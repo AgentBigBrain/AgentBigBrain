@@ -1,0 +1,242 @@
+# AgentBigBrain Architecture
+
+## 1) System Intent
+AgentBigBrain is a governance-first agent runtime.
+
+Think of it as air-traffic control for autonomous actions:
+- planner proposes flights,
+- hard constraints clear (or deny) the runway,
+- governors vote on takeoff,
+- executor runs approved work,
+- receipts and traces provide the flight recorder.
+
+Core design goals:
+- deterministic safety boundaries before model judgment
+- explicit governance for all side effects
+- fail-closed behavior on malformed/timeout/missing control signals
+- local-first, auditable runtime state
+
+## 2) Runtime Topology
+
+### Entry Points
+| Surface | File | Responsibility |
+|---|---|---|
+| CLI runtime | `src/index.ts` | Runs one task, autonomous loop, or daemon loop |
+| Interface runtime | `src/interfaces/interfaceRuntime.ts` | Runs Telegram/Discord gateways and routes chat jobs into orchestrator |
+| Federation server runtime | `src/interfaces/federationRuntime.ts` | Runs authenticated inbound federation HTTP server |
+
+### Composition Root
+`src/core/buildBrain.ts` wires:
+- config (`createBrainConfigFromEnv`)
+- model client (`createModelClientFromEnv`)
+- organs (planner, executor, memory broker, reflection)
+- governors + master governor
+- stores (state, governance memory, receipts, profile, workflow/judgment learning)
+- orchestrator (`BrainOrchestrator`)
+
+## 3) Control Planes
+
+### Planning Plane
+- `src/organs/planner.ts`
+- Produces structured action plans from model output.
+- Injects deterministic environment guidance (platform/shell/invocation/limits).
+- Includes repair/retry and normalization logic for brittle provider payloads.
+
+### Safety Plane (Deterministic)
+- `src/core/hardConstraints.ts`
+- Runs before any governance vote.
+- Enforces non-negotiable policy (cost ceilings, path policy, immutable targets, shell/network guards, communication identity/data rules, Stage 6.86 action schemas).
+
+### Governance Plane
+- Voting: `src/governors/voteGate.ts`
+- Aggregation: `src/governors/masterGovernor.ts`
+- Per-action loop: `src/core/taskRunner.ts`
+
+Governor set:
+- Full council (7): `ethics`, `logic`, `resource`, `security`, `continuity`, `utility`, `compliance`
+- Preflight-only governor (1): `codeReview` for `create_skill`
+
+Operationally:
+- There are 8 governor lenses in code.
+- Escalation council voting is 6-of-7 by default (`supermajorityThreshold = 6`).
+- Fast path defaults to `security` only (`fastPathGovernorIds = ["security"]`).
+
+### Execution Plane
+- Standard actions: `src/organs/executor.ts`
+- Stage 6.86 actions (`memory_mutation`, `pulse_emit`): `src/core/stage6_86RuntimeActions.ts` via `TaskRunner`
+- Receipts: `src/core/executionReceipts.ts`
+
+### Orchestration Plane
+- `src/core/orchestrator.ts`
+- Owns task lifecycle, bounded replanning, persistence, reflection, and tracing.
+
+## 4) End-to-End Runtime Flow
+
+```mermaid
+flowchart LR
+    A[Ingress TaskRequest] --> B[BrainOrchestrator.runTask]
+    B --> C[PlannerOrgan plan]
+    C --> D[TaskRunner action loop]
+    D --> E[Hard Constraints]
+    E -->|pass| F[Governor vote]
+    E -->|fail| X[Blocked]
+    F -->|approved| G[Execute action]
+    F -->|rejected| X
+    G --> H[Append governance event]
+    H --> I[Append execution receipt if approved]
+    I --> J[Persist run and metrics]
+    J --> K[Reflection + learning updates]
+```
+
+Per-action order in `TaskRunner` is deterministic:
+1. runtime guards (deadline, idempotency, mission stop limits, model-spend guard)
+2. hard constraints
+3. `create_skill` code-review preflight (when applicable)
+4. council vote (fast or escalation path)
+5. respond verification gate (claim-sensitive prompts)
+6. execution
+7. governance-memory append
+8. approved-action receipt append
+
+If an attempt is governance-blocked and retry budget remains, orchestrator replans with typed feedback.
+
+## 5) Governance Model Details
+
+### Fast Path vs Escalation Path
+Execution mode is resolved in `src/core/executionMode.ts`.
+
+Default escalation action types:
+- `delete_file`
+- `self_modify`
+- `network_write`
+- `shell_command`
+- `create_skill`
+- `memory_mutation`
+- `pulse_emit`
+
+Everything else defaults to fast path unless configured otherwise.
+
+### Fail-Closed Voting
+`runCouncilVote(...)` denies safely on:
+- governor timeout/failure
+- malformed vote payload
+- missing expected governors
+
+No decision, malformed decision, or empty required governor set also blocks execution.
+
+## 6) Hard Constraint Boundary
+`evaluateHardConstraints(...)` enforces deterministic policy before governance.
+
+Major categories:
+- budget policy (`maxEstimatedCostUsd`, cumulative action cost, cumulative model spend guard in runner)
+- filesystem path policy (sandbox + protected paths + immutable target protections)
+- shell policy (profile match, command length, timeout bounds, cwd policy, dangerous-command patterns)
+- communication policy (identity impersonation denied, personal-data approval required)
+- dynamic skill policy (name/code validation, executable export requirement, unsafe pattern denial)
+- Stage 6.86 schema policy (`memory_mutation` store/operation/payload and `pulse_emit` kind validation)
+
+## 7) Action Execution Layer
+
+### Standard Tool Execution (`ToolExecutorOrgan`)
+Handles:
+- `respond`
+- file I/O actions
+- `create_skill` / `run_skill` under `runtime/skills/`
+- `network_write` (simulated unless real network enabled)
+- `shell_command` (simulated unless real shell enabled)
+
+Real shell execution uses explicit `spawn(executable, args)` from resolved shell profile and records bounded telemetry digests.
+
+### Stage 6.86 Runtime Actions
+`memory_mutation` and `pulse_emit` do not execute in executor.
+They run in `Stage686RuntimeActionEngine`, with durable adapters and deterministic receipt-linked mutation behavior.
+
+### Execution Receipts
+`ExecutionReceiptStore` appends receipts only for approved actions.
+
+Each receipt includes:
+- output digest
+- vote digest
+- metadata digest
+- prior hash link (`priorReceiptHash`)
+- current `receiptHash`
+
+This yields a tamper-evident receipt chain for approved execution history.
+
+## 8) Data Plane and Persistence
+
+Default local artifacts:
+| Domain | Default Path | Module |
+|---|---|---|
+| Task runs + aggregate metrics | `runtime/state.json` | `src/core/stateStore.ts` |
+| Governance decision log | `runtime/governance_memory.json` | `src/core/governanceMemory.ts` |
+| Execution receipt chain | `runtime/execution_receipts.json` | `src/core/executionReceipts.ts` |
+| Semantic lessons | `runtime/semantic_memory.json` | `src/core/semanticMemory.ts` |
+| Personality profile | `runtime/personality_profile.json` | `src/core/personalityStore.ts` |
+| Encrypted profile memory | `runtime/profile_memory.secure.json` | `src/core/profileMemoryStore.ts` |
+| Interface session state | `runtime/interface_sessions.json` | `src/interfaces/sessionStore.ts` |
+| Trace log (optional) | `runtime/runtime_trace.jsonl` | `src/core/runtimeTraceLogger.ts` |
+| SQLite ledger backend | `runtime/ledgers.sqlite` | shared across stores when enabled |
+
+Most stores support JSON and/or SQLite backends with deterministic lock + atomic-write patterns where applicable.
+
+## 9) Model Layer
+`createModelClientFromEnv()` selects one backend:
+- `mock`
+- `openai`
+- `ollama`
+
+Model calls remain behind `ModelClient`.
+Structured outputs are normalized and validated before entering planner/governor/orchestrator paths.
+
+## 10) Interfaces and Federation
+
+### Chat Interfaces
+`src/interfaces/interfaceRuntime.ts` starts Telegram/Discord gateways with:
+- auth and allowlist checks
+- replay/rate-limit controls
+- per-session queue worker (`ConversationManager`)
+- shared orchestrator path for all accepted tasks
+
+### Federation
+- Inbound server: `src/interfaces/federationRuntime.ts` + `FederatedHttpServer`
+- Outbound delegation: explicit tag only (`[federate:<agentId> quote=<usd>] ...`) via `src/core/federatedOutboundDelegation.ts`
+
+Both paths remain governed by orchestrator policy.
+
+## 11) Autonomy and Clone Model
+
+### Autonomous Loop
+`src/core/agentLoop.ts` runs bounded iterations for:
+- autonomous mode
+- daemon mode (with explicit safety latches and rollover limits)
+
+### Clones Are Not Sub-Agents
+`src/core/satelliteClone.ts` provides governed satellite primitives:
+- deterministic spawn policy (count/depth/budget)
+- role overlays (`creative`, `researcher`, `critic`, `builder`)
+- direct satellite-to-satellite channel denial (isolation broker)
+- merge-decision contracts with explicit rejection attribution
+
+Important scope note:
+- clones are bounded satellite identities inside policy envelopes, not independent unrestricted agents
+- current production wiring uses clone-governed merge attribution in reflection/distiller flows; spawn/isolation primitives are present as governed runtime building blocks
+
+## 12) Extension Points
+
+To extend the system safely:
+- add a new action type in `src/core/types.ts`
+- add deterministic constraints in `src/core/hardConstraints.ts`
+- route execution in `TaskRunner` and/or `ToolExecutorOrgan`
+- ensure governance coverage (fast/escalation policy)
+- persist required evidence/metadata (governance event + receipt semantics)
+- add tests under `tests/` for runtime path behavior
+
+## 13) Architectural Invariant
+No action reaches side effects without passing:
+1. deterministic hard constraints
+2. governance decision path
+3. runtime execution policies
+4. durable audit artifacts
+
+That invariant is the architecture.

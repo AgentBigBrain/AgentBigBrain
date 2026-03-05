@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Test
+        run: |
+          mkdir -p runtime/ci
+          set -o pipefail
+          npm test 2>&1 | tee runtime/ci/npm-test.log
+
+      - name: Check docs
+        run: npm run check:docs
+
+      - name: Show test log tail on failure
+        if: failure()
+        run: |
+          echo "=== Last 200 lines of npm-test.log ==="
+          tail -n 200 runtime/ci/npm-test.log || true
+          echo "=== Failing TAP lines (not ok) ==="
+          grep -n '^not ok ' runtime/ci/npm-test.log || true
+          first_fail_line=$(grep -n '^not ok ' runtime/ci/npm-test.log | head -n 1 | cut -d: -f1 || true)
+          if [ -n "$first_fail_line" ]; then
+            start_line=$(( first_fail_line > 25 ? first_fail_line - 25 : 1 ))
+            end_line=$(( first_fail_line + 80 ))
+            echo "=== Context around first failure (lines ${start_line}-${end_line}) ==="
+            sed -n "${start_line},${end_line}p" runtime/ci/npm-test.log || true
+          fi
+
+      - name: Upload CI logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-logs
+          path: runtime/ci/*.log
