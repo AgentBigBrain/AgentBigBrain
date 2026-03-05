@@ -1,15 +1,15 @@
 # Global default owners.
 #
 # IMPORTANT:
-# - Replace `@AgentBigBrain/maintainers` with your real owner team/user.
-# - Only enable "Require review from Code Owners" after this owner target exists.
+# - Use an email that is linked to a GitHub account with write access.
+# - Only enable "Require review from Code Owners" after this owner target is valid.
 
-* @AgentBigBrain/maintainers
+* info@michiganwebteam.com
 
 # Critical policy/runtime surfaces.
-src/core/* @AgentBigBrain/maintainers
-src/governors/* @AgentBigBrain/maintainers
-src/organs/* @AgentBigBrain/maintainers
-src/interfaces/* @AgentBigBrain/maintainers
-docs/* @AgentBigBrain/maintainers
-.github/* @AgentBigBrain/maintainers
+src/core/* info@michiganwebteam.com
+src/governors/* info@michiganwebteam.com
+src/organs/* info@michiganwebteam.com
+src/interfaces/* info@michiganwebteam.com
+docs/* info@michiganwebteam.com
+.github/* info@michiganwebteam.com
