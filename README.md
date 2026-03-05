@@ -119,7 +119,34 @@ npm run dev -- "summarize current repo status"
 npm install
 ```
 
-### 3) Configure environment
+### 3) Install local ONNX embedding assets (recommended)
+
+Semantic memory uses a local ONNX model (`all-MiniLM-L6-v2`) and tokenizer files.
+Install them once:
+
+```bash
+npm run setup:embeddings
+```
+
+PowerShell (same command):
+
+```powershell
+npm run setup:embeddings
+```
+
+Optional flags:
+
+```bash
+npm run setup:embeddings -- --dir models/all-MiniLM-L6-v2 --force
+```
+
+If you intentionally skip local embeddings, set:
+
+```env
+BRAIN_ENABLE_EMBEDDINGS=false
+```
+
+### 4) Configure environment
 
 Runtime env loading is implemented in `src/core/envLoader.ts`.
 
@@ -148,14 +175,14 @@ BRAIN_MODEL_BACKEND=mock
 BRAIN_RUNTIME_MODE=isolated
 ```
 
-### 4) Build and run
+### 5) Build and run
 
 ```bash
 npm run build
 npm run dev -- "<goal>"
 ```
 
-### 5) Runtime modes
+### 6) Runtime modes
 
 ```bash
 npm run dev -- "<goal>"
@@ -177,6 +204,7 @@ npm run dev:federation
 
 ```bash
 npm install
+npm run setup:embeddings
 npm run build
 npm test
 npm run test:list
