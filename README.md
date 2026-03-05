@@ -113,6 +113,8 @@ Scope clarification:
 
 ## Quickstart
 
+Need the **full** operator setup path? See **[docs/SETUP.md](docs/SETUP.md)**.
+
 ```bash
 npm install
 npm run build
