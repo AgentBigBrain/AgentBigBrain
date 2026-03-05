@@ -9,7 +9,7 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-blue)](./tsconfig.json)
 [![Dependencies](https://img.shields.io/badge/runtime_deps-2-brightgreen)](#zero-dependency-core)
 
-AgentBigBrain is not another LLM wrapper or prompt chain. It's a full **cognitive runtime** for building AI agents that plan, execute, learn, and operate autonomously — all under a governance system that enforces safety at every step. Every action passes through hard constraints, then governance (a single security governor on the fast path, or the full 7-governor council for escalations), execution, and finally a tamper-evident receipt chain.
+AgentBigBrain is not another LLM wrapper or prompt chain. It is a **defensively engineered cognitive runtime** for building AI agents that plan, execute, learn, and operate autonomously. The system abandons the typical "loose loop" of standard agent frameworks in favor of a **rigidly typed, fail-closed runtime**, where every action passes through non-negotiable hard constraints, a two-path governance layer (security-only fast path, or full 7-governor council escalation), execution limits, and finally a tamper-evident cryptographic receipt chain.
 
 Built in TypeScript with only **2 runtime dependencies** (`ws`, `onnxruntime-node`). Everything else — HTTP servers, crypto, process management, persistence — uses Node.js built-ins by design.
 
@@ -21,9 +21,9 @@ Architecture spec: **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
 
 🏛️ **Governor Council** — Actions follow two governance paths: **fast-path** actions are evaluated by the security governor alone, while **escalation-path** actions go to the full 7-governor council (ethics, logic, resource, security, continuity, utility, compliance) with supermajority voting. A separate code-review governor runs as a preflight gate for skill creation.
 
-🔒 **Hard Constraints** — A pre-governance safety boundary that runs *before* voting. Non-negotiable checks for sandbox enforcement, immutable file protection, skill code scanning (blocks `eval`, `child_process`, `process.env`), and cost ceiling enforcement. Fail-closed by design.
+🔒 **Hard Constraints (Fail-Closed by Design)** — A pre-governance safety boundary that runs *before* voting. If the LLM hallucinates an off-limits `child_process` command or attempts to manipulate immutable files, the runtime does not endlessly prompt the LLM to fix it. It throws a structural block, logs a typed block outcome and denies that action. (Malformed model outputs are caught even earlier at the rigid schema-validation boundary.)
 
-🔗 **Tamper-Evident Execution Receipts** — Each approved action produces a cryptographic receipt after execution, containing output digests, vote digests, and a hash-chained link to prior receipts. The full chain can be mathematically verified for tampering at any time.
+🔗 **Tamper-Evident Execution Receipts** — AgentBigBrain operates on mathematical proof of behavior. Every approved action produces a cryptographic receipt after execution, containing output digests, vote digests, and a hash-chained link to prior receipts. You don't have to trust the agent; you can verify the full chain for tampering at any time.
 
 🧠 **Five Memory Systems** — Profile memory (encrypted, approval-gated), governance memory (append-only decision ledger), semantic memory (ONNX vector embeddings), workflow learning (pattern-scored planner hints), and an entity relationship graph. Memory access has probing/extraction attack detection with sliding-window analysis.
 
@@ -52,8 +52,8 @@ flowchart LR
     G -->|Next action| B
 ```
 
-1. **Plan** — The `PlannerOrgan` calls the LLM to produce structured actions, injecting workflow learning hints and judgment patterns from past runs.
-2. **Constrain** — `hardConstraints.ts` enforces non-negotiable safety rules *before* governance. Sandbox escapes, unsafe code patterns, cost overruns, and immutable-file mutations are blocked here.
+1. **Plan** — The `PlannerOrgan` calls the LLM, synthesizing workflow learning hints and judgment patterns out of past runs, and forces the model to return a strictly typed `PlannerModelOutput` schema. A `FirstPrinciplesPacketV1` is generated deterministically alongside the plan when triggered.
+2. **Constrain** — `hardConstraints.ts` enforces non-negotiable safety rules *before* governance. Sandbox escapes, unsafe code patterns, cost overruns, and immutable-file mutations are definitively blocked here.
 3. **Vote** — Fast-path actions are evaluated by the security governor; escalation-path actions go to the full 7-governor council with supermajority voting.
 4. **Execute** — The `ToolExecutorOrgan` runs the approved action. Shell commands run with output buffering, timeout enforcement, and telemetry; file operations use direct FS access with protected-path checks.
 5. **Receipt** — After execution, a tamper-evident `ExecutionReceipt` is appended to a hash chain with digests of the output, votes, and metadata (approved actions only).
@@ -74,12 +74,27 @@ flowchart LR
 
 ---
 
+## Evolutionary Maturity Stages
+
+AgentBigBrain does not grant blanket autonomy. It unlocks capabilities through strict, version-gated evolutionary stages based on proven, auditable milestones. 
+
+The codebase contains an architectural fossil record (e.g., `stage6_75ApprovalPolicy.ts`, `stage6_86ConversationStack.ts`) indicating progressive scaling:
+- **Stage 6.75:** Unlocks robust user-facing approvals and preflight consistency checks.
+- **Stage 6.85:** Grants bounded mission-recovery logic, clones, and workflow replay.
+- **Stage 6.86:** Implements multi-turn conversation stacks, open-loop bindings, and global mission suppression limits.
+
+Each stage is accompanied by a suite of deterministic live-smoke scripts, ensuring the runtime is capable of handling the new complexity safely before scaling further.
+
+---
+
 ## Clones (Not Sub-Agents)
 
 AgentBigBrain includes a **satellite clone model** for bounded parallelism.
 
-A clone is **not** an autonomous sub-agent with independent tool authority.
-A clone is a short-lived, deterministic satellite identity (for example `atlas-1001`) with a bounded role overlay (`creative`, `researcher`, `critic`, `builder`).
+A clone is **not** an autonomous sub-agent with independent tool authority running a rogue system process.
+A clone is a short-lived, deterministic satellite identity (for example `[atlas-1001]`) with a bounded role overlay (`creative`, `researcher`, `critic`, `builder`) that remains strictly controlled by the Orchestrator. 
+
+This prevents the "blast radius" of parallel tasks from expanding beyond the main agent's established constraints.
 
 What this means in practice:
 
