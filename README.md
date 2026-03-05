@@ -1,5 +1,7 @@
 # 🧠 AgentBigBrain — Governed Autonomous AI Agent (Assistant)
 
+![AgentBigBrain](img/AgentBigBrain.png)
+
 **A governed cognitive architecture for autonomous AI agents — where every action is constrained, governed, executed, and cryptographically receipted.**
 
 [![CI](https://github.com/AgentBigBrain/AgentBigBrain/actions/workflows/ci.yml/badge.svg)](https://github.com/AgentBigBrain/AgentBigBrain/actions/workflows/ci.yml)
