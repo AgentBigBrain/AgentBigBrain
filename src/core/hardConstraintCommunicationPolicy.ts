@@ -22,9 +22,9 @@ const IMPERSONATION_PATTERNS = [
   "on behalf of ",
   "i am a human",
   "i'm a human",
-  "i am anthony",
-  "i'm anthony",
-  "this is anthony",
+  "this is the user",
+  "i am the owner",
+  "i'm the owner",
   "as a human",
   "i am your husband",
   "i am your wife"
@@ -93,10 +93,28 @@ const HUMAN_IDENTITY_STEMS = [
   "person",
   "owner",
   "user",
-  "anthony",
+  "customer",
   "individual",
   "real"
 ];
+const FIRST_PERSON_NAMED_IDENTITY_REGEX =
+  /\b(?:[Ii]\s+am|[Ii]'m|[Tt]his\s+is)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)(?=$|[.!?,;:])/g;
+const NON_NAME_IDENTITY_TOKENS = new Set([
+  "human",
+  "person",
+  "owner",
+  "user",
+  "customer",
+  "individual",
+  "real",
+  "agent",
+  "assistant",
+  "bot",
+  "model",
+  "system",
+  "ai"
+]);
+const AGENT_IDENTITY_HINT_STEMS = ["agent", "assistant", "bot", "model", "system", "ai", "llm"];
 const RELAY_STEMS = ["behalf", "speak", "for", "as"];
 const PROFILE_RECALL_CONTEXT_STEMS = [
   "profile",
@@ -228,6 +246,44 @@ const PERSONAL_DATA_RECIPIENT_HINT_KEYS = [
 function containsAnyPattern(text: string, patterns: readonly string[]): boolean {
   const normalized = text.toLowerCase();
   return patterns.some((pattern) => normalized.includes(pattern));
+}
+
+/**
+ * Detects first-person claims that introduce a specific proper-name identity.
+ *
+ * **Why it exists:**
+ * Hard constraints should block named human-identity claims without hardcoding any specific person.
+ * This detector keeps that coverage deterministic while staying identity-agnostic.
+ *
+ * **What it talks to:**
+ * - Reads `FIRST_PERSON_NAMED_IDENTITY_REGEX`, `NON_NAME_IDENTITY_TOKENS`, and
+ *   `AGENT_IDENTITY_HINT_STEMS`.
+ *
+ * @param text - Candidate communication text from rationale/description/params.
+ * @returns `true` when a first-person named identity claim is detected.
+ */
+function containsNamedHumanIdentityClaim(text: string): boolean {
+  for (const match of text.matchAll(FIRST_PERSON_NAMED_IDENTITY_REGEX)) {
+    const claimedIdentity = match[1];
+    if (!claimedIdentity) {
+      continue;
+    }
+    const identityTokens = claimedIdentity.toLowerCase().split(/\s+/).filter(Boolean);
+    if (identityTokens.length === 0) {
+      continue;
+    }
+    const hasAgentIdentityHint = identityTokens.some((token) =>
+      AGENT_IDENTITY_HINT_STEMS.some((stem) => token.startsWith(stem))
+    );
+    if (hasAgentIdentityHint) {
+      continue;
+    }
+    const hasNameToken = identityTokens.some((token) => !NON_NAME_IDENTITY_TOKENS.has(token));
+    if (hasNameToken) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /**
@@ -545,6 +601,10 @@ export function containsImpersonationSignal(proposal: GovernanceProposal): boole
   ].join("\n");
 
   if (containsAnyPattern(textSignal, IMPERSONATION_PATTERNS)) {
+    return true;
+  }
+
+  if (containsNamedHumanIdentityClaim(textSignal)) {
     return true;
   }
 

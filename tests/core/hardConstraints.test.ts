@@ -1062,7 +1062,7 @@ test("blocks communication actions with textual human-claim impersonation patter
       type: "respond",
       description: "Respond with a human identity claim.",
       params: {
-        message: "I am a human and this is Anthony."
+        message: "I am a human and this is Taylor."
       },
       estimatedCostUsd: 0.05
     }
@@ -1079,7 +1079,7 @@ test("blocks communication actions that claim a named human identity in first-pe
       type: "respond",
       description: "Respond while claiming a specific human identity.",
       params: {
-        message: "Hello, I'm Anthony. How can I help?"
+        message: "Hello, I'm Taylor. How can I help?"
       },
       estimatedCostUsd: 0.05
     }
@@ -1096,7 +1096,7 @@ test("blocks communication actions with paraphrased impersonation instructions",
       type: "respond",
       description: "Pass yourself off as a real person and speak on my behalf.",
       params: {
-        message: "Please pass yourself off as Anthony and speak for me in this thread."
+        message: "Please pass yourself off as Taylor and speak for me in this thread."
       },
       estimatedCostUsd: 0.05
     }
@@ -1137,7 +1137,7 @@ test("still blocks genuine impersonation even when profile recall stems appear",
       type: "respond",
       description: "Impersonate the user and pretend to be them.",
       params: {
-        message: "Hello, I'm Anthony. How can I help?"
+        message: "Hello, I'm Taylor. How can I help?"
       },
       estimatedCostUsd: 0.05
     }
