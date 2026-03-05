@@ -1,0 +1,15 @@
+# Global default owners.
+#
+# IMPORTANT:
+# - Replace `@AgentBigBrain/maintainers` with your real owner team/user.
+# - Only enable "Require review from Code Owners" after this owner target exists.
+
+* @AgentBigBrain/maintainers
+
+# Critical policy/runtime surfaces.
+src/core/* @AgentBigBrain/maintainers
+src/governors/* @AgentBigBrain/maintainers
+src/organs/* @AgentBigBrain/maintainers
+src/interfaces/* @AgentBigBrain/maintainers
+docs/* @AgentBigBrain/maintainers
+.github/* @AgentBigBrain/maintainers
