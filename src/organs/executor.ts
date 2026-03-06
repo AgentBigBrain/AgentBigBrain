@@ -423,6 +423,27 @@ function buildFileImportUrl(artifactPath: string): string {
 }
 
 /**
+ * Loads module namespace from available runtime context.
+ *
+ * **Why it exists:**
+ * Preserves true ESM dynamic import semantics in compiled CommonJS builds where TypeScript would
+ * otherwise rewrite `import(...)` to `require(...)` and break `file://`/`data:` loading paths.
+ *
+ * **What it talks to:**
+ * - Uses local constants/helpers within this module.
+ *
+ * @param specifier - Module specifier consumed by runtime dynamic import.
+ * @returns Promise resolving to loaded module namespace.
+ */
+async function importModuleNamespaceAtRuntime(specifier: string): Promise<Record<string, unknown>> {
+  const runtimeDynamicImport = new Function(
+    "moduleSpecifier",
+    "return import(moduleSpecifier);"
+  ) as (moduleSpecifier: string) => Promise<unknown>;
+  return (await runtimeDynamicImport(specifier)) as Record<string, unknown>;
+}
+
+/**
  * Builds import URL from available runtime context.
  *
  * **Why it exists:**
@@ -482,21 +503,21 @@ async function loadSkillModuleNamespace(
   if (artifact.extension === PRIMARY_SKILL_EXTENSION) {
     const fileImportUrl = buildFileImportUrl(artifact.path);
     try {
-      return (await import(fileImportUrl)) as Record<string, unknown>;
+      return await importModuleNamespaceAtRuntime(fileImportUrl);
     } catch (error) {
       if (!shouldRetryJavaScriptImportViaDataUrl(error)) {
         throw error;
       }
       const jsSource = await readFile(artifact.path, "utf8");
       const dataImportUrl = buildDataModuleImportUrl(jsSource, artifact.path);
-      return (await import(dataImportUrl)) as Record<string, unknown>;
+      return await importModuleNamespaceAtRuntime(dataImportUrl);
     }
   }
 
   const tsSource = await readFile(artifact.path, "utf8");
-      const transformedSource = await compileSkillSourceToJavaScript(tsSource);
+  const transformedSource = await compileSkillSourceToJavaScript(tsSource);
   const dataImportUrl = buildDataModuleImportUrl(transformedSource, artifact.path);
-  return (await import(dataImportUrl)) as Record<string, unknown>;
+  return await importModuleNamespaceAtRuntime(dataImportUrl);
 }
 
 /**
@@ -516,10 +537,21 @@ function pickCallableSkillExport(
   moduleNamespace: Record<string, unknown>,
   preferredExportName?: string
 ): ((input: string) => unknown | Promise<unknown>) | null {
+  const defaultNamespaceCandidate =
+    typeof moduleNamespace.default === "object" && moduleNamespace.default !== null
+      ? (moduleNamespace.default as Record<string, unknown>)
+      : null;
+
   if (preferredExportName) {
     const preferred = moduleNamespace[preferredExportName];
     if (typeof preferred === "function") {
       return preferred as (input: string) => unknown | Promise<unknown>;
+    }
+    if (defaultNamespaceCandidate) {
+      const defaultPreferred = defaultNamespaceCandidate[preferredExportName];
+      if (typeof defaultPreferred === "function") {
+        return defaultPreferred as (input: string) => unknown | Promise<unknown>;
+      }
     }
   }
 
@@ -537,6 +569,14 @@ function pickCallableSkillExport(
   for (const exported of Object.values(moduleNamespace)) {
     if (typeof exported === "function") {
       return exported as (input: string) => unknown | Promise<unknown>;
+    }
+  }
+
+  if (defaultNamespaceCandidate) {
+    for (const exported of Object.values(defaultNamespaceCandidate)) {
+      if (typeof exported === "function") {
+        return exported as (input: string) => unknown | Promise<unknown>;
+      }
     }
   }
 
