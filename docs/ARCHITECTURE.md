@@ -16,6 +16,9 @@ Core design goals:
 - fail-closed behavior on malformed/timeout/missing control signals
 - local-first, auditable runtime state
 
+Operator troubleshooting reference:
+- `docs/ERROR_CODE_ENV_MAP.md` (maps high-signal runtime/reason codes to env controls)
+
 ## 2) Runtime Topology
 
 ### Entry Points
@@ -90,6 +93,7 @@ flowchart LR
 
 Per-action order in `TaskRunner` is deterministic:
 1. runtime guards (deadline, idempotency, mission stop limits, model-spend guard)
+   - deadline guard is configurable through `BRAIN_PER_TURN_DEADLINE_MS` (default `20000`)
 2. hard constraints
 3. `create_skill` code-review preflight (when applicable)
 4. council vote (fast or escalation path)
@@ -203,6 +207,9 @@ Structured outputs are normalized and validated before entering planner/governor
 - deterministic routing-map intent hints (`RoutingMapV1`) injected into conversation-aware execution input:
   - generic execution-style build/create prompts (for example React app creation on Desktop) classify to `BUILD_SCAFFOLD` execution surface
   - explanation-only build prompts stay outside execution-surface routing to reduce over-classification
+- autonomous progress delivery is transport-aware:
+  - edit/stream-capable transports update a single progress message when possible
+  - non-edit transports fall back to bounded discrete progress sends
 - advanced cross-provider UX regression gate: `npm run test:interface:advanced_live_smoke` runs adversarial Telegram+Discord prompt suites and emits `runtime/evidence/interface_advanced_live_smoke_report.json` with per-provider parity diagnostics
 - real-provider transport smoke gate: `npm run test:interface:real_provider_live_smoke` runs live Telegram/Discord outbound delivery (no fetch stubs) and emits `runtime/evidence/interface_real_provider_live_smoke_report.json`; execution is fail-closed unless `BRAIN_INTERFACE_REAL_LIVE_SMOKE_CONFIRM=true`
 
@@ -220,6 +227,7 @@ Both paths remain governed by orchestrator policy.
 - daemon mode (with explicit safety latches and rollover limits)
 - deterministic completion gate for execution-style missions: no `Goal Met` until mission-level approved real side-effect evidence exists (`read_file`/`list_directory` and simulated outcomes are excluded)
 - deterministic side-effect-aware stall abort for execution-style respond-only loops (`reasonCode=AUTONOMOUS_EXECUTION_STYLE_STALLED_NO_SIDE_EFFECT`)
+- deterministic task-step failure aborts: loop task-execution exceptions are converted to typed aborted reasons (`reasonCode=AUTONOMOUS_TASK_EXECUTION_FAILED`) rather than bubbling as generic interface failures
 - stall-abort threshold is operator-configurable via `BRAIN_AUTONOMOUS_MAX_CONSECUTIVE_NO_PROGRESS` (default `3`)
 
 ### Clones Are Not Sub-Agents

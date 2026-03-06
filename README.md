@@ -14,6 +14,7 @@ AgentBigBrain is not another LLM wrapper or prompt chain. It is a **defensively 
 Built in TypeScript with only **2 runtime dependencies** (`ws`, `onnxruntime-node`). Everything else — HTTP servers, crypto, process management, persistence — uses Node.js built-ins by design.
 
 Architecture spec: **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
+Operator troubleshooting map: **[docs/ERROR_CODE_ENV_MAP.md](docs/ERROR_CODE_ENV_MAP.md)**.
 
 ---
 
@@ -234,6 +235,7 @@ Autonomous execution semantics:
 - Read-only actions (`read_file`, `list_directory`) and simulated outcomes do not count as completion evidence for execution-style missions.
 - Repeated respond-only execution-style iterations trigger bounded deterministic abort (`reasonCode=AUTONOMOUS_EXECUTION_STYLE_STALLED_NO_SIDE_EFFECT`) instead of silently looping until cap.
 - `BRAIN_AUTONOMOUS_MAX_CONSECUTIVE_NO_PROGRESS` controls the stall-abort threshold (`3` by default).
+- Iteration runtime failures (for example provider timeout during a loop step) now terminate with deterministic stopped-state reason codes instead of ambiguous generic failure text (`AUTONOMOUS_TASK_EXECUTION_FAILED` in-loop, `AUTONOMOUS_LOOP_RUNTIME_ERROR` adapter fallback).
 
 Routing semantics for build requests:
 
@@ -336,6 +338,7 @@ When to use which command:
 - **`/chat`**: use this for one direct request, a question, a summary, a skill create/run request, or a single side-effect request you want handled now.
 - **`/propose`**: use this when you want a draft first and explicit approval before execution, especially for writes, shell commands, or larger multi-file changes.
 - **`/auto`**: use this for a multi-step goal where the runtime may need several iterations to finish. If you expect real execution, still say **`execute now`** and name the shell when relevant.
+- Autonomous progress updates are transport-aware: gateways prefer updating one progress message in place when the provider transport supports edit/stream behavior.
 - **`/draft`**: use this to inspect the current proposed plan before approval.
 - **`/adjust`**: use this to change the active draft without restarting from scratch.
 - **`/approve`**: use this when the draft is correct and you want it executed.
@@ -444,6 +447,7 @@ All configuration is via environment variables. Required variables are noted per
 | `BRAIN_ALLOW_DAEMON_MODE` | Conditional | `false` | Required for `--daemon` mode startup. |
 | `BRAIN_MAX_AUTONOMOUS_ITERATIONS` | No | `15` | Max iterations per autonomous run. |
 | `BRAIN_AUTONOMOUS_MAX_CONSECUTIVE_NO_PROGRESS` | No | `3` | Stall guard: max consecutive zero-progress autonomous iterations before abort. |
+| `BRAIN_PER_TURN_DEADLINE_MS` | No | `20000` | Per-task action-loop deadline; once exceeded, pending actions block with `GLOBAL_DEADLINE_EXCEEDED`. |
 | `BRAIN_MAX_DAEMON_GOAL_ROLLOVERS` | No | `0` | Max daemon rollover count; daemon requires `> 0`. |
 | `BRAIN_USER_PROTECTED_PATHS` | No | empty | Semicolon-delimited extra protected path prefixes. |
 | `BRAIN_REFLECT_ON_SUCCESS` | No | `false` | Enables success-path reflection storage. |
@@ -659,6 +663,20 @@ When `BRAIN_RUNTIME_MODE=full_access`, set `BRAIN_ALLOW_FULL_ACCESS=true`.
 - `BRAIN_ALLOW_DAEMON_MODE=true`
 - `BRAIN_MAX_AUTONOMOUS_ITERATIONS > 0`
 - `BRAIN_MAX_DAEMON_GOAL_ROLLOVERS > 0`
+
+### Autonomous stops with `GLOBAL_DEADLINE_EXCEEDED`
+
+This means the per-task action-loop deadline was hit before remaining planned actions could run.
+
+Set a larger deadline for heavy build/scaffold goals:
+
+```env
+BRAIN_PER_TURN_DEADLINE_MS=120000
+```
+
+For broader code-to-env tuning (including autonomous, shell, and budget codes), use:
+
+- **[docs/ERROR_CODE_ENV_MAP.md](docs/ERROR_CODE_ENV_MAP.md)**
 
 ### Interface runtime startup errors
 

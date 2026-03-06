@@ -469,6 +469,7 @@ export class TelegramGateway {
         if (autonomousGoal) {
           const abortController = new AbortController();
           this.autonomousAbortControllers.set(chatId, abortController);
+          let progressMessageId: string | null = null;
           /**
            * Bridges autonomous-loop progress callbacks into Telegram message delivery.
            *
@@ -490,7 +491,16 @@ export class TelegramGateway {
               await notifier.stream(msg).catch(() => undefined);
               return;
             }
-            await notifier.send(msg).catch(() => undefined);
+            if (progressMessageId && typeof notifier.edit === "function") {
+              const editResult = await notifier.edit(progressMessageId, msg).catch(() => null);
+              if (editResult?.ok) {
+                return;
+              }
+            }
+            const sendResult = await notifier.send(msg).catch(() => null);
+            if (sendResult?.ok && sendResult.messageId) {
+              progressMessageId = sendResult.messageId;
+            }
           };
           try {
             const summary = await this.adapter.runAutonomousTask(

@@ -85,7 +85,8 @@ test("supports env overrides for per-action and cumulative budget limits", () =>
     BRAIN_MAX_SUBAGENTS_PER_TASK: "4",
     BRAIN_MAX_SUBAGENT_DEPTH: "2",
     BRAIN_AUTONOMOUS_MAX_CONSECUTIVE_NO_PROGRESS: "6",
-    BRAIN_MAX_DAEMON_GOAL_ROLLOVERS: "6"
+    BRAIN_MAX_DAEMON_GOAL_ROLLOVERS: "6",
+    BRAIN_PER_TURN_DEADLINE_MS: "120000"
   });
 
   assert.equal(config.limits.maxEstimatedCostUsd, 0.5);
@@ -95,6 +96,17 @@ test("supports env overrides for per-action and cumulative budget limits", () =>
   assert.equal(config.limits.maxSubagentDepth, 2);
   assert.equal(config.limits.maxAutonomousConsecutiveNoProgressIterations, 6);
   assert.equal(config.limits.maxDaemonGoalRollovers, 6);
+  assert.equal(config.limits.perTurnDeadlineMs, 120000);
+});
+
+test("fails closed when per-turn deadline env override is out of bounds", () => {
+  assert.throws(
+    () =>
+      createBrainConfigFromEnv({
+        BRAIN_PER_TURN_DEADLINE_MS: "1000"
+      }),
+    /BRAIN_PER_TURN_DEADLINE_MS out of range/
+  );
 });
 
 test("falls back for negative daemon rollover limits", () => {

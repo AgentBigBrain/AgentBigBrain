@@ -667,6 +667,7 @@ export class DiscordGateway {
         if (autonomousGoal) {
           const abortController = new AbortController();
           this.autonomousAbortControllers.set(channelId, abortController);
+          let progressMessageId: string | null = null;
           /**
            * Forwards autonomous-loop progress text to the active notifier channel.
            *
@@ -681,7 +682,16 @@ export class DiscordGateway {
            * @returns Promise that resolves after send attempt completes.
            */
           const progressSender = async (msg: string): Promise<void> => {
-            await notifier.send(msg).catch(() => undefined);
+            if (progressMessageId && typeof notifier.edit === "function") {
+              const editResult = await notifier.edit(progressMessageId, msg).catch(() => null);
+              if (editResult?.ok) {
+                return;
+              }
+            }
+            const sendResult = await notifier.send(msg).catch(() => null);
+            if (sendResult?.ok && sendResult.messageId) {
+              progressMessageId = sendResult.messageId;
+            }
           };
           try {
             const summary = await this.adapter.runAutonomousTask(
@@ -769,6 +779,12 @@ export class DiscordGateway {
         this.sendChannelMessage(
           channelId,
           applyInvocationHints(messageText, this.config.security.invocation)
+        ),
+      edit: async (messageId: string, messageText: string) =>
+        this.editChannelMessage(
+          channelId,
+          messageId,
+          applyInvocationHints(messageText, this.config.security.invocation)
         )
     };
   }
@@ -852,6 +868,84 @@ export class DiscordGateway {
       ok: false,
       messageId: null,
       errorCode: "DISCORD_SEND_FAILED"
+    };
+  }
+
+  /**
+   * Implements edit channel message behavior used by `discordGateway` autonomous progress updates.
+   *
+   * **Why it exists:**
+   * Autonomous loops can emit multiple progress events; editing one progress message keeps Discord
+   * chats readable while preserving deterministic terminal summaries.
+   *
+   * **What it talks to:**
+   * - Uses `ConversationDeliveryResult` (import `ConversationDeliveryResult`) from `./conversationManager`.
+   * - Uses `buildDiscordApiUrl` (import `buildDiscordApiUrl`) from `./discordApiUrl`.
+   * - Uses `parseDiscordRetryAfterMs` (import `parseDiscordRetryAfterMs`) from `./discordRateLimit`.
+   *
+   * @param channelId - Stable identifier used to reference an entity or record.
+   * @param messageId - Stable identifier used to reference an entity or record.
+   * @param text - Message/text content processed by this function.
+   * @returns Promise resolving to ConversationDeliveryResult.
+   */
+  private async editChannelMessage(
+    channelId: string,
+    messageId: string,
+    text: string
+  ): Promise<ConversationDeliveryResult> {
+    const url = buildDiscordApiUrl(
+      this.config.apiBaseUrl,
+      `/channels/${channelId}/messages/${messageId}`
+    );
+    try {
+      for (let attempt = 1; attempt <= 2; attempt += 1) {
+        const response = await fetch(url.toString(), {
+          method: "PATCH",
+          headers: {
+            Authorization: `Bot ${this.config.botToken}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            content: text
+          })
+        });
+
+        if (response.ok) {
+          return {
+            ok: true,
+            messageId,
+            errorCode: null
+          };
+        }
+
+        if (response.status === 429 && attempt === 1) {
+          const payload = (await response.json().catch(() => null)) as unknown;
+          const retryAfterMs = parseDiscordRetryAfterMs(payload);
+          await sleep(retryAfterMs);
+          continue;
+        }
+
+        return {
+          ok: false,
+          messageId: null,
+          errorCode:
+            response.status === 429
+              ? "DISCORD_RATE_LIMITED"
+              : `DISCORD_EDIT_HTTP_${response.status}`
+        };
+      }
+    } catch {
+      return {
+        ok: false,
+        messageId: null,
+        errorCode: "DISCORD_EDIT_FAILED"
+      };
+    }
+
+    return {
+      ok: false,
+      messageId: null,
+      errorCode: "DISCORD_EDIT_FAILED"
     };
   }
 }

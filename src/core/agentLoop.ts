@@ -34,6 +34,7 @@ const EXECUTION_STYLE_STALL_REASON_CODE = "AUTONOMOUS_EXECUTION_STYLE_STALLED_NO
 const GENERIC_STALL_REASON_CODE = "AUTONOMOUS_STALLED_ZERO_PROGRESS";
 const MAX_ITERATIONS_REASON_CODE = "AUTONOMOUS_MAX_ITERATIONS_REACHED";
 const EMPTY_NEXT_STEP_REASON_CODE = "AUTONOMOUS_NEXT_STEP_EMPTY";
+const TASK_EXECUTION_FAILED_REASON_CODE = "AUTONOMOUS_TASK_EXECUTION_FAILED";
 
 /**
  * Formats reason text with deterministic reason-code metadata.
@@ -220,7 +221,20 @@ export class AutonomousLoop {
                     createdAt: new Date().toISOString()
                 };
 
-                const result = await this.orchestrator.runTask(task);
+                let result: TaskRunResult;
+                try {
+                    result = await this.orchestrator.runTask(task);
+                } catch (error) {
+                    const errorMessage = (error as Error).message || "Unknown runtime error.";
+                    const reason = formatReasonWithCode(
+                        TASK_EXECUTION_FAILED_REASON_CODE,
+                        `Iteration ${iteration} failed before completion: ${errorMessage}`
+                    );
+                    console.log(`\n[Autonomous Loop Aborted] ${reason}\n`);
+                    await callbacks?.onGoalAborted?.(reason, iteration);
+                    goalMetInCurrentLoop = true;
+                    break;
+                }
                 const approved = result.actionResults.filter(r => r.approved).length;
                 const approvedRealSideEffects = countApprovedRealSideEffectActions(result);
                 if (approvedRealSideEffects > 0) {

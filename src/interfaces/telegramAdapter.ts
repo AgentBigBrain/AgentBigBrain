@@ -289,6 +289,7 @@ export class TelegramAdapter {
 
     const callbacks: AutonomousLoopCallbacks = {
       onIterationStart: async (iteration, input) => {
+        totalIterations = iteration;
         if (iteration === 1) {
           const preview = input.length > 150 ? input.slice(0, 150) + "..." : input;
           await onProgress(`Autonomous task started: ${preview}`);
@@ -324,7 +325,20 @@ export class TelegramAdapter {
       }
     };
 
-    await loop.run(goal, callbacks, signal);
+    try {
+      await loop.run(goal, callbacks, signal);
+    } catch (error) {
+      if (!terminalAborted) {
+        terminalAborted = true;
+        const errorMessage = (error as Error).message || "Unknown runtime error.";
+        terminalReason =
+          `[reasonCode=AUTONOMOUS_LOOP_RUNTIME_ERROR] Autonomous loop runtime failure: ${errorMessage}`;
+        await onProgress(
+          `Stopped after ${totalIterations} iteration(s): ${terminalReason}\n` +
+          `${totalApproved} action(s) approved, ${totalBlocked} blocked.`
+        );
+      }
+    }
     if (terminalAborted) {
       return `Autonomous task stopped after ${totalIterations} iteration(s). ` +
         `${totalApproved} approved, ${totalBlocked} blocked. Reason: ${terminalReason}`;

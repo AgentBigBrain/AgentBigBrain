@@ -110,6 +110,10 @@ export interface BrainConfig {
 }
 
 const INVALID_USER_PROTECTED_PATH_PATTERN = /[\u0000*?<>|]/;
+const PER_TURN_DEADLINE_MS_BOUNDS = {
+  min: 5_000,
+  max: 600_000
+} as const;
 
 /**
  * Parses boolean and validates expected structure.
@@ -515,6 +519,7 @@ export const DEFAULT_BRAIN_CONFIG: BrainConfig = {
       "brain_max_subagents_per_task",
       "brain_max_subagent_depth",
       "brain_autonomous_max_consecutive_no_progress",
+      "brain_per_turn_deadline_ms",
       "maxdaemongoalrollovers",
       "brain_max_daemon_goal_rollovers"
     ],
@@ -942,6 +947,12 @@ export function createBrainConfigFromEnv(env: NodeJS.ProcessEnv = process.env): 
   config.limits.maxDaemonGoalRollovers = parseNonNegativeInteger(
     env.BRAIN_MAX_DAEMON_GOAL_ROLLOVERS,
     config.limits.maxDaemonGoalRollovers
+  );
+  config.limits.perTurnDeadlineMs = parseBoundedPositiveInteger(
+    env.BRAIN_PER_TURN_DEADLINE_MS,
+    config.limits.perTurnDeadlineMs,
+    PER_TURN_DEADLINE_MS_BOUNDS,
+    "BRAIN_PER_TURN_DEADLINE_MS"
   );
 
   const profileMemoryPath = env.BRAIN_PROFILE_MEMORY_PATH?.trim();

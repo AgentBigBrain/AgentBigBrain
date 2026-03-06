@@ -72,6 +72,17 @@ class ScriptedOrchestrator extends StubOrchestrator {
   }
 }
 
+class ThrowingOrchestrator extends StubOrchestrator {
+  /**
+   * Implements `runTask` behavior within class ThrowingOrchestrator.
+   * Interacts with local collaborators through imported modules and typed inputs/outputs.
+   */
+  override async runTask(_task: TaskRequest): Promise<TaskRunResult> {
+    this.runCount += 1;
+    throw new Error("OpenAI request timed out after 15000ms.");
+  }
+}
+
 /**
  * Implements `buildApprovedRespondResult` behavior within module scope.
  * Interacts with local collaborators through imported modules and typed inputs/outputs.
@@ -500,4 +511,36 @@ test("AutonomousLoop uses configurable no-progress stall threshold from runtime 
 
   assert.equal(orchestrator.runCount, 4);
   assert.match(abortedReason, /\[reasonCode=AUTONOMOUS_MAX_ITERATIONS_REACHED\]/i);
+});
+
+test("AutonomousLoop emits deterministic aborted reason when task execution throws", async () => {
+  const orchestrator = new ThrowingOrchestrator();
+  const modelClient = new StubLoopModelClient([
+    {
+      isGoalMet: false,
+      reasoning: "continue",
+      nextUserInput: "next"
+    }
+  ]);
+  const loop = new AutonomousLoop(
+    orchestrator as unknown as BrainOrchestrator,
+    modelClient,
+    { ...DEFAULT_BRAIN_CONFIG, runtime: { ...DEFAULT_BRAIN_CONFIG.runtime, isDaemonMode: false } }
+  );
+
+  let goalMetCalled = false;
+  let abortedReason = "";
+  await loop.run("Create a React app on my Desktop and execute now.", {
+    onGoalMet: async () => {
+      goalMetCalled = true;
+    },
+    onGoalAborted: async (reason) => {
+      abortedReason = reason;
+    }
+  });
+
+  assert.equal(goalMetCalled, false);
+  assert.equal(orchestrator.runCount, 1);
+  assert.match(abortedReason, /\[reasonCode=AUTONOMOUS_TASK_EXECUTION_FAILED\]/i);
+  assert.match(abortedReason, /timed out/i);
 });
