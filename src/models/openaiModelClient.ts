@@ -78,6 +78,12 @@ const PLANNER_ACTION_TYPE_VALUES = [
   "network_write",
   "self_modify",
   "shell_command",
+  "start_process",
+  "check_process",
+  "stop_process",
+  "probe_port",
+  "probe_http",
+  "verify_browser",
   "memory_mutation",
   "pulse_emit"
 ] as const;
@@ -142,9 +148,55 @@ const PLANNER_PARAMS_SCHEMA: Record<string, unknown> = {
       type: "object",
       additionalProperties: false,
       properties: {
-        command: { type: "string" }
+        command: { type: "string" },
+        cwd: { type: "string" },
+        workdir: { type: "string" },
+        requestedShellKind: {
+          type: "string",
+          enum: ["powershell", "pwsh", "cmd", "bash", "wsl_bash"]
+        },
+        timeoutMs: { type: "integer" }
       },
       required: ["command"]
+    },
+    {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        leaseId: { type: "string" }
+      },
+      required: ["leaseId"]
+    },
+    {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        host: { type: "string" },
+        port: { type: "integer" },
+        timeoutMs: { type: "integer" }
+      },
+      required: ["port"]
+    },
+    {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        url: { type: "string" },
+        expectedStatus: { type: "integer" },
+        timeoutMs: { type: "integer" }
+      },
+      required: ["url"]
+    },
+    {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        url: { type: "string" },
+        expectedTitle: { type: "string" },
+        expectedText: { type: "string" },
+        timeoutMs: { type: "integer" }
+      },
+      required: ["url"]
     },
     {
       type: "object",
@@ -393,6 +445,120 @@ function sanitizeSchemaContractName(schemaName: string): string {
 }
 
 /**
+ * Evaluates whether a schema node already permits `null`.
+ *
+ * **Why it exists:**
+ * OpenAI strict JSON-schema mode requires object properties to be listed in `required`, so formerly
+ * optional properties need an explicit nullable representation instead of being silently omitted.
+ *
+ * **What it talks to:**
+ * - Uses local schema-walking helpers within this module.
+ *
+ * @param schemaNode - Raw JSON-schema node.
+ * @returns `true` when the node already allows `null`.
+ */
+function schemaAllowsNull(schemaNode: unknown): boolean {
+  if (!schemaNode || typeof schemaNode !== "object" || Array.isArray(schemaNode)) {
+    return false;
+  }
+
+  const node = schemaNode as Record<string, unknown>;
+  if (node.type === "null") {
+    return true;
+  }
+
+  if (Array.isArray(node.anyOf)) {
+    return node.anyOf.some((entry) => schemaAllowsNull(entry));
+  }
+
+  if (Array.isArray(node.enum)) {
+    return node.enum.includes(null);
+  }
+
+  return false;
+}
+
+/**
+ * Converts a JSON-schema tree into OpenAI strict-mode form.
+ *
+ * **Why it exists:**
+ * OpenAI `json_schema` strict mode rejects object nodes unless every declared property also appears
+ * in `required`. This transformer keeps local logical schemas readable while producing the stricter
+ * provider-side contract at request time.
+ *
+ * **What it talks to:**
+ * - Uses `schemaAllowsNull` from this module.
+ *
+ * @param schemaNode - Raw logical JSON-schema node.
+ * @returns Provider-safe JSON-schema node for OpenAI strict mode.
+ */
+function toOpenAIStrictSchemaNode(schemaNode: unknown): unknown {
+  if (Array.isArray(schemaNode)) {
+    return schemaNode.map((entry) => toOpenAIStrictSchemaNode(entry));
+  }
+
+  if (!schemaNode || typeof schemaNode !== "object") {
+    return schemaNode;
+  }
+
+  const node = schemaNode as Record<string, unknown>;
+  const transformed: Record<string, unknown> = {};
+
+  for (const [key, value] of Object.entries(node)) {
+    if (key === "properties" && value && typeof value === "object" && !Array.isArray(value)) {
+      const propertyEntries = Object.entries(value as Record<string, unknown>);
+      const currentRequired = new Set(
+        Array.isArray(node.required)
+          ? (node.required.filter((entry): entry is string => typeof entry === "string"))
+          : []
+      );
+      const strictProperties: Record<string, unknown> = {};
+
+      for (const [propertyKey, propertySchema] of propertyEntries) {
+        const strictPropertySchema = toOpenAIStrictSchemaNode(propertySchema);
+        strictProperties[propertyKey] = currentRequired.has(propertyKey) || schemaAllowsNull(strictPropertySchema)
+          ? strictPropertySchema
+          : {
+            anyOf: [
+              strictPropertySchema,
+              { type: "null" }
+            ]
+          };
+      }
+
+      transformed.properties = strictProperties;
+      transformed.required = propertyEntries.map(([propertyKey]) => propertyKey);
+      continue;
+    }
+
+    if (key === "required") {
+      continue;
+    }
+
+    if (Array.isArray(value)) {
+      transformed[key] = value.map((entry) => toOpenAIStrictSchemaNode(entry));
+      continue;
+    }
+
+    if (value && typeof value === "object") {
+      transformed[key] = toOpenAIStrictSchemaNode(value);
+      continue;
+    }
+
+    transformed[key] = value;
+  }
+
+  if (transformed.type === "object") {
+    transformed.additionalProperties = false;
+    if (!Object.prototype.hasOwnProperty.call(transformed, "required")) {
+      transformed.required = [];
+    }
+  }
+
+  return transformed;
+}
+
+/**
  * Builds the provider `response_format` contract for a known schema.
  *
  * **Why it exists:**
@@ -417,7 +583,7 @@ function buildOpenAIResponseFormatContract(schemaName: string): OpenAIResponseFo
     json_schema: {
       name: sanitizeSchemaContractName(schemaName),
       strict: true,
-      schema: contractSchema
+      schema: toOpenAIStrictSchemaNode(contractSchema) as Record<string, unknown>
     }
   };
 }

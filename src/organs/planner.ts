@@ -3,6 +3,7 @@
  */
 
 import {
+  DistilledPacketV1,
   FirstPrinciplesPacketV1,
   FirstPrinciplesRubric,
   Plan,
@@ -12,7 +13,7 @@ import {
   TaskRequest,
   WorkflowPattern
 } from "../core/types";
-import { SemanticMemoryStore } from "../core/semanticMemory";
+import { SemanticLesson, SemanticMemoryStore } from "../core/semanticMemory";
 import { estimateActionCostUsd } from "../core/actionCostPolicy";
 import {
   createFirstPrinciplesRubric,
@@ -52,19 +53,23 @@ import {
   PLANNER_FAILURE_WINDOW_MS,
   RequiredActionType
 } from "./plannerHelpers";
+import {
+  assessExecutionStyleBuildPlan,
+  allowsImplicitFiniteShellForBuildRequest,
+  allowsImplicitManagedProcessForBuildRequest,
+  buildExecutionStyleRequiredActionHint,
+  describeExecutionStyleBuildPlanIssue,
+  hasNonRespondAction,
+  isExecutionStyleBuildRequest,
+  isLiveVerificationBuildRequest,
+  requiresBrowserVerificationBuildRequest,
+  requiresExecutableBuildPlan
+} from "./plannerBuildExecutionPolicy";
 
 const SHELL_EXPLICIT_REQUEST_PATTERN =
   /\b(shell|terminal|powershell|bash|cmd(?:\.exe)?|command line|run (?:a )?command|execute (?:a )?command)\b/i;
 const SELF_MODIFY_EXPLICIT_REQUEST_PATTERN =
   /\b(self[-\s]?modify|modify (?:yourself|your own|the agent|the brain|runtime|source|codebase|governor|policy)|edit (?:agent|runtime|source|code|config)|patch (?:agent|runtime|codebase)|change (?:governor|policy|hard constraint|runtime|codebase))\b/i;
-const BUILD_EXECUTION_VERB_PATTERN =
-  /\b(create|build|make|generate|scaffold|setup|set up|spin up)\b/i;
-const BUILD_EXECUTION_TARGET_PATTERN =
-  /\b(app|application|project|dashboard|site|website|frontend|backend|api|cli|repo|repository|react|next\.?js|vue|svelte|angular|vite)\b/i;
-const BUILD_EXECUTION_DESTINATION_PATTERN =
-  /\bon\s+my\s+(desktop|documents|downloads)\b|\bin\s+['"]?[a-z]:\\|\bin\s+['"]?\/(?:users|home|tmp|var|opt)\//i;
-const BUILD_EXPLANATION_ONLY_PATTERN =
-  /^\s*(how\s+do\s+i|how\s+to|explain|show\s+me\s+how|tutorial|guide\s+me|what\s+is)\b|\b(without\s+executing|do\s+not\s+execute|don't\s+execute|guidance\s+only|instructions?\s+only)\b/i;
 const FIRST_PRINCIPLES_RISK_PATTERNS: readonly RegExp[] = [
   /\b(delete|remove|rm)\b/i,
   /\b(network|api|webhook|endpoint|http[s]?:\/\/)\b/i,
@@ -78,40 +83,13 @@ const FIRST_PRINCIPLES_NOVEL_REQUEST_MIN_WORDS = 16;
 const RESPONSE_IDENTITY_GUARDRAIL =
   "Keep explicit AI-agent identity in all user-facing text. " +
   "Do not claim to be human, do not claim to be the user, and do not write in first person as if you are the user. ";
+const RESPONSE_STYLE_GUARDRAIL =
+  "When you write user-facing text, keep it human-first: plain language first, brief explanation second, and a concrete next step when relevant. " +
+  "Avoid internal control-plane jargon unless diagnostics were explicitly requested. ";
 
 interface FirstPrinciplesTriggerDecision {
   required: boolean;
   reasons: readonly string[];
-}
-
-/**
- * Evaluates generic build-execution request and returns a deterministic policy signal.
- *
- * **Why it exists:**
- * Helps planner guardrails bias toward actionable plans for build/create intents without weakening
- * explicit shell/self-modify safety constraints.
- *
- * **What it talks to:**
- * - Uses local deterministic lexical patterns in this module.
- *
- * @param currentUserRequest - Structured input object for this operation.
- * @returns `true` when this check passes.
- */
-function isExecutionStyleBuildRequest(currentUserRequest: string): boolean {
-  if (BUILD_EXPLANATION_ONLY_PATTERN.test(currentUserRequest)) {
-    return false;
-  }
-  if (!BUILD_EXECUTION_VERB_PATTERN.test(currentUserRequest)) {
-    return false;
-  }
-  if (!BUILD_EXECUTION_TARGET_PATTERN.test(currentUserRequest)) {
-    return false;
-  }
-  return (
-    BUILD_EXECUTION_DESTINATION_PATTERN.test(currentUserRequest) ||
-    /\bexecute\s+now\b/i.test(currentUserRequest) ||
-    /\brun\s+(?:it|commands?)\b/i.test(currentUserRequest)
-  );
 }
 
 export interface PlannerPlanOptions {
@@ -125,6 +103,11 @@ export interface PlannerExecutionEnvironmentContext {
   shellKind: ShellRuntimeProfileV1["shellKind"];
   invocationMode: ShellRuntimeProfileV1["invocationMode"];
   commandMaxChars: number;
+}
+
+interface DistilledRelevantLesson {
+  packet: DistilledPacketV1;
+  concepts: readonly string[];
 }
 
 /**
@@ -148,6 +131,61 @@ function resolveDefaultExecutionEnvironmentContext(): PlannerExecutionEnvironmen
     invocationMode: "inline_command",
     commandMaxChars: 4_000
   };
+}
+
+/**
+ * Distills planner lessons while suppressing quarantined memory entries.
+ *
+ * **Why it exists:**
+ * Planner memory should improve planning quality, but one quarantined lesson must not abort a live
+ * user task when the lesson can simply be excluded from prompt context.
+ *
+ * **What it talks to:**
+ * - Uses `SemanticLesson` (import `SemanticLesson`) from `../core/semanticMemory`.
+ * - Uses `buildDefaultRetrievalQuarantinePolicy` from `../core/retrievalQuarantine`.
+ * - Uses `distillExternalContent` from `../core/retrievalQuarantine`.
+ * - Uses `requireDistilledPacketForPlanner` from `../core/retrievalQuarantine`.
+ *
+ * @param relevantLessons - Retrieved lesson candidates from semantic memory.
+ * @param retrievalPolicy - Deterministic retrieval quarantine policy for this planning pass.
+ * @returns Planner-safe distilled lessons ready for prompt inclusion.
+ */
+function distillPlannerLessons(
+  relevantLessons: readonly SemanticLesson[],
+  retrievalPolicy: ReturnType<typeof buildDefaultRetrievalQuarantinePolicy>
+): DistilledRelevantLesson[] {
+  const distilledLessons: DistilledRelevantLesson[] = [];
+  for (const lesson of relevantLessons) {
+    const distillation = distillExternalContent(
+      {
+        sourceKind: "document",
+        sourceId: lesson.id,
+        contentType: "text/plain",
+        rawContent: lesson.text,
+        observedAt: lesson.createdAt
+      },
+      retrievalPolicy
+    );
+    if (!distillation.ok) {
+      console.warn(
+        `[Planner] Suppressing quarantined lesson ${lesson.id}: ` +
+        `${distillation.blockCode} (${distillation.reason})`
+      );
+      continue;
+    }
+    const packetValidation = requireDistilledPacketForPlanner(distillation.packet);
+    if (packetValidation) {
+      throw new Error(
+        `Retrieval quarantine packet validation failed for lesson ${lesson.id}: ` +
+        `${packetValidation.blockCode} (${packetValidation.reason})`
+      );
+    }
+    distilledLessons.push({
+      packet: distillation.packet,
+      concepts: lesson.concepts
+    });
+  }
+  return distilledLessons;
 }
 
 export class PlannerOrgan {
@@ -193,7 +231,47 @@ export class PlannerOrgan {
       `- shellKind: ${this.executionEnvironment.shellKind}\n` +
       `- invocationMode: ${this.executionEnvironment.invocationMode}\n` +
       `- commandMaxChars: ${this.executionEnvironment.commandMaxChars}\n` +
-      "- If you emit shell_command, it must be valid for this shellKind."
+      "- If you emit shell_command or start_process, the command must be valid for this shellKind."
+    );
+  }
+
+  /**
+   * Builds deterministic build-task strategy guidance for planner prompts.
+   *
+   * **Why it exists:**
+   * Keeps planner verification strategy aligned with seamless-execution UX goals so build requests
+   * bias toward finite proof steps instead of long-running dev-server loops the runtime cannot
+   * always verify cleanly.
+   *
+   * **What it talks to:**
+   * - Uses local helper functions within this module.
+   * - Uses `classifyRoutingIntentV1` (import `classifyRoutingIntentV1`) from `../interfaces/routingMap`.
+   *
+   * @param currentUserRequest - Active request segment extracted from conversation/task input.
+   * @returns Resulting string value.
+   */
+  private buildExecutionStyleBuildStrategyGuidance(currentUserRequest: string): string {
+    if (!isExecutionStyleBuildRequest(currentUserRequest)) {
+      return "";
+    }
+
+    const browserVerificationClause = requiresBrowserVerificationBuildRequest(currentUserRequest)
+      ? " Explicit browser/UI proof is required: after localhost readiness succeeds, use verify_browser with params.url and any available expectedTitle/expectedText hints."
+      : "";
+    const liveVerificationClause = isLiveVerificationBuildRequest(currentUserRequest)
+      ? " Live-run verification intent detected: only choose a long-running run/observe step after finite proof steps succeed. When localhost readiness proof is required, pair start_process with probe_port or probe_http. Do not claim browser or UI verification from probes alone." +
+        browserVerificationClause +
+        " If live verification still cannot be proven truthfully in this runtime path, say so plainly instead of claiming the app was running or the UI was verified."
+      : "";
+
+    return (
+      "\nDeterministic build-task strategy: prefer finite proof steps before any live session. " +
+      "Use the smallest executable sequence that can prove progress, usually scaffold -> edit -> install -> build -> finite verification. " +
+      "Read_file, list_directory, check_process, or stop_process can support the plan, but they do not satisfy an execution-style build request by themselves. " +
+      "Do not use long-running dev-server commands (for example npm start, npm run dev, next dev, vite dev, or watch mode) as the default proof step when a finite build/test verification step exists. " +
+      "Only use managed-process actions (start_process/check_process/stop_process) when live verification is explicitly required and policy allows it. " +
+      "Use probe_port or probe_http only for loopback-local readiness checks." +
+      liveVerificationClause
     );
   }
 
@@ -449,8 +527,24 @@ export class PlannerOrgan {
    */
   private buildHighRiskActionGuardrails(currentUserRequest: string): string {
     const disallowedActionTypes: string[] = [];
-    if (!SHELL_EXPLICIT_REQUEST_PATTERN.test(currentUserRequest)) {
+    const allowImplicitFiniteShell =
+      allowsImplicitFiniteShellForBuildRequest(currentUserRequest);
+    const allowImplicitManagedProcess =
+      allowsImplicitManagedProcessForBuildRequest(currentUserRequest);
+    if (
+      !SHELL_EXPLICIT_REQUEST_PATTERN.test(currentUserRequest) &&
+      !allowImplicitFiniteShell
+    ) {
       disallowedActionTypes.push("shell_command");
+    }
+    if (
+      !SHELL_EXPLICIT_REQUEST_PATTERN.test(currentUserRequest) &&
+      !allowImplicitManagedProcess
+    ) {
+      disallowedActionTypes.push("start_process");
+    }
+    if (!requiresBrowserVerificationBuildRequest(currentUserRequest)) {
+      disallowedActionTypes.push("verify_browser");
     }
     if (!SELF_MODIFY_EXPLICIT_REQUEST_PATTERN.test(currentUserRequest)) {
       disallowedActionTypes.push("self_modify");
@@ -460,7 +554,7 @@ export class PlannerOrgan {
     }
 
     const buildExecutionBias = isExecutionStyleBuildRequest(currentUserRequest)
-      ? " Execution-style build request detected: prefer actionable non-respond plans (for example write_file/read_file/list_directory/run_skill) over guidance-only respond output when policy allows."
+      ? " Execution-style build request detected: prefer concrete build or proof actions (for example write_file, shell_command, start_process, probe_http, or verify_browser). Read_file, list_directory, check_process, and stop_process may support the plan but are too weak by themselves. Avoid guidance-only respond output when policy allows."
       : "";
 
     return (
@@ -592,12 +686,18 @@ export class PlannerOrgan {
     const playbookGuidance = this.buildPlaybookGuidance(playbookSelection);
     const highRiskActionGuardrails = this.buildHighRiskActionGuardrails(currentUserRequest);
     const executionEnvironmentGuidance = this.buildExecutionEnvironmentGuidance();
+    const buildStrategyGuidance =
+      this.buildExecutionStyleBuildStrategyGuidance(currentUserRequest);
     const requiredActionHint =
       requiredActionType === "create_skill"
         ? "Current user request explicitly asks to create a skill. Include at least one create_skill action and do not replace it with respond-only output."
         : requiredActionType === "run_skill"
           ? "Current user request explicitly asks to run or use a skill. Include at least one run_skill action and do not replace it with respond-only output."
-        : "";
+          : requiredActionType
+            ? `Current user request explicitly asks for ${requiredActionType}. Include at least one ${requiredActionType} action and do not replace it with unrelated actions or respond-only output.`
+            : "";
+    const executionStyleRequiredActionHint =
+      buildExecutionStyleRequiredActionHint(currentUserRequest);
     return this.modelClient.completeJson<PlannerModelOutput>({
       model: plannerModel,
       schemaName: "planner_v1",
@@ -607,11 +707,19 @@ export class PlannerOrgan {
         "Always produce at least one valid action. For conversational requests, emit a `respond` action. " +
         "If you emit a respond action, include params.message with the exact user-facing text. " +
         RESPONSE_IDENTITY_GUARDRAIL +
+        RESPONSE_STYLE_GUARDRAIL +
         "If you emit a write_file action, include params.path and params.content with the full file content to write. " +
         "If you emit a read_file action, include params.path. " +
         "If you emit a shell_command action, include params.command with the exact command string. " +
+        "If you emit a start_process action, include params.command and any needed cwd/workdir fields. " +
+        "If you emit check_process or stop_process, include params.leaseId. " +
+        "If you emit a probe_port action, include params.port and optional params.host/timeoutMs. " +
+        "If you emit a probe_http action, include params.url and optional params.expectedStatus/timeoutMs. " +
+        "If you emit a verify_browser action, include params.url and optional params.expectedTitle/expectedText/timeoutMs. " +
         requiredActionHint +
+        executionStyleRequiredActionHint +
         executionEnvironmentGuidance +
+        buildStrategyGuidance +
         playbookGuidance +
         highRiskActionGuardrails +
         firstPrinciplesGuidance +
@@ -666,12 +774,18 @@ export class PlannerOrgan {
     const playbookGuidance = this.buildPlaybookGuidance(playbookSelection);
     const highRiskActionGuardrails = this.buildHighRiskActionGuardrails(currentUserRequest);
     const executionEnvironmentGuidance = this.buildExecutionEnvironmentGuidance();
+    const buildStrategyGuidance =
+      this.buildExecutionStyleBuildStrategyGuidance(currentUserRequest);
     const requiredActionHint =
       requiredActionType === "create_skill"
         ? "Repair must include at least one create_skill action because the explicit user request is to create a skill."
         : requiredActionType === "run_skill"
           ? "Repair must include at least one run_skill action because the explicit user request is to run or use a skill."
-        : "";
+          : requiredActionType
+            ? `Repair must include at least one ${requiredActionType} action because the explicit user request names ${requiredActionType}.`
+            : "";
+    const executionStyleRequiredActionHint =
+      buildExecutionStyleRequiredActionHint(currentUserRequest, true);
     return this.modelClient.completeJson<PlannerModelOutput>({
       model: plannerModel,
       schemaName: "planner_v1",
@@ -679,13 +793,21 @@ export class PlannerOrgan {
       systemPrompt:
         "You are repairing a planner JSON output that had no valid actions. " +
         "Return compact JSON with plannerNotes and actions[]. " +
-        "Actions must use only allowed types: respond, read_file, write_file, delete_file, list_directory, create_skill, run_skill, network_write, self_modify, shell_command. " +
+        "Actions must use only allowed types: respond, read_file, write_file, delete_file, list_directory, create_skill, run_skill, network_write, self_modify, shell_command, start_process, check_process, stop_process, probe_port, probe_http, verify_browser. " +
         "Always produce at least one valid action. For conversational requests, emit respond with params.message. " +
         RESPONSE_IDENTITY_GUARDRAIL +
+        RESPONSE_STYLE_GUARDRAIL +
         "For write_file, include params.path and params.content (the full file content). " +
         "For read_file, include params.path. For shell_command, include params.command. " +
+        "For start_process, include params.command and any needed cwd/workdir fields. " +
+        "For check_process or stop_process, include params.leaseId. " +
+        "For probe_port, include params.port and optional params.host/timeoutMs. " +
+        "For probe_http, include params.url and optional params.expectedStatus/timeoutMs. " +
+        "For verify_browser, include params.url and optional params.expectedTitle/expectedText/timeoutMs. " +
         requiredActionHint +
+        executionStyleRequiredActionHint +
         executionEnvironmentGuidance +
+        buildStrategyGuidance +
         playbookGuidance +
         highRiskActionGuardrails +
         firstPrinciplesGuidance +
@@ -771,7 +893,8 @@ export class PlannerOrgan {
       systemPrompt:
         "You are a response synthesizer organ in a governed assistant. " +
         "Return JSON with one key: message. The message must directly answer the user input, be concise, and avoid mentioning internal systems. " +
-        RESPONSE_IDENTITY_GUARDRAIL,
+        RESPONSE_IDENTITY_GUARDRAIL +
+        RESPONSE_STYLE_GUARDRAIL,
       userPrompt: JSON.stringify({
         taskId: task.id,
         goal: task.goal,
@@ -934,35 +1057,7 @@ export class PlannerOrgan {
 
     const relevantLessons = await this.memoryStore.getRelevantLessons(task.userInput, 8);
     const retrievalPolicy = buildDefaultRetrievalQuarantinePolicy(new Date().toISOString());
-    const distilledLessons = relevantLessons.map((lesson) => {
-      const distillation = distillExternalContent(
-        {
-          sourceKind: "document",
-          sourceId: lesson.id,
-          contentType: "text/plain",
-          rawContent: lesson.text,
-          observedAt: lesson.createdAt
-        },
-        retrievalPolicy
-      );
-      if (!distillation.ok) {
-        throw new Error(
-          `Retrieval quarantine blocked lesson ${lesson.id}: ` +
-          `${distillation.blockCode} (${distillation.reason})`
-        );
-      }
-      const packetValidation = requireDistilledPacketForPlanner(distillation.packet);
-      if (packetValidation) {
-        throw new Error(
-          `Retrieval quarantine packet validation failed for lesson ${lesson.id}: ` +
-          `${packetValidation.blockCode} (${packetValidation.reason})`
-        );
-      }
-      return {
-        packet: distillation.packet,
-        concepts: lesson.concepts
-      };
-    });
+    const distilledLessons = distillPlannerLessons(relevantLessons, retrievalPolicy);
     const lessonsText = distilledLessons.length > 0
       ? `\n\nRelevant Distilled Lessons:\n${distilledLessons
           .map(({ packet, concepts }) => {
@@ -1004,6 +1099,7 @@ export class PlannerOrgan {
         }
         : undefined;
     const requiredActionType = inferRequiredActionType(currentUserRequest);
+    const requiresExecutableAction = requiresExecutableBuildPlan(currentUserRequest);
     const playbookSelection = options.playbookSelection ?? null;
 
     try {
@@ -1039,11 +1135,30 @@ export class PlannerOrgan {
       const missingRequiredAction =
         normalizedActions.length > 0 &&
         !hasRequiredAction(normalizedActions, requiredActionType);
-      if (normalizedActions.length === 0 || missingRequiredAction) {
+      const missingExecutableAction =
+        normalizedActions.length > 0 &&
+        requiresExecutableAction &&
+        !hasNonRespondAction(normalizedActions);
+      const initialBuildPlanAssessment = assessExecutionStyleBuildPlan(
+        currentUserRequest,
+        normalizedActions
+      );
+      const invalidExecutionStyleBuildPlan =
+        normalizedActions.length > 0 && !initialBuildPlanAssessment.valid;
+      if (
+        normalizedActions.length === 0 ||
+        missingRequiredAction ||
+        missingExecutableAction ||
+        invalidExecutionStyleBuildPlan
+      ) {
         const repairReason =
           normalizedActions.length === 0
             ? "no_valid_actions"
-            : `missing_required_action:${requiredActionType}`;
+            : missingRequiredAction
+              ? `missing_required_action:${requiredActionType}`
+              : missingExecutableAction
+                ? "missing_executable_action:execution_style_build"
+                : `invalid_execution_style_build_plan:${initialBuildPlanAssessment.issueCode ?? "UNKNOWN"}`;
         const repairedOutput = await this.requestPlannerRepairOutput(
           task,
           plannerModel,
@@ -1117,6 +1232,20 @@ export class PlannerOrgan {
             `Planner model missing required ${requiredActionType} action for explicit user intent.`
           );
         }
+        if (requiresExecutableAction && !hasNonRespondAction(normalizedActions)) {
+          throw new Error(
+            "Planner model returned no executable non-respond actions for execution-style build request."
+          );
+        }
+        const repairedBuildPlanAssessment = assessExecutionStyleBuildPlan(
+          currentUserRequest,
+          normalizedActions
+        );
+        if (!repairedBuildPlanAssessment.valid && repairedBuildPlanAssessment.issueCode) {
+          throw new Error(
+            describeExecutionStyleBuildPlanIssue(repairedBuildPlanAssessment.issueCode)
+          );
+        }
         const actionsWithMessages = await this.ensureRespondMessages(
           normalizedActions,
           task,
@@ -1146,6 +1275,20 @@ export class PlannerOrgan {
       if (!hasRequiredAction(normalizedActions, requiredActionType)) {
         throw new Error(
           `Planner model missing required ${requiredActionType} action for explicit user intent.`
+        );
+      }
+      if (requiresExecutableAction && !hasNonRespondAction(normalizedActions)) {
+        throw new Error(
+          "Planner model returned no executable non-respond actions for execution-style build request."
+        );
+      }
+      const finalBuildPlanAssessment = assessExecutionStyleBuildPlan(
+        currentUserRequest,
+        normalizedActions
+      );
+      if (!finalBuildPlanAssessment.valid && finalBuildPlanAssessment.issueCode) {
+        throw new Error(
+          describeExecutionStyleBuildPlanIssue(finalBuildPlanAssessment.issueCode)
         );
       }
       const actionsWithMessages = await this.ensureRespondMessages(

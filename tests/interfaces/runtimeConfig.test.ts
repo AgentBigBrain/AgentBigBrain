@@ -19,8 +19,8 @@ test("runtime config selects telegram provider when configured", () => {
   assert.equal(config.security.allowedUsernames[0], "agentowner");
   assert.equal(config.security.agentPulseTickIntervalMs, 120000);
   assert.equal(config.security.ackDelayMs, 1200);
-  assert.equal(config.security.showTechnicalSummary, true);
-  assert.equal(config.security.showSafetyCodes, true);
+  assert.equal(config.security.showTechnicalSummary, false);
+  assert.equal(config.security.showSafetyCodes, false);
   assert.equal(config.security.showCompletionPrefix, false);
   assert.equal(config.security.followUpOverridePath, null);
   assert.equal(config.security.pulseLexicalOverridePath, null);

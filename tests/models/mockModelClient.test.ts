@@ -76,6 +76,95 @@ test("MockModelClient can produce run_skill actions for planner schema", async (
   assert.ok(output.actions.some((action) => action.type === "run_skill"));
 });
 
+test("MockModelClient emits executable build actions for execution-style app prompts", async () => {
+  const client = new MockModelClient();
+  const output = await client.completeJson<PlannerModelOutput>({
+    model: "mock-planner",
+    schemaName: "planner_v1",
+    systemPrompt: "planner",
+    userPrompt: JSON.stringify({
+      userInput: "Create a React app on my Desktop and execute now."
+    })
+  });
+
+  assert.ok(output.actions.some((action) => action.type === "shell_command"));
+  assert.equal(output.actions.some((action) => action.type === "respond"), false);
+});
+
+test("MockModelClient emits managed-process readiness actions for live verification build prompts", async () => {
+  const client = new MockModelClient();
+  const output = await client.completeJson<PlannerModelOutput>({
+    model: "mock-planner",
+    schemaName: "planner_v1",
+    systemPrompt: "planner",
+    userPrompt: JSON.stringify({
+      userInput: "Create a React app on my Desktop, run the app, and verify the homepage UI. Execute now."
+    })
+  });
+
+  assert.ok(output.actions.some((action) => action.type === "shell_command"));
+  assert.ok(output.actions.some((action) => action.type === "start_process"));
+  assert.ok(output.actions.some((action) => action.type === "probe_port"));
+  assert.ok(output.actions.some((action) => action.type === "verify_browser"));
+});
+
+test("MockModelClient planner prefers the current user request over wrapped conversation context", async () => {
+  const client = new MockModelClient();
+  const output = await client.completeJson<PlannerModelOutput>({
+    model: "mock-planner",
+    schemaName: "planner_v1",
+    systemPrompt: "planner",
+    userPrompt: JSON.stringify({
+      userInput: [
+        "Recent conversation context (oldest to newest):",
+        "- User: Create a React app on my Desktop and execute now.",
+        "",
+        "Current user request:",
+        "summarize what is currently running and what is queued right now."
+      ].join("\n"),
+      currentUserRequest: "summarize what is currently running and what is queued right now."
+    })
+  });
+
+  assert.equal(output.actions.length, 1);
+  assert.equal(output.actions[0].type, "respond");
+  assert.equal(output.actions.some((action) => action.type === "shell_command"), false);
+});
+
+test("MockModelClient aligns routed scaffold prompts with executable build actions", async () => {
+  const client = new MockModelClient();
+  const output = await client.completeJson<PlannerModelOutput>({
+    model: "mock-planner",
+    schemaName: "planner_v1",
+    systemPrompt: "planner",
+    userPrompt: JSON.stringify({
+      userInput: "Build and test a deterministic TypeScript CLI scaffold with runbook and tests."
+    })
+  });
+
+  assert.ok(output.actions.some((action) => action.type === "shell_command"));
+});
+
+test("MockModelClient response synthesis uses the active request from wrapped conversation input", async () => {
+  const client = new MockModelClient();
+  const output = await client.completeJson<ResponseSynthesisModelOutput>({
+    model: "mock-synthesizer",
+    schemaName: "response_v1",
+    systemPrompt: "synthesizer",
+    userPrompt: JSON.stringify({
+      userInput: [
+        "Recent conversation context (oldest to newest):",
+        "- User: Create a React app on my Desktop and execute now.",
+        "",
+        "Current user request:",
+        "say currently running: none queued: one"
+      ].join("\n")
+    })
+  });
+
+  assert.equal(output.message, "currently running: none queued: one");
+});
+
 test("MockModelClient supports autonomous loop schemas", async () => {
   const client = new MockModelClient();
   const next = await client.completeJson<AutonomousNextStepModelOutput>({

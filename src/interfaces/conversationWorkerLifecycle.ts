@@ -60,6 +60,51 @@ function canUseNativeStreaming(
   return notify.capabilities.supportsNativeStreaming && typeof notify.stream === "function";
 }
 
+/**
+ * Builds a short request preview for worker progress messaging.
+ *
+ * **Why it exists:**
+ * Generic "still working" pings are low-signal. This helper keeps progress updates anchored to
+ * the actual request while bounding message length for chat transports.
+ *
+ * **What it talks to:**
+ * - Reads `ConversationJob` input/executionInput fields.
+ *
+ * @param job - Running job whose request preview should be rendered.
+ * @returns Bounded request summary for progress messages.
+ */
+function summarizeJobForProgress(job: ConversationJob): string {
+  const rawText = (job.input || job.executionInput || "your request")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!rawText) {
+    return "your request";
+  }
+  return rawText.length > 100 ? `${rawText.slice(0, 100)}...` : rawText;
+}
+
+/**
+ * Builds a human-first worker progress message.
+ *
+ * **Why it exists:**
+ * Queue worker updates should sound like active help instead of idle telemetry while still making
+ * elapsed-time context available during longer runs.
+ *
+ * **What it talks to:**
+ * - Uses `summarizeJobForProgress` within this module.
+ *
+ * @param job - Running job being described.
+ * @param elapsed - Optional elapsed-time value in seconds.
+ * @returns Human-readable progress message.
+ */
+function buildWorkerProgressMessage(job: ConversationJob, elapsed?: number): string {
+  const preview = summarizeJobForProgress(job);
+  if (typeof elapsed === "number") {
+    return `Working on your request: ${preview} (${elapsed}s elapsed)`;
+  }
+  return `Working on your request: ${preview}`;
+}
+
 export interface MarkQueuedJobRunningInput {
   session: ConversationSession;
   job: ConversationJob;
@@ -181,7 +226,7 @@ export async function executeRunningJob(input: ExecuteRunningJobInput): Promise<
   const useNativeStreaming = !suppressHeartbeat && canUseNativeStreaming(notify);
 
   if (useNativeStreaming) {
-    void notify.stream!("Working on it...").catch(() => undefined);
+    void notify.stream!(buildWorkerProgressMessage(job)).catch(() => undefined);
   }
 
   const heartbeat = suppressHeartbeat
@@ -191,7 +236,7 @@ export async function executeRunningJob(input: ExecuteRunningJobInput): Promise<
           return;
         }
         const elapsed = elapsedSeconds(job.startedAt ?? job.createdAt);
-        const progressText = `Still working... (${elapsed}s elapsed)`;
+        const progressText = buildWorkerProgressMessage(job, elapsed);
         if (useNativeStreaming) {
           void notify.stream!(progressText).catch(() => undefined);
           return;

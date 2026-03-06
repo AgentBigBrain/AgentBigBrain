@@ -116,6 +116,8 @@ test("buildConversationAwareExecutionInput includes build-scaffold routing hint 
 
   assert.match(executionInput, /Deterministic routing hint:/);
   assert.match(executionInput, /Intent surface: build_scaffold\./i);
+  assert.match(executionInput, /Prefer governed finite proof steps first/i);
+  assert.match(executionInput, /Only use managed process plus probe actions/i);
   assert.match(executionInput, /BUILD_NO_SIDE_EFFECT_EXECUTED/i);
 });
 

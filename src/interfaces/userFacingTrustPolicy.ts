@@ -168,5 +168,13 @@ function resolveTrustUncertainMessage(classification: TrustRenderClassification)
  * @returns `true` when this action type should count as side-effect execution.
  */
 function isSideEffectActionType(actionType: string): boolean {
-  return actionType !== "respond" && actionType !== "read_file" && actionType !== "list_directory";
+  return (
+    actionType !== "respond" &&
+    actionType !== "read_file" &&
+    actionType !== "list_directory" &&
+    actionType !== "check_process" &&
+    actionType !== "probe_port" &&
+    actionType !== "probe_http" &&
+    actionType !== "verify_browser"
+  );
 }

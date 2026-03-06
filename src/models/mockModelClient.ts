@@ -2,6 +2,7 @@
  * @fileoverview Deterministic mock model backend for local development and CI testing.
  */
 
+import { extractActiveRequestSegment } from "../core/currentRequestExtraction";
 import { ActionType } from "../core/types";
 import { estimateActionCostUsd } from "../core/actionCostPolicy";
 import {
@@ -27,6 +28,20 @@ const HIGH_RISK_SELF_EDIT_HINTS = [
   "disable safety",
   "override"
 ];
+const MOCK_BUILD_EXECUTION_VERB_PATTERN =
+  /\b(create|build|make|generate|scaffold|setup|set up|spin up)\b/i;
+const MOCK_BUILD_EXECUTION_TARGET_PATTERN =
+  /\b(app|application|project|dashboard|site|website|frontend|backend|api|cli|repo|repository|react|next\.?js|vue|svelte|angular|vite)\b/i;
+const MOCK_BUILD_EXECUTION_DESTINATION_PATTERN =
+  /\bon\s+my\s+(desktop|documents|downloads)\b|\bin\s+['"]?[a-z]:\\|\bin\s+['"]?\/(?:users|home|tmp|var|opt)\//i;
+const MOCK_ROUTED_BUILD_PATTERNS: readonly RegExp[] = [
+  /\bbuild\b.*\btypescript\b.*\bcli\b/i,
+  /\bdeterministic\s+typescript\s+cli\s+scaffold\b/i,
+  /\bscaffold\b/i,
+  /\brunbook\b/i
+] as const;
+const MOCK_BUILD_EXPLANATION_ONLY_PATTERN =
+  /^\s*(how\s+do\s+i|how\s+to|explain|show\s+me\s+how|tutorial|guide\s+me|what\s+is)\b|\b(without\s+executing|do\s+not\s+execute|don't\s+execute|guidance\s+only|instructions?\s+only)\b/i;
 
 const ACTION_TYPES: ActionType[] = [
   "respond",
@@ -38,7 +53,13 @@ const ACTION_TYPES: ActionType[] = [
   "run_skill",
   "network_write",
   "self_modify",
-  "shell_command"
+  "shell_command",
+  "start_process",
+  "check_process",
+  "stop_process",
+  "probe_port",
+  "probe_http",
+  "verify_browser"
 ];
 
 /**
@@ -99,6 +120,39 @@ function asString(value: unknown): string {
 }
 
 /**
+ * Resolves the active user request from structured mock-model input.
+ *
+ * **Why it exists:**
+ * Keeps mock planner and response-synthesis behavior aligned with the wrapped interface payloads
+ * used in production so tests evaluate the newest user turn instead of stale conversation context.
+ *
+ * **What it talks to:**
+ * - Uses `extractActiveRequestSegment` (import `extractActiveRequestSegment`) from `../core/currentRequestExtraction`.
+ * - Uses `asString` from this module.
+ *
+ * @param input - Parsed structured model input object.
+ * @param fallbackPrompt - Raw prompt fallback used when no structured user input is present.
+ * @returns Active request text used for deterministic mock intent matching.
+ */
+function resolveActiveMockUserInput(
+  input: Record<string, unknown>,
+  fallbackPrompt: string
+): string {
+  const currentUserRequest = asString(input.currentUserRequest).trim();
+  if (currentUserRequest.length > 0) {
+    return currentUserRequest;
+  }
+
+  const structuredUserInput = asString(input.userInput).trim();
+  if (structuredUserInput.length > 0) {
+    const activeRequest = extractActiveRequestSegment(structuredUserInput);
+    return activeRequest.length > 0 ? activeRequest : structuredUserInput;
+  }
+
+  return fallbackPrompt;
+}
+
+/**
  * Evaluates any and returns a deterministic policy signal.
  *
  * **Why it exists:**
@@ -113,6 +167,97 @@ function asString(value: unknown): string {
  */
 function includesAny(text: string, patterns: string[]): boolean {
   return patterns.some((pattern) => text.includes(pattern));
+}
+
+/**
+ * Evaluates generic build-execution request and returns a deterministic policy signal.
+ *
+ * **Why it exists:**
+ * Keeps mock planner behavior aligned with real planner policy so CI and local dry runs exercise
+ * execution-style build flows with non-respond actions instead of collapsing back to guidance-only
+ * output.
+ *
+ * **What it talks to:**
+ * - Uses local deterministic lexical patterns within this module.
+ *
+ * @param userInput - Raw user input text passed to the mock planner.
+ * @returns `true` when the request looks like an execution-style build goal.
+ */
+function isMockExecutionStyleBuildRequest(userInput: string): boolean {
+  if (MOCK_BUILD_EXPLANATION_ONLY_PATTERN.test(userInput)) {
+    return false;
+  }
+  if (MOCK_ROUTED_BUILD_PATTERNS.some((pattern) => pattern.test(userInput))) {
+    return true;
+  }
+  if (!MOCK_BUILD_EXECUTION_VERB_PATTERN.test(userInput)) {
+    return false;
+  }
+  if (!MOCK_BUILD_EXECUTION_TARGET_PATTERN.test(userInput)) {
+    return false;
+  }
+  return (
+    MOCK_BUILD_EXECUTION_DESTINATION_PATTERN.test(userInput) ||
+    /\bexecute\s+now\b/i.test(userInput) ||
+    /\brun\s+(?:it|commands?)\b/i.test(userInput)
+  );
+}
+
+/**
+ * Evaluates whether a build request explicitly asks for live-run verification.
+ *
+ * **Why it exists:**
+ * Lets the mock planner exercise managed-process plus readiness-probe planning paths when tests or
+ * local runs ask to start and verify an app instead of only scaffolding it.
+ *
+ * **What it talks to:**
+ * - Uses `isMockExecutionStyleBuildRequest` from this module.
+ * - Uses local deterministic lexical patterns within this module.
+ *
+ * @param userInput - Raw user input text passed to the mock planner.
+ * @returns `true` when live verification is explicitly requested.
+ */
+function isMockLiveVerificationBuildRequest(userInput: string): boolean {
+  if (!isMockExecutionStyleBuildRequest(userInput)) {
+    return false;
+  }
+  return (
+    /\bnpm\s+start\b/i.test(userInput) ||
+    /\bnpm\s+run\s+dev\b/i.test(userInput) ||
+    /\b(?:pnpm|yarn)\s+(?:start|dev)\b/i.test(userInput) ||
+    /\b(?:next|vite)\s+dev\b/i.test(userInput) ||
+    /\bdev\s+server\b/i.test(userInput) ||
+    /\b(run|start|launch|open)\b[\s\S]{0,80}\b(app|site|server|project|frontend)\b/i.test(
+      userInput
+    ) ||
+    /\bverify\b[\s\S]{0,80}\b(ui|homepage|browser|render|renders|rendering)\b/i.test(
+      userInput
+    ) ||
+    /\bopen\b[\s\S]{0,80}\bbrowser\b/i.test(userInput)
+  );
+}
+
+/**
+ * Evaluates whether a build request explicitly asks for browser or UI proof.
+ *
+ * **Why it exists:**
+ * Lets the mock planner exercise the browser-verification action path so CI covers stronger live
+ * app verification instead of stopping at port readiness.
+ *
+ * **What it talks to:**
+ * - Uses `isMockLiveVerificationBuildRequest` from this module.
+ * - Uses local deterministic lexical patterns within this module.
+ *
+ * @param userInput - Raw user input text passed to the mock planner.
+ * @returns `true` when browser/UI proof is explicitly requested.
+ */
+function isMockBrowserVerificationBuildRequest(userInput: string): boolean {
+  if (!isMockLiveVerificationBuildRequest(userInput)) {
+    return false;
+  }
+  return /\bverify\b[\s\S]{0,80}\b(ui|homepage|browser|render|renders|rendering)\b/i.test(
+    userInput
+  );
 }
 
 /**
@@ -131,7 +276,7 @@ function includesAny(text: string, patterns: string[]): boolean {
  */
 function buildPlannerOutput(userPrompt: string): PlannerModelOutput {
   const input = parseJsonObject(userPrompt);
-  const userInput = asString(input.userInput) || userPrompt;
+  const userInput = resolveActiveMockUserInput(input, userPrompt);
   const text = userInput.toLowerCase();
   const actions: PlannerModelOutput["actions"] = [];
 
@@ -234,6 +379,49 @@ function buildPlannerOutput(userPrompt: string): PlannerModelOutput {
     });
   }
 
+  if (text.includes("start process") || text.includes("start dev server")) {
+    pushAction("start_process", "Start a managed long-running process.", {
+      command: "npm start"
+    });
+  }
+
+  if (text.includes("check process")) {
+    pushAction("check_process", "Check a managed process lease.", {
+      leaseId: "proc_mock_lease"
+    });
+  }
+
+  if (text.includes("stop process") || text.includes("kill process")) {
+    pushAction("stop_process", "Stop a managed process lease.", {
+      leaseId: "proc_mock_lease"
+    });
+  }
+
+  if (text.includes("probe port") || text.includes("check port")) {
+    pushAction("probe_port", "Probe a local TCP port for readiness.", {
+      host: "127.0.0.1",
+      port: 3000
+    });
+  }
+
+  if (text.includes("probe http") || text.includes("check url") || text.includes("check endpoint")) {
+    pushAction("probe_http", "Probe a local HTTP endpoint for readiness.", {
+      url: "http://127.0.0.1:3000/",
+      expectedStatus: 200
+    });
+  }
+
+  if (
+    text.includes("verify browser") ||
+    text.includes("verify ui") ||
+    text.includes("verify homepage")
+  ) {
+    pushAction("verify_browser", "Verify a loopback page through browser automation.", {
+      url: "http://127.0.0.1:3000/",
+      expectedText: text.includes("robinhood") ? "Robinhood" : "App"
+    });
+  }
+
   if (includesAny(text, HIGH_RISK_SELF_EDIT_HINTS)) {
     const touchesImmutable =
       text.includes("constitution") || text.includes("dna") || text.includes("kill switch");
@@ -242,6 +430,28 @@ function buildPlannerOutput(userPrompt: string): PlannerModelOutput {
       patch: "Adjust threshold for escalation trigger.",
       touchesImmutable
     });
+  }
+
+  if (actions.length === 0 && isMockExecutionStyleBuildRequest(userInput)) {
+    pushAction("shell_command", "Run a finite scaffold/build step for the requested app.", {
+      command: "npm create vite@latest finance-dashboard -- --template react"
+    });
+
+    if (isMockLiveVerificationBuildRequest(userInput)) {
+      pushAction("start_process", "Start a managed development server for live verification.", {
+        command: "npm start"
+      });
+      pushAction("probe_port", "Probe the local dev-server port for readiness.", {
+        host: "127.0.0.1",
+        port: 3000
+      });
+      if (isMockBrowserVerificationBuildRequest(userInput)) {
+        pushAction("verify_browser", "Verify the live app in a loopback browser session.", {
+          url: "http://127.0.0.1:3000/",
+          expectedText: text.includes("robinhood") ? "Robinhood" : "App"
+        });
+      }
+    }
   }
 
   if (actions.length === 0) {
@@ -403,7 +613,7 @@ function buildProactiveGoalOutput(_userPrompt: string): ProactiveGoalModelOutput
  */
 function buildResponseSynthesisOutput(userPrompt: string): ResponseSynthesisModelOutput {
   const input = parseJsonObject(userPrompt);
-  const userInput = asString(input.userInput).trim();
+  const userInput = resolveActiveMockUserInput(input, userPrompt).trim();
   const normalizedInput = userInput.toLowerCase();
 
   if (!userInput) {

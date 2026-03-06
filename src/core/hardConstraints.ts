@@ -2,6 +2,7 @@
  * @fileoverview Enforces non-negotiable deterministic safety constraints before governance voting.
  */
 
+import { existsSync } from "node:fs";
 import path from "node:path";
 
 import { BrainConfig } from "./config";
@@ -128,6 +129,49 @@ function containsUnsafeSkillCode(code: string): boolean {
 }
 
 /**
+ * Resolves runtime skill artifact candidates for one skill name.
+ *
+ * **Why it exists:**
+ * `run_skill` should fail deterministically when the requested skill artifact is absent, instead of
+ * leaving that outcome to later model-governed variance.
+ *
+ * **What it talks to:**
+ * - Uses `path` (import `default`) from `node:path`.
+ *
+ * @param skillName - Skill identifier requested by the action payload.
+ * @returns Stable primary and compatibility artifact paths under `runtime/skills`.
+ */
+function resolveRuntimeSkillArtifactPaths(skillName: string): {
+  primaryPath: string;
+  compatibilityPath: string;
+} {
+  const skillsRoot = path.resolve(process.cwd(), "runtime/skills");
+  return {
+    primaryPath: path.resolve(skillsRoot, `${skillName}.js`),
+    compatibilityPath: path.resolve(skillsRoot, `${skillName}.ts`)
+  };
+}
+
+/**
+ * Evaluates existing runtime skill artifact and returns a deterministic policy signal.
+ *
+ * **Why it exists:**
+ * Missing skill files are a deterministic local-state fact, so the runtime should block them before
+ * governance instead of letting provider variance produce inconsistent chat outcomes.
+ *
+ * **What it talks to:**
+ * - Uses `existsSync` (import `existsSync`) from `node:fs`.
+ * - Uses `resolveRuntimeSkillArtifactPaths` from this module.
+ *
+ * @param skillName - Skill identifier requested by the action payload.
+ * @returns `true` when either the primary or compatibility artifact exists.
+ */
+function hasRuntimeSkillArtifact(skillName: string): boolean {
+  const paths = resolveRuntimeSkillArtifactPaths(skillName);
+  return existsSync(paths.primaryPath) || existsSync(paths.compatibilityPath);
+}
+
+/**
  * Detects whether a self-modification proposal targets immutable governance controls.
  *
  * **Why it exists:**
@@ -154,6 +198,408 @@ export function detectImmutableTouch(proposal: GovernanceProposal, config: Brain
 
   const normalizedTarget = target.toLowerCase();
   return config.dna.immutableKeywords.some((keyword) => normalizedTarget.includes(keyword));
+}
+
+/**
+ * Resolves shell-like constraint code families for finite shell vs managed-process actions.
+ *
+ * **Why it exists:**
+ * Keeps shared shell/process policy checks reusable without collapsing distinct typed codes that
+ * higher layers use for truth-safe messaging and diagnostics.
+ *
+ * **What it talks to:**
+ * - Uses local constants/helpers within this module.
+ *
+ * @param actionType - Shell-like action family under evaluation.
+ * @param shellCode - Constraint code for `shell_command`.
+ * @param processCode - Constraint code for `start_process`.
+ * @returns Stable typed code for the active action family.
+ */
+function resolveShellLikeConstraintCode(
+  actionType: "shell_command" | "start_process",
+  shellCode:
+    | "SHELL_DISABLED_BY_POLICY"
+    | "SHELL_MISSING_COMMAND"
+    | "SHELL_COMMAND_TOO_LONG"
+    | "SHELL_PROFILE_MISMATCH"
+    | "SHELL_CWD_OUTSIDE_SANDBOX"
+    | "SHELL_DANGEROUS_COMMAND"
+    | "SHELL_TARGETS_PROTECTED_PATH",
+  processCode:
+    | "PROCESS_DISABLED_BY_POLICY"
+    | "PROCESS_MISSING_COMMAND"
+    | "PROCESS_COMMAND_TOO_LONG"
+    | "PROCESS_PROFILE_MISMATCH"
+    | "PROCESS_CWD_OUTSIDE_SANDBOX"
+    | "PROCESS_DANGEROUS_COMMAND"
+    | "PROCESS_TARGETS_PROTECTED_PATH"
+): ConstraintViolation["code"] {
+  return actionType === "shell_command" ? shellCode : processCode;
+}
+
+/**
+ * Evaluates shared shell/process safety constraints for command-driven actions.
+ *
+ * **Why it exists:**
+ * Prevents managed-process startup from becoming a policy bypass by reusing the same deterministic
+ * command, cwd, shell-profile, and protected-path checks that finite shell execution already obeys.
+ *
+ * **What it talks to:**
+ * - Uses `BrainConfig` (import `BrainConfig`) from `./config`.
+ * - Uses `containsDangerousCommand` (import `containsDangerousCommand`) from `./hardConstraintShellPolicy`.
+ * - Uses `extractShellPathTargets` (import `extractShellPathTargets`) from `./hardConstraintShellPolicy`.
+ * - Uses local helpers within this module.
+ *
+ * @param actionType - Shell-like action family under evaluation.
+ * @param params - Action params object containing command/cwd metadata.
+ * @param config - Runtime policy/config values that define deterministic constraints.
+ * @returns Deterministic constraint violations for this shell-like action family.
+ */
+function evaluateShellLikeActionConstraints(
+  actionType: "shell_command" | "start_process",
+  params: Record<string, unknown>,
+  config: BrainConfig
+): ConstraintViolation[] {
+  const violations: ConstraintViolation[] = [];
+
+  if (!config.permissions.allowShellCommandAction) {
+    violations.push({
+      code: resolveShellLikeConstraintCode(
+        actionType,
+        "SHELL_DISABLED_BY_POLICY",
+        "PROCESS_DISABLED_BY_POLICY"
+      ),
+      message:
+        actionType === "shell_command"
+          ? "Shell command actions are disabled in current runtime profile."
+          : "Managed process actions are disabled in current runtime profile."
+    });
+  }
+
+  const command = getStringParam(params, "command");
+  if (!command) {
+    violations.push({
+      code: resolveShellLikeConstraintCode(
+        actionType,
+        "SHELL_MISSING_COMMAND",
+        "PROCESS_MISSING_COMMAND"
+      ),
+      message:
+        actionType === "shell_command"
+          ? "Shell command action requires a command string."
+          : "Managed process start requires a command string."
+    });
+    return violations;
+  }
+
+  if (command.length > config.shellRuntime.profile.commandMaxChars) {
+    violations.push({
+      code: resolveShellLikeConstraintCode(
+        actionType,
+        "SHELL_COMMAND_TOO_LONG",
+        "PROCESS_COMMAND_TOO_LONG"
+      ),
+      message:
+        actionType === "shell_command"
+          ? `Shell command length ${command.length} exceeds max ${config.shellRuntime.profile.commandMaxChars}.`
+          : `Managed process command length ${command.length} exceeds max ${config.shellRuntime.profile.commandMaxChars}.`
+    });
+  } else if (containsDangerousCommand(command)) {
+    violations.push({
+      code: resolveShellLikeConstraintCode(
+        actionType,
+        "SHELL_DANGEROUS_COMMAND",
+        "PROCESS_DANGEROUS_COMMAND"
+      ),
+      message: "Command matches denied destructive patterns."
+    });
+  }
+
+  const requestedShellKind = getStringParam(params, "requestedShellKind");
+  if (requestedShellKind && requestedShellKind !== config.shellRuntime.profile.shellKind) {
+    violations.push({
+      code: resolveShellLikeConstraintCode(
+        actionType,
+        "SHELL_PROFILE_MISMATCH",
+        "PROCESS_PROFILE_MISMATCH"
+      ),
+      message:
+        `Requested shell '${requestedShellKind}' does not match resolved runtime shell ` +
+        `'${config.shellRuntime.profile.shellKind}'.`
+    });
+  }
+
+  const shellCwd = getStringParam(params, "cwd") ?? getStringParam(params, "workdir");
+  if (shellCwd) {
+    if (
+      !config.shellRuntime.profile.cwdPolicy.allowRelative &&
+      !path.isAbsolute(shellCwd)
+    ) {
+      violations.push({
+        code: resolveShellLikeConstraintCode(
+          actionType,
+          "SHELL_CWD_OUTSIDE_SANDBOX",
+          "PROCESS_CWD_OUTSIDE_SANDBOX"
+        ),
+        message:
+          actionType === "shell_command"
+            ? "Shell command cwd must be absolute when relative cwd is disabled."
+            : "Managed process cwd must be absolute when relative cwd is disabled."
+      });
+    }
+
+    if (
+      config.shellRuntime.profile.cwdPolicy.denyOutsideSandbox &&
+      !isPathWithinPrefix(shellCwd, config.dna.sandboxPathPrefix)
+    ) {
+      violations.push({
+        code: resolveShellLikeConstraintCode(
+          actionType,
+          "SHELL_CWD_OUTSIDE_SANDBOX",
+          "PROCESS_CWD_OUTSIDE_SANDBOX"
+        ),
+        message:
+          actionType === "shell_command"
+            ? `Shell command cwd must stay inside sandbox (${config.dna.sandboxPathPrefix}).`
+            : `Managed process cwd must stay inside sandbox (${config.dna.sandboxPathPrefix}).`
+      });
+    }
+  }
+
+  const protectedTarget = extractShellPathTargets(params).find((targetPath) =>
+    isProtectedPath(targetPath, config)
+  );
+  if (protectedTarget) {
+    violations.push({
+      code: resolveShellLikeConstraintCode(
+        actionType,
+        "SHELL_TARGETS_PROTECTED_PATH",
+        "PROCESS_TARGETS_PROTECTED_PATH"
+      ),
+      message:
+        actionType === "shell_command"
+          ? `Shell command targets protected path: ${protectedTarget}`
+          : `Managed process command targets protected path: ${protectedTarget}`
+    });
+  }
+
+  return violations;
+}
+
+/**
+ * Evaluates probe host and returns a deterministic policy signal.
+ *
+ * **Why it exists:**
+ * Readiness probes must stay loopback-local so they cannot become a general network egress path.
+ *
+ * **What it talks to:**
+ * - Uses local constants/helpers within this module.
+ *
+ * @param host - Probe host candidate supplied by planner params or URL parsing.
+ * @returns `true` when the host is a supported loopback/local probe host.
+ */
+function isLocalProbeHost(host: string): boolean {
+  const normalizedHost = host.trim().toLowerCase().replace(/^\[|\]$/g, "");
+  return (
+    normalizedHost === "localhost" ||
+    normalizedHost === "127.0.0.1" ||
+    normalizedHost === "::1"
+  );
+}
+
+/**
+ * Evaluates readiness-probe timeout bounds and returns a deterministic policy signal.
+ *
+ * **Why it exists:**
+ * Reuses one timeout policy for local readiness probes so planner payloads cannot request unbounded
+ * or malformed probe waits.
+ *
+ * **What it talks to:**
+ * - Uses `BrainConfig` (import `BrainConfig`) from `./config`.
+ *
+ * @param timeoutMs - Optional timeout candidate from planner params.
+ * @param config - Runtime policy/config values that define deterministic constraints.
+ * @returns `true` when timeout is absent or within configured integer bounds.
+ */
+function isValidProbeTimeoutMs(timeoutMs: number | undefined, config: BrainConfig): boolean {
+  if (timeoutMs === undefined) {
+    return true;
+  }
+  return (
+    Number.isInteger(timeoutMs) &&
+    timeoutMs >= config.shellRuntime.timeoutBoundsMs.min &&
+    timeoutMs <= config.shellRuntime.timeoutBoundsMs.max
+  );
+}
+
+/**
+ * Evaluates local readiness-probe params and returns deterministic constraint violations.
+ *
+ * **Why it exists:**
+ * Keeps local-only probe validation centralized so executor readiness checks cannot drift into
+ * general host/network probing and malformed payloads fail closed before governance.
+ *
+ * **What it talks to:**
+ * - Uses `BrainConfig` (import `BrainConfig`) from `./config`.
+ * - Uses `getNumberParam` (import `getNumberParam`) from `./hardConstraintParamUtils`.
+ * - Uses `getStringParam` (import `getStringParam`) from `./hardConstraintParamUtils`.
+ * - Uses local helpers within this module.
+ *
+ * @param actionType - Probe action family under evaluation.
+ * @param params - Action params object containing host/url/timeout metadata.
+ * @param config - Runtime policy/config values that define deterministic constraints.
+ * @returns Deterministic constraint violations for the active probe action.
+ */
+function evaluateProbeActionConstraints(
+  actionType: "probe_port" | "probe_http",
+  params: Record<string, unknown>,
+  config: BrainConfig
+): ConstraintViolation[] {
+  const violations: ConstraintViolation[] = [];
+  const timeoutMs = getNumberParam(params, "timeoutMs");
+  if (
+    Object.prototype.hasOwnProperty.call(params, "timeoutMs") &&
+    !isValidProbeTimeoutMs(timeoutMs, config)
+  ) {
+    violations.push({
+      code: "PROBE_TIMEOUT_INVALID",
+      message:
+        "Readiness probe timeoutMs must be an integer " +
+        `within ${config.shellRuntime.timeoutBoundsMs.min}..` +
+        `${config.shellRuntime.timeoutBoundsMs.max}.`
+    });
+  }
+
+  if (actionType === "probe_port") {
+    const host = getStringParam(params, "host");
+    const port = getNumberParam(params, "port");
+    if (port === undefined) {
+      violations.push({
+        code: "PROBE_MISSING_PORT",
+        message: "Port probe requires params.port."
+      });
+    } else if (!Number.isInteger(port) || port < 1 || port > 65_535) {
+      violations.push({
+        code: "PROBE_PORT_INVALID",
+        message: "Port probe params.port must be an integer within 1..65535."
+      });
+    }
+
+    if (host && !isLocalProbeHost(host)) {
+      violations.push({
+        code: "PROBE_HOST_NOT_LOCAL",
+        message: "Port probe host must be localhost, 127.0.0.1, or ::1."
+      });
+    }
+    return violations;
+  }
+
+  const urlValue = getStringParam(params, "url");
+  if (!urlValue) {
+    violations.push({
+      code: "PROBE_MISSING_URL",
+      message: "HTTP probe requires params.url."
+    });
+    return violations;
+  }
+
+  try {
+    const parsedUrl = new URL(urlValue);
+    if (
+      parsedUrl.protocol !== "http:" &&
+      parsedUrl.protocol !== "https:"
+    ) {
+      violations.push({
+        code: "PROBE_URL_INVALID",
+        message: "HTTP probe url must use http or https."
+      });
+    }
+    if (!isLocalProbeHost(parsedUrl.hostname)) {
+      violations.push({
+        code: "PROBE_URL_NOT_LOCAL",
+        message: "HTTP probe url must target localhost, 127.0.0.1, or ::1."
+      });
+    }
+  } catch {
+    violations.push({
+      code: "PROBE_URL_INVALID",
+      message: "HTTP probe url must be a valid absolute URL."
+    });
+  }
+
+  return violations;
+}
+
+/**
+ * Evaluates browser-verification params and returns deterministic constraint violations.
+ *
+ * **Why it exists:**
+ * Browser verification should stay loopback-local and bounded just like readiness probes, but it
+ * needs distinct typed codes so runtime/UI proof failures are explainable without free-text parsing.
+ *
+ * **What it talks to:**
+ * - Uses `BrainConfig` (import `BrainConfig`) from `./config`.
+ * - Uses `getNumberParam` (import `getNumberParam`) from `./hardConstraintParamUtils`.
+ * - Uses `getStringParam` (import `getStringParam`) from `./hardConstraintParamUtils`.
+ * - Uses local helpers within this module.
+ *
+ * @param params - Action params object containing browser verification metadata.
+ * @param config - Runtime policy/config values that define deterministic constraints.
+ * @returns Deterministic constraint violations for browser verification.
+ */
+function evaluateBrowserVerifyActionConstraints(
+  params: Record<string, unknown>,
+  config: BrainConfig
+): ConstraintViolation[] {
+  const violations: ConstraintViolation[] = [];
+  const timeoutMs = getNumberParam(params, "timeoutMs");
+  if (
+    Object.prototype.hasOwnProperty.call(params, "timeoutMs") &&
+    !isValidProbeTimeoutMs(timeoutMs, config)
+  ) {
+    violations.push({
+      code: "BROWSER_VERIFY_TIMEOUT_INVALID",
+      message:
+        "Browser verification timeoutMs must be an integer " +
+        `within ${config.shellRuntime.timeoutBoundsMs.min}..` +
+        `${config.shellRuntime.timeoutBoundsMs.max}.`
+    });
+  }
+
+  const urlValue = getStringParam(params, "url");
+  if (!urlValue) {
+    violations.push({
+      code: "BROWSER_VERIFY_MISSING_URL",
+      message: "Browser verification requires params.url."
+    });
+    return violations;
+  }
+
+  try {
+    const parsedUrl = new URL(urlValue);
+    if (
+      parsedUrl.protocol !== "http:" &&
+      parsedUrl.protocol !== "https:"
+    ) {
+      violations.push({
+        code: "BROWSER_VERIFY_URL_INVALID",
+        message: "Browser verification url must use http or https."
+      });
+    }
+    if (!isLocalProbeHost(parsedUrl.hostname)) {
+      violations.push({
+        code: "BROWSER_VERIFY_URL_NOT_LOCAL",
+        message: "Browser verification url must target localhost, 127.0.0.1, or ::1."
+      });
+    }
+  } catch {
+    violations.push({
+      code: "BROWSER_VERIFY_URL_INVALID",
+      message: "Browser verification url must be a valid absolute URL."
+    });
+  }
+
+  return violations;
 }
 
 /**
@@ -357,6 +803,11 @@ export function evaluateHardConstraints(
         code: "RUN_SKILL_INVALID_NAME",
         message: "Run skill name must match [a-zA-Z0-9_-] and be <= 64 chars."
       });
+    } else if (!hasRuntimeSkillArtifact(skillName)) {
+      violations.push({
+        code: "RUN_SKILL_ARTIFACT_MISSING",
+        message: `Run skill failed: no skill artifact found for ${skillName}.`
+      });
     }
   }
 
@@ -398,45 +849,13 @@ export function evaluateHardConstraints(
     }
   }
 
+  if (action.type === "shell_command" || action.type === "start_process") {
+    violations.push(
+      ...evaluateShellLikeActionConstraints(action.type, action.params, config)
+    );
+  }
+
   if (action.type === "shell_command") {
-    // Shell deny-list guards against obvious destructive command patterns.
-    if (!config.permissions.allowShellCommandAction) {
-      violations.push({
-        code: "SHELL_DISABLED_BY_POLICY",
-        message: "Shell command actions are disabled in current runtime profile."
-      });
-    }
-
-    const command = getStringParam(action.params, "command");
-    if (!command) {
-      violations.push({
-        code: "SHELL_MISSING_COMMAND",
-        message: "Shell command action requires a command string."
-      });
-    } else if (command.length > config.shellRuntime.profile.commandMaxChars) {
-      violations.push({
-        code: "SHELL_COMMAND_TOO_LONG",
-        message:
-          `Shell command length ${command.length} exceeds max ` +
-          `${config.shellRuntime.profile.commandMaxChars}.`
-      });
-    } else if (containsDangerousCommand(command)) {
-      violations.push({
-        code: "SHELL_DANGEROUS_COMMAND",
-        message: "Command matches denied destructive patterns."
-      });
-    }
-
-    const requestedShellKind = getStringParam(action.params, "requestedShellKind");
-    if (requestedShellKind && requestedShellKind !== config.shellRuntime.profile.shellKind) {
-      violations.push({
-        code: "SHELL_PROFILE_MISMATCH",
-        message:
-          `Requested shell '${requestedShellKind}' does not match resolved runtime shell ` +
-          `'${config.shellRuntime.profile.shellKind}'.`
-      });
-    }
-
     if (Object.prototype.hasOwnProperty.call(action.params, "timeoutMs")) {
       const timeoutMs = getNumberParam(action.params, "timeoutMs");
       if (
@@ -454,42 +873,31 @@ export function evaluateHardConstraints(
         });
       }
     }
+  }
 
-    const shellCwd =
-      getStringParam(action.params, "cwd") ?? getStringParam(action.params, "workdir");
-    if (shellCwd) {
-      if (
-        !config.shellRuntime.profile.cwdPolicy.allowRelative &&
-        !path.isAbsolute(shellCwd)
-      ) {
-        violations.push({
-          code: "SHELL_CWD_OUTSIDE_SANDBOX",
-          message: "Shell command cwd must be absolute when relative cwd is disabled."
-        });
-      }
-
-      if (
-        config.shellRuntime.profile.cwdPolicy.denyOutsideSandbox &&
-        !isPathWithinPrefix(shellCwd, config.dna.sandboxPathPrefix)
-      ) {
-        violations.push({
-          code: "SHELL_CWD_OUTSIDE_SANDBOX",
-          message:
-            `Shell command cwd must stay inside sandbox (${config.dna.sandboxPathPrefix}).`
-        });
-      }
-    }
-
-    // Path-targeting shell variants cannot touch owner-protected paths.
-    const protectedTarget = extractShellPathTargets(action.params).find((targetPath) =>
-      isProtectedPath(targetPath, config)
-    );
-    if (protectedTarget) {
+  if (action.type === "check_process" || action.type === "stop_process") {
+    const leaseId = getStringParam(action.params, "leaseId");
+    if (!leaseId) {
       violations.push({
-        code: "SHELL_TARGETS_PROTECTED_PATH",
-        message: `Shell command targets protected path: ${protectedTarget}`
+        code: "PROCESS_MISSING_LEASE_ID",
+        message:
+          action.type === "check_process"
+            ? "Process check requires a leaseId."
+            : "Process stop requires a leaseId."
       });
     }
+  }
+
+  if (action.type === "probe_port" || action.type === "probe_http") {
+    violations.push(
+      ...evaluateProbeActionConstraints(action.type, action.params, config)
+    );
+  }
+
+  if (action.type === "verify_browser") {
+    violations.push(
+      ...evaluateBrowserVerifyActionConstraints(action.params, config)
+    );
   }
 
   if (action.type === "network_write" && !config.permissions.allowNetworkWriteAction) {

@@ -3,6 +3,8 @@
  */
 
 import assert from "node:assert/strict";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import path from "node:path";
 import { test } from "node:test";
 
 import { createBrainConfigFromEnv, DEFAULT_BRAIN_CONFIG } from "../../src/core/config";
@@ -534,7 +536,27 @@ test("blocks run_skill when name is invalid", () => {
   assert.ok(violations.some((violation) => violation.code === "RUN_SKILL_INVALID_NAME"));
 });
 
-test("allows run_skill with valid payload", () => {
+test("blocks run_skill when artifact is missing", () => {
+  const proposal = makeProposal({
+    action: {
+      id: "action_run_skill_missing_artifact",
+      type: "run_skill",
+      description: "Run skill with valid name but no artifact",
+      params: { name: "missing_skill_artifact", input: "hello" },
+      estimatedCostUsd: 0.1
+    }
+  });
+
+  const violations = evaluateHardConstraints(proposal, DEFAULT_BRAIN_CONFIG);
+  assert.ok(violations.some((violation) => violation.code === "RUN_SKILL_ARTIFACT_MISSING"));
+});
+
+test("allows run_skill with valid payload and existing artifact", () => {
+  const skillRoot = path.resolve(process.cwd(), "runtime/skills");
+  const skillPath = path.resolve(skillRoot, "safe_skill.js");
+  mkdirSync(skillRoot, { recursive: true });
+  writeFileSync(skillPath, "export default async function safeSkill() { return 'ok'; }\n", "utf8");
+
   const proposal = makeProposal({
     action: {
       id: "action_run_skill_valid",
@@ -545,11 +567,15 @@ test("allows run_skill with valid payload", () => {
     }
   });
 
-  const violations = evaluateHardConstraints(proposal, DEFAULT_BRAIN_CONFIG);
-  assert.equal(
-    violations.some((violation) => violation.code.startsWith("RUN_SKILL")),
-    false
-  );
+  try {
+    const violations = evaluateHardConstraints(proposal, DEFAULT_BRAIN_CONFIG);
+    assert.equal(
+      violations.some((violation) => violation.code.startsWith("RUN_SKILL")),
+      false
+    );
+  } finally {
+    rmSync(skillPath, { force: true });
+  }
 });
 
 test("blocks shell command when command is missing", () => {
@@ -569,6 +595,191 @@ test("blocks shell command when command is missing", () => {
 
   const violations = evaluateHardConstraints(proposal, fullAccessConfig);
   assert.ok(violations.some((violation) => violation.code === "SHELL_MISSING_COMMAND"));
+});
+
+test("blocks managed process start when command is missing", () => {
+  const fullAccessConfig = createBrainConfigFromEnv({
+    BRAIN_RUNTIME_MODE: "full_access",
+    BRAIN_ALLOW_FULL_ACCESS: "true"
+  });
+  const proposal = makeProposal({
+    action: {
+      id: "action_process_missing",
+      type: "start_process",
+      description: "Start missing managed process command",
+      params: {},
+      estimatedCostUsd: 0.1
+    }
+  });
+
+  const violations = evaluateHardConstraints(proposal, fullAccessConfig);
+  assert.ok(violations.some((violation) => violation.code === "PROCESS_MISSING_COMMAND"));
+});
+
+test("blocks probe_port when port is missing", () => {
+  const proposal = makeProposal({
+    action: {
+      id: "action_probe_port_missing_port",
+      type: "probe_port",
+      description: "Probe local port without port value.",
+      params: {
+        host: "127.0.0.1"
+      },
+      estimatedCostUsd: 0.03
+    }
+  });
+
+  const violations = evaluateHardConstraints(proposal, DEFAULT_BRAIN_CONFIG);
+  assert.ok(violations.some((violation) => violation.code === "PROBE_MISSING_PORT"));
+});
+
+test("blocks probe_port when host is not local", () => {
+  const proposal = makeProposal({
+    action: {
+      id: "action_probe_port_remote_host",
+      type: "probe_port",
+      description: "Probe non-local TCP host.",
+      params: {
+        host: "example.com",
+        port: 3000
+      },
+      estimatedCostUsd: 0.03
+    }
+  });
+
+  const violations = evaluateHardConstraints(proposal, DEFAULT_BRAIN_CONFIG);
+  assert.ok(violations.some((violation) => violation.code === "PROBE_HOST_NOT_LOCAL"));
+});
+
+test("blocks probe_http when url is missing", () => {
+  const proposal = makeProposal({
+    action: {
+      id: "action_probe_http_missing_url",
+      type: "probe_http",
+      description: "Probe local HTTP endpoint without url.",
+      params: {},
+      estimatedCostUsd: 0.04
+    }
+  });
+
+  const violations = evaluateHardConstraints(proposal, DEFAULT_BRAIN_CONFIG);
+  assert.ok(violations.some((violation) => violation.code === "PROBE_MISSING_URL"));
+});
+
+test("blocks probe_http when url is not local", () => {
+  const proposal = makeProposal({
+    action: {
+      id: "action_probe_http_remote_url",
+      type: "probe_http",
+      description: "Probe remote HTTP endpoint.",
+      params: {
+        url: "https://example.com/health"
+      },
+      estimatedCostUsd: 0.04
+    }
+  });
+
+  const violations = evaluateHardConstraints(proposal, DEFAULT_BRAIN_CONFIG);
+  assert.ok(violations.some((violation) => violation.code === "PROBE_URL_NOT_LOCAL"));
+});
+
+test("allows loopback probe actions with valid local payloads", () => {
+  const portProposal = makeProposal({
+    action: {
+      id: "action_probe_port_valid",
+      type: "probe_port",
+      description: "Probe local TCP readiness.",
+      params: {
+        host: "127.0.0.1",
+        port: 3000,
+        timeoutMs: 2000
+      },
+      estimatedCostUsd: 0.03
+    }
+  });
+  const httpProposal = makeProposal({
+    action: {
+      id: "action_probe_http_valid",
+      type: "probe_http",
+      description: "Probe local HTTP readiness.",
+      params: {
+        url: "http://127.0.0.1:3000/health",
+        expectedStatus: 200,
+        timeoutMs: 2000
+      },
+      estimatedCostUsd: 0.04
+    }
+  });
+
+  const portViolations = evaluateHardConstraints(portProposal, DEFAULT_BRAIN_CONFIG);
+  const httpViolations = evaluateHardConstraints(httpProposal, DEFAULT_BRAIN_CONFIG);
+  assert.equal(
+    portViolations.some((violation) => violation.code.startsWith("PROBE_")),
+    false
+  );
+  assert.equal(
+    httpViolations.some((violation) => violation.code.startsWith("PROBE_")),
+    false
+  );
+});
+
+test("blocks verify_browser when url is missing", () => {
+  const proposal = makeProposal({
+    action: {
+      id: "action_verify_browser_missing_url",
+      type: "verify_browser",
+      description: "Verify browser page without url.",
+      params: {},
+      estimatedCostUsd: 0.09
+    }
+  });
+
+  const violations = evaluateHardConstraints(proposal, DEFAULT_BRAIN_CONFIG);
+  assert.ok(
+    violations.some((violation) => violation.code === "BROWSER_VERIFY_MISSING_URL")
+  );
+});
+
+test("blocks verify_browser when url is not local", () => {
+  const proposal = makeProposal({
+    action: {
+      id: "action_verify_browser_remote_url",
+      type: "verify_browser",
+      description: "Verify remote browser page.",
+      params: {
+        url: "https://example.com/dashboard"
+      },
+      estimatedCostUsd: 0.09
+    }
+  });
+
+  const violations = evaluateHardConstraints(proposal, DEFAULT_BRAIN_CONFIG);
+  assert.ok(
+    violations.some((violation) => violation.code === "BROWSER_VERIFY_URL_NOT_LOCAL")
+  );
+});
+
+test("allows verify_browser when loopback payload is valid", () => {
+  const proposal = makeProposal({
+    action: {
+      id: "action_verify_browser_valid",
+      type: "verify_browser",
+      description: "Verify local browser page.",
+      params: {
+        url: "http://127.0.0.1:3000/",
+        expectedTitle: "Robinhood",
+        expectedText: "Portfolio",
+        timeoutMs: 4000
+      },
+      estimatedCostUsd: 0.09
+    }
+  });
+
+  const violations = evaluateHardConstraints(proposal, DEFAULT_BRAIN_CONFIG);
+  assert.equal(
+    violations.some((violation) => violation.code.startsWith("BROWSER_VERIFY_")),
+    false
+  );
 });
 
 test("blocks shell command when requested shell profile mismatches resolved profile", () => {
@@ -669,6 +880,25 @@ test("blocks dangerous shell commands even in full access mode", () => {
   assert.ok(violations.some((violation) => violation.code === "SHELL_DANGEROUS_COMMAND"));
 });
 
+test("blocks dangerous managed process commands even in full access mode", () => {
+  const fullAccessConfig = createBrainConfigFromEnv({
+    BRAIN_RUNTIME_MODE: "full_access",
+    BRAIN_ALLOW_FULL_ACCESS: "true"
+  });
+  const proposal = makeProposal({
+    action: {
+      id: "action_process_dangerous",
+      type: "start_process",
+      description: "Start dangerous managed process command",
+      params: { command: "rm -rf /" },
+      estimatedCostUsd: 0.1
+    }
+  });
+
+  const violations = evaluateHardConstraints(proposal, fullAccessConfig);
+  assert.ok(violations.some((violation) => violation.code === "PROCESS_DANGEROUS_COMMAND"));
+});
+
 test("blocks shell command when command targets protected path", () => {
   const fullAccessConfig = createBrainConfigFromEnv({
     BRAIN_RUNTIME_MODE: "full_access",
@@ -687,6 +917,27 @@ test("blocks shell command when command targets protected path", () => {
   const violations = evaluateHardConstraints(proposal, fullAccessConfig);
   assert.ok(
     violations.some((violation) => violation.code === "SHELL_TARGETS_PROTECTED_PATH")
+  );
+});
+
+test("blocks managed process command when command targets protected path", () => {
+  const fullAccessConfig = createBrainConfigFromEnv({
+    BRAIN_RUNTIME_MODE: "full_access",
+    BRAIN_ALLOW_FULL_ACCESS: "true"
+  });
+  const proposal = makeProposal({
+    action: {
+      id: "action_process_protected_target",
+      type: "start_process",
+      description: "Start managed process against protected file",
+      params: { command: "type memory/project_memory.md" },
+      estimatedCostUsd: 0.1
+    }
+  });
+
+  const violations = evaluateHardConstraints(proposal, fullAccessConfig);
+  assert.ok(
+    violations.some((violation) => violation.code === "PROCESS_TARGETS_PROTECTED_PATH")
   );
 });
 
@@ -731,6 +982,58 @@ test("allows shell command when path targets stay outside protected prefixes", (
     violations.some((violation) => violation.code === "SHELL_TARGETS_PROTECTED_PATH"),
     false
   );
+});
+
+test("allows managed process start when command and cwd stay inside allowed boundaries", () => {
+  const fullAccessConfig = createBrainConfigFromEnv({
+    BRAIN_RUNTIME_MODE: "full_access",
+    BRAIN_ALLOW_FULL_ACCESS: "true"
+  });
+  const proposal = makeProposal({
+    action: {
+      id: "action_process_allowed",
+      type: "start_process",
+      description: "Start managed process inside sandbox",
+      params: {
+        command: "npm run dev",
+        cwd: "runtime/sandbox/app"
+      },
+      estimatedCostUsd: 0.1
+    }
+  });
+
+  const violations = evaluateHardConstraints(proposal, fullAccessConfig);
+  assert.equal(violations.some((violation) => violation.code.startsWith("PROCESS_")), false);
+});
+
+test("blocks check_process when leaseId is missing", () => {
+  const proposal = makeProposal({
+    action: {
+      id: "action_check_process_missing_lease",
+      type: "check_process",
+      description: "Check process without leaseId",
+      params: {},
+      estimatedCostUsd: 0.04
+    }
+  });
+
+  const violations = evaluateHardConstraints(proposal, DEFAULT_BRAIN_CONFIG);
+  assert.ok(violations.some((violation) => violation.code === "PROCESS_MISSING_LEASE_ID"));
+});
+
+test("blocks stop_process when leaseId is missing", () => {
+  const proposal = makeProposal({
+    action: {
+      id: "action_stop_process_missing_lease",
+      type: "stop_process",
+      description: "Stop process without leaseId",
+      params: {},
+      estimatedCostUsd: 0.12
+    }
+  });
+
+  const violations = evaluateHardConstraints(proposal, DEFAULT_BRAIN_CONFIG);
+  assert.ok(violations.some((violation) => violation.code === "PROCESS_MISSING_LEASE_ID"));
 });
 
 test("blocks actions that exceed cost limits", () => {

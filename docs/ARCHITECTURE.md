@@ -114,6 +114,12 @@ Default escalation action types:
 - `self_modify`
 - `network_write`
 - `shell_command`
+- `start_process`
+- `check_process`
+- `stop_process`
+- `probe_port`
+- `probe_http`
+- `verify_browser`
 - `create_skill`
 - `memory_mutation`
 - `pulse_emit`
@@ -135,6 +141,7 @@ Major categories:
 - budget policy (`maxEstimatedCostUsd`, cumulative action cost, cumulative model spend guard in runner)
 - filesystem path policy (sandbox + protected paths + immutable target protections)
 - shell policy (profile match, command length, timeout bounds, cwd policy, dangerous-command patterns)
+- local readiness/browser-verification policy (loopback-only host/url validation and bounded probe/browser timeouts)
 - communication policy (identity impersonation denied, personal-data approval required)
 - dynamic skill policy (name/code validation, executable export requirement, unsafe pattern denial)
 - Stage 6.86 schema policy (`memory_mutation` store/operation/payload and `pulse_emit` kind validation)
@@ -149,9 +156,13 @@ Handles:
 - `create_skill` / `run_skill` under `runtime/skills/` (`.js` primary runtime artifact, `.ts` compatibility fallback during migration window)
 - `network_write` (simulated unless real network enabled)
 - `shell_command` (simulated unless real shell enabled)
+- `start_process` / `check_process` / `stop_process` for lease-based managed-process lifecycle control
+- `probe_port` / `probe_http` for loopback-local readiness proof
+- `verify_browser` for optional loopback-local browser/UI proof when Playwright is installed locally (for example `npm install --no-save playwright` then `npx playwright install chromium`)
 - typed execution outcomes (`success | blocked | failed`) with deterministic runtime failure codes consumed by `TaskRunner`
 
-Real shell execution uses explicit `spawn(executable, args)` from resolved shell profile and records bounded telemetry digests.
+Real shell execution uses explicit `spawn(executable, args)` from resolved shell profile, records bounded telemetry digests, and now observes propagated abort signals so autonomous `/stop` can terminate the active shell child instead of waiting for the next loop boundary.
+Managed-process execution reuses the same shell-policy guardrails, but tracks a lease id plus lifecycle metadata (`PROCESS_STARTED`, `PROCESS_STILL_RUNNING`, `PROCESS_STOPPED`) so higher layers can reason about long-running sessions without faking exit-based completion. Local readiness probes (`PROCESS_READY`, `PROCESS_NOT_READY`) provide finite loopback proof for port/http availability after a live run starts, and `verify_browser` adds page-level proof for explicit homepage/UI verification requests when a local Playwright runtime is available.
 
 ### Stage 6.86 Runtime Actions
 `memory_mutation` and `pulse_emit` do not execute in executor.
@@ -204,14 +215,39 @@ Structured outputs are normalized and validated before entering planner/governor
 - per-session queue worker (`ConversationManager`)
 - shared orchestrator path for all accepted tasks
 - deterministic user-facing rendering that leads with plain-English execution state (`Executed`, `Guidance only`, `Blocked`) while preserving typed technical reason codes in technical/debug surfaces
+- when no custom `respond` action exists, successful executed work now renders human-first direct outcomes (for example created file, ran command, started process) instead of generic `Completed task with ...` telemetry
+- default `/status` output is human-first and summarizes what is running, queued, or waiting for approval; explicit `/status debug` is required to see ack/final-delivery lifecycle internals
 - deterministic routing-map intent hints (`RoutingMapV1`) injected into conversation-aware execution input:
   - generic execution-style build/create prompts (for example React app creation on Desktop) classify to `BUILD_SCAFFOLD` execution surface
   - explanation-only build prompts stay outside execution-surface routing to reduce over-classification
+- planner prompts for execution-style build goals bias finite proof steps (`scaffold -> edit -> install -> build -> finite verification`) before long-running `npm start`/`npm run dev`-style live verification, and user-facing no-op output explains that live verification remains unproven instead of overclaiming success
+  - generic build prompts can unlock finite shell planning without requiring explicit shell-keyword phrasing
+  - managed-process planning stays narrower and only opens when the prompt clearly asks to run or verify a live app/session
+  - inspection-only build plans (`read_file`, `list_directory`, `check_process`, `stop_process` without a concrete build/proof step) are repaired once and then fail closed
+  - live-verification build prompts must include at least one live-proof action (`start_process`, `probe_port`, `probe_http`, or `verify_browser`)
+  - explicit tool-like autonomous subtasks (`start_process ...`, `check_process ...`, `probe_http ...`, `probe_port ...`, `verify_browser ...`) are treated as matching-action requests, so the planner repairs or rejects unrelated drift instead of silently swapping in other actions
+  - explicit homepage/browser/UI verification prompts can add `verify_browser` after localhost readiness is proven, but the runtime will fail closed if no local Playwright runtime is installed
+- `verify_browser` runs a local Playwright-backed Chromium session in headless mode by default, so browser proof is real even when no visible window opens; set `BRAIN_BROWSER_VERIFY_VISIBLE=true` or `BRAIN_BROWSER_VERIFY_HEADLESS=false` to run the same proof in a visible local Chromium window
+  - autonomous browser/UI verification goals can retry once with finite local Playwright install steps (`npm install --no-save playwright`, `npx playwright install chromium`) when `verify_browser` returns `BROWSER_VERIFY_RUNTIME_UNAVAILABLE` and policy still allows shell execution
+- if governance/runtime blocks the remaining localhost proof steps for an autonomous live-verification goal, the loop stops with a plain explanation instead of repeating manual-check or shell-Playwright fallback subtasks
+- loopback-local proof actions (`probe_port`, `probe_http`, `verify_browser`) and bounded managed-process lifecycle actions (`start_process`, `check_process`, `stop_process`) bypass model-advisory vetoes after deterministic localhost/live-run validation, so localhost/browser proof follows deterministic policy instead of model drift
+- `start_process` performs a loopback-port preflight for explicit local-server ports, so polluted ports fail fast with typed metadata instead of being reported as healthy starts
+- for explicit browser/UI verification goals, readiness is satisfied by actual HTTP/browser reachability rather than a bare port-open check, so the loop does not treat TCP accept alone as page-ready proof
+- when a live-run goal explicitly asks for a finite flow or process shutdown, autonomous completion requires stop-proof before the loop can claim success
+- when `start_process` succeeds but localhost proof still returns `PROCESS_NOT_READY`, the autonomous loop routes the next step through `check_process` lease inspection before retrying readiness
+- when a loopback port is already occupied and the user did not explicitly require that port, the autonomous loop can restart the same local server on a suggested free localhost port before continuing readiness or browser proof
+- explicit homepage/browser/UI verification prompts fail closed if the repaired plan still omits `verify_browser`
+- if shell/process policy blocks a live-run build step, user-facing block rendering explains that the app was not started or verified and points to finite build proof or manual proof paths
+  - respond-only build plans are repaired once and then fail closed if no executable non-respond action is produced
+  - explicit missing-skill requests now fail deterministically at the hard-constraint boundary with `RUN_SKILL_ARTIFACT_MISSING`, so Telegram/Discord do not drift between governance-block phrasing and executor-failure phrasing for the same missing artifact
 - autonomous progress delivery is transport-aware:
   - edit/stream-capable transports update a single progress message when possible
   - non-edit transports fall back to bounded discrete progress sends
+  - progress and stop summaries now render human-first wording instead of leading with raw autonomous reason-code prefixes in normal chat flow
+- autonomous cancellation now propagates through loop -> orchestrator -> task runner -> executor for active real shell steps, so `/stop` can interrupt the currently running shell child during autonomous execution
 - advanced cross-provider UX regression gate: `npm run test:interface:advanced_live_smoke` runs adversarial Telegram+Discord prompt suites and emits `runtime/evidence/interface_advanced_live_smoke_report.json` with per-provider parity diagnostics
 - real-provider transport smoke gate: `npm run test:interface:real_provider_live_smoke` runs live Telegram/Discord outbound delivery (no fetch stubs) and emits `runtime/evidence/interface_real_provider_live_smoke_report.json`; execution is fail-closed unless `BRAIN_INTERFACE_REAL_LIVE_SMOKE_CONFIRM=true`
+- managed-process runtime smoke gate: `npm run test:runtime:managed_process_live_smoke` runs a real loopback process under `start_process -> probe_port/probe_http -> verify_browser -> stop_process` and emits `runtime/evidence/managed_process_live_smoke_report.json`; browser verification passes either by real Playwright proof or by a truthful `BROWSER_VERIFY_RUNTIME_UNAVAILABLE` fallback when Playwright is not installed locally
 
 ### Federation
 - Inbound server: `src/interfaces/federationRuntime.ts` + `FederatedHttpServer`

@@ -10,6 +10,7 @@ import { BrainConfig } from "./config";
 import { estimateActionCostUsd } from "./actionCostPolicy";
 import { resolveExecutionMode } from "./executionMode";
 import { evaluateHardConstraints } from "./hardConstraints";
+import { throwIfAborted } from "./runtimeAbort";
 import {
   ActionRunResult,
   BrainState,
@@ -88,6 +89,7 @@ export interface RunPlanActionsInput {
   cumulativeApprovedEstimatedCostUsd: number;
   modelUsageStart: ModelUsageSnapshot;
   profileMemoryStatus: ProfileMemoryStatus;
+  signal?: AbortSignal;
 }
 
 export class TaskRunner {
@@ -145,7 +147,8 @@ export class TaskRunner {
       startedAtMs,
       cumulativeApprovedEstimatedCostUsd,
       modelUsageStart,
-      profileMemoryStatus
+      profileMemoryStatus,
+      signal
     } = input;
     const attemptResults: ActionRunResult[] = [];
     let approvedEstimatedCostDeltaUsd = 0;
@@ -169,6 +172,7 @@ export class TaskRunner {
     };
 
     for (const action of plan.actions) {
+      throwIfAborted(signal);
       const mode = resolveExecutionMode(action, this.deps.config);
       const usageDelta = diffUsageSnapshot(
         modelUsageStart,
@@ -1305,6 +1309,7 @@ export class TaskRunner {
         }
       }
 
+      throwIfAborted(signal);
       const executionStartedAtMs = Date.now();
       const stage686Execution = await this.stage686RuntimeActionEngine.execute({
         taskId: task.id,
@@ -1340,6 +1345,7 @@ export class TaskRunner {
             executionMetadata: stage686ExecutionMetadata
           };
       } else {
+        throwIfAborted(signal);
         preparedOutput = await preparedOutputPromise;
         usedPreparedOutput = preparedOutput !== null;
         if (preparedOutput !== null) {
@@ -1348,7 +1354,11 @@ export class TaskRunner {
             output: preparedOutput
           };
         } else {
-          executionOutcome = await this.deps.executor.executeWithOutcome(action);
+          executionOutcome = await this.deps.executor.executeWithOutcome(
+            action,
+            signal,
+            task.id
+          );
           shellExecutionTelemetry = this.deps.executor.consumeShellExecutionTelemetry(action.id);
         }
         output = executionOutcome.output;

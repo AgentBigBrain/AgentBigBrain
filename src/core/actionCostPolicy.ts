@@ -15,6 +15,12 @@ const BASE_ACTION_COST_USD: Record<ActionType, number> = {
   network_write: 0.15,
   self_modify: 0.2,
   shell_command: 0.25,
+  start_process: 0.28,
+  check_process: 0.04,
+  stop_process: 0.12,
+  probe_port: 0.03,
+  probe_http: 0.04,
+  verify_browser: 0.09,
   memory_mutation: 0.08,
   pulse_emit: 0.04
 };
@@ -30,6 +36,12 @@ const PAYLOAD_SURCHARGE_PER_UNIT_USD: Record<ActionType, number> = {
   network_write: 0.06,
   self_modify: 0.08,
   shell_command: 0.08,
+  start_process: 0.06,
+  check_process: 0.02,
+  stop_process: 0.02,
+  probe_port: 0.01,
+  probe_http: 0.02,
+  verify_browser: 0.04,
   memory_mutation: 0.04,
   pulse_emit: 0.02
 };

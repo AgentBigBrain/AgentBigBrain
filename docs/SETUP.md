@@ -74,12 +74,31 @@ Operational implication:
 | `BRAIN_MODEL_BACKEND` | Model provider selector (`mock`, `openai`, `ollama`). | `mock` for local bring-up |
 | `BRAIN_ENABLE_REAL_SHELL` | Enables real shell-command execution path. | `false` until you need live shell actions |
 | `BRAIN_ENABLE_REAL_NETWORK_WRITE` | Enables real network-write side effects. | `false` by default |
+| `BRAIN_BROWSER_VERIFY_VISIBLE` | Shows a real local Chromium window during `verify_browser` instead of headless proof. | `false` by default |
 | `BRAIN_MAX_ACTION_COST_USD` | Per-action estimated budget cap. | `1.25` |
 | `BRAIN_MAX_CUMULATIVE_COST_USD` | Per-task cumulative action budget cap. | `10` |
 | `BRAIN_MAX_MODEL_SPEND_USD` | Per-task cumulative model spend cap. | `10` |
 | `BRAIN_MAX_AUTONOMOUS_ITERATIONS` | Iteration cap for autonomous loops. | `.env.example` sets `100`; code fallback is `15` if unset |
 | `BRAIN_AUTONOMOUS_MAX_CONSECUTIVE_NO_PROGRESS` | Consecutive zero-progress iterations allowed before autonomous stall-abort. | `3` |
 | `BRAIN_PER_TURN_DEADLINE_MS` | Per-task action-loop deadline before `GLOBAL_DEADLINE_EXCEEDED` blocks remaining actions. | `.env.example` sets `120000`; code fallback is `20000` if unset |
+
+### Local Browser Verification Visibility
+
+`verify_browser` uses local Playwright Chromium. By default it runs headless, so the proof is real even if no window appears.
+
+To watch the browser locally:
+
+```env
+BRAIN_BROWSER_VERIFY_VISIBLE=true
+```
+
+Equivalent explicit headless override:
+
+```env
+BRAIN_BROWSER_VERIFY_HEADLESS=false
+```
+
+This setting is shared by the governed runtime, so it applies to CLI autonomous runs and interface-driven autonomous runs alike.
 
 ## 6) Model Backend Setup
 
@@ -123,6 +142,11 @@ Install:
 ```bash
 npm run setup:embeddings
 ```
+
+Apple Silicon note:
+- if the machine is an M-series Mac but Node is running as `darwin/x64` under Rosetta, `onnxruntime-node` can fail before embeddings initialize
+- use a native arm64 Node install, remove `node_modules`, and run `npm install` again from that arm64 shell
+- as a temporary workaround, set `BRAIN_ENABLE_EMBEDDINGS=false` to disable local vector embeddings and keep the runtime on keyword-only retrieval
 
 Optional:
 
@@ -366,8 +390,8 @@ These apply to Telegram, Discord, or both.
 | `BRAIN_INTERFACE_RATE_LIMIT_MAX_EVENTS` | No | Max inbound events per window per identity bucket. |
 | `BRAIN_INTERFACE_REPLAY_CACHE_SIZE` | No | Event dedupe cache size. |
 | `BRAIN_INTERFACE_ACK_DELAY_MS` | No | Queue ack delay; bounded `250..3000`. |
-| `BRAIN_INTERFACE_SHOW_TECHNICAL_SUMMARY` | No | Include technical status details in user-facing replies. |
-| `BRAIN_INTERFACE_SHOW_SAFETY_CODES` | No | Show policy/safety codes in blocked outputs. |
+| `BRAIN_INTERFACE_SHOW_TECHNICAL_SUMMARY` | No | Include technical status details in user-facing replies. Default is off so normal chat stays human-first. |
+| `BRAIN_INTERFACE_SHOW_SAFETY_CODES` | No | Show policy/safety codes in blocked outputs. Default follows the technical-summary flag. |
 | `BRAIN_INTERFACE_SHOW_COMPLETION_PREFIX` | No | Prefix final completion text. |
 | `BRAIN_ALLOW_AUTONOMOUS_VIA_INTERFACE` | No | Allows interface-origin autonomous execution requests. |
 | `BRAIN_ENABLE_DYNAMIC_PULSE` | No | Enables dynamic pulse behavior in interface runtime. |
@@ -558,7 +582,17 @@ npm run test:federation:live_smoke
 npm run test:daemon:live_smoke
 npm run test:runtime_wiring:integrated_live_smoke
 npm run test:interface:real_provider_live_smoke
+npm run test:runtime:managed_process_live_smoke
 ```
+
+Optional browser verification:
+
+- `verify_browser` works only when `playwright` or `playwright-core` plus browser binaries are installed locally.
+- Quick install for this workspace:
+  - `npm install --no-save playwright`
+  - `npx playwright install chromium`
+- If you want loopback browser/UI proof, install one of those locally before running live app verification flows.
+- If Playwright is not installed, the runtime fails closed with `BROWSER_VERIFY_RUNTIME_UNAVAILABLE` instead of pretending the UI was verified.
 
 Real-provider interface smoke is fail-closed. Set `BRAIN_INTERFACE_REAL_LIVE_SMOKE_CONFIRM=true`
 before running it, and ensure your provider tokens/allowlists point to intentional test destinations.
@@ -738,9 +772,9 @@ This section covers every key currently present in `.env.example` and what to ex
   - `true` requires alias mention before processing.
 - `BRAIN_INTERFACE_NAME_ALIASES`: accepted invocation aliases.
   - Add aliases to expand valid name-call triggers.
-- `BRAIN_INTERFACE_SHOW_TECHNICAL_SUMMARY`: include technical execution summaries in user replies.
+- `BRAIN_INTERFACE_SHOW_TECHNICAL_SUMMARY`: include technical execution summaries in user replies. Default is `false` so normal chat stays less technical.
   - `false` produces cleaner non-technical output.
-- `BRAIN_INTERFACE_SHOW_SAFETY_CODES`: include safety/policy code lines.
+- `BRAIN_INTERFACE_SHOW_SAFETY_CODES`: include safety/policy code lines. Default follows `BRAIN_INTERFACE_SHOW_TECHNICAL_SUMMARY`.
   - `false` keeps refusals shorter.
 - `BRAIN_INTERFACE_SHOW_COMPLETION_PREFIX`: adds completion prefix (for example `Done.`) when enabled.
 - `BRAIN_INTERFACE_RATE_LIMIT_WINDOW_MS`: ingress rate-limit window size.

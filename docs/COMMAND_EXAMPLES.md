@@ -2,15 +2,17 @@
 
 This page is for operators who want prompts and commands that match the current runtime behavior, not aspirational behavior.
 
-The current planner only treats shell execution as explicitly requested when the prompt includes terms such as `shell`, `terminal`, `powershell`, `bash`, `cmd`, `command line`, `run a command`, or `execute a command`. The examples below intentionally use those terms where real shell execution matters.
+For execution-style build goals, the planner now allows finite executable planning without forcing shell-keyword phrasing on every prompt. Shell naming is still useful when you care about a specific shell or when the request is general shell work rather than build/scaffold work.
 
 ## Quick Rules That Matter
 
-- For real shell work, name the shell directly: **`PowerShell`**, **`cmd`**, **`bash`**, **`terminal`**, or **`command line`**.
 - For real side effects, say **`execute now`**.
+- For build/scaffold work, you no longer need shell keywords just to unlock executable planning.
+- For non-build shell work, or when you need a specific shell, name it directly: **`PowerShell`**, **`cmd`**, **`bash`**, **`terminal`**, or **`command line`**.
 - For guidance only, say **`guidance only`** or **`without executing anything`**.
 - There is no separate `/skill` slash command right now. Use **`/chat create skill ...`**, **`/chat run skill ...`**, or the same phrasing through CLI prompts.
 - If you want draft-first behavior, use **`/propose`** and ask for the exact approval diff before writes or shell commands.
+- Use **`/status`** for the normal plain-language progress view. Use **`/status debug`** only when you need delivery/lifecycle internals.
 
 ## When To Use Which Command
 
@@ -52,7 +54,8 @@ Examples:
 
 Important:
 - If you want real side effects, still say **`execute now`**.
-- If shell execution matters, still name the shell explicitly, for example **`PowerShell`**.
+- If shell selection matters, still name the shell explicitly, for example **`PowerShell`**.
+- If the goal is a normal app build, you do not need shell keywords just to get an executable plan.
 
 Examples:
 
@@ -67,6 +70,23 @@ Examples:
 - `/adjust`: you want to modify the pending plan without starting over.
 - `/approve`: you are satisfied with the draft and want execution to begin.
 - `/cancel`: the draft is wrong, stale, or no longer wanted.
+
+### Use `/status` when
+
+- You want the normal human summary of what is running right now.
+- You want to know whether anything is queued behind the current work.
+- You want to see whether a draft is waiting for approval without reading transport internals.
+
+Examples:
+
+```text
+/status
+/status debug
+```
+
+Why this works:
+- **`/status`** is the normal operator-facing view.
+- **`/status debug`** is the explicit troubleshooting view for ack/final-delivery lifecycle details.
 
 ## What The Runtime Will Tell You
 
@@ -194,10 +214,12 @@ Why this works:
 ```text
 /review 6.85.A
 /status
+/status debug
 ```
 
 Why this works:
 - These are deterministic slash-command surfaces handled directly by the interface layer.
+- `/status` stays human-first by default, while `/status debug` exposes the deeper delivery state only when you ask for it.
 
 ## CLI Examples
 
@@ -312,5 +334,6 @@ If you want a fast mental model, remember this:
 - Want approval first: use **`/propose`**.
 - Want to inspect or change a draft: use **`/draft`** and **`/adjust ...`**.
 - Want shell execution: say **`Execute now using PowerShell`** or the equivalent shell for your platform.
+- Want live browser/UI proof: say **`run the app and verify the homepage UI`**.
 - Want skills: use **`create skill ...`** and **`run skill ...`**, not `/skill`.
 - Want pulse control: use **`/pulse on|off|private|public|status`**.

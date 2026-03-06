@@ -190,6 +190,233 @@ test("model advisory governor rejection is tagged as MODEL_ADVISORY_BLOCK", asyn
   assert.equal(vote.rejectCategory, "MODEL_ADVISORY_BLOCK");
 });
 
+test("resource governor ignores advisory vetoes for loopback probe_http proof actions", async () => {
+  const resourceGovernor = getGovernorById("resource");
+  const vote = await resourceGovernor.evaluate(
+    buildProposal({
+      type: "probe_http",
+      description: "Probe localhost readiness for the managed app",
+      params: {
+        url: "http://127.0.0.1:3000/"
+      }
+    }),
+    buildContext("resource")
+  );
+
+  assert.equal(vote.approve, true);
+  assert.equal(vote.rejectCategory, undefined);
+});
+
+test("ethics governor ignores advisory vetoes for loopback verify_browser proof actions", async () => {
+  const ethicsGovernor = getGovernorById("ethics");
+  const vote = await ethicsGovernor.evaluate(
+    buildProposal({
+      type: "verify_browser",
+      description: "Verify the localhost homepage UI in a browser",
+      params: {
+        url: "http://localhost:3000/"
+      }
+    }),
+    buildContext("ethics")
+  );
+
+  assert.equal(vote.approve, true);
+  assert.equal(vote.rejectCategory, undefined);
+});
+
+test("logic governor ignores advisory vetoes for loopback verify_browser proof actions", async () => {
+  const logicGovernor = getGovernorById("logic");
+  const vote = await logicGovernor.evaluate(
+    buildProposal({
+      type: "verify_browser",
+      description: "Verify the localhost homepage UI in a browser",
+      params: {
+        url: "http://localhost:3000/"
+      }
+    }),
+    buildContext("logic")
+  );
+
+  assert.equal(vote.approve, true);
+  assert.equal(vote.rejectCategory, undefined);
+});
+
+test("continuity governor ignores advisory vetoes for loopback verify_browser proof actions", async () => {
+  const continuityGovernor = getGovernorById("continuity");
+  const vote = await continuityGovernor.evaluate(
+    buildProposal({
+      type: "verify_browser",
+      description: "Verify the localhost homepage UI in a browser",
+      params: {
+        url: "http://localhost:3000/"
+      }
+    }),
+    buildContext("continuity")
+  );
+
+  assert.equal(vote.approve, true);
+  assert.equal(vote.rejectCategory, undefined);
+});
+
+test("security governor ignores advisory vetoes for loopback verify_browser proof actions", async () => {
+  const securityGovernor = getGovernorById("security");
+  const vote = await securityGovernor.evaluate(
+    buildProposal({
+      type: "verify_browser",
+      description: "Verify the localhost homepage UI in a browser",
+      params: {
+        url: "http://localhost:3000/"
+      }
+    }),
+    buildContext("security")
+  );
+
+  assert.equal(vote.approve, true);
+  assert.equal(vote.rejectCategory, undefined);
+});
+
+test("utility governor ignores advisory vetoes for loopback probe_port proof actions", async () => {
+  const utilityGovernor = getGovernorById("utility");
+  const vote = await utilityGovernor.evaluate(
+    buildProposal({
+      type: "probe_port",
+      description: "Check that the localhost dev server port is ready",
+      params: {
+        host: "127.0.0.1",
+        port: 3000
+      }
+    }),
+    buildContext("utility")
+  );
+
+  assert.equal(vote.approve, true);
+  assert.equal(vote.rejectCategory, undefined);
+});
+
+test("compliance governor ignores advisory vetoes for loopback verify_browser proof actions", async () => {
+  const complianceGovernor = getGovernorById("compliance");
+  const vote = await complianceGovernor.evaluate(
+    buildProposal({
+      type: "verify_browser",
+      description: "Verify the localhost homepage UI in a browser",
+      params: {
+        url: "http://localhost:3000/"
+      }
+    }),
+    buildContext("compliance")
+  );
+
+  assert.equal(vote.approve, true);
+  assert.equal(vote.rejectCategory, undefined);
+});
+
+test("ethics governor ignores advisory vetoes for bounded local start_process live-run actions", async () => {
+  const ethicsGovernor = getGovernorById("ethics");
+  const vote = await ethicsGovernor.evaluate(
+    buildProposal({
+      type: "start_process",
+      description: "Start the local Python HTTP server for localhost verification",
+      params: {
+        command: "python -m http.server 8000",
+        cwd: "C:\\Users\\benac\\OneDrive\\Desktop\\playwright-proof-smoke-test"
+      }
+    }),
+    buildContext("ethics")
+  );
+
+  assert.equal(vote.approve, true);
+  assert.equal(vote.rejectCategory, undefined);
+});
+
+test("logic governor ignores advisory vetoes for local Python serve-script start_process actions", async () => {
+  const logicGovernor = getGovernorById("logic");
+  const vote = await logicGovernor.evaluate(
+    buildProposal({
+      type: "start_process",
+      description: "Start the local HTTP server script for localhost verification",
+      params: {
+        command: "python serve8124.py",
+        cwd: "C:\\Users\\benac\\OneDrive\\Desktop\\playwright-proof-smoke-codex-auto-8124"
+      }
+    }),
+    buildContext("logic")
+  );
+
+  assert.equal(vote.approve, true);
+  assert.equal(vote.rejectCategory, undefined);
+});
+
+test("security governor ignores advisory vetoes for local Python serve-script start_process actions", async () => {
+  const securityGovernor = getGovernorById("security");
+  const vote = await securityGovernor.evaluate(
+    buildProposal({
+      type: "start_process",
+      description: "Start the local HTTP server script for localhost verification",
+      params: {
+        command: "python serve8124.py",
+        cwd: "C:\\Users\\benac\\OneDrive\\Desktop\\playwright-proof-smoke-codex-auto-8124"
+      }
+    }),
+    buildContext("security")
+  );
+
+  assert.equal(vote.approve, true);
+  assert.equal(vote.rejectCategory, undefined);
+});
+
+test("compliance governor ignores advisory vetoes for local Python serve-script start_process actions", async () => {
+  const complianceGovernor = getGovernorById("compliance");
+  const vote = await complianceGovernor.evaluate(
+    buildProposal({
+      type: "start_process",
+      description: "Start the local HTTP server script for localhost verification",
+      params: {
+        command: "python serve8124.py",
+        cwd: "C:\\Users\\benac\\OneDrive\\Desktop\\playwright-proof-smoke-codex-auto-8124"
+      }
+    }),
+    buildContext("compliance")
+  );
+
+  assert.equal(vote.approve, true);
+  assert.equal(vote.rejectCategory, undefined);
+});
+
+test("security governor ignores advisory vetoes for bounded managed-process check actions", async () => {
+  const securityGovernor = getGovernorById("security");
+  const vote = await securityGovernor.evaluate(
+    buildProposal({
+      type: "check_process",
+      description: "Check the managed localhost server lease before retrying readiness",
+      params: {
+        leaseId: "proc_localhost_live_1"
+      }
+    }),
+    buildContext("security")
+  );
+
+  assert.equal(vote.approve, true);
+  assert.equal(vote.rejectCategory, undefined);
+});
+
+test("generic start_process actions still honor advisory vetoes when they are not local live-run commands", async () => {
+  const securityGovernor = getGovernorById("security");
+  const vote = await securityGovernor.evaluate(
+    buildProposal({
+      type: "start_process",
+      description: "Start a long-running custom process",
+      params: {
+        command: "python background_worker.py",
+        cwd: "C:\\Users\\benac\\OneDrive\\Desktop\\playwright-proof-smoke-test"
+      }
+    }),
+    buildContext("security")
+  );
+
+  assert.equal(vote.approve, false);
+  assert.equal(vote.rejectCategory, "MODEL_ADVISORY_BLOCK");
+});
+
 test("security governor preserves destructive shell-command block behavior on canonical cases", async () => {
   const securityGovernor = getGovernorById("security");
   const vote = await securityGovernor.evaluate(

@@ -27,6 +27,7 @@ import {
   WorkflowPattern
 } from "./types";
 import { extractActiveRequestSegment } from "./currentRequestExtraction";
+import { throwIfAborted } from "./runtimeAbort";
 import {
   deriveJudgmentPatternFromTaskRun,
   JudgmentPattern,
@@ -354,6 +355,10 @@ interface PlannerLearningContext {
   judgmentHints: readonly JudgmentPattern[];
 }
 
+interface RunTaskOptions {
+  signal?: AbortSignal;
+}
+
 export class BrainOrchestrator {
   private readonly memoryBroker: MemoryBrokerOrgan;
   private readonly intentInterpreter: IntentInterpreterOrgan;
@@ -575,9 +580,11 @@ export class BrainOrchestrator {
    * - Runtime tracing via `appendTraceEvent`.
    *
    * @param task - Incoming task request from CLI/interface runtime.
+   * @param options - Optional cancellation signal propagated from caller/runtime surface.
    * @returns Promise resolving to TaskRunResult.
    */
-  async runTask(task: TaskRequest): Promise<TaskRunResult> {
+  async runTask(task: TaskRequest, options: RunTaskOptions = {}): Promise<TaskRunResult> {
+    throwIfAborted(options.signal);
     const startedAtIso = new Date().toISOString();
     const startedAtMs = Date.now();
     const usageStart = this.readModelUsageSnapshot();
@@ -626,6 +633,7 @@ export class BrainOrchestrator {
 
     // Retry planning within the same task when governance rejects an entire attempt.
     for (let attempt = 1; attempt <= maxPlanAttempts; attempt += 1) {
+      throwIfAborted(options.signal);
       attemptsExecuted = attempt;
       const attemptOutcome = await this.taskRunner.runPlanActions({
         task,
@@ -635,7 +643,8 @@ export class BrainOrchestrator {
         cumulativeApprovedEstimatedCostUsd,
         modelUsageStart: usageStart,
         profileMemoryStatus,
-        missionAttemptId: attempt
+        missionAttemptId: attempt,
+        signal: options.signal
       });
       actionResults.push(...attemptOutcome.results);
       const checkpointObservedAtIso = new Date().toISOString();

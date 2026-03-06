@@ -12,6 +12,7 @@ import {
   createProposalDraft,
   renderAgentPulseStatus,
   renderConversationStatus,
+  renderConversationStatusDebug,
   renderProposalDraftStatus,
   resetAgentPulseRuntimeStatus
 } from "../../src/interfaces/conversationDraftStatusPolicy";
@@ -68,7 +69,7 @@ function buildJob(id: string, overrides: Partial<ConversationJob> = {}): Convers
   };
 }
 
-test("renderConversationStatus includes running job ack/final delivery and recent job snapshot", () => {
+test("renderConversationStatus keeps default /status human-first while preserving work summary", () => {
   const session = buildSession();
   const running = buildJob("job-1", {
     status: "running",
@@ -87,6 +88,36 @@ test("renderConversationStatus includes running job ack/final delivery and recen
 
   const rendered = renderConversationStatus(session);
 
+  assert.match(rendered, /Current status: I'm working on a request right now\./);
+  assert.match(rendered, /Working on: input-job-1/);
+  assert.match(rendered, /Queue: 1 request waiting after the current run\./);
+  assert.match(rendered, /Draft: none\./);
+  assert.match(rendered, /Agent Pulse: off\./);
+  assert.match(rendered, /Recent activity:/);
+  assert.match(rendered, /- Completed: input-job-3/);
+  assert.match(rendered, /Use \/status debug/);
+});
+
+test("renderConversationStatusDebug preserves detailed ack and delivery metadata for troubleshooting", () => {
+  const session = buildSession();
+  const running = buildJob("job-1", {
+    status: "running",
+    ackTimerGeneration: 4,
+    ackEligibleAt: "2026-03-03T00:00:05.000Z",
+    ackLifecycleState: "SENT",
+    finalDeliveryOutcome: "not_attempted",
+    finalDeliveryAttemptCount: 1
+  });
+  session.runningJobId = running.id;
+  session.queuedJobs = [buildJob("job-2")];
+  session.recentJobs = [
+    running,
+    buildJob("job-3", { status: "completed" })
+  ];
+
+  const rendered = renderConversationStatusDebug(session);
+
+  assert.match(rendered, /^Debug status:/);
   assert.match(rendered, /Running job: job-1/);
   assert.match(rendered, /Queued jobs: 1/);
   assert.match(rendered, /Running ack: state=SENT, generation=4/);

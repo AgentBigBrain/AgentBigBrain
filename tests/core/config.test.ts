@@ -21,6 +21,7 @@ test("defaults to isolated runtime mode", () => {
   assert.equal(config.persistence.exportJsonOnWrite, true);
   assert.equal(config.observability.traceEnabled, false);
   assert.equal(config.observability.traceLogPath, "runtime/runtime_trace.jsonl");
+  assert.equal(config.browserVerification.headless, true);
 });
 
 test("requires explicit acknowledgement for full access mode", () => {
@@ -272,6 +273,23 @@ test("supports structured trace logging env overrides", () => {
     config.dna.protectedPathPrefixes.includes("runtime/custom_trace.jsonl"),
     true
   );
+});
+
+test("supports headed browser verification env override", () => {
+  const config = createBrainConfigFromEnv({
+    BRAIN_BROWSER_VERIFY_HEADLESS: "false"
+  });
+
+  assert.equal(config.browserVerification.headless, false);
+});
+
+test("supports visible browser verification alias with precedence over headless flag", () => {
+  const config = createBrainConfigFromEnv({
+    BRAIN_BROWSER_VERIFY_HEADLESS: "true",
+    BRAIN_BROWSER_VERIFY_VISIBLE: "true"
+  });
+
+  assert.equal(config.browserVerification.headless, false);
 });
 
 test("defaults deterministic shell runtime profile and bounds", () => {

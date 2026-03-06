@@ -31,6 +31,45 @@ const RUN_SKILL_EXPLICIT_REQUEST_PATTERN =
   /\b(run|execute|invoke|use)\s+(?:a\s+)?skill\b|\brun[_\s-]?skill\b/i;
 const WORKFLOW_RUN_SKILL_REQUEST_PATTERN =
   /\b(workflow|replay|capture|selector\s+drift|browser\s+workflow)\b/i;
+export type RequiredActionType =
+  | "create_skill"
+  | "run_skill"
+  | "start_process"
+  | "check_process"
+  | "stop_process"
+  | "probe_port"
+  | "probe_http"
+  | "verify_browser"
+  | null;
+const EXPLICIT_RUNTIME_ACTION_REQUEST_PATTERNS: readonly {
+  type: Exclude<RequiredActionType, null>;
+  pattern: RegExp;
+}[] = [
+  {
+    type: "verify_browser",
+    pattern: /^\s*(?:verify_browser\b|(?:use|run|execute)\s+verify_browser\b)/i
+  },
+  {
+    type: "probe_http",
+    pattern: /^\s*(?:probe_http\b|(?:use|run|execute)\s+probe_http\b)/i
+  },
+  {
+    type: "probe_port",
+    pattern: /^\s*(?:probe_port\b|(?:use|run|execute)\s+probe_port\b)/i
+  },
+  {
+    type: "check_process",
+    pattern: /^\s*(?:check_process\b|(?:use|run|execute)\s+check_process\b)/i
+  },
+  {
+    type: "stop_process",
+    pattern: /^\s*(?:stop_process\b|(?:use|run|execute)\s+stop_process\b)/i
+  },
+  {
+    type: "start_process",
+    pattern: /^\s*(?:start_process\b|(?:use|run|execute)\s+start_process\b)/i
+  }
+] as const;
 const SKILL_NAME_STOP_WORDS = new Set([
   "a",
   "an",
@@ -66,8 +105,6 @@ const SKILL_SLUG_STOP_WORDS = new Set([
   "teach",
   "write"
 ]);
-
-export type RequiredActionType = "create_skill" | "run_skill" | null;
 
 /**
  * Evaluates action type and returns a deterministic policy signal.
@@ -281,6 +318,11 @@ export function inferRequiredActionType(currentUserRequest: string): RequiredAct
   }
   if (RUN_SKILL_EXPLICIT_REQUEST_PATTERN.test(currentUserRequest)) {
     return "run_skill";
+  }
+  for (const explicitRuntimeActionRequest of EXPLICIT_RUNTIME_ACTION_REQUEST_PATTERNS) {
+    if (explicitRuntimeActionRequest.pattern.test(currentUserRequest)) {
+      return explicitRuntimeActionRequest.type;
+    }
   }
   return null;
 }

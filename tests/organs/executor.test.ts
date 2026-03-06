@@ -5,6 +5,8 @@
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
+import * as http from "node:http";
+import * as net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -12,6 +14,11 @@ import { test } from "node:test";
 import { createBrainConfigFromEnv, BrainConfig } from "../../src/core/config";
 import { DEFAULT_BRAIN_CONFIG } from "../../src/core/config";
 import { PlannedAction } from "../../src/core/types";
+import {
+  BrowserVerificationResult,
+  BrowserVerifier,
+  VerifyBrowserRequest
+} from "../../src/organs/browserVerifier";
 import { ToolExecutorOrgan } from "../../src/organs/executor";
 
 /**
@@ -167,6 +174,174 @@ function buildShellAction(
   };
 }
 
+/**
+ * Implements `buildStartProcessAction` behavior within module scope.
+ * Interacts with local collaborators through imported modules and typed inputs/outputs.
+ */
+function buildStartProcessAction(
+  command?: string,
+  overrides: Record<string, unknown> = {}
+): PlannedAction {
+  return {
+    id: "action_start_process",
+    type: "start_process",
+    description: "start managed process",
+    params: {
+      ...(typeof command === "string" ? { command } : {}),
+      ...overrides
+    },
+    estimatedCostUsd: 0.1
+  };
+}
+
+/**
+ * Implements `buildCheckProcessAction` behavior within module scope.
+ * Interacts with local collaborators through imported modules and typed inputs/outputs.
+ */
+function buildCheckProcessAction(leaseId?: string): PlannedAction {
+  return {
+    id: "action_check_process",
+    type: "check_process",
+    description: "check managed process",
+    params: typeof leaseId === "string" ? { leaseId } : {},
+    estimatedCostUsd: 0.04
+  };
+}
+
+/**
+ * Implements `buildStopProcessAction` behavior within module scope.
+ * Interacts with local collaborators through imported modules and typed inputs/outputs.
+ */
+function buildStopProcessAction(leaseId?: string): PlannedAction {
+  return {
+    id: "action_stop_process",
+    type: "stop_process",
+    description: "stop managed process",
+    params: typeof leaseId === "string" ? { leaseId } : {},
+    estimatedCostUsd: 0.12
+  };
+}
+
+/**
+ * Implements `buildProbePortAction` behavior within module scope.
+ * Interacts with local collaborators through imported modules and typed inputs/outputs.
+ */
+function buildProbePortAction(port?: number, host = "127.0.0.1"): PlannedAction {
+  return {
+    id: "action_probe_port",
+    type: "probe_port",
+    description: "probe local tcp port",
+    params: {
+      ...(typeof host === "string" ? { host } : {}),
+      ...(typeof port === "number" ? { port } : {})
+    },
+    estimatedCostUsd: 0.03
+  };
+}
+
+/**
+ * Implements `buildProbeHttpAction` behavior within module scope.
+ * Interacts with local collaborators through imported modules and typed inputs/outputs.
+ */
+function buildProbeHttpAction(
+  url?: string,
+  expectedStatus?: number
+): PlannedAction {
+  return {
+    id: "action_probe_http",
+    type: "probe_http",
+    description: "probe local http endpoint",
+    params: {
+      ...(typeof url === "string" ? { url } : {}),
+      ...(typeof expectedStatus === "number" ? { expectedStatus } : {})
+    },
+    estimatedCostUsd: 0.04
+  };
+}
+
+/**
+ * Implements `buildVerifyBrowserAction` behavior within module scope.
+ * Interacts with local collaborators through imported modules and typed inputs/outputs.
+ */
+function buildVerifyBrowserAction(
+  url?: string,
+  overrides: Record<string, unknown> = {}
+): PlannedAction {
+  return {
+    id: "action_verify_browser",
+    type: "verify_browser",
+    description: "verify loopback browser page",
+    params: {
+      ...(typeof url === "string" ? { url } : {}),
+      ...overrides
+    },
+    estimatedCostUsd: 0.09
+  };
+}
+
+async function withLocalTcpServer(callback: (port: number) => Promise<void>): Promise<void> {
+  const server = net.createServer((socket) => {
+    socket.end();
+  });
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => resolve());
+  });
+
+  const address = server.address();
+  assert.ok(address && typeof address !== "string");
+
+  try {
+    await callback(address.port);
+  } finally {
+    await new Promise<void>((resolve, reject) => {
+      server.close((error) => (error ? reject(error) : resolve()));
+    });
+  }
+}
+
+async function withUnusedTcpPort(callback: (port: number) => Promise<void>): Promise<void> {
+  const server = net.createServer();
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => resolve());
+  });
+
+  const address = server.address();
+  assert.ok(address && typeof address !== "string");
+  const port = address.port;
+
+  await new Promise<void>((resolve, reject) => {
+    server.close((error) => (error ? reject(error) : resolve()));
+  });
+  await callback(port);
+}
+
+async function withLocalHttpServer(
+  statusCode: number,
+  callback: (url: string) => Promise<void>
+): Promise<void> {
+  const server = http.createServer((_request, response) => {
+    response.statusCode = statusCode;
+    response.end("ok");
+  });
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => resolve());
+  });
+
+  const address = server.address();
+  assert.ok(address && typeof address !== "string");
+
+  try {
+    await callback(`http://127.0.0.1:${address.port}/`);
+  } finally {
+    await new Promise<void>((resolve, reject) => {
+      server.close((error) => (error ? reject(error) : resolve()));
+    });
+  }
+}
+
 interface MockShellSpawnResult {
   stdout?: string;
   stderr?: string;
@@ -233,6 +408,163 @@ function createMockShellSpawn(result: MockShellSpawnResult): {
     calls,
     spawn
   };
+}
+
+function createManagedProcessShellSpawn(): {
+  calls: MockShellSpawnCall[];
+  getKillCount: () => number;
+  spawn: typeof import("node:child_process").spawn;
+} {
+  const calls: MockShellSpawnCall[] = [];
+  let killCount = 0;
+  let latestManagedChild:
+    | import("node:child_process").ChildProcessWithoutNullStreams
+    | null = null;
+  const spawn = ((
+    executable: string,
+    argsOrOptions?: unknown,
+    maybeOptions?: unknown
+  ) => {
+    const args = Array.isArray(argsOrOptions) ? argsOrOptions : [];
+    const options = (
+      Array.isArray(argsOrOptions) ? maybeOptions : argsOrOptions
+    ) as Record<string, unknown> | undefined;
+    if (executable.toLowerCase() === "taskkill") {
+      killCount += 1;
+      calls.push({
+        executable,
+        args,
+        options: options ?? {}
+      });
+
+      const killer = new EventEmitter() as import("node:child_process").ChildProcessWithoutNullStreams;
+      killer.stdout = new EventEmitter() as unknown as import("node:stream").Readable;
+      killer.stderr = new EventEmitter() as unknown as import("node:stream").Readable;
+      queueMicrotask(() => {
+        latestManagedChild?.emit("close", 0, "SIGTERM");
+        killer.emit("close", 0, null);
+      });
+      return killer;
+    }
+    calls.push({
+      executable,
+      args,
+      options: options ?? {}
+    });
+
+    const child = new EventEmitter() as import("node:child_process").ChildProcessWithoutNullStreams;
+    const stdout = new EventEmitter() as unknown as import("node:stream").Readable & {
+      resume?: () => void;
+    };
+    const stderr = new EventEmitter() as unknown as import("node:stream").Readable & {
+      resume?: () => void;
+    };
+    const stdin = new EventEmitter() as unknown as import("node:stream").Writable;
+    stdout.resume = () => stdout;
+    stderr.resume = () => stderr;
+    child.stdin = stdin;
+    child.stdout = stdout;
+    child.stderr = stderr;
+    Object.defineProperty(child, "pid", { value: 4242, writable: true });
+    child.kill = (() => {
+      killCount += 1;
+      queueMicrotask(() => {
+        child.emit("close", 0, "SIGTERM");
+      });
+      return true;
+    }) as unknown as (signal?: NodeJS.Signals | number | undefined) => boolean;
+    latestManagedChild = child;
+
+    queueMicrotask(() => {
+      child.emit("spawn");
+    });
+
+    return child;
+  }) as unknown as typeof import("node:child_process").spawn;
+
+  return {
+    calls,
+    getKillCount: () => killCount,
+    spawn
+  };
+}
+
+function createAbortableShellSpawn(): {
+  calls: MockShellSpawnCall[];
+  getKillCount: () => number;
+  spawn: typeof import("node:child_process").spawn;
+} {
+  const calls: MockShellSpawnCall[] = [];
+  let killCount = 0;
+  const spawn = ((
+    executable: string,
+    argsOrOptions?: unknown,
+    maybeOptions?: unknown
+  ) => {
+    const args = Array.isArray(argsOrOptions) ? argsOrOptions : [];
+    const options = (
+      Array.isArray(argsOrOptions) ? maybeOptions : argsOrOptions
+    ) as Record<string, unknown> | undefined;
+    if (executable.toLowerCase() === "taskkill") {
+      killCount += 1;
+      calls.push({
+        executable,
+        args,
+        options: options ?? {}
+      });
+
+      const killer = new EventEmitter() as import("node:child_process").ChildProcessWithoutNullStreams;
+      killer.stdout = new EventEmitter() as unknown as import("node:stream").Readable;
+      killer.stderr = new EventEmitter() as unknown as import("node:stream").Readable;
+      queueMicrotask(() => {
+        killer.emit("close", 0, null);
+      });
+      return killer;
+    }
+    calls.push({
+      executable,
+      args,
+      options: options ?? {}
+    });
+
+    const child = new EventEmitter() as import("node:child_process").ChildProcessWithoutNullStreams;
+    child.stdout = new EventEmitter() as unknown as import("node:stream").Readable;
+    child.stderr = new EventEmitter() as unknown as import("node:stream").Readable;
+    child.kill = (() => {
+      killCount += 1;
+      queueMicrotask(() => {
+        child.emit("close", null, "SIGTERM");
+      });
+      return true;
+    }) as unknown as (signal?: NodeJS.Signals | number | undefined) => boolean;
+
+    return child;
+  }) as unknown as typeof import("node:child_process").spawn;
+
+  return {
+    calls,
+    getKillCount: () => killCount,
+    spawn
+  };
+}
+
+class MockBrowserVerifier implements BrowserVerifier {
+  public readonly requests: VerifyBrowserRequest[] = [];
+
+  /**
+   * Initializes class MockBrowserVerifier dependencies and runtime state.
+   * Interacts with local collaborators through imported modules and typed inputs/outputs.
+   */
+  constructor(private readonly result: BrowserVerificationResult) {}
+
+  /**
+   * Implements `verify` behavior within class MockBrowserVerifier.
+   * Interacts with local collaborators through imported modules and typed inputs/outputs.
+   */
+  async verify(request: VerifyBrowserRequest): Promise<BrowserVerificationResult> {
+    this.requests.push(request);
+    return this.result;
+  }
 }
 
 /**
@@ -462,6 +794,410 @@ test("ToolExecutorOrgan enforces timeout fallback and reports shell failure exit
     assert.equal(telemetry?.shellExitCode, 2);
     assert.equal(telemetry?.shellTimedOut, false);
     assert.equal(telemetry?.shellTimeoutMs, config.shellRuntime.profile.timeoutMsDefault);
+  });
+});
+
+test("ToolExecutorOrgan cancels active shell command when abort signal fires", async () => {
+  await withTempCwd(async () => {
+    const mockSpawn = createAbortableShellSpawn();
+    const config = buildShellEnabledConfig({
+      shellRuntime: {
+        ...DEFAULT_BRAIN_CONFIG.shellRuntime,
+        profile: {
+          ...DEFAULT_BRAIN_CONFIG.shellRuntime.profile,
+          shellKind: "cmd",
+          executable: "cmd.exe",
+          wrapperArgs: ["/d", "/c"],
+          cwdPolicy: {
+            ...DEFAULT_BRAIN_CONFIG.shellRuntime.profile.cwdPolicy,
+            denyOutsideSandbox: false
+          }
+        }
+      }
+    });
+    const executor = new ToolExecutorOrgan(config, mockSpawn.spawn);
+    const abortController = new AbortController();
+    const executionPromise = executor.executeWithOutcome(
+      buildShellAction("npm start"),
+      abortController.signal
+    );
+
+    abortController.abort();
+
+    await assert.rejects(
+      executionPromise,
+      (error: unknown) => error instanceof Error && error.name === "AbortError"
+    );
+    assert.ok(mockSpawn.calls.length >= 1);
+    assert.equal(mockSpawn.getKillCount(), 1);
+  });
+});
+
+test("ToolExecutorOrgan starts managed process and returns lease metadata", async () => {
+  await withTempCwd(async () => {
+    const mockSpawn = createManagedProcessShellSpawn();
+    const config = buildShellEnabledConfig({
+      shellRuntime: {
+        ...DEFAULT_BRAIN_CONFIG.shellRuntime,
+        profile: {
+          ...DEFAULT_BRAIN_CONFIG.shellRuntime.profile,
+          shellKind: "cmd",
+          executable: "cmd.exe",
+          wrapperArgs: ["/d", "/c"],
+          cwdPolicy: {
+            ...DEFAULT_BRAIN_CONFIG.shellRuntime.profile.cwdPolicy,
+            denyOutsideSandbox: false
+          }
+        }
+      }
+    });
+    const executor = new ToolExecutorOrgan(config, mockSpawn.spawn);
+    const outcome = await executor.executeWithOutcome(
+      buildStartProcessAction("npm start", { cwd: "runtime/sandbox/app" }),
+      undefined,
+      "task_managed_process_1"
+    );
+
+    assert.equal(outcome.status, "success");
+    assert.match(outcome.output, /Process started: lease /i);
+    assert.equal(outcome.executionMetadata?.processLifecycleStatus, "PROCESS_STARTED");
+    assert.equal(outcome.executionMetadata?.processPid, 4242);
+    assert.equal(outcome.executionMetadata?.processTaskId, "task_managed_process_1");
+    assert.equal(typeof outcome.executionMetadata?.processLeaseId, "string");
+    assert.equal(mockSpawn.calls.length, 1);
+    assert.deepEqual(mockSpawn.calls[0].args, ["/d", "/c", "npm start"]);
+  });
+});
+
+test("ToolExecutorOrgan fails managed process start early when the requested loopback port is already occupied", async () => {
+  await withTempCwd(async () => {
+    await withLocalTcpServer(async (port) => {
+      const mockSpawn = createManagedProcessShellSpawn();
+      const config = buildShellEnabledConfig({
+        shellRuntime: {
+          ...DEFAULT_BRAIN_CONFIG.shellRuntime,
+          profile: {
+            ...DEFAULT_BRAIN_CONFIG.shellRuntime.profile,
+            shellKind: "cmd",
+            executable: "cmd.exe",
+            wrapperArgs: ["/d", "/c"],
+            cwdPolicy: {
+              ...DEFAULT_BRAIN_CONFIG.shellRuntime.profile.cwdPolicy,
+              denyOutsideSandbox: false
+            }
+          }
+        }
+      });
+      const executor = new ToolExecutorOrgan(config, mockSpawn.spawn);
+      const outcome = await executor.executeWithOutcome(
+        buildStartProcessAction(`python -m http.server ${port}`, {
+          cwd: "runtime/sandbox/app"
+        })
+      );
+
+      assert.equal(outcome.status, "failed");
+      assert.equal(outcome.failureCode, "PROCESS_START_FAILED");
+      assert.match(outcome.output, /already occupied before startup/i);
+      assert.equal(outcome.executionMetadata?.processLifecycleStatus, "PROCESS_START_FAILED");
+      assert.equal(outcome.executionMetadata?.processStartupFailureKind, "PORT_IN_USE");
+      assert.equal(outcome.executionMetadata?.processRequestedPort, port);
+      assert.equal(outcome.executionMetadata?.processRequestedUrl, `http://localhost:${port}`);
+      assert.equal(typeof outcome.executionMetadata?.processSuggestedPort, "number");
+      assert.equal(mockSpawn.calls.length, 0);
+    });
+  });
+});
+
+test("ToolExecutorOrgan tears down managed process lease when the owning signal aborts after start", async () => {
+  await withTempCwd(async () => {
+    const mockSpawn = createManagedProcessShellSpawn();
+    const config = buildShellEnabledConfig({
+      shellRuntime: {
+        ...DEFAULT_BRAIN_CONFIG.shellRuntime,
+        profile: {
+          ...DEFAULT_BRAIN_CONFIG.shellRuntime.profile,
+          shellKind: "cmd",
+          executable: "cmd.exe",
+          wrapperArgs: ["/d", "/c"],
+          cwdPolicy: {
+            ...DEFAULT_BRAIN_CONFIG.shellRuntime.profile.cwdPolicy,
+            denyOutsideSandbox: false
+          }
+        }
+      }
+    });
+    const executor = new ToolExecutorOrgan(config, mockSpawn.spawn);
+    const abortController = new AbortController();
+    const startOutcome = await executor.executeWithOutcome(
+      buildStartProcessAction("npm start", { cwd: "runtime/sandbox/app" }),
+      abortController.signal,
+      "task_managed_process_abort_1"
+    );
+    const leaseId = startOutcome.executionMetadata?.processLeaseId;
+
+    assert.equal(startOutcome.status, "success");
+    assert.equal(typeof leaseId, "string");
+
+    abortController.abort();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    assert.equal(mockSpawn.getKillCount(), 1);
+    const checkOutcome = await executor.executeWithOutcome(
+      buildCheckProcessAction(typeof leaseId === "string" ? leaseId : undefined)
+    );
+    assert.equal(checkOutcome.status, "success");
+    assert.match(checkOutcome.output, /Process stopped: lease /i);
+    assert.equal(checkOutcome.executionMetadata?.processLifecycleStatus, "PROCESS_STOPPED");
+    assert.equal(checkOutcome.executionMetadata?.processStopRequested, true);
+  });
+});
+
+test("ToolExecutorOrgan reports managed process as still running when lease is active", async () => {
+  await withTempCwd(async () => {
+    const mockSpawn = createManagedProcessShellSpawn();
+    const config = buildShellEnabledConfig({
+      shellRuntime: {
+        ...DEFAULT_BRAIN_CONFIG.shellRuntime,
+        profile: {
+          ...DEFAULT_BRAIN_CONFIG.shellRuntime.profile,
+          shellKind: "cmd",
+          executable: "cmd.exe",
+          wrapperArgs: ["/d", "/c"],
+          cwdPolicy: {
+            ...DEFAULT_BRAIN_CONFIG.shellRuntime.profile.cwdPolicy,
+            denyOutsideSandbox: false
+          }
+        }
+      }
+    });
+    const executor = new ToolExecutorOrgan(config, mockSpawn.spawn);
+    const startOutcome = await executor.executeWithOutcome(
+      buildStartProcessAction("npm start", { cwd: "runtime/sandbox/app" })
+    );
+    const leaseId = startOutcome.executionMetadata?.processLeaseId;
+
+    assert.equal(typeof leaseId, "string");
+    const checkOutcome = await executor.executeWithOutcome(
+      buildCheckProcessAction(typeof leaseId === "string" ? leaseId : undefined)
+    );
+    assert.equal(checkOutcome.status, "success");
+    assert.match(checkOutcome.output, /Process still running: lease /i);
+    assert.equal(checkOutcome.executionMetadata?.processLifecycleStatus, "PROCESS_STILL_RUNNING");
+    assert.equal(checkOutcome.executionMetadata?.processLeaseId, leaseId);
+  });
+});
+
+test("ToolExecutorOrgan stops managed process and returns closed lifecycle metadata", async () => {
+  await withTempCwd(async () => {
+    const mockSpawn = createManagedProcessShellSpawn();
+    const config = buildShellEnabledConfig({
+      shellRuntime: {
+        ...DEFAULT_BRAIN_CONFIG.shellRuntime,
+        profile: {
+          ...DEFAULT_BRAIN_CONFIG.shellRuntime.profile,
+          shellKind: "cmd",
+          executable: "cmd.exe",
+          wrapperArgs: ["/d", "/c"],
+          cwdPolicy: {
+            ...DEFAULT_BRAIN_CONFIG.shellRuntime.profile.cwdPolicy,
+            denyOutsideSandbox: false
+          }
+        }
+      }
+    });
+    const executor = new ToolExecutorOrgan(config, mockSpawn.spawn);
+    const startOutcome = await executor.executeWithOutcome(
+      buildStartProcessAction("npm start", { cwd: "runtime/sandbox/app" })
+    );
+    const leaseId = startOutcome.executionMetadata?.processLeaseId;
+
+    assert.equal(typeof leaseId, "string");
+    const stopOutcome = await executor.executeWithOutcome(
+      buildStopProcessAction(typeof leaseId === "string" ? leaseId : undefined)
+    );
+    assert.equal(stopOutcome.status, "success");
+    assert.match(stopOutcome.output, /Process stopped: lease /i);
+    assert.equal(stopOutcome.executionMetadata?.processLifecycleStatus, "PROCESS_STOPPED");
+    assert.equal(stopOutcome.executionMetadata?.processLeaseId, leaseId);
+    assert.equal(mockSpawn.getKillCount(), 1);
+    if (process.platform === "win32") {
+      assert.ok(mockSpawn.calls.some((call) => call.executable.toLowerCase() === "taskkill"));
+    } else {
+      assert.equal(stopOutcome.executionMetadata?.processSignal, "SIGTERM");
+    }
+  });
+});
+
+test("ToolExecutorOrgan probes local TCP port and returns PROCESS_READY metadata", async () => {
+  await withTempCwd(async () => {
+    await withLocalTcpServer(async (port) => {
+      const executor = new ToolExecutorOrgan(DEFAULT_BRAIN_CONFIG);
+      const outcome = await executor.executeWithOutcome(buildProbePortAction(port));
+
+      assert.equal(outcome.status, "success");
+      assert.match(outcome.output, /Port ready:/i);
+      assert.equal(outcome.executionMetadata?.processLifecycleStatus, "PROCESS_READY");
+      assert.equal(outcome.executionMetadata?.probeKind, "port");
+      assert.equal(outcome.executionMetadata?.probeReady, true);
+      assert.equal(outcome.executionMetadata?.probePort, port);
+    });
+  });
+});
+
+test("ToolExecutorOrgan reports PROCESS_NOT_READY when local TCP port is closed", async () => {
+  await withTempCwd(async () => {
+    await withUnusedTcpPort(async (port) => {
+      const executor = new ToolExecutorOrgan(DEFAULT_BRAIN_CONFIG);
+      const outcome = await executor.executeWithOutcome(buildProbePortAction(port));
+
+      assert.equal(outcome.status, "failed");
+      assert.match(outcome.output, /Port not ready:/i);
+      assert.equal(outcome.failureCode, "PROCESS_NOT_READY");
+      assert.equal(outcome.executionMetadata?.processLifecycleStatus, "PROCESS_NOT_READY");
+      assert.equal(outcome.executionMetadata?.probeKind, "port");
+      assert.equal(outcome.executionMetadata?.probeReady, false);
+    });
+  });
+});
+
+test("ToolExecutorOrgan probes local HTTP endpoint and returns PROCESS_READY metadata", async () => {
+  await withTempCwd(async () => {
+    await withLocalHttpServer(200, async (url) => {
+      const executor = new ToolExecutorOrgan(DEFAULT_BRAIN_CONFIG);
+      const outcome = await executor.executeWithOutcome(buildProbeHttpAction(url, 200));
+
+      assert.equal(outcome.status, "success");
+      assert.match(outcome.output, /HTTP ready:/i);
+      assert.equal(outcome.executionMetadata?.processLifecycleStatus, "PROCESS_READY");
+      assert.equal(outcome.executionMetadata?.probeKind, "http");
+      assert.equal(outcome.executionMetadata?.probeReady, true);
+      assert.equal(outcome.executionMetadata?.probeUrl, url);
+      assert.equal(outcome.executionMetadata?.probeObservedStatus, 200);
+    });
+  });
+});
+
+test("ToolExecutorOrgan reports PROCESS_NOT_READY when local HTTP status mismatches", async () => {
+  await withTempCwd(async () => {
+    await withLocalHttpServer(503, async (url) => {
+      const executor = new ToolExecutorOrgan(DEFAULT_BRAIN_CONFIG);
+      const outcome = await executor.executeWithOutcome(buildProbeHttpAction(url, 200));
+
+      assert.equal(outcome.status, "failed");
+      assert.match(outcome.output, /HTTP probe not ready:/i);
+      assert.equal(outcome.failureCode, "PROCESS_NOT_READY");
+      assert.equal(outcome.executionMetadata?.processLifecycleStatus, "PROCESS_NOT_READY");
+      assert.equal(outcome.executionMetadata?.probeKind, "http");
+      assert.equal(outcome.executionMetadata?.probeReady, false);
+      assert.equal(outcome.executionMetadata?.probeObservedStatus, 503);
+    });
+  });
+});
+
+test("ToolExecutorOrgan verifies loopback pages through browser verifier and records proof metadata", async () => {
+  await withTempCwd(async () => {
+    const browserVerifier = new MockBrowserVerifier({
+      status: "verified",
+      detail: "Browser verification passed: observed title \"Robinhood Mock\"; expected title matched.",
+      observedTitle: "Robinhood Mock",
+      observedTextSample: "Portfolio $12,340",
+      matchedTitle: true,
+      matchedText: true
+    });
+    const executor = new ToolExecutorOrgan(
+      DEFAULT_BRAIN_CONFIG,
+      undefined,
+      undefined,
+      browserVerifier
+    );
+    const outcome = await executor.executeWithOutcome(
+      buildVerifyBrowserAction("http://127.0.0.1:3000/", {
+        expectedTitle: "Robinhood",
+        expectedText: "Portfolio",
+        timeoutMs: 4000
+      })
+    );
+
+    assert.equal(outcome.status, "success");
+    assert.match(outcome.output, /Browser verification passed/i);
+    assert.equal(browserVerifier.requests.length, 1);
+    assert.equal(browserVerifier.requests[0].url, "http://127.0.0.1:3000/");
+    assert.equal(outcome.executionMetadata?.browserVerification, true);
+    assert.equal(outcome.executionMetadata?.browserVerifyPassed, true);
+    assert.equal(outcome.executionMetadata?.browserVerifyObservedTitle, "Robinhood Mock");
+    assert.equal(outcome.executionMetadata?.browserVerifyExpectedTitle, "Robinhood");
+    assert.equal(outcome.executionMetadata?.processLifecycleStatus, "PROCESS_READY");
+  });
+});
+
+test("ToolExecutorOrgan returns typed expectation failure for browser verification mismatches", async () => {
+  await withTempCwd(async () => {
+    const browserVerifier = new MockBrowserVerifier({
+      status: "expectation_failed",
+      detail: "Browser verification failed: page loaded, but expected text containing \"Portfolio\" was not found.",
+      observedTitle: "Robinhood Mock",
+      observedTextSample: "Watchlist only",
+      matchedTitle: true,
+      matchedText: false
+    });
+    const executor = new ToolExecutorOrgan(
+      DEFAULT_BRAIN_CONFIG,
+      undefined,
+      undefined,
+      browserVerifier
+    );
+    const outcome = await executor.executeWithOutcome(
+      buildVerifyBrowserAction("http://127.0.0.1:3000/", {
+        expectedTitle: "Robinhood",
+        expectedText: "Portfolio"
+      })
+    );
+
+    assert.equal(outcome.status, "failed");
+    assert.equal(outcome.failureCode, "BROWSER_VERIFY_EXPECTATION_FAILED");
+    assert.equal(outcome.executionMetadata?.browserVerifyPassed, false);
+    assert.equal(outcome.executionMetadata?.browserVerifyMatchedText, false);
+    assert.equal(outcome.executionMetadata?.processLifecycleStatus, "PROCESS_READY");
+  });
+});
+
+test("ToolExecutorOrgan returns typed runtime-unavailable failure for browser verification", async () => {
+  await withTempCwd(async () => {
+    const browserVerifier = new MockBrowserVerifier({
+      status: "runtime_unavailable",
+      detail: "Browser verification is unavailable in this runtime because Playwright is not installed locally.",
+      observedTitle: null,
+      observedTextSample: null,
+      matchedTitle: null,
+      matchedText: null
+    });
+    const executor = new ToolExecutorOrgan(
+      DEFAULT_BRAIN_CONFIG,
+      undefined,
+      undefined,
+      browserVerifier
+    );
+    const outcome = await executor.executeWithOutcome(
+      buildVerifyBrowserAction("http://127.0.0.1:3000/")
+    );
+
+    assert.equal(outcome.status, "failed");
+    assert.equal(outcome.failureCode, "BROWSER_VERIFY_RUNTIME_UNAVAILABLE");
+    assert.equal(outcome.executionMetadata?.browserVerification, true);
+    assert.equal(outcome.executionMetadata?.browserVerifyPassed, false);
+  });
+});
+
+test("ToolExecutorOrgan blocks managed process check and stop for unknown leases", async () => {
+  await withTempCwd(async () => {
+    const executor = new ToolExecutorOrgan(buildShellEnabledConfig());
+    const checkOutcome = await executor.executeWithOutcome(buildCheckProcessAction("proc_missing"));
+    const stopOutcome = await executor.executeWithOutcome(buildStopProcessAction("proc_missing"));
+
+    assert.equal(checkOutcome.status, "blocked");
+    assert.equal(checkOutcome.failureCode, "PROCESS_LEASE_NOT_FOUND");
+    assert.equal(stopOutcome.status, "blocked");
+    assert.equal(stopOutcome.failureCode, "PROCESS_LEASE_NOT_FOUND");
   });
 });
 

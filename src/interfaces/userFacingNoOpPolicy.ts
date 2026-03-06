@@ -12,6 +12,7 @@ import {
   buildUserFacingEnvelopeV1,
   renderUserFacingEnvelopeV1
 } from "./userFacingContracts";
+import { isLiveBuildVerificationPrompt } from "./liveBuildVerificationPromptPolicy";
 
 const STAGE_REVIEW_PROGRESS_PROMPT_PATTERNS: readonly RegExp[] = [
   /\bclone-assisted\b/i,
@@ -132,10 +133,12 @@ export function resolveRoutingPolicyExplanation(
  * Returns deterministic no-op/unsupported responses for execution-surface routing categories.
  *
  * @param classification - Routing classification derived from the current user request.
+ * @param userInput - Raw task user input, potentially including conversation wrappers.
  * @returns Rendered fallback response text, or `null` when no execution-surface fallback applies.
  */
 export function resolveExecutionSurfaceFallbackFromRouting(
-  classification: RoutingMapClassificationV1
+  classification: RoutingMapClassificationV1,
+  userInput = ""
 ): string | null {
   switch (classification.category) {
     case "SCHEDULE_FOCUS_BLOCKS":
@@ -148,10 +151,9 @@ export function resolveExecutionSurfaceFallbackFromRouting(
         )
       );
     case "BUILD_SCAFFOLD":
-      return buildDeterministicNoOpTemplate(
-        classification.fallbackReasonCode ?? "BUILD_NO_SIDE_EFFECT_EXECUTED",
-        "No governed build side-effect action was approved and executed in this run.",
-        "Ask for the exact approval diff and approve the required build step, or request a guidance-only response."
+      return resolveBuildScaffoldNoOpFallback(
+        userInput,
+        classification.fallbackReasonCode ?? "BUILD_NO_SIDE_EFFECT_EXECUTED"
       );
     case "CLONE_VARIANTS":
       return buildDeterministicNoOpTemplate(
@@ -190,6 +192,47 @@ export function resolveExecutionSurfaceFallbackFromRouting(
     default:
       return null;
   }
+}
+
+/**
+ * Returns `true` when the active request is a destructive delete against a clearly high-risk path.
+ *
+ * @param userInput - Raw task user input, potentially including conversation wrappers.
+ * @returns `true` when high-risk destructive-path patterns are present.
+ */
+export function isHighRiskDestructiveDeletePrompt(userInput: string): boolean {
+  const normalized = extractCurrentRequestForDiagnostics(userInput);
+  if (!normalized) {
+    return false;
+  }
+  const destructiveVerb = /\b(delete|remove|erase)\b/i.test(normalized);
+  const riskyTarget =
+    /\b(?:system32|drivers\\etc\\hosts|\/etc\/hosts|\.env\b|c:\\windows\\|windows\\system32|\/bin\/|\/etc\/|\/usr\/)\b/i.test(
+      normalized
+    );
+  return destructiveVerb && riskyTarget;
+}
+
+/**
+ * Builds a deterministic no-op response for high-risk destructive delete prompts when no richer
+ * block/governance signal is available.
+ *
+ * @param userInput - Raw task user input, potentially including conversation wrappers.
+ * @returns Rendered no-op envelope text, or `null` when the prompt is not a high-risk delete.
+ */
+export function resolveHighRiskDeleteNoOpFallback(userInput: string): string | null {
+  if (!isHighRiskDestructiveDeletePrompt(userInput)) {
+    return null;
+  }
+  return buildDeterministicNoOpTemplate(
+    "COMMUNICATION_NO_SIDE_EFFECT_EXECUTED",
+    "the request targeted a high-risk delete on a protected or system path, and this run did not execute a governed delete step.",
+    "Ask for the exact block code or approval diff first, or narrow the request to a safe sandbox path you want changed.",
+    {
+      whatHappened:
+        "the request targeted a high-risk delete on a protected or system path."
+    }
+  );
 }
 
 /**
@@ -345,10 +388,9 @@ export function resolveProgressPlaceholderFallback(
     case "research":
       return resolveResearchNoOpFallback(runResult.task.userInput);
     case "build":
-      return buildDeterministicNoOpTemplate(
-        "BUILD_NO_SIDE_EFFECT_EXECUTED",
-        "No governed build side-effect action was approved and executed in this run.",
-        "Ask for the exact approval diff and approve the required build step, or request a guidance-only response."
+      return resolveBuildScaffoldNoOpFallback(
+        runResult.task.userInput,
+        "BUILD_NO_SIDE_EFFECT_EXECUTED"
       );
     case "workflow_replay":
       return buildDeterministicNoOpTemplate(
@@ -417,26 +459,82 @@ function extractCurrentRequestForDiagnostics(userInput: string): string {
 /**
  * Builds a deterministic no-op envelope with a caller-supplied reason.
  *
+ * **Why it exists:**
+ * Centralizes shared envelope rendering so execution-surface fallbacks stay deterministic while
+ * allowing specific call sites to override the short message or the "what happened" line.
+ *
+ * **What it talks to:**
+ * - Uses `buildUserFacingEnvelopeV1` from `./userFacingContracts`.
+ * - Uses `renderUserFacingEnvelopeV1` from `./userFacingContracts`.
+ *
  * @param reasonCode - Typed no-op reason code.
  * @param reason - Human-readable reason text.
  * @param nextStep - Deterministic remediation guidance.
+ * @param overrides - Optional caller-supplied short-message or what-happened overrides.
  * @returns Rendered `NO_OP` envelope text.
  */
 function buildDeterministicNoOpTemplate(
   reasonCode: string,
   reason: string,
-  nextStep: string
+  nextStep: string,
+  overrides: {
+    shortMessage?: string;
+    whatHappened?: string;
+  } = {}
 ): string {
-  return renderUserFacingEnvelopeV1(
+  let rendered = renderUserFacingEnvelopeV1(
     buildUserFacingEnvelopeV1(
       "NO_OP",
-      "I couldn't execute that request in this run.",
+      overrides.shortMessage ?? "I couldn't execute that request in this run.",
       reasonCode,
       nextStep
     )
-  ).replace(
+  );
+  if (overrides.whatHappened) {
+    rendered = rendered.replace(
+      "What happened: this run finished without executing the requested side effect.",
+      `What happened: ${overrides.whatHappened}`
+    );
+  }
+  return rendered.replace(
     "Why it didn't execute: no approved governed side-effect action completed in this run.",
     `Why it didn't execute: ${reason}`
+  );
+}
+
+/**
+ * Builds the deterministic no-op response for build-scaffold requests.
+ *
+ * **Why it exists:**
+ * Centralizes build-specific fallback wording so normal scaffold misses stay compact while live-run
+ * build failures explain the finite-vs-live verification limitation in plain English.
+ *
+ * **What it talks to:**
+ * - Uses `isLiveBuildVerificationPrompt` from this module.
+ * - Uses `buildDeterministicNoOpTemplate` from this module.
+ *
+ * @param userInput - Raw task user input, potentially including conversation wrappers.
+ * @param reasonCode - Typed no-op reason code.
+ * @returns Rendered build-specific `NO_OP` envelope text.
+ */
+function resolveBuildScaffoldNoOpFallback(userInput: string, reasonCode: string): string {
+  if (isLiveBuildVerificationPrompt(userInput)) {
+    return buildDeterministicNoOpTemplate(
+      reasonCode,
+      "no governed live-run step reached a verifiable ready state in this run. Local readiness probes can verify loopback port/http availability, and verify_browser can prove basic page expectations when Playwright is installed locally.",
+      "Ask for a finite build flow first (scaffold, edit, install, build), then request start_process plus probe_port or probe_http for localhost readiness proof and verify_browser for page-level confirmation, or run the dev server manually and send back the terminal output or a screenshot.",
+      {
+        shortMessage: "I didn't complete the requested live app run in this run.",
+        whatHappened:
+          "the build request reached a live-run verification step without enough executed proof to claim the app was running or the UI was verified."
+      }
+    );
+  }
+
+  return buildDeterministicNoOpTemplate(
+    reasonCode,
+    "No governed build side-effect action was approved and executed in this run.",
+    "Ask for the exact approval diff and approve the required build step, or request a guidance-only response."
   );
 }
 

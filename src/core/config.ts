@@ -94,6 +94,9 @@ export interface BrainConfig {
     traceEnabled: boolean;
     traceLogPath: string;
   };
+  browserVerification: {
+    headless: boolean;
+  };
   shellRuntime: {
     profile: ShellRuntimeProfileV1;
     timeoutBoundsMs: {
@@ -143,6 +146,30 @@ function parseBoolean(value: string | undefined, fallback: boolean): boolean {
   }
 
   return fallback;
+}
+
+/**
+ * Parses browser-verification launch visibility from env with deterministic alias precedence.
+ *
+ * **Why it exists:**
+ * Keeps the visible-browser toggle centralized so CLI, Telegram, and Discord runtime assembly all
+ * interpret the same env inputs the same way without duplicating alias rules.
+ *
+ * **What it talks to:**
+ * - Uses `parseBoolean` within this module.
+ *
+ * @param env - Process environment carrying optional browser-verification overrides.
+ * @param fallback - Default headless setting when no override is present.
+ * @returns `true` when browser verification should stay headless.
+ */
+function parseBrowserVerificationHeadless(
+  env: NodeJS.ProcessEnv,
+  fallback: boolean
+): boolean {
+  if (env.BRAIN_BROWSER_VERIFY_VISIBLE !== undefined) {
+    return !parseBoolean(env.BRAIN_BROWSER_VERIFY_VISIBLE, false);
+  }
+  return parseBoolean(env.BRAIN_BROWSER_VERIFY_HEADLESS, fallback);
 }
 
 /**
@@ -482,6 +509,12 @@ export const DEFAULT_BRAIN_CONFIG: BrainConfig = {
       "self_modify",
       "network_write",
       "shell_command",
+      "start_process",
+      "check_process",
+      "stop_process",
+      "probe_port",
+      "probe_http",
+      "verify_browser",
       "create_skill",
       "memory_mutation",
       "pulse_emit"
@@ -575,6 +608,9 @@ export const DEFAULT_BRAIN_CONFIG: BrainConfig = {
   observability: {
     traceEnabled: false,
     traceLogPath: "runtime/runtime_trace.jsonl"
+  },
+  browserVerification: {
+    headless: true
   },
   shellRuntime: {
     profile: buildDefaultShellRuntimeProfile(),
@@ -712,6 +748,7 @@ export function createBrainConfigFromEnv(env: NodeJS.ProcessEnv = process.env): 
         embeddings: { ...DEFAULT_BRAIN_CONFIG.embeddings },
         persistence: { ...DEFAULT_BRAIN_CONFIG.persistence },
         observability: { ...DEFAULT_BRAIN_CONFIG.observability },
+        browserVerification: { ...DEFAULT_BRAIN_CONFIG.browserVerification },
         shellRuntime: {
           profile: {
             ...DEFAULT_BRAIN_CONFIG.shellRuntime.profile,
@@ -739,6 +776,7 @@ export function createBrainConfigFromEnv(env: NodeJS.ProcessEnv = process.env): 
   // Arrays are cloned per-config so runtime customization cannot mutate shared defaults.
   config = {
     ...config,
+    browserVerification: { ...config.browserVerification },
     dna: {
       ...config.dna,
       immutableKeywords: [...config.dna.immutableKeywords],
@@ -905,6 +943,10 @@ export function createBrainConfigFromEnv(env: NodeJS.ProcessEnv = process.env): 
   config.observability.traceEnabled = parseBoolean(
     env.BRAIN_TRACE_LOG_ENABLED,
     config.observability.traceEnabled
+  );
+  config.browserVerification.headless = parseBrowserVerificationHeadless(
+    env,
+    config.browserVerification.headless
   );
   const configuredTraceLogPath = env.BRAIN_TRACE_LOG_PATH?.trim();
   if (configuredTraceLogPath) {

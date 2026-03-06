@@ -13,6 +13,12 @@ export type ActionType =
   | "network_write"
   | "self_modify"
   | "shell_command"
+  | "start_process"
+  | "check_process"
+  | "stop_process"
+  | "probe_port"
+  | "probe_http"
+  | "verify_browser"
   | "memory_mutation"
   | "pulse_emit";
 
@@ -227,6 +233,40 @@ export interface ShellCommandActionParams extends Record<string, unknown> {
   input?: string;
 }
 
+export interface StartProcessActionParams extends Record<string, unknown> {
+  command?: string;
+  cwd?: string;
+  workdir?: string;
+  requestedShellKind?: ShellKindV1;
+}
+
+export interface CheckProcessActionParams extends Record<string, unknown> {
+  leaseId?: string;
+}
+
+export interface StopProcessActionParams extends Record<string, unknown> {
+  leaseId?: string;
+}
+
+export interface ProbePortActionParams extends Record<string, unknown> {
+  host?: string;
+  port?: number;
+  timeoutMs?: number;
+}
+
+export interface ProbeHttpActionParams extends Record<string, unknown> {
+  url?: string;
+  expectedStatus?: number;
+  timeoutMs?: number;
+}
+
+export interface VerifyBrowserActionParams extends Record<string, unknown> {
+  url?: string;
+  expectedTitle?: string;
+  expectedText?: string;
+  timeoutMs?: number;
+}
+
 export type MemoryMutationStoreV1 = "entity_graph" | "conversation_stack" | "pulse_state";
 
 export type MemoryMutationOperationV1 = "upsert" | "merge" | "supersede" | "resolve" | "evict";
@@ -258,6 +298,12 @@ export type PlannedActionParamsByType = {
   network_write: NetworkWriteActionParams;
   self_modify: SelfModifyActionParams;
   shell_command: ShellCommandActionParams;
+  start_process: StartProcessActionParams;
+  check_process: CheckProcessActionParams;
+  stop_process: StopProcessActionParams;
+  probe_port: ProbePortActionParams;
+  probe_http: ProbeHttpActionParams;
+  verify_browser: VerifyBrowserActionParams;
   memory_mutation: MemoryMutationActionParams;
   pulse_emit: PulseEmitActionParams;
 };
@@ -331,6 +377,32 @@ export const CONSTRAINT_VIOLATION_CODES = [
   "SHELL_CWD_OUTSIDE_SANDBOX",
   "SHELL_DANGEROUS_COMMAND",
   "SHELL_TARGETS_PROTECTED_PATH",
+  "PROCESS_DISABLED_BY_POLICY",
+  "PROCESS_MISSING_COMMAND",
+  "PROCESS_COMMAND_TOO_LONG",
+  "PROCESS_PROFILE_MISMATCH",
+  "PROCESS_CWD_OUTSIDE_SANDBOX",
+  "PROCESS_DANGEROUS_COMMAND",
+  "PROCESS_TARGETS_PROTECTED_PATH",
+  "PROCESS_MISSING_LEASE_ID",
+  "PROCESS_LEASE_NOT_FOUND",
+  "PROCESS_START_FAILED",
+  "PROCESS_STOP_FAILED",
+  "PROCESS_NOT_READY",
+  "PROBE_MISSING_PORT",
+  "PROBE_PORT_INVALID",
+  "PROBE_MISSING_URL",
+  "PROBE_URL_INVALID",
+  "PROBE_HOST_NOT_LOCAL",
+  "PROBE_URL_NOT_LOCAL",
+  "PROBE_TIMEOUT_INVALID",
+  "BROWSER_VERIFY_MISSING_URL",
+  "BROWSER_VERIFY_URL_INVALID",
+  "BROWSER_VERIFY_URL_NOT_LOCAL",
+  "BROWSER_VERIFY_TIMEOUT_INVALID",
+  "BROWSER_VERIFY_RUNTIME_UNAVAILABLE",
+  "BROWSER_VERIFY_EXPECTATION_FAILED",
+  "BROWSER_VERIFY_FAILED",
   "NETWORK_WRITE_DISABLED",
   "IDENTITY_IMPERSONATION_DENIED",
   "PERSONAL_DATA_APPROVAL_REQUIRED",
@@ -422,6 +494,15 @@ export interface MasterDecision {
   threshold: number;
   dissent: GovernorVote[];
 }
+
+export type ManagedProcessLifecycleCode =
+  | "PROCESS_STARTED"
+  | "PROCESS_READY"
+  | "PROCESS_STILL_RUNNING"
+  | "PROCESS_STOPPED"
+  | "PROCESS_NOT_READY"
+  | "PROCESS_START_FAILED"
+  | "PROCESS_STOP_FAILED";
 
 export type ExecutorExecutionStatus = "success" | "blocked" | "failed";
 

@@ -13,6 +13,7 @@ import {
   resolveVerificationCategoryForPrompt,
   shouldEvaluateVerificationGateForDiagnostics
 } from "./diagnosticsPromptPolicy";
+import { isLiveBuildVerificationPrompt } from "./liveBuildVerificationPromptPolicy";
 
 /**
  * Render options for blocked-message formatting.
@@ -42,6 +43,10 @@ const ABUSE_SIGNAL_REGEXES: RegExp[] = [
 const STRUCTURED_ABUSE_REJECT_CATEGORIES: GovernorRejectCategory[] = [
   "ABUSE_MALWARE_OR_FRAUD"
 ];
+const LIVE_BUILD_RUNTIME_POLICY_CODES = [
+  "SHELL_DISABLED_BY_POLICY",
+  "PROCESS_DISABLED_BY_POLICY"
+] as const;
 
 /**
  * Collects unique block/violation policy codes from failed actions and adds verification-gate failures.
@@ -112,6 +117,10 @@ export function resolveBlockedActionMessage(
   const rejectVotes = extractRejectVotes(runResult);
   if (rejectVotes.length > 0) {
     return buildGovernanceBlockedMessage(rejectVotes, policyCodes, options);
+  }
+
+  if (shouldUseLiveBuildPolicyBlockedMessage(runResult.task.userInput, policyCodes)) {
+    return buildLiveBuildPolicyBlockedMessage(policyCodes, options);
   }
 
   return buildGenericBlockedMessage(policyCodes, options);
@@ -284,6 +293,31 @@ function formatTechnicalCodeTail(
 }
 
 /**
+ * Determines whether blocked policy codes match a live-build runtime-policy denial.
+ *
+ * **Why it exists:**
+ * Keeps live-run build prompts from falling through to a generic blocked message when the real
+ * issue is that the environment cannot start the shell/process step needed for verification.
+ *
+ * **What it talks to:**
+ * - Uses `isLiveBuildVerificationPrompt` (import `isLiveBuildVerificationPrompt`) from `./liveBuildVerificationPromptPolicy`.
+ * - Uses local runtime-policy constants within this module.
+ *
+ * @param userInput - Raw task user input, potentially including conversation wrappers.
+ * @param policyCodes - Block/violation codes collected from blocked actions.
+ * @returns `true` when humanized live-build block wording should be used.
+ */
+function shouldUseLiveBuildPolicyBlockedMessage(
+  userInput: string,
+  policyCodes: string[]
+): boolean {
+  if (!isLiveBuildVerificationPrompt(userInput)) {
+    return false;
+  }
+  return LIVE_BUILD_RUNTIME_POLICY_CODES.some((code) => policyCodes.includes(code));
+}
+
+/**
  * Builds the user-facing message for identity-impersonation policy blocks.
  *
  * @param policyCodes - Block/violation codes to append when enabled.
@@ -319,6 +353,33 @@ function buildPersonalDataBlockedMessage(
     "What happened: the request attempted personal-data sharing. " +
     "Why it didn't execute: personal-data policy requires explicit human approval metadata before release. " +
     "What to do next: provide explicit approval details (approval id + consent scope) or request a non-sensitive summary." +
+    formatTechnicalCodeTail(policyCodes, options)
+  );
+}
+
+/**
+ * Builds the user-facing message for live-build runtime-policy blocks.
+ *
+ * **Why it exists:**
+ * Explains live-run build denials in plain language so users understand that the app was not
+ * started or verified, instead of receiving a generic blocked-action message.
+ *
+ * **What it talks to:**
+ * - Uses `formatTechnicalCodeTail` from this module.
+ *
+ * @param policyCodes - Block/violation codes to append when enabled.
+ * @param options - Rendering options that control safety-code visibility.
+ * @returns Live-build block explanation text.
+ */
+function buildLiveBuildPolicyBlockedMessage(
+  policyCodes: string[],
+  options: BlockMessageRenderOptions
+): string {
+  return (
+    "I couldn't start the requested live app run in this run. " +
+    "What happened: the build request reached a live-run step, but the runtime blocked the shell/process action needed to run the app. " +
+    "Why it didn't execute: real shell/process execution is disabled in this environment, so I can't truthfully claim the app was running or the UI was verified. " +
+    "What to do next: ask for a finite build flow first (scaffold, edit, install, build), then run the dev server manually and send back the terminal output or a screenshot, or enable approved live-run execution so I can use start_process plus probe_port or probe_http and verify_browser." +
     formatTechnicalCodeTail(policyCodes, options)
   );
 }

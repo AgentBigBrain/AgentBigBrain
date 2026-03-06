@@ -4,27 +4,227 @@
 
 import { makeId } from "../core/ids";
 import { findRecentJob } from "./conversationSessionMutations";
-import { proposalPreview, renderPulseTargetConversation } from "./conversationManagerHelpers";
 import {
+  normalizeWhitespace,
+  proposalPreview,
+  renderPulseTargetConversation
+} from "./conversationManagerHelpers";
+import {
+  ConversationJob,
   ConversationSession,
   PendingProposal
 } from "./sessionStore";
+
+const STATUS_JOB_PREVIEW_MAX_CHARS = 96;
+
+/**
+ * Builds a pluralized request count phrase for status output.
+ *
+ * **Why it exists:**
+ * Keeps human-facing queue text consistent so status replies do not drift across idle, queued, and
+ * running states.
+ *
+ * **What it talks to:**
+ * - Uses local constants/helpers within this module.
+ *
+ * @param count - Request count being described.
+ * @returns Human-readable request-count phrase.
+ */
+function formatRequestCount(count: number): string {
+  return `${count} request${count === 1 ? "" : "s"}`;
+}
+
+/**
+ * Converts one job into a short human-readable subject for status summaries.
+ *
+ * **Why it exists:**
+ * Status output should talk about the work in plain language without leaking internal placeholder
+ * markers or overlong raw prompts.
+ *
+ * **What it talks to:**
+ * - Uses `normalizeWhitespace` from `./conversationManagerHelpers`.
+ *
+ * @param job - Job being summarized for a user-facing status line.
+ * @returns Short deterministic job subject.
+ */
+function summarizeConversationJobSubject(job: ConversationJob): string {
+  if (job.isSystemJob) {
+    return "an Agent Pulse check-in";
+  }
+  if (job.input === "__recovered_stale_job__") {
+    return "a recovered interrupted job";
+  }
+
+  const normalized = normalizeWhitespace(job.input);
+  if (!normalized) {
+    return "a request";
+  }
+  if (normalized.length <= STATUS_JOB_PREVIEW_MAX_CHARS) {
+    return normalized;
+  }
+  return `${normalized.slice(0, STATUS_JOB_PREVIEW_MAX_CHARS - 3)}...`;
+}
+
+/**
+ * Builds the primary human-first status headline for the current session state.
+ *
+ * **Why it exists:**
+ * Keeps the first status line focused on what the user most needs to know right now instead of raw
+ * job-control metadata.
+ *
+ * **What it talks to:**
+ * - Uses local constants/helpers within this module.
+ *
+ * @param runningJob - Currently running job when one exists.
+ * @param queuedCount - Number of queued jobs still waiting.
+ * @returns Human-readable status headline.
+ */
+function buildConversationStatusHeadline(
+  runningJob: ConversationJob | null,
+  queuedCount: number
+): string {
+  if (runningJob) {
+    return "Current status: I'm working on a request right now.";
+  }
+  if (queuedCount > 0) {
+    return `Current status: ${formatRequestCount(queuedCount)} ${queuedCount === 1 ? "is" : "are"} waiting to start.`;
+  }
+  return "Current status: Nothing is running right now.";
+}
+
+/**
+ * Builds the human-facing queue summary for the current session state.
+ *
+ * **Why it exists:**
+ * Separates queue wording from the raw queue counters so default `/status` stays readable while
+ * still communicating backlog state precisely.
+ *
+ * **What it talks to:**
+ * - Uses local constants/helpers within this module.
+ *
+ * @param runningJob - Currently running job when one exists.
+ * @param queuedCount - Number of queued jobs still waiting.
+ * @returns Human-readable queue summary sentence.
+ */
+function buildConversationQueueSummary(
+  runningJob: ConversationJob | null,
+  queuedCount: number
+): string {
+  if (runningJob && queuedCount > 0) {
+    return `Queue: ${formatRequestCount(queuedCount)} waiting after the current run.`;
+  }
+  if (runningJob) {
+    return "Queue: no other requests waiting.";
+  }
+  if (queuedCount > 0) {
+    return `Queue: ${formatRequestCount(queuedCount)} waiting to start.`;
+  }
+  return "Queue: empty.";
+}
+
+/**
+ * Builds recent-activity bullet lines for the human-first status view.
+ *
+ * **Why it exists:**
+ * Recent jobs provide useful context, but the default status surface should summarize them in plain
+ * language instead of exposing raw ids and transport metadata.
+ *
+ * **What it talks to:**
+ * - Uses `summarizeConversationJobSubject` in this module.
+ *
+ * @param session - Session snapshot being rendered.
+ * @param runningJobId - Optional running-job id excluded from duplicate recent-activity bullets.
+ * @returns Bullet lines suitable for the default `/status` output.
+ */
+function buildRecentActivityLines(
+  session: ConversationSession,
+  runningJobId: string | null
+): string[] {
+  const visibleRecentJobs = session.recentJobs
+    .filter((job) => job.id !== runningJobId)
+    .slice(0, 3);
+
+  const lines: string[] = [];
+  for (const job of visibleRecentJobs) {
+    const subject = summarizeConversationJobSubject(job);
+    if (job.status === "completed") {
+      lines.push(`- Completed: ${subject}`);
+      continue;
+    }
+    if (job.status === "failed") {
+      lines.push(`- Stopped: ${subject}`);
+      continue;
+    }
+    if (job.status === "running") {
+      lines.push(`- Still running: ${subject}`);
+    }
+  }
+  return lines;
+}
 
 /**
  * Renders the deterministic `/status` summary for a conversation session.
  *
  * **Why it exists:**
- * Keeps queue/worker/draft/pulse status formatting in one place so command and tests share the
- * same output contract.
+ * Keeps the default `/status` surface human-first so normal operators see what is happening
+ * without parsing delivery-lifecycle internals.
  *
  * **What it talks to:**
  * - Uses `findRecentJob` to resolve running-job metadata.
+ * - Uses `proposalPreview` from `./conversationManagerHelpers`.
+ * - Uses local human-first status helpers within this module.
  *
  * @param session - Session snapshot being rendered.
  * @returns Human-readable status block.
  */
 export function renderConversationStatus(session: ConversationSession): string {
+  const runningJob = session.runningJobId
+    ? findRecentJob(session, session.runningJobId) ?? null
+    : null;
   const lines: string[] = [];
+  lines.push(buildConversationStatusHeadline(runningJob, session.queuedJobs.length));
+  if (runningJob) {
+    lines.push(`Working on: ${summarizeConversationJobSubject(runningJob)}`);
+  } else if (session.queuedJobs.length > 0) {
+    lines.push(`Next up: ${summarizeConversationJobSubject(session.queuedJobs[0])}`);
+  }
+  lines.push(buildConversationQueueSummary(runningJob, session.queuedJobs.length));
+  if (session.activeProposal) {
+    lines.push("Draft: ready for approval.");
+    lines.push(`Draft preview: ${proposalPreview(session.activeProposal)}`);
+  } else {
+    lines.push("Draft: none.");
+  }
+  lines.push(
+    `Agent Pulse: ${session.agentPulse.optIn ? `on (${session.agentPulse.mode} mode)` : "off"}.`
+  );
+
+  const recentActivityLines = buildRecentActivityLines(session, runningJob?.id ?? null);
+  if (recentActivityLines.length > 0) {
+    lines.push("Recent activity:");
+    lines.push(...recentActivityLines);
+  }
+
+  lines.push("Need delivery or lifecycle details? Use /status debug.");
+  return lines.join("\n");
+}
+
+/**
+ * Renders the detailed operator/debug `/status` summary for a conversation session.
+ *
+ * **Why it exists:**
+ * Preserves the full delivery/ack/job-lifecycle view for troubleshooting without forcing every
+ * normal `/status` request to read operator-centric metadata.
+ *
+ * **What it talks to:**
+ * - Uses `findRecentJob` to resolve running-job metadata.
+ *
+ * @param session - Session snapshot being rendered.
+ * @returns Detailed debug status block.
+ */
+export function renderConversationStatusDebug(session: ConversationSession): string {
+  const lines: string[] = [];
+  lines.push("Debug status:");
   lines.push(`Running job: ${session.runningJobId ?? "none"}`);
   lines.push(`Queued jobs: ${session.queuedJobs.length}`);
   if (session.runningJobId) {

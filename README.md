@@ -152,6 +152,11 @@ PowerShell (same command):
 npm run setup:embeddings
 ```
 
+Apple Silicon note:
+- if the machine is an M-series Mac but Node is running as `darwin/x64` under Rosetta, `onnxruntime-node` can fail to load its native binding during startup
+- use a native arm64 Node install, remove `node_modules`, and run `npm install` again from that arm64 shell
+- if you need to get the app running first, set `BRAIN_ENABLE_EMBEDDINGS=false` to fall back to keyword-only retrieval
+
 Optional flags:
 
 ```bash
@@ -243,6 +248,8 @@ Routing semantics for build requests:
 
 - Generic execution-style build prompts (for example: `create a React app on my Desktop and execute now`) map to the build execution surface and deterministic no-op fallback policy when no governed side effect executes.
 - Explanation-only prompts (for example: `how do I create a React app`) are not over-classified as execution requests.
+- Inspection-only build plans (`read_file`, `list_directory`, `check_process`, `stop_process` without a concrete build/proof step) are repaired once and then fail closed instead of being treated as real execution.
+- Live-run build requests that hit shell/process policy blocks now get the same human-first explanation that the app was not started or verified, instead of a generic blocked-action response.
 
 ## Commands
 
@@ -281,6 +288,7 @@ npm run test:federation:live_smoke
 npm run test:daemon:live_smoke
 npm run test:interface:advanced_live_smoke
 npm run test:interface:real_provider_live_smoke
+npm run test:runtime:managed_process_live_smoke
 npm run audit:claims
 npm run audit:governors
 npm run audit:ledgers
@@ -339,8 +347,14 @@ When to use which command:
 
 - **`/chat`**: use this for one direct request, a question, a summary, a skill create/run request, or a single side-effect request you want handled now.
 - **`/propose`**: use this when you want a draft first and explicit approval before execution, especially for writes, shell commands, or larger multi-file changes.
-- **`/auto`**: use this for a multi-step goal where the runtime may need several iterations to finish. If you expect real execution, still say **`execute now`** and name the shell when relevant.
+- **`/auto`**: use this for a multi-step goal where the runtime may need several iterations to finish. If you expect real execution, still say **`execute now`**. Name the shell when you need a specific shell or for non-build shell tasks.
+- For app-building goals, the planner now prefers finite proof steps such as scaffold, edit, install, and build before long-running **`npm start`** or **`npm run dev`**-style verification. Ask for a live run only when you actually need a running session.
+- Generic execution-style build prompts no longer need shell keywords just to unlock finite executable planning. Live run planning still stays narrower: the request needs to clearly ask to run or verify the app before managed-process steps are considered.
+- The runtime now has an early managed-process path for live sessions: finite one-shot commands still use **`shell_command`**, while long-running sessions are beginning to move toward lease-based **start/check/stop** process lifecycle actions instead of pretending they should exit like normal commands.
+- If you send **`/stop`** while `/auto` is actively running a real shell command, the runtime now forwards cancellation to that active shell child instead of only stopping future iterations.
 - Autonomous progress updates are transport-aware: gateways prefer updating one progress message in place when the provider transport supports edit/stream behavior.
+- Autonomous progress and stop messages now lead with plain-English summaries instead of raw `[reasonCode=...]` telemetry in normal Telegram/Discord flow.
+- **`/status`**: use this for the normal plain-language progress view. Use **`/status debug`** only when you need ack/final-delivery and lifecycle internals.
 - **`/draft`**: use this to inspect the current proposed plan before approval.
 - **`/adjust`**: use this to change the active draft without restarting from scratch.
 - **`/approve`**: use this when the draft is correct and you want it executed.
@@ -389,8 +403,9 @@ What the runtime will tell you:
 
 - Deterministic command surfaces:
   `/status`
+  `/status debug`
   `/review 6.85.A`
-  Why this succeeds: these are direct slash-command surfaces with deterministic handlers.
+  Why this succeeds: these are direct slash-command surfaces with deterministic handlers. `/status` is the normal human view; `/status debug` is the explicit troubleshooting view.
 
 Need more examples? See **[docs/COMMAND_EXAMPLES.md](docs/COMMAND_EXAMPLES.md)** for Telegram/Discord slash commands, CLI examples, approval-flow sequences, pulse commands, and prompt rewrites that make execution intent explicit.
 
@@ -399,6 +414,7 @@ Operator-facing execution states:
 - `Executed`: approved real side-effect actions actually ran in this run (read-only and simulated outcomes do not count).
 - `Guidance only`: response contains instructions or analysis only.
 - `Blocked`: policy/governance/runtime denied execution; reply includes plain-English happened/why/next-step guidance.
+- Successful executed work now prefers plain-language outcome lines such as what file changed or what command ran, instead of generic `Completed task with ...` telemetry when no custom reply was drafted.
 
 ### Federation API (HTTP)
 
@@ -579,8 +595,8 @@ All configuration is via environment variables. Required variables are noted per
 | `BRAIN_INTERFACE_ALLOWED_USER_IDS` | No | empty | Optional strict user-id allowlist. Telegram: `message.from.id` from `getUpdates`. Discord: enable Developer Mode, then copy User ID. |
 | `BRAIN_INTERFACE_REQUIRE_NAME_CALL` | No | `false` | Requires explicit alias invocation before processing. |
 | `BRAIN_INTERFACE_NAME_ALIASES` | No | `BigBrain` | Comma aliases accepted when name-call is required. |
-| `BRAIN_INTERFACE_SHOW_TECHNICAL_SUMMARY` | No | `true` | Shows technical completion details in interface replies. |
-| `BRAIN_INTERFACE_SHOW_SAFETY_CODES` | No | follows technical-summary value | Shows policy/safety codes in replies. |
+| `BRAIN_INTERFACE_SHOW_TECHNICAL_SUMMARY` | No | `false` | Shows technical completion details in interface replies. Keep this off for normal human-first chat, or turn it on for troubleshooting. |
+| `BRAIN_INTERFACE_SHOW_SAFETY_CODES` | No | follows technical-summary value | Shows policy/safety codes in replies. Usually leave this off unless you want debug-level policy detail in chat. |
 | `BRAIN_INTERFACE_SHOW_COMPLETION_PREFIX` | No | `false` | Prefixes completion text with a short completion marker. |
 | `BRAIN_INTERFACE_RATE_LIMIT_WINDOW_MS` | No | `60000` | Rate-limit window length. |
 | `BRAIN_INTERFACE_RATE_LIMIT_MAX_EVENTS` | No | `20` | Max accepted events per window. |
@@ -679,6 +695,30 @@ BRAIN_PER_TURN_DEADLINE_MS=120000
 For broader code-to-env tuning (including autonomous, shell, and budget codes), use:
 
 - **[docs/ERROR_CODE_ENV_MAP.md](docs/ERROR_CODE_ENV_MAP.md)**
+
+### `/stop` during an autonomous shell task
+
+`/stop` propagates cancellation into the active autonomous shell step, so a currently running shell child is asked to terminate instead of waiting for the loop to reach the next iteration boundary.
+
+Execution behavior around autonomous shell, live-run, and browser-proof goals:
+
+- autonomous shell cancellation propagates into the active shell child instead of waiting for the next loop boundary
+- execution-style build planning prefers finite proof steps before long-running `npm start` or `npm run dev` sessions when a finite proof path exists
+- respond-only and inspection-only execution-style build plans are repaired once and then fail closed if no executable step is produced
+- managed-process planning is reserved for prompts that clearly ask to run or verify a live app or session
+- live-run verification relies on the managed-process lifecycle and loopback proof actions: `start_process`, `check_process`, `stop_process`, `probe_port`, `probe_http`, and `verify_browser`
+- explicit tool-like autonomous subtasks such as `start_process ...`, `probe_http ...`, or `verify_browser ...` are repaired or rejected unless the planner returns the matching governed action
+- when a live-run build is blocked by shell or process policy, chat adapters explain that the app was not started or verified and point users toward finite proof or manual proof paths
+- browser or UI proof is available through `verify_browser` when `playwright` or `playwright-core` plus browser binaries are installed locally
+- `verify_browser` uses a local Playwright-backed Chromium session in headless mode by default, so the proof is real even when no visible browser window opens; set `BRAIN_BROWSER_VERIFY_VISIBLE=true` or `BRAIN_BROWSER_VERIFY_HEADLESS=false` to watch the local Chromium window during verification
+- the quickest local browser-proof setup is `npm install --no-save playwright` followed by `npx playwright install chromium`
+- explicit autonomous browser-proof goals can retry once with those finite local Playwright install steps when `verify_browser` reports `BROWSER_VERIFY_RUNTIME_UNAVAILABLE` and shell policy still allows the recovery
+- loopback proof actions (`probe_port`, `probe_http`, `verify_browser`) and bounded managed-process lifecycle actions (`start_process`, `check_process`, `stop_process`) rely on deterministic localhost/live-run validation instead of advisory model drift, and readiness recovery inspects the tracked managed-process lease before retrying proof when the process starts but localhost is not ready yet
+- `start_process` now fails early when the requested loopback port is already occupied, and autonomous live-run recovery can retry on a concrete free localhost port when the user did not explicitly pin the original port
+- for explicit browser/UI verification goals, readiness means actual HTTP/browser reachability; a port-open check is only preliminary evidence and does not satisfy the page-readiness gate by itself
+- when a live-run goal explicitly asks for a finite flow or to stop the process, autonomous completion requires stop-proof before the loop can claim the goal is done
+- `npm run test:runtime:managed_process_live_smoke` is the dedicated smoke gate for the real loopback process, readiness, browser-proof, and cleanup path; it writes `runtime/evidence/managed_process_live_smoke_report.json`
+- long-lived dev-server workflows are tracked in **[docs/plans/SEAMLESS_EXECUTION_UX_PLAN.md](docs/plans/SEAMLESS_EXECUTION_UX_PLAN.md)**
 
 ### Interface runtime startup errors
 

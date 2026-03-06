@@ -18,6 +18,12 @@ import {
 import { AutonomousLoop, AutonomousLoopCallbacks } from "../core/agentLoop";
 import { createModelClientFromEnv } from "../models/createModelClient";
 import { createBrainConfigFromEnv } from "../core/config";
+import {
+  buildAutonomousGoalAbortedProgressMessage,
+  buildAutonomousGoalMetProgressMessage,
+  buildAutonomousIterationProgressMessage,
+  buildAutonomousTerminalSummaryMessage
+} from "./autonomousMessagePolicy";
 
 export interface DiscordInboundMessage {
   messageId: string;
@@ -300,25 +306,37 @@ export class DiscordAdapter {
         totalBlocked += blocked;
         if (shouldSendProgress(iteration, approved)) {
           await onProgress(
-            `[${iteration}] ${approved} approved, ${blocked} blocked ` +
-            `(totals: ${totalApproved} approved, ${totalBlocked} blocked)`
+            buildAutonomousIterationProgressMessage(
+              iteration,
+              approved,
+              blocked,
+              totalApproved,
+              totalBlocked
+            )
           );
           lastProgressMessageAt = Date.now();
         }
       },
       onGoalMet: async (reasoning) => {
-        const preview = reasoning.length > 300 ? reasoning.slice(0, 300) + "..." : reasoning;
         await onProgress(
-          `Done in ${totalIterations} iteration(s). ` +
-          `${totalApproved} action(s) approved, ${totalBlocked} blocked.\n${preview}`
+          buildAutonomousGoalMetProgressMessage(
+            totalIterations,
+            totalApproved,
+            totalBlocked,
+            reasoning
+          )
         );
       },
       onGoalAborted: async (reason) => {
         terminalAborted = true;
         terminalReason = reason;
         await onProgress(
-          `Stopped after ${totalIterations} iteration(s): ${reason}\n` +
-          `${totalApproved} action(s) approved, ${totalBlocked} blocked.`
+          buildAutonomousGoalAbortedProgressMessage(
+            totalIterations,
+            totalApproved,
+            totalBlocked,
+            reason
+          )
         );
       }
     };
@@ -332,17 +350,22 @@ export class DiscordAdapter {
         terminalReason =
           `[reasonCode=AUTONOMOUS_LOOP_RUNTIME_ERROR] Autonomous loop runtime failure: ${errorMessage}`;
         await onProgress(
-          `Stopped after ${totalIterations} iteration(s): ${terminalReason}\n` +
-          `${totalApproved} action(s) approved, ${totalBlocked} blocked.`
+          buildAutonomousGoalAbortedProgressMessage(
+            totalIterations,
+            totalApproved,
+            totalBlocked,
+            terminalReason
+          )
         );
       }
     }
-    if (terminalAborted) {
-      return `Autonomous task stopped after ${totalIterations} iteration(s). ` +
-        `${totalApproved} approved, ${totalBlocked} blocked. Reason: ${terminalReason}`;
-    }
-    return `Autonomous task completed after ${totalIterations} iteration(s). ` +
-      `${totalApproved} approved, ${totalBlocked} blocked.`;
+    return buildAutonomousTerminalSummaryMessage(
+      !terminalAborted,
+      totalIterations,
+      totalApproved,
+      totalBlocked,
+      terminalReason
+    );
   }
 
   /**

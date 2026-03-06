@@ -3,7 +3,10 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { EventEmitter } from "node:events";
+import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import * as http from "node:http";
+import * as net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -24,6 +27,11 @@ import {
   PlannerModelOutput,
   StructuredCompletionRequest
 } from "../../src/models/types";
+import {
+  BrowserVerificationResult,
+  BrowserVerifier,
+  VerifyBrowserRequest
+} from "../../src/organs/browserVerifier";
 import { ToolExecutorOrgan } from "../../src/organs/executor";
 import { PlannerOrgan } from "../../src/organs/planner";
 import { ReflectionOrgan } from "../../src/organs/reflection";
@@ -109,6 +117,22 @@ function buildTask(userInput: string): TaskRequest {
     userInput,
     createdAt: new Date().toISOString()
   };
+}
+
+async function withRuntimeSkillArtifact(
+  skillName: string,
+  sourceCode: string,
+  callback: () => Promise<void>
+): Promise<void> {
+  const skillsRoot = path.resolve(process.cwd(), "runtime/skills");
+  const artifactPath = path.join(skillsRoot, `${skillName}.js`);
+  await mkdir(skillsRoot, { recursive: true });
+  await writeFile(artifactPath, sourceCode, "utf8");
+  try {
+    await callback();
+  } finally {
+    await rm(artifactPath, { force: true });
+  }
 }
 
 class GovernanceReplanModelClient implements ModelClient {
@@ -227,7 +251,7 @@ class WorkflowReplayConflictModelClient implements ModelClient {
             type: "run_skill",
             description: "Run governed computer-use workflow replay step.",
             params: {
-              name: "computer_use_runtime",
+              name: "workflow_replay_runtime_test",
               actionFamily: "computer_use",
               operation: "replay_step",
               schemaSupported: true,
@@ -447,12 +471,152 @@ class PreparedRespondExecutor extends ToolExecutorOrgan {
  * Implements `execute` behavior within class PreparedRespondExecutor.
  * Interacts with local collaborators through imported modules and typed inputs/outputs.
  */
-  override async execute(action: Parameters<ToolExecutorOrgan["execute"]>[0]): Promise<string> {
+  override async execute(
+    action: Parameters<ToolExecutorOrgan["execute"]>[0],
+    signal?: AbortSignal,
+    taskId?: string
+  ): Promise<string> {
     this.executeCalls += 1;
     if (action.type === "respond") {
       throw new Error("respond execute should not run when prepared output exists");
     }
-    return super.execute(action);
+    return super.execute(action, signal, taskId);
+  }
+}
+
+class FixedPlannerModelClient implements ModelClient {
+  readonly backend = "mock" as const;
+  private readonly delegate = new MockModelClient();
+
+  constructor(private nextPlan: PlannerModelOutput) { }
+
+  /**
+  * Implements `setNextPlan` behavior within class FixedPlannerModelClient.
+  * Interacts with local collaborators through imported modules and typed inputs/outputs.
+  */
+  setNextPlan(nextPlan: PlannerModelOutput): void {
+    this.nextPlan = nextPlan;
+  }
+
+  /**
+  * Implements `completeJson` behavior within class FixedPlannerModelClient.
+  * Interacts with local collaborators through imported modules and typed inputs/outputs.
+  */
+  async completeJson<T>(request: StructuredCompletionRequest): Promise<T> {
+    if (request.schemaName === "planner_v1") {
+      return this.nextPlan as T;
+    }
+
+    return this.delegate.completeJson<T>(request);
+  }
+}
+
+class FixedBrowserVerifier implements BrowserVerifier {
+  /**
+   * Initializes class FixedBrowserVerifier dependencies and runtime state.
+   * Interacts with local collaborators through imported modules and typed inputs/outputs.
+   */
+  constructor(private readonly result: BrowserVerificationResult) {}
+
+  /**
+   * Implements `verify` behavior within class FixedBrowserVerifier.
+   * Interacts with local collaborators through imported modules and typed inputs/outputs.
+   */
+  async verify(_request: VerifyBrowserRequest): Promise<BrowserVerificationResult> {
+    return this.result;
+  }
+}
+
+/**
+ * Implements `createManagedProcessShellSpawn` behavior within module scope.
+ * Interacts with local collaborators through imported modules and typed inputs/outputs.
+ */
+function createManagedProcessShellSpawn(): {
+  getKillCount: () => number;
+  spawn: typeof import("node:child_process").spawn;
+} {
+  let killCount = 0;
+  const spawn = ((
+    _executable: string,
+    _argsOrOptions?: unknown,
+    _maybeOptions?: unknown
+  ) => {
+    const child = new EventEmitter() as import("node:child_process").ChildProcessWithoutNullStreams;
+    const stdout = new EventEmitter() as unknown as import("node:stream").Readable & {
+      resume?: () => void;
+    };
+    const stderr = new EventEmitter() as unknown as import("node:stream").Readable & {
+      resume?: () => void;
+    };
+    const stdin = new EventEmitter() as unknown as import("node:stream").Writable;
+    stdout.resume = () => undefined;
+    stderr.resume = () => undefined;
+    child.stdin = stdin;
+    child.stdout = stdout;
+    child.stderr = stderr;
+    child.pid = 5252;
+    child.kill = (() => {
+      killCount += 1;
+      queueMicrotask(() => {
+        child.emit("close", 0, "SIGTERM");
+      });
+      return true;
+    }) as unknown as (signal?: NodeJS.Signals | number | undefined) => boolean;
+    queueMicrotask(() => {
+      child.emit("spawn");
+    });
+    return child;
+  }) as unknown as typeof import("node:child_process").spawn;
+
+  return {
+    getKillCount: () => killCount,
+    spawn
+  };
+}
+
+async function withLocalTcpServer(callback: (port: number) => Promise<void>): Promise<void> {
+  const server = net.createServer((socket) => {
+    socket.end();
+  });
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => resolve());
+  });
+
+  const address = server.address();
+  assert.ok(address && typeof address !== "string");
+
+  try {
+    await callback(address.port);
+  } finally {
+    await new Promise<void>((resolve, reject) => {
+      server.close((error) => (error ? reject(error) : resolve()));
+    });
+  }
+}
+
+async function withLocalHttpServer(
+  statusCode: number,
+  callback: (url: string) => Promise<void>
+): Promise<void> {
+  const server = http.createServer((_request, response) => {
+    response.statusCode = statusCode;
+    response.end("ok");
+  });
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => resolve());
+  });
+
+  const address = server.address();
+  assert.ok(address && typeof address !== "string");
+
+  try {
+    await callback(`http://127.0.0.1:${address.port}/`);
+  } finally {
+    await new Promise<void>((resolve, reject) => {
+      server.close((error) => (error ? reject(error) : resolve()));
+    });
   }
 }
 
@@ -602,18 +766,24 @@ test("orchestrator enforces Stage 6.85 retry stop-limit with deterministic recov
 
 test("orchestrator blocks workflow replay drift in live task runner path", async () => {
   const modelClient = new WorkflowReplayConflictModelClient();
-  await withTestBrainForModel(modelClient, async (brain) => {
-    const result = await brain.runTask(buildTask("Replay this captured workflow deterministically."));
-    assert.equal(result.actionResults.length, 1);
-    assert.equal(result.actionResults[0]?.approved, false);
-    assert.equal(result.actionResults[0]?.blockedBy.includes("WORKFLOW_DRIFT_DETECTED"), true);
-    assert.equal(
-      result.actionResults[0]?.violations.some(
-        (violation) => violation.code === "WORKFLOW_DRIFT_DETECTED"
-      ),
-      true
-    );
-  });
+  await withRuntimeSkillArtifact(
+    "workflow_replay_runtime_test",
+    "export default function workflowReplayRuntimeTest(): string { return 'ok'; }",
+    async () => {
+      await withTestBrainForModel(modelClient, async (brain) => {
+        const result = await brain.runTask(buildTask("Replay this captured workflow deterministically."));
+        assert.equal(result.actionResults.length, 1);
+        assert.equal(result.actionResults[0]?.approved, false);
+        assert.equal(result.actionResults[0]?.blockedBy.includes("WORKFLOW_DRIFT_DETECTED"), true);
+        assert.equal(
+          result.actionResults[0]?.violations.some(
+            (violation) => violation.code === "WORKFLOW_DRIFT_DETECTED"
+          ),
+          true
+        );
+      });
+    }
+  );
 });
 
 test("orchestrator enforces cumulative budget in runtime path", async () => {
@@ -660,7 +830,7 @@ test("orchestrator blocks actions when cumulative model spend limit is exceeded"
   });
 });
 
-test("orchestrator fails closed when approved run_skill execution returns deterministic failure output", async () => {
+test("orchestrator fails closed when run_skill artifact is missing before execution", async () => {
   const modelClient = new RunSkillFailureModelClient();
 
   await withTestBrainForModel(modelClient, async (brain) => {
@@ -669,8 +839,8 @@ test("orchestrator fails closed when approved run_skill execution returns determ
     );
     assert.equal(result.actionResults.length, 1);
     assert.equal(result.actionResults[0].approved, false);
-    assert.equal(result.actionResults[0].executionStatus, "failed");
-    assert.equal(result.actionResults[0].executionFailureCode, "RUN_SKILL_ARTIFACT_MISSING");
+    assert.equal(result.actionResults[0].executionStatus, undefined);
+    assert.equal(result.actionResults[0].executionFailureCode, undefined);
     assert.ok(result.actionResults[0].blockedBy.includes("RUN_SKILL_ARTIFACT_MISSING"));
     assert.equal(
       result.actionResults[0].violations.some(
@@ -678,7 +848,10 @@ test("orchestrator fails closed when approved run_skill execution returns determ
       ),
       true
     );
-    assert.match(result.actionResults[0].output ?? "", /Run skill failed: no skill artifact found/i);
+    assert.match(
+      result.actionResults[0].violations[0]?.message ?? "",
+      /Run skill failed: no skill artifact found/i
+    );
     assert.match(result.summary, /0 approved action\(s\) and 1 blocked action\(s\)/i);
     assert.doesNotMatch(result.summary, /Recovery postmortem: MISSION_STOP_LIMIT_REACHED/i);
   });
@@ -847,6 +1020,242 @@ test("orchestrator uses prepared respond output before execute to reduce respons
     assert.equal(result.actionResults[0].output, "prepared reply from executor");
     assert.equal(executor.getPrepareCalls() >= 1, true);
     assert.equal(executor.getExecuteCalls(), 0);
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("orchestrator executes managed-process lifecycle actions through the full governed loop", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-managed-process-orch-"));
+  const statePath = path.join(tempDir, "state.json");
+  const memoryStore = new SemanticMemoryStore(path.join(tempDir, "memory.json"));
+  const personalityStore = new PersonalityStore(path.join(tempDir, "personality_profile.json"));
+  const governanceMemoryStore = new GovernanceMemoryStore(path.join(tempDir, "governance_memory.json"));
+  const modelClient = new FixedPlannerModelClient({
+    plannerNotes: "Start managed process.",
+    actions: [
+      {
+        type: "start_process",
+        description: "Start dev server process.",
+        params: {
+          command: "npm start",
+          cwd: "runtime/sandbox/app"
+        },
+        estimatedCostUsd: 0.28
+      }
+    ]
+  });
+  const spawnMock = createManagedProcessShellSpawn();
+  const config = {
+    ...DEFAULT_BRAIN_CONFIG,
+    permissions: {
+      ...DEFAULT_BRAIN_CONFIG.permissions,
+      allowShellCommandAction: true,
+      allowRealShellExecution: true
+    },
+    shellRuntime: {
+      ...DEFAULT_BRAIN_CONFIG.shellRuntime,
+      profile: {
+        ...DEFAULT_BRAIN_CONFIG.shellRuntime.profile,
+        shellKind: "cmd" as const,
+        executable: "cmd.exe",
+        wrapperArgs: ["/d", "/c"],
+        cwdPolicy: {
+          ...DEFAULT_BRAIN_CONFIG.shellRuntime.profile.cwdPolicy,
+          denyOutsideSandbox: false
+        }
+      }
+    }
+  };
+  const executor = new ToolExecutorOrgan(config, spawnMock.spawn);
+  const brain = new BrainOrchestrator(
+    config,
+    new PlannerOrgan(modelClient, memoryStore),
+    executor,
+    createDefaultGovernors(),
+    new MasterGovernor(config.governance.supermajorityThreshold),
+    new StateStore(statePath),
+    modelClient,
+    new ReflectionOrgan(memoryStore, modelClient),
+    personalityStore,
+    governanceMemoryStore
+  );
+
+  try {
+    const startResult = await brain.runTask(buildTask("Start the managed process."));
+    assert.equal(startResult.actionResults.length, 1);
+    assert.equal(startResult.actionResults[0].approved, true);
+    assert.equal(startResult.actionResults[0].action.type, "start_process");
+    assert.match(startResult.actionResults[0].output, /Process started: lease /i);
+    const leaseId = startResult.actionResults[0].executionMetadata?.processLeaseId;
+    assert.equal(typeof leaseId, "string");
+
+    modelClient.setNextPlan({
+      plannerNotes: "Check managed process.",
+      actions: [
+        {
+          type: "check_process",
+          description: "Check managed process state.",
+          params: { leaseId },
+          estimatedCostUsd: 0.04
+        }
+      ]
+    });
+    const checkResult = await brain.runTask(buildTask("Check the managed process."));
+    assert.equal(checkResult.actionResults.length, 1);
+    assert.equal(checkResult.actionResults[0].approved, true);
+    assert.equal(checkResult.actionResults[0].action.type, "check_process");
+    assert.match(checkResult.actionResults[0].output, /Process still running: lease /i);
+
+    modelClient.setNextPlan({
+      plannerNotes: "Stop managed process.",
+      actions: [
+        {
+          type: "stop_process",
+          description: "Stop managed process state.",
+          params: { leaseId },
+          estimatedCostUsd: 0.12
+        }
+      ]
+    });
+    const stopResult = await brain.runTask(buildTask("Stop the managed process."));
+    assert.equal(stopResult.actionResults.length, 1);
+    assert.equal(stopResult.actionResults[0].approved, true);
+    assert.equal(stopResult.actionResults[0].action.type, "stop_process");
+    assert.match(stopResult.actionResults[0].output, /Process stopped: lease /i);
+    assert.equal(
+      stopResult.actionResults[0].executionMetadata?.processLifecycleStatus,
+      "PROCESS_STOPPED"
+    );
+    assert.equal(spawnMock.getKillCount(), 1);
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("orchestrator executes probe_port through the full governed loop", async () => {
+  await withLocalTcpServer(async (port) => {
+    const modelClient = new FixedPlannerModelClient({
+      plannerNotes: "Probe local TCP readiness.",
+      actions: [
+        {
+          type: "probe_port",
+          description: "Probe loopback port readiness.",
+          params: {
+            host: "127.0.0.1",
+            port
+          },
+          estimatedCostUsd: 0.03
+        }
+      ]
+    });
+
+    await withTestBrainForModel(modelClient, async (brain) => {
+      const result = await brain.runTask(buildTask("Probe the local app port."));
+      assert.equal(result.actionResults.length, 1);
+      assert.equal(result.actionResults[0].approved, true);
+      assert.equal(result.actionResults[0].mode, "escalation_path");
+      assert.equal(result.actionResults[0].action.type, "probe_port");
+      assert.match(result.actionResults[0].output ?? "", /Port ready:/i);
+      assert.equal(
+        result.actionResults[0].executionMetadata?.processLifecycleStatus,
+        "PROCESS_READY"
+      );
+    });
+  });
+});
+
+test("orchestrator executes probe_http through the full governed loop", async () => {
+  await withLocalHttpServer(200, async (url) => {
+    const modelClient = new FixedPlannerModelClient({
+      plannerNotes: "Probe local HTTP readiness.",
+      actions: [
+        {
+          type: "probe_http",
+          description: "Probe loopback HTTP readiness.",
+          params: {
+            url,
+            expectedStatus: 200
+          },
+          estimatedCostUsd: 0.04
+        }
+      ]
+    });
+
+    await withTestBrainForModel(modelClient, async (brain) => {
+      const result = await brain.runTask(buildTask("Probe the local app endpoint."));
+      assert.equal(result.actionResults.length, 1);
+      assert.equal(result.actionResults[0].approved, true);
+      assert.equal(result.actionResults[0].mode, "escalation_path");
+      assert.equal(result.actionResults[0].action.type, "probe_http");
+      assert.match(result.actionResults[0].output ?? "", /HTTP ready:/i);
+      assert.equal(
+        result.actionResults[0].executionMetadata?.processLifecycleStatus,
+        "PROCESS_READY"
+      );
+    });
+  });
+});
+
+test("orchestrator executes verify_browser through the full governed loop", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-browser-verify-"));
+  const statePath = path.join(tempDir, "state.json");
+  const memoryStore = new SemanticMemoryStore(path.join(tempDir, "memory.json"));
+  const personalityStore = new PersonalityStore(path.join(tempDir, "personality_profile.json"));
+  const governanceMemoryStore = new GovernanceMemoryStore(path.join(tempDir, "governance_memory.json"));
+  const modelClient = new FixedPlannerModelClient({
+    plannerNotes: "Verify loopback UI through browser automation.",
+    actions: [
+      {
+        type: "verify_browser",
+        description: "Verify the local homepage UI in a browser session.",
+        params: {
+          url: "http://127.0.0.1:3000/",
+          expectedTitle: "Finance"
+        },
+        estimatedCostUsd: 0.09
+      }
+    ]
+  });
+  const executor = new ToolExecutorOrgan(
+    DEFAULT_BRAIN_CONFIG,
+    undefined,
+    undefined,
+    new FixedBrowserVerifier({
+      status: "verified",
+      detail: "Browser verification passed: observed title \"Finance Dashboard\"; expected title matched.",
+      observedTitle: "Finance Dashboard",
+      observedTextSample: "Portfolio $12,340",
+      matchedTitle: true,
+      matchedText: null
+    })
+  );
+  const brain = new BrainOrchestrator(
+    DEFAULT_BRAIN_CONFIG,
+    new PlannerOrgan(modelClient, memoryStore),
+    executor,
+    createDefaultGovernors(),
+    new MasterGovernor(DEFAULT_BRAIN_CONFIG.governance.supermajorityThreshold),
+    new StateStore(statePath),
+    modelClient,
+    new ReflectionOrgan(memoryStore, modelClient),
+    personalityStore,
+    governanceMemoryStore
+  );
+
+  try {
+    const result = await brain.runTask(buildTask("Verify the local homepage UI in a browser."));
+    assert.equal(result.actionResults.length, 1);
+    assert.equal(result.actionResults[0].approved, true);
+    assert.equal(result.actionResults[0].mode, "escalation_path");
+    assert.equal(result.actionResults[0].action.type, "verify_browser");
+    assert.match(result.actionResults[0].output ?? "", /Browser verification passed:/i);
+    assert.equal(result.actionResults[0].executionMetadata?.browserVerification, true);
+    assert.equal(result.actionResults[0].executionMetadata?.browserVerifyPassed, true);
+    assert.equal(
+      result.actionResults[0].executionMetadata?.processLifecycleStatus,
+      "PROCESS_READY"
+    );
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }

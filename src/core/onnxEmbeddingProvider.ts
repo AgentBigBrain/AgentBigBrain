@@ -19,6 +19,10 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 
 import type { EmbeddingProvider } from "./embeddingProvider";
+import {
+    buildAppleSiliconNodeMismatchMessage,
+    detectCurrentAppleSiliconNodeMismatch
+} from "./appleSiliconRuntime";
 
 // onnxruntime-node types
 interface OnnxTensor {
@@ -261,6 +265,13 @@ export class OnnxEmbeddingProvider implements EmbeddingProvider {
         }
 
         this.initializationPromise = (async () => {
+            const appleSiliconMismatch = detectCurrentAppleSiliconNodeMismatch();
+            if (appleSiliconMismatch) {
+                throw new Error(
+                    buildAppleSiliconNodeMismatchMessage("onnxruntime-node")
+                );
+            }
+
             // Dynamic import to avoid hard crash if onnxruntime-node isn't installed
             const ort = (await import("onnxruntime-node")) as unknown as OnnxRuntime;
             this.ort = ort;

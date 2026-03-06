@@ -14,7 +14,10 @@ import {
   buildMissionTimelineV1,
   explainFailureDeterministically
 } from "../core/stage6_85ObservabilityPolicy";
-import { classifyTrustRenderDecision } from "./trustLexicalClassifier";
+import {
+  classifyTrustRenderDecision,
+  isSimulatedOutput
+} from "./trustLexicalClassifier";
 import {
   DEFAULT_TRUST_LEXICAL_RULE_CONTEXT,
   hasApprovedRealNonRespondExecution,
@@ -49,10 +52,12 @@ import {
   isObservabilityBundleExportPrompt,
   isInstructionalHowToResponse,
   isProgressPlaceholderResponse,
+  resolveHighRiskDeleteNoOpFallback,
   resolveExecutionSurfaceFallbackFromRouting,
   resolveProgressPlaceholderFallback,
   resolveRoutingPolicyExplanation
 } from "./userFacingNoOpPolicy";
+import { isLiveBuildVerificationPrompt } from "./liveBuildVerificationPromptPolicy";
 
 export interface UserFacingSummaryOptions {
   showTechnicalSummary?: boolean;
@@ -83,7 +88,14 @@ function deriveStage685TierFromActionType(actionType: string): number | null {
   if (actionType === "respond") {
     return 0;
   }
-  if (actionType === "read_file" || actionType === "list_directory") {
+  if (
+    actionType === "read_file" ||
+    actionType === "list_directory" ||
+    actionType === "check_process" ||
+    actionType === "probe_port" ||
+    actionType === "probe_http" ||
+    actionType === "verify_browser"
+  ) {
     return 1;
   }
   if (
@@ -93,6 +105,8 @@ function deriveStage685TierFromActionType(actionType: string): number | null {
     actionType === "run_skill" ||
     actionType === "network_write" ||
     actionType === "shell_command" ||
+    actionType === "start_process" ||
+    actionType === "stop_process" ||
     actionType === "self_modify"
   ) {
     return 3;
@@ -528,6 +542,9 @@ function resolveRunSkillOutcomeLine(runResult: TaskRunResult): string | null {
       (result) =>
         !result.approved &&
         (result.executionStatus === "failed" ||
+          result.executionFailureCode === "RUN_SKILL_ARTIFACT_MISSING" ||
+          result.blockedBy.includes("RUN_SKILL_ARTIFACT_MISSING") ||
+          result.violations.some((violation) => violation.code === "RUN_SKILL_ARTIFACT_MISSING") ||
           result.executionFailureCode === "ACTION_EXECUTION_FAILED" ||
           result.blockedBy.includes("ACTION_EXECUTION_FAILED") ||
           result.violations.some((violation) => violation.code === "ACTION_EXECUTION_FAILED"))
@@ -536,11 +553,198 @@ function resolveRunSkillOutcomeLine(runResult: TaskRunResult): string | null {
     const output = typeof failedRunSkillResult.output === "string"
       ? failedRunSkillResult.output.trim()
       : "";
-    return output.length > 0
-      ? output
-      : "Run skill failed: action execution failed with no detailed output.";
+    if (output.length > 0) {
+      return output;
+    }
+    const violationMessage = failedRunSkillResult.violations
+      .filter(
+        (violation) =>
+          violation.code === "RUN_SKILL_ARTIFACT_MISSING" ||
+          violation.code === "ACTION_EXECUTION_FAILED"
+      )
+      .map((violation) => violation.message.trim())
+      .find((message) => message.length > 0);
+    return violationMessage ?? "Run skill failed: action execution failed with no detailed output.";
   }
   return null;
+}
+
+/**
+ * Resolves managed-process outcome line from available runtime context.
+ *
+ * **Why it exists:**
+ * Prevents long-running process lifecycle actions from collapsing into generic `Done.` summaries when
+ * no respond action exists and the user needs the lease/status text directly.
+ *
+ * **What it talks to:**
+ * - Uses `TaskRunResult` (import `TaskRunResult`) from `../core/types`.
+ *
+ * @param runResult - Result object inspected or transformed in this step.
+ * @returns Computed `string | null` result.
+ */
+function resolveManagedProcessOutcomeLine(runResult: TaskRunResult): string | null {
+  const processResults = runResult.actionResults.filter((result) =>
+    result.action.type === "start_process" ||
+    result.action.type === "check_process" ||
+    result.action.type === "stop_process"
+  );
+  if (processResults.length === 0) {
+    return null;
+  }
+  const output = [...processResults]
+    .reverse()
+    .map((result) => (typeof result.output === "string" ? result.output.trim() : ""))
+    .find((value) => value.length > 0);
+  return output ?? null;
+}
+
+/**
+ * Resolves readiness-probe outcome line from available runtime context.
+ *
+ * **Why it exists:**
+ * Prevents successful or failed readiness probes from collapsing into generic summaries when the
+ * operator needs the direct localhost readiness result for follow-up process verification.
+ *
+ * **What it talks to:**
+ * - Uses `TaskRunResult` (import `TaskRunResult`) from `../core/types`.
+ *
+ * @param runResult - Result object inspected or transformed in this step.
+ * @returns Computed `string | null` result.
+ */
+function resolveProbeOutcomeLine(runResult: TaskRunResult): string | null {
+  const probeResults = runResult.actionResults.filter((result) =>
+    result.action.type === "probe_port" ||
+    result.action.type === "probe_http"
+  );
+  if (probeResults.length === 0) {
+    return null;
+  }
+  const output = [...probeResults]
+    .reverse()
+    .map((result) => (typeof result.output === "string" ? result.output.trim() : ""))
+    .find((value) => value.length > 0);
+  return output ?? null;
+}
+
+/**
+ * Resolves browser verification outcome line from available runtime context.
+ *
+ * **Why it exists:**
+ * Prevents browser verification results from collapsing into generic summaries or execution-surface
+ * no-op fallbacks when the run produced direct UI/browser proof text.
+ *
+ * **What it talks to:**
+ * - Uses `TaskRunResult` (import `TaskRunResult`) from `../core/types`.
+ *
+ * @param runResult - Result object inspected or transformed in this step.
+ * @returns Computed `string | null` result.
+ */
+function resolveBrowserVerificationOutcomeLine(runResult: TaskRunResult): string | null {
+  const browserResults = runResult.actionResults.filter(
+    (result) => result.action.type === "verify_browser"
+  );
+  if (browserResults.length === 0) {
+    return null;
+  }
+  const output = [...browserResults]
+    .reverse()
+    .map((result) => (typeof result.output === "string" ? result.output.trim() : ""))
+    .find((value) => value.length > 0);
+  return output ?? null;
+}
+
+/**
+ * Resolves a human-first direct execution outcome line from approved non-respond work.
+ *
+ * **Why it exists:**
+ * Normal chat replies should explain what actually happened when real work completed, even when the
+ * planner did not emit a dedicated `respond` action. Without this helper, successful file/shell/
+ * network work falls back to operator-style task telemetry such as `Completed task with ...`.
+ *
+ * **What it talks to:**
+ * - Uses `TaskRunResult` (import `TaskRunResult`) from `../core/types`.
+ * - Uses `isSimulatedOutput` (import `isSimulatedOutput`) from `./trustLexicalClassifier`.
+ * - Uses `DEFAULT_TRUST_LEXICAL_RULE_CONTEXT` from `./userFacingTrustPolicy`.
+ *
+ * @param runResult - Result object inspected or transformed in this step.
+ * @returns Human-first execution summary, or `null` when no supported real execution result exists.
+ */
+function resolveDirectExecutionOutcomeLine(runResult: TaskRunResult): string | null {
+  const latestRealExecution = [...runResult.actionResults]
+    .reverse()
+    .find(
+      (result) =>
+        result.approved &&
+        result.action.type !== "respond" &&
+        result.action.type !== "run_skill" &&
+        result.action.type !== "create_skill" &&
+        result.action.type !== "start_process" &&
+        result.action.type !== "check_process" &&
+        result.action.type !== "stop_process" &&
+        result.action.type !== "probe_port" &&
+        result.action.type !== "probe_http" &&
+        result.action.type !== "verify_browser" &&
+        !isSimulatedOutput(result.output ?? "", DEFAULT_TRUST_LEXICAL_RULE_CONTEXT)
+    );
+  if (!latestRealExecution) {
+    return null;
+  }
+
+  switch (latestRealExecution.action.type) {
+    case "write_file": {
+      const targetPath = latestRealExecution.action.params.path?.trim();
+      return targetPath
+        ? `I created or updated ${targetPath}.`
+        : "I created or updated the requested file.";
+    }
+    case "delete_file": {
+      const targetPath = latestRealExecution.action.params.path?.trim();
+      return targetPath ? `I deleted ${targetPath}.` : "I deleted the requested file.";
+    }
+    case "read_file": {
+      const targetPath = latestRealExecution.action.params.path?.trim();
+      return targetPath ? `I read ${targetPath}.` : "I read the requested file.";
+    }
+    case "list_directory": {
+      const targetPath = latestRealExecution.action.params.path?.trim();
+      return targetPath
+        ? `I checked ${targetPath}.`
+        : "I checked the requested directory.";
+    }
+    case "shell_command": {
+      const output = typeof latestRealExecution.output === "string"
+        ? latestRealExecution.output.trim()
+        : "";
+      if (/^Shell success:\s*command returned no output\./i.test(output)) {
+        return "I ran the command successfully.";
+      }
+      if (/^Shell success:\s*/i.test(output)) {
+        const commandOutput = output.replace(/^Shell success:\s*/i, "").trim();
+        return commandOutput.length > 0
+          ? `I ran the command successfully.\nCommand output:\n${commandOutput}`
+          : "I ran the command successfully.";
+      }
+      return output.length > 0 ? output : "I ran the command successfully.";
+    }
+    case "network_write": {
+      const output = typeof latestRealExecution.output === "string"
+        ? latestRealExecution.output.trim()
+        : "";
+      const responseMatch = output.match(/^Network write response:\s*(.+)$/i);
+      if (responseMatch?.[1]) {
+        return `I sent the request successfully (${responseMatch[1].trim()}).`;
+      }
+      return output.length > 0 ? output : "I sent the request successfully.";
+    }
+    case "self_modify":
+      return "I updated the requested runtime code.";
+    case "memory_mutation":
+      return "I updated the requested memory state.";
+    case "pulse_emit":
+      return "I sent the requested follow-up prompt.";
+    default:
+      return null;
+  }
 }
 
 /**
@@ -587,8 +791,17 @@ export function selectUserFacingSummary(
     showSafetyCodes: options.showSafetyCodes ?? showTechnicalSummary
   };
   const routingClassification = classifyRoutingIntentV1(runResult.task.userInput);
-
   const policyCodes = extractBlockedPolicyCodes(runResult);
+  const blockedMessage = resolveBlockedActionMessage(
+    runResult,
+    policyCodes,
+    normalizedOptions
+  );
+  const preferBlockedMessageOverBrowserFailure =
+    blockedMessage !== null &&
+    isLiveBuildVerificationPrompt(runResult.task.userInput) &&
+    (policyCodes.includes("SHELL_DISABLED_BY_POLICY") ||
+      policyCodes.includes("PROCESS_DISABLED_BY_POLICY"));
   const respondOutputs = runResult.actionResults
     .filter((result) => result.approved && result.action.type === "respond")
     .map((result) => (typeof result.output === "string" ? result.output.trim() : ""))
@@ -621,8 +834,15 @@ export function selectUserFacingSummary(
       const approvedRealNonRespondExecution = hasApprovedRealNonRespondExecution(runResult);
       const createSkillOutcomeLine = resolveCreateSkillOutcomeLine(runResult);
       const runSkillOutcomeLine = resolveRunSkillOutcomeLine(runResult);
+      const managedProcessOutcomeLine = resolveManagedProcessOutcomeLine(runResult);
+      const probeOutcomeLine = resolveProbeOutcomeLine(runResult);
+      const browserVerificationOutcomeLine = resolveBrowserVerificationOutcomeLine(runResult);
       const hasTechnicalOutcomeLine =
-        createSkillOutcomeLine !== null || runSkillOutcomeLine !== null;
+        createSkillOutcomeLine !== null ||
+        runSkillOutcomeLine !== null ||
+        managedProcessOutcomeLine !== null ||
+        probeOutcomeLine !== null ||
+        browserVerificationOutcomeLine !== null;
       const instructionOnlyNoOp =
         !approvedRealNonRespondExecution &&
         !hasTechnicalOutcomeLine &&
@@ -680,10 +900,21 @@ export function selectUserFacingSummary(
           routingClassification.routeType === "execution_surface" &&
           !isDiagnosticsRoutingClassification(routingClassification)
         ) {
-          const routeFallback = resolveExecutionSurfaceFallbackFromRouting(routingClassification);
+          const routeFallback = resolveExecutionSurfaceFallbackFromRouting(
+            routingClassification,
+            runResult.task.userInput
+          );
           if (routeFallback) {
             trustedOutputForRender = routeFallback;
           }
+        }
+      }
+      if (!approvedRealNonRespondExecution && !hasTechnicalOutcomeLine) {
+        const highRiskDeleteFallback = resolveHighRiskDeleteNoOpFallback(
+          runResult.task.userInput
+        );
+        if (highRiskDeleteFallback) {
+          trustedOutputForRender = highRiskDeleteFallback;
         }
       }
       if (
@@ -693,7 +924,10 @@ export function selectUserFacingSummary(
         isCompletedTaskSummary(trustedOutputForRender)
       ) {
         const forcedObservabilityFallback =
-          resolveExecutionSurfaceFallbackFromRouting(routingClassification);
+          resolveExecutionSurfaceFallbackFromRouting(
+            routingClassification,
+            runResult.task.userInput
+          );
         if (forcedObservabilityFallback) {
           trustedOutputForRender = forcedObservabilityFallback;
         }
@@ -709,7 +943,10 @@ export function selectUserFacingSummary(
           /\bno\s+execution\s+evidence\b/i.test(trustedOutputForRender))
       ) {
         const forcedLatencyFallback =
-          resolveExecutionSurfaceFallbackFromRouting(routingClassification);
+          resolveExecutionSurfaceFallbackFromRouting(
+            routingClassification,
+            runResult.task.userInput
+          );
         if (forcedLatencyFallback) {
           trustedOutputForRender = forcedLatencyFallback;
         }
@@ -718,7 +955,13 @@ export function selectUserFacingSummary(
         return trustedOutputForRender;
       }
 
-      if (!createSkillOutcomeLine && !runSkillOutcomeLine) {
+      if (
+        !createSkillOutcomeLine &&
+        !runSkillOutcomeLine &&
+        !managedProcessOutcomeLine &&
+        !probeOutcomeLine &&
+        !browserVerificationOutcomeLine
+      ) {
         return appendMissionDiagnosticsIfRequested(
           runResult,
           trustedOutputForRender,
@@ -732,6 +975,15 @@ export function selectUserFacingSummary(
       if (runSkillOutcomeLine) {
         technicalLines.push(`Run skill status: ${runSkillOutcomeLine}`);
       }
+      if (managedProcessOutcomeLine) {
+        technicalLines.push(`Process status: ${managedProcessOutcomeLine}`);
+      }
+      if (probeOutcomeLine) {
+        technicalLines.push(`Readiness status: ${probeOutcomeLine}`);
+      }
+      if (browserVerificationOutcomeLine) {
+        technicalLines.push(`Browser verification: ${browserVerificationOutcomeLine}`);
+      }
       return appendMissionDiagnosticsIfRequested(
         runResult,
         `${trustedOutputForRender}\n${technicalLines.join("\n")}`,
@@ -741,6 +993,10 @@ export function selectUserFacingSummary(
   }
 
   const runSkillOutcomeLine = resolveRunSkillOutcomeLine(runResult);
+  const managedProcessOutcomeLine = resolveManagedProcessOutcomeLine(runResult);
+  const probeOutcomeLine = resolveProbeOutcomeLine(runResult);
+  const browserVerificationOutcomeLine = resolveBrowserVerificationOutcomeLine(runResult);
+  const directExecutionOutcomeLine = resolveDirectExecutionOutcomeLine(runResult);
   if (runSkillOutcomeLine) {
     const explicitRunSkillRequest = EXPLICIT_RUN_SKILL_REQUEST_PATTERN.test(
       runResult.task.userInput
@@ -763,12 +1019,81 @@ export function selectUserFacingSummary(
     );
   }
 
+  if (preferBlockedMessageOverBrowserFailure) {
+    return appendMissionDiagnosticsIfRequested(
+      runResult,
+      blockedMessage,
+      normalizedOptions
+    );
+  }
+
+  if (browserVerificationOutcomeLine) {
+    return appendMissionDiagnosticsIfRequested(
+      runResult,
+      browserVerificationOutcomeLine,
+      normalizedOptions
+    );
+  }
+
+  if (blockedMessage) {
+    return appendMissionDiagnosticsIfRequested(
+      runResult,
+      blockedMessage,
+      normalizedOptions
+    );
+  }
+
+  if (
+    !hasApprovedRealNonRespondExecution(runResult) &&
+    routingClassification.routeType === "execution_surface" &&
+    !isDiagnosticsRoutingClassification(routingClassification)
+  ) {
+    const routeFallback = resolveExecutionSurfaceFallbackFromRouting(
+      routingClassification,
+      runResult.task.userInput
+    );
+    if (routeFallback) {
+      return appendMissionDiagnosticsIfRequested(
+        runResult,
+        routeFallback,
+        normalizedOptions
+      );
+    }
+  }
+
+  if (directExecutionOutcomeLine) {
+    return appendMissionDiagnosticsIfRequested(
+      runResult,
+      directExecutionOutcomeLine,
+      normalizedOptions
+    );
+  }
+
+  if (managedProcessOutcomeLine) {
+    return appendMissionDiagnosticsIfRequested(
+      runResult,
+      managedProcessOutcomeLine,
+      normalizedOptions
+    );
+  }
+
+  if (probeOutcomeLine) {
+    return appendMissionDiagnosticsIfRequested(
+      runResult,
+      probeOutcomeLine,
+      normalizedOptions
+    );
+  }
+
   if (
     routingClassification.category === "OBSERVABILITY_EXPORT" &&
     isObservabilityBundleExportPrompt(runResult.task.userInput)
   ) {
     const forcedObservabilityFallback =
-      resolveExecutionSurfaceFallbackFromRouting(routingClassification);
+      resolveExecutionSurfaceFallbackFromRouting(
+        routingClassification,
+        runResult.task.userInput
+      );
     if (forcedObservabilityFallback) {
       return appendMissionDiagnosticsIfRequested(
         runResult,
@@ -791,7 +1116,10 @@ export function selectUserFacingSummary(
       routingClassification.routeType === "execution_surface" &&
       !isDiagnosticsRoutingClassification(routingClassification)
     ) {
-      const routeFallback = resolveExecutionSurfaceFallbackFromRouting(routingClassification);
+      const routeFallback = resolveExecutionSurfaceFallbackFromRouting(
+        routingClassification,
+        runResult.task.userInput
+      );
       if (routeFallback) {
         return appendMissionDiagnosticsIfRequested(
           runResult,
@@ -802,17 +1130,17 @@ export function selectUserFacingSummary(
     }
   }
 
-  const blockedMessage = resolveBlockedActionMessage(
-    runResult,
-    policyCodes,
-    normalizedOptions
-  );
-  if (blockedMessage) {
-    return appendMissionDiagnosticsIfRequested(
-      runResult,
-      blockedMessage,
-      normalizedOptions
+  if (!hasApprovedRealNonRespondExecution(runResult)) {
+    const highRiskDeleteFallback = resolveHighRiskDeleteNoOpFallback(
+      runResult.task.userInput
     );
+    if (highRiskDeleteFallback) {
+      return appendMissionDiagnosticsIfRequested(
+        runResult,
+        highRiskDeleteFallback,
+        normalizedOptions
+      );
+    }
   }
 
   return appendMissionDiagnosticsIfRequested(

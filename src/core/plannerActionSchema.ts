@@ -15,6 +15,12 @@ const PLANNER_ACTION_TYPES: readonly ActionType[] = [
   "network_write",
   "self_modify",
   "shell_command",
+  "start_process",
+  "check_process",
+  "stop_process",
+  "probe_port",
+  "probe_http",
+  "verify_browser",
   "memory_mutation",
   "pulse_emit"
 ];
@@ -65,6 +71,25 @@ const PLANNER_ACTION_TYPE_ALIASES: Record<string, ActionType> = {
   command: "shell_command",
   run_command: "shell_command",
   terminal: "shell_command",
+  start_process: "start_process",
+  start_server: "start_process",
+  launch_process: "start_process",
+  check_process: "check_process",
+  process_status: "check_process",
+  stop_process: "stop_process",
+  terminate_process: "stop_process",
+  kill_process: "stop_process",
+  probe_port: "probe_port",
+  port_probe: "probe_port",
+  wait_for_port: "probe_port",
+  probe_http: "probe_http",
+  http_probe: "probe_http",
+  check_url: "probe_http",
+  verify_browser: "verify_browser",
+  browser_verify: "verify_browser",
+  browser_check: "verify_browser",
+  ui_verify: "verify_browser",
+  playwright_verify: "verify_browser",
   memory_mutation: "memory_mutation",
   memory_update: "memory_mutation",
   thread_update: "memory_mutation",
@@ -166,6 +191,18 @@ export function defaultPlannerActionDescription(type: ActionType): string {
       return "Propose a governed self-modification.";
     case "shell_command":
       return "Run a shell command required by the task.";
+    case "start_process":
+      return "Start a managed long-running process required by the task.";
+    case "check_process":
+      return "Check the status of a managed long-running process.";
+    case "stop_process":
+      return "Stop a managed long-running process.";
+    case "probe_port":
+      return "Probe a local TCP port for readiness.";
+    case "probe_http":
+      return "Probe a local HTTP endpoint for readiness.";
+    case "verify_browser":
+      return "Verify a local browser-rendered page using governed UI checks.";
     case "memory_mutation":
       return "Apply a governed local memory mutation.";
     case "pulse_emit":
@@ -225,10 +262,35 @@ export function normalizePlannerActionParams(
   actionRecord: Record<string, unknown>,
   existingParams: Record<string, unknown>
 ): Record<string, unknown> {
-  const params = { ...existingParams };
-  const stringFields = ["message", "text", "name", "code", "content", "path", "command"] as const;
+  const params = Object.fromEntries(
+    Object.entries(existingParams).filter(([, value]) => value !== null && value !== undefined)
+  );
+  const stringFields = [
+    "message",
+    "text",
+    "name",
+    "code",
+    "content",
+    "path",
+    "command",
+    "cwd",
+    "workdir",
+    "requestedShellKind",
+    "leaseId",
+    "host",
+    "url",
+    "expectedTitle",
+    "expectedText"
+  ] as const;
   for (const field of stringFields) {
     if (typeof actionRecord[field] === "string" && typeof params[field] !== "string") {
+      params[field] = actionRecord[field];
+    }
+  }
+
+  const numberFields = ["port", "timeoutMs", "expectedStatus"] as const;
+  for (const field of numberFields) {
+    if (typeof actionRecord[field] === "number" && typeof params[field] !== "number") {
       params[field] = actionRecord[field];
     }
   }

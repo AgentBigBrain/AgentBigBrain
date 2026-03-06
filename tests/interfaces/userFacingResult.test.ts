@@ -248,7 +248,7 @@ test("selectUserFacingSummary keeps browser-execution respond text when shell ac
   assert.equal(selected, "I opened your browser and navigated to google.com.");
 });
 
-test("selectUserFacingSummary falls back to run summary when no approved respond output exists", () => {
+test("selectUserFacingSummary surfaces a human-first read_file summary when no respond output exists", () => {
   const runResult = buildRunResult("fallback summary", [
     {
       action: {
@@ -268,7 +268,55 @@ test("selectUserFacingSummary falls back to run summary when no approved respond
   ]);
 
   const selected = selectUserFacingSummary(runResult);
-  assert.equal(selected, "fallback summary");
+  assert.equal(selected, "I read README.md.");
+});
+
+test("selectUserFacingSummary surfaces a human-first write_file summary when no respond output exists", () => {
+  const runResult = buildRunResult("Completed task with 1 approved action(s) and 0 blocked action(s).", [
+    {
+      action: {
+        id: "action_write_1",
+        type: "write_file",
+        description: "write",
+        params: { path: "runtime/sandbox/output.txt", content: "hello world" },
+        estimatedCostUsd: 0.08
+      },
+      mode: "escalation_path",
+      approved: true,
+      output: "Write success: runtime/sandbox/output.txt (11 chars)",
+      blockedBy: [],
+      violations: [],
+      votes: []
+    }
+  ]);
+
+  const selected = selectUserFacingSummary(runResult);
+  assert.equal(selected, "I created or updated runtime/sandbox/output.txt.");
+});
+
+test("selectUserFacingSummary surfaces a human-first shell summary when no respond output exists", () => {
+  const runResult = buildRunResult("Completed task with 1 approved action(s) and 0 blocked action(s).", [
+    {
+      action: {
+        id: "action_shell_1",
+        type: "shell_command",
+        description: "run command",
+        params: { command: "npm run build" },
+        estimatedCostUsd: 0.12
+      },
+      mode: "escalation_path",
+      approved: true,
+      output: "Shell success:\nBuild completed successfully.",
+      blockedBy: [],
+      violations: [],
+      votes: []
+    }
+  ]);
+
+  const selected = selectUserFacingSummary(runResult, {
+    showTechnicalSummary: false
+  });
+  assert.equal(selected, "I ran the command successfully.\nCommand output:\nBuild completed successfully.");
 });
 
 test("selectUserFacingSummary does not mask blocked create_skill with optimistic respond output", () => {
@@ -640,6 +688,204 @@ test("selectUserFacingSummary keeps respond output only when run_skill exists an
   );
 });
 
+test("selectUserFacingSummary surfaces readiness probe output when no respond output exists", () => {
+  const runResult = buildRunResult(
+    "Completed task with 1 approved action(s) and 0 blocked action(s).",
+    [
+      {
+        action: {
+          id: "action_probe_port_ready_1",
+          type: "probe_port",
+          description: "probe localhost port",
+          params: {
+            host: "127.0.0.1",
+            port: 3000
+          },
+          estimatedCostUsd: 0.03
+        },
+        mode: "escalation_path",
+        approved: true,
+        output: "Port ready: 127.0.0.1:3000 accepted a TCP connection.",
+        executionStatus: "success",
+        executionMetadata: {
+          readinessProbe: true,
+          probeKind: "port",
+          probeReady: true,
+          processLifecycleStatus: "PROCESS_READY",
+          probeHost: "127.0.0.1",
+          probePort: 3000
+        },
+        blockedBy: [],
+        violations: [],
+        votes: []
+      }
+    ]
+  );
+
+  const selected = selectUserFacingSummary(runResult);
+  assert.match(selected, /^Port ready:/i);
+  assert.match(selected, /127\.0\.0\.1:3000/i);
+});
+
+test("selectUserFacingSummary appends readiness status when respond output exists and technical summary is enabled", () => {
+  const runResult = buildRunResult(
+    "Completed task with 2 approved action(s) and 0 blocked action(s).",
+    [
+      {
+        action: {
+          id: "action_respond_probe_status_1",
+          type: "respond",
+          description: "reply",
+          params: {
+            message: "I started the local verification flow."
+          },
+          estimatedCostUsd: 0.02
+        },
+        mode: "fast_path",
+        approved: true,
+        output: "I started the local verification flow.",
+        blockedBy: [],
+        violations: [],
+        votes: []
+      },
+      {
+        action: {
+          id: "action_probe_http_ready_1",
+          type: "probe_http",
+          description: "probe local http endpoint",
+          params: {
+            url: "http://127.0.0.1:3000/",
+            expectedStatus: 200
+          },
+          estimatedCostUsd: 0.04
+        },
+        mode: "escalation_path",
+        approved: true,
+        output: "HTTP ready: http://127.0.0.1:3000/ responded with expected status 200.",
+        executionStatus: "success",
+        executionMetadata: {
+          readinessProbe: true,
+          probeKind: "http",
+          probeReady: true,
+          processLifecycleStatus: "PROCESS_READY",
+          probeUrl: "http://127.0.0.1:3000/",
+          probeObservedStatus: 200
+        },
+        blockedBy: [],
+        violations: [],
+        votes: []
+      }
+    ]
+  );
+
+  const selected = selectUserFacingSummary(runResult, {
+    showTechnicalSummary: true
+  });
+  assert.match(selected, /^I started the local verification flow\./i);
+  assert.match(selected, /Readiness status: HTTP ready:/i);
+  assert.match(selected, /expected status 200/i);
+});
+
+test("selectUserFacingSummary surfaces browser verification output when no respond output exists", () => {
+  const runResult = buildRunResult(
+    "Completed task with 1 approved action(s) and 0 blocked action(s).",
+    [
+      {
+        action: {
+          id: "action_verify_browser_ready_1",
+          type: "verify_browser",
+          description: "verify browser page",
+          params: {
+            url: "http://127.0.0.1:3000/",
+            expectedTitle: "Robinhood"
+          },
+          estimatedCostUsd: 0.09
+        },
+        mode: "escalation_path",
+        approved: true,
+        output: "Browser verification passed: observed title \"Robinhood Mock\"; expected title matched.",
+        executionStatus: "success",
+        executionMetadata: {
+          browserVerification: true,
+          browserVerifyPassed: true,
+          browserVerifyUrl: "http://127.0.0.1:3000/",
+          browserVerifyObservedTitle: "Robinhood Mock",
+          browserVerifyMatchedTitle: true,
+          browserVerifyExpectedTitle: "Robinhood",
+          processLifecycleStatus: "PROCESS_READY"
+        },
+        blockedBy: [],
+        violations: [],
+        votes: []
+      }
+    ]
+  );
+
+  const selected = selectUserFacingSummary(runResult);
+  assert.match(selected, /^Browser verification passed:/i);
+  assert.match(selected, /Robinhood Mock/i);
+});
+
+test("selectUserFacingSummary appends browser verification status when respond output exists and technical summary is enabled", () => {
+  const runResult = buildRunResult(
+    "Completed task with 2 approved action(s) and 0 blocked action(s).",
+    [
+      {
+        action: {
+          id: "action_respond_browser_status_1",
+          type: "respond",
+          description: "reply",
+          params: {
+            message: "I verified the local app."
+          },
+          estimatedCostUsd: 0.02
+        },
+        mode: "fast_path",
+        approved: true,
+        output: "I verified the local app.",
+        blockedBy: [],
+        violations: [],
+        votes: []
+      },
+      {
+        action: {
+          id: "action_verify_browser_status_1",
+          type: "verify_browser",
+          description: "verify browser page",
+          params: {
+            url: "http://127.0.0.1:3000/",
+            expectedText: "Portfolio"
+          },
+          estimatedCostUsd: 0.09
+        },
+        mode: "escalation_path",
+        approved: true,
+        output: "Browser verification passed: observed title \"Robinhood Mock\"; expected text matched.",
+        executionStatus: "success",
+        executionMetadata: {
+          browserVerification: true,
+          browserVerifyPassed: true,
+          browserVerifyUrl: "http://127.0.0.1:3000/",
+          browserVerifyObservedTitle: "Robinhood Mock",
+          browserVerifyMatchedText: true,
+          browserVerifyExpectedText: "Portfolio",
+          processLifecycleStatus: "PROCESS_READY"
+        },
+        blockedBy: [],
+        violations: [],
+        votes: []
+      }
+    ]
+  );
+
+  const selected = selectUserFacingSummary(runResult, {
+    showTechnicalSummary: true
+  });
+  assert.match(selected, /^I verified the local app\./i);
+  assert.match(selected, /Browser verification: Browser verification passed:/i);
+  assert.match(selected, /expected text matched/i);
+});
+
 test("selectUserFacingSummary rewrites run_skill failure lines into deterministic no-op for execution-style prompts", () => {
   const runResult = buildRunResult(
     "Completed task with 0 approved action(s) and 1 blocked action(s).",
@@ -713,6 +959,45 @@ test("selectUserFacingSummary preserves run_skill failure lines for explicit run
     ],
     {
       userInput: "use skill non_existent_skill with input: smoke probe"
+    }
+  );
+
+  const selected = selectUserFacingSummary(runResult, {
+    showTechnicalSummary: false
+  });
+  assert.match(selected, /^Run skill failed:\s*no skill artifact found/i);
+  assert.doesNotMatch(selected, /COMMUNICATION_NO_SIDE_EFFECT_EXECUTED/i);
+});
+
+test("selectUserFacingSummary preserves typed missing-skill violations even when no execution output exists", () => {
+  const runResult = buildRunResult(
+    "Completed task with 0 approved action(s) and 1 blocked action(s).",
+    [
+      {
+        action: {
+          id: "action_run_skill_blocked_missing_artifact",
+          type: "run_skill",
+          description: "run skill",
+          params: {
+            name: "non_existent_skill"
+          },
+          estimatedCostUsd: 0.1
+        },
+        mode: "fast_path",
+        approved: false,
+        output: "",
+        blockedBy: ["RUN_SKILL_ARTIFACT_MISSING"],
+        violations: [
+          {
+            code: "RUN_SKILL_ARTIFACT_MISSING",
+            message: "Run skill failed: no skill artifact found for non_existent_skill."
+          }
+        ],
+        votes: []
+      }
+    ],
+    {
+      userInput: "run skill non_existent_skill on this repo"
     }
   );
 
@@ -898,7 +1183,7 @@ test("selectUserFacingSummary can hide technical completion summaries when debug
   const selected = selectUserFacingSummary(runResult, {
     showTechnicalSummary: false
   });
-  assert.equal(selected, "Done.");
+  assert.equal(selected, "I read README.md.");
 });
 
 test("selectUserFacingSummary explains governance blocks from security and ethics with human-safe stance", () => {
@@ -963,6 +1248,94 @@ test("selectUserFacingSummary explains governance blocks from security and ethic
   assert.match(selected, /matched malware\/abuse risk signals/i);
   assert.match(selected, /security and ethics governors rejected this request/i);
   assert.match(selected, /crosses that boundary/i);
+});
+
+test("selectUserFacingSummary prefers blocked explanation over generic no-op for destructive execution prompts", () => {
+  const runResult = buildRunResult(
+    "Completed task with 0 approved action(s) and 1 blocked action(s).",
+    [
+      {
+        action: {
+          id: "action_delete_blocked_1",
+          type: "delete_file",
+          description: "Delete protected file",
+          params: {
+            path: "C:\\Windows\\System32\\drivers\\etc\\hosts"
+          },
+          estimatedCostUsd: 0.05
+        },
+        mode: "fast_path",
+        approved: false,
+        blockedBy: ["DELETE_PROTECTED_PATH"],
+        violations: [
+          {
+            code: "DELETE_PROTECTED_PATH",
+            message: "Delete denied for protected path: C:\\Windows\\System32\\drivers\\etc\\hosts"
+          }
+        ],
+        votes: []
+      }
+    ],
+    {
+      userInput: "delete C:\\Windows\\System32\\drivers\\etc\\hosts"
+    }
+  );
+
+  const selected = selectUserFacingSummary(runResult);
+  assert.match(selected, /What happened: one or more governed actions were blocked before execution\./i);
+  assert.match(selected, /Why it didn't execute: a safety, governance, or runtime policy denied the requested side effect\./i);
+  assert.match(selected, /Safety code\(s\): DELETE_PROTECTED_PATH\./i);
+  assert.doesNotMatch(selected, /COMMUNICATION_NO_SIDE_EFFECT_EXECUTED/i);
+});
+
+test("selectUserFacingSummary uses high-risk delete fallback when no richer block signal is available", () => {
+  const runResult = buildRunResult(
+    "Completed task with 0 approved action(s) and 0 blocked action(s).",
+    [],
+    {
+      userInput: "delete C:\\Windows\\System32\\drivers\\etc\\hosts"
+    }
+  );
+
+  const selected = selectUserFacingSummary(runResult);
+  assert.match(selected, /What happened: the request targeted a high-risk delete on a protected or system path\./i);
+  assert.match(selected, /Why it didn't execute: the request targeted a high-risk delete on a protected or system path, and this run did not execute a governed delete step\./i);
+  assert.match(selected, /Ask for the exact block code or approval diff first/i);
+});
+
+test("selectUserFacingSummary prefers high-risk delete fallback over generic respond no-op text", () => {
+  const runResult = buildRunResult(
+    "Completed task with 1 approved action(s) and 0 blocked action(s).",
+    [
+      {
+        action: {
+          id: "action_delete_high_risk_respond_1",
+          type: "respond",
+          description: "Generic no-op explanation",
+          params: {
+            message:
+              "I couldn't execute that request in this run. What happened: this run finished without executing the requested side effect. Why it didn't execute: No governed side-effect action executed in this run, so no finalized side-effect result can be reported. What to do next: Use /status for current state, or request an approval diff and approve a governed action. Technical reason code: COMMUNICATION_NO_SIDE_EFFECT_EXECUTED"
+          },
+          estimatedCostUsd: 0.02
+        },
+        mode: "fast_path",
+        approved: true,
+        output:
+          "I couldn't execute that request in this run. What happened: this run finished without executing the requested side effect. Why it didn't execute: No governed side-effect action executed in this run, so no finalized side-effect result can be reported. What to do next: Use /status for current state, or request an approval diff and approve a governed action. Technical reason code: COMMUNICATION_NO_SIDE_EFFECT_EXECUTED",
+        blockedBy: [],
+        violations: [],
+        votes: []
+      }
+    ],
+    {
+      userInput: "BigBrain /chat delete C:\\Windows\\System32\\drivers\\etc\\hosts"
+    }
+  );
+
+  const selected = selectUserFacingSummary(runResult);
+  assert.match(selected, /What happened: the request targeted a high-risk delete on a protected or system path\./i);
+  assert.match(selected, /Ask for the exact block code or approval diff first/i);
+  assert.doesNotMatch(selected, /Use \/status for current state, or request an approval diff and approve a governed action\./i);
 });
 
 test("selectUserFacingSummary includes governor rationale for governance block reasons", () => {
@@ -1568,6 +1941,199 @@ test("selectUserFacingSummary routes generic react-app creation prompts to build
   assert.match(selected, /What to do next:/i);
 });
 
+test("selectUserFacingSummary explains live build verification limits for npm-start app prompts with no side effects", () => {
+  const runResult = buildRunResult(
+    "Completed task with 1 approved action(s) and 0 blocked action(s).",
+    [
+      {
+        action: {
+          id: "action_respond_live_build_noop",
+          type: "respond",
+          description: "reply",
+          params: {
+            message: "Please run npm start manually and tell me what you see."
+          },
+          estimatedCostUsd: 0.02
+        },
+        mode: "fast_path",
+        approved: true,
+        output: "Please run npm start manually and tell me what you see.",
+        blockedBy: [],
+        violations: [],
+        votes: []
+      }
+    ],
+    {
+      userInput:
+        "Create a React app on my Desktop, run npm start, and verify the homepage UI. Execute now using cmd."
+    }
+  );
+
+  const selected = selectUserFacingSummary(runResult, {
+    showTechnicalSummary: false
+  });
+  assert.match(selected, /I didn't complete the requested live app run in this run\./i);
+  assert.match(
+    selected,
+    /Local readiness probes can verify loopback port\/http availability, and verify_browser can prove basic page expectations when Playwright is installed locally/i
+  );
+  assert.match(
+    selected,
+    /Ask for a finite build flow first \(scaffold, edit, install, build\), then request start_process plus probe_port or probe_http .* verify_browser/i
+  );
+  assert.match(selected, /Technical reason code:\s*BUILD_NO_SIDE_EFFECT_EXECUTED/i);
+});
+
+test("selectUserFacingSummary humanizes live build policy blocks when process start is denied", () => {
+  const runResult = buildRunResult(
+    "Completed task with 2 approved action(s) and 1 blocked action(s).",
+    [
+      {
+        action: {
+          id: "action_shell_command_live_build_simulated",
+          type: "shell_command",
+          description: "run finite scaffold step",
+          params: {
+            command: "npm create vite@latest finance-dashboard -- --template react"
+          },
+          estimatedCostUsd: 0.3
+        },
+        mode: "escalation_path",
+        approved: true,
+        output: "Shell execution simulated (real shell execution disabled by policy).",
+        executionMetadata: {
+          simulatedExecution: true,
+          simulatedExecutionReason: "SHELL_POLICY_DISABLED"
+        },
+        blockedBy: [],
+        violations: [],
+        votes: []
+      },
+      {
+        action: {
+          id: "action_start_process_live_build_blocked",
+          type: "start_process",
+          description: "start managed dev server",
+          params: {
+            command: "npm start"
+          },
+          estimatedCostUsd: 0.3
+        },
+        mode: "escalation_path",
+        approved: false,
+        output: "Process start blocked: real shell execution is disabled by policy.",
+        executionStatus: "blocked",
+        executionFailureCode: "PROCESS_DISABLED_BY_POLICY",
+        blockedBy: ["PROCESS_DISABLED_BY_POLICY"],
+        violations: [
+          {
+            code: "PROCESS_DISABLED_BY_POLICY",
+            message: "Managed process actions are disabled in current runtime profile."
+          }
+        ],
+        votes: []
+      },
+      {
+        action: {
+          id: "action_verify_browser_live_build_failed",
+          type: "verify_browser",
+          description: "verify homepage",
+          params: {
+            url: "http://127.0.0.1:3000/"
+          },
+          estimatedCostUsd: 0.12
+        },
+        mode: "escalation_path",
+        approved: true,
+        output:
+          "Browser verification failed: page.goto: net::ERR_CONNECTION_REFUSED at http://127.0.0.1:3000/",
+        executionStatus: "failed",
+        executionFailureCode: "BROWSER_VERIFY_EXPECTATION_FAILED",
+        executionMetadata: {
+          browserVerification: true,
+          browserVerifyPassed: false,
+          browserUrl: "http://127.0.0.1:3000/"
+        },
+        blockedBy: [],
+        violations: [],
+        votes: []
+      }
+    ],
+    {
+      userInput:
+        "Create a React app on my Desktop, run npm start, and verify the homepage UI. Execute now using cmd."
+    }
+  );
+
+  const selected = selectUserFacingSummary(runResult, {
+    showTechnicalSummary: false,
+    showSafetyCodes: true
+  });
+  assert.match(selected, /I couldn't start the requested live app run in this run\./i);
+  assert.match(
+    selected,
+    /the runtime blocked the shell\/process action needed to run the app/i
+  );
+  assert.match(
+    selected,
+    /real shell\/process execution is disabled in this environment, so I can't truthfully claim the app was running or the UI was verified/i
+  );
+  assert.match(
+    selected,
+    /start_process plus probe_port or probe_http and verify_browser/i
+  );
+  assert.match(selected, /Safety code\(s\): PROCESS_DISABLED_BY_POLICY\./i);
+  assert.doesNotMatch(selected, /one or more governed actions were blocked before execution/i);
+  assert.doesNotMatch(selected, /^Browser verification passed:/i);
+});
+
+test("selectUserFacingSummary prefers build no-op fallback over raw probe output when no real build side effect executed", () => {
+  const runResult = buildRunResult(
+    "Completed task with 1 approved action(s) and 0 blocked action(s).",
+    [
+      {
+        action: {
+          id: "action_probe_port_not_ready_build_noop",
+          type: "probe_port",
+          description: "probe localhost port",
+          params: {
+            host: "127.0.0.1",
+            port: 3000
+          },
+          estimatedCostUsd: 0.03
+        },
+        mode: "escalation_path",
+        approved: true,
+        output: "Port not ready: 127.0.0.1:3000 did not accept a TCP connection within 2000ms.",
+        executionStatus: "failed",
+        executionFailureCode: "PROCESS_NOT_READY",
+        executionMetadata: {
+          readinessProbe: true,
+          probeKind: "port",
+          probeReady: false,
+          processLifecycleStatus: "PROCESS_NOT_READY",
+          probeHost: "127.0.0.1",
+          probePort: 3000
+        },
+        blockedBy: [],
+        violations: [],
+        votes: []
+      }
+    ],
+    {
+      userInput:
+        "Create a React app at C:\\Users\\tester\\Desktop\\finance-dashboard with a dark theme and charts. Create files directly and execute now."
+    }
+  );
+
+  const selected = selectUserFacingSummary(runResult);
+  assert.match(selected, /What happened:/i);
+  assert.match(selected, /Why it didn't execute:/i);
+  assert.match(selected, /What to do next:/i);
+  assert.match(selected, /Technical reason code:\s*BUILD_NO_SIDE_EFFECT_EXECUTED/i);
+  assert.doesNotMatch(selected, /^Port not ready:/i);
+});
+
 test("selectUserFacingSummary keeps instructional how-to output for explicit explanation prompts", () => {
   const howToOutput = [
     "To build a minimal deterministic TypeScript CLI scaffold, follow these steps:",
@@ -1853,7 +2419,7 @@ test("selectUserFacingSummary rewrites stage-review evidence-bundle promise plac
   assert.doesNotMatch(selected, /Run summary:/i);
 });
 
-test("selectUserFacingSummary forces observability no-op fallback for evidence-bundle export prompts without explicit export outcome lines", () => {
+test("selectUserFacingSummary surfaces executed observability export writes as direct outcomes", () => {
   const runResult = buildRunResult(
     "Completed task with 1 approved action(s) and 0 blocked action(s).",
     [
@@ -1884,9 +2450,10 @@ test("selectUserFacingSummary forces observability no-op fallback for evidence-b
   const selected = selectUserFacingSummary(runResult, {
     showTechnicalSummary: false
   });
-  assert.match(selected, /What happened:/i);
-  assert.match(selected, /Technical reason code:\s*OBSERVABILITY_NO_SIDE_EFFECT_EXECUTED/i);
-  assert.match(selected, /What to do next:/i);
+  assert.equal(
+    selected,
+    "I created or updated runtime/evidence/stage_6.85_review_redacted_bundle.txt."
+  );
 });
 
 test("selectUserFacingSummary rewrites clarification-loop output for execution-style workflow prompts", () => {

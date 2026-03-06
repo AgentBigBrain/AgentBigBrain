@@ -69,6 +69,48 @@ function collectMissingAdditionalPropertiesFalsePaths(
   return violations;
 }
 
+function collectMissingRequiredPropertyPaths(
+  schemaNode: unknown,
+  currentPath = "$"
+): string[] {
+  if (!schemaNode || typeof schemaNode !== "object" || Array.isArray(schemaNode)) {
+    return [];
+  }
+
+  const node = schemaNode as Record<string, unknown>;
+  const violations: string[] = [];
+  if (
+    node.type === "object" &&
+    node.properties &&
+    typeof node.properties === "object" &&
+    !Array.isArray(node.properties)
+  ) {
+    const propertyKeys = Object.keys(node.properties as Record<string, unknown>);
+    const requiredKeys = Array.isArray(node.required)
+      ? new Set(node.required.filter((entry): entry is string => typeof entry === "string"))
+      : new Set<string>();
+    const missing = propertyKeys.filter((key) => !requiredKeys.has(key));
+    if (missing.length > 0) {
+      violations.push(`${currentPath} -> ${missing.join(",")}`);
+    }
+  }
+
+  for (const [key, value] of Object.entries(node)) {
+    if (Array.isArray(value)) {
+      value.forEach((entry, index) => {
+        violations.push(...collectMissingRequiredPropertyPaths(entry, `${currentPath}.${key}[${index}]`));
+      });
+      continue;
+    }
+
+    if (value && typeof value === "object") {
+      violations.push(...collectMissingRequiredPropertyPaths(value, `${currentPath}.${key}`));
+    }
+  }
+
+  return violations;
+}
+
 /**
  * Implements `buildMockResponse` behavior within module scope.
  * Interacts with local collaborators through imported modules and typed inputs/outputs.
@@ -276,6 +318,62 @@ test("OpenAIModelClient planner schema sets additionalProperties false on every 
   );
 });
 
+test("OpenAIModelClient planner schema marks every object property as required for strict provider mode", async () => {
+  await withMockFetch(
+    (async (_input: unknown, init?: RequestInit) => {
+      const requestBody = parseRequestBody(init);
+      const responseFormat = requestBody.response_format as
+        | { type?: string; json_schema?: { name?: string; schema?: unknown } }
+        | undefined;
+
+      assert.equal(responseFormat?.type, "json_schema");
+      assert.equal(responseFormat?.json_schema?.name, "planner_v1");
+      const schema = responseFormat?.json_schema?.schema;
+      const violations = collectMissingRequiredPropertyPaths(schema);
+      assert.deepEqual(
+        violations,
+        [],
+        `planner_v1 strict schema has object nodes missing required keys for declared properties: ${violations.join("; ")}`
+      );
+
+      const plannerSchema = schema as Record<string, unknown>;
+      const paramsAnyOf =
+        ((((plannerSchema.properties as Record<string, unknown>).actions as Record<string, unknown>).items as Record<string, unknown>).properties as Record<string, unknown>).params as Record<string, unknown>;
+      const shellParamsBranch = (paramsAnyOf.anyOf as Array<Record<string, unknown>>).find((branch) => {
+        const properties = branch.properties as Record<string, unknown> | undefined;
+        return Boolean(properties?.command) && Boolean(properties?.cwd);
+      });
+
+      assert.ok(shellParamsBranch, "expected shell_command params branch to exist");
+      const shellProperties = shellParamsBranch?.properties as Record<string, unknown>;
+      const cwdSchema = shellProperties.cwd as Record<string, unknown>;
+      assert.equal(Array.isArray(cwdSchema.anyOf), true);
+      assert.equal(
+        (cwdSchema.anyOf as Array<Record<string, unknown>>).some((entry) => entry.type === "null"),
+        true
+      );
+
+      return buildMockResponse({
+        ok: true,
+        status: 200,
+        payload: {
+          choices: [
+            {
+              message: {
+                content: "{\"plannerNotes\":\"ok\",\"actions\":[]}"
+              }
+            }
+          ]
+        }
+      });
+    }) as typeof fetch,
+    async () => {
+      const client = new OpenAIModelClient({ apiKey: "test-key", baseUrl: "https://mock.local" });
+      await client.completeJson(buildRequest());
+    }
+  );
+});
+
 test("OpenAIModelClient falls back to json_object for unknown schema names", async () => {
   await withMockFetch(
     (async (_input: unknown, init?: RequestInit) => {
@@ -304,6 +402,35 @@ test("OpenAIModelClient falls back to json_object for unknown schema names", asy
         schemaName: "custom_schema_v1"
       });
       assert.equal(output.custom, "ok");
+    }
+  );
+});
+
+test("OpenAIModelClient strips provider-null placeholders from normalized planner params", async () => {
+  await withMockFetch(
+    (async () =>
+      buildMockResponse({
+        ok: true,
+        status: 200,
+        payload: {
+          choices: [
+            {
+              message: {
+                content:
+                  "{\"plannerNotes\":\"ok\",\"actions\":[{\"type\":\"shell_command\",\"description\":\"Run the app\",\"params\":{\"command\":\"npm start\",\"cwd\":null,\"workdir\":null,\"requestedShellKind\":null,\"timeoutMs\":null}}]}"
+              }
+            }
+          ]
+        }
+      })) as typeof fetch,
+    async () => {
+      const client = new OpenAIModelClient({ apiKey: "test-key", baseUrl: "https://mock.local" });
+      const output = await client.completeJson<{
+        plannerNotes: string;
+        actions: Array<{ params: Record<string, unknown> }>;
+      }>(buildRequest());
+
+      assert.deepEqual(output.actions[0]?.params, { command: "npm start" });
     }
   );
 });

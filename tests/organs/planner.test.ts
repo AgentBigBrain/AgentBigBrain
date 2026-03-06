@@ -410,6 +410,350 @@ class MissingCreateSkillAfterRepairModelClient implements ModelClient {
   }
 }
 
+class PlaybookContextAwareExecutableModelClient implements ModelClient {
+  readonly backend = "mock" as const;
+  private plannerRequest: StructuredCompletionRequest | null = null;
+
+  getPlannerRequest(): StructuredCompletionRequest | null {
+    return this.plannerRequest;
+  }
+
+  async completeJson<T>(request: StructuredCompletionRequest): Promise<T> {
+    if (request.schemaName !== "planner_v1") {
+      throw new Error(`Unexpected schema: ${request.schemaName}`);
+    }
+    this.plannerRequest = request;
+    const parsedUserPrompt = JSON.parse(request.userPrompt) as {
+      currentUserRequest?: string;
+    };
+    const currentUserRequest = parsedUserPrompt.currentUserRequest ?? "";
+
+    if (/verify the homepage ui/i.test(currentUserRequest)) {
+      return {
+        plannerNotes: "planner output with live browser verification actions for prompt inspection",
+        actions: [
+          {
+            type: "shell_command",
+            description: "Scaffold the requested React app.",
+            params: {
+              command: "npm create vite@latest robinhood-mock -- --template react",
+              cwd: "C:\\Users\\benac\\OneDrive\\Desktop"
+            }
+          },
+          {
+            type: "start_process",
+            description: "Start the local dev server for live verification.",
+            params: {
+              command: "npm run dev",
+              cwd: "C:\\Users\\benac\\OneDrive\\Desktop\\robinhood-mock"
+            }
+          },
+          {
+            type: "probe_http",
+            description: "Wait for the local homepage to respond.",
+            params: {
+              url: "http://127.0.0.1:4173",
+              expectedStatus: 200,
+              timeoutMs: 5000
+            }
+          },
+          {
+            type: "verify_browser",
+            description: "Verify the homepage in a browser.",
+            params: {
+              url: "http://127.0.0.1:4173",
+              expectedTitle: "Robinhood Mock",
+              expectedText: "Managed process ready",
+              timeoutMs: 5000
+            }
+          }
+        ]
+      } as T;
+    }
+
+    if (/run the app/i.test(currentUserRequest)) {
+      return {
+        plannerNotes: "planner output with live readiness actions for prompt inspection",
+        actions: [
+          {
+            type: "shell_command",
+            description: "Scaffold the requested React app.",
+            params: {
+              command: "npm create vite@latest robinhood-mock -- --template react",
+              cwd: "C:\\Users\\benac\\OneDrive\\Desktop"
+            }
+          },
+          {
+            type: "start_process",
+            description: "Start the local dev server for live verification.",
+            params: {
+              command: "npm run dev",
+              cwd: "C:\\Users\\benac\\OneDrive\\Desktop\\robinhood-mock"
+            }
+          },
+          {
+            type: "probe_http",
+            description: "Wait for the local homepage to respond.",
+            params: {
+              url: "http://127.0.0.1:4173",
+              expectedStatus: 200,
+              timeoutMs: 5000
+            }
+          }
+        ]
+      } as T;
+    }
+
+    return {
+      plannerNotes: "planner output with executable action for prompt inspection",
+      actions: [
+        {
+          type: "shell_command",
+          description: "Scaffold the requested workspace.",
+          params: {
+            command: "npm create vite@latest robinhood-mock -- --template react",
+            cwd: "C:\\Users\\benac\\OneDrive\\Desktop"
+          }
+        }
+      ]
+    } as T;
+  }
+}
+
+class ExecutionStyleBuildRepairModelClient implements ModelClient {
+  readonly backend = "mock" as const;
+  private plannerCallCount = 0;
+
+  getPlannerCallCount(): number {
+    return this.plannerCallCount;
+  }
+
+  async completeJson<T>(request: StructuredCompletionRequest): Promise<T> {
+    if (request.schemaName !== "planner_v1") {
+      throw new Error(`Unexpected schema: ${request.schemaName}`);
+    }
+
+    this.plannerCallCount += 1;
+    if (this.plannerCallCount === 1) {
+      return {
+        plannerNotes: "first pass incorrectly responded with guidance only",
+        actions: [
+          {
+            type: "respond",
+            message: "Here are the steps you can follow manually."
+          }
+        ]
+      } as T;
+    }
+
+    return {
+      plannerNotes: "repair emits executable build step",
+      actions: [
+        {
+          type: "shell_command",
+          description: "Scaffold the requested React app.",
+          params: {
+            command: "npm create vite@latest robinhood-mock -- --template react",
+            cwd: "C:\\Users\\benac\\OneDrive\\Desktop"
+          }
+        }
+      ]
+    } as T;
+  }
+}
+
+class InspectionOnlyBuildRepairModelClient implements ModelClient {
+  readonly backend = "mock" as const;
+  private plannerCallCount = 0;
+
+  getPlannerCallCount(): number {
+    return this.plannerCallCount;
+  }
+
+  async completeJson<T>(request: StructuredCompletionRequest): Promise<T> {
+    if (request.schemaName !== "planner_v1") {
+      throw new Error(`Unexpected schema: ${request.schemaName}`);
+    }
+
+    this.plannerCallCount += 1;
+    if (this.plannerCallCount === 1) {
+      return {
+        plannerNotes: "first pass only inspected the workspace",
+        actions: [
+          {
+            type: "list_directory",
+            description: "Inspect the target workspace.",
+            params: {
+              path: "C:\\Users\\benac\\OneDrive\\Desktop"
+            }
+          }
+        ]
+      } as T;
+    }
+
+    return {
+      plannerNotes: "repair emits concrete build action",
+      actions: [
+        {
+          type: "shell_command",
+          description: "Scaffold the requested React app.",
+          params: {
+            command: "npm create vite@latest robinhood-mock -- --template react",
+            cwd: "C:\\Users\\benac\\OneDrive\\Desktop"
+          }
+        }
+      ]
+    } as T;
+  }
+}
+
+class InspectionOnlyBuildFailureModelClient implements ModelClient {
+  readonly backend = "mock" as const;
+
+  async completeJson<T>(request: StructuredCompletionRequest): Promise<T> {
+    if (request.schemaName !== "planner_v1") {
+      throw new Error(`Unexpected schema: ${request.schemaName}`);
+    }
+
+    return {
+      plannerNotes: "planner keeps returning inspection-only actions",
+      actions: [
+        {
+          type: "list_directory",
+          description: "Inspect the target workspace.",
+          params: {
+            path: "C:\\Users\\benac\\OneDrive\\Desktop"
+          }
+        }
+      ]
+    } as T;
+  }
+}
+
+class LiveVerificationRepairModelClient implements ModelClient {
+  readonly backend = "mock" as const;
+  private plannerCallCount = 0;
+
+  getPlannerCallCount(): number {
+    return this.plannerCallCount;
+  }
+
+  async completeJson<T>(request: StructuredCompletionRequest): Promise<T> {
+    if (request.schemaName !== "planner_v1") {
+      throw new Error(`Unexpected schema: ${request.schemaName}`);
+    }
+
+    this.plannerCallCount += 1;
+    if (this.plannerCallCount === 1) {
+      return {
+        plannerNotes: "first pass only planned finite build work",
+        actions: [
+          {
+            type: "shell_command",
+            description: "Scaffold the requested React app.",
+            params: {
+              command: "npm create vite@latest robinhood-mock -- --template react",
+              cwd: "C:\\Users\\benac\\OneDrive\\Desktop"
+            }
+          }
+        ]
+      } as T;
+    }
+
+    return {
+      plannerNotes: "repair adds live verification proof",
+      actions: [
+        {
+          type: "shell_command",
+          description: "Scaffold the requested React app.",
+          params: {
+            command: "npm create vite@latest robinhood-mock -- --template react",
+            cwd: "C:\\Users\\benac\\OneDrive\\Desktop"
+          }
+        },
+        {
+          type: "start_process",
+          description: "Start the local dev server.",
+          params: {
+            command: "npm run dev",
+            cwd: "C:\\Users\\benac\\OneDrive\\Desktop\\robinhood-mock"
+          }
+        },
+        {
+          type: "probe_http",
+          description: "Wait for the local homepage to respond.",
+          params: {
+            url: "http://127.0.0.1:4173",
+            expectedStatus: 200,
+            timeoutMs: 5000
+          }
+        }
+      ]
+    } as T;
+  }
+}
+
+class BrowserVerificationFailureModelClient implements ModelClient {
+  readonly backend = "mock" as const;
+
+  async completeJson<T>(request: StructuredCompletionRequest): Promise<T> {
+    if (request.schemaName !== "planner_v1") {
+      throw new Error(`Unexpected schema: ${request.schemaName}`);
+    }
+
+    return {
+      plannerNotes: "planner omits verify_browser despite explicit UI verification request",
+      actions: [
+        {
+          type: "shell_command",
+          description: "Scaffold the requested React app.",
+          params: {
+            command: "npm create vite@latest robinhood-mock -- --template react",
+            cwd: "C:\\Users\\benac\\OneDrive\\Desktop"
+          }
+        },
+        {
+          type: "start_process",
+          description: "Start the local dev server.",
+          params: {
+            command: "npm run dev",
+            cwd: "C:\\Users\\benac\\OneDrive\\Desktop\\robinhood-mock"
+          }
+        },
+        {
+          type: "probe_http",
+          description: "Wait for the local homepage to respond.",
+          params: {
+            url: "http://127.0.0.1:4173",
+            expectedStatus: 200,
+            timeoutMs: 5000
+          }
+        }
+      ]
+    } as T;
+  }
+}
+
+class ExecutionStyleBuildRespondOnlyModelClient implements ModelClient {
+  readonly backend = "mock" as const;
+
+  async completeJson<T>(request: StructuredCompletionRequest): Promise<T> {
+    if (request.schemaName !== "planner_v1") {
+      throw new Error(`Unexpected schema: ${request.schemaName}`);
+    }
+
+    return {
+      plannerNotes: "planner never emits executable action",
+      actions: [
+        {
+          type: "respond",
+          message: "You can run the scaffolding command yourself."
+        }
+      ]
+    } as T;
+  }
+}
+
 class MissingRunSkillThenRepairModelClient implements ModelClient {
   readonly backend = "mock" as const;
   private plannerCallCount = 0;
@@ -478,6 +822,170 @@ class MissingRunSkillAfterRepairModelClient implements ModelClient {
         {
           type: "respond",
           message: "The requested skill is unavailable."
+        }
+      ]
+    } as T;
+  }
+}
+
+class MissingVerifyBrowserThenRepairModelClient implements ModelClient {
+  readonly backend = "mock" as const;
+  private plannerCallCount = 0;
+
+  /**
+ * Implements `getPlannerCallCount` behavior within class MissingVerifyBrowserThenRepairModelClient.
+ * Interacts with local collaborators through imported modules and typed inputs/outputs.
+ */
+  getPlannerCallCount(): number {
+    return this.plannerCallCount;
+  }
+
+  /**
+ * Implements `completeJson` behavior within class MissingVerifyBrowserThenRepairModelClient.
+ * Interacts with local collaborators through imported modules and typed inputs/outputs.
+ */
+  async completeJson<T>(request: StructuredCompletionRequest): Promise<T> {
+    if (request.schemaName !== "planner_v1") {
+      throw new Error(`Unexpected schema: ${request.schemaName}`);
+    }
+
+    this.plannerCallCount += 1;
+    if (this.plannerCallCount === 1) {
+      return {
+        plannerNotes: "first pass drifted into file mutation",
+        actions: [
+          {
+            type: "write_file",
+            description: "Rewrite the homepage file.",
+            params: {
+              path: "C:\\Users\\benac\\OneDrive\\Desktop\\playwright-proof-smoke\\index.html",
+              content: "<title>Playwright Proof Smoke</title>"
+            }
+          }
+        ]
+      } as T;
+    }
+
+    return {
+      plannerNotes: "repair includes explicit browser proof",
+      actions: [
+        {
+          type: "verify_browser",
+          description: "Verify the homepage UI in a real browser.",
+          params: {
+            url: "http://localhost:8000",
+            expectedTitle: "Playwright Proof Smoke",
+            expectedText: "Browser proof works"
+          }
+        }
+      ]
+    } as T;
+  }
+}
+
+class MissingVerifyBrowserAfterRepairModelClient implements ModelClient {
+  readonly backend = "mock" as const;
+
+  /**
+ * Implements `completeJson` behavior within class MissingVerifyBrowserAfterRepairModelClient.
+ * Interacts with local collaborators through imported modules and typed inputs/outputs.
+ */
+  async completeJson<T>(request: StructuredCompletionRequest): Promise<T> {
+    if (request.schemaName !== "planner_v1") {
+      throw new Error(`Unexpected schema: ${request.schemaName}`);
+    }
+
+    return {
+      plannerNotes: "never emits verify_browser",
+      actions: [
+        {
+          type: "write_file",
+          description: "Rewrite the homepage file.",
+          params: {
+            path: "C:\\Users\\benac\\OneDrive\\Desktop\\playwright-proof-smoke\\index.html",
+            content: "<title>Playwright Proof Smoke</title>"
+          }
+        }
+      ]
+    } as T;
+  }
+}
+
+class MissingStartProcessThenRepairModelClient implements ModelClient {
+  readonly backend = "mock" as const;
+  private plannerCallCount = 0;
+
+  /**
+ * Implements `getPlannerCallCount` behavior within class MissingStartProcessThenRepairModelClient.
+ * Interacts with local collaborators through imported modules and typed inputs/outputs.
+ */
+  getPlannerCallCount(): number {
+    return this.plannerCallCount;
+  }
+
+  /**
+ * Implements `completeJson` behavior within class MissingStartProcessThenRepairModelClient.
+ * Interacts with local collaborators through imported modules and typed inputs/outputs.
+ */
+  async completeJson<T>(request: StructuredCompletionRequest): Promise<T> {
+    if (request.schemaName !== "planner_v1") {
+      throw new Error(`Unexpected schema: ${request.schemaName}`);
+    }
+
+    this.plannerCallCount += 1;
+    if (this.plannerCallCount === 1) {
+      return {
+        plannerNotes: "first pass drifted into file mutation",
+        actions: [
+          {
+            type: "write_file",
+            description: "Create the homepage file.",
+            params: {
+              path: "C:\\Users\\benac\\OneDrive\\Desktop\\playwright-proof-smoke\\index.html",
+              content: "<title>Playwright Proof Smoke</title>"
+            }
+          }
+        ]
+      } as T;
+    }
+
+    return {
+      plannerNotes: "repair includes explicit managed-process start",
+      actions: [
+        {
+          type: "start_process",
+          description: "Start the local HTTP server.",
+          params: {
+            command: "python -m http.server 8000",
+            cwd: "C:\\Users\\benac\\OneDrive\\Desktop\\playwright-proof-smoke"
+          }
+        }
+      ]
+    } as T;
+  }
+}
+
+class CheckProcessRecoveryModelClient implements ModelClient {
+  readonly backend = "mock" as const;
+
+  /**
+ * Implements `completeJson` behavior within class CheckProcessRecoveryModelClient.
+ * Interacts with local collaborators through imported modules and typed inputs/outputs.
+ */
+  async completeJson<T>(request: StructuredCompletionRequest): Promise<T> {
+    if (request.schemaName !== "planner_v1") {
+      throw new Error(`Unexpected schema: ${request.schemaName}`);
+    }
+
+    return {
+      plannerNotes: "planner returns explicit check_process recovery action",
+      actions: [
+        {
+          type: "check_process",
+          description: "Inspect the managed process lease.",
+          params: {
+            leaseId: "proc_recovery_1"
+          }
         }
       ]
     } as T;
@@ -759,7 +1267,7 @@ test("planner normalizes alias action type and top-level message fields", async 
 });
 
 test("planner forwards deterministic stage 6.85 playbook selection context into planner prompts", async () => {
-  const modelClient = new PlaybookContextAwareModelClient();
+  const modelClient = new PlaybookContextAwareExecutableModelClient();
   const playbookSelection: Stage685PlaybookPlanningContext = {
     selectedPlaybookId: "playbook_stage685_a_build",
     selectedPlaybookName: "Candidate playbook for Build deterministic backup CLI",
@@ -786,14 +1294,17 @@ test("planner forwards deterministic stage 6.85 playbook selection context into 
       }
     );
     assert.equal(plan.actions.length, 1);
-    assert.equal(plan.actions[0].type, "respond");
+    assert.equal(plan.actions[0].type, "shell_command");
   });
 
   const plannerRequest = modelClient.getPlannerRequest();
   assert.ok(plannerRequest);
   assert.match(plannerRequest.systemPrompt, /deterministic stage 6\.85 playbook match is available/i);
   assert.match(plannerRequest.systemPrompt, /deterministic high-risk action guardrail/i);
-  assert.match(plannerRequest.systemPrompt, /do not emit shell_command or self_modify actions/i);
+  assert.doesNotMatch(plannerRequest.systemPrompt, /do not emit shell_command/i);
+  assert.match(plannerRequest.systemPrompt, /do not emit start_process/i);
+  assert.match(plannerRequest.systemPrompt, /do not emit .*verify_browser/i);
+  assert.match(plannerRequest.systemPrompt, /do not emit .*self_modify/i);
 
   const parsedUserPrompt = JSON.parse(plannerRequest.userPrompt) as Record<string, unknown>;
   const parsedPlaybookSelection = parsedUserPrompt.playbookSelection as {
@@ -804,26 +1315,170 @@ test("planner forwards deterministic stage 6.85 playbook selection context into 
   assert.equal(parsedPlaybookSelection.fallbackToPlanner, false);
 });
 
-test("planner adds execution-style build bias while keeping explicit shell/self-modify guardrail", async () => {
-  const modelClient = new PlaybookContextAwareModelClient();
+test("planner execution-style build prompts allow finite shell planning without explicit shell-name phrasing", async () => {
+  const modelClient = new PlaybookContextAwareExecutableModelClient();
   await withPlannerClient(modelClient, async (planner) => {
     const plan = await planner.plan(
       buildTask("Create a React app on my Desktop and execute now."),
       "mock-planner"
     );
     assert.equal(plan.actions.length, 1);
-    assert.equal(plan.actions[0].type, "respond");
+    assert.equal(plan.actions[0].type, "shell_command");
   });
 
   const plannerRequest = modelClient.getPlannerRequest();
   assert.ok(plannerRequest);
   assert.match(plannerRequest.systemPrompt, /deterministic high-risk action guardrail/i);
-  assert.match(plannerRequest.systemPrompt, /do not emit shell_command or self_modify actions/i);
+  assert.doesNotMatch(plannerRequest.systemPrompt, /do not emit shell_command/i);
+  assert.match(plannerRequest.systemPrompt, /do not emit start_process/i);
+  assert.match(plannerRequest.systemPrompt, /do not emit .*verify_browser/i);
+  assert.match(plannerRequest.systemPrompt, /do not emit .*self_modify/i);
   assert.match(plannerRequest.systemPrompt, /Execution-style build request detected/i);
   assert.match(
     plannerRequest.systemPrompt,
-    /prefer actionable non-respond plans .*write_file\/read_file\/list_directory\/run_skill/i
+    /prefer concrete build or proof actions .*write_file.*shell_command.*start_process.*probe_http.*verify_browser/i
   );
+  assert.match(
+    plannerRequest.systemPrompt,
+    /Include at least one executable non-respond action and do not replace the plan with guidance-only respond output/i
+  );
+  assert.match(
+    plannerRequest.systemPrompt,
+    /Read_file, list_directory, check_process, or stop_process do not satisfy this requirement by themselves/i
+  );
+  assert.match(
+    plannerRequest.systemPrompt,
+    /When you write user-facing text, keep it human-first: plain language first, brief explanation second, and a concrete next step when relevant/i
+  );
+});
+
+test("planner live-verification build prompts can allow managed process planning without explicit shell-name phrasing", async () => {
+  const modelClient = new PlaybookContextAwareExecutableModelClient();
+  await withPlannerClient(modelClient, async (planner) => {
+    const plan = await planner.plan(
+      buildTask(
+        "Create a React app on my Desktop, run the app, and verify the homepage UI. Execute now."
+      ),
+      "mock-planner"
+    );
+    assert.equal(plan.actions.some((action) => action.type === "shell_command"), true);
+    assert.equal(plan.actions.some((action) => action.type === "start_process"), true);
+    assert.equal(plan.actions.some((action) => action.type === "probe_http"), true);
+    assert.equal(plan.actions.some((action) => action.type === "verify_browser"), true);
+  });
+
+  const plannerRequest = modelClient.getPlannerRequest();
+  assert.ok(plannerRequest);
+  assert.doesNotMatch(plannerRequest.systemPrompt, /do not emit shell_command/i);
+  assert.doesNotMatch(plannerRequest.systemPrompt, /do not emit start_process/i);
+  assert.match(plannerRequest.systemPrompt, /Deterministic build-task strategy:/i);
+  assert.match(plannerRequest.systemPrompt, /prefer finite proof steps before any live session/i);
+  assert.match(
+    plannerRequest.systemPrompt,
+    /do not use long-running dev-server commands .*npm start.*npm run dev/i
+  );
+  assert.match(
+    plannerRequest.systemPrompt,
+    /Only use managed-process actions .*start_process\/check_process\/stop_process/i
+  );
+  assert.match(
+    plannerRequest.systemPrompt,
+    /Use probe_port or probe_http only for loopback-local readiness checks/i
+  );
+  assert.doesNotMatch(plannerRequest.systemPrompt, /do not emit verify_browser/i);
+  assert.match(plannerRequest.systemPrompt, /Live-run verification intent detected/i);
+  assert.match(
+    plannerRequest.systemPrompt,
+    /pair start_process with probe_port or probe_http/i
+  );
+  assert.match(
+    plannerRequest.systemPrompt,
+    /use verify_browser with params\.url and any available expectedTitle\/expectedText hints/i
+  );
+  assert.match(
+    plannerRequest.systemPrompt,
+    /instead of claiming the app was running or the UI was verified/i
+  );
+  assert.match(
+    plannerRequest.systemPrompt,
+    /Repair must include at least one executable non-respond action|Include at least one executable non-respond action/i
+  );
+  assert.match(
+    plannerRequest.systemPrompt,
+    /Read_file, list_directory, check_process, or stop_process can support the plan, but they do not satisfy an execution-style build request by themselves/i
+  );
+});
+
+test("planner repairs execution-style build requests when first plan is guidance-only respond output", async () => {
+  const modelClient = new ExecutionStyleBuildRepairModelClient();
+  await withPlannerClient(modelClient, async (planner) => {
+    const plan = await planner.plan(
+      buildTask("Create a React app on my Desktop and execute now."),
+      "mock-planner"
+    );
+    assert.equal(modelClient.getPlannerCallCount(), 2);
+    assert.equal(plan.actions.length, 1);
+    assert.equal(plan.actions[0].type, "shell_command");
+    assert.ok(plan.plannerNotes.includes("repair=true"));
+  });
+});
+
+test("planner fails closed when execution-style build request never yields an executable action", async () => {
+  await withPlannerClient(new ExecutionStyleBuildRespondOnlyModelClient(), async (planner) => {
+    await assert.rejects(
+      planner.plan(buildTask("Create a React app on my Desktop and execute now."), "mock-planner"),
+      /no executable non-respond actions for execution-style build request/i
+    );
+  });
+});
+
+test("planner repairs inspection-only execution-style build requests into concrete execution", async () => {
+  const modelClient = new InspectionOnlyBuildRepairModelClient();
+  await withPlannerClient(modelClient, async (planner) => {
+    const plan = await planner.plan(
+      buildTask("Create a React app on my Desktop and execute now."),
+      "mock-planner"
+    );
+    assert.equal(modelClient.getPlannerCallCount(), 2);
+    assert.equal(plan.actions.length, 1);
+    assert.equal(plan.actions[0].type, "shell_command");
+    assert.ok(plan.plannerNotes.includes("repair=true"));
+  });
+});
+
+test("planner fails closed when execution-style build request only yields inspection-only actions", async () => {
+  await withPlannerClient(new InspectionOnlyBuildFailureModelClient(), async (planner) => {
+    await assert.rejects(
+      planner.plan(buildTask("Create a React app on my Desktop and execute now."), "mock-planner"),
+      /inspection-only actions for execution-style build request/i
+    );
+  });
+});
+
+test("planner repairs live-verification build requests that omit live proof actions", async () => {
+  const modelClient = new LiveVerificationRepairModelClient();
+  await withPlannerClient(modelClient, async (planner) => {
+    const plan = await planner.plan(
+      buildTask("Create a React app on my Desktop, run the app, and tell me if it worked. Execute now."),
+      "mock-planner"
+    );
+    assert.equal(modelClient.getPlannerCallCount(), 2);
+    assert.equal(plan.actions.some((action) => action.type === "start_process"), true);
+    assert.equal(plan.actions.some((action) => action.type === "probe_http"), true);
+    assert.ok(plan.plannerNotes.includes("repair=true"));
+  });
+});
+
+test("planner fails closed when explicit browser verification request omits verify_browser", async () => {
+  await withPlannerClient(new BrowserVerificationFailureModelClient(), async (planner) => {
+    await assert.rejects(
+      planner.plan(
+        buildTask("Create a React app on my Desktop, run the app, and verify the homepage UI. Execute now."),
+        "mock-planner"
+      ),
+      /no verify_browser action for explicit browser\/UI verification request/i
+    );
+  });
 });
 
 test("planner injects deterministic execution environment block into planner prompts", async () => {
@@ -923,7 +1578,7 @@ test("planner injects only distilled lessons from retrieval quarantine into plan
   }
 });
 
-test("planner fails closed when retrieval quarantine blocks private-range lesson content", async () => {
+test("planner suppresses quarantined private-range lesson content instead of failing the task", async () => {
   const modelClient = new PlaybookContextAwareModelClient();
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-planner-quarantine-block-"));
   try {
@@ -933,10 +1588,16 @@ test("planner fails closed when retrieval quarantine blocks private-range lesson
       "task_lesson_002"
     );
     const planner = new PlannerOrgan(modelClient, memoryStore);
-    await assert.rejects(
-      planner.plan(buildTask("Provide a deterministic summary response."), "mock-planner"),
-      /PRIVATE_RANGE_TARGET_DENIED/i
+    const plan = await planner.plan(
+      buildTask("Provide a deterministic summary response."),
+      "mock-planner"
     );
+
+    assert.equal(plan.actions.length, 1);
+    const plannerRequest = modelClient.getPlannerRequest();
+    assert.ok(plannerRequest);
+    assert.doesNotMatch(plannerRequest.systemPrompt, /Relevant Distilled Lessons:/i);
+    assert.doesNotMatch(plannerRequest.systemPrompt, /localhost/i);
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }
@@ -1163,6 +1824,73 @@ test("planner fails closed when explicit run-skill intent never yields run_skill
       planner.plan(buildTask(wrappedInput), "mock-planner"),
       /missing required run_skill action/i
     );
+  });
+});
+
+test("planner repairs explicit verify_browser subtasks when first plan drifts into unrelated actions", async () => {
+  const modelClient = new MissingVerifyBrowserThenRepairModelClient();
+
+  await withPlannerClient(modelClient, async (planner) => {
+    const plan = await planner.plan(
+      buildTask(
+        'verify_browser url=http://localhost:8000 expect_title="Playwright Proof Smoke" expect_content="Browser proof works"'
+      ),
+      "mock-planner"
+    );
+
+    assert.equal(modelClient.getPlannerCallCount(), 2);
+    assert.equal(plan.actions.length, 1);
+    assert.equal(plan.actions[0].type, "verify_browser");
+    assert.equal(plan.actions[0].params.url, "http://localhost:8000");
+  });
+});
+
+test("planner fails closed when explicit verify_browser subtasks never yield verify_browser", async () => {
+  const modelClient = new MissingVerifyBrowserAfterRepairModelClient();
+
+  await withPlannerClient(modelClient, async (planner) => {
+    await assert.rejects(
+      planner.plan(
+        buildTask(
+          'verify_browser url=http://localhost:8000 expect_title="Playwright Proof Smoke" expect_content="Browser proof works"'
+        ),
+        "mock-planner"
+      ),
+      /missing required verify_browser action/i
+    );
+  });
+});
+
+test("planner repairs explicit start_process subtasks when first plan drifts into unrelated actions", async () => {
+  const modelClient = new MissingStartProcessThenRepairModelClient();
+
+  await withPlannerClient(modelClient, async (planner) => {
+    const plan = await planner.plan(
+      buildTask(
+        'start_process cmd="python -m http.server 8000" cwd="C:\\Users\\benac\\OneDrive\\Desktop\\playwright-proof-smoke"'
+      ),
+      "mock-planner"
+    );
+
+    assert.equal(modelClient.getPlannerCallCount(), 2);
+    assert.equal(plan.actions.length, 1);
+    assert.equal(plan.actions[0].type, "start_process");
+    assert.equal(plan.actions[0].params.command, "python -m http.server 8000");
+  });
+});
+
+test("planner accepts check_process recovery subtasks without falsely requiring verify_browser", async () => {
+  await withPlannerClient(new CheckProcessRecoveryModelClient(), async (planner) => {
+    const plan = await planner.plan(
+      buildTask(
+        'check_process leaseId="proc_recovery_1". Managed process lease proc_recovery_1 started, but localhost was not ready yet. If the lease is still running, retry probe_port or probe_http once. Only continue to page-level proof after readiness passes.'
+      ),
+      "mock-planner"
+    );
+
+    assert.equal(plan.actions.length, 1);
+    assert.equal(plan.actions[0].type, "check_process");
+    assert.equal(plan.actions[0].params.leaseId, "proc_recovery_1");
   });
 });
 

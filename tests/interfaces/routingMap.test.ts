@@ -58,7 +58,15 @@ test("classifyRoutingIntentV1 does not over-classify explanation-only build prom
   assert.equal(classification.routeType, "none");
 });
 
-test("buildRoutingExecutionHintV1 returns deterministic hints for workflow replay and no hint for NONE", () => {
+test("buildRoutingExecutionHintV1 returns deterministic hints for build and workflow replay surfaces and no hint for NONE", () => {
+  const buildHint = buildRoutingExecutionHintV1(
+    classifyRoutingIntentV1("Create a React app on my Desktop and execute now.")
+  );
+  assert.ok(buildHint);
+  assert.match(buildHint ?? "", /Prefer governed finite proof steps first/i);
+  assert.match(buildHint ?? "", /Only use managed process plus probe actions/i);
+  assert.match(buildHint ?? "", /BUILD_NO_SIDE_EFFECT_EXECUTED/i);
+
   const workflowHint = buildRoutingExecutionHintV1(
     classifyRoutingIntentV1("Capture this flow, compile replay script, and block on selector mismatch.")
   );

@@ -122,7 +122,8 @@ export const LessonSignalRulepackV1 = Object.freeze({
     /\bclarif(?:y|ying)\b.*\b(requirements?|requests?|needs?)\b/i,
     /\bprioritizing clear(?: and concise)? communication\b/i,
     /\bthorough(?:ly)? understanding(?: of)? (?:the )?user context\b/i,
-    /\bprecise and relevant response\b/i
+    /\bprecise and relevant response\b/i,
+    /\b(?:localhost|127\.0\.0\.1|loopback|private[-\s]?range)\b.*\b(?:blocked|denied|policy|policies|ethics|security)\b/i
   ],
   highSignalKeywords: [
     "sandbox",

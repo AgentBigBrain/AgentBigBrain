@@ -275,7 +275,7 @@ function buildSharedSecurityConfig(env: NodeJS.ProcessEnv): SharedInterfaceSecur
 
   const showTechnicalSummary = parseBoolean(
     env.BRAIN_INTERFACE_SHOW_TECHNICAL_SUMMARY,
-    true
+    false
   );
   const ackDelayMs = parseBoundedIntOrThrow(
     env.BRAIN_INTERFACE_ACK_DELAY_MS,

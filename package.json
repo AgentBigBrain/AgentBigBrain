@@ -89,6 +89,7 @@
     "test:interface:contextual_followup_lexical_evidence": "tsx scripts/evidence/agentPulseContextualLexicalEvidence.ts",
     "test:interface:advanced_live_smoke": "tsx scripts/evidence/interfaceAdvancedLiveSmoke.ts",
     "test:interface:real_provider_live_smoke": "tsx scripts/evidence/interfaceRealProviderLiveSmoke.ts",
+    "test:runtime:managed_process_live_smoke": "tsx scripts/evidence/managedProcessLiveSmoke.ts",
     "test:skill:compiled_live_smoke": "node scripts/evidence/skillCompiledRuntimeLiveSmoke.cjs",
     "test:reflection:signal_evidence": "tsx scripts/evidence/reflectionSignalEvidence.ts",
     "test:profile_memory_commitment_evidence": "tsx scripts/evidence/profileMemoryCommitmentEvidence.ts",

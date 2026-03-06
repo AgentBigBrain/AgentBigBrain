@@ -424,7 +424,8 @@ export function buildRoutingExecutionHintV1(
     case "BUILD_SCAFFOLD":
       return [
         "Intent surface: build_scaffold.",
-        "Prefer governed build steps with explicit approval-diff rendering before write actions.",
+        "Prefer governed finite proof steps first (for example scaffold, edit, install, build, finite verification) with explicit approval-diff rendering before write actions.",
+        "Only use managed process plus probe actions when the user clearly asks to run or verify a live app/session.",
         "If no governed build action executes, return typed no-op reasonCode BUILD_NO_SIDE_EFFECT_EXECUTED."
       ].join(" ");
     case "CLONE_VARIANTS":

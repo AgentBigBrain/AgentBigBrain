@@ -100,6 +100,40 @@ test("classifyLessonSignal rejects low-signal generic communication lessons", ()
   assert.equal(result.matchedRuleId, "lesson_signal_v1_low_signal_pattern");
 });
 
+test("classifyLessonSignal rejects localhost policy lessons that would poison later planning", () => {
+  const runResult = buildRunResult([
+    {
+      action: {
+        id: "action_localhost_policy_reject",
+        type: "probe_http",
+        description: "probe localhost readiness",
+        params: {
+          url: "http://127.0.0.1:3000/"
+        },
+        estimatedCostUsd: 0.02
+      },
+      mode: "fast_path",
+      approved: false,
+      blockedBy: ["PROBE_HTTP_FAILED"],
+      violations: [{ code: "PROBE_HTTP_FAILED", message: "blocked" }],
+      votes: []
+    }
+  ]);
+
+  const result = classifyLessonSignal(
+    "Automated probing of localhost or starting local servers may be blocked due to security and ethics policies; consider providing manual instructions for such steps.",
+    {
+      runResult,
+      source: "failure",
+      existingLessons: []
+    }
+  );
+
+  assert.equal(result.allowPersist, false);
+  assert.equal(result.blockReason, "LOW_SIGNAL_PATTERN");
+  assert.equal(result.matchedRuleId, "lesson_signal_v1_low_signal_pattern");
+});
+
 test("classifyLessonSignal allows high-signal governance lessons", () => {
   const runResult = buildRunResult([
     {

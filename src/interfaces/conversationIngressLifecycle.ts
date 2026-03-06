@@ -24,6 +24,7 @@ import {
   cancelProposalDraft,
   createProposalDraft,
   renderConversationStatus,
+  renderConversationStatusDebug,
   renderProposalDraftStatus
 } from "./conversationDraftStatusPolicy";
 import {
@@ -335,6 +336,35 @@ async function handleImplicitProposalFlow(
 }
 
 /**
+ * Resolves `/status` command output with human-first default text and explicit debug fallback.
+ *
+ * **Why it exists:**
+ * Keeps status command argument handling deterministic so the normal user view stays simple while
+ * operators can still opt into delivery/lifecycle internals on demand.
+ *
+ * **What it talks to:**
+ * - Uses `renderConversationStatus` from `./conversationDraftStatusPolicy`.
+ * - Uses `renderConversationStatusDebug` from `./conversationDraftStatusPolicy`.
+ *
+ * @param session - Mutable session state being rendered.
+ * @param argument - Optional `/status` sub-argument.
+ * @returns User-facing status text for the requested mode.
+ */
+function resolveStatusCommandResponse(
+  session: ConversationSession,
+  argument: string
+): string {
+  const normalizedArgument = argument.trim().toLowerCase();
+  if (!normalizedArgument) {
+    return renderConversationStatus(session);
+  }
+  if (normalizedArgument === "debug") {
+    return renderConversationStatusDebug(session);
+  }
+  return "Usage: /status [debug]";
+}
+
+/**
  * Handles slash-command interactions with deterministic command-policy behavior.
  *
  * @param session - Mutable session state.
@@ -360,7 +390,7 @@ async function handleCommand(
   }
 
   if (command === "status") {
-    return renderConversationStatus(session);
+    return resolveStatusCommandResponse(session, argument);
   }
 
   if (command === "propose") {

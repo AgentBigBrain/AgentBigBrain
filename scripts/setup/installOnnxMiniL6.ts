@@ -11,6 +11,11 @@ import path from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 
+import {
+  buildAppleSiliconNodeMismatchMessage,
+  detectCurrentAppleSiliconNodeMismatch
+} from "../../src/core/appleSiliconRuntime";
+
 interface CliOptions {
   targetDir: string;
   force: boolean;
@@ -198,10 +203,29 @@ async function installArtifacts(options: CliOptions): Promise<void> {
 }
 
 /**
+ * Prints a deterministic setup warning when Apple Silicon is using x64 Node.
+ *
+ * @param options - CLI install options.
+ */
+function warnOnAppleSiliconNodeMismatch(options: CliOptions): void {
+  const mismatch = detectCurrentAppleSiliconNodeMismatch();
+  if (!mismatch) {
+    return;
+  }
+
+  const resolvedDir = path.resolve(options.targetDir);
+  console.warn(
+    `[Embeddings] Warning: ${buildAppleSiliconNodeMismatchMessage("onnxruntime-node")} ` +
+    `This setup command only downloads model assets into "${resolvedDir}"; it does not repair a mismatched native Node runtime.`
+  );
+}
+
+/**
  * Main CLI entrypoint.
  */
 async function main(): Promise<void> {
   const options = parseCliOptions(process.argv.slice(2));
+  warnOnAppleSiliconNodeMismatch(options);
   await installArtifacts(options);
 }
 
@@ -210,4 +234,3 @@ main().catch((error) => {
   console.error(`[Embeddings] Installation failed: ${message}`);
   process.exitCode = 1;
 });
-

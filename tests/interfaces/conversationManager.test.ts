@@ -293,8 +293,26 @@ test("conversation manager keeps session responsive with job queue status and he
         notifications.push(message);
       }
     );
-    assert.ok(statusDuringRun.includes("Running job:"));
-    assert.match(statusDuringRun, /Queued jobs:\s*\d+/);
+    assert.match(
+      statusDuringRun,
+      /Current status: (I'm working on a request right now\.|\d+ request(?:s)? (?:is|are) waiting to start\.)/
+    );
+    assert.match(
+      statusDuringRun,
+      /Queue: ((\d+ request|\d+ requests) waiting after the current run|(\d+ request|\d+ requests) waiting to start|no other requests waiting)\./
+    );
+    assert.ok(statusDuringRun.includes("Need delivery or lifecycle details? Use /status debug."));
+
+    const debugStatusDuringRun = await manager.handleMessage(
+      buildMessage("/status debug"),
+      async (input) => ({ summary: input }),
+      async (message) => {
+        notifications.push(message);
+      }
+    );
+    assert.ok(debugStatusDuringRun.includes("Debug status:"));
+    assert.ok(debugStatusDuringRun.includes("Running job:"));
+    assert.match(debugStatusDuringRun, /Queued jobs:\s*\d+/);
 
     await waitForAsync(async () => {
       const session = await store.getSession("telegram:chat-1:user-1");
@@ -312,9 +330,11 @@ test("conversation manager keeps session responsive with job queue status and he
       }
     );
 
-    assert.ok(statusAfterRun.includes("Running job: none"));
-    assert.ok(statusAfterRun.includes("Queued jobs: 0"));
-    assert.ok(notifications.some((message) => message.startsWith("Still working...")));
+    assert.ok(statusAfterRun.includes("Current status: Nothing is running right now."));
+    assert.ok(statusAfterRun.includes("Queue: empty."));
+    assert.ok(
+      notifications.some((message) => message.startsWith("Working on your request:"))
+    );
     assert.ok(notifications.some((message) => message.toLowerCase().includes("completed")));
   } finally {
     await removeTempDirWithRetry(tempDir);
@@ -381,7 +401,7 @@ test("conversation manager suppresses generic heartbeats for editable telegram t
     assert.equal(targetJob?.finalDeliveryOutcome, "sent");
 
     assert.equal(
-      notifications.some((message) => message.includes("Still working...")),
+      notifications.some((message) => message.includes("Working on your request:")),
       false
     );
     assert.equal(notifications.length > 0, true);
@@ -511,8 +531,8 @@ test("conversation manager recovers stale running job and resumes queued work", 
         notifications.push(message);
       }
     );
-    assert.ok(statusReply.includes("Running job: none"));
-    assert.ok(statusReply.includes("Queued jobs: 1"));
+    assert.ok(statusReply.includes("Current status: 1 request is waiting to start."));
+    assert.ok(statusReply.includes("Queue: 1 request waiting to start."));
 
     await waitFor(
       () => notifications.some((message) => message.includes("completed recover me")),
@@ -525,6 +545,23 @@ test("conversation manager recovers stale running job and resumes queued work", 
     assert.equal(session?.queuedJobs.length, 0);
     assert.ok(session?.recentJobs.some((job) => job.id === "job_stale_123" && job.status === "failed"));
     assert.ok(session?.recentJobs.some((job) => job.id === "job_queued_1" && job.status === "completed"));
+  } finally {
+    await removeTempDirWithRetry(tempDir);
+  }
+});
+
+test("conversation manager keeps detailed lifecycle state behind /status debug and rejects unknown status modes", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-conversation-status-debug-"));
+  const store = new InterfaceSessionStore(path.join(tempDir, "sessions.json"));
+  const manager = new ConversationManager(store);
+
+  try {
+    const usageReply = await manager.handleMessage(
+      buildMessage("/status verbose"),
+      async (input) => ({ summary: input }),
+      async () => { }
+    );
+    assert.equal(usageReply, "Usage: /status [debug]");
   } finally {
     await removeTempDirWithRetry(tempDir);
   }
