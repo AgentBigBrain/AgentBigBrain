@@ -1002,6 +1002,57 @@ test("AutonomousLoop emits deterministic aborted reason when task execution thro
   assert.match(abortedReason, /timed out/i);
 });
 
+test("AutonomousLoop logs planner live-run failures in plain language", async () => {
+  const orchestrator = {
+    runCount: 0,
+    async runTask(
+      _task: TaskRequest,
+      _options?: { signal?: AbortSignal }
+    ): Promise<TaskRunResult> {
+      orchestrator.runCount += 1;
+      throw new Error(
+        "Planner model returned no live-verification actions for execution-style live-run request."
+      );
+    }
+  };
+  const modelClient = new StubLoopModelClient([
+    {
+      isGoalMet: false,
+      reasoning: "continue",
+      nextUserInput: "next"
+    }
+  ]);
+  const loop = new AutonomousLoop(
+    orchestrator as unknown as BrainOrchestrator,
+    modelClient,
+    { ...DEFAULT_BRAIN_CONFIG, runtime: { ...DEFAULT_BRAIN_CONFIG.runtime, isDaemonMode: false } }
+  );
+
+  const originalConsoleLog = console.log;
+  const loggedLines: string[] = [];
+  console.log = (...args: unknown[]) => {
+    loggedLines.push(args.map((arg) => String(arg)).join(" "));
+  };
+
+  try {
+    await loop.run("Create a tiny local site, run it locally, and verify the homepage UI. Execute now.");
+  } finally {
+    console.log = originalConsoleLog;
+  }
+
+  const abortLine = loggedLines.find((line) => line.includes("[Autonomous Loop Aborted]")) ?? "";
+  assert.equal(orchestrator.runCount, 1);
+  assert.match(abortLine, /planner never produced a valid live-run verification plan/i);
+  assert.match(
+    abortLine,
+    /next step: retry with an explicit request to start the app, prove readiness with probe_http, and then verify the page with verify_browser/i
+  );
+  assert.doesNotMatch(
+    abortLine,
+    /Planner model returned no live-verification actions for execution-style live-run request/i
+  );
+});
+
 test("AutonomousLoop reports user cancellation when task execution aborts mid-iteration", async () => {
   const orchestrator = new AbortAwareOrchestrator();
   const modelClient = new StubLoopModelClient([

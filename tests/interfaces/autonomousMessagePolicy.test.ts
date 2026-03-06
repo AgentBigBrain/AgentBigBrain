@@ -32,46 +32,58 @@ test("humanizeAutonomousStopReason explains stalled browser-proof runs plainly",
 });
 
 test("humanizeAutonomousStopReason explains user cancellation plainly", () => {
-  assert.equal(
-    humanizeAutonomousStopReason("Cancelled by user."),
-    "Stopped because you cancelled the run."
-  );
+  const rendered = humanizeAutonomousStopReason("Cancelled by user.");
+
+  assert.match(rendered, /stopped because you cancelled the run/i);
+  assert.match(rendered, /next step: restart the run when you are ready to continue/i);
 });
 
 test("humanizeAutonomousStopReason explains explicit browser-proof gating plainly", () => {
-  assert.equal(
-    humanizeAutonomousStopReason(
-      "[reasonCode=AUTONOMOUS_EXECUTION_STYLE_BROWSER_EVIDENCE_REQUIRED] Goal completion deferred: missing mission requirement(s) BROWSER_PROOF."
-    ),
-    "I need browser or UI proof before I can say the page rendered as expected."
+  const rendered = humanizeAutonomousStopReason(
+    "[reasonCode=AUTONOMOUS_EXECUTION_STYLE_BROWSER_EVIDENCE_REQUIRED] Goal completion deferred: missing mission requirement(s) BROWSER_PROOF."
   );
+
+  assert.match(rendered, /need browser or UI proof/i);
+  assert.match(rendered, /next step: keep the app running and add verify_browser after readiness passes/i);
 });
 
 test("humanizeAutonomousStopReason explains internal localhost-lesson failures plainly", () => {
-  assert.equal(
-    humanizeAutonomousStopReason(
-      "[reasonCode=AUTONOMOUS_TASK_EXECUTION_FAILED] Iteration 10 failed before completion: Retrieval quarantine blocked lesson lesson_demo: PRIVATE_RANGE_TARGET_DENIED (Private-range or localhost target patterns are denied in retrieval quarantine.)"
-    ),
-    "I stopped because an internal saved lesson about localhost was filtered out. That internal note should have been ignored instead of stopping your task."
+  const rendered = humanizeAutonomousStopReason(
+    "[reasonCode=AUTONOMOUS_TASK_EXECUTION_FAILED] Iteration 10 failed before completion: Retrieval quarantine blocked lesson lesson_demo: PRIVATE_RANGE_TARGET_DENIED (Private-range or localhost target patterns are denied in retrieval quarantine.)"
+  );
+
+  assert.match(rendered, /internal saved lesson about localhost was filtered out/i);
+  assert.match(rendered, /next step: retry the same request/i);
+});
+
+test("humanizeAutonomousStopReason explains planner live-run verification failures plainly", () => {
+  const rendered = humanizeAutonomousStopReason(
+    "[reasonCode=AUTONOMOUS_TASK_EXECUTION_FAILED] Iteration 1 failed before completion: Planner model returned no live-verification actions for execution-style live-run request."
+  );
+
+  assert.match(rendered, /planner never produced a valid live-run verification plan/i);
+  assert.match(
+    rendered,
+    /next step: retry with an explicit request to start the app, prove readiness with probe_http, and then verify the page with verify_browser/i
   );
 });
 
 test("humanizeAutonomousStopReason explains blocked live verification plainly", () => {
-  assert.equal(
-    humanizeAutonomousStopReason(
-      "[reasonCode=AUTONOMOUS_EXECUTION_STYLE_LIVE_VERIFICATION_BLOCKED] Live verification stopped because the environment blocked localhost readiness and browser verification steps, so I could not truthfully confirm the app or page in this run."
-    ),
-    "I stopped because this environment blocked the localhost readiness or browser verification steps, so I could not truthfully confirm the app or page in this run."
+  const rendered = humanizeAutonomousStopReason(
+    "[reasonCode=AUTONOMOUS_EXECUTION_STYLE_LIVE_VERIFICATION_BLOCKED] Live verification stopped because the environment blocked localhost readiness and browser verification steps, so I could not truthfully confirm the app or page in this run."
   );
+
+  assert.match(rendered, /environment blocked the localhost readiness or browser verification steps/i);
+  assert.match(rendered, /next step: allow local process and browser verification/i);
 });
 
 test("humanizeAutonomousStopReason explains never-ready local processes plainly", () => {
-  assert.equal(
-    humanizeAutonomousStopReason(
-      "[reasonCode=AUTONOMOUS_EXECUTION_STYLE_PROCESS_NEVER_READY] Live verification stopped because the running local process never became HTTP-ready at http://localhost:8000, so I stopped retrying and could not truthfully confirm the app or page in this run."
-    ),
-    "I stopped because the local server process kept running but never became HTTP-ready, so I could not truthfully verify the app or page in this run."
+  const rendered = humanizeAutonomousStopReason(
+    "[reasonCode=AUTONOMOUS_EXECUTION_STYLE_PROCESS_NEVER_READY] Live verification stopped because the running local process never became HTTP-ready at http://localhost:8000, so I stopped retrying and could not truthfully confirm the app or page in this run."
   );
+
+  assert.match(rendered, /local server process kept running but never became HTTP-ready/i);
+  assert.match(rendered, /next step: inspect the server command, chosen port, and startup logs/i);
 });
 
 test("buildAutonomousIterationProgressMessage renders human-first step progress", () => {
@@ -93,6 +105,7 @@ test("buildAutonomousGoalAbortedProgressMessage keeps totals while hiding raw re
   assert.doesNotMatch(rendered, /\[reasonCode=/i);
   assert.match(rendered, /Stopped after 4 iteration\(s\)\./i);
   assert.match(rendered, /configured iteration limit/i);
+  assert.match(rendered, /next step: narrow the goal or raise the iteration limit/i);
   assert.match(rendered, /2 action\(s\) approved, 1 blocked\./i);
 });
 
@@ -121,6 +134,7 @@ test("buildAutonomousTerminalSummaryMessage returns human-first stopped summarie
 
   assert.match(rendered, /Autonomous task stopped after 3 iteration\(s\)\./i);
   assert.match(rendered, /Why it stopped: Stopped because you cancelled the run\./i);
+  assert.match(rendered, /Next step: restart the run when you are ready to continue\./i);
 });
 
 test("buildAutonomousTerminalSummaryMessage keeps completed summaries human-first", () => {

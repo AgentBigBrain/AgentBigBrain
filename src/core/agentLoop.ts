@@ -14,6 +14,7 @@ import {
 } from "../models/types";
 import { selectModelForRole } from "./modelRouting";
 import { BrainConfig } from "./config";
+import { humanizeAutonomousStopReason } from "./autonomousReasonText";
 import {
     classifyRoutingIntentV1,
     isExecutionSurfaceRoutingClassification
@@ -2000,7 +2001,7 @@ export class AutonomousLoop {
                     );
                     trackedManagedProcessLeaseId = null;
                 }
-                console.log(`\n[Autonomous Loop Aborted] ${reason}\n`);
+                console.log(`\n[Autonomous Loop Aborted] ${humanizeAutonomousStopReason(reason)}\n`);
                 await callbacks?.onGoalAborted?.(reason, currentIteration);
                 goalMetInCurrentLoop = true;
             };

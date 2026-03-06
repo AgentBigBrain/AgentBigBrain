@@ -2,102 +2,7 @@
  * @fileoverview Renders human-first autonomous progress and terminal messages for chat interfaces.
  */
 
-const AUTONOMOUS_REASON_CODE_PATTERN = /^\[reasonCode=([A-Z0-9_]+)\]\s*/i;
-
-/**
- * Extracts a typed autonomous reason code from prefixed runtime text.
- *
- * **Why it exists:**
- * Keeps reason-code parsing deterministic and reusable so adapters can render human-first summaries
- * without duplicating regex logic.
- *
- * **What it talks to:**
- * - Uses local deterministic regex helpers within this module.
- *
- * @param reason - Raw autonomous-loop reason text.
- * @returns Parsed reason code, or `null` when no prefixed code exists.
- */
-function extractAutonomousReasonCode(reason: string): string | null {
-  const match = reason.match(AUTONOMOUS_REASON_CODE_PATTERN);
-  return match?.[1] ?? null;
-}
-
-/**
- * Removes the typed autonomous reason-code prefix from runtime text.
- *
- * **Why it exists:**
- * User-facing chat summaries should not lead with bracketed machine codes, but the underlying text
- * still needs to be available for deterministic humanization.
- *
- * **What it talks to:**
- * - Uses local deterministic regex helpers within this module.
- *
- * @param reason - Raw autonomous-loop reason text.
- * @returns Reason text without the leading reason-code prefix.
- */
-function stripAutonomousReasonCode(reason: string): string {
-  return reason.replace(AUTONOMOUS_REASON_CODE_PATTERN, "").trim();
-}
-
-/**
- * Renders a human-first explanation for stalled autonomous runs based on missing evidence.
- *
- * **Why it exists:**
- * Stalled autonomous-loop reasons include deterministic requirement tokens such as `BROWSER_PROOF`
- * and `READINESS_PROOF`. This helper translates those machine-readable hints into plain language so
- * chat interfaces explain what proof was still missing when the loop stopped.
- *
- * **What it talks to:**
- * - Uses local deterministic regex helpers within this module.
- *
- * @param reason - Autonomous stall reason with any reason-code prefix already stripped.
- * @returns Human-readable stalled-run explanation.
- */
-function humanizeAutonomousStallReason(reason: string): string {
-  if (/\bBROWSER_PROOF\b/i.test(reason)) {
-    return "I stopped because I still did not get browser or UI proof that the page rendered as expected.";
-  }
-  if (/\bREADINESS_PROOF\b/i.test(reason)) {
-    return "I stopped because I still did not get readiness proof that the app or service was running.";
-  }
-  if (/\bARTIFACT_MUTATION\b/i.test(reason)) {
-    return "I stopped because I still did not get proof that the requested project files or artifacts were changed.";
-  }
-  if (/\bTARGET_PATH_TOUCH\b/i.test(reason)) {
-    return "I stopped because I still did not get proof that the requested target path was touched.";
-  }
-  return (
-    "I stopped because I could not verify enough real execution progress to prove the goal " +
-    "happened in this run."
-  );
-}
-
-/**
- * Renders a human-first explanation for autonomous execution failures.
- *
- * **Why it exists:**
- * Some autonomous aborts come from internal planner or learning-path faults that should be
- * described plainly instead of echoed back as raw infrastructure jargon in chat.
- *
- * **What it talks to:**
- * - Uses local regex helpers within this module.
- *
- * @param reason - Autonomous execution failure text with any reason-code prefix already stripped.
- * @returns Human-readable execution failure explanation.
- */
-function humanizeAutonomousExecutionFailureReason(reason: string): string {
-  if (/Retrieval quarantine blocked lesson .*PRIVATE_RANGE_TARGET_DENIED/i.test(reason)) {
-    return (
-      "I stopped because an internal saved lesson about localhost was filtered out. " +
-      "That internal note should have been ignored instead of stopping your task."
-    );
-  }
-
-  return reason.replace(
-    /^Iteration\s+\d+\s+failed\s+before\s+completion:\s*/i,
-    "I hit an execution failure: "
-  );
-}
+import { humanizeAutonomousStopReason as humanizeSharedAutonomousStopReason } from "../core/autonomousReasonText";
 
 /**
  * Renders a human-first explanation for autonomous stop/abort reasons.
@@ -107,57 +12,13 @@ function humanizeAutonomousExecutionFailureReason(reason: string): string {
  * control-plane reason codes or implementation-specific diagnostics.
  *
  * **What it talks to:**
- * - Uses local reason-code parsing helpers within this module.
+ * - Uses `humanizeAutonomousStopReason` (imported as `humanizeSharedAutonomousStopReason`) from `../core/autonomousReasonText`.
  *
  * @param reason - Raw autonomous-loop reason text.
  * @returns Human-readable stop explanation with no bracketed reason codes.
  */
 export function humanizeAutonomousStopReason(reason: string): string {
-  const reasonCode = extractAutonomousReasonCode(reason);
-  const strippedReason = stripAutonomousReasonCode(reason);
-
-  if (!reasonCode) {
-    if (/^cancelled by user\.?$/i.test(strippedReason)) {
-      return "Stopped because you cancelled the run.";
-    }
-    return strippedReason;
-  }
-
-  switch (reasonCode) {
-    case "AUTONOMOUS_EXECUTION_STYLE_STALLED_NO_SIDE_EFFECT":
-      return humanizeAutonomousStallReason(strippedReason);
-    case "AUTONOMOUS_EXECUTION_STYLE_SIDE_EFFECT_REQUIRED":
-      return "I need real executed side effects before I can call this goal done.";
-    case "AUTONOMOUS_EXECUTION_STYLE_TARGET_PATH_EVIDENCE_REQUIRED":
-      return "I need evidence that the requested target path was actually touched.";
-    case "AUTONOMOUS_EXECUTION_STYLE_MUTATION_EVIDENCE_REQUIRED":
-      return "I need evidence that the requested project files or artifacts were actually changed.";
-    case "AUTONOMOUS_EXECUTION_STYLE_READINESS_EVIDENCE_REQUIRED":
-      return "I need readiness proof before I can say the app or service is running.";
-    case "AUTONOMOUS_EXECUTION_STYLE_BROWSER_EVIDENCE_REQUIRED":
-      return "I need browser or UI proof before I can say the page rendered as expected.";
-    case "AUTONOMOUS_EXECUTION_STYLE_LIVE_VERIFICATION_BLOCKED":
-      return (
-        "I stopped because this environment blocked the localhost readiness or browser verification steps, " +
-        "so I could not truthfully confirm the app or page in this run."
-      );
-    case "AUTONOMOUS_EXECUTION_STYLE_PROCESS_NEVER_READY":
-      return (
-        "I stopped because the local server process kept running but never became HTTP-ready, " +
-        "so I could not truthfully verify the app or page in this run."
-      );
-    case "AUTONOMOUS_MAX_ITERATIONS_REACHED":
-      return "I hit the configured iteration limit before I could finish.";
-    case "AUTONOMOUS_TASK_EXECUTION_FAILED":
-      return humanizeAutonomousExecutionFailureReason(strippedReason);
-    case "AUTONOMOUS_LOOP_RUNTIME_ERROR":
-      return strippedReason.replace(
-        /^Autonomous loop runtime failure:\s*/i,
-        "I hit a runtime error: "
-      );
-    default:
-      return strippedReason;
-  }
+  return humanizeSharedAutonomousStopReason(reason);
 }
 
 /**
