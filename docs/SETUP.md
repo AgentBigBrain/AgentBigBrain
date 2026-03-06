@@ -460,6 +460,8 @@ Autonomous iteration cap guidance:
 - In unbounded mode, the loop can still stop due to goal completion, safety/governance outcomes, zero-progress guard, errors, or manual cancellation (`Ctrl+C`).
 - For execution-style autonomous goals (for example build/create/write requests), completion is gated: the loop will not mark `Goal Met` until at least one approved real side-effect action executes in that mission.
 - Read-only actions (`read_file`, `list_directory`) and simulated outputs are excluded from execution-style completion evidence.
+- If your goal includes an explicit target path, completion also requires path-touch evidence (approved real side effect touching that path). Path drift produces `AUTONOMOUS_EXECUTION_STYLE_TARGET_PATH_EVIDENCE_REQUIRED`.
+- If your goal asks for customization/editing outcomes (for example dark theme, UI components, style/content replacement), completion also requires artifact-mutation evidence from explicit typed mutation actions (`write_file`, `delete_file`, `self_modify`, `memory_mutation`, `network_write`, `create_skill`, `run_skill`). Shell-command text is not used as mutation proof. Missing evidence defers completion with `AUTONOMOUS_EXECUTION_STYLE_MUTATION_EVIDENCE_REQUIRED`.
 - If execution-style iterations keep approving only `respond`, loop termination is bounded by deterministic stall-abort (`reasonCode=AUTONOMOUS_EXECUTION_STYLE_STALLED_NO_SIDE_EFFECT`) rather than waiting for max-iteration exhaustion.
 
 Daemon mode (fail-closed latches required):

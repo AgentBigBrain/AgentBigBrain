@@ -186,6 +186,31 @@ function buildApprovedSimulatedShellResult(actionId: string): ActionRunResult {
   };
 }
 
+/**
+ * Implements `buildApprovedShellResult` behavior within module scope.
+ * Interacts with local collaborators through imported modules and typed inputs/outputs.
+ */
+function buildApprovedShellResult(actionId: string, command: string): ActionRunResult {
+  return {
+    action: {
+      id: actionId,
+      type: "shell_command",
+      description: "execute shell command",
+      params: {
+        command
+      },
+      estimatedCostUsd: 0.08
+    },
+    mode: "escalation_path",
+    approved: true,
+    output: `Shell command completed: ${command}`,
+    executionStatus: "success",
+    blockedBy: [],
+    violations: [],
+    votes: []
+  };
+}
+
 class StubLoopModelClient implements ModelClient {
   readonly backend = "mock" as const;
   private nextStepCallCount = 0;
@@ -543,4 +568,119 @@ test("AutonomousLoop emits deterministic aborted reason when task execution thro
   assert.equal(orchestrator.runCount, 1);
   assert.match(abortedReason, /\[reasonCode=AUTONOMOUS_TASK_EXECUTION_FAILED\]/i);
   assert.match(abortedReason, /timed out/i);
+});
+
+test("AutonomousLoop does not mark explicit-path missions complete when side effects touch a different path", async () => {
+  const orchestrator = new ScriptedOrchestrator([
+    [buildApprovedShellResult("shell_1", "npx create-react-app C:\\Users\\benac\\OneDrive\\Desktop\\wrong-app")],
+    [buildApprovedShellResult("shell_2", "npx create-react-app C:\\Users\\benac\\OneDrive\\Desktop\\wrong-app")],
+    [buildApprovedShellResult("shell_3", "npx create-react-app C:\\Users\\benac\\OneDrive\\Desktop\\wrong-app")]
+  ]);
+  const modelClient = new StubLoopModelClient([
+    {
+      isGoalMet: true,
+      reasoning: "work completed",
+      nextUserInput: ""
+    }
+  ]);
+  const loop = new AutonomousLoop(
+    orchestrator as unknown as BrainOrchestrator,
+    modelClient,
+    { ...DEFAULT_BRAIN_CONFIG, runtime: { ...DEFAULT_BRAIN_CONFIG.runtime, isDaemonMode: false } }
+  );
+
+  let goalMetCalled = false;
+  let abortedReason = "";
+  await loop.run(
+    "Create a React app at C:\\Users\\benac\\OneDrive\\Desktop\\robinhood-mock and execute now.",
+    {
+      onGoalMet: async () => {
+        goalMetCalled = true;
+      },
+      onGoalAborted: async (reason) => {
+        abortedReason = reason;
+      }
+    }
+  );
+
+  assert.equal(goalMetCalled, false);
+  assert.equal(orchestrator.runCount, 4);
+  assert.match(abortedReason, /\[reasonCode=AUTONOMOUS_EXECUTION_STYLE_STALLED_NO_SIDE_EFFECT\]/i);
+  assert.match(abortedReason, /TARGET_PATH_TOUCH/i);
+});
+
+test("AutonomousLoop requires artifact mutation evidence for customization-heavy execution goals", async () => {
+  const orchestrator = new ScriptedOrchestrator([
+    [buildApprovedShellResult("shell_scaffold_1", "npx create-react-app C:\\Users\\benac\\OneDrive\\Desktop\\robinhood-mock")],
+    [buildApprovedShellResult("shell_scaffold_2", "npx create-react-app C:\\Users\\benac\\OneDrive\\Desktop\\robinhood-mock")],
+    [buildApprovedShellResult("shell_scaffold_3", "npx create-react-app C:\\Users\\benac\\OneDrive\\Desktop\\robinhood-mock")]
+  ]);
+  const modelClient = new StubLoopModelClient([
+    {
+      isGoalMet: true,
+      reasoning: "scaffold exists",
+      nextUserInput: ""
+    }
+  ]);
+  const loop = new AutonomousLoop(
+    orchestrator as unknown as BrainOrchestrator,
+    modelClient,
+    { ...DEFAULT_BRAIN_CONFIG, runtime: { ...DEFAULT_BRAIN_CONFIG.runtime, isDaemonMode: false } }
+  );
+
+  let goalMetCalled = false;
+  let abortedReason = "";
+  await loop.run(
+    "Create a React app at C:\\Users\\benac\\OneDrive\\Desktop\\robinhood-mock with a modern dark theme, Robinhood-style UI, and stock components. Execute now.",
+    {
+      onGoalMet: async () => {
+        goalMetCalled = true;
+      },
+      onGoalAborted: async (reason) => {
+        abortedReason = reason;
+      }
+    }
+  );
+
+  assert.equal(goalMetCalled, false);
+  assert.equal(orchestrator.runCount, 4);
+  assert.match(abortedReason, /\[reasonCode=AUTONOMOUS_EXECUTION_STYLE_STALLED_NO_SIDE_EFFECT\]/i);
+  assert.match(abortedReason, /ARTIFACT_MUTATION/i);
+});
+
+test("AutonomousLoop allows customization-heavy execution completion after real mutation evidence", async () => {
+  const orchestrator = new ScriptedOrchestrator([
+    [buildApprovedShellResult("shell_scaffold_1", "npx create-react-app C:\\Users\\benac\\OneDrive\\Desktop\\robinhood-mock")],
+    [buildApprovedWriteFileResult("write_1")]
+  ]);
+  const modelClient = new StubLoopModelClient([
+    {
+      isGoalMet: false,
+      reasoning: "continue",
+      nextUserInput: "apply requested customizations"
+    },
+    {
+      isGoalMet: true,
+      reasoning: "customization files written",
+      nextUserInput: ""
+    }
+  ]);
+  const loop = new AutonomousLoop(
+    orchestrator as unknown as BrainOrchestrator,
+    modelClient,
+    { ...DEFAULT_BRAIN_CONFIG, runtime: { ...DEFAULT_BRAIN_CONFIG.runtime, isDaemonMode: false } }
+  );
+
+  let goalMetReasoning = "";
+  await loop.run(
+    "Create a React app on my Desktop with modern dark Robinhood-style UI components and execute now.",
+    {
+      onGoalMet: async (reasoning) => {
+        goalMetReasoning = reasoning;
+      }
+    }
+  );
+
+  assert.equal(orchestrator.runCount, 2);
+  assert.match(goalMetReasoning, /customization files written/i);
 });

@@ -226,6 +226,9 @@ Both paths remain governed by orchestrator policy.
 - autonomous mode
 - daemon mode (with explicit safety latches and rollover limits)
 - deterministic completion gate for execution-style missions: no `Goal Met` until mission-level approved real side-effect evidence exists (`read_file`/`list_directory` and simulated outcomes are excluded)
+- deterministic mission contract checks before completion:
+  - explicit-path missions require target-path touch evidence (`AUTONOMOUS_EXECUTION_STYLE_TARGET_PATH_EVIDENCE_REQUIRED`)
+  - customization-heavy missions require artifact-mutation evidence from explicit typed mutation actions (shell-command text is excluded from mutation proof) (`AUTONOMOUS_EXECUTION_STYLE_MUTATION_EVIDENCE_REQUIRED`)
 - deterministic side-effect-aware stall abort for execution-style respond-only loops (`reasonCode=AUTONOMOUS_EXECUTION_STYLE_STALLED_NO_SIDE_EFFECT`)
 - deterministic task-step failure aborts: loop task-execution exceptions are converted to typed aborted reasons (`reasonCode=AUTONOMOUS_TASK_EXECUTION_FAILED`) rather than bubbling as generic interface failures
 - stall-abort threshold is operator-configurable via `BRAIN_AUTONOMOUS_MAX_CONSECUTIVE_NO_PROGRESS` (default `3`)

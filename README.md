@@ -233,6 +233,8 @@ Autonomous execution semantics:
 
 - For execution-style goals, `Goal Met` is only allowed after at least one approved real side-effect action occurs in the current mission.
 - Read-only actions (`read_file`, `list_directory`) and simulated outcomes do not count as completion evidence for execution-style missions.
+- For goals with explicit target paths, completion is gated on path-touch evidence: at least one approved real side effect must touch the requested path. Path drift triggers typed defer reasons (`AUTONOMOUS_EXECUTION_STYLE_TARGET_PATH_EVIDENCE_REQUIRED`).
+- For customization-heavy goals (for example theme/UI/component/style changes), completion is gated on mutation evidence from explicit typed mutation actions (`write_file`, `delete_file`, `self_modify`, `memory_mutation`, `network_write`, `create_skill`, `run_skill`). Shell-command text alone is intentionally excluded from mutation proof (`AUTONOMOUS_EXECUTION_STYLE_MUTATION_EVIDENCE_REQUIRED`).
 - Repeated respond-only execution-style iterations trigger bounded deterministic abort (`reasonCode=AUTONOMOUS_EXECUTION_STYLE_STALLED_NO_SIDE_EFFECT`) instead of silently looping until cap.
 - `BRAIN_AUTONOMOUS_MAX_CONSECUTIVE_NO_PROGRESS` controls the stall-abort threshold (`3` by default).
 - Iteration runtime failures (for example provider timeout during a loop step) now terminate with deterministic stopped-state reason codes instead of ambiguous generic failure text (`AUTONOMOUS_TASK_EXECUTION_FAILED` in-loop, `AUTONOMOUS_LOOP_RUNTIME_ERROR` adapter fallback).
