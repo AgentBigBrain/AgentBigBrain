@@ -43,7 +43,7 @@ npm run dev -- "summarize current repo status"
 
 ## Operational Gates
 
-1. **Determinism gate:** Do not add nondeterministic sources (`Date.now()`, `Math.random()`, unstable iteration order) without injected boundaries and tests proving determinism at the contract layer.
+1. **Determinism gate:** Do not add nondeterministic sources (`Date.now()`, `Math.random()`, unstable iteration order) without injected boundaries and tests proving determinism at the contract layer. For runtime time/random boundaries, route through `src/core/runtimeEntropy.ts`.
 2. **Resource lifecycle gate:** Use `using` / `await using` for resources implementing `Symbol.dispose` / `Symbol.asyncDispose` (e.g., SQLite `DatabaseSync` and file handles). Otherwise use deterministic `try/finally` teardown with explicit `release()` where available.
 3. **ActionType change gate:** If you add or change `ActionType` or action params, you must update, at minimum:
    - `src/core/types.ts` (shape contracts)

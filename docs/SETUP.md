@@ -156,20 +156,33 @@ This token maps to:
 TELEGRAM_BOT_TOKEN=<botfather_token>
 ```
 
-### B) Find your chat ID (optional but recommended allowlist)
+### B) Find your Telegram username, user ID, and chat ID
 
-1. Send a message to your bot (for example `/start`).
-2. Query updates:
+1. Make sure your Telegram account has a username set in Telegram settings.
+2. Send a message to your bot (for example `/start`).
+3. Query updates:
 
 ```bash
 curl -sS "https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/getUpdates"
 ```
 
-3. Read `message.chat.id` from the payload.
+4. Read these fields from the payload:
+
+- `message.from.username` -> `BRAIN_INTERFACE_ALLOWED_USERNAMES`
+- `message.from.id` -> `BRAIN_INTERFACE_ALLOWED_USER_IDS`
+- `message.chat.id` -> `TELEGRAM_ALLOWED_CHAT_IDS`
+
+Practical notes:
+
+- `BRAIN_INTERFACE_ALLOWED_USERNAMES` is required, so if `message.from.username` is blank you need to create a Telegram username first.
+- `BRAIN_INTERFACE_ALLOWED_USER_IDS` is optional stricter filtering. Most first-time setups can leave it blank, confirm the bot responds, then add it later.
+- `TELEGRAM_ALLOWED_CHAT_IDS` is also optional. Add it if you want the bot restricted to specific chats.
 
 This maps to:
 
 ```env
+BRAIN_INTERFACE_ALLOWED_USERNAMES=<telegram_username_without_at>
+BRAIN_INTERFACE_ALLOWED_USER_IDS=<telegram_user_id>
 TELEGRAM_ALLOWED_CHAT_IDS=<chat_id_1,chat_id_2>
 ```
 
@@ -187,6 +200,13 @@ TELEGRAM_BOT_TOKEN=<botfather_token>
 Username format note:
 
 - `BRAIN_INTERFACE_ALLOWED_USERNAMES` is normalized by runtime to lowercase with any leading `@` removed.
+
+Optional stricter Telegram allowlists:
+
+```env
+BRAIN_INTERFACE_ALLOWED_USER_IDS=<telegram_user_id>
+TELEGRAM_ALLOWED_CHAT_IDS=<chat_id_1,chat_id_2>
+```
 
 Useful optional controls:
 
@@ -251,14 +271,23 @@ In OAuth2 URL generator:
 
 Authorize against your target server.
 
-### D) Get target channel IDs (optional strict allowlist)
+### D) Find your Discord username, user ID, and channel ID
 
 1. Enable Developer Mode in Discord.
-2. Right-click channel -> Copy Channel ID.
+2. Use your Discord account username for `BRAIN_INTERFACE_ALLOWED_USERNAMES`.
+3. Right-click your user in Discord -> Copy User ID.
+4. Right-click channel -> Copy Channel ID.
+
+Practical notes:
+
+- Use your account username, not a server nickname or display name. The runtime validates against Discord `author.username`.
+- `BRAIN_INTERFACE_ALLOWED_USER_IDS` is optional stricter filtering. Most first-time setups can leave it blank, confirm the bot responds, then add it later.
 
 This maps to:
 
 ```env
+BRAIN_INTERFACE_ALLOWED_USERNAMES=<discord_username>
+BRAIN_INTERFACE_ALLOWED_USER_IDS=<discord_user_id>
 DISCORD_ALLOWED_CHANNEL_IDS=<channel_id_1,channel_id_2>
 ```
 
@@ -281,6 +310,7 @@ Username format note:
 Optional:
 
 ```env
+BRAIN_INTERFACE_ALLOWED_USER_IDS=<discord_user_id>
 DISCORD_GATEWAY_INTENTS=37377
 DISCORD_ALLOWED_CHANNEL_IDS=<channel_ids>
 ```
@@ -296,7 +326,26 @@ Expected:
 - Startup succeeds with no missing-env error.
 - Messages from allowlisted usernames route to governed execution.
 
-## 10) Shared Interface Settings Explained
+## 10) Interface Identity Lookup Cheat Sheet
+
+Use this when filling `.env` so you know exactly where each interface value comes from.
+
+| Env var | Telegram source | Discord source |
+|---|---|---|
+| `BRAIN_INTERFACE_ALLOWED_USERNAMES` | `message.from.username` from `getUpdates`; create a Telegram username first if blank. | Your account username. Do not use display name or server nickname. |
+| `BRAIN_INTERFACE_ALLOWED_USER_IDS` | `message.from.id` from `getUpdates`. | Enable Developer Mode, then right-click your user and copy User ID. |
+| `TELEGRAM_ALLOWED_CHAT_IDS` | `message.chat.id` from `getUpdates` after messaging the bot. | n/a |
+| `DISCORD_ALLOWED_CHANNEL_IDS` | n/a | Enable Developer Mode, then right-click the target channel and copy Channel ID. |
+| `TELEGRAM_BOT_TOKEN` | BotFather `/newbot` output. | n/a |
+| `DISCORD_BOT_TOKEN` | n/a | Discord Developer Portal -> Bot -> Reset/Copy Token. |
+
+Bring-up recommendation:
+
+- Start with `BRAIN_INTERFACE_ALLOWED_USERNAMES` plus the provider bot token.
+- Leave `BRAIN_INTERFACE_ALLOWED_USER_IDS`, `TELEGRAM_ALLOWED_CHAT_IDS`, and `DISCORD_ALLOWED_CHANNEL_IDS` empty until the bot responds once.
+- After initial success, add the stricter ID/chat/channel allowlists if you want tighter ingress control.
+
+## 11) Shared Interface Settings Explained
 
 These apply to Telegram, Discord, or both.
 
@@ -305,7 +354,7 @@ These apply to Telegram, Discord, or both.
 | `BRAIN_INTERFACE_PROVIDER` | Yes | `telegram`, `discord`, `both`, or `telegram,discord`. |
 | `BRAIN_INTERFACE_SHARED_SECRET` | Yes | Ingress auth secret used by interface adapters. |
 | `BRAIN_INTERFACE_ALLOWED_USERNAMES` | Yes | Comma list of allowed usernames. Normalized lowercase, `@` ignored. |
-| `BRAIN_INTERFACE_ALLOWED_USER_IDS` | No | Optional stricter ID-level allowlist. |
+| `BRAIN_INTERFACE_ALLOWED_USER_IDS` | No | Optional stricter ID-level allowlist. Telegram: `message.from.id` from `getUpdates`. Discord: Developer Mode -> Copy User ID. |
 | `BRAIN_INTERFACE_REQUIRE_NAME_CALL` | No | Requires explicit agent name mention to process input. |
 | `BRAIN_INTERFACE_NAME_ALIASES` | No | Allowed aliases when name-call is required (default includes `BigBrain`). |
 | `BRAIN_INTERFACE_RATE_LIMIT_WINDOW_MS` | No | Rate-limit window size. |
@@ -318,7 +367,7 @@ These apply to Telegram, Discord, or both.
 | `BRAIN_ALLOW_AUTONOMOUS_VIA_INTERFACE` | No | Allows interface-origin autonomous execution requests. |
 | `BRAIN_ENABLE_DYNAMIC_PULSE` | No | Enables dynamic pulse behavior in interface runtime. |
 
-## 11) `.env` Profiles You Can Copy
+## 12) `.env` Profiles You Can Copy
 
 ### Telegram-only profile
 
@@ -368,7 +417,20 @@ Node:
 node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
 ```
 
-## 12) Runtime Modes
+## 12A) `/help` Command Surface Expectations
+
+When running `npm run dev:interface`, use `/help` to view live command guidance.
+
+Current operator contract:
+
+- There is no separate `/skill` command.
+- Use `/chat` or `/propose` with `create skill ...` / `run skill ...`.
+- For real side effects, say `execute now` and name your shell (`PowerShell` / `cmd` / `Terminal` / `bash` / `zsh`).
+- Runtime responses should clearly indicate one state: `Executed`, `Guidance only`, or `Blocked`.
+
+Extended prompt patterns are in `docs/COMMAND_EXAMPLES.md`.
+
+## 13) Runtime Modes
 
 Single governed task:
 
@@ -389,6 +451,9 @@ Autonomous iteration cap guidance:
 - If you do not set it at all, code fallback default is `15`.
 - Set `BRAIN_MAX_AUTONOMOUS_ITERATIONS=-1` (or `0`) for unbounded autonomous iteration cap.
 - In unbounded mode, the loop can still stop due to goal completion, safety/governance outcomes, zero-progress guard, errors, or manual cancellation (`Ctrl+C`).
+- For execution-style autonomous goals (for example build/create/write requests), completion is gated: the loop will not mark `Goal Met` until at least one approved real side-effect action executes in that mission.
+- Read-only actions (`read_file`, `list_directory`) and simulated outputs are excluded from execution-style completion evidence.
+- If execution-style iterations keep approving only `respond`, loop termination is bounded by deterministic stall-abort (`reasonCode=AUTONOMOUS_EXECUTION_STYLE_STALLED_NO_SIDE_EFFECT`) rather than waiting for max-iteration exhaustion.
 
 Daemon mode (fail-closed latches required):
 
@@ -408,7 +473,13 @@ Run daemon:
 npm run dev -- --daemon "continuous mission objective"
 ```
 
-## 13) Federation Runtime (Inbound)
+Read-file output contract:
+
+- `read_file` returns a bounded preview payload, not unbounded full-file text.
+- Success output includes preview text plus deterministic metadata (`readFileTotalChars`, `readFileReturnedChars`, `readFileTruncated`) in runtime traces/receipts.
+- If content exceeds the preview cap, output is explicitly marked with `[...truncated]`.
+
+## 14) Federation Runtime (Inbound)
 
 Enable and configure contracts:
 
@@ -444,7 +515,7 @@ Health check:
 curl -sS http://127.0.0.1:9100/federation/health
 ```
 
-## 14) Outbound Federation (Optional)
+## 15) Outbound Federation (Optional)
 
 ```env
 BRAIN_ENABLE_OUTBOUND_FEDERATION=true
@@ -457,7 +528,7 @@ Delegation trigger format is explicit-intent only:
 [federate:<agentId> quote=<usd>] <delegated user input>
 ```
 
-## 15) Validation Checklist
+## 16) Validation Checklist
 
 Run before relying on a setup:
 
@@ -475,9 +546,13 @@ Recommended smoke checks:
 npm run test:federation:live_smoke
 npm run test:daemon:live_smoke
 npm run test:runtime_wiring:integrated_live_smoke
+npm run test:interface:real_provider_live_smoke
 ```
 
-## 16) Runtime Data Locations
+Real-provider interface smoke is fail-closed. Set `BRAIN_INTERFACE_REAL_LIVE_SMOKE_CONFIRM=true`
+before running it, and ensure your provider tokens/allowlists point to intentional test destinations.
+
+## 17) Runtime Data Locations
 
 - `runtime/state.json` (run/task state)
 - `runtime/semantic_memory.json` (semantic memory lessons)
@@ -496,9 +571,9 @@ npm run test:runtime_wiring:integrated_live_smoke
 - `runtime/judgment_patterns.json` (judgment-pattern store in JSON mode)
 - `runtime/distiller_rejection_ledger.json` (distiller merge rejection ledger in JSON mode)
 - `runtime/stage6_86_runtime_state.json` (Stage 6.86 runtime state JSON mode)
-- `runtime/skills/` (created/promoted runtime skills)
+- `runtime/skills/` (created/promoted runtime skills; `.js` primary runtime artifact with `.ts` compatibility fallback during migration window)
 
-## 17) Complete `.env.example` Reference
+## 18) Complete `.env.example` Reference
 
 This section covers every key currently present in `.env.example` and what to expect if you change it.
 
@@ -639,6 +714,8 @@ This section covers every key currently present in `.env.example` and what to ex
 - `BRAIN_INTERFACE_ALLOWED_USERNAMES`: username allowlist (required).
   - Only matching normalized usernames are accepted.
 - `BRAIN_INTERFACE_ALLOWED_USER_IDS`: optional stricter ID allowlist.
+  - Telegram value source: `message.from.id` from `getUpdates`.
+  - Discord value source: Developer Mode -> right-click user -> Copy User ID.
   - If set, non-listed user IDs are rejected even if username matches.
 - `BRAIN_INTERFACE_REQUIRE_NAME_CALL`: explicit invocation requirement.
   - `true` requires alias mention before processing.
@@ -668,6 +745,7 @@ This section covers every key currently present in `.env.example` and what to ex
 - `TELEGRAM_BOT_TOKEN`: Telegram bot credential.
   - Required when provider includes Telegram.
 - `TELEGRAM_ALLOWED_CHAT_IDS`: optional chat allowlist.
+  - Value source: `message.chat.id` from `getUpdates` after messaging the bot.
   - If set, only listed chats are accepted.
 - `TELEGRAM_POLL_TIMEOUT_SECONDS`: long-poll timeout.
   - Higher value reduces request churn; lower value returns control sooner.
@@ -679,6 +757,7 @@ This section covers every key currently present in `.env.example` and what to ex
 - `DISCORD_BOT_TOKEN`: Discord bot credential.
   - Required when provider includes Discord.
 - `DISCORD_ALLOWED_CHANNEL_IDS`: optional channel allowlist.
+  - Value source: Developer Mode -> right-click channel -> Copy Channel ID.
   - If set, only listed channels are accepted.
 - `DISCORD_GATEWAY_INTENTS`: gateway intent bitmask.
   - Changing this changes which event/message types Discord delivers to the bot.
@@ -708,7 +787,7 @@ This section covers every key currently present in `.env.example` and what to ex
 - `OPENAI_PRICE_LARGE_REASONING_INPUT_PER_1M_USD`, `OPENAI_PRICE_LARGE_REASONING_OUTPUT_PER_1M_USD`: alias-specific pricing for `large-reasoning-model`.
 - `BRAIN_TRACE_AUDIT_OUTPUT_PATH`: output path override for `npm run audit:traces`.
 
-## 18) Troubleshooting
+## 19) Troubleshooting
 
 `OPENAI_API_KEY` missing:
 
@@ -732,6 +811,8 @@ Interface startup fails:
 
 - Verify `BRAIN_INTERFACE_PROVIDER`, `BRAIN_INTERFACE_SHARED_SECRET`,
   `BRAIN_INTERFACE_ALLOWED_USERNAMES`, and token(s) (`TELEGRAM_BOT_TOKEN` / `DISCORD_BOT_TOKEN`).
+- If `BRAIN_INTERFACE_ALLOWED_USER_IDS` is set, confirm the copied user ID matches the provider:
+  Telegram `message.from.id` or Discord Developer Mode -> Copy User ID.
 
 Telegram bot receives no updates:
 

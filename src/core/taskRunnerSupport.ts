@@ -11,6 +11,7 @@ import {
   ActionRunResult,
   BrainState,
   ConstraintViolation,
+  ExecutorExecutionOutcome,
   GovernanceBlockCategory,
   GovernanceMemoryEvent,
   GovernanceMemoryReadView,
@@ -116,6 +117,10 @@ export function resolveBlockCategory(result: ActionRunResult): GovernanceBlockCa
     return "none";
   }
 
+  if (result.executionStatus && result.executionStatus !== "success") {
+    return "runtime";
+  }
+
   if (
     result.blockedBy.includes("ACTION_EXECUTION_FAILED") ||
     result.violations.some((violation) => violation.code === "ACTION_EXECUTION_FAILED")
@@ -135,28 +140,27 @@ export function resolveBlockCategory(result: ActionRunResult): GovernanceBlockCa
 }
 
 /**
- * Detects run-skill execution failures that must fail closed as typed constraint violations.
+ * Converts a typed executor outcome into a fail-closed runtime violation when execution did not succeed.
  *
  * @param action - Planned action that was executed.
- * @param output - Action output text returned by executor.
- * @returns Typed execution-failure violation, or `null` when output does not indicate run-skill failure.
+ * @param outcome - Typed executor outcome emitted by ToolExecutorOrgan.
+ * @returns Typed execution/block violation, or `null` when outcome status is `success`.
  */
-export function resolveExecutionFailureViolation(
+export function resolveExecutionOutcomeViolation(
   action: TaskRunResult["plan"]["actions"][number],
-  output: string
+  outcome: ExecutorExecutionOutcome
 ): ConstraintViolation | null {
-  if (action.type !== "run_skill") {
+  if (outcome.status === "success") {
     return null;
   }
 
-  const normalizedOutput = output.trim().toLowerCase();
-  if (!normalizedOutput.startsWith("run skill failed:")) {
-    return null;
-  }
-
+  const fallbackMessage =
+    outcome.status === "blocked"
+      ? `Approved ${action.type} action was blocked during execution.`
+      : `Approved ${action.type} action failed during execution.`;
   return {
-    code: "ACTION_EXECUTION_FAILED",
-    message: output.trim() || "Approved run_skill action failed during execution."
+    code: outcome.failureCode ?? "ACTION_EXECUTION_FAILED",
+    message: outcome.output.trim() || fallbackMessage
   };
 }
 

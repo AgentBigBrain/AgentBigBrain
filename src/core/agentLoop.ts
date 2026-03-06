@@ -13,6 +13,10 @@ import {
 } from "../models/types";
 import { selectModelForRole } from "./modelRouting";
 import { BrainConfig } from "./config";
+import {
+    classifyRoutingIntentV1,
+    isExecutionSurfaceRoutingClassification
+} from "../interfaces/routingMap";
 
 /**
  * Optional callbacks for observing autonomous loop progress.
@@ -31,6 +35,118 @@ export interface AutonomousLoopCallbacks {
  * systematic block (governance, constraint, schema) is in effect.
  */
 const MAX_CONSECUTIVE_ZERO_PROGRESS = 3;
+const EXECUTION_STYLE_GOAL_GATING_REASON_CODE = "AUTONOMOUS_EXECUTION_STYLE_SIDE_EFFECT_REQUIRED";
+const EXECUTION_STYLE_STALL_REASON_CODE = "AUTONOMOUS_EXECUTION_STYLE_STALLED_NO_SIDE_EFFECT";
+const GENERIC_STALL_REASON_CODE = "AUTONOMOUS_STALLED_ZERO_PROGRESS";
+const MAX_ITERATIONS_REASON_CODE = "AUTONOMOUS_MAX_ITERATIONS_REACHED";
+const EMPTY_NEXT_STEP_REASON_CODE = "AUTONOMOUS_NEXT_STEP_EMPTY";
+
+/**
+ * Formats reason text with deterministic reason-code metadata.
+ *
+ * @param reasonCode - Stable reason code for machine-readable diagnostics.
+ * @param message - Human-readable reason detail.
+ * @returns Reason string with deterministic reason-code prefix.
+ */
+function formatReasonWithCode(reasonCode: string, message: string): string {
+    return `[reasonCode=${reasonCode}] ${message}`;
+}
+
+/**
+ * Evaluates execution-style mission intent and returns a deterministic policy signal.
+ *
+ * @param input - Goal or subtask request text.
+ * @returns `true` when this text indicates side-effect execution intent.
+ */
+function isExecutionStyleInput(input: string): boolean {
+    const normalized = input.trim().toLowerCase();
+    if (!normalized) {
+        return false;
+    }
+
+    if (
+        /\b(guidance\s+only|instructions?\s+only|without\s+executing|do\s+not\s+execute|don't\s+execute|explain\s+how)\b/.test(
+            normalized
+        )
+    ) {
+        return false;
+    }
+
+    if (isExecutionSurfaceRoutingClassification(classifyRoutingIntentV1(input))) {
+        return true;
+    }
+
+    const executionVerb = /\b(create|build|scaffold|generate|write|delete|modify|run|execute|install|deploy|open|launch)\b/;
+    if (!executionVerb.test(normalized)) {
+        return false;
+    }
+
+    const sideEffectTarget =
+        /\b(app|application|project|dashboard|site|website|frontend|backend|api|file|folder|directory|repo|repository|script|command|powershell|terminal|bash|zsh|cmd)\b/;
+    const explicitPath = /([a-z]:\\|\/|\\)/i;
+    return sideEffectTarget.test(normalized) || explicitPath.test(normalized);
+}
+
+/**
+ * Evaluates side-effect action type and returns a deterministic policy signal.
+ *
+ * @param actionType - Planned action type.
+ * @returns `true` when this action type counts as side-effect execution evidence.
+ */
+function isExecutionEvidenceActionType(
+    actionType: TaskRunResult["actionResults"][number]["action"]["type"]
+): boolean {
+    return actionType !== "respond" && actionType !== "read_file" && actionType !== "list_directory";
+}
+
+/**
+ * Evaluates execution output and metadata for simulation markers.
+ *
+ * @param output - Execution output text.
+ * @param executionMetadata - Optional typed execution metadata.
+ * @returns `true` when the execution result is simulated and should not count as real evidence.
+ */
+function isSimulatedExecutionEvidence(
+    output: string | undefined,
+    executionMetadata: TaskRunResult["actionResults"][number]["executionMetadata"]
+): boolean {
+    if (executionMetadata?.simulatedExecution === true) {
+        return true;
+    }
+    const normalizedOutput = (output ?? "").trim().toLowerCase();
+    if (!normalizedOutput) {
+        return false;
+    }
+    return /\bsimulated\b/.test(normalizedOutput);
+}
+
+/**
+ * Counts approved real side-effect actions in one task result.
+ *
+ * @param result - Task result from one autonomous-loop iteration.
+ * @returns Number of approved side-effect actions that represent real execution evidence.
+ */
+function countApprovedRealSideEffectActions(result: TaskRunResult): number {
+    return result.actionResults.filter((entry) => {
+        if (!entry.approved) {
+            return false;
+        }
+        if (!isExecutionEvidenceActionType(entry.action.type)) {
+            return false;
+        }
+        return !isSimulatedExecutionEvidence(entry.output, entry.executionMetadata);
+    }).length;
+}
+
+/**
+ * Builds fallback retry input for execution-style completion gating.
+ *
+ * @param overarchingGoal - Mission-level goal text for context continuity.
+ * @returns Deterministic retry instruction text.
+ */
+function buildExecutionStyleRetryInput(overarchingGoal: string): string {
+    return `Execution evidence is required before marking this mission complete. For goal "${overarchingGoal}", execute at least one real side-effect action now (read/list/simulated outputs do not satisfy this gate). If blocked, stop and report exact block codes and required user approval.`;
+}
 
 export class AutonomousLoop {
     /**
@@ -81,6 +197,8 @@ export class AutonomousLoop {
             const maxIterations = this.config.limits.maxAutonomousIterations;
             const unlimited = maxIterations <= 0;
             let consecutiveZeroProgress = 0;
+            let hasApprovedRealSideEffectInMission = false;
+            let isExecutionStyleMission = isExecutionStyleInput(currentOverarchingGoal);
 
             let goalMetInCurrentLoop = false;
 
@@ -108,11 +226,20 @@ export class AutonomousLoop {
 
                 const result = await this.orchestrator.runTask(task);
                 const approved = result.actionResults.filter(r => r.approved).length;
+                const approvedRealSideEffects = countApprovedRealSideEffectActions(result);
+                if (approvedRealSideEffects > 0) {
+                    hasApprovedRealSideEffectInMission = true;
+                }
+                if (!isExecutionStyleMission && isExecutionStyleInput(currentInput)) {
+                    isExecutionStyleMission = true;
+                }
+
                 const blocked = result.actionResults.filter(r => !r.approved).length;
                 console.log(`\n[Iteration ${iteration} Completed] ${result.summary}`);
                 await callbacks?.onIterationComplete?.(iteration, result.summary, approved, blocked);
 
-                if (approved === 0) {
+                const madeProgress = isExecutionStyleMission ? approvedRealSideEffects > 0 : approved > 0;
+                if (!madeProgress) {
                     consecutiveZeroProgress++;
                 } else {
                     consecutiveZeroProgress = 0;
@@ -123,8 +250,17 @@ export class AutonomousLoop {
                         .filter(r => !r.approved && r.blockedBy)
                         .map(r => r.blockedBy)
                         .join(", ");
-                    const reason = `Stuck: ${consecutiveZeroProgress} consecutive iterations with 0 approved actions. ` +
-                        `Block reason(s): ${blockCodes || "unknown"}. Stopping to avoid waste.`;
+                    const reasonCode = isExecutionStyleMission
+                        ? EXECUTION_STYLE_STALL_REASON_CODE
+                        : GENERIC_STALL_REASON_CODE;
+                    const progressLabel = isExecutionStyleMission
+                        ? "approved real side-effect actions"
+                        : "approved actions";
+                    const reason = formatReasonWithCode(
+                        reasonCode,
+                        `Stuck: ${consecutiveZeroProgress} consecutive iterations with 0 ${progressLabel}. ` +
+                        `Block reason(s): ${blockCodes || "unknown"}. Stopping to avoid waste.`
+                    );
                     console.log(`\n[Autonomous Loop Stuck] ${reason}\n`);
                     await callbacks?.onGoalAborted?.(reason, iteration);
                     goalMetInCurrentLoop = true;
@@ -132,6 +268,24 @@ export class AutonomousLoop {
                 }
 
                 const nextStep = await this.evaluateNextStep(currentOverarchingGoal, result);
+                const completionGateBlocked =
+                    isExecutionStyleMission &&
+                    nextStep.isGoalMet &&
+                    !hasApprovedRealSideEffectInMission;
+
+                if (completionGateBlocked) {
+                    const gateReason = formatReasonWithCode(
+                        EXECUTION_STYLE_GOAL_GATING_REASON_CODE,
+                        "Goal completion deferred: execution-style mission has no approved real side-effect action in this autonomous run."
+                    );
+                    console.log(`\n[Evaluation] Goal completion deferred by deterministic execution gate.`);
+                    console.log(`Reasoning: ${gateReason}`);
+                    currentInput =
+                        nextStep.nextUserInput && nextStep.nextUserInput.trim().length > 0
+                            ? nextStep.nextUserInput
+                            : buildExecutionStyleRetryInput(currentOverarchingGoal);
+                    continue;
+                }
 
                 if (nextStep.isGoalMet) {
                     console.log(`\n======================================================`);
@@ -144,7 +298,10 @@ export class AutonomousLoop {
                 }
 
                 if (!nextStep.nextUserInput || nextStep.nextUserInput.trim() === "") {
-                    const reason = "Output was empty or invalid. Human intervention may be needed.";
+                    const reason = formatReasonWithCode(
+                        EMPTY_NEXT_STEP_REASON_CODE,
+                        "Output was empty or invalid. Human intervention may be needed."
+                    );
                     console.log(`\n[Autonomous Loop Aborted] ${reason}\n`);
                     await callbacks?.onGoalAborted?.(reason, iteration);
                     goalMetInCurrentLoop = true;
@@ -157,7 +314,10 @@ export class AutonomousLoop {
             }
 
             if (!goalMetInCurrentLoop) {
-                const reason = `Reached maximum iterations (${maxIterations}) for goal.`;
+                const reason = formatReasonWithCode(
+                    MAX_ITERATIONS_REASON_CODE,
+                    `Reached maximum iterations (${maxIterations}) for goal.`
+                );
                 console.log(`\n[Autonomous Loop Terminated] ${reason}\n`);
                 await callbacks?.onGoalAborted?.(reason, iteration);
             }

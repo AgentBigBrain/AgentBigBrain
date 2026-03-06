@@ -55,7 +55,7 @@ flowchart LR
 1. **Plan** — The `PlannerOrgan` calls the LLM, synthesizing workflow learning hints and judgment patterns out of past runs, and forces the model to return a strictly typed `PlannerModelOutput` schema. A `FirstPrinciplesPacketV1` is generated deterministically alongside the plan when triggered.
 2. **Constrain** — `hardConstraints.ts` enforces non-negotiable safety rules *before* governance. Sandbox escapes, unsafe code patterns, cost overruns, and immutable-file mutations are definitively blocked here.
 3. **Vote** — Fast-path actions are evaluated by the security governor; escalation-path actions go to the full 7-governor council with supermajority voting.
-4. **Execute** — The `ToolExecutorOrgan` runs the approved action. Shell commands run with output buffering, timeout enforcement, and telemetry; file operations use direct FS access with protected-path checks.
+4. **Execute** — The `ToolExecutorOrgan` runs the approved action and returns a typed execution outcome (`success | blocked | failed` + deterministic failure code). `TaskRunner` fail-closes non-success outcomes before receipt append. Shell commands run with output buffering, timeout enforcement, and telemetry; file operations use direct FS access with protected-path checks. `read_file` returns a bounded preview payload (with deterministic truncation metadata) instead of unbounded full-file output. Skill artifacts are written as `runtime/skills/<name>.js` (primary runtime artifact) with `.ts` compatibility artifacts during migration, and `run_skill` resolves `.js` first then `.ts`.
 5. **Receipt** — After execution, a tamper-evident `ExecutionReceipt` is appended to a hash chain with digests of the output, votes, and metadata (approved actions only).
 6. **Reflect** — The `ReflectionOrgan` analyzes outcomes, extracts lessons, classifies signal quality, and persists high-value learnings to memory.
 
@@ -185,6 +185,19 @@ Copy-Item .env.example .env
 
 Then replace placeholder secrets in `.env` (for example `OPENAI_API_KEY`, interface secrets, and bot tokens) as needed for your runtime mode.
 
+If you are enabling Telegram or Discord, use **[docs/SETUP.md](docs/SETUP.md)** for the value-to-source mapping before you fill the interface vars. It now shows where to get:
+
+- `BRAIN_INTERFACE_ALLOWED_USERNAMES`
+- `BRAIN_INTERFACE_ALLOWED_USER_IDS`
+- `TELEGRAM_ALLOWED_CHAT_IDS`
+- `DISCORD_ALLOWED_CHANNEL_IDS`
+
+Practical bring-up rule:
+
+- Start with usernames plus bot token(s).
+- Leave `BRAIN_INTERFACE_ALLOWED_USER_IDS` and chat/channel allowlists blank until the bot responds once.
+- Add the stricter ID/chat/channel allowlists after initial verification.
+
 Minimal local config for non-provider runs:
 
 ```env
@@ -214,6 +227,17 @@ npm run dev:federation
 - `BRAIN_ALLOW_DAEMON_MODE=true`
 - `BRAIN_MAX_AUTONOMOUS_ITERATIONS > 0`
 - `BRAIN_MAX_DAEMON_GOAL_ROLLOVERS > 0`
+
+Autonomous execution semantics:
+
+- For execution-style goals, `Goal Met` is only allowed after at least one approved real side-effect action occurs in the current mission.
+- Read-only actions (`read_file`, `list_directory`) and simulated outcomes do not count as completion evidence for execution-style missions.
+- Repeated respond-only execution-style iterations trigger bounded deterministic abort (`reasonCode=AUTONOMOUS_EXECUTION_STYLE_STALLED_NO_SIDE_EFFECT`) instead of silently looping until cap.
+
+Routing semantics for build requests:
+
+- Generic execution-style build prompts (for example: `create a React app on my Desktop and execute now`) map to the build execution surface and deterministic no-op fallback policy when no governed side effect executes.
+- Explanation-only prompts (for example: `how do I create a React app`) are not over-classified as execution requests.
 
 ## Commands
 
@@ -250,6 +274,8 @@ npm run test:runtime:orphan_gate
 npm run test:runtime:orphan_gate:touched
 npm run test:federation:live_smoke
 npm run test:daemon:live_smoke
+npm run test:interface:advanced_live_smoke
+npm run test:interface:real_provider_live_smoke
 npm run audit:claims
 npm run audit:governors
 npm run audit:ledgers
@@ -299,6 +325,74 @@ npm run dev -- --autonomous "stabilize runtime wiring plan execution"
 # 3) Daemon mode (requires daemon latches in env)
 npm run dev -- --daemon "continuously triage repository issues"
 ```
+
+### `/help`-style interface examples (Telegram/Discord)
+
+When you run `npm run dev:interface`, use `/help` in Telegram or Discord. The examples below mirror the current help text: command list, skill workflow, and the execution-state language you should expect back from the runtime.
+
+When to use which command:
+
+- **`/chat`**: use this for one direct request, a question, a summary, a skill create/run request, or a single side-effect request you want handled now.
+- **`/propose`**: use this when you want a draft first and explicit approval before execution, especially for writes, shell commands, or larger multi-file changes.
+- **`/auto`**: use this for a multi-step goal where the runtime may need several iterations to finish. If you expect real execution, still say **`execute now`** and name the shell when relevant.
+- **`/draft`**: use this to inspect the current proposed plan before approval.
+- **`/adjust`**: use this to change the active draft without restarting from scratch.
+- **`/approve`**: use this when the draft is correct and you want it executed.
+- **`/cancel`**: use this when the active draft is wrong, stale, or no longer needed.
+
+What the runtime will tell you:
+
+- **Executed**: real side-effect actions actually ran in this run (read-only and simulated outcomes do not count).
+- **Guidance only**: the run produced instructions or analysis without side effects.
+- **Blocked**: safety, governance, or runtime policy denied execution in this run.
+
+- Guidance only:
+  `/chat guidance only: show me how to create a React app without executing anything`
+  Why this succeeds: **`guidance only`** and **`without executing anything`** make it clear you want explanation, not side effects.
+
+- Draft first, approval later:
+  `/propose create a React app at C:\Users\<you>\Desktop\finance-dashboard. Show the exact approval diff before any write or shell command.`
+  Why this succeeds: **`/propose`** keeps the request in draft form, and **`before any write or shell command`** makes the approval-first expectation explicit.
+
+- Draft lifecycle:
+  `/draft`
+  `/adjust add a watchlist panel and show the exact approval diff before writes`
+  `/approve`
+  Why this succeeds: **`/draft`** shows the active draft, **`/adjust`** changes the pending plan without executing it, and **`/approve`** is the explicit execution boundary.
+
+- Cancel the current draft:
+  `/cancel`
+  Why this succeeds: it deterministically clears the active draft instead of leaving stale approval state around.
+
+- Create a skill:
+  `/chat create skill repo_status that reads package.json and runtime/state.json and returns a short repo summary`
+  Why this succeeds: there is **no separate `/skill` command** right now; skill creation goes through **`/chat`** or **`/propose`**.
+
+- Run a skill:
+  `/chat run skill repo_status on this repo`
+  Why this succeeds: **`run skill <name>`** is the phrasing the planner can route without inventing a new slash-command surface.
+
+- Autonomous build with real execution intent:
+  `/auto create a React app at C:\Users\<you>\Desktop\finance-dashboard. Execute now using PowerShell. Create files directly; if blocked, stop and tell me exactly why.`
+  Why this succeeds: **`Execute now`** makes side effects explicit, and **`PowerShell`** satisfies the current explicit-shell guardrail.
+
+- Pulse controls:
+  `/pulse on`
+  `/pulse status`
+  Why this succeeds: these are deterministic slash-command controls for Agent Pulse, not planner-generated free-form prompts.
+
+- Deterministic command surfaces:
+  `/status`
+  `/review 6.85.A`
+  Why this succeeds: these are direct slash-command surfaces with deterministic handlers.
+
+Need more examples? See **[docs/COMMAND_EXAMPLES.md](docs/COMMAND_EXAMPLES.md)** for Telegram/Discord slash commands, CLI examples, approval-flow sequences, pulse commands, and prompt rewrites that make execution intent explicit.
+
+Operator-facing execution states:
+
+- `Executed`: approved real side-effect actions actually ran in this run (read-only and simulated outcomes do not count).
+- `Guidance only`: response contains instructions or analysis only.
+- `Blocked`: policy/governance/runtime denied execution; reply includes plain-English happened/why/next-step guidance.
 
 ### Federation API (HTTP)
 
@@ -473,8 +567,8 @@ All configuration is via environment variables. Required variables are noted per
 |---|---|---|---|
 | `BRAIN_INTERFACE_PROVIDER` | Yes | none | `telegram`, `discord`, `both`, or `telegram,discord`. |
 | `BRAIN_INTERFACE_SHARED_SECRET` | Yes | none | Required ingress auth secret for adapters. |
-| `BRAIN_INTERFACE_ALLOWED_USERNAMES` | Yes | none | Comma-separated username allowlist. |
-| `BRAIN_INTERFACE_ALLOWED_USER_IDS` | No | empty | Optional strict user-id allowlist. |
+| `BRAIN_INTERFACE_ALLOWED_USERNAMES` | Yes | none | Comma-separated username allowlist. Telegram: use `message.from.username` from `getUpdates`. Discord: use your account username, not display name. |
+| `BRAIN_INTERFACE_ALLOWED_USER_IDS` | No | empty | Optional strict user-id allowlist. Telegram: `message.from.id` from `getUpdates`. Discord: enable Developer Mode, then copy User ID. |
 | `BRAIN_INTERFACE_REQUIRE_NAME_CALL` | No | `false` | Requires explicit alias invocation before processing. |
 | `BRAIN_INTERFACE_NAME_ALIASES` | No | `BigBrain` | Comma aliases accepted when name-call is required. |
 | `BRAIN_INTERFACE_SHOW_TECHNICAL_SUMMARY` | No | `true` | Shows technical completion details in interface replies. |
@@ -498,7 +592,7 @@ All configuration is via environment variables. Required variables are noted per
 | `TELEGRAM_POLL_INTERVAL_MS` | No | `500` | Poll loop interval in ms. |
 | `TELEGRAM_STREAMING_TRANSPORT_MODE` | No | `edit` (or `native_draft` if legacy toggle is true) | Streaming mode: `edit` or `native_draft`. |
 | `TELEGRAM_NATIVE_DRAFT_STREAMING` | No | `false` | Legacy compatibility toggle for native draft mode. |
-| `TELEGRAM_ALLOWED_CHAT_IDS` | No | empty | Optional chat-id allowlist. |
+| `TELEGRAM_ALLOWED_CHAT_IDS` | No | empty | Optional chat-id allowlist. Get values from `message.chat.id` in Telegram `getUpdates`. |
 
 **Discord:**
 
@@ -508,7 +602,7 @@ All configuration is via environment variables. Required variables are noted per
 | `DISCORD_API_BASE_URL` | No | `https://discord.com/api/v10` | Discord REST base URL. |
 | `DISCORD_GATEWAY_URL` | No | `https://discord.com/api/v10/gateway/bot` | Discord gateway discovery URL. |
 | `DISCORD_GATEWAY_INTENTS` | No | `37377` | Gateway intents bitmask. |
-| `DISCORD_ALLOWED_CHANNEL_IDS` | No | empty | Optional channel-id allowlist. |
+| `DISCORD_ALLOWED_CHANNEL_IDS` | No | empty | Optional channel-id allowlist. Enable Developer Mode, then right-click channel and copy Channel ID. |
 
 </details>
 

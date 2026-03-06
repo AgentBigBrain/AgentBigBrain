@@ -45,6 +45,7 @@ import {
   isExecutionCapabilityLimitationResponse,
   isExecutionNoOpResponse,
   isExecutionStyleRequestPrompt,
+  isExecutionPolicyRefusalResponse,
   isObservabilityBundleExportPrompt,
   isInstructionalHowToResponse,
   isProgressPlaceholderResponse,
@@ -59,6 +60,8 @@ export interface UserFacingSummaryOptions {
 }
 
 const COMPLETED_TASK_SUMMARY_PREFIX = "completed task with";
+const EXPLICIT_RUN_SKILL_REQUEST_PATTERN =
+  /\b(run|execute|invoke|use)\s+(?:a\s+)?skill\b|\brun[_\s-]?skill\b/i;
 const STATUS_CONTRADICTION_CUE_PATTERNS: readonly RegExp[] = [
   /\b(?:my\s+records?|records?|memory|earlier)\b.*\b(?:show|shows|indicate|indicates)\b/i,
   /\bit\s+seems\s+there\s+might\s+be\s+a\s+misunderstanding\b/i
@@ -342,6 +345,7 @@ function appendMissionDiagnosticsIfRequested(
   const trimmedSummary = selectedSummary.trim();
   const shouldRetainSummaryPrefix =
     /^run skill failed:/i.test(trimmedSummary) ||
+    /^i couldn't execute that request in this run\./i.test(trimmedSummary) ||
     /^i couldn't complete that request because a safety policy blocked it\./i.test(trimmedSummary);
 
   if (shouldRetainSummaryPrefix && trimmedSummary.length > 0) {
@@ -518,12 +522,23 @@ function resolveRunSkillOutcomeLine(runResult: TaskRunResult): string | null {
     return "Run skill success.";
   }
 
-  const failedRunSkillOutput = [...runSkillResults]
+  const failedRunSkillResult = [...runSkillResults]
     .reverse()
-    .map((result) => (typeof result.output === "string" ? result.output.trim() : ""))
-    .find((value) => value.toLowerCase().startsWith("run skill failed:"));
-  if (failedRunSkillOutput) {
-    return failedRunSkillOutput;
+    .find(
+      (result) =>
+        !result.approved &&
+        (result.executionStatus === "failed" ||
+          result.executionFailureCode === "ACTION_EXECUTION_FAILED" ||
+          result.blockedBy.includes("ACTION_EXECUTION_FAILED") ||
+          result.violations.some((violation) => violation.code === "ACTION_EXECUTION_FAILED"))
+    );
+  if (failedRunSkillResult) {
+    const output = typeof failedRunSkillResult.output === "string"
+      ? failedRunSkillResult.output.trim()
+      : "";
+    return output.length > 0
+      ? output
+      : "Run skill failed: action execution failed with no detailed output.";
   }
   return null;
 }
@@ -628,6 +643,11 @@ export function selectUserFacingSummary(
         !hasTechnicalOutcomeLine &&
         isExecutionStyleRequestPrompt(runResult.task.userInput) &&
         isExecutionCapabilityLimitationResponse(contradictionSafeRespondOutput);
+      const policyRefusalNoOp =
+        !approvedRealNonRespondExecution &&
+        !hasTechnicalOutcomeLine &&
+        isExecutionStyleRequestPrompt(runResult.task.userInput) &&
+        isExecutionPolicyRefusalResponse(contradictionSafeRespondOutput);
       let trustedOutputForRender = contradictionSafeRespondOutput;
       if (isProgressPlaceholderResponse(contradictionSafeRespondOutput, runResult.task.userInput)) {
         trustedOutputForRender = resolveProgressPlaceholderFallback(
@@ -639,7 +659,8 @@ export function selectUserFacingSummary(
         instructionOnlyNoOp ||
         clarificationOnlyNoOp ||
         executionNoOp ||
-        executionCapabilityLimitationNoOp
+        executionCapabilityLimitationNoOp ||
+        policyRefusalNoOp
       ) {
         trustedOutputForRender = resolveProgressPlaceholderFallback(
           runResult,
@@ -680,8 +701,10 @@ export function selectUserFacingSummary(
       if (
         routingClassification.category === "LATENCY_BUDGETS" &&
         !hasTechnicalOutcomeLine &&
-        !/\bno-op outcome:/i.test(trustedOutputForRender) &&
-        (/reasonCode:\s*LATENCY_NO_SIDE_EFFECT_EXECUTED/i.test(trustedOutputForRender) ||
+        !/\b(no-op outcome:|technical reason code:\s*LATENCY_NO_SIDE_EFFECT_EXECUTED)\b/i.test(
+          trustedOutputForRender
+        ) &&
+        (/(reasonCode|Technical reason code):\s*LATENCY_NO_SIDE_EFFECT_EXECUTED/i.test(trustedOutputForRender) ||
           /\bno\s+phase\s+exceeded\b/i.test(trustedOutputForRender) ||
           /\bno\s+execution\s+evidence\b/i.test(trustedOutputForRender))
       ) {
@@ -719,9 +742,13 @@ export function selectUserFacingSummary(
 
   const runSkillOutcomeLine = resolveRunSkillOutcomeLine(runResult);
   if (runSkillOutcomeLine) {
+    const explicitRunSkillRequest = EXPLICIT_RUN_SKILL_REQUEST_PATTERN.test(
+      runResult.task.userInput
+    );
     if (
       isRunSkillFailureLine(runSkillOutcomeLine) &&
-      isExecutionStyleRequestPrompt(runResult.task.userInput)
+      isExecutionStyleRequestPrompt(runResult.task.userInput) &&
+      !explicitRunSkillRequest
     ) {
       return appendMissionDiagnosticsIfRequested(
         runResult,

@@ -161,6 +161,8 @@ test("orchestrator routes explicit federated outbound intent through remote agen
       assert.equal(result.plan.actions[0].type, "network_write");
       assert.equal(result.actionResults.length, 1);
       assert.equal(result.actionResults[0].approved, true);
+      assert.equal(result.actionResults[0].executionStatus, "success");
+      assert.equal(result.actionResults[0].executionFailureCode, undefined);
       assert.match(result.actionResults[0].output ?? "", /Delegated summary from remote agent/i);
       assert.equal(result.actionResults[0].executionMetadata?.outboundFederation, true);
       assert.equal(result.failureTaxonomy, undefined);
@@ -245,6 +247,8 @@ test("orchestrator persists typed failure taxonomy when outbound delegated execu
 
       assert.equal(result.actionResults.length, 1);
       assert.equal(result.actionResults[0].approved, false);
+      assert.equal(result.actionResults[0].executionStatus, "failed");
+      assert.equal(result.actionResults[0].executionFailureCode, "ACTION_EXECUTION_FAILED");
       assert.ok(result.actionResults[0].blockedBy.includes("ACTION_EXECUTION_FAILED"));
       assert.equal(result.failureTaxonomy?.failureCategory, "constraint");
       assert.equal(result.failureTaxonomy?.failureCode, "constraint_blocked");

@@ -33,9 +33,24 @@ test("renderConversationCommandHelpText includes key command guidance", () => {
   const helpText = renderConversationCommandHelpText();
 
   assert.match(helpText, /^Commands:/);
+  assert.match(helpText, /\/help - show this guide and examples/);
   assert.match(helpText, /\/propose <task>/);
+  assert.match(helpText, /\/chat <message>/);
+  assert.match(helpText, /\/auto <goal>/);
   assert.match(helpText, /\/pulse <on\|off\|private\|public\|status>/);
   assert.match(helpText, /\/review <checkpoint-id>/);
+  assert.match(helpText, /^Skill workflow:/m);
+  assert.match(helpText, /There is no separate \/skill command/i);
+  assert.match(helpText, /create skill repo_status/i);
+  assert.match(helpText, /run skill repo_status/i);
+  assert.match(helpText, /^Examples:/m);
+  assert.match(helpText, /\/review 6\.85\.A/);
+  assert.match(helpText, /Execute now using PowerShell/i);
+  assert.match(helpText, /PowerShell\/cmd on Windows, Terminal\/bash\/zsh on macOS\/Linux/i);
+  assert.match(helpText, /- Executed: side-effect actions actually ran/i);
+  assert.match(helpText, /- Guidance only: the run produced instructions\/analysis/i);
+  assert.match(helpText, /- Blocked: safety\/governance\/runtime policy denied execution/i);
+  assert.match(helpText, /Autonomy note: \/auto can still complete with guidance-only output/i);
   assert.match(helpText, /If work is already running, new requests are queued/);
 });
 

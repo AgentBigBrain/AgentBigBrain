@@ -67,7 +67,7 @@ const SKILL_SLUG_STOP_WORDS = new Set([
   "write"
 ]);
 
-export type RequiredActionType = "create_skill" | null;
+export type RequiredActionType = "create_skill" | "run_skill" | null;
 
 /**
  * Evaluates action type and returns a deterministic policy signal.
@@ -278,6 +278,9 @@ export function normalizeFingerprintSegment(value: string): string {
 export function inferRequiredActionType(currentUserRequest: string): RequiredActionType {
   if (CREATE_SKILL_INTENT_PATTERN.test(currentUserRequest)) {
     return "create_skill";
+  }
+  if (RUN_SKILL_EXPLICIT_REQUEST_PATTERN.test(currentUserRequest)) {
+    return "run_skill";
   }
   return null;
 }
@@ -675,6 +678,94 @@ export function normalizeRequiredCreateSkillParams(
       (!existingCode || isPlaceholderSkillCode(existingCode)) && Boolean(resolvedSkillName);
     if (needsFallbackCode && resolvedSkillName) {
       params.code = buildCreateSkillFallbackCode(resolvedSkillName);
+    }
+
+    return {
+      ...action,
+      params
+    };
+  });
+}
+
+/**
+ * Derives run-skill name from request from available runtime inputs.
+ *
+ * **Why it exists:**
+ * Keeps derivation logic for run-skill name extraction centralized so explicit run-skill requests
+ * can fail closed with deterministic parameter backfill when model shape is incomplete.
+ *
+ * **What it talks to:**
+ * - Uses local skill-name regex patterns and sanitization helpers in this module.
+ *
+ * @param currentUserRequest - Active request segment used for run-skill name extraction.
+ * @returns Extracted/sanitized skill name, or `null` when no explicit name is present.
+ */
+export function extractRunSkillNameFromRequest(currentUserRequest: string): string | null {
+  const quotedMatch = currentUserRequest.match(SKILL_NAME_QUOTED_PATTERN);
+  if (quotedMatch) {
+    const quotedCandidate = sanitizeSkillNameCandidate(quotedMatch[1] ?? "");
+    if (quotedCandidate) {
+      return quotedCandidate;
+    }
+  }
+
+  const namedMatch = currentUserRequest.match(SKILL_NAME_NAMED_PATTERN);
+  if (namedMatch) {
+    const namedCandidate = sanitizeSkillNameCandidate(namedMatch[1] ?? "");
+    if (namedCandidate) {
+      return namedCandidate;
+    }
+  }
+
+  const directMatch = currentUserRequest.match(SKILL_NAME_DIRECT_PATTERN);
+  if (directMatch) {
+    const directCandidate = sanitizeSkillNameCandidate(directMatch[1] ?? "");
+    if (directCandidate) {
+      return directCandidate;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Normalizes required run-skill params into a stable shape for `plannerHelpers` logic.
+ *
+ * **Why it exists:**
+ * Centralizes normalization rules for required run-skill params so explicit run-skill requests
+ * remain deterministic even when provider output omits `params.name`.
+ *
+ * **What it talks to:**
+ * - Uses `PlannedAction` (import `PlannedAction`) from `../core/types`.
+ *
+ * @param actions - Normalized planner actions.
+ * @param currentUserRequest - Active request segment used for name backfill.
+ * @param requiredActionType - Required action inferred from explicit user intent.
+ * @returns Actions with deterministic run-skill `params.name` backfilled when possible.
+ */
+export function normalizeRequiredRunSkillParams(
+  actions: PlannedAction[],
+  currentUserRequest: string,
+  requiredActionType: RequiredActionType
+): PlannedAction[] {
+  if (requiredActionType !== "run_skill") {
+    return actions;
+  }
+
+  const inferredSkillName = extractRunSkillNameFromRequest(currentUserRequest);
+  return actions.map((action) => {
+    if (action.type !== "run_skill") {
+      return action;
+    }
+
+    const params = { ...action.params };
+    const existingSkillNameRaw = trimToNonEmptyString(params.name);
+    const existingSkillName =
+      existingSkillNameRaw && SKILL_NAME_PATTERN.test(existingSkillNameRaw)
+        ? existingSkillNameRaw
+        : null;
+    if (!existingSkillName && inferredSkillName) {
+      params.name = inferredSkillName;
     }
 
     return {

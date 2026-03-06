@@ -295,9 +295,10 @@ function buildIdentityBlockedMessage(
   options: BlockMessageRenderOptions
 ): string {
   return (
-    "I can help with that, but I cannot present myself as a human or pretend to be you or anyone else. " +
-    "I keep my identity explicit as an AI agent to prevent abuse and confusion. " +
-    "If helpful, I can still answer in third person." +
+    "I couldn't execute that request in this run. " +
+    "What happened: the request asked for human impersonation behavior. " +
+    "Why it didn't execute: identity policy requires me to stay explicitly AI and never impersonate you or anyone else. " +
+    "What to do next: ask for the same content in third person with explicit AI identity wording." +
     formatTechnicalCodeTail(policyCodes, options)
   );
 }
@@ -314,8 +315,10 @@ function buildPersonalDataBlockedMessage(
   options: BlockMessageRenderOptions
 ): string {
   return (
-    "I cannot share personal data about someone without explicit human approval. " +
-    "That privacy boundary is intentional for safety and transparency." +
+    "I couldn't execute that request in this run. " +
+    "What happened: the request attempted personal-data sharing. " +
+    "Why it didn't execute: personal-data policy requires explicit human approval metadata before release. " +
+    "What to do next: provide explicit approval details (approval id + consent scope) or request a non-sensitive summary." +
     formatTechnicalCodeTail(policyCodes, options)
   );
 }
@@ -332,7 +335,10 @@ function buildGenericBlockedMessage(
   options: BlockMessageRenderOptions
 ): string {
   return (
-    "I couldn't complete that request because a safety policy blocked it." +
+    "I couldn't execute that request in this run. " +
+    "What happened: one or more governed actions were blocked before execution. " +
+    "Why it didn't execute: a safety, governance, or runtime policy denied the requested side effect. " +
+    "What to do next: ask for the exact block code and approval diff, then retry with a narrower allowed action." +
     formatTechnicalCodeTail(policyCodes, options)
   );
 }
@@ -366,16 +372,20 @@ function buildGovernanceBlockedMessage(
     hasMalwareOrAbuseSignal(rejectVotes)
   ) {
     return (
-      "No, I can't help with malware or abusive behavior. " +
-      `${governanceSentence} My role is to help humans safely, and that trust is on the line if I cross this boundary.` +
+      "I couldn't execute that request in this run. " +
+      "What happened: the request matched malware/abuse risk signals and was governance-blocked. " +
+      `Why it didn't execute: ${governanceSentence} My role is to help humans safely, and this request crosses that boundary.` +
+      " What to do next: ask for defensive or recovery guidance only, without offensive or abusive intent." +
       rationale +
       formatTechnicalCodeTail(policyCodes, options)
     );
   }
 
   return (
-    `I can't complete that request. ${governanceSentence} ` +
-    "I have to keep my actions safe and aligned with helping humans." +
+    "I couldn't execute that request in this run. " +
+    `What happened: governance blocked the requested action. Why it didn't execute: ${governanceSentence} ` +
+    "I have to keep actions safe and aligned with helping humans. " +
+    "What to do next: request the exact rejected step with typed codes, then submit a safer/narrower alternative." +
     rationale +
     formatTechnicalCodeTail(policyCodes, options)
   );

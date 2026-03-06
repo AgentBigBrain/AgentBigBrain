@@ -63,6 +63,27 @@ const BUILD_PATTERNS: readonly RegExp[] = [
   /\brunbook\b/i
 ] as const;
 
+const BUILD_EXECUTION_VERB_PATTERNS: readonly RegExp[] = [
+  /\b(create|build|make|generate|scaffold|setup|set up|spin up)\b/i
+] as const;
+
+const BUILD_EXECUTION_ARTIFACT_PATTERNS: readonly RegExp[] = [
+  /\b(app|application|project|dashboard|site|website|frontend|backend|api|cli|repo|repository)\b/i,
+  /\b(react|next\.?js|vue|svelte|angular|vite)\b/i
+] as const;
+
+const BUILD_EXECUTION_DESTINATION_PATTERNS: readonly RegExp[] = [
+  /\bon\s+my\s+(desktop|documents|downloads)\b/i,
+  /\bin\s+['"]?[a-z]:\\/i,
+  /\bin\s+['"]?\/(?:users|home|tmp|var|opt)\//i,
+  /\b[a-z]:\\(?:users|temp|tmp|dev|work|projects|repos)\\/i
+] as const;
+
+const BUILD_EXPLANATION_ONLY_PATTERNS: readonly RegExp[] = [
+  /^\s*(how\s+do\s+i|how\s+to|explain|show\s+me\s+how|tutorial|guide\s+me|what\s+is)\b/i,
+  /\b(without\s+executing|do\s+not\s+execute|don't\s+execute|guidance\s+only|instructions?\s+only)\b/i
+] as const;
+
 const CLONE_VARIANT_PATTERNS: readonly RegExp[] = [
   /\bclone-assisted\b/i,
   /\bclone\s+plan\s+variants?\b/i,
@@ -163,6 +184,39 @@ function matchesAny(text: string, patterns: readonly RegExp[]): boolean {
 }
 
 /**
+ * Evaluates build execution intent and returns a deterministic policy signal.
+ *
+ * **Why it exists:**
+ * Keeps build execution-intent classification explicit so generic app/project creation prompts
+ * route to governed execution surfaces while explanation-only prompts avoid over-classification.
+ *
+ * **What it talks to:**
+ * - Uses local deterministic regex rulepacks in this module.
+ *
+ * @param text - Message/text content processed by this function.
+ * @returns `true` when this check passes.
+ */
+function isGenericBuildExecutionIntent(text: string): boolean {
+  if (matchesAny(text, BUILD_EXPLANATION_ONLY_PATTERNS)) {
+    return false;
+  }
+  if (!matchesAny(text, BUILD_EXECUTION_VERB_PATTERNS)) {
+    return false;
+  }
+  if (!matchesAny(text, BUILD_EXECUTION_ARTIFACT_PATTERNS)) {
+    return false;
+  }
+  if (
+    matchesAny(text, BUILD_EXECUTION_DESTINATION_PATTERNS) ||
+    /\bexecute\s+now\b/i.test(text) ||
+    /\brun\s+(?:it|commands?)\b/i.test(text)
+  ) {
+    return true;
+  }
+  return false;
+}
+
+/**
  * Builds classification for this module's runtime flow.
  *
  * **Why it exists:**
@@ -244,7 +298,7 @@ export function classifyRoutingIntentV1(input: string): RoutingMapClassification
     });
   }
 
-  if (matchesAny(normalized, BUILD_PATTERNS)) {
+  if (matchesAny(normalized, BUILD_PATTERNS) || isGenericBuildExecutionIntent(normalized)) {
     return createClassification({
       category: "BUILD_SCAFFOLD",
       routeType: "execution_surface",
@@ -253,7 +307,9 @@ export function classifyRoutingIntentV1(input: string): RoutingMapClassification
       requiresApprovalDiff: true,
       commandIntent: "build_scaffold",
       confidenceTier: "HIGH",
-      matchedRuleId: "routing_v1_build_scaffold"
+      matchedRuleId: matchesAny(normalized, BUILD_PATTERNS)
+        ? "routing_v1_build_scaffold"
+        : "routing_v1_build_scaffold_generic"
     });
   }
 

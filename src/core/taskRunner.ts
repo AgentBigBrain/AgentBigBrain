@@ -14,6 +14,7 @@ import {
   ActionRunResult,
   BrainState,
   ConflictObjectV1,
+  ExecutorExecutionOutcome,
   FULL_COUNCIL_GOVERNOR_IDS,
   GovernorVote,
   isConstraintViolationCode,
@@ -60,7 +61,7 @@ import {
   normalizeOptionalString,
   prepareActionOutput,
   readModelUsageSnapshot,
-  resolveExecutionFailureViolation,
+  resolveExecutionOutcomeViolation,
   resolveVerificationCategoryForPrompt,
   shouldEnforceVerificationGateForRespond
 } from "./taskRunnerSupport";
@@ -1316,31 +1317,46 @@ export class TaskRunner {
       let usedPreparedOutput = false;
       let output = "";
       let shellExecutionTelemetry: ReturnType<ToolExecutorOrgan["consumeShellExecutionTelemetry"]> | undefined;
-      let executionFailureViolation = null as ReturnType<typeof resolveExecutionFailureViolation>;
+      let executionOutcome: ExecutorExecutionOutcome = {
+        status: "success",
+        output: ""
+      };
       let stage686ExecutionMetadata: Record<string, string | number | boolean | null> | undefined;
       let stage686TraceDetails: Record<string, string | number | boolean | null> | undefined;
       if (stage686Execution) {
         output = stage686Execution.output;
         stage686ExecutionMetadata = stage686Execution.executionMetadata;
         stage686TraceDetails = stage686Execution.traceDetails;
-        if (!stage686Execution.approved && stage686Execution.violationCode) {
-          executionFailureViolation = {
-            code: stage686Execution.violationCode,
-            message: stage686Execution.violationMessage ?? stage686Execution.output
+        executionOutcome = stage686Execution.approved
+          ? {
+            status: "success",
+            output: stage686Execution.output,
+            executionMetadata: stage686ExecutionMetadata
+          }
+          : {
+            status: "blocked",
+            output: stage686Execution.output,
+            failureCode: stage686Execution.violationCode ?? "ACTION_EXECUTION_FAILED",
+            executionMetadata: stage686ExecutionMetadata
           };
-        }
       } else {
         preparedOutput = await preparedOutputPromise;
         usedPreparedOutput = preparedOutput !== null;
-        output =
-          preparedOutput !== null
-            ? preparedOutput
-            : await this.deps.executor.execute(action);
-        shellExecutionTelemetry = this.deps.executor.consumeShellExecutionTelemetry(action.id);
-        executionFailureViolation = resolveExecutionFailureViolation(action, output);
+        if (preparedOutput !== null) {
+          executionOutcome = {
+            status: "success",
+            output: preparedOutput
+          };
+        } else {
+          executionOutcome = await this.deps.executor.executeWithOutcome(action);
+          shellExecutionTelemetry = this.deps.executor.consumeShellExecutionTelemetry(action.id);
+        }
+        output = executionOutcome.output;
       }
+      const executionFailureViolation = resolveExecutionOutcomeViolation(action, executionOutcome);
       if (executionFailureViolation) {
         const failureMetadata = {
+          ...(executionOutcome.executionMetadata ?? {}),
           ...(shellExecutionTelemetry
             ? { ...shellExecutionTelemetry } as Record<string, string | number | boolean | null>
             : {}),
@@ -1357,6 +1373,8 @@ export class TaskRunner {
           mode,
           approved: false,
           output,
+          executionStatus: executionOutcome.status,
+          executionFailureCode: executionFailureViolation.code,
           executionMetadata: executionMetadata ?? shellMetadata,
           blockedBy: [executionFailureViolation.code],
           violations: [executionFailureViolation],
@@ -1444,6 +1462,7 @@ export class TaskRunner {
         params: action.params
       });
       const approvedExecutionMetadata: Record<string, string | number | boolean | null> = {
+        ...(executionOutcome.executionMetadata ?? {}),
         ...(shellExecutionTelemetry
           ? { ...shellExecutionTelemetry } as Record<string, string | number | boolean | null>
           : {}),
@@ -1467,6 +1486,7 @@ export class TaskRunner {
         mode,
         approved: true,
         output,
+        executionStatus: executionOutcome.status,
         executionMetadata: Object.keys(approvedExecutionMetadata).length > 0
           ? approvedExecutionMetadata
           : undefined,

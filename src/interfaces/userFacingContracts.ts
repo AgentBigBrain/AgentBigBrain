@@ -51,12 +51,16 @@ export function renderUserFacingEnvelopeV1(envelope: UserFacingEnvelopeV1): stri
   }
 
   if (envelope.state === "BLOCKED") {
-    const lines = [envelope.shortMessage];
-    if (envelope.reasonCode) {
-      lines.push(`Reason code: ${envelope.reasonCode}`);
-    }
+    const lines = [
+      envelope.shortMessage,
+      "What happened: one or more governed actions were blocked before execution.",
+      "Why it didn't execute: safety, governance, or runtime policy denied this request."
+    ];
     if (envelope.nextStep) {
-      lines.push(`Next step: ${envelope.nextStep}`);
+      lines.push(`What to do next: ${envelope.nextStep}`);
+    }
+    if (envelope.reasonCode) {
+      lines.push(`Technical reason code: ${envelope.reasonCode}`);
     }
     return lines.join("\n");
   }
@@ -69,15 +73,24 @@ export function renderUserFacingEnvelopeV1(envelope: UserFacingEnvelopeV1): stri
     return lines.join("\n");
   }
 
-  const safeReasonCode = envelope.reasonCode ?? "NO_OP_UNSPECIFIED";
-  const safeNextStep = envelope.nextStep ?? "Request a governed next step and retry.";
-  return [
+  const whyLine =
+    envelope.state === "UNSUPPORTED"
+      ? "Why it didn't execute: this runtime path is unavailable for the requested operation."
+      : "Why it didn't execute: no approved governed side-effect action completed in this run.";
+  const lines = [
     envelope.shortMessage,
-    "No-op outcome:",
-    `- reasonCode: ${safeReasonCode}`,
-    `- reason: ${envelope.shortMessage}`,
-    `- nextStep: ${safeNextStep}`
-  ].join("\n");
+    envelope.state === "UNSUPPORTED"
+      ? "What happened: the requested capability is not available in this runtime path."
+      : "What happened: this run finished without executing the requested side effect.",
+    whyLine
+  ];
+  if (envelope.nextStep) {
+    lines.push(`What to do next: ${envelope.nextStep}`);
+  }
+  if (envelope.reasonCode) {
+    lines.push(`Technical reason code: ${envelope.reasonCode}`);
+  }
+  return lines.join("\n");
 }
 
 /**

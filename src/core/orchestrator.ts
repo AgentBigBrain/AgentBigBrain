@@ -916,6 +916,8 @@ export class BrainOrchestrator {
       action: delegatedAction,
       mode: "escalation_path",
       approved,
+      executionStatus: approved ? "success" : "failed",
+      executionFailureCode: approved ? undefined : "ACTION_EXECUTION_FAILED",
       output: approved
         ? (remoteOutput.trim() || "Federated task completed with empty output payload.")
         : `Federated task did not complete successfully: ${remoteError ?? "unknown error"}`,

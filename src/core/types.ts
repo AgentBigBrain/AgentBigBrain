@@ -317,6 +317,9 @@ export const CONSTRAINT_VIOLATION_CODES = [
   "CREATE_SKILL_CODE_TOO_LARGE",
   "RUN_SKILL_MISSING_NAME",
   "RUN_SKILL_INVALID_NAME",
+  "RUN_SKILL_ARTIFACT_MISSING",
+  "RUN_SKILL_INVALID_EXPORT",
+  "RUN_SKILL_LOAD_FAILED",
   "SHELL_DISABLED_BY_POLICY",
   "SHELL_PROFILE_INVALID",
   "SHELL_PROFILE_NOT_SUPPORTED_ON_PLATFORM",
@@ -420,11 +423,22 @@ export interface MasterDecision {
   dissent: GovernorVote[];
 }
 
+export type ExecutorExecutionStatus = "success" | "blocked" | "failed";
+
+export interface ExecutorExecutionOutcome {
+  status: ExecutorExecutionStatus;
+  output: string;
+  failureCode?: ConstraintViolationCode;
+  executionMetadata?: Record<string, RuntimeTraceDetailValue>;
+}
+
 export interface ActionRunResult {
   action: PlannedAction;
   mode: ExecutionMode;
   approved: boolean;
   output?: string;
+  executionStatus?: ExecutorExecutionStatus;
+  executionFailureCode?: ConstraintViolationCode;
   executionMetadata?: Record<string, RuntimeTraceDetailValue>;
   blockedBy: ActionBlockReason[];
   violations: ConstraintViolation[];

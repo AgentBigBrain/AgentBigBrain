@@ -82,6 +82,34 @@ function buildRunSkillAction(name: string, input: string): PlannedAction {
 }
 
 /**
+ * Implements `buildWriteFileAction` behavior within module scope.
+ * Interacts with local collaborators through imported modules and typed inputs/outputs.
+ */
+function buildWriteFileAction(pathValue: string, content?: string): PlannedAction {
+  return {
+    id: "action_write_file",
+    type: "write_file",
+    description: "write file",
+    params: typeof content === "string" ? { path: pathValue, content } : { path: pathValue },
+    estimatedCostUsd: 0.1
+  };
+}
+
+/**
+ * Implements `buildReadFileAction` behavior within module scope.
+ * Interacts with local collaborators through imported modules and typed inputs/outputs.
+ */
+function buildReadFileAction(pathValue: string): PlannedAction {
+  return {
+    id: "action_read_file",
+    type: "read_file",
+    description: "read file",
+    params: { path: pathValue },
+    estimatedCostUsd: 0.1
+  };
+}
+
+/**
  * Implements `buildMemoryMutationAction` behavior within module scope.
  * Interacts with local collaborators through imported modules and typed inputs/outputs.
  */
@@ -91,7 +119,7 @@ function buildMemoryMutationAction(): PlannedAction {
     type: "memory_mutation",
     description: "stage 6.86 memory mutation action",
     params: {
-      store: "semantic_memory",
+      store: "entity_graph",
       operation: "upsert",
       payload: { lesson: "keep governance deterministic" },
       evidenceRefs: ["trace:test:memory_mutation"]
@@ -252,10 +280,14 @@ test("ToolExecutorOrgan writes valid skill into runtime/skills", async () => {
       buildCreateSkillAction("safe_skill", "export const safeSkill = true;")
     );
     assert.match(output, /Skill created successfully/i);
+    assert.match(output, /safe_skill\.js/i);
 
-    const createdPath = path.join(tempDir, "runtime", "skills", "safe_skill.ts");
-    const content = await readFile(createdPath, "utf8");
-    assert.equal(content.includes("safeSkill"), true);
+    const primaryPath = path.join(tempDir, "runtime", "skills", "safe_skill.js");
+    const compatibilityPath = path.join(tempDir, "runtime", "skills", "safe_skill.ts");
+    const primaryContent = await readFile(primaryPath, "utf8");
+    const compatibilityContent = await readFile(compatibilityPath, "utf8");
+    assert.equal(primaryContent.includes("safeSkill"), true);
+    assert.equal(compatibilityContent.includes("safeSkill"), true);
   });
 });
 
@@ -272,6 +304,71 @@ test("ToolExecutorOrgan runs previously created skill", async () => {
     const output = await executor.execute(buildRunSkillAction("safe_skill", "  hello world  "));
     assert.match(output, /Run skill success:/i);
     assert.match(output, /HELLO WORLD/);
+  });
+});
+
+test("ToolExecutorOrgan executeWithOutcome fails closed for write_file missing content", async () => {
+  await withTempCwd(async () => {
+    const executor = new ToolExecutorOrgan(DEFAULT_BRAIN_CONFIG);
+    const outcome = await executor.executeWithOutcome(
+      buildWriteFileAction("runtime/generated/missing-content.txt")
+    );
+    assert.equal(outcome.status, "blocked");
+    assert.equal(outcome.failureCode, "ACTION_EXECUTION_FAILED");
+    assert.match(outcome.output, /missing params\.content/i);
+  });
+});
+
+test("ToolExecutorOrgan returns typed missing-artifact failure for run_skill", async () => {
+  await withTempCwd(async () => {
+    const executor = new ToolExecutorOrgan(DEFAULT_BRAIN_CONFIG);
+    const outcome = await executor.executeWithOutcome(
+      buildRunSkillAction("missing_skill", "hello world")
+    );
+    assert.equal(outcome.status, "failed");
+    assert.equal(outcome.failureCode, "RUN_SKILL_ARTIFACT_MISSING");
+    assert.match(outcome.output, /no skill artifact found/i);
+  });
+});
+
+test("ToolExecutorOrgan executeWithOutcome returns bounded read_file preview with metadata", async () => {
+  await withTempCwd(async () => {
+    const executor = new ToolExecutorOrgan(DEFAULT_BRAIN_CONFIG);
+    const readTarget = "runtime/read_target.txt";
+    const readContent = `${"A".repeat(3995)}END`;
+    const writeOutcome = await executor.executeWithOutcome(
+      buildWriteFileAction(readTarget, readContent)
+    );
+    assert.equal(writeOutcome.status, "success");
+
+    const outcome = await executor.executeWithOutcome(buildReadFileAction(readTarget));
+    assert.equal(outcome.status, "success");
+    assert.match(outcome.output, /Read success: runtime\/read_target\.txt \(\d+ chars\)\./i);
+    assert.match(outcome.output, /Read preview:/i);
+    assert.match(outcome.output, /A{20}/);
+    assert.equal(outcome.executionMetadata?.readFileTotalChars, readContent.length);
+    assert.equal(outcome.executionMetadata?.readFileReturnedChars, readContent.length);
+    assert.equal(outcome.executionMetadata?.readFileTruncated, false);
+  });
+});
+
+test("ToolExecutorOrgan executeWithOutcome marks read_file preview truncation deterministically", async () => {
+  await withTempCwd(async () => {
+    const executor = new ToolExecutorOrgan(DEFAULT_BRAIN_CONFIG);
+    const readTarget = "runtime/read_target_large.txt";
+    const readContent = "B".repeat(4500);
+    const writeOutcome = await executor.executeWithOutcome(
+      buildWriteFileAction(readTarget, readContent)
+    );
+    assert.equal(writeOutcome.status, "success");
+
+    const outcome = await executor.executeWithOutcome(buildReadFileAction(readTarget));
+    assert.equal(outcome.status, "success");
+    assert.match(outcome.output, /truncated to 4000/i);
+    assert.match(outcome.output, /\[\.\.\.truncated\]/i);
+    assert.equal(outcome.executionMetadata?.readFileTotalChars, readContent.length);
+    assert.equal(outcome.executionMetadata?.readFileReturnedChars, 4000);
+    assert.equal(outcome.executionMetadata?.readFileTruncated, true);
   });
 });
 
@@ -363,5 +460,16 @@ test("ToolExecutorOrgan enforces timeout fallback and reports shell failure exit
     assert.equal(telemetry?.shellExitCode, 2);
     assert.equal(telemetry?.shellTimedOut, false);
     assert.equal(telemetry?.shellTimeoutMs, config.shellRuntime.profile.timeoutMsDefault);
+  });
+});
+
+test("ToolExecutorOrgan tags simulated shell execution with deterministic metadata", async () => {
+  await withTempCwd(async () => {
+    const executor = new ToolExecutorOrgan(DEFAULT_BRAIN_CONFIG);
+    const outcome = await executor.executeWithOutcome(buildShellAction("echo hello"));
+    assert.equal(outcome.status, "success");
+    assert.match(outcome.output, /Shell execution simulated/i);
+    assert.equal(outcome.executionMetadata?.simulatedExecution, true);
+    assert.equal(outcome.executionMetadata?.simulatedExecutionReason, "SHELL_POLICY_DISABLED");
   });
 });

@@ -62,9 +62,9 @@ function sleep(ms: number): Promise<void> {
 async function removeTempDirWithRetry(tempDir: string): Promise<void> {
   // Queue workers can still flush a final session write after reply text is returned.
   // Delay cleanup briefly so atomic temp-file writes settle before directory removal.
-  await sleep(150);
+  await sleep(400);
 
-  for (let attempt = 1; attempt <= 8; attempt += 1) {
+  for (let attempt = 1; attempt <= 20; attempt += 1) {
     try {
       await rm(tempDir, { recursive: true, force: true });
       return;
@@ -73,7 +73,7 @@ async function removeTempDirWithRetry(tempDir: string): Promise<void> {
       if (!["ENOTEMPTY", "EPERM", "EBUSY", "ENOENT"].includes(code)) {
         throw error;
       }
-      await sleep(attempt * 25);
+      await sleep(attempt * 50);
     }
   }
 
@@ -1486,7 +1486,7 @@ test("enqueueSystemJob marks job as system job and suppresses blocked result del
     );
 
     const blockedSummary = [
-      "I couldn't complete that request because a safety policy blocked it.",
+      "I couldn't execute that request in this run.",
       "",
       "Run summary:",
       "- State: blocked",

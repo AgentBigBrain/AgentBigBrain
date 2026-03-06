@@ -39,6 +39,25 @@ test("classifyRoutingIntentV1 classifies clone block-reason prompts as policy ex
   assert.equal(classification.actionFamily, "clone_workflow");
 });
 
+test("classifyRoutingIntentV1 classifies generic app-creation prompts as build execution surface", () => {
+  const classification = classifyRoutingIntentV1(
+    "Create a React app on my Desktop and execute now."
+  );
+  assert.equal(classification.category, "BUILD_SCAFFOLD");
+  assert.equal(classification.routeType, "execution_surface");
+  assert.equal(classification.actionFamily, "build");
+  assert.equal(classification.fallbackReasonCode, "BUILD_NO_SIDE_EFFECT_EXECUTED");
+  assert.equal(classification.matchedRuleId, "routing_v1_build_scaffold_generic");
+});
+
+test("classifyRoutingIntentV1 does not over-classify explanation-only build prompts as execution surface", () => {
+  const classification = classifyRoutingIntentV1(
+    "How do I create a React app on my Desktop?"
+  );
+  assert.equal(classification.category, "NONE");
+  assert.equal(classification.routeType, "none");
+});
+
 test("buildRoutingExecutionHintV1 returns deterministic hints for workflow replay and no hint for NONE", () => {
   const workflowHint = buildRoutingExecutionHintV1(
     classifyRoutingIntentV1("Capture this flow, compile replay script, and block on selector mismatch.")

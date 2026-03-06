@@ -410,6 +410,80 @@ class MissingCreateSkillAfterRepairModelClient implements ModelClient {
   }
 }
 
+class MissingRunSkillThenRepairModelClient implements ModelClient {
+  readonly backend = "mock" as const;
+  private plannerCallCount = 0;
+
+  /**
+ * Implements `getPlannerCallCount` behavior within class MissingRunSkillThenRepairModelClient.
+ * Interacts with local collaborators through imported modules and typed inputs/outputs.
+ */
+  getPlannerCallCount(): number {
+    return this.plannerCallCount;
+  }
+
+  /**
+ * Implements `completeJson` behavior within class MissingRunSkillThenRepairModelClient.
+ * Interacts with local collaborators through imported modules and typed inputs/outputs.
+ */
+  async completeJson<T>(request: StructuredCompletionRequest): Promise<T> {
+    if (request.schemaName !== "planner_v1") {
+      throw new Error(`Unexpected schema: ${request.schemaName}`);
+    }
+
+    this.plannerCallCount += 1;
+    if (this.plannerCallCount === 1) {
+      return {
+        plannerNotes: "first pass incorrectly responded conversationally",
+        actions: [
+          {
+            type: "respond",
+            message: "The requested skill appears unavailable."
+          }
+        ]
+      } as T;
+    }
+
+    return {
+      plannerNotes: "repair includes required run_skill action",
+      actions: [
+        {
+          type: "run_skill",
+          description: "Run requested skill.",
+          params: {
+            name: "non_existent_skill",
+            input: "smoke probe"
+          }
+        }
+      ]
+    } as T;
+  }
+}
+
+class MissingRunSkillAfterRepairModelClient implements ModelClient {
+  readonly backend = "mock" as const;
+
+  /**
+ * Implements `completeJson` behavior within class MissingRunSkillAfterRepairModelClient.
+ * Interacts with local collaborators through imported modules and typed inputs/outputs.
+ */
+  async completeJson<T>(request: StructuredCompletionRequest): Promise<T> {
+    if (request.schemaName !== "planner_v1") {
+      throw new Error(`Unexpected schema: ${request.schemaName}`);
+    }
+
+    return {
+      plannerNotes: "never emits run_skill",
+      actions: [
+        {
+          type: "respond",
+          message: "The requested skill is unavailable."
+        }
+      ]
+    } as T;
+  }
+}
+
 class NonExplicitRunSkillThenRepairModelClient implements ModelClient {
   readonly backend = "mock" as const;
   private plannerCallCount = 0;
@@ -730,6 +804,28 @@ test("planner forwards deterministic stage 6.85 playbook selection context into 
   assert.equal(parsedPlaybookSelection.fallbackToPlanner, false);
 });
 
+test("planner adds execution-style build bias while keeping explicit shell/self-modify guardrail", async () => {
+  const modelClient = new PlaybookContextAwareModelClient();
+  await withPlannerClient(modelClient, async (planner) => {
+    const plan = await planner.plan(
+      buildTask("Create a React app on my Desktop and execute now."),
+      "mock-planner"
+    );
+    assert.equal(plan.actions.length, 1);
+    assert.equal(plan.actions[0].type, "respond");
+  });
+
+  const plannerRequest = modelClient.getPlannerRequest();
+  assert.ok(plannerRequest);
+  assert.match(plannerRequest.systemPrompt, /deterministic high-risk action guardrail/i);
+  assert.match(plannerRequest.systemPrompt, /do not emit shell_command or self_modify actions/i);
+  assert.match(plannerRequest.systemPrompt, /Execution-style build request detected/i);
+  assert.match(
+    plannerRequest.systemPrompt,
+    /prefer actionable non-respond plans .*write_file\/read_file\/list_directory\/run_skill/i
+  );
+});
+
 test("planner injects deterministic execution environment block into planner prompts", async () => {
   const modelClient = new PlaybookContextAwareModelClient();
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-planner-env-context-"));
@@ -1027,6 +1123,45 @@ test("planner fails closed when explicit create skill intent never yields create
     await assert.rejects(
       planner.plan(buildTask(wrappedInput), "mock-planner"),
       /missing required create_skill action/i
+    );
+  });
+});
+
+test("planner repairs explicit run-skill requests when first plan misses run_skill", async () => {
+  const modelClient = new MissingRunSkillThenRepairModelClient();
+  const wrappedInput = [
+    "You are in an ongoing conversation with the same user.",
+    "Recent conversation context (oldest to newest):",
+    "- user: earlier unrelated prompt",
+    "- assistant: earlier unrelated response",
+    "Current user request:",
+    "Use skill non_existent_skill with input: smoke probe."
+  ].join("\n");
+
+  await withPlannerClient(modelClient, async (planner) => {
+    const plan = await planner.plan(buildTask(wrappedInput), "mock-planner");
+    assert.equal(modelClient.getPlannerCallCount(), 2);
+    assert.equal(plan.actions.length, 1);
+    assert.equal(plan.actions[0].type, "run_skill");
+    assert.equal(plan.actions[0].params.name, "non_existent_skill");
+  });
+});
+
+test("planner fails closed when explicit run-skill intent never yields run_skill action", async () => {
+  const modelClient = new MissingRunSkillAfterRepairModelClient();
+  const wrappedInput = [
+    "You are in an ongoing conversation with the same user.",
+    "Recent conversation context (oldest to newest):",
+    "- user: earlier unrelated prompt",
+    "- assistant: earlier unrelated response",
+    "Current user request:",
+    "Use skill non_existent_skill with input: smoke probe."
+  ].join("\n");
+
+  await withPlannerClient(modelClient, async (planner) => {
+    await assert.rejects(
+      planner.plan(buildTask(wrappedInput), "mock-planner"),
+      /missing required run_skill action/i
     );
   });
 });

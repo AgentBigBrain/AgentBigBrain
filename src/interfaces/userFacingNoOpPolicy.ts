@@ -42,12 +42,13 @@ const TERMINAL_RESPONSE_SIGNAL_PATTERNS: readonly RegExp[] = [
   /\bskill status:\b/i
 ] as const;
 const EXECUTION_REQUEST_PROMPT_PATTERNS: readonly RegExp[] = [
-  /^\s*(build|create|schedule|capture|compile|run|export|retry|continue|generate|research)\b/i,
+  /^\s*(build|create|schedule|capture|compile|run|export|retry|continue|generate|research|write|delete|remove|rename|move|open|launch)\b/i,
   /\bbefore\s+any\s+write\b/i,
   /\bshow\s+exact\s+approval\s+diff\b/i,
   /\bwait\s+for\s+step-level\s+approval\b/i,
   /\bkeep\b.*\blatency\s+budgets?\b/i,
-  /\breuse\b.*\bcache\s+paths?\b/i
+  /\breuse\b.*\bcache\s+paths?\b/i,
+  /\b(run|use|execute|invoke)\s+(?:a\s+)?skill\b/i
 ] as const;
 const EXPLANATION_REQUEST_PROMPT_PATTERNS: readonly RegExp[] = [
   /^\s*how\s+(?:do|can)\s+i\b/i,
@@ -85,6 +86,11 @@ const EXECUTION_CAPABILITY_LIMITATION_RESPONSE_PATTERNS: readonly RegExp[] = [
   /\b(?:cannot|can't)\b[\s\S]{0,200}\b(?:execute|retry|resume)\b[\s\S]{0,200}\b(?:side[-\s]?effects?|retry\s+actions?)\b[\s\S]{0,120}\b(?:directly|in\s+this\s+context)\b/i,
   /\b(?:cannot|can't)\s+execute\s+this\s+action\s+directly\b/i,
   /\b(?:cannot|can't)\s+execute\s+this\s+request\s+directly\b/i
+] as const;
+const EXECUTION_POLICY_REFUSAL_RESPONSE_PATTERNS: readonly RegExp[] = [
+  /\b(?:not\s+permitted|not\s+allowed|will\s+not\s+be\s+performed)\b[\s\S]{0,220}\b(?:safety|security|integrity|policy)\b/i,
+  /\b(?:cannot|can't|will\s+not|won't)\b[\s\S]{0,220}\b(?:delete|remove|execute|perform)\b[\s\S]{0,180}\b(?:safety|security|policy|risk)\b/i,
+  /\bhigh[-\s]?risk\b[\s\S]{0,220}\b(?:will\s+not|cannot|can't|not\s+permitted|not\s+allowed)\b/i
 ] as const;
 const NUMBERED_STEP_LINE_PATTERN = /^\s*\d+\.\s+/gm;
 const OBSERVABILITY_BUNDLE_EXPORT_PROMPT_PATTERNS: readonly RegExp[] = [
@@ -266,6 +272,22 @@ export function isExecutionCapabilityLimitationResponse(text: string): boolean {
 }
 
 /**
+ * Returns `true` when response text is a policy-refusal narrative for an execution-style ask.
+ *
+ * @param text - Candidate response text.
+ * @returns `true` when refusal-pattern lexical checks are present.
+ */
+export function isExecutionPolicyRefusalResponse(text: string): boolean {
+  const normalized = text.trim();
+  if (!normalized) {
+    return false;
+  }
+  return EXECUTION_POLICY_REFUSAL_RESPONSE_PATTERNS.some((pattern) =>
+    pattern.test(normalized)
+  );
+}
+
+/**
  * Detects progress-placeholder response text that should be replaced with deterministic fallback text.
  *
  * @param text - Candidate response text.
@@ -408,11 +430,14 @@ function buildDeterministicNoOpTemplate(
   return renderUserFacingEnvelopeV1(
     buildUserFacingEnvelopeV1(
       "NO_OP",
-      "I couldn't execute that side-effect in this run.",
+      "I couldn't execute that request in this run.",
       reasonCode,
       nextStep
     )
-  ).replace("- reason: I couldn't execute that side-effect in this run.", `- reason: ${reason}`);
+  ).replace(
+    "Why it didn't execute: no approved governed side-effect action completed in this run.",
+    `Why it didn't execute: ${reason}`
+  );
 }
 
 /**

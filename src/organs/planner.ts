@@ -46,6 +46,7 @@ import {
   normalizeFingerprintSegment,
   normalizeModelActions,
   normalizeRequiredCreateSkillParams,
+  normalizeRequiredRunSkillParams,
   PLANNER_FAILURE_COOLDOWN_MS,
   PLANNER_FAILURE_MAX_STRIKES,
   PLANNER_FAILURE_WINDOW_MS,
@@ -56,6 +57,14 @@ const SHELL_EXPLICIT_REQUEST_PATTERN =
   /\b(shell|terminal|powershell|bash|cmd(?:\.exe)?|command line|run (?:a )?command|execute (?:a )?command)\b/i;
 const SELF_MODIFY_EXPLICIT_REQUEST_PATTERN =
   /\b(self[-\s]?modify|modify (?:yourself|your own|the agent|the brain|runtime|source|codebase|governor|policy)|edit (?:agent|runtime|source|code|config)|patch (?:agent|runtime|codebase)|change (?:governor|policy|hard constraint|runtime|codebase))\b/i;
+const BUILD_EXECUTION_VERB_PATTERN =
+  /\b(create|build|make|generate|scaffold|setup|set up|spin up)\b/i;
+const BUILD_EXECUTION_TARGET_PATTERN =
+  /\b(app|application|project|dashboard|site|website|frontend|backend|api|cli|repo|repository|react|next\.?js|vue|svelte|angular|vite)\b/i;
+const BUILD_EXECUTION_DESTINATION_PATTERN =
+  /\bon\s+my\s+(desktop|documents|downloads)\b|\bin\s+['"]?[a-z]:\\|\bin\s+['"]?\/(?:users|home|tmp|var|opt)\//i;
+const BUILD_EXPLANATION_ONLY_PATTERN =
+  /^\s*(how\s+do\s+i|how\s+to|explain|show\s+me\s+how|tutorial|guide\s+me|what\s+is)\b|\b(without\s+executing|do\s+not\s+execute|don't\s+execute|guidance\s+only|instructions?\s+only)\b/i;
 const FIRST_PRINCIPLES_RISK_PATTERNS: readonly RegExp[] = [
   /\b(delete|remove|rm)\b/i,
   /\b(network|api|webhook|endpoint|http[s]?:\/\/)\b/i,
@@ -73,6 +82,36 @@ const RESPONSE_IDENTITY_GUARDRAIL =
 interface FirstPrinciplesTriggerDecision {
   required: boolean;
   reasons: readonly string[];
+}
+
+/**
+ * Evaluates generic build-execution request and returns a deterministic policy signal.
+ *
+ * **Why it exists:**
+ * Helps planner guardrails bias toward actionable plans for build/create intents without weakening
+ * explicit shell/self-modify safety constraints.
+ *
+ * **What it talks to:**
+ * - Uses local deterministic lexical patterns in this module.
+ *
+ * @param currentUserRequest - Structured input object for this operation.
+ * @returns `true` when this check passes.
+ */
+function isExecutionStyleBuildRequest(currentUserRequest: string): boolean {
+  if (BUILD_EXPLANATION_ONLY_PATTERN.test(currentUserRequest)) {
+    return false;
+  }
+  if (!BUILD_EXECUTION_VERB_PATTERN.test(currentUserRequest)) {
+    return false;
+  }
+  if (!BUILD_EXECUTION_TARGET_PATTERN.test(currentUserRequest)) {
+    return false;
+  }
+  return (
+    BUILD_EXECUTION_DESTINATION_PATTERN.test(currentUserRequest) ||
+    /\bexecute\s+now\b/i.test(currentUserRequest) ||
+    /\brun\s+(?:it|commands?)\b/i.test(currentUserRequest)
+  );
 }
 
 export interface PlannerPlanOptions {
@@ -420,10 +459,15 @@ export class PlannerOrgan {
       return "";
     }
 
+    const buildExecutionBias = isExecutionStyleBuildRequest(currentUserRequest)
+      ? " Execution-style build request detected: prefer actionable non-respond plans (for example write_file/read_file/list_directory/run_skill) over guidance-only respond output when policy allows."
+      : "";
+
     return (
       "\nDeterministic high-risk action guardrail: " +
       `for this request, do not emit ${disallowedActionTypes.join(" or ")} actions unless the user explicitly requests them. ` +
-      "Prefer request-relevant action types such as respond, run_skill, or scoped file actions."
+      "Prefer request-relevant action types such as respond, run_skill, or scoped file actions." +
+      buildExecutionBias
     );
   }
 
@@ -551,6 +595,8 @@ export class PlannerOrgan {
     const requiredActionHint =
       requiredActionType === "create_skill"
         ? "Current user request explicitly asks to create a skill. Include at least one create_skill action and do not replace it with respond-only output."
+        : requiredActionType === "run_skill"
+          ? "Current user request explicitly asks to run or use a skill. Include at least one run_skill action and do not replace it with respond-only output."
         : "";
     return this.modelClient.completeJson<PlannerModelOutput>({
       model: plannerModel,
@@ -623,6 +669,8 @@ export class PlannerOrgan {
     const requiredActionHint =
       requiredActionType === "create_skill"
         ? "Repair must include at least one create_skill action because the explicit user request is to create a skill."
+        : requiredActionType === "run_skill"
+          ? "Repair must include at least one run_skill action because the explicit user request is to run or use a skill."
         : "";
     return this.modelClient.completeJson<PlannerModelOutput>({
       model: plannerModel,
@@ -976,6 +1024,11 @@ export class PlannerOrgan {
         currentUserRequest,
         requiredActionType
       );
+      normalizedActions = normalizeRequiredRunSkillParams(
+        normalizedActions,
+        currentUserRequest,
+        requiredActionType
+      );
       const filteredInitialRunSkillOnly =
         hasOnlyRunSkillActions(normalizedActions) &&
         filterNonExplicitRunSkillActions(normalizedActions, currentUserRequest).length === 0;
@@ -1005,6 +1058,11 @@ export class PlannerOrgan {
         );
         normalizedActions = normalizeModelActions(extractActionCandidates(repairedOutput));
         normalizedActions = normalizeRequiredCreateSkillParams(
+          normalizedActions,
+          currentUserRequest,
+          requiredActionType
+        );
+        normalizedActions = normalizeRequiredRunSkillParams(
           normalizedActions,
           currentUserRequest,
           requiredActionType

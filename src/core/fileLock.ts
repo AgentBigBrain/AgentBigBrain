@@ -4,10 +4,15 @@
 
 import { mkdir, open, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
+import {
+  DEFAULT_RUNTIME_ENTROPY_SOURCE,
+  RuntimeEntropySource
+} from "./runtimeEntropy";
 
 interface FileLockOptions {
   timeoutMs?: number;
   pollIntervalMs?: number;
+  entropySource?: RuntimeEntropySource;
 }
 
 interface FileLockHandle {
@@ -73,7 +78,8 @@ async function acquireFileLock(
 ): Promise<FileLockHandle> {
   const timeoutMs = Math.max(1, options.timeoutMs ?? DEFAULT_LOCK_TIMEOUT_MS);
   const pollIntervalMs = Math.max(1, options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS);
-  const startedAt = Date.now();
+  const entropySource = options.entropySource ?? DEFAULT_RUNTIME_ENTROPY_SOURCE;
+  const startedAt = entropySource.nowMs();
   await mkdir(path.dirname(lockPath), { recursive: true });
 
   while (true) {
@@ -104,7 +110,7 @@ async function acquireFileLock(
         throw error;
       }
 
-      if (Date.now() - startedAt >= timeoutMs) {
+      if (entropySource.nowMs() - startedAt >= timeoutMs) {
         throw new Error(`Timed out waiting for file lock: ${path.basename(lockPath)}`);
       }
 
@@ -141,6 +147,33 @@ export async function withFileLock<T>(
 }
 
 /**
+ * Builds deterministic atomic-write temp file path from available runtime context.
+ *
+ * **Why it exists:**
+ * Centralizes temp-path naming so atomic-write behavior is testable and free of ad-hoc
+ * `Date.now`/`Math.random` usage across call sites.
+ *
+ * **What it talks to:**
+ * - Uses `path` (import `default`) from `node:path`.
+ * - Uses `RuntimeEntropySource` (import `RuntimeEntropySource`) from `./runtimeEntropy`.
+ * - Uses `DEFAULT_RUNTIME_ENTROPY_SOURCE` (import `DEFAULT_RUNTIME_ENTROPY_SOURCE`) from `./runtimeEntropy`.
+ *
+ * @param filePath - Final destination file path.
+ * @param entropySource - Optional entropy source used for temp-name suffix generation.
+ * @returns Deterministic temp file path shape for atomic write operations.
+ */
+export function buildAtomicWriteTempFilePath(
+  filePath: string,
+  entropySource: RuntimeEntropySource = DEFAULT_RUNTIME_ENTROPY_SOURCE
+): string {
+  const dirPath = path.dirname(filePath);
+  const basename = path.basename(filePath);
+  const timestampToken = String(entropySource.nowMs());
+  const randomToken = entropySource.randomHex(12);
+  return path.join(dirPath, `${basename}.tmp-${process.pid}-${timestampToken}-${randomToken}`);
+}
+
+/**
  * Persists file atomic with deterministic state semantics.
  *
  * **Why it exists:**
@@ -152,21 +185,23 @@ export async function withFileLock<T>(
  * - Uses `rm` (import `rm`) from `node:fs/promises`.
  * - Uses `writeFile` (import `writeFile`) from `node:fs/promises`.
  * - Uses `path` (import `default`) from `node:path`.
+ * - Uses `buildAtomicWriteTempFilePath` in this module.
+ * - Uses `RuntimeEntropySource` (import `RuntimeEntropySource`) from `./runtimeEntropy`.
  *
  * @param filePath - Filesystem location used by this operation.
  * @param content - Value for content.
+ * @param entropySource - Optional entropy source used for deterministic temp-name generation.
  * @returns Promise resolving to void.
  */
-export async function writeFileAtomic(filePath: string, content: string): Promise<void> {
+export async function writeFileAtomic(
+  filePath: string,
+  content: string,
+  entropySource: RuntimeEntropySource = DEFAULT_RUNTIME_ENTROPY_SOURCE
+): Promise<void> {
   const dirPath = path.dirname(filePath);
   await mkdir(dirPath, { recursive: true });
 
-  const tempFilePath = path.join(
-    dirPath,
-    `${path.basename(filePath)}.tmp-${process.pid}-${Date.now()}-${Math.random()
-      .toString(16)
-      .slice(2)}`
-  );
+  const tempFilePath = buildAtomicWriteTempFilePath(filePath, entropySource);
 
   try {
     await writeFile(tempFilePath, content, "utf8");

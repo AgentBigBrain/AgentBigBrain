@@ -322,7 +322,7 @@ test("selectUserFacingSummary does not mask blocked create_skill with optimistic
 
   const selected = selectUserFacingSummary(runResult);
   assert.doesNotMatch(selected, /I will create the skill/i);
-  assert.match(selected, /safety policy blocked/i);
+  assert.match(selected, /execute that request in this run/i);
   assert.match(selected, /CREATE_SKILL_MISSING_NAME/i);
   assert.match(selected, /CREATE_SKILL_MISSING_CODE/i);
 });
@@ -374,7 +374,7 @@ test("selectUserFacingSummary does not mask blocked delete_file with optimistic 
 
   const selected = selectUserFacingSummary(runResult);
   assert.doesNotMatch(selected, /deleted successfully/i);
-  assert.match(selected, /safety policy blocked/i);
+  assert.match(selected, /execute that request in this run/i);
   assert.match(selected, /DELETE_OUTSIDE_SANDBOX/i);
 });
 
@@ -411,7 +411,7 @@ test("selectUserFacingSummary appends create_skill execution status when technic
         },
         mode: "escalation_path",
         approved: true,
-        output: "Skill created successfully: stage6_live_gate.ts",
+        output: "Skill created successfully: stage6_live_gate.js (compat: stage6_live_gate.ts)",
         blockedBy: [],
         violations: [],
         votes: []
@@ -423,7 +423,7 @@ test("selectUserFacingSummary appends create_skill execution status when technic
     showTechnicalSummary: true
   });
   assert.match(selected, /^I will proceed with creating the skill\./i);
-  assert.match(selected, /Skill status: Skill created successfully: stage6_live_gate\.ts/i);
+  assert.match(selected, /Skill status: Skill created successfully: stage6_live_gate\.js/i);
 });
 
 test("selectUserFacingSummary hides create_skill execution status when technical summary is disabled", () => {
@@ -459,7 +459,7 @@ test("selectUserFacingSummary hides create_skill execution status when technical
         },
         mode: "escalation_path",
         approved: true,
-        output: "Skill created successfully: stage6_live_gate.ts",
+        output: "Skill created successfully: stage6_live_gate.js (compat: stage6_live_gate.ts)",
         blockedBy: [],
         violations: [],
         votes: []
@@ -676,10 +676,130 @@ test("selectUserFacingSummary rewrites run_skill failure lines into deterministi
   const selected = selectUserFacingSummary(runResult, {
     showTechnicalSummary: false
   });
-  assert.match(selected, /No-op outcome:/i);
-  assert.match(selected, /reasonCode:\s*WORKFLOW_REPLAY_NO_SIDE_EFFECT_EXECUTED/i);
-  assert.match(selected, /nextStep:/i);
+  assert.match(selected, /What happened:/i);
+  assert.match(selected, /Technical reason code:\s*WORKFLOW_REPLAY_NO_SIDE_EFFECT_EXECUTED/i);
+  assert.match(selected, /What to do next:/i);
   assert.doesNotMatch(selected, /run skill failed:/i);
+});
+
+test("selectUserFacingSummary preserves run_skill failure lines for explicit run-skill prompts", () => {
+  const runResult = buildRunResult(
+    "Completed task with 0 approved action(s) and 1 blocked action(s).",
+    [
+      {
+        action: {
+          id: "action_run_skill_failed_explicit_request",
+          type: "run_skill",
+          description: "run skill",
+          params: {
+            name: "non_existent_skill"
+          },
+          estimatedCostUsd: 0.1
+        },
+        mode: "fast_path",
+        approved: false,
+        output: "Run skill failed: no skill artifact found for non_existent_skill.",
+        executionStatus: "failed",
+        executionFailureCode: "RUN_SKILL_ARTIFACT_MISSING",
+        blockedBy: ["RUN_SKILL_ARTIFACT_MISSING"],
+        violations: [
+          {
+            code: "RUN_SKILL_ARTIFACT_MISSING",
+            message: "Run skill failed: no skill artifact found for non_existent_skill."
+          }
+        ],
+        votes: []
+      }
+    ],
+    {
+      userInput: "use skill non_existent_skill with input: smoke probe"
+    }
+  );
+
+  const selected = selectUserFacingSummary(runResult, {
+    showTechnicalSummary: false
+  });
+  assert.match(selected, /^Run skill failed:\s*no skill artifact found/i);
+  assert.doesNotMatch(selected, /COMMUNICATION_NO_SIDE_EFFECT_EXECUTED/i);
+});
+
+test("selectUserFacingSummary surfaces typed run_skill execution failures without legacy output-prefix matching", () => {
+  const runResult = buildRunResult(
+    "Completed task with 0 approved action(s) and 1 blocked action(s).",
+    [
+      {
+        action: {
+          id: "action_run_skill_failed_without_prefix",
+          type: "run_skill",
+          description: "run skill",
+          params: {
+            name: "repo_status"
+          },
+          estimatedCostUsd: 0.1
+        },
+        mode: "fast_path",
+        approved: false,
+        output: "Skill execution failed without legacy run-skill prefix.",
+        executionStatus: "failed",
+        executionFailureCode: "ACTION_EXECUTION_FAILED",
+        blockedBy: ["ACTION_EXECUTION_FAILED"],
+        violations: [
+          {
+            code: "ACTION_EXECUTION_FAILED",
+            message: "Deterministic action execution failed."
+          }
+        ],
+        votes: []
+      }
+    ],
+    {
+      userInput: "run skill repo_status on this repository"
+    }
+  );
+
+  const selected = selectUserFacingSummary(runResult, {
+    showTechnicalSummary: false
+  });
+  assert.equal(selected, "Skill execution failed without legacy run-skill prefix.");
+});
+
+test("selectUserFacingSummary rewrites destructive policy-refusal replies into deterministic no-op template", () => {
+  const runResult = buildRunResult(
+    "Completed task with 1 approved action(s) and 0 blocked action(s).",
+    [
+      {
+        action: {
+          id: "action_respond_policy_refusal_delete_hosts",
+          type: "respond",
+          description: "reply",
+          params: {
+            message:
+              "AI system notice: Deleting C:\\Windows\\System32\\drivers\\etc\\hosts is a high-risk operation that will not be performed for safety and integrity."
+          },
+          estimatedCostUsd: 0.02
+        },
+        mode: "fast_path",
+        approved: true,
+        output:
+          "AI system notice: Deleting C:\\Windows\\System32\\drivers\\etc\\hosts is a high-risk operation that will not be performed for safety and integrity.",
+        blockedBy: [],
+        violations: [],
+        votes: []
+      }
+    ],
+    {
+      userInput: "delete C:\\Windows\\System32\\drivers\\etc\\hosts"
+    }
+  );
+
+  const selected = selectUserFacingSummary(runResult, {
+    showTechnicalSummary: false
+  });
+  assert.match(selected, /^I couldn't execute that request in this run\./i);
+  assert.match(selected, /What happened:/i);
+  assert.match(selected, /Why it didn't execute:/i);
+  assert.match(selected, /What to do next:/i);
+  assert.match(selected, /Technical reason code:\s*COMMUNICATION_NO_SIDE_EFFECT_EXECUTED/i);
 });
 
 test("selectUserFacingSummary explains identity impersonation blocks with clear agent identity language", () => {
@@ -713,8 +833,8 @@ test("selectUserFacingSummary explains identity impersonation blocks with clear 
   const selected = selectUserFacingSummary(runResult, {
     showTechnicalSummary: false
   });
-  assert.match(selected, /cannot present myself as a human/i);
-  assert.match(selected, /identity explicit as an ai agent/i);
+  assert.match(selected, /identity policy requires me to stay explicitly AI/i);
+  assert.match(selected, /explicitly AI/i);
 });
 
 test("selectUserFacingSummary can hide safety code lines while preserving blocked explanation", () => {
@@ -749,7 +869,7 @@ test("selectUserFacingSummary can hide safety code lines while preserving blocke
     showTechnicalSummary: true,
     showSafetyCodes: false
   });
-  assert.match(selected, /cannot present myself as a human/i);
+  assert.match(selected, /identity policy requires me to stay explicitly AI/i);
   assert.doesNotMatch(selected, /Safety code\(s\):/i);
 });
 
@@ -840,9 +960,9 @@ test("selectUserFacingSummary explains governance blocks from security and ethic
   const selected = selectUserFacingSummary(runResult, {
     showTechnicalSummary: false
   });
-  assert.match(selected, /can't help with malware or abusive behavior/i);
+  assert.match(selected, /matched malware\/abuse risk signals/i);
   assert.match(selected, /security and ethics governors rejected this request/i);
-  assert.match(selected, /trust is on the line/i);
+  assert.match(selected, /crosses that boundary/i);
 });
 
 test("selectUserFacingSummary includes governor rationale for governance block reasons", () => {
@@ -955,7 +1075,7 @@ test("selectUserFacingSummary treats ransomware and credential-theft governance 
   const selected = selectUserFacingSummary(runResult, {
     showTechnicalSummary: false
   });
-  assert.match(selected, /can't help with malware or abusive behavior/i);
+  assert.match(selected, /matched malware\/abuse risk signals/i);
   assert.match(selected, /security and ethics governors rejected this request/i);
 });
 
@@ -1022,7 +1142,7 @@ test("selectUserFacingSummary prefers structured abuse reject categories over fr
   const selected = selectUserFacingSummary(runResult, {
     showTechnicalSummary: false
   });
-  assert.match(selected, /can't help with malware or abusive behavior/i);
+  assert.match(selected, /matched malware\/abuse risk signals/i);
   assert.match(selected, /security and ethics governors rejected this request/i);
 });
 
@@ -1284,9 +1404,9 @@ test("selectUserFacingSummary replaces progress placeholder respond text with de
   const selected = selectUserFacingSummary(runResult, {
     showTechnicalSummary: false
   });
-  assert.match(selected, /No-op outcome:/i);
-  assert.match(selected, /reasonCode:\s*COMMUNICATION_NO_SIDE_EFFECT_EXECUTED/i);
-  assert.match(selected, /nextStep:/i);
+  assert.match(selected, /What happened:/i);
+  assert.match(selected, /Technical reason code:\s*COMMUNICATION_NO_SIDE_EFFECT_EXECUTED/i);
+  assert.match(selected, /What to do next:/i);
 });
 
 test("selectUserFacingSummary uses research-specific placeholder fallback wording", () => {
@@ -1323,9 +1443,9 @@ test("selectUserFacingSummary uses research-specific placeholder fallback wordin
   assert.match(selected, /baseline deterministic sandboxing controls/i);
   assert.doesNotMatch(selected, /nist sp 800-190/i);
   assert.match(selected, /request governed retrieval/i);
-  assert.match(selected, /No-op outcome:/i);
-  assert.match(selected, /reasonCode:\s*RESEARCH_NO_SIDE_EFFECT_EXECUTED/i);
-  assert.match(selected, /nextStep:/i);
+  assert.match(selected, /What happened:/i);
+  assert.match(selected, /Technical reason code:\s*RESEARCH_NO_SIDE_EFFECT_EXECUTED/i);
+  assert.match(selected, /What to do next:/i);
 });
 
 test("selectUserFacingSummary rewrites future-promise research output for execution-style research prompts", () => {
@@ -1364,9 +1484,9 @@ test("selectUserFacingSummary rewrites future-promise research output for execut
   assert.match(selected, /baseline deterministic sandboxing controls/i);
   assert.doesNotMatch(selected, /nist sp 800-190/i);
   assert.match(selected, /request governed retrieval/i);
-  assert.match(selected, /No-op outcome:/i);
-  assert.match(selected, /reasonCode:\s*RESEARCH_NO_SIDE_EFFECT_EXECUTED/i);
-  assert.match(selected, /nextStep:/i);
+  assert.match(selected, /What happened:/i);
+  assert.match(selected, /Technical reason code:\s*RESEARCH_NO_SIDE_EFFECT_EXECUTED/i);
+  assert.match(selected, /What to do next:/i);
 });
 
 test("selectUserFacingSummary rewrites instructional how-to output for execution-style build prompts with no side effects", () => {
@@ -1406,9 +1526,46 @@ test("selectUserFacingSummary rewrites instructional how-to output for execution
   const selected = selectUserFacingSummary(runResult, {
     showTechnicalSummary: false
   });
-  assert.match(selected, /No-op outcome:/i);
-  assert.match(selected, /reasonCode:\s*BUILD_NO_SIDE_EFFECT_EXECUTED/i);
-  assert.match(selected, /nextStep:/i);
+  assert.match(selected, /What happened:/i);
+  assert.match(selected, /Technical reason code:\s*BUILD_NO_SIDE_EFFECT_EXECUTED/i);
+  assert.match(selected, /What to do next:/i);
+});
+
+test("selectUserFacingSummary routes generic react-app creation prompts to build no-op fallback when no side effects execute", () => {
+  const runResult = buildRunResult(
+    "Completed task with 1 approved action(s) and 0 blocked action(s).",
+    [
+      {
+        action: {
+          id: "action_respond_generic_react_build_noop",
+          type: "respond",
+          description: "reply",
+          params: {
+            message:
+              "Here are starter instructions and files to create your React app manually."
+          },
+          estimatedCostUsd: 0.02
+        },
+        mode: "fast_path",
+        approved: true,
+        output:
+          "Here are starter instructions and files to create your React app manually.",
+        blockedBy: [],
+        violations: [],
+        votes: []
+      }
+    ],
+    {
+      userInput: "Create a React app on my Desktop and execute now."
+    }
+  );
+
+  const selected = selectUserFacingSummary(runResult, {
+    showTechnicalSummary: false
+  });
+  assert.match(selected, /What happened:/i);
+  assert.match(selected, /Technical reason code:\s*BUILD_NO_SIDE_EFFECT_EXECUTED/i);
+  assert.match(selected, /What to do next:/i);
 });
 
 test("selectUserFacingSummary keeps instructional how-to output for explicit explanation prompts", () => {
@@ -1485,9 +1642,9 @@ test("selectUserFacingSummary rewrites stage-review latency promise placeholders
   const selected = selectUserFacingSummary(runResult, {
     showTechnicalSummary: false
   });
-  assert.match(selected, /No-op outcome:/i);
-  assert.match(selected, /reasonCode:\s*LATENCY_NO_SIDE_EFFECT_EXECUTED/i);
-  assert.match(selected, /nextStep:/i);
+  assert.match(selected, /What happened:/i);
+  assert.match(selected, /Technical reason code:\s*LATENCY_NO_SIDE_EFFECT_EXECUTED/i);
+  assert.match(selected, /What to do next:/i);
 });
 
 test("selectUserFacingSummary rewrites latency assurance promise placeholders that use ensure phrasing", () => {
@@ -1523,9 +1680,9 @@ test("selectUserFacingSummary rewrites latency assurance promise placeholders th
   const selected = selectUserFacingSummary(runResult, {
     showTechnicalSummary: false
   });
-  assert.match(selected, /No-op outcome:/i);
-  assert.match(selected, /reasonCode:\s*LATENCY_NO_SIDE_EFFECT_EXECUTED/i);
-  assert.match(selected, /nextStep:/i);
+  assert.match(selected, /What happened:/i);
+  assert.match(selected, /Technical reason code:\s*LATENCY_NO_SIDE_EFFECT_EXECUTED/i);
+  assert.match(selected, /What to do next:/i);
 });
 
 test("selectUserFacingSummary rewrites cache-reuse promise placeholders for stage-review latency checks", () => {
@@ -1561,9 +1718,9 @@ test("selectUserFacingSummary rewrites cache-reuse promise placeholders for stag
   const selected = selectUserFacingSummary(runResult, {
     showTechnicalSummary: false
   });
-  assert.match(selected, /No-op outcome:/i);
-  assert.match(selected, /reasonCode:\s*LATENCY_NO_SIDE_EFFECT_EXECUTED/i);
-  assert.match(selected, /nextStep:/i);
+  assert.match(selected, /What happened:/i);
+  assert.match(selected, /Technical reason code:\s*LATENCY_NO_SIDE_EFFECT_EXECUTED/i);
+  assert.match(selected, /What to do next:/i);
 });
 
 test("selectUserFacingSummary keeps latency cache no-op fallback when only read-only actions are approved", () => {
@@ -1597,9 +1754,9 @@ test("selectUserFacingSummary keeps latency cache no-op fallback when only read-
   const selected = selectUserFacingSummary(runResult, {
     showTechnicalSummary: false
   });
-  assert.match(selected, /No-op outcome:/i);
-  assert.match(selected, /reasonCode:\s*LATENCY_NO_SIDE_EFFECT_EXECUTED/i);
-  assert.match(selected, /nextStep:/i);
+  assert.match(selected, /What happened:/i);
+  assert.match(selected, /Technical reason code:\s*LATENCY_NO_SIDE_EFFECT_EXECUTED/i);
+  assert.match(selected, /What to do next:/i);
 });
 
 test("selectUserFacingSummary normalizes latency no-op text drift into deterministic no-op envelope", () => {
@@ -1653,9 +1810,9 @@ test("selectUserFacingSummary normalizes latency no-op text drift into determini
   const selected = selectUserFacingSummary(runResult, {
     showTechnicalSummary: false
   });
-  assert.match(selected, /No-op outcome:/i);
-  assert.match(selected, /reasonCode:\s*LATENCY_NO_SIDE_EFFECT_EXECUTED/i);
-  assert.match(selected, /nextStep:/i);
+  assert.match(selected, /What happened:/i);
+  assert.match(selected, /Technical reason code:\s*LATENCY_NO_SIDE_EFFECT_EXECUTED/i);
+  assert.match(selected, /What to do next:/i);
 });
 
 test("selectUserFacingSummary rewrites stage-review evidence-bundle promise placeholders without forcing mission diagnostics", () => {
@@ -1690,9 +1847,9 @@ test("selectUserFacingSummary rewrites stage-review evidence-bundle promise plac
   const selected = selectUserFacingSummary(runResult, {
     showTechnicalSummary: true
   });
-  assert.match(selected, /No-op outcome:/i);
-  assert.match(selected, /reasonCode:\s*OBSERVABILITY_NO_SIDE_EFFECT_EXECUTED/i);
-  assert.match(selected, /nextStep:/i);
+  assert.match(selected, /What happened:/i);
+  assert.match(selected, /Technical reason code:\s*OBSERVABILITY_NO_SIDE_EFFECT_EXECUTED/i);
+  assert.match(selected, /What to do next:/i);
   assert.doesNotMatch(selected, /Run summary:/i);
 });
 
@@ -1727,9 +1884,9 @@ test("selectUserFacingSummary forces observability no-op fallback for evidence-b
   const selected = selectUserFacingSummary(runResult, {
     showTechnicalSummary: false
   });
-  assert.match(selected, /No-op outcome:/i);
-  assert.match(selected, /reasonCode:\s*OBSERVABILITY_NO_SIDE_EFFECT_EXECUTED/i);
-  assert.match(selected, /nextStep:/i);
+  assert.match(selected, /What happened:/i);
+  assert.match(selected, /Technical reason code:\s*OBSERVABILITY_NO_SIDE_EFFECT_EXECUTED/i);
+  assert.match(selected, /What to do next:/i);
 });
 
 test("selectUserFacingSummary rewrites clarification-loop output for execution-style workflow prompts", () => {
@@ -1764,9 +1921,9 @@ test("selectUserFacingSummary rewrites clarification-loop output for execution-s
   const selected = selectUserFacingSummary(runResult, {
     showTechnicalSummary: false
   });
-  assert.match(selected, /No-op outcome:/i);
-  assert.match(selected, /reasonCode:\s*WORKFLOW_REPLAY_NO_SIDE_EFFECT_EXECUTED/i);
-  assert.match(selected, /nextStep:/i);
+  assert.match(selected, /What happened:/i);
+  assert.match(selected, /Technical reason code:\s*WORKFLOW_REPLAY_NO_SIDE_EFFECT_EXECUTED/i);
+  assert.match(selected, /What to do next:/i);
 });
 
 test("selectUserFacingSummary rewrites execution no-op phrasing for execution-style workflow prompts", () => {
@@ -1801,9 +1958,9 @@ test("selectUserFacingSummary rewrites execution no-op phrasing for execution-st
   const selected = selectUserFacingSummary(runResult, {
     showTechnicalSummary: false
   });
-  assert.match(selected, /No-op outcome:/i);
-  assert.match(selected, /reasonCode:\s*WORKFLOW_REPLAY_NO_SIDE_EFFECT_EXECUTED/i);
-  assert.match(selected, /nextStep:/i);
+  assert.match(selected, /What happened:/i);
+  assert.match(selected, /Technical reason code:\s*WORKFLOW_REPLAY_NO_SIDE_EFFECT_EXECUTED/i);
+  assert.match(selected, /What to do next:/i);
 });
 
 test("selectUserFacingSummary rewrites non-question clarification workflow replies for execution-style prompts", () => {
@@ -1838,9 +1995,9 @@ test("selectUserFacingSummary rewrites non-question clarification workflow repli
   const selected = selectUserFacingSummary(runResult, {
     showTechnicalSummary: false
   });
-  assert.match(selected, /No-op outcome:/i);
-  assert.match(selected, /reasonCode:\s*WORKFLOW_REPLAY_NO_SIDE_EFFECT_EXECUTED/i);
-  assert.match(selected, /nextStep:/i);
+  assert.match(selected, /What happened:/i);
+  assert.match(selected, /Technical reason code:\s*WORKFLOW_REPLAY_NO_SIDE_EFFECT_EXECUTED/i);
+  assert.match(selected, /What to do next:/i);
 });
 
 test("selectUserFacingSummary rewrites workflow confirmation-loop replies for execution-style prompts", () => {
@@ -1875,9 +2032,9 @@ test("selectUserFacingSummary rewrites workflow confirmation-loop replies for ex
   const selected = selectUserFacingSummary(runResult, {
     showTechnicalSummary: false
   });
-  assert.match(selected, /No-op outcome:/i);
-  assert.match(selected, /reasonCode:\s*WORKFLOW_REPLAY_NO_SIDE_EFFECT_EXECUTED/i);
-  assert.match(selected, /nextStep:/i);
+  assert.match(selected, /What happened:/i);
+  assert.match(selected, /Technical reason code:\s*WORKFLOW_REPLAY_NO_SIDE_EFFECT_EXECUTED/i);
+  assert.match(selected, /What to do next:/i);
 });
 
 test("selectUserFacingSummary rewrites capability-limitation workflow replies for execution-style prompts", () => {
@@ -1912,9 +2069,9 @@ test("selectUserFacingSummary rewrites capability-limitation workflow replies fo
   const selected = selectUserFacingSummary(runResult, {
     showTechnicalSummary: false
   });
-  assert.match(selected, /No-op outcome:/i);
-  assert.match(selected, /reasonCode:\s*WORKFLOW_REPLAY_NO_SIDE_EFFECT_EXECUTED/i);
-  assert.match(selected, /nextStep:/i);
+  assert.match(selected, /What happened:/i);
+  assert.match(selected, /Technical reason code:\s*WORKFLOW_REPLAY_NO_SIDE_EFFECT_EXECUTED/i);
+  assert.match(selected, /What to do next:/i);
 });
 
 test("selectUserFacingSummary rewrites capability-limitation evidence export replies for execution-style prompts", () => {
@@ -1949,9 +2106,9 @@ test("selectUserFacingSummary rewrites capability-limitation evidence export rep
   const selected = selectUserFacingSummary(runResult, {
     showTechnicalSummary: false
   });
-  assert.match(selected, /No-op outcome:/i);
-  assert.match(selected, /reasonCode:\s*OBSERVABILITY_NO_SIDE_EFFECT_EXECUTED/i);
-  assert.match(selected, /nextStep:/i);
+  assert.match(selected, /What happened:/i);
+  assert.match(selected, /Technical reason code:\s*OBSERVABILITY_NO_SIDE_EFFECT_EXECUTED/i);
+  assert.match(selected, /What to do next:/i);
 });
 
 test("selectUserFacingSummary rewrites capability-limitation recovery replies for retry-budget prompts", () => {
@@ -1987,9 +2144,9 @@ test("selectUserFacingSummary rewrites capability-limitation recovery replies fo
   const selected = selectUserFacingSummary(runResult, {
     showTechnicalSummary: false
   });
-  assert.match(selected, /No-op outcome:/i);
-  assert.match(selected, /reasonCode:\s*RECOVERY_NO_SIDE_EFFECT_EXECUTED/i);
-  assert.match(selected, /nextStep:/i);
+  assert.match(selected, /What happened:/i);
+  assert.match(selected, /Technical reason code:\s*RECOVERY_NO_SIDE_EFFECT_EXECUTED/i);
+  assert.match(selected, /What to do next:/i);
 });
 
 test("selectUserFacingSummary rewrites recovery clarification replies that ask for more instructions", () => {
@@ -2025,9 +2182,9 @@ test("selectUserFacingSummary rewrites recovery clarification replies that ask f
   const selected = selectUserFacingSummary(runResult, {
     showTechnicalSummary: false
   });
-  assert.match(selected, /No-op outcome:/i);
-  assert.match(selected, /reasonCode:\s*RECOVERY_NO_SIDE_EFFECT_EXECUTED/i);
-  assert.match(selected, /nextStep:/i);
+  assert.match(selected, /What happened:/i);
+  assert.match(selected, /Technical reason code:\s*RECOVERY_NO_SIDE_EFFECT_EXECUTED/i);
+  assert.match(selected, /What to do next:/i);
 });
 
 test("selectUserFacingSummary rewrites recovery future-promise replies that only describe retries", () => {
@@ -2063,9 +2220,9 @@ test("selectUserFacingSummary rewrites recovery future-promise replies that only
   const selected = selectUserFacingSummary(runResult, {
     showTechnicalSummary: false
   });
-  assert.match(selected, /No-op outcome:/i);
-  assert.match(selected, /reasonCode:\s*RECOVERY_NO_SIDE_EFFECT_EXECUTED/i);
-  assert.match(selected, /nextStep:/i);
+  assert.match(selected, /What happened:/i);
+  assert.match(selected, /Technical reason code:\s*RECOVERY_NO_SIDE_EFFECT_EXECUTED/i);
+  assert.match(selected, /What to do next:/i);
 });
 
 test("selectUserFacingSummary rewrites recovery narrative acknowledgements that avoid concrete execution", () => {
@@ -2101,9 +2258,9 @@ test("selectUserFacingSummary rewrites recovery narrative acknowledgements that 
   const selected = selectUserFacingSummary(runResult, {
     showTechnicalSummary: false
   });
-  assert.match(selected, /No-op outcome:/i);
-  assert.match(selected, /reasonCode:\s*RECOVERY_NO_SIDE_EFFECT_EXECUTED/i);
-  assert.match(selected, /nextStep:/i);
+  assert.match(selected, /What happened:/i);
+  assert.match(selected, /Technical reason code:\s*RECOVERY_NO_SIDE_EFFECT_EXECUTED/i);
+  assert.match(selected, /What to do next:/i);
 });
 
 test("selectUserFacingSummary rewrites progress placeholders before technical run_skill status lines", () => {
@@ -2249,7 +2406,7 @@ test("selectUserFacingSummary includes VERIFICATION_GATE_FAILED safety code even
         },
         mode: "escalation_path",
         approved: false,
-        output: null,
+        output: undefined,
         blockedBy: ["LIST_MISSING_PATH"],
         violations: [
           {
@@ -2355,9 +2512,9 @@ test("selectUserFacingSummary routes schedule prompts to typed unsupported no-op
   const selected = selectUserFacingSummary(runResult, {
     showTechnicalSummary: false
   });
-  assert.match(selected, /No-op outcome:/i);
-  assert.match(selected, /reasonCode:\s*CALENDAR_PROPOSE_NOT_AVAILABLE/i);
-  assert.match(selected, /nextStep:/i);
+  assert.match(selected, /What happened:/i);
+  assert.match(selected, /Technical reason code:\s*CALENDAR_PROPOSE_NOT_AVAILABLE/i);
+  assert.match(selected, /What to do next:/i);
 });
 
 test("selectUserFacingSummary answers clone block-reason prompts with policy explanation", () => {
@@ -2435,3 +2592,8 @@ test("selectUserFacingSummary applies TruthPolicyV1 so blocked diagnostics never
   assert.match(selected, /Task ended blocked with 0 approved action\(s\) and 1 blocked action\(s\)\./i);
   assert.doesNotMatch(selected, /Completed task with 0 approved action\(s\) and 1 blocked action\(s\)\./i);
 });
+
+
+
+
+

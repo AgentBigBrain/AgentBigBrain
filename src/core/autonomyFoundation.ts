@@ -3,7 +3,7 @@
  */
 
 import { exec as execCallback } from "node:child_process";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 
@@ -13,6 +13,8 @@ import { TaskRunResult } from "./types";
 
 const exec = promisify(execCallback);
 const SKILL_NAME_PATTERN = /^[a-zA-Z0-9_-]{1,64}$/;
+const PRIMARY_SKILL_EXTENSION = ".js";
+const COMPATIBILITY_SKILL_EXTENSION = ".ts";
 const DEFAULT_SANDBOX_TIMEOUT_MS = 120_000;
 const TRACE_MIN_CONCEPT_LENGTH = 4;
 const TRACE_CONCEPT_STOP_WORDS = new Set([
@@ -195,6 +197,27 @@ async function readOptionalFile(filePath: string): Promise<string | null> {
     return await readFile(filePath, "utf8");
   } catch {
     return null;
+  }
+}
+
+/**
+ * Evaluates file exists and returns a deterministic policy signal.
+ *
+ * **Why it exists:**
+ * Keeps compatibility fallback logic explicit for promotion drills during skill artifact migration.
+ *
+ * **What it talks to:**
+ * - Uses `access` (import `access`) from `node:fs/promises`.
+ *
+ * @param filePath - Filesystem location used by this operation.
+ * @returns Promise resolving to `true` when this check passes.
+ */
+async function fileExists(filePath: string): Promise<boolean> {
+  try {
+    await access(filePath);
+    return true;
+  } catch {
+    return false;
   }
 }
 
@@ -529,11 +552,45 @@ export class AutonomyPromotionDrill {
       throw new Error("Skill name is invalid for promotion drill.");
     }
 
-    const resolved = path.resolve(path.join(this.skillsRootPath, `${skillName}.ts`));
-    if (!resolved.startsWith(this.skillsRootPath)) {
+    const primaryPath = path.resolve(
+      path.join(this.skillsRootPath, `${skillName}${PRIMARY_SKILL_EXTENSION}`)
+    );
+    const compatibilityPath = path.resolve(
+      path.join(this.skillsRootPath, `${skillName}${COMPATIBILITY_SKILL_EXTENSION}`)
+    );
+    if (
+      !primaryPath.startsWith(this.skillsRootPath) ||
+      !compatibilityPath.startsWith(this.skillsRootPath)
+    ) {
       throw new Error("Skill path escaped promotion skills root.");
     }
-    return resolved;
+    return primaryPath;
+  }
+
+  /**
+   * Resolves skill path from available runtime context.
+   *
+   * **Why it exists:**
+   * Applies deterministic `.js` primary with `.ts` compatibility fallback for promotion snapshots.
+   *
+   * **What it talks to:**
+   * - Uses `fileExists` in this module.
+   *
+   * @param skillName - Value for skill name.
+   * @returns Promise resolving to string.
+   */
+  private async resolveSkillPathForSnapshot(skillName: string): Promise<string> {
+    const primaryPath = this.resolveSkillPath(skillName);
+    if (await fileExists(primaryPath)) {
+      return primaryPath;
+    }
+    const compatibilityPath = path.resolve(
+      path.join(this.skillsRootPath, `${skillName}${COMPATIBILITY_SKILL_EXTENSION}`)
+    );
+    if (await fileExists(compatibilityPath)) {
+      return compatibilityPath;
+    }
+    return primaryPath;
   }
 
   /**
@@ -597,7 +654,7 @@ export class AutonomyPromotionDrill {
     if (!normalizedProposalId) {
       throw new Error("Proposal ID is required for promotion drill.");
     }
-    const skillPath = this.resolveSkillPath(skillName);
+    const skillPath = await this.resolveSkillPathForSnapshot(skillName);
     const previousContent = await readOptionalFile(skillPath);
 
     const snapshot: AutonomyPromotionSnapshot = {

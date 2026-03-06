@@ -80,9 +80,10 @@ test("renderUserFacingEnvelopeV1 renders deterministic no-op template shape", ()
     "Request approval diff."
   );
   const rendered = renderUserFacingEnvelopeV1(envelope);
-  assert.match(rendered, /No-op outcome:/i);
-  assert.match(rendered, /reasonCode:\s*BUILD_NO_SIDE_EFFECT_EXECUTED/i);
-  assert.match(rendered, /nextStep:\s*Request approval diff\./i);
+  assert.match(rendered, /What happened:\s*this run finished without executing the requested side effect\./i);
+  assert.match(rendered, /Why it didn't execute:/i);
+  assert.match(rendered, /Technical reason code:\s*BUILD_NO_SIDE_EFFECT_EXECUTED/i);
+  assert.match(rendered, /What to do next:\s*Request approval diff\./i);
 });
 
 test("applyTruthPolicyV1ToOutcomeSummary removes completion wording for blocked outcomes", () => {

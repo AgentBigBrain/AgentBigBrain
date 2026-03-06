@@ -48,10 +48,9 @@ test("buildTurnLocalStatusUpdateBlock only emits block for first-person status u
 test("resolveFollowUpInput wraps short follow-up answers with prior assistant clarification context", () => {
   const session = buildSession();
   session.conversationTurns.push({
-    id: "assistant-turn-1",
     role: "assistant",
     text: "Do you want the private or public pulse mode?",
-    createdAt: "2026-03-03T00:00:10.000Z"
+    at: "2026-03-03T00:00:10.000Z"
   });
 
   const resolution = resolveFollowUpInput(
@@ -80,16 +79,14 @@ test("buildConversationAwareExecutionInput returns raw input when no context, st
 test("buildConversationAwareExecutionInput includes conversation context, status guardrails, and routing hint", () => {
   const session = buildSession();
   session.conversationTurns.push({
-    id: "user-turn-1",
     role: "user",
     text: "Please keep approvals deterministic.",
-    createdAt: "2026-03-03T00:00:10.000Z"
+    at: "2026-03-03T00:00:10.000Z"
   });
   session.conversationTurns.push({
-    id: "assistant-turn-2",
     role: "assistant",
     text: "I will provide the exact approval diff before any write.",
-    createdAt: "2026-03-03T00:00:20.000Z"
+    at: "2026-03-03T00:00:20.000Z"
   });
 
   const executionInput = buildConversationAwareExecutionInput(
@@ -105,13 +102,29 @@ test("buildConversationAwareExecutionInput includes conversation context, status
   assert.match(executionInput, /Current user request:/);
 });
 
+test("buildConversationAwareExecutionInput includes build-scaffold routing hint for generic app creation prompts", () => {
+  const session = buildSession();
+  const classification = classifyRoutingIntentV1(
+    "Create a React app on my Desktop and execute now."
+  );
+  const executionInput = buildConversationAwareExecutionInput(
+    session,
+    "Create a React app on my Desktop and execute now.",
+    10,
+    classification
+  );
+
+  assert.match(executionInput, /Deterministic routing hint:/);
+  assert.match(executionInput, /Intent surface: build_scaffold\./i);
+  assert.match(executionInput, /BUILD_NO_SIDE_EFFECT_EXECUTED/i);
+});
+
 test("buildAgentPulseExecutionInput includes pulse safety instructions and bounded context", () => {
   const session = buildSession();
   session.conversationTurns.push({
-    id: "assistant-turn-1",
     role: "assistant",
     text: "Reminder: we paused at checkpoint 6.86.G.",
-    createdAt: "2026-03-03T00:00:10.000Z"
+    at: "2026-03-03T00:00:10.000Z"
   });
 
   const executionInput = buildAgentPulseExecutionInput(

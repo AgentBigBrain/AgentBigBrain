@@ -141,9 +141,11 @@ Major categories:
 Handles:
 - `respond`
 - file I/O actions
-- `create_skill` / `run_skill` under `runtime/skills/`
+- `read_file` returns bounded preview content with deterministic truncation metadata (`readFileTotalChars`, `readFileReturnedChars`, `readFileTruncated`)
+- `create_skill` / `run_skill` under `runtime/skills/` (`.js` primary runtime artifact, `.ts` compatibility fallback during migration window)
 - `network_write` (simulated unless real network enabled)
 - `shell_command` (simulated unless real shell enabled)
+- typed execution outcomes (`success | blocked | failed`) with deterministic runtime failure codes consumed by `TaskRunner`
 
 Real shell execution uses explicit `spawn(executable, args)` from resolved shell profile and records bounded telemetry digests.
 
@@ -197,6 +199,12 @@ Structured outputs are normalized and validated before entering planner/governor
 - replay/rate-limit controls
 - per-session queue worker (`ConversationManager`)
 - shared orchestrator path for all accepted tasks
+- deterministic user-facing rendering that leads with plain-English execution state (`Executed`, `Guidance only`, `Blocked`) while preserving typed technical reason codes in technical/debug surfaces
+- deterministic routing-map intent hints (`RoutingMapV1`) injected into conversation-aware execution input:
+  - generic execution-style build/create prompts (for example React app creation on Desktop) classify to `BUILD_SCAFFOLD` execution surface
+  - explanation-only build prompts stay outside execution-surface routing to reduce over-classification
+- advanced cross-provider UX regression gate: `npm run test:interface:advanced_live_smoke` runs adversarial Telegram+Discord prompt suites and emits `runtime/evidence/interface_advanced_live_smoke_report.json` with per-provider parity diagnostics
+- real-provider transport smoke gate: `npm run test:interface:real_provider_live_smoke` runs live Telegram/Discord outbound delivery (no fetch stubs) and emits `runtime/evidence/interface_real_provider_live_smoke_report.json`; execution is fail-closed unless `BRAIN_INTERFACE_REAL_LIVE_SMOKE_CONFIRM=true`
 
 ### Federation
 - Inbound server: `src/interfaces/federationRuntime.ts` + `FederatedHttpServer`
@@ -210,6 +218,8 @@ Both paths remain governed by orchestrator policy.
 `src/core/agentLoop.ts` runs bounded iterations for:
 - autonomous mode
 - daemon mode (with explicit safety latches and rollover limits)
+- deterministic completion gate for execution-style missions: no `Goal Met` until mission-level approved real side-effect evidence exists (`read_file`/`list_directory` and simulated outcomes are excluded)
+- deterministic side-effect-aware stall abort for execution-style respond-only loops (`reasonCode=AUTONOMOUS_EXECUTION_STYLE_STALLED_NO_SIDE_EFFECT`)
 
 ### Clones Are Not Sub-Agents
 `src/core/satelliteClone.ts` provides governed satellite primitives:

@@ -7,7 +7,7 @@ import path from "node:path";
 
 import { buildDefaultBrain } from "../core/buildBrain";
 import { ensureEnvLoaded } from "../core/envLoader";
-import { ActionType, TaskRequest } from "../core/types";
+import { ActionRunResult, ActionType, TaskRequest } from "../core/types";
 
 export interface OpenAiLiveSmokePrompt {
   id: string;
@@ -81,11 +81,20 @@ function buildTask(stageId: string, prompt: OpenAiLiveSmokePrompt, index: number
  * **What it talks to:**
  * - Uses local constants/helpers within this module.
  *
- * @param output - Result object inspected or transformed in this step.
+ * @param actionResult - Action result inspected for runtime execution failure signals.
  * @returns `true` when this check passes.
  */
-function detectExecutionFailure(output: string | undefined): boolean {
-  const normalized = (output ?? "").trim().toLowerCase();
+function detectExecutionFailure(actionResult: ActionRunResult): boolean {
+  if (
+    actionResult.executionStatus === "failed" ||
+    actionResult.executionFailureCode === "ACTION_EXECUTION_FAILED" ||
+    actionResult.blockedBy.includes("ACTION_EXECUTION_FAILED") ||
+    actionResult.violations.some((violation) => violation.code === "ACTION_EXECUTION_FAILED")
+  ) {
+    return true;
+  }
+
+  const normalized = (actionResult.output ?? "").trim().toLowerCase();
   return normalized.startsWith("run skill failed:");
 }
 
@@ -148,10 +157,7 @@ export async function runOpenAiLiveSmoke(
         .map((result) => result.action.type);
       const blockedBy = runResult.actionResults.flatMap((result) => result.blockedBy);
       const executionFailureDetected = runResult.actionResults.some(
-        (result) =>
-          result.blockedBy.includes("ACTION_EXECUTION_FAILED") ||
-          result.violations.some((violation) => violation.code === "ACTION_EXECUTION_FAILED") ||
-          detectExecutionFailure(result.output)
+        (result) => detectExecutionFailure(result)
       );
       const requiredTypes = prompt.requiredApprovedActionTypes ?? [];
       const promptRequiredActionTypesSatisfied = requiredTypes.every((requiredType) =>

@@ -351,6 +351,36 @@ class RunSkillFailureModelClient implements ModelClient {
   }
 }
 
+class WriteFileMissingContentModelClient implements ModelClient {
+  readonly backend = "mock" as const;
+  private readonly delegate = new MockModelClient();
+
+  /**
+  * Implements `completeJson` behavior within class WriteFileMissingContentModelClient.
+  * Interacts with local collaborators through imported modules and typed inputs/outputs.
+  */
+  async completeJson<T>(request: StructuredCompletionRequest): Promise<T> {
+    if (request.schemaName === "planner_v1") {
+      const writeFilePlan: PlannerModelOutput = {
+        plannerNotes: "Emit write_file action missing content to verify fail-closed execution handling.",
+        actions: [
+          {
+            type: "write_file",
+            description: "Write app file without required content payload.",
+            params: {
+              path: "runtime/generated/missing-content.txt"
+            },
+            estimatedCostUsd: 0.08
+          }
+        ]
+      };
+      return writeFilePlan as T;
+    }
+
+    return this.delegate.completeJson<T>(request);
+  }
+}
+
 class RespondOnlyPlannerModelClient implements ModelClient {
   readonly backend = "mock" as const;
   private readonly delegate = new MockModelClient();
@@ -639,6 +669,32 @@ test("orchestrator fails closed when approved run_skill execution returns determ
     );
     assert.equal(result.actionResults.length, 1);
     assert.equal(result.actionResults[0].approved, false);
+    assert.equal(result.actionResults[0].executionStatus, "failed");
+    assert.equal(result.actionResults[0].executionFailureCode, "RUN_SKILL_ARTIFACT_MISSING");
+    assert.ok(result.actionResults[0].blockedBy.includes("RUN_SKILL_ARTIFACT_MISSING"));
+    assert.equal(
+      result.actionResults[0].violations.some(
+        (violation) => violation.code === "RUN_SKILL_ARTIFACT_MISSING"
+      ),
+      true
+    );
+    assert.match(result.actionResults[0].output ?? "", /Run skill failed: no skill artifact found/i);
+    assert.match(result.summary, /0 approved action\(s\) and 1 blocked action\(s\)/i);
+    assert.doesNotMatch(result.summary, /Recovery postmortem: MISSION_STOP_LIMIT_REACHED/i);
+  });
+});
+
+test("orchestrator fails closed when approved write_file execution is missing params.content", async () => {
+  const modelClient = new WriteFileMissingContentModelClient();
+
+  await withTestBrainForModel(modelClient, async (brain) => {
+    const result = await brain.runTask(
+      buildTask("Create a file but omit content to verify fail-closed execution behavior.")
+    );
+    assert.equal(result.actionResults.length, 1);
+    assert.equal(result.actionResults[0].approved, false);
+    assert.equal(result.actionResults[0].executionStatus, "blocked");
+    assert.equal(result.actionResults[0].executionFailureCode, "ACTION_EXECUTION_FAILED");
     assert.ok(result.actionResults[0].blockedBy.includes("ACTION_EXECUTION_FAILED"));
     assert.equal(
       result.actionResults[0].violations.some(
@@ -646,9 +702,8 @@ test("orchestrator fails closed when approved run_skill execution returns determ
       ),
       true
     );
-    assert.match(result.actionResults[0].output ?? "", /Run skill failed:/i);
+    assert.match(result.actionResults[0].output ?? "", /missing params\.content/i);
     assert.match(result.summary, /0 approved action\(s\) and 1 blocked action\(s\)/i);
-    assert.doesNotMatch(result.summary, /Recovery postmortem: MISSION_STOP_LIMIT_REACHED/i);
   });
 });
 

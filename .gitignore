@@ -6,3 +6,6 @@ runtime/
 .env.local
 
 /models/
+docs/stages/
+docs/memory/
+docs/plans/

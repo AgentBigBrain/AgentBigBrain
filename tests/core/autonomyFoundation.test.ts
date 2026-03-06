@@ -190,7 +190,7 @@ async function stage6GovernedPromotionControlUsesOrchestratorVotes(): Promise<vo
 
     const createdSkillPath = path.resolve(
       process.cwd(),
-      "runtime/skills/stage6_promoted_skill.ts"
+      "runtime/skills/stage6_promoted_skill.js"
     );
     const createdContent = await readFile(createdSkillPath, "utf8");
     assert.ok(createdContent.includes("generatedSkill"));
@@ -230,6 +230,11 @@ async function stage6RollbackDrillRestoresPreviousSkillSnapshot(): Promise<void>
 
     const snapshot = await drill.readSnapshot();
     assert.equal(snapshot?.status, "rolled_back");
+    const snapshotPath = path.resolve(tempDir, "runtime/evidence/stage6_promotion_drill.json");
+    const persistedSnapshot = JSON.parse(await readFile(snapshotPath, "utf8")) as {
+      skillPath: string;
+    };
+    assert.equal(persistedSnapshot.skillPath.endsWith(".ts"), true);
   } finally {
     process.chdir(previousCwd);
     await removeTempDirWithRetry(tempDir);
