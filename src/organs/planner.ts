@@ -67,7 +67,7 @@ import {
 } from "./plannerBuildExecutionPolicy";
 
 const SHELL_EXPLICIT_REQUEST_PATTERN =
-  /\b(shell|terminal|powershell|bash|cmd(?:\.exe)?|command line|run (?:a )?command|execute (?:a )?command)\b/i;
+  /\b(shell|terminal|powershell|bash|zsh|cmd(?:\.exe)?|command line|run (?:a )?command|execute (?:a )?command)\b/i;
 const SELF_MODIFY_EXPLICIT_REQUEST_PATTERN =
   /\b(self[-\s]?modify|modify (?:yourself|your own|the agent|the brain|runtime|source|codebase|governor|policy)|edit (?:agent|runtime|source|code|config)|patch (?:agent|runtime|codebase)|change (?:governor|policy|hard constraint|runtime|codebase))\b/i;
 const FIRST_PRINCIPLES_RISK_PATTERNS: readonly RegExp[] = [
@@ -77,7 +77,7 @@ const FIRST_PRINCIPLES_RISK_PATTERNS: readonly RegExp[] = [
   /\b(deploy|production|rollback|database migration)\b/i,
   /\b(self[-\s]?modify|modify (?:agent|runtime|policy|governor|constraint))\b/i,
   /\b(memory_mutation|pulse_emit)\b/i,
-  /\b(shell|terminal|powershell|bash|cmd(?:\.exe)?)\b/i
+  /\b(shell|terminal|powershell|bash|zsh|cmd(?:\.exe)?)\b/i
 ];
 const FIRST_PRINCIPLES_NOVEL_REQUEST_MIN_WORDS = 16;
 const RESPONSE_IDENTITY_GUARDRAIL =

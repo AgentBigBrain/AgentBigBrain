@@ -532,7 +532,7 @@ All configuration is via environment variables. Required variables are noted per
 
 | Name | Required | Default | Description |
 |---|---|---|---|
-| `BRAIN_SHELL_PROFILE` | No | `auto` | Shell profile: `auto`, `pwsh`, `powershell`, `cmd`, `bash`, `wsl_bash`. |
+| `BRAIN_SHELL_PROFILE` | No | `auto` | Shell profile: `auto`, `pwsh`, `powershell`, `cmd`, `bash`, `zsh`, `wsl_bash`. |
 | `BRAIN_SHELL_EXECUTABLE` | No | auto-resolved | Override executable (absolute path or known shell binary). |
 | `BRAIN_SHELL_TIMEOUT_MS` | No | `10000` | Default shell timeout (bounds: 250..120000). |
 | `BRAIN_SHELL_COMMAND_MAX_CHARS` | No | `4000` | Max shell command length (bounds: 256..32000). |
@@ -543,6 +543,10 @@ All configuration is via environment variables. Required variables are noted per
 | `BRAIN_SHELL_WSL_DISTRO` | No | unset | Optional WSL distro for `wsl_bash`. |
 | `BRAIN_SHELL_CWD_POLICY_DENY_OUTSIDE_SANDBOX` | No | `true` | Denies shell cwd outside sandbox prefix. |
 | `BRAIN_SHELL_CWD_POLICY_ALLOW_RELATIVE` | No | `true` | Allows relative cwd values. |
+
+Set `BRAIN_SHELL_PROFILE=zsh` when you want true `zsh` execution semantics. Mentioning `zsh`
+in a prompt helps shell intent detection, but the runtime still enforces the configured shell
+profile.
 
 </details>
 

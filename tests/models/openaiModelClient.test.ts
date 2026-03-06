@@ -346,6 +346,15 @@ test("OpenAIModelClient planner schema marks every object property as required f
 
       assert.ok(shellParamsBranch, "expected shell_command params branch to exist");
       const shellProperties = shellParamsBranch?.properties as Record<string, unknown>;
+      const requestedShellKindSchema =
+        shellProperties.requestedShellKind as Record<string, unknown>;
+      assert.equal(Array.isArray(requestedShellKindSchema.anyOf), true);
+      assert.equal(
+        (requestedShellKindSchema.anyOf as Array<Record<string, unknown>>).some((entry) =>
+          Array.isArray(entry.enum) && (entry.enum as unknown[]).includes("zsh")
+        ),
+        true
+      );
       const cwdSchema = shellProperties.cwd as Record<string, unknown>;
       assert.equal(Array.isArray(cwdSchema.anyOf), true);
       assert.equal(

@@ -60,6 +60,7 @@ const KNOWN_SHELL_PROFILE_OPTIONS = new Set<string>([
   "pwsh",
   "cmd",
   "bash",
+  "zsh",
   "wsl_bash"
 ]);
 
@@ -67,6 +68,7 @@ const KNOWN_SHELL_ENV_MODES = new Set<string>(["allowlist", "passthrough"]);
 const WINDOWS_PATHEXT_DEFAULT = [".COM", ".EXE", ".BAT", ".CMD"];
 const ALLOWED_SHELL_EXECUTABLE_OVERRIDES = new Set<string>([
   "bash",
+  "zsh",
   "cmd",
   "cmd.exe",
   "powershell",
@@ -123,7 +125,7 @@ export function normalizeShellProfileOption(value: string | undefined): "auto" |
   const normalized = (value ?? "auto").trim().toLowerCase();
   if (!KNOWN_SHELL_PROFILE_OPTIONS.has(normalized)) {
     throw new Error(
-      "SHELL_PROFILE_INVALID: BRAIN_SHELL_PROFILE must be one of auto|pwsh|powershell|cmd|bash|wsl_bash."
+      "SHELL_PROFILE_INVALID: BRAIN_SHELL_PROFILE must be one of auto|pwsh|powershell|cmd|bash|zsh|wsl_bash."
     );
   }
   return normalized as "auto" | ShellKindV1;
@@ -587,6 +589,8 @@ function defaultExecutableCandidates(shellKind: ShellKindV1): readonly string[] 
       return ["cmd.exe", "cmd"];
     case "bash":
       return ["bash"];
+    case "zsh":
+      return ["zsh"];
     case "wsl_bash":
       return ["wsl.exe", "wsl"];
     default:
@@ -627,6 +631,8 @@ function buildShellWrapperArgs(input: BuildShellWrapperArgsInput): readonly stri
       // `/s` changes quoting semantics and can break quoted drive paths under child-process spawn.
       return ["/d", "/c"];
     case "bash":
+      return ["-lc"];
+    case "zsh":
       return ["-lc"];
     case "wsl_bash": {
       const args: string[] = [];

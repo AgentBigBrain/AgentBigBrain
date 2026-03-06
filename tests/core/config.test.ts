@@ -322,6 +322,20 @@ test("supports deterministic shell runtime env overrides", () => {
   assert.deepEqual(config.shellRuntime.profile.envPolicy.denylist, ["TOKEN", "SECRET"]);
 });
 
+test("supports deterministic zsh shell runtime env overrides", () => {
+  const config = createBrainConfigFromEnv({
+    BRAIN_SHELL_PROFILE: "zsh",
+    BRAIN_SHELL_TIMEOUT_MS: "20000",
+    BRAIN_SHELL_COMMAND_MAX_CHARS: "6000"
+  });
+
+  assert.equal(config.shellRuntime.profile.shellKind, "zsh");
+  assert.equal(config.shellRuntime.profile.executable, "zsh");
+  assert.deepEqual(config.shellRuntime.profile.wrapperArgs, ["-lc"]);
+  assert.equal(config.shellRuntime.profile.timeoutMsDefault, 20000);
+  assert.equal(config.shellRuntime.profile.commandMaxChars, 6000);
+});
+
 test("fails closed on invalid shell profile enum", () => {
   assert.throws(
     () =>

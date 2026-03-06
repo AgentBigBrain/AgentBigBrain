@@ -684,8 +684,10 @@ This section covers every key currently present in `.env.example` and what to ex
 
 ### Shell runtime behavior
 
-- `BRAIN_SHELL_PROFILE`: command execution profile (`cmd`, `pwsh`, `powershell`, `bash`, `wsl_bash`, etc.).
+- `BRAIN_SHELL_PROFILE`: command execution profile (`cmd`, `pwsh`, `powershell`, `bash`, `zsh`, `wsl_bash`, etc.).
   - Changing alters how commands are wrapped/invoked.
+  - If you want true `zsh` execution semantics, set `BRAIN_SHELL_PROFILE=zsh`. Prompt wording
+    alone does not override the configured runtime shell profile.
 - `BRAIN_SHELL_TIMEOUT_MS`: default shell timeout.
   - Lower value interrupts long-running commands sooner.
   - Higher value allows longer command completion windows.

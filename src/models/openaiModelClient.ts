@@ -153,7 +153,7 @@ const PLANNER_PARAMS_SCHEMA: Record<string, unknown> = {
         workdir: { type: "string" },
         requestedShellKind: {
           type: "string",
-          enum: ["powershell", "pwsh", "cmd", "bash", "wsl_bash"]
+          enum: ["powershell", "pwsh", "cmd", "bash", "zsh", "wsl_bash"]
         },
         timeoutMs: { type: "integer" }
       },

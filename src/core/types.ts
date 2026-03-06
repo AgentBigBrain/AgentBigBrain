@@ -173,7 +173,7 @@ export interface SelfModifyActionParams extends Record<string, unknown> {
   touchesImmutable?: boolean;
 }
 
-export type ShellKindV1 = "powershell" | "pwsh" | "cmd" | "bash" | "wsl_bash";
+export type ShellKindV1 = "powershell" | "pwsh" | "cmd" | "bash" | "zsh" | "wsl_bash";
 
 export type ShellInvocationModeV1 = "inline_command";
 

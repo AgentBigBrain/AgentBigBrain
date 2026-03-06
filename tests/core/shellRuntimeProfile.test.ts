@@ -22,6 +22,7 @@ test("normalize shell profile option accepts known values and rejects invalid va
   assert.equal(normalizeShellProfileOption(undefined), "auto");
   assert.equal(normalizeShellProfileOption("pwsh"), "pwsh");
   assert.equal(normalizeShellProfileOption("bash"), "bash");
+  assert.equal(normalizeShellProfileOption("zsh"), "zsh");
   assert.throws(() => normalizeShellProfileOption("fish"), /SHELL_PROFILE_INVALID/);
 });
 
@@ -51,6 +52,31 @@ test("resolve shell runtime profile deterministically for explicit bash profile"
 
   assert.equal(profile.shellKind, "bash");
   assert.equal(profile.executable, "bash");
+  assert.deepEqual(profile.wrapperArgs, ["-lc"]);
+  assert.equal(profile.timeoutMsDefault, 12000);
+  assert.equal(profile.commandMaxChars, 3000);
+});
+
+test("resolve shell runtime profile deterministically for explicit zsh profile", () => {
+  const profile = resolveShellRuntimeProfile({
+    requestedProfile: "zsh",
+    executableOverride: null,
+    platform: "darwin",
+    env: process.env,
+    allowRealShellExecution: false,
+    timeoutMsDefault: 12000,
+    commandMaxChars: 3000,
+    envMode: "allowlist",
+    envAllowlistKeys: ["PATH", "HOME"],
+    envDenylistKeys: ["TOKEN"],
+    allowExecutionPolicyBypass: false,
+    wslDistro: null,
+    denyOutsideSandboxCwd: true,
+    allowRelativeCwd: true
+  });
+
+  assert.equal(profile.shellKind, "zsh");
+  assert.equal(profile.executable, "zsh");
   assert.deepEqual(profile.wrapperArgs, ["-lc"]);
   assert.equal(profile.timeoutMsDefault, 12000);
   assert.equal(profile.commandMaxChars, 3000);
