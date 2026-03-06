@@ -27,3 +27,9 @@
    module-local definitions.
 5. Tests must have clear naming and minimal intent comments only when behavior is non-obvious.
 6. Update `README.md` and `docs/ARCHITECTURE.md` for externally observable behavior changes.
+7. `README.md` and `docs/ARCHITECTURE.md` are polished product or architecture references, not
+   changelogs.
+8. Do not write branch-status notes, implementation diaries, "now does X" rollout phrasing, or
+   patch-by-patch history into `README.md` or `docs/ARCHITECTURE.md`.
+9. Put change history, rollout notes, and active status in plan docs, evidence artifacts, PR
+   descriptions, or other explicitly operational documents instead.
