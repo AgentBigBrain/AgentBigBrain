@@ -260,6 +260,8 @@ export class TelegramAdapter {
     let totalIterations = 0;
     let totalApproved = 0;
     let totalBlocked = 0;
+    let terminalAborted = false;
+    let terminalReason = "";
     let lastProgressMessageAt = 0;
     const THROTTLE_MS = 30_000;
 
@@ -313,6 +315,8 @@ export class TelegramAdapter {
         );
       },
       onGoalAborted: async (reason) => {
+        terminalAborted = true;
+        terminalReason = reason;
         await onProgress(
           `Stopped after ${totalIterations} iteration(s): ${reason}\n` +
           `${totalApproved} action(s) approved, ${totalBlocked} blocked.`
@@ -321,6 +325,10 @@ export class TelegramAdapter {
     };
 
     await loop.run(goal, callbacks, signal);
+    if (terminalAborted) {
+      return `Autonomous task stopped after ${totalIterations} iteration(s). ` +
+        `${totalApproved} approved, ${totalBlocked} blocked. Reason: ${terminalReason}`;
+    }
     return `Autonomous task completed after ${totalIterations} iteration(s). ` +
       `${totalApproved} approved, ${totalBlocked} blocked.`;
   }

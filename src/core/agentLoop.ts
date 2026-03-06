@@ -29,12 +29,6 @@ export interface AutonomousLoopCallbacks {
     onGoalAborted?: (reason: string, totalIterations: number) => Promise<void> | void;
 }
 
-/**
- * Maximum number of consecutive iterations that produce zero approved actions
- * before the loop aborts.  Prevents burning through iterations when a
- * systematic block (governance, constraint, schema) is in effect.
- */
-const MAX_CONSECUTIVE_ZERO_PROGRESS = 3;
 const EXECUTION_STYLE_GOAL_GATING_REASON_CODE = "AUTONOMOUS_EXECUTION_STYLE_SIDE_EFFECT_REQUIRED";
 const EXECUTION_STYLE_STALL_REASON_CODE = "AUTONOMOUS_EXECUTION_STYLE_STALLED_NO_SIDE_EFFECT";
 const GENERIC_STALL_REASON_CODE = "AUTONOMOUS_STALLED_ZERO_PROGRESS";
@@ -195,6 +189,8 @@ export class AutonomousLoop {
             let currentInput = currentOverarchingGoal;
             let iteration = 0;
             const maxIterations = this.config.limits.maxAutonomousIterations;
+            const maxConsecutiveZeroProgressIterations =
+                this.config.limits.maxAutonomousConsecutiveNoProgressIterations;
             const unlimited = maxIterations <= 0;
             let consecutiveZeroProgress = 0;
             let hasApprovedRealSideEffectInMission = false;
@@ -245,7 +241,7 @@ export class AutonomousLoop {
                     consecutiveZeroProgress = 0;
                 }
 
-                if (consecutiveZeroProgress >= MAX_CONSECUTIVE_ZERO_PROGRESS) {
+                if (consecutiveZeroProgress >= maxConsecutiveZeroProgressIterations) {
                     const blockCodes = result.actionResults
                         .filter(r => !r.approved && r.blockedBy)
                         .map(r => r.blockedBy)

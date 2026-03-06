@@ -1149,7 +1149,11 @@ export class ToolExecutorOrgan {
     const shellSpawnSpecFingerprint = computeShellSpawnSpecFingerprint(spawnSpec);
 
     try {
-      const result = await this.runShellProcess(spawnSpec, shellEnvironment.env);
+      const result = await this.runShellProcess(
+        spawnSpec,
+        shellEnvironment.env,
+        this.config.shellRuntime.profile.shellKind
+      );
       this.shellExecutionTelemetryByActionId.set(actionId, {
         shellProfileFingerprint,
         shellSpawnSpecFingerprint,
@@ -1272,6 +1276,7 @@ export class ToolExecutorOrgan {
    *
    * @param spawnSpec - Value for spawn spec.
    * @param env - Value for env.
+   * @param shellKind - Resolved runtime shell kind for spawn options.
    * @returns Promise resolving to {
     exitCode: number | null;
     signal: string | null;
@@ -1282,7 +1287,8 @@ export class ToolExecutorOrgan {
    */
   private async runShellProcess(
     spawnSpec: ReturnType<typeof buildShellSpawnSpec>,
-    env: NodeJS.ProcessEnv
+    env: NodeJS.ProcessEnv,
+    shellKind: string
   ): Promise<{
     exitCode: number | null;
     signal: string | null;
@@ -1295,6 +1301,7 @@ export class ToolExecutorOrgan {
         cwd: spawnSpec.cwd,
         env,
         windowsHide: true,
+        windowsVerbatimArguments: shellKind === "cmd",
         stdio: ["ignore", "pipe", "pipe"]
       });
       let stdoutBuffer = emptyCappedTextBuffer();

@@ -56,6 +56,28 @@ test("resolve shell runtime profile deterministically for explicit bash profile"
   assert.equal(profile.commandMaxChars, 3000);
 });
 
+test("resolve shell runtime profile uses cmd wrapper args without /s quoting mode", () => {
+  const profile = resolveShellRuntimeProfile({
+    requestedProfile: "cmd",
+    executableOverride: null,
+    platform: "win32",
+    env: process.env,
+    allowRealShellExecution: false,
+    timeoutMsDefault: 12000,
+    commandMaxChars: 3000,
+    envMode: "allowlist",
+    envAllowlistKeys: ["PATH", "SYSTEMROOT"],
+    envDenylistKeys: ["TOKEN"],
+    allowExecutionPolicyBypass: false,
+    wslDistro: null,
+    denyOutsideSandboxCwd: true,
+    allowRelativeCwd: true
+  });
+
+  assert.equal(profile.shellKind, "cmd");
+  assert.deepEqual(profile.wrapperArgs, ["/d", "/c"]);
+});
+
 test("resolve shell runtime profile keeps logical executable name when real shell is disabled", async () => {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-shell-runtime-"));
   const fakeBash = path.join(tempDir, "bash");

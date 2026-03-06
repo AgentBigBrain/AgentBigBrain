@@ -220,6 +220,7 @@ Both paths remain governed by orchestrator policy.
 - daemon mode (with explicit safety latches and rollover limits)
 - deterministic completion gate for execution-style missions: no `Goal Met` until mission-level approved real side-effect evidence exists (`read_file`/`list_directory` and simulated outcomes are excluded)
 - deterministic side-effect-aware stall abort for execution-style respond-only loops (`reasonCode=AUTONOMOUS_EXECUTION_STYLE_STALLED_NO_SIDE_EFFECT`)
+- stall-abort threshold is operator-configurable via `BRAIN_AUTONOMOUS_MAX_CONSECUTIVE_NO_PROGRESS` (default `3`)
 
 ### Clones Are Not Sub-Agents
 `src/core/satelliteClone.ts` provides governed satellite primitives:

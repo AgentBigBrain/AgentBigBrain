@@ -233,6 +233,7 @@ Autonomous execution semantics:
 - For execution-style goals, `Goal Met` is only allowed after at least one approved real side-effect action occurs in the current mission.
 - Read-only actions (`read_file`, `list_directory`) and simulated outcomes do not count as completion evidence for execution-style missions.
 - Repeated respond-only execution-style iterations trigger bounded deterministic abort (`reasonCode=AUTONOMOUS_EXECUTION_STYLE_STALLED_NO_SIDE_EFFECT`) instead of silently looping until cap.
+- `BRAIN_AUTONOMOUS_MAX_CONSECUTIVE_NO_PROGRESS` controls the stall-abort threshold (`3` by default).
 
 Routing semantics for build requests:
 
@@ -442,6 +443,7 @@ All configuration is via environment variables. Required variables are noted per
 | `BRAIN_ENABLE_REAL_NETWORK_WRITE` | No | `false` | Enables real network-write action path. |
 | `BRAIN_ALLOW_DAEMON_MODE` | Conditional | `false` | Required for `--daemon` mode startup. |
 | `BRAIN_MAX_AUTONOMOUS_ITERATIONS` | No | `15` | Max iterations per autonomous run. |
+| `BRAIN_AUTONOMOUS_MAX_CONSECUTIVE_NO_PROGRESS` | No | `3` | Stall guard: max consecutive zero-progress autonomous iterations before abort. |
 | `BRAIN_MAX_DAEMON_GOAL_ROLLOVERS` | No | `0` | Max daemon rollover count; daemon requires `> 0`. |
 | `BRAIN_USER_PROTECTED_PATHS` | No | empty | Semicolon-delimited extra protected path prefixes. |
 | `BRAIN_REFLECT_ON_SUCCESS` | No | `false` | Enables success-path reflection storage. |

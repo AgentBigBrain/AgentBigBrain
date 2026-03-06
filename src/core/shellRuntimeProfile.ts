@@ -624,7 +624,8 @@ function buildShellWrapperArgs(input: BuildShellWrapperArgsInput): readonly stri
       return args;
     }
     case "cmd":
-      return ["/d", "/s", "/c"];
+      // `/s` changes quoting semantics and can break quoted drive paths under child-process spawn.
+      return ["/d", "/c"];
     case "bash":
       return ["-lc"];
     case "wsl_bash": {

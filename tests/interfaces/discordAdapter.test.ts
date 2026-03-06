@@ -167,3 +167,26 @@ test("discord adapter routes accepted events through orchestrator governance pat
     assert.ok(result.runResult?.actionResults[0].blockedBy.includes("DELETE_OUTSIDE_SANDBOX"));
   });
 });
+
+test("discord adapter autonomous summary reports stopped state when loop aborts", async () => {
+  await withAdapterHarness(async (adapter) => {
+    const progressMessages: string[] = [];
+    const controller = new AbortController();
+    controller.abort();
+    const summary = await adapter.runAutonomousTask(
+      "Build a frontend and execute now.",
+      new Date().toISOString(),
+      async (message) => {
+        progressMessages.push(message);
+      },
+      controller.signal
+    );
+
+    assert.match(summary, /Autonomous task stopped after 0 iteration\(s\)/i);
+    assert.match(summary, /reason: cancelled by user\./i);
+    assert.equal(
+      progressMessages.some((message) => /Stopped after 0 iteration\(s\): Cancelled by user\./i.test(message)),
+      true
+    );
+  });
+});

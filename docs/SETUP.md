@@ -75,6 +75,7 @@ Operational implication:
 | `BRAIN_MAX_CUMULATIVE_COST_USD` | Per-task cumulative action budget cap. | `10` |
 | `BRAIN_MAX_MODEL_SPEND_USD` | Per-task cumulative model spend cap. | `10` |
 | `BRAIN_MAX_AUTONOMOUS_ITERATIONS` | Iteration cap for autonomous loops. | `.env.example` sets `100`; code fallback is `15` if unset |
+| `BRAIN_AUTONOMOUS_MAX_CONSECUTIVE_NO_PROGRESS` | Consecutive zero-progress iterations allowed before autonomous stall-abort. | `3` |
 
 ## 6) Model Backend Setup
 
@@ -450,6 +451,7 @@ Autonomous iteration cap guidance:
 - If you copy `.env.example`, it is set to `100`.
 - If you do not set it at all, code fallback default is `15`.
 - Set `BRAIN_MAX_AUTONOMOUS_ITERATIONS=-1` (or `0`) for unbounded autonomous iteration cap.
+- `BRAIN_AUTONOMOUS_MAX_CONSECUTIVE_NO_PROGRESS` controls how many consecutive no-progress iterations are allowed before deterministic stall-abort (default `3`).
 - In unbounded mode, the loop can still stop due to goal completion, safety/governance outcomes, zero-progress guard, errors, or manual cancellation (`Ctrl+C`).
 - For execution-style autonomous goals (for example build/create/write requests), completion is gated: the loop will not mark `Goal Met` until at least one approved real side-effect action executes in that mission.
 - Read-only actions (`read_file`, `list_directory`) and simulated outputs are excluded from execution-style completion evidence.
@@ -460,6 +462,7 @@ Daemon mode (fail-closed latches required):
 ```env
 BRAIN_ALLOW_DAEMON_MODE=true
 BRAIN_MAX_AUTONOMOUS_ITERATIONS=100
+BRAIN_AUTONOMOUS_MAX_CONSECUTIVE_NO_PROGRESS=3
 BRAIN_MAX_DAEMON_GOAL_ROLLOVERS=1
 ```
 
@@ -630,6 +633,9 @@ This section covers every key currently present in `.env.example` and what to ex
 - `-1` or `0` means unbounded iteration cap for `--autonomous`.
 - For `--daemon`, this value must be `> 0` or startup fails closed.
 - Lower value stops long loops earlier.
+- `BRAIN_AUTONOMOUS_MAX_CONSECUTIVE_NO_PROGRESS`: autonomous no-progress stall threshold.
+- Default is `3`; increase it to allow more retries before deterministic stall-abort.
+- Lower it to fail faster when execution-style missions keep producing guidance-only/no-progress loops.
 
 ### Shell runtime behavior
 

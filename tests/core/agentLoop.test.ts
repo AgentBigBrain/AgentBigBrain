@@ -462,3 +462,42 @@ test("AutonomousLoop classifies frontend build prompts as execution-style and ga
   assert.equal(orchestrator.runCount, 3);
   assert.match(abortedReason, /\[reasonCode=AUTONOMOUS_EXECUTION_STYLE_STALLED_NO_SIDE_EFFECT\]/i);
 });
+
+test("AutonomousLoop uses configurable no-progress stall threshold from runtime config", async () => {
+  const orchestrator = new ScriptedOrchestrator([
+    [buildApprovedRespondResult("respond_cfg_1")],
+    [buildApprovedRespondResult("respond_cfg_2")],
+    [buildApprovedRespondResult("respond_cfg_3")],
+    [buildApprovedRespondResult("respond_cfg_4")]
+  ]);
+  const modelClient = new StubLoopModelClient([
+    {
+      isGoalMet: false,
+      reasoning: "keep executing",
+      nextUserInput: "continue"
+    }
+  ]);
+  const loop = new AutonomousLoop(
+    orchestrator as unknown as BrainOrchestrator,
+    modelClient,
+    {
+      ...DEFAULT_BRAIN_CONFIG,
+      limits: {
+        ...DEFAULT_BRAIN_CONFIG.limits,
+        maxAutonomousIterations: 4,
+        maxAutonomousConsecutiveNoProgressIterations: 5
+      },
+      runtime: { ...DEFAULT_BRAIN_CONFIG.runtime, isDaemonMode: false }
+    }
+  );
+
+  let abortedReason = "";
+  await loop.run("Build a frontend on my Desktop and execute now.", {
+    onGoalAborted: async (reason) => {
+      abortedReason = reason;
+    }
+  });
+
+  assert.equal(orchestrator.runCount, 4);
+  assert.match(abortedReason, /\[reasonCode=AUTONOMOUS_MAX_ITERATIONS_REACHED\]/i);
+});

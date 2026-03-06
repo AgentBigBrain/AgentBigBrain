@@ -417,6 +417,7 @@ test("ToolExecutorOrgan runs shell command through deterministic bash wrapper an
     assert.equal(mockSpawn.calls.length, 1);
     assert.equal(mockSpawn.calls[0].executable, "bash");
     assert.deepEqual(mockSpawn.calls[0].args, ["-lc", "echo hello"]);
+    assert.equal(mockSpawn.calls[0].options.windowsVerbatimArguments, false);
 
     const telemetry = executor.consumeShellExecutionTelemetry(action.id);
     assert.ok(telemetry);
@@ -441,7 +442,7 @@ test("ToolExecutorOrgan enforces timeout fallback and reports shell failure exit
           ...DEFAULT_BRAIN_CONFIG.shellRuntime.profile,
           shellKind: "cmd",
           executable: "cmd.exe",
-          wrapperArgs: ["/d", "/s", "/c"],
+          wrapperArgs: ["/d", "/c"],
           cwdPolicy: {
             ...DEFAULT_BRAIN_CONFIG.shellRuntime.profile.cwdPolicy,
             denyOutsideSandbox: false
@@ -455,7 +456,8 @@ test("ToolExecutorOrgan enforces timeout fallback and reports shell failure exit
 
     assert.match(output, /Shell failed \(exit code 2\)/i);
     assert.equal(mockSpawn.calls.length, 1);
-    assert.deepEqual(mockSpawn.calls[0].args, ["/d", "/s", "/c", "echo hello"]);
+    assert.deepEqual(mockSpawn.calls[0].args, ["/d", "/c", "echo hello"]);
+    assert.equal(mockSpawn.calls[0].options.windowsVerbatimArguments, true);
     const telemetry = executor.consumeShellExecutionTelemetry(action.id);
     assert.equal(telemetry?.shellExitCode, 2);
     assert.equal(telemetry?.shellTimedOut, false);
@@ -472,4 +474,38 @@ test("ToolExecutorOrgan tags simulated shell execution with deterministic metada
     assert.equal(outcome.executionMetadata?.simulatedExecution, true);
     assert.equal(outcome.executionMetadata?.simulatedExecutionReason, "SHELL_POLICY_DISABLED");
   });
+});
+
+test("ToolExecutorOrgan runs quoted cmd path commands with real shell on Windows", async () => {
+  if (process.platform !== "win32") {
+    return;
+  }
+
+  const quotedTempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain cmd quoted path "));
+  try {
+    const config = buildShellEnabledConfig({
+      shellRuntime: {
+        ...DEFAULT_BRAIN_CONFIG.shellRuntime,
+        profile: {
+          ...DEFAULT_BRAIN_CONFIG.shellRuntime.profile,
+          shellKind: "cmd",
+          executable: "cmd.exe",
+          wrapperArgs: ["/d", "/c"],
+          cwdPolicy: {
+            ...DEFAULT_BRAIN_CONFIG.shellRuntime.profile.cwdPolicy,
+            denyOutsideSandbox: false
+          }
+        }
+      }
+    });
+    const executor = new ToolExecutorOrgan(config);
+    const output = await executor.execute(
+      buildShellAction(`cd "${quotedTempDir}" && echo quoted-path-ok`)
+    );
+
+    assert.match(output, /Shell success/i);
+    assert.match(output, /quoted-path-ok/i);
+  } finally {
+    await rm(quotedTempDir, { recursive: true, force: true });
+  }
 });

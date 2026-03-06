@@ -73,6 +73,7 @@ test("defaults dual budget controls for per-action and cumulative limits", () =>
   assert.equal(config.limits.maxCumulativeModelSpendUsd, 10);
   assert.equal(config.limits.maxSubagentsPerTask, 2);
   assert.equal(config.limits.maxSubagentDepth, 1);
+  assert.equal(config.limits.maxAutonomousConsecutiveNoProgressIterations, 3);
   assert.equal(config.limits.maxDaemonGoalRollovers, 0);
 });
 
@@ -83,6 +84,7 @@ test("supports env overrides for per-action and cumulative budget limits", () =>
     BRAIN_MAX_MODEL_SPEND_USD: "3",
     BRAIN_MAX_SUBAGENTS_PER_TASK: "4",
     BRAIN_MAX_SUBAGENT_DEPTH: "2",
+    BRAIN_AUTONOMOUS_MAX_CONSECUTIVE_NO_PROGRESS: "6",
     BRAIN_MAX_DAEMON_GOAL_ROLLOVERS: "6"
   });
 
@@ -91,6 +93,7 @@ test("supports env overrides for per-action and cumulative budget limits", () =>
   assert.equal(config.limits.maxCumulativeModelSpendUsd, 3);
   assert.equal(config.limits.maxSubagentsPerTask, 4);
   assert.equal(config.limits.maxSubagentDepth, 2);
+  assert.equal(config.limits.maxAutonomousConsecutiveNoProgressIterations, 6);
   assert.equal(config.limits.maxDaemonGoalRollovers, 6);
 });
 

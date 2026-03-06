@@ -43,6 +43,7 @@ export interface BrainConfig {
     maxActionsPerTask: number;
     maxPlanAttemptsPerTask: number;
     maxAutonomousIterations: number;
+    maxAutonomousConsecutiveNoProgressIterations: number;
     maxDaemonGoalRollovers: number;
     perGovernorTimeoutMs: number;
     perTurnDeadlineMs: number;
@@ -491,6 +492,7 @@ export const DEFAULT_BRAIN_CONFIG: BrainConfig = {
     maxActionsPerTask: 8,
     maxPlanAttemptsPerTask: 2,
     maxAutonomousIterations: 15,
+    maxAutonomousConsecutiveNoProgressIterations: 3,
     maxDaemonGoalRollovers: 0,
     perGovernorTimeoutMs: 3_000,
     perTurnDeadlineMs: 20_000
@@ -512,6 +514,7 @@ export const DEFAULT_BRAIN_CONFIG: BrainConfig = {
       "brain_max_model_spend_usd",
       "brain_max_subagents_per_task",
       "brain_max_subagent_depth",
+      "brain_autonomous_max_consecutive_no_progress",
       "maxdaemongoalrollovers",
       "brain_max_daemon_goal_rollovers"
     ],
@@ -931,6 +934,10 @@ export function createBrainConfigFromEnv(env: NodeJS.ProcessEnv = process.env): 
   config.limits.maxAutonomousIterations = parseInteger(
     env.BRAIN_MAX_AUTONOMOUS_ITERATIONS,
     config.limits.maxAutonomousIterations
+  );
+  config.limits.maxAutonomousConsecutiveNoProgressIterations = parsePositiveInteger(
+    env.BRAIN_AUTONOMOUS_MAX_CONSECUTIVE_NO_PROGRESS,
+    config.limits.maxAutonomousConsecutiveNoProgressIterations
   );
   config.limits.maxDaemonGoalRollovers = parseNonNegativeInteger(
     env.BRAIN_MAX_DAEMON_GOAL_ROLLOVERS,
