@@ -35,7 +35,7 @@ Built in TypeScript with only **2 runtime dependencies** (`ws`, `onnxruntime-nod
 
 **🧠 Five Memory Systems** — Profile memory, governance memory, semantic memory, workflow learning, and an entity relationship graph. All governed.
 
-**Multi-Interface** — CLI, Telegram bot, Discord bot, and an HTTP federation protocol for agent-to-agent communication.
+**💬 Multi-Interface** — CLI, Telegram bot, Discord bot, and an HTTP federation protocol for agent-to-agent communication.
 
 <a id="zero-dependency-core"></a>
 **📦 Minimal Dependencies** — Only 2 runtime packages. No heavyweight SDKs. Crypto, HTTP, SQLite, and process control all use Node.js built-ins.
