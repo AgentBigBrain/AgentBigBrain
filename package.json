@@ -106,7 +106,7 @@
     "check:ai_first": "npm run check:module_size && npm run check:reason_codes && npm run check:stop_phrases && npm run check:subsystem_readmes"
   },
   "dependencies": {
-    "onnxruntime-node": "^1.24.2",
+    "onnxruntime-node": "^1.24.3",
     "ws": "^8.19.0"
   },
   "devDependencies": {
