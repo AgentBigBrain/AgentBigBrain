@@ -1,10 +1,10 @@
-# 🧠 AgentBigBrain — Governed Autonomous AI Agent
+# 🧠 AgentBigBrain — Governed AI Assistant & Agent
 
 <div align="center">
-  <img src="img/AgentBigBrain.png" alt="AgentBigBrain" />
+  <img src="img/AgentBigBrain.png" alt="AgentBigBrain - Governed AI Assistant and Agent Framework" />
 </div>
 
-**An AI agent framework where every action is checked, voted on, and recorded — before it runs.**
+**A framework for AI assistants and agents where every action is checked, voted on, and recorded — before it runs.**
 
 [![CI](https://github.com/AgentBigBrain/AgentBigBrain/actions/workflows/ci.yml/badge.svg)](https://github.com/AgentBigBrain/AgentBigBrain/actions/workflows/ci.yml)
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-blue)](./LICENSE)
@@ -13,9 +13,9 @@
 
 ---
 
-## What Is This?
+## 🎯 What Is This?
 
-AgentBigBrain is a framework for building AI agents you can actually trust.
+AgentBigBrain is a framework for building AI assistants and autonomous agents you can actually trust.
 
 Most agent frameworks let the AI decide what to do and hope for the best. AgentBigBrain takes a different approach: every action the AI proposes must pass through hard safety checks and a council of specialized reviewers before it's allowed to run. If anything looks wrong, the action is blocked — no exceptions, no overrides.
 
@@ -25,24 +25,24 @@ Built in TypeScript with only **2 runtime dependencies** (`ws`, `onnxruntime-nod
 
 ---
 
-## Key Features
+## ✨ Key Features
 
-**Governor Council** — Seven specialized reviewers (ethics, logic, resource, security, continuity, utility, compliance) vote on every sensitive action. Six out of seven must approve.
+**🏛️ Governor Council** — Seven specialized reviewers (ethics, logic, resource, security, continuity, utility, compliance) vote on every sensitive action. Six out of seven must approve.
 
-**Safety Guardrails** — Hard rules that run before any voting. If the AI tries something dangerous — running unsafe code, touching protected files, exceeding budgets — it's blocked instantly. No debate, no AI judgment involved.
+**🛡️ Safety Guardrails** — Hard rules that run before any voting. If the AI tries something dangerous — running unsafe code, touching protected files, exceeding budgets — it's blocked instantly. No debate, no AI judgment involved.
 
-**Tamper-Evident Receipts** — Every approved action produces a cryptographic receipt. You don't have to trust the agent — you can verify.
+**🔗 Tamper-Evident Receipts** — Every approved action produces a cryptographic receipt. You don't have to trust the agent — you can verify.
 
-**Five Memory Systems** — Profile memory, governance memory, semantic memory, workflow learning, and an entity relationship graph. All governed.
+**🧠 Five Memory Systems** — Profile memory, governance memory, semantic memory, workflow learning, and an entity relationship graph. All governed.
 
 **Multi-Interface** — CLI, Telegram bot, Discord bot, and an HTTP federation protocol for agent-to-agent communication.
 
 <a id="zero-dependency-core"></a>
-**Minimal Dependencies** — Only 2 runtime packages. No heavyweight SDKs. Crypto, HTTP, SQLite, and process control all use Node.js built-ins.
+**📦 Minimal Dependencies** — Only 2 runtime packages. No heavyweight SDKs. Crypto, HTTP, SQLite, and process control all use Node.js built-ins.
 
 ---
 
-## How It Works
+## 🔄 How It Works
 
 Every action follows the same path — no shortcuts, no exceptions:
 
@@ -50,11 +50,11 @@ Every action follows the same path — no shortcuts, no exceptions:
   <img src="img/AgentBigBrain_Approval-Flow_Diagram.png" alt="How AgentBigBrain keeps you safe — approval flow from AI proposal through safety guardrails, council vote, to execution and audit" width="800" />
 </div>
 
-1. **Plan** — The AI reads your goal and proposes a concrete list of actions.
-2. **Check** — Each action runs through hard safety rules. Anything dangerous is blocked instantly, before any AI judgment is involved.
-3. **Vote** — The council of 7 specialized reviewers evaluates the action. Six of seven must approve. If any reviewer times out or returns a bad response, that counts as a "no."
-4. **Execute & Record** — The action runs. A cryptographic receipt is appended to the tamper-evident audit chain.
-5. **Reflect** — The system analyzes what happened and stores useful lessons for next time.
+1. **🎯 Plan** — The AI reads your goal and proposes a concrete list of actions.
+2. **🛡️ Check** — Each action runs through hard safety rules. Anything dangerous is blocked instantly, before any AI judgment is involved.
+3. **🗳️ Vote** — The council of 7 specialized reviewers evaluates the action. Six of seven must approve. If any reviewer times out or returns a bad response, that counts as a "no."
+4. **⚡ Execute & Record** — The action runs. A cryptographic receipt is appended to the tamper-evident audit chain.
+5. **💡 Reflect** — The system analyzes what happened and stores useful lessons for next time.
 
 <details>
 <summary>Text-based flow diagram</summary>
@@ -74,7 +74,7 @@ flowchart LR
 
 ---
 
-## What Makes This Different
+## 📊 What Makes This Different
 
 | | Typical Agent Frameworks | AgentBigBrain |
 |---|---|---|
@@ -87,7 +87,7 @@ flowchart LR
 
 ---
 
-## Quickstart
+## 🚀 Quickstart
 
 > **Full setup guide:** [docs/SETUP.md](docs/SETUP.md)
 
@@ -132,7 +132,7 @@ For the full configuration reference (model backends, shell profiles, interfaces
 
 ---
 
-## Examples
+## 📝 Examples
 
 ### CLI
 
@@ -165,11 +165,11 @@ For federation setup and API usage, see **[docs/SETUP.md](docs/SETUP.md)**.
 
 ---
 
-## FAQ
+## ❓ FAQ
 
-### What does AgentBigBrain actually do?
+### What does AgentBigBrain do for an AI assistant or agent?
 
-It gives an AI agent a plan-check-vote-execute loop. The agent can read files, write files, run shell commands, send network requests, and more — but only after every proposed action passes safety checks and council review. Nothing runs without approval.
+It gives your AI assistant or agent a plan-check-vote-execute loop. The assistant can read files, write files, run shell commands, send network requests, and more — but only after every proposed action passes safety checks and council review. Nothing runs without approval.
 
 ### Is this safe to use?
 
@@ -221,7 +221,7 @@ AgentBigBrain doesn't grant full autonomy all at once. It unlocks capabilities t
 
 ---
 
-## Troubleshooting
+## 🔧 Troubleshooting
 
 Common issues and their fixes:
 
@@ -237,7 +237,7 @@ For the full error-code-to-env-variable map, see **[docs/ERROR_CODE_ENV_MAP.md](
 
 ---
 
-## Architecture
+## 🏗️ Architecture
 
 | Layer | Directory | What It Does |
 |---|---|---|
@@ -254,11 +254,11 @@ Full architecture spec: **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**
 
 ---
 
-## Security
+## 🔒 Security
 
 Report vulnerabilities privately to **security@michiganwebteam.com** or via [GitHub Security Advisories](https://github.com/AgentBigBrain/AgentBigBrain/security/advisories/new). Do not open public issues for security vulnerabilities. See [SECURITY.md](SECURITY.md).
 
-## Contributing and Support
+## 🤝 Contributing and Support
 
 - Contributing guide: [CONTRIBUTING.md](CONTRIBUTING.md)
 - Code of Conduct: [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
