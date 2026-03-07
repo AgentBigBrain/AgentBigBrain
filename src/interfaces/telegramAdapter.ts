@@ -23,7 +23,7 @@ import {
   buildAutonomousGoalMetProgressMessage,
   buildAutonomousIterationProgressMessage,
   buildAutonomousTerminalSummaryMessage
-} from "./autonomousMessagePolicy";
+} from "./userFacing/stopSummarySurface";
 
 export interface TelegramInboundMessage {
   updateId: number;

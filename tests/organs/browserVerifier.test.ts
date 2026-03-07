@@ -9,7 +9,7 @@ import {
   describeBrowserVerificationLaunchMode,
   PlaywrightBrowserVerifier,
   resolvePlaywrightChromiumFromModuleNamespace
-} from "../../src/organs/browserVerifier";
+} from "../../src/organs/liveRun/browserVerifier";
 
 test("resolvePlaywrightChromiumFromModuleNamespace accepts top-level chromium export", () => {
   const chromium = {

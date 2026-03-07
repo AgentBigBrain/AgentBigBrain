@@ -1,8 +1,8 @@
 /**
- * @fileoverview Defines deterministic user-facing envelope and truth-policy helpers for Stage 6.85 rendering.
+ * @fileoverview Defines deterministic user-facing envelope, option, and truth-policy helpers.
  */
 
-import { TaskRunResult } from "../core/types";
+import { TaskRunResult } from "../../core/types";
 
 export type UserFacingEnvelopeStateV1 =
   | "OK"
@@ -18,6 +18,29 @@ export interface UserFacingEnvelopeV1 {
   shortMessage: string;
   nextStep: string | null;
   diagnosticsRef: string | null;
+}
+
+export interface UserFacingSummaryOptions {
+  showTechnicalSummary?: boolean;
+  showSafetyCodes?: boolean;
+}
+
+export interface NormalizedUserFacingSummaryOptions {
+  showTechnicalSummary: boolean;
+  showSafetyCodes: boolean;
+}
+
+/**
+ * Normalizes user-facing rendering toggles into a stable shape.
+ */
+export function normalizeUserFacingSummaryOptions(
+  options: UserFacingSummaryOptions = {}
+): NormalizedUserFacingSummaryOptions {
+  const showTechnicalSummary = options.showTechnicalSummary !== false;
+  return {
+    showTechnicalSummary,
+    showSafetyCodes: options.showSafetyCodes ?? showTechnicalSummary
+  };
 }
 
 /**

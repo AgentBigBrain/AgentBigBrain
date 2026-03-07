@@ -16,6 +16,7 @@ import {
   normalizePlannerActionTypeAlias,
   toPlannerRecord
 } from "../core/plannerActionSchema";
+import { RequiredActionType } from "./plannerPolicy/executionStyleContracts";
 
 export const PLANNER_FAILURE_WINDOW_MS = 2 * 60 * 1000;
 export const PLANNER_FAILURE_COOLDOWN_MS = 60 * 1000;
@@ -31,16 +32,7 @@ const RUN_SKILL_EXPLICIT_REQUEST_PATTERN =
   /\b(run|execute|invoke|use)\s+(?:a\s+)?skill\b|\brun[_\s-]?skill\b/i;
 const WORKFLOW_RUN_SKILL_REQUEST_PATTERN =
   /\b(workflow|replay|capture|selector\s+drift|browser\s+workflow)\b/i;
-export type RequiredActionType =
-  | "create_skill"
-  | "run_skill"
-  | "start_process"
-  | "check_process"
-  | "stop_process"
-  | "probe_port"
-  | "probe_http"
-  | "verify_browser"
-  | null;
+export type { RequiredActionType } from "./plannerPolicy/executionStyleContracts";
 const EXPLICIT_RUNTIME_ACTION_REQUEST_PATTERNS: readonly {
   type: Exclude<RequiredActionType, null>;
   pattern: RegExp;

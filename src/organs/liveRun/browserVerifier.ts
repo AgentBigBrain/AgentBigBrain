@@ -2,7 +2,7 @@
  * @fileoverview Provides optional Playwright-backed browser verification for loopback-local app and site checks.
  */
 
-import { createAbortError, isAbortError, throwIfAborted } from "../core/runtimeAbort";
+import { createAbortError, isAbortError, throwIfAborted } from "../../core/runtimeAbort";
 
 /**
  * Browser verification request passed from governed executor actions.
@@ -169,7 +169,7 @@ export interface BrowserVerifier {
  * downlevel rewrite that would break runtime-only module resolution.
  *
  * **What it talks to:**
- * - Uses local constants/helpers within this module.
+ * - Uses local helpers within this module.
  *
  * @param specifier - Module specifier to resolve at runtime.
  * @returns Promise resolving to the imported module namespace.
@@ -190,7 +190,7 @@ async function importModuleNamespaceAtRuntime(specifier: string): Promise<Record
  * drift across title/text call sites.
  *
  * **What it talks to:**
- * - Uses local constants/helpers within this module.
+ * - Uses local helpers within this module.
  *
  * @param value - Candidate expectation value supplied by planner/executor params.
  * @returns Trimmed expectation string or `null` when the input is empty.
@@ -211,7 +211,7 @@ function normalizeOptionalExpectation(value: string | null | undefined): string 
  * "matched" across title and body text checks.
  *
  * **What it talks to:**
- * - Uses local constants/helpers within this module.
+ * - Uses local helpers within this module.
  *
  * @param observedValue - Observed text captured from the browser page.
  * @param expectedValue - Optional expected substring to match.
@@ -235,7 +235,7 @@ function matchesOptionalExpectation(
  * observed content to explain expectation mismatches deterministically.
  *
  * **What it talks to:**
- * - Uses local constants/helpers within this module.
+ * - Uses local helpers within this module.
  *
  * @param text - Raw text captured from the browser page body.
  * @returns Trimmed, bounded text sample or `null` when empty.
@@ -252,11 +252,11 @@ function buildObservedTextSample(text: string): string | null {
  * Builds a success detail message for one verified browser check.
  *
  * **Why it exists:**
- * Keeps browser-verification success text deterministic so executor/user-facing renderers do not
- * need to reconstruct title/text matching details ad hoc.
+ * Keeps browser-verification success text deterministic so executor or user-facing renderers do
+ * not need to reconstruct title/text matching details ad hoc.
  *
  * **What it talks to:**
- * - Uses local constants/helpers within this module.
+ * - Uses local helpers within this module.
  *
  * @param observedTitle - Title captured from the loaded page.
  * @param matchedTitle - Optional title-match result.
@@ -288,7 +288,7 @@ function buildVerifiedDetail(
  * was missing without reading raw Playwright exceptions.
  *
  * **What it talks to:**
- * - Uses local constants/helpers within this module.
+ * - Uses local helpers within this module.
  *
  * @param observedTitle - Title captured from the loaded page.
  * @param observedTextSample - Bounded body-text sample captured from the page.
@@ -332,7 +332,7 @@ function buildExpectationFailureDetail(
  * immediately understand whether a visible Chromium window should have appeared.
  *
  * **What it talks to:**
- * - Uses local constants/helpers within this module.
+ * - Uses local helpers within this module.
  *
  * @param headless - Whether Chromium launches in headless mode.
  * @returns Human-readable launch-mode description.
@@ -351,7 +351,7 @@ export function describeBrowserVerificationLaunchMode(headless: boolean): string
  * executor can return a typed "install or provision Playwright locally" outcome.
  *
  * **What it talks to:**
- * - Uses local constants/helpers within this module.
+ * - Uses local helpers within this module.
  *
  * @param message - Error message captured from dynamic import or launch/navigation flow.
  * @returns `true` when the message indicates missing Playwright runtime support.
@@ -374,11 +374,10 @@ function isPlaywrightRuntimeUnavailableMessage(message: string): boolean {
  * do not consume `AbortSignal` directly.
  *
  * **What it talks to:**
- * - Uses `createAbortError` from `../core/runtimeAbort`.
- * - Uses `throwIfAborted` from `../core/runtimeAbort`.
+ * - Uses `createAbortError` and `throwIfAborted` from `../../core/runtimeAbort`.
  *
  * @param operation - Promise representing one browser automation step.
- * @param signal - Optional abort signal propagated from runtime/orchestrator surfaces.
+ * @param signal - Optional abort signal propagated from runtime or orchestrator surfaces.
  * @returns Promise resolving to the original operation result.
  */
 async function awaitWithAbort<T>(operation: Promise<T>, signal?: AbortSignal): Promise<T> {
@@ -406,7 +405,7 @@ async function awaitWithAbort<T>(operation: Promise<T>, signal?: AbortSignal): P
  * caller to duplicate null checks and close-error suppression logic.
  *
  * **What it talks to:**
- * - Uses local constants/helpers within this module.
+ * - Uses local helpers within this module.
  *
  * @param resource - Browser automation resource that may expose an async `close()` method.
  * @returns Promise resolving when teardown work finishes.
@@ -485,17 +484,16 @@ export class PlaywrightBrowserVerifier implements BrowserVerifier {
    * Verifies one loopback page through a local Playwright Chromium session.
    *
    * **Why it exists:**
-   * Gives the runtime a truthful UI/browser proof step for live app workflows without pretending
-   * that port or HTTP probes alone confirm rendered page state.
+   * Gives the runtime a truthful UI or browser proof step for live app workflows without
+   * pretending that port or HTTP probes alone confirm rendered page state.
    *
    * **What it talks to:**
-   * - Uses `loadPlaywrightChromium` from this module.
    * - Uses `awaitWithAbort` from this module.
    * - Uses `buildObservedTextSample` from this module.
    * - Uses `buildVerifiedDetail` from this module.
    * - Uses `buildExpectationFailureDetail` from this module.
    * - Uses `closeIfPossible` from this module.
-   * - Uses `throwIfAborted` from `../core/runtimeAbort`.
+   * - Uses `throwIfAborted` from `../../core/runtimeAbort`.
    *
    * @param request - Structured verification request for one loopback page.
    * @returns Promise resolving to a typed verification result.
@@ -543,9 +541,7 @@ export class PlaywrightBrowserVerifier implements BrowserVerifier {
       const observedTextSample = buildObservedTextSample(observedBodyText);
       const matchedTitle = matchesOptionalExpectation(observedTitle, expectedTitle);
       const matchedText = matchesOptionalExpectation(observedBodyText, expectedText);
-      const expectationsPassed =
-        matchedTitle !== false &&
-        matchedText !== false;
+      const expectationsPassed = matchedTitle !== false && matchedText !== false;
 
       if (!expectationsPassed) {
         return {

@@ -2,17 +2,17 @@
  * @fileoverview Deterministic no-op and progress-placeholder policy helpers for user-facing output rendering.
  */
 
-import { TaskRunResult } from "../core/types";
-import { extractActiveRequestSegment } from "../core/currentRequestExtraction";
+import { TaskRunResult } from "../../core/types";
+import { extractActiveRequestSegment } from "../../core/currentRequestExtraction";
 import {
   classifyRoutingIntentV1,
   RoutingMapClassificationV1
-} from "./routingMap";
+} from "../routingMap";
 import {
   buildUserFacingEnvelopeV1,
   renderUserFacingEnvelopeV1
-} from "./userFacingContracts";
-import { isLiveBuildVerificationPrompt } from "./liveBuildVerificationPromptPolicy";
+} from "./contracts";
+import { isLiveBuildVerificationPrompt } from "../liveBuildVerificationPromptPolicy";
 
 const STAGE_REVIEW_PROGRESS_PROMPT_PATTERNS: readonly RegExp[] = [
   /\bclone-assisted\b/i,
@@ -464,8 +464,8 @@ function extractCurrentRequestForDiagnostics(userInput: string): string {
  * allowing specific call sites to override the short message or the "what happened" line.
  *
  * **What it talks to:**
- * - Uses `buildUserFacingEnvelopeV1` from `./userFacingContracts`.
- * - Uses `renderUserFacingEnvelopeV1` from `./userFacingContracts`.
+ * - Uses `buildUserFacingEnvelopeV1` from `./contracts`.
+ * - Uses `renderUserFacingEnvelopeV1` from `./contracts`.
  *
  * @param reasonCode - Typed no-op reason code.
  * @param reason - Human-readable reason text.

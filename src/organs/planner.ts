@@ -8,13 +8,10 @@ import {
   FirstPrinciplesRubric,
   Plan,
   PlannerLearningHintSummaryV1,
-  PlannedAction,
-  ShellRuntimeProfileV1,
   TaskRequest,
   WorkflowPattern
 } from "../core/types";
 import { SemanticLesson, SemanticMemoryStore } from "../core/semanticMemory";
-import { estimateActionCostUsd } from "../core/actionCostPolicy";
 import {
   createFirstPrinciplesRubric,
   validateFirstPrinciplesRubric
@@ -26,50 +23,40 @@ import {
 } from "../core/retrievalQuarantine";
 import { JudgmentPattern } from "../core/judgmentPatterns";
 import { extractCurrentUserRequest } from "./memoryBroker";
-import {
-  ModelClient,
-  PlannerModelOutput,
-  ResponseSynthesisModelOutput
-} from "../models/types";
+import { ModelClient } from "../models/types";
 import {
   InMemoryPlannerFailureStore,
   PlannerFailureStore
 } from "../core/plannerFailureStore";
 import { Stage685PlaybookPlanningContext } from "../core/stage6_85PlaybookRuntime";
 import {
-  allowsRunSkillForRequest,
-  extractActionCandidates,
-  filterNonExplicitRunSkillActions,
-  hasOnlyRunSkillActions,
-  hasRequiredAction,
-  hasRespondMessage,
   inferRequiredActionType,
   normalizeFingerprintSegment,
-  normalizeModelActions,
-  normalizeRequiredCreateSkillParams,
-  normalizeRequiredRunSkillParams,
   PLANNER_FAILURE_COOLDOWN_MS,
   PLANNER_FAILURE_MAX_STRIKES,
-  PLANNER_FAILURE_WINDOW_MS,
-  RequiredActionType
+  PLANNER_FAILURE_WINDOW_MS
 } from "./plannerHelpers";
 import {
-  assessExecutionStyleBuildPlan,
-  allowsImplicitFiniteShellForBuildRequest,
-  allowsImplicitManagedProcessForBuildRequest,
-  buildExecutionStyleRequiredActionHint,
-  describeExecutionStyleBuildPlanIssue,
-  hasNonRespondAction,
-  isExecutionStyleBuildRequest,
-  isLiveVerificationBuildRequest,
-  requiresBrowserVerificationBuildRequest,
-  requiresExecutableBuildPlan
-} from "./plannerBuildExecutionPolicy";
+  PlannerExecutionEnvironmentContext,
+  RequiredActionType
+} from "./plannerPolicy/executionStyleContracts";
+import {
+  assertPlannerActionValidation,
+  evaluatePlannerActionValidation,
+  preparePlannerActions,
+  shouldUseNonExplicitRunSkillFallback
+} from "./plannerPolicy/explicitActionRepair";
+import {
+  requestPlannerOutput,
+  requestPlannerRepairOutput
+} from "./plannerPolicy/promptAssembly";
+import {
+  buildNonExplicitRunSkillFallbackAction,
+  enforceRunSkillIntentPolicy,
+  ensureRespondMessages,
+  synthesizeRespondMessage
+} from "./plannerPolicy/responseSynthesisFallback";
 
-const SHELL_EXPLICIT_REQUEST_PATTERN =
-  /\b(shell|terminal|powershell|bash|zsh|cmd(?:\.exe)?|command line|run (?:a )?command|execute (?:a )?command)\b/i;
-const SELF_MODIFY_EXPLICIT_REQUEST_PATTERN =
-  /\b(self[-\s]?modify|modify (?:yourself|your own|the agent|the brain|runtime|source|codebase|governor|policy)|edit (?:agent|runtime|source|code|config)|patch (?:agent|runtime|codebase)|change (?:governor|policy|hard constraint|runtime|codebase))\b/i;
 const FIRST_PRINCIPLES_RISK_PATTERNS: readonly RegExp[] = [
   /\b(delete|remove|rm)\b/i,
   /\b(network|api|webhook|endpoint|http[s]?:\/\/)\b/i,
@@ -80,12 +67,6 @@ const FIRST_PRINCIPLES_RISK_PATTERNS: readonly RegExp[] = [
   /\b(shell|terminal|powershell|bash|zsh|cmd(?:\.exe)?)\b/i
 ];
 const FIRST_PRINCIPLES_NOVEL_REQUEST_MIN_WORDS = 16;
-const RESPONSE_IDENTITY_GUARDRAIL =
-  "Keep explicit AI-agent identity in all user-facing text. " +
-  "Do not claim to be human, do not claim to be the user, and do not write in first person as if you are the user. ";
-const RESPONSE_STYLE_GUARDRAIL =
-  "When you write user-facing text, keep it human-first: plain language first, brief explanation second, and a concrete next step when relevant. " +
-  "Avoid internal control-plane jargon unless diagnostics were explicitly requested. ";
 
 interface FirstPrinciplesTriggerDecision {
   required: boolean;
@@ -96,13 +77,6 @@ export interface PlannerPlanOptions {
   playbookSelection?: Stage685PlaybookPlanningContext | null;
   workflowHints?: readonly WorkflowPattern[];
   judgmentHints?: readonly JudgmentPattern[];
-}
-
-export interface PlannerExecutionEnvironmentContext {
-  platform: ShellRuntimeProfileV1["platform"];
-  shellKind: ShellRuntimeProfileV1["shellKind"];
-  invocationMode: ShellRuntimeProfileV1["invocationMode"];
-  commandMaxChars: number;
 }
 
 interface DistilledRelevantLesson {
@@ -213,67 +187,6 @@ export class PlannerOrgan {
     private readonly executionEnvironment: PlannerExecutionEnvironmentContext =
       resolveDefaultExecutionEnvironmentContext()
   ) { }
-
-  /**
-   * Builds execution environment guidance for this module's runtime flow.
-   *
-   * **Why it exists:**
-   * Keeps construction of execution environment guidance consistent across call sites.
-   *
-   * **What it talks to:**
-   * - Uses local constants/helpers within this module.
-   * @returns Resulting string value.
-   */
-  private buildExecutionEnvironmentGuidance(): string {
-    return (
-      "\nExecution Environment:\n" +
-      `- platform: ${this.executionEnvironment.platform}\n` +
-      `- shellKind: ${this.executionEnvironment.shellKind}\n` +
-      `- invocationMode: ${this.executionEnvironment.invocationMode}\n` +
-      `- commandMaxChars: ${this.executionEnvironment.commandMaxChars}\n` +
-      "- If you emit shell_command or start_process, the command must be valid for this shellKind."
-    );
-  }
-
-  /**
-   * Builds deterministic build-task strategy guidance for planner prompts.
-   *
-   * **Why it exists:**
-   * Keeps planner verification strategy aligned with seamless-execution UX goals so build requests
-   * bias toward finite proof steps instead of long-running dev-server loops the runtime cannot
-   * always verify cleanly.
-   *
-   * **What it talks to:**
-   * - Uses local helper functions within this module.
-   * - Uses `classifyRoutingIntentV1` (import `classifyRoutingIntentV1`) from `../interfaces/routingMap`.
-   *
-   * @param currentUserRequest - Active request segment extracted from conversation/task input.
-   * @returns Resulting string value.
-   */
-  private buildExecutionStyleBuildStrategyGuidance(currentUserRequest: string): string {
-    if (!isExecutionStyleBuildRequest(currentUserRequest)) {
-      return "";
-    }
-
-    const browserVerificationClause = requiresBrowserVerificationBuildRequest(currentUserRequest)
-      ? " Explicit browser/UI proof is required: after localhost readiness succeeds, use verify_browser with params.url and any available expectedTitle/expectedText hints."
-      : "";
-    const liveVerificationClause = isLiveVerificationBuildRequest(currentUserRequest)
-      ? " Live-run verification intent detected: only choose a long-running run/observe step after finite proof steps succeed. When localhost readiness proof is required, pair start_process with probe_port or probe_http. Do not claim browser or UI verification from probes alone." +
-        browserVerificationClause +
-        " If live verification still cannot be proven truthfully in this runtime path, say so plainly instead of claiming the app was running or the UI was verified."
-      : "";
-
-    return (
-      "\nDeterministic build-task strategy: prefer finite proof steps before any live session. " +
-      "Use the smallest executable sequence that can prove progress, usually scaffold -> edit -> install -> build -> finite verification. " +
-      "Read_file, list_directory, check_process, or stop_process can support the plan, but they do not satisfy an execution-style build request by themselves. " +
-      "Do not use long-running dev-server commands (for example npm start, npm run dev, next dev, vite dev, or watch mode) as the default proof step when a finite build/test verification step exists. " +
-      "Only use managed-process actions (start_process/check_process/stop_process) when live verification is explicitly required and policy allows it. " +
-      "Use probe_port or probe_http only for loopback-local readiness checks." +
-      liveVerificationClause
-    );
-  }
 
   /**
    * Resolves whether first-principles rubric planning is mandatory for this request.
@@ -514,58 +427,6 @@ export class PlannerOrgan {
   }
 
   /**
-   * Builds high risk action guardrails for this module's runtime flow.
-   *
-   * **Why it exists:**
-   * Keeps construction of high risk action guardrails consistent across call sites.
-   *
-   * **What it talks to:**
-   * - Uses local constants/helpers within this module.
-   *
-   * @param currentUserRequest - Structured input object for this operation.
-   * @returns Resulting string value.
-   */
-  private buildHighRiskActionGuardrails(currentUserRequest: string): string {
-    const disallowedActionTypes: string[] = [];
-    const allowImplicitFiniteShell =
-      allowsImplicitFiniteShellForBuildRequest(currentUserRequest);
-    const allowImplicitManagedProcess =
-      allowsImplicitManagedProcessForBuildRequest(currentUserRequest);
-    if (
-      !SHELL_EXPLICIT_REQUEST_PATTERN.test(currentUserRequest) &&
-      !allowImplicitFiniteShell
-    ) {
-      disallowedActionTypes.push("shell_command");
-    }
-    if (
-      !SHELL_EXPLICIT_REQUEST_PATTERN.test(currentUserRequest) &&
-      !allowImplicitManagedProcess
-    ) {
-      disallowedActionTypes.push("start_process");
-    }
-    if (!requiresBrowserVerificationBuildRequest(currentUserRequest)) {
-      disallowedActionTypes.push("verify_browser");
-    }
-    if (!SELF_MODIFY_EXPLICIT_REQUEST_PATTERN.test(currentUserRequest)) {
-      disallowedActionTypes.push("self_modify");
-    }
-    if (disallowedActionTypes.length === 0) {
-      return "";
-    }
-
-    const buildExecutionBias = isExecutionStyleBuildRequest(currentUserRequest)
-      ? " Execution-style build request detected: prefer concrete build or proof actions (for example write_file, shell_command, start_process, probe_http, or verify_browser). Read_file, list_directory, check_process, and stop_process may support the plan but are too weak by themselves. Avoid guidance-only respond output when policy allows."
-      : "";
-
-    return (
-      "\nDeterministic high-risk action guardrail: " +
-      `for this request, do not emit ${disallowedActionTypes.join(" or ")} actions unless the user explicitly requests them. ` +
-      "Prefer request-relevant action types such as respond, run_skill, or scoped file actions." +
-      buildExecutionBias
-    );
-  }
-
-  /**
    * Cleans up failure fingerprint state according to deterministic retention rules.
    *
    * **Why it exists:**
@@ -653,377 +514,6 @@ export class PlannerOrgan {
   }
 
   /**
-   * Implements request planner output behavior used by `planner`.
-   *
-   * **Why it exists:**
-   * Keeps `request planner output` behavior centralized so collaborating call sites stay consistent.
-   *
-   * **What it talks to:**
-   * - Uses `Stage685PlaybookPlanningContext` (import `Stage685PlaybookPlanningContext`) from `../core/stage6_85PlaybookRuntime`.
-   * - Uses `TaskRequest` (import `TaskRequest`) from `../core/types`.
-   * - Uses `PlannerModelOutput` (import `PlannerModelOutput`) from `../models/types`.
-   * - Uses `RequiredActionType` (import `RequiredActionType`) from `./plannerHelpers`.
-   *
-   * @param task - Value for task.
-   * @param plannerModel - Value for planner model.
-   * @param lessonsText - Message/text content processed by this function.
-   * @param firstPrinciplesGuidance - Message/text content processed by this function.
-   * @param currentUserRequest - Structured input object for this operation.
-   * @param requiredActionType - Value for required action type.
-   * @param playbookSelection - Value for playbook selection.
-   * @returns Promise resolving to PlannerModelOutput.
-   */
-  private async requestPlannerOutput(
-    task: TaskRequest,
-    plannerModel: string,
-    lessonsText: string,
-    firstPrinciplesGuidance: string,
-    learningGuidance: string,
-    currentUserRequest: string,
-    requiredActionType: RequiredActionType,
-    playbookSelection: Stage685PlaybookPlanningContext | null
-  ): Promise<PlannerModelOutput> {
-    const playbookGuidance = this.buildPlaybookGuidance(playbookSelection);
-    const highRiskActionGuardrails = this.buildHighRiskActionGuardrails(currentUserRequest);
-    const executionEnvironmentGuidance = this.buildExecutionEnvironmentGuidance();
-    const buildStrategyGuidance =
-      this.buildExecutionStyleBuildStrategyGuidance(currentUserRequest);
-    const requiredActionHint =
-      requiredActionType === "create_skill"
-        ? "Current user request explicitly asks to create a skill. Include at least one create_skill action and do not replace it with respond-only output."
-        : requiredActionType === "run_skill"
-          ? "Current user request explicitly asks to run or use a skill. Include at least one run_skill action and do not replace it with respond-only output."
-          : requiredActionType
-            ? `Current user request explicitly asks for ${requiredActionType}. Include at least one ${requiredActionType} action and do not replace it with unrelated actions or respond-only output.`
-            : "";
-    const executionStyleRequiredActionHint =
-      buildExecutionStyleRequiredActionHint(currentUserRequest);
-    return this.modelClient.completeJson<PlannerModelOutput>({
-      model: plannerModel,
-      schemaName: "planner_v1",
-      temperature: 0,
-      systemPrompt:
-        "You are a planning organ for an autonomous system. Return compact JSON with plannerNotes and actions[]. " +
-        "Always produce at least one valid action. For conversational requests, emit a `respond` action. " +
-        "If you emit a respond action, include params.message with the exact user-facing text. " +
-        RESPONSE_IDENTITY_GUARDRAIL +
-        RESPONSE_STYLE_GUARDRAIL +
-        "If you emit a write_file action, include params.path and params.content with the full file content to write. " +
-        "If you emit a read_file action, include params.path. " +
-        "If you emit a shell_command action, include params.command with the exact command string. " +
-        "If you emit a start_process action, include params.command and any needed cwd/workdir fields. " +
-        "If you emit check_process or stop_process, include params.leaseId. " +
-        "If you emit a probe_port action, include params.port and optional params.host/timeoutMs. " +
-        "If you emit a probe_http action, include params.url and optional params.expectedStatus/timeoutMs. " +
-        "If you emit a verify_browser action, include params.url and optional params.expectedTitle/expectedText/timeoutMs. " +
-        requiredActionHint +
-        executionStyleRequiredActionHint +
-        executionEnvironmentGuidance +
-        buildStrategyGuidance +
-        playbookGuidance +
-        highRiskActionGuardrails +
-        firstPrinciplesGuidance +
-        learningGuidance +
-        lessonsText,
-      userPrompt: JSON.stringify({
-        taskId: task.id,
-        goal: task.goal,
-        userInput: task.userInput,
-        currentUserRequest,
-        requiredActionType,
-        playbookSelection
-      })
-    });
-  }
-
-  /**
-   * Implements request planner repair output behavior used by `planner`.
-   *
-   * **Why it exists:**
-   * Keeps `request planner repair output` behavior centralized so collaborating call sites stay consistent.
-   *
-   * **What it talks to:**
-   * - Uses `Stage685PlaybookPlanningContext` (import `Stage685PlaybookPlanningContext`) from `../core/stage6_85PlaybookRuntime`.
-   * - Uses `TaskRequest` (import `TaskRequest`) from `../core/types`.
-   * - Uses `PlannerModelOutput` (import `PlannerModelOutput`) from `../models/types`.
-   * - Uses `RequiredActionType` (import `RequiredActionType`) from `./plannerHelpers`.
-   *
-   * @param task - Value for task.
-   * @param plannerModel - Value for planner model.
-   * @param lessonsText - Message/text content processed by this function.
-   * @param firstPrinciplesGuidance - Message/text content processed by this function.
-   * @param previousOutput - Result object inspected or transformed in this step.
-   * @param currentUserRequest - Structured input object for this operation.
-   * @param requiredActionType - Value for required action type.
-   * @param repairReason - Value for repair reason.
-   * @param playbookSelection - Value for playbook selection.
-   * @returns Promise resolving to PlannerModelOutput.
-   */
-  private async requestPlannerRepairOutput(
-    task: TaskRequest,
-    plannerModel: string,
-    lessonsText: string,
-    firstPrinciplesGuidance: string,
-    learningGuidance: string,
-    previousOutput: PlannerModelOutput,
-    currentUserRequest: string,
-    requiredActionType: RequiredActionType,
-    repairReason: string,
-    playbookSelection: Stage685PlaybookPlanningContext | null
-  ): Promise<PlannerModelOutput> {
-    const playbookGuidance = this.buildPlaybookGuidance(playbookSelection);
-    const highRiskActionGuardrails = this.buildHighRiskActionGuardrails(currentUserRequest);
-    const executionEnvironmentGuidance = this.buildExecutionEnvironmentGuidance();
-    const buildStrategyGuidance =
-      this.buildExecutionStyleBuildStrategyGuidance(currentUserRequest);
-    const requiredActionHint =
-      requiredActionType === "create_skill"
-        ? "Repair must include at least one create_skill action because the explicit user request is to create a skill."
-        : requiredActionType === "run_skill"
-          ? "Repair must include at least one run_skill action because the explicit user request is to run or use a skill."
-          : requiredActionType
-            ? `Repair must include at least one ${requiredActionType} action because the explicit user request names ${requiredActionType}.`
-            : "";
-    const executionStyleRequiredActionHint =
-      buildExecutionStyleRequiredActionHint(currentUserRequest, true);
-    return this.modelClient.completeJson<PlannerModelOutput>({
-      model: plannerModel,
-      schemaName: "planner_v1",
-      temperature: 0,
-      systemPrompt:
-        "You are repairing a planner JSON output that had no valid actions. " +
-        "Return compact JSON with plannerNotes and actions[]. " +
-        "Actions must use only allowed types: respond, read_file, write_file, delete_file, list_directory, create_skill, run_skill, network_write, self_modify, shell_command, start_process, check_process, stop_process, probe_port, probe_http, verify_browser. " +
-        "Always produce at least one valid action. For conversational requests, emit respond with params.message. " +
-        RESPONSE_IDENTITY_GUARDRAIL +
-        RESPONSE_STYLE_GUARDRAIL +
-        "For write_file, include params.path and params.content (the full file content). " +
-        "For read_file, include params.path. For shell_command, include params.command. " +
-        "For start_process, include params.command and any needed cwd/workdir fields. " +
-        "For check_process or stop_process, include params.leaseId. " +
-        "For probe_port, include params.port and optional params.host/timeoutMs. " +
-        "For probe_http, include params.url and optional params.expectedStatus/timeoutMs. " +
-        "For verify_browser, include params.url and optional params.expectedTitle/expectedText/timeoutMs. " +
-        requiredActionHint +
-        executionStyleRequiredActionHint +
-        executionEnvironmentGuidance +
-        buildStrategyGuidance +
-        playbookGuidance +
-        highRiskActionGuardrails +
-        firstPrinciplesGuidance +
-        learningGuidance +
-        lessonsText,
-      userPrompt: JSON.stringify({
-        taskId: task.id,
-        goal: task.goal,
-        userInput: task.userInput,
-        currentUserRequest,
-        requiredActionType,
-        repairReason,
-        invalidPlannerOutput: previousOutput,
-        playbookSelection
-      })
-    });
-  }
-
-  /**
-   * Builds playbook guidance for this module's runtime flow.
-   *
-   * **Why it exists:**
-   * Keeps construction of playbook guidance consistent across call sites.
-   *
-   * **What it talks to:**
-   * - Uses `Stage685PlaybookPlanningContext` (import `Stage685PlaybookPlanningContext`) from `../core/stage6_85PlaybookRuntime`.
-   *
-   * @param playbookSelection - Value for playbook selection.
-   * @returns Resulting string value.
-   */
-  private buildPlaybookGuidance(
-    playbookSelection: Stage685PlaybookPlanningContext | null
-  ): string {
-    if (!playbookSelection) {
-      return "";
-    }
-
-    if (!playbookSelection.fallbackToPlanner && playbookSelection.selectedPlaybookId) {
-      const selectedPlaybookName = playbookSelection.selectedPlaybookName ?? "unnamed_playbook";
-      const tags = playbookSelection.requestedTags.join(",");
-      return (
-        "\nDeterministic Stage 6.85 playbook match is available. " +
-        `Selected playbook id: ${playbookSelection.selectedPlaybookId}. ` +
-        `Selected playbook name: ${selectedPlaybookName}. ` +
-        `Requested tags: ${tags}. ` +
-        `Required input schema: ${playbookSelection.requiredInputSchema}. ` +
-        "Use this playbook context as the default workflow scaffold and avoid clarification-only output " +
-        "unless a safety-critical unknown blocks execution. " +
-        "For build/research playbook matches, prefer respond actions with deterministic steps. " +
-        "Do not emit run_skill unless the current user request explicitly asks to run or use a named skill."
-      );
-    }
-
-    return (
-      "\nDeterministic Stage 6.85 playbook fallback is active. " +
-      `Fallback reason: ${playbookSelection.reason}. ` +
-      "Use normal planning with explicit assumptions and avoid repeated clarification loops."
-    );
-  }
-
-  /**
-   * Implements synthesize respond message behavior used by `planner`.
-   *
-   * **Why it exists:**
-   * Keeps `synthesize respond message` behavior centralized so collaborating call sites stay consistent.
-   *
-   * **What it talks to:**
-   * - Uses `TaskRequest` (import `TaskRequest`) from `../core/types`.
-   * - Uses `ResponseSynthesisModelOutput` (import `ResponseSynthesisModelOutput`) from `../models/types`.
-   *
-   * @param task - Value for task.
-   * @param synthesizerModel - Value for synthesizer model.
-   * @returns Promise resolving to string.
-   */
-  private async synthesizeRespondMessage(
-    task: TaskRequest,
-    synthesizerModel: string
-  ): Promise<string> {
-    const output = await this.modelClient.completeJson<ResponseSynthesisModelOutput>({
-      model: synthesizerModel,
-      schemaName: "response_v1",
-      temperature: 0.2,
-      systemPrompt:
-        "You are a response synthesizer organ in a governed assistant. " +
-        "Return JSON with one key: message. The message must directly answer the user input, be concise, and avoid mentioning internal systems. " +
-        RESPONSE_IDENTITY_GUARDRAIL +
-        RESPONSE_STYLE_GUARDRAIL,
-      userPrompt: JSON.stringify({
-        taskId: task.id,
-        goal: task.goal,
-        userInput: task.userInput
-      })
-    });
-
-    const message = typeof output.message === "string" ? output.message.trim() : "";
-    if (message.length === 0) {
-      throw new Error("Response synthesis returned an empty message.");
-    }
-
-    return message;
-  }
-
-  /**
-   * Applies deterministic validity checks for respond messages.
-   *
-   * **Why it exists:**
-   * Fails fast when respond messages is invalid so later control flow stays safe and predictable.
-   *
-   * **What it talks to:**
-   * - Uses `PlannedAction` (import `PlannedAction`) from `../core/types`.
-   * - Uses `TaskRequest` (import `TaskRequest`) from `../core/types`.
-   * - Uses `hasRespondMessage` (import `hasRespondMessage`) from `./plannerHelpers`.
-   *
-   * @param actions - Value for actions.
-   * @param task - Value for task.
-   * @param synthesizerModel - Value for synthesizer model.
-   * @returns Ordered collection produced by this step.
-   */
-  private async ensureRespondMessages(
-    actions: PlannedAction[],
-    task: TaskRequest,
-    synthesizerModel: string
-  ): Promise<PlannedAction[]> {
-    const needsMessage = actions.some(
-      (action) => action.type === "respond" && !hasRespondMessage(action)
-    );
-    if (!needsMessage) {
-      return actions;
-    }
-
-    const synthesizedMessage = await this.synthesizeRespondMessage(task, synthesizerModel);
-    return actions.map((action) => {
-      if (action.type !== "respond" || hasRespondMessage(action)) {
-        return action;
-      }
-
-      return {
-        ...action,
-        params: {
-          ...action.params,
-          message: synthesizedMessage
-        }
-      };
-    });
-  }
-
-  /**
-   * Implements enforce run skill intent policy behavior used by `planner`.
-   *
-   * **Why it exists:**
-   * Keeps `enforce run skill intent policy` behavior centralized so collaborating call sites stay consistent.
-   *
-   * **What it talks to:**
-   * - Uses `estimateActionCostUsd` (import `estimateActionCostUsd`) from `../core/actionCostPolicy`.
-   * - Uses `PlannedAction` (import `PlannedAction`) from `../core/types`.
-   * - Uses `TaskRequest` (import `TaskRequest`) from `../core/types`.
-   * - Uses `extractCurrentUserRequest` (import `extractCurrentUserRequest`) from `./memoryBroker`.
-   * - Uses `allowsRunSkillForRequest` (import `allowsRunSkillForRequest`) from `./plannerHelpers`.
-   * - Uses `hasOnlyRunSkillActions` (import `hasOnlyRunSkillActions`) from `./plannerHelpers`.
-   *
-   * @param actions - Value for actions.
-   * @param task - Value for task.
-   * @param synthesizerModel - Value for synthesizer model.
-   * @param currentUserRequest - Structured input object for this operation.
-   * @returns Ordered collection produced by this step.
-   */
-  private async enforceRunSkillIntentPolicy(
-    actions: PlannedAction[],
-    task: TaskRequest,
-    synthesizerModel: string,
-    currentUserRequest: string
-  ): Promise<{ actions: PlannedAction[]; usedFallback: boolean }> {
-    const extractedCurrentUserRequest = extractCurrentUserRequest(task.userInput);
-    const runSkillAllowed =
-      allowsRunSkillForRequest(currentUserRequest) &&
-      allowsRunSkillForRequest(extractedCurrentUserRequest);
-    const filteredActions = runSkillAllowed
-      ? actions
-      : actions.filter((action) => action.type !== "run_skill");
-    if (filteredActions.length > 0) {
-      return {
-        actions: filteredActions,
-        usedFallback: false
-      };
-    }
-
-    if (!hasOnlyRunSkillActions(actions)) {
-      return {
-        actions: filteredActions,
-        usedFallback: false
-      };
-    }
-
-    const synthesizedMessage = await this.synthesizeRespondMessage(task, synthesizerModel);
-    return {
-      actions: [
-        {
-          id: "action_non_explicit_run_skill_post_filter_fallback",
-          type: "respond",
-          description: "Respond using deterministic fallback after post-normalization run_skill filtering.",
-          params: {
-            message: synthesizedMessage
-          },
-          estimatedCostUsd: estimateActionCostUsd({
-            type: "respond",
-            params: {
-              message: synthesizedMessage
-            }
-          })
-        }
-      ],
-      usedFallback: true
-    };
-  }
-
-  /**
    * Implements plan behavior used by `planner`.
    *
    * **Why it exists:**
@@ -1099,12 +589,11 @@ export class PlannerOrgan {
         }
         : undefined;
     const requiredActionType = inferRequiredActionType(currentUserRequest);
-    const requiresExecutableAction = requiresExecutableBuildPlan(currentUserRequest);
     const playbookSelection = options.playbookSelection ?? null;
 
     try {
       // Planner failures are fatal by policy: no deterministic fallback plan generation.
-      const output = await this.requestPlannerOutput(
+      const output = await requestPlannerOutput(this.modelClient, {
         task,
         plannerModel,
         lessonsText,
@@ -1112,89 +601,48 @@ export class PlannerOrgan {
         learningGuidance,
         currentUserRequest,
         requiredActionType,
-        playbookSelection
-      );
-      let normalizedActions = normalizeModelActions(extractActionCandidates(output));
-      normalizedActions = normalizeRequiredCreateSkillParams(
-        normalizedActions,
+        playbookSelection,
+        executionEnvironment: this.executionEnvironment
+      });
+      const initialPreparation = preparePlannerActions(
+        output,
         currentUserRequest,
         requiredActionType
       );
-      normalizedActions = normalizeRequiredRunSkillParams(
-        normalizedActions,
+      const initialValidation = evaluatePlannerActionValidation(
         currentUserRequest,
-        requiredActionType
+        requiredActionType,
+        initialPreparation.actions
       );
-      const filteredInitialRunSkillOnly =
-        hasOnlyRunSkillActions(normalizedActions) &&
-        filterNonExplicitRunSkillActions(normalizedActions, currentUserRequest).length === 0;
-      normalizedActions = filterNonExplicitRunSkillActions(
-        normalizedActions,
-        currentUserRequest
-      );
-      const missingRequiredAction =
-        normalizedActions.length > 0 &&
-        !hasRequiredAction(normalizedActions, requiredActionType);
-      const missingExecutableAction =
-        normalizedActions.length > 0 &&
-        requiresExecutableAction &&
-        !hasNonRespondAction(normalizedActions);
-      const initialBuildPlanAssessment = assessExecutionStyleBuildPlan(
-        currentUserRequest,
-        normalizedActions
-      );
-      const invalidExecutionStyleBuildPlan =
-        normalizedActions.length > 0 && !initialBuildPlanAssessment.valid;
-      if (
-        normalizedActions.length === 0 ||
-        missingRequiredAction ||
-        missingExecutableAction ||
-        invalidExecutionStyleBuildPlan
-      ) {
-        const repairReason =
-          normalizedActions.length === 0
-            ? "no_valid_actions"
-            : missingRequiredAction
-              ? `missing_required_action:${requiredActionType}`
-              : missingExecutableAction
-                ? "missing_executable_action:execution_style_build"
-                : `invalid_execution_style_build_plan:${initialBuildPlanAssessment.issueCode ?? "UNKNOWN"}`;
-        const repairedOutput = await this.requestPlannerRepairOutput(
+      if (initialValidation.needsRepair) {
+        const repairedOutput = await requestPlannerRepairOutput(this.modelClient, {
           task,
           plannerModel,
           lessonsText,
           firstPrinciplesGuidance,
           learningGuidance,
-          output,
           currentUserRequest,
           requiredActionType,
-          repairReason,
-          playbookSelection
-        );
-        normalizedActions = normalizeModelActions(extractActionCandidates(repairedOutput));
-        normalizedActions = normalizeRequiredCreateSkillParams(
-          normalizedActions,
+          playbookSelection,
+          executionEnvironment: this.executionEnvironment,
+          previousOutput: output,
+          repairReason: initialValidation.repairReason ?? "no_valid_actions"
+        });
+        const repairedPreparation = preparePlannerActions(
+          repairedOutput,
           currentUserRequest,
           requiredActionType
         );
-        normalizedActions = normalizeRequiredRunSkillParams(
-          normalizedActions,
-          currentUserRequest,
-          requiredActionType
-        );
-        const filteredRepairRunSkillOnly =
-          hasOnlyRunSkillActions(normalizedActions) &&
-          filterNonExplicitRunSkillActions(normalizedActions, currentUserRequest).length === 0;
-        normalizedActions = filterNonExplicitRunSkillActions(
-          normalizedActions,
-          currentUserRequest
-        );
-        if (normalizedActions.length === 0) {
+        if (repairedPreparation.actions.length === 0) {
           if (
-            requiredActionType === null &&
-            (filteredRepairRunSkillOnly || filteredInitialRunSkillOnly)
+            shouldUseNonExplicitRunSkillFallback(
+              requiredActionType,
+              initialPreparation,
+              repairedPreparation
+            )
           ) {
-            const synthesizedMessage = await this.synthesizeRespondMessage(
+            const synthesizedMessage = await synthesizeRespondMessage(
+              this.modelClient,
               task,
               synthesizerModel
             );
@@ -1207,51 +655,25 @@ export class PlannerOrgan {
                 "non_explicit_run_skill_fallback=respond)",
               firstPrinciples: firstPrinciplesPacket,
               learningHints,
-              actions: [
-                {
-                  id: "action_non_explicit_run_skill_fallback",
-                  type: "respond",
-                  description: "Respond using deterministic fallback after filtering non-explicit run_skill actions.",
-                  params: {
-                    message: synthesizedMessage
-                  },
-                  estimatedCostUsd: estimateActionCostUsd({
-                    type: "respond",
-                    params: {
-                      message: synthesizedMessage
-                    }
-                  })
-                }
-              ]
+              actions: [buildNonExplicitRunSkillFallbackAction(synthesizedMessage)]
             };
           }
           throw new Error("Planner model returned no valid actions.");
         }
-        if (!hasRequiredAction(normalizedActions, requiredActionType)) {
-          throw new Error(
-            `Planner model missing required ${requiredActionType} action for explicit user intent.`
-          );
-        }
-        if (requiresExecutableAction && !hasNonRespondAction(normalizedActions)) {
-          throw new Error(
-            "Planner model returned no executable non-respond actions for execution-style build request."
-          );
-        }
-        const repairedBuildPlanAssessment = assessExecutionStyleBuildPlan(
+        const repairedValidation = evaluatePlannerActionValidation(
           currentUserRequest,
-          normalizedActions
+          requiredActionType,
+          repairedPreparation.actions
         );
-        if (!repairedBuildPlanAssessment.valid && repairedBuildPlanAssessment.issueCode) {
-          throw new Error(
-            describeExecutionStyleBuildPlanIssue(repairedBuildPlanAssessment.issueCode)
-          );
-        }
-        const actionsWithMessages = await this.ensureRespondMessages(
-          normalizedActions,
+        assertPlannerActionValidation(repairedValidation, requiredActionType);
+        const actionsWithMessages = await ensureRespondMessages(
+          this.modelClient,
+          repairedPreparation.actions,
           task,
           synthesizerModel
         );
-        const postPolicy = await this.enforceRunSkillIntentPolicy(
+        const postPolicy = await enforceRunSkillIntentPolicy(
+          this.modelClient,
           actionsWithMessages,
           task,
           synthesizerModel,
@@ -1265,38 +687,22 @@ export class PlannerOrgan {
             `(backend=${this.modelClient.backend}, model=${plannerModel}, repair=true)` +
             (postPolicy.usedFallback
               ? " (non_explicit_run_skill_post_filter_fallback=respond)"
-              : ""),
+            : ""),
           firstPrinciples: firstPrinciplesPacket,
           learningHints,
           actions: postPolicy.actions
         };
       }
 
-      if (!hasRequiredAction(normalizedActions, requiredActionType)) {
-        throw new Error(
-          `Planner model missing required ${requiredActionType} action for explicit user intent.`
-        );
-      }
-      if (requiresExecutableAction && !hasNonRespondAction(normalizedActions)) {
-        throw new Error(
-          "Planner model returned no executable non-respond actions for execution-style build request."
-        );
-      }
-      const finalBuildPlanAssessment = assessExecutionStyleBuildPlan(
-        currentUserRequest,
-        normalizedActions
-      );
-      if (!finalBuildPlanAssessment.valid && finalBuildPlanAssessment.issueCode) {
-        throw new Error(
-          describeExecutionStyleBuildPlanIssue(finalBuildPlanAssessment.issueCode)
-        );
-      }
-      const actionsWithMessages = await this.ensureRespondMessages(
-        normalizedActions,
+      assertPlannerActionValidation(initialValidation, requiredActionType);
+      const actionsWithMessages = await ensureRespondMessages(
+        this.modelClient,
+        initialPreparation.actions,
         task,
         synthesizerModel
       );
-      const postPolicy = await this.enforceRunSkillIntentPolicy(
+      const postPolicy = await enforceRunSkillIntentPolicy(
+        this.modelClient,
         actionsWithMessages,
         task,
         synthesizerModel,

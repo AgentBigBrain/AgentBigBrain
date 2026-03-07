@@ -18,7 +18,7 @@ import {
   BrowserVerificationResult,
   BrowserVerifier,
   VerifyBrowserRequest
-} from "../../src/organs/browserVerifier";
+} from "../../src/organs/liveRun/browserVerifier";
 import { ToolExecutorOrgan } from "../../src/organs/executor";
 
 /**

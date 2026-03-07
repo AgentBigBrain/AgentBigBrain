@@ -7,13 +7,13 @@ import {
   GovernorRejectCategory,
   GovernorVote,
   TaskRunResult
-} from "../core/types";
-import { evaluateVerificationGate } from "../core/stage6_85QualityGatePolicy";
+} from "../../core/types";
+import { evaluateVerificationGate } from "../../core/stage6_85QualityGatePolicy";
 import {
   resolveVerificationCategoryForPrompt,
   shouldEvaluateVerificationGateForDiagnostics
-} from "./diagnosticsPromptPolicy";
-import { isLiveBuildVerificationPrompt } from "./liveBuildVerificationPromptPolicy";
+} from "../diagnosticsPromptPolicy";
+import { isLiveBuildVerificationPrompt } from "../liveBuildVerificationPromptPolicy";
 
 /**
  * Render options for blocked-message formatting.

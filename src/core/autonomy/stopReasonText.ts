@@ -2,6 +2,19 @@
  * @fileoverview Converts autonomous runtime stop reasons into human-first plain-language summaries.
  */
 
+import {
+  EXECUTION_STYLE_BROWSER_GATING_REASON_CODE,
+  EXECUTION_STYLE_GOAL_GATING_REASON_CODE,
+  EXECUTION_STYLE_LIVE_VERIFICATION_BLOCKED_REASON_CODE,
+  EXECUTION_STYLE_MUTATION_GATING_REASON_CODE,
+  EXECUTION_STYLE_PROCESS_NEVER_READY_REASON_CODE,
+  EXECUTION_STYLE_READINESS_GATING_REASON_CODE,
+  EXECUTION_STYLE_STALL_REASON_CODE,
+  EXECUTION_STYLE_TARGET_PATH_GATING_REASON_CODE,
+  MAX_ITERATIONS_REASON_CODE,
+  TASK_EXECUTION_FAILED_REASON_CODE
+} from "./contracts";
+
 const AUTONOMOUS_REASON_CODE_PATTERN = /^\[reasonCode=([A-Z0-9_]+)\]\s*/i;
 
 /**
@@ -177,6 +190,7 @@ function humanizeAutonomousExecutionFailureReason(reason: string): string {
  * plane diagnostics.
  *
  * **What it talks to:**
+ * - Uses autonomy reason contracts from `./contracts`.
  * - Uses local deterministic helpers within this module.
  *
  * @param reason - Raw autonomous-loop reason text.
@@ -197,49 +211,49 @@ export function humanizeAutonomousStopReason(reason: string): string {
   }
 
   switch (reasonCode) {
-    case "AUTONOMOUS_EXECUTION_STYLE_STALLED_NO_SIDE_EFFECT":
+    case EXECUTION_STYLE_STALL_REASON_CODE:
       return humanizeAutonomousStallReason(strippedReason);
-    case "AUTONOMOUS_EXECUTION_STYLE_SIDE_EFFECT_REQUIRED":
+    case EXECUTION_STYLE_GOAL_GATING_REASON_CODE:
       return appendActionableNextStep(
         "I need real executed side effects before I can call this goal done.",
         "rerun with an explicit execute-now request that includes at least one real write, build, or run step."
       );
-    case "AUTONOMOUS_EXECUTION_STYLE_TARGET_PATH_EVIDENCE_REQUIRED":
+    case EXECUTION_STYLE_TARGET_PATH_GATING_REASON_CODE:
       return appendActionableNextStep(
         "I need evidence that the requested target path was actually touched.",
         "rerun with actions that create or modify files directly in the requested path."
       );
-    case "AUTONOMOUS_EXECUTION_STYLE_MUTATION_EVIDENCE_REQUIRED":
+    case EXECUTION_STYLE_MUTATION_GATING_REASON_CODE:
       return appendActionableNextStep(
         "I need evidence that the requested project files or artifacts were actually changed.",
         "rerun with explicit mutation steps such as write_file, build output, or another real artifact-changing action."
       );
-    case "AUTONOMOUS_EXECUTION_STYLE_READINESS_EVIDENCE_REQUIRED":
+    case EXECUTION_STYLE_READINESS_GATING_REASON_CODE:
       return appendActionableNextStep(
         "I need readiness proof before I can say the app or service is running.",
         "start the app or service, then prove it with probe_http or another readiness check before asking for completion."
       );
-    case "AUTONOMOUS_EXECUTION_STYLE_BROWSER_EVIDENCE_REQUIRED":
+    case EXECUTION_STYLE_BROWSER_GATING_REASON_CODE:
       return appendActionableNextStep(
         "I need browser or UI proof before I can say the page rendered as expected.",
         "keep the app running and add verify_browser after readiness passes."
       );
-    case "AUTONOMOUS_EXECUTION_STYLE_LIVE_VERIFICATION_BLOCKED":
+    case EXECUTION_STYLE_LIVE_VERIFICATION_BLOCKED_REASON_CODE:
       return appendActionableNextStep(
         "I stopped because this environment blocked the localhost readiness or browser verification steps, so I could not truthfully confirm the app or page in this run.",
         "allow local process and browser verification in this environment, or rerun where localhost checks are permitted."
       );
-    case "AUTONOMOUS_EXECUTION_STYLE_PROCESS_NEVER_READY":
+    case EXECUTION_STYLE_PROCESS_NEVER_READY_REASON_CODE:
       return appendActionableNextStep(
         "I stopped because the local server process kept running but never became HTTP-ready, so I could not truthfully verify the app or page in this run.",
         "inspect the server command, chosen port, and startup logs, then retry once the app serves HTTP on localhost."
       );
-    case "AUTONOMOUS_MAX_ITERATIONS_REACHED":
+    case MAX_ITERATIONS_REASON_CODE:
       return appendActionableNextStep(
         "I hit the configured iteration limit before I could finish.",
         "narrow the goal or raise the iteration limit if this task legitimately needs more steps."
       );
-    case "AUTONOMOUS_TASK_EXECUTION_FAILED":
+    case TASK_EXECUTION_FAILED_REASON_CODE:
       return humanizeAutonomousExecutionFailureReason(strippedReason);
     case "AUTONOMOUS_LOOP_RUNTIME_ERROR":
       return appendActionableNextStep(

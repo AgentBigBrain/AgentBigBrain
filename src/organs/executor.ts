@@ -4,10 +4,7 @@
 
 import { ChildProcess, ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 import { access, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
-import * as http from "node:http";
-import * as https from "node:https";
 import { stripTypeScriptTypes } from "node:module";
-import * as net from "node:net";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -22,38 +19,32 @@ import {
   resolveShellEnvironment
 } from "../core/shellRuntimeProfile";
 import {
-  CheckProcessActionParams,
-  ConstraintViolationCode,
   ExecutorExecutionOutcome,
-  ExecutorExecutionStatus,
-  ManagedProcessLifecycleCode,
   NetworkWriteActionParams,
   PlannedAction,
-  ProbeHttpActionParams,
-  ProbePortActionParams,
   RespondActionParams,
   RuntimeTraceDetailValue,
-  ShellCommandActionParams,
-  StartProcessActionParams,
-  StopProcessActionParams,
-  VerifyBrowserActionParams
+  ShellCommandActionParams
 } from "../core/types";
+import { BrowserVerifier, PlaywrightBrowserVerifier } from "./liveRun/browserVerifier";
 import {
-  ManagedProcessRegistry,
-  ManagedProcessSnapshot
-} from "./managedProcessRegistry";
-import { BrowserVerifier, PlaywrightBrowserVerifier } from "./browserVerifier";
+  buildExecutionOutcome,
+  LiveRunExecutorContext,
+  normalizeOptionalString
+} from "./liveRun/contracts";
+import { executeBrowserVerification } from "./liveRun/browserVerificationHandler";
+import { executeCheckProcess } from "./liveRun/checkProcessHandler";
+import { ManagedProcessRegistry } from "./liveRun/managedProcessRegistry";
+import { executeProbeHttp } from "./liveRun/probeHttpHandler";
+import { executeProbePort } from "./liveRun/probePortHandler";
+import { executeStartProcess } from "./liveRun/startProcessHandler";
+import { executeStopProcess } from "./liveRun/stopProcessHandler";
 const SKILL_NAME_PATTERN = /^[a-zA-Z0-9_-]{1,64}$/;
 const PRIMARY_SKILL_EXTENSION = ".js";
 const COMPATIBILITY_SKILL_EXTENSION = ".ts";
 const SHELL_OUTPUT_CAPTURE_MAX_BYTES = 64 * 1024;
 const READ_FILE_OUTPUT_MAX_CHARS = 4000;
-const MANAGED_PROCESS_START_TIMEOUT_MS = 1_000;
-const MANAGED_PROCESS_STOP_TIMEOUT_MS = 2_000;
 const PROCESS_TREE_TERMINATION_TIMEOUT_MS = 2_000;
-const MANAGED_PROCESS_PORT_PRECHECK_TIMEOUT_MS = 250;
-const READINESS_PROBE_TIMEOUT_MS_DEFAULT = 2_000;
-const BROWSER_VERIFY_TIMEOUT_MS_DEFAULT = 10_000;
 
 /**
  * Resolves workspace path from available runtime context.
@@ -89,26 +80,6 @@ function resolveWorkspacePath(inputPath: string): string {
  */
 function isSafeSkillName(skillName: string): boolean {
   return SKILL_NAME_PATTERN.test(skillName);
-}
-
-/**
- * Normalizes optional string into a stable shape for `executor` logic.
- *
- * **Why it exists:**
- * Centralizes normalization rules for optional string so call sites stay aligned.
- *
- * **What it talks to:**
- * - Uses local constants/helpers within this module.
- *
- * @param value - Primary value processed by this function.
- * @returns Computed `string | null` result.
- */
-function normalizeOptionalString(value: unknown): string | null {
-  if (typeof value !== "string") {
-    return null;
-  }
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
 }
 
 interface CappedTextBuffer {
@@ -678,35 +649,6 @@ function buildReadFileSuccessOutput(
 }
 
 /**
- * Builds a typed executor outcome with deterministic defaults.
- *
- * **Why it exists:**
- * Centralizes typed outcome construction so action handlers return one stable contract.
- *
- * **What it talks to:**
- * - Uses `ExecutorExecutionOutcome` (import `ExecutorExecutionOutcome`) from `../core/types`.
- *
- * @param status - Typed executor status.
- * @param output - Human-readable execution output for logs and user-facing summaries.
- * @param failureCode - Optional typed failure/block code for fail-closed runtime mapping.
- * @param executionMetadata - Optional execution metadata bag for trace/receipt propagation.
- * @returns Typed executor outcome.
- */
-function buildExecutionOutcome(
-  status: ExecutorExecutionStatus,
-  output: string,
-  failureCode?: ConstraintViolationCode,
-  executionMetadata?: Record<string, RuntimeTraceDetailValue>
-): ExecutorExecutionOutcome {
-  return {
-    status,
-    output,
-    failureCode,
-    executionMetadata
-  };
-}
-
-/**
  * Builds simulated execution metadata for typed downstream evidence checks.
  *
  * **Why it exists:**
@@ -728,236 +670,6 @@ function buildSimulatedExecutionMetadata(
   };
 }
 
-/**
- * Builds managed-process metadata for trace, receipts, and user-facing evidence checks.
- *
- * **Why it exists:**
- * Keeps managed-process result metadata stable across start/check/stop actions so downstream code
- * can reason about process lifecycle without parsing free-form output text.
- *
- * **What it talks to:**
- * - Uses `ManagedProcessSnapshot` (import `ManagedProcessSnapshot`) from `./managedProcessRegistry`.
- * - Uses `ManagedProcessLifecycleCode` (import `ManagedProcessLifecycleCode`) from `../core/types`.
- *
- * @param snapshot - Managed-process snapshot to serialize.
- * @param lifecycleCode - Optional lifecycle code override for the current action result.
- * @returns Metadata bag safe for runtime trace persistence.
- */
-function buildManagedProcessExecutionMetadata(
-  snapshot: ManagedProcessSnapshot,
-  lifecycleCode: ManagedProcessLifecycleCode = snapshot.statusCode
-): Record<string, RuntimeTraceDetailValue> {
-  return {
-    managedProcess: true,
-    processLeaseId: snapshot.leaseId,
-    processTaskId: snapshot.taskId,
-    processPid: snapshot.pid,
-    processLifecycleStatus: lifecycleCode,
-    processCommandFingerprint: snapshot.commandFingerprint,
-    processCwd: snapshot.cwd,
-    processShellExecutable: snapshot.shellExecutable,
-    processShellKind: snapshot.shellKind,
-    processStartedAt: snapshot.startedAt,
-    processExitCode: snapshot.exitCode,
-    processSignal: snapshot.signal,
-    processStopRequested: snapshot.stopRequested
-  };
-}
-
-/**
- * Builds managed-process start-failure metadata for deterministic recovery routing.
- *
- * **Why it exists:**
- * Startup preflight failures can still be actionable for the autonomous loop, so this helper keeps
- * typed port-conflict details machine-readable instead of forcing later recovery logic to scrape
- * free-form output text.
- *
- * **What it talks to:**
- * - Uses `RuntimeTraceDetailValue` (import `RuntimeTraceDetailValue`) from `../core/types`.
- *
- * @param details - Structured start-failure details for this outcome.
- * @returns Metadata bag safe for runtime trace persistence.
- */
-function buildManagedProcessStartFailureExecutionMetadata(details: {
-  commandFingerprint: string;
-  cwd: string;
-  shellExecutable: string;
-  shellKind: string;
-  failureKind: "PORT_IN_USE";
-  requestedHost: string;
-  requestedPort: number;
-  requestedUrl: string;
-  suggestedPort: number | null;
-}): Record<string, RuntimeTraceDetailValue> {
-  return {
-    managedProcess: true,
-    processLifecycleStatus: "PROCESS_START_FAILED",
-    processCommandFingerprint: details.commandFingerprint,
-    processCwd: details.cwd,
-    processShellExecutable: details.shellExecutable,
-    processShellKind: details.shellKind,
-    processStartupFailureKind: details.failureKind,
-    processRequestedHost: details.requestedHost,
-    processRequestedPort: details.requestedPort,
-    processRequestedUrl: details.requestedUrl,
-    processSuggestedHost: details.suggestedPort !== null ? "localhost" : null,
-    processSuggestedPort: details.suggestedPort,
-    processSuggestedUrl:
-      details.suggestedPort !== null ? `http://localhost:${details.suggestedPort}` : null
-  };
-}
-
-/**
- * Builds readiness-probe metadata for trace, receipts, and completion evidence checks.
- *
- * **Why it exists:**
- * Keeps port/http probe outputs machine-readable so autonomous completion and user-facing status
- * rendering can reason about ready/not-ready state without parsing free-form text.
- *
- * **What it talks to:**
- * - Uses `ManagedProcessLifecycleCode` (import `ManagedProcessLifecycleCode`) from `../core/types`.
- * - Uses `RuntimeTraceDetailValue` (import `RuntimeTraceDetailValue`) from `../core/types`.
- *
- * @param details - Structured readiness probe details for this outcome.
- * @returns Metadata bag safe for runtime trace persistence.
- */
-function buildReadinessProbeExecutionMetadata(details: {
-  probeKind: "port" | "http";
-  ready: boolean;
-  lifecycleCode: ManagedProcessLifecycleCode;
-  host?: string;
-  port?: number;
-  url?: string;
-  timeoutMs: number;
-  expectedStatus?: number | null;
-  observedStatus?: number | null;
-}): Record<string, RuntimeTraceDetailValue> {
-  return {
-    readinessProbe: true,
-    probeKind: details.probeKind,
-    probeReady: details.ready,
-    processLifecycleStatus: details.lifecycleCode,
-    probeHost: details.host ?? null,
-    probePort: details.port ?? null,
-    probeUrl: details.url ?? null,
-    probeTimeoutMs: details.timeoutMs,
-    probeExpectedStatus: details.expectedStatus ?? null,
-    probeObservedStatus: details.observedStatus ?? null
-  };
-}
-
-/**
- * Builds browser-verification metadata for trace, receipts, and mission-evidence checks.
- *
- * **Why it exists:**
- * Keeps browser verification outputs machine-readable so user-facing summaries and autonomous
- * mission gates can reason about verified UI/browser proof without parsing free-form text.
- *
- * **What it talks to:**
- * - Uses `ManagedProcessLifecycleCode` (import `ManagedProcessLifecycleCode`) from `../core/types`.
- * - Uses `RuntimeTraceDetailValue` (import `RuntimeTraceDetailValue`) from `../core/types`.
- *
- * @param details - Structured browser verification details for this outcome.
- * @returns Metadata bag safe for runtime trace persistence.
- */
-function buildBrowserVerificationExecutionMetadata(details: {
-  url: string;
-  passed: boolean;
-  observedTitle: string | null;
-  observedTextSample: string | null;
-  matchedTitle: boolean | null;
-  matchedText: boolean | null;
-  expectedTitle: string | null;
-  expectedText: string | null;
-  timeoutMs: number;
-  lifecycleCode?: ManagedProcessLifecycleCode;
-}): Record<string, RuntimeTraceDetailValue> {
-  return {
-    browserVerification: true,
-    browserVerifyPassed: details.passed,
-    browserVerifyUrl: details.url,
-    browserVerifyObservedTitle: details.observedTitle,
-    browserVerifyObservedTextSample: details.observedTextSample,
-    browserVerifyMatchedTitle: details.matchedTitle,
-    browserVerifyMatchedText: details.matchedText,
-    browserVerifyExpectedTitle: details.expectedTitle,
-    browserVerifyExpectedText: details.expectedText,
-    browserVerifyTimeoutMs: details.timeoutMs,
-    processLifecycleStatus: details.lifecycleCode ?? null
-  };
-}
-
-/**
- * Evaluates whether one hostname belongs to the loopback-only browser verification allowlist.
- *
- * **Why it exists:**
- * Provides a second fail-closed local-only check in the executor for direct `executeWithOutcome`
- * callers that do not go through hard constraints first.
- *
- * **What it talks to:**
- * - Uses local constants/helpers within this module.
- *
- * @param hostname - Hostname extracted from a browser verification URL.
- * @returns `true` when the hostname is a permitted loopback target.
- */
-function isLoopbackBrowserVerificationHost(hostname: string): boolean {
-  const normalizedHostname = hostname.trim().toLowerCase().replace(/^\[|\]$/g, "");
-  return (
-    normalizedHostname === "localhost" ||
-    normalizedHostname === "127.0.0.1" ||
-    normalizedHostname === "::1"
-  );
-}
-
-interface ManagedProcessLoopbackTargetHint {
-  host: string;
-  port: number;
-  url: string;
-}
-
-/**
- * Parses one probable loopback-local port from a managed-process command string.
- *
- * **Why it exists:**
- * `start_process` preflight can only detect deterministic local port conflicts when the runtime
- * can recover the intended loopback port from trusted command params, so this helper centralizes
- * the bounded parsing rules.
- *
- * **What it talks to:**
- * - Uses local constants/helpers within this module.
- *
- * @param command - Shell/process command text emitted by the planner.
- * @returns Loopback-local target hint, or `null` when no supported port pattern is present.
- */
-function inferManagedProcessLoopbackTarget(
-  command: string
-): ManagedProcessLoopbackTargetHint | null {
-  const normalizedCommand = command.trim().toLowerCase();
-  const patterns = [
-    /\bhttp\.server\s+(\d{2,5})\b/,
-    /\b--port\s+(\d{2,5})\b/,
-    /\b-p\s+(\d{2,5})\b/,
-    /\blocalhost:(\d{2,5})\b/,
-    /\b127\.0\.0\.1:(\d{2,5})\b/
-  ];
-  for (const pattern of patterns) {
-    const match = normalizedCommand.match(pattern);
-    if (!match) {
-      continue;
-    }
-    const port = Number.parseInt(match[1] ?? "", 10);
-    if (!Number.isInteger(port) || port < 1 || port > 65_535) {
-      continue;
-    }
-    return {
-      host: "localhost",
-      port,
-      url: `http://localhost:${port}`
-    };
-  }
-  return null;
-}
-
 export class ToolExecutorOrgan {
   private readonly shellExecutionTelemetryByActionId = new Map<string, ShellExecutionTelemetry>();
   private readonly managedProcessRegistry: ManagedProcessRegistry;
@@ -972,8 +684,8 @@ export class ToolExecutorOrgan {
    * **What it talks to:**
    * - Uses `BrainConfig` (import `BrainConfig`) from `../core/config`.
    * - Uses `spawn` (import `spawn`) from `node:child_process`.
-   * - Uses `ManagedProcessRegistry` (import `ManagedProcessRegistry`) from `./managedProcessRegistry`.
-   * - Uses `PlaywrightBrowserVerifier` (import `PlaywrightBrowserVerifier`) from `./browserVerifier`.
+   * - Uses `ManagedProcessRegistry` (import `ManagedProcessRegistry`) from `./liveRun/managedProcessRegistry`.
+   * - Uses `PlaywrightBrowserVerifier` (import `PlaywrightBrowserVerifier`) from `./liveRun/browserVerifier`.
    *
    * @param config - Configuration or policy settings applied here.
    * @param shellSpawn - Value for shell spawn.
@@ -992,6 +704,29 @@ export class ToolExecutorOrgan {
       new PlaywrightBrowserVerifier({
         headless: config.browserVerification.headless
       });
+  }
+
+  /**
+   * Builds the shared live-run handler context for extracted process or browser capability modules.
+   *
+   * **Why it exists:**
+   * Keeps the executor as a thin dispatcher while still passing one stable dependency bag to the
+   * live-run subsystem.
+   *
+   * **What it talks to:**
+   * - Uses `LiveRunExecutorContext` from `./liveRun/contracts`.
+   *
+   * @returns Shared live-run execution context.
+   */
+  private buildLiveRunContext(): LiveRunExecutorContext {
+    return {
+      config: this.config,
+      shellSpawn: this.shellSpawn,
+      managedProcessRegistry: this.managedProcessRegistry,
+      browserVerifier: this.browserVerifier,
+      resolveShellCommandCwd: (params) => this.resolveShellCommandCwd(params),
+      terminateProcessTree: (child) => this.terminateProcessTree(child)
+    };
   }
 
   /**
@@ -1329,22 +1064,28 @@ export class ToolExecutorOrgan {
         return this.executeRealShellCommand(action.id, action.params, signal);
 
       case "start_process":
-        return this.startManagedProcess(action.id, action.params, signal, taskId);
+        return executeStartProcess(
+          this.buildLiveRunContext(),
+          action.id,
+          action.params,
+          signal,
+          taskId
+        );
 
       case "check_process":
-        return this.checkManagedProcess(action.params);
+        return executeCheckProcess(this.buildLiveRunContext(), action.params);
 
       case "stop_process":
-        return this.stopManagedProcess(action.params);
+        return executeStopProcess(this.buildLiveRunContext(), action.params);
 
       case "probe_port":
-        return this.probePortReadiness(action.params, signal);
+        return executeProbePort(this.buildLiveRunContext(), action.params, signal);
 
       case "probe_http":
-        return this.probeHttpReadiness(action.params, signal);
+        return executeProbeHttp(this.buildLiveRunContext(), action.params, signal);
 
       case "verify_browser":
-        return this.verifyBrowserPage(action.params, signal);
+        return executeBrowserVerification(this.buildLiveRunContext(), action.params, signal);
 
       case "memory_mutation": {
         return buildExecutionOutcome(
@@ -1388,642 +1129,6 @@ export class ToolExecutorOrgan {
   async execute(action: PlannedAction, signal?: AbortSignal, taskId?: string): Promise<string> {
     const outcome = await this.executeWithOutcome(action, signal, taskId);
     return outcome.output;
-  }
-
-  /**
-   * Starts a managed long-running process as part of this module's control flow.
-   *
-   * **Why it exists:**
-   * Separates long-lived process startup from finite shell execution so the runtime can track
-   * lease-based process state instead of forcing app/server workflows through exit-based semantics.
-   *
-   * **What it talks to:**
-   * - Uses `hashSha256` (import `hashSha256`) from `../core/cryptoUtils`.
-   * - Uses `buildShellSpawnSpec` (import `buildShellSpawnSpec`) from `../core/shellRuntimeProfile`.
-   * - Uses `resolveShellEnvironment` (import `resolveShellEnvironment`) from `../core/shellRuntimeProfile`.
-   * - Uses `StartProcessActionParams` (import `StartProcessActionParams`) from `../core/types`.
-   * - Uses `ManagedProcessRegistry` (import `ManagedProcessRegistry`) from `./managedProcessRegistry`.
-   *
-   * @param actionId - Stable identifier used to reference an entity or record.
-   * @param params - Structured input object for this operation.
-   * @param signal - Optional abort signal propagated from caller/runtime surface.
-   * @param taskId - Optional owning task id for runtime metadata propagation.
-   * @returns Promise resolving to typed executor outcome.
-   */
-  private async startManagedProcess(
-    actionId: string,
-    params: StartProcessActionParams,
-    signal?: AbortSignal,
-    taskId?: string
-  ): Promise<ExecutorExecutionOutcome> {
-    throwIfAborted(signal);
-    if (!this.config.permissions.allowRealShellExecution) {
-      return buildExecutionOutcome(
-        "blocked",
-        "Process start blocked: real shell execution is disabled by policy.",
-        "PROCESS_DISABLED_BY_POLICY"
-      );
-    }
-
-    const command = normalizeOptionalString(params.command);
-    if (!command) {
-      return buildExecutionOutcome(
-        "blocked",
-        "Process start blocked: missing command.",
-        "PROCESS_MISSING_COMMAND"
-      );
-    }
-
-    const resolvedCwd = this.resolveShellCommandCwd(params);
-    if (!resolvedCwd) {
-      return buildExecutionOutcome(
-        "blocked",
-        "Process start blocked: requested cwd is outside sandbox policy.",
-        "PROCESS_CWD_OUTSIDE_SANDBOX"
-      );
-    }
-
-    const shellEnvironment = resolveShellEnvironment(this.config.shellRuntime.profile, process.env);
-    const commandFingerprint = hashSha256(command);
-    const spawnSpec = buildShellSpawnSpec({
-      profile: this.config.shellRuntime.profile,
-      command,
-      cwd: resolvedCwd,
-      timeoutMs: this.config.shellRuntime.profile.timeoutMsDefault,
-      envKeyNames: shellEnvironment.envKeyNames
-    });
-    const loopbackTarget = inferManagedProcessLoopbackTarget(command);
-
-    if (loopbackTarget) {
-      const portAlreadyOccupied = await this.performLocalPortProbe(
-        loopbackTarget.host,
-        loopbackTarget.port,
-        MANAGED_PROCESS_PORT_PRECHECK_TIMEOUT_MS,
-        signal
-      );
-      if (portAlreadyOccupied) {
-        const suggestedPort = await this.findAvailableLoopbackPort(signal);
-        return buildExecutionOutcome(
-          "failed",
-          `Process start failed: ${loopbackTarget.url} was already occupied before startup.` +
-            `${suggestedPort !== null ? ` Try a different free loopback port such as ${suggestedPort}.` : ""}`,
-          "PROCESS_START_FAILED",
-          buildManagedProcessStartFailureExecutionMetadata({
-            commandFingerprint,
-            cwd: spawnSpec.cwd,
-            shellExecutable: spawnSpec.executable,
-            shellKind: this.config.shellRuntime.profile.shellKind,
-            failureKind: "PORT_IN_USE",
-            requestedHost: loopbackTarget.host,
-            requestedPort: loopbackTarget.port,
-            requestedUrl: loopbackTarget.url,
-            suggestedPort
-          })
-        );
-      }
-    }
-
-    try {
-      const child = this.shellSpawn(spawnSpec.executable, [...spawnSpec.args], {
-        cwd: spawnSpec.cwd,
-        detached: process.platform !== "win32",
-        env: shellEnvironment.env,
-        windowsHide: true,
-        windowsVerbatimArguments: this.config.shellRuntime.profile.shellKind === "cmd",
-        stdio: ["pipe", "pipe", "pipe"]
-      });
-      if (typeof child.stdout.resume === "function") {
-        child.stdout.resume();
-      }
-      if (typeof child.stderr.resume === "function") {
-        child.stderr.resume();
-      }
-      await this.waitForManagedProcessStart(child, signal);
-      const snapshot = this.managedProcessRegistry.registerStarted({
-        actionId,
-        child,
-        commandFingerprint,
-        cwd: spawnSpec.cwd,
-        shellExecutable: spawnSpec.executable,
-        shellKind: this.config.shellRuntime.profile.shellKind,
-        taskId
-      });
-      this.bindAbortCleanupForManagedProcess(snapshot.leaseId, child, signal);
-      return buildExecutionOutcome(
-        "success",
-        `Process started: lease ${snapshot.leaseId} (pid ${snapshot.pid ?? "unknown"}).`,
-        undefined,
-        buildManagedProcessExecutionMetadata(snapshot, "PROCESS_STARTED")
-      );
-    } catch (error) {
-      if (isAbortError(error)) {
-        throw error;
-      }
-      return buildExecutionOutcome(
-        "failed",
-        `Process start failed: ${(error as Error).message}`,
-        "PROCESS_START_FAILED"
-      );
-    }
-  }
-
-  /**
-   * Binds one managed-process lease to an abort signal for deterministic cleanup.
-   *
-   * **Why it exists:**
-   * `start_process` can succeed before the surrounding task is cancelled. This helper ensures the
-   * managed child is still torn down when the owning task signal aborts later, instead of leaving a
-   * long-running lease alive after cancellation.
-   *
-   * **What it talks to:**
-   * - Uses `ManagedProcessRegistry` (import `ManagedProcessRegistry`) from `./managedProcessRegistry`.
-   * - Uses `terminateProcessTree` within this module.
-   *
-   * @param leaseId - Managed-process lease identifier to mark as stop-requested on abort.
-   * @param child - Live child handle associated with the managed-process lease.
-   * @param signal - Optional abort signal propagated from caller/runtime surface.
-   * @returns Nothing; registers runtime cleanup side effects when a signal exists.
-   */
-  private bindAbortCleanupForManagedProcess(
-    leaseId: string,
-    child: ChildProcessWithoutNullStreams,
-    signal?: AbortSignal
-  ): void {
-    if (!signal) {
-      return;
-    }
-
-    const handleAbort = (): void => {
-      this.managedProcessRegistry.markStopRequested(leaseId);
-      void this.terminateProcessTree(child);
-    };
-
-    if (signal.aborted) {
-      handleAbort();
-      return;
-    }
-
-    signal.addEventListener("abort", handleAbort, { once: true });
-    child.once("close", () => {
-      signal.removeEventListener("abort", handleAbort);
-    });
-  }
-
-  /**
-   * Checks one managed-process lease and reports its current lifecycle status.
-   *
-   * **Why it exists:**
-   * Gives higher-level orchestration a deterministic way to inspect long-running work without
-   * relying on process exit or ad-hoc shell polling.
-   *
-   * **What it talks to:**
-   * - Uses `CheckProcessActionParams` (import `CheckProcessActionParams`) from `../core/types`.
-   * - Uses `ManagedProcessRegistry` (import `ManagedProcessRegistry`) from `./managedProcessRegistry`.
-   *
-   * @param params - Structured input object for this operation.
-   * @returns Promise resolving to typed executor outcome.
-   */
-  private async checkManagedProcess(
-    params: CheckProcessActionParams
-  ): Promise<ExecutorExecutionOutcome> {
-    const leaseId = normalizeOptionalString(params.leaseId);
-    if (!leaseId) {
-      return buildExecutionOutcome(
-        "blocked",
-        "Process check blocked: missing leaseId.",
-        "PROCESS_MISSING_LEASE_ID"
-      );
-    }
-    const snapshot = this.managedProcessRegistry.markObservedRunning(leaseId);
-    if (!snapshot) {
-      return buildExecutionOutcome(
-        "blocked",
-        `Process check blocked: unknown lease ${leaseId}.`,
-        "PROCESS_LEASE_NOT_FOUND"
-      );
-    }
-
-    if (snapshot.statusCode === "PROCESS_STOPPED") {
-      const exitDetail =
-        snapshot.exitCode !== null
-          ? `exit code ${snapshot.exitCode}`
-          : snapshot.signal
-            ? `signal ${snapshot.signal}`
-            : "unknown exit";
-      return buildExecutionOutcome(
-        "success",
-        `Process stopped: lease ${snapshot.leaseId} (${exitDetail}).`,
-        undefined,
-        buildManagedProcessExecutionMetadata(snapshot, "PROCESS_STOPPED")
-      );
-    }
-
-    return buildExecutionOutcome(
-      "success",
-      `Process still running: lease ${snapshot.leaseId} (pid ${snapshot.pid ?? "unknown"}).`,
-      undefined,
-      buildManagedProcessExecutionMetadata(snapshot, "PROCESS_STILL_RUNNING")
-    );
-  }
-
-  /**
-   * Stops one managed-process lease and waits for deterministic close confirmation.
-   *
-   * **Why it exists:**
-   * Provides a truthful cleanup boundary for long-running work so stop requests can confirm whether
-   * the runtime actually terminated the tracked child process.
-   *
-   * **What it talks to:**
-   * - Uses `StopProcessActionParams` (import `StopProcessActionParams`) from `../core/types`.
-   * - Uses `ManagedProcessRegistry` (import `ManagedProcessRegistry`) from `./managedProcessRegistry`.
-   *
-   * @param params - Structured input object for this operation.
-   * @returns Promise resolving to typed executor outcome.
-   */
-  private async stopManagedProcess(
-    params: StopProcessActionParams
-  ): Promise<ExecutorExecutionOutcome> {
-    const leaseId = normalizeOptionalString(params.leaseId);
-    if (!leaseId) {
-      return buildExecutionOutcome(
-        "blocked",
-        "Process stop blocked: missing leaseId.",
-        "PROCESS_MISSING_LEASE_ID"
-      );
-    }
-
-    const snapshot = this.managedProcessRegistry.markStopRequested(leaseId);
-    if (!snapshot) {
-      return buildExecutionOutcome(
-        "blocked",
-        `Process stop blocked: unknown lease ${leaseId}.`,
-        "PROCESS_LEASE_NOT_FOUND"
-      );
-    }
-    if (snapshot.statusCode === "PROCESS_STOPPED") {
-      return buildExecutionOutcome(
-        "success",
-        `Process already stopped: lease ${snapshot.leaseId}.`,
-        undefined,
-        buildManagedProcessExecutionMetadata(snapshot, "PROCESS_STOPPED")
-      );
-    }
-
-    const child = this.managedProcessRegistry.getChild(leaseId);
-    if (!child) {
-      return buildExecutionOutcome(
-        "failed",
-        `Process stop failed: live child handle is unavailable for lease ${leaseId}.`,
-        "PROCESS_STOP_FAILED"
-      );
-    }
-
-    try {
-      const killAccepted = await this.terminateProcessTree(child);
-      if (!killAccepted) {
-        return buildExecutionOutcome(
-          "failed",
-          `Process stop failed: kill signal was not accepted for lease ${leaseId}.`,
-          "PROCESS_STOP_FAILED"
-        );
-      }
-      const closedSnapshot = await this.managedProcessRegistry.waitForClosed(
-        leaseId,
-        MANAGED_PROCESS_STOP_TIMEOUT_MS
-      );
-      if (!closedSnapshot) {
-        return buildExecutionOutcome(
-          "failed",
-          `Process stop failed: lease ${leaseId} did not exit within ${MANAGED_PROCESS_STOP_TIMEOUT_MS}ms.`,
-          "PROCESS_STOP_FAILED"
-        );
-      }
-      return buildExecutionOutcome(
-        "success",
-        `Process stopped: lease ${closedSnapshot.leaseId}.`,
-        undefined,
-        buildManagedProcessExecutionMetadata(closedSnapshot, "PROCESS_STOPPED")
-      );
-    } catch (error) {
-      return buildExecutionOutcome(
-        "failed",
-        `Process stop failed: ${(error as Error).message}`,
-        "PROCESS_STOP_FAILED"
-      );
-    }
-  }
-
-  /**
-   * Probes a local TCP port and reports deterministic ready/not-ready metadata.
-   *
-   * **Why it exists:**
-   * Gives live-run flows a finite readiness check that proves a local service accepted connections
-   * without pretending that a long-running process fully exited or that a browser UI was verified.
-   *
-   * **What it talks to:**
-   * - Uses `ProbePortActionParams` (import `ProbePortActionParams`) from `../core/types`.
-   * - Uses local helpers within this module.
-   *
-   * @param params - Structured input object for this operation.
-   * @param signal - Optional abort signal propagated from caller/runtime surface.
-   * @returns Promise resolving to typed executor outcome.
-   */
-  private async probePortReadiness(
-    params: ProbePortActionParams,
-    signal?: AbortSignal
-  ): Promise<ExecutorExecutionOutcome> {
-    throwIfAborted(signal);
-    const host = normalizeOptionalString(params.host) ?? "127.0.0.1";
-    if (params.port === undefined) {
-      return buildExecutionOutcome(
-        "blocked",
-        "Port probe blocked: missing params.port.",
-        "PROBE_MISSING_PORT"
-      );
-    }
-    if (!Number.isInteger(params.port) || params.port < 1 || params.port > 65_535) {
-      return buildExecutionOutcome(
-        "blocked",
-        "Port probe blocked: params.port must be an integer within 1..65535.",
-        "PROBE_PORT_INVALID"
-      );
-    }
-
-    const timeoutMs = this.resolveReadinessProbeTimeoutMs(params.timeoutMs);
-
-    try {
-      const ready = await this.performLocalPortProbe(host, params.port, timeoutMs, signal);
-      if (ready) {
-        return buildExecutionOutcome(
-          "success",
-          `Port ready: ${host}:${params.port} accepted a TCP connection.`,
-          undefined,
-          buildReadinessProbeExecutionMetadata({
-            probeKind: "port",
-            ready: true,
-            lifecycleCode: "PROCESS_READY",
-            host,
-            port: params.port,
-            timeoutMs
-          })
-        );
-      }
-      return buildExecutionOutcome(
-        "failed",
-        `Port not ready: ${host}:${params.port} did not accept a TCP connection within ${timeoutMs}ms.`,
-        "PROCESS_NOT_READY",
-        buildReadinessProbeExecutionMetadata({
-          probeKind: "port",
-          ready: false,
-          lifecycleCode: "PROCESS_NOT_READY",
-          host,
-          port: params.port,
-          timeoutMs
-        })
-      );
-    } catch (error) {
-      if (isAbortError(error)) {
-        throw error;
-      }
-      return buildExecutionOutcome(
-        "failed",
-        `Port probe failed: ${(error as Error).message}`,
-        "ACTION_EXECUTION_FAILED"
-      );
-    }
-  }
-
-  /**
-   * Probes one local HTTP endpoint and reports deterministic ready/not-ready metadata.
-   *
-   * **Why it exists:**
-   * Provides a finite proof step for local app/server availability without overclaiming browser or
-   * UI-level verification that the runtime still does not perform.
-   *
-   * **What it talks to:**
-   * - Uses `ProbeHttpActionParams` (import `ProbeHttpActionParams`) from `../core/types`.
-   * - Uses local helpers within this module.
-   *
-   * @param params - Structured input object for this operation.
-   * @param signal - Optional abort signal propagated from caller/runtime surface.
-   * @returns Promise resolving to typed executor outcome.
-   */
-  private async probeHttpReadiness(
-    params: ProbeHttpActionParams,
-    signal?: AbortSignal
-  ): Promise<ExecutorExecutionOutcome> {
-    throwIfAborted(signal);
-    const urlValue = normalizeOptionalString(params.url);
-    if (!urlValue) {
-      return buildExecutionOutcome(
-        "blocked",
-        "HTTP probe blocked: missing params.url.",
-        "PROBE_MISSING_URL"
-      );
-    }
-
-    let parsedUrl: URL;
-    try {
-      parsedUrl = new URL(urlValue);
-    } catch {
-      return buildExecutionOutcome(
-        "blocked",
-        "HTTP probe blocked: params.url must be a valid absolute URL.",
-        "PROBE_URL_INVALID"
-      );
-    }
-
-    const expectedStatus =
-      typeof params.expectedStatus === "number" && Number.isInteger(params.expectedStatus)
-        ? params.expectedStatus
-        : null;
-    const timeoutMs = this.resolveReadinessProbeTimeoutMs(params.timeoutMs);
-
-    try {
-      const observedStatus = await this.performLocalHttpProbe(parsedUrl, timeoutMs, signal);
-      const port = this.resolveUrlPort(parsedUrl);
-      if (observedStatus !== null && this.isReadyHttpStatus(observedStatus, expectedStatus)) {
-        return buildExecutionOutcome(
-          "success",
-          expectedStatus === null
-            ? `HTTP ready: ${urlValue} responded with ${observedStatus}.`
-            : `HTTP ready: ${urlValue} responded with expected status ${expectedStatus}.`,
-          undefined,
-          buildReadinessProbeExecutionMetadata({
-            probeKind: "http",
-            ready: true,
-            lifecycleCode: "PROCESS_READY",
-            host: parsedUrl.hostname,
-            port,
-            url: urlValue,
-            timeoutMs,
-            expectedStatus,
-            observedStatus
-          })
-        );
-      }
-
-      const failureDetail =
-        observedStatus === null
-          ? `no HTTP response within ${timeoutMs}ms`
-          : expectedStatus === null
-            ? `status ${observedStatus}`
-            : `status ${observedStatus} (expected ${expectedStatus})`;
-      return buildExecutionOutcome(
-        "failed",
-        `HTTP probe not ready: ${urlValue} returned ${failureDetail}.`,
-        "PROCESS_NOT_READY",
-        buildReadinessProbeExecutionMetadata({
-          probeKind: "http",
-          ready: false,
-          lifecycleCode: "PROCESS_NOT_READY",
-          host: parsedUrl.hostname,
-          port,
-          url: urlValue,
-          timeoutMs,
-          expectedStatus,
-          observedStatus
-        })
-      );
-    } catch (error) {
-      if (isAbortError(error)) {
-        throw error;
-      }
-      return buildExecutionOutcome(
-        "failed",
-        `HTTP probe failed: ${(error as Error).message}`,
-        "ACTION_EXECUTION_FAILED"
-      );
-    }
-  }
-
-  /**
-   * Verifies one loopback page through the configured browser verifier backend.
-   *
-   * **Why it exists:**
-   * Provides a truthful browser/UI proof step for local live-run workflows so the runtime can
-   * verify page-level expectations instead of treating readiness probes as UI confirmation.
-   *
-   * **What it talks to:**
-   * - Uses `VerifyBrowserActionParams` (import `VerifyBrowserActionParams`) from `../core/types`.
-   * - Uses `BrowserVerifier` (import `BrowserVerifier`) from `./browserVerifier`.
-   * - Uses local helpers within this module.
-   *
-   * @param params - Structured input object for this operation.
-   * @param signal - Optional abort signal propagated from caller/runtime surface.
-   * @returns Promise resolving to typed executor outcome.
-   */
-  private async verifyBrowserPage(
-    params: VerifyBrowserActionParams,
-    signal?: AbortSignal
-  ): Promise<ExecutorExecutionOutcome> {
-    throwIfAborted(signal);
-    const url = normalizeOptionalString(params.url);
-    if (!url) {
-      return buildExecutionOutcome(
-        "blocked",
-        "Browser verification blocked: missing params.url.",
-        "BROWSER_VERIFY_MISSING_URL"
-      );
-    }
-
-    let parsedUrl: URL;
-    try {
-      parsedUrl = new URL(url);
-    } catch {
-      return buildExecutionOutcome(
-        "blocked",
-        "Browser verification blocked: params.url must be a valid absolute URL.",
-        "BROWSER_VERIFY_URL_INVALID"
-      );
-    }
-
-    if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
-      return buildExecutionOutcome(
-        "blocked",
-        "Browser verification blocked: params.url must use http or https.",
-        "BROWSER_VERIFY_URL_INVALID"
-      );
-    }
-    if (!isLoopbackBrowserVerificationHost(parsedUrl.hostname)) {
-      return buildExecutionOutcome(
-        "blocked",
-        "Browser verification blocked: params.url must target localhost, 127.0.0.1, or ::1.",
-        "BROWSER_VERIFY_URL_NOT_LOCAL"
-      );
-    }
-
-    const timeoutMs = this.resolveBrowserVerificationTimeoutMs(params.timeoutMs);
-    const expectedTitle = normalizeOptionalString(params.expectedTitle);
-    const expectedText = normalizeOptionalString(params.expectedText);
-
-    try {
-      const verificationResult = await this.browserVerifier.verify({
-        url: parsedUrl.toString(),
-        expectedTitle,
-        expectedText,
-        timeoutMs,
-        signal
-      });
-
-      const executionMetadata = buildBrowserVerificationExecutionMetadata({
-        url: parsedUrl.toString(),
-        passed: verificationResult.status === "verified",
-        observedTitle: verificationResult.observedTitle,
-        observedTextSample: verificationResult.observedTextSample,
-        matchedTitle: verificationResult.matchedTitle,
-        matchedText: verificationResult.matchedText,
-        expectedTitle,
-        expectedText,
-        timeoutMs,
-        lifecycleCode:
-          verificationResult.status === "verified" ||
-            verificationResult.status === "expectation_failed"
-            ? "PROCESS_READY"
-            : undefined
-      });
-
-      switch (verificationResult.status) {
-        case "verified":
-          return buildExecutionOutcome(
-            "success",
-            verificationResult.detail,
-            undefined,
-            executionMetadata
-          );
-        case "expectation_failed":
-          return buildExecutionOutcome(
-            "failed",
-            verificationResult.detail,
-            "BROWSER_VERIFY_EXPECTATION_FAILED",
-            executionMetadata
-          );
-        case "runtime_unavailable":
-          return buildExecutionOutcome(
-            "failed",
-            verificationResult.detail,
-            "BROWSER_VERIFY_RUNTIME_UNAVAILABLE",
-            executionMetadata
-          );
-        case "failed":
-        default:
-          return buildExecutionOutcome(
-            "failed",
-            verificationResult.detail,
-            "BROWSER_VERIFY_FAILED",
-            executionMetadata
-          );
-      }
-    } catch (error) {
-      if (isAbortError(error)) {
-        throw error;
-      }
-      return buildExecutionOutcome(
-        "failed",
-        `Browser verification failed: ${(error as Error).message}`,
-        "BROWSER_VERIFY_FAILED"
-      );
-    }
   }
 
   /**
@@ -2178,58 +1283,6 @@ export class ToolExecutorOrgan {
   }
 
   /**
-   * Resolves readiness probe timeout from available runtime context.
-   *
-   * **Why it exists:**
-   * Keeps probe timeout selection deterministic so readiness checks stay bounded even when planner
-   * payloads omit timeout metadata or provide out-of-bounds values.
-   *
-   * **What it talks to:**
-   * - Uses `BrainConfig` (import `BrainConfig`) from `../core/config`.
-   *
-   * @param timeoutMs - Optional timeout candidate from planner params.
-   * @returns Computed numeric value.
-   */
-  private resolveReadinessProbeTimeoutMs(timeoutMs: number | undefined): number {
-    if (timeoutMs === undefined || !Number.isInteger(timeoutMs)) {
-      return READINESS_PROBE_TIMEOUT_MS_DEFAULT;
-    }
-    if (
-      timeoutMs < this.config.shellRuntime.timeoutBoundsMs.min ||
-      timeoutMs > this.config.shellRuntime.timeoutBoundsMs.max
-    ) {
-      return READINESS_PROBE_TIMEOUT_MS_DEFAULT;
-    }
-    return timeoutMs;
-  }
-
-  /**
-   * Resolves browser verification timeout from available runtime context.
-   *
-   * **Why it exists:**
-   * Keeps browser-verification timeouts bounded and deterministic even when planner payloads omit
-   * timeout metadata or direct executor callers provide invalid values.
-   *
-   * **What it talks to:**
-   * - Uses local constants/helpers within this module.
-   *
-   * @param timeoutMs - Optional timeout candidate from planner params.
-   * @returns Computed numeric value.
-   */
-  private resolveBrowserVerificationTimeoutMs(timeoutMs: number | undefined): number {
-    if (timeoutMs === undefined || !Number.isInteger(timeoutMs)) {
-      return BROWSER_VERIFY_TIMEOUT_MS_DEFAULT;
-    }
-    if (
-      timeoutMs < this.config.shellRuntime.timeoutBoundsMs.min ||
-      timeoutMs > this.config.shellRuntime.timeoutBoundsMs.max
-    ) {
-      return BROWSER_VERIFY_TIMEOUT_MS_DEFAULT;
-    }
-    return timeoutMs;
-  }
-
-  /**
    * Resolves shell command cwd from available runtime context.
    *
    * **Why it exists:**
@@ -2252,307 +1305,6 @@ export class ToolExecutorOrgan {
       return null;
     }
     return cwd;
-  }
-
-  /**
-   * Evaluates whether one observed HTTP status satisfies ready-state expectations.
-   *
-   * **Why it exists:**
-   * Keeps HTTP readiness semantics consistent so probe success does not depend on duplicated
-   * caller-side status handling.
-   *
-   * **What it talks to:**
-   * - Uses local constants/helpers within this module.
-   *
-   * @param observedStatus - HTTP status observed from the local probe request.
-   * @param expectedStatus - Optional exact status required by the planner payload.
-   * @returns `true` when the observed status proves readiness.
-   */
-  private isReadyHttpStatus(observedStatus: number, expectedStatus: number | null): boolean {
-    if (expectedStatus !== null) {
-      return observedStatus === expectedStatus;
-    }
-    return observedStatus >= 200 && observedStatus < 300;
-  }
-
-  /**
-   * Resolves URL port from a parsed local HTTP endpoint.
-   *
-   * **Why it exists:**
-   * Keeps trace metadata and readiness summaries consistent when the URL omits an explicit port.
-   *
-   * **What it talks to:**
-   * - Uses `URL` global available in Node runtime.
-   *
-   * @param parsedUrl - Parsed local endpoint URL.
-   * @returns Deterministic numeric port value.
-   */
-  private resolveUrlPort(parsedUrl: URL): number {
-    if (parsedUrl.port.trim().length > 0) {
-      return Number(parsedUrl.port);
-    }
-    return parsedUrl.protocol === "https:" ? 443 : 80;
-  }
-
-  /**
-   * Finds one currently free loopback TCP port for deterministic recovery hints.
-   *
-   * **Why it exists:**
-   * When a managed-process start is blocked by a pre-existing local listener, the autonomous loop
-   * can recover much faster if the executor provides a concrete alternate loopback port instead of
-   * forcing the model to guess one.
-   *
-   * **What it talks to:**
-   * - Uses `net` (import `default as net`) from `node:net`.
-   * - Uses `createAbortError` (import `createAbortError`) from `../core/runtimeAbort`.
-   *
-   * @param signal - Optional abort signal propagated from caller/runtime surface.
-   * @returns Promise resolving to a free loopback port, or `null` when discovery fails.
-   */
-  private async findAvailableLoopbackPort(signal?: AbortSignal): Promise<number | null> {
-    throwIfAborted(signal);
-    return new Promise((resolve, reject) => {
-      const server = net.createServer();
-      let settled = false;
-
-      const finalize = (callback: () => void): void => {
-        if (settled) {
-          return;
-        }
-        settled = true;
-        server.removeAllListeners();
-        if (signal && typeof signal.removeEventListener === "function") {
-          signal.removeEventListener("abort", handleAbort);
-        }
-        callback();
-      };
-
-      const handleAbort = (): void => {
-        server.close(() => {
-          finalize(() => reject(createAbortError()));
-        });
-      };
-
-      if (signal) {
-        signal.addEventListener("abort", handleAbort, { once: true });
-      }
-
-      server.once("error", () => {
-        finalize(() => resolve(null));
-      });
-      server.listen(0, "127.0.0.1", () => {
-        const address = server.address();
-        const port =
-          address && typeof address !== "string" && Number.isInteger(address.port)
-            ? address.port
-            : null;
-        server.close(() => {
-          finalize(() => resolve(port));
-        });
-      });
-    });
-  }
-
-  /**
-   * Performs one local TCP connection attempt for readiness proof.
-   *
-   * **Why it exists:**
-   * Encapsulates socket lifecycle and abort handling so readiness probes stay finite, cancellable,
-   * and free of duplicated event-cleanup logic.
-   *
-   * **What it talks to:**
-   * - Uses `net` (import `default as net`) from `node:net`.
-   * - Uses `createAbortError` (import `createAbortError`) from `../core/runtimeAbort`.
-   *
-   * @param host - Loopback host to probe.
-   * @param port - Local TCP port to probe.
-   * @param timeoutMs - Maximum wait before declaring not-ready.
-   * @param signal - Optional abort signal propagated from caller/runtime surface.
-   * @returns Promise resolving to `true` when the port accepts a connection.
-   */
-  private async performLocalPortProbe(
-    host: string,
-    port: number,
-    timeoutMs: number,
-    signal?: AbortSignal
-  ): Promise<boolean> {
-    throwIfAborted(signal);
-    return new Promise((resolve, reject) => {
-      const socket = new net.Socket();
-      let settled = false;
-
-      const finalize = (callback: () => void): void => {
-        if (settled) {
-          return;
-        }
-        settled = true;
-        socket.removeAllListeners();
-        socket.destroy();
-        if (signal && typeof signal.removeEventListener === "function") {
-          signal.removeEventListener("abort", handleAbort);
-        }
-        callback();
-      };
-
-      const handleAbort = (): void => {
-        finalize(() => reject(createAbortError()));
-      };
-
-      if (signal) {
-        signal.addEventListener("abort", handleAbort, { once: true });
-      }
-
-      socket.setTimeout(timeoutMs);
-      socket.once("connect", () => {
-        finalize(() => resolve(true));
-      });
-      socket.once("timeout", () => {
-        finalize(() => resolve(false));
-      });
-      socket.once("error", () => {
-        finalize(() => resolve(false));
-      });
-      socket.connect(port, host);
-    });
-  }
-
-  /**
-   * Performs one local HTTP request for readiness proof.
-   *
-   * **Why it exists:**
-   * Encapsulates request lifecycle and abort handling so local endpoint verification stays finite
-   * and deterministic across both HTTP and HTTPS loopback targets.
-   *
-   * **What it talks to:**
-   * - Uses `http` (import `default as http`) from `node:http`.
-   * - Uses `https` (import `default as https`) from `node:https`.
-   * - Uses `createAbortError` (import `createAbortError`) from `../core/runtimeAbort`.
-   *
-   * @param parsedUrl - Parsed loopback endpoint URL.
-   * @param timeoutMs - Maximum wait before declaring not-ready.
-   * @param signal - Optional abort signal propagated from caller/runtime surface.
-   * @returns Promise resolving to observed HTTP status code, or `null` when no ready response arrived.
-   */
-  private async performLocalHttpProbe(
-    parsedUrl: URL,
-    timeoutMs: number,
-    signal?: AbortSignal
-  ): Promise<number | null> {
-    throwIfAborted(signal);
-    return new Promise((resolve, reject) => {
-      const requestModule = parsedUrl.protocol === "https:" ? https : http;
-      const request = requestModule.request(
-        parsedUrl,
-        {
-          method: "GET",
-          timeout: timeoutMs
-        },
-        (response) => {
-          response.resume();
-          response.once("end", () => {
-            finalize(() => resolve(response.statusCode ?? null));
-          });
-        }
-      );
-      let settled = false;
-
-      const finalize = (callback: () => void): void => {
-        if (settled) {
-          return;
-        }
-        settled = true;
-        request.removeAllListeners();
-        request.destroy();
-        if (signal && typeof signal.removeEventListener === "function") {
-          signal.removeEventListener("abort", handleAbort);
-        }
-        callback();
-      };
-
-      const handleAbort = (): void => {
-        finalize(() => reject(createAbortError()));
-      };
-
-      if (signal) {
-        signal.addEventListener("abort", handleAbort, { once: true });
-      }
-
-      request.once("timeout", () => {
-        finalize(() => resolve(null));
-      });
-      request.once("error", () => {
-        finalize(() => resolve(null));
-      });
-      request.end();
-    });
-  }
-
-  /**
-   * Waits for a managed process to emit a successful spawn event.
-   *
-   * **Why it exists:**
-   * Keeps start-process success/failure detection deterministic so the executor does not report a
-   * lease until the child has actually spawned or failed.
-   *
-   * **What it talks to:**
-   * - Uses `createAbortError` and `throwIfAborted` from `../core/runtimeAbort`.
-   *
-   * @param child - Live child handle returned from `spawn`.
-   * @param signal - Optional abort signal propagated from caller/runtime surface.
-   * @returns Promise resolving when the process successfully spawns.
-   */
-  private async waitForManagedProcessStart(
-    child: ChildProcessWithoutNullStreams,
-    signal?: AbortSignal
-  ): Promise<void> {
-    throwIfAborted(signal);
-    return new Promise((resolve, reject) => {
-      let settled = false;
-      const finalize = (callback: () => void): void => {
-        if (settled) {
-          return;
-        }
-        settled = true;
-        clearTimeout(timeoutHandle);
-        if (signal && typeof signal.removeEventListener === "function") {
-          signal.removeEventListener("abort", handleAbort);
-        }
-        callback();
-      };
-      const timeoutHandle = setTimeout(() => {
-        finalize(() =>
-          reject(
-            new Error(
-              `Process did not emit a spawn event within ${MANAGED_PROCESS_START_TIMEOUT_MS}ms.`
-            )
-          )
-        );
-      }, MANAGED_PROCESS_START_TIMEOUT_MS);
-      const handleAbort = (): void => {
-        void this.terminateProcessTree(child);
-        finalize(() => reject(createAbortError()));
-      };
-
-      if (signal) {
-        signal.addEventListener("abort", handleAbort, { once: true });
-      }
-
-      child.once("spawn", () => {
-        finalize(() => resolve());
-      });
-      child.once("error", (error) => {
-        finalize(() => reject(error));
-      });
-      child.once("close", (code, closeSignal) => {
-        finalize(() =>
-          reject(
-            new Error(
-              `Process exited before startup completed (${code ?? "no-exit-code"}${closeSignal ? `, signal ${closeSignal}` : ""}).`
-            )
-          )
-        );
-      });
-    });
   }
 
   /**

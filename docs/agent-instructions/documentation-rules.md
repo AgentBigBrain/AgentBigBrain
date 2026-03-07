@@ -33,3 +33,14 @@
    patch-by-patch history into `README.md` or `docs/ARCHITECTURE.md`.
 9. Put change history, rollout notes, and active status in plan docs, evidence artifacts, PR
    descriptions, or other explicitly operational documents instead.
+10. Folder-level `README.md` files under `src/` are part of the code contract, not optional prose.
+11. Use the standard folder README structure: `## Responsibility`, `## Inputs`, `## Outputs`,
+    `## Invariants`, `## Related Tests`, and `## When to Update This README`.
+12. Apply that structure to older source folders as well as newly extracted subsystems when the
+    folder owns a meaningful runtime or tooling boundary.
+13. If a code change alters a folder's responsibility, public entrypoints, invariants, required
+    tests, or related modules, update that folder's `README.md` in the same change.
+14. If a folder-level `README.md` exists, do not leave it stale. Either update it to match the code
+    or remove it if the folder no longer needs a dedicated subsystem contract document.
+15. If a folder has become a real change surface and still has no README contract, add one instead
+    of relying on unwritten conventions.

@@ -4,12 +4,12 @@
 
 import { ChildProcessWithoutNullStreams } from "node:child_process";
 
-import { makeId } from "../core/ids";
+import { makeId } from "../../core/ids";
 import {
   DEFAULT_RUNTIME_ENTROPY_SOURCE,
   RuntimeEntropySource
-} from "../core/runtimeEntropy";
-import { ManagedProcessLifecycleCode } from "../core/types";
+} from "../../core/runtimeEntropy";
+import { ManagedProcessLifecycleCode } from "../../core/types";
 
 export interface ManagedProcessSnapshot {
   leaseId: string;
@@ -41,7 +41,7 @@ interface ManagedProcessRuntimeRecord {
  * Prevents callers from mutating registry-owned process state directly after reads or updates.
  *
  * **What it talks to:**
- * - Uses local constants/helpers within this module.
+ * - Uses local helpers within this module.
  *
  * @param snapshot - Registry-owned snapshot value.
  * @returns Caller-owned snapshot copy.
@@ -64,10 +64,10 @@ export class ManagedProcessRegistry {
    * centralizing managed-process state in one runtime-owned registry.
    *
    * **What it talks to:**
-   * - Uses `RuntimeEntropySource` (import `RuntimeEntropySource`) from `../core/runtimeEntropy`.
-   * - Uses `DEFAULT_RUNTIME_ENTROPY_SOURCE` (import `DEFAULT_RUNTIME_ENTROPY_SOURCE`) from `../core/runtimeEntropy`.
+   * - Uses `RuntimeEntropySource` from `../../core/runtimeEntropy`.
+   * - Uses `DEFAULT_RUNTIME_ENTROPY_SOURCE` from `../../core/runtimeEntropy`.
    *
-   * @param entropySource - Optional injected entropy/time boundary.
+   * @param entropySource - Optional injected entropy or time boundary.
    */
   constructor(
     private readonly entropySource: RuntimeEntropySource = DEFAULT_RUNTIME_ENTROPY_SOURCE
@@ -77,15 +77,15 @@ export class ManagedProcessRegistry {
    * Registers a newly started managed process and attaches close-state tracking.
    *
    * **Why it exists:**
-   * Centralizes lease allocation and lifecycle wiring so executor start/check/stop actions share one
-   * deterministic runtime view of long-running child processes.
+   * Centralizes lease allocation and lifecycle wiring so executor start, check, and stop actions
+   * share one deterministic runtime view of long-running child processes.
    *
    * **What it talks to:**
-   * - Uses `makeId` (import `makeId`) from `../core/ids`.
-   * - Uses local constants/helpers within this module.
+   * - Uses `makeId` from `../../core/ids`.
+   * - Uses local helpers within this module.
    *
    * @param input - Process metadata and child handle to store.
-   * @returns Snapshot recorded for this managed process lease.
+   * @returns Snapshot recorded for this managed-process lease.
    */
   registerStarted(input: {
     actionId: string;
@@ -140,9 +140,9 @@ export class ManagedProcessRegistry {
    * callers directly.
    *
    * **What it talks to:**
-   * - Uses local constants/helpers within this module.
+   * - Uses local helpers within this module.
    *
-   * @param leaseId - Managed process lease identifier.
+   * @param leaseId - Managed-process lease identifier.
    * @returns Updated snapshot, or `null` when the lease is unknown.
    */
   markObservedRunning(leaseId: string): ManagedProcessSnapshot | null {
@@ -163,13 +163,13 @@ export class ManagedProcessRegistry {
    * Marks a process lease as stop-requested before the executor sends a signal.
    *
    * **Why it exists:**
-   * Preserves a deterministic trace of operator/runtime stop intent even if the child exits between
-   * request and kill handling.
+   * Preserves a deterministic trace of operator or runtime stop intent even if the child exits
+   * between request and kill handling.
    *
    * **What it talks to:**
-   * - Uses local constants/helpers within this module.
+   * - Uses local helpers within this module.
    *
-   * @param leaseId - Managed process lease identifier.
+   * @param leaseId - Managed-process lease identifier.
    * @returns Updated snapshot, or `null` when the lease is unknown.
    */
   markStopRequested(leaseId: string): ManagedProcessSnapshot | null {
@@ -191,9 +191,9 @@ export class ManagedProcessRegistry {
    * Provides a safe read API for executor and tests without exposing mutable registry internals.
    *
    * **What it talks to:**
-   * - Uses local constants/helpers within this module.
+   * - Uses local helpers within this module.
    *
-   * @param leaseId - Managed process lease identifier.
+   * @param leaseId - Managed-process lease identifier.
    * @returns Snapshot copy, or `null` when the lease is unknown.
    */
   getSnapshot(leaseId: string): ManagedProcessSnapshot | null {
@@ -211,9 +211,9 @@ export class ManagedProcessRegistry {
    * Keeps child-process access centralized so stop logic does not reach into registry internals.
    *
    * **What it talks to:**
-   * - Uses local constants/helpers within this module.
+   * - Uses local helpers within this module.
    *
-   * @param leaseId - Managed process lease identifier.
+   * @param leaseId - Managed-process lease identifier.
    * @returns Child handle, or `null` when the lease is unknown.
    */
   getChild(leaseId: string): ChildProcessWithoutNullStreams | null {
@@ -229,11 +229,11 @@ export class ManagedProcessRegistry {
    * child-process events to higher layers.
    *
    * **What it talks to:**
-   * - Uses local constants/helpers within this module.
+   * - Uses local helpers within this module.
    *
-   * @param leaseId - Managed process lease identifier.
+   * @param leaseId - Managed-process lease identifier.
    * @param timeoutMs - Maximum wait duration in milliseconds.
-   * @returns Promise resolving to the closed snapshot, or `null` on timeout/unknown lease.
+   * @returns Promise resolving to the closed snapshot, or `null` on timeout or unknown lease.
    */
   async waitForClosed(
     leaseId: string,
@@ -262,9 +262,9 @@ export class ManagedProcessRegistry {
    * snapshot regardless of whether the process exited naturally or from a stop request.
    *
    * **What it talks to:**
-   * - Uses local constants/helpers within this module.
+   * - Uses local helpers within this module.
    *
-   * @param leaseId - Managed process lease identifier.
+   * @param leaseId - Managed-process lease identifier.
    * @param exitCode - Child-process exit code from the close event.
    * @param signal - Child-process termination signal from the close event.
    */

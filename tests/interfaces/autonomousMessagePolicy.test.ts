@@ -11,7 +11,7 @@ import {
   buildAutonomousIterationProgressMessage,
   buildAutonomousTerminalSummaryMessage,
   humanizeAutonomousStopReason
-} from "../../src/interfaces/autonomousMessagePolicy";
+} from "../../src/interfaces/userFacing/stopSummarySurface";
 
 test("humanizeAutonomousStopReason removes raw reason-code prefixes and explains stalled evidence plainly", () => {
   const rendered = humanizeAutonomousStopReason(

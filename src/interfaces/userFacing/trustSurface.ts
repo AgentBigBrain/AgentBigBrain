@@ -2,12 +2,18 @@
  * @fileoverview Shared trust-policy helpers for user-facing rendering of executed vs simulated side effects.
  */
 
-import { TaskRunResult } from "../core/types";
+import { TaskRunResult } from "../../core/types";
+import { extractFirstPersonStatusUpdate } from "../diagnosticsPromptPolicy";
 import {
   createTrustLexicalRuleContext,
   isSimulatedOutput,
   TrustRenderClassification
-} from "./trustLexicalClassifier";
+} from "../trustLexicalClassifier";
+
+const STATUS_CONTRADICTION_CUE_PATTERNS: readonly RegExp[] = [
+  /\b(?:my\s+records?|records?|memory|earlier)\b.*\b(?:show|shows|indicate|indicates)\b/i,
+  /\bit\s+seems\s+there\s+might\s+be\s+a\s+misunderstanding\b/i
+] as const;
 
 /**
  * Default lexical trust-rule context used by user-facing trust checks.
@@ -16,9 +22,6 @@ export const DEFAULT_TRUST_LEXICAL_RULE_CONTEXT = createTrustLexicalRuleContext(
 
 /**
  * Checks whether a real (non-simulated) approved shell action executed in this run.
- *
- * @param runResult - Full task execution result.
- * @returns `true` when at least one approved real shell action exists.
  */
 export function hasApprovedRealShellExecution(runResult: TaskRunResult): boolean {
   return runResult.actionResults.some(
@@ -31,9 +34,6 @@ export function hasApprovedRealShellExecution(runResult: TaskRunResult): boolean
 
 /**
  * Checks whether a real (non-simulated) approved non-respond action executed in this run.
- *
- * @param runResult - Full task execution result.
- * @returns `true` when at least one approved real non-respond action exists.
  */
 export function hasApprovedRealNonRespondExecution(runResult: TaskRunResult): boolean {
   return runResult.actionResults.some(
@@ -46,9 +46,6 @@ export function hasApprovedRealNonRespondExecution(runResult: TaskRunResult): bo
 
 /**
  * Checks whether a simulated approved shell action executed in this run.
- *
- * @param runResult - Full task execution result.
- * @returns `true` when at least one approved simulated shell action exists.
  */
 export function hasApprovedSimulatedShellExecution(runResult: TaskRunResult): boolean {
   return runResult.actionResults.some(
@@ -61,9 +58,6 @@ export function hasApprovedSimulatedShellExecution(runResult: TaskRunResult): bo
 
 /**
  * Checks whether a simulated approved non-respond action executed in this run.
- *
- * @param runResult - Full task execution result.
- * @returns `true` when at least one approved simulated non-respond action exists.
  */
 export function hasApprovedSimulatedNonRespondExecution(runResult: TaskRunResult): boolean {
   return runResult.actionResults.some(
@@ -76,9 +70,6 @@ export function hasApprovedSimulatedNonRespondExecution(runResult: TaskRunResult
 
 /**
  * Detects whether blocked side-effect actions are unmatched by any approved action type.
- *
- * @param runResult - Full task execution result.
- * @returns `true` when optimistic respond text could mask blocked side-effect work.
  */
 export function hasBlockedUnmatchedAction(runResult: TaskRunResult): boolean {
   const approvedRespondExists = runResult.actionResults.some(
@@ -88,9 +79,6 @@ export function hasBlockedUnmatchedAction(runResult: TaskRunResult): boolean {
     return false;
   }
 
-  // Prevent optimistic respond text from masking blocked side-effect actions.
-  // If an action type is blocked and no action of that same type was approved,
-  // prefer a blocked-policy explanation over free-form respond text.
   const approvedActionTypes = new Set(
     runResult.actionResults
       .filter((result) => result.approved)
@@ -106,10 +94,6 @@ export function hasBlockedUnmatchedAction(runResult: TaskRunResult): boolean {
 
 /**
  * Rewrites approved respond output according to the trust-render decision.
- *
- * @param selectedRespondOutput - Candidate respond text selected from approved actions.
- * @param classification - Trust-render decision and lexical evidence.
- * @returns Trust-safe respond output.
  */
 export function resolveTrustAwareRespondOutput(
   selectedRespondOutput: string,
@@ -134,10 +118,32 @@ export function resolveTrustAwareRespondOutput(
 }
 
 /**
+ * Normalizes respond text when the user supplied a first-person status update that conflicts with it.
+ */
+export function resolveStatusContradictionSafeOutput(
+  runResult: TaskRunResult,
+  selectedRespondOutput: string
+): string {
+  const statusUpdate = extractFirstPersonStatusUpdate(runResult.task.userInput);
+  if (!statusUpdate) {
+    return selectedRespondOutput;
+  }
+  const hasContradictionCue = STATUS_CONTRADICTION_CUE_PATTERNS.some((pattern) =>
+    pattern.test(selectedRespondOutput)
+  );
+  if (!hasContradictionCue) {
+    return selectedRespondOutput;
+  }
+
+  return [
+    `Noted: ${statusUpdate}.`,
+    "I will treat this as the latest status for this turn.",
+    "If needed, I can help with the next step."
+  ].join(" ");
+}
+
+/**
  * Builds a deterministic no-overclaim message for uncertain trust classifications.
- *
- * @param classification - Trust-render decision and lexical evidence.
- * @returns User-facing uncertainty message tied to the matched claim type.
  */
 function resolveTrustUncertainMessage(classification: TrustRenderClassification): string {
   if (classification.evidence.matchedRuleId.includes("browser_claim")) {
@@ -160,12 +166,6 @@ function resolveTrustUncertainMessage(classification: TrustRenderClassification)
 
 /**
  * Returns `true` for action types that represent governed side-effect execution.
- *
- * Read-only actions (`read_file`, `list_directory`) are intentionally excluded so
- * latency/workflow no-op fallback logic is not bypassed by non-side-effect probes.
- *
- * @param actionType - Action type from an execution result.
- * @returns `true` when this action type should count as side-effect execution.
  */
 function isSideEffectActionType(actionType: string): boolean {
   return (

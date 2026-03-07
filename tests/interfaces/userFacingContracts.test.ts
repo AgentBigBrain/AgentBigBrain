@@ -10,7 +10,7 @@ import {
   applyTruthPolicyV1ToOutcomeSummary,
   buildUserFacingEnvelopeV1,
   renderUserFacingEnvelopeV1
-} from "../../src/interfaces/userFacingContracts";
+} from "../../src/interfaces/userFacing/contracts";
 
 /**
  * Implements `buildMinimalRunResult` behavior within module scope.

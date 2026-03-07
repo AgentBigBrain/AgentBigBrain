@@ -5,6 +5,8 @@ follows the loop: Plan -> Constrain -> Govern -> Execute -> Receipt -> Reflect.
 
 Key architecture facts for contributors:
 
+- The repository is AI-first for maintainability: folder READMEs, `docs/ai/` discovery artifacts,
+  and thin stable entrypoints should make the correct edit surface discoverable without guesswork.
 - Governance has two paths: fast-path actions are evaluated by the security governor only;
   escalation-path actions go to the full 7-governor council (ethics, logic, resource, security,
   continuity, utility, compliance) with supermajority voting. A separate code-review governor runs

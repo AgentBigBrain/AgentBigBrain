@@ -31,7 +31,7 @@ import {
   BrowserVerificationResult,
   BrowserVerifier,
   VerifyBrowserRequest
-} from "../../src/organs/browserVerifier";
+} from "../../src/organs/liveRun/browserVerifier";
 import { ToolExecutorOrgan } from "../../src/organs/executor";
 import { PlannerOrgan } from "../../src/organs/planner";
 import { ReflectionOrgan } from "../../src/organs/reflection";
