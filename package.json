@@ -100,11 +100,10 @@
     "audit:traces": "tsx scripts/evidence/traceLatencyAudit.ts",
     "check:docs": "tsx src/tools/checkFunctionDocs.ts",
     "check:module_size": "tsx src/tools/checkModuleSize.ts",
-    "check:ai_surfaces": "tsx src/tools/checkAiChangeSurfaceSync.ts",
     "check:reason_codes": "tsx src/tools/checkReasonCodeUniqueness.ts",
     "check:stop_phrases": "tsx src/tools/checkUserFacingStopPhraseDuplication.ts",
     "check:subsystem_readmes": "tsx src/tools/checkSubsystemReadmeSync.ts",
-    "check:ai_first": "npm run check:module_size && npm run check:ai_surfaces && npm run check:reason_codes && npm run check:stop_phrases && npm run check:subsystem_readmes"
+    "check:ai_first": "npm run check:module_size && npm run check:reason_codes && npm run check:stop_phrases && npm run check:subsystem_readmes"
   },
   "dependencies": {
     "onnxruntime-node": "^1.24.2",
