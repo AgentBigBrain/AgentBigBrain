@@ -128,7 +128,7 @@ function buildPrivateMessage(
 }
 
 function buildTurns(
-  lines: readonly Array<{ role: ConversationTurn["role"]; text: string; at: string }>
+  lines: ReadonlyArray<{ role: ConversationTurn["role"]; text: string; at: string }>
 ): ConversationTurn[] {
   return lines.map((line) => ({
     role: line.role,
@@ -385,27 +385,31 @@ async function runContextualRecallScenario(
         currentText,
         new Date("2026-03-08T12:00:00.000Z").toISOString()
       ),
-      async (input): Promise<ConversationExecutionResult> => {
+      async (input, _receivedAt): Promise<ConversationExecutionResult> => {
         capturedExecutionInput = input;
         return {
           summary: "live recall smoke ok"
         };
       },
-      async () => {}
+      async () => { }
     );
 
     await waitFor(() => capturedExecutionInput !== null);
     await waitForSessionIdle(harness.store, session.conversationId);
     await waitForFinalDeliverySettled(harness.store, session.conversationId);
 
+    // Snapshot to a const with explicit type to prevent TypeScript from narrowing to 'never'.
+    const executionInput: string | null = capturedExecutionInput;
+    const executionInputStr: string = executionInput ?? "";
+
     const resolvedReference = resolveContextualReferenceHints({
       userInput: currentText,
       recentTurns: session.conversationTurns,
       threads: session.conversationStack.threads
     });
-    const recallInjected = capturedExecutionInput?.includes("Contextual recall opportunity (optional):") ?? false;
-    const mentionsBilly = capturedExecutionInput?.includes("Relevant situation: Billy") ?? false;
-    const mentionsMri = capturedExecutionInput?.toLowerCase().includes("mri") ?? false;
+    const recallInjected = executionInputStr.includes("Contextual recall opportunity (optional):");
+    const mentionsBilly = executionInputStr.includes("Relevant situation: Billy");
+    const mentionsMri = executionInputStr.toLowerCase().includes("mri");
     const expected = mode === "positive";
 
     return {
@@ -420,15 +424,15 @@ async function runContextualRecallScenario(
       checks: [
         {
           label: "execution-input-captured",
-          passed: capturedExecutionInput !== null,
-          observed: capturedExecutionInput ? "captured" : "missing"
+          passed: executionInput !== null,
+          observed: executionInput ? "captured" : "missing"
         },
         {
           label: "contextual-recall-block",
           passed: expected ? recallInjected : !recallInjected,
           observed: recallInjected
             ? "present"
-            : `suppressed:${(capturedExecutionInput ?? "").slice(0, 220)}`
+            : `suppressed:${(executionInput ?? "").slice(0, 220)}`
         },
         {
           label: "continuity-episode-query",
@@ -591,26 +595,26 @@ async function runProactiveScenario(
     session.updatedAt = nowIso;
     session.conversationTurns = mode === "positive"
       ? buildTurns([
-          {
-            role: "user",
-            at: nowIso,
-            text: [
-              "I keep meaning to revisit the project toolchain because it has been stale for a while.",
-              "Nothing is actively broken yet, but it feels like the kind of thing that bites us when we ignore it too long.",
-              "If there is a concrete reason to nudge me later, that would actually help."
-            ].join(" ")
-          }
-        ])
+        {
+          role: "user",
+          at: nowIso,
+          text: [
+            "I keep meaning to revisit the project toolchain because it has been stale for a while.",
+            "Nothing is actively broken yet, but it feels like the kind of thing that bites us when we ignore it too long.",
+            "If there is a concrete reason to nudge me later, that would actually help."
+          ].join(" ")
+        }
+      ])
       : buildTurns([
-          {
-            role: "user",
-            at: nowIso,
-            text: [
-              "Morning. Nothing is really open right now and I am mostly just saying hi.",
-              "If there is no concrete reason, I do not want a generic check-in or relationship nudge."
-            ].join(" ")
-          }
-        ]);
+        {
+          role: "user",
+          at: nowIso,
+          text: [
+            "Morning. Nothing is really open right now and I am mostly just saying hi.",
+            "If there is no concrete reason, I do not want a generic check-in or relationship nudge."
+          ].join(" ")
+        }
+      ]);
     session.conversationStack = buildConversationStackFromTurnsV1(session.conversationTurns, nowIso);
     if (mode === "negative") {
       session.agentPulse.recentEmissions = [
@@ -667,7 +671,7 @@ async function runProactiveScenario(
                 summary: "live proactive smoke ok"
               };
             },
-            async () => {}
+            async () => { }
           ),
         updatePulseState: async (conversationKey, update) =>
           manager.updateAgentPulseState(conversationKey, update),
@@ -692,12 +696,14 @@ async function runProactiveScenario(
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
 
+    // Snapshot to a const with explicit type to prevent TypeScript from narrowing to 'never'.
+    const executionInput: string | null = capturedExecutionInput;
+    const executionInputStr: string = executionInput ?? "";
+
     const refreshedSession = await harness.store.getSession(session.conversationId);
     const lastDecisionCode = refreshedSession?.agentPulse.lastDecisionCode ?? null;
-    const pulseRequestWrapped =
-      capturedExecutionInput?.includes("System-generated Agent Pulse check-in request.") ?? false;
-    const staleSignal =
-      capturedExecutionInput?.includes("Signal type: STALE_FACT_REVALIDATION") ?? false;
+    const pulseRequestWrapped = executionInputStr.includes("System-generated Agent Pulse check-in request.");
+    const staleSignal = executionInputStr.includes("Signal type: STALE_FACT_REVALIDATION");
 
     return {
       scenarioId: mode === "positive"
@@ -705,7 +711,7 @@ async function runProactiveScenario(
         : "generic_proactive_live_suppressed",
       passed: mode === "positive"
         ? pulseRequestWrapped && staleSignal && lastDecisionCode === "DYNAMIC_SENT"
-        : capturedExecutionInput === null && lastDecisionCode === "DYNAMIC_SUPPRESSED",
+        : executionInput === null && lastDecisionCode === "DYNAMIC_SUPPRESSED",
       transcriptPreview: previewTranscript(session.conversationTurns.map((turn) => turn.text)),
       checks: [
         {
@@ -718,9 +724,9 @@ async function runProactiveScenario(
         {
           label: "system-job-execution",
           passed: mode === "positive"
-            ? capturedExecutionInput !== null
-            : capturedExecutionInput === null,
-          observed: capturedExecutionInput ? "executed" : "suppressed"
+            ? executionInput !== null
+            : executionInput === null,
+          observed: executionInput ? "executed" : "suppressed"
         },
         {
           label: "bounded-prompt-shape",
@@ -760,7 +766,7 @@ function buildArtifact(
     command: COMMAND_NAME,
     status:
       failedScenarios === 0 &&
-      Object.values(requiredProofs).every((value) => value)
+        Object.values(requiredProofs).every((value) => value)
         ? "PASS"
         : "FAIL",
     requiredProofs,
