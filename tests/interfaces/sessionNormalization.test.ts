@@ -1,0 +1,100 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+
+import {
+  normalizeSession,
+  normalizeState
+} from "../../src/interfaces/conversationRuntime/sessionNormalization";
+
+test("normalizeSession migrates legacy session payloads to the stable runtime shape", () => {
+  const now = "2026-03-07T12:00:00.000Z";
+  const normalized = normalizeSession({
+    conversationId: "telegram:chat-1:user-1",
+    userId: "user-1",
+    username: "agentowner",
+    conversationVisibility: "private",
+    updatedAt: now,
+    activeProposal: null,
+    runningJobId: null,
+    queuedJobs: [],
+    recentJobs: [],
+    conversationTurns: [
+      {
+        role: "user",
+        text: "hello there",
+        at: now
+      }
+    ],
+    classifierEvents: [
+      {
+        classifier: "pulse_lexical",
+        input: "turn on pulse reminders",
+        at: now,
+        isShortFollowUp: false,
+        category: "COMMAND",
+        confidenceTier: "HIGH",
+        matchedRuleId: "pulse_lexical_v1_enable",
+        rulepackVersion: "PulseLexicalRulepackV1",
+        intent: "on",
+        conflict: false
+      }
+    ],
+    agentPulse: {
+      optIn: true,
+      mode: "private",
+      routeStrategy: "last_private_used",
+      lastPulseSentAt: null,
+      lastPulseReason: null,
+      lastPulseTargetConversationId: null,
+      lastDecisionCode: "ALLOWED",
+      lastEvaluatedAt: now,
+      recentEmissions: [
+        {
+          emittedAt: now,
+          reasonCode: "stale_fact_revalidation",
+          candidateEntityRefs: []
+        }
+      ]
+    }
+  });
+
+  assert.ok(normalized);
+  assert.equal(normalized?.sessionSchemaVersion, "v2");
+  assert.ok(normalized?.conversationStack);
+  assert.equal(normalized?.classifierEvents?.[0]?.intent, "on");
+  assert.equal(normalized?.agentPulse.recentEmissions?.length, 1);
+});
+
+test("normalizeState drops invalid conversation entries", () => {
+  const normalized = normalizeState({
+    conversations: {
+      valid: {
+        conversationId: "valid",
+        userId: "user-1",
+        username: "agentowner",
+        conversationVisibility: "private",
+        updatedAt: "2026-03-07T12:00:00.000Z",
+        activeProposal: null,
+        runningJobId: null,
+        queuedJobs: [],
+        recentJobs: [],
+        conversationTurns: [],
+        agentPulse: {
+          optIn: false,
+          mode: "private",
+          routeStrategy: "last_private_used",
+          lastPulseSentAt: null,
+          lastPulseReason: null,
+          lastPulseTargetConversationId: null,
+          lastDecisionCode: "NOT_EVALUATED",
+          lastEvaluatedAt: null
+        }
+      },
+      invalid: {
+        userId: "user-2"
+      } as never
+    }
+  });
+
+  assert.deepEqual(Object.keys(normalized.conversations), ["valid"]);
+});

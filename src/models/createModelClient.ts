@@ -6,12 +6,8 @@ import { ModelClient } from "./types";
 import { MockModelClient } from "./mockModelClient";
 import { OllamaModelClient } from "./ollamaModelClient";
 import { OpenAIModelClient } from "./openaiModelClient";
+import { buildOpenAIPricingFromEnv } from "./openai/pricingPolicy";
 import { ensureEnvLoaded } from "../core/envLoader";
-
-interface TokenPricing {
-  inputPer1MUsd: number;
-  outputPer1MUsd: number;
-}
 
 /**
  * Normalizes backend into a stable shape for `createModelClient` logic.
@@ -56,115 +52,6 @@ function parseTimeoutMs(value: string | undefined, fallback: number): number {
 }
 
 /**
- * Parses non negative number and validates expected structure.
- *
- * **Why it exists:**
- * Centralizes normalization rules for non negative number so call sites stay aligned.
- *
- * **What it talks to:**
- * - Uses local constants/helpers within this module.
- *
- * @param value - Primary value processed by this function.
- * @param fallback - Value for fallback.
- * @returns Computed numeric value.
- */
-function parseNonNegativeNumber(value: string | undefined, fallback: number): number {
-  if (!value) {
-    return fallback;
-  }
-
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed) || parsed < 0) {
-    return fallback;
-  }
-
-  return parsed;
-}
-
-/**
- * Builds pricing from env for this module's runtime flow.
- *
- * **Why it exists:**
- * Keeps construction of pricing from env consistent across call sites.
- *
- * **What it talks to:**
- * - Uses local constants/helpers within this module.
- *
- * @param env - Value for env.
- * @returns Computed `{
-  defaultPricing: TokenPricing;
-  aliasPricing: Record<string, TokenPricing>;
-}` result.
- */
-function buildPricingFromEnv(env: NodeJS.ProcessEnv): {
-  defaultPricing: TokenPricing;
-  aliasPricing: Record<string, TokenPricing>;
-} {
-  const defaultPricing: TokenPricing = {
-    inputPer1MUsd: parseNonNegativeNumber(env.OPENAI_PRICE_INPUT_PER_1M_USD, 0),
-    outputPer1MUsd: parseNonNegativeNumber(env.OPENAI_PRICE_OUTPUT_PER_1M_USD, 0)
-  };
-
-  const aliasPricing: Record<string, TokenPricing> = {
-    "small-fast-model": {
-      inputPer1MUsd: parseNonNegativeNumber(
-        env.OPENAI_PRICE_SMALL_FAST_INPUT_PER_1M_USD,
-        defaultPricing.inputPer1MUsd
-      ),
-      outputPer1MUsd: parseNonNegativeNumber(
-        env.OPENAI_PRICE_SMALL_FAST_OUTPUT_PER_1M_USD,
-        defaultPricing.outputPer1MUsd
-      )
-    },
-    "small-policy-model": {
-      inputPer1MUsd: parseNonNegativeNumber(
-        env.OPENAI_PRICE_SMALL_POLICY_INPUT_PER_1M_USD,
-        defaultPricing.inputPer1MUsd
-      ),
-      outputPer1MUsd: parseNonNegativeNumber(
-        env.OPENAI_PRICE_SMALL_POLICY_OUTPUT_PER_1M_USD,
-        defaultPricing.outputPer1MUsd
-      )
-    },
-    "medium-general-model": {
-      inputPer1MUsd: parseNonNegativeNumber(
-        env.OPENAI_PRICE_MEDIUM_GENERAL_INPUT_PER_1M_USD,
-        defaultPricing.inputPer1MUsd
-      ),
-      outputPer1MUsd: parseNonNegativeNumber(
-        env.OPENAI_PRICE_MEDIUM_GENERAL_OUTPUT_PER_1M_USD,
-        defaultPricing.outputPer1MUsd
-      )
-    },
-    "medium-policy-model": {
-      inputPer1MUsd: parseNonNegativeNumber(
-        env.OPENAI_PRICE_MEDIUM_POLICY_INPUT_PER_1M_USD,
-        defaultPricing.inputPer1MUsd
-      ),
-      outputPer1MUsd: parseNonNegativeNumber(
-        env.OPENAI_PRICE_MEDIUM_POLICY_OUTPUT_PER_1M_USD,
-        defaultPricing.outputPer1MUsd
-      )
-    },
-    "large-reasoning-model": {
-      inputPer1MUsd: parseNonNegativeNumber(
-        env.OPENAI_PRICE_LARGE_REASONING_INPUT_PER_1M_USD,
-        defaultPricing.inputPer1MUsd
-      ),
-      outputPer1MUsd: parseNonNegativeNumber(
-        env.OPENAI_PRICE_LARGE_REASONING_OUTPUT_PER_1M_USD,
-        defaultPricing.outputPer1MUsd
-      )
-    }
-  };
-
-  return {
-    defaultPricing,
-    aliasPricing
-  };
-}
-
-/**
  * Builds model client from env for this module's runtime flow.
  *
  * **Why it exists:**
@@ -197,7 +84,7 @@ export function createModelClientFromEnv(): ModelClient {
       );
     }
 
-    const pricing = buildPricingFromEnv(process.env);
+    const pricing = buildOpenAIPricingFromEnv(process.env);
     return new OpenAIModelClient({
       apiKey,
       baseUrl: process.env.OPENAI_BASE_URL,

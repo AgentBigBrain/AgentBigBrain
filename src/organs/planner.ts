@@ -5,7 +5,6 @@
 import {
   DistilledPacketV1,
   FirstPrinciplesPacketV1,
-  FirstPrinciplesRubric,
   Plan,
   PlannerLearningHintSummaryV1,
   TaskRequest,
@@ -31,14 +30,15 @@ import {
 import { Stage685PlaybookPlanningContext } from "../core/stage6_85PlaybookRuntime";
 import {
   inferRequiredActionType,
+} from "./plannerPolicy/explicitActionIntent";
+import {
   normalizeFingerprintSegment,
   PLANNER_FAILURE_COOLDOWN_MS,
   PLANNER_FAILURE_MAX_STRIKES,
   PLANNER_FAILURE_WINDOW_MS
-} from "./plannerHelpers";
+} from "./plannerPolicy/plannerFailurePolicy";
 import {
   PlannerExecutionEnvironmentContext,
-  RequiredActionType
 } from "./plannerPolicy/executionStyleContracts";
 import {
   assertPlannerActionValidation,
@@ -414,7 +414,8 @@ export class PlannerOrgan {
    *
    * **What it talks to:**
    * - Uses `TaskRequest` (import `TaskRequest`) from `../core/types`.
-   * - Uses `normalizeFingerprintSegment` (import `normalizeFingerprintSegment`) from `./plannerHelpers`.
+   * - Uses `normalizeFingerprintSegment` (import `normalizeFingerprintSegment`) from
+   *   `./plannerPolicy/plannerFailurePolicy`.
    *
    * @param task - Value for task.
    * @returns Resulting string value.
@@ -433,7 +434,8 @@ export class PlannerOrgan {
    * Keeps failure fingerprint state lifecycle mutation logic centralized to reduce drift in state transitions.
    *
    * **What it talks to:**
-   * - Uses `PLANNER_FAILURE_WINDOW_MS` (import `PLANNER_FAILURE_WINDOW_MS`) from `./plannerHelpers`.
+   * - Uses `PLANNER_FAILURE_WINDOW_MS` (import `PLANNER_FAILURE_WINDOW_MS`) from
+   *   `./plannerPolicy/plannerFailurePolicy`.
    *
    * @param nowMs - Duration value in milliseconds.
    * @returns Promise resolving to void.
@@ -474,9 +476,12 @@ export class PlannerOrgan {
    * Centralizes failure fingerprint mutations for auditability and replay.
    *
    * **What it talks to:**
-   * - Uses `PLANNER_FAILURE_COOLDOWN_MS` (import `PLANNER_FAILURE_COOLDOWN_MS`) from `./plannerHelpers`.
-   * - Uses `PLANNER_FAILURE_MAX_STRIKES` (import `PLANNER_FAILURE_MAX_STRIKES`) from `./plannerHelpers`.
-   * - Uses `PLANNER_FAILURE_WINDOW_MS` (import `PLANNER_FAILURE_WINDOW_MS`) from `./plannerHelpers`.
+   * - Uses `PLANNER_FAILURE_COOLDOWN_MS` (import `PLANNER_FAILURE_COOLDOWN_MS`) from
+   *   `./plannerPolicy/plannerFailurePolicy`.
+   * - Uses `PLANNER_FAILURE_MAX_STRIKES` (import `PLANNER_FAILURE_MAX_STRIKES`) from
+   *   `./plannerPolicy/plannerFailurePolicy`.
+   * - Uses `PLANNER_FAILURE_WINDOW_MS` (import `PLANNER_FAILURE_WINDOW_MS`) from
+   *   `./plannerPolicy/plannerFailurePolicy`.
    *
    * @param fingerprint - Value for fingerprint.
    * @param nowMs - Duration value in milliseconds.
@@ -524,8 +529,8 @@ export class PlannerOrgan {
    * - Uses `Plan` (import `Plan`) from `../core/types`.
    * - Uses `TaskRequest` (import `TaskRequest`) from `../core/types`.
    * - Uses `extractCurrentUserRequest` (import `extractCurrentUserRequest`) from `./memoryBroker`.
-   * - Uses `extractActionCandidates` (import `extractActionCandidates`) from `./plannerHelpers`.
-   * - Uses `filterNonExplicitRunSkillActions` (import `filterNonExplicitRunSkillActions`) from `./plannerHelpers`.
+   * - Uses planner action preparation, validation, and response fallback helpers from
+   *   `./plannerPolicy/explicitActionRepair` and `./plannerPolicy/responseSynthesisFallback`.
    * - Additional imported collaborators are also used in this function body.
    *
    * @param task - Value for task.

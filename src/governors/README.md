@@ -23,6 +23,8 @@ cross-governor routing helpers that sit above the extracted default council subs
 ## Invariants
 - `defaultGovernors.ts` is a stable thin entrypoint; detailed council policy belongs in
   `src/governors/defaultCouncil/`.
+- `defaultGovernors.ts` is intentionally guarded by the module-size check so the top-level council
+  surface stays a coordinator instead of regrowing policy branches.
 - Shared governor shapes belong in `types.ts`, not duplicated in each governor file.
 - Cross-governor wiring should stay readable at the top level instead of reappearing inside
   unrelated runtime folders.

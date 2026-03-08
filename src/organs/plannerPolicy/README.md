@@ -12,6 +12,10 @@ belongs here.
 - `executionStyleContracts.ts`
 - `buildExecutionPolicy.ts`
 - `liveVerificationPolicy.ts`
+- `actionNormalization.ts`
+- `explicitActionIntent.ts`
+- `plannerFailurePolicy.ts`
+- `skillActionNormalization.ts`
 - `explicitActionRepair.ts`
 - `promptAssembly.ts`
 - `responseSynthesisFallback.ts`
@@ -21,10 +25,15 @@ belongs here.
 - planner model output and repair output
 - routing and live-build prompt classification
 - planner action schema requirements
+- explicit-action intent and skill scaffolding rules
 
 ## Outputs
 - execution-style classification decisions
 - live-verification requirements
+- planner action normalization and alias cleanup
+- explicit-action intent classification and filtering
+- planner failure cooldown/fingerprint helpers
+- skill-name extraction and create/run-skill param normalization
 - explicit-action repair decisions
 - planner system prompts and repair prompts
 - synthesized fallback respond messages when fail-closed repair still cannot produce executable work
@@ -33,11 +42,16 @@ belongs here.
 - Explicit browser/UI verification requests must require `verify_browser`.
 - Execution-style build requests must not silently pass with inspection-only plans.
 - Planner repair must fail closed when required executable actions never appear.
+- Action normalization, explicit-action intent inference, and skill fallback scaffolding must stay
+  owned here rather than drifting back into `src/organs/`.
 - Prompt assembly rules should stay centralized here rather than drifting back into
   `src/organs/planner.ts`.
 
 ## Related Tests
 - `tests/organs/plannerPolicy.test.ts`
+- `tests/organs/plannerActionNormalization.test.ts`
+- `tests/organs/plannerExplicitActionIntent.test.ts`
+- `tests/organs/plannerSkillActionNormalization.test.ts`
 - `tests/organs/planner.test.ts`
 
 ## When to Update This README

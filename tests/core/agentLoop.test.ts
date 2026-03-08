@@ -16,6 +16,10 @@ import {
   ProactiveGoalModelOutput,
   StructuredCompletionRequest
 } from "../../src/models/types";
+import {
+  WINDOWS_TEST_ROBINHOOD_MOCK_DIR,
+  WINDOWS_TEST_WRONG_APP_DIR
+} from "../support/windowsPathFixtures";
 
 class StubOrchestrator {
   public runCount = 0;
@@ -1090,9 +1094,9 @@ test("AutonomousLoop reports user cancellation when task execution aborts mid-it
 
 test("AutonomousLoop does not mark explicit-path missions complete when side effects touch a different path", async () => {
   const orchestrator = new ScriptedOrchestrator([
-    [buildApprovedShellResult("shell_1", "npx create-react-app C:\\Users\\benac\\OneDrive\\Desktop\\wrong-app")],
-    [buildApprovedShellResult("shell_2", "npx create-react-app C:\\Users\\benac\\OneDrive\\Desktop\\wrong-app")],
-    [buildApprovedShellResult("shell_3", "npx create-react-app C:\\Users\\benac\\OneDrive\\Desktop\\wrong-app")]
+    [buildApprovedShellResult("shell_1", `npx create-react-app ${WINDOWS_TEST_WRONG_APP_DIR}`)],
+    [buildApprovedShellResult("shell_2", `npx create-react-app ${WINDOWS_TEST_WRONG_APP_DIR}`)],
+    [buildApprovedShellResult("shell_3", `npx create-react-app ${WINDOWS_TEST_WRONG_APP_DIR}`)]
   ]);
   const modelClient = new StubLoopModelClient([
     {
@@ -1110,7 +1114,7 @@ test("AutonomousLoop does not mark explicit-path missions complete when side eff
   let goalMetCalled = false;
   let abortedReason = "";
   await loop.run(
-    "Create a React app at C:\\Users\\benac\\OneDrive\\Desktop\\robinhood-mock and execute now.",
+    `Create a React app at ${WINDOWS_TEST_ROBINHOOD_MOCK_DIR} and execute now.`,
     {
       onGoalMet: async () => {
         goalMetCalled = true;
@@ -1129,9 +1133,9 @@ test("AutonomousLoop does not mark explicit-path missions complete when side eff
 
 test("AutonomousLoop requires artifact mutation evidence for customization-heavy execution goals", async () => {
   const orchestrator = new ScriptedOrchestrator([
-    [buildApprovedShellResult("shell_scaffold_1", "npx create-react-app C:\\Users\\benac\\OneDrive\\Desktop\\robinhood-mock")],
-    [buildApprovedShellResult("shell_scaffold_2", "npx create-react-app C:\\Users\\benac\\OneDrive\\Desktop\\robinhood-mock")],
-    [buildApprovedShellResult("shell_scaffold_3", "npx create-react-app C:\\Users\\benac\\OneDrive\\Desktop\\robinhood-mock")]
+    [buildApprovedShellResult("shell_scaffold_1", `npx create-react-app ${WINDOWS_TEST_ROBINHOOD_MOCK_DIR}`)],
+    [buildApprovedShellResult("shell_scaffold_2", `npx create-react-app ${WINDOWS_TEST_ROBINHOOD_MOCK_DIR}`)],
+    [buildApprovedShellResult("shell_scaffold_3", `npx create-react-app ${WINDOWS_TEST_ROBINHOOD_MOCK_DIR}`)]
   ]);
   const modelClient = new StubLoopModelClient([
     {
@@ -1149,7 +1153,7 @@ test("AutonomousLoop requires artifact mutation evidence for customization-heavy
   let goalMetCalled = false;
   let abortedReason = "";
   await loop.run(
-    "Create a React app at C:\\Users\\benac\\OneDrive\\Desktop\\robinhood-mock with a modern dark theme, Robinhood-style UI, and stock components. Execute now.",
+    `Create a React app at ${WINDOWS_TEST_ROBINHOOD_MOCK_DIR} with a modern dark theme, Robinhood-style UI, and stock components. Execute now.`,
     {
       onGoalMet: async () => {
         goalMetCalled = true;
@@ -1168,7 +1172,7 @@ test("AutonomousLoop requires artifact mutation evidence for customization-heavy
 
 test("AutonomousLoop allows customization-heavy execution completion after real mutation evidence", async () => {
   const orchestrator = new ScriptedOrchestrator([
-    [buildApprovedShellResult("shell_scaffold_1", "npx create-react-app C:\\Users\\benac\\OneDrive\\Desktop\\robinhood-mock")],
+    [buildApprovedShellResult("shell_scaffold_1", `npx create-react-app ${WINDOWS_TEST_ROBINHOOD_MOCK_DIR}`)],
     [buildApprovedWriteFileResult("write_1")]
   ]);
   const modelClient = new StubLoopModelClient([

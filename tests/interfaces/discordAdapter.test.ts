@@ -21,6 +21,7 @@ import { ReflectionOrgan } from "../../src/organs/reflection";
 import { ToolExecutorOrgan } from "../../src/organs/executor";
 import { DiscordAdapter, DiscordAdapterConfig, DiscordInboundMessage } from "../../src/interfaces/discordAdapter";
 import { GovernanceMemoryStore } from "../../src/core/governanceMemory";
+import { WINDOWS_TEST_IMPORTANT_FILE_PATH } from "../support/windowsPathFixtures";
 
 /**
  * Implements `buildAdapterConfig` behavior within module scope.
@@ -156,7 +157,7 @@ test("discord adapter routes accepted events through orchestrator governance pat
     const result = await adapter.handleMessage(
       buildMessage({
         messageId: "m-31",
-        text: "Delete C:/Users/benac/important.txt"
+        text: `Delete ${WINDOWS_TEST_IMPORTANT_FILE_PATH}`
       })
     );
 

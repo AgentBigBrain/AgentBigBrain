@@ -21,6 +21,7 @@ import { ReflectionOrgan } from "../../src/organs/reflection";
 import { ToolExecutorOrgan } from "../../src/organs/executor";
 import { TelegramAdapter, TelegramAdapterConfig, TelegramInboundMessage } from "../../src/interfaces/telegramAdapter";
 import { GovernanceMemoryStore } from "../../src/core/governanceMemory";
+import { WINDOWS_TEST_IMPORTANT_FILE_PATH } from "../support/windowsPathFixtures";
 
 /**
  * Implements `buildAdapterConfig` behavior within module scope.
@@ -174,7 +175,7 @@ test("telegram adapter routes accepted events through orchestrator governance pa
     const result = await adapter.handleMessage(
       buildMessage({
         updateId: 31,
-        text: "Delete C:/Users/benac/important.txt"
+        text: `Delete ${WINDOWS_TEST_IMPORTANT_FILE_PATH}`
       })
     );
 

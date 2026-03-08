@@ -7,10 +7,12 @@ import { PlannedAction, TaskRequest } from "../../core/types";
 import { ModelClient, ResponseSynthesisModelOutput } from "../../models/types";
 import { extractCurrentUserRequest } from "../memoryBroker";
 import {
-  allowsRunSkillForRequest,
-  hasOnlyRunSkillActions,
   hasRespondMessage
-} from "../plannerHelpers";
+} from "./actionNormalization";
+import {
+  allowsRunSkillForRequest,
+  hasOnlyRunSkillActions
+} from "./explicitActionIntent";
 import { RunSkillPostPolicyResult } from "./executionStyleContracts";
 import { RESPONSE_IDENTITY_GUARDRAIL, RESPONSE_STYLE_GUARDRAIL } from "./promptAssembly";
 

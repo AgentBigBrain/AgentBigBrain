@@ -14,6 +14,9 @@ import {
   ProactiveGoalModelOutput,
   ResponseSynthesisModelOutput
 } from "../../src/models/types";
+import {
+  WINDOWS_TEST_IMPORTANT_FILE_PATH
+} from "../support/windowsPathFixtures";
 
 test("MockModelClient returns structured planner actions", async () => {
   const client = new MockModelClient();
@@ -22,7 +25,7 @@ test("MockModelClient returns structured planner actions", async () => {
     schemaName: "planner_v1",
     systemPrompt: "planner",
     userPrompt: JSON.stringify({
-      userInput: "Delete C:/Users/benac/important.txt"
+      userInput: `Delete ${WINDOWS_TEST_IMPORTANT_FILE_PATH}`
     })
   });
 
@@ -41,7 +44,7 @@ test("MockModelClient can reject by governor policy signals", async () => {
       actionType: "delete_file",
       actionDescription: "Delete file",
       rationale: "Cleanup old files",
-      path: "C:/Users/benac/important.txt"
+      path: WINDOWS_TEST_IMPORTANT_FILE_PATH
     })
   });
 

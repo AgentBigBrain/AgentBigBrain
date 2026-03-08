@@ -5,13 +5,17 @@
 import { PlannedAction } from "../../core/types";
 import {
   extractActionCandidates,
+  normalizeModelActions
+} from "./actionNormalization";
+import {
   filterNonExplicitRunSkillActions,
   hasOnlyRunSkillActions,
-  hasRequiredAction,
-  normalizeModelActions,
+  hasRequiredAction
+} from "./explicitActionIntent";
+import {
   normalizeRequiredCreateSkillParams,
   normalizeRequiredRunSkillParams
-} from "../plannerHelpers";
+} from "./skillActionNormalization";
 import {
   assessExecutionStyleBuildPlan,
   describeExecutionStyleBuildPlanIssue,

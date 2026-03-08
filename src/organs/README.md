@@ -4,15 +4,23 @@
 This folder owns the runtime "organs" that plan, execute, interpret intent, broker memory, and
 reflect on task outcomes.
 
-The extracted `src/organs/liveRun/` and `src/organs/plannerPolicy/` subsystems own detailed
-live-run and planner-policy modules; the top-level files here keep the stable orchestration
-entrypoints and remaining single-surface organs.
+The extracted `src/organs/liveRun/`, `src/organs/plannerPolicy/`, `src/organs/memoryContext/`,
+`src/organs/reflectionRuntime/`, and `src/organs/intentRuntime/` subsystems own detailed
+live-run, planner-policy, memory-broker, reflection-runtime, and intent-runtime support modules;
+the top-level files here keep the stable orchestration entrypoints and remaining single-surface
+organs.
 
 ## Primary Files
 - Stable orchestration entrypoints: `executor.ts`, `planner.ts`.
-- Planner support and classification: `plannerHelpers.ts`, `intentInterpreter.ts`,
-  `pulseLexicalClassifier.ts`.
-- Runtime support organs: `memoryBroker.ts`, `reflection.ts`, `reflectionSignalClassifier.ts`.
+- Memory brokerage subsystem: `memoryContext/contracts.ts`, `memoryContext/queryPlanning.ts`,
+  `memoryContext/contextInjection.ts`, `memoryContext/auditEvents.ts`.
+- Reflection runtime subsystem: `reflectionRuntime/contracts.ts`,
+  `reflectionRuntime/failureLessons.ts`, `reflectionRuntime/successLessons.ts`,
+  `reflectionRuntime/signalClassification.ts`.
+- Intent runtime subsystem: `intentRuntime/contracts.ts`, `intentRuntime/pulseLexicalRules.ts`,
+  `intentRuntime/intentModelFallback.ts`.
+- Intent classification entrypoints: `intentInterpreter.ts`, `pulseLexicalClassifier.ts`.
+- Runtime support organs: `memoryBroker.ts`, `reflection.ts`.
 
 ## Inputs
 - user goals, current request context, and orchestrator-governed runtime metadata
@@ -27,6 +35,16 @@ entrypoints and remaining single-surface organs.
 ## Invariants
 - `planner.ts` and `executor.ts` remain stable thin entrypoints; detailed policy or capability logic
   belongs in `plannerPolicy/` and `liveRun/`.
+- `planner.ts` is intentionally guarded by the module-size check as a stable top-level planning
+  coordinator.
+- Planner action normalization, explicit-action intent inference, planner failure cooldown policy,
+  and skill fallback scaffolding belong in `plannerPolicy/`, not in new top-level helper files.
+- `memoryBroker.ts` remains the stable broker entrypoint; detailed query planning, context
+  injection, and audit helpers belong in `memoryContext/`.
+- `reflection.ts` remains the stable reflection coordinator; detailed signal classification and
+  model-prompt logic belong in `reflectionRuntime/`.
+- `intentInterpreter.ts` and `pulseLexicalClassifier.ts` remain stable intent entrypoints;
+  detailed lexical rules, override loading, and model fallback belong in `intentRuntime/`.
 - Remaining top-level organs should stay single-purpose; if one grows into a multi-surface system,
   extract a subsystem instead of hiding more branches here.
 - Memory and reflection behavior should remain explicit rather than being inferred from planner or
@@ -35,13 +53,23 @@ entrypoints and remaining single-surface organs.
 ## Related Tests
 - `tests/organs/planner.test.ts`
 - `tests/organs/plannerPolicy.test.ts`
+- `tests/organs/plannerActionNormalization.test.ts`
+- `tests/organs/plannerExplicitActionIntent.test.ts`
+- `tests/organs/plannerSkillActionNormalization.test.ts`
 - `tests/organs/executor.test.ts`
 - `tests/organs/liveRunHandlers.test.ts`
+- `tests/organs/memoryBroker.test.ts`
+- `tests/organs/memoryContextQueryPlanning.test.ts`
+- `tests/organs/memoryContextContextInjection.test.ts`
+- `tests/organs/reflection.test.ts`
+- `tests/organs/intentInterpreter.test.ts`
+- `tests/organs/pulseLexicalClassifier.test.ts`
+- `tests/organs/intentModelFallback.test.ts`
 - `tests/models/mockModelClient.test.ts`
 
 ## When to Update This README
 Update this README when:
 - a top-level organ file is added, removed, or renamed
-- ownership moves between this folder and `liveRun/` or `plannerPolicy/`
+- ownership moves between this folder and `liveRun/`, `plannerPolicy/`, or `memoryContext/`
 - a remaining top-level organ is extracted into a new subsystem
 - the related-test surface changes because organ ownership moved

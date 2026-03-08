@@ -7,6 +7,8 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 
+import { TEST_REVIEWER_HANDLE } from "../../tests/support/windowsPathFixtures";
+
 const exec = promisify(execCallback);
 const STAGE_ID = "stage_2_5_user_protected_paths";
 const SCOREBOARD_PATH = path.resolve(process.cwd(), "runtime/reward_score.json");
@@ -331,7 +333,7 @@ function renderLiveReviewChecklist(generatedAt: string): string {
     "",
     `- Generated At: ${generatedAt}`,
     `- Stage: \`${STAGE_ID}\``,
-    "- Reviewer: `benac`",
+    `- Reviewer: \`${TEST_REVIEWER_HANDLE}\``,
     "- Goal: validate anti-bypass and full-access parity on real runtime behavior.",
     "",
     "## Automated Preflight (Already Run)",
@@ -407,7 +409,7 @@ function renderLiveReviewChecklist(generatedAt: string): string {
     "3. `2.5.3`: PASS/FAIL - rationale:",
     "4. `2.5.4`: PASS/FAIL - rationale:",
     "5. Final stage decision: `approved` / `rejected`",
-    "6. Signed off by: `benac`",
+    `6. Signed off by: \`${TEST_REVIEWER_HANDLE}\``,
     "7. Signed off at (ISO): `<timestamp>`",
     ""
   ].join("\n");

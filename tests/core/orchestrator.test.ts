@@ -38,6 +38,7 @@ import { ReflectionOrgan } from "../../src/organs/reflection";
 import { SemanticMemoryStore } from "../../src/core/semanticMemory";
 import { PersonalityStore } from "../../src/core/personalityStore";
 import { GovernanceMemoryStore } from "../../src/core/governanceMemory";
+import { WINDOWS_TEST_IMPORTANT_FILE_PATH } from "../support/windowsPathFixtures";
 
 /**
  * Implements `withTestBrain` behavior within module scope.
@@ -675,7 +676,7 @@ test("orchestrator fails closed when fast-path governor set is empty", async () 
 
 test("orchestrator blocks unsafe delete request", async () => {
   await withTestBrain(async (brain) => {
-    const result = await brain.runTask(buildTask("Delete C:/Users/benac/important.txt"));
+  const result = await brain.runTask(buildTask(`Delete ${WINDOWS_TEST_IMPORTANT_FILE_PATH}`));
     assert.equal(result.actionResults.length, 1);
     assert.equal(result.actionResults[0].mode, "escalation_path");
     assert.equal(result.actionResults[0].approved, false);
@@ -943,7 +944,7 @@ test("orchestrator does not enforce verification gate for system pulse prompts c
 test("orchestrator appends governance-memory events for approved and blocked actions", async () => {
   await withTestBrain(async (brain, _personalityStore, governanceMemoryStore) => {
     await brain.runTask(buildTask("Give me a concise status update."));
-    await brain.runTask(buildTask("Delete C:/Users/benac/important.txt"));
+  await brain.runTask(buildTask(`Delete ${WINDOWS_TEST_IMPORTANT_FILE_PATH}`));
 
     const view = await governanceMemoryStore.getReadView(10);
     assert.equal(view.totalEvents >= 2, true);
@@ -981,7 +982,7 @@ test("poisoned governance memory cannot bypass hard constraints", async () => {
       dissentGovernorIds: []
     });
 
-    const result = await brain.runTask(buildTask("Delete C:/Users/benac/important.txt"));
+  const result = await brain.runTask(buildTask(`Delete ${WINDOWS_TEST_IMPORTANT_FILE_PATH}`));
     assert.equal(result.actionResults.length, 1);
     assert.equal(result.actionResults[0].approved, false);
     assert.equal(
@@ -1417,7 +1418,7 @@ test(
     );
 
     try {
-      const result = await brain.runTask(buildTask("Delete C:/Users/benac/important.txt"));
+  const result = await brain.runTask(buildTask(`Delete ${WINDOWS_TEST_IMPORTANT_FILE_PATH}`));
       assert.equal(result.failureTaxonomy?.failureCategory, "constraint");
       assert.equal(result.failureTaxonomy?.failureCode, "constraint_blocked");
 

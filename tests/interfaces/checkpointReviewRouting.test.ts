@@ -9,7 +9,7 @@ import {
   GatewayCheckpointReviewRunners,
   runGatewayCheckpointReview
 } from "../../src/interfaces/checkpointReviewRouting";
-import type { ConversationCheckpointReviewResult } from "../../src/interfaces/conversationManager";
+import type { ConversationCheckpointReviewResult } from "../../src/interfaces/conversationRuntime/managerContracts";
 
 /**
  * Builds a deterministic review result payload for routing tests.
@@ -19,7 +19,7 @@ import type { ConversationCheckpointReviewResult } from "../../src/interfaces/co
  * conversation command-policy flow.
  *
  * **What it talks to:**
- * - Uses `ConversationCheckpointReviewResult` type from `conversationManager`.
+ * - Uses `ConversationCheckpointReviewResult` type from `conversationRuntime/managerContracts`.
  *
  * @param checkpointId - Checkpoint id to embed in the fixture payload.
  * @returns Review result fixture with deterministic values.

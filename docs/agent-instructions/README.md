@@ -20,8 +20,9 @@ Apply these sections in order:
 6. `docs/agent-instructions/user-experience-and-capability-principles.md`
 7. `docs/agent-instructions/operational-gates.md`
 8. `docs/agent-instructions/documentation-rules.md`
-9. `docs/agent-instructions/testing-rules.md`
-10. `docs/agent-instructions/integrity-rules.md`
-11. `docs/agent-instructions/definition-of-done.md`
+9. `docs/agent-instructions/commit-rules.md`
+10. `docs/agent-instructions/testing-rules.md`
+11. `docs/agent-instructions/integrity-rules.md`
+12. `docs/agent-instructions/definition-of-done.md`
 
 Tool-specific wrappers may keep only the minimum front matter or title required by that tool.

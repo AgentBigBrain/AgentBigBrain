@@ -7,6 +7,8 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 
+import { TEST_REVIEWER_HANDLE } from "../../tests/support/windowsPathFixtures";
+
 const exec = promisify(execCallback);
 const STAGE_ID = "stage_6_autonomy";
 const SCOREBOARD_PATH = path.resolve(process.cwd(), "runtime/reward_score.json");
@@ -468,7 +470,7 @@ function renderLiveReviewChecklist(generatedAt: string): string {
     "",
     `- Generated At: ${generatedAt}`,
     `- Stage: \`${STAGE_ID}\``,
-    "- Reviewer: `benac`",
+    `- Reviewer: \`${TEST_REVIEWER_HANDLE}\``,
     "",
     "## Automated Preflight (Already Run)",
     "",
@@ -573,7 +575,7 @@ function renderLiveReviewChecklist(generatedAt: string): string {
     "7. `6.7`: PASS/FAIL - rationale:",
     "8. `6.8`: PASS/FAIL - rationale:",
     "9. Final stage decision: `approved` / `rejected`",
-    "10. Signed off by: `benac`",
+    `10. Signed off by: \`${TEST_REVIEWER_HANDLE}\``,
     "11. Signed off at (ISO): `<timestamp>`",
     ""
   ].join("\n");

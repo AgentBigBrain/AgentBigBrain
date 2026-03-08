@@ -11,10 +11,11 @@ import {
   resolveExecutionSurfaceFallbackFromRouting,
   resolveHighRiskDeleteNoOpFallback
 } from "../../../src/interfaces/userFacing/noOpSurface";
+import { WINDOWS_TEST_DEMO_APP_DIR } from "../../support/windowsPathFixtures";
 
 test("resolveExecutionSurfaceFallbackFromRouting returns build fallback for build-scaffold prompts", () => {
   const userInput =
-    "Create a React app at C:\\Users\\benac\\Desktop\\demo-app and execute now.";
+    `Create a React app at ${WINDOWS_TEST_DEMO_APP_DIR} and execute now.`;
   const classification = classifyRoutingIntentV1(userInput);
 
   const fallback = resolveExecutionSurfaceFallbackFromRouting(classification, userInput);

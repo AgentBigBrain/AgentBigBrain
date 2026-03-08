@@ -2,25 +2,40 @@
  * @fileoverview Implements a minimal Discord gateway + REST transport that maps MESSAGE_CREATE events into secure adapter messages.
  */
 
-import { DiscordAdapter, DiscordInboundMessage } from "./discordAdapter";
+import { DiscordAdapter } from "./discordAdapter";
 import { AgentPulseScheduler } from "./agentPulseScheduler";
 import {
-  ConversationDeliveryResult,
-  ConversationManager,
-  ConversationNotifierTransport,
-  parseAutonomousExecutionInput
+  ConversationManager
 } from "./conversationManager";
-import { buildDiscordApiUrl } from "./discordApiUrl";
-import { parseDiscordRetryAfterMs } from "./discordRateLimit";
-import { applyInvocationHints } from "./invocationHints";
-import { applyInvocationPolicy } from "./invocationPolicy";
+import {
+  type ConversationNotifierTransport
+} from "./conversationRuntime/managerContracts";
 import { DiscordInterfaceConfig } from "./runtimeConfig";
 import { InterfaceSessionStore } from "./sessionStore";
+import {
+  deliverPreparedTransportResponse,
+  handleAcceptedTransportConversation
+} from "./transportRuntime/inboundDispatch";
+import {
+  createDiscordGatewayNotifier,
+  type DiscordMessageCreateData,
+  prepareDiscordMessageCreate,
+  sendDiscordGatewayMessage
+} from "./transportRuntime/discordGatewayRuntime";
+import {
+  attachDiscordSocketLifecycle,
+  handleDiscordHelloLifecycle,
+  reconnectWithBackoffLoop,
+  routeDiscordDispatchEvent,
+  DiscordSocket,
+  handleDiscordGatewaySocketMessage,
+  resolveDiscordGatewaySocketUrl,
+  resolveWebSocketConstructor,
+} from "./transportRuntime/gatewayLifecycle";
 import { runStage685CheckpointLiveReview } from "./CheckpointReviewRunners/stage685CheckpointReviewRunner";
 import { runGatewayCheckpointReview } from "./checkpointReviewRouting";
 import {
-  createDynamicPulseEntityGraphGetter,
-  maybeRecordInboundEntityGraphMutation
+  createDynamicPulseEntityGraphGetter
 } from "./entityGraphRuntime";
 import { renderPulseUserFacingSummaryV1 } from "./pulseUxRuntime";
 import { selectUserFacingSummary } from "./userFacingResult";
@@ -32,46 +47,6 @@ import { EntityGraphStore } from "../core/entityGraphStore";
 interface DiscordGatewayOptions {
   sessionStore?: InterfaceSessionStore;
   entityGraphStore?: EntityGraphStore;
-}
-
-interface DiscordSocket {
-  send(data: string): void;
-  close(code?: number, reason?: string): void;
-  onopen: (() => void) | null;
-  onclose: (() => void) | null;
-  onerror: ((error: unknown) => void) | null;
-  onmessage: ((event: { data: string }) => void) | null;
-  readyState: number;
-}
-
-interface DiscordGatewayPayload {
-  op?: number;
-  t?: string | null;
-  s?: number | null;
-  d?: unknown;
-}
-
-interface DiscordAuthor {
-  id?: string;
-  username?: string;
-  bot?: boolean;
-}
-
-interface DiscordMessageCreateData {
-  id?: string;
-  channel_id?: string;
-  guild_id?: string;
-  content?: string;
-  author?: DiscordAuthor;
-  timestamp?: string;
-}
-
-interface DiscordGatewayBotResponse {
-  url?: string;
-}
-
-interface WebSocketLikeConstructor {
-  new(url: string): DiscordSocket;
 }
 
 /**
@@ -86,38 +61,6 @@ interface WebSocketLikeConstructor {
  */
 function isInterfaceDebugEnabled(): boolean {
   return (process.env.BRAIN_INTERFACE_DEBUG ?? "").trim().toLowerCase() === "true";
-}
-
-/**
- * Pauses execution for a bounded interval used by retry/backoff flows.
- *
- * **Why it exists:**
- * Avoids ad-hoc wait behavior by keeping retry/backoff timing in one deterministic helper.
- *
- * **What it talks to:**
- * - Uses local constants/helpers within this module.
- *
- * @param ms - Duration value in milliseconds.
- * @returns Promise resolving to void.
- */
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-/**
- * Evaluates notify reject and returns a deterministic policy signal.
- *
- * **Why it exists:**
- * Keeps the notify reject policy check explicit and testable before side effects.
- *
- * **What it talks to:**
- * - Uses local constants/helpers within this module.
- *
- * @param code - Value for code.
- * @returns `true` when this check passes.
- */
-function shouldNotifyReject(code: string): boolean {
-  return code === "RATE_LIMITED" || code === "EMPTY_MESSAGE";
 }
 
 /**
@@ -138,47 +81,6 @@ function extractChannelIdFromConversationKey(conversationKey: string): string | 
     return null;
   }
   return segments[1] || null;
-}
-
-/**
- * Resolves conversation visibility from available runtime context.
- *
- * **Why it exists:**
- * Prevents divergent selection of conversation visibility by keeping rules in one function.
- *
- * **What it talks to:**
- * - Uses local constants/helpers within this module.
- *
- * @param guildId - Stable identifier used to reference an entity or record.
- * @returns Computed `"private" | "public"` result.
- */
-function resolveConversationVisibility(guildId: string | undefined): "private" | "public" {
-  return guildId ? "public" : "private";
-}
-
-/**
- * Resolves web socket constructor from available runtime context.
- *
- * **Why it exists:**
- * Prevents divergent selection of web socket constructor by keeping rules in one function.
- *
- * **What it talks to:**
- * - Uses local constants/helpers within this module.
- * @returns Computed `WebSocketLikeConstructor` result.
- */
-function resolveWebSocketConstructor(): WebSocketLikeConstructor {
-  const maybeGlobal = (globalThis as unknown as { WebSocket?: WebSocketLikeConstructor }).WebSocket;
-  if (maybeGlobal) {
-    return maybeGlobal;
-  }
-
-  // Fallback for Node runtimes where WebSocket is not exposed globally.
-  const wsModule = require("ws") as { WebSocket?: WebSocketLikeConstructor; default?: WebSocketLikeConstructor };
-  const maybeModuleCtor = wsModule.WebSocket ?? wsModule.default;
-  if (!maybeModuleCtor) {
-    throw new Error("No WebSocket implementation found. Install dependency `ws`.");
-  }
-  return maybeModuleCtor;
 }
 
 export class DiscordGateway {
@@ -351,37 +253,50 @@ export class DiscordGateway {
    * @returns Promise resolving to void.
    */
   private async connect(): Promise<void> {
-    const socketUrl = await this.resolveGatewaySocketUrl();
+    const socketUrl = await resolveDiscordGatewaySocketUrl({
+      gatewayUrl: this.config.gatewayUrl,
+      botToken: this.config.botToken
+    });
     const WebSocketCtor = resolveWebSocketConstructor();
     const socket = new WebSocketCtor(socketUrl);
     this.socket = socket;
 
-    socket.onopen = () => {
-      console.log("[DiscordGateway] Connected.");
-    };
-    socket.onmessage = (event) => {
-      void this.handleSocketMessage(event.data).catch((error) => {
-        console.error(`[DiscordGateway] message handling error: ${(error as Error).message}`);
-      });
-    };
-    socket.onerror = (error) => {
-      console.error(`[DiscordGateway] socket error: ${String(error)}`);
-    };
-    socket.onclose = () => {
-      if (this.heartbeatTimer) {
-        clearInterval(this.heartbeatTimer);
-        this.heartbeatTimer = null;
+    attachDiscordSocketLifecycle({
+      socket,
+      onOpen: () => {
+        console.log("[DiscordGateway] Connected.");
+      },
+      onMessage: async (rawData) =>
+        handleDiscordGatewaySocketMessage({
+          rawData,
+          onSequence: (sequence: number) => {
+            this.sequence = sequence;
+          },
+          onHello: async (data) => this.handleHello(data),
+          onDispatch: async (eventType, data) => this.handleDispatch(eventType, data)
+        }),
+      onMessageError: (error) => {
+        console.error(`[DiscordGateway] message handling error: ${error.message}`);
+      },
+      onError: (error) => {
+        console.error(`[DiscordGateway] socket error: ${String(error)}`);
+      },
+      onClose: () => {
+        if (this.heartbeatTimer) {
+          clearInterval(this.heartbeatTimer);
+          this.heartbeatTimer = null;
+        }
+        this.socket = null;
+        if (this.running) {
+          void this.reconnectWithBackoff();
+          return;
+        }
+        if (this.resolveStopPromise) {
+          this.resolveStopPromise();
+          this.resolveStopPromise = null;
+        }
       }
-      this.socket = null;
-      if (this.running) {
-        void this.reconnectWithBackoff();
-        return;
-      }
-      if (this.resolveStopPromise) {
-        this.resolveStopPromise();
-        this.resolveStopPromise = null;
-      }
-    };
+    });
   }
 
   /**
@@ -395,79 +310,14 @@ export class DiscordGateway {
    * @returns Promise resolving to void.
    */
   private async reconnectWithBackoff(): Promise<void> {
-    await sleep(2_000);
-    if (!this.running) {
-      return;
-    }
-    try {
-      await this.connect();
-    } catch (error) {
-      console.error(`[DiscordGateway] reconnect failed: ${(error as Error).message}`);
-      await this.reconnectWithBackoff();
-    }
-  }
-
-  /**
-   * Resolves gateway socket url from available runtime context.
-   *
-   * **Why it exists:**
-   * Prevents divergent selection of gateway socket url by keeping rules in one function.
-   *
-   * **What it talks to:**
-   * - Uses local constants/helpers within this module.
-   * @returns Promise resolving to string.
-   */
-  private async resolveGatewaySocketUrl(): Promise<string> {
-    const response = await fetch(this.config.gatewayUrl, {
-      method: "GET",
-      headers: {
-        Authorization: `Bot ${this.config.botToken}`
+    await reconnectWithBackoffLoop({
+      delayMs: 2_000,
+      isRunning: () => this.running,
+      reconnect: async () => this.connect(),
+      onReconnectError: (error) => {
+        console.error(`[DiscordGateway] reconnect failed: ${error.message}`);
       }
     });
-    if (!response.ok) {
-      throw new Error(`Discord gateway discovery failed with status ${response.status}.`);
-    }
-
-    const payload = (await response.json()) as DiscordGatewayBotResponse;
-    const baseUrl = payload.url ?? "wss://gateway.discord.gg";
-    const url = new URL(baseUrl);
-    url.searchParams.set("v", "10");
-    url.searchParams.set("encoding", "json");
-    return url.toString();
-  }
-
-  /**
-   * Executes socket message as part of this module's control flow.
-   *
-   * **Why it exists:**
-   * Isolates the socket message runtime step so higher-level orchestration stays readable.
-   *
-   * **What it talks to:**
-   * - Uses local constants/helpers within this module.
-   *
-   * @param rawData - Value for raw data.
-   * @returns Promise resolving to void.
-   */
-  private async handleSocketMessage(rawData: string): Promise<void> {
-    let payload: DiscordGatewayPayload;
-    try {
-      payload = JSON.parse(rawData) as DiscordGatewayPayload;
-    } catch {
-      return;
-    }
-
-    if (typeof payload.s === "number") {
-      this.sequence = payload.s;
-    }
-
-    if (payload.op === 10) {
-      await this.handleHello(payload.d as { heartbeat_interval?: number } | undefined);
-      return;
-    }
-
-    if (payload.op === 0 && typeof payload.t === "string") {
-      await this.handleDispatch(payload.t, payload.d);
-    }
   }
 
   /**
@@ -483,53 +333,14 @@ export class DiscordGateway {
    * @returns Promise resolving to void.
    */
   private async handleHello(data: { heartbeat_interval?: number } | undefined): Promise<void> {
-    const heartbeatInterval = data?.heartbeat_interval ?? 41_250;
-    if (this.heartbeatTimer) {
-      clearInterval(this.heartbeatTimer);
-    }
-
-    this.heartbeatTimer = setInterval(() => {
-      this.sendGatewayPayload({
-        op: 1,
-        d: this.sequence
-      });
-    }, heartbeatInterval);
-
-    this.sendGatewayPayload({
-      op: 1,
-      d: this.sequence
+    this.heartbeatTimer = handleDiscordHelloLifecycle({
+      data,
+      existingHeartbeatTimer: this.heartbeatTimer,
+      sequenceProvider: () => this.sequence,
+      socket: this.socket,
+      botToken: this.config.botToken,
+      intents: this.config.intents
     });
-
-    this.sendGatewayPayload({
-      op: 2,
-      d: {
-        token: this.config.botToken,
-        intents: this.config.intents,
-        properties: {
-          $os: "windows",
-          $browser: "agentbigbrain",
-          $device: "agentbigbrain"
-        }
-      }
-    });
-  }
-
-  /**
-   * Sends gateway payload through the module's deterministic transport path.
-   *
-   * **Why it exists:**
-   * Keeps outbound transport behavior for gateway payload consistent across runtime call sites.
-   *
-   * **What it talks to:**
-   * - Uses local constants/helpers within this module.
-   *
-   * @param payload - Structured input object for this operation.
-   */
-  private sendGatewayPayload(payload: Record<string, unknown>): void {
-    if (!this.socket || this.socket.readyState !== 1) {
-      return;
-    }
-    this.socket.send(JSON.stringify(payload));
   }
 
   /**
@@ -546,15 +357,15 @@ export class DiscordGateway {
    * @returns Promise resolving to void.
    */
   private async handleDispatch(eventType: string, data: unknown): Promise<void> {
-    if (eventType === "READY") {
-      const ready = data as { user?: { id?: string } };
-      this.botUserId = ready.user?.id ?? "";
-      return;
-    }
-
-    if (eventType === "MESSAGE_CREATE") {
-      await this.handleMessageCreate(data as DiscordMessageCreateData);
-    }
+    await routeDiscordDispatchEvent({
+      eventType,
+      data,
+      onReady: async (ready) => {
+        this.botUserId = ready.user?.id ?? "";
+      },
+      onMessageCreate: async (messageData) =>
+        this.handleMessageCreate(messageData as DiscordMessageCreateData)
+    });
   }
 
   /**
@@ -564,166 +375,100 @@ export class DiscordGateway {
    * Isolates the message create runtime step so higher-level orchestration stays readable.
    *
    * **What it talks to:**
-   * - Uses `parseAutonomousExecutionInput` (import `parseAutonomousExecutionInput`) from `./conversationManager`.
-   * - Uses `DiscordInboundMessage` (import `DiscordInboundMessage`) from `./discordAdapter`.
-   * - Uses `applyInvocationHints` (import `applyInvocationHints`) from `./invocationHints`.
-   * - Uses `applyInvocationPolicy` (import `applyInvocationPolicy`) from `./invocationPolicy`.
-   * - Uses `selectUserFacingSummary` (import `selectUserFacingSummary`) from `./userFacingResult`.
+   * - Uses `prepareDiscordMessageCreate(...)` for provider-specific parse/validation.
+   * - Uses `handleAcceptedTransportConversation(...)` for shared accepted-message dispatch.
+   * - Uses `sendDiscordGatewayMessage(...)` for reject/stop/final delivery.
    *
    * @param data - Value for data.
    * @returns Promise resolving to void.
    */
   private async handleMessageCreate(data: DiscordMessageCreateData): Promise<void> {
-    const messageId = data.id ?? "";
-    const channelId = data.channel_id ?? "";
-    const text = data.content ?? "";
-    const userId = data.author?.id ?? "";
-    const username = data.author?.username ?? "";
-    const isBotAuthor = data.author?.bot === true;
-    if (!messageId || !channelId || !text.trim() || !userId || !username) {
+    const prepared = prepareDiscordMessageCreate({
+      data,
+      botUserId: this.botUserId,
+      sharedSecret: this.config.security.sharedSecret,
+      invocationPolicy: this.config.security.invocation,
+      validateMessage: (message) => this.adapter.validateMessage(message),
+      abortControllers: this.autonomousAbortControllers
+    });
+    if (prepared.kind === "ignored") {
       return;
     }
-    if (isBotAuthor || (this.botUserId && userId === this.botUserId)) {
+    if (prepared.kind === "rejected") {
+      await deliverPreparedTransportResponse(
+        prepared.responseText,
+        (text: string) =>
+          sendDiscordGatewayMessage(
+            this.config,
+            prepared.channelId,
+            text,
+            (message: string) => this.logDebug(message)
+          ),
+        "DISCORD_SEND_FAILED"
+      );
       return;
     }
-    const conversationVisibility = resolveConversationVisibility(data.guild_id);
+    if (prepared.kind === "stop") {
+      await deliverPreparedTransportResponse(
+        prepared.responseText,
+        (text: string) =>
+          sendDiscordGatewayMessage(
+            this.config,
+            prepared.channelId,
+            text,
+            (message: string) => this.logDebug(message)
+          ),
+        "DISCORD_SEND_FAILED"
+      );
+      return;
+    }
+
     this.logDebug(
-      `Inbound MESSAGE_CREATE id=${messageId} channel=${channelId} user=${username}(${userId}) textLength=${text.length}`
-    );
-    const invocation = applyInvocationPolicy(text, this.config.security.invocation);
-    if (!invocation.accepted) {
-      this.logDebug(
-        `Invocation policy skipped id=${messageId} channel=${channelId} user=${username}(${userId}) reason=${invocation.reason}`
-      );
-      return;
-    }
-
-    const inbound: DiscordInboundMessage = {
-      messageId,
-      channelId,
-      userId,
-      username,
-      text: invocation.normalizedText,
-      authToken: this.config.security.sharedSecret,
-      receivedAt: data.timestamp ?? new Date().toISOString()
-    };
-    const validation = this.adapter.validateMessage(inbound);
-    if (!validation.accepted) {
-      this.logDebug(
-        `Validation rejected id=${messageId} channel=${channelId} user=${username}(${userId}) code=${validation.code}`
-      );
-      if (shouldNotifyReject(validation.code)) {
-        const sendResult = await this.sendChannelMessage(
-          channelId,
-          applyInvocationHints(validation.message, this.config.security.invocation)
-        );
-        if (!sendResult.ok) {
-          throw new Error(sendResult.errorCode ?? "DISCORD_SEND_FAILED");
-        }
-      }
-      return;
-    }
-
-    const stopController = this.tryAbortAutonomousLoop(channelId, invocation.normalizedText);
-    if (stopController) {
-      const ack = await this.sendChannelMessage(
-        channelId,
-        applyInvocationHints("Autonomous loop cancelled.", this.config.security.invocation)
-      );
-      if (!ack.ok) {
-        throw new Error(ack.errorCode ?? "DISCORD_SEND_FAILED");
-      }
-      return;
-    }
-
-    await maybeRecordInboundEntityGraphMutation(
-      this.entityGraphStore,
-      this.config.security.enableDynamicPulse,
-      {
-        provider: "discord",
-        conversationId: channelId,
-        eventId: messageId,
-        text: invocation.normalizedText,
-        observedAt: inbound.receivedAt ?? new Date().toISOString()
-      },
-      (error) => {
-        console.warn(`[DiscordGateway] entity-graph mutation skipped: ${error.message}`);
-      }
+      `Inbound MESSAGE_CREATE id=${prepared.messageId} channel=${prepared.channelId} user=${prepared.username}(${prepared.userId}) textLength=${prepared.inbound.text.length}`
     );
 
-    const notifier = this.createConversationNotifier(channelId);
-    const reply = await this.conversationManager.handleMessage(
-      {
+    const notifier = this.createConversationNotifier(prepared.channelId);
+    await handleAcceptedTransportConversation({
+      inbound: {
         provider: "discord",
-        conversationId: channelId,
-        userId,
-        username,
-        conversationVisibility,
-        text: invocation.normalizedText,
-        receivedAt: inbound.receivedAt ?? new Date().toISOString()
+        conversationId: prepared.channelId,
+        userId: prepared.userId,
+        username: prepared.username,
+        conversationVisibility: prepared.conversationVisibility,
+        text: prepared.inbound.text,
+        receivedAt: prepared.inbound.receivedAt ?? new Date().toISOString()
       },
-      async (input, receivedAt) => {
-        const autonomousGoal = parseAutonomousExecutionInput(input);
-        if (autonomousGoal) {
-          const abortController = new AbortController();
-          this.autonomousAbortControllers.set(channelId, abortController);
-          let progressMessageId: string | null = null;
-          /**
-           * Forwards autonomous-loop progress text to the active notifier channel.
-           *
-           * **Why it exists:**
-           * The adapter loop expects a generic progress callback; this bridge binds that callback to
-           * Discord delivery with fail-safe send handling.
-           *
-           * **What it talks to:**
-           * - Calls `notifier.send(...)` with best-effort error swallowing.
-           *
-           * @param msg - Progress line generated by autonomous loop callbacks.
-           * @returns Promise that resolves after send attempt completes.
-           */
-          const progressSender = async (msg: string): Promise<void> => {
-            if (progressMessageId && typeof notifier.edit === "function") {
-              const editResult = await notifier.edit(progressMessageId, msg).catch(() => null);
-              if (editResult?.ok) {
-                return;
-              }
-            }
-            const sendResult = await notifier.send(msg).catch(() => null);
-            if (sendResult?.ok && sendResult.messageId) {
-              progressMessageId = sendResult.messageId;
-            }
-          };
-          try {
-            const summary = await this.adapter.runAutonomousTask(
-              autonomousGoal, receivedAt, progressSender, abortController.signal
-            );
-            return { summary };
-          } finally {
-            this.autonomousAbortControllers.delete(channelId);
-          }
-        }
-        const runResult = await this.adapter.runTextTask(input, receivedAt);
-        return {
-          summary: selectUserFacingSummary(runResult, {
-            showTechnicalSummary: this.config.security.showTechnicalSummary,
-            showSafetyCodes: this.config.security.showSafetyCodes
-          })
-        };
-      },
+      entityGraphEvent: prepared.entityGraphEvent,
       notifier
-    );
-
-    if (!reply.trim()) {
-      this.logDebug(`No reply generated for message id=${messageId}.`);
-      return;
-    }
-    const sendResult = await this.sendChannelMessage(
-      channelId,
-      applyInvocationHints(reply, this.config.security.invocation)
-    );
-    if (!sendResult.ok) {
-      throw new Error(sendResult.errorCode ?? "DISCORD_SEND_FAILED");
-    }
+      ,
+      conversationManager: this.conversationManager,
+      entityGraphStore: this.entityGraphStore,
+      dynamicPulseEnabled: this.config.security.enableDynamicPulse,
+      abortControllers: this.autonomousAbortControllers,
+      runTextTask: async (input: string, receivedAt: string) => {
+        const runResult = await this.adapter.runTextTask(input, receivedAt);
+        return selectUserFacingSummary(runResult, {
+          showTechnicalSummary: this.config.security.showTechnicalSummary,
+          showSafetyCodes: this.config.security.showSafetyCodes
+        });
+      },
+      runAutonomousTask: (goal, timestamp, progressSender, signal) =>
+        this.adapter.runAutonomousTask(goal, timestamp, progressSender, signal),
+      deliverReply: (reply: string) =>
+        sendDiscordGatewayMessage(
+          this.config,
+          prepared.channelId,
+          reply,
+          (message: string) => this.logDebug(message)
+        ),
+      deliveryFailureCode: "DISCORD_SEND_FAILED",
+      onEntityGraphMutationFailure: (error) => {
+        console.warn(`[DiscordGateway] entity-graph mutation skipped: ${error.message}`);
+      },
+      onEmptyReply: () => {
+        this.logDebug(`No reply generated for message id=${prepared.messageId}.`);
+      }
+    });
   }
 
   /**
@@ -745,207 +490,13 @@ export class DiscordGateway {
   }
 
   /**
-   * Detects stop/cancel intent and aborts any running autonomous loop for the channel.
-   */
-  private tryAbortAutonomousLoop(channelId: string, text: string): boolean {
-    const normalized = text.trim().toLowerCase();
-    const isStopIntent =
-      normalized === "/stop" ||
-      normalized === "stop" ||
-      normalized === "stop!" ||
-      normalized === "/cancel" ||
-      normalized.startsWith("/stop ") ||
-      normalized.startsWith("stop ");
-    if (!isStopIntent) return false;
-
-    const controller = this.autonomousAbortControllers.get(channelId);
-    if (!controller) return false;
-
-    controller.abort();
-    this.autonomousAbortControllers.delete(channelId);
-    return true;
-  }
-
-  /**
    * Creates a notifier transport bound to a specific Discord channel.
    */
   private createConversationNotifier(channelId: string): ConversationNotifierTransport {
-    return {
-      capabilities: {
-        supportsEdit: false,
-        supportsNativeStreaming: false
-      },
-      send: async (messageText: string) =>
-        this.sendChannelMessage(
-          channelId,
-          applyInvocationHints(messageText, this.config.security.invocation)
-        ),
-      edit: async (messageId: string, messageText: string) =>
-        this.editChannelMessage(
-          channelId,
-          messageId,
-          applyInvocationHints(messageText, this.config.security.invocation)
-        )
-    };
-  }
-
-  /**
-   * Sends channel message through the module's deterministic transport path.
-   *
-   * **Why it exists:**
-   * Keeps outbound transport behavior for channel message consistent across runtime call sites.
-   *
-   * **What it talks to:**
-   * - Uses `ConversationDeliveryResult` (import `ConversationDeliveryResult`) from `./conversationManager`.
-   * - Uses `buildDiscordApiUrl` (import `buildDiscordApiUrl`) from `./discordApiUrl`.
-   * - Uses `parseDiscordRetryAfterMs` (import `parseDiscordRetryAfterMs`) from `./discordRateLimit`.
-   *
-   * @param channelId - Stable identifier used to reference an entity or record.
-   * @param text - Message/text content processed by this function.
-   * @returns Promise resolving to ConversationDeliveryResult.
-   */
-  private async sendChannelMessage(channelId: string, text: string): Promise<ConversationDeliveryResult> {
-    const url = buildDiscordApiUrl(this.config.apiBaseUrl, `/channels/${channelId}/messages`);
-    try {
-      for (let attempt = 1; attempt <= 2; attempt += 1) {
-        const response = await fetch(url.toString(), {
-          method: "POST",
-          headers: {
-            Authorization: `Bot ${this.config.botToken}`,
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            content: text
-          })
-        });
-
-        if (response.ok) {
-          this.logDebug(`Sent message to channel=${channelId} textLength=${text.length}.`);
-          const payload = (await response.json().catch(() => null)) as
-            | { id?: string | number }
-            | null;
-          const messageIdRaw = payload?.id;
-          const messageId =
-            typeof messageIdRaw === "string" || typeof messageIdRaw === "number"
-              ? String(messageIdRaw)
-              : null;
-          return {
-            ok: true,
-            messageId,
-            errorCode: null
-          };
-        }
-
-        if (response.status === 429 && attempt === 1) {
-          const payload = (await response.json().catch(() => null)) as unknown;
-          const retryAfterMs = parseDiscordRetryAfterMs(payload);
-          this.logDebug(
-            `Discord rate-limited outbound send for channel=${channelId}; retrying in ${retryAfterMs}ms.`
-          );
-          await sleep(retryAfterMs);
-          continue;
-        }
-
-        const responseText = await response.text().catch(() => "");
-        return {
-          ok: false,
-          messageId: null,
-          errorCode:
-            response.status === 429
-              ? "DISCORD_RATE_LIMITED"
-              : `DISCORD_SEND_HTTP_${response.status}${responseText ? "_WITH_BODY" : ""}`
-        };
-      }
-    } catch {
-      return {
-        ok: false,
-        messageId: null,
-        errorCode: "DISCORD_SEND_FAILED"
-      };
-    }
-
-    return {
-      ok: false,
-      messageId: null,
-      errorCode: "DISCORD_SEND_FAILED"
-    };
-  }
-
-  /**
-   * Implements edit channel message behavior used by `discordGateway` autonomous progress updates.
-   *
-   * **Why it exists:**
-   * Autonomous loops can emit multiple progress events; editing one progress message keeps Discord
-   * chats readable while preserving deterministic terminal summaries.
-   *
-   * **What it talks to:**
-   * - Uses `ConversationDeliveryResult` (import `ConversationDeliveryResult`) from `./conversationManager`.
-   * - Uses `buildDiscordApiUrl` (import `buildDiscordApiUrl`) from `./discordApiUrl`.
-   * - Uses `parseDiscordRetryAfterMs` (import `parseDiscordRetryAfterMs`) from `./discordRateLimit`.
-   *
-   * @param channelId - Stable identifier used to reference an entity or record.
-   * @param messageId - Stable identifier used to reference an entity or record.
-   * @param text - Message/text content processed by this function.
-   * @returns Promise resolving to ConversationDeliveryResult.
-   */
-  private async editChannelMessage(
-    channelId: string,
-    messageId: string,
-    text: string
-  ): Promise<ConversationDeliveryResult> {
-    const url = buildDiscordApiUrl(
-      this.config.apiBaseUrl,
-      `/channels/${channelId}/messages/${messageId}`
+    return createDiscordGatewayNotifier(
+      this.config,
+      channelId,
+      (message: string) => this.logDebug(message)
     );
-    try {
-      for (let attempt = 1; attempt <= 2; attempt += 1) {
-        const response = await fetch(url.toString(), {
-          method: "PATCH",
-          headers: {
-            Authorization: `Bot ${this.config.botToken}`,
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            content: text
-          })
-        });
-
-        if (response.ok) {
-          return {
-            ok: true,
-            messageId,
-            errorCode: null
-          };
-        }
-
-        if (response.status === 429 && attempt === 1) {
-          const payload = (await response.json().catch(() => null)) as unknown;
-          const retryAfterMs = parseDiscordRetryAfterMs(payload);
-          await sleep(retryAfterMs);
-          continue;
-        }
-
-        return {
-          ok: false,
-          messageId: null,
-          errorCode:
-            response.status === 429
-              ? "DISCORD_RATE_LIMITED"
-              : `DISCORD_EDIT_HTTP_${response.status}`
-        };
-      }
-    } catch {
-      return {
-        ok: false,
-        messageId: null,
-        errorCode: "DISCORD_EDIT_FAILED"
-      };
-    }
-
-    return {
-      ok: false,
-      messageId: null,
-      errorCode: "DISCORD_EDIT_FAILED"
-    };
   }
 }

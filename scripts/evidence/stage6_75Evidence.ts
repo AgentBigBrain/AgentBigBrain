@@ -7,6 +7,8 @@ import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 
+import { TEST_REVIEWER_HANDLE } from "../../tests/support/windowsPathFixtures";
+
 const exec = promisify(execCallback);
 const STAGE_ID = "stage_6_75_governed_operator_capability";
 const SCOREBOARD_PATH = path.resolve(process.cwd(), "runtime/reward_score.json");
@@ -659,7 +661,7 @@ function buildLiveReviewChecklist(): string {
     "",
     `- Stage: \`${STAGE_ID}\``,
     `- GeneratedAt: \`${new Date().toISOString()}\``,
-    "- Reviewer: `benac`",
+    `- Reviewer: \`${TEST_REVIEWER_HANDLE}\``,
     "- Goal: run scenario-first manual review with concrete Telegram examples and artifact-backed checkpoint decisions.",
     "",
     "## Automated Preflight (Already Run)",

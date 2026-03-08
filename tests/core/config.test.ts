@@ -7,6 +7,7 @@ import path from "node:path";
 import { test } from "node:test";
 
 import { createBrainConfigFromEnv, DEFAULT_BRAIN_CONFIG } from "../../src/core/config";
+import { HOST_TEST_PRIVATE_DIR } from "../support/windowsPathFixtures";
 
 test("defaults to isolated runtime mode", () => {
   const config = createBrainConfigFromEnv({});
@@ -149,7 +150,7 @@ test("protects default and configured profile-memory paths from runtime modifica
 
 test("supports owner-declared user protected paths from env", () => {
   const config = createBrainConfigFromEnv({
-    BRAIN_USER_PROTECTED_PATHS: "runtime/owner-safe;\"C:\\Users\\benac\\OneDrive\\Private\""
+    BRAIN_USER_PROTECTED_PATHS: `runtime/owner-safe;"${HOST_TEST_PRIVATE_DIR}"`
   });
 
   assert.equal(
@@ -157,7 +158,7 @@ test("supports owner-declared user protected paths from env", () => {
     true
   );
   assert.equal(
-    config.dna.protectedPathPrefixes.includes("C:\\Users\\benac\\OneDrive\\Private"),
+    config.dna.protectedPathPrefixes.includes(HOST_TEST_PRIVATE_DIR),
     true
   );
 });

@@ -1,157 +1,15 @@
 /**
- * @fileoverview Deterministic lesson-signal classification for reflection memory writes with versioned rulepack metadata.
+ * @fileoverview Deterministic reflection lesson-signal classification using the canonical reflection-runtime rulepack.
  */
 
-import { TaskRunResult } from "../core/types";
-
-export type ReflectionLessonSource = "failure" | "success";
-export type LessonSignalCategory = "ALLOW" | "REJECT";
-export type LessonSignalConfidenceTier = "HIGH" | "MED" | "LOW";
-export type LessonSignalBlockReason =
-  | "LESSON_TOO_SHORT"
-  | "LOW_SIGNAL_PATTERN"
-  | "NO_SUBSTANTIVE_SIGNAL_TOKEN"
-  | "INSUFFICIENT_GOAL_OVERLAP"
-  | "NEAR_DUPLICATE";
-
-export interface LessonSignalClassificationContext {
-  runResult: TaskRunResult;
-  source: ReflectionLessonSource;
-  existingLessons: readonly string[];
-}
-
-export interface LessonSignalScores {
-  tokenCount: number;
-  goalOverlap: number;
-  operationalOverlap: number;
-  maxSimilarity: number;
-}
-
-export interface LessonSignalClassification {
-  allowPersist: boolean;
-  category: LessonSignalCategory;
-  confidenceTier: LessonSignalConfidenceTier;
-  matchedRuleId: string;
-  rulepackVersion: string;
-  blockReason: LessonSignalBlockReason | null;
-  scores: LessonSignalScores;
-}
-
-/**
- * Frozen deterministic baseline rulepack for reflection lesson quality gating.
- */
-export const LessonSignalRulepackV1 = Object.freeze({
-  version: "LessonSignalRulepackV1",
-  minLessonLength: 24,
-  minTokenLength: 3,
-  lessonSimilarityThreshold: 0.5,
-  minSuccessGoalOverlap: 2,
-  minFailureGoalOverlap: 1,
-  minOperationalOverlap: 1,
-  stopWords: [
-    "the",
-    "and",
-    "for",
-    "with",
-    "that",
-    "this",
-    "from",
-    "into",
-    "your",
-    "their",
-    "user",
-    "users",
-    "request",
-    "requests",
-    "task",
-    "tasks",
-    "action",
-    "actions",
-    "ensure",
-    "ensures",
-    "using",
-    "before",
-    "after",
-    "while",
-    "when",
-    "where",
-    "what",
-    "which",
-    "through"
-  ],
-  genericReflectionTokens: [
-    "clarify",
-    "clarifying",
-    "clarification",
-    "context",
-    "contextual",
-    "communication",
-    "thorough",
-    "requirement",
-    "requirements",
-    "effective",
-    "efficient",
-    "efficiency",
-    "precise",
-    "relevant",
-    "successful",
-    "successfully",
-    "success",
-    "smooth",
-    "smoothly",
-    "interaction",
-    "interactions",
-    "response",
-    "responses",
-    "align",
-    "alignment",
-    "understanding",
-    "upfront",
-    "proceed",
-    "proceeding",
-    "helpful",
-    "better"
-  ],
-  lowSignalLessonPatterns: [
-    /\bprioritizing user engagement\b/i,
-    /\bfriendly greeting\b/i,
-    /\benhances the overall user experience\b/i,
-    /\bclarifying user requests\b/i,
-    /\bfosters trust and efficiency\b/i,
-    /\baccurate understanding and effective responses\b/i,
-    /\bclarif(?:y|ying)\b.*\b(requirements?|requests?|needs?)\b/i,
-    /\bprioritizing clear(?: and concise)? communication\b/i,
-    /\bthorough(?:ly)? understanding(?: of)? (?:the )?user context\b/i,
-    /\bprecise and relevant response\b/i,
-    /\b(?:localhost|127\.0\.0\.1|loopback|private[-\s]?range)\b.*\b(?:blocked|denied|policy|policies|ethics|security)\b/i
-  ],
-  highSignalKeywords: [
-    "sandbox",
-    "constraint",
-    "constraints",
-    "governor",
-    "governance",
-    "approval",
-    "validate",
-    "validation",
-    "policy",
-    "blocked",
-    "rollback",
-    "schema",
-    "budget",
-    "trace",
-    "receipt",
-    "delete",
-    "create",
-    "skill",
-    "path",
-    "paths",
-    "impersonation",
-    "personal",
-    "data",
-    "security"
-  ]
-} as const);
+import { TaskRunResult } from "../../core/types";
+import {
+  LessonSignalClassification,
+  LessonSignalClassificationContext,
+  LessonSignalConfidenceTier,
+  LessonSignalRulepackV1,
+  LessonSignalScores
+} from "./contracts";
 
 const LESSON_STOP_WORD_SET: ReadonlySet<string> = new Set<string>(
   LessonSignalRulepackV1.stopWords as readonly string[]
@@ -313,19 +171,6 @@ function extractGoalTokens(runResult: TaskRunResult): Set<string> {
  */
 function extractOperationalTokens(runResult: TaskRunResult): Set<string> {
   const tokens = new Set<string>();
-  /**
-   * Tokenizes one value and merges normalized terms into the operational token set.
-   *
-   * **Why it exists:**
-   * Reflection signal scoring depends on lexical overlap between runs and prior lessons. This
-   * helper centralizes token insertion so every operational field is normalized the same way.
-   *
-   * **What it talks to:**
-   * - Calls `tokenizeLesson(...)` for deterministic token splitting.
-   * - Writes into local `tokens` accumulator.
-   *
-   * @param value - Raw text value collected from action results and violations.
-   */
   const addTokens = (value: string): void => {
     for (const token of tokenizeLesson(value)) {
       tokens.add(token);
@@ -478,7 +323,7 @@ function buildClassification(
   allowPersist: boolean,
   confidenceTier: LessonSignalConfidenceTier,
   matchedRuleId: string,
-  blockReason: LessonSignalBlockReason | null,
+  blockReason: LessonSignalClassification["blockReason"],
   scores: LessonSignalScores
 ): LessonSignalClassification {
   return {
@@ -606,11 +451,5 @@ export function classifyLessonSignal(
     );
   }
 
-  return buildClassification(
-    true,
-    allowConfidenceTier,
-    allowRuleId,
-    null,
-    scores
-  );
+  return buildClassification(true, allowConfidenceTier, allowRuleId, null, scores);
 }

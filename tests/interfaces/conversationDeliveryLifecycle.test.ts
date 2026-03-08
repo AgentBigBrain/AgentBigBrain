@@ -13,8 +13,8 @@ import { buildSessionSeed } from "../../src/interfaces/conversationManagerHelper
 import {
   deliverFinalMessage,
   handleAckTimerFire,
-  type ConversationNotifierTransport
 } from "../../src/interfaces/conversationDeliveryLifecycle";
+import type { ConversationNotifierTransport } from "../../src/interfaces/conversationRuntime/managerContracts";
 import {
   type ConversationAckLifecycleState,
   type ConversationJob,

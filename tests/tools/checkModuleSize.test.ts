@@ -45,3 +45,34 @@ test("computeModuleSizeDiagnosticsFromRecords reports violations for oversized m
     ]
   );
 });
+
+test("computeModuleSizeDiagnosticsFromRecords enforces thin entrypoint budgets independently of subsystem rules", () => {
+  const rules: readonly ModuleSizeRule[] = [
+    {
+      label: "session_store_entrypoint",
+      exactPath: "src/interfaces/sessionStore.ts",
+      maxLines: 10
+    },
+    {
+      label: "conversation_runtime_subsystem",
+      pathPrefix: "src/interfaces/conversationRuntime/",
+      maxLines: 20
+    }
+  ];
+
+  const diagnostics = computeModuleSizeDiagnosticsFromRecords(
+    [
+      { path: "src/interfaces/sessionStore.ts", lineCount: 12 },
+      { path: "src/interfaces/conversationRuntime/sessionPersistence.ts", lineCount: 25 }
+    ],
+    rules
+  );
+
+  assert.deepEqual(
+    diagnostics.violations.map((violation) => `${violation.ruleLabel}:${violation.path}`),
+    [
+      "session_store_entrypoint:src/interfaces/sessionStore.ts",
+      "conversation_runtime_subsystem:src/interfaces/conversationRuntime/sessionPersistence.ts"
+    ]
+  );
+});

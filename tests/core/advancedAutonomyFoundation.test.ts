@@ -29,6 +29,7 @@ import { MockModelClient } from "../../src/models/mockModelClient";
 import { ToolExecutorOrgan } from "../../src/organs/executor";
 import { PlannerOrgan } from "../../src/organs/planner";
 import { ReflectionOrgan } from "../../src/organs/reflection";
+import { WINDOWS_TEST_TOP_SECRET_FILE_PATH } from "../support/windowsPathFixtures";
 
 /**
  * Implements `buildTask` behavior within module scope.
@@ -151,7 +152,7 @@ async function stage65FailureTaxonomyClassifiesOutcomesDeterministically(): Prom
   assert.equal(humanFeedbackCategory, "human_feedback");
 
   await withAdvancedAutonomyTestBrain(async (brain) => {
-    const blockedRun = await brain.runTask(buildTask("Delete C:/Users/benac/top_secret.txt"));
+  const blockedRun = await brain.runTask(buildTask(`Delete ${WINDOWS_TEST_TOP_SECRET_FILE_PATH}`));
     const signal = buildFailureTaxonomySignalFromRun(blockedRun);
     const constraintCategory = classifyFailureTaxonomy(signal);
     assert.equal(constraintCategory, "constraint");

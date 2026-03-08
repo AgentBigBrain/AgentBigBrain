@@ -7,6 +7,8 @@ import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 
+import { TEST_REVIEWER_HANDLE } from "../../tests/support/windowsPathFixtures";
+
 const exec = promisify(execCallback);
 const STAGE_ID = "stage_6_85_it_just_works_orchestration";
 const SCOREBOARD_PATH = path.resolve(process.cwd(), "runtime/reward_score.json");
@@ -690,7 +692,7 @@ function buildLiveReviewChecklist(evaluation: Stage685Evaluation): string {
     "",
     `- Stage: \`${STAGE_ID}\``,
     `- GeneratedAt: \`${new Date().toISOString()}\``,
-    "- Reviewer: `benac`",
+    `- Reviewer: \`${TEST_REVIEWER_HANDLE}\``,
     `- Preflight readiness: \`${formatReadiness(evaluation.readinessComplete)}\``,
     "- Goal: run scenario-first manual review and confirm every checkpoint artifact before sign-off.",
     "",

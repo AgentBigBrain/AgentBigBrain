@@ -9,6 +9,7 @@ import { test } from "node:test";
 import { createBrainConfigFromEnv } from "../../src/core/config";
 import { evaluateHardConstraints } from "../../src/core/hardConstraints";
 import { GovernanceProposal } from "../../src/core/types";
+import { HOST_TEST_PRIVATE_DIR } from "../support/windowsPathFixtures";
 
 const USER_PROTECTED_PREFIX = "runtime/user_protected";
 
@@ -72,7 +73,7 @@ function toWindowsDriveCaseVariant(inputPath: string): string | null {
 
 test("stage 2.5 user protection policy surface parses deterministic owner declarations and fails closed on invalid input", () => {
   const parsed = createBrainConfigFromEnv({
-    BRAIN_USER_PROTECTED_PATHS: "runtime/user_protected;\"C:\\Users\\benac\\Private\""
+    BRAIN_USER_PROTECTED_PATHS: `runtime/user_protected;"${HOST_TEST_PRIVATE_DIR}"`
   });
 
   assert.equal(
@@ -80,7 +81,7 @@ test("stage 2.5 user protection policy surface parses deterministic owner declar
     true
   );
   assert.equal(
-    parsed.dna.protectedPathPrefixes.includes("C:\\Users\\benac\\Private"),
+    parsed.dna.protectedPathPrefixes.includes(HOST_TEST_PRIVATE_DIR),
     true
   );
 

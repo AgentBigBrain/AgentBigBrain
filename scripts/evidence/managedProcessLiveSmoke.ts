@@ -9,12 +9,14 @@ import path from "node:path";
 
 import { createBrainConfigFromEnv } from "../../src/core/config";
 import { ensureEnvLoaded } from "../../src/core/envLoader";
-import { evaluateHardConstraints } from "../../src/core/hardConstraints";
 import {
-  ConstraintEvaluationContext,
-  ConstraintViolation,
-  ExecutorExecutionOutcome,
-  PlannedAction
+  type ConstraintEvaluationContext,
+  evaluateHardConstraints
+} from "../../src/core/hardConstraints";
+import {
+  type ConstraintViolation,
+  type ExecutorExecutionOutcome,
+  type PlannedAction
 } from "../../src/core/types";
 import { ToolExecutorOrgan } from "../../src/organs/executor";
 
@@ -321,6 +323,8 @@ async function runManagedProcessLiveSmoke(): Promise<ManagedProcessLiveSmokeArti
     BRAIN_ENABLE_DYNAMIC_PULSE: "false",
     BRAIN_LEDGER_BACKEND: "json",
     BRAIN_TRACE_LOG_ENABLED: "false",
+    BRAIN_BROWSER_VERIFY_VISIBLE: "false",
+    BRAIN_BROWSER_VERIFY_HEADLESS: "true",
     BRAIN_LEDGER_SQLITE_PATH: path.join(runtimeDir, "ledgers.sqlite"),
     BRAIN_VECTOR_SQLITE_PATH: path.join(runtimeDir, "vectors.sqlite"),
     BRAIN_TRACE_LOG_PATH: path.join(runtimeDir, "runtime_trace.jsonl"),
@@ -587,8 +591,8 @@ function finalizeManagedProcessArtifact(
     command: COMMAND_NAME,
     status: overallPass ? "PASS" : "FAIL",
     runtime: {
-      runtimeMode: config.permissions.runtimeMode,
-      allowFullAccess: config.permissions.runtimeMode === "full_access",
+      runtimeMode: config.runtime.mode,
+      allowFullAccess: config.runtime.mode === "full_access",
       realShellEnabled: config.permissions.allowRealShellExecution,
       shellKind: config.shellRuntime.profile.shellKind
     },

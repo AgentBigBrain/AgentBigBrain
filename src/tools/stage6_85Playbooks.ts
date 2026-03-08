@@ -10,7 +10,7 @@ import {
   compileCandidatePlaybookFromTrace,
   createPlaybookEnvelopeV1,
   selectPlaybookDeterministically
-} from "../core/stage6_85PlaybookPolicy";
+} from "../core/stage6_85/playbookPolicy";
 
 const ARTIFACT_PATH = path.resolve(process.cwd(), "runtime/evidence/stage6_85_playbooks_report.json");
 const REGISTRY_PATH = path.resolve(process.cwd(), "runtime/playbooks/playbook_registry.json");

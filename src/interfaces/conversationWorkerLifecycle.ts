@@ -14,32 +14,18 @@ import {
   ConversationJob,
   ConversationSession
 } from "./sessionStore";
+import type {
+  ConversationNotifierTransport,
+  ExecuteConversationTask
+} from "./conversationRuntime/managerContracts";
 
-export interface ConversationExecutionResult {
-  summary: string;
-}
-
-export type ExecuteConversationTask = (
-  input: string,
-  receivedAt: string
-) => Promise<ConversationExecutionResult>;
-
-export interface ConversationDeliveryResult {
-  ok: boolean;
-  messageId: string | null;
-  errorCode: string | null;
-}
-
-export interface ConversationNotifierCapabilities {
-  supportsEdit: boolean;
-  supportsNativeStreaming: boolean;
-}
-
-export interface ConversationNotifierTransport {
-  capabilities: ConversationNotifierCapabilities;
-  send(message: string): Promise<ConversationDeliveryResult>;
-  stream?(message: string): Promise<ConversationDeliveryResult>;
-}
+export type {
+  ConversationDeliveryResult,
+  ConversationExecutionResult,
+  ConversationNotifierCapabilities,
+  ConversationNotifierTransport,
+  ExecuteConversationTask
+} from "./conversationRuntime/managerContracts";
 
 /**
  * Evaluates notifier native-streaming support and returns a deterministic policy signal.

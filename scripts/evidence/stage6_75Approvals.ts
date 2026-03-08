@@ -11,6 +11,7 @@ import {
   registerApprovalGrantUse,
   validateApprovalGrantUse
 } from "../../src/core/stage6_75ApprovalPolicy";
+import { TEST_OPERATOR_ID } from "../../tests/support/windowsPathFixtures";
 
 const ARTIFACT_PATH = path.resolve(
   process.cwd(),
@@ -54,7 +55,7 @@ export async function runStage675CheckpointF(): Promise<Stage675CheckpointFArtif
   const grant = createApprovalGrantV1({
     request,
     approvedAt: "2026-02-27T23:00:00.000Z",
-    approvedBy: "operator_benac"
+    approvedBy: TEST_OPERATOR_ID
   });
 
   const validDecision = validateApprovalGrantUse(request, grant, {

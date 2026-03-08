@@ -2,95 +2,49 @@
  * @fileoverview Executes per-action governance and execution loop phases for a task plan.
  */
 
-import { MasterGovernor } from "../governors/masterGovernor";
-import { runCouncilVote } from "../governors/voteGate";
-import { Governor } from "../governors/types";
-import { ModelClient, ModelUsageSnapshot } from "../models/types";
-import { BrainConfig } from "./config";
-import { estimateActionCostUsd } from "./actionCostPolicy";
 import { resolveExecutionMode } from "./executionMode";
-import { evaluateHardConstraints } from "./hardConstraints";
 import { throwIfAborted } from "./runtimeAbort";
-import {
+import type {
   ActionRunResult,
-  BrainState,
-  ConflictObjectV1,
-  ExecutorExecutionOutcome,
-  FULL_COUNCIL_GOVERNOR_IDS,
-  GovernorVote,
-  isConstraintViolationCode,
-  MasterDecision,
-  ProfileMemoryStatus,
-  STAGE_6_75_BLOCK_CODES,
-  TaskRunResult
+  ApprovalGrantV1
 } from "./types";
-import { GovernanceMemoryStore } from "./governanceMemory";
-import { ExecutionReceiptStore } from "./advancedAutonomyRuntime";
-import { AppendRuntimeTraceEventInput } from "./runtimeTraceLogger";
+import { isConstraintViolationCode } from "./types";
 import { evaluateVerificationGate } from "./stage6_85QualityGatePolicy";
-import { evaluateStage675EgressPolicy } from "./stage6_75EgressPolicy";
-import { evaluateStage685RuntimeGuard } from "./stage6_85RuntimeGuards";
 import {
-  createApprovalGrantV1,
-  createApprovalRequestV1,
-  registerApprovalGrantUse,
-  validateApprovalGrantUse
-} from "./stage6_75ApprovalPolicy";
-import {
-  createConnectorReceiptV1,
-  Stage675ConnectorOperation,
-  validateStage675ConnectorOperation
-} from "./stage6_75ConnectorPolicy";
-import { evaluateConsistencyPreflight } from "./stage6_75ConsistencyPolicy";
-import {
-  advanceMissionPhase,
   buildInitialMissionState,
   createMissionCheckpoint,
   evaluateMissionStopDecision,
-  MissionStopLimitsV1,
-  registerMissionActionOutcome
+  MissionStopLimitsV1
 } from "./stage6_75MissionStateMachine";
-import { canonicalJson } from "./normalizers/canonicalizationRules";
-import { ToolExecutorOrgan } from "../organs/executor";
 import {
-  appendExecutionReceipt,
-  appendGovernanceEvent,
-  buildGovernorContext,
-  buildProposal,
   diffUsageSnapshot,
-  evaluateCodeReview,
   normalizeOptionalString,
-  prepareActionOutput,
   readModelUsageSnapshot,
-  resolveExecutionOutcomeViolation,
   resolveVerificationCategoryForPrompt,
   shouldEnforceVerificationGateForRespond
 } from "./taskRunnerSupport";
-import { Stage686RuntimeActionEngine } from "./stage6_86RuntimeActions";
+import { buildGovernorContext } from "./orchestration/taskRunnerProposal";
+import { Stage686RuntimeActionEngine } from "./stage6_86/runtimeActions";
+import {
+  type RunPlanActionsInput,
+  type TaskRunnerDependencies
+} from "./orchestration/contracts";
+import {
+  buildTaskRunnerMissionStopLimits,
+  recordApprovedActionOutcome,
+  recordBlockedActionOutcome
+} from "./orchestration/taskRunnerLifecycle";
+import {
+  buildBlockedActionResult
+} from "./orchestration/taskRunnerSummary";
+import { evaluateTaskRunnerPreflight } from "./orchestration/taskRunnerPreflight";
+import { type TaskRunnerConnectorReceiptSeed } from "./orchestration/taskRunnerNetworkPreflight";
+import { evaluateTaskRunnerGovernance } from "./orchestration/taskRunnerGovernance";
+import {
+  executeTaskRunnerAction
+} from "./orchestration/taskRunnerExecution";
 
-export interface TaskRunnerDependencies {
-  config: BrainConfig;
-  governors: Governor[];
-  masterGovernor: MasterGovernor;
-  modelClient: ModelClient;
-  executor: ToolExecutorOrgan;
-  governanceMemoryStore: GovernanceMemoryStore;
-  executionReceiptStore: ExecutionReceiptStore;
-  appendTraceEvent: (input: AppendRuntimeTraceEventInput) => Promise<void>;
-  stage686RuntimeActionEngine?: Stage686RuntimeActionEngine;
-}
-
-export interface RunPlanActionsInput {
-  task: TaskRunResult["task"];
-  state: BrainState;
-  plan: TaskRunResult["plan"];
-  missionAttemptId: number;
-  startedAtMs: number;
-  cumulativeApprovedEstimatedCostUsd: number;
-  modelUsageStart: ModelUsageSnapshot;
-  profileMemoryStatus: ProfileMemoryStatus;
-  signal?: AbortSignal;
-}
+export type { RunPlanActionsInput, TaskRunnerDependencies } from "./orchestration/contracts";
 
 export class TaskRunner {
   private readonly stage686RuntimeActionEngine: Stage686RuntimeActionEngine;
@@ -127,7 +81,6 @@ export class TaskRunner {
    * **What it talks to:**
    * - Uses `MasterGovernor` (import `MasterGovernor`) from `../governors/masterGovernor`.
    * - Uses `runCouncilVote` (import `runCouncilVote`) from `../governors/voteGate`.
-   * - Uses `estimateActionCostUsd` (import `estimateActionCostUsd`) from `./actionCostPolicy`.
    * - Uses `resolveExecutionMode` (import `resolveExecutionMode`) from `./executionMode`.
    * - Uses `evaluateHardConstraints` (import `evaluateHardConstraints`) from `./hardConstraints`.
    * - Uses `evaluateStage675EgressPolicy` (import `evaluateStage675EgressPolicy`) from `./stage6_75EgressPolicy`.
@@ -154,22 +107,9 @@ export class TaskRunner {
     let approvedEstimatedCostDeltaUsd = 0;
     let missionState = buildInitialMissionState(task.id, missionAttemptId);
     const deterministicActionIds = new Set<string>();
-    const approvalGrantById = new Map<string, ReturnType<typeof createApprovalGrantV1>>();
-    const connectorReceiptByActionId = new Map<
-      string,
-      {
-        connector: "gmail" | "calendar";
-        operation: "read" | "watch" | "draft" | "propose" | "write";
-        requestPayload: unknown;
-        responseMetadata: unknown;
-        externalIds: readonly string[];
-      }
-    >();
-    const missionStopLimits: MissionStopLimitsV1 = {
-      maxActions: Math.max(1, this.deps.config.limits.maxActionsPerTask),
-      maxDenies: Math.max(1, this.deps.config.limits.maxPlanAttemptsPerTask * 2),
-      maxBytes: 1_048_576
-    };
+    const approvalGrantById = new Map<string, ApprovalGrantV1>();
+    const connectorReceiptByActionId = new Map<string, TaskRunnerConnectorReceiptSeed>();
+    const missionStopLimits: MissionStopLimitsV1 = buildTaskRunnerMissionStopLimits(this.deps.config);
 
     for (const action of plan.actions) {
       throwIfAborted(signal);
@@ -208,33 +148,21 @@ export class TaskRunner {
           ],
           votes: []
         };
-        attemptResults.push(blockedResult);
-        await this.deps.appendTraceEvent({
-          eventType: "constraint_blocked",
+        missionState = await recordBlockedActionOutcome({
+          actionResult: blockedResult,
+          appendTraceEvent: this.deps.appendTraceEvent,
+          attemptResults,
+          governanceMemoryStore: this.deps.governanceMemoryStore,
+          idempotencyKey,
+          missionState,
           taskId: task.id,
-          actionId: action.id,
-          mode,
-          details: {
+          traceDetails: {
             blockCode: normalizedMissionStopCode,
             blockCategory: "runtime",
             missionAttemptId,
             missionPhase: missionState.currentPhase
           }
         });
-        await appendGovernanceEvent({
-          taskId: task.id,
-          proposalId: null,
-          actionResult: blockedResult,
-          governanceMemoryStore: this.deps.governanceMemoryStore,
-          appendTraceEvent: this.deps.appendTraceEvent
-        });
-        const missionRegistration = registerMissionActionOutcome(
-          missionState,
-          idempotencyKey,
-          0,
-          true
-        );
-        missionState = advanceMissionPhase(missionRegistration.nextState);
         continue;
       }
       if (missionState.seenIdempotencyKeys[idempotencyKey] === true) {
@@ -251,32 +179,20 @@ export class TaskRunner {
           ],
           votes: []
         };
-        attemptResults.push(blockedResult);
-        await this.deps.appendTraceEvent({
-          eventType: "constraint_blocked",
+        missionState = await recordBlockedActionOutcome({
+          actionResult: blockedResult,
+          appendTraceEvent: this.deps.appendTraceEvent,
+          attemptResults,
+          governanceMemoryStore: this.deps.governanceMemoryStore,
+          idempotencyKey,
+          missionState,
           taskId: task.id,
-          actionId: action.id,
-          mode,
-          details: {
+          traceDetails: {
             blockCode: "IDEMPOTENCY_KEY_REPLAY_DETECTED",
             blockCategory: "runtime",
             idempotencyKey
           }
         });
-        await appendGovernanceEvent({
-          taskId: task.id,
-          proposalId: null,
-          actionResult: blockedResult,
-          governanceMemoryStore: this.deps.governanceMemoryStore,
-          appendTraceEvent: this.deps.appendTraceEvent
-        });
-        const missionRegistration = registerMissionActionOutcome(
-          missionState,
-          idempotencyKey,
-          0,
-          true
-        );
-        missionState = advanceMissionPhase(missionRegistration.nextState);
         continue;
       }
       if (deterministicActionIds.has(missionCheckpoint.actionId)) {
@@ -293,727 +209,63 @@ export class TaskRunner {
           ],
           votes: []
         };
-        attemptResults.push(blockedResult);
-        await this.deps.appendTraceEvent({
-          eventType: "constraint_blocked",
+        missionState = await recordBlockedActionOutcome({
+          actionResult: blockedResult,
+          appendTraceEvent: this.deps.appendTraceEvent,
+          attemptResults,
+          governanceMemoryStore: this.deps.governanceMemoryStore,
+          idempotencyKey,
+          missionState,
           taskId: task.id,
-          actionId: action.id,
-          mode,
-          details: {
+          traceDetails: {
             blockCode: "ACTION_ID_DUPLICATE_DETECTED",
             blockCategory: "runtime",
             deterministicActionId: missionCheckpoint.actionId
           }
         });
-        await appendGovernanceEvent({
-          taskId: task.id,
-          proposalId: null,
-          actionResult: blockedResult,
-          governanceMemoryStore: this.deps.governanceMemoryStore,
-          appendTraceEvent: this.deps.appendTraceEvent
-        });
-        const missionRegistration = registerMissionActionOutcome(
-          missionState,
-          idempotencyKey,
-          0,
-          true
-        );
-        missionState = advanceMissionPhase(missionRegistration.nextState);
         continue;
       }
       deterministicActionIds.add(missionCheckpoint.actionId);
-      if (Date.now() - startedAtMs > this.deps.config.limits.perTurnDeadlineMs) {
-        const blockedResult: ActionRunResult = {
-          action,
-          mode,
-          approved: false,
-          blockedBy: ["GLOBAL_DEADLINE_EXCEEDED"],
-          violations: [
-            {
-              code: "GLOBAL_DEADLINE_EXCEEDED",
-              message: `Turn exceeded ${this.deps.config.limits.perTurnDeadlineMs}ms deadline.`
-            }
-          ],
-          votes: []
-        };
-        attemptResults.push(blockedResult);
-        await this.deps.appendTraceEvent({
-          eventType: "constraint_blocked",
-          taskId: task.id,
-          actionId: action.id,
-          mode,
-          details: {
-            blockCode: "GLOBAL_DEADLINE_EXCEEDED",
-            blockCategory: "runtime"
-          }
-        });
-        await appendGovernanceEvent({
-          taskId: task.id,
-          proposalId: null,
-          actionResult: blockedResult,
-          governanceMemoryStore: this.deps.governanceMemoryStore,
-          appendTraceEvent: this.deps.appendTraceEvent
-        });
-        const missionRegistration = registerMissionActionOutcome(
-          missionState,
-          idempotencyKey,
-          0,
-          true
-        );
-        missionState = advanceMissionPhase(missionRegistration.nextState);
-        continue;
-      }
-
-      if (usageDelta.estimatedSpendUsd > this.deps.config.limits.maxCumulativeModelSpendUsd) {
-        const blockedResult: ActionRunResult = {
-          action,
-          mode,
-          approved: false,
-          blockedBy: ["MODEL_SPEND_LIMIT_EXCEEDED"],
-          violations: [
-            {
-              code: "MODEL_SPEND_LIMIT_EXCEEDED",
-              message:
-                `Model spend ${usageDelta.estimatedSpendUsd.toFixed(6)} exceeds ` +
-                `max ${this.deps.config.limits.maxCumulativeModelSpendUsd.toFixed(2)}.`
-            }
-          ],
-          votes: []
-        };
-        attemptResults.push(blockedResult);
-        await this.deps.appendTraceEvent({
-          eventType: "constraint_blocked",
-          taskId: task.id,
-          actionId: action.id,
-          mode,
-          details: {
-            blockCode: "MODEL_SPEND_LIMIT_EXCEEDED",
-            blockCategory: "runtime"
-          }
-        });
-        await appendGovernanceEvent({
-          taskId: task.id,
-          proposalId: null,
-          actionResult: blockedResult,
-          governanceMemoryStore: this.deps.governanceMemoryStore,
-          appendTraceEvent: this.deps.appendTraceEvent
-        });
-        const missionRegistration = registerMissionActionOutcome(
-          missionState,
-          idempotencyKey,
-          0,
-          true
-        );
-        missionState = advanceMissionPhase(missionRegistration.nextState);
-        continue;
-      }
-
-      const proposal = buildProposal(task, action, this.deps.config);
-      const violations = evaluateHardConstraints(proposal, this.deps.config, {
+      const preflightOutcome = evaluateTaskRunnerPreflight({
+        action,
+        approvalGrantById,
+        config: this.deps.config,
         cumulativeEstimatedCostUsd:
-          cumulativeApprovedEstimatedCostUsd + approvedEstimatedCostDeltaUsd
+          cumulativeApprovedEstimatedCostUsd + approvedEstimatedCostDeltaUsd,
+        estimatedModelSpendUsd: usageDelta.estimatedSpendUsd,
+        idempotencyKey,
+        mode,
+        nowIso,
+        startedAtMs,
+        task
       });
-      if (violations.length > 0) {
-        const blockedResult: ActionRunResult = {
-          action,
-          mode,
-          approved: false,
-          blockedBy: violations.map((violation) => violation.code),
-          violations,
-          votes: []
-        };
-        attemptResults.push(blockedResult);
-        await this.deps.appendTraceEvent({
-          eventType: "constraint_blocked",
-          taskId: task.id,
-          actionId: action.id,
-          proposalId: proposal.id,
-          mode,
-          details: {
-            blockCode: violations[0]?.code ?? "CONSTRAINT_VIOLATION",
-            blockCategory: "constraints",
-            violationCount: violations.length
-          }
-        });
-        await appendGovernanceEvent({
-          taskId: task.id,
-          proposalId: proposal.id,
-          actionResult: blockedResult,
+      if (preflightOutcome.blockedOutcome) {
+        missionState = await recordBlockedActionOutcome({
+          actionResult: preflightOutcome.blockedOutcome.actionResult,
+          appendTraceEvent: this.deps.appendTraceEvent,
+          attemptResults,
           governanceMemoryStore: this.deps.governanceMemoryStore,
-          appendTraceEvent: this.deps.appendTraceEvent
-        });
-        const missionRegistration = registerMissionActionOutcome(
-          missionState,
           idempotencyKey,
-          0,
-          true
-        );
-        missionState = advanceMissionPhase(missionRegistration.nextState);
+          missionState,
+          proposalId: preflightOutcome.proposal?.id,
+          taskId: task.id,
+          traceDetails: preflightOutcome.blockedOutcome.traceDetails
+        });
         continue;
       }
-
-      const stage685Guard = evaluateStage685RuntimeGuard(action);
-      if (stage685Guard) {
-        const blockedResult: ActionRunResult = {
-          action,
-          mode,
-          approved: false,
-          blockedBy: [stage685Guard.violation.code],
-          violations: [stage685Guard.violation],
-          votes: []
-        };
-        attemptResults.push(blockedResult);
-        await this.deps.appendTraceEvent({
-          eventType: "constraint_blocked",
-          taskId: task.id,
-          actionId: action.id,
-          proposalId: proposal.id,
-          mode,
-          details: {
-            blockCode: stage685Guard.violation.code,
-            blockCategory: "constraints",
-            conflictCode: stage685Guard.conflictCode
-          }
-        });
-        await appendGovernanceEvent({
-          taskId: task.id,
-          proposalId: proposal.id,
-          actionResult: blockedResult,
-          governanceMemoryStore: this.deps.governanceMemoryStore,
-          appendTraceEvent: this.deps.appendTraceEvent
-        });
-        const missionRegistration = registerMissionActionOutcome(
-          missionState,
-          idempotencyKey,
-          0,
-          true
-        );
-        missionState = advanceMissionPhase(missionRegistration.nextState);
-        continue;
+      const proposal = preflightOutcome.proposal;
+      if (!proposal) {
+        throw new Error("TaskRunner preflight outcome missing proposal after successful evaluation.");
       }
-
-      // Stage 6.75 Connector Policy Guard
-      if (action.type === "network_write") {
-        const url = normalizeOptionalString(action.params.url) ?? normalizeOptionalString(action.params.endpoint);
-        if (!url) {
-          const blockedResult: ActionRunResult = {
-            action,
-            mode,
-            approved: false,
-            blockedBy: ["NETWORK_EGRESS_POLICY_BLOCKED"],
-            violations: [
-              {
-                code: "NETWORK_EGRESS_POLICY_BLOCKED",
-                message: "Missing URL/endpoint in network_write action."
-              }
-            ],
-            votes: []
-          };
-          attemptResults.push(blockedResult);
-          await appendGovernanceEvent({
-            taskId: task.id,
-            proposalId: proposal.id,
-            actionResult: blockedResult,
-            governanceMemoryStore: this.deps.governanceMemoryStore,
-            appendTraceEvent: this.deps.appendTraceEvent
-          });
-          const missionRegistration = registerMissionActionOutcome(
-            missionState,
-            idempotencyKey,
-            0,
-            true
-          );
-          missionState = advanceMissionPhase(missionRegistration.nextState);
-          continue;
-        }
-
-        const connectorRaw = normalizeOptionalString(action.params.connector)?.toLowerCase();
-        const connector =
-          connectorRaw === "gmail" || connectorRaw === "calendar"
-            ? connectorRaw
-            : null;
-        const operationRaw = normalizeOptionalString(action.params.operation)?.toLowerCase();
-        let connectorOperation: Stage675ConnectorOperation | null = null;
-        if (
-          operationRaw === "read" ||
-          operationRaw === "watch" ||
-          operationRaw === "draft" ||
-          operationRaw === "propose" ||
-          operationRaw === "write" ||
-          operationRaw === "update" ||
-          operationRaw === "delete"
-        ) {
-          connectorOperation = operationRaw;
-        }
-
-        if (operationRaw && !connectorOperation) {
-          const blockedResult: ActionRunResult = {
-            action,
-            mode,
-            approved: false,
-            blockedBy: ["CONNECTOR_OPERATION_NOT_SUPPORTED_IN_STAGE_6_75"],
-            violations: [
-              {
-                code: "CONNECTOR_OPERATION_NOT_SUPPORTED_IN_STAGE_6_75",
-                message: `Unsupported connector operation '${operationRaw}'.`
-              }
-            ],
-            votes: []
-          };
-          attemptResults.push(blockedResult);
-          await this.deps.appendTraceEvent({
-            eventType: "constraint_blocked",
-            taskId: task.id,
-            actionId: action.id,
-            proposalId: proposal.id,
-            mode,
-            details: {
-              blockCode: "CONNECTOR_OPERATION_NOT_SUPPORTED_IN_STAGE_6_75",
-              blockCategory: "constraints"
-            }
-          });
-          await appendGovernanceEvent({
-            taskId: task.id,
-            proposalId: proposal.id,
-            actionResult: blockedResult,
-            governanceMemoryStore: this.deps.governanceMemoryStore,
-            appendTraceEvent: this.deps.appendTraceEvent
-          });
-          const missionRegistration = registerMissionActionOutcome(
-            missionState,
-            idempotencyKey,
-            0,
-            true
-          );
-          missionState = advanceMissionPhase(missionRegistration.nextState);
-          continue;
-        }
-
-        if (connectorOperation) {
-          const connectorDecision = validateStage675ConnectorOperation(connectorOperation);
-          if (!connectorDecision.ok && connectorDecision.blockCode) {
-            const normalizedConnectorCode = isConstraintViolationCode(connectorDecision.blockCode)
-              ? connectorDecision.blockCode
-              : "CONNECTOR_OPERATION_NOT_SUPPORTED_IN_STAGE_6_75";
-            const blockedResult: ActionRunResult = {
-              action,
-              mode,
-              approved: false,
-              blockedBy: [normalizedConnectorCode],
-              violations: [
-                {
-                  code: normalizedConnectorCode,
-                  message: connectorDecision.reason
-                }
-              ],
-              votes: []
-            };
-            attemptResults.push(blockedResult);
-            await this.deps.appendTraceEvent({
-              eventType: "constraint_blocked",
-              taskId: task.id,
-              actionId: action.id,
-              proposalId: proposal.id,
-              mode,
-              details: {
-                blockCode: normalizedConnectorCode,
-                blockCategory: "constraints"
-              }
-            });
-            await appendGovernanceEvent({
-              taskId: task.id,
-              proposalId: proposal.id,
-              actionResult: blockedResult,
-              governanceMemoryStore: this.deps.governanceMemoryStore,
-              appendTraceEvent: this.deps.appendTraceEvent
-            });
-            const missionRegistration = registerMissionActionOutcome(
-              missionState,
-              idempotencyKey,
-              0,
-              true
-            );
-            missionState = advanceMissionPhase(missionRegistration.nextState);
-            continue;
-          }
-        }
-
-        const requiresConsistencyPreflight =
-          action.params.requiresConsistencyPreflight === true ||
-          connector === "calendar" ||
-          connector === "gmail";
-        if (requiresConsistencyPreflight) {
-          const lastReadAtIso =
-            normalizeOptionalString(action.params.lastReadAtIso) ??
-            normalizeOptionalString(action.params.observedAtWatermark);
-          const unresolvedConflictRaw = action.params.unresolvedConflict;
-          let unresolvedConflict: ConflictObjectV1 | null = null;
-          if (
-            unresolvedConflictRaw &&
-            typeof unresolvedConflictRaw === "object" &&
-            !Array.isArray(unresolvedConflictRaw)
-          ) {
-            const raw = unresolvedConflictRaw as Partial<ConflictObjectV1>;
-            const rawConflictCode = normalizeOptionalString(raw.conflictCode);
-            const detail = normalizeOptionalString(raw.detail);
-            const observedAtWatermark = normalizeOptionalString(raw.observedAtWatermark);
-            if (rawConflictCode && detail && observedAtWatermark) {
-              const conflictCode = STAGE_6_75_BLOCK_CODES.includes(
-                rawConflictCode as ConflictObjectV1["conflictCode"]
-              )
-                ? rawConflictCode as ConflictObjectV1["conflictCode"]
-                : "CONFLICT_OBJECT_UNRESOLVED";
-              unresolvedConflict = {
-                conflictCode,
-                detail,
-                observedAtWatermark
-              };
-            } else {
-              unresolvedConflict = {
-                conflictCode: "CONFLICT_OBJECT_UNRESOLVED",
-                detail: "Conflict object metadata is incomplete.",
-                observedAtWatermark: nowIso
-              };
-            }
-          }
-          const providedFreshnessWindowMs =
-            typeof action.params.freshnessWindowMs === "number" &&
-              Number.isFinite(action.params.freshnessWindowMs) &&
-              action.params.freshnessWindowMs > 0
-              ? Math.floor(action.params.freshnessWindowMs)
-              : null;
-          const defaultFreshnessWindowMs = connector === "calendar" ? 2_000 : 5_000;
-          const consistencyDecision = evaluateConsistencyPreflight({
-            nowIso,
-            lastReadAtIso,
-            freshnessWindowMs: providedFreshnessWindowMs ?? defaultFreshnessWindowMs,
-            unresolvedConflict
-          });
-          if (!consistencyDecision.ok && consistencyDecision.blockCode) {
-            const normalizedConsistencyCode = isConstraintViolationCode(consistencyDecision.blockCode)
-              ? consistencyDecision.blockCode
-              : "STATE_STALE_REPLAN_REQUIRED";
-            const blockedResult: ActionRunResult = {
-              action,
-              mode,
-              approved: false,
-              blockedBy: [normalizedConsistencyCode],
-              violations: [
-                {
-                  code: normalizedConsistencyCode,
-                  message: consistencyDecision.reason
-                }
-              ],
-              votes: []
-            };
-            attemptResults.push(blockedResult);
-            await this.deps.appendTraceEvent({
-              eventType: "constraint_blocked",
-              taskId: task.id,
-              actionId: action.id,
-              proposalId: proposal.id,
-              mode,
-              details: {
-                blockCode: normalizedConsistencyCode,
-                blockCategory: "constraints"
-              }
-            });
-            await appendGovernanceEvent({
-              taskId: task.id,
-              proposalId: proposal.id,
-              actionResult: blockedResult,
-              governanceMemoryStore: this.deps.governanceMemoryStore,
-              appendTraceEvent: this.deps.appendTraceEvent
-            });
-            const missionRegistration = registerMissionActionOutcome(
-              missionState,
-              idempotencyKey,
-              0,
-              true
-            );
-            missionState = advanceMissionPhase(missionRegistration.nextState);
-            continue;
-          }
-        }
-
-        const egressDecision = evaluateStage675EgressPolicy(url);
-        if (!egressDecision.ok) {
-          const blockedResult: ActionRunResult = {
-            action,
-            mode,
-            approved: false,
-            blockedBy: ["NETWORK_EGRESS_POLICY_BLOCKED"],
-            violations: [
-              {
-                code: "NETWORK_EGRESS_POLICY_BLOCKED",
-                message: egressDecision.reason
-              }
-            ],
-            votes: []
-          };
-          attemptResults.push(blockedResult);
-          await this.deps.appendTraceEvent({
-            eventType: "constraint_blocked",
-            taskId: task.id,
-            actionId: action.id,
-            proposalId: proposal.id,
-            mode,
-            details: {
-              blockCode: "NETWORK_EGRESS_POLICY_BLOCKED",
-              blockCategory: "constraints"
-            }
-          });
-          await appendGovernanceEvent({
-            taskId: task.id,
-            proposalId: proposal.id,
-            actionResult: blockedResult,
-            governanceMemoryStore: this.deps.governanceMemoryStore,
-            appendTraceEvent: this.deps.appendTraceEvent
-          });
-          const missionRegistration = registerMissionActionOutcome(
-            missionState,
-            idempotencyKey,
-            0,
-            true
-          );
-          missionState = advanceMissionPhase(missionRegistration.nextState);
-          continue;
-        }
-
-        // Diff Approval Check - Require explicit approval receipt for network egress
-        const approvalId = normalizeOptionalString(action.params.approvalId);
-        if (!approvalId) {
-          const blockedResult: ActionRunResult = {
-            action,
-            mode,
-            approved: false,
-            blockedBy: ["JIT_APPROVAL_REQUIRED"],
-            violations: [
-              {
-                code: "JIT_APPROVAL_REQUIRED",
-                message: "A cryptographically signed JIT UI diff approval is required for side-effect egress, but none was provided."
-              }
-            ],
-            votes: []
-          };
-          attemptResults.push(blockedResult);
-          await this.deps.appendTraceEvent({
-            eventType: "constraint_blocked",
-            taskId: task.id,
-            actionId: action.id,
-            proposalId: proposal.id,
-            mode,
-            details: {
-              blockCode: "JIT_APPROVAL_REQUIRED",
-              blockCategory: "constraints"
-            }
-          });
-          await appendGovernanceEvent({
-            taskId: task.id,
-            proposalId: proposal.id,
-            actionResult: blockedResult,
-            governanceMemoryStore: this.deps.governanceMemoryStore,
-            appendTraceEvent: this.deps.appendTraceEvent
-          });
-          const missionRegistration = registerMissionActionOutcome(
-            missionState,
-            idempotencyKey,
-            0,
-            true
-          );
-          missionState = advanceMissionPhase(missionRegistration.nextState);
-          continue;
-        }
-
-        const approvalDiff =
-          normalizeOptionalString(action.params.approvalDiff) ??
-          canonicalJson({
-            endpoint: url,
-            method: normalizeOptionalString(action.params.method) ?? "POST",
-            payload: action.params.payload ?? null
-          });
-        const approvalExpiresAtRaw = normalizeOptionalString(action.params.approvalExpiresAt);
-        const approvalExpiresAt =
-          approvalExpiresAtRaw ??
-          new Date(Date.now() + 5 * 60 * 1000).toISOString();
-        if (!Number.isFinite(Date.parse(approvalExpiresAt))) {
-          const blockedResult: ActionRunResult = {
-            action,
-            mode,
-            approved: false,
-            blockedBy: ["APPROVAL_SCOPE_MISMATCH"],
-            violations: [
-              {
-                code: "APPROVAL_SCOPE_MISMATCH",
-                message: "Approval expiry timestamp is invalid."
-              }
-            ],
-            votes: []
-          };
-          attemptResults.push(blockedResult);
-          await this.deps.appendTraceEvent({
-            eventType: "constraint_blocked",
-            taskId: task.id,
-            actionId: action.id,
-            proposalId: proposal.id,
-            mode,
-            details: {
-              blockCode: "APPROVAL_SCOPE_MISMATCH",
-              blockCategory: "constraints"
-            }
-          });
-          await appendGovernanceEvent({
-            taskId: task.id,
-            proposalId: proposal.id,
-            actionResult: blockedResult,
-            governanceMemoryStore: this.deps.governanceMemoryStore,
-            appendTraceEvent: this.deps.appendTraceEvent
-          });
-          const missionRegistration = registerMissionActionOutcome(
-            missionState,
-            idempotencyKey,
-            0,
-            true
-          );
-          missionState = advanceMissionPhase(missionRegistration.nextState);
-          continue;
-        }
-
-        const approvalMaxUses =
-          typeof action.params.approvalMaxUses === "number" &&
-            Number.isFinite(action.params.approvalMaxUses) &&
-            action.params.approvalMaxUses > 0
-            ? Math.floor(action.params.approvalMaxUses)
-            : 1;
-        const approvalUses =
-          typeof action.params.approvalUses === "number" &&
-            Number.isFinite(action.params.approvalUses) &&
-            action.params.approvalUses >= 0
-            ? Math.floor(action.params.approvalUses)
-            : 0;
-        const approvalRiskClass = action.params.riskClass === "tier_2" ? "tier_2" : "tier_3";
-        const approvalActionIds = Array.isArray(action.params.approvalActionIds)
-          ? action.params.approvalActionIds
-            .map((value) => normalizeOptionalString(value))
-            .filter((value): value is string => value !== null)
-          : [];
-        const scopedActionIds = approvalActionIds.length > 0 ? approvalActionIds : [action.id];
-        const approvalIdempotencyKeys = Array.isArray(action.params.idempotencyKeys)
-          ? action.params.idempotencyKeys
-            .map((value) => normalizeOptionalString(value))
-            .filter((value): value is string => value !== null)
-          : [];
-        const scopedIdempotencyKeys =
-          approvalIdempotencyKeys.length > 0 ? approvalIdempotencyKeys : [idempotencyKey];
-
-        const approvalRequest = createApprovalRequestV1({
-          missionId: task.id,
-          actionIds: scopedActionIds,
-          diff: approvalDiff,
-          riskClass: approvalRiskClass,
-          idempotencyKeys: scopedIdempotencyKeys,
-          expiresAt: approvalExpiresAt,
-          maxUses: approvalMaxUses
-        });
-        const scopedApprovalRequest = {
-          ...approvalRequest,
-          approvalId
-        };
-        let approvalGrant = approvalGrantById.get(approvalId);
-        if (!approvalGrant) {
-          const initialGrant = createApprovalGrantV1({
-            request: scopedApprovalRequest,
-            approvedAt: nowIso,
-            approvedBy: normalizeOptionalString(action.params.approvedBy) ?? "human_operator"
-          });
-          approvalGrant =
-            approvalUses > 0
-              ? {
-                ...initialGrant,
-                uses: approvalUses
-              }
-              : initialGrant;
-        }
-        const approvalDecision = validateApprovalGrantUse(
-          scopedApprovalRequest,
-          approvalGrant,
-          {
-            missionId: task.id,
-            actionId: action.id,
-            idempotencyKey,
-            nowIso
-          }
+      if (preflightOutcome.approvalGrant) {
+        approvalGrantById.set(
+          preflightOutcome.approvalGrant.approvalId,
+          preflightOutcome.approvalGrant.grant
         );
-        if (!approvalDecision.ok) {
-          const blockCode =
-            approvalDecision.blockCode && isConstraintViolationCode(approvalDecision.blockCode)
-              ? approvalDecision.blockCode
-              : "APPROVAL_SCOPE_MISMATCH";
-          const blockedResult: ActionRunResult = {
-            action,
-            mode,
-            approved: false,
-            blockedBy: [blockCode],
-            violations: [
-              {
-                code: blockCode,
-                message: approvalDecision.reason
-              }
-            ],
-            votes: []
-          };
-          attemptResults.push(blockedResult);
-          await this.deps.appendTraceEvent({
-            eventType: "constraint_blocked",
-            taskId: task.id,
-            actionId: action.id,
-            proposalId: proposal.id,
-            mode,
-            details: {
-              blockCode,
-              blockCategory: "constraints"
-            }
-          });
-          await appendGovernanceEvent({
-            taskId: task.id,
-            proposalId: proposal.id,
-            actionResult: blockedResult,
-            governanceMemoryStore: this.deps.governanceMemoryStore,
-            appendTraceEvent: this.deps.appendTraceEvent
-          });
-          const missionRegistration = registerMissionActionOutcome(
-            missionState,
-            idempotencyKey,
-            0,
-            true
-          );
-          missionState = advanceMissionPhase(missionRegistration.nextState);
-          continue;
-        }
-
-        approvalGrantById.set(approvalId, registerApprovalGrantUse(approvalGrant));
-        if (connector && connectorOperation && connectorOperation !== "update" && connectorOperation !== "delete") {
-          const externalIds = Array.isArray(action.params.externalIds)
-            ? action.params.externalIds
-              .map((value) => normalizeOptionalString(value))
-              .filter((value): value is string => value !== null)
-            : [];
-          connectorReceiptByActionId.set(action.id, {
-            connector,
-            operation: connectorOperation,
-            requestPayload: action.params.payload ?? null,
-            responseMetadata: {
-              endpoint: url
-            },
-            externalIds
-          });
-        }
       }
-
-      const preparedOutputPromise =
-        action.type === "memory_mutation" || action.type === "pulse_emit"
-          ? Promise.resolve<string | null>(null)
-          : prepareActionOutput(this.deps.executor, action);
+      if (preflightOutcome.connectorReceiptInput) {
+        connectorReceiptByActionId.set(action.id, preflightOutcome.connectorReceiptInput);
+      }
 
       const governanceMemory = await this.deps.governanceMemoryStore.getReadView();
       const governorContext = buildGovernorContext({
@@ -1024,227 +276,36 @@ export class TaskRunner {
         config: this.deps.config,
         modelClient: this.deps.modelClient
       });
-      const preflightVotes: GovernorVote[] = [];
-      if (action.type === "create_skill") {
-        const preflightStartedAtMs = Date.now();
-        const codeReviewVote = await evaluateCodeReview(
-          proposal,
-          governorContext,
-          this.deps.config.limits.perGovernorTimeoutMs
-        );
-        preflightVotes.push(codeReviewVote);
-        await this.deps.appendTraceEvent({
-          eventType: "governance_voted",
-          taskId: task.id,
-          actionId: action.id,
-          proposalId: proposal.id,
-          mode,
-          durationMs: Date.now() - preflightStartedAtMs,
-          details: {
-            phase: "code_review_preflight",
-            approved: codeReviewVote.approve,
-            voteCount: 1,
-            yesVotes: codeReviewVote.approve ? 1 : 0,
-            noVotes: codeReviewVote.approve ? 0 : 1
-          }
-        });
-        if (!codeReviewVote.approve) {
-          const blockedResult: ActionRunResult = {
-            action,
-            mode,
-            approved: false,
-            blockedBy: [codeReviewVote.governorId],
-            violations: [],
-            votes: preflightVotes
-          };
-          attemptResults.push(blockedResult);
-          await appendGovernanceEvent({
-            taskId: task.id,
-            proposalId: proposal.id,
-            actionResult: blockedResult,
-            governanceMemoryStore: this.deps.governanceMemoryStore,
-            appendTraceEvent: this.deps.appendTraceEvent
-          });
-          const missionRegistration = registerMissionActionOutcome(
-            missionState,
-            idempotencyKey,
-            0,
-            true
-          );
-          missionState = advanceMissionPhase(missionRegistration.nextState);
-          continue;
-        }
-      }
-
-      let votes: GovernorVote[] = [];
-      let decision: MasterDecision | undefined;
-      const voteStartedAtMs = Date.now();
-      if (mode === "fast_path") {
-        const fastGovernors = this.deps.governors.filter((governor) =>
-          this.deps.config.governance.fastPathGovernorIds.includes(governor.id)
-        );
-
-        if (fastGovernors.length === 0) {
-          const blockedResult: ActionRunResult = {
-            action,
-            mode,
-            approved: false,
-            blockedBy: ["GOVERNOR_SET_EMPTY"],
-            violations: [
-              {
-                code: "GOVERNOR_SET_EMPTY",
-                message:
-                  "Fast-path governance denied because no active governors matched fastPathGovernorIds."
-              }
-            ],
-            votes: []
-          };
-          attemptResults.push(blockedResult);
-          await this.deps.appendTraceEvent({
-            eventType: "constraint_blocked",
-            taskId: task.id,
-            actionId: action.id,
-            proposalId: proposal.id,
-            mode,
-            details: {
-              blockCode: "GOVERNOR_SET_EMPTY",
-              blockCategory: "governance"
-            }
-          });
-          await appendGovernanceEvent({
-            taskId: task.id,
-            proposalId: proposal.id,
-            actionResult: blockedResult,
-            governanceMemoryStore: this.deps.governanceMemoryStore,
-            appendTraceEvent: this.deps.appendTraceEvent
-          });
-          const missionRegistration = registerMissionActionOutcome(
-            missionState,
-            idempotencyKey,
-            0,
-            true
-          );
-          missionState = advanceMissionPhase(missionRegistration.nextState);
-          continue;
-        }
-        const fastPathMaster = new MasterGovernor(fastGovernors.length);
-        const fastVoteResult = await runCouncilVote(
-          proposal,
-          fastGovernors,
-          governorContext,
-          fastPathMaster,
-          this.deps.config.limits.perGovernorTimeoutMs,
-          {
-            expectedGovernorIds: this.deps.config.governance.fastPathGovernorIds
-          }
-        );
-        votes = fastVoteResult.votes;
-        decision = fastVoteResult.decision;
-      } else {
-        const councilResult = await runCouncilVote(
-          proposal,
-          this.deps.governors,
-          governorContext,
-          this.deps.masterGovernor,
-          this.deps.config.limits.perGovernorTimeoutMs,
-          {
-            expectedGovernorIds: FULL_COUNCIL_GOVERNOR_IDS
-          }
-        );
-        votes = councilResult.votes;
-        decision = councilResult.decision;
-      }
-
-      await this.deps.appendTraceEvent({
-        eventType: "governance_voted",
-        taskId: task.id,
-        actionId: action.id,
-        proposalId: proposal.id,
+      const governanceOutcome = await evaluateTaskRunnerGovernance({
+        action,
         mode,
-        durationMs: Date.now() - voteStartedAtMs,
-        details: {
-          phase: mode === "fast_path" ? "fast_path_council" : "escalation_council",
-          approved: decision ? decision.approved : true,
-          voteCount: votes.length,
-          yesVotes: decision ? decision.yesVotes : votes.filter((vote) => vote.approve).length,
-          noVotes: decision ? decision.noVotes : votes.filter((vote) => !vote.approve).length,
-          threshold: decision?.threshold ?? null
-        }
+        proposal,
+        taskId: task.id,
+        governorContext,
+        governors: this.deps.governors,
+        masterGovernor: this.deps.masterGovernor,
+        fastPathGovernorIds: this.deps.config.governance.fastPathGovernorIds,
+        perGovernorTimeoutMs: this.deps.config.limits.perGovernorTimeoutMs,
+        appendTraceEvent: this.deps.appendTraceEvent
       });
-
-      if (!decision) {
-        const blockedResult: ActionRunResult = {
-          action,
-          mode,
-          approved: false,
-          blockedBy: ["GOVERNANCE_DECISION_MISSING"],
-          violations: [
-            {
-              code: "GOVERNANCE_DECISION_MISSING",
-              message: "Governance decision missing after council vote; execution denied fail-closed."
-            }
-          ],
-          votes: preflightVotes.concat(votes)
-        };
-        attemptResults.push(blockedResult);
-        await this.deps.appendTraceEvent({
-          eventType: "constraint_blocked",
-          taskId: task.id,
-          actionId: action.id,
-          proposalId: proposal.id,
-          mode,
-          details: {
-            blockCode: "GOVERNANCE_DECISION_MISSING",
-            blockCategory: "governance"
-          }
-        });
-        await appendGovernanceEvent({
-          taskId: task.id,
-          proposalId: proposal.id,
-          actionResult: blockedResult,
+      if (governanceOutcome.blockedResult) {
+        missionState = await recordBlockedActionOutcome({
+          actionResult: governanceOutcome.blockedResult,
+          appendTraceEvent: this.deps.appendTraceEvent,
+          attemptResults,
           governanceMemoryStore: this.deps.governanceMemoryStore,
-          appendTraceEvent: this.deps.appendTraceEvent
-        });
-        const missionRegistration = registerMissionActionOutcome(
-          missionState,
           idempotencyKey,
-          0,
-          true
-        );
-        missionState = advanceMissionPhase(missionRegistration.nextState);
+          missionState,
+          proposalId: proposal.id,
+          taskId: task.id,
+          traceDetails: governanceOutcome.blockedTraceDetails
+        });
         continue;
       }
-
-      const combinedVotes = preflightVotes.concat(votes);
-      const approved = decision.approved;
-      if (!approved) {
-        const blockedResult: ActionRunResult = {
-          action,
-          mode,
-          approved: false,
-          blockedBy: combinedVotes
-            .filter((vote) => !vote.approve)
-            .map((vote) => vote.governorId),
-          violations: [],
-          votes: combinedVotes,
-          decision
-        };
-        attemptResults.push(blockedResult);
-        await appendGovernanceEvent({
-          taskId: task.id,
-          proposalId: proposal.id,
-          actionResult: blockedResult,
-          governanceMemoryStore: this.deps.governanceMemoryStore,
-          appendTraceEvent: this.deps.appendTraceEvent
-        });
-        const missionRegistration = registerMissionActionOutcome(
-          missionState,
-          idempotencyKey,
-          0,
-          true
-        );
-        missionState = advanceMissionPhase(missionRegistration.nextState);
-        continue;
+      const combinedVotes = governanceOutcome.combinedVotes;
+      const decision = governanceOutcome.decision;
+      if (!decision) {
+        throw new Error("TaskRunner governance outcome missing decision after successful evaluation.");
       }
 
       // Stage 6.85 verification gate enforcement applies only to explicit completion-claim prompts.
@@ -1263,270 +324,85 @@ export class TaskRunner {
           });
 
           if (!verificationGate.passed) {
-            const blockedResult: ActionRunResult = {
+            const blockedResult = buildBlockedActionResult({
               action,
               mode,
-              approved: false,
               blockedBy: ["VERIFICATION_GATE_FAILED"],
               violations: [
                 {
                   code: "VERIFICATION_GATE_FAILED",
-                  message: `Task requires deterministic completion proofs for category '${category}', but none were provided. ` +
-                    `The respond action is blocked to prevent false completion claims.`
+                  message:
+                    `Task requires deterministic completion proofs for category '${category}', but none were provided. ` +
+                    "The respond action is blocked to prevent false completion claims."
                 }
               ],
               votes: combinedVotes,
               decision
-            };
-            attemptResults.push(blockedResult);
-            await this.deps.appendTraceEvent({
-              eventType: "constraint_blocked",
-              taskId: task.id,
-              actionId: action.id,
+            });
+            missionState = await recordBlockedActionOutcome({
+              actionResult: blockedResult,
+              appendTraceEvent: this.deps.appendTraceEvent,
+              attemptResults,
+              governanceMemoryStore: this.deps.governanceMemoryStore,
+              idempotencyKey,
+              missionState,
               proposalId: proposal.id,
-              mode,
-              details: {
+              taskId: task.id,
+              traceDetails: {
                 blockCode: "VERIFICATION_GATE_FAILED",
                 blockCategory: "constraints"
               }
             });
-            await appendGovernanceEvent({
-              taskId: task.id,
-              proposalId: proposal.id,
-              actionResult: blockedResult,
-              governanceMemoryStore: this.deps.governanceMemoryStore,
-              appendTraceEvent: this.deps.appendTraceEvent
-            });
-            const missionRegistration = registerMissionActionOutcome(
-              missionState,
-              idempotencyKey,
-              0,
-              true
-            );
-            missionState = advanceMissionPhase(missionRegistration.nextState);
             continue;
           }
         }
       }
 
-      throwIfAborted(signal);
-      const executionStartedAtMs = Date.now();
-      const stage686Execution = await this.stage686RuntimeActionEngine.execute({
-        taskId: task.id,
-        proposalId: proposal.id,
-        missionId: task.id,
-        missionAttemptId,
-        action
-      });
-      let preparedOutput: string | null = null;
-      let usedPreparedOutput = false;
-      let output = "";
-      let shellExecutionTelemetry: ReturnType<ToolExecutorOrgan["consumeShellExecutionTelemetry"]> | undefined;
-      let executionOutcome: ExecutorExecutionOutcome = {
-        status: "success",
-        output: ""
-      };
-      let stage686ExecutionMetadata: Record<string, string | number | boolean | null> | undefined;
-      let stage686TraceDetails: Record<string, string | number | boolean | null> | undefined;
-      if (stage686Execution) {
-        output = stage686Execution.output;
-        stage686ExecutionMetadata = stage686Execution.executionMetadata;
-        stage686TraceDetails = stage686Execution.traceDetails;
-        executionOutcome = stage686Execution.approved
-          ? {
-            status: "success",
-            output: stage686Execution.output,
-            executionMetadata: stage686ExecutionMetadata
-          }
-          : {
-            status: "blocked",
-            output: stage686Execution.output,
-            failureCode: stage686Execution.violationCode ?? "ACTION_EXECUTION_FAILED",
-            executionMetadata: stage686ExecutionMetadata
-          };
-      } else {
-        throwIfAborted(signal);
-        preparedOutput = await preparedOutputPromise;
-        usedPreparedOutput = preparedOutput !== null;
-        if (preparedOutput !== null) {
-          executionOutcome = {
-            status: "success",
-            output: preparedOutput
-          };
-        } else {
-          executionOutcome = await this.deps.executor.executeWithOutcome(
-            action,
-            signal,
-            task.id
-          );
-          shellExecutionTelemetry = this.deps.executor.consumeShellExecutionTelemetry(action.id);
-        }
-        output = executionOutcome.output;
-      }
-      const executionFailureViolation = resolveExecutionOutcomeViolation(action, executionOutcome);
-      if (executionFailureViolation) {
-        const failureMetadata = {
-          ...(executionOutcome.executionMetadata ?? {}),
-          ...(shellExecutionTelemetry
-            ? { ...shellExecutionTelemetry } as Record<string, string | number | boolean | null>
-            : {}),
-          ...(stage686ExecutionMetadata ?? {})
-        };
-        const executionMetadata = Object.keys(failureMetadata).length > 0
-          ? failureMetadata
-          : undefined;
-        const shellMetadata = shellExecutionTelemetry
-          ? { ...shellExecutionTelemetry } as Record<string, string | number | boolean | null>
-          : undefined;
-        const failedExecutionResult: ActionRunResult = {
-          action,
-          mode,
-          approved: false,
-          output,
-          executionStatus: executionOutcome.status,
-          executionFailureCode: executionFailureViolation.code,
-          executionMetadata: executionMetadata ?? shellMetadata,
-          blockedBy: [executionFailureViolation.code],
-          violations: [executionFailureViolation],
-          votes: combinedVotes,
-          decision
-        };
-        attemptResults.push(failedExecutionResult);
-        await this.deps.appendTraceEvent({
-          eventType: "constraint_blocked",
-          taskId: task.id,
-          actionId: action.id,
-          proposalId: proposal.id,
-            mode,
-            details: {
-              blockCode: executionFailureViolation.code,
-              blockCategory: "runtime",
-              ...(stage686TraceDetails ?? {})
-            }
-          });
-        await appendGovernanceEvent({
-          taskId: task.id,
-          proposalId: proposal.id,
-          actionResult: failedExecutionResult,
-          governanceMemoryStore: this.deps.governanceMemoryStore,
-          appendTraceEvent: this.deps.appendTraceEvent
-        });
-        const missionRegistration = registerMissionActionOutcome(
-          missionState,
-          idempotencyKey,
-          output.length,
-          true
-        );
-        missionState = advanceMissionPhase(missionRegistration.nextState);
-        continue;
-      }
-      const connectorReceiptInput = connectorReceiptByActionId.get(action.id);
-      const connectorReceipt = connectorReceiptInput
-        ? createConnectorReceiptV1({
-          connector: connectorReceiptInput.connector,
-          operation: connectorReceiptInput.operation,
-          requestPayload: connectorReceiptInput.requestPayload,
-          responseMetadata: connectorReceiptInput.responseMetadata,
-          externalIds: connectorReceiptInput.externalIds,
-          observedAt: new Date().toISOString()
-        })
-        : null;
-      await this.deps.appendTraceEvent({
-        eventType: "action_executed",
-        taskId: task.id,
-        actionId: action.id,
-        proposalId: proposal.id,
-        mode,
-        durationMs: Date.now() - executionStartedAtMs,
-        details: {
-          usedPreparedOutput,
-          outputLength: output.length,
-          shellProfileFingerprint: shellExecutionTelemetry?.shellProfileFingerprint ?? null,
-          shellSpawnSpecFingerprint: shellExecutionTelemetry?.shellSpawnSpecFingerprint ?? null,
-          shellKind: shellExecutionTelemetry?.shellKind ?? null,
-          shellExecutable: shellExecutionTelemetry?.shellExecutable ?? null,
-          shellTimeoutMs: shellExecutionTelemetry?.shellTimeoutMs ?? null,
-          shellEnvMode: shellExecutionTelemetry?.shellEnvMode ?? null,
-          shellEnvKeyCount: shellExecutionTelemetry?.shellEnvKeyCount ?? null,
-          shellEnvRedactedKeyCount: shellExecutionTelemetry?.shellEnvRedactedKeyCount ?? null,
-          shellExitCode: shellExecutionTelemetry?.shellExitCode ?? null,
-          shellSignal: shellExecutionTelemetry?.shellSignal ?? null,
-          shellTimedOut: shellExecutionTelemetry?.shellTimedOut ?? null,
-          shellStdoutDigest: shellExecutionTelemetry?.shellStdoutDigest ?? null,
-          shellStderrDigest: shellExecutionTelemetry?.shellStderrDigest ?? null,
-          shellStdoutBytes: shellExecutionTelemetry?.shellStdoutBytes ?? null,
-          shellStderrBytes: shellExecutionTelemetry?.shellStderrBytes ?? null,
-          shellStdoutTruncated: shellExecutionTelemetry?.shellStdoutTruncated ?? null,
-          shellStderrTruncated: shellExecutionTelemetry?.shellStderrTruncated ?? null,
-          missionAttemptId,
-          missionPhase: missionState.currentPhase,
-          deterministicActionId: missionCheckpoint.actionId,
-          connector: connectorReceipt?.connector ?? null,
-          connectorOperation: connectorReceipt?.operation ?? null,
-          connectorExternalIdCount: connectorReceipt?.externalIds.length ?? null,
-          ...(stage686TraceDetails ?? {})
-        }
-      });
-      approvedEstimatedCostDeltaUsd += estimateActionCostUsd({
-        type: action.type,
-        params: action.params
-      });
-      const approvedExecutionMetadata: Record<string, string | number | boolean | null> = {
-        ...(executionOutcome.executionMetadata ?? {}),
-        ...(shellExecutionTelemetry
-          ? { ...shellExecutionTelemetry } as Record<string, string | number | boolean | null>
-          : {}),
-        ...(stage686ExecutionMetadata ?? {}),
+      const executionResult = await executeTaskRunnerAction({
+        action,
+        appendTraceEvent: this.deps.appendTraceEvent,
+        combinedVotes,
+        connectorReceiptInput: connectorReceiptByActionId.get(action.id) ?? null,
+        decision,
+        deterministicActionId: missionCheckpoint.actionId,
+        executor: this.deps.executor,
         missionAttemptId,
         missionPhase: missionState.currentPhase,
-        deterministicActionId: missionCheckpoint.actionId
-      };
-      if (connectorReceipt) {
-        approvedExecutionMetadata.stage675Connector = connectorReceipt.connector;
-        approvedExecutionMetadata.stage675ConnectorOperation = connectorReceipt.operation;
-        approvedExecutionMetadata.stage675ConnectorRequestFingerprint =
-          connectorReceipt.requestFingerprint;
-        approvedExecutionMetadata.stage675ConnectorResponseFingerprint =
-          connectorReceipt.responseFingerprint;
-        approvedExecutionMetadata.stage675ConnectorObservedAt = connectorReceipt.observedAt;
-        approvedExecutionMetadata.stage675ConnectorExternalIdCount = connectorReceipt.externalIds.length;
-      }
-      const approvedResult: ActionRunResult = {
-        action,
         mode,
-        approved: true,
-        output,
-        executionStatus: executionOutcome.status,
-        executionMetadata: Object.keys(approvedExecutionMetadata).length > 0
-          ? approvedExecutionMetadata
-          : undefined,
-        blockedBy: [],
-        violations: [],
-        votes: combinedVotes,
-        decision
-      };
-      attemptResults.push(approvedResult);
-      await appendGovernanceEvent({
-        taskId: task.id,
         proposalId: proposal.id,
-        actionResult: approvedResult,
-        governanceMemoryStore: this.deps.governanceMemoryStore,
-        appendTraceEvent: this.deps.appendTraceEvent
+        signal,
+        stage686RuntimeActionEngine: this.stage686RuntimeActionEngine,
+        taskId: task.id
       });
-      await appendExecutionReceipt({
-        taskId: task.id,
+      if (!executionResult.actionResult.approved) {
+        missionState = await recordBlockedActionOutcome({
+          actionResult: executionResult.actionResult,
+          appendTraceEvent: this.deps.appendTraceEvent,
+          attemptResults,
+          governanceMemoryStore: this.deps.governanceMemoryStore,
+          idempotencyKey,
+          missionState,
+          outputLength: executionResult.outputLength,
+          proposalId: proposal.id,
+          taskId: task.id,
+          traceDetails: executionResult.blockedTraceDetails
+        });
+        continue;
+      }
+      approvedEstimatedCostDeltaUsd += executionResult.approvedEstimatedCostDeltaUsd;
+      missionState = await recordApprovedActionOutcome({
+        actionResult: executionResult.actionResult,
+        appendTraceEvent: this.deps.appendTraceEvent,
+        attemptResults,
+        executionReceiptStore: this.deps.executionReceiptStore,
+        governanceMemoryStore: this.deps.governanceMemoryStore,
+        idempotencyKey,
+        missionState,
+        outputLength: executionResult.outputLength,
         planTaskId: plan.taskId,
         proposalId: proposal.id,
-        actionResult: approvedResult,
-        executionReceiptStore: this.deps.executionReceiptStore
+        taskId: task.id
       });
-      const missionRegistration = registerMissionActionOutcome(
-        missionState,
-        idempotencyKey,
-        output.length,
-        false
-      );
-      missionState = advanceMissionPhase(missionRegistration.nextState);
     }
 
     return {

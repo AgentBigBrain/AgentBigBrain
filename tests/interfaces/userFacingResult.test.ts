@@ -7,6 +7,10 @@ import { test } from "node:test";
 
 import { TaskRunResult } from "../../src/core/types";
 import { selectUserFacingSummary } from "../../src/interfaces/userFacingResult";
+import {
+  HOST_TEST_FINANCE_DASHBOARD_DIR,
+  HOST_TEST_TOP_SECRET_FILE_PATH
+} from "../support/windowsPathFixtures";
 
 /**
  * Builds a minimal `TaskRunResult` fixture for user-facing rendering tests.
@@ -391,7 +395,7 @@ test("selectUserFacingSummary does not mask blocked delete_file with optimistic 
         },
         mode: "fast_path",
         approved: true,
-        output: "The file 'C:\\Users\\benac\\top_secret.txt' has been deleted successfully.",
+        output: `The file '${HOST_TEST_TOP_SECRET_FILE_PATH}' has been deleted successfully.`,
         blockedBy: [],
         violations: [],
         votes: []
@@ -402,7 +406,7 @@ test("selectUserFacingSummary does not mask blocked delete_file with optimistic 
           type: "delete_file",
           description: "delete file",
           params: {
-            path: "C:\\Users\\benac\\top_secret.txt"
+            path: HOST_TEST_TOP_SECRET_FILE_PATH
           },
           estimatedCostUsd: 0.08
         },
@@ -2122,7 +2126,7 @@ test("selectUserFacingSummary prefers build no-op fallback over raw probe output
     ],
     {
       userInput:
-        "Create a React app at C:\\Users\\tester\\Desktop\\finance-dashboard with a dark theme and charts. Create files directly and execute now."
+        `Create a React app at ${HOST_TEST_FINANCE_DASHBOARD_DIR} with a dark theme and charts. Create files directly and execute now.`
     }
   );
 

@@ -7,6 +7,8 @@ import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 
+import { TEST_REVIEWER_HANDLE } from "../../tests/support/windowsPathFixtures";
+
 const exec = promisify(execCallback);
 
 const STAGE_ID = "stage_6_86_dynamic_relationship_memory_and_threaded_pulse";
@@ -501,7 +503,7 @@ function buildLiveReviewChecklistMarkdown(result: Stage686EvidenceResult): strin
     "",
     "## Reviewer Decision",
     "- [ ] All checkpoints PASS with expected artifacts and typed outcomes.",
-    "- [ ] Stage remains pending until final reviewer (`benac`) explicitly signs off."
+    `- [ ] Stage remains pending until final reviewer (\`${TEST_REVIEWER_HANDLE}\`) explicitly signs off.`
   ].join("\n");
 }
 

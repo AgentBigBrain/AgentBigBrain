@@ -35,6 +35,7 @@ import { MockModelClient } from "../../src/models/mockModelClient";
 import { ToolExecutorOrgan } from "../../src/organs/executor";
 import { PlannerOrgan } from "../../src/organs/planner";
 import { ReflectionOrgan } from "../../src/organs/reflection";
+import { WINDOWS_TEST_TOP_SECRET_FILE_PATH } from "../support/windowsPathFixtures";
 
 /**
  * Implements `buildTask` behavior within module scope.
@@ -248,7 +249,7 @@ async function stage6RollbackDrillRestoresPreviousSkillSnapshot(): Promise<void>
 async function stage6ObjectiveRewardIntegrityUsesRuntimeOutcomeCounts(): Promise<void> {
   await withAutonomyTestBrain(async (brain) => {
     const approvedRun = await brain.runTask(buildTask("Say hello in one line."));
-    const blockedRun = await brain.runTask(buildTask("Delete C:/Users/benac/top_secret.txt"));
+  const blockedRun = await brain.runTask(buildTask(`Delete ${WINDOWS_TEST_TOP_SECRET_FILE_PATH}`));
 
     const approvedEvidence = deriveObjectiveRewardEvidence(approvedRun);
     const blockedEvidence = deriveObjectiveRewardEvidence(blockedRun);

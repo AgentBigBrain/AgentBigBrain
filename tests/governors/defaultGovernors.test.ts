@@ -11,6 +11,10 @@ import { BrainState, GovernanceProposal, GovernorId, TaskRequest } from "../../s
 import { ModelClient, StructuredCompletionRequest } from "../../src/models/types";
 import { createDefaultGovernors } from "../../src/governors/defaultGovernors";
 import { GovernorContext } from "../../src/governors/types";
+import {
+  HOST_TEST_PLAYWRIGHT_PROOF_SMOKE_AUTO_8124_DIR,
+  HOST_TEST_PLAYWRIGHT_PROOF_SMOKE_TEST_DIR
+} from "../support/windowsPathFixtures";
 
 /**
  * Implements `DeterministicGovernorModelClient` behavior within test scope.
@@ -318,7 +322,7 @@ test("ethics governor ignores advisory vetoes for bounded local start_process li
       description: "Start the local Python HTTP server for localhost verification",
       params: {
         command: "python -m http.server 8000",
-        cwd: "C:\\Users\\benac\\OneDrive\\Desktop\\playwright-proof-smoke-test"
+        cwd: HOST_TEST_PLAYWRIGHT_PROOF_SMOKE_TEST_DIR
       }
     }),
     buildContext("ethics")
@@ -336,7 +340,7 @@ test("logic governor ignores advisory vetoes for local Python serve-script start
       description: "Start the local HTTP server script for localhost verification",
       params: {
         command: "python serve8124.py",
-        cwd: "C:\\Users\\benac\\OneDrive\\Desktop\\playwright-proof-smoke-codex-auto-8124"
+        cwd: HOST_TEST_PLAYWRIGHT_PROOF_SMOKE_AUTO_8124_DIR
       }
     }),
     buildContext("logic")
@@ -354,7 +358,7 @@ test("security governor ignores advisory vetoes for local Python serve-script st
       description: "Start the local HTTP server script for localhost verification",
       params: {
         command: "python serve8124.py",
-        cwd: "C:\\Users\\benac\\OneDrive\\Desktop\\playwright-proof-smoke-codex-auto-8124"
+        cwd: HOST_TEST_PLAYWRIGHT_PROOF_SMOKE_AUTO_8124_DIR
       }
     }),
     buildContext("security")
@@ -372,7 +376,7 @@ test("compliance governor ignores advisory vetoes for local Python serve-script 
       description: "Start the local HTTP server script for localhost verification",
       params: {
         command: "python serve8124.py",
-        cwd: "C:\\Users\\benac\\OneDrive\\Desktop\\playwright-proof-smoke-codex-auto-8124"
+        cwd: HOST_TEST_PLAYWRIGHT_PROOF_SMOKE_AUTO_8124_DIR
       }
     }),
     buildContext("compliance")
@@ -407,7 +411,7 @@ test("generic start_process actions still honor advisory vetoes when they are no
       description: "Start a long-running custom process",
       params: {
         command: "python background_worker.py",
-        cwd: "C:\\Users\\benac\\OneDrive\\Desktop\\playwright-proof-smoke-test"
+        cwd: HOST_TEST_PLAYWRIGHT_PROOF_SMOKE_TEST_DIR
       }
     }),
     buildContext("security")

@@ -3,7 +3,7 @@
  */
 
 import type { Stage675CheckpointReviewResult } from "../core/stage6_75CheckpointLive";
-import type { ConversationCheckpointReviewResult } from "./conversationManager";
+import type { ConversationCheckpointReviewResult } from "./conversationRuntime/managerContracts";
 
 export interface GatewayCheckpointReviewRunners {
   runCheckpoint611LiveReview: () => Promise<ConversationCheckpointReviewResult>;

@@ -20,13 +20,17 @@ scripts that are intentionally kept outside the main runtime path.
 - local package scripts and repo-root execution context
 
 ## Outputs
-- fail-closed validation results for docs, module size, reason codes, and README sync
+- fail-closed validation results for docs, unused locals/imports, module size, reason codes, and
+  README sync
 - smoke/evidence reports and operational diagnostics
 
 ## Invariants
 - Repo-maintenance tooling should stay deterministic and runnable from package scripts.
 - One-off operational helpers are acceptable here, but they should not silently become runtime
   dependencies.
+- `checkModuleSize.ts` and `checkSubsystemReadmeSync.ts` are the canonical contract gates for the
+  intentionally kept thin entrypoints and folder-level README discovery surface after the cleanup
+  plans.
 
 ## Related Tests
 - `tests/tools/checkModuleSize.test.ts`
@@ -38,5 +42,7 @@ scripts that are intentionally kept outside the main runtime path.
 Update this README when:
 - a top-level tooling script is added, removed, or renamed
 - a new maintainability or AI-first check is introduced
+- thin-entrypoint or README-sync enforcement changes enough to alter the main tooling contract
+- package-script validation starts enforcing a new repo-wide TypeScript hygiene rule
 - smoke/evidence ownership moves into a different tooling folder
 - the related-test surface changes because tooling ownership moved

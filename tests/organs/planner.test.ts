@@ -20,6 +20,12 @@ import {
   StructuredCompletionRequest
 } from "../../src/models/types";
 import { PlannerOrgan } from "../../src/organs/planner";
+import {
+  HOST_TEST_DESKTOP_DIR,
+  HOST_TEST_PLAYWRIGHT_PROOF_SMOKE_DIR,
+  HOST_TEST_PLAYWRIGHT_PROOF_SMOKE_INDEX_HTML,
+  HOST_TEST_ROBINHOOD_MOCK_DIR
+} from "../support/windowsPathFixtures";
 
 class PlannerFailureModelClient implements ModelClient {
   readonly backend = "mock" as const;
@@ -437,7 +443,7 @@ class PlaybookContextAwareExecutableModelClient implements ModelClient {
             description: "Scaffold the requested React app.",
             params: {
               command: "npm create vite@latest robinhood-mock -- --template react",
-              cwd: "C:\\Users\\benac\\OneDrive\\Desktop"
+              cwd: HOST_TEST_DESKTOP_DIR
             }
           },
           {
@@ -445,7 +451,7 @@ class PlaybookContextAwareExecutableModelClient implements ModelClient {
             description: "Start the local dev server for live verification.",
             params: {
               command: "npm run dev",
-              cwd: "C:\\Users\\benac\\OneDrive\\Desktop\\robinhood-mock"
+              cwd: HOST_TEST_ROBINHOOD_MOCK_DIR
             }
           },
           {
@@ -480,7 +486,7 @@ class PlaybookContextAwareExecutableModelClient implements ModelClient {
             description: "Scaffold the requested React app.",
             params: {
               command: "npm create vite@latest robinhood-mock -- --template react",
-              cwd: "C:\\Users\\benac\\OneDrive\\Desktop"
+              cwd: HOST_TEST_DESKTOP_DIR
             }
           },
           {
@@ -488,7 +494,7 @@ class PlaybookContextAwareExecutableModelClient implements ModelClient {
             description: "Start the local dev server for live verification.",
             params: {
               command: "npm run dev",
-              cwd: "C:\\Users\\benac\\OneDrive\\Desktop\\robinhood-mock"
+              cwd: HOST_TEST_ROBINHOOD_MOCK_DIR
             }
           },
           {
@@ -512,7 +518,7 @@ class PlaybookContextAwareExecutableModelClient implements ModelClient {
           description: "Scaffold the requested workspace.",
           params: {
             command: "npm create vite@latest robinhood-mock -- --template react",
-            cwd: "C:\\Users\\benac\\OneDrive\\Desktop"
+            cwd: HOST_TEST_DESKTOP_DIR
           }
         }
       ]
@@ -554,7 +560,7 @@ class ExecutionStyleBuildRepairModelClient implements ModelClient {
           description: "Scaffold the requested React app.",
           params: {
             command: "npm create vite@latest robinhood-mock -- --template react",
-            cwd: "C:\\Users\\benac\\OneDrive\\Desktop"
+            cwd: HOST_TEST_DESKTOP_DIR
           }
         }
       ]
@@ -584,7 +590,7 @@ class InspectionOnlyBuildRepairModelClient implements ModelClient {
             type: "list_directory",
             description: "Inspect the target workspace.",
             params: {
-              path: "C:\\Users\\benac\\OneDrive\\Desktop"
+              path: HOST_TEST_DESKTOP_DIR
             }
           }
         ]
@@ -599,7 +605,7 @@ class InspectionOnlyBuildRepairModelClient implements ModelClient {
           description: "Scaffold the requested React app.",
           params: {
             command: "npm create vite@latest robinhood-mock -- --template react",
-            cwd: "C:\\Users\\benac\\OneDrive\\Desktop"
+            cwd: HOST_TEST_DESKTOP_DIR
           }
         }
       ]
@@ -622,7 +628,7 @@ class InspectionOnlyBuildFailureModelClient implements ModelClient {
           type: "list_directory",
           description: "Inspect the target workspace.",
           params: {
-            path: "C:\\Users\\benac\\OneDrive\\Desktop"
+            path: HOST_TEST_DESKTOP_DIR
           }
         }
       ]
@@ -653,7 +659,7 @@ class LiveVerificationRepairModelClient implements ModelClient {
             description: "Scaffold the requested React app.",
             params: {
               command: "npm create vite@latest robinhood-mock -- --template react",
-              cwd: "C:\\Users\\benac\\OneDrive\\Desktop"
+              cwd: HOST_TEST_DESKTOP_DIR
             }
           }
         ]
@@ -668,7 +674,7 @@ class LiveVerificationRepairModelClient implements ModelClient {
           description: "Scaffold the requested React app.",
           params: {
             command: "npm create vite@latest robinhood-mock -- --template react",
-            cwd: "C:\\Users\\benac\\OneDrive\\Desktop"
+            cwd: HOST_TEST_DESKTOP_DIR
           }
         },
         {
@@ -676,7 +682,7 @@ class LiveVerificationRepairModelClient implements ModelClient {
           description: "Start the local dev server.",
           params: {
             command: "npm run dev",
-            cwd: "C:\\Users\\benac\\OneDrive\\Desktop\\robinhood-mock"
+            cwd: HOST_TEST_ROBINHOOD_MOCK_DIR
           }
         },
         {
@@ -709,7 +715,7 @@ class BrowserVerificationFailureModelClient implements ModelClient {
           description: "Scaffold the requested React app.",
           params: {
             command: "npm create vite@latest robinhood-mock -- --template react",
-            cwd: "C:\\Users\\benac\\OneDrive\\Desktop"
+            cwd: HOST_TEST_DESKTOP_DIR
           }
         },
         {
@@ -717,7 +723,7 @@ class BrowserVerificationFailureModelClient implements ModelClient {
           description: "Start the local dev server.",
           params: {
             command: "npm run dev",
-            cwd: "C:\\Users\\benac\\OneDrive\\Desktop\\robinhood-mock"
+            cwd: HOST_TEST_ROBINHOOD_MOCK_DIR
           }
         },
         {
@@ -858,7 +864,7 @@ class MissingVerifyBrowserThenRepairModelClient implements ModelClient {
             type: "write_file",
             description: "Rewrite the homepage file.",
             params: {
-              path: "C:\\Users\\benac\\OneDrive\\Desktop\\playwright-proof-smoke\\index.html",
+              path: HOST_TEST_PLAYWRIGHT_PROOF_SMOKE_INDEX_HTML,
               content: "<title>Playwright Proof Smoke</title>"
             }
           }
@@ -902,7 +908,7 @@ class MissingVerifyBrowserAfterRepairModelClient implements ModelClient {
           type: "write_file",
           description: "Rewrite the homepage file.",
           params: {
-            path: "C:\\Users\\benac\\OneDrive\\Desktop\\playwright-proof-smoke\\index.html",
+            path: HOST_TEST_PLAYWRIGHT_PROOF_SMOKE_INDEX_HTML,
             content: "<title>Playwright Proof Smoke</title>"
           }
         }
@@ -941,7 +947,7 @@ class MissingStartProcessThenRepairModelClient implements ModelClient {
             type: "write_file",
             description: "Create the homepage file.",
             params: {
-              path: "C:\\Users\\benac\\OneDrive\\Desktop\\playwright-proof-smoke\\index.html",
+              path: HOST_TEST_PLAYWRIGHT_PROOF_SMOKE_INDEX_HTML,
               content: "<title>Playwright Proof Smoke</title>"
             }
           }
@@ -957,7 +963,7 @@ class MissingStartProcessThenRepairModelClient implements ModelClient {
           description: "Start the local HTTP server.",
           params: {
             command: "python -m http.server 8000",
-            cwd: "C:\\Users\\benac\\OneDrive\\Desktop\\playwright-proof-smoke"
+            cwd: HOST_TEST_PLAYWRIGHT_PROOF_SMOKE_DIR
           }
         }
       ]
@@ -1867,7 +1873,7 @@ test("planner repairs explicit start_process subtasks when first plan drifts int
   await withPlannerClient(modelClient, async (planner) => {
     const plan = await planner.plan(
       buildTask(
-        'start_process cmd="python -m http.server 8000" cwd="C:\\Users\\benac\\OneDrive\\Desktop\\playwright-proof-smoke"'
+        `start_process cmd="python -m http.server 8000" cwd="${HOST_TEST_PLAYWRIGHT_PROOF_SMOKE_DIR}"`
       ),
       "mock-planner"
     );

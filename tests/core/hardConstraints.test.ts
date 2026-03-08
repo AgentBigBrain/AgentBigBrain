@@ -10,6 +10,10 @@ import { test } from "node:test";
 import { createBrainConfigFromEnv, DEFAULT_BRAIN_CONFIG } from "../../src/core/config";
 import { evaluateHardConstraints } from "../../src/core/hardConstraints";
 import { GovernanceProposal } from "../../src/core/types";
+import {
+  HOST_TEST_DESKTOP_DIR_FORWARD,
+  HOST_TEST_SOMETHING_FILE_PATH
+} from "../support/windowsPathFixtures";
 
 /**
  * Implements `makeProposal` behavior within module scope.
@@ -39,7 +43,7 @@ test("blocks delete outside sandbox", () => {
       id: "action_delete",
       type: "delete_file",
       description: "Delete file",
-      params: { path: "C:/Users/benac/Desktop/something.txt" },
+      params: { path: HOST_TEST_SOMETHING_FILE_PATH },
       estimatedCostUsd: 0.2
     }
   });
@@ -89,7 +93,7 @@ test("allows delete outside sandbox in full access profile", () => {
       id: "action_delete_full",
       type: "delete_file",
       description: "Delete file",
-      params: { path: "C:/Users/benac/Desktop/something.txt" },
+      params: { path: HOST_TEST_SOMETHING_FILE_PATH },
       estimatedCostUsd: 0.2
     }
   });
@@ -107,7 +111,7 @@ test("blocks list directory outside sandbox in isolated profile", () => {
       id: "action_list",
       type: "list_directory",
       description: "List directories",
-      params: { path: "C:/Users/benac/Desktop" },
+      params: { path: HOST_TEST_DESKTOP_DIR_FORWARD },
       estimatedCostUsd: 0.1
     }
   });
@@ -126,7 +130,7 @@ test("allows list directory outside sandbox in full access profile", () => {
       id: "action_list_full",
       type: "list_directory",
       description: "List directories",
-      params: { path: "C:/Users/benac/Desktop" },
+      params: { path: HOST_TEST_DESKTOP_DIR_FORWARD },
       estimatedCostUsd: 0.1
     }
   });
@@ -852,7 +856,7 @@ test("blocks shell command when cwd resolves outside sandbox under cwd policy", 
       id: "action_shell_cwd_outside_sandbox",
       type: "shell_command",
       description: "Run shell command outside configured sandbox cwd boundary.",
-      params: { command: "echo hi", cwd: "C:/Users/benac/Desktop" },
+      params: { command: "echo hi", cwd: HOST_TEST_DESKTOP_DIR_FORWARD },
       estimatedCostUsd: 0.1
     }
   });
@@ -1418,7 +1422,7 @@ test("does not block respond action that recalls profile facts about the user", 
       type: "respond",
       description: "Respond with the user's profile information from memory.",
       params: {
-        message: "You are Benny, and your main job is at Crimson."
+        message: "You are Benny, and your main job is at AgentBigBrain."
       },
       estimatedCostUsd: 0.05
     }

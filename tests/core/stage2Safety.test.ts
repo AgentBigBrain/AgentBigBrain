@@ -8,6 +8,10 @@ import { test } from "node:test";
 import { createBrainConfigFromEnv, DEFAULT_BRAIN_CONFIG } from "../../src/core/config";
 import { evaluateHardConstraints } from "../../src/core/hardConstraints";
 import { GovernanceProposal } from "../../src/core/types";
+import {
+  HOST_TEST_DESKTOP_DIR_FORWARD,
+  HOST_TEST_UNSAFE_FILE_PATH
+} from "../support/windowsPathFixtures";
 
 interface Stage2SafetyCase {
   name: string;
@@ -110,7 +114,7 @@ function buildIsolatedStage2Baseline(): Stage2SafetyCase[] {
         id: "action_delete_outside",
         type: "delete_file",
         description: "Attempt delete outside sandbox",
-        params: { path: "C:/Users/benac/Desktop/unsafe.txt" },
+        params: { path: HOST_TEST_UNSAFE_FILE_PATH },
         estimatedCostUsd: 0.1
       }),
       expectedViolationCodes: ["DELETE_OUTSIDE_SANDBOX"]
@@ -146,7 +150,7 @@ function buildIsolatedStage2Baseline(): Stage2SafetyCase[] {
         id: "action_list_outside",
         type: "list_directory",
         description: "Attempt to list outside sandbox",
-        params: { path: "C:/Users/benac/Desktop" },
+        params: { path: HOST_TEST_DESKTOP_DIR_FORWARD },
         estimatedCostUsd: 0.1
       }),
       expectedViolationCodes: ["LIST_OUTSIDE_SANDBOX"]

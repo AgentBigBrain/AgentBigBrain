@@ -11,6 +11,7 @@ import {
   registerApprovalGrantUse,
   validateApprovalGrantUse
 } from "../../src/core/stage6_75ApprovalPolicy";
+import { TEST_OPERATOR_ID } from "../support/windowsPathFixtures";
 
 /**
  * Implements `buildRequest` behavior within module scope.
@@ -33,7 +34,7 @@ test("approval grant validates when mission/action/idempotency and expiry are in
   const grant = createApprovalGrantV1({
     request,
     approvedAt: "2026-02-27T22:00:00.000Z",
-    approvedBy: "operator_benac"
+    approvedBy: TEST_OPERATOR_ID
   });
 
   const decision = validateApprovalGrantUse(request, grant, {
@@ -51,7 +52,7 @@ test("approval grant fails closed when diff hash mismatches", () => {
   const grant = createApprovalGrantV1({
     request,
     approvedAt: "2026-02-27T22:00:00.000Z",
-    approvedBy: "operator_benac"
+    approvedBy: TEST_OPERATOR_ID
   });
 
   const tampered = {
@@ -73,7 +74,7 @@ test("approval grant fails closed when expired or max-uses exceeded", () => {
   const grant = createApprovalGrantV1({
     request,
     approvedAt: "2026-02-27T22:00:00.000Z",
-    approvedBy: "operator_benac"
+    approvedBy: TEST_OPERATOR_ID
   });
   const usedGrant = registerApprovalGrantUse(grant);
 
@@ -89,7 +90,7 @@ test("approval grant fails closed when expired or max-uses exceeded", () => {
   const freshGrant = createApprovalGrantV1({
     request,
     approvedAt: "2026-02-27T22:00:00.000Z",
-    approvedBy: "operator_benac"
+    approvedBy: TEST_OPERATOR_ID
   });
   const expiryDecision = validateApprovalGrantUse(request, freshGrant, {
     missionId: "mission_approval_001",

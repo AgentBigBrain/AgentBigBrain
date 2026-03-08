@@ -6,10 +6,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { ActionRunResult, TaskRunResult } from "../../src/core/types";
-import {
-  classifyLessonSignal,
-  LessonSignalRulepackV1
-} from "../../src/organs/reflectionSignalClassifier";
+import { LessonSignalRulepackV1 } from "../../src/organs/reflectionRuntime/contracts";
+import { classifyLessonSignal } from "../../src/organs/reflectionRuntime/signalClassification";
 
 /**
  * Implements `buildRunResult` behavior within module scope.

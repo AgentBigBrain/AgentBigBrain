@@ -44,3 +44,5 @@
     or remove it if the folder no longer needs a dedicated subsystem contract document.
 15. If a folder has become a real change surface and still has no README contract, add one instead
     of relying on unwritten conventions.
+16. Folder-level `README.md` files under `src/` must not contain absolute local filesystem paths or
+    personal workspace links. Use inline code identifiers or repo-relative references instead.

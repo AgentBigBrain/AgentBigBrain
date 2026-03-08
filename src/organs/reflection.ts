@@ -3,37 +3,26 @@
  */
 
 import { MAIN_AGENT_ID, normalizeAgentId } from "../core/agentIdentity";
-import { DistillerMergeLedgerStore } from "../core/distillerLedger";
 import {
   LessonSignalMetadataV1,
   SemanticMemoryStore
 } from "../core/semanticMemory";
-import { SatelliteCloneCoordinator, SatelliteCloneRecord } from "../core/satelliteClone";
+import type { SatelliteCloneRecord } from "../core/satelliteClone";
 import { TaskRunResult } from "../core/types";
-import {
-  ModelClient,
-  ReflectionModelOutput,
-  SuccessReflectionModelOutput
-} from "../models/types";
+import { ModelClient } from "../models/types";
 import {
   classifyLessonSignal,
+  normalizeLessonText
+} from "./reflectionRuntime/signalClassification";
+import {
+  DEFAULT_REFLECTION_CONFIG,
   LessonSignalClassification,
-  normalizeLessonText,
+  ReflectionConfig,
+  ReflectionDistillerDependencies,
   ReflectionLessonSource
-} from "./reflectionSignalClassifier";
-
-export interface ReflectionConfig {
-  reflectOnSuccess: boolean;
-}
-
-export interface ReflectionDistillerDependencies {
-  distillerLedgerStore: DistillerMergeLedgerStore;
-  satelliteCloneCoordinator: SatelliteCloneCoordinator;
-}
-
-const DEFAULT_REFLECTION_CONFIG: ReflectionConfig = {
-  reflectOnSuccess: false
-};
+} from "./reflectionRuntime/contracts";
+import { extractFailureLessons } from "./reflectionRuntime/failureLessons";
+import { extractSuccessReflection } from "./reflectionRuntime/successLessons";
 const CLONE_AGENT_ID_PATTERN = /^[a-z][a-z0-9]*-[1-9][0-9]*$/;
 
 /**
@@ -112,8 +101,10 @@ function buildSyntheticCloneRecord(
  *
  * **What it talks to:**
  * - Uses `LessonSignalMetadataV1` (import `LessonSignalMetadataV1`) from `../core/semanticMemory`.
- * - Uses `LessonSignalClassification` (import `LessonSignalClassification`) from `./reflectionSignalClassifier`.
- * - Uses `ReflectionLessonSource` (import `ReflectionLessonSource`) from `./reflectionSignalClassifier`.
+ * - Uses `LessonSignalClassification` (import `LessonSignalClassification`) from
+ *   `./reflectionRuntime/contracts`.
+ * - Uses `ReflectionLessonSource` (import `ReflectionLessonSource`) from
+ *   `./reflectionRuntime/contracts`.
  *
  * @param classification - Value for classification.
  * @param source - Value for source.
@@ -261,7 +252,7 @@ export class ReflectionOrgan {
    *
    * **What it talks to:**
    * - Uses `TaskRunResult` (import `TaskRunResult`) from `../core/types`.
-   * - Uses `ReflectionModelOutput` (import `ReflectionModelOutput`) from `../models/types`.
+   * - Uses `extractFailureLessons` (import `extractFailureLessons`) from `./reflectionRuntime/failureLessons`.
    *
    * @param runResult - Result object inspected or transformed in this step.
    * @param blockedActions - Value for blocked actions.
@@ -273,36 +264,16 @@ export class ReflectionOrgan {
     blockedActions: TaskRunResult["actionResults"],
     model: string
   ): Promise<void> {
-    let output: ReflectionModelOutput;
-    try {
-      output = await this.modelClient.completeJson<ReflectionModelOutput>({
-        model,
-        schemaName: "reflection_v1",
-        temperature: 0.2,
-        systemPrompt:
-          "You are a reflection engine. Analyze the failed/blocked actions of the given task run. " +
-          "Extract 1 or 2 concise lessons learned that would prevent these failures in the future. " +
-          "Return JSON with a `lessons` array of strings.",
-        userPrompt: JSON.stringify({
-          goal: runResult.task.goal,
-          summary: runResult.summary,
-          blockedActions: blockedActions.map((result) => ({
-            type: result.action.type,
-            description: result.action.description,
-            blockedBy: result.blockedBy,
-            violations: result.violations
-          }))
-        })
-      });
-    } catch (error) {
-      console.error(`[Reflection] Model call failed: ${(error as Error).message}`);
+    const lessons = await extractFailureLessons(
+      this.modelClient,
+      runResult,
+      blockedActions,
+      model
+    );
+    if (lessons == null) {
       return;
     }
-
-    console.log(
-      `[Reflection] Extracted ${output.lessons.length} lessons from ${blockedActions.length} blocked actions.`
-    );
-    await this.saveLessons(output.lessons, runResult, "failure");
+    await this.saveLessons(lessons, runResult, "failure");
   }
 
   /**
@@ -313,39 +284,17 @@ export class ReflectionOrgan {
    *
    * **What it talks to:**
    * - Uses `TaskRunResult` (import `TaskRunResult`) from `../core/types`.
-   * - Uses `SuccessReflectionModelOutput` (import `SuccessReflectionModelOutput`) from `../models/types`.
+   * - Uses `extractSuccessReflection` (import `extractSuccessReflection`) from `./reflectionRuntime/successLessons`.
    *
    * @param runResult - Result object inspected or transformed in this step.
    * @param model - Value for model.
    * @returns Promise resolving to void.
    */
   private async reflectOnSuccess(runResult: TaskRunResult, model: string): Promise<void> {
-    let output: SuccessReflectionModelOutput;
-    try {
-      output = await this.modelClient.completeJson<SuccessReflectionModelOutput>({
-        model,
-        schemaName: "reflection_success_v1",
-        temperature: 0.1,
-        systemPrompt:
-          "You are a reflection engine. Analyze this fully successful task run. " +
-          "Extract exactly 1 concise lesson about what key insight or approach made it succeed. " +
-          "If something almost went wrong, note the near-miss. Return JSON with `lesson` " +
-          "(string) and `nearMiss` (string or null).",
-        userPrompt: JSON.stringify({
-          goal: runResult.task.goal,
-          summary: runResult.summary,
-          approvedActions: runResult.actionResults.map((result) => ({
-            type: result.action.type,
-            description: result.action.description
-          }))
-        })
-      });
-    } catch (error) {
-      console.error(`[Reflection] Success reflection model call failed: ${(error as Error).message}`);
+    const output = await extractSuccessReflection(this.modelClient, runResult, model);
+    if (output == null) {
       return;
     }
-
-    console.log("[Reflection] Extracted success lesson from completed task.");
     await this.saveLessons([output.lesson], runResult, "success");
 
     if (output.nearMiss) {
@@ -362,9 +311,12 @@ export class ReflectionOrgan {
    *
    * **What it talks to:**
    * - Uses `TaskRunResult` (import `TaskRunResult`) from `../core/types`.
-   * - Uses `classifyLessonSignal` (import `classifyLessonSignal`) from `./reflectionSignalClassifier`.
-   * - Uses `normalizeLessonText` (import `normalizeLessonText`) from `./reflectionSignalClassifier`.
-   * - Uses `ReflectionLessonSource` (import `ReflectionLessonSource`) from `./reflectionSignalClassifier`.
+   * - Uses `classifyLessonSignal` (import `classifyLessonSignal`) from
+   *   `./reflectionRuntime/signalClassification`.
+   * - Uses `normalizeLessonText` (import `normalizeLessonText`) from
+   *   `./reflectionRuntime/signalClassification`.
+   * - Uses `ReflectionLessonSource` (import `ReflectionLessonSource`) from
+   *   `./reflectionRuntime/contracts`.
    *
    * @param lessons - Value for lessons.
    * @param runResult - Result object inspected or transformed in this step.

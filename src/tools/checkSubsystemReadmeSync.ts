@@ -18,6 +18,7 @@ export interface SubsystemReadmeIssue {
   missingReadme: boolean;
   missingHeadings: string[];
   missingFileReferences: string[];
+  forbiddenAbsolutePathReferences: string[];
 }
 
 export interface SubsystemReadmeSyncDiagnostics {
@@ -31,6 +32,11 @@ const REQUIRED_README_HEADINGS = [
   "## Invariants",
   "## Related Tests",
   "## When to Update This README"
+] as const;
+const ABSOLUTE_LOCAL_PATH_REFERENCE_PATTERNS: readonly RegExp[] = [
+  /\[[^\]]+\]\((?:file:\/\/\/?)?(?:\/)?[A-Za-z]:[\\/][^)]+\)/g,
+  /\[[^\]]+\]\((?:file:\/\/)?\/Users\/[^)]+\)/g,
+  /\[[^\]]+\]\((?:file:\/\/)?\/home\/[^)]+\)/g
 ] as const;
 
 export const DEFAULT_SUBSYSTEM_README_SPECS: readonly SubsystemReadmeSpec[] = [
@@ -59,6 +65,24 @@ export const DEFAULT_SUBSYSTEM_README_SPECS: readonly SubsystemReadmeSpec[] = [
     requiredHeadings: REQUIRED_README_HEADINGS
   },
   {
+    name: "modelsOpenAI",
+    codeDir: "src/models/openai",
+    readmePath: "src/models/openai/README.md",
+    requiredHeadings: REQUIRED_README_HEADINGS
+  },
+  {
+    name: "modelsSchema",
+    codeDir: "src/models/schema",
+    readmePath: "src/models/schema/README.md",
+    requiredHeadings: REQUIRED_README_HEADINGS
+  },
+  {
+    name: "modelsMock",
+    codeDir: "src/models/mock",
+    readmePath: "src/models/mock/README.md",
+    requiredHeadings: REQUIRED_README_HEADINGS
+  },
+  {
     name: "organs",
     codeDir: "src/organs",
     readmePath: "src/organs/README.md",
@@ -74,6 +98,42 @@ export const DEFAULT_SUBSYSTEM_README_SPECS: readonly SubsystemReadmeSpec[] = [
     name: "autonomy",
     codeDir: "src/core/autonomy",
     readmePath: "src/core/autonomy/README.md",
+    requiredHeadings: REQUIRED_README_HEADINGS
+  },
+  {
+    name: "orchestration",
+    codeDir: "src/core/orchestration",
+    readmePath: "src/core/orchestration/README.md",
+    requiredHeadings: REQUIRED_README_HEADINGS
+  },
+  {
+    name: "profileMemoryRuntime",
+    codeDir: "src/core/profileMemoryRuntime",
+    readmePath: "src/core/profileMemoryRuntime/README.md",
+    requiredHeadings: REQUIRED_README_HEADINGS
+  },
+  {
+    name: "stage685",
+    codeDir: "src/core/stage6_85",
+    readmePath: "src/core/stage6_85/README.md",
+    requiredHeadings: REQUIRED_README_HEADINGS
+  },
+  {
+    name: "stage686",
+    codeDir: "src/core/stage6_86",
+    readmePath: "src/core/stage6_86/README.md",
+    requiredHeadings: REQUIRED_README_HEADINGS
+  },
+  {
+    name: "runtimeTypes",
+    codeDir: "src/core/runtimeTypes",
+    readmePath: "src/core/runtimeTypes/README.md",
+    requiredHeadings: REQUIRED_README_HEADINGS
+  },
+  {
+    name: "configRuntime",
+    codeDir: "src/core/configRuntime",
+    readmePath: "src/core/configRuntime/README.md",
     requiredHeadings: REQUIRED_README_HEADINGS
   },
   {
@@ -95,9 +155,39 @@ export const DEFAULT_SUBSYSTEM_README_SPECS: readonly SubsystemReadmeSpec[] = [
     requiredHeadings: REQUIRED_README_HEADINGS
   },
   {
+    name: "memoryContext",
+    codeDir: "src/organs/memoryContext",
+    readmePath: "src/organs/memoryContext/README.md",
+    requiredHeadings: REQUIRED_README_HEADINGS
+  },
+  {
+    name: "reflectionRuntime",
+    codeDir: "src/organs/reflectionRuntime",
+    readmePath: "src/organs/reflectionRuntime/README.md",
+    requiredHeadings: REQUIRED_README_HEADINGS
+  },
+  {
+    name: "intentRuntime",
+    codeDir: "src/organs/intentRuntime",
+    readmePath: "src/organs/intentRuntime/README.md",
+    requiredHeadings: REQUIRED_README_HEADINGS
+  },
+  {
     name: "userFacing",
     codeDir: "src/interfaces/userFacing",
     readmePath: "src/interfaces/userFacing/README.md",
+    requiredHeadings: REQUIRED_README_HEADINGS
+  },
+  {
+    name: "conversationRuntime",
+    codeDir: "src/interfaces/conversationRuntime",
+    readmePath: "src/interfaces/conversationRuntime/README.md",
+    requiredHeadings: REQUIRED_README_HEADINGS
+  },
+  {
+    name: "transportRuntime",
+    codeDir: "src/interfaces/transportRuntime",
+    readmePath: "src/interfaces/transportRuntime/README.md",
     requiredHeadings: REQUIRED_README_HEADINGS
   }
 ] as const;
@@ -131,7 +221,8 @@ export function computeSubsystemReadmeSyncDiagnostics(
         readmePath: spec.readmePath,
         missingReadme: true,
         missingHeadings: [...spec.requiredHeadings],
-        missingFileReferences: collectDirectTypeScriptFileNames(path.join(rootDir, spec.codeDir))
+        missingFileReferences: collectDirectTypeScriptFileNames(path.join(rootDir, spec.codeDir)),
+        forbiddenAbsolutePathReferences: []
       });
       continue;
     }
@@ -141,14 +232,20 @@ export function computeSubsystemReadmeSyncDiagnostics(
     const missingFileReferences = collectDirectTypeScriptFileNames(path.join(rootDir, spec.codeDir)).filter(
       (fileName) => !readmeText.includes(fileName)
     );
+    const forbiddenAbsolutePathReferences = collectAbsoluteLocalPathReferences(readmeText);
 
-    if (missingHeadings.length > 0 || missingFileReferences.length > 0) {
+    if (
+      missingHeadings.length > 0 ||
+      missingFileReferences.length > 0 ||
+      forbiddenAbsolutePathReferences.length > 0
+    ) {
       issues.push({
         subsystem: spec.name,
         readmePath: spec.readmePath,
         missingReadme: false,
         missingHeadings,
-        missingFileReferences
+        missingFileReferences,
+        forbiddenAbsolutePathReferences
       });
     }
   }
@@ -189,6 +286,9 @@ export function assertSubsystemReadmeSync(
     }
     for (const fileReference of issue.missingFileReferences) {
       lines.push(`  - README does not mention local file: ${fileReference}`);
+    }
+    for (const forbiddenReference of issue.forbiddenAbsolutePathReferences) {
+      lines.push(`  - README contains forbidden absolute local path reference: ${forbiddenReference}`);
     }
   }
   throw new Error(lines.join("\n"));
@@ -238,6 +338,29 @@ function collectDirectTypeScriptFileNames(directoryPath: string): string[] {
     .filter((absolutePath) => statSync(absolutePath).isFile() && absolutePath.endsWith(".ts"))
     .map((absolutePath) => path.basename(absolutePath))
     .sort((left, right) => left.localeCompare(right));
+}
+
+/**
+ * Collects absolute local filesystem references embedded in README markdown.
+ *
+ * **Why it exists:**
+ * Subsystem READMEs are repo-authored contract docs and must not leak a contributor's local drive
+ * path or personal workspace location.
+ *
+ * **What it talks to:**
+ * - Uses local regex patterns within this module.
+ *
+ * @param readmeText - README markdown text being validated.
+ * @returns Sorted unique markdown-link references that point to absolute local filesystem paths.
+ */
+function collectAbsoluteLocalPathReferences(readmeText: string): string[] {
+  const matches = new Set<string>();
+  for (const pattern of ABSOLUTE_LOCAL_PATH_REFERENCE_PATTERNS) {
+    for (const match of readmeText.matchAll(pattern)) {
+      matches.add(match[0]);
+    }
+  }
+  return [...matches].sort((left, right) => left.localeCompare(right));
 }
 
 if (require.main === module) {
