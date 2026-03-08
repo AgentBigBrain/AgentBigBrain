@@ -556,10 +556,13 @@ function buildBillyEntityGraph(): EntityGraphV1 {
       {
         entityKey: "entity_billy",
         canonicalName: "Billy",
+        entityType: "person",
+        disambiguator: null,
         aliases: ["Billy"],
         firstSeenAt: "2026-02-10T12:00:00.000Z",
         lastSeenAt: "2026-03-08T11:00:00.000Z",
-        mentionCount: 6
+        salience: 0.86,
+        evidenceRefs: []
       }
     ],
     edges: []
@@ -577,8 +580,12 @@ function buildRelationshipClarificationCandidate(): PulseCandidateV1 {
     scoreBreakdown: {
       recency: 0.2,
       frequency: 0.1,
-      unresolvedImportance: 0.1
-    }
+      unresolvedImportance: 0.1,
+      sensitivityPenalty: 0,
+      cooldownPenalty: 0
+    },
+    lastTouchedAt: "2026-03-08T12:00:00.000Z",
+    stableHash: "candidate_billy_followup_hash"
   };
 }
 
@@ -682,9 +689,9 @@ async function evaluateEpisodeUnderstandingScenario(
     });
     observed.push({
       behavior: "preserve_followup_relevance",
-      passed: candidates.some((candidate) => candidate.tags.includes("followup")),
+      passed: candidates.some((candidate) => (candidate.tags ?? []).includes("followup")),
       note: candidates.length > 0
-        ? `Observed tags: ${candidates.flatMap((candidate) => candidate.tags).join(", ")}`
+        ? `Observed tags: ${candidates.flatMap((candidate) => candidate.tags ?? []).join(", ")}`
         : "No candidate tags were available."
     });
   } else {
@@ -1000,7 +1007,6 @@ async function main(): Promise<void> {
   }
 }
 
-const MODULE_PATH = fileURLToPath(import.meta.url);
-if (process.argv[1] && path.resolve(process.argv[1]) === MODULE_PATH) {
+if (require.main === module) {
   void main();
 }

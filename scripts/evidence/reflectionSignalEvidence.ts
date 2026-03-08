@@ -7,10 +7,12 @@ import path from "node:path";
 
 import { ActionRunResult, TaskRunResult } from "../../src/core/types";
 import {
-  classifyLessonSignal,
   LessonSignalRulepackV1,
   ReflectionLessonSource
-} from "../../src/organs/reflectionSignalClassifier";
+} from "../../src/organs/reflectionRuntime/contracts";
+import {
+  classifyLessonSignal,
+} from "../../src/organs/reflectionRuntime/signalClassification";
 
 interface ReflectionSignalEvidenceSample {
   lesson: string;

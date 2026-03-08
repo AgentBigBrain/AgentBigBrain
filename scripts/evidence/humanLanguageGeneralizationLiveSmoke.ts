@@ -3,7 +3,7 @@
  * conversation manager and Agent Pulse scheduler paths.
  */
 
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -151,8 +151,27 @@ async function createHarness(): Promise<RuntimeHarness> {
   return { tempDir, store, profileStore };
 }
 
+async function waitForHarnessQuiescence(tempDir: string, timeoutMs = 1_000): Promise<void> {
+  const startedAt = Date.now();
+  let stableChecks = 0;
+  while (Date.now() - startedAt < timeoutMs) {
+    const entries = await readdir(tempDir).catch(() => [] as string[]);
+    const hasPendingAtomicWrite = entries.some((entry) => entry.includes(".tmp-"));
+    if (!hasPendingAtomicWrite) {
+      stableChecks += 1;
+      if (stableChecks >= 4) {
+        return;
+      }
+    } else {
+      stableChecks = 0;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+}
+
 async function disposeHarness(harness: RuntimeHarness): Promise<void> {
   let lastError: unknown = null;
+  await waitForHarnessQuiescence(harness.tempDir);
   for (let attempt = 0; attempt < 5; attempt += 1) {
     try {
       await rm(harness.tempDir, { recursive: true, force: true });
@@ -798,7 +817,7 @@ async function main(): Promise<void> {
   console.log(`Status: ${artifact.status}`);
 }
 
-if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
+if (require.main === module) {
   void main().catch((error: unknown) => {
     console.error(error);
     process.exitCode = 1;
