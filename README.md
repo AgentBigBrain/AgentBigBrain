@@ -33,7 +33,7 @@ Built in TypeScript with only **2 runtime dependencies** (`ws`, `onnxruntime-nod
 
 **🔗 Tamper-Evident Receipts** — Every approved action produces a cryptographic receipt. You don't have to trust the agent — you can verify.
 
-**🧠 Five Memory Systems** — Profile memory, governance memory, semantic memory, workflow learning, and an entity relationship graph. All governed.
+**🧠 Six Governed Memory Systems** — Profile facts, episodic memory, governance memory, semantic memory, workflow learning, and continuity state (entity graph plus open loops). All governed, with private remembered-situation review controls.
 
 **💬 Multi-Interface** — CLI, Telegram bot, Discord bot, and an HTTP federation protocol for agent-to-agent communication.
 
@@ -81,7 +81,7 @@ flowchart LR
 | Safety | Optional, bolted on later | **Built in from day one** — there is no bypass |
 | Who decides safety? | The AI polices itself | **Hard rules run first**; the AI never controls its own safety checks |
 | Audit trail | Logs, maybe | **Every action has a cryptographic receipt** |
-| Memory | Basic retrieval stores | **Five governed memory systems** with encryption and probing detection |
+| Memory | Basic retrieval stores | **Six governed memory systems** for profile facts, episodes, governance, semantic memory, workflow learning, and continuity state — with encryption, probing detection, and private remembered-situation review controls |
 | Dependencies | Dozens of packages | **2 runtime dependencies** |
 | When in doubt | Allow by default | **Block by default** — failing safe is always the answer |
 
@@ -153,7 +153,7 @@ npm run dev -- --daemon "continuously triage repository issues"
 npm run dev:interface
 ```
 
-Then use `/chat`, `/propose`, `/auto`, `/status`, and other slash commands. See **[docs/COMMAND_EXAMPLES.md](docs/COMMAND_EXAMPLES.md)** for the full command reference with examples.
+Then use `/chat`, `/propose`, `/auto`, `/memory`, `/status`, and other slash commands. See **[docs/COMMAND_EXAMPLES.md](docs/COMMAND_EXAMPLES.md)** for the full command reference with examples.
 
 ### Federation (Agent-to-Agent)
 

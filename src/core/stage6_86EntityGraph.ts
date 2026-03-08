@@ -8,6 +8,7 @@ export {
   computeCoMentionIncrement,
   createEmptyEntityGraphV1,
   extractEntityCandidates,
+  getEntityLookupTerms,
   promoteRelationEdgeWithConfirmation,
   type Stage686AliasConflict,
   type Stage686EntityExtractionInput,

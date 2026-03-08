@@ -16,16 +16,29 @@ import {
 } from "./agentPulse";
 import {
   buildProfilePlanningContext,
+  queryProfileFactsForContinuity,
+  readProfileEpisodes,
   readProfileFacts
 } from "./profileMemoryRuntime/profileMemoryQueries";
 import {
+  buildProfileEpisodePlanningContext
+} from "./profileMemoryRuntime/profileMemoryEpisodePlanningContext";
+import { selectProfileEpisodesForPlanningQuery } from "./profileMemoryRuntime/profileMemoryEpisodePlanningContext";
+import {
   extractProfileFactCandidatesFromUserInput
 } from "./profileMemoryRuntime/profileMemoryExtraction";
+import {
+  extractProfileEpisodeCandidatesFromUserInput
+} from "./profileMemoryRuntime/profileMemoryEpisodeExtraction";
 import {
   createProfileMemoryPersistenceConfigFromEnv,
   loadPersistedProfileMemoryState,
   saveProfileMemoryState
 } from "./profileMemoryRuntime/profileMemoryPersistence";
+import {
+  applyProfileEpisodeCandidates,
+  applyProfileEpisodeResolutions
+} from "./profileMemoryRuntime/profileMemoryEpisodeMutations";
 import {
   applyProfileFactCandidates,
   buildInferredCommitmentResolutionCandidates,
@@ -34,26 +47,48 @@ import {
   extractUnresolvedCommitmentTopics
 } from "./profileMemoryRuntime/profileMemoryMutations";
 import {
+  buildInferredProfileEpisodeResolutionCandidates
+} from "./profileMemoryRuntime/profileMemoryEpisodeResolution";
+import {
   applyRelationshipAwareTemporalNudging,
   assessContextDrift,
   assessRelationshipRole,
-  countStaleActiveFacts
+  countStaleActiveFacts,
+  selectRelevantEpisodesForPulse
 } from "./profileMemoryRuntime/profileMemoryPulse";
 import {
   type AgentPulseEvaluationRequest,
   type AgentPulseEvaluationResult,
   type ProfileAccessRequest,
   type ProfileIngestResult,
+  type ProfileReadableEpisode,
   type ProfileReadableFact
 } from "./profileMemoryRuntime/contracts";
+import {
+  queryProfileEpisodesForContinuity,
+  type ProfileEpisodeContinuityQueryRequest
+} from "./profileMemoryRuntime/profileMemoryEpisodeQueries";
+import type { ProfileFactContinuityQueryRequest } from "./profileMemoryRuntime/profileMemoryQueries";
+import { consolidateProfileEpisodes } from "./profileMemoryRuntime/profileMemoryEpisodeConsolidation";
+import type { ProfileEpisodeResolutionStatus } from "./profileMemoryRuntime/profileMemoryEpisodeContracts";
+import type { CreateProfileEpisodeRecordInput } from "./profileMemory";
+import type {
+  ConversationStackV1,
+  EntityGraphV1
+} from "./types";
 
 export type {
   AgentPulseEvaluationRequest,
   AgentPulseEvaluationResult,
   ProfileAccessRequest,
   ProfileIngestResult,
+  ProfileReadableEpisode,
   ProfileReadableFact
 } from "./profileMemoryRuntime/contracts";
+
+export interface ProfileMemoryIngestOptions {
+  additionalEpisodeCandidates?: readonly CreateProfileEpisodeRecordInput[];
+}
 
 export class ProfileMemoryStore {
   /**
@@ -117,6 +152,7 @@ export class ProfileMemoryStore {
    * @returns Normalized profile state, persisted if reconciliation made deterministic changes.
    */
   async load(): Promise<ProfileMemoryState> {
+    const nowIso = new Date().toISOString();
     const state = await loadPersistedProfileMemoryState(this.filePath, this.encryptionKey);
     const staleResult = markStaleFactsAsUncertain(
       state,
@@ -135,6 +171,16 @@ export class ProfileMemoryStore {
     );
     if (reconciliationResult.appliedFacts > 0) {
       nextState = reconciliationResult.nextState;
+      shouldPersist = true;
+    }
+
+    const consolidationResult = consolidateProfileEpisodes(nextState.episodes);
+    if (consolidationResult.consolidatedEpisodeCount > 0) {
+      nextState = {
+        ...nextState,
+        updatedAt: nowIso,
+        episodes: consolidationResult.episodes
+      };
       shouldPersist = true;
     }
 
@@ -162,7 +208,8 @@ export class ProfileMemoryStore {
   async ingestFromTaskInput(
     taskId: string,
     userInput: string,
-    observedAt: string
+    observedAt: string,
+    options: ProfileMemoryIngestOptions = {}
   ): Promise<ProfileIngestResult> {
     const state = await this.load();
     const extractedCandidates = extractProfileFactCandidatesFromUserInput(
@@ -181,16 +228,45 @@ export class ProfileMemoryStore {
       ...inferredResolutionCandidates
     ];
     const applyResult = applyProfileFactCandidates(state, candidates);
-    if (applyResult.appliedFacts === 0) {
+    const extractedEpisodeCandidates = extractProfileEpisodeCandidatesFromUserInput(
+      userInput,
+      taskId,
+      observedAt
+    );
+    const mergedEpisodeCandidates = [
+      ...extractedEpisodeCandidates,
+      ...(options.additionalEpisodeCandidates ?? [])
+    ];
+    const inferredEpisodeResolutionCandidates =
+      buildInferredProfileEpisodeResolutionCandidates(
+        applyResult.nextState,
+        userInput,
+        taskId,
+        observedAt
+      );
+    const episodeCandidateResult = applyProfileEpisodeCandidates(
+      applyResult.nextState,
+      mergedEpisodeCandidates
+    );
+    const episodeResolutionResult = applyProfileEpisodeResolutions(
+      episodeCandidateResult.nextState,
+      inferredEpisodeResolutionCandidates
+    );
+
+    const totalAppliedFacts = applyResult.appliedFacts +
+      episodeCandidateResult.createdEpisodes +
+      episodeCandidateResult.updatedEpisodes +
+      episodeResolutionResult.resolvedEpisodes;
+    if (totalAppliedFacts === 0) {
       return {
         appliedFacts: 0,
         supersededFacts: 0
       };
     }
 
-    await this.save(applyResult.nextState);
+    await this.save(episodeResolutionResult.nextState);
     return {
-      appliedFacts: applyResult.appliedFacts,
+      appliedFacts: totalAppliedFacts,
       supersededFacts: applyResult.supersededFacts
     };
   }
@@ -213,6 +289,92 @@ export class ProfileMemoryStore {
   async getPlanningContext(maxFacts = 6, queryInput = ""): Promise<string> {
     const state = await this.load();
     return buildProfilePlanningContext(state, maxFacts, queryInput);
+  }
+
+  /**
+   * Returns bounded non-sensitive facts selected for the current planner query.
+   *
+   * @param maxFacts - Maximum number of facts to return.
+   * @param queryInput - Current planner query text.
+   * @returns Readable fact entries selected for query-aware planning.
+   */
+  async queryFactsForPlanningContext(
+    maxFacts = 6,
+    queryInput = ""
+  ): Promise<readonly ProfileReadableFact[]> {
+    const state = await this.load();
+    return queryProfileFactsForContinuity(state, {
+      entityHints: [queryInput],
+      maxFacts
+    });
+  }
+
+  /**
+   * Builds planner-facing episodic-memory context with bounded unresolved-situation summaries.
+   *
+   * **Why it exists:**
+   * Planner/model prompts sometimes need a small number of relevant unresolved situations, but only
+   * when the current query makes them relevant and only when they remain non-sensitive.
+   *
+   * **What it talks to:**
+   * - Uses `buildProfileEpisodePlanningContext` from
+   *   `./profileMemoryRuntime/profileMemoryEpisodePlanningContext`.
+   *
+   * @param maxEpisodes - Maximum number of episode summaries to include.
+   * @param queryInput - Current user/planner query used for relevance scoring.
+   * @returns Rendered episodic-memory planning context block.
+   */
+  async getEpisodePlanningContext(
+    maxEpisodes = 2,
+    queryInput = "",
+    nowIso = new Date().toISOString()
+  ): Promise<string> {
+    const state = await this.load();
+    return buildProfileEpisodePlanningContext(
+      state,
+      maxEpisodes,
+      queryInput,
+      nowIso,
+      this.staleAfterDays
+    );
+  }
+
+  /**
+   * Returns bounded non-sensitive episodes selected for the current planner query.
+   *
+   * @param maxEpisodes - Maximum number of episodes to return.
+   * @param queryInput - Current planner query text.
+   * @param nowIso - Timestamp used for lifecycle ranking.
+   * @returns Readable episode entries selected for query-aware planning.
+   */
+  async queryEpisodesForPlanningContext(
+    maxEpisodes = 2,
+    queryInput = "",
+    nowIso = new Date().toISOString()
+  ): Promise<readonly ProfileReadableEpisode[]> {
+    const state = await this.load();
+    return selectProfileEpisodesForPlanningQuery(
+      state,
+      maxEpisodes,
+      queryInput,
+      nowIso,
+      this.staleAfterDays
+    ).map((episode) => ({
+      episodeId: episode.id,
+      title: episode.title,
+      summary: episode.summary,
+      status: episode.status,
+      sensitive: episode.sensitive,
+      sourceKind: episode.sourceKind,
+      observedAt: episode.observedAt,
+      lastMentionedAt: episode.lastMentionedAt,
+      lastUpdatedAt: episode.lastUpdatedAt,
+      resolvedAt: episode.resolvedAt,
+      confidence: episode.confidence,
+      entityRefs: [...episode.entityRefs],
+      openLoopRefs: [...episode.openLoopRefs],
+      tags: [...episode.tags]
+    }));
   }
 
   /**
@@ -239,6 +401,12 @@ export class ProfileMemoryStore {
     const staleFactCount = countStaleActiveFacts(state, this.staleAfterDays, request.nowIso);
     const unresolvedCommitmentCount = countUnresolvedCommitments(state);
     const unresolvedCommitmentTopics = extractUnresolvedCommitmentTopics(state);
+    const relevantEpisodes = selectRelevantEpisodesForPulse(
+      state,
+      this.staleAfterDays,
+      request.nowIso,
+      2
+    );
     const relationship = assessRelationshipRole(state);
     const contextDrift = assessContextDrift(state);
 
@@ -264,6 +432,7 @@ export class ProfileMemoryStore {
       staleFactCount,
       unresolvedCommitmentCount,
       unresolvedCommitmentTopics,
+      relevantEpisodes,
       relationship,
       contextDrift
     };
@@ -289,6 +458,158 @@ export class ProfileMemoryStore {
   }
 
   /**
+   * Returns bounded non-sensitive profile facts relevant to current continuity/entity hints.
+   *
+   * @param graph - Current Stage 6.86 entity graph.
+   * @param stack - Current Stage 6.86 conversation stack.
+   * @param request - Continuity-aware fact query request.
+   * @returns Readable fact entries ranked for continuity-aware recall/planning.
+   */
+  async queryFactsForContinuity(
+    graph: EntityGraphV1,
+    stack: ConversationStackV1,
+    request: ProfileFactContinuityQueryRequest
+  ): Promise<readonly ProfileReadableFact[]> {
+    void graph;
+    void stack;
+    const state = await this.load();
+    return queryProfileFactsForContinuity(state, request);
+  }
+
+  /**
+   * Returns readable episodic-memory records under approval-aware sensitivity gating.
+   *
+   * @param request - Access request with purpose/approval/maxEpisodes controls.
+   * @returns Sorted readable episode entries filtered by sensitivity rules.
+   */
+  async readEpisodes(
+    request: ProfileAccessRequest,
+    nowIso = new Date().toISOString()
+  ): Promise<ProfileReadableEpisode[]> {
+    const state = await this.load();
+    return readProfileEpisodes(state, request, nowIso, this.staleAfterDays);
+  }
+
+  /**
+   * Returns bounded user-reviewable episodic-memory records under explicit review approval.
+   *
+   * @param maxEpisodes - Maximum number of remembered situations to surface.
+   * @param nowIso - Timestamp used for stale/closed ranking.
+   * @returns Readable episodic-memory records for direct user review.
+   */
+  async reviewEpisodesForUser(
+    maxEpisodes = 5,
+    nowIso = new Date().toISOString()
+  ): Promise<ProfileReadableEpisode[]> {
+    return this.readEpisodes(
+      {
+        purpose: "operator_view",
+        includeSensitive: true,
+        explicitHumanApproval: true,
+        approvalId: `memory_review:${nowIso}`,
+        maxEpisodes
+      },
+      nowIso
+    );
+  }
+
+  /**
+   * Applies one explicit user-driven episodic-memory status update.
+   *
+   * @param episodeId - Episode identifier targeted by the user.
+   * @param status - Target terminal/non-terminal status to apply.
+   * @param sourceTaskId - Command-scoped source task id.
+   * @param sourceText - User command text that triggered the update.
+   * @param note - Optional bounded outcome/correction note.
+   * @param nowIso - Timestamp applied to the mutation.
+   * @returns Updated readable episode, or `null` when the episode is unavailable.
+   */
+  async updateEpisodeFromUser(
+    episodeId: string,
+    status: ProfileEpisodeResolutionStatus,
+    sourceTaskId: string,
+    sourceText: string,
+    note?: string,
+    nowIso = new Date().toISOString()
+  ): Promise<ProfileReadableEpisode | null> {
+    const state = await this.load();
+    if (!state.episodes.some((episode) => episode.id === episodeId)) {
+      return null;
+    }
+
+    const applyResult = applyProfileEpisodeResolutions(state, [
+      {
+        episodeId,
+        status,
+        sourceTaskId,
+        source: sourceText,
+        observedAt: nowIso,
+        confidence: 1,
+        summary: note
+      }
+    ]);
+    if (applyResult.resolvedEpisodes === 0) {
+      return this.findReadableEpisodeById(applyResult.nextState, episodeId);
+    }
+
+    await this.save(applyResult.nextState);
+    return this.findReadableEpisodeById(applyResult.nextState, episodeId);
+  }
+
+  /**
+   * Forgets one remembered episodic-memory record entirely.
+   *
+   * @param episodeId - Episode identifier targeted by the user.
+   * @param nowIso - Timestamp applied to the mutation.
+   * @returns Removed readable episode, or `null` when no matching episode exists.
+   */
+  async forgetEpisodeFromUser(
+    episodeId: string,
+    _sourceTaskId: string,
+    _sourceText: string,
+    nowIso = new Date().toISOString()
+  ): Promise<ProfileReadableEpisode | null> {
+    const state = await this.load();
+    const removedEpisode = state.episodes.find((episode) => episode.id === episodeId);
+    if (!removedEpisode) {
+      return null;
+    }
+
+    const nextState: ProfileMemoryState = {
+      ...state,
+      updatedAt: nowIso,
+      episodes: state.episodes.filter((episode) => episode.id !== episodeId)
+    };
+    await this.save(nextState);
+    return toReadableEpisode(removedEpisode);
+  }
+
+  /**
+   * Selects bounded episodic-memory records relevant to the current continuity surfaces.
+   *
+   * @param graph - Current Stage 6.86 entity graph.
+   * @param stack - Current Stage 6.86 conversation stack.
+   * @param request - Entity-hint query parameters.
+   * @returns Deterministically ranked linked episodic-memory records.
+   */
+  async queryEpisodesForContinuity(
+    graph: EntityGraphV1,
+    stack: ConversationStackV1,
+    request: ProfileEpisodeContinuityQueryRequest,
+    nowIso = new Date().toISOString()
+  ) {
+    const state = await this.load();
+    return queryProfileEpisodesForContinuity(
+      state,
+      graph,
+      stack,
+      request,
+      nowIso,
+      this.staleAfterDays
+    );
+  }
+
+  /**
    * Encrypts and persists profile state to local storage.
    *
    * **Why it exists:**
@@ -306,4 +627,46 @@ export class ProfileMemoryStore {
   private async save(state: ProfileMemoryState): Promise<void> {
     await saveProfileMemoryState(this.filePath, this.encryptionKey, state);
   }
+
+  /**
+   * Finds one readable episodic-memory record by identifier.
+   *
+   * @param state - Loaded profile-memory state.
+   * @param episodeId - Target episode identifier.
+   * @returns Readable episodic-memory record, or `null` when absent.
+   */
+  private findReadableEpisodeById(
+    state: ProfileMemoryState,
+    episodeId: string
+  ): ProfileReadableEpisode | null {
+    const episode = state.episodes.find((entry) => entry.id === episodeId);
+    return episode ? toReadableEpisode(episode) : null;
+  }
+}
+
+/**
+ * Converts one canonical episode record into the public readable review shape.
+ *
+ * @param episode - Canonical stored episode record.
+ * @returns Readable episodic-memory record.
+ */
+function toReadableEpisode(
+  episode: ProfileMemoryState["episodes"][number]
+): ProfileReadableEpisode {
+  return {
+    episodeId: episode.id,
+    title: episode.title,
+    summary: episode.summary,
+    status: episode.status,
+    sensitive: episode.sensitive,
+    sourceKind: episode.sourceKind,
+    observedAt: episode.observedAt,
+    lastMentionedAt: episode.lastMentionedAt,
+    lastUpdatedAt: episode.lastUpdatedAt,
+    resolvedAt: episode.resolvedAt,
+    confidence: episode.confidence,
+    entityRefs: [...episode.entityRefs],
+    openLoopRefs: [...episode.openLoopRefs],
+    tags: [...episode.tags]
+  };
 }

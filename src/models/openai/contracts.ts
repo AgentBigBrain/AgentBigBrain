@@ -381,5 +381,52 @@ export const OPENAI_SCHEMA_CONTRACTS: Readonly<Record<KnownModelSchemaName, Reco
         rationale: { type: "string" }
       },
       required: ["intentType", "mode", "confidence", "rationale"]
+    },
+    language_episode_extraction_v1: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        episodes: {
+          type: "array",
+          maxItems: 2,
+          items: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              subjectName: { type: "string" },
+              eventSummary: { type: "string" },
+              supportingSnippet: { type: "string" },
+              status: {
+                type: "string",
+                enum: [
+                  "unresolved",
+                  "partially_resolved",
+                  "resolved",
+                  "outcome_unknown",
+                  "no_longer_relevant"
+                ]
+              },
+              confidence: {
+                type: "number",
+                minimum: 0,
+                maximum: 1
+              },
+              tags: {
+                type: "array",
+                items: { type: "string" }
+              }
+            },
+            required: [
+              "subjectName",
+              "eventSummary",
+              "supportingSnippet",
+              "status",
+              "confidence",
+              "tags"
+            ]
+          }
+        }
+      },
+      required: ["episodes"]
     }
   });

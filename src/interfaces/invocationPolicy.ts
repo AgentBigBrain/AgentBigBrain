@@ -14,6 +14,16 @@ export interface InvocationPolicyDecision {
   reason: "ALIAS_NOT_REQUIRED" | "ALIAS_MATCHED" | "ALIAS_REQUIRED" | "EMPTY_AFTER_ALIAS";
 }
 
+const VOCATIVE_GREETING_TOKENS = new Set([
+  "hello",
+  "hi",
+  "hey",
+  "yo",
+  "morning",
+  "afternoon",
+  "evening"
+]);
+
 /**
  * Normalizes alias into a stable shape for `invocationPolicy` logic.
  *
@@ -28,6 +38,16 @@ export interface InvocationPolicyDecision {
  */
 function normalizeAlias(value: string): string {
   return value.trim().replace(/^@+/, "").toLowerCase();
+}
+
+/**
+ * Normalizes a token for alias-comparison while allowing trailing punctuation in vocative forms.
+ *
+ * @param value - Raw token value from the user message.
+ * @returns Alias-comparison-safe token.
+ */
+function normalizeAliasToken(value: string): string {
+  return normalizeAlias(value).replace(/[,:;.!?\-]+$/g, "");
 }
 
 /**
@@ -71,6 +91,11 @@ function extractAliasMatch(
   trimmedText: string,
   alias: string
 ): { matched: boolean; remainder: string } {
+  const vocativeMatch = extractVocativeAliasMatch(trimmedText, alias);
+  if (vocativeMatch.matched) {
+    return vocativeMatch;
+  }
+
   const lowerText = trimmedText.toLowerCase();
   const directPrefix = alias;
   const atPrefix = `@${alias}`;
@@ -101,6 +126,61 @@ function extractAliasMatch(
   return {
     matched: false,
     remainder: ""
+  };
+}
+
+/**
+ * Accepts bounded greeting-plus-alias forms like `Hi BigBrain` or `Hey, BigBrain, ...`.
+ *
+ * This keeps the name-call gate human-friendly without turning any arbitrary in-sentence alias
+ * mention into an accepted invocation.
+ *
+ * @param trimmedText - User message trimmed for invocation matching.
+ * @param alias - Normalized invocation alias.
+ * @returns Matched state plus normalized remainder text.
+ */
+function extractVocativeAliasMatch(
+  trimmedText: string,
+  alias: string
+): { matched: boolean; remainder: string } {
+  const normalizedText = trimmedText.trim();
+  if (!normalizedText) {
+    return { matched: false, remainder: "" };
+  }
+
+  const rawTokens = normalizedText.split(/\s+/);
+  if (rawTokens.length < 2) {
+    return { matched: false, remainder: "" };
+  }
+
+  const aliasTokenIndex = rawTokens.findIndex((token) => normalizeAliasToken(token) === alias);
+  if (aliasTokenIndex <= 0) {
+    return { matched: false, remainder: "" };
+  }
+
+  const leadingTokens = rawTokens.slice(0, aliasTokenIndex);
+  const leadingNormalized = leadingTokens
+    .map((token) => normalizeAliasToken(token))
+    .filter((token) => token.length > 0);
+  if (
+    leadingNormalized.length === 0 ||
+    leadingNormalized.length > 3 ||
+    leadingNormalized.some((token) => !VOCATIVE_GREETING_TOKENS.has(token))
+  ) {
+    return { matched: false, remainder: "" };
+  }
+
+  const aliasToken = rawTokens[aliasTokenIndex];
+  const aliasTail = aliasToken.slice(aliasToken.toLowerCase().indexOf(alias) + alias.length);
+  if (aliasTail && !/^[,:;.!?\-]+$/.test(aliasTail)) {
+    return { matched: false, remainder: "" };
+  }
+
+  const remainderTokens = rawTokens.filter((_, index) => index !== aliasTokenIndex);
+  const remainder = remainderTokens.join(" ").trim();
+  return {
+    matched: true,
+    remainder
   };
 }
 

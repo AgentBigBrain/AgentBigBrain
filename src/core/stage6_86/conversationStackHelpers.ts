@@ -8,59 +8,11 @@ import type {
   TopicKeyCandidateV1,
   TopicNodeV1
 } from "../types";
+import { countLanguageTermOverlap } from "../languageRuntime/languageScoring";
+import { extractConversationTopicTerms } from "../languageRuntime/queryIntentTerms";
 import { sha256HexFromCanonicalJson } from "../normalizers/canonicalizationRules";
 
-const TOPIC_TOKEN_PATTERN = /[a-z0-9]+/g;
-const TOPIC_STOP_WORDS = new Set([
-  "a",
-  "an",
-  "the",
-  "let",
-  "lets",
-  "discuss",
-  "now",
-  "also",
-  "go",
-  "back",
-  "there",
-  "here",
-  "thread",
-  "topic",
-  "and",
-  "for",
-  "that",
-  "this",
-  "with",
-  "from",
-  "have",
-  "your",
-  "you",
-  "about",
-  "into",
-  "just",
-  "when",
-  "where",
-  "what",
-  "which",
-  "will",
-  "would",
-  "could",
-  "should",
-  "please",
-  "show",
-  "tell",
-  "need",
-  "next",
-  "week",
-  "today",
-  "tomorrow",
-  "yesterday",
-  "chat",
-  "bigbrain",
-  "agentbigbrain"
-]);
 export const RETURN_SIGNAL_PATTERN = /\b(?:back|return|resume|continue|pick up)\b/i;
-const MIN_TOPIC_TOKEN_LENGTH = 3;
 export const DEFAULT_MAX_THREADS = 12;
 export const DEFAULT_TOPIC_SWITCH_THRESHOLD = 0.56;
 const MAX_TOPIC_KEY_CHARS = 48;
@@ -111,16 +63,7 @@ export function normalizeTopicToken(value: string): string {
  * @returns Ordered collection produced by this step.
  */
 export function tokenizeTopicWords(value: string): readonly string[] {
-  const tokens = normalizeWhitespace(value).toLowerCase().match(TOPIC_TOKEN_PATTERN) ?? [];
-  const uniqueTokens = new Set<string>();
-  for (const token of tokens) {
-    const normalized = normalizeTopicToken(token);
-    if (normalized.length < MIN_TOPIC_TOKEN_LENGTH || TOPIC_STOP_WORDS.has(normalized)) {
-      continue;
-    }
-    uniqueTokens.add(normalized);
-  }
-  return [...uniqueTokens];
+  return extractConversationTopicTerms(value).map((token) => normalizeTopicToken(token));
 }
 
 /**
@@ -284,7 +227,7 @@ export function resolveExplicitReturnThread(
     if (labelTokens.length === 0) {
       return false;
     }
-    return labelTokens.some((token) => normalized.includes(token));
+    return countLanguageTermOverlap(labelTokens, tokenizeTopicWords(normalized)) > 0;
   });
 
   if (matches.length === 1) {

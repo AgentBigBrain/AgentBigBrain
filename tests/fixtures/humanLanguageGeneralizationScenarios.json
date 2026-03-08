@@ -1,0 +1,215 @@
+{
+  "schemaVersion": 1,
+  "scenarios": [
+    {
+      "id": "episode_understanding_billy_fall_positive",
+      "category": "episode_understanding",
+      "polarity": "positive",
+      "title": "Recognize a richer injury situation without exact regex phrasing",
+      "summary": "Billy had a rough fall is described in natural language and should qualify as an episode candidate.",
+      "expectedBehavior": [
+        "extract_episode_candidate",
+        "preserve_followup_relevance"
+      ],
+      "qualities": {
+        "resumedSituation": true,
+        "mixedPracticalRelational": true
+      },
+      "transcript": [
+        {
+          "speaker": "user",
+          "text": "Billy had a rough scare a few weeks ago. He slipped on the back steps after work and landed hard on his shoulder, so the whole evening turned into urgent care and phone calls. I never really told you how that situation wrapped up. It has still been sitting in the back of my mind."
+        },
+        {
+          "speaker": "assistant",
+          "text": "That sounds like exactly the kind of situation worth keeping track of carefully. If it still feels unresolved later, I should be able to help you revisit it naturally instead of acting like it never happened."
+        }
+      ]
+    },
+    {
+      "id": "episode_understanding_billy_stressed_negative",
+      "category": "episode_understanding",
+      "polarity": "negative",
+      "title": "Do not over-infer an episode from vague emotional venting",
+      "summary": "General stress or frustration should not automatically become a concrete remembered situation.",
+      "expectedBehavior": [
+        "suppress_episode_candidate"
+      ],
+      "qualities": {
+        "mixedPracticalRelational": true
+      },
+      "transcript": [
+        {
+          "speaker": "user",
+          "text": "Billy has just been all over the place lately. One day he sounds excited about work and the next day he is irritated with everyone, so talking to him has been exhausting. Nothing dramatic actually happened this week. I mostly needed to vent about how inconsistent he has been."
+        },
+        {
+          "speaker": "assistant",
+          "text": "That sounds frustrating, but it is also different from a concrete event with a clear follow-up. I should avoid pretending there is a single unresolved situation when you were really just describing a mood pattern."
+        }
+      ]
+    },
+    {
+      "id": "contextual_recall_mom_hospital_positive",
+      "category": "contextual_recall",
+      "polarity": "positive",
+      "title": "Resolve a vague callback to the right older situation",
+      "summary": "The later phrase 'that whole thing' should resolve to the earlier hospital episode involving the user's mom.",
+      "expectedBehavior": [
+        "resolve_contextual_reference",
+        "offer_one_inline_followup"
+      ],
+      "qualities": {
+        "topicDrift": true,
+        "resumedSituation": true,
+        "vagueCallback": true,
+        "mixedPracticalRelational": true
+      },
+      "transcript": [
+        {
+          "speaker": "user",
+          "text": "My mom ended up in the hospital for a bit last month after her breathing got bad overnight. It was scary, and most of the stress came from waiting around without clear answers. We never really got a clean explanation before she went home. I have been half wondering whether that story is finished or not."
+        },
+        {
+          "speaker": "assistant",
+          "text": "I can see why that would linger, especially if the discharge did not come with a satisfying explanation. If you bring it back up later, I should be able to connect the dots instead of treating it like a brand new topic."
+        },
+        {
+          "speaker": "user",
+          "text": "Anyway, I had to spend half the morning sorting out paperwork and texting people back. My mom also called again today, and it reminded me that we never closed the loop on that whole thing. I am not even sure what question I should be asking now. Do you think it is worth revisiting?"
+        }
+      ]
+    },
+    {
+      "id": "contextual_recall_billy_name_only_negative",
+      "category": "contextual_recall",
+      "polarity": "negative",
+      "title": "Do not revive an old situation from a bare repeated name",
+      "summary": "Mentioning Billy again for a completely different reason should not automatically reopen an older issue.",
+      "expectedBehavior": [
+        "suppress_contextual_recall"
+      ],
+      "qualities": {
+        "topicDrift": true
+      },
+      "transcript": [
+        {
+          "speaker": "user",
+          "text": "A while back I told you Billy was dealing with a rough fall and the follow-up felt unfinished. That was one of those situations that stayed in my head because it never got a clean ending. I have not really had an update since then. I just remember it feeling unresolved."
+        },
+        {
+          "speaker": "assistant",
+          "text": "That makes sense. If you mention Billy later in a way that clearly connects back to that event, I should be able to ask about it once without derailing the whole conversation."
+        },
+        {
+          "speaker": "user",
+          "text": "Billy texted me this morning about a movie recommendation and a new coffee place near his office. We mostly joked around and traded music suggestions for a few minutes. There was nothing serious in the conversation at all. I just wanted to tell you something light for once."
+        }
+      ]
+    },
+    {
+      "id": "cross_memory_synthesis_billy_followup_positive",
+      "category": "cross_memory_synthesis",
+      "polarity": "positive",
+      "title": "Combine fact, episode, and continuity state into one bounded hypothesis",
+      "summary": "A later Billy mention plus an unresolved episode and paused follow-up should support one bounded synthesis.",
+      "expectedBehavior": [
+        "produce_bounded_synthesis",
+        "include_supporting_evidence"
+      ],
+      "qualities": {
+        "topicDrift": true,
+        "resumedSituation": true,
+        "mixedPracticalRelational": true
+      },
+      "transcript": [
+        {
+          "speaker": "user",
+          "text": "Billy is one of the people I check on most often, so I notice when something feels off. A few weeks ago he had that bad fall, and we never really got a satisfying ending after the urgent care visit. I told myself I would follow up once he had time to breathe. Then the week got away from me."
+        },
+        {
+          "speaker": "assistant",
+          "text": "That gives me three useful signals already: Billy matters to you, the fall itself was a concrete event, and you intended to follow up later. If you bring him up again, the best response would be one bounded reminder tied to that unresolved situation."
+        },
+        {
+          "speaker": "user",
+          "text": "I heard from Billy again today while I was juggling errands and work. He sounded normal enough, but it made me realize there are still loose ends around that fall and I never actually checked how it turned out. I do not need a dramatic recap, just help figuring out the right next question. What would you ask?"
+        }
+      ]
+    },
+    {
+      "id": "cross_memory_synthesis_conflict_negative",
+      "category": "cross_memory_synthesis",
+      "polarity": "negative",
+      "title": "Suppress synthesis when the evidence conflicts or stays weak",
+      "summary": "A vague callback with conflicting details should not produce a confident combined memory hypothesis.",
+      "expectedBehavior": [
+        "suppress_bounded_synthesis"
+      ],
+      "qualities": {
+        "vagueCallback": true,
+        "topicDrift": true
+      },
+      "transcript": [
+        {
+          "speaker": "user",
+          "text": "There were a couple different family things stacked on top of each other last month, and honestly I may have blended some of them together when I talked about them. Someone had a hospital scare, someone else had a work mess, and I was exhausted the whole time. I do not think I explained any of it cleanly. Parts of it might not even belong to the same person."
+        },
+        {
+          "speaker": "assistant",
+          "text": "That is exactly the kind of ambiguity where I should slow down instead of acting certain. If you reference it later in a vague way, a safe system should ask for clarification rather than manufacture one neat combined memory."
+        },
+        {
+          "speaker": "user",
+          "text": "Something about that whole mess crossed my mind again today while I was driving. I cannot actually tell whether I am thinking about the hospital piece or the work piece, and I might be mixing two people together. I just know it felt unresolved in some broad emotional sense. That is probably too fuzzy to pin down cleanly right now."
+        }
+      ]
+    },
+    {
+      "id": "proactive_followup_explicit_request_positive",
+      "category": "proactive_utility",
+      "polarity": "positive",
+      "title": "Allow a specific proactive follow-up when the user explicitly asked for it",
+      "summary": "An explicit follow-up request for test results should qualify as useful proactive behavior.",
+      "expectedBehavior": [
+        "allow_proactive_followup"
+      ],
+      "qualities": {
+        "mixedPracticalRelational": true
+      },
+      "transcript": [
+        {
+          "speaker": "user",
+          "text": "I am probably going to lose track of this if tomorrow gets busy. Billy is supposed to hear back about his MRI results in the afternoon, and I really do want to check in after that instead of forgetting again. If I do not bring it up on my own, please nudge me once in a way that is actually useful. A generic check-in would just blend into everything else."
+        },
+        {
+          "speaker": "assistant",
+          "text": "That is a strong proactive case because you explicitly asked for the follow-up and there is a concrete reason for it. The nudge should mention the MRI results directly, not some vague 'how is Billy' placeholder."
+        }
+      ]
+    },
+    {
+      "id": "proactive_followup_generic_ping_negative",
+      "category": "proactive_utility",
+      "polarity": "negative",
+      "title": "Suppress generic companionship-style check-ins",
+      "summary": "A relationship-flavored but low-value check-in should be treated as worse than silence.",
+      "expectedBehavior": [
+        "suppress_generic_proactive_nudge"
+      ],
+      "qualities": {
+        "mixedPracticalRelational": true
+      },
+      "transcript": [
+        {
+          "speaker": "user",
+          "text": "Nothing is really open right now, and I am just bouncing between normal little tasks. I might mention friends or family in passing because that is how I talk, but there is not a hidden assignment inside every name. Sometimes I really am just making conversation. If there is no concrete reason to interrupt me later, I would rather not get a random check-in."
+        },
+        {
+          "speaker": "assistant",
+          "text": "That should suppress proactive outreach instead of encouraging it. The right system should understand that a generic 'just seeing how you are doing' message is low value when there is no unresolved situation, no explicit follow-up request, and no time-sensitive reason to speak up."
+        }
+      ]
+    }
+  ]
+}

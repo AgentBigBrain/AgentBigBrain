@@ -46,3 +46,9 @@
     of relying on unwritten conventions.
 16. Folder-level `README.md` files under `src/` must not contain absolute local filesystem paths or
     personal workspace links. Use inline code identifiers or repo-relative references instead.
+17. Every implementation plan created under `docs/plans/` must include a final section titled
+    `When another agent picks this up:`.
+18. That section must say what is already done, what is next, what not to restart, and what files
+    or README contracts the next agent should read first.
+19. If a plan is actively being executed, keep the `When another agent picks this up:` section
+    updated in the same change as phase/status updates so handoff does not depend on guesswork.

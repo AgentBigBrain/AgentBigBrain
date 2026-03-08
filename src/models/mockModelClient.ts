@@ -5,6 +5,7 @@
 import {
   AutonomousNextStepModelOutput,
   GovernorModelOutput,
+  LanguageEpisodeExtractionModelOutput,
   ModelClient,
   ModelUsageSnapshot,
   ProactiveGoalModelOutput,
@@ -14,6 +15,7 @@ import {
 } from "./types";
 import { normalizeStructuredModelOutput, validateStructuredModelOutput } from "./schema/validation";
 import { buildIntentInterpretationOutput } from "./mock/intentResponses";
+import { buildLanguageEpisodeExtractionOutput } from "./mock/languageUnderstanding";
 import { buildPlannerOutput } from "./mock/plannerResponses";
 import { buildResponseSynthesisOutput } from "./mock/responseSynthesis";
 import { asString, isActionType, parseJsonObject } from "./mock/contracts";
@@ -251,6 +253,8 @@ export class MockModelClient implements ModelClient {
       output = buildResponseSynthesisOutput(request.userPrompt);
     } else if (request.schemaName === "intent_interpretation_v1") {
       output = buildIntentInterpretationOutput(request.userPrompt);
+    } else if (request.schemaName === "language_episode_extraction_v1") {
+      output = buildLanguageEpisodeExtractionOutput(request.userPrompt) as LanguageEpisodeExtractionModelOutput;
     } else {
       throw new Error(`MockModelClient does not support schema: ${request.schemaName}`);
     }

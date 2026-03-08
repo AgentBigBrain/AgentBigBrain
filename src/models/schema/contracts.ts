@@ -10,7 +10,8 @@ export const KNOWN_MODEL_SCHEMA_NAMES = [
   "governor_v1",
   "autonomous_next_step_v1",
   "proactive_goal_v1",
-  "intent_interpretation_v1"
+  "intent_interpretation_v1",
+  "language_episode_extraction_v1"
 ] as const;
 
 export type KnownModelSchemaName = typeof KNOWN_MODEL_SCHEMA_NAMES[number];

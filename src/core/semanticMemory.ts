@@ -9,40 +9,12 @@ import { MAIN_AGENT_ID, normalizeAgentId } from "./agentIdentity";
 import { EmbeddingProvider, normalizeTextForEmbedding } from "./embeddingProvider";
 import { withFileLock, writeFileAtomic } from "./fileLock";
 import { makeId } from "./ids";
+import { countLanguageTermOverlap } from "./languageRuntime/languageScoring";
+import { extractSemanticConceptTerms } from "./languageRuntime/queryIntentTerms";
 import { SqliteVectorStore } from "./vectorStore";
 
 const MAX_LESSONS = 300;
-const MIN_CONCEPT_LENGTH = 4;
 const MIN_LINK_OVERLAP = 2;
-const STOP_WORDS = new Set([
-  "this",
-  "that",
-  "from",
-  "with",
-  "were",
-  "when",
-  "what",
-  "where",
-  "which",
-  "should",
-  "would",
-  "could",
-  "have",
-  "has",
-  "will",
-  "been",
-  "always",
-  "never",
-  "into",
-  "about",
-  "task",
-  "action",
-  "actions",
-  "blocked",
-  "allow",
-  "allows",
-  "using"
-]);
 
 export type LessonMemoryType = "fact" | "experience" | "belief";
 
@@ -102,13 +74,7 @@ function normalizeConcept(token: string): string {
  * @returns Ordered collection produced by this step.
  */
 function extractConcepts(text: string): string[] {
-  const normalizedTokens = text
-    .split(/[^a-zA-Z0-9_]+/)
-    .map((token) => normalizeConcept(token))
-    .filter((token) => token.length >= MIN_CONCEPT_LENGTH)
-    .filter((token) => !STOP_WORDS.has(token));
-
-  return [...new Set(normalizedTokens)].slice(0, 20);
+  return extractSemanticConceptTerms(text).map((token) => normalizeConcept(token));
 }
 
 /**
@@ -125,14 +91,7 @@ function extractConcepts(text: string): string[] {
  * @returns Computed numeric value.
  */
 function calculateOverlap(left: string[], right: string[]): number {
-  const rightSet = new Set(right);
-  let overlap = 0;
-  for (const concept of left) {
-    if (rightSet.has(concept)) {
-      overlap += 1;
-    }
-  }
-  return overlap;
+  return countLanguageTermOverlap(left, right);
 }
 
 /**

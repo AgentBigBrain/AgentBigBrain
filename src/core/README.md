@@ -9,9 +9,12 @@ The extracted `src/core/autonomy/` subsystem owns the detailed bounded-autonomy 
 `agentLoop.ts` remains a stable top-level entrypoint here. The extracted
 `src/core/orchestration/` subsystem owns shared orchestration contracts and mission/postmortem
 helpers for `orchestrator.ts` and `taskRunner.ts`. The extracted
+`src/core/languageRuntime/` subsystem owns canonical deterministic non-safety tokenization,
+language-profile, stop-word, and overlap-scoring helpers used by memory, continuity, and retrieval
+surfaces. The extracted
 `src/core/profileMemoryRuntime/` subsystem owns the runtime contracts plus query, commitment
-matching, and persistence helpers that sit between encrypted profile storage and planner/operator
-surfaces. The extracted `src/core/stage6_85/` subsystem owns clustered Stage 6.85 mission-UX,
+matching, episodic-memory, and persistence helpers that sit between encrypted profile storage and
+planner/operator surfaces. The extracted `src/core/stage6_85/` subsystem owns clustered Stage 6.85 mission-UX,
 latency, observability, playbook, quality-gate, recovery, clone-workflow, workflow-replay, and
 runtime-guard helpers while the matching `stage6_85*Policy.ts` entrypoints remain stable
 compatibility surfaces. The extracted `src/core/stage6_86/` subsystem now owns the canonical
@@ -42,6 +45,12 @@ env-parsing helpers while `config.ts` remains the stable config entrypoint.
   `src/core/orchestration/taskRunnerGovernance.ts`,
   `src/core/orchestration/taskRunnerLifecycle.ts`,
   `src/core/orchestration/taskRunnerSummary.ts`.
+- Extracted language-runtime subsystem: `src/core/languageRuntime/contracts.ts`,
+  `src/core/languageRuntime/languageProfiles.ts`,
+  `src/core/languageRuntime/stopWordPolicy.ts`,
+  `src/core/languageRuntime/tokenization.ts`,
+  `src/core/languageRuntime/queryIntentTerms.ts`,
+  `src/core/languageRuntime/languageScoring.ts`.
 - Autonomy foundations, planning context, and prompt classification:
   `advancedAutonomyFoundation.ts`, `advancedAutonomyRuntime.ts`, `autonomyFoundation.ts`,
   `commitmentSignalClassifier.ts`, `currentRequestExtraction.ts`, `plannerActionSchema.ts`,
@@ -75,6 +84,16 @@ env-parsing helpers while `config.ts` remains the stable config entrypoint.
   `src/core/profileMemoryRuntime/profileMemoryCommitmentTopics.ts`,
   `src/core/profileMemoryRuntime/profileMemoryContactExtraction.ts`,
   `src/core/profileMemoryRuntime/profileMemoryEncryption.ts`,
+  `src/core/profileMemoryRuntime/profileMemoryEpisodeContracts.ts`,
+  `src/core/profileMemoryRuntime/profileMemoryEpisodeExtraction.ts`,
+  `src/core/profileMemoryRuntime/profileMemoryEpisodeConsolidation.ts`,
+  `src/core/profileMemoryRuntime/profileMemoryEpisodeLinking.ts`,
+  `src/core/profileMemoryRuntime/profileMemoryEpisodeMutations.ts`,
+  `src/core/profileMemoryRuntime/profileMemoryEpisodePlanningContext.ts`,
+  `src/core/profileMemoryRuntime/profileMemoryEpisodeNormalization.ts`,
+  `src/core/profileMemoryRuntime/profileMemoryEpisodeQueries.ts`,
+  `src/core/profileMemoryRuntime/profileMemoryEpisodeResolution.ts`,
+  `src/core/profileMemoryRuntime/profileMemoryEpisodeState.ts`,
   `src/core/profileMemoryRuntime/profileMemoryExtraction.ts`,
   `src/core/profileMemoryRuntime/profileMemoryFactLifecycle.ts`,
   `src/core/profileMemoryRuntime/profileMemoryMutations.ts`,
@@ -128,7 +147,9 @@ env-parsing helpers while `config.ts` remains the stable config entrypoint.
 - governed orchestration flow, task execution sequencing, and autonomy entrypoints
 - persisted receipts, memory state, profile state, and stage-policy state
 - shared runtime helpers consumed by `src/governors/`, `src/interfaces/`, `src/models/`, and
-  `src/organs/`
+  `src/organs/`, including bounded episodic-memory queries and freshness-ranked unresolved
+  situations for active-conversation recall, private remembered-situation review/update, or pulse
+  grounding
 
 ## Invariants
 - Shared contracts belong here before they belong in higher layers.
@@ -148,9 +169,19 @@ env-parsing helpers while `config.ts` remains the stable config entrypoint.
 - `taskRunnerSupport.ts` should remain a shared utility surface only when the helpers are reused
   outside orchestration; task-runner proposal, persistence, and execution helpers belong in
   `src/core/orchestration/`.
-- Profile-memory runtime contracts and query, pulse, mutation, and persistence helpers belong in
-  `src/core/profileMemoryRuntime/` once they are reused across planner, operator, or interface
-  call sites.
+- Profile-memory runtime contracts and query, pulse, mutation, persistence, and episodic-memory
+  helpers belong in `src/core/profileMemoryRuntime/` once they are reused across planner,
+  operator, or interface call sites.
+- Explicit user review/correction of remembered situations should still route through stable brokered
+  or interface entrypoints, not direct encrypted-store access from transport layers.
+- Remembered-situation resolve, wrong, and forget flows must stay bounded, deterministic, and
+  approval-aware even when private user controls exist at the interface layer.
+- Conversational language generalization for memory, recall, and planner-context ranking should
+  route through `src/core/languageRuntime/`; this folder should not keep growing scattered ad hoc
+  stop-word or tokenization rules across memory surfaces.
+- Safety-critical lexical policy should remain deterministic here or in the dedicated governor or
+  intent surfaces; richer human-language understanding belongs in bounded higher-level runtimes or
+  organs, not in fail-closed hard-constraint code.
 
 ## Related Tests
 - `tests/core/agentLoop.test.ts`
@@ -159,6 +190,7 @@ env-parsing helpers while `config.ts` remains the stable config entrypoint.
 - `tests/core/shellRuntimeProfile.test.ts`
 - `tests/core/autonomyModules.test.ts`
 - `tests/core/orchestrationModules.test.ts`
+- `tests/core/languageRuntime.test.ts`
 - `tests/core/orchestratorLearning.test.ts`
 - `tests/core/orchestratorPlanning.test.ts`
 - `tests/core/orchestratorGovernance.test.ts`
@@ -175,6 +207,13 @@ env-parsing helpers while `config.ts` remains the stable config entrypoint.
 - `tests/core/profileMemoryMutations.test.ts`
 - `tests/core/profileMemoryNormalization.test.ts`
 - `tests/core/profileMemoryFactLifecycle.test.ts`
+- `tests/core/profileMemoryEpisodeExtraction.test.ts`
+- `tests/core/profileMemoryEpisodeLinking.test.ts`
+- `tests/core/profileMemoryEpisodeMutations.test.ts`
+- `tests/core/profileMemoryEpisodePlanningContext.test.ts`
+- `tests/core/profileMemoryEpisodeQueries.test.ts`
+- `tests/core/profileMemoryEpisodeResolution.test.ts`
+- `tests/core/profileMemoryEpisodeConsolidation.test.ts`
 - `tests/core/profileMemoryStateNormalization.test.ts`
 - `tests/core/profileMemoryExtraction.test.ts`
 - `tests/core/profileMemoryEncryption.test.ts`

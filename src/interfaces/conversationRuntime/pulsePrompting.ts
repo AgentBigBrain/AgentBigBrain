@@ -110,6 +110,13 @@ export function buildPulsePrompt(
     reason === "unresolved_commitment"
       ? "If you mention unresolved commitments, focus only on the listed topics and avoid unrelated recent topics."
       : null;
+  const relevantEpisodesLine =
+    evaluation.relevantEpisodes.length > 0 &&
+    (reason === "contextual_followup" || reason === "user_requested_followup")
+      ? `Relevant unresolved situations: ${evaluation.relevantEpisodes
+        .map((episode) => `${episode.title} (${episode.status}; ${episode.ageDays}d old)`)
+        .join("; ")}`
+      : null;
   const contextualLines =
     reason === "contextual_followup" && contextualCandidate
       ? [
@@ -133,6 +140,7 @@ export function buildPulsePrompt(
     `Signal counts: staleFactCount=${evaluation.staleFactCount}, unresolvedCommitmentCount=${evaluation.unresolvedCommitmentCount}`,
     ...(unresolvedTopicsLine ? [unresolvedTopicsLine] : []),
     ...(unresolvedTopicsDirective ? [unresolvedTopicsDirective] : []),
+    ...(relevantEpisodesLine ? [relevantEpisodesLine] : []),
     ...contextualLines,
     "Generate one concise, friendly follow-up message in natural language.",
     "Be truthful that you are an AI assistant only if that identity is directly relevant, and do not prepend labels like 'AI assistant response' or 'AI assistant check-in'.",

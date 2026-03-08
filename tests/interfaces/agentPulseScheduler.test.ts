@@ -64,6 +64,7 @@ function buildPulseEvaluation(
     staleFactCount: 0,
     unresolvedCommitmentCount: 0,
     unresolvedCommitmentTopics: [],
+    relevantEpisodes: [],
     relationship: {
       role: "unknown",
       roleFactId: null

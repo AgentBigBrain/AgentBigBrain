@@ -6,6 +6,10 @@ import type { AgentPulseDecision } from "../../core/agentPulse";
 import type { AgentPulseEvaluationResult } from "../../core/profileMemoryStore";
 import type { ConversationSession, ConversationTurn } from "../sessionStore";
 import {
+  buildContextualTopicCooldownHistory,
+  resolveContextualTopicCooldown
+} from "../proactiveRuntime/cooldownPolicy";
+import {
   classifyContextualFollowupLexicalCue,
   type ContextualFollowupLexicalClassification
 } from "../contextualFollowupLexicalClassifier";
@@ -24,7 +28,6 @@ export interface ContextualFollowupCandidate {
 
 const CONTEXTUAL_FOLLOWUP_MIN_CONFIDENCE = 0.7;
 const CONTEXTUAL_FOLLOWUP_SIGNAL_MAX_AGE_MS = 72 * 60 * 60 * 1000;
-const CONTEXTUAL_FOLLOWUP_TOPIC_COOLDOWN_MS = 6 * 60 * 60 * 1000;
 
 /**
  * Normalizes confidence into deterministic bounds.
@@ -135,55 +138,6 @@ function calculateContextualLinkageConfidence(
 }
 
 /**
- * Extracts the derived contextual topic key from a previously emitted pulse prompt.
- */
-function extractContextualTopicKeyFromPulseInput(input: string): string | null {
-  const reasonMatch = input.match(/^\s*Reason code:\s*([a-z_]+)/im);
-  if (!reasonMatch || reasonMatch[1].trim().toLowerCase() !== "contextual_followup") {
-    return null;
-  }
-  const topicKeyMatch = input.match(/^\s*Contextual topic key(?:\s+\(derived\))?:\s*([a-z0-9_]+)/im);
-  if (!topicKeyMatch) {
-    return null;
-  }
-  return topicKeyMatch[1].trim().toLowerCase();
-}
-
-/**
- * Resolves the next eligible time for a contextual topic cooldown, if any.
- */
-function resolveContextualTopicCooldown(
-  session: ConversationSession,
-  topicKey: string,
-  nowMs: number
-): string | null {
-  let latestTopicPulseMs: number | null = null;
-  const history = [...session.queuedJobs, ...session.recentJobs];
-  for (const job of history) {
-    const matchedTopicKey = extractContextualTopicKeyFromPulseInput(job.input);
-    if (matchedTopicKey !== topicKey) {
-      continue;
-    }
-    const atIso = job.completedAt ?? job.createdAt;
-    const atMs = Date.parse(atIso);
-    if (!Number.isFinite(atMs)) {
-      continue;
-    }
-    if (latestTopicPulseMs === null || atMs > latestTopicPulseMs) {
-      latestTopicPulseMs = atMs;
-    }
-  }
-
-  if (latestTopicPulseMs === null) {
-    return null;
-  }
-  if (nowMs - latestTopicPulseMs >= CONTEXTUAL_FOLLOWUP_TOPIC_COOLDOWN_MS) {
-    return null;
-  }
-  return new Date(latestTopicPulseMs + CONTEXTUAL_FOLLOWUP_TOPIC_COOLDOWN_MS).toISOString();
-}
-
-/**
  * Evaluates whether a bounded contextual follow-up candidate exists for a session.
  */
 export function evaluateContextualFollowupCandidate(
@@ -275,7 +229,7 @@ export function evaluateContextualFollowupCandidate(
 
   const topicIdentity = buildContextualTopicIdentity(topicTokens);
   const cooldownNextEligibleAtIso = resolveContextualTopicCooldown(
-    session,
+    buildContextualTopicCooldownHistory(session),
     topicIdentity.topicKey,
     nowMs
   );
@@ -317,6 +271,7 @@ export function buildSuppressedEvaluation(
     staleFactCount: 0,
     unresolvedCommitmentCount: 0,
     unresolvedCommitmentTopics: [],
+    relevantEpisodes: [],
     relationship: {
       role: "unknown",
       roleFactId: null

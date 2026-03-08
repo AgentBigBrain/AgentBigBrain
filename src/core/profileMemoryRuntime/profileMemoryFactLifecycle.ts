@@ -102,7 +102,8 @@ export function upsertTemporalProfileFact(
     nextState: {
       schemaVersion: PROFILE_MEMORY_SCHEMA_VERSION,
       updatedAt: nowIso,
-      facts: nextFacts
+      facts: nextFacts,
+      episodes: state.episodes ?? []
     },
     upsertedFact,
     supersededFactIds

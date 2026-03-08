@@ -11,6 +11,8 @@ import { test } from "node:test";
 import { MemoryAccessAuditStore } from "../../src/core/memoryAccessAudit";
 import { ProfileMemoryStore } from "../../src/core/profileMemoryStore";
 import { TaskRequest } from "../../src/core/types";
+import { MockModelClient } from "../../src/models/mockModelClient";
+import { LanguageUnderstandingOrgan } from "../../src/organs/languageUnderstanding/episodeExtraction";
 import { extractCurrentUserRequest, MemoryBrokerOrgan } from "../../src/organs/memoryBroker";
 
 /**
@@ -180,6 +182,7 @@ test("memory broker appends memory-access audit events with required fields", as
         taskId: string;
         queryHash: string;
         retrievedCount: number;
+        retrievedEpisodeCount: number;
         redactedCount: number;
         domainLanes: string[];
       }>;
@@ -193,9 +196,118 @@ test("memory broker appends memory-access audit events with required fields", as
     assert.equal(lastEvent.taskId, "task_memory_audit_2");
     assert.match(lastEvent.queryHash, /^[a-f0-9]{64}$/i);
     assert.ok(typeof lastEvent.retrievedCount === "number");
+    assert.ok(typeof lastEvent.retrievedEpisodeCount === "number");
     assert.ok(typeof lastEvent.redactedCount === "number");
     assert.ok(Array.isArray(lastEvent.domainLanes));
     assert.ok(lastEvent.domainLanes.length >= 1);
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("memory broker injects bounded unresolved episode context for relevant follow-up queries", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-memory-broker-episodes-"));
+  const profilePath = path.join(tempDir, "profile_memory.secure.json");
+  const key = Buffer.alloc(32, 33);
+  const store = new ProfileMemoryStore(profilePath, key, 90);
+  const broker = new MemoryBrokerOrgan(store);
+
+  try {
+    await broker.buildPlannerInput(
+      buildTask(
+        "task_memory_episode_seed_1",
+        "Billy fell down three weeks ago and I never told you how it ended."
+      )
+    );
+
+    const enriched = await broker.buildPlannerInput(
+      buildTask(
+        "task_memory_episode_seed_2",
+        "How is Billy doing after the fall?"
+      )
+    );
+
+    assert.equal(enriched.profileMemoryStatus, "available");
+    assert.match(enriched.userInput, /\[AgentFriendEpisodeContext\]/);
+    assert.match(enriched.userInput, /Billy fell down/);
+    assert.match(enriched.userInput, /status=unresolved/);
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("memory broker stores richer model-assisted situations that deterministic regexes would miss", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-memory-broker-language-"));
+  const profilePath = path.join(tempDir, "profile_memory.secure.json");
+  const key = Buffer.alloc(32, 35);
+  const store = new ProfileMemoryStore(profilePath, key, 90);
+  const broker = new MemoryBrokerOrgan(
+    store,
+    undefined,
+    undefined,
+    new LanguageUnderstandingOrgan(new MockModelClient())
+  );
+
+  try {
+    await broker.buildPlannerInput(
+      buildTask(
+        "task_memory_language_seed_1",
+        [
+          "Billy had this scare at the hospital a few weeks ago.",
+          "We still do not know what the doctors found."
+        ].join(" ")
+      )
+    );
+
+    const enriched = await broker.buildPlannerInput(
+      buildTask(
+        "task_memory_language_seed_2",
+        "How is Billy doing now?"
+      )
+    );
+
+    assert.equal(enriched.profileMemoryStatus, "available");
+    assert.match(enriched.userInput, /\[AgentFriendEpisodeContext\]/);
+    assert.match(enriched.userInput, /Billy had a medical situation/);
+    assert.match(enriched.userInput, /status=unresolved/);
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("memory broker injects one bounded planner synthesis block when facts and episodes align", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-memory-broker-synthesis-"));
+  const profilePath = path.join(tempDir, "profile_memory.secure.json");
+  const key = Buffer.alloc(32, 55);
+  const store = new ProfileMemoryStore(profilePath, key, 90);
+  const broker = new MemoryBrokerOrgan(store);
+
+  try {
+    await broker.buildPlannerInput(
+      buildTask(
+        "task_memory_synthesis_seed_1",
+        "Billy is my coworker at Flare Web Design."
+      )
+    );
+    await broker.buildPlannerInput(
+      buildTask(
+        "task_memory_synthesis_seed_2",
+        "Billy fell down a few weeks ago and I never heard how it ended."
+      )
+    );
+
+    const enriched = await broker.buildPlannerInput(
+      buildTask(
+        "task_memory_synthesis_seed_3",
+        "How should I follow up with Billy now?"
+      )
+    );
+
+    assert.equal(enriched.profileMemoryStatus, "available");
+    assert.match(enriched.userInput, /\[AgentFriendMemorySynthesis\]/);
+    assert.match(enriched.userInput, /synthesized situation:/i);
+    assert.match(enriched.userInput, /topic=Billy fell down/i);
+    assert.match(enriched.userInput, /evidence=fact:contact\.billy\..* -> /i);
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }
@@ -267,3 +379,54 @@ test(
     }
   }
 );
+
+test("memory broker supports bounded remembered-situation review and explicit user updates", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-memory-broker-review-"));
+  const profilePath = path.join(tempDir, "profile_memory.secure.json");
+  const key = Buffer.alloc(32, 61);
+  const store = new ProfileMemoryStore(profilePath, key, 90);
+  const broker = new MemoryBrokerOrgan(store);
+
+  try {
+    await broker.buildPlannerInput(
+      buildTask(
+        "task_memory_review_seed",
+        "Billy fell down three weeks ago and I never told you how it ended."
+      )
+    );
+
+    const reviewed = await broker.reviewRememberedSituations(
+      "task_memory_review_list",
+      "/memory",
+      "2026-03-08T12:00:00.000Z"
+    );
+    assert.equal(reviewed.length, 1);
+    assert.equal(reviewed[0]?.title, "Billy fell down");
+
+    const resolved = await broker.resolveRememberedSituation(
+      reviewed[0]!.episodeId,
+      "task_memory_review_resolve",
+      "/memory resolve",
+      "2026-03-08T12:10:00.000Z",
+      "Billy recovered and is fine now."
+    );
+    assert.equal(resolved?.status, "resolved");
+
+    const forgotten = await broker.forgetRememberedSituation(
+      reviewed[0]!.episodeId,
+      "task_memory_review_forget",
+      "/memory forget",
+      "2026-03-08T12:20:00.000Z"
+    );
+    assert.equal(forgotten?.episodeId, reviewed[0]?.episodeId);
+
+    const finalReview = await broker.reviewRememberedSituations(
+      "task_memory_review_list_2",
+      "/memory",
+      "2026-03-08T12:30:00.000Z"
+    );
+    assert.equal(finalReview.length, 0);
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});

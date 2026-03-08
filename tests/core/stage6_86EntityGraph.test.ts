@@ -12,6 +12,7 @@ import {
   computeCoMentionIncrement,
   createEmptyEntityGraphV1,
   extractEntityCandidates,
+  getEntityLookupTerms,
   promoteRelationEdgeWithConfirmation
 } from "../../src/core/stage6_86EntityGraph";
 
@@ -339,6 +340,19 @@ function appliesRecencyWeightedCoMentionStrengthIncrements(): void {
   assert.ok(staleIncrement > 0);
 }
 
+/**
+ * Implements `buildsDeterministicEntityLookupTerms` behavior within module scope.
+ * Interacts with local collaborators through imported modules and typed inputs/outputs.
+ */
+function buildsDeterministicEntityLookupTerms(): void {
+  const terms = getEntityLookupTerms({
+    canonicalName: "Billy Bena",
+    aliases: ["Billy", "William Bena"]
+  });
+
+  assert.deepEqual(terms, ["bena", "billy", "william"]);
+}
+
 test(
   "stage 6.86 entity graph extracts deterministic entity candidates from recurring conversation text",
   extractsDeterministicEntityCandidates
@@ -366,4 +380,8 @@ test(
 test(
   "stage 6.86 entity graph uses deterministic recency-weighted strength increments",
   appliesRecencyWeightedCoMentionStrengthIncrements
+);
+test(
+  "stage 6.86 entity graph builds deterministic lookup terms for continuity linkage",
+  buildsDeterministicEntityLookupTerms
 );

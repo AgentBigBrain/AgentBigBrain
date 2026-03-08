@@ -16,6 +16,10 @@ import {
   renderTurnsForContext
 } from "./conversationManagerHelpers";
 import { buildContextualRecallBlock } from "./conversationRuntime/contextualRecall";
+import type {
+  QueryConversationContinuityEpisodes,
+  QueryConversationContinuityFacts
+} from "./conversationRuntime/managerContracts";
 
 const FIRST_PERSON_STATUS_UPDATE_PATTERN =
   /\bmy\s+[a-z0-9][a-z0-9_.\-/\s]{0,120}\s+is\s+[a-z0-9][^.!?\n]{0,120}/i;
@@ -61,17 +65,24 @@ export function buildTurnLocalStatusUpdateBlock(userInput: string): string | nul
  * @param routingClassification - Optional routing-map classification for deterministic hinting.
  * @returns Execution payload passed to the task runner.
  */
-export function buildConversationAwareExecutionInput(
+export async function buildConversationAwareExecutionInput(
   session: ConversationSession,
   executionInput: string,
   maxContextTurnsForExecution: number,
   routingClassification: RoutingMapClassificationV1 | null = null,
-  sourceUserInput: string | null = null
-): string {
+  sourceUserInput: string | null = null,
+  queryContinuityEpisodes?: QueryConversationContinuityEpisodes,
+  queryContinuityFacts?: QueryConversationContinuityFacts
+): Promise<string> {
   const recentTurns = session.conversationTurns.slice(-maxContextTurnsForExecution);
   const rawUserInput = sourceUserInput ?? executionInput;
   const statusUpdateBlock = buildTurnLocalStatusUpdateBlock(rawUserInput);
-  const contextualRecallBlock = buildContextualRecallBlock(session, rawUserInput);
+  const contextualRecallBlock = await buildContextualRecallBlock(
+    session,
+    rawUserInput,
+    queryContinuityEpisodes,
+    queryContinuityFacts
+  );
   const routingHint = routingClassification
     ? buildRoutingExecutionHintV1(routingClassification)
     : null;

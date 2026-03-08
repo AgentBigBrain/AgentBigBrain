@@ -182,3 +182,39 @@ test("handleConversationCommand keeps /auto policy and turn recording behavior",
   );
   assert.equal(session.conversationTurns.at(-1)?.text, "/auto ship it");
 });
+
+test("handleConversationCommand routes /memory through canonical review dispatch", async () => {
+  const session = buildSession();
+  let capturedReviewTaskId = "";
+
+  const reply = await handleConversationCommand(
+    session,
+    buildMessage("/memory"),
+    buildDependencies(
+      () => {
+        throw new Error("enqueueJob should not run for /memory");
+      },
+      {
+        reviewConversationMemory: async (request) => {
+          capturedReviewTaskId = request.reviewTaskId;
+          return [
+            {
+              episodeId: "episode_billy_fall",
+              title: "Billy fell down",
+              summary: "Billy fell down and the outcome was unresolved.",
+              status: "unresolved",
+              lastMentionedAt: "2026-03-07T10:00:00.000Z",
+              resolvedAt: null,
+              confidence: 0.91,
+              sensitive: false
+            }
+          ];
+        }
+      }
+    )
+  );
+
+  assert.match(capturedReviewTaskId, /^memory_review_/);
+  assert.match(reply, /Remembered situations:/);
+  assert.match(reply, /Billy fell down/);
+});

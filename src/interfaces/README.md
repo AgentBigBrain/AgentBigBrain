@@ -60,7 +60,11 @@ transport and lifecycle path that consumes both subsystems.
 - canonical user-facing result composition through `userFacingResult.ts`
 - user-facing proactive pulse messages that omit internal pulse/debug scaffolding
 - active-conversation execution-input hints that can surface one bounded contextual recall when the
-  user naturally re-mentions an older unresolved topic
+  user naturally re-mentions an older unresolved topic or concrete situation
+- bounded pulse-grounding inputs so natural proactive follow-ups can reference useful unresolved
+  situations without leaking raw memory internals
+- private-only `/memory` command responses that let the user inspect, resolve, correct, or forget
+  bounded remembered situations without exposing raw encrypted-store internals
 
 ## Invariants
 - Transport lifecycle logic should stay at this top level; wording logic should stay in
@@ -89,12 +93,30 @@ transport and lifecycle path that consumes both subsystems.
   intentionally guarded by the module-size check so the top-level interface layer stays focused on
   stable coordination surfaces.
 - Telegram and Discord adapters should share the same truthfulness and stop-summary contracts.
+- Invocation gating should stay fail-closed, but it may accept bounded human vocatives like
+  `Hi BigBrain` in addition to direct alias prefixes.
 - User-facing proactive pulse delivery must not leak internal reason codes, preview envelopes, or
   raw thread-context diagnostics.
 - User-facing pulse or recall copy may be truthful about AI identity when relevant, but should not
   use label-style openings like `AI assistant response:` or `AI assistant check-in:`.
+- General user-facing replies should also strip any accidental label-style openings from model
+  output before final delivery.
+- User-facing pulse grounding may use bounded unresolved-situation summaries, but it must not leak
+  raw memory internals or turn pulse delivery into a memory dump.
 - Active-conversation contextual recall should stay inline and optional; it must not turn into a
   second proactive outreach channel.
+- Active-conversation contextual recall should prefer concrete unresolved situations backed by
+  bounded episodic memory over generic paused-topic overlap when both are available.
+- Future human-centric proactive follow-up scoring should live in a bounded runtime such as
+  `src/interfaces/proactiveRuntime/`, not by loosening generic pulse heuristics inside unrelated
+  transport or delivery code.
+- User-facing conversational language upgrades should prefer specific, useful follow-ups and
+  suppression over broader interruption frequency.
+- User-facing remembered-situation review must stay private-only, bounded, and explicit about what
+  is remembered versus later corrected or forgotten.
+- User-facing remembered-situation mutation flows must be explicit about whether a situation was
+  marked resolved, marked wrong, or forgotten; they must not hide memory changes behind vague
+  confirmation text.
 - Conversation lifecycle behavior should remain discoverable here rather than spread into unrelated
   transport helpers.
 
@@ -103,6 +125,7 @@ transport and lifecycle path that consumes both subsystems.
 - `tests/interfaces/autonomousMessagePolicy.test.ts`
 - `tests/interfaces/conversationCommandPolicy.test.ts`
 - `tests/interfaces/conversationDeliveryLifecycle.test.ts`
+- `tests/interfaces/memoryReviewCommand.test.ts`
 - `tests/interfaces/sessionPersistence.test.ts`
 - `tests/interfaces/transportRuntime.test.ts`
 - `tests/interfaces/conversationWorkerRuntime.test.ts`
@@ -128,5 +151,8 @@ Update this README when:
 - Telegram or Discord runtime wiring changes materially
 - user-facing proactive pulse rendering or suppression rules change materially
 - user-facing pulse identity/natural-language rules change materially
+- bounded unresolved-situation pulse-grounding rules change materially
 - in-conversation contextual recall rules change materially
+- episodic-memory-backed conversation recall wiring changes materially
+- remembered-situation review or mutation command behavior changes materially
 - the related-test surface changes because interface responsibilities moved

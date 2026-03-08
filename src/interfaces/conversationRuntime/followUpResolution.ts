@@ -167,12 +167,14 @@ export async function handleImplicitProposalFlow(
       session,
       normalizedInput,
       message.receivedAt,
-      buildConversationAwareExecutionInput(
+      await buildConversationAwareExecutionInput(
         session,
         normalizedInput,
         deps.config.maxContextTurnsForExecution,
         classifyRoutingIntentV1(normalizedInput),
-        normalizedInput
+        normalizedInput,
+        deps.queryContinuityEpisodes,
+        deps.queryContinuityFacts
       )
     );
     recordUserTurn(session, normalizedInput, message.receivedAt, deps.config.maxConversationTurns);

@@ -38,6 +38,7 @@ test("renderConversationCommandHelpText includes key command guidance", () => {
   assert.match(helpText, /\/chat <message>/);
   assert.match(helpText, /\/auto <goal>/);
   assert.match(helpText, /\/pulse <on\|off\|private\|public\|status>/);
+  assert.match(helpText, /\/memory \[list\|resolve\|wrong\|forget\]/);
   assert.match(helpText, /\/review <checkpoint-id>/);
   assert.match(helpText, /\/status \[debug\] - show plain-language job state; add debug for delivery internals/);
   assert.match(helpText, /^Skill workflow:/m);
@@ -45,6 +46,8 @@ test("renderConversationCommandHelpText includes key command guidance", () => {
   assert.match(helpText, /create skill repo_status/i);
   assert.match(helpText, /run skill repo_status/i);
   assert.match(helpText, /^Examples:/m);
+  assert.match(helpText, /\/memory$/m);
+  assert.match(helpText, /\/memory resolve episode_abc123 Billy recovered and is fine now/);
   assert.match(helpText, /\/review 6\.85\.A/);
   assert.match(helpText, /\/status debug/);
   assert.match(helpText, /Execute now using PowerShell/i);

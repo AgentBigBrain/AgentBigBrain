@@ -8,6 +8,7 @@ import { test } from "node:test";
 import { buildConversationStackFromTurnsV1 } from "../../src/core/stage6_86ConversationStack";
 import {
   detectOpenLoopTriggerV1,
+  getOpenLoopLookupTermsV1,
   resolveOpenLoopOnConversationStackV1,
   selectOpenLoopsForPulseV1,
   upsertOpenLoopOnConversationStackV1
@@ -217,6 +218,26 @@ function resolvesOpenLoopAndKeepsItOutOfPulseSelection(): void {
   assert.equal(selection.selected.length, 0);
 }
 
+/**
+ * Implements `buildsDeterministicOpenLoopLookupTerms` behavior within module scope.
+ * Interacts with local collaborators through imported modules and typed inputs/outputs.
+ */
+function buildsDeterministicOpenLoopLookupTerms(): void {
+  const terms = getOpenLoopLookupTermsV1(
+    {
+      entityRefs: ["Billy", "contact.billy"]
+    },
+    {
+      topicLabel: "Billy Fall",
+      resumeHint: "Billy fell down and you wanted an update later."
+    }
+  );
+
+  assert.equal(terms.includes("billy"), true);
+  assert.equal(terms.includes("fall"), true);
+  assert.equal(terms.includes("later"), true);
+}
+
 test(
   "stage 6.86 open loops detect deterministic deferred and unresolved-decision trigger signals",
   detectsDeterministicOpenLoopTriggers
@@ -236,4 +257,8 @@ test(
 test(
   "stage 6.86 open loops resolve loops and exclude resolved loops from pulse selection",
   resolvesOpenLoopAndKeepsItOutOfPulseSelection
+);
+test(
+  "stage 6.86 open loops build deterministic lookup terms for continuity linkage",
+  buildsDeterministicOpenLoopLookupTerms
 );

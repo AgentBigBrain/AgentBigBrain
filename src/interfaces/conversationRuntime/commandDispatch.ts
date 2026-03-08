@@ -25,6 +25,7 @@ import { recordUserTurn } from "../conversationSessionMutations";
 import type { ConversationIngressDependencies } from "./contracts";
 import { approveProposal } from "./followUpResolution";
 import { routeConversationChatInput } from "./conversationRouting";
+import { handleMemoryReviewCommand } from "./memoryReviewCommand";
 
 /**
  * Resolves `/status` command output with human-first default text and explicit debug fallback.
@@ -114,12 +115,12 @@ export async function handleConversationCommand(
       return "Usage: /chat <message>";
     }
     const normalizedInput = normalizeWhitespace(argument);
-    return routeConversationChatInput(
+    return (await routeConversationChatInput(
       session,
       normalizedInput,
       message.receivedAt,
       deps
-    ).reply;
+    )).reply;
   }
 
   if (command === "auto") {
@@ -151,6 +152,10 @@ export async function handleConversationCommand(
 
   if (command === "review") {
     return resolveReviewCommandResponse(argument, deps.runCheckpointReview);
+  }
+
+  if (command === "memory") {
+    return handleMemoryReviewCommand(session, message, deps, argument);
   }
 
   return "Unknown command. Use /help to see available commands.";

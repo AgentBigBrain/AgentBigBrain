@@ -119,6 +119,7 @@ export function buildSuppressedContextPacket(
  * @param scores - Lane scores used to explain the boundary decision.
  * @param reason - Stable inject reason code.
  * @param context - Sanitized brokered profile context payload.
+ * @param episodeContext - Optional sanitized brokered episode context payload.
  * @returns Planner-input packet with broker metadata plus injected context.
  */
 export function buildInjectedContextPacket(
@@ -126,9 +127,11 @@ export function buildInjectedContextPacket(
   lanes: readonly MemoryDomainLane[],
   scores: DomainLaneScores,
   reason: string,
-  context: string
+  context: string,
+  episodeContext = "",
+  memorySynthesisContext = ""
 ): string {
-  return [
+  const packet = [
     task.userInput,
     "",
     "[AgentFriendMemoryBroker]",
@@ -140,7 +143,17 @@ export function buildInjectedContextPacket(
     "",
     "[AgentFriendProfileContext]",
     context
-  ].join("\n");
+  ];
+
+  if (episodeContext.trim().length > 0) {
+    packet.push("", "[AgentFriendEpisodeContext]", episodeContext);
+  }
+
+  if (memorySynthesisContext.trim().length > 0) {
+    packet.push("", "[AgentFriendMemorySynthesis]", memorySynthesisContext);
+  }
+
+  return packet.join("\n");
 }
 
 /**

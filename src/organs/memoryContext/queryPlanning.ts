@@ -151,13 +151,13 @@ function inferDomainLaneScoresFromRequest(currentUserRequest: string): DomainLan
   return scores;
 }
 
-/** Adds lane signals inferred from the rendered profile-context payload. */
+/** Adds lane signals inferred from the rendered brokered memory-context payload. */
 function applyProfileContextLaneSignals(
   baseScores: DomainLaneScores,
-  profileContext: string
+  memoryContext: string
 ): DomainLaneScores {
   const scores: DomainLaneScores = { ...baseScores };
-  const lines = profileContext
+  const lines = memoryContext
     .split(/\r?\n/)
     .map((line) => line.trim().toLowerCase())
     .filter((line) => line.length > 0);
@@ -179,6 +179,9 @@ function applyProfileContextLaneSignals(
     }
     if (line.startsWith("policy.") || line.includes("governor") || line.includes("constraint")) {
       addLaneScore(scores, "system_policy", 1);
+    }
+    if (line.startsWith("- situation:") || line.startsWith("episode.")) {
+      addLaneScore(scores, "relationship", 1);
     }
   }
 
@@ -224,8 +227,7 @@ export function extractCurrentUserRequest(userInput: string): string {
     return normalized;
   }
 
-  const extracted = normalized.slice(markerIndex + CURRENT_USER_REQUEST_MARKER.length).trim();
-  return extracted || normalized;
+  return normalized.slice(markerIndex + CURRENT_USER_REQUEST_MARKER.length).trim() || normalized;
 }
 
 /**
@@ -355,15 +357,15 @@ export function registerAndAssessProbing(
  * Assesses whether profile context should be injected or suppressed for the current request.
  *
  * @param currentUserRequest - Active user request used for lane scoring.
- * @param profileContext - Sanitized profile-context payload, if available.
+ * @param memoryContext - Sanitized brokered memory-context payload, if available.
  * @returns Deterministic lane scores plus the inject/suppress decision.
  */
 export function assessDomainBoundary(
   currentUserRequest: string,
-  profileContext: string
+  memoryContext: string
 ): DomainBoundaryAssessment {
   const requestScores = inferDomainLaneScoresFromRequest(currentUserRequest);
-  const scores = applyProfileContextLaneSignals(requestScores, profileContext);
+  const scores = applyProfileContextLaneSignals(requestScores, memoryContext);
   const lanes = selectDomainLanes(scores);
   const profileSignal = scores.profile + scores.relationship;
   const nonProfileSignal = scores.workflow + scores.system_policy;

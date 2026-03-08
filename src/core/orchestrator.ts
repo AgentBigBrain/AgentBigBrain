@@ -10,7 +10,13 @@ import {
   evaluateFederatedOutboundPolicy,
   type FederatedOutboundRuntimeConfig
 } from "./federatedOutboundDelegation";
-import { type ActionRunResult, type TaskRequest, type TaskRunResult } from "./types";
+import {
+  type ActionRunResult,
+  type ConversationStackV1,
+  type EntityGraphV1,
+  type TaskRequest,
+  type TaskRunResult
+} from "./types";
 import { throwIfAborted } from "./runtimeAbort";
 import {
   JudgmentPatternStore
@@ -171,6 +177,7 @@ export class BrainOrchestrator {
         staleFactCount: 0,
         unresolvedCommitmentCount: 0,
         unresolvedCommitmentTopics: [],
+        relevantEpisodes: [],
         relationship: {
           role: "unknown",
           roleFactId: null
@@ -196,6 +203,7 @@ export class BrainOrchestrator {
         staleFactCount: 0,
         unresolvedCommitmentCount: 0,
         unresolvedCommitmentTopics: [],
+        relevantEpisodes: [],
         relationship: {
           role: "unknown",
           roleFactId: null
@@ -249,6 +257,183 @@ export class BrainOrchestrator {
         rationale: `Intent interpreter fallback: ${(error as Error).message}`,
         source: "fallback"
       };
+    }
+  }
+
+  /**
+   * Queries bounded unresolved episodic memory linked to current continuity state.
+   *
+   * **Why it exists:**
+   * Keeps interface/runtime recall consumers behind the orchestrator boundary instead of reaching
+   * directly into encrypted profile-memory storage.
+   *
+   * **What it talks to:**
+   * - Uses `ProfileMemoryStore.queryEpisodesForContinuity(...)` from `./profileMemoryStore`.
+   *
+   * @param graph - Current Stage 6.86 entity graph.
+   * @param stack - Current Stage 6.86 conversation stack.
+   * @param entityHints - Re-mentioned entity/topic hints from the active conversation turn.
+   * @param maxEpisodes - Maximum number of bounded episode matches to return.
+   * @returns Continuity-linked episodic-memory matches, or an empty list when unavailable.
+   */
+  async queryContinuityEpisodes(
+    graph: EntityGraphV1,
+    stack: ConversationStackV1,
+    entityHints: readonly string[],
+    maxEpisodes = 3
+  ) {
+    if (!this.profileMemoryStore) {
+      return [];
+    }
+
+    try {
+      return await this.profileMemoryStore.queryEpisodesForContinuity(graph, stack, {
+        entityHints,
+        maxEpisodes
+      });
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Queries bounded profile facts linked to the current continuity/entity hints.
+   *
+   * @param graph - Current Stage 6.86 entity graph.
+   * @param stack - Current Stage 6.86 conversation stack.
+   * @param entityHints - Re-mentioned entity/topic hints from the active conversation turn.
+   * @param maxFacts - Maximum number of bounded fact matches to return.
+   * @returns Continuity-linked readable profile facts, or an empty list when unavailable.
+   */
+  async queryContinuityFacts(
+    graph: EntityGraphV1,
+    stack: ConversationStackV1,
+    entityHints: readonly string[],
+    maxFacts = 3
+  ) {
+    if (!this.profileMemoryStore) {
+      return [];
+    }
+
+    try {
+      return await this.profileMemoryStore.queryFactsForContinuity(graph, stack, {
+        entityHints,
+        maxFacts
+      });
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Returns bounded remembered situations for explicit user review flows.
+   *
+   * @param reviewTaskId - Synthetic task id for audit linkage.
+   * @param query - User-facing review command text.
+   * @param nowIso - Timestamp applied to ranking/audit.
+   * @param maxEpisodes - Maximum number of situations to surface.
+   * @returns Bounded remembered situations, or an empty list when unavailable.
+   */
+  async reviewRememberedSituations(
+    reviewTaskId: string,
+    query: string,
+    nowIso: string,
+    maxEpisodes = 5
+  ) {
+    try {
+      return await this.memoryBroker.reviewRememberedSituations(
+        reviewTaskId,
+        query,
+        nowIso,
+        maxEpisodes
+      );
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Marks one remembered situation resolved via an explicit user command.
+   *
+   * @param episodeId - Episode identifier targeted by the user.
+   * @param sourceTaskId - Synthetic task id for mutation provenance.
+   * @param sourceText - User command text that triggered the mutation.
+   * @param nowIso - Timestamp applied to the mutation.
+   * @param note - Optional bounded outcome note.
+   * @returns Updated remembered situation, or `null` when unavailable.
+   */
+  async resolveRememberedSituation(
+    episodeId: string,
+    sourceTaskId: string,
+    sourceText: string,
+    nowIso: string,
+    note?: string
+  ) {
+    try {
+      return await this.memoryBroker.resolveRememberedSituation(
+        episodeId,
+        sourceTaskId,
+        sourceText,
+        nowIso,
+        note
+      );
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Marks one remembered situation wrong/no longer relevant via an explicit user command.
+   *
+   * @param episodeId - Episode identifier targeted by the user.
+   * @param sourceTaskId - Synthetic task id for mutation provenance.
+   * @param sourceText - User command text that triggered the mutation.
+   * @param nowIso - Timestamp applied to the mutation.
+   * @param note - Optional bounded correction note.
+   * @returns Updated remembered situation, or `null` when unavailable.
+   */
+  async markRememberedSituationWrong(
+    episodeId: string,
+    sourceTaskId: string,
+    sourceText: string,
+    nowIso: string,
+    note?: string
+  ) {
+    try {
+      return await this.memoryBroker.markRememberedSituationWrong(
+        episodeId,
+        sourceTaskId,
+        sourceText,
+        nowIso,
+        note
+      );
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Forgets one remembered situation via an explicit user command.
+   *
+   * @param episodeId - Episode identifier targeted by the user.
+   * @param nowIso - Timestamp applied to the mutation.
+   * @returns Removed remembered situation, or `null` when unavailable.
+   */
+  async forgetRememberedSituation(
+    episodeId: string,
+    sourceTaskId: string,
+    sourceText: string,
+    nowIso: string
+  ) {
+    try {
+      return await this.memoryBroker.forgetRememberedSituation(
+        episodeId,
+        sourceTaskId,
+        sourceText,
+        nowIso
+      );
+    } catch {
+      return null;
     }
   }
 

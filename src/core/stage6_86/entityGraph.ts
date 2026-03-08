@@ -86,6 +86,26 @@ export interface Stage686RelationPromotionResult {
 }
 
 /**
+ * Builds deterministic lookup terms for one entity graph node.
+ *
+ * @param entity - Entity node to normalize.
+ * @returns Stable lookup terms for continuity linkage.
+ */
+export function getEntityLookupTerms(
+  entity: Pick<EntityNodeV1, "canonicalName" | "aliases">
+): readonly string[] {
+  const normalized = new Set<string>();
+  for (const value of [entity.canonicalName, ...entity.aliases]) {
+    for (const term of normalizeAliasKey(value).split(" ")) {
+      if (term.trim().length >= 3) {
+        normalized.add(term.trim());
+      }
+    }
+  }
+  return [...normalized].sort((left, right) => left.localeCompare(right));
+}
+
+/**
  * Applies deterministic validity checks for valid iso timestamp.
  *
  * **Why it exists:**

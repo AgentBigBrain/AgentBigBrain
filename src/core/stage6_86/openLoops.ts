@@ -99,6 +99,32 @@ export interface OpenLoopPulseSelectionResultV1 {
 }
 
 /**
+ * Builds deterministic lookup terms for one open loop plus its owning thread context.
+ *
+ * @param loop - Open loop to normalize.
+ * @param thread - Owning thread context.
+ * @returns Stable lookup terms for continuity linkage.
+ */
+export function getOpenLoopLookupTermsV1(
+  loop: Pick<OpenLoopV1, "entityRefs">,
+  thread: Pick<ThreadFrameV1, "topicLabel" | "resumeHint">
+): readonly string[] {
+  const normalized = new Set<string>();
+  for (const value of [
+    thread.topicLabel,
+    thread.resumeHint,
+    ...normalizeEntityRefs(loop.entityRefs)
+  ]) {
+    for (const term of normalizeWhitespace(value).toLowerCase().match(/[a-z0-9]+/g) ?? []) {
+      if (term.trim().length >= 3) {
+        normalized.add(term.trim());
+      }
+    }
+  }
+  return [...normalized].sort((left, right) => left.localeCompare(right));
+}
+
+/**
  * Applies deterministic validity checks for valid iso timestamp.
  *
  * **Why it exists:**

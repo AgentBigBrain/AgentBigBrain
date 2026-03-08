@@ -6,6 +6,7 @@ import { MAIN_AGENT_ID } from "../core/agentIdentity";
 import { makeId } from "../core/ids";
 import { BrainOrchestrator } from "../core/orchestrator";
 import { TaskRequest, TaskRunResult } from "../core/types";
+import type { EntityGraphV1 } from "../core/types";
 import {
   InterpretedConversationIntent,
   IntentInterpreterTurn
@@ -24,6 +25,11 @@ import {
   buildAutonomousIterationProgressMessage,
   buildAutonomousTerminalSummaryMessage
 } from "./userFacing/stopSummarySurface";
+import type {
+  ConversationContinuityEpisodeQueryRequest,
+  ConversationContinuityEpisodeRecord,
+  ConversationMemoryReviewRecord
+} from "./conversationRuntime/managerContracts";
 
 export interface TelegramInboundMessage {
   updateId: number;
@@ -411,6 +417,162 @@ export class TelegramAdapter {
     pulseRuleContext?: PulseLexicalRuleContext
   ): Promise<InterpretedConversationIntent> {
     return this.brain.interpretConversationIntent(text, recentTurns, pulseRuleContext);
+  }
+
+  /**
+   * Queries bounded episodic-memory matches linked to the current continuity state.
+   *
+   * @param graph - Current Stage 6.86 entity graph.
+   * @param request - Continuity-aware episode query request from interface runtime.
+   * @returns Bounded recall-ready episodic-memory records.
+   */
+  async queryContinuityEpisodes(
+    graph: EntityGraphV1,
+    request: ConversationContinuityEpisodeQueryRequest
+  ): Promise<readonly ConversationContinuityEpisodeRecord[]> {
+    const linkedEpisodes = await this.brain.queryContinuityEpisodes(
+      graph,
+      request.stack,
+      request.entityHints,
+      request.maxEpisodes
+    );
+    return linkedEpisodes.map((entry) => ({
+      episodeId: entry.episode.id,
+      title: entry.episode.title,
+      summary: entry.episode.summary,
+      status: entry.episode.status,
+      lastMentionedAt: entry.episode.lastMentionedAt,
+      entityRefs: [...entry.episode.entityRefs],
+      entityLinks: entry.entityLinks.map((link) => ({
+        entityKey: link.entityKey,
+        canonicalName: link.canonicalName
+      })),
+      openLoopLinks: entry.openLoopLinks.map((link) => ({
+        loopId: link.loopId,
+        threadKey: link.threadKey,
+        status: link.status,
+        priority: link.priority
+      }))
+    }));
+  }
+
+  /**
+   * Queries bounded profile facts linked to the current continuity state.
+   *
+   * @param graph - Current Stage 6.86 entity graph.
+   * @param request - Continuity-aware fact query request from interface runtime.
+   * @returns Bounded recall/planning-ready profile facts.
+   */
+  async queryContinuityFacts(
+    graph: EntityGraphV1,
+    request: import("./conversationRuntime/managerContracts").ConversationContinuityFactQueryRequest
+  ): Promise<readonly import("./conversationRuntime/managerContracts").ConversationContinuityFactRecord[]> {
+    const facts = await this.brain.queryContinuityFacts(
+      graph,
+      request.stack,
+      request.entityHints,
+      request.maxFacts
+    );
+    return facts.map((fact) => ({
+      factId: fact.factId,
+      key: fact.key,
+      value: fact.value,
+      status: fact.status,
+      observedAt: fact.observedAt,
+      lastUpdatedAt: fact.lastUpdatedAt,
+      confidence: fact.confidence
+    }));
+  }
+
+  /**
+   * Returns bounded remembered situations for explicit user review commands.
+   *
+   * @param reviewTaskId - Synthetic task id for audit linkage.
+   * @param query - User-facing review command text.
+   * @param nowIso - Timestamp applied to ranking/audit.
+   * @param maxEpisodes - Maximum number of situations to surface.
+   * @returns Bounded remembered situations for command rendering.
+   */
+  async reviewConversationMemory(
+    reviewTaskId: string,
+    query: string,
+    nowIso: string,
+    maxEpisodes = 5
+  ): Promise<readonly ConversationMemoryReviewRecord[]> {
+    return this.brain.reviewRememberedSituations(reviewTaskId, query, nowIso, maxEpisodes);
+  }
+
+  /**
+   * Marks one remembered situation resolved through an explicit user command.
+   *
+   * @param episodeId - Episode identifier targeted by the user.
+   * @param sourceTaskId - Synthetic task id for mutation provenance.
+   * @param sourceText - User command text that triggered the mutation.
+   * @param nowIso - Timestamp applied to the mutation.
+   * @param note - Optional bounded outcome note.
+   * @returns Updated remembered situation, or `null` when unavailable.
+   */
+  async resolveConversationMemoryEpisode(
+    episodeId: string,
+    sourceTaskId: string,
+    sourceText: string,
+    nowIso: string,
+    note?: string
+  ): Promise<ConversationMemoryReviewRecord | null> {
+    return this.brain.resolveRememberedSituation(
+      episodeId,
+      sourceTaskId,
+      sourceText,
+      nowIso,
+      note
+    );
+  }
+
+  /**
+   * Marks one remembered situation wrong/no longer relevant through an explicit user command.
+   *
+   * @param episodeId - Episode identifier targeted by the user.
+   * @param sourceTaskId - Synthetic task id for mutation provenance.
+   * @param sourceText - User command text that triggered the mutation.
+   * @param nowIso - Timestamp applied to the mutation.
+   * @param note - Optional bounded correction note.
+   * @returns Updated remembered situation, or `null` when unavailable.
+   */
+  async markConversationMemoryEpisodeWrong(
+    episodeId: string,
+    sourceTaskId: string,
+    sourceText: string,
+    nowIso: string,
+    note?: string
+  ): Promise<ConversationMemoryReviewRecord | null> {
+    return this.brain.markRememberedSituationWrong(
+      episodeId,
+      sourceTaskId,
+      sourceText,
+      nowIso,
+      note
+    );
+  }
+
+  /**
+   * Forgets one remembered situation through an explicit user command.
+   *
+   * @param episodeId - Episode identifier targeted by the user.
+   * @param nowIso - Timestamp applied to the mutation.
+   * @returns Removed remembered situation, or `null` when unavailable.
+   */
+  async forgetConversationMemoryEpisode(
+    episodeId: string,
+    sourceTaskId: string,
+    sourceText: string,
+    nowIso: string
+  ): Promise<ConversationMemoryReviewRecord | null> {
+    return this.brain.forgetRememberedSituation(
+      episodeId,
+      sourceTaskId,
+      sourceText,
+      nowIso
+    );
   }
 
   /**

@@ -54,6 +54,14 @@ The latest slices moved queue/ack, worker-loop, and pulse-state ownership here s
   model-assisted follow-up resolution below `conversationIngressLifecycle.ts`
 - `contextualRecall.ts` owns canonical in-conversation contextual recall matching for active user
   turns below `conversationExecutionInputPolicy.ts`
+- `contextualRecallSupport.ts` owns shared tokenization, cue-building, duplicate-suppression, and
+  episodic/paused-thread candidate assembly used by bounded contextual recall
+- `contextualRecallRanking.ts` owns canonical prioritization between generic paused-thread recall
+  and concrete unresolved-situation recall backed by episodic memory
+- `memoryReviewCommand.ts` owns the bounded private `/memory` review and mutation command surface
+  below `commandDispatch.ts`
+- `memoryReviewRendering.ts` owns the canonical user-facing rendering for remembered-situation
+  review and mutation responses, including explicit resolve, wrong, and forget outcomes
 
 ## Inputs
 - normalized conversation session payloads from `sessionStore.ts`
@@ -70,6 +78,10 @@ The latest slices moved queue/ack, worker-loop, and pulse-state ownership here s
 - proposal/follow-up messages plus ingress dependencies from `conversationIngressLifecycle.ts`
 - manager contract imports and autonomous execution helpers consumed by extracted runtime helpers
   and transport gateways
+- bounded continuity-episode query results supplied by transport/runtime wiring for active-turn
+  episodic recall
+- bounded freshness-ranked unresolved-situation summaries supplied by profile-memory pulse
+  evaluation for natural pulse grounding
 
 ## Outputs
 - persisted interface session snapshots in JSON and SQLite backends
@@ -79,6 +91,8 @@ The latest slices moved queue/ack, worker-loop, and pulse-state ownership here s
   stable session entrypoint and stable pulse scheduler entrypoint
 - canonical pulse target-selection, contextual follow-up, and prompt-building helpers for the
   stable scheduler entrypoint
+- canonical bounded unresolved-situation pulse grounding so useful older situations can inform a
+  pulse prompt without leaking raw memory internals to the user
 - canonical scheduler contracts plus legacy/dynamic user-evaluation helpers for the stable pulse
   scheduler entrypoint
 - canonical conversation-manager contract and autonomous execution-input helpers for extracted
@@ -93,7 +107,12 @@ The latest slices moved queue/ack, worker-loop, and pulse-state ownership here s
 - canonical slash-command dispatch helpers for the stable ingress entrypoint
 - canonical stale-running-job recovery helpers for the stable ingress entrypoint
 - canonical proposal approval and follow-up interpretation helpers for the stable ingress entrypoint
-- canonical bounded in-conversation recall helpers for the stable execution-input entrypoint
+- canonical bounded in-conversation recall helpers and ranking for the stable execution-input
+  entrypoint
+- canonical bounded remembered-situation review and mutation command helpers for the stable ingress
+  command path
+- canonical user-facing `/memory` list/help plus resolve, wrong, and forget rendering for the
+  stable ingress command path
 
 ## Invariants
 - `sessionStore.ts` remains the stable public entrypoint for interface session contracts.
@@ -117,6 +136,8 @@ The latest slices moved queue/ack, worker-loop, and pulse-state ownership here s
 - User-facing pulse prompts should sound natural; they may be truthful about AI identity when
   relevant, but must not prepend label-style openings like `AI assistant response:` or
   `AI assistant check-in:`.
+- User-facing pulse grounding may use bounded unresolved-situation summaries, but it must not leak
+  raw episode ids or private memory internals into the user-visible message body.
 - Conversation lifecycle helpers here must preserve queue and ack semantics; extraction should only
   move ownership, not change delivery or queue behavior.
 - Worker-runtime helpers here must preserve job execution, heartbeat, and final-delivery semantics;
@@ -135,6 +156,23 @@ The latest slices moved queue/ack, worker-loop, and pulse-state ownership here s
   only move ownership, not change ingress behavior.
 - Contextual recall helpers here must stay bounded and optional; they may suggest one natural
   same-conversation follow-up, but must not turn into a separate proactive pulse path.
+- Contextual recall should prefer concrete unresolved situations linked through episodic memory
+  over generic paused-topic overlap when that situation is available, recent, and not repetitious.
+- Contextual recall should suppress bare repeated-name revivals when the current turn lacks a real
+  recall cue; a name mention alone is not enough to reopen an older unresolved situation.
+- Contextual recall may still surface without an explicit canned recall phrase when the current
+  turn has strong direct overlap with a concrete unresolved situation (for example, re-mentioning
+  both the person and the distinctive situation detail), but weak one-term overlap should remain
+  suppressed.
+- Shared tokenization, stop-wording, and recall-term extraction should converge on canonical
+  `src/core/languageRuntime/` helpers instead of drifting across local recall helpers; local
+  helpers here should stay focused on recall-specific cue assembly and suppression policy.
+- Future proactive utility scoring should live in a bounded dedicated runtime rather than being
+  smuggled into contextual recall or generic pulse heuristics here.
+- Remembered-situation review and mutation commands here must stay private-only, bounded, and
+  brokered; they must not expose raw encrypted-store internals or bypass approval-aware reads.
+- Remembered-situation mutation commands here must remain explicit about the action taken
+  (`resolved`, `wrong`, `forgotten`) and must not silently rewrite memory.
 
 ## Related Tests
 - `tests/interfaces/sessionStore.test.ts`
@@ -156,6 +194,8 @@ The latest slices moved queue/ack, worker-loop, and pulse-state ownership here s
 - `tests/interfaces/sessionRecovery.test.ts`
 - `tests/interfaces/followUpResolution.test.ts`
 - `tests/interfaces/contextualRecall.test.ts`
+- `tests/interfaces/conversationExecutionInputPolicy.test.ts`
+- `tests/interfaces/memoryReviewCommand.test.ts`
 - `tests/interfaces/managerContracts.test.ts`
 - `tests/interfaces/conversationManager.test.ts`
 - `scripts/evidence/interfaceAdvancedLiveSmoke.ts`
@@ -175,6 +215,7 @@ Update this README when:
 - session normalization, session merge, timezone detection, or user-style fingerprint
   responsibilities change materially
 - pulse target-selection, contextual follow-up, or pulse-prompt responsibilities change materially
+- bounded unresolved-situation pulse-grounding responsibilities change materially
 - user-facing pulse suppression or pulse message-body rules change materially
 - pulse identity or natural-language prompt rules change materially
 - queue insertion, ack timers, or ack lifecycle responsibilities change materially
@@ -188,4 +229,9 @@ Update this README when:
 - proposal approval, proposal-reply interpretation, or follow-up resolution responsibilities change
   materially
 - in-conversation contextual recall matching or suppression rules change materially
+- bare repeated-name suppression or recall-cue requirements change materially
+- the strong direct-overlap threshold for bounded contextual recall changes materially
+- contextual recall ranking or continuity-episode query usage changes materially
+- remembered-situation review or mutation command responsibilities change materially
+- remembered-situation rendering or privacy rules change materially
 - related test coverage changes because the conversation-runtime surface moved

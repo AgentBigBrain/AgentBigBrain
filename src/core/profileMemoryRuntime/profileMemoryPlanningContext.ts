@@ -6,42 +6,8 @@ import {
   type ProfileFactRecord,
   type ProfileMemoryState
 } from "../profileMemory";
+import { extractPlanningQueryTerms } from "../languageRuntime/queryIntentTerms";
 import { planningContextPriority } from "./profileMemoryNormalization";
-
-const PLANNING_QUERY_STOP_WORDS = new Set([
-  "who",
-  "what",
-  "where",
-  "when",
-  "why",
-  "how",
-  "is",
-  "are",
-  "was",
-  "were",
-  "do",
-  "does",
-  "did",
-  "my",
-  "me",
-  "i",
-  "we",
-  "you",
-  "the",
-  "a",
-  "an",
-  "to",
-  "at",
-  "for",
-  "in",
-  "on",
-  "of",
-  "and",
-  "about",
-  "relation",
-  "related",
-  "now"
-]);
 
 const IDENTITY_ANCHOR_PREFIXES = ["identity.preferred_name", "identity.name", "name"];
 
@@ -93,14 +59,51 @@ export function buildQueryAwarePlanningContext(
   maxFacts: number,
   queryInput: string
 ): string {
+  const selectedFacts = selectProfileFactsForQuery(state, maxFacts, queryInput);
+  if (selectedFacts.length === 0) {
+    return "";
+  }
+
+  return buildPlanningContextFromProfile(
+    {
+      ...state,
+      facts: [...selectedFacts]
+    },
+    Math.max(0, maxFacts)
+  );
+}
+
+/**
+ * Selects bounded active non-sensitive facts for one query-aware retrieval surface.
+ *
+ * @param state - Current normalized profile-memory state.
+ * @param maxFacts - Maximum number of facts to include.
+ * @param queryInput - Current query text used for relevance ranking.
+ * @returns Deterministically selected active non-sensitive facts.
+ */
+export function selectProfileFactsForQuery(
+  state: ProfileMemoryState,
+  maxFacts: number,
+  queryInput: string
+): readonly ProfileFactRecord[] {
   const safeMaxFacts = Math.max(0, maxFacts);
   if (safeMaxFacts === 0) {
-    return "";
+    return [];
   }
 
   const queryTokens = extractPlanningQueryTokens(queryInput);
   if (queryTokens.length === 0) {
-    return buildPlanningContextFromProfile(state, safeMaxFacts);
+    return state.facts
+      .filter((fact) => isActiveFact(fact) && !fact.sensitive)
+      .sort((left, right) => {
+        const leftPriority = planningContextPriority(left.key);
+        const rightPriority = planningContextPriority(right.key);
+        if (leftPriority !== rightPriority) {
+          return leftPriority - rightPriority;
+        }
+        return Date.parse(right.lastUpdatedAt) - Date.parse(left.lastUpdatedAt);
+      })
+      .slice(0, safeMaxFacts);
   }
 
   const activeNonSensitiveFacts = state.facts
@@ -122,7 +125,17 @@ export function buildQueryAwarePlanningContext(
     .map((entry) => entry.fact);
 
   if (scoredFacts.length === 0) {
-    return buildPlanningContextFromProfile(state, safeMaxFacts);
+    return state.facts
+      .filter((fact) => isActiveFact(fact) && !fact.sensitive)
+      .sort((left, right) => {
+        const leftPriority = planningContextPriority(left.key);
+        const rightPriority = planningContextPriority(right.key);
+        if (leftPriority !== rightPriority) {
+          return leftPriority - rightPriority;
+        }
+        return Date.parse(right.lastUpdatedAt) - Date.parse(left.lastUpdatedAt);
+      })
+      .slice(0, safeMaxFacts);
   }
 
   const selected: ProfileFactRecord[] = [];
@@ -160,13 +173,7 @@ export function buildQueryAwarePlanningContext(
     }
   }
 
-  return buildPlanningContextFromProfile(
-    {
-      ...state,
-      facts: selected
-    },
-    safeMaxFacts
-  );
+  return selected;
 }
 
 /**
@@ -186,22 +193,7 @@ function isActiveFact(fact: ProfileFactRecord): boolean {
  * @returns Ordered unique query tokens used for scoring.
  */
 function extractPlanningQueryTokens(queryInput: string): string[] {
-  const normalized = queryInput
-    .toLowerCase()
-    .replace(/[^a-z0-9\s_.-]+/g, " ")
-    .replace(/[\s_.-]+/g, " ")
-    .trim();
-  if (!normalized) {
-    return [];
-  }
-
-  const tokens = normalized
-    .split(" ")
-    .map((token) => token.trim())
-    .filter((token) => token.length >= 2)
-    .filter((token) => !PLANNING_QUERY_STOP_WORDS.has(token));
-
-  return [...new Set(tokens)].slice(0, 12);
+  return [...extractPlanningQueryTerms(queryInput)];
 }
 
 /**

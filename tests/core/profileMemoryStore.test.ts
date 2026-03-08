@@ -9,10 +9,23 @@ import path from "node:path";
 import { test } from "node:test";
 
 import {
+  createProfileEpisodeRecord,
   createEmptyProfileMemoryState,
   upsertTemporalProfileFact
 } from "../../src/core/profileMemory";
 import { ProfileMemoryStore } from "../../src/core/profileMemoryStore";
+import { saveProfileMemoryState } from "../../src/core/profileMemoryRuntime/profileMemoryPersistence";
+import {
+  buildConversationStackFromTurnsV1
+} from "../../src/core/stage6_86ConversationStack";
+import {
+  applyEntityExtractionToGraph,
+  createEmptyEntityGraphV1,
+  extractEntityCandidates
+} from "../../src/core/stage6_86EntityGraph";
+import {
+  upsertOpenLoopOnConversationStackV1
+} from "../../src/core/stage6_86OpenLoops";
 
 /**
  * Implements `withProfileStore` behavior within module scope.
@@ -111,6 +124,229 @@ test("planning context is query-aware and surfaces matching contact facts", asyn
   });
 });
 
+test("episode planning context is query-aware and surfaces matching unresolved situations", async () => {
+  await withProfileStore(async (store) => {
+    await store.ingestFromTaskInput(
+      "task_profile_episode_context_1",
+      "Billy fell down three weeks ago and I never told you how it ended.",
+      "2026-03-08T10:00:00.000Z"
+    );
+
+    const episodePlanningContext = await store.getEpisodePlanningContext(
+      2,
+      "How is Billy doing after the fall?"
+    );
+
+    assert.match(episodePlanningContext, /Billy fell down/);
+    assert.match(episodePlanningContext, /status=unresolved/);
+  });
+});
+
+test("readEpisodes hides sensitive episodes unless explicit approval is present", async () => {
+  await withProfileStore(async (store) => {
+    const seededState = {
+      ...createEmptyProfileMemoryState(),
+      episodes: [
+        createProfileEpisodeRecord({
+          title: "Billy fell down",
+          summary: "Billy fell down and the outcome was unresolved.",
+          sourceTaskId: "task_profile_store_read_episode_1",
+          source: "test",
+          sourceKind: "explicit_user_statement",
+          sensitive: false,
+          observedAt: "2026-03-08T10:00:00.000Z"
+        }),
+        createProfileEpisodeRecord({
+          title: "Private family health situation",
+          summary: "A private health situation came up.",
+          sourceTaskId: "task_profile_store_read_episode_2",
+          source: "test",
+          sourceKind: "explicit_user_statement",
+          sensitive: true,
+          observedAt: "2026-03-08T11:00:00.000Z"
+        })
+      ]
+    };
+
+    await (store as unknown as { save: (state: typeof seededState) => Promise<void> }).save(
+      seededState
+    );
+
+    const withoutApproval = await store.readEpisodes({
+      purpose: "operator_view",
+      includeSensitive: true,
+      explicitHumanApproval: false
+    });
+    assert.equal(withoutApproval.length, 1);
+    assert.equal(withoutApproval[0]?.title, "Billy fell down");
+
+    const withApproval = await store.readEpisodes({
+      purpose: "operator_view",
+      includeSensitive: true,
+      explicitHumanApproval: true,
+      approvalId: "approval_episode_read_1"
+    });
+    assert.equal(withApproval.length, 2);
+  });
+});
+
+test("queryEpisodesForContinuity returns linked unresolved episodes for re-mentioned entity hints", async () => {
+  await withProfileStore(async (store, filePath) => {
+    const observedAt = "2026-03-08T10:00:00.000Z";
+    const seededState = {
+      ...createEmptyProfileMemoryState(),
+      episodes: [
+        createProfileEpisodeRecord({
+          title: "Billy fell down",
+          summary: "Billy fell down a few weeks ago and the outcome was unresolved.",
+          sourceTaskId: "task_profile_store_query_episode_1",
+          source: "test",
+          sourceKind: "explicit_user_statement",
+          sensitive: false,
+          observedAt,
+          entityRefs: ["contact.billy"],
+          tags: ["followup", "injury"]
+        })
+      ]
+    };
+
+    await saveProfileMemoryState(filePath, Buffer.alloc(32, 7), seededState);
+
+    const graph = applyEntityExtractionToGraph(
+      createEmptyEntityGraphV1(observedAt),
+      extractEntityCandidates({
+        text: "Billy checked in after the fall.",
+        observedAt,
+        evidenceRef: "trace:store_query_episode_1"
+      }),
+      observedAt,
+      "trace:store_query_episode_1"
+    ).graph;
+    const seededStack = buildConversationStackFromTurnsV1(
+      [
+        {
+          role: "user",
+          text: "Billy fell down a few weeks ago.",
+          at: observedAt
+        }
+      ],
+      observedAt
+    );
+    const stack = upsertOpenLoopOnConversationStackV1({
+      stack: seededStack,
+      threadKey: seededStack.activeThreadKey!,
+      text: "Remind me later to ask how Billy is doing after the fall.",
+      observedAt,
+      entityRefs: ["Billy"]
+    }).stack;
+
+    const matches = await store.queryEpisodesForContinuity(graph, stack, {
+      entityHints: ["Billy"]
+    });
+
+    assert.equal(matches.length, 1);
+    assert.equal(matches[0]?.episode.title, "Billy fell down");
+    assert.equal(matches[0]?.entityLinks.length > 0, true);
+    assert.equal(matches[0]?.openLoopLinks.length > 0, true);
+  });
+});
+
+test("profile memory store load preserves persisted episodic-memory state", async () => {
+  await withProfileStore(async (store, filePath) => {
+    const seededState = {
+      ...createEmptyProfileMemoryState(),
+      episodes: [
+        createProfileEpisodeRecord({
+          title: "Billy fall situation",
+          summary: "Billy fell down a few weeks ago and the outcome was never mentioned.",
+          sourceTaskId: "task_profile_store_episode_1",
+          source: "test",
+          sourceKind: "explicit_user_statement",
+          sensitive: false,
+          observedAt: "2026-03-08T10:00:00.000Z",
+          entityRefs: ["entity_billy"],
+          openLoopRefs: ["loop_billy"],
+          tags: ["followup", "injury"]
+        })
+      ]
+    };
+
+    await saveProfileMemoryState(filePath, Buffer.alloc(32, 7), seededState);
+
+    const loaded = await store.load();
+    assert.equal(loaded.episodes.length, 1);
+    assert.equal(loaded.episodes[0]?.title, "Billy fall situation");
+    assert.deepEqual(loaded.episodes[0]?.entityRefs, ["entity_billy"]);
+  });
+});
+
+test("profile memory store load consolidates duplicate episodic-memory records", async () => {
+  await withProfileStore(async (store, filePath) => {
+    const seededState = {
+      ...createEmptyProfileMemoryState(),
+      episodes: [
+        createProfileEpisodeRecord({
+          title: "Billy fell down",
+          summary: "Billy fell down near the stairs.",
+          sourceTaskId: "task_profile_store_episode_consolidation_1",
+          source: "test",
+          sourceKind: "explicit_user_statement",
+          sensitive: false,
+          observedAt: "2026-03-01T10:00:00.000Z",
+          entityRefs: ["contact.billy"],
+          openLoopRefs: ["loop_old"],
+          tags: ["injury"]
+        }),
+        createProfileEpisodeRecord({
+          title: "Billy fell down",
+          summary: "Billy fell down near the stairs and the outcome was unresolved.",
+          sourceTaskId: "task_profile_store_episode_consolidation_2",
+          source: "test",
+          sourceKind: "assistant_inference",
+          sensitive: false,
+          observedAt: "2026-03-02T10:00:00.000Z",
+          entityRefs: ["contact.billy"],
+          openLoopRefs: ["loop_new"],
+          tags: ["followup", "injury"]
+        })
+      ]
+    };
+
+    await saveProfileMemoryState(filePath, Buffer.alloc(32, 7), seededState);
+
+    const loaded = await store.load();
+    assert.equal(loaded.episodes.length, 1);
+    assert.match(loaded.episodes[0]?.summary ?? "", /outcome was unresolved/i);
+    assert.deepEqual(loaded.episodes[0]?.openLoopRefs, ["loop_new", "loop_old"]);
+  });
+});
+
+test("ingestFromTaskInput extracts and later resolves bounded episodic-memory situations", async () => {
+  await withProfileStore(async (store) => {
+    await store.ingestFromTaskInput(
+      "task_profile_store_episode_ingest_1",
+      "Billy fell down three weeks ago and I never told you how it ended.",
+      "2026-03-08T10:00:00.000Z"
+    );
+
+    let state = await store.load();
+    assert.equal(state.episodes.length, 1);
+    assert.equal(state.episodes[0]?.title, "Billy fell down");
+    assert.equal(state.episodes[0]?.status, "unresolved");
+
+    await store.ingestFromTaskInput(
+      "task_profile_store_episode_ingest_2",
+      "Billy is doing better now after the fall.",
+      "2026-03-08T12:00:00.000Z"
+    );
+
+    state = await store.load();
+    assert.equal(state.episodes.length, 1);
+    assert.equal(state.episodes[0]?.status, "resolved");
+    assert.equal(state.episodes[0]?.resolvedAt, "2026-03-08T12:00:00.000Z");
+  });
+});
+
 test("fromEnv returns undefined when profile memory is disabled", () => {
   const store = ProfileMemoryStore.fromEnv({});
   assert.equal(store, undefined);
@@ -162,6 +398,66 @@ test("evaluateAgentPulse allows stale-fact revalidation when stale facts exist",
     assert.equal(evaluation.staleFactCount > 0, true);
     assert.equal(evaluation.decision.allowed, true);
     assert.equal(evaluation.decision.decisionCode, "ALLOWED");
+  });
+});
+
+test("evaluateAgentPulse exposes bounded fresh unresolved situations for pulse grounding", async () => {
+  await withProfileStore(async (store, filePath) => {
+    const seededState = {
+      ...createEmptyProfileMemoryState(),
+      episodes: [
+        createProfileEpisodeRecord({
+          title: "Billy finished rehab",
+          summary: "Billy finished rehab and fully recovered.",
+          sourceTaskId: "task_profile_store_pulse_episode_1",
+          source: "test",
+          sourceKind: "explicit_user_statement",
+          sensitive: false,
+          observedAt: "2026-03-05T10:00:00.000Z",
+          lastMentionedAt: "2026-03-05T10:00:00.000Z",
+          status: "resolved",
+          resolvedAt: "2026-03-05T12:00:00.000Z",
+          entityRefs: ["contact.billy"]
+        }),
+        createProfileEpisodeRecord({
+          title: "Billy fell down",
+          summary: "Billy fell down and the outcome is unresolved.",
+          sourceTaskId: "task_profile_store_pulse_episode_2",
+          source: "test",
+          sourceKind: "explicit_user_statement",
+          sensitive: false,
+          observedAt: "2026-03-07T10:00:00.000Z",
+          lastMentionedAt: "2026-03-07T10:00:00.000Z",
+          entityRefs: ["contact.billy"]
+        })
+      ]
+    };
+
+    await saveProfileMemoryState(filePath, Buffer.alloc(32, 7), seededState);
+
+    const evaluation = await store.evaluateAgentPulse(
+      {
+        enabled: true,
+        timezoneOffsetMinutes: 0,
+        quietHoursStartHourLocal: 22,
+        quietHoursEndHourLocal: 8,
+        minIntervalMinutes: 0
+      },
+      {
+        nowIso: "2026-03-08T10:00:00.000Z",
+        userOptIn: true,
+        reason: "contextual_followup",
+        contextualLinkageConfidence: 0.9,
+        lastPulseSentAtIso: null,
+        overrideQuietHours: true
+      }
+    );
+
+    assert.equal(evaluation.decision.allowed, true);
+    assert.deepEqual(
+      evaluation.relevantEpisodes.map((episode) => episode.title),
+      ["Billy fell down"]
+    );
   });
 });
 
@@ -493,6 +789,48 @@ test("evaluateAgentPulse blocks check-ins during quiet hours unless overridden",
 
     assert.equal(overridden.decision.allowed, true);
     assert.equal(overridden.decision.decisionCode, "ALLOWED");
+  });
+});
+
+test("reviewEpisodesForUser and explicit user episode updates remain bounded and deterministic", async () => {
+  await withProfileStore(async (store) => {
+    await store.ingestFromTaskInput(
+      "task_profile_store_user_review_1",
+      "Billy fell down three weeks ago and I never told you how it ended.",
+      "2026-03-08T10:00:00.000Z"
+    );
+
+    const reviewed = await store.reviewEpisodesForUser(
+      5,
+      "2026-03-08T10:05:00.000Z"
+    );
+    assert.equal(reviewed.length, 1);
+    assert.equal(reviewed[0]?.status, "unresolved");
+
+    const resolved = await store.updateEpisodeFromUser(
+      reviewed[0]!.episodeId,
+      "resolved",
+      "memory_resolve_1",
+      "/memory resolve episode",
+      "Billy recovered and is fine now.",
+      "2026-03-08T11:00:00.000Z"
+    );
+    assert.equal(resolved?.status, "resolved");
+    assert.equal(resolved?.resolvedAt, "2026-03-08T11:00:00.000Z");
+
+    const forgotten = await store.forgetEpisodeFromUser(
+      reviewed[0]!.episodeId,
+      "memory_forget_1",
+      "/memory forget episode",
+      "2026-03-08T12:00:00.000Z"
+    );
+    assert.equal(forgotten?.episodeId, reviewed[0]?.episodeId);
+
+    const afterForget = await store.reviewEpisodesForUser(
+      5,
+      "2026-03-08T12:10:00.000Z"
+    );
+    assert.equal(afterForget.length, 0);
   });
 });
 

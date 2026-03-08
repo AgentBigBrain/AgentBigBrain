@@ -36,6 +36,8 @@ import {
   type ConversationManagerConfig,
   type ConversationManagerDependencies,
   type ConversationNotifier,
+  type QueryConversationContinuityFacts,
+  type QueryConversationContinuityEpisodes,
   type ExecuteConversationTask
 } from "./conversationRuntime/managerContracts";
 
@@ -82,6 +84,12 @@ export class ConversationManager {
   private readonly interpretConversationIntent?: ConversationIntentInterpreter;
   private readonly intentInterpreterConfidenceThreshold: number;
   private readonly runCheckpointReview?: ConversationCheckpointReviewRunner;
+  private readonly queryContinuityEpisodes?: QueryConversationContinuityEpisodes;
+  private readonly queryContinuityFacts?: QueryConversationContinuityFacts;
+  private readonly reviewConversationMemory?: ConversationManagerDependencies["reviewConversationMemory"];
+  private readonly resolveConversationMemoryEpisode?: ConversationManagerDependencies["resolveConversationMemoryEpisode"];
+  private readonly markConversationMemoryEpisodeWrong?: ConversationManagerDependencies["markConversationMemoryEpisodeWrong"];
+  private readonly forgetConversationMemoryEpisode?: ConversationManagerDependencies["forgetConversationMemoryEpisode"];
   private readonly followUpRuleContext: FollowUpRuleContext;
   private readonly pulseLexicalRuleContext: PulseLexicalRuleContext;
 
@@ -115,6 +123,12 @@ export class ConversationManager {
       )
     );
     this.runCheckpointReview = dependencies.runCheckpointReview;
+    this.queryContinuityEpisodes = dependencies.queryContinuityEpisodes;
+    this.queryContinuityFacts = dependencies.queryContinuityFacts;
+    this.reviewConversationMemory = dependencies.reviewConversationMemory;
+    this.resolveConversationMemoryEpisode = dependencies.resolveConversationMemoryEpisode;
+    this.markConversationMemoryEpisodeWrong = dependencies.markConversationMemoryEpisodeWrong;
+    this.forgetConversationMemoryEpisode = dependencies.forgetConversationMemoryEpisode;
     this.followUpRuleContext = createFollowUpRuleContext(this.config.followUpOverridePath);
     this.pulseLexicalRuleContext = createPulseLexicalRuleContext(this.config.pulseLexicalOverridePath);
   }
@@ -245,6 +259,12 @@ export class ConversationManager {
       interpretConversationIntent: this.interpretConversationIntent,
       intentInterpreterConfidenceThreshold: this.intentInterpreterConfidenceThreshold,
       runCheckpointReview: this.runCheckpointReview,
+      queryContinuityEpisodes: this.queryContinuityEpisodes,
+      queryContinuityFacts: this.queryContinuityFacts,
+      reviewConversationMemory: this.reviewConversationMemory,
+      resolveConversationMemoryEpisode: this.resolveConversationMemoryEpisode,
+      markConversationMemoryEpisodeWrong: this.markConversationMemoryEpisodeWrong,
+      forgetConversationMemoryEpisode: this.forgetConversationMemoryEpisode,
       isWorkerActive: (sessionKey) => this.activeWorkers.has(sessionKey),
       clearAckTimer: (sessionKey) => clearConversationAckTimer(sessionKey, this.ackTimers),
       setWorkerBinding: (sessionKey, task, notifier) =>

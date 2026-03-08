@@ -25,6 +25,7 @@ function toAuditDomainLanes(lanes: readonly MemoryDomainLane[]): MemoryAccessDom
  * @param taskId - Task identifier associated with the retrieval.
  * @param query - User request query used for retrieval.
  * @param retrievedCount - Count of retrieved readable facts.
+ * @param retrievedEpisodeCount - Count of retrieved episode summaries.
  * @param redactedCount - Count of sensitive fields redacted before egress.
  * @param lanes - Domain lanes attributed to the retrieval.
  * @param options - Optional probing-specific metadata.
@@ -35,6 +36,7 @@ export async function appendMemoryAccessAudit(
   taskId: string,
   query: string,
   retrievedCount: number,
+  retrievedEpisodeCount: number,
   redactedCount: number,
   lanes: readonly MemoryDomainLane[],
   options?: MemoryAccessAuditAppendOptions
@@ -44,6 +46,7 @@ export async function appendMemoryAccessAudit(
       taskId,
       query,
       retrievedCount,
+      retrievedEpisodeCount: options?.retrievedEpisodeCount ?? retrievedEpisodeCount,
       redactedCount,
       domainLanes: toAuditDomainLanes(lanes),
       eventType: options?.eventType,

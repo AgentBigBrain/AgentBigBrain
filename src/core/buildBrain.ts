@@ -12,6 +12,7 @@ import { PlannerOrgan } from "../organs/planner";
 import { ReflectionOrgan } from "../organs/reflection";
 import { ToolExecutorOrgan } from "../organs/executor";
 import { MemoryBrokerOrgan } from "../organs/memoryBroker";
+import { LanguageUnderstandingOrgan } from "../organs/languageUnderstanding/episodeExtraction";
 import { ExecutionReceiptStore } from "./advancedAutonomyRuntime";
 import { SemanticMemoryStore } from "./semanticMemory";
 import { PersonalityStore } from "./personalityStore";
@@ -153,7 +154,12 @@ export function buildDefaultBrain(): BrainOrchestrator {
     exportJsonOnWrite: config.persistence.exportJsonOnWrite
   });
   const profileMemoryStore = ProfileMemoryStore.fromEnv();
-  const memoryBroker = new MemoryBrokerOrgan(profileMemoryStore);
+  const memoryBroker = new MemoryBrokerOrgan(
+    profileMemoryStore,
+    undefined,
+    undefined,
+    new LanguageUnderstandingOrgan(modelClient)
+  );
 
   return new BrainOrchestrator(
     config,

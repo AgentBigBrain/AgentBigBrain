@@ -30,7 +30,10 @@ organs.
 ## Outputs
 - executable action plans and fallback responses
 - action execution dispatch and live-run capability routing
-- memory context packets, reflection lessons, and pulse-intent classification
+- memory context packets, bounded remembered-situation review and mutation brokerage, reflection
+  lessons, and pulse-intent classification
+- explicit remembered-situation review/update brokerage so private interface controls can resolve,
+  correct, or forget episodic memory through stable organ boundaries
 
 ## Invariants
 - `planner.ts` and `executor.ts` remain stable thin entrypoints; detailed policy or capability logic
@@ -41,6 +44,16 @@ organs.
   and skill fallback scaffolding belong in `plannerPolicy/`, not in new top-level helper files.
 - `memoryBroker.ts` remains the stable broker entrypoint; detailed query planning, context
   injection, and audit helpers belong in `memoryContext/`.
+- Explicit user review/correction/forget flows for remembered situations should stay brokered
+  through `memoryBroker.ts`; transport layers must not reach directly into encrypted profile-memory
+  storage.
+- Remembered-situation resolve, wrong, and forget flows should stay explicit and deterministic at
+  the broker boundary; `memoryBroker.ts` should not silently rewrite episodic memory.
+- Future richer language understanding should converge under bounded `languageUnderstanding/` and
+  `memorySynthesis/` organs rather than adding more bespoke lexical heuristics across unrelated
+  organs.
+- `intentRuntime/pulseLexicalRules.ts` stays a deterministic lexical gate; human-centric proactive
+  utility scoring belongs in a separate bounded runtime, not in the fail-closed pulse rulepack.
 - `reflection.ts` remains the stable reflection coordinator; detailed signal classification and
   model-prompt logic belong in `reflectionRuntime/`.
 - `intentInterpreter.ts` and `pulseLexicalClassifier.ts` remain stable intent entrypoints;

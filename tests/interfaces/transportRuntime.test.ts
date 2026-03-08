@@ -266,6 +266,41 @@ test("prepareDiscordMessageCreate returns accepted payloads with normalized runt
   });
 });
 
+test("prepareDiscordMessageCreate accepts greeting-plus-alias invocations", () => {
+  const result = prepareDiscordMessageCreate({
+    data: {
+      id: "m1b",
+      channel_id: "c1",
+      guild_id: "g1",
+      content: "Hi BigBrain what can you help me with",
+      author: {
+        id: "u1",
+        username: "tester",
+        bot: false
+      },
+      timestamp: "2026-03-07T10:00:00.000Z"
+    },
+    botUserId: "bot-1",
+    sharedSecret: "shared-secret",
+    invocationPolicy: {
+      requireNameCall: true,
+      aliases: ["bigbrain"]
+    },
+    validateMessage: () => ({
+      accepted: true,
+      code: "ACCEPTED",
+      message: "ok"
+    }),
+    abortControllers: new Map<string, AbortController>()
+  });
+
+  assert.equal(result.kind, "accepted");
+  if (result.kind !== "accepted") {
+    return;
+  }
+  assert.equal(result.inbound.text, "Hi what can you help me with");
+});
+
 test("prepareDiscordMessageCreate surfaces transport-facing rejections and stop intents", () => {
   const rejected = prepareDiscordMessageCreate({
     data: {
@@ -639,6 +674,43 @@ test("prepareTelegramUpdate returns accepted payloads with normalized runtime me
   assert.equal(result.conversationVisibility, "private");
   assert.equal(result.inbound.text, "status");
   assert.equal(result.entityGraphEvent.eventId, "44");
+});
+
+test("prepareTelegramUpdate accepts greeting-plus-alias invocations", () => {
+  const result = prepareTelegramUpdate({
+    update: {
+      update_id: 46,
+      message: {
+        text: "Hi BigBrain",
+        chat: {
+          id: 100,
+          type: "private"
+        },
+        from: {
+          id: 200,
+          username: "tester"
+        },
+        date: 1_700_000_000
+      }
+    },
+    sharedSecret: "shared-secret",
+    invocationPolicy: {
+      requireNameCall: true,
+      aliases: ["bigbrain"]
+    },
+    validateMessage: () => ({
+      accepted: true,
+      code: "ACCEPTED",
+      message: "ok"
+    }),
+    abortControllers: new Map<string, AbortController>()
+  });
+
+  assert.equal(result.kind, "accepted");
+  if (result.kind !== "accepted") {
+    return;
+  }
+  assert.equal(result.inbound.text, "Hi");
 });
 
 test("prepareTelegramUpdate surfaces transport-facing rejections and wrapped draft ids", () => {

@@ -9,6 +9,7 @@ import path from "node:path";
 import { test } from "node:test";
 
 import {
+  createProfileEpisodeRecord,
   createEmptyProfileMemoryState,
   upsertTemporalProfileFact
 } from "../../src/core/profileMemory";
@@ -65,6 +66,23 @@ test("saveProfileMemoryState and loadPersistedProfileMemoryState round-trip encr
     observedAt: "2026-02-24T00:00:00.000Z",
     confidence: 0.95
   }).nextState;
+  state = {
+    ...state,
+    episodes: [
+      createProfileEpisodeRecord({
+        title: "Billy fall situation",
+        summary: "Billy fell down and the outcome was not mentioned yet.",
+        sourceTaskId: "task_profile_episode_roundtrip",
+        source: "test",
+        sourceKind: "explicit_user_statement",
+        sensitive: false,
+        observedAt: "2026-02-24T00:00:00.000Z",
+        entityRefs: ["entity_billy"],
+        openLoopRefs: ["loop_billy"],
+        tags: ["followup"]
+      })
+    ]
+  };
 
   try {
     await saveProfileMemoryState(filePath, encryptionKey, state);
@@ -75,8 +93,10 @@ test("saveProfileMemoryState and loadPersistedProfileMemoryState round-trip encr
 
     const loaded = await loadPersistedProfileMemoryState(filePath, encryptionKey);
     assert.equal(loaded.facts.length, 1);
+    assert.equal(loaded.episodes.length, 1);
     assert.equal(loaded.facts[0]?.key, "employment.current");
     assert.equal(loaded.facts[0]?.value, "Flare");
+    assert.equal(loaded.episodes[0]?.title, "Billy fall situation");
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }

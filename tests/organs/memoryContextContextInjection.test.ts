@@ -12,6 +12,10 @@ import {
   countRetrievedProfileFacts,
   sanitizeProfileContextForModelEgress
 } from "../../src/organs/memoryContext/contextInjection";
+import {
+  countRetrievedEpisodeSummaries,
+  sanitizeEpisodeContextForModelEgress
+} from "../../src/organs/memoryContext/episodeContextInjection";
 
 function buildTask(userInput: string): TaskRequest {
   return {
@@ -83,4 +87,42 @@ test("countRetrievedProfileFacts ignores headers and counts fact lines only", ()
   ].join("\n");
 
   assert.equal(countRetrievedProfileFacts(context), 2);
+});
+
+test("sanitizeEpisodeContextForModelEgress redacts sensitive episode lines deterministically", () => {
+  const result = sanitizeEpisodeContextForModelEgress([
+    "- situation: Billy follow-up | status=unresolved | summary=Billy's phone number is 555-1234."
+  ].join("\n"));
+
+  assert.equal(result.redactedFieldCount, 1);
+  assert.match(result.sanitizedContext, /\[REDACTED\]/);
+});
+
+test("buildInjectedContextPacket appends bounded episode context when provided", () => {
+  const packet = buildInjectedContextPacket(
+    buildTask("How is Billy doing after the fall?"),
+    ["relationship"],
+    {
+      profile: 0,
+      relationship: 3,
+      workflow: 0,
+      system_policy: 0,
+      unknown: 0
+    },
+    "profile_context_relevant",
+    "contact.billy.name: Billy",
+    "- situation: Billy fell down | status=unresolved | observedAt=2026-03-08T10:00:00.000Z | summary=Billy fell down a few weeks ago and the outcome was unresolved."
+  );
+
+  assert.match(packet, /\[AgentFriendEpisodeContext\]/);
+  assert.match(packet, /Billy fell down/);
+});
+
+test("countRetrievedEpisodeSummaries counts rendered situation lines only", () => {
+  const context = [
+    "- situation: Billy fell down | status=unresolved | summary=Still waiting on the outcome.",
+    "- situation: Tax filing issue | status=outcome_unknown | summary=No final update yet."
+  ].join("\n");
+
+  assert.equal(countRetrievedEpisodeSummaries(context), 2);
 });

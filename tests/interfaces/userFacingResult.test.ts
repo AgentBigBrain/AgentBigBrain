@@ -68,6 +68,29 @@ test("selectUserFacingSummary prefers approved respond output when present", () 
   assert.equal(selected, "Hello there!");
 });
 
+test("selectUserFacingSummary strips label-style AI assistant openings from respond output", () => {
+  const runResult = buildRunResult("technical summary", [
+    {
+      action: {
+        id: "action_respond_label_style_prefix",
+        type: "respond",
+        description: "reply",
+        params: {},
+        estimatedCostUsd: 0.02
+      },
+      mode: "fast_path",
+      approved: true,
+      output: "AI assistant response: Test message received, Benny.",
+      blockedBy: [],
+      violations: [],
+      votes: []
+    }
+  ]);
+
+  const selected = selectUserFacingSummary(runResult);
+  assert.equal(selected, "Test message received, Benny.");
+});
+
 test("selectUserFacingSummary blocks browser-execution overclaims when no shell action executed", () => {
   const runResult = buildRunResult("technical summary", [
     {

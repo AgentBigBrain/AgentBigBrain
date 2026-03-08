@@ -8,6 +8,11 @@ import type {
   PulseLexicalRuleContext
 } from "../conversationManagerHelpers";
 import type {
+  ConversationStackV1,
+  OpenLoopV1
+} from "../../core/types";
+import type { ProfileEpisodeStatus } from "../../core/profileMemory";
+import type {
   InterpretedConversationIntent,
   IntentInterpreterTurn
 } from "../../organs/intentInterpreter";
@@ -70,6 +75,104 @@ export type ConversationCheckpointReviewRunner = (
   checkpointId: string
 ) => Promise<ConversationCheckpointReviewResult | null>;
 
+export interface ConversationContinuityEpisodeEntityLink {
+  entityKey: string;
+  canonicalName: string;
+}
+
+export interface ConversationContinuityEpisodeOpenLoopLink {
+  loopId: string;
+  threadKey: string;
+  status: OpenLoopV1["status"];
+  priority: number;
+}
+
+export interface ConversationContinuityEpisodeRecord {
+  episodeId: string;
+  title: string;
+  summary: string;
+  status: ProfileEpisodeStatus;
+  lastMentionedAt: string;
+  entityRefs: readonly string[];
+  entityLinks: readonly ConversationContinuityEpisodeEntityLink[];
+  openLoopLinks: readonly ConversationContinuityEpisodeOpenLoopLink[];
+}
+
+export interface ConversationContinuityFactRecord {
+  factId: string;
+  key: string;
+  value: string;
+  status: string;
+  observedAt: string;
+  lastUpdatedAt: string;
+  confidence: number;
+}
+
+export interface ConversationMemoryReviewRecord {
+  episodeId: string;
+  title: string;
+  summary: string;
+  status: ProfileEpisodeStatus;
+  lastMentionedAt: string;
+  resolvedAt: string | null;
+  confidence: number;
+  sensitive: boolean;
+}
+
+export interface ConversationMemoryReviewRequest {
+  reviewTaskId: string;
+  query: string;
+  nowIso: string;
+  maxEpisodes?: number;
+}
+
+export type ReviewConversationMemory = (
+  request: ConversationMemoryReviewRequest
+) => Promise<readonly ConversationMemoryReviewRecord[]>;
+
+export interface ConversationMemoryMutationRequest {
+  episodeId: string;
+  note?: string;
+  nowIso: string;
+  sourceTaskId: string;
+  sourceText: string;
+}
+
+export type ResolveConversationMemoryEpisode = (
+  request: ConversationMemoryMutationRequest
+) => Promise<ConversationMemoryReviewRecord | null>;
+
+export type MarkConversationMemoryEpisodeWrong = (
+  request: ConversationMemoryMutationRequest
+) => Promise<ConversationMemoryReviewRecord | null>;
+
+export type ForgetConversationMemoryEpisode = (
+  request: Pick<
+    ConversationMemoryMutationRequest,
+    "episodeId" | "nowIso" | "sourceTaskId" | "sourceText"
+  >
+) => Promise<ConversationMemoryReviewRecord | null>;
+
+export interface ConversationContinuityEpisodeQueryRequest {
+  stack: ConversationStackV1;
+  entityHints: readonly string[];
+  maxEpisodes?: number;
+}
+
+export type QueryConversationContinuityEpisodes = (
+  request: ConversationContinuityEpisodeQueryRequest
+) => Promise<readonly ConversationContinuityEpisodeRecord[]>;
+
+export interface ConversationContinuityFactQueryRequest {
+  stack: ConversationStackV1;
+  entityHints: readonly string[];
+  maxFacts?: number;
+}
+
+export type QueryConversationContinuityFacts = (
+  request: ConversationContinuityFactQueryRequest
+) => Promise<readonly ConversationContinuityFactRecord[]>;
+
 export interface ConversationManagerConfig {
   maxProposalInputChars: number;
   heartbeatIntervalMs: number;
@@ -88,6 +191,12 @@ export interface ConversationManagerDependencies {
   interpretConversationIntent?: ConversationIntentInterpreter;
   intentInterpreterConfidenceThreshold?: number;
   runCheckpointReview?: ConversationCheckpointReviewRunner;
+  queryContinuityEpisodes?: QueryConversationContinuityEpisodes;
+  queryContinuityFacts?: QueryConversationContinuityFacts;
+  reviewConversationMemory?: ReviewConversationMemory;
+  resolveConversationMemoryEpisode?: ResolveConversationMemoryEpisode;
+  markConversationMemoryEpisodeWrong?: MarkConversationMemoryEpisodeWrong;
+  forgetConversationMemoryEpisode?: ForgetConversationMemoryEpisode;
 }
 
 export interface ConversationIngressRuleContexts {

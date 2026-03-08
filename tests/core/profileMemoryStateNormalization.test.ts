@@ -18,6 +18,30 @@ test("safeIsoOrNow falls back to a valid ISO timestamp for invalid input", () =>
 test("normalizeProfileMemoryState drops malformed facts and preserves valid mutation audit metadata", () => {
   const normalized = normalizeProfileMemoryState({
     updatedAt: "2026-03-07T00:00:00.000Z",
+    episodes: [
+      {
+        id: "episode_valid",
+        title: "Billy fall situation",
+        summary: "Billy fell down and the outcome was not mentioned yet.",
+        status: "unresolved",
+        sourceTaskId: "task_episode_state_normalization",
+        source: "test",
+        sourceKind: "explicit_user_statement",
+        sensitive: false,
+        confidence: 0.85,
+        observedAt: "2026-03-07T00:00:00.000Z",
+        lastMentionedAt: "2026-03-07T00:05:00.000Z",
+        lastUpdatedAt: "2026-03-07T00:05:00.000Z",
+        resolvedAt: null,
+        entityRefs: ["entity_billy"],
+        openLoopRefs: ["loop_billy"],
+        tags: ["followup"]
+      },
+      {
+        id: 5,
+        title: "bad episode"
+      }
+    ],
     facts: [
       {
         id: "fact_valid",
@@ -49,6 +73,8 @@ test("normalizeProfileMemoryState drops malformed facts and preserves valid muta
   });
 
   assert.equal(normalized.facts.length, 1);
+  assert.equal(normalized.episodes.length, 1);
+  assert.equal(normalized.episodes[0]?.title, "Billy fall situation");
   assert.equal(normalized.facts[0]?.key, "followup.tax.filing");
   assert.equal(
     normalized.facts[0]?.mutationAudit?.rulepackVersion,

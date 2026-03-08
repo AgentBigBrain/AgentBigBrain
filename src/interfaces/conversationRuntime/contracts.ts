@@ -4,10 +4,16 @@
 
 import type {
   ConversationCheckpointReviewRunner,
+  ForgetConversationMemoryEpisode,
   ConversationIngressRuleContexts,
+  QueryConversationContinuityFacts,
   ConversationIntentInterpreter,
   ConversationManagerConfig,
   ConversationNotifier,
+  QueryConversationContinuityEpisodes,
+  ResolveConversationMemoryEpisode,
+  ReviewConversationMemory,
+  MarkConversationMemoryEpisodeWrong,
   ExecuteConversationTask
 } from "./managerContracts";
 import type { ConversationSession } from "../sessionStore";
@@ -61,6 +67,12 @@ export interface ConversationIngressDependencies extends ConversationIngressRule
   interpretConversationIntent?: ConversationIntentInterpreter;
   intentInterpreterConfidenceThreshold: number;
   runCheckpointReview?: ConversationCheckpointReviewRunner;
+  queryContinuityEpisodes?: QueryConversationContinuityEpisodes;
+  queryContinuityFacts?: QueryConversationContinuityFacts;
+  reviewConversationMemory?: ReviewConversationMemory;
+  resolveConversationMemoryEpisode?: ResolveConversationMemoryEpisode;
+  markConversationMemoryEpisodeWrong?: MarkConversationMemoryEpisodeWrong;
+  forgetConversationMemoryEpisode?: ForgetConversationMemoryEpisode;
   isWorkerActive(sessionKey: string): boolean;
   clearAckTimer(sessionKey: string): void;
   setWorkerBinding(

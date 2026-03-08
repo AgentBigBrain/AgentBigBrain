@@ -11,6 +11,7 @@ consumed directly from `stopSummarySurface.ts` by the interface adapters.
 ## Primary Files
 - `contracts.ts`
 - `resultSurface.ts`
+- `languageSurface.ts`
 - `successSurface.ts`
 - `blockSurface.ts`
 - `noOpSurface.ts`
@@ -26,6 +27,7 @@ consumed directly from `stopSummarySurface.ts` by the interface adapters.
 
 ## Outputs
 - user-facing success summaries
+- label-style opening cleanup for model-authored replies
 - blocked and no-op explanations
 - trust-safe respond rendering
 - debug/diagnostic mission summaries
@@ -37,6 +39,8 @@ consumed directly from `stopSummarySurface.ts` by the interface adapters.
   instead of mixing in one giant file.
 - Debug/diagnostic output should only appear when explicitly requested and when technical summary is
   enabled.
+- User-facing replies should strip robotic label-style openings like `AI assistant response:` even
+  if the model emits them.
 - Thin entrypoints should stay limited to stable surface-composition paths such as
   `src/interfaces/userFacingResult.ts`; canonical wording logic should live in this folder.
 

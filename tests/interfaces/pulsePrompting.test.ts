@@ -60,6 +60,7 @@ function buildPulseEvaluation(
     staleFactCount: 0,
     unresolvedCommitmentCount: 0,
     unresolvedCommitmentTopics: [],
+    relevantEpisodes: [],
     relationship: {
       role: "unknown",
       roleFactId: null
@@ -99,6 +100,16 @@ test("buildPulsePrompt includes contextual follow-up and revalidation directives
     buildSession("telegram:chat-1:user-1"),
     "contextual_followup",
     buildPulseEvaluation({
+      relevantEpisodes: [
+        {
+          episodeId: "episode_billy_fall",
+          title: "Billy fell down",
+          summary: "Billy fell down and the outcome is unresolved.",
+          status: "unresolved",
+          lastMentionedAt: "2026-03-07T12:00:00.000Z",
+          ageDays: 1
+        }
+      ],
       relationship: {
         role: "friend",
         roleFactId: "profile_fact_friend"
@@ -114,6 +125,7 @@ test("buildPulsePrompt includes contextual follow-up and revalidation directives
   );
 
   assert.ok(prompt.includes("Contextual follow-up nudge: enabled."));
+  assert.ok(prompt.includes("Relevant unresolved situations: Billy fell down (unresolved; 1d old)"));
   assert.ok(prompt.includes("Topic linkage confidence: 0.90"));
   assert.ok(prompt.includes("Side-thread linkage: present"));
   assert.ok(prompt.includes("Ask one concise revalidation question before making assumptions."));

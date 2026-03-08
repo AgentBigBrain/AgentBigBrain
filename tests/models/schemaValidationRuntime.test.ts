@@ -26,7 +26,8 @@ test("schema-runtime contracts expose the canonical known schema names", () => {
     "governor_v1",
     "autonomous_next_step_v1",
     "proactive_goal_v1",
-    "intent_interpretation_v1"
+    "intent_interpretation_v1",
+    "language_episode_extraction_v1"
   ]);
 });
 
@@ -79,5 +80,22 @@ test("schemaValidation shim re-exports the canonical schema-runtime helpers", ()
   assert.deepEqual(normalized, { message: "ok" });
   assert.doesNotThrow(() =>
     schemaValidationShim.validateStructuredModelOutput("response_v1", { message: "ok" })
+  );
+});
+
+test("validateStructuredModelOutput accepts bounded language episode extraction payloads", () => {
+  assert.doesNotThrow(() =>
+    validateStructuredModelOutput("language_episode_extraction_v1", {
+      episodes: [
+        {
+          subjectName: "Billy",
+          eventSummary: "had a medical situation",
+          supportingSnippet: "Billy had a scare at the hospital and we still do not know what happened.",
+          status: "unresolved",
+          confidence: 0.82,
+          tags: ["medical", "followup"]
+        }
+      ]
+    })
   );
 });

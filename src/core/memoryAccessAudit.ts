@@ -26,6 +26,7 @@ export interface MemoryAccessAuditEvent {
   taskId: string;
   queryHash: string;
   retrievedCount: number;
+  retrievedEpisodeCount: number;
   redactedCount: number;
   domainLanes: MemoryAccessDomainLane[];
   probeSignals?: string[];
@@ -42,6 +43,7 @@ interface AppendMemoryAccessAuditInput {
   taskId: string;
   query: string;
   retrievedCount: number;
+  retrievedEpisodeCount?: number;
   redactedCount: number;
   domainLanes: readonly MemoryAccessDomainLane[];
   eventType?: MemoryAccessAuditEventType;
@@ -216,6 +218,7 @@ function coerceMemoryAccessAuditDocument(input: unknown): MemoryAccessAuditDocum
             ? raw.queryHash
             : hashQuery(""),
         retrievedCount: toNonNegativeInteger(raw.retrievedCount),
+        retrievedEpisodeCount: toNonNegativeInteger(raw.retrievedEpisodeCount),
         redactedCount: toNonNegativeInteger(raw.redactedCount),
         domainLanes: normalizedDomainLanes.length > 0 ? normalizedDomainLanes : ["unknown"],
         probeSignals: probeSignals.length > 0 ? probeSignals : undefined,
@@ -287,10 +290,11 @@ export class MemoryAccessAuditStore {
         id: makeId("memory_access"),
         recordedAt: new Date().toISOString(),
         eventType,
-        taskId: input.taskId,
-        queryHash: hashQuery(input.query),
-        retrievedCount: toNonNegativeInteger(input.retrievedCount),
-        redactedCount: toNonNegativeInteger(input.redactedCount),
+      taskId: input.taskId,
+      queryHash: hashQuery(input.query),
+      retrievedCount: toNonNegativeInteger(input.retrievedCount),
+      retrievedEpisodeCount: toNonNegativeInteger(input.retrievedEpisodeCount),
+      redactedCount: toNonNegativeInteger(input.redactedCount),
         domainLanes: normalizedLanes.length > 0 ? normalizedLanes : ["unknown"],
         probeSignals: probeSignals.length > 0 ? probeSignals : undefined,
         probeWindowSize:

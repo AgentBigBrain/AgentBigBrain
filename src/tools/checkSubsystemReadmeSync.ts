@@ -107,6 +107,12 @@ export const DEFAULT_SUBSYSTEM_README_SPECS: readonly SubsystemReadmeSpec[] = [
     requiredHeadings: REQUIRED_README_HEADINGS
   },
   {
+    name: "languageRuntime",
+    codeDir: "src/core/languageRuntime",
+    readmePath: "src/core/languageRuntime/README.md",
+    requiredHeadings: REQUIRED_README_HEADINGS
+  },
+  {
     name: "profileMemoryRuntime",
     codeDir: "src/core/profileMemoryRuntime",
     readmePath: "src/core/profileMemoryRuntime/README.md",
@@ -161,6 +167,18 @@ export const DEFAULT_SUBSYSTEM_README_SPECS: readonly SubsystemReadmeSpec[] = [
     requiredHeadings: REQUIRED_README_HEADINGS
   },
   {
+    name: "languageUnderstanding",
+    codeDir: "src/organs/languageUnderstanding",
+    readmePath: "src/organs/languageUnderstanding/README.md",
+    requiredHeadings: REQUIRED_README_HEADINGS
+  },
+  {
+    name: "memorySynthesis",
+    codeDir: "src/organs/memorySynthesis",
+    readmePath: "src/organs/memorySynthesis/README.md",
+    requiredHeadings: REQUIRED_README_HEADINGS
+  },
+  {
     name: "reflectionRuntime",
     codeDir: "src/organs/reflectionRuntime",
     readmePath: "src/organs/reflectionRuntime/README.md",
@@ -188,6 +206,12 @@ export const DEFAULT_SUBSYSTEM_README_SPECS: readonly SubsystemReadmeSpec[] = [
     name: "transportRuntime",
     codeDir: "src/interfaces/transportRuntime",
     readmePath: "src/interfaces/transportRuntime/README.md",
+    requiredHeadings: REQUIRED_README_HEADINGS
+  },
+  {
+    name: "proactiveRuntime",
+    codeDir: "src/interfaces/proactiveRuntime",
+    readmePath: "src/interfaces/proactiveRuntime/README.md",
     requiredHeadings: REQUIRED_README_HEADINGS
   }
 ] as const;

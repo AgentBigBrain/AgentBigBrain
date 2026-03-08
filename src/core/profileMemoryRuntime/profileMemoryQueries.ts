@@ -3,11 +3,20 @@
  */
 
 import { type ProfileFactRecord, type ProfileMemoryState } from "../profileMemory";
-import { buildQueryAwarePlanningContext } from "./profileMemoryPlanningContext";
+import {
+  buildQueryAwarePlanningContext,
+  selectProfileFactsForQuery
+} from "./profileMemoryPlanningContext";
 import {
   type ProfileAccessRequest,
   type ProfileReadableFact
 } from "./contracts";
+import { readProfileEpisodes } from "./profileMemoryEpisodeQueries";
+
+export interface ProfileFactContinuityQueryRequest {
+  entityHints: readonly string[];
+  maxFacts?: number;
+}
 
 /**
  * Builds planner-facing profile context from normalized profile-memory state.
@@ -58,6 +67,32 @@ export function readProfileFacts(
     }));
 }
 
+export { readProfileEpisodes };
+
+/**
+ * Returns bounded non-sensitive facts that overlap the supplied continuity/entity hints.
+ *
+ * @param state - Loaded profile-memory state.
+ * @param request - Continuity-aware fact query request.
+ * @returns Deterministically selected readable facts.
+ */
+export function queryProfileFactsForContinuity(
+  state: ProfileMemoryState,
+  request: ProfileFactContinuityQueryRequest
+): readonly ProfileReadableFact[] {
+  const queryInput = request.entityHints.join(" ").trim();
+  if (!queryInput) {
+    return [];
+  }
+
+  const selectedFacts = selectProfileFactsForQuery(
+    state,
+    Math.max(1, request.maxFacts ?? 3),
+    queryInput
+  );
+  return selectedFacts.map((fact) => toReadableFact(fact));
+}
+
 /**
  * Evaluates whether a profile access request includes explicit human approval metadata.
  *
@@ -96,4 +131,24 @@ function canReadSensitiveFacts(request: ProfileAccessRequest): boolean {
  */
 function isActiveProfileFact(fact: ProfileFactRecord): boolean {
   return fact.status !== "superseded" && fact.supersededAt === null;
+}
+
+/**
+ * Projects one active fact into the public readable-fact shape used by bounded review surfaces.
+ *
+ * @param fact - Active fact record under projection.
+ * @returns Readable fact view.
+ */
+function toReadableFact(fact: ProfileFactRecord): ProfileReadableFact {
+  return {
+    factId: fact.id,
+    key: fact.key,
+    value: fact.value,
+    status: fact.status,
+    sensitive: fact.sensitive,
+    observedAt: fact.observedAt,
+    lastUpdatedAt: fact.lastUpdatedAt,
+    confidence: fact.confidence,
+    mutationAudit: fact.mutationAudit
+  };
 }

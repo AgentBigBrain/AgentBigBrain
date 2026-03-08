@@ -18,6 +18,7 @@ import {
   normalizeUserFacingSummaryOptions,
   UserFacingSummaryOptions
 } from "./contracts";
+import { stripLabelStyleOpening } from "./languageSurface";
 import {
   isClarificationLoopResponse,
   isExecutionCapabilityLimitationResponse,
@@ -63,6 +64,7 @@ export function selectUserFacingSummary(
   options: UserFacingSummaryOptions = {}
 ): string {
   const normalizedOptions = normalizeUserFacingSummaryOptions(options);
+  const render = (summary: string): string => stripLabelStyleOpening(summary);
   const routingClassification = classifyRoutingIntentV1(runResult.task.userInput);
   const policyCodes = extractBlockedPolicyCodes(runResult);
   const blockedMessage = resolveBlockedActionMessage(
@@ -92,7 +94,7 @@ export function selectUserFacingSummary(
       normalizedOptions
     );
     if (respondSummary !== null) {
-      return respondSummary;
+      return render(respondSummary);
     }
   }
 
@@ -105,41 +107,41 @@ export function selectUserFacingSummary(
       isExecutionStyleRequestPrompt(runResult.task.userInput) &&
       !explicitRunSkillRequest
     ) {
-      return appendMissionDiagnosticsIfRequested(
+      return render(appendMissionDiagnosticsIfRequested(
         runResult,
         resolveProgressPlaceholderFallback(runResult, false, false),
         normalizedOptions
-      );
+      ));
     }
-    return appendMissionDiagnosticsIfRequested(
+    return render(appendMissionDiagnosticsIfRequested(
       runResult,
       outcomes.runSkillOutcomeLine,
       normalizedOptions
-    );
+    ));
   }
 
   if (preferBlockedMessageOverBrowserFailure && blockedMessage) {
-    return appendMissionDiagnosticsIfRequested(
+    return render(appendMissionDiagnosticsIfRequested(
       runResult,
       blockedMessage,
       normalizedOptions
-    );
+    ));
   }
 
   if (outcomes.browserVerificationOutcomeLine) {
-    return appendMissionDiagnosticsIfRequested(
+    return render(appendMissionDiagnosticsIfRequested(
       runResult,
       outcomes.browserVerificationOutcomeLine,
       normalizedOptions
-    );
+    ));
   }
 
   if (blockedMessage) {
-    return appendMissionDiagnosticsIfRequested(
+    return render(appendMissionDiagnosticsIfRequested(
       runResult,
       blockedMessage,
       normalizedOptions
-    );
+    ));
   }
 
   if (
@@ -152,36 +154,36 @@ export function selectUserFacingSummary(
       runResult.task.userInput
     );
     if (routeFallback) {
-      return appendMissionDiagnosticsIfRequested(
+      return render(appendMissionDiagnosticsIfRequested(
         runResult,
         routeFallback,
         normalizedOptions
-      );
+      ));
     }
   }
 
   if (outcomes.directExecutionOutcomeLine) {
-    return appendMissionDiagnosticsIfRequested(
+    return render(appendMissionDiagnosticsIfRequested(
       runResult,
       outcomes.directExecutionOutcomeLine,
       normalizedOptions
-    );
+    ));
   }
 
   if (outcomes.managedProcessOutcomeLine) {
-    return appendMissionDiagnosticsIfRequested(
+    return render(appendMissionDiagnosticsIfRequested(
       runResult,
       outcomes.managedProcessOutcomeLine,
       normalizedOptions
-    );
+    ));
   }
 
   if (outcomes.probeOutcomeLine) {
-    return appendMissionDiagnosticsIfRequested(
+    return render(appendMissionDiagnosticsIfRequested(
       runResult,
       outcomes.probeOutcomeLine,
       normalizedOptions
-    );
+    ));
   }
 
   if (
@@ -194,22 +196,22 @@ export function selectUserFacingSummary(
         runResult.task.userInput
       );
     if (forcedObservabilityFallback) {
-      return appendMissionDiagnosticsIfRequested(
+      return render(appendMissionDiagnosticsIfRequested(
         runResult,
         forcedObservabilityFallback,
         normalizedOptions
-      );
+      ));
     }
   }
 
   if (!approvedRealNonRespondExecution) {
     const routingPolicyExplanation = resolveRoutingPolicyExplanation(routingClassification);
     if (routingPolicyExplanation) {
-      return appendMissionDiagnosticsIfRequested(
+      return render(appendMissionDiagnosticsIfRequested(
         runResult,
         routingPolicyExplanation,
         normalizedOptions
-      );
+      ));
     }
     if (
       routingClassification.routeType === "execution_surface" &&
@@ -220,11 +222,11 @@ export function selectUserFacingSummary(
         runResult.task.userInput
       );
       if (routeFallback) {
-        return appendMissionDiagnosticsIfRequested(
+        return render(appendMissionDiagnosticsIfRequested(
           runResult,
           routeFallback,
           normalizedOptions
-        );
+        ));
       }
     }
   }
@@ -234,19 +236,19 @@ export function selectUserFacingSummary(
       runResult.task.userInput
     );
     if (highRiskDeleteFallback) {
-      return appendMissionDiagnosticsIfRequested(
+      return render(appendMissionDiagnosticsIfRequested(
         runResult,
         highRiskDeleteFallback,
         normalizedOptions
-      );
+      ));
     }
   }
 
-  return appendMissionDiagnosticsIfRequested(
+  return render(appendMissionDiagnosticsIfRequested(
     runResult,
     resolveSummaryFallback(runResult, runResult.summary, normalizedOptions),
     normalizedOptions
-  );
+  ));
 }
 
 /**

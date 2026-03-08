@@ -7,6 +7,7 @@ synthesis, and intent-interpretation builders that should not stay mixed into th
 
 The current extracted slice moves mock ownership behind:
 - `contracts.ts`
+- `languageUnderstanding.ts`
 - `plannerResponses.ts`
 - `responseSynthesis.ts`
 - `intentResponses.ts`

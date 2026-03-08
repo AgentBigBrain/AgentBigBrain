@@ -133,6 +133,44 @@ export class DiscordGateway {
     }, {
       interpretConversationIntent: async (input, recentTurns, pulseRuleContext) =>
         this.adapter.interpretConversationIntent(input, recentTurns, pulseRuleContext),
+      queryContinuityEpisodes: async (request) => {
+        const graph = await this.entityGraphStore.getGraph();
+        return this.adapter.queryContinuityEpisodes(graph, request);
+      },
+      queryContinuityFacts: async (request) => {
+        const graph = await this.entityGraphStore.getGraph();
+        return this.adapter.queryContinuityFacts(graph, request);
+      },
+      reviewConversationMemory: async (request) =>
+        this.adapter.reviewConversationMemory(
+          request.reviewTaskId,
+          request.query,
+          request.nowIso,
+          request.maxEpisodes
+        ),
+      resolveConversationMemoryEpisode: async (request) =>
+        this.adapter.resolveConversationMemoryEpisode(
+          request.episodeId,
+          request.sourceTaskId,
+          request.sourceText,
+          request.nowIso,
+          request.note
+        ),
+      markConversationMemoryEpisodeWrong: async (request) =>
+        this.adapter.markConversationMemoryEpisodeWrong(
+          request.episodeId,
+          request.sourceTaskId,
+          request.sourceText,
+          request.nowIso,
+          request.note
+        ),
+      forgetConversationMemoryEpisode: async (request) =>
+        this.adapter.forgetConversationMemoryEpisode(
+          request.episodeId,
+          request.sourceTaskId,
+          request.sourceText,
+          request.nowIso
+        ),
       runCheckpointReview: async (checkpointId) =>
         runGatewayCheckpointReview(checkpointId, {
           runCheckpoint611LiveReview,

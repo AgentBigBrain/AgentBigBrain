@@ -7,6 +7,7 @@ import type {
   ProfileMemoryState,
   ProfileMutationAuditMetadataV1
 } from "../profileMemory";
+import { normalizeProfileMemoryEpisodes } from "./profileMemoryEpisodeNormalization";
 import {
   createEmptyProfileMemoryState,
   PROFILE_MEMORY_SCHEMA_VERSION
@@ -71,11 +72,13 @@ export function normalizeProfileMemoryState(raw: unknown): ProfileMemoryState {
         : [];
     })
     : [];
+  const episodes = normalizeProfileMemoryEpisodes((candidate as { episodes?: unknown }).episodes);
 
   return {
     schemaVersion: PROFILE_MEMORY_SCHEMA_VERSION,
     updatedAt: safeIsoOrNow(candidate.updatedAt),
-    facts
+    facts,
+    episodes
   };
 }
 

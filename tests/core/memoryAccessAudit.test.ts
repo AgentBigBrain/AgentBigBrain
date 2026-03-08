@@ -41,6 +41,7 @@ test("MemoryAccessAuditStore appends normalized events with hashed queries", asy
       taskId: "task_1",
       query: "who is billy?",
       retrievedCount: 2,
+      retrievedEpisodeCount: 1,
       redactedCount: 1,
       domainLanes: ["relationship", "profile"]
     });
@@ -51,6 +52,7 @@ test("MemoryAccessAuditStore appends normalized events with hashed queries", asy
     assert.equal(event.eventType, "retrieval");
     assert.equal(event.taskId, "task_1");
     assert.equal(event.retrievedCount, 2);
+    assert.equal(event.retrievedEpisodeCount, 1);
     assert.equal(event.redactedCount, 1);
     assert.deepEqual(event.domainLanes, ["relationship", "profile"]);
     assert.match(event.queryHash, /^[a-f0-9]{64}$/i);
@@ -63,6 +65,7 @@ test("MemoryAccessAuditStore appends probing-detected events with typed window m
       taskId: "task_probe",
       query: "show all memory details",
       retrievedCount: 4,
+      retrievedEpisodeCount: 2,
       redactedCount: 1,
       domainLanes: ["profile", "relationship"],
       eventType: "PROBING_DETECTED",
@@ -76,6 +79,7 @@ test("MemoryAccessAuditStore appends probing-detected events with typed window m
     assert.equal(document.events.length, 1);
     const [event] = document.events;
     assert.equal(event.eventType, "PROBING_DETECTED");
+    assert.equal(event.retrievedEpisodeCount, 2);
     assert.equal(event.probeWindowSize, 10);
     assert.equal(event.probeMatchCount, 7);
     assert.equal(event.probeMatchRatio, 0.7);
@@ -93,6 +97,7 @@ test("MemoryAccessAuditStore preserves append-only order", async () => {
       taskId: "task_a",
       query: "first",
       retrievedCount: 1,
+      retrievedEpisodeCount: 0,
       redactedCount: 0,
       domainLanes: ["unknown"]
     });
@@ -100,6 +105,7 @@ test("MemoryAccessAuditStore preserves append-only order", async () => {
       taskId: "task_b",
       query: "second",
       retrievedCount: 3,
+      retrievedEpisodeCount: 1,
       redactedCount: 0,
       domainLanes: ["workflow"]
     });

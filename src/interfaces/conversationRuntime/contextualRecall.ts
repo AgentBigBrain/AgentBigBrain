@@ -2,250 +2,90 @@
  * @fileoverview Owns bounded in-conversation contextual recall helpers for active user turns.
  */
 
-import {
-  buildConversationStackFromTurnsV1
-} from "../../core/stage6_86ConversationStack";
+import { normalizeWhitespace } from "../conversationManagerHelpers";
+import type { ConversationSession } from "../sessionStore";
 import type {
-  ConversationStackV1,
-  ThreadFrameV1
-} from "../../core/types";
+  QueryConversationContinuityEpisodes,
+  QueryConversationContinuityFacts
+} from "./managerContracts";
+import { resolveContextualReferenceHints } from "../../organs/languageUnderstanding/contextualReferenceResolution";
+import { buildRecallSynthesis } from "../../organs/memorySynthesis/recallSynthesis";
 import {
-  isLikelyAssistantClarificationPrompt,
-  normalizeWhitespace
-} from "../conversationManagerHelpers";
-import type {
-  ConversationSession
-} from "../sessionStore";
+  buildEpisodeRecallCandidates,
+  buildPausedThreadRecallCandidate,
+  hasRecentDuplicateAssistantRecall,
+  resolveConversationStack,
+  tokenizeTopicTerms
+} from "./contextualRecallSupport";
+import {
+  selectBestContextualRecallCandidate,
+  type ContextualRecallCandidate
+} from "./contextualRecallRanking";
 
-const MAX_CONTEXTUAL_RECALL_AGE_MS = 45 * 24 * 60 * 60 * 1000;
-const MAX_SUPPORTING_CUE_CHARS = 180;
-const RECENT_ASSISTANT_DUPLICATE_LOOKBACK = 4;
-const MIN_TOPIC_LABEL_OVERLAP = 1;
-const TOPIC_TOKEN_PATTERN = /[a-z0-9]+/g;
-const TOPIC_STOP_WORDS = new Set([
-  "a",
-  "an",
-  "and",
-  "any",
-  "are",
-  "back",
-  "been",
-  "but",
-  "can",
-  "did",
-  "for",
-  "from",
-  "got",
-  "had",
-  "has",
-  "have",
-  "hey",
-  "his",
-  "her",
-  "how",
-  "into",
-  "its",
-  "just",
-  "later",
-  "like",
-  "need",
-  "next",
-  "now",
-  "our",
-  "out",
-  "same",
-  "she",
-  "that",
-  "the",
-  "them",
-  "then",
-  "they",
+export type { ContextualRecallCandidate } from "./contextualRecallRanking";
+
+const GENERIC_RECALL_DETAIL_TERMS = new Set([
+  "ago",
+  "few",
+  "situation",
   "thing",
-  "this",
-  "those",
-  "today",
-  "want",
-  "what",
-  "when",
-  "where",
-  "with",
-  "would",
-  "your"
+  "whole",
+  "week",
+  "weeks"
 ]);
 
-export interface ContextualRecallCandidate {
-  threadKey: string;
-  topicLabel: string;
-  supportingCue: string;
-  openLoopCount: number;
-  lastTouchedAt: string;
-}
-
 /**
- * Tokenizes freeform text into bounded lower-case topic terms for recall matching.
+ * Detects strong direct overlap between the current turn and one episode candidate.
  *
- * @param value - Freeform text to tokenize.
- * @returns Stable set of meaningful topic tokens.
+ * @param candidate - Recall candidate under evaluation.
+ * @param directTerms - Directly extracted terms from the current user turn.
+ * @returns `true` when the turn overlaps both the episode entity and a concrete situation detail.
  */
-function tokenizeTopicTerms(value: string): readonly string[] {
-  const matches = normalizeWhitespace(value)
-    .toLowerCase()
-    .match(TOPIC_TOKEN_PATTERN) ?? [];
-  const normalized = new Set<string>();
-  for (const match of matches) {
-    const token = match.trim();
-    if (token.length < 3 || TOPIC_STOP_WORDS.has(token)) {
-      continue;
-    }
-    normalized.add(token);
-  }
-  return [...normalized];
-}
-
-/**
- * Counts token overlap between the current user turn and a stored topic surface.
- *
- * @param left - Current user-turn tokens.
- * @param right - Thread/topic tokens to compare.
- * @returns Count of overlapping tokens.
- */
-function countTokenOverlap(
-  left: readonly string[],
-  right: readonly string[]
-): number {
-  if (left.length === 0 || right.length === 0) {
-    return 0;
-  }
-  const rightSet = new Set(right);
-  let overlap = 0;
-  for (const token of left) {
-    if (rightSet.has(token)) {
-      overlap += 1;
-    }
-  }
-  return overlap;
-}
-
-/**
- * Builds a deterministic stack snapshot for recall matching.
- *
- * @param session - Conversation session providing persisted stack/turn state.
- * @returns Canonical conversation stack for recall evaluation.
- */
-function resolveConversationStack(session: ConversationSession): ConversationStackV1 {
-  return session.conversationStack
-    ?? buildConversationStackFromTurnsV1(
-      session.conversationTurns,
-      session.updatedAt
-    );
-}
-
-/**
- * Finds the best paused thread candidate for the current user turn.
- *
- * @param stack - Canonical conversation stack to inspect.
- * @param userTokens - Current user-turn topic tokens.
- * @param nowMs - Evaluation timestamp in epoch milliseconds.
- * @returns Highest-scoring paused thread, or `null` when no bounded match exists.
- */
-function findBestPausedThreadMatch(
-  stack: ConversationStackV1,
-  userTokens: readonly string[],
-  nowMs: number
-): ThreadFrameV1 | null {
-  let bestThread: ThreadFrameV1 | null = null;
-  let bestScore = -1;
-
-  for (const thread of stack.threads) {
-    if (thread.state !== "paused") {
-      continue;
-    }
-    const lastTouchedMs = Date.parse(thread.lastTouchedAt);
-    if (!Number.isFinite(lastTouchedMs) || nowMs - lastTouchedMs > MAX_CONTEXTUAL_RECALL_AGE_MS) {
-      continue;
-    }
-
-    const topicLabelTokens = tokenizeTopicTerms(thread.topicLabel);
-    const labelOverlap = countTokenOverlap(userTokens, topicLabelTokens);
-    if (labelOverlap < MIN_TOPIC_LABEL_OVERLAP) {
-      continue;
-    }
-
-    const resumeTokens = tokenizeTopicTerms(thread.resumeHint);
-    const resumeOverlap = countTokenOverlap(userTokens, resumeTokens);
-    const openLoopCount = thread.openLoops.filter((loop) => loop.status === "open").length;
-    const ageBoost = Math.max(0, 1 - ((nowMs - lastTouchedMs) / MAX_CONTEXTUAL_RECALL_AGE_MS));
-    const score = (labelOverlap * 3) + resumeOverlap + (openLoopCount * 0.5) + ageBoost;
-
-    if (score > bestScore) {
-      bestScore = score;
-      bestThread = thread;
-    }
-  }
-
-  return bestThread;
-}
-
-/**
- * Builds a short supporting cue from prior related turns for one paused thread.
- *
- * @param session - Conversation session containing prior turns.
- * @param thread - Matched paused thread.
- * @param userTokens - Current user-turn topic tokens.
- * @returns Best supporting cue text to expose to the model.
- */
-function buildSupportingCue(
-  session: ConversationSession,
-  thread: ThreadFrameV1,
-  userTokens: readonly string[]
-): string {
-  const topicTokens = tokenizeTopicTerms(thread.topicLabel);
-  const relatedTurns = session.conversationTurns.filter((turn) => {
-    const turnTokens = tokenizeTopicTerms(turn.text);
-    return countTokenOverlap(turnTokens, topicTokens) > 0
-      || countTokenOverlap(turnTokens, userTokens) > 0;
-  });
-  const assistantQuestion = [...relatedTurns]
-    .reverse()
-    .find(
-      (turn) =>
-        turn.role === "assistant"
-        && isLikelyAssistantClarificationPrompt(turn.text)
-    );
-  const fallbackTurn = [...relatedTurns].reverse()[0] ?? null;
-  const rawCue = assistantQuestion?.text ?? fallbackTurn?.text ?? thread.resumeHint;
-  const normalizedCue = normalizeWhitespace(rawCue);
-  if (normalizedCue.length <= MAX_SUPPORTING_CUE_CHARS) {
-    return normalizedCue;
-  }
-  return `${normalizedCue.slice(0, MAX_SUPPORTING_CUE_CHARS - 3)}...`;
-}
-
-/**
- * Suppresses recall when the assistant already asked a very similar follow-up recently.
- *
- * @param session - Conversation session containing recent assistant turns.
- * @param topicLabel - Matched paused-thread topic label.
- * @param userTokens - Current user-turn topic tokens.
- * @returns `true` when a recent assistant turn already covered the recall.
- */
-function hasRecentDuplicateAssistantRecall(
-  session: ConversationSession,
-  topicLabel: string,
-  userTokens: readonly string[]
+function hasStrongDirectEpisodeOverlap(
+  candidate: ContextualRecallCandidate,
+  directTerms: readonly string[]
 ): boolean {
-  const topicTokens = tokenizeTopicTerms(topicLabel);
-  const assistantTurns = session.conversationTurns
-    .filter((turn) => turn.role === "assistant")
-    .slice(-RECENT_ASSISTANT_DUPLICATE_LOOKBACK);
-  return assistantTurns.some((turn) => {
-    if (!isLikelyAssistantClarificationPrompt(turn.text)) {
-      return false;
-    }
-    const turnTokens = tokenizeTopicTerms(turn.text);
-    return countTokenOverlap(turnTokens, topicTokens) > 0
-      || countTokenOverlap(turnTokens, userTokens) > 0;
-  });
+  if (candidate.kind !== "episode") {
+    return false;
+  }
+
+  const entityTerms = tokenizeTopicTerms((candidate.entityRefs ?? []).join(" "));
+  const detailTerms = tokenizeTopicTerms([
+    candidate.topicLabel,
+    candidate.episodeSummary ?? ""
+  ].join(" "))
+    .filter((term) => !GENERIC_RECALL_DETAIL_TERMS.has(term))
+    .filter((term) => !entityTerms.includes(term));
+  const directEntityOverlap = directTerms.filter((term) => entityTerms.includes(term)).length;
+  const directDetailOverlap = directTerms.filter((term) => detailTerms.includes(term)).length;
+  return directEntityOverlap > 0 && directDetailOverlap > 0;
+}
+
+/**
+ * Suppresses weak contextual recall revivals when the current turn lacks a real recall cue.
+ */
+function shouldSuppressWeakContextualRecall(
+  candidate: ContextualRecallCandidate,
+  resolvedReference: ReturnType<typeof resolveContextualReferenceHints>
+): boolean {
+  const directTerms = resolvedReference.directTerms;
+
+  if (resolvedReference.hasRecallCue) {
+    return false;
+  }
+  if (hasStrongDirectEpisodeOverlap(candidate, directTerms)) {
+    return false;
+  }
+  if (!resolvedReference.usedFallbackContext) {
+    return true;
+  }
+  const candidateTerms = tokenizeTopicTerms([
+    candidate.topicLabel,
+    candidate.episodeSummary ?? "",
+    ...(candidate.entityRefs ?? [])
+  ].join(" "));
+  const directOverlap = directTerms.filter((term) => candidateTerms.includes(term)).length;
+  return directOverlap <= 1;
 }
 
 /**
@@ -253,46 +93,59 @@ function hasRecentDuplicateAssistantRecall(
  *
  * @param session - Conversation session providing prior turns and stack state.
  * @param userInput - Current raw user message before execution wrapping.
+ * @param queryContinuityEpisodes - Optional bounded episodic-memory query capability.
  * @returns One grounded recall candidate, or `null` when no bounded recall should be offered.
  */
-export function resolveContextualRecallCandidate(
+export async function resolveContextualRecallCandidate(
   session: ConversationSession,
-  userInput: string
-): ContextualRecallCandidate | null {
+  userInput: string,
+  queryContinuityEpisodes?: QueryConversationContinuityEpisodes
+): Promise<ContextualRecallCandidate | null> {
   const normalizedInput = normalizeWhitespace(userInput);
   if (!normalizedInput) {
     return null;
   }
 
-  const userTokens = tokenizeTopicTerms(normalizedInput);
+  const stack = resolveConversationStack(session);
+  const resolvedReference = resolveContextualReferenceHints({
+    userInput: normalizedInput,
+    recentTurns: session.conversationTurns,
+    threads: stack.threads
+  });
+  const userTokens = resolvedReference.resolvedHints.length > 0
+    ? resolvedReference.resolvedHints
+    : tokenizeTopicTerms(normalizedInput);
   if (userTokens.length === 0) {
     return null;
   }
 
   const nowMs = Date.parse(session.updatedAt);
-  if (!Number.isFinite(nowMs)) {
+  const pausedThreadCandidate = Number.isFinite(nowMs)
+    ? buildPausedThreadRecallCandidate(session, stack, userTokens, nowMs)
+    : null;
+  const episodeCandidates = await buildEpisodeRecallCandidates(
+    session,
+    stack,
+    userTokens,
+    queryContinuityEpisodes
+  );
+  const bestCandidate = selectBestContextualRecallCandidate([
+    ...(pausedThreadCandidate ? [pausedThreadCandidate] : []),
+    ...episodeCandidates
+  ]);
+  if (!bestCandidate) {
     return null;
   }
 
-  const stack = resolveConversationStack(session);
-  const matchedThread = findBestPausedThreadMatch(stack, userTokens, nowMs);
-  if (!matchedThread) {
+  if (shouldSuppressWeakContextualRecall(bestCandidate, resolvedReference)) {
     return null;
   }
 
-  if (hasRecentDuplicateAssistantRecall(session, matchedThread.topicLabel, userTokens)) {
+  if (hasRecentDuplicateAssistantRecall(session, bestCandidate, userTokens)) {
     return null;
   }
 
-  const supportingCue = buildSupportingCue(session, matchedThread, userTokens);
-  const openLoopCount = matchedThread.openLoops.filter((loop) => loop.status === "open").length;
-  return {
-    threadKey: matchedThread.threadKey,
-    topicLabel: matchedThread.topicLabel,
-    supportingCue,
-    openLoopCount,
-    lastTouchedAt: matchedThread.lastTouchedAt
-  };
+  return bestCandidate;
 }
 
 /**
@@ -300,15 +153,74 @@ export function resolveContextualRecallCandidate(
  *
  * @param session - Conversation session providing prior turns and stack state.
  * @param userInput - Current raw user message before execution wrapping.
+ * @param queryContinuityEpisodes - Optional bounded episodic-memory query capability.
  * @returns Instruction block appended to execution input, or `null` when no recall applies.
  */
-export function buildContextualRecallBlock(
+export async function buildContextualRecallBlock(
   session: ConversationSession,
-  userInput: string
-): string | null {
-  const candidate = resolveContextualRecallCandidate(session, userInput);
+  userInput: string,
+  queryContinuityEpisodes?: QueryConversationContinuityEpisodes,
+  queryContinuityFacts?: QueryConversationContinuityFacts
+): Promise<string | null> {
+  const normalizedInput = normalizeWhitespace(userInput);
+  const stack = resolveConversationStack(session);
+  const resolvedReference = resolveContextualReferenceHints({
+    userInput: normalizedInput,
+    recentTurns: session.conversationTurns,
+    threads: stack.threads
+  });
+  const candidate = await resolveContextualRecallCandidate(
+    session,
+    userInput,
+    queryContinuityEpisodes
+  );
   if (!candidate) {
     return null;
+  }
+
+  const resolvedHints = resolvedReference.resolvedHints.length > 0
+    ? resolvedReference.resolvedHints
+    : tokenizeTopicTerms(normalizedInput);
+  const supportingEpisodes = queryContinuityEpisodes && resolvedHints.length > 0
+    ? await queryContinuityEpisodes({
+      stack,
+      entityHints: resolvedHints,
+      maxEpisodes: 3
+    }).catch(() => [])
+    : [];
+  const supportingFacts = queryContinuityFacts && resolvedHints.length > 0
+    ? await queryContinuityFacts({
+      stack,
+      entityHints: resolvedHints,
+      maxFacts: 3
+    }).catch(() => [])
+    : [];
+  const synthesis = buildRecallSynthesis(supportingEpisodes, supportingFacts);
+
+  if (candidate.kind === "episode") {
+    return [
+      "Contextual recall opportunity (optional):",
+      "- The user naturally re-mentioned a person or topic tied to an older unresolved situation.",
+      `- Relevant situation: ${candidate.topicLabel}`,
+      `- Situation summary: ${candidate.episodeSummary ?? candidate.supportingCue}`,
+      `- Prior cue: ${candidate.supportingCue}`,
+      `- Situation status: ${candidate.episodeStatus ?? "unresolved"}`,
+      `- Related open loops: ${candidate.openLoopCount}`,
+      `- Last mentioned: ${candidate.lastTouchedAt}`,
+      ...(resolvedReference.usedFallbackContext
+        ? [`- Resolved from context: ${resolvedReference.evidence.join(", ")}`]
+        : []),
+      ...(synthesis
+        ? [
+            `- Supporting memory hypothesis: ${synthesis.summary}`,
+            ...synthesis.evidence.slice(0, 3).map(
+              (evidence) => `- Evidence: ${evidence.kind} | ${evidence.label} | ${evidence.detail}`
+            )
+          ]
+        : []),
+      "- Response rule: if it fits naturally, ask at most one brief follow-up about this specific older situation before returning to the current request.",
+      "- Do not ask if it would feel repetitive, overly intrusive, or derail the current request."
+    ].join("\n");
   }
 
   return [
@@ -317,6 +229,17 @@ export function buildContextualRecallBlock(
     `- Prior thread cue: ${candidate.supportingCue}`,
     `- Open loops on that thread: ${candidate.openLoopCount}`,
     `- Last touched: ${candidate.lastTouchedAt}`,
+    ...(resolvedReference.usedFallbackContext
+      ? [`- Resolved from context: ${resolvedReference.evidence.join(", ")}`]
+      : []),
+    ...(synthesis
+      ? [
+          `- Supporting memory hypothesis: ${synthesis.summary}`,
+          ...synthesis.evidence.slice(0, 2).map(
+            (evidence) => `- Evidence: ${evidence.kind} | ${evidence.label} | ${evidence.detail}`
+          )
+        ]
+      : []),
     "- Response rule: if it fits naturally, you may ask one brief follow-up about that older unresolved thread before continuing.",
     "- Do not force the detour if the current request is clearly unrelated.",
     "- Do not repeat a recent follow-up the assistant already asked."

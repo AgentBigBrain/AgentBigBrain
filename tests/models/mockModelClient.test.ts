@@ -10,6 +10,7 @@ import {
   AutonomousNextStepModelOutput,
   GovernorModelOutput,
   IntentInterpretationModelOutput,
+  LanguageEpisodeExtractionModelOutput,
   PlannerModelOutput,
   ProactiveGoalModelOutput,
   ResponseSynthesisModelOutput
@@ -221,5 +222,25 @@ test("MockModelClient supports intent interpretation schema", async () => {
   assert.equal(output.intentType, "pulse_control");
   assert.equal(output.mode, "off");
   assert.ok(output.confidence > 0.8);
+});
+
+test("MockModelClient supports bounded language episode extraction schema", async () => {
+  const client = new MockModelClient();
+  const output = await client.completeJson<LanguageEpisodeExtractionModelOutput>({
+    model: "mock-language",
+    schemaName: "language_episode_extraction_v1",
+    systemPrompt: "language-understanding",
+    userPrompt: JSON.stringify({
+      text: [
+        "Billy had this scare at the hospital a few weeks ago.",
+        "We still do not know what the doctors found."
+      ].join(" ")
+    })
+  });
+
+  assert.equal(output.episodes.length, 1);
+  assert.equal(output.episodes[0]?.subjectName, "Billy");
+  assert.equal(output.episodes[0]?.eventSummary, "had a medical situation");
+  assert.equal(output.episodes[0]?.status, "unresolved");
 });
 

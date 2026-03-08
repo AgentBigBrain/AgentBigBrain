@@ -69,3 +69,36 @@ test("invocation policy matches aliases case-insensitively", () => {
   assert.equal(result.normalizedText, "say hello");
 });
 
+test("invocation policy accepts greeting-plus-alias vocatives", () => {
+  const result = applyInvocationPolicy("Hi BigBrain", {
+    requireNameCall: true,
+    aliases: ["BigBrain"]
+  });
+
+  assert.equal(result.accepted, true);
+  assert.equal(result.normalizedText, "Hi");
+  assert.equal(result.reason, "ALIAS_MATCHED");
+});
+
+test("invocation policy accepts greeting-plus-alias with a trailing request", () => {
+  const result = applyInvocationPolicy("Hi BigBrain what can you help me with", {
+    requireNameCall: true,
+    aliases: ["BigBrain"]
+  });
+
+  assert.equal(result.accepted, true);
+  assert.equal(result.normalizedText, "Hi what can you help me with");
+  assert.equal(result.reason, "ALIAS_MATCHED");
+});
+
+test("invocation policy accepts punctuation after a greeting-plus-alias vocative", () => {
+  const result = applyInvocationPolicy("Hi BigBrain, what can you help me with", {
+    requireNameCall: true,
+    aliases: ["BigBrain"]
+  });
+
+  assert.equal(result.accepted, true);
+  assert.equal(result.normalizedText, "Hi what can you help me with");
+  assert.equal(result.reason, "ALIAS_MATCHED");
+});
+

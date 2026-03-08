@@ -4,7 +4,20 @@
 
 import { ProfileMemoryStore } from "../core/profileMemoryStore";
 import { MemoryAccessAuditStore } from "../core/memoryAccessAudit";
+import { LanguageUnderstandingOrgan } from "./languageUnderstanding/episodeExtraction";
+import type { ProfileEpisodeStatus } from "../core/profileMemory";
+import type {
+  ProfileReadableEpisode,
+  ProfileReadableFact
+} from "../core/profileMemoryRuntime/contracts";
 import type { TaskRequest } from "../core/types";
+import {
+  buildPlannerContextSynthesisBlock
+} from "./memorySynthesis/plannerContextSynthesis";
+import type {
+  MemorySynthesisEpisodeRecord,
+  MemorySynthesisFactRecord
+} from "./memorySynthesis/contracts";
 import { appendMemoryAccessAudit } from "./memoryContext/auditEvents";
 import {
   buildInjectedContextPacket,
@@ -12,6 +25,10 @@ import {
   countRetrievedProfileFacts,
   sanitizeProfileContextForModelEgress
 } from "./memoryContext/contextInjection";
+import {
+  countRetrievedEpisodeSummaries,
+  sanitizeEpisodeContextForModelEgress
+} from "./memoryContext/episodeContextInjection";
 import type {
   DomainBoundaryAssessment,
   MemoryBrokerInputResult,
@@ -28,50 +45,32 @@ import {
 export { extractCurrentUserRequest } from "./memoryContext/queryPlanning";
 export type { MemoryBrokerInputResult, MemoryBrokerOptions } from "./memoryContext/contracts";
 
+export interface MemoryReviewEpisode {
+  episodeId: string;
+  title: string;
+  summary: string;
+  status: ProfileEpisodeStatus;
+  lastMentionedAt: string;
+  resolvedAt: string | null;
+  confidence: number;
+  sensitive: boolean;
+}
+
 export class MemoryBrokerOrgan {
   private readonly probingDetectorConfig;
   private readonly recentProbeSignals: ProbingSignalSnapshot[] = [];
 
-  /**
-   * Initializes `MemoryBrokerOrgan` with deterministic runtime dependencies.
-   *
-   * **Why it exists:**
-   * Captures broker dependencies at initialization time so profile-context enrichment remains
-   * explicit and testable.
-   *
-   * **What it talks to:**
-   * - Uses `ProfileMemoryStore` from `../core/profileMemoryStore`.
-   * - Uses `MemoryAccessAuditStore` from `../core/memoryAccessAudit`.
-   * - Uses probing-detector config helpers from `./memoryContext/queryPlanning`.
-   *
-   * @param profileMemoryStore - Optional profile-memory store dependency for ingestion/retrieval.
-   * @param memoryAccessAuditStore - Append-only audit store for memory access traces.
-   * @param options - Optional deterministic probing-detector tuning values.
-   */
+  /** Initializes the broker with deterministic profile-memory and audit dependencies. */
   constructor(
     private readonly profileMemoryStore?: ProfileMemoryStore,
     private readonly memoryAccessAuditStore = new MemoryAccessAuditStore(),
-    options?: MemoryBrokerOptions
+    options?: MemoryBrokerOptions,
+    private readonly languageUnderstandingOrgan?: LanguageUnderstandingOrgan
   ) {
     this.probingDetectorConfig = resolveProbingDetectorConfig(options?.probingDetector);
   }
 
-  /**
-   * Builds planner input by optionally brokering profile context through deterministic guards.
-   *
-   * **Why it exists:**
-   * The planner should only see profile context when the request is relevant, non-probing, and
-   * safe to inject. This method coordinates profile ingestion, query-aware reads, domain-boundary
-   * scoring, audit writes, and degraded fallback behavior.
-   *
-   * **What it talks to:**
-   * - Uses `ProfileMemoryStore` read/ingest methods.
-   * - Uses `memoryContext` helpers for request extraction, probing detection, context rendering,
-   *   and audit appends.
-   *
-   * @param task - Incoming task request to enrich with brokered profile context.
-   * @returns Planner input plus profile-memory availability status.
-   */
+  /** Builds planner input while brokering profile context through deterministic guards. */
   async buildPlannerInput(task: TaskRequest): Promise<MemoryBrokerInputResult> {
     if (!this.profileMemoryStore) {
       return {
@@ -80,7 +79,7 @@ export class MemoryBrokerOrgan {
       };
     }
 
-    const currentUserRequest = extractCurrentUserRequest(task.userInput);
+      const currentUserRequest = extractCurrentUserRequest(task.userInput);
     const probing = registerAndAssessProbing(
       currentUserRequest,
       this.recentProbeSignals,
@@ -89,14 +88,50 @@ export class MemoryBrokerOrgan {
     this.recentProbeSignals.splice(0, this.recentProbeSignals.length, ...probing.nextSignals);
 
     try {
-      await this.profileMemoryStore.ingestFromTaskInput(task.id, currentUserRequest, task.createdAt);
+      const additionalEpisodeCandidates = this.languageUnderstandingOrgan
+        ? await this.languageUnderstandingOrgan.extractEpisodeCandidates({
+            text: currentUserRequest,
+            sourceTaskId: task.id,
+            observedAt: task.createdAt
+          })
+        : [];
+      await this.profileMemoryStore.ingestFromTaskInput(
+        task.id,
+        currentUserRequest,
+        task.createdAt,
+        {
+          additionalEpisodeCandidates
+        }
+      );
       const profileContext = await this.profileMemoryStore.getPlanningContext(6, currentUserRequest);
+      const episodeContext = await this.profileMemoryStore.getEpisodePlanningContext(2, currentUserRequest);
+      const plannerFacts = await this.profileMemoryStore.queryFactsForPlanningContext(
+        3,
+        currentUserRequest
+      );
+      const plannerEpisodes = await this.profileMemoryStore.queryEpisodesForPlanningContext(
+        2,
+        currentUserRequest,
+        task.createdAt
+      );
+      const memorySynthesisContext = buildPlannerContextSynthesisBlock(
+        plannerEpisodes.map((episode) => this.toMemorySynthesisEpisodeRecord(episode)),
+        plannerFacts.map((fact) => this.toMemorySynthesisFactRecord(fact))
+      );
 
-      if (!profileContext) {
+      if (!profileContext && !episodeContext) {
         const domainBoundary = assessDomainBoundary(currentUserRequest, "");
-        await this.recordAudit(task.id, currentUserRequest, 0, 0, domainBoundary);
+        await this.recordAudit(task.id, currentUserRequest, 0, 0, 0, domainBoundary);
         if (probing.assessment.detected) {
-          await this.recordProbingAudit(task.id, currentUserRequest, 0, 0, domainBoundary, probing.assessment);
+          await this.recordProbingAudit(
+            task.id,
+            currentUserRequest,
+            0,
+            0,
+            0,
+            domainBoundary,
+            probing.assessment
+          );
         }
         return {
           userInput: task.userInput,
@@ -105,10 +140,14 @@ export class MemoryBrokerOrgan {
       }
 
       const sanitizedProfileContext = sanitizeProfileContextForModelEgress(profileContext);
-      const assessedDomainBoundary = assessDomainBoundary(
-        currentUserRequest,
-        sanitizedProfileContext.sanitizedContext
-      );
+      const sanitizedEpisodeContext = sanitizeEpisodeContextForModelEgress(episodeContext);
+      const brokeredMemoryContext = [
+        sanitizedProfileContext.sanitizedContext,
+        sanitizedEpisodeContext.sanitizedContext
+      ]
+        .filter((section) => section.trim().length > 0)
+        .join("\n");
+      const assessedDomainBoundary = assessDomainBoundary(currentUserRequest, brokeredMemoryContext);
       const domainBoundary: DomainBoundaryAssessment = probing.assessment.detected
         ? {
             ...assessedDomainBoundary,
@@ -117,12 +156,16 @@ export class MemoryBrokerOrgan {
           }
         : assessedDomainBoundary;
       const retrievedCount = countRetrievedProfileFacts(profileContext);
+      const retrievedEpisodeCount = countRetrievedEpisodeSummaries(episodeContext);
+      const redactedCount =
+        sanitizedProfileContext.redactedFieldCount + sanitizedEpisodeContext.redactedFieldCount;
 
       await this.recordAudit(
         task.id,
         currentUserRequest,
         retrievedCount,
-        sanitizedProfileContext.redactedFieldCount,
+        retrievedEpisodeCount,
+        redactedCount,
         domainBoundary
       );
       if (probing.assessment.detected) {
@@ -130,7 +173,8 @@ export class MemoryBrokerOrgan {
           task.id,
           currentUserRequest,
           retrievedCount,
-          sanitizedProfileContext.redactedFieldCount,
+          retrievedEpisodeCount,
+          redactedCount,
           domainBoundary,
           probing.assessment
         );
@@ -149,8 +193,8 @@ export class MemoryBrokerOrgan {
       }
 
       const egressGuardFooter =
-        sanitizedProfileContext.redactedFieldCount > 0
-          ? `\n[AgentFriendProfileEgressGuard]\nredactedSensitiveFields=${sanitizedProfileContext.redactedFieldCount}`
+        redactedCount > 0
+          ? `\n[AgentFriendProfileEgressGuard]\nredactedSensitiveFields=${redactedCount}`
           : "";
       const brokeredContext = `${sanitizedProfileContext.sanitizedContext}${egressGuardFooter}`;
 
@@ -160,7 +204,9 @@ export class MemoryBrokerOrgan {
           domainBoundary.lanes,
           domainBoundary.scores,
           domainBoundary.reason,
-          brokeredContext
+          brokeredContext,
+          sanitizedEpisodeContext.sanitizedContext,
+          memorySynthesisContext
         ),
         profileMemoryStatus: "available"
       };
@@ -181,21 +227,111 @@ export class MemoryBrokerOrgan {
     }
   }
 
-  /**
-   * Appends the probing-specific audit event when the broker suppresses extraction-style bursts.
-   *
-   * @param taskId - Task identifier associated with the retrieval.
-   * @param query - Active user request query.
-   * @param retrievedCount - Count of retrieved facts before suppression.
-   * @param redactedCount - Count of redacted fields before suppression.
-   * @param domainBoundary - Final domain-boundary decision.
-   * @param probingAssessment - Deterministic probing assessment for this query window.
-   * @returns Promise resolving when the audit append attempt completes.
-   */
+  /** Returns bounded remembered situations for an explicit user review request. */
+  async reviewRememberedSituations(
+    reviewTaskId: string,
+    query: string,
+    nowIso: string,
+    maxEpisodes = 5
+  ): Promise<readonly MemoryReviewEpisode[]> {
+    if (!this.profileMemoryStore) {
+      return [];
+    }
+
+    const episodes = await this.profileMemoryStore.reviewEpisodesForUser(maxEpisodes, nowIso);
+    const domainBoundary = assessDomainBoundary(query, "");
+    await this.recordAudit(
+      reviewTaskId,
+      query,
+      0,
+      episodes.length,
+      0,
+      domainBoundary
+    );
+    return episodes.map((episode) => ({
+      episodeId: episode.episodeId,
+      title: episode.title,
+      summary: episode.summary,
+      status: episode.status,
+      lastMentionedAt: episode.lastMentionedAt,
+      resolvedAt: episode.resolvedAt,
+      confidence: episode.confidence,
+      sensitive: episode.sensitive
+    }));
+  }
+
+  /** Marks one remembered situation resolved through an explicit user instruction. */
+  async resolveRememberedSituation(
+    episodeId: string,
+    sourceTaskId: string,
+    sourceText: string,
+    nowIso: string,
+    note?: string
+  ): Promise<MemoryReviewEpisode | null> {
+    if (!this.profileMemoryStore) {
+      return null;
+    }
+
+    const episode = await this.profileMemoryStore.updateEpisodeFromUser(
+      episodeId,
+      "resolved",
+      sourceTaskId,
+      sourceText,
+      note,
+      nowIso
+    );
+    return episode ? this.toMemoryReviewEpisode(episode) : null;
+  }
+
+  /** Marks one remembered situation as wrong or no longer relevant. */
+  async markRememberedSituationWrong(
+    episodeId: string,
+    sourceTaskId: string,
+    sourceText: string,
+    nowIso: string,
+    note?: string
+  ): Promise<MemoryReviewEpisode | null> {
+    if (!this.profileMemoryStore) {
+      return null;
+    }
+
+    const episode = await this.profileMemoryStore.updateEpisodeFromUser(
+      episodeId,
+      "no_longer_relevant",
+      sourceTaskId,
+      sourceText,
+      note,
+      nowIso
+    );
+    return episode ? this.toMemoryReviewEpisode(episode) : null;
+  }
+
+  /** Forgets one remembered situation entirely through an explicit user instruction. */
+  async forgetRememberedSituation(
+    episodeId: string,
+    sourceTaskId: string,
+    sourceText: string,
+    nowIso: string
+  ): Promise<MemoryReviewEpisode | null> {
+    if (!this.profileMemoryStore) {
+      return null;
+    }
+
+    const episode = await this.profileMemoryStore.forgetEpisodeFromUser(
+      episodeId,
+      sourceTaskId,
+      sourceText,
+      nowIso
+    );
+    return episode ? this.toMemoryReviewEpisode(episode) : null;
+  }
+
+  /** Appends the probing-specific audit event when extraction-style bursts are detected. */
   private async recordProbingAudit(
     taskId: string,
     query: string,
     retrievedCount: number,
+    retrievedEpisodeCount: number,
     redactedCount: number,
     domainBoundary: DomainBoundaryAssessment,
     probingAssessment: ReturnType<typeof registerAndAssessProbing>["assessment"]
@@ -205,10 +341,12 @@ export class MemoryBrokerOrgan {
       taskId,
       query,
       retrievedCount,
+      retrievedEpisodeCount,
       redactedCount,
       domainBoundary.lanes,
       {
         eventType: "PROBING_DETECTED",
+        retrievedEpisodeCount,
         probeSignals: probingAssessment.matchedSignals,
         probeWindowSize: probingAssessment.windowSize,
         probeMatchCount: probingAssessment.matchCount,
@@ -217,20 +355,12 @@ export class MemoryBrokerOrgan {
     );
   }
 
-  /**
-   * Appends the standard retrieval audit event for one brokered planner-input build.
-   *
-   * @param taskId - Task identifier associated with the retrieval.
-   * @param query - Active user request query.
-   * @param retrievedCount - Count of retrieved facts.
-   * @param redactedCount - Count of redacted sensitive fields.
-   * @param domainBoundary - Final domain-boundary decision.
-   * @returns Promise resolving when the audit append attempt completes.
-   */
+  /** Appends the standard retrieval audit event for one brokered planner-input build. */
   private async recordAudit(
     taskId: string,
     query: string,
     retrievedCount: number,
+    retrievedEpisodeCount: number,
     redactedCount: number,
     domainBoundary: DomainBoundaryAssessment
   ): Promise<void> {
@@ -239,8 +369,64 @@ export class MemoryBrokerOrgan {
       taskId,
       query,
       retrievedCount,
+      retrievedEpisodeCount,
       redactedCount,
       domainBoundary.lanes
     );
+  }
+
+  /** Converts a readable profile-memory episode into the brokered review shape. */
+  private toMemoryReviewEpisode(
+    episode: Awaited<ReturnType<ProfileMemoryStore["reviewEpisodesForUser"]>>[number]
+  ): MemoryReviewEpisode {
+    return {
+      episodeId: episode.episodeId,
+      title: episode.title,
+      summary: episode.summary,
+      status: episode.status,
+      lastMentionedAt: episode.lastMentionedAt,
+      resolvedAt: episode.resolvedAt,
+      confidence: episode.confidence,
+      sensitive: episode.sensitive
+    };
+  }
+
+  /** Converts one readable planner episode into the bounded synthesis episode shape. */
+  private toMemorySynthesisEpisodeRecord(
+    episode: ProfileReadableEpisode
+  ): MemorySynthesisEpisodeRecord {
+    return {
+      episodeId: episode.episodeId,
+      title: episode.title,
+      summary: episode.summary,
+      status: episode.status,
+      lastMentionedAt: episode.lastMentionedAt,
+      entityRefs: [...episode.entityRefs],
+      entityLinks: episode.entityRefs.map((entityRef: string, index: number) => ({
+        entityKey: `episode_entity_${episode.episodeId}_${index}`,
+        canonicalName: entityRef
+      })),
+      openLoopLinks: episode.openLoopRefs.map((loopId: string, index: number) => ({
+        loopId,
+        threadKey: `episode_thread_${episode.episodeId}_${index}`,
+        status: episode.status === "resolved" ? "resolved" : "open",
+        priority: 1
+      }))
+    };
+  }
+
+  /** Converts one readable planner fact into the bounded synthesis fact shape. */
+  private toMemorySynthesisFactRecord(
+    fact: ProfileReadableFact
+  ): MemorySynthesisFactRecord {
+    return {
+      factId: fact.factId,
+      key: fact.key,
+      value: fact.value,
+      status: fact.status,
+      observedAt: fact.observedAt,
+      lastUpdatedAt: fact.lastUpdatedAt,
+      confidence: fact.confidence
+    };
   }
 }

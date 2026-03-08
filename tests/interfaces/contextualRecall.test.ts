@@ -10,6 +10,7 @@ import {
   resolveContextualRecallCandidate
 } from "../../src/interfaces/conversationRuntime/contextualRecall";
 import { buildSessionSeed } from "../../src/interfaces/conversationManagerHelpers";
+import type { QueryConversationContinuityEpisodes } from "../../src/interfaces/conversationRuntime/managerContracts";
 import type {
   ConversationStackV1
 } from "../../src/core/types";
@@ -96,7 +97,13 @@ function buildPausedBillyStack(): ConversationStackV1 {
   };
 }
 
-test("resolveContextualRecallCandidate returns a paused-thread recall when the user naturally re-mentions the topic", () => {
+function buildEpisodeQuery(
+  implementation: QueryConversationContinuityEpisodes
+): QueryConversationContinuityEpisodes {
+  return implementation;
+}
+
+test("resolveContextualRecallCandidate prefers a concrete unresolved episode over generic paused-topic overlap", async () => {
   const session = buildSession({
     conversationTurns: [
       {
@@ -117,22 +124,120 @@ test("resolveContextualRecallCandidate returns a paused-thread recall when the u
     ],
     conversationStack: buildPausedBillyStack()
   });
+  const queryContinuityEpisodes = buildEpisodeQuery(async (request) => {
+    assert.ok(request.entityHints.includes("billy"));
+    return [
+      {
+        episodeId: "episode_billy_fall",
+        title: "Billy fell down",
+        summary: "Billy fell down a few weeks ago and the outcome never got resolved.",
+        status: "unresolved",
+        lastMentionedAt: "2026-02-14T15:00:00.000Z",
+        entityRefs: ["Billy"],
+        entityLinks: [
+          {
+            entityKey: "entity_billy",
+            canonicalName: "Billy"
+          }
+        ],
+        openLoopLinks: [
+          {
+            loopId: "loop_billy",
+            threadKey: "thread_billy",
+            status: "open",
+            priority: 0.8
+          }
+        ]
+      }
+    ];
+  });
 
-  const candidate = resolveContextualRecallCandidate(
+  const candidate = await resolveContextualRecallCandidate(
     session,
-    "How is Billy doing lately?"
+    "How is Billy doing lately?",
+    queryContinuityEpisodes
   );
 
   assert.ok(candidate);
+  assert.equal(candidate?.kind, "episode");
   assert.equal(candidate?.threadKey, "thread_billy");
-  assert.equal(candidate?.topicLabel, "Billy Fall");
+  assert.equal(candidate?.topicLabel, "Billy fell down");
   assert.equal(candidate?.openLoopCount, 1);
+  assert.equal(candidate?.episodeStatus, "unresolved");
   assert.match(candidate?.supportingCue ?? "", /Billy/i);
 });
 
-test("buildContextualRecallBlock suppresses recall when no paused related thread exists", () => {
+test("resolveContextualRecallCandidate allows strong direct overlap even when the recall phrasing is human and not canned", async () => {
+  const session = buildSession({
+    conversationTurns: [
+      {
+        role: "user",
+        text: [
+          "Billy had a rough fall a few weeks ago and it turned into a whole mess.",
+          "He ended up in urgent care, and the doctor wanted him to get an MRI because the swelling was not going down.",
+          "I never really heard how it all turned out, and I still feel like that situation is hanging open."
+        ].join(" "),
+        at: "2026-02-14T15:00:00.000Z"
+      },
+      {
+        role: "assistant",
+        text: [
+          "That sounds exhausting, especially if the outcome stayed blurry.",
+          "We can leave it there for now and come back to it later if it matters again."
+        ].join(" "),
+        at: "2026-02-14T15:01:00.000Z"
+      }
+    ],
+    conversationStack: buildPausedBillyStack()
+  });
+  const queryContinuityEpisodes = buildEpisodeQuery(async ({ entityHints }) => {
+    assert.ok(entityHints.includes("billy"));
+    assert.ok(entityHints.includes("mri"));
+    return [
+      {
+        episodeId: "episode_billy_mri",
+        title: "Billy was waiting on MRI results",
+        summary: "Billy had a rough fall, ended up in urgent care, and was waiting on MRI results.",
+        status: "outcome_unknown",
+        lastMentionedAt: "2026-02-14T15:00:00.000Z",
+        entityRefs: ["Billy"],
+        entityLinks: [
+          {
+            entityKey: "entity_billy",
+            canonicalName: "Billy"
+          }
+        ],
+        openLoopLinks: [
+          {
+            loopId: "loop_billy",
+            threadKey: "thread_billy",
+            status: "open",
+            priority: 0.8
+          }
+        ]
+      }
+    ];
+  });
+
+  const candidate = await resolveContextualRecallCandidate(
+    session,
+    [
+      "Billy came up again this morning when I was texting someone from home.",
+      "It made me think about that whole MRI situation from a few weeks back, and I realized I still do not know how it ended up.",
+      "I keep feeling like I missed the ending to that whole thing."
+    ].join(" "),
+    queryContinuityEpisodes
+  );
+
+  assert.ok(candidate);
+  assert.equal(candidate?.kind, "episode");
+  assert.match(candidate?.topicLabel ?? "", /Billy/i);
+  assert.match(candidate?.topicLabel ?? "", /MRI/i);
+});
+
+test("buildContextualRecallBlock suppresses recall when no paused thread or concrete episode exists", async () => {
   const session = buildSession();
-  const block = buildContextualRecallBlock(
+  const block = await buildContextualRecallBlock(
     session,
     "How is Billy doing lately?"
   );
@@ -140,7 +245,65 @@ test("buildContextualRecallBlock suppresses recall when no paused related thread
   assert.equal(block, null);
 });
 
-test("buildContextualRecallBlock suppresses recall when the assistant already asked that follow-up recently", () => {
+test("resolveContextualRecallCandidate suppresses a bare repeated name when the current turn is clearly light and unrelated", async () => {
+  const session = buildSession({
+    conversationTurns: [
+      {
+        role: "user",
+        text: "Billy fell down a few weeks ago and it still feels unresolved.",
+        at: "2026-02-14T15:00:00.000Z"
+      },
+      {
+        role: "assistant",
+        text: "If Billy comes up again in a related way, I can help you revisit that situation once.",
+        at: "2026-02-14T15:01:00.000Z"
+      }
+    ],
+    conversationStack: buildPausedBillyStack()
+  });
+  const queryContinuityEpisodes = buildEpisodeQuery(async ({ entityHints }) => {
+    assert.ok(entityHints.includes("billy"));
+    return [
+      {
+        episodeId: "episode_billy_fall",
+        title: "Billy fell down",
+        summary: "Billy fell down a few weeks ago and the outcome never got resolved.",
+        status: "unresolved",
+        lastMentionedAt: "2026-02-14T15:00:00.000Z",
+        entityRefs: ["Billy"],
+        entityLinks: [
+          {
+            entityKey: "entity_billy",
+            canonicalName: "Billy"
+          }
+        ],
+        openLoopLinks: [
+          {
+            loopId: "loop_billy",
+            threadKey: "thread_billy",
+            status: "open",
+            priority: 0.8
+          }
+        ]
+      }
+    ];
+  });
+
+  const candidate = await resolveContextualRecallCandidate(
+    session,
+    [
+      "Billy texted me this morning about a movie recommendation and a new coffee place near his office.",
+      "We mostly joked around and traded music suggestions for a few minutes.",
+      "There was nothing serious in the conversation at all.",
+      "I just wanted to tell you something light for once."
+    ].join(" "),
+    queryContinuityEpisodes
+  );
+
+  assert.equal(candidate, null);
+});
+
+test("buildContextualRecallBlock suppresses recall when the assistant already asked that follow-up recently", async () => {
   const session = buildSession({
     conversationTurns: [
       {
@@ -151,11 +314,82 @@ test("buildContextualRecallBlock suppresses recall when the assistant already as
     ],
     conversationStack: buildPausedBillyStack()
   });
+  const queryContinuityEpisodes = buildEpisodeQuery(async () => [
+    {
+      episodeId: "episode_billy_fall",
+      title: "Billy fell down",
+      summary: "Billy fell down a few weeks ago and the outcome never got resolved.",
+      status: "unresolved",
+      lastMentionedAt: "2026-02-14T15:00:00.000Z",
+      entityRefs: ["Billy"],
+      entityLinks: [
+        {
+          entityKey: "entity_billy",
+          canonicalName: "Billy"
+        }
+      ],
+      openLoopLinks: [
+        {
+          loopId: "loop_billy",
+          threadKey: "thread_billy",
+          status: "open",
+          priority: 0.8
+        }
+      ]
+    }
+  ]);
 
-  const block = buildContextualRecallBlock(
+  const block = await buildContextualRecallBlock(
     session,
-    "How is Billy doing lately?"
+    "How is Billy doing lately?",
+    queryContinuityEpisodes
   );
 
   assert.equal(block, null);
+});
+
+test("buildContextualRecallBlock renders a bounded unresolved-situation recall block", async () => {
+  const session = buildSession({
+    conversationTurns: [
+      {
+        role: "user",
+        text: "Billy fell down a few weeks ago.",
+        at: "2026-02-14T15:00:00.000Z"
+      }
+    ],
+    conversationStack: buildPausedBillyStack()
+  });
+  const block = await buildContextualRecallBlock(
+    session,
+    "How is Billy doing lately?",
+    buildEpisodeQuery(async () => [
+      {
+        episodeId: "episode_billy_fall",
+        title: "Billy fell down",
+        summary: "Billy fell down a few weeks ago and the outcome never got resolved.",
+        status: "unresolved",
+        lastMentionedAt: "2026-02-14T15:00:00.000Z",
+        entityRefs: ["Billy"],
+        entityLinks: [
+          {
+            entityKey: "entity_billy",
+            canonicalName: "Billy"
+          }
+        ],
+        openLoopLinks: [
+          {
+            loopId: "loop_billy",
+            threadKey: "thread_billy",
+            status: "open",
+            priority: 0.8
+          }
+        ]
+      }
+    ])
+  );
+
+  assert.match(block ?? "", /older unresolved situation/i);
+  assert.match(block ?? "", /Relevant situation: Billy fell down/);
+  assert.match(block ?? "", /Situation status: unresolved/i);
+  assert.match(block ?? "", /ask at most one brief follow-up/i);
 });

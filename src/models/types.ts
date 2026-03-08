@@ -76,3 +76,16 @@ export interface IntentInterpretationModelOutput {
   confidence: number;
   rationale: string;
 }
+
+export interface LanguageEpisodeExtractionModelCandidate {
+  subjectName: string;
+  eventSummary: string;
+  supportingSnippet: string;
+  status: "unresolved" | "partially_resolved" | "resolved" | "outcome_unknown" | "no_longer_relevant";
+  confidence: number;
+  tags: string[];
+}
+
+export interface LanguageEpisodeExtractionModelOutput {
+  episodes: LanguageEpisodeExtractionModelCandidate[];
+}

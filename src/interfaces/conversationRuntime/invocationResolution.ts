@@ -104,12 +104,12 @@ export async function resolveConversationInvocation(
   }
 
   return {
-    reply: routeConversationMessageInput(
+    reply: (await routeConversationMessageInput(
       session,
       trimmed,
       message.receivedAt,
       deps
-    ).reply,
+    )).reply,
     shouldStartWorker: session.queuedJobs.length > 0
   };
 }

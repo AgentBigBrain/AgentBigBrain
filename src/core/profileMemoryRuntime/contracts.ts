@@ -4,6 +4,7 @@
 
 import { type AgentPulseDecision, type AgentPulseReason } from "../agentPulse";
 import { type ProfileFactRecord, type ProfileMutationAuditMetadataV1 } from "../profileMemory";
+import type { ProfileEpisodeRecord } from "./profileMemoryEpisodeContracts";
 
 export type ProfileAccessPurpose = "planning_context" | "operator_view" | "governor_review";
 
@@ -13,6 +14,7 @@ export interface ProfileAccessRequest {
   explicitHumanApproval?: boolean;
   approvalId?: string;
   maxFacts?: number;
+  maxEpisodes?: number;
 }
 
 export interface ProfileReadableFact {
@@ -25,6 +27,32 @@ export interface ProfileReadableFact {
   lastUpdatedAt: string;
   confidence: number;
   mutationAudit?: ProfileMutationAuditMetadataV1;
+}
+
+export interface ProfileReadableEpisode {
+  episodeId: string;
+  title: string;
+  summary: string;
+  status: ProfileEpisodeRecord["status"];
+  sensitive: boolean;
+  sourceKind: ProfileEpisodeRecord["sourceKind"];
+  observedAt: string;
+  lastMentionedAt: string;
+  lastUpdatedAt: string;
+  resolvedAt: string | null;
+  confidence: number;
+  entityRefs: string[];
+  openLoopRefs: string[];
+  tags: string[];
+}
+
+export interface ProfilePulseRelevantEpisode {
+  episodeId: string;
+  title: string;
+  summary: string;
+  status: ProfileEpisodeRecord["status"];
+  lastMentionedAt: string;
+  ageDays: number;
 }
 
 export interface ProfileIngestResult {
@@ -69,6 +97,7 @@ export interface AgentPulseEvaluationResult {
   staleFactCount: number;
   unresolvedCommitmentCount: number;
   unresolvedCommitmentTopics: string[];
+  relevantEpisodes: ProfilePulseRelevantEpisode[];
   relationship: AgentPulseRelationshipAssessment;
   contextDrift: AgentPulseContextDriftAssessment;
 }

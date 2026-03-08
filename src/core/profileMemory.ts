@@ -2,17 +2,61 @@
  * @fileoverview Defines temporal profile-memory types plus the stable public entrypoint for runtime helpers.
  */
 
+import type { ProfileEpisodeRecord } from "./profileMemoryRuntime/profileMemoryEpisodeContracts";
+
 export {
   extractProfileFactCandidatesFromUserInput
 } from "./profileMemoryRuntime/profileMemoryExtraction";
+export {
+  clampProfileEpisodeConfidence,
+  createProfileEpisodeRecord,
+  isTerminalProfileEpisodeStatus,
+  PROFILE_MEMORY_EPISODE_SCHEMA_VERSION
+} from "./profileMemoryRuntime/profileMemoryEpisodeState";
+export {
+  applyProfileEpisodeCandidates,
+  applyProfileEpisodeResolutions
+} from "./profileMemoryRuntime/profileMemoryEpisodeMutations";
+export {
+  linkProfileEpisodeToContinuity,
+  linkProfileEpisodesToContinuity
+} from "./profileMemoryRuntime/profileMemoryEpisodeLinking";
+export {
+  queryProfileEpisodesForContinuity,
+  readProfileEpisodes
+} from "./profileMemoryRuntime/profileMemoryEpisodeQueries";
+export {
+  queryProfileFactsForContinuity,
+  readProfileFacts
+} from "./profileMemoryRuntime/profileMemoryQueries";
+export {
+  buildInferredProfileEpisodeResolutionCandidates
+} from "./profileMemoryRuntime/profileMemoryEpisodeResolution";
+export {
+  assessProfileEpisodeFreshness,
+  buildProfileEpisodeConsolidationKey,
+  compareProfileEpisodesForLifecyclePriority,
+  consolidateProfileEpisodes
+} from "./profileMemoryRuntime/profileMemoryEpisodeConsolidation";
+export {
+  extractProfileEpisodeCandidatesFromUserInput
+} from "./profileMemoryRuntime/profileMemoryEpisodeExtraction";
+export type { ProfileMemoryIngestOptions } from "./profileMemoryStore";
 export {
   isSensitiveKey,
   normalizeProfileKey,
   normalizeProfileValue
 } from "./profileMemoryRuntime/profileMemoryNormalization";
+export { normalizeProfileMemoryEpisodes } from "./profileMemoryRuntime/profileMemoryEpisodeNormalization";
 export {
   buildPlanningContextFromProfile
 } from "./profileMemoryRuntime/profileMemoryPlanningContext";
+export {
+  selectProfileFactsForQuery
+} from "./profileMemoryRuntime/profileMemoryPlanningContext";
+export {
+  buildProfileEpisodePlanningContext
+} from "./profileMemoryRuntime/profileMemoryEpisodePlanningContext";
 export {
   DEFAULT_PROFILE_STALE_AFTER_DAYS,
   PROFILE_MEMORY_SCHEMA_VERSION,
@@ -22,6 +66,14 @@ export {
 } from "./profileMemoryRuntime/profileMemoryState";
 export { upsertTemporalProfileFact } from "./profileMemoryRuntime/profileMemoryFactLifecycle";
 export { normalizeProfileMemoryState } from "./profileMemoryRuntime/profileMemoryStateNormalization";
+export type {
+  CreateProfileEpisodeRecordInput,
+  ProfileEpisodeRecord,
+  ProfileEpisodeResolutionInput,
+  ProfileEpisodeResolutionStatus,
+  ProfileEpisodeSourceKind,
+  ProfileEpisodeStatus
+} from "./profileMemoryRuntime/profileMemoryEpisodeContracts";
 
 export type ProfileFactStatus = "confirmed" | "uncertain" | "superseded";
 
@@ -65,6 +117,7 @@ export interface ProfileMemoryState {
   schemaVersion: number;
   updatedAt: string;
   facts: ProfileFactRecord[];
+  episodes: ProfileEpisodeRecord[];
 }
 
 export interface ProfileFactUpsertInput {

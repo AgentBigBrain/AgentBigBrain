@@ -11,6 +11,10 @@ import type { FollowUpRuleContext } from "../conversationManagerHelpers";
 import { recordUserTurn } from "../conversationSessionMutations";
 import { classifyRoutingIntentV1 } from "../routingMap";
 import type { ConversationSession } from "../sessionStore";
+import type {
+  QueryConversationContinuityEpisodes,
+  QueryConversationContinuityFacts
+} from "./managerContracts";
 
 export interface ConversationEnqueueResult {
   reply: string;
@@ -19,6 +23,8 @@ export interface ConversationEnqueueResult {
 
 export interface ConversationRoutingDependencies {
   followUpRuleContext: FollowUpRuleContext;
+  queryContinuityEpisodes?: QueryConversationContinuityEpisodes;
+  queryContinuityFacts?: QueryConversationContinuityFacts;
   config: {
     maxContextTurnsForExecution: number;
     maxConversationTurns: number;
@@ -41,12 +47,12 @@ export interface ConversationRoutingDependencies {
  * @param deps - Routing dependencies exposed by the stable ingress coordinator.
  * @returns Queue insertion result for the stable ingress coordinator.
  */
-export function routeConversationChatInput(
+export async function routeConversationChatInput(
   session: ConversationSession,
   normalizedInput: string,
   receivedAt: string,
   deps: ConversationRoutingDependencies
-): ConversationEnqueueResult {
+): Promise<ConversationEnqueueResult> {
   const followUpResolution = resolveFollowUpInput(
     session,
     normalizedInput,
@@ -63,12 +69,14 @@ export function routeConversationChatInput(
     session,
     normalizedInput,
     receivedAt,
-    buildConversationAwareExecutionInput(
+    await buildConversationAwareExecutionInput(
       session,
       followUpResolution.executionInput,
       deps.config.maxContextTurnsForExecution,
       routingClassification,
-      normalizedInput
+      normalizedInput,
+      deps.queryContinuityEpisodes,
+      deps.queryContinuityFacts
     )
   );
   recordUserTurn(
@@ -89,12 +97,12 @@ export function routeConversationChatInput(
  * @param deps - Routing dependencies exposed by the stable ingress coordinator.
  * @returns Queue insertion result for the stable ingress coordinator.
  */
-export function routeConversationMessageInput(
+export async function routeConversationMessageInput(
   session: ConversationSession,
   input: string,
   receivedAt: string,
   deps: ConversationRoutingDependencies
-): ConversationEnqueueResult {
+): Promise<ConversationEnqueueResult> {
   const followUpResolution = resolveFollowUpInput(
     session,
     input,
@@ -110,12 +118,14 @@ export function routeConversationMessageInput(
     session,
     input,
     receivedAt,
-    buildConversationAwareExecutionInput(
+    await buildConversationAwareExecutionInput(
       session,
       followUpResolution.executionInput,
       deps.config.maxContextTurnsForExecution,
       null,
-      input
+      input,
+      deps.queryContinuityEpisodes,
+      deps.queryContinuityFacts
     )
   );
   recordUserTurn(session, input, receivedAt, deps.config.maxConversationTurns);

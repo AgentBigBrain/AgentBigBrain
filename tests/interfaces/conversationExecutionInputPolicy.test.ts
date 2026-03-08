@@ -65,9 +65,9 @@ test("resolveFollowUpInput wraps short follow-up answers with prior assistant cl
   assert.match(resolution.executionInput, /User follow-up answer: private/);
 });
 
-test("buildConversationAwareExecutionInput returns raw input when no context, status, or routing hints exist", () => {
+test("buildConversationAwareExecutionInput returns raw input when no context, status, or routing hints exist", async () => {
   const session = buildSession();
-  const executionInput = buildConversationAwareExecutionInput(
+  const executionInput = await buildConversationAwareExecutionInput(
     session,
     "just do this",
     10
@@ -76,7 +76,7 @@ test("buildConversationAwareExecutionInput returns raw input when no context, st
   assert.equal(executionInput, "just do this");
 });
 
-test("buildConversationAwareExecutionInput includes conversation context, status guardrails, and routing hint", () => {
+test("buildConversationAwareExecutionInput includes conversation context, status guardrails, and routing hint", async () => {
   const session = buildSession();
   session.conversationTurns.push({
     role: "user",
@@ -89,7 +89,7 @@ test("buildConversationAwareExecutionInput includes conversation context, status
     at: "2026-03-03T00:00:20.000Z"
   });
 
-  const executionInput = buildConversationAwareExecutionInput(
+  const executionInput = await buildConversationAwareExecutionInput(
     session,
     "my release status is pending",
     10,
@@ -102,12 +102,12 @@ test("buildConversationAwareExecutionInput includes conversation context, status
   assert.match(executionInput, /Current user request:/);
 });
 
-test("buildConversationAwareExecutionInput includes build-scaffold routing hint for generic app creation prompts", () => {
+test("buildConversationAwareExecutionInput includes build-scaffold routing hint for generic app creation prompts", async () => {
   const session = buildSession();
   const classification = classifyRoutingIntentV1(
     "Create a React app on my Desktop and execute now."
   );
-  const executionInput = buildConversationAwareExecutionInput(
+  const executionInput = await buildConversationAwareExecutionInput(
     session,
     "Create a React app on my Desktop and execute now.",
     10,
@@ -121,7 +121,7 @@ test("buildConversationAwareExecutionInput includes build-scaffold routing hint 
   assert.match(executionInput, /BUILD_NO_SIDE_EFFECT_EXECUTED/i);
 });
 
-test("buildConversationAwareExecutionInput can inject contextual recall from the raw user turn while preserving wrapped execution input", () => {
+test("buildConversationAwareExecutionInput can inject episode-aware contextual recall from the raw user turn while preserving wrapped execution input", async () => {
   const session = buildSession();
   session.conversationTurns.push({
     role: "user",
@@ -180,16 +180,41 @@ test("buildConversationAwareExecutionInput can inject contextual recall from the
     ]
   };
 
-  const executionInput = buildConversationAwareExecutionInput(
+  const executionInput = await buildConversationAwareExecutionInput(
     session,
     "Follow-up user response to prior assistant clarification.\nUser follow-up answer: Billy seems better now.",
     10,
     null,
-    "How is Billy doing lately?"
+    "How is Billy doing lately?",
+    async () => [
+      {
+        episodeId: "episode_billy_fall",
+        title: "Billy fell down",
+        summary: "Billy fell down a few weeks ago and the outcome never got resolved.",
+        status: "unresolved",
+        lastMentionedAt: "2026-02-14T15:00:00.000Z",
+        entityRefs: ["Billy"],
+        entityLinks: [
+          {
+            entityKey: "entity_billy",
+            canonicalName: "Billy"
+          }
+        ],
+        openLoopLinks: [
+          {
+            loopId: "loop_billy",
+            threadKey: "thread_billy",
+            status: "open",
+            priority: 0.8
+          }
+        ]
+      }
+    ]
   );
 
   assert.match(executionInput, /Contextual recall opportunity \(optional\):/);
-  assert.match(executionInput, /older paused topic: Billy Fall/i);
+  assert.match(executionInput, /older unresolved situation/i);
+  assert.match(executionInput, /Relevant situation: Billy fell down/i);
   assert.match(executionInput, /Current user request:/);
   assert.match(executionInput, /User follow-up answer: Billy seems better now\./);
 });

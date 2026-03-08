@@ -5,10 +5,11 @@
 import type {
   ProfileFactRecord,
   ProfileFreshnessAssessment,
+  ProfileEpisodeRecord,
   ProfileMemoryState
 } from "../profileMemory";
 
-export const PROFILE_MEMORY_SCHEMA_VERSION = 1;
+export const PROFILE_MEMORY_SCHEMA_VERSION = 2;
 export const DEFAULT_PROFILE_STALE_AFTER_DAYS = 90;
 
 /**
@@ -20,7 +21,8 @@ export function createEmptyProfileMemoryState(): ProfileMemoryState {
   return {
     schemaVersion: PROFILE_MEMORY_SCHEMA_VERSION,
     updatedAt: new Date().toISOString(),
-    facts: []
+    facts: [],
+    episodes: []
   };
 }
 
@@ -88,10 +90,21 @@ export function markStaleFactsAsUncertain(
     nextState: {
       schemaVersion: PROFILE_MEMORY_SCHEMA_VERSION,
       updatedAt: nowIso,
-      facts: nextFacts
+      facts: nextFacts,
+      episodes: state.episodes ?? []
     },
     updatedFactIds
   };
+}
+
+/**
+ * Returns the canonical episode collection from one profile-memory state envelope.
+ *
+ * @param state - Profile-memory state under inspection.
+ * @returns Episode collection, or an empty array when none exist.
+ */
+export function getProfileEpisodes(state: ProfileMemoryState): readonly ProfileEpisodeRecord[] {
+  return state.episodes ?? [];
 }
 
 /**

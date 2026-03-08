@@ -12,9 +12,15 @@ import {
   type AgentPulseContextDriftAssessment,
   type AgentPulseContextDriftDomain,
   type AgentPulseEvaluationRequest,
+  type ProfilePulseRelevantEpisode,
   type AgentPulseRelationshipAssessment,
   type AgentPulseRelationshipRole
 } from "./contracts";
+import {
+  assessProfileEpisodeFreshness,
+  compareProfileEpisodesForLifecyclePriority
+} from "./profileMemoryEpisodeConsolidation";
+import { isTerminalProfileEpisodeStatus } from "./profileMemoryEpisodeState";
 import { isActiveFact } from "./profileMemoryCommitmentSignals";
 
 const RELATIONSHIP_FACT_KEY_HINTS = [
@@ -78,6 +84,53 @@ export function countStaleActiveFacts(
     }
     return assessProfileFactFreshness(fact, staleAfterDays, nowIso).stale;
   }).length;
+}
+
+/**
+ * Selects bounded unresolved situation previews appropriate for pulse grounding.
+ *
+ * @param state - Loaded profile-memory state.
+ * @param staleAfterDays - Value for stale after days.
+ * @param nowIso - Timestamp used for freshness decisions.
+ * @param maxEpisodes - Maximum relevant episode count.
+ * @returns Deterministically ranked non-sensitive episode previews.
+ */
+export function selectRelevantEpisodesForPulse(
+  state: ProfileMemoryState,
+  staleAfterDays: number,
+  nowIso: string,
+  maxEpisodes = 2
+): ProfilePulseRelevantEpisode[] {
+  const safeMaxEpisodes = Math.max(0, maxEpisodes);
+  if (safeMaxEpisodes === 0) {
+    return [];
+  }
+
+  return [...state.episodes]
+    .filter((episode) => !episode.sensitive)
+    .filter((episode) => !isTerminalProfileEpisodeStatus(episode.status))
+    .map((episode) => ({
+      episode,
+      freshness: assessProfileEpisodeFreshness(episode, staleAfterDays, nowIso)
+    }))
+    .filter((entry) => !entry.freshness.stale)
+    .sort((left, right) =>
+      compareProfileEpisodesForLifecyclePriority(
+        left.episode,
+        right.episode,
+        staleAfterDays,
+        nowIso
+      )
+    )
+    .slice(0, safeMaxEpisodes)
+    .map(({ episode, freshness }) => ({
+      episodeId: episode.id,
+      title: episode.title,
+      summary: episode.summary,
+      status: episode.status,
+      lastMentionedAt: episode.lastMentionedAt,
+      ageDays: freshness.ageDays
+    }));
 }
 
 /**

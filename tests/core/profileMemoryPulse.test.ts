@@ -7,6 +7,7 @@ import { test } from "node:test";
 
 import { type AgentPulseDecision } from "../../src/core/agentPulse";
 import {
+  createProfileEpisodeRecord,
   createEmptyProfileMemoryState,
   type ProfileMemoryState,
   upsertTemporalProfileFact
@@ -15,7 +16,8 @@ import {
   applyRelationshipAwareTemporalNudging,
   assessContextDrift,
   assessRelationshipRole,
-  countStaleActiveFacts
+  countStaleActiveFacts,
+  selectRelevantEpisodesForPulse
 } from "../../src/core/profileMemoryRuntime/profileMemoryPulse";
 
 test("countStaleActiveFacts counts only active stale facts", () => {
@@ -190,4 +192,59 @@ test("applyRelationshipAwareTemporalNudging suppresses unresolved-commitment nud
     "context_drift.contact",
     "context_drift.job"
   ]);
+});
+
+test("selectRelevantEpisodesForPulse excludes stale and terminal situations", () => {
+  const state = {
+    ...createEmptyProfileMemoryState(),
+    episodes: [
+      createProfileEpisodeRecord({
+        title: "Billy finished rehab",
+        summary: "Billy finished rehab and fully recovered.",
+        sourceTaskId: "task_profile_pulse_episode_1",
+        source: "test",
+        sourceKind: "explicit_user_statement",
+        sensitive: false,
+        observedAt: "2026-03-05T10:00:00.000Z",
+        lastMentionedAt: "2026-03-05T10:00:00.000Z",
+        status: "resolved",
+        resolvedAt: "2026-03-05T12:00:00.000Z",
+        entityRefs: ["contact.billy"]
+      }),
+      createProfileEpisodeRecord({
+        title: "Billy changed jobs",
+        summary: "Billy changed jobs and the outcome never got resolved.",
+        sourceTaskId: "task_profile_pulse_episode_2",
+        source: "test",
+        sourceKind: "explicit_user_statement",
+        sensitive: false,
+        observedAt: "2025-10-01T10:00:00.000Z",
+        lastMentionedAt: "2025-10-01T10:00:00.000Z",
+        entityRefs: ["contact.billy"]
+      }),
+      createProfileEpisodeRecord({
+        title: "Billy fell down",
+        summary: "Billy fell down and the outcome was never mentioned.",
+        sourceTaskId: "task_profile_pulse_episode_3",
+        source: "test",
+        sourceKind: "explicit_user_statement",
+        sensitive: false,
+        observedAt: "2026-03-07T10:00:00.000Z",
+        lastMentionedAt: "2026-03-07T10:00:00.000Z",
+        entityRefs: ["contact.billy"]
+      })
+    ]
+  };
+
+  const relevantEpisodes = selectRelevantEpisodesForPulse(
+    state,
+    90,
+    "2026-03-08T10:00:00.000Z",
+    2
+  );
+
+  assert.deepEqual(
+    relevantEpisodes.map((episode) => episode.title),
+    ["Billy fell down"]
+  );
 });

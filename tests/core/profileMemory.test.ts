@@ -24,6 +24,7 @@ function isoDaysAgo(days: number): string {
 
 test("upsert supersedes older active fact for same key with new value", () => {
   const emptyState = createEmptyProfileMemoryState();
+  assert.deepEqual(emptyState.episodes, []);
   const first = upsertTemporalProfileFact(emptyState, {
     key: "employment.current",
     value: "Pro-Green",

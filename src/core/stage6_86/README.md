@@ -41,11 +41,13 @@ Canonical behavior for those entrypoints now lives here.
 - deterministic bridge-question gating, rendering, and answer-resolution helpers for Stage 6.86
 - deterministic conversation-stack threading, topic switching, and migration helpers for Stage 6.86
 - deterministic entity extraction, graph mutation, and relation-promotion helpers for Stage 6.86
+- deterministic entity lookup-term helpers for Stage 6.86 continuity linkage
 - deterministic pulse-candidate generation, suppression, and emission-history normalization for
   Stage 6.86
 - deterministic runtime-action execution for Stage 6.86 `memory_mutation` and `pulse_emit` flows
 - deterministic memory-governance receipts, conflict checks, and rollback parity
 - deterministic open-loop creation, resolution, and pulse-selection helpers
+- deterministic open-loop lookup-term helpers for Stage 6.86 continuity linkage
 - deterministic runtime-state persistence for conversation stack, pulse state, bridge queue, and
   mutation-receipt linkage
 - shared Stage 6.86 runtime contracts for extracted helper modules and stable entrypoints
@@ -59,6 +61,9 @@ Canonical behavior for those entrypoints now lives here.
 - Stage 6.86 runtime helpers here must remain deterministic and fail-closed.
 - Additional Stage 6.86 helpers should move into this folder by concern instead of growing new
   top-level `stage6_86*` catch-all files.
+- Conversation-stack and entity/open-loop language handling here should converge on shared
+  `src/core/languageRuntime/` helpers rather than growing more local stop-word or token
+  heuristics.
 
 ## Related Tests
 - `tests/core/stage6_86MemoryGovernance.test.ts`

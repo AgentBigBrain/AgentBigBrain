@@ -12,6 +12,10 @@ import { DEFAULT_BRAIN_CONFIG } from "../../src/core/config";
 import { makeId } from "../../src/core/ids";
 import { BrainOrchestrator } from "../../src/core/orchestrator";
 import { ProfileMemoryStore } from "../../src/core/profileMemoryStore";
+import type {
+  ProfileReadableEpisode,
+  ProfileReadableFact
+} from "../../src/core/profileMemoryRuntime/contracts";
 import { SemanticMemoryStore } from "../../src/core/semanticMemory";
 import { StateStore } from "../../src/core/stateStore";
 import { TaskRequest } from "../../src/core/types";
@@ -81,6 +85,41 @@ class InjectedSensitiveProfileStore {
       "employment.current: Flare"
     ].join("\n");
   }
+
+  /**
+ * Implements `getEpisodePlanningContext` behavior within class InjectedSensitiveProfileStore.
+ * Interacts with local collaborators through imported modules and typed inputs/outputs.
+ */
+  async getEpisodePlanningContext(_maxEpisodes = 2, _queryInput = ""): Promise<string> {
+    return "";
+  }
+
+  /**
+ * Implements `queryFactsForPlanningContext` behavior within class InjectedSensitiveProfileStore.
+ * Interacts with local collaborators through imported modules and typed inputs/outputs.
+ */
+  async queryFactsForPlanningContext(): Promise<readonly ProfileReadableFact[]> {
+    return [
+      {
+        factId: "fact_flare",
+        key: "employment.current",
+        value: "Flare",
+        status: "active",
+        observedAt: new Date(0).toISOString(),
+        lastUpdatedAt: new Date(0).toISOString(),
+        confidence: 0.92,
+        sensitive: false
+      }
+    ];
+  }
+
+  /**
+ * Implements `queryEpisodesForPlanningContext` behavior within class InjectedSensitiveProfileStore.
+ * Interacts with local collaborators through imported modules and typed inputs/outputs.
+ */
+  async queryEpisodesForPlanningContext(): Promise<readonly ProfileReadableEpisode[]> {
+    return [];
+  }
 }
 
 class CapturingIngestProfileStore {
@@ -107,6 +146,30 @@ class CapturingIngestProfileStore {
  */
   async getPlanningContext(_maxFacts = 6, _queryInput = ""): Promise<string> {
     return "";
+  }
+
+  /**
+ * Implements `getEpisodePlanningContext` behavior within class CapturingIngestProfileStore.
+ * Interacts with local collaborators through imported modules and typed inputs/outputs.
+ */
+  async getEpisodePlanningContext(_maxEpisodes = 2, _queryInput = ""): Promise<string> {
+    return "";
+  }
+
+  /**
+ * Implements `queryFactsForPlanningContext` behavior within class CapturingIngestProfileStore.
+ * Interacts with local collaborators through imported modules and typed inputs/outputs.
+ */
+  async queryFactsForPlanningContext(): Promise<readonly ProfileReadableFact[]> {
+    return [];
+  }
+
+  /**
+ * Implements `queryEpisodesForPlanningContext` behavior within class CapturingIngestProfileStore.
+ * Interacts with local collaborators through imported modules and typed inputs/outputs.
+ */
+  async queryEpisodesForPlanningContext(): Promise<readonly ProfileReadableEpisode[]> {
+    return [];
   }
 }
 

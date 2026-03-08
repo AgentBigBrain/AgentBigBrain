@@ -20,6 +20,8 @@ model-fallback helpers used by the stable `intentInterpreter.ts` and
 - `pulseLexicalClassifier.ts` remains the stable lexical-classification entrypoint.
 - `pulseLexicalRules.ts` owns the canonical pulse rulepack and override loading behavior.
 - `intentModelFallback.ts` owns bounded model prompting and normalization for nuanced pulse intent.
+- This subsystem is not the long-term home for human-centric proactive utility scoring; those
+  richer usefulness decisions should stay separate from deterministic pulse lexical gating.
 
 ## Related Tests
 - `intentInterpreter.test.ts`
