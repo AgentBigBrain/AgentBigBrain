@@ -42,6 +42,59 @@ Built in TypeScript with only **2 runtime dependencies** (`ws`, `onnxruntime-nod
 
 ---
 
+## 🧭 Design Philosophy & Deep Capabilities
+
+### The model is treated as untrusted
+
+AgentBigBrain does not treat model output as authority. The model proposes. The runtime decides.
+
+That matters because every proposed action still has to survive:
+
+- strict typed contracts
+- deterministic safety rules
+- governance review
+- execution-time verification
+
+The result is a simple design philosophy: intelligence can be flexible, but execution must be
+bounded, auditable, and fail-closed.
+
+### It can grow new tools under governance
+
+The runtime can create and run governed skills. In practice, that means the agent can write a
+useful tool for itself, validate it, and use it later without turning the system into an
+unrestricted self-modifying loop.
+
+This is not open-ended self-rewrite. It is bounded self-extension under policy, review, and audit.
+
+### It remembers situations, not just facts
+
+The memory model is designed to reduce the usual “start from scratch every time” feeling.
+
+The runtime keeps:
+
+- profile facts
+- remembered situations and outcomes
+- continuity state like open loops and entity links
+
+That lets it resume relevant context across sessions, ask better follow-up questions, and revive an
+older unresolved thread when it naturally comes up again, without stuffing full transcripts back
+into every prompt.
+
+### It produces high-signal execution data
+
+Approved actions leave durable receipts and related runtime traces. Over time, that gives you a
+cleaner record of what the agent actually proposed, what was allowed, what ran, and what happened
+afterward.
+
+That data is useful for:
+
+- audits
+- evaluations
+- replay and regression testing
+- future model-training or fine-tuning pipelines
+
+---
+
 ## 🔄 How It Works
 
 Every action follows the same path — no shortcuts, no exceptions:

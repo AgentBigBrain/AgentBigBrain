@@ -1,17 +1,19 @@
 # Full Setup Guide
 
-This is the full operator setup for AgentBigBrain.
-The README is intentionally quick-start; this document is the detailed wiring guide.
+This is the detailed operator setup for AgentBigBrain.
+
+The main [README](../README.md) is the quick-start path. This document is the fuller reference for
+environment wiring, interface bring-up, live verification, and operator validation.
 
 For runtime troubleshooting by error/reason code, see:
 - [docs/ERROR_CODE_ENV_MAP.md](ERROR_CODE_ENV_MAP.md)
 
 ## What This Covers
 
-- Exact environment setup flow.
-- What key settings mean and when to change them.
-- Where to create Telegram and Discord bots, and which values map to which env vars.
-- How to verify each runtime mode.
+- how to bring the runtime up safely
+- which environment settings matter most
+- how Telegram and Discord values map to `.env`
+- how to verify that the runtime is actually working, not just starting
 
 ## 1) Prerequisites
 
@@ -454,7 +456,10 @@ Current operator contract:
 
 - There is no separate `/skill` command.
 - Use `/chat` or `/propose` with `create skill ...` / `run skill ...`.
+- `/memory` is available in private conversations for remembered-situation review and correction.
 - For real side effects, say `execute now` and name your shell (`PowerShell` / `cmd` / `Terminal` / `bash` / `zsh`).
+- If name-call mode is enabled, natural greeting forms like `Hi BigBrain` and `Hey BigBrain, ...`
+  are accepted.
 - Runtime responses should clearly indicate one state: `Executed`, `Guidance only`, or `Blocked`.
 
 Extended prompt patterns are in `docs/COMMAND_EXAMPLES.md`.
@@ -568,8 +573,7 @@ Delegation trigger format is explicit-intent only:
 Run before relying on a setup:
 
 ```bash
-npm run build
-npm test
+npm run check:repo
 npm run check:docs
 npm run audit:governors
 npm run audit:claims
@@ -583,6 +587,9 @@ npm run test:daemon:live_smoke
 npm run test:runtime_wiring:integrated_live_smoke
 npm run test:interface:real_provider_live_smoke
 npm run test:runtime:managed_process_live_smoke
+npm run test:interface:advanced_live_smoke
+npm run test:human_language_generalization:evidence
+npm run test:human_language_generalization:live_smoke
 ```
 
 Optional browser verification:
@@ -596,6 +603,12 @@ Optional browser verification:
 
 Real-provider interface smoke is fail-closed. Set `BRAIN_INTERFACE_REAL_LIVE_SMOKE_CONFIRM=true`
 before running it, and ensure your provider tokens/allowlists point to intentional test destinations.
+
+The human-language pair has two different jobs:
+
+- `test:human_language_generalization:evidence` proves deterministic scenario coverage
+- `test:human_language_generalization:live_smoke` proves the current runtime can actually surface
+  the intended recall/generalization behavior in a live smoke path
 
 ## 17) Runtime Data Locations
 

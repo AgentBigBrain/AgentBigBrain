@@ -1,27 +1,63 @@
 # Command Examples
 
-This page is for operators who want prompts and commands that match the current runtime behavior, not aspirational behavior.
+This page shows the current command surface as an operator would actually use it. The goal is not
+to be exhaustive. The goal is to make the common paths easy to use correctly.
 
-For execution-style build goals, the planner now allows finite executable planning without forcing shell-keyword phrasing on every prompt. Shell naming is still useful when you care about a specific shell or when the request is general shell work rather than build/scaffold work.
+If you want setup and environment wiring, use [docs/SETUP.md](SETUP.md). If you want architecture,
+use [docs/ARCHITECTURE.md](ARCHITECTURE.md).
 
-## Quick Rules That Matter
+## 1) Quick Mental Model
 
-- For real side effects, say **`execute now`**.
-- For build/scaffold work, you no longer need shell keywords just to unlock executable planning.
-- For non-build shell work, or when you need a specific shell, name it directly: **`PowerShell`**, **`cmd`**, **`bash`**, **`terminal`**, or **`command line`**.
-- For guidance only, say **`guidance only`** or **`without executing anything`**.
-- There is no separate `/skill` slash command right now. Use **`/chat create skill ...`**, **`/chat run skill ...`**, or the same phrasing through CLI prompts.
-- If you want draft-first behavior, use **`/propose`** and ask for the exact approval diff before writes or shell commands.
-- Use **`/status`** for the normal plain-language progress view. Use **`/status debug`** only when you need delivery/lifecycle internals.
+- Use `/chat` for a direct request.
+- Use `/propose` when you want a draft and explicit approval before execution.
+- Use `/auto` for a multi-step goal.
+- Use `/memory` in a private conversation to review or correct remembered situations.
+- Use `/pulse` to control proactive check-ins.
+- Use `/status` for the normal human summary. Use `/status debug` only when you need delivery
+  internals.
 
-## When To Use Which Command
+Three execution labels matter:
+
+- `Executed`: the runtime actually ran side effects in that run.
+- `Guidance only`: the runtime gave instructions or analysis without side effects.
+- `Blocked`: policy, governance, or runtime limits denied execution.
+
+## 2) Quick Rules That Matter
+
+- If you want real side effects, say `execute now`.
+- If shell selection matters, name it directly: `PowerShell`, `cmd`, `bash`, `zsh`, `terminal`, or
+  `command line`.
+- For build/scaffold requests, you do not need shell keywords just to unlock executable planning.
+- If you want draft-first behavior, use `/propose`.
+- There is no separate `/skill` slash command. Use natural language through `/chat` or `/propose`:
+  `create skill ...` or `run skill ...`.
+- `/memory` is private-only. It is for reviewing or correcting remembered situations, not dumping
+  raw memory internals.
+
+## 3) Natural Invocation
+
+When name-call mode is enabled, the alias does not have to be the first word. Natural greeting
+forms are accepted.
+
+Examples:
+
+```text
+Hi BigBrain
+Hey BigBrain, help me think through this
+Morning BigBrain, summarize the current repo state
+BigBrain what can you help me with
+```
+
+If name-call is required and you send only the alias, the runtime will treat that as incomplete and
+ask for actual content.
+
+## 4) When To Use Which Command
 
 ### Use `/chat` when
 
-- You have one direct request and do not need a draft first.
-- You want a summary, explanation, or read-oriented task.
-- You want to create or run a skill through natural language.
-- You want one concrete side effect handled now.
+- you want one direct request
+- you do not need a draft first
+- you want a read, explanation, summary, or one-off side effect
 
 Examples:
 
@@ -29,13 +65,14 @@ Examples:
 /chat summarize runtime/state.json
 /chat create skill repo_status that reads package.json and runtime/state.json and returns a short repo summary
 /chat run skill repo_status on this repo
+/chat create a file at C:\Users\<you>\Desktop\todo.txt with today's top three priorities. Execute now.
 ```
 
 ### Use `/propose` when
 
-- You want to inspect a plan before anything executes.
-- You expect writes, shell commands, or a non-trivial change set.
-- You want an approval boundary you can review and adjust.
+- you want to inspect the plan before execution
+- the task is likely to write files, run shell commands, or produce a non-trivial change set
+- you want a clean approval boundary
 
 Examples:
 
@@ -48,14 +85,9 @@ Examples:
 
 ### Use `/auto` when
 
-- The goal is multi-step and may require several iterations.
-- You want the runtime to keep working toward the goal without waiting after every substep.
-- You are comfortable with autonomous progression within the configured limits.
-
-Important:
-- If you want real side effects, still say **`execute now`**.
-- If shell selection matters, still name the shell explicitly, for example **`PowerShell`**.
-- If the goal is a normal app build, you do not need shell keywords just to get an executable plan.
+- the task is multi-step
+- you want the runtime to keep working within the configured limits
+- you want execution to continue without waiting after every substep
 
 Examples:
 
@@ -64,18 +96,42 @@ Examples:
 /auto guidance only: outline a release checklist for this repo without executing anything
 ```
 
-### Use `/draft`, `/adjust`, `/approve`, and `/cancel` when
+### Use `/memory` when
 
-- `/draft`: you want to inspect the current pending plan.
-- `/adjust`: you want to modify the pending plan without starting over.
-- `/approve`: you are satisfied with the draft and want execution to begin.
-- `/cancel`: the draft is wrong, stale, or no longer wanted.
+- you are in a private conversation
+- you want to inspect remembered situations
+- you want to mark something resolved, wrong, or forgotten
+
+Examples:
+
+```text
+/memory
+/memory list
+/memory resolve episode_abc123 Billy recovered and is doing well now
+/memory wrong episode_abc123 That situation was about Ben, not Billy
+/memory forget episode_abc123
+```
+
+### Use `/pulse` when
+
+- you want to opt in or out of proactive check-ins
+- you want to change whether those check-ins stay private or can use the current conversation
+
+Examples:
+
+```text
+/pulse on
+/pulse private
+/pulse public
+/pulse status
+/pulse off
+```
 
 ### Use `/status` when
 
-- You want the normal human summary of what is running right now.
-- You want to know whether anything is queued behind the current work.
-- You want to see whether a draft is waiting for approval without reading transport internals.
+- you want the normal human summary of what is running
+- you want to know whether work is queued
+- you want to know whether a draft is waiting for approval
 
 Examples:
 
@@ -84,19 +140,20 @@ Examples:
 /status debug
 ```
 
-Why this works:
-- **`/status`** is the normal operator-facing view.
-- **`/status debug`** is the explicit troubleshooting view for ack/final-delivery lifecycle details.
+### Use `/review` when
 
-## What The Runtime Will Tell You
+- you want a live checkpoint review command
+- you want the artifact path and pass/fail summary for a supported checkpoint
 
-- **Executed** means side-effect actions actually ran in that run.
-- **Guidance only** means the runtime answered with instructions or analysis but did not execute side effects.
-- **Blocked** means policy, governance, or runtime constraints denied execution.
+Examples:
 
-Use those labels as a quick truth check before assuming anything was created, changed, or run.
+```text
+/review 6.11
+/review 6.75
+/review 6.85.A
+```
 
-## Telegram / Discord Slash-Command Examples
+## 5) Human-Centric Examples
 
 ### Guidance only
 
@@ -104,124 +161,43 @@ Use those labels as a quick truth check before assuming anything was created, ch
 /chat guidance only: show me how to create a React app without executing anything
 ```
 
-Why this works:
-- **`guidance only`** makes the non-executing intent explicit.
-- **`without executing anything`** reduces the chance of side-effect planning.
+Why it works:
+- it explicitly asks for advice rather than execution
+- it avoids accidental side-effect planning
 
-### Plain direct request
-
-```text
-/chat summarize runtime/state.json
-```
-
-Why this works:
-- It is a normal direct request with no draft required.
-- It is naturally read-oriented rather than execution-heavy.
-
-### Draft first, explicit approval
+### Direct file work
 
 ```text
-/propose create a React app at C:\Users\<you>\Desktop\finance-dashboard. Show the exact approval diff before any write or shell command.
+/chat write a short handoff note to C:\Users\<you>\Desktop\handoff.txt. Execute now.
 ```
 
-Why this works:
-- **`/propose`** keeps the request in draft/approval flow.
-- **`before any write or shell command`** makes the approval boundary concrete.
+Why it works:
+- it gives the runtime a clear target path
+- it makes the side-effect request explicit
 
-### Draft lifecycle sequence
+### Live app verification
 
 ```text
-/propose create a React app at C:\Users\<you>\Desktop\finance-dashboard. Show the exact approval diff before any write or shell command.
-/draft
-/adjust add a watchlist panel and keep the first pass small
-/approve
+/chat create a tiny local test site in C:\Users\<you>\Desktop\playwright-proof-smoke, start it, prove localhost readiness, verify the homepage UI in a real browser, then stop the process. Execute now using PowerShell.
 ```
 
-Why this works:
-- **`/draft`** lets you inspect the pending plan before execution.
-- **`/adjust`** changes the draft without crossing the execution boundary.
-- **`/approve`** is the explicit go signal.
+Why it works:
+- it asks for the full finite live-run flow
+- it makes readiness proof and browser proof explicit
+- it asks for shutdown instead of leaving a background process behind
 
-### Cancel a stale draft
+### Context-aware follow-up
 
 ```text
-/cancel
+Hi BigBrain, Billy came up again today. I was thinking about that whole thing from a few weeks ago and realized I never told you how it ended.
 ```
 
-Why this works:
-- It clears the active draft deterministically.
-- It is the right command when you do not want an old approval candidate hanging around.
+Why it works:
+- it sounds like a real human conversation
+- it gives the runtime a natural place to use bounded contextual recall
+- it avoids needing a special memory-specific command
 
-### Direct file creation without shell
-
-```text
-/chat create a file at C:\Users\<you>\Desktop\todo.txt with today's top three priorities. Execute now.
-```
-
-Why this works:
-- The file path gives the runtime a deterministic target.
-- **`Execute now`** makes the side-effect request explicit.
-
-### Autonomous React app build
-
-```text
-/auto create a React app at C:\Users\<you>\Desktop\finance-dashboard. Execute now using PowerShell. Create files directly; if blocked, stop and tell me exactly why.
-```
-
-Why this works:
-- **`Execute now`** makes the side-effect expectation explicit.
-- **`PowerShell`** matches the current explicit-shell guardrail.
-- The full destination path reduces ambiguity.
-- `if blocked, stop and tell me exactly why` asks for a truthful failure explanation instead of a vague success claim.
-
-### Pulse controls
-
-```text
-/pulse on
-/pulse status
-/pulse private
-/pulse public
-/pulse off
-```
-
-Why this works:
-- These are deterministic slash-command controls, not planner-generated free-form prompts.
-- `private` and `public` change how proactive check-ins are routed.
-- `status` gives you a direct pulse-state read without needing a separate diagnostic prompt.
-
-### Create a skill
-
-```text
-/chat create skill repo_status that reads package.json and runtime/state.json and returns a short repo summary
-```
-
-Why this works:
-- There is **no `/skill` command** to discover or memorize.
-- `create skill repo_status` clearly names the artifact and its purpose.
-
-### Run a skill
-
-```text
-/chat run skill repo_status on this repo
-```
-
-Why this works:
-- `run skill <name>` is direct and easy for the planner to route.
-- It avoids inventing a different command surface.
-
-### Review and status
-
-```text
-/review 6.85.A
-/status
-/status debug
-```
-
-Why this works:
-- These are deterministic slash-command surfaces handled directly by the interface layer.
-- `/status` stays human-first by default, while `/status debug` exposes the deeper delivery state only when you ask for it.
-
-## CLI Examples
+## 6) CLI Examples
 
 ### Single governed task
 
@@ -229,57 +205,32 @@ Why this works:
 npm run dev -- "summarize current repo status"
 ```
 
-### Guidance only from CLI
+### Guidance only
 
 ```bash
 npm run dev -- "guidance only: show me how to create a React app without executing anything"
 ```
 
-Why this works:
-- The same guidance-only phrasing that helps in Telegram/Discord also helps in CLI mode.
-
-### Approval-first planning from CLI
+### Approval-first planning
 
 ```bash
 npm run dev -- "create a React app at C:\Users\<you>\Desktop\finance-dashboard. Show the exact approval diff before any write or shell command."
 ```
 
-Why this works:
-- It asks for an approval-first path without requiring slash commands.
-- The approval-diff wording keeps the execution boundary explicit.
-
-### Autonomous build with explicit shell wording
+### Autonomous build
 
 ```bash
 npm run dev -- --autonomous "create a React app at C:\Users\<you>\Desktop\finance-dashboard. Execute now using PowerShell. Create files directly; if blocked, stop and tell me exactly why."
 ```
 
-Why this works:
-- **`Execute now`** requests real side effects.
-- **`PowerShell`** makes shell intent explicit to the planner.
-- The path makes the target concrete.
-
-### Create a skill from CLI
+### Skill workflow from CLI
 
 ```bash
 npm run dev -- "create skill repo_status that reads package.json and runtime/state.json and returns a short repo summary"
-```
-
-### Run a skill from CLI
-
-```bash
 npm run dev -- "run skill repo_status on this repo"
 ```
 
-### Compiled runtime parity check
-
-```bash
-npm start -- "run skill repo_status on this repo"
-```
-
-Use this when you want to verify behavior under the compiled runtime instead of only the `tsx` development path.
-
-## Weak Prompt vs Better Prompt
+## 7) Weak Prompt vs Better Prompt
 
 ### Weak
 
@@ -288,9 +239,9 @@ Use this when you want to verify behavior under the compiled runtime instead of 
 ```
 
 Problem:
-- It does not clearly say whether you want guidance or executed side effects.
-- It does not name a shell.
-- It leaves the destination vague.
+- unclear about execution vs guidance
+- vague destination
+- no shell preference if shell matters
 
 ### Better
 
@@ -299,10 +250,10 @@ Problem:
 ```
 
 Why it is better:
-- **`Execute now`** asks for real execution.
-- **`PowerShell`** satisfies the current shell-explicit guardrail.
-- The explicit path anchors the target location.
-- The blocked-path clause pushes the runtime toward a truthful explanation if it cannot proceed.
+- `execute now` makes the execution expectation explicit
+- the target path is concrete
+- the shell is named
+- the blocked-path clause asks for a truthful failure explanation
 
 ### Weak
 
@@ -311,9 +262,9 @@ Why it is better:
 ```
 
 Problem:
-- It does not name the skill.
-- It does not describe what the skill should do.
-- It leaves too much room for planner drift.
+- no name
+- no scope
+- no output contract
 
 ### Better
 
@@ -322,18 +273,20 @@ Problem:
 ```
 
 Why it is better:
-- The skill name is explicit.
-- The inputs are explicit.
-- The output expectation is explicit.
+- the skill name is explicit
+- the inputs are explicit
+- the output expectation is explicit
 
-## Operator Shortcut
+## 8) Operator Shortcut
 
-If you want a fast mental model, remember this:
+If you want a short checklist, remember this:
 
-- Want explanation only: say **`guidance only`**.
-- Want approval first: use **`/propose`**.
-- Want to inspect or change a draft: use **`/draft`** and **`/adjust ...`**.
-- Want shell execution: say **`Execute now using PowerShell`** or the equivalent shell for your platform.
-- Want live browser/UI proof: say **`run the app and verify the homepage UI`**.
-- Want skills: use **`create skill ...`** and **`run skill ...`**, not `/skill`.
-- Want pulse control: use **`/pulse on|off|private|public|status`**.
+- Want explanation only: say `guidance only`
+- Want a draft first: use `/propose`
+- Want a multi-step governed run: use `/auto`
+- Want real side effects: say `execute now`
+- Want a specific shell: name it directly
+- Want remembered-situation review: use `/memory` in a private conversation
+- Want proactive control: use `/pulse`
+- Want the normal progress view: use `/status`
+- Want internal delivery detail: use `/status debug`
