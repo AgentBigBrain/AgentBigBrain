@@ -15,6 +15,7 @@ import {
   normalizeWhitespace,
   renderTurnsForContext
 } from "./conversationManagerHelpers";
+import { buildContextualRecallBlock } from "./conversationRuntime/contextualRecall";
 
 const FIRST_PERSON_STATUS_UPDATE_PATTERN =
   /\bmy\s+[a-z0-9][a-z0-9_.\-/\s]{0,120}\s+is\s+[a-z0-9][^.!?\n]{0,120}/i;
@@ -62,17 +63,20 @@ export function buildTurnLocalStatusUpdateBlock(userInput: string): string | nul
  */
 export function buildConversationAwareExecutionInput(
   session: ConversationSession,
-  userInput: string,
+  executionInput: string,
   maxContextTurnsForExecution: number,
-  routingClassification: RoutingMapClassificationV1 | null = null
+  routingClassification: RoutingMapClassificationV1 | null = null,
+  sourceUserInput: string | null = null
 ): string {
   const recentTurns = session.conversationTurns.slice(-maxContextTurnsForExecution);
-  const statusUpdateBlock = buildTurnLocalStatusUpdateBlock(userInput);
+  const rawUserInput = sourceUserInput ?? executionInput;
+  const statusUpdateBlock = buildTurnLocalStatusUpdateBlock(rawUserInput);
+  const contextualRecallBlock = buildContextualRecallBlock(session, rawUserInput);
   const routingHint = routingClassification
     ? buildRoutingExecutionHintV1(routingClassification)
     : null;
-  if (recentTurns.length === 0 && !statusUpdateBlock && !routingHint) {
-    return userInput;
+  if (recentTurns.length === 0 && !statusUpdateBlock && !contextualRecallBlock && !routingHint) {
+    return executionInput;
   }
 
   const lines: string[] = [
@@ -97,11 +101,14 @@ export function buildConversationAwareExecutionInput(
   if (statusUpdateBlock) {
     lines.push("", statusUpdateBlock);
   }
+  if (contextualRecallBlock) {
+    lines.push("", contextualRecallBlock);
+  }
   if (routingHint) {
     lines.push("", "Deterministic routing hint:", routingHint);
   }
 
-  lines.push("", "Current user request:", userInput);
+  lines.push("", "Current user request:", executionInput);
   return lines.join("\n");
 }
 
@@ -183,7 +190,8 @@ export function buildAgentPulseExecutionInput(
 
   return [
     "System-generated Agent Pulse check-in request.",
-    "Return one concise proactive check-in message as an explicit AI assistant identity.",
+    "Return one concise proactive check-in message in natural language.",
+    "Be truthful that you are an AI assistant if that identity is directly relevant, but do not prepend labels like 'AI assistant response' or 'AI assistant check-in'.",
     "Do not impersonate a human.",
     "Do not perform file/network/shell actions unless explicitly required.",
     "",

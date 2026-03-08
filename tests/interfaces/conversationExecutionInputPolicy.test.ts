@@ -121,6 +121,79 @@ test("buildConversationAwareExecutionInput includes build-scaffold routing hint 
   assert.match(executionInput, /BUILD_NO_SIDE_EFFECT_EXECUTED/i);
 });
 
+test("buildConversationAwareExecutionInput can inject contextual recall from the raw user turn while preserving wrapped execution input", () => {
+  const session = buildSession();
+  session.conversationTurns.push({
+    role: "user",
+    text: "Billy fell down a few weeks ago.",
+    at: "2026-02-14T15:00:00.000Z"
+  });
+  session.conversationStack = {
+    schemaVersion: "v1",
+    updatedAt: "2026-03-03T00:00:00.000Z",
+    activeThreadKey: "thread_current",
+    threads: [
+      {
+        threadKey: "thread_current",
+        topicKey: "release_rollout",
+        topicLabel: "Release Rollout",
+        state: "active",
+        resumeHint: "Need to finish the rollout.",
+        openLoops: [],
+        lastTouchedAt: "2026-03-03T00:00:00.000Z"
+      },
+      {
+        threadKey: "thread_billy",
+        topicKey: "billy_fall",
+        topicLabel: "Billy Fall",
+        state: "paused",
+        resumeHint: "Billy fell down and you wanted to hear how it ended up.",
+        openLoops: [
+          {
+            loopId: "loop_billy",
+            threadKey: "thread_billy",
+            entityRefs: ["billy"],
+            createdAt: "2026-02-14T15:00:00.000Z",
+            lastMentionedAt: "2026-02-14T15:00:00.000Z",
+            priority: 0.8,
+            status: "open"
+          }
+        ],
+        lastTouchedAt: "2026-02-14T15:00:00.000Z"
+      }
+    ],
+    topics: [
+      {
+        topicKey: "release_rollout",
+        label: "Release Rollout",
+        firstSeenAt: "2026-03-03T00:00:00.000Z",
+        lastSeenAt: "2026-03-03T00:00:00.000Z",
+        mentionCount: 1
+      },
+      {
+        topicKey: "billy_fall",
+        label: "Billy Fall",
+        firstSeenAt: "2026-02-14T15:00:00.000Z",
+        lastSeenAt: "2026-02-14T15:00:00.000Z",
+        mentionCount: 1
+      }
+    ]
+  };
+
+  const executionInput = buildConversationAwareExecutionInput(
+    session,
+    "Follow-up user response to prior assistant clarification.\nUser follow-up answer: Billy seems better now.",
+    10,
+    null,
+    "How is Billy doing lately?"
+  );
+
+  assert.match(executionInput, /Contextual recall opportunity \(optional\):/);
+  assert.match(executionInput, /older paused topic: Billy Fall/i);
+  assert.match(executionInput, /Current user request:/);
+  assert.match(executionInput, /User follow-up answer: Billy seems better now\./);
+});
+
 test("buildAgentPulseExecutionInput includes pulse safety instructions and bounded context", () => {
   const session = buildSession();
   session.conversationTurns.push({

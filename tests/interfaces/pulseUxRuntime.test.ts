@@ -1,5 +1,5 @@
 /**
- * @fileoverview Tests deterministic Stage 6.86 pulse UX envelope rendering in live interface delivery paths.
+ * @fileoverview Tests final user-facing pulse text rendering in live interface delivery paths.
  */
 
 import assert from "node:assert/strict";
@@ -93,10 +93,10 @@ function rendersStage686PulseEnvelopeWhenReasonCodeIsPresent(): void {
     "2026-03-03T15:00:10.000Z"
   );
 
-  assert.match(rendered, /^Continuity pulse:/);
-  assert.match(rendered, /- reasonCode: OPEN_LOOP_RESUME/);
-  assert.match(rendered, /Thread context: active=Budget runway; paused=1; open_loops=1/);
-  assert.match(rendered, /Quick check-in:/);
+  assert.equal(rendered, "Quick check-in: want to continue the budget runway thread from yesterday?");
+  assert.doesNotMatch(rendered, /Continuity pulse:/);
+  assert.doesNotMatch(rendered, /reasonCode:/);
+  assert.doesNotMatch(rendered, /Thread context:/);
 }
 
 /**
@@ -126,12 +126,11 @@ function supportsLegacyLowerCaseStage686ReasonCodes(): void {
     "2026-03-03T15:00:10.000Z"
   );
 
-  assert.match(rendered, /reasonCode: STALE_FACT_REVALIDATION/);
-  assert.match(rendered, /Thread context: active=Budget runway; paused=1; open_loops=1/);
+  assert.equal(rendered, "Could you confirm whether your current deployment timeline changed?");
 }
 
 test(
-  "pulse ux runtime renders stage 6.86 reason code and thread strip in live delivery output",
+  "pulse ux runtime strips stage 6.86 envelope metadata from live delivery output",
   rendersStage686PulseEnvelopeWhenReasonCodeIsPresent
 );
 test(
@@ -139,6 +138,6 @@ test(
   returnsBaseSummaryWhenNoStage686ReasonCodeExists
 );
 test(
-  "pulse ux runtime supports lower-case stage 6.86 reason-code prompts",
+  "pulse ux runtime supports lower-case stage 6.86 reason-code prompts without leaking envelope metadata",
   supportsLegacyLowerCaseStage686ReasonCodes
 );

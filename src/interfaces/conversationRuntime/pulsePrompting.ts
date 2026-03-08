@@ -14,7 +14,7 @@ const DYNAMIC_PULSE_INTENT_DIRECTIVES: Record<PulseReasonCodeV1, string> = {
   OPEN_LOOP_RESUME:
     "Something was left unfinished in conversation. Bring it back up if it feels right.",
   RELATIONSHIP_CLARIFICATION:
-    "These things keep coming up together. You're curious about the connection.",
+    "Only ask about the connection if a specific recent topic clearly grounds it. Ask one concrete, low-pressure question rather than sending a generic check-in.",
   TOPIC_DRIFT_RESUME:
     "A conversation drifted away from something that seemed important. See if they want to revisit.",
   STALE_FACT_REVALIDATION:
@@ -79,7 +79,8 @@ export function buildPulsePrompt(
       `Reason code: ${reason}`,
       relationshipLine,
       contextDriftLine,
-      "Generate one concise, friendly, generic check-in message in explicit AI assistant identity.",
+      "Generate one concise, friendly, generic check-in message in natural language.",
+      "Be truthful that you are an AI assistant only if that identity is directly relevant, and do not prepend labels like 'AI assistant response' or 'AI assistant check-in'.",
       "Do not mention profile facts, unresolved commitments, or personal details.",
       reason === "contextual_followup"
         ? "Contextual follow-up nudge is enabled. Keep it generic in public mode."
@@ -133,7 +134,8 @@ export function buildPulsePrompt(
     ...(unresolvedTopicsLine ? [unresolvedTopicsLine] : []),
     ...(unresolvedTopicsDirective ? [unresolvedTopicsDirective] : []),
     ...contextualLines,
-    "Generate one concise, friendly follow-up message in explicit AI assistant identity.",
+    "Generate one concise, friendly follow-up message in natural language.",
+    "Be truthful that you are an AI assistant only if that identity is directly relevant, and do not prepend labels like 'AI assistant response' or 'AI assistant check-in'.",
     revalidationDirective,
     "Do not impersonate a human."
   ].join("\n");
@@ -248,8 +250,11 @@ export function buildDynamicPulsePrompt(
     "--- How to respond ---",
     "Be concise -- one or two sentences, not a paragraph.",
     "Match the energy of recent conversation. If things have been casual, stay casual.",
+    "Only send this if you can give one concrete reason the user would care right now.",
     "Never repeat a message you've already sent. If you've asked about this before, find a new angle.",
     "Do not explain why you're bringing this up. No 'I noticed that...' or 'My records show...'.",
+    "Do not prepend labels like 'AI assistant response', 'AI assistant check-in', or similar identity headers.",
+    "Do not write generic filler like 'AI assistant check-in', 'just checking in', 'here if you need anything', 'want to chat', or 'need a hand with anything'.",
     "Do not impersonate a human.",
     "Temperature hint: 0.65"
   ].filter(Boolean).join("\n");

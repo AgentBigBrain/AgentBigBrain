@@ -67,7 +67,8 @@ export function routeConversationChatInput(
       session,
       followUpResolution.executionInput,
       deps.config.maxContextTurnsForExecution,
-      routingClassification
+      routingClassification,
+      normalizedInput
     )
   );
   recordUserTurn(
@@ -112,7 +113,9 @@ export function routeConversationMessageInput(
     buildConversationAwareExecutionInput(
       session,
       followUpResolution.executionInput,
-      deps.config.maxContextTurnsForExecution
+      deps.config.maxContextTurnsForExecution,
+      null,
+      input
     )
   );
   recordUserTurn(session, input, receivedAt, deps.config.maxConversationTurns);

@@ -1048,6 +1048,126 @@ test("dynamic pulse path returns gracefully when getEntityGraph is undefined", a
   }
 });
 
+test("dynamic pulse suppresses weak relationship clarification nudges with no concrete recent grounding", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-pulse-relationship-suppress-"));
+  const nowIso = new Date().toISOString();
+  const staleDate = new Date(Date.now() - 20 * 24 * 60 * 60 * 1000).toISOString();
+  const store = new InterfaceSessionStore(path.join(tempDir, "sessions.json"));
+
+  await store.setSession(
+    buildSession("telegram:chat-relationship:user-1", {
+      conversationStack: buildMinimalConversationStack(nowIso),
+      conversationTurns: [
+        { role: "user", text: "Morning. Anything urgent today?", at: nowIso }
+      ],
+      agentPulse: {
+        optIn: true,
+        mode: "private",
+        routeStrategy: "last_private_used",
+        lastPulseSentAt: null,
+        lastPulseReason: null,
+        lastPulseTargetConversationId: null,
+        lastDecisionCode: "NOT_EVALUATED",
+        lastEvaluatedAt: null,
+        recentEmissions: [
+          {
+            emittedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+            reasonCode: "RELATIONSHIP_CLARIFICATION",
+            candidateEntityRefs: ["entity-alpha", "entity-beta"],
+            responseOutcome: "ignored",
+            generatedSnippet: "Checking in about alpha and beta."
+          }
+        ]
+      }
+    })
+  );
+
+  let enqueueCalls = 0;
+  const updates: Array<{ lastDecisionCode?: string; lastPulseTargetConversationId?: string | null }> = [];
+  try {
+    const graph: EntityGraphV1 = {
+      schemaVersion: "v1",
+      updatedAt: nowIso,
+      entities: [
+        {
+          entityKey: "entity-alpha",
+          canonicalName: "Alpha Systems",
+          entityType: "organization",
+          disambiguator: null,
+          firstSeenAt: staleDate,
+          lastSeenAt: staleDate,
+          salience: 1,
+          aliases: [],
+          evidenceRefs: ["conv:thread-1"]
+        },
+        {
+          entityKey: "entity-beta",
+          canonicalName: "Beta Program",
+          entityType: "concept",
+          disambiguator: null,
+          firstSeenAt: staleDate,
+          lastSeenAt: staleDate,
+          salience: 1,
+          aliases: [],
+          evidenceRefs: ["conv:thread-1"]
+        }
+      ],
+      edges: [
+        {
+          edgeKey: "entity-alpha->entity-beta",
+          sourceEntityKey: "entity-alpha",
+          targetEntityKey: "entity-beta",
+          relationType: "co_mentioned",
+          status: "uncertain",
+          coMentionCount: 6,
+          strength: 0.74,
+          firstObservedAt: staleDate,
+          lastObservedAt: staleDate,
+          evidenceRefs: ["conv:thread-1"]
+        }
+      ]
+    };
+
+    const scheduler = new AgentPulseScheduler(
+      {
+        provider: "telegram",
+        sessionStore: store,
+        evaluateAgentPulse: async () => buildPulseEvaluation({}),
+        enqueueSystemJob: async () => {
+          enqueueCalls += 1;
+          return true;
+        },
+        updatePulseState: async (_key, update) => {
+          updates.push({
+            lastDecisionCode: update.lastDecisionCode,
+            lastPulseTargetConversationId: update.lastPulseTargetConversationId ?? null
+          });
+        },
+        enableDynamicPulse: true,
+        getEntityGraph: async () => graph
+      },
+      {
+        tickIntervalMs: 1_000,
+        reasonPriority: ["unresolved_commitment", "stale_fact_revalidation"]
+      }
+    );
+
+    await scheduler.runTickOnce();
+
+    assert.equal(enqueueCalls, 0);
+    assert.ok(updates.some((update) => update.lastDecisionCode === "DYNAMIC_SUPPRESSED"));
+    assert.ok(
+      updates.some(
+        (update) =>
+          update.lastDecisionCode === "DYNAMIC_SUPPRESSED" &&
+          update.lastPulseTargetConversationId === "telegram:chat-relationship:user-1"
+      )
+    );
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
 test("dynamic pulse prompt includes naturalness context sections when enabled", async () => {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-pulse-naturalness-"));
   const staleDate = new Date(Date.now() - 100 * 24 * 60 * 60 * 1000).toISOString();

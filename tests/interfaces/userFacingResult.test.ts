@@ -1607,7 +1607,8 @@ test("selectUserFacingSummary does not force diagnostics for pulse prompts that 
     {
       userInput: [
         "System-generated Agent Pulse check-in request.",
-        "Return one concise proactive check-in message as an explicit AI assistant identity.",
+        "Return one concise proactive check-in message in natural language.",
+        "Be truthful that you are an AI assistant if that identity is directly relevant, but do not prepend labels like 'AI assistant response' or 'AI assistant check-in'.",
         "",
         "Agent Pulse request:",
         "Agent Pulse proactive check-in request. Reason code: stale_fact_revalidation.",

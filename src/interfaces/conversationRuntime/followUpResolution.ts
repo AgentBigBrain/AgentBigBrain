@@ -171,7 +171,8 @@ export async function handleImplicitProposalFlow(
         session,
         normalizedInput,
         deps.config.maxContextTurnsForExecution,
-        classifyRoutingIntentV1(normalizedInput)
+        classifyRoutingIntentV1(normalizedInput),
+        normalizedInput
       )
     );
     recordUserTurn(session, normalizedInput, message.receivedAt, deps.config.maxConversationTurns);

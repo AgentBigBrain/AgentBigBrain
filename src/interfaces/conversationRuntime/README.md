@@ -52,6 +52,8 @@ The latest slices moved queue/ack, worker-loop, and pulse-state ownership here s
   `conversationIngressLifecycle.ts`
 - `followUpResolution.ts` owns canonical proposal approval, proposal-reply interpretation, and
   model-assisted follow-up resolution below `conversationIngressLifecycle.ts`
+- `contextualRecall.ts` owns canonical in-conversation contextual recall matching for active user
+  turns below `conversationExecutionInputPolicy.ts`
 
 ## Inputs
 - normalized conversation session payloads from `sessionStore.ts`
@@ -91,6 +93,7 @@ The latest slices moved queue/ack, worker-loop, and pulse-state ownership here s
 - canonical slash-command dispatch helpers for the stable ingress entrypoint
 - canonical stale-running-job recovery helpers for the stable ingress entrypoint
 - canonical proposal approval and follow-up interpretation helpers for the stable ingress entrypoint
+- canonical bounded in-conversation recall helpers for the stable execution-input entrypoint
 
 ## Invariants
 - `sessionStore.ts` remains the stable public entrypoint for interface session contracts.
@@ -109,6 +112,11 @@ The latest slices moved queue/ack, worker-loop, and pulse-state ownership here s
 - JSON and SQLite persistence must stay fail-closed and preserve deterministic ordering.
 - Agent Pulse helpers here must preserve existing scheduling semantics; extraction should only move
   ownership, not change pulse behavior.
+- User-facing proactive pulse delivery must emit only the final message body; internal reason codes,
+  previews, and thread diagnostics belong in debug or diagnostic surfaces, not end-user messages.
+- User-facing pulse prompts should sound natural; they may be truthful about AI identity when
+  relevant, but must not prepend label-style openings like `AI assistant response:` or
+  `AI assistant check-in:`.
 - Conversation lifecycle helpers here must preserve queue and ack semantics; extraction should only
   move ownership, not change delivery or queue behavior.
 - Worker-runtime helpers here must preserve job execution, heartbeat, and final-delivery semantics;
@@ -125,6 +133,8 @@ The latest slices moved queue/ack, worker-loop, and pulse-state ownership here s
   only move recovery ownership, not change ingress behavior.
 - Follow-up resolution helpers here must preserve proposal/follow-up semantics; extraction should
   only move ownership, not change ingress behavior.
+- Contextual recall helpers here must stay bounded and optional; they may suggest one natural
+  same-conversation follow-up, but must not turn into a separate proactive pulse path.
 
 ## Related Tests
 - `tests/interfaces/sessionStore.test.ts`
@@ -145,6 +155,7 @@ The latest slices moved queue/ack, worker-loop, and pulse-state ownership here s
 - `tests/interfaces/commandDispatch.test.ts`
 - `tests/interfaces/sessionRecovery.test.ts`
 - `tests/interfaces/followUpResolution.test.ts`
+- `tests/interfaces/contextualRecall.test.ts`
 - `tests/interfaces/managerContracts.test.ts`
 - `tests/interfaces/conversationManager.test.ts`
 - `scripts/evidence/interfaceAdvancedLiveSmoke.ts`
@@ -164,6 +175,8 @@ Update this README when:
 - session normalization, session merge, timezone detection, or user-style fingerprint
   responsibilities change materially
 - pulse target-selection, contextual follow-up, or pulse-prompt responsibilities change materially
+- user-facing pulse suppression or pulse message-body rules change materially
+- pulse identity or natural-language prompt rules change materially
 - queue insertion, ack timers, or ack lifecycle responsibilities change materially
 - ack/final-delivery contract, preview, or persistence responsibilities change materially
 - system-job enqueue, worker execution, or pulse-state persistence responsibilities change
@@ -174,4 +187,5 @@ Update this README when:
 - stale-running-job recovery responsibilities change materially
 - proposal approval, proposal-reply interpretation, or follow-up resolution responsibilities change
   materially
+- in-conversation contextual recall matching or suppression rules change materially
 - related test coverage changes because the conversation-runtime surface moved

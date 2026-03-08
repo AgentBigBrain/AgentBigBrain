@@ -58,6 +58,9 @@ transport and lifecycle path that consumes both subsystems.
 - conversation routing decisions, prompt classification, and invocation hints
 - transport-facing delivery behavior and session mutations
 - canonical user-facing result composition through `userFacingResult.ts`
+- user-facing proactive pulse messages that omit internal pulse/debug scaffolding
+- active-conversation execution-input hints that can surface one bounded contextual recall when the
+  user naturally re-mentions an older unresolved topic
 
 ## Invariants
 - Transport lifecycle logic should stay at this top level; wording logic should stay in
@@ -86,6 +89,12 @@ transport and lifecycle path that consumes both subsystems.
   intentionally guarded by the module-size check so the top-level interface layer stays focused on
   stable coordination surfaces.
 - Telegram and Discord adapters should share the same truthfulness and stop-summary contracts.
+- User-facing proactive pulse delivery must not leak internal reason codes, preview envelopes, or
+  raw thread-context diagnostics.
+- User-facing pulse or recall copy may be truthful about AI identity when relevant, but should not
+  use label-style openings like `AI assistant response:` or `AI assistant check-in:`.
+- Active-conversation contextual recall should stay inline and optional; it must not turn into a
+  second proactive outreach channel.
 - Conversation lifecycle behavior should remain discoverable here rather than spread into unrelated
   transport helpers.
 
@@ -117,4 +126,7 @@ Update this README when:
 - accepted inbound conversation dispatch ownership moves between the top-level gateways and
   `src/interfaces/transportRuntime/`
 - Telegram or Discord runtime wiring changes materially
+- user-facing proactive pulse rendering or suppression rules change materially
+- user-facing pulse identity/natural-language rules change materially
+- in-conversation contextual recall rules change materially
 - the related-test surface changes because interface responsibilities moved

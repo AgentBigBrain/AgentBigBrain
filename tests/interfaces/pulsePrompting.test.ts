@@ -176,6 +176,36 @@ test("buildDynamicPulsePrompt includes naturalness context sections when provide
   assert.ok(prompt.includes("working with this user for"));
   assert.ok(prompt.includes("1 ignored"));
   assert.ok(prompt.includes("User communication style: brief and task-focused"));
+  assert.ok(prompt.includes("Only send this if you can give one concrete reason"));
+  assert.ok(prompt.includes("Do not write generic filler like 'AI assistant check-in'"));
+});
+
+test("buildDynamicPulsePrompt hardens relationship clarification against generic check-in wording", () => {
+  const candidate: PulseCandidateV1 = {
+    candidateId: "pulse-relationship",
+    reasonCode: "RELATIONSHIP_CLARIFICATION",
+    score: 0.67,
+    scoreBreakdown: {
+      recency: 0.7,
+      frequency: 0.61,
+      unresolvedImportance: 0.71
+    },
+    lastTouchedAt: "2026-03-07T14:00:00.000Z",
+    threadKey: null,
+    entityRefs: ["entity-1", "entity-2"],
+    evidenceRefs: ["evidence-1"],
+    stableHash: "stable-hash-relationship"
+  };
+
+  const prompt = buildDynamicPulsePrompt(
+    candidate,
+    buildSession("telegram:chat-1:user-1"),
+    "private"
+  );
+
+  assert.ok(prompt.includes("Only ask about the connection if a specific recent topic clearly grounds it."));
+  assert.match(prompt, /rather than sending a generic check-in/i);
+  assert.match(prompt, /do not prepend labels like 'AI assistant response'/i);
 });
 
 test("computeRelationshipAgeDays prefers entity-graph firstSeenAt over conversation turns", () => {

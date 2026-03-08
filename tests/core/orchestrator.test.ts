@@ -921,12 +921,14 @@ test("orchestrator does not enforce verification gate for system pulse prompts c
   const modelClient = new RespondOnlyPlannerModelClient();
   const pulsePrompt = [
     "System-generated Agent Pulse check-in request.",
-    "Return one concise proactive check-in message as an explicit AI assistant identity.",
+    "Return one concise proactive check-in message in natural language.",
+    "Be truthful that you are an AI assistant if that identity is directly relevant, but do not prepend labels like 'AI assistant response' or 'AI assistant check-in'.",
     "",
     "Agent Pulse request:",
     "Agent Pulse proactive check-in request.",
     "Reason code: stale_fact_revalidation",
-    "Generate one concise, friendly follow-up message in explicit AI assistant identity.",
+    "Generate one concise, friendly follow-up message in natural language.",
+    "Be truthful that you are an AI assistant only if that identity is directly relevant, and do not prepend labels like 'AI assistant response' or 'AI assistant check-in'.",
     "",
     "Recent conversation context (oldest to newest):",
     "- user: Claim this task is complete only if deterministic proof artifacts exist; otherwise block the done claim."

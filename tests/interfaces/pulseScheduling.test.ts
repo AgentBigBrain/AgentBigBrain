@@ -51,7 +51,7 @@ test("conversationBelongsToProvider matches only the active provider prefix", ()
   assert.equal(conversationBelongsToProvider("discord:chan-1:user-1", "telegram"), false);
 });
 
-test("shouldSkipSessionForPulse enforces opt-in, active work, and minimum gap", () => {
+test("shouldSkipSessionForPulse enforces opt-in, active work, and human-scale minimum gap", () => {
   assert.equal(
     shouldSkipSessionForPulse(
       buildSession("telegram:chat-1:user-1", {
@@ -120,6 +120,24 @@ test("shouldSkipSessionForPulse enforces opt-in, active work, and minimum gap", 
   );
 
   assert.equal(shouldSkipSessionForPulse(buildSession("telegram:chat-1:user-1")), false);
+
+  assert.equal(
+    shouldSkipSessionForPulse(
+      buildSession("telegram:chat-1:user-1", {
+        agentPulse: {
+          optIn: true,
+          mode: "private",
+          routeStrategy: "last_private_used",
+          lastPulseSentAt: new Date(Date.now() - 13 * 60 * 60 * 1_000).toISOString(),
+          lastPulseReason: null,
+          lastPulseTargetConversationId: null,
+          lastDecisionCode: "NOT_EVALUATED",
+          lastEvaluatedAt: null
+        }
+      })
+    ),
+    false
+  );
 });
 
 test("selectPulseTargetSession prefers the newest private route and reports NO_PRIVATE_ROUTE", () => {

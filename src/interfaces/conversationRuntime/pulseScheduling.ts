@@ -4,7 +4,7 @@
 
 import type { ConversationSession } from "../sessionStore";
 
-const PULSE_MINIMUM_GAP_MS = 60_000;
+const PULSE_MINIMUM_GAP_MS = 12 * 60 * 60 * 1_000;
 
 /**
  * Returns true when a conversation key belongs to the active provider namespace.
