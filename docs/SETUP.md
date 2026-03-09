@@ -115,7 +115,8 @@ BRAIN_MODEL_BACKEND=mock
 ```env
 BRAIN_MODEL_BACKEND=openai
 OPENAI_API_KEY=<your_openai_api_key>
-OPENAI_TIMEOUT_MS=15000
+OPENAI_TIMEOUT_MS=300000
+OPENAI_TRANSPORT_MODE=auto
 ```
 
 Optional model routing overrides:
@@ -125,6 +126,55 @@ Optional model routing overrides:
 - `OPENAI_MODEL_MEDIUM_GENERAL`
 - `OPENAI_MODEL_MEDIUM_POLICY`
 - `OPENAI_MODEL_LARGE_REASONING`
+
+Recommended cross-family routing for broad OpenAI coverage:
+
+```env
+OPENAI_MODEL_SMALL_FAST=gpt-4.1-mini
+OPENAI_MODEL_SMALL_POLICY=gpt-4.1-mini
+OPENAI_MODEL_MEDIUM_GENERAL=gpt-4.1
+OPENAI_MODEL_MEDIUM_POLICY=gpt-4.1-mini
+OPENAI_MODEL_LARGE_REASONING=gpt-5.3-codex
+```
+
+OpenAI transport notes:
+
+- The runtime supports both Chat Completions and Responses transports.
+- `OPENAI_TRANSPORT_MODE=auto` selects the preferred transport for the resolved model family.
+- `OPENAI_TRANSPORT_MODE=chat_completions` or `responses` forces one transport for compatibility
+  testing.
+- `OPENAI_COMPATIBILITY_STRICT=false` allows lowest-common-denominator transport selection for
+  unknown model ids instead of failing closed immediately.
+- `OPENAI_ALLOW_JSON_OBJECT_COMPAT_FALLBACK=true` enables one deterministic compatibility retry from
+  strict schema mode to `json_object` mode when the provider rejects strict structured output.
+- The current compatibility and live-smoke coverage target the GPT-4.1 and GPT-5.x API families,
+  including `gpt-4.1-mini`, `gpt-4.1`, `gpt-5`, `gpt-5.1`,
+  `gpt-5.2`, and `gpt-5.3-codex`.
+- Recommended starting point for real autonomous work is:
+  - `OPENAI_TIMEOUT_MS=300000`
+  - `OPENAI_TRANSPORT_MODE=auto`
+  - `OPENAI_MODEL_SMALL_FAST=gpt-4.1-mini`
+  - `OPENAI_MODEL_SMALL_POLICY=gpt-4.1-mini`
+  - `OPENAI_MODEL_MEDIUM_GENERAL=gpt-4.1`
+  - `OPENAI_MODEL_MEDIUM_POLICY=gpt-4.1-mini`
+  - `OPENAI_MODEL_LARGE_REASONING=gpt-5.3-codex`
+- This mix keeps fast control/policy work on the cheaper GPT-4.1 path while giving harder planning
+  and repair loops a stronger GPT-5-family model.
+- The live smoke uses `gpt-4.1-mini` for fast/policy control roles and swaps the model under test
+  into `medium-general` and `large-reasoning`. Use `--role-mode=all_roles_under_test` only if you
+  intentionally want the harsh "every runtime role uses the same provider model" variant.
+- Verified live-smoke matrix:
+  - `gpt-4.1-mini`
+  - `gpt-4.1`
+  - `gpt-5`
+  - `gpt-5.1`
+  - `gpt-5.2`
+  - `gpt-5.3-codex`
+- Full range smoke command:
+
+```bash
+OPENAI_MULTI_MODEL_LIVE_SMOKE_CONFIRM=true npm run test:openai:multi_model_live_smoke -- --all
+```
 
 ### Ollama backend (local provider)
 
@@ -646,10 +696,28 @@ This section covers every key currently present in `.env.example` and what to ex
 - `OPENAI_BASE_URL` (optional, commented in template): OpenAI endpoint override.
   - Change only if you intentionally route to a compatible proxy/service.
 - `OPENAI_TIMEOUT_MS`: client timeout for OpenAI requests.
+  - Recommended guidance for GPT-4.1 through GPT-5.3 autonomous runs is `300000`.
+  - `120000` can still be fine for short single-turn calls, but it is more likely to cut off slower
+    GPT-5-family planning or repair turns.
   - Higher value tolerates slower responses but increases wait time on hangs.
   - Lower value fails faster on latency spikes/timeouts.
+- `OPENAI_TRANSPORT_MODE`: OpenAI transport selection policy.
+  - `auto`: picks the preferred transport for the resolved model family.
+  - `chat_completions`: forces `/v1/chat/completions`.
+  - `responses`: forces `/v1/responses`.
+  - Recommended setting: `auto`.
+- `OPENAI_COMPATIBILITY_STRICT`: unknown-model compatibility policy.
+  - `true`: fail closed when the provider model id is not in the compatibility registry.
+  - `false`: allow lowest-common-denominator transport selection for unknown models.
+- `OPENAI_ALLOW_JSON_OBJECT_COMPAT_FALLBACK`: one-step structured-output compatibility retry toggle.
+  - `false`: strict schema incompatibilities fail closed.
+  - `true`: allows one retry in `json_object` mode when the provider rejects strict schema mode.
 - `OPENAI_MODEL_SMALL_FAST`, `OPENAI_MODEL_SMALL_POLICY`, `OPENAI_MODEL_MEDIUM_GENERAL`, `OPENAI_MODEL_MEDIUM_POLICY`, `OPENAI_MODEL_LARGE_REASONING`: alias-to-provider model mapping.
   - Changing these remaps which provider model each runtime role uses.
+  - Recommended broad-coverage mix: `small_fast=gpt-4.1-mini`, `small_policy=gpt-4.1-mini`,
+    `medium_general=gpt-4.1`, `medium_policy=gpt-4.1-mini`, `large_reasoning=gpt-5.3-codex`.
+  - Verified live-smoke coverage for the current compatibility layer: `gpt-4.1-mini`, `gpt-4.1`,
+    `gpt-5`, `gpt-5.1`, `gpt-5.2`, `gpt-5.3-codex`.
 - `OPENAI_PRICE_INPUT_PER_1M_USD`, `OPENAI_PRICE_OUTPUT_PER_1M_USD`: spend-estimation rates.
   - Changing affects budget accounting/telemetry only, not provider billing.
 

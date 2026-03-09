@@ -25,6 +25,7 @@ import {
     MISSION_REQUIREMENT_SIDE_EFFECT,
     TASK_EXECUTION_FAILED_REASON_CODE,
     formatReasonWithCode,
+    type MissionCompletionContract,
     type MissionEvidenceCounters
 } from "./autonomy/contracts";
 import { buildMissionCompletionContract } from "./autonomy/missionContract";
@@ -158,6 +159,33 @@ function buildPlaywrightInstallRecoveryInput(overarchingGoal: string): string {
         `After install, continue this original goal and retry the localhost browser verification: "${overarchingGoal}". ` +
         "If install is blocked or fails, stop and explain plainly that browser verification could not be completed."
     );
+}
+
+/**
+ * Formats deterministic live-run completion reasoning from the mission contract.
+ *
+ * **Why it exists:**
+ * The loop can finish after either the main iteration path or a bounded cleanup stop. Both paths
+ * need the same truthful reasoning text that only mentions proof actually required by the goal.
+ *
+ * **What it talks to:**
+ * - Uses `MissionCompletionContract` (import `MissionCompletionContract`) from `./autonomy/contracts`.
+ *
+ * @param missionContract - Completion requirements for the current mission.
+ * @returns Human-readable goal-met reasoning for explicit live-run contracts.
+ */
+function formatLiveRunCompletionReasoning(
+    missionContract: MissionCompletionContract
+): string {
+    if (missionContract.requireProcessStopProof) {
+        return missionContract.requireBrowserProof
+            ? "The explicit live-run evidence contract is complete: the build flow executed, localhost readiness was proven, browser verification passed, and the managed process was stopped."
+            : "The explicit live-run evidence contract is complete: the build flow executed, localhost readiness was proven, and the managed process was stopped.";
+    }
+    if (missionContract.requireBrowserProof) {
+        return "The explicit live-run evidence contract is complete: the build flow executed, localhost readiness was proven, and browser verification passed.";
+    }
+    return "The explicit live-run evidence contract is complete: localhost readiness was proven.";
 }
 
 export class AutonomousLoop {
@@ -396,6 +424,25 @@ export class AutonomousLoop {
                     break;
                 }
 
+                const liveRunEvidenceComplete =
+                    missionContract.executionStyle &&
+                    missingAfter.length === 0 &&
+                    (
+                        missionContract.requireReadinessProof ||
+                        missionContract.requireBrowserProof ||
+                        missionContract.requireProcessStopProof
+                    );
+                if (liveRunEvidenceComplete) {
+                    const reasoning = formatLiveRunCompletionReasoning(missionContract);
+                    console.log(`\n======================================================`);
+                    console.log(`[Autonomous Loop Finished] Goal Met!`);
+                    console.log(`Reasoning: ${reasoning}`);
+                    console.log(`======================================================\n`);
+                    await callbacks?.onGoalMet?.(reasoning, iteration);
+                    goalMetInCurrentLoop = true;
+                    break;
+                }
+
                 const madeProgress = missionContract.executionStyle
                     ? missingAfter.length < missingBefore.length
                     : approved > 0;
@@ -444,6 +491,7 @@ export class AutonomousLoop {
                 const nextStep = await this.evaluateNextStep(
                     currentOverarchingGoal,
                     result,
+                    missionEvidence,
                     trackedManagedProcessLeaseId,
                     trackedLoopbackTarget
                 );
@@ -507,6 +555,51 @@ export class AutonomousLoop {
             }
 
             if (!goalMetInCurrentLoop) {
+                const missingRequirements = resolveMissingMissionRequirements(
+                    missionContract,
+                    missionEvidence
+                );
+                if (
+                    missionContract.requireProcessStopProof &&
+                    trackedManagedProcessLeaseId &&
+                    missingRequirements.length === 1 &&
+                    missingRequirements[0] === MISSION_REQUIREMENT_PROCESS_STOP
+                ) {
+                    const cleanupResult = await cleanupManagedProcessLease(
+                        this.orchestrator,
+                        currentOverarchingGoal,
+                        trackedManagedProcessLeaseId
+                    );
+                    if (cleanupResult) {
+                        missionEvidence = {
+                            ...missionEvidence,
+                            processStopProofs:
+                                missionEvidence.processStopProofs +
+                                countApprovedManagedProcessStopActions(cleanupResult)
+                        };
+                        trackedManagedProcessLeaseId = resolveTrackedManagedProcessLeaseId(
+                            trackedManagedProcessLeaseId,
+                            cleanupResult
+                        );
+                        if (
+                            resolveMissingMissionRequirements(
+                                missionContract,
+                                missionEvidence
+                            ).length === 0
+                        ) {
+                            const reasoning = formatLiveRunCompletionReasoning(missionContract);
+                            console.log(`\n======================================================`);
+                            console.log(`[Autonomous Loop Finished] Goal Met!`);
+                            console.log(`Reasoning: ${reasoning}`);
+                            console.log(`======================================================\n`);
+                            await callbacks?.onGoalMet?.(reasoning, iteration);
+                            goalMetInCurrentLoop = true;
+                        }
+                    }
+                }
+            }
+
+            if (!goalMetInCurrentLoop) {
                 const reason = formatReasonWithCode(
                     MAX_ITERATIONS_REASON_CODE,
                     `Reached maximum iterations (${maxIterations}) for goal.`
@@ -565,6 +658,7 @@ export class AutonomousLoop {
      *
      * @param overarchingGoal - Value for overarching goal.
      * @param lastResult - Result object inspected or transformed in this step.
+     * @param missionEvidence - Cumulative deterministic mission evidence captured so far.
      * @param trackedManagedProcessLeaseId - Managed-process lease carried across iterations, if any.
      * @param trackedLoopbackTarget - Loopback target carried across iterations, if any.
      * @returns Promise resolving to AutonomousNextStepModelOutput.
@@ -572,10 +666,15 @@ export class AutonomousLoop {
     private async evaluateNextStep(
         overarchingGoal: string,
         lastResult: TaskRunResult,
+        missionEvidence: MissionEvidenceCounters,
         trackedManagedProcessLeaseId: string | null,
         trackedLoopbackTarget: LoopbackTargetHint | null
     ): Promise<AutonomousNextStepModelOutput> {
         const missionContract = buildMissionCompletionContract(overarchingGoal);
+        const missingRequirements = resolveMissingMissionRequirements(
+            missionContract,
+            missionEvidence
+        );
         const startPortConflict = findManagedProcessStartPortConflictFailure(lastResult);
         if (missionContract.requireReadinessProof && startPortConflict) {
             if (
@@ -671,6 +770,20 @@ export class AutonomousLoop {
             };
         }
 
+        if (
+            missionContract.requireProcessStopProof &&
+            trackedManagedProcessLeaseId &&
+            missingRequirements.length === 1 &&
+            missingRequirements[0] === MISSION_REQUIREMENT_PROCESS_STOP
+        ) {
+            return {
+                isGoalMet: false,
+                reasoning:
+                    "All required build and verification proof is complete; the remaining required step is to stop the tracked managed process.",
+                nextUserInput: buildManagedProcessStopRetryInput(trackedManagedProcessLeaseId)
+            };
+        }
+
         const model = selectModelForRole("planner", this.config);
 
         try {
@@ -682,6 +795,8 @@ export class AutonomousLoop {
                     missionContract.requireReadinessProof || missionContract.requireBrowserProof
                         ? " For explicit localhost/live/browser verification goals, keep next steps inside governed proof actions. " +
                         "Do not ask the user to manually open a browser or manually inspect localhost during the autonomous loop. " +
+                        "When a managed process is not running yet, request one finite next step that creates any missing helper artifact and then immediately performs the remaining live proof chain in the same task: start_process, probe_http, verify_browser, and stop_process when required. " +
+                        "Do not return a preparatory next step that only writes a helper script or only starts the process without also asking for the remaining proof actions. " +
                         "Do not replace verify_browser with shell-based Playwright commands such as npx playwright --version, npx playwright open, or npx playwright test. " +
                         "If live proof steps are blocked or unavailable, say so plainly instead of inventing manual or shell-based fallback checks."
                         : ""

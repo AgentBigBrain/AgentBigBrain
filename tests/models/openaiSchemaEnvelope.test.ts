@@ -5,7 +5,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { buildOpenAIResponseFormatContract } from "../../src/models/openai/schemaEnvelope";
+import {
+  buildOpenAIJsonObjectContract,
+  buildOpenAIResponseFormatContract,
+  buildOpenAITextFormatContract
+} from "../../src/models/openai/schemaEnvelope";
 
 function collectMissingAdditionalPropertiesFalsePaths(
   schemaNode: unknown,
@@ -94,6 +98,19 @@ test("buildOpenAIResponseFormatContract returns strict json_schema envelopes for
 
 test("buildOpenAIResponseFormatContract falls back to json_object for unknown schemas", () => {
   assert.deepEqual(buildOpenAIResponseFormatContract("custom_schema_v1"), {
+    type: "json_object"
+  });
+});
+
+test("buildOpenAITextFormatContract mirrors schema response-format behavior", () => {
+  const responseFormat = buildOpenAITextFormatContract("planner_v1");
+  assert.equal(responseFormat.type, "json_schema");
+  assert.equal(responseFormat.name, "planner_v1");
+  assert.equal(responseFormat.strict, true);
+});
+
+test("buildOpenAIJsonObjectContract emits json_object", () => {
+  assert.deepEqual(buildOpenAIJsonObjectContract(), {
     type: "json_object"
   });
 });

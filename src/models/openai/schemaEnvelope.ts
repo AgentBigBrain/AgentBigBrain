@@ -5,7 +5,7 @@
 import {
   OPENAI_SCHEMA_CONTRACTS
 } from "./contracts";
-import type { OpenAIResponseFormatContract } from "./contracts";
+import type { OpenAIResponseFormatContract, OpenAITextFormatContract } from "./contracts";
 
 /**
  * Sanitizes schema names for OpenAI `response_format.json_schema.name` constraints.
@@ -118,6 +118,14 @@ function toOpenAIStrictSchemaNode(schemaNode: unknown): unknown {
 /**
  * Builds the provider `response_format` contract for a known schema.
  *
+ * **Why it exists:**
+ * Chat Completions requires provider-safe structured-output contracts, and the schema envelope must
+ * stay canonical so every caller emits the same strict JSON schema for known runtime schemas.
+ *
+ * **What it talks to:**
+ * - Uses `OPENAI_SCHEMA_CONTRACTS` (import `OPENAI_SCHEMA_CONTRACTS`) from `./contracts`.
+ * - Uses local constants/helpers within this module.
+ *
  * @param schemaName - Requested logical schema name.
  * @returns OpenAI response-format contract used in the chat completion request body.
  */
@@ -134,5 +142,60 @@ export function buildOpenAIResponseFormatContract(schemaName: string): OpenAIRes
       strict: true,
       schema: toOpenAIStrictSchemaNode(contractSchema) as Record<string, unknown>
     }
+  };
+}
+
+/**
+ * Builds a canonical JSON-object response-format contract.
+ *
+ * **Why it exists:**
+ * Compatibility fallback and unknown-schema handling both need one stable JSON-object contract
+ * instead of re-creating ad hoc `{ type: "json_object" }` objects at each call site.
+ *
+ * **What it talks to:**
+ * - Uses local constants/helpers within this module.
+ *
+ * @param _schemaName - Unused schema identifier retained for call-site symmetry.
+ * @returns OpenAI JSON-object response format contract.
+ */
+export function buildOpenAIJsonObjectContract(
+  _schemaName?: string
+): OpenAIResponseFormatContract {
+  return { type: "json_object" };
+}
+
+/**
+ * Builds a canonical JSON-object text-format contract for the Responses API.
+ *
+ * @returns OpenAI JSON-object text format contract.
+ */
+export function buildOpenAITextJsonObjectContract(): OpenAITextFormatContract {
+  return { type: "json_object" };
+}
+
+/**
+ * Builds the provider `text.format` contract for the Responses API.
+ *
+ * **Why it exists:**
+ * The Responses API moves structured output under `text.format`, but the runtime should still reuse
+ * the same schema-envelope ownership as the Chat Completions path.
+ *
+ * **What it talks to:**
+ * - Uses `buildOpenAIResponseFormatContract` from this module.
+ *
+ * @param schemaName - Requested logical schema name.
+ * @returns OpenAI text-format contract used in the Responses request body.
+ */
+export function buildOpenAITextFormatContract(schemaName: string): OpenAITextFormatContract {
+  const contractSchema = OPENAI_SCHEMA_CONTRACTS[schemaName as keyof typeof OPENAI_SCHEMA_CONTRACTS];
+  if (!contractSchema) {
+    return { type: "json_object" };
+  }
+
+  return {
+    type: "json_schema",
+    name: sanitizeSchemaContractName(schemaName),
+    strict: true,
+    schema: toOpenAIStrictSchemaNode(contractSchema) as Record<string, unknown>
   };
 }

@@ -92,6 +92,40 @@ function buildApprovedProbePortReadyResult(actionId: string): ActionRunResult {
 }
 
 /**
+ * Builds an approved managed-process start result for autonomy-module tests.
+ *
+ * @param actionId - Action id to assign.
+ * @returns Approved start-process action result.
+ */
+function buildApprovedStartProcessResult(actionId: string): ActionRunResult {
+  return {
+    action: {
+      id: actionId,
+      type: "start_process",
+      description: "start localhost server",
+      params: {
+        command: "python -m http.server 3000",
+        cwd: "runtime/generated"
+      },
+      estimatedCostUsd: 0.28
+    },
+    mode: "escalation_path",
+    approved: true,
+    output: "Process started: lease proc_autonomy_modules_1 (pid 4242).",
+    executionStatus: "success",
+    executionMetadata: {
+      managedProcess: true,
+      processLeaseId: "proc_autonomy_modules_1",
+      processLifecycleStatus: "PROCESS_STARTED",
+      processPid: 4242
+    },
+    blockedBy: [],
+    violations: [],
+    votes: []
+  };
+}
+
+/**
  * Builds a blocked HTTP-readiness probe result for autonomy-module tests.
  *
  * @param actionId - Action id to assign.
@@ -130,6 +164,17 @@ test("buildMissionCompletionContract captures finite live-run mission requiremen
   assert.equal(contract.requireBrowserProof, true);
   assert.equal(contract.requireProcessStopProof, true);
   assert.deepEqual(contract.targetPathHints, ["c:\\demo"]);
+});
+
+test("buildMissionCompletionContract treats Playwright verification language as browser proof", () => {
+  const contract = buildMissionCompletionContract(
+    "Build a tiny static site on /tmp/demo, start it locally, verify it in Playwright, and then stop the server. Execute now."
+  );
+
+  assert.equal(contract.executionStyle, true);
+  assert.equal(contract.requireReadinessProof, true);
+  assert.equal(contract.requireBrowserProof, true);
+  assert.equal(contract.requireProcessStopProof, true);
 });
 
 test("countApprovedReadinessProofActions treats port-only proof as insufficient for browser goals", () => {
@@ -204,6 +249,31 @@ test("resolveLiveVerificationBlockedAbortReason returns a typed abort reason for
   assert.ok(reason);
   assert.match(reason ?? "", new RegExp(EXECUTION_STYLE_LIVE_VERIFICATION_BLOCKED_REASON_CODE, "i"));
   assert.match(reason ?? "", /localhost readiness and browser verification steps/i);
+});
+
+test("resolveLiveVerificationBlockedAbortReason ignores mixed iterations that made live-run progress", () => {
+  const result = buildTaskResult([
+    buildApprovedStartProcessResult("start_process_live_progress_1"),
+    buildBlockedProbeHttpGovernanceResult("probe_http_blocked_after_start_1")
+  ]);
+  const contract: MissionCompletionContract = {
+    executionStyle: true,
+    requireRealSideEffect: true,
+    requireTargetPathTouch: false,
+    requireArtifactMutation: false,
+    requireReadinessProof: true,
+    requireBrowserProof: true,
+    requireProcessStopProof: false,
+    targetPathHints: []
+  };
+
+  const reason = resolveLiveVerificationBlockedAbortReason(
+    result,
+    contract,
+    [MISSION_REQUIREMENT_READINESS, MISSION_REQUIREMENT_BROWSER]
+  );
+
+  assert.equal(reason, null);
 });
 
 test("formatManagedProcessNeverReadyReason keeps the target label and shared reason-code prefix", () => {

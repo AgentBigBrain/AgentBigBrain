@@ -7,10 +7,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## [Unreleased]
 
 ### Added
+- OpenAI compatibility and live-smoke coverage for `gpt-4.1-mini`, `gpt-4.1`, `gpt-5`, `gpt-5.1`,
+  `gpt-5.2`, and `gpt-5.3-codex`.
 
 ### Changed
+- OpenAI operator guidance now recommends `OPENAI_TRANSPORT_MODE=auto` and
+  `OPENAI_TIMEOUT_MS=300000` for autonomous and live-smoke runs.
+- GPT-5-family Responses requests now apply explicit lower-latency reasoning settings so autonomous
+  loops complete more reliably without manual transport tuning.
 
 ### Fixed
+- OpenAI live-smoke evidence now documents the verified GPT-4.1 through GPT-5.3 model range in the
+  setup and subsystem docs.
 
 ### Security
 
@@ -42,19 +50,27 @@ To cut a release manually:
 
 1. Ensure clean state:
    ```bash
+   npm run check:versioning
    npm run build
    npm test
    npm run check:docs
    ```
-2. Update the version in `package.json`.
-3. Move items from `[Unreleased]` into a new version section in this file.
-4. Commit with a [Conventional Commit](https://www.conventionalcommits.org/) message:
+2. Confirm the current version when needed:
+   ```bash
+   npm run version:current
+   ```
+3. Update the version in `package.json`.
+4. Move items from `[Unreleased]` into a new version section in this file.
+   Keep the new release heading aligned with `package.json`.
+5. Commit with a [Conventional Commit](https://www.conventionalcommits.org/) message:
    ```
    chore(release): v0.2.0
    ```
-5. Tag and push:
+6. Tag and push:
    ```bash
    git tag v0.2.0
    git push origin main --tags
    ```
-6. Create a GitHub Release from the tag using the changelog entry as release notes.
+7. Create a GitHub Release from the tag using the changelog entry as release notes.
+
+For the repo-wide versioning policy, see [VERSIONING.md](./VERSIONING.md).

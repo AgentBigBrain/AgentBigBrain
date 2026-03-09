@@ -7,6 +7,7 @@ import { test } from "node:test";
 
 import {
   buildOpenAIPricingFromEnv,
+  defaultOpenAIModelForAlias,
   estimateSpendUsd,
   resolveOpenAIModel,
   resolveOpenAIPricing
@@ -61,4 +62,10 @@ test("resolveOpenAIModel keeps direct provider ids unchanged", () => {
     aliasModel: null,
     providerModel: "gpt-4.1-mini"
   });
+});
+
+test("defaultOpenAIModelForAlias uses role-specific fallback models", () => {
+  assert.equal(defaultOpenAIModelForAlias("small-fast-model"), "gpt-4.1-mini");
+  assert.equal(defaultOpenAIModelForAlias("small-policy-model"), "gpt-4.1-mini");
+  assert.equal(defaultOpenAIModelForAlias("large-reasoning-model"), "gpt-4.1");
 });

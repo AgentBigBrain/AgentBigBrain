@@ -8,6 +8,7 @@ import { test } from "node:test";
 import {
   buildManagedProcessCheckRecoveryInput,
   buildManagedProcessPortConflictRecoveryInput,
+  buildManagedProcessStoppedRecoveryInput,
   buildManagedProcessStillRunningRetryInput,
   findManagedProcessStartPortConflictFailure,
   goalExplicitlyRequiresLoopbackPort,
@@ -173,6 +174,23 @@ test("loopback-target tracking preserves the first approved start target until a
   assert.deepEqual(secondTarget, firstTarget);
 });
 
+test("loopback-target tracking preserves an explicit 127.0.0.1 bind from the start command", () => {
+  const startResult = buildTaskResult([
+    buildApprovedStartProcessResult(
+      "start_process_bound_target_1",
+      "python -m http.server 8125 --bind 127.0.0.1"
+    )
+  ]);
+
+  const target = resolveTrackedLoopbackTarget(null, startResult);
+
+  assert.deepEqual(target, {
+    url: "http://127.0.0.1:8125",
+    host: "127.0.0.1",
+    port: 8125
+  } satisfies LoopbackTargetHint);
+});
+
 test("HTTP-required recovery prompts stay pinned to probe_http when the target is known", () => {
   const target: LoopbackTargetHint = {
     url: "http://localhost:8125",
@@ -191,6 +209,25 @@ test("HTTP-required recovery prompts stay pinned to probe_http when the target i
   assert.doesNotMatch(
     buildManagedProcessStillRunningRetryInput("proc_live_1", true, target),
     /probe_port/i
+  );
+  assert.match(
+    buildManagedProcessCheckRecoveryInput("proc_live_1", target, true),
+    /supported params .*command.*cwd.*requestedShellKind/i
+  );
+  assert.match(
+    buildManagedProcessStillRunningRetryInput("proc_live_1", true, target),
+    /do not invent `profile` keys/i
+  );
+});
+
+test("stopped-process recovery prompts steer restarts toward raw start_process commands", () => {
+  assert.match(
+    buildManagedProcessStoppedRecoveryInput("proc_live_1"),
+    /use start_process with supported params only/i
+  );
+  assert.match(
+    buildManagedProcessStoppedRecoveryInput("proc_live_1"),
+    /raw server command instead of `zsh -lc` wrappers/i
   );
 });
 

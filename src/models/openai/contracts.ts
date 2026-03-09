@@ -24,6 +24,19 @@ export interface OpenAIJsonObjectContract {
 
 export type OpenAIResponseFormatContract = OpenAIJsonSchemaContract | OpenAIJsonObjectContract;
 
+export interface OpenAITextJsonSchemaContract {
+  readonly type: "json_schema";
+  readonly name: string;
+  readonly strict: true;
+  readonly schema: Record<string, unknown>;
+}
+
+export interface OpenAITextJsonObjectContract {
+  readonly type: "json_object";
+}
+
+export type OpenAITextFormatContract = OpenAITextJsonSchemaContract | OpenAITextJsonObjectContract;
+
 const PLANNER_ACTION_TYPE_VALUES = [
   "respond",
   "read_file",

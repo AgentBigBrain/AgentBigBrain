@@ -116,7 +116,10 @@ test("routeConversationMessageInput keeps follow-up execution envelopes without 
   assert.ok(!capturedExecutionInput.includes("Deterministic routing hint:"));
   assert.equal(session.classifierEvents?.length, 1);
   assert.equal(session.classifierEvents?.[0]?.classifier, "follow_up");
-  assert.equal(session.conversationTurns.at(-1)?.text, "plain text");
+  assert.equal(
+    session.conversationTurns[session.conversationTurns.length - 1]?.text,
+    "plain text"
+  );
 });
 
 test("routeConversationMessageInput threads bounded episodic recall into execution input when available", async () => {

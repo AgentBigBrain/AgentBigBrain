@@ -167,13 +167,14 @@ export function resolveTrackedManagedProcessLeaseId(
  * @param orchestrator - Brain orchestrator used to run the bounded cleanup task.
  * @param overarchingGoal - Goal the loop was working on when cleanup became necessary.
  * @param leaseId - Managed-process lease id to stop.
- * @returns Promise resolving once the best-effort cleanup attempt finishes.
+ * @returns Cleanup task result when execution completed, or `null` when cleanup failed before a
+ * result could be produced.
  */
 export async function cleanupManagedProcessLease(
   orchestrator: BrainOrchestrator,
   overarchingGoal: string,
   leaseId: string
-): Promise<void> {
+): Promise<TaskRunResult | null> {
   const cleanupTask: TaskRequest = {
     id: makeId("task"),
     agentId: MAIN_AGENT_ID,
@@ -185,11 +186,13 @@ export async function cleanupManagedProcessLease(
     console.log(`\n[Autonomous Loop Cleanup] Stopping managed process lease ${leaseId}.\n`);
     const cleanupResult = await orchestrator.runTask(cleanupTask);
     console.log(`[Autonomous Loop Cleanup] ${cleanupResult.summary}`);
+    return cleanupResult;
   } catch (error) {
     console.error(
       `[Autonomous Loop Cleanup] Failed to stop managed process lease ${leaseId}: ${
         error instanceof Error ? error.message : String(error)
       }`
     );
+    return null;
   }
 }

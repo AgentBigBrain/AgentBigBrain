@@ -66,7 +66,7 @@ export function isLocalServerStartCommand(command: string | undefined): boolean 
     return false;
   }
   return (
-    /\bpython\s+-m\s+http\.server\b/.test(normalized) ||
+    /\bpython(?:3)?\s+-m\s+http\.server\b/.test(normalized) ||
     /\bpython(?:3)?\b[\s\S]{0,40}\b(?:serve|server|preview|dev)[^\\/\s]*\.py\b/.test(normalized) ||
     /\bnpm\s+(?:start|run\s+dev)\b/.test(normalized) ||
     /\b(?:pnpm|yarn)\s+(?:start|dev)\b/.test(normalized) ||

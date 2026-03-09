@@ -6,6 +6,10 @@ import { ModelClient } from "./types";
 import { MockModelClient } from "./mockModelClient";
 import { OllamaModelClient } from "./ollamaModelClient";
 import { OpenAIModelClient } from "./openaiModelClient";
+import {
+  parseOpenAICompatibilityStrict,
+  parseOpenAITransportMode
+} from "./openai/modelProfiles";
 import { buildOpenAIPricingFromEnv } from "./openai/pricingPolicy";
 import { ensureEnvLoaded } from "../core/envLoader";
 
@@ -52,6 +56,24 @@ function parseTimeoutMs(value: string | undefined, fallback: number): number {
 }
 
 /**
+ * Parses boolean env and validates expected structure.
+ *
+ * **Why it exists:**
+ * Keeps OpenAI compatibility-mode bootstrap logic aligned with the rest of the env reader without
+ * spreading boolean parsing rules across the file.
+ *
+ * **What it talks to:**
+ * - Uses local constants/helpers within this module.
+ *
+ * @param value - Primary value processed by this function.
+ * @returns `true` when the env value enables the feature.
+ */
+function parseBoolean(value: string | undefined): boolean {
+  const normalized = (value ?? "").trim().toLowerCase();
+  return normalized === "true" || normalized === "1" || normalized === "yes" || normalized === "on";
+}
+
+/**
  * Builds model client from env for this module's runtime flow.
  *
  * **Why it exists:**
@@ -88,12 +110,20 @@ export function createModelClientFromEnv(): ModelClient {
     return new OpenAIModelClient({
       apiKey,
       baseUrl: process.env.OPENAI_BASE_URL,
-      requestTimeoutMs: parseTimeoutMs(process.env.OPENAI_TIMEOUT_MS, 15_000),
+      requestTimeoutMs: parseTimeoutMs(process.env.OPENAI_TIMEOUT_MS, 120_000),
       defaultPricing: pricing.defaultPricing,
-      aliasPricing: pricing.aliasPricing
+      aliasPricing: pricing.aliasPricing,
+      transportMode: parseOpenAITransportMode(process.env.OPENAI_TRANSPORT_MODE),
+      compatibilityStrict:
+        process.env.OPENAI_COMPATIBILITY_STRICT === undefined
+          ? false
+          : parseOpenAICompatibilityStrict(process.env.OPENAI_COMPATIBILITY_STRICT),
+      allowJsonObjectCompatibilityFallback:
+        process.env.OPENAI_ALLOW_JSON_OBJECT_COMPAT_FALLBACK === undefined
+          ? false
+          : parseBoolean(process.env.OPENAI_ALLOW_JSON_OBJECT_COMPAT_FALLBACK)
     });
   }
 
   return new MockModelClient();
 }
-

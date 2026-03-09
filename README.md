@@ -40,6 +40,11 @@ Built in TypeScript with only **2 runtime dependencies** (`ws`, `onnxruntime-nod
 <a id="zero-dependency-core"></a>
 **📦 Minimal Dependencies** — Only 2 runtime packages. No heavyweight SDKs. Crypto, HTTP, SQLite, and process control all use Node.js built-ins.
 
+**🧭 Broad OpenAI Coverage** — The OpenAI adapter now supports the practical GPT-4.1 through
+GPT-5.3 range used in this repo, including `gpt-4.1-mini`, `gpt-4.1`, `gpt-5`, `gpt-5.1`,
+`gpt-5.2`, and `gpt-5.3-codex`, with model-family-aware transport selection and live-smoke
+verification. Setup details live in [docs/SETUP.md](./docs/SETUP.md).
+
 ---
 
 ## 🧭 Design Philosophy & Deep Capabilities
@@ -254,7 +259,7 @@ Low-risk actions take the **fast path** — only the security governor votes, so
 
 ### Can I use this with my own model?
 
-Yes. Set `BRAIN_MODEL_BACKEND=openai` and configure `OPENAI_API_KEY`. You can point it at any OpenAI-compatible API (including local models) using `OPENAI_BASE_URL`. There's also an Ollama adapter for local models. See **[docs/SETUP.md](docs/SETUP.md)** for all model options.
+Yes. Set `BRAIN_MODEL_BACKEND=openai` and configure `OPENAI_API_KEY`. You can point it at any OpenAI-compatible API (including local models) using `OPENAI_BASE_URL`. The OpenAI path supports model-family-aware transport selection across Chat Completions and Responses, and there is also an Ollama adapter for local models. See **[docs/SETUP.md](docs/SETUP.md)** for all model options.
 
 ### How do I connect it to Telegram or Discord?
 

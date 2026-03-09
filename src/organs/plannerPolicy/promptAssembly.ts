@@ -60,7 +60,7 @@ export function buildExecutionStyleBuildStrategyGuidance(currentUserRequest: str
     ? " Explicit browser/UI proof is required: after localhost readiness succeeds, use verify_browser with params.url and any available expectedTitle/expectedText hints."
     : "";
   const liveVerificationClause = isLiveVerificationBuildRequest(currentUserRequest)
-    ? " Live-run verification intent detected: only choose a long-running run/observe step after finite proof steps succeed. When localhost readiness proof is required, pair start_process with probe_port or probe_http. Do not claim browser or UI verification from probes alone." +
+    ? " Live-run verification intent detected: only choose a long-running run/observe step after finite proof steps succeed. When localhost readiness proof is required, pair start_process with probe_port or probe_http. The same plan must contain the local proof chain needed to finish truthfully: start_process (when a local server is required), then probe_port or probe_http for loopback readiness, then verify_browser when UI verification was requested. Do not stop at helper-file creation or partial setup when live proof is still missing. Do not claim browser or UI verification from probes alone." +
       browserVerificationClause +
       " If live verification still cannot be proven truthfully in this runtime path, say so plainly instead of claiming the app was running or the UI was verified."
     : "";
@@ -74,6 +74,32 @@ export function buildExecutionStyleBuildStrategyGuidance(currentUserRequest: str
     "Use probe_port or probe_http only for loopback-local readiness checks." +
     liveVerificationClause
   );
+}
+
+function buildPlannerRepairReasonGuidance(repairReason: string): string {
+  if (repairReason.startsWith("invalid_execution_style_build_plan:LIVE_VERIFICATION_ACTION_REQUIRED")) {
+    return (
+      " The prior plan failed because it omitted live-verification actions. " +
+      "Repair by returning one action list that contains the complete local proof chain needed to finish truthfully: " +
+      "start_process when a local server is required, then probe_port or probe_http for loopback readiness, " +
+      "and verify_browser when the request asks for UI or homepage verification. " +
+      "Do not return helper-file creation by itself as the repaired plan."
+    );
+  }
+  if (repairReason.startsWith("invalid_execution_style_build_plan:START_PROCESS_REQUIRES_PROOF_ACTION")) {
+    return (
+      " The prior plan failed because it started a process without also planning the required proof steps. " +
+      "Repair by keeping start_process and adding loopback readiness proof with probe_port or probe_http, " +
+      "plus verify_browser whenever the request explicitly asks for UI verification."
+    );
+  }
+  if (repairReason.startsWith("invalid_execution_style_build_plan:BROWSER_VERIFICATION_ACTION_REQUIRED")) {
+    return (
+      " The prior plan failed because it omitted verify_browser for an explicit UI verification request. " +
+      "Repair by adding verify_browser after readiness proof in the same action list."
+    );
+  }
+  return "";
 }
 
 /**
@@ -224,6 +250,7 @@ export function buildPlannerRepairSystemPrompt(input: PlannerRepairPromptBuildIn
   const requiredActionHint = buildRequiredActionHint(input.requiredActionType, true);
   const executionStyleRequiredActionHint =
     buildExecutionStyleRequiredActionHint(input.currentUserRequest, true);
+  const repairReasonGuidance = buildPlannerRepairReasonGuidance(input.repairReason);
   return (
     "You are repairing a planner JSON output that had no valid actions. " +
     "Return compact JSON with plannerNotes and actions[]. " +
@@ -240,6 +267,7 @@ export function buildPlannerRepairSystemPrompt(input: PlannerRepairPromptBuildIn
     "For verify_browser, include params.url and optional params.expectedTitle/expectedText/timeoutMs. " +
     requiredActionHint +
     executionStyleRequiredActionHint +
+    repairReasonGuidance +
     executionEnvironmentGuidance +
     buildStrategyGuidance +
     playbookGuidance +

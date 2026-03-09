@@ -332,6 +332,24 @@ test("ethics governor ignores advisory vetoes for bounded local start_process li
   assert.equal(vote.rejectCategory, undefined);
 });
 
+test("security governor ignores advisory vetoes for python3 http.server start_process actions", async () => {
+  const securityGovernor = getGovernorById("security");
+  const vote = await securityGovernor.evaluate(
+    buildProposal({
+      type: "start_process",
+      description: "Start the local Python3 HTTP server for localhost verification",
+      params: {
+        command: "python3 -m http.server 4173 --directory '/tmp/site'",
+        cwd: HOST_TEST_PLAYWRIGHT_PROOF_SMOKE_TEST_DIR
+      }
+    }),
+    buildContext("security")
+  );
+
+  assert.equal(vote.approve, true);
+  assert.equal(vote.rejectCategory, undefined);
+});
+
 test("logic governor ignores advisory vetoes for local Python serve-script start_process actions", async () => {
   const logicGovernor = getGovernorById("logic");
   const vote = await logicGovernor.evaluate(

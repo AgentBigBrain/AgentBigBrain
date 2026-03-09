@@ -302,6 +302,15 @@ Supported backends:
 - OpenAI-compatible
 - Ollama
 
+OpenAI backend note:
+
+- the OpenAI runtime resolves model aliases to provider ids, selects a transport (`chat/completions`
+  or `responses`) per model-family compatibility policy, and normalizes both transport shapes back
+  into the same structured-output validation path
+- current operator guidance is centered on the GPT-4.1 and GPT-5.x families, with `chat/completions`
+  preferred for `gpt-4.1*`, `responses` preferred for `gpt-5*`, and explicit lower-latency
+  reasoning settings applied for GPT-5-family autonomous runs
+
 The runtime treats model output as untrusted until it is normalized and validated.
 
 ## 10) Extension Points

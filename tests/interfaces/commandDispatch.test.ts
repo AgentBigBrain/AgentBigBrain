@@ -180,7 +180,10 @@ test("handleConversationCommand keeps /auto policy and turn recording behavior",
     enabledReply,
     "Starting autonomous loop for: ship it\nqueued autonomous goal"
   );
-  assert.equal(session.conversationTurns.at(-1)?.text, "/auto ship it");
+  assert.equal(
+    session.conversationTurns[session.conversationTurns.length - 1]?.text,
+    "/auto ship it"
+  );
 });
 
 test("handleConversationCommand routes /memory through canonical review dispatch", async () => {

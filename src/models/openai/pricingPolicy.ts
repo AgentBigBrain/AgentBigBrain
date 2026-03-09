@@ -23,6 +23,14 @@ const OPENAI_MODEL_ALIAS_ENV: Record<string, string> = {
   "large-reasoning-model": "OPENAI_MODEL_LARGE_REASONING"
 };
 
+const DEFAULT_OPENAI_ALIAS_MODELS: Record<string, string> = {
+  "small-fast-model": "gpt-4.1-mini",
+  "small-policy-model": "gpt-4.1-mini",
+  "medium-general-model": "gpt-4.1-mini",
+  "medium-policy-model": "gpt-4.1-mini",
+  "large-reasoning-model": "gpt-4.1"
+};
+
 const OPENAI_MODEL_ALIAS_IDS = new Set(Object.keys(OPENAI_MODEL_ALIAS_ENV));
 
 /**
@@ -39,8 +47,8 @@ const OPENAI_MODEL_ALIAS_IDS = new Set(Object.keys(OPENAI_MODEL_ALIAS_ENV));
  * @returns Provider model id to use for that alias.
  */
 export function defaultOpenAIModelForAlias(alias: string): string {
-  if (Object.prototype.hasOwnProperty.call(OPENAI_MODEL_ALIAS_ENV, alias)) {
-    return "gpt-4o-mini";
+  if (Object.prototype.hasOwnProperty.call(DEFAULT_OPENAI_ALIAS_MODELS, alias)) {
+    return DEFAULT_OPENAI_ALIAS_MODELS[alias] as string;
   }
 
   return alias;

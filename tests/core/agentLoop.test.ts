@@ -1383,6 +1383,49 @@ test("AutonomousLoop still allows probe_port readiness proof for readiness-only 
   assert.match(goalMetReasoning, /localhost readiness was proven/i);
 });
 
+test("AutonomousLoop does not claim browser verification for finite readiness-only stop goals", async () => {
+  const orchestrator = new ScriptedOrchestrator([
+    [
+      buildApprovedStartProcessResult(
+        "start_process_readiness_stop_only_1",
+        "proc_readiness_stop_only_1",
+        "python -m http.server 8127"
+      ),
+      buildApprovedProbeHttpReadyResult(
+        "probe_http_readiness_stop_only_1",
+        "http://localhost:8127"
+      )
+    ],
+    [buildApprovedStopProcessResult("stop_process_readiness_stop_only_1", "proc_readiness_stop_only_1")]
+  ]);
+  const modelClient = new StubLoopModelClient([
+    {
+      isGoalMet: true,
+      reasoning: "localhost readiness is proven",
+      nextUserInput: ""
+    }
+  ]);
+  const loop = new AutonomousLoop(
+    orchestrator as unknown as BrainOrchestrator,
+    modelClient,
+    { ...DEFAULT_BRAIN_CONFIG, runtime: { ...DEFAULT_BRAIN_CONFIG.runtime, isDaemonMode: false } }
+  );
+
+  let goalMetReasoning = "";
+  await loop.run(
+    "Run the local API on localhost:8127, keep the flow finite, and then stop the process. Execute now.",
+    {
+      onGoalMet: async (reasoning) => {
+        goalMetReasoning = reasoning;
+      }
+    }
+  );
+
+  assert.equal(orchestrator.runCount, 2);
+  assert.doesNotMatch(goalMetReasoning, /browser verification passed/i);
+  assert.match(goalMetReasoning, /managed process was stopped/i);
+});
+
 test("AutonomousLoop allows explicit UI-verification completion after successful browser proof", async () => {
   const orchestrator = new ScriptedOrchestrator([
     [buildApprovedWriteFileResult("write_live_browser_1")],
@@ -1473,6 +1516,192 @@ test("AutonomousLoop requires stop-process proof for finite live-run goals befor
   assert.equal(orchestrator.runCount, 3);
   assert.match(orchestrator.receivedInputs[2] ?? "", /^stop_process leaseId="proc_stop_required_1"/i);
   assert.match(goalMetReasoning, /browser verification passed/i);
+});
+
+test("AutonomousLoop credits bounded cleanup stop-proof when the iteration cap is reached", async () => {
+  const orchestrator = new ScriptedOrchestrator([
+    [
+      buildApprovedStartProcessResult(
+        "start_process_stop_cap_1",
+        "proc_stop_cap_1",
+        "python -m http.server 8128"
+      ),
+      buildApprovedProbeHttpReadyResult(
+        "probe_http_stop_cap_1",
+        "http://localhost:8128"
+      )
+    ],
+    [buildApprovedVerifyBrowserResult("verify_browser_stop_cap_1")],
+    [buildApprovedStopProcessResult("stop_process_stop_cap_1", "proc_stop_cap_1")]
+  ]);
+  const modelClient = new StubLoopModelClient([
+    {
+      isGoalMet: false,
+      reasoning: "browser proof comes next",
+      nextUserInput: "Verify the homepage UI in a browser session."
+    },
+    {
+      isGoalMet: true,
+      reasoning: "browser verification passed",
+      nextUserInput: ""
+    }
+  ]);
+  const loop = new AutonomousLoop(
+    orchestrator as unknown as BrainOrchestrator,
+    modelClient,
+    {
+      ...DEFAULT_BRAIN_CONFIG,
+      limits: {
+        ...DEFAULT_BRAIN_CONFIG.limits,
+        maxAutonomousIterations: 2
+      },
+      runtime: { ...DEFAULT_BRAIN_CONFIG.runtime, isDaemonMode: false }
+    }
+  );
+
+  let goalMetReasoning = "";
+  let abortedReason = "";
+  await loop.run(
+    "Run the local site on localhost:8128, verify the homepage UI in a real browser, keep the flow finite, and then stop the process. Execute now.",
+    {
+      onGoalMet: async (reasoning) => {
+        goalMetReasoning = reasoning;
+      },
+      onGoalAborted: async (reason) => {
+        abortedReason = reason;
+      }
+    }
+  );
+
+  assert.equal(orchestrator.runCount, 3);
+  assert.match(orchestrator.receivedInputs[2] ?? "", /^stop_process leaseId="proc_stop_cap_1"/i);
+  assert.equal(abortedReason, "");
+  assert.match(goalMetReasoning, /managed process was stopped/i);
+});
+
+test("AutonomousLoop deterministically emits stop_process when cleanup is the only missing requirement", async () => {
+  const loop = new AutonomousLoop(
+    new StubOrchestrator() as unknown as BrainOrchestrator,
+    {
+      backend: "mock",
+      async completeJson(): Promise<never> {
+        throw new Error("evaluateNextStep should not call the model when only stop proof is missing.");
+      }
+    },
+    { ...DEFAULT_BRAIN_CONFIG, runtime: { ...DEFAULT_BRAIN_CONFIG.runtime, isDaemonMode: false } }
+  );
+
+  const lastResult: TaskRunResult = {
+    task: {
+      id: "task_stop_only",
+      agentId: "main-agent",
+      goal: "Create a tiny local site on localhost:8123, verify the homepage UI in a real browser, keep the flow finite, and then stop the process. Execute now.",
+      userInput: "verify_browser url=\"http://localhost:8123\"",
+      createdAt: new Date().toISOString()
+    },
+    plan: {
+      taskId: "task_stop_only",
+      plannerNotes: "stub",
+      actions: [buildApprovedVerifyBrowserResult("verify_browser_stop_only_1").action]
+    },
+    actionResults: [buildApprovedVerifyBrowserResult("verify_browser_stop_only_1")],
+    summary: "Browser verification passed.",
+    startedAt: new Date().toISOString(),
+    completedAt: new Date().toISOString()
+  };
+
+  const nextStep = await (loop as unknown as {
+    evaluateNextStep(
+      overarchingGoal: string,
+      lastResult: TaskRunResult,
+      missionEvidence: {
+        realSideEffects: number;
+        targetPathTouches: number;
+        artifactMutations: number;
+        readinessProofs: number;
+        browserProofs: number;
+        processStopProofs: number;
+      },
+      trackedManagedProcessLeaseId: string | null,
+      trackedLoopbackTarget: { url: string | null; host: string | null; port: number | null } | null
+    ): Promise<AutonomousNextStepModelOutput>;
+  }).evaluateNextStep(
+    lastResult.task.goal,
+    lastResult,
+    {
+      realSideEffects: 1,
+      targetPathTouches: 1,
+      artifactMutations: 1,
+      readinessProofs: 1,
+      browserProofs: 1,
+      processStopProofs: 0
+    },
+    "proc_stop_needed_1",
+    {
+      url: "http://localhost:8123",
+      host: "localhost",
+      port: 8123
+    }
+  );
+
+  assert.equal(nextStep.isGoalMet, false);
+  assert.match(nextStep.reasoning, /remaining required step is to stop/i);
+  assert.match(nextStep.nextUserInput, /^stop_process leaseId="proc_stop_needed_1"/i);
+});
+
+test("AutonomousLoop deterministically finishes finite live-run goals once all proof is complete", async () => {
+  const orchestrator = new ScriptedOrchestrator([
+    [
+      buildApprovedStartProcessResult(
+        "start_process_stop_complete_1",
+        "proc_stop_complete_1",
+        "python -m http.server 8124"
+      ),
+      buildApprovedProbeHttpReadyResult(
+        "probe_http_stop_complete_1",
+        "http://localhost:8124"
+      )
+    ],
+    [buildApprovedVerifyBrowserResult("verify_browser_stop_complete_1")],
+    [buildApprovedStopProcessResult("stop_process_stop_complete_1", "proc_stop_complete_1")]
+  ]);
+  let nextStepCallCount = 0;
+  const modelClient: ModelClient = {
+    backend: "mock",
+    async completeJson<T>(request: StructuredCompletionRequest): Promise<T> {
+      if (request.schemaName !== "autonomous_next_step_v1") {
+        throw new Error(`Unexpected schema ${request.schemaName}`);
+      }
+      nextStepCallCount += 1;
+      if (nextStepCallCount > 1) {
+        throw new Error("live-run completion should not ask the model again after proof is complete");
+      }
+      return {
+        isGoalMet: false,
+        reasoning: "browser verification comes next",
+        nextUserInput: "Verify the homepage UI in a browser session."
+      } as T;
+    }
+  };
+  const loop = new AutonomousLoop(
+    orchestrator as unknown as BrainOrchestrator,
+    modelClient,
+    { ...DEFAULT_BRAIN_CONFIG, runtime: { ...DEFAULT_BRAIN_CONFIG.runtime, isDaemonMode: false } }
+  );
+
+  let goalMetReasoning = "";
+  await loop.run(
+    "Create a tiny local site on localhost:8124, verify the homepage UI in a real browser, keep the flow finite, and then stop the process. Execute now.",
+    {
+      onGoalMet: async (reasoning) => {
+        goalMetReasoning = reasoning;
+      }
+    }
+  );
+
+  assert.equal(orchestrator.runCount, 3);
+  assert.equal(nextStepCallCount, 1);
+  assert.match(goalMetReasoning, /evidence contract is complete/i);
 });
 
 test("AutonomousLoop retries explicit browser-proof goals with a Playwright install step", async () => {

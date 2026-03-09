@@ -639,9 +639,14 @@ class InspectionOnlyBuildFailureModelClient implements ModelClient {
 class LiveVerificationRepairModelClient implements ModelClient {
   readonly backend = "mock" as const;
   private plannerCallCount = 0;
+  private readonly plannerRequests: StructuredCompletionRequest[] = [];
 
   getPlannerCallCount(): number {
     return this.plannerCallCount;
+  }
+
+  getPlannerRequests(): readonly StructuredCompletionRequest[] {
+    return this.plannerRequests.slice();
   }
 
   async completeJson<T>(request: StructuredCompletionRequest): Promise<T> {
@@ -650,6 +655,7 @@ class LiveVerificationRepairModelClient implements ModelClient {
     }
 
     this.plannerCallCount += 1;
+    this.plannerRequests.push(request);
     if (this.plannerCallCount === 1) {
       return {
         plannerNotes: "first pass only planned finite build work",
@@ -1399,6 +1405,10 @@ test("planner live-verification build prompts can allow managed process planning
   );
   assert.match(
     plannerRequest.systemPrompt,
+    /same plan must contain the local proof chain needed to finish truthfully/i
+  );
+  assert.match(
+    plannerRequest.systemPrompt,
     /use verify_browser with params\.url and any available expectedTitle\/expectedText hints/i
   );
   assert.match(
@@ -1473,6 +1483,21 @@ test("planner repairs live-verification build requests that omit live proof acti
     assert.equal(plan.actions.some((action) => action.type === "probe_http"), true);
     assert.ok(plan.plannerNotes.includes("repair=true"));
   });
+
+  const repairRequest = modelClient.getPlannerRequests()[1];
+  assert.ok(repairRequest);
+  assert.match(
+    repairRequest.systemPrompt,
+    /prior plan failed because it omitted live-verification actions/i
+  );
+  assert.match(
+    repairRequest.systemPrompt,
+    /complete local proof chain needed to finish truthfully/i
+  );
+  assert.match(
+    repairRequest.systemPrompt,
+    /Do not return helper-file creation by itself as the repaired plan/i
+  );
 });
 
 test("planner fails closed when explicit browser verification request omits verify_browser", async () => {

@@ -171,12 +171,15 @@ function normalizeLoopbackTargetUrl(rawUrl: string | null): LoopbackTargetHint |
  */
 function inferLoopbackTargetFromCommand(command: string): LoopbackTargetHint | null {
   const normalized = normalizeRecoveryText(command);
+  const explicitHostMatch =
+    normalized.match(/(?:^|\s)(?:--bind|--host)\s+(127\.0\.0\.1|localhost|::1)\b/) ??
+    normalized.match(/\b(127\.0\.0\.1|localhost|::1):\d{2,5}\b/);
+  const host = explicitHostMatch?.[1] ?? "localhost";
   const patterns = [
     /\bhttp\.server\s+(\d{2,5})\b/,
     /\b--port\s+(\d{2,5})\b/,
     /\b-p\s+(\d{2,5})\b/,
-    /\blocalhost:(\d{2,5})\b/,
-    /\b127\.0\.0\.1:(\d{2,5})\b/
+    /\b(?:localhost|127\.0\.0\.1|::1):(\d{2,5})\b/
   ];
   for (const pattern of patterns) {
     const match = normalized.match(pattern);
@@ -188,8 +191,8 @@ function inferLoopbackTargetFromCommand(command: string): LoopbackTargetHint | n
       continue;
     }
     return {
-      url: `http://localhost:${port}`,
-      host: "localhost",
+      url: `http://${host === "::1" ? "[::1]" : host}:${port}`,
+      host,
       port
     };
   }
@@ -511,6 +514,8 @@ export function buildManagedProcessCheckRecoveryInput(
     `check_process leaseId="${leaseId}". ` +
     `Managed process lease ${leaseId} started, but localhost was not ready yet${targetLabel ? ` at ${targetLabel}` : ""}. ` +
     `If the lease is still running, ${retryInstruction}. ` +
+    "If you need to restart, use start_process with only supported params (`command`, `cwd`/`workdir`, `requestedShellKind`, optional `timeoutMs`). " +
+    'Set `requestedShellKind` to `zsh` instead of wrapping the command in `zsh -lc` or `bash -lc`. ' +
     "Only continue to page-level proof after readiness passes. " +
     "If the lease already stopped, explain that plainly and restart once if needed."
   );
@@ -541,12 +546,14 @@ export function buildManagedProcessStillRunningRetryInput(
       return (
         `probe_http url="${target.url}". ` +
         `Managed process lease ${leaseId} is still running, but actual localhost HTTP readiness is still not proven at ${target.url}. ` +
+        "Do not invent `profile` keys on restart actions; use supported start_process params only. " +
         "If you still do not get an HTTP response, stop and explain plainly that the running process never became HTTP-ready before any page-level proof."
       );
     }
     return (
       "probe_http on the expected loopback URL. " +
       `Managed process lease ${leaseId} is still running, but actual localhost HTTP readiness is still not proven. ` +
+      "Do not invent `profile` keys on restart actions; use supported start_process params only. " +
       "Use probe_port only if the URL is still unknown, and return to probe_http before any page-level proof."
     );
   }
@@ -581,6 +588,8 @@ export function buildManagedProcessStoppedRecoveryInput(leaseId: string): string
   return (
     `Managed process lease ${leaseId} stopped before localhost readiness was proven. ` +
     "Explain the stop result plainly, restart the local server once if needed, and prove " +
-    "readiness before any page-level proof."
+    "readiness before any page-level proof. " +
+    "When restarting, use start_process with supported params only (`command`, `cwd`/`workdir`, `requestedShellKind`, optional `timeoutMs`) " +
+    "and prefer a raw server command instead of `zsh -lc` wrappers."
   );
 }

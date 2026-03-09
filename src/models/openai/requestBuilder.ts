@@ -1,10 +1,12 @@
 /**
- * @fileoverview Canonical OpenAI request-building and deadline helpers.
+ * @fileoverview Canonical OpenAI request-building exports and deadline helpers.
  */
 
-import { buildOpenAIResponseFormatContract } from "./schemaEnvelope";
-import type { ResolvedOpenAIModel } from "./pricingPolicy";
+import { buildOpenAIChatCompletionRequest } from "./chatRequestBuilder";
+import { buildOpenAIResponsesRequest } from "./responsesRequestBuilder";
 import type { OpenAITokenPricing } from "./contracts";
+import type { ResolvedOpenAIModel } from "./pricingPolicy";
+import type { OpenAITransportMode } from "./transportContracts";
 import type { StructuredCompletionRequest } from "../types";
 
 export interface OpenAIModelClientOptions {
@@ -13,19 +15,23 @@ export interface OpenAIModelClientOptions {
   requestTimeoutMs?: number;
   defaultPricing?: OpenAITokenPricing;
   aliasPricing?: Partial<Record<string, OpenAITokenPricing>>;
+  transportMode?: OpenAITransportMode;
+  compatibilityStrict?: boolean;
+  allowJsonObjectCompatibilityFallback?: boolean;
 }
 
+export { buildOpenAIChatCompletionRequest };
+export { buildOpenAIResponsesRequest };
+
 /**
- * Builds the OpenAI chat-completions request payload for a structured model request.
+ * Builds the legacy Chat Completions `RequestInit` payload for a structured model request.
  *
  * **Why it exists:**
- * Keeps provider request assembly canonical inside the OpenAI runtime subsystem instead of
- * rebuilding headers and message structure inside the stable entrypoint.
+ * Existing tests and call sites still import the older request-builder helper name. This wrapper
+ * preserves that stable surface while the runtime moves to transport-specific builders underneath.
  *
  * **What it talks to:**
- * - Uses `buildOpenAIResponseFormatContract` from `./schemaEnvelope`.
- * - Uses `ResolvedOpenAIModel` from `./pricingPolicy`.
- * - Uses `StructuredCompletionRequest` from `../types`.
+ * - Uses `buildOpenAIChatCompletionRequest` from `./chatRequestBuilder`.
  *
  * @param apiKey - OpenAI API key used for Authorization.
  * @param model - Resolved provider model metadata for this request.
@@ -39,29 +45,14 @@ export function buildOpenAIChatCompletionRequestInit(
   request: StructuredCompletionRequest,
   abortSignal: AbortSignal
 ): RequestInit {
-  return {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      model: model.providerModel,
-      temperature: request.temperature ?? 0,
-      response_format: buildOpenAIResponseFormatContract(request.schemaName),
-      messages: [
-        {
-          role: "system",
-          content: `${request.systemPrompt}\nReturn only valid JSON for schema ${request.schemaName}.`
-        },
-        {
-          role: "user",
-          content: request.userPrompt
-        }
-      ]
-    }),
-    signal: abortSignal
-  };
+  return buildOpenAIChatCompletionRequest({
+    apiKey,
+    model,
+    request,
+    abortSignal,
+    includeTemperature: true,
+    structuredOutputMode: "json_schema"
+  }).requestInit;
 }
 
 /**

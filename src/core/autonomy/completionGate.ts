@@ -226,6 +226,9 @@ export function resolveLiveVerificationBlockedAbortReason(
   ) {
     return null;
   }
+  if (liveVerificationEntries.some((entry) => entry.approved)) {
+    return null;
+  }
 
   const blockedReasons = new Set<string>();
   for (const entry of liveVerificationEntries) {

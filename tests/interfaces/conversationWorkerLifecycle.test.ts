@@ -261,8 +261,14 @@ test("persistExecutedJobOutcome writes canonical recent-job state and assistant 
   assert.equal(persisted.status, "completed");
   assert.equal(persisted.resultSummary, "All set.");
   assert.equal(session.recentJobs[0]?.id, "job-1");
-  assert.equal(session.conversationTurns.at(-1)?.role, "assistant");
-  assert.equal(session.conversationTurns.at(-1)?.text, "All set.");
+  assert.equal(
+    session.conversationTurns[session.conversationTurns.length - 1]?.role,
+    "assistant"
+  );
+  assert.equal(
+    session.conversationTurns[session.conversationTurns.length - 1]?.text,
+    "All set."
+  );
   assert.equal(buildFinalMessageForJob(persisted, false), "All set.");
   assert.equal(buildFinalMessageForJob(
     {

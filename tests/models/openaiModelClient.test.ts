@@ -629,7 +629,7 @@ test("OpenAIModelClient resolves abstract routing model labels with default mapp
             ...buildRequest(),
             model: "large-reasoning-model"
           });
-          assert.equal(resolvedModel, "gpt-4o-mini");
+          assert.equal(resolvedModel, "gpt-4.1");
         }
       );
     }
@@ -761,6 +761,200 @@ test("OpenAIModelClient applies alias-specific pricing for abstract routed model
       const usage = client.getUsageSnapshot();
       // (2000 / 1_000_000 * 3) + (1000 / 1_000_000 * 9) = 0.015
       assert.equal(usage.estimatedSpendUsd, 0.015);
+    }
+  );
+});
+
+test("OpenAIModelClient can use the Responses transport for structured output", async () => {
+  await withMockFetch(
+    (async (input: unknown, init?: RequestInit) => {
+      assert.equal(String(input), "https://mock.local/responses");
+      const requestBody = parseRequestBody(init);
+      assert.equal(Array.isArray(requestBody.input), true);
+      assert.equal(
+        ((requestBody.text as { format?: { type?: string } } | undefined)?.format?.type),
+        "json_schema"
+      );
+
+      return buildMockResponse({
+        ok: true,
+        status: 200,
+        payload: {
+          output_text: "{\"plannerNotes\":\"responses\",\"actions\":[]}",
+          usage: {
+            input_tokens: 120,
+            output_tokens: 40,
+            total_tokens: 160
+          }
+        }
+      });
+    }) as typeof fetch,
+    async () => {
+      const client = new OpenAIModelClient({
+        apiKey: "test-key",
+        baseUrl: "https://mock.local",
+        transportMode: "responses"
+      });
+
+      const output = await client.completeJson<{ plannerNotes: string; actions: unknown[] }>({
+        ...buildRequest(),
+        model: "gpt-5"
+      });
+
+      assert.equal(output.plannerNotes, "responses");
+      const usage = client.getUsageSnapshot();
+      assert.equal(usage.promptTokens, 120);
+      assert.equal(usage.completionTokens, 40);
+      assert.equal(usage.totalTokens, 160);
+    }
+  );
+});
+
+test("OpenAIModelClient retries once without temperature when provider rejects that parameter", async () => {
+  let calls = 0;
+  await withMockFetch(
+    (async (_input: unknown, init?: RequestInit) => {
+      calls += 1;
+      const requestBody = parseRequestBody(init);
+      if (calls === 1) {
+        assert.equal(requestBody.temperature, 0);
+        return buildMockResponse({
+          ok: false,
+          status: 400,
+          payload: {
+            error: {
+              message: "Unsupported parameter: temperature"
+            }
+          }
+        });
+      }
+
+      assert.equal(Object.prototype.hasOwnProperty.call(requestBody, "temperature"), false);
+      return buildMockResponse({
+        ok: true,
+        status: 200,
+        payload: {
+          choices: [
+            {
+              message: {
+                content: "{\"plannerNotes\":\"retry-ok\",\"actions\":[]}"
+              }
+            }
+          ]
+        }
+      });
+    }) as typeof fetch,
+    async () => {
+      const client = new OpenAIModelClient({ apiKey: "test-key", baseUrl: "https://mock.local" });
+      const output = await client.completeJson<{ plannerNotes: string; actions: unknown[] }>(
+        buildRequest()
+      );
+
+      assert.equal(output.plannerNotes, "retry-ok");
+      assert.equal(calls, 2);
+    }
+  );
+});
+
+test("OpenAIModelClient retries once on the alternate transport when the endpoint is unsupported", async () => {
+  let calls = 0;
+  await withMockFetch(
+    (async (input: unknown) => {
+      calls += 1;
+      if (calls === 1) {
+        assert.equal(String(input), "https://mock.local/responses");
+        return buildMockResponse({
+          ok: false,
+          status: 400,
+          payload: {
+            error: {
+              message: "Responses endpoint is not supported for this model on this endpoint."
+            }
+          }
+        });
+      }
+
+      assert.equal(String(input), "https://mock.local/chat/completions");
+      return buildMockResponse({
+        ok: true,
+        status: 200,
+        payload: {
+          choices: [
+            {
+              message: {
+                content: "{\"plannerNotes\":\"transport-fallback\",\"actions\":[]}"
+              }
+            }
+          ]
+        }
+      });
+    }) as typeof fetch,
+    async () => {
+      const client = new OpenAIModelClient({
+        apiKey: "test-key",
+        baseUrl: "https://mock.local",
+        transportMode: "responses",
+        compatibilityStrict: false
+      });
+
+      const output = await client.completeJson<{ plannerNotes: string; actions: unknown[] }>({
+        ...buildRequest(),
+        model: "gpt-4.1-mini"
+      });
+
+      assert.equal(output.plannerNotes, "transport-fallback");
+      assert.equal(calls, 2);
+    }
+  );
+});
+
+test("OpenAIModelClient can fall back to json_object mode when compatibility fallback is enabled", async () => {
+  let calls = 0;
+  await withMockFetch(
+    (async (_input: unknown, init?: RequestInit) => {
+      calls += 1;
+      const requestBody = parseRequestBody(init);
+      if (calls === 1) {
+        assert.equal((requestBody.response_format as { type?: string }).type, "json_schema");
+        return buildMockResponse({
+          ok: false,
+          status: 400,
+          payload: {
+            error: {
+              message: "response_format json_schema is not supported by this model."
+            }
+          }
+        });
+      }
+
+      assert.equal((requestBody.response_format as { type?: string }).type, "json_object");
+      return buildMockResponse({
+        ok: true,
+        status: 200,
+        payload: {
+          choices: [
+            {
+              message: {
+                content: "{\"plannerNotes\":\"json-object-fallback\",\"actions\":[]}"
+              }
+            }
+          ]
+        }
+      });
+    }) as typeof fetch,
+    async () => {
+      const client = new OpenAIModelClient({
+        apiKey: "test-key",
+        baseUrl: "https://mock.local",
+        allowJsonObjectCompatibilityFallback: true
+      });
+
+      const output = await client.completeJson<{ plannerNotes: string; actions: unknown[] }>(
+        buildRequest()
+      );
+
+      assert.equal(output.plannerNotes, "json-object-fallback");
+      assert.equal(calls, 2);
     }
   );
 });
