@@ -6,7 +6,7 @@ scripts that are intentionally kept outside the main runtime path.
 
 ## Primary Files
 - Maintainability and contract checks: `checkFunctionDocs.ts`, `checkModuleSize.ts`,
-  `checkReasonCodeUniqueness.ts`, `checkSubsystemReadmeSync.ts`,
+  `checkReasonCodeUniqueness.ts`, `checkSubsystemReadmeSync.ts`, `checkVersioning.ts`,
   `checkUserFacingStopPhraseDuplication.ts`.
 - Smoke/evidence helpers: `openAiLiveSmokeHarness.ts`, `stage6_85Clones.ts`,
   `stage6_85Latency.ts`, `stage6_85MissionUx.ts`, `stage6_85Observability.ts`,

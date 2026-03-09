@@ -7,12 +7,7 @@ import { MAIN_AGENT_ID } from "./agentIdentity";
 import { makeId } from "./ids";
 import { isAbortError } from "./runtimeAbort";
 import { TaskRequest, TaskRunResult } from "./types";
-import {
-    AutonomousNextStepModelOutput,
-    ModelClient,
-    ProactiveGoalModelOutput
-} from "../models/types";
-import { selectModelForRole } from "./modelRouting";
+import { ModelClient } from "../models/types";
 import { BrainConfig } from "./config";
 import { humanizeAutonomousStopReason } from "./autonomy/stopReasonText";
 import {
@@ -25,7 +20,6 @@ import {
     MISSION_REQUIREMENT_SIDE_EFFECT,
     TASK_EXECUTION_FAILED_REASON_CODE,
     formatReasonWithCode,
-    type MissionCompletionContract,
     type MissionEvidenceCounters
 } from "./autonomy/contracts";
 import { buildMissionCompletionContract } from "./autonomy/missionContract";
@@ -46,13 +40,7 @@ import {
     resolveLiveVerificationBlockedAbortReason
 } from "./autonomy/completionGate";
 import {
-    buildManagedProcessCheckRecoveryInput,
-    buildManagedProcessPortConflictRecoveryInput,
-    buildManagedProcessStillRunningRetryInput,
-    buildManagedProcessStoppedRecoveryInput,
     describeLoopbackTarget,
-    findManagedProcessStartPortConflictFailure,
-    goalExplicitlyRequiresLoopbackPort,
     hasReadinessNotReadyFailure,
     resolveTrackedLoopbackTarget,
     type LoopbackTargetHint
@@ -60,9 +48,13 @@ import {
 import {
     cleanupManagedProcessLease,
     findApprovedManagedProcessCheckResult,
-    findApprovedManagedProcessStartLeaseId,
     resolveTrackedManagedProcessLeaseId
 } from "./autonomy/loopCleanupPolicy";
+import {
+    evaluateAutonomousNextStep,
+    evaluateProactiveAutonomousGoal,
+    formatLiveRunCompletionReasoning
+} from "./autonomy/agentLoopModelPolicy";
 
 /**
  * Optional callbacks for observing autonomous loop progress.
@@ -73,119 +65,6 @@ export interface AutonomousLoopCallbacks {
     onIterationComplete?: (iteration: number, summary: string, approved: number, blocked: number) => Promise<void> | void;
     onGoalMet?: (reasoning: string, totalIterations: number) => Promise<void> | void;
     onGoalAborted?: (reason: string, totalIterations: number) => Promise<void> | void;
-}
-
-/**
- * Normalizes text for deterministic case-insensitive evidence checks.
- *
- * **Why it exists:**
- * Keeps lexical evidence matching stable across Windows/macOS/Linux path and command text shapes.
- *
- * **What it talks to:**
- * - Uses local constants/helpers within this module.
- *
- * @param input - Source text to normalize.
- * @returns Lower-cased normalized text.
- */
-function normalizeEvidenceText(input: string): string {
-    return input.trim().toLowerCase();
-}
-
-
-/**
- * Detects whether a task result contains a specific execution failure code.
- *
- * **Why it exists:**
- * Keeps deterministic recovery routing grounded in typed runtime failure codes instead of brittle
- * free-text matching spread across the autonomous loop.
- *
- * **What it talks to:**
- * - Uses `TaskRunResult` (import `TaskRunResult`) from `./types`.
- *
- * @param result - Task result from one autonomous-loop iteration.
- * @param failureCode - Typed execution failure code to detect.
- * @returns `true` when the result contains the requested failure code.
- */
-function hasExecutionFailureCode(result: TaskRunResult, failureCode: string): boolean {
-    return result.actionResults.some((entry) =>
-        !entry.approved &&
-        (
-            entry.executionFailureCode === failureCode ||
-            entry.blockedBy.some((blockCode) => blockCode === failureCode)
-        )
-    );
-}
-
-/**
- * Detects whether the current subtask already attempted a local Playwright install.
- *
- * **Why it exists:**
- * Prevents the autonomous loop from reissuing the same dependency-install instruction when the
- * current subtask is already the explicit runtime-recovery attempt.
- *
- * **What it talks to:**
- * - Uses local normalization helpers within this module.
- *
- * @param input - Current subtask instruction text.
- * @returns `true` when the instruction is already a Playwright install recovery attempt.
- */
-function isPlaywrightInstallRecoveryInput(input: string): boolean {
-    const normalized = normalizeEvidenceText(input);
-    return (
-        normalized.includes("npm install --no-save playwright") ||
-        normalized.includes("npx playwright install chromium") ||
-        /\binstall playwright\b/.test(normalized)
-    );
-}
-
-/**
- * Builds a deterministic recovery instruction for missing local Playwright runtime support.
- *
- * **Why it exists:**
- * Explicit browser-proof goals should try the smallest truthful local dependency-install recovery
- * path before giving up, rather than bouncing between generic blocked explanations.
- *
- * **What it talks to:**
- * - Uses local constants/helpers within this module.
- *
- * @param overarchingGoal - Mission-level goal text.
- * @returns Explicit recovery subtask instruction.
- */
-function buildPlaywrightInstallRecoveryInput(overarchingGoal: string): string {
-    return (
-        "Browser verification is unavailable because the local Playwright runtime is missing or " +
-        "missing browser binaries. Install Playwright locally with finite shell steps if policy " +
-        "allows: run `npm install --no-save playwright` and then `npx playwright install chromium`. " +
-        `After install, continue this original goal and retry the localhost browser verification: "${overarchingGoal}". ` +
-        "If install is blocked or fails, stop and explain plainly that browser verification could not be completed."
-    );
-}
-
-/**
- * Formats deterministic live-run completion reasoning from the mission contract.
- *
- * **Why it exists:**
- * The loop can finish after either the main iteration path or a bounded cleanup stop. Both paths
- * need the same truthful reasoning text that only mentions proof actually required by the goal.
- *
- * **What it talks to:**
- * - Uses `MissionCompletionContract` (import `MissionCompletionContract`) from `./autonomy/contracts`.
- *
- * @param missionContract - Completion requirements for the current mission.
- * @returns Human-readable goal-met reasoning for explicit live-run contracts.
- */
-function formatLiveRunCompletionReasoning(
-    missionContract: MissionCompletionContract
-): string {
-    if (missionContract.requireProcessStopProof) {
-        return missionContract.requireBrowserProof
-            ? "The explicit live-run evidence contract is complete: the build flow executed, localhost readiness was proven, browser verification passed, and the managed process was stopped."
-            : "The explicit live-run evidence contract is complete: the build flow executed, localhost readiness was proven, and the managed process was stopped.";
-    }
-    if (missionContract.requireBrowserProof) {
-        return "The explicit live-run evidence contract is complete: the build flow executed, localhost readiness was proven, and browser verification passed.";
-    }
-    return "The explicit live-run evidence contract is complete: localhost readiness was proven.";
 }
 
 export class AutonomousLoop {
@@ -645,220 +524,29 @@ export class AutonomousLoop {
         }
     }
 
-    /**
-     * Evaluates next step and returns a deterministic policy signal.
-     *
-     * **Why it exists:**
-     * Keeps the next step policy check explicit and testable before side effects.
-     *
-     * **What it talks to:**
-     * - Uses `AutonomousNextStepModelOutput` (import `AutonomousNextStepModelOutput`) from `../models/types`.
-     * - Uses `selectModelForRole` (import `selectModelForRole`) from `./modelRouting`.
-     * - Uses `TaskRunResult` (import `TaskRunResult`) from `./types`.
-     *
-     * @param overarchingGoal - Value for overarching goal.
-     * @param lastResult - Result object inspected or transformed in this step.
-     * @param missionEvidence - Cumulative deterministic mission evidence captured so far.
-     * @param trackedManagedProcessLeaseId - Managed-process lease carried across iterations, if any.
-     * @param trackedLoopbackTarget - Loopback target carried across iterations, if any.
-     * @returns Promise resolving to AutonomousNextStepModelOutput.
-     */
     private async evaluateNextStep(
         overarchingGoal: string,
         lastResult: TaskRunResult,
         missionEvidence: MissionEvidenceCounters,
         trackedManagedProcessLeaseId: string | null,
         trackedLoopbackTarget: LoopbackTargetHint | null
-    ): Promise<AutonomousNextStepModelOutput> {
-        const missionContract = buildMissionCompletionContract(overarchingGoal);
-        const missingRequirements = resolveMissingMissionRequirements(
-            missionContract,
-            missionEvidence
+    ) {
+        return await evaluateAutonomousNextStep(
+            this.modelClient,
+            this.config,
+            overarchingGoal,
+            lastResult,
+            missionEvidence,
+            trackedManagedProcessLeaseId,
+            trackedLoopbackTarget
         );
-        const startPortConflict = findManagedProcessStartPortConflictFailure(lastResult);
-        if (missionContract.requireReadinessProof && startPortConflict) {
-            if (
-                startPortConflict.suggestedPort !== null &&
-                !goalExplicitlyRequiresLoopbackPort(
-                    overarchingGoal,
-                    startPortConflict.requestedPort
-                )
-            ) {
-                return {
-                    isGoalMet: false,
-                    reasoning:
-                        `The requested localhost port ${startPortConflict.requestedPort} was already occupied, ` +
-                        "so the local server needs a different free port before readiness or browser proof can continue.",
-                    nextUserInput: buildManagedProcessPortConflictRecoveryInput(
-                        startPortConflict,
-                        missionContract.requireBrowserProof
-                    )
-                };
-            }
-        }
-        const startedManagedProcessLeaseId = findApprovedManagedProcessStartLeaseId(lastResult);
-        const checkedManagedProcess = findApprovedManagedProcessCheckResult(lastResult);
-        const activeManagedProcessLeaseId =
-            startedManagedProcessLeaseId ??
-            checkedManagedProcess?.leaseId ??
-            trackedManagedProcessLeaseId;
-        if (
-            missionContract.requireReadinessProof &&
-            activeManagedProcessLeaseId &&
-            hasReadinessNotReadyFailure(lastResult)
-        ) {
-            return {
-                isGoalMet: false,
-                reasoning:
-                    "The local process started, but localhost readiness was not proven yet.",
-                nextUserInput: buildManagedProcessCheckRecoveryInput(
-                    activeManagedProcessLeaseId,
-                    trackedLoopbackTarget,
-                    missionContract.requireBrowserProof
-                )
-            };
-        }
-
-        if (
-            missionContract.requireReadinessProof &&
-            checkedManagedProcess?.lifecycleStatus === "PROCESS_STILL_RUNNING" &&
-            countApprovedReadinessProofActions(
-                lastResult,
-                missionContract.requireBrowserProof
-            ) === 0
-        ) {
-            return {
-                isGoalMet: false,
-                reasoning:
-                    "The managed process is still running, so the next step is to retry localhost readiness proof.",
-                nextUserInput: buildManagedProcessStillRunningRetryInput(
-                    checkedManagedProcess.leaseId,
-                    missionContract.requireBrowserProof,
-                    trackedLoopbackTarget
-                )
-            };
-        }
-
-        if (
-            missionContract.requireReadinessProof &&
-            checkedManagedProcess?.lifecycleStatus === "PROCESS_STOPPED" &&
-            countApprovedReadinessProofActions(
-                lastResult,
-                missionContract.requireBrowserProof
-            ) === 0
-        ) {
-            return {
-                isGoalMet: false,
-                reasoning:
-                    "The managed process stopped before localhost readiness was proven.",
-                nextUserInput: buildManagedProcessStoppedRecoveryInput(
-                    checkedManagedProcess.leaseId
-                )
-            };
-        }
-
-        if (
-            missionContract.requireBrowserProof &&
-            hasExecutionFailureCode(lastResult, "BROWSER_VERIFY_RUNTIME_UNAVAILABLE") &&
-            !isPlaywrightInstallRecoveryInput(lastResult.task.userInput)
-        ) {
-            return {
-                isGoalMet: false,
-                reasoning:
-                    "Browser verification is still unavailable because the local Playwright runtime is not ready yet.",
-                nextUserInput: buildPlaywrightInstallRecoveryInput(overarchingGoal)
-            };
-        }
-
-        if (
-            missionContract.requireProcessStopProof &&
-            trackedManagedProcessLeaseId &&
-            missingRequirements.length === 1 &&
-            missingRequirements[0] === MISSION_REQUIREMENT_PROCESS_STOP
-        ) {
-            return {
-                isGoalMet: false,
-                reasoning:
-                    "All required build and verification proof is complete; the remaining required step is to stop the tracked managed process.",
-                nextUserInput: buildManagedProcessStopRetryInput(trackedManagedProcessLeaseId)
-            };
-        }
-
-        const model = selectModelForRole("planner", this.config);
-
-        try {
-            const systemPrompt =
-                "You are the manager of an autonomous agent loop. Analyze the last task's result against the overarching goal. " +
-                "Decide if the goal is completely met. If not, formulate the exact next instruction (userInput) the agent needs to perform. " +
-                "Return JSON with 'isGoalMet' (boolean), 'reasoning' (string), and 'nextUserInput' (string)." +
-                (
-                    missionContract.requireReadinessProof || missionContract.requireBrowserProof
-                        ? " For explicit localhost/live/browser verification goals, keep next steps inside governed proof actions. " +
-                        "Do not ask the user to manually open a browser or manually inspect localhost during the autonomous loop. " +
-                        "When a managed process is not running yet, request one finite next step that creates any missing helper artifact and then immediately performs the remaining live proof chain in the same task: start_process, probe_http, verify_browser, and stop_process when required. " +
-                        "Do not return a preparatory next step that only writes a helper script or only starts the process without also asking for the remaining proof actions. " +
-                        "Do not replace verify_browser with shell-based Playwright commands such as npx playwright --version, npx playwright open, or npx playwright test. " +
-                        "If live proof steps are blocked or unavailable, say so plainly instead of inventing manual or shell-based fallback checks."
-                        : ""
-                );
-            const output = await this.modelClient.completeJson<AutonomousNextStepModelOutput>({
-                model,
-                schemaName: "autonomous_next_step_v1",
-                temperature: 0.1,
-                systemPrompt,
-                userPrompt: JSON.stringify({
-                    overarchingGoal,
-                    lastTaskInput: lastResult.task.userInput,
-                    lastTaskSummary: lastResult.summary,
-                    actionResults: lastResult.actionResults.map(r => ({
-                        type: r.action.type,
-                        description: r.action.description,
-                        approved: r.approved,
-                        output: r.output,
-                        blockedBy: r.blockedBy
-                    }))
-                })
-            });
-            return output;
-        } catch (error) {
-            // Provide a graceful fallback to stop the loop instead of crashing hard
-            return {
-                isGoalMet: true,
-                reasoning: "Failed to evaluate next step via model. Terminating to prevent out-of-control loops. Error: " + (error as Error).message,
-                nextUserInput: ""
-            };
-        }
     }
 
-    /**
-     * Evaluates proactive goal and returns a deterministic policy signal.
-     *
-     * **Why it exists:**
-     * Keeps the proactive goal policy check explicit and testable before side effects.
-     *
-     * **What it talks to:**
-     * - Uses `ProactiveGoalModelOutput` (import `ProactiveGoalModelOutput`) from `../models/types`.
-     * - Uses `selectModelForRole` (import `selectModelForRole`) from `./modelRouting`.
-     *
-     * @param previousGoal - Value for previous goal.
-     * @returns Promise resolving to ProactiveGoalModelOutput.
-     */
-    private async evaluateProactiveGoal(previousGoal: string): Promise<ProactiveGoalModelOutput> {
-        const model = selectModelForRole("planner", this.config);
-
-        try {
-            return await this.modelClient.completeJson<ProactiveGoalModelOutput>({
-                model,
-                schemaName: "proactive_goal_v1",
-                temperature: 0.8,
-                systemPrompt: "You are a 24/7 autonomous agent daemon. Your previous goal was just completed. Generate a logical, productive new overarching goal for yourself to work on next. It should be independent and self-contained. Return JSON with 'proactiveGoal' (string) and 'reasoning' (string).",
-                userPrompt: JSON.stringify({ previousGoal })
-            });
-        } catch (error) {
-            return {
-                proactiveGoal: "Sleep and idle",
-                reasoning: "Fallback proactive goal due to an error: " + (error as Error).message
-            };
-        }
+    private async evaluateProactiveGoal(previousGoal: string) {
+        return await evaluateProactiveAutonomousGoal(
+            this.modelClient,
+            this.config,
+            previousGoal
+        );
     }
 }

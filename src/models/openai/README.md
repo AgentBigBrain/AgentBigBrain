@@ -17,6 +17,7 @@ The current extracted slice moves canonical OpenAI schema-envelope ownership beh
 - `responsesResponseNormalization.ts`
 - `transportContracts.ts`
 - `schemaEnvelope.ts`
+- `clientRuntime.ts`
 
 ## Inputs
 - logical schema names and structured completion requests from `openaiModelClient.ts`

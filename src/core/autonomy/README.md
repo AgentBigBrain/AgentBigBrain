@@ -20,6 +20,7 @@ here.
 - `liveRunRecovery.ts`
 - `loopCleanupPolicy.ts`
 - `stopReasonText.ts`
+- `agentLoopModelPolicy.ts`
 
 ## Inputs
 - `TaskRunResult` action outcomes and mission state
@@ -29,6 +30,7 @@ here.
 
 ## Outputs
 - next-step recovery prompts
+- model-backed next-step and proactive-goal policy decisions
 - completion-gate decisions
 - missing-evidence classifications
 - cleanup decisions for tracked managed processes
