@@ -524,6 +524,24 @@ export class AutonomousLoop {
         }
     }
 
+    /**
+     * Delegates autonomous next-step evaluation to the extracted autonomy policy helper.
+     *
+     * **Why it exists:**
+     * Runtime code and tests still depend on a stable `AutonomousLoop` method surface even though
+     * the underlying model-policy logic now lives in the autonomy subsystem.
+     *
+     * **What it talks to:**
+     * - Uses `evaluateAutonomousNextStep` (import `evaluateAutonomousNextStep`) from
+     *   `./autonomy/agentLoopModelPolicy`.
+     *
+     * @param overarchingGoal - Current mission goal text.
+     * @param lastResult - Latest task result from the autonomous loop.
+     * @param missionEvidence - Cumulative deterministic mission evidence so far.
+     * @param trackedManagedProcessLeaseId - Tracked managed-process lease, if any.
+     * @param trackedLoopbackTarget - Tracked loopback target, if any.
+     * @returns Promise resolving to the next-step policy decision.
+     */
     private async evaluateNextStep(
         overarchingGoal: string,
         lastResult: TaskRunResult,
@@ -542,6 +560,20 @@ export class AutonomousLoop {
         );
     }
 
+    /**
+     * Delegates proactive-goal generation to the extracted autonomy policy helper.
+     *
+     * **Why it exists:**
+     * Daemon-mode orchestration still expects a method on `AutonomousLoop`, while the actual model
+     * prompt and fallback logic now live in the autonomy subsystem.
+     *
+     * **What it talks to:**
+     * - Uses `evaluateProactiveAutonomousGoal` (import `evaluateProactiveAutonomousGoal`) from
+     *   `./autonomy/agentLoopModelPolicy`.
+     *
+     * @param previousGoal - Goal that just completed.
+     * @returns Promise resolving to the next proactive goal decision.
+     */
     private async evaluateProactiveGoal(previousGoal: string) {
         return await evaluateProactiveAutonomousGoal(
             this.modelClient,
