@@ -32,11 +32,6 @@ export class OpenAIModelClient implements ModelClient {
     estimatedSpendUsd: 0
   };
 
-  /**
-   * Configures provider endpoint, timeout policy, compatibility behavior, and pricing tables.
-   *
-   * @param options - API key plus optional endpoint, timeout, pricing, and compatibility overrides.
-   */
   constructor(private readonly options: OpenAIModelClientOptions) {
     this.baseUrl = (options.baseUrl ?? "https://api.openai.com/v1").replace(/\/+$/, "");
     this.requestTimeoutMs = Math.max(1, options.requestTimeoutMs ?? 120_000);
@@ -51,21 +46,10 @@ export class OpenAIModelClient implements ModelClient {
       options.allowJsonObjectCompatibilityFallback ?? false;
   }
 
-  /**
-   * Returns a copy of cumulative provider-usage telemetry for this client instance.
-   *
-   * @returns Snapshot of current call counts, token counts, and estimated spend.
-   */
   getUsageSnapshot(): ModelUsageSnapshot {
     return { ...this.usage };
   }
 
-  /**
-   * Updates cumulative token and spend accounting from one normalized provider usage payload.
-   *
-   * @param usage - Normalized provider usage payload.
-   * @param model - Resolved provider model metadata used for pricing lookup.
-   */
   private trackUsage(usage: OpenAINormalizedUsage, model: ResolvedOpenAIModel): void {
     const promptTokens = safeTokenCount(usage.promptTokens);
     const completionTokens = safeTokenCount(usage.completionTokens);
@@ -82,12 +66,6 @@ export class OpenAIModelClient implements ModelClient {
     );
   }
 
-  /**
-   * Executes a structured JSON completion against OpenAI with bounded compatibility fallback.
-   *
-   * @param request - Structured completion request routed through the model client.
-   * @returns Parsed and schema-validated JSON payload typed as `T`.
-   */
   async completeJson<T>(request: StructuredCompletionRequest): Promise<T> {
     const resolvedModel = resolveOpenAIModel(request.model);
     return await completeOpenAIJsonRequest(
