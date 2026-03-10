@@ -4,14 +4,18 @@
 This folder owns the runtime "organs" that plan, execute, interpret intent, broker memory, and
 reflect on task outcomes.
 
-The extracted `src/organs/liveRun/`, `src/organs/plannerPolicy/`, `src/organs/memoryContext/`,
-`src/organs/reflectionRuntime/`, and `src/organs/intentRuntime/` subsystems own detailed
-live-run, planner-policy, memory-broker, reflection-runtime, and intent-runtime support modules;
-the top-level files here keep the stable orchestration entrypoints and remaining single-surface
+The extracted `src/organs/liveRun/`, `src/organs/executionRuntime/`,
+`src/organs/plannerPolicy/`, `src/organs/memoryContext/`, `src/organs/reflectionRuntime/`, and
+`src/organs/intentRuntime/` subsystems own detailed live-run, non-live-run execution,
+planner-policy, memory-broker, reflection-runtime, and intent-runtime support modules; the
+top-level files here keep the stable orchestration entrypoints and remaining single-surface
 organs.
 
 ## Primary Files
 - Stable orchestration entrypoints: `executor.ts`, `planner.ts`.
+- Non-live-run execution subsystem: `executionRuntime/contracts.ts`,
+  `executionRuntime/fileMutationExecution.ts`, `executionRuntime/skillRuntime.ts`,
+  `executionRuntime/shellExecution.ts`.
 - Memory brokerage subsystem: `memoryContext/contracts.ts`, `memoryContext/queryPlanning.ts`,
   `memoryContext/contextInjection.ts`, `memoryContext/auditEvents.ts`.
 - Reflection runtime subsystem: `reflectionRuntime/contracts.ts`,
@@ -37,8 +41,10 @@ organs.
 
 ## Invariants
 - `planner.ts` and `executor.ts` remain stable thin entrypoints; detailed policy or capability logic
-  belongs in `plannerPolicy/` and `liveRun/`.
+  belongs in `plannerPolicy/`, `executionRuntime/`, and `liveRun/`.
 - `planner.ts` is intentionally guarded by the module-size check as a stable top-level planning
+  coordinator.
+- `executor.ts` is intentionally guarded by the module-size check as a stable top-level execution
   coordinator.
 - Planner action normalization, explicit-action intent inference, planner failure cooldown policy,
   and skill fallback scaffolding belong in `plannerPolicy/`, not in new top-level helper files.
@@ -83,6 +89,7 @@ organs.
 ## When to Update This README
 Update this README when:
 - a top-level organ file is added, removed, or renamed
-- ownership moves between this folder and `liveRun/`, `plannerPolicy/`, or `memoryContext/`
+- ownership moves between this folder and `executionRuntime/`, `liveRun/`, `plannerPolicy/`, or
+  `memoryContext/`
 - a remaining top-level organ is extracted into a new subsystem
 - the related-test surface changes because organ ownership moved
