@@ -6,12 +6,9 @@ import { BrainConfig } from "./config";
 import { selectModelForRole } from "./modelRouting";
 import { ExecutionReceiptStore } from "./advancedAutonomyRuntime";
 import {
-  createFederatedOutboundRuntimeConfigFromEnv,
-  evaluateFederatedOutboundPolicy,
-  type FederatedOutboundRuntimeConfig
+  createFederatedOutboundRuntimeConfigFromEnv
 } from "./federatedOutboundDelegation";
 import {
-  type ActionRunResult,
   type ConversationStackV1,
   type EntityGraphV1,
   type TaskRequest,
@@ -41,8 +38,6 @@ import { StateStore } from "./stateStore";
 import { PersonalityStore } from "./personalityStore";
 import { GovernanceMemoryStore } from "./governanceMemory";
 import {
-  AgentPulseEvaluationRequest,
-  AgentPulseEvaluationResult,
   ProfileMemoryStore
 } from "./profileMemoryStore";
 import { AppendRuntimeTraceEventInput, RuntimeTraceLogger } from "./runtimeTraceLogger";
@@ -54,10 +49,18 @@ import {
   type RunTaskOptions,
   type Stage685PlaybookPlanningContextResolver
 } from "./orchestration/contracts";
-import {
-  deriveFailureTaxonomyFromRun
-} from "./orchestration/orchestratorReceipts";
 import { executeLocalOrchestratorTask } from "./orchestration/orchestratorExecution";
+import {
+  evaluateOrchestratorAgentPulse,
+  forgetRememberedSituation as forgetRememberedSituationFromRuntime,
+  interpretOrchestratorConversationIntent,
+  markRememberedSituationWrong as markRememberedSituationWrongFromRuntime,
+  queryOrchestratorContinuityEpisodes,
+  queryOrchestratorContinuityFacts,
+  resolveRememberedSituation as resolveRememberedSituationFromRuntime,
+  reviewRememberedSituations as reviewRememberedSituationsFromRuntime
+} from "./orchestration/orchestratorContinuation";
+import { maybeRunOutboundFederatedTask } from "./orchestration/orchestratorFederation";
 import {
   buildProfileAwareInput,
   loadPlannerLearningContext,
@@ -69,7 +72,6 @@ import {
 } from "./orchestration/orchestratorGovernance";
 import { persistLearningSignals } from "./orchestration/orchestratorLearning";
 import {
-  diffUsageSnapshot,
   readModelUsageSnapshot as readModelUsageSnapshotFromClient
 } from "./taskRunnerSupport";
 
@@ -163,58 +165,14 @@ export class BrainOrchestrator {
    * @param request - Pulse-evaluation context (user/session metadata and timing inputs).
    * @returns Promise resolving to AgentPulseEvaluationResult.
    */
-  async evaluateAgentPulse(
-    request: AgentPulseEvaluationRequest
-  ): Promise<AgentPulseEvaluationResult> {
-    if (!this.profileMemoryStore) {
-      return {
-        decision: {
-          allowed: false,
-          decisionCode: "DISABLED",
-          suppressedBy: ["profile_memory.disabled"],
-          nextEligibleAtIso: null
-        },
-        staleFactCount: 0,
-        unresolvedCommitmentCount: 0,
-        unresolvedCommitmentTopics: [],
-        relevantEpisodes: [],
-        relationship: {
-          role: "unknown",
-          roleFactId: null
-        },
-        contextDrift: {
-          detected: false,
-          domains: [],
-          requiresRevalidation: false
-        }
-      };
-    }
-
-    try {
-      return await this.profileMemoryStore.evaluateAgentPulse(this.config.agentPulse, request);
-    } catch {
-      return {
-        decision: {
-          allowed: false,
-          decisionCode: "DISABLED",
-          suppressedBy: ["profile_memory.unavailable"],
-          nextEligibleAtIso: null
-        },
-        staleFactCount: 0,
-        unresolvedCommitmentCount: 0,
-        unresolvedCommitmentTopics: [],
-        relevantEpisodes: [],
-        relationship: {
-          role: "unknown",
-          roleFactId: null
-        },
-        contextDrift: {
-          detected: false,
-          domains: [],
-          requiresRevalidation: false
-        }
-      };
-    }
+  async evaluateAgentPulse(request: Parameters<typeof evaluateOrchestratorAgentPulse>[1]) {
+    return evaluateOrchestratorAgentPulse(
+      {
+        config: this.config,
+        profileMemoryStore: this.profileMemoryStore
+      },
+      request
+    );
   }
 
   /**
@@ -239,25 +197,15 @@ export class BrainOrchestrator {
     recentTurns: IntentInterpreterTurn[],
     pulseRuleContext?: PulseLexicalRuleContext
   ): Promise<InterpretedConversationIntent> {
-    try {
-      const interpreterModel = selectModelForRole("planner", this.config);
-      return await this.intentInterpreter.interpretConversationIntent(
-        text,
-        interpreterModel,
-        {
-          recentTurns,
-          pulseRuleContext
-        }
-      );
-    } catch (error) {
-      return {
-        intentType: "none",
-        pulseMode: null,
-        confidence: 0,
-        rationale: `Intent interpreter fallback: ${(error as Error).message}`,
-        source: "fallback"
-      };
-    }
+    return interpretOrchestratorConversationIntent(
+      {
+        config: this.config,
+        intentInterpreter: this.intentInterpreter
+      },
+      text,
+      recentTurns,
+      pulseRuleContext
+    );
   }
 
   /**
@@ -282,18 +230,15 @@ export class BrainOrchestrator {
     entityHints: readonly string[],
     maxEpisodes = 3
   ) {
-    if (!this.profileMemoryStore) {
-      return [];
-    }
-
-    try {
-      return await this.profileMemoryStore.queryEpisodesForContinuity(graph, stack, {
-        entityHints,
-        maxEpisodes
-      });
-    } catch {
-      return [];
-    }
+    return queryOrchestratorContinuityEpisodes(
+      {
+        profileMemoryStore: this.profileMemoryStore
+      },
+      graph,
+      stack,
+      entityHints,
+      maxEpisodes
+    );
   }
 
   /**
@@ -311,18 +256,15 @@ export class BrainOrchestrator {
     entityHints: readonly string[],
     maxFacts = 3
   ) {
-    if (!this.profileMemoryStore) {
-      return [];
-    }
-
-    try {
-      return await this.profileMemoryStore.queryFactsForContinuity(graph, stack, {
-        entityHints,
-        maxFacts
-      });
-    } catch {
-      return [];
-    }
+    return queryOrchestratorContinuityFacts(
+      {
+        profileMemoryStore: this.profileMemoryStore
+      },
+      graph,
+      stack,
+      entityHints,
+      maxFacts
+    );
   }
 
   /**
@@ -340,16 +282,15 @@ export class BrainOrchestrator {
     nowIso: string,
     maxEpisodes = 5
   ) {
-    try {
-      return await this.memoryBroker.reviewRememberedSituations(
-        reviewTaskId,
-        query,
-        nowIso,
-        maxEpisodes
-      );
-    } catch {
-      return [];
-    }
+    return reviewRememberedSituationsFromRuntime(
+      {
+        memoryBroker: this.memoryBroker
+      },
+      reviewTaskId,
+      query,
+      nowIso,
+      maxEpisodes
+    );
   }
 
   /**
@@ -369,17 +310,16 @@ export class BrainOrchestrator {
     nowIso: string,
     note?: string
   ) {
-    try {
-      return await this.memoryBroker.resolveRememberedSituation(
-        episodeId,
-        sourceTaskId,
-        sourceText,
-        nowIso,
-        note
-      );
-    } catch {
-      return null;
-    }
+    return resolveRememberedSituationFromRuntime(
+      {
+        memoryBroker: this.memoryBroker
+      },
+      episodeId,
+      sourceTaskId,
+      sourceText,
+      nowIso,
+      note
+    );
   }
 
   /**
@@ -399,17 +339,16 @@ export class BrainOrchestrator {
     nowIso: string,
     note?: string
   ) {
-    try {
-      return await this.memoryBroker.markRememberedSituationWrong(
-        episodeId,
-        sourceTaskId,
-        sourceText,
-        nowIso,
-        note
-      );
-    } catch {
-      return null;
-    }
+    return markRememberedSituationWrongFromRuntime(
+      {
+        memoryBroker: this.memoryBroker
+      },
+      episodeId,
+      sourceTaskId,
+      sourceText,
+      nowIso,
+      note
+    );
   }
 
   /**
@@ -425,16 +364,15 @@ export class BrainOrchestrator {
     sourceText: string,
     nowIso: string
   ) {
-    try {
-      return await this.memoryBroker.forgetRememberedSituation(
-        episodeId,
-        sourceTaskId,
-        sourceText,
-        nowIso
-      );
-    } catch {
-      return null;
-    }
+    return forgetRememberedSituationFromRuntime(
+      {
+        memoryBroker: this.memoryBroker
+      },
+      episodeId,
+      sourceTaskId,
+      sourceText,
+      nowIso
+    );
   }
 
   /**
@@ -491,7 +429,21 @@ export class BrainOrchestrator {
       }
     });
 
-    const delegatedRunResult = await this.maybeRunOutboundFederatedTask(
+    const delegatedRunResult = await maybeRunOutboundFederatedTask(
+      {
+        appendTraceEvent: this.appendTraceEvent.bind(this),
+        config: this.config,
+        createFederatedClient: (input) => new FederatedHttpClient(input),
+        personalityStore: this.personalityStore,
+        readModelUsageSnapshot: this.readModelUsageSnapshot.bind(this),
+        reflection: this.reflection,
+        resolveFederatedOutboundRuntimeConfig: this.resolveFederatedOutboundRuntimeConfig,
+        stateStore: this.stateStore,
+        workflowLearningDeps: {
+          workflowLearningStore: this.workflowLearningStore,
+          judgmentPatternStore: this.judgmentPatternStore
+        }
+      },
       task,
       startedAtIso,
       startedAtMs,
@@ -571,243 +523,6 @@ export class BrainOrchestrator {
     }
 
     // Reflection failures are non-fatal; task execution result is already durable.
-    try {
-      const reflectionModel = selectModelForRole("planner", this.config);
-      await this.reflection.reflectOnTask(runResult, reflectionModel);
-    } catch (error) {
-      console.error(
-        `[Reflection] non-fatal reflection failure for task ${task.id}: ${(error as Error).message}`
-      );
-    }
-
-    return runResult;
-  }
-
-  /**
-   * Attempts explicit outbound federated delegation before local planning/execution.
-   *
-   * **Why it exists:**
-   * Phase 2b wiring requires a production-path outbound delegation route with deterministic
-   * allowlist/quote gates and fail-closed local fallback when policy checks fail.
-   *
-   * **What it talks to:**
-   * - Outbound federation policy/config helpers (`federatedOutboundDelegation`).
-   * - `FederatedHttpClient` for remote delegate/poll protocol.
-   * - Runtime trace/state/reflection sinks for durable evidence parity.
-   *
-   * @param task - Current task request.
-   * @param startedAtIso - Task start timestamp.
-   * @param startedAtMs - Task start time in epoch milliseconds.
-   * @param usageStart - Model usage snapshot captured at task start.
-   * @returns Delegated task run result when outbound route executes, otherwise `null` to continue local path.
-   */
-  private async maybeRunOutboundFederatedTask(
-    task: TaskRequest,
-    startedAtIso: string,
-    startedAtMs: number,
-    usageStart: ModelUsageSnapshot
-  ): Promise<TaskRunResult | null> {
-    let outboundConfig: FederatedOutboundRuntimeConfig;
-    try {
-      outboundConfig = this.resolveFederatedOutboundRuntimeConfig(process.env);
-    } catch (error) {
-      await this.appendTraceEvent({
-        eventType: "constraint_blocked",
-        taskId: task.id,
-        details: {
-          blockCode: "OUTBOUND_FEDERATION_CONFIG_INVALID",
-          blockCategory: "runtime",
-          fallbackLocal: true,
-          reason: error instanceof Error ? error.message : String(error)
-        }
-      });
-      return null;
-    }
-
-    const policyDecision = evaluateFederatedOutboundPolicy(task, outboundConfig);
-    if (!policyDecision.intent) {
-      return null;
-    }
-
-    if (!policyDecision.shouldDelegate || !policyDecision.target) {
-      await this.appendTraceEvent({
-        eventType: "constraint_blocked",
-        taskId: task.id,
-        details: {
-          blockCode: policyDecision.reasonCode,
-          blockCategory: "runtime",
-          fallbackLocal: true,
-          reason: policyDecision.reason
-        }
-      });
-      return null;
-    }
-
-    const target = policyDecision.target;
-    const intent = policyDecision.intent;
-    const quoteId = `${task.id}:${target.externalAgentId}:quote`;
-    const client = new FederatedHttpClient({
-      baseUrl: target.baseUrl,
-      timeoutMs: target.awaitTimeoutMs,
-      auth: {
-        externalAgentId: target.externalAgentId,
-        sharedSecret: target.sharedSecret
-      }
-    });
-
-    const delegateResult = await client.delegate({
-      quoteId,
-      quotedCostUsd: intent.quotedCostUsd,
-      goal: task.goal,
-      userInput: intent.delegatedUserInput,
-      requestedAt: task.createdAt
-    });
-    if (!delegateResult.ok || !delegateResult.taskId || !delegateResult.decision?.accepted) {
-      await this.appendTraceEvent({
-        eventType: "constraint_blocked",
-        taskId: task.id,
-        details: {
-          blockCode: "OUTBOUND_DELEGATION_DISPATCH_REJECTED",
-          blockCategory: "runtime",
-          fallbackLocal: true,
-          httpStatus: delegateResult.httpStatus,
-          reason:
-            delegateResult.error ??
-            delegateResult.decision?.reasons.join(" | ") ??
-            "Outbound delegate call was not accepted."
-        }
-      });
-      return null;
-    }
-
-    const pollResult = await client.awaitResult(delegateResult.taskId, {
-      pollIntervalMs: target.pollIntervalMs,
-      timeoutMs: target.awaitTimeoutMs
-    });
-    const remoteStatus = pollResult.result?.status ?? (pollResult.ok ? "pending" : "poll_failed");
-    const remoteOutput = pollResult.result?.output ?? "";
-    const remoteError =
-      pollResult.result?.error ??
-      (pollResult.ok ? null : pollResult.error ?? "Federated poll failed without error message.");
-    const approved = pollResult.ok && pollResult.result?.status === "completed";
-    const completedAtIso = new Date().toISOString();
-    const usageEnd = this.readModelUsageSnapshot();
-    const usageDelta = diffUsageSnapshot(usageStart, usageEnd);
-
-    const delegatedAction: TaskRunResult["plan"]["actions"][number] = {
-      id: `federated_delegate_${task.id}`,
-      type: "network_write",
-      description: `Delegate task to federated target ${target.externalAgentId}.`,
-      params: {
-        endpoint: `${target.baseUrl}/federation/delegate`,
-        externalAgentId: target.externalAgentId,
-        quoteId,
-        delegatedTaskId: delegateResult.taskId,
-        quotedCostUsd: intent.quotedCostUsd,
-        delegationMode: "federated_outbound_v1"
-      },
-      estimatedCostUsd: intent.quotedCostUsd
-    };
-    const actionResult: ActionRunResult = {
-      action: delegatedAction,
-      mode: "escalation_path",
-      approved,
-      executionStatus: approved ? "success" : "failed",
-      executionFailureCode: approved ? undefined : "ACTION_EXECUTION_FAILED",
-      output: approved
-        ? (remoteOutput.trim() || "Federated task completed with empty output payload.")
-        : `Federated task did not complete successfully: ${remoteError ?? "unknown error"}`,
-      executionMetadata: {
-        outboundFederation: true,
-        targetAgentId: target.externalAgentId,
-        delegatedTaskId: delegateResult.taskId,
-        remoteStatus
-      },
-      blockedBy: approved ? [] : ["ACTION_EXECUTION_FAILED"],
-      violations: approved
-        ? []
-        : [
-          {
-            code: "ACTION_EXECUTION_FAILED",
-            message:
-              `Outbound federated task "${delegateResult.taskId}" failed with status "${remoteStatus}". ` +
-              `Reason: ${remoteError ?? "unknown error"}.`
-          }
-        ],
-      votes: []
-    };
-    const runResult: TaskRunResult = {
-      task,
-      plan: {
-        taskId: task.id,
-        plannerNotes:
-          `Outbound federated delegation route selected for target "${target.externalAgentId}".`,
-        actions: [delegatedAction]
-      },
-      actionResults: [actionResult],
-      summary: approved
-        ? `Delegated outbound task to "${target.externalAgentId}" (taskId=${delegateResult.taskId}) and received a completed result.`
-        : `Delegated outbound task to "${target.externalAgentId}" (taskId=${delegateResult.taskId}) but remote execution failed (${remoteStatus}).`,
-      modelUsage: usageDelta,
-      startedAt: startedAtIso,
-      completedAt: completedAtIso
-    };
-    const failureTaxonomy = deriveFailureTaxonomyFromRun(runResult);
-    if (failureTaxonomy) {
-      runResult.failureTaxonomy = failureTaxonomy;
-    }
-
-    await this.appendTraceEvent({
-      eventType: "action_executed",
-      taskId: task.id,
-      actionId: delegatedAction.id,
-      mode: "escalation_path",
-      details: {
-        outboundFederation: true,
-        targetAgentId: target.externalAgentId,
-        delegatedTaskId: delegateResult.taskId,
-        remoteStatus,
-        outputLength: remoteOutput.length
-      }
-    });
-    await this.appendTraceEvent({
-      eventType: "task_completed",
-      taskId: task.id,
-      durationMs: Date.now() - startedAtMs,
-      details: {
-        approvedCount: approved ? 1 : 0,
-        blockedCount: approved ? 0 : 1,
-        attemptsExecuted: 1,
-        estimatedApprovedCostUsd: approved ? Number(intent.quotedCostUsd.toFixed(4)) : 0,
-        modelSpendUsd: Number(usageDelta.estimatedSpendUsd.toFixed(8)),
-        outboundFederation: true,
-        targetAgentId: target.externalAgentId,
-        delegatedTaskId: delegateResult.taskId,
-        remoteStatus,
-        failureCategory: failureTaxonomy?.failureCategory ?? null,
-        failureCode: failureTaxonomy?.failureCode ?? null
-      }
-    });
-
-    await this.stateStore.appendRun(runResult);
-    await persistLearningSignals(
-      {
-        workflowLearningStore: this.workflowLearningStore,
-        judgmentPatternStore: this.judgmentPatternStore
-      },
-      runResult
-    );
-
-    if (this.personalityStore) {
-      try {
-        await this.personalityStore.applyRunReward(runResult);
-      } catch (error) {
-        console.error(
-          `[Personality] non-fatal personality update failure for task ${task.id}: ${(error as Error).message}`
-        );
-      }
-    }
-
     try {
       const reflectionModel = selectModelForRole("planner", this.config);
       await this.reflection.reflectOnTask(runResult, reflectionModel);

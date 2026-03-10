@@ -113,6 +113,12 @@ export const DEFAULT_SUBSYSTEM_README_SPECS: readonly SubsystemReadmeSpec[] = [
     requiredHeadings: REQUIRED_README_HEADINGS
   },
   {
+    name: "constraintRuntime",
+    codeDir: "src/core/constraintRuntime",
+    readmePath: "src/core/constraintRuntime/README.md",
+    requiredHeadings: REQUIRED_README_HEADINGS
+  },
+  {
     name: "profileMemoryRuntime",
     codeDir: "src/core/profileMemoryRuntime",
     readmePath: "src/core/profileMemoryRuntime/README.md",
@@ -146,6 +152,12 @@ export const DEFAULT_SUBSYSTEM_README_SPECS: readonly SubsystemReadmeSpec[] = [
     name: "liveRun",
     codeDir: "src/organs/liveRun",
     readmePath: "src/organs/liveRun/README.md",
+    requiredHeadings: REQUIRED_README_HEADINGS
+  },
+  {
+    name: "executionRuntime",
+    codeDir: "src/organs/executionRuntime",
+    readmePath: "src/organs/executionRuntime/README.md",
     requiredHeadings: REQUIRED_README_HEADINGS
   },
   {
