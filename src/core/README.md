@@ -11,7 +11,8 @@ The extracted `src/core/autonomy/` subsystem owns the detailed bounded-autonomy 
 helpers for `orchestrator.ts` and `taskRunner.ts`. The extracted
 `src/core/languageRuntime/` subsystem owns canonical deterministic non-safety tokenization,
 language-profile, stop-word, and overlap-scoring helpers used by memory, continuity, and retrieval
-surfaces. The extracted
+surfaces. The extracted `src/core/constraintRuntime/` subsystem owns the remaining hard-constraint
+action-family evaluators while `hardConstraints.ts` stays the stable fail-closed entrypoint. The extracted
 `src/core/profileMemoryRuntime/` subsystem owns the runtime contracts plus query, commitment
 matching, episodic-memory, and persistence helpers that sit between encrypted profile storage and
 planner/operator surfaces. The extracted `src/core/stage6_85/` subsystem owns clustered Stage 6.85 mission-UX,
@@ -32,6 +33,8 @@ env-parsing helpers while `config.ts` remains the stable config entrypoint.
   `agentPulse.ts`, `buildBrain.ts`, `executionMode.ts`, `orchestrator.ts`, `runtimeAbort.ts`,
   `runtimeTraceLogger.ts`, `taskRunner.ts`, `taskRunnerSupport.ts`.
 - Extracted orchestration subsystem: `src/core/orchestration/contracts.ts`,
+  `src/core/orchestration/orchestratorContinuation.ts`,
+  `src/core/orchestration/orchestratorFederation.ts`,
   `src/core/orchestration/orchestratorGovernance.ts`,
   `src/core/orchestration/orchestratorExecution.ts`,
   `src/core/orchestration/orchestratorLearning.ts`,
@@ -51,6 +54,14 @@ env-parsing helpers while `config.ts` remains the stable config entrypoint.
   `src/core/languageRuntime/tokenization.ts`,
   `src/core/languageRuntime/queryIntentTerms.ts`,
   `src/core/languageRuntime/languageScoring.ts`.
+- Extracted constraint-runtime subsystem: `src/core/constraintRuntime/contracts.ts`,
+  `src/core/constraintRuntime/decisionHelpers.ts`,
+  `src/core/constraintRuntime/pathConstraints.ts`,
+  `src/core/constraintRuntime/processConstraints.ts`,
+  `src/core/constraintRuntime/loopbackConstraints.ts`,
+  `src/core/constraintRuntime/browserConstraints.ts`,
+  `src/core/constraintRuntime/continuityConstraints.ts`,
+  `src/core/constraintRuntime/skillConstraints.ts`.
 - Autonomy foundations, planning context, and prompt classification:
   `advancedAutonomyFoundation.ts`, `advancedAutonomyRuntime.ts`, `autonomyFoundation.ts`,
   `commitmentSignalClassifier.ts`, `currentRequestExtraction.ts`, `plannerActionSchema.ts`,
@@ -154,6 +165,8 @@ env-parsing helpers while `config.ts` remains the stable config entrypoint.
 ## Invariants
 - Shared contracts belong here before they belong in higher layers.
 - Deterministic safety or hard-constraint behavior must stay fail-closed and locally discoverable.
+- `hardConstraints.ts` remains the stable top-level fail-closed safety entrypoint; detailed
+  action-family evaluators belong in `src/core/constraintRuntime/`.
 - `stage6_*` clusters should stay grouped until they receive an explicit subsystem extraction.
 - Extracted Stage 6.85 helpers belong in `src/core/stage6_85/` once they stop fitting the
   top-level `stage6_85*` files.
@@ -257,3 +270,5 @@ Update this README when:
 - a stage-policy cluster is extracted into its own subsystem
 - a new `src/core/stage6_85/` or `src/core/stage6_86/` cluster file is added, removed, or renamed
 - a stable core entrypoint changes or the related-test expectations move materially
+- hard-constraint ownership moves between `hardConstraints.ts`, `constraintRuntime/`, or the older
+  `hardConstraint*Policy.ts` helpers

@@ -16,6 +16,9 @@ files.
 - shared orchestration contracts in `contracts.ts`
 - local orchestrator governance-driven replanning helpers in `orchestratorGovernance.ts`
 - local orchestrator retry-loop, postmortem, and summary assembly in `orchestratorExecution.ts`
+- local orchestrator continuity, recall, intent, and remembered-situation access in
+  `orchestratorContinuation.ts`
+- local orchestrator outbound federated delegation flow in `orchestratorFederation.ts`
 - local orchestrator planner-input enrichment, hint loading, and per-attempt planning in
   `orchestratorPlanning.ts`
 - local orchestrator workflow/judgment learning persistence in `orchestratorLearning.ts`
@@ -44,6 +47,7 @@ files.
 ## Related Tests
 - `tests/core/orchestrationModules.test.ts`
 - `tests/core/orchestratorLearning.test.ts`
+- `tests/core/orchestrator.profileMemory.test.ts`
 - `tests/core/orchestratorPlanning.test.ts`
 - `tests/core/orchestratorGovernance.test.ts`
 - `tests/core/taskRunnerPersistence.test.ts`
@@ -62,6 +66,8 @@ Update this README when:
 - orchestration contracts move between this folder and `orchestrator.ts` or `taskRunner.ts`
 - local orchestrator governance-feedback or replan-prompt ownership changes
 - local orchestrator retry-loop or mission-summary ownership changes
+- local orchestrator continuity, recall, or remembered-situation ownership changes
+- local orchestrator outbound federated delegation ownership changes
 - local orchestrator planner-attempt assembly or learning-persistence ownership changes
 - mission-checkpoint or postmortem ownership changes
 - task-runner proposal construction or governor-context ownership changes
