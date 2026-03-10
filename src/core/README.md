@@ -107,6 +107,7 @@ env-parsing helpers while `config.ts` remains the stable config entrypoint.
   `src/core/profileMemoryRuntime/profileMemoryEpisodeState.ts`,
   `src/core/profileMemoryRuntime/profileMemoryExtraction.ts`,
   `src/core/profileMemoryRuntime/profileMemoryFactLifecycle.ts`,
+  `src/core/profileMemoryRuntime/profileMemoryMediaIngest.ts`,
   `src/core/profileMemoryRuntime/profileMemoryMutations.ts`,
   `src/core/profileMemoryRuntime/profileMemoryNormalization.ts`,
   `src/core/profileMemoryRuntime/profileMemoryPersistence.ts`,
@@ -126,7 +127,8 @@ env-parsing helpers while `config.ts` remains the stable config entrypoint.
 - Extracted Stage 6.86 subsystem: `src/core/stage6_86/bridgeQuestions.ts`,
   `src/core/stage6_86/conversationStack.ts`, `src/core/stage6_86/conversationStackContracts.ts`,
   `src/core/stage6_86/conversationStackHelpers.ts`, `src/core/stage6_86/contracts.ts`,
-  `src/core/stage6_86/entityGraph.ts`, `src/core/stage6_86/memoryGovernance.ts`,
+  `src/core/stage6_86/entityGraph.ts`, `src/core/stage6_86/mediaContinuityLinking.ts`,
+  `src/core/stage6_86/memoryGovernance.ts`,
   `src/core/stage6_86/openLoops.ts`, `src/core/stage6_86/pulseCandidates.ts`,
   `src/core/stage6_86/pulseCandidateSupport.ts`,
   `src/core/stage6_86/runtimeActions.ts`, `src/core/stage6_86/runtimeState.ts`.
@@ -185,6 +187,9 @@ env-parsing helpers while `config.ts` remains the stable config entrypoint.
 - Profile-memory runtime contracts and query, pulse, mutation, persistence, and episodic-memory
   helpers belong in `src/core/profileMemoryRuntime/` once they are reused across planner,
   operator, or interface call sites.
+- Interpreted media should enter durable memory only through bounded profile-memory and continuity
+  helpers here; raw image, voice, or video payloads do not belong in the six governed memory
+  systems.
 - Explicit user review/correction of remembered situations should still route through stable brokered
   or interface entrypoints, not direct encrypted-store access from transport layers.
 - Remembered-situation resolve, wrong, and forget flows must stay bounded, deterministic, and
@@ -227,6 +232,7 @@ env-parsing helpers while `config.ts` remains the stable config entrypoint.
 - `tests/core/profileMemoryEpisodeQueries.test.ts`
 - `tests/core/profileMemoryEpisodeResolution.test.ts`
 - `tests/core/profileMemoryEpisodeConsolidation.test.ts`
+- `tests/core/profileMemoryMediaIngest.test.ts`
 - `tests/core/profileMemoryStateNormalization.test.ts`
 - `tests/core/profileMemoryExtraction.test.ts`
 - `tests/core/profileMemoryEncryption.test.ts`
@@ -255,6 +261,7 @@ env-parsing helpers while `config.ts` remains the stable config entrypoint.
 - `tests/core/stage6_86BridgeQuestions.test.ts`
 - `tests/core/stage6_86ConversationStack.test.ts`
 - `tests/core/stage6_86EntityGraph.test.ts`
+- `tests/core/stage6_86MediaContinuityLinking.test.ts`
 - `tests/core/stage6_86RuntimeActions.test.ts`
 - `tests/core/stage6_86MemoryGovernance.test.ts`
 - `tests/core/stage6_86OpenLoops.test.ts`

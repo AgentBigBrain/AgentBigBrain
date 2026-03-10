@@ -4,7 +4,7 @@
 
 import { ActionType } from "../core/types";
 
-export type ModelBackend = "mock" | "openai" | "ollama";
+export type ModelBackend = "mock" | "openai" | "ollama" | "anthropic";
 
 export interface ModelUsageSnapshot {
   calls: number;

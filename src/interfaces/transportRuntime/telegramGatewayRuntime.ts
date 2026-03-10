@@ -9,6 +9,21 @@ import type {
 import { applyInvocationHints } from "../invocationHints";
 import { applyInvocationPolicy } from "../invocationPolicy";
 import type { TelegramInterfaceConfig } from "../runtimeConfig";
+import {
+  buildConversationInboundUserInput
+} from "../mediaRuntime/mediaNormalization";
+import {
+  DEFAULT_TELEGRAM_MEDIA_RUNTIME_CONFIG,
+  type TelegramMediaRuntimeConfig,
+  validateTelegramMediaAttachments
+} from "../mediaRuntime/mediaLimits";
+import {
+  extractTelegramMediaEnvelope,
+  type TelegramDocumentAttachment,
+  type TelegramPhotoSize,
+  type TelegramVideoAttachment,
+  type TelegramVoiceAttachment
+} from "../mediaRuntime/telegramMediaIngress";
 import type { ConversationDeliveryResult } from "../conversationRuntime/managerContracts";
 import type { TelegramNotifierOptions } from "./contracts";
 import {
@@ -20,8 +35,20 @@ import {
 import { abortAutonomousTransportTaskIfRequested } from "./gatewayLifecycle";
 import { shouldNotifyRejectedInvocation } from "./rateLimitPolicy";
 
+export type {
+  TelegramDocumentAttachment,
+  TelegramPhotoSize,
+  TelegramVideoAttachment,
+  TelegramVoiceAttachment
+} from "../mediaRuntime/telegramMediaIngress";
+
 export interface TelegramUpdateMessage {
   text?: string;
+  caption?: string;
+  photo?: readonly TelegramPhotoSize[];
+  voice?: TelegramVoiceAttachment;
+  video?: TelegramVideoAttachment;
+  document?: TelegramDocumentAttachment;
   chat?: { id?: number | string; type?: string };
   from?: { id?: number | string; username?: string };
   date?: number;
@@ -76,6 +103,7 @@ export interface PrepareTelegramUpdateInput {
   update: TelegramUpdate;
   sharedSecret: string;
   invocationPolicy: TelegramInterfaceConfig["security"]["invocation"];
+  mediaConfig?: TelegramInterfaceConfig["media"];
   validateMessage(message: TelegramInboundMessage): TelegramAdapterValidationResult;
   abortControllers: Map<string, AbortController>;
 }
@@ -123,6 +151,32 @@ export function resolveTelegramConversationVisibility(
 }
 
 /**
+ * Normalizes Telegram interface media config into the canonical media-runtime limit shape.
+ *
+ * @param config - Optional Telegram interface media config.
+ * @returns Canonical Telegram media runtime config.
+ */
+function resolveTelegramMediaRuntimeConfig(
+  config: TelegramInterfaceConfig["media"] | undefined
+): TelegramMediaRuntimeConfig {
+  if (!config) {
+    return DEFAULT_TELEGRAM_MEDIA_RUNTIME_CONFIG;
+  }
+  return {
+    enabled: config.enabled,
+    maxAttachmentCount: config.maxAttachments,
+    maxAttachmentBytes: config.maxAttachmentBytes,
+    maxDownloadBytes: config.maxDownloadBytes,
+    maxVoiceDurationSeconds: config.maxVoiceSeconds,
+    maxVideoDurationSeconds: config.maxVideoSeconds,
+    allowImages: config.allowImages,
+    allowVoiceNotes: config.allowVoiceNotes,
+    allowVideos: config.allowVideos,
+    allowDocuments: config.allowDocuments
+  };
+}
+
+/**
  * Parses and validates a Telegram update before conversation execution.
  *
  * @param input - Provider-specific parse/validation dependencies.
@@ -136,17 +190,46 @@ export function prepareTelegramUpdate(
   }
 
   const message = input.update.message;
-  const text = message?.text ?? "";
+  const media = extractTelegramMediaEnvelope(message);
   const chatId = asTelegramStringId(message?.chat?.id);
   const userId = asTelegramStringId(message?.from?.id);
   const username = message?.from?.username ?? "";
-  if (!text.trim() || !chatId || !userId || !username) {
+  if (!chatId || !userId || !username) {
     return { kind: "ignored" };
   }
 
-  const invocation = applyInvocationPolicy(text, input.invocationPolicy);
-  if (!invocation.accepted) {
+  const mediaValidation = validateTelegramMediaAttachments(
+    media?.attachments ?? [],
+    resolveTelegramMediaRuntimeConfig(input.mediaConfig)
+  );
+  if (!mediaValidation.accepted) {
+    return {
+      kind: "rejected",
+      chatId,
+      responseText: mediaValidation.message
+    };
+  }
+
+  const conversationVisibility = resolveTelegramConversationVisibility(message?.chat?.type, chatId, userId);
+  const text = (message?.text ?? message?.caption ?? "").trim();
+  const mediaOnlyPrivateConversation = !text && Boolean(media) && conversationVisibility === "private";
+  const privateConversationBypassesInvocation = conversationVisibility === "private";
+  if (!text && !media) {
     return { kind: "ignored" };
+  }
+
+  let normalizedText = text;
+  if (!mediaOnlyPrivateConversation && privateConversationBypassesInvocation) {
+    const invocation = applyInvocationPolicy(text, input.invocationPolicy);
+    normalizedText = invocation.accepted ? invocation.normalizedText : text;
+  } else if (!mediaOnlyPrivateConversation) {
+    const invocation = applyInvocationPolicy(text, input.invocationPolicy);
+    if (!invocation.accepted) {
+      return { kind: "ignored" };
+    }
+    normalizedText = invocation.normalizedText;
+  } else if (mediaOnlyPrivateConversation) {
+    normalizedText = "";
   }
 
   const receivedAt = new Date((message?.date ?? Math.floor(Date.now() / 1000)) * 1000).toISOString();
@@ -155,7 +238,8 @@ export function prepareTelegramUpdate(
     chatId,
     userId,
     username,
-    text: invocation.normalizedText,
+    text: normalizedText,
+    media,
     authToken: input.sharedSecret,
     receivedAt
   };
@@ -170,7 +254,7 @@ export function prepareTelegramUpdate(
 
   const stopRequested = abortAutonomousTransportTaskIfRequested(
     chatId,
-    invocation.normalizedText,
+    normalizedText,
     input.abortControllers
   );
   if (stopRequested) {
@@ -186,13 +270,13 @@ export function prepareTelegramUpdate(
     chatId,
     userId,
     username,
-    conversationVisibility: resolveTelegramConversationVisibility(message?.chat?.type, chatId, userId),
+    conversationVisibility,
     inbound,
     entityGraphEvent: {
       provider: "telegram",
       conversationId: chatId,
       eventId: String(input.update.update_id),
-      text: invocation.normalizedText,
+      text: buildConversationInboundUserInput(normalizedText, media),
       observedAt: receivedAt
     }
   };
@@ -311,3 +395,6 @@ export function createTelegramGatewayNotifier(
       sendTelegramGatewayDraftUpdate(config, chatId, draftId, messageText)
   });
 }
+
+
+

@@ -347,6 +347,74 @@ test("ingestFromTaskInput extracts and later resolves bounded episodic-memory si
   });
 });
 
+test("ingestFromTaskInput uses voice transcripts for durable fact and episode extraction", async () => {
+  await withProfileStore(async (store) => {
+    await store.ingestFromTaskInput(
+      "task_profile_store_media_voice_1",
+      [
+        "Please fix this before lunch.",
+        "",
+        "Attached media context:",
+        "- Voice note transcript: My name is Benny and Billy fell down last week."
+      ].join("\n"),
+      "2026-03-08T13:00:00.000Z"
+    );
+
+    const facts = await store.readFacts({
+      purpose: "operator_view",
+      includeSensitive: true,
+      explicitHumanApproval: true,
+      approvalId: "approval_profile_media_voice_1",
+      maxFacts: 10
+    });
+    assert.equal(
+      facts.some((fact) => fact.key === "identity.preferred_name" && fact.value === "Benny"),
+      true
+    );
+
+    const episodes = await store.reviewEpisodesForUser(5, "2026-03-08T13:05:00.000Z");
+    assert.equal(episodes.some((episode) => episode.title === "Billy fell down"), true);
+  });
+});
+
+test("ingestFromTaskInput suppresses generic media-only prompts but still accepts interpreted situation summaries", async () => {
+  await withProfileStore(async (store) => {
+    const genericResult = await store.ingestFromTaskInput(
+      "task_profile_store_media_generic_1",
+      "Please review the attached image and respond based on what it shows.",
+      "2026-03-08T14:00:00.000Z"
+    );
+    assert.deepEqual(genericResult, {
+      appliedFacts: 0,
+      supersededFacts: 0
+    });
+
+    await store.ingestFromTaskInput(
+      "task_profile_store_media_summary_1",
+      [
+        "You did this wrong.",
+        "",
+        "Attached media context:",
+        "- image summary: Billy fell down near the stairs and the outcome still sounds unresolved.",
+        "- OCR text: Billy fell down near the stairs"
+      ].join("\n"),
+      "2026-03-08T14:10:00.000Z"
+    );
+
+    const facts = await store.readFacts({
+      purpose: "operator_view",
+      includeSensitive: true,
+      explicitHumanApproval: true,
+      approvalId: "approval_profile_media_summary_1",
+      maxFacts: 10
+    });
+    assert.equal(facts.some((fact) => fact.key === "identity.preferred_name"), false);
+
+    const episodes = await store.reviewEpisodesForUser(5, "2026-03-08T14:15:00.000Z");
+    assert.equal(episodes.some((episode) => episode.title === "Billy fell down"), true);
+  });
+});
+
 test("fromEnv returns undefined when profile memory is disabled", () => {
   const store = ProfileMemoryStore.fromEnv({});
   assert.equal(store, undefined);
@@ -974,3 +1042,4 @@ test("relationship-aware temporal nudging role taxonomy updates behavior after c
     assert.equal(second.decision.decisionCode, "ALLOWED");
   });
 });
+

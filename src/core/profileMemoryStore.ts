@@ -31,6 +31,9 @@ import {
   extractProfileEpisodeCandidatesFromUserInput
 } from "./profileMemoryRuntime/profileMemoryEpisodeExtraction";
 import {
+  parseProfileMediaIngestInput
+} from "./profileMemoryRuntime/profileMemoryMediaIngest";
+import {
   createProfileMemoryPersistenceConfigFromEnv,
   loadPersistedProfileMemoryState,
   saveProfileMemoryState
@@ -210,40 +213,38 @@ export class ProfileMemoryStore {
     userInput: string,
     observedAt: string,
     options: ProfileMemoryIngestOptions = {}
-  ): Promise<ProfileIngestResult> {
-    const state = await this.load();
-    const extractedCandidates = extractProfileFactCandidatesFromUserInput(
-      userInput,
-      taskId,
-      observedAt
+  ): Promise<ProfileIngestResult> {    const state = await this.load();
+    const mediaIngest = parseProfileMediaIngestInput(userInput);
+    const factSourceTexts = dedupeProfileIngestTexts([
+      mediaIngest.directUserText,
+      ...mediaIngest.transcriptFragments
+    ]);
+    const extractedCandidates = factSourceTexts.flatMap((text) =>
+      extractProfileFactCandidatesFromUserInput(text, taskId, observedAt)
     );
-    const inferredResolutionCandidates = buildInferredCommitmentResolutionCandidates(
-      state,
-      userInput,
-      taskId,
-      observedAt
+    const inferredResolutionCandidates = factSourceTexts.flatMap((text) =>
+      buildInferredCommitmentResolutionCandidates(state, text, taskId, observedAt)
     );
     const candidates = [
       ...extractedCandidates,
       ...inferredResolutionCandidates
     ];
     const applyResult = applyProfileFactCandidates(state, candidates);
-    const extractedEpisodeCandidates = extractProfileEpisodeCandidatesFromUserInput(
-      userInput,
-      taskId,
-      observedAt
+    const extractedEpisodeCandidates = mediaIngest.allNarrativeFragments.flatMap((text) =>
+      extractProfileEpisodeCandidatesFromUserInput(text, taskId, observedAt)
     );
     const mergedEpisodeCandidates = [
       ...extractedEpisodeCandidates,
       ...(options.additionalEpisodeCandidates ?? [])
     ];
-    const inferredEpisodeResolutionCandidates =
+    const inferredEpisodeResolutionCandidates = factSourceTexts.flatMap((text) =>
       buildInferredProfileEpisodeResolutionCandidates(
         applyResult.nextState,
-        userInput,
+        text,
         taskId,
         observedAt
-      );
+      )
+    );
     const episodeCandidateResult = applyProfileEpisodeCandidates(
       applyResult.nextState,
       mergedEpisodeCandidates
@@ -650,6 +651,36 @@ export class ProfileMemoryStore {
  * @param episode - Canonical stored episode record.
  * @returns Readable episodic-memory record.
  */
+/**
+ * Deduplicates bounded media/user text fragments before extraction or resolution inference.
+ *
+ * @param values - Candidate ingest fragments.
+ * @returns Ordered unique text fragments.
+ */
+function dedupeProfileIngestTexts(values: readonly string[]): readonly string[] {
+  const seen = new Set<string>();
+  const ordered: string[] = [];
+  for (const value of values) {
+    const normalized = value.trim();
+    if (!normalized) {
+      continue;
+    }
+    const signature = normalized.toLowerCase();
+    if (seen.has(signature)) {
+      continue;
+    }
+    seen.add(signature);
+    ordered.push(normalized);
+  }
+  return ordered;
+}
+
+/**
+ * Converts one stored episode into the bounded operator-facing review shape.
+ *
+ * @param episode - Stored episode record.
+ * @returns Readable episode payload used by memory review surfaces.
+ */
 function toReadableEpisode(
   episode: ProfileMemoryState["episodes"][number]
 ): ProfileReadableEpisode {
@@ -670,3 +701,4 @@ function toReadableEpisode(
     tags: [...episode.tags]
   };
 }
+

@@ -4,14 +4,15 @@
 This subsystem owns the canonical clustered Stage 6.86 runtime helpers as they move out of the
 legacy top-level `stage6_86*` files.
 
-The current extracted slice moves bridge-question, conversation-stack, entity-graph, pulse-candidate,
-runtime-action, and runtime-state ownership behind:
+The current extracted slice moves bridge-question, conversation-stack, entity-graph, media-continuity,
+pulse-candidate, runtime-action, and runtime-state ownership behind:
 - `bridgeQuestions.ts`
 - `conversationStack.ts`
 - `conversationStackContracts.ts`
 - `conversationStackHelpers.ts`
 - `contracts.ts`
 - `entityGraph.ts`
+- `mediaContinuityLinking.ts`
 - `memoryGovernance.ts`
 - `openLoops.ts`
 - `pulseCandidates.ts`
@@ -42,6 +43,7 @@ Canonical behavior for those entrypoints now lives here.
 - deterministic conversation-stack threading, topic switching, and migration helpers for Stage 6.86
 - deterministic entity extraction, graph mutation, and relation-promotion helpers for Stage 6.86
 - deterministic entity lookup-term helpers for Stage 6.86 continuity linkage
+- deterministic interpreted-media continuity-linking hints for Stage 6.86 recall grounding
 - deterministic pulse-candidate generation, suppression, and emission-history normalization for
   Stage 6.86
 - deterministic runtime-action execution for Stage 6.86 `memory_mutation` and `pulse_emit` flows
@@ -71,6 +73,7 @@ Canonical behavior for those entrypoints now lives here.
 - `tests/core/stage6_86BridgeQuestions.test.ts`
 - `tests/core/stage6_86ConversationStack.test.ts`
 - `tests/core/stage6_86EntityGraph.test.ts`
+- `tests/core/stage6_86MediaContinuityLinking.test.ts`
 - `tests/core/stage6_86PulseCandidates.test.ts`
 - `tests/core/stage6_86RuntimeActions.test.ts`
 - `tests/core/stage6_86RuntimeStateStore.test.ts`
@@ -79,8 +82,8 @@ Canonical behavior for those entrypoints now lives here.
 ## When to Update This README
 Update this README when:
 - a file is added, removed, or renamed under `src/core/stage6_86/`
-- canonical Stage 6.86 bridge-question, conversation-stack, entity-graph, memory-governance,
-  open-loop, pulse-candidate, runtime-action, or runtime-state ownership moves
+- canonical Stage 6.86 bridge-question, conversation-stack, entity-graph, media-continuity,
+  memory-governance, open-loop, pulse-candidate, runtime-action, or runtime-state ownership moves
 - any stable `stage6_86*.ts` compatibility entrypoint changes role
 - deterministic Stage 6.86 runtime behavior changes materially
 - the related-test surface changes because Stage 6.86 ownership moved

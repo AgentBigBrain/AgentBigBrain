@@ -119,6 +119,41 @@ OPENAI_TIMEOUT_MS=300000
 OPENAI_TRANSPORT_MODE=auto
 ```
 
+### Media understanding (images, voice notes, and short video)
+
+The runtime can ingest Telegram screenshots, voice notes, and short videos, but the interpretation quality depends on the configured media path.
+
+- Images use a vision-capable OpenAI model.
+- Voice notes use the transcription endpoint.
+- Video is accepted as input, but the current runtime only produces simple metadata/caption summaries. It does **not** yet claim full video understanding.
+
+Truthfulness rule:
+
+- if provider-backed media understanding is unavailable, the runtime falls back to a simple summary
+- it does not invent OCR text, transcripts, or detailed video semantics it cannot prove
+
+Recommended media env block:
+
+```env
+BRAIN_MEDIA_VISION_MODEL=gpt-4.1-mini
+BRAIN_MEDIA_TRANSCRIPTION_MODEL=whisper-1
+BRAIN_MEDIA_REQUEST_TIMEOUT_MS=45000
+```
+
+How each setting works:
+
+- `BRAIN_MEDIA_VISION_MODEL`: vision-capable model for screenshots/images. If unset, the runtime falls back to `OPENAI_MODEL_SMALL_FAST`, then `gpt-4.1-mini`.
+- `BRAIN_MEDIA_TRANSCRIPTION_MODEL`: transcription model for voice notes. If unset, the runtime defaults to `whisper-1`.
+- `BRAIN_MEDIA_REQUEST_TIMEOUT_MS`: timeout used by the image/transcription calls.
+
+What to expect today:
+
+- screenshots can produce OCR/summary style context when the vision path is available
+- voice notes can produce transcript-backed context when the transcription path is available
+- short videos currently use file metadata and captions even when an API key is configured
+
+Video note: the current runtime does not yet have a dedicated clip-analysis path. Video is accepted and routed correctly, but interpretation is limited to file metadata and captions.
+
 Optional model routing overrides:
 
 - `OPENAI_MODEL_SMALL_FAST`
@@ -511,6 +546,9 @@ Current operator contract:
 - If name-call mode is enabled, natural greeting forms like `Hi BigBrain` and `Hey BigBrain, ...`
   are accepted.
 - Runtime responses should clearly indicate one state: `Executed`, `Guidance only`, or `Blocked`.
+- Telegram screenshots, voice notes, and short videos are supported as media inputs with safe
+  limits. Rich screenshot and voice interpretation depends on the media model settings above; video
+  currently remains on simple fallback.
 
 Extended prompt patterns are in `docs/COMMAND_EXAMPLES.md`.
 
@@ -638,6 +676,8 @@ npm run test:runtime_wiring:integrated_live_smoke
 npm run test:interface:real_provider_live_smoke
 npm run test:runtime:managed_process_live_smoke
 npm run test:interface:advanced_live_smoke
+npm run test:media_ingest_execution_intent:evidence
+npm run test:media_ingest_execution_intent:live_smoke
 npm run test:human_language_generalization:evidence
 npm run test:human_language_generalization:live_smoke
 ```
@@ -720,6 +760,24 @@ This section covers every key currently present in `.env.example` and what to ex
     `gpt-5`, `gpt-5.1`, `gpt-5.2`, `gpt-5.3-codex`.
 - `OPENAI_PRICE_INPUT_PER_1M_USD`, `OPENAI_PRICE_OUTPUT_PER_1M_USD`: spend-estimation rates.
   - Changing affects budget accounting/telemetry only, not provider billing.
+
+### Media understanding
+
+- `BRAIN_MEDIA_VISION_MODEL`: model used for screenshot/image interpretation.
+  - If unset, the runtime falls back to `OPENAI_MODEL_SMALL_FAST`, then `gpt-4.1-mini`.
+  - If the selected model is not actually vision-capable in your provider environment, image understanding falls back to a simple summary.
+- `BRAIN_MEDIA_TRANSCRIPTION_MODEL`: model used for voice-note transcription.
+  - If unset, the runtime defaults to `whisper-1`.
+  - If transcription is unavailable, the runtime falls back to basic media context rather than fabricating a transcript.
+- `BRAIN_MEDIA_REQUEST_TIMEOUT_MS`: timeout for provider-backed media interpretation requests.
+  - Raise it if image or transcription requests time out.
+  - Lower it if you want quicker fail-closed fallback behavior.
+
+Current video limitation:
+
+- short videos can be ingested and attached to conversation context, but the current runtime does not expose provider-backed video understanding yet
+- video currently stays on file metadata and captions
+- there is no `.env` switch today that turns video into full clip-understanding behavior
 
 ### Runtime mode and safety latches
 

@@ -41,6 +41,9 @@ export {
 export {
   extractProfileEpisodeCandidatesFromUserInput
 } from "./profileMemoryRuntime/profileMemoryEpisodeExtraction";
+export {
+  parseProfileMediaIngestInput
+} from "./profileMemoryRuntime/profileMemoryMediaIngest";
 export type { ProfileMemoryIngestOptions } from "./profileMemoryStore";
 export {
   isSensitiveKey,
@@ -141,3 +144,4 @@ export interface ProfileFreshnessAssessment {
   stale: boolean;
   ageDays: number;
 }
+

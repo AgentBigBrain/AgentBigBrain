@@ -46,6 +46,131 @@ function buildRoutingDependencies(
   };
 }
 
+
+
+test("routeConversationChatInput asks one clarification question for ambiguous build requests", async () => {
+  const session = buildSession();
+  let enqueueCalls = 0;
+
+  const result = await routeConversationChatInput(
+    session,
+    "Build a dashboard for the team.",
+    "2026-03-07T16:00:05.000Z",
+    buildRoutingDependencies(() => {
+      enqueueCalls += 1;
+      return {
+        reply: "should not enqueue",
+        shouldStartWorker: true
+      };
+    })
+  );
+
+  assert.deepEqual(result, {
+    reply: "Do you want me to plan it first or build it now?",
+    shouldStartWorker: false
+  } satisfies ConversationEnqueueResult);
+  assert.equal(enqueueCalls, 0);
+  assert.equal(session.conversationTurns.length, 2);
+  assert.equal(session.conversationTurns[0]?.role, "user");
+  assert.equal(session.conversationTurns[1]?.role, "assistant");
+});
+
+test("routeConversationMessageInput asks one clarification question for ambiguous fix requests", async () => {
+  const session = buildSession();
+  let enqueueCalls = 0;
+
+  const result = await routeConversationMessageInput(
+    session,
+    "The screenshot shows a failing test and something is wrong.",
+    "2026-03-07T16:00:05.000Z",
+    buildRoutingDependencies(() => {
+      enqueueCalls += 1;
+      return {
+        reply: "should not enqueue",
+        shouldStartWorker: true
+      };
+    })
+  );
+
+  assert.deepEqual(result, {
+    reply: "Do you want me to explain the issue first or fix it now?",
+    shouldStartWorker: false
+  } satisfies ConversationEnqueueResult);
+  assert.equal(enqueueCalls, 0);
+});
+
+test("routeConversationMessageInput preserves explicit build-now requests without clarification", async () => {
+  const session = buildSession();
+  let enqueueCalls = 0;
+
+  const result = await routeConversationMessageInput(
+    session,
+    "Build this now and use React.",
+    "2026-03-07T16:00:05.000Z",
+    buildRoutingDependencies((_currentSession, _input, _receivedAt, executionInput) => {
+      enqueueCalls += 1;
+      assert.match(executionInput ?? "", /Current user request:/);
+      return {
+        reply: "queued build",
+        shouldStartWorker: true
+      };
+    })
+  );
+
+  assert.deepEqual(result, {
+    reply: "queued build",
+    shouldStartWorker: true
+  } satisfies ConversationEnqueueResult);
+  assert.equal(enqueueCalls, 1);
+});
+
+test("routeConversationMessageInput passes interpreted media context through execution input", async () => {
+  const session = buildSession();
+  let capturedExecutionInput = "";
+
+  await routeConversationMessageInput(
+    session,
+    "Please fix this.",
+    "2026-03-07T16:00:05.000Z",
+    buildRoutingDependencies((_currentSession, _input, _receivedAt, executionInput) => {
+      capturedExecutionInput = executionInput ?? "";
+      return {
+        reply: "queued media request",
+        shouldStartWorker: true
+      };
+    }),
+    {
+      attachments: [
+        {
+          kind: "image",
+          provider: "telegram",
+          fileId: "img-1",
+          fileUniqueId: "img-uniq-1",
+          mimeType: "image/png",
+          fileName: "failure.png",
+          sizeBytes: 4096,
+          caption: "You did this wrong.",
+          durationSeconds: null,
+          width: 1280,
+          height: 720,
+          interpretation: {
+            summary: "Screenshot shows a failing assertion in planner.test.ts.",
+            transcript: null,
+            ocrText: "Expected true Received false",
+            confidence: 0.91,
+            provenance: "vision + ocr",
+            source: "fixture_catalog",
+            entityHints: ["planner.test.ts", "assertion"]
+          }
+        }
+      ]
+    }
+  );
+
+  assert.match(capturedExecutionInput, /Inbound media context \(interpreted once, bounded, no raw bytes\):/);
+  assert.match(capturedExecutionInput, /planner\.test\.ts/);
+});
+
 test("routeConversationChatInput adds deterministic routing hints and records the user turn", async () => {
   const session = buildSession();
   let capturedInput = "";

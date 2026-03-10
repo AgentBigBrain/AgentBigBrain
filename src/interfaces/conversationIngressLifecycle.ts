@@ -2,10 +2,11 @@
  * @fileoverview Runs deterministic inbound-message, command, proposal-flow, and stale-job recovery lifecycle for ConversationManager.
  */
 
-import type {
-  ConversationInboundMessage,
-  ConversationNotifier,
-  ExecuteConversationTask
+import {
+  resolveConversationInboundUserInput,
+  type ConversationInboundMessage,
+  type ConversationNotifier,
+  type ExecuteConversationTask
 } from "./conversationRuntime/managerContracts";
 import { detectTimezoneFromMessage } from "./conversationRuntime/sessionPulseMetadata";
 import {
@@ -36,7 +37,7 @@ export async function processConversationMessage(
   notify: ConversationNotifier,
   deps: ConversationIngressDependencies
 ): Promise<string> {
-  const trimmed = message.text.trim();
+  const trimmed = resolveConversationInboundUserInput(message).trim();
   if (!trimmed) {
     return "Message ignored because it is empty.";
   }
@@ -89,3 +90,4 @@ export async function processConversationMessage(
   }
   return invocation.reply;
 }
+

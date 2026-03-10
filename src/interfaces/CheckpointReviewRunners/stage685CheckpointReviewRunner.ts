@@ -6,15 +6,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { runStage685CheckpointA } from "../../tools/stage6_85Playbooks";
-import { runStage685CheckpointB } from "../../tools/stage6_85MissionUx";
-import { runStage685CheckpointC } from "../../tools/stage6_85Clones";
-import { runStage685CheckpointD } from "../../tools/stage6_85Recovery";
-import { runStage685CheckpointE } from "../../tools/stage6_85QualityGates";
-import { runStage685CheckpointF } from "../../tools/stage6_85WorkflowReplay";
-import { runStage685CheckpointG } from "../../tools/stage6_85Latency";
-import { runStage685CheckpointH } from "../../tools/stage6_85Observability";
-
 type Stage685CheckpointId =
   | "6.85.A"
   | "6.85.B"
@@ -186,6 +177,7 @@ function buildCheckpointReviewResult(
 async function runStage685CheckpointAReview(
   artifactPath: string
 ): Promise<Stage685CheckpointReviewResult> {
+  const { runStage685CheckpointA } = await import("../../tools/stage6_85Playbooks");
   const artifact = await runStage685CheckpointA();
   const persistedArtifactPath = await persistArtifact(artifactPath, artifact);
   return buildCheckpointReviewResult(artifact, persistedArtifactPath, [
@@ -209,6 +201,7 @@ async function runStage685CheckpointAReview(
 async function runStage685CheckpointBReview(
   artifactPath: string
 ): Promise<Stage685CheckpointReviewResult> {
+  const { runStage685CheckpointB } = await import("../../tools/stage6_85MissionUx");
   const artifact = await runStage685CheckpointB();
   const persistedArtifactPath = await persistArtifact(artifactPath, artifact);
   return buildCheckpointReviewResult(artifact, persistedArtifactPath, [
@@ -232,6 +225,7 @@ async function runStage685CheckpointBReview(
 async function runStage685CheckpointCReview(
   artifactPath: string
 ): Promise<Stage685CheckpointReviewResult> {
+  const { runStage685CheckpointC } = await import("../../tools/stage6_85Clones");
   const artifact = await runStage685CheckpointC();
   const persistedArtifactPath = await persistArtifact(artifactPath, artifact);
   return buildCheckpointReviewResult(artifact, persistedArtifactPath, [
@@ -256,6 +250,7 @@ async function runStage685CheckpointCReview(
 async function runStage685CheckpointDReview(
   artifactPath: string
 ): Promise<Stage685CheckpointReviewResult> {
+  const { runStage685CheckpointD } = await import("../../tools/stage6_85Recovery");
   const artifact = await runStage685CheckpointD();
   const persistedArtifactPath = await persistArtifact(artifactPath, artifact);
   return buildCheckpointReviewResult(artifact, persistedArtifactPath, [
@@ -279,6 +274,7 @@ async function runStage685CheckpointDReview(
 async function runStage685CheckpointEReview(
   artifactPath: string
 ): Promise<Stage685CheckpointReviewResult> {
+  const { runStage685CheckpointE } = await import("../../tools/stage6_85QualityGates");
   const artifact = await runStage685CheckpointE();
   const persistedArtifactPath = await persistArtifact(artifactPath, artifact);
   return buildCheckpointReviewResult(artifact, persistedArtifactPath, [
@@ -302,6 +298,7 @@ async function runStage685CheckpointEReview(
 async function runStage685CheckpointFReview(
   artifactPath: string
 ): Promise<Stage685CheckpointReviewResult> {
+  const { runStage685CheckpointF } = await import("../../tools/stage6_85WorkflowReplay");
   const artifact = await runStage685CheckpointF();
   const persistedArtifactPath = await persistArtifact(artifactPath, artifact);
   return buildCheckpointReviewResult(artifact, persistedArtifactPath, [
@@ -325,6 +322,7 @@ async function runStage685CheckpointFReview(
 async function runStage685CheckpointGReview(
   artifactPath: string
 ): Promise<Stage685CheckpointReviewResult> {
+  const { runStage685CheckpointG } = await import("../../tools/stage6_85Latency");
   const artifact = await runStage685CheckpointG();
   const persistedArtifactPath = await persistArtifact(artifactPath, artifact);
   return buildCheckpointReviewResult(artifact, persistedArtifactPath, [
@@ -348,6 +346,7 @@ async function runStage685CheckpointGReview(
 async function runStage685CheckpointHReview(
   artifactPath: string
 ): Promise<Stage685CheckpointReviewResult> {
+  const { runStage685CheckpointH } = await import("../../tools/stage6_85Observability");
   const artifact = await runStage685CheckpointH();
   const persistedArtifactPath = await persistArtifact(artifactPath, artifact);
   return buildCheckpointReviewResult(artifact, persistedArtifactPath, [

@@ -75,7 +75,37 @@ These are easy to confuse:
   - local browser runtime problem
   - **not** fixed by a timeout or budget env var
 
-## 5) Example Tuning Blocks
+## 5) Media Interpretation Reality Check
+
+Not every media issue shows up as a dedicated reason code. Some of the most common operator questions are really capability-limit questions.
+
+- `The screenshot reply is generic and does not seem to use OCR or visual detail.`
+  - likely causes:
+    - `OPENAI_API_KEY` missing
+    - `BRAIN_MEDIA_VISION_MODEL` unset or mapped to a non-vision-capable model
+    - provider timeout/failure causing a simple fallback summary
+  - relevant env:
+    - `OPENAI_API_KEY`
+    - `BRAIN_MEDIA_VISION_MODEL`
+    - `OPENAI_MODEL_SMALL_FAST`
+    - `BRAIN_MEDIA_REQUEST_TIMEOUT_MS`
+
+- `The voice note was accepted, but the reply says transcription is unavailable.`
+  - likely causes:
+    - `OPENAI_API_KEY` missing
+    - transcription path unavailable
+    - provider timeout/failure causing a simple fallback summary
+  - relevant env:
+    - `OPENAI_API_KEY`
+    - `BRAIN_MEDIA_TRANSCRIPTION_MODEL`
+    - `BRAIN_MEDIA_REQUEST_TIMEOUT_MS`
+
+- `The short video only produced a simple summary or metadata-style description.`
+  - this is the expected current behavior
+  - there is no env knob today that enables full semantic video understanding
+  - the runtime currently uses file metadata and captions for video instead of full clip analysis
+
+## 6) Example Tuning Blocks
 
 ### Heavier autonomous build and verification runs
 
@@ -102,7 +132,7 @@ BRAIN_MAX_MODEL_SPEND_USD=20
 BRAIN_MAX_CUMULATIVE_COST_USD=20
 ```
 
-## 6) Codes With No `.env` Knob
+## 7) Codes With No `.env` Knob
 
 These are mostly request-shape, artifact, or deterministic-policy issues. Changing `.env` will not
 help:
@@ -118,7 +148,7 @@ help:
 
 For these, fix the request, the artifact, or the runtime path itself.
 
-## 7) Practical Rule
+## 8) Practical Rule
 
 If you are not sure whether the code is env-tunable:
 

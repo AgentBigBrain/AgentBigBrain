@@ -13,6 +13,7 @@ import {
   ConversationManager,
   type ConversationNotifierTransport
 } from "../../src/interfaces/conversationManager";
+import { buildConversationInboundUserInput } from "../../src/interfaces/mediaRuntime/mediaNormalization";
 import { InterfaceSessionStore } from "../../src/interfaces/sessionStore";
 
 /**
@@ -27,6 +28,50 @@ function buildMessage(text: string): ConversationInboundMessage {
     username: "agentowner",
     conversationVisibility: "private",
     text,
+    receivedAt: new Date().toISOString()
+  };
+}
+
+/**
+ * Implements `buildVoiceMessage` behavior within module scope.
+ * Interacts with local collaborators through imported modules and typed inputs/outputs.
+ */
+function buildVoiceMessage(transcript: string): ConversationInboundMessage {
+  const media = {
+    attachments: [
+      {
+        kind: "voice" as const,
+        provider: "telegram" as const,
+        fileId: "voice-1",
+        fileUniqueId: "voice-1-uniq",
+        mimeType: "audio/ogg",
+        fileName: null,
+        sizeBytes: 1024,
+        caption: null,
+        durationSeconds: 6,
+        width: null,
+        height: null,
+        interpretation: {
+          summary: `Voice note transcript: ${transcript}`,
+          transcript,
+          ocrText: null,
+          confidence: 0.94,
+          provenance: "fixture transcription",
+          source: "fixture_catalog" as const,
+          entityHints: []
+        }
+      }
+    ]
+  };
+
+  return {
+    provider: "telegram",
+    conversationId: "chat-1",
+    userId: "user-1",
+    username: "agentowner",
+    conversationVisibility: "private",
+    text: buildConversationInboundUserInput("", media),
+    media,
     receivedAt: new Date().toISOString()
   };
 }
@@ -545,6 +590,37 @@ test("conversation manager recovers stale running job and resumes queued work", 
     assert.equal(session?.queuedJobs.length, 0);
     assert.ok(session?.recentJobs.some((job) => job.id === "job_stale_123" && job.status === "failed"));
     assert.ok(session?.recentJobs.some((job) => job.id === "job_queued_1" && job.status === "completed"));
+  } finally {
+    await removeTempDirWithRetry(tempDir);
+  }
+});
+
+test("conversation manager handles promoted voice commands after media normalization", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-conversation-voice-command-"));
+  const store = new InterfaceSessionStore(path.join(tempDir, "sessions.json"));
+  const manager = new ConversationManager(store, {
+    allowAutonomousViaInterface: true,
+    heartbeatIntervalMs: 25,
+    maxRecentJobs: 20,
+    staleRunningJobRecoveryMs: 60_000,
+    maxConversationTurns: 40,
+    maxContextTurnsForExecution: 10
+  });
+  try {
+    const reply = await manager.handleMessage(
+      buildVoiceMessage("BigBrain, command auto fix the planner test now"),
+      async (input) => ({ summary: `executed ${input}` }),
+      async () => undefined
+    );
+
+    assert.match(reply, /Starting autonomous loop for: fix the planner test now/);
+
+    const session = await store.getSession("telegram:chat-1:user-1");
+    assert.ok(session);
+    assert.equal(
+      session?.conversationTurns[session.conversationTurns.length - 1]?.text,
+      "/auto fix the planner test now"
+    );
   } finally {
     await removeTempDirWithRetry(tempDir);
   }

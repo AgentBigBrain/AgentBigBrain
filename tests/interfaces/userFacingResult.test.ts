@@ -91,6 +91,75 @@ test("selectUserFacingSummary strips label-style AI assistant openings from resp
   assert.equal(selected, "Test message received, Benny.");
 });
 
+test("selectUserFacingSummary strips label-style AI assistant answer openings from respond output", () => {
+  const runResult = buildRunResult("technical summary", [
+    {
+      action: {
+        id: "action_respond_label_style_answer_prefix",
+        type: "respond",
+        description: "reply",
+        params: {},
+        estimatedCostUsd: 0.02
+      },
+      mode: "fast_path",
+      approved: true,
+      output: "AI assistant answer: The screenshot shows a GitHub repository list.",
+      blockedBy: [],
+      violations: [],
+      votes: []
+    }
+  ]);
+
+  const selected = selectUserFacingSummary(runResult);
+  assert.equal(selected, "The screenshot shows a GitHub repository list.");
+});
+
+test("selectUserFacingSummary strips AI assistant here introductions from respond output", () => {
+  const runResult = buildRunResult("technical summary", [
+    {
+      action: {
+        id: "action_respond_ai_assistant_here_intro",
+        type: "respond",
+        description: "reply",
+        params: {},
+        estimatedCostUsd: 0.02
+      },
+      mode: "fast_path",
+      approved: true,
+      output: "AI assistant here—doing well, thanks for asking! How can I help you today, buddy?",
+      blockedBy: [],
+      violations: [],
+      votes: []
+    }
+  ]);
+
+  const selected = selectUserFacingSummary(runResult);
+  assert.equal(selected, "Doing well, thanks for asking! How can I help you today, buddy?");
+});
+
+test("selectUserFacingSummary strips I am your AI assistant introductions from respond output", () => {
+  const runResult = buildRunResult("technical summary", [
+    {
+      action: {
+        id: "action_respond_ai_assistant_identity_intro",
+        type: "respond",
+        description: "reply",
+        params: {},
+        estimatedCostUsd: 0.02
+      },
+      mode: "fast_path",
+      approved: true,
+      output: "Hey Benny — I'm your AI assistant, and I'm doing great. Thanks for asking! How are you doing today, and what would you like help with?",
+      blockedBy: [],
+      violations: [],
+      votes: []
+    }
+  ]);
+
+  const selected = selectUserFacingSummary(runResult);
+  assert.equal(selected, "I'm doing great. Thanks for asking! How are you doing today, and what would you like help with?");
+});
+
 test("selectUserFacingSummary blocks browser-execution overclaims when no shell action executed", () => {
   const runResult = buildRunResult("technical summary", [
     {

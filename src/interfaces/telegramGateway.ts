@@ -28,6 +28,10 @@ import {
   sendTelegramGatewayReply,
   type TelegramUpdate
 } from "./transportRuntime/telegramGatewayRuntime";
+import {
+  enrichAcceptedTelegramUpdateWithMedia,
+  extractTelegramChatIdFromConversationKey
+} from "./transportRuntime/telegramConversationDispatch";
 import { runStage685CheckpointLiveReview } from "./CheckpointReviewRunners/stage685CheckpointReviewRunner";
 import { runGatewayCheckpointReview } from "./checkpointReviewRouting";
 import {
@@ -39,30 +43,12 @@ import { runCheckpoint611LiveReview } from "./CheckpointReviewRunners/stage6_5Ch
 import { runCheckpoint613LiveReview } from "./CheckpointReviewRunners/stage6_5Checkpoint6_13Live";
 import { runCheckpoint675LiveReview } from "../core/stage6_75CheckpointLive";
 import { EntityGraphStore } from "../core/entityGraphStore";
+import { MediaUnderstandingOrgan } from "../organs/mediaUnderstanding/mediaInterpretation";
 
 interface TelegramGatewayOptions {
   sessionStore?: InterfaceSessionStore;
   entityGraphStore?: EntityGraphStore;
-}
-
-/**
- * Derives chat id from conversation key from available runtime inputs.
- *
- * **Why it exists:**
- * Keeps derivation logic for chat id from conversation key in one place so downstream policy uses the same signal.
- *
- * **What it talks to:**
- * - Uses local constants/helpers within this module.
- *
- * @param conversationKey - Lookup key or map field identifier.
- * @returns Computed `string | null` result.
- */
-function extractChatIdFromConversationKey(conversationKey: string): string | null {
-  const segments = conversationKey.split(":");
-  if (segments.length < 3 || segments[0] !== "telegram") {
-    return null;
-  }
-  return segments[1] || null;
+  mediaUnderstandingOrgan?: MediaUnderstandingOrgan;
 }
 
 export class TelegramGateway {
@@ -73,6 +59,7 @@ export class TelegramGateway {
   private readonly pulseScheduler: AgentPulseScheduler;
   private readonly autonomousAbortControllers = new Map<string, AbortController>();
   private readonly entityGraphStore: EntityGraphStore;
+  private readonly mediaUnderstandingOrgan?: MediaUnderstandingOrgan;
   private nextDraftId = 1;
 
   /**
@@ -101,6 +88,7 @@ export class TelegramGateway {
   ) {
     this.sessionStore = options.sessionStore ?? new InterfaceSessionStore();
     this.entityGraphStore = options.entityGraphStore ?? new EntityGraphStore();
+    this.mediaUnderstandingOrgan = options.mediaUnderstandingOrgan;
     this.conversationManager = new ConversationManager(this.sessionStore, {
       ackDelayMs: this.config.security.ackDelayMs,
       showCompletionPrefix: this.config.security.showCompletionPrefix,
@@ -162,7 +150,7 @@ export class TelegramGateway {
         sessionStore: this.sessionStore,
         evaluateAgentPulse: async (request) => this.adapter.evaluateAgentPulse(request),
         enqueueSystemJob: async (session, systemInput, receivedAt) => {
-          const chatId = extractChatIdFromConversationKey(session.conversationId);
+          const chatId = extractTelegramChatIdFromConversationKey(session.conversationId);
           if (!chatId) {
             return false;
           }
@@ -284,6 +272,7 @@ export class TelegramGateway {
       update,
       sharedSecret: this.config.security.sharedSecret,
       invocationPolicy: this.config.security.invocation,
+      mediaConfig: this.config.media,
       validateMessage: (message) => this.adapter.validateMessage(message),
       abortControllers: this.autonomousAbortControllers
     });
@@ -307,20 +296,35 @@ export class TelegramGateway {
       return;
     }
 
-    const notifier = this.createConversationNotifier(prepared.chatId, {
-      nativeDraftStreamingAllowed: prepared.conversationVisibility === "private"
+    const enrichedPrepared = await enrichAcceptedTelegramUpdateWithMedia({
+      prepared,
+      config: this.config,
+      mediaUnderstandingOrgan: this.mediaUnderstandingOrgan
+    });
+    if (enrichedPrepared.kind === "rejected") {
+      await deliverPreparedTransportResponse(
+        enrichedPrepared.responseText,
+        (text: string) => sendTelegramGatewayReply(this.config, enrichedPrepared.chatId, text),
+        "TELEGRAM_SEND_FAILED"
+      );
+      return;
+    }
+
+    const notifier = this.createConversationNotifier(enrichedPrepared.chatId, {
+      nativeDraftStreamingAllowed: enrichedPrepared.conversationVisibility === "private"
     });
     await handleAcceptedTransportConversation({
       inbound: {
         provider: "telegram",
-        conversationId: prepared.chatId,
-        userId: prepared.userId,
-        username: prepared.username,
-        conversationVisibility: prepared.conversationVisibility,
-        text: prepared.inbound.text,
-        receivedAt: prepared.inbound.receivedAt ?? new Date().toISOString()
+        conversationId: enrichedPrepared.chatId,
+        userId: enrichedPrepared.userId,
+        username: enrichedPrepared.username,
+        conversationVisibility: enrichedPrepared.conversationVisibility,
+        text: enrichedPrepared.inbound.text,
+        media: enrichedPrepared.inbound.media ?? null,
+        receivedAt: enrichedPrepared.inbound.receivedAt ?? new Date().toISOString()
       },
-      entityGraphEvent: prepared.entityGraphEvent,
+      entityGraphEvent: enrichedPrepared.entityGraphEvent,
       notifier,
       conversationManager: this.conversationManager,
       entityGraphStore: this.entityGraphStore,
@@ -335,7 +339,7 @@ export class TelegramGateway {
       },
       runAutonomousTask: (goal, timestamp, progressSender, signal) =>
         this.adapter.runAutonomousTask(goal, timestamp, progressSender, signal),
-      deliverReply: (reply: string) => sendTelegramGatewayReply(this.config, prepared.chatId, reply),
+      deliverReply: (reply: string) => sendTelegramGatewayReply(this.config, enrichedPrepared.chatId, reply),
       deliveryFailureCode: "TELEGRAM_SEND_FAILED",
       onEntityGraphMutationFailure: (error) => {
         console.warn(`[TelegramGateway] entity-graph mutation skipped: ${error.message}`);

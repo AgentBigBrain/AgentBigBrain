@@ -4,6 +4,7 @@
 
 import { buildDefaultBrain } from "../core/buildBrain";
 import { BrainOrchestrator } from "../core/orchestrator";
+import { MediaUnderstandingOrgan } from "../organs/mediaUnderstanding/mediaInterpretation";
 import { createBrainConfigFromEnv } from "../core/config";
 import { EntityGraphStore } from "../core/entityGraphStore";
 import { ensureEnvLoaded } from "../core/envLoader";
@@ -52,6 +53,8 @@ function createTelegramGatewayRuntime(
   config: TelegramInterfaceConfig,
   persistence: GatewayRuntimePersistence
 ): GatewayRuntime {
+  const mediaUnderstandingOrgan = new MediaUnderstandingOrgan();
+
   const adapter = new TelegramAdapter(brain, {
     auth: {
       requiredToken: config.security.sharedSecret
@@ -72,7 +75,8 @@ function createTelegramGatewayRuntime(
 
   return new TelegramGateway(adapter, config, {
     sessionStore: persistence.sessionStore,
-    entityGraphStore: persistence.entityGraphStore
+    entityGraphStore: persistence.entityGraphStore,
+    mediaUnderstandingOrgan
   });
 }
 
@@ -432,3 +436,4 @@ async function main(): Promise<void> {
 if (require.main === module) {
   void main();
 }
+

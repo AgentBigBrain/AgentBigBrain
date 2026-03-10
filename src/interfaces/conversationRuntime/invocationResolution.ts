@@ -7,9 +7,10 @@ import { resolvePulseCommandResponse } from "../conversationCommandPolicy";
 import {
   resolveNaturalPulseCommandClassification
 } from "../conversationManagerHelpers";
-import type {
-  ConversationInboundMessage,
-  ExecuteConversationTask
+import {
+  resolveConversationInboundUserInput,
+  type ConversationInboundMessage,
+  type ExecuteConversationTask
 } from "./managerContracts";
 import type { ConversationSession } from "../sessionStore";
 import type { ConversationIngressDependencies } from "./contracts";
@@ -39,7 +40,7 @@ export async function resolveConversationInvocation(
   executeTask: ExecuteConversationTask,
   deps: ConversationIngressDependencies
 ): Promise<ConversationInvocationResolution> {
-  const trimmed = message.text.trim();
+  const trimmed = resolveConversationInboundUserInput(message).trim();
   const naturalPulseClassification = resolveNaturalPulseCommandClassification(
     trimmed,
     deps.pulseLexicalRuleContext
@@ -108,8 +109,10 @@ export async function resolveConversationInvocation(
       session,
       trimmed,
       message.receivedAt,
-      deps
+      deps,
+      message.media
     )).reply,
     shouldStartWorker: session.queuedJobs.length > 0
   };
 }
+

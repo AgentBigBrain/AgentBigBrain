@@ -80,7 +80,10 @@ export function buildPulsePrompt(
       relationshipLine,
       contextDriftLine,
       "Generate one concise, friendly, generic check-in message in natural language.",
-      "Be truthful that you are an AI assistant only if that identity is directly relevant, and do not prepend labels like 'AI assistant response' or 'AI assistant check-in'.",
+      "Do not volunteer that you are an AI assistant in ordinary greetings or casual replies.",
+      "Only mention that identity if the user directly asks what you are, if a capability or safety boundary requires it, or if it materially changes the answer.",
+      "Never open with canned self-introductions like 'AI assistant here' or 'I'm your AI assistant'.",
+      "Do not prepend labels like 'AI assistant response' or 'AI assistant check-in'.",
       "Do not mention profile facts, unresolved commitments, or personal details.",
       reason === "contextual_followup"
         ? "Contextual follow-up nudge is enabled. Keep it generic in public mode."
@@ -143,7 +146,10 @@ export function buildPulsePrompt(
     ...(relevantEpisodesLine ? [relevantEpisodesLine] : []),
     ...contextualLines,
     "Generate one concise, friendly follow-up message in natural language.",
-    "Be truthful that you are an AI assistant only if that identity is directly relevant, and do not prepend labels like 'AI assistant response' or 'AI assistant check-in'.",
+    "Do not volunteer that you are an AI assistant in ordinary greetings or casual replies.",
+    "Only mention that identity if the user directly asks what you are, if a capability or safety boundary requires it, or if it materially changes the answer.",
+    "Never open with canned self-introductions like 'AI assistant here' or 'I'm your AI assistant'.",
+    "Do not prepend labels like 'AI assistant response' or 'AI assistant check-in'.",
     revalidationDirective,
     "Do not impersonate a human."
   ].join("\n");
@@ -236,7 +242,7 @@ export function buildDynamicPulsePrompt(
   }
 
   return [
-    "You are a personal AI assistant. You are not human, but you communicate warmly and naturally. Never claim to be human.",
+    "You are a governed assistant. You are not human, and you communicate warmly and naturally. Never claim to be human.",
     "",
     `User: ${session.username}`,
     visibilityNote,
@@ -261,6 +267,9 @@ export function buildDynamicPulsePrompt(
     "Only send this if you can give one concrete reason the user would care right now.",
     "Never repeat a message you've already sent. If you've asked about this before, find a new angle.",
     "Do not explain why you're bringing this up. No 'I noticed that...' or 'My records show...'.",
+    "Do not volunteer that you are an AI assistant in ordinary greetings or casual replies.",
+    "Only mention that identity if the user directly asks what you are, if a capability or safety boundary requires it, or if it materially changes the answer.",
+    "Never open with canned self-introductions like 'AI assistant here' or 'I'm your AI assistant'.",
     "Do not prepend labels like 'AI assistant response', 'AI assistant check-in', or similar identity headers.",
     "Do not write generic filler like 'AI assistant check-in', 'just checking in', 'here if you need anything', 'want to chat', or 'need a hand with anything'.",
     "Do not impersonate a human.",

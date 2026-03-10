@@ -5,11 +5,11 @@ This folder owns the runtime "organs" that plan, execute, interpret intent, brok
 reflect on task outcomes.
 
 The extracted `src/organs/liveRun/`, `src/organs/executionRuntime/`,
-`src/organs/plannerPolicy/`, `src/organs/memoryContext/`, `src/organs/reflectionRuntime/`, and
-`src/organs/intentRuntime/` subsystems own detailed live-run, non-live-run execution,
-planner-policy, memory-broker, reflection-runtime, and intent-runtime support modules; the
-top-level files here keep the stable orchestration entrypoints and remaining single-surface
-organs.
+`src/organs/plannerPolicy/`, `src/organs/memoryContext/`, `src/organs/reflectionRuntime/`,
+`src/organs/intentRuntime/`, and `src/organs/mediaUnderstanding/` subsystems own detailed
+live-run, non-live-run execution, planner-policy, memory-broker, reflection-runtime,
+intent-runtime, and bounded media-understanding support modules; the top-level files here keep the
+stable orchestration entrypoints and remaining single-surface organs.
 
 ## Primary Files
 - Stable orchestration entrypoints: `executor.ts`, `planner.ts`.
@@ -18,6 +18,10 @@ organs.
   `executionRuntime/shellExecution.ts`.
 - Memory brokerage subsystem: `memoryContext/contracts.ts`, `memoryContext/queryPlanning.ts`,
   `memoryContext/contextInjection.ts`, `memoryContext/auditEvents.ts`.
+- Media understanding subsystem: `mediaUnderstanding/contracts.ts`,
+  `mediaUnderstanding/imageUnderstanding.ts`, `mediaUnderstanding/speechToText.ts`,
+  `mediaUnderstanding/videoUnderstanding.ts`, `mediaUnderstanding/mediaInterpretation.ts`,
+  `mediaUnderstanding/mediaModelFallback.ts`.
 - Reflection runtime subsystem: `reflectionRuntime/contracts.ts`,
   `reflectionRuntime/failureLessons.ts`, `reflectionRuntime/successLessons.ts`,
   `reflectionRuntime/signalClassification.ts`.
@@ -34,8 +38,8 @@ organs.
 ## Outputs
 - executable action plans and fallback responses
 - action execution dispatch and live-run capability routing
-- memory context packets, bounded remembered-situation review and mutation brokerage, reflection
-  lessons, and pulse-intent classification
+- memory context packets, bounded remembered-situation review and mutation brokerage, bounded media
+  interpretations, reflection lessons, and pulse-intent classification
 - explicit remembered-situation review/update brokerage so private interface controls can resolve,
   correct, or forget episodic memory through stable organ boundaries
 
@@ -58,6 +62,8 @@ organs.
 - Future richer language understanding should converge under bounded `languageUnderstanding/` and
   `memorySynthesis/` organs rather than adding more bespoke lexical heuristics across unrelated
   organs.
+- Bounded image/video/voice interpretation belongs in `mediaUnderstanding/`; transport or memory
+  layers should consume interpreted summaries, not reinvent provider-specific media parsing.
 - `intentRuntime/pulseLexicalRules.ts` stays a deterministic lexical gate; human-centric proactive
   utility scoring belongs in a separate bounded runtime, not in the fail-closed pulse rulepack.
 - `reflection.ts` remains the stable reflection coordinator; detailed signal classification and
@@ -80,6 +86,7 @@ organs.
 - `tests/organs/memoryBroker.test.ts`
 - `tests/organs/memoryContextQueryPlanning.test.ts`
 - `tests/organs/memoryContextContextInjection.test.ts`
+- `tests/organs/mediaUnderstanding.test.ts`
 - `tests/organs/reflection.test.ts`
 - `tests/organs/intentInterpreter.test.ts`
 - `tests/organs/pulseLexicalClassifier.test.ts`
@@ -91,5 +98,6 @@ Update this README when:
 - a top-level organ file is added, removed, or renamed
 - ownership moves between this folder and `executionRuntime/`, `liveRun/`, `plannerPolicy/`, or
   `memoryContext/`
+- ownership moves between this folder and `mediaUnderstanding/`
 - a remaining top-level organ is extracted into a new subsystem
 - the related-test surface changes because organ ownership moved

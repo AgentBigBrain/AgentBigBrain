@@ -3,6 +3,7 @@
  */
 
 import type { ConversationVisibility } from "../sessionStore";
+import type { ConversationInboundMediaEnvelope } from "../mediaRuntime/contracts";
 import type {
   FollowUpRuleContext,
   PulseLexicalRuleContext
@@ -16,6 +17,7 @@ import type {
   InterpretedConversationIntent,
   IntentInterpreterTurn
 } from "../../organs/intentInterpreter";
+import { buildConversationInboundUserInput } from "../mediaRuntime/mediaNormalization";
 
 export interface ConversationInboundMessage {
   provider: "telegram" | "discord";
@@ -24,6 +26,7 @@ export interface ConversationInboundMessage {
   username: string;
   conversationVisibility: ConversationVisibility;
   text: string;
+  media?: ConversationInboundMediaEnvelope | null;
   receivedAt: string;
 }
 
@@ -231,3 +234,17 @@ export function parseAutonomousExecutionInput(
   }
   return executionInput.slice(AUTONOMOUS_EXECUTION_PREFIX.length).trim();
 }
+
+/**
+ * Resolves the bounded user-input text used by conversation-runtime helpers, preferring explicit
+ * text and falling back to a natural media-only request when the inbound message contains media.
+ *
+ * @param message - Inbound provider message.
+ * @returns Canonical user-input text used for routing and execution input assembly.
+ */
+export function resolveConversationInboundUserInput(
+  message: ConversationInboundMessage
+): string {
+  return buildConversationInboundUserInput(message.text, message.media);
+}
+

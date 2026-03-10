@@ -50,8 +50,12 @@ The latest slices moved queue/ack, worker-loop, and pulse-state ownership here s
 - `commandDispatch.ts` owns canonical slash-command dispatch below `conversationIngressLifecycle.ts`
 - `sessionRecovery.ts` owns canonical stale-running-job repair below
   `conversationIngressLifecycle.ts`
+- `executionIntentClarification.ts` owns canonical plan/build/execute-now clarification rules below
+  `conversationRouting.ts`
 - `followUpResolution.ts` owns canonical proposal approval, proposal-reply interpretation, and
   model-assisted follow-up resolution below `conversationIngressLifecycle.ts`
+- `mediaContextRendering.ts` owns canonical bounded execution-input rendering for interpreted media
+  context below `conversationExecutionInputPolicy.ts`
 - `contextualRecall.ts` owns canonical in-conversation contextual recall matching for active user
   turns below `conversationExecutionInputPolicy.ts`
 - `contextualRecallSupport.ts` owns shared tokenization, cue-building, duplicate-suppression, and
@@ -106,7 +110,9 @@ The latest slices moved queue/ack, worker-loop, and pulse-state ownership here s
 - canonical non-command invocation-resolution helpers for the stable ingress entrypoint
 - canonical slash-command dispatch helpers for the stable ingress entrypoint
 - canonical stale-running-job recovery helpers for the stable ingress entrypoint
+- canonical plan/build/execute-now clarification helpers for the stable routing entrypoint
 - canonical proposal approval and follow-up interpretation helpers for the stable ingress entrypoint
+- canonical bounded media-context rendering helpers for the stable execution-input entrypoint
 - canonical bounded in-conversation recall helpers and ranking for the stable execution-input
   entrypoint
 - canonical bounded remembered-situation review and mutation command helpers for the stable ingress
@@ -135,7 +141,11 @@ The latest slices moved queue/ack, worker-loop, and pulse-state ownership here s
   previews, and thread diagnostics belong in debug or diagnostic surfaces, not end-user messages.
 - User-facing pulse prompts should sound natural; they may be truthful about AI identity when
   relevant, but must not prepend label-style openings like `AI assistant response:` or
-  `AI assistant check-in:`.
+  `AI assistant check-in:` and should not volunteer AI identity in ordinary greetings or casual
+  replies.
+- Stored assistant turns and recent-conversation prompt context must also strip robotic label-style
+  openings like `AI assistant response:` or `AI assistant answer:` so stale history does not
+  reintroduce unnatural phrasing into later model turns.
 - User-facing pulse grounding may use bounded unresolved-situation summaries, but it must not leak
   raw episode ids or private memory internals into the user-visible message body.
 - Conversation lifecycle helpers here must preserve queue and ack semantics; extraction should only
@@ -152,8 +162,12 @@ The latest slices moved queue/ack, worker-loop, and pulse-state ownership here s
   command ownership, not change ingress behavior.
 - Session-recovery helpers here must preserve stale-running-job repair semantics; extraction should
   only move recovery ownership, not change ingress behavior.
+- Execution-intent clarification helpers here must preserve direct `execute now` / `build this
+  now` support while asking at most one short clarification when the user stays ambiguous.
 - Follow-up resolution helpers here must preserve proposal/follow-up semantics; extraction should
   only move ownership, not change ingress behavior.
+- Media-context rendering here must stay bounded, interpreted, and text-based; it must not leak raw
+  bytes or become a generic multimodal transport envelope downstream.
 - Contextual recall helpers here must stay bounded and optional; they may suggest one natural
   same-conversation follow-up, but must not turn into a separate proactive pulse path.
 - Contextual recall should prefer concrete unresolved situations linked through episodic memory
@@ -193,6 +207,7 @@ The latest slices moved queue/ack, worker-loop, and pulse-state ownership here s
 - `tests/interfaces/commandDispatch.test.ts`
 - `tests/interfaces/sessionRecovery.test.ts`
 - `tests/interfaces/followUpResolution.test.ts`
+- `tests/interfaces/mediaContextRendering.test.ts`
 - `tests/interfaces/contextualRecall.test.ts`
 - `tests/interfaces/conversationExecutionInputPolicy.test.ts`
 - `tests/interfaces/memoryReviewCommand.test.ts`
@@ -218,6 +233,8 @@ Update this README when:
 - bounded unresolved-situation pulse-grounding responsibilities change materially
 - user-facing pulse suppression or pulse message-body rules change materially
 - pulse identity or natural-language prompt rules change materially
+- AI-identity mention rules for pulse or conversational prompts change materially
+- assistant-turn storage or recent-context sanitization rules change materially
 - queue insertion, ack timers, or ack lifecycle responsibilities change materially
 - ack/final-delivery contract, preview, or persistence responsibilities change materially
 - system-job enqueue, worker execution, or pulse-state persistence responsibilities change
@@ -226,8 +243,10 @@ Update this README when:
 - non-command invocation-resolution responsibilities change materially
 - slash-command dispatch responsibilities change materially
 - stale-running-job recovery responsibilities change materially
+- execution-intent clarification responsibilities change materially
 - proposal approval, proposal-reply interpretation, or follow-up resolution responsibilities change
   materially
+- bounded media-context rendering responsibilities change materially
 - in-conversation contextual recall matching or suppression rules change materially
 - bare repeated-name suppression or recall-cue requirements change materially
 - the strong direct-overlap threshold for bounded contextual recall changes materially

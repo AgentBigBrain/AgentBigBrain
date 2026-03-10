@@ -10,6 +10,7 @@ send/edit/draft delivery behind:
 - `contracts.ts`
 - `deliveryLifecycle.ts`
 - `inboundDispatch.ts`
+- `telegramConversationDispatch.ts`
 - `discordGatewayRuntime.ts`
 - `discordTransport.ts`
 - `gatewayLifecycle.ts`
@@ -39,6 +40,8 @@ here.
 - canonical Telegram poll-loop helpers
 - canonical provider-specific inbound payload parsing/validation helpers for Discord and Telegram
 - canonical provider-specific gateway notifier/send-edit wrapper helpers for Discord and Telegram
+- canonical Telegram media-enrichment and conversation-key chat-id helpers used before shared
+  conversation dispatch
 - canonical accepted inbound conversation dispatch, autonomous/text task routing, and final reply
   delivery helpers shared by Discord and Telegram gateways
 - deterministic Discord send/edit delivery results
@@ -58,6 +61,8 @@ here.
   behavior; extraction should only move ownership, not change runtime behavior.
 - Provider-specific inbound parse/validation helpers here must preserve existing accept/reject/stop
   behavior; extraction should only move ownership, not change gateway semantics.
+- Telegram private one-to-one chats may accept plain text without an explicit `BigBrain` alias, but
+  group/public chats must keep the name-call requirement fail-closed.
 - Shared accepted-inbound dispatch helpers here must preserve existing entity-graph mutation,
   autonomous routing, conversation-manager execution, and final-send behavior; extraction should
   only move ownership, not change gateway semantics.
@@ -84,9 +89,12 @@ Update this README when:
 - reconnect or Telegram poll-loop ownership moves between the gateways and this subsystem
 - provider-specific inbound payload parsing/validation ownership moves between the gateways and this
   subsystem
+- Telegram private-chat invocation or public-chat name-call rules change materially
 - accepted inbound conversation dispatch ownership moves between the gateways and this subsystem
 - provider-specific notifier/send-edit wrapper ownership moves between the gateways and this
   subsystem
+- Telegram media-enrichment or conversation-key chat-id helper ownership moves between the gateway
+  entrypoints and this subsystem
 - Discord or Telegram notifier capability behavior changes materially
 - outbound Discord or Telegram send/edit/draft behavior changes materially
 - related test coverage changes because the transport-runtime surface moved

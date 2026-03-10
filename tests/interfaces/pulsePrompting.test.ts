@@ -190,6 +190,8 @@ test("buildDynamicPulsePrompt includes naturalness context sections when provide
   assert.ok(prompt.includes("User communication style: brief and task-focused"));
   assert.ok(prompt.includes("Only send this if you can give one concrete reason"));
   assert.ok(prompt.includes("Do not write generic filler like 'AI assistant check-in'"));
+  assert.ok(prompt.includes("Do not volunteer that you are an AI assistant in ordinary greetings or casual replies."));
+  assert.ok(prompt.includes("Never open with canned self-introductions like 'AI assistant here' or 'I'm your AI assistant'."));
 });
 
 test("buildDynamicPulsePrompt hardens relationship clarification against generic check-in wording", () => {
@@ -218,6 +220,8 @@ test("buildDynamicPulsePrompt hardens relationship clarification against generic
   assert.ok(prompt.includes("Only ask about the connection if a specific recent topic clearly grounds it."));
   assert.match(prompt, /rather than sending a generic check-in/i);
   assert.match(prompt, /do not prepend labels like 'AI assistant response'/i);
+  assert.match(prompt, /do not volunteer that you are an ai assistant in ordinary greetings or casual replies/i);
+  assert.match(prompt, /never open with canned self-introductions like 'ai assistant here' or 'i'm your ai assistant'/i);
 });
 
 test("computeRelationshipAgeDays prefers entity-graph firstSeenAt over conversation turns", () => {

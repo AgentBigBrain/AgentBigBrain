@@ -21,9 +21,10 @@ import {
   recordAssistantTurn,
   recordUserTurn
 } from "../conversationSessionMutations";
-import type {
-  ConversationInboundMessage,
-  ExecuteConversationTask
+import {
+  resolveConversationInboundUserInput,
+  type ConversationInboundMessage,
+  type ExecuteConversationTask
 } from "./managerContracts";
 import type { ConversationIngressDependencies } from "./contracts";
 
@@ -130,7 +131,7 @@ export async function handleImplicitProposalFlow(
   executeTask: ExecuteConversationTask,
   deps: ConversationIngressDependencies
 ): Promise<string> {
-  const normalizedInput = message.text.trim();
+  const normalizedInput = resolveConversationInboundUserInput(message).trim();
   const proposalReplyClassification = classifyProposalReply(normalizedInput, {
     hasActiveProposal: Boolean(session.activeProposal),
     ruleContext: deps.followUpRuleContext
@@ -174,7 +175,8 @@ export async function handleImplicitProposalFlow(
         classifyRoutingIntentV1(normalizedInput),
         normalizedInput,
         deps.queryContinuityEpisodes,
-        deps.queryContinuityFacts
+        deps.queryContinuityFacts,
+        message.media
       )
     );
     recordUserTurn(session, normalizedInput, message.receivedAt, deps.config.maxConversationTurns);
@@ -205,3 +207,4 @@ export async function handleImplicitProposalFlow(
     "Use 'adjust <changes>', 'approve', or 'cancel'."
   ].join("\n");
 }
+

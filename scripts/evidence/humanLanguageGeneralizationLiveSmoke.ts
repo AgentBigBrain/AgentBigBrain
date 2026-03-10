@@ -635,6 +635,7 @@ async function runProactiveScenario(
         }
       ]);
     session.conversationStack = buildConversationStackFromTurnsV1(session.conversationTurns, nowIso);
+    session.agentPulse.optIn = true;
     if (mode === "negative") {
       session.agentPulse.recentEmissions = [
         {

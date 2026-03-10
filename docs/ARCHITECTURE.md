@@ -212,6 +212,7 @@ Main surfaces:
 - `src/interfaces/conversationManager.ts`
 - `src/interfaces/conversationRuntime/`
 - `src/interfaces/transportRuntime/`
+- `src/interfaces/mediaRuntime/`
 - `src/interfaces/userFacing/`
 
 The interface stack is designed so transport handling, conversation state, and user-facing language
@@ -246,6 +247,37 @@ That is why user-facing rendering now separates:
 
 Main surface:
 - `src/interfaces/userFacing/`
+
+## 6A) Media Ingest Model
+
+Main surfaces:
+- `src/interfaces/mediaRuntime/`
+- `src/organs/mediaUnderstanding/`
+- `src/organs/memoryContext/`
+
+The runtime stays text-first internally, so media is interpreted once and then reduced to structured context with clear limits.
+
+Current model:
+
+1. transport parses the inbound media attachment
+2. media runtime downloads and normalizes metadata
+3. media understanding produces a short summary, optional OCR/transcript, confidence, source note, and entity hints
+4. memory brokerage decides whether any of that belongs in continuity or remembered situations
+5. the rest of the conversation runtime sees structured context, not raw media blobs
+
+Current capability limits:
+
+- images can use a vision-capable OpenAI model when configured
+- voice notes can use the transcription endpoint when configured
+- short videos currently use file metadata and captions
+
+Why video is still fallback-only:
+
+- there is no dedicated clip-analysis path in the current runtime
+- frame sampling, cost, latency, and truthfulness controls are not mature enough yet
+- the runtime currently limits video interpretation to file metadata and captions
+
+That choice is deliberate. It keeps the system honest while still letting video participate in intent clarification and continuity context.
 
 ## 7) Live-Run and Verification Model
 
@@ -312,6 +344,12 @@ OpenAI backend note:
   reasoning settings applied for GPT-5-family autonomous runs
 
 The runtime treats model output as untrusted until it is normalized and validated.
+
+Media note:
+
+- image understanding depends on a vision-capable model path
+- voice-note understanding depends on a transcription-capable model path
+- video is currently transport-plus-fallback, not full multimodal clip reasoning
 
 ## 10) Extension Points
 

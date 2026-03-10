@@ -31,6 +31,7 @@ full `profileMemoryStore.ts` implementation.
 - bounded episodic-memory resolution inference in `profileMemoryEpisodeResolution.ts`
 - episodic-memory consolidation plus freshness/lifecycle ranking in
   `profileMemoryEpisodeConsolidation.ts`
+- bounded interpreted media-ingest normalization in `profileMemoryMediaIngest.ts`
 - canonical fact upsert lifecycle helpers in `profileMemoryFactLifecycle.ts`
 - key, value, sensitivity, and topic normalization helpers in `profileMemoryNormalization.ts`
 - canonical persisted state normalization helpers in `profileMemoryStateNormalization.ts`
@@ -64,6 +65,8 @@ full `profileMemoryStore.ts` implementation.
   runtime must not grow an unbounded raw-episode dump surface.
 - Explicit user resolve, wrong, or forget flows must remain bounded and deterministic here even
   when higher layers expose private remembered-situation controls.
+- Interpreted media may enrich episodes or continuity context here, but raw image, audio, and video
+  bytes must never become general durable memory payloads.
 - Episodic-memory freshness and lifecycle ranking here may de-prioritize stale or terminal
   situations for planning, pulse grounding, and continuity recall, but must not fabricate recall
   candidates.
@@ -84,6 +87,7 @@ full `profileMemoryStore.ts` implementation.
 - `tests/core/profileMemoryEpisodeQueries.test.ts`
 - `tests/core/profileMemoryEpisodeResolution.test.ts`
 - `tests/core/profileMemoryEpisodeConsolidation.test.ts`
+- `tests/core/profileMemoryMediaIngest.test.ts`
 - `tests/core/profileMemoryFactLifecycle.test.ts`
 - `tests/core/profileMemoryMutations.test.ts`
 - `tests/core/profileMemoryNormalization.test.ts`
@@ -101,6 +105,7 @@ Update this README when:
 - a file is added, removed, or renamed in `src/core/profileMemoryRuntime/`
 - profile-memory runtime contracts move between this folder and `profileMemoryStore.ts`
 - planner-context, state lifecycle, normalization, extraction, pulse, mutation, encryption,
+  media-ingest normalization,
   readable-fact query, readable-episode query, episodic-memory linkage, episodic-memory,
   episodic-memory planning context, episodic-memory consolidation, or persistence ownership changes
 - related profile-memory runtime tests move materially

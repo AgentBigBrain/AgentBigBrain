@@ -30,6 +30,8 @@ import type {
   ConversationContinuityEpisodeRecord,
   ConversationMemoryReviewRecord
 } from "./conversationRuntime/managerContracts";
+import type { ConversationInboundMediaEnvelope } from "./mediaRuntime/contracts";
+import { hasConversationMedia } from "./mediaRuntime/contracts";
 
 export interface TelegramInboundMessage {
   updateId: number;
@@ -37,6 +39,7 @@ export interface TelegramInboundMessage {
   userId: string;
   username: string;
   text: string;
+  media?: ConversationInboundMediaEnvelope | null;
   authToken: string;
   receivedAt?: string;
 }
@@ -193,11 +196,11 @@ export class TelegramAdapter {
       };
     }
 
-    if (!message.text || !message.text.trim()) {
+    if ((!message.text || !message.text.trim()) && !hasConversationMedia(message.media)) {
       return {
         accepted: false,
         code: "EMPTY_MESSAGE",
-        message: "Inbound message rejected: text payload is empty."
+        message: "Inbound message rejected: text or media payload is empty."
       };
     }
 
@@ -691,3 +694,8 @@ export class TelegramAdapter {
     return true;
   }
 }
+
+
+
+
+

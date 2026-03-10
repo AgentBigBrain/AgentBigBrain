@@ -11,6 +11,7 @@ import {
   buildTurnLocalStatusUpdateBlock,
   resolveFollowUpInput
 } from "../../src/interfaces/conversationExecutionInputPolicy";
+import { buildConversationMediaContextBlock } from "../../src/interfaces/conversationRuntime/mediaContextRendering";
 import {
   buildSessionSeed,
   createFollowUpRuleContext
@@ -65,6 +66,60 @@ test("resolveFollowUpInput wraps short follow-up answers with prior assistant cl
   assert.match(resolution.executionInput, /User follow-up answer: private/);
 });
 
+test("resolveFollowUpInput strips robotic assistant labels from prior clarification prompts", () => {
+  const session = buildSession();
+  session.conversationTurns.push({
+    role: "assistant",
+    text: "AI assistant answer: Would you like me to build it now or plan it first?",
+    at: "2026-03-03T00:00:10.000Z"
+  });
+
+  const resolution = resolveFollowUpInput(
+    session,
+    "build it now",
+    createFollowUpRuleContext(null)
+  );
+
+  assert.match(resolution.executionInput, /Previous assistant question: Would you like me to build it now or plan it first\?/);
+  assert.doesNotMatch(resolution.executionInput, /AI assistant answer:/i);
+});
+
+
+
+test("buildConversationMediaContextBlock renders bounded interpreted attachment details", () => {
+  const block = buildConversationMediaContextBlock({
+    attachments: [
+      {
+        kind: "image",
+        provider: "telegram",
+        fileId: "file-image-1",
+        fileUniqueId: "uniq-image-1",
+        mimeType: "image/png",
+        fileName: "error.png",
+        sizeBytes: 2048,
+        caption: "You did this wrong.",
+        durationSeconds: null,
+        width: 1280,
+        height: 720,
+        interpretation: {
+          summary: "Screenshot shows a failing planner assertion.",
+          transcript: null,
+          ocrText: "Expected true Received false",
+          confidence: null,
+          provenance: "ocr + vision summary",
+          source: "fixture_catalog",
+          entityHints: ["planner.test.ts", "assertion"]
+        }
+      }
+    ]
+  });
+
+  assert.match(block ?? "", /Inbound media context \(interpreted once, bounded, no raw bytes\):/);
+  assert.match(block ?? "", /Attachment 1: image/);
+  assert.match(block ?? "", /interpretation\.confidence: unknown/);
+  assert.match(block ?? "", /planner\.test\.ts, assertion/);
+});
+
 test("buildConversationAwareExecutionInput returns raw input when no context, status, or routing hints exist", async () => {
   const session = buildSession();
   const executionInput = await buildConversationAwareExecutionInput(
@@ -99,6 +154,70 @@ test("buildConversationAwareExecutionInput includes conversation context, status
   assert.match(executionInput, /Recent conversation context \(oldest to newest\):/);
   assert.match(executionInput, /Turn-local status update \(authoritative for this turn\):/);
   assert.match(executionInput, /Deterministic routing hint:/);
+  assert.match(executionInput, /Current user request:/);
+});
+
+test("buildConversationAwareExecutionInput strips robotic assistant labels from recent conversation context", async () => {
+  const session = buildSession();
+  session.conversationTurns.push({
+    role: "assistant",
+    text: "AI assistant answer: Billy seems to be doing better now.",
+    at: "2026-03-03T00:00:20.000Z"
+  });
+
+  const executionInput = await buildConversationAwareExecutionInput(
+    session,
+    "How is Billy doing?",
+    10
+  );
+
+  assert.match(executionInput, /Recent conversation context \(oldest to newest\):/);
+  assert.match(executionInput, /- assistant: Billy seems to be doing better now\./);
+  assert.doesNotMatch(executionInput, /AI assistant answer:/i);
+});
+
+
+
+test("buildConversationAwareExecutionInput includes interpreted media context when media is attached", async () => {
+  const session = buildSession();
+  const executionInput = await buildConversationAwareExecutionInput(
+    session,
+    "Please fix this.",
+    10,
+    null,
+    "Please fix this.",
+    undefined,
+    undefined,
+    {
+      attachments: [
+        {
+          kind: "voice",
+          provider: "telegram",
+          fileId: "voice-1",
+          fileUniqueId: "voice-uniq-1",
+          mimeType: "audio/ogg",
+          fileName: null,
+          sizeBytes: 8192,
+          caption: null,
+          durationSeconds: 11,
+          width: null,
+          height: null,
+          interpretation: {
+            summary: "Voice note asking to fix the failing planner test now.",
+            transcript: "Please fix the failing planner test now.",
+            ocrText: null,
+            confidence: 0.94,
+            provenance: "transcription",
+            source: "fixture_catalog",
+            entityHints: ["planner", "test"]
+          }
+        }
+      ]
+    }
+  );
+
+  assert.match(executionInput, /Inbound media context \(interpreted once, bounded, no raw bytes\):/);
+  assert.match(executionInput, /interpretation\.transcript: Please fix the failing planner test now\./);
   assert.match(executionInput, /Current user request:/);
 });
 
@@ -219,6 +338,133 @@ test("buildConversationAwareExecutionInput can inject episode-aware contextual r
   assert.match(executionInput, /User follow-up answer: Billy seems better now\./);
 });
 
+
+test("buildConversationAwareExecutionInput can use media continuity cues to surface bounded contextual recall", async () => {
+  const session = buildSession({
+    conversationTurns: [
+      {
+        role: "user",
+        text: "We never really found out how Billy's MRI turned out.",
+        at: "2026-02-14T15:00:00.000Z"
+      }
+    ],
+    conversationStack: {
+      schemaVersion: "v1",
+      updatedAt: "2026-03-03T00:00:00.000Z",
+      activeThreadKey: "thread_current",
+      threads: [
+        {
+          threadKey: "thread_current",
+          topicKey: "repo_work",
+          topicLabel: "Repo Work",
+          state: "active",
+          resumeHint: "Continue the repo work.",
+          openLoops: [],
+          lastTouchedAt: "2026-03-03T00:00:00.000Z"
+        },
+        {
+          threadKey: "thread_billy",
+          topicKey: "billy_mri",
+          topicLabel: "Billy MRI",
+          state: "paused",
+          resumeHint: "Billy was waiting on MRI results and the outcome never got resolved.",
+          openLoops: [
+            {
+              loopId: "loop_billy_mri",
+              threadKey: "thread_billy",
+              entityRefs: ["billy", "mri"],
+              createdAt: "2026-02-14T15:00:00.000Z",
+              lastMentionedAt: "2026-02-14T15:00:00.000Z",
+              priority: 0.9,
+              status: "open"
+            }
+          ],
+          lastTouchedAt: "2026-02-14T15:00:00.000Z"
+        }
+      ],
+      topics: [
+        {
+          topicKey: "repo_work",
+          label: "Repo Work",
+          firstSeenAt: "2026-03-03T00:00:00.000Z",
+          lastSeenAt: "2026-03-03T00:00:00.000Z",
+          mentionCount: 1
+        },
+        {
+          topicKey: "billy_mri",
+          label: "Billy MRI",
+          firstSeenAt: "2026-02-14T15:00:00.000Z",
+          lastSeenAt: "2026-02-14T15:00:00.000Z",
+          mentionCount: 1
+        }
+      ]
+    }
+  });
+
+  const executionInput = await buildConversationAwareExecutionInput(
+    session,
+    "Please review the screenshot and tell me what to do next.",
+    10,
+    null,
+    "Please review the screenshot and tell me what to do next.",
+    async () => [
+      {
+        episodeId: "episode_billy_mri",
+        title: "Billy MRI results were still pending",
+        summary: "Billy was waiting on MRI results and the outcome never got resolved.",
+        status: "outcome_unknown",
+        lastMentionedAt: "2026-02-14T15:00:00.000Z",
+        entityRefs: ["Billy", "MRI"],
+        entityLinks: [
+          {
+            entityKey: "entity_billy",
+            canonicalName: "Billy"
+          }
+        ],
+        openLoopLinks: [
+          {
+            loopId: "loop_billy_mri",
+            threadKey: "thread_billy",
+            status: "open",
+            priority: 0.9
+          }
+        ]
+      }
+    ],
+    undefined,
+    {
+      attachments: [
+        {
+          kind: "image",
+          provider: "telegram",
+          fileId: "image-billy-1",
+          fileUniqueId: "image-billy-uniq-1",
+          mimeType: "image/png",
+          fileName: "billy-update.png",
+          sizeBytes: 2048,
+          caption: "Here is the note about Billy.",
+          durationSeconds: null,
+          width: 1024,
+          height: 768,
+          interpretation: {
+            summary: "The screenshot mentions Billy and says the MRI results still have not come back.",
+            transcript: null,
+            ocrText: "Billy MRI results still pending",
+            confidence: 0.93,
+            provenance: "fixture screenshot",
+            source: "fixture_catalog",
+            entityHints: ["Billy", "MRI"]
+          }
+        }
+      ]
+    }
+  );
+
+  assert.match(executionInput, /Contextual recall opportunity \(optional\):/);
+  assert.match(executionInput, /Media continuity cues: billy, mri/);
+  assert.match(executionInput, /Relevant situation: Billy MRI results were still pending/i);
+});
+
 test("buildAgentPulseExecutionInput includes pulse safety instructions and bounded context", () => {
   const session = buildSession();
   session.conversationTurns.push({
@@ -235,6 +481,11 @@ test("buildAgentPulseExecutionInput includes pulse safety instructions and bound
 
   assert.match(executionInput, /^System-generated Agent Pulse check-in request\./);
   assert.match(executionInput, /Do not impersonate a human\./);
+  assert.match(executionInput, /Do not volunteer that you are an AI assistant in ordinary greetings or casual replies\./);
+  assert.match(executionInput, /Only mention that identity if the user directly asks what you are/i);
+  assert.match(executionInput, /Never open with canned self-introductions like 'AI assistant here' or 'I'm your AI assistant'\./);
   assert.match(executionInput, /Agent Pulse request:/);
   assert.match(executionInput, /Recent conversation context \(oldest to newest\):/);
 });
+
+

@@ -209,6 +209,7 @@ function isGenericBuildExecutionIntent(text: string): boolean {
   if (
     matchesAny(text, BUILD_EXECUTION_DESTINATION_PATTERNS) ||
     /\bexecute\s+now\b/i.test(text) ||
+    /\b(?:build|create|make|generate|scaffold|set up|setup|spin up)\s+(?:this|it)?\s*now\b/i.test(text) ||
     /\brun\s+(?:it|commands?)\b/i.test(text)
   ) {
     return true;

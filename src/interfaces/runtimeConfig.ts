@@ -30,6 +30,19 @@ export interface SharedInterfaceSecurityConfig {
   };
 }
 
+export interface TelegramMediaInterfaceConfig {
+  enabled: boolean;
+  maxAttachments: number;
+  maxAttachmentBytes: number;
+  maxDownloadBytes: number;
+  maxVoiceSeconds: number;
+  maxVideoSeconds: number;
+  allowImages: boolean;
+  allowVoiceNotes: boolean;
+  allowVideos: boolean;
+  allowDocuments: boolean;
+}
+
 export interface TelegramInterfaceConfig {
   provider: "telegram";
   security: SharedInterfaceSecurityConfig;
@@ -40,6 +53,7 @@ export interface TelegramInterfaceConfig {
   streamingTransportMode: TelegramStreamingTransportMode;
   nativeDraftStreaming: boolean;
   allowedChatIds: string[];
+  media: TelegramMediaInterfaceConfig;
 }
 
 export interface DiscordInterfaceConfig {
@@ -352,7 +366,19 @@ function buildTelegramConfig(
     pollIntervalMs: parsePositiveInt(env.TELEGRAM_POLL_INTERVAL_MS, 500),
     streamingTransportMode,
     nativeDraftStreaming: streamingTransportMode === "native_draft",
-    allowedChatIds: parseCsv(env.TELEGRAM_ALLOWED_CHAT_IDS)
+    allowedChatIds: parseCsv(env.TELEGRAM_ALLOWED_CHAT_IDS),
+    media: {
+      enabled: parseBoolean(env.TELEGRAM_MEDIA_ENABLED, true),
+      maxAttachments: parsePositiveInt(env.TELEGRAM_MAX_MEDIA_ATTACHMENTS, 4),
+      maxAttachmentBytes: parsePositiveInt(env.TELEGRAM_MAX_MEDIA_ATTACHMENT_BYTES, 12000000),
+      maxDownloadBytes: parsePositiveInt(env.TELEGRAM_MAX_MEDIA_DOWNLOAD_BYTES, 20000000),
+      maxVoiceSeconds: parsePositiveInt(env.TELEGRAM_MAX_VOICE_SECONDS, 180),
+      maxVideoSeconds: parsePositiveInt(env.TELEGRAM_MAX_VIDEO_SECONDS, 90),
+      allowImages: parseBoolean(env.TELEGRAM_ALLOW_IMAGES, true),
+      allowVoiceNotes: parseBoolean(env.TELEGRAM_ALLOW_VOICE_NOTES, true),
+      allowVideos: parseBoolean(env.TELEGRAM_ALLOW_VIDEOS, true),
+      allowDocuments: parseBoolean(env.TELEGRAM_ALLOW_DOCUMENTS, false)
+    }
   };
 }
 
@@ -426,3 +452,8 @@ export function createInterfaceRuntimeConfigFromEnv(
     discord: buildDiscordConfig(env, security),
   };
 }
+
+
+
+
+

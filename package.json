@@ -91,6 +91,8 @@
     "test:interface:real_provider_live_smoke": "tsx scripts/evidence/interfaceRealProviderLiveSmoke.ts",
     "test:openai:multi_model_live_smoke": "tsx scripts/evidence/openaiMultiModelLiveSmoke.ts",
     "test:runtime:managed_process_live_smoke": "tsx scripts/evidence/managedProcessLiveSmoke.ts",
+    "test:media_ingest_execution_intent:evidence": "tsx scripts/evidence/mediaIngestExecutionIntentEvidence.ts",
+    "test:media_ingest_execution_intent:live_smoke": "tsx scripts/evidence/mediaIngestExecutionIntentLiveSmoke.ts",
     "test:human_language_generalization:evidence": "tsx scripts/evidence/humanLanguageGeneralizationEvidence.ts",
     "test:human_language_generalization:live_smoke": "tsx scripts/evidence/humanLanguageGeneralizationLiveSmoke.ts",
     "test:skill:compiled_live_smoke": "node scripts/evidence/skillCompiledRuntimeLiveSmoke.cjs",

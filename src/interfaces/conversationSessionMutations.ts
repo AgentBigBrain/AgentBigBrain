@@ -8,6 +8,7 @@ import {
   ConversationTurn
 } from "./sessionStore";
 import {
+  normalizeAssistantTurnText,
   normalizeTurnText,
   sortTurnsByTime
 } from "./conversationManagerHelpers";
@@ -125,7 +126,9 @@ export function pushConversationTurn(
   at: string,
   maxConversationTurns: number
 ): void {
-  const normalized = normalizeTurnText(text);
+  const normalized = role === "assistant"
+    ? normalizeAssistantTurnText(text)
+    : normalizeTurnText(text);
   if (!normalized) {
     return;
   }
@@ -176,7 +179,7 @@ export function backfillTurnsFromRecentJobsIfNeeded(
     }
 
     if (job.status === "completed" && job.resultSummary) {
-      const normalizedAssistant = normalizeTurnText(job.resultSummary);
+      const normalizedAssistant = normalizeAssistantTurnText(job.resultSummary);
       if (normalizedAssistant) {
         recoveredTurns.push({
           role: "assistant",

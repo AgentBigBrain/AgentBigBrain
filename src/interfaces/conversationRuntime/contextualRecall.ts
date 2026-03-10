@@ -2,6 +2,7 @@
  * @fileoverview Owns bounded in-conversation contextual recall helpers for active user turns.
  */
 
+import type { ConversationInboundMediaEnvelope } from "../mediaRuntime/contracts";
 import { normalizeWhitespace } from "../conversationManagerHelpers";
 import type { ConversationSession } from "../sessionStore";
 import type {
@@ -10,6 +11,7 @@ import type {
 } from "./managerContracts";
 import { resolveContextualReferenceHints } from "../../organs/languageUnderstanding/contextualReferenceResolution";
 import { buildRecallSynthesis } from "../../organs/memorySynthesis/recallSynthesis";
+import { buildMediaContinuityHints } from "../../core/stage6_86/mediaContinuityLinking";
 import {
   buildEpisodeRecallCandidates,
   buildPausedThreadRecallCandidate,
@@ -33,6 +35,26 @@ const GENERIC_RECALL_DETAIL_TERMS = new Set([
   "week",
   "weeks"
 ]);
+
+/**
+ * Deduplicates resolved recall hints while preserving their original order.
+ *
+ * @param hints - Candidate recall hints from reference resolution or media continuity.
+ * @returns Lowercased ordered hint list with duplicates removed.
+ */
+function dedupeRecallHints(hints: readonly string[]): readonly string[] {
+  const seen = new Set<string>();
+  const ordered: string[] = [];
+  for (const hint of hints) {
+    const normalized = hint.trim().toLowerCase();
+    if (!normalized || seen.has(normalized)) {
+      continue;
+    }
+    seen.add(normalized);
+    ordered.push(normalized);
+  }
+  return ordered;
+}
 
 /**
  * Detects strong direct overlap between the current turn and one episode candidate.
@@ -66,11 +88,21 @@ function hasStrongDirectEpisodeOverlap(
  */
 function shouldSuppressWeakContextualRecall(
   candidate: ContextualRecallCandidate,
-  resolvedReference: ReturnType<typeof resolveContextualReferenceHints>
+  resolvedReference: ReturnType<typeof resolveContextualReferenceHints>,
+  mediaRecallHints: readonly string[] = []
 ): boolean {
   const directTerms = resolvedReference.directTerms;
+  const candidateTerms = tokenizeTopicTerms([
+    candidate.topicLabel,
+    candidate.episodeSummary ?? "",
+    ...(candidate.entityRefs ?? [])
+  ].join(" "));
+  const mediaOverlap = mediaRecallHints.filter((term) => candidateTerms.includes(term)).length;
 
   if (resolvedReference.hasRecallCue) {
+    return false;
+  }
+  if (mediaOverlap >= 2) {
     return false;
   }
   if (hasStrongDirectEpisodeOverlap(candidate, directTerms)) {
@@ -79,11 +111,6 @@ function shouldSuppressWeakContextualRecall(
   if (!resolvedReference.usedFallbackContext) {
     return true;
   }
-  const candidateTerms = tokenizeTopicTerms([
-    candidate.topicLabel,
-    candidate.episodeSummary ?? "",
-    ...(candidate.entityRefs ?? [])
-  ].join(" "));
   const directOverlap = directTerms.filter((term) => candidateTerms.includes(term)).length;
   return directOverlap <= 1;
 }
@@ -94,12 +121,14 @@ function shouldSuppressWeakContextualRecall(
  * @param session - Conversation session providing prior turns and stack state.
  * @param userInput - Current raw user message before execution wrapping.
  * @param queryContinuityEpisodes - Optional bounded episodic-memory query capability.
+ * @param media - Optional interpreted media envelope that may provide continuity cues.
  * @returns One grounded recall candidate, or `null` when no bounded recall should be offered.
  */
 export async function resolveContextualRecallCandidate(
   session: ConversationSession,
   userInput: string,
-  queryContinuityEpisodes?: QueryConversationContinuityEpisodes
+  queryContinuityEpisodes?: QueryConversationContinuityEpisodes,
+  media?: ConversationInboundMediaEnvelope | null
 ): Promise<ContextualRecallCandidate | null> {
   const normalizedInput = normalizeWhitespace(userInput);
   if (!normalizedInput) {
@@ -112,9 +141,12 @@ export async function resolveContextualRecallCandidate(
     recentTurns: session.conversationTurns,
     threads: stack.threads
   });
-  const userTokens = resolvedReference.resolvedHints.length > 0
-    ? resolvedReference.resolvedHints
-    : tokenizeTopicTerms(normalizedInput);
+  const mediaHints = buildMediaContinuityHints(media);
+  const userTokens = dedupeRecallHints(
+    resolvedReference.resolvedHints.length > 0
+      ? [...resolvedReference.resolvedHints, ...mediaHints.recallHints]
+      : [...tokenizeTopicTerms(normalizedInput), ...mediaHints.recallHints]
+  );
   if (userTokens.length === 0) {
     return null;
   }
@@ -137,7 +169,7 @@ export async function resolveContextualRecallCandidate(
     return null;
   }
 
-  if (shouldSuppressWeakContextualRecall(bestCandidate, resolvedReference)) {
+  if (shouldSuppressWeakContextualRecall(bestCandidate, resolvedReference, mediaHints.recallHints)) {
     return null;
   }
 
@@ -154,13 +186,16 @@ export async function resolveContextualRecallCandidate(
  * @param session - Conversation session providing prior turns and stack state.
  * @param userInput - Current raw user message before execution wrapping.
  * @param queryContinuityEpisodes - Optional bounded episodic-memory query capability.
+ * @param queryContinuityFacts - Optional bounded continuity fact query capability.
+ * @param media - Optional interpreted media envelope that may provide continuity cues.
  * @returns Instruction block appended to execution input, or `null` when no recall applies.
  */
 export async function buildContextualRecallBlock(
   session: ConversationSession,
   userInput: string,
   queryContinuityEpisodes?: QueryConversationContinuityEpisodes,
-  queryContinuityFacts?: QueryConversationContinuityFacts
+  queryContinuityFacts?: QueryConversationContinuityFacts,
+  media?: ConversationInboundMediaEnvelope | null
 ): Promise<string | null> {
   const normalizedInput = normalizeWhitespace(userInput);
   const stack = resolveConversationStack(session);
@@ -169,18 +204,22 @@ export async function buildContextualRecallBlock(
     recentTurns: session.conversationTurns,
     threads: stack.threads
   });
+  const mediaHints = buildMediaContinuityHints(media);
   const candidate = await resolveContextualRecallCandidate(
     session,
     userInput,
-    queryContinuityEpisodes
+    queryContinuityEpisodes,
+    media
   );
   if (!candidate) {
     return null;
   }
 
-  const resolvedHints = resolvedReference.resolvedHints.length > 0
-    ? resolvedReference.resolvedHints
-    : tokenizeTopicTerms(normalizedInput);
+  const resolvedHints = dedupeRecallHints(
+    resolvedReference.resolvedHints.length > 0
+      ? [...resolvedReference.resolvedHints, ...mediaHints.recallHints]
+      : [...tokenizeTopicTerms(normalizedInput), ...mediaHints.recallHints]
+  );
   const supportingEpisodes = queryContinuityEpisodes && resolvedHints.length > 0
     ? await queryContinuityEpisodes({
       stack,
@@ -196,6 +235,12 @@ export async function buildContextualRecallBlock(
     }).catch(() => [])
     : [];
   const synthesis = buildRecallSynthesis(supportingEpisodes, supportingFacts);
+  const mediaCueLine = mediaHints.recallHints.length > 0
+    ? [`- Media continuity cues: ${mediaHints.recallHints.join(", ")}`]
+    : [];
+  const mediaEvidenceLine = mediaHints.evidence.length > 0
+    ? [`- Media cue sources: ${mediaHints.evidence.join(", ")}`]
+    : [];
 
   if (candidate.kind === "episode") {
     return [
@@ -207,6 +252,8 @@ export async function buildContextualRecallBlock(
       `- Situation status: ${candidate.episodeStatus ?? "unresolved"}`,
       `- Related open loops: ${candidate.openLoopCount}`,
       `- Last mentioned: ${candidate.lastTouchedAt}`,
+      ...mediaCueLine,
+      ...mediaEvidenceLine,
       ...(resolvedReference.usedFallbackContext
         ? [`- Resolved from context: ${resolvedReference.evidence.join(", ")}`]
         : []),
@@ -229,6 +276,8 @@ export async function buildContextualRecallBlock(
     `- Prior thread cue: ${candidate.supportingCue}`,
     `- Open loops on that thread: ${candidate.openLoopCount}`,
     `- Last touched: ${candidate.lastTouchedAt}`,
+    ...mediaCueLine,
+    ...mediaEvidenceLine,
     ...(resolvedReference.usedFallbackContext
       ? [`- Resolved from context: ${resolvedReference.evidence.join(", ")}`]
       : []),

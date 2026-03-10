@@ -19,4 +19,4 @@ This project is licensed under the [Apache License, Version 2.0](LICENSE).
 
 ## Questions
 
-For legal or licensing questions, contact the maintainers at **info@michiganwebteam.com**.
+For legal or licensing questions, contact the maintainers at **info@agentbigbrain.com**.

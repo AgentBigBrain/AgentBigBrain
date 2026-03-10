@@ -16,34 +16,75 @@ interface EpisodePattern {
   tags: readonly string[];
 }
 
+const EPISODE_SUBJECT_PATTERN =
+  "([A-Z][A-Za-z']+(?:[ -][A-Z][A-Za-z']+){0,2})";
+const EPISODE_NAME_CANDIDATE_PATTERN = /[A-Z][A-Za-z']+(?:[ -][A-Z][A-Za-z']+){0,2}/g;
+const EPISODE_NAME_STOP_WORDS = new Set([
+  "A",
+  "An",
+  "He",
+  "Her",
+  "His",
+  "I",
+  "It",
+  "My",
+  "Our",
+  "She",
+  "Someone",
+  "That",
+  "The",
+  "Their",
+  "They",
+  "This",
+  "We"
+]);
+
 const EPISODE_PATTERNS: readonly EpisodePattern[] = [
   {
-    pattern: /\b([A-Z][A-Za-z' -]{1,40})\s+(fell down|had a fall|fell and got hurt)\b/i,
+    pattern: new RegExp(
+      `\\b${EPISODE_SUBJECT_PATTERN}\\s+(fell down|had a fall|fell and got hurt)\\b`,
+      "i"
+    ),
     canonicalEvent: "fell down",
     tags: ["injury", "fall", "followup"]
   },
   {
-    pattern: /\b([A-Z][A-Za-z' -]{1,40})\s+(got hurt|was hurt|got injured|was injured)\b/i,
+    pattern: new RegExp(
+      `\\b${EPISODE_SUBJECT_PATTERN}\\s+(got hurt|was hurt|got injured|was injured)\\b`,
+      "i"
+    ),
     canonicalEvent: "got hurt",
     tags: ["injury", "followup"]
   },
   {
-    pattern: /\b([A-Z][A-Za-z' -]{1,40})\s+(got sick|was sick|has been sick)\b/i,
+    pattern: new RegExp(
+      `\\b${EPISODE_SUBJECT_PATTERN}\\s+(got sick|was sick|has been sick)\\b`,
+      "i"
+    ),
     canonicalEvent: "got sick",
     tags: ["health", "followup"]
   },
   {
-    pattern: /\b([A-Z][A-Za-z' -]{1,40})\s+(was hospitalized|went to the hospital|had surgery)\b/i,
+    pattern: new RegExp(
+      `\\b${EPISODE_SUBJECT_PATTERN}\\s+(was hospitalized|went to the hospital|had surgery)\\b`,
+      "i"
+    ),
     canonicalEvent: "had a medical situation",
     tags: ["health", "medical", "followup"]
   },
   {
-    pattern: /\b([A-Z][A-Za-z' -]{1,40})\s+(lost (?:his|her|their) job|got fired)\b/i,
+    pattern: new RegExp(
+      `\\b${EPISODE_SUBJECT_PATTERN}\\s+(lost (?:his|her|their) job|got fired)\\b`,
+      "i"
+    ),
     canonicalEvent: "lost a job",
     tags: ["work", "followup"]
   },
   {
-    pattern: /\b([A-Z][A-Za-z' -]{1,40})\s+(was in an accident|got into an accident)\b/i,
+    pattern: new RegExp(
+      `\\b${EPISODE_SUBJECT_PATTERN}\\s+(was in an accident|got into an accident)\\b`,
+      "i"
+    ),
     canonicalEvent: "was in an accident",
     tags: ["accident", "followup"]
   }
@@ -79,7 +120,7 @@ export function extractProfileEpisodeCandidatesFromUserInput(
       }
 
       const rawName = trimTrailingClausePunctuation(match[1] ?? "");
-      const contactToken = normalizeProfileKey(rawName);
+      const contactToken = extractEpisodeContactToken(rawName);
       if (!contactToken) {
         continue;
       }
@@ -138,4 +179,21 @@ function toEpisodeConfidence(text: string): number {
     normalized.includes("i think")
     ? 0.72
     : 0.9;
+}
+
+/**
+ * Resolves one bounded contact token from a regex-matched episode subject span.
+ *
+ * @param rawName - Raw subject span matched before the event phrase.
+ * @returns Normalized contact token, or null when no credible name-like subject exists.
+ */
+function extractEpisodeContactToken(rawName: string): string | null {
+  const candidates = [...rawName.matchAll(EPISODE_NAME_CANDIDATE_PATTERN)]
+    .map((match) => trimTrailingClausePunctuation(match[0] ?? ""))
+    .filter((candidate) => candidate.length > 0)
+    .filter((candidate) => !EPISODE_NAME_STOP_WORDS.has(candidate));
+  if (candidates.length === 0) {
+    return null;
+  }
+  return normalizeProfileKey(candidates[candidates.length - 1] ?? "");
 }

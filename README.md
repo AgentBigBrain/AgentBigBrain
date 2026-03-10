@@ -37,6 +37,8 @@ Built in TypeScript with only **2 runtime dependencies** (`ws`, `onnxruntime-nod
 
 **🧠 Six Governed Memory Systems** — Profile facts, episodic memory, governance memory, semantic memory, workflow learning, and continuity state (entity graph plus open loops). All governed, with private remembered-situation review controls.
 
+**🖼️ Media Input With Safe Limits** — Telegram screenshots, voice notes, and short videos can enter the governed conversation path. Images use a vision-capable model when available, voice notes use transcription when available, and video currently uses file metadata and captions rather than full clip analysis.
+
 **💬 Multi-Interface** — CLI, Telegram bot, Discord bot, and an HTTP federation protocol for agent-to-agent communication.
 
 <a id="zero-dependency-core"></a>
@@ -267,6 +269,16 @@ Yes. Set `BRAIN_MODEL_BACKEND=openai` and configure `OPENAI_API_KEY`. You can po
 
 Set `BRAIN_INTERFACE_PROVIDER` to `telegram`, `discord`, or `both`, add your bot token(s), and configure the username allowlist. Then run `npm run dev:interface`. Step-by-step instructions are in **[docs/SETUP.md](docs/SETUP.md)**.
 
+### Can it handle screenshots, voice notes, or short video?
+
+Yes, but the current media support is intentionally limited and truthful.
+
+- Images: supported through the Telegram media-ingest path. Rich interpretation requires a vision-capable OpenAI model. If that path is unavailable, the runtime falls back to a simple caption or file-metadata summary.
+- Voice notes: supported through the Telegram media-ingest path. Rich interpretation requires the transcription path, which defaults to `whisper-1`. If transcription is unavailable, the runtime falls back to basic media context instead of fabricating a transcript.
+- Video: accepted as input. Today the runtime uses file metadata and captions for video, not full clip analysis.
+
+See **[docs/SETUP.md](docs/SETUP.md)** for the exact media-related env settings and current operator limits.
+
 ### What are clones?
 
 Clones are short-lived satellite identities the agent can spawn for bounded parallel work. They're not independent sub-agents — they stay under the main agent's governance and their outputs must pass merge checks before integration. Think of them as temporary helpers on a short leash, not autonomous workers.
@@ -316,7 +328,7 @@ Full architecture spec: **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**
 
 ## 🔒 Security
 
-Report vulnerabilities privately to **security@michiganwebteam.com** or via [GitHub Security Advisories](https://github.com/AgentBigBrain/AgentBigBrain/security/advisories/new). Do not open public issues for security vulnerabilities. See [SECURITY.md](SECURITY.md).
+Report vulnerabilities privately to **security@agentbigbrain.com** or via [GitHub Security Advisories](https://github.com/AgentBigBrain/AgentBigBrain/security/advisories/new). Do not open public issues for security vulnerabilities. See [SECURITY.md](SECURITY.md).
 
 ## 🤝 Contributing and Support
 

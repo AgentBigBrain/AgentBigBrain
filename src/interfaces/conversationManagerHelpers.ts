@@ -17,6 +17,7 @@ import {
   PulseLexicalRuleContext
 } from "../organs/pulseLexicalClassifier";
 import { createEmptyConversationStackV1 } from "../core/stage6_86ConversationStack";
+import { stripLabelStyleOpening } from "./userFacing/languageSurface";
 export {
   FollowUpRulepackV1,
   type FollowUpClassification,
@@ -341,6 +342,25 @@ export function normalizeTurnText(value: string): string {
 }
 
 /**
+ * Normalizes assistant-authored turn text and strips robotic label-style openings.
+ *
+ * **Why it exists:**
+ * Assistant turns are persisted and later re-injected into prompt context. Stripping prefixes like
+ * `AI assistant response:` here prevents stale history from teaching the model bad style in later
+ * turns while preserving the underlying answer content.
+ *
+ * **What it talks to:**
+ * - Uses `normalizeTurnText` for bounded storage.
+ * - Uses `stripLabelStyleOpening` to remove robotic assistant labels.
+ *
+ * @param value - Raw assistant-authored turn text.
+ * @returns Assistant turn text normalized for storage and prompt-context reuse.
+ */
+export function normalizeAssistantTurnText(value: string): string {
+  return normalizeTurnText(stripLabelStyleOpening(value));
+}
+
+/**
  * Renders conversation turns into bullet lines for prompt context blocks.
  *
  * **Why it exists:**
@@ -353,7 +373,11 @@ export function normalizeTurnText(value: string): string {
  * @returns Bullet-style transcript lines used in prompt context blocks.
  */
 export function renderTurnsForContext(turns: ConversationTurn[]): string {
-  return turns.map((turn) => `- ${turn.role}: ${turn.text}`).join("\n");
+  return turns
+    .map((turn) =>
+      `- ${turn.role}: ${turn.role === "assistant" ? normalizeAssistantTurnText(turn.text) : turn.text}`
+    )
+    .join("\n");
 }
 
 /**

@@ -3,6 +3,8 @@
  */
 
 import type { ConversationSession } from "./sessionStore";
+import type { ConversationInboundMediaEnvelope } from "./mediaRuntime/contracts";
+import { buildConversationMediaContextBlock } from "./conversationRuntime/mediaContextRendering";
 import {
   buildRoutingExecutionHintV1,
   type RoutingMapClassificationV1
@@ -12,6 +14,7 @@ import {
   isLikelyAssistantClarificationPrompt,
   type FollowUpClassification,
   type FollowUpRuleContext,
+  normalizeAssistantTurnText,
   normalizeWhitespace,
   renderTurnsForContext
 } from "./conversationManagerHelpers";
@@ -72,7 +75,8 @@ export async function buildConversationAwareExecutionInput(
   routingClassification: RoutingMapClassificationV1 | null = null,
   sourceUserInput: string | null = null,
   queryContinuityEpisodes?: QueryConversationContinuityEpisodes,
-  queryContinuityFacts?: QueryConversationContinuityFacts
+  queryContinuityFacts?: QueryConversationContinuityFacts,
+  media?: ConversationInboundMediaEnvelope | null
 ): Promise<string> {
   const recentTurns = session.conversationTurns.slice(-maxContextTurnsForExecution);
   const rawUserInput = sourceUserInput ?? executionInput;
@@ -81,12 +85,20 @@ export async function buildConversationAwareExecutionInput(
     session,
     rawUserInput,
     queryContinuityEpisodes,
-    queryContinuityFacts
+    queryContinuityFacts,
+    media
   );
+  const mediaContextBlock = buildConversationMediaContextBlock(media);
   const routingHint = routingClassification
     ? buildRoutingExecutionHintV1(routingClassification)
     : null;
-  if (recentTurns.length === 0 && !statusUpdateBlock && !contextualRecallBlock && !routingHint) {
+  if (
+    recentTurns.length === 0 &&
+    !statusUpdateBlock &&
+    !contextualRecallBlock &&
+    !mediaContextBlock &&
+    !routingHint
+  ) {
     return executionInput;
   }
 
@@ -114,6 +126,9 @@ export async function buildConversationAwareExecutionInput(
   }
   if (contextualRecallBlock) {
     lines.push("", contextualRecallBlock);
+  }
+  if (mediaContextBlock) {
+    lines.push("", mediaContextBlock);
   }
   if (routingHint) {
     lines.push("", "Deterministic routing hint:", routingHint);
@@ -169,7 +184,7 @@ export function resolveFollowUpInput(
       `Follow-up rulepack: ${classification.rulepackVersion}`,
       `Follow-up category: ${classification.category}`,
       `Follow-up confidence: ${classification.confidenceTier}`,
-      `Previous assistant question: ${lastAssistantPrompt.text}`,
+      `Previous assistant question: ${normalizeAssistantTurnText(lastAssistantPrompt.text)}`,
       `User follow-up answer: ${normalizeWhitespace(userInput)}`
     ].join("\n"),
     classification
@@ -202,7 +217,10 @@ export function buildAgentPulseExecutionInput(
   return [
     "System-generated Agent Pulse check-in request.",
     "Return one concise proactive check-in message in natural language.",
-    "Be truthful that you are an AI assistant if that identity is directly relevant, but do not prepend labels like 'AI assistant response' or 'AI assistant check-in'.",
+    "Do not volunteer that you are an AI assistant in ordinary greetings or casual replies.",
+    "Only mention that identity if the user directly asks what you are, if a capability or safety boundary requires it, or if it materially changes the answer.",
+    "Never open with canned self-introductions like 'AI assistant here' or 'I'm your AI assistant'.",
+    "Do not prepend labels like 'AI assistant response' or 'AI assistant check-in'.",
     "Do not impersonate a human.",
     "Do not perform file/network/shell actions unless explicitly required.",
     "",
@@ -211,3 +229,9 @@ export function buildAgentPulseExecutionInput(
     contextBlock
   ].join("\n");
 }
+
+
+
+
+
+

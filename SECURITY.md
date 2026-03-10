@@ -17,7 +17,7 @@
 Use one of these private channels:
 
 1. **GitHub Security Advisories** (preferred) — [Report a vulnerability](https://github.com/AgentBigBrain/AgentBigBrain/security/advisories/new)
-2. **Email** — [security@michiganwebteam.com](mailto:security@michiganwebteam.com)
+2. **Email** — [security@agentbigbrain.com](mailto:security@agentbigbrain.com)
 
 ### What to Include
 

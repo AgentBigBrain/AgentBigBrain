@@ -52,3 +52,9 @@
     or README contracts the next agent should read first.
 19. If a plan is actively being executed, keep the `When another agent picks this up:` section
     updated in the same change as phase/status updates so handoff does not depend on guesswork.
+20. In public-facing docs such as `README.md`, `docs/SETUP.md`, `docs/COMMAND_EXAMPLES.md`, and
+    `docs/ERROR_CODE_ENV_MAP.md`, prefer clear plain-English wording over internal jargon.
+21. Technical terms are allowed when they improve accuracy, but do not let them become a barrier
+    to understanding. If you use terms like `bounded`, `provenance`, `semantic`, or other internal
+    shorthand, either make the meaning obvious from context or explain it right away in simpler
+    language.

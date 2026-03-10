@@ -10,6 +10,19 @@ import {
 import { extractNamedContactFacts } from "./profileMemoryContactExtraction";
 
 /**
+ * Trims common trailing clause continuations from name-like captures.
+ *
+ * @param value - Raw captured preferred-name clause.
+ * @returns Sanitized preferred-name text.
+ */
+function trimPreferredNameValue(value: string): string {
+  return trimTrailingClausePunctuation(value)
+    .replace(/\s+and\b[\s\S]*$/i, "")
+    .replace(/\s+(?:but|because|so)\b[\s\S]*$/i, "")
+    .trim();
+}
+
+/**
  * Extracts deterministic profile-fact candidates from raw user text.
  *
  * @param userInput - Raw user utterance or wrapped execution input text.
@@ -63,12 +76,12 @@ export function extractProfileFactCandidatesFromUserInput(
   }
 
   const namePattern =
-    /\bmy\s+name\s+(?:is|was|=)\s+([^.!?\n]+?)(?=(?:\s+and\b)|[.!?\n]|$)/i;
+    /\bmy\s+name\s+(?:is|was|=)\s+(.+?)(?:\s+and\b|[.!?\n]|$)/i;
   const nameMatch = namePattern.exec(text);
   if (nameMatch) {
     maybeAddCandidate({
       key: "identity.preferred_name",
-      value: trimTrailingClausePunctuation(nameMatch[1]),
+      value: trimPreferredNameValue(nameMatch[1]),
       sensitive: false,
       sourceTaskId,
       source: "user_input_pattern.name_phrase",
@@ -78,12 +91,12 @@ export function extractProfileFactCandidatesFromUserInput(
   }
 
   const callMePattern =
-    /\b(?:you\s+can\s+)?call\s+me\s+([^.!?\n]+?)(?=(?:\s+and\b)|[.!?\n]|$)/i;
+    /\b(?:you\s+can\s+)?call\s+me\s+(.+?)(?:\s+and\b|[.!?\n]|$)/i;
   const callMeMatch = callMePattern.exec(text);
   if (callMeMatch) {
     maybeAddCandidate({
       key: "identity.preferred_name",
-      value: trimTrailingClausePunctuation(callMeMatch[1]),
+      value: trimPreferredNameValue(callMeMatch[1]),
       sensitive: false,
       sourceTaskId,
       source: "user_input_pattern.call_me",
@@ -93,12 +106,12 @@ export function extractProfileFactCandidatesFromUserInput(
   }
 
   const goByPattern =
-    /\bi\s+go\s+by\s+([^.!?\n]+?)(?=(?:\s+and\b)|[.!?\n]|$)/i;
+    /\bi\s+go\s+by\s+(.+?)(?:\s+and\b|[.!?\n]|$)/i;
   const goByMatch = goByPattern.exec(text);
   if (goByMatch) {
     maybeAddCandidate({
       key: "identity.preferred_name",
-      value: trimTrailingClausePunctuation(goByMatch[1]),
+      value: trimPreferredNameValue(goByMatch[1]),
       sensitive: false,
       sourceTaskId,
       source: "user_input_pattern.go_by",
@@ -113,6 +126,9 @@ export function extractProfileFactCandidatesFromUserInput(
     const rawKey = match[1];
     const value = match[2];
     const key = normalizeProfileKey(rawKey);
+    if (canonicalizeProfileKey(key) === "identity.preferred_name") {
+      continue;
+    }
     maybeAddCandidate({
       key,
       value,

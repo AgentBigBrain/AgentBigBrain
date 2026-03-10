@@ -22,6 +22,13 @@ Three execution labels matter:
 - `Guidance only`: the runtime gave instructions or analysis without side effects.
 - `Blocked`: policy, governance, or runtime limits denied execution.
 
+Media note:
+
+- Telegram screenshots, voice notes, and short videos can be used as input context with safe limits.
+- Rich screenshot understanding requires a vision-capable model.
+- Rich voice-note understanding requires transcription.
+- Short video currently uses file metadata and captions, so captions or follow-up text are still helpful when the clip is ambiguous.
+
 ## 2) Quick Rules That Matter
 
 - If you want real side effects, say `execute now`.
@@ -197,6 +204,40 @@ Why it works:
 - it gives the runtime a natural place to use bounded contextual recall
 - it avoids needing a special memory-specific command
 
+### Screenshot correction in Telegram
+
+```text
+[send a screenshot]
+Caption: BigBrain you did this wrong. The screenshot shows the actual issue. Please fix it now instead of only explaining it.
+```
+
+Why it works:
+- the screenshot provides visual context
+- the caption makes the execution intent explicit
+- the runtime can treat this like a direct corrective request
+
+### Voice note with direct execution intent
+
+```text
+[send a voice note]
+Spoken content: Please go fix this now. The planner test is still failing on the branch behavior, and I want you to repair it instead of just describing it.
+```
+
+Why it works:
+- the voice note can become transcript-backed context
+- the request is explicit enough that the runtime does not need `execute now` as magic wording
+
+### Short video with ambiguous intent
+
+```text
+[send a short video]
+Caption: BigBrain I recorded this because the dashboard feels off right after the menu opens. Use the clip and help me with the next step.
+```
+
+What should happen:
+- the runtime should ask a clarifying question such as whether you want it planned first or built now
+- it should not act as if the clip got deep analysis when the current video path only uses metadata and captions
+
 ## 6) CLI Examples
 
 ### Single governed task
@@ -290,3 +331,4 @@ If you want a short checklist, remember this:
 - Want proactive control: use `/pulse`
 - Want the normal progress view: use `/status`
 - Want internal delivery detail: use `/status debug`
+- Want media to carry most of the context: screenshots and voice notes work best today; video is accepted but still relies on file metadata and captions

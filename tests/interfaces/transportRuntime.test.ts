@@ -713,6 +713,139 @@ test("prepareTelegramUpdate accepts greeting-plus-alias invocations", () => {
   assert.equal(result.inbound.text, "Hi");
 });
 
+test("prepareTelegramUpdate accepts private plain-text messages without alias in one-to-one chats", () => {
+  const result = prepareTelegramUpdate({
+    update: {
+      update_id: 46_1,
+      message: {
+        text: "what can you help me with",
+        chat: {
+          id: 100,
+          type: "private"
+        },
+        from: {
+          id: 200,
+          username: "tester"
+        },
+        date: 1_700_000_000
+      }
+    },
+    sharedSecret: "shared-secret",
+    invocationPolicy: {
+      requireNameCall: true,
+      aliases: ["bigbrain"]
+    },
+    validateMessage: () => ({
+      accepted: true,
+      code: "ACCEPTED",
+      message: "ok"
+    }),
+    abortControllers: new Map<string, AbortController>()
+  });
+
+  assert.equal(result.kind, "accepted");
+  if (result.kind !== "accepted") {
+    return;
+  }
+  assert.equal(result.inbound.text, "what can you help me with");
+});
+
+test("prepareTelegramUpdate still requires alias in group chats", () => {
+  const result = prepareTelegramUpdate({
+    update: {
+      update_id: 46_2,
+      message: {
+        text: "what can you help me with",
+        chat: {
+          id: 100,
+          type: "group"
+        },
+        from: {
+          id: 200,
+          username: "tester"
+        },
+        date: 1_700_000_000
+      }
+    },
+    sharedSecret: "shared-secret",
+    invocationPolicy: {
+      requireNameCall: true,
+      aliases: ["bigbrain"]
+    },
+    validateMessage: () => ({
+      accepted: true,
+      code: "ACCEPTED",
+      message: "ok"
+    }),
+    abortControllers: new Map<string, AbortController>()
+  });
+
+  assert.deepEqual(result, { kind: "ignored" });
+});
+
+
+
+test("prepareTelegramUpdate accepts private media-only messages and defers canonical text assembly", () => {
+  const result = prepareTelegramUpdate({
+    update: {
+      update_id: 47,
+      message: {
+        chat: {
+          id: 100,
+          type: "private"
+        },
+        from: {
+          id: 200,
+          username: "tester"
+        },
+        caption: "",
+        photo: [
+          {
+            file_id: "photo-1",
+            file_unique_id: "photo-uniq-1",
+            width: 1280,
+            height: 720,
+            file_size: 4096
+          }
+        ],
+        date: 1_700_000_000
+      }
+    },
+    sharedSecret: "shared-secret",
+    invocationPolicy: {
+      requireNameCall: true,
+      aliases: ["bigbrain"]
+    },
+    mediaConfig: {
+      enabled: true,
+      maxAttachments: 4,
+      maxAttachmentBytes: 12000000,
+      maxDownloadBytes: 20000000,
+      maxVoiceSeconds: 180,
+      maxVideoSeconds: 90,
+      allowImages: true,
+      allowVoiceNotes: true,
+      allowVideos: true,
+      allowDocuments: false
+    },
+    validateMessage: () => ({
+      accepted: true,
+      code: "ACCEPTED",
+      message: "ok"
+    }),
+    abortControllers: new Map<string, AbortController>()
+  });
+
+  assert.equal(result.kind, "accepted");
+  if (result.kind !== "accepted") {
+    return;
+  }
+  assert.equal(result.inbound.text, "");
+  assert.equal(result.inbound.media?.attachments.length, 1);
+  assert.equal(result.inbound.media?.attachments[0]?.kind, "image");
+  assert.equal(result.entityGraphEvent.text, "Please review the attached image and respond based on what it shows.");
+});
+
 test("prepareTelegramUpdate surfaces transport-facing rejections and wrapped draft ids", () => {
   const rejected = prepareTelegramUpdate({
     update: {
@@ -1222,3 +1355,4 @@ test("runTelegramPollingLoop keeps polling until running stops and preserves err
 
   assert.deepEqual(events, ["poll:1", "error:poll failed", "sleep:500", "poll:2"]);
 });
+

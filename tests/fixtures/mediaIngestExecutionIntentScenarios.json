@@ -1,0 +1,73 @@
+{
+  "schemaVersion": 1,
+  "scenarios": [
+    {
+      "id": "image_fix_now",
+      "title": "Screenshot correction with direct fix intent",
+      "summary": "The user sends a screenshot and says the assistant should fix the issue now instead of explaining it.",
+      "mediaKind": "image",
+      "fixtureFile": "planner_failure.png",
+      "userText": "BigBrain you did this wrong. The screenshot shows the planner assertion still failing in the branch I asked you to change. Please fix it now instead of just explaining it.",
+      "expectedInterpretation": {
+        "summary": "Screenshot shows a failing planner assertion on the wrong branch path.",
+        "transcript": null,
+        "ocrText": "planner.test.ts expected the other branch to run",
+        "confidence": 0.98,
+        "provenance": "repo fixture planner failure screenshot",
+        "entityHints": ["planner", "planner.test.ts", "branch mismatch"]
+      },
+      "expectedBehavior": ["direct_execute", "image_correction", "bounded_media_context"]
+    },
+    {
+      "id": "video_plan_or_build",
+      "title": "Short UI clip with ambiguous build intent",
+      "summary": "The user shares a short clip of a UI regression and mentions building the dashboard change without explicitly saying to do it now.",
+      "mediaKind": "video",
+      "fixtureFile": "ui_regression.mp4",
+      "userText": "BigBrain I recorded a short clip so you can see what the UI is doing. The wrong panel slides in right after the menu opens and the dashboard feels off. Please build the dashboard change using this clip.",
+      "expectedInterpretation": {
+        "summary": "Short video shows the wrong dashboard panel sliding in after the menu opens.",
+        "transcript": null,
+        "ocrText": null,
+        "confidence": 0.92,
+        "provenance": "repo fixture dashboard regression clip",
+        "entityHints": ["dashboard", "menu", "panel"]
+      },
+      "expectedBehavior": ["clarify_plan_or_build", "video_context", "bounded_media_context"]
+    },
+    {
+      "id": "voice_fix_now",
+      "title": "Voice note asking for an immediate repair",
+      "summary": "The user sends a voice note that clearly asks the assistant to fix the failing planner test right away.",
+      "mediaKind": "voice",
+      "fixtureFile": "fix_request.ogg",
+      "userText": "",
+      "expectedInterpretation": {
+        "summary": "Voice note asks for an immediate fix to the failing planner test.",
+        "transcript": "Please go fix this now. The main problem is the planner test is still failing on the branch behavior, and I want you to repair it instead of just explaining it. Use the same repo and make the change.",
+        "ocrText": null,
+        "confidence": 0.97,
+        "provenance": "repo fixture fix request voice note",
+        "entityHints": ["planner test", "branch behavior", "repo"]
+      },
+      "expectedBehavior": ["direct_execute", "voice_transcript", "bounded_media_context"]
+    },
+    {
+      "id": "voice_memory_followup",
+      "title": "Voice note reopening an unresolved Billy situation",
+      "summary": "The user sends a natural voice note that brings Billy up again and should create or refresh an episodic memory rather than triggering immediate execution.",
+      "mediaKind": "voice",
+      "fixtureFile": "billy_followup.ogg",
+      "userText": "",
+      "expectedInterpretation": {
+        "summary": "Voice note revisits Billy's unresolved MRI situation from a few weeks ago.",
+        "transcript": "Billy came up again while I was driving home, and it reminded me of that whole MRI situation from a few weeks ago. I still do not know how it ended, and it feels like the story never fully closed. If you remember that thread, keep it in mind when we talk next.",
+        "ocrText": null,
+        "confidence": 0.94,
+        "provenance": "repo fixture Billy follow-up voice note",
+        "entityHints": ["Billy", "MRI", "few weeks ago"]
+      },
+      "expectedBehavior": ["memory_update", "episode_followup", "bounded_media_context"]
+    }
+  ]
+}

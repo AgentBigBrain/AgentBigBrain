@@ -8,9 +8,16 @@ import {
   resolveFollowUpInput
 } from "../conversationExecutionInputPolicy";
 import type { FollowUpRuleContext } from "../conversationManagerHelpers";
-import { recordUserTurn } from "../conversationSessionMutations";
+import {
+  recordAssistantTurn,
+  recordUserTurn
+} from "../conversationSessionMutations";
 import { classifyRoutingIntentV1 } from "../routingMap";
 import type { ConversationSession } from "../sessionStore";
+import type { ConversationInboundMediaEnvelope } from "../mediaRuntime/contracts";
+import {
+  resolveExecutionIntentClarification
+} from "./executionIntentClarification";
 import type {
   QueryConversationContinuityEpisodes,
   QueryConversationContinuityFacts
@@ -65,6 +72,36 @@ export async function routeConversationChatInput(
     receivedAt,
     followUpResolution.classification
   );
+
+  const followUpLinkedToPriorAssistantPrompt =
+    followUpResolution.classification.isShortFollowUp
+    && followUpResolution.executionInput !== normalizedInput;
+
+  if (!followUpLinkedToPriorAssistantPrompt) {
+    const clarification = resolveExecutionIntentClarification(
+      normalizedInput,
+      routingClassification
+    );
+    if (clarification.question) {
+      recordUserTurn(
+        session,
+        normalizedInput,
+        receivedAt,
+        deps.config.maxConversationTurns
+      );
+      recordAssistantTurn(
+        session,
+        clarification.question,
+        receivedAt,
+        deps.config.maxConversationTurns
+      );
+      return {
+        reply: clarification.question,
+        shouldStartWorker: false
+      };
+    }
+  }
+
   const enqueueResult = deps.enqueueJob(
     session,
     normalizedInput,
@@ -76,7 +113,8 @@ export async function routeConversationChatInput(
       routingClassification,
       normalizedInput,
       deps.queryContinuityEpisodes,
-      deps.queryContinuityFacts
+      deps.queryContinuityFacts,
+      null
     )
   );
   recordUserTurn(
@@ -101,19 +139,43 @@ export async function routeConversationMessageInput(
   session: ConversationSession,
   input: string,
   receivedAt: string,
-  deps: ConversationRoutingDependencies
+  deps: ConversationRoutingDependencies,
+  media: ConversationInboundMediaEnvelope | null = null
 ): Promise<ConversationEnqueueResult> {
   const followUpResolution = resolveFollowUpInput(
     session,
     input,
     deps.followUpRuleContext
   );
+  const routingClassification = classifyRoutingIntentV1(input);
   recordClassifierEvent(
     session,
     input,
     receivedAt,
     followUpResolution.classification
   );
+
+  const followUpLinkedToPriorAssistantPrompt =
+    followUpResolution.classification.isShortFollowUp
+    && followUpResolution.executionInput !== input;
+
+  if (!followUpLinkedToPriorAssistantPrompt) {
+    const clarification = resolveExecutionIntentClarification(input, routingClassification);
+    if (clarification.question) {
+      recordUserTurn(session, input, receivedAt, deps.config.maxConversationTurns);
+      recordAssistantTurn(
+        session,
+        clarification.question,
+        receivedAt,
+        deps.config.maxConversationTurns
+      );
+      return {
+        reply: clarification.question,
+        shouldStartWorker: false
+      };
+    }
+  }
+
   const enqueueResult = deps.enqueueJob(
     session,
     input,
@@ -122,10 +184,11 @@ export async function routeConversationMessageInput(
       session,
       followUpResolution.executionInput,
       deps.config.maxContextTurnsForExecution,
-      null,
+      routingClassification,
       input,
       deps.queryContinuityEpisodes,
-      deps.queryContinuityFacts
+      deps.queryContinuityFacts,
+      media
     )
   );
   recordUserTurn(session, input, receivedAt, deps.config.maxConversationTurns);
