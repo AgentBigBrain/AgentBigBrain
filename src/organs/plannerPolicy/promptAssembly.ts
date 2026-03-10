@@ -76,12 +76,6 @@ export function buildExecutionStyleBuildStrategyGuidance(currentUserRequest: str
   );
 }
 
-/**
- * Appends deterministic repair guidance for invalid planner action plans.
- *
- * @param repairReason - Machine-readable repair reason emitted by planner validation.
- * @returns Additional prompt text describing how the repaired plan should change.
- */
 function buildPlannerRepairReasonGuidance(repairReason: string): string {
   if (repairReason.startsWith("invalid_execution_style_build_plan:LIVE_VERIFICATION_ACTION_REQUIRED")) {
     return (
