@@ -252,6 +252,12 @@ export async function evaluateProactiveAutonomousGoal(
   }
 }
 
+/**
+ * Appends live-run-specific planner guidance when the mission requires localhost or browser proof.
+ *
+ * @param missionContract - Mission completion contract for the current goal.
+ * @returns Additional prompt text or an empty string when live-run proof is not required.
+ */
 function buildLiveRunPromptGuidance(missionContract: MissionCompletionContract): string {
   if (!(missionContract.requireReadinessProof || missionContract.requireBrowserProof)) {
     return "";
@@ -267,6 +273,13 @@ function buildLiveRunPromptGuidance(missionContract: MissionCompletionContract):
   );
 }
 
+/**
+ * Detects whether a task result includes a specific runtime execution failure code.
+ *
+ * @param result - Task result from the latest autonomous-loop iteration.
+ * @param failureCode - Runtime failure code to detect.
+ * @returns `true` when the task result contains the requested failure code.
+ */
 function hasExecutionFailureCode(result: TaskRunResult, failureCode: string): boolean {
   return result.actionResults.some((entry) =>
     !entry.approved &&
@@ -277,6 +290,12 @@ function hasExecutionFailureCode(result: TaskRunResult, failureCode: string): bo
   );
 }
 
+/**
+ * Detects whether the current subtask already attempted local Playwright installation recovery.
+ *
+ * @param input - Current subtask instruction text.
+ * @returns `true` when the instruction is already a Playwright install recovery prompt.
+ */
 function isPlaywrightInstallRecoveryInput(input: string): boolean {
   const normalized = input.trim().toLowerCase();
   return (
@@ -286,6 +305,12 @@ function isPlaywrightInstallRecoveryInput(input: string): boolean {
   );
 }
 
+/**
+ * Builds the deterministic Playwright-install recovery prompt for browser-proof missions.
+ *
+ * @param overarchingGoal - Mission-level goal text.
+ * @returns Explicit recovery subtask instruction.
+ */
 function buildPlaywrightInstallRecoveryInput(overarchingGoal: string): string {
   return (
     "Browser verification is unavailable because the local Playwright runtime is missing or " +
