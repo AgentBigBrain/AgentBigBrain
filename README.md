@@ -17,6 +17,8 @@
 
 AgentBigBrain is a framework for building AI assistants and autonomous agents you can actually trust.
 
+> You wouldn't let a new hire run your company unsupervised on day one — you'd check their work, have someone review it, and keep a paper trail. AgentBigBrain holds AI to that same standard.
+
 Most agent frameworks let the AI decide what to do and hope for the best. AgentBigBrain takes a different approach: every action the AI proposes must pass through hard safety checks and a council of specialized reviewers before it's allowed to run. If anything looks wrong, the action is blocked — no exceptions, no overrides.
 
 Think of it like checks and balances for AI. The AI plans. The system verifies. Only then does it act. Every approved action is recorded in a tamper-evident audit trail, so you never have to take the agent's word for it — you can verify exactly what happened and why.
