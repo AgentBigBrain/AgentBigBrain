@@ -29,6 +29,12 @@ Media note:
 - Rich voice-note understanding requires transcription.
 - Short video currently uses file metadata and captions, so captions or follow-up text are still helpful when the clip is ambiguous.
 
+Voice command note:
+
+- In voice notes, you can use `command <name>` as the spoken version of a slash command.
+- Examples: `command skills`, `command status`, `command auto fix the planner test now`
+- If a voice note does not start with a clear `command <name>` phrase, it stays normal conversation text.
+
 ## 2) Quick Rules That Matter
 
 - If you want real side effects, say `execute now`.
@@ -227,6 +233,30 @@ Why it works:
 - the voice note can become transcript-backed context
 - the request is explicit enough that the runtime does not need `execute now` as magic wording
 
+### Voice note with explicit command mode
+
+```text
+[send a voice note]
+Spoken content: BigBrain, command skills and tell me which reusable tools you already trust for planner failure work because I do not want to rediscover the same fix again.
+```
+
+Why it works:
+- `command skills` is the voice-safe version of `/skills`
+- the rest of the sentence can stay natural and conversational
+- it avoids false positives because ordinary speech does not get promoted into slash commands
+
+### Voice note with autonomous command mode
+
+```text
+[send a voice note]
+Spoken content: BigBrain, command auto fix the failing planner branch test now and stop if policy blocks any write or shell step.
+```
+
+Why it works:
+- `command auto` is the voice-safe version of `/auto`
+- the goal can still be spoken in one natural sentence
+- the runtime keeps the same safety and stop behavior as text `/auto`
+
 ### Short video with ambiguous intent
 
 ```text
@@ -270,6 +300,27 @@ npm run dev -- --autonomous "create a React app at C:\Users\<you>\Desktop\financ
 npm run dev -- "create skill repo_status that reads package.json and runtime/state.json and returns a short repo summary"
 npm run dev -- "run skill repo_status on this repo"
 ```
+
+### Ask for the current skill inventory in normal conversation
+
+```text
+/chat Before we jump back into the planner failure, tell me what reusable skills you already have available right now. I want to know which ones are safe to trust before I ask you to use one.
+```
+
+Why it works:
+- users do not need to know the internal architecture to inspect available skills
+- the runtime should answer with the same canonical inventory as `/skills`
+
+### Ask to reuse a proven workflow without jargon
+
+```text
+/chat This feels like the same planner failure we dealt with last week. If you already have a reusable tool or a proven workflow for it, use that instead of rediscovering the fix.
+```
+
+Why it works:
+- it sounds like a natural human request
+- it gives the runtime room to prefer a trusted skill or a proven workflow
+- the user does not need to say whether the answer should come from a skill or workflow memory
 
 ## 7) Weak Prompt vs Better Prompt
 

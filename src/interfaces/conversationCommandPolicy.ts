@@ -75,6 +75,7 @@ export function renderConversationCommandHelpText(): string {
     "/chat run skill repo_status on this repo",
     "/skills",
     "/auto create a React app at C:\\Users\\<you>\\Desktop\\finance-dashboard. Execute now using PowerShell. Create files directly; if blocked, stop and tell me exactly why.",
+    "Voice command tip: in a voice note, say \"command skills\" for /skills or \"command auto ...\" for /auto.",
     "/pulse on",
     "/memory",
     "/memory resolve episode_abc123 Billy recovered and is fine now",
