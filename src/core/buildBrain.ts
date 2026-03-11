@@ -2,6 +2,8 @@
  * @fileoverview Composes the default brain instance by wiring config, organs, governors, model client, and state store.
  */
 
+import path from "node:path";
+
 import { createBrainConfigFromEnv } from "./config";
 import { BrainOrchestrator } from "./orchestrator";
 import { StateStore } from "./stateStore";
@@ -13,6 +15,7 @@ import { ReflectionOrgan } from "../organs/reflection";
 import { ToolExecutorOrgan } from "../organs/executor";
 import { MemoryBrokerOrgan } from "../organs/memoryBroker";
 import { LanguageUnderstandingOrgan } from "../organs/languageUnderstanding/episodeExtraction";
+import { SkillRegistryStore } from "../organs/skillRegistry/skillRegistryStore";
 import { ExecutionReceiptStore } from "./advancedAutonomyRuntime";
 import { SemanticMemoryStore } from "./semanticMemory";
 import { PersonalityStore } from "./personalityStore";
@@ -127,6 +130,9 @@ export function buildDefaultBrain(): BrainOrchestrator {
     sqlitePath: config.persistence.ledgerSqlitePath,
     exportJsonOnWrite: config.persistence.exportJsonOnWrite
   });
+  const skillRegistryStore = new SkillRegistryStore(
+    path.resolve(process.cwd(), "runtime/skills")
+  );
   const distillerLedgerStore = new DistillerMergeLedgerStore(undefined, {
     backend: config.persistence.ledgerBackend,
     sqlitePath: config.persistence.ledgerSqlitePath,
@@ -179,6 +185,7 @@ export function buildDefaultBrain(): BrainOrchestrator {
     undefined,
     undefined,
     workflowLearningStore,
-    judgmentPatternStore
+    judgmentPatternStore,
+    skillRegistryStore
   );
 }

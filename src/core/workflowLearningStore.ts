@@ -11,7 +11,9 @@ import { LedgerBackend } from "./config";
 import { withFileLock, writeFileAtomic } from "./fileLock";
 import { withSqliteDatabase } from "./sqliteStore";
 import { TaskRunResult, WorkflowAdaptationResult, WorkflowObservation, WorkflowPattern } from "./types";
-import { extractActiveRequestSegment } from "./currentRequestExtraction";
+import { applyWorkflowObservationMetadata } from "./workflowLearningRuntime/patternLifecycle";
+import { deriveWorkflowObservationFromTaskRunDetailed } from "./workflowLearningRuntime/observationExtraction";
+import { rankRelevantWorkflowPatterns } from "./workflowLearningRuntime/relevanceRanking";
 
 const SQLITE_WORKFLOW_PATTERNS_TABLE = "workflow_patterns";
 const MAX_WORKFLOW_PATTERNS = 2_000;
@@ -106,7 +108,33 @@ function parseWorkflowPattern(input: unknown): WorkflowPattern | null {
     successCount: Number(candidate.successCount),
     failureCount: Number(candidate.failureCount),
     suppressedCount: Number(candidate.suppressedCount),
-    contextTags
+    contextTags,
+    executionStyle: parseOptionalEnum(candidate.executionStyle, [
+      "respond_only",
+      "single_action",
+      "multi_action",
+      "live_run",
+      "skill_based"
+    ] as const),
+    actionSequenceShape: parseOptionalString(candidate.actionSequenceShape) ?? undefined,
+    approvalPosture: parseOptionalEnum(candidate.approvalPosture, [
+      "none",
+      "fast_path_only",
+      "escalation_only",
+      "mixed",
+      "blocked_only"
+    ] as const),
+    verificationProofPresent: parseOptionalBoolean(candidate.verificationProofPresent),
+    costBand: parseOptionalEnum(candidate.costBand, ["none", "low", "medium", "high"] as const),
+    latencyBand: parseOptionalEnum(candidate.latencyBand, ["fast", "moderate", "slow"] as const),
+    dominantFailureMode: parseOptionalString(candidate.dominantFailureMode),
+    recoveryPath: parseOptionalString(candidate.recoveryPath),
+    linkedSkillName: parseOptionalString(candidate.linkedSkillName),
+    linkedSkillVerificationStatus: parseOptionalEnum(candidate.linkedSkillVerificationStatus, [
+      "unverified",
+      "verified",
+      "failed"
+    ] as const)
   };
 }
 
@@ -138,40 +166,75 @@ function parseWorkflowLearningDocument(input: unknown): WorkflowLearningDocument
 }
 
 /**
- * Normalizes query token and validates expected structure.
+ * Parses optional string fields from persisted workflow documents.
  *
- * **Why it exists:**
- * Centralizes normalization rules for query token so call sites stay aligned.
- *
- * **What it talks to:**
- * - Uses local constants/helpers within this module.
- *
- * @param value - Primary value processed by this function.
- * @returns Resulting string value.
+ * @param value - Raw persisted value.
+ * @returns `undefined` for type mismatch, `null` for empty/null, or the trimmed string.
  */
-function normalizeQueryToken(value: string): string {
-  return value.trim().toLowerCase();
+function parseOptionalString(value: unknown): string | null | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (value === null) {
+    return null;
+  }
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  return value.trim().length > 0 ? value : null;
 }
 
 /**
- * Derives query tokens from available runtime inputs.
+ * Parses optional boolean fields from persisted workflow documents.
  *
- * **Why it exists:**
- * Keeps derivation logic for query tokens in one place so downstream policy uses the same signal.
- *
- * **What it talks to:**
- * - Uses local constants/helpers within this module.
- *
- * @param query - Value for query.
- * @returns Ordered collection produced by this step.
+ * @param value - Raw persisted value.
+ * @returns Boolean when valid, otherwise `undefined`.
  */
-function deriveQueryTokens(query: string): string[] {
-  const tokens = query
-    .toLowerCase()
-    .split(/[^a-z0-9_]+/)
-    .map((entry) => normalizeQueryToken(entry))
-    .filter((entry) => entry.length >= 3);
-  return [...new Set(tokens)].slice(0, 12);
+function parseOptionalBoolean(value: unknown): boolean | undefined {
+  return typeof value === "boolean" ? value : undefined;
+}
+
+/**
+ * Parses optional enum fields from persisted workflow documents.
+ *
+ * @param value - Raw persisted value.
+ * @param allowedValues - Canonical enum values accepted for the field.
+ * @returns Matching enum value or `undefined`.
+ */
+function parseOptionalEnum<T extends string>(
+  value: unknown,
+  allowedValues: readonly T[]
+): T | undefined {
+  return typeof value === "string" && allowedValues.includes(value as T)
+    ? (value as T)
+    : undefined;
+}
+
+/**
+ * Reapplies structured observation metadata to the workflow adaptation result returned by the
+ * legacy adapter so richer fields survive the persistence round trip.
+ *
+ * @param adaptation - Legacy workflow adaptation result.
+ * @param observation - New observation metadata to apply.
+ * @returns Adaptation result with the updated pattern enriched.
+ */
+function applyObservationMetadataToAdaptation(
+  adaptation: WorkflowAdaptationResult,
+  observation: WorkflowObservation
+): WorkflowAdaptationResult {
+  const patterns = adaptation.patterns.map((pattern) =>
+    pattern.id === adaptation.updatedPattern.id
+      ? applyWorkflowObservationMetadata(pattern, observation)
+      : pattern
+  );
+  const updatedPattern =
+    patterns.find((pattern) => pattern.id === adaptation.updatedPattern.id) ??
+    applyWorkflowObservationMetadata(adaptation.updatedPattern, observation);
+  return {
+    patterns,
+    updatedPattern,
+    supersededPatternIds: adaptation.supersededPatternIds
+  };
 }
 
 /**
@@ -213,37 +276,6 @@ function capWorkflowPatterns(patterns: readonly WorkflowPattern[]): WorkflowPatt
   return [...patterns]
     .sort(sortPatternsForRetention)
     .slice(0, MAX_WORKFLOW_PATTERNS);
-}
-
-/**
- * Computes retrieval score for one workflow pattern.
- *
- * **Why it exists:**
- * Keeps workflow hint scoring deterministic and auditable for planner-context injection.
- *
- * **What it talks to:**
- * - Uses local constants/helpers within this module.
- *
- * @param pattern - Value for pattern.
- * @param queryTokens - Value for query tokens.
- * @returns Computed numeric value.
- */
-function computeWorkflowPatternScore(pattern: WorkflowPattern, queryTokens: readonly string[]): number {
-  const key = pattern.workflowKey.toLowerCase();
-  const contextTagSet = new Set(pattern.contextTags.map((tag) => tag.toLowerCase()));
-  let overlap = 0;
-  for (const token of queryTokens) {
-    if (key.includes(token)) {
-      overlap += 1;
-      continue;
-    }
-    if (contextTagSet.has(token)) {
-      overlap += 1;
-    }
-  }
-
-  const activeBonus = pattern.status === "active" ? 1 : -1;
-  return Number((overlap * 1.25 + pattern.confidence + activeBonus).toFixed(4));
 }
 
 /**
@@ -363,7 +395,10 @@ export class WorkflowLearningStore {
 
     return withFileLock(this.filePath, async () => {
       const document = await this.readJsonDocumentFromFile();
-      const adaptation = adaptWorkflowPatterns(document.patterns, observation);
+      const adaptation = applyObservationMetadataToAdaptation(
+        adaptWorkflowPatterns(document.patterns, observation),
+        observation
+      );
       const nextPatterns = capWorkflowPatterns(adaptation.patterns);
       const nextUpdatedPattern =
         nextPatterns.find((pattern) => pattern.id === adaptation.updatedPattern.id) ??
@@ -400,28 +435,7 @@ export class WorkflowLearningStore {
   ): Promise<readonly WorkflowPattern[]> {
     const normalizedLimit = Number.isFinite(limit) ? Math.max(1, Math.floor(limit)) : 1;
     const document = await this.load();
-    const queryTokens = deriveQueryTokens(query);
-
-    const ranked = document.patterns
-      .map((pattern) => ({
-        pattern,
-        score: computeWorkflowPatternScore(pattern, queryTokens)
-      }))
-      .filter((entry) => entry.pattern.status === "active")
-      .sort((left, right) => {
-        if (left.score !== right.score) {
-          return right.score - left.score;
-        }
-        if (left.pattern.confidence !== right.pattern.confidence) {
-          return right.pattern.confidence - left.pattern.confidence;
-        }
-        if (left.pattern.lastSeenAt !== right.pattern.lastSeenAt) {
-          return right.pattern.lastSeenAt.localeCompare(left.pattern.lastSeenAt);
-        }
-        return left.pattern.id.localeCompare(right.pattern.id);
-      });
-
-    return ranked.slice(0, normalizedLimit).map((entry) => entry.pattern);
+    return rankRelevantWorkflowPatterns(document.patterns, query, normalizedLimit);
   }
 
   /**
@@ -463,7 +477,10 @@ export class WorkflowLearningStore {
     const adaptation = await withSqliteDatabase(this.sqlitePath, async (db) => {
       this.ensureSqliteSchema(db);
       const current = this.readSqliteDocument(db);
-      const next = adaptWorkflowPatterns(current.patterns, observation);
+      const next = applyObservationMetadataToAdaptation(
+        adaptWorkflowPatterns(current.patterns, observation),
+        observation
+      );
       const nextPatterns = capWorkflowPatterns(next.patterns);
       const nextUpdatedPattern =
         nextPatterns.find((pattern) => pattern.id === next.updatedPattern.id) ??
@@ -678,30 +695,5 @@ export class WorkflowLearningStore {
 export function deriveWorkflowObservationFromTaskRun(
   runResult: TaskRunResult
 ): WorkflowObservation {
-  const activeRequest = extractActiveRequestSegment(runResult.task.userInput);
-  const actionTypes = runResult.plan.actions.map((action) => action.type);
-  const actionTypeSignature = [...new Set(actionTypes)].sort((left, right) => left.localeCompare(right));
-  const requestTokens = deriveQueryTokens(activeRequest).slice(0, 5);
-  const workflowKey = `${actionTypeSignature.join("+")}:${requestTokens.join("_") || "generic"}`;
-
-  const approvedCount = runResult.actionResults.filter((result) => result.approved).length;
-  const blockedCount = runResult.actionResults.length - approvedCount;
-  const outcome: WorkflowObservation["outcome"] =
-    approvedCount > 0 && blockedCount === 0
-      ? "success"
-      : approvedCount === 0 && blockedCount > 0
-        ? "failure"
-        : "suppressed";
-
-  return {
-    workflowKey,
-    outcome,
-    observedAt: runResult.completedAt,
-    domainLane: runResult.plan.actions.some((action) => action.type !== "respond")
-      ? "workflow"
-      : "conversation",
-    contextTags: [...new Set([...requestTokens, ...actionTypeSignature])].sort(
-      (left, right) => left.localeCompare(right)
-    )
-  };
+  return deriveWorkflowObservationFromTaskRunDetailed(runResult);
 }

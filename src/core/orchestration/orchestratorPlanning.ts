@@ -4,6 +4,8 @@
 
 import { type PlannerOrgan } from "../../organs/planner";
 import { type MemoryBrokerOrgan } from "../../organs/memoryBroker";
+import { type SkillInventoryEntry } from "../../organs/skillRegistry/contracts";
+import { buildWorkflowSkillBridgeSummary } from "../../organs/skillRegistry/workflowSkillBridge";
 import { extractActiveRequestSegment } from "../currentRequestExtraction";
 import { type AppendRuntimeTraceEventInput } from "../runtimeTraceLogger";
 import { type TaskRequest, type TaskRunResult, type WorkflowPattern } from "../types";
@@ -22,6 +24,7 @@ export interface BuildProfileAwareInputDependencies {
 export interface LoadPlannerLearningContextDependencies {
   workflowLearningStore?: Pick<WorkflowLearningStore, "getRelevantPatterns">;
   judgmentPatternStore?: Pick<JudgmentPatternStore, "getRelevantPatterns">;
+  listAvailableSkills?: () => Promise<readonly SkillInventoryEntry[]>;
 }
 
 export interface PlanOrchestratorAttemptInput {
@@ -66,7 +69,8 @@ export async function loadPlannerLearningContext(
   if (!contextQuery) {
     return {
       workflowHints: [],
-      judgmentHints: []
+      judgmentHints: [],
+      workflowBridge: null
     };
   }
 
@@ -92,9 +96,24 @@ export async function loadPlannerLearningContext(
     }
   }
 
+  let availableSkills: readonly SkillInventoryEntry[] = [];
+  if (deps.listAvailableSkills) {
+    try {
+      availableSkills = await deps.listAvailableSkills();
+    } catch (error) {
+      console.error(
+        `[SkillRegistry] non-fatal skill inventory retrieval failure: ${(error as Error).message}`
+      );
+    }
+  }
+
   return {
     workflowHints,
-    judgmentHints
+    judgmentHints,
+    workflowBridge: buildWorkflowSkillBridgeSummary({
+      workflowHints,
+      availableSkills
+    })
   };
 }
 
@@ -140,18 +159,20 @@ export async function planOrchestratorAttempt(
     eventType: "planner_completed",
     taskId: input.task.id,
     durationMs: Date.now() - plannerStartedAtMs,
-    details: {
-      attemptNumber: input.attemptNumber,
-      plannerModel: input.plannerModel,
-      synthesizerModel: input.synthesizerModel,
-      actionCount: plan.actions.length,
+      details: {
+        attemptNumber: input.attemptNumber,
+        plannerModel: input.plannerModel,
+        synthesizerModel: input.synthesizerModel,
+        actionCount: plan.actions.length,
       firstPrinciplesRequired: plan.firstPrinciples?.required ?? false,
-      firstPrinciplesTriggerCount: plan.firstPrinciples?.triggerReasons.length ?? 0,
-      workflowHintCount: plan.learningHints?.workflowHintCount ?? 0,
-      judgmentHintCount: plan.learningHints?.judgmentHintCount ?? 0,
-      playbookSelectedId: playbookPlanningContext.selectedPlaybookId,
-      playbookFallback: playbookPlanningContext.fallbackToPlanner
-    }
+        firstPrinciplesTriggerCount: plan.firstPrinciples?.triggerReasons.length ?? 0,
+        workflowHintCount: plan.learningHints?.workflowHintCount ?? 0,
+        judgmentHintCount: plan.learningHints?.judgmentHintCount ?? 0,
+        workflowPreferredSkillName: plan.learningHints?.workflowPreferredSkillName ?? null,
+        workflowSkillSuggestionCount: plan.learningHints?.workflowSkillSuggestionCount ?? 0,
+        playbookSelectedId: playbookPlanningContext.selectedPlaybookId,
+        playbookFallback: playbookPlanningContext.fallbackToPlanner
+      }
   });
   return plan;
 }

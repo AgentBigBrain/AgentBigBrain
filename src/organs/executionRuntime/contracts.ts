@@ -35,6 +35,7 @@ export interface SkillArtifactPaths {
   skillsRoot: string;
   primaryPath: string;
   compatibilityPath: string;
+  manifestPath: string;
 }
 
 export interface ResolvedSkillArtifact {

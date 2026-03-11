@@ -69,6 +69,72 @@ test("buildConversationInboundUserInput keeps ordinary voice transcripts convers
   assert.equal(input, "Voice note transcript: Please fix the planner test now.");
 });
 
+test("buildConversationInboundUserInput promotes explicit voice skills inventory commands", () => {
+  const input = buildConversationInboundUserInput("", {
+    attachments: [
+      {
+        kind: "voice",
+        provider: "telegram",
+        fileId: "voice-skills-1",
+        fileUniqueId: "voice-skills-1-uniq",
+        mimeType: "audio/ogg",
+        fileName: null,
+        sizeBytes: 1024,
+        caption: null,
+        durationSeconds: 6,
+        width: null,
+        height: null,
+        interpretation: {
+          summary: "Voice note asking for the current skill inventory.",
+          transcript: "command skills",
+          ocrText: null,
+          confidence: 0.94,
+          provenance: "transcription",
+          source: "fixture_catalog",
+          entityHints: []
+        }
+      }
+    ]
+  });
+
+  assert.equal(input, "/skills");
+});
+
+test("buildConversationInboundUserInput promotes longer explicit voice skill commands near the start", () => {
+  const input = buildConversationInboundUserInput("", {
+    attachments: [
+      {
+        kind: "voice",
+        provider: "telegram",
+        fileId: "voice-skills-2",
+        fileUniqueId: "voice-skills-2-uniq",
+        mimeType: "audio/ogg",
+        fileName: null,
+        sizeBytes: 1024,
+        caption: null,
+        durationSeconds: 10,
+        width: null,
+        height: null,
+        interpretation: {
+          summary: "Voice note asking for the skill inventory with a longer natural follow-up.",
+          transcript:
+            "BigBrain, command skills and then tell me which reusable tools you already trust for planner failure work because I do not want to rediscover the same fix again.",
+          ocrText: null,
+          confidence: 0.94,
+          provenance: "transcription",
+          source: "fixture_catalog",
+          entityHints: ["planner"]
+        }
+      }
+    ]
+  });
+
+  assert.equal(
+    input,
+    "/skills and then tell me which reusable tools you already trust for planner failure work because I do not want to rediscover the same fix again."
+  );
+});
+
 test("buildConversationInboundUserInput does not let voice command promotion override explicit text", () => {
   const input = buildConversationInboundUserInput("please use this voice note as extra context", {
     attachments: [

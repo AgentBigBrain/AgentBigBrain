@@ -15,6 +15,7 @@ import { type AppendRuntimeTraceEventInput } from "../runtimeTraceLogger";
 import { type Stage686RuntimeActionEngine } from "../stage6_86/runtimeActions";
 import { type BrainState, type ProfileMemoryStatus, type TaskRunResult, type WorkflowPattern } from "../types";
 import { type JudgmentPattern } from "../judgmentPatterns";
+import { type WorkflowSkillBridgeSummary } from "../../organs/skillRegistry/workflowSkillBridge";
 
 export type Stage685PlaybookPlanningContextResolver = (input: {
   userInput: string;
@@ -33,6 +34,7 @@ export interface ProfileAwareInput {
 export interface PlannerLearningContext {
   workflowHints: readonly WorkflowPattern[];
   judgmentHints: readonly JudgmentPattern[];
+  workflowBridge: WorkflowSkillBridgeSummary | null;
 }
 
 export interface RunTaskOptions {

@@ -19,13 +19,17 @@ import {
   normalizeWhitespace,
   splitCommand
 } from "../conversationManagerHelpers";
-import type { ConversationInboundMessage } from "./managerContracts";
+import {
+  resolveConversationInboundUserInput,
+  type ConversationInboundMessage
+} from "./managerContracts";
 import type { ConversationSession } from "../sessionStore";
 import { recordUserTurn } from "../conversationSessionMutations";
 import type { ConversationIngressDependencies } from "./contracts";
 import { approveProposal } from "./followUpResolution";
 import { routeConversationChatInput } from "./conversationRouting";
 import { handleMemoryReviewCommand } from "./memoryReviewCommand";
+import { renderSkillInventory } from "../../organs/skillRegistry/skillInspection";
 
 /**
  * Resolves `/status` command output with human-first default text and explicit debug fallback.
@@ -61,7 +65,11 @@ export async function handleConversationCommand(
   message: ConversationInboundMessage,
   deps: ConversationIngressDependencies
 ): Promise<string> {
-  const { command, argument } = splitCommand(message.text);
+  const normalizedCommandInput = resolveConversationInboundUserInput(message).trim();
+  const commandInput = normalizedCommandInput.startsWith("/")
+    ? (normalizedCommandInput.split(/\r?\n/, 1)[0] ?? normalizedCommandInput)
+    : normalizedCommandInput;
+  const { command, argument } = splitCommand(commandInput);
 
   if (command === "help") {
     return renderConversationCommandHelpText();
@@ -156,6 +164,13 @@ export async function handleConversationCommand(
 
   if (command === "memory") {
     return handleMemoryReviewCommand(session, message, deps, argument);
+  }
+
+  if (command === "skills") {
+    if (!deps.listAvailableSkills) {
+      return "Skill inventory is unavailable in this runtime.";
+    }
+    return renderSkillInventory(await deps.listAvailableSkills());
   }
 
   return "Unknown command. Use /help to see available commands.";

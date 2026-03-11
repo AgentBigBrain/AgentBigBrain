@@ -626,6 +626,62 @@ test("conversation manager handles promoted voice commands after media normaliza
   }
 });
 
+test("conversation manager answers natural-language skill discovery with the canonical inventory", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-conversation-skills-"));
+  const store = new InterfaceSessionStore(path.join(tempDir, "sessions.json"));
+  const manager = new ConversationManager(
+    store,
+    {
+      heartbeatIntervalMs: 25,
+      maxRecentJobs: 20,
+      staleRunningJobRecoveryMs: 60_000,
+      maxConversationTurns: 40,
+      maxContextTurnsForExecution: 10
+    },
+    {
+      listAvailableSkills: async () => [
+        {
+          name: "triage_planner_failure",
+          description: "Inspect planner failures and summarize likely causes.",
+          userSummary: "Reusable tool for planner failure triage.",
+          verificationStatus: "verified",
+          riskLevel: "low",
+          tags: ["planner", "tests"],
+          invocationHints: ["Ask me to run skill triage_planner_failure."],
+          lifecycleStatus: "active",
+          updatedAt: "2026-03-10T12:00:00.000Z"
+        }
+      ]
+    }
+  );
+
+  try {
+    const reply = await manager.handleMessage(
+      buildMessage(
+        "Before we jump back into the planner failure, tell me what reusable skills you already have available right now. I want to know which ones are safe to trust before I ask you to use one."
+      ),
+      async (input) => ({ summary: `executed ${input}` }),
+      async () => undefined
+    );
+
+    assert.match(reply, /^Available skills:/);
+    assert.match(reply, /triage_planner_failure/);
+    assert.match(reply, /planner failure triage/i);
+
+    const toolsReply = await manager.handleMessage(
+      buildMessage(
+        "Before we go back to the failing planner work, can you show me what reusable tools you already have that you actually trust for this kind of fix? I do not want to rediscover the same approach again if a verified tool already exists."
+      ),
+      async (input) => ({ summary: `executed ${input}` }),
+      async () => undefined
+    );
+
+    assert.equal(toolsReply, reply);
+  } finally {
+    await removeTempDirWithRetry(tempDir);
+  }
+});
+
 test("conversation manager keeps detailed lifecycle state behind /status debug and rejects unknown status modes", async () => {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-conversation-status-debug-"));
   const store = new InterfaceSessionStore(path.join(tempDir, "sessions.json"));

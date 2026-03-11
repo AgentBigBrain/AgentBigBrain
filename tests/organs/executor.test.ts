@@ -64,12 +64,16 @@ async function removeTempDirWithRetry(tempDir: string): Promise<void> {
  * Implements `buildCreateSkillAction` behavior within module scope.
  * Interacts with local collaborators through imported modules and typed inputs/outputs.
  */
-function buildCreateSkillAction(name: string, code: string): PlannedAction {
+function buildCreateSkillAction(
+  name: string,
+  code: string,
+  overrides: Record<string, unknown> = {}
+): PlannedAction {
   return {
     id: "action_create_skill",
     type: "create_skill",
     description: "create skill",
-    params: { name, code },
+    params: { name, code, ...overrides },
     estimatedCostUsd: 0.1
   };
 }
@@ -620,6 +624,82 @@ test("ToolExecutorOrgan writes valid skill into runtime/skills", async () => {
     const compatibilityContent = await readFile(compatibilityPath, "utf8");
     assert.equal(primaryContent.includes("safeSkill"), true);
     assert.equal(compatibilityContent.includes("safeSkill"), true);
+  });
+});
+
+test("ToolExecutorOrgan records skill manifests and marks verified skills as trusted for reuse", async () => {
+  await withTempCwd(async (tempDir) => {
+    const executor = new ToolExecutorOrgan(DEFAULT_BRAIN_CONFIG);
+    const outcome = await executor.executeWithOutcome(
+      buildCreateSkillAction(
+        "verified_skill",
+        "export function verifiedSkill(input: string): string { return `Hello ${input.trim()}`; }",
+        {
+          description: "Return a greeting for the provided input.",
+          purpose: "Reusable greeting helper for deterministic text workflows.",
+          userSummary: "Reusable tool for simple greeting generation.",
+          invocationHints: ["Ask me to run skill verified_skill."],
+          riskLevel: "low",
+          tags: ["greeting", "text"],
+          testInput: "Benny",
+          expectedOutputContains: "Hello Benny"
+        }
+      )
+    );
+
+    assert.equal(outcome.status, "success");
+    assert.equal(outcome.executionMetadata?.skillName, "verified_skill");
+    assert.equal(outcome.executionMetadata?.skillVerificationStatus, "verified");
+    assert.equal(outcome.executionMetadata?.skillTrustedForReuse, true);
+    assert.equal(typeof outcome.executionMetadata?.skillManifestPath, "string");
+
+    const manifestPath = path.join(tempDir, "runtime", "skills", "verified_skill.manifest.json");
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as Record<string, unknown>;
+    assert.equal(manifest.name, "verified_skill");
+    assert.equal(manifest.verificationStatus, "verified");
+    assert.equal(manifest.userSummary, "Reusable tool for simple greeting generation.");
+    assert.deepEqual(manifest.invocationHints, ["Ask me to run skill verified_skill."]);
+    assert.equal(manifest.verificationFailureReason, null);
+
+    const runOutcome = await executor.executeWithOutcome(
+      buildRunSkillAction("verified_skill", "Benny")
+    );
+    assert.equal(runOutcome.status, "success");
+    assert.equal(runOutcome.executionMetadata?.skillVerificationStatus, "verified");
+    assert.equal(runOutcome.executionMetadata?.skillTrustedForReuse, true);
+  });
+});
+
+test("ToolExecutorOrgan keeps failing skill verification explicit and untrusted", async () => {
+  await withTempCwd(async (tempDir) => {
+    const executor = new ToolExecutorOrgan(DEFAULT_BRAIN_CONFIG);
+    const outcome = await executor.executeWithOutcome(
+      buildCreateSkillAction(
+        "failing_skill",
+        "export function failingSkill(input: string): string { return input.trim().toUpperCase(); }",
+        {
+          testInput: "benny",
+          expectedOutputContains: "hello"
+        }
+      )
+    );
+
+    assert.equal(outcome.status, "success");
+    assert.equal(outcome.executionMetadata?.skillVerificationStatus, "failed");
+    assert.equal(outcome.executionMetadata?.skillTrustedForReuse, false);
+    assert.match(outcome.output, /Verification failed:/i);
+
+    const manifestPath = path.join(tempDir, "runtime", "skills", "failing_skill.manifest.json");
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as Record<string, unknown>;
+    assert.equal(manifest.verificationStatus, "failed");
+    assert.equal(typeof manifest.verificationFailureReason, "string");
+
+    const runOutcome = await executor.executeWithOutcome(
+      buildRunSkillAction("failing_skill", "benny")
+    );
+    assert.equal(runOutcome.status, "success");
+    assert.equal(runOutcome.executionMetadata?.skillVerificationStatus, "failed");
+    assert.equal(runOutcome.executionMetadata?.skillTrustedForReuse, false);
   });
 });
 

@@ -6,16 +6,22 @@ reflect on task outcomes.
 
 The extracted `src/organs/liveRun/`, `src/organs/executionRuntime/`,
 `src/organs/plannerPolicy/`, `src/organs/memoryContext/`, `src/organs/reflectionRuntime/`,
-`src/organs/intentRuntime/`, and `src/organs/mediaUnderstanding/` subsystems own detailed
+`src/organs/intentRuntime/`, `src/organs/mediaUnderstanding/`, and `src/organs/skillRegistry/`
+subsystems own detailed
 live-run, non-live-run execution, planner-policy, memory-broker, reflection-runtime,
-intent-runtime, and bounded media-understanding support modules; the top-level files here keep the
-stable orchestration entrypoints and remaining single-surface organs.
+intent-runtime, bounded media-understanding, and skill registry/inspection support modules; the
+top-level files here keep the stable orchestration entrypoints and remaining single-surface organs.
 
 ## Primary Files
 - Stable orchestration entrypoints: `executor.ts`, `planner.ts`.
 - Non-live-run execution subsystem: `executionRuntime/contracts.ts`,
   `executionRuntime/fileMutationExecution.ts`, `executionRuntime/skillRuntime.ts`,
   `executionRuntime/shellExecution.ts`.
+- Skill registry subsystem: `skillRegistry/contracts.ts`, `skillRegistry/skillInspection.ts`,
+  `skillRegistry/skillLifecycle.ts`, `skillRegistry/skillManifest.ts`,
+  `skillRegistry/skillRegistryStore.ts`, `skillRegistry/skillSuggestionPolicy.ts`,
+  `skillRegistry/skillVerification.ts`, `skillRegistry/skillVerificationContracts.ts`,
+  `skillRegistry/workflowSkillBridge.ts`.
 - Memory brokerage subsystem: `memoryContext/contracts.ts`, `memoryContext/queryPlanning.ts`,
   `memoryContext/contextInjection.ts`, `memoryContext/auditEvents.ts`.
 - Media understanding subsystem: `mediaUnderstanding/contracts.ts`,
@@ -40,6 +46,8 @@ stable orchestration entrypoints and remaining single-surface organs.
 - action execution dispatch and live-run capability routing
 - memory context packets, bounded remembered-situation review and mutation brokerage, bounded media
   interpretations, reflection lessons, and pulse-intent classification
+- governed skill manifests, verification state, inventory summaries, and workflow-linked preferred
+  skill suggestions
 - explicit remembered-situation review/update brokerage so private interface controls can resolve,
   correct, or forget episodic memory through stable organ boundaries
 
@@ -64,6 +72,9 @@ stable orchestration entrypoints and remaining single-surface organs.
   organs.
 - Bounded image/video/voice interpretation belongs in `mediaUnderstanding/`; transport or memory
   layers should consume interpreted summaries, not reinvent provider-specific media parsing.
+- Skill manifests, inventory summaries, verification state, and workflow-linked preferred-skill
+  summaries belong in `skillRegistry/`; top-level organs should consume those stable surfaces
+  instead of re-inventing skill discovery or trust logic inline.
 - `intentRuntime/pulseLexicalRules.ts` stays a deterministic lexical gate; human-centric proactive
   utility scoring belongs in a separate bounded runtime, not in the fail-closed pulse rulepack.
 - `reflection.ts` remains the stable reflection coordinator; detailed signal classification and
@@ -99,5 +110,6 @@ Update this README when:
 - ownership moves between this folder and `executionRuntime/`, `liveRun/`, `plannerPolicy/`, or
   `memoryContext/`
 - ownership moves between this folder and `mediaUnderstanding/`
+- ownership moves between this folder and `skillRegistry/`
 - a remaining top-level organ is extracted into a new subsystem
 - the related-test surface changes because organ ownership moved

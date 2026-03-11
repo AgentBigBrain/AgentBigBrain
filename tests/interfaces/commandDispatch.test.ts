@@ -10,6 +10,7 @@ import {
   createFollowUpRuleContext,
   createPulseLexicalRuleContext
 } from "../../src/interfaces/conversationManagerHelpers";
+import { buildConversationInboundUserInput } from "../../src/interfaces/mediaRuntime/mediaNormalization";
 import type { ConversationIngressDependencies } from "../../src/interfaces/conversationRuntime/contracts";
 import { handleConversationCommand } from "../../src/interfaces/conversationRuntime/commandDispatch";
 import type {
@@ -40,6 +41,46 @@ function buildMessage(text: string): ConversationInboundMessage {
     conversationVisibility: "private",
     receivedAt: "2026-03-07T17:00:05.000Z",
     text
+  };
+}
+
+function buildVoiceCommandMessage(transcript: string): ConversationInboundMessage {
+  const media = {
+    attachments: [
+      {
+        kind: "voice" as const,
+        provider: "telegram" as const,
+        fileId: "voice-1",
+        fileUniqueId: "voice-1-uniq",
+        mimeType: "audio/ogg",
+        fileName: null,
+        sizeBytes: 1024,
+        caption: null,
+        durationSeconds: 4,
+        width: null,
+        height: null,
+        interpretation: {
+          summary: `Voice note transcript: ${transcript}`,
+          transcript,
+          ocrText: null,
+          confidence: 0.96,
+          provenance: "fixture transcription",
+          source: "fixture_catalog" as const,
+          entityHints: []
+        }
+      }
+    ]
+  };
+
+  return {
+    provider: "telegram",
+    conversationId: "chat-1",
+    userId: "user-1",
+    username: "agentowner",
+    conversationVisibility: "private",
+    receivedAt: "2026-03-07T17:00:05.000Z",
+    text: buildConversationInboundUserInput("", media),
+    media
   };
 }
 
@@ -220,4 +261,83 @@ test("handleConversationCommand routes /memory through canonical review dispatch
   assert.match(capturedReviewTaskId, /^memory_review_/);
   assert.match(reply, /Remembered situations:/);
   assert.match(reply, /Billy fell down/);
+});
+
+test("handleConversationCommand renders the canonical skill inventory for /skills", async () => {
+  const session = buildSession();
+
+  const reply = await handleConversationCommand(
+    session,
+    buildMessage("/skills"),
+    buildDependencies(
+      () => {
+        throw new Error("enqueueJob should not run for /skills");
+      },
+      {
+        listAvailableSkills: async () => [
+          {
+            name: "triage_planner_failure",
+            description: "Inspect planner failures and summarize likely causes.",
+            userSummary: "Reusable tool for planner failure triage.",
+            verificationStatus: "verified",
+            riskLevel: "low",
+            tags: ["planner", "tests"],
+            invocationHints: ["Ask me to run skill triage_planner_failure."],
+            lifecycleStatus: "active",
+            updatedAt: "2026-03-10T12:00:00.000Z"
+          }
+        ]
+      }
+    )
+  );
+
+  assert.match(reply, /^Available skills:/);
+  assert.match(reply, /triage_planner_failure/);
+  assert.match(reply, /verified, low risk/);
+});
+
+test("handleConversationCommand fails closed when /skills inventory is unavailable", async () => {
+  const session = buildSession();
+
+  const reply = await handleConversationCommand(
+    session,
+    buildMessage("/skills"),
+    buildDependencies(() => {
+      throw new Error("enqueueJob should not run for /skills");
+    })
+  );
+
+  assert.equal(reply, "Skill inventory is unavailable in this runtime.");
+});
+
+test("handleConversationCommand uses media-normalized voice command text for /skills", async () => {
+  const session = buildSession();
+
+  const reply = await handleConversationCommand(
+    session,
+    buildVoiceCommandMessage("command skills"),
+    buildDependencies(
+      () => {
+        throw new Error("enqueueJob should not run for voice-promoted /skills");
+      },
+      {
+        listAvailableSkills: async () => [
+          {
+            name: "triage_planner_failure",
+            description: "Inspect planner failures and summarize likely causes.",
+            userSummary: "Reusable tool for planner failure triage.",
+            verificationStatus: "verified",
+            riskLevel: "low",
+            tags: ["planner", "tests"],
+            invocationHints: ["Ask me to run skill triage_planner_failure."],
+            lifecycleStatus: "active",
+            updatedAt: "2026-03-10T12:00:00.000Z"
+          }
+        ]
+      }
+    )
+  );
+
+  assert.match(reply, /^Available skills:/);
+  assert.match(reply, /triage_planner_failure/);
 });

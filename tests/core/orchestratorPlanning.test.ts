@@ -40,7 +40,8 @@ test("loadPlannerLearningContext returns empty hints for blank current request",
 
   assert.deepEqual(result, {
     workflowHints: [],
-    judgmentHints: []
+    judgmentHints: [],
+    workflowBridge: null
   });
 });
 

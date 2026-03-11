@@ -2,6 +2,8 @@
  * @fileoverview Implements a minimal Discord gateway + REST transport that maps MESSAGE_CREATE events into secure adapter messages.
  */
 
+import path from "node:path";
+
 import { DiscordAdapter } from "./discordAdapter";
 import { AgentPulseScheduler } from "./agentPulseScheduler";
 import {
@@ -43,6 +45,7 @@ import { runCheckpoint611LiveReview } from "./CheckpointReviewRunners/stage6_5Ch
 import { runCheckpoint613LiveReview } from "./CheckpointReviewRunners/stage6_5Checkpoint6_13Live";
 import { runCheckpoint675LiveReview } from "../core/stage6_75CheckpointLive";
 import { EntityGraphStore } from "../core/entityGraphStore";
+import { SkillRegistryStore } from "../organs/skillRegistry/skillRegistryStore";
 
 interface DiscordGatewayOptions {
   sessionStore?: InterfaceSessionStore;
@@ -97,6 +100,7 @@ export class DiscordGateway {
   private readonly debugEnabled = isInterfaceDebugEnabled();
   private readonly autonomousAbortControllers = new Map<string, AbortController>();
   private readonly entityGraphStore: EntityGraphStore;
+  private readonly skillRegistryStore = new SkillRegistryStore(path.resolve(process.cwd(), "runtime/skills"));
 
   /**
    * Initializes `DiscordGateway` with deterministic runtime dependencies.
@@ -171,6 +175,7 @@ export class DiscordGateway {
           request.sourceText,
           request.nowIso
         ),
+      listAvailableSkills: async () => this.skillRegistryStore.listAvailableSkills(),
       runCheckpointReview: async (checkpointId) =>
         runGatewayCheckpointReview(checkpointId, {
           runCheckpoint611LiveReview,

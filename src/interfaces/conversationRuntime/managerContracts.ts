@@ -13,6 +13,7 @@ import type {
   OpenLoopV1
 } from "../../core/types";
 import type { ProfileEpisodeStatus } from "../../core/profileMemory";
+import type { SkillInventoryEntry } from "../../organs/skillRegistry/contracts";
 import type {
   InterpretedConversationIntent,
   IntentInterpreterTurn
@@ -156,6 +157,8 @@ export type ForgetConversationMemoryEpisode = (
   >
 ) => Promise<ConversationMemoryReviewRecord | null>;
 
+export type ListAvailableSkills = () => Promise<readonly SkillInventoryEntry[]>;
+
 export interface ConversationContinuityEpisodeQueryRequest {
   stack: ConversationStackV1;
   entityHints: readonly string[];
@@ -200,6 +203,7 @@ export interface ConversationManagerDependencies {
   resolveConversationMemoryEpisode?: ResolveConversationMemoryEpisode;
   markConversationMemoryEpisodeWrong?: MarkConversationMemoryEpisodeWrong;
   forgetConversationMemoryEpisode?: ForgetConversationMemoryEpisode;
+  listAvailableSkills?: ListAvailableSkills;
 }
 
 export interface ConversationIngressRuleContexts {

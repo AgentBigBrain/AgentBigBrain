@@ -66,6 +66,14 @@ env-parsing helpers while `config.ts` remains the stable config entrypoint.
   `advancedAutonomyFoundation.ts`, `advancedAutonomyRuntime.ts`, `autonomyFoundation.ts`,
   `commitmentSignalClassifier.ts`, `currentRequestExtraction.ts`, `plannerActionSchema.ts`,
   `plannerFailureStore.ts`, `verificationPromptClassifier.ts`, `workflowLearningStore.ts`.
+- Extracted workflow-learning runtime subsystem: `src/core/workflowLearningRuntime/contracts.ts`,
+  `src/core/workflowLearningRuntime/observationExtraction.ts`,
+  `src/core/workflowLearningRuntime/observationScoring.ts`,
+  `src/core/workflowLearningRuntime/patternLifecycle.ts`,
+  `src/core/workflowLearningRuntime/plannerBias.ts`,
+  `src/core/workflowLearningRuntime/relevanceRanking.ts`,
+  `src/core/workflowLearningRuntime/skillOpportunityRanking.ts`,
+  `src/core/workflowLearningRuntime/workflowInspection.ts`.
 - Config, identity, and platform/runtime support: `appleSiliconRuntime.ts`, `config.ts`,
   `envLoader.ts`, `fileLock.ts`, `ids.ts`, `personality.ts`, `personalityStore.ts`,
   `runtimeEntropy.ts`, `shellRuntimeProfile.ts`, `sqliteStore.ts`, `stateStore.ts`, `types.ts`.
@@ -89,7 +97,7 @@ env-parsing helpers while `config.ts` remains the stable config entrypoint.
   `evidenceStore.ts`, `governanceMemory.ts`, `judgmentPatterns.ts`, `memoryAccessAudit.ts`,
   `modelRouting.ts`, `onnxEmbeddingProvider.ts`, `profileMemory.ts`, `profileMemoryCrypto.ts`,
   `profileMemoryPlanningContext.ts`, `profileMemoryStore.ts`, `semanticMemory.ts`,
-  `vectorStore.ts`.
+  `vectorStore.ts`, `workflowLearningStore.ts`.
 - Extracted profile-memory runtime subsystem: `src/core/profileMemoryRuntime/contracts.ts`,
   `src/core/profileMemoryRuntime/profileMemoryCommitmentSignals.ts`,
   `src/core/profileMemoryRuntime/profileMemoryCommitmentTopics.ts`,
@@ -187,6 +195,9 @@ env-parsing helpers while `config.ts` remains the stable config entrypoint.
 - Profile-memory runtime contracts and query, pulse, mutation, persistence, and episodic-memory
   helpers belong in `src/core/profileMemoryRuntime/` once they are reused across planner,
   operator, or interface call sites.
+- Workflow-learning observation extraction, ranking, planner bias, inspection, and skill-opportunity
+  helpers belong in `src/core/workflowLearningRuntime/` once they are reused across planner,
+  orchestrator, or operator call sites.
 - Interpreted media should enter durable memory only through bounded profile-memory and continuity
   helpers here; raw image, voice, or video payloads do not belong in the six governed memory
   systems.

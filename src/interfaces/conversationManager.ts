@@ -90,6 +90,7 @@ export class ConversationManager {
   private readonly resolveConversationMemoryEpisode?: ConversationManagerDependencies["resolveConversationMemoryEpisode"];
   private readonly markConversationMemoryEpisodeWrong?: ConversationManagerDependencies["markConversationMemoryEpisodeWrong"];
   private readonly forgetConversationMemoryEpisode?: ConversationManagerDependencies["forgetConversationMemoryEpisode"];
+  private readonly listAvailableSkills?: ConversationManagerDependencies["listAvailableSkills"];
   private readonly followUpRuleContext: FollowUpRuleContext;
   private readonly pulseLexicalRuleContext: PulseLexicalRuleContext;
 
@@ -129,6 +130,7 @@ export class ConversationManager {
     this.resolveConversationMemoryEpisode = dependencies.resolveConversationMemoryEpisode;
     this.markConversationMemoryEpisodeWrong = dependencies.markConversationMemoryEpisodeWrong;
     this.forgetConversationMemoryEpisode = dependencies.forgetConversationMemoryEpisode;
+    this.listAvailableSkills = dependencies.listAvailableSkills;
     this.followUpRuleContext = createFollowUpRuleContext(this.config.followUpOverridePath);
     this.pulseLexicalRuleContext = createPulseLexicalRuleContext(this.config.pulseLexicalOverridePath);
   }
@@ -265,6 +267,7 @@ export class ConversationManager {
       resolveConversationMemoryEpisode: this.resolveConversationMemoryEpisode,
       markConversationMemoryEpisodeWrong: this.markConversationMemoryEpisodeWrong,
       forgetConversationMemoryEpisode: this.forgetConversationMemoryEpisode,
+      listAvailableSkills: this.listAvailableSkills,
       isWorkerActive: (sessionKey) => this.activeWorkers.has(sessionKey),
       clearAckTimer: (sessionKey) => clearConversationAckTimer(sessionKey, this.ackTimers),
       setWorkerBinding: (sessionKey, task, notifier) =>

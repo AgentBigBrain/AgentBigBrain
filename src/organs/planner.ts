@@ -56,6 +56,11 @@ import {
   ensureRespondMessages,
   synthesizeRespondMessage
 } from "./plannerPolicy/responseSynthesisFallback";
+import {
+  buildLearningHintSummary,
+  buildLearningPromptGuidance
+} from "./plannerPolicy/learningPromptGuidance";
+import { type WorkflowSkillBridgeSummary } from "./skillRegistry/workflowSkillBridge";
 
 const FIRST_PRINCIPLES_RISK_PATTERNS: readonly RegExp[] = [
   /\b(delete|remove|rm)\b/i,
@@ -77,6 +82,7 @@ export interface PlannerPlanOptions {
   playbookSelection?: Stage685PlaybookPlanningContext | null;
   workflowHints?: readonly WorkflowPattern[];
   judgmentHints?: readonly JudgmentPattern[];
+  workflowBridge?: WorkflowSkillBridgeSummary | null;
 }
 
 interface DistilledRelevantLesson {
@@ -321,92 +327,6 @@ export class PlannerOrgan {
   }
 
   /**
-   * Builds deterministic workflow-learning guidance for planner prompts.
-   *
-   * **Why it exists:**
-   * Stage 6.13 runtime wiring needs compact reusable workflow hints injected into planning prompts.
-   *
-   * **What it talks to:**
-   * - Uses `WorkflowPattern` hint entries supplied by orchestrator pre-plan retrieval.
-   *
-   * @param patterns - Workflow hints chosen for this planning attempt.
-   * @returns Prompt guidance block, or empty string when no workflow hints are available.
-   */
-  private buildWorkflowLearningGuidance(patterns: readonly WorkflowPattern[]): string {
-    if (patterns.length === 0) {
-      return "";
-    }
-    const lines = patterns.slice(0, 3).map((pattern) => {
-      return (
-        `- workflowKey=${pattern.workflowKey}; confidence=${pattern.confidence.toFixed(2)}; ` +
-        `status=${pattern.status}; success=${pattern.successCount}; failure=${pattern.failureCount}; ` +
-        `suppressed=${pattern.suppressedCount}`
-      );
-    });
-    return (
-      "\nWorkflow Learning Hints:\n" +
-      lines.join("\n") +
-      "\nPrefer high-confidence active workflow patterns and avoid known suppressed/failure motifs."
-    );
-  }
-
-  /**
-   * Builds deterministic judgment-learning guidance for planner prompts.
-   *
-   * **Why it exists:**
-   * Stage 6.17 runtime wiring needs calibrated judgment hints to reduce repeated low-quality choices.
-   *
-   * **What it talks to:**
-   * - Uses `JudgmentPattern` hint entries supplied by orchestrator pre-plan retrieval.
-   *
-   * @param patterns - Judgment hints chosen for this planning attempt.
-   * @returns Prompt guidance block, or empty string when no judgment hints are available.
-   */
-  private buildJudgmentLearningGuidance(patterns: readonly JudgmentPattern[]): string {
-    if (patterns.length === 0) {
-      return "";
-    }
-    const lines = patterns.slice(0, 3).map((pattern) => {
-      const latestSignal =
-        pattern.outcomeHistory.length > 0
-          ? pattern.outcomeHistory[pattern.outcomeHistory.length - 1]
-          : undefined;
-      return (
-        `- riskPosture=${pattern.riskPosture}; confidence=${pattern.confidence.toFixed(2)}; ` +
-        `signals=${pattern.outcomeHistory.length}; latestSignal=${latestSignal?.signalType ?? "none"}; ` +
-        `latestScore=${latestSignal ? latestSignal.score.toFixed(2) : "n/a"}`
-      );
-    });
-    return (
-      "\nJudgment Learning Hints:\n" +
-      lines.join("\n") +
-      "\nWhen uncertain, prefer lower-risk options and avoid repeating low-confidence decisions."
-    );
-  }
-
-  /**
-   * Builds combined planner guidance block from workflow and judgment learning hints.
-   *
-   * **Why it exists:**
-   * Keeps Stage 6.13/6.17 prompt injection deterministic and centralized.
-   *
-   * **What it talks to:**
-   * - Uses workflow/judgment hint builders in this module.
-   *
-   * @param workflowHints - Workflow patterns relevant to the current request.
-   * @param judgmentHints - Judgment patterns relevant to the current request.
-   * @returns Combined prompt guidance text, or empty string when no learning hints exist.
-   */
-  private buildLearningPromptGuidance(
-    workflowHints: readonly WorkflowPattern[],
-    judgmentHints: readonly JudgmentPattern[]
-  ): string {
-    const workflowGuidance = this.buildWorkflowLearningGuidance(workflowHints);
-    const judgmentGuidance = this.buildJudgmentLearningGuidance(judgmentHints);
-    return `${workflowGuidance}${judgmentGuidance}`;
-  }
-
-  /**
    * Builds failure fingerprint for this module's runtime flow.
    *
    * **Why it exists:**
@@ -585,14 +505,17 @@ export class PlannerOrgan {
     const firstPrinciplesGuidance = this.buildFirstPrinciplesPromptGuidance(firstPrinciplesPacket);
     const workflowHints = (options.workflowHints ?? []).slice(0, 3);
     const judgmentHints = (options.judgmentHints ?? []).slice(0, 3);
-    const learningGuidance = this.buildLearningPromptGuidance(workflowHints, judgmentHints);
-    const learningHints: PlannerLearningHintSummaryV1 | undefined =
-      workflowHints.length > 0 || judgmentHints.length > 0
-        ? {
-          workflowHintCount: workflowHints.length,
-          judgmentHintCount: judgmentHints.length
-        }
-        : undefined;
+    const workflowBridge = options.workflowBridge ?? null;
+    const learningGuidance = buildLearningPromptGuidance(
+      workflowHints,
+      judgmentHints,
+      workflowBridge
+    );
+    const learningHints: PlannerLearningHintSummaryV1 | undefined = buildLearningHintSummary(
+      workflowHints,
+      judgmentHints,
+      workflowBridge
+    );
     const requiredActionType = inferRequiredActionType(currentUserRequest);
     const playbookSelection = options.playbookSelection ?? null;
 

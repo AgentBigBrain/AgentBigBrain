@@ -56,6 +56,19 @@ export interface ListDirectoryActionParams extends Record<string, unknown> {
 export interface CreateSkillActionParams extends Record<string, unknown> {
   name?: string;
   code?: string;
+  description?: string;
+  purpose?: string;
+  inputSummary?: string;
+  outputSummary?: string;
+  riskLevel?: string;
+  allowedSideEffects?: readonly string[];
+  tags?: readonly string[];
+  capabilities?: readonly string[];
+  version?: string;
+  userSummary?: string;
+  invocationHints?: readonly string[];
+  testInput?: string;
+  expectedOutputContains?: string;
 }
 
 export interface RunSkillActionParams extends Record<string, unknown> {
@@ -258,6 +271,8 @@ export type PlannedAction = {
 export interface PlannerLearningHintSummaryV1 {
   workflowHintCount: number;
   judgmentHintCount: number;
+  workflowPreferredSkillName?: string | null;
+  workflowSkillSuggestionCount?: number;
 }
 
 export interface Plan {

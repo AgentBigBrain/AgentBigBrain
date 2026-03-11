@@ -14,6 +14,7 @@ belongs here.
 - `liveVerificationPolicy.ts`
 - `actionNormalization.ts`
 - `explicitActionIntent.ts`
+- `learningPromptGuidance.ts`
 - `plannerFailurePolicy.ts`
 - `skillActionNormalization.ts`
 - `explicitActionRepair.ts`
@@ -34,6 +35,8 @@ belongs here.
 - explicit-action intent classification and filtering
 - planner failure cooldown/fingerprint helpers
 - skill-name extraction and create/run-skill param normalization
+- workflow-learning preferred-skill and repeated-workflow suggestion guidance injected into planner
+  prompt assembly and repair notes
 - explicit-action repair decisions
 - planner system prompts and repair prompts
 - synthesized fallback respond messages when fail-closed repair still cannot produce executable work
@@ -44,6 +47,8 @@ belongs here.
 - Planner repair must fail closed when required executable actions never appear.
 - Action normalization, explicit-action intent inference, and skill fallback scaffolding must stay
   owned here rather than drifting back into `src/organs/`.
+- Workflow-learning preferred-skill guidance should stay explicit and inspectable here rather than
+  becoming hidden model-only behavior.
 - Prompt assembly rules should stay centralized here rather than drifting back into
   `src/organs/planner.ts`.
 

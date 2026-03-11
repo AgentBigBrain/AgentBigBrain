@@ -19,10 +19,49 @@ import {
   resolveInterpretedPulseCommandArgument
 } from "./followUpResolution";
 import { routeConversationMessageInput } from "./conversationRouting";
+import { renderSkillInventory } from "../../organs/skillRegistry/skillInspection";
 
 export interface ConversationInvocationResolution {
   reply: string;
   shouldStartWorker: boolean;
+}
+
+const NATURAL_SKILL_DISCOVERY_LEAD_PATTERNS: readonly RegExp[] = [
+  /\bwhat\b/i,
+  /\bwhich\b/i,
+  /\bshow\b/i,
+  /\blist\b/i,
+  /\btell me\b/i
+];
+const NATURAL_SKILL_DISCOVERY_SUBJECT_PATTERNS: readonly RegExp[] = [
+  /\bskills?\b/i,
+  /\btools?\b/i
+];
+const NATURAL_SKILL_DISCOVERY_INVENTORY_PATTERNS: readonly RegExp[] = [
+  /\bavailable\b/i,
+  /\bhave\b/i,
+  /\bknow\b/i,
+  /\breusable\b/i,
+  /\btrust\b/i,
+  /\balready\b/i
+];
+
+/**
+ * Returns `true` when the inbound non-command message is clearly asking for the canonical skill
+ * inventory in natural language.
+ *
+ * @param value - Raw inbound user text before queue routing.
+ * @returns `true` when the text looks like an explicit skill/tool inventory request.
+ */
+function isNaturalSkillDiscoveryRequest(value: string): boolean {
+  const normalized = value.trim();
+  if (!normalized) {
+    return false;
+  }
+  const hasLead = NATURAL_SKILL_DISCOVERY_LEAD_PATTERNS.some((pattern) => pattern.test(normalized));
+  const hasSubject = NATURAL_SKILL_DISCOVERY_SUBJECT_PATTERNS.some((pattern) => pattern.test(normalized));
+  const hasInventoryCue = NATURAL_SKILL_DISCOVERY_INVENTORY_PATTERNS.some((pattern) => pattern.test(normalized));
+  return hasLead && hasSubject && hasInventoryCue;
 }
 
 /**
@@ -101,6 +140,13 @@ export async function resolveConversationInvocation(
         deps
       ),
       shouldStartWorker: session.queuedJobs.length > 0
+    };
+  }
+
+  if (deps.listAvailableSkills && isNaturalSkillDiscoveryRequest(trimmed)) {
+    return {
+      reply: renderSkillInventory(await deps.listAvailableSkills()),
+      shouldStartWorker: false
     };
   }
 

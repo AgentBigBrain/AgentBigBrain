@@ -125,6 +125,12 @@ export const DEFAULT_SUBSYSTEM_README_SPECS: readonly SubsystemReadmeSpec[] = [
     requiredHeadings: REQUIRED_README_HEADINGS
   },
   {
+    name: "workflowLearningRuntime",
+    codeDir: "src/core/workflowLearningRuntime",
+    readmePath: "src/core/workflowLearningRuntime/README.md",
+    requiredHeadings: REQUIRED_README_HEADINGS
+  },
+  {
     name: "stage685",
     codeDir: "src/core/stage6_85",
     readmePath: "src/core/stage6_85/README.md",
@@ -158,6 +164,12 @@ export const DEFAULT_SUBSYSTEM_README_SPECS: readonly SubsystemReadmeSpec[] = [
     name: "executionRuntime",
     codeDir: "src/organs/executionRuntime",
     readmePath: "src/organs/executionRuntime/README.md",
+    requiredHeadings: REQUIRED_README_HEADINGS
+  },
+  {
+    name: "skillRegistry",
+    codeDir: "src/organs/skillRegistry",
+    readmePath: "src/organs/skillRegistry/README.md",
     requiredHeadings: REQUIRED_README_HEADINGS
   },
   {

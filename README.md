@@ -149,6 +149,25 @@ flowchart LR
 
 ---
 
+## 🧠 Don't Trust, Verify (The AI Onboarding Way)
+
+This codebase is dense. It enforces strict cognitive science principles, cryptographic ledgers, and governed execution gates. **Do not read the source code manually. Unless you are up for a challenge, and have an extraordinary amount of time on your hands, and are prepared to read the source code**
+
+Instead, open this project in an AI-native IDE (like Cursor, Antigravity, Codex, or Copilot) and use this exact prompt:
+
+> *"I just cloned the AgentBigBrain repository. I want to build a [insert your use case, e.g., customer support bot / local file organizer / smart contract deployer]. First, read `docs/ARCHITECTURE.md` to understand the high-level concepts. Then, recursively read and index the actual source code in `src/` to verify exactly how the 7 Governors and the execution loop truly operate. Do not blindly trust the documentation—verify it against the code. Finally, tell me exactly which files I need to modify to integrate my use case, how to configure the `.env` file, and what capabilities this agent will safely have."*
+
+**Or, if you just want to understand the system without building anything yet:**
+
+> *"I just cloned the AgentBigBrain repository. Please read `docs/ARCHITECTURE.md` and then recursively read the source code in `src/`. Provide a comprehensive, high-level review of the entire system. Explain the cognitive architecture, how the different memory systems (Episodic, Semantic, etc.) interact, how the 7 Governors enforce safety, and how the 'Society of Mind' orchestration works. Give me a tour of the codebase."*
+
+**Why this works:**
+Because this project enforces strict TypeScript contracts (no `any` types), dependency injection, and zero-dependency boundaries, your IDE's AI will find it incredibly easy to navigate. It won't hallucinate spaghetti code because the interfaces physically won't allow it to compile. 
+
+Ask your AI how the `Governor Council` votes. Ask it how to add a new `ActionType`. Let the IDE do the reading. Although you of course are welcome to as well, just be prepared for a challenge.
+
+---
+
 ## 🚀 Quickstart
 
 > **Full setup guide:** [docs/SETUP.md](docs/SETUP.md)

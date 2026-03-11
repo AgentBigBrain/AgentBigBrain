@@ -12,6 +12,7 @@ const VOICE_COMMAND_ALIASES = new Set([
   "status",
   "chat",
   "auto",
+  "skills",
   "pulse",
   "review",
   "memory",

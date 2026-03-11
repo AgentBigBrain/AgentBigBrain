@@ -2,6 +2,8 @@
  * @fileoverview Implements Telegram long-poll transport that maps platform updates into secure adapter messages.
  */
 
+import path from "node:path";
+
 import { TelegramAdapter } from "./telegramAdapter";
 import { AgentPulseScheduler } from "./agentPulseScheduler";
 import {
@@ -44,6 +46,7 @@ import { runCheckpoint613LiveReview } from "./CheckpointReviewRunners/stage6_5Ch
 import { runCheckpoint675LiveReview } from "../core/stage6_75CheckpointLive";
 import { EntityGraphStore } from "../core/entityGraphStore";
 import { MediaUnderstandingOrgan } from "../organs/mediaUnderstanding/mediaInterpretation";
+import { SkillRegistryStore } from "../organs/skillRegistry/skillRegistryStore";
 
 interface TelegramGatewayOptions {
   sessionStore?: InterfaceSessionStore;
@@ -60,6 +63,7 @@ export class TelegramGateway {
   private readonly autonomousAbortControllers = new Map<string, AbortController>();
   private readonly entityGraphStore: EntityGraphStore;
   private readonly mediaUnderstandingOrgan?: MediaUnderstandingOrgan;
+  private readonly skillRegistryStore = new SkillRegistryStore(path.resolve(process.cwd(), "runtime/skills"));
   private nextDraftId = 1;
 
   /**
@@ -136,6 +140,7 @@ export class TelegramGateway {
           request.sourceText,
           request.nowIso
         ),
+      listAvailableSkills: async () => this.skillRegistryStore.listAvailableSkills(),
       runCheckpointReview: async (checkpointId) =>
         runGatewayCheckpointReview(checkpointId, {
           runCheckpoint611LiveReview,

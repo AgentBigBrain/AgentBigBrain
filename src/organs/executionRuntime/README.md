@@ -6,12 +6,14 @@ entrypoint.
 
 It contains the direct file/basic action handlers, dynamic skill create/run runtime, shell
 execution helpers, and supporting contracts that should not live inline inside the top-level
-executor coordinator.
+executor coordinator. Skill manifest lifecycle, inventory, workflow-bridge summaries, and
+verification-state rendering stay owned by `src/organs/skillRegistry/`.
 
 ## Primary Files
 - `contracts.ts`
 - `pathRuntime.ts`
 - `fileMutationExecution.ts`
+- `skillModuleLoader.ts`
 - `skillRuntime.ts`
 - `shellExecution.ts`
 
@@ -25,6 +27,8 @@ executor coordinator.
 - typed `ExecutorExecutionOutcome` values
 - shell execution telemetry records for runtime traces
 - stable skill-artifact execution and bounded file-action responses
+- skill create/run execution metadata that can be handed off to the skill registry without the
+  executor re-reading manifests inline
 
 ## Invariants
 - `src/organs/executor.ts` stays the stable top-level execution entrypoint.
@@ -32,6 +36,8 @@ executor coordinator.
   direct execution families.
 - Shell helpers here must preserve existing fail-closed timeout, cwd, and process-tree semantics.
 - Skill runtime helpers must not bypass the existing executor-side name/path validation.
+- Manifest creation, verification updates, and inventory rendering must stay delegated to
+  `src/organs/skillRegistry/`; this subsystem should not become a second registry surface.
 
 ## Related Tests
 - `tests/organs/executor.test.ts`

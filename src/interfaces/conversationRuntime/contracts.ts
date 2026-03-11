@@ -6,6 +6,7 @@ import type {
   ConversationCheckpointReviewRunner,
   ForgetConversationMemoryEpisode,
   ConversationIngressRuleContexts,
+  ListAvailableSkills,
   QueryConversationContinuityFacts,
   ConversationIntentInterpreter,
   ConversationManagerConfig,
@@ -73,6 +74,7 @@ export interface ConversationIngressDependencies extends ConversationIngressRule
   resolveConversationMemoryEpisode?: ResolveConversationMemoryEpisode;
   markConversationMemoryEpisodeWrong?: MarkConversationMemoryEpisodeWrong;
   forgetConversationMemoryEpisode?: ForgetConversationMemoryEpisode;
+  listAvailableSkills?: ListAvailableSkills;
   isWorkerActive(sessionKey: string): boolean;
   clearAckTimer(sessionKey: string): void;
   setWorkerBinding(

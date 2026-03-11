@@ -95,6 +95,8 @@
     "test:media_ingest_execution_intent:live_smoke": "tsx scripts/evidence/mediaIngestExecutionIntentLiveSmoke.ts",
     "test:human_language_generalization:evidence": "tsx scripts/evidence/humanLanguageGeneralizationEvidence.ts",
     "test:human_language_generalization:live_smoke": "tsx scripts/evidence/humanLanguageGeneralizationLiveSmoke.ts",
+    "test:skills_workflow_maturity:evidence": "tsx scripts/evidence/skillsAndWorkflowMaturityEvidence.ts",
+    "test:skills_workflow_maturity:live_smoke": "tsx scripts/evidence/skillsAndWorkflowMaturityLiveSmoke.ts",
     "test:skill:compiled_live_smoke": "node scripts/evidence/skillCompiledRuntimeLiveSmoke.cjs",
     "test:reflection:signal_evidence": "tsx scripts/evidence/reflectionSignalEvidence.ts",
     "test:profile_memory_commitment_evidence": "tsx scripts/evidence/profileMemoryCommitmentEvidence.ts",

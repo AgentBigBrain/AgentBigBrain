@@ -34,6 +34,7 @@ import {
 } from "../organs/intentInterpreter";
 import { PulseLexicalRuleContext } from "../organs/pulseLexicalClassifier";
 import { MemoryBrokerOrgan } from "../organs/memoryBroker";
+import type { SkillRegistryStore } from "../organs/skillRegistry/skillRegistryStore";
 import { StateStore } from "./stateStore";
 import { PersonalityStore } from "./personalityStore";
 import { GovernanceMemoryStore } from "./governanceMemory";
@@ -112,6 +113,7 @@ export class BrainOrchestrator {
    * @param resolveFederatedOutboundRuntimeConfig - Resolver for outbound federation runtime config/env gates.
    * @param workflowLearningStore - Optional Stage 6.13 store used for workflow hint retrieval and post-run adaptation writes.
    * @param judgmentPatternStore - Optional Stage 6.17 store used for judgment hint retrieval and outcome calibration writes.
+   * @param skillRegistryStore - Optional skill inventory used for workflow-to-skill bridge guidance.
    */
   constructor(
     private readonly config: BrainConfig,
@@ -136,7 +138,8 @@ export class BrainOrchestrator {
     private readonly resolveFederatedOutboundRuntimeConfig: FederatedOutboundRuntimeConfigResolver =
       createFederatedOutboundRuntimeConfigFromEnv,
     private readonly workflowLearningStore?: WorkflowLearningStore,
-    private readonly judgmentPatternStore?: JudgmentPatternStore
+    private readonly judgmentPatternStore?: JudgmentPatternStore,
+    private readonly skillRegistryStore?: Pick<SkillRegistryStore, "listAvailableSkills">
   ) {
     this.memoryBroker = memoryBroker ?? new MemoryBrokerOrgan(profileMemoryStore);
     this.intentInterpreter = new IntentInterpreterOrgan(this.modelClient);
@@ -466,7 +469,8 @@ export class BrainOrchestrator {
     const plannerLearningContext = await loadPlannerLearningContext(
       {
         workflowLearningStore: this.workflowLearningStore,
-        judgmentPatternStore: this.judgmentPatternStore
+        judgmentPatternStore: this.judgmentPatternStore,
+        listAvailableSkills: this.skillRegistryStore?.listAvailableSkills.bind(this.skillRegistryStore)
       },
       profileAwareUserInput
     );

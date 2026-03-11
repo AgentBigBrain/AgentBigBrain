@@ -6,6 +6,24 @@ export type WorkflowOutcome = "success" | "failure" | "suppressed";
 
 export type WorkflowPatternStatus = "active" | "superseded";
 
+export type WorkflowExecutionStyle =
+  | "respond_only"
+  | "single_action"
+  | "multi_action"
+  | "live_run"
+  | "skill_based";
+
+export type WorkflowApprovalPosture =
+  | "none"
+  | "fast_path_only"
+  | "escalation_only"
+  | "mixed"
+  | "blocked_only";
+
+export type WorkflowCostBand = "none" | "low" | "medium" | "high";
+
+export type WorkflowLatencyBand = "fast" | "moderate" | "slow";
+
 export interface WorkflowObservation {
   workflowKey: string;
   outcome: WorkflowOutcome;
@@ -13,6 +31,16 @@ export interface WorkflowObservation {
   domainLane: string;
   contextTags: readonly string[];
   supersedesKeys?: readonly string[];
+  executionStyle?: WorkflowExecutionStyle;
+  actionSequenceShape?: string;
+  approvalPosture?: WorkflowApprovalPosture;
+  verificationProofPresent?: boolean;
+  costBand?: WorkflowCostBand;
+  latencyBand?: WorkflowLatencyBand;
+  dominantFailureMode?: string | null;
+  recoveryPath?: string | null;
+  linkedSkillName?: string | null;
+  linkedSkillVerificationStatus?: "unverified" | "verified" | "failed" | null;
 }
 
 export interface WorkflowPattern {
@@ -28,6 +56,16 @@ export interface WorkflowPattern {
   failureCount: number;
   suppressedCount: number;
   contextTags: readonly string[];
+  executionStyle?: WorkflowExecutionStyle;
+  actionSequenceShape?: string;
+  approvalPosture?: WorkflowApprovalPosture;
+  verificationProofPresent?: boolean;
+  costBand?: WorkflowCostBand;
+  latencyBand?: WorkflowLatencyBand;
+  dominantFailureMode?: string | null;
+  recoveryPath?: string | null;
+  linkedSkillName?: string | null;
+  linkedSkillVerificationStatus?: "unverified" | "verified" | "failed" | null;
 }
 
 export interface WorkflowAdaptationResult {
