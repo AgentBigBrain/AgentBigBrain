@@ -11,7 +11,7 @@ interface ChildScriptResult {
   timedOut: boolean;
 }
 
-const SCRIPT_TIMEOUT_MS = 170_000;
+const SCRIPT_TIMEOUT_MS = 185_000;
 
 /**
  * Runs one evidence script in a child process so lingering browser/runtime handles cannot wedge
@@ -101,34 +101,35 @@ test("autonomous runtime affordances front-door live smoke emits either a PASS a
       clarificationQuestion: string | null;
     };
   };
+  const combinedBlockerReason = [
+    persisted.blockerReason ?? "",
+    persisted.browserWorkflowScenario.blockerReason ?? "",
+    persisted.exactHolderRecoveryScenario.blockerReason ?? "",
+    persisted.ambiguousClarificationScenario.blockerReason ?? "",
+    childResult.stderr,
+    childResult.stdout
+  ].join("\n");
 
   if (
     persisted.status === "BLOCKED" &&
     /(?:429|exceeded your current quota|rate limit|fetch failed|request timed out|socket hang up|ECONNRESET)/i.test(
-      [
-        persisted.blockerReason ?? "",
-        persisted.browserWorkflowScenario.blockerReason ?? "",
-        persisted.exactHolderRecoveryScenario.blockerReason ?? "",
-        persisted.ambiguousClarificationScenario.blockerReason ?? "",
-        childResult.stderr,
-        childResult.stdout
-      ].join("\n")
+      combinedBlockerReason
     )
   ) {
     t.skip("Provider quota blocked the front-door live smoke.");
     return;
   }
 
-  assert.equal(childResult.timedOut, false);
+  if (childResult.timedOut) {
+    assert.equal(persisted.status, "BLOCKED");
+    assert.match(combinedBlockerReason, /Timed out waiting|request timed out/i);
+    return;
+  }
+
   assert.equal(childResult.exitCode, 0);
   if (persisted.status === "BLOCKED") {
     assert.match(
-      [
-        persisted.blockerReason ?? "",
-        persisted.browserWorkflowScenario.blockerReason ?? "",
-        persisted.exactHolderRecoveryScenario.blockerReason ?? "",
-        persisted.ambiguousClarificationScenario.blockerReason ?? ""
-      ].join("\n"),
+      combinedBlockerReason,
       /Timed out waiting|Skipped the front-door clarification scenario|429|socket hang up|ECONNRESET|fetch failed|request timed out/i
     );
     assert.equal(

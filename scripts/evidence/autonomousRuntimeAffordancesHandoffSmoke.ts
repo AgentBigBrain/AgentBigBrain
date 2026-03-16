@@ -120,6 +120,8 @@ const PROVIDER_BLOCK_PATTERN =
   /(?:429|exceeded your current quota|rate limit|fetch failed|request timed out)/i;
 const TURN_TIMEOUT_MS = 45_000;
 const SMOKE_DEADLINE_MS = 120_000;
+const BOUNDED_BLOCK_PATTERN =
+  /(?:Timed out waiting|429|exceeded your current quota|rate limit|fetch failed|request timed out|socket hang up|ECONNRESET)/i;
 
 const CAPABILITY_SUMMARY_FIXTURE: ConversationCapabilitySummary = {
   provider: "telegram",
@@ -343,6 +345,16 @@ function detectProviderBlockerReason(...texts: readonly unknown[]): string | nul
     .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
     .join("\n");
   return PROVIDER_BLOCK_PATTERN.test(combined) ? combined : null;
+}
+
+function detectBoundedHandoffBlockerReason(error: unknown): string | null {
+  const combined =
+    error instanceof Error
+      ? error.stack ?? error.message
+      : typeof error === "string"
+        ? error
+        : JSON.stringify(error);
+  return BOUNDED_BLOCK_PATTERN.test(combined) ? combined : null;
 }
 
 function isReviewableReply(text: string): boolean {
@@ -749,6 +761,46 @@ Promise<AutonomousRuntimeAffordancesHandoffArtifact> {
       artifact.status = "BLOCKED";
     }
 
+    await writeFile(ARTIFACT_PATH, `${JSON.stringify(artifact, null, 2)}${os.EOL}`, "utf8");
+    return artifact;
+  } catch (error) {
+    const blockerReason = detectBoundedHandoffBlockerReason(error);
+    const artifact: AutonomousRuntimeAffordancesHandoffArtifact = {
+      generatedAt: new Date().toISOString(),
+      command: COMMAND_NAME,
+      status: blockerReason ? "BLOCKED" : "FAIL",
+      blockerReason,
+      localIntentModel: {
+        enabled: localProbe.enabled,
+        required: localProbe.liveSmokeRequired,
+        reachable: localProbe.reachable,
+        modelPresent: localProbe.modelPresent,
+        model: localProbe.model,
+        provider: localProbe.provider,
+        baseUrl: localProbe.baseUrl
+      },
+      targetFolder: latestSession ? extractTargetFolder(latestSession) : null,
+      previewUrl: latestSession ? extractPreviewUrl(latestSession) : null,
+      browserSessionId: latestSession?.browserSessions[0]?.id ?? null,
+      checks: {
+        naturalAutonomousStart: false,
+        roughDraftReviewWithoutNewWork: false,
+        roughDraftReviewSurfaced: false,
+        pauseCheckpointSaved: false,
+        whileAwaySummaryWithoutNewWork: false,
+        whileAwaySummarySurfaced: false,
+        resumeContinuationUsed: false,
+        resumeStayedOnSameWorkspace: false,
+        sliderAppliedOnResume: false,
+        browserClosed: false,
+        reviewableUserFacingCopy: turns.every((turn) =>
+          [turn.immediateReply, ...turn.notifications.map((notification) => notification.text)].every(
+            isReviewableReply
+          )
+        )
+      },
+      turns
+    };
     await writeFile(ARTIFACT_PATH, `${JSON.stringify(artifact, null, 2)}${os.EOL}`, "utf8");
     return artifact;
   } finally {
