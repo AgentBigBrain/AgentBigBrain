@@ -2,8 +2,7 @@
  * @fileoverview Shared metadata parsing and label helpers used below the recent-action ledger entrypoint.
  */
 
-import path from "node:path";
-
+import { basenameCrossPlatformPath } from "../../core/crossPlatformPath";
 import type { ActionRunResult } from "../../core/types";
 import type { ConversationPathDestinationRecord } from "../sessionStore";
 
@@ -107,7 +106,7 @@ export function parseLinkedBrowserSessionCleanupRecords(
  * @returns Human-readable file label.
  */
 export function fileLabel(targetPath: string): string {
-  const baseName = path.basename(targetPath.replace(/[\\/]+$/, ""));
+  const baseName = basenameCrossPlatformPath(targetPath);
   return baseName ? `File ${baseName}` : `File ${targetPath}`;
 }
 
@@ -118,7 +117,7 @@ export function fileLabel(targetPath: string): string {
  * @returns Human-readable folder label.
  */
 export function folderLabel(targetPath: string): string {
-  const baseName = path.basename(targetPath.replace(/[\\/]+$/, ""));
+  const baseName = basenameCrossPlatformPath(targetPath);
   return baseName ? `Folder ${baseName}` : `Folder ${targetPath}`;
 }
 

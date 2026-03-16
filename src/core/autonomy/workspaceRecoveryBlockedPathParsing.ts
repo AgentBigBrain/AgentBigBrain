@@ -5,6 +5,7 @@
 import { readdirSync } from "node:fs";
 import path from "node:path";
 
+import { dirnameCrossPlatformPath } from "../crossPlatformPath";
 import type { ActionRunResult, TaskRunResult } from "../types";
 
 const LOCAL_FOLDER_IN_USE_PATTERN =
@@ -247,11 +248,11 @@ export function extractBlockedFolderPaths(
           : null) ??
         (typeof payloadRecord.destination === "string" &&
         payloadRecord.destination.trim().length > 0
-          ? path.dirname(payloadRecord.destination.trim())
+          ? dirnameCrossPlatformPath(payloadRecord.destination.trim())
           : null) ??
         (typeof payloadRecord.Destination === "string" &&
         payloadRecord.Destination.trim().length > 0
-          ? path.dirname(payloadRecord.Destination.trim())
+          ? dirnameCrossPlatformPath(payloadRecord.Destination.trim())
           : null) ??
         resolveDesktopPathFromEnvironment();
       collectBlockedFolderPathsFromUnknown(payload, blockedPaths, desktopPath);

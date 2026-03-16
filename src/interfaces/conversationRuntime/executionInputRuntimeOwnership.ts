@@ -2,9 +2,10 @@
  * @fileoverview Reconciles persisted conversation ownership state with live runtime snapshots for execution input assembly.
  */
 
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-
+import {
+  dirnameCrossPlatformPath,
+  localFileUrlToAbsolutePath
+} from "../../core/crossPlatformPath";
 import type { BrowserSessionSnapshot } from "../../organs/liveRun/browserSessionRegistry";
 import type { ManagedProcessSnapshot } from "../../organs/liveRun/managedProcessRegistry";
 import type {
@@ -55,9 +56,15 @@ function deriveLocalPreviewPaths(previewUrl: string | null | undefined): Derived
   }
 
   try {
-    const primaryArtifactPath = fileURLToPath(previewUrl);
+    const primaryArtifactPath = localFileUrlToAbsolutePath(previewUrl);
+    if (!primaryArtifactPath) {
+      return {
+        rootPath: null,
+        primaryArtifactPath: null
+      };
+    }
     return {
-      rootPath: path.dirname(primaryArtifactPath),
+      rootPath: dirnameCrossPlatformPath(primaryArtifactPath),
       primaryArtifactPath
     };
   } catch {

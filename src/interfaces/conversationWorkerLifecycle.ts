@@ -2,8 +2,6 @@
  * @fileoverview Implements deterministic worker-loop lifecycle helpers for conversation queue execution.
  */
 
-import path from "node:path";
-
 import { assertAckInvariants } from "./ackStateMachine";
 import { backfillPulseSnippet } from "./pulseEmissionLifecycle";
 import { elapsedSeconds } from "./conversationManagerHelpers";
@@ -30,6 +28,10 @@ import { buildConversationReturnHandoff } from "./conversationRuntime/returnHand
 import { buildPausedReturnHandoffProgressState } from "./conversationRuntime/returnHandoffControl";
 import { deriveTaskRecoveryClarification } from "./conversationRuntime/taskRecoveryClarification";
 import { reconcileConversationExecutionRuntimeSession } from "./conversationRuntime/executionInputRuntimeOwnership";
+import {
+  dirnameCrossPlatformPath,
+  extnameCrossPlatformPath
+} from "../core/crossPlatformPath";
 import type { BrowserSessionSnapshot } from "../organs/liveRun/browserSessionRegistry";
 import type { ManagedProcessSnapshot } from "../organs/liveRun/managedProcessRegistry";
 import type {
@@ -190,7 +192,7 @@ function selectPrimaryArtifactPath(
   if (htmlPath) {
     return htmlPath;
   }
-  const filePath = changedPaths.find((entry) => path.extname(entry).length > 0);
+  const filePath = changedPaths.find((entry) => extnameCrossPlatformPath(entry).length > 0);
   if (filePath) {
     return filePath;
   }
@@ -241,7 +243,7 @@ function resolveWorkspaceRootPath(
     return folderDestination.resolvedPath;
   }
   if (primaryArtifactPath) {
-    return path.dirname(primaryArtifactPath);
+    return dirnameCrossPlatformPath(primaryArtifactPath);
   }
   return previousWorkspace?.rootPath ?? null;
 }

@@ -2,8 +2,7 @@
  * @fileoverview Owns bounded workspace-recovery context blocks used by conversation execution input assembly.
  */
 
-import path from "node:path";
-
+import { basenameCrossPlatformPath } from "../../core/crossPlatformPath";
 import { normalizeWhitespace } from "../conversationManagerHelpers";
 import type { ConversationSession } from "../sessionStore";
 import type { ManagedProcessSnapshot } from "../../organs/liveRun/managedProcessRegistry";
@@ -150,7 +149,7 @@ function selectFallbackMatchingSnapshots(
     .filter((snapshot) => snapshot.cwd.trim().length > 0)
     .filter((snapshot) => {
       const cwdLower = snapshot.cwd.toLowerCase();
-      const basename = path.basename(snapshot.cwd).toLowerCase();
+      const basename = basenameCrossPlatformPath(snapshot.cwd).toLowerCase();
       return matchTokens.some(
         (token) =>
           cwdLower.includes(token) ||

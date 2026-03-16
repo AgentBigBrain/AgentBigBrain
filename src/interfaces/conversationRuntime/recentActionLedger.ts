@@ -1,7 +1,8 @@
 /**
  * @fileoverview Derives and renders user-facing recent-action, destination, browser-session, and progress ledgers.
  */
-import path from "node:path";
+
+import { basenameCrossPlatformPath } from "../../core/crossPlatformPath";
 import type { ActionRunResult, TaskRunResult } from "../../core/types";
 import type { ConversationIntentSemanticHint } from "./intentModeContracts";
 import {
@@ -523,7 +524,7 @@ function renderLatestChangeSummary(session: ConversationSession): string | null 
     const fileNames = fileActions
       .map((action) => action.location)
       .filter((location): location is string => typeof location === "string")
-      .map((location) => path.basename(location))
+      .map((location) => basenameCrossPlatformPath(location))
       .filter((value, index, array) => value.length > 0 && array.indexOf(value) === index);
     if (fileNames.length > 0) {
       lines.push(`I updated ${joinNaturalList(fileNames)}.`);
@@ -532,7 +533,7 @@ function renderLatestChangeSummary(session: ConversationSession): string | null 
     const folderNames = folderActions
       .map((action) => action.location)
       .filter((location): location is string => typeof location === "string")
-      .map((location) => path.basename(location))
+      .map((location) => basenameCrossPlatformPath(location))
       .filter((value, index, array) => value.length > 0 && array.indexOf(value) === index);
     if (folderNames.length > 0) {
       lines.push(`I updated ${joinNaturalList(folderNames)}.`);

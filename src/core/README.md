@@ -75,8 +75,9 @@ env-parsing helpers while `config.ts` remains the stable config entrypoint.
   `src/core/workflowLearningRuntime/skillOpportunityRanking.ts`,
   `src/core/workflowLearningRuntime/workflowInspection.ts`.
 - Config, identity, and platform/runtime support: `appleSiliconRuntime.ts`, `config.ts`,
-  `envLoader.ts`, `fileLock.ts`, `ids.ts`, `personality.ts`, `personalityStore.ts`,
-  `runtimeEntropy.ts`, `shellRuntimeProfile.ts`, `sqliteStore.ts`, `stateStore.ts`, `types.ts`.
+  `crossPlatformPath.ts`, `envLoader.ts`, `fileLock.ts`, `ids.ts`, `personality.ts`,
+  `personalityStore.ts`, `runtimeEntropy.ts`, `shellRuntimeProfile.ts`, `sqliteStore.ts`,
+  `stateStore.ts`, `types.ts`.
 - Extracted runtime-types subsystem: `src/core/runtimeTypes/actionTypes.ts`,
   `src/core/runtimeTypes/decisionSupportTypes.ts`,
   `src/core/runtimeTypes/governanceTypes.ts`,
@@ -216,6 +217,7 @@ env-parsing helpers while `config.ts` remains the stable config entrypoint.
 - `tests/core/agentLoop.test.ts`
 - `tests/core/orchestrator.test.ts`
 - `tests/core/config.test.ts`
+- `tests/core/crossPlatformPath.test.ts`
 - `tests/core/shellRuntimeProfile.test.ts`
 - `tests/core/autonomyModules.test.ts`
 - `tests/core/orchestrationModules.test.ts`

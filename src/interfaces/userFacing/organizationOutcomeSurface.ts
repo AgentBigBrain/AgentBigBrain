@@ -2,8 +2,7 @@
  * @fileoverview Human-first outcome rendering helpers for local folder-organization work.
  */
 
-import path from "node:path";
-
+import { basenameCrossPlatformPath } from "../../core/crossPlatformPath";
 import { extractActiveRequestSegment } from "../../core/currentRequestExtraction";
 import { extractBlockedFolderPaths } from "../../core/autonomy/workspaceRecoveryBlockedPathParsing";
 import { TaskRunResult } from "../../core/types";
@@ -502,7 +501,7 @@ export function resolvePartialLocalOrganizationOutcomeLine(
   const blockedFolderNames = Array.from(
     new Set(
       blockedFolderPaths
-        .map((folderPath) => path.basename(folderPath.trim()))
+        .map((folderPath) => basenameCrossPlatformPath(folderPath.trim()))
         .filter((entry) => entry.length > 0)
     )
   );

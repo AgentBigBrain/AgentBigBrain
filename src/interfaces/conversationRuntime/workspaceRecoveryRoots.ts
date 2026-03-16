@@ -2,8 +2,12 @@
  * @fileoverview Owns attributable workspace-root selection and explanation for workspace recovery.
  */
 
-import path from "node:path";
-
+import {
+  basenameCrossPlatformPath,
+  dirnameCrossPlatformPath,
+  extnameCrossPlatformPath,
+  normalizeCrossPlatformPath
+} from "../../core/crossPlatformPath";
 import type { ConversationSession } from "../sessionStore";
 
 export interface AttributableWorkspaceRootCandidate {
@@ -31,15 +35,11 @@ function normalizeWorkspaceRootPath(candidatePath: string | null | undefined): s
   if (!candidatePath) {
     return null;
   }
-  const trimmed = candidatePath.trim();
-  if (!trimmed) {
-    return null;
-  }
-  const normalized = path.normalize(trimmed).replace(/[\\/]+$/, "");
+  const normalized = normalizeCrossPlatformPath(candidatePath);
   if (!normalized) {
     return null;
   }
-  return path.extname(normalized) ? path.dirname(normalized) : normalized;
+  return extnameCrossPlatformPath(normalized) ? dirnameCrossPlatformPath(normalized) : normalized;
 }
 
 /**
@@ -65,7 +65,7 @@ export function selectAttributableWorkspaceRoots(
       return;
     }
     const comparableRoot = rootPath.toLowerCase();
-    const basename = path.basename(rootPath).toLowerCase();
+    const basename = basenameCrossPlatformPath(rootPath).toLowerCase();
     if (
       matchTokens.length > 0 &&
       !matchTokens.some(
