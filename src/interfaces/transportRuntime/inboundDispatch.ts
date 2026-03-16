@@ -3,12 +3,15 @@
  */
 
 import type {
+  ConversationExecutionProgressUpdate,
+  ConversationExecutionResult,
   ConversationDeliveryResult,
   ConversationInboundMessage,
   ConversationNotifierTransport,
   ExecuteConversationTask
 } from "../conversationRuntime/managerContracts";
 import { parseAutonomousExecutionInput } from "../conversationRuntime/managerContracts";
+import type { TaskRunResult } from "../../core/types";
 import type {
   EntityGraphStoreLike,
   InboundEntityGraphMutationInput
@@ -32,17 +35,86 @@ export interface HandleAcceptedTransportConversationInput {
   entityGraphStore: EntityGraphStoreLike;
   dynamicPulseEnabled: boolean;
   abortControllers: Map<string, AbortController>;
-  runTextTask(input: string, receivedAt: string): Promise<string>;
+  runTextTask(
+    input: string,
+    receivedAt: string,
+    onProgressUpdate?: (update: ConversationExecutionProgressUpdate) => Promise<void>
+  ): Promise<ConversationExecutionResult | TaskRunResult | string>;
   runAutonomousTask(
     goal: string,
     receivedAt: string,
     progressSender: (message: string) => Promise<void>,
-    signal: AbortSignal
-  ): Promise<string>;
+    signal: AbortSignal,
+    initialExecutionInput?: string | null,
+    onProgressUpdate?: (update: ConversationExecutionProgressUpdate) => Promise<void>
+  ): Promise<ConversationExecutionResult>;
   deliverReply(reply: string): Promise<ConversationDeliveryResult>;
   deliveryFailureCode: string;
   onEntityGraphMutationFailure?(error: Error): void;
   onEmptyReply?(): void;
+}
+
+/**
+ * Normalizes transport text-task output into the canonical conversation execution result shape.
+ *
+ * **Why it exists:**
+ * Gateways already return a normalized execution result, but transport tests and narrow helper
+ * call sites may still provide a summary string or raw `TaskRunResult`. This keeps the
+ * transport seam tolerant without leaking shape ambiguity through the rest of the interface
+ * runtime.
+ *
+ * **What it talks to:**
+ * - Uses `ConversationExecutionResult` (import type `ConversationExecutionResult`) from
+ *   `../conversationRuntime/managerContracts`.
+ * - Uses `TaskRunResult` (import type `TaskRunResult`) from `../../core/types`.
+ *
+ * @param result - Raw text-task result returned by the transport caller.
+ * @returns Canonical conversation execution result with a stable `summary`.
+ */
+function normalizeConversationExecutionResult(
+  result: ConversationExecutionResult | TaskRunResult | string
+): ConversationExecutionResult {
+  if (typeof result === "string") {
+    return { summary: result };
+  }
+
+  if (isTaskRunResult(result)) {
+    return {
+      summary: result.summary,
+      taskRunResult: result
+    };
+  }
+
+  return {
+    summary: result.summary,
+    taskRunResult: result.taskRunResult ?? null
+  };
+}
+
+/**
+ * Determines whether a transport execution value is a raw `TaskRunResult`.
+ *
+ * **Why it exists:**
+ * `TaskRunResult` and `ConversationExecutionResult` both carry `summary`, so the transport seam
+ * needs a stronger discriminator before deciding whether to preserve a raw orchestrator result or
+ * just a normalized summary wrapper.
+ *
+ * **What it talks to:**
+ * - Uses `TaskRunResult` (import type `TaskRunResult`) from `../../core/types`.
+ *
+ * @param result - Candidate execution payload returned by a transport caller.
+ * @returns `true` when the value matches the raw orchestrator result contract.
+ */
+function isTaskRunResult(
+  result: ConversationExecutionResult | TaskRunResult
+): result is TaskRunResult {
+  return (
+    "task" in result &&
+    "plan" in result &&
+    "actionResults" in result &&
+    "startedAt" in result &&
+    "completedAt" in result
+  );
 }
 
 /**
@@ -109,22 +181,27 @@ export async function handleAcceptedTransportConversation(
 function buildTransportExecutionTask(
   input: HandleAcceptedTransportConversationInput
 ): ExecuteConversationTask {
-  return async (taskInput: string, receivedAt: string) => {
+  return async (
+    taskInput: string,
+    receivedAt: string,
+    onProgressUpdate?: (update: ConversationExecutionProgressUpdate) => Promise<void>
+  ) => {
     const autonomousGoal = parseAutonomousExecutionInput(taskInput);
     if (autonomousGoal) {
-      const summary = await runAutonomousTransportTask({
+      return await runAutonomousTransportTask({
         conversationId: input.inbound.conversationId,
-        goal: autonomousGoal,
+        goal: autonomousGoal.goal,
+        initialExecutionInput: autonomousGoal.initialExecutionInput,
         receivedAt,
         notifier: input.notifier,
         abortControllers: input.abortControllers,
-        runAutonomousTask: input.runAutonomousTask
+        runAutonomousTask: input.runAutonomousTask,
+        onProgressUpdate
       });
-      return { summary };
     }
 
-    return {
-      summary: await input.runTextTask(taskInput, receivedAt)
-    };
+    return normalizeConversationExecutionResult(
+      await input.runTextTask(taskInput, receivedAt, onProgressUpdate)
+    );
   };
 }

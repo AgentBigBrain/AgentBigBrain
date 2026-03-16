@@ -105,6 +105,41 @@ Not every media issue shows up as a dedicated reason code. Some of the most comm
   - there is no env knob today that enables full semantic video understanding
   - the runtime currently uses file metadata and captions for video instead of full clip analysis
 
+## 5A) Local Intent-Model Reality Check
+
+The optional local intent engine is not the main planner. It is a bounded front-door classifier
+used only when deterministic routing confidence stays weak.
+
+There is not currently a dedicated reason code for every local-intent-model failure. The common
+operator questions are usually setup or availability issues:
+
+- `Natural front-door requests keep falling back to deterministic routing and the local intent model never seems active.`
+  - likely causes:
+    - `BRAIN_LOCAL_INTENT_MODEL_ENABLED=false`
+    - Ollama is not running at `BRAIN_LOCAL_INTENT_MODEL_BASE_URL`
+    - the configured model tag was not pulled into Ollama
+  - relevant env:
+    - `BRAIN_LOCAL_INTENT_MODEL_ENABLED`
+    - `BRAIN_LOCAL_INTENT_MODEL_PROVIDER`
+    - `BRAIN_LOCAL_INTENT_MODEL_BASE_URL`
+    - `BRAIN_LOCAL_INTENT_MODEL_NAME`
+
+- `Live smoke says the local intent model was enabled but unavailable.`
+  - likely causes:
+    - the base URL is wrong or Ollama is down
+    - the configured model is missing from `ollama tags`
+    - the timeout is too low for the local machine
+  - relevant env:
+    - `BRAIN_LOCAL_INTENT_MODEL_BASE_URL`
+    - `BRAIN_LOCAL_INTENT_MODEL_NAME`
+    - `BRAIN_LOCAL_INTENT_MODEL_TIMEOUT_MS`
+    - `BRAIN_LOCAL_INTENT_MODEL_LIVE_SMOKE_REQUIRED`
+
+- `The local intent path seems active, but it still does not authorize risky actions automatically.`
+  - this is the expected current behavior
+  - the local intent model helps classify meaning
+  - deterministic runtime ownership, clarification, and safety policy still decide what is allowed
+
 ## 6) Example Tuning Blocks
 
 ### Heavier autonomous build and verification runs
@@ -130,6 +165,16 @@ BRAIN_ENABLE_REAL_NETWORK_WRITE=true
 BRAIN_MAX_AUTONOMOUS_ITERATIONS=100
 BRAIN_MAX_MODEL_SPEND_USD=20
 BRAIN_MAX_CUMULATIVE_COST_USD=20
+```
+
+### Optional local intent-model bring-up
+
+```env
+BRAIN_LOCAL_INTENT_MODEL_ENABLED=true
+BRAIN_LOCAL_INTENT_MODEL_PROVIDER=ollama
+BRAIN_LOCAL_INTENT_MODEL_BASE_URL=http://127.0.0.1:11434
+BRAIN_LOCAL_INTENT_MODEL_NAME=phi4-mini:latest
+BRAIN_LOCAL_INTENT_MODEL_TIMEOUT_MS=45000
 ```
 
 ## 7) Codes With No `.env` Knob

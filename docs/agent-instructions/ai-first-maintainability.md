@@ -20,3 +20,6 @@
    when contributors would otherwise need to infer the rule.
 7. Prefer explicit machine-checkable structure over prose-only guidance. If a convention matters
    repeatedly, enforce it with tooling or a sync check instead of relying on memory.
+8. Prefer DRY when it clearly removes repeated logic, repeated microcopy, or repeated contracts,
+   but do not force abstractions for their own sake. If two flows have different UX, safety, or
+   state needs, keep them separate until the shared shape is truly stable.

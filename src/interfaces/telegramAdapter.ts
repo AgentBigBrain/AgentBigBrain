@@ -23,15 +23,21 @@ import {
   buildAutonomousGoalAbortedProgressMessage,
   buildAutonomousGoalMetProgressMessage,
   buildAutonomousIterationProgressMessage,
-  buildAutonomousTerminalSummaryMessage
+  buildAutonomousTerminalSummaryMessage,
+  humanizeAutonomousStopReason
 } from "./userFacing/stopSummarySurface";
+import { buildAutonomousConversationExecutionResult } from "./autonomousConversationExecutionResult";
 import type {
+  ConversationExecutionResult,
+  ConversationExecutionProgressUpdate,
   ConversationContinuityEpisodeQueryRequest,
   ConversationContinuityEpisodeRecord,
   ConversationMemoryReviewRecord
 } from "./conversationRuntime/managerContracts";
 import type { ConversationInboundMediaEnvelope } from "./mediaRuntime/contracts";
 import { hasConversationMedia } from "./mediaRuntime/contracts";
+import type { ManagedProcessSnapshot } from "../organs/liveRun/managedProcessRegistry";
+import type { BrowserSessionSnapshot } from "../organs/liveRun/browserSessionRegistry";
 
 export interface TelegramInboundMessage {
   updateId: number;
@@ -255,6 +261,38 @@ export class TelegramAdapter {
   }
 
   /**
+   * Lists managed-process lease snapshots currently owned by the shared runtime.
+   *
+   * **Why it exists:**
+   * Gateway conversation flows use this to surface already-running local previews when a follow-up
+   * request needs to reorganize or close user-owned workspaces safely.
+   *
+   * **What it talks to:**
+   * - Uses `BrainOrchestrator.listManagedProcessSnapshots()` from `../core/orchestrator`.
+   *
+   * @returns Caller-owned managed-process snapshots.
+   */
+  async listManagedProcessSnapshots(): Promise<readonly ManagedProcessSnapshot[]> {
+    return this.brain.listManagedProcessSnapshots();
+  }
+
+  /**
+   * Lists browser-session snapshots currently owned by the shared runtime.
+   *
+   * **Why it exists:**
+   * Gateway conversation flows use this to ground close/reopen follow-ups in live browser control
+   * state instead of stale persisted session metadata after restart churn.
+   *
+   * **What it talks to:**
+   * - Uses `BrainOrchestrator.listBrowserSessionSnapshots()` from `../core/orchestrator`.
+   *
+   * @returns Caller-owned browser-session snapshots.
+   */
+  async listBrowserSessionSnapshots(): Promise<readonly BrowserSessionSnapshot[]> {
+    return this.brain.listBrowserSessionSnapshots();
+  }
+
+  /**
    * Runs the full autonomous goal-resolution loop, delivering throttled progress
    * to the chat.  Messages are consolidated: only the first iteration, every Nth
    * iteration with real progress, and terminal events (goal met / abort) send a
@@ -266,8 +304,10 @@ export class TelegramAdapter {
     goal: string,
     receivedAt: string,
     onProgress: (message: string) => Promise<void>,
-    signal?: AbortSignal
-  ): Promise<string> {
+    signal?: AbortSignal,
+    initialExecutionInput?: string | null,
+    onProgressUpdate?: (update: ConversationExecutionProgressUpdate) => Promise<void>
+  ): Promise<ConversationExecutionResult> {
     const config = createBrainConfigFromEnv();
     const modelClient = createModelClientFromEnv();
     const loop = new AutonomousLoop(this.brain, modelClient, config);
@@ -279,6 +319,13 @@ export class TelegramAdapter {
     let terminalReason = "";
     let lastProgressMessageAt = 0;
     const THROTTLE_MS = 30_000;
+    let latestTaskRunResult: TaskRunResult | null = null;
+    const aggregatedActionResults: TaskRunResult["actionResults"] = [];
+    let firstTaskStartedAt: string | null = null;
+    let latestTaskCompletedAt: string | null = null;
+    let lastStateMessageKey = "";
+    let terminalProgressStateEmitted = false;
+    let terminalProgressMessageEmitted = false;
 
     /**
      * Decides whether the current autonomous-loop iteration should emit progress.
@@ -303,6 +350,31 @@ export class TelegramAdapter {
     };
 
     const callbacks: AutonomousLoopCallbacks = {
+      onStateChange: async (update) => {
+        await onProgressUpdate?.({
+          status: update.state,
+          message: update.message
+        });
+        if (update.state === "completed" || update.state === "stopped") {
+          terminalProgressStateEmitted = true;
+          return;
+        }
+        if (update.state === "working" && update.iteration === 1) {
+          return;
+        }
+        const stateMessage = update.message.trim();
+        const stateKey = `${update.state}|${update.iteration}|${stateMessage}`;
+        const now = Date.now();
+        if (
+          stateKey === lastStateMessageKey ||
+          (update.state === "working" && now - lastProgressMessageAt < THROTTLE_MS)
+        ) {
+          return;
+        }
+        lastStateMessageKey = stateKey;
+        await onProgress(stateMessage);
+        lastProgressMessageAt = now;
+      },
       onIterationStart: async (iteration, input) => {
         totalIterations = iteration;
         if (iteration === 1) {
@@ -311,10 +383,14 @@ export class TelegramAdapter {
           lastProgressMessageAt = Date.now();
         }
       },
-      onIterationComplete: async (iteration, _summary, approved, blocked) => {
+      onIterationComplete: async (iteration, _summary, approved, blocked, result) => {
         totalIterations = iteration;
         totalApproved += approved;
         totalBlocked += blocked;
+        latestTaskRunResult = result;
+        aggregatedActionResults.push(...result.actionResults);
+        firstTaskStartedAt ??= result.startedAt;
+        latestTaskCompletedAt = result.completedAt;
         if (shouldSendProgress(iteration, approved)) {
           await onProgress(
             buildAutonomousIterationProgressMessage(
@@ -329,6 +405,14 @@ export class TelegramAdapter {
         }
       },
       onGoalMet: async (reasoning) => {
+        lastStateMessageKey = "";
+        if (!terminalProgressStateEmitted) {
+          await onProgressUpdate?.({
+            status: "completed",
+            message: reasoning
+          });
+          terminalProgressStateEmitted = true;
+        }
         await onProgress(
           buildAutonomousGoalMetProgressMessage(
             totalIterations,
@@ -337,10 +421,19 @@ export class TelegramAdapter {
             reasoning
           )
         );
+        terminalProgressMessageEmitted = true;
       },
       onGoalAborted: async (reason) => {
         terminalAborted = true;
         terminalReason = reason;
+        lastStateMessageKey = "";
+        if (!terminalProgressStateEmitted) {
+          await onProgressUpdate?.({
+            status: "stopped",
+            message: humanizeAutonomousStopReason(reason)
+          });
+          terminalProgressStateEmitted = true;
+        }
         await onProgress(
           buildAutonomousGoalAbortedProgressMessage(
             totalIterations,
@@ -349,11 +442,12 @@ export class TelegramAdapter {
             reason
           )
         );
+        terminalProgressMessageEmitted = true;
       }
     };
 
     try {
-      await loop.run(goal, callbacks, signal);
+      await loop.run(goal, callbacks, signal, undefined, initialExecutionInput ?? null);
     } catch (error) {
       if (!terminalAborted) {
         terminalAborted = true;
@@ -368,14 +462,42 @@ export class TelegramAdapter {
             terminalReason
           )
         );
+        terminalProgressMessageEmitted = true;
       }
     }
-    return buildAutonomousTerminalSummaryMessage(
+    if (terminalAborted) {
+      if (!terminalProgressStateEmitted) {
+        await onProgressUpdate?.({
+          status: "stopped",
+          message: humanizeAutonomousStopReason(terminalReason)
+        });
+        terminalProgressStateEmitted = true;
+      }
+      if (!terminalProgressMessageEmitted) {
+        await onProgress(
+          buildAutonomousGoalAbortedProgressMessage(
+            totalIterations,
+            totalApproved,
+            totalBlocked,
+            terminalReason
+          )
+        );
+        terminalProgressMessageEmitted = true;
+      }
+    }
+    const summary = buildAutonomousTerminalSummaryMessage(
       !terminalAborted,
       totalIterations,
       totalApproved,
       totalBlocked,
       terminalReason
+    );
+    return buildAutonomousConversationExecutionResult(
+      summary,
+      latestTaskRunResult,
+      aggregatedActionResults,
+      firstTaskStartedAt,
+      latestTaskCompletedAt
     );
   }
 

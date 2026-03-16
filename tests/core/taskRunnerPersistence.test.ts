@@ -5,6 +5,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import type { AppendRuntimeTraceEventInput } from "../../src/core/runtimeTraceLogger";
 import {
   appendExecutionReceipt,
   appendGovernanceEvent,
@@ -15,7 +16,7 @@ test("resolveBlockCategory prefers runtime for execution failures", () => {
   const category = resolveBlockCategory({
     action: {
       id: "action_task_runner_persistence_1",
-      type: "run_command",
+      type: "shell_command",
       description: "run command",
       params: {},
       estimatedCostUsd: 0.01
@@ -51,11 +52,11 @@ test("appendGovernanceEvent persists aligned vote and trace details", async () =
       },
       mode: "fast_path",
       approved: false,
-      blockedBy: ["safety"],
+      blockedBy: ["security"],
       violations: [],
       votes: [
         {
-          governorId: "safety",
+          governorId: "security",
           approve: false,
           reason: "unsafe",
           confidence: 1
@@ -71,8 +72,8 @@ test("appendGovernanceEvent persists aligned vote and trace details", async () =
         };
       }
     } as never,
-    appendTraceEvent: async (event: Record<string, unknown>) => {
-      traceEvents.push(event as Record<string, unknown>);
+    appendTraceEvent: async (event: AppendRuntimeTraceEventInput) => {
+      traceEvents.push(event as unknown as Record<string, unknown>);
     }
   });
 
@@ -105,7 +106,7 @@ test("appendExecutionReceipt skips blocked results and writes approved receipts"
       },
       mode: "fast_path",
       approved: false,
-      blockedBy: ["safety"],
+      blockedBy: ["security"],
       violations: [],
       votes: []
     },

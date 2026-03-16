@@ -24,7 +24,7 @@ For runtime troubleshooting by error/reason code, see:
 Optional by mode:
 
 - OpenAI API key (if `BRAIN_MODEL_BACKEND=openai`).
-- Local Ollama runtime (if `BRAIN_MODEL_BACKEND=ollama`).
+- Local Ollama runtime (if `BRAIN_MODEL_BACKEND=ollama` or `BRAIN_LOCAL_INTENT_MODEL_ENABLED=true`).
 - Telegram bot token and/or Discord bot token (if using `dev:interface`).
 
 ## 2) Install and Build
@@ -74,6 +74,7 @@ Operational implication:
 | `BRAIN_RUNTIME_MODE` | Runtime profile: `isolated` or `full_access`. | `isolated` |
 | `BRAIN_ALLOW_FULL_ACCESS` | Safety latch required when using `full_access`. | `false` unless explicitly needed |
 | `BRAIN_MODEL_BACKEND` | Model provider selector (`mock`, `openai`, `ollama`). | `mock` for local bring-up |
+| `BRAIN_LOCAL_INTENT_MODEL_ENABLED` | Enables the optional bounded local intent-model classifier for front-door routing. | `false` by default |
 | `BRAIN_ENABLE_REAL_SHELL` | Enables real shell-command execution path. | `false` until you need live shell actions |
 | `BRAIN_ENABLE_REAL_NETWORK_WRITE` | Enables real network-write side effects. | `false` by default |
 | `BRAIN_BROWSER_VERIFY_VISIBLE` | Shows a real local Chromium window during `verify_browser` instead of headless proof. | `false` by default |
@@ -218,6 +219,52 @@ BRAIN_MODEL_BACKEND=ollama
 OLLAMA_BASE_URL=http://localhost:11434
 OLLAMA_TIMEOUT_MS=60000
 ```
+
+### Optional local intent engine (Ollama-backed)
+
+This is optional.
+
+It adds a small local model that helps the assistant understand natural phrasing a little better
+at the front door. This is useful for messages like `pick that back up`, `show me the rough
+draft`, or other natural follow-up wording.
+
+It does not replace your main planner model, and it cannot approve actions on its own. The normal
+safety checks and execution rules still decide what is allowed to run.
+
+You can enable it even when `BRAIN_MODEL_BACKEND=openai`.
+
+1. Install and run Ollama locally.
+2. Pull the preferred Phi model:
+
+```bash
+ollama pull phi4-mini
+```
+
+3. Add the local intent block:
+
+```env
+BRAIN_LOCAL_INTENT_MODEL_ENABLED=true
+BRAIN_LOCAL_INTENT_MODEL_PROVIDER=ollama
+BRAIN_LOCAL_INTENT_MODEL_BASE_URL=http://127.0.0.1:11434
+BRAIN_LOCAL_INTENT_MODEL_NAME=phi4-mini:latest
+BRAIN_LOCAL_INTENT_MODEL_TIMEOUT_MS=45000
+BRAIN_LOCAL_INTENT_MODEL_LIVE_SMOKE_REQUIRED=false
+```
+
+How each setting works:
+
+- `BRAIN_LOCAL_INTENT_MODEL_ENABLED`: turns this helper on.
+- `BRAIN_LOCAL_INTENT_MODEL_PROVIDER`: which local provider to use. Right now this must be `ollama`.
+- `BRAIN_LOCAL_INTENT_MODEL_BASE_URL`: where Ollama is running.
+- `BRAIN_LOCAL_INTENT_MODEL_NAME`: which local model tag to use. The current default is `phi4-mini:latest`.
+- `BRAIN_LOCAL_INTENT_MODEL_TIMEOUT_MS`: how long to wait before giving up and falling back.
+- `BRAIN_LOCAL_INTENT_MODEL_LIVE_SMOKE_REQUIRED`: when `true`, related live smokes fail if this helper was expected but not reachable.
+
+What to expect:
+
+- the runtime checks whether this local model is reachable and logs the result
+- if it is unavailable, the system falls back to the normal routing path
+- this helper only helps interpret the request; it does not grant permission to write files, run commands, or bypass safety rules
 
 ## 7) Install ONNX Embedding Assets
 
@@ -760,6 +807,23 @@ This section covers every key currently present in `.env.example` and what to ex
     `gpt-5`, `gpt-5.1`, `gpt-5.2`, `gpt-5.3-codex`.
 - `OPENAI_PRICE_INPUT_PER_1M_USD`, `OPENAI_PRICE_OUTPUT_PER_1M_USD`: spend-estimation rates.
   - Changing affects budget accounting/telemetry only, not provider billing.
+
+### Optional local intent engine
+
+- `BRAIN_LOCAL_INTENT_MODEL_ENABLED`: turns the optional local intent helper on.
+  - `false`: the runtime uses its normal front-door routing only.
+  - `true`: the interface can ask the local helper for extra help with natural phrasing when needed.
+- `BRAIN_LOCAL_INTENT_MODEL_PROVIDER`: which local provider to use.
+  - Right now the runtime supports only `ollama`.
+- `BRAIN_LOCAL_INTENT_MODEL_BASE_URL`: where Ollama is running.
+  - Default is `http://127.0.0.1:11434`.
+- `BRAIN_LOCAL_INTENT_MODEL_NAME`: which Ollama model tag to use for this helper.
+  - Default is `phi4-mini:latest`.
+  - Pull `phi4-mini` in Ollama first so this tag resolves.
+- `BRAIN_LOCAL_INTENT_MODEL_TIMEOUT_MS`: how long to wait before falling back.
+  - Raise it if the local model is slow on the current machine.
+- `BRAIN_LOCAL_INTENT_MODEL_LIVE_SMOKE_REQUIRED`: makes related live smokes fail when this helper was expected but not actually reachable.
+  - Useful on machines where the local intent helper is part of the proof bar.
 
 ### Media understanding
 

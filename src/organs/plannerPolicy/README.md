@@ -11,18 +11,29 @@ belongs here.
 ## Primary Files
 - `executionStyleContracts.ts`
 - `buildExecutionPolicy.ts`
+- `buildExecutionPlanMessaging.ts`
+- `buildExecutionActionHeuristics.ts`
+- `buildExecutionRecoveryPolicy.ts`
 - `liveVerificationPolicy.ts`
+- `userOwnedPathHints.ts`
 - `actionNormalization.ts`
 - `explicitActionIntent.ts`
+- `explicitActionRepairSupport.ts`
 - `learningPromptGuidance.ts`
 - `plannerFailurePolicy.ts`
 - `skillActionNormalization.ts`
 - `explicitActionRepair.ts`
+- `explicitRuntimeActionFallback.ts`
 - `promptAssembly.ts`
+- `promptAssemblyRepairGuidance.ts`
+- `promptAssemblyRecoveryGuidance.ts`
 - `responseSynthesisFallback.ts`
+- `workspaceRecoveryFallback.ts`
+- `workspaceRecoveryParsing.ts`
 
 ## Inputs
 - current user request text
+- tracked path or browser-session hints carried forward from the active conversation
 - planner model output and repair output
 - routing and live-build prompt classification
 - planner action schema requirements
@@ -31,6 +42,14 @@ belongs here.
 ## Outputs
 - execution-style classification decisions
 - live-verification requirements
+- shared recovery and destination guardrails used by execution-style build assessment, including
+  shared-desktop denial, broad-shutdown denial, candidate-holder inspect-first policy, and
+  destination self-nesting denial for organization moves
+- shared execution-style policy messaging used by prompt assembly and fail-closed repair surfaces
+- shared build/organization action-shape heuristics used by execution-style build assessment,
+  including real move-command detection, Windows shell validation, open-browser target checks, and
+  tracked artifact-edit preview allowance
+- user-owned path and destination hints for safer continuity-aware local execution
 - planner action normalization and alias cleanup
 - explicit-action intent classification and filtering
 - planner failure cooldown/fingerprint helpers
@@ -39,11 +58,24 @@ belongs here.
   prompt assembly and repair notes
 - explicit-action repair decisions
 - planner system prompts and repair prompts
+- deterministic repair-guidance snippets reused by prompt assembly
+- deterministic workspace-recovery grounding snippets reused by planner prompt assembly so exact
+  tracked workspace ids, browser session ids, preview URLs, and lease ids are reused instead of
+  being replaced with broad recovery guesses
 - synthesized fallback respond messages when fail-closed repair still cannot produce executable work
 
 ## Invariants
 - Explicit browser/UI verification requests must require `verify_browser`.
+- Tracked browser-control follow-ups should stay distinct from build/live-verification repair rules.
 - Execution-style build requests must not silently pass with inspection-only plans.
+- Local organization requests must not pass with destination-creation-only shell steps; they need a
+  real move command that retries the scoped move.
+- Local organization requests must not pass with bare move-only retries; they need bounded proof of
+  what landed in the destination and what remained at the original root.
+- Local organization requests must not let the named destination folder match the same move selector
+  unless the plan explicitly excludes that destination first.
+- Build and organization policy heuristics should stay split into focused modules instead of
+  regrowing into one oversized validator file.
 - Planner repair must fail closed when required executable actions never appear.
 - Action normalization, explicit-action intent inference, and skill fallback scaffolding must stay
   owned here rather than drifting back into `src/organs/`.

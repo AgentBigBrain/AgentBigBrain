@@ -1,0 +1,368 @@
+/**
+ * @fileoverview Launches a visible local browser window and records a persistent browser-session handle when possible.
+ */
+
+import { OpenBrowserActionParams, ExecutorExecutionOutcome } from "../../core/types";
+import { isAllowedBrowserSessionControlUrl } from "../../core/constraintRuntime/browserConstraints";
+import { createAbortError, isAbortError, throwIfAborted } from "../../core/runtimeAbort";
+import {
+  buildBrowserSessionExecutionMetadata,
+  buildExecutionOutcome,
+  isLoopbackBrowserVerificationHost,
+  LiveRunExecutorContext,
+  normalizeOptionalString,
+  resolveReadinessProbeTimeoutMs,
+  waitForLocalHttpReadiness
+} from "./contracts";
+import {
+  BrowserVerifierBrowser,
+  BrowserVerifierContext,
+  BrowserVerifierPage,
+  loadPlaywrightChromium
+} from "./playwrightRuntime";
+import {
+  findNewPlaywrightAutomationBrowserPid,
+  listPlaywrightAutomationBrowserProcesses
+} from "./playwrightBrowserProcessIntrospection";
+
+interface BrowserOpenLaunchSpec {
+  executable: string;
+  args: readonly string[];
+  openMethod: string;
+  windowsVerbatimArguments?: boolean;
+}
+
+/**
+ * Builds the OS-specific browser-launch command used when managed Playwright control is unavailable.
+ *
+ * @param url - Local preview URL to open in the user's browser.
+ * @returns Platform-specific launch specification.
+ */
+function buildBrowserOpenLaunchSpec(url: string): BrowserOpenLaunchSpec {
+  switch (process.platform) {
+    case "win32":
+      return {
+        executable: "cmd.exe",
+        args: ["/d", "/c", "start", "", url],
+        openMethod: "cmd_start",
+        windowsVerbatimArguments: true
+      };
+    case "darwin":
+      return {
+        executable: "open",
+        args: [url],
+        openMethod: "open"
+      };
+    default:
+      return {
+        executable: "xdg-open",
+        args: [url],
+        openMethod: "xdg_open"
+      };
+  }
+}
+
+/**
+ * Waits for a spawned browser-launch child to either start successfully or fail immediately.
+ *
+ * @param child - Spawned child handle for the OS browser launcher.
+ * @param signal - Optional abort signal propagated from the runtime.
+ * @returns Promise resolving when the launcher successfully spawns.
+ */
+async function waitForBrowserOpenLaunch(
+  child: ReturnType<LiveRunExecutorContext["shellSpawn"]>,
+  signal?: AbortSignal
+): Promise<void> {
+  throwIfAborted(signal);
+  await new Promise<void>((resolve, reject) => {
+    let settled = false;
+    const finalize = (callback: () => void): void => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      if (signal) {
+        signal.removeEventListener("abort", handleAbort);
+      }
+      child.removeAllListeners("spawn");
+      child.removeAllListeners("error");
+      callback();
+    };
+
+    const handleAbort = (): void => {
+      finalize(() => reject(createAbortError()));
+    };
+
+    if (signal) {
+      signal.addEventListener("abort", handleAbort, { once: true });
+    }
+
+    child.once("spawn", () => {
+      finalize(() => resolve());
+    });
+    child.once("error", (error) => {
+      finalize(() => reject(error));
+    });
+  });
+}
+
+/**
+ * Executes `open_browser` by launching a visible local browser session that can stay open.
+ *
+ * @param context - Shared executor dependencies for live-run capability handlers.
+ * @param actionId - Stable action id used to derive the browser-session record id.
+ * @param params - Structured planner params for this browser-open request.
+ * @param signal - Optional abort signal propagated from the runtime.
+ * @returns Promise resolving to a typed executor outcome.
+ */
+export async function executeOpenBrowser(
+  context: LiveRunExecutorContext,
+  actionId: string,
+  params: OpenBrowserActionParams,
+  signal?: AbortSignal
+): Promise<ExecutorExecutionOutcome> {
+  throwIfAborted(signal);
+  const url = normalizeOptionalString(params.url);
+  if (!url) {
+    return buildExecutionOutcome(
+      "blocked",
+      "Browser open blocked: missing params.url.",
+      "BROWSER_VERIFY_MISSING_URL"
+    );
+  }
+
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(url);
+  } catch {
+    return buildExecutionOutcome(
+      "blocked",
+      "Browser open blocked: params.url must be a valid absolute URL.",
+      "BROWSER_VERIFY_URL_INVALID"
+    );
+  }
+
+  const isLoopbackHttpUrl =
+    (parsedUrl.protocol === "http:" || parsedUrl.protocol === "https:") &&
+    isLoopbackBrowserVerificationHost(parsedUrl.hostname);
+  const isLocalFileUrl = parsedUrl.protocol === "file:" && isAllowedBrowserSessionControlUrl(parsedUrl);
+  if (
+    parsedUrl.protocol !== "http:" &&
+    parsedUrl.protocol !== "https:" &&
+    parsedUrl.protocol !== "file:"
+  ) {
+    return buildExecutionOutcome(
+      "blocked",
+      "Browser open blocked: params.url must use http, https, or file.",
+      "BROWSER_VERIFY_URL_INVALID"
+    );
+  }
+  if (!isLoopbackHttpUrl && !isLocalFileUrl) {
+    return buildExecutionOutcome(
+      "blocked",
+      parsedUrl.protocol === "file:"
+        ? "Browser open blocked: params.url file target must be a local absolute path."
+        : "Browser open blocked: params.url must target localhost, 127.0.0.1, ::1, or a local file URL.",
+      parsedUrl.protocol === "file:" ? "BROWSER_VERIFY_URL_INVALID" : "BROWSER_VERIFY_URL_NOT_LOCAL"
+    );
+  }
+
+  const normalizedUrl = parsedUrl.toString();
+  const sessionId = `browser_session:${actionId}`;
+  const workspaceRootPath = normalizeOptionalString(params.rootPath);
+  const linkedPreviewProcessLeaseId = normalizeOptionalString(params.previewProcessLeaseId);
+  const linkedPreviewProcessSnapshot = linkedPreviewProcessLeaseId
+    ? context.managedProcessRegistry.getSnapshot(linkedPreviewProcessLeaseId)
+    : null;
+  const linkedProcessLeaseId = linkedPreviewProcessSnapshot?.leaseId ?? linkedPreviewProcessLeaseId;
+  const linkedProcessCwd = linkedPreviewProcessSnapshot?.cwd ?? workspaceRootPath;
+  const linkedProcessPid = linkedPreviewProcessSnapshot?.pid ?? null;
+  const timeoutMs = resolveReadinessProbeTimeoutMs(
+    context.config,
+    typeof params.timeoutMs === "number" ? params.timeoutMs : undefined
+  );
+
+  try {
+    if (isLoopbackHttpUrl) {
+      const readiness = await waitForLocalHttpReadiness(parsedUrl, timeoutMs, null, signal);
+      if (!readiness.ready) {
+        const failureDetail =
+          readiness.observedStatus === null
+            ? `no HTTP response within ${timeoutMs}ms`
+            : `status ${readiness.observedStatus}`;
+        return buildExecutionOutcome(
+          "failed",
+          `Browser open failed: ${normalizedUrl} never became ready (${failureDetail}).`,
+          "PROCESS_NOT_READY"
+        );
+      }
+    }
+
+    const existingSession = context.browserSessionRegistry.findReusableOpenSessionByUrl(normalizedUrl);
+    if (existingSession) {
+      context.browserSessionRegistry.annotateSessionOwnership(existingSession.sessionId, {
+        workspaceRootPath,
+        linkedProcessLeaseId,
+        linkedProcessCwd,
+        linkedProcessPid
+      });
+      const reusedSession = await context.browserSessionRegistry.reuseOpenSession(
+        existingSession.sessionId,
+        timeoutMs,
+        signal
+      );
+      if (reusedSession) {
+        return buildExecutionOutcome(
+          "success",
+          `The existing browser window for ${normalizedUrl} is already open and was brought forward.`,
+          undefined,
+          buildBrowserSessionExecutionMetadata({
+            sessionId: reusedSession.sessionId,
+            url: reusedSession.url,
+            status: reusedSession.status,
+            visibility: reusedSession.visibility,
+            controllerKind: reusedSession.controllerKind,
+            controlAvailable: reusedSession.controlAvailable,
+            browserProcessPid: reusedSession.browserProcessPid,
+            workspaceRootPath: reusedSession.workspaceRootPath,
+            linkedProcessLeaseId: reusedSession.linkedProcessLeaseId,
+            linkedProcessCwd: reusedSession.linkedProcessCwd,
+            linkedProcessPid: reusedSession.linkedProcessPid,
+            openMethod: reusedSession.controllerKind
+          })
+        );
+      }
+    }
+
+    const playwrightRuntime = await (
+      context.playwrightChromiumLoader ?? loadPlaywrightChromium
+    )();
+    if (playwrightRuntime) {
+      let browser: BrowserVerifierBrowser | null = null;
+      let browserContext: BrowserVerifierContext | null = null;
+      let page: BrowserVerifierPage | null = null;
+      try {
+        const playwrightBrowserProcessesBeforeLaunch =
+          await listPlaywrightAutomationBrowserProcesses().catch(() => []);
+        browser = await playwrightRuntime.chromium.launch({ headless: false });
+        browserContext = await browser.newContext();
+        page = await browserContext.newPage();
+        await page.goto(normalizedUrl, {
+          waitUntil: "domcontentloaded",
+          timeout: timeoutMs
+        });
+        if (typeof page.bringToFront === "function") {
+          await page.bringToFront();
+        }
+        const browserProcess = typeof browser.process === "function" ? browser.process() : null;
+        const playwrightBrowserProcessesAfterLaunch =
+          await listPlaywrightAutomationBrowserProcesses().catch(() => []);
+        const openedAt = new Date().toISOString();
+        const snapshot = context.browserSessionRegistry.registerManagedSession({
+          sessionId,
+          url: normalizedUrl,
+          visibility: "visible",
+          openedAt,
+          browser,
+          context: browserContext,
+          page,
+          browserProcessPid:
+            typeof browserProcess?.pid === "number"
+              ? browserProcess.pid
+              : findNewPlaywrightAutomationBrowserPid(
+                  playwrightBrowserProcessesBeforeLaunch,
+                  playwrightBrowserProcessesAfterLaunch
+                ),
+          workspaceRootPath,
+          linkedProcessLeaseId,
+          linkedProcessCwd,
+          linkedProcessPid
+        });
+        return buildExecutionOutcome(
+          "success",
+          `Opened ${normalizedUrl} in a visible browser window and left it open for you.`,
+          undefined,
+          buildBrowserSessionExecutionMetadata({
+            sessionId: snapshot.sessionId,
+            url: snapshot.url,
+            status: snapshot.status,
+            visibility: snapshot.visibility,
+            controllerKind: snapshot.controllerKind,
+            controlAvailable: snapshot.controlAvailable,
+            browserProcessPid: snapshot.browserProcessPid,
+            workspaceRootPath: snapshot.workspaceRootPath,
+            linkedProcessLeaseId: snapshot.linkedProcessLeaseId,
+            linkedProcessCwd: snapshot.linkedProcessCwd,
+            linkedProcessPid: snapshot.linkedProcessPid,
+            openMethod: playwrightRuntime.sourceModule
+          })
+        );
+      } catch (error) {
+        if (page && typeof page.close === "function") {
+          await page.close().catch(() => undefined);
+        }
+        if (browserContext) {
+          await browserContext.close().catch(() => undefined);
+        }
+        if (browser) {
+          await browser.close().catch(() => undefined);
+        }
+        throw error;
+      }
+    }
+
+    const launchSpec = buildBrowserOpenLaunchSpec(normalizedUrl);
+    const child = context.shellSpawn(
+      launchSpec.executable,
+      launchSpec.args,
+      {
+        detached: true,
+        stdio: "ignore",
+        windowsVerbatimArguments: launchSpec.windowsVerbatimArguments ?? false
+      }
+    );
+    await waitForBrowserOpenLaunch(child, signal);
+    if (typeof child.unref === "function") {
+      child.unref();
+    }
+    const openedAt = new Date().toISOString();
+    const snapshot = context.browserSessionRegistry.registerDetachedSession({
+      sessionId,
+      url: normalizedUrl,
+      visibility: "visible",
+      openedAt,
+      workspaceRootPath,
+      linkedProcessLeaseId,
+      linkedProcessCwd,
+      linkedProcessPid
+    });
+    return buildExecutionOutcome(
+      "success",
+      `Opened ${normalizedUrl} in your visible browser and left it open. This window may need to be closed manually later because runtime control is unavailable here.`,
+      undefined,
+      buildBrowserSessionExecutionMetadata({
+        sessionId: snapshot.sessionId,
+        url: snapshot.url,
+        status: snapshot.status,
+        visibility: snapshot.visibility,
+        controllerKind: snapshot.controllerKind,
+        controlAvailable: snapshot.controlAvailable,
+        browserProcessPid: snapshot.browserProcessPid,
+        workspaceRootPath: snapshot.workspaceRootPath,
+        linkedProcessLeaseId: snapshot.linkedProcessLeaseId,
+        linkedProcessCwd: snapshot.linkedProcessCwd,
+        linkedProcessPid: snapshot.linkedProcessPid,
+        openMethod: launchSpec.openMethod
+      })
+    );
+  } catch (error) {
+    if (isAbortError(error)) {
+      throw error;
+    }
+    return buildExecutionOutcome(
+      "failed",
+      `Browser open failed: ${(error as Error).message}`,
+      "ACTION_EXECUTION_FAILED"
+    );
+  }
+}

@@ -42,3 +42,34 @@
    - When a workflow is inherently dynamic or live, the answer is usually better modeling and better
      verification, not less capability.
    - The goal is a brain that stays safe and truthful while still learning how to get unstuck.
+7. Treat intent as the primary meaning layer, not the safety layer.
+   - The intent engine should be the main way the system understands user meaning, working mode,
+     continuity, and natural follow-up phrasing.
+   - Prefer richer typed intent outputs and better runtime context over growing phrase lists or
+     regex-heavy routing.
+   - Keep lexical helpers as a thin deterministic shell for explicit commands, very high-precision
+     cues, and fail-closed fallback behavior.
+   - Do not let intent understanding silently become permission. Understanding what the user means
+     is separate from deciding what the runtime is allowed to do.
+8. Prefer narrow recovery over blunt recovery.
+   - If the assistant knows the exact browser session, preview lease, workspace, or file it owns,
+     it should act on that exact resource first.
+   - If the assistant cannot prove the exact holder or target, it should clarify or stop cleanly
+     instead of reaching for broad app shutdown or speculative cleanup.
+   - A good recovery message should still feel helpful and calm to the user, but the underlying
+     action scope should stay narrow and reviewable.
+   - Concrete examples:
+     - If the user says `close the landing page` and the runtime has the exact tracked browser
+       session plus linked preview lease, close that exact session and stop that exact linked
+       preview.
+     - If the user says `organize those drone folders` and one exact tracked preview lease is the
+       blocker, stop that exact tracked holder and retry the move.
+     - If the user says `pick that older landing page back up` and the runtime can tie that request
+       to one stale but attributable workspace, continue with that exact workspace instead of
+       rebuilding from scratch.
+     - If the user asks for the same organization step but the runtime cannot prove which process
+       holds the folder, ask one short contextual clarification instead of guessing.
+     - If a natural follow-up like `change the hero to a slider` is understood but the runtime
+       cannot prove which workspace or page it targets, clarification is still the right outcome.
+     - If recovery would require broad app shutdown like `node`, `Code`, `OneDrive`, or
+       `explorer`, that is the wrong recovery shape even if it sounds convenient.

@@ -840,16 +840,28 @@ async function runModelCase(
       const executeTask = async (taskInput: string, taskReceivedAt: string) => {
         const autonomousGoal = parseAutonomousExecutionInput(taskInput);
         if (autonomousGoal) {
-          const summary = await runAutonomousTransportTask({
+          return await runAutonomousTransportTask({
             conversationId: sessionKey,
-            goal: autonomousGoal,
+            goal: autonomousGoal.goal,
+            initialExecutionInput: autonomousGoal.initialExecutionInput,
             receivedAt: taskReceivedAt,
             notifier,
             abortControllers,
-            runAutonomousTask: async (goal, runReceivedAt, progressSender, signal) =>
-              adapter.runAutonomousTask(goal, runReceivedAt, progressSender, signal)
+            runAutonomousTask: async (
+              goal,
+              runReceivedAt,
+              progressSender,
+              signal,
+              initialExecutionInput
+            ) =>
+              adapter.runAutonomousTask(
+                goal,
+                runReceivedAt,
+                progressSender,
+                signal,
+                initialExecutionInput
+              )
           });
-          return { summary };
         }
         return {
           summary: selectUserFacingSummary(

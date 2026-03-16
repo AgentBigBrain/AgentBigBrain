@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
 
 import {
@@ -78,6 +79,29 @@ test("sqlite planner failure store cleanup removes stale entries", async () => {
     const fresh = await store.get("fingerprint_fresh");
     assert.equal(stale, undefined);
     assert.ok(fresh);
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("sqlite planner failure store recreates the schema if the planner-failure table disappears mid-run", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-planner-failure-recover-"));
+  const sqlitePath = path.join(tempDir, "ledgers.sqlite");
+
+  try {
+    const store = new SqlitePlannerFailureStore(sqlitePath);
+    await store.upsert("fingerprint_recover", buildEntry(Date.now()));
+
+    using db = new DatabaseSync(sqlitePath);
+    db.exec("DROP TABLE IF EXISTS planner_failure_fingerprints");
+
+    const recoveredMissing = await store.get("fingerprint_missing_after_drop");
+    assert.equal(recoveredMissing, undefined);
+
+    await store.upsert("fingerprint_recovered", buildEntry(Date.now()));
+    const recoveredEntry = await store.get("fingerprint_recovered");
+    assert.ok(recoveredEntry);
+    assert.equal(recoveredEntry?.strikes, 2);
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }

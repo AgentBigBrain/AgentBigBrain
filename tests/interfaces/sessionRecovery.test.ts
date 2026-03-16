@@ -12,19 +12,13 @@ import type {
   ConversationJob,
   ConversationSession
 } from "../../src/interfaces/sessionStore";
+import { buildConversationSessionFixture } from "../helpers/conversationFixtures";
 
 function buildSession(overrides: Partial<ConversationSession> = {}): ConversationSession {
-  return {
-    ...buildSessionSeed({
-      provider: "telegram",
-      conversationId: "chat-1",
-      userId: "user-1",
-      username: "agentowner",
-      conversationVisibility: "private",
-      receivedAt: "2026-03-07T18:00:00.000Z"
-    }),
-    ...overrides
-  };
+  return buildConversationSessionFixture(overrides, {
+    conversationId: "chat-1",
+    receivedAt: "2026-03-07T18:00:00.000Z"
+  });
 }
 
 function buildQueuedJob(id: string): ConversationJob {

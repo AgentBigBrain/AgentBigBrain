@@ -168,7 +168,7 @@ test("deduplicates normalized user protected paths", () => {
     BRAIN_USER_PROTECTED_PATHS: "memory/;MeMoRy\\"
   });
   const normalizedMemoryPrefixCount = config.dna.protectedPathPrefixes
-    .map((prefix) => prefix.replaceAll("\\", "/").replace(/\/+$/, "").toLowerCase())
+    .map((prefix) => prefix.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase())
     .filter((prefix) => prefix === "memory")
     .length;
 

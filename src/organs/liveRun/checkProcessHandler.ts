@@ -37,6 +37,24 @@ export async function executeCheckProcess(
     );
   }
 
+  const persistedSnapshot = context.managedProcessRegistry.getSnapshot(leaseId);
+  if (!persistedSnapshot) {
+    return buildExecutionOutcome(
+      "blocked",
+      `Process check blocked: unknown lease ${leaseId}.`,
+      "PROCESS_LEASE_NOT_FOUND"
+    );
+  }
+
+  if (
+    persistedSnapshot.statusCode !== "PROCESS_STOPPED" &&
+    !context.managedProcessRegistry.getChild(leaseId) &&
+    typeof persistedSnapshot.pid === "number" &&
+    !context.isProcessRunning(persistedSnapshot.pid)
+  ) {
+    context.managedProcessRegistry.markRecoveredStopped(leaseId, null, null);
+  }
+
   const snapshot = context.managedProcessRegistry.markObservedRunning(leaseId);
   if (!snapshot) {
     return buildExecutionOutcome(

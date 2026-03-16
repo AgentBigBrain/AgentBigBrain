@@ -78,3 +78,15 @@ test("createModelClientFromEnv returns openai backend when key exists", async ()
     }
   );
 });
+
+test("createModelClientFromEnv returns ollama backend when configured", async () => {
+  await withEnv(
+    {
+      BRAIN_MODEL_BACKEND: "ollama"
+    },
+    async () => {
+      const client = createModelClientFromEnv();
+      assert.equal(client.backend, "ollama");
+    }
+  );
+});

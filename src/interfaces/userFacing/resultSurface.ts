@@ -2,6 +2,7 @@
  * @fileoverview Selects user-facing chat output from task runs, preferring approved `respond` action outputs over technical summaries.
  */
 
+import { extractActiveRequestSegment } from "../../core/currentRequestExtraction";
 import { TaskRunResult } from "../../core/types";
 import { classifyTrustRenderDecision } from "../trustLexicalClassifier";
 import {
@@ -14,6 +15,10 @@ import {
   resolveBlockedActionMessage
 } from "./blockSurface";
 import { appendMissionDiagnosticsIfRequested } from "./debugSurface";
+import {
+  buildPartialExecutionBlockedSummary,
+  isInspectionOnlyDirectExecutionOutcome
+} from "./partialSuccessSurface";
 import {
   normalizeUserFacingSummaryOptions,
   UserFacingSummaryOptions
@@ -34,6 +39,7 @@ import {
   resolveRoutingPolicyExplanation
 } from "./noOpSurface";
 import {
+  resolvePrimaryExecutionOutcomeLine,
   resolveTechnicalOutcomeLines,
   UserFacingTechnicalOutcomeLines
 } from "./successSurface";
@@ -55,6 +61,89 @@ import {
 
 const EXPLICIT_RUN_SKILL_REQUEST_PATTERN =
   /\b(run|execute|invoke|use)\s+(?:a\s+)?skill\b|\brun[_\s-]?skill\b/i;
+const LOCAL_ORGANIZATION_VERB_PATTERN =
+  /\b(?:organize|move|group|gather|sort|clean up|put|collect|tidy)\b/i;
+const LOCAL_ORGANIZATION_TARGET_PATTERN =
+  /\b(?:folder|folders|directory|directories|desktop|documents|downloads|workspace|workspaces|project|projects)\b/i;
+const LOCAL_ORGANIZATION_SUCCESS_SUMMARY_PATTERN =
+  /^I moved the matching folders into /i;
+const LOCAL_ORGANIZATION_PARTIAL_SUMMARY_PATTERN =
+  /^The destination now contains /i;
+const LOCAL_ORGANIZATION_MOVE_COMMAND_PATTERN = /\b(?:move-item|mv|move)\b/i;
+
+/**
+ * Returns `true` when a model-authored reply only reports an inspection-style check despite
+ * stronger concrete side effects already being available from the run.
+ *
+ * @param summary - Candidate respond output.
+ * @returns `true` when the reply is too weak to represent the completed work by itself.
+ */
+function isWeakInspectionSuccessReply(summary: string): boolean {
+  const normalized = summary.trim();
+  if (!normalized || normalized.length > 220) {
+    return false;
+  }
+  return /^(?:done[.!-]?\s+)?i\s+(?:checked|inspected|looked\s+at)\b/i.test(normalized);
+}
+
+/**
+ * Returns `true` when the request asks to organize local folders or projects.
+ *
+ * @param userInput - Raw user wording.
+ * @returns `true` when the request is a local organization goal.
+ */
+function isLocalOrganizationRequest(userInput: string): boolean {
+  return (
+    LOCAL_ORGANIZATION_VERB_PATTERN.test(userInput) &&
+    LOCAL_ORGANIZATION_TARGET_PATTERN.test(userInput)
+  );
+}
+
+/**
+ * Returns `true` when the run still represents local-organization recovery work even if the
+ * current user wording was only a short clarification answer.
+ *
+ * @param runResult - Completed task result being summarized.
+ * @returns `true` when the action pattern still proves an organization recovery run.
+ */
+function isRecoveredLocalOrganizationRun(runResult: TaskRunResult): boolean {
+  return (
+    runResult.actionResults.some(
+      (result) =>
+        result.approved &&
+        result.action.type === "shell_command" &&
+        typeof result.action.params.command === "string" &&
+        LOCAL_ORGANIZATION_MOVE_COMMAND_PATTERN.test(result.action.params.command)
+    ) &&
+    runResult.actionResults.some(
+      (result) => result.approved && result.action.type === "stop_process"
+    )
+  );
+}
+
+/**
+ * Returns `true` when a direct execution outcome already contains proof-backed local-organization
+ * wording, including either full completion or a truthful partial-success summary.
+ *
+ * @param summary - Candidate direct execution outcome line.
+ * @returns `true` when the summary should override a weak inspection-style respond output.
+ */
+function isProofBackedLocalOrganizationOutcome(summary: string): boolean {
+  return (
+    LOCAL_ORGANIZATION_SUCCESS_SUMMARY_PATTERN.test(summary) ||
+    /^I moved .+ into (?:the requested folder|.+)\./i.test(summary) ||
+    LOCAL_ORGANIZATION_PARTIAL_SUMMARY_PATTERN.test(summary)
+  );
+}
+
+/**
+ * Builds a fail-closed summary for organization runs that executed but never proved the move.
+ *
+ * @returns Human-facing no-proof explanation.
+ */
+function buildLocalOrganizationNoProofSummary(): string {
+  return "I checked the requested folders, but this run did not prove that the matching folders were moved into the requested destination yet.";
+}
 
 /**
  * Selects the final message shown to the user from governed run output.
@@ -63,6 +152,7 @@ export function selectUserFacingSummary(
   runResult: TaskRunResult,
   options: UserFacingSummaryOptions = {}
 ): string {
+  const activeRequest = extractActiveRequestSegment(runResult.task.userInput);
   const normalizedOptions = normalizeUserFacingSummaryOptions(options);
   const render = (summary: string): string => stripLabelStyleOpening(summary);
   const routingClassification = classifyRoutingIntentV1(runResult.task.userInput);
@@ -78,6 +168,7 @@ export function selectUserFacingSummary(
     (policyCodes.includes("SHELL_DISABLED_BY_POLICY") ||
       policyCodes.includes("PROCESS_DISABLED_BY_POLICY"));
   const outcomes = resolveTechnicalOutcomeLines(runResult);
+  const primaryExecutionOutcomeLine = resolvePrimaryExecutionOutcomeLine(outcomes);
   const approvedRealNonRespondExecution = hasApprovedRealNonRespondExecution(runResult);
   const respondOutputs = runResult.actionResults
     .filter((result) => result.approved && result.action.type === "respond")
@@ -88,10 +179,13 @@ export function selectUserFacingSummary(
     const respondSummary = resolveRespondSurfaceSummary(
       runResult,
       respondOutputs[respondOutputs.length - 1],
+      activeRequest,
       routingClassification,
       outcomes,
       approvedRealNonRespondExecution,
-      normalizedOptions
+      policyCodes,
+      normalizedOptions,
+      blockedMessage
     );
     if (respondSummary !== null) {
       return render(respondSummary);
@@ -128,15 +222,7 @@ export function selectUserFacingSummary(
     ));
   }
 
-  if (outcomes.browserVerificationOutcomeLine) {
-    return render(appendMissionDiagnosticsIfRequested(
-      runResult,
-      outcomes.browserVerificationOutcomeLine,
-      normalizedOptions
-    ));
-  }
-
-  if (blockedMessage) {
+  if (blockedMessage && !approvedRealNonRespondExecution) {
     return render(appendMissionDiagnosticsIfRequested(
       runResult,
       blockedMessage,
@@ -162,26 +248,18 @@ export function selectUserFacingSummary(
     }
   }
 
-  if (outcomes.directExecutionOutcomeLine) {
+  if (primaryExecutionOutcomeLine) {
+    const primaryExecutionSummary =
+      blockedMessage && approvedRealNonRespondExecution
+        ? buildPartialExecutionBlockedSummary(
+            primaryExecutionOutcomeLine,
+            blockedMessage,
+            policyCodes
+          )
+        : primaryExecutionOutcomeLine;
     return render(appendMissionDiagnosticsIfRequested(
       runResult,
-      outcomes.directExecutionOutcomeLine,
-      normalizedOptions
-    ));
-  }
-
-  if (outcomes.managedProcessOutcomeLine) {
-    return render(appendMissionDiagnosticsIfRequested(
-      runResult,
-      outcomes.managedProcessOutcomeLine,
-      normalizedOptions
-    ));
-  }
-
-  if (outcomes.probeOutcomeLine) {
-    return render(appendMissionDiagnosticsIfRequested(
-      runResult,
-      outcomes.probeOutcomeLine,
+      primaryExecutionSummary,
       normalizedOptions
     ));
   }
@@ -257,11 +335,15 @@ export function selectUserFacingSummary(
 function resolveRespondSurfaceSummary(
   runResult: TaskRunResult,
   selectedRespondOutput: string,
+  activeRequest: string,
   routingClassification: ReturnType<typeof classifyRoutingIntentV1>,
   outcomes: UserFacingTechnicalOutcomeLines,
   approvedRealNonRespondExecution: boolean,
-  normalizedOptions: ReturnType<typeof normalizeUserFacingSummaryOptions>
+  policyCodes: readonly string[],
+  normalizedOptions: ReturnType<typeof normalizeUserFacingSummaryOptions>,
+  blockedMessage: string | null
 ): string | null {
+  const primaryExecutionOutcomeLine = resolvePrimaryExecutionOutcomeLine(outcomes);
   const trustRenderClassification = classifyTrustRenderDecision(
     {
       text: selectedRespondOutput,
@@ -399,6 +481,56 @@ function resolveRespondSurfaceSummary(
       );
     if (forcedLatencyFallback) {
       trustedOutputForRender = forcedLatencyFallback;
+    }
+  }
+
+  if (
+    approvedRealNonRespondExecution &&
+    primaryExecutionOutcomeLine &&
+    isWeakInspectionSuccessReply(trustedOutputForRender) &&
+    !isWeakInspectionSuccessReply(primaryExecutionOutcomeLine)
+  ) {
+    trustedOutputForRender =
+      blockedMessage && !isInspectionOnlyDirectExecutionOutcome(primaryExecutionOutcomeLine)
+        ? buildPartialExecutionBlockedSummary(
+            primaryExecutionOutcomeLine,
+            blockedMessage,
+            policyCodes
+          )
+        : primaryExecutionOutcomeLine;
+  }
+
+  if (
+    blockedMessage &&
+    approvedRealNonRespondExecution &&
+    primaryExecutionOutcomeLine &&
+    !isInspectionOnlyDirectExecutionOutcome(primaryExecutionOutcomeLine) &&
+    (isExecutionNoOpResponse(trustedOutputForRender) ||
+      isExecutionCapabilityLimitationResponse(trustedOutputForRender) ||
+      isExecutionPolicyRefusalResponse(trustedOutputForRender))
+  ) {
+    trustedOutputForRender = buildPartialExecutionBlockedSummary(
+      primaryExecutionOutcomeLine,
+      blockedMessage,
+      policyCodes
+    );
+  }
+
+  if (
+    isLocalOrganizationRequest(activeRequest) ||
+    isRecoveredLocalOrganizationRun(runResult) ||
+    (outcomes.directExecutionOutcomeLine !== null &&
+      isProofBackedLocalOrganizationOutcome(outcomes.directExecutionOutcomeLine))
+  ) {
+    if (
+      outcomes.directExecutionOutcomeLine &&
+      isProofBackedLocalOrganizationOutcome(outcomes.directExecutionOutcomeLine)
+    ) {
+      trustedOutputForRender = outcomes.directExecutionOutcomeLine;
+    } else if (blockedMessage) {
+      trustedOutputForRender = blockedMessage;
+    } else {
+      trustedOutputForRender = buildLocalOrganizationNoProofSummary();
     }
   }
 

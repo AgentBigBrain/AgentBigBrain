@@ -112,8 +112,8 @@ test("classifyLessonSignal rejects localhost policy lessons that would poison la
       },
       mode: "fast_path",
       approved: false,
-      blockedBy: ["PROBE_HTTP_FAILED"],
-      violations: [{ code: "PROBE_HTTP_FAILED", message: "blocked" }],
+      blockedBy: ["ACTION_EXECUTION_FAILED"],
+      violations: [{ code: "ACTION_EXECUTION_FAILED", message: "blocked" }],
       votes: []
     }
   ]);

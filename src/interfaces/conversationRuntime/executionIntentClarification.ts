@@ -3,6 +3,9 @@
  */
 
 import type { RoutingMapClassificationV1 } from "../routingMap";
+import {
+  isNaturalAutonomousExecutionRequest
+} from "./executionPreferenceExtraction";
 
 export interface ExecutionIntentClarificationResolution {
   question: string | null;
@@ -82,7 +85,11 @@ export function resolveExecutionIntentClarification(
     };
   }
 
-  if (matchesAny(normalized, PLAN_ONLY_PATTERNS) || matchesAny(normalized, DIRECT_EXECUTION_PATTERNS)) {
+  if (
+    matchesAny(normalized, PLAN_ONLY_PATTERNS) ||
+    matchesAny(normalized, DIRECT_EXECUTION_PATTERNS) ||
+    isNaturalAutonomousExecutionRequest(normalized)
+  ) {
     return {
       question: null,
       mode: null,

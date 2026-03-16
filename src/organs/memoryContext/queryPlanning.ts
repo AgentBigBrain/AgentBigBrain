@@ -8,6 +8,7 @@ import type {
   DomainBoundaryAssessment, DomainLaneScores, MemoryDomainLane, ProbingDetectorConfig,
   ProbingRegistrationResult, ProbingSignalSnapshot
 } from "./contracts";
+import { extractActiveRequestSegment } from "../../core/currentRequestExtraction";
 
 const CURRENT_USER_REQUEST_MARKER = "Current user request:";
 const STRUCTURED_PROMPT_SCAFFOLD_HINTS = [
@@ -111,11 +112,9 @@ function containsStructuredPromptScaffold(value: string): boolean {
 function inferDomainLaneScoresFromRequest(currentUserRequest: string): DomainLaneScores {
   const normalized = currentUserRequest.toLowerCase();
   const scores = createEmptyDomainLaneScores();
-
   if (/\b(my|i|me|mine|myself)\b/.test(normalized)) {
     addLaneScore(scores, "profile", 2);
   }
-
   if (
     /\b(friend|coworker|colleague|manager|neighbor|relative|teammate|contact|relationship)\b/.test(
       normalized
@@ -125,7 +124,6 @@ function inferDomainLaneScoresFromRequest(currentUserRequest: string): DomainLan
   ) {
     addLaneScore(scores, "relationship", 3);
   }
-
   if (
     /\b(name|called|call me|i go by|favorite|prefer|birthday|age|live|moved|job|work at)\b/.test(
       normalized
@@ -133,7 +131,6 @@ function inferDomainLaneScoresFromRequest(currentUserRequest: string): DomainLan
   ) {
     addLaneScore(scores, "profile", 2);
   }
-
   if (
     /\b(workflow|deploy|deployment|script|build|task|project|workspace|repo|code)\b/.test(
       normalized
@@ -141,7 +138,6 @@ function inferDomainLaneScoresFromRequest(currentUserRequest: string): DomainLan
   ) {
     addLaneScore(scores, "workflow", 3);
   }
-
   if (
     /\b(governor|policy|safety|constraint|allowlist|approval|compliance)\b/.test(normalized)
   ) {
@@ -220,6 +216,10 @@ export function extractCurrentUserRequest(userInput: string): string {
   }
   const markerIndex = normalized.toLowerCase().lastIndexOf(CURRENT_USER_REQUEST_MARKER.toLowerCase());
   if (markerIndex < 0) {
+    const extractedActiveRequest = extractActiveRequestSegment(normalized);
+    if (extractedActiveRequest !== normalized) {
+      return extractedActiveRequest;
+    }
     if (containsStructuredPromptScaffold(normalized)) {
       const firstLine = extractFirstNonEmptyLine(normalized);
       return firstLine || normalized;
@@ -227,7 +227,7 @@ export function extractCurrentUserRequest(userInput: string): string {
     return normalized;
   }
 
-  return normalized.slice(markerIndex + CURRENT_USER_REQUEST_MARKER.length).trim() || normalized;
+  return extractActiveRequestSegment(normalized) || normalized;
 }
 
 /**

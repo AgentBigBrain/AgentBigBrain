@@ -21,7 +21,7 @@ test("canonical episode extraction captures named-person situation candidates", 
     "Billy fell down at the store three weeks ago and I never told you how it ended"
   );
   assert.deepEqual(candidates[0]?.entityRefs, ["contact.billy"]);
-  assert.equal(candidates[0]?.tags.includes("fall"), true);
+  assert.equal(candidates[0]?.tags?.includes("fall"), true);
 });
 
 test("canonical episode extraction deduplicates equivalent sentences in one utterance", () => {

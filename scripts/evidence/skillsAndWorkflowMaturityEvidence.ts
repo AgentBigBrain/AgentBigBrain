@@ -8,6 +8,7 @@ import type { ConversationInboundMediaEnvelope } from "../../src/interfaces/medi
 import type { ConversationInboundMessage } from "../../src/interfaces/conversationRuntime/managerContracts";
 import {
   ensureSkillsWorkflowEvidenceDirectory,
+  matchesSkillDiscoveryReply,
   runConversationManagerMessage,
   runSkillLifecycleEvidence,
   runWorkflowEvidence,
@@ -138,9 +139,9 @@ export async function runSkillsAndWorkflowMaturityEvidence(): Promise<SkillsWork
       workflowInspectionVisible:
         workflow.inspectionSummary.length > 0 &&
         workflow.inspectionSummary.some((entry) => entry.workflowKey.includes("planner")),
-      textSkillDiscoveryWorks: slashReply === lifecycle.inventoryText,
-      naturalSkillDiscoveryWorks: naturalReply === lifecycle.inventoryText,
-      voiceSkillDiscoveryWorks: voiceReply === lifecycle.inventoryText
+      textSkillDiscoveryWorks: matchesSkillDiscoveryReply(slashReply, lifecycle.inventoryText),
+      naturalSkillDiscoveryWorks: matchesSkillDiscoveryReply(naturalReply, lifecycle.inventoryText),
+      voiceSkillDiscoveryWorks: matchesSkillDiscoveryReply(voiceReply, lifecycle.inventoryText)
     };
 
     const checks: EvidenceCheck[] = [

@@ -9,6 +9,7 @@ import path from "node:path";
 import { test } from "node:test";
 
 import { AgentPulseScheduler } from "../../src/interfaces/agentPulseScheduler";
+import { buildSessionSeed } from "../../src/interfaces/conversationManagerHelpers";
 import { ConversationSession, InterfaceSessionStore } from "../../src/interfaces/sessionStore";
 import { AgentPulseEvaluationResult } from "../../src/core/profileMemoryStore";
 import { EntityGraphV1, ConversationStackV1 } from "../../src/core/types";
@@ -23,25 +24,26 @@ function buildSession(
 ): ConversationSession {
   const nowIso = new Date().toISOString();
   return {
+    ...buildSessionSeed({
+      provider: "telegram",
+      conversationId: conversationId.split(":")[1] ?? conversationId,
+      userId: "user-1",
+      username: "agentowner",
+      conversationVisibility: "private",
+      receivedAt: nowIso
+    }),
     conversationId,
-    userId: "user-1",
-    username: "agentowner",
-    conversationVisibility: "private",
     updatedAt: nowIso,
-    activeProposal: null,
-    runningJobId: null,
-    queuedJobs: [],
-    recentJobs: [],
-    conversationTurns: [],
     agentPulse: {
-      optIn: true,
-      mode: "private",
-      routeStrategy: "last_private_used",
-      lastPulseSentAt: null,
-      lastPulseReason: null,
-      lastPulseTargetConversationId: null,
-      lastDecisionCode: "NOT_EVALUATED",
-      lastEvaluatedAt: null
+      ...buildSessionSeed({
+        provider: "telegram",
+        conversationId: "chat-1",
+        userId: "user-1",
+        username: "agentowner",
+        conversationVisibility: "private",
+        receivedAt: nowIso
+      }).agentPulse,
+      optIn: true
     },
     ...overrides
   };
@@ -1093,7 +1095,7 @@ test("dynamic pulse suppresses weak relationship clarification nudges with no co
         {
           entityKey: "entity-alpha",
           canonicalName: "Alpha Systems",
-          entityType: "organization",
+          entityType: "org",
           disambiguator: null,
           firstSeenAt: staleDate,
           lastSeenAt: staleDate,

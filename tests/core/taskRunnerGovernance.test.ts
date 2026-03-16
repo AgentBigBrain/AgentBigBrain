@@ -6,9 +6,15 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { MasterGovernor } from "../../src/governors/masterGovernor";
-import { evaluateTaskRunnerGovernance } from "../../src/core/orchestration/taskRunnerGovernance";
+import {
+  evaluateTaskRunnerGovernance,
+  type EvaluateTaskRunnerGovernanceInput
+} from "../../src/core/orchestration/taskRunnerGovernance";
 
-function createGovernanceInput() {
+function createGovernanceInput(): {
+  traceEvents: Array<{ eventType: string; details?: Record<string, unknown> }>;
+  input: EvaluateTaskRunnerGovernanceInput;
+} {
   const traceEvents: Array<{ eventType: string; details?: Record<string, unknown> }> = [];
   return {
     traceEvents,
@@ -37,9 +43,9 @@ function createGovernanceInput() {
       },
       taskId: "task_task_runner_governance_1",
       governorContext: {} as never,
-      governors: [{ id: "safety" }] as never,
+      governors: [{ id: "security" }] as never,
       masterGovernor: new MasterGovernor(1),
-      fastPathGovernorIds: ["safety"],
+      fastPathGovernorIds: ["security"],
       perGovernorTimeoutMs: 5_000,
       appendTraceEvent: async (input: {
         eventType: string;
@@ -111,14 +117,14 @@ test("evaluateTaskRunnerGovernance fails closed when council vote returns no dec
       runCouncilVote: async () => ({
         votes: [
           {
-            governorId: "safety",
+            governorId: "security",
             approve: true,
             reason: "Safe.",
             confidence: 1
           }
         ],
         decision: undefined
-      })
+      } as never)
     }
   });
 
@@ -153,7 +159,7 @@ test("evaluateTaskRunnerGovernance returns combined votes and decision on approv
       runCouncilVote: async () => ({
         votes: [
           {
-            governorId: "safety",
+            governorId: "security",
             approve: true,
             reason: "Safe.",
             confidence: 1

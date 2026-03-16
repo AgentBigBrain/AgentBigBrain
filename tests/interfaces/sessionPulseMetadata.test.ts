@@ -9,6 +9,15 @@ import {
   resolveUserLocalTime
 } from "../../src/interfaces/conversationRuntime/sessionPulseMetadata";
 
+const PULSE_REASON_CODES = [
+  "OPEN_LOOP_RESUME",
+  "RELATIONSHIP_CLARIFICATION",
+  "TOPIC_DRIFT_RESUME",
+  "STALE_FACT_REVALIDATION",
+  "USER_REQUESTED_FOLLOWUP",
+  "SAFETY_HOLD"
+] as const;
+
 test("appendPulseEmission caps the persisted history at ten records", () => {
   const state: AgentPulseSessionState = {
     optIn: true,
@@ -25,14 +34,14 @@ test("appendPulseEmission caps the persisted history at ten records", () => {
   for (let index = 0; index < 12; index += 1) {
     appendPulseEmission(state, {
       emittedAt: `2026-03-07T12:${String(index).padStart(2, "0")}:00.000Z`,
-      reasonCode: `reason-${index}`,
+      reasonCode: PULSE_REASON_CODES[index % PULSE_REASON_CODES.length],
       candidateEntityRefs: []
     });
   }
 
   assert.equal(state.recentEmissions?.length, 10);
-  assert.equal(state.recentEmissions?.[0]?.reasonCode, "reason-2");
-  assert.equal(state.recentEmissions?.[9]?.reasonCode, "reason-11");
+  assert.equal(state.recentEmissions?.[0]?.reasonCode, "TOPIC_DRIFT_RESUME");
+  assert.equal(state.recentEmissions?.[9]?.reasonCode, "SAFETY_HOLD");
 });
 
 test("computeUserStyleFingerprint stays deterministic for short casual turns", () => {

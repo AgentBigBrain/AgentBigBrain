@@ -3,7 +3,11 @@
  */
 
 import { estimateActionCostUsd } from "./actionCostPolicy";
-import { evaluateBrowserVerifyActionConstraints } from "./constraintRuntime/browserConstraints";
+import {
+  evaluateCloseBrowserActionConstraints,
+  evaluateBrowserVerifyActionConstraints,
+  evaluateOpenBrowserActionConstraints
+} from "./constraintRuntime/browserConstraints";
 import { evaluateMemoryMutationConstraints, evaluatePulseEmitConstraints } from "./constraintRuntime/continuityConstraints";
 import { ConstraintEvaluationContext } from "./constraintRuntime/contracts";
 import { detectImmutableTouch as detectImmutableTouchFromRuntime } from "./constraintRuntime/decisionHelpers";
@@ -145,6 +149,14 @@ export function evaluateHardConstraints(
 
   if (action.type === "verify_browser") {
     violations.push(...evaluateBrowserVerifyActionConstraints(action.params, config));
+  }
+
+  if (action.type === "open_browser") {
+    violations.push(...evaluateOpenBrowserActionConstraints(action.params));
+  }
+
+  if (action.type === "close_browser") {
+    violations.push(...evaluateCloseBrowserActionConstraints(action.params));
   }
 
   if (action.type === "network_write" && !config.permissions.allowNetworkWriteAction) {

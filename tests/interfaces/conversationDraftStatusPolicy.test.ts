@@ -95,7 +95,7 @@ test("renderConversationStatus keeps default /status human-first while preservin
   assert.match(rendered, /Agent Pulse: off\./);
   assert.match(rendered, /Recent activity:/);
   assert.match(rendered, /- Completed: input-job-3/);
-  assert.match(rendered, /Use \/status debug/);
+  assert.match(rendered, /run \/status debug/);
 });
 
 test("renderConversationStatusDebug preserves detailed ack and delivery metadata for troubleshooting", () => {

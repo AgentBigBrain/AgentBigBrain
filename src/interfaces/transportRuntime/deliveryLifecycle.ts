@@ -2,11 +2,16 @@
  * @fileoverview Canonical transport-facing autonomous progress and delivery bridges for gateways.
  */
 
-import type { ConversationNotifierTransport } from "../conversationRuntime/managerContracts";
+import type {
+  ConversationExecutionResult,
+  ConversationExecutionProgressUpdate,
+  ConversationNotifierTransport
+} from "../conversationRuntime/managerContracts";
 
 export interface RunAutonomousTransportTaskInput {
   conversationId: string;
   goal: string;
+  initialExecutionInput?: string | null;
   receivedAt: string;
   notifier: ConversationNotifierTransport;
   abortControllers: Map<string, AbortController>;
@@ -14,8 +19,11 @@ export interface RunAutonomousTransportTaskInput {
     goal: string,
     receivedAt: string,
     progressSender: (message: string) => Promise<void>,
-    signal: AbortSignal
-  ): Promise<string>;
+    signal: AbortSignal,
+    initialExecutionInput?: string | null,
+    onProgressUpdate?: (update: ConversationExecutionProgressUpdate) => Promise<void>
+  ): Promise<ConversationExecutionResult>;
+  onProgressUpdate?: (update: ConversationExecutionProgressUpdate) => Promise<void>;
 }
 
 /**
@@ -60,7 +68,7 @@ export function createAutonomousProgressSender(
  */
 export async function runAutonomousTransportTask(
   input: RunAutonomousTransportTaskInput
-): Promise<string> {
+): Promise<ConversationExecutionResult> {
   const abortController = new AbortController();
   input.abortControllers.set(input.conversationId, abortController);
   const progressSender = createAutonomousProgressSender(input.notifier);
@@ -70,7 +78,9 @@ export async function runAutonomousTransportTask(
       input.goal,
       input.receivedAt,
       progressSender,
-      abortController.signal
+      abortController.signal,
+      input.initialExecutionInput ?? null,
+      input.onProgressUpdate
     );
   } finally {
     input.abortControllers.delete(input.conversationId);

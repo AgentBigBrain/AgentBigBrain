@@ -5,6 +5,11 @@
 import { buildDefaultBrain } from "../core/buildBrain";
 import { BrainOrchestrator } from "../core/orchestrator";
 import { MediaUnderstandingOrgan } from "../organs/mediaUnderstanding/mediaInterpretation";
+import {
+  createLocalIntentModelResolverFromEnv,
+  isLocalIntentModelRuntimeReady,
+  probeLocalIntentModelFromEnv
+} from "../organs/languageUnderstanding/localIntentModelRuntime";
 import { createBrainConfigFromEnv } from "../core/config";
 import { EntityGraphStore } from "../core/entityGraphStore";
 import { ensureEnvLoaded } from "../core/envLoader";
@@ -31,6 +36,10 @@ interface GatewayRuntimePersistence {
   entityGraphStore: EntityGraphStore;
 }
 
+interface InterfaceRuntimeOptionalDependencies {
+  localIntentModelResolver?: ReturnType<typeof createLocalIntentModelResolverFromEnv>;
+}
+
 /**
  * Creates the Telegram runtime stack (adapter + gateway) used by the interface process.
  *
@@ -51,7 +60,8 @@ interface GatewayRuntimePersistence {
 function createTelegramGatewayRuntime(
   brain: BrainOrchestrator,
   config: TelegramInterfaceConfig,
-  persistence: GatewayRuntimePersistence
+  persistence: GatewayRuntimePersistence,
+  optionalDependencies: InterfaceRuntimeOptionalDependencies = {}
 ): GatewayRuntime {
   const mediaUnderstandingOrgan = new MediaUnderstandingOrgan();
 
@@ -76,7 +86,8 @@ function createTelegramGatewayRuntime(
   return new TelegramGateway(adapter, config, {
     sessionStore: persistence.sessionStore,
     entityGraphStore: persistence.entityGraphStore,
-    mediaUnderstandingOrgan
+    mediaUnderstandingOrgan,
+    localIntentModelResolver: optionalDependencies.localIntentModelResolver
   });
 }
 
@@ -99,7 +110,8 @@ function createTelegramGatewayRuntime(
 function createDiscordGatewayRuntime(
   brain: BrainOrchestrator,
   config: DiscordInterfaceConfig,
-  persistence: GatewayRuntimePersistence
+  persistence: GatewayRuntimePersistence,
+  optionalDependencies: InterfaceRuntimeOptionalDependencies = {}
 ): GatewayRuntime {
   const adapter = new DiscordAdapter(brain, {
     auth: {
@@ -121,7 +133,8 @@ function createDiscordGatewayRuntime(
 
   return new DiscordGateway(adapter, config, {
     sessionStore: persistence.sessionStore,
-    entityGraphStore: persistence.entityGraphStore
+    entityGraphStore: persistence.entityGraphStore,
+    localIntentModelResolver: optionalDependencies.localIntentModelResolver
   });
 }
 
@@ -143,13 +156,14 @@ function createDiscordGatewayRuntime(
 function createGatewayRuntimesForSingleProvider(
   brain: BrainOrchestrator,
   config: TelegramInterfaceConfig | DiscordInterfaceConfig,
-  persistence: GatewayRuntimePersistence
+  persistence: GatewayRuntimePersistence,
+  optionalDependencies: InterfaceRuntimeOptionalDependencies = {}
 ): GatewayRuntime[] {
   if (config.provider === "telegram") {
-    return [createTelegramGatewayRuntime(brain, config, persistence)];
+    return [createTelegramGatewayRuntime(brain, config, persistence, optionalDependencies)];
   }
 
-  return [createDiscordGatewayRuntime(brain, config, persistence)];
+  return [createDiscordGatewayRuntime(brain, config, persistence, optionalDependencies)];
 }
 
 /**
@@ -172,11 +186,12 @@ function createGatewayRuntimesForSingleProvider(
 function createGatewayRuntimesForBothProviders(
   brain: BrainOrchestrator,
   config: MultiProviderInterfaceConfig,
-  persistence: GatewayRuntimePersistence
+  persistence: GatewayRuntimePersistence,
+  optionalDependencies: InterfaceRuntimeOptionalDependencies = {}
 ): GatewayRuntime[] {
   return [
-    createTelegramGatewayRuntime(brain, config.telegram, persistence),
-    createDiscordGatewayRuntime(brain, config.discord, persistence)
+    createTelegramGatewayRuntime(brain, config.telegram, persistence, optionalDependencies),
+    createDiscordGatewayRuntime(brain, config.discord, persistence, optionalDependencies)
   ];
 }
 
@@ -198,12 +213,13 @@ function createGatewayRuntimesForBothProviders(
 function createGatewayRuntimes(
   brain: BrainOrchestrator,
   config: InterfaceRuntimeConfig,
-  persistence: GatewayRuntimePersistence
+  persistence: GatewayRuntimePersistence,
+  optionalDependencies: InterfaceRuntimeOptionalDependencies = {}
 ): GatewayRuntime[] {
   if (config.provider === "both") {
-    return createGatewayRuntimesForBothProviders(brain, config, persistence);
+    return createGatewayRuntimesForBothProviders(brain, config, persistence, optionalDependencies);
   }
-  return createGatewayRuntimesForSingleProvider(brain, config, persistence);
+  return createGatewayRuntimesForSingleProvider(brain, config, persistence, optionalDependencies);
 }
 
 /**
@@ -331,6 +347,43 @@ function logCrossPlatformProfileMemoryWarningIfNeeded(
 }
 
 /**
+ * Logs whether the optional local intent-model runtime is available for the interface front door.
+ *
+ * **Why it exists:**
+ * Operators need a startup-visible signal that clarifies whether the bounded local Phi path will
+ * participate in natural intent routing or whether the runtime will stay on deterministic-only
+ * routing for this process.
+ *
+ * **What it talks to:**
+ * - Uses `probeLocalIntentModelFromEnv` (import `probeLocalIntentModelFromEnv`) from
+ *   `../organs/languageUnderstanding/localIntentModelRuntime`.
+ * - Uses `isLocalIntentModelRuntimeReady` (import `isLocalIntentModelRuntimeReady`) from
+ *   `../organs/languageUnderstanding/localIntentModelRuntime`.
+ *
+ * @param env - Environment source used for local intent-model config.
+ * @returns Promise resolving after the status log is emitted.
+ */
+async function logLocalIntentModelStatus(env: NodeJS.ProcessEnv = process.env): Promise<void> {
+  const probe = await probeLocalIntentModelFromEnv(env);
+  if (!probe.enabled) {
+    return;
+  }
+  if (isLocalIntentModelRuntimeReady(probe)) {
+    console.log(
+      `[InterfaceRuntime] Local intent model enabled via ${probe.provider}: ${probe.model} at ${probe.baseUrl}.`
+    );
+    return;
+  }
+  const availabilityLabel = probe.reachable
+    ? "reachable, but the configured model is missing"
+    : "not reachable";
+  console.warn(
+    `[InterfaceRuntime] Local intent model is enabled but ${availabilityLabel}. ` +
+    `Front-door intent routing will fail closed to deterministic behavior until ${probe.model} is available at ${probe.baseUrl}.`
+  );
+}
+
+/**
  * Registers SIGINT/SIGTERM handlers and returns a detach callback.
  *
  * **Why it exists:**
@@ -385,7 +438,9 @@ export async function runInterfaceRuntime(): Promise<void> {
   ensureEnvLoaded();
   const config = createInterfaceRuntimeConfigFromEnv();
   const brainConfig = createBrainConfigFromEnv();
+  const localIntentModelResolver = createLocalIntentModelResolverFromEnv();
   logCrossPlatformProfileMemoryWarningIfNeeded(config);
+  await logLocalIntentModelStatus();
   const sessionStore = new InterfaceSessionStore(undefined, {
     backend: brainConfig.persistence.ledgerBackend,
     sqlitePath: brainConfig.persistence.ledgerSqlitePath,
@@ -400,6 +455,8 @@ export async function runInterfaceRuntime(): Promise<void> {
   const gateways = createGatewayRuntimes(brain, config, {
     sessionStore,
     entityGraphStore
+  }, {
+    localIntentModelResolver
   });
   const detachHandlers = registerShutdownHandlers(() => {
     stopAllGateways(gateways);

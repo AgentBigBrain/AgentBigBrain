@@ -1,0 +1,174 @@
+/**
+ * @fileoverview Covers persisted clarification state creation and deterministic answer resolution.
+ */
+
+import assert from "node:assert/strict";
+import { test } from "node:test";
+
+import {
+  buildClarifiedExecutionInput,
+  createActiveClarificationState,
+  createTaskRecoveryClarificationState,
+  resolveClarificationAnswer
+} from "../../src/interfaces/conversationRuntime/clarificationBroker";
+import type { IntentClarificationCandidate } from "../../src/interfaces/conversationRuntime/intentModeContracts";
+
+const EXECUTION_MODE_CANDIDATE: IntentClarificationCandidate = {
+  kind: "execution_mode",
+  matchedRuleId: "execution_intent_build_generic",
+  question: "Do you want me to plan it first or build it now?",
+  options: [
+    { id: "plan", label: "Plan it first" },
+    { id: "build", label: "Build it now" }
+  ]
+};
+
+test("createActiveClarificationState preserves original source input and option labels", () => {
+  const clarification = createActiveClarificationState(
+    "Create me that landing page with a hero and CTA.",
+    "2026-03-11T18:00:00.000Z",
+    EXECUTION_MODE_CANDIDATE
+  );
+
+  assert.equal(clarification.sourceInput, "Create me that landing page with a hero and CTA.");
+  assert.equal(clarification.options[0]?.label, "Plan it first");
+});
+
+test("resolveClarificationAnswer picks the single deterministic option from a human reply", () => {
+  const clarification = createActiveClarificationState(
+    "Create me that landing page with a hero and CTA.",
+    "2026-03-11T18:00:00.000Z",
+    EXECUTION_MODE_CANDIDATE
+  );
+
+  const resolution = resolveClarificationAnswer(
+    clarification,
+    "Build it now and just go ahead with the real thing."
+  );
+
+  assert.equal(resolution?.selectedOptionId, "build");
+  assert.ok(
+    buildClarifiedExecutionInput(
+      clarification.sourceInput,
+      clarification,
+      resolution?.selectedOptionId ?? "build"
+    ).includes("User selected: Build it now.")
+  );
+});
+
+test("resolveClarificationAnswer stays unresolved when the reply remains ambiguous", () => {
+  const clarification = createActiveClarificationState(
+    "Create me that landing page with a hero and CTA.",
+    "2026-03-11T18:00:00.000Z",
+    EXECUTION_MODE_CANDIDATE
+  );
+
+  const resolution = resolveClarificationAnswer(
+    clarification,
+    "Yeah, do whichever makes sense."
+  );
+
+  assert.equal(resolution, null);
+});
+
+test("task recovery clarification resolves yes/no answers and adds a recovery instruction", () => {
+  const clarification = createTaskRecoveryClarificationState(
+    "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+    "2026-03-13T14:00:00.000Z",
+    "I couldn't move those folders yet because one or more are still open in a local preview process. I can inspect the matching holders, shut down only exact tracked ones, and retry the move. Do you want me to do that?",
+    "post_execution_locked_folder_recovery",
+    "Recovery instruction: stop only these exact tracked preview-process lease ids if they are still active: leaseId=\"proc_preview_1\"."
+  );
+
+  const yesResolution = resolveClarificationAnswer(
+    clarification,
+    "Yes, go ahead and retry it."
+  );
+  const noResolution = resolveClarificationAnswer(
+    clarification,
+    "No, leave them alone."
+  );
+
+  assert.equal(yesResolution?.selectedOptionId, "retry_with_shutdown");
+  assert.equal(noResolution?.selectedOptionId, "cancel");
+  assert.match(
+    buildClarifiedExecutionInput(
+      clarification.sourceInput,
+      clarification,
+      yesResolution?.selectedOptionId ?? "retry_with_shutdown"
+    ),
+    /leaseId="proc_preview_1"/i
+  );
+});
+
+test("task recovery clarification can continue recovery without pretending shutdown is already proven", () => {
+  const clarification = createTaskRecoveryClarificationState(
+    "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+    "2026-03-13T14:00:00.000Z",
+    "I couldn't move those folders yet because likely local preview holders may still be using them. I can inspect those holders more closely first. Do you want me to continue that recovery?",
+    "post_execution_untracked_holder_recovery_clarification",
+    "Recovery instruction: inspect the likely untracked holder processes more closely. Do not stop them automatically.",
+    [
+      {
+        id: "continue_recovery",
+        label: "Yes, inspect and continue"
+      },
+      {
+        id: "cancel",
+        label: "No, leave them alone"
+      }
+    ]
+  );
+
+  const yesResolution = resolveClarificationAnswer(
+    clarification,
+    "Yes, inspect them more closely first."
+  );
+
+  assert.equal(yesResolution?.selectedOptionId, "continue_recovery");
+  assert.match(
+    buildClarifiedExecutionInput(
+      clarification.sourceInput,
+      clarification,
+      yesResolution?.selectedOptionId ?? "continue_recovery"
+    ),
+    /inspect the likely untracked holder processes more closely/i
+  );
+});
+
+test("task recovery clarification preserves exact non-preview shutdown markers after confirmation", () => {
+  const clarification = createTaskRecoveryClarificationState(
+    "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+    "2026-03-14T20:15:00.000Z",
+    "I found one high-confidence local holder still tied to those folders: Code (pid 8840). It still looks like an editor or IDE process is holding them. If you want, I can stop just that process and retry the move. Do you want me to do that?",
+    "post_execution_exact_non_preview_holder_recovery_clarification",
+    [
+      "[WORKSPACE_RECOVERY_STOP_EXACT]",
+      "A folder move was blocked because one high-confidence local holder still owns the target folders. Stop only this exact confirmed local holder if it is still active: pid=8840 (Code (pid 8840)).",
+      "Verify it stopped, then retry this original folder-organization goal: \"Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.\"."
+    ].join("\n")
+  );
+
+  const yesResolution = resolveClarificationAnswer(
+    clarification,
+    "Yes, shut that down and retry it."
+  );
+
+  assert.equal(yesResolution?.selectedOptionId, "retry_with_shutdown");
+  assert.match(
+    buildClarifiedExecutionInput(
+      clarification.sourceInput,
+      clarification,
+      yesResolution?.selectedOptionId ?? "retry_with_shutdown"
+    ),
+    /\[WORKSPACE_RECOVERY_STOP_EXACT\]/i
+  );
+  assert.match(
+    buildClarifiedExecutionInput(
+      clarification.sourceInput,
+      clarification,
+      yesResolution?.selectedOptionId ?? "retry_with_shutdown"
+    ),
+    /pid=8840/i
+  );
+});

@@ -30,6 +30,8 @@ The extracted subsystems now own:
 
 ## Invariants
 - Provider-specific logic should stay behind the `ModelClient` contract.
+- Ollama-backed runs must resolve logical model aliases to concrete local model tags before making
+  provider requests; alias names should never leak directly to the Ollama API.
 - Schema validation belongs here, close to provider normalization, not duplicated at call sites.
 - `schemaValidation.ts` remains the stable schema-validation entrypoint even when canonical schema
   ownership moves into `src/models/schema/`.

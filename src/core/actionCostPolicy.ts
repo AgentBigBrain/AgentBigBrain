@@ -21,6 +21,10 @@ const BASE_ACTION_COST_USD: Record<ActionType, number> = {
   probe_port: 0.03,
   probe_http: 0.04,
   verify_browser: 0.09,
+  open_browser: 0.03,
+  close_browser: 0.03,
+  inspect_path_holders: 0.04,
+  inspect_workspace_resources: 0.04,
   memory_mutation: 0.08,
   pulse_emit: 0.04
 };
@@ -42,6 +46,10 @@ const PAYLOAD_SURCHARGE_PER_UNIT_USD: Record<ActionType, number> = {
   probe_port: 0.01,
   probe_http: 0.02,
   verify_browser: 0.04,
+  open_browser: 0.01,
+  close_browser: 0.01,
+  inspect_path_holders: 0.02,
+  inspect_workspace_resources: 0.02,
   memory_mutation: 0.04,
   pulse_emit: 0.02
 };

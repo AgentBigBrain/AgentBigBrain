@@ -65,6 +65,9 @@ const DEFAULT_CONVERSATION_MANAGER_CONFIG: ConversationManagerConfig = {
   heartbeatIntervalMs: 15_000,
   ackDelayMs: 1_200,
   maxRecentJobs: 20,
+  maxRecentActions: 12,
+  maxBrowserSessions: 6,
+  maxPathDestinations: 8,
   staleRunningJobRecoveryMs: 60_000,
   maxConversationTurns: 40,
   maxContextTurnsForExecution: 10,
@@ -82,6 +85,7 @@ export class ConversationManager {
   private readonly workerBindings = new Map<string, SessionWorkerBinding>();
   private readonly config: ConversationManagerConfig;
   private readonly interpretConversationIntent?: ConversationIntentInterpreter;
+  private readonly localIntentModelResolver?: ConversationManagerDependencies["localIntentModelResolver"];
   private readonly intentInterpreterConfidenceThreshold: number;
   private readonly runCheckpointReview?: ConversationCheckpointReviewRunner;
   private readonly queryContinuityEpisodes?: QueryConversationContinuityEpisodes;
@@ -91,6 +95,10 @@ export class ConversationManager {
   private readonly markConversationMemoryEpisodeWrong?: ConversationManagerDependencies["markConversationMemoryEpisodeWrong"];
   private readonly forgetConversationMemoryEpisode?: ConversationManagerDependencies["forgetConversationMemoryEpisode"];
   private readonly listAvailableSkills?: ConversationManagerDependencies["listAvailableSkills"];
+  private readonly describeRuntimeCapabilities?: ConversationManagerDependencies["describeRuntimeCapabilities"];
+  private readonly listManagedProcessSnapshots?: ConversationManagerDependencies["listManagedProcessSnapshots"];
+  private readonly listBrowserSessionSnapshots?: ConversationManagerDependencies["listBrowserSessionSnapshots"];
+  private readonly abortActiveAutonomousRun?: ConversationManagerDependencies["abortActiveAutonomousRun"];
   private readonly followUpRuleContext: FollowUpRuleContext;
   private readonly pulseLexicalRuleContext: PulseLexicalRuleContext;
 
@@ -115,6 +123,7 @@ export class ConversationManager {
       ...config
     };
     this.interpretConversationIntent = dependencies.interpretConversationIntent;
+    this.localIntentModelResolver = dependencies.localIntentModelResolver;
     this.intentInterpreterConfidenceThreshold = Math.max(
       0,
       Math.min(
@@ -131,6 +140,10 @@ export class ConversationManager {
     this.markConversationMemoryEpisodeWrong = dependencies.markConversationMemoryEpisodeWrong;
     this.forgetConversationMemoryEpisode = dependencies.forgetConversationMemoryEpisode;
     this.listAvailableSkills = dependencies.listAvailableSkills;
+    this.describeRuntimeCapabilities = dependencies.describeRuntimeCapabilities;
+    this.listManagedProcessSnapshots = dependencies.listManagedProcessSnapshots;
+    this.listBrowserSessionSnapshots = dependencies.listBrowserSessionSnapshots;
+    this.abortActiveAutonomousRun = dependencies.abortActiveAutonomousRun;
     this.followUpRuleContext = createFollowUpRuleContext(this.config.followUpOverridePath);
     this.pulseLexicalRuleContext = createPulseLexicalRuleContext(this.config.pulseLexicalOverridePath);
   }
@@ -181,10 +194,15 @@ export class ConversationManager {
           ackTimers: this.ackTimers,
           workerBindings: this.workerBindings,
           store: this.store,
+          listManagedProcessSnapshots: this.listManagedProcessSnapshots,
+          listBrowserSessionSnapshots: this.listBrowserSessionSnapshots,
           config: {
             ackDelayMs: this.config.ackDelayMs,
             heartbeatIntervalMs: this.config.heartbeatIntervalMs,
             maxRecentJobs: this.config.maxRecentJobs,
+            maxRecentActions: this.config.maxRecentActions,
+            maxBrowserSessions: this.config.maxBrowserSessions,
+            maxPathDestinations: this.config.maxPathDestinations,
             maxConversationTurns: this.config.maxConversationTurns,
             showCompletionPrefix: this.config.showCompletionPrefix
           },
@@ -259,6 +277,7 @@ export class ConversationManager {
       followUpRuleContext: this.followUpRuleContext,
       pulseLexicalRuleContext: this.pulseLexicalRuleContext,
       interpretConversationIntent: this.interpretConversationIntent,
+      localIntentModelResolver: this.localIntentModelResolver,
       intentInterpreterConfidenceThreshold: this.intentInterpreterConfidenceThreshold,
       runCheckpointReview: this.runCheckpointReview,
       queryContinuityEpisodes: this.queryContinuityEpisodes,
@@ -268,6 +287,10 @@ export class ConversationManager {
       markConversationMemoryEpisodeWrong: this.markConversationMemoryEpisodeWrong,
       forgetConversationMemoryEpisode: this.forgetConversationMemoryEpisode,
       listAvailableSkills: this.listAvailableSkills,
+      describeRuntimeCapabilities: this.describeRuntimeCapabilities,
+      listManagedProcessSnapshots: this.listManagedProcessSnapshots,
+      listBrowserSessionSnapshots: this.listBrowserSessionSnapshots,
+      abortActiveAutonomousRun: this.abortActiveAutonomousRun,
       isWorkerActive: (sessionKey) => this.activeWorkers.has(sessionKey),
       clearAckTimer: (sessionKey) => clearConversationAckTimer(sessionKey, this.ackTimers),
       setWorkerBinding: (sessionKey, task, notifier) =>
@@ -281,10 +304,15 @@ export class ConversationManager {
           ackTimers: this.ackTimers,
           workerBindings: this.workerBindings,
           store: this.store,
+          listManagedProcessSnapshots: this.listManagedProcessSnapshots,
+          listBrowserSessionSnapshots: this.listBrowserSessionSnapshots,
           config: {
             ackDelayMs: this.config.ackDelayMs,
             heartbeatIntervalMs: this.config.heartbeatIntervalMs,
             maxRecentJobs: this.config.maxRecentJobs,
+            maxRecentActions: this.config.maxRecentActions,
+            maxBrowserSessions: this.config.maxBrowserSessions,
+            maxPathDestinations: this.config.maxPathDestinations,
             maxConversationTurns: this.config.maxConversationTurns,
             showCompletionPrefix: this.config.showCompletionPrefix
           },
@@ -294,5 +322,28 @@ export class ConversationManager {
         enqueueConversationJob(session, input, receivedAt, executionInput, isSystemJob),
       buildAutonomousExecutionInput: (goal) => buildAutonomousExecutionInput(goal)
     });
+  }
+
+  /**
+   * Waits for queued background worker activity and notifier timers to settle for this manager.
+   *
+   * **Why it exists:**
+   * Tests and controlled shutdown flows sometimes need a truthful "fully idle" boundary so they do
+   * not tear down session persistence while worker or delivery cleanup is still flushing.
+   *
+   * @param timeoutMs - Upper bound for waiting on active workers, bindings, and timers.
+   * @returns Promise resolving once the manager is idle.
+   */
+  async waitForIdle(timeoutMs = 30_000): Promise<void> {
+    const startedAt = Date.now();
+    while (
+      this.activeWorkers.size > 0 ||
+      this.ackTimers.size > 0
+    ) {
+      if (Date.now() - startedAt > timeoutMs) {
+        throw new Error(`Timed out waiting for conversation manager to go idle after ${timeoutMs}ms.`);
+      }
+      await new Promise<void>((resolve) => setTimeout(resolve, 25));
+    }
   }
 }

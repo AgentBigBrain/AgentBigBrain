@@ -19,6 +19,7 @@ import {
   BrowserVerifier,
   VerifyBrowserRequest
 } from "../../src/organs/liveRun/browserVerifier";
+import type { PlaywrightChromiumRuntime } from "../../src/organs/liveRun/playwrightRuntime";
 import { ToolExecutorOrgan } from "../../src/organs/executor";
 
 /**
@@ -280,6 +281,40 @@ function buildVerifyBrowserAction(
       ...overrides
     },
     estimatedCostUsd: 0.09
+  };
+}
+
+/**
+ * Implements `buildOpenBrowserAction` behavior within module scope.
+ * Interacts with local collaborators through imported modules and typed inputs/outputs.
+ */
+function buildOpenBrowserAction(url?: string): PlannedAction {
+  return {
+    id: "action_open_browser",
+    type: "open_browser",
+    description: "open verified page in visible browser",
+    params: {
+      ...(typeof url === "string" ? { url } : {})
+    },
+    estimatedCostUsd: 0.03
+  };
+}
+
+/**
+ * Implements `buildCloseBrowserAction` behavior within module scope.
+ * Interacts with local collaborators through imported modules and typed inputs/outputs.
+ */
+function buildCloseBrowserAction(
+  overrides: Record<string, unknown> = {}
+): PlannedAction {
+  return {
+    id: "action_close_browser",
+    type: "close_browser",
+    description: "close tracked browser window",
+    params: {
+      ...overrides
+    },
+    estimatedCostUsd: 0.02
   };
 }
 
@@ -569,6 +604,70 @@ class MockBrowserVerifier implements BrowserVerifier {
     this.requests.push(request);
     return this.result;
   }
+}
+
+function createStubPlaywrightRuntime(): {
+  runtime: PlaywrightChromiumRuntime;
+  getPageCloseCount: () => number;
+  getContextCloseCount: () => number;
+  getBrowserCloseCount: () => number;
+} {
+  let pageCloseCount = 0;
+  let contextCloseCount = 0;
+  let browserCloseCount = 0;
+
+  const page = {
+    async goto(): Promise<void> {
+      return;
+    },
+    async title(): Promise<string> {
+      return "stub";
+    },
+    async textContent(): Promise<string> {
+      return "stub";
+    },
+    async bringToFront(): Promise<void> {
+      return;
+    },
+    async reload(): Promise<void> {
+      return;
+    },
+    async close(): Promise<void> {
+      pageCloseCount += 1;
+    }
+  };
+
+  const context = {
+    async newPage() {
+      return page;
+    },
+    async close(): Promise<void> {
+      contextCloseCount += 1;
+    }
+  };
+
+  const browser = {
+    async newContext() {
+      return context;
+    },
+    async close(): Promise<void> {
+      browserCloseCount += 1;
+    }
+  };
+
+  return {
+    runtime: {
+      chromium: {
+        async launch(): Promise<typeof browser> {
+          return browser;
+        }
+      },
+      sourceModule: "playwright"
+    },
+    getPageCloseCount: () => pageCloseCount,
+    getContextCloseCount: () => contextCloseCount,
+    getBrowserCloseCount: () => browserCloseCount
+  };
 }
 
 /**
@@ -874,6 +973,43 @@ test("ToolExecutorOrgan enforces timeout fallback and reports shell failure exit
     assert.equal(telemetry?.shellExitCode, 2);
     assert.equal(telemetry?.shellTimedOut, false);
     assert.equal(telemetry?.shellTimeoutMs, config.shellRuntime.profile.timeoutMsDefault);
+  });
+});
+
+test("ToolExecutorOrgan treats known Move-Item file-lock stderr as a shell failure even when exit code is zero", async () => {
+  await withTempCwd(async () => {
+    const mockSpawn = createMockShellSpawn({
+      stdout: "drone-company\r\n",
+      stderr:
+        "Move-Item : The process cannot access the file because it is being used by another process.\r\n" +
+        "FullyQualifiedErrorId : MoveDirectoryItemIOError,Microsoft.PowerShell.Commands.MoveItemCommand\r\n",
+      exitCode: 0
+    });
+    const config = buildShellEnabledConfig({
+      shellRuntime: {
+        ...DEFAULT_BRAIN_CONFIG.shellRuntime,
+        profile: {
+          ...DEFAULT_BRAIN_CONFIG.shellRuntime.profile,
+          shellKind: "powershell",
+          executable: "powershell.exe",
+          wrapperArgs: ["-NoProfile", "-NonInteractive", "-Command"],
+          cwdPolicy: {
+            ...DEFAULT_BRAIN_CONFIG.shellRuntime.profile.cwdPolicy,
+            denyOutsideSandbox: false
+          }
+        }
+      }
+    });
+    const executor = new ToolExecutorOrgan(config, mockSpawn.spawn);
+    const output = await executor.execute(
+      buildShellAction("Move-Item -Path source -Destination dest")
+    );
+
+    assert.match(output, /Shell failed:/i);
+    assert.match(output, /used by another process/i);
+    const telemetry = executor.consumeShellExecutionTelemetry("action_shell_command");
+    assert.equal(telemetry?.shellExitCode, 0);
+    assert.equal(telemetry?.shellKind, "powershell");
   });
 });
 
@@ -1265,6 +1401,63 @@ test("ToolExecutorOrgan returns typed runtime-unavailable failure for browser ve
     assert.equal(outcome.failureCode, "BROWSER_VERIFY_RUNTIME_UNAVAILABLE");
     assert.equal(outcome.executionMetadata?.browserVerification, true);
     assert.equal(outcome.executionMetadata?.browserVerifyPassed, false);
+  });
+});
+
+test("ToolExecutorOrgan opens a visible browser window and records persistent browser-session metadata", async () => {
+  await withTempCwd(async () => {
+    const mockSpawn = createManagedProcessShellSpawn();
+    await withLocalHttpServer(200, async (url) => {
+      const executor = new ToolExecutorOrgan(
+        DEFAULT_BRAIN_CONFIG,
+        mockSpawn.spawn,
+        undefined,
+        undefined,
+        undefined,
+        async () => null
+      );
+      const outcome = await executor.executeWithOutcome(buildOpenBrowserAction(url));
+
+      assert.equal(outcome.status, "success");
+      assert.match(outcome.output, /left it open/i);
+      assert.equal(outcome.executionMetadata?.browserSession, true);
+      assert.equal(outcome.executionMetadata?.browserSessionStatus, "open");
+      assert.equal(outcome.executionMetadata?.browserSessionUrl, url);
+      assert.equal(outcome.executionMetadata?.browserSessionVisibility, "visible");
+      assert.equal(typeof outcome.executionMetadata?.browserSessionId, "string");
+      assert.equal(outcome.executionMetadata?.browserSessionControlAvailable, false);
+      assert.equal(mockSpawn.calls.length, 1);
+    });
+  });
+});
+
+test("ToolExecutorOrgan closes a tracked managed browser window by session id", async () => {
+  await withTempCwd(async () => {
+    await withLocalHttpServer(200, async (url) => {
+      const stubRuntime = createStubPlaywrightRuntime();
+      const executor = new ToolExecutorOrgan(
+        DEFAULT_BRAIN_CONFIG,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        async () => stubRuntime.runtime
+      );
+
+      const openOutcome = await executor.executeWithOutcome(buildOpenBrowserAction(url));
+      const closeOutcome = await executor.executeWithOutcome(
+        buildCloseBrowserAction({
+          sessionId: openOutcome.executionMetadata?.browserSessionId
+        })
+      );
+
+      assert.equal(openOutcome.status, "success");
+      assert.equal(closeOutcome.status, "success");
+      assert.equal(closeOutcome.executionMetadata?.browserSessionStatus, "closed");
+      assert.equal(stubRuntime.getPageCloseCount(), 1);
+      assert.equal(stubRuntime.getContextCloseCount(), 1);
+      assert.equal(stubRuntime.getBrowserCloseCount(), 1);
+    });
   });
 });
 

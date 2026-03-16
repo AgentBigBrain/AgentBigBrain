@@ -1,7 +1,6 @@
 /**
  * @fileoverview Owns internal system-job enqueue and worker-loop execution for ConversationManager.
  */
-
 import { buildAgentPulseExecutionInput } from "../conversationExecutionInputPolicy";
 import {
   deliverFinalMessage,
@@ -13,6 +12,7 @@ import { normalizeWhitespace } from "../conversationManagerHelpers";
 import { upsertRecentJob } from "../conversationSessionMutations";
 import {
   buildFinalMessageForJob,
+  type ConversationNotifierTransport,
   executeRunningJob,
   isBlockedSystemJobOutcome,
   markQueuedJobRunning,
@@ -21,17 +21,23 @@ import {
 } from "../conversationWorkerLifecycle";
 import type { InterfaceSessionStore } from "../sessionStore";
 import type {
+  ListBrowserSessionSnapshots,
+  ListManagedProcessSnapshots,
   ConversationNotifier,
-  ConversationNotifierTransport,
   ExecuteConversationTask
 } from "./managerContracts";
+import {
+  toConversationNotifierTransport
+} from "./conversationNotifierTransport";
+import { enqueueAutomaticTrackedWorkspaceRecoveryRetry } from "./conversationWorkerAutoRecovery";
+import { persistConversationExecutionProgress } from "./conversationWorkerProgressPersistence";
 import {
   canUseConversationAckTimerForSession,
   clearConversationAckTimer,
   enqueueConversationJob,
   setConversationAckLifecycleState
 } from "./conversationLifecycle";
-
+import { collectWorkerRuntimeSnapshots } from "./conversationWorkerRuntimeSnapshots";
 export interface SessionWorkerBinding {
   executeTask: ExecuteConversationTask;
   notifier: ConversationNotifierTransport;
@@ -41,6 +47,9 @@ export interface ConversationWorkerRuntimeConfig {
   ackDelayMs: number;
   heartbeatIntervalMs: number;
   maxRecentJobs: number;
+  maxRecentActions: number;
+  maxBrowserSessions: number;
+  maxPathDestinations: number;
   maxConversationTurns: number;
   maxContextTurnsForExecution: number;
   showCompletionPrefix: boolean;
@@ -71,71 +80,22 @@ export interface ProcessConversationQueueInput {
   executeTask: ExecuteConversationTask;
   notify: ConversationNotifierTransport;
   store: InterfaceSessionStore;
+  listManagedProcessSnapshots?: ListManagedProcessSnapshots;
+  listBrowserSessionSnapshots?: ListBrowserSessionSnapshots;
   config: Pick<
     ConversationWorkerRuntimeConfig,
     | "ackDelayMs"
     | "heartbeatIntervalMs"
     | "maxRecentJobs"
+    | "maxRecentActions"
+    | "maxBrowserSessions"
+    | "maxPathDestinations"
     | "maxConversationTurns"
     | "showCompletionPrefix"
   >;
   ackTimers: Map<string, NodeJS.Timeout>;
   workerBindings: Map<string, SessionWorkerBinding>;
   autonomousExecutionPrefix: string;
-}
-
-/**
- * Returns `true` when a notifier already implements the transport contract expected by worker
- * runtime helpers.
- *
- * @param notify - Candidate notifier callback/object from the stable conversation manager.
- * @returns `true` when the notifier already exposes transport capabilities and `send(...)`.
- */
-export function isConversationNotifierTransport(
-  notify: ConversationNotifier
-): notify is ConversationNotifierTransport {
-  if (!notify || typeof notify !== "object") {
-    return false;
-  }
-
-  const candidate = notify as Partial<ConversationNotifierTransport>;
-  const supportsEdit = candidate.capabilities?.supportsEdit;
-  const supportsNativeStreaming = candidate.capabilities?.supportsNativeStreaming;
-  return (
-    typeof candidate.send === "function" &&
-    Boolean(candidate.capabilities) &&
-    typeof supportsEdit === "boolean" &&
-    typeof supportsNativeStreaming === "boolean"
-  );
-}
-
-/**
- * Normalizes notifier callbacks into the canonical transport-capable worker contract.
- *
- * @param notify - Notifier callback/object from the stable conversation manager surface.
- * @returns Transport-capable notifier used by queue workers.
- */
-export function toConversationNotifierTransport(
-  notify: ConversationNotifier
-): ConversationNotifierTransport {
-  if (isConversationNotifierTransport(notify)) {
-    return notify;
-  }
-
-  return {
-    capabilities: {
-      supportsEdit: false,
-      supportsNativeStreaming: false
-    },
-    send: async (message: string) => {
-      await notify(message);
-      return {
-        ok: true,
-        messageId: null,
-        errorCode: null
-      };
-    }
-  };
 }
 
 /**
@@ -166,11 +126,16 @@ export interface StartConversationWorkerIfNeededInput {
   ackTimers: Map<string, NodeJS.Timeout>;
   workerBindings: Map<string, SessionWorkerBinding>;
   store: InterfaceSessionStore;
+  listManagedProcessSnapshots?: ListManagedProcessSnapshots;
+  listBrowserSessionSnapshots?: ListBrowserSessionSnapshots;
   config: Pick<
     ConversationWorkerRuntimeConfig,
     | "ackDelayMs"
     | "heartbeatIntervalMs"
     | "maxRecentJobs"
+    | "maxRecentActions"
+    | "maxBrowserSessions"
+    | "maxPathDestinations"
     | "maxConversationTurns"
     | "showCompletionPrefix"
   >;
@@ -194,6 +159,8 @@ export async function startConversationWorkerIfNeeded(
     ackTimers,
     workerBindings,
     store,
+    listManagedProcessSnapshots,
+    listBrowserSessionSnapshots,
     config,
     autonomousExecutionPrefix
   } = input;
@@ -216,6 +183,8 @@ export async function startConversationWorkerIfNeeded(
       executeTask: binding.executeTask,
       notify: binding.notifier,
       store,
+      listManagedProcessSnapshots,
+      listBrowserSessionSnapshots,
       config,
       ackTimers,
       workerBindings,
@@ -240,6 +209,8 @@ export async function startConversationWorkerIfNeeded(
         ackTimers,
         workerBindings,
         store,
+        listManagedProcessSnapshots,
+        listBrowserSessionSnapshots,
         config,
         autonomousExecutionPrefix
       });
@@ -318,6 +289,8 @@ export async function processConversationQueue(
     executeTask,
     notify,
     store,
+    listManagedProcessSnapshots,
+    listBrowserSessionSnapshots,
     config,
     ackTimers,
     workerBindings,
@@ -376,7 +349,7 @@ export async function processConversationQueue(
       }
     });
 
-    await executeRunningJob({
+    const executionResult = await executeRunningJob({
       job: nextJob,
       executeTask: activeExecuteTask,
       notify: activeNotify,
@@ -386,16 +359,48 @@ export async function processConversationQueue(
         autonomousExecutionPrefix,
         activeNotify
       ),
+      onProgressUpdate: async (update) => {
+        await persistConversationExecutionProgress(
+          sessionKey,
+          nextJob.id,
+          update,
+          store
+        );
+      },
       onExecutionSettled: () => clearConversationAckTimer(sessionKey, ackTimers)
     });
 
     const updatedSession = (await store.getSession(sessionKey)) ?? session;
+    const {
+      managedProcessSnapshots,
+      browserSessionSnapshots
+    } = await collectWorkerRuntimeSnapshots({
+      listManagedProcessSnapshots,
+      listBrowserSessionSnapshots
+    });
     const persistedRunningJob = persistExecutedJobOutcome({
       session: updatedSession,
       executedJob: nextJob,
+      executionResult,
+      browserSessionSnapshots,
+      managedProcessSnapshots,
       maxRecentJobs: config.maxRecentJobs,
+      maxRecentActions: config.maxRecentActions,
+      maxBrowserSessions: config.maxBrowserSessions,
+      maxPathDestinations: config.maxPathDestinations,
       maxConversationTurns: config.maxConversationTurns
     });
+    if (
+      persistedRunningJob.status === "completed" &&
+      executionResult?.taskRunResult &&
+      enqueueAutomaticTrackedWorkspaceRecoveryRetry(
+        updatedSession,
+        persistedRunningJob,
+        executionResult.taskRunResult
+      )
+    ) {
+      upsertRecentJob(updatedSession, persistedRunningJob, config.maxRecentJobs);
+    }
     await store.setSession(updatedSession);
 
     if (isBlockedSystemJobOutcome(persistedRunningJob)) {

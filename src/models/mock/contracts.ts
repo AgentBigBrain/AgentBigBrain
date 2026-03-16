@@ -23,7 +23,9 @@ export const ACTION_TYPES: readonly ActionType[] = [
   "stop_process",
   "probe_port",
   "probe_http",
-  "verify_browser"
+  "verify_browser",
+  "open_browser",
+  "close_browser"
 ] as const;
 
 /**

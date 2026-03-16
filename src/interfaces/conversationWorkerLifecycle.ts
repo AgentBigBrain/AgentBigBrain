@@ -2,19 +2,39 @@
  * @fileoverview Implements deterministic worker-loop lifecycle helpers for conversation queue execution.
  */
 
+import path from "node:path";
+
 import { assertAckInvariants } from "./ackStateMachine";
 import { backfillPulseSnippet } from "./pulseEmissionLifecycle";
 import { elapsedSeconds } from "./conversationManagerHelpers";
 import {
   findRecentJob,
   recordAssistantTurn,
+  setActiveClarification,
+  setActiveWorkspace,
+  setProgressState,
+  setReturnHandoff,
+  upsertBrowserSession,
+  upsertPathDestination,
+  upsertRecentAction,
   upsertRecentJob
 } from "./conversationSessionMutations";
 import {
+  ConversationActiveWorkspaceRecord,
   ConversationJob,
   ConversationSession
 } from "./sessionStore";
+import { buildConversationWorkerProgressMessage } from "./conversationRuntime/conversationWorkerProgressText";
+import { deriveConversationLedgersFromTaskRunResult } from "./conversationRuntime/recentActionLedger";
+import { buildConversationReturnHandoff } from "./conversationRuntime/returnHandoff";
+import { buildPausedReturnHandoffProgressState } from "./conversationRuntime/returnHandoffControl";
+import { deriveTaskRecoveryClarification } from "./conversationRuntime/taskRecoveryClarification";
+import { reconcileConversationExecutionRuntimeSession } from "./conversationRuntime/executionInputRuntimeOwnership";
+import type { BrowserSessionSnapshot } from "../organs/liveRun/browserSessionRegistry";
+import type { ManagedProcessSnapshot } from "../organs/liveRun/managedProcessRegistry";
 import type {
+  ConversationExecutionProgressUpdate,
+  ConversationExecutionResult,
   ConversationNotifierTransport,
   ExecuteConversationTask
 } from "./conversationRuntime/managerContracts";
@@ -47,48 +67,371 @@ function canUseNativeStreaming(
 }
 
 /**
- * Builds a short request preview for worker progress messaging.
+ * Collects the newest concrete changed paths emitted by one completed job.
  *
- * **Why it exists:**
- * Generic "still working" pings are low-signal. This helper keeps progress updates anchored to
- * the actual request while bounding message length for chat transports.
- *
- * **What it talks to:**
- * - Reads `ConversationJob` input/executionInput fields.
- *
- * @param job - Running job whose request preview should be rendered.
- * @returns Bounded request summary for progress messages.
+ * @param session - Session containing recent-action ledgers.
+ * @param sourceJobId - Job whose concrete side effects should be preferred.
+ * @returns Ordered changed file/folder paths for continuity recall.
  */
-function summarizeJobForProgress(job: ConversationJob): string {
-  const rawText = (job.input || job.executionInput || "your request")
-    .replace(/\s+/g, " ")
-    .trim();
-  if (!rawText) {
-    return "your request";
+function collectWorkspaceChangedPaths(
+  session: ConversationSession,
+  sourceJobId: string
+): string[] {
+  const seen = new Set<string>();
+  const changedPaths: string[] = [];
+  for (const action of session.recentActions) {
+    if (action.sourceJobId !== sourceJobId || !action.location) {
+      continue;
+    }
+    if (action.kind !== "file" && action.kind !== "folder") {
+      continue;
+    }
+    if (seen.has(action.location)) {
+      continue;
+    }
+    seen.add(action.location);
+    changedPaths.push(action.location);
   }
-  return rawText.length > 100 ? `${rawText.slice(0, 100)}...` : rawText;
+  return changedPaths;
 }
 
 /**
- * Builds a human-first worker progress message.
+ * Deduplicates non-empty strings while preserving first-seen order.
  *
- * **Why it exists:**
- * Queue worker updates should sound like active help instead of idle telemetry while still making
- * elapsed-time context available during longer runs.
- *
- * **What it talks to:**
- * - Uses `summarizeJobForProgress` within this module.
- *
- * @param job - Running job being described.
- * @param elapsed - Optional elapsed-time value in seconds.
- * @returns Human-readable progress message.
+ * @param values - Candidate string values.
+ * @returns Unique non-empty strings.
  */
-function buildWorkerProgressMessage(job: ConversationJob, elapsed?: number): string {
-  const preview = summarizeJobForProgress(job);
-  if (typeof elapsed === "number") {
-    return `Working on your request: ${preview} (${elapsed}s elapsed)`;
+function uniqueNonEmpty(values: readonly (string | null | undefined)[]): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const value of values) {
+    if (!value || seen.has(value)) {
+      continue;
+    }
+    seen.add(value);
+    result.push(value);
   }
-  return `Working on your request: ${preview}`;
+  return result;
+}
+
+/**
+ * Extracts one managed preview-process lease id from a recent-action identifier when present.
+ *
+ * @param actionId - Stable recent-action identifier.
+ * @returns Lease id suffix, or `null` when the action is not a managed-process ledger entry.
+ */
+function extractProcessLeaseIdFromRecentActionId(actionId: string): string | null {
+  const marker = ":process:";
+  const markerIndex = actionId.lastIndexOf(marker);
+  if (markerIndex < 0) {
+    return null;
+  }
+  return actionId.slice(markerIndex + marker.length).trim() || null;
+}
+
+/**
+ * Resolves the newest persisted recent-action status for one managed preview-process lease.
+ *
+ * @param session - Session containing recent-action ledgers.
+ * @param leaseId - Preview-process lease identifier being evaluated.
+ * @returns Most recent persisted status for that lease, or `null` when the session never recorded it.
+ */
+function resolveLatestProcessActionStatusForLease(
+  session: ConversationSession,
+  leaseId: string
+): ConversationSession["recentActions"][number]["status"] | null {
+  const matchingAction = session.recentActions
+    .filter((action) => action.kind === "process")
+    .find((action) => extractProcessLeaseIdFromRecentActionId(action.id) === leaseId);
+  return matchingAction?.status ?? null;
+}
+
+/**
+ * Filters preview-process lease ids down to those the session still has live control evidence for.
+ *
+ * @param session - Session containing recent-action ledgers.
+ * @param leaseIds - Candidate preview-process lease ids remembered for the workspace.
+ * @param currentTrackedBrowserSession - Current controllable browser session tied to the workspace.
+ * @returns Lease ids that still look live from session evidence.
+ */
+function selectLivePreviewProcessLeaseIds(
+  session: ConversationSession,
+  leaseIds: readonly string[],
+  currentTrackedBrowserSession: ConversationSession["browserSessions"][number] | null
+): string[] {
+  return leaseIds.filter((leaseId) => {
+    const latestStatus = resolveLatestProcessActionStatusForLease(session, leaseId);
+    if (latestStatus === "running") {
+      return true;
+    }
+    if (latestStatus === "closed" || latestStatus === "failed") {
+      return false;
+    }
+    return (
+      currentTrackedBrowserSession?.status === "open" &&
+      currentTrackedBrowserSession.controlAvailable &&
+      currentTrackedBrowserSession.linkedProcessLeaseId === leaseId
+    );
+  });
+}
+
+/**
+ * Selects the strongest primary artifact path for the tracked workspace.
+ *
+ * @param changedPaths - Concrete changed paths emitted by the completed job.
+ * @param previousWorkspace - Previously tracked workspace snapshot when continuity already exists.
+ * @returns Preferred primary artifact path, or `null` when none is known.
+ */
+function selectPrimaryArtifactPath(
+  changedPaths: readonly string[],
+  previousWorkspace: ConversationActiveWorkspaceRecord | null
+): string | null {
+  const htmlPath = changedPaths.find((entry) => entry.toLowerCase().endsWith(".html"));
+  if (htmlPath) {
+    return htmlPath;
+  }
+  const filePath = changedPaths.find((entry) => path.extname(entry).length > 0);
+  if (filePath) {
+    return filePath;
+  }
+  return previousWorkspace?.primaryArtifactPath ?? null;
+}
+
+/**
+ * Resolves the workspace root path from the latest ledgers and prior continuity.
+ *
+ * @param session - Session containing persisted path and browser ledgers.
+ * @param sourceJobId - Job currently being persisted.
+ * @param browserSession - Preferred browser session for this workspace.
+ * @param primaryArtifactPath - Preferred primary artifact path.
+ * @param previousWorkspace - Previously tracked workspace snapshot when continuity already exists.
+ * @returns Best-known workspace root path, or `null` when no stable project root is evident.
+ */
+function resolveWorkspaceRootPath(
+  session: ConversationSession,
+  sourceJobId: string,
+  browserSession: ConversationSession["browserSessions"][number] | null,
+  primaryArtifactPath: string | null,
+  previousWorkspace: ConversationActiveWorkspaceRecord | null
+): string | null {
+  const processDestination =
+    session.pathDestinations.find(
+      (destination) =>
+        destination.sourceJobId === sourceJobId &&
+        destination.id.startsWith("path:process:")
+    ) ?? null;
+  if (browserSession?.workspaceRootPath) {
+    return browserSession.workspaceRootPath;
+  }
+  if (browserSession?.linkedProcessCwd) {
+    return browserSession.linkedProcessCwd;
+  }
+  if (processDestination) {
+    return processDestination.resolvedPath;
+  }
+  const folderDestination =
+    session.pathDestinations.find(
+      (destination) =>
+        destination.sourceJobId === sourceJobId &&
+        !destination.resolvedPath.toLowerCase().endsWith(".html") &&
+        !destination.resolvedPath.toLowerCase().endsWith(".css") &&
+        !destination.resolvedPath.toLowerCase().endsWith(".js")
+    ) ?? null;
+  if (folderDestination) {
+    return folderDestination.resolvedPath;
+  }
+  if (primaryArtifactPath) {
+    return path.dirname(primaryArtifactPath);
+  }
+  return previousWorkspace?.rootPath ?? null;
+}
+
+/**
+ * Rebuilds the canonical active-workspace snapshot from the latest persisted ledgers.
+ *
+ * @param session - Session containing up-to-date ledgers for the completed job.
+ * @param sourceJobId - Completed job currently being persisted.
+ * @param updatedAt - Timestamp used for freshness ordering.
+ * @returns Canonical active workspace snapshot, or `null` when this job produced no project continuity.
+ */
+function deriveActiveWorkspaceFromSession(
+  session: ConversationSession,
+  sourceJobId: string,
+  updatedAt: string
+): ConversationActiveWorkspaceRecord | null {
+  const previousWorkspace = session.activeWorkspace ?? null;
+  const currentJobBrowserSessions = session.browserSessions.filter(
+    (browserSession) => browserSession.sourceJobId === sourceJobId
+  );
+  const currentJobBrowserSession = currentJobBrowserSessions[0] ?? null;
+  const continuityBrowserSession =
+    (previousWorkspace?.browserSessionId
+      ? session.browserSessions.find(
+          (browserSession) => browserSession.id === previousWorkspace.browserSessionId
+        ) ?? null
+      : null) ??
+    currentJobBrowserSession;
+  const changedPaths = collectWorkspaceChangedPaths(session, sourceJobId);
+  const primaryArtifactPath = selectPrimaryArtifactPath(changedPaths, previousWorkspace);
+  const rootPath = resolveWorkspaceRootPath(
+    session,
+    sourceJobId,
+    continuityBrowserSession,
+    primaryArtifactPath,
+    previousWorkspace
+  );
+  const previewUrl =
+    continuityBrowserSession?.url ??
+    session.recentActions.find(
+      (action) =>
+        action.sourceJobId === sourceJobId &&
+        action.kind === "url" &&
+        typeof action.location === "string"
+    )?.location ??
+    previousWorkspace?.previewUrl ??
+    null;
+  const previewProcessLeaseIds = uniqueNonEmpty([
+    continuityBrowserSession?.linkedProcessLeaseId ?? null,
+    previousWorkspace?.previewProcessLeaseId ?? null,
+    ...(previousWorkspace?.previewProcessLeaseIds ?? []),
+    ...currentJobBrowserSessions.map((browserSession) => browserSession.linkedProcessLeaseId)
+  ]);
+  const browserSessionIds = uniqueNonEmpty([
+    continuityBrowserSession?.id ?? null,
+    previousWorkspace?.browserSessionId ?? null,
+    ...(previousWorkspace?.browserSessionIds ?? []),
+    ...currentJobBrowserSessions.map((browserSession) => browserSession.id)
+  ]);
+  const currentTrackedBrowserSession =
+    continuityBrowserSession?.status === "open" &&
+    continuityBrowserSession.controlAvailable
+      ? continuityBrowserSession
+      : null;
+  const livePreviewProcessLeaseIds = selectLivePreviewProcessLeaseIds(
+    session,
+    previewProcessLeaseIds,
+    currentTrackedBrowserSession
+  );
+  const lastKnownPreviewProcessPid =
+    continuityBrowserSession?.linkedProcessPid ??
+    previousWorkspace?.lastKnownPreviewProcessPid ??
+    null;
+  const browserProcessPid =
+    continuityBrowserSession?.browserProcessPid ??
+    previousWorkspace?.browserProcessPid ??
+    null;
+  const previewProcessCwd =
+    continuityBrowserSession?.workspaceRootPath ??
+    continuityBrowserSession?.linkedProcessCwd ??
+    previousWorkspace?.previewProcessCwd ??
+    rootPath;
+  const hasOpenBrowserSession = currentTrackedBrowserSession !== null;
+  const hasPreviewProcess = livePreviewProcessLeaseIds.length > 0;
+  const hasOpenAttributableBrowserSession = continuityBrowserSession?.status === "open";
+  const previewStackState =
+    hasOpenBrowserSession && hasPreviewProcess
+      ? "browser_and_preview"
+      : hasOpenBrowserSession
+        ? "browser_only"
+        : hasPreviewProcess
+          ? "preview_only"
+          : "detached";
+  const stillControllable =
+    hasOpenBrowserSession ||
+    hasPreviewProcess;
+  const ownershipState =
+    stillControllable
+      ? "tracked"
+      : hasOpenAttributableBrowserSession
+        ? "orphaned"
+        : "stale";
+  const primaryPreviewProcessLeaseId =
+    livePreviewProcessLeaseIds[0] ??
+    previewProcessLeaseIds[0] ??
+    null;
+
+  if (
+    !rootPath &&
+    !primaryArtifactPath &&
+    !previewUrl &&
+    !continuityBrowserSession &&
+    !previousWorkspace
+  ) {
+    return null;
+  }
+
+  return {
+    id:
+      previousWorkspace?.id ??
+      `workspace:${rootPath ?? primaryArtifactPath ?? previewUrl ?? sourceJobId}`,
+    label: "Current project workspace",
+    rootPath,
+    primaryArtifactPath,
+    previewUrl,
+    browserSessionId: continuityBrowserSession?.id ?? previousWorkspace?.browserSessionId ?? null,
+    browserSessionIds,
+    browserSessionStatus:
+      continuityBrowserSession?.status ??
+      previousWorkspace?.browserSessionStatus ??
+      null,
+    browserProcessPid,
+    previewProcessLeaseId: primaryPreviewProcessLeaseId,
+    previewProcessLeaseIds,
+    previewProcessCwd,
+    lastKnownPreviewProcessPid,
+    stillControllable,
+    ownershipState,
+    previewStackState,
+    lastChangedPaths:
+      changedPaths.length > 0
+        ? changedPaths.slice(0, 5)
+        : (previousWorkspace?.lastChangedPaths ?? []),
+    sourceJobId,
+    updatedAt
+  };
+}
+
+/**
+ * Returns whether the persisted close-preview summary should be promoted from a blocked follow-up
+ * into a truthful closed-preview success message after live runtime reconciliation.
+ */
+function shouldPromoteClosedPreviewStackSummary(
+  session: ConversationSession,
+  summary: string | null
+): boolean {
+  if (!summary || !/BROWSER_SESSION_CONTROL_UNAVAILABLE|One later step was blocked/i.test(summary)) {
+    return false;
+  }
+  const activeWorkspace = session.activeWorkspace;
+  if (!activeWorkspace) {
+    return false;
+  }
+  if (
+    activeWorkspace.browserSessionStatus !== "closed" ||
+    activeWorkspace.ownershipState !== "stale" ||
+    activeWorkspace.previewStackState !== "detached"
+  ) {
+    return false;
+  }
+  return session.browserSessions.some(
+    (browserSession) =>
+      activeWorkspace.browserSessionIds.includes(browserSession.id) &&
+      browserSession.status === "closed"
+  );
+}
+
+/**
+ * Builds a truthful completion summary when the linked preview stack ended up fully closed even
+ * though an intermediate browser-control step reported unavailable.
+ */
+function buildClosedPreviewStackSummary(session: ConversationSession): string {
+  const activeWorkspace = session.activeWorkspace;
+  const previewTarget =
+    activeWorkspace?.previewUrl ??
+    activeWorkspace?.primaryArtifactPath ??
+    activeWorkspace?.rootPath ??
+    "that landing page";
+  return `I shut down the tracked local preview stack and closed the linked browser window for ${previewTarget}, so that project page is no longer left open.`;
 }
 
 export interface MarkQueuedJobRunningInput {
@@ -135,6 +478,12 @@ export function markQueuedJobRunning(input: MarkQueuedJobRunningInput): void {
   job.finalDeliveryLastAttemptAt = null;
   session.runningJobId = job.id;
   session.updatedAt = startedAt;
+  setProgressState(session, {
+    status: "working",
+    message: buildConversationWorkerProgressMessage(job),
+    jobId: job.id,
+    updatedAt: startedAt
+  });
   upsertRecentJob(session, job, maxRecentJobs);
 }
 
@@ -182,6 +531,7 @@ export interface ExecuteRunningJobInput {
   notify: ConversationNotifierTransport;
   heartbeatIntervalMs: number;
   suppressHeartbeat: boolean;
+  onProgressUpdate?: (update: ConversationExecutionProgressUpdate) => Promise<void>;
   onExecutionSettled(): void;
 }
 
@@ -198,21 +548,24 @@ export interface ExecuteRunningJobInput {
  * - Invokes `onExecutionSettled` callback for timer cleanup.
  *
  * @param input - Running job, worker callbacks, and heartbeat controls.
- * @returns Promise resolving after status fields are updated and cleanup callback is invoked.
+ * @returns Full execution result when the task succeeds, otherwise `null` for failed runs.
  */
-export async function executeRunningJob(input: ExecuteRunningJobInput): Promise<void> {
+export async function executeRunningJob(
+  input: ExecuteRunningJobInput
+): Promise<ConversationExecutionResult | null> {
   const {
     job,
     executeTask,
     notify,
     heartbeatIntervalMs,
     suppressHeartbeat,
+    onProgressUpdate,
     onExecutionSettled
   } = input;
   const useNativeStreaming = !suppressHeartbeat && canUseNativeStreaming(notify);
 
   if (useNativeStreaming) {
-    void notify.stream!(buildWorkerProgressMessage(job)).catch(() => undefined);
+    void notify.stream!(buildConversationWorkerProgressMessage(job)).catch(() => undefined);
   }
 
   const heartbeat = suppressHeartbeat
@@ -222,7 +575,7 @@ export async function executeRunningJob(input: ExecuteRunningJobInput): Promise<
           return;
         }
         const elapsed = elapsedSeconds(job.startedAt ?? job.createdAt);
-        const progressText = buildWorkerProgressMessage(job, elapsed);
+        const progressText = buildConversationWorkerProgressMessage(job, elapsed);
         if (useNativeStreaming) {
           void notify.stream!(progressText).catch(() => undefined);
           return;
@@ -231,16 +584,22 @@ export async function executeRunningJob(input: ExecuteRunningJobInput): Promise<
       }, heartbeatIntervalMs);
 
   try {
-    const result = await executeTask(job.executionInput ?? job.input, job.createdAt);
+    const result = await executeTask(
+      job.executionInput ?? job.input,
+      job.createdAt,
+      onProgressUpdate
+    );
     job.status = "completed";
     job.completedAt = new Date().toISOString();
     job.resultSummary = result.summary;
     job.errorMessage = null;
+    return result;
   } catch (error) {
     job.status = "failed";
     job.completedAt = new Date().toISOString();
     job.resultSummary = null;
     job.errorMessage = (error as Error).message;
+    return null;
   } finally {
     if (heartbeat) {
       clearInterval(heartbeat);
@@ -252,7 +611,13 @@ export async function executeRunningJob(input: ExecuteRunningJobInput): Promise<
 export interface PersistJobOutcomeInput {
   session: ConversationSession;
   executedJob: ConversationJob;
+  executionResult: ConversationExecutionResult | null;
+  browserSessionSnapshots?: readonly BrowserSessionSnapshot[];
+  managedProcessSnapshots?: readonly ManagedProcessSnapshot[];
   maxRecentJobs: number;
+  maxRecentActions: number;
+  maxBrowserSessions: number;
+  maxPathDestinations: number;
   maxConversationTurns: number;
 }
 
@@ -275,7 +640,13 @@ export function persistExecutedJobOutcome(input: PersistJobOutcomeInput): Conver
   const {
     session,
     executedJob,
+    executionResult,
+    browserSessionSnapshots,
+    managedProcessSnapshots,
     maxRecentJobs,
+    maxRecentActions,
+    maxBrowserSessions,
+    maxPathDestinations,
     maxConversationTurns
   } = input;
   const persistedRunningJob = findRecentJob(session, executedJob.id) ?? executedJob;
@@ -291,7 +662,87 @@ export function persistExecutedJobOutcome(input: PersistJobOutcomeInput): Conver
 
   session.runningJobId = null;
   session.updatedAt = new Date().toISOString();
+  const pauseRequested =
+    typeof persistedRunningJob.pauseRequestedAt === "string" &&
+    persistedRunningJob.pauseRequestedAt.trim().length > 0;
+  const terminalProgressState =
+    pauseRequested
+      ? buildPausedReturnHandoffProgressState(persistedRunningJob.id, session.updatedAt)
+      : session.progressState &&
+          (session.progressState.status === "completed" || session.progressState.status === "stopped")
+      ? {
+          ...session.progressState,
+          jobId: null,
+          updatedAt: session.updatedAt
+        }
+      : null;
+  setProgressState(session, terminalProgressState);
   upsertRecentJob(session, persistedRunningJob, maxRecentJobs);
+
+  if (persistedRunningJob.status === "completed" && executionResult?.taskRunResult) {
+    const ledgers = deriveConversationLedgersFromTaskRunResult(
+      executionResult.taskRunResult,
+      persistedRunningJob.id,
+      persistedRunningJob.completedAt ?? session.updatedAt
+    );
+    for (const action of ledgers.recentActions) {
+      upsertRecentAction(session, action, maxRecentActions);
+    }
+    for (const browserSession of ledgers.browserSessions) {
+      upsertBrowserSession(session, browserSession, maxBrowserSessions);
+    }
+    for (const destination of ledgers.pathDestinations) {
+      upsertPathDestination(session, destination, maxPathDestinations);
+    }
+    setActiveWorkspace(
+      session,
+      deriveActiveWorkspaceFromSession(
+        session,
+        persistedRunningJob.id,
+        persistedRunningJob.completedAt ?? session.updatedAt
+      )
+    );
+    const taskRecoveryClarification = deriveTaskRecoveryClarification(
+      executionResult.taskRunResult,
+      persistedRunningJob.completedAt ?? session.updatedAt
+    );
+    if (taskRecoveryClarification) {
+      persistedRunningJob.resultSummary = taskRecoveryClarification.reply;
+      if (taskRecoveryClarification.clarification) {
+        setActiveClarification(session, taskRecoveryClarification.clarification);
+        setProgressState(session, {
+          status: "waiting_for_user",
+          message: taskRecoveryClarification.reply,
+          jobId: null,
+          updatedAt: persistedRunningJob.completedAt ?? session.updatedAt
+        });
+      }
+    }
+  }
+
+  const reconciledSession = reconcileConversationExecutionRuntimeSession(
+    session,
+    browserSessionSnapshots,
+    managedProcessSnapshots
+  );
+  if (reconciledSession !== session) {
+    session.browserSessions = [...reconciledSession.browserSessions];
+    session.activeWorkspace = reconciledSession.activeWorkspace;
+  }
+  if (shouldPromoteClosedPreviewStackSummary(session, persistedRunningJob.resultSummary)) {
+    persistedRunningJob.resultSummary = buildClosedPreviewStackSummary(session);
+  }
+
+  if (persistedRunningJob.status === "completed") {
+    setReturnHandoff(
+      session,
+      buildConversationReturnHandoff(
+        persistedRunningJob,
+        session.progressState,
+        session.activeWorkspace
+      )
+    );
+  }
 
   if (persistedRunningJob.status === "completed") {
     backfillPulseSnippet(session, persistedRunningJob);

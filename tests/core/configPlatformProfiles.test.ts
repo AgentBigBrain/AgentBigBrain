@@ -27,7 +27,7 @@ test("buildMutableConfigForRuntimeMode clones mutable config branches for isolat
   const config = buildMutableConfigForRuntimeMode(DEFAULT_BRAIN_CONFIG, "isolated");
 
   config.dna.protectedPathPrefixes.push("runtime/test_path.json");
-  config.shellRuntime.profile.wrapperArgs.push("--test");
+  config.shellRuntime.profile.wrapperArgs = [...config.shellRuntime.profile.wrapperArgs, "--test"];
 
   assert.equal(config.runtime.mode, "isolated");
   assert.equal(

@@ -5,6 +5,11 @@
 import { estimateActionCostUsd } from "../../core/actionCostPolicy";
 import { PlannedAction, TaskRequest } from "../../core/types";
 import { ModelClient, ResponseSynthesisModelOutput } from "../../models/types";
+import {
+  containsWorkspaceRecoveryInspectFirstMarker,
+  containsWorkspaceRecoveryPostShutdownRetryMarker,
+  containsWorkspaceRecoveryStopExactMarker
+} from "../../core/autonomy/workspaceRecoveryCommandBuilders";
 import { extractCurrentUserRequest } from "../memoryBroker";
 import {
   hasRespondMessage
@@ -15,6 +20,20 @@ import {
 } from "./explicitActionIntent";
 import { RunSkillPostPolicyResult } from "./executionStyleContracts";
 import { RESPONSE_IDENTITY_GUARDRAIL, RESPONSE_STYLE_GUARDRAIL } from "./promptAssembly";
+
+/**
+ * Detects whether the current request is one of the bounded workspace-recovery marker turns.
+ *
+ * @param currentUserRequest - Active planner-facing request text.
+ * @returns `true` when run-skill fallback should fail closed instead of synthesizing chat text.
+ */
+function isWorkspaceRecoveryMarkerRequest(currentUserRequest: string): boolean {
+  return (
+    containsWorkspaceRecoveryInspectFirstMarker(currentUserRequest) ||
+    containsWorkspaceRecoveryStopExactMarker(currentUserRequest) ||
+    containsWorkspaceRecoveryPostShutdownRetryMarker(currentUserRequest)
+  );
+}
 
 /**
  * Synthesizes a deterministic respond message when planner output omitted user-facing text.
@@ -129,6 +148,12 @@ export async function enforceRunSkillIntentPolicy(
       actions: filteredActions,
       usedFallback: false
     };
+  }
+
+  if (isWorkspaceRecoveryMarkerRequest(currentUserRequest)) {
+    throw new Error(
+      "Planner model collapsed a workspace-recovery step into non-explicit run_skill output."
+    );
   }
 
   const synthesizedMessage = await synthesizeRespondMessage(modelClient, task, synthesizerModel);

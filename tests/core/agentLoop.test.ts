@@ -647,6 +647,91 @@ function buildApprovedShellResult(actionId: string, command: string): ActionRunR
   };
 }
 
+/**
+ * Implements `buildBlockedFolderInUseShellResult` behavior within module scope.
+ * Interacts with local collaborators through imported modules and typed inputs/outputs.
+ */
+function buildBlockedFolderInUseShellResult(actionId: string): ActionRunResult {
+  return {
+    action: {
+      id: actionId,
+      type: "shell_command",
+      description: "move matching folders",
+      params: {
+        command: "Move-Item"
+      },
+      estimatedCostUsd: 0.08
+    },
+    mode: "escalation_path",
+    approved: false,
+    output:
+      "Move-Item : The process cannot access the file because it is being used by another process.",
+    executionStatus: "failed",
+    executionFailureCode: "ACTION_EXECUTION_FAILED",
+    blockedBy: [],
+    violations: [],
+    votes: []
+  };
+}
+
+/**
+ * Implements `buildApprovedInspectWorkspaceResourcesResult` behavior within module scope.
+ * Interacts with local collaborators through imported modules and typed inputs/outputs.
+ */
+function buildApprovedInspectWorkspaceResourcesResult(
+  actionId: string,
+  metadata: Record<string, string | number | boolean | null>
+): ActionRunResult {
+  return {
+    action: {
+      id: actionId,
+      type: "inspect_workspace_resources",
+      description: "inspect workspace resources",
+      params: {
+        rootPath: "C:\\Users\\test\\Desktop\\drone-company"
+      },
+      estimatedCostUsd: 0.04
+    },
+    mode: "escalation_path",
+    approved: true,
+    output: "Inspection results for C:\\Users\\test\\Desktop\\drone-company.",
+    executionStatus: "success",
+    executionMetadata: metadata,
+    blockedBy: [],
+    violations: [],
+    votes: []
+  };
+}
+
+/**
+ * Implements `buildApprovedInspectPathHoldersResult` behavior within module scope.
+ * Interacts with local collaborators through imported modules and typed inputs/outputs.
+ */
+function buildApprovedInspectPathHoldersResult(
+  actionId: string,
+  metadata: Record<string, string | number | boolean | null>
+): ActionRunResult {
+  return {
+    action: {
+      id: actionId,
+      type: "inspect_path_holders",
+      description: "inspect path holders",
+      params: {
+        path: "C:\\Users\\test\\Desktop\\drone-company"
+      },
+      estimatedCostUsd: 0.04
+    },
+    mode: "escalation_path",
+    approved: true,
+    output: "Inspection results for C:\\Users\\test\\Desktop\\drone-company.",
+    executionStatus: "success",
+    executionMetadata: metadata,
+    blockedBy: [],
+    violations: [],
+    votes: []
+  };
+}
+
 class StubLoopModelClient implements ModelClient {
   readonly backend = "mock" as const;
   private nextStepCallCount = 0;
@@ -1090,6 +1175,37 @@ test("AutonomousLoop reports user cancellation when task execution aborts mid-it
 
   assert.equal(orchestrator.runCount, 1);
   assert.equal(abortedReason, "Cancelled by user.");
+});
+
+test("AutonomousLoop aborts cleanly when the next safe step requires a human reply", async () => {
+  const orchestrator = new ScriptedOrchestrator([[buildApprovedRespondResult("respond_wait_gate")]]);
+  const modelClient = new StubLoopModelClient([
+    {
+      isGoalMet: false,
+      reasoning: "The remaining folders are still locked, so I need your confirmation before I continue.",
+      nextUserInput:
+        "Continue waiting for the user to reply with exactly \"ready\". Do not perform any file operations until then."
+    }
+  ]);
+  const loop = new AutonomousLoop(
+    orchestrator as unknown as BrainOrchestrator,
+    modelClient,
+    { ...DEFAULT_BRAIN_CONFIG, runtime: { ...DEFAULT_BRAIN_CONFIG.runtime, isDaemonMode: false } }
+  );
+
+  let abortedReason = "";
+  await loop.run(
+    "Every folder with the name beginning in drone should go in drone-folder on my desktop.",
+    {
+      onGoalAborted: async (reason) => {
+        abortedReason = reason;
+      }
+    }
+  );
+
+  assert.equal(orchestrator.runCount, 1);
+  assert.match(abortedReason, /requires your reply or confirmation/i);
+  assert.match(abortedReason, /remaining folders are still locked/i);
 });
 
 test("AutonomousLoop does not mark explicit-path missions complete when side effects touch a different path", async () => {
@@ -1737,6 +1853,1339 @@ test("AutonomousLoop retries explicit browser-proof goals with a Playwright inst
   assert.match(orchestrator.receivedInputs[1], /retry the localhost browser verification/i);
 });
 
+test("AutonomousLoop inspects workspace holders before retrying a locked organization request", async () => {
+  const orchestrator = new ScriptedOrchestrator([
+    [buildBlockedFolderInUseShellResult("shell_lock_1")],
+    [buildApprovedRespondResult("respond_after_inspect_recovery")]
+  ]);
+  let nextStepCalls = 0;
+  const modelClient: ModelClient = {
+    backend: "mock",
+    async completeJson<T>(request: StructuredCompletionRequest): Promise<T> {
+      if (request.schemaName === "autonomous_next_step_v1") {
+        nextStepCalls += 1;
+        return {
+          isGoalMet: true,
+          reasoning: "done after deterministic recovery prompt",
+          nextUserInput: ""
+        } as T;
+      }
+      if (request.schemaName === "proactive_goal_v1") {
+        return {
+          proactiveGoal: "noop",
+          reasoning: "noop"
+        } as T;
+      }
+      throw new Error(`Unexpected schema ${request.schemaName}`);
+    }
+  };
+  const loop = new AutonomousLoop(
+    orchestrator as unknown as BrainOrchestrator,
+    modelClient,
+    { ...DEFAULT_BRAIN_CONFIG, runtime: { ...DEFAULT_BRAIN_CONFIG.runtime, isDaemonMode: false } }
+  );
+
+  await loop.run('Every folder with the name beginning in drone should go in "drone-folder" on my desktop.');
+
+  assert.equal(orchestrator.receivedInputs.length, 2);
+  assert.match(
+    orchestrator.receivedInputs[1] ?? "",
+    /Inspect the relevant workspace resources or path holders first/i
+  );
+  assert.equal(nextStepCalls, 1);
+});
+
+test("AutonomousLoop stops only exact tracked holders after inspected workspace evidence", async () => {
+  const orchestrator = new ScriptedOrchestrator([
+    [
+      buildBlockedFolderInUseShellResult("shell_lock_2"),
+      buildApprovedInspectWorkspaceResourcesResult("inspect_workspace_1", {
+        runtimeOwnershipInspection: true,
+        inspectionRecommendedNextAction: "stop_exact_tracked_holders",
+        inspectionPreviewProcessLeaseIds: "proc_preview_1,proc_preview_2"
+      })
+    ],
+    [buildApprovedRespondResult("respond_after_exact_holder_recovery")]
+  ]);
+  let nextStepCalls = 0;
+  const modelClient: ModelClient = {
+    backend: "mock",
+    async completeJson<T>(request: StructuredCompletionRequest): Promise<T> {
+      if (request.schemaName === "autonomous_next_step_v1") {
+        nextStepCalls += 1;
+        return {
+          isGoalMet: true,
+          reasoning: "done after exact holder stop",
+          nextUserInput: ""
+        } as T;
+      }
+      if (request.schemaName === "proactive_goal_v1") {
+        return {
+          proactiveGoal: "noop",
+          reasoning: "noop"
+        } as T;
+      }
+      throw new Error(`Unexpected schema ${request.schemaName}`);
+    }
+  };
+  const loop = new AutonomousLoop(
+    orchestrator as unknown as BrainOrchestrator,
+    modelClient,
+    { ...DEFAULT_BRAIN_CONFIG, runtime: { ...DEFAULT_BRAIN_CONFIG.runtime, isDaemonMode: false } }
+  );
+
+  await loop.run('Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.');
+
+  assert.equal(orchestrator.receivedInputs.length, 2);
+  assert.match(orchestrator.receivedInputs[1] ?? "", /leaseId="proc_preview_1"/i);
+  assert.match(orchestrator.receivedInputs[1] ?? "", /leaseId="proc_preview_2"/i);
+  assert.equal(nextStepCalls, 1);
+});
+
+test("AutonomousLoop retries the original move after an exact tracked holder shutdown-only step", async () => {
+  const orchestrator = new ScriptedOrchestrator([
+    [
+      buildBlockedFolderInUseShellResult("shell_lock_retry_1"),
+      buildApprovedInspectWorkspaceResourcesResult("inspect_workspace_retry_1", {
+        runtimeOwnershipInspection: true,
+        inspectionRecommendedNextAction: "stop_exact_tracked_holders",
+        inspectionPreviewProcessLeaseIds: "proc_preview_retry_1"
+      })
+    ],
+    [buildApprovedStopProcessResult("stop_process_retry_1", "proc_preview_retry_1")],
+    [buildApprovedShellResult("shell_move_retry_1", "Move-Item -LiteralPath drone-company -Destination drone-folder")]
+  ]);
+  let nextStepCalls = 0;
+  const modelClient: ModelClient = {
+    backend: "mock",
+    async completeJson<T>(request: StructuredCompletionRequest): Promise<T> {
+      if (request.schemaName === "autonomous_next_step_v1") {
+        nextStepCalls += 1;
+        return {
+          isGoalMet: true,
+          reasoning: "the remaining folders were moved after the holder shutdown",
+          nextUserInput: ""
+        } as T;
+      }
+      if (request.schemaName === "proactive_goal_v1") {
+        return {
+          proactiveGoal: "noop",
+          reasoning: "noop"
+        } as T;
+      }
+      throw new Error(`Unexpected schema ${request.schemaName}`);
+    }
+  };
+  const loop = new AutonomousLoop(
+    orchestrator as unknown as BrainOrchestrator,
+    modelClient,
+    { ...DEFAULT_BRAIN_CONFIG, runtime: { ...DEFAULT_BRAIN_CONFIG.runtime, isDaemonMode: false } }
+  );
+
+  await loop.run('Every folder with the name beginning in drone should go in "drone-folder" on my desktop.');
+
+  assert.equal(orchestrator.receivedInputs.length, 3);
+  assert.match(orchestrator.receivedInputs[1] ?? "", /leaseId="proc_preview_retry_1"/i);
+  assert.match(
+    orchestrator.receivedInputs[2] ?? "",
+    /Retry this original folder-organization goal now/i
+  );
+  assert.equal(nextStepCalls, 1);
+});
+
+test("AutonomousLoop retries the original move once after a clean inspection-only recovery step", async () => {
+  const orchestrator = new ScriptedOrchestrator([
+    [
+      buildApprovedInspectPathHoldersResult("inspect_path_retry_1", {
+        runtimeOwnershipInspection: true,
+        inspectionRecommendedNextAction: "collect_more_evidence",
+        inspectionOwnershipClassification: "unknown"
+      })
+    ],
+    [buildApprovedShellResult("shell_move_after_inspection_1", "Move-Item -LiteralPath drone-company -Destination drone-folder")]
+  ]);
+  let nextStepCalls = 0;
+  const modelClient: ModelClient = {
+    backend: "mock",
+    async completeJson<T>(request: StructuredCompletionRequest): Promise<T> {
+      if (request.schemaName === "autonomous_next_step_v1") {
+        nextStepCalls += 1;
+        return {
+          isGoalMet: true,
+          reasoning: "the remaining folders moved after the inspection retry",
+          nextUserInput: ""
+        } as T;
+      }
+      if (request.schemaName === "proactive_goal_v1") {
+        return {
+          proactiveGoal: "noop",
+          reasoning: "noop"
+        } as T;
+      }
+      throw new Error(`Unexpected schema ${request.schemaName}`);
+    }
+  };
+  const loop = new AutonomousLoop(
+    orchestrator as unknown as BrainOrchestrator,
+    modelClient,
+    { ...DEFAULT_BRAIN_CONFIG, runtime: { ...DEFAULT_BRAIN_CONFIG.runtime, isDaemonMode: false } }
+  );
+
+  await loop.run(
+    'Every folder with the name beginning in drone should go in "drone-folder" on my desktop.',
+    undefined,
+    undefined,
+    undefined,
+    "Continue workspace-recovery for the same goal. First run inspect_path_holders on the remaining blocked paths: 1) C:\\Users\\testuser\\Desktop\\drone-company-a and 2) C:\\Users\\testuser\\Desktop\\drone-company-b."
+  );
+
+  assert.equal(orchestrator.receivedInputs.length, 2);
+  assert.match(orchestrator.receivedInputs[1] ?? "", /Retry this original folder-organization goal now/i);
+  assert.equal(nextStepCalls, 1);
+});
+
+test("AutonomousLoop aborts cleanly when the move is still blocked after a post-inspection retry", async () => {
+  const orchestrator = new ScriptedOrchestrator([
+    [
+      buildApprovedInspectPathHoldersResult("inspect_path_retry_2", {
+        runtimeOwnershipInspection: true,
+        inspectionRecommendedNextAction: "collect_more_evidence",
+        inspectionOwnershipClassification: "unknown"
+      })
+    ],
+    [buildBlockedFolderInUseShellResult("shell_lock_after_inspection_retry_1")]
+  ]);
+  const loop = new AutonomousLoop(
+    orchestrator as unknown as BrainOrchestrator,
+    {
+      backend: "mock",
+      async completeJson(): Promise<never> {
+        throw new Error("evaluateNextStep should not run after the post-inspection retry stays blocked.");
+      }
+    },
+    { ...DEFAULT_BRAIN_CONFIG, runtime: { ...DEFAULT_BRAIN_CONFIG.runtime, isDaemonMode: false } }
+  );
+
+  let abortedReason = "";
+  await loop.run(
+    'Every folder with the name beginning in drone should go in "drone-folder" on my desktop.',
+    {
+      onGoalAborted: async (reason) => {
+        abortedReason = reason;
+      }
+    },
+    undefined,
+    undefined,
+    "Continue workspace-recovery for the same goal. First run inspect_path_holders on the remaining blocked paths: 1) C:\\Users\\testuser\\Desktop\\drone-company-a and 2) C:\\Users\\testuser\\Desktop\\drone-company-b."
+  );
+
+  assert.equal(orchestrator.receivedInputs.length, 2);
+  assert.match(abortedReason, /retried the move after inspection/i);
+  assert.match(abortedReason, /could not prove a safe exact holder/i);
+});
+
+test("AutonomousLoop emits retrying state updates for exact tracked workspace recovery", async () => {
+  const orchestrator = new ScriptedOrchestrator([
+    [
+      buildBlockedFolderInUseShellResult("shell_lock_state_1"),
+      buildApprovedInspectWorkspaceResourcesResult("inspect_workspace_state_1", {
+        runtimeOwnershipInspection: true,
+        inspectionRecommendedNextAction: "stop_exact_tracked_holders",
+        inspectionPreviewProcessLeaseIds: "proc_preview_state_1"
+      })
+    ],
+    [buildApprovedRespondResult("respond_after_state_retry")]
+  ]);
+  const modelClient: ModelClient = {
+    backend: "mock",
+    async completeJson<T>(request: StructuredCompletionRequest): Promise<T> {
+      if (request.schemaName === "autonomous_next_step_v1") {
+        return {
+          isGoalMet: true,
+          reasoning: "done after exact holder stop",
+          nextUserInput: ""
+        } as T;
+      }
+      if (request.schemaName === "proactive_goal_v1") {
+        return {
+          proactiveGoal: "noop",
+          reasoning: "noop"
+        } as T;
+      }
+      throw new Error(`Unexpected schema ${request.schemaName}`);
+    }
+  };
+  const loop = new AutonomousLoop(
+    orchestrator as unknown as BrainOrchestrator,
+    modelClient,
+    { ...DEFAULT_BRAIN_CONFIG, runtime: { ...DEFAULT_BRAIN_CONFIG.runtime, isDaemonMode: false } }
+  );
+  const states: string[] = [];
+
+  await loop.run(
+    'Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.',
+    {
+      onStateChange: async (update) => {
+        states.push(`${update.state}:${update.message}`);
+      }
+    }
+  );
+
+  assert.match(states[0] ?? "", /^starting:/i);
+  assert.ok(states.some((entry) => /^working:/i.test(entry)));
+  assert.ok(
+    states.some(
+      (entry) =>
+        /^retrying:/i.test(entry) &&
+        /exact tracked holders/i.test(entry)
+    )
+  );
+  assert.ok(states.some((entry) => /^completed:/i.test(entry)));
+});
+
+test("AutonomousLoop aborts when only untracked holder candidates remain for a locked organization request", async () => {
+  const orchestrator = new ScriptedOrchestrator([
+    [
+      buildBlockedFolderInUseShellResult("shell_lock_3"),
+      buildApprovedInspectWorkspaceResourcesResult("inspect_workspace_2", {
+        runtimeOwnershipInspection: true,
+        inspectionRecommendedNextAction: "clarify_before_untracked_shutdown",
+        inspectionUntrackedCandidatePids: "8801,8802"
+      })
+    ]
+  ]);
+  const loop = new AutonomousLoop(
+    orchestrator as unknown as BrainOrchestrator,
+    {
+      backend: "mock",
+      async completeJson(): Promise<never> {
+        throw new Error("evaluateNextStep should not call the model when clarification is required.");
+      }
+    },
+    { ...DEFAULT_BRAIN_CONFIG, runtime: { ...DEFAULT_BRAIN_CONFIG.runtime, isDaemonMode: false } }
+  );
+
+  let abortedReason = "";
+  await loop.run(
+    'Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.',
+    {
+      onGoalAborted: async (reason) => {
+        abortedReason = reason;
+      }
+    }
+  );
+
+  assert.equal(orchestrator.runCount, 1);
+  assert.match(abortedReason, /confirmation/i);
+  assert.match(abortedReason, /8801, 8802/i);
+});
+
+test("AutonomousLoop aborts cleanly when inspection finds a small likely non-preview holder set", async () => {
+  const orchestrator = new ScriptedOrchestrator([
+    [
+      buildBlockedFolderInUseShellResult("shell_lock_non_preview_likely_1"),
+      buildApprovedInspectWorkspaceResourcesResult("inspect_workspace_non_preview_likely_1", {
+        runtimeOwnershipInspection: true,
+        inspectionOwnershipClassification: "orphaned_attributable",
+        inspectionRecommendedNextAction: "clarify_before_likely_non_preview_shutdown",
+        inspectionUntrackedCandidatePids: "8810,8811",
+        inspectionUntrackedCandidateKinds: "editor_workspace,shell_workspace",
+        inspectionUntrackedCandidateNames: "Code.exe|explorer.exe",
+        inspectionUntrackedCandidateConfidences: "medium,medium",
+        inspectionUntrackedCandidateReasons:
+          "command_line_mentions_target_name|command_line_mentions_target_name"
+      })
+    ]
+  ]);
+  const loop = new AutonomousLoop(
+    orchestrator as unknown as BrainOrchestrator,
+    {
+      backend: "mock",
+      async completeJson(): Promise<never> {
+        throw new Error("evaluateNextStep should not call the model when a likely non-preview holder confirmation is required.");
+      }
+    },
+    { ...DEFAULT_BRAIN_CONFIG, runtime: { ...DEFAULT_BRAIN_CONFIG.runtime, isDaemonMode: false } }
+  );
+
+  let abortedReason = "";
+  await loop.run(
+    'Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.',
+    {
+      onGoalAborted: async (reason) => {
+        abortedReason = reason;
+      }
+    }
+  );
+
+  assert.equal(orchestrator.runCount, 1);
+  assert.match(abortedReason, /small set of likely local editor or shell holders/i);
+  assert.match(abortedReason, /8810, 8811/i);
+});
+
+test("AutonomousLoop retries the move once when inspection finds only stale tracked workspace records", async () => {
+  const orchestrator = new ScriptedOrchestrator([
+    [
+      buildBlockedFolderInUseShellResult("shell_lock_4"),
+      buildApprovedInspectWorkspaceResourcesResult("inspect_workspace_3", {
+        runtimeOwnershipInspection: true,
+        inspectionOwnershipClassification: "stale_tracked",
+        inspectionRecommendedNextAction: "collect_more_evidence",
+        inspectionStalePreviewProcessLeaseIds: "proc_preview_old_1",
+        inspectionStaleBrowserSessionIds: "browser_session:old_preview"
+      })
+    ],
+    [buildApprovedShellResult("shell_move_after_stale_inspection_1", "Move-Item -LiteralPath drone-company -Destination drone-folder")]
+  ]);
+  let nextStepCalls = 0;
+  const loop = new AutonomousLoop(
+    orchestrator as unknown as BrainOrchestrator,
+    {
+      backend: "mock",
+      async completeJson<T>(request: StructuredCompletionRequest): Promise<T> {
+        if (request.schemaName === "autonomous_next_step_v1") {
+          nextStepCalls += 1;
+          return {
+            isGoalMet: true,
+            reasoning: "the move succeeded after the stale-only retry",
+            nextUserInput: ""
+          } as T;
+        }
+        if (request.schemaName === "proactive_goal_v1") {
+          return {
+            proactiveGoal: "noop",
+            reasoning: "noop"
+          } as T;
+        }
+        throw new Error(`Unexpected schema ${request.schemaName}`);
+      }
+    },
+    { ...DEFAULT_BRAIN_CONFIG, runtime: { ...DEFAULT_BRAIN_CONFIG.runtime, isDaemonMode: false } }
+  );
+
+  await loop.run(
+    'Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.',
+    undefined
+  );
+
+  assert.equal(orchestrator.receivedInputs.length, 2);
+  assert.match(orchestrator.receivedInputs[1] ?? "", /Retry this original folder-organization goal now/i);
+  assert.equal(nextStepCalls, 1);
+});
+
+test("AutonomousLoop aborts cleanly when inspection finds only orphaned assistant browser state", async () => {
+  const orchestrator = new ScriptedOrchestrator([
+    [
+      buildBlockedFolderInUseShellResult("shell_lock_5"),
+      buildApprovedInspectWorkspaceResourcesResult("inspect_workspace_4", {
+        runtimeOwnershipInspection: true,
+        inspectionOwnershipClassification: "orphaned_attributable",
+        inspectionRecommendedNextAction: "manual_orphaned_browser_cleanup",
+        inspectionOrphanedBrowserSessionIds: "browser_session:old_browser_preview"
+      })
+    ]
+  ]);
+  const loop = new AutonomousLoop(
+    orchestrator as unknown as BrainOrchestrator,
+    {
+      backend: "mock",
+      async completeJson(): Promise<never> {
+        throw new Error("evaluateNextStep should not call the model when orphaned browser cleanup must be handled manually.");
+      }
+    },
+    { ...DEFAULT_BRAIN_CONFIG, runtime: { ...DEFAULT_BRAIN_CONFIG.runtime, isDaemonMode: false } }
+  );
+
+  let abortedReason = "";
+  await loop.run(
+    'Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.',
+    {
+      onGoalAborted: async (reason) => {
+        abortedReason = reason;
+      }
+    }
+  );
+
+  assert.equal(orchestrator.runCount, 1);
+  assert.match(abortedReason, /older assistant browser windows/i);
+  assert.match(abortedReason, /no longer have direct runtime control/i);
+});
+
+test("AutonomousLoop aborts cleanly when inspection finds only non-preview local holders", async () => {
+  const orchestrator = new ScriptedOrchestrator([
+    [
+      buildBlockedFolderInUseShellResult("shell_lock_non_preview_1"),
+      buildApprovedInspectWorkspaceResourcesResult("inspect_workspace_non_preview_1", {
+        runtimeOwnershipInspection: true,
+        inspectionOwnershipClassification: "orphaned_attributable",
+        inspectionRecommendedNextAction: "manual_non_preview_holder_cleanup",
+        inspectionUntrackedCandidatePids: "8810",
+        inspectionUntrackedCandidateKinds: "editor_workspace",
+        inspectionUntrackedCandidateNames: "Code.exe"
+      })
+    ]
+  ]);
+  const loop = new AutonomousLoop(
+    orchestrator as unknown as BrainOrchestrator,
+    {
+      backend: "mock",
+      async completeJson(): Promise<never> {
+        throw new Error("evaluateNextStep should not call the model when only non-preview local holders remain.");
+      }
+    },
+    { ...DEFAULT_BRAIN_CONFIG, runtime: { ...DEFAULT_BRAIN_CONFIG.runtime, isDaemonMode: false } }
+  );
+
+  let abortedReason = "";
+  await loop.run(
+    'Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.',
+    {
+      onGoalAborted: async (reason) => {
+        abortedReason = reason;
+      }
+    }
+  );
+
+  assert.equal(orchestrator.runCount, 1);
+  assert.match(abortedReason, /non-preview local holders/i);
+  assert.match(abortedReason, /editor, shell, or sync processes/i);
+});
+
+test("AutonomousLoop aborts cleanly with a targeted confirmation need for one high-confidence non-preview holder", async () => {
+  const orchestrator = new ScriptedOrchestrator([
+    [
+      buildBlockedFolderInUseShellResult("shell_lock_non_preview_exact_1"),
+      buildApprovedInspectWorkspaceResourcesResult("inspect_workspace_non_preview_exact_1", {
+        runtimeOwnershipInspection: true,
+        inspectionOwnershipClassification: "orphaned_attributable",
+        inspectionRecommendedNextAction: "clarify_before_exact_non_preview_shutdown",
+        inspectionUntrackedCandidatePids: "8840",
+        inspectionUntrackedCandidateKinds: "editor_workspace",
+        inspectionUntrackedCandidateNames: "Code.exe",
+        inspectionUntrackedCandidateConfidences: "high",
+        inspectionUntrackedCandidateReasons: "command_line_matches_target_path"
+      })
+    ]
+  ]);
+  const loop = new AutonomousLoop(
+    orchestrator as unknown as BrainOrchestrator,
+    {
+      backend: "mock",
+      async completeJson(): Promise<never> {
+        throw new Error("evaluateNextStep should not call the model when a targeted exact-holder confirmation is required.");
+      }
+    },
+    { ...DEFAULT_BRAIN_CONFIG, runtime: { ...DEFAULT_BRAIN_CONFIG.runtime, isDaemonMode: false } }
+  );
+
+  let abortedReason = "";
+  await loop.run(
+    'Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.',
+    {
+      onGoalAborted: async (reason) => {
+        abortedReason = reason;
+      }
+    }
+  );
+
+  assert.equal(orchestrator.runCount, 1);
+  assert.match(abortedReason, /one high-confidence local holder/i);
+  assert.match(abortedReason, /Code \(pid 8840\)/i);
+});
+
+test("AutonomousLoop aborts cleanly with a targeted confirmation need for one high-confidence sync holder", async () => {
+  const orchestrator = new ScriptedOrchestrator([
+    [
+      buildBlockedFolderInUseShellResult("shell_lock_non_preview_sync_exact_1"),
+      buildApprovedInspectWorkspaceResourcesResult("inspect_workspace_non_preview_sync_exact_1", {
+        runtimeOwnershipInspection: true,
+        inspectionOwnershipClassification: "orphaned_attributable",
+        inspectionRecommendedNextAction: "clarify_before_exact_non_preview_shutdown",
+        inspectionUntrackedCandidatePids: "8850",
+        inspectionUntrackedCandidateKinds: "sync_client",
+        inspectionUntrackedCandidateNames: "OneDrive.exe",
+        inspectionUntrackedCandidateConfidences: "high",
+        inspectionUntrackedCandidateReasons: "command_line_matches_target_path"
+      })
+    ]
+  ]);
+  const loop = new AutonomousLoop(
+    orchestrator as unknown as BrainOrchestrator,
+    {
+      backend: "mock",
+      async completeJson(): Promise<never> {
+        throw new Error("evaluateNextStep should not call the model when a targeted exact sync-holder confirmation is required.");
+      }
+    },
+    { ...DEFAULT_BRAIN_CONFIG, runtime: { ...DEFAULT_BRAIN_CONFIG.runtime, isDaemonMode: false } }
+  );
+
+  let abortedReason = "";
+  await loop.run(
+    'Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.',
+    {
+      onGoalAborted: async (reason) => {
+        abortedReason = reason;
+      }
+    }
+  );
+
+  assert.equal(orchestrator.runCount, 1);
+  assert.match(abortedReason, /one high-confidence local holder/i);
+  assert.match(abortedReason, /OneDrive \(pid 8850\)/i);
+});
+
+test("AutonomousLoop aborts cleanly with a contextual confirmation need for a still-bounded four-holder local editor and shell set", async () => {
+  const orchestrator = new ScriptedOrchestrator([
+    [
+      buildBlockedFolderInUseShellResult("shell_lock_non_preview_likely_four_1"),
+      buildApprovedInspectWorkspaceResourcesResult("inspect_workspace_non_preview_likely_four_1", {
+        runtimeOwnershipInspection: true,
+        inspectionOwnershipClassification: "orphaned_attributable",
+        inspectionRecommendedNextAction: "clarify_before_likely_non_preview_shutdown",
+        inspectionUntrackedCandidatePids: "8810,8811,8812,8813",
+        inspectionUntrackedCandidateKinds:
+          "editor_workspace,shell_workspace,shell_workspace,editor_workspace",
+        inspectionUntrackedCandidateNames:
+          "Code.exe|explorer.exe|powershell.exe|Code.exe",
+        inspectionUntrackedCandidateConfidences: "medium,medium,medium,medium",
+        inspectionUntrackedCandidateReasons:
+          "command_line_mentions_target_name|command_line_mentions_target_name|command_line_mentions_target_name|command_line_mentions_target_name"
+      })
+    ]
+  ]);
+  const loop = new AutonomousLoop(
+    orchestrator as unknown as BrainOrchestrator,
+    {
+      backend: "mock",
+      async completeJson(): Promise<never> {
+        throw new Error("evaluateNextStep should not call the model when a contextual non-preview clarification is required.");
+      }
+    },
+    { ...DEFAULT_BRAIN_CONFIG, runtime: { ...DEFAULT_BRAIN_CONFIG.runtime, isDaemonMode: false } }
+  );
+
+  let abortedReason = "";
+  await loop.run(
+    'Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.',
+    {
+      onGoalAborted: async (reason) => {
+        abortedReason = reason;
+      }
+    }
+  );
+
+  assert.equal(orchestrator.runCount, 1);
+  assert.match(abortedReason, /small set of likely local editor or shell holders/i);
+  assert.match(abortedReason, /8810, 8811, 8812, 8813/i);
+});
+
+test("AutonomousLoop aborts cleanly with a contextual confirmation need for a broader five-holder local editor and shell set", async () => {
+  const orchestrator = new ScriptedOrchestrator([
+    [
+      buildBlockedFolderInUseShellResult("shell_lock_non_preview_likely_five_1"),
+      buildApprovedInspectWorkspaceResourcesResult("inspect_workspace_non_preview_likely_five_1", {
+        runtimeOwnershipInspection: true,
+        inspectionOwnershipClassification: "orphaned_attributable",
+        inspectionRecommendedNextAction: "clarify_before_likely_non_preview_shutdown",
+        inspectionUntrackedCandidatePids: "8820,8821,8822,8823,8824",
+        inspectionUntrackedCandidateKinds:
+          "editor_workspace,shell_workspace,shell_workspace,editor_workspace,shell_workspace",
+        inspectionUntrackedCandidateNames:
+          "Code.exe|explorer.exe|powershell.exe|Code.exe|explorer.exe",
+        inspectionUntrackedCandidateConfidences: "medium,medium,medium,low,low",
+        inspectionUntrackedCandidateReasons:
+          "command_line_mentions_target_name|command_line_mentions_target_name|command_line_mentions_target_name|command_line_mentions_target_name|command_line_mentions_target_name"
+      })
+    ]
+  ]);
+  const loop = new AutonomousLoop(
+    orchestrator as unknown as BrainOrchestrator,
+    {
+      backend: "mock",
+      async completeJson(): Promise<never> {
+        throw new Error("evaluateNextStep should not call the model when a broader contextual non-preview clarification is required.");
+      }
+    },
+    { ...DEFAULT_BRAIN_CONFIG, runtime: { ...DEFAULT_BRAIN_CONFIG.runtime, isDaemonMode: false } }
+  );
+
+  let abortedReason = "";
+  await loop.run(
+    'Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.',
+    {
+      onGoalAborted: async (reason) => {
+        abortedReason = reason;
+      }
+    }
+  );
+
+  assert.equal(orchestrator.runCount, 1);
+  assert.match(abortedReason, /broader inspected local editor or shell holder set/i);
+  assert.match(abortedReason, /8820, 8821, 8822, 8823, 8824/i);
+});
+
+test("AutonomousLoop aborts cleanly with a contextual confirmation need for a broader seven-holder local editor and shell set", async () => {
+  const orchestrator = new ScriptedOrchestrator([
+    [
+      buildBlockedFolderInUseShellResult("shell_lock_non_preview_likely_seven_1"),
+      buildApprovedInspectWorkspaceResourcesResult("inspect_workspace_non_preview_likely_seven_1", {
+        runtimeOwnershipInspection: true,
+        inspectionOwnershipClassification: "orphaned_attributable",
+        inspectionRecommendedNextAction: "clarify_before_likely_non_preview_shutdown",
+        inspectionUntrackedCandidatePids: "8820,8821,8822,8823,8824,8825,8826",
+        inspectionUntrackedCandidateKinds:
+          "editor_workspace,shell_workspace,shell_workspace,editor_workspace,shell_workspace,shell_workspace,editor_workspace",
+        inspectionUntrackedCandidateNames:
+          "Code.exe|explorer.exe|powershell.exe|Code.exe|explorer.exe|powershell.exe|Code.exe",
+        inspectionUntrackedCandidateConfidences: "medium,medium,medium,medium,low,low,low",
+        inspectionUntrackedCandidateReasons:
+          "command_line_mentions_target_name|command_line_mentions_target_name|command_line_mentions_target_name|command_line_mentions_target_name|command_line_mentions_target_name|command_line_mentions_target_name|command_line_mentions_target_name"
+      })
+    ]
+  ]);
+  const loop = new AutonomousLoop(
+    orchestrator as unknown as BrainOrchestrator,
+    {
+      backend: "mock",
+      async completeJson(): Promise<never> {
+        throw new Error("evaluateNextStep should not call the model when a broader contextual non-preview clarification is required.");
+      }
+    },
+    { ...DEFAULT_BRAIN_CONFIG, runtime: { ...DEFAULT_BRAIN_CONFIG.runtime, isDaemonMode: false } }
+  );
+
+  let abortedReason = "";
+  await loop.run(
+    'Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.',
+    {
+      onGoalAborted: async (reason) => {
+        abortedReason = reason;
+      }
+    }
+  );
+
+  assert.equal(orchestrator.runCount, 1);
+  assert.match(abortedReason, /broader inspected local editor or shell holder set/i);
+  assert.match(abortedReason, /8820, 8821, 8822, 8823, 8824, 8825, 8826/i);
+});
+
+test("AutonomousLoop aborts cleanly with a contextual confirmation need for a bounded mixed editor shell and sync holder set", async () => {
+  const orchestrator = new ScriptedOrchestrator([
+    [
+      buildBlockedFolderInUseShellResult("shell_lock_non_preview_likely_mixed_1"),
+      buildApprovedInspectWorkspaceResourcesResult("inspect_workspace_non_preview_likely_mixed_1", {
+        runtimeOwnershipInspection: true,
+        inspectionOwnershipClassification: "orphaned_attributable",
+        inspectionRecommendedNextAction: "clarify_before_likely_non_preview_shutdown",
+        inspectionUntrackedCandidatePids: "8830,8831,8832",
+        inspectionUntrackedCandidateKinds:
+          "editor_workspace,shell_workspace,sync_client",
+        inspectionUntrackedCandidateNames:
+          "Code.exe|explorer.exe|OneDrive.exe",
+        inspectionUntrackedCandidateConfidences: "medium,medium,medium",
+        inspectionUntrackedCandidateReasons:
+          "command_line_mentions_target_name|command_line_mentions_target_name|command_line_mentions_target_name"
+      })
+    ]
+  ]);
+  const loop = new AutonomousLoop(
+    orchestrator as unknown as BrainOrchestrator,
+    {
+      backend: "mock",
+      async completeJson(): Promise<never> {
+        throw new Error("evaluateNextStep should not call the model when a bounded mixed non-preview clarification is required.");
+      }
+    },
+    { ...DEFAULT_BRAIN_CONFIG, runtime: { ...DEFAULT_BRAIN_CONFIG.runtime, isDaemonMode: false } }
+  );
+
+  let abortedReason = "";
+  await loop.run(
+    'Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.',
+    {
+      onGoalAborted: async (reason) => {
+        abortedReason = reason;
+      }
+    }
+  );
+
+  assert.equal(orchestrator.runCount, 1);
+  assert.match(abortedReason, /small inspected local holder set across editor, shell, or sync processes/i);
+  assert.match(abortedReason, /8830, 8831, 8832/i);
+});
+
+test("AutonomousLoop aborts cleanly with a contextual confirmation need for a bounded mixed holder set with a nearby exact-path local process", async () => {
+  const orchestrator = new ScriptedOrchestrator([
+    [
+      buildBlockedFolderInUseShellResult("shell_lock_non_preview_likely_nearby_local_1"),
+      buildApprovedInspectWorkspaceResourcesResult("inspect_workspace_non_preview_likely_nearby_local_1", {
+        runtimeOwnershipInspection: true,
+        inspectionOwnershipClassification: "orphaned_attributable",
+        inspectionRecommendedNextAction: "clarify_before_likely_non_preview_shutdown",
+        inspectionUntrackedCandidatePids: "8830,8831,8832",
+        inspectionUntrackedCandidateKinds:
+          "editor_workspace,shell_workspace,unknown_local_process",
+        inspectionUntrackedCandidateNames:
+          "Code.exe|explorer.exe|AcmeDesktopHelper.exe",
+        inspectionUntrackedCandidateConfidences: "medium,medium,medium",
+        inspectionUntrackedCandidateReasons:
+          "command_line_mentions_target_name|command_line_mentions_target_name|command_line_matches_target_path"
+      })
+    ]
+  ]);
+  const loop = new AutonomousLoop(
+    orchestrator as unknown as BrainOrchestrator,
+    {
+      backend: "mock",
+      async completeJson(): Promise<never> {
+        throw new Error("evaluateNextStep should not call the model when a bounded mixed nearby-process clarification is required.");
+      }
+    },
+    { ...DEFAULT_BRAIN_CONFIG, runtime: { ...DEFAULT_BRAIN_CONFIG.runtime, isDaemonMode: false } }
+  );
+
+  let abortedReason = "";
+  await loop.run(
+    'Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.',
+    {
+      onGoalAborted: async (reason) => {
+        abortedReason = reason;
+      }
+    }
+  );
+
+  assert.equal(orchestrator.runCount, 1);
+  assert.match(
+    abortedReason,
+    /small inspected local holder set across editor, shell, or nearby local processes/i
+  );
+  assert.match(abortedReason, /8830, 8831, 8832/i);
+});
+
+test("AutonomousLoop aborts cleanly with a contextual confirmation need for a broader five-holder mixed set with one nearby exact-path local process", async () => {
+  const orchestrator = new ScriptedOrchestrator([
+    [
+      buildBlockedFolderInUseShellResult("shell_lock_non_preview_likely_broader_nearby_local_1"),
+      buildApprovedInspectWorkspaceResourcesResult("inspect_workspace_non_preview_likely_broader_nearby_local_1", {
+        runtimeOwnershipInspection: true,
+        inspectionOwnershipClassification: "orphaned_attributable",
+        inspectionRecommendedNextAction: "clarify_before_likely_non_preview_shutdown",
+        inspectionUntrackedCandidatePids: "8840,8841,8842,8843,8844",
+        inspectionUntrackedCandidateKinds:
+          "editor_workspace,shell_workspace,shell_workspace,editor_workspace,unknown_local_process",
+        inspectionUntrackedCandidateNames:
+          "Code.exe|explorer.exe|powershell.exe|Code.exe|AcmeDesktopHelper.exe",
+        inspectionUntrackedCandidateConfidences: "medium,medium,medium,low,medium",
+        inspectionUntrackedCandidateReasons:
+          "command_line_mentions_target_name|command_line_mentions_target_name|command_line_mentions_target_name|command_line_mentions_target_name|command_line_matches_target_path"
+      })
+    ]
+  ]);
+  const loop = new AutonomousLoop(
+    orchestrator as unknown as BrainOrchestrator,
+    {
+      backend: "mock",
+      async completeJson(): Promise<never> {
+        throw new Error("evaluateNextStep should not call the model when a broader nearby-process clarification is required.");
+      }
+    },
+    { ...DEFAULT_BRAIN_CONFIG, runtime: { ...DEFAULT_BRAIN_CONFIG.runtime, isDaemonMode: false } }
+  );
+
+  let abortedReason = "";
+  await loop.run(
+    'Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.',
+    {
+      onGoalAborted: async (reason) => {
+        abortedReason = reason;
+      }
+    }
+  );
+
+  assert.equal(orchestrator.runCount, 1);
+  assert.match(
+    abortedReason,
+    /broader inspected local holder set across editor, shell, or nearby local processes/i
+  );
+  assert.match(abortedReason, /8840, 8841, 8842, 8843, 8844/i);
+});
+
+test("AutonomousLoop aborts cleanly with a contextual confirmation need for a broader six-holder mixed set including sync and one nearby exact-path local process", async () => {
+  const orchestrator = new ScriptedOrchestrator([
+    [
+      buildBlockedFolderInUseShellResult("shell_lock_non_preview_likely_broader_sync_nearby_local_1"),
+      buildApprovedInspectWorkspaceResourcesResult("inspect_workspace_non_preview_likely_broader_sync_nearby_local_1", {
+        runtimeOwnershipInspection: true,
+        inspectionOwnershipClassification: "orphaned_attributable",
+        inspectionRecommendedNextAction: "clarify_before_likely_non_preview_shutdown",
+        inspectionUntrackedCandidatePids: "8850,8851,8852,8853,8854,8855",
+        inspectionUntrackedCandidateKinds:
+          "editor_workspace,shell_workspace,shell_workspace,editor_workspace,sync_client,unknown_local_process",
+        inspectionUntrackedCandidateNames:
+          "Code.exe|explorer.exe|powershell.exe|Code.exe|OneDrive.exe|AcmeDesktopHelper.exe",
+        inspectionUntrackedCandidateConfidences: "medium,medium,medium,low,medium,medium",
+        inspectionUntrackedCandidateReasons:
+          "command_line_mentions_target_name|command_line_mentions_target_name|command_line_mentions_target_name|command_line_mentions_target_name|command_line_mentions_target_name|command_line_matches_target_path"
+      })
+    ]
+  ]);
+  const loop = new AutonomousLoop(
+    orchestrator as unknown as BrainOrchestrator,
+    {
+      backend: "mock",
+      async completeJson(): Promise<never> {
+        throw new Error("evaluateNextStep should not call the model when a broader sync-plus-nearby clarification is required.");
+      }
+    },
+    { ...DEFAULT_BRAIN_CONFIG, runtime: { ...DEFAULT_BRAIN_CONFIG.runtime, isDaemonMode: false } }
+  );
+
+  let abortedReason = "";
+  await loop.run(
+    'Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.',
+    {
+      onGoalAborted: async (reason) => {
+        abortedReason = reason;
+      }
+    }
+  );
+
+  assert.equal(orchestrator.runCount, 1);
+  assert.match(
+    abortedReason,
+    /broader inspected local holder set across editor, shell, sync, or nearby local processes/i
+  );
+  assert.match(abortedReason, /8850, 8851, 8852, 8853, 8854, 8855/i);
+});
+
+test("AutonomousLoop aborts cleanly with a contextual confirmation need for a broader seven-holder mixed set including sync and one nearby exact-path local process", async () => {
+  const orchestrator = new ScriptedOrchestrator([
+    [
+      buildBlockedFolderInUseShellResult("shell_lock_non_preview_likely_broader_sync_nearby_local_2"),
+      buildApprovedInspectWorkspaceResourcesResult("inspect_workspace_non_preview_likely_broader_sync_nearby_local_2", {
+        runtimeOwnershipInspection: true,
+        inspectionOwnershipClassification: "orphaned_attributable",
+        inspectionRecommendedNextAction: "clarify_before_likely_non_preview_shutdown",
+        inspectionUntrackedCandidatePids: "8860,8861,8862,8863,8864,8865,8866",
+        inspectionUntrackedCandidateKinds:
+          "editor_workspace,shell_workspace,shell_workspace,editor_workspace,sync_client,shell_workspace,unknown_local_process",
+        inspectionUntrackedCandidateNames:
+          "Code.exe|explorer.exe|powershell.exe|Code.exe|OneDrive.exe|cmd.exe|AcmeDesktopHelper.exe",
+        inspectionUntrackedCandidateConfidences: "medium,medium,medium,low,medium,low,medium",
+        inspectionUntrackedCandidateReasons:
+          "command_line_mentions_target_name|command_line_mentions_target_name|command_line_mentions_target_name|command_line_mentions_target_name|command_line_mentions_target_name|command_line_mentions_target_name|command_line_matches_target_path"
+      })
+    ]
+  ]);
+  const loop = new AutonomousLoop(
+    orchestrator as unknown as BrainOrchestrator,
+    {
+      backend: "mock",
+      async completeJson(): Promise<never> {
+        throw new Error("evaluateNextStep should not call the model when a broader seven-holder sync-plus-nearby clarification is required.");
+      }
+    },
+    { ...DEFAULT_BRAIN_CONFIG, runtime: { ...DEFAULT_BRAIN_CONFIG.runtime, isDaemonMode: false } }
+  );
+
+  let abortedReason = "";
+  await loop.run(
+    'Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.',
+    {
+      onGoalAborted: async (reason) => {
+        abortedReason = reason;
+      }
+    }
+  );
+
+  assert.equal(orchestrator.runCount, 1);
+  assert.match(
+    abortedReason,
+    /broader inspected local holder set across editor, shell, sync, or nearby local processes/i
+  );
+  assert.match(abortedReason, /8860, 8861, 8862, 8863, 8864, 8865, 8866/i);
+});
+
+test("AutonomousLoop aborts cleanly with a contextual confirmation need for a broader eight-holder mixed set including sync and one nearby exact-path local process", async () => {
+  const orchestrator = new ScriptedOrchestrator([
+    [
+      buildBlockedFolderInUseShellResult("shell_lock_non_preview_likely_broader_sync_nearby_local_3"),
+      buildApprovedInspectWorkspaceResourcesResult("inspect_workspace_non_preview_likely_broader_sync_nearby_local_3", {
+        runtimeOwnershipInspection: true,
+        inspectionOwnershipClassification: "orphaned_attributable",
+        inspectionRecommendedNextAction: "clarify_before_likely_non_preview_shutdown",
+        inspectionUntrackedCandidatePids: "8870,8871,8872,8873,8874,8875,8876,8877",
+        inspectionUntrackedCandidateKinds:
+          "editor_workspace,shell_workspace,shell_workspace,editor_workspace,sync_client,shell_workspace,editor_workspace,unknown_local_process",
+        inspectionUntrackedCandidateNames:
+          "Code.exe|explorer.exe|powershell.exe|Code.exe|OneDrive.exe|cmd.exe|Code.exe|AcmeDesktopHelper.exe",
+        inspectionUntrackedCandidateConfidences: "medium,medium,medium,low,medium,low,medium,medium",
+        inspectionUntrackedCandidateReasons:
+          "command_line_mentions_target_name|command_line_mentions_target_name|command_line_mentions_target_name|command_line_mentions_target_name|command_line_mentions_target_name|command_line_mentions_target_name|command_line_mentions_target_name|command_line_matches_target_path"
+      })
+    ]
+  ]);
+  const loop = new AutonomousLoop(
+    orchestrator as unknown as BrainOrchestrator,
+    {
+      backend: "mock",
+      async completeJson(): Promise<never> {
+        throw new Error("evaluateNextStep should not call the model when a broader eight-holder sync-plus-nearby clarification is required.");
+      }
+    },
+    { ...DEFAULT_BRAIN_CONFIG, runtime: { ...DEFAULT_BRAIN_CONFIG.runtime, isDaemonMode: false } }
+  );
+
+  let abortedReason = "";
+  await loop.run(
+    'Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.',
+    {
+      onGoalAborted: async (reason) => {
+        abortedReason = reason;
+      }
+    }
+  );
+
+  assert.equal(orchestrator.runCount, 1);
+  assert.match(
+    abortedReason,
+    /broader inspected local holder set across editor, shell, sync, or nearby local processes/i
+  );
+  assert.match(abortedReason, /8870, 8871, 8872, 8873, 8874, 8875, 8876, 8877/i);
+});
+
+test("AutonomousLoop aborts cleanly with a targeted confirmation need for multiple high-confidence non-preview holders", async () => {
+  const orchestrator = new ScriptedOrchestrator([
+    [
+      buildBlockedFolderInUseShellResult("shell_lock_non_preview_exact_multi_1"),
+      buildApprovedInspectWorkspaceResourcesResult("inspect_workspace_non_preview_exact_multi_1", {
+        runtimeOwnershipInspection: true,
+        inspectionOwnershipClassification: "orphaned_attributable",
+        inspectionRecommendedNextAction: "clarify_before_exact_non_preview_shutdown",
+        inspectionUntrackedCandidatePids: "8840,8841,8842",
+        inspectionUntrackedCandidateKinds: "editor_workspace,shell_workspace,shell_workspace",
+        inspectionUntrackedCandidateNames: "Code.exe|explorer.exe|powershell.exe",
+        inspectionUntrackedCandidateConfidences: "high,high,low",
+        inspectionUntrackedCandidateReasons:
+          "command_line_matches_target_path|command_line_matches_target_path|command_line_mentions_target_name"
+      })
+    ]
+  ]);
+  const loop = new AutonomousLoop(
+    orchestrator as unknown as BrainOrchestrator,
+    {
+      backend: "mock",
+      async completeJson(): Promise<never> {
+        throw new Error("evaluateNextStep should not call the model when targeted exact-holder confirmation is required.");
+      }
+    },
+    { ...DEFAULT_BRAIN_CONFIG, runtime: { ...DEFAULT_BRAIN_CONFIG.runtime, isDaemonMode: false } }
+  );
+
+  let abortedReason = "";
+  await loop.run(
+    'Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.',
+    {
+      onGoalAborted: async (reason) => {
+        abortedReason = reason;
+      }
+    }
+  );
+
+  assert.equal(orchestrator.runCount, 1);
+  assert.match(abortedReason, /2 high-confidence local holders/i);
+  assert.match(abortedReason, /Code \(pid 8840\)/i);
+  assert.match(abortedReason, /explorer \(pid 8841\)/i);
+});
+
+test("AutonomousLoop aborts cleanly with contextual manual cleanup wording for a broader nine-holder local family", async () => {
+  const orchestrator = new ScriptedOrchestrator([
+    [
+      buildBlockedFolderInUseShellResult("shell_lock_non_preview_contextual_1"),
+      buildApprovedInspectWorkspaceResourcesResult("inspect_workspace_non_preview_contextual_1", {
+        runtimeOwnershipInspection: true,
+        inspectionOwnershipClassification: "orphaned_attributable",
+        inspectionRecommendedNextAction: "manual_non_preview_holder_cleanup",
+        inspectionUntrackedCandidatePids: "8880,8881,8882,8883,8884,8885,8886,8887,8888",
+        inspectionUntrackedCandidateKinds:
+          "shell_workspace,shell_workspace,shell_workspace,shell_workspace,shell_workspace,shell_workspace,shell_workspace,shell_workspace,unknown_local_process",
+        inspectionUntrackedCandidateNames:
+          "explorer.exe|powershell.exe|explorer.exe|powershell.exe|explorer.exe|powershell.exe|explorer.exe|powershell.exe|AcmeDesktopHelper.exe",
+        inspectionUntrackedCandidateConfidences:
+          "medium,medium,low,medium,low,medium,low,medium,medium",
+        inspectionUntrackedCandidateReasons:
+          "command_line_mentions_target_name|command_line_mentions_target_name|command_line_mentions_target_name|command_line_mentions_target_name|command_line_mentions_target_name|command_line_mentions_target_name|command_line_mentions_target_name|command_line_mentions_target_name|command_line_matches_target_path"
+      })
+    ]
+  ]);
+  const loop = new AutonomousLoop(
+    orchestrator as unknown as BrainOrchestrator,
+    {
+      backend: "mock",
+      async completeJson(): Promise<never> {
+        throw new Error("evaluateNextStep should not call the model when broader contextual manual cleanup is required.");
+      }
+    },
+    { ...DEFAULT_BRAIN_CONFIG, runtime: { ...DEFAULT_BRAIN_CONFIG.runtime, isDaemonMode: false } }
+  );
+
+  let abortedReason = "";
+  await loop.run(
+    'Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.',
+    {
+      onGoalAborted: async (reason) => {
+        abortedReason = reason;
+      }
+    }
+  );
+
+  assert.equal(orchestrator.runCount, 1);
+  assert.match(
+    abortedReason,
+    /9 likely local non-preview holders across editor, shell, or nearby local processes/i
+  );
+  assert.match(abortedReason, /outside the confirmation lane/i);
+  assert.match(abortedReason, /8880, 8881, 8882, 8883, 8884, 8885, 8886, 8887, 8888/i);
+});
+
+test("AutonomousLoop aborts cleanly with contextual manual cleanup wording for a grouped thirteen-holder local family", async () => {
+  const orchestrator = new ScriptedOrchestrator([
+    [
+      buildBlockedFolderInUseShellResult("shell_lock_non_preview_contextual_grouped_1"),
+      buildApprovedInspectWorkspaceResourcesResult(
+        "inspect_workspace_non_preview_contextual_grouped_1",
+        {
+          runtimeOwnershipInspection: true,
+          inspectionOwnershipClassification: "orphaned_attributable",
+          inspectionRecommendedNextAction: "manual_non_preview_holder_cleanup",
+          inspectionUntrackedCandidatePids:
+            "8890,8891,8892,8893,8894,8895,8896,8897,8898,8899,8900,8901,8902",
+          inspectionUntrackedCandidateKinds:
+            "editor_workspace,shell_workspace,shell_workspace,editor_workspace,shell_workspace,shell_workspace,editor_workspace,shell_workspace,shell_workspace,editor_workspace,shell_workspace,shell_workspace,unknown_local_process",
+          inspectionUntrackedCandidateNames:
+            "Code.exe|explorer.exe|powershell.exe|Code.exe|explorer.exe|powershell.exe|Code.exe|explorer.exe|powershell.exe|Code.exe|explorer.exe|powershell.exe|AcmeDesktopHelper.exe",
+          inspectionUntrackedCandidateConfidences:
+            "medium,medium,medium,medium,medium,medium,low,low,medium,low,low,medium,medium",
+          inspectionUntrackedCandidateReasons:
+            "command_line_mentions_target_name|command_line_mentions_target_name|command_line_mentions_target_name|command_line_mentions_target_name|command_line_mentions_target_name|command_line_mentions_target_name|command_line_mentions_target_name|command_line_mentions_target_name|command_line_mentions_target_name|command_line_mentions_target_name|command_line_mentions_target_name|command_line_mentions_target_name|command_line_matches_target_path"
+        }
+      )
+    ]
+  ]);
+  const loop = new AutonomousLoop(
+    orchestrator as unknown as BrainOrchestrator,
+    {
+      backend: "mock",
+      async completeJson(): Promise<never> {
+        throw new Error(
+          "evaluateNextStep should not call the model when grouped contextual manual cleanup is required."
+        );
+      }
+    },
+    { ...DEFAULT_BRAIN_CONFIG, runtime: { ...DEFAULT_BRAIN_CONFIG.runtime, isDaemonMode: false } }
+  );
+
+  let abortedReason = "";
+  await loop.run(
+    'Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.',
+    {
+      onGoalAborted: async (reason) => {
+        abortedReason = reason;
+      }
+    }
+  );
+
+  assert.equal(orchestrator.runCount, 1);
+  assert.match(
+    abortedReason,
+    /13 likely local non-preview holders across editor, shell, or nearby local processes/i
+  );
+  assert.match(abortedReason, /outside the confirmation lane/i);
+  assert.match(
+    abortedReason,
+    /8890, 8891, 8892, 8893, 8894, 8895, 8896, 8897, 8898, 8899, 8900, 8901, 8902/i
+  );
+});
+
+test("AutonomousLoop aborts cleanly with contextual manual cleanup wording for a grouped fifteen-holder local family with two nearby local processes", async () => {
+  const orchestrator = new ScriptedOrchestrator([
+    [
+      buildBlockedFolderInUseShellResult("shell_lock_non_preview_contextual_grouped_2"),
+      buildApprovedInspectWorkspaceResourcesResult(
+        "inspect_workspace_non_preview_contextual_grouped_2",
+        {
+          runtimeOwnershipInspection: true,
+          inspectionOwnershipClassification: "orphaned_attributable",
+          inspectionRecommendedNextAction: "manual_non_preview_holder_cleanup",
+          inspectionUntrackedCandidatePids:
+            "8910,8911,8912,8913,8914,8915,8916,8917,8918,8919,8920,8921,8922,8923,8924",
+          inspectionUntrackedCandidateKinds:
+            "editor_workspace,shell_workspace,shell_workspace,editor_workspace,shell_workspace,shell_workspace,editor_workspace,shell_workspace,shell_workspace,editor_workspace,shell_workspace,shell_workspace,editor_workspace,unknown_local_process,unknown_local_process",
+          inspectionUntrackedCandidateNames:
+            "Code.exe|explorer.exe|powershell.exe|Code.exe|explorer.exe|powershell.exe|Code.exe|explorer.exe|powershell.exe|Code.exe|explorer.exe|powershell.exe|Code.exe|AcmeDesktopHelper.exe|WatchBridgeService.exe",
+          inspectionUntrackedCandidateConfidences:
+            "medium,medium,medium,medium,medium,medium,low,low,medium,low,low,medium,medium,medium,medium",
+          inspectionUntrackedCandidateReasons:
+            "command_line_mentions_target_name|command_line_mentions_target_name|command_line_mentions_target_name|command_line_mentions_target_name|command_line_mentions_target_name|command_line_mentions_target_name|command_line_mentions_target_name|command_line_mentions_target_name|command_line_mentions_target_name|command_line_mentions_target_name|command_line_mentions_target_name|command_line_mentions_target_name|command_line_mentions_target_name|command_line_matches_target_path|command_line_matches_target_path"
+        }
+      )
+    ]
+  ]);
+  const loop = new AutonomousLoop(
+    orchestrator as unknown as BrainOrchestrator,
+    {
+      backend: "mock",
+      async completeJson(): Promise<never> {
+        throw new Error(
+          "evaluateNextStep should not call the model when grouped contextual manual cleanup with two nearby local processes is required."
+        );
+      }
+    },
+    { ...DEFAULT_BRAIN_CONFIG, runtime: { ...DEFAULT_BRAIN_CONFIG.runtime, isDaemonMode: false } }
+  );
+
+  let abortedReason = "";
+  await loop.run(
+    'Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.',
+    {
+      onGoalAborted: async (reason) => {
+        abortedReason = reason;
+      }
+    }
+  );
+
+  assert.equal(orchestrator.runCount, 1);
+  assert.match(
+    abortedReason,
+    /15 likely local non-preview holders across editor, shell, or nearby local processes/i
+  );
+  assert.match(abortedReason, /outside the confirmation lane/i);
+  assert.match(
+    abortedReason,
+    /8910, 8911, 8912, 8913, 8914, 8915, 8916, 8917, 8918, 8919, 8920, 8921, 8922, 8923, 8924/i
+  );
+});
+
+test("AutonomousLoop aborts cleanly with contextual manual cleanup wording for a grouped eighteen-holder mixed local family with two nearby local processes", async () => {
+  const orchestrator = new ScriptedOrchestrator([
+    [
+      buildBlockedFolderInUseShellResult("shell_lock_non_preview_contextual_grouped_3"),
+      buildApprovedInspectWorkspaceResourcesResult(
+        "inspect_workspace_non_preview_contextual_grouped_3",
+        {
+          runtimeOwnershipInspection: true,
+          inspectionOwnershipClassification: "orphaned_attributable",
+          inspectionRecommendedNextAction: "manual_non_preview_holder_cleanup",
+          inspectionUntrackedCandidatePids:
+            "8930,8931,8932,8933,8934,8935,8936,8937,8938,8939,8940,8941,8942,8943,8944,8945,8946,8947",
+          inspectionUntrackedCandidateKinds:
+            "editor_workspace,shell_workspace,shell_workspace,editor_workspace,shell_workspace,shell_workspace,editor_workspace,shell_workspace,shell_workspace,editor_workspace,shell_workspace,shell_workspace,editor_workspace,unknown_local_process,unknown_local_process,sync_client,sync_client,sync_client",
+          inspectionUntrackedCandidateNames:
+            "Code.exe|explorer.exe|powershell.exe|Code.exe|explorer.exe|powershell.exe|Code.exe|explorer.exe|powershell.exe|Code.exe|explorer.exe|powershell.exe|Code.exe|AcmeDesktopHelper.exe|WatchBridgeService.exe|OneDrive.exe|OneDrive.exe|OneDrive.exe",
+          inspectionUntrackedCandidateConfidences:
+            "medium,medium,medium,medium,medium,medium,low,low,medium,low,low,medium,medium,medium,medium,medium,medium,medium",
+          inspectionUntrackedCandidateReasons:
+            "command_line_mentions_target_name|command_line_mentions_target_name|command_line_mentions_target_name|command_line_mentions_target_name|command_line_mentions_target_name|command_line_mentions_target_name|command_line_mentions_target_name|command_line_mentions_target_name|command_line_mentions_target_name|command_line_mentions_target_name|command_line_mentions_target_name|command_line_mentions_target_name|command_line_mentions_target_name|command_line_matches_target_path|command_line_matches_target_path|command_line_mentions_target_name|command_line_mentions_target_name|command_line_mentions_target_name"
+        }
+      )
+    ]
+  ]);
+  const loop = new AutonomousLoop(
+    orchestrator as unknown as BrainOrchestrator,
+    {
+      backend: "mock",
+      async completeJson(): Promise<never> {
+        throw new Error(
+          "evaluateNextStep should not call the model when grouped contextual manual cleanup with sync and two nearby local processes is required."
+        );
+      }
+    },
+    { ...DEFAULT_BRAIN_CONFIG, runtime: { ...DEFAULT_BRAIN_CONFIG.runtime, isDaemonMode: false } }
+  );
+
+  let abortedReason = "";
+  await loop.run(
+    'Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.',
+    {
+      onGoalAborted: async (reason) => {
+        abortedReason = reason;
+      }
+    }
+  );
+
+  assert.equal(orchestrator.runCount, 1);
+  assert.match(
+    abortedReason,
+    /18 likely local non-preview holders across editor, shell, sync, or nearby local processes/i
+  );
+  assert.match(abortedReason, /outside the confirmation lane/i);
+  assert.match(
+    abortedReason,
+    /8930, 8931, 8932, 8933, 8934, 8935, 8936, 8937, 8938, 8939, 8940, 8941, 8942, 8943, 8944, 8945, 8946, 8947/i
+  );
+  assert.match(abortedReason, /Close or narrow that local holder set first, then ask me to retry/i);
+});
+
+test("AutonomousLoop aborts cleanly with contextual manual cleanup wording for a repeated-family twenty-four-holder mixed local family", async () => {
+  const orchestrator = new ScriptedOrchestrator([
+    [
+      buildBlockedFolderInUseShellResult("shell_lock_non_preview_contextual_grouped_4"),
+      buildApprovedInspectWorkspaceResourcesResult(
+        "inspect_workspace_non_preview_contextual_grouped_4",
+        {
+          runtimeOwnershipInspection: true,
+          inspectionOwnershipClassification: "orphaned_attributable",
+          inspectionRecommendedNextAction: "manual_non_preview_holder_cleanup",
+          inspectionUntrackedCandidatePids:
+            "8950,8951,8952,8953,8954,8955,8956,8957,8958,8959,8960,8961,8962,8963,8964,8965,8966,8967,8968,8969,8970,8971,8972,8973",
+          inspectionUntrackedCandidateKinds:
+            "editor_workspace,shell_workspace,shell_workspace,editor_workspace,shell_workspace,shell_workspace,editor_workspace,shell_workspace,shell_workspace,editor_workspace,shell_workspace,shell_workspace,editor_workspace,unknown_local_process,unknown_local_process,sync_client,sync_client,sync_client,editor_workspace,shell_workspace,shell_workspace,editor_workspace,shell_workspace,shell_workspace",
+          inspectionUntrackedCandidateNames:
+            "Code.exe|explorer.exe|powershell.exe|Code.exe|explorer.exe|powershell.exe|Code.exe|explorer.exe|powershell.exe|Code.exe|explorer.exe|powershell.exe|Code.exe|AcmeDesktopHelper.exe|WatchBridgeService.exe|OneDrive.exe|OneDrive.exe|OneDrive.exe|Code.exe|explorer.exe|powershell.exe|Code.exe|explorer.exe|powershell.exe",
+          inspectionUntrackedCandidateConfidences:
+            "medium,medium,medium,medium,medium,medium,low,low,medium,low,low,medium,medium,medium,medium,medium,medium,medium,medium,medium,medium,low,low,medium",
+          inspectionUntrackedCandidateReasons:
+            "command_line_mentions_target_name|command_line_mentions_target_name|command_line_mentions_target_name|command_line_mentions_target_name|command_line_mentions_target_name|command_line_mentions_target_name|command_line_mentions_target_name|command_line_mentions_target_name|command_line_mentions_target_name|command_line_mentions_target_name|command_line_mentions_target_name|command_line_mentions_target_name|command_line_mentions_target_name|command_line_matches_target_path|command_line_matches_target_path|command_line_mentions_target_name|command_line_mentions_target_name|command_line_mentions_target_name|command_line_mentions_target_name|command_line_mentions_target_name|command_line_mentions_target_name|command_line_mentions_target_name|command_line_mentions_target_name|command_line_mentions_target_name"
+        }
+      )
+    ]
+  ]);
+  const loop = new AutonomousLoop(
+    orchestrator as unknown as BrainOrchestrator,
+    {
+      backend: "mock",
+      async completeJson(): Promise<never> {
+        throw new Error(
+          "evaluateNextStep should not call the model when repeated-family contextual manual cleanup is required."
+        );
+      }
+    },
+    { ...DEFAULT_BRAIN_CONFIG, runtime: { ...DEFAULT_BRAIN_CONFIG.runtime, isDaemonMode: false } }
+  );
+
+  let abortedReason = "";
+  await loop.run(
+    'Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.',
+    {
+      onGoalAborted: async (reason) => {
+        abortedReason = reason;
+      }
+    }
+  );
+
+  assert.equal(orchestrator.runCount, 1);
+  assert.match(
+    abortedReason,
+    /24 likely local non-preview holders across editor, shell, sync, or nearby local processes/i
+  );
+  assert.match(abortedReason, /outside the confirmation lane/i);
+  assert.match(
+    abortedReason,
+    /8950, 8951, 8952, 8953, 8954, 8955, 8956, 8957, 8958, 8959, 8960, 8961, 8962, 8963, 8964, 8965, 8966, 8967, 8968, 8969, 8970, 8971, 8972, 8973/i
+  );
+});
+
 test("AutonomousLoop stops early when live verification proof is blocked by the environment", async () => {
   const orchestrator = new ScriptedOrchestrator([
     [buildApprovedWriteFileResult("write_live_site_1")],
@@ -1800,6 +3249,102 @@ test("AutonomousLoop stops early when live verification is blocked by ethics and
   assert.equal(orchestrator.runCount, 1);
   assert.match(abortedReason, /AUTONOMOUS_EXECUTION_STYLE_LIVE_VERIFICATION_BLOCKED/i);
   assert.match(abortedReason, /could not truthfully confirm the app or page/i);
+});
+
+test("AutonomousLoop emits verifying state updates when execution proof is still missing", async () => {
+  const orchestrator = new ScriptedOrchestrator([
+    [
+      buildApprovedStartProcessResult("start_process_verify_state_1", "proc_verify_state_1"),
+      buildApprovedProbeHttpReadyResult(
+        "probe_http_verify_state_1",
+        "http://127.0.0.1:3000/"
+      )
+    ],
+    [buildApprovedVerifyBrowserResult("verify_browser_verify_state_1")]
+  ]);
+  const modelClient = new StubLoopModelClient([
+    {
+      isGoalMet: true,
+      reasoning: "the app is up",
+      nextUserInput: ""
+    },
+    {
+      isGoalMet: true,
+      reasoning: "browser verification passed",
+      nextUserInput: ""
+    }
+  ]);
+  const loop = new AutonomousLoop(
+    orchestrator as unknown as BrainOrchestrator,
+    modelClient,
+    { ...DEFAULT_BRAIN_CONFIG, runtime: { ...DEFAULT_BRAIN_CONFIG.runtime, isDaemonMode: false } }
+  );
+  const states: string[] = [];
+
+  await loop.run(
+    "Create a tiny local site, run it locally, and verify the homepage UI. Execute now.",
+    {
+      onStateChange: async (update) => {
+        states.push(`${update.state}:${update.message}`);
+      }
+    }
+  );
+
+  assert.ok(
+    states.some(
+      (entry) =>
+        /^verifying:/i.test(entry) &&
+        /browser result/i.test(entry)
+    )
+  );
+});
+
+test("AutonomousLoop aborts immediately when an inner task exhausts its retry budget", async () => {
+  let modelCalls = 0;
+  const orchestrator = {
+    async runTask(task: TaskRequest): Promise<TaskRunResult> {
+      return {
+        task,
+        plan: {
+          taskId: task.id,
+          plannerNotes: "stub",
+          actions: [buildApprovedWriteFileResult("write_retry_budget_stop_1").action]
+        },
+        actionResults: [buildApprovedWriteFileResult("write_retry_budget_stop_1")],
+        summary:
+          "Completed task with 1 approved action(s) and 2 blocked action(s) across 2 plan attempt(s). " +
+          "Estimated approved action cost 0.08/10.00 USD. Model usage spend (provider-usage estimated) 0.000200/10.00 USD. " +
+          "Recovery postmortem: MISSION_STOP_LIMIT_REACHED (Mission retry budget exhausted.).",
+        startedAt: new Date().toISOString(),
+        completedAt: new Date().toISOString()
+      };
+    }
+  };
+  const modelClient: ModelClient = {
+    backend: "mock",
+    async completeJson<T>(): Promise<T> {
+      modelCalls += 1;
+      throw new Error("evaluateNextStep should not run after mission stop limit is reached.");
+    }
+  };
+  const loop = new AutonomousLoop(
+    orchestrator as unknown as BrainOrchestrator,
+    modelClient,
+    { ...DEFAULT_BRAIN_CONFIG, runtime: { ...DEFAULT_BRAIN_CONFIG.runtime, isDaemonMode: false } }
+  );
+
+  let abortedReason = "";
+  await loop.run(
+    "Build the page and leave it open for me.",
+    {
+      onGoalAborted: async (reason) => {
+        abortedReason = reason;
+      }
+    }
+  );
+
+  assert.equal(modelCalls, 0);
+  assert.match(abortedReason, /retry budget/i);
 });
 
 test("AutonomousLoop retries a live-run goal on a suggested free port after start_process hits a loopback port conflict", async () => {

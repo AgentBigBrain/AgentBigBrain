@@ -54,6 +54,8 @@ const PLANNER_ACTION_TYPE_VALUES = [
   "probe_port",
   "probe_http",
   "verify_browser",
+  "open_browser",
+  "close_browser",
   "memory_mutation",
   "pulse_emit"
 ] as const;
@@ -209,6 +211,15 @@ const PLANNER_PARAMS_SCHEMA: Record<string, unknown> = {
         url: { type: "string" }
       },
       required: ["url"]
+    },
+    {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        sessionId: { type: "string" },
+        url: { type: "string" }
+      },
+      required: []
     },
     {
       type: "object",

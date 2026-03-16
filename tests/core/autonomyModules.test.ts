@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
+  EXECUTION_STYLE_STALL_REASON_CODE,
   EXECUTION_STYLE_LIVE_VERIFICATION_BLOCKED_REASON_CODE,
   MISSION_REQUIREMENT_BROWSER,
   MISSION_REQUIREMENT_PROCESS_STOP,
@@ -26,8 +27,15 @@ import {
   formatManagedProcessNeverReadyReason,
   resolveLiveVerificationBlockedAbortReason
 } from "../../src/core/autonomy/completionGate";
+import {
+  buildRetryingStateMessage,
+  buildVerificationStateMessage,
+  buildWorkingStateMessage,
+  buildWorkspaceRecoveryStateMessage
+} from "../../src/core/autonomy/agentLoopProgress";
 import { humanizeAutonomousStopReason } from "../../src/core/autonomy/stopReasonText";
 import { type ActionRunResult, type TaskRunResult } from "../../src/core/types";
+import { buildWorkspaceRecoverySignalFixture } from "../helpers/conversationFixtures";
 
 /**
  * Builds a minimal task result for autonomy-module tests.
@@ -177,6 +185,18 @@ test("buildMissionCompletionContract treats Playwright verification language as 
   assert.equal(contract.requireProcessStopProof, true);
 });
 
+test("buildMissionCompletionContract does not force localhost readiness for a static browser preview request", () => {
+  const contract = buildMissionCompletionContract(
+    "Build a tech landing page on my desktop, create a folder called drone-company, and leave it open in a browser for me."
+  );
+
+  assert.equal(contract.executionStyle, true);
+  assert.equal(contract.requireRealSideEffect, true);
+  assert.equal(contract.requireReadinessProof, false);
+  assert.equal(contract.requireBrowserProof, false);
+  assert.equal(contract.requireProcessStopProof, false);
+});
+
 test("countApprovedReadinessProofActions treats port-only proof as insufficient for browser goals", () => {
   const result = buildTaskResult([buildApprovedProbePortReadyResult("probe_port_ready_1")]);
 
@@ -295,4 +315,112 @@ test("humanizeAutonomousStopReason still reads from the canonical stop-reason mo
 
   assert.match(rendered, /planner never produced a valid live-run verification plan/i);
   assert.match(rendered, /next step: retry with an explicit request to start the app/i);
+});
+
+test("humanizeAutonomousStopReason keeps provider pressure and timeout failures specific", () => {
+  const rateLimited = humanizeAutonomousStopReason(
+    "[reasonCode=AUTONOMOUS_TASK_EXECUTION_FAILED] Iteration 1 failed before completion: OpenAI returned 429 rate limit exceeded."
+  );
+  const timedOut = humanizeAutonomousStopReason(
+    "[reasonCode=AUTONOMOUS_TASK_EXECUTION_FAILED] Iteration 2 failed before completion: request timed out while waiting for verification."
+  );
+  const droppedConnection = humanizeAutonomousStopReason(
+    "[reasonCode=AUTONOMOUS_TASK_EXECUTION_FAILED] Iteration 3 failed before completion: fetch failed with ECONNRESET."
+  );
+
+  assert.match(rateLimited, /rate limit/i);
+  assert.match(rateLimited, /capacity is available/i);
+  assert.match(timedOut, /timed out/i);
+  assert.match(timedOut, /bounded timeout/i);
+  assert.match(droppedConnection, /connection/i);
+  assert.match(droppedConnection, /dependency is stable/i);
+});
+
+test("agentLoopProgress renders human-first working, verification, and narrow recovery messages", () => {
+  const working = buildWorkingStateMessage(
+    2,
+    "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects and keep going until the move is actually verified."
+  );
+  const verification = buildVerificationStateMessage([MISSION_REQUIREMENT_PROCESS_STOP]);
+  const recovery = buildWorkspaceRecoveryStateMessage(buildWorkspaceRecoverySignalFixture({
+    recommendedAction: "stop_exact_tracked_holders",
+    matchedRuleId: "workspace_recovery_exact_preview_holder",
+    reasoning: "The exact tracked preview holders are still blocking the folder move.",
+    question: "Do you want me to continue?",
+    recoveryInstruction: "Stop only the exact tracked preview holders, then retry the move.",
+    trackedPreviewProcessLeaseIds: ["proc_preview_1"],
+    recoveredExactHolderPids: [4242],
+    blockedFolderPaths: ["C:\\Users\\testuser\\Desktop\\drone-company"],
+    exactNonPreviewHolders: []
+  }));
+
+  assert.equal(
+    working,
+    "I'm organizing the project folders and checking what can move safely now (step 2)."
+  );
+  assert.match(verification, /cleanup proof/i);
+  assert.match(verification, /preview stack was actually shut down/i);
+  assert.match(recovery, /exact tracked holders/i);
+  assert.match(recovery, /narrow shutdown path/i);
+});
+
+test("agentLoopProgress keeps edit and generic autonomous work calmer than raw prompt echoes", () => {
+  const editMessage = buildWorkingStateMessage(
+    3,
+    "Please turn the hero into a slider and keep the preview aligned with the current page."
+  );
+  const genericMessage = buildWorkingStateMessage(
+    1,
+    "Take this from start to finish."
+  );
+
+  assert.equal(
+    editMessage,
+    "I'm updating the current page and keeping the preview in sync now (step 3)."
+  );
+  assert.equal(
+    genericMessage,
+    "I'm working through the next step now (step 1)."
+  );
+});
+
+test("agentLoopProgress turns low-signal retry reasons into calmer continuation text", () => {
+  const organizeRetry = buildRetryingStateMessage(
+    "keep executing",
+    "Every folder with the name beginning in drone-company should go in drone-folder on my desktop."
+  );
+  const verifyRetry = buildRetryingStateMessage(
+    "Summarize what was built and verify expected files.",
+    "Please create a drone landing page and leave it open for me."
+  );
+
+  assert.equal(
+    organizeRetry,
+    "I'm continuing the folder move now and checking what changed after each step."
+  );
+  assert.equal(
+    verifyRetry,
+    "I'm moving into the next verification step now so I can confirm the result cleanly."
+  );
+});
+
+test("agentLoopProgress and stopReasonText keep bounded clarification and stalled-stop language human", () => {
+  const clarification = buildWorkspaceRecoveryStateMessage(buildWorkspaceRecoverySignalFixture({
+    recommendedAction: "clarify_before_likely_non_preview_shutdown",
+    matchedRuleId: "workspace_recovery_likely_non_preview_holder_set",
+    reasoning: "A small local editor and shell set still looks tied to the blocked folders.",
+    question: "Do you want me to stop just those likely holders and retry the move?",
+    recoveryInstruction: "Ask before stopping the likely inspected holder set.",
+    untrackedCandidatePids: [8810, 8811],
+    blockedFolderPaths: ["C:\\Users\\testuser\\Desktop\\drone-company"],
+    exactNonPreviewHolders: []
+  }));
+  const stalled = humanizeAutonomousStopReason(
+    `[reasonCode=${EXECUTION_STYLE_STALL_REASON_CODE}] Missing mission requirements: BROWSER_PROOF.`
+  );
+
+  assert.match(clarification, /I found one likely local blocker|I found possible blockers|I hit a blocker/i);
+  assert.doesNotMatch(clarification, /Stop-Process|taskkill|killall|pkill/i);
+  assert.match(stalled, /did not get browser or UI proof/i);
+  assert.match(stalled, /next step:/i);
 });

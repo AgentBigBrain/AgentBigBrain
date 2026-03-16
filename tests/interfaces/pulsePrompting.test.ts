@@ -5,11 +5,16 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import { buildSessionSeed } from "../../src/interfaces/conversationManagerHelpers";
 import { buildDynamicPulsePrompt, buildPulsePrompt, computeRelationshipAgeDays } from "../../src/interfaces/conversationRuntime/pulsePrompting";
 import type { ContextualFollowupCandidate } from "../../src/interfaces/conversationRuntime/pulseContextualFollowup";
 import type { AgentPulseEvaluationResult } from "../../src/core/profileMemoryStore";
 import type { EntityGraphV1, PulseCandidateV1 } from "../../src/core/types";
 import type { ConversationSession } from "../../src/interfaces/sessionStore";
+import {
+  buildConversationSessionFixture,
+  buildPulseScoreBreakdownFixture
+} from "../helpers/conversationFixtures";
 
 /**
  * Builds a minimal conversation session for prompt tests.
@@ -19,29 +24,21 @@ function buildSession(
   overrides: Partial<ConversationSession> = {}
 ): ConversationSession {
   const nowIso = new Date().toISOString();
-  return {
-    conversationId,
-    userId: "user-1",
-    username: "agentowner",
-    conversationVisibility: "private",
-    updatedAt: nowIso,
-    activeProposal: null,
-    runningJobId: null,
-    queuedJobs: [],
-    recentJobs: [],
-    conversationTurns: [],
-    agentPulse: {
-      optIn: true,
-      mode: "private",
-      routeStrategy: "last_private_used",
-      lastPulseSentAt: null,
-      lastPulseReason: null,
-      lastPulseTargetConversationId: null,
-      lastDecisionCode: "NOT_EVALUATED",
-      lastEvaluatedAt: null
+  return buildConversationSessionFixture(
+    {
+      conversationId,
+      updatedAt: nowIso,
+      agentPulse: {
+        ...buildConversationSessionFixture().agentPulse,
+        optIn: true
+      },
+      ...overrides
     },
-    ...overrides
-  };
+    {
+      conversationId: conversationId.split(":")[1] ?? conversationId,
+      receivedAt: nowIso
+    }
+  );
 }
 
 /**
@@ -89,7 +86,7 @@ test("buildPulsePrompt includes contextual follow-up and revalidation directives
       matchedRuleId: "contextual_followup_lexical_v1_cue_with_candidate_tokens",
       rulepackVersion: "v1",
       rulepackFingerprint: "fingerprint",
-      confidenceTier: "high",
+      confidenceTier: "HIGH",
       confidence: 0.92,
       conflict: false,
       candidateTokens: ["alpha", "beta", "gamma"]
@@ -136,11 +133,11 @@ test("buildDynamicPulsePrompt includes naturalness context sections when provide
     candidateId: "pulse-1",
     reasonCode: "OPEN_LOOP_RESUME",
     score: 0.64,
-    scoreBreakdown: {
+    scoreBreakdown: buildPulseScoreBreakdownFixture({
       recency: 0.75,
       frequency: 0.5,
       unresolvedImportance: 0.67
-    },
+    }),
     lastTouchedAt: "2026-03-07T14:00:00.000Z",
     threadKey: "thread-1",
     entityRefs: ["entity-1"],
@@ -163,10 +160,9 @@ test("buildDynamicPulsePrompt includes naturalness context sections when provide
     {
       nowIso: "2026-03-07T15:00:00.000Z",
       userLocalTime: {
-        timezone: "America/New_York",
         formatted: "Saturday, March 7, 2026 at 10:00 AM EST",
-        locale: "en-US",
-        offsetMinutes: -300
+        dayOfWeek: "Saturday",
+        hour: 10
       },
       conversationalGapMs: 2 * 60 * 60 * 1000,
       relationshipAgeDays: 30,
@@ -199,11 +195,11 @@ test("buildDynamicPulsePrompt hardens relationship clarification against generic
     candidateId: "pulse-relationship",
     reasonCode: "RELATIONSHIP_CLARIFICATION",
     score: 0.67,
-    scoreBreakdown: {
+    scoreBreakdown: buildPulseScoreBreakdownFixture({
       recency: 0.7,
       frequency: 0.61,
       unresolvedImportance: 0.71
-    },
+    }),
     lastTouchedAt: "2026-03-07T14:00:00.000Z",
     threadKey: null,
     entityRefs: ["entity-1", "entity-2"],

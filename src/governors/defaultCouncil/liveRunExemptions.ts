@@ -2,6 +2,7 @@
  * @fileoverview Detects bounded localhost live-run actions that should bypass generic model-advisory drift.
  */
 
+import { isAllowedBrowserSessionControlUrl } from "../../core/constraintRuntime/browserConstraints";
 import { getParamString, normalize } from "./common";
 import { DefaultGovernanceProposal } from "./contracts";
 
@@ -44,6 +45,23 @@ export function parseLoopbackHostnameFromUrl(rawUrl: string | undefined): string
     return new URL(rawUrl).hostname;
   } catch {
     return null;
+  }
+}
+
+/**
+ * Evaluates whether one browser-control URL stays on the local machine.
+ *
+ * @param rawUrl - Raw browser target URL from action params.
+ * @returns `true` when the URL is a loopback-local page or a local file preview.
+ */
+function isLocalBrowserControlUrl(rawUrl: string | undefined): boolean {
+  if (!rawUrl) {
+    return false;
+  }
+  try {
+    return isAllowedBrowserSessionControlUrl(new URL(rawUrl));
+  } catch {
+    return false;
   }
 }
 
@@ -104,7 +122,7 @@ export function isManagedProcessLiveRunAction(
 }
 
 /**
- * Evaluates proposal and returns whether it is a loopback-local proof action.
+ * Evaluates proposal and returns whether it is a loopback-local proof or browser-session action.
  *
  * **Why it exists:**
  * Loopback readiness and browser proof actions already pass deterministic localhost hard
@@ -123,8 +141,21 @@ export function isLoopbackProofAction(proposal: DefaultGovernanceProposal): bool
   if (action.type === "probe_port") {
     return isLoopbackHost(getParamString(action.params, "host") ?? "127.0.0.1");
   }
-  if (action.type === "probe_http" || action.type === "verify_browser") {
+  if (
+    action.type === "probe_http" ||
+    action.type === "verify_browser"
+  ) {
     return isLoopbackHost(parseLoopbackHostnameFromUrl(getParamString(action.params, "url")));
+  }
+  if (action.type === "open_browser") {
+    return isLocalBrowserControlUrl(getParamString(action.params, "url"));
+  }
+  if (action.type === "close_browser") {
+    const targetUrl = getParamString(action.params, "url");
+    if (targetUrl) {
+      return isLocalBrowserControlUrl(targetUrl);
+    }
+    return Boolean(getParamString(action.params, "sessionId"));
   }
   return false;
 }

@@ -9,6 +9,8 @@ Key files:
 - `contracts.ts`
 - `common.ts`
 - `liveRunExemptions.ts`
+- `trackedArtifactExemptions.ts`
+- `userOwnedBuildExemptions.ts`
 - `modelAdvisory.ts`
 - `ethicsGovernor.ts`
 - `logicGovernor.ts`
@@ -27,10 +29,14 @@ Key files:
 - `GovernorVote` results for each default governor.
 - Model-advisory vetoes when a governor-specific advisory model rejects a proposal.
 - Deterministic localhost live-run exemption decisions for bounded proof actions.
+- Deterministic tracked-artifact and user-owned build exemptions for safe follow-up edits or
+  browser-control flows.
 
 ## Invariants
 - Model-advisory drift must not re-ban bounded localhost `start_process`, `check_process`,
   `stop_process`, `probe_http`, `probe_port`, or `verify_browser` flows.
+- Tracked artifact or clearly user-owned build follow-ups may soften advisory vetoes, but they must
+  stay scoped to the active workspace or tracked runtime resource.
 - Each governor file owns one dominant policy concern.
 - `src/governors/defaultGovernors.ts` stays a composition entrypoint, not the main policy home.
 - Deterministic checks remain authoritative when model-advisory calls fail.

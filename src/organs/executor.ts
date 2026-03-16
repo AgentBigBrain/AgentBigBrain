@@ -15,8 +15,10 @@ import {
 } from "./executionRuntime/fileMutationExecution";
 import {
   executeShellCommandAction,
+  isProcessRunningByPid,
   resolveShellCommandCwd,
-  terminateProcessTree
+  terminateProcessTree,
+  terminateProcessTreeByPid
 } from "./executionRuntime/shellExecution";
 import { executeCreateSkillAction, executeRunSkillAction } from "./executionRuntime/skillRuntime";
 import { BrowserVerifier, PlaywrightBrowserVerifier } from "./liveRun/browserVerifier";
@@ -27,16 +29,27 @@ import {
 } from "./liveRun/contracts";
 import { executeBrowserVerification } from "./liveRun/browserVerificationHandler";
 import { executeCheckProcess } from "./liveRun/checkProcessHandler";
+import { BrowserSessionRegistry } from "./liveRun/browserSessionRegistry";
+import type { BrowserSessionSnapshot } from "./liveRun/browserSessionRegistry";
+import { executeCloseBrowser } from "./liveRun/closeBrowserHandler";
+import { executeInspectPathHolders } from "./liveRun/inspectPathHoldersHandler";
+import { executeInspectWorkspaceResources } from "./liveRun/inspectWorkspaceResourcesHandler";
 import { ManagedProcessRegistry } from "./liveRun/managedProcessRegistry";
+import { executeOpenBrowser } from "./liveRun/openBrowserHandler";
+import { loadPlaywrightChromium, type PlaywrightChromiumRuntime } from "./liveRun/playwrightRuntime";
 import { executeProbeHttp } from "./liveRun/probeHttpHandler";
 import { executeProbePort } from "./liveRun/probePortHandler";
 import { executeStartProcess } from "./liveRun/startProcessHandler";
 import { executeStopProcess } from "./liveRun/stopProcessHandler";
+import { inspectSystemPreviewCandidates } from "./liveRun/untrackedPreviewCandidateInspection";
+import type { ManagedProcessSnapshot } from "./liveRun/managedProcessRegistry";
 
 export class ToolExecutorOrgan {
   private readonly shellExecutionTelemetryByActionId = new Map<string, ShellExecutionTelemetry>();
   private readonly managedProcessRegistry: ManagedProcessRegistry;
+  private readonly browserSessionRegistry: BrowserSessionRegistry;
   private readonly browserVerifier: BrowserVerifier;
+  private readonly playwrightChromiumLoader?: () => Promise<PlaywrightChromiumRuntime | null>;
 
   /**
    * Initializes `ToolExecutorOrgan` with deterministic runtime dependencies.
@@ -59,14 +72,18 @@ export class ToolExecutorOrgan {
     private readonly config: BrainConfig,
     private readonly shellSpawn: typeof spawn = spawn,
     managedProcessRegistry: ManagedProcessRegistry = new ManagedProcessRegistry(),
-    browserVerifier?: BrowserVerifier
+    browserVerifier?: BrowserVerifier,
+    browserSessionRegistry: BrowserSessionRegistry = new BrowserSessionRegistry(),
+    playwrightChromiumLoader?: () => Promise<PlaywrightChromiumRuntime | null>
   ) {
     this.managedProcessRegistry = managedProcessRegistry;
+    this.browserSessionRegistry = browserSessionRegistry;
     this.browserVerifier =
       browserVerifier ??
       new PlaywrightBrowserVerifier({
         headless: config.browserVerification.headless
       });
+    this.playwrightChromiumLoader = playwrightChromiumLoader;
   }
 
   /**
@@ -86,9 +103,14 @@ export class ToolExecutorOrgan {
       config: this.config,
       shellSpawn: this.shellSpawn,
       managedProcessRegistry: this.managedProcessRegistry,
+      browserSessionRegistry: this.browserSessionRegistry,
       browserVerifier: this.browserVerifier,
+      playwrightChromiumLoader: this.playwrightChromiumLoader ?? loadPlaywrightChromium,
+      inspectSystemPreviewCandidates,
       resolveShellCommandCwd: (params) => resolveShellCommandCwd(this.config, params),
-      terminateProcessTree: (child) => terminateProcessTree(this.shellSpawn, child)
+      terminateProcessTree: (child) => terminateProcessTree(this.shellSpawn, child),
+      terminateProcessTreeByPid: (pid) => terminateProcessTreeByPid(this.shellSpawn, pid),
+      isProcessRunning: (pid) => isProcessRunningByPid(pid)
     };
   }
 
@@ -111,6 +133,38 @@ export class ToolExecutorOrgan {
     }
     this.shellExecutionTelemetryByActionId.delete(actionId);
     return telemetry;
+  }
+
+  /**
+   * Lists current managed-process lease snapshots owned by this executor runtime.
+   *
+   * **Why it exists:**
+   * Conversation-facing continuity flows need a read-only view of active preview leases so
+   * follow-up requests can stop only the resources that belong to the user-visible workspace.
+   *
+   * **What it talks to:**
+   * - Uses `ManagedProcessRegistry` from `./liveRun/managedProcessRegistry`.
+   *
+   * @returns Caller-owned managed-process snapshots.
+   */
+  listManagedProcessSnapshots(): readonly ManagedProcessSnapshot[] {
+    return this.managedProcessRegistry.listSnapshots();
+  }
+
+  /**
+   * Lists current browser-session snapshots owned by this executor runtime.
+   *
+   * **Why it exists:**
+   * Conversation-facing continuity flows need a runtime-authoritative view of tracked browser
+   * control state so follow-up close/reopen requests do not plan from stale persisted metadata.
+   *
+   * **What it talks to:**
+   * - Uses `BrowserSessionRegistry` from `./liveRun/browserSessionRegistry`.
+   *
+   * @returns Caller-owned browser-session snapshots.
+   */
+  listBrowserSessionSnapshots(): readonly BrowserSessionSnapshot[] {
+    return this.browserSessionRegistry.listSnapshots();
   }
 
   /**
@@ -239,6 +293,23 @@ export class ToolExecutorOrgan {
 
       case "verify_browser":
         return executeBrowserVerification(this.buildLiveRunContext(), action.params, signal);
+
+      case "open_browser":
+        return executeOpenBrowser(
+          this.buildLiveRunContext(),
+          action.id,
+          action.params,
+          signal
+        );
+
+      case "close_browser":
+        return executeCloseBrowser(this.buildLiveRunContext(), action.params, signal);
+
+      case "inspect_path_holders":
+        return executeInspectPathHolders(this.buildLiveRunContext(), action.params);
+
+      case "inspect_workspace_resources":
+        return executeInspectWorkspaceResources(this.buildLiveRunContext(), action.params);
 
       default:
         return buildExecutionOutcome(

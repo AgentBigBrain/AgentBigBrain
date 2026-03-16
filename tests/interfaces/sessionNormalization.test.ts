@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import { buildConversationSessionFixture } from "../helpers/conversationFixtures";
 import {
   normalizeSession,
   normalizeState
@@ -51,7 +52,7 @@ test("normalizeSession migrates legacy session payloads to the stable runtime sh
       recentEmissions: [
         {
           emittedAt: now,
-          reasonCode: "stale_fact_revalidation",
+          reasonCode: "STALE_FACT_REVALIDATION",
           candidateEntityRefs: []
         }
       ]
@@ -69,26 +70,17 @@ test("normalizeState drops invalid conversation entries", () => {
   const normalized = normalizeState({
     conversations: {
       valid: {
-        conversationId: "valid",
-        userId: "user-1",
-        username: "agentowner",
-        conversationVisibility: "private",
+        ...buildConversationSessionFixture(
+          {
+            conversationId: "valid",
+            updatedAt: "2026-03-07T12:00:00.000Z"
+          },
+          {
+            conversationId: "valid",
+            receivedAt: "2026-03-07T12:00:00.000Z"
+          }
+        ),
         updatedAt: "2026-03-07T12:00:00.000Z",
-        activeProposal: null,
-        runningJobId: null,
-        queuedJobs: [],
-        recentJobs: [],
-        conversationTurns: [],
-        agentPulse: {
-          optIn: false,
-          mode: "private",
-          routeStrategy: "last_private_used",
-          lastPulseSentAt: null,
-          lastPulseReason: null,
-          lastPulseTargetConversationId: null,
-          lastDecisionCode: "NOT_EVALUATED",
-          lastEvaluatedAt: null
-        }
       },
       invalid: {
         userId: "user-2"

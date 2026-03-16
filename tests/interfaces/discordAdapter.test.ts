@@ -172,6 +172,7 @@ test("discord adapter routes accepted events through orchestrator governance pat
 test("discord adapter autonomous summary reports stopped state when loop aborts", async () => {
   await withAdapterHarness(async (adapter) => {
     const progressMessages: string[] = [];
+    const progressUpdates: string[] = [];
     const controller = new AbortController();
     controller.abort();
     const summary = await adapter.runAutonomousTask(
@@ -180,13 +181,21 @@ test("discord adapter autonomous summary reports stopped state when loop aborts"
       async (message) => {
         progressMessages.push(message);
       },
-      controller.signal
+      controller.signal,
+      null,
+      async (update) => {
+        progressUpdates.push(`${update.status}:${update.message}`);
+      }
     );
 
-    assert.match(summary, /Autonomous task stopped after 0 iteration\(s\)/i);
-    assert.match(summary, /Why it stopped: Stopped because you cancelled the run\./i);
+    assert.match(summary.summary, /Autonomous task stopped after 0 iteration\(s\)/i);
+    assert.match(summary.summary, /Why it stopped: Stopped because you cancelled the run\./i);
     assert.equal(
       progressMessages.some((message) => /Stopped after 0 iteration\(s\)\. Stopped because you cancelled the run\./i.test(message)),
+      true
+    );
+    assert.equal(
+      progressUpdates.some((entry) => /^stopped:Stopped because you cancelled the run\./i.test(entry)),
       true
     );
   });

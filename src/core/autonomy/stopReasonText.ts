@@ -130,6 +130,27 @@ function humanizeAutonomousStallReason(reason: string): string {
  * @returns Human-readable execution failure explanation.
  */
 function humanizeAutonomousExecutionFailureReason(reason: string): string {
+  if (/(?:429|exceeded your current quota|rate limit)/i.test(reason)) {
+    return appendActionableNextStep(
+      "I stopped because the planner or provider hit a rate limit before the run could finish cleanly.",
+      "retry once capacity is available again, or use a lower-pressure provider/model path for this run."
+    );
+  }
+
+  if (/(?:request timed out|timed out)/i.test(reason)) {
+    return appendActionableNextStep(
+      "I stopped because a provider or runtime step timed out before I could finish the current proof chain.",
+      "retry the run, and if it repeats, shorten the live proof path or raise the bounded timeout for that environment."
+    );
+  }
+
+  if (/(?:socket hang up|econnreset|fetch failed)/i.test(reason)) {
+    return appendActionableNextStep(
+      "I stopped because the connection to a required runtime or model dependency dropped mid-run.",
+      "retry once the dependency is stable, and keep the same request if you want the exact same goal retried."
+    );
+  }
+
   if (/Retrieval quarantine blocked lesson .*PRIVATE_RANGE_TARGET_DENIED/i.test(reason)) {
     return appendActionableNextStep(
       "I stopped because an internal saved lesson about localhost was filtered out. That internal note should have been ignored instead of stopping your task.",

@@ -120,3 +120,26 @@ test("StateStore preserves all concurrent appends across separate store instance
     assert.equal(loaded.metrics.approvedActions, runCount);
   });
 });
+
+test("StateStore default constructor honors BRAIN_STATE_JSON_PATH for isolated runtime state", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-state-env-"));
+  const statePath = path.join(tempDir, "isolated-state.json");
+  const previousStatePath = process.env.BRAIN_STATE_JSON_PATH;
+  process.env.BRAIN_STATE_JSON_PATH = statePath;
+
+  try {
+    const store = new StateStore();
+    await store.appendRun(buildRunResult("env_default"));
+
+    const raw = await readFile(statePath, "utf8");
+    const parsed = JSON.parse(raw) as { runs: unknown[] };
+    assert.equal(parsed.runs.length, 1);
+  } finally {
+    if (previousStatePath === undefined) {
+      delete process.env.BRAIN_STATE_JSON_PATH;
+    } else {
+      process.env.BRAIN_STATE_JSON_PATH = previousStatePath;
+    }
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});

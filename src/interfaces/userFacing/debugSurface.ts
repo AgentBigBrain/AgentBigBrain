@@ -44,16 +44,18 @@ function deriveStage685TierFromActionType(actionType: string): number | null {
     return 1;
   }
   if (
-    actionType === "write_file" ||
-    actionType === "delete_file" ||
-    actionType === "create_skill" ||
-    actionType === "run_skill" ||
-    actionType === "network_write" ||
-    actionType === "shell_command" ||
-    actionType === "start_process" ||
-    actionType === "stop_process" ||
-    actionType === "self_modify"
-  ) {
+      actionType === "write_file" ||
+      actionType === "delete_file" ||
+      actionType === "create_skill" ||
+      actionType === "run_skill" ||
+      actionType === "network_write" ||
+      actionType === "shell_command" ||
+      actionType === "start_process" ||
+      actionType === "stop_process" ||
+      actionType === "open_browser" ||
+      actionType === "close_browser" ||
+      actionType === "self_modify"
+    ) {
     return 3;
   }
   return null;

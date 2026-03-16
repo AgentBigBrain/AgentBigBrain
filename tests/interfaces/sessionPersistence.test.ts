@@ -22,40 +22,32 @@ import type {
   SessionPersistenceContext
 } from "../../src/interfaces/conversationRuntime/contracts";
 import type { ConversationSession } from "../../src/interfaces/sessionStore";
+import { buildConversationSessionFixture } from "../helpers/conversationFixtures";
 
 function buildSessionFixture(overrides: Partial<ConversationSession> = {}): ConversationSession {
   const now = new Date().toISOString();
-  return {
-    conversationId: "telegram:chat-1:user-1",
-    userId: "user-1",
-    username: "agentowner",
-    conversationVisibility: "private",
-    updatedAt: now,
-    activeProposal: null,
-    runningJobId: null,
-    queuedJobs: [],
-    recentJobs: [],
-    conversationTurns: [
-      {
-        role: "user",
-        text: "hello",
-        at: now
-      }
-    ],
-    classifierEvents: [],
-    agentPulse: {
-      optIn: false,
-      mode: "private",
-      routeStrategy: "last_private_used",
-      lastPulseSentAt: null,
-      lastPulseReason: null,
-      lastPulseTargetConversationId: null,
-      lastDecisionCode: "NOT_EVALUATED",
-      lastEvaluatedAt: null,
-      recentEmissions: []
+  return buildConversationSessionFixture(
+    {
+      updatedAt: now,
+      conversationTurns: [
+        {
+          role: "user",
+          text: "hello",
+          at: now
+        }
+      ],
+      classifierEvents: [],
+      agentPulse: {
+        ...buildConversationSessionFixture().agentPulse,
+        recentEmissions: []
+      },
+      ...overrides
     },
-    ...overrides
-  };
+    {
+      conversationId: "chat-1",
+      receivedAt: now
+    }
+  );
 }
 
 function normalizeSession(raw: Partial<ConversationSession>): ConversationSession | null {

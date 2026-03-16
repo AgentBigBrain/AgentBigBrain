@@ -12,6 +12,7 @@ import { ModelClient, StructuredCompletionRequest } from "../../src/models/types
 import { createDefaultGovernors } from "../../src/governors/defaultGovernors";
 import { GovernorContext } from "../../src/governors/types";
 import {
+  HOST_TEST_DESKTOP_DIR,
   HOST_TEST_PLAYWRIGHT_PROOF_SMOKE_AUTO_8124_DIR,
   HOST_TEST_PLAYWRIGHT_PROOF_SMOKE_TEST_DIR
 } from "../support/windowsPathFixtures";
@@ -61,11 +62,11 @@ class DeterministicGovernorModelClient implements ModelClient {
  * Implements `buildTask` behavior within module scope.
  * Interacts with local collaborators through imported modules and typed inputs/outputs.
  */
-function buildTask(): TaskRequest {
+function buildTask(userInput = "governor test request"): TaskRequest {
   return {
     id: "task_default_governors",
     goal: "Validate default governor behavior.",
-    userInput: "governor test request",
+    userInput,
     createdAt: new Date().toISOString()
   };
 }
@@ -118,9 +119,12 @@ function buildProposal(
  * Implements `buildContext` behavior within module scope.
  * Interacts with local collaborators through imported modules and typed inputs/outputs.
  */
-function buildContext(advisoryRejectGovernorId?: GovernorId): GovernorContext {
+function buildContext(
+  advisoryRejectGovernorId?: GovernorId,
+  userInput = "governor test request"
+): GovernorContext {
   return {
-    task: buildTask(),
+    task: buildTask(userInput),
     state: buildState(),
     governanceMemory: {
       generatedAt: new Date().toISOString(),
@@ -138,6 +142,8 @@ function buildContext(advisoryRejectGovernorId?: GovernorId): GovernorContext {
     modelClient: new DeterministicGovernorModelClient(advisoryRejectGovernorId)
   };
 }
+
+const HOST_TEST_PATH_SEPARATOR = HOST_TEST_DESKTOP_DIR.includes("\\") ? "\\" : "/";
 
 /**
  * Implements `getGovernorById` behavior within module scope.
@@ -209,6 +215,189 @@ test("resource governor ignores advisory vetoes for loopback probe_http proof ac
 
   assert.equal(vote.approve, true);
   assert.equal(vote.rejectCategory, undefined);
+});
+
+test("utility governor ignores advisory vetoes for loopback open_browser proof actions", async () => {
+  const utilityGovernor = getGovernorById("utility");
+  const vote = await utilityGovernor.evaluate(
+    buildProposal({
+      type: "open_browser",
+      description: "Open the localhost homepage in a visible browser window",
+      params: {
+        url: "http://localhost:3000/"
+      }
+    }),
+    buildContext("utility")
+  );
+
+  assert.equal(vote.approve, true);
+  assert.equal(vote.rejectCategory, undefined);
+});
+
+test("utility governor ignores advisory vetoes for local file open_browser preview actions", async () => {
+  const utilityGovernor = getGovernorById("utility");
+  const vote = await utilityGovernor.evaluate(
+    buildProposal({
+      type: "open_browser",
+      description: "Open the built local landing-page file in a visible browser window",
+      params: {
+        url: "file:///C:/Users/testuser/Desktop/drone-company/index.html"
+      }
+    }),
+    buildContext("utility")
+  );
+
+  assert.equal(vote.approve, true);
+  assert.equal(vote.rejectCategory, undefined);
+});
+
+test("continuity governor ignores advisory vetoes for tracked close_browser actions", async () => {
+  const continuityGovernor = getGovernorById("continuity");
+  const vote = await continuityGovernor.evaluate(
+    buildProposal({
+      type: "close_browser",
+      description: "Close the tracked localhost browser window from the last run",
+      params: {
+        sessionId: "browser_session:landing-page"
+      }
+    }),
+    buildContext("continuity")
+  );
+
+  assert.equal(vote.approve, true);
+  assert.equal(vote.rejectCategory, undefined);
+});
+
+test("security governor ignores advisory vetoes for tracked artifact follow-up read_file actions", async () => {
+  const securityGovernor = getGovernorById("security");
+  const vote = await securityGovernor.evaluate(
+    buildProposal({
+      type: "read_file",
+      description: "Read the tracked landing page script before updating it.",
+      params: {
+        path: "C:\\Users\\testuser\\Desktop\\drone-company\\script.js"
+      }
+    }),
+    buildContext(
+      "security",
+      [
+        "You are in an ongoing conversation with the same user.",
+        "",
+        "Recent user-visible actions in this chat:",
+        "- File script.js: C:\\Users\\testuser\\Desktop\\drone-company\\script.js (updated)",
+        "- File styles.css: C:\\Users\\testuser\\Desktop\\drone-company\\styles.css (updated)",
+        "- File index.html: C:\\Users\\testuser\\Desktop\\drone-company\\index.html (updated)",
+        "",
+        "Natural artifact-edit follow-up:",
+        "- The user appears to be editing the artifact already created in this chat rather than asking for a brand-new project.",
+        "- Most recent concrete artifact: File script.js at C:\\Users\\testuser\\Desktop\\drone-company\\script.js",
+        "- Preferred edit destination: C:\\Users\\testuser\\Desktop\\drone-company\\script.js",
+        "",
+        "Current user request:",
+        "Change the hero image to a slider instead of the landing page."
+      ].join("\n")
+    )
+  );
+
+  assert.equal(vote.approve, true);
+  assert.equal(vote.rejectCategory, undefined);
+});
+
+test("security governor ignores advisory vetoes for explicit my-desktop write_file build actions", async () => {
+  const securityGovernor = getGovernorById("security");
+  const vote = await securityGovernor.evaluate(
+    buildProposal({
+      type: "write_file",
+      description: "Write the initial landing page into the requested Desktop project folder.",
+      params: {
+        path:
+          `${HOST_TEST_DESKTOP_DIR}${HOST_TEST_PATH_SEPARATOR}drone-company` +
+          `${HOST_TEST_PATH_SEPARATOR}index.html`,
+        content: "<!doctype html><title>Drone Company</title>"
+      }
+    }),
+    buildContext(
+      "security",
+      "Build a simple landing page on my desktop in a folder called drone-company and run it in a browser."
+    )
+  );
+
+  assert.equal(vote.approve, true);
+  assert.equal(vote.rejectCategory, undefined);
+});
+
+test("security governor ignores advisory vetoes for explicit my-desktop mkdir shell actions", async () => {
+  const securityGovernor = getGovernorById("security");
+  const vote = await securityGovernor.evaluate(
+    buildProposal({
+      type: "shell_command",
+      description: "Create the requested Desktop project folder before writing files.",
+      params: {
+        command:
+          `if not exist "${HOST_TEST_DESKTOP_DIR}${HOST_TEST_PATH_SEPARATOR}drone-company" ` +
+          `mkdir "${HOST_TEST_DESKTOP_DIR}${HOST_TEST_PATH_SEPARATOR}drone-company"`,
+        cwd: HOST_TEST_DESKTOP_DIR,
+        workdir: HOST_TEST_DESKTOP_DIR,
+        requestedShellKind: "cmd",
+        timeoutMs: 120000
+      }
+    }),
+    buildContext(
+      "security",
+      "Build a simple landing page on my desktop in a folder called drone-company and run it in a browser."
+    )
+  );
+
+  assert.equal(vote.approve, true);
+  assert.equal(vote.rejectCategory, undefined);
+});
+
+test("security governor ignores advisory vetoes for bounded desktop organization shell actions", async () => {
+  const securityGovernor = getGovernorById("security");
+  const vote = await securityGovernor.evaluate(
+    buildProposal({
+      type: "shell_command",
+      description: "Create the destination folder and move matching drone-company folders into it.",
+      params: {
+        command:
+          `New-Item -ItemType Directory -Force -Path "${HOST_TEST_DESKTOP_DIR}${HOST_TEST_PATH_SEPARATOR}drone-web-projects"; ` +
+          `Move-Item -Path "${HOST_TEST_DESKTOP_DIR}${HOST_TEST_PATH_SEPARATOR}drone-company*" ` +
+          `-Destination "${HOST_TEST_DESKTOP_DIR}${HOST_TEST_PATH_SEPARATOR}drone-web-projects"`,
+        cwd: HOST_TEST_DESKTOP_DIR,
+        workdir: HOST_TEST_DESKTOP_DIR,
+        requestedShellKind: "powershell",
+        timeoutMs: 120000
+      }
+    }),
+    buildContext(
+      "security",
+      "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects."
+    )
+  );
+
+  assert.equal(vote.approve, true);
+  assert.equal(vote.rejectCategory, undefined);
+});
+
+test("security governor still blocks advisory vetoes for shared public desktop write actions", async () => {
+  const securityGovernor = getGovernorById("security");
+  const vote = await securityGovernor.evaluate(
+    buildProposal({
+      type: "write_file",
+      description: "Write a landing page into the Public Desktop.",
+      params: {
+        path: "C:\\Users\\Public\\Desktop\\drone-company\\index.html",
+        content: "<!doctype html><title>Drone Company</title>"
+      }
+    }),
+    buildContext(
+      "security",
+      "Build a simple landing page on my desktop in a folder called drone-company and run it in a browser."
+    )
+  );
+
+  assert.equal(vote.approve, false);
+  assert.equal(vote.rejectCategory, "MODEL_ADVISORY_BLOCK");
 });
 
 test("ethics governor ignores advisory vetoes for loopback verify_browser proof actions", async () => {

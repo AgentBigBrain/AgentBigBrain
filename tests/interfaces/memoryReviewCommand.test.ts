@@ -10,9 +10,11 @@ import type { ConversationIngressDependencies } from "../../src/interfaces/conve
 import { handleMemoryReviewCommand } from "../../src/interfaces/conversationRuntime/memoryReviewCommand";
 import type {
   ConversationInboundMessage,
+  ConversationMemoryReviewRequest,
   ConversationMemoryReviewRecord
 } from "../../src/interfaces/conversationRuntime/managerContracts";
 import type { ConversationSession } from "../../src/interfaces/sessionStore";
+import { buildConversationIngressConfig } from "../helpers/conversationFixtures";
 
 function buildSession(
   overrides: Partial<ConversationSession> = {}
@@ -53,14 +55,9 @@ function buildDependencies(
       getSession: async () => null,
       setSession: async () => undefined
     },
-    config: {
-      allowAutonomousViaInterface: true,
-      maxProposalInputChars: 500,
-      maxConversationTurns: 20,
-      maxContextTurnsForExecution: 8,
-      staleRunningJobRecoveryMs: 60_000,
-      maxRecentJobs: 20
-    },
+    config: buildConversationIngressConfig({
+      maxProposalInputChars: 500
+    }),
     followUpRuleContext: {} as ConversationIngressDependencies["followUpRuleContext"],
     pulseLexicalRuleContext: {} as ConversationIngressDependencies["pulseLexicalRuleContext"],
     intentInterpreterConfidenceThreshold: 0.85,
@@ -105,8 +102,7 @@ test("handleMemoryReviewCommand blocks non-private usage", async () => {
 });
 
 test("handleMemoryReviewCommand renders bounded remembered situations", async () => {
-  let capturedRequest: Parameters<NonNullable<ConversationIngressDependencies["reviewConversationMemory"]>>[0] | null =
-    null;
+  let capturedRequest: ConversationMemoryReviewRequest | null = null;
 
   const reply = await handleMemoryReviewCommand(
     buildSession(),
@@ -120,8 +116,11 @@ test("handleMemoryReviewCommand renders bounded remembered situations", async ()
     ""
   );
 
-  assert.ok(capturedRequest);
-  assert.equal(capturedRequest?.maxEpisodes, 5);
+  if (capturedRequest === null) {
+    assert.fail("Expected memory review request to be captured.");
+  }
+  const request = capturedRequest as ConversationMemoryReviewRequest;
+  assert.equal(request.maxEpisodes, 5);
   assert.match(reply, /^Remembered situations:/);
   assert.match(reply, /Billy fell down \(episode_billy_fall\)/);
   assert.match(reply, /\/memory resolve <episode-id>/);

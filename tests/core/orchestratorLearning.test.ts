@@ -5,6 +5,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import type { JudgmentSignalType } from "../../src/core/judgmentPatterns";
 import {
   deriveJudgmentObjectiveScore,
   persistLearningSignals
@@ -72,7 +73,11 @@ test("persistLearningSignals writes workflow and judgment outcomes", async () =>
           judgmentRecorded += 1;
           return { id: "pattern_1" };
         },
-        applyOutcomeSignal: async (_patternId, signalType, score) => {
+        applyOutcomeSignal: async (
+          _patternId: string,
+          signalType: JudgmentSignalType,
+          score: number
+        ) => {
           if (signalType === "objective") {
             objectiveSignal = score;
           }

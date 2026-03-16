@@ -136,7 +136,13 @@ export async function executeFileMutationAction(
         await writeFile(outputPath, action.params.content, "utf8");
         return buildExecutionOutcome(
           "success",
-          `Write success: ${targetPath} (${action.params.content.length} chars)`
+          `Write success: ${targetPath} (${action.params.content.length} chars)`,
+          undefined,
+          {
+            writeFilePath: targetPath,
+            filePath: targetPath,
+            contentLength: action.params.content.length
+          }
         );
       } catch (error) {
         return buildExecutionOutcome(
@@ -154,7 +160,15 @@ export async function executeFileMutationAction(
       }
       try {
         await rm(resolveWorkspacePath(targetPath), { force: true });
-        return buildExecutionOutcome("success", `Delete success: ${targetPath}`);
+        return buildExecutionOutcome(
+          "success",
+          `Delete success: ${targetPath}`,
+          undefined,
+          {
+            deleteFilePath: targetPath,
+            filePath: targetPath
+          }
+        );
       } catch (error) {
         return buildExecutionOutcome(
           "failed",
@@ -175,7 +189,16 @@ export async function executeFileMutationAction(
       }
       try {
         const files = await readdir(resolveWorkspacePath(targetPath));
-        return buildExecutionOutcome("success", `Directory contents:\n${files.join("\n")}`);
+        return buildExecutionOutcome(
+          "success",
+          `Directory contents:\n${files.join("\n")}`,
+          undefined,
+          {
+            directoryPath: targetPath,
+            listedPath: targetPath,
+            directoryEntryCount: files.length
+          }
+        );
       } catch (error) {
         return buildExecutionOutcome(
           "failed",

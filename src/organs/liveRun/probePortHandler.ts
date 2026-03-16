@@ -9,8 +9,8 @@ import {
   buildReadinessProbeExecutionMetadata,
   LiveRunExecutorContext,
   normalizeOptionalString,
-  performLocalPortProbe,
-  resolveReadinessProbeTimeoutMs
+  resolveReadinessProbeTimeoutMs,
+  waitForLocalPortReadiness
 } from "./contracts";
 
 /**
@@ -53,7 +53,8 @@ export async function executeProbePort(
   const timeoutMs = resolveReadinessProbeTimeoutMs(context.config, params.timeoutMs);
 
   try {
-    const ready = await performLocalPortProbe(host, params.port, timeoutMs, signal);
+    const result = await waitForLocalPortReadiness(host, params.port, timeoutMs, signal);
+    const { ready, attempts } = result;
     if (ready) {
       return buildExecutionOutcome(
         "success",
@@ -65,7 +66,8 @@ export async function executeProbePort(
           lifecycleCode: "PROCESS_READY",
           host,
           port: params.port,
-          timeoutMs
+          timeoutMs,
+          attempts
         })
       );
     }
@@ -79,7 +81,8 @@ export async function executeProbePort(
         lifecycleCode: "PROCESS_NOT_READY",
         host,
         port: params.port,
-        timeoutMs
+        timeoutMs,
+        attempts
       })
     );
   } catch (error) {

@@ -2,43 +2,73 @@
  * @fileoverview Deterministic execution-style build policy and plan-quality guardrails.
  */
 
-import { ActionType, PlannedAction } from "../../core/types";
+import { PlannedAction } from "../../core/types";
 import {
   ExecutionStyleBuildPlanAssessment,
-  ExecutionStyleBuildPlanIssueCode
+  PlannerExecutionEnvironmentContext,
+  RequiredActionType
 } from "./executionStyleContracts";
 import {
+  hasInvalidWindowsOrganizationPowerShellInterpolation,
+  hasOrganizationMoveAction,
+  hasUnsupportedWorkspaceRecoveryInspectionShellAction,
+  hasUnsupportedOpenBrowserTarget,
+  hasWorkspaceRecoveryExactStopOrMoveAction,
+  hasWorkspaceRecoveryInspectionAction,
+  hasInvalidWorkspaceRecoveryInspectionTargets,
+  hasUnsupportedWindowsOrganizationShellAction,
+  hasOrganizationMoveProofAction,
+  isInspectionOnlyBuildAction,
+  isLiveVerificationAction,
+  isWorkspaceRecoveryExactStopInstruction,
+  isWorkspaceRecoveryInspectInstruction,
+  isWorkspaceRecoveryPostShutdownRetryInstruction,
+  isTrackedArtifactEditPreviewPlan
+} from "./buildExecutionActionHeuristics";
+import {
+  hasBroadProcessNameShutdownAction,
+  hasCandidateOnlyHolderShutdownAction,
+  hasOrganizationDestinationSelfMatchAction,
+  usesSharedDesktopForUserOwnedRequest
+} from "./buildExecutionRecoveryPolicy";
+import {
+  isLocalWorkspaceOrganizationRequest,
   isExecutionStyleBuildRequest,
   isLiveVerificationBuildRequest,
-  requiresBrowserVerificationBuildRequest
+  requiresBrowserVerificationBuildRequest,
+  requiresPersistentBrowserOpenBuildRequest
 } from "./liveVerificationPolicy";
-
-const BUILD_INSPECTION_ONLY_ACTION_TYPES: readonly ActionType[] = [
-  "respond",
-  "read_file",
-  "list_directory",
-  "check_process",
-  "stop_process"
-] as const;
-const LIVE_VERIFICATION_ACTION_TYPES: readonly ActionType[] = [
-  "start_process",
-  "probe_port",
-  "probe_http",
-  "verify_browser"
-] as const;
 
 /**
  * Evaluates whether planner policy may implicitly allow finite shell work for a build request.
  */
-export function allowsImplicitFiniteShellForBuildRequest(currentUserRequest: string): boolean {
-  return isExecutionStyleBuildRequest(currentUserRequest);
+export function allowsImplicitFiniteShellForBuildRequest(
+  currentUserRequest: string,
+  fullExecutionInput = currentUserRequest
+): boolean {
+  return (
+    isWorkspaceRecoveryInspectInstruction(fullExecutionInput) ||
+    isWorkspaceRecoveryExactStopInstruction(fullExecutionInput) ||
+    isWorkspaceRecoveryPostShutdownRetryInstruction(fullExecutionInput) ||
+    isExecutionStyleBuildRequest(currentUserRequest) ||
+    isLocalWorkspaceOrganizationRequest(currentUserRequest)
+  );
 }
 
 /**
  * Evaluates whether planner output must include executable non-respond actions.
  */
-export function requiresExecutableBuildPlan(currentUserRequest: string): boolean {
-  return isExecutionStyleBuildRequest(currentUserRequest);
+export function requiresExecutableBuildPlan(
+  currentUserRequest: string,
+  fullExecutionInput = currentUserRequest
+): boolean {
+  return (
+    isWorkspaceRecoveryInspectInstruction(fullExecutionInput) ||
+    isWorkspaceRecoveryExactStopInstruction(fullExecutionInput) ||
+    isWorkspaceRecoveryPostShutdownRetryInstruction(fullExecutionInput) ||
+    isExecutionStyleBuildRequest(currentUserRequest) ||
+    isLocalWorkspaceOrganizationRequest(currentUserRequest)
+  );
 }
 
 /**
@@ -49,27 +79,125 @@ export function hasNonRespondAction(actions: readonly PlannedAction[]): boolean 
 }
 
 /**
- * Evaluates whether an action is too weak to satisfy an execution-style build plan on its own.
- */
-function isInspectionOnlyBuildAction(action: PlannedAction): boolean {
-  return BUILD_INSPECTION_ONLY_ACTION_TYPES.includes(action.type);
-}
-
-/**
- * Evaluates whether an action contributes explicit live-verification behavior.
- */
-function isLiveVerificationAction(action: PlannedAction): boolean {
-  return LIVE_VERIFICATION_ACTION_TYPES.includes(action.type);
-}
-
-/**
  * Evaluates whether a planner action list satisfies deterministic execution-style build quality.
  */
 export function assessExecutionStyleBuildPlan(
   currentUserRequest: string,
-  actions: readonly PlannedAction[]
+  actions: readonly PlannedAction[],
+  requiredActionType: RequiredActionType | null = null,
+  executionEnvironment: PlannerExecutionEnvironmentContext | null = null,
+  fullExecutionInput = currentUserRequest
 ): ExecutionStyleBuildPlanAssessment {
-  if (!requiresExecutableBuildPlan(currentUserRequest)) {
+  if (!requiresExecutableBuildPlan(currentUserRequest, fullExecutionInput)) {
+    return {
+      valid: true,
+      issueCode: null
+    };
+  }
+
+  if (
+    hasUnsupportedWindowsOrganizationShellAction(
+      currentUserRequest,
+      actions,
+      executionEnvironment
+    )
+  ) {
+    return {
+      valid: false,
+      issueCode: "WINDOWS_ORGANIZATION_REQUIRES_POWERSHELL"
+    };
+  }
+
+  if (
+    hasInvalidWindowsOrganizationPowerShellInterpolation(
+      currentUserRequest,
+      actions,
+      executionEnvironment
+    )
+  ) {
+    return {
+      valid: false,
+      issueCode: "WINDOWS_ORGANIZATION_INVALID_POWERSHELL_INTERPOLATION"
+    };
+  }
+
+  if (hasBroadProcessNameShutdownAction(actions)) {
+    return {
+      valid: false,
+      issueCode: "BROAD_PROCESS_SHUTDOWN_DISALLOWED"
+    };
+  }
+
+  if (hasCandidateOnlyHolderShutdownAction(currentUserRequest, actions)) {
+    return {
+      valid: false,
+      issueCode: "CANDIDATE_HOLDER_SHUTDOWN_REQUIRES_INSPECTION"
+    };
+  }
+
+  if (hasUnsupportedWorkspaceRecoveryInspectionShellAction(fullExecutionInput, actions)) {
+    return {
+      valid: false,
+      issueCode: "WORKSPACE_RECOVERY_RUNTIME_INSPECTION_REQUIRED"
+    };
+  }
+
+  if (hasInvalidWorkspaceRecoveryInspectionTargets(fullExecutionInput, actions)) {
+    return {
+      valid: false,
+      issueCode: "WORKSPACE_RECOVERY_EXACT_PATH_INSPECTION_REQUIRED"
+    };
+  }
+
+  if (isWorkspaceRecoveryInspectInstruction(fullExecutionInput)) {
+    return hasWorkspaceRecoveryInspectionAction(actions)
+      ? {
+          valid: true,
+          issueCode: null
+        }
+      : {
+          valid: false,
+          issueCode: "WORKSPACE_RECOVERY_RUNTIME_INSPECTION_REQUIRED"
+        };
+  }
+
+  if (isWorkspaceRecoveryExactStopInstruction(fullExecutionInput)) {
+    if (hasOrganizationDestinationSelfMatchAction(currentUserRequest, actions)) {
+      return {
+        valid: false,
+        issueCode: "LOCAL_ORGANIZATION_DESTINATION_SELF_MATCH_DISALLOWED"
+      };
+    }
+    return hasWorkspaceRecoveryExactStopOrMoveAction(actions)
+      ? {
+          valid: true,
+          issueCode: null
+        }
+      : {
+          valid: false,
+          issueCode: "WORKSPACE_RECOVERY_STOP_OR_MOVE_REQUIRED"
+        };
+  }
+
+  if (isWorkspaceRecoveryPostShutdownRetryInstruction(fullExecutionInput)) {
+    if (hasOrganizationDestinationSelfMatchAction(currentUserRequest, actions)) {
+      return {
+        valid: false,
+        issueCode: "LOCAL_ORGANIZATION_DESTINATION_SELF_MATCH_DISALLOWED"
+      };
+    }
+    if (!hasOrganizationMoveAction(actions)) {
+      return {
+        valid: false,
+        issueCode: "LOCAL_ORGANIZATION_SHELL_ACTION_REQUIRED"
+      };
+    }
+    if (!hasOrganizationMoveProofAction(actions)) {
+      return {
+        valid: false,
+        issueCode: "LOCAL_ORGANIZATION_PROOF_REQUIRED"
+      };
+    }
     return {
       valid: true,
       issueCode: null
@@ -80,6 +208,73 @@ export function assessExecutionStyleBuildPlan(
     return {
       valid: false,
       issueCode: "INSPECTION_ONLY_BUILD_PLAN"
+    };
+  }
+
+  if (
+    isLocalWorkspaceOrganizationRequest(currentUserRequest) &&
+    !hasOrganizationMoveAction(actions)
+  ) {
+    return {
+      valid: false,
+      issueCode: "LOCAL_ORGANIZATION_SHELL_ACTION_REQUIRED"
+    };
+  }
+
+  if (
+    isLocalWorkspaceOrganizationRequest(currentUserRequest) &&
+    hasOrganizationDestinationSelfMatchAction(currentUserRequest, actions)
+  ) {
+    return {
+      valid: false,
+      issueCode: "LOCAL_ORGANIZATION_DESTINATION_SELF_MATCH_DISALLOWED"
+    };
+  }
+
+  if (
+    isLocalWorkspaceOrganizationRequest(currentUserRequest) &&
+    !hasOrganizationMoveProofAction(actions)
+  ) {
+    return {
+      valid: false,
+      issueCode: "LOCAL_ORGANIZATION_PROOF_REQUIRED"
+    };
+  }
+
+  if (
+    isTrackedArtifactEditPreviewPlan(
+      requiredActionType,
+      currentUserRequest,
+      fullExecutionInput,
+      actions
+    )
+  ) {
+    return {
+      valid: true,
+      issueCode: null
+    };
+  }
+
+  if (!isExecutionStyleBuildRequest(currentUserRequest)) {
+    return {
+      valid: true,
+      issueCode: null
+    };
+  }
+
+  if (
+    usesSharedDesktopForUserOwnedRequest(currentUserRequest, actions)
+  ) {
+    return {
+      valid: false,
+      issueCode: "SHARED_DESKTOP_PATH_DISALLOWED"
+    };
+  }
+
+  if (hasUnsupportedOpenBrowserTarget(currentUserRequest, actions)) {
+    return {
+      valid: false,
+      issueCode: "OPEN_BROWSER_HTTP_URL_REQUIRED"
     };
   }
 
@@ -104,6 +299,16 @@ export function assessExecutionStyleBuildPlan(
   }
 
   if (
+    requiresPersistentBrowserOpenBuildRequest(currentUserRequest) &&
+    !actions.some((action) => action.type === "open_browser")
+  ) {
+    return {
+      valid: false,
+      issueCode: "PERSISTENT_BROWSER_OPEN_REQUIRED"
+    };
+  }
+
+  if (
     actions.some((action) => action.type === "start_process") &&
     !actions.some(
       (action) =>
@@ -122,47 +327,4 @@ export function assessExecutionStyleBuildPlan(
     valid: true,
     issueCode: null
   };
-}
-
-/**
- * Resolves a stable human-readable explanation for execution-style build policy failures.
- */
-export function describeExecutionStyleBuildPlanIssue(
-  issueCode: ExecutionStyleBuildPlanIssueCode
-): string {
-  switch (issueCode) {
-    case "INSPECTION_ONLY_BUILD_PLAN":
-      return "Planner model returned inspection-only actions for execution-style build request.";
-    case "LIVE_VERIFICATION_ACTION_REQUIRED":
-      return "Planner model returned no live-verification actions for execution-style live-run request.";
-    case "BROWSER_VERIFICATION_ACTION_REQUIRED":
-      return "Planner model returned no verify_browser action for explicit browser/UI verification request.";
-    case "START_PROCESS_REQUIRES_PROOF_ACTION":
-      return "Planner model started a managed process without a readiness or browser proof action in the same plan.";
-  }
-}
-
-/**
- * Builds execution-style build action requirement guidance for planner prompts.
- */
-export function buildExecutionStyleRequiredActionHint(
-  currentUserRequest: string,
-  repairMode = false
-): string {
-  if (!requiresExecutableBuildPlan(currentUserRequest)) {
-    return "";
-  }
-
-  const prefix = repairMode
-    ? "Repair must include at least one executable non-respond action because the current user request is an execution-style build goal."
-    : "Current user request is an execution-style build goal. Include at least one executable non-respond action and do not replace the plan with guidance-only respond output.";
-  const concreteExecutionClause =
-    " Inspection-only actions such as read_file, list_directory, check_process, or stop_process do not satisfy this requirement by themselves.";
-  const liveVerificationClause = isLiveVerificationBuildRequest(currentUserRequest)
-    ? " For live verification goals, keep finite proof steps first and include at least one live verification action such as start_process, probe_port, probe_http, or verify_browser."
-    : "";
-  const browserVerificationClause = requiresBrowserVerificationBuildRequest(currentUserRequest)
-    ? " When the request explicitly asks to verify the UI or homepage, include verify_browser after loopback readiness is proven."
-    : "";
-  return ` ${prefix}${concreteExecutionClause}${liveVerificationClause}${browserVerificationClause}`;
 }

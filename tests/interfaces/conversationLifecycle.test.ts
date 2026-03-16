@@ -12,6 +12,10 @@ import {
   setConversationAckLifecycleState
 } from "../../src/interfaces/conversationRuntime/conversationLifecycle";
 import type { ConversationJob, ConversationSession } from "../../src/interfaces/sessionStore";
+import {
+  buildConversationJobFixture,
+  buildConversationSessionFixture
+} from "../helpers/conversationFixtures";
 
 /**
  * Builds a minimal conversation session for lifecycle helper tests.
@@ -21,57 +25,31 @@ function buildSession(
   overrides: Partial<ConversationSession> = {}
 ): ConversationSession {
   const nowIso = new Date().toISOString();
-  return {
-    conversationId,
-    userId: "user-1",
-    username: "agentowner",
-    conversationVisibility: "private",
-    updatedAt: nowIso,
-    activeProposal: null,
-    runningJobId: null,
-    queuedJobs: [],
-    recentJobs: [],
-    conversationTurns: [],
-    agentPulse: {
-      optIn: true,
-      mode: "private",
-      routeStrategy: "last_private_used",
-      lastPulseSentAt: null,
-      lastPulseReason: null,
-      lastPulseTargetConversationId: null,
-      lastDecisionCode: "NOT_EVALUATED",
-      lastEvaluatedAt: null
+  return buildConversationSessionFixture(
+    {
+      updatedAt: nowIso,
+      agentPulse: {
+        ...buildConversationSessionFixture().agentPulse,
+        optIn: true
+      },
+      ...overrides
     },
-    ...overrides
-  };
+    {
+      conversationId,
+      receivedAt: nowIso
+    }
+  );
 }
 
 /**
  * Builds a minimal conversation job for ack-lifecycle tests.
  */
 function buildJob(): ConversationJob {
-  return {
-    id: "job-1",
+  return buildConversationJobFixture({
     input: "input",
     executionInput: "input",
-    createdAt: "2026-03-07T15:00:00.000Z",
-    startedAt: null,
-    completedAt: null,
-    status: "queued",
-    resultSummary: null,
-    errorMessage: null,
-    ackTimerGeneration: 0,
-    ackEligibleAt: null,
-    ackLifecycleState: "NOT_SENT",
-    ackMessageId: null,
-    ackSentAt: null,
-    ackEditAttemptCount: 0,
-    ackLastErrorCode: null,
-    finalDeliveryOutcome: "not_attempted",
-    finalDeliveryAttemptCount: 0,
-    finalDeliveryLastErrorCode: null,
-    finalDeliveryLastAttemptAt: null
-  };
+    createdAt: "2026-03-07T15:00:00.000Z"
+  });
 }
 
 test("canUseConversationAckTimerForSession only enables Telegram edit-capable non-streaming transports", () => {
@@ -130,7 +108,7 @@ test("enqueueConversationJob starts immediately for idle sessions and queues beh
     "2026-03-07T15:00:00.000Z"
   );
   assert.equal(queued.shouldStartWorker, false);
-  assert.ok(queued.reply.includes("Queue depth: 2"));
+  assert.ok(queued.reply.includes("1 request is already waiting ahead of it."));
 });
 
 test("setConversationAckLifecycleState fails closed on invalid transitions", () => {

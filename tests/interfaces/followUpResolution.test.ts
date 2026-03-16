@@ -17,41 +17,33 @@ import {
   createPulseLexicalRuleContext
 } from "../../src/interfaces/conversationManagerHelpers";
 import { type ConversationSession } from "../../src/interfaces/sessionStore";
+import {
+  buildConversationIngressConfig,
+  buildConversationSessionFixture
+} from "../helpers/conversationFixtures";
 
 /**
  * Builds a minimal interface conversation session for follow-up tests.
  */
 function buildSession(overrides: Partial<ConversationSession> = {}): ConversationSession {
-  return {
-    conversationId: "telegram:chat-1:user-1",
-    userId: "user-1",
-    username: "agentowner",
-    conversationVisibility: "private",
-    updatedAt: "2026-03-07T15:00:00.000Z",
-    activeProposal: {
-      id: "draft-1",
-      originalInput: "schedule focused work",
-      currentInput: "schedule focused work",
-      createdAt: "2026-03-07T15:00:00.000Z",
+  return buildConversationSessionFixture(
+    {
       updatedAt: "2026-03-07T15:00:00.000Z",
-      status: "pending"
+      activeProposal: {
+        id: "draft-1",
+        originalInput: "schedule focused work",
+        currentInput: "schedule focused work",
+        createdAt: "2026-03-07T15:00:00.000Z",
+        updatedAt: "2026-03-07T15:00:00.000Z",
+        status: "pending"
+      },
+      ...overrides
     },
-    runningJobId: null,
-    queuedJobs: [],
-    recentJobs: [],
-    conversationTurns: [],
-    agentPulse: {
-      optIn: false,
-      mode: "private",
-      routeStrategy: "last_private_used",
-      lastPulseSentAt: null,
-      lastPulseReason: null,
-      lastPulseTargetConversationId: null,
-      lastDecisionCode: "NOT_EVALUATED",
-      lastEvaluatedAt: null
-    },
-    ...overrides
-  };
+    {
+      conversationId: "chat-1",
+      receivedAt: "2026-03-07T15:00:00.000Z"
+    }
+  );
 }
 
 /**
@@ -77,14 +69,9 @@ function buildDeps(
 ): ConversationIngressDependencies {
   return {
     store: null as never,
-    config: {
-      allowAutonomousViaInterface: false,
-      maxProposalInputChars: 5_000,
-      maxConversationTurns: 20,
-      maxContextTurnsForExecution: 8,
-      staleRunningJobRecoveryMs: 60_000,
-      maxRecentJobs: 20
-    },
+    config: buildConversationIngressConfig({
+      allowAutonomousViaInterface: false
+    }),
     followUpRuleContext: createFollowUpRuleContext(null),
     pulseLexicalRuleContext: createPulseLexicalRuleContext(null),
     intentInterpreterConfidenceThreshold: 0.85,
@@ -122,7 +109,7 @@ test("approveProposal clears the active draft and enqueues the proposal input", 
   assert.equal(enqueuedInputs[0], "schedule focused work");
   assert.equal(session.activeProposal, null);
   assert.ok(reply.includes("Draft draft-1 approved."));
-  assert.ok(reply.includes("Execution started. Use /status for live state."));
+  assert.ok(reply.includes("Execution started. I will keep you updated here while it runs."));
 });
 
 test("resolveInterpretedPulseCommandArgument honors model-assisted pulse control when confidence passes", async () => {
@@ -151,6 +138,34 @@ test("resolveInterpretedPulseCommandArgument honors model-assisted pulse control
   );
 
   assert.equal(interpreted?.pulseMode, "public");
+});
+
+test("resolveInterpretedPulseCommandArgument ignores model-assisted pulse control without pulse wording", async () => {
+  const session = buildSession({
+    activeProposal: null,
+    conversationTurns: [
+      {
+        role: "user",
+        text: "Build the landing page and leave it open.",
+        at: "2026-03-07T15:00:00.000Z"
+      }
+    ]
+  });
+
+  const interpreted = await resolveInterpretedPulseCommandArgument(
+    "Close the landing page so we can work on something else.",
+    session,
+    buildDeps({
+      interpretConversationIntent: async () => ({
+        intentType: "pulse_control",
+        pulseMode: "off",
+        confidence: 0.99,
+        lexicalClassification: null
+      }) as never
+    })
+  );
+
+  assert.equal(interpreted, null);
 });
 
 test("handleImplicitProposalFlow executes direct clarifying answers while proposal is idle", async () => {

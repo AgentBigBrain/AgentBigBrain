@@ -228,6 +228,16 @@ const PERSONAL_DATA_RECIPIENT_HINT_KEYS = [
   "channel",
   "conversationId"
 ];
+const PERSONAL_DATA_PHRASE_REGEXES = PERSONAL_DATA_PATTERNS.map((pattern) =>
+  new RegExp(
+    `\\b${pattern
+      .trim()
+      .split(/\s+/)
+      .map((token) => token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+      .join("[\\\\s_/-]+")}\\b`,
+    "i"
+  )
+);
 
 /**
  * Checks whether text contains any substring from a pattern allow/deny list.
@@ -246,6 +256,28 @@ const PERSONAL_DATA_RECIPIENT_HINT_KEYS = [
 function containsAnyPattern(text: string, patterns: readonly string[]): boolean {
   const normalized = text.toLowerCase();
   return patterns.some((pattern) => normalized.includes(pattern));
+}
+
+/**
+ * Checks whether text contains any personal-data phrase as a bounded phrase match.
+ *
+ * **Why it exists:**
+ * Privacy checks should not treat benign wording like "personal information" as an exact match for
+ * the narrower phrase "personal info". Bounded phrase regexes reduce those false positives while
+ * still catching explicit PII wording.
+ *
+ * **What it talks to:**
+ * - Reads `PERSONAL_DATA_PHRASE_REGEXES`.
+ *
+ * @param text - Source text to inspect.
+ * @param patterns - Original phrase list used to filter the compiled regex list.
+ * @returns `true` when at least one bounded PII phrase is present.
+ */
+function containsPersonalDataPhrase(text: string, patterns: readonly string[]): boolean {
+  const allowedPatterns = new Set(patterns);
+  return PERSONAL_DATA_PATTERNS.some((pattern, index) =>
+    allowedPatterns.has(pattern) && PERSONAL_DATA_PHRASE_REGEXES[index]?.test(text)
+  );
 }
 
 /**
@@ -652,10 +684,10 @@ export function containsPersonalDataSignal(proposal: GovernanceProposal): boolea
     const highConfidencePatterns = PERSONAL_DATA_PATTERNS.filter(
       (pattern) => !AMBIGUOUS_PII_PATTERNS_IN_CODE_CONTEXT.includes(pattern)
     );
-    if (containsAnyPattern(textSignal, highConfidencePatterns)) {
+    if (containsPersonalDataPhrase(textSignal, highConfidencePatterns)) {
       return true;
     }
-  } else if (containsAnyPattern(textSignal, PERSONAL_DATA_PATTERNS)) {
+  } else if (containsPersonalDataPhrase(textSignal, PERSONAL_DATA_PATTERNS)) {
     return true;
   }
 

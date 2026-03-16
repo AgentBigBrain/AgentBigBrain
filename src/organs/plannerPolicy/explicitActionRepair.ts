@@ -18,12 +18,22 @@ import {
 } from "./skillActionNormalization";
 import {
   assessExecutionStyleBuildPlan,
-  describeExecutionStyleBuildPlanIssue,
   hasNonRespondAction,
   requiresExecutableBuildPlan
 } from "./buildExecutionPolicy";
+import { describeExecutionStyleBuildPlanIssue } from "./buildExecutionPlanMessaging";
+import {
+  extractLinkedPreviewLeaseId,
+  hasLinkedPreviewStopProcessAction,
+  isWorkspaceRecoveryMarkerRequest,
+  normalizeLinkedPreviewShutdownActions,
+  normalizeOpenBrowserWorkspaceContext,
+  normalizeTrackedArtifactPreviewRefreshActions,
+  stripExecutionStyleRespondActions
+} from "./explicitActionRepairSupport";
 import {
   PlannerActionPreparationResult,
+  PlannerExecutionEnvironmentContext,
   PlannerActionValidationResult,
   RequiredActionType
 } from "./executionStyleContracts";
@@ -34,7 +44,8 @@ import {
 export function preparePlannerActions(
   plannerOutput: unknown,
   currentUserRequest: string,
-  requiredActionType: RequiredActionType
+  requiredActionType: RequiredActionType,
+  fullExecutionInput: string = currentUserRequest
 ): PlannerActionPreparationResult {
   let actions = normalizeModelActions(extractActionCandidates(plannerOutput));
   actions = normalizeRequiredCreateSkillParams(
@@ -45,7 +56,20 @@ export function preparePlannerActions(
   actions = normalizeRequiredRunSkillParams(
     actions,
     currentUserRequest,
-    requiredActionType
+      requiredActionType
+  );
+  actions = stripExecutionStyleRespondActions(actions, currentUserRequest);
+  actions = normalizeTrackedArtifactPreviewRefreshActions(
+    actions,
+    currentUserRequest,
+    requiredActionType,
+    fullExecutionInput
+  );
+  actions = normalizeOpenBrowserWorkspaceContext(actions, fullExecutionInput);
+  actions = normalizeLinkedPreviewShutdownActions(
+    actions,
+    requiredActionType,
+    fullExecutionInput
   );
   const filteredRunSkillOnly =
     hasOnlyRunSkillActions(actions) &&
@@ -62,18 +86,29 @@ export function preparePlannerActions(
 export function evaluatePlannerActionValidation(
   currentUserRequest: string,
   requiredActionType: RequiredActionType,
-  actions: PlannedAction[]
+  actions: PlannedAction[],
+  fullExecutionInput: string = currentUserRequest,
+  executionEnvironment: PlannerExecutionEnvironmentContext | null = null
 ): PlannerActionValidationResult {
+  const linkedPreviewLeaseId = extractLinkedPreviewLeaseId(fullExecutionInput);
   const missingRequiredAction =
     actions.length > 0 &&
     !hasRequiredAction(actions, requiredActionType);
+  const missingLinkedPreviewStopProcess =
+    actions.length > 0 &&
+    requiredActionType === "close_browser" &&
+    linkedPreviewLeaseId !== null &&
+    !hasLinkedPreviewStopProcessAction(actions, linkedPreviewLeaseId);
   const missingExecutableAction =
     actions.length > 0 &&
     requiresExecutableBuildPlan(currentUserRequest) &&
     !hasNonRespondAction(actions);
   const buildPlanAssessment = assessExecutionStyleBuildPlan(
     currentUserRequest,
-    actions
+    actions,
+    requiredActionType,
+    executionEnvironment,
+    fullExecutionInput
   );
   const invalidExecutionStyleBuildPlan =
     actions.length > 0 && !buildPlanAssessment.valid;
@@ -82,6 +117,8 @@ export function evaluatePlannerActionValidation(
       ? "no_valid_actions"
       : missingRequiredAction
         ? `missing_required_action:${requiredActionType}`
+        : missingLinkedPreviewStopProcess
+          ? `missing_linked_preview_stop_process:${linkedPreviewLeaseId}`
         : missingExecutableAction
           ? "missing_executable_action:execution_style_build"
           : invalidExecutionStyleBuildPlan
@@ -90,6 +127,7 @@ export function evaluatePlannerActionValidation(
 
   return {
     missingRequiredAction,
+    missingLinkedPreviewStopProcess,
     missingExecutableAction,
     invalidExecutionStyleBuildPlan,
     buildPlanAssessment,
@@ -108,6 +146,11 @@ export function assertPlannerActionValidation(
   if (validation.missingRequiredAction) {
     throw new Error(
       `Planner model missing required ${requiredActionType} action for explicit user intent.`
+    );
+  }
+  if (validation.missingLinkedPreviewStopProcess) {
+    throw new Error(
+      "Planner model closed a tracked browser session without stopping the linked preview process."
     );
   }
   if (validation.missingExecutableAction) {
@@ -129,10 +172,12 @@ export function assertPlannerActionValidation(
  * Evaluates whether run-skill-only collapse should use deterministic respond fallback.
  */
 export function shouldUseNonExplicitRunSkillFallback(
+  currentUserRequest: string,
   requiredActionType: RequiredActionType,
   ...preparations: readonly PlannerActionPreparationResult[]
 ): boolean {
   return (
+    !isWorkspaceRecoveryMarkerRequest(currentUserRequest) &&
     requiredActionType === null &&
     preparations.some((preparation) => preparation.filteredRunSkillOnly)
   );

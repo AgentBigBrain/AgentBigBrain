@@ -15,7 +15,7 @@ import { DEFAULT_BRAIN_CONFIG } from "../../src/core/config";
 import { makeId } from "../../src/core/ids";
 import { BrainOrchestrator } from "../../src/core/orchestrator";
 import { StateStore } from "../../src/core/stateStore";
-import { TaskRequest } from "../../src/core/types";
+import { ExecutorExecutionOutcome, TaskRequest } from "../../src/core/types";
 import { createDefaultGovernors } from "../../src/governors/defaultGovernors";
 import { MasterGovernor } from "../../src/governors/masterGovernor";
 import { RuntimeTraceLogger } from "../../src/core/runtimeTraceLogger";
@@ -528,6 +528,54 @@ class FixedBrowserVerifier implements BrowserVerifier {
   }
 }
 
+class PortConflictThenProofExecutor extends ToolExecutorOrgan {
+  private readonly executedActionTypes: string[] = [];
+
+  getExecutedActionTypes(): readonly string[] {
+    return [...this.executedActionTypes];
+  }
+
+  override async executeWithOutcome(
+    action: Parameters<ToolExecutorOrgan["executeWithOutcome"]>[0],
+    _signal?: AbortSignal,
+    _taskId?: string
+  ): Promise<ExecutorExecutionOutcome> {
+    this.executedActionTypes.push(action.type);
+    if (action.type === "start_process") {
+      return {
+        status: "failed",
+        output:
+          "Process start failed: http://localhost:4173 was already occupied before startup. Try a different free loopback port such as 60070.",
+        failureCode: "PROCESS_START_FAILED",
+        executionMetadata: {
+          managedProcess: true,
+          processLifecycleStatus: "PROCESS_START_FAILED",
+          processStartupFailureKind: "PORT_IN_USE",
+          processRequestedHost: "localhost",
+          processRequestedPort: 4173,
+          processRequestedUrl: "http://localhost:4173",
+          processSuggestedHost: "localhost",
+          processSuggestedPort: 60070,
+          processSuggestedUrl: "http://localhost:60070"
+        }
+      };
+    }
+    if (action.type === "probe_http") {
+      return {
+        status: "success",
+        output: "HTTP ready: http://localhost:4173 responded with 200."
+      };
+    }
+    if (action.type === "open_browser") {
+      return {
+        status: "success",
+        output: "Opened http://localhost:4173 in a visible browser window and left it open for you."
+      };
+    }
+    return super.executeWithOutcome(action, _signal, _taskId);
+  }
+}
+
 /**
  * Implements `createManagedProcessShellSpawn` behavior within module scope.
  * Interacts with local collaborators through imported modules and typed inputs/outputs.
@@ -542,20 +590,23 @@ function createManagedProcessShellSpawn(): {
     _argsOrOptions?: unknown,
     _maybeOptions?: unknown
   ) => {
-    const child = new EventEmitter() as import("node:child_process").ChildProcessWithoutNullStreams;
-    const stdout = new EventEmitter() as unknown as import("node:stream").Readable & {
+    const stdout = Object.assign(new EventEmitter(), {
+      resume: () => undefined
+    }) as unknown as import("node:stream").Readable & {
       resume?: () => void;
     };
-    const stderr = new EventEmitter() as unknown as import("node:stream").Readable & {
+    const stderr = Object.assign(new EventEmitter(), {
+      resume: () => undefined
+    }) as unknown as import("node:stream").Readable & {
       resume?: () => void;
     };
     const stdin = new EventEmitter() as unknown as import("node:stream").Writable;
-    stdout.resume = () => undefined;
-    stderr.resume = () => undefined;
-    child.stdin = stdin;
-    child.stdout = stdout;
-    child.stderr = stderr;
-    child.pid = 5252;
+    const child = Object.assign(new EventEmitter(), {
+      stdin,
+      stdout,
+      stderr,
+      pid: 5252
+    }) as import("node:child_process").ChildProcessWithoutNullStreams;
     child.kill = (() => {
       killCount += 1;
       queueMicrotask(() => {
@@ -1089,9 +1140,16 @@ test("orchestrator executes managed-process lifecycle actions through the full g
     assert.equal(startResult.actionResults.length, 1);
     assert.equal(startResult.actionResults[0].approved, true);
     assert.equal(startResult.actionResults[0].action.type, "start_process");
-    assert.match(startResult.actionResults[0].output, /Process started: lease /i);
+    const startOutput = startResult.actionResults[0].output;
+    if (typeof startOutput !== "string") {
+      assert.fail("Expected start_process output.");
+    }
+    assert.match(startOutput, /Process started: lease /i);
     const leaseId = startResult.actionResults[0].executionMetadata?.processLeaseId;
-    assert.equal(typeof leaseId, "string");
+    if (typeof leaseId !== "string") {
+      assert.fail("Expected process lease id from start_process result.");
+    }
+    const managedLeaseId = leaseId;
 
     modelClient.setNextPlan({
       plannerNotes: "Check managed process.",
@@ -1099,7 +1157,7 @@ test("orchestrator executes managed-process lifecycle actions through the full g
         {
           type: "check_process",
           description: "Check managed process state.",
-          params: { leaseId },
+          params: { leaseId: managedLeaseId },
           estimatedCostUsd: 0.04
         }
       ]
@@ -1108,7 +1166,11 @@ test("orchestrator executes managed-process lifecycle actions through the full g
     assert.equal(checkResult.actionResults.length, 1);
     assert.equal(checkResult.actionResults[0].approved, true);
     assert.equal(checkResult.actionResults[0].action.type, "check_process");
-    assert.match(checkResult.actionResults[0].output, /Process still running: lease /i);
+    const checkOutput = checkResult.actionResults[0].output;
+    if (typeof checkOutput !== "string") {
+      assert.fail("Expected check_process output.");
+    }
+    assert.match(checkOutput, /Process still running: lease /i);
 
     modelClient.setNextPlan({
       plannerNotes: "Stop managed process.",
@@ -1116,7 +1178,7 @@ test("orchestrator executes managed-process lifecycle actions through the full g
         {
           type: "stop_process",
           description: "Stop managed process state.",
-          params: { leaseId },
+          params: { leaseId: managedLeaseId },
           estimatedCostUsd: 0.12
         }
       ]
@@ -1125,12 +1187,115 @@ test("orchestrator executes managed-process lifecycle actions through the full g
     assert.equal(stopResult.actionResults.length, 1);
     assert.equal(stopResult.actionResults[0].approved, true);
     assert.equal(stopResult.actionResults[0].action.type, "stop_process");
-    assert.match(stopResult.actionResults[0].output, /Process stopped: lease /i);
+    const stopOutput = stopResult.actionResults[0].output;
+    if (typeof stopOutput !== "string") {
+      assert.fail("Expected stop_process output.");
+    }
+    assert.match(stopOutput, /Process stopped: lease /i);
     assert.equal(
       stopResult.actionResults[0].executionMetadata?.processLifecycleStatus,
       "PROCESS_STOPPED"
     );
     assert.equal(spawnMock.getKillCount(), 1);
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("orchestrator skips same-plan live proof and browser-open actions after a port-conflicted start_process", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-port-conflict-guard-"));
+  const statePath = path.join(tempDir, "state.json");
+  const memoryStore = new SemanticMemoryStore(path.join(tempDir, "memory.json"));
+  const personalityStore = new PersonalityStore(path.join(tempDir, "personality_profile.json"));
+  const governanceMemoryStore = new GovernanceMemoryStore(path.join(tempDir, "governance_memory.json"));
+  const modelClient = new FixedPlannerModelClient({
+    plannerNotes: "Start the app, prove readiness, and leave the page open.",
+    actions: [
+      {
+        type: "start_process",
+        description: "Start the local preview server.",
+        params: {
+          command: "python -m http.server 4173",
+          cwd: tempDir
+        },
+        estimatedCostUsd: 0.28
+      },
+      {
+        type: "probe_http",
+        description: "Prove loopback readiness for the local page.",
+        params: {
+          url: "http://localhost:4173"
+        },
+        estimatedCostUsd: 0.04
+      },
+      {
+        type: "open_browser",
+        description: "Leave the local page open in a visible browser window.",
+        params: {
+          url: "http://localhost:4173"
+        },
+        estimatedCostUsd: 0.05
+      }
+    ]
+  });
+  const config = {
+    ...DEFAULT_BRAIN_CONFIG,
+    permissions: {
+      ...DEFAULT_BRAIN_CONFIG.permissions,
+      allowShellCommandAction: true,
+      allowRealShellExecution: true
+    },
+    shellRuntime: {
+      ...DEFAULT_BRAIN_CONFIG.shellRuntime,
+      profile: {
+        ...DEFAULT_BRAIN_CONFIG.shellRuntime.profile,
+        cwdPolicy: {
+          ...DEFAULT_BRAIN_CONFIG.shellRuntime.profile.cwdPolicy,
+          denyOutsideSandbox: false
+        }
+      }
+    }
+  };
+  const executor = new PortConflictThenProofExecutor(config);
+  const brain = new BrainOrchestrator(
+    config,
+    new PlannerOrgan(modelClient, memoryStore),
+    executor,
+    createDefaultGovernors(),
+    new MasterGovernor(config.governance.supermajorityThreshold),
+    new StateStore(statePath),
+    modelClient,
+    new ReflectionOrgan(memoryStore, modelClient),
+    personalityStore,
+    governanceMemoryStore
+  );
+
+  try {
+    const result = await brain.runTask(
+      buildTask("Build the local landing page and leave it open when it is ready.")
+    );
+
+    assert.deepEqual(executor.getExecutedActionTypes(), ["start_process"]);
+    assert.equal(result.actionResults.length, 3);
+
+    const startResult = result.actionResults[0];
+    assert.equal(startResult.action.type, "start_process");
+    assert.equal(startResult.approved, false);
+    assert.equal(startResult.executionFailureCode, "PROCESS_START_FAILED");
+
+    const probeResult = result.actionResults[1];
+    assert.equal(probeResult.action.type, "probe_http");
+    assert.equal(probeResult.approved, false);
+    assert.equal(probeResult.blockedBy.includes("PROCESS_START_FAILED"), true);
+    assert.match(probeResult.output ?? "", /probe_http skipped/i);
+    assert.match(probeResult.output ?? "", /http:\/\/localhost:4173/i);
+
+    const openResult = result.actionResults[2];
+    assert.equal(openResult.action.type, "open_browser");
+    assert.equal(openResult.approved, false);
+    assert.equal(openResult.blockedBy.includes("PROCESS_START_FAILED"), true);
+    assert.match(openResult.output ?? "", /open_browser skipped/i);
+    assert.match(openResult.output ?? "", /http:\/\/localhost:4173/i);
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }

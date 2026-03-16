@@ -24,49 +24,44 @@ import {
 } from "./autonomy/contracts";
 import { buildMissionCompletionContract } from "./autonomy/missionContract";
 import {
-    buildManagedProcessStopRetryInput,
-    buildMissionEvidenceRetryInput,
-    countApprovedArtifactMutationActions,
-    countApprovedBrowserProofActions,
-    countApprovedManagedProcessStopActions,
-    countApprovedReadinessProofActions,
-    countApprovedRealSideEffectActions,
-    countApprovedTargetPathTouchActions,
-    mapRequirementToReasonCode,
+    buildManagedProcessStopRetryInput, buildMissionEvidenceRetryInput, countApprovedArtifactMutationActions,
+    countApprovedBrowserProofActions, countApprovedManagedProcessStopActions, countApprovedReadinessProofActions,
+    countApprovedRealSideEffectActions, countApprovedTargetPathTouchActions, mapRequirementToReasonCode,
     resolveMissingMissionRequirements
 } from "./autonomy/missionEvidence";
+import { formatManagedProcessNeverReadyReason, resolveLiveVerificationBlockedAbortReason } from "./autonomy/completionGate";
+import { describeLoopbackTarget, hasReadinessNotReadyFailure, resolveTrackedLoopbackTarget, type LoopbackTargetHint } from "./autonomy/liveRunRecovery";
+import { cleanupManagedProcessLease, findApprovedManagedProcessCheckResult, resolveTrackedManagedProcessLeaseId } from "./autonomy/loopCleanupPolicy";
+import { formatLiveRunCompletionReasoning } from "./autonomy/agentLoopModelPolicy";
+import { buildAutonomousUserTurnGateReason } from "./autonomy/agentLoopUserTurnGate";
 import {
-    formatManagedProcessNeverReadyReason,
-    resolveLiveVerificationBlockedAbortReason
-} from "./autonomy/completionGate";
+    buildRetryingStateMessage,
+    buildVerificationStateMessage,
+    buildWorkingStateMessage,
+    buildWorkspaceRecoveryStateMessage
+} from "./autonomy/agentLoopProgress";
+import { evaluateAutonomousNextStepPolicy, evaluateProactiveAutonomousGoalPolicy, hasMissionStopLimitReached } from "./autonomy/agentLoopRuntimeSupport";
+import type { AutonomousLoopCallbacks } from "./autonomy/agentLoopRuntimeSupport";
 import {
-    describeLoopbackTarget,
-    hasReadinessNotReadyFailure,
-    resolveTrackedLoopbackTarget,
-    type LoopbackTargetHint
-} from "./autonomy/liveRunRecovery";
+    buildWorkspaceRecoveryAbortReason,
+    deriveWorkspaceRecoveryInspectionSignal,
+    deriveWorkspaceRecoverySignal,
+    hasApprovedWorkspaceRecoveryMoveAction,
+    hasApprovedWorkspaceRecoveryStopProcessAction
+} from "./autonomy/workspaceRecoveryPolicy";
 import {
-    cleanupManagedProcessLease,
-    findApprovedManagedProcessCheckResult,
-    resolveTrackedManagedProcessLeaseId
-} from "./autonomy/loopCleanupPolicy";
-import {
-    evaluateAutonomousNextStep,
-    evaluateProactiveAutonomousGoal,
-    formatLiveRunCompletionReasoning
-} from "./autonomy/agentLoopModelPolicy";
+    buildWorkspaceRecoveryNextUserInput,
+    buildWorkspaceRecoveryPostInspectionRetryInput,
+    buildWorkspaceRecoveryPostShutdownRetryInput,
+    containsWorkspaceRecoveryPostInspectionRetryMarker,
+    containsWorkspaceRecoveryStopExactMarker
+} from "./autonomy/workspaceRecoveryCommandBuilders";
 
-/**
- * Optional callbacks for observing autonomous loop progress.
- * Used by interface adapters (Telegram, Discord) to deliver per-iteration updates.
- */
-export interface AutonomousLoopCallbacks {
-    onIterationStart?: (iteration: number, input: string) => Promise<void> | void;
-    onIterationComplete?: (iteration: number, summary: string, approved: number, blocked: number) => Promise<void> | void;
-    onGoalMet?: (reasoning: string, totalIterations: number) => Promise<void> | void;
-    onGoalAborted?: (reason: string, totalIterations: number) => Promise<void> | void;
-}
-
+export type {
+    AutonomousLoopCallbacks,
+    AutonomousLoopState,
+    AutonomousLoopStateUpdate
+} from "./autonomy/agentLoopRuntimeSupport";
 export class AutonomousLoop {
     /**
      * Initializes `AutonomousLoop` with deterministic runtime dependencies.
@@ -90,6 +85,64 @@ export class AutonomousLoop {
     ) { }
 
     /**
+     * Evaluates the next autonomous step through the extracted model-policy helper.
+     *
+     * **Why it exists:**
+     * Preserves a stable, testable loop-evaluation seam even when the inner runtime helpers are
+     * refactored into smaller autonomy modules.
+     *
+     * **What it talks to:**
+     * - Uses `evaluateAutonomousNextStepPolicy` (import `evaluateAutonomousNextStepPolicy`) from
+     *   `./autonomy/agentLoopRuntimeSupport`.
+     *
+     * @param overarchingGoal - Current mission goal text.
+     * @param lastResult - Result from the latest autonomous-loop iteration.
+     * @param missionEvidence - Cumulative deterministic mission evidence so far.
+     * @param trackedManagedProcessLeaseId - Tracked managed-process lease, if any.
+     * @param trackedLoopbackTarget - Tracked loopback target, if any.
+     * @returns Promise resolving to the next-step policy decision.
+     */
+    async evaluateNextStep(
+        overarchingGoal: string,
+        lastResult: TaskRunResult,
+        missionEvidence: MissionEvidenceCounters,
+        trackedManagedProcessLeaseId: string | null,
+        trackedLoopbackTarget: LoopbackTargetHint | null
+    ) {
+        return await evaluateAutonomousNextStepPolicy(
+            this.modelClient,
+            this.config,
+            overarchingGoal,
+            lastResult,
+            missionEvidence,
+            trackedManagedProcessLeaseId,
+            trackedLoopbackTarget
+        );
+    }
+
+    /**
+     * Evaluates the next proactive daemon goal through the extracted model-policy helper.
+     *
+     * **Why it exists:**
+     * Keeps proactive-goal generation available as an explicit class seam so tests and future
+     * runtime wiring do not depend on private helper imports.
+     *
+     * **What it talks to:**
+     * - Uses `evaluateProactiveAutonomousGoalPolicy` (import
+     *   `evaluateProactiveAutonomousGoalPolicy`) from `./autonomy/agentLoopRuntimeSupport`.
+     *
+     * @param previousGoal - Goal that just completed.
+     * @returns Promise resolving to the next proactive-goal decision.
+     */
+    async evaluateProactiveGoal(previousGoal: string) {
+        return await evaluateProactiveAutonomousGoalPolicy(
+            this.modelClient,
+            this.config,
+            previousGoal
+        );
+    }
+
+    /**
      * Runs the autonomous goal-resolution loop with optional progress callbacks.
      * Each iteration plans, governs, and executes a subtask, then evaluates whether the goal is met.
      * Pass an {@link AbortSignal} to allow external cancellation (e.g. user "stop" command).
@@ -100,18 +153,28 @@ export class AutonomousLoop {
         overarchingGoal: string,
         callbacks?: AutonomousLoopCallbacks,
         signal?: AbortSignal,
-        daemonGoalRolloverLimit?: number
+        daemonGoalRolloverLimit?: number,
+        initialGoalInput?: string | null
     ): Promise<void> {
         let currentOverarchingGoal = overarchingGoal;
         let daemonGoalRollovers = 0;
-
+        let currentLoopInitialInput =
+            typeof initialGoalInput === "string" && initialGoalInput.trim().length > 0
+                ? initialGoalInput.trim()
+                : null;
         /* eslint-disable no-constant-condition */
         while (true) {
             console.log(`\n======================================================`);
             console.log(`[Autonomous Loop Started] Goal: "${currentOverarchingGoal}"`);
             console.log(`======================================================\n`);
+            await callbacks?.onStateChange?.({
+                state: "starting",
+                iteration: 0,
+                message:
+                    "I'm taking this end to end now. I'll keep going until it's done or I hit a real blocker."
+            });
 
-            let currentInput = currentOverarchingGoal;
+            let currentInput = currentLoopInitialInput ?? currentOverarchingGoal;
             let iteration = 0;
             const maxIterations = this.config.limits.maxAutonomousIterations;
             const maxConsecutiveZeroProgressIterations =
@@ -131,7 +194,6 @@ export class AutonomousLoop {
             let trackedLoopbackTarget: LoopbackTargetHint | null = null;
             let readinessFailureLeaseId: string | null = null;
             let readinessFailureCount = 0;
-
             let goalMetInCurrentLoop = false;
             const abortCurrentLoop = async (
                 reason: string,
@@ -147,6 +209,11 @@ export class AutonomousLoop {
                     trackedManagedProcessLeaseId = null;
                 }
                 console.log(`\n[Autonomous Loop Aborted] ${humanizeAutonomousStopReason(reason)}\n`);
+                await callbacks?.onStateChange?.({
+                    state: "stopped",
+                    iteration: currentIteration,
+                    message: humanizeAutonomousStopReason(reason)
+                });
                 await callbacks?.onGoalAborted?.(reason, currentIteration);
                 goalMetInCurrentLoop = true;
             };
@@ -171,6 +238,11 @@ export class AutonomousLoop {
                 iteration++;
                 console.log(`\n--- [Iteration ${iteration}] Executing Subtask ---`);
                 console.log(`> Request: "${currentInput}"\n`);
+                await callbacks?.onStateChange?.({
+                    state: "working",
+                    iteration,
+                    message: buildWorkingStateMessage(iteration, currentInput)
+                });
                 await callbacks?.onIterationStart?.(iteration, currentInput);
 
                 const task: TaskRequest = {
@@ -262,7 +334,13 @@ export class AutonomousLoop {
 
                 const blocked = result.actionResults.filter(r => !r.approved).length;
                 console.log(`\n[Iteration ${iteration} Completed] ${result.summary}`);
-                await callbacks?.onIterationComplete?.(iteration, result.summary, approved, blocked);
+                await callbacks?.onIterationComplete?.(
+                    iteration,
+                    result.summary,
+                    approved,
+                    blocked,
+                    result
+                );
 
                 if (signal?.aborted) {
                     const reason = "Cancelled by user.";
@@ -275,8 +353,24 @@ export class AutonomousLoop {
                         trackedManagedProcessLeaseId = null;
                     }
                     console.log(`\n[Autonomous Loop Cancelled] ${reason}\n`);
+                    await callbacks?.onStateChange?.({
+                        state: "stopped",
+                        iteration,
+                        message: humanizeAutonomousStopReason(reason)
+                    });
                     await callbacks?.onGoalAborted?.(reason, iteration);
                     goalMetInCurrentLoop = true;
+                    break;
+                }
+
+                if (hasMissionStopLimitReached(result)) {
+                    const reason = formatReasonWithCode(
+                        missionContract.executionStyle
+                            ? EXECUTION_STYLE_STALL_REASON_CODE
+                            : GENERIC_STALL_REASON_CODE,
+                        "This run exhausted the mission retry budget before the remaining work could be completed."
+                    );
+                    await abortCurrentLoop(reason, iteration, true);
                     break;
                 }
 
@@ -320,6 +414,94 @@ export class AutonomousLoop {
                     await callbacks?.onGoalMet?.(reasoning, iteration);
                     goalMetInCurrentLoop = true;
                     break;
+                }
+
+                const workspaceRecoverySignal = deriveWorkspaceRecoverySignal(result);
+                if (workspaceRecoverySignal) {
+                    if (
+                        containsWorkspaceRecoveryPostInspectionRetryMarker(currentInput) &&
+                        workspaceRecoverySignal.recommendedAction === "inspect_first"
+                    ) {
+                        const reason =
+                            "Autonomous recovery stopped because I retried the move after inspection and it was still blocked, but I still could not prove a safe exact holder to shut down automatically.";
+                        await abortCurrentLoop(reason, iteration, false);
+                        break;
+                    }
+                    if (
+                        workspaceRecoverySignal.recommendedAction === "clarify_before_exact_non_preview_shutdown" ||
+                        workspaceRecoverySignal.recommendedAction === "clarify_before_likely_non_preview_shutdown" ||
+                        workspaceRecoverySignal.recommendedAction === "clarify_before_untracked_shutdown" ||
+                        workspaceRecoverySignal.recommendedAction === "stop_no_live_holders_found"
+                    ) {
+                        const reason = buildWorkspaceRecoveryAbortReason(workspaceRecoverySignal);
+                        await abortCurrentLoop(reason, iteration, false);
+                        break;
+                    }
+
+                    console.log(`\n[Recovery] ${workspaceRecoverySignal.reasoning}`);
+                    await callbacks?.onStateChange?.({
+                        state: "retrying",
+                        iteration,
+                        message: buildWorkspaceRecoveryStateMessage(workspaceRecoverySignal)
+                    });
+                    currentInput = buildWorkspaceRecoveryNextUserInput(
+                        currentOverarchingGoal,
+                        workspaceRecoverySignal
+                    );
+                    continue;
+                }
+
+                const inspectionOnlyWorkspaceRecoverySignal =
+                    deriveWorkspaceRecoveryInspectionSignal(result);
+                if (inspectionOnlyWorkspaceRecoverySignal) {
+                    if (
+                        inspectionOnlyWorkspaceRecoverySignal.recommendedAction === "clarify_before_exact_non_preview_shutdown" ||
+                        inspectionOnlyWorkspaceRecoverySignal.recommendedAction === "clarify_before_likely_non_preview_shutdown" ||
+                        inspectionOnlyWorkspaceRecoverySignal.recommendedAction === "clarify_before_untracked_shutdown" ||
+                        inspectionOnlyWorkspaceRecoverySignal.recommendedAction === "stop_no_live_holders_found"
+                    ) {
+                        const reason = buildWorkspaceRecoveryAbortReason(
+                            inspectionOnlyWorkspaceRecoverySignal
+                        );
+                        await abortCurrentLoop(reason, iteration, false);
+                        break;
+                    }
+                    console.log(`\n[Recovery] ${inspectionOnlyWorkspaceRecoverySignal.reasoning}`);
+                    await callbacks?.onStateChange?.({
+                        state: "retrying",
+                        iteration,
+                        message: buildWorkspaceRecoveryStateMessage(
+                            inspectionOnlyWorkspaceRecoverySignal
+                        )
+                    });
+                    currentInput =
+                        inspectionOnlyWorkspaceRecoverySignal.recommendedAction ===
+                        "retry_after_inspection"
+                            ? buildWorkspaceRecoveryPostInspectionRetryInput(
+                                currentOverarchingGoal
+                            )
+                            : buildWorkspaceRecoveryNextUserInput(
+                                currentOverarchingGoal,
+                                inspectionOnlyWorkspaceRecoverySignal
+                            );
+                    continue;
+                }
+
+                if (
+                    containsWorkspaceRecoveryStopExactMarker(currentInput) &&
+                    hasApprovedWorkspaceRecoveryStopProcessAction(result) &&
+                    !hasApprovedWorkspaceRecoveryMoveAction(result)
+                ) {
+                    await callbacks?.onStateChange?.({
+                        state: "retrying",
+                        iteration,
+                        message:
+                            "I shut down the exact tracked holders that were blocking the move. I'm retrying the folder move now and will verify what changed."
+                    });
+                    currentInput = buildWorkspaceRecoveryPostShutdownRetryInput(
+                        currentOverarchingGoal
+                    );
+                    continue;
                 }
 
                 const madeProgress = missionContract.executionStyle
@@ -394,6 +576,11 @@ export class AutonomousLoop {
                     );
                     console.log(`\n[Evaluation] Goal completion deferred by deterministic execution gate.`);
                     console.log(`Reasoning: ${gateReason}`);
+                    await callbacks?.onStateChange?.({
+                        state: "verifying",
+                        iteration,
+                        message: buildVerificationStateMessage(missingRequirements)
+                    });
                     currentInput =
                         primaryMissingRequirement === MISSION_REQUIREMENT_PROCESS_STOP &&
                         trackedManagedProcessLeaseId
@@ -414,8 +601,22 @@ export class AutonomousLoop {
                     console.log(`[Autonomous Loop Finished] Goal Met!`);
                     console.log(`Reasoning: ${nextStep.reasoning}`);
                     console.log(`======================================================\n`);
+                    await callbacks?.onStateChange?.({
+                        state: "completed",
+                        iteration,
+                        message: nextStep.reasoning
+                    });
                     await callbacks?.onGoalMet?.(nextStep.reasoning, iteration);
                     goalMetInCurrentLoop = true;
+                    break;
+                }
+
+                const userTurnGateReason = buildAutonomousUserTurnGateReason(
+                    nextStep.reasoning,
+                    nextStep.nextUserInput ?? ""
+                );
+                if (userTurnGateReason) {
+                    await abortCurrentLoop(userTurnGateReason, iteration, false);
                     break;
                 }
 
@@ -430,6 +631,14 @@ export class AutonomousLoop {
 
                 console.log(`\n[Evaluation] Goal not met yet. Scheduling next sub-task...`);
                 console.log(`Reasoning: ${nextStep.reasoning}`);
+                await callbacks?.onStateChange?.({
+                    state: "retrying",
+                    iteration,
+                    message: buildRetryingStateMessage(
+                        nextStep.reasoning,
+                        currentInput
+                    )
+                });
                 currentInput = nextStep.nextUserInput;
             }
 
@@ -471,6 +680,11 @@ export class AutonomousLoop {
                             console.log(`[Autonomous Loop Finished] Goal Met!`);
                             console.log(`Reasoning: ${reasoning}`);
                             console.log(`======================================================\n`);
+                            await callbacks?.onStateChange?.({
+                                state: "completed",
+                                iteration,
+                                message: reasoning
+                            });
                             await callbacks?.onGoalMet?.(reasoning, iteration);
                             goalMetInCurrentLoop = true;
                         }
@@ -492,6 +706,11 @@ export class AutonomousLoop {
                     trackedManagedProcessLeaseId = null;
                 }
                 console.log(`\n[Autonomous Loop Terminated] ${reason}\n`);
+                await callbacks?.onStateChange?.({
+                    state: "stopped",
+                    iteration,
+                    message: humanizeAutonomousStopReason(reason)
+                });
                 await callbacks?.onGoalAborted?.(reason, iteration);
             }
 
@@ -514,6 +733,7 @@ export class AutonomousLoop {
             try {
                 const nextGoalResult = await this.evaluateProactiveGoal(currentOverarchingGoal);
                 currentOverarchingGoal = nextGoalResult.proactiveGoal;
+                currentLoopInitialInput = null;
                 daemonGoalRollovers += 1;
                 console.log(`[Daemon Mode] Next Proactive Goal: ${currentOverarchingGoal}`);
                 console.log(`[Daemon Mode] Reasoning: ${nextGoalResult.reasoning}`);
@@ -524,61 +744,4 @@ export class AutonomousLoop {
         }
     }
 
-    /**
-     * Delegates autonomous next-step evaluation to the extracted autonomy policy helper.
-     *
-     * **Why it exists:**
-     * Runtime code and tests still depend on a stable `AutonomousLoop` method surface even though
-     * the underlying model-policy logic now lives in the autonomy subsystem.
-     *
-     * **What it talks to:**
-     * - Uses `evaluateAutonomousNextStep` (import `evaluateAutonomousNextStep`) from
-     *   `./autonomy/agentLoopModelPolicy`.
-     *
-     * @param overarchingGoal - Current mission goal text.
-     * @param lastResult - Latest task result from the autonomous loop.
-     * @param missionEvidence - Cumulative deterministic mission evidence so far.
-     * @param trackedManagedProcessLeaseId - Tracked managed-process lease, if any.
-     * @param trackedLoopbackTarget - Tracked loopback target, if any.
-     * @returns Promise resolving to the next-step policy decision.
-     */
-    private async evaluateNextStep(
-        overarchingGoal: string,
-        lastResult: TaskRunResult,
-        missionEvidence: MissionEvidenceCounters,
-        trackedManagedProcessLeaseId: string | null,
-        trackedLoopbackTarget: LoopbackTargetHint | null
-    ) {
-        return await evaluateAutonomousNextStep(
-            this.modelClient,
-            this.config,
-            overarchingGoal,
-            lastResult,
-            missionEvidence,
-            trackedManagedProcessLeaseId,
-            trackedLoopbackTarget
-        );
-    }
-
-    /**
-     * Delegates proactive-goal generation to the extracted autonomy policy helper.
-     *
-     * **Why it exists:**
-     * Daemon-mode orchestration still expects a method on `AutonomousLoop`, while the actual model
-     * prompt and fallback logic now live in the autonomy subsystem.
-     *
-     * **What it talks to:**
-     * - Uses `evaluateProactiveAutonomousGoal` (import `evaluateProactiveAutonomousGoal`) from
-     *   `./autonomy/agentLoopModelPolicy`.
-     *
-     * @param previousGoal - Goal that just completed.
-     * @returns Promise resolving to the next proactive goal decision.
-     */
-    private async evaluateProactiveGoal(previousGoal: string) {
-        return await evaluateProactiveAutonomousGoal(
-            this.modelClient,
-            this.config,
-            previousGoal
-        );
-    }
 }

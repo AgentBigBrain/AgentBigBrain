@@ -4,10 +4,15 @@
 
 const LABEL_STYLE_OPENING_PATTERNS: readonly RegExp[] = [
   /^(?:ai\s+assistant|assistant)\s+(?:response|reply|answer|check[- ]?in|message)\s*:\s*/i,
+  /^(?:absolutely|sure|okay|alright|got\s+it|certainly)\b[^:\n]{0,40}[-,\s\u2013\u2014]+(?:ai\s+assistant|assistant)\s+(?:summary|response|reply|answer|message)(?:\s+of[^:]{0,80})?\s*:\s*/i,
   /^(?:personal\s+ai\s+assistant)\s+(?:response|reply|answer|check[- ]?in|message)\s*:\s*/i,
+  /^(?:ai\s+assistant|assistant)\s*:\s*/i,
+  /^(?:personal\s+ai\s+assistant)\s*:\s*/i,
   /^(?:ai\s+assistant|assistant)\s+here\s*[-:,\u2013\u2014]\s*/i,
-  /^(?:i['’]?m|i\s+am)\s+(?:your\s+)?ai\s+assistant\b[,\s\-:\u2013\u2014]*(?:and\s+)?/i,
-  /^(?:hey|hi|hello)\b[^.!?\n]{0,80}[-,\s\u2013\u2014]+(?:i['’]?m|i\s+am)\s+(?:your\s+)?ai\s+assistant\b[,\s\-:\u2013\u2014]*(?:and\s+)?/i
+  /^(?:ai\s+assistant|assistant)\s+(?:is|was|will|can|should|would|could|has|have|had)\b[\s\-:\u2013\u2014]*(?:to\s+)?/i,
+  /^(?:i['’]?m|i\s+am)\s+(?:(?:your|an)\s+)?ai\s+assistant\b[,\s\-:\u2013\u2014]*(?:and\s+)?/i,
+  /^(?:absolutely|sure|okay|alright|got\s+it|certainly)\b(?:\s*[-,\u2013\u2014]\s*|\s+)(?:i['’]?m|i\s+am)\s+(?:(?:your|an)\s+)?ai\s+assistant\b[,\s\-:\u2013\u2014]*(?:and\s+)?/i,
+  /^(?:hey|hi|hello)\b[^.!?\n]{0,80}[-,\s\u2013\u2014]+(?:i['’]?m|i\s+am)\s+(?:(?:your|an)\s+)?ai\s+assistant\b[,\s\-:\u2013\u2014]*(?:and\s+)?/i
 ];
 
 /**
@@ -19,6 +24,26 @@ const LABEL_STYLE_OPENING_PATTERNS: readonly RegExp[] = [
  */
 function uppercaseLeadingLetter(value: string): string {
   return value.replace(/^[a-z]/, (letter) => letter.toUpperCase());
+}
+
+/**
+ * Rewrites awkward third-person assistant self-references into first-person phrasing.
+ *
+ * @param value - Summary text after leading-prefix stripping.
+ * @returns Summary with mechanical assistant self-references normalized.
+ */
+function normalizeAssistantSelfReference(value: string): string {
+  return value
+    .replace(/\btell\s+(?:this|the|your)?\s*ai\s+assistant\b/gi, "Tell me")
+    .replace(/\btell\s+(?:this|the|your)?\s*assistant\b/gi, "Tell me")
+    .replace(/\b(?:this|the|your)?\s*ai\s+assistant\s+has\b/gi, "I have")
+    .replace(/\b(?:this|the|your)?\s*assistant\s+has\b/gi, "I have")
+    .replace(/\b(?:this|the|your)?\s*ai\s+assistant\s+is\b/gi, "I am")
+    .replace(/\b(?:this|the|your)?\s*assistant\s+is\b/gi, "I am")
+    .replace(/\b(?:this|the|your)?\s*ai\s+assistant\s+will\b/gi, "I will")
+    .replace(/\b(?:this|the|your)?\s*assistant\s+will\b/gi, "I will")
+    .replace(/\b(?:this|the|your)?\s*ai\s+assistant\s+can\b/gi, "I can")
+    .replace(/\b(?:this|the|your)?\s*assistant\s+can\b/gi, "I can");
 }
 
 /**
@@ -50,6 +75,8 @@ export function stripLabelStyleOpening(summary: string): string {
   if (strippedAnyPrefix) {
     normalized = uppercaseLeadingLetter(normalized);
   }
+
+  normalized = normalizeAssistantSelfReference(normalized);
 
   return normalized || summary;
 }

@@ -115,6 +115,7 @@ test("assessContextDrift detects uncertain active and superseded domain facts", 
         observedAt: "2026-02-03T00:00:00.000Z",
         lastUpdatedAt: "2026-02-03T00:00:00.000Z",
         status: "uncertain",
+        confirmedAt: null,
         supersededAt: null,
         confidence: 0.4
       }

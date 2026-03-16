@@ -160,6 +160,83 @@ test("selectUserFacingSummary strips I am your AI assistant introductions from r
   assert.equal(selected, "I'm doing great. Thanks for asking! How are you doing today, and what would you like help with?");
 });
 
+test("selectUserFacingSummary strips filler plus AI assistant identity openings from respond output", () => {
+  const runResult = buildRunResult("technical summary", [
+    {
+      action: {
+        id: "action_respond_ai_assistant_identity_with_filler",
+        type: "respond",
+        description: "reply",
+        params: {},
+        estimatedCostUsd: 0.02
+      },
+      mode: "fast_path",
+      approved: true,
+      output: "Got it - I'm an AI assistant, and I'm closing that landing page window now so we can move on.",
+      blockedBy: [],
+      violations: [],
+      votes: []
+    }
+  ]);
+
+  const selected = selectUserFacingSummary(runResult);
+  assert.equal(selected, "I'm closing that landing page window now so we can move on.");
+});
+
+test("selectUserFacingSummary strips direct AI assistant action phrasing from respond output", () => {
+  const runResult = buildRunResult("technical summary", [
+    {
+      action: {
+        id: "action_respond_ai_assistant_direct_action",
+        type: "respond",
+        description: "reply",
+        params: {},
+        estimatedCostUsd: 0.02
+      },
+      mode: "fast_path",
+      approved: true,
+      output:
+        "AI assistant is closing the landing page window now so we can work on something else. Tell AI assistant what you want to do next.",
+      blockedBy: [],
+      violations: [],
+      votes: []
+    }
+  ]);
+
+  const selected = selectUserFacingSummary(runResult);
+  assert.equal(
+    selected,
+    "Closing the landing page window now so we can work on something else. Tell me what you want to do next."
+  );
+});
+
+test("selectUserFacingSummary rewrites filler plus third-person AI assistant completion phrasing", () => {
+  const runResult = buildRunResult("technical summary", [
+    {
+      action: {
+        id: "action_respond_ai_assistant_completion_phrase",
+        type: "respond",
+        description: "reply",
+        params: {},
+        estimatedCostUsd: 0.02
+      },
+      mode: "fast_path",
+      approved: true,
+      output:
+        "Done - this AI assistant has closed that landing page window. You can tell me what you want to work on next.",
+      blockedBy: [],
+      violations: [],
+      votes: []
+    }
+  ]);
+
+  const selected = selectUserFacingSummary(runResult);
+  assert.equal(
+    selected,
+    "Done - I have closed that landing page window. You can tell me what you want to work on next."
+  );
+});
+
 test("selectUserFacingSummary blocks browser-execution overclaims when no shell action executed", () => {
   const runResult = buildRunResult("technical summary", [
     {
@@ -342,6 +419,1548 @@ test("selectUserFacingSummary keeps browser-execution respond text when shell ac
 
   const selected = selectUserFacingSummary(runResult);
   assert.equal(selected, "I opened your browser and navigated to google.com.");
+});
+
+test("selectUserFacingSummary prefers truthful partial-success wording over generic blocked failure when real work succeeded", () => {
+  const runResult = buildRunResult("technical summary", [
+    {
+      action: {
+        id: "action_write_file_success",
+        type: "write_file",
+        description: "write index file",
+        params: {
+          path: "C:\\temp\\drone-company\\index.html",
+          content: "<html></html>"
+        },
+        estimatedCostUsd: 0.08
+      },
+      mode: "escalation_path",
+      approved: true,
+      output: "Write success: C:\\temp\\drone-company\\index.html",
+      blockedBy: [],
+      violations: [],
+      votes: []
+    },
+    {
+      action: {
+        id: "action_open_browser_success",
+        type: "open_browser",
+        description: "leave preview open",
+        params: {
+          url: "http://127.0.0.1:4173/index.html"
+        },
+        estimatedCostUsd: 0.06
+      },
+      mode: "escalation_path",
+      approved: true,
+      output: "Opened http://127.0.0.1:4173/index.html in a visible browser window and left it open for you.",
+      blockedBy: [],
+      violations: [],
+      votes: []
+    },
+    {
+      action: {
+        id: "action_followup_blocked",
+        type: "shell_command",
+        description: "follow-up command",
+        params: {
+          command: "echo blocked"
+        },
+        estimatedCostUsd: 0.05
+      },
+      mode: "escalation_path",
+      approved: false,
+      output: "",
+      blockedBy: ["PERSONAL_DATA_APPROVAL_REQUIRED"],
+      violations: [
+        {
+          code: "PERSONAL_DATA_APPROVAL_REQUIRED",
+          message: "Approval required."
+        }
+      ],
+      votes: []
+    }
+  ], {
+    userInput: "build the page on my desktop and leave it open for me"
+  });
+
+  const selected = selectUserFacingSummary(runResult);
+  assert.match(selected, /I opened http:\/\/127\.0\.0\.1:4173\/index\.html in your browser and left it open\./i);
+  assert.match(selected, /One later step was blocked/i);
+  assert.doesNotMatch(selected, /^I couldn't execute that request in this run\./i);
+});
+
+test("selectUserFacingSummary prefers a proven file update over later inspection-only proof when verification blocks", () => {
+  const runResult = buildRunResult("technical summary", [
+    {
+      action: {
+        id: "action_write_file_edit_success",
+        type: "write_file",
+        description: "update landing page",
+        params: {
+          path: "C:\\temp\\drone-company\\index.html",
+          content: "<html><body>edited</body></html>"
+        },
+        estimatedCostUsd: 0.08
+      },
+      mode: "escalation_path",
+      approved: true,
+      output: "Write success: C:\\temp\\drone-company\\index.html",
+      blockedBy: [],
+      violations: [],
+      votes: []
+    },
+    {
+      action: {
+        id: "action_list_directory_after_edit",
+        type: "list_directory",
+        description: "inspect workspace",
+        params: {
+          path: "C:\\temp\\drone-company"
+        },
+        estimatedCostUsd: 0.04
+      },
+      mode: "escalation_path",
+      approved: true,
+      output: "Directory contents:\nindex.html",
+      blockedBy: [],
+      violations: [],
+      votes: []
+    },
+    {
+      action: {
+        id: "action_verify_browser_blocked_after_edit",
+        type: "verify_browser",
+        description: "verify edited page",
+        params: {
+          sessionId: "browser_session:landing_page"
+        },
+        estimatedCostUsd: 0.06
+      },
+      mode: "escalation_path",
+      approved: false,
+      output: "",
+      blockedBy: ["ACTION_EXECUTION_FAILED"],
+      violations: [
+        {
+          code: "ACTION_EXECUTION_FAILED",
+          message: "Browser verification failed."
+        }
+      ],
+      votes: []
+    }
+  ], {
+    userInput: "edit the landing page and verify the browser preview"
+  });
+
+  const selected = selectUserFacingSummary(runResult);
+  assert.match(selected, /I created or updated C:\\temp\\drone-company\\index\.html\./i);
+  assert.match(selected, /One later step was blocked \(ACTION_EXECUTION_FAILED\)/i);
+  assert.doesNotMatch(selected, /I checked C:\\temp\\drone-company\./i);
+});
+
+test("selectUserFacingSummary prefers proof-backed partial success over a generic blocked respond summary after a file update", () => {
+  const runResult = buildRunResult("technical summary", [
+    {
+      action: {
+        id: "action_write_file_partial_success",
+        type: "write_file",
+        description: "update landing page",
+        params: {
+          path: "C:\\temp\\drone-company\\index.html",
+          content: "<html><body>edited</body></html>"
+        },
+        estimatedCostUsd: 0.08
+      },
+      mode: "escalation_path",
+      approved: true,
+      output: "Write success: C:\\temp\\drone-company\\index.html",
+      blockedBy: [],
+      violations: [],
+      votes: []
+    },
+    {
+      action: {
+        id: "action_respond_generic_blocked_after_real_edit",
+        type: "respond",
+        description: "reply",
+        params: {
+          message:
+            "I couldn't execute that request in this run. What happened: one or more governed actions were blocked before execution. Why it didn't execute: a safety, governance, or runtime policy denied the requested side effect. What to do next: ask for the exact block code and approval diff, then retry with a narrower allowed action. Technical reason code: ACTION_EXECUTION_FAILED"
+        },
+        estimatedCostUsd: 0.02
+      },
+      mode: "fast_path",
+      approved: true,
+      output:
+        "I couldn't execute that request in this run. What happened: one or more governed actions were blocked before execution. Why it didn't execute: a safety, governance, or runtime policy denied the requested side effect. What to do next: ask for the exact block code and approval diff, then retry with a narrower allowed action. Technical reason code: ACTION_EXECUTION_FAILED",
+      blockedBy: [],
+      violations: [],
+      votes: []
+    },
+    {
+      action: {
+        id: "action_verify_browser_blocked_after_real_edit",
+        type: "verify_browser",
+        description: "verify edited page",
+        params: {
+          sessionId: "browser_session:landing_page"
+        },
+        estimatedCostUsd: 0.06
+      },
+      mode: "escalation_path",
+      approved: false,
+      output: "",
+      blockedBy: ["ACTION_EXECUTION_FAILED"],
+      violations: [
+        {
+          code: "ACTION_EXECUTION_FAILED",
+          message: "Browser verification failed."
+        }
+      ],
+      votes: []
+    }
+  ], {
+    userInput: "edit the landing page and verify the browser preview"
+  });
+
+  const selected = selectUserFacingSummary(runResult);
+  assert.match(selected, /I created or updated C:\\temp\\drone-company\\index\.html\./i);
+  assert.match(selected, /One later step was blocked \(ACTION_EXECUTION_FAILED\)/i);
+  assert.doesNotMatch(selected, /^I couldn't execute that request in this run\./i);
+});
+
+test("selectUserFacingSummary prefers the open page over later browser-verification detail when a later step blocks", () => {
+  const runResult = buildRunResult("technical summary", [
+    {
+      action: {
+        id: "action_open_browser_preview_success",
+        type: "open_browser",
+        description: "open preview",
+        params: {
+          url: "http://127.0.0.1:4177/index.html"
+        },
+        estimatedCostUsd: 0.06
+      },
+      mode: "escalation_path",
+      approved: true,
+      output: "Opened http://127.0.0.1:4177/index.html in a visible browser window and left it open for you.",
+      blockedBy: [],
+      violations: [],
+      votes: []
+    },
+    {
+      action: {
+        id: "action_verify_browser_preview_success",
+        type: "verify_browser",
+        description: "verify preview",
+        params: {
+          url: "http://127.0.0.1:4177/index.html"
+        },
+        estimatedCostUsd: 0.07
+      },
+      mode: "escalation_path",
+      approved: true,
+      output: "Browser verification passed: observed title \"Drone Landing\"; expected text matched.",
+      blockedBy: [],
+      violations: [],
+      votes: []
+    },
+    {
+      action: {
+        id: "action_followup_blocked_after_browser_verify",
+        type: "shell_command",
+        description: "follow-up command",
+        params: {
+          command: "echo blocked"
+        },
+        estimatedCostUsd: 0.04
+      },
+      mode: "escalation_path",
+      approved: false,
+      output: "",
+      blockedBy: ["ACTION_EXECUTION_FAILED"],
+      violations: [
+        {
+          code: "ACTION_EXECUTION_FAILED",
+          message: "Follow-up command failed."
+        }
+      ],
+      votes: []
+    }
+  ], {
+    userInput: "build the page, verify it in the browser, and leave it open"
+  });
+
+  const selected = selectUserFacingSummary(runResult);
+  assert.match(selected, /I opened http:\/\/127\.0\.0\.1:4177\/index\.html in your browser and left it open\./i);
+  assert.match(selected, /One later step was blocked \(ACTION_EXECUTION_FAILED\)/i);
+  assert.doesNotMatch(selected, /^Browser verification passed:/i);
+});
+
+test("selectUserFacingSummary prefers readiness proof over a generic blocked respond summary when process start and probe succeeded", () => {
+  const runResult = buildRunResult("technical summary", [
+    {
+      action: {
+        id: "action_start_process_ready_success",
+        type: "start_process",
+        description: "start preview server",
+        params: {
+          command: "npm run dev"
+        },
+        estimatedCostUsd: 0.12
+      },
+      mode: "escalation_path",
+      approved: true,
+      output: "Process started: lease proc_preview_a (pid 4242).",
+      blockedBy: [],
+      violations: [],
+      votes: []
+    },
+    {
+      action: {
+        id: "action_probe_http_ready_success",
+        type: "probe_http",
+        description: "probe preview url",
+        params: {
+          url: "http://127.0.0.1:4177/",
+          expectedStatus: 200
+        },
+        estimatedCostUsd: 0.05
+      },
+      mode: "escalation_path",
+      approved: true,
+      output: "HTTP ready: http://127.0.0.1:4177/ responded with expected status 200.",
+      blockedBy: [],
+      violations: [],
+      votes: []
+    },
+    {
+      action: {
+        id: "action_respond_generic_blocked_after_probe",
+        type: "respond",
+        description: "reply",
+        params: {
+          message:
+            "I couldn't execute that request in this run. What happened: one or more governed actions were blocked before execution. Why it didn't execute: a safety, governance, or runtime policy denied the requested side effect. What to do next: ask for the exact block code and approval diff, then retry with a narrower allowed action. Technical reason code: ACTION_EXECUTION_FAILED"
+        },
+        estimatedCostUsd: 0.02
+      },
+      mode: "fast_path",
+      approved: true,
+      output:
+        "I couldn't execute that request in this run. What happened: one or more governed actions were blocked before execution. Why it didn't execute: a safety, governance, or runtime policy denied the requested side effect. What to do next: ask for the exact block code and approval diff, then retry with a narrower allowed action. Technical reason code: ACTION_EXECUTION_FAILED",
+      blockedBy: [],
+      violations: [],
+      votes: []
+    },
+    {
+      action: {
+        id: "action_verify_browser_blocked_after_probe",
+        type: "verify_browser",
+        description: "verify preview browser",
+        params: {
+          url: "http://127.0.0.1:4177/"
+        },
+        estimatedCostUsd: 0.07
+      },
+      mode: "escalation_path",
+      approved: false,
+      output: "",
+      blockedBy: ["ACTION_EXECUTION_FAILED"],
+      violations: [
+        {
+          code: "ACTION_EXECUTION_FAILED",
+          message: "Browser verification failed."
+        }
+      ],
+      votes: []
+    }
+  ], {
+    userInput: "start the preview, make sure it is ready, and verify it in the browser"
+  });
+
+  const selected = selectUserFacingSummary(runResult);
+  assert.match(selected, /HTTP ready: http:\/\/127\.0\.0\.1:4177\/ responded with expected status 200\./i);
+  assert.match(selected, /One later step was blocked \(ACTION_EXECUTION_FAILED\)/i);
+  assert.doesNotMatch(selected, /^I couldn't execute that request in this run\./i);
+});
+
+test("selectUserFacingSummary explains local folder lock failures in plain language", () => {
+  const runResult = buildRunResult(
+    "Completed task with 3 approved action(s) and 1 blocked action(s).",
+    [
+      {
+        action: {
+          id: "action_list_desktop_success",
+          type: "list_directory",
+          description: "inspect desktop",
+          params: {
+            path: "C:\\Users\\testuser\\OneDrive\\Desktop"
+          },
+          estimatedCostUsd: 0.06
+        },
+        mode: "fast_path",
+        approved: true,
+        output: "Directory contents:\ndrone-company",
+        blockedBy: [],
+        violations: [],
+        votes: []
+      },
+      {
+        action: {
+          id: "action_move_blocked_by_lock",
+          type: "shell_command",
+          description: "move folders",
+          params: {
+            command: "Move-Item ..."
+          },
+          estimatedCostUsd: 0.25
+        },
+        mode: "escalation_path",
+        approved: false,
+        output:
+          "Shell failed:\nMove-Item : The process cannot access the file because it is being used by another process.",
+        blockedBy: ["ACTION_EXECUTION_FAILED"],
+        violations: [
+          {
+            code: "ACTION_EXECUTION_FAILED",
+            message:
+              "Shell failed:\nMove-Item : The process cannot access the file because it is being used by another process."
+          }
+        ],
+        votes: []
+      }
+    ],
+    {
+      userInput:
+        "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects."
+    }
+  );
+
+  const selected = selectUserFacingSummary(runResult, {
+    showTechnicalSummary: false
+  });
+
+  assert.match(selected, /I couldn't finish organizing those folders in this run\./i);
+  assert.match(selected, /still being used by another local process/i);
+  assert.match(selected, /close the related preview or local process first/i);
+});
+
+test("selectUserFacingSummary tells the truth when some organized folders moved and some stayed blocked", () => {
+  const runResult = buildRunResult(
+    "Completed task with 4 approved action(s) and 0 blocked action(s).",
+    [
+      {
+        action: {
+          id: "action_stop_holder_partial_move",
+          type: "stop_process",
+          description: "stop preview holder",
+          params: {
+            leaseId: "proc_preview_a"
+          },
+          estimatedCostUsd: 0.03
+        },
+        mode: "escalation_path",
+        approved: true,
+        output: "Process stopped: lease proc_preview_a.",
+        blockedBy: [],
+        violations: [],
+        votes: []
+      },
+      {
+        action: {
+          id: "action_move_partial_success",
+          type: "shell_command",
+          description: "move matching folders",
+          params: {
+            command: "Move-Item ..."
+          },
+          estimatedCostUsd: 0.18
+        },
+        mode: "escalation_path",
+        approved: true,
+        output: [
+          "Shell success:",
+          JSON.stringify({
+            desktop: "C:\\Users\\testuser\\OneDrive\\Desktop",
+            destination: "C:\\Users\\testuser\\OneDrive\\Desktop\\drone-web-projects",
+            moved: ["drone-company-a"],
+            failed: [
+              {
+                item: "C:\\Users\\testuser\\OneDrive\\Desktop\\drone-company-b",
+                error:
+                  "The process cannot access the file because it is being used by another process."
+              }
+            ],
+            remainingOnDesktop: ["drone-company-b"]
+          })
+        ].join("\n"),
+        blockedBy: [],
+        violations: [],
+        votes: []
+      },
+      {
+        action: {
+          id: "action_verify_partial_destination",
+          type: "list_directory",
+          description: "inspect destination folder",
+          params: {
+            path: "C:\\Users\\testuser\\OneDrive\\Desktop\\drone-web-projects"
+          },
+          estimatedCostUsd: 0.05
+        },
+        mode: "fast_path",
+        approved: true,
+        output: "Directory contents:\ndrone-company-a",
+        blockedBy: [],
+        violations: [],
+        votes: []
+      },
+      {
+        action: {
+          id: "action_respond_weak_partial_inspection",
+          type: "respond",
+          description: "reply",
+          params: {
+            message:
+              "I checked C:\\Users\\testuser\\OneDrive\\Desktop\\drone-web-projects."
+          },
+          estimatedCostUsd: 0.02
+        },
+        mode: "fast_path",
+        approved: true,
+        output: "I checked C:\\Users\\testuser\\OneDrive\\Desktop\\drone-web-projects.",
+        blockedBy: [],
+        violations: [],
+        votes: []
+      }
+    ],
+    {
+      userInput:
+        "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects."
+    }
+  );
+
+  const selected = selectUserFacingSummary(runResult, {
+    showTechnicalSummary: false
+  });
+
+  assert.match(
+    selected,
+    /The destination now contains drone-company-a in C:\\Users\\testuser\\OneDrive\\Desktop\\drone-web-projects\./i
+  );
+  assert.match(selected, /These still stayed outside it: drone-company-b\./i);
+  assert.match(selected, /I had already shut down 1 exact tracked preview holder first/i);
+  assert.match(selected, /Ask me to inspect the remaining holder and retry the move/i);
+  assert.doesNotMatch(
+    selected,
+    /^I moved the matching folders into C:\\Users\\testuser\\OneDrive\\Desktop\\drone-web-projects\./i
+  );
+});
+
+test("selectUserFacingSummary does not append a generic blocked suffix to self-contained partial organization proof", () => {
+  const runResult = buildRunResult(
+    "Completed task with 3 approved action(s) and 1 blocked action(s).",
+    [
+      {
+        action: {
+          id: "action_stop_holder_partial_move_blocked",
+          type: "stop_process",
+          description: "stop preview holder",
+          params: {
+            leaseId: "proc_preview_a"
+          },
+          estimatedCostUsd: 0.03
+        },
+        mode: "escalation_path",
+        approved: true,
+        output: "Process stopped: lease proc_preview_a.",
+        blockedBy: [],
+        violations: [],
+        votes: []
+      },
+      {
+        action: {
+          id: "action_move_partial_success_blocked",
+          type: "shell_command",
+          description: "move matching folders",
+          params: {
+            command: "Move-Item ..."
+          },
+          estimatedCostUsd: 0.18
+        },
+        mode: "escalation_path",
+        approved: true,
+        output: [
+          "Shell success:",
+          JSON.stringify({
+            desktop: "C:\\Users\\testuser\\OneDrive\\Desktop",
+            destination: "C:\\Users\\testuser\\OneDrive\\Desktop\\drone-web-projects",
+            moved: ["drone-company-a"],
+            failed: [
+              {
+                item: "C:\\Users\\testuser\\OneDrive\\Desktop\\drone-company-b",
+                error:
+                  "The process cannot access the file because it is being used by another process."
+              }
+            ],
+            remainingOnDesktop: ["drone-company-b"]
+          })
+        ].join("\n"),
+        blockedBy: [],
+        violations: [],
+        votes: []
+      },
+      {
+        action: {
+          id: "action_verify_partial_destination_blocked",
+          type: "list_directory",
+          description: "inspect destination folder",
+          params: {
+            path: "C:\\Users\\testuser\\OneDrive\\Desktop\\drone-web-projects"
+          },
+          estimatedCostUsd: 0.05
+        },
+        mode: "fast_path",
+        approved: true,
+        output: "Directory contents:\ndrone-company-a",
+        blockedBy: [],
+        violations: [],
+        votes: []
+      },
+      {
+        action: {
+          id: "action_followup_blocked_after_partial_move",
+          type: "shell_command",
+          description: "follow-up command",
+          params: {
+            command: "echo blocked"
+          },
+          estimatedCostUsd: 0.04
+        },
+        mode: "escalation_path",
+        approved: false,
+        output: "",
+        blockedBy: ["ACTION_EXECUTION_FAILED"],
+        violations: [
+          {
+            code: "ACTION_EXECUTION_FAILED",
+            message: "Follow-up command failed."
+          }
+        ],
+        votes: []
+      }
+    ],
+    {
+      userInput:
+        "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects."
+    }
+  );
+
+  const selected = selectUserFacingSummary(runResult, {
+    showTechnicalSummary: false
+  });
+
+  assert.match(selected, /These still stayed outside it: drone-company-b\./i);
+  assert.doesNotMatch(selected, /One later step was blocked/i);
+});
+
+test("selectUserFacingSummary prefers the completed organization move over a weak inspection reply", () => {
+  const runResult = buildRunResult(
+    "Completed task with 5 approved action(s) and 0 blocked action(s).",
+    [
+      {
+        action: {
+          id: "action_respond_organization_success",
+          type: "respond",
+          description: "reply",
+          params: {
+            message:
+              "I checked C:\\Users\\testuser\\OneDrive\\Desktop\\drone-web-projects."
+          },
+          estimatedCostUsd: 0.02
+        },
+        mode: "fast_path",
+        approved: true,
+        output: "I checked C:\\Users\\testuser\\OneDrive\\Desktop\\drone-web-projects.",
+        blockedBy: [],
+        violations: [],
+        votes: []
+      },
+      {
+        action: {
+          id: "action_stop_holder_a",
+          type: "stop_process",
+          description: "stop first preview holder",
+          params: {
+            leaseId: "proc_preview_a"
+          },
+          estimatedCostUsd: 0.03
+        },
+        mode: "escalation_path",
+        approved: true,
+        output: "Process stopped: lease proc_preview_a.",
+        blockedBy: [],
+        violations: [],
+        votes: []
+      },
+      {
+        action: {
+          id: "action_stop_holder_b",
+          type: "stop_process",
+          description: "stop second preview holder",
+          params: {
+            leaseId: "proc_preview_b"
+          },
+          estimatedCostUsd: 0.03
+        },
+        mode: "escalation_path",
+        approved: true,
+        output: "Process stopped: lease proc_preview_b.",
+        blockedBy: [],
+        violations: [],
+        votes: []
+      },
+      {
+        action: {
+          id: "action_move_folders_success",
+          type: "shell_command",
+          description: "move matching folders",
+          params: {
+            command: "Move-Item ..."
+          },
+          estimatedCostUsd: 0.18
+        },
+        mode: "escalation_path",
+        approved: true,
+        output: "Shell success: moved matching drone-company folders.",
+        blockedBy: [],
+        violations: [],
+        votes: []
+      },
+      {
+        action: {
+          id: "action_verify_destination",
+          type: "list_directory",
+          description: "inspect destination folder",
+          params: {
+            path: "C:\\Users\\testuser\\OneDrive\\Desktop\\drone-web-projects"
+          },
+          estimatedCostUsd: 0.05
+        },
+        mode: "fast_path",
+        approved: true,
+        output: "Directory contents:\ndrone-company-a\ndrone-company-b",
+        blockedBy: [],
+        violations: [],
+        votes: []
+      }
+    ],
+    {
+      userInput:
+        "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects."
+    }
+  );
+
+  const selected = selectUserFacingSummary(runResult, {
+    showTechnicalSummary: false
+  });
+
+  assert.equal(
+    selected,
+    "I moved the matching folders into C:\\Users\\testuser\\OneDrive\\Desktop\\drone-web-projects. I shut down 2 exact tracked preview holders first so the move could finish."
+  );
+});
+
+test("selectUserFacingSummary prefers the recovered organization move summary after a clarification reply", () => {
+  const runResult = buildRunResult(
+    "Completed task with 8 approved action(s) and 0 blocked action(s).",
+    [
+      {
+        action: {
+          id: "action_respond_recovered_move_shell_output",
+          type: "respond",
+          description: "reply",
+          params: {
+            message:
+              "I ran the command successfully. Command output: moved|drone-company-a moved|drone-company-b"
+          },
+          estimatedCostUsd: 0.02
+        },
+        mode: "fast_path",
+        approved: true,
+        output:
+          "I ran the command successfully. Command output: moved|drone-company-a moved|drone-company-b",
+        blockedBy: [],
+        violations: [],
+        votes: []
+      },
+      {
+        action: {
+          id: "action_stop_recovered_holder_a",
+          type: "stop_process",
+          description: "stop first preview holder",
+          params: {
+            leaseId: "proc_preview_a"
+          },
+          estimatedCostUsd: 0.03
+        },
+        mode: "escalation_path",
+        approved: true,
+        output: "Process stopped: lease proc_preview_a.",
+        blockedBy: [],
+        violations: [],
+        votes: []
+      },
+      {
+        action: {
+          id: "action_stop_recovered_holder_b",
+          type: "stop_process",
+          description: "stop second preview holder",
+          params: {
+            leaseId: "proc_preview_b"
+          },
+          estimatedCostUsd: 0.03
+        },
+        mode: "escalation_path",
+        approved: true,
+        output: "Process stopped: lease proc_preview_b.",
+        blockedBy: [],
+        violations: [],
+        votes: []
+      },
+      {
+        action: {
+          id: "action_move_recovered_folders_success",
+          type: "shell_command",
+          description: "move matching folders",
+          params: {
+            command: "Move-Item ..."
+          },
+          estimatedCostUsd: 0.18
+        },
+        mode: "escalation_path",
+        approved: true,
+        output: "Shell success: moved matching drone-company folders.",
+        blockedBy: [],
+        violations: [],
+        votes: []
+      },
+      {
+        action: {
+          id: "action_close_linked_browser_a",
+          type: "close_browser",
+          description: "close linked browser window",
+          params: {
+            sessionId: "browser_session_a"
+          },
+          estimatedCostUsd: 0.03
+        },
+        mode: "escalation_path",
+        approved: true,
+        output: "Browser session closed.",
+        blockedBy: [],
+        violations: [],
+        votes: []
+      },
+      {
+        action: {
+          id: "action_close_linked_browser_b",
+          type: "close_browser",
+          description: "close linked browser window",
+          params: {
+            sessionId: "browser_session_b"
+          },
+          estimatedCostUsd: 0.03
+        },
+        mode: "escalation_path",
+        approved: true,
+        output: "Browser session closed.",
+        blockedBy: [],
+        violations: [],
+        votes: []
+      },
+      {
+        action: {
+          id: "action_verify_recovered_destination",
+          type: "list_directory",
+          description: "inspect destination folder",
+          params: {
+            path: "C:\\Users\\testuser\\OneDrive\\Desktop\\drone-web-projects"
+          },
+          estimatedCostUsd: 0.05
+        },
+        mode: "fast_path",
+        approved: true,
+        output: "Directory contents:\ndrone-company-a\ndrone-company-b",
+        blockedBy: [],
+        violations: [],
+        votes: []
+      }
+    ],
+    {
+      userInput: "Yes, shut them down and retry the move."
+    }
+  );
+
+  const selected = selectUserFacingSummary(runResult, {
+    showTechnicalSummary: false
+  });
+
+  assert.equal(
+    selected,
+    "I moved the matching folders into C:\\Users\\testuser\\OneDrive\\Desktop\\drone-web-projects. I shut down 2 exact tracked preview holders first so the move could finish."
+  );
+});
+
+test("selectUserFacingSummary uses the active request segment for wrapped organization prompts", () => {
+  const wrappedOrganizationPrompt = [
+    "You are in an ongoing conversation with the same user.",
+    "",
+    "Recent conversation context (oldest to newest):",
+    "- user: Please build a small drone project in a folder called drone-company-organize-smoke-a and leave the preview open for me.",
+    "- assistant: Opened http://localhost:4173/index.html in a visible browser window and left it open for you.",
+    "",
+    "Current user request:",
+    "Please organize the drone-company-organize-smoke project folders you made earlier into a folder called drone-web-projects."
+  ].join("\n");
+
+  const runResult = buildRunResult(
+    "Completed task with 4 approved action(s) and 0 blocked action(s).",
+    [
+      {
+        action: {
+          id: "action_respond_wrapped_organization_success",
+          type: "respond",
+          description: "reply",
+          params: {
+            message:
+              "I checked C:\\Users\\testuser\\OneDrive\\Desktop\\drone-web-projects."
+          },
+          estimatedCostUsd: 0.02
+        },
+        mode: "fast_path",
+        approved: true,
+        output: "I checked C:\\Users\\testuser\\OneDrive\\Desktop\\drone-web-projects.",
+        blockedBy: [],
+        violations: [],
+        votes: []
+      },
+      {
+        action: {
+          id: "action_stop_wrapped_holder_a",
+          type: "stop_process",
+          description: "stop exact preview holder",
+          params: {
+            leaseId: "proc_wrapped_preview_a"
+          },
+          estimatedCostUsd: 0.03
+        },
+        mode: "escalation_path",
+        approved: true,
+        output: "Process stopped: lease proc_wrapped_preview_a.",
+        blockedBy: [],
+        violations: [],
+        votes: []
+      },
+      {
+        action: {
+          id: "action_move_wrapped_folders_success",
+          type: "shell_command",
+          description: "move matching folders",
+          params: {
+            command: "Move-Item ..."
+          },
+          estimatedCostUsd: 0.18
+        },
+        mode: "escalation_path",
+        approved: true,
+        output: "Shell success: moved matching drone-company folders.",
+        blockedBy: [],
+        violations: [],
+        votes: []
+      },
+      {
+        action: {
+          id: "action_verify_wrapped_destination",
+          type: "list_directory",
+          description: "inspect destination folder",
+          params: {
+            path: "C:\\Users\\testuser\\OneDrive\\Desktop\\drone-web-projects"
+          },
+          estimatedCostUsd: 0.05
+        },
+        mode: "fast_path",
+        approved: true,
+        output: "Directory contents:\ndrone-company-organize-smoke-a\ndrone-company-organize-smoke-b",
+        blockedBy: [],
+        violations: [],
+        votes: []
+      }
+    ],
+    {
+      userInput: wrappedOrganizationPrompt
+    }
+  );
+
+  const selected = selectUserFacingSummary(runResult, {
+    showTechnicalSummary: false
+  });
+
+  assert.equal(
+    selected,
+    "I moved the matching folders into C:\\Users\\testuser\\OneDrive\\Desktop\\drone-web-projects. I shut down 1 exact tracked preview holder first so the move could finish."
+  );
+});
+
+test("selectUserFacingSummary does not trust organization move claims when the run never proved the move", () => {
+  const runResult = buildRunResult(
+    "Completed task with 4 approved action(s) and 0 blocked action(s).",
+    [
+      {
+        action: {
+          id: "action_respond_false_organization_success",
+          type: "respond",
+          description: "reply",
+          params: {
+            message:
+              "I moved the matching folders into drone-company-organize-smoke-a and left the preview open for you."
+          },
+          estimatedCostUsd: 0.02
+        },
+        mode: "fast_path",
+        approved: true,
+        output:
+          "I moved the matching folders into drone-company-organize-smoke-a and left the preview open for you.",
+        blockedBy: [],
+        violations: [],
+        votes: []
+      },
+      {
+        action: {
+          id: "action_create_destination_only",
+          type: "shell_command",
+          description: "create destination folder only",
+          params: {
+            command:
+              "New-Item -ItemType Directory -Path 'C:\\Users\\testuser\\OneDrive\\Desktop\\drone-web-projects' -Force | Out-Null"
+          },
+          estimatedCostUsd: 0.08
+        },
+        mode: "escalation_path",
+        approved: true,
+        output: "Shell success: command returned no output.",
+        blockedBy: [],
+        violations: [],
+        votes: []
+      },
+      {
+        action: {
+          id: "action_list_desktop_after_noop",
+          type: "list_directory",
+          description: "inspect desktop root",
+          params: {
+            path: "C:\\Users\\testuser\\OneDrive\\Desktop"
+          },
+          estimatedCostUsd: 0.05
+        },
+        mode: "fast_path",
+        approved: true,
+        output: "Directory contents:\ndrone-company-organize-smoke-a\ndrone-company-organize-smoke-b\ndrone-web-projects",
+        blockedBy: [],
+        violations: [],
+        votes: []
+      },
+      {
+        action: {
+          id: "action_list_empty_destination",
+          type: "list_directory",
+          description: "inspect destination folder",
+          params: {
+            path: "C:\\Users\\testuser\\OneDrive\\Desktop\\drone-web-projects"
+          },
+          estimatedCostUsd: 0.05
+        },
+        mode: "fast_path",
+        approved: true,
+        output: "Directory contents:",
+        blockedBy: [],
+        violations: [],
+        votes: []
+      }
+    ],
+    {
+      userInput:
+        "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects."
+    }
+  );
+
+  const selected = selectUserFacingSummary(runResult, {
+    showTechnicalSummary: false
+  });
+
+  assert.equal(
+    selected,
+    "I checked the requested folders, but this run did not prove that the matching folders were moved into the requested destination yet."
+  );
+});
+
+test("selectUserFacingSummary surfaces a human-first organization summary without any respond action", () => {
+  const runResult = buildRunResult(
+    "Completed task with 3 approved action(s) and 0 blocked action(s).",
+    [
+      {
+        action: {
+          id: "action_stop_holder_only",
+          type: "stop_process",
+          description: "stop preview holder",
+          params: {
+            leaseId: "proc_preview_a"
+          },
+          estimatedCostUsd: 0.03
+        },
+        mode: "escalation_path",
+        approved: true,
+        output: "Process stopped: lease proc_preview_a.",
+        blockedBy: [],
+        violations: [],
+        votes: []
+      },
+      {
+        action: {
+          id: "action_move_folders_only",
+          type: "shell_command",
+          description: "move matching folders",
+          params: {
+            command: "Move-Item ..."
+          },
+          estimatedCostUsd: 0.18
+        },
+        mode: "escalation_path",
+        approved: true,
+        output: "Shell success: moved matching drone-company folders.",
+        blockedBy: [],
+        violations: [],
+        votes: []
+      },
+      {
+        action: {
+          id: "action_verify_destination_only",
+          type: "list_directory",
+          description: "inspect destination folder",
+          params: {
+            path: "C:\\Users\\testuser\\OneDrive\\Desktop\\drone-web-projects"
+          },
+          estimatedCostUsd: 0.05
+        },
+        mode: "fast_path",
+        approved: true,
+        output: "Directory contents:\ndrone-company-a",
+        blockedBy: [],
+        violations: [],
+        votes: []
+      }
+    ],
+    {
+      userInput:
+        "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects."
+    }
+  );
+
+  const selected = selectUserFacingSummary(runResult);
+
+  assert.equal(
+    selected,
+    "I moved the matching folders into C:\\Users\\testuser\\OneDrive\\Desktop\\drone-web-projects. I shut down 1 exact tracked preview holder first so the move could finish."
+  );
+});
+
+test("selectUserFacingSummary renders the completed organization move after a recovery confirmation turn", () => {
+  const runResult = buildRunResult(
+    "Completed task with 8 approved action(s) and 0 blocked action(s).",
+    [
+      {
+        action: {
+          id: "action_respond_recovery_followup",
+          type: "respond",
+          description: "reply",
+          params: {
+            message: "I checked C:\\Users\\testuser\\OneDrive\\Desktop\\drone-web-projects."
+          },
+          estimatedCostUsd: 0.02
+        },
+        mode: "fast_path",
+        approved: true,
+        output: "I checked C:\\Users\\testuser\\OneDrive\\Desktop\\drone-web-projects.",
+        blockedBy: [],
+        violations: [],
+        votes: []
+      },
+      {
+        action: {
+          id: "action_stop_holder_recovery_a",
+          type: "stop_process",
+          description: "stop first exact preview holder",
+          params: {
+            leaseId: "proc_preview_a"
+          },
+          estimatedCostUsd: 0.03
+        },
+        mode: "escalation_path",
+        approved: true,
+        output: "Process stopped: lease proc_preview_a.",
+        blockedBy: [],
+        violations: [],
+        votes: []
+      },
+      {
+        action: {
+          id: "action_stop_holder_recovery_b",
+          type: "stop_process",
+          description: "stop second exact preview holder",
+          params: {
+            leaseId: "proc_preview_b"
+          },
+          estimatedCostUsd: 0.03
+        },
+        mode: "escalation_path",
+        approved: true,
+        output: "Process stopped: lease proc_preview_b.",
+        blockedBy: [],
+        violations: [],
+        votes: []
+      },
+      {
+        action: {
+          id: "action_move_after_recovery",
+          type: "shell_command",
+          description: "move the matching folders after recovery",
+          params: {
+            command: "Move-Item ..."
+          },
+          estimatedCostUsd: 0.18
+        },
+        mode: "escalation_path",
+        approved: true,
+        output: "Shell success: moved matching drone-company folders.",
+        blockedBy: [],
+        violations: [],
+        votes: []
+      },
+      {
+        action: {
+          id: "action_verify_destination_after_recovery",
+          type: "list_directory",
+          description: "inspect the destination folder after recovery",
+          params: {
+            path: "C:\\Users\\testuser\\OneDrive\\Desktop\\drone-web-projects"
+          },
+          estimatedCostUsd: 0.05
+        },
+        mode: "fast_path",
+        approved: true,
+        output: "Directory contents:\ndrone-company-a\ndrone-company-b",
+        blockedBy: [],
+        violations: [],
+        votes: []
+      }
+    ],
+    {
+      userInput: "Yes, shut them down and retry the move."
+    }
+  );
+
+  const selected = selectUserFacingSummary(runResult, {
+    showTechnicalSummary: false
+  });
+
+  assert.equal(
+    selected,
+    "I moved the matching folders into C:\\Users\\testuser\\OneDrive\\Desktop\\drone-web-projects. I shut down 2 exact tracked preview holders first so the move could finish."
+  );
+});
+
+test("selectUserFacingSummary renders the completed organization move from bounded move-proof output after a recovery confirmation turn", () => {
+  const runResult = buildRunResult(
+    "Completed task with 8 approved action(s) and 0 blocked action(s).",
+    [
+      {
+        action: {
+          id: "action_respond_recovery_followup_raw_output",
+          type: "respond",
+          description: "reply",
+          params: {
+            message:
+              "I ran the command successfully. Command output: MOVED_TO_DEST drone-company-a drone-company-b REMAINING_AT_DESKTOP"
+          },
+          estimatedCostUsd: 0.02
+        },
+        mode: "fast_path",
+        approved: true,
+        output:
+          "I ran the command successfully.\nCommand output:\nMOVED_TO_DEST\ndrone-company-a\ndrone-company-b\nREMAINING_AT_DESKTOP",
+        blockedBy: [],
+        violations: [],
+        votes: []
+      },
+      {
+        action: {
+          id: "action_stop_holder_recovery_output_a",
+          type: "stop_process",
+          description: "stop first exact preview holder",
+          params: {
+            leaseId: "proc_preview_a"
+          },
+          estimatedCostUsd: 0.03
+        },
+        mode: "escalation_path",
+        approved: true,
+        output: "Process stopped: lease proc_preview_a.",
+        blockedBy: [],
+        violations: [],
+        votes: []
+      },
+      {
+        action: {
+          id: "action_stop_holder_recovery_output_b",
+          type: "stop_process",
+          description: "stop second exact preview holder",
+          params: {
+            leaseId: "proc_preview_b"
+          },
+          estimatedCostUsd: 0.03
+        },
+        mode: "escalation_path",
+        approved: true,
+        output: "Process stopped: lease proc_preview_b.",
+        blockedBy: [],
+        violations: [],
+        votes: []
+      },
+      {
+        action: {
+          id: "action_move_after_recovery_output",
+          type: "shell_command",
+          description: "move the matching folders after recovery",
+          params: {
+            command: "Move-Item ..."
+          },
+          estimatedCostUsd: 0.18
+        },
+        mode: "escalation_path",
+        approved: true,
+        output:
+          "MOVED_TO_DEST\ndrone-company-a\ndrone-company-b\nREMAINING_AT_DESKTOP",
+        blockedBy: [],
+        violations: [],
+        votes: []
+      }
+    ],
+    {
+      userInput: "Yes, shut them down and retry the move."
+    }
+  );
+
+  const selected = selectUserFacingSummary(runResult, {
+    showTechnicalSummary: false
+  });
+
+  assert.equal(
+    selected,
+    "I moved drone-company-a and drone-company-b into the requested folder. I shut down 2 exact tracked preview holders first so the move could finish."
+  );
+});
+
+test("selectUserFacingSummary renders the completed organization move from destination-content proof output after a recovery confirmation turn", () => {
+  const runResult = buildRunResult(
+    "Completed task with 8 approved action(s) and 0 blocked action(s).",
+    [
+      {
+        action: {
+          id: "action_respond_recovery_followup_dest_contents",
+          type: "respond",
+          description: "reply",
+          params: {
+            message: "I ran the command successfully."
+          },
+          estimatedCostUsd: 0.02
+        },
+        mode: "fast_path",
+        approved: true,
+        output: "I ran the command successfully.",
+        blockedBy: [],
+        violations: [],
+        votes: []
+      },
+      {
+        action: {
+          id: "action_stop_holder_recovery_dest_contents_a",
+          type: "stop_process",
+          description: "stop first exact preview holder",
+          params: {
+            leaseId: "proc_preview_a"
+          },
+          estimatedCostUsd: 0.03
+        },
+        mode: "escalation_path",
+        approved: true,
+        output: "Process stopped: lease proc_preview_a.",
+        blockedBy: [],
+        violations: [],
+        votes: []
+      },
+      {
+        action: {
+          id: "action_stop_holder_recovery_dest_contents_b",
+          type: "stop_process",
+          description: "stop second exact preview holder",
+          params: {
+            leaseId: "proc_preview_b"
+          },
+          estimatedCostUsd: 0.03
+        },
+        mode: "escalation_path",
+        approved: true,
+        output: "Process stopped: lease proc_preview_b.",
+        blockedBy: [],
+        violations: [],
+        votes: []
+      },
+      {
+        action: {
+          id: "action_move_after_recovery_dest_contents",
+          type: "shell_command",
+          description: "move the matching folders after recovery",
+          params: {
+            command: [
+              "$destination = 'C:\\Users\\testuser\\OneDrive\\Desktop\\drone-web-projects'",
+              "Move-Item ...",
+              "Write-Output 'DEST_CONTENTS:'",
+              "Write-Output 'ROOT_REMAINING_MATCHES:'"
+            ].join("\n")
+          },
+          estimatedCostUsd: 0.18
+        },
+        mode: "escalation_path",
+        approved: true,
+        output:
+          "Shell success:\nDEST_CONTENTS:\r\ndrone-company-a\r\ndrone-company-b\r\nROOT_REMAINING_MATCHES:",
+        blockedBy: [],
+        violations: [],
+        votes: []
+      }
+    ],
+    {
+      userInput: "Yes, shut them down and retry the move."
+    }
+  );
+
+  const selected = selectUserFacingSummary(runResult, {
+    showTechnicalSummary: false
+  });
+
+  assert.equal(
+    selected,
+    "I moved drone-company-a and drone-company-b into the requested folder. I shut down 2 exact tracked preview holders first so the move could finish."
+  );
+});
+
+test("selectUserFacingSummary renders the completed organization move from inline assignment proof output after a recovery confirmation turn", () => {
+  const runResult = buildRunResult(
+    "Completed task with 8 approved action(s) and 0 blocked action(s).",
+    [
+      {
+        action: {
+          id: "action_respond_recovery_followup_inline_assignment",
+          type: "respond",
+          description: "reply",
+          params: {
+            message:
+              "I ran the command successfully. Command output: MOVED_TO_DEST=drone-company-a,drone-company-b DEST_CONTENTS=drone-company-a,drone-company-b ROOT_REMAINING_MATCHES="
+          },
+          estimatedCostUsd: 0.02
+        },
+        mode: "fast_path",
+        approved: true,
+        output:
+          "I ran the command successfully.\nCommand output:\nMOVED_TO_DEST=drone-company-a,drone-company-b\nDEST_CONTENTS=drone-company-a,drone-company-b\nROOT_REMAINING_MATCHES=",
+        blockedBy: [],
+        violations: [],
+        votes: []
+      },
+      {
+        action: {
+          id: "action_stop_holder_recovery_inline_assignment_a",
+          type: "stop_process",
+          description: "stop first exact preview holder",
+          params: {
+            leaseId: "proc_preview_a"
+          },
+          estimatedCostUsd: 0.03
+        },
+        mode: "escalation_path",
+        approved: true,
+        output: "Process stopped: lease proc_preview_a.",
+        blockedBy: [],
+        violations: [],
+        votes: []
+      },
+      {
+        action: {
+          id: "action_stop_holder_recovery_inline_assignment_b",
+          type: "stop_process",
+          description: "stop second exact preview holder",
+          params: {
+            leaseId: "proc_preview_b"
+          },
+          estimatedCostUsd: 0.03
+        },
+        mode: "escalation_path",
+        approved: true,
+        output: "Process stopped: lease proc_preview_b.",
+        blockedBy: [],
+        violations: [],
+        votes: []
+      },
+      {
+        action: {
+          id: "action_move_after_recovery_inline_assignment",
+          type: "shell_command",
+          description: "move the matching folders after recovery",
+          params: {
+            command: [
+              "$destination = 'C:\\Users\\testuser\\OneDrive\\Desktop\\drone-web-projects'",
+              "Move-Item ...",
+              "Write-Output 'MOVED_TO_DEST=drone-company-a,drone-company-b'",
+              "Write-Output 'DEST_CONTENTS=drone-company-a,drone-company-b'",
+              "Write-Output 'ROOT_REMAINING_MATCHES='"
+            ].join("\n")
+          },
+          estimatedCostUsd: 0.18
+        },
+        mode: "escalation_path",
+        approved: true,
+        output:
+          "Shell success:\nMOVED_TO_DEST=drone-company-a,drone-company-b\r\nDEST_CONTENTS=drone-company-a,drone-company-b\r\nROOT_REMAINING_MATCHES=",
+        blockedBy: [],
+        violations: [],
+        votes: []
+      }
+    ],
+    {
+      userInput: "Yes, shut them down and retry the move."
+    }
+  );
+
+  const selected = selectUserFacingSummary(runResult, {
+    showTechnicalSummary: false
+  });
+
+  assert.equal(
+    selected,
+    "I moved drone-company-a and drone-company-b into the requested folder. I shut down 2 exact tracked preview holders first so the move could finish."
+  );
 });
 
 test("selectUserFacingSummary surfaces a human-first read_file summary when no respond output exists", () => {

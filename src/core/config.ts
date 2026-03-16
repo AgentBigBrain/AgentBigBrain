@@ -59,6 +59,8 @@ export const DEFAULT_BRAIN_CONFIG: BrainConfig = {
       "probe_port",
       "probe_http",
       "verify_browser",
+      "open_browser",
+      "close_browser",
       "create_skill",
       "memory_mutation",
       "pulse_emit"

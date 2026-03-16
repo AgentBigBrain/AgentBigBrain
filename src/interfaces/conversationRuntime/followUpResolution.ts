@@ -29,6 +29,8 @@ import {
 import type { ConversationIngressDependencies } from "./contracts";
 
 const MAX_INTENT_INTERPRETER_INPUT_CHARS = 320;
+const PULSE_INTERPRETATION_HINT_PATTERN =
+  /\b(pulse|check[- ]?in|check in|notifications?|reminders?|nudges?|pings?)\b/i;
 
 export interface InterpretedPulseResolution {
   pulseMode: "on" | "off" | "private" | "public" | "status";
@@ -67,7 +69,7 @@ export function approveProposal(
   }
   return [
     `Draft ${active.id} approved.`,
-    "Execution started. Use /status for live state."
+    "Execution started. I will keep you updated here while it runs."
   ].join("\n");
 }
 
@@ -87,7 +89,11 @@ export async function resolveInterpretedPulseCommandArgument(
   if (!deps.interpretConversationIntent) {
     return null;
   }
-  if (normalizeWhitespace(userText).length > MAX_INTENT_INTERPRETER_INPUT_CHARS) {
+  const normalizedUserText = normalizeWhitespace(userText);
+  if (normalizedUserText.length > MAX_INTENT_INTERPRETER_INPUT_CHARS) {
+    return null;
+  }
+  if (!PULSE_INTERPRETATION_HINT_PATTERN.test(normalizedUserText)) {
     return null;
   }
 
@@ -95,7 +101,7 @@ export async function resolveInterpretedPulseCommandArgument(
   let interpreted: InterpretedConversationIntent;
   try {
     interpreted = await deps.interpretConversationIntent(
-      userText,
+      normalizedUserText,
       recentTurns,
       deps.pulseLexicalRuleContext
     );
@@ -204,7 +210,7 @@ export async function handleImplicitProposalFlow(
     answer.summary,
     "",
     `Draft ${active.id} is still pending.`,
-    "Use 'adjust <changes>', 'approve', or 'cancel'."
+    "Reply with changes, say approve to run it, or say cancel to stop this draft."
   ].join("\n");
 }
 

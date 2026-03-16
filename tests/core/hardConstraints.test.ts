@@ -786,6 +786,122 @@ test("allows verify_browser when loopback payload is valid", () => {
   );
 });
 
+test("allows open_browser when loopback payload is valid", () => {
+  const proposal = makeProposal({
+    action: {
+      id: "action_open_browser_valid",
+      type: "open_browser",
+      description: "Open the verified local page in a visible browser.",
+      params: {
+        url: "http://127.0.0.1:3000/"
+      },
+      estimatedCostUsd: 0.03
+    }
+  });
+
+  const violations = evaluateHardConstraints(proposal, DEFAULT_BRAIN_CONFIG);
+  assert.equal(
+    violations.some((violation) => violation.code.startsWith("BROWSER_")),
+    false
+  );
+});
+
+test("allows open_browser when a local file preview url is valid", () => {
+  const proposal = makeProposal({
+    action: {
+      id: "action_open_browser_file_valid",
+      type: "open_browser",
+      description: "Open the built local file preview in a visible browser.",
+      params: {
+        url: "file:///C:/Users/testuser/Desktop/drone-company/index.html"
+      },
+      estimatedCostUsd: 0.03
+    }
+  });
+
+  const violations = evaluateHardConstraints(proposal, DEFAULT_BRAIN_CONFIG);
+  assert.equal(
+    violations.some((violation) => violation.code.startsWith("BROWSER_")),
+    false
+  );
+});
+
+test("blocks close_browser when session id and url are both missing", () => {
+  const proposal = makeProposal({
+    action: {
+      id: "action_close_browser_missing_target",
+      type: "close_browser",
+      description: "Close browser without a tracked target.",
+      params: {},
+      estimatedCostUsd: 0.02
+    }
+  });
+
+  const violations = evaluateHardConstraints(proposal, DEFAULT_BRAIN_CONFIG);
+  assert.ok(
+    violations.some((violation) => violation.code === "BROWSER_SESSION_MISSING_ID")
+  );
+});
+
+test("blocks close_browser when url is not loopback local", () => {
+  const proposal = makeProposal({
+    action: {
+      id: "action_close_browser_remote_url",
+      type: "close_browser",
+      description: "Close a remote browser page.",
+      params: {
+        url: "https://example.com/dashboard"
+      },
+      estimatedCostUsd: 0.02
+    }
+  });
+
+  const violations = evaluateHardConstraints(proposal, DEFAULT_BRAIN_CONFIG);
+  assert.ok(
+    violations.some((violation) => violation.code === "BROWSER_VERIFY_URL_NOT_LOCAL")
+  );
+});
+
+test("allows close_browser when a tracked browser session id is present", () => {
+  const proposal = makeProposal({
+    action: {
+      id: "action_close_browser_valid",
+      type: "close_browser",
+      description: "Close a tracked landing-page browser window.",
+      params: {
+        sessionId: "browser_session:landing-page"
+      },
+      estimatedCostUsd: 0.02
+    }
+  });
+
+  const violations = evaluateHardConstraints(proposal, DEFAULT_BRAIN_CONFIG);
+  assert.equal(
+    violations.some((violation) => violation.code.startsWith("BROWSER_")),
+    false
+  );
+});
+
+test("allows close_browser when a tracked local file preview url is present", () => {
+  const proposal = makeProposal({
+    action: {
+      id: "action_close_browser_file_valid",
+      type: "close_browser",
+      description: "Close a tracked local file preview window.",
+      params: {
+        url: "file:///C:/Users/testuser/Desktop/drone-company/index.html"
+      },
+      estimatedCostUsd: 0.02
+    }
+  });
+
+  const violations = evaluateHardConstraints(proposal, DEFAULT_BRAIN_CONFIG);
+  assert.equal(
+    violations.some((violation) => violation.code.startsWith("BROWSER_")),
+    false
+  );
+});
+
 test("blocks shell command when requested shell profile mismatches resolved profile", () => {
   const fullAccessConfig = createBrainConfigFromEnv({
     BRAIN_RUNTIME_MODE: "full_access",
@@ -1038,6 +1154,26 @@ test("blocks stop_process when leaseId is missing", () => {
 
   const violations = evaluateHardConstraints(proposal, DEFAULT_BRAIN_CONFIG);
   assert.ok(violations.some((violation) => violation.code === "PROCESS_MISSING_LEASE_ID"));
+});
+
+test("allows stop_process when an exact recovered pid is provided", () => {
+  const proposal = makeProposal({
+    action: {
+      id: "action_stop_process_recovered_pid",
+      type: "stop_process",
+      description: "Stop process by exact recovered pid",
+      params: {
+        pid: 31908
+      },
+      estimatedCostUsd: 0.02
+    }
+  });
+
+  const violations = evaluateHardConstraints(proposal, DEFAULT_BRAIN_CONFIG);
+  assert.equal(
+    violations.some((violation) => violation.code === "PROCESS_MISSING_LEASE_ID"),
+    false
+  );
 });
 
 test("blocks actions that exceed cost limits", () => {
@@ -1555,6 +1691,48 @@ test("does not overblock browser-navigation request phrasing as personal-data sh
       description: "Acknowledge browser navigation request.",
       params: {
         message: "I will open your browser and navigate to google.com."
+      },
+      estimatedCostUsd: 0.05
+    }
+  });
+
+  const violations = evaluateHardConstraints(proposal, DEFAULT_BRAIN_CONFIG);
+  assert.equal(
+    violations.some((violation) => violation.code === "PERSONAL_DATA_APPROVAL_REQUIRED"),
+    false
+  );
+});
+
+test("does not overblock benign preferred-name clarification replies as personal-data sharing", () => {
+  const proposal = makeProposal({
+    action: {
+      id: "action_respond_preferred_name_memory_reply",
+      type: "respond",
+      description: "Acknowledge the user's preferred name and explain session memory limits.",
+      params: {
+        message:
+          "Thank you for clarifying. Your preferred name is Benny, and I'll use that from now on. For privacy and safety, I don't retain personal information between sessions unless you tell me again."
+      },
+      estimatedCostUsd: 0.05
+    }
+  });
+
+  const violations = evaluateHardConstraints(proposal, DEFAULT_BRAIN_CONFIG);
+  assert.equal(
+    violations.some((violation) => violation.code === "PERSONAL_DATA_APPROVAL_REQUIRED"),
+    false
+  );
+});
+
+test("does not overblock local desktop setup instructions as personal-data sharing", () => {
+  const proposal = makeProposal({
+    action: {
+      id: "action_respond_local_setup_instructions",
+      type: "respond",
+      description: "Provide local setup commands for a generated landing page.",
+      params: {
+        message:
+          "Create the folder at C:\\Users\\testuser\\Desktop\\drone-company, copy the generated files there, run `py -m http.server 5500`, and open `http://localhost:5500` in your browser."
       },
       estimatedCostUsd: 0.05
     }

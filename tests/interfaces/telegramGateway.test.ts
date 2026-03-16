@@ -8,6 +8,7 @@ import { test } from "node:test";
 import { TelegramAdapter } from "../../src/interfaces/telegramAdapter";
 import { TelegramGateway } from "../../src/interfaces/telegramGateway";
 import { TelegramInterfaceConfig } from "../../src/interfaces/runtimeConfig";
+import { buildTelegramInterfaceConfigFixture } from "../helpers/conversationFixtures";
 
 interface TelegramGatewayTestHarness {
   createConversationNotifier(
@@ -28,37 +29,10 @@ interface TelegramGatewayTestHarness {
  * Interacts with local collaborators through imported modules and typed inputs/outputs.
  */
 function buildTelegramConfig(nativeDraftStreaming: boolean): TelegramInterfaceConfig {
-  return {
-    provider: "telegram",
-    security: {
-      sharedSecret: "secret",
-      allowedUsernames: ["agentowner"],
-      allowedUserIds: [],
-      rateLimitWindowMs: 60_000,
-      maxEventsPerWindow: 10,
-      replayCacheSize: 500,
-      agentPulseTickIntervalMs: 30_000,
-      ackDelayMs: 800,
-      showTechnicalSummary: true,
-      showSafetyCodes: true,
-      showCompletionPrefix: false,
-      followUpOverridePath: null,
-      pulseLexicalOverridePath: null,
-      allowAutonomousViaInterface: false,
-      enableDynamicPulse: false,
-      invocation: {
-        requireNameCall: false,
-        aliases: ["BigBrain"]
-      }
-    },
-    botToken: "telegram-token",
-    apiBaseUrl: "https://api.telegram.org",
-    pollTimeoutSeconds: 25,
-    pollIntervalMs: 500,
+  return buildTelegramInterfaceConfigFixture({
     streamingTransportMode: nativeDraftStreaming ? "native_draft" : "edit",
-    nativeDraftStreaming,
-    allowedChatIds: []
-  };
+    nativeDraftStreaming
+  });
 }
 
 /**
@@ -125,7 +99,7 @@ test("telegram gateway notifier uses sendMessageDraft transport when native draf
   assert.equal(typeof notifier.stream, "function");
 
   let capturedUrl = "";
-  let capturedBody: Record<string, unknown> | null = null;
+  let capturedBody: { chat_id?: number; draft_id?: number; text?: string } | null = null;
   await withMockFetch(
     (async (input, init) => {
       capturedUrl = String(input);
@@ -145,7 +119,11 @@ test("telegram gateway notifier uses sendMessageDraft transport when native draf
   );
 
   assert.match(capturedUrl, /\/bottelegram-token\/sendMessageDraft$/);
-  assert.equal(capturedBody?.chat_id, 12345);
-  assert.equal(capturedBody?.draft_id, 1);
-  assert.equal(capturedBody?.text, "Still working...");
+  if (capturedBody === null) {
+    assert.fail("Expected Telegram draft request body to be captured.");
+  }
+  const body = capturedBody as { chat_id?: number; draft_id?: number; text?: string };
+  assert.equal(body.chat_id, 12345);
+  assert.equal(body.draft_id, 1);
+  assert.equal(body.text, "Still working...");
 });

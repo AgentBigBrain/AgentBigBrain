@@ -59,6 +59,18 @@ function normalizeEntry(input: unknown): PlannerFailureFingerprintEntry | undefi
   };
 }
 
+/**
+ * Returns whether one sqlite error proves the planner-failure table is missing from the current
+ * ledger database.
+ *
+ * @param error - Candidate sqlite error.
+ * @returns `true` when the error means the planner-failure table must be recreated.
+ */
+function isMissingPlannerFailureTableError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /no such table:\s*planner_failure_fingerprints/i.test(message);
+}
+
 export class InMemoryPlannerFailureStore implements PlannerFailureStore {
   private readonly entries = new Map<string, PlannerFailureFingerprintEntry>();
 
@@ -169,22 +181,24 @@ export class SqlitePlannerFailureStore implements PlannerFailureStore {
    * @returns Promise resolving to PlannerFailureFingerprintEntry | undefined.
    */
   async get(fingerprint: string): Promise<PlannerFailureFingerprintEntry | undefined> {
-    await this.ensureSchema();
-    return withSqliteDatabase(this.sqlitePath, async (db) => {
-      const row = db
-        .prepare(
-          `SELECT strikes, last_failure_at_ms, blocked_until_ms
-           FROM planner_failure_fingerprints
-           WHERE fingerprint = ?`
-        )
-        .get(fingerprint) as Record<string, unknown> | undefined;
-      if (!row) {
-        return undefined;
-      }
-      return normalizeEntry({
-        strikes: row.strikes,
-        lastFailureAtMs: row.last_failure_at_ms,
-        blockedUntilMs: row.blocked_until_ms
+    return this.withMissingTableRecovery(async () => {
+      await this.ensureSchema();
+      return withSqliteDatabase(this.sqlitePath, async (db) => {
+        const row = db
+          .prepare(
+            `SELECT strikes, last_failure_at_ms, blocked_until_ms
+             FROM planner_failure_fingerprints
+             WHERE fingerprint = ?`
+          )
+          .get(fingerprint) as Record<string, unknown> | undefined;
+        if (!row) {
+          return undefined;
+        }
+        return normalizeEntry({
+          strikes: row.strikes,
+          lastFailureAtMs: row.last_failure_at_ms,
+          blockedUntilMs: row.blocked_until_ms
+        });
       });
     });
   }
@@ -203,35 +217,37 @@ export class SqlitePlannerFailureStore implements PlannerFailureStore {
    * @returns Promise resolving to void.
    */
   async upsert(fingerprint: string, entry: PlannerFailureFingerprintEntry): Promise<void> {
-    await this.ensureSchema();
-    await withSqliteDatabase(this.sqlitePath, async (db) => {
-      db.exec("BEGIN IMMEDIATE;");
-      try {
-        db.prepare(
-          `INSERT INTO planner_failure_fingerprints (
+    await this.withMissingTableRecovery(async () => {
+      await this.ensureSchema();
+      await withSqliteDatabase(this.sqlitePath, async (db) => {
+        db.exec("BEGIN IMMEDIATE;");
+        try {
+          db.prepare(
+            `INSERT INTO planner_failure_fingerprints (
+              fingerprint,
+              strikes,
+              last_failure_at_ms,
+              blocked_until_ms,
+              updated_at_ms
+            ) VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(fingerprint) DO UPDATE SET
+              strikes = excluded.strikes,
+              last_failure_at_ms = excluded.last_failure_at_ms,
+              blocked_until_ms = excluded.blocked_until_ms,
+              updated_at_ms = excluded.updated_at_ms`
+          ).run(
             fingerprint,
-            strikes,
-            last_failure_at_ms,
-            blocked_until_ms,
-            updated_at_ms
-          ) VALUES (?, ?, ?, ?, ?)
-          ON CONFLICT(fingerprint) DO UPDATE SET
-            strikes = excluded.strikes,
-            last_failure_at_ms = excluded.last_failure_at_ms,
-            blocked_until_ms = excluded.blocked_until_ms,
-            updated_at_ms = excluded.updated_at_ms`
-        ).run(
-          fingerprint,
-          entry.strikes,
-          entry.lastFailureAtMs,
-          entry.blockedUntilMs,
-          Date.now()
-        );
-        db.exec("COMMIT;");
-      } catch (error) {
-        db.exec("ROLLBACK;");
-        throw error;
-      }
+            entry.strikes,
+            entry.lastFailureAtMs,
+            entry.blockedUntilMs,
+            Date.now()
+          );
+          db.exec("COMMIT;");
+        } catch (error) {
+          db.exec("ROLLBACK;");
+          throw error;
+        }
+      });
     });
   }
 
@@ -248,9 +264,11 @@ export class SqlitePlannerFailureStore implements PlannerFailureStore {
    * @returns Promise resolving to void.
    */
   async delete(fingerprint: string): Promise<void> {
-    await this.ensureSchema();
-    await withSqliteDatabase(this.sqlitePath, async (db) => {
-      db.prepare("DELETE FROM planner_failure_fingerprints WHERE fingerprint = ?").run(fingerprint);
+    await this.withMissingTableRecovery(async () => {
+      await this.ensureSchema();
+      await withSqliteDatabase(this.sqlitePath, async (db) => {
+        db.prepare("DELETE FROM planner_failure_fingerprints WHERE fingerprint = ?").run(fingerprint);
+      });
     });
   }
 
@@ -267,11 +285,13 @@ export class SqlitePlannerFailureStore implements PlannerFailureStore {
    * @returns Promise resolving to void.
    */
   async cleanupOlderThan(staleBeforeMs: number): Promise<void> {
-    await this.ensureSchema();
-    await withSqliteDatabase(this.sqlitePath, async (db) => {
-      db.prepare(
-        "DELETE FROM planner_failure_fingerprints WHERE last_failure_at_ms < ? AND blocked_until_ms <= ?"
-      ).run(staleBeforeMs, Date.now());
+    await this.withMissingTableRecovery(async () => {
+      await this.ensureSchema();
+      await withSqliteDatabase(this.sqlitePath, async (db) => {
+        db.prepare(
+          "DELETE FROM planner_failure_fingerprints WHERE last_failure_at_ms < ? AND blocked_until_ms <= ?"
+        ).run(staleBeforeMs, Date.now());
+      });
     });
   }
 
@@ -294,6 +314,26 @@ export class SqlitePlannerFailureStore implements PlannerFailureStore {
       this.initSchema(db);
     });
     this.sqliteReady = true;
+  }
+
+  /**
+   * Retries one store operation once after recreating the planner-failure schema when the current
+   * sqlite ledger unexpectedly loses that table.
+   *
+   * @param operation - Store operation to run.
+   * @returns Promise resolving to the original operation result.
+   */
+  private async withMissingTableRecovery<T>(operation: () => Promise<T>): Promise<T> {
+    try {
+      return await operation();
+    } catch (error) {
+      if (!isMissingPlannerFailureTableError(error)) {
+        throw error;
+      }
+      this.sqliteReady = false;
+      await this.ensureSchema();
+      return await operation();
+    }
   }
 
   /**

@@ -7,8 +7,9 @@ import { test } from "node:test";
 
 import { createBrainConfigFromEnv } from "../../src/core/config";
 import { evaluateTaskRunnerPreflight } from "../../src/core/orchestration/taskRunnerPreflight";
+import type { EvaluateTaskRunnerPreflightInput } from "../../src/core/orchestration/taskRunnerPreflight";
 
-function createBaseInput() {
+function createBaseInput(): EvaluateTaskRunnerPreflightInput {
   const baseConfig = createBrainConfigFromEnv({});
   const config = {
     ...baseConfig,

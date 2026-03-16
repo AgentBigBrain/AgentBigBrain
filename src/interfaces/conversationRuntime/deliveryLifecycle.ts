@@ -105,7 +105,8 @@ export async function handleAckTimerFire(input: HandleAckTimerFireInput): Promis
     return;
   }
 
-  const ackMessage = "Working on it. Use /status for live state.";
+  const ackMessage =
+    "Working on your request now. I will post progress here, and you can ask for status at any time.";
   const delivery = await notify.send(ackMessage);
   if (!delivery.ok) {
     setAckLifecycleState(

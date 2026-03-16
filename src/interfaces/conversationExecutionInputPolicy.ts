@@ -3,12 +3,17 @@
  */
 
 import type { ConversationSession } from "./sessionStore";
+import type { ConversationIntentSemanticHint } from "./conversationRuntime/intentModeContracts";
 import type { ConversationInboundMediaEnvelope } from "./mediaRuntime/contracts";
 import { buildConversationMediaContextBlock } from "./conversationRuntime/mediaContextRendering";
+import { buildPathDestinationContextBlock } from "./conversationRuntime/pathDestinationContext";
+import { buildWorkspaceRecoveryContextBlock } from "./conversationRuntime/workspaceRecoveryContext";
 import {
   buildRoutingExecutionHintV1,
   type RoutingMapClassificationV1
 } from "./routingMap";
+import { buildReuseIntentContextBlock } from "./conversationRuntime/reuseIntentContext";
+import { buildReturnHandoffContinuationBlock } from "./conversationRuntime/returnHandoffContinuation";
 import {
   classifyFollowUp,
   isLikelyAssistantClarificationPrompt,
@@ -23,15 +28,379 @@ import type {
   QueryConversationContinuityEpisodes,
   QueryConversationContinuityFacts
 } from "./conversationRuntime/managerContracts";
+import type { ManagedProcessSnapshot } from "../organs/liveRun/managedProcessRegistry";
+import type { BrowserSessionSnapshot } from "../organs/liveRun/browserSessionRegistry";
+import { reconcileConversationExecutionRuntimeSession } from "./conversationRuntime/executionInputRuntimeOwnership";
 
 const FIRST_PERSON_STATUS_UPDATE_PATTERN =
   /\bmy\s+[a-z0-9][a-z0-9_.\-/\s]{0,120}\s+is\s+[a-z0-9][^.!?\n]{0,120}/i;
 const STATUS_UPDATE_VALUE_MARKER_PATTERN =
   /\b(?:pending|open|stuck|unresolved|incomplete|complete|completed|done|resolved)\b/i;
+const NATURAL_BROWSER_CLOSE_REFERENCE_PATTERN =
+  /\b(?:close|shut|dismiss|hide)\b[\s\S]{0,50}\b(?:browser|tab|window|preview|page|landing page|homepage)\b/i;
+const NATURAL_BROWSER_OPEN_REFERENCE_PATTERN =
+  /\b(?:open|reopen|show|bring\s+(?:back|up)|pull\s+up)\b[\s\S]{0,50}\b(?:browser|tab|window|preview|page|landing page|homepage)\b/i;
+const NATURAL_ARTIFACT_EDIT_VERB_PATTERN =
+  /\b(?:change|edit|update|replace|swap|revise|tweak|adjust|make)\b/i;
+const NATURAL_ARTIFACT_EDIT_TARGET_PATTERN =
+  /\b(?:hero|header|homepage|landing page|page|site|slider|cta|call to action|section|image|copy|headline|button)\b/i;
+const NATURAL_ARTIFACT_EDIT_DELTA_PATTERN =
+  /\b(?:instead of|from earlier|from before|we were working on|we built|you made)\b/i;
+const NATURAL_NEW_BUILD_PATTERN =
+  /\b(?:build|create|generate|scaffold|start)\b[\s\S]{0,20}\b(?:new|another|fresh)\b/i;
+const RECENT_ACTION_CONTEXT_PRIORITY: Readonly<Record<string, number>> = {
+  file: 0,
+  folder: 1,
+  browser_session: 2,
+  url: 3,
+  process: 4,
+  task_summary: 5
+};
 
 export interface FollowUpResolution {
   executionInput: string;
   classification: FollowUpClassification;
+}
+
+/**
+ * Sorts recent actions so continuity prompts see concrete files and folders before supporting
+ * browser or summary records.
+ *
+ * @param session - Current conversation session.
+ * @returns Prioritized recent-action list for continuity context.
+ */
+function prioritizeRecentActionsForContext(session: ConversationSession) {
+  return [...session.recentActions].sort((left, right) => {
+    const leftPriority = RECENT_ACTION_CONTEXT_PRIORITY[left.kind] ?? 99;
+    const rightPriority = RECENT_ACTION_CONTEXT_PRIORITY[right.kind] ?? 99;
+    if (leftPriority !== rightPriority) {
+      return leftPriority - rightPriority;
+    }
+    return right.at.localeCompare(left.at);
+  });
+}
+
+/**
+ * Renders the currently remembered working mode so follow-up turns can stay aligned with prior build/plan state.
+ *
+ * @param session - Current conversation session.
+ * @returns Context block for execution input, or `null` when no working mode is active.
+ */
+function buildModeContinuityBlock(session: ConversationSession): string | null {
+  if (!session.modeContinuity) {
+    return null;
+  }
+  return [
+    "Current working mode from earlier in this chat:",
+    `- Active mode: ${session.modeContinuity.activeMode}`,
+    `- Confidence: ${session.modeContinuity.confidence.toLowerCase()}`,
+    `- Last affirmed at: ${session.modeContinuity.lastAffirmedAt}`,
+    `- Last user wording: ${session.modeContinuity.lastUserInput}`
+  ].join("\n");
+}
+
+/**
+ * Renders the current progress state so execution input can answer "what are you doing now?" consistently.
+ *
+ * @param session - Current conversation session.
+ * @returns Progress block, or `null` when no progress state is tracked.
+ */
+function buildProgressStateBlock(session: ConversationSession): string | null {
+  if (!session.progressState) {
+    return null;
+  }
+  const progressJobId = session.progressState.jobId ?? "none";
+  return [
+    "Current progress state:",
+    `- Status: ${session.progressState.status}`,
+    `- Message: ${session.progressState.message}`,
+    `- Job id: ${progressJobId}`,
+    `- Updated at: ${session.progressState.updatedAt}`
+  ].join("\n");
+}
+
+/**
+ * Renders the latest durable work handoff so return turns can pick up from a real checkpoint.
+ *
+ * @param session - Current conversation session.
+ * @returns Handoff block, or `null` when no durable handoff exists yet.
+ */
+function buildReturnHandoffBlock(session: ConversationSession): string | null {
+  if (!session.returnHandoff) {
+    return null;
+  }
+  const lines = [
+    "Latest durable work handoff in this chat:",
+    `- Status: ${session.returnHandoff.status}`,
+    `- Goal: ${session.returnHandoff.goal}`,
+    `- Summary: ${session.returnHandoff.summary}`,
+    `- Updated at: ${session.returnHandoff.updatedAt}`
+  ];
+  if (session.returnHandoff.workspaceRootPath) {
+    lines.push(`- Workspace root: ${session.returnHandoff.workspaceRootPath}`);
+  }
+  if (session.returnHandoff.primaryArtifactPath) {
+    lines.push(`- Primary artifact: ${session.returnHandoff.primaryArtifactPath}`);
+  }
+  if (session.returnHandoff.previewUrl) {
+    lines.push(`- Preview URL: ${session.returnHandoff.previewUrl}`);
+  }
+  if (session.returnHandoff.changedPaths.length > 0) {
+    lines.push(`- Changed paths: ${session.returnHandoff.changedPaths.join(", ")}`);
+  }
+  if (session.returnHandoff.nextSuggestedStep) {
+    lines.push(`- Next suggested step: ${session.returnHandoff.nextSuggestedStep}`);
+  }
+  return lines.join("\n");
+}
+
+/**
+ * Summarizes the most recent user-visible actions from the current chat for natural recall and reuse prompts.
+ *
+ * @param session - Current conversation session.
+ * @returns Recent action block, or `null` when no actions are tracked.
+ */
+function buildRecentActionBlock(session: ConversationSession): string | null {
+  if (session.recentActions.length === 0) {
+    return null;
+  }
+  const prioritizedActions = prioritizeRecentActionsForContext(session);
+  const lines = prioritizedActions.slice(0, 3).map((action) =>
+    action.location
+      ? `- ${action.label}: ${action.location} (${action.status})`
+      : `- ${action.label}: ${action.summary} (${action.status})`
+  );
+  return [
+    "Recent user-visible actions in this chat:",
+    ...lines
+  ].join("\n");
+}
+
+/**
+ * Renders the canonical tracked workspace so follow-up turns can act on one explicit project root.
+ *
+ * @param session - Current conversation session.
+ * @returns Workspace block, or `null` when no workspace is currently tracked.
+ */
+function buildActiveWorkspaceBlock(session: ConversationSession): string | null {
+  if (!session.activeWorkspace) {
+    return null;
+  }
+  const lines = [
+    "Current tracked workspace in this chat:",
+    `- Label: ${session.activeWorkspace.label}`,
+    `- Root path: ${session.activeWorkspace.rootPath ?? "unknown"}`,
+    `- Primary artifact: ${session.activeWorkspace.primaryArtifactPath ?? "unknown"}`,
+    `- Preview URL: ${session.activeWorkspace.previewUrl ?? "none"}`,
+    `- Browser session id: ${session.activeWorkspace.browserSessionId ?? "none"}`,
+    `- Browser session ids: ${session.activeWorkspace.browserSessionIds.length > 0 ? session.activeWorkspace.browserSessionIds.join(", ") : "none"}`,
+    `- Browser session status: ${session.activeWorkspace.browserSessionStatus ?? "unknown"}`,
+    `- Browser process pid: ${session.activeWorkspace.browserProcessPid ?? "unknown"}`,
+    `- Preview process lease: ${session.activeWorkspace.previewProcessLeaseId ?? "none"}`,
+    `- Preview process leases: ${session.activeWorkspace.previewProcessLeaseIds.length > 0 ? session.activeWorkspace.previewProcessLeaseIds.join(", ") : "none"}`,
+    `- Last known preview pid: ${session.activeWorkspace.lastKnownPreviewProcessPid ?? "unknown"}`,
+    `- Still controllable: ${session.activeWorkspace.stillControllable ? "yes" : "no"}`,
+    `- Ownership state: ${session.activeWorkspace.ownershipState}`,
+    `- Preview stack state: ${session.activeWorkspace.previewStackState}`,
+    `- Updated at: ${session.activeWorkspace.updatedAt}`
+  ];
+  if (session.activeWorkspace.lastChangedPaths.length > 0) {
+    lines.push(
+      `- Recent changed paths: ${session.activeWorkspace.lastChangedPaths.join(", ")}`
+    );
+  }
+  return lines.join("\n");
+}
+
+/**
+ * Renders tracked browser sessions so execution can answer follow-up requests about visible pages or tabs.
+ *
+ * @param session - Current conversation session.
+ * @returns Browser session block, or `null` when no browser sessions are tracked.
+ */
+function buildBrowserSessionBlock(session: ConversationSession): string | null {
+  if (session.browserSessions.length === 0) {
+    return null;
+  }
+  const lines = session.browserSessions.slice(0, 3).map((browserSession) =>
+    `- ${browserSession.label}: sessionId=${browserSession.id}; url=${browserSession.url}; status=${browserSession.status}; visibility=${browserSession.visibility}; controller=${browserSession.controllerKind}; control=${browserSession.controlAvailable ? "available" : "unavailable"}${browserSession.browserProcessPid !== null ? `; browserPid=${browserSession.browserProcessPid}` : ""}${browserSession.workspaceRootPath ? `; workspaceRoot=${browserSession.workspaceRootPath}` : ""}${browserSession.linkedProcessLeaseId ? `; linkedPreviewLease=${browserSession.linkedProcessLeaseId}` : ""}${browserSession.linkedProcessPid !== null ? `; linkedPreviewPid=${browserSession.linkedProcessPid}` : ""}${browserSession.linkedProcessCwd ? `; linkedPreviewCwd=${browserSession.linkedProcessCwd}` : ""}`
+  );
+  return [
+    "Tracked browser sessions:",
+    ...lines
+  ].join("\n");
+}
+
+/**
+ * Builds a follow-up block when the user is naturally referring to an already tracked browser
+ * window from this chat.
+ *
+ * @param session - Current conversation session.
+ * @param userInput - Raw current user wording.
+ * @returns Browser follow-up guidance block, or `null` when no natural browser follow-up is detected.
+ */
+function buildBrowserFollowUpIntentBlock(
+  session: ConversationSession,
+  userInput: string
+): string | null {
+  if (session.browserSessions.length === 0) {
+    return null;
+  }
+
+  const normalizedInput = normalizeWhitespace(userInput);
+  if (!normalizedInput) {
+    return null;
+  }
+
+  const wantsClose = NATURAL_BROWSER_CLOSE_REFERENCE_PATTERN.test(normalizedInput);
+  const wantsOpen =
+    !wantsClose &&
+    NATURAL_BROWSER_OPEN_REFERENCE_PATTERN.test(normalizedInput);
+  if (!wantsClose && !wantsOpen) {
+    return null;
+  }
+
+  const preferredSession =
+    (session.activeWorkspace?.browserSessionId
+      ? session.browserSessions.find(
+          (browserSession) => browserSession.id === session.activeWorkspace?.browserSessionId
+        ) ?? null
+      : null) ??
+    session.browserSessions.find((browserSession) => browserSession.status === "open") ??
+    session.browserSessions[0];
+  if (!preferredSession) {
+    return null;
+  }
+
+  const lines = [
+    "Natural browser-session follow-up:",
+    "- The user appears to be referring to a tracked browser window from earlier in this chat.",
+    `- Preferred browser session: ${preferredSession.label}; sessionId=${preferredSession.id}; url=${preferredSession.url}; status=${preferredSession.status}; control=${preferredSession.controlAvailable ? "available" : "unavailable"}`
+  ];
+  if (preferredSession.linkedProcessLeaseId) {
+    lines.push(
+      `- Linked preview process: leaseId=${preferredSession.linkedProcessLeaseId}${preferredSession.linkedProcessCwd ? `; cwd=${preferredSession.linkedProcessCwd}` : ""}`
+    );
+    lines.push(
+      "- In this chat, closing that landing page should shut down the linked local preview stack, not only hide the browser window."
+    );
+  } else if (preferredSession.workspaceRootPath) {
+    lines.push(
+      `- Remembered browser workspace root: ${preferredSession.workspaceRootPath}`
+    );
+  }
+  if (wantsClose) {
+    if (preferredSession.linkedProcessLeaseId) {
+      if (preferredSession.controlAvailable) {
+        lines.push(
+          `- If the user wants that visible page closed now, prefer close_browser with params.sessionId=${preferredSession.id} and then stop_process with params.leaseId=${preferredSession.linkedProcessLeaseId} so the linked local preview stack shuts down fully. Do not stop unrelated processes.`
+        );
+      } else {
+        lines.push(
+          `- If the user wants that visible page closed now, the browser session is no longer directly controllable. Prefer stop_process with params.leaseId=${preferredSession.linkedProcessLeaseId} first so the linked local preview stack shuts down, then only use close_browser with params.sessionId=${preferredSession.id} if the runtime still proves direct browser control afterward. Do not stop unrelated processes.`
+        );
+      }
+    } else {
+      lines.push(
+        `- If the user wants that visible page closed now, prefer close_browser with params.sessionId=${preferredSession.id} over unrelated file, shell, or process actions.`
+      );
+    }
+  } else {
+    lines.push(
+      `- If the user wants to see that page again, prefer open_browser with params.url=${preferredSession.url} instead of rebuilding a new project.`
+    );
+  }
+  return lines.join("\n");
+}
+
+/**
+ * Builds a follow-up block when the user appears to be editing the artifact already created in this
+ * chat rather than asking for a brand-new project.
+ *
+ * @param session - Current conversation session.
+ * @param userInput - Raw current user wording.
+ * @returns Artifact-edit guidance block, or `null` when no natural edit follow-up is detected.
+ */
+function buildRecentArtifactEditContextBlock(
+  session: ConversationSession,
+  userInput: string
+): string | null {
+  const normalizedInput = normalizeWhitespace(userInput);
+  if (!normalizedInput) {
+    return null;
+  }
+
+  const looksLikeEdit =
+    NATURAL_ARTIFACT_EDIT_VERB_PATTERN.test(normalizedInput) &&
+    (
+      NATURAL_ARTIFACT_EDIT_TARGET_PATTERN.test(normalizedInput) ||
+      NATURAL_ARTIFACT_EDIT_DELTA_PATTERN.test(normalizedInput)
+    ) &&
+    !NATURAL_NEW_BUILD_PATTERN.test(normalizedInput);
+  if (!looksLikeEdit) {
+    return null;
+  }
+
+  const recentArtifactAction =
+    prioritizeRecentActionsForContext(session).find((action) => action.kind !== "task_summary") ?? null;
+  const recentDestination =
+    (session.activeWorkspace?.rootPath
+      ? {
+          resolvedPath: session.activeWorkspace.rootPath
+        }
+      : null) ??
+    session.pathDestinations[0] ??
+    null;
+  const openBrowserSession =
+    (session.activeWorkspace?.browserSessionId
+      ? session.browserSessions.find(
+          (browserSession) => browserSession.id === session.activeWorkspace?.browserSessionId
+        ) ?? null
+      : null) ??
+    session.browserSessions.find((browserSession) => browserSession.status === "open") ??
+    null;
+  if (
+    !recentArtifactAction &&
+    !recentDestination &&
+    !openBrowserSession &&
+    !session.activeWorkspace
+  ) {
+    return null;
+  }
+
+  const lines = [
+    "Natural artifact-edit follow-up:",
+    "- The user appears to be editing the artifact already created in this chat rather than asking for a brand-new project."
+  ];
+  if (recentArtifactAction) {
+    lines.push(
+      recentArtifactAction.location
+        ? `- Most recent concrete artifact: ${recentArtifactAction.label} at ${recentArtifactAction.location}`
+        : `- Most recent concrete artifact: ${recentArtifactAction.label}`
+    );
+  }
+  if (recentDestination) {
+    lines.push(
+      `- Preferred edit destination: ${recentDestination.resolvedPath}`
+    );
+  }
+  if (session.activeWorkspace?.primaryArtifactPath) {
+    lines.push(
+      `- Preferred primary artifact: ${session.activeWorkspace.primaryArtifactPath}`
+    );
+  }
+  if (openBrowserSession) {
+    lines.push(
+      `- Visible preview already exists: ${openBrowserSession.url}; keep the preview aligned with the edited artifact when practical.`
+    );
+  }
+  lines.push(
+    "- This run must include a real file mutation under the tracked workspace. Do not satisfy this request by only reopening, focusing, or closing the preview."
+  );
+  lines.push(
+    "- Prefer updating the tracked primary artifact first unless the requested change clearly belongs in another related tracked file."
+  );
+  return lines.join("\n");
 }
 
 /**
@@ -76,19 +445,59 @@ export async function buildConversationAwareExecutionInput(
   sourceUserInput: string | null = null,
   queryContinuityEpisodes?: QueryConversationContinuityEpisodes,
   queryContinuityFacts?: QueryConversationContinuityFacts,
-  media?: ConversationInboundMediaEnvelope | null
+  media?: ConversationInboundMediaEnvelope | null,
+  managedProcessSnapshots?: readonly ManagedProcessSnapshot[],
+  semanticHint: ConversationIntentSemanticHint | null = null,
+  browserSessionSnapshots?: readonly BrowserSessionSnapshot[]
 ): Promise<string> {
+  const runtimeReconciledSession = reconcileConversationExecutionRuntimeSession(
+    session,
+    browserSessionSnapshots,
+    managedProcessSnapshots
+  );
   const recentTurns = session.conversationTurns.slice(-maxContextTurnsForExecution);
   const rawUserInput = sourceUserInput ?? executionInput;
   const statusUpdateBlock = buildTurnLocalStatusUpdateBlock(rawUserInput);
   const contextualRecallBlock = await buildContextualRecallBlock(
-    session,
+    runtimeReconciledSession,
     rawUserInput,
     queryContinuityEpisodes,
     queryContinuityFacts,
     media
   );
   const mediaContextBlock = buildConversationMediaContextBlock(media);
+  const modeContinuityBlock = buildModeContinuityBlock(runtimeReconciledSession);
+  const progressStateBlock = buildProgressStateBlock(runtimeReconciledSession);
+  const returnHandoffBlock = buildReturnHandoffBlock(runtimeReconciledSession);
+  const returnHandoffContinuationBlock = buildReturnHandoffContinuationBlock(
+    runtimeReconciledSession,
+    rawUserInput,
+    semanticHint
+  );
+  const recentActionBlock = buildRecentActionBlock(runtimeReconciledSession);
+  const activeWorkspaceBlock = buildActiveWorkspaceBlock(runtimeReconciledSession);
+  const browserSessionBlock = buildBrowserSessionBlock(runtimeReconciledSession);
+  const browserFollowUpIntentBlock = buildBrowserFollowUpIntentBlock(
+    runtimeReconciledSession,
+    rawUserInput
+  );
+  const artifactEditContextBlock = buildRecentArtifactEditContextBlock(
+    runtimeReconciledSession,
+    rawUserInput
+  );
+  const workspaceRecoveryContextBlock = buildWorkspaceRecoveryContextBlock(
+    runtimeReconciledSession,
+    rawUserInput,
+    managedProcessSnapshots
+  );
+  const pathDestinationBlock = buildPathDestinationContextBlock(
+    runtimeReconciledSession,
+    rawUserInput
+  );
+  const reusePreferenceBlock = buildReuseIntentContextBlock(
+    runtimeReconciledSession,
+    rawUserInput
+  );
   const routingHint = routingClassification
     ? buildRoutingExecutionHintV1(routingClassification)
     : null;
@@ -97,6 +506,18 @@ export async function buildConversationAwareExecutionInput(
     !statusUpdateBlock &&
     !contextualRecallBlock &&
     !mediaContextBlock &&
+    !modeContinuityBlock &&
+    !progressStateBlock &&
+    !returnHandoffBlock &&
+    !returnHandoffContinuationBlock &&
+    !recentActionBlock &&
+    !activeWorkspaceBlock &&
+    !browserSessionBlock &&
+    !browserFollowUpIntentBlock &&
+    !artifactEditContextBlock &&
+    !workspaceRecoveryContextBlock &&
+    !pathDestinationBlock &&
+    !reusePreferenceBlock &&
     !routingHint
   ) {
     return executionInput;
@@ -129,6 +550,42 @@ export async function buildConversationAwareExecutionInput(
   }
   if (mediaContextBlock) {
     lines.push("", mediaContextBlock);
+  }
+  if (modeContinuityBlock) {
+    lines.push("", modeContinuityBlock);
+  }
+  if (progressStateBlock) {
+    lines.push("", progressStateBlock);
+  }
+  if (returnHandoffBlock) {
+    lines.push("", returnHandoffBlock);
+  }
+  if (returnHandoffContinuationBlock) {
+    lines.push("", returnHandoffContinuationBlock);
+  }
+  if (recentActionBlock) {
+    lines.push("", recentActionBlock);
+  }
+  if (activeWorkspaceBlock) {
+    lines.push("", activeWorkspaceBlock);
+  }
+  if (browserSessionBlock) {
+    lines.push("", browserSessionBlock);
+  }
+  if (browserFollowUpIntentBlock) {
+    lines.push("", browserFollowUpIntentBlock);
+  }
+  if (artifactEditContextBlock) {
+    lines.push("", artifactEditContextBlock);
+  }
+  if (workspaceRecoveryContextBlock) {
+    lines.push("", workspaceRecoveryContextBlock);
+  }
+  if (pathDestinationBlock) {
+    lines.push("", pathDestinationBlock);
+  }
+  if (reusePreferenceBlock) {
+    lines.push("", reusePreferenceBlock);
   }
   if (routingHint) {
     lines.push("", "Deterministic routing hint:", routingHint);

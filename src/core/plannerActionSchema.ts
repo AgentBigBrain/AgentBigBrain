@@ -21,6 +21,10 @@ const PLANNER_ACTION_TYPES: readonly ActionType[] = [
   "probe_port",
   "probe_http",
   "verify_browser",
+  "open_browser",
+  "close_browser",
+  "inspect_path_holders",
+  "inspect_workspace_resources",
   "memory_mutation",
   "pulse_emit"
 ];
@@ -90,6 +94,18 @@ const PLANNER_ACTION_TYPE_ALIASES: Record<string, ActionType> = {
   browser_check: "verify_browser",
   ui_verify: "verify_browser",
   playwright_verify: "verify_browser",
+  open_browser: "open_browser",
+  browser_open: "open_browser",
+  launch_browser: "open_browser",
+  close_browser: "close_browser",
+  browser_close: "close_browser",
+  close_tab: "close_browser",
+  inspect_path_holders: "inspect_path_holders",
+  inspect_path_holder: "inspect_path_holders",
+  inspect_holders: "inspect_path_holders",
+  inspect_workspace_resources: "inspect_workspace_resources",
+  inspect_workspace: "inspect_workspace_resources",
+  inspect_workspace_resources_for_followup: "inspect_workspace_resources",
   memory_mutation: "memory_mutation",
   memory_update: "memory_mutation",
   thread_update: "memory_mutation",
@@ -203,6 +219,14 @@ export function defaultPlannerActionDescription(type: ActionType): string {
       return "Probe a local HTTP endpoint for readiness.";
     case "verify_browser":
       return "Verify a local browser-rendered page using governed UI checks.";
+    case "open_browser":
+      return "Open a local page in a visible browser window and leave it open.";
+    case "close_browser":
+      return "Close a tracked browser window that the runtime previously opened.";
+    case "inspect_path_holders":
+      return "Inspect runtime-owned holders or preview resources that still match one local path.";
+    case "inspect_workspace_resources":
+      return "Inspect runtime-owned browser and preview resources for one tracked workspace.";
     case "memory_mutation":
       return "Apply a governed local memory mutation.";
     case "pulse_emit":
@@ -280,7 +304,12 @@ export function normalizePlannerActionParams(
     "host",
     "url",
     "expectedTitle",
-    "expectedText"
+    "expectedText",
+    "sessionId",
+    "rootPath",
+    "previewUrl",
+    "browserSessionId",
+    "previewProcessLeaseId"
   ] as const;
   for (const field of stringFields) {
     if (typeof actionRecord[field] === "string" && typeof params[field] !== "string") {
@@ -288,7 +317,7 @@ export function normalizePlannerActionParams(
     }
   }
 
-  const numberFields = ["port", "timeoutMs", "expectedStatus"] as const;
+  const numberFields = ["port", "timeoutMs", "expectedStatus", "pid"] as const;
   for (const field of numberFields) {
     if (typeof actionRecord[field] === "number" && typeof params[field] !== "number") {
       params[field] = actionRecord[field];

@@ -209,11 +209,11 @@ export function evaluateShellCommandTimeoutConstraints(
 }
 
 /**
- * Ensures process-check and process-stop actions include a lease id.
+ * Ensures process-check and process-stop actions include the exact identity needed for safe control.
  *
  * @param actionType - Managed-process action being evaluated.
  * @param params - Planned action params.
- * @returns Constraint violations when leaseId is missing.
+ * @returns Constraint violations when the required lease id or recovered pid is missing.
  */
 export function evaluateManagedProcessLeaseConstraints(
   actionType: "check_process" | "stop_process",
@@ -224,13 +224,20 @@ export function evaluateManagedProcessLeaseConstraints(
     return [];
   }
 
+  if (actionType === "stop_process") {
+    const pid = getNumberParam(params, "pid");
+    if (typeof pid === "number" && Number.isInteger(pid) && pid > 0) {
+      return [];
+    }
+  }
+
   return [
     {
       code: "PROCESS_MISSING_LEASE_ID",
       message:
         actionType === "check_process"
           ? "Process check requires a leaseId."
-          : "Process stop requires a leaseId."
+          : "Process stop requires a leaseId or recovered pid."
     }
   ];
 }
