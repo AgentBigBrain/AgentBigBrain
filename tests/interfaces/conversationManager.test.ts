@@ -472,7 +472,14 @@ test("conversation manager keeps session responsive with job queue status and he
     assert.ok(statusAfterRun.includes("Current status: Nothing is running right now."));
     assert.ok(statusAfterRun.includes("Queue: empty."));
     assert.ok(
-      notifications.some((message) => message.startsWith("Working on your request:"))
+      notifications.some(
+        (message) =>
+          message.startsWith("I'm working on that now") ||
+          message.startsWith("I'm building the page") ||
+          message.startsWith("I'm updating the current page") ||
+          message.startsWith("I'm organizing the project folders") ||
+          message.startsWith("I'm closing the tracked preview")
+      )
     );
     assert.ok(notifications.some((message) => message.toLowerCase().includes("completed")));
   } finally {

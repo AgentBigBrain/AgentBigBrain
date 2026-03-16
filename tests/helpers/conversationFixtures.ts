@@ -25,15 +25,22 @@ export function buildConversationSessionFixture(
     receivedAt: string;
   }> = {}
 ): ConversationSession {
+  const provider = seed.provider ?? "telegram";
+  const seededConversationId = seed.conversationId ?? "chat-1";
+  const baseSession = buildSessionSeed({
+    provider,
+    conversationId: seededConversationId,
+    userId: seed.userId ?? "user-1",
+    username: seed.username ?? "agentowner",
+    conversationVisibility: seed.conversationVisibility ?? "private",
+    receivedAt: seed.receivedAt ?? "2026-03-07T12:00:00.000Z"
+  });
   return {
-    ...buildSessionSeed({
-      provider: seed.provider ?? "telegram",
-      conversationId: seed.conversationId ?? "chat-1",
-      userId: seed.userId ?? "user-1",
-      username: seed.username ?? "agentowner",
-      conversationVisibility: seed.conversationVisibility ?? "private",
-      receivedAt: seed.receivedAt ?? "2026-03-07T12:00:00.000Z"
-    }),
+    ...baseSession,
+    conversationId:
+      seededConversationId.startsWith(`${provider}:`)
+        ? seededConversationId
+        : baseSession.conversationId,
     ...overrides
   };
 }
@@ -65,10 +72,12 @@ export function buildConversationIngressConfig(
 export function buildConversationJobFixture(
   overrides: Partial<ConversationJob> = {}
 ): ConversationJob {
+  const input = overrides.input ?? "run test task";
+  const executionInput = overrides.executionInput ?? input;
   return {
     id: "job-1",
-    input: "run test task",
-    executionInput: "run test task",
+    input,
+    executionInput,
     createdAt: "2026-03-07T12:00:00.000Z",
     startedAt: null,
     completedAt: null,

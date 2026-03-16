@@ -691,7 +691,8 @@ function createTelegramAdapterHarness(harness: TelegramLiveSmokeHarness): Telegr
       );
       return record ? toConversationMemoryReviewRecords([record])[0] ?? null : null;
     },
-    listManagedProcessSnapshots: async () => []
+    listManagedProcessSnapshots: async () => [],
+    listBrowserSessionSnapshots: async () => []
   } as unknown as TelegramAdapter;
 }
 

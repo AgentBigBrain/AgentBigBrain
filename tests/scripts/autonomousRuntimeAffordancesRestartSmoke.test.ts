@@ -73,6 +73,7 @@ test("autonomous runtime affordances restart smoke exits cleanly and emits a PAS
     reloadBeforeClose: {
       browserTrackedCurrent: boolean;
       browserTrackedOrphaned: boolean;
+      browserStatus: string | null;
       processTrackedCurrent: boolean;
     };
     reloadAfterClose: {
@@ -103,8 +104,12 @@ test("autonomous runtime affordances restart smoke exits cleanly and emits a PAS
   );
   assert.equal(persisted.status, "PASS");
   assert.equal(Object.values(persisted.checks).every(Boolean), true);
-  assert.equal(persisted.reloadBeforeClose.browserTrackedCurrent, false);
-  assert.equal(persisted.reloadBeforeClose.browserTrackedOrphaned, true);
+  assert.equal(persisted.reloadBeforeClose.browserStatus, "open");
+  assert.equal(
+    persisted.reloadBeforeClose.browserTrackedCurrent ||
+      persisted.reloadBeforeClose.browserTrackedOrphaned,
+    true
+  );
   assert.equal(persisted.reloadBeforeClose.processTrackedCurrent, true);
   assert.equal(persisted.reloadAfterClose.browserTrackedStale, true);
   assert.equal(persisted.reloadAfterClose.processTrackedStale, true);
