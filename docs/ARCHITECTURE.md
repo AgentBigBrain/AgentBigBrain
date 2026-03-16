@@ -205,6 +205,11 @@ Main supporting surfaces:
 - `src/organs/memorySynthesis/`
 - `src/interfaces/proactiveRuntime/`
 
+The front door can also use an optional bounded local intent-model seam from
+`src/organs/languageUnderstanding/` when deterministic routing confidence stays weak. That seam is
+currently Ollama-backed and used only for mode and semantic-hint classification. It does not
+replace the planner, and it does not authorize risky actions by itself.
+
 ## 6) Interface and Conversation Model
 
 Main surfaces:

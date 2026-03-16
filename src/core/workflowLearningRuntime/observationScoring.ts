@@ -19,7 +19,16 @@ import type {
  */
 function hasLiveRunAction(actionTypes: readonly string[]): boolean {
   return actionTypes.some((type) =>
-    ["start_process", "check_process", "stop_process", "probe_http", "probe_port", "verify_browser"].includes(type)
+    [
+      "start_process",
+      "check_process",
+      "stop_process",
+      "probe_http",
+      "probe_port",
+      "verify_browser",
+      "open_browser",
+      "close_browser"
+    ].includes(type)
   );
 }
 

@@ -32,7 +32,7 @@ import {
   sendTelegramDraftUpdate,
   sendTelegramReply
 } from "./telegramTransport";
-import { abortAutonomousTransportTaskIfRequested } from "./gatewayLifecycle";
+import { abortAutonomousTransportTaskIfRequested } from "./autonomousAbortControl";
 import { shouldNotifyRejectedInvocation } from "./rateLimitPolicy";
 
 export type {

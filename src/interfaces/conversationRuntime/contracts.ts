@@ -4,8 +4,11 @@
 
 import type {
   ConversationCheckpointReviewRunner,
+  DescribeRuntimeCapabilities,
   ForgetConversationMemoryEpisode,
   ConversationIngressRuleContexts,
+  ListBrowserSessionSnapshots,
+  ListManagedProcessSnapshots,
   ListAvailableSkills,
   QueryConversationContinuityFacts,
   ConversationIntentInterpreter,
@@ -17,6 +20,7 @@ import type {
   MarkConversationMemoryEpisodeWrong,
   ExecuteConversationTask
 } from "./managerContracts";
+import type { LocalIntentModelResolver } from "../../organs/languageUnderstanding/localIntentModelContracts";
 import type { ConversationSession } from "../sessionStore";
 
 export interface InterfaceSessionFile {
@@ -64,8 +68,12 @@ export interface ConversationIngressDependencies extends ConversationIngressRule
     | "maxContextTurnsForExecution"
     | "staleRunningJobRecoveryMs"
     | "maxRecentJobs"
+    | "maxRecentActions"
+    | "maxBrowserSessions"
+    | "maxPathDestinations"
   >;
   interpretConversationIntent?: ConversationIntentInterpreter;
+  localIntentModelResolver?: LocalIntentModelResolver;
   intentInterpreterConfidenceThreshold: number;
   runCheckpointReview?: ConversationCheckpointReviewRunner;
   queryContinuityEpisodes?: QueryConversationContinuityEpisodes;
@@ -75,6 +83,10 @@ export interface ConversationIngressDependencies extends ConversationIngressRule
   markConversationMemoryEpisodeWrong?: MarkConversationMemoryEpisodeWrong;
   forgetConversationMemoryEpisode?: ForgetConversationMemoryEpisode;
   listAvailableSkills?: ListAvailableSkills;
+  describeRuntimeCapabilities?: DescribeRuntimeCapabilities;
+  listManagedProcessSnapshots?: ListManagedProcessSnapshots;
+  listBrowserSessionSnapshots?: ListBrowserSessionSnapshots;
+  abortActiveAutonomousRun?(conversationId: string): boolean;
   isWorkerActive(sessionKey: string): boolean;
   clearAckTimer(sessionKey: string): void;
   setWorkerBinding(

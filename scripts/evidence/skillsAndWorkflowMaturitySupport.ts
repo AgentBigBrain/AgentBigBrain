@@ -18,6 +18,7 @@ import type { ConversationInboundMessage, ExecuteConversationTask } from "../../
 import { InterfaceSessionStore } from "../../src/interfaces/sessionStore";
 import { executeCreateSkillAction, executeRunSkillAction } from "../../src/organs/executionRuntime/skillRuntime";
 import { SkillRegistryStore } from "../../src/organs/skillRegistry/skillRegistryStore";
+import { renderSkillInventory } from "../../src/organs/skillRegistry/skillInspection";
 import type { WorkflowSkillBridgeSummary } from "../../src/organs/skillRegistry/workflowSkillBridge";
 
 export const SKILLS_AND_WORKFLOW_MATURITY_ARTIFACT_PATH = path.resolve(
@@ -56,6 +57,16 @@ export interface WorkflowEvidence {
   relevantPatterns: readonly import("../../src/core/types").WorkflowPattern[];
   bridgeSummary: WorkflowSkillBridgeSummary | null;
   inspectionSummary: readonly import("../../src/core/workflowLearningRuntime/contracts").WorkflowInspectionEntry[];
+}
+
+/**
+ * Normalizes natural skill-discovery wording back to the canonical slash inventory header.
+ *
+ * @param reply - User-facing skill discovery reply text.
+ * @returns Canonicalized inventory text for semantic comparison.
+ */
+function canonicalizeSkillDiscoveryReply(reply: string): string {
+  return reply.replace(/^Reusable skills I can lean on:/u, "Available skills:");
 }
 
 /**
@@ -210,16 +221,7 @@ export async function runSkillLifecycleEvidence(
   const createOutcome = await executeCreateSkillAction(createAction);
   const runOutcome = await executeRunSkillAction(runAction);
   const inventory = await skillRegistryStore.listAvailableSkills();
-  const inventoryText = inventory.length === 0
-    ? "I do not have any saved skills yet."
-    : [
-      "Available skills:",
-      ...inventory.map((skill) => {
-        const firstHint = skill.invocationHints[0];
-        const suffix = firstHint ? ` Hint: ${firstHint}` : "";
-        return `- ${skill.name} (${skill.verificationStatus}, ${skill.riskLevel} risk): ${skill.userSummary}.${suffix}`;
-      })
-    ].join("\n");
+  const inventoryText = renderSkillInventory(inventory);
 
   return {
     createAction,
@@ -427,4 +429,15 @@ export async function runConversationManagerMessage(
     summary: `executed:${input}`
   });
   return conversationManager.handleMessage(message, executeTask, async () => undefined);
+}
+
+/**
+ * Compares slash, natural, or voice skill-discovery replies against the canonical inventory text.
+ *
+ * @param reply - User-facing reply returned by the conversation manager.
+ * @param inventoryText - Canonical slash-command inventory text.
+ * @returns `true` when the reply expresses the same inventory content.
+ */
+export function matchesSkillDiscoveryReply(reply: string, inventoryText: string): boolean {
+  return canonicalizeSkillDiscoveryReply(reply) === inventoryText;
 }

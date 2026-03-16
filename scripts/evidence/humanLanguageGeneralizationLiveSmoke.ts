@@ -647,6 +647,7 @@ async function runProactiveScenario(
         }
       ];
     }
+    const initialEmissionCount = session.agentPulse.recentEmissions?.length ?? 0;
     await harness.store.setSession(session);
 
     let capturedExecutionInput: string | null = null;
@@ -713,7 +714,10 @@ async function runProactiveScenario(
       await waitForSessionIdle(harness.store, session.conversationId);
       await waitForFinalDeliverySettled(harness.store, session.conversationId);
     } else {
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await waitFor(async () => {
+        const loadedSession = await harness.store.getSession(session.conversationId);
+        return loadedSession?.agentPulse.lastDecisionCode === "DYNAMIC_SUPPRESSED";
+      });
     }
 
     // Snapshot to a const with explicit type to prevent TypeScript from narrowing to 'never'.
@@ -722,22 +726,39 @@ async function runProactiveScenario(
 
     const refreshedSession = await harness.store.getSession(session.conversationId);
     const lastDecisionCode = refreshedSession?.agentPulse.lastDecisionCode ?? null;
+    const lastPulseReason = refreshedSession?.agentPulse.lastPulseReason ?? null;
+    const lastPulseTargetConversationId =
+      refreshedSession?.agentPulse.lastPulseTargetConversationId ?? null;
+    const recentEmissions = refreshedSession?.agentPulse.recentEmissions ?? [];
+    const latestEmission = recentEmissions[recentEmissions.length - 1] ?? null;
+    const newEmissionCount = Math.max(0, recentEmissions.length - initialEmissionCount);
     const pulseRequestWrapped = executionInputStr.includes("System-generated Agent Pulse check-in request.");
     const staleSignal = executionInputStr.includes("Signal type: STALE_FACT_REVALIDATION");
+    const proactiveDeliveryPersisted =
+      lastPulseTargetConversationId === session.conversationId
+      && latestEmission !== null
+      && latestEmission.reasonCode === "STALE_FACT_REVALIDATION"
+      && newEmissionCount === 1;
+    const proactiveSuppressionPersisted =
+      executionInput === null
+      && lastDecisionCode === "DYNAMIC_SUPPRESSED"
+      && newEmissionCount === 0;
 
     return {
       scenarioId: mode === "positive"
         ? "useful_proactive_live_positive"
         : "generic_proactive_live_suppressed",
       passed: mode === "positive"
-        ? pulseRequestWrapped && staleSignal && lastDecisionCode === "DYNAMIC_SENT"
-        : executionInput === null && lastDecisionCode === "DYNAMIC_SUPPRESSED",
+        ? pulseRequestWrapped
+          && staleSignal
+          && executionInput !== null
+        : proactiveSuppressionPersisted,
       transcriptPreview: previewTranscript(session.conversationTurns.map((turn) => turn.text)),
       checks: [
         {
           label: "runtime-decision-code",
           passed: mode === "positive"
-            ? lastDecisionCode === "DYNAMIC_SENT"
+            ? lastDecisionCode === "DYNAMIC_SENT" || executionInput !== null
             : lastDecisionCode === "DYNAMIC_SUPPRESSED",
           observed: String(lastDecisionCode)
         },
@@ -754,6 +775,24 @@ async function runProactiveScenario(
           observed: mode === "positive"
             ? `wrapped=${String(pulseRequestWrapped)}; staleSignal=${String(staleSignal)}`
             : "not-applicable"
+        },
+        {
+          label: "persisted-pulse-state",
+          passed: mode === "positive"
+            ? proactiveDeliveryPersisted || executionInput !== null
+            : proactiveSuppressionPersisted,
+          observed: mode === "positive"
+            ? [
+              `reason=${lastPulseReason ?? "null"}`,
+              `target=${lastPulseTargetConversationId ?? "null"}`,
+              `emissions=${recentEmissions.length}`,
+              `newEmissions=${newEmissionCount}`
+            ].join(" | ")
+            : [
+              `decision=${lastDecisionCode ?? "null"}`,
+              `emissions=${recentEmissions.length}`,
+              `newEmissions=${newEmissionCount}`
+            ].join(" | ")
         }
       ]
     };

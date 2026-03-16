@@ -18,35 +18,30 @@ import { shouldSuppressRelationshipClarificationPulse } from "../../src/interfac
 import { calculateRelationshipClarificationUtilityScore } from "../../src/interfaces/proactiveRuntime/userValueScoring";
 import type { ConversationSession } from "../../src/interfaces/sessionStore";
 import type { EntityGraphV1, PulseCandidateV1 } from "../../src/core/types";
+import {
+  buildConversationJobFixture,
+  buildConversationSessionFixture,
+  buildPulseScoreBreakdownFixture
+} from "../helpers/conversationFixtures";
 
 function buildSession(
   conversationId: string,
   overrides: Partial<ConversationSession> = {}
 ): ConversationSession {
-  const nowIso = "2026-03-08T12:00:00.000Z";
-  return {
-    conversationId,
-    userId: "user-1",
-    username: "agentowner",
-    conversationVisibility: "private",
-    updatedAt: nowIso,
-    activeProposal: null,
-    runningJobId: null,
-    queuedJobs: [],
-    recentJobs: [],
-    conversationTurns: [],
-    agentPulse: {
-      optIn: true,
-      mode: "private",
-      routeStrategy: "last_private_used",
-      lastPulseSentAt: null,
-      lastPulseReason: null,
-      lastPulseTargetConversationId: null,
-      lastDecisionCode: "NOT_EVALUATED",
-      lastEvaluatedAt: null
+  return buildConversationSessionFixture(
+    {
+      updatedAt: "2026-03-08T12:00:00.000Z",
+      agentPulse: {
+        ...buildConversationSessionFixture().agentPulse,
+        optIn: true
+      },
+      ...overrides
     },
-    ...overrides
-  };
+    {
+      conversationId,
+      receivedAt: "2026-03-08T12:00:00.000Z"
+    }
+  );
 }
 
 function buildEntityGraph(): EntityGraphV1 {
@@ -57,10 +52,13 @@ function buildEntityGraph(): EntityGraphV1 {
       {
         entityKey: "entity_billy",
         canonicalName: "Billy",
+        entityType: "person",
+        disambiguator: null,
         aliases: ["Billy"],
         firstSeenAt: "2026-02-10T12:00:00.000Z",
         lastSeenAt: "2026-03-08T11:00:00.000Z",
-        mentionCount: 4
+        salience: 1,
+        evidenceRefs: ["conv:thread-1"]
       }
     ],
     edges: []
@@ -75,11 +73,9 @@ function buildPulseCandidate(): PulseCandidateV1 {
     evidenceRefs: [],
     threadKey: null,
     score: 0.4,
-    scoreBreakdown: {
-      recency: 0.2,
-      frequency: 0.1,
-      unresolvedImportance: 0.1
-    }
+    scoreBreakdown: buildPulseScoreBreakdownFixture(),
+    lastTouchedAt: "2026-03-08T11:00:00.000Z",
+    stableHash: "candidate_billy_hash"
   };
 }
 
@@ -128,27 +124,16 @@ test("cooldown and delivery policy helpers stay human-scale and provider-bounded
 
   const session = buildSession("telegram:chat-1:user-1", {
     queuedJobs: [
-      {
+      buildConversationJobFixture({
         id: "job-1",
         input: "Reason code: contextual_followup\nContextual topic key (derived): alpha_beta_gamma",
         createdAt: "2026-03-08T09:00:00.000Z",
         startedAt: null,
         completedAt: "2026-03-08T09:10:00.000Z",
-        status: "done",
-        resultSummary: null,
-        errorMessage: null,
-        ackTimerGeneration: 0,
-        ackEligibleAt: null,
-        ackLifecycleState: "PENDING",
-        ackMessageId: null,
-        ackSentAt: null,
-        ackEditAttemptCount: 0,
-        ackLastErrorCode: null,
-        finalDeliveryOutcome: null,
-        finalDeliveryAttemptCount: 0,
-        finalDeliveryLastErrorCode: null,
-        finalDeliveryLastAttemptAt: null
-      }
+        status: "completed",
+        ackLifecycleState: "NOT_SENT",
+        finalDeliveryOutcome: "not_attempted"
+      })
     ]
   });
   const nextEligibleAt = resolveContextualTopicCooldown(

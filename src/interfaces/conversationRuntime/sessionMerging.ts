@@ -7,12 +7,23 @@ import {
   isConversationStackV1
 } from "../../core/stage6_86ConversationStack";
 import type {
+  ConversationBrowserSessionRecord,
   ConversationClassifierEvent,
   ConversationJob,
   ConversationJobStatus,
+  ConversationRecentActionRecord,
+  ConversationPathDestinationRecord,
   ConversationSession,
   ConversationTurn
 } from "../sessionStore";
+import {
+  resolveMergedProgressState,
+  selectActiveClarification,
+  selectModeContinuity,
+  selectProgressState,
+  selectReturnHandoff
+} from "./sessionMergeStateSelection";
+import { selectActiveWorkspace } from "./workspaceMerge";
 
 const TERMINAL_JOB_STATUSES = new Set<ConversationJobStatus>(["completed", "failed"]);
 
@@ -59,6 +70,12 @@ function choosePreferredConversationJob(
     return existing;
   }
   if (!existing.errorMessage && incoming.errorMessage) {
+    return incoming;
+  }
+  if (existing.pauseRequestedAt && !incoming.pauseRequestedAt) {
+    return existing;
+  }
+  if (!existing.pauseRequestedAt && incoming.pauseRequestedAt) {
     return incoming;
   }
 
@@ -195,6 +212,83 @@ function selectRunningJobId(
 }
 
 /**
+ * Merges recent action records into a deterministic deduplicated ordering.
+ */
+function mergeRecentActions(
+  existingActions: readonly ConversationRecentActionRecord[],
+  incomingActions: readonly ConversationRecentActionRecord[]
+): ConversationRecentActionRecord[] {
+  const mergedById = new Map<string, ConversationRecentActionRecord>();
+  for (const action of existingActions) {
+    mergedById.set(action.id, action);
+  }
+  for (const action of incomingActions) {
+    const current = mergedById.get(action.id);
+    if (!current || action.at >= current.at) {
+      mergedById.set(action.id, action);
+    }
+  }
+  return [...mergedById.values()].sort((left, right) => right.at.localeCompare(left.at));
+}
+
+/**
+ * Merges browser session records into a deterministic deduplicated ordering.
+ */
+function mergeBrowserSessions(
+  existingSessions: readonly ConversationBrowserSessionRecord[],
+  incomingSessions: readonly ConversationBrowserSessionRecord[]
+): ConversationBrowserSessionRecord[] {
+  const mergedById = new Map<string, ConversationBrowserSessionRecord>();
+  for (const session of existingSessions) {
+    mergedById.set(session.id, session);
+  }
+  for (const session of incomingSessions) {
+    const current = mergedById.get(session.id);
+    if (!current) {
+      mergedById.set(session.id, session);
+      continue;
+    }
+    const preferred = session.openedAt >= current.openedAt ? session : current;
+    const fallback = preferred === session ? current : session;
+    mergedById.set(session.id, {
+      ...preferred,
+      browserProcessPid:
+        preferred.browserProcessPid ?? fallback.browserProcessPid ?? null,
+      workspaceRootPath:
+        preferred.workspaceRootPath ?? fallback.workspaceRootPath ?? null,
+      linkedProcessLeaseId:
+        preferred.linkedProcessLeaseId ?? fallback.linkedProcessLeaseId ?? null,
+      linkedProcessCwd:
+        preferred.linkedProcessCwd ?? fallback.linkedProcessCwd ?? null,
+      linkedProcessPid:
+        preferred.linkedProcessPid ?? fallback.linkedProcessPid ?? null
+    });
+  }
+  return [...mergedById.values()].sort((left, right) => right.openedAt.localeCompare(left.openedAt));
+}
+
+/**
+ * Merges path destination records into a deterministic deduplicated ordering.
+ */
+function mergePathDestinations(
+  existingDestinations: readonly ConversationPathDestinationRecord[],
+  incomingDestinations: readonly ConversationPathDestinationRecord[]
+): ConversationPathDestinationRecord[] {
+  const mergedByKey = new Map<string, ConversationPathDestinationRecord>();
+  for (const destination of existingDestinations) {
+    mergedByKey.set(destination.label.toLowerCase(), destination);
+  }
+  for (const destination of incomingDestinations) {
+    const key = destination.label.toLowerCase();
+    const current = mergedByKey.get(key);
+    if (!current || destination.updatedAt >= current.updatedAt) {
+      mergedByKey.set(key, destination);
+    }
+  }
+  return [...mergedByKey.values()].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+}
+
+/**
  * Merges two normalized conversation sessions into one deterministic persisted session shape.
  */
 export function mergeConversationSession(
@@ -203,15 +297,27 @@ export function mergeConversationSession(
 ): ConversationSession {
   const mergedRecentJobs = mergeConversationJobs(existing.recentJobs, incoming.recentJobs);
   const mergedQueuedCandidates = mergeConversationJobs(existing.queuedJobs, incoming.queuedJobs);
-  const completedRecentIds = new Set(
-    mergedRecentJobs.filter((job) => isTerminalConversationJobStatus(job.status)).map((job) => job.id)
+  const nonQueuedRecentIds = new Set(
+    mergedRecentJobs.filter((job) => job.status !== "queued").map((job) => job.id)
   );
   const mergedQueuedJobs = mergedQueuedCandidates.filter(
-    (job) => !completedRecentIds.has(job.id) && !isTerminalConversationJobStatus(job.status)
+    (job) => !nonQueuedRecentIds.has(job.id) && !isTerminalConversationJobStatus(job.status)
   );
   const mergedConversationTurns = mergeConversationTurns(
     existing.conversationTurns,
     incoming.conversationTurns
+  );
+  const mergedRecentActions = mergeRecentActions(
+    existing.recentActions ?? [],
+    incoming.recentActions ?? []
+  );
+  const mergedBrowserSessions = mergeBrowserSessions(
+    existing.browserSessions ?? [],
+    incoming.browserSessions ?? []
+  );
+  const mergedPathDestinations = mergePathDestinations(
+    existing.pathDestinations ?? [],
+    incoming.pathDestinations ?? []
   );
   const mergedUpdatedAt = existing.updatedAt > incoming.updatedAt ? existing.updatedAt : incoming.updatedAt;
   const preferredStackSource = existing.updatedAt >= incoming.updatedAt ? existing : incoming;
@@ -224,6 +330,17 @@ export function mergeConversationSession(
     {},
     preferredStack
   );
+  const mergedRunningJobId = selectRunningJobId(
+    existing.runningJobId,
+    incoming.runningJobId,
+    mergedQueuedJobs,
+    mergedRecentJobs
+  );
+  const mergedProgressState = resolveMergedProgressState(
+    selectProgressState(existing.progressState ?? null, incoming.progressState ?? null),
+    mergedRunningJobId,
+    mergedQueuedJobs
+  );
 
   return {
     ...existing,
@@ -231,14 +348,23 @@ export function mergeConversationSession(
     sessionSchemaVersion: "v2",
     conversationStack: mergedConversationStack,
     updatedAt: mergedUpdatedAt,
-    runningJobId: selectRunningJobId(
-      existing.runningJobId,
-      incoming.runningJobId,
-      mergedQueuedJobs,
-      mergedRecentJobs
+    activeClarification: selectActiveClarification(
+      existing.activeClarification,
+      incoming.activeClarification
     ),
+    modeContinuity: selectModeContinuity(existing.modeContinuity ?? null, incoming.modeContinuity ?? null),
+    progressState: mergedProgressState,
+    returnHandoff: selectReturnHandoff(existing.returnHandoff ?? null, incoming.returnHandoff ?? null),
+    runningJobId: mergedRunningJobId,
     queuedJobs: mergedQueuedJobs,
     recentJobs: mergedRecentJobs,
+    recentActions: mergedRecentActions,
+    browserSessions: mergedBrowserSessions,
+    pathDestinations: mergedPathDestinations,
+    activeWorkspace: selectActiveWorkspace(
+      existing.activeWorkspace ?? null,
+      incoming.activeWorkspace ?? null
+    ),
     conversationTurns: mergedConversationTurns,
     classifierEvents: mergeClassifierEvents(
       existing.classifierEvents ?? [],

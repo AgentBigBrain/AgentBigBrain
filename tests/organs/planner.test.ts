@@ -510,6 +510,31 @@ class PlaybookContextAwareExecutableModelClient implements ModelClient {
       } as T;
     }
 
+    if (/organize the drone-company project folders/i.test(currentUserRequest)) {
+      return {
+        plannerNotes: "planner output with finite local organization shell move",
+        actions: [
+          {
+            type: "shell_command",
+            description: "Create the destination, move matching drone-company folders, and prove the result.",
+            params: {
+              command: [
+                "$destination = Join-Path 'C:\\Users\\testuser\\OneDrive\\Desktop' 'drone-web-projects'",
+                "New-Item -ItemType Directory -Path $destination -Force | Out-Null",
+                "$moved = Get-ChildItem -Path 'C:\\Users\\testuser\\OneDrive\\Desktop' -Directory -Filter 'drone-company*' | Where-Object { $_.Name -ne 'drone-web-projects' }",
+                "$moved | Move-Item -Destination $destination -Force",
+                "$destContents = Get-ChildItem -Path $destination -Directory | Select-Object -ExpandProperty Name",
+                "$rootRemaining = Get-ChildItem -Path 'C:\\Users\\testuser\\OneDrive\\Desktop' -Directory -Filter 'drone-company*' | Where-Object { $_.Name -ne 'drone-web-projects' } | Select-Object -ExpandProperty Name",
+                "Write-Output ('MOVED_TO_DEST=' + (($moved | Select-Object -ExpandProperty Name) -join ','))",
+                "Write-Output ('DEST_CONTENTS=' + ($destContents -join ','))",
+                "Write-Output ('ROOT_REMAINING_MATCHES=' + ($rootRemaining -join ','))"
+              ].join('; ')
+            }
+          }
+        ]
+      } as T;
+    }
+
     return {
       plannerNotes: "planner output with executable action for prompt inspection",
       actions: [
@@ -977,6 +1002,43 @@ class MissingStartProcessThenRepairModelClient implements ModelClient {
   }
 }
 
+class TrackedArtifactEditPreviewModelClient implements ModelClient {
+  readonly backend = "mock" as const;
+  private plannerCallCount = 0;
+
+  getPlannerCallCount(): number {
+    return this.plannerCallCount;
+  }
+
+  async completeJson<T>(request: StructuredCompletionRequest): Promise<T> {
+    if (request.schemaName !== "planner_v1") {
+      throw new Error(`Unexpected schema: ${request.schemaName}`);
+    }
+
+    this.plannerCallCount += 1;
+    return {
+      plannerNotes: "edit the tracked artifact and reopen the same local preview",
+      actions: [
+        {
+          type: "write_file",
+          description: "Update the tracked landing page artifact.",
+          params: {
+            path: "C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
+            content: "<section class=\"hero-slider\">updated</section>"
+          }
+        },
+        {
+          type: "open_browser",
+          description: "Reopen the same local file preview after the edit.",
+          params: {
+            url: "file:///C:/Users/testuser/Desktop/drone-company/index.html"
+          }
+        }
+      ]
+    } as T;
+  }
+}
+
 class CheckProcessRecoveryModelClient implements ModelClient {
   readonly backend = "mock" as const;
 
@@ -1364,6 +1426,33 @@ test("planner execution-style build prompts allow finite shell planning without 
   );
 });
 
+test("planner organization prompts allow finite shell planning without explicit shell-name phrasing", async () => {
+  const modelClient = new PlaybookContextAwareExecutableModelClient();
+  await withPlannerClient(modelClient, async (planner) => {
+    const plan = await planner.plan(
+      buildTask(
+        "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects."
+      ),
+      "mock-planner"
+    );
+    assert.equal(plan.actions.length, 1);
+    assert.equal(plan.actions[0].type, "shell_command");
+  });
+
+  const plannerRequest = modelClient.getPlannerRequest();
+  assert.ok(plannerRequest);
+  assert.doesNotMatch(plannerRequest.systemPrompt, /do not emit shell_command/i);
+  assert.match(plannerRequest.systemPrompt, /local workspace-organization goal/i);
+  assert.match(
+    plannerRequest.systemPrompt,
+    /bounded local folder organization, finite shell_command steps are allowed/i
+  );
+  assert.match(
+    plannerRequest.systemPrompt,
+    /create the destination folder if it is missing, then move only the matching project folders/i
+  );
+});
+
 test("planner live-verification build prompts can allow managed process planning without explicit shell-name phrasing", async () => {
   const modelClient = new PlaybookContextAwareExecutableModelClient();
   await withPlannerClient(modelClient, async (planner) => {
@@ -1521,7 +1610,10 @@ test("planner injects deterministic execution environment block into planner pro
       platform: "linux",
       shellKind: "bash",
       invocationMode: "inline_command",
-      commandMaxChars: 2048
+      commandMaxChars: 2048,
+      desktopPath: "/home/testuser/Desktop",
+      documentsPath: "/home/testuser/Documents",
+      downloadsPath: "/home/testuser/Downloads"
     });
     await planner.plan(buildTask("Give me a short response."), "mock-planner");
 
@@ -1628,7 +1720,10 @@ test("planner suppresses quarantined private-range lesson content instead of fai
     const plannerRequest = modelClient.getPlannerRequest();
     assert.ok(plannerRequest);
     assert.doesNotMatch(plannerRequest.systemPrompt, /Relevant Distilled Lessons:/i);
-    assert.doesNotMatch(plannerRequest.systemPrompt, /localhost/i);
+    assert.doesNotMatch(
+      plannerRequest.systemPrompt,
+      /Do not send payloads to localhost endpoints because that bypasses network policy\./i
+    );
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }
@@ -1699,6 +1794,90 @@ test("planner injects workflow and judgment learning hints into prompt guidance"
   assert.match(plannerRequest.systemPrompt, /Judgment Learning Hints:/i);
   assert.match(plannerRequest.systemPrompt, /Prefer high-confidence active workflow patterns/i);
   assert.match(plannerRequest.systemPrompt, /prefer lower-risk options/i);
+});
+
+test("planner synthesizes deterministic workspace-recovery inspection when repair still returns no valid actions", async () => {
+  const modelClient = new DeterministicInvalidPlannerModelClient();
+  const taskInput = [
+    "[WORKSPACE_RECOVERY_INSPECT_FIRST]",
+    "A folder move was blocked because the target folders are still in use.",
+    "Use inspect_workspace_resources or inspect_path_holders as the main non-respond action for this step; list_directory alone is not enough.",
+    "Blocked folder paths: C:\\Users\\testuser\\Desktop\\drone-company-live-smoke-1",
+    "",
+    "Workspace recovery context for this chat:",
+    "- Preferred workspace root: C:\\Users\\testuser\\Desktop\\drone-company",
+    "- Preferred preview URL: http://127.0.0.1:4173/",
+    "- Exact tracked browser session ids: browser_session:drone-page",
+    "- Exact tracked preview lease ids: proc_preview_drone"
+  ].join("\n");
+
+  await withPlannerClient(modelClient, async (planner) => {
+    const plan = await planner.plan(buildTask(taskInput), "mock-planner");
+
+    assert.equal(plan.actions.length, 1);
+    assert.equal(plan.actions[0]?.type, "inspect_path_holders");
+    assert.equal(
+      plan.actions[0]?.params.path,
+      "C:\\Users\\testuser\\Desktop\\drone-company-live-smoke-1"
+    );
+    assert.match(plan.plannerNotes ?? "", /deterministic_workspace_recovery_fallback=inspect_path_holders/i);
+  });
+});
+
+test("planner synthesizes deterministic explicit inspect_path_holders actions when repair still returns no valid actions", async () => {
+  const modelClient = new DeterministicInvalidPlannerModelClient();
+  const taskInput =
+    "Execute inspect_path_holders on `C:\\Users\\testuser\\Desktop\\drone-company-live-smoke-1` and `C:\\Users\\testuser\\Desktop\\drone-company-live-smoke-2` now, then report the holders.";
+
+  await withPlannerClient(modelClient, async (planner) => {
+    const plan = await planner.plan(buildTask(taskInput), "mock-planner");
+
+    assert.deepEqual(
+      plan.actions.map((action) => ({
+        type: action.type,
+        path: action.params.path
+      })),
+      [
+        {
+          type: "inspect_path_holders",
+          path: "C:\\Users\\testuser\\Desktop\\drone-company-live-smoke-1"
+        },
+        {
+          type: "inspect_path_holders",
+          path: "C:\\Users\\testuser\\Desktop\\drone-company-live-smoke-2"
+        }
+      ]
+    );
+    assert.match(plan.plannerNotes ?? "", /deterministic_explicit_runtime_fallback=inspect_path_holders/i);
+  });
+});
+
+test("planner keeps exact blocked paths when explicit workspace-recovery inspection requests mention multiple Windows paths", async () => {
+  const modelClient = new DeterministicInvalidPlannerModelClient();
+  const taskInput =
+    "Continue workspace-recovery for the same goal. First run inspect_path_holders (or inspect_workspace_resources) on the remaining blocked paths: 1) C:\\Users\\testuser\\Desktop\\drone-company-live-smoke-1773407921176 and 2) C:\\Users\\testuser\\Desktop\\drone-company-live-smoke-1773414171194. If exact tracked preview/runtime holders are found, stop only those exact tracked holders, then retry the organization task: move every Desktop folder whose name begins with \"drone\" into C:\\Users\\testuser\\Desktop\\drone-folder. If inspection finds only likely untracked holders, stop and report that user confirmation is required before shutting them down. Do not stop unrelated apps by name.";
+
+  await withPlannerClient(modelClient, async (planner) => {
+    const plan = await planner.plan(buildTask(taskInput), "mock-planner");
+
+    assert.deepEqual(
+      plan.actions.map((action) => ({
+        type: action.type,
+        path: action.params.path
+      })),
+      [
+        {
+          type: "inspect_path_holders",
+          path: "C:\\Users\\testuser\\Desktop\\drone-company-live-smoke-1773407921176"
+        },
+        {
+          type: "inspect_path_holders",
+          path: "C:\\Users\\testuser\\Desktop\\drone-company-live-smoke-1773414171194"
+        }
+      ]
+    );
+    assert.match(plan.plannerNotes ?? "", /deterministic_explicit_runtime_fallback=inspect_path_holders/i);
+  });
 });
 
 test("planner activates deterministic cooldown after repeated failing fingerprints", async () => {
@@ -1854,6 +2033,32 @@ test("planner fails closed when explicit run-skill intent never yields run_skill
     await assert.rejects(
       planner.plan(buildTask(wrappedInput), "mock-planner"),
       /missing required run_skill action/i
+    );
+  });
+});
+
+test("planner accepts tracked artifact-edit follow-ups that reopen the same local file preview", async () => {
+  const modelClient = new TrackedArtifactEditPreviewModelClient();
+  const wrappedInput = [
+    "You are in an ongoing conversation with the same user.",
+    "Tracked artifact-edit follow-up:",
+    "- Preferred workspace root: C:\\Users\\testuser\\Desktop\\drone-company",
+    "- Preferred primary artifact: C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
+    "- Preferred preview target: file:///C:/Users/testuser/Desktop/drone-company/index.html",
+    "",
+    "Current user request:",
+    "Change the hero image to a slider instead of the landing page."
+  ].join("\n");
+
+  await withPlannerClient(modelClient, async (planner) => {
+    const plan = await planner.plan(buildTask(wrappedInput), "mock-planner");
+    assert.equal(modelClient.getPlannerCallCount(), 1);
+    assert.equal(plan.actions.length, 2);
+    assert.equal(plan.actions[0].type, "write_file");
+    assert.equal(plan.actions[1].type, "open_browser");
+    assert.equal(
+      plan.actions[1].params.url,
+      "file:///C:/Users/testuser/Desktop/drone-company/index.html"
     );
   });
 });

@@ -30,6 +30,8 @@ const MOCK_ROUTED_BUILD_PATTERNS: readonly RegExp[] = [
 ] as const;
 const MOCK_BUILD_EXPLANATION_ONLY_PATTERN =
   /^\s*(how\s+do\s+i|how\s+to|explain|show\s+me\s+how|tutorial|guide\s+me|what\s+is)\b|\b(without\s+executing|do\s+not\s+execute|don't\s+execute|guidance\s+only|instructions?\s+only)\b/i;
+const MOCK_NATURAL_CLOSE_BROWSER_FOLLOW_UP_PATTERN =
+  /\b(?:close|shut|dismiss|hide)\b[\s\S]{0,50}\b(?:browser|tab|window|preview|page|landing page|homepage)\b/i;
 
 /**
  * Evaluates generic build-execution request and returns a deterministic policy signal.
@@ -123,6 +125,31 @@ function isMockBrowserVerificationBuildRequest(userInput: string): boolean {
 }
 
 /**
+ * Evaluates whether a build request explicitly asks for a visible browser window to remain open.
+ *
+ * **Why it exists:**
+ * Keeps mock live-run behavior aligned with the real planner policy so leave-it-open requests test
+ * a separate persistent browser-launch step instead of stopping at verification.
+ *
+ * **What it talks to:**
+ * - Uses `isMockLiveVerificationBuildRequest` from this module.
+ * - Uses local deterministic lexical patterns within this module.
+ *
+ * @param userInput - Raw user input text passed to the mock planner.
+ * @returns `true` when the request explicitly asks for a browser window to stay open.
+ */
+function requiresMockPersistentBrowserOpenBuildRequest(userInput: string): boolean {
+  if (!isMockLiveVerificationBuildRequest(userInput)) {
+    return false;
+  }
+  return (
+    /\bleave\b[\s\S]{0,40}\b(browser|page|site|it)\b[\s\S]{0,20}\bopen\b/i.test(userInput) ||
+    /\bkeep\b[\s\S]{0,40}\b(browser|page|site|it)\b[\s\S]{0,20}\bopen\b/i.test(userInput) ||
+    /\blet me (?:see|view)\b/i.test(userInput)
+  );
+}
+
+/**
  * Builds planner output for this module's runtime flow.
  *
  * **Why it exists:**
@@ -142,6 +169,7 @@ export function buildPlannerOutput(userPrompt: string): PlannerModelOutput {
   const input = parseJsonObject(userPrompt);
   const userInput = resolveActiveMockUserInput(input, userPrompt);
   const text = userInput.toLowerCase();
+  const promptText = userPrompt.toLowerCase();
   const actions: PlannerModelOutput["actions"] = [];
 
   const pushAction = (
@@ -271,6 +299,44 @@ export function buildPlannerOutput(userPrompt: string): PlannerModelOutput {
     });
   }
 
+  if (text.includes("open browser") || text.includes("leave it open")) {
+    pushAction("open_browser", "Open the verified page in a visible browser window.", {
+      url: "http://127.0.0.1:3000/"
+    });
+  }
+
+  if (text.includes("close browser") || text.includes("close the browser")) {
+    pushAction("close_browser", "Close the tracked browser window for the local page.", {
+      url: "http://127.0.0.1:3000/"
+    });
+  }
+
+  const linkedSessionMatch = userPrompt.match(/sessionId=([^\s;]+)/i);
+  const linkedPreviewLeaseMatch = userPrompt.match(/linked preview process:\s*leaseId=([^\s;]+)/i);
+  if (
+    actions.length === 0 &&
+    MOCK_NATURAL_CLOSE_BROWSER_FOLLOW_UP_PATTERN.test(userInput) &&
+    promptText.includes("tracked browser sessions:")
+  ) {
+    pushAction("close_browser", "Close the tracked browser window for the local page.", {
+      ...(linkedSessionMatch?.[1] ? { sessionId: linkedSessionMatch[1] } : { url: "http://127.0.0.1:3000/" })
+    });
+    if (linkedPreviewLeaseMatch?.[1]) {
+      pushAction("stop_process", "Stop the linked local preview process after closing the browser.", {
+        leaseId: linkedPreviewLeaseMatch[1]
+      });
+    }
+  }
+  if (
+    actions.some((action) => action.type === "close_browser") &&
+    linkedPreviewLeaseMatch?.[1] &&
+    !actions.some((action) => action.type === "stop_process")
+  ) {
+    pushAction("stop_process", "Stop the linked local preview process after closing the browser.", {
+      leaseId: linkedPreviewLeaseMatch[1]
+    });
+  }
+
   if (includesAny(text, HIGH_RISK_SELF_EDIT_HINTS)) {
     const touchesImmutable =
       text.includes("constitution") || text.includes("dna") || text.includes("kill switch");
@@ -298,6 +364,11 @@ export function buildPlannerOutput(userPrompt: string): PlannerModelOutput {
         pushAction("verify_browser", "Verify the live app in a loopback browser session.", {
           url: "http://127.0.0.1:3000/",
           expectedText: text.includes("robinhood") ? "Robinhood" : "App"
+        });
+      }
+      if (requiresMockPersistentBrowserOpenBuildRequest(userInput)) {
+        pushAction("open_browser", "Open the live app in a visible browser window and leave it open.", {
+          url: "http://127.0.0.1:3000/"
         });
       }
     }

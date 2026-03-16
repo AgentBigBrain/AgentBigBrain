@@ -17,7 +17,13 @@ manager entrypoint. It also now owns canonical session-shape normalization, sess
 timezone detection, user-style fingerprinting, local-time resolution helpers, and canonical Agent
 Pulse scheduler contracts plus legacy/dynamic evaluation routing below the stable session/pulse
 entrypoints. It also now owns canonical ack/final-delivery contracts, preview helpers, and
-delivery persistence below the stable `conversationDeliveryLifecycle.ts` entrypoint.
+delivery persistence below the stable `conversationDeliveryLifecycle.ts` entrypoint. It now also
+owns the canonical human-centric front door for natural execution intent, active clarification
+state, routing precedence, optional local intent-model routing, sticky working-mode continuity,
+recent-action and progress recall, and remembered destination/reuse context below the stable
+ingress and manager entrypoints. It also now owns persisted recovery clarifications for
+recoverable blocked runs so the assistant can ask one short follow-up question instead of ending a
+safe retry path prematurely.
 `src/interfaces/transportRuntime/` now owns canonical outbound Discord/Telegram delivery,
 autonomous progress-delivery bridging, shared transport-facing reject policy, and
 notifier-construction helpers below the stable gateway entrypoints. It also now owns shared
@@ -37,7 +43,8 @@ This top-level folder owns the transport and lifecycle path that consumes both s
   `conversationDeliveryLifecycle.ts`, `conversationDraftStatusPolicy.ts`,
   `conversationExecutionInputPolicy.ts`, `conversationIngressLifecycle.ts`,
   `conversationManager.ts`, `conversationManagerHelpers.ts`,
-  `conversationSessionMutations.ts`, `conversationWorkerLifecycle.ts`, `routingMap.ts`,
+  `conversationSessionMutations.ts`, `conversationWorkerLifecycle.ts`,
+  `autonomousConversationExecutionResult.ts`, `routingMap.ts`,
   `sessionStore.ts`, plus the extracted `src/interfaces/conversationRuntime/` persistence and
   pulse/helper plus delivery subsystem.
 - Prompting, routing, and lexical classification: `checkpointReviewRouting.ts`,
@@ -61,6 +68,13 @@ This top-level folder owns the transport and lifecycle path that consumes both s
 - bounded media envelopes, media-only fallback input, and Telegram media-download helpers that feed
   the transport and conversation runtimes
 - conversation routing decisions, prompt classification, and invocation hints
+- canonical front-door intent resolution, clarification state, and natural execution preference
+  extraction for text and voice
+- canonical recovery clarification state for recoverable blocked runs that need one short user
+  confirmation before retry
+- canonical sticky working mode, recent-action recall, and remembered destination/reuse context for
+  human follow-ups like `where did you put that?`, `what are you doing right now?`, or `use the
+  same approach as before`
 - transport-facing delivery behavior and session mutations
 - canonical user-facing result composition through `userFacingResult.ts`
 - user-facing proactive pulse messages that omit internal pulse/debug scaffolding
@@ -79,6 +93,10 @@ This top-level folder owns the transport and lifecycle path that consumes both s
 - Voice notes may promote explicit `command <name>` transcripts into slash-command behavior, but
   that promotion must stay voice-only and narrow enough to avoid false positives in ordinary
   speech.
+- Natural build/review/plan/capability requests should flow through one canonical front-door intent
+  seam rather than a growing set of one-off regex paths.
+- Recoverable blocked runs should prefer one short persisted clarification over a dead-end failure
+  when the runtime has a truthful next step it can attempt after user confirmation.
 - `discordGateway.ts` and `telegramGateway.ts` remain the stable transport entrypoints even when
   outbound delivery helpers or autonomous progress bridges move into
   `src/interfaces/transportRuntime/`.
@@ -92,6 +110,8 @@ This top-level folder owns the transport and lifecycle path that consumes both s
   ack lifecycle helpers, worker execution, pulse-state mutation, or canonical manager contracts
   move into
   `src/interfaces/conversationRuntime/`.
+  Its public surface may still expose bounded coordination helpers such as waiting for manager
+  idleness during tests or controlled teardown.
 - `conversationDeliveryLifecycle.ts` remains the stable delivery entrypoint even when ack/final-
   delivery contract, preview, or persistence ownership moves into
   `src/interfaces/conversationRuntime/`.
@@ -178,6 +198,11 @@ Update this README when:
 - user-facing AI-identity mention rules change materially
 - assistant-turn storage or prompt-context sanitization rules change materially
 - bounded unresolved-situation pulse-grounding rules change materially
+- the canonical front-door intent, clarification, or routing-precedence responsibilities change
+  materially
+- post-execution recovery-clarification behavior changes materially
+- sticky working-mode, recent-action recall, or remembered destination/reuse responsibilities
+  change materially
 - in-conversation contextual recall rules change materially
 - episodic-memory-backed conversation recall wiring changes materially
 - remembered-situation review or mutation command behavior changes materially

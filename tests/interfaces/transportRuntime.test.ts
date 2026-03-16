@@ -5,6 +5,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import type { EntityGraphV1 } from "../../src/core/types";
 import {
   createDiscordConversationNotifier,
   editDiscordChannelMessage,
@@ -48,6 +49,26 @@ import {
   sendTelegramGatewayReply
 } from "../../src/interfaces/transportRuntime/telegramGatewayRuntime";
 import type { ConversationInboundMessage } from "../../src/interfaces/conversationRuntime/managerContracts";
+import { buildTelegramInterfaceConfigFixture } from "../helpers/conversationFixtures";
+
+interface TestGatewaySocket {
+  readyState: number;
+  send: (data: string) => void;
+  close: () => void;
+  onopen: (() => void) | null;
+  onclose: (() => void) | null;
+  onerror: ((error: unknown) => void) | null;
+  onmessage: ((event: { data: string }) => void | Promise<void>) | null;
+}
+
+function buildEmptyEntityGraph(): EntityGraphV1 {
+  return {
+    schemaVersion: "v1",
+    updatedAt: "2026-03-07T10:00:00.000Z",
+    entities: [],
+    edges: []
+  };
+}
 
 /**
  * Temporarily replaces the global `fetch` implementation for one async callback.
@@ -423,7 +444,7 @@ test("handleAcceptedTransportConversation routes text execution and final reply 
       }
     },
     entityGraphStore: {
-      getGraph: async () => ({ version: "v1", entities: [], links: [] }),
+      getGraph: async () => buildEmptyEntityGraph(),
       upsertFromExtractionInput: async (input) => {
         entityGraphWrites.push(input.evidenceRef);
       }
@@ -431,7 +452,7 @@ test("handleAcceptedTransportConversation routes text execution and final reply 
     dynamicPulseEnabled: true,
     abortControllers: new Map<string, AbortController>(),
     runTextTask: async () => "normalized summary",
-    runAutonomousTask: async () => "autonomous summary",
+    runAutonomousTask: async () => ({ summary: "autonomous summary" }),
     deliverReply: async (reply: string) => {
       deliveries.push(reply);
       return { ok: true, messageId: "final-1", errorCode: null };
@@ -484,7 +505,7 @@ test("handleAcceptedTransportConversation routes autonomous execution through pr
       }
     },
     entityGraphStore: {
-      getGraph: async () => ({ version: "v1", entities: [], links: [] }),
+      getGraph: async () => buildEmptyEntityGraph(),
       upsertFromExtractionInput: async () => undefined
     },
     dynamicPulseEnabled: false,
@@ -492,7 +513,7 @@ test("handleAcceptedTransportConversation routes autonomous execution through pr
     runTextTask: async () => "unused",
     runAutonomousTask: async (_goal, _receivedAt, progressSender) => {
       await progressSender("step 1");
-      return "autonomous summary";
+      return { summary: "autonomous summary" };
     },
     deliverReply: async (reply: string) => {
       finalMessages.push(reply);
@@ -538,7 +559,7 @@ test("createTelegramConversationNotifier enables native draft streaming when req
 
 test("sendTelegramDraftUpdate uses draft endpoint and numeric chat id when possible", async () => {
   let capturedUrl = "";
-  let capturedBody: Record<string, unknown> | null = null;
+  let capturedBody: { chat_id?: number; draft_id?: number; text?: string } | null = null;
   await withMockFetch(
     (async (input, init) => {
       capturedUrl = String(input);
@@ -566,9 +587,13 @@ test("sendTelegramDraftUpdate uses draft endpoint and numeric chat id when possi
   );
 
   assert.match(capturedUrl, /\/bottelegram-token\/sendMessageDraft$/);
-  assert.equal(capturedBody?.chat_id, 12345);
-  assert.equal(capturedBody?.draft_id, 1);
-  assert.equal(capturedBody?.text, "Still working...");
+  if (capturedBody === null) {
+    assert.fail("Expected Telegram draft request body to be captured.");
+  }
+  const body = capturedBody as { chat_id?: number; draft_id?: number; text?: string };
+  assert.equal(body.chat_id, 12345);
+  assert.equal(body.draft_id, 1);
+  assert.equal(body.text, "Still working...");
 });
 
 test("sendTelegramGatewayReply applies invocation hints before transport delivery", async () => {
@@ -589,12 +614,10 @@ test("sendTelegramGatewayReply applies invocation hints before transport deliver
     }) as typeof fetch,
     async () => {
       const result = await sendTelegramGatewayReply(
-        {
-          provider: "telegram",
+        buildTelegramInterfaceConfigFixture({
           security: {
-            sharedSecret: "secret",
+            ...buildTelegramInterfaceConfigFixture().security,
             allowedUsernames: [],
-            allowedUserIds: [],
             rateLimitWindowMs: 1,
             maxEventsPerWindow: 1,
             replayCacheSize: 1,
@@ -602,24 +625,15 @@ test("sendTelegramGatewayReply applies invocation hints before transport deliver
             ackDelayMs: 1,
             showTechnicalSummary: false,
             showSafetyCodes: false,
-            showCompletionPrefix: false,
-            followUpOverridePath: null,
-            pulseLexicalOverridePath: null,
             allowAutonomousViaInterface: true,
-            enableDynamicPulse: false,
             invocation: {
               requireNameCall: true,
               aliases: ["bigbrain"]
             }
           },
-          botToken: "telegram-token",
-          apiBaseUrl: "https://api.telegram.org",
           pollTimeoutSeconds: 1,
-          pollIntervalMs: 1,
-          streamingTransportMode: "edit",
-          nativeDraftStreaming: false,
-          allowedChatIds: []
-        },
+          pollIntervalMs: 1
+        }),
         "12345",
         "Use /status for more detail."
       );
@@ -924,7 +938,7 @@ test("resolveDiscordGatewaySocketUrl appends version and encoding parameters", a
       ok: true,
       status: 200,
       json: async () => ({ url: "wss://gateway.discord.gg/" })
-    })) as typeof fetch,
+    })) as unknown as typeof fetch,
     async () => {
       const url = await resolveDiscordGatewaySocketUrl({
         gatewayUrl: "https://discord.com/api/v10/gateway/bot",
@@ -972,7 +986,7 @@ test("sendDiscordGatewayPayload only sends on open sockets", () => {
 
 test("attachDiscordSocketLifecycle wires open message error and close callbacks deterministically", async () => {
   const events: string[] = [];
-  const socket = {
+  const socket: TestGatewaySocket = {
     readyState: 1,
     send: () => undefined,
     close: () => undefined,
@@ -1027,13 +1041,13 @@ test("handleDiscordHelloLifecycle resets heartbeat and sends the identify payloa
   globalThis.setInterval = ((callback: TimerHandler) => {
     void callback;
     return fakeTimer;
-  }) as typeof setInterval;
+  }) as unknown as typeof setInterval;
   globalThis.clearInterval = ((timer: unknown) => {
     clearedTimers.push(timer);
-  }) as typeof clearInterval;
+  }) as unknown as typeof clearInterval;
 
   try {
-    const socket = {
+    const socket: TestGatewaySocket = {
       readyState: 1,
       send: (data: string) => {
         sentPayloads.push(JSON.parse(data) as Record<string, unknown>);
@@ -1254,8 +1268,9 @@ test("createAutonomousProgressSender prefers native streaming when supported", a
 test("runAutonomousTransportTask wires abort-controller lifecycle and removes the controller after completion", async () => {
   const abortControllers = new Map<string, AbortController>();
   const progressMessages: string[] = [];
+  const progressUpdates: Array<{ status: string; message: string }> = [];
 
-  const summary = await runAutonomousTransportTask({
+  const result = await runAutonomousTransportTask({
     conversationId: "discord:123:user",
     goal: "verify app",
     receivedAt: "2026-03-07T12:00:00.000Z",
@@ -1274,22 +1289,35 @@ test("runAutonomousTransportTask wires abort-controller lifecycle and removes th
       }
     },
     abortControllers,
-    runAutonomousTask: async (goal, receivedAt, progressSender, signal) => {
+    runAutonomousTask: async (goal, receivedAt, progressSender, signal, _initialExecutionInput, onProgressUpdate) => {
       assert.equal(goal, "verify app");
       assert.equal(receivedAt, "2026-03-07T12:00:00.000Z");
       assert.equal(signal.aborted, false);
       assert.equal(abortControllers.has("discord:123:user"), true);
+      await onProgressUpdate?.({
+        status: "retrying",
+        message: "Retrying with exact tracked holders."
+      });
       await progressSender("progress one");
       await progressSender("progress two");
-      return "done";
+      return { summary: "done" };
+    },
+    onProgressUpdate: async (update) => {
+      progressUpdates.push(update);
     }
   });
 
-  assert.equal(summary, "done");
+  assert.equal(result.summary, "done");
   assert.equal(abortControllers.has("discord:123:user"), false);
   assert.deepEqual(progressMessages, [
     "progress one",
     "progress-1:progress two"
+  ]);
+  assert.deepEqual(progressUpdates, [
+    {
+      status: "retrying",
+      message: "Retrying with exact tracked holders."
+    }
   ]);
 });
 
@@ -1307,7 +1335,7 @@ test("pollTelegramUpdatesOnce returns the next offset and processes each update"
           { update_id: 12, payload: "second" }
         ]
       })
-    })) as typeof fetch,
+    })) as unknown as typeof fetch,
     async () => {
       const nextOffset = await pollTelegramUpdatesOnce({
         apiBaseUrl: "https://api.telegram.org",

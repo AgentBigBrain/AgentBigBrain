@@ -12,6 +12,10 @@ import {
   sortByMostRecentSessionUpdate
 } from "../../src/interfaces/conversationRuntime/pulseScheduling";
 import type { ConversationSession } from "../../src/interfaces/sessionStore";
+import {
+  buildConversationJobFixture,
+  buildConversationSessionFixture
+} from "../helpers/conversationFixtures";
 
 /**
  * Builds a minimal conversation session for pulse-scheduling tests.
@@ -21,29 +25,20 @@ function buildSession(
   overrides: Partial<ConversationSession> = {}
 ): ConversationSession {
   const nowIso = new Date().toISOString();
-  return {
-    conversationId,
-    userId: "user-1",
-    username: "agentowner",
-    conversationVisibility: "private",
-    updatedAt: nowIso,
-    activeProposal: null,
-    runningJobId: null,
-    queuedJobs: [],
-    recentJobs: [],
-    conversationTurns: [],
-    agentPulse: {
-      optIn: true,
-      mode: "private",
-      routeStrategy: "last_private_used",
-      lastPulseSentAt: null,
-      lastPulseReason: null,
-      lastPulseTargetConversationId: null,
-      lastDecisionCode: "NOT_EVALUATED",
-      lastEvaluatedAt: null
+  return buildConversationSessionFixture(
+    {
+      updatedAt: nowIso,
+      agentPulse: {
+        ...buildConversationSessionFixture().agentPulse,
+        optIn: true
+      },
+      ...overrides
     },
-    ...overrides
-  };
+    {
+      conversationId,
+      receivedAt: nowIso
+    }
+  );
 }
 
 test("conversationBelongsToProvider matches only the active provider prefix", () => {
@@ -74,27 +69,14 @@ test("shouldSkipSessionForPulse enforces opt-in, active work, and human-scale mi
     shouldSkipSessionForPulse(
       buildSession("telegram:chat-1:user-1", {
         queuedJobs: [
-          {
+          buildConversationJobFixture({
             id: "job-1",
             input: "queued",
             createdAt: new Date().toISOString(),
-            startedAt: null,
-            completedAt: null,
             status: "queued",
-            resultSummary: null,
-            errorMessage: null,
-            ackTimerGeneration: 0,
-            ackEligibleAt: null,
-            ackLifecycleState: "PENDING",
-            ackMessageId: null,
-            ackSentAt: null,
-            ackEditAttemptCount: 0,
-            ackLastErrorCode: null,
-            finalDeliveryOutcome: null,
-            finalDeliveryAttemptCount: 0,
-            finalDeliveryLastErrorCode: null,
-            finalDeliveryLastAttemptAt: null
-          }
+            ackLifecycleState: "NOT_SENT",
+            finalDeliveryOutcome: "not_attempted"
+          })
         ]
       })
     ),

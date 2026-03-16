@@ -47,6 +47,25 @@ function createInitialState(): BrainState {
 }
 
 /**
+ * Resolves the runtime state-store path from environment overrides when present.
+ *
+ * **Why it exists:**
+ * Lets governed live-smoke runs isolate their runtime state without rewriting the normal
+ * default runtime path or fighting over one shared lock file.
+ *
+ * **What it talks to:**
+ * - Reads `process.env.BRAIN_STATE_JSON_PATH` from the current Node.js environment.
+ *
+ * @returns Resolved filesystem path for the durable state store.
+ */
+function resolveStateStorePathFromEnv(): string {
+  const configuredPath = process.env.BRAIN_STATE_JSON_PATH?.trim();
+  return configuredPath && configuredPath.length > 0
+    ? configuredPath
+    : "runtime/state.json";
+}
+
+/**
  * Persists metrics with deterministic state semantics.
  *
  * **Why it exists:**
@@ -84,7 +103,7 @@ export class StateStore {
  *
  * @param filePath - Filesystem location used by this operation.
  */
-constructor(private readonly filePath = "runtime/state.json") {}
+constructor(private readonly filePath = resolveStateStorePathFromEnv()) {}
 
 /**
  * Reads input needed for this execution step.

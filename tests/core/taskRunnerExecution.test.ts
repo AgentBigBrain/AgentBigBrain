@@ -6,7 +6,11 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { estimateActionCostUsd } from "../../src/core/actionCostPolicy";
-import { executeTaskRunnerAction } from "../../src/core/orchestration/taskRunnerExecution";
+import type { ShellExecutionTelemetry } from "../../src/organs/executionRuntime/contracts";
+import {
+  executeTaskRunnerAction,
+  type ExecuteTaskRunnerActionInput
+} from "../../src/core/orchestration/taskRunnerExecution";
 
 const BASE_ACTION = {
   id: "action_task_runner_execution_1",
@@ -18,14 +22,32 @@ const BASE_ACTION = {
   estimatedCostUsd: 0.01
 };
 
-function createExecutionInput() {
+function createExecutionInput(): {
+  input: ExecuteTaskRunnerActionInput;
+  shellTelemetry: ShellExecutionTelemetry;
+  traceEvents: Array<{ eventType: string; details?: Record<string, unknown> }>;
+} {
   const traceEvents: Array<{ eventType: string; details?: Record<string, unknown> }> = [];
-  const shellTelemetry = {
+  const shellTelemetry: ShellExecutionTelemetry = {
     shellKind: "bash",
     shellExecutable: "/bin/bash",
-    shellProfileFingerprint: "profile_1"
+    shellProfileFingerprint: "profile_1",
+    shellSpawnSpecFingerprint: "spawn_spec_1",
+    shellTimeoutMs: 10_000,
+    shellEnvMode: "isolated",
+    shellEnvKeyCount: 0,
+    shellEnvRedactedKeyCount: 0,
+    shellExitCode: 0,
+    shellSignal: null,
+    shellTimedOut: false,
+    shellStdoutDigest: "stdout_digest",
+    shellStderrDigest: "stderr_digest",
+    shellStdoutBytes: 0,
+    shellStderrBytes: 0,
+    shellStdoutTruncated: false,
+    shellStderrTruncated: false
   };
-  const input = {
+  const input: ExecuteTaskRunnerActionInput = {
     action: BASE_ACTION,
     appendTraceEvent: async (event: {
       eventType: string;
@@ -35,7 +57,7 @@ function createExecutionInput() {
     },
     combinedVotes: [
       {
-        governorId: "safety",
+        governorId: "security",
         approve: true,
         reason: "Safe.",
         confidence: 1

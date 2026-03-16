@@ -55,6 +55,19 @@ test("classifyPulseLexicalCommand returns NON_COMMAND when no pulse-control lexi
   assert.equal(result.matchedRuleId, "pulse_lexical_v1_no_pulse_signal");
 });
 
+test("classifyPulseLexicalCommand does not treat generic workspace start/open language as pulse on", () => {
+  const ruleContext = createPulseLexicalRuleContext(null, noOpLog, noOpLog);
+  const result = classifyPulseLexicalCommand(
+    "Please build a small landing page, start a local preview server for it, and open it in a browser for me.",
+    ruleContext
+  );
+
+  assert.equal(result.category, "NON_COMMAND");
+  assert.equal(result.commandIntent, null);
+  assert.equal(result.conflict, false);
+  assert.equal(result.matchedRuleId, "pulse_lexical_v1_no_pulse_signal");
+});
+
 test("createPulseLexicalRuleContext loads tightening-only override and disables configured intents", async () => {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-pulse-lexical-override-"));
   const overridePath = path.join(tempDir, "pulse_lexical_override.json");

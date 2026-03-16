@@ -194,6 +194,7 @@ export interface CheckProcessActionParams extends Record<string, unknown> {
 
 export interface StopProcessActionParams extends Record<string, unknown> {
   leaseId?: string;
+  pid?: number;
 }
 
 export interface ProbePortActionParams extends Record<string, unknown> {
@@ -213,6 +214,30 @@ export interface VerifyBrowserActionParams extends Record<string, unknown> {
   expectedTitle?: string;
   expectedText?: string;
   timeoutMs?: number;
+}
+
+export interface OpenBrowserActionParams extends Record<string, unknown> {
+  url?: string;
+  timeoutMs?: number;
+  rootPath?: string;
+  previewProcessLeaseId?: string;
+}
+
+export interface CloseBrowserActionParams extends Record<string, unknown> {
+  sessionId?: string;
+  url?: string;
+}
+
+export interface InspectPathHoldersActionParams extends Record<string, unknown> {
+  path?: string;
+}
+
+export interface InspectWorkspaceResourcesActionParams extends Record<string, unknown> {
+  rootPath?: string;
+  path?: string;
+  previewUrl?: string;
+  browserSessionId?: string;
+  previewProcessLeaseId?: string;
 }
 
 export type MemoryMutationStoreV1 = "entity_graph" | "conversation_stack" | "pulse_state";
@@ -252,6 +277,10 @@ export type PlannedActionParamsByType = {
   probe_port: ProbePortActionParams;
   probe_http: ProbeHttpActionParams;
   verify_browser: VerifyBrowserActionParams;
+  open_browser: OpenBrowserActionParams;
+  close_browser: CloseBrowserActionParams;
+  inspect_path_holders: InspectPathHoldersActionParams;
+  inspect_workspace_resources: InspectWorkspaceResourcesActionParams;
   memory_mutation: MemoryMutationActionParams;
   pulse_emit: PulseEmitActionParams;
 };

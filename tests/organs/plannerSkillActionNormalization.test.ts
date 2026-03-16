@@ -30,7 +30,7 @@ test("normalizeRequiredCreateSkillParams backfills skill name and deterministic 
 
   assert.equal(extractCreateSkillNameFromRequest(request), "smoke_skill");
   assert.equal(normalized[0]?.params.name, "smoke_skill");
-  assert.match(normalized[0]?.params.code ?? "", /export function smoke_skill/i);
+  assert.match(String(normalized[0]?.params.code ?? ""), /export function smoke_skill/i);
 });
 
 test("normalizeRequiredRunSkillParams backfills the run-skill name from explicit user intent", () => {

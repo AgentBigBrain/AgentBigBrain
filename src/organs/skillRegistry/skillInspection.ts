@@ -19,8 +19,9 @@ export function renderSkillInventory(skills: readonly SkillInventoryEntry[]): st
   for (const skill of skills) {
     const firstHint = skill.invocationHints[0];
     const suffix = firstHint ? ` Hint: ${firstHint}` : "";
+    const summary = skill.userSummary.replace(/[.?!]+$/u, "");
     lines.push(
-      `- ${skill.name} (${skill.verificationStatus}, ${skill.riskLevel} risk): ${skill.userSummary}.${suffix}`
+      `- ${skill.name} (${skill.verificationStatus}, ${skill.riskLevel} risk): ${summary}.${suffix}`
     );
   }
   return lines.join("\n");

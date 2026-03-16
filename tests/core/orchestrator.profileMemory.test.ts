@@ -104,7 +104,7 @@ class InjectedSensitiveProfileStore {
         factId: "fact_flare",
         key: "employment.current",
         value: "Flare",
-        status: "active",
+        status: "confirmed",
         observedAt: new Date(0).toISOString(),
         lastUpdatedAt: new Date(0).toISOString(),
         confidence: 0.92,

@@ -7,6 +7,7 @@ and Telegram gateway entrypoints.
 
 The current extracted slice moves notifier wiring, autonomous progress bridging, and platform
 send/edit/draft delivery behind:
+- `autonomousAbortControl.ts`
 - `contracts.ts`
 - `deliveryLifecycle.ts`
 - `inboundDispatch.ts`
@@ -34,6 +35,8 @@ here.
 ## Outputs
 - canonical `ConversationNotifierTransport` instances for Discord and Telegram
 - canonical autonomous progress send/edit/stream delivery behavior
+- canonical explicit autonomous stop and abort-controller helpers shared by Discord and Telegram
+  transport runtimes
 - canonical transport-facing reject-notification policy for shared adapter validation codes
 - canonical Discord socket attach/connect helper policy, hello/identify payload handling, and
   shared dispatch routing helpers

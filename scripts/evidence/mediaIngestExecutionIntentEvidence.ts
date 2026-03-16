@@ -142,6 +142,7 @@ async function runRoutingScenario(
     {
       followUpRuleContext: createFollowUpRuleContext(null),
       config: {
+        allowAutonomousViaInterface: true,
         maxContextTurnsForExecution: 10,
         maxConversationTurns: 40
       },

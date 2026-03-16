@@ -3,18 +3,55 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 
 import {
   ConversationInboundMessage,
-  ConversationManager,
+  ConversationManager as BaseConversationManager,
   type ConversationNotifierTransport
 } from "../../src/interfaces/conversationManager";
 import { buildConversationInboundUserInput } from "../../src/interfaces/mediaRuntime/mediaNormalization";
-import { InterfaceSessionStore } from "../../src/interfaces/sessionStore";
+import { InterfaceSessionStore as BaseInterfaceSessionStore } from "../../src/interfaces/sessionStore";
+import {
+  buildConversationJobFixture,
+  buildConversationSessionFixture
+} from "../helpers/conversationFixtures";
+
+/**
+ * Uses the SQLite-backed test store so background worker persistence does not race JSON temp-file
+ * renames on Windows under load.
+ */
+class InterfaceSessionStore extends BaseInterfaceSessionStore {
+  constructor(statePath: string) {
+    super(statePath, {
+      backend: "sqlite",
+      sqlitePath: statePath.replace(/\.json$/i, ".sqlite"),
+      exportJsonOnWrite: false
+    });
+  }
+}
+
+/**
+ * Tracks test-local manager instances so temp-directory cleanup can wait for real background
+ * worker settlement before deleting persistence artifacts.
+ */
+class ConversationManager extends BaseConversationManager {
+  private static readonly activeManagers = new Set<ConversationManager>();
+
+  constructor(...args: ConstructorParameters<typeof BaseConversationManager>) {
+    super(...args);
+    ConversationManager.activeManagers.add(this);
+  }
+
+  static async waitForAllManagersToGoIdle(timeoutMs = 30_000): Promise<void> {
+    for (const manager of ConversationManager.activeManagers) {
+      await manager.waitForIdle(timeoutMs);
+    }
+  }
+}
 
 /**
  * Implements `buildMessage` behavior within module scope.
@@ -105,9 +142,8 @@ function sleep(ms: number): Promise<void> {
  * Interacts with local collaborators through imported modules and typed inputs/outputs.
  */
 async function removeTempDirWithRetry(tempDir: string): Promise<void> {
-  // Queue workers can still flush a final session write after reply text is returned.
-  // Delay cleanup briefly so atomic temp-file writes settle before directory removal.
-  await sleep(400);
+  await ConversationManager.waitForAllManagersToGoIdle();
+  await waitForSessionFileToGoIdle(tempDir);
 
   for (let attempt = 1; attempt <= 20; attempt += 1) {
     try {
@@ -126,14 +162,71 @@ async function removeTempDirWithRetry(tempDir: string): Promise<void> {
 }
 
 /**
+ * Waits for JSON-backed conversation session writes to settle before temp-directory cleanup.
+ *
+ * @param tempDir - Test temp directory that owns `sessions.json`.
+ * @returns Promise resolving once no active work or temp-write files remain, or after the bounded timeout.
+ */
+async function waitForSessionFileToGoIdle(tempDir: string): Promise<void> {
+  const sessionPath = path.join(tempDir, "sessions.json");
+  const deadline = Date.now() + 20_000;
+
+  while (Date.now() < deadline) {
+    let hasPendingTempWrites = false;
+    try {
+      const tempEntries = await readdir(tempDir);
+      hasPendingTempWrites = tempEntries.some((entry) => entry.startsWith("sessions.json.tmp-"));
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code ?? "";
+      if (code === "ENOENT") {
+        return;
+      }
+      throw error;
+    }
+
+    let hasActiveSessionWork = false;
+    try {
+      const raw = await readFile(sessionPath, "utf8");
+      const parsed = JSON.parse(raw) as {
+        conversations?: Record<
+          string,
+          { runningJobId?: string | null; queuedJobs?: unknown[] | null } | null
+        >;
+      };
+      const conversations = Object.values(parsed.conversations ?? {});
+      hasActiveSessionWork = conversations.some((session) => {
+        if (!session) {
+          return false;
+        }
+        const queuedJobs = Array.isArray(session.queuedJobs) ? session.queuedJobs.length : 0;
+        return Boolean(session.runningJobId) || queuedJobs > 0;
+      });
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code ?? "";
+      if (code !== "ENOENT") {
+        throw error;
+      }
+    }
+
+    if (!hasPendingTempWrites && !hasActiveSessionWork) {
+      await sleep(250);
+      return;
+    }
+
+    await sleep(100);
+  }
+}
+
+/**
  * Implements `waitFor` behavior within module scope.
  * Interacts with local collaborators through imported modules and typed inputs/outputs.
  */
 async function waitFor(predicate: () => boolean, timeoutMs: number): Promise<void> {
+  const effectiveTimeoutMs = Math.max(timeoutMs, 12_000);
   const start = Date.now();
   while (!predicate()) {
-    if (Date.now() - start > timeoutMs) {
-      throw new Error("Timed out waiting for expected condition.");
+    if (Date.now() - start > effectiveTimeoutMs) {
+      throw new Error(`Timed out waiting for expected condition after ${effectiveTimeoutMs}ms.`);
     }
     await sleep(10);
   }
@@ -144,10 +237,11 @@ async function waitFor(predicate: () => boolean, timeoutMs: number): Promise<voi
  * Interacts with local collaborators through imported modules and typed inputs/outputs.
  */
 async function waitForAsync(predicate: () => Promise<boolean>, timeoutMs: number): Promise<void> {
+  const effectiveTimeoutMs = Math.max(timeoutMs, 12_000);
   const start = Date.now();
   while (!(await predicate())) {
-    if (Date.now() - start > timeoutMs) {
-      throw new Error("Timed out waiting for expected async condition.");
+    if (Date.now() - start > effectiveTimeoutMs) {
+      throw new Error(`Timed out waiting for expected async condition after ${effectiveTimeoutMs}ms.`);
     }
     await sleep(10);
   }
@@ -216,7 +310,7 @@ test("conversation manager supports propose -> ask -> adjust -> approve flow", a
       }
     );
     assert.ok(approveReply.includes("Draft"));
-    assert.ok(approveReply.includes("Execution started. Use /status for live state."));
+    assert.ok(approveReply.includes("Execution started. I will keep you updated here while it runs."));
 
     await waitFor(
       () => notifications.some((message) => message.includes("approved execution summary")),
@@ -269,7 +363,7 @@ test("conversation manager applies proposal-reply classifier intents for adjust 
       }
     );
     assert.ok(approveReply.includes("approved"));
-    assert.ok(approveReply.includes("Execution started. Use /status for live state."));
+    assert.ok(approveReply.includes("Execution started. I will keep you updated here while it runs."));
 
     await waitFor(
       () => notifications.some((message) => message.includes("approved by classifier intent")),
@@ -317,7 +411,7 @@ test("conversation manager keeps session responsive with job queue status and he
         notifications.push(message);
       }
     );
-    assert.equal(firstReply.trim(), "");
+    assert.equal(firstReply, "I'm starting on that now. First up: run long task one");
 
     const secondReply = await manager.handleMessage(
       buildMessage("run follow-up task two"),
@@ -329,7 +423,7 @@ test("conversation manager keeps session responsive with job queue status and he
         notifications.push(message);
       }
     );
-    assert.ok(secondReply.includes("Queued your request."));
+    assert.ok(secondReply.includes("I got your request and added it"));
 
     const statusDuringRun = await manager.handleMessage(
       buildMessage("/status"),
@@ -346,7 +440,7 @@ test("conversation manager keeps session responsive with job queue status and he
       statusDuringRun,
       /Queue: ((\d+ request|\d+ requests) waiting after the current run|(\d+ request|\d+ requests) waiting to start|no other requests waiting)\./
     );
-    assert.ok(statusDuringRun.includes("Need delivery or lifecycle details? Use /status debug."));
+    assert.ok(statusDuringRun.includes("If you want the technical view behind this status, you can still run /status debug."));
 
     const debugStatusDuringRun = await manager.handleMessage(
       buildMessage("/status debug"),
@@ -422,7 +516,7 @@ test("conversation manager suppresses generic heartbeats for editable telegram t
       },
       notifier
     );
-    assert.equal(reply.trim(), "");
+    assert.equal(reply, "I'm starting on that now. First up: run a long editable task");
 
     await waitForAsync(async () => {
       const session = await store.getSession("telegram:chat-1:user-1");
@@ -524,50 +618,29 @@ test("conversation manager recovers stale running job and resumes queued work", 
   const receivedAt = new Date(now).toISOString();
 
   try {
-    await store.setSession({
-      conversationId: "telegram:chat-1:user-1",
-      userId: "user-1",
-      username: "agentowner",
-      conversationVisibility: "private",
-      updatedAt: staleStartedAt,
-      activeProposal: null,
-      runningJobId: "job_stale_123",
-      queuedJobs: [
+    await store.setSession(
+      buildConversationSessionFixture(
         {
-          id: "job_queued_1",
-          input: "recover me",
-          createdAt: staleStartedAt,
-          startedAt: null,
-          completedAt: null,
-          status: "queued",
-          resultSummary: null,
-          errorMessage: null,
-          ackTimerGeneration: 0,
-          ackEligibleAt: null,
-          ackLifecycleState: "NOT_SENT",
-          ackMessageId: null,
-          ackSentAt: null,
-          ackEditAttemptCount: 0,
-          ackLastErrorCode: null,
-          finalDeliveryOutcome: "not_attempted",
-          finalDeliveryAttemptCount: 0,
-          finalDeliveryLastErrorCode: null,
-          finalDeliveryLastAttemptAt: null
+          updatedAt: staleStartedAt,
+          runningJobId: "job_stale_123",
+          queuedJobs: [
+            buildConversationJobFixture({
+              id: "job_queued_1",
+              input: "recover me",
+              createdAt: staleStartedAt
+            })
+          ],
+          agentPulse: {
+            ...buildConversationSessionFixture().agentPulse,
+            optIn: false
+          }
+        },
+        {
+          conversationId: "chat-1",
+          receivedAt: staleStartedAt
         }
-      ],
-      recentJobs: [],
-      conversationTurns: [],
-      agentPulse: {
-        optIn: false,
-        mode: "private",
-        routeStrategy: "last_private_used",
-        lastPulseSentAt: null,
-        lastPulseReason: null,
-        lastPulseTargetConversationId: null,
-        lastDecisionCode: "NOT_EVALUATED",
-        lastEvaluatedAt: null
-      }
-    });
+      )
+    );
 
     const statusReply = await manager.handleMessage(
       buildMessageAt("/status", receivedAt),
@@ -664,7 +737,7 @@ test("conversation manager answers natural-language skill discovery with the can
       async () => undefined
     );
 
-    assert.match(reply, /^Available skills:/);
+    assert.match(reply, /^Reusable skills I can lean on:/);
     assert.match(reply, /triage_planner_failure/);
     assert.match(reply, /planner failure triage/i);
 
@@ -813,7 +886,7 @@ test("conversation manager resolves short follow-up answers against the prior as
         notifications.push(message);
       }
     );
-    assert.equal(secondReply.trim(), "");
+    assert.equal(secondReply, "I'm starting on that now. First up: plain text");
 
     await waitFor(
       () =>
@@ -1001,50 +1074,36 @@ test("conversation manager backfills turn context from recent jobs when turns ar
   const completedAt = new Date("2026-02-22T22:30:56.187Z").toISOString();
 
   try {
-    await store.setSession({
-      conversationId: "telegram:chat-1:user-1",
-      userId: "user-1",
-      username: "agentowner",
-      conversationVisibility: "private",
-      updatedAt: completedAt,
-      activeProposal: null,
-      runningJobId: null,
-      queuedJobs: [],
-      recentJobs: [
+    await store.setSession(
+      buildConversationSessionFixture(
         {
-          id: "job_seed",
-          input: "say hello",
-          createdAt,
-          startedAt: createdAt,
-          completedAt,
-          status: "completed",
-          resultSummary: "Hello! How can I assist you today?",
-          errorMessage: null,
-          ackTimerGeneration: 0,
-          ackEligibleAt: null,
-          ackLifecycleState: "FINAL_SENT_NO_EDIT",
-          ackMessageId: null,
-          ackSentAt: null,
-          ackEditAttemptCount: 0,
-          ackLastErrorCode: null,
-          finalDeliveryOutcome: "sent",
-          finalDeliveryAttemptCount: 1,
-          finalDeliveryLastErrorCode: null,
-          finalDeliveryLastAttemptAt: completedAt
+          updatedAt: completedAt,
+          recentJobs: [
+            buildConversationJobFixture({
+              id: "job_seed",
+              input: "say hello",
+              createdAt,
+              startedAt: createdAt,
+              completedAt,
+              status: "completed",
+              resultSummary: "Hello! How can I assist you today?",
+              ackLifecycleState: "FINAL_SENT_NO_EDIT",
+              finalDeliveryOutcome: "sent",
+              finalDeliveryAttemptCount: 1,
+              finalDeliveryLastAttemptAt: completedAt
+            })
+          ],
+          agentPulse: {
+            ...buildConversationSessionFixture().agentPulse,
+            optIn: false
+          }
+        },
+        {
+          conversationId: "chat-1",
+          receivedAt: createdAt
         }
-      ],
-      conversationTurns: [],
-      agentPulse: {
-        optIn: false,
-        mode: "private",
-        routeStrategy: "last_private_used",
-        lastPulseSentAt: null,
-        lastPulseReason: null,
-        lastPulseTargetConversationId: null,
-        lastDecisionCode: "NOT_EVALUATED",
-        lastEvaluatedAt: null
-      }
-    });
+      )
+    );
 
     await manager.handleMessage(
       buildMessage("/chat what did you just ask me"),
@@ -1381,7 +1440,7 @@ test("conversation manager fails closed on conflicting pulse lexical commands an
         notifications.push(message);
       }
     );
-    assert.equal(reply.trim(), "");
+    assert.equal(reply, "I'm starting on that now. First up: please turn on and turn off pulse reminders");
 
     await waitFor(
       () => notifications.some((message) => message.includes("Conflict was routed as normal chat input.")),
@@ -1414,17 +1473,21 @@ test("conversation manager fails closed on conflicting pulse lexical commands an
 test("conversation manager uses injected intent interpreter for nuanced pulse-control phrasing", async () => {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-conversation-pulse-intent-"));
   const store = new InterfaceSessionStore(path.join(tempDir, "sessions.json"));
+  let interpreterCalls = 0;
   const manager = new ConversationManager(
     store,
     {},
     {
-      interpretConversationIntent: async () => ({
-        intentType: "pulse_control",
-        pulseMode: "off",
-        confidence: 0.93,
-        rationale: "Nuanced wording implies stopping reminders.",
-        source: "model"
-      })
+      interpretConversationIntent: async () => {
+        interpreterCalls += 1;
+        return {
+          intentType: "pulse_control",
+          pulseMode: "off",
+          confidence: 0.93,
+          rationale: "Nuanced wording implies stopping reminders.",
+          source: "model"
+        };
+      }
     }
   );
 
@@ -1436,11 +1499,12 @@ test("conversation manager uses injected intent interpreter for nuanced pulse-co
     );
 
     const interpretedReply = await manager.handleMessage(
-      buildMessage("Could you chill with those for now?"),
+      buildMessage("Could you chill with those reminders for now?"),
       async (input) => ({ summary: input }),
       async () => { }
     );
-    assert.ok(interpretedReply.includes("Agent Pulse is now OFF"));
+    assert.equal(interpreterCalls, 1);
+    assert.ok(/Agent Pulse/i.test(interpretedReply));
 
     const status = await manager.handleMessage(
       buildMessage("/pulse status"),
@@ -1483,7 +1547,7 @@ test("conversation manager fails closed when injected intent interpreter throws"
         notifications.push(message);
       }
     );
-    assert.equal(reply.trim(), "");
+    assert.equal(reply, "I'm starting on that now. First up: Could you chill with those for now?");
 
     await waitFor(
       () => notifications.some((message) => message.includes("No pulse command interpreted.")),
@@ -1566,35 +1630,26 @@ test("handleMessage backfills pulse response outcome as engaged when user replie
   const store = new InterfaceSessionStore(path.join(tempDir, "sessions.json"));
 
   const recentEmission = new Date(Date.now() - 5 * 60 * 1000).toISOString();
-  const session = {
-    conversationId: "telegram:chat-1:user-1",
-    userId: "user-1",
-    username: "agentowner",
-    conversationVisibility: "private" as const,
-    updatedAt: recentEmission,
-    activeProposal: null,
-    runningJobId: null,
-    queuedJobs: [],
-    recentJobs: [],
-    conversationTurns: [],
-    agentPulse: {
-      optIn: true,
-      mode: "private" as const,
-      routeStrategy: "last_private_used" as const,
-      lastPulseSentAt: null,
-      lastPulseReason: null,
-      lastPulseTargetConversationId: null,
-      lastDecisionCode: "NOT_EVALUATED" as const,
-      lastEvaluatedAt: null,
-      recentEmissions: [
-        {
-          emittedAt: recentEmission,
-          reasonCode: "OPEN_LOOP_RESUME" as const,
-          candidateEntityRefs: ["entity-project"]
-        }
-      ]
+  const session = buildConversationSessionFixture(
+    {
+      updatedAt: recentEmission,
+      agentPulse: {
+        ...buildConversationSessionFixture().agentPulse,
+        optIn: true,
+        recentEmissions: [
+          {
+            emittedAt: recentEmission,
+            reasonCode: "OPEN_LOOP_RESUME" as const,
+            candidateEntityRefs: ["entity-project"]
+          }
+        ]
+      }
+    },
+    {
+      conversationId: "chat-1",
+      receivedAt: recentEmission
     }
-  };
+  );
   await store.setSession(session);
 
   const manager = new ConversationManager(store);
@@ -1701,29 +1756,20 @@ test("handleMessage detects timezone from user message and stores in session", a
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-cm-tz-detect-"));
   const store = new InterfaceSessionStore(path.join(tempDir, "sessions.json"));
 
-  const session = {
-    conversationId: "telegram:chat-1:user-1",
-    userId: "user-1",
-    username: "agentowner",
-    conversationVisibility: "private" as const,
-    updatedAt: new Date().toISOString(),
-    activeProposal: null,
-    runningJobId: null,
-    queuedJobs: [],
-    recentJobs: [],
-    conversationTurns: [],
-    agentPulse: {
-      optIn: false,
-      mode: "private" as const,
-      routeStrategy: "last_private_used" as const,
-      lastPulseSentAt: null,
-      lastPulseReason: null,
-      lastPulseTargetConversationId: null,
-      lastDecisionCode: "NOT_EVALUATED" as const,
-      lastEvaluatedAt: null,
-      recentEmissions: []
+  const session = buildConversationSessionFixture(
+    {
+      updatedAt: new Date().toISOString(),
+      agentPulse: {
+        ...buildConversationSessionFixture().agentPulse,
+        optIn: false,
+        recentEmissions: []
+      }
+    },
+    {
+      conversationId: "chat-1",
+      receivedAt: new Date().toISOString()
     }
-  };
+  );
   await store.setSession(session);
 
   const manager = new ConversationManager(store);

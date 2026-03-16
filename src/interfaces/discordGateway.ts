@@ -3,15 +3,10 @@
  */
 
 import path from "node:path";
-
 import { DiscordAdapter } from "./discordAdapter";
 import { AgentPulseScheduler } from "./agentPulseScheduler";
-import {
-  ConversationManager
-} from "./conversationManager";
-import {
-  type ConversationNotifierTransport
-} from "./conversationRuntime/managerContracts";
+import { ConversationManager } from "./conversationManager";
+import { type ConversationNotifierTransport } from "./conversationRuntime/managerContracts";
 import { DiscordInterfaceConfig } from "./runtimeConfig";
 import { InterfaceSessionStore } from "./sessionStore";
 import {
@@ -34,11 +29,10 @@ import {
   resolveDiscordGatewaySocketUrl,
   resolveWebSocketConstructor,
 } from "./transportRuntime/gatewayLifecycle";
+import { abortAutonomousTransportTask } from "./transportRuntime/autonomousAbortControl";
 import { runStage685CheckpointLiveReview } from "./CheckpointReviewRunners/stage685CheckpointReviewRunner";
 import { runGatewayCheckpointReview } from "./checkpointReviewRouting";
-import {
-  createDynamicPulseEntityGraphGetter
-} from "./entityGraphRuntime";
+import { createDynamicPulseEntityGraphGetter } from "./entityGraphRuntime";
 import { renderPulseUserFacingSummaryV1 } from "./pulseUxRuntime";
 import { selectUserFacingSummary } from "./userFacingResult";
 import { runCheckpoint611LiveReview } from "./CheckpointReviewRunners/stage6_5Checkpoint6_11Live";
@@ -46,10 +40,12 @@ import { runCheckpoint613LiveReview } from "./CheckpointReviewRunners/stage6_5Ch
 import { runCheckpoint675LiveReview } from "../core/stage6_75CheckpointLive";
 import { EntityGraphStore } from "../core/entityGraphStore";
 import { SkillRegistryStore } from "../organs/skillRegistry/skillRegistryStore";
+import type { LocalIntentModelResolver } from "../organs/languageUnderstanding/localIntentModelContracts";
 
 interface DiscordGatewayOptions {
   sessionStore?: InterfaceSessionStore;
   entityGraphStore?: EntityGraphStore;
+  localIntentModelResolver?: LocalIntentModelResolver;
 }
 
 /**
@@ -175,7 +171,12 @@ export class DiscordGateway {
           request.sourceText,
           request.nowIso
         ),
+      localIntentModelResolver: options.localIntentModelResolver,
       listAvailableSkills: async () => this.skillRegistryStore.listAvailableSkills(),
+      listManagedProcessSnapshots: async () => this.adapter.listManagedProcessSnapshots(),
+      listBrowserSessionSnapshots: async () => this.adapter.listBrowserSessionSnapshots(),
+      abortActiveAutonomousRun: (conversationId) =>
+        abortAutonomousTransportTask(conversationId, this.autonomousAbortControllers),
       runCheckpointReview: async (checkpointId) =>
         runGatewayCheckpointReview(checkpointId, {
           runCheckpoint611LiveReview,
@@ -490,13 +491,22 @@ export class DiscordGateway {
       abortControllers: this.autonomousAbortControllers,
       runTextTask: async (input: string, receivedAt: string) => {
         const runResult = await this.adapter.runTextTask(input, receivedAt);
-        return selectUserFacingSummary(runResult, {
-          showTechnicalSummary: this.config.security.showTechnicalSummary,
-          showSafetyCodes: this.config.security.showSafetyCodes
-        });
+        return {
+          summary: selectUserFacingSummary(runResult, {
+            showTechnicalSummary: this.config.security.showTechnicalSummary,
+            showSafetyCodes: this.config.security.showSafetyCodes
+          }),
+          taskRunResult: runResult
+        };
       },
-      runAutonomousTask: (goal, timestamp, progressSender, signal) =>
-        this.adapter.runAutonomousTask(goal, timestamp, progressSender, signal),
+      runAutonomousTask: (goal, timestamp, progressSender, signal, initialExecutionInput) =>
+        this.adapter.runAutonomousTask(
+          goal,
+          timestamp,
+          progressSender,
+          signal,
+          initialExecutionInput
+        ),
       deliverReply: (reply: string) =>
         sendDiscordGatewayMessage(
           this.config,

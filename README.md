@@ -41,6 +41,8 @@ Built in TypeScript with only **2 runtime dependencies** (`ws`, `onnxruntime-nod
 
 **💬 Multi-Interface** — CLI, Telegram bot, Discord bot, and an HTTP federation protocol for agent-to-agent communication.
 
+**🧭 Human-Centric Front Door** — You can talk to it like a normal person without losing the safety rails. Clear natural requests still go through the same routing and approval checks, and you can optionally add a small local Ollama intent helper for more natural phrasing and smoother resume or handoff turns.
+
 <a id="zero-dependency-core"></a>
 **📦 Minimal Dependencies** — Only 2 runtime packages. No heavyweight SDKs. Crypto, HTTP, SQLite, and process control all use Node.js built-ins.
 
@@ -209,6 +211,18 @@ BRAIN_MODEL_BACKEND=mock
 BRAIN_RUNTIME_MODE=isolated
 ```
 
+Optional: enable the bounded local intent engine for more natural front-door routing while keeping the main planner/provider path unchanged:
+
+```bash
+ollama pull phi4-mini
+```
+
+```env
+BRAIN_LOCAL_INTENT_MODEL_ENABLED=true
+BRAIN_LOCAL_INTENT_MODEL_PROVIDER=ollama
+BRAIN_LOCAL_INTENT_MODEL_NAME=phi4-mini:latest
+```
+
 For the full configuration reference (model backends, shell profiles, interfaces, federation, and all environment variables), see **[docs/SETUP.md](docs/SETUP.md)**.
 
 ---
@@ -282,7 +296,7 @@ Low-risk actions take the **fast path** — only the security governor votes, so
 
 ### Can I use this with my own model?
 
-Yes. Set `BRAIN_MODEL_BACKEND=openai` and configure `OPENAI_API_KEY`. You can point it at any OpenAI-compatible API (including local models) using `OPENAI_BASE_URL`. The OpenAI path supports model-family-aware transport selection across Chat Completions and Responses, and there is also an Ollama adapter for local models. See **[docs/SETUP.md](docs/SETUP.md)** for all model options.
+Yes. Set `BRAIN_MODEL_BACKEND=openai` and configure `OPENAI_API_KEY`. You can point it at any OpenAI-compatible API (including local models) using `OPENAI_BASE_URL`. The OpenAI path supports model-family-aware transport selection across Chat Completions and Responses, and there is also an Ollama adapter for local models. The optional local intent engine is a separate Ollama-backed seam, so you can keep the main planner on OpenAI while using a local Phi model for bounded front-door intent classification. See **[docs/SETUP.md](docs/SETUP.md)** for all model options.
 
 ### How do I connect it to Telegram or Discord?
 

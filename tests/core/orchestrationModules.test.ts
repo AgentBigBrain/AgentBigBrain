@@ -13,7 +13,12 @@ import {
   resolveMissionFailureRootCause,
   shouldEmitMissionPostmortem
 } from "../../src/core/orchestration/orchestratorReceipts";
-import { type ActionRunResult, type TaskRunResult } from "../../src/core/types";
+import {
+  type ActionRunResult,
+  type ConstraintViolationCode,
+  type GovernorId,
+  type TaskRunResult
+} from "../../src/core/types";
 import { type RetryBudgetDecision } from "../../src/core/stage6_85RecoveryPolicy";
 
 function buildTaskResult(actionResults: ActionRunResult[]): TaskRunResult {
@@ -55,7 +60,10 @@ function buildApprovedResult(actionId: string, actionType: ActionRunResult["acti
   };
 }
 
-function buildBlockedConstraintResult(actionId: string, code = "DELETE_OUTSIDE_SANDBOX"): ActionRunResult {
+function buildBlockedConstraintResult(
+  actionId: string,
+  code: ConstraintViolationCode = "DELETE_OUTSIDE_SANDBOX"
+): ActionRunResult {
   return {
     action: {
       id: actionId,
@@ -90,11 +98,11 @@ function buildBlockedGovernanceResult(actionId: string): ActionRunResult {
     mode: "escalation_path",
     approved: false,
     output: "blocked",
-    blockedBy: ["safety"],
+    blockedBy: ["security"],
     violations: [],
     votes: [
       {
-        governorId: "safety",
+        governorId: "security" satisfies GovernorId,
         approve: false,
         reason: "Unsafe self-modification denied.",
         confidence: 1

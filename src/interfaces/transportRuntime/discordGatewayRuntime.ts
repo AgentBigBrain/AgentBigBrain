@@ -15,7 +15,7 @@ import {
   editDiscordChannelMessage,
   sendDiscordChannelMessage
 } from "./discordTransport";
-import { abortAutonomousTransportTaskIfRequested } from "./gatewayLifecycle";
+import { abortAutonomousTransportTaskIfRequested } from "./autonomousAbortControl";
 import { shouldNotifyRejectedInvocation } from "./rateLimitPolicy";
 
 export interface DiscordAuthor {

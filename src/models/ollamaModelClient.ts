@@ -15,6 +15,7 @@
  *   - codellama:13b  — code-aware, good for code review governor
  */
 
+import { resolveOllamaModel } from "./ollama/modelResolution";
 import { ModelClient, ModelUsageSnapshot, StructuredCompletionRequest } from "./types";
 
 interface OllamaModelClientOptions {
@@ -71,6 +72,7 @@ export class OllamaModelClient implements ModelClient {
      * @returns Promise resolving to T.
      */
     async completeJson<T>(request: StructuredCompletionRequest): Promise<T> {
+        const resolvedModel = resolveOllamaModel(request.model);
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), this.options.requestTimeoutMs);
 
@@ -79,7 +81,7 @@ export class OllamaModelClient implements ModelClient {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    model: request.model,
+                    model: resolvedModel.providerModel,
                     messages: [
                         { role: "system", content: request.systemPrompt },
                         { role: "user", content: request.userPrompt }

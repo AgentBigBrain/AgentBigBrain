@@ -19,6 +19,7 @@ import {
   ConversationTurn
 } from "../../src/interfaces/sessionStore";
 import type { PulseEmissionRecordV1 } from "../../src/core/stage6_86PulseCandidates";
+import { buildConversationSessionFixture } from "../helpers/conversationFixtures";
 
 /**
  * Implements `buildSessionFixture` behavior within module scope.
@@ -26,55 +27,53 @@ import type { PulseEmissionRecordV1 } from "../../src/core/stage6_86PulseCandida
  */
 function buildSessionFixture(overrides: Partial<ConversationSession> = {}): ConversationSession {
   const now = new Date().toISOString();
-  return {
-    conversationId: "telegram:chat-1:user-1",
-    userId: "user-1",
-    username: "agentowner",
-    conversationVisibility: "private",
-    updatedAt: now,
-    activeProposal: {
-      id: "proposal-1",
-      originalInput: "watch email",
-      currentInput: "watch email",
-      createdAt: now,
+  return buildConversationSessionFixture(
+    {
       updatedAt: now,
-      status: "pending"
+      activeProposal: {
+        id: "proposal-1",
+        originalInput: "watch email",
+        currentInput: "watch email",
+        createdAt: now,
+        updatedAt: now,
+        status: "pending"
+      },
+      conversationTurns: [
+        {
+          role: "user",
+          text: "hello",
+          at: now
+        }
+      ],
+      classifierEvents: [
+        {
+          classifier: "follow_up",
+          input: "plain text",
+          at: now,
+          isShortFollowUp: true,
+          category: "ACK",
+          confidenceTier: "MED",
+          matchedRuleId: "follow_up_v1_contextual_short_reply",
+          rulepackVersion: "FollowUpRulepackV1",
+          intent: null
+        }
+      ],
+      agentPulse: {
+        ...buildConversationSessionFixture().agentPulse,
+        optIn: true,
+        lastPulseSentAt: now,
+        lastPulseReason: "STALE_FACT_REVALIDATION",
+        lastPulseTargetConversationId: "telegram:chat-1:user-1",
+        lastDecisionCode: "ALLOWED",
+        lastEvaluatedAt: now
+      },
+      ...overrides
     },
-    runningJobId: null,
-    queuedJobs: [],
-    recentJobs: [],
-    conversationTurns: [
-      {
-        role: "user",
-        text: "hello",
-        at: now
-      }
-    ],
-    classifierEvents: [
-      {
-        classifier: "follow_up",
-        input: "plain text",
-        at: now,
-        isShortFollowUp: true,
-        category: "ACK",
-        confidenceTier: "MED",
-        matchedRuleId: "follow_up_v1_contextual_short_reply",
-        rulepackVersion: "FollowUpRulepackV1",
-        intent: null
-      }
-    ],
-    agentPulse: {
-      optIn: true,
-      mode: "private",
-      routeStrategy: "last_private_used",
-      lastPulseSentAt: now,
-      lastPulseReason: "stale_fact_revalidation",
-      lastPulseTargetConversationId: "telegram:chat-1:user-1",
-      lastDecisionCode: "ALLOWED",
-      lastEvaluatedAt: now
-    },
-    ...overrides
-  };
+    {
+      conversationId: "chat-1",
+      receivedAt: now
+    }
+  );
 }
 
 test("session store persists and reloads conversation session state", async () => {
@@ -309,28 +308,21 @@ test("session store lists sessions and applies default agent pulse state", async
   try {
     const store = new InterfaceSessionStore(sessionsPath);
     const now = new Date().toISOString();
-    await store.setSession({
-      conversationId: "telegram:chat-1:user-1",
-      userId: "user-1",
-      username: "agentowner",
-      updatedAt: now,
-      activeProposal: null,
-      runningJobId: null,
-      queuedJobs: [],
-      recentJobs: [],
-      conversationTurns: [],
-      conversationVisibility: "private",
-      agentPulse: {
-        optIn: false,
-        mode: "private",
-        routeStrategy: "last_private_used",
-        lastPulseSentAt: null,
-        lastPulseReason: null,
-        lastPulseTargetConversationId: null,
-        lastDecisionCode: "NOT_EVALUATED",
-        lastEvaluatedAt: null
-      }
-    });
+    await store.setSession(
+      buildConversationSessionFixture(
+        {
+          updatedAt: now,
+          agentPulse: {
+            ...buildConversationSessionFixture().agentPulse,
+            optIn: false
+          }
+        },
+        {
+          conversationId: "chat-1",
+          receivedAt: now
+        }
+      )
+    );
 
     await writeFile(
       sessionsPath,

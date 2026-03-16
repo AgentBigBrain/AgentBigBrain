@@ -62,7 +62,7 @@ test("buildApprovedActionResult preserves governance decisions and clears block 
     },
     votes: [
       {
-        governorId: "safety",
+        governorId: "security",
         approve: true,
         reason: "Safe.",
         confidence: 1

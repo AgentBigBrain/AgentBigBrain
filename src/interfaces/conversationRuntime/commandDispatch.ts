@@ -127,7 +127,12 @@ export async function handleConversationCommand(
       session,
       normalizedInput,
       message.receivedAt,
-      deps
+      {
+        ...deps,
+        abortActiveAutonomousRun: deps.abortActiveAutonomousRun
+          ? () => deps.abortActiveAutonomousRun?.(message.conversationId) ?? false
+          : undefined
+      }
     )).reply;
   }
 

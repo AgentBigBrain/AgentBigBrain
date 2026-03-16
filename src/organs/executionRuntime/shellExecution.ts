@@ -19,14 +19,12 @@ import { isPathWithinPrefix, resolveWorkspacePath } from "./pathRuntime";
 
 const SHELL_OUTPUT_CAPTURE_MAX_BYTES = 64 * 1024;
 const PROCESS_TREE_TERMINATION_TIMEOUT_MS = 2_000;
-
-/**
- * Appends process output into a bounded text buffer without exceeding the capture limit.
- *
- * @param buffer - Existing bounded text buffer.
- * @param chunk - New output chunk.
- * @returns Updated bounded text buffer.
- */
+const KNOWN_SHELL_PARTIAL_FAILURE_PATTERNS: readonly RegExp[] = [
+  /the process cannot access the file because it is being used by another process\./i,
+  /\bmove-item\b[\s\S]{0,120}\bioexception\b/i,
+  /\bfullyqualifiederrorid\s*:\s*move(?:directory)?item/i
+] as const;
+/** Appends one stdout/stderr chunk into a bounded capture buffer. */
 function appendChunkToBuffer(buffer: CappedTextBuffer, chunk: Buffer): CappedTextBuffer {
   if (chunk.length === 0) {
     return buffer;
@@ -44,21 +42,24 @@ function appendChunkToBuffer(buffer: CappedTextBuffer, chunk: Buffer): CappedTex
   return {
     text: buffer.text + slice.toString("utf8"),
     bytes: buffer.bytes + slice.length,
-    truncated: buffer.truncated || chunk.length > remaining
+      truncated: buffer.truncated || chunk.length > remaining
   };
 }
-
-/**
- * Creates an empty bounded output buffer for shell stdout/stderr capture.
- *
- * @returns Empty capped text buffer.
- */
+/** Creates an empty bounded text buffer for shell output capture. */
 function emptyCappedTextBuffer(): CappedTextBuffer {
   return {
     text: "",
     bytes: 0,
     truncated: false
   };
+}
+/** Treats known stderr signatures as hard failure even when the shell exits cleanly. */
+function hasKnownShellPartialFailure(stderrText: string): boolean {
+  const normalized = stderrText.trim();
+  if (normalized.length === 0) {
+    return false;
+  }
+  return KNOWN_SHELL_PARTIAL_FAILURE_PATTERNS.some((pattern) => pattern.test(normalized));
 }
 
 /**
@@ -83,14 +84,7 @@ export function resolveShellCommandCwd(
   }
   return cwd;
 }
-
-/**
- * Resolves the bounded timeout used for shell execution.
- *
- * @param config - Active brain config with timeout bounds.
- * @param params - Shell action params.
- * @returns Effective timeout in milliseconds.
- */
+/** Resolves the bounded timeout applied to the shell command. */
 function resolveShellCommandTimeoutMs(
   config: ShellExecutionDependencies["config"],
   params: ShellCommandActionParams
@@ -130,6 +124,26 @@ export async function terminateProcessTree(
     }
   }
 
+  return terminateProcessTreeByPid(shellSpawn, pid, child);
+}
+
+/**
+ * Terminates a process tree using a known PID when the original child handle is unavailable.
+ *
+ * @param shellSpawn - Spawn helper used for platform-specific termination helpers.
+ * @param pid - Process id to terminate.
+ * @param fallbackChild - Optional live child handle used as a final fallback.
+ * @returns `true` when termination succeeded or the process was already complete.
+ */
+export async function terminateProcessTreeByPid(
+  shellSpawn: ShellExecutionDependencies["shellSpawn"],
+  pid: number,
+  fallbackChild?: ChildProcess | ChildProcessWithoutNullStreams
+): Promise<boolean> {
+  if (!Number.isInteger(pid) || pid <= 0) {
+    return false;
+  }
+
   if (process.platform === "win32") {
     try {
       await new Promise<void>((resolve, reject) => {
@@ -160,11 +174,14 @@ export async function terminateProcessTree(
       });
       return true;
     } catch {
-      try {
-        return child.kill();
-      } catch {
-        return false;
+      if (fallbackChild) {
+        try {
+          return fallbackChild.kill();
+        } catch {
+          return false;
+        }
       }
+      return false;
     }
   }
 
@@ -173,10 +190,36 @@ export async function terminateProcessTree(
     return true;
   } catch {
     try {
-      return child.kill("SIGTERM");
+      process.kill(pid, "SIGTERM");
+      return true;
     } catch {
+      if (fallbackChild) {
+        try {
+          return fallbackChild.kill("SIGTERM");
+        } catch {
+          return false;
+        }
+      }
       return false;
     }
+  }
+}
+
+/**
+ * Checks whether a process id still appears alive from the current runtime.
+ *
+ * @param pid - Process id to inspect.
+ * @returns `true` when the process appears alive or inaccessible but present.
+ */
+export function isProcessRunningByPid(pid: number): boolean {
+  if (!Number.isInteger(pid) || pid <= 0) {
+    return false;
+  }
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === "EPERM";
   }
 }
 
@@ -370,6 +413,16 @@ export async function executeShellCommandAction(
       .filter((value) => value.trim().length > 0)
       .join("\n")
       .trim();
+    if (hasKnownShellPartialFailure(result.stderr.text)) {
+      return {
+        outcome: buildExecutionOutcome(
+          "failed",
+          `Shell failed:\n${combinedOutput}`,
+          "ACTION_EXECUTION_FAILED"
+        ),
+        telemetry
+      };
+    }
     if ((result.exitCode ?? 0) !== 0) {
       if (combinedOutput.length > 0) {
         return {

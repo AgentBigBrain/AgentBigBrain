@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { createEmptyConversationStackV1 } from "../../src/core/stage6_86ConversationStack";
+import { buildSessionSeed } from "../../src/interfaces/conversationManagerHelpers";
 import { ConversationSession } from "../../src/interfaces/sessionStore";
 import { renderPulseUserFacingSummaryV1 } from "../../src/interfaces/pulseUxRuntime";
 
@@ -17,10 +18,14 @@ function buildSession(): ConversationSession {
   const nowIso = "2026-03-03T15:00:00.000Z";
   const stack = createEmptyConversationStackV1(nowIso);
   return {
-    conversationId: "telegram:chat-1:user-1",
-    userId: "user-1",
-    username: "agentowner",
-    conversationVisibility: "private",
+    ...buildSessionSeed({
+      provider: "telegram",
+      conversationId: "chat-1",
+      userId: "user-1",
+      username: "agentowner",
+      conversationVisibility: "private",
+      receivedAt: nowIso
+    }),
     sessionSchemaVersion: "v2",
     conversationStack: {
       ...stack,
@@ -57,21 +62,16 @@ function buildSession(): ConversationSession {
       ]
     },
     updatedAt: nowIso,
-    activeProposal: null,
-    runningJobId: null,
-    queuedJobs: [],
-    recentJobs: [],
-    conversationTurns: [],
     agentPulse: {
+      ...buildSessionSeed({
+        provider: "telegram",
+        conversationId: "chat-1",
+        userId: "user-1",
+        username: "agentowner",
+        conversationVisibility: "private",
+        receivedAt: nowIso
+      }).agentPulse,
       optIn: true,
-      mode: "private",
-      routeStrategy: "last_private_used",
-      lastPulseSentAt: null,
-      lastPulseReason: null,
-      lastPulseTargetConversationId: null,
-      lastDecisionCode: "NOT_EVALUATED",
-      lastEvaluatedAt: null,
-      lastContextualLexicalEvidence: null,
       recentEmissions: []
     }
   };

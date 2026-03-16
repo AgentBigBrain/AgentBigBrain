@@ -17,6 +17,7 @@ import type {
   ConversationInboundMessage
 } from "../../src/interfaces/conversationRuntime/managerContracts";
 import type { ConversationJob, ConversationSession } from "../../src/interfaces/sessionStore";
+import { buildConversationIngressConfig } from "../helpers/conversationFixtures";
 
 function buildSession(overrides: Partial<ConversationSession> = {}): ConversationSession {
   return {
@@ -119,14 +120,9 @@ function buildDependencies(
       setSession: async () => undefined,
       listSessions: async () => []
     } as ConversationIngressDependencies["store"],
-    config: {
-      allowAutonomousViaInterface: true,
-      maxProposalInputChars: 400,
-      maxConversationTurns: 20,
-      maxContextTurnsForExecution: 8,
-      staleRunningJobRecoveryMs: 60_000,
-      maxRecentJobs: 20
-    },
+    config: buildConversationIngressConfig({
+      maxProposalInputChars: 400
+    }),
     followUpRuleContext: createFollowUpRuleContext(null),
     pulseLexicalRuleContext: createPulseLexicalRuleContext(null),
     interpretConversationIntent: undefined,
@@ -189,12 +185,10 @@ test("handleConversationCommand keeps /auto policy and turn recording behavior",
       },
       {
         config: {
-          allowAutonomousViaInterface: false,
-          maxProposalInputChars: 400,
-          maxConversationTurns: 20,
-          maxContextTurnsForExecution: 8,
-          staleRunningJobRecoveryMs: 60_000,
-          maxRecentJobs: 20
+          ...buildConversationIngressConfig({
+            allowAutonomousViaInterface: false,
+            maxProposalInputChars: 400
+          })
         }
       }
     )

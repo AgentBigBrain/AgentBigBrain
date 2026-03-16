@@ -7,6 +7,7 @@ const USER_FOLLOW_UP_ANSWER_MARKER = "User follow-up answer:";
 const USER_QUESTION_MARKER = "User question:";
 const AGENT_PULSE_REQUEST_MARKER = "Agent Pulse request:";
 const RECENT_CONVERSATION_CONTEXT_MARKER = "Recent conversation context (oldest to newest):";
+const TRAILING_AGENTFRIEND_SECTION_PATTERN = /^\[AgentFriend[A-Za-z]+\]/;
 
 /**
  * Extracts the trailing section after the last occurrence of a marker.
@@ -59,6 +60,35 @@ function extractAgentPulseRequestSegment(userInput: string): string | null {
 }
 
 /**
+ * Bounds a request-like segment before any trailing AgentFriend broker packets.
+ *
+ * **Why it exists:**
+ * Brokered planner input can append `[AgentFriend...]` sections after the wrapped
+ * `Current user request:` block. Those packets must not leak into the active request segment used
+ * by routing and planner policy.
+ *
+ * **What it talks to:**
+ * - Uses local AgentFriend section marker pattern only.
+ *
+ * @param value - Extracted request-like segment that may contain appended broker packets.
+ * @returns Bounded request text without trailing AgentFriend sections.
+ */
+function boundRequestBeforeAgentFriendSections(value: string): string {
+  const lines = value.split(/\r?\n/);
+  const boundedLines: string[] = [];
+  for (const line of lines) {
+    if (
+      boundedLines.length > 0 &&
+      TRAILING_AGENTFRIEND_SECTION_PATTERN.test(line.trim())
+    ) {
+      break;
+    }
+    boundedLines.push(line);
+  }
+  return boundedLines.join("\n").trim();
+}
+
+/**
  * Checks whether user input includes the agent-pulse request marker.
  *
  * **Why it exists:**
@@ -94,7 +124,7 @@ export function extractActiveRequestSegment(userInput: string): string {
 
   const currentRequest = extractSectionAfterMarker(normalized, CURRENT_USER_REQUEST_MARKER);
   if (currentRequest) {
-    return currentRequest;
+    return boundRequestBeforeAgentFriendSections(currentRequest);
   }
 
   const followUpAnswer = extractSectionAfterMarker(normalized, USER_FOLLOW_UP_ANSWER_MARKER);

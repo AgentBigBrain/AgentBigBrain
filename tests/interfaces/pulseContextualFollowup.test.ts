@@ -12,6 +12,10 @@ import {
   toContextualLexicalEvidence
 } from "../../src/interfaces/conversationRuntime/pulseContextualFollowup";
 import type { ConversationSession } from "../../src/interfaces/sessionStore";
+import {
+  buildConversationJobFixture,
+  buildConversationSessionFixture
+} from "../helpers/conversationFixtures";
 
 /**
  * Builds a minimal conversation session for contextual follow-up tests.
@@ -21,29 +25,20 @@ function buildSession(
   overrides: Partial<ConversationSession> = {}
 ): ConversationSession {
   const nowIso = new Date().toISOString();
-  return {
-    conversationId,
-    userId: "user-1",
-    username: "agentowner",
-    conversationVisibility: "private",
-    updatedAt: nowIso,
-    activeProposal: null,
-    runningJobId: null,
-    queuedJobs: [],
-    recentJobs: [],
-    conversationTurns: [],
-    agentPulse: {
-      optIn: true,
-      mode: "private",
-      routeStrategy: "last_private_used",
-      lastPulseSentAt: null,
-      lastPulseReason: null,
-      lastPulseTargetConversationId: null,
-      lastDecisionCode: "NOT_EVALUATED",
-      lastEvaluatedAt: null
+  return buildConversationSessionFixture(
+    {
+      updatedAt: nowIso,
+      agentPulse: {
+        ...buildConversationSessionFixture().agentPulse,
+        optIn: true
+      },
+      ...overrides
     },
-    ...overrides
-  };
+    {
+      conversationId,
+      receivedAt: nowIso
+    }
+  );
 }
 
 test("evaluateContextualFollowupCandidate returns an eligible bounded side-thread candidate", () => {
@@ -97,7 +92,7 @@ test("evaluateContextualFollowupCandidate enforces contextual topic cooldown fro
       }
     ],
     recentJobs: [
-      {
+      buildConversationJobFixture({
         id: "job_prev_contextual",
         input: [
           "Agent Pulse proactive check-in request.",
@@ -121,7 +116,7 @@ test("evaluateContextualFollowupCandidate enforces contextual topic cooldown fro
         finalDeliveryAttemptCount: 1,
         finalDeliveryLastErrorCode: null,
         finalDeliveryLastAttemptAt: recentCompletedAt
-      }
+      })
     ]
   });
 

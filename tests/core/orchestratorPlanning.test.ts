@@ -5,6 +5,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import type { AppendRuntimeTraceEventInput } from "../../src/core/runtimeTraceLogger";
+import type { Stage685PlaybookPlanningContext } from "../../src/core/stage6_85/playbookRuntime";
 import {
   buildProfileAwareInput,
   loadPlannerLearningContext,
@@ -49,7 +51,7 @@ test("planOrchestratorAttempt caps actions and annotates planner notes", async (
   const traceEvents: Array<Record<string, unknown>> = [];
   const plan = await planOrchestratorAttempt({
     appendTraceEvent: async (event) => {
-      traceEvents.push(event as Record<string, unknown>);
+      traceEvents.push(event as unknown as Record<string, unknown>);
     },
     maxActionsPerTask: 1,
     planner: {
@@ -82,13 +84,19 @@ test("planOrchestratorAttempt caps actions and annotates planner notes", async (
     } as never,
     plannerLearningContext: {
       workflowHints: [],
-      judgmentHints: []
+      judgmentHints: [],
+      workflowBridge: null
     },
     plannerModel: "planner-model",
-    resolvePlaybookPlanningContext: async () => ({
+    resolvePlaybookPlanningContext: async (): Promise<Stage685PlaybookPlanningContext> => ({
       selectedPlaybookId: "build_live_run",
+      selectedPlaybookName: "Build Live Run",
       fallbackToPlanner: false,
-      triggerMatches: []
+      reason: "Matched build_live_run.",
+      requestedTags: [],
+      requiredInputSchema: "none",
+      registryValidated: true,
+      scoreSummary: []
     }),
     synthesizerModel: "synth-model",
     task: {
@@ -107,5 +115,5 @@ test("planOrchestratorAttempt caps actions and annotates planner notes", async (
     "base notes [playbook=build_live_run] [replanAttempt=2]"
   );
   assert.equal(traceEvents[0]?.eventType, "planner_completed");
-  assert.equal(traceEvents[0]?.details?.attemptNumber, 2);
+  assert.equal((traceEvents[0]?.details as AppendRuntimeTraceEventInput["details"])?.attemptNumber, 2);
 });

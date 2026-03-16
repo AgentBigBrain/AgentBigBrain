@@ -25,6 +25,25 @@ test("extractCurrentUserRequest parses wrapped current-request markers determini
   assert.equal(extractCurrentUserRequest(wrapped), "who is Billy?");
 });
 
+test("extractCurrentUserRequest excludes trailing AgentFriend broker packets after current request", () => {
+  const wrapped = [
+    "You are in an ongoing conversation with the same user.",
+    "Current user request:",
+    "Change the hero image to a slider instead of the landing page.",
+    "",
+    "[AgentFriendMemoryBroker]",
+    "retrievalMode=query_aware",
+    "",
+    "[AgentFriendProfileContext]",
+    "contact.billy.note: moved projects earlier."
+  ].join("\n");
+
+  assert.equal(
+    extractCurrentUserRequest(wrapped),
+    "Change the hero image to a slider instead of the landing page."
+  );
+});
+
 test("registerAndAssessProbing detects extraction-style bursts once the sample threshold is met", () => {
   const config = resolveProbingDetectorConfig({
     windowSize: 6,

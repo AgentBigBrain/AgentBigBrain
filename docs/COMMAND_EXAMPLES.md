@@ -22,6 +22,11 @@ Three execution labels matter:
 - `Guidance only`: the runtime gave instructions or analysis without side effects.
 - `Blocked`: policy, governance, or runtime limits denied execution.
 
+One more practical rule:
+
+- Slash commands are still the clearest way to force a mode, but clear natural wording can also
+  start autonomous work, resume saved work, or ask for a review-ready checkpoint.
+
 Media note:
 
 - Telegram screenshots, voice notes, and short videos can be used as input context with safe limits.
@@ -42,6 +47,8 @@ Voice command note:
   `command line`.
 - For build/scaffold requests, you do not need shell keywords just to unlock executable planning.
 - If you want draft-first behavior, use `/propose`.
+- If a real saved checkpoint already exists, natural prompts like `show me the rough draft`, `pick
+  that back up`, or `leave the rest for later` can work without a slash command.
 - There is no separate `/skill` slash command. Use natural language through `/chat` or `/propose`:
   `create skill ...` or `run skill ...`.
 - `/memory` is private-only. It is for reviewing or correcting remembered situations, not dumping
@@ -107,6 +114,13 @@ Examples:
 ```text
 /auto create a React app at C:\Users\<you>\Desktop\finance-dashboard. Execute now using PowerShell. Create files directly; if blocked, stop and tell me exactly why.
 /auto guidance only: outline a release checklist for this repo without executing anything
+```
+
+Natural front-door equivalents can also work when the intent is already clear:
+
+```text
+BigBrain, build me a landing page for a drone company, keep going until it's done, put it on my Desktop in a folder called drone-company, and leave the preview open for me.
+Keep refining that saved draft from where you left off.
 ```
 
 ### Use `/memory` when
@@ -199,6 +213,30 @@ Why it works:
 - it makes readiness proof and browser proof explicit
 - it asks for shutdown instead of leaving a background process behind
 
+### Natural autonomous start
+
+```text
+BigBrain, build a small local landing page for a drone company, keep going until it's done, put it on my Desktop in a folder called drone-company, and leave the preview open for review.
+```
+
+Why it works:
+- it gives a real end-to-end goal instead of a tiny one-step request
+- it makes the autonomous expectation explicit with `keep going until it's done`
+- it gives the runtime a concrete destination and review handoff
+
+### Natural clarification answer
+
+```text
+BigBrain, create a landing page with a hero and call to action.
+Build it now.
+```
+
+Why it works:
+- the first turn is naturally ambiguous enough that the runtime can ask whether to plan first or
+  build now
+- the second turn is a direct clarification answer, not a brand-new task
+- it keeps the approval and execution boundary readable for a normal human conversation
+
 ### Context-aware follow-up
 
 ```text
@@ -268,6 +306,58 @@ What should happen:
 - the runtime should ask a clarifying question such as whether you want it planned first or built now
 - it should not act as if the clip got deep analysis when the current video path only uses metadata and captions
 
+### Review what is ready from a saved checkpoint
+
+```text
+Show me the rough draft.
+What did you get done while I was away?
+Show me what is ready to review.
+```
+
+Why it works:
+- these prompts are meant for a chat that already has a real saved checkpoint or return handoff
+- they should pull from the saved work summary instead of queueing a brand-new job
+- the reply should stay human and review-oriented, not dump raw runtime internals
+
+### Ask what to review first or next
+
+```text
+What should I look at first?
+What should I review next from that draft?
+What should I look at after that?
+```
+
+Why it works:
+- the runtime can answer from the saved preview URL, primary artifact, and changed files
+- these are normal human review prompts, not special debugger syntax
+- they help the user re-enter the work without restating the whole task
+
+### Resume saved work naturally
+
+```text
+Pick that back up and keep going from where you left off.
+Resume that and keep going.
+When you get a chance, keep refining that draft from where you left off.
+```
+
+Why it works:
+- these prompts can resume from a durable saved checkpoint when the prior workspace is still known
+- if the prior mode was autonomous, the runtime can continue in autonomous mode instead of falling
+  back to generic chat
+- the user does not need to restate the whole goal every time
+
+### Pause and keep the checkpoint
+
+```text
+Okay, leave the rest for later.
+Stop here and keep the latest checkpoint ready for me.
+```
+
+Why it works:
+- it asks for a controlled pause instead of an unbounded background run
+- the runtime can preserve the workspace, preview, and next suggested step for later return
+- it gives the user a clean re-entry point instead of making them reconstruct the state manually
+
 ## 6) CLI Examples
 
 ### Single governed task
@@ -300,6 +390,27 @@ npm run dev -- --autonomous "create a React app at C:\Users\<you>\Desktop\financ
 npm run dev -- "create skill repo_status that reads package.json and runtime/state.json and returns a short repo summary"
 npm run dev -- "run skill repo_status on this repo"
 ```
+
+### Natural autonomous start from CLI
+
+```bash
+npm run dev -- --autonomous "build a small drone-company landing page on my Desktop, keep going until it is done, and leave the preview open for review"
+```
+
+### Natural return-handoff phrasing in chat
+
+```text
+/chat Show me the rough draft.
+/chat What should I look at first?
+/chat Pick that back up and keep going from where you left off.
+/chat Okay, leave the rest for later.
+```
+
+Why it works:
+- the slash command is optional here; these examples are shown with `/chat` only to make the entry
+  path obvious
+- the meaning comes from the saved checkpoint and current session state, not from magic keywords
+- the runtime should treat them as review, resume, or pause requests instead of generic chat
 
 ### Ask for the current skill inventory in normal conversation
 
@@ -382,4 +493,6 @@ If you want a short checklist, remember this:
 - Want proactive control: use `/pulse`
 - Want the normal progress view: use `/status`
 - Want internal delivery detail: use `/status debug`
+- Want to return to saved work naturally: say things like `show me the rough draft`, `what did you
+  get done while I was away`, `pick that back up`, or `leave the rest for later`
 - Want media to carry most of the context: screenshots and voice notes work best today; video is accepted but still relies on file metadata and captions

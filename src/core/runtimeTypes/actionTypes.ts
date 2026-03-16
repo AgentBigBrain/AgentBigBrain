@@ -19,6 +19,10 @@ export type ActionType =
   | "probe_port"
   | "probe_http"
   | "verify_browser"
+  | "open_browser"
+  | "close_browser"
+  | "inspect_path_holders"
+  | "inspect_workspace_resources"
   | "memory_mutation"
   | "pulse_emit";
 

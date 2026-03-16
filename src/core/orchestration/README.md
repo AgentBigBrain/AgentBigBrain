@@ -30,6 +30,8 @@ files.
   `taskRunnerNetworkPreflight.ts`
 - task-runner governance preflight and council evaluation in `taskRunnerGovernance.ts`
 - task-runner approved-action execution normalization in `taskRunnerExecution.ts`
+- task-runner live-run approval guards and browser/process follow-up gating in
+  `taskRunnerLiveRunGuards.ts`
 - task-runner lifecycle bookkeeping in `taskRunnerLifecycle.ts`
 - task-runner governance-event and execution-receipt persistence in `taskRunnerPersistence.ts`
 - canonical task-runner result builders in `taskRunnerSummary.ts`
@@ -76,4 +78,6 @@ Update this README when:
 - task-runner governance-event or receipt-persistence ownership changes
 - task-runner lifecycle or result-builder ownership changes
 - task-runner approved-action execution ownership changes
+- task-runner live-run guardrails start depending on different browser/process ownership metadata or
+  exact-resource follow-up semantics
 - related orchestration tests move materially

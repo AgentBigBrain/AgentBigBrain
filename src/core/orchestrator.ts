@@ -50,6 +50,8 @@ import {
   type RunTaskOptions,
   type Stage685PlaybookPlanningContextResolver
 } from "./orchestration/contracts";
+import type { ManagedProcessSnapshot } from "../organs/liveRun/managedProcessRegistry";
+import type { BrowserSessionSnapshot } from "../organs/liveRun/browserSessionRegistry";
 import { executeLocalOrchestratorTask } from "./orchestration/orchestratorExecution";
 import {
   evaluateOrchestratorAgentPulse,
@@ -268,6 +270,38 @@ export class BrainOrchestrator {
       entityHints,
       maxFacts
     );
+  }
+
+  /**
+   * Lists managed-process lease snapshots currently owned by this orchestrator runtime.
+   *
+   * **Why it exists:**
+   * Interface continuity flows need a runtime-authoritative way to inspect open preview leases so
+   * follow-up requests can clean them up without guessing from stale chat state alone.
+   *
+   * **What it talks to:**
+   * - Uses `ToolExecutorOrgan.listManagedProcessSnapshots()` from `../organs/executor`.
+   *
+   * @returns Caller-owned managed-process snapshots.
+   */
+  listManagedProcessSnapshots(): readonly ManagedProcessSnapshot[] {
+    return this.executor.listManagedProcessSnapshots();
+  }
+
+  /**
+   * Lists browser-session snapshots currently owned by this orchestrator runtime.
+   *
+   * **Why it exists:**
+   * Interface continuity flows need a runtime-authoritative view of tracked browser control state
+   * so restart-churn follow-ups do not trust stale session metadata alone.
+   *
+   * **What it talks to:**
+   * - Uses `ToolExecutorOrgan.listBrowserSessionSnapshots()` from `../organs/executor`.
+   *
+   * @returns Caller-owned browser-session snapshots.
+   */
+  listBrowserSessionSnapshots(): readonly BrowserSessionSnapshot[] {
+    return this.executor.listBrowserSessionSnapshots();
   }
 
   /**

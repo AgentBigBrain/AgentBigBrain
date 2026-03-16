@@ -35,6 +35,11 @@ import {
   recordBlockedActionOutcome
 } from "./orchestration/taskRunnerLifecycle";
 import {
+  evaluateDependentLiveRunTargetBlock,
+  rememberFailedManagedProcessStartTarget,
+  type FailedManagedProcessStartTarget
+} from "./orchestration/taskRunnerLiveRunGuards";
+import {
   buildBlockedActionResult
 } from "./orchestration/taskRunnerSummary";
 import { evaluateTaskRunnerPreflight } from "./orchestration/taskRunnerPreflight";
@@ -109,11 +114,30 @@ export class TaskRunner {
     const deterministicActionIds = new Set<string>();
     const approvalGrantById = new Map<string, ApprovalGrantV1>();
     const connectorReceiptByActionId = new Map<string, TaskRunnerConnectorReceiptSeed>();
+    let failedManagedProcessStartTargets: readonly FailedManagedProcessStartTarget[] = [];
     const missionStopLimits: MissionStopLimitsV1 = buildTaskRunnerMissionStopLimits(this.deps.config);
 
     for (const action of plan.actions) {
       throwIfAborted(signal);
       const mode = resolveExecutionMode(action, this.deps.config);
+      const dependentLiveRunBlock = evaluateDependentLiveRunTargetBlock(
+        action,
+        mode,
+        failedManagedProcessStartTargets
+      );
+      if (dependentLiveRunBlock) {
+        missionState = await recordBlockedActionOutcome({
+          actionResult: dependentLiveRunBlock.actionResult,
+          appendTraceEvent: this.deps.appendTraceEvent,
+          attemptResults,
+          governanceMemoryStore: this.deps.governanceMemoryStore,
+          idempotencyKey: `${task.id}:${missionAttemptId}:${action.id}`,
+          missionState,
+          taskId: task.id,
+          traceDetails: dependentLiveRunBlock.traceDetails
+        });
+        continue;
+      }
       const usageDelta = diffUsageSnapshot(
         modelUsageStart,
         readModelUsageSnapshot(this.deps.modelClient)
@@ -387,6 +411,10 @@ export class TaskRunner {
           taskId: task.id,
           traceDetails: executionResult.blockedTraceDetails
         });
+        failedManagedProcessStartTargets = rememberFailedManagedProcessStartTarget(
+          failedManagedProcessStartTargets,
+          executionResult.actionResult
+        );
         continue;
       }
       approvedEstimatedCostDeltaUsd += executionResult.approvedEstimatedCostDeltaUsd;

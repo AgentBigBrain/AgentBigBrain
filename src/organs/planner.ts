@@ -40,6 +40,7 @@ import {
 import {
   PlannerExecutionEnvironmentContext,
 } from "./plannerPolicy/executionStyleContracts";
+import { resolveUserOwnedPathHints } from "./plannerPolicy/userOwnedPathHints";
 import {
   assertPlannerActionValidation,
   evaluatePlannerActionValidation,
@@ -56,6 +57,8 @@ import {
   ensureRespondMessages,
   synthesizeRespondMessage
 } from "./plannerPolicy/responseSynthesisFallback";
+import { buildDeterministicExplicitRuntimeActionFallbackActions } from "./plannerPolicy/explicitRuntimeActionFallback";
+import { buildDeterministicWorkspaceRecoveryFallbackActions } from "./plannerPolicy/workspaceRecoveryFallback";
 import {
   buildLearningHintSummary,
   buildLearningPromptGuidance
@@ -105,11 +108,15 @@ function resolveDefaultExecutionEnvironmentContext(): PlannerExecutionEnvironmen
     ? process.platform
     : "linux";
   const shellKind = platform === "win32" ? "powershell" : "bash";
+  const userOwnedPaths = resolveUserOwnedPathHints();
   return {
     platform,
     shellKind,
     invocationMode: "inline_command",
-    commandMaxChars: 4_000
+    commandMaxChars: 4_000,
+    desktopPath: userOwnedPaths.desktopPath,
+    documentsPath: userOwnedPaths.documentsPath,
+    downloadsPath: userOwnedPaths.downloadsPath
   };
 }
 
@@ -516,7 +523,7 @@ export class PlannerOrgan {
       judgmentHints,
       workflowBridge
     );
-    const requiredActionType = inferRequiredActionType(currentUserRequest);
+    const requiredActionType = inferRequiredActionType(currentUserRequest, task.userInput);
     const playbookSelection = options.playbookSelection ?? null;
 
     try {
@@ -535,12 +542,15 @@ export class PlannerOrgan {
       const initialPreparation = preparePlannerActions(
         output,
         currentUserRequest,
-        requiredActionType
+        requiredActionType,
+        task.userInput
       );
       const initialValidation = evaluatePlannerActionValidation(
         currentUserRequest,
         requiredActionType,
-        initialPreparation.actions
+        initialPreparation.actions,
+        task.userInput,
+        this.executionEnvironment
       );
       if (initialValidation.needsRepair) {
         const repairedOutput = await requestPlannerRepairOutput(this.modelClient, {
@@ -559,11 +569,76 @@ export class PlannerOrgan {
         const repairedPreparation = preparePlannerActions(
           repairedOutput,
           currentUserRequest,
-          requiredActionType
+          requiredActionType,
+          task.userInput
         );
+        const repairedValidation = evaluatePlannerActionValidation(
+          currentUserRequest,
+          requiredActionType,
+          repairedPreparation.actions,
+          task.userInput,
+          this.executionEnvironment
+        );
+        const deterministicWorkspaceRecoveryFallbackActions =
+          repairedPreparation.actions.length === 0 || repairedValidation.needsRepair
+            ? buildDeterministicWorkspaceRecoveryFallbackActions(
+                currentUserRequest,
+                task.userInput
+              )
+            : [];
+        if (deterministicWorkspaceRecoveryFallbackActions.length > 0) {
+          const fallbackValidation = evaluatePlannerActionValidation(
+            currentUserRequest,
+            requiredActionType,
+            deterministicWorkspaceRecoveryFallbackActions,
+            task.userInput,
+            this.executionEnvironment
+          );
+          assertPlannerActionValidation(fallbackValidation, requiredActionType);
+          await this.clearFailureFingerprint(failureFingerprint);
+          return {
+            taskId: task.id,
+            plannerNotes:
+              `${repairedOutput.plannerNotes || output.plannerNotes || "Model planner output"} ` +
+              `(backend=${this.modelClient.backend}, model=${plannerModel}, repair=true, ` +
+              `deterministic_workspace_recovery_fallback=${deterministicWorkspaceRecoveryFallbackActions[0]?.type ?? "unknown"})`,
+            firstPrinciples: firstPrinciplesPacket,
+            learningHints,
+            actions: deterministicWorkspaceRecoveryFallbackActions
+          };
+        }
+        const deterministicExplicitRuntimeFallbackActions =
+          repairedPreparation.actions.length === 0 || repairedValidation.needsRepair
+            ? buildDeterministicExplicitRuntimeActionFallbackActions(
+                currentUserRequest,
+                requiredActionType
+              )
+            : [];
+        if (deterministicExplicitRuntimeFallbackActions.length > 0) {
+          const fallbackValidation = evaluatePlannerActionValidation(
+            currentUserRequest,
+            requiredActionType,
+            deterministicExplicitRuntimeFallbackActions,
+            task.userInput,
+            this.executionEnvironment
+          );
+          assertPlannerActionValidation(fallbackValidation, requiredActionType);
+          await this.clearFailureFingerprint(failureFingerprint);
+          return {
+            taskId: task.id,
+            plannerNotes:
+              `${repairedOutput.plannerNotes || output.plannerNotes || "Model planner output"} ` +
+              `(backend=${this.modelClient.backend}, model=${plannerModel}, repair=true, ` +
+              `deterministic_explicit_runtime_fallback=${deterministicExplicitRuntimeFallbackActions[0]?.type ?? "unknown"})`,
+            firstPrinciples: firstPrinciplesPacket,
+            learningHints,
+            actions: deterministicExplicitRuntimeFallbackActions
+          };
+        }
         if (repairedPreparation.actions.length === 0) {
           if (
             shouldUseNonExplicitRunSkillFallback(
+              currentUserRequest,
               requiredActionType,
               initialPreparation,
               repairedPreparation
@@ -588,11 +663,6 @@ export class PlannerOrgan {
           }
           throw new Error("Planner model returned no valid actions.");
         }
-        const repairedValidation = evaluatePlannerActionValidation(
-          currentUserRequest,
-          requiredActionType,
-          repairedPreparation.actions
-        );
         assertPlannerActionValidation(repairedValidation, requiredActionType);
         const actionsWithMessages = await ensureRespondMessages(
           this.modelClient,

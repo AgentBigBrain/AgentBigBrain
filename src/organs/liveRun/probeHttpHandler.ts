@@ -10,9 +10,9 @@ import {
   isReadyHttpStatus,
   LiveRunExecutorContext,
   normalizeOptionalString,
-  performLocalHttpProbe,
   resolveReadinessProbeTimeoutMs,
-  resolveUrlPort
+  resolveUrlPort,
+  waitForLocalHttpReadiness
 } from "./contracts";
 
 /**
@@ -63,9 +63,14 @@ export async function executeProbeHttp(
   const timeoutMs = resolveReadinessProbeTimeoutMs(context.config, params.timeoutMs);
 
   try {
-    const observedStatus = await performLocalHttpProbe(parsedUrl, timeoutMs, signal);
+    const { ready, attempts, observedStatus } = await waitForLocalHttpReadiness(
+      parsedUrl,
+      timeoutMs,
+      expectedStatus,
+      signal
+    );
     const port = resolveUrlPort(parsedUrl);
-    if (observedStatus !== null && isReadyHttpStatus(observedStatus, expectedStatus)) {
+    if (ready && observedStatus !== null && isReadyHttpStatus(observedStatus, expectedStatus)) {
       return buildExecutionOutcome(
         "success",
         expectedStatus === null
@@ -80,6 +85,7 @@ export async function executeProbeHttp(
           port,
           url: urlValue,
           timeoutMs,
+          attempts,
           expectedStatus,
           observedStatus
         })
@@ -104,6 +110,7 @@ export async function executeProbeHttp(
         port,
         url: urlValue,
         timeoutMs,
+        attempts,
         expectedStatus,
         observedStatus
       })

@@ -3,7 +3,15 @@
  */
 
 import {
+  ActiveClarificationState,
+  ConversationActiveWorkspaceRecord,
+  ConversationBrowserSessionRecord,
   ConversationJob,
+  ConversationModeContinuityState,
+  ConversationPathDestinationRecord,
+  ConversationProgressState,
+  ConversationReturnHandoffRecord,
+  ConversationRecentActionRecord,
   ConversationSession,
   ConversationTurn
 } from "./sessionStore";
@@ -195,4 +203,201 @@ export function backfillTurnsFromRecentJobsIfNeeded(
   }
 
   session.conversationTurns = sortTurnsByTime(recoveredTurns).slice(-maxConversationTurns);
+}
+
+/**
+ * Persists one active clarification state on the session.
+ *
+ * **Why it exists:**
+ * Clarification should survive the next turn instead of behaving like a disposable prompt.
+ *
+ * **What it talks to:**
+ * - Mutates `session.activeClarification`.
+ *
+ * @param session - Session receiving the clarification state.
+ * @param clarification - Clarification state to store.
+ */
+export function setActiveClarification(
+  session: ConversationSession,
+  clarification: ActiveClarificationState
+): void {
+  session.activeClarification = clarification;
+}
+
+/**
+ * Clears the currently active clarification state from the session.
+ *
+ * **Why it exists:**
+ * Keeps clarification cleanup explicit when the user answers or the flow resets.
+ *
+ * **What it talks to:**
+ * - Mutates `session.activeClarification`.
+ *
+ * @param session - Session having its clarification state cleared.
+ */
+export function clearActiveClarification(session: ConversationSession): void {
+  session.activeClarification = null;
+  if (session.progressState?.status === "waiting_for_user") {
+    session.progressState = null;
+  }
+}
+
+/**
+ * Persists the current front-door mode continuity snapshot for the session.
+ *
+ * **Why it exists:**
+ * Human-centric routing should remember the user's current working mode instead of forcing the
+ * same phrasing every turn.
+ *
+ * **What it talks to:**
+ * - Mutates `session.modeContinuity`.
+ *
+ * @param session - Session receiving the continuity state.
+ * @param modeContinuity - Canonical mode continuity snapshot.
+ */
+export function setModeContinuity(
+  session: ConversationSession,
+  modeContinuity: ConversationModeContinuityState
+): void {
+  session.modeContinuity = modeContinuity;
+}
+
+/**
+ * Persists the current user-facing progress state for the session.
+ *
+ * **Why it exists:**
+ * Queue/execution flows need one canonical place to explain whether the assistant is working,
+ * waiting, or idle.
+ *
+ * **What it talks to:**
+ * - Mutates `session.progressState`.
+ *
+ * @param session - Session receiving the progress state.
+ * @param progressState - Progress snapshot to store.
+ */
+export function setProgressState(
+  session: ConversationSession,
+  progressState: ConversationProgressState | null
+): void {
+  session.progressState = progressState;
+}
+
+/**
+ * Persists the latest durable return-handoff snapshot for later resume and review turns.
+ *
+ * @param session - Session receiving the handoff snapshot.
+ * @param returnHandoff - Durable work handoff state to store.
+ */
+export function setReturnHandoff(
+  session: ConversationSession,
+  returnHandoff: ConversationReturnHandoffRecord | null
+): void {
+  session.returnHandoff = returnHandoff;
+}
+
+/**
+ * Upserts one recent action record into bounded user-facing session state.
+ *
+ * **Why it exists:**
+ * Recent user-visible outcomes should be queryable later without reverse-parsing job summaries.
+ *
+ * **What it talks to:**
+ * - Mutates `session.recentActions`.
+ *
+ * @param session - Session receiving the action record.
+ * @param action - Recent action snapshot to insert or replace.
+ * @param maxRecentActions - Maximum number of records to retain.
+ */
+export function upsertRecentAction(
+  session: ConversationSession,
+  action: ConversationRecentActionRecord,
+  maxRecentActions: number
+): void {
+  session.recentActions = [action, ...(session.recentActions ?? []).filter((candidate) => candidate.id !== action.id)]
+    .sort((left, right) => right.at.localeCompare(left.at))
+    .slice(0, maxRecentActions);
+}
+
+/**
+ * Upserts one browser session record into bounded session state.
+ *
+ * **Why it exists:**
+ * User-visible browser sessions should be closable and recallable later without relying on
+ * ephemeral worker memory.
+ *
+ * **What it talks to:**
+ * - Mutates `session.browserSessions`.
+ *
+ * @param session - Session receiving the browser session record.
+ * @param browserSession - Browser session snapshot to insert or replace.
+ * @param maxBrowserSessions - Maximum number of records to retain.
+ */
+export function upsertBrowserSession(
+  session: ConversationSession,
+  browserSession: ConversationBrowserSessionRecord,
+  maxBrowserSessions: number
+): void {
+  const existingBrowserSession =
+    (session.browserSessions ?? []).find((candidate) => candidate.id === browserSession.id) ?? null;
+  const mergedBrowserSession: ConversationBrowserSessionRecord = {
+    ...browserSession,
+    workspaceRootPath:
+      browserSession.workspaceRootPath ?? existingBrowserSession?.workspaceRootPath ?? null,
+    linkedProcessLeaseId:
+      browserSession.linkedProcessLeaseId ?? existingBrowserSession?.linkedProcessLeaseId ?? null,
+    linkedProcessCwd:
+      browserSession.linkedProcessCwd ?? existingBrowserSession?.linkedProcessCwd ?? null
+  };
+  session.browserSessions = [
+    mergedBrowserSession,
+    ...(session.browserSessions ?? []).filter((candidate) => candidate.id !== browserSession.id)
+  ]
+    .sort((left, right) => right.openedAt.localeCompare(left.openedAt))
+    .slice(0, maxBrowserSessions);
+}
+
+/**
+ * Upserts one remembered path/destination record into bounded session state.
+ *
+ * **Why it exists:**
+ * Natural phrases like "same place as before" should resolve from structured destination memory.
+ *
+ * **What it talks to:**
+ * - Mutates `session.pathDestinations`.
+ *
+ * @param session - Session receiving the destination record.
+ * @param destination - Destination snapshot to insert or replace.
+ * @param maxDestinations - Maximum number of records to retain.
+ */
+export function upsertPathDestination(
+  session: ConversationSession,
+  destination: ConversationPathDestinationRecord,
+  maxDestinations: number
+): void {
+  session.pathDestinations = [
+    destination,
+    ...(session.pathDestinations ?? []).filter((candidate) => candidate.id !== destination.id)
+  ]
+    .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
+    .slice(0, maxDestinations);
+}
+
+/**
+ * Persists the current canonical workspace/project record for this conversation.
+ *
+ * **Why it exists:**
+ * Follow-up requests like "edit it", "tell me what changed", and "close it" need one explicit
+ * workspace record instead of re-deriving continuity from unrelated ledgers every turn.
+ *
+ * **What it talks to:**
+ * - Mutates `session.activeWorkspace`.
+ *
+ * @param session - Session receiving the workspace snapshot.
+ * @param workspace - Canonical workspace snapshot to store, or `null` to clear it.
+ */
+export function setActiveWorkspace(
+  session: ConversationSession,
+  workspace: ConversationActiveWorkspaceRecord | null
+): void {
+  session.activeWorkspace = workspace;
 }

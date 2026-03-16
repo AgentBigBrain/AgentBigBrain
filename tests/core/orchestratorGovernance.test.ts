@@ -46,7 +46,7 @@ test("extractGovernanceReplanFeedback summarizes non-approving governor votes", 
       violations: [],
       votes: [
         {
-          governorId: "safety",
+          governorId: "security",
           approve: false,
           reason: "Path is outside allowed workspace.",
           confidence: 1
@@ -63,18 +63,18 @@ test("extractGovernanceReplanFeedback summarizes non-approving governor votes", 
 
   assert.equal(
     feedback,
-    "write_file: safety: Path is outside allowed workspace. | utility: Does not satisfy the user request."
+    "write_file: security: Path is outside allowed workspace. | utility: Does not satisfy the user request."
   );
 });
 
 test("buildGovernanceReplanInput preserves the original user request and injects attempt guidance", () => {
   const prompt = buildGovernanceReplanInput(
     "Create the file and verify it.",
-    "write_file: safety: Path is outside allowed workspace.",
+    "write_file: security: Path is outside allowed workspace.",
     3
   );
 
   assert.match(prompt, /^Create the file and verify it\./);
   assert.match(prompt, /Replan Attempt 3: the prior plan was blocked by governance\./);
-  assert.match(prompt, /Governance feedback:\nwrite_file: safety: Path is outside allowed workspace\./);
+  assert.match(prompt, /Governance feedback:\nwrite_file: security: Path is outside allowed workspace\./);
 });

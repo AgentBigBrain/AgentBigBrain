@@ -18,13 +18,26 @@ import {
   StartProcessActionParams
 } from "../../core/types";
 import type { BrowserVerifier } from "./browserVerifier";
+import { BrowserSessionRegistry } from "./browserSessionRegistry";
+export {
+  buildBrowserSessionExecutionMetadata,
+  buildLinkedBrowserSessionCleanupMetadata,
+  buildRuntimeOwnershipInspectionMetadata
+} from "./liveRunMetadataBuilders";
 import { ManagedProcessRegistry } from "./managedProcessRegistry";
 import type { ManagedProcessSnapshot } from "./managedProcessRegistry";
+import type { PlaywrightChromiumRuntime } from "./playwrightRuntime";
+import type {
+  SystemPreviewCandidateInspectionRequest,
+  UntrackedHolderCandidate
+} from "./untrackedPreviewCandidateInspection";
 
 export const MANAGED_PROCESS_START_TIMEOUT_MS = 1_000;
 export const MANAGED_PROCESS_STOP_TIMEOUT_MS = 2_000;
 export const MANAGED_PROCESS_PORT_PRECHECK_TIMEOUT_MS = 250;
 export const READINESS_PROBE_TIMEOUT_MS_DEFAULT = 2_000;
+export const READINESS_PROBE_ATTEMPT_TIMEOUT_MS = 350;
+export const READINESS_PROBE_RETRY_INTERVAL_MS = 150;
 export const BROWSER_VERIFY_TIMEOUT_MS_DEFAULT = 10_000;
 
 export interface ManagedProcessLoopbackTargetHint {
@@ -37,11 +50,18 @@ export interface LiveRunExecutorContext {
   config: BrainConfig;
   shellSpawn: typeof spawn;
   managedProcessRegistry: ManagedProcessRegistry;
+  browserSessionRegistry: BrowserSessionRegistry;
   browserVerifier: BrowserVerifier;
+  playwrightChromiumLoader?: () => Promise<PlaywrightChromiumRuntime | null>;
+  inspectSystemPreviewCandidates?(
+    request: SystemPreviewCandidateInspectionRequest
+  ): Promise<readonly UntrackedHolderCandidate[]>;
   resolveShellCommandCwd(params: StartProcessActionParams): string | null;
   terminateProcessTree(
     child: ChildProcess | ChildProcessWithoutNullStreams
   ): Promise<boolean>;
+  terminateProcessTreeByPid(pid: number): Promise<boolean>;
+  isProcessRunning(pid: number): boolean;
 }
 
 /**
@@ -194,6 +214,7 @@ export function buildReadinessProbeExecutionMetadata(details: {
   port?: number;
   url?: string;
   timeoutMs: number;
+  attempts?: number;
   expectedStatus?: number | null;
   observedStatus?: number | null;
 }): Record<string, RuntimeTraceDetailValue> {
@@ -206,6 +227,7 @@ export function buildReadinessProbeExecutionMetadata(details: {
     probePort: details.port ?? null,
     probeUrl: details.url ?? null,
     probeTimeoutMs: details.timeoutMs,
+    probeAttempts: details.attempts ?? null,
     probeExpectedStatus: details.expectedStatus ?? null,
     probeObservedStatus: details.observedStatus ?? null
   };
@@ -612,6 +634,142 @@ export async function performLocalHttpProbe(
     });
     request.end();
   });
+}
+
+/**
+ * Waits one bounded retry interval while respecting an optional abort signal.
+ *
+ * @param timeoutMs - Delay budget before the next readiness attempt.
+ * @param signal - Optional abort signal propagated from the caller.
+ * @returns Promise resolving after the delay expires.
+ */
+async function sleepWithAbort(timeoutMs: number, signal?: AbortSignal): Promise<void> {
+  throwIfAborted(signal);
+  if (timeoutMs <= 0) {
+    return;
+  }
+  await new Promise<void>((resolve, reject) => {
+    const timeoutHandle = setTimeout(() => {
+      if (signal && typeof signal.removeEventListener === "function") {
+        signal.removeEventListener("abort", handleAbort);
+      }
+      resolve();
+    }, timeoutMs);
+
+    const handleAbort = (): void => {
+      clearTimeout(timeoutHandle);
+      if (signal && typeof signal.removeEventListener === "function") {
+        signal.removeEventListener("abort", handleAbort);
+      }
+      reject(createAbortError());
+    };
+
+    if (signal) {
+      signal.addEventListener("abort", handleAbort, { once: true });
+    }
+  });
+}
+
+/**
+ * Repeats bounded local TCP probes until the port becomes ready or the timeout budget is exhausted.
+ *
+ * @param host - Loopback host to probe.
+ * @param port - Local TCP port to probe.
+ * @param timeoutMs - Total timeout budget for all attempts.
+ * @param signal - Optional abort signal propagated from the caller.
+ * @returns Ready-state plus deterministic attempt count.
+ */
+export async function waitForLocalPortReadiness(
+  host: string,
+  port: number,
+  timeoutMs: number,
+  signal?: AbortSignal
+): Promise<{
+  ready: boolean;
+  attempts: number;
+}> {
+  const startedAt = Date.now();
+  let attempts = 0;
+
+  while (true) {
+    throwIfAborted(signal);
+    attempts += 1;
+    const remainingMs = Math.max(0, timeoutMs - (Date.now() - startedAt));
+    const attemptTimeoutMs = Math.max(
+      1,
+      Math.min(remainingMs || timeoutMs, READINESS_PROBE_ATTEMPT_TIMEOUT_MS)
+    );
+    const ready = await performLocalPortProbe(host, port, attemptTimeoutMs, signal);
+    if (ready) {
+      return { ready: true, attempts };
+    }
+    if (Date.now() - startedAt >= timeoutMs) {
+      return { ready: false, attempts };
+    }
+    await sleepWithAbort(
+      Math.min(
+        READINESS_PROBE_RETRY_INTERVAL_MS,
+        Math.max(1, timeoutMs - (Date.now() - startedAt))
+      ),
+      signal
+    );
+  }
+}
+
+/**
+ * Repeats bounded local HTTP probes until the endpoint becomes ready or the timeout budget is exhausted.
+ *
+ * @param parsedUrl - Parsed loopback endpoint URL.
+ * @param timeoutMs - Total timeout budget for all attempts.
+ * @param expectedStatus - Optional exact status required for readiness.
+ * @param signal - Optional abort signal propagated from the caller.
+ * @returns Final observed readiness status plus deterministic attempt count.
+ */
+export async function waitForLocalHttpReadiness(
+  parsedUrl: URL,
+  timeoutMs: number,
+  expectedStatus: number | null,
+  signal?: AbortSignal
+): Promise<{
+  ready: boolean;
+  attempts: number;
+  observedStatus: number | null;
+}> {
+  const startedAt = Date.now();
+  let attempts = 0;
+  let observedStatus: number | null = null;
+
+  while (true) {
+    throwIfAborted(signal);
+    attempts += 1;
+    const remainingMs = Math.max(0, timeoutMs - (Date.now() - startedAt));
+    const attemptTimeoutMs = Math.max(
+      1,
+      Math.min(remainingMs || timeoutMs, READINESS_PROBE_ATTEMPT_TIMEOUT_MS)
+    );
+    observedStatus = await performLocalHttpProbe(parsedUrl, attemptTimeoutMs, signal);
+    if (observedStatus !== null && isReadyHttpStatus(observedStatus, expectedStatus)) {
+      return {
+        ready: true,
+        attempts,
+        observedStatus
+      };
+    }
+    if (Date.now() - startedAt >= timeoutMs) {
+      return {
+        ready: false,
+        attempts,
+        observedStatus
+      };
+    }
+    await sleepWithAbort(
+      Math.min(
+        READINESS_PROBE_RETRY_INTERVAL_MS,
+        Math.max(1, timeoutMs - (Date.now() - startedAt))
+      ),
+      signal
+    );
+  }
 }
 
 /**

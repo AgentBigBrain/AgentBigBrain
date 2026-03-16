@@ -205,7 +205,7 @@ export function renderConversationStatus(session: ConversationSession): string {
     lines.push(...recentActivityLines);
   }
 
-  lines.push("Need delivery or lifecycle details? Use /status debug.");
+  lines.push("If you want the technical view behind this status, you can still run /status debug.");
   return lines.join("\n");
 }
 

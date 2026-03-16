@@ -15,7 +15,7 @@ import {
   buildBlockedActionResult
 } from "../../src/core/orchestration/taskRunnerSummary";
 import { buildInitialMissionState } from "../../src/core/stage6_75MissionStateMachine";
-import { type GovernanceMemoryEvent } from "../../src/core/types";
+import { type ActionRunResult, type GovernanceMemoryEvent } from "../../src/core/types";
 
 function createGovernanceMemoryStoreStub() {
   const events: GovernanceMemoryEvent[] = [];
@@ -94,7 +94,7 @@ test("buildTaskRunnerMissionStopLimits derives deterministic limits from config"
 test("recordBlockedActionOutcome appends telemetry, governance memory, and denied mission state", async () => {
   const traces: Array<{ eventType: string }> = [];
   const governance = createGovernanceMemoryStoreStub();
-  const attemptResults = [];
+  const attemptResults: ActionRunResult[] = [];
   const nextState = await recordBlockedActionOutcome({
     actionResult: buildBlockedActionResult({
       action: {
@@ -143,7 +143,7 @@ test("recordApprovedActionOutcome appends receipts and advances mission state wi
   const traces: Array<{ eventType: string }> = [];
   const governance = createGovernanceMemoryStoreStub();
   const receipts = createExecutionReceiptStoreStub();
-  const attemptResults = [];
+  const attemptResults: ActionRunResult[] = [];
   const nextState = await recordApprovedActionOutcome({
     actionResult: buildApprovedActionResult({
       action: {

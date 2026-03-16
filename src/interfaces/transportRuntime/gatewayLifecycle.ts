@@ -3,6 +3,11 @@
  */
 
 import type { TransportFetch } from "./contracts";
+export {
+  abortAutonomousTransportTask,
+  abortAutonomousTransportTaskIfRequested,
+  isAutonomousStopIntent
+} from "./autonomousAbortControl";
 
 export interface DiscordSocket {
   send(data: string): void;
@@ -109,51 +114,6 @@ interface TelegramUpdateIdCarrier {
  */
 export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-/**
- * Returns `true` when user input is an explicit autonomous stop/cancel request.
- *
- * @param text - User input text.
- * @returns `true` when the text should abort an active autonomous loop.
- */
-export function isAutonomousStopIntent(text: string): boolean {
-  const normalized = text.trim().toLowerCase();
-  return (
-    normalized === "/stop" ||
-    normalized === "stop" ||
-    normalized === "stop!" ||
-    normalized === "/cancel" ||
-    normalized.startsWith("/stop ") ||
-    normalized.startsWith("stop ")
-  );
-}
-
-/**
- * Aborts an active autonomous transport task when the current message is an explicit stop intent.
- *
- * @param conversationId - Provider-scoped conversation identifier used to track active controllers.
- * @param text - Incoming user text to inspect for stop/cancel intent.
- * @param abortControllers - Active autonomous abort-controller registry owned by a gateway.
- * @returns `true` when an active autonomous task was aborted.
- */
-export function abortAutonomousTransportTaskIfRequested(
-  conversationId: string,
-  text: string,
-  abortControllers: Map<string, AbortController>
-): boolean {
-  if (!isAutonomousStopIntent(text)) {
-    return false;
-  }
-
-  const controller = abortControllers.get(conversationId);
-  if (!controller) {
-    return false;
-  }
-
-  controller.abort();
-  abortControllers.delete(conversationId);
-  return true;
 }
 
 /**

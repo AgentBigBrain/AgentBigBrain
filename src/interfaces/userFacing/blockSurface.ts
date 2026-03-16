@@ -47,6 +47,8 @@ const LIVE_BUILD_RUNTIME_POLICY_CODES = [
   "SHELL_DISABLED_BY_POLICY",
   "PROCESS_DISABLED_BY_POLICY"
 ] as const;
+const LOCAL_FOLDER_IN_USE_PATTERN =
+  /the process cannot access the file because it is being used by another process\./i;
 
 /**
  * Collects unique block/violation policy codes from failed actions and adds verification-gate failures.
@@ -114,6 +116,10 @@ export function resolveBlockedActionMessage(
     return buildPersonalDataBlockedMessage(policyCodes, options);
   }
 
+  if (hasLocalFolderInUseSignal(runResult)) {
+    return buildLocalFolderInUseBlockedMessage(policyCodes, options);
+  }
+
   const rejectVotes = extractRejectVotes(runResult);
   if (rejectVotes.length > 0) {
     return buildGovernanceBlockedMessage(rejectVotes, policyCodes, options);
@@ -124,6 +130,26 @@ export function resolveBlockedActionMessage(
   }
 
   return buildGenericBlockedMessage(policyCodes, options);
+}
+
+/**
+ * Detects blocked execution results where a local folder move failed because another process still
+ * holds the folder open.
+ *
+ * @param runResult - Task execution result to inspect.
+ * @returns `true` when the blocked run matches the in-use folder failure pattern.
+ */
+function hasLocalFolderInUseSignal(runResult: TaskRunResult): boolean {
+  return runResult.actionResults.some((result) => {
+    if (result.approved) {
+      return false;
+    }
+    const output = typeof result.output === "string" ? result.output : "";
+    if (LOCAL_FOLDER_IN_USE_PATTERN.test(output)) {
+      return true;
+    }
+    return result.violations.some((violation) => LOCAL_FOLDER_IN_USE_PATTERN.test(violation.message));
+  });
 }
 
 /**
@@ -353,6 +379,26 @@ function buildPersonalDataBlockedMessage(
     "What happened: the request attempted personal-data sharing. " +
     "Why it didn't execute: personal-data policy requires explicit human approval metadata before release. " +
     "What to do next: provide explicit approval details (approval id + consent scope) or request a non-sensitive summary." +
+    formatTechnicalCodeTail(policyCodes, options)
+  );
+}
+
+/**
+ * Builds the user-facing message for local folder moves blocked by in-use process locks.
+ *
+ * @param policyCodes - Block/violation codes to append when enabled.
+ * @param options - Rendering options that control safety-code visibility.
+ * @returns Human-first local-lock explanation text.
+ */
+function buildLocalFolderInUseBlockedMessage(
+  policyCodes: string[],
+  options: BlockMessageRenderOptions
+): string {
+  return (
+    "I couldn't finish organizing those folders in this run. " +
+    "What happened: one or more of the target folders are still being used by another local process, so Windows would not let me move them safely. " +
+    "Why it didn't execute: active preview servers, terminals, editors, or sync tools can keep a project folder locked even when the move command itself is correct. " +
+    "What to do next: close the related preview or local process first, or ask me to inspect the holder so I can tell you whether it looks like a preview, editor, shell, or sync lock before I retry the move." +
     formatTechnicalCodeTail(policyCodes, options)
   );
 }

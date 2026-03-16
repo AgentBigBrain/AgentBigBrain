@@ -9,6 +9,7 @@ import type { ConversationInboundMediaEnvelope } from "../../src/interfaces/medi
 import type { ConversationInboundMessage } from "../../src/interfaces/conversationRuntime/managerContracts";
 import {
   ensureSkillsWorkflowEvidenceDirectory,
+  matchesSkillDiscoveryReply,
   runConversationManagerMessage,
   runSkillLifecycleEvidence,
   runWorkflowEvidence,
@@ -169,23 +170,23 @@ export async function runSkillsAndWorkflowMaturityLiveSmoke(): Promise<SkillsWor
       {
         scenarioId: "skill_discovery_text_and_voice",
         passed:
-          slashReply === lifecycle.inventoryText &&
-          naturalReply === lifecycle.inventoryText &&
-          voiceReply === lifecycle.inventoryText,
+          matchesSkillDiscoveryReply(slashReply, lifecycle.inventoryText) &&
+          matchesSkillDiscoveryReply(naturalReply, lifecycle.inventoryText) &&
+          matchesSkillDiscoveryReply(voiceReply, lifecycle.inventoryText),
         checks: [
           {
             label: "slash-discovery",
-            passed: slashReply === lifecycle.inventoryText,
+            passed: matchesSkillDiscoveryReply(slashReply, lifecycle.inventoryText),
             observed: slashReply
           },
           {
             label: "natural-discovery",
-            passed: naturalReply === lifecycle.inventoryText,
+            passed: matchesSkillDiscoveryReply(naturalReply, lifecycle.inventoryText),
             observed: naturalReply
           },
           {
             label: "voice-command-discovery",
-            passed: voiceReply === lifecycle.inventoryText,
+            passed: matchesSkillDiscoveryReply(voiceReply, lifecycle.inventoryText),
             observed: voiceReply
           }
         ]

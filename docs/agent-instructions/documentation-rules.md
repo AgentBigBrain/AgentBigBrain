@@ -46,15 +46,28 @@
     of relying on unwritten conventions.
 16. Folder-level `README.md` files under `src/` must not contain absolute local filesystem paths or
     personal workspace links. Use inline code identifiers or repo-relative references instead.
-17. Every implementation plan created under `docs/plans/` must include a final section titled
-    `When another agent picks this up:`.
-18. That section must say what is already done, what is next, what not to restart, and what files
+17. Every implementation plan created under `docs/plans/` must include a top-level section titled
+    `## Plan Status`.
+18. `## Plan Status` must state the current overall status plainly, for example: `Not started`,
+    `In progress`, `Blocked`, or `Done`.
+19. Every implementation plan created under `docs/plans/` must include a section titled
+    `## When another agent picks this up:`.
+20. That section must say what is already done, what is next, what not to restart, and what files
     or README contracts the next agent should read first.
-19. If a plan is actively being executed, keep the `When another agent picks this up:` section
-    updated in the same change as phase/status updates so handoff does not depend on guesswork.
-20. In public-facing docs such as `README.md`, `docs/SETUP.md`, `docs/COMMAND_EXAMPLES.md`, and
+21. Every implementation plan created under `docs/plans/` must end with a final section titled
+    `## Last Worked On`.
+22. `## Last Worked On` must be updated whenever the plan changes and must include:
+    - current phase or focus
+    - what changed last
+    - what still feels clunky, blocked, or unfinished
+    - the next clean seam to continue from
+    - the latest validation or evidence state, if any
+23. If a plan is actively being executed, keep `## Plan Status`, `## When another agent picks this
+    up:`, and `## Last Worked On` updated in the same change as phase/status updates so handoff
+    does not depend on guesswork.
+24. In public-facing docs such as `README.md`, `docs/SETUP.md`, `docs/COMMAND_EXAMPLES.md`, and
     `docs/ERROR_CODE_ENV_MAP.md`, prefer clear plain-English wording over internal jargon.
-21. Technical terms are allowed when they improve accuracy, but do not let them become a barrier
+25. Technical terms are allowed when they improve accuracy, but do not let them become a barrier
     to understanding. If you use terms like `bounded`, `provenance`, `semantic`, or other internal
     shorthand, either make the meaning obvious from context or explain it right away in simpler
     language.

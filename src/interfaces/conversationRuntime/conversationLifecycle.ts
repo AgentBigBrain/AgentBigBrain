@@ -23,6 +23,51 @@ interface AckTimerCapableNotifier {
 }
 
 /**
+ * Builds a pluralized request count phrase for queue acknowledgements.
+ *
+ * @param count - Number of queued requests being described.
+ * @returns Human-readable request count text.
+ */
+function formatQueuedRequestCount(count: number): string {
+  return `${count} request${count === 1 ? "" : "s"}`;
+}
+
+/**
+ * Renders the human-first acknowledgement shown when new work is queued behind existing work.
+ *
+ * @param session - Session snapshot after the new job has been pushed into the queue.
+ * @returns Human-readable queued acknowledgement.
+ */
+function buildQueuedAcknowledgement(session: ConversationSession): string {
+  if (session.runningJobId) {
+    const waitingAhead = Math.max(session.queuedJobs.length - 1, 0);
+    if (waitingAhead > 0) {
+      return [
+        "I got your request and added it to the queue.",
+        `${formatQueuedRequestCount(waitingAhead)} ${waitingAhead === 1 ? "is" : "are"} already lined up behind the work in progress, so this will start after those.`,
+        "I'll keep you posted here."
+      ].join(" ");
+    }
+    return [
+      "I got your request and added it behind the work already in progress.",
+      "It will start as soon as the current request finishes.",
+      "I'll keep you posted here."
+    ].join(" ");
+  }
+
+  const waitingAhead = Math.max(session.queuedJobs.length - 1, 0);
+  if (waitingAhead > 0) {
+    return [
+      "I got your request and added it to the queue.",
+      `${formatQueuedRequestCount(waitingAhead)} ${waitingAhead === 1 ? "is" : "are"} already waiting ahead of it.`,
+      "I'll keep you posted here."
+    ].join(" ");
+  }
+
+  return "I got your request and added it to the queue. It is next in line, and I'll keep you posted here.";
+}
+
+/**
  * Returns true when a session can use delayed ack plus later edit replacement flow.
  */
 export function canUseConversationAckTimerForSession(
@@ -104,7 +149,8 @@ export function enqueueConversationJob(
     finalDeliveryOutcome: "not_attempted",
     finalDeliveryAttemptCount: 0,
     finalDeliveryLastErrorCode: null,
-    finalDeliveryLastAttemptAt: null
+    finalDeliveryLastAttemptAt: null,
+    pauseRequestedAt: null
   };
   session.queuedJobs.push(job);
   session.updatedAt = receivedAt;
@@ -113,7 +159,7 @@ export function enqueueConversationJob(
   if (hadActiveWork) {
     return {
       shouldStartWorker: false,
-      reply: `Queued your request. Queue depth: ${session.queuedJobs.length}. Use /status to monitor progress.`
+      reply: buildQueuedAcknowledgement(session)
     };
   }
 

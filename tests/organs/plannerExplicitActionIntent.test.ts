@@ -21,8 +21,59 @@ test("inferRequiredActionType recognizes explicit runtime tools and create-skill
     "verify_browser"
   );
   assert.equal(
+    inferRequiredActionType("open_browser url=http://localhost:3000"),
+    "open_browser"
+  );
+  assert.equal(
     inferRequiredActionType("Create a skill called workflow_helper that validates smoke state."),
     "create_skill"
+  );
+});
+
+test("inferRequiredActionType promotes natural browser follow-ups when tracked session context exists", () => {
+  const trackedBrowserExecutionInput = [
+    "Tracked browser sessions:",
+    "- Landing page preview: sessionId=browser_session:landing-page; url=http://127.0.0.1:4173/; status=open; visibility=visible; controller=playwright_managed; control=available",
+    "",
+    "Current user request:",
+    "Close the landing page so we can work on something else."
+  ].join("\n");
+
+  assert.equal(
+    inferRequiredActionType(
+      "Close the landing page so we can work on something else.",
+      trackedBrowserExecutionInput
+    ),
+    "close_browser"
+  );
+  assert.equal(
+    inferRequiredActionType(
+      "Open the landing page browser again so I can see it.",
+      trackedBrowserExecutionInput
+    ),
+    "open_browser"
+  );
+});
+
+test("inferRequiredActionType promotes tracked artifact-edit follow-ups to write_file", () => {
+  const trackedArtifactExecutionInput = [
+    "Natural artifact-edit follow-up:",
+    "- The user appears to be editing the artifact already created in this chat rather than asking for a brand-new project.",
+    "- Preferred edit destination: C:\\Users\\testuser\\Desktop\\drone-company",
+    "- Preferred primary artifact: C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
+    "- Visible preview already exists: http://127.0.0.1:4173/; keep the preview aligned with the edited artifact when practical.",
+    "- This run must include a real file mutation under the tracked workspace. Do not satisfy this request by only reopening, focusing, or closing the preview.",
+    "",
+    "Current user request:",
+    "Change the hero image to a slider instead of the landing page."
+  ].join("\n");
+
+  assert.equal(
+    inferRequiredActionType(
+      "Change the hero image to a slider instead of the landing page.",
+      trackedArtifactExecutionInput
+    ),
+    "write_file"
   );
 });
 

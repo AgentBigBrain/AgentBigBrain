@@ -18,6 +18,25 @@ test("extractActiveRequestSegment prefers the current user request marker", () =
   assert.equal(extractActiveRequestSegment(input), "Please run diagnostics now.");
 });
 
+test("extractActiveRequestSegment excludes trailing AgentFriend broker packets after current request", () => {
+  const input = [
+    "You are in an ongoing conversation with the same user.",
+    "Current user request:",
+    "Change the hero image to a slider instead of the landing page.",
+    "",
+    "[AgentFriendMemoryBroker]",
+    "retrievalMode=query_aware",
+    "",
+    "[AgentFriendProfileContext]",
+    "contact.billy.note: moved projects earlier."
+  ].join("\n");
+
+  assert.equal(
+    extractActiveRequestSegment(input),
+    "Change the hero image to a slider instead of the landing page."
+  );
+});
+
 test("extractActiveRequestSegment falls back to follow-up answer marker", () => {
   const input = "User follow-up answer: Yes, use the safer option.";
   assert.equal(extractActiveRequestSegment(input), "Yes, use the safer option.");

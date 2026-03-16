@@ -237,7 +237,7 @@ function buildDefaultPulseLexicalRuleContext(): PulseLexicalRuleContext {
   return {
     rulepackVersion: PulseLexicalRulepackV1.version,
     disabledIntents: new Set<PulseControlMode>(),
-    requirePulseKeywordForOnOff: false,
+    requirePulseKeywordForOnOff: true,
     requirePulseKeywordForVisibility: false,
     requirePulseKeywordForStatus: false,
     overrideFingerprint: null,

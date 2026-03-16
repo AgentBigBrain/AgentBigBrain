@@ -1,0 +1,195 @@
+{
+  "schemaVersion": 1,
+  "scenarios": [
+    {
+      "id": "natural_build_now_positive",
+      "category": "natural_intent",
+      "polarity": "positive",
+      "title": "Natural build-now request without magic phrase",
+      "summary": "The user asks for immediate implementation in plain language.",
+      "expectedBehavior": [
+        "intent_mode_build"
+      ],
+      "qualities": {
+        "messyLanguage": true
+      },
+      "transcript": [
+        {
+          "speaker": "user",
+          "text": "Go ahead and build it now with a clean hero section and a clear call to action. Put it in the same desktop folder I used earlier."
+        }
+      ]
+    },
+    {
+      "id": "natural_intent_chat_negative",
+      "category": "natural_intent",
+      "polarity": "negative",
+      "title": "Non-execution chat should stay chat mode",
+      "summary": "The user asks a social question that should not auto-promote execution.",
+      "expectedBehavior": [
+        "intent_mode_chat"
+      ],
+      "qualities": {
+        "messyLanguage": false
+      },
+      "transcript": [
+        {
+          "speaker": "user",
+          "text": "I just wanted to say good morning and check how things are going. I do not need you to run anything right now."
+        }
+      ]
+    },
+    {
+      "id": "clarification_plan_or_build_positive",
+      "category": "clarification",
+      "polarity": "positive",
+      "title": "Ambiguous build request triggers clarification",
+      "summary": "The user asks for a project but does not clearly choose plan vs build.",
+      "expectedBehavior": [
+        "clarify_plan_or_build"
+      ],
+      "qualities": {
+        "messyLanguage": true
+      },
+      "transcript": [
+        {
+          "speaker": "user",
+          "text": "Can you create that app idea we talked about with a hero and strong call to action. I want to get back to it later, and I am still split on how to handle the first step."
+        }
+      ]
+    },
+    {
+      "id": "clarification_not_needed_negative",
+      "category": "clarification",
+      "polarity": "negative",
+      "title": "Explicit execute-now request does not trigger clarification",
+      "summary": "The user is explicit enough that no clarification is needed.",
+      "expectedBehavior": [
+        "no_clarification_needed"
+      ],
+      "qualities": {
+        "messyLanguage": false
+      },
+      "transcript": [
+        {
+          "speaker": "user",
+          "text": "Go ahead and build it now and run the checks when you are done. Ship it as soon as it is stable."
+        }
+      ]
+    },
+    {
+      "id": "status_recall_positive",
+      "category": "status_recall",
+      "polarity": "positive",
+      "title": "Natural status and location recall",
+      "summary": "The user asks what happened and where output was saved.",
+      "expectedBehavior": [
+        "status_or_recall_reply"
+      ],
+      "qualities": {
+        "messyLanguage": true
+      },
+      "transcript": [
+        {
+          "speaker": "user",
+          "text": "What are you doing right now and where did you put that landing page from earlier. I am jumping between tasks and I lost the path."
+        }
+      ]
+    },
+    {
+      "id": "status_recall_negative",
+      "category": "status_recall",
+      "polarity": "negative",
+      "title": "Unrelated question should not force status mode",
+      "summary": "The user asks a normal question that is not status recall.",
+      "expectedBehavior": [
+        "non_status_route"
+      ],
+      "qualities": {
+        "messyLanguage": false
+      },
+      "transcript": [
+        {
+          "speaker": "user",
+          "text": "Can you explain why this architecture uses strict safety contracts. I am trying to understand the design choices."
+        }
+      ]
+    },
+    {
+      "id": "capability_discovery_positive",
+      "category": "capability_discovery",
+      "polarity": "positive",
+      "title": "Natural capability and tools question",
+      "summary": "The user asks what is available in this runtime without slash commands.",
+      "expectedBehavior": [
+        "capability_reply"
+      ],
+      "qualities": {
+        "messyLanguage": true
+      },
+      "transcript": [
+        {
+          "speaker": "user",
+          "text": "What can you do here today, and what tools do you already know for this kind of work. I want the practical version, not docs language."
+        }
+      ]
+    },
+    {
+      "id": "capability_discovery_negative",
+      "category": "capability_discovery",
+      "polarity": "negative",
+      "title": "Task request should not be treated as capability discovery",
+      "summary": "A direct task request should route to execution path.",
+      "expectedBehavior": [
+        "non_capability_route"
+      ],
+      "qualities": {
+        "messyLanguage": false
+      },
+      "transcript": [
+        {
+          "speaker": "user",
+          "text": "Create the page and run it now. Keep the browser visible so I can review it."
+        }
+      ]
+    },
+    {
+      "id": "voice_command_auto_positive",
+      "category": "voice_convergence",
+      "polarity": "positive",
+      "title": "Voice command namespace still works",
+      "summary": "Voice transcript with command prefix maps to slash command text.",
+      "expectedBehavior": [
+        "voice_command_promoted"
+      ],
+      "qualities": {
+        "messyLanguage": true
+      },
+      "transcript": [
+        {
+          "speaker": "user",
+          "text": "Command auto create the smoke test page and verify it in the browser. Then stop and report what happened."
+        }
+      ]
+    },
+    {
+      "id": "voice_command_unknown_negative",
+      "category": "voice_convergence",
+      "polarity": "negative",
+      "title": "Unknown voice command stays natural text",
+      "summary": "Voice transcript with unsupported command name should not become slash command.",
+      "expectedBehavior": [
+        "voice_command_not_promoted"
+      ],
+      "qualities": {
+        "messyLanguage": true
+      },
+      "transcript": [
+        {
+          "speaker": "user",
+          "text": "Command launch rockets from my desktop folder right now. This should stay plain text because that command does not exist."
+        }
+      ]
+    }
+  ]
+}

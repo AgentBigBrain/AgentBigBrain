@@ -22,6 +22,35 @@ import {
 import { resolveConversationInvocation } from "./conversationRuntime/invocationResolution";
 import { recoverStaleRunningJobIfNeeded } from "./conversationRuntime/sessionRecovery";
 
+const STARTING_WORK_REPLY_MAX_CHARS = 96;
+
+/**
+ * Builds a bounded preview of the work the runtime is about to start.
+ *
+ * @param input - Canonical inbound user input for the job being started.
+ * @returns Short human-readable preview safe for first acknowledgements.
+ */
+function summarizeStartedWorkInput(input: string): string {
+  const normalized = input.replace(/\s+/g, " ").trim();
+  if (!normalized) {
+    return "your request";
+  }
+  if (normalized.length <= STARTING_WORK_REPLY_MAX_CHARS) {
+    return normalized;
+  }
+  return `${normalized.slice(0, STARTING_WORK_REPLY_MAX_CHARS - 3)}...`;
+}
+
+/**
+ * Renders the first acknowledgement for work that has started immediately.
+ *
+ * @param input - Canonical inbound user input for the job being started.
+ * @returns Human-first acknowledgement shown before background completion delivery.
+ */
+function buildStartedWorkReply(input: string): string {
+  return `I'm starting on that now. First up: ${summarizeStartedWorkInput(input)}`;
+}
+
 /**
  * Processes one inbound message through command/pulse/proposal/queueing paths and persists session mutations.
  *
@@ -39,7 +68,7 @@ export async function processConversationMessage(
 ): Promise<string> {
   const trimmed = resolveConversationInboundUserInput(message).trim();
   if (!trimmed) {
-    return "Message ignored because it is empty.";
+    return "I did not receive any text yet. Send a quick message or add a caption and I will continue.";
   }
 
   const sessionKey = buildConversationKey(message);
@@ -87,6 +116,9 @@ export async function processConversationMessage(
   await deps.store.setSession(session);
   if (invocation.shouldStartWorker) {
     void deps.startWorkerIfNeeded(sessionKey, executeTask, notify);
+  }
+  if (invocation.shouldStartWorker && invocation.reply.trim().length === 0) {
+    return buildStartedWorkReply(trimmed);
   }
   return invocation.reply;
 }

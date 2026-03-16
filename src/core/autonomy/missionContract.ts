@@ -134,7 +134,10 @@ function requiresReadinessEvidence(goal: string): boolean {
     /\b(?:next|vite)\s+dev\b/.test(normalized) ||
     /\bdev\s+server\b/.test(normalized) ||
     /\b(localhost|127\.0\.0\.1|::1)\b/.test(normalized) ||
-    /\b(run|start|launch|open|serve)\b[\s\S]{0,80}\b(app|site|server|service|project|frontend|backend|api)\b/.test(
+    /\b(run|start|launch|serve)\b[\s\S]{0,80}\b(server|service|backend|api|dev\s+server)\b/.test(
+      normalized
+    ) ||
+    /\b(?:probe|check|confirm|wait\s+until)\b[\s\S]{0,80}\b(?:localhost|http|port|ready|readiness)\b/.test(
       normalized
     ) ||
     /\bverify\b[\s\S]{0,80}\b(ui|homepage|browser|render|renders|rendering|server|service|endpoint|port)\b/.test(

@@ -15,6 +15,8 @@ import { ReflectionOrgan } from "../organs/reflection";
 import { ToolExecutorOrgan } from "../organs/executor";
 import { MemoryBrokerOrgan } from "../organs/memoryBroker";
 import { LanguageUnderstandingOrgan } from "../organs/languageUnderstanding/episodeExtraction";
+import { BrowserSessionRegistry } from "../organs/liveRun/browserSessionRegistry";
+import { ManagedProcessRegistry } from "../organs/liveRun/managedProcessRegistry";
 import { SkillRegistryStore } from "../organs/skillRegistry/skillRegistryStore";
 import { ExecutionReceiptStore } from "./advancedAutonomyRuntime";
 import { SemanticMemoryStore } from "./semanticMemory";
@@ -30,6 +32,7 @@ import { SatelliteCloneCoordinator } from "./satelliteClone";
 import { SqliteVectorStore } from "./vectorStore";
 import { WorkflowLearningStore } from "./workflowLearningStore";
 import { BrainConfig } from "./config";
+import { resolveUserOwnedPathHints } from "../organs/plannerPolicy/userOwnedPathHints";
 
 /**
  * Builds embedding stack for this module's runtime flow.
@@ -77,6 +80,26 @@ function buildEmbeddingStack(config: BrainConfig): {
 }
 
 /**
+ * Resolves the live-run runtime directory for browser/process snapshot persistence.
+ *
+ * **Why it exists:**
+ * Live-smoke proofs need to isolate browser and managed-process snapshots so one restart or
+ * timeout cannot poison another governed run.
+ *
+ * **What it talks to:**
+ * - Reads `process.env.BRAIN_LIVE_RUN_RUNTIME_PATH` from the current Node.js environment.
+ * - Uses `path.resolve` (import `default`) from `node:path`.
+ *
+ * @returns Absolute runtime directory path for live-run snapshot storage.
+ */
+function resolveLiveRunRuntimePathFromEnv(): string {
+  const configuredRuntimePath = process.env.BRAIN_LIVE_RUN_RUNTIME_PATH?.trim();
+  return configuredRuntimePath && configuredRuntimePath.length > 0
+    ? path.resolve(configuredRuntimePath)
+    : path.resolve(process.cwd(), "runtime/live_run");
+}
+
+/**
  * Builds default brain for this module's runtime flow.
  *
  * **Why it exists:**
@@ -104,13 +127,28 @@ export function buildDefaultBrain(): BrainOrchestrator {
   const plannerFailureStore = new SqlitePlannerFailureStore(
     config.persistence.ledgerSqlitePath
   );
+  const userOwnedPathHints = resolveUserOwnedPathHints();
   const planner = new PlannerOrgan(modelClient, memoryStore, plannerFailureStore, {
     platform: config.shellRuntime.profile.platform,
     shellKind: config.shellRuntime.profile.shellKind,
     invocationMode: config.shellRuntime.profile.invocationMode,
-    commandMaxChars: config.shellRuntime.profile.commandMaxChars
+    commandMaxChars: config.shellRuntime.profile.commandMaxChars,
+    desktopPath: userOwnedPathHints.desktopPath,
+    documentsPath: userOwnedPathHints.documentsPath,
+    downloadsPath: userOwnedPathHints.downloadsPath
   });
-  const executor = new ToolExecutorOrgan(config);
+  const liveRunRuntimePath = resolveLiveRunRuntimePathFromEnv();
+  const executor = new ToolExecutorOrgan(
+    config,
+    undefined,
+    new ManagedProcessRegistry({
+      snapshotPath: path.join(liveRunRuntimePath, "managed_processes.json")
+    }),
+    undefined,
+    new BrowserSessionRegistry({
+      snapshotPath: path.join(liveRunRuntimePath, "browser_sessions.json")
+    })
+  );
   const governors = createDefaultGovernors();
   const masterGovernor = new MasterGovernor(config.governance.supermajorityThreshold);
   const stateStore = new StateStore();
