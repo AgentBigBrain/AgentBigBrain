@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { buildSmokeModelEnvOverrides } from "../../scripts/evidence/smokeModelEnv";
+import {
+  buildSmokeModelEnvOverrides,
+  resolveRequiredRealSmokeBackend
+} from "../../scripts/evidence/smokeModelEnv";
 
 test("buildSmokeModelEnvOverrides prefers ollama when the local model is ready", () => {
   const previousPreferLocal = process.env.BRAIN_LIVE_SMOKE_PREFER_LOCAL_MODEL;
@@ -56,5 +59,26 @@ test("buildSmokeModelEnvOverrides keeps the existing backend by default even whe
     delete process.env.BRAIN_LIVE_SMOKE_PREFER_LOCAL_MODEL;
   } else {
     process.env.BRAIN_LIVE_SMOKE_PREFER_LOCAL_MODEL = previousPreferLocal;
+  }
+});
+
+test("resolveRequiredRealSmokeBackend blocks when the effective backend is mock", () => {
+  const previousBackend = process.env.BRAIN_MODEL_BACKEND;
+  delete process.env.BRAIN_MODEL_BACKEND;
+
+  const result = resolveRequiredRealSmokeBackend({
+    provider: "ollama",
+    reachable: false,
+    modelPresent: false,
+    model: "phi4-mini:latest"
+  });
+
+  assert.equal(result.effectiveBackend, "mock");
+  assert.match(result.blockerReason ?? "", /effective backend is mock/i);
+
+  if (previousBackend === undefined) {
+    delete process.env.BRAIN_MODEL_BACKEND;
+  } else {
+    process.env.BRAIN_MODEL_BACKEND = previousBackend;
   }
 });

@@ -11,6 +11,15 @@ export interface SmokeModelBackendSelection {
   envOverrides: Record<string, string>;
 }
 
+export interface RequiredRealSmokeBackendResolution extends SmokeModelBackendSelection {
+  effectiveBackend: string;
+  blockerReason: string | null;
+}
+
+function normalizeBackend(value: string | undefined): string {
+  return (value ?? "mock").trim().toLowerCase() || "mock";
+}
+
 /**
  * Builds smoke-only model env overrides from the current local-intent probe state.
  *
@@ -65,5 +74,48 @@ export function buildSmokeModelEnvOverrides(
   return {
     backend: "existing",
     envOverrides: {}
+  };
+}
+
+/**
+ * Resolves a smoke backend that can satisfy real-execution proof requirements.
+ *
+ * @param probe - Local-intent runtime probe result for the current machine.
+ * @returns Effective backend plus a blocker reason when only mock execution is available.
+ */
+export function resolveRequiredRealSmokeBackend(
+  probe: Pick<
+    LocalIntentModelRuntimeProbeResult,
+    "provider" | "reachable" | "modelPresent" | "model"
+  >
+): RequiredRealSmokeBackendResolution {
+  const selection = buildSmokeModelEnvOverrides(probe);
+  const effectiveBackend = normalizeBackend(
+    selection.envOverrides.BRAIN_MODEL_BACKEND ?? process.env.BRAIN_MODEL_BACKEND
+  );
+
+  if (effectiveBackend === "mock") {
+    return {
+      ...selection,
+      effectiveBackend,
+      blockerReason:
+        "Live smoke requires a real model backend, but the effective backend is mock. " +
+        "Configure OpenAI or a reachable local Ollama model for this proof surface."
+    };
+  }
+
+  if (effectiveBackend === "openai" && !(process.env.OPENAI_API_KEY ?? "").trim()) {
+    return {
+      ...selection,
+      effectiveBackend,
+      blockerReason:
+        "Live smoke requires a real model backend, but BRAIN_MODEL_BACKEND=openai is missing OPENAI_API_KEY."
+    };
+  }
+
+  return {
+    ...selection,
+    effectiveBackend,
+    blockerReason: null
   };
 }

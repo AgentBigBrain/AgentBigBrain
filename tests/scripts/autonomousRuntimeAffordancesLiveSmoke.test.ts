@@ -112,11 +112,11 @@ test("autonomous runtime affordances front-door live smoke emits either a PASS a
 
   if (
     persisted.status === "BLOCKED" &&
-    /(?:429|exceeded your current quota|rate limit|fetch failed|request timed out|socket hang up|ECONNRESET)/i.test(
+    /(?:429|exceeded your current quota|rate limit|fetch failed|request timed out|socket hang up|ECONNRESET|requires a real model backend|effective backend is mock|missing OPENAI_API_KEY)/i.test(
       combinedBlockerReason
     )
   ) {
-    t.skip("Provider quota blocked the front-door live smoke.");
+    t.skip("Real backend capacity or availability blocked the front-door live smoke.");
     return;
   }
 

@@ -63,6 +63,7 @@ import {
 } from "../../src/organs/liveRun/managedProcessRegistry";
 import { resolveUserOwnedPathHints } from "../../src/organs/plannerPolicy/userOwnedPathHints";
 import { ToolExecutorOrgan } from "../../src/organs/executor";
+import { resolveRequiredRealSmokeBackend } from "./smokeModelEnv";
 
 type ArtifactStatus = "PASS" | "FAIL" | "BLOCKED";
 
@@ -1092,8 +1093,12 @@ Promise<AutonomousRuntimeAffordancesRestartArtifact> {
       `model=${localProbe.model} reachable=${localProbe.reachable} modelPresent=${localProbe.modelPresent}`
     );
   }
+  const smokeBackend = resolveRequiredRealSmokeBackend(localProbe);
 
   const { desktopPath } = resolveUserOwnedPathHints();
+  if (!desktopPath) {
+    throw new Error("Unable to resolve a desktop path for the restart smoke.");
+  }
   const targetFolderName = `drone-company-restart-smoke-${Date.now()}`;
   const targetFolderPath = path.join(desktopPath, targetFolderName);
   const sessionPath = path.resolve(
@@ -1109,6 +1114,7 @@ Promise<AutonomousRuntimeAffordancesRestartArtifact> {
     `runtime/tmp-autonomous-runtime-affordances-restart-${Date.now()}.json`
   );
   const envSnapshot = applyEnvOverrides({
+    ...smokeBackend.envOverrides,
     BRAIN_LIVE_RUN_RUNTIME_PATH: LIVE_RUN_RUNTIME_PATH,
     BRAIN_STATE_JSON_PATH: tempStatePath,
     BRAIN_LEDGER_SQLITE_PATH: tempLedgerPath,
@@ -1127,6 +1133,13 @@ Promise<AutonomousRuntimeAffordancesRestartArtifact> {
   let latestSession: ConversationSession | null = null;
 
   try {
+    await mkdir(desktopPath, { recursive: true });
+    if (smokeBackend.blockerReason) {
+      const artifact = buildRestartBlockedArtifact(smokeBackend.blockerReason, localProbe);
+      await writeRestartArtifact(artifact);
+      return artifact;
+    }
+
     await rm(targetFolderPath, { recursive: true, force: true }).catch(() => undefined);
 
     const seeded = await seedRestartWorkspaceSession(sessionPath, targetFolderPath);

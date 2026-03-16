@@ -36,7 +36,7 @@ import {
   probeLocalIntentModelFromEnv
 } from "../../src/organs/languageUnderstanding/localIntentModelRuntime";
 import { resolveUserOwnedPathHints } from "../../src/organs/plannerPolicy/userOwnedPathHints";
-import { buildSmokeModelEnvOverrides } from "./smokeModelEnv";
+import { resolveRequiredRealSmokeBackend } from "./smokeModelEnv";
 
 type ArtifactStatus = "PASS" | "FAIL" | "BLOCKED";
 
@@ -1279,9 +1279,29 @@ Promise<AutonomousRuntimeAffordancesLiveSmokeArtifact> {
       `Local intent model is required for this smoke but not ready: provider=${localProbe.provider} model=${localProbe.model} reachable=${localProbe.reachable} modelPresent=${localProbe.modelPresent}`
     );
   }
-  const smokeModelSnapshot = applyEnvOverrides(buildSmokeModelEnvOverrides(localProbe).envOverrides);
+  const smokeBackend = resolveRequiredRealSmokeBackend(localProbe);
+  const smokeModelSnapshot = applyEnvOverrides(smokeBackend.envOverrides);
 
   try {
+    if (smokeBackend.blockerReason) {
+      const artifact = buildArtifact(
+        {
+          enabled: localProbe.enabled,
+          required: localProbe.liveSmokeRequired,
+          reachable: localProbe.reachable,
+          modelPresent: localProbe.modelPresent,
+          model: localProbe.model,
+          provider: localProbe.provider,
+          baseUrl: localProbe.baseUrl
+        },
+        buildFailedFrontDoorScenarioSummary(smokeBackend.blockerReason),
+        buildFailedFrontDoorScenarioSummary(smokeBackend.blockerReason),
+        buildFailedAmbiguousClarificationScenario(smokeBackend.blockerReason)
+      );
+      await writeFile(ARTIFACT_PATH, `${JSON.stringify(artifact, null, 2)}${os.EOL}`, "utf8");
+      return artifact;
+    }
+
     let browserWorkflowScenario = buildFailedFrontDoorScenarioSummary(null);
     let exactHolderRecoveryScenario = buildFailedFrontDoorScenarioSummary(null);
     let ambiguousClarificationScenario = buildFailedAmbiguousClarificationScenario(null);

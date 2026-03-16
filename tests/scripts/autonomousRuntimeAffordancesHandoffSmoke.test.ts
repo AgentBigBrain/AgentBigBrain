@@ -25,7 +25,7 @@ test("autonomous runtime affordances handoff smoke emits either a PASS artifact 
     assert.equal(artifact.status, "BLOCKED");
     assert.match(
       persisted.blockerReason ?? "",
-      /(?:Timed out waiting|429|exceeded your current quota|rate limit|fetch failed|request timed out|socket hang up|ECONNRESET)/i
+      /(?:Timed out waiting|429|exceeded your current quota|rate limit|fetch failed|request timed out|socket hang up|ECONNRESET|requires a real model backend|effective backend is mock|missing OPENAI_API_KEY)/i
     );
     return;
   }

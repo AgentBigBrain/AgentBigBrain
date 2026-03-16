@@ -9,7 +9,9 @@ import type {
 } from "../../src/interfaces/conversationRuntime/managerContracts";
 import { TelegramAdapter } from "../../src/interfaces/telegramAdapter";
 import { selectUserFacingSummary } from "../../src/interfaces/userFacingResult";
+import { probeLocalIntentModelFromEnv } from "../../src/organs/languageUnderstanding/localIntentModelRuntime";
 import { resolveUserOwnedPathHints } from "../../src/organs/plannerPolicy/userOwnedPathHints";
+import { resolveRequiredRealSmokeBackend } from "./smokeModelEnv";
 
 type ArtifactStatus = "PASS" | "FAIL" | "BLOCKED";
 
@@ -203,6 +205,22 @@ function buildArtifact(
   };
 }
 
+function buildBlockedScenarioBase(
+  prompt: string,
+  blockerReason: string
+): DirectAutoScenarioBase {
+  return {
+    prompt,
+    terminalOutcome: "blocked",
+    summary: blockerReason,
+    userFacingSummary: null,
+    blockerReason,
+    transientProviderFailureRecovered: false,
+    progressMessages: [],
+    progressStates: []
+  };
+}
+
 async function executeDirectAutoRun(
   adapter: TelegramAdapter,
   prompt: string,
@@ -249,6 +267,8 @@ Promise<AutonomousRuntimeAffordancesDirectAutoArtifact> {
   if (!desktopPath) {
     throw new Error("Unable to resolve a desktop path for the direct-auto smoke.");
   }
+  const localProbe = await probeLocalIntentModelFromEnv();
+  const smokeBackend = resolveRequiredRealSmokeBackend(localProbe);
   const runId = `${Date.now()}`;
   const targetPrefix = `drone-autonomy-direct-auto-${runId}`;
   const destinationFolderName = `${targetPrefix}-folder`;
@@ -264,6 +284,7 @@ Promise<AutonomousRuntimeAffordancesDirectAutoArtifact> {
   const timeoutController = new AbortController();
   const timeoutHandle = setTimeout(() => timeoutController.abort(), SMOKE_DEADLINE_MS);
   const envSnapshot = applyEnvOverrides({
+    ...smokeBackend.envOverrides,
     BRAIN_LIVE_RUN_RUNTIME_PATH: LIVE_RUN_RUNTIME_PATH,
     BRAIN_STATE_JSON_PATH: STATE_PATH,
     BRAIN_LEDGER_SQLITE_PATH: tempLedgerPath,
@@ -273,6 +294,44 @@ Promise<AutonomousRuntimeAffordancesDirectAutoArtifact> {
   });
 
   try {
+    await mkdir(desktopPath, { recursive: true });
+    if (smokeBackend.blockerReason) {
+      const artifact = buildArtifact(
+        targetPrefix,
+        destinationFolderName,
+        desktopPath,
+        {
+          ...buildBlockedScenarioBase(prompt, smokeBackend.blockerReason),
+          movedEntries: [],
+          desktopEntriesAfter: [],
+          checks: {
+            directEntryPointUsed: true,
+            boundedExit: true,
+            destinationCreated: false,
+            movedMatchingFolders: false,
+            noRemainingMatchingFoldersAtDesktopRoot: false,
+            noNestedDestination: false,
+            observedProgressStates: false,
+            truthfulSummary: true
+          }
+        },
+        {
+          ...buildBlockedScenarioBase(buildBoundedStopPrompt(), smokeBackend.blockerReason),
+          checks: {
+            directEntryPointUsed: true,
+            boundedExit: true,
+            observedWorkingState: false,
+            observedStoppedState: false,
+            truthfulStopSummary: true,
+            noFalseSuccessSummary: true
+          }
+        }
+      );
+      await mkdir(path.dirname(ARTIFACT_PATH), { recursive: true });
+      await writeFile(ARTIFACT_PATH, `${JSON.stringify(artifact, null, 2)}\n`, "utf8");
+      return artifact;
+    }
+
     await cleanupProofFolders(desktopPath, targetPrefix);
     for (const sourceFolderName of sourceFolderNames) {
       await seedProofFolder(

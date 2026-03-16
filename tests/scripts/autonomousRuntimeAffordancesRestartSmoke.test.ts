@@ -84,11 +84,11 @@ test("autonomous runtime affordances restart smoke exits cleanly and emits a PAS
 
   if (
     persisted.status === "BLOCKED" &&
-    /(?:429|exceeded your current quota|rate limit|fetch failed|request timed out)/i.test(
+    /(?:429|exceeded your current quota|rate limit|fetch failed|request timed out|requires a real model backend|effective backend is mock|missing OPENAI_API_KEY)/i.test(
       persisted.blockerReason ?? ""
     )
   ) {
-    t.skip("Provider quota blocked the restart live smoke.");
+    t.skip("Real backend capacity or availability blocked the restart live smoke.");
     return;
   }
 

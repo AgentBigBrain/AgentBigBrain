@@ -37,6 +37,8 @@ import {
   probeLocalIntentModelFromEnv
 } from "../../src/organs/languageUnderstanding/localIntentModelRuntime";
 import { cleanupLingeringPlaywrightAutomationBrowsers } from "../../src/organs/liveRun/playwrightBrowserProcessIntrospection";
+import { resolveUserOwnedPathHints } from "../../src/organs/plannerPolicy/userOwnedPathHints";
+import { resolveRequiredRealSmokeBackend } from "./smokeModelEnv";
 
 type ArtifactStatus = "PASS" | "FAIL" | "BLOCKED";
 
@@ -460,12 +462,6 @@ Promise<AutonomousRuntimeAffordancesHandoffArtifact> {
   await rm(SESSION_PATH, { force: true }).catch(() => undefined);
   await rm(`${SESSION_PATH}.lock`, { force: true }).catch(() => undefined);
   const deadlineAtMs = Date.now() + SMOKE_DEADLINE_MS;
-  const envSnapshot = applyEnvOverrides({
-    BRAIN_LIVE_RUN_RUNTIME_PATH: LIVE_RUN_RUNTIME_PATH,
-    BRAIN_STATE_JSON_PATH: STATE_PATH,
-    BRAIN_ENABLE_EMBEDDINGS: "false",
-    BRAIN_ENABLE_DYNAMIC_PULSE: "false"
-  });
 
   const localProbe = await probeLocalIntentModelFromEnv();
   if (
@@ -478,9 +474,21 @@ Promise<AutonomousRuntimeAffordancesHandoffArtifact> {
       `model=${localProbe.model} reachable=${localProbe.reachable} modelPresent=${localProbe.modelPresent}`
     );
   }
+  const smokeBackend = resolveRequiredRealSmokeBackend(localProbe);
+  const { desktopPath } = resolveUserOwnedPathHints();
+  if (!desktopPath) {
+    throw new Error("Unable to resolve a desktop path for the handoff smoke.");
+  }
+  const envSnapshot = applyEnvOverrides({
+    ...smokeBackend.envOverrides,
+    BRAIN_LIVE_RUN_RUNTIME_PATH: LIVE_RUN_RUNTIME_PATH,
+    BRAIN_STATE_JSON_PATH: STATE_PATH,
+    BRAIN_ENABLE_EMBEDDINGS: "false",
+    BRAIN_ENABLE_DYNAMIC_PULSE: "false"
+  });
 
   const targetFolderName = `drone-company-handoff-smoke-${Date.now()}`;
-  const targetFolderPath = path.join(os.homedir(), "OneDrive", "Desktop", targetFolderName);
+  const targetFolderPath = path.join(desktopPath, targetFolderName);
   const turn1Input =
     `hey I'd like to build a calm air-drone landing page, be creative, and go until you finish, ` +
     `do it on my desktop, create a folder called ${targetFolderName}, when you're done run it on a browser and leave it open for me`;
@@ -634,6 +642,44 @@ Promise<AutonomousRuntimeAffordancesHandoffArtifact> {
   };
 
   try {
+    await mkdir(desktopPath, { recursive: true });
+    if (smokeBackend.blockerReason) {
+      const artifact: AutonomousRuntimeAffordancesHandoffArtifact = {
+        generatedAt: new Date().toISOString(),
+        command: COMMAND_NAME,
+        status: "BLOCKED",
+        blockerReason: smokeBackend.blockerReason,
+        localIntentModel: {
+          enabled: localProbe.enabled,
+          required: localProbe.liveSmokeRequired,
+          reachable: localProbe.reachable,
+          modelPresent: localProbe.modelPresent,
+          model: localProbe.model,
+          provider: localProbe.provider,
+          baseUrl: localProbe.baseUrl
+        },
+        targetFolder: targetFolderPath,
+        previewUrl: null,
+        browserSessionId: null,
+        checks: {
+          naturalAutonomousStart: false,
+          roughDraftReviewWithoutNewWork: false,
+          roughDraftReviewSurfaced: false,
+          pauseCheckpointSaved: false,
+          whileAwaySummaryWithoutNewWork: false,
+          whileAwaySummarySurfaced: false,
+          resumeContinuationUsed: false,
+          resumeStayedOnSameWorkspace: false,
+          sliderAppliedOnResume: false,
+          browserClosed: false,
+          reviewableUserFacingCopy: false
+        },
+        turns
+      };
+      await writeFile(ARTIFACT_PATH, `${JSON.stringify(artifact, null, 2)}${os.EOL}`, "utf8");
+      return artifact;
+    }
+
     await rm(targetFolderPath, { recursive: true, force: true }).catch(() => undefined);
 
     const turn1At = new Date().toISOString();
