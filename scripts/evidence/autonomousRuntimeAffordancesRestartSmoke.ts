@@ -1151,6 +1151,18 @@ Promise<AutonomousRuntimeAffordancesRestartArtifact> {
     const turn1Session = await runTurn(harness2, 1, turn1Input, turn1At, turns);
     latestSession = turn1Session;
 
+    const turn1Job = findLatestJobSince(turn1Session, turn1At);
+    const turn1BrowserActions = turn1Job
+      ? turn1Session.recentActions.filter(
+          (action) => action.sourceJobId === turn1Job.id && action.kind === "browser_session"
+        )
+      : [];
+    const turn1ProcessActions = turn1Job
+      ? turn1Session.recentActions.filter(
+          (action) => action.sourceJobId === turn1Job.id && action.kind === "process"
+        )
+      : [];
+
     const reloadAfterClose = captureReloadClassification(
       await harness2.store.getSession(harness2.conversationKey),
       browserSessionId,
@@ -1189,7 +1201,8 @@ Promise<AutonomousRuntimeAffordancesRestartArtifact> {
       closeAfterReloadSucceeded:
         turn1Session.browserSessions.every((entry) => entry.status === "closed") &&
         previewReachableAfterClose === false &&
-        /close|closed/i.test(extractLatestAssistantReply(turn1Session)),
+        turn1BrowserActions.some((action) => action.status === "closed") &&
+        turn1ProcessActions.some((action) => action.status === "closed"),
       reloadedResourcesClassifiedStaleAfterClose:
         reloadAfterClose.browserTrackedStale &&
         reloadAfterClose.processTrackedStale &&

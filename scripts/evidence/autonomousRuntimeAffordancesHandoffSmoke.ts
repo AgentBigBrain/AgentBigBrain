@@ -334,6 +334,13 @@ function extractTargetFolder(session: ConversationSession): string | null {
   return null;
 }
 
+function extractPrimaryBrowserSessionId(session: ConversationSession | null): string | null {
+  if (!session) {
+    return null;
+  }
+  return session.browserSessions[0]?.id ?? null;
+}
+
 function extractLatestAssistantReply(session: ConversationSession): string {
   return [...session.conversationTurns]
     .reverse()
@@ -781,7 +788,7 @@ Promise<AutonomousRuntimeAffordancesHandoffArtifact> {
       },
       targetFolder: latestSession ? extractTargetFolder(latestSession) : null,
       previewUrl: latestSession ? extractPreviewUrl(latestSession) : null,
-      browserSessionId: latestSession?.browserSessions[0]?.id ?? null,
+      browserSessionId: extractPrimaryBrowserSessionId(latestSession),
       checks: {
         naturalAutonomousStart: false,
         roughDraftReviewWithoutNewWork: false,
