@@ -1195,6 +1195,16 @@ test("buildConversationAwareExecutionInput grounds the Telegram desktop cleanup 
   assert.match(executionInput, /This run must include a real folder move side effect\./i);
 });
 
+test("buildConversationAwareExecutionInput does not misread build destinations as Desktop cleanup work", async () => {
+  const executionInput = await buildConversationAwareExecutionInput(
+    buildSession(),
+    "Hey, build me a tech landing page for air drones, go until you finish, put it on my desktop, create a folder called drone-company, and leave it open for me.",
+    10
+  );
+
+  assert.doesNotMatch(executionInput, /Natural desktop-organization follow-up:/);
+});
+
 test("buildConversationAwareExecutionInput derives workspace root and artifact from a tracked file preview", async () => {
   const session = buildSession();
   session.browserSessions.push({

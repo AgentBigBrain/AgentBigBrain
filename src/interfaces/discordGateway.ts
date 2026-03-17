@@ -123,6 +123,19 @@ export class DiscordGateway {
     private readonly config: DiscordInterfaceConfig,
     options: DiscordGatewayOptions = {}
   ) {
+    const runDirectConversationTurn =
+      typeof this.adapter.runDirectConversationTurn === "function"
+        ? async (input: string, receivedAt: string) =>
+            this.adapter.runDirectConversationTurn(input, receivedAt)
+        : undefined;
+    const listManagedProcessSnapshots =
+      typeof this.adapter.listManagedProcessSnapshots === "function"
+        ? async () => this.adapter.listManagedProcessSnapshots()
+        : undefined;
+    const listBrowserSessionSnapshots =
+      typeof this.adapter.listBrowserSessionSnapshots === "function"
+        ? async () => this.adapter.listBrowserSessionSnapshots()
+        : undefined;
     this.sessionStore = options.sessionStore ?? new InterfaceSessionStore();
     this.entityGraphStore = options.entityGraphStore ?? new EntityGraphStore();
     this.conversationManager = new ConversationManager(this.sessionStore, {
@@ -134,8 +147,7 @@ export class DiscordGateway {
     }, {
       interpretConversationIntent: async (input, recentTurns, pulseRuleContext) =>
         this.adapter.interpretConversationIntent(input, recentTurns, pulseRuleContext),
-      runDirectConversationTurn: async (input, receivedAt) =>
-        this.adapter.runDirectConversationTurn(input, receivedAt),
+      runDirectConversationTurn,
       queryContinuityEpisodes: async (request) => {
         const graph = await this.entityGraphStore.getGraph();
         return this.adapter.queryContinuityEpisodes(graph, request);
@@ -180,8 +192,8 @@ export class DiscordGateway {
         buildDiscordCapabilitySummary(
           this.config.security.allowAutonomousViaInterface
         ),
-      listManagedProcessSnapshots: async () => this.adapter.listManagedProcessSnapshots(),
-      listBrowserSessionSnapshots: async () => this.adapter.listBrowserSessionSnapshots(),
+      listManagedProcessSnapshots,
+      listBrowserSessionSnapshots,
       abortActiveAutonomousRun: (conversationId) =>
         abortAutonomousTransportTask(conversationId, this.autonomousAbortControllers),
       runCheckpointReview: async (checkpointId) =>

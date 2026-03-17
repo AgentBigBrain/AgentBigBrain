@@ -52,10 +52,13 @@ const NATURAL_ARTIFACT_EDIT_DELTA_PATTERN =
   /\b(?:instead of|from earlier|from before|we were working on|we built|you made)\b/i;
 const NATURAL_NEW_BUILD_PATTERN =
   /\b(?:build|create|generate|scaffold|start)\b[\s\S]{0,20}\b(?:new|another|fresh)\b/i;
-const LOCAL_ORGANIZATION_VERB_PATTERN =
-  /\b(?:organize|move|group|gather|sort|clean up|put|collect|tidy)\b/i;
+const STRONG_LOCAL_ORGANIZATION_VERB_PATTERN =
+  /\b(?:organize|move|group|gather|sort|clean up|collect|tidy)\b/i;
+const WEAK_LOCAL_ORGANIZATION_VERB_PATTERN = /\bput\b/i;
 const LOCAL_ORGANIZATION_TARGET_PATTERN =
-  /\b(?:folder|folders|directory|directories|desktop|documents|downloads|workspace|workspaces|project|projects)\b/i;
+  /\b(?:folder|folders|directory|directories|workspace|workspaces|project|projects)\b/i;
+const LOCAL_ORGANIZATION_COLLECTION_PATTERN =
+  /\b(?:every|all)\s+(?:folder|folders|directory|directories|workspace|workspaces|project|projects)\b/i;
 const SIMPLE_DESKTOP_DESTINATION_PATTERN =
   /\b(?:into|inside|under|to)\s+(?:a\s+folder\s+called\s+)?["'`]?([a-z0-9][a-z0-9_-]{0,80})["'`]?/i;
 const ORGANIZATION_PREFIX_PATTERN =
@@ -424,9 +427,19 @@ function buildRecentArtifactEditContextBlock(
  * @returns `true` when the turn is an execution-style local organization request.
  */
 function isLocalOrganizationRequest(userInput: string): boolean {
+  if (!LOCAL_ORGANIZATION_TARGET_PATTERN.test(userInput)) {
+    return false;
+  }
+  if (STRONG_LOCAL_ORGANIZATION_VERB_PATTERN.test(userInput)) {
+    return true;
+  }
   return (
-    LOCAL_ORGANIZATION_VERB_PATTERN.test(userInput) &&
-    LOCAL_ORGANIZATION_TARGET_PATTERN.test(userInput)
+    WEAK_LOCAL_ORGANIZATION_VERB_PATTERN.test(userInput) &&
+    (
+      LOCAL_ORGANIZATION_COLLECTION_PATTERN.test(userInput) ||
+      ORGANIZATION_PREFIX_PATTERN.test(userInput) ||
+      EXPLICIT_ALL_MATCHING_FOLDERS_PATTERN.test(userInput)
+    )
   );
 }
 
