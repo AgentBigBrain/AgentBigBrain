@@ -70,6 +70,7 @@ const DIRECT_CONVERSATION_FORMAT_PATTERN = /\btwo short paragraphs\b/i;
 const DIRECT_CONVERSATION_PAUSE_WORK_PATTERN =
   /\b(?:just chat|talk for a minute|do not start work|do not continue(?: the)?(?: [a-z-]+)? workflow|keep this as conversation|without doing new work)\b/i;
 
+/** Adds direct-chat-only control lines to the model input when the user asked for them. */
 function buildDirectConversationReplyInput(
   userInput: string,
   conversationAwareInput: string
@@ -91,6 +92,7 @@ function buildDirectConversationReplyInput(
   return `${controlLines.join("\n")}\n\n${conversationAwareInput}`;
 }
 
+/** Normalizes direct-chat replies to the requested paragraph format when needed. */
 function enforceDirectConversationReplyFormat(
   userInput: string,
   reply: string

@@ -214,6 +214,7 @@ export class TelegramGateway {
     );
   }
 
+  /** Starts Telegram polling and pulse scheduling for this gateway instance. */
   async start(): Promise<void> {
     this.running = true;
     this.pulseScheduler.start();
@@ -227,11 +228,13 @@ export class TelegramGateway {
     });
   }
 
+  /** Stops Telegram polling and background pulse work for this gateway instance. */
   stop(): void {
     this.running = false;
     this.pulseScheduler.stop();
   }
 
+  /** Polls Telegram once and advances the gateway offset cursor. */
   private async pollOnce(): Promise<void> {
     this.nextOffset = await pollTelegramUpdatesOnce({
       apiBaseUrl: this.config.apiBaseUrl,
@@ -242,6 +245,7 @@ export class TelegramGateway {
     });
   }
 
+  /** Processes one Telegram update through validation, enrichment, and conversation handling. */
   private async processUpdate(update: TelegramUpdate): Promise<void> {
     const prepared = prepareTelegramUpdate({
       update,
@@ -355,6 +359,7 @@ export class TelegramGateway {
     });
   }
 
+  /** Creates the notifier transport used for one Telegram conversation. */
   private createConversationNotifier(
     chatId: string,
     options: TelegramNotifierOptions
@@ -368,6 +373,7 @@ export class TelegramGateway {
     );
   }
 
+  /** Allocates the next deterministic Telegram draft identifier for native draft streaming. */
   private allocateDraftId(): number {
     const allocation = allocateNextTelegramDraftId(this.nextDraftId);
     this.nextDraftId = allocation.nextDraftId;

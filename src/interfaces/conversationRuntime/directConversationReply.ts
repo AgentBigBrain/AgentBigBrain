@@ -11,6 +11,7 @@ import { stripLabelStyleOpening } from "../userFacing/languageSurface";
 import { createModelClientFromEnv } from "../../models/createModelClient";
 import type { ResponseSynthesisModelOutput } from "../../models/types";
 
+/** Builds the synthetic task envelope used for direct conversational replies. */
 function buildDirectConversationTask(
   input: string,
   receivedAt: string

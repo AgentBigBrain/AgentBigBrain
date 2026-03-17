@@ -26,20 +26,25 @@ export interface InterfaceRuntimeLockHandle {
 
 const DEFAULT_LOCK_TIMEOUT_MS = 1_500;
 const DEFAULT_POLL_INTERVAL_MS = 50;
+
+/** Resolves the canonical interface-runtime lock path under `runtime/`. */
 function resolveInterfaceRuntimeLockPath(): string {
   return path.resolve(process.cwd(), "runtime/interface_runtime.lock");
 }
 
+/** Narrows unknown errors to Node errno objects for lock-file handling. */
 function isNodeErrno(error: unknown): error is NodeJS.ErrnoException {
   return typeof error === "object" && error !== null && "code" in error;
 }
 
+/** Sleeps for one bounded retry interval while waiting on the runtime lock. */
 async function sleep(durationMs: number): Promise<void> {
   await new Promise<void>((resolve) => {
     setTimeout(resolve, durationMs);
   });
 }
 
+/** Checks whether the process that owns the lock is still alive. */
 function isProcessAlive(pid: number): boolean {
   try {
     process.kill(pid, 0);
@@ -55,6 +60,7 @@ function isProcessAlive(pid: number): boolean {
   }
 }
 
+/** Builds the lock-record payload written by the active interface runtime. */
 function buildInterfaceRuntimeLockRecord(): InterfaceRuntimeLockRecord {
   return {
     pid: process.pid,
@@ -64,6 +70,7 @@ function buildInterfaceRuntimeLockRecord(): InterfaceRuntimeLockRecord {
   };
 }
 
+/** Reads the persisted interface-runtime lock record, returning `null` for missing or malformed locks. */
 async function readInterfaceRuntimeLockRecord(
   lockPath: string
 ): Promise<InterfaceRuntimeLockRecord | null> {

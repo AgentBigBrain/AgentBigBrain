@@ -70,6 +70,7 @@ async function sleep(durationMs: number): Promise<void> {
   });
 }
 
+/** Checks whether the process that owns a file lock is still alive. */
 function isProcessAlive(pid: number): boolean {
   try {
     process.kill(pid, 0);
@@ -85,6 +86,7 @@ function isProcessAlive(pid: number): boolean {
   }
 }
 
+/** Builds the persisted metadata written into a file-lock sidecar. */
 function buildFileLockRecord(targetPath: string): FileLockRecord {
   return {
     pid: process.pid,
@@ -93,6 +95,7 @@ function buildFileLockRecord(targetPath: string): FileLockRecord {
   };
 }
 
+/** Inspects an on-disk lock file and returns its parsed record plus observed age. */
 async function inspectFileLock(
   lockPath: string,
   entropySource: RuntimeEntropySource
