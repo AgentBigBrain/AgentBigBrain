@@ -4,6 +4,7 @@
 
 import type { RoutingMapClassificationV1 } from "../routingMap";
 import {
+  extractExecutionPreferences,
   isNaturalAutonomousExecutionRequest
 } from "./executionPreferenceExtraction";
 
@@ -12,19 +13,6 @@ export interface ExecutionIntentClarificationResolution {
   mode: "plan_or_build" | "explain_or_execute" | null;
   matchedRuleId: string | null;
 }
-
-const PLAN_ONLY_PATTERNS: readonly RegExp[] = [
-  /\b(plan it|plan first|walk me through|outline it|proposal first|just plan)\b/i,
-  /\b(explain first|talk me through|guide me first)\b/i,
-  /\b(do not execute|don't execute|without executing|guidance only|instructions only)\b/i,
-  /\b(do not build|don't build)\b/i
-] as const;
-
-const DIRECT_EXECUTION_PATTERNS: readonly RegExp[] = [
-  /\b(execute now|build (?:this )?now|do it now|fix (?:it|this) now|repair (?:it|this) now|run it now|ship it now)\b/i,
-  /\b(go ahead and|just)\s+(?:build|create|fix|implement|run|execute|ship|do)\b/i,
-  /\bplease\s+(?:build|create|fix|implement|run|execute)\s+(?:it|this)\s+now\b/i
-] as const;
 
 const AMBIGUOUS_BUILD_PATTERNS: readonly RegExp[] = [
   /\b(create|build|make|generate|implement|add|scaffold|set up|setup|spin up)\b/i,
@@ -85,9 +73,13 @@ export function resolveExecutionIntentClarification(
     };
   }
 
+  const preferences = extractExecutionPreferences(normalized);
   if (
-    matchesAny(normalized, PLAN_ONLY_PATTERNS) ||
-    matchesAny(normalized, DIRECT_EXECUTION_PATTERNS) ||
+    preferences.planOnly ||
+    preferences.executeNow ||
+    preferences.statusOrRecall ||
+    preferences.naturalSkillDiscovery ||
+    preferences.reusePriorApproach ||
     isNaturalAutonomousExecutionRequest(normalized)
   ) {
     return {

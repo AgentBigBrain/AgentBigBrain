@@ -42,6 +42,9 @@ const NATURAL_SKILL_DISCOVERY_INVENTORY_PATTERNS: readonly RegExp[] = [
 const NATURAL_CAPABILITY_DISCOVERY_DIRECT_PATTERNS: readonly RegExp[] = [
   /\bwhat can you do(?:\s+here|\s+in this setup)?\b/i,
   /\bwhat can you help with\b/i,
+  /\bwhat can you help me with\b/i,
+  /\bhow can you help(?:\s+me)?\b/i,
+  /\bwhat can i ask you to do\b/i,
   /\bwhat are you able to do\b/i,
   /\bwhat do you support\b/i,
   /\bwhich capabilities\b/i,
@@ -60,7 +63,10 @@ const PLAN_ONLY_PATTERNS: readonly RegExp[] = [
 const DIRECT_EXECUTION_PATTERNS: readonly RegExp[] = [
   /\b(execute now|build (?:this )?now|do it now|fix (?:it|this) now|repair (?:it|this) now|run it now|ship it now)\b/i,
   /\b(go ahead and|just)\s+(?:build|create|fix|implement|run|execute|ship|do)\b/i,
-  /\bplease\s+(?:build|create|fix|implement|run|execute)\s+(?:it|this)\s+now\b/i
+  /\bplease\s+(?:build|create|fix|implement|run|execute)\s+(?:it|this)\s+now\b/i,
+  /^(?:okay,\s*)?(?:please\s+)?(?:change|edit|update|revise|rewrite|add|remove|organize|move|put|gather|clean up|tidy up)\b/i,
+  /\bplease\s+(?:change|edit|update|revise|rewrite|add|remove|organize|move|put|gather|clean up|tidy up)\b/i,
+  /\b(?:organize|move|put|gather|clean up|tidy up)\b[\s\S]{0,80}\b(?:desktop|folder|folders|project|projects)\b/i
 ] as const;
 
 const BROWSER_CONTROL_EXECUTION_PATTERNS: readonly RegExp[] = [

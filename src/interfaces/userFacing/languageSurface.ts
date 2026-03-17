@@ -8,8 +8,11 @@ const LABEL_STYLE_OPENING_PATTERNS: readonly RegExp[] = [
   /^(?:personal\s+ai\s+assistant)\s+(?:response|reply|answer|check[- ]?in|message)\s*:\s*/i,
   /^(?:ai\s+assistant|assistant)\s*:\s*/i,
   /^(?:personal\s+ai\s+assistant)\s*:\s*/i,
+  /^(?:bigbrain)\s*:\s*/i,
   /^(?:ai\s+assistant|assistant)\s+here\s*[-:,\u2013\u2014]\s*/i,
+  /^(?:bigbrain)\s+here\s*[-:,\u2013\u2014]\s*/i,
   /^(?:ai\s+assistant|assistant)\s+(?:is|was|will|can|should|would|could|has|have|had)\b[\s\-:\u2013\u2014]*(?:to\s+)?/i,
+  /^(?:bigbrain)\s+(?:is|was|will|can|should|would|could|has|have|had)\b[\s\-:\u2013\u2014]*(?:to\s+)?/i,
   /^(?:i['’]?m|i\s+am)\s+(?:(?:your|an)\s+)?ai\s+assistant\b[,\s\-:\u2013\u2014]*(?:and\s+)?/i,
   /^(?:absolutely|sure|okay|alright|got\s+it|certainly)\b(?:\s*[-,\u2013\u2014]\s*|\s+)(?:i['’]?m|i\s+am)\s+(?:(?:your|an)\s+)?ai\s+assistant\b[,\s\-:\u2013\u2014]*(?:and\s+)?/i,
   /^(?:hey|hi|hello)\b[^.!?\n]{0,80}[-,\s\u2013\u2014]+(?:i['’]?m|i\s+am)\s+(?:(?:your|an)\s+)?ai\s+assistant\b[,\s\-:\u2013\u2014]*(?:and\s+)?/i
@@ -34,8 +37,19 @@ function uppercaseLeadingLetter(value: string): string {
  */
 function normalizeAssistantSelfReference(value: string): string {
   return value
+    .replace(/\byou can tell bigbrain\b/gi, "You can tell me")
+    .replace(/\btell\s+bigbrain\b/gi, "Tell me")
     .replace(/\btell\s+(?:this|the|your)?\s*ai\s+assistant\b/gi, "Tell me")
     .replace(/\btell\s+(?:this|the|your)?\s*assistant\b/gi, "Tell me")
+    .replace(/\bbigbrain\s+has\b/gi, "I have")
+    .replace(/\bbigbrain\s+had\b/gi, "I had")
+    .replace(/\bbigbrain\s+is\b/gi, "I am")
+    .replace(/\bbigbrain\s+was\b/gi, "I was")
+    .replace(/\bbigbrain\s+will\b/gi, "I will")
+    .replace(/\bbigbrain\s+can\b/gi, "I can")
+    .replace(/\bbigbrain\s+should\b/gi, "I should")
+    .replace(/\bbigbrain\s+would\b/gi, "I would")
+    .replace(/\bbigbrain\s+could\b/gi, "I could")
     .replace(/\b(?:this|the|your)?\s*ai\s+assistant\s+has\b/gi, "I have")
     .replace(/\b(?:this|the|your)?\s*assistant\s+has\b/gi, "I have")
     .replace(/\b(?:this|the|your)?\s*ai\s+assistant\s+is\b/gi, "I am")

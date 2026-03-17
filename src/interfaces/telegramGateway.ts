@@ -8,7 +8,10 @@ import { ConversationManager } from "./conversationManager";
 import { type ConversationNotifierTransport } from "./conversationRuntime/managerContracts";
 import { TelegramInterfaceConfig } from "./runtimeConfig";
 import { InterfaceSessionStore } from "./sessionStore";
-import type { TelegramNotifierOptions } from "./transportRuntime/contracts";
+import type {
+  TelegramNotifierOptions,
+  TelegramOutboundDeliveryObserver
+} from "./transportRuntime/contracts";
 import { deliverPreparedTransportResponse, handleAcceptedTransportConversation } from "./transportRuntime/inboundDispatch";
 import { pollTelegramUpdatesOnce, runTelegramPollingLoop } from "./transportRuntime/gatewayLifecycle";
 import { abortAutonomousTransportTask } from "./transportRuntime/autonomousAbortControl";
@@ -16,9 +19,9 @@ import {
   allocateNextTelegramDraftId,
   createTelegramGatewayNotifier,
   prepareTelegramUpdate,
-  sendTelegramGatewayReply,
   type TelegramUpdate
 } from "./transportRuntime/telegramGatewayRuntime";
+import { sendObservedTelegramGatewayReply } from "./transportRuntime/telegramGatewayObservation";
 import {
   enrichAcceptedTelegramUpdateWithMedia,
   extractTelegramChatIdFromConversationKey
@@ -32,17 +35,18 @@ import { runCheckpoint611LiveReview } from "./CheckpointReviewRunners/stage6_5Ch
 import { runCheckpoint613LiveReview } from "./CheckpointReviewRunners/stage6_5Checkpoint6_13Live";
 import { runCheckpoint675LiveReview } from "../core/stage6_75CheckpointLive";
 import { EntityGraphStore } from "../core/entityGraphStore";
+import { buildTelegramCapabilitySummary } from "./conversationRuntime/capabilityIntrospection";
 import { MediaUnderstandingOrgan } from "../organs/mediaUnderstanding/mediaInterpretation";
 import { SkillRegistryStore } from "../organs/skillRegistry/skillRegistryStore";
 import type { LocalIntentModelResolver } from "../organs/languageUnderstanding/localIntentModelContracts";
-
+export type { TelegramOutboundDeliveryObservation } from "./transportRuntime/contracts";
 interface TelegramGatewayOptions {
   sessionStore?: InterfaceSessionStore;
   entityGraphStore?: EntityGraphStore;
   mediaUnderstandingOrgan?: MediaUnderstandingOrgan;
   localIntentModelResolver?: LocalIntentModelResolver;
+  onOutboundDelivery?: TelegramOutboundDeliveryObserver;
 }
-
 export class TelegramGateway {
   private running = false;
   private nextOffset = 0;
@@ -52,9 +56,9 @@ export class TelegramGateway {
   private readonly autonomousAbortControllers = new Map<string, AbortController>();
   private readonly entityGraphStore: EntityGraphStore;
   private readonly mediaUnderstandingOrgan?: MediaUnderstandingOrgan;
+  private readonly onOutboundDelivery?: TelegramOutboundDeliveryObserver;
   private readonly skillRegistryStore = new SkillRegistryStore(path.resolve(process.cwd(), "runtime/skills"));
   private nextDraftId = 1;
-
   /**
    * Initializes `TelegramGateway` with deterministic runtime dependencies.
    *
@@ -82,6 +86,7 @@ export class TelegramGateway {
     this.sessionStore = options.sessionStore ?? new InterfaceSessionStore();
     this.entityGraphStore = options.entityGraphStore ?? new EntityGraphStore();
     this.mediaUnderstandingOrgan = options.mediaUnderstandingOrgan;
+    this.onOutboundDelivery = options.onOutboundDelivery;
     this.conversationManager = new ConversationManager(this.sessionStore, {
       ackDelayMs: this.config.security.ackDelayMs,
       showCompletionPrefix: this.config.security.showCompletionPrefix,
@@ -91,6 +96,8 @@ export class TelegramGateway {
     }, {
       interpretConversationIntent: async (input, recentTurns, pulseRuleContext) =>
         this.adapter.interpretConversationIntent(input, recentTurns, pulseRuleContext),
+      runDirectConversationTurn: async (input, receivedAt) =>
+        this.adapter.runDirectConversationTurn(input, receivedAt),
       queryContinuityEpisodes: async (request) => {
         const graph = await this.entityGraphStore.getGraph();
         return this.adapter.queryContinuityEpisodes(graph, request);
@@ -131,6 +138,8 @@ export class TelegramGateway {
         ),
       localIntentModelResolver: options.localIntentModelResolver,
       listAvailableSkills: async () => this.skillRegistryStore.listAvailableSkills(),
+      describeRuntimeCapabilities: async () =>
+        buildTelegramCapabilitySummary(this.config),
       listManagedProcessSnapshots: async () => this.adapter.listManagedProcessSnapshots(),
       listBrowserSessionSnapshots: async () => this.adapter.listBrowserSessionSnapshots(),
       abortActiveAutonomousRun: (conversationId) =>
@@ -193,17 +202,6 @@ export class TelegramGateway {
     );
   }
 
-  /**
-   * Ignites the Telegram gateway and begins polling for inbound messages.
-   * 
-   * **Why it exists:**  
-   * Acts as the primary lifecycle hook for the Telegram transport. Binds the autonomous system 
-   * layer to the internet, allowing humans to invoke routines securely.
-   * 
-   * **What it talks to:**  
-   * - Starts the `AgentPulseScheduler` to wake up background thoughts securely.
-   * - Triggers continuous asynchronous loops via `pollOnce()`.
-   */
   async start(): Promise<void> {
     this.running = true;
     this.pulseScheduler.start();
@@ -217,30 +215,11 @@ export class TelegramGateway {
     });
   }
 
-  /**
-   * Stops or clears input to keep runtime state consistent.
-   *
-   * **Why it exists:**
-   * Centralizes teardown/reset behavior for input so lifecycle handling stays predictable.
-   *
-   * **What it talks to:**
-   * - Uses local constants/helpers within this module.
-   */
   stop(): void {
     this.running = false;
     this.pulseScheduler.stop();
   }
 
-  /**
-   * Implements poll once behavior used by `telegramGateway`.
-   *
-   * **Why it exists:**
-   * Keeps `poll once` logic in one place to reduce behavior drift.
-   *
-   * **What it talks to:**
-   * - Uses local constants/helpers within this module.
-   * @returns Promise resolving to void.
-   */
   private async pollOnce(): Promise<void> {
     this.nextOffset = await pollTelegramUpdatesOnce({
       apiBaseUrl: this.config.apiBaseUrl,
@@ -251,21 +230,6 @@ export class TelegramGateway {
     });
   }
 
-  /**
-   * Processes a single inbound payload from the Telegram proxy API.
-   * 
-   * **Why it exists:**  
-   * Transforms raw API payloads into strongly-typed `TelegramInboundMessage` objects, evaluates 
-   * cryptographic validation policies, and routes accepted intents directly to the engine's 
-   * `ConversationManager`. Acts as the first line of defense physically shielding the brain.
-   * 
-   * **What it talks to:**  
-   * - Uses `prepareTelegramUpdate(...)` for provider-specific parse/validation.
-   * - Uses `handleAcceptedTransportConversation(...)` for shared accepted-update dispatch.
-   * - Uses `sendTelegramGatewayReply(...)` for reject/stop/final delivery.
-   * 
-   * @param update - The raw JSON update payload yielded by Telegram's `/getUpdates` queue.
-   */
   private async processUpdate(update: TelegramUpdate): Promise<void> {
     const prepared = prepareTelegramUpdate({
       update,
@@ -281,7 +245,13 @@ export class TelegramGateway {
     if (prepared.kind === "rejected") {
       await deliverPreparedTransportResponse(
         prepared.responseText,
-        (text: string) => sendTelegramGatewayReply(this.config, prepared.chatId, text),
+        (text: string) =>
+          sendObservedTelegramGatewayReply(
+            this.config,
+            prepared.chatId,
+            text,
+            this.onOutboundDelivery
+          ),
         "TELEGRAM_SEND_FAILED"
       );
       return;
@@ -289,7 +259,13 @@ export class TelegramGateway {
     if (prepared.kind === "stop") {
       await deliverPreparedTransportResponse(
         prepared.responseText,
-        (text: string) => sendTelegramGatewayReply(this.config, prepared.chatId, text),
+        (text: string) =>
+          sendObservedTelegramGatewayReply(
+            this.config,
+            prepared.chatId,
+            text,
+            this.onOutboundDelivery
+          ),
         "TELEGRAM_SEND_FAILED"
       );
       return;
@@ -303,7 +279,13 @@ export class TelegramGateway {
     if (enrichedPrepared.kind === "rejected") {
       await deliverPreparedTransportResponse(
         enrichedPrepared.responseText,
-        (text: string) => sendTelegramGatewayReply(this.config, enrichedPrepared.chatId, text),
+        (text: string) =>
+          sendObservedTelegramGatewayReply(
+            this.config,
+            enrichedPrepared.chatId,
+            text,
+            this.onOutboundDelivery
+          ),
         "TELEGRAM_SEND_FAILED"
       );
       return;
@@ -347,7 +329,13 @@ export class TelegramGateway {
           signal,
           initialExecutionInput
         ),
-      deliverReply: (reply: string) => sendTelegramGatewayReply(this.config, enrichedPrepared.chatId, reply),
+      deliverReply: (reply: string) =>
+        sendObservedTelegramGatewayReply(
+          this.config,
+          enrichedPrepared.chatId,
+          reply,
+          this.onOutboundDelivery
+        ),
       deliveryFailureCode: "TELEGRAM_SEND_FAILED",
       onEntityGraphMutationFailure: (error) => {
         console.warn(`[TelegramGateway] entity-graph mutation skipped: ${error.message}`);
@@ -355,40 +343,19 @@ export class TelegramGateway {
     });
   }
 
-  /**
-   * Creates a notifier transport bound to a specific Telegram chat.
-   *
-   * **Why it exists:**
-   * Conversation workers require a transport contract that can support standard send/edit delivery
-   * and optional Telegram native draft-stream updates.
-   *
-   * **What it talks to:**
-   * - Uses `sendReply` and `editReply` for persisted message delivery.
-   * - Uses `sendDraftUpdate` when native draft streaming is enabled for this notifier context.
-   *
-   * @param chatId - Target Telegram chat identifier.
-   * @param options - Per-notifier transport capability options.
-   * @returns Conversation notifier transport bound to this chat.
-   */
   private createConversationNotifier(
     chatId: string,
     options: TelegramNotifierOptions
   ): ConversationNotifierTransport {
-    return createTelegramGatewayNotifier(this.config, chatId, options, () => this.allocateDraftId());
+    return createTelegramGatewayNotifier(
+      this.config,
+      chatId,
+      options,
+      () => this.allocateDraftId(),
+      this.onOutboundDelivery
+    );
   }
 
-  /**
-   * Allocates a bounded deterministic draft identifier for Telegram native streaming updates.
-   *
-   * **Why it exists:**
-   * `sendMessageDraft` requires a non-zero integer `draft_id`; reuse of the same ID keeps draft
-   * changes animated while avoiding unbounded identifier growth.
-   *
-   * **What it talks to:**
-   * - Uses in-memory `nextDraftId` counter state.
-   *
-   * @returns Non-zero draft identifier suitable for `sendMessageDraft`.
-   */
   private allocateDraftId(): number {
     const allocation = allocateNextTelegramDraftId(this.nextDraftId);
     this.nextDraftId = allocation.nextDraftId;

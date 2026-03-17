@@ -113,7 +113,8 @@ export async function resolveConversationInvocation(
         ...deps,
         abortActiveAutonomousRun: deps.abortActiveAutonomousRun
           ? () => deps.abortActiveAutonomousRun?.(message.conversationId) ?? false
-          : undefined
+          : undefined,
+        runDirectConversationTurn: deps.runDirectConversationTurn
       },
       message.media
     )).reply,

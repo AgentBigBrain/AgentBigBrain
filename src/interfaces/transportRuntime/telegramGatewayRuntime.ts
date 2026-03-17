@@ -25,7 +25,10 @@ import {
   type TelegramVoiceAttachment
 } from "../mediaRuntime/telegramMediaIngress";
 import type { ConversationDeliveryResult } from "../conversationRuntime/managerContracts";
-import type { TelegramNotifierOptions } from "./contracts";
+import type {
+  TelegramNotifierOptions,
+  TelegramOutboundDeliveryObservation
+} from "./contracts";
 import {
   createTelegramConversationNotifier,
   editTelegramReply,
@@ -378,7 +381,10 @@ export function createTelegramGatewayNotifier(
   config: TelegramInterfaceConfig,
   chatId: string,
   options: TelegramNotifierOptions,
-  allocateDraftId: () => number
+  allocateDraftId: () => number,
+  observeOutboundDelivery?: (
+    event: TelegramOutboundDeliveryObservation
+  ) => void | Promise<void>
 ) {
   return createTelegramConversationNotifier({
     renderOutboundText: (messageText: string) =>
@@ -388,11 +394,46 @@ export function createTelegramGatewayNotifier(
       config.nativeDraftStreaming &&
       options.nativeDraftStreamingAllowed,
     allocateDraftId,
-    sendReply: (messageText: string) => sendTelegramGatewayReply(config, chatId, messageText),
-    editReply: (messageId: string, messageText: string) =>
-      editTelegramGatewayReply(config, chatId, messageId, messageText),
-    sendDraftUpdate: (draftId: number, messageText: string) =>
-      sendTelegramGatewayDraftUpdate(config, chatId, draftId, messageText)
+    sendReply: async (messageText: string) => {
+      const result = await sendTelegramGatewayReply(config, chatId, messageText);
+      if (result.ok) {
+        await observeOutboundDelivery?.({
+          kind: "send",
+          chatId,
+          text: messageText,
+          at: new Date().toISOString(),
+          messageId: result.messageId
+        });
+      }
+      return result;
+    },
+    editReply: async (messageId: string, messageText: string) => {
+      const result = await editTelegramGatewayReply(config, chatId, messageId, messageText);
+      if (result.ok) {
+        await observeOutboundDelivery?.({
+          kind: "edit",
+          chatId,
+          text: messageText,
+          at: new Date().toISOString(),
+          messageId
+        });
+      }
+      return result;
+    },
+    sendDraftUpdate: async (draftId: number, messageText: string) => {
+      const result = await sendTelegramGatewayDraftUpdate(config, chatId, draftId, messageText);
+      if (result.ok) {
+        await observeOutboundDelivery?.({
+          kind: "draft",
+          chatId,
+          text: messageText,
+          at: new Date().toISOString(),
+          draftId,
+          messageId: result.messageId
+        });
+      }
+      return result;
+    }
   });
 }
 

@@ -40,7 +40,6 @@ import {
   type QueryConversationContinuityEpisodes,
   type ExecuteConversationTask
 } from "./conversationRuntime/managerContracts";
-
 export {
   buildAutonomousExecutionInput,
   parseAutonomousExecutionInput
@@ -59,7 +58,6 @@ export type {
   ExecuteConversationTask
 } from "./conversationRuntime/managerContracts";
 import type { ConversationInboundMessage } from "./conversationRuntime/managerContracts";
-
 const DEFAULT_CONVERSATION_MANAGER_CONFIG: ConversationManagerConfig = {
   maxProposalInputChars: 5_000,
   heartbeatIntervalMs: 15_000,
@@ -76,7 +74,6 @@ const DEFAULT_CONVERSATION_MANAGER_CONFIG: ConversationManagerConfig = {
   pulseLexicalOverridePath: null,
   allowAutonomousViaInterface: false
 };
-
 const DEFAULT_INTENT_INTERPRETER_CONFIDENCE_THRESHOLD = 0.85;
 
 export class ConversationManager {
@@ -85,6 +82,7 @@ export class ConversationManager {
   private readonly workerBindings = new Map<string, SessionWorkerBinding>();
   private readonly config: ConversationManagerConfig;
   private readonly interpretConversationIntent?: ConversationIntentInterpreter;
+  private readonly runDirectConversationTurn?: ConversationManagerDependencies["runDirectConversationTurn"];
   private readonly localIntentModelResolver?: ConversationManagerDependencies["localIntentModelResolver"];
   private readonly intentInterpreterConfidenceThreshold: number;
   private readonly runCheckpointReview?: ConversationCheckpointReviewRunner;
@@ -123,6 +121,7 @@ export class ConversationManager {
       ...config
     };
     this.interpretConversationIntent = dependencies.interpretConversationIntent;
+    this.runDirectConversationTurn = dependencies.runDirectConversationTurn;
     this.localIntentModelResolver = dependencies.localIntentModelResolver;
     this.intentInterpreterConfidenceThreshold = Math.max(
       0,
@@ -277,6 +276,7 @@ export class ConversationManager {
       followUpRuleContext: this.followUpRuleContext,
       pulseLexicalRuleContext: this.pulseLexicalRuleContext,
       interpretConversationIntent: this.interpretConversationIntent,
+      runDirectConversationTurn: this.runDirectConversationTurn,
       localIntentModelResolver: this.localIntentModelResolver,
       intentInterpreterConfidenceThreshold: this.intentInterpreterConfidenceThreshold,
       runCheckpointReview: this.runCheckpointReview,

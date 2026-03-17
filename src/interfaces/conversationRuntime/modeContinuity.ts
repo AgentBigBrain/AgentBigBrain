@@ -23,6 +23,12 @@ const DESTINATION_REFERENCE_PATTERNS: readonly RegExp[] = [
   /\bfolder called\b/i
 ] as const;
 
+const WORK_PRODUCT_CONTINUATION_PATTERNS: readonly RegExp[] = [
+  /\b(?:turn|transform|convert|expand)\b[\s\S]{0,40}\b(?:that|this|the)\b[\s\S]{0,20}\b(?:plan|outline|draft|copy)\b/i,
+  /\b(?:write|draft|outline|refine|revise|edit|update|change|add|remove)\b[\s\S]{0,80}\b(?:hero|headline|supporting paragraph|call[- ]to[- ]action|cta|section|outline|copy|draft|trust bar|image)\b/i,
+  /\b(?:next|now|then|after that)\b[\s,:-]*(?:please\s+)?(?:write|draft|outline|refine|revise|edit|update|change|add|remove|turn|transform|convert|expand)\b/i
+] as const;
+
 const CONTINUABLE_MODES = new Set<ConversationIntentMode>([
   "plan",
   "build",
@@ -96,6 +102,9 @@ export function resolveModeContinuityIntent(
     preferences.presentation.keepVisible ||
     preferences.presentation.leaveOpen ||
     preferences.presentation.runLocally;
+  const hasWorkProductContinuationCue = WORK_PRODUCT_CONTINUATION_PATTERNS.some((pattern) =>
+    pattern.test(normalized)
+  );
 
   if (hasContinuationCue) {
     return buildContinuityResolution(
@@ -109,8 +118,17 @@ export function resolveModeContinuityIntent(
   if (
     continuity.activeMode === "build" ||
     continuity.activeMode === "autonomous" ||
-    continuity.activeMode === "review"
+    continuity.activeMode === "review" ||
+    continuity.activeMode === "plan"
   ) {
+    if (hasWorkProductContinuationCue) {
+      return buildContinuityResolution(
+        session,
+        "intent_mode_continuity_work_product_follow_up",
+        "The user asked for the next transformation or drafting step on the current work product, so the active working mode should continue.",
+        "high"
+      );
+    }
     if (hasDestinationCue) {
       return buildContinuityResolution(
         session,

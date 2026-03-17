@@ -17,6 +17,16 @@ test("resolveConversationIntentMode detects natural capability discovery request
   assert.equal(resolution.clarification, null);
 });
 
+test("resolveConversationIntentMode treats what-can-you-help-me-with prompts as capability discovery", async () => {
+  const resolution = await resolveConversationIntentMode(
+    "What can you help me with?"
+  );
+
+  assert.equal(resolution.mode, "discover_available_capabilities");
+  assert.equal(resolution.confidence, "high");
+  assert.equal(resolution.clarification, null);
+});
+
 test("resolveConversationIntentMode treats natural capability-limit questions as capability discovery intent", async () => {
   const resolution = await resolveConversationIntentMode(
     "Why can't you do that here right now?"
@@ -154,6 +164,46 @@ test("resolveConversationIntentMode lets the local intent model break ties for n
   assert.equal(resolution.mode, "build");
   assert.equal(resolution.confidence, "medium");
   assert.equal(resolution.matchedRuleId, "local_intent_model_build_now");
+  assert.equal(resolution.clarification, null);
+});
+
+test("resolveConversationIntentMode treats polite edit imperatives as execute-now work", async () => {
+  const resolution = await resolveConversationIntentMode(
+    "Please change the hero section so the headline says calmer drone operations start here."
+  );
+
+  assert.equal(resolution.mode, "build");
+  assert.equal(resolution.confidence, "high");
+  assert.equal(resolution.clarification, null);
+});
+
+test("resolveConversationIntentMode treats natural desktop cleanup imperatives as execute-now work", async () => {
+  const resolution = await resolveConversationIntentMode(
+    "Can you clean up the drone-company folders on my desktop and put them into drone-folder for me?"
+  );
+
+  assert.equal(resolution.mode, "build");
+  assert.equal(resolution.confidence, "high");
+  assert.equal(resolution.clarification, null);
+});
+
+test("resolveConversationIntentMode keeps the Telegram live-smoke edit wording on the build path", async () => {
+  const resolution = await resolveConversationIntentMode(
+    "That helps. Please change the hero section so the headline literally says 'Calmer drone operations start here', and add a short trust bar that literally says 'Trusted by local teams'. Leave the updated page in the same place when you're done."
+  );
+
+  assert.equal(resolution.mode, "build");
+  assert.equal(resolution.confidence, "high");
+  assert.equal(resolution.clarification, null);
+});
+
+test("resolveConversationIntentMode keeps the Telegram live-smoke cleanup wording on the build path", async () => {
+  const resolution = await resolveConversationIntentMode(
+    "One last real-world thing: please go ahead and clean up my desktop now by moving every folder there that starts with drone-company into drone-folder. I do mean all of them, so you do not need to ask again before doing it."
+  );
+
+  assert.equal(resolution.mode, "build");
+  assert.equal(resolution.confidence, "high");
   assert.equal(resolution.clarification, null);
 });
 

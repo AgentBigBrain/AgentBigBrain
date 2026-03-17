@@ -27,6 +27,7 @@ import {
   humanizeAutonomousStopReason
 } from "./userFacing/stopSummarySurface";
 import { buildAutonomousConversationExecutionResult } from "./autonomousConversationExecutionResult";
+import { runDirectConversationReply } from "./conversationRuntime/directConversationReply";
 import type {
   ConversationExecutionResult,
   ConversationExecutionProgressUpdate,
@@ -254,6 +255,27 @@ export class DiscordAdapter {
    */
   async runTextTask(text: string, receivedAt: string): Promise<TaskRunResult> {
     return this.brain.runTask(buildTaskFromText(text, receivedAt));
+  }
+
+  /**
+   * Generates a direct conversational reply without entering the durable task-run path.
+   *
+   * **Why it exists:**
+   * Ordinary conversation should remain model-authored even when another task is using the shared
+   * runtime state file.
+   *
+   * @param text - Current conversational turn, optionally enriched with bounded chat context.
+   * @param receivedAt - Timestamp used for deterministic synthetic task metadata.
+   * @returns Model-authored conversational reply payload.
+   */
+  async runDirectConversationTurn(
+    text: string,
+    receivedAt: string
+  ): Promise<ConversationExecutionResult> {
+    return {
+      summary: await runDirectConversationReply(text, receivedAt),
+      taskRunResult: null
+    };
   }
 
   /**

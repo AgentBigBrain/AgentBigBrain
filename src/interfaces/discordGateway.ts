@@ -39,6 +39,7 @@ import { runCheckpoint611LiveReview } from "./CheckpointReviewRunners/stage6_5Ch
 import { runCheckpoint613LiveReview } from "./CheckpointReviewRunners/stage6_5Checkpoint6_13Live";
 import { runCheckpoint675LiveReview } from "../core/stage6_75CheckpointLive";
 import { EntityGraphStore } from "../core/entityGraphStore";
+import { buildDiscordCapabilitySummary } from "./conversationRuntime/capabilityIntrospection";
 import { SkillRegistryStore } from "../organs/skillRegistry/skillRegistryStore";
 import type { LocalIntentModelResolver } from "../organs/languageUnderstanding/localIntentModelContracts";
 
@@ -133,6 +134,8 @@ export class DiscordGateway {
     }, {
       interpretConversationIntent: async (input, recentTurns, pulseRuleContext) =>
         this.adapter.interpretConversationIntent(input, recentTurns, pulseRuleContext),
+      runDirectConversationTurn: async (input, receivedAt) =>
+        this.adapter.runDirectConversationTurn(input, receivedAt),
       queryContinuityEpisodes: async (request) => {
         const graph = await this.entityGraphStore.getGraph();
         return this.adapter.queryContinuityEpisodes(graph, request);
@@ -173,6 +176,10 @@ export class DiscordGateway {
         ),
       localIntentModelResolver: options.localIntentModelResolver,
       listAvailableSkills: async () => this.skillRegistryStore.listAvailableSkills(),
+      describeRuntimeCapabilities: async () =>
+        buildDiscordCapabilitySummary(
+          this.config.security.allowAutonomousViaInterface
+        ),
       listManagedProcessSnapshots: async () => this.adapter.listManagedProcessSnapshots(),
       listBrowserSessionSnapshots: async () => this.adapter.listBrowserSessionSnapshots(),
       abortActiveAutonomousRun: (conversationId) =>

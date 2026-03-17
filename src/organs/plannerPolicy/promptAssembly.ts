@@ -34,8 +34,9 @@ const BROWSER_CONTROL_REQUEST_PATTERN =
   /\b(?:open|reopen|close|leave|keep)\b[\s\S]{0,40}\b(?:browser|tab|window|page)\b/i;
 
 export const RESPONSE_IDENTITY_GUARDRAIL =
-  "Keep explicit AI-agent identity in all user-facing text. " +
-  "Do not claim to be human, do not claim to be the user, and do not write in first person as if you are the user. ";
+  "Use first-person voice for your own actions and replies by default. " +
+  "Do not claim to be human, do not claim to be the user, and do not write in first person as if you are the user. " +
+  "Do not volunteer AI-agent identity or refer to yourself in third person or by name unless the user explicitly asks for that style or the identity is directly relevant. ";
 export const RESPONSE_STYLE_GUARDRAIL =
   "When you write user-facing text, keep it human-first: plain language first, brief explanation second, and a concrete next step when relevant. " +
   "Avoid internal control-plane jargon unless diagnostics were explicitly requested. ";

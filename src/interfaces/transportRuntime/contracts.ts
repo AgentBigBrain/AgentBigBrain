@@ -67,6 +67,19 @@ export interface TelegramNotifierOptions {
   nativeDraftStreamingAllowed: boolean;
 }
 
+export interface TelegramOutboundDeliveryObservation {
+  kind: "send" | "edit" | "draft";
+  chatId: string;
+  text: string;
+  at: string;
+  messageId?: string | null;
+  draftId?: number | null;
+}
+
+export type TelegramOutboundDeliveryObserver = (
+  event: TelegramOutboundDeliveryObservation
+) => void | Promise<void>;
+
 export interface TelegramNotifierFactoryInput {
   renderOutboundText(text: string): string;
   nativeDraftStreamingEnabled: boolean;

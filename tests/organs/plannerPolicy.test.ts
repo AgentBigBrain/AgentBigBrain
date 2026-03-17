@@ -22,7 +22,10 @@ import {
   buildPlannerRepairSystemPrompt,
   buildPlannerSystemPrompt
 } from "../../src/organs/plannerPolicy/promptAssembly";
-import { assessExecutionStyleBuildPlan } from "../../src/organs/plannerPolicy/buildExecutionPolicy";
+import {
+  assessExecutionStyleBuildPlan,
+  requiresExecutableBuildPlan
+} from "../../src/organs/plannerPolicy/buildExecutionPolicy";
 import {
   buildWorkspaceRecoveryNextUserInput,
   buildWorkspaceRecoveryPostShutdownRetryInput
@@ -548,6 +551,15 @@ test("implicit go-into phrasing still classifies as executable local organizatio
 
   assert.equal(isExecutionStyleBuildRequest(currentUserRequest), false);
   assert.equal(isLocalWorkspaceOrganizationRequest(currentUserRequest), true);
+});
+
+test("clean-up phrasing over my desktop still classifies as executable local organization work", () => {
+  const currentUserRequest =
+    "One last real-world thing: please go ahead and clean up my desktop now by moving every folder there that starts with drone-company into drone-folder. I do mean all of them, so you do not need to ask again before doing it.";
+
+  assert.equal(isExecutionStyleBuildRequest(currentUserRequest), false);
+  assert.equal(isLocalWorkspaceOrganizationRequest(currentUserRequest), true);
+  assert.equal(requiresExecutableBuildPlan(currentUserRequest), true);
 });
 
 test("local workspace organization classification uses the active request from wrapped input", () => {

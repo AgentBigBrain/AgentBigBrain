@@ -411,7 +411,7 @@ test("conversation manager keeps session responsive with job queue status and he
         notifications.push(message);
       }
     );
-    assert.equal(firstReply, "I'm starting on that now. First up: run long task one");
+    assert.equal(firstReply, "On it. I'll start with: run long task one");
 
     const secondReply = await manager.handleMessage(
       buildMessage("run follow-up task two"),
@@ -523,7 +523,7 @@ test("conversation manager suppresses generic heartbeats for editable telegram t
       },
       notifier
     );
-    assert.equal(reply, "I'm starting on that now. First up: run a long editable task");
+    assert.equal(reply, "On it. I'll start with: run a long editable task");
 
     await waitForAsync(async () => {
       const session = await store.getSession("telegram:chat-1:user-1");
@@ -893,7 +893,7 @@ test("conversation manager resolves short follow-up answers against the prior as
         notifications.push(message);
       }
     );
-    assert.equal(secondReply, "I'm starting on that now. First up: plain text");
+    assert.equal(secondReply, "On it. I'll start with: plain text");
 
     await waitFor(
       () =>
@@ -905,25 +905,19 @@ test("conversation manager resolves short follow-up answers against the prior as
 
     assert.equal(executedInputs.length, 2);
     assert.ok(
-      executedInputs[1].includes("Follow-up user response to prior assistant clarification.")
+      executedInputs[1].includes("Recent conversation context (oldest to newest):")
     );
     assert.ok(
       executedInputs[1].includes(
-        "Previous assistant question: How would you like the exact approval diff rendered?"
+        "- assistant: How would you like the exact approval diff rendered?"
       )
     );
-    assert.ok(executedInputs[1].includes("User follow-up answer: plain text"));
+    assert.ok(executedInputs[1].includes("Current user request:\nplain text"));
 
     const session = await store.getSession("telegram:chat-1:user-1");
     assert.ok(session);
-    const classifierEvents = session?.classifierEvents ?? [];
     assert.ok(
-      classifierEvents.some(
-        (event) =>
-          event.classifier === "follow_up" &&
-          event.matchedRuleId === "follow_up_v1_contextual_short_reply" &&
-          event.rulepackVersion === "FollowUpRulepackV1"
-      )
+      session?.recentJobs[0]?.input.includes("plain text")
     );
   } finally {
     await removeTempDirWithRetry(tempDir);
@@ -1005,16 +999,19 @@ test("conversation manager resolves short follow-up answers against latest assis
     assert.equal(executedInputs.length, 3);
     assert.ok(
       executedInputs[2].includes(
-        "Previous assistant question: Please confirm if you would like to proceed with this approach."
+        "- assistant: Please confirm if you would like to proceed with this approach."
+      )
+    );
+    assert.ok(
+      executedInputs[2].includes(
+        "- Goal: Capture this browser workflow and block if selector drift appears."
       )
     );
     assert.equal(
-      executedInputs[2].includes(
-        "Previous assistant question: Could you please specify which school you are asking about?"
-      ),
+      executedInputs[2].includes("- Goal: Which school did we attend?"),
       false
     );
-    assert.ok(executedInputs[2].includes("User follow-up answer: I confirm."));
+    assert.ok(executedInputs[2].includes("Current user request:\nI confirm."));
   } finally {
     await removeTempDirWithRetry(tempDir);
   }
@@ -1447,7 +1444,7 @@ test("conversation manager fails closed on conflicting pulse lexical commands an
         notifications.push(message);
       }
     );
-    assert.equal(reply, "I'm starting on that now. First up: please turn on and turn off pulse reminders");
+    assert.equal(reply, "On it. I'll start with: please turn on and turn off pulse reminders");
 
     await waitFor(
       () => notifications.some((message) => message.includes("Conflict was routed as normal chat input.")),
@@ -1554,7 +1551,7 @@ test("conversation manager fails closed when injected intent interpreter throws"
         notifications.push(message);
       }
     );
-    assert.equal(reply, "I'm starting on that now. First up: Could you chill with those for now?");
+    assert.equal(reply, "On it. I'll start with: Could you chill with those for now?");
 
     await waitFor(
       () => notifications.some((message) => message.includes("No pulse command interpreted.")),

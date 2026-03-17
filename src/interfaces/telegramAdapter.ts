@@ -27,6 +27,7 @@ import {
   humanizeAutonomousStopReason
 } from "./userFacing/stopSummarySurface";
 import { buildAutonomousConversationExecutionResult } from "./autonomousConversationExecutionResult";
+import { runDirectConversationReply } from "./conversationRuntime/directConversationReply";
 import type {
   ConversationExecutionResult,
   ConversationExecutionProgressUpdate,
@@ -258,6 +259,27 @@ export class TelegramAdapter {
   async runTextTask(text: string, receivedAt: string): Promise<TaskRunResult> {
     const task = buildTaskFromText(text, receivedAt);
     return this.brain.runTask(task);
+  }
+
+  /**
+   * Generates a direct conversational reply without entering the durable task-run path.
+   *
+   * **Why it exists:**
+   * Small-talk turns should stay model-authored, but they should not fail just because another
+   * runtime task is holding the shared `runtime/state.json` lock.
+   *
+   * @param text - Current conversational turn, optionally enriched with bounded chat context.
+   * @param receivedAt - Timestamp used for deterministic synthetic task metadata.
+   * @returns Model-authored conversational reply payload.
+   */
+  async runDirectConversationTurn(
+    text: string,
+    receivedAt: string
+  ): Promise<ConversationExecutionResult> {
+    return {
+      summary: await runDirectConversationReply(text, receivedAt),
+      taskRunResult: null
+    };
   }
 
   /**

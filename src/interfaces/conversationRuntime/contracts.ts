@@ -18,7 +18,8 @@ import type {
   ResolveConversationMemoryEpisode,
   ReviewConversationMemory,
   MarkConversationMemoryEpisodeWrong,
-  ExecuteConversationTask
+  ExecuteConversationTask,
+  RunDirectConversationTurn
 } from "./managerContracts";
 import type { LocalIntentModelResolver } from "../../organs/languageUnderstanding/localIntentModelContracts";
 import type { ConversationSession } from "../sessionStore";
@@ -73,6 +74,7 @@ export interface ConversationIngressDependencies extends ConversationIngressRule
     | "maxPathDestinations"
   >;
   interpretConversationIntent?: ConversationIntentInterpreter;
+  runDirectConversationTurn?: RunDirectConversationTurn;
   localIntentModelResolver?: LocalIntentModelResolver;
   intentInterpreterConfidenceThreshold: number;
   runCheckpointReview?: ConversationCheckpointReviewRunner;

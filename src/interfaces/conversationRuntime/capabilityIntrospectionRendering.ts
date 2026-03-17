@@ -13,6 +13,46 @@ export interface RenderCapabilityDiscoveryResponseInput {
 }
 
 /**
+ * Builds grounded capability-discovery context for the direct conversation synthesizer path.
+ *
+ * @param userInput - Raw user question about capabilities or reusable skills.
+ * @param input - Capability summary plus optional skill inventory text.
+ * @returns Bounded prompt context for natural capability replies.
+ */
+export function buildCapabilityDiscoveryConversationInput(
+  userInput: string,
+  input: RenderCapabilityDiscoveryResponseInput
+): string {
+  const sections: string[] = [
+    "Reply naturally to the user's question about what you can help with in this chat.",
+    "Use only the capability and skill facts below. Do not invent tools or mention internal systems."
+  ];
+
+  if (input.capabilitySummary) {
+    sections.push("Capability facts:");
+    for (const capability of input.capabilitySummary.capabilities) {
+      sections.push(
+        `- ${capability.label}: ${renderCapabilityStatus(capability.status)}. ${capability.summary}`
+      );
+    }
+    sections.push(
+      input.capabilitySummary.privateChatAliasOptional
+        ? "- Private chat note: they can message you naturally without saying BigBrain first."
+        : "- Shared chat note: they should say BigBrain first in shared chats."
+    );
+  }
+
+  if (input.skillInventoryText?.trim()) {
+    sections.push("Reusable skill facts:");
+    sections.push(humanizeSkillInventoryForDiscovery(input.skillInventoryText));
+  }
+
+  sections.push("Current user request:");
+  sections.push(userInput.trim());
+  return sections.join("\n");
+}
+
+/**
  * Renders one capability status into a short natural-language label.
  *
  * @param status - Canonical capability availability status.

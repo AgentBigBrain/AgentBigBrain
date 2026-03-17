@@ -148,3 +148,41 @@ test("resolveConversationInvocation routes normal messages into the queue and re
   assert.equal(capturedExecutionInput, "Please draft a concise summary");
   assert.ok(!capturedExecutionInput.includes("Deterministic routing hint:"));
 });
+
+test("resolveConversationInvocation keeps ordinary chat synchronous without queueing work", async () => {
+  const session = buildSession();
+  let executeCalls = 0;
+  let directConversationCalls = 0;
+
+  const resolution = await resolveConversationInvocation(
+    session,
+    buildMessage("What's your name?"),
+    async (input) => {
+      executeCalls += 1;
+      assert.equal(input, "What's your name?");
+      return {
+        summary: "I'm BigBrain."
+      };
+    },
+    buildDependencies(
+      () => {
+        throw new Error("enqueueJob should not run for ordinary chat");
+      },
+      {
+        runDirectConversationTurn: async (input) => {
+          directConversationCalls += 1;
+          assert.equal(input, "What's your name?");
+          return {
+            summary: "I'm BigBrain."
+          };
+        }
+      }
+    )
+  );
+
+  assert.equal(resolution.reply, "I'm BigBrain.");
+  assert.equal(resolution.shouldStartWorker, false);
+  assert.equal(directConversationCalls, 1);
+  assert.equal(executeCalls, 0);
+  assert.equal(session.queuedJobs.length, 0);
+});

@@ -67,3 +67,21 @@ test("stripLabelStyleOpening rewrites filler plus third-person AI assistant comp
     "Done - I have closed that landing page window. You can tell me what you want to work on next."
   );
 });
+
+test("stripLabelStyleOpening rewrites third-person BigBrain self-reference into first person", () => {
+  assert.equal(
+    stripLabelStyleOpening(
+      "If you want, BigBrain can turn that plan into a section-by-section outline next."
+    ),
+    "If you want, I can turn that plan into a section-by-section outline next."
+  );
+});
+
+test("stripLabelStyleOpening rewrites tell-BigBrain follow-up phrasing", () => {
+  assert.equal(
+    stripLabelStyleOpening(
+      "BigBrain is ready with the next draft. You can tell BigBrain what you want to refine next."
+    ),
+    "Ready with the next draft. You can tell me what you want to refine next."
+  );
+});

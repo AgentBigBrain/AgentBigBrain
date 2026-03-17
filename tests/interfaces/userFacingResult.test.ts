@@ -237,6 +237,33 @@ test("selectUserFacingSummary rewrites filler plus third-person AI assistant com
   );
 });
 
+test("selectUserFacingSummary rewrites third-person BigBrain self-reference in respond output", () => {
+  const runResult = buildRunResult("technical summary", [
+    {
+      action: {
+        id: "action_respond_bigbrain_third_person",
+        type: "respond",
+        description: "reply",
+        params: {},
+        estimatedCostUsd: 0.02
+      },
+      mode: "fast_path",
+      approved: true,
+      output:
+        "If you want, BigBrain can next turn this into a tiny section-by-section content outline before any coding.",
+      blockedBy: [],
+      violations: [],
+      votes: []
+    }
+  ]);
+
+  const selected = selectUserFacingSummary(runResult);
+  assert.equal(
+    selected,
+    "If you want, I can next turn this into a tiny section-by-section content outline before any coding."
+  );
+});
+
 test("selectUserFacingSummary blocks browser-execution overclaims when no shell action executed", () => {
   const runResult = buildRunResult("technical summary", [
     {
@@ -1573,6 +1600,62 @@ test("selectUserFacingSummary surfaces a human-first organization summary withou
   assert.equal(
     selected,
     "I moved the matching folders into C:\\Users\\testuser\\OneDrive\\Desktop\\drone-web-projects. I shut down 1 exact tracked preview holder first so the move could finish."
+  );
+});
+
+test("selectUserFacingSummary trusts JSON move-proof output for desktop cleanup runs", () => {
+  const runResult = buildRunResult(
+    "Completed task with 2 approved action(s) and 0 blocked action(s).",
+    [
+      {
+        action: {
+          id: "action_move_desktop_drone_folders_json",
+          type: "shell_command",
+          description: "move all drone-company desktop folders into drone-folder",
+          params: {
+            command: "Move-Item ..."
+          },
+          estimatedCostUsd: 0.18
+        },
+        mode: "escalation_path",
+        approved: true,
+        output:
+          "Shell success:\n{\"destination\":\"C:\\\\Users\\\\testuser\\\\OneDrive\\\\Desktop\\\\drone-folder\",\"moved\":[\"drone-company-a\",\"drone-company-b\"],\"failed\":[]}",
+        blockedBy: [],
+        violations: [],
+        votes: []
+      },
+      {
+        action: {
+          id: "action_ack_desktop_drone_cleanup",
+          type: "respond",
+          description: "acknowledge cleanup",
+          params: {
+            message: "Got it — I’m moving the folders now."
+          },
+          estimatedCostUsd: 0.02
+        },
+        mode: "fast_path",
+        approved: true,
+        output: "Got it — I’m moving the folders now.",
+        blockedBy: [],
+        violations: [],
+        votes: []
+      }
+    ],
+    {
+      userInput:
+        "Please clean up the drone-company folders on my desktop and put them into drone-folder."
+    }
+  );
+
+  const selected = selectUserFacingSummary(runResult, {
+    showTechnicalSummary: false
+  });
+
+  assert.equal(
+    selected,
+    "I moved drone-company-a and drone-company-b into C:\\Users\\testuser\\OneDrive\\Desktop\\drone-folder."
   );
 });
 

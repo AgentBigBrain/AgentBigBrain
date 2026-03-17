@@ -251,14 +251,14 @@ async function runNaturalBuildScenario(harness: Harness): Promise<LiveSmokeScena
   );
   return {
     scenarioId: "natural_build_request_live",
-    passed: reply.startsWith("I'm starting on that now.") && executed,
+    passed: reply.startsWith("On it. I'll start with:") && executed,
     transcriptPreview: [
       "user: Go ahead and build this now with a clean hero and a clear call to action. Put it in the same desktop folder as before and keep it visible when it is ready."
     ],
     checks: [
       {
         label: "immediate_reply_shape",
-        passed: reply.startsWith("I'm starting on that now."),
+        passed: reply.startsWith("On it. I'll start with:"),
         observed: reply
       },
       {
@@ -313,7 +313,7 @@ async function runClarificationScenario(harness: Harness): Promise<LiveSmokeScen
     scenarioId: "clarification_round_trip_live",
     passed:
       firstReply.includes("Do you want me to plan it first or build it now?")
-      && secondReply.startsWith("I'm starting on that now.")
+      && secondReply.startsWith("On it. I'll start with:")
       && clarifiedExecution,
     transcriptPreview: [
       "user: Create the landing page we talked about yesterday with a strong hero and call to action. I want to come back to it later, and I am still split on how the first step should happen.",
@@ -402,7 +402,7 @@ async function runQueueAndStatusCopyScenario(harness: Harness): Promise<LiveSmok
   );
   return {
     scenarioId: "queue_status_copy_live",
-    passed: firstReply.startsWith("I'm starting on that now.") && queueCopyPassed && statusCopyPassed,
+    passed: firstReply.startsWith("On it. I'll start with:") && queueCopyPassed && statusCopyPassed,
     transcriptPreview: [
       "user: Go ahead and build it now for this long queue request. Keep it deterministic and report completion after checks.",
       `assistant: ${firstReply}`,
@@ -753,7 +753,7 @@ async function runLocalIntentModelScenario(harness: Harness): Promise<LiveSmokeS
     resolverCalls > 0
     && (observedMode === "build" || observedMode === "autonomous")
     && (
-      reply.startsWith("I'm starting on that now.")
+      reply.startsWith("On it. I'll start with:")
       || reply.startsWith("I'm taking this end to end now.")
     );
   harness.localIntentModel.status = passed

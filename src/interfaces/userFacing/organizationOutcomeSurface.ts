@@ -18,6 +18,7 @@ const LOCAL_ORGANIZATION_DESTINATION_PATTERN =
 const LOCAL_ORGANIZATION_MOVE_COMMAND_PATTERN = /\b(?:move-item|mv|move)\b/i;
 
 interface OrganizationMoveOutputEvidence {
+  destinationPath: string | null;
   movedEntries: readonly string[];
   remainingEntries: readonly string[];
 }
@@ -287,6 +288,45 @@ function parseOrganizationMoveOutputEvidence(
   if (typeof output !== "string") {
     return null;
   }
+  const strippedOutput = output.replace(/^Shell (?:success|failed):\s*/i, "").trim();
+  if (strippedOutput.startsWith("{")) {
+    try {
+      const parsed = JSON.parse(strippedOutput) as {
+        destination?: unknown;
+        moved?: unknown;
+        failed?: unknown;
+      };
+      const movedEntries = Array.isArray(parsed.moved)
+        ? parsed.moved
+          .map((entry) => (typeof entry === "string" ? entry.trim() : ""))
+          .filter((entry) => entry.length > 0)
+        : [];
+      const remainingEntries = Array.isArray(parsed.failed)
+        ? parsed.failed
+          .map((entry) => {
+            if (typeof entry !== "string") {
+              return "";
+            }
+            const [name] = entry.split(":");
+            return name?.trim() ?? "";
+          })
+          .filter((entry) => entry.length > 0)
+        : [];
+      const destinationPath =
+        typeof parsed.destination === "string" && parsed.destination.trim().length > 0
+          ? parsed.destination.trim()
+          : null;
+      if (movedEntries.length > 0 || remainingEntries.length > 0) {
+        return {
+          destinationPath,
+          movedEntries,
+          remainingEntries
+        };
+      }
+    } catch {
+      // Fall through to the bounded marker parser below.
+    }
+  }
   const parsedSections = parseOrganizationOutputSections(output);
   if (!parsedSections) {
     return null;
@@ -301,6 +341,7 @@ function parseOrganizationMoveOutputEvidence(
     return null;
   }
   return {
+    destinationPath: null,
     movedEntries,
     remainingEntries
   };
@@ -417,15 +458,16 @@ export function resolveLocalOrganizationOutcomeLine(
     return null;
   }
 
+  const moveOutputEvidence = resolveOrganizationMoveOutputEvidence(runResult);
   const destinationName = extractOrganizationDestinationName(activeRequest);
-  const destinationPath = resolveOrganizationDestinationPath(
-    runResult,
-    destinationName
-  );
+  const destinationPath =
+    resolveOrganizationDestinationPath(
+      runResult,
+      destinationName
+    ) ?? moveOutputEvidence?.destinationPath ?? null;
   const destinationEntries = hasVerifiedOrganizationDestinationContents(runResult, destinationPath)
     ? resolveOrganizationDestinationEntries(runResult, destinationPath)
     : [];
-  const moveOutputEvidence = resolveOrganizationMoveOutputEvidence(runResult);
   const movedEntries =
     destinationEntries.length > 0 ? destinationEntries : moveOutputEvidence?.movedEntries ?? [];
   if (movedEntries.length === 0) {
@@ -483,16 +525,17 @@ export function resolvePartialLocalOrganizationOutcomeLine(
     return null;
   }
 
+  const moveOutputEvidence = resolveOrganizationMoveOutputEvidence(runResult);
   const destinationName = extractOrganizationDestinationName(activeRequest);
-  const destinationPath = resolveOrganizationDestinationPath(
-    runResult,
-    destinationName
-  );
+  const destinationPath =
+    resolveOrganizationDestinationPath(
+      runResult,
+      destinationName
+    ) ?? moveOutputEvidence?.destinationPath ?? null;
   const resolvedDestinationEntries = resolveOrganizationDestinationEntries(
     runResult,
     destinationPath
   );
-  const moveOutputEvidence = resolveOrganizationMoveOutputEvidence(runResult);
   const destinationEntries = (
     resolvedDestinationEntries.length > 0
       ? resolvedDestinationEntries

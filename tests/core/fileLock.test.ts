@@ -3,13 +3,14 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, stat, utimes, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
 import {
   buildAtomicWriteTempFilePath,
+  withFileLock,
   writeFileAtomic
 } from "../../src/core/fileLock";
 import { RuntimeEntropySource } from "../../src/core/runtimeEntropy";
@@ -62,5 +63,65 @@ test("writeFileAtomic writes destination file and leaves no temp artifact", asyn
     const files = await readdir(path.dirname(targetPath));
     const tempFiles = files.filter((fileName) => fileName.includes(".tmp-"));
     assert.equal(tempFiles.length, 0);
+  });
+});
+
+test("withFileLock reclaims a stale malformed legacy lock file", async () => {
+  await withTempDir(async (tempDir) => {
+    const targetPath = path.join(tempDir, "runtime", "state.json");
+    const lockPath = `${targetPath}.lock`;
+    await mkdir(path.dirname(lockPath), { recursive: true });
+    await writeFile(lockPath, "", "utf8");
+    const staleAt = new Date((Date.now() - 120_000) / 1000 * 1000);
+    await utimes(lockPath, staleAt, staleAt);
+
+    let ran = false;
+    await withFileLock(
+      targetPath,
+      async () => {
+        ran = true;
+      },
+      {
+        malformedStaleAfterMs: 1_000
+      }
+    );
+
+    assert.equal(ran, true);
+    await assert.rejects(() => stat(lockPath), { code: "ENOENT" });
+  });
+});
+
+test("withFileLock reclaims a stale lock when the recorded pid is no longer alive", async () => {
+  await withTempDir(async (tempDir) => {
+    const targetPath = path.join(tempDir, "runtime", "state.json");
+    const lockPath = `${targetPath}.lock`;
+    await mkdir(path.dirname(lockPath), { recursive: true });
+    await writeFile(
+      lockPath,
+      `${JSON.stringify(
+        {
+          pid: 999_999,
+          acquiredAt: "2026-03-15T00:00:00.000Z",
+          targetPath
+        },
+        null,
+        2
+      )}\n`,
+      "utf8"
+    );
+
+    let ran = false;
+    await withFileLock(
+      targetPath,
+      async () => {
+        ran = true;
+      },
+      {
+        isProcessAlive: () => false
+      }
+    );
+
+    assert.equal(ran, true);
+    await assert.rejects(() => stat(lockPath), { code: "ENOENT" });
   });
 });

@@ -375,6 +375,328 @@ test("routeConversationMessageInput serves natural capability discovery through 
   );
 });
 
+test("routeConversationMessageInput keeps what-can-you-help-me-with prompts off the worker path", async () => {
+  const session = buildSession();
+  const result = await routeConversationMessageInput(
+    session,
+    "What can you help me with?",
+    "2026-03-11T18:05:06.000Z",
+    buildDependencies(
+      () => {
+        throw new Error("enqueueJob should not run for capability discovery prompts");
+      },
+      {
+        describeRuntimeCapabilities: async () => ({
+          provider: "telegram",
+          privateChatAliasOptional: true,
+          supportsNaturalConversation: true,
+          supportsAutonomousExecution: true,
+          supportsMemoryReview: true,
+          capabilities: [
+            {
+              id: "natural_chat",
+              label: "Natural conversation",
+              status: "available",
+              summary: "You can talk to me normally in this private chat."
+            },
+            {
+              id: "plan_and_build",
+              label: "Plan and build requests",
+              status: "available",
+              summary: "I can help plan, build, and review work from chat."
+            }
+          ]
+        }),
+        listAvailableSkills: async () => [
+          {
+            name: "planner-fix",
+            description: "Fixes planner regressions.",
+            userSummary: "A reusable planner repair tool.",
+            verificationStatus: "verified",
+            riskLevel: "low",
+            tags: ["planner"],
+            invocationHints: ["Use for planner failures"],
+            lifecycleStatus: "active",
+            updatedAt: "2026-03-10T00:00:00.000Z"
+          }
+        ]
+      }
+    )
+  );
+
+  assert.equal(result.shouldStartWorker, false);
+  assert.match(result.reply, /Here is what I can help with/i);
+  assert.match(result.reply, /Natural conversation: Available\./);
+  assert.match(result.reply, /planner-fix/);
+  assert.equal(session.modeContinuity?.activeMode, "discover_available_capabilities");
+});
+
+test("routeConversationMessageInput can synthesize capability discovery replies through the direct conversation path", async () => {
+  const session = buildSession();
+  let capturedInput = "";
+
+  const result = await routeConversationMessageInput(
+    session,
+    "What can you help me with?",
+    "2026-03-11T18:05:07.000Z",
+    buildDependencies(
+      () => {
+        throw new Error("enqueueJob should not run for direct capability discovery");
+      },
+      {
+        describeRuntimeCapabilities: async () => ({
+          provider: "telegram",
+          privateChatAliasOptional: true,
+          supportsNaturalConversation: true,
+          supportsAutonomousExecution: true,
+          supportsMemoryReview: true,
+          capabilities: [
+            {
+              id: "plan_and_build",
+              label: "Plan and build requests",
+              status: "available",
+              summary: "I can help plan, build, and review work from chat."
+            }
+          ]
+        }),
+        listAvailableSkills: async () => [
+          {
+            name: "planner-fix",
+            description: "Fixes planner regressions.",
+            userSummary: "A reusable planner repair tool.",
+            verificationStatus: "verified",
+            riskLevel: "low",
+            tags: ["planner"],
+            invocationHints: ["Use for planner failures"],
+            lifecycleStatus: "active",
+            updatedAt: "2026-03-10T00:00:00.000Z"
+          }
+        ],
+        runDirectConversationTurn: async (input) => {
+          capturedInput = input;
+          return {
+            summary: "I can chat normally, help plan or build work, and reuse skills like planner-fix when they fit."
+          };
+        }
+      }
+    )
+  );
+
+  assert.equal(result.shouldStartWorker, false);
+  assert.equal(
+    result.reply,
+    "I can chat normally, help plan or build work, and reuse skills like planner-fix when they fit."
+  );
+  assert.match(capturedInput, /Capability facts:/);
+  assert.match(capturedInput, /Reusable skill facts:/);
+  assert.equal(session.modeContinuity?.activeMode, "discover_available_capabilities");
+});
+
+test("routeConversationMessageInput answers casual chat turns directly without queueing work", async () => {
+  const session = buildSession();
+
+  const result = await routeConversationMessageInput(
+    session,
+    "Hi",
+    "2026-03-11T18:05:04.000Z",
+    buildDependencies(
+      () => {
+        throw new Error("enqueueJob should not run for ordinary chat");
+      },
+      {
+        runDirectConversationTurn: async (input) => {
+          assert.equal(input, "Hi");
+          return {
+            summary: "Hello there."
+          };
+        }
+      }
+    )
+  );
+
+  assert.equal(result.shouldStartWorker, false);
+  assert.equal(result.reply, "Hello there.");
+  assert.equal(
+    session.conversationTurns[session.conversationTurns.length - 1]?.text,
+    normalizeAssistantTurnText(result.reply)
+  );
+});
+
+test("routeConversationMessageInput normalizes third-person self-reference in direct chat replies", async () => {
+  const session = buildSession();
+
+  const result = await routeConversationMessageInput(
+    session,
+    "Hi",
+    "2026-03-11T18:05:04.500Z",
+    buildDependencies(
+      () => {
+        throw new Error("enqueueJob should not run for ordinary chat");
+      },
+      {
+        runDirectConversationTurn: async () => ({
+          summary: "If you want, BigBrain can keep chatting for a bit."
+        })
+      }
+    )
+  );
+
+  assert.equal(result.shouldStartWorker, false);
+  assert.equal(result.reply, "If you want, I can keep chatting for a bit.");
+});
+
+test("routeConversationMessageInput keeps casual greetings off the worker path even after earlier assistant turns", async () => {
+  const session = buildSession({
+    conversationTurns: [
+      {
+        role: "assistant",
+        text: "What should we work on next?",
+        at: "2026-03-11T18:04:58.000Z"
+      }
+    ]
+  });
+
+  const result = await routeConversationMessageInput(
+    session,
+    "Hi",
+    "2026-03-11T18:05:08.000Z",
+    buildDependencies(
+      () => {
+        throw new Error("enqueueJob should not run for a greeting after prior assistant turns");
+      },
+      {
+        runDirectConversationTurn: async (input) => {
+          assert.match(input, /Recent conversation context \(oldest to newest\):/);
+          assert.match(input, /Current user request:\nHi/);
+          return {
+            summary: "Hey again."
+          };
+        }
+      }
+    )
+  );
+
+  assert.equal(result.shouldStartWorker, false);
+  assert.equal(result.reply, "Hey again.");
+});
+
+test("routeConversationMessageInput keeps capability discovery off the worker path even after earlier assistant turns", async () => {
+  const session = buildSession({
+    conversationTurns: [
+      {
+        role: "assistant",
+        text: "What should we work on next?",
+        at: "2026-03-11T18:04:58.000Z"
+      }
+    ]
+  });
+
+  const result = await routeConversationMessageInput(
+    session,
+    "What can you help me with?",
+    "2026-03-11T18:05:09.000Z",
+    buildDependencies(
+      () => {
+        throw new Error("enqueueJob should not run for capability discovery after prior assistant turns");
+      },
+      {
+        describeRuntimeCapabilities: async () => ({
+          provider: "telegram",
+          privateChatAliasOptional: true,
+          supportsNaturalConversation: true,
+          supportsAutonomousExecution: true,
+          supportsMemoryReview: true,
+          capabilities: [
+            {
+              id: "natural_chat",
+              label: "Natural conversation",
+              status: "available",
+              summary: "You can talk to me normally in this private chat."
+            }
+          ]
+        }),
+        runDirectConversationTurn: async () => ({
+          summary: "I can talk normally here, help with tasks, and answer questions about what I can do."
+        })
+      }
+    )
+  );
+
+  assert.equal(result.shouldStartWorker, false);
+  assert.match(result.reply, /I can talk normally here/i);
+});
+
+test("routeConversationMessageInput keeps multi-paragraph conversational turns off the worker path", async () => {
+  const session = buildSession();
+  let capturedInput = "";
+
+  const result = await routeConversationMessageInput(
+    session,
+    "I've had a long day and I'm still deciding what I want to work on.\n\nCan we just talk it through for a minute before you start anything?",
+    "2026-03-11T18:05:10.000Z",
+    buildDependencies(
+      () => {
+        throw new Error("enqueueJob should not run for multi-paragraph conversation");
+      },
+      {
+        runDirectConversationTurn: async (input) => {
+          capturedInput = input;
+          return {
+            summary: "Of course. We can talk it through first and start work only when you want to."
+          };
+        }
+      }
+    )
+  );
+
+  assert.equal(result.shouldStartWorker, false);
+  assert.equal(
+    result.reply,
+    "Of course. We can talk it through first and start work only when you want to."
+  );
+  assert.equal(
+    capturedInput,
+    "I've had a long day and I'm still deciding what I want to work on.\n\nCan we just talk it through for a minute before you start anything?"
+  );
+});
+
+test("routeConversationMessageInput forwards explicit conversation-only format controls into the direct chat path", async () => {
+  const session = buildSession();
+  let capturedInput = "";
+
+  const result = await routeConversationMessageInput(
+    session,
+    "Can we just talk for a minute before we do anything else?\n\nPlease reply in two short paragraphs and do not start work yet.",
+    "2026-03-11T18:05:10.500Z",
+    buildDependencies(
+      () => {
+        throw new Error("enqueueJob should not run for explicit conversation-only turns");
+      },
+      {
+        runDirectConversationTurn: async (input) => {
+          capturedInput = input;
+          return {
+            summary: "First sentence. Second sentence. Third sentence. Fourth sentence."
+          };
+        }
+      }
+    )
+  );
+
+  assert.equal(result.shouldStartWorker, false);
+  assert.match(result.reply, /First sentence\./);
+  assert.match(result.reply, /\n\n/);
+  assert.match(result.reply, /Third sentence\./);
+  assert.match(
+    capturedInput,
+    /Direct reply format requirement: reply in exactly two short paragraphs separated by one blank line\./
+  );
+  assert.match(
+    capturedInput,
+    /Direct reply intent: answer this as conversation only\./
+  );
+});
+
 test("routeConversationMessageInput handles natural status and artifact-recall questions without queueing work", async () => {
   const session = buildSession({
     progressState: {
@@ -1293,6 +1615,51 @@ test("routeConversationMessageInput carries open-browser and artifact context in
   assert.match(capturedExecutionInput, /Landing page preview: sessionId=browser_session:landing-page;/);
   assert.match(capturedExecutionInput, /Natural artifact-edit follow-up:/);
   assert.match(capturedExecutionInput, /Preferred edit destination: C:\\Users\\testuser\\Desktop\\drone-company/);
+});
+
+test("routeConversationMessageInput keeps workflow continuation turns on the work path after conversational interludes", async () => {
+  const session = buildSession({
+    modeContinuity: {
+      activeMode: "plan",
+      source: "natural_intent",
+      confidence: "HIGH",
+      lastAffirmedAt: "2026-03-11T18:05:00.000Z",
+      lastUserInput: "Please plan a calm air-drone landing page in three concise steps."
+    },
+    recentJobs: [
+      {
+        ...buildQueuedJob(
+          "Please plan a calm air-drone landing page in three concise steps.",
+          "Please plan a calm air-drone landing page in three concise steps."
+        ),
+        id: "job-plan-1",
+        status: "completed",
+        startedAt: "2026-03-11T18:05:01.000Z",
+        completedAt: "2026-03-11T18:05:08.000Z",
+        resultSummary: "Here is the three-step plan."
+      }
+    ]
+  });
+  let capturedExecutionInput = "";
+
+  const result = await routeConversationMessageInput(
+    session,
+    "Okay, now turn that plan into a short section-by-section outline.",
+    "2026-03-11T18:06:00.000Z",
+    buildDependencies((currentSession, input, _receivedAt, executionInput) => {
+      capturedExecutionInput = executionInput ?? "";
+      currentSession.queuedJobs.push(buildQueuedJob(input, executionInput ?? input));
+      return {
+        reply: "queued",
+        shouldStartWorker: true
+      };
+    })
+  );
+
+  assert.equal(result.shouldStartWorker, true);
+  assert.equal(session.modeContinuity?.activeMode, "plan");
+  assert.match(capturedExecutionInput, /Current user request:/);
+  assert.match(capturedExecutionInput, /section-by-section outline/i);
 });
 
 test("routeConversationMessageInput routes natural close-browser follow-ups through the same build surface", async () => {

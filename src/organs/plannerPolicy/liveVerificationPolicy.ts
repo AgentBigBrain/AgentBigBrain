@@ -17,6 +17,8 @@ const LOCAL_WORKSPACE_ORGANIZATION_TARGET_PATTERN =
   /\b(?:folder|folders|directory|directories|project|projects|workspace|workspaces|files)\b/i;
 const LOCAL_WORKSPACE_ORGANIZATION_DESTINATION_PATTERN =
   /\b(?:into|in(?:to)?|under)\s+(?:a\s+)?folder\s+called\b|\bcreate\s+a\s+folder\s+called\b/i;
+const LOCAL_WORKSPACE_ORGANIZATION_USER_OWNED_LOCATION_PATTERN =
+  /\bmy\s+(desktop|documents|downloads)\b/i;
 const LOCAL_WORKSPACE_ORGANIZATION_IMPLICIT_MOVE_PATTERN =
   /\b(?:every|all)\s+(?:folder|folders|directory|directories|project|projects|workspace|workspaces|files)\b[\s\S]{0,80}\b(?:go|belongs?)\b[\s\S]{0,20}\b(?:in|into|under)\b/i;
 const LOCAL_WORKSPACE_ORGANIZATION_REFERENCE_PATTERN =
@@ -106,6 +108,7 @@ export function isLocalWorkspaceOrganizationRequest(currentUserRequest: string):
   }
   return (
     LOCAL_WORKSPACE_ORGANIZATION_DESTINATION_PATTERN.test(activeRequest) ||
+    LOCAL_WORKSPACE_ORGANIZATION_USER_OWNED_LOCATION_PATTERN.test(activeRequest) ||
     LOCAL_WORKSPACE_ORGANIZATION_REFERENCE_PATTERN.test(activeRequest) ||
     BUILD_EXECUTION_DESTINATION_PATTERN.test(activeRequest)
   );

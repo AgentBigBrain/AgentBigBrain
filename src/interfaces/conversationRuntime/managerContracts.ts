@@ -43,6 +43,11 @@ export interface ConversationExecutionResult {
   taskRunResult?: TaskRunResult | null;
 }
 
+export type RunDirectConversationTurn = (
+  input: string,
+  receivedAt: string
+) => Promise<ConversationExecutionResult>;
+
 export interface ConversationExecutionProgressUpdate {
   status: Exclude<ConversationProgressStatus, "idle">;
   message: string;
@@ -244,6 +249,7 @@ export interface ConversationManagerConfig {
 
 export interface ConversationManagerDependencies {
   interpretConversationIntent?: ConversationIntentInterpreter;
+  runDirectConversationTurn?: RunDirectConversationTurn;
   localIntentModelResolver?: LocalIntentModelResolver;
   intentInterpreterConfidenceThreshold?: number;
   runCheckpointReview?: ConversationCheckpointReviewRunner;

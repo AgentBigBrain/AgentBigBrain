@@ -35,7 +35,8 @@ This top-level folder owns the transport and lifecycle path that consumes both s
 
 ## Primary Files
 - Transport entrypoints and runtime wiring: `discordAdapter.ts`, `discordApiUrl.ts`,
-  `discordGateway.ts`, `discordRateLimit.ts`, `interfaceRuntime.ts`, `runtimeConfig.ts`,
+  `discordGateway.ts`, `discordRateLimit.ts`, `interfaceRuntime.ts`,
+  `interfaceRuntimeLock.ts`, `runtimeConfig.ts`,
   `telegramAdapter.ts`, `telegramGateway.ts`, plus the extracted
   `src/interfaces/mediaRuntime/` ingest subsystem and
   `src/interfaces/transportRuntime/` delivery subsystem.
@@ -88,6 +89,9 @@ This top-level folder owns the transport and lifecycle path that consumes both s
 ## Invariants
 - Transport lifecycle logic should stay at this top level; wording logic should stay in
   `src/interfaces/userFacing/`.
+- `interfaceRuntime.ts` should acquire the single-instance runtime guard in
+  `interfaceRuntimeLock.ts` before starting shared transport/session wiring so duplicate interface
+  runtimes do not fight over `state.json` or deliver duplicate replies.
 - Media-only Telegram messages should remain first-class bounded requests; they must not be dropped
   just because `text` is empty.
 - Voice notes may promote explicit `command <name>` transcripts into slash-command behavior, but
@@ -174,6 +178,7 @@ This top-level folder owns the transport and lifecycle path that consumes both s
 ## When to Update This README
 Update this README when:
 - a top-level interface file is added, removed, or renamed
+- interface runtime single-instance startup or lock ownership changes materially
 - ownership moves between transport lifecycle code, `src/interfaces/userFacing/`, and
   `src/interfaces/conversationRuntime/`
 - ownership moves between the top-level transport entrypoints and `src/interfaces/mediaRuntime/`

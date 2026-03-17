@@ -108,7 +108,14 @@ The latest slices moved queue/ack, worker-loop, and pulse-state ownership here s
 - `capabilityIntrospection.ts` owns canonical truthful capability summaries for natural questions
   like `what can you do here?` or `why can't you do that?`
 - `capabilityIntrospectionRendering.ts` owns canonical user-facing capability and skill-discovery
-  rendering used by natural front-door discovery replies
+  rendering used by natural front-door discovery replies, plus the bounded execution input used
+  when the direct conversation runtime should answer capability questions in a more natural voice
+- `directConversationReply.ts` owns the bounded direct-conversation helper that lets the runtime
+  synthesize ordinary conversational replies without queueing background work or fabricating task
+  progress
+- `conversationRoutingDirectReplies.ts` owns the extracted casual-chat and capability-discovery
+  direct-reply helpers reused by the stable conversation-routing entrypoint so ordinary
+  conversation and normal capability checks can stay out of the worker queue
 - `presentationPreferenceResolution.ts` owns canonical user-facing presentation preference families
   such as `keep it open`, `show it later`, and `run it locally`
 - `routingPrecedence.ts` owns the canonical ordering between slash commands, voice `command <name>`
@@ -252,6 +259,8 @@ The latest slices moved queue/ack, worker-loop, and pulse-state ownership here s
   phrases like `plan it first`, `build it now`, `leave it open`, or `show it later`
 - canonical capability-introspection summaries and rendering so natural capability questions can
   return practical environment limits plus reusable skill inventory
+- canonical direct-conversation reply helpers so ordinary conversation and natural capability
+  checks can be answered inline instead of starting governed work
 - canonical routing precedence and active-clarification brokers so the front door can stay
   stateful instead of relying on disposable prompts
 - canonical post-execution recovery clarifications so recoverable blocked runs can ask one short
@@ -345,6 +354,9 @@ The latest slices moved queue/ack, worker-loop, and pulse-state ownership here s
 - Human-first queued-worker progress narration here must stay descriptive but meaning-light. It may
   categorize already-running work for user-facing progress updates, but it must not participate in
   routing, authorization, or recovery decisions.
+- Direct-conversation reply helpers here must stay bounded to ordinary conversation and capability
+  discovery. They may improve natural user-facing phrasing, but they must not silently authorize
+  task execution or bypass the governed worker path for real side effects.
 - Exact-tracked worker auto-retry must stay bounded to one automatic retry lane, must only use
   exact proven preview-holder evidence, and must not bypass clarification when the runtime only
   has likely untracked holder candidates.
@@ -478,6 +490,9 @@ Update this README when:
   families change materially
 - capability-introspection summary or capability/skill discovery rendering responsibilities change
   materially
+- direct-conversation reply ownership or the ordinary-conversation/capability-discovery
+  queue-bypass rules
+  change materially
 - the optional local intent-model seam or its fail-closed routing rules change materially
 - mode-continuity promotion rules or active-mode carry-forward behavior change materially
 - proposal approval, proposal-reply interpretation, or follow-up resolution responsibilities change

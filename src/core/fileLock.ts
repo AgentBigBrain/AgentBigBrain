@@ -2,7 +2,7 @@
  * @fileoverview Provides deterministic file-locking and atomic-write helpers for runtime JSON stores.
  */
 
-import { mkdir, open, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, open, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
   DEFAULT_RUNTIME_ENTROPY_SOURCE,
@@ -13,14 +13,28 @@ interface FileLockOptions {
   timeoutMs?: number;
   pollIntervalMs?: number;
   entropySource?: RuntimeEntropySource;
+  isProcessAlive?: (pid: number) => boolean;
+  malformedStaleAfterMs?: number;
 }
 
 interface FileLockHandle {
   release: () => Promise<void>;
 }
 
+interface FileLockRecord {
+  pid: number;
+  acquiredAt: string;
+  targetPath: string;
+}
+
+interface FileLockInspection {
+  record: FileLockRecord | null;
+  ageMs: number | null;
+}
+
 const DEFAULT_LOCK_TIMEOUT_MS = 15_000;
 const DEFAULT_POLL_INTERVAL_MS = 25;
+const DEFAULT_MALFORMED_STALE_AFTER_MS = 60_000;
 
 /**
  * Evaluates node errno and returns a deterministic policy signal.
@@ -56,6 +70,75 @@ async function sleep(durationMs: number): Promise<void> {
   });
 }
 
+function isProcessAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    if (isNodeErrno(error) && error.code === "EPERM") {
+      return true;
+    }
+    if (isNodeErrno(error) && error.code === "ESRCH") {
+      return false;
+    }
+    throw error;
+  }
+}
+
+function buildFileLockRecord(targetPath: string): FileLockRecord {
+  return {
+    pid: process.pid,
+    acquiredAt: new Date().toISOString(),
+    targetPath
+  };
+}
+
+async function inspectFileLock(
+  lockPath: string,
+  entropySource: RuntimeEntropySource
+): Promise<FileLockInspection> {
+  try {
+    const [raw, lockStat] = await Promise.all([
+      readFile(lockPath, "utf8"),
+      stat(lockPath)
+    ]);
+    const ageMs = Math.max(0, entropySource.nowMs() - lockStat.mtimeMs);
+    try {
+      const parsed = JSON.parse(raw) as Partial<FileLockRecord>;
+      if (
+        typeof parsed.pid === "number" &&
+        Number.isInteger(parsed.pid) &&
+        parsed.pid > 0 &&
+        typeof parsed.acquiredAt === "string" &&
+        typeof parsed.targetPath === "string"
+      ) {
+        return {
+          record: {
+            pid: parsed.pid,
+            acquiredAt: parsed.acquiredAt,
+            targetPath: parsed.targetPath
+          },
+          ageMs
+        };
+      }
+    } catch {
+      // Intentionally ignore malformed JSON; caller decides whether stale reclaim is safe.
+    }
+    return {
+      record: null,
+      ageMs
+    };
+  } catch (error) {
+    if (isNodeErrno(error) && error.code === "ENOENT") {
+      return {
+        record: null,
+        ageMs: null
+      };
+    }
+    throw error;
+  }
+}
+
 /**
  * Implements acquire file lock behavior used by `fileLock`.
  *
@@ -79,6 +162,11 @@ async function acquireFileLock(
   const timeoutMs = Math.max(1, options.timeoutMs ?? DEFAULT_LOCK_TIMEOUT_MS);
   const pollIntervalMs = Math.max(1, options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS);
   const entropySource = options.entropySource ?? DEFAULT_RUNTIME_ENTROPY_SOURCE;
+  const processAlive = options.isProcessAlive ?? isProcessAlive;
+  const malformedStaleAfterMs = Math.max(
+    1,
+    options.malformedStaleAfterMs ?? DEFAULT_MALFORMED_STALE_AFTER_MS
+  );
   const startedAt = entropySource.nowMs();
   await mkdir(path.dirname(lockPath), { recursive: true });
 
@@ -86,6 +174,16 @@ async function acquireFileLock(
     try {
       const handle = await open(lockPath, "wx");
       let released = false;
+      try {
+        await handle.writeFile(
+          `${JSON.stringify(buildFileLockRecord(lockPath.slice(0, -".lock".length)), null, 2)}\n`,
+          "utf8"
+        );
+      } catch (error) {
+        await handle.close();
+        await rm(lockPath, { force: true });
+        throw error;
+      }
       return {
         release: async (): Promise<void> => {
           if (released) {
@@ -108,6 +206,16 @@ async function acquireFileLock(
         (error.code !== "EEXIST" && error.code !== "EPERM" && error.code !== "EACCES")
       ) {
         throw error;
+      }
+
+      const existing = await inspectFileLock(lockPath, entropySource);
+      if (existing.record && !processAlive(existing.record.pid)) {
+        await rm(lockPath, { force: true });
+        continue;
+      }
+      if (!existing.record && existing.ageMs !== null && existing.ageMs >= malformedStaleAfterMs) {
+        await rm(lockPath, { force: true });
+        continue;
       }
 
       if (entropySource.nowMs() - startedAt >= timeoutMs) {

@@ -48,7 +48,7 @@ function summarizeStartedWorkInput(input: string): string {
  * @returns Human-first acknowledgement shown before background completion delivery.
  */
 function buildStartedWorkReply(input: string): string {
-  return `I'm starting on that now. First up: ${summarizeStartedWorkInput(input)}`;
+  return `On it. I'll start with: ${summarizeStartedWorkInput(input)}`;
 }
 
 /**

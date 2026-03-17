@@ -1150,6 +1150,51 @@ test("buildConversationAwareExecutionInput explains when the remembered workspac
   assert.match(executionInput, /require fresh inspection before assuming preview or process control still exists/i);
 });
 
+test("buildConversationAwareExecutionInput grounds the Telegram desktop cleanup wording as a real move", async () => {
+  const session = buildSession();
+  session.activeWorkspace = {
+    id: "workspace:drone-company-live-smoke-9",
+    label: "Current project workspace",
+    rootPath: "C:\\Users\\testuser\\Desktop\\drone-company-live-smoke-9",
+    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\drone-company-live-smoke-9\\index.html",
+    previewUrl: "file:///C:/Users/testuser/Desktop/drone-company-live-smoke-9/index.html",
+    browserSessionId: "browser-detached-cleanup-1",
+    browserSessionIds: ["browser-detached-cleanup-1"],
+    browserSessionStatus: "closed",
+    browserProcessPid: null,
+    previewProcessLeaseId: null,
+    previewProcessLeaseIds: [],
+    previewProcessCwd: null,
+    lastKnownPreviewProcessPid: null,
+    stillControllable: false,
+    ownershipState: "stale",
+    previewStackState: "detached",
+    lastChangedPaths: [
+      "C:\\Users\\testuser\\Desktop\\drone-company-live-smoke-9\\index.html"
+    ],
+    sourceJobId: "job-cleanup-1",
+    updatedAt: "2026-03-03T00:00:25.000Z"
+  };
+
+  const executionInput = await buildConversationAwareExecutionInput(
+    session,
+    "One last real-world thing: please go ahead and clean up my desktop now by moving every folder there that starts with drone-company into drone-folder. I do mean all of them, so you do not need to ask again before doing it.",
+    10
+  );
+
+  assert.match(executionInput, /Natural desktop-organization follow-up:/);
+  assert.match(executionInput, /real Desktop folder move, not just an inspection or summary/i);
+  assert.match(executionInput, /Strongest remembered Desktop root in this chat: C:\\Users\\testuser\\Desktop/i);
+  assert.match(executionInput, /Treat the named destination as C:\\Users\\testuser\\Desktop\\drone-folder/i);
+  assert.match(executionInput, /Match Desktop folders whose names start with drone-company\./i);
+  assert.match(
+    executionInput,
+    /The current tracked workspace folder drone-company-live-smoke-9 also matches that requested prefix; include it in the move unless the user explicitly excluded it\./i
+  );
+  assert.match(executionInput, /The user explicitly authorized moving all matching folders now; do not ask again before executing the move unless a new blocker appears\./i);
+  assert.match(executionInput, /This run must include a real folder move side effect\./i);
+});
+
 test("buildConversationAwareExecutionInput derives workspace root and artifact from a tracked file preview", async () => {
   const session = buildSession();
   session.browserSessions.push({

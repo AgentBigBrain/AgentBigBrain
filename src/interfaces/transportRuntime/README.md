@@ -16,6 +16,7 @@ send/edit/draft delivery behind:
 - `discordTransport.ts`
 - `gatewayLifecycle.ts`
 - `rateLimitPolicy.ts`
+- `telegramGatewayObservation.ts`
 - `telegramGatewayRuntime.ts`
 - `telegramTransport.ts`
 
@@ -43,6 +44,7 @@ here.
 - canonical Telegram poll-loop helpers
 - canonical provider-specific inbound payload parsing/validation helpers for Discord and Telegram
 - canonical provider-specific gateway notifier/send-edit wrapper helpers for Discord and Telegram
+- canonical Telegram outbound-delivery observation helpers used by live-smoke instrumentation
 - canonical Telegram media-enrichment and conversation-key chat-id helpers used before shared
   conversation dispatch
 - canonical accepted inbound conversation dispatch, autonomous/text task routing, and final reply

@@ -30,6 +30,10 @@ import type {
 } from "./conversationRuntime/managerContracts";
 import type { ManagedProcessSnapshot } from "../organs/liveRun/managedProcessRegistry";
 import type { BrowserSessionSnapshot } from "../organs/liveRun/browserSessionRegistry";
+import {
+  basenameCrossPlatformPath,
+  normalizeCrossPlatformPath
+} from "../core/crossPlatformPath";
 import { reconcileConversationExecutionRuntimeSession } from "./conversationRuntime/executionInputRuntimeOwnership";
 
 const FIRST_PERSON_STATUS_UPDATE_PATTERN =
@@ -48,6 +52,16 @@ const NATURAL_ARTIFACT_EDIT_DELTA_PATTERN =
   /\b(?:instead of|from earlier|from before|we were working on|we built|you made)\b/i;
 const NATURAL_NEW_BUILD_PATTERN =
   /\b(?:build|create|generate|scaffold|start)\b[\s\S]{0,20}\b(?:new|another|fresh)\b/i;
+const LOCAL_ORGANIZATION_VERB_PATTERN =
+  /\b(?:organize|move|group|gather|sort|clean up|put|collect|tidy)\b/i;
+const LOCAL_ORGANIZATION_TARGET_PATTERN =
+  /\b(?:folder|folders|directory|directories|desktop|documents|downloads|workspace|workspaces|project|projects)\b/i;
+const SIMPLE_DESKTOP_DESTINATION_PATTERN =
+  /\b(?:into|inside|under|to)\s+(?:a\s+folder\s+called\s+)?["'`]?([a-z0-9][a-z0-9_-]{0,80})["'`]?/i;
+const ORGANIZATION_PREFIX_PATTERN =
+  /\bstarts?\s+with\s+["'`]?([a-z0-9._-]{2,80})["'`]?/i;
+const EXPLICIT_ALL_MATCHING_FOLDERS_PATTERN =
+  /\b(?:all of them|every folder|all matching folders)\b/i;
 const RECENT_ACTION_CONTEXT_PRIORITY: Readonly<Record<string, number>> = {
   file: 0,
   folder: 1,
@@ -404,6 +418,158 @@ function buildRecentArtifactEditContextBlock(
 }
 
 /**
+ * Returns whether the current turn is asking for local folder organization work.
+ *
+ * @param userInput - Raw current user wording.
+ * @returns `true` when the turn is an execution-style local organization request.
+ */
+function isLocalOrganizationRequest(userInput: string): boolean {
+  return (
+    LOCAL_ORGANIZATION_VERB_PATTERN.test(userInput) &&
+    LOCAL_ORGANIZATION_TARGET_PATTERN.test(userInput)
+  );
+}
+
+/**
+ * Extracts the simple Desktop destination folder name from natural organization wording.
+ *
+ * @param userInput - Raw current user wording.
+ * @returns Folder name, or `null` when none is named directly.
+ */
+function extractSimpleDesktopDestinationName(userInput: string): string | null {
+  const match = userInput.match(SIMPLE_DESKTOP_DESTINATION_PATTERN);
+  return match?.[1]?.trim() ?? null;
+}
+
+/**
+ * Extracts the requested folder-name prefix from wording like `starts with drone-company`.
+ *
+ * @param userInput - Raw current user wording.
+ * @returns Requested folder-name prefix, or `null` when none is named.
+ */
+function extractOrganizationFolderPrefix(userInput: string): string | null {
+  return userInput.match(ORGANIZATION_PREFIX_PATTERN)?.[1]?.trim() ?? null;
+}
+
+/**
+ * Derives the Desktop root from any remembered path that sits under the user's Desktop.
+ *
+ * @param candidatePath - Remembered file or folder path.
+ * @returns Desktop root path, or `null` when the path is not under Desktop.
+ */
+function deriveDesktopRootFromCandidatePath(candidatePath: string | null | undefined): string | null {
+  if (!candidatePath?.trim()) {
+    return null;
+  }
+  const normalized = normalizeCrossPlatformPath(candidatePath);
+  if (!normalized) {
+    return null;
+  }
+  const usesWindowsSeparators = normalized.includes("\\");
+  const separator = usesWindowsSeparators ? "\\" : "/";
+  const segments = normalized.split(/[\\/]+/);
+  const desktopIndex = segments.findIndex((segment) => segment.toLowerCase() === "desktop");
+  if (desktopIndex === -1) {
+    return null;
+  }
+  return segments.slice(0, desktopIndex + 1).join(separator) || null;
+}
+
+/**
+ * Collects remembered Desktop roots from the current session so natural cleanup turns can act on
+ * one explicit location instead of guessing.
+ *
+ * @param session - Current conversation session.
+ * @returns Deduplicated Desktop roots in priority order.
+ */
+function collectRememberedDesktopRoots(session: ConversationSession): readonly string[] {
+  const candidates = [
+    session.activeWorkspace?.rootPath ?? null,
+    session.activeWorkspace?.primaryArtifactPath ?? null,
+    session.returnHandoff?.workspaceRootPath ?? null,
+    session.returnHandoff?.primaryArtifactPath ?? null,
+    ...(session.returnHandoff?.changedPaths ?? []),
+    ...session.pathDestinations.map((destination) => destination.resolvedPath),
+    ...session.recentActions.map((action) => action.location ?? null),
+    ...session.browserSessions.flatMap((browserSession) => [
+      browserSession.workspaceRootPath ?? null,
+      browserSession.linkedProcessCwd ?? null
+    ])
+  ];
+  const uniqueRoots = new Set<string>();
+  for (const candidate of candidates) {
+    const desktopRoot = deriveDesktopRootFromCandidatePath(candidate);
+    if (desktopRoot) {
+      uniqueRoots.add(desktopRoot);
+    }
+  }
+  return [...uniqueRoots];
+}
+
+/**
+ * Builds a bounded execution-input block for natural Desktop cleanup requests so the planner knows
+ * it must perform a real move and can anchor the destination to the remembered Desktop root.
+ *
+ * @param session - Current conversation session.
+ * @param userInput - Raw current user wording.
+ * @returns Desktop-organization guidance block, or `null` when the turn is not such a request.
+ */
+function buildDesktopOrganizationExecutionContextBlock(
+  session: ConversationSession,
+  userInput: string
+): string | null {
+  const normalizedInput = normalizeWhitespace(userInput);
+  if (!normalizedInput || !isLocalOrganizationRequest(normalizedInput)) {
+    return null;
+  }
+  if (!/\bdesktop\b/i.test(normalizedInput)) {
+    return null;
+  }
+
+  const rememberedDesktopRoot = collectRememberedDesktopRoots(session)[0] ?? null;
+  const destinationFolderName = extractSimpleDesktopDestinationName(normalizedInput);
+  const requestedFolderPrefix = extractOrganizationFolderPrefix(normalizedInput);
+  const activeWorkspaceFolderName = session.activeWorkspace?.rootPath
+    ? basenameCrossPlatformPath(session.activeWorkspace.rootPath)
+    : null;
+  const activeWorkspaceMatchesRequestedPrefix =
+    Boolean(activeWorkspaceFolderName) &&
+    Boolean(requestedFolderPrefix) &&
+    activeWorkspaceFolderName!.toLowerCase().startsWith(requestedFolderPrefix!.toLowerCase());
+
+  const lines = [
+    "Natural desktop-organization follow-up:",
+    "- The user is asking for a real Desktop folder move, not just an inspection or summary."
+  ];
+  if (rememberedDesktopRoot) {
+    lines.push(`- Strongest remembered Desktop root in this chat: ${rememberedDesktopRoot}`);
+  }
+  if (rememberedDesktopRoot && destinationFolderName) {
+    const separator = rememberedDesktopRoot.includes("\\") ? "\\" : "/";
+    lines.push(
+      `- Treat the named destination as ${normalizeCrossPlatformPath(`${rememberedDesktopRoot}${separator}${destinationFolderName}`)} unless fresher path evidence in this chat proves a different location.`
+    );
+  }
+  if (requestedFolderPrefix) {
+    lines.push(`- Match Desktop folders whose names start with ${requestedFolderPrefix}.`);
+  }
+  if (activeWorkspaceMatchesRequestedPrefix && activeWorkspaceFolderName) {
+    lines.push(
+      `- The current tracked workspace folder ${activeWorkspaceFolderName} also matches that requested prefix; include it in the move unless the user explicitly excluded it.`
+    );
+  }
+  if (EXPLICIT_ALL_MATCHING_FOLDERS_PATTERN.test(normalizedInput)) {
+    lines.push(
+      "- The user explicitly authorized moving all matching folders now; do not ask again before executing the move unless a new blocker appears."
+    );
+  }
+  lines.push(
+    "- This run must include a real folder move side effect. Do not satisfy this request by only listing, reading, or summarizing directories."
+  );
+  return lines.join("\n");
+}
+
+/**
  * Builds a prompt guardrail block when the user gives first-person status updates.
  *
  * @param userInput - Current raw user message.
@@ -485,6 +651,10 @@ export async function buildConversationAwareExecutionInput(
     runtimeReconciledSession,
     rawUserInput
   );
+  const desktopOrganizationContextBlock = buildDesktopOrganizationExecutionContextBlock(
+    runtimeReconciledSession,
+    rawUserInput
+  );
   const workspaceRecoveryContextBlock = buildWorkspaceRecoveryContextBlock(
     runtimeReconciledSession,
     rawUserInput,
@@ -515,6 +685,7 @@ export async function buildConversationAwareExecutionInput(
     !browserSessionBlock &&
     !browserFollowUpIntentBlock &&
     !artifactEditContextBlock &&
+    !desktopOrganizationContextBlock &&
     !workspaceRecoveryContextBlock &&
     !pathDestinationBlock &&
     !reusePreferenceBlock &&
@@ -577,6 +748,9 @@ export async function buildConversationAwareExecutionInput(
   }
   if (artifactEditContextBlock) {
     lines.push("", artifactEditContextBlock);
+  }
+  if (desktopOrganizationContextBlock) {
+    lines.push("", desktopOrganizationContextBlock);
   }
   if (workspaceRecoveryContextBlock) {
     lines.push("", workspaceRecoveryContextBlock);

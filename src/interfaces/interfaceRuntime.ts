@@ -15,6 +15,7 @@ import { EntityGraphStore } from "../core/entityGraphStore";
 import { ensureEnvLoaded } from "../core/envLoader";
 import { DiscordAdapter } from "./discordAdapter";
 import { DiscordGateway } from "./discordGateway";
+import { acquireInterfaceRuntimeLock } from "./interfaceRuntimeLock";
 import {
   createInterfaceRuntimeConfigFromEnv,
   DiscordInterfaceConfig,
@@ -436,6 +437,7 @@ function registerShutdownHandlers(onShutdown: () => void): () => void {
  */
 export async function runInterfaceRuntime(): Promise<void> {
   ensureEnvLoaded();
+  const runtimeLock = await acquireInterfaceRuntimeLock();
   const config = createInterfaceRuntimeConfigFromEnv();
   const brainConfig = createBrainConfigFromEnv();
   const localIntentModelResolver = createLocalIntentModelResolverFromEnv();
@@ -472,6 +474,7 @@ export async function runInterfaceRuntime(): Promise<void> {
   } finally {
     stopAllGateways(gateways);
     detachHandlers();
+    await runtimeLock.release();
   }
 }
 
