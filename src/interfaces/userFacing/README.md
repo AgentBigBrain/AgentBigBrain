@@ -16,6 +16,7 @@ state-driven retry and verification updates used during `/auto`.
 - `successSurface.ts`
 - `partialSuccessSurface.ts`
 - `organizationOutcomeSurface.ts`
+- `directExecutionFailureSurface.ts`
 - `blockSurface.ts`
 - `noOpSurface.ts`
 - `stopSummarySurface.ts`

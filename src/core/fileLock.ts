@@ -138,6 +138,35 @@ async function inspectFileLock(
         ageMs: null
       };
     }
+    if (
+      isNodeErrno(error) &&
+      (error.code === "EPERM" || error.code === "EACCES")
+    ) {
+      try {
+        const lockStat = await stat(lockPath);
+        return {
+          record: null,
+          ageMs: Math.max(0, entropySource.nowMs() - lockStat.mtimeMs)
+        };
+      } catch (statError) {
+        if (isNodeErrno(statError) && statError.code === "ENOENT") {
+          return {
+            record: null,
+            ageMs: null
+          };
+        }
+        if (
+          isNodeErrno(statError) &&
+          (statError.code === "EPERM" || statError.code === "EACCES")
+        ) {
+          return {
+            record: null,
+            ageMs: null
+          };
+        }
+        throw statError;
+      }
+    }
     throw error;
   }
 }

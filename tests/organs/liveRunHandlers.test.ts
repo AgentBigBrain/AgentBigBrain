@@ -335,6 +335,74 @@ test("executeStartProcess registers a managed-process lease after spawn", async 
   assert.equal(registry.getSnapshot(leaseId)?.statusCode, "PROCESS_STARTED");
 });
 
+test("executeStartProcess routes simple Windows npm preview commands through cmd.exe with launcher env keys", async () => {
+  const { calls, spawn } = createManagedProcessShellSpawn();
+  const registry = new ManagedProcessRegistry();
+  const originalComSpec = process.env.ComSpec;
+  const originalPathExt = process.env.PATHEXT;
+  const originalWindir = process.env.WINDIR;
+  process.env.ComSpec = originalComSpec ?? "C:\\Windows\\System32\\cmd.exe";
+  process.env.PATHEXT = originalPathExt ?? ".COM;.EXE;.BAT;.CMD";
+  process.env.WINDIR = originalWindir ?? "C:\\Windows";
+
+  try {
+    const context = buildLiveRunContext({
+      config: buildShellEnabledConfig({
+        shellRuntime: {
+          profile: {
+            ...buildShellEnabledConfig().shellRuntime.profile,
+            platform: "win32",
+            shellKind: "powershell",
+            executable: "powershell.exe",
+            wrapperArgs: ["-NoProfile", "-NonInteractive", "-Command"],
+            envPolicy: {
+              mode: "allowlist",
+              allowlist: ["PATH", "HOME", "USERPROFILE", "TEMP", "SYSTEMROOT"],
+              denylist: ["TOKEN", "SECRET", "PASSWORD", "AUTH", "COOKIE"]
+            }
+          }
+        }
+      }),
+      shellSpawn: spawn,
+      managedProcessRegistry: registry
+    });
+
+    const outcome = await executeStartProcess(context, "action_start_windows_preview", {
+      command: "npm run preview -- --host 127.0.0.1 --port 4173",
+      cwd: process.cwd()
+    });
+
+    assert.equal(outcome.status, "success");
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0]?.executable, "cmd.exe");
+    assert.deepEqual(calls[0]?.args, [
+      "/d",
+      "/c",
+      "npm run preview -- --host 127.0.0.1 --port 4173"
+    ]);
+    const spawnedEnv = (calls[0]?.options.env ?? {}) as NodeJS.ProcessEnv;
+    assert.equal(spawnedEnv.ComSpec, process.env.ComSpec);
+    assert.equal(spawnedEnv.PATHEXT, process.env.PATHEXT);
+    assert.equal(spawnedEnv.WINDIR, process.env.WINDIR);
+  } finally {
+    if (originalComSpec === undefined) {
+      delete process.env.ComSpec;
+    } else {
+      process.env.ComSpec = originalComSpec;
+    }
+    if (originalPathExt === undefined) {
+      delete process.env.PATHEXT;
+    } else {
+      process.env.PATHEXT = originalPathExt;
+    }
+    if (originalWindir === undefined) {
+      delete process.env.WINDIR;
+    } else {
+      process.env.WINDIR = originalWindir;
+    }
+  }
+});
+
 test("executeStartProcess fails early when the requested loopback port is already occupied", async () => {
   const server = net.createServer();
   await new Promise<void>((resolve) => {
@@ -880,6 +948,91 @@ test("executeOpenBrowser persists workspace ownership metadata for later preview
     assert.equal(snapshot?.linkedProcessPid, 6123);
     assert.equal(snapshot?.workspaceRootPath, tempDir);
     assert.equal(calls.length, 1);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("executeOpenBrowser reuses an existing managed browser session and infers the latest linked preview lease from the same task workspace", async () => {
+  const tempDir = mkdtempSync(path.join(os.tmpdir(), "abb-live-run-reused-owned-preview-"));
+  const indexPath = path.join(tempDir, "index.html");
+  writeFileSync(indexPath, "<!doctype html><title>Drone Company</title>", "utf8");
+  const stubRuntime = createStubPlaywrightRuntime();
+  const managedProcessRegistry = new ManagedProcessRegistry({
+    entropySource: {
+      nowMs: (() => {
+        let current = 1_000;
+        return () => current++;
+      })(),
+      randomBase36: (length) => "a".repeat(length),
+      randomHex: (length) => "b".repeat(length)
+    }
+  });
+  managedProcessRegistry.registerStarted({
+    actionId: "action_preview_process_old",
+    child: createManagedProcessChild(6123),
+    commandFingerprint: "preview-fingerprint-old",
+    cwd: tempDir,
+    shellExecutable: "node",
+    shellKind: "powershell",
+    taskId: "task_reused_preview"
+  });
+  const newestProcessSnapshot = managedProcessRegistry.registerStarted({
+    actionId: "action_preview_process_new",
+    child: createManagedProcessChild(6124),
+    commandFingerprint: "preview-fingerprint-new",
+    cwd: tempDir,
+    shellExecutable: "node",
+    shellKind: "powershell",
+    taskId: "task_reused_preview"
+  });
+
+  try {
+    const context = buildLiveRunContext({
+      playwrightChromiumLoader: async () => stubRuntime.runtime,
+      managedProcessRegistry
+    });
+    const fileUrl = `file:///${indexPath.replace(/\\/g, "/")}`;
+
+    const firstOutcome = await executeOpenBrowser(
+      context,
+      "action_open_browser_first",
+      {
+        url: fileUrl
+      },
+      undefined,
+      "task_reused_preview"
+    );
+    const secondOutcome = await executeOpenBrowser(
+      context,
+      "action_open_browser_second",
+      {
+        url: fileUrl,
+        rootPath: tempDir
+      },
+      undefined,
+      "task_reused_preview"
+    );
+
+    assert.equal(firstOutcome.status, "success");
+    assert.equal(secondOutcome.status, "success");
+    assert.equal(stubRuntime.getLaunchCount(), 1);
+    assert.equal(
+      secondOutcome.executionMetadata?.browserSessionId,
+      firstOutcome.executionMetadata?.browserSessionId
+    );
+    assert.equal(
+      secondOutcome.executionMetadata?.browserSessionLinkedProcessLeaseId,
+      newestProcessSnapshot.leaseId
+    );
+    assert.equal(secondOutcome.executionMetadata?.browserSessionLinkedProcessCwd, tempDir);
+    assert.equal(secondOutcome.executionMetadata?.browserSessionLinkedProcessPid, 6124);
+    const reusedSnapshot = context.browserSessionRegistry.getSnapshot(
+      String(secondOutcome.executionMetadata?.browserSessionId ?? "")
+    );
+    assert.equal(reusedSnapshot?.linkedProcessLeaseId, newestProcessSnapshot.leaseId);
+    assert.equal(reusedSnapshot?.linkedProcessCwd, tempDir);
+    assert.equal(reusedSnapshot?.linkedProcessPid, 6124);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }

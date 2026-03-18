@@ -47,6 +47,16 @@ test("resolveConversationIntentMode detects natural status and artifact recall r
   assert.equal(resolution.clarification, null);
 });
 
+test("resolveConversationIntentMode treats what's-the-status wording as status or recall", async () => {
+  const resolution = await resolveConversationIntentMode(
+    "What's the status?"
+  );
+
+  assert.equal(resolution.mode, "status_or_recall");
+  assert.equal(resolution.confidence, "high");
+  assert.equal(resolution.clarification, null);
+});
+
 test("resolveConversationIntentMode treats change-summary follow-ups as status or recall requests", async () => {
   const resolution = await resolveConversationIntentMode(
     "Okay tell me about your changes so I know what you changed"

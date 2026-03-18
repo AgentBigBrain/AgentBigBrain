@@ -18,9 +18,61 @@ const LINKED_PREVIEW_LEASE_INLINE_PATTERN = /\blinkedPreviewLease=([A-Za-z0-9:_-
 const LINKED_PREVIEW_CWD_INLINE_PATTERN = /\blinkedPreviewCwd=([^\n]+)/i;
 const LINKED_PREVIEW_PROCESS_LINE_PATTERN =
   /\bLinked preview process:\s*leaseId=([A-Za-z0-9:_-]+)(?:;\s*cwd=([^\n]+))?/i;
+const PREVIEW_PROCESS_LEASES_LINE_PATTERN = /^-\s*Preview process leases:\s*(.+)$/im;
 const WORKSPACE_ROOT_LINE_PATTERN = /^-\s*Root path:\s*(.+)$/im;
 const VISIBLE_PREVIEW_URL_LINE_PATTERN =
   /^-\s*Visible preview already exists:\s*([^;\n]+)(?:;.*)?$/im;
+
+/**
+ * Deduplicates non-empty string values while preserving first-seen order.
+ *
+ * @param values - Candidate string values.
+ * @returns Unique non-empty values.
+ */
+function uniqueNonEmpty(values: readonly (string | null | undefined)[]): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const value of values) {
+    if (!value) {
+      continue;
+    }
+    const trimmed = value.trim();
+    if (trimmed.length === 0 || seen.has(trimmed)) {
+      continue;
+    }
+    seen.add(trimmed);
+    result.push(trimmed);
+  }
+  return result;
+}
+
+/**
+ * Extracts exact tracked preview-process lease ids from the conversation-aware execution input.
+ *
+ * @param fullExecutionInput - Conversation-aware execution payload sent to the planner.
+ * @returns Exact preview-process lease ids, or an empty list when the current request context has none.
+ */
+function extractTrackedPreviewLeaseIds(fullExecutionInput: string): string[] {
+  const leaseIds: string[] = [];
+  const previewLeaseListMatch = fullExecutionInput.match(PREVIEW_PROCESS_LEASES_LINE_PATTERN);
+  if (previewLeaseListMatch?.[1]) {
+    leaseIds.push(
+      ...previewLeaseListMatch[1]
+        .split(",")
+        .map((value) => value.trim())
+        .filter((value) => /^[A-Za-z0-9:_-]+$/.test(value))
+    );
+  }
+  const inlineMatch = fullExecutionInput.match(LINKED_PREVIEW_LEASE_INLINE_PATTERN);
+  if (inlineMatch?.[1]) {
+    leaseIds.push(inlineMatch[1]);
+  }
+  const processLineMatch = fullExecutionInput.match(LINKED_PREVIEW_PROCESS_LINE_PATTERN);
+  if (processLineMatch?.[1]) {
+    leaseIds.push(processLineMatch[1]);
+  }
+  return uniqueNonEmpty(leaseIds);
+}
 
 /**
  * Detects whether the current request is one of the bounded workspace-recovery marker turns.
@@ -43,12 +95,7 @@ export function isWorkspaceRecoveryMarkerRequest(currentUserRequest: string): bo
  * @returns Linked preview-process lease id, or `null` when the current request context has none.
  */
 export function extractLinkedPreviewLeaseId(fullExecutionInput: string): string | null {
-  const inlineMatch = fullExecutionInput.match(LINKED_PREVIEW_LEASE_INLINE_PATTERN);
-  if (inlineMatch?.[1]) {
-    return inlineMatch[1];
-  }
-  const processLineMatch = fullExecutionInput.match(LINKED_PREVIEW_PROCESS_LINE_PATTERN);
-  return processLineMatch?.[1] ?? null;
+  return extractTrackedPreviewLeaseIds(fullExecutionInput)[0] ?? null;
 }
 
 /**
@@ -132,8 +179,8 @@ export function normalizeLinkedPreviewShutdownActions(
   if (requiredActionType !== "close_browser") {
     return actions;
   }
-  const linkedPreviewLeaseId = extractLinkedPreviewLeaseId(fullExecutionInput);
-  if (!linkedPreviewLeaseId) {
+  const linkedPreviewLeaseIds = extractTrackedPreviewLeaseIds(fullExecutionInput);
+  if (linkedPreviewLeaseIds.length === 0) {
     return actions;
   }
 
@@ -144,27 +191,29 @@ export function normalizeLinkedPreviewShutdownActions(
     }
     const leaseId =
       typeof action.params.leaseId === "string" ? action.params.leaseId.trim() : "";
-    return leaseId === linkedPreviewLeaseId;
+    return linkedPreviewLeaseIds.includes(leaseId);
   });
 
-  if (
-    hasCloseBrowserAction &&
-    !hasLinkedPreviewStopProcessAction(filteredActions, linkedPreviewLeaseId)
-  ) {
-    filteredActions.push({
-      id: makeId("action"),
-      type: "stop_process",
-      description: "Stop the tracked preview process linked to the browser session being closed.",
-      params: {
-        leaseId: linkedPreviewLeaseId
-      },
-      estimatedCostUsd: estimateActionCostUsd({
+  if (hasCloseBrowserAction) {
+    for (const linkedPreviewLeaseId of linkedPreviewLeaseIds) {
+      if (hasLinkedPreviewStopProcessAction(filteredActions, linkedPreviewLeaseId)) {
+        continue;
+      }
+      filteredActions.push({
+        id: makeId("action"),
         type: "stop_process",
+        description: "Stop the tracked preview process linked to the browser session being closed.",
         params: {
           leaseId: linkedPreviewLeaseId
-        }
-      })
-    });
+        },
+        estimatedCostUsd: estimateActionCostUsd({
+          type: "stop_process",
+          params: {
+            leaseId: linkedPreviewLeaseId
+          }
+        })
+      });
+    }
   }
 
   return filteredActions;

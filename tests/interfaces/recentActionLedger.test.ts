@@ -740,6 +740,156 @@ test("deriveConversationLedgersFromTaskRunResult prefers explicit browser owners
   assert.equal(ledgers.browserSessions[0]?.linkedProcessPid, 43126);
 });
 
+test("deriveConversationLedgersFromTaskRunResult links an open browser session to the latest prior matching preview lease when a task started multiple workspace processes", () => {
+  const taskRunResult: TaskRunResult = {
+    task: {
+      id: "task-open-browser-multi-process",
+      goal: "Leave the repaired local app open in a browser window.",
+      userInput: "Reuse the existing React app, start its preview, and leave it open for me.",
+      createdAt: "2026-03-12T00:00:00.000Z"
+    },
+    plan: {
+      taskId: "task-open-browser-multi-process",
+      plannerNotes: "Repair the preview flow and leave the browser open.",
+      actions: [
+        {
+          id: "action_start_process_old",
+          type: "start_process",
+          description: "Start the earlier preview attempt.",
+          params: {
+            command: "npm run preview -- --host 127.0.0.1 --port 4173",
+            cwd: "C:\\Users\\testuser\\Desktop\\AI Drone City"
+          },
+          estimatedCostUsd: 0.08
+        },
+        {
+          id: "action_start_process_new",
+          type: "start_process",
+          description: "Restart the preview with the repaired workspace state.",
+          params: {
+            command: "npm run preview -- --host 127.0.0.1 --port 4173",
+            cwd: "C:\\Users\\testuser\\Desktop\\AI Drone City"
+          },
+          estimatedCostUsd: 0.08
+        },
+        {
+          id: "action_open_browser_multi_process",
+          type: "open_browser",
+          description: "Open the repaired preview in a visible browser window.",
+          params: {
+            url: "http://127.0.0.1:4173/",
+            rootPath: "C:\\Users\\testuser\\Desktop\\AI Drone City"
+          },
+          estimatedCostUsd: 0.03
+        }
+      ]
+    },
+    actionResults: [
+      {
+        action: {
+          id: "action_start_process_old",
+          type: "start_process",
+          description: "Start the earlier preview attempt.",
+          params: {
+            command: "npm run preview -- --host 127.0.0.1 --port 4173",
+            cwd: "C:\\Users\\testuser\\Desktop\\AI Drone City"
+          },
+          estimatedCostUsd: 0.08
+        },
+        mode: "escalation_path",
+        approved: true,
+        output: "Process started: lease proc_preview_old.",
+        executionStatus: "success",
+        executionMetadata: {
+          processLeaseId: "proc_preview_old",
+          processLifecycleStatus: "PROCESS_STARTED",
+          processCwd: "C:\\Users\\testuser\\Desktop\\AI Drone City",
+          processPid: 43125
+        },
+        blockedBy: [],
+        violations: [],
+        votes: []
+      },
+      {
+        action: {
+          id: "action_start_process_new",
+          type: "start_process",
+          description: "Restart the preview with the repaired workspace state.",
+          params: {
+            command: "npm run preview -- --host 127.0.0.1 --port 4173",
+            cwd: "C:\\Users\\testuser\\Desktop\\AI Drone City"
+          },
+          estimatedCostUsd: 0.08
+        },
+        mode: "escalation_path",
+        approved: true,
+        output: "Process started: lease proc_preview_new.",
+        executionStatus: "success",
+        executionMetadata: {
+          processLeaseId: "proc_preview_new",
+          processLifecycleStatus: "PROCESS_STARTED",
+          processCwd: "C:\\Users\\testuser\\Desktop\\AI Drone City",
+          processPid: 43126
+        },
+        blockedBy: [],
+        violations: [],
+        votes: []
+      },
+      {
+        action: {
+          id: "action_open_browser_multi_process",
+          type: "open_browser",
+          description: "Open the repaired preview in a visible browser window.",
+          params: {
+            url: "http://127.0.0.1:4173/",
+            rootPath: "C:\\Users\\testuser\\Desktop\\AI Drone City"
+          },
+          estimatedCostUsd: 0.03
+        },
+        mode: "escalation_path",
+        approved: true,
+        output: "The existing browser window for http://127.0.0.1:4173/ is already open and was brought forward.",
+        executionStatus: "success",
+        executionMetadata: {
+          browserSession: true,
+          browserSessionId: "browser_session:action_open_browser_multi_process",
+          browserSessionUrl: "http://127.0.0.1:4173/",
+          browserSessionStatus: "open",
+          browserSessionVisibility: "visible",
+          browserSessionBrowserProcessPid: 42057
+        },
+        blockedBy: [],
+        violations: [],
+        votes: []
+      }
+    ],
+    summary: "Opened the repaired local app in a visible browser window.",
+    modelUsage: {
+      calls: 0,
+      promptTokens: 0,
+      completionTokens: 0,
+      totalTokens: 0,
+      estimatedSpendUsd: 0
+    },
+    startedAt: "2026-03-12T00:00:01.000Z",
+    completedAt: "2026-03-12T00:00:02.000Z"
+  };
+
+  const ledgers = deriveConversationLedgersFromTaskRunResult(
+    taskRunResult,
+    "job-open-browser-multi-process",
+    "2026-03-12T00:00:02.000Z"
+  );
+
+  assert.equal(ledgers.browserSessions.length, 1);
+  assert.equal(ledgers.browserSessions[0]?.linkedProcessLeaseId, "proc_preview_new");
+  assert.equal(
+    ledgers.browserSessions[0]?.linkedProcessCwd,
+    "C:\\Users\\testuser\\Desktop\\AI Drone City"
+  );
+  assert.equal(ledgers.browserSessions[0]?.linkedProcessPid, 43126);
+});
+
 test("deriveConversationLedgersFromTaskRunResult marks a stopped managed preview process as closed", () => {
   const taskRunResult: TaskRunResult = {
     task: {

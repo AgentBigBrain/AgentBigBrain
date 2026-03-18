@@ -6,8 +6,12 @@ import { ChildProcessWithoutNullStreams } from "node:child_process";
 
 import { hashSha256 } from "../../core/cryptoUtils";
 import { isAbortError, throwIfAborted } from "../../core/runtimeAbort";
-import { buildShellSpawnSpec, resolveShellEnvironment } from "../../core/shellRuntimeProfile";
+import { buildShellSpawnSpec } from "../../core/shellRuntimeProfile";
 import { ExecutorExecutionOutcome, StartProcessActionParams } from "../../core/types";
+import {
+  resolveCommandAwareShellEnvironment,
+  resolveEffectiveShellProfile
+} from "../executionRuntime/shellExecutionSupport";
 import {
   buildExecutionOutcome,
   buildManagedProcessExecutionMetadata,
@@ -73,13 +77,21 @@ export async function executeStartProcess(
     );
   }
 
-  const shellEnvironment = resolveShellEnvironment(context.config.shellRuntime.profile, process.env);
+  const effectiveShellProfile = resolveEffectiveShellProfile(
+    context.config.shellRuntime.profile,
+    command
+  );
+  const shellEnvironment = resolveCommandAwareShellEnvironment(
+    effectiveShellProfile,
+    command,
+    process.env
+  );
   const commandFingerprint = hashSha256(command);
   const spawnSpec = buildShellSpawnSpec({
-    profile: context.config.shellRuntime.profile,
+    profile: effectiveShellProfile,
     command,
     cwd: resolvedCwd,
-    timeoutMs: context.config.shellRuntime.profile.timeoutMsDefault,
+    timeoutMs: effectiveShellProfile.timeoutMsDefault,
     envKeyNames: shellEnvironment.envKeyNames
   });
   const loopbackTarget = inferManagedProcessLoopbackTarget(command);
@@ -102,7 +114,7 @@ export async function executeStartProcess(
           commandFingerprint,
           cwd: spawnSpec.cwd,
           shellExecutable: spawnSpec.executable,
-          shellKind: context.config.shellRuntime.profile.shellKind,
+          shellKind: effectiveShellProfile.shellKind,
           failureKind: "PORT_IN_USE",
           requestedHost: loopbackTarget.host,
           requestedPort: loopbackTarget.port,
@@ -119,7 +131,7 @@ export async function executeStartProcess(
       detached: process.platform !== "win32",
       env: shellEnvironment.env,
       windowsHide: true,
-      windowsVerbatimArguments: context.config.shellRuntime.profile.shellKind === "cmd",
+      windowsVerbatimArguments: effectiveShellProfile.shellKind === "cmd",
       stdio: ["pipe", "pipe", "pipe"]
     });
     if (typeof child.stdout.resume === "function") {
@@ -135,7 +147,7 @@ export async function executeStartProcess(
       commandFingerprint,
       cwd: spawnSpec.cwd,
       shellExecutable: spawnSpec.executable,
-      shellKind: context.config.shellRuntime.profile.shellKind,
+      shellKind: effectiveShellProfile.shellKind,
       taskId
     });
     bindAbortCleanupForManagedProcess(context, snapshot.leaseId, child, signal);

@@ -356,6 +356,27 @@ function detectProviderBlockerReason(...texts: readonly unknown[]): string | nul
   return PROVIDER_BLOCK_PATTERN.test(combined) ? combined : null;
 }
 
+/**
+ * Extracts a provider-capacity blocker from one captured handoff turn when the real backend
+ * failed before the smoke could finish.
+ *
+ * @param turn - Captured handoff turn, when present.
+ * @param job - Fresh job associated with that turn, when present.
+ * @returns Joined blocker evidence, or `null` when the turn did not fail for provider reasons.
+ */
+function detectProviderBlockerFromTurn(
+  turn: TurnCapture | undefined,
+  job: ConversationJob | null
+): string | null {
+  return detectProviderBlockerReason(
+    turn?.immediateReply,
+    turn?.notifications.map((notification) => notification.text).join("\n"),
+    job?.errorMessage,
+    job?.resultSummary,
+    turn ? extractLatestAssistantReply(turn.sessionSnapshot) : null
+  );
+}
+
 function detectBoundedHandoffBlockerReason(error: unknown): string | null {
   const combined =
     error instanceof Error
@@ -549,6 +570,14 @@ Promise<AutonomousRuntimeAffordancesHandoffArtifact> {
   const abortControllers = new Map<string, AbortController>();
   const turns: TurnCapture[] = [];
   let latestSession: ConversationSession | null = null;
+  const abortActiveSmokeRun = async (): Promise<void> => {
+    const controller = abortControllers.get(conversationKey);
+    if (!controller || controller.signal.aborted) {
+      return;
+    }
+    controller.abort();
+    await sleep(200);
+  };
 
   const runTurn = async (
     turn: number,
@@ -684,6 +713,51 @@ Promise<AutonomousRuntimeAffordancesHandoffArtifact> {
 
     const turn1At = new Date().toISOString();
     const sessionAfterTurn1 = await runTurn(1, turn1Input, turn1At);
+    const turn1Job = findLatestJobSince(sessionAfterTurn1, turn1At);
+    const turn1ProviderBlocker = detectProviderBlockerFromTurn(
+      turns[turns.length - 1],
+      turn1Job
+    );
+    if (turn1ProviderBlocker) {
+      const artifact: AutonomousRuntimeAffordancesHandoffArtifact = {
+        generatedAt: new Date().toISOString(),
+        command: COMMAND_NAME,
+        status: "BLOCKED",
+        blockerReason: turn1ProviderBlocker,
+        localIntentModel: {
+          enabled: localProbe.enabled,
+          required: localProbe.liveSmokeRequired,
+          reachable: localProbe.reachable,
+          modelPresent: localProbe.modelPresent,
+          model: localProbe.model,
+          provider: localProbe.provider,
+          baseUrl: localProbe.baseUrl
+        },
+        targetFolder: extractTargetFolder(sessionAfterTurn1),
+        previewUrl: extractPreviewUrl(sessionAfterTurn1),
+        browserSessionId: extractPrimaryBrowserSessionId(sessionAfterTurn1),
+        checks: {
+          naturalAutonomousStart: false,
+          roughDraftReviewWithoutNewWork: false,
+          roughDraftReviewSurfaced: false,
+          pauseCheckpointSaved: false,
+          whileAwaySummaryWithoutNewWork: false,
+          whileAwaySummarySurfaced: false,
+          resumeContinuationUsed: false,
+          resumeStayedOnSameWorkspace: false,
+          sliderAppliedOnResume: false,
+          browserClosed: false,
+          reviewableUserFacingCopy: turns.every((capturedTurn) =>
+            [capturedTurn.immediateReply, ...capturedTurn.notifications.map((notification) => notification.text)].every(
+              isReviewableReply
+            )
+          )
+        },
+        turns
+      };
+      await writeFile(ARTIFACT_PATH, `${JSON.stringify(artifact, null, 2)}${os.EOL}`, "utf8");
+      return artifact;
+    }
     const targetFolder = extractTargetFolder(sessionAfterTurn1);
     const previewUrl = extractPreviewUrl(sessionAfterTurn1);
     const initialBrowserSession =
@@ -772,11 +846,11 @@ Promise<AutonomousRuntimeAffordancesHandoffArtifact> {
         resumeStayedOnSameWorkspace &&
         sliderAppliedOnResume &&
         browserClosed &&
-        reviewableUserFacingCopy
+      reviewableUserFacingCopy
           ? "PASS"
           : "FAIL",
       blockerReason: detectProviderBlockerReason(
-        turns.flatMap((turn) => [
+        ...turns.flatMap((turn) => [
           turn.immediateReply,
           ...turn.notifications.map((notification) => notification.text),
           extractLatestAssistantReply(turn.sessionSnapshot)
@@ -817,7 +891,16 @@ Promise<AutonomousRuntimeAffordancesHandoffArtifact> {
     await writeFile(ARTIFACT_PATH, `${JSON.stringify(artifact, null, 2)}${os.EOL}`, "utf8");
     return artifact;
   } catch (error) {
-    const blockerReason = detectBoundedHandoffBlockerReason(error);
+    await abortActiveSmokeRun().catch(() => undefined);
+    latestSession = latestSession ?? await store.getSession(conversationKey).catch(() => null);
+    const blockerReason =
+      detectProviderBlockerReason(
+        ...turns.flatMap((turn) => [
+          turn.immediateReply,
+          ...turn.notifications.map((notification) => notification.text),
+          extractLatestAssistantReply(turn.sessionSnapshot)
+        ])
+      ) ?? detectBoundedHandoffBlockerReason(error);
     const artifact: AutonomousRuntimeAffordancesHandoffArtifact = {
       generatedAt: new Date().toISOString(),
       command: COMMAND_NAME,
@@ -857,6 +940,8 @@ Promise<AutonomousRuntimeAffordancesHandoffArtifact> {
     await writeFile(ARTIFACT_PATH, `${JSON.stringify(artifact, null, 2)}${os.EOL}`, "utf8");
     return artifact;
   } finally {
+    await abortActiveSmokeRun().catch(() => undefined);
+    latestSession = latestSession ?? await store.getSession(conversationKey).catch(() => null);
     await cleanupTrackedSmokeResources(latestSession).catch(() => undefined);
     await cleanupLingeringPlaywrightAutomationBrowsers().catch(() => undefined);
     await rm(targetFolderPath, { recursive: true, force: true }).catch(() => undefined);

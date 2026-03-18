@@ -6,11 +6,11 @@ import { classifyRoutingIntentV1 } from "../../interfaces/routingMap";
 import { extractActiveRequestSegment } from "../../core/currentRequestExtraction";
 
 const BUILD_EXECUTION_VERB_PATTERN =
-  /\b(create|build|make|generate|scaffold|setup|set up|spin up)\b/i;
+  /\b(create|build|make|generate|scaffold|setup|set up|spin up|run|start|launch|fix|repair)\b/i;
 const BUILD_EXECUTION_TARGET_PATTERN =
   /\b(app|application|project|dashboard|site|website|landing\s+page|homepage|web\s+page|page|frontend|backend|api|cli|repo|repository|react|next\.?js|vue|svelte|angular|vite)\b/i;
 const BUILD_EXECUTION_DESTINATION_PATTERN =
-  /\bon\s+my\s+(desktop|documents|downloads)\b|\bin\s+['"]?[a-z]:\\|\bin\s+['"]?\/(?:users|home|tmp|var|opt)\//i;
+  /\bon\s+my\s+(desktop|documents|downloads)\b|\bin\s+(?:the\s+)?['"]?[a-z]:\\|\bin\s+(?:the\s+)?['"]?\/(?:users|home|tmp|var|opt)\//i;
 const LOCAL_WORKSPACE_ORGANIZATION_VERB_PATTERN =
   /\b(?:organize|group|sort|move|collect|gather|tidy|clean\s+up)\b/i;
 const LOCAL_WORKSPACE_ORGANIZATION_TARGET_PATTERN =
@@ -27,6 +27,8 @@ const BUILD_EXPLANATION_ONLY_PATTERN =
   /^\s*(how\s+do\s+i|how\s+to|explain|show\s+me\s+how|tutorial|guide\s+me|what\s+is)\b|\b(without\s+executing|do\s+not\s+execute|don't\s+execute|guidance\s+only|instructions?\s+only)\b/i;
 const NATURAL_BROWSER_CONTROL_FOLLOW_UP_PATTERN =
   /^\s*(?:open|reopen|show|bring\s+(?:back|up)|pull\s+up|close|shut|dismiss|hide)\b[\s\S]{0,50}\b(?:browser|tab|window|preview|page|landing page|homepage)\b/i;
+const FRAMEWORK_APP_REQUEST_PATTERN =
+  /\b(?:react|vite|next\.?js|nextjs|vue|svelte|angular)\b/i;
 
 /**
  * Normalizes planner-facing request text down to the active user request segment.
@@ -77,6 +79,20 @@ export function isExecutionStyleBuildRequest(currentUserRequest: string): boolea
     BUILD_EXECUTION_DESTINATION_PATTERN.test(activeRequest) ||
     /\bexecute\s+now\b/i.test(activeRequest) ||
     /\brun\s+(?:it|commands?)\b/i.test(activeRequest)
+  );
+}
+
+/**
+ * Evaluates whether a request is asking for a fresh framework-app scaffold/build path rather than
+ * a static landing-page file or a tracked artifact-edit follow-up.
+ */
+export function requiresFrameworkAppScaffoldAction(
+  currentUserRequest: string
+): boolean {
+  const activeRequest = normalizeActiveRequest(currentUserRequest);
+  return (
+    isExecutionStyleBuildRequest(activeRequest) &&
+    FRAMEWORK_APP_REQUEST_PATTERN.test(activeRequest)
   );
 }
 

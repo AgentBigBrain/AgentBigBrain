@@ -13,6 +13,7 @@ belongs here.
 - `buildExecutionPolicy.ts`
 - `buildExecutionPlanMessaging.ts`
 - `buildExecutionActionHeuristics.ts`
+- `frameworkBuildActionHeuristics.ts`
 - `buildExecutionRecoveryPolicy.ts`
 - `liveVerificationPolicy.ts`
 - `userOwnedPathHints.ts`
@@ -49,6 +50,8 @@ belongs here.
 - shared build/organization action-shape heuristics used by execution-style build assessment,
   including real move-command detection, Windows shell validation, open-browser target checks, and
   tracked artifact-edit preview allowance
+- framework-app specific scaffold/preview heuristics used to require native preview commands,
+  reject directory-only reuse guards, and keep oversized shell/start commands fail-closed
 - user-owned path and destination hints for safer continuity-aware local execution
 - planner action normalization and alias cleanup
 - explicit-action intent classification and filtering
@@ -76,6 +79,8 @@ belongs here.
   unless the plan explicitly excludes that destination first.
 - Build and organization policy heuristics should stay split into focused modules instead of
   regrowing into one oversized validator file.
+- Framework-app scaffold and preview heuristics should stay isolated enough that shell-budget or
+  native-preview fixes do not force unrelated organization-policy edits.
 - Planner repair must fail closed when required executable actions never appear.
 - Action normalization, explicit-action intent inference, and skill fallback scaffolding must stay
   owned here rather than drifting back into `src/organs/`.

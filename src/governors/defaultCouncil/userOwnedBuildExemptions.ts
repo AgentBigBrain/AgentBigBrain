@@ -13,14 +13,41 @@ const WINDOWS_PUBLIC_FOLDER_PATTERN =
   /^[a-z]:\/users\/public\/(?:desktop|documents|downloads)(?:\/|$)/i;
 const WINDOWS_USER_FOLDER_PATTERN =
   /^[a-z]:\/users\/[^/]+\/(?:(?:onedrive(?:[^/]+)?)\/)?(desktop|documents|downloads)(?:\/|$)/i;
+const WINDOWS_USER_FOLDER_INLINE_PATTERN =
+  /[a-z]:\\users\\[^\\]+\\(?:(?:onedrive(?:[^\\]*)?)\\)?(desktop|documents|downloads)(?:\\|$)/ig;
+const WINDOWS_PUBLIC_FOLDER_INLINE_PATTERN =
+  /[a-z]:\\users\\public\\(?:desktop|documents|downloads)(?:\\|$)/ig;
 const MAC_USER_FOLDER_PATTERN = /^\/users\/[^/]+\/(desktop|documents|downloads)(?:\/|$)/i;
 const LINUX_USER_FOLDER_PATTERN = /^\/home\/[^/]+\/(desktop|documents|downloads)(?:\/|$)/i;
 const SHELL_FOLDER_CREATE_PATTERN =
-  /\b(?:mkdir|md)\b|\bif\s+not\s+exist\b[\s\S]{0,80}\b(?:mkdir|md)\b/i;
+  /\b(?:mkdir|md)\b|\bnew-item\b[\s\S]{0,80}-itemtype\s+directory\b|\bif\s+not\s+exist\b[\s\S]{0,80}\b(?:mkdir|md)\b/i;
+const SHELL_BUILD_TOOLCHAIN_PATTERN =
+  /\b(?:(?:npm|npx|pnpm|yarn)(?:\.cmd)?)\b[\s\S]{0,120}\b(?:create|init|install|ci|run\s+(?:build|dev|preview|start)|build|dev|preview|start)\b/i;
+const SHELL_FRAMEWORK_CLI_PATTERN =
+  /\b(?:vite|create-vite|react-scripts|next|nextjs|create-next-app)\b[\s\S]{0,80}\b(?:build|dev|preview|start|create)\b/i;
 const SHELL_FILE_ORGANIZATION_PATTERN =
   /\b(?:mkdir|md|move-item|rename-item|copy-item|get-childitem|new-item|mv|cp|ls|dir|ren)\b/i;
 
 type UserOwnedFolderKind = "desktop" | "documents" | "downloads";
+
+/**
+ * Resolves a known-folder kind from one normalized filesystem path candidate.
+ *
+ * @param candidate - Normalized filesystem path candidate.
+ * @returns Matched known-folder kind, or `null` when the path is not user-owned.
+ */
+function resolveKnownFolderKindFromPath(candidate: string): UserOwnedFolderKind | null {
+  if (!candidate || WINDOWS_PUBLIC_FOLDER_PATTERN.test(candidate)) {
+    return null;
+  }
+
+  const match =
+    candidate.match(WINDOWS_USER_FOLDER_PATTERN) ??
+    candidate.match(MAC_USER_FOLDER_PATTERN) ??
+    candidate.match(LINUX_USER_FOLDER_PATTERN);
+  const matchedKind = match?.[1]?.toLowerCase() as UserOwnedFolderKind | undefined;
+  return matchedKind ?? null;
+}
 
 /**
  * Resolves which user-owned known folder kinds the user explicitly requested in this turn.
@@ -29,17 +56,37 @@ type UserOwnedFolderKind = "desktop" | "documents" | "downloads";
  * @returns Requested known-folder kinds.
  */
 function resolveRequestedFolderKinds(taskUserInput: string): readonly UserOwnedFolderKind[] {
-  const requestedKinds: UserOwnedFolderKind[] = [];
+  const requestedKinds = new Set<UserOwnedFolderKind>();
   if (/\bon\s+my\s+desktop\b/i.test(taskUserInput)) {
-    requestedKinds.push("desktop");
+    requestedKinds.add("desktop");
   }
   if (/\bin\s+my\s+documents\b/i.test(taskUserInput)) {
-    requestedKinds.push("documents");
+    requestedKinds.add("documents");
   }
   if (/\bin\s+my\s+downloads\b/i.test(taskUserInput)) {
-    requestedKinds.push("downloads");
+    requestedKinds.add("downloads");
   }
-  return requestedKinds;
+
+  for (const match of taskUserInput.matchAll(WINDOWS_USER_FOLDER_INLINE_PATTERN)) {
+    const rawMatch = match[0]?.trim() ?? "";
+    if (!rawMatch || WINDOWS_PUBLIC_FOLDER_INLINE_PATTERN.test(rawMatch)) {
+      continue;
+    }
+    WINDOWS_PUBLIC_FOLDER_INLINE_PATTERN.lastIndex = 0;
+    const matchedKind = match[1]?.toLowerCase() as UserOwnedFolderKind | undefined;
+    if (matchedKind) {
+      requestedKinds.add(matchedKind);
+    }
+  }
+
+  for (const candidate of extractFilesystemCandidatesFromCommand(taskUserInput)) {
+    const matchedKind = resolveKnownFolderKindFromPath(normalizeFilesystemText(candidate));
+    if (matchedKind) {
+      requestedKinds.add(matchedKind);
+    }
+  }
+
+  return [...requestedKinds];
 }
 
 /**
@@ -80,20 +127,8 @@ function isRequestedUserOwnedKnownFolderPath(
   candidate: string,
   requestedKinds: readonly UserOwnedFolderKind[]
 ): boolean {
-  if (!candidate || WINDOWS_PUBLIC_FOLDER_PATTERN.test(candidate)) {
-    return false;
-  }
-
-  const match =
-    candidate.match(WINDOWS_USER_FOLDER_PATTERN) ??
-    candidate.match(MAC_USER_FOLDER_PATTERN) ??
-    candidate.match(LINUX_USER_FOLDER_PATTERN);
-  if (!match) {
-    return false;
-  }
-
-  const matchedKind = match[1]?.toLowerCase() as UserOwnedFolderKind | undefined;
-  return matchedKind !== undefined && requestedKinds.includes(matchedKind);
+  const matchedKind = resolveKnownFolderKindFromPath(candidate);
+  return matchedKind !== null && requestedKinds.includes(matchedKind);
 }
 
 /**
@@ -103,14 +138,7 @@ function isRequestedUserOwnedKnownFolderPath(
  * @returns `true` when the path belongs to a user-owned Desktop/Documents/Downloads tree.
  */
 function isAnyUserOwnedKnownFolderPath(candidate: string): boolean {
-  if (!candidate || WINDOWS_PUBLIC_FOLDER_PATTERN.test(candidate)) {
-    return false;
-  }
-  return (
-    WINDOWS_USER_FOLDER_PATTERN.test(candidate) ||
-    MAC_USER_FOLDER_PATTERN.test(candidate) ||
-    LINUX_USER_FOLDER_PATTERN.test(candidate)
-  );
+  return resolveKnownFolderKindFromPath(candidate) !== null;
 }
 
 /**
@@ -181,12 +209,22 @@ export function isExplicitUserOwnedBuildWorkspaceAction(
 
   if (proposal.action.type === "shell_command") {
     const command = getParamString(proposal.action.params, "command");
+    const matchesBuildShellPattern =
+      buildRequest &&
+      Boolean(
+        command &&
+        (
+          SHELL_FOLDER_CREATE_PATTERN.test(command) ||
+          SHELL_BUILD_TOOLCHAIN_PATTERN.test(command) ||
+          SHELL_FRAMEWORK_CLI_PATTERN.test(command)
+        )
+      );
+    const matchesOrganizationShellPattern =
+      organizationRequest &&
+      Boolean(command && SHELL_FILE_ORGANIZATION_PATTERN.test(command));
     if (
       !command ||
-      !(
-        SHELL_FOLDER_CREATE_PATTERN.test(command) ||
-        (organizationRequest && SHELL_FILE_ORGANIZATION_PATTERN.test(command))
-      )
+      (!matchesBuildShellPattern && !matchesOrganizationShellPattern)
     ) {
       return false;
     }

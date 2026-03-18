@@ -29,11 +29,15 @@ import { buildPausedReturnHandoffProgressState } from "./conversationRuntime/ret
 import { deriveTaskRecoveryClarification } from "./conversationRuntime/taskRecoveryClarification";
 import { reconcileConversationExecutionRuntimeSession } from "./conversationRuntime/executionInputRuntimeOwnership";
 import {
+  basenameCrossPlatformPath,
   dirnameCrossPlatformPath,
-  extnameCrossPlatformPath
+  extnameCrossPlatformPath,
+  localFileUrlToAbsolutePath,
+  normalizeCrossPlatformPath
 } from "../core/crossPlatformPath";
 import type { BrowserSessionSnapshot } from "../organs/liveRun/browserSessionRegistry";
 import type { ManagedProcessSnapshot } from "../organs/liveRun/managedProcessRegistry";
+import type { TaskRunResult } from "../core/types";
 import type {
   ConversationExecutionProgressUpdate,
   ConversationExecutionResult,
@@ -116,6 +120,218 @@ function uniqueNonEmpty(values: readonly (string | null | undefined)[]): string[
   return result;
 }
 
+const PROJECT_SOURCE_DIRECTORY_NAMES = new Set([
+  "src",
+  "app",
+  "pages",
+  "components",
+  "styles",
+  "public"
+]);
+const GENERIC_WORKSPACE_CONTAINER_NAMES = new Set([
+  "desktop",
+  "documents",
+  "downloads",
+  "onedrive",
+  "pictures",
+  "videos",
+  "music"
+]);
+
+/**
+ * Normalizes one local path into a case-insensitive comparable identity.
+ *
+ * @param candidatePath - Raw local path candidate.
+ * @returns Comparable normalized path, or `null` when the input is blank.
+ */
+function toComparablePath(candidatePath: string | null | undefined): string | null {
+  if (!candidatePath) {
+    return null;
+  }
+  const normalized = normalizeCrossPlatformPath(candidatePath);
+  if (!normalized) {
+    return null;
+  }
+  return normalized.replace(/\\/g, "/").toLowerCase();
+}
+
+/**
+ * Returns whether one comparable path is the same as or nested below another.
+ *
+ * @param candidatePath - Candidate child or same path.
+ * @param rootPath - Candidate parent path.
+ * @returns `true` when the candidate path is the same as or nested below the root.
+ */
+function isSameOrNestedComparablePath(
+  candidatePath: string | null,
+  rootPath: string | null
+): boolean {
+  if (!candidatePath || !rootPath) {
+    return false;
+  }
+  return candidatePath === rootPath || candidatePath.startsWith(`${rootPath}/`);
+}
+
+/**
+ * Collapses common source subdirectories like `src/` back to the project root.
+ *
+ * @param candidateRoot - Candidate workspace root.
+ * @returns Collapsed project root when a well-known source directory is detected.
+ */
+function collapseProjectSourceRoot(candidateRoot: string): string {
+  const basename = basenameCrossPlatformPath(candidateRoot).toLowerCase();
+  if (!PROJECT_SOURCE_DIRECTORY_NAMES.has(basename)) {
+    return candidateRoot;
+  }
+  const parent = dirnameCrossPlatformPath(candidateRoot);
+  return parent || candidateRoot;
+}
+
+/**
+ * Finds the deepest shared ancestor directory across a set of local paths.
+ *
+ * @param candidatePaths - File or folder paths belonging to the same workspace.
+ * @returns Shared ancestor directory, or `null` when none exists.
+ */
+function findCommonAncestorPath(candidatePaths: readonly string[]): string | null {
+  const normalizedPaths = candidatePaths
+    .map((entry) => normalizeCrossPlatformPath(entry))
+    .filter((entry) => entry.length > 0);
+  if (normalizedPaths.length === 0) {
+    return null;
+  }
+  let candidate = normalizedPaths[0]!;
+  while (candidate.length > 0) {
+    const comparableCandidate = toComparablePath(candidate);
+    if (
+      normalizedPaths.every((entry) => isSameOrNestedComparablePath(toComparablePath(entry), comparableCandidate))
+    ) {
+      return candidate;
+    }
+    const parent = dirnameCrossPlatformPath(candidate);
+    if (!parent || parent === candidate) {
+      break;
+    }
+    candidate = parent;
+  }
+  return null;
+}
+
+/**
+ * Derives the strongest project-root candidate from one job's changed files or artifact path.
+ *
+ * @param changedPaths - Concrete changed paths emitted by the completed job.
+ * @param primaryArtifactPath - Preferred primary artifact path for the completed job.
+ * @returns Current-job project root candidate, or `null` when no path evidence exists.
+ */
+function deriveCurrentJobWorkspaceRootFromPaths(
+  changedPaths: readonly string[],
+  primaryArtifactPath: string | null
+): string | null {
+  const locationDirectories = uniqueNonEmpty([
+    ...changedPaths.map((entry) =>
+      extnameCrossPlatformPath(entry).length > 0
+        ? dirnameCrossPlatformPath(entry)
+        : entry
+    ),
+    primaryArtifactPath
+      ? extnameCrossPlatformPath(primaryArtifactPath).length > 0
+        ? dirnameCrossPlatformPath(primaryArtifactPath)
+        : primaryArtifactPath
+      : null
+  ]);
+  const commonAncestor = findCommonAncestorPath(locationDirectories);
+  if (!commonAncestor) {
+    return null;
+  }
+  return collapseProjectSourceRoot(commonAncestor);
+}
+
+/**
+ * Returns whether a remembered workspace root is specific enough to anchor continuity matching.
+ *
+ * @param workspace - Previously tracked workspace.
+ * @returns `true` when the remembered root is project-specific rather than a generic container.
+ */
+function hasReliableWorkspaceRoot(
+  workspace: ConversationActiveWorkspaceRecord
+): boolean {
+  if (!workspace.rootPath) {
+    return false;
+  }
+  const basename = basenameCrossPlatformPath(workspace.rootPath).toLowerCase();
+  if (!GENERIC_WORKSPACE_CONTAINER_NAMES.has(basename)) {
+    return true;
+  }
+  return workspace.lastChangedPaths.some((entry) => {
+    const parent = dirnameCrossPlatformPath(entry);
+    return parent.length > 0 && normalizeCrossPlatformPath(parent) !== normalizeCrossPlatformPath(workspace.rootPath ?? "");
+  });
+}
+
+/**
+ * Returns whether the current job still belongs to the previously tracked workspace.
+ *
+ * @param previousWorkspace - Previously tracked workspace continuity snapshot.
+ * @param changedPaths - Concrete changed paths emitted by the current job.
+ * @param currentRootPath - Current-job workspace root candidate.
+ * @param currentPrimaryArtifactPath - Current-job primary artifact path.
+ * @param currentJobBrowserSession - Browser session opened by the current job when present.
+ * @returns `true` when it is safe to reuse the previous workspace's preview continuity.
+ */
+function shouldReusePreviousWorkspaceContinuity(
+  previousWorkspace: ConversationActiveWorkspaceRecord | null,
+  changedPaths: readonly string[],
+  currentRootPath: string | null,
+  currentPrimaryArtifactPath: string | null,
+  currentJobBrowserSession: ConversationSession["browserSessions"][number] | null
+): boolean {
+  if (!previousWorkspace) {
+    return false;
+  }
+  if (
+    currentJobBrowserSession?.id &&
+    previousWorkspace.browserSessionIds.includes(currentJobBrowserSession.id)
+  ) {
+    return true;
+  }
+
+  const currentEvidencePaths = uniqueNonEmpty([
+    currentPrimaryArtifactPath,
+    ...changedPaths
+  ]).map((entry) => toComparablePath(entry)).filter((entry): entry is string => entry !== null);
+  if (currentEvidencePaths.length === 0 && !currentRootPath) {
+    return true;
+  }
+
+  const previousStrongPaths = uniqueNonEmpty([
+    previousWorkspace.primaryArtifactPath,
+    ...previousWorkspace.lastChangedPaths,
+    localFileUrlToAbsolutePath(previousWorkspace.previewUrl ?? "")
+  ]).map((entry) => toComparablePath(entry)).filter((entry): entry is string => entry !== null);
+  if (
+    currentEvidencePaths.some((entry) => previousStrongPaths.includes(entry))
+  ) {
+    return true;
+  }
+
+  if (!hasReliableWorkspaceRoot(previousWorkspace)) {
+    return false;
+  }
+
+  const comparablePreviousRoot = toComparablePath(previousWorkspace.rootPath);
+  const comparableCurrentRoot = toComparablePath(currentRootPath);
+  if (
+    comparableCurrentRoot &&
+    comparableCurrentRoot === comparablePreviousRoot
+  ) {
+    return true;
+  }
+  return currentEvidencePaths.some((entry) =>
+    isSameOrNestedComparablePath(entry, comparablePreviousRoot)
+  );
+}
+
 /**
  * Extracts one managed preview-process lease id from a recent-action identifier when present.
  *
@@ -129,6 +345,39 @@ function extractProcessLeaseIdFromRecentActionId(actionId: string): string | nul
     return null;
   }
   return actionId.slice(markerIndex + marker.length).trim() || null;
+}
+
+/**
+ * Collects managed preview-process lease ids emitted by the current job for the tracked workspace.
+ *
+ * @param session - Session containing recent-action ledgers.
+ * @param sourceJobId - Job whose process ledgers should be considered.
+ * @param rootPath - Current workspace root candidate.
+ * @returns Exact process lease ids attributable to the current workspace run.
+ */
+function collectCurrentJobPreviewProcessLeaseIds(
+  session: ConversationSession,
+  sourceJobId: string,
+  rootPath: string | null
+): string[] {
+  const comparableRootPath = toComparablePath(rootPath);
+  return uniqueNonEmpty(
+    session.recentActions
+      .filter(
+        (action) =>
+          action.sourceJobId === sourceJobId &&
+          action.kind === "process" &&
+          action.status !== "closed" &&
+          action.status !== "failed"
+      )
+      .filter((action) => {
+        if (!comparableRootPath) {
+          return true;
+        }
+        return isSameOrNestedComparablePath(toComparablePath(action.location), comparableRootPath);
+      })
+      .map((action) => extractProcessLeaseIdFromRecentActionId(action.id))
+  );
 }
 
 /**
@@ -212,7 +461,9 @@ function selectPrimaryArtifactPath(
 function resolveWorkspaceRootPath(
   session: ConversationSession,
   sourceJobId: string,
-  browserSession: ConversationSession["browserSessions"][number] | null,
+  changedPaths: readonly string[],
+  currentJobBrowserSession: ConversationSession["browserSessions"][number] | null,
+  continuityBrowserSession: ConversationSession["browserSessions"][number] | null,
   primaryArtifactPath: string | null,
   previousWorkspace: ConversationActiveWorkspaceRecord | null
 ): string | null {
@@ -222,12 +473,6 @@ function resolveWorkspaceRootPath(
         destination.sourceJobId === sourceJobId &&
         destination.id.startsWith("path:process:")
     ) ?? null;
-  if (browserSession?.workspaceRootPath) {
-    return browserSession.workspaceRootPath;
-  }
-  if (browserSession?.linkedProcessCwd) {
-    return browserSession.linkedProcessCwd;
-  }
   if (processDestination) {
     return processDestination.resolvedPath;
   }
@@ -235,12 +480,29 @@ function resolveWorkspaceRootPath(
     session.pathDestinations.find(
       (destination) =>
         destination.sourceJobId === sourceJobId &&
-        !destination.resolvedPath.toLowerCase().endsWith(".html") &&
-        !destination.resolvedPath.toLowerCase().endsWith(".css") &&
-        !destination.resolvedPath.toLowerCase().endsWith(".js")
+        extnameCrossPlatformPath(destination.resolvedPath).length === 0
     ) ?? null;
   if (folderDestination) {
     return folderDestination.resolvedPath;
+  }
+  if (currentJobBrowserSession?.workspaceRootPath) {
+    return currentJobBrowserSession.workspaceRootPath;
+  }
+  if (currentJobBrowserSession?.linkedProcessCwd) {
+    return currentJobBrowserSession.linkedProcessCwd;
+  }
+  const derivedCurrentJobRootPath = deriveCurrentJobWorkspaceRootFromPaths(
+    changedPaths,
+    primaryArtifactPath
+  );
+  if (derivedCurrentJobRootPath) {
+    return derivedCurrentJobRootPath;
+  }
+  if (continuityBrowserSession?.workspaceRootPath) {
+    return continuityBrowserSession.workspaceRootPath;
+  }
+  if (continuityBrowserSession?.linkedProcessCwd) {
+    return continuityBrowserSession.linkedProcessCwd;
   }
   if (primaryArtifactPath) {
     return dirnameCrossPlatformPath(primaryArtifactPath);
@@ -266,42 +528,77 @@ function deriveActiveWorkspaceFromSession(
     (browserSession) => browserSession.sourceJobId === sourceJobId
   );
   const currentJobBrowserSession = currentJobBrowserSessions[0] ?? null;
+  const changedPaths = collectWorkspaceChangedPaths(session, sourceJobId);
+  const currentJobPrimaryArtifactPath = selectPrimaryArtifactPath(changedPaths, null);
+  const currentJobRootPath = resolveWorkspaceRootPath(
+    session,
+    sourceJobId,
+    changedPaths,
+    currentJobBrowserSession,
+    null,
+    currentJobPrimaryArtifactPath,
+    null
+  );
+  const reusePreviousContinuity = shouldReusePreviousWorkspaceContinuity(
+    previousWorkspace,
+    changedPaths,
+    currentJobRootPath,
+    currentJobPrimaryArtifactPath,
+    currentJobBrowserSession
+  );
   const continuityBrowserSession =
-    (previousWorkspace?.browserSessionId
+    currentJobBrowserSession ??
+    (reusePreviousContinuity && previousWorkspace?.browserSessionId
       ? session.browserSessions.find(
           (browserSession) => browserSession.id === previousWorkspace.browserSessionId
         ) ?? null
-      : null) ??
-    currentJobBrowserSession;
-  const changedPaths = collectWorkspaceChangedPaths(session, sourceJobId);
-  const primaryArtifactPath = selectPrimaryArtifactPath(changedPaths, previousWorkspace);
+      : null);
+  const primaryArtifactPath =
+    currentJobPrimaryArtifactPath ??
+    (reusePreviousContinuity ? previousWorkspace?.primaryArtifactPath ?? null : null);
   const rootPath = resolveWorkspaceRootPath(
     session,
     sourceJobId,
+    changedPaths,
+    currentJobBrowserSession,
     continuityBrowserSession,
     primaryArtifactPath,
-    previousWorkspace
+    reusePreviousContinuity ? previousWorkspace : null
   );
   const previewUrl =
-    continuityBrowserSession?.url ??
+    currentJobBrowserSession?.url ??
     session.recentActions.find(
       (action) =>
         action.sourceJobId === sourceJobId &&
         action.kind === "url" &&
         typeof action.location === "string"
     )?.location ??
-    previousWorkspace?.previewUrl ??
+    (reusePreviousContinuity ? previousWorkspace?.previewUrl ?? null : null) ??
     null;
+  const currentJobPreviewProcessLeaseIds = collectCurrentJobPreviewProcessLeaseIds(
+    session,
+    sourceJobId,
+    rootPath
+  );
   const previewProcessLeaseIds = uniqueNonEmpty([
     continuityBrowserSession?.linkedProcessLeaseId ?? null,
-    previousWorkspace?.previewProcessLeaseId ?? null,
-    ...(previousWorkspace?.previewProcessLeaseIds ?? []),
+    ...currentJobPreviewProcessLeaseIds,
+    ...(reusePreviousContinuity
+      ? [
+          previousWorkspace?.previewProcessLeaseId ?? null,
+          ...(previousWorkspace?.previewProcessLeaseIds ?? [])
+        ]
+      : []),
     ...currentJobBrowserSessions.map((browserSession) => browserSession.linkedProcessLeaseId)
   ]);
   const browserSessionIds = uniqueNonEmpty([
     continuityBrowserSession?.id ?? null,
-    previousWorkspace?.browserSessionId ?? null,
-    ...(previousWorkspace?.browserSessionIds ?? []),
+    ...(reusePreviousContinuity
+      ? [
+          previousWorkspace?.browserSessionId ?? null,
+          ...(previousWorkspace?.browserSessionIds ?? [])
+        ]
+      : []),
     ...currentJobBrowserSessions.map((browserSession) => browserSession.id)
   ]);
   const currentTrackedBrowserSession =
@@ -316,16 +613,16 @@ function deriveActiveWorkspaceFromSession(
   );
   const lastKnownPreviewProcessPid =
     continuityBrowserSession?.linkedProcessPid ??
-    previousWorkspace?.lastKnownPreviewProcessPid ??
+    (reusePreviousContinuity ? previousWorkspace?.lastKnownPreviewProcessPid ?? null : null) ??
     null;
   const browserProcessPid =
     continuityBrowserSession?.browserProcessPid ??
-    previousWorkspace?.browserProcessPid ??
+    (reusePreviousContinuity ? previousWorkspace?.browserProcessPid ?? null : null) ??
     null;
   const previewProcessCwd =
     continuityBrowserSession?.workspaceRootPath ??
     continuityBrowserSession?.linkedProcessCwd ??
-    previousWorkspace?.previewProcessCwd ??
+    (reusePreviousContinuity ? previousWorkspace?.previewProcessCwd ?? null : null) ??
     rootPath;
   const hasOpenBrowserSession = currentTrackedBrowserSession !== null;
   const hasPreviewProcess = livePreviewProcessLeaseIds.length > 0;
@@ -364,17 +661,19 @@ function deriveActiveWorkspaceFromSession(
 
   return {
     id:
-      previousWorkspace?.id ??
+      (reusePreviousContinuity ? previousWorkspace?.id ?? null : null) ??
       `workspace:${rootPath ?? primaryArtifactPath ?? previewUrl ?? sourceJobId}`,
     label: "Current project workspace",
     rootPath,
     primaryArtifactPath,
     previewUrl,
-    browserSessionId: continuityBrowserSession?.id ?? previousWorkspace?.browserSessionId ?? null,
+    browserSessionId:
+      continuityBrowserSession?.id ??
+      (reusePreviousContinuity ? previousWorkspace?.browserSessionId ?? null : null),
     browserSessionIds,
     browserSessionStatus:
       continuityBrowserSession?.status ??
-      previousWorkspace?.browserSessionStatus ??
+      (reusePreviousContinuity ? previousWorkspace?.browserSessionStatus ?? null : null) ??
       null,
     browserProcessPid,
     previewProcessLeaseId: primaryPreviewProcessLeaseId,
@@ -399,7 +698,9 @@ function deriveActiveWorkspaceFromSession(
  */
 function shouldPromoteClosedPreviewStackSummary(
   session: ConversationSession,
-  summary: string | null
+  summary: string | null,
+  userInput: string,
+  taskRunResult: TaskRunResult | null
 ): boolean {
   if (!summary || !/BROWSER_SESSION_CONTROL_UNAVAILABLE|One later step was blocked/i.test(summary)) {
     return false;
@@ -415,11 +716,138 @@ function shouldPromoteClosedPreviewStackSummary(
   ) {
     return false;
   }
+  if (inputReferencesDifferentExplicitBrowserUrl(userInput, session)) {
+    return false;
+  }
+  if (taskRunResult && !didRunAttemptTrackedPreviewShutdown(taskRunResult, activeWorkspace)) {
+    return false;
+  }
+  if (!taskRunResult && !requestLooksLikeTrackedPreviewClose(userInput)) {
+    return false;
+  }
   return session.browserSessions.some(
     (browserSession) =>
       activeWorkspace.browserSessionIds.includes(browserSession.id) &&
       browserSession.status === "closed"
   );
+}
+
+const PROMOTION_EXPLICIT_URL_REFERENCE_PATTERN =
+  /\b(?:https?:\/\/|file:\/\/\/)[^\s<>"')\]]+/gi;
+const PROMOTION_BROWSER_CLOSE_REQUEST_PATTERN =
+  /\b(?:close|shut|dismiss|hide)\b[\s\S]{0,50}\b(?:browser|tab|window|preview|page|landing page|homepage)\b/i;
+
+/**
+ * Normalizes browser-target URLs so persisted-summary reconciliation can detect foreign explicit URLs.
+ *
+ * @param rawUrl - Raw URL from the user request or tracked runtime state.
+ * @returns Comparable normalized URL, or `null` when unsupported.
+ */
+function normalizeComparablePromotionBrowserUrl(
+  rawUrl: string | null | undefined
+): string | null {
+  if (typeof rawUrl !== "string") {
+    return null;
+  }
+  const trimmed = rawUrl.trim().replace(/[),.;!?]+$/g, "");
+  if (!trimmed) {
+    return null;
+  }
+  try {
+    const parsed = new URL(trimmed);
+    parsed.hash = "";
+    if (parsed.protocol === "http:" || parsed.protocol === "https:") {
+      const normalizedPath =
+        parsed.pathname && parsed.pathname !== "/"
+          ? parsed.pathname.replace(/\/+$/g, "")
+          : "/";
+      return `${parsed.protocol}//${parsed.host.toLowerCase()}${normalizedPath}${parsed.search}`;
+    }
+    if (parsed.protocol === "file:") {
+      return `${parsed.protocol}//${parsed.pathname}${parsed.search}`;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+/**
+ * Returns whether the current request names an explicit browser URL that does not match the tracked preview.
+ *
+ * @param userInput - Current executed job wording.
+ * @param session - Current conversation session.
+ * @returns `true` when summary promotion should not override a foreign explicit URL request.
+ */
+function inputReferencesDifferentExplicitBrowserUrl(
+  userInput: string,
+  session: ConversationSession
+): boolean {
+  const explicitUrls = (userInput.match(PROMOTION_EXPLICIT_URL_REFERENCE_PATTERN) ?? [])
+    .map((match) => normalizeComparablePromotionBrowserUrl(match))
+    .filter((match): match is string => typeof match === "string" && match.length > 0);
+  if (explicitUrls.length === 0) {
+    return false;
+  }
+  const trackedUrls = new Set<string>();
+  const activePreviewUrl = normalizeComparablePromotionBrowserUrl(session.activeWorkspace?.previewUrl);
+  if (activePreviewUrl) {
+    trackedUrls.add(activePreviewUrl);
+  }
+  for (const browserSession of session.browserSessions) {
+    const normalizedUrl = normalizeComparablePromotionBrowserUrl(browserSession.url);
+    if (normalizedUrl) {
+      trackedUrls.add(normalizedUrl);
+    }
+  }
+  return explicitUrls.some((url) => !trackedUrls.has(url));
+}
+
+/**
+ * Returns whether the current request still reads like a tracked-preview close follow-up.
+ *
+ * @param userInput - Current executed job wording.
+ * @returns `true` when blocked close-preview copy can be promoted safely.
+ */
+function requestLooksLikeTrackedPreviewClose(userInput: string): boolean {
+  return PROMOTION_BROWSER_CLOSE_REQUEST_PATTERN.test(userInput);
+}
+
+/**
+ * Returns whether the current run actually targeted the tracked preview stack.
+ *
+ * @param taskRunResult - Completed governed run for the current job.
+ * @param activeWorkspace - Reconciled tracked workspace after the run.
+ * @returns `true` when close/stop actions hit the tracked browser or preview lease ids.
+ */
+function didRunAttemptTrackedPreviewShutdown(
+  taskRunResult: TaskRunResult,
+  activeWorkspace: ConversationActiveWorkspaceRecord
+): boolean {
+  const trackedBrowserSessionIds = new Set(
+    activeWorkspace.browserSessionIds.filter((sessionId) => sessionId.trim().length > 0)
+  );
+  const trackedPreviewLeaseIds = new Set(
+    activeWorkspace.previewProcessLeaseIds.filter((leaseId) => leaseId.trim().length > 0)
+  );
+  return taskRunResult.actionResults.some((result) => {
+    if (!result.approved) {
+      return false;
+    }
+    if (
+      result.action.type === "close_browser" &&
+      typeof result.action.params?.sessionId === "string"
+    ) {
+      return trackedBrowserSessionIds.has(result.action.params.sessionId);
+    }
+    if (
+      result.action.type === "stop_process" &&
+      typeof result.action.params?.leaseId === "string"
+    ) {
+      return trackedPreviewLeaseIds.has(result.action.params.leaseId);
+    }
+    return false;
+  });
 }
 
 /**
@@ -731,7 +1159,14 @@ export function persistExecutedJobOutcome(input: PersistJobOutcomeInput): Conver
     session.browserSessions = [...reconciledSession.browserSessions];
     session.activeWorkspace = reconciledSession.activeWorkspace;
   }
-  if (shouldPromoteClosedPreviewStackSummary(session, persistedRunningJob.resultSummary)) {
+  if (
+    shouldPromoteClosedPreviewStackSummary(
+      session,
+      persistedRunningJob.resultSummary,
+      persistedRunningJob.input,
+      executionResult?.taskRunResult ?? null
+    )
+  ) {
     persistedRunningJob.resultSummary = buildClosedPreviewStackSummary(session);
   }
 

@@ -54,6 +54,10 @@ The latest slices moved queue/ack, worker-loop, and pulse-state ownership here s
   persistence below the stable `conversationDeliveryLifecycle.ts` entrypoint
 - `conversationWorkerRuntime.ts` owns canonical system-job enqueue plus persisted worker-loop
   execution
+- `conversationWorkerBinding.ts` owns the extracted worker binding helpers used by the stable
+  worker runtime entrypoint
+- `conversationWorkerStatusPanel.ts` owns the extracted persistent status-message helpers used by
+  the stable worker runtime entrypoint
 - `conversationWorkerRuntimeSnapshots.ts` owns best-effort live browser/process snapshot
   collection so completed worker turns can reconcile persisted workspace and browser ownership
   state against current runtime truth before final handoff and delivery
@@ -142,6 +146,9 @@ The latest slices moved queue/ack, worker-loop, and pulse-state ownership here s
 - `recentActionLedger.ts` owns canonical recent-action and progress recall so questions like `what
   did you just do?`, `where did you put it?`, and `what are you waiting on from me?` can resolve
   from typed session state instead of queue wording alone
+- `recentActionLedgerOwnership.ts` owns extracted browser-session and preview-process ownership
+  matching helpers reused by the stable recent-action ledger entrypoint so linked preview leases
+  stay attributable without re-bloating that entrypoint
 - `recentActionLedgerMetadataHelpers.ts` owns extracted metadata parsing and label helpers reused by
   the stable recent-action ledger entrypoint so the entrypoint can stay within its module-size
   budget while still handling linked browser cleanup and other typed execution metadata
@@ -274,6 +281,8 @@ The latest slices moved queue/ack, worker-loop, and pulse-state ownership here s
   was put, or what the runtime is waiting on
 - canonical linked-browser cleanup recall so stop-process cleanup can persist closed browser
   windows into session state instead of leaving the workspace falsely remembered as still open
+- canonical extracted browser-session ownership matching so recent-action ledgers can reconnect
+  browser opens to the right preview lease even when multiple workspace processes ran in one task
 - canonical shared rendering helpers for recent-action, browser, path, and workspace recall lines
 - canonical path-destination and reuse context blocks so remembered locations and prior successful
   approaches can be carried into safe execution input naturally

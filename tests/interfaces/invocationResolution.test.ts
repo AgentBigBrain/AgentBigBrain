@@ -186,3 +186,88 @@ test("resolveConversationInvocation keeps ordinary chat synchronous without queu
   assert.equal(executeCalls, 0);
   assert.equal(session.queuedJobs.length, 0);
 });
+
+test("resolveConversationInvocation preserves a direct-route no-worker decision even when older work is queued", async () => {
+  const session = buildSession({
+    queuedJobs: [buildQueuedJob("older queued work")]
+  });
+  let directConversationCalls = 0;
+
+  const resolution = await resolveConversationInvocation(
+    session,
+    buildMessage("What's your name?"),
+    noopExecuteTask,
+    buildDependencies(
+      () => {
+        throw new Error("enqueueJob should not run for ordinary chat turns");
+      },
+      {
+        runDirectConversationTurn: async (input) => {
+          directConversationCalls += 1;
+          assert.equal(input, "What's your name?");
+          return {
+            summary: "I'm BigBrain."
+          };
+        }
+      }
+    )
+  );
+
+  assert.equal(resolution.reply, "I'm BigBrain.");
+  assert.equal(resolution.shouldStartWorker, false);
+  assert.equal(directConversationCalls, 1);
+  assert.equal(session.queuedJobs.length, 1);
+});
+
+test("resolveConversationInvocation prefers active work status over pulse status for generic status prompts", async () => {
+  const session = buildSession({
+    runningJobId: "job-1",
+    queuedJobs: [buildQueuedJob("older queued work")],
+    progressState: {
+      status: "working",
+      message: "organizing the React landing page files",
+      jobId: "job-1",
+      updatedAt: "2026-03-07T16:30:04.000Z"
+    }
+  });
+
+  const resolution = await resolveConversationInvocation(
+    session,
+    buildMessage("What's the status?"),
+    noopExecuteTask,
+    buildDependencies(() => {
+      throw new Error("enqueueJob should not run for generic status prompts");
+    })
+  );
+
+  assert.match(
+    resolution.reply,
+    /I'm working on organizing the React landing page files\./
+  );
+  assert.equal(resolution.shouldStartWorker, false);
+});
+
+test("resolveConversationInvocation keeps explicit pulse status requests on the pulse-control path", async () => {
+  const session = buildSession({
+    runningJobId: "job-1",
+    queuedJobs: [buildQueuedJob("older queued work")],
+    progressState: {
+      status: "working",
+      message: "organizing the React landing page files",
+      jobId: "job-1",
+      updatedAt: "2026-03-07T16:30:04.000Z"
+    }
+  });
+
+  const resolution = await resolveConversationInvocation(
+    session,
+    buildMessage("pulse status"),
+    noopExecuteTask,
+    buildDependencies(() => {
+      throw new Error("enqueueJob should not run for explicit pulse status requests");
+    })
+  );
+
+  assert.match(resolution.reply, /Agent Pulse: off/);
+  assert.equal(resolution.shouldStartWorker, false);
+});

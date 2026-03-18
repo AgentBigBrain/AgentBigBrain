@@ -551,6 +551,362 @@ test("persistExecutedJobOutcome writes canonical recent-job state and assistant 
   ), "Request failed: No route.");
 });
 
+test("persistExecutedJobOutcome retains every live preview lease for the current workspace when the browser session links only the newest one", () => {
+  const nowIso = "2026-03-18T11:15:50.157Z";
+  const completedAt = "2026-03-18T11:16:56.905Z";
+  const session = buildSessionSeed({
+    provider: "telegram",
+    conversationId: "chat-multi-preview-leases",
+    userId: "user-1",
+    username: "owner",
+    conversationVisibility: "private",
+    receivedAt: nowIso
+  });
+  const job: ConversationJob = {
+    ...buildQueuedJob(nowIso),
+    id: "job-open-preview",
+    input: "Reuse AI Drone City, open the preview, and leave it open.",
+    executionInput: "Reuse AI Drone City, open the preview, and leave it open.",
+    startedAt: nowIso,
+    status: "running",
+    ackEligibleAt: nowIso
+  };
+
+  persistExecutedJobOutcome({
+    session,
+    executedJob: {
+      ...job,
+      status: "completed",
+      completedAt,
+      resultSummary: "Opened the AI Drone City preview and left it open.",
+      errorMessage: null
+    },
+    executionResult: {
+      summary: "Opened the AI Drone City preview and left it open.",
+      taskRunResult: {
+        task: {
+          id: "task-open-preview",
+          goal: "Open the AI Drone City preview and leave it open.",
+          userInput: "Reuse AI Drone City, open the preview, and leave it open.",
+          createdAt: nowIso
+        },
+        plan: {
+          taskId: "task-open-preview",
+          plannerNotes: "Start the repaired preview and keep it open.",
+          actions: [
+            {
+              id: "action-start-preview-old",
+              type: "start_process",
+              description: "Start the earlier preview attempt.",
+              params: {
+                command: "npm run preview -- --host 127.0.0.1 --port 4173",
+                cwd: "C:\\Users\\testuser\\Desktop\\AI Drone City"
+              },
+              estimatedCostUsd: 0.08
+            },
+            {
+              id: "action-start-preview-new",
+              type: "start_process",
+              description: "Restart the preview with the repaired workspace.",
+              params: {
+                command: "npm run preview -- --host 127.0.0.1 --port 4173",
+                cwd: "C:\\Users\\testuser\\Desktop\\AI Drone City"
+              },
+              estimatedCostUsd: 0.08
+            },
+            {
+              id: "action-open-browser",
+              type: "open_browser",
+              description: "Open the running preview in a browser window.",
+              params: {
+                url: "http://127.0.0.1:4173/",
+                rootPath: "C:\\Users\\testuser\\Desktop\\AI Drone City"
+              },
+              estimatedCostUsd: 0.03
+            }
+          ]
+        },
+        actionResults: [
+          {
+            action: {
+              id: "action-start-preview-old",
+              type: "start_process",
+              description: "Start the earlier preview attempt.",
+              params: {
+                command: "npm run preview -- --host 127.0.0.1 --port 4173",
+                cwd: "C:\\Users\\testuser\\Desktop\\AI Drone City"
+              },
+              estimatedCostUsd: 0.08
+            },
+            mode: "escalation_path",
+            approved: true,
+            output: "Process started: lease proc_preview_1.",
+            executionStatus: "success",
+            executionMetadata: {
+              processLeaseId: "proc_preview_1",
+              processLifecycleStatus: "PROCESS_STARTED",
+              processCwd: "C:\\Users\\testuser\\Desktop\\AI Drone City",
+              processPid: 43125
+            },
+            blockedBy: [],
+            violations: [],
+            votes: []
+          },
+          {
+            action: {
+              id: "action-start-preview-new",
+              type: "start_process",
+              description: "Restart the preview with the repaired workspace.",
+              params: {
+                command: "npm run preview -- --host 127.0.0.1 --port 4173",
+                cwd: "C:\\Users\\testuser\\Desktop\\AI Drone City"
+              },
+              estimatedCostUsd: 0.08
+            },
+            mode: "escalation_path",
+            approved: true,
+            output: "Process started: lease proc_preview_2.",
+            executionStatus: "success",
+            executionMetadata: {
+              processLeaseId: "proc_preview_2",
+              processLifecycleStatus: "PROCESS_STARTED",
+              processCwd: "C:\\Users\\testuser\\Desktop\\AI Drone City",
+              processPid: 43126
+            },
+            blockedBy: [],
+            violations: [],
+            votes: []
+          },
+          {
+            action: {
+              id: "action-open-browser",
+              type: "open_browser",
+              description: "Open the running preview in a browser window.",
+              params: {
+                url: "http://127.0.0.1:4173/",
+                rootPath: "C:\\Users\\testuser\\Desktop\\AI Drone City"
+              },
+              estimatedCostUsd: 0.03
+            },
+            mode: "escalation_path",
+            approved: true,
+            output: "The existing browser window for http://127.0.0.1:4173/ is already open and was brought forward.",
+            executionStatus: "success",
+            executionMetadata: {
+              browserSession: true,
+              browserSessionId: "browser_session:ai-drone-city",
+              browserSessionUrl: "http://127.0.0.1:4173/",
+              browserSessionStatus: "open",
+              browserSessionVisibility: "visible",
+              browserSessionControllerKind: "playwright_managed",
+              browserSessionControlAvailable: true,
+              browserSessionBrowserProcessPid: 42057,
+              browserSessionWorkspaceRootPath: "C:\\Users\\testuser\\Desktop\\AI Drone City",
+              browserSessionLinkedProcessLeaseId: "proc_preview_2",
+              browserSessionLinkedProcessCwd: "C:\\Users\\testuser\\Desktop\\AI Drone City",
+              browserSessionLinkedProcessPid: 43126
+            },
+            blockedBy: [],
+            violations: [],
+            votes: []
+          }
+        ],
+        summary: "Opened the AI Drone City preview and left it open.",
+        startedAt: nowIso,
+        completedAt
+      }
+    },
+    maxRecentJobs: 20,
+    maxRecentActions: 12,
+    maxBrowserSessions: 6,
+    maxPathDestinations: 8,
+    maxConversationTurns: 40
+  });
+
+  assert.equal(session.activeWorkspace?.previewProcessLeaseId, "proc_preview_2");
+  assert.deepEqual(
+    session.activeWorkspace?.previewProcessLeaseIds,
+    ["proc_preview_2", "proc_preview_1"]
+  );
+  assert.equal(session.activeWorkspace?.previewStackState, "browser_and_preview");
+});
+
+test("persistExecutedJobOutcome lets a new React workspace replace stale single-file preview continuity", () => {
+  const nowIso = "2026-03-17T23:58:00.000Z";
+  const completedAt = "2026-03-17T23:58:07.000Z";
+  const session = buildSessionSeed({
+    provider: "telegram",
+    conversationId: "chat-react-workspace-reset",
+    userId: "user-1",
+    username: "owner",
+    conversationVisibility: "private",
+    receivedAt: nowIso
+  });
+  session.runningJobId = "job-react-workspace-reset";
+  session.recentJobs = [
+    {
+      ...buildQueuedJob(nowIso),
+      id: "job-react-workspace-reset",
+      input: "Create a new landing page on my desktop in React.",
+      executionInput: "Create a new landing page on my desktop in React.",
+      status: "running",
+      startedAt: nowIso
+    }
+  ];
+  session.browserSessions = [
+    {
+      id: "browser_session:old-static-preview",
+      label: "Old landing page preview",
+      url: "file:///C:/Users/testuser/Desktop/drone-company-landing.html",
+      status: "closed",
+      openedAt: "2026-03-17T23:40:00.000Z",
+      closedAt: "2026-03-17T23:41:00.000Z",
+      sourceJobId: "job-old-static-preview",
+      visibility: "visible",
+      controllerKind: "playwright_managed",
+      controlAvailable: false,
+      browserProcessPid: 42057,
+      workspaceRootPath: "C:\\Users\\testuser\\Desktop",
+      linkedProcessLeaseId: null,
+      linkedProcessCwd: "C:\\Users\\testuser\\Desktop",
+      linkedProcessPid: null
+    }
+  ];
+  session.activeWorkspace = {
+    id: "workspace:old-static-preview",
+    label: "Current project workspace",
+    rootPath: "C:\\Users\\testuser\\Desktop",
+    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\drone-company-landing.html",
+    previewUrl: "file:///C:/Users/testuser/Desktop/drone-company-landing.html",
+    browserSessionId: "browser_session:old-static-preview",
+    browserSessionIds: ["browser_session:old-static-preview"],
+    browserSessionStatus: "closed",
+    browserProcessPid: 42057,
+    previewProcessLeaseId: null,
+    previewProcessLeaseIds: [],
+    previewProcessCwd: "C:\\Users\\testuser\\Desktop",
+    lastKnownPreviewProcessPid: null,
+    stillControllable: false,
+    ownershipState: "stale",
+    previewStackState: "detached",
+    lastChangedPaths: ["C:\\Users\\testuser\\Desktop\\drone-company-landing.html"],
+    sourceJobId: "job-old-static-preview",
+    updatedAt: "2026-03-17T23:41:00.000Z"
+  };
+
+  persistExecutedJobOutcome({
+    session,
+    executedJob: {
+      ...session.recentJobs[0]!,
+      status: "completed",
+      completedAt,
+      resultSummary: "Created the React landing page files.",
+      errorMessage: null
+    },
+    executionResult: {
+      summary: "Created the React landing page files.",
+      taskRunResult: {
+        task: {
+          id: "task-react-workspace-reset",
+          goal: "Create a new landing page on the Desktop in React.",
+          userInput: "Create a new landing page on my desktop in React.",
+          createdAt: nowIso
+        },
+        plan: {
+          taskId: "task-react-workspace-reset",
+          plannerNotes: "Write the React app source files.",
+          actions: [
+            {
+              id: "action-write-react-app",
+              type: "write_file",
+              description: "Write App.jsx",
+              params: {},
+              estimatedCostUsd: 0.03
+            },
+            {
+              id: "action-write-react-css",
+              type: "write_file",
+              description: "Write index.css",
+              params: {},
+              estimatedCostUsd: 0.03
+            }
+          ]
+        },
+        actionResults: [
+          {
+            action: {
+              id: "action-write-react-app",
+              type: "write_file",
+              description: "Write App.jsx",
+              params: {},
+              estimatedCostUsd: 0.03
+            },
+            mode: "escalation_path",
+            approved: true,
+            output: "Wrote App.jsx.",
+            executionStatus: "success",
+            executionMetadata: {
+              filePath: "C:\\Users\\testuser\\Desktop\\React Landing Page\\src\\App.jsx"
+            },
+            blockedBy: [],
+            violations: [],
+            votes: []
+          },
+          {
+            action: {
+              id: "action-write-react-css",
+              type: "write_file",
+              description: "Write index.css",
+              params: {},
+              estimatedCostUsd: 0.03
+            },
+            mode: "escalation_path",
+            approved: true,
+            output: "Wrote index.css.",
+            executionStatus: "success",
+            executionMetadata: {
+              filePath: "C:\\Users\\testuser\\Desktop\\React Landing Page\\src\\index.css"
+            },
+            blockedBy: [],
+            violations: [],
+            votes: []
+          }
+        ],
+        summary: "Created the React landing page files.",
+        startedAt: nowIso,
+        completedAt
+      }
+    },
+    maxRecentJobs: 20,
+    maxRecentActions: 12,
+    maxBrowserSessions: 6,
+    maxPathDestinations: 8,
+    maxConversationTurns: 40
+  });
+
+  assert.equal(
+    session.activeWorkspace?.rootPath,
+    "C:\\Users\\testuser\\Desktop\\React Landing Page"
+  );
+  assert.ok(
+    session.activeWorkspace?.primaryArtifactPath ===
+      "C:\\Users\\testuser\\Desktop\\React Landing Page\\src\\App.jsx" ||
+    session.activeWorkspace?.primaryArtifactPath ===
+      "C:\\Users\\testuser\\Desktop\\React Landing Page\\src\\index.css"
+  );
+  assert.equal(session.activeWorkspace?.previewUrl, null);
+  assert.equal(session.activeWorkspace?.browserSessionId, null);
+  assert.deepEqual(session.activeWorkspace?.browserSessionIds, []);
+  assert.deepEqual(session.activeWorkspace?.previewProcessLeaseIds, []);
+  assert.deepEqual(
+    [...(session.activeWorkspace?.lastChangedPaths ?? [])].sort(),
+    [
+      "C:\\Users\\testuser\\Desktop\\React Landing Page\\src\\App.jsx",
+      "C:\\Users\\testuser\\Desktop\\React Landing Page\\src\\index.css"
+    ].sort()
+  );
+});
+
 test("persistExecutedJobOutcome preserves autonomous-loop ledgers from the aggregated task result", () => {
   const nowIso = "2026-03-13T12:00:00.000Z";
   const completedAt = "2026-03-13T12:00:03.000Z";
@@ -4182,4 +4538,147 @@ test("persistExecutedJobOutcome reconciles persisted workspace control against l
   assert.equal(session.activeWorkspace?.ownershipState, "stale");
   assert.equal(session.activeWorkspace?.previewStackState, "detached");
   assert.equal(session.returnHandoff?.status, "completed");
+});
+
+test("persistExecutedJobOutcome does not promote closed-preview success copy when the request names a different explicit localhost URL", () => {
+  const nowIso = "2026-03-15T18:09:00.000Z";
+  const completedAt = "2026-03-15T18:09:02.000Z";
+  const session = buildSessionSeed({
+    provider: "telegram",
+    conversationId: "close-foreign-preview",
+    userId: "user-1",
+    username: "owner",
+    conversationVisibility: "private",
+    receivedAt: nowIso
+  });
+  session.recentJobs = [
+    {
+      id: "job-foreign-url",
+      input:
+        "Please close http://127.0.0.1:59999/index.html only if it is actually the page from this project.",
+      executionInput: "same",
+      createdAt: nowIso,
+      startedAt: nowIso,
+      completedAt: null,
+      status: "running",
+      resultSummary: null,
+      errorMessage: null,
+      ackTimerGeneration: 0,
+      ackEligibleAt: null,
+      ackLifecycleState: "PENDING",
+      ackMessageId: null,
+      ackSentAt: null,
+      ackEditAttemptCount: 0,
+      ackLastErrorCode: null,
+      finalDeliveryOutcome: null,
+      finalDeliveryAttemptCount: 0,
+      finalDeliveryLastErrorCode: null,
+      finalDeliveryLastAttemptAt: null,
+      pauseRequestedAt: null
+    }
+  ];
+  session.browserSessions = [
+    {
+      id: "browser_session:reloaded_preview",
+      label: "Landing page preview",
+      url: "http://127.0.0.1:55225/index.html",
+      status: "closed",
+      openedAt: "2026-03-15T18:09:00.000Z",
+      closedAt: completedAt,
+      sourceJobId: "job-open-preview",
+      visibility: "visible",
+      controllerKind: "playwright_managed",
+      controlAvailable: false,
+      browserProcessPid: 55001,
+      workspaceRootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
+      linkedProcessLeaseId: "proc_preview_reload",
+      linkedProcessCwd: "C:\\Users\\testuser\\Desktop\\drone-company",
+      linkedProcessPid: 55002
+    }
+  ];
+  session.activeWorkspace = {
+    id: "workspace:drone-company",
+    label: "Current project workspace",
+    rootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
+    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
+    previewUrl: "http://127.0.0.1:55225/index.html",
+    browserSessionId: "browser_session:reloaded_preview",
+    browserSessionIds: ["browser_session:reloaded_preview"],
+    browserSessionStatus: "closed",
+    browserProcessPid: 55001,
+    previewProcessLeaseId: "proc_preview_reload",
+    previewProcessLeaseIds: ["proc_preview_reload"],
+    previewProcessCwd: "C:\\Users\\testuser\\Desktop\\drone-company",
+    lastKnownPreviewProcessPid: 55002,
+    stillControllable: false,
+    ownershipState: "stale",
+    previewStackState: "detached",
+    lastChangedPaths: ["C:\\Users\\testuser\\Desktop\\drone-company\\index.html"],
+    sourceJobId: "job-open-preview",
+    updatedAt: "2026-03-15T18:09:00.000Z"
+  };
+
+  const persisted = persistExecutedJobOutcome({
+    session,
+    executedJob: {
+      ...session.recentJobs[0]!,
+      status: "completed",
+      completedAt,
+      resultSummary:
+        "Process stopped: lease proc_preview_reload.\nOne later step was blocked (BROWSER_SESSION_CONTROL_UNAVAILABLE), so I stopped after the work that already succeeded.",
+      errorMessage: null
+    },
+    executionResult: {
+      summary:
+        "Process stopped: lease proc_preview_reload.\nOne later step was blocked (BROWSER_SESSION_CONTROL_UNAVAILABLE), so I stopped after the work that already succeeded."
+    },
+    browserSessionSnapshots: [
+      {
+        sessionId: "browser_session:reloaded_preview",
+        url: "http://127.0.0.1:55225/index.html",
+        status: "closed",
+        openedAt: "2026-03-15T18:09:00.000Z",
+        closedAt: completedAt,
+        visibility: "visible",
+        controllerKind: "playwright_managed",
+        controlAvailable: false,
+        browserProcessPid: 55001,
+        workspaceRootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
+        linkedProcessLeaseId: "proc_preview_reload",
+        linkedProcessCwd: "C:\\Users\\testuser\\Desktop\\drone-company",
+        linkedProcessPid: 55002
+      }
+    ],
+    managedProcessSnapshots: [
+      {
+        leaseId: "proc_preview_reload",
+        taskId: "task-close-after-reload",
+        actionId: "action_stop_preview_reload",
+        pid: 55002,
+        commandFingerprint: "python -m http.server 55225",
+        cwd: "C:\\Users\\testuser\\Desktop\\drone-company",
+        shellExecutable: "python",
+        shellKind: "process",
+        startedAt: "2026-03-15T18:09:00.000Z",
+        statusCode: "PROCESS_STOPPED",
+        exitCode: 0,
+        signal: null,
+        stopRequested: true
+      }
+    ],
+    maxRecentJobs: 20,
+    maxRecentActions: 12,
+    maxBrowserSessions: 6,
+    maxPathDestinations: 8,
+    maxConversationTurns: 40
+  });
+
+  assert.match(
+    persisted.resultSummary ?? "",
+    /BROWSER_SESSION_CONTROL_UNAVAILABLE/i
+  );
+  assert.doesNotMatch(
+    persisted.resultSummary ?? "",
+    /closed the linked browser window/i
+  );
 });

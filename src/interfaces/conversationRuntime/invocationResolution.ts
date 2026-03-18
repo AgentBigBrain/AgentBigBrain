@@ -25,6 +25,28 @@ export interface ConversationInvocationResolution {
   shouldStartWorker: boolean;
 }
 
+const EXPLICIT_PULSE_STATUS_HINT_PATTERN =
+  /\b(pulse|check[- ]?in|check in|notifications?|reminders?|nudges?|pings?)\b/i;
+
+/**
+ * Returns whether active or queued work should win over a generic pulse-status lexical match.
+ *
+ * @param session - Mutable conversation session under evaluation.
+ * @returns `true` when there is runnable or waiting work in flight.
+ */
+function hasActiveOrQueuedWork(session: ConversationSession): boolean {
+  if (session.runningJobId || session.queuedJobs.length > 0) {
+    return true;
+  }
+  return (
+    session.progressState?.status === "starting" ||
+    session.progressState?.status === "working" ||
+    session.progressState?.status === "retrying" ||
+    session.progressState?.status === "verifying" ||
+    session.progressState?.status === "waiting_for_user"
+  );
+}
+
 /**
  * Resolves one non-command inbound message across pulse control, proposal follow-up, and queue-routing paths.
  *
@@ -51,7 +73,14 @@ export async function resolveConversationInvocation(
     message.receivedAt,
     naturalPulseClassification
   );
+  const shouldPreferWorkStatusOverPulseStatus =
+    naturalPulseClassification.category === "COMMAND" &&
+    naturalPulseClassification.commandIntent === "status" &&
+    !naturalPulseClassification.conflict &&
+    hasActiveOrQueuedWork(session) &&
+    !EXPLICIT_PULSE_STATUS_HINT_PATTERN.test(trimmed);
   if (
+    !shouldPreferWorkStatusOverPulseStatus &&
     naturalPulseClassification.category === "COMMAND" &&
     !naturalPulseClassification.conflict &&
     naturalPulseClassification.commandIntent
@@ -66,7 +95,7 @@ export async function resolveConversationInvocation(
     };
   }
 
-  if (!naturalPulseClassification.conflict) {
+  if (!naturalPulseClassification.conflict && !shouldPreferWorkStatusOverPulseStatus) {
     const interpretedPulse = await resolveInterpretedPulseCommandArgument(
       trimmed,
       session,
@@ -104,21 +133,23 @@ export async function resolveConversationInvocation(
     };
   }
 
+  const routedResolution = await routeConversationMessageInput(
+    session,
+    trimmed,
+    message.receivedAt,
+    {
+      ...deps,
+      abortActiveAutonomousRun: deps.abortActiveAutonomousRun
+        ? () => deps.abortActiveAutonomousRun?.(message.conversationId) ?? false
+        : undefined,
+      runDirectConversationTurn: deps.runDirectConversationTurn
+    },
+    message.media
+  );
+
   return {
-    reply: (await routeConversationMessageInput(
-      session,
-      trimmed,
-      message.receivedAt,
-      {
-        ...deps,
-        abortActiveAutonomousRun: deps.abortActiveAutonomousRun
-          ? () => deps.abortActiveAutonomousRun?.(message.conversationId) ?? false
-          : undefined,
-        runDirectConversationTurn: deps.runDirectConversationTurn
-      },
-      message.media
-    )).reply,
-    shouldStartWorker: session.queuedJobs.length > 0
+    reply: routedResolution.reply,
+    shouldStartWorker: routedResolution.shouldStartWorker
   };
 }
 

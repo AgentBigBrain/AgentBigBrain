@@ -493,3 +493,74 @@ test("mergeConversationSession trusts the newer workspace ownership state once c
     "C:\\Users\\testuser\\Desktop\\drone-company"
   );
 });
+
+test("mergeConversationSession does not backfill stale preview continuity into a newer different workspace", () => {
+  const existing = buildSession({
+    activeWorkspace: {
+      id: "workspace:old-static-preview",
+      label: "Current project workspace",
+      rootPath: "C:\\Users\\testuser\\Desktop",
+      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\drone-company-landing.html",
+      previewUrl: "file:///C:/Users/testuser/Desktop/drone-company-landing.html",
+      browserSessionId: "browser_session:old-static-preview",
+      browserSessionIds: ["browser_session:old-static-preview"],
+      browserSessionStatus: "closed",
+      browserProcessPid: 42057,
+      previewProcessLeaseId: null,
+      previewProcessLeaseIds: [],
+      previewProcessCwd: "C:\\Users\\testuser\\Desktop",
+      lastKnownPreviewProcessPid: null,
+      stillControllable: false,
+      ownershipState: "stale",
+      previewStackState: "detached",
+      lastChangedPaths: ["C:\\Users\\testuser\\Desktop\\drone-company-landing.html"],
+      sourceJobId: "job-old-static-preview",
+      updatedAt: "2026-03-17T23:40:00.000Z"
+    }
+  });
+  const incoming = buildSession({
+    updatedAt: "2026-03-17T23:58:00.000Z",
+    activeWorkspace: {
+      id: "workspace:new-react-project",
+      label: "Current project workspace",
+      rootPath: "C:\\Users\\testuser\\Desktop\\React Landing Page",
+      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\React Landing Page\\src\\App.jsx",
+      previewUrl: null,
+      browserSessionId: null,
+      browserSessionIds: [],
+      browserSessionStatus: null,
+      browserProcessPid: null,
+      previewProcessLeaseId: null,
+      previewProcessLeaseIds: [],
+      previewProcessCwd: "C:\\Users\\testuser\\Desktop\\React Landing Page",
+      lastKnownPreviewProcessPid: null,
+      stillControllable: false,
+      ownershipState: "stale",
+      previewStackState: "detached",
+      lastChangedPaths: [
+        "C:\\Users\\testuser\\Desktop\\React Landing Page\\src\\App.jsx",
+        "C:\\Users\\testuser\\Desktop\\React Landing Page\\src\\index.css"
+      ],
+      sourceJobId: "job-react-workspace-reset",
+      updatedAt: "2026-03-17T23:58:00.000Z"
+    }
+  });
+
+  const merged = mergeConversationSession(existing, incoming);
+  assert.equal(
+    merged.activeWorkspace?.rootPath,
+    "C:\\Users\\testuser\\Desktop\\React Landing Page"
+  );
+  assert.equal(
+    merged.activeWorkspace?.primaryArtifactPath,
+    "C:\\Users\\testuser\\Desktop\\React Landing Page\\src\\App.jsx"
+  );
+  assert.equal(merged.activeWorkspace?.previewUrl, null);
+  assert.equal(merged.activeWorkspace?.browserSessionId, null);
+  assert.deepEqual(merged.activeWorkspace?.browserSessionIds, []);
+  assert.deepEqual(merged.activeWorkspace?.previewProcessLeaseIds, []);
+  assert.deepEqual(merged.activeWorkspace?.lastChangedPaths, [
+    "C:\\Users\\testuser\\Desktop\\React Landing Page\\src\\App.jsx",
+    "C:\\Users\\testuser\\Desktop\\React Landing Page\\src\\index.css"
+  ]);
+});

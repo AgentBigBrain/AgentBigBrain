@@ -1002,6 +1002,113 @@ class MissingStartProcessThenRepairModelClient implements ModelClient {
   }
 }
 
+class MissingFrameworkScaffoldThenRepairModelClient implements ModelClient {
+  readonly backend = "mock" as const;
+  private plannerCallCount = 0;
+
+  getPlannerCallCount(): number {
+    return this.plannerCallCount;
+  }
+
+  async completeJson<T>(request: StructuredCompletionRequest): Promise<T> {
+    if (request.schemaName !== "planner_v1") {
+      throw new Error(`Unexpected schema: ${request.schemaName}`);
+    }
+
+    this.plannerCallCount += 1;
+    if (this.plannerCallCount === 1) {
+      return {
+        plannerNotes: "first pass drifted into source-file writes only",
+        actions: [
+          {
+            type: "write_file",
+            description: "Write the React source entry file.",
+            params: {
+              path: path.join(HOST_TEST_ROBINHOOD_MOCK_DIR, "src", "App.jsx"),
+              content: "export default function App() { return <main>AI Drone City</main>; }"
+            }
+          }
+        ]
+      } as T;
+    }
+
+    return {
+      plannerNotes: "repair includes a real scaffold-capable toolchain step",
+      actions: [
+        {
+          type: "shell_command",
+          description: "Scaffold the requested React app.",
+          params: {
+            command: "npm create vite@latest robinhood-mock -- --template react",
+            cwd: HOST_TEST_DESKTOP_DIR
+          }
+        }
+      ]
+    } as T;
+  }
+}
+
+class NonInPlaceFrameworkScaffoldThenRepairModelClient implements ModelClient {
+  readonly backend = "mock" as const;
+  private plannerCallCount = 0;
+
+  getPlannerCallCount(): number {
+    return this.plannerCallCount;
+  }
+
+  async completeJson<T>(request: StructuredCompletionRequest): Promise<T> {
+    if (request.schemaName !== "planner_v1") {
+      throw new Error(`Unexpected schema: ${request.schemaName}`);
+    }
+
+    this.plannerCallCount += 1;
+    if (this.plannerCallCount === 1) {
+      return {
+        plannerNotes: "first pass tries to recreate the named folder from the Desktop root",
+        actions: [
+          {
+            type: "shell_command",
+            description: "Scaffold or reuse the React app.",
+            params: {
+              command: [
+                `$desktop = '${HOST_TEST_DESKTOP_DIR}'`,
+                "$app = Join-Path $desktop 'AI Drone City'",
+                "if (!(Test-Path (Join-Path $app 'package.json'))) {",
+                "  Set-Location $desktop",
+                "  npm create vite@latest 'AI Drone City' -- --template react",
+                "}",
+                "Set-Location $app",
+                "npm install"
+              ].join("; ")
+            }
+          }
+        ]
+      } as T;
+    }
+
+    return {
+      plannerNotes: "repair scaffolds in place inside the exact requested folder",
+      actions: [
+        {
+          type: "shell_command",
+          description: "Scaffold or repair the React app in place.",
+          params: {
+            command: [
+              `$app = '${HOST_TEST_ROBINHOOD_MOCK_DIR}'`,
+              "if (!(Test-Path (Join-Path $app 'package.json'))) {",
+              "  Set-Location $app",
+              "  npm create vite@latest . -- --template react",
+              "}",
+              "Set-Location $app",
+              "npm install"
+            ].join("; ")
+          }
+        }
+      ]
+    } as T;
+  }
+}
+
 class TrackedArtifactEditPreviewModelClient implements ModelClient {
   readonly backend = "mock" as const;
   private plannerCallCount = 0;
@@ -2112,6 +2219,38 @@ test("planner repairs explicit start_process subtasks when first plan drifts int
     assert.equal(plan.actions.length, 1);
     assert.equal(plan.actions[0].type, "start_process");
     assert.equal(plan.actions[0].params.command, "python -m http.server 8000");
+  });
+});
+
+test("planner repairs fresh framework-app requests when first plan only writes source files", async () => {
+  const modelClient = new MissingFrameworkScaffoldThenRepairModelClient();
+
+  await withPlannerClient(modelClient, async (planner) => {
+    const plan = await planner.plan(
+      buildTask("Create a React app on my Desktop and execute now."),
+      "mock-planner"
+    );
+
+    assert.equal(modelClient.getPlannerCallCount(), 2);
+    assert.equal(plan.actions.length, 1);
+    assert.equal(plan.actions[0].type, "shell_command");
+    assert.match(String(plan.actions[0].params.command), /create vite@latest/i);
+  });
+});
+
+test("planner repairs framework-app requests that try to recreate the named folder from its parent", async () => {
+  const modelClient = new NonInPlaceFrameworkScaffoldThenRepairModelClient();
+
+  await withPlannerClient(modelClient, async (planner) => {
+    const plan = await planner.plan(
+      buildTask("Create a React app on my Desktop in a folder called AI Drone City and execute now."),
+      "mock-planner"
+    );
+
+    assert.equal(modelClient.getPlannerCallCount(), 2);
+    assert.equal(plan.actions.length, 1);
+    assert.equal(plan.actions[0].type, "shell_command");
+    assert.match(String(plan.actions[0].params.command), /create vite@latest \./i);
   });
 });
 

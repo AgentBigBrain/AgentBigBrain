@@ -32,6 +32,7 @@ import type { ManagedProcessSnapshot } from "../organs/liveRun/managedProcessReg
 import type { BrowserSessionSnapshot } from "../organs/liveRun/browserSessionRegistry";
 import {
   basenameCrossPlatformPath,
+  dirnameCrossPlatformPath,
   normalizeCrossPlatformPath
 } from "../core/crossPlatformPath";
 import { reconcileConversationExecutionRuntimeSession } from "./conversationRuntime/executionInputRuntimeOwnership";
@@ -44,6 +45,11 @@ const NATURAL_BROWSER_CLOSE_REFERENCE_PATTERN =
   /\b(?:close|shut|dismiss|hide)\b[\s\S]{0,50}\b(?:browser|tab|window|preview|page|landing page|homepage)\b/i;
 const NATURAL_BROWSER_OPEN_REFERENCE_PATTERN =
   /\b(?:open|reopen|show|bring\s+(?:back|up)|pull\s+up)\b[\s\S]{0,50}\b(?:browser|tab|window|preview|page|landing page|homepage)\b/i;
+const NATURAL_BROWSER_CLOSE_VERB_PATTERN = /\b(?:close|shut|dismiss|hide)\b/i;
+const NATURAL_BROWSER_OPEN_VERB_PATTERN =
+  /\b(?:reopen|show|bring\s+(?:back|up)|pull\s+up)\b/i;
+const EXPLICIT_URL_REFERENCE_PATTERN =
+  /\b(?:https?:\/\/|file:\/\/\/)[^\s<>"')\]]+/gi;
 const NATURAL_ARTIFACT_EDIT_VERB_PATTERN =
   /\b(?:change|edit|update|replace|swap|revise|tweak|adjust|make)\b/i;
 const NATURAL_ARTIFACT_EDIT_TARGET_PATTERN =
@@ -73,6 +79,171 @@ const RECENT_ACTION_CONTEXT_PRIORITY: Readonly<Record<string, number>> = {
   process: 4,
   task_summary: 5
 };
+const GENERIC_WORKSPACE_SEGMENT_NAMES = new Set(["dist", "build", "out", "public", "site", "app"]);
+
+/**
+ * Extracts stable human-readable workspace or artifact names from tracked browser metadata.
+ *
+ * @param candidates - Mutable candidate-name set accumulated for one session.
+ * @param rawValue - Raw path or URL-derived location text from tracked workspace/browser state.
+ */
+function pushTrackedBrowserReferenceCandidate(
+  candidates: Set<string>,
+  rawValue: string | null | undefined
+): void {
+  if (typeof rawValue !== "string") {
+    return;
+  }
+  const trimmed = rawValue.trim();
+  if (!trimmed) {
+    return;
+  }
+  const normalizedPath = normalizeCrossPlatformPath(
+    trimmed.replace(/^file:\/\/\/?/i, "").replace(/\?.*$/, "")
+  );
+  const basename = basenameCrossPlatformPath(normalizedPath);
+  const parentBasename = basenameCrossPlatformPath(
+    dirnameCrossPlatformPath(normalizedPath)
+  );
+  const addCandidate = (value: string | null | undefined): void => {
+    if (typeof value !== "string") {
+      return;
+    }
+    const candidate = value.trim();
+    if (candidate.length >= 3) {
+      candidates.add(candidate.toLowerCase());
+    }
+  };
+
+  addCandidate(
+    basename.replace(/\.[a-z0-9]{1,8}$/i, "")
+  );
+  if (
+    basename &&
+    GENERIC_WORKSPACE_SEGMENT_NAMES.has(basename.toLowerCase()) &&
+    parentBasename
+  ) {
+    addCandidate(parentBasename);
+  }
+}
+
+/**
+ * Collects names that users may naturally use to refer to the currently tracked browser target.
+ *
+ * @param session - Current conversation session.
+ * @returns Lowercased candidate names derived from tracked workspace and browser metadata.
+ */
+function collectTrackedBrowserReferenceCandidates(
+  session: ConversationSession
+): readonly string[] {
+  const candidates = new Set<string>();
+  pushTrackedBrowserReferenceCandidate(candidates, session.activeWorkspace?.rootPath);
+  pushTrackedBrowserReferenceCandidate(
+    candidates,
+    session.activeWorkspace?.primaryArtifactPath
+  );
+  pushTrackedBrowserReferenceCandidate(candidates, session.activeWorkspace?.previewUrl);
+  for (const browserSession of session.browserSessions) {
+    pushTrackedBrowserReferenceCandidate(candidates, browserSession.workspaceRootPath);
+    pushTrackedBrowserReferenceCandidate(candidates, browserSession.url);
+  }
+  return [...candidates];
+}
+
+/**
+ * Evaluates whether the current user wording names the tracked browser target by workspace/app name.
+ *
+ * @param normalizedInput - Current user wording normalized for follow-up analysis.
+ * @param session - Current conversation session.
+ * @returns `true` when the wording references the tracked browser target by name.
+ */
+function inputMentionsTrackedBrowserTarget(
+  normalizedInput: string,
+  session: ConversationSession
+): boolean {
+  const normalizedLower = normalizedInput.toLowerCase();
+  return collectTrackedBrowserReferenceCandidates(session).some((candidate) =>
+    normalizedLower.includes(candidate)
+  );
+}
+
+/**
+ * Normalizes browser-target URLs so explicit user URLs can be compared against tracked session URLs.
+ *
+ * @param rawUrl - Raw URL text from the user or tracked runtime state.
+ * @returns Comparable normalized URL, or `null` when the text is not a supported URL.
+ */
+function normalizeComparableBrowserUrl(rawUrl: string | null | undefined): string | null {
+  if (typeof rawUrl !== "string") {
+    return null;
+  }
+  const trimmed = rawUrl.trim().replace(/[),.;!?]+$/g, "");
+  if (!trimmed) {
+    return null;
+  }
+  try {
+    const parsed = new URL(trimmed);
+    parsed.hash = "";
+    if (parsed.protocol === "http:" || parsed.protocol === "https:") {
+      const normalizedPath =
+        parsed.pathname && parsed.pathname !== "/"
+          ? parsed.pathname.replace(/\/+$/g, "")
+          : "/";
+      return `${parsed.protocol}//${parsed.host.toLowerCase()}${normalizedPath}${parsed.search}`;
+    }
+    if (parsed.protocol === "file:") {
+      return `${parsed.protocol}//${parsed.pathname}${parsed.search}`;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+/**
+ * Extracts explicit browser-target URLs named directly in the current user request.
+ *
+ * @param normalizedInput - Current user wording normalized for follow-up analysis.
+ * @returns Deduplicated normalized URL references.
+ */
+function extractExplicitBrowserUrlReferences(
+  normalizedInput: string
+): readonly string[] {
+  const matches = normalizedInput.match(EXPLICIT_URL_REFERENCE_PATTERN) ?? [];
+  const normalizedMatches = matches
+    .map((match) => normalizeComparableBrowserUrl(match))
+    .filter((match): match is string => typeof match === "string" && match.length > 0);
+  return [...new Set(normalizedMatches)];
+}
+
+/**
+ * Returns whether the user named an explicit URL that does not match any tracked browser target.
+ *
+ * @param normalizedInput - Current user wording normalized for follow-up analysis.
+ * @param session - Current conversation session.
+ * @returns `true` when a precise foreign URL should override fuzzy tracked-browser follow-up heuristics.
+ */
+function inputReferencesUntrackedExplicitBrowserUrl(
+  normalizedInput: string,
+  session: ConversationSession
+): boolean {
+  const explicitUrls = extractExplicitBrowserUrlReferences(normalizedInput);
+  if (explicitUrls.length === 0) {
+    return false;
+  }
+  const trackedUrls = new Set<string>();
+  const trackedPreviewUrl = normalizeComparableBrowserUrl(session.activeWorkspace?.previewUrl);
+  if (trackedPreviewUrl) {
+    trackedUrls.add(trackedPreviewUrl);
+  }
+  for (const browserSession of session.browserSessions) {
+    const normalizedUrl = normalizeComparableBrowserUrl(browserSession.url);
+    if (normalizedUrl) {
+      trackedUrls.add(normalizedUrl);
+    }
+  }
+  return explicitUrls.some((url) => !trackedUrls.has(url));
+}
 
 export interface FollowUpResolution {
   executionInput: string;
@@ -269,22 +440,62 @@ function buildBrowserFollowUpIntentBlock(
     return null;
   }
 
-  const wantsClose = NATURAL_BROWSER_CLOSE_REFERENCE_PATTERN.test(normalizedInput);
+  const referencesTrackedBrowserTarget = inputMentionsTrackedBrowserTarget(
+    normalizedInput,
+    session
+  );
+  const wantsClose =
+    NATURAL_BROWSER_CLOSE_REFERENCE_PATTERN.test(normalizedInput) ||
+    (
+      NATURAL_BROWSER_CLOSE_VERB_PATTERN.test(normalizedInput) &&
+      referencesTrackedBrowserTarget
+    );
   const wantsOpen =
     !wantsClose &&
-    NATURAL_BROWSER_OPEN_REFERENCE_PATTERN.test(normalizedInput);
+    (
+      NATURAL_BROWSER_OPEN_REFERENCE_PATTERN.test(normalizedInput) ||
+      (
+        NATURAL_BROWSER_OPEN_VERB_PATTERN.test(normalizedInput) &&
+        referencesTrackedBrowserTarget
+      )
+    );
   if (!wantsClose && !wantsOpen) {
     return null;
   }
+  if (inputReferencesUntrackedExplicitBrowserUrl(normalizedInput, session)) {
+    return null;
+  }
 
-  const preferredSession =
+  const activeWorkspaceSession =
     (session.activeWorkspace?.browserSessionId
       ? session.browserSessions.find(
           (browserSession) => browserSession.id === session.activeWorkspace?.browserSessionId
         ) ?? null
-      : null) ??
+      : null);
+  const openBrowserSession =
     session.browserSessions.find((browserSession) => browserSession.status === "open") ??
-    session.browserSessions[0];
+    null;
+  const activeWorkspaceSupportsReopenFollowUp =
+    wantsOpen &&
+    Boolean(
+      session.activeWorkspace?.previewUrl &&
+      (
+        session.activeWorkspace.browserSessionStatus === "open" ||
+        session.activeWorkspace.stillControllable ||
+        session.activeWorkspace.ownershipState === "orphaned" ||
+        session.activeWorkspace.previewStackState !== "detached"
+      )
+    );
+  const preferredSession = wantsOpen
+    ? (
+        activeWorkspaceSupportsReopenFollowUp
+          ? activeWorkspaceSession
+          : null
+      ) ??
+      openBrowserSession
+    : activeWorkspaceSession ??
+      openBrowserSession ??
+      session.browserSessions[0];
   if (!preferredSession) {
     return null;
   }
@@ -294,6 +505,8 @@ function buildBrowserFollowUpIntentBlock(
     "- The user appears to be referring to a tracked browser window from earlier in this chat.",
     `- Preferred browser session: ${preferredSession.label}; sessionId=${preferredSession.id}; url=${preferredSession.url}; status=${preferredSession.status}; control=${preferredSession.controlAvailable ? "available" : "unavailable"}`
   ];
+  const exactWorkspacePreviewLeaseIds =
+    session.activeWorkspace?.previewProcessLeaseIds.filter((leaseId) => leaseId.trim().length > 0) ?? [];
   if (preferredSession.linkedProcessLeaseId) {
     lines.push(
       `- Linked preview process: leaseId=${preferredSession.linkedProcessLeaseId}${preferredSession.linkedProcessCwd ? `; cwd=${preferredSession.linkedProcessCwd}` : ""}`
@@ -306,8 +519,26 @@ function buildBrowserFollowUpIntentBlock(
       `- Remembered browser workspace root: ${preferredSession.workspaceRootPath}`
     );
   }
+  if (exactWorkspacePreviewLeaseIds.length > 1) {
+    lines.push(
+      `- Exact tracked preview process leases for this workspace: ${exactWorkspacePreviewLeaseIds.join(", ")}`
+    );
+  }
   if (wantsClose) {
-    if (preferredSession.linkedProcessLeaseId) {
+    if (exactWorkspacePreviewLeaseIds.length > 1) {
+      const stopAllLeasesInstruction = exactWorkspacePreviewLeaseIds
+        .map((leaseId) => `stop_process with params.leaseId=${leaseId}`)
+        .join(", then ");
+      if (preferredSession.controlAvailable) {
+        lines.push(
+          `- If the user wants that visible page closed now, prefer close_browser with params.sessionId=${preferredSession.id} and then stop each exact tracked preview lease for this workspace: ${stopAllLeasesInstruction}. Do not stop unrelated processes.`
+        );
+      } else {
+        lines.push(
+          `- If the user wants that visible page closed now, the browser session is no longer directly controllable. Prefer stopping each exact tracked preview lease for this workspace first: ${stopAllLeasesInstruction}. Then only use close_browser with params.sessionId=${preferredSession.id} if the runtime still proves direct browser control afterward. Do not stop unrelated processes.`
+        );
+      }
+    } else if (preferredSession.linkedProcessLeaseId) {
       if (preferredSession.controlAvailable) {
         lines.push(
           `- If the user wants that visible page closed now, prefer close_browser with params.sessionId=${preferredSession.id} and then stop_process with params.leaseId=${preferredSession.linkedProcessLeaseId} so the linked local preview stack shuts down fully. Do not stop unrelated processes.`

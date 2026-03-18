@@ -16,6 +16,8 @@ verification-state rendering stay owned by `src/organs/skillRegistry/`.
 - `skillModuleLoader.ts`
 - `skillRuntime.ts`
 - `shellExecution.ts`
+- `shellExecutionSupport.ts`
+- `shellExecutionPostconditions.ts`
 
 ## Inputs
 - approved planner actions and params
@@ -26,6 +28,10 @@ verification-state rendering stay owned by `src/organs/skillRegistry/`.
 ## Outputs
 - typed `ExecutorExecutionOutcome` values
 - shell execution telemetry records for runtime traces
+- shell postcondition checks and Windows package-manager normalization used to fail closed when
+  scaffold/build commands do not leave behind the required local artifacts
+- extracted scaffold/build postcondition helpers so `shellExecutionSupport.ts` can stay focused on
+  command shaping and launcher policy
 - stable skill-artifact execution and bounded file-action responses
 - skill create/run execution metadata that can be handed off to the skill registry without the
   executor re-reading manifests inline

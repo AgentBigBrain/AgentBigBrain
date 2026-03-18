@@ -6,8 +6,8 @@ import {
   buildShellSpawnSpec,
   computeShellProfileFingerprint,
   computeShellSpawnSpecFingerprint,
-  resolveShellEnvironment
 } from "../../core/shellRuntimeProfile";
+import type { ShellRuntimeProfileV1 } from "../../core/types";
 import { ShellCommandActionParams } from "../../core/types";
 import { buildExecutionOutcome, normalizeOptionalString } from "../liveRun/contracts";
 import {
@@ -16,51 +16,19 @@ import {
   ShellExecutionResult
 } from "./contracts";
 import { isPathWithinPrefix, resolveWorkspacePath } from "./pathRuntime";
+import {
+  appendChunkToBuffer,
+  appendWindowsPowerShellPackageManagerFailureChecks,
+  emptyCappedTextBuffer,
+  hasKnownShellPartialFailure,
+  normalizeWindowsPowerShellPackageManagerCommand,
+  resolveCommandAwareShellEnvironment,
+  resolveEffectiveShellProfile,
+  resolveShellCommandTimeoutMs,
+  resolveShellPostconditionFailure
+} from "./shellExecutionSupport";
 
-const SHELL_OUTPUT_CAPTURE_MAX_BYTES = 64 * 1024;
 const PROCESS_TREE_TERMINATION_TIMEOUT_MS = 2_000;
-const KNOWN_SHELL_PARTIAL_FAILURE_PATTERNS: readonly RegExp[] = [
-  /the process cannot access the file because it is being used by another process\./i,
-  /\bmove-item\b[\s\S]{0,120}\bioexception\b/i,
-  /\bfullyqualifiederrorid\s*:\s*move(?:directory)?item/i
-] as const;
-/** Appends one stdout/stderr chunk into a bounded capture buffer. */
-function appendChunkToBuffer(buffer: CappedTextBuffer, chunk: Buffer): CappedTextBuffer {
-  if (chunk.length === 0) {
-    return buffer;
-  }
-
-  if (buffer.truncated || buffer.bytes >= SHELL_OUTPUT_CAPTURE_MAX_BYTES) {
-    return {
-      ...buffer,
-      truncated: true
-    };
-  }
-
-  const remaining = SHELL_OUTPUT_CAPTURE_MAX_BYTES - buffer.bytes;
-  const slice = chunk.subarray(0, remaining);
-  return {
-    text: buffer.text + slice.toString("utf8"),
-    bytes: buffer.bytes + slice.length,
-      truncated: buffer.truncated || chunk.length > remaining
-  };
-}
-/** Creates an empty bounded text buffer for shell output capture. */
-function emptyCappedTextBuffer(): CappedTextBuffer {
-  return {
-    text: "",
-    bytes: 0,
-    truncated: false
-  };
-}
-/** Treats known stderr signatures as hard failure even when the shell exits cleanly. */
-function hasKnownShellPartialFailure(stderrText: string): boolean {
-  const normalized = stderrText.trim();
-  if (normalized.length === 0) {
-    return false;
-  }
-  return KNOWN_SHELL_PARTIAL_FAILURE_PATTERNS.some((pattern) => pattern.test(normalized));
-}
 
 /**
  * Resolves the effective cwd for a shell command and enforces sandbox policy.
@@ -83,22 +51,6 @@ export function resolveShellCommandCwd(
     return null;
   }
   return cwd;
-}
-/** Resolves the bounded timeout applied to the shell command. */
-function resolveShellCommandTimeoutMs(
-  config: ShellExecutionDependencies["config"],
-  params: ShellCommandActionParams
-): number {
-  if (typeof params.timeoutMs !== "number" || !Number.isInteger(params.timeoutMs)) {
-    return config.shellRuntime.profile.timeoutMsDefault;
-  }
-  if (
-    params.timeoutMs < config.shellRuntime.timeoutBoundsMs.min ||
-    params.timeoutMs > config.shellRuntime.timeoutBoundsMs.max
-  ) {
-    return config.shellRuntime.profile.timeoutMsDefault;
-  }
-  return params.timeoutMs;
 }
 
 /**
@@ -354,20 +306,31 @@ export async function executeShellCommandAction(
   }
 
   const timeoutMs = resolveShellCommandTimeoutMs(dependencies.config, params);
-  const shellEnvironment = resolveShellEnvironment(
+  const windowsNormalizedCommand = normalizeWindowsPowerShellPackageManagerCommand(
     dependencies.config.shellRuntime.profile,
+    command
+  );
+  const effectiveShellProfile = resolveEffectiveShellProfile(
+    dependencies.config.shellRuntime.profile,
+    windowsNormalizedCommand
+  );
+  const shellEnvironment = resolveCommandAwareShellEnvironment(
+    effectiveShellProfile,
+    windowsNormalizedCommand,
     process.env
   );
+  const normalizedCommand = appendWindowsPowerShellPackageManagerFailureChecks(
+    effectiveShellProfile,
+    windowsNormalizedCommand
+  );
   const spawnSpec = buildShellSpawnSpec({
-    profile: dependencies.config.shellRuntime.profile,
-    command,
+    profile: effectiveShellProfile,
+    command: normalizedCommand,
     cwd: resolvedCwd,
     timeoutMs,
     envKeyNames: shellEnvironment.envKeyNames
   });
-  const shellProfileFingerprint = computeShellProfileFingerprint(
-    dependencies.config.shellRuntime.profile
-  );
+  const shellProfileFingerprint = computeShellProfileFingerprint(effectiveShellProfile);
   const shellSpawnSpecFingerprint = computeShellSpawnSpecFingerprint(spawnSpec);
 
   try {
@@ -375,13 +338,13 @@ export async function executeShellCommandAction(
       dependencies,
       spawnSpec,
       shellEnvironment.env,
-      dependencies.config.shellRuntime.profile.shellKind,
+      effectiveShellProfile.shellKind,
       signal
     );
     const telemetry = {
       shellProfileFingerprint,
       shellSpawnSpecFingerprint,
-      shellKind: dependencies.config.shellRuntime.profile.shellKind,
+      shellKind: effectiveShellProfile.shellKind,
       shellExecutable: spawnSpec.executable,
       shellTimeoutMs: spawnSpec.timeoutMs,
       shellEnvMode: dependencies.config.shellRuntime.profile.envPolicy.mode,
@@ -438,6 +401,20 @@ export async function executeShellCommandAction(
         outcome: buildExecutionOutcome(
           "failed",
           `Shell failed (exit code ${result.exitCode ?? "unknown"}).`,
+          "ACTION_EXECUTION_FAILED"
+        ),
+        telemetry
+      };
+    }
+    const postconditionFailure = await resolveShellPostconditionFailure(
+      normalizedCommand,
+      resolvedCwd
+    );
+    if (postconditionFailure) {
+      return {
+        outcome: buildExecutionOutcome(
+          "failed",
+          postconditionFailure.message,
           "ACTION_EXECUTION_FAILED"
         ),
         telemetry

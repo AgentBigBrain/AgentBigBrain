@@ -352,6 +352,161 @@ test("security governor ignores advisory vetoes for explicit my-desktop mkdir sh
   assert.equal(vote.rejectCategory, undefined);
 });
 
+test("security governor ignores advisory vetoes for explicit my-desktop React scaffold shell actions", async () => {
+  const securityGovernor = getGovernorById("security");
+  const targetFolder =
+    `${HOST_TEST_DESKTOP_DIR}${HOST_TEST_PATH_SEPARATOR}AI Drone City`;
+  const vote = await securityGovernor.evaluate(
+    buildProposal({
+      type: "shell_command",
+      description: "Scaffold the requested React app in the Desktop workspace.",
+      params: {
+        command:
+          `if (Test-Path "${targetFolder}${HOST_TEST_PATH_SEPARATOR}package.json") { ` +
+          `Set-Location "${targetFolder}"; npm install } else { ` +
+          `Set-Location "${HOST_TEST_DESKTOP_DIR}"; npm create vite@latest "AI Drone City" -- --template react }`,
+        cwd: HOST_TEST_DESKTOP_DIR,
+        workdir: HOST_TEST_DESKTOP_DIR,
+        requestedShellKind: "powershell",
+        timeoutMs: 120000
+      }
+    }),
+    buildContext(
+      "security",
+      "Please build a small React landing page in a folder called AI Drone City on my desktop and open it in the browser."
+    )
+  );
+
+  assert.equal(vote.approve, true);
+  assert.equal(vote.rejectCategory, undefined);
+});
+
+test("security governor ignores advisory vetoes for explicit my-desktop PowerShell New-Item folder creation", async () => {
+  const securityGovernor = getGovernorById("security");
+  const targetFolder =
+    `${HOST_TEST_DESKTOP_DIR}${HOST_TEST_PATH_SEPARATOR}AI Drone City`;
+  const vote = await securityGovernor.evaluate(
+    buildProposal({
+      type: "shell_command",
+      description: "Create the requested Desktop React project folder in place.",
+      params: {
+        command:
+          `$target='${targetFolder}'; New-Item -ItemType Directory -Force -Path $target | Out-Null; ` +
+          "New-Item -ItemType Directory -Force -Path (Join-Path $target 'src') | Out-Null",
+        cwd: HOST_TEST_DESKTOP_DIR,
+        workdir: HOST_TEST_DESKTOP_DIR,
+        requestedShellKind: "powershell",
+        timeoutMs: 120000
+      }
+    }),
+    buildContext(
+      "security",
+      "Please build a small React landing page in a folder called AI Drone City on my desktop and open it in the browser."
+    )
+  );
+
+  assert.equal(vote.approve, true);
+  assert.equal(vote.rejectCategory, undefined);
+});
+
+test("resource governor ignores advisory vetoes for explicit my-desktop React install and build shell actions", async () => {
+  const resourceGovernor = getGovernorById("resource");
+  const targetFolder =
+    `${HOST_TEST_DESKTOP_DIR}${HOST_TEST_PATH_SEPARATOR}AI Drone City`;
+  const vote = await resourceGovernor.evaluate(
+    buildProposal({
+      type: "shell_command",
+      description: "Install dependencies and build the requested React app in the Desktop workspace.",
+      params: {
+        command: "npm install && npm run build",
+        cwd: targetFolder,
+        workdir: targetFolder,
+        requestedShellKind: "cmd",
+        timeoutMs: 120000
+      }
+    }),
+    buildContext(
+      "resource",
+      "Please build a small React landing page in a folder called AI Drone City on my desktop and leave it open in the browser for me."
+    )
+  );
+
+  assert.equal(vote.approve, true);
+  assert.equal(vote.rejectCategory, undefined);
+});
+
+test("security governor ignores advisory vetoes for explicit absolute Desktop-path list_directory build actions", async () => {
+  const securityGovernor = getGovernorById("security");
+  const targetFolder =
+    `${HOST_TEST_DESKTOP_DIR}${HOST_TEST_PATH_SEPARATOR}AI Drone City`;
+  const vote = await securityGovernor.evaluate(
+    buildProposal({
+      type: "list_directory",
+      description: "Inspect the exact React app folder before continuing the build flow.",
+      params: {
+        path: targetFolder
+      }
+    }),
+    buildContext(
+      "security",
+      `Go to ${targetFolder}, inspect whether node_modules and dist exist, then run the missing setup steps: install dependencies with npm install, build with npm run build, and open the app in the browser.`
+    )
+  );
+
+  assert.equal(vote.approve, true);
+  assert.equal(vote.rejectCategory, undefined);
+});
+
+test("resource governor ignores advisory vetoes for explicit absolute Desktop-path React repair shell actions", async () => {
+  const resourceGovernor = getGovernorById("resource");
+  const targetFolder =
+    `${HOST_TEST_DESKTOP_DIR}${HOST_TEST_PATH_SEPARATOR}AI Drone City`;
+  const vote = await resourceGovernor.evaluate(
+    buildProposal({
+      type: "shell_command",
+      description: "Install, build, and preview the exact Desktop React app workspace.",
+      params: {
+        command:
+          `$ErrorActionPreference='Stop'; Set-Location '${targetFolder}'; ` +
+          "npm install; npm run build; npm run preview -- --host 127.0.0.1 --port 4173",
+        cwd: targetFolder,
+        workdir: targetFolder,
+        requestedShellKind: "powershell",
+        timeoutMs: 120000
+      }
+    }),
+    buildContext(
+      "resource",
+      `Go to ${targetFolder}, install dependencies if needed, build the app, and start it locally so I can view it in the browser.`
+    )
+  );
+
+  assert.equal(vote.approve, true);
+  assert.equal(vote.rejectCategory, undefined);
+});
+
+test('security governor ignores advisory vetoes for explicit Desktop-path React repair requests phrased as in the "..." folder', async () => {
+  const securityGovernor = getGovernorById("security");
+  const targetFolder =
+    `${HOST_TEST_DESKTOP_DIR}${HOST_TEST_PATH_SEPARATOR}AI Drone City`;
+  const vote = await securityGovernor.evaluate(
+    buildProposal({
+      type: "list_directory",
+      description: "Inspect the exact Desktop React workspace before repairing it.",
+      params: {
+        path: targetFolder
+      }
+    }),
+    buildContext(
+      "security",
+      `Fix the React/Vite project in the "${targetFolder}" folder, install dependencies if needed, build it, and open it in the browser.`
+    )
+  );
+
+  assert.equal(vote.approve, true);
+  assert.equal(vote.rejectCategory, undefined);
+});
+
 test("security governor ignores advisory vetoes for bounded desktop organization shell actions", async () => {
   const securityGovernor = getGovernorById("security");
   const vote = await securityGovernor.evaluate(
@@ -533,6 +688,27 @@ test("security governor ignores advisory vetoes for python3 http.server start_pr
       }
     }),
     buildContext("security")
+  );
+
+  assert.equal(vote.approve, true);
+  assert.equal(vote.rejectCategory, undefined);
+});
+
+test("security governor ignores advisory vetoes for npm run preview localhost start_process actions", async () => {
+  const securityGovernor = getGovernorById("security");
+  const vote = await securityGovernor.evaluate(
+    buildProposal({
+      type: "start_process",
+      description: "Start the local Vite preview server for the React landing page.",
+      params: {
+        command: "npm run preview -- --host 127.0.0.1 --port 4173",
+        cwd: `${HOST_TEST_DESKTOP_DIR}${HOST_TEST_PATH_SEPARATOR}AI Drone City`
+      }
+    }),
+    buildContext(
+      "security",
+      "In C:\\Users\\testuser\\Desktop\\AI Drone City, start the React app, wait for the local URL, and open it in the browser."
+    )
   );
 
   assert.equal(vote.approve, true);

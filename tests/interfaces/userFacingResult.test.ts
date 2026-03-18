@@ -725,6 +725,93 @@ test("selectUserFacingSummary prefers the open page over later browser-verificat
   assert.doesNotMatch(selected, /^Browser verification passed:/i);
 });
 
+test("selectUserFacingSummary surfaces an approved browser-open execution failure instead of a later generic blocked reply", () => {
+  const targetUrl = "file:///C:/Users/testuser/Desktop/drone-company-landing.html";
+  const runResult = buildRunResult("technical summary", [
+    {
+      action: {
+        id: "action_open_browser_preview_failed",
+        type: "open_browser",
+        description: "open preview",
+        params: {
+          url: targetUrl
+        },
+        estimatedCostUsd: 0.06
+      },
+      mode: "escalation_path",
+      approved: true,
+      output: `Browser open failed: net::ERR_FILE_NOT_FOUND at ${targetUrl}`,
+      executionStatus: "failed",
+      executionFailureCode: "ACTION_EXECUTION_FAILED",
+      blockedBy: [],
+      violations: [
+        {
+          code: "ACTION_EXECUTION_FAILED",
+          message: `Browser open failed: net::ERR_FILE_NOT_FOUND at ${targetUrl}`
+        }
+      ],
+      votes: []
+    },
+    {
+      action: {
+        id: "action_followup_blocked_after_failed_open",
+        type: "shell_command",
+        description: "follow-up command",
+        params: {
+          command: "echo blocked"
+        },
+        estimatedCostUsd: 0.04
+      },
+      mode: "escalation_path",
+      approved: false,
+      output: "",
+      blockedBy: ["ACTION_EXECUTION_FAILED"],
+      violations: [
+        {
+          code: "ACTION_EXECUTION_FAILED",
+          message: "Security governor timeout or failure."
+        }
+      ],
+      votes: [
+        {
+          governorId: "security",
+          approve: false,
+          reason: "Governor timeout or failure."
+        }
+      ]
+    },
+    {
+      action: {
+        id: "action_respond_generic_block_after_failed_open",
+        type: "respond",
+        description: "reply",
+        params: {
+          message:
+            "I couldn't execute that request in this run. What happened: governance blocked the requested action. Why it didn't execute: Security governor rejected this request. I have to keep actions safe and aligned with helping humans. What to do next: request the exact rejected step with typed codes, then submit a safer/narrower alternative. Main concerns: Security: Governor timeout or failure."
+        },
+        estimatedCostUsd: 0.02
+      },
+      mode: "fast_path",
+      approved: true,
+      output:
+        "I couldn't execute that request in this run. What happened: governance blocked the requested action. Why it didn't execute: Security governor rejected this request. I have to keep actions safe and aligned with helping humans. What to do next: request the exact rejected step with typed codes, then submit a safer/narrower alternative. Main concerns: Security: Governor timeout or failure.",
+      blockedBy: [],
+      violations: [],
+      votes: []
+    }
+  ], {
+    userInput: "Open both of the landing pages that you just designed in React so I can compare them"
+  });
+
+  const selected = selectUserFacingSummary(runResult);
+  assert.match(
+    selected,
+    /I tried to open file:\/\/\/C:\/Users\/testuser\/Desktop\/drone-company-landing\.html in your browser, but it failed: net::ERR_FILE_NOT_FOUND at file:\/\/\/C:\/Users\/testuser\/Desktop\/drone-company-landing\.html\./i
+  );
+  assert.doesNotMatch(selected, /^I couldn't execute that request in this run\./i);
+  assert.doesNotMatch(selected, /governance blocked the requested action/i);
+});
+
 test("selectUserFacingSummary prefers readiness proof over a generic blocked respond summary when process start and probe succeeded", () => {
   const runResult = buildRunResult("technical summary", [
     {

@@ -3,6 +3,7 @@
  */
 
 import { ActionType } from "./types";
+import { SHELL_TIMEOUT_MS_BOUNDS } from "./shellRuntimeProfile";
 
 const PLANNER_ACTION_TYPES: readonly ActionType[] = [
   "respond",
@@ -320,9 +321,33 @@ export function normalizePlannerActionParams(
   const numberFields = ["port", "timeoutMs", "expectedStatus", "pid"] as const;
   for (const field of numberFields) {
     if (typeof actionRecord[field] === "number" && typeof params[field] !== "number") {
-      params[field] = actionRecord[field];
+      params[field] =
+        field === "timeoutMs"
+          ? normalizePlannerTimeoutMs(actionRecord[field])
+          : actionRecord[field];
     }
   }
 
+  if (typeof params.timeoutMs === "number") {
+    params.timeoutMs = normalizePlannerTimeoutMs(params.timeoutMs);
+  }
+
   return params;
+}
+
+/**
+ * Clamps planner-supplied timeout values into the runtime-supported bounded integer range.
+ */
+function normalizePlannerTimeoutMs(timeoutMs: number): number {
+  const roundedTimeoutMs = Math.round(timeoutMs);
+  if (!Number.isFinite(roundedTimeoutMs)) {
+    return SHELL_TIMEOUT_MS_BOUNDS.min;
+  }
+  if (roundedTimeoutMs < SHELL_TIMEOUT_MS_BOUNDS.min) {
+    return SHELL_TIMEOUT_MS_BOUNDS.min;
+  }
+  if (roundedTimeoutMs > SHELL_TIMEOUT_MS_BOUNDS.max) {
+    return SHELL_TIMEOUT_MS_BOUNDS.max;
+  }
+  return roundedTimeoutMs;
 }

@@ -9,6 +9,51 @@
  * @returns Additional prompt text describing how the repaired plan should change.
  */
 export function buildPlannerRepairReasonGuidance(repairReason: string): string {
+  if (
+    repairReason.startsWith("invalid_execution_style_build_plan:FRAMEWORK_APP_SCAFFOLD_ACTION_REQUIRED")
+  ) {
+    return (
+      " The prior plan failed because it treated a fresh framework-app request like a file-only edit. " +
+      "Repair by including at least one real toolchain step that can scaffold, install, build, preview, or run the app, such as npm/npx/pnpm/yarn/bun create, install, build, dev, start, or preview. " +
+      "Do not return only src-file writes for a new React/Vite/Next/Vue/Svelte/Angular app request."
+    );
+  }
+  if (
+    repairReason.startsWith("invalid_execution_style_build_plan:FRAMEWORK_APP_ARTIFACT_CHECK_REQUIRED")
+  ) {
+    return (
+      " The prior plan failed because it treated folder existence alone as proof the framework app already exists. " +
+      "Repair by checking for real scaffold artifacts such as package.json before deciding to reuse or skip scaffold. " +
+      "If the folder exists but package.json is missing, complete the scaffold or repair in place instead of assuming the app is ready."
+    );
+  }
+  if (
+    repairReason.startsWith("invalid_execution_style_build_plan:FRAMEWORK_APP_IN_PLACE_SCAFFOLD_REQUIRED")
+  ) {
+    return (
+      " The prior plan failed because it checked the exact folder for package.json but still tried to recreate that folder from the parent directory. " +
+      "Repair by scaffolding or repairing in place inside the exact requested folder when package.json is missing, for example by setting the cwd to that folder and using '.' as the scaffold target. " +
+      "If that exact folder already contains Vite-like source files such as index.html, src/main.jsx, src/App.jsx, or src/index.css, prefer repairing the workspace in place by writing the missing package.json and any standard Vite metadata before install/build instead of rerunning create-vite. " +
+      "Do not rerun create-vite or similar against the folder name from outside that folder."
+    );
+  }
+  if (
+    repairReason.startsWith("invalid_execution_style_build_plan:FRAMEWORK_APP_NATIVE_PREVIEW_REQUIRED")
+  ) {
+    return (
+      " The prior plan failed because it used an ad-hoc preview server for a framework-app live-run request. " +
+      "Repair by starting the app with the workspace-native preview/runtime command instead, such as npm run preview, npm run dev, vite preview, or vite dev from the exact project folder. " +
+      "Keep the later readiness probe and open_browser actions pointed at that same loopback URL so the runtime can leave the correct app open and later stop it cleanly."
+    );
+  }
+  if (
+    repairReason.startsWith("invalid_execution_style_build_plan:SHELL_COMMAND_MAX_CHARS_EXCEEDED")
+  ) {
+    return (
+      " The prior plan failed because one shell or start-process command exceeded the runtime's command-length budget. " +
+      "Repair by splitting large inline file creation into separate write_file actions and keeping shell/toolchain steps short and bounded, such as separate npm install, npm run build, and npm run preview commands instead of one giant script."
+    );
+  }
   if (repairReason.startsWith("invalid_execution_style_build_plan:LIVE_VERIFICATION_ACTION_REQUIRED")) {
     return (
       " The prior plan failed because it omitted live-verification actions. " +
@@ -34,7 +79,8 @@ export function buildPlannerRepairReasonGuidance(repairReason: string): string {
   if (repairReason.startsWith("invalid_execution_style_build_plan:PERSISTENT_BROWSER_OPEN_REQUIRED")) {
     return (
       " The prior plan failed because it omitted open_browser for a request that explicitly asked to leave the page open. " +
-      "Repair by adding open_browser after verification succeeds."
+      "Repair by adding open_browser after verification succeeds. " +
+      "Reuse the exact local target that the plan really proved ready: the verified loopback URL for live runs, or the built local file:// artifact for static previews."
     );
   }
   if (repairReason.startsWith("invalid_execution_style_build_plan:OPEN_BROWSER_HTTP_URL_REQUIRED")) {

@@ -2,6 +2,9 @@
  * @fileoverview Launches a visible local browser window and records a persistent browser-session handle when possible.
  */
 
+import { access } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
+
 import { OpenBrowserActionParams, ExecutorExecutionOutcome } from "../../core/types";
 import { isAllowedBrowserSessionControlUrl } from "../../core/constraintRuntime/browserConstraints";
 import { createAbortError, isAbortError, throwIfAborted } from "../../core/runtimeAbort";
@@ -24,12 +27,93 @@ import {
   findNewPlaywrightAutomationBrowserPid,
   listPlaywrightAutomationBrowserProcesses
 } from "./playwrightBrowserProcessIntrospection";
+import type { ManagedProcessSnapshot } from "./managedProcessRegistry";
 
 interface BrowserOpenLaunchSpec {
   executable: string;
   args: readonly string[];
   openMethod: string;
   windowsVerbatimArguments?: boolean;
+}
+
+/**
+ * Normalizes one local path into a stable comparable value.
+ *
+ * @param value - Candidate local path.
+ * @returns Comparable path, or `null` when the input is blank.
+ */
+function normalizeComparablePath(value: string | null): string | null {
+  if (!value) {
+    return null;
+  }
+  const trimmed = value.trim();
+  if (trimmed.length === 0) {
+    return null;
+  }
+  return trimmed.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+}
+
+/**
+ * Chooses the most relevant managed preview-process snapshot to link to a browser-open action when
+ * the planner omitted `previewProcessLeaseId` but the runtime can still prove the active preview
+ * from current task/workspace context.
+ *
+ * @param context - Shared executor dependencies for live-run capability handlers.
+ * @param workspaceRootPath - Current workspace root when known.
+ * @param taskId - Owning task id for the browser-open action.
+ * @returns Inferred managed-process snapshot, or `null` when the runtime cannot prove one.
+ */
+function inferLinkedPreviewProcessSnapshot(
+  context: LiveRunExecutorContext,
+  workspaceRootPath: string | null,
+  taskId?: string
+): ManagedProcessSnapshot | null {
+  if (!taskId) {
+    return null;
+  }
+
+  const activeSnapshots = context.managedProcessRegistry
+    .listSnapshots()
+    .filter(
+      (snapshot) => snapshot.taskId === taskId && snapshot.statusCode !== "PROCESS_STOPPED"
+    )
+    .sort((left, right) => right.startedAt.localeCompare(left.startedAt));
+  if (activeSnapshots.length === 0) {
+    return null;
+  }
+
+  const comparableWorkspaceRoot = normalizeComparablePath(workspaceRootPath);
+  if (comparableWorkspaceRoot) {
+    const matchingWorkspaceSnapshots = activeSnapshots.filter(
+      (snapshot) => normalizeComparablePath(snapshot.cwd) === comparableWorkspaceRoot
+    );
+    if (matchingWorkspaceSnapshots.length === 1) {
+      return matchingWorkspaceSnapshots[0] ?? null;
+    }
+    if (
+      matchingWorkspaceSnapshots.length > 1 &&
+      matchingWorkspaceSnapshots.every(
+        (snapshot) => normalizeComparablePath(snapshot.cwd) === comparableWorkspaceRoot
+      )
+    ) {
+      return matchingWorkspaceSnapshots[0] ?? null;
+    }
+  }
+
+  if (activeSnapshots.length === 1) {
+    return activeSnapshots[0] ?? null;
+  }
+
+  const uniqueComparableCwds = new Set(
+    activeSnapshots
+      .map((snapshot) => normalizeComparablePath(snapshot.cwd))
+      .filter((snapshotCwd): snapshotCwd is string => snapshotCwd !== null)
+  );
+  if (uniqueComparableCwds.size === 1) {
+    return activeSnapshots[0] ?? null;
+  }
+
+  return null;
 }
 
 /**
@@ -119,7 +203,8 @@ export async function executeOpenBrowser(
   context: LiveRunExecutorContext,
   actionId: string,
   params: OpenBrowserActionParams,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  taskId?: string
 ): Promise<ExecutorExecutionOutcome> {
   throwIfAborted(signal);
   const url = normalizeOptionalString(params.url);
@@ -170,10 +255,16 @@ export async function executeOpenBrowser(
   const normalizedUrl = parsedUrl.toString();
   const sessionId = `browser_session:${actionId}`;
   const workspaceRootPath = normalizeOptionalString(params.rootPath);
-  const linkedPreviewProcessLeaseId = normalizeOptionalString(params.previewProcessLeaseId);
+  const explicitLinkedPreviewProcessLeaseId = normalizeOptionalString(params.previewProcessLeaseId);
+  const inferredLinkedPreviewProcessSnapshot =
+    explicitLinkedPreviewProcessLeaseId === null
+      ? inferLinkedPreviewProcessSnapshot(context, workspaceRootPath, taskId)
+      : null;
+  const linkedPreviewProcessLeaseId =
+    explicitLinkedPreviewProcessLeaseId ?? inferredLinkedPreviewProcessSnapshot?.leaseId ?? null;
   const linkedPreviewProcessSnapshot = linkedPreviewProcessLeaseId
     ? context.managedProcessRegistry.getSnapshot(linkedPreviewProcessLeaseId)
-    : null;
+    : inferredLinkedPreviewProcessSnapshot;
   const linkedProcessLeaseId = linkedPreviewProcessSnapshot?.leaseId ?? linkedPreviewProcessLeaseId;
   const linkedProcessCwd = linkedPreviewProcessSnapshot?.cwd ?? workspaceRootPath;
   const linkedProcessPid = linkedPreviewProcessSnapshot?.pid ?? null;
@@ -194,6 +285,19 @@ export async function executeOpenBrowser(
           "failed",
           `Browser open failed: ${normalizedUrl} never became ready (${failureDetail}).`,
           "PROCESS_NOT_READY"
+        );
+      }
+    }
+
+    if (isLocalFileUrl) {
+      const localFilePath = fileURLToPath(parsedUrl);
+      try {
+        await access(localFilePath);
+      } catch {
+        return buildExecutionOutcome(
+          "failed",
+          `Browser open failed: local file does not exist at ${localFilePath}.`,
+          "ACTION_EXECUTION_FAILED"
         );
       }
     }

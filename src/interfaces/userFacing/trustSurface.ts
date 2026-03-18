@@ -2,7 +2,7 @@
  * @fileoverview Shared trust-policy helpers for user-facing rendering of executed vs simulated side effects.
  */
 
-import { TaskRunResult } from "../../core/types";
+import { ActionRunResult, TaskRunResult } from "../../core/types";
 import { extractFirstPersonStatusUpdate } from "../diagnosticsPromptPolicy";
 import {
   createTrustLexicalRuleContext,
@@ -21,12 +21,25 @@ const STATUS_CONTRADICTION_CUE_PATTERNS: readonly RegExp[] = [
 export const DEFAULT_TRUST_LEXICAL_RULE_CONTEXT = createTrustLexicalRuleContext(null);
 
 /**
+ * Returns `true` when an approved action has concrete execution evidence in this run.
+ *
+ * Legacy fixtures may omit `executionStatus`; treat that as a successful execution so existing
+ * evidence-based rendering remains stable while still excluding explicit runtime failures.
+ */
+function didApprovedActionExecute(result: ActionRunResult): boolean {
+  return (
+    result.approved &&
+    (result.executionStatus === undefined || result.executionStatus === "success")
+  );
+}
+
+/**
  * Checks whether a real (non-simulated) approved shell action executed in this run.
  */
 export function hasApprovedRealShellExecution(runResult: TaskRunResult): boolean {
   return runResult.actionResults.some(
     (result) =>
-      result.approved &&
+      didApprovedActionExecute(result) &&
       result.action.type === "shell_command" &&
       !isSimulatedOutput(result.output ?? "", DEFAULT_TRUST_LEXICAL_RULE_CONTEXT)
   );
@@ -38,7 +51,7 @@ export function hasApprovedRealShellExecution(runResult: TaskRunResult): boolean
 export function hasApprovedRealNonRespondExecution(runResult: TaskRunResult): boolean {
   return runResult.actionResults.some(
     (result) =>
-      result.approved &&
+      didApprovedActionExecute(result) &&
       isSideEffectActionType(result.action.type) &&
       !isSimulatedOutput(result.output ?? "", DEFAULT_TRUST_LEXICAL_RULE_CONTEXT)
   );
@@ -50,7 +63,7 @@ export function hasApprovedRealNonRespondExecution(runResult: TaskRunResult): bo
 export function hasApprovedSimulatedShellExecution(runResult: TaskRunResult): boolean {
   return runResult.actionResults.some(
     (result) =>
-      result.approved &&
+      didApprovedActionExecute(result) &&
       result.action.type === "shell_command" &&
       isSimulatedOutput(result.output ?? "", DEFAULT_TRUST_LEXICAL_RULE_CONTEXT)
   );
@@ -62,7 +75,7 @@ export function hasApprovedSimulatedShellExecution(runResult: TaskRunResult): bo
 export function hasApprovedSimulatedNonRespondExecution(runResult: TaskRunResult): boolean {
   return runResult.actionResults.some(
     (result) =>
-      result.approved &&
+      didApprovedActionExecute(result) &&
       isSideEffectActionType(result.action.type) &&
       isSimulatedOutput(result.output ?? "", DEFAULT_TRUST_LEXICAL_RULE_CONTEXT)
   );

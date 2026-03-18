@@ -4,12 +4,13 @@
 
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import * as http from "node:http";
 import * as net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
+import { pathToFileURL } from "node:url";
 
 import { createBrainConfigFromEnv, BrainConfig } from "../../src/core/config";
 import { DEFAULT_BRAIN_CONFIG } from "../../src/core/config";
@@ -1013,6 +1014,338 @@ test("ToolExecutorOrgan treats known Move-Item file-lock stderr as a shell failu
   });
 });
 
+test("ToolExecutorOrgan routes Windows npm commands through cmd and fails closed when Vite scaffold artifacts are missing", async () => {
+  await withTempCwd(async () => {
+    const mockSpawn = createMockShellSpawn({
+      exitCode: 0
+    });
+    const config = buildShellEnabledConfig({
+      shellRuntime: {
+        ...DEFAULT_BRAIN_CONFIG.shellRuntime,
+        profile: {
+          ...DEFAULT_BRAIN_CONFIG.shellRuntime.profile,
+          shellKind: "powershell",
+          executable: "powershell.exe",
+          wrapperArgs: ["-NoProfile", "-NonInteractive", "-Command"],
+          cwdPolicy: {
+            ...DEFAULT_BRAIN_CONFIG.shellRuntime.profile.cwdPolicy,
+            denyOutsideSandbox: false
+          }
+        }
+      }
+    });
+    const executor = new ToolExecutorOrgan(config, mockSpawn.spawn);
+    const outcome = await executor.executeWithOutcome(
+      buildShellAction('npm create vite@latest "AI Drone City" -- --template react')
+    );
+
+    assert.equal(outcome.status, "failed");
+    assert.equal(outcome.failureCode, "ACTION_EXECUTION_FAILED");
+    assert.match(outcome.output, /did not create the expected package\.json/i);
+    assert.equal(mockSpawn.calls.length, 1);
+    assert.equal(mockSpawn.calls[0].executable, "cmd.exe");
+    assert.deepEqual(mockSpawn.calls[0].args, [
+      "/d",
+      "/c",
+      'npm.cmd create vite@latest "AI Drone City" -- --template react'
+    ]);
+    assert.equal(mockSpawn.calls[0].options.windowsVerbatimArguments, true);
+    const telemetry = executor.consumeShellExecutionTelemetry("action_shell_command");
+    assert.equal(telemetry?.shellKind, "cmd");
+  });
+});
+
+test("ToolExecutorOrgan fails closed when embedded PowerShell Vite scaffold leaves package.json missing", async () => {
+  await withTempCwd(async (tempDir) => {
+    const mockSpawn = createMockShellSpawn({
+      exitCode: 0
+    });
+    const config = buildShellEnabledConfig({
+      shellRuntime: {
+        ...DEFAULT_BRAIN_CONFIG.shellRuntime,
+        profile: {
+          ...DEFAULT_BRAIN_CONFIG.shellRuntime.profile,
+          shellKind: "powershell",
+          executable: "powershell.exe",
+          wrapperArgs: ["-NoProfile", "-NonInteractive", "-Command"],
+          cwdPolicy: {
+            ...DEFAULT_BRAIN_CONFIG.shellRuntime.profile.cwdPolicy,
+            denyOutsideSandbox: false
+          }
+        }
+      }
+    });
+    const executor = new ToolExecutorOrgan(config, mockSpawn.spawn);
+    const outcome = await executor.executeWithOutcome(
+      buildShellAction(
+        `$desktop='${tempDir.replace(/\\/g, "\\\\")}'; ` +
+        `Set-Location $desktop; npm create vite@latest 'AI Drone City' -- --template react`
+      )
+    );
+
+    assert.equal(outcome.status, "failed");
+    assert.equal(outcome.failureCode, "ACTION_EXECUTION_FAILED");
+    assert.match(outcome.output, /did not create the expected package\.json/i);
+    assert.equal(mockSpawn.calls.length, 1);
+    assert.equal(mockSpawn.calls[0].executable, "powershell.exe");
+  });
+});
+
+test("ToolExecutorOrgan resolves Set-Location before validating in-place PowerShell Vite scaffold artifacts", async () => {
+  await withTempCwd(async (tempDir) => {
+    const projectDir = path.join(tempDir, "AI Drone City");
+    await mkdir(projectDir, { recursive: true });
+    const mockSpawn = createMockShellSpawn({
+      exitCode: 0
+    });
+    const config = buildShellEnabledConfig({
+      shellRuntime: {
+        ...DEFAULT_BRAIN_CONFIG.shellRuntime,
+        profile: {
+          ...DEFAULT_BRAIN_CONFIG.shellRuntime.profile,
+          shellKind: "powershell",
+          executable: "powershell.exe",
+          wrapperArgs: ["-NoProfile", "-NonInteractive", "-Command"],
+          cwdPolicy: {
+            ...DEFAULT_BRAIN_CONFIG.shellRuntime.profile.cwdPolicy,
+            denyOutsideSandbox: false
+          }
+        }
+      }
+    });
+    const executor = new ToolExecutorOrgan(config, mockSpawn.spawn);
+    const outcome = await executor.executeWithOutcome(
+      buildShellAction(
+        `$p='${projectDir.replace(/\\/g, "\\\\")}'; ` +
+        "Set-Location $p; npm create vite@latest . -- --template react"
+      )
+    );
+
+    assert.equal(outcome.status, "failed");
+    assert.equal(outcome.failureCode, "ACTION_EXECUTION_FAILED");
+    assert.match(outcome.output, /expected package\.json at /i);
+    assert.match(outcome.output, /AI Drone City\\package\.json/i);
+  });
+});
+
+test("ToolExecutorOrgan treats npm.ps1 LASTEXITCODE wrapper errors as shell failure even when exit code is zero", async () => {
+  await withTempCwd(async () => {
+    const mockSpawn = createMockShellSpawn({
+      stderr:
+        "The variable '$LASTEXITCODE' cannot be retrieved because it has not been set.\r\n" +
+        "At C:\\Program Files\\nodejs\\npm.ps1:17 char:5\r\n" +
+        "FullyQualifiedErrorId : VariableIsUndefined\r\n",
+      exitCode: 0
+    });
+    const config = buildShellEnabledConfig({
+      shellRuntime: {
+        ...DEFAULT_BRAIN_CONFIG.shellRuntime,
+        profile: {
+          ...DEFAULT_BRAIN_CONFIG.shellRuntime.profile,
+          shellKind: "powershell",
+          executable: "powershell.exe",
+          wrapperArgs: ["-NoProfile", "-NonInteractive", "-Command"],
+          cwdPolicy: {
+            ...DEFAULT_BRAIN_CONFIG.shellRuntime.profile.cwdPolicy,
+            denyOutsideSandbox: false
+          }
+        }
+      }
+    });
+    const executor = new ToolExecutorOrgan(config, mockSpawn.spawn);
+    const outcome = await executor.executeWithOutcome(buildShellAction("$env:FOO='bar'; npm install"));
+
+    assert.equal(outcome.status, "failed");
+    assert.equal(outcome.failureCode, "ACTION_EXECUTION_FAILED");
+    assert.match(outcome.output, /Shell failed:/i);
+    assert.match(outcome.output, /LASTEXITCODE/i);
+  });
+});
+
+test("ToolExecutorOrgan rewrites embedded Windows PowerShell npm invocations to npm.cmd", async () => {
+  await withTempCwd(async () => {
+    const mockSpawn = createMockShellSpawn({
+      stdout: "installed\n",
+      exitCode: 0
+    });
+    const config = buildShellEnabledConfig({
+      shellRuntime: {
+        ...DEFAULT_BRAIN_CONFIG.shellRuntime,
+        profile: {
+          ...DEFAULT_BRAIN_CONFIG.shellRuntime.profile,
+          shellKind: "powershell",
+          executable: "powershell.exe",
+          wrapperArgs: ["-NoProfile", "-NonInteractive", "-Command"],
+          cwdPolicy: {
+            ...DEFAULT_BRAIN_CONFIG.shellRuntime.profile.cwdPolicy,
+            denyOutsideSandbox: false
+          }
+        }
+      }
+    });
+    const executor = new ToolExecutorOrgan(config, mockSpawn.spawn);
+    const outcome = await executor.executeWithOutcome(
+      buildShellAction("$target='C:\\\\Temp\\\\AI Drone City'; npm install --prefix \"$target\"")
+    );
+
+    assert.equal(outcome.status, "success");
+    assert.equal(mockSpawn.calls.length, 1);
+    assert.equal(mockSpawn.calls[0].executable, "powershell.exe");
+    assert.match(
+      String(mockSpawn.calls[0].args[3]),
+      /\$target='C:\\\\Temp\\\\AI Drone City'; npm\.cmd install --prefix \"\$target\"; if \(\$LASTEXITCODE -ne 0\) \{ exit \$LASTEXITCODE \}/i
+    );
+  });
+});
+
+test("ToolExecutorOrgan keeps PowerShell multi-step npm scripts on PowerShell while rewriting npm to npm.cmd", async () => {
+  await withTempCwd(async (tempDir) => {
+    await writeFile(
+      path.join(tempDir, "package.json"),
+      JSON.stringify({
+        name: "ai-drone-city",
+        private: true,
+        scripts: {
+          build: "vite build"
+        },
+        devDependencies: {
+          vite: "^7.0.0"
+        }
+      })
+    );
+    await mkdir(path.join(tempDir, "dist"), { recursive: true });
+    await writeFile(path.join(tempDir, "dist", "index.html"), "<!doctype html><title>AI Drone City</title>");
+    const mockSpawn = createMockShellSpawn({
+      stdout: "installed\nbuilt\n",
+      exitCode: 0
+    });
+    const config = buildShellEnabledConfig({
+      shellRuntime: {
+        ...DEFAULT_BRAIN_CONFIG.shellRuntime,
+        profile: {
+          ...DEFAULT_BRAIN_CONFIG.shellRuntime.profile,
+          shellKind: "powershell",
+          executable: "powershell.exe",
+          wrapperArgs: ["-NoProfile", "-NonInteractive", "-Command"],
+          cwdPolicy: {
+            ...DEFAULT_BRAIN_CONFIG.shellRuntime.profile.cwdPolicy,
+            denyOutsideSandbox: false
+          }
+        }
+      }
+    });
+    const executor = new ToolExecutorOrgan(config, mockSpawn.spawn);
+    const outcome = await executor.executeWithOutcome(
+      buildShellAction("npm install; npm run build; Write-Output 'done'")
+    );
+
+    assert.equal(outcome.status, "success");
+    assert.equal(mockSpawn.calls.length, 1);
+    assert.equal(mockSpawn.calls[0].executable, "powershell.exe");
+    assert.match(
+      String(mockSpawn.calls[0].args[3]),
+      /npm\.cmd install;\s*if \(\$LASTEXITCODE -ne 0\) \{ exit \$LASTEXITCODE \};\s*npm\.cmd run build;\s*if \(\$LASTEXITCODE -ne 0\) \{ exit \$LASTEXITCODE \};\s*write-output 'done'/i
+    );
+  });
+});
+
+test("ToolExecutorOrgan fails closed when Vite build succeeds without creating dist/index.html", async () => {
+  await withTempCwd(async (tempDir) => {
+    await writeFile(
+      path.join(tempDir, "package.json"),
+      JSON.stringify({
+        name: "ai-drone-city",
+        private: true,
+        scripts: {
+          build: "vite build"
+        },
+        devDependencies: {
+          vite: "^7.0.0"
+        }
+      })
+    );
+    const mockSpawn = createMockShellSpawn({
+      stdout: "vite build complete\n",
+      exitCode: 0
+    });
+    const config = buildShellEnabledConfig({
+      shellRuntime: {
+        ...DEFAULT_BRAIN_CONFIG.shellRuntime,
+        profile: {
+          ...DEFAULT_BRAIN_CONFIG.shellRuntime.profile,
+          shellKind: "cmd",
+          executable: "cmd.exe",
+          wrapperArgs: ["/d", "/c"],
+          cwdPolicy: {
+            ...DEFAULT_BRAIN_CONFIG.shellRuntime.profile.cwdPolicy,
+            denyOutsideSandbox: false
+          }
+        }
+      }
+    });
+    const executor = new ToolExecutorOrgan(config, mockSpawn.spawn);
+    const outcome = await executor.executeWithOutcome(
+      buildShellAction("npm run build", {
+        cwd: tempDir,
+        workdir: tempDir
+      })
+    );
+
+    assert.equal(outcome.status, "failed");
+    assert.equal(outcome.failureCode, "ACTION_EXECUTION_FAILED");
+    assert.match(outcome.output, /did not produce the expected dist[\\/]index\.html/i);
+  });
+});
+
+test("ToolExecutorOrgan accepts Vite build success only after dist/index.html exists", async () => {
+  await withTempCwd(async (tempDir) => {
+    await writeFile(
+      path.join(tempDir, "package.json"),
+      JSON.stringify({
+        name: "ai-drone-city",
+        private: true,
+        scripts: {
+          build: "vite build"
+        },
+        devDependencies: {
+          vite: "^7.0.0"
+        }
+      })
+    );
+    await mkdir(path.join(tempDir, "dist"), { recursive: true });
+    await writeFile(path.join(tempDir, "dist", "index.html"), "<!doctype html><title>AI Drone City</title>");
+    const mockSpawn = createMockShellSpawn({
+      stdout: "vite build complete\n",
+      exitCode: 0
+    });
+    const config = buildShellEnabledConfig({
+      shellRuntime: {
+        ...DEFAULT_BRAIN_CONFIG.shellRuntime,
+        profile: {
+          ...DEFAULT_BRAIN_CONFIG.shellRuntime.profile,
+          shellKind: "cmd",
+          executable: "cmd.exe",
+          wrapperArgs: ["/d", "/c"],
+          cwdPolicy: {
+            ...DEFAULT_BRAIN_CONFIG.shellRuntime.profile.cwdPolicy,
+            denyOutsideSandbox: false
+          }
+        }
+      }
+    });
+    const executor = new ToolExecutorOrgan(config, mockSpawn.spawn);
+    const outcome = await executor.executeWithOutcome(
+      buildShellAction("npm run build", {
+        cwd: tempDir,
+        workdir: tempDir
+      })
+    );
+
+    assert.equal(outcome.status, "success");
+    assert.match(outcome.output, /Shell success/i);
+  });
+});
+
 test("ToolExecutorOrgan cancels active shell command when abort signal fires", async () => {
   await withTempCwd(async () => {
     const mockSpawn = createAbortableShellSpawn();
@@ -1428,6 +1761,27 @@ test("ToolExecutorOrgan opens a visible browser window and records persistent br
       assert.equal(outcome.executionMetadata?.browserSessionControlAvailable, false);
       assert.equal(mockSpawn.calls.length, 1);
     });
+  });
+});
+
+test("ToolExecutorOrgan reports missing local file targets before attempting browser open", async () => {
+  await withTempCwd(async () => {
+    const executor = new ToolExecutorOrgan(
+      DEFAULT_BRAIN_CONFIG,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      async () => createStubPlaywrightRuntime().runtime
+    );
+    const missingFileUrl = pathToFileURL(
+      path.join(process.cwd(), "AI Drone City", "dist", "index.html")
+    ).toString();
+    const outcome = await executor.executeWithOutcome(buildOpenBrowserAction(missingFileUrl));
+
+    assert.equal(outcome.status, "failed");
+    assert.equal(outcome.failureCode, "ACTION_EXECUTION_FAILED");
+    assert.match(outcome.output, /local file does not exist/i);
   });
 });
 

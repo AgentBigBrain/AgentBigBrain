@@ -395,6 +395,26 @@ function detectProviderBlockerReason(...texts: readonly unknown[]): string | nul
   return PROVIDER_BLOCK_PATTERN.test(combined) ? combined : null;
 }
 
+/**
+ * Extracts a provider-capacity blocker from one captured conversation turn when the real backend
+ * failed before the smoke could finish.
+ *
+ * @param turn - Captured turn emitted by the restart smoke harness.
+ * @param job - Completed or failed job associated with the turn, when present.
+ * @returns Joined blocker evidence, or `null` when the turn did not fail for provider reasons.
+ */
+function detectProviderBlockerFromTurn(
+  turn: TurnCapture | undefined,
+  job: ConversationJob | null
+): string | null {
+  return detectProviderBlockerReason(
+    turn?.immediateReply,
+    turn?.notifications.map((notification) => notification.text).join("\n"),
+    job?.errorMessage,
+    job?.resultSummary
+  );
+}
+
 function isReviewableReply(text: string): boolean {
   const trimmed = text.trim();
   return trimmed.length >= 24 && !/^\s*{\s*"/.test(trimmed) && !/^\/auto\b/i.test(trimmed);
@@ -1165,6 +1185,23 @@ Promise<AutonomousRuntimeAffordancesRestartArtifact> {
     latestSession = turn1Session;
 
     const turn1Job = findLatestJobSince(turn1Session, turn1At);
+    const turn1ProviderBlocker = detectProviderBlockerFromTurn(
+      turns[turns.length - 1],
+      turn1Job
+    );
+    if (turn1ProviderBlocker) {
+      const blockedArtifact = buildRestartBlockedArtifact(turn1ProviderBlocker, localProbe);
+      const artifact = {
+        ...blockedArtifact,
+        targetFolder,
+        previewUrl,
+        browserSessionId,
+        previewProcessLeaseId,
+        turns
+      } satisfies AutonomousRuntimeAffordancesRestartArtifact;
+      await writeRestartArtifact(artifact);
+      return artifact;
+    }
     const turn1BrowserActions = turn1Job
       ? turn1Session.recentActions.filter(
           (action) => action.sourceJobId === turn1Job.id && action.kind === "browser_session"
@@ -1188,6 +1225,28 @@ Promise<AutonomousRuntimeAffordancesRestartArtifact> {
     latestSession = turn2Session;
     const turn2Reply = extractLatestAssistantReply(turn2Session);
     const turn2Job = findLatestJobSince(turn2Session, turn2At);
+    const turn2ProviderBlocker = detectProviderBlockerFromTurn(
+      turns[turns.length - 1],
+      turn2Job
+    );
+    if (turn2ProviderBlocker) {
+      const blockedArtifact = buildRestartBlockedArtifact(turn2ProviderBlocker, localProbe);
+      const artifact = {
+        ...blockedArtifact,
+        targetFolder,
+        previewUrl,
+        browserSessionId,
+        previewProcessLeaseId,
+        turns
+      } satisfies AutonomousRuntimeAffordancesRestartArtifact;
+      await writeRestartArtifact(artifact);
+      return artifact;
+    }
+    const turn2BrowserActions = turn2Job
+      ? turn2Session.recentActions.filter(
+          (action) => action.sourceJobId === turn2Job.id && action.kind === "browser_session"
+        )
+      : [];
     const turn2ProcessActions = turn2Job
       ? turn2Session.recentActions.filter(
           (action) => action.sourceJobId === turn2Job.id && action.kind === "process"
@@ -1221,7 +1280,8 @@ Promise<AutonomousRuntimeAffordancesRestartArtifact> {
         reloadAfterClose.processTrackedStale &&
         reloadAfterClose.workspaceOwnershipState === "stale",
       unknownResourceStoppedSafely:
-        turn2ProcessActions.length === 0 &&
+        turn2ProcessActions.every((action) => action.status === "closed") &&
+        turn2BrowserActions.every((action) => action.status === "closed") &&
         turn2Session.browserSessions.every((entry) => entry.status === "closed") &&
         /cannot prove|can't prove|no verifiable link|from the evidence|leav(?:e|ing)\s+.*(?:alone|untouched)|did not close|leave .* alone|untouched to avoid guessing/i.test(
           turn2Reply

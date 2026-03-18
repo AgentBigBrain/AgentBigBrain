@@ -19,18 +19,27 @@ import {
   persistExecutedJobOutcome,
   shouldSuppressWorkerHeartbeat
 } from "../conversationWorkerLifecycle";
-import type { InterfaceSessionStore } from "../sessionStore";
+import type {
+  InterfaceSessionStore
+} from "../sessionStore";
 import type {
   ListBrowserSessionSnapshots,
   ListManagedProcessSnapshots,
   ConversationNotifier,
   ExecuteConversationTask
 } from "./managerContracts";
-import {
-  toConversationNotifierTransport
-} from "./conversationNotifierTransport";
 import { enqueueAutomaticTrackedWorkspaceRecoveryRetry } from "./conversationWorkerAutoRecovery";
+import {
+  type SessionWorkerBinding,
+  setConversationWorkerBinding
+} from "./conversationWorkerBinding";
 import { persistConversationExecutionProgress } from "./conversationWorkerProgressPersistence";
+import {
+  buildInitialPersistentStatusMessage,
+  buildPersistentStatusMessage,
+  buildTerminalPersistentStatusUpdate,
+  createPersistentConversationStatusSender
+} from "./conversationWorkerStatusPanel";
 import {
   canUseConversationAckTimerForSession,
   clearConversationAckTimer,
@@ -38,10 +47,8 @@ import {
   setConversationAckLifecycleState
 } from "./conversationLifecycle";
 import { collectWorkerRuntimeSnapshots } from "./conversationWorkerRuntimeSnapshots";
-export interface SessionWorkerBinding {
-  executeTask: ExecuteConversationTask;
-  notifier: ConversationNotifierTransport;
-}
+export { setConversationWorkerBinding } from "./conversationWorkerBinding";
+export type { SessionWorkerBinding } from "./conversationWorkerBinding";
 
 export interface ConversationWorkerRuntimeConfig {
   ackDelayMs: number;
@@ -96,26 +103,6 @@ export interface ProcessConversationQueueInput {
   ackTimers: Map<string, NodeJS.Timeout>;
   workerBindings: Map<string, SessionWorkerBinding>;
   autonomousExecutionPrefix: string;
-}
-
-/**
- * Stores the latest worker dependencies for one session key.
- *
- * @param workerBindings - Shared worker-binding map owned by the stable conversation manager.
- * @param sessionKey - Provider-scoped conversation/session key.
- * @param executeTask - Current governed execution callback for the session.
- * @param notify - Current notifier callback/object for the session.
- */
-export function setConversationWorkerBinding(
-  workerBindings: Map<string, SessionWorkerBinding>,
-  sessionKey: string,
-  executeTask: ExecuteConversationTask,
-  notify: ConversationNotifier
-): void {
-  workerBindings.set(sessionKey, {
-    executeTask,
-    notifier: toConversationNotifierTransport(notify)
-  });
 }
 
 export interface StartConversationWorkerIfNeededInput {
@@ -326,28 +313,37 @@ export async function processConversationQueue(
       maxRecentJobs: config.maxRecentJobs
     });
     await store.setSession(session);
-    scheduleAckTimerForJob({
+    const persistentStatusSender = createPersistentConversationStatusSender(
       sessionKey,
-      runningJob: nextJob,
-      notify: activeNotify,
-      ackTimers,
-      clearAckTimer: (key) => clearConversationAckTimer(key, ackTimers),
-      canUseAckTimerForSession: (candidateSessionKey, candidateNotifier) =>
-        canUseConversationAckTimerForSession(candidateSessionKey, candidateNotifier),
-      onTimerFire: async (timerRecord: ActiveAckTimerRecord) => {
-        await handleAckTimerFire({
-          sessionKey,
-          timerRecord,
-          notify: activeNotify,
-          store,
-          maxRecentJobs: config.maxRecentJobs,
-          canUseAckTimerForSession: (candidateSessionKey, candidateNotifier) =>
-            canUseConversationAckTimerForSession(candidateSessionKey, candidateNotifier),
-          setAckLifecycleState: (job, nextState, fallbackErrorCode) =>
-            setConversationAckLifecycleState(job, nextState, fallbackErrorCode)
-        });
-      }
-    });
+      activeNotify,
+      nextJob
+    );
+    if (persistentStatusSender) {
+      await persistentStatusSender(buildInitialPersistentStatusMessage(nextJob));
+    } else {
+      scheduleAckTimerForJob({
+        sessionKey,
+        runningJob: nextJob,
+        notify: activeNotify,
+        ackTimers,
+        clearAckTimer: (key) => clearConversationAckTimer(key, ackTimers),
+        canUseAckTimerForSession: (candidateSessionKey, candidateNotifier) =>
+          canUseConversationAckTimerForSession(candidateSessionKey, candidateNotifier),
+        onTimerFire: async (timerRecord: ActiveAckTimerRecord) => {
+          await handleAckTimerFire({
+            sessionKey,
+            timerRecord,
+            notify: activeNotify,
+            store,
+            maxRecentJobs: config.maxRecentJobs,
+            canUseAckTimerForSession: (candidateSessionKey, candidateNotifier) =>
+              canUseConversationAckTimerForSession(candidateSessionKey, candidateNotifier),
+            setAckLifecycleState: (job, nextState, fallbackErrorCode) =>
+              setConversationAckLifecycleState(job, nextState, fallbackErrorCode)
+          });
+        }
+      });
+    }
 
     const executionResult = await executeRunningJob({
       job: nextJob,
@@ -366,6 +362,9 @@ export async function processConversationQueue(
           update,
           store
         );
+        if (persistentStatusSender) {
+          await persistentStatusSender(buildPersistentStatusMessage(update));
+        }
       },
       onExecutionSettled: () => clearConversationAckTimer(sessionKey, ackTimers)
     });
@@ -427,5 +426,18 @@ export async function processConversationQueue(
       setAckLifecycleState: (job, nextState, fallbackErrorCode) =>
         setConversationAckLifecycleState(job, nextState, fallbackErrorCode)
     });
+    if (persistentStatusSender) {
+      const deliveredSession = await store.getSession(sessionKey);
+      const deliveredJob =
+        deliveredSession?.recentJobs.find((candidate) => candidate.id === persistedRunningJob.id) ??
+        persistedRunningJob;
+      const terminalStatusUpdate = buildTerminalPersistentStatusUpdate(
+        deliveredSession ?? updatedSession,
+        deliveredJob
+      );
+      if (terminalStatusUpdate) {
+        await persistentStatusSender(buildPersistentStatusMessage(terminalStatusUpdate));
+      }
+    }
   }
 }

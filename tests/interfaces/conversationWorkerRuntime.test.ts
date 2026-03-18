@@ -159,6 +159,84 @@ test("processConversationQueue drains a queued job and persists the final delive
   }
 });
 
+test("processConversationQueue uses a persistent editable status message and still sends the final reply separately", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-conversation-process-status-panel-"));
+  const store = new InterfaceSessionStore(path.join(tempDir, "sessions.json"));
+  const conversationKey = "telegram:chat-1:user-1";
+  const deliveries: Array<{ kind: "send" | "edit"; message: string; messageId?: string }> = [];
+  const ackTimers = new Map<string, NodeJS.Timeout>();
+  const workerBindings = new Map<string, SessionWorkerBinding>();
+  const notify: ConversationNotifierTransport = {
+    capabilities: {
+      supportsEdit: true,
+      supportsNativeStreaming: false
+    },
+    send: async (message) => {
+      const messageId = `message-${deliveries.length + 1}`;
+      deliveries.push({ kind: "send", message, messageId });
+      return {
+        ok: true,
+        messageId,
+        errorCode: null
+      };
+    },
+    edit: async (messageId, message) => {
+      deliveries.push({ kind: "edit", messageId, message });
+      return {
+        ok: true,
+        messageId,
+        errorCode: null
+      };
+    }
+  };
+
+  try {
+    await store.setSession(
+      buildSession(conversationKey, {
+        queuedJobs: [buildQueuedJob()]
+      })
+    );
+
+    await processConversationQueue({
+      sessionKey: conversationKey,
+      executeTask: async (_input, _receivedAt, onProgressUpdate) => {
+        await onProgressUpdate?.({
+          status: "verifying",
+          message: "Checking the generated page before finishing."
+        });
+        return { summary: "completed runtime slice" };
+      },
+      notify,
+      store,
+      config: buildConversationWorkerRuntimeConfig({
+        ackDelayMs: 5_000,
+        heartbeatIntervalMs: 10,
+        maxRecentJobs: 20,
+        maxConversationTurns: 20
+      }),
+      ackTimers,
+      workerBindings,
+      autonomousExecutionPrefix: "[AUTONOMOUS_LOOP_GOAL]"
+    });
+
+    const session = await store.getSession(conversationKey);
+    assert.ok(session);
+    assert.equal(session?.recentJobs[0]?.status, "completed");
+    assert.equal(session?.recentJobs[0]?.finalDeliveryOutcome, "sent");
+    assert.equal(ackTimers.size, 0);
+    assert.equal(deliveries[0]?.kind, "send");
+    assert.match(deliveries[0]?.message ?? "", /Status: Thinking/);
+    assert.equal(deliveries[1]?.kind, "edit");
+    assert.match(deliveries[1]?.message ?? "", /Status: Verifying/);
+    assert.equal(deliveries[2]?.kind, "send");
+    assert.equal(deliveries[2]?.message, "completed runtime slice");
+    assert.equal(deliveries[3]?.kind, "edit");
+    assert.match(deliveries[3]?.message ?? "", /Status: Done/);
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
 test("processConversationQueue automatically retries exact tracked folder recovery once before asking the user", async () => {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-conversation-process-recovery-"));
   const store = new InterfaceSessionStore(path.join(tempDir, "sessions.json"));

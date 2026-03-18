@@ -3,6 +3,11 @@
  */
 
 import { PlannedAction } from "../../core/types";
+import {
+  basenameCrossPlatformPath,
+  dirnameCrossPlatformPath,
+  normalizeCrossPlatformPath
+} from "../../core/crossPlatformPath";
 import { RequiredActionType } from "./executionStyleContracts";
 
 const CREATE_SKILL_INTENT_PATTERN =
@@ -17,8 +22,22 @@ const NATURAL_CLOSE_BROWSER_FOLLOW_UP_PATTERN =
   /\b(?:close|shut|dismiss|hide)\b[\s\S]{0,50}\b(?:browser|tab|window|preview|page|landing page|homepage)\b/i;
 const NATURAL_OPEN_BROWSER_FOLLOW_UP_PATTERN =
   /\b(?:open|reopen|show|bring\s+(?:back|up)|pull\s+up)\b[\s\S]{0,50}\b(?:browser|tab|window|preview|page|landing page|homepage)\b/i;
+const NATURAL_CLOSE_BROWSER_VERB_PATTERN = /\b(?:close|shut|dismiss|hide)\b/i;
+const NATURAL_OPEN_BROWSER_VERB_PATTERN =
+  /\b(?:reopen|show|bring\s+(?:back|up)|pull\s+up)\b/i;
 const NATURAL_ARTIFACT_EDIT_REQUEST_PATTERN =
   /\b(?:change|edit|update|replace|swap|revise|tweak|adjust|make)\b[\s\S]{0,80}\b(?:hero|header|homepage|landing page|page|site|slider|cta|call to action|section|image|copy|headline|button)\b/i;
+const TRACKED_BROWSER_PATH_BLOCK_PATTERN =
+  /\b(?:Root path|Primary artifact|Preview URL|workspaceRoot|Remembered browser workspace root):\s*([^\n;]+)/gi;
+const TRACKED_BROWSER_URL_PATTERN = /\burl=([^\s;]+)/gi;
+const GENERIC_BROWSER_WORKSPACE_SEGMENT_NAMES = new Set([
+  "dist",
+  "build",
+  "out",
+  "public",
+  "site",
+  "app"
+]);
 const EXPLICIT_RUNTIME_ACTION_REQUEST_PATTERNS: readonly {
   type: Exclude<RequiredActionType, null>;
   pattern: RegExp;
@@ -68,6 +87,72 @@ const EXPLICIT_RUNTIME_ACTION_REQUEST_PATTERNS: readonly {
 export type { RequiredActionType } from "./executionStyleContracts";
 
 /**
+ * Extracts stable workspace/app names from tracked browser path context embedded in execution input.
+ *
+ * @param candidates - Mutable candidate-name set accumulated from tracked browser context.
+ * @param rawValue - Raw path or URL-derived location text extracted from execution input.
+ */
+function pushTrackedBrowserReferenceCandidate(
+  candidates: Set<string>,
+  rawValue: string | null | undefined
+): void {
+  if (typeof rawValue !== "string") {
+    return;
+  }
+  const trimmed = rawValue.trim();
+  if (!trimmed) {
+    return;
+  }
+  const normalizedPath = normalizeCrossPlatformPath(
+    trimmed.replace(/^file:\/\/\/?/i, "").replace(/\?.*$/, "")
+  );
+  const basename = basenameCrossPlatformPath(normalizedPath);
+  const parentBasename = basenameCrossPlatformPath(
+    dirnameCrossPlatformPath(normalizedPath)
+  );
+  const addCandidate = (value: string | null | undefined): void => {
+    if (typeof value !== "string") {
+      return;
+    }
+    const candidate = value.trim().replace(/\.[a-z0-9]{1,8}$/i, "");
+    if (candidate.length >= 3) {
+      candidates.add(candidate.toLowerCase());
+    }
+  };
+
+  addCandidate(basename);
+  if (
+    basename &&
+    GENERIC_BROWSER_WORKSPACE_SEGMENT_NAMES.has(basename.toLowerCase()) &&
+    parentBasename
+  ) {
+    addCandidate(parentBasename);
+  }
+}
+
+/**
+ * Evaluates whether the current request refers to the tracked browser target by workspace/app name.
+ *
+ * @param currentUserRequest - Current natural-language user request.
+ * @param fullExecutionInput - Full conversation-aware execution input containing tracked browser context.
+ * @returns `true` when the request names the tracked browser target.
+ */
+function currentUserRequestReferencesTrackedBrowserTarget(
+  currentUserRequest: string,
+  fullExecutionInput: string
+): boolean {
+  const candidates = new Set<string>();
+  for (const match of fullExecutionInput.matchAll(TRACKED_BROWSER_PATH_BLOCK_PATTERN)) {
+    pushTrackedBrowserReferenceCandidate(candidates, match[1] ?? null);
+  }
+  for (const match of fullExecutionInput.matchAll(TRACKED_BROWSER_URL_PATTERN)) {
+    pushTrackedBrowserReferenceCandidate(candidates, match[1] ?? null);
+  }
+  const normalizedRequest = currentUserRequest.toLowerCase();
+  return [...candidates].some((candidate) => normalizedRequest.includes(candidate));
+}
+
+/**
  * Derives required action type from explicit current-user intent.
  */
 export function inferRequiredActionType(
@@ -86,10 +171,26 @@ export function inferRequiredActionType(
     }
   }
   if (TRACKED_BROWSER_SESSION_CONTEXT_PATTERN.test(fullExecutionInput)) {
-    if (NATURAL_CLOSE_BROWSER_FOLLOW_UP_PATTERN.test(currentUserRequest)) {
+    const referencesTrackedBrowserTarget = currentUserRequestReferencesTrackedBrowserTarget(
+      currentUserRequest,
+      fullExecutionInput
+    );
+    if (
+      NATURAL_CLOSE_BROWSER_FOLLOW_UP_PATTERN.test(currentUserRequest) ||
+      (
+        NATURAL_CLOSE_BROWSER_VERB_PATTERN.test(currentUserRequest) &&
+        referencesTrackedBrowserTarget
+      )
+    ) {
       return "close_browser";
     }
-    if (NATURAL_OPEN_BROWSER_FOLLOW_UP_PATTERN.test(currentUserRequest)) {
+    if (
+      NATURAL_OPEN_BROWSER_FOLLOW_UP_PATTERN.test(currentUserRequest) ||
+      (
+        NATURAL_OPEN_BROWSER_VERB_PATTERN.test(currentUserRequest) &&
+        referencesTrackedBrowserTarget
+      )
+    ) {
       return "open_browser";
     }
   }

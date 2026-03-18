@@ -32,7 +32,8 @@ import {
 } from "../../src/core/autonomy/workspaceRecoveryPolicy";
 import {
   isExecutionStyleBuildRequest,
-  isLocalWorkspaceOrganizationRequest
+  isLocalWorkspaceOrganizationRequest,
+  requiresFrameworkAppScaffoldAction
 } from "../../src/organs/plannerPolicy/liveVerificationPolicy";
 import {
   buildNonExplicitRunSkillFallbackAction,
@@ -188,6 +189,44 @@ test("preparePlannerActions appends linked preview shutdown when a natural close
     ),
     true
   );
+});
+
+test("preparePlannerActions appends exact shutdown steps for every tracked preview lease in a close-browser follow-up", () => {
+  const fullExecutionInput = [
+    "Current tracked workspace in this chat:",
+    "- Label: Current project workspace",
+    "- Root path: C:\\Users\\testuser\\Desktop\\AI Drone City",
+    "- Preview process leases: proc_preview_1, proc_preview_2",
+    "",
+    "Tracked browser sessions:",
+    "- Browser window: sessionId=browser_session:ai-drone-city; url=http://127.0.0.1:4173/; status=open; visibility=visible; controller=playwright_managed; control=available; linkedPreviewLease=proc_preview_2; linkedPreviewCwd=C:\\Users\\testuser\\Desktop\\AI Drone City",
+    "",
+    "Current user request:",
+    "Close AI Drone City and anything it needs so we can move on."
+  ].join("\n");
+  const preparation = preparePlannerActions(
+    {
+      plannerNotes: "close the tracked browser only",
+      actions: [
+        {
+          type: "close_browser",
+          description: "Close the tracked AI Drone City preview.",
+          params: {
+            sessionId: "browser_session:ai-drone-city"
+          }
+        }
+      ]
+    },
+    "Close AI Drone City and anything it needs so we can move on.",
+    "close_browser",
+    fullExecutionInput
+  );
+
+  const stopProcessLeaseIds = preparation.actions
+    .filter((action) => action.type === "stop_process")
+    .map((action) => action.params.leaseId)
+    .sort();
+  assert.deepEqual(stopProcessLeaseIds, ["proc_preview_1", "proc_preview_2"]);
 });
 
 test("preparePlannerActions backfills open-browser workspace context from tracked preview metadata", () => {
@@ -420,6 +459,325 @@ test("evaluatePlannerActionValidation does not treat a plain open-browser previe
   assert.equal(validation.buildPlanAssessment.issueCode, null);
 });
 
+test("fresh framework-app requests require a real scaffold-capable action instead of write-file-only plans", () => {
+  const currentUserRequest =
+    "Create a React landing page app on my Desktop, open it in a browser, and leave it open for me.";
+  const validation = evaluatePlannerActionValidation(currentUserRequest, null, [
+    {
+      id: "action_write_app_source",
+      type: "write_file",
+      description: "write the React app source file",
+      params: {
+        path: "/home/testuser/Desktop/ai-drone-city/src/App.jsx",
+        content: "export default function App() { return <main>AI Drone City</main>; }"
+      },
+      estimatedCostUsd: 0.08
+    },
+    {
+      id: "action_open_static_preview",
+      type: "open_browser",
+      description: "open the preview",
+      params: {
+        url: "file:///home/testuser/Desktop/ai-drone-city/dist/index.html"
+      },
+      estimatedCostUsd: 0.03
+    }
+  ]);
+
+  assert.equal(requiresFrameworkAppScaffoldAction(currentUserRequest), true);
+  assert.equal(validation.needsRepair, true);
+  assert.equal(
+    validation.buildPlanAssessment.issueCode,
+    "FRAMEWORK_APP_SCAFFOLD_ACTION_REQUIRED"
+  );
+  assert.throws(
+    () => assertPlannerActionValidation(validation, null),
+    /fresh framework-app request like a file-only edit/i
+  );
+});
+
+test("framework-app requests accept real toolchain actions for scaffold/build flow", () => {
+  const currentUserRequest =
+    "Create a React landing page app on my Desktop, open it in a browser, and leave it open for me.";
+  const validation = evaluatePlannerActionValidation(currentUserRequest, null, [
+    {
+      id: "action_scaffold_app",
+      type: "shell_command",
+      description: "scaffold the React app",
+      params: {
+        command: "npm create vite@latest ai-drone-city -- --template react"
+      },
+      estimatedCostUsd: 0.12
+    },
+    {
+      id: "action_build_app",
+      type: "shell_command",
+      description: "build the app",
+      params: {
+        command: "npm run build"
+      },
+      estimatedCostUsd: 0.12
+    },
+    {
+      id: "action_open_preview",
+      type: "open_browser",
+      description: "open the built preview",
+      params: {
+        url: "file:///home/testuser/Desktop/ai-drone-city/dist/index.html"
+      },
+      estimatedCostUsd: 0.03
+    }
+  ]);
+
+  assert.equal(validation.needsRepair, false);
+  assert.equal(validation.buildPlanAssessment.issueCode, null);
+});
+
+test('execution-style build detection accepts explicit Desktop paths phrased as in the "..." folder', () => {
+  const currentUserRequest =
+    'Fix the React/Vite project in the "C:\\Users\\testuser\\OneDrive\\Desktop\\AI Drone City" folder, install dependencies if needed, build it, and open it in the browser.';
+
+  assert.equal(isExecutionStyleBuildRequest(currentUserRequest), true);
+  assert.equal(requiresFrameworkAppScaffoldAction(currentUserRequest), true);
+});
+
+test("fresh framework-app requests fail closed when scaffold logic keys reuse on folder existence alone", () => {
+  const currentUserRequest =
+    "Create a React landing page app on my Desktop, open it in a browser, and leave it open for me.";
+  const validation = evaluatePlannerActionValidation(currentUserRequest, null, [
+    {
+      id: "action_scaffold_with_directory_only_guard",
+      type: "shell_command",
+      description: "scaffold only when the directory is missing",
+      params: {
+        command:
+          "$desktop = 'C:\\Users\\testuser\\Desktop'; $project = Join-Path $desktop 'AI Drone City'; if (-not (Test-Path $project)) { npm create vite@latest \"$project\" -- --template react }"
+      },
+      estimatedCostUsd: 0.12
+    },
+    {
+      id: "action_build_app",
+      type: "shell_command",
+      description: "build the app",
+      params: {
+        command: "npm run build"
+      },
+      estimatedCostUsd: 0.12
+    },
+    {
+      id: "action_open_preview",
+      type: "open_browser",
+      description: "open the built preview",
+      params: {
+        url: "file:///home/testuser/Desktop/ai-drone-city/dist/index.html"
+      },
+      estimatedCostUsd: 0.03
+    }
+  ]);
+
+  assert.equal(validation.needsRepair, true);
+  assert.equal(
+    validation.buildPlanAssessment.issueCode,
+    "FRAMEWORK_APP_ARTIFACT_CHECK_REQUIRED"
+  );
+  assert.throws(
+    () => assertPlannerActionValidation(validation, null),
+    /directory existence alone as proof a framework app already exists/i
+  );
+});
+
+test("fresh framework-app requests fail closed when package.json-guarded scaffold recreates the named folder from its parent", () => {
+  const currentUserRequest =
+    "Create a React landing page app on my Desktop in a folder called AI Drone City, open it in a browser, and leave it open for me.";
+  const validation = evaluatePlannerActionValidation(currentUserRequest, null, [
+    {
+      id: "action_scaffold_named_folder_from_parent",
+      type: "shell_command",
+      description: "Scaffold or reuse the React app.",
+      params: {
+        command: [
+          "$desktop = 'C:\\Users\\testuser\\Desktop'",
+          "$app = Join-Path $desktop 'AI Drone City'",
+          "if (!(Test-Path (Join-Path $app 'package.json'))) {",
+          "  Set-Location $desktop",
+          "  npm create vite@latest 'AI Drone City' -- --template react",
+          "}",
+          "Set-Location $app",
+          "npm install"
+        ].join("; ")
+      },
+      estimatedCostUsd: 0.2
+    },
+    {
+      id: "action_open_preview",
+      type: "open_browser",
+      description: "open the built preview",
+      params: {
+        url: "file:///home/testuser/Desktop/ai-drone-city/dist/index.html"
+      },
+      estimatedCostUsd: 0.03
+    }
+  ]);
+
+  assert.equal(validation.needsRepair, true);
+  assert.equal(
+    validation.buildPlanAssessment.issueCode,
+    "FRAMEWORK_APP_IN_PLACE_SCAFFOLD_REQUIRED"
+  );
+  assert.throws(
+    () => assertPlannerActionValidation(validation, null),
+    /scaffold or repair inside the exact requested folder/i
+  );
+});
+
+test("framework-app live-run requests fail closed when they use an ad-hoc preview server", () => {
+  const currentUserRequest =
+    "Create a React landing page app on my Desktop, run it locally on localhost, open it in a browser, and leave it open for me.";
+  const validation = evaluatePlannerActionValidation(currentUserRequest, null, [
+    {
+      id: "action_repair_workspace",
+      type: "shell_command",
+      description: "Repair the React workspace in place.",
+      params: {
+        command: "npm install && npm run build"
+      },
+      estimatedCostUsd: 0.18
+    },
+    {
+      id: "action_start_ad_hoc_server",
+      type: "start_process",
+      description: "Serve the built dist folder.",
+      params: {
+        command:
+          "powershell -NoProfile -Command \"$ErrorActionPreference='Stop'; Set-Location 'C:\\Users\\testuser\\Desktop\\AI Drone City'; npx --yes serve -s dist -l 4173\""
+      },
+      estimatedCostUsd: 0.28
+    },
+    {
+      id: "action_probe_http",
+      type: "probe_http",
+      description: "Wait for localhost readiness.",
+      params: {
+        url: "http://127.0.0.1:4173",
+        expectedStatus: 200
+      },
+      estimatedCostUsd: 0.04
+    },
+    {
+      id: "action_open_browser",
+      type: "open_browser",
+      description: "Open the local page and leave it open.",
+      params: {
+        url: "http://127.0.0.1:4173"
+      },
+      estimatedCostUsd: 0.03
+    }
+  ]);
+
+  assert.equal(validation.needsRepair, true);
+  assert.equal(
+    validation.buildPlanAssessment.issueCode,
+    "FRAMEWORK_APP_NATIVE_PREVIEW_REQUIRED"
+  );
+  assert.throws(
+    () => assertPlannerActionValidation(validation, null),
+    /ad-hoc preview server/i
+  );
+});
+
+test("execution-style build requests fail closed when shell commands exceed the runtime command budget", () => {
+  const currentUserRequest =
+    "Create a React landing page app on my Desktop, run it locally on localhost, open it in a browser, and leave it open for me.";
+  const oversizedCommand = "Write-Output '" + "x".repeat(5000) + "'";
+  const validation = evaluatePlannerActionValidation(
+    currentUserRequest,
+    null,
+    [
+      {
+        id: "action_oversized_shell",
+        type: "shell_command",
+        description: "Write the whole app inside one giant shell command.",
+        params: {
+          command: oversizedCommand
+        },
+        estimatedCostUsd: 0.25
+      }
+    ],
+    currentUserRequest,
+    {
+      platform: "win32",
+      shellKind: "powershell",
+      invocationMode: "inline_command",
+      commandMaxChars: 4096,
+      desktopPath: "C:\\Users\\testuser\\Desktop",
+      documentsPath: "C:\\Users\\testuser\\Documents",
+      downloadsPath: "C:\\Users\\testuser\\Downloads"
+    }
+  );
+
+  assert.equal(validation.needsRepair, true);
+  assert.equal(
+    validation.buildPlanAssessment.issueCode,
+    "SHELL_COMMAND_MAX_CHARS_EXCEEDED"
+  );
+  assert.throws(
+    () => assertPlannerActionValidation(validation, null),
+    /longer than the configured runtime command budget/i
+  );
+});
+
+test("framework-app start_process plans fail closed when they use an ad-hoc preview server even without explicit localhost wording", () => {
+  const currentUserRequest =
+    "Create a React landing page app on my Desktop, open it in the browser, and leave it open for me.";
+  const validation = evaluatePlannerActionValidation(currentUserRequest, null, [
+    {
+      id: "action_repair_workspace",
+      type: "shell_command",
+      description: "Repair the React workspace in place.",
+      params: {
+        command:
+          "Set-Location 'C:\\Users\\testuser\\Desktop\\AI Drone City'; npm install; npm run build"
+      },
+      estimatedCostUsd: 0.18
+    },
+    {
+      id: "action_start_ad_hoc_server",
+      type: "start_process",
+      description: "Serve the built dist folder.",
+      params: {
+        command:
+          "powershell -NoProfile -Command \"$ErrorActionPreference='Stop'; Set-Location 'C:\\Users\\testuser\\Desktop\\AI Drone City'; npx --yes serve -s dist -l 4173\""
+      },
+      estimatedCostUsd: 0.28
+    },
+    {
+      id: "action_probe_http",
+      type: "probe_http",
+      description: "Wait for localhost readiness.",
+      params: {
+        url: "http://127.0.0.1:4173",
+        expectedStatus: 200
+      },
+      estimatedCostUsd: 0.04
+    },
+    {
+      id: "action_open_browser",
+      type: "open_browser",
+      description: "Open the local page and leave it open.",
+      params: {
+        url: "http://127.0.0.1:4173"
+      },
+      estimatedCostUsd: 0.03
+    }
+  ]);
+
+  assert.equal(validation.needsRepair, true);
+  assert.equal(
+    validation.buildPlanAssessment.issueCode,
+    "FRAMEWORK_APP_NATIVE_PREVIEW_REQUIRED"
+  );
+});
+
 test("evaluatePlannerActionValidation fails closed when live verification uses a file target", () => {
   const currentUserRequest =
     "Build the landing page on my Desktop, verify the homepage UI, and leave it open for me.";
@@ -560,6 +918,20 @@ test("clean-up phrasing over my desktop still classifies as executable local org
   assert.equal(isExecutionStyleBuildRequest(currentUserRequest), false);
   assert.equal(isLocalWorkspaceOrganizationRequest(currentUserRequest), true);
   assert.equal(requiresExecutableBuildPlan(currentUserRequest), true);
+});
+
+test("starting an existing React app from an explicit Desktop path still classifies as execution-style build work", () => {
+  const currentUserRequest =
+    "In C:\\Users\\testuser\\Desktop\\AI Drone City, start the React app, wait for the local URL, and open it in the browser.";
+
+  assert.equal(isExecutionStyleBuildRequest(currentUserRequest), true);
+});
+
+test("repairing an existing React app in an explicit Desktop path still classifies as execution-style build work", () => {
+  const currentUserRequest =
+    "Fix the React/Vite project so it runs correctly in C:\\Users\\testuser\\Desktop\\AI Drone City, then open it in the browser.";
+
+  assert.equal(isExecutionStyleBuildRequest(currentUserRequest), true);
 });
 
 test("local workspace organization classification uses the active request from wrapped input", () => {
@@ -1836,6 +2208,96 @@ test("buildPlannerRepairSystemPrompt explains broad shutdown repairs", () => {
   assert.match(prompt, /stopping broad apps by process name/i);
   assert.match(prompt, /use exact tracked stop_process actions/i);
   assert.match(prompt, /Do not emit Stop-Process -Name, taskkill \/IM, pkill, killall/i);
+});
+
+test("buildPlannerRepairSystemPrompt explains framework app scaffold repairs", () => {
+  const prompt = buildPlannerRepairSystemPrompt({
+    ...buildPromptInput(
+      "Create a React landing page app on my Desktop, open it in a browser, and leave it open for me."
+    ),
+    previousOutput: {
+      plannerNotes: "write src files only",
+      actions: []
+    },
+    repairReason:
+      "invalid_execution_style_build_plan:FRAMEWORK_APP_SCAFFOLD_ACTION_REQUIRED"
+  });
+
+  assert.match(prompt, /fresh framework-app request like a file-only edit/i);
+  assert.match(prompt, /real toolchain step that can scaffold, install, build, preview, or run the app/i);
+  assert.match(prompt, /Do not return only src-file writes/i);
+});
+
+test("buildPlannerRepairSystemPrompt explains framework app artifact-check repairs", () => {
+  const prompt = buildPlannerRepairSystemPrompt({
+    ...buildPromptInput(
+      "Create a React landing page app on my Desktop, open it in a browser, and leave it open for me."
+    ),
+    previousOutput: {
+      plannerNotes: "skip scaffold when the folder exists",
+      actions: []
+    },
+    repairReason:
+      "invalid_execution_style_build_plan:FRAMEWORK_APP_ARTIFACT_CHECK_REQUIRED"
+  });
+
+  assert.match(prompt, /folder existence alone as proof the framework app already exists/i);
+  assert.match(prompt, /checking for real scaffold artifacts such as package\.json/i);
+  assert.match(prompt, /If the folder exists but package\.json is missing, complete the scaffold or repair in place/i);
+});
+
+test("buildPlannerRepairSystemPrompt explains framework app in-place scaffold repairs", () => {
+  const prompt = buildPlannerRepairSystemPrompt({
+    ...buildPromptInput(
+      "Create a React landing page app on my Desktop in a folder called AI Drone City, open it in a browser, and leave it open for me."
+    ),
+    previousOutput: {
+      plannerNotes: "recreate named folder from parent",
+      actions: []
+    },
+    repairReason:
+      "invalid_execution_style_build_plan:FRAMEWORK_APP_IN_PLACE_SCAFFOLD_REQUIRED"
+  });
+
+  assert.match(prompt, /checked the exact folder for package\.json/i);
+  assert.match(prompt, /scaffolding or repairing in place inside the exact requested folder/i);
+  assert.match(prompt, /using '\.' as the scaffold target|using '.' as the scaffold target/i);
+});
+
+test("buildPlannerRepairSystemPrompt explains framework app native preview repairs", () => {
+  const prompt = buildPlannerRepairSystemPrompt({
+    ...buildPromptInput(
+      "Create a React landing page app on my Desktop, run it locally on localhost, open it in a browser, and leave it open for me."
+    ),
+    previousOutput: {
+      plannerNotes: "serve the dist folder with npx serve",
+      actions: []
+    },
+    repairReason:
+      "invalid_execution_style_build_plan:FRAMEWORK_APP_NATIVE_PREVIEW_REQUIRED"
+  });
+
+  assert.match(prompt, /used an ad-hoc preview server/i);
+  assert.match(prompt, /workspace-native preview\/runtime command/i);
+  assert.match(prompt, /npm run preview, npm run dev, vite preview, or vite dev/i);
+});
+
+test("buildPlannerRepairSystemPrompt explains shell command budget repairs", () => {
+  const prompt = buildPlannerRepairSystemPrompt({
+    ...buildPromptInput(
+      "Create a React landing page app on my Desktop, run it locally on localhost, open it in a browser, and leave it open for me."
+    ),
+    previousOutput: {
+      plannerNotes: "inline everything in one giant shell script",
+      actions: []
+    },
+    repairReason:
+      "invalid_execution_style_build_plan:SHELL_COMMAND_MAX_CHARS_EXCEEDED"
+  });
+
+  assert.match(prompt, /exceeded the runtime's command-length budget/i);
+  assert.match(prompt, /splitting large inline file creation into separate write_file actions/i);
+  assert.match(prompt, /separate npm install, npm run build, and npm run preview commands/i);
 });
 
 test("buildPlannerRepairSystemPrompt keeps exact workspace-recovery ids visible during repair", () => {

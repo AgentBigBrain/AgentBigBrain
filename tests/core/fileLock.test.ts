@@ -3,7 +3,17 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readdir, readFile, rm, stat, utimes, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  open,
+  readdir,
+  readFile,
+  rm,
+  stat,
+  utimes,
+  writeFile
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -123,5 +133,40 @@ test("withFileLock reclaims a stale lock when the recorded pid is no longer aliv
 
     assert.equal(ran, true);
     await assert.rejects(() => stat(lockPath), { code: "ENOENT" });
+  });
+});
+
+test("withFileLock tolerates a transient unreadable lock file until the owning handle releases", async () => {
+  await withTempDir(async (tempDir) => {
+    const targetPath = path.join(tempDir, "runtime", "state.json");
+    const lockPath = `${targetPath}.lock`;
+    await mkdir(path.dirname(lockPath), { recursive: true });
+
+    const heldHandle = await open(lockPath, "wx");
+    let ran = false;
+
+    const releaseTimer = setTimeout(async () => {
+      await heldHandle.close();
+      await rm(lockPath, { force: true });
+    }, 75);
+
+    try {
+      await withFileLock(
+        targetPath,
+        async () => {
+          ran = true;
+        },
+        {
+          timeoutMs: 2_000,
+          pollIntervalMs: 25
+        }
+      );
+    } finally {
+      clearTimeout(releaseTimer);
+      await heldHandle.close().catch(() => undefined);
+      await rm(lockPath, { force: true }).catch(() => undefined);
+    }
+
+    assert.equal(ran, true);
   });
 });

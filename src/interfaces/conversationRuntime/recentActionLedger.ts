@@ -15,6 +15,12 @@ import {
   summarizeActionOutput
 } from "./recentActionLedgerMetadataHelpers";
 import {
+  type BrowserSessionOwnershipContext,
+  type TaskLevelLinkedProcessContext,
+  collectTaskLevelLinkedProcesses,
+  resolveBrowserLinkedProcessForAction
+} from "./recentActionLedgerOwnership";
+import {
   renderActiveWorkspaceHeading,
   renderActiveWorkspacePreviewLine,
   joinNaturalList,
@@ -42,16 +48,6 @@ export interface DerivedConversationLedgers {
   recentActions: readonly ConversationRecentActionRecord[];
   browserSessions: readonly ConversationBrowserSessionRecord[];
   pathDestinations: readonly ConversationPathDestinationRecord[];
-}
-
-interface TaskLevelLinkedProcessContext {
-  leaseId: string;
-  cwd: string | null;
-  pid: number | null;
-}
-
-interface BrowserSessionOwnershipContext extends TaskLevelLinkedProcessContext {
-  workspaceRootPath: string | null;
 }
 
 /**
@@ -293,39 +289,6 @@ function deriveActionRecordsFromResult(
   };
 }
 
-/**
- * Resolves one stable managed-process lease from a completed task so later browser follow-ups can
- * shut down the same local preview stack instead of only closing the window.
- *
- * @param actionResults - Action results emitted by the completed task.
- * @returns Linked process context, or `null` when no single active preview process is evident.
- */
-function resolveTaskLevelLinkedProcess(
-  actionResults: readonly ActionRunResult[]
-): TaskLevelLinkedProcessContext | null {
-  const candidates = actionResults
-    .map((actionResult) => {
-      const metadata = actionResult.executionMetadata ?? {};
-      const leaseId = normalizeString(metadata.processLeaseId);
-      if (!leaseId || actionResult.executionStatus !== "success") {
-        return null;
-      }
-      if (normalizeString(metadata.processLifecycleStatus) === "PROCESS_STOPPED") {
-        return null;
-      }
-      return {
-        leaseId,
-        cwd: normalizeString(metadata.processCwd),
-        pid: normalizeInteger(metadata.processPid)
-      } satisfies TaskLevelLinkedProcessContext;
-    })
-    .filter((candidate): candidate is TaskLevelLinkedProcessContext => candidate !== null);
-
-  if (candidates.length !== 1) {
-    return null;
-  }
-  return candidates[0];
-}
 
 /**
  * Derives typed user-facing ledgers from one completed task result.
@@ -354,9 +317,19 @@ export function deriveConversationLedgersFromTaskRunResult(
   ];
   const browserSessions: ConversationBrowserSessionRecord[] = [];
   const pathDestinations: ConversationPathDestinationRecord[] = [];
-  const linkedProcess = resolveTaskLevelLinkedProcess(taskRunResult.actionResults);
+  const taskLevelLinkedProcesses = collectTaskLevelLinkedProcesses(taskRunResult.actionResults);
 
-  for (const actionResult of taskRunResult.actionResults) {
+  for (const [actionIndex, actionResult] of taskRunResult.actionResults.entries()) {
+    const linkedProcess =
+      actionResult.action.type === "open_browser"
+        ? resolveBrowserLinkedProcessForAction(
+            actionResult,
+            actionIndex,
+            taskLevelLinkedProcesses
+          )
+        : taskLevelLinkedProcesses.length === 1
+          ? taskLevelLinkedProcesses[0] ?? null
+          : null;
     const derived = deriveActionRecordsFromResult(
       actionResult,
       sourceJobId,

@@ -169,6 +169,7 @@ export function selectUserFacingSummary(
       policyCodes.includes("PROCESS_DISABLED_BY_POLICY"));
   const outcomes = resolveTechnicalOutcomeLines(runResult);
   const primaryExecutionOutcomeLine = resolvePrimaryExecutionOutcomeLine(outcomes);
+  const directExecutionFailureOutcomeLine = outcomes.directExecutionFailureOutcomeLine;
   const approvedRealNonRespondExecution = hasApprovedRealNonRespondExecution(runResult);
   const respondOutputs = runResult.actionResults
     .filter((result) => result.approved && result.action.type === "respond")
@@ -222,10 +223,22 @@ export function selectUserFacingSummary(
     ));
   }
 
-  if (blockedMessage && !approvedRealNonRespondExecution) {
+  if (
+    blockedMessage &&
+    !approvedRealNonRespondExecution &&
+    !directExecutionFailureOutcomeLine
+  ) {
     return render(appendMissionDiagnosticsIfRequested(
       runResult,
       blockedMessage,
+      normalizedOptions
+    ));
+  }
+
+  if (directExecutionFailureOutcomeLine && !approvedRealNonRespondExecution) {
+    return render(appendMissionDiagnosticsIfRequested(
+      runResult,
+      directExecutionFailureOutcomeLine,
       normalizedOptions
     ));
   }
@@ -344,6 +357,7 @@ function resolveRespondSurfaceSummary(
   blockedMessage: string | null
 ): string | null {
   const primaryExecutionOutcomeLine = resolvePrimaryExecutionOutcomeLine(outcomes);
+  const directExecutionFailureOutcomeLine = outcomes.directExecutionFailureOutcomeLine;
   const trustRenderClassification = classifyTrustRenderDecision(
     {
       text: selectedRespondOutput,
@@ -516,6 +530,10 @@ function resolveRespondSurfaceSummary(
     );
   }
 
+  if (!approvedRealNonRespondExecution && directExecutionFailureOutcomeLine) {
+    trustedOutputForRender = directExecutionFailureOutcomeLine;
+  }
+
   if (
     isLocalOrganizationRequest(activeRequest) ||
     isRecoveredLocalOrganizationRun(runResult) ||
@@ -546,9 +564,18 @@ function resolveRespondSurfaceSummary(
     );
   }
 
+  const technicalLines = buildTechnicalLines(outcomes);
+  if (technicalLines.length === 0) {
+    return appendMissionDiagnosticsIfRequested(
+      runResult,
+      trustedOutputForRender,
+      normalizedOptions
+    );
+  }
+
   return appendMissionDiagnosticsIfRequested(
     runResult,
-    `${trustedOutputForRender}\n${buildTechnicalLines(outcomes).join("\n")}`,
+    `${trustedOutputForRender}\n${technicalLines.join("\n")}`,
     normalizedOptions
   );
 }
@@ -562,7 +589,8 @@ function hasAnyTechnicalOutcomeLine(outcomes: UserFacingTechnicalOutcomeLines): 
     outcomes.runSkillOutcomeLine !== null ||
     outcomes.managedProcessOutcomeLine !== null ||
     outcomes.probeOutcomeLine !== null ||
-    outcomes.browserVerificationOutcomeLine !== null
+    outcomes.browserVerificationOutcomeLine !== null ||
+    outcomes.directExecutionFailureOutcomeLine !== null
   );
 }
 

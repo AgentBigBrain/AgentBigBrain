@@ -16,6 +16,11 @@ import {
   hasWorkspaceRecoveryExactStopOrMoveAction,
   hasWorkspaceRecoveryInspectionAction,
   hasInvalidWorkspaceRecoveryInspectionTargets,
+  hasFrameworkAppScaffoldAction,
+  hasFrameworkAppDirectoryOnlyReuseGuard,
+  hasFrameworkAppNonInPlaceScaffoldRepair,
+  hasFrameworkAppAdHocPreviewServer,
+  hasShellCommandExceedingMaxChars,
   hasUnsupportedWindowsOrganizationShellAction,
   hasOrganizationMoveProofAction,
   isInspectionOnlyBuildAction,
@@ -35,6 +40,7 @@ import {
   isLocalWorkspaceOrganizationRequest,
   isExecutionStyleBuildRequest,
   isLiveVerificationBuildRequest,
+  requiresFrameworkAppScaffoldAction,
   requiresBrowserVerificationBuildRequest,
   requiresPersistentBrowserOpenBuildRequest
 } from "./liveVerificationPolicy";
@@ -211,6 +217,13 @@ export function assessExecutionStyleBuildPlan(
     };
   }
 
+  if (hasShellCommandExceedingMaxChars(actions, executionEnvironment)) {
+    return {
+      valid: false,
+      issueCode: "SHELL_COMMAND_MAX_CHARS_EXCEEDED"
+    };
+  }
+
   if (
     isLocalWorkspaceOrganizationRequest(currentUserRequest) &&
     !hasOrganizationMoveAction(actions)
@@ -259,6 +272,47 @@ export function assessExecutionStyleBuildPlan(
     return {
       valid: true,
       issueCode: null
+    };
+  }
+
+  if (
+    requiresFrameworkAppScaffoldAction(currentUserRequest) &&
+    hasNonRespondAction(actions) &&
+    !hasFrameworkAppScaffoldAction(currentUserRequest, actions)
+  ) {
+    return {
+      valid: false,
+      issueCode: "FRAMEWORK_APP_SCAFFOLD_ACTION_REQUIRED"
+    };
+  }
+
+  if (
+    requiresFrameworkAppScaffoldAction(currentUserRequest) &&
+    hasFrameworkAppDirectoryOnlyReuseGuard(currentUserRequest, actions)
+  ) {
+    return {
+      valid: false,
+      issueCode: "FRAMEWORK_APP_ARTIFACT_CHECK_REQUIRED"
+    };
+  }
+
+  if (
+    requiresFrameworkAppScaffoldAction(currentUserRequest) &&
+    hasFrameworkAppNonInPlaceScaffoldRepair(currentUserRequest, actions)
+  ) {
+    return {
+      valid: false,
+      issueCode: "FRAMEWORK_APP_IN_PLACE_SCAFFOLD_REQUIRED"
+    };
+  }
+
+  if (
+    requiresFrameworkAppScaffoldAction(currentUserRequest) &&
+    hasFrameworkAppAdHocPreviewServer(currentUserRequest, actions)
+  ) {
+    return {
+      valid: false,
+      issueCode: "FRAMEWORK_APP_NATIVE_PREVIEW_REQUIRED"
     };
   }
 

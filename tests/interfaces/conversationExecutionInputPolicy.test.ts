@@ -670,6 +670,137 @@ test("buildConversationAwareExecutionInput highlights natural browser close foll
   assert.match(executionInput, /prefer close_browser with params\.sessionId=browser_session:landing-page and then stop_process with params\.leaseId=proc_preview_1/i);
 });
 
+test("buildConversationAwareExecutionInput instructs close follow-ups to stop every exact tracked preview lease for the workspace", async () => {
+  const session = buildSession();
+  session.browserSessions.push(buildConversationBrowserSessionFixture({
+    id: "browser_session:ai-drone-city",
+    label: "AI Drone City preview",
+    url: "http://127.0.0.1:4173/",
+    sourceJobId: "job-ai-drone-city",
+    openedAt: "2026-03-03T00:00:24.000Z",
+    workspaceRootPath: "C:\\Users\\testuser\\Desktop\\AI Drone City",
+    linkedProcessLeaseId: "proc_preview_2",
+    linkedProcessCwd: "C:\\Users\\testuser\\Desktop\\AI Drone City"
+  }));
+  session.activeWorkspace = {
+    id: "workspace:ai-drone-city",
+    label: "Current project workspace",
+    rootPath: "C:\\Users\\testuser\\Desktop\\AI Drone City",
+    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\AI Drone City\\package.json",
+    previewUrl: "http://127.0.0.1:4173/",
+    browserSessionId: "browser_session:ai-drone-city",
+    browserSessionIds: ["browser_session:ai-drone-city"],
+    browserSessionStatus: "open",
+    browserProcessPid: 41001,
+    previewProcessLeaseId: "proc_preview_2",
+    previewProcessLeaseIds: ["proc_preview_2", "proc_preview_1"],
+    previewProcessCwd: "C:\\Users\\testuser\\Desktop\\AI Drone City",
+    lastKnownPreviewProcessPid: 4002,
+    stillControllable: true,
+    ownershipState: "tracked",
+    previewStackState: "browser_and_preview",
+    lastChangedPaths: ["C:\\Users\\testuser\\Desktop\\AI Drone City\\package.json"],
+    sourceJobId: "job-ai-drone-city",
+    updatedAt: "2026-03-03T00:00:24.000Z"
+  };
+
+  const executionInput = await buildConversationAwareExecutionInput(
+    session,
+    "Thanks. Please close AI Drone City and anything it needs so we can move on.",
+    10
+  );
+
+  assert.match(executionInput, /Exact tracked preview process leases for this workspace: proc_preview_2, proc_preview_1/);
+  assert.match(executionInput, /prefer close_browser with params\.sessionId=browser_session:ai-drone-city and then stop each exact tracked preview lease for this workspace: stop_process with params\.leaseId=proc_preview_2, then stop_process with params\.leaseId=proc_preview_1/i);
+});
+
+test("buildConversationAwareExecutionInput treats closing a named tracked workspace as a browser close follow-up", async () => {
+  const session = buildSession();
+  session.browserSessions.push(buildConversationBrowserSessionFixture({
+    id: "browser_session:ai-drone-city",
+    label: "AI Drone City preview",
+    url: "file:///C:/Users/testuser/Desktop/AI%20Drone%20City/dist/index.html",
+    sourceJobId: "job-ai-drone-city",
+    openedAt: "2026-03-03T00:00:24.000Z",
+    workspaceRootPath: "C:\\Users\\testuser\\Desktop\\AI Drone City\\dist"
+  }));
+  session.activeWorkspace = {
+    id: "workspace:ai-drone-city",
+    label: "Current project workspace",
+    rootPath: "C:\\Users\\testuser\\Desktop\\AI Drone City\\dist",
+    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\AI Drone City\\dist\\index.html",
+    previewUrl: "file:///C:/Users/testuser/Desktop/AI%20Drone%20City/dist/index.html",
+    browserSessionId: "browser_session:ai-drone-city",
+    browserSessionIds: ["browser_session:ai-drone-city"],
+    browserSessionStatus: "open",
+    browserProcessPid: 41001,
+    previewProcessLeaseId: null,
+    previewProcessLeaseIds: [],
+    previewProcessCwd: "C:\\Users\\testuser\\Desktop\\AI Drone City\\dist",
+    lastKnownPreviewProcessPid: null,
+    stillControllable: true,
+    ownershipState: "tracked",
+    previewStackState: "browser_only",
+    lastChangedPaths: [],
+    sourceJobId: "job-ai-drone-city",
+    updatedAt: "2026-03-03T00:00:24.000Z"
+  };
+
+  const executionInput = await buildConversationAwareExecutionInput(
+    session,
+    "Thanks. Please close AI Drone City and anything it needs so we can move on.",
+    10
+  );
+
+  assert.match(executionInput, /Natural browser-session follow-up:/);
+  assert.match(executionInput, /Preferred browser session: AI Drone City preview; sessionId=browser_session:ai-drone-city/i);
+  assert.match(executionInput, /prefer close_browser with params\.sessionId=browser_session:ai-drone-city/i);
+});
+
+test("buildConversationAwareExecutionInput does not treat keep the page open as a reopen request during normal conversation", async () => {
+  const session = buildSession();
+  session.browserSessions.push(buildConversationBrowserSessionFixture({
+    id: "browser_session:ai-drone-city",
+    label: "AI Drone City preview",
+    url: "file:///C:/Users/testuser/Desktop/AI%20Drone%20City/dist/index.html",
+    sourceJobId: "job-ai-drone-city",
+    openedAt: "2026-03-03T00:00:24.000Z",
+    workspaceRootPath: "C:\\Users\\testuser\\Desktop\\AI Drone City"
+  }));
+  session.activeWorkspace = {
+    id: "workspace:ai-drone-city",
+    label: "Current project workspace",
+    rootPath: "C:\\Users\\testuser\\Desktop\\AI Drone City",
+    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\AI Drone City\\package.json",
+    previewUrl: "file:///C:/Users/testuser/Desktop/AI%20Drone%20City/dist/index.html",
+    browserSessionId: "browser_session:ai-drone-city",
+    browserSessionIds: ["browser_session:ai-drone-city"],
+    browserSessionStatus: "open",
+    browserProcessPid: 41001,
+    previewProcessLeaseId: null,
+    previewProcessLeaseIds: [],
+    previewProcessCwd: "C:\\Users\\testuser\\Desktop\\AI Drone City",
+    lastKnownPreviewProcessPid: null,
+    stillControllable: true,
+    ownershipState: "tracked",
+    previewStackState: "browser_only",
+    lastChangedPaths: [
+      "C:\\Users\\testuser\\Desktop\\AI Drone City\\package.json",
+      "C:\\Users\\testuser\\Desktop\\AI Drone City"
+    ],
+    sourceJobId: "job-ai-drone-city",
+    updatedAt: "2026-03-03T00:00:24.000Z"
+  };
+
+  const executionInput = await buildConversationAwareExecutionInput(
+    session,
+    "Looks good. Before changing anything, just talk with me for a minute about what makes AI Drone City feel playful. Reply in two short paragraphs and keep the page open.",
+    10
+  );
+
+  assert.doesNotMatch(executionInput, /Natural browser-session follow-up:/);
+});
+
 test("buildConversationAwareExecutionInput prefers stop_process first when live browser control is unavailable after restart churn", async () => {
   const session = buildSession();
   session.browserSessions.push({
@@ -763,6 +894,115 @@ test("buildConversationAwareExecutionInput prefers stop_process first when live 
   assert.match(executionInput, /Preferred browser session: Landing page preview; sessionId=browser_session:landing-page; url=http:\/\/127\.0\.0\.1:4173\/; status=open; control=unavailable/);
   assert.match(executionInput, /prefer stop_process with params\.leaseId=proc_preview_1 first/i);
   assert.match(executionInput, /only use close_browser with params\.sessionId=browser_session:landing-page if the runtime still proves direct browser control afterward/i);
+});
+
+test("buildConversationAwareExecutionInput does not inject tracked browser follow-up guidance when the user names a different explicit localhost URL", async () => {
+  const session = buildSession();
+  session.browserSessions.push({
+    id: "browser_session:landing-page",
+    label: "Landing page preview",
+    url: "http://127.0.0.1:4173/",
+    visibility: "visible",
+    status: "closed",
+    sourceJobId: "job-landing",
+    openedAt: "2026-03-03T00:00:24.000Z",
+    closedAt: "2026-03-03T00:01:10.000Z",
+    controllerKind: "playwright_managed",
+    controlAvailable: false,
+    browserProcessPid: 41001,
+    workspaceRootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
+    linkedProcessLeaseId: "proc_preview_1",
+    linkedProcessCwd: "C:\\Users\\testuser\\Desktop\\drone-company",
+    linkedProcessPid: 4001
+  });
+  session.activeWorkspace = {
+    id: "workspace:drone-company",
+    label: "Current project workspace",
+    rootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
+    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
+    previewUrl: "http://127.0.0.1:4173/",
+    browserSessionId: "browser_session:landing-page",
+    browserSessionIds: ["browser_session:landing-page"],
+    browserSessionStatus: "closed",
+    browserProcessPid: 41001,
+    previewProcessLeaseId: "proc_preview_1",
+    previewProcessLeaseIds: ["proc_preview_1"],
+    previewProcessCwd: "C:\\Users\\testuser\\Desktop\\drone-company",
+    lastKnownPreviewProcessPid: 4001,
+    stillControllable: false,
+    ownershipState: "stale",
+    previewStackState: "detached",
+    lastChangedPaths: ["C:\\Users\\testuser\\Desktop\\drone-company\\index.html"],
+    sourceJobId: "job-landing",
+    updatedAt: "2026-03-03T00:01:10.000Z"
+  };
+
+  const executionInput = await buildConversationAwareExecutionInput(
+    session,
+    "Please close http://127.0.0.1:59999/index.html only if it is actually the page from this project.",
+    10
+  );
+
+  assert.doesNotMatch(executionInput, /Natural browser-session follow-up:/);
+});
+
+test("buildConversationAwareExecutionInput does not treat a stale detached closed preview as the preferred reopen target for a new React workspace", async () => {
+  const session = buildSession();
+  session.browserSessions.push({
+    id: "browser_session:old-static-preview",
+    label: "Older static landing page",
+    url: "file:///C:/Users/testuser/Desktop/drone-company-landing.html",
+    visibility: "visible",
+    status: "closed",
+    sourceJobId: "job-old-static-preview",
+    openedAt: "2026-03-03T00:00:18.000Z",
+    closedAt: "2026-03-03T00:00:22.000Z",
+    controllerKind: "playwright_managed",
+    controlAvailable: false,
+    browserProcessPid: 41001,
+    workspaceRootPath: "C:\\Users\\testuser\\Desktop",
+    linkedProcessLeaseId: null,
+    linkedProcessCwd: "C:\\Users\\testuser\\Desktop",
+    linkedProcessPid: null
+  });
+  session.activeWorkspace = {
+    id: "workspace:new-react-project",
+    label: "Current project workspace",
+    rootPath: "C:\\Users\\testuser\\Desktop\\React Landing Page",
+    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\React Landing Page\\src\\App.jsx",
+    previewUrl: null,
+    browserSessionId: null,
+    browserSessionIds: [],
+    browserSessionStatus: null,
+    browserProcessPid: null,
+    previewProcessLeaseId: null,
+    previewProcessLeaseIds: [],
+    previewProcessCwd: "C:\\Users\\testuser\\Desktop\\React Landing Page",
+    lastKnownPreviewProcessPid: null,
+    stillControllable: false,
+    ownershipState: "stale",
+    previewStackState: "detached",
+    lastChangedPaths: [
+      "C:\\Users\\testuser\\Desktop\\React Landing Page\\src\\App.jsx",
+      "C:\\Users\\testuser\\Desktop\\React Landing Page\\src\\index.css"
+    ],
+    sourceJobId: "job-react-workspace-reset",
+    updatedAt: "2026-03-03T00:00:30.000Z"
+  };
+
+  const executionInput = await buildConversationAwareExecutionInput(
+    session,
+    "Open both of the landing pages that you just designed in React so I can compare them.",
+    10
+  );
+
+  assert.match(executionInput, /Current tracked workspace in this chat:/);
+  assert.match(executionInput, /Root path: C:\\Users\\testuser\\Desktop\\React Landing Page/);
+  assert.doesNotMatch(executionInput, /Natural browser-session follow-up:/);
+  assert.doesNotMatch(
+    executionInput,
+    /prefer open_browser with params\.url=file:\/\/\/C:\/Users\/testuser\/Desktop\/drone-company-landing\.html/i
+  );
 });
 
 test("buildConversationAwareExecutionInput surfaces exact tracked workspace recovery affordances for local organization requests", async () => {

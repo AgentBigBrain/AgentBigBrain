@@ -2,13 +2,14 @@
  * @fileoverview Success and technical outcome rendering helpers for user-facing summaries.
  */
 
-import { ActionRunResult, TaskRunResult } from "../../core/types";
-import { isSimulatedOutput } from "../trustLexicalClassifier";
+import { TaskRunResult } from "../../core/types";
 import {
   resolveLocalOrganizationOutcomeLine,
   resolvePartialLocalOrganizationOutcomeLine
 } from "./organizationOutcomeSurface";
-import { DEFAULT_TRUST_LEXICAL_RULE_CONTEXT } from "./trustSurface";
+import {
+  resolveDirectExecutionFailureOutcomeLine,
+} from "./directExecutionFailureSurface";
 
 export interface UserFacingTechnicalOutcomeLines {
   createSkillOutcomeLine: string | null;
@@ -17,6 +18,7 @@ export interface UserFacingTechnicalOutcomeLines {
   probeOutcomeLine: string | null;
   browserVerificationOutcomeLine: string | null;
   directExecutionOutcomeLine: string | null;
+  directExecutionFailureOutcomeLine: string | null;
 }
 
 /**
@@ -99,84 +101,6 @@ export function resolvePrimaryExecutionOutcomeLine(
     }
   }
   return preferred.summary;
-}
-
-/**
- * Returns `true` when one approved action is eligible for direct user-facing execution wording.
- */
-function isDirectExecutionOutcomeCandidate(result: ActionRunResult): boolean {
-  return (
-    result.approved &&
-    result.action.type !== "respond" &&
-    result.action.type !== "run_skill" &&
-    result.action.type !== "create_skill" &&
-    result.action.type !== "start_process" &&
-    result.action.type !== "check_process" &&
-    result.action.type !== "stop_process" &&
-    result.action.type !== "probe_port" &&
-    result.action.type !== "probe_http" &&
-    result.action.type !== "verify_browser" &&
-    !isSimulatedOutput(result.output ?? "", DEFAULT_TRUST_LEXICAL_RULE_CONTEXT)
-  );
-}
-
-/**
- * Scores direct execution actions so user-facing summaries prefer the strongest proven effect over
- * later inspection-only follow-up steps.
- */
-function resolveDirectExecutionOutcomePriority(result: ActionRunResult): number {
-  switch (result.action.type) {
-    case "open_browser":
-      return 100;
-    case "close_browser":
-      return 95;
-    case "write_file":
-      return 90;
-    case "delete_file":
-      return 88;
-    case "self_modify":
-      return 86;
-    case "shell_command":
-      return 80;
-    case "network_write":
-      return 78;
-    case "memory_mutation":
-      return 70;
-    case "pulse_emit":
-      return 68;
-    case "read_file":
-      return 20;
-    case "list_directory":
-      return 10;
-    default:
-      return 0;
-  }
-}
-
-/**
- * Picks the strongest direct execution proof for one run, breaking ties toward the latest action.
- */
-function resolvePreferredDirectExecutionResult(
-  runResult: TaskRunResult
-): ActionRunResult | null {
-  let preferredResult: ActionRunResult | null = null;
-  let preferredPriority = -1;
-  let preferredIndex = -1;
-  runResult.actionResults.forEach((result, index) => {
-    if (!isDirectExecutionOutcomeCandidate(result)) {
-      return;
-    }
-    const priority = resolveDirectExecutionOutcomePriority(result);
-    if (
-      priority > preferredPriority ||
-      (priority === preferredPriority && index > preferredIndex)
-    ) {
-      preferredResult = result;
-      preferredPriority = priority;
-      preferredIndex = index;
-    }
-  });
-  return preferredResult;
 }
 
 /**
@@ -333,6 +257,63 @@ export function resolveBrowserVerificationOutcomeLine(runResult: TaskRunResult):
 }
 
 /**
+ * Picks the strongest direct execution proof for one run, breaking ties toward the latest action.
+ */
+function resolvePreferredDirectExecutionResult(
+  runResult: TaskRunResult
+): import("../../core/types").ActionRunResult | null {
+  let preferredResult: import("../../core/types").ActionRunResult | null = null;
+  let preferredPriority = -1;
+  let preferredIndex = -1;
+  runResult.actionResults.forEach((result, index) => {
+    if (!result.approved || result.action.type === "respond" || result.action.type === "run_skill" || result.action.type === "create_skill" || result.action.type === "start_process" || result.action.type === "check_process" || result.action.type === "stop_process" || result.action.type === "probe_port" || result.action.type === "probe_http" || result.action.type === "verify_browser") {
+      return;
+    }
+    const output = result.output ?? "";
+    if (typeof output === "string" && /(?:^|\n)Shell execution simulated|real side-effect action was not executed/i.test(output)) {
+      return;
+    }
+    const priority = (() => {
+      switch (result.action.type) {
+        case "open_browser":
+          return 100;
+        case "close_browser":
+          return 95;
+        case "write_file":
+          return 90;
+        case "delete_file":
+          return 88;
+        case "self_modify":
+          return 86;
+        case "shell_command":
+          return 80;
+        case "network_write":
+          return 78;
+        case "memory_mutation":
+          return 70;
+        case "pulse_emit":
+          return 68;
+        case "read_file":
+          return 20;
+        case "list_directory":
+          return 10;
+        default:
+          return 0;
+      }
+    })();
+    if (
+      priority > preferredPriority ||
+      (priority === preferredPriority && index > preferredIndex)
+    ) {
+      preferredResult = result;
+      preferredPriority = priority;
+      preferredIndex = index;
+    }
+  });
+  return preferredResult;
+}
+
+/**
  * Resolves direct execution success wording for approved non-respond actions.
  */
 export function resolveDirectExecutionOutcomeLine(runResult: TaskRunResult): string | null {
@@ -436,6 +417,7 @@ export function resolveTechnicalOutcomeLines(
     managedProcessOutcomeLine: resolveManagedProcessOutcomeLine(runResult),
     probeOutcomeLine: resolveProbeOutcomeLine(runResult),
     browserVerificationOutcomeLine: resolveBrowserVerificationOutcomeLine(runResult),
-    directExecutionOutcomeLine: resolveDirectExecutionOutcomeLine(runResult)
+    directExecutionOutcomeLine: resolveDirectExecutionOutcomeLine(runResult),
+    directExecutionFailureOutcomeLine: resolveDirectExecutionFailureOutcomeLine(runResult)
   };
 }

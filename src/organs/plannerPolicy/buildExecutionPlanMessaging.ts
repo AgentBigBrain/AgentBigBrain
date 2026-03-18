@@ -20,6 +20,16 @@ export function describeExecutionStyleBuildPlanIssue(
   switch (issueCode) {
     case "INSPECTION_ONLY_BUILD_PLAN":
       return "Planner model returned inspection-only actions for execution-style build request.";
+    case "FRAMEWORK_APP_SCAFFOLD_ACTION_REQUIRED":
+      return "Planner model treated a fresh framework-app request like a file-only edit. Include a real scaffold/build-capable action such as npm/npx/pnpm/yarn/bun create/install/build/dev/start, not just source-file writes.";
+    case "FRAMEWORK_APP_ARTIFACT_CHECK_REQUIRED":
+      return "Planner model treated directory existence alone as proof a framework app already exists. Reuse or skip scaffold only after checking for real app artifacts such as package.json; otherwise repair or scaffold in place.";
+    case "FRAMEWORK_APP_IN_PLACE_SCAFFOLD_REQUIRED":
+      return "Planner model checked for package.json but still tried to recreate the named framework-app folder from its parent directory. When package.json is missing, scaffold or repair inside the exact requested folder instead of recreating the folder name from outside it.";
+    case "FRAMEWORK_APP_NATIVE_PREVIEW_REQUIRED":
+      return "Planner model chose an ad-hoc preview server for a framework-app live-run request. Use the workspace-native preview/runtime command such as npm run preview, npm run dev, or vite preview/dev so the runtime can prove and later stop the same app cleanly.";
+    case "SHELL_COMMAND_MAX_CHARS_EXCEEDED":
+      return "Planner model emitted a shell or start-process command longer than the configured runtime command budget. Split large inline file writes into write_file actions and keep shell/toolchain steps short enough for the current shell runtime.";
     case "LIVE_VERIFICATION_ACTION_REQUIRED":
       return "Planner model returned no live-verification actions for execution-style live-run request.";
     case "BROWSER_VERIFICATION_ACTION_REQUIRED":
@@ -82,17 +92,30 @@ export function buildExecutionStyleRequiredActionHint(
   const organizationExclusionClause = isOrganizationRequest
     ? " If the named destination folder could also match the same source selector, explicitly exclude that destination from the move set before moving anything. Never move the destination into itself or create a nested destination folder."
     : "";
+  const frameworkScaffoldClause =
+    /\b(?:react|vite|next\.?js|nextjs|vue|svelte|angular)\b/i.test(currentUserRequest)
+      ? " For a fresh framework-app request, raw source-file writes alone do not satisfy the build. Include at least one real scaffold/build-capable action such as npm/npx/pnpm/yarn/bun create, install, build, dev, start, or preview. If you may reuse an existing folder, key that decision off real scaffold artifacts like package.json instead of only checking whether the directory exists. When package.json is missing for the exact requested folder, scaffold or repair in place inside that folder instead of recreating the folder name from its parent directory. If that exact folder already contains Vite-like source files such as index.html or src/main.jsx but still lacks package.json, prefer repairing it in place by writing the missing package.json and standard Vite metadata before install/build. Once the exact project folder is known, set cwd/workdir to that folder and run npm install / npm run build / npm run preview there instead of chaining multi-step --prefix commands from the parent directory."
+      : "";
   const liveVerificationClause = isLiveVerificationBuildRequest(currentUserRequest)
     ? " For live verification goals, keep finite proof steps first and include at least one live verification action such as start_process, probe_port, probe_http, or verify_browser."
     : "";
+  const frameworkLivePreviewClause =
+    /\b(?:react|vite|next\.?js|nextjs|vue|svelte|angular)\b/i.test(currentUserRequest) &&
+    isLiveVerificationBuildRequest(currentUserRequest)
+      ? " For framework-app live runs, prefer the workspace-native preview/runtime command such as npm run preview, npm run dev, vite preview, or vite dev instead of inventing an ad-hoc npx serve server."
+      : "";
+  const commandBudgetClause =
+    /\b(?:react|vite|next\.?js|nextjs|vue|svelte|angular)\b/i.test(currentUserRequest)
+      ? " Keep large file content in write_file actions instead of one oversized shell script so the toolchain commands stay within the runtime command-length budget."
+      : "";
   const browserVerificationClause = requiresBrowserVerificationBuildRequest(currentUserRequest)
     ? " When the request explicitly asks to verify the UI or homepage, include verify_browser after loopback readiness is proven."
     : "";
   const persistentBrowserOpenClause = requiresPersistentBrowserOpenBuildRequest(currentUserRequest)
-    ? " When the request asks to leave the page open afterward, include open_browser as a final visible-browser step after the artifact is ready. If explicit browser verification was requested, open the page after that proof succeeds."
+    ? " When the request asks to leave the page open afterward, include open_browser as a final visible-browser step after the artifact is ready. If explicit browser verification was requested, open the page after that proof succeeds. For framework apps, point open_browser at the same verified loopback URL or built local artifact that this plan actually proved ready."
     : "";
   const desktopPathClause = /\bon\s+my\s+desktop\b/i.test(currentUserRequest)
     ? " When the user says \"my desktop\", do not substitute a shared Public Desktop path."
     : "";
-  return ` ${prefix}${concreteExecutionClause}${organizationClause}${organizationExclusionClause}${liveVerificationClause}${browserVerificationClause}${persistentBrowserOpenClause}${desktopPathClause}`;
+  return ` ${prefix}${concreteExecutionClause}${organizationClause}${organizationExclusionClause}${frameworkScaffoldClause}${liveVerificationClause}${frameworkLivePreviewClause}${commandBudgetClause}${browserVerificationClause}${persistentBrowserOpenClause}${desktopPathClause}`;
 }

@@ -299,7 +299,8 @@ export class ToolExecutorOrgan {
           this.buildLiveRunContext(),
           action.id,
           action.params,
-          signal
+          signal,
+          taskId
         );
 
       case "close_browser":

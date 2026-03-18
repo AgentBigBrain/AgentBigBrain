@@ -106,6 +106,7 @@ const STATUS_OR_RECALL_PATTERNS: readonly RegExp[] = [
   /\bwhat got completed while i was (?:away|gone|out)\b/i,
   /\bwhere did you put (?:it|that|this)\b/i,
   /\bwhere is (?:it|that|the file|the folder)\b/i,
+  /\bwhat(?:'s| is) (?:the )?status\b/i,
   /\bwhat(?:'s| is) happening (?:right )?now\b/i,
   /\bwhat are you doing\b/i,
   /\bwhat did you leave open\b/i

@@ -55,6 +55,29 @@ test("inferRequiredActionType promotes natural browser follow-ups when tracked s
   );
 });
 
+test("inferRequiredActionType treats closing a named tracked workspace as close_browser", () => {
+  const trackedBrowserExecutionInput = [
+    "Current tracked workspace in this chat:",
+    "- Root path: C:\\Users\\testuser\\Desktop\\AI Drone City\\dist",
+    "- Primary artifact: C:\\Users\\testuser\\Desktop\\AI Drone City\\dist\\index.html",
+    "- Preview URL: file:///C:/Users/testuser/Desktop/AI%20Drone%20City/dist/index.html",
+    "",
+    "Tracked browser sessions:",
+    "- AI Drone City preview: sessionId=browser_session:ai-drone-city; url=file:///C:/Users/testuser/Desktop/AI%20Drone%20City/dist/index.html; status=open; visibility=visible; controller=playwright_managed; control=available; workspaceRoot=C:\\Users\\testuser\\Desktop\\AI Drone City\\dist",
+    "",
+    "Current user request:",
+    "Thanks. Please close AI Drone City and anything it needs so we can move on."
+  ].join("\n");
+
+  assert.equal(
+    inferRequiredActionType(
+      "Thanks. Please close AI Drone City and anything it needs so we can move on.",
+      trackedBrowserExecutionInput
+    ),
+    "close_browser"
+  );
+});
+
 test("inferRequiredActionType promotes tracked artifact-edit follow-ups to write_file", () => {
   const trackedArtifactExecutionInput = [
     "Natural artifact-edit follow-up:",

@@ -13,12 +13,16 @@ import {
   PlannerExecutionEnvironmentContext,
   RequiredActionType
 } from "./executionStyleContracts";
+import { isExecutionStyleBuildRequest } from "./liveVerificationPolicy";
 import { extractWorkspaceRecoveryBlockedFolderPaths } from "./workspaceRecoveryParsing";
 import {
-  isExecutionStyleBuildRequest,
-  isLiveVerificationBuildRequest,
-  requiresBrowserVerificationBuildRequest
-} from "./liveVerificationPolicy";
+  hasFrameworkAppAdHocPreviewServer,
+  hasFrameworkAppDirectoryOnlyReuseGuard,
+  hasFrameworkAppNonInPlaceScaffoldRepair,
+  hasFrameworkAppScaffoldAction,
+  hasShellCommandExceedingMaxChars,
+  hasUnsupportedOpenBrowserTarget
+} from "./frameworkBuildActionHeuristics";
 
 const BUILD_INSPECTION_ONLY_ACTION_TYPES: readonly ActionType[] = [
   "respond",
@@ -54,35 +58,6 @@ const ORGANIZATION_MOVE_PROOF_COMMAND_PATTERN =
   /(?:\bMOVED_TO_DEST\b|\bMOVED_TARGETS:|\bMOVED:|\bDEST_CONTENTS:|\bDEST_CONTENT_MATCHES:|\bREMAINING_AT_DESKTOP\b|\bROOT_REMAINING_MATCHES:|\bFAILED:)/i;
 const WORKSPACE_RECOVERY_EXTERNAL_INSPECTION_PATTERN =
   /\b(?:handle(?:64)?(?:\.exe)?|openfiles)\b/i;
-
-/**
- * Evaluates whether any `open_browser` action targets a non-http URL.
- */
-export function hasUnsupportedOpenBrowserTarget(
-  currentUserRequest: string,
-  actions: readonly PlannedAction[]
-): boolean {
-  const liveVerificationRequired =
-    isLiveVerificationBuildRequest(currentUserRequest) ||
-    requiresBrowserVerificationBuildRequest(currentUserRequest);
-  return actions.some((action) => {
-    if (action.type !== "open_browser") {
-      return false;
-    }
-    const targetUrl = typeof action.params.url === "string" ? action.params.url.trim() : "";
-    if (targetUrl.length === 0) {
-      return false;
-    }
-    if (/^https?:\/\//i.test(targetUrl)) {
-      return false;
-    }
-    if (/^file:\/\//i.test(targetUrl)) {
-      return liveVerificationRequired;
-    }
-    return true;
-  });
-}
-
 /**
  * Evaluates whether an action is too weak to satisfy an execution-style build plan on its own.
  */
@@ -374,3 +349,12 @@ export function isTrackedArtifactEditPreviewPlan(
     NATURAL_ARTIFACT_EDIT_REQUEST_PATTERN.test(currentUserRequest)
   );
 }
+
+export {
+  hasFrameworkAppAdHocPreviewServer,
+  hasFrameworkAppDirectoryOnlyReuseGuard,
+  hasFrameworkAppNonInPlaceScaffoldRepair,
+  hasFrameworkAppScaffoldAction,
+  hasShellCommandExceedingMaxChars,
+  hasUnsupportedOpenBrowserTarget
+};
