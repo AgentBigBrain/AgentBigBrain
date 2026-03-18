@@ -699,6 +699,35 @@ function buildShellEnabledConfig(overrides: Partial<BrainConfig> = {}): BrainCon
   };
 }
 
+/**
+ * Builds a shell-enabled config that deterministically exercises Windows PowerShell/npm behavior
+ * regardless of the host platform running the tests.
+ */
+function buildWindowsPowerShellShellEnabledConfig(
+  overrides: Partial<BrainConfig> = {}
+): BrainConfig {
+  return buildShellEnabledConfig({
+    ...overrides,
+    shellRuntime: {
+      ...DEFAULT_BRAIN_CONFIG.shellRuntime,
+      ...(overrides.shellRuntime ?? {}),
+      profile: {
+        ...DEFAULT_BRAIN_CONFIG.shellRuntime.profile,
+        platform: "win32",
+        shellKind: "powershell",
+        executable: "powershell.exe",
+        wrapperArgs: ["-NoProfile", "-NonInteractive", "-Command"],
+        cwdPolicy: {
+          ...DEFAULT_BRAIN_CONFIG.shellRuntime.profile.cwdPolicy,
+          denyOutsideSandbox: false,
+          ...(overrides.shellRuntime?.profile?.cwdPolicy ?? {})
+        },
+        ...(overrides.shellRuntime?.profile ?? {})
+      }
+    }
+  });
+}
+
 test("ToolExecutorOrgan blocks invalid skill name", async () => {
   await withTempCwd(async () => {
     const executor = new ToolExecutorOrgan(DEFAULT_BRAIN_CONFIG);
@@ -1019,21 +1048,7 @@ test("ToolExecutorOrgan routes Windows npm commands through cmd and fails closed
     const mockSpawn = createMockShellSpawn({
       exitCode: 0
     });
-    const config = buildShellEnabledConfig({
-      shellRuntime: {
-        ...DEFAULT_BRAIN_CONFIG.shellRuntime,
-        profile: {
-          ...DEFAULT_BRAIN_CONFIG.shellRuntime.profile,
-          shellKind: "powershell",
-          executable: "powershell.exe",
-          wrapperArgs: ["-NoProfile", "-NonInteractive", "-Command"],
-          cwdPolicy: {
-            ...DEFAULT_BRAIN_CONFIG.shellRuntime.profile.cwdPolicy,
-            denyOutsideSandbox: false
-          }
-        }
-      }
-    });
+    const config = buildWindowsPowerShellShellEnabledConfig();
     const executor = new ToolExecutorOrgan(config, mockSpawn.spawn);
     const outcome = await executor.executeWithOutcome(
       buildShellAction('npm create vite@latest "AI Drone City" -- --template react')
@@ -1060,21 +1075,7 @@ test("ToolExecutorOrgan fails closed when embedded PowerShell Vite scaffold leav
     const mockSpawn = createMockShellSpawn({
       exitCode: 0
     });
-    const config = buildShellEnabledConfig({
-      shellRuntime: {
-        ...DEFAULT_BRAIN_CONFIG.shellRuntime,
-        profile: {
-          ...DEFAULT_BRAIN_CONFIG.shellRuntime.profile,
-          shellKind: "powershell",
-          executable: "powershell.exe",
-          wrapperArgs: ["-NoProfile", "-NonInteractive", "-Command"],
-          cwdPolicy: {
-            ...DEFAULT_BRAIN_CONFIG.shellRuntime.profile.cwdPolicy,
-            denyOutsideSandbox: false
-          }
-        }
-      }
-    });
+    const config = buildWindowsPowerShellShellEnabledConfig();
     const executor = new ToolExecutorOrgan(config, mockSpawn.spawn);
     const outcome = await executor.executeWithOutcome(
       buildShellAction(
@@ -1098,21 +1099,7 @@ test("ToolExecutorOrgan resolves Set-Location before validating in-place PowerSh
     const mockSpawn = createMockShellSpawn({
       exitCode: 0
     });
-    const config = buildShellEnabledConfig({
-      shellRuntime: {
-        ...DEFAULT_BRAIN_CONFIG.shellRuntime,
-        profile: {
-          ...DEFAULT_BRAIN_CONFIG.shellRuntime.profile,
-          shellKind: "powershell",
-          executable: "powershell.exe",
-          wrapperArgs: ["-NoProfile", "-NonInteractive", "-Command"],
-          cwdPolicy: {
-            ...DEFAULT_BRAIN_CONFIG.shellRuntime.profile.cwdPolicy,
-            denyOutsideSandbox: false
-          }
-        }
-      }
-    });
+    const config = buildWindowsPowerShellShellEnabledConfig();
     const executor = new ToolExecutorOrgan(config, mockSpawn.spawn);
     const outcome = await executor.executeWithOutcome(
       buildShellAction(
@@ -1137,21 +1124,7 @@ test("ToolExecutorOrgan treats npm.ps1 LASTEXITCODE wrapper errors as shell fail
         "FullyQualifiedErrorId : VariableIsUndefined\r\n",
       exitCode: 0
     });
-    const config = buildShellEnabledConfig({
-      shellRuntime: {
-        ...DEFAULT_BRAIN_CONFIG.shellRuntime,
-        profile: {
-          ...DEFAULT_BRAIN_CONFIG.shellRuntime.profile,
-          shellKind: "powershell",
-          executable: "powershell.exe",
-          wrapperArgs: ["-NoProfile", "-NonInteractive", "-Command"],
-          cwdPolicy: {
-            ...DEFAULT_BRAIN_CONFIG.shellRuntime.profile.cwdPolicy,
-            denyOutsideSandbox: false
-          }
-        }
-      }
-    });
+    const config = buildWindowsPowerShellShellEnabledConfig();
     const executor = new ToolExecutorOrgan(config, mockSpawn.spawn);
     const outcome = await executor.executeWithOutcome(buildShellAction("$env:FOO='bar'; npm install"));
 
@@ -1168,21 +1141,7 @@ test("ToolExecutorOrgan rewrites embedded Windows PowerShell npm invocations to 
       stdout: "installed\n",
       exitCode: 0
     });
-    const config = buildShellEnabledConfig({
-      shellRuntime: {
-        ...DEFAULT_BRAIN_CONFIG.shellRuntime,
-        profile: {
-          ...DEFAULT_BRAIN_CONFIG.shellRuntime.profile,
-          shellKind: "powershell",
-          executable: "powershell.exe",
-          wrapperArgs: ["-NoProfile", "-NonInteractive", "-Command"],
-          cwdPolicy: {
-            ...DEFAULT_BRAIN_CONFIG.shellRuntime.profile.cwdPolicy,
-            denyOutsideSandbox: false
-          }
-        }
-      }
-    });
+    const config = buildWindowsPowerShellShellEnabledConfig();
     const executor = new ToolExecutorOrgan(config, mockSpawn.spawn);
     const outcome = await executor.executeWithOutcome(
       buildShellAction("$target='C:\\\\Temp\\\\AI Drone City'; npm install --prefix \"$target\"")
@@ -1219,21 +1178,7 @@ test("ToolExecutorOrgan keeps PowerShell multi-step npm scripts on PowerShell wh
       stdout: "installed\nbuilt\n",
       exitCode: 0
     });
-    const config = buildShellEnabledConfig({
-      shellRuntime: {
-        ...DEFAULT_BRAIN_CONFIG.shellRuntime,
-        profile: {
-          ...DEFAULT_BRAIN_CONFIG.shellRuntime.profile,
-          shellKind: "powershell",
-          executable: "powershell.exe",
-          wrapperArgs: ["-NoProfile", "-NonInteractive", "-Command"],
-          cwdPolicy: {
-            ...DEFAULT_BRAIN_CONFIG.shellRuntime.profile.cwdPolicy,
-            denyOutsideSandbox: false
-          }
-        }
-      }
-    });
+    const config = buildWindowsPowerShellShellEnabledConfig();
     const executor = new ToolExecutorOrgan(config, mockSpawn.spawn);
     const outcome = await executor.executeWithOutcome(
       buildShellAction("npm install; npm run build; Write-Output 'done'")

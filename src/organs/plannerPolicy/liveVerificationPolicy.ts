@@ -10,7 +10,7 @@ const BUILD_EXECUTION_VERB_PATTERN =
 const BUILD_EXECUTION_TARGET_PATTERN =
   /\b(app|application|project|dashboard|site|website|landing\s+page|homepage|web\s+page|page|frontend|backend|api|cli|repo|repository|react|next\.?js|vue|svelte|angular|vite)\b/i;
 const BUILD_EXECUTION_DESTINATION_PATTERN =
-  /\bon\s+my\s+(desktop|documents|downloads)\b|\bin\s+(?:the\s+)?['"]?[a-z]:\\|\bin\s+(?:the\s+)?['"]?\/(?:users|home|tmp|var|opt)\//i;
+  /\bon\s+my\s+(desktop|documents|downloads)\b|\b(?:in|inside|at|under|from|go\s+to)\s+(?:the\s+)?['"]?[a-z]:\\|\b(?:in|inside|at|under|from|go\s+to)\s+(?:the\s+)?['"]?\/(?:users|home|tmp|var|opt)\//i;
 const LOCAL_WORKSPACE_ORGANIZATION_VERB_PATTERN =
   /\b(?:organize|group|sort|move|collect|gather|tidy|clean\s+up)\b/i;
 const LOCAL_WORKSPACE_ORGANIZATION_TARGET_PATTERN =

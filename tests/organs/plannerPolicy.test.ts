@@ -934,6 +934,13 @@ test("repairing an existing React app in an explicit Desktop path still classifi
   assert.equal(isExecutionStyleBuildRequest(currentUserRequest), true);
 });
 
+test("repairing an existing React app via an explicit POSIX Desktop path still classifies as execution-style build work", () => {
+  const currentUserRequest =
+    "Go to /home/testuser/Desktop/AI Drone City, inspect whether node_modules and dist exist, then run the missing setup steps: install dependencies with npm install, build with npm run build, and open the app in the browser.";
+
+  assert.equal(isExecutionStyleBuildRequest(currentUserRequest), true);
+});
+
 test("local workspace organization classification uses the active request from wrapped input", () => {
   const wrappedRequest = [
     "You are in an ongoing conversation with the same user.",
