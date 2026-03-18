@@ -1111,7 +1111,7 @@ test("ToolExecutorOrgan resolves Set-Location before validating in-place PowerSh
     assert.equal(outcome.status, "failed");
     assert.equal(outcome.failureCode, "ACTION_EXECUTION_FAILED");
     assert.match(outcome.output, /expected package\.json at /i);
-    assert.match(outcome.output, /AI Drone City\\package\.json/i);
+    assert.match(outcome.output, /AI Drone City[\\/]package\.json/i);
   });
 });
 
