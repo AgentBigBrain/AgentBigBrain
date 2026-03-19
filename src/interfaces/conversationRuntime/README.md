@@ -114,6 +114,8 @@ The latest slices moved queue/ack, worker-loop, and pulse-state ownership here s
 - `capabilityIntrospectionRendering.ts` owns canonical user-facing capability and skill-discovery
   rendering used by natural front-door discovery replies, plus the bounded execution input used
   when the direct conversation runtime should answer capability questions in a more natural voice
+- `directConversationIntent.ts` owns canonical detection of explicit conversational interludes like
+  `just talk with me for a minute` so those turns stay off the governed work queue
 - `directConversationReply.ts` owns the bounded direct-conversation helper that lets the runtime
   synthesize ordinary conversational replies without queueing background work or fabricating task
   progress
@@ -269,6 +271,8 @@ The latest slices moved queue/ack, worker-loop, and pulse-state ownership here s
   phrases like `plan it first`, `build it now`, `leave it open`, or `show it later`
 - canonical capability-introspection summaries and rendering so natural capability questions can
   return practical environment limits plus reusable skill inventory
+- canonical explicit conversational-interlude detection so users can pause work and just talk
+  without accidentally restarting governed execution
 - canonical direct-conversation reply helpers so ordinary conversation and natural capability
   checks can be answered inline instead of starting governed work
 - canonical routing precedence and active-clarification brokers so the front door can stay
@@ -369,6 +373,9 @@ The latest slices moved queue/ack, worker-loop, and pulse-state ownership here s
 - Direct-conversation reply helpers here must stay bounded to ordinary conversation and capability
   discovery. They may improve natural user-facing phrasing, but they must not silently authorize
   task execution or bypass the governed worker path for real side effects.
+- Direct-conversation intent detection here must stay conservative and user-explicit; it can keep a
+  turn off the queue when the user clearly asks for conversation, but it must not swallow genuine
+  execution requests just because the wording is friendly.
 - Exact-tracked worker auto-retry must stay bounded to one automatic retry lane, must only use
   exact proven preview-holder evidence, and must not bypass clarification when the runtime only
   has likely untracked holder candidates.
@@ -501,6 +508,8 @@ Update this README when:
 - canonical intent-mode resolution, execution-preference extraction, or presentation-preference
   families change materially
 - capability-introspection summary or capability/skill discovery rendering responsibilities change
+  materially
+- direct-conversation intent detection or explicit conversational-interlude routing changes
   materially
 - direct-conversation reply ownership or the ordinary-conversation/capability-discovery
   queue-bypass rules

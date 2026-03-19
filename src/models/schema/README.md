@@ -7,6 +7,7 @@ deterministic validation for provider and mock model clients.
 The current extracted slice moves schema ownership behind:
 - `contracts.ts`
 - `jsonSchemas.ts`
+- `strictStructuredSchema.ts`
 - `validation.ts`
 
 The stable `schemaValidation.ts` entrypoint remains for compatibility, but canonical schema
@@ -20,6 +21,8 @@ validation logic now lives here.
 ## Outputs
 - canonical known-schema contracts for structured model requests
 - JSON Schema payloads for backends that accept schema files directly
+- strict closed-object schema conversion for structured-output transports that require
+  `additionalProperties: false`
 - normalized planner output payloads at the model boundary
 - deterministic validation failures for malformed provider or mock responses
 
@@ -29,6 +32,8 @@ validation logic now lives here.
 - Validation here must remain fail-closed and deterministic.
 - Schema normalization here must preserve existing provider/mock behavior; extraction changes
   ownership, not product semantics.
+- Strict structured-schema conversion here must stay closed-object and fail-closed for provider
+  transports that reject open shapes.
 - Planner action normalization here must stay aligned with `src/core/plannerActionSchema.ts`.
 
 ## Related Tests

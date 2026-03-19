@@ -245,6 +245,58 @@ function inputReferencesUntrackedExplicitBrowserUrl(
   return explicitUrls.some((url) => !trackedUrls.has(url));
 }
 
+/**
+ * Builds a fail-closed guard when the user names an explicit browser URL that the runtime cannot
+ * prove belongs to the currently tracked project.
+ *
+ * @param session - Current conversation session.
+ * @param userInput - Raw current user wording.
+ * @returns Ownership guard block, or `null` when no foreign explicit browser URL was named.
+ */
+function buildExplicitBrowserUrlOwnershipGuardBlock(
+  session: ConversationSession,
+  userInput: string
+): string | null {
+  const normalizedInput = normalizeWhitespace(userInput);
+  if (!normalizedInput) {
+    return null;
+  }
+  const mentionsBrowserAction =
+    NATURAL_BROWSER_CLOSE_VERB_PATTERN.test(normalizedInput) ||
+    NATURAL_BROWSER_OPEN_VERB_PATTERN.test(normalizedInput) ||
+    NATURAL_BROWSER_CLOSE_REFERENCE_PATTERN.test(normalizedInput) ||
+    NATURAL_BROWSER_OPEN_REFERENCE_PATTERN.test(normalizedInput);
+  if (!mentionsBrowserAction) {
+    return null;
+  }
+  const explicitUrls = extractExplicitBrowserUrlReferences(normalizedInput);
+  if (explicitUrls.length === 0) {
+    return null;
+  }
+
+  const trackedUrls = [
+    session.activeWorkspace?.previewUrl ?? null,
+    ...session.browserSessions.map((browserSession) => browserSession.url)
+  ]
+    .map((url) => normalizeComparableBrowserUrl(url))
+    .filter((url): url is string => typeof url === "string" && url.length > 0);
+  const untrackedUrls = explicitUrls.filter((url) => !trackedUrls.includes(url));
+  if (untrackedUrls.length === 0) {
+    return null;
+  }
+
+  const lines = [
+    "Explicit browser-ownership guard:",
+    `- The user named an explicit browser target that is not one of the tracked project pages in this chat: ${untrackedUrls.join(", ")}`,
+    "- Do not close, reopen, or stop the tracked project preview as a substitute for that foreign URL.",
+    "- Unless this run can prove that exact explicit URL belongs to the current tracked project, leave it alone and explain that ownership was not proven."
+  ];
+  if (trackedUrls.length > 0) {
+    lines.push(`- Tracked project browser targets in this chat: ${trackedUrls.join(", ")}`);
+  }
+  return lines.join("\n");
+}
+
 export interface FollowUpResolution {
   executionInput: string;
   classification: FollowUpClassification;
@@ -887,6 +939,10 @@ export async function buildConversationAwareExecutionInput(
   const recentActionBlock = buildRecentActionBlock(runtimeReconciledSession);
   const activeWorkspaceBlock = buildActiveWorkspaceBlock(runtimeReconciledSession);
   const browserSessionBlock = buildBrowserSessionBlock(runtimeReconciledSession);
+  const explicitBrowserUrlOwnershipGuardBlock = buildExplicitBrowserUrlOwnershipGuardBlock(
+    runtimeReconciledSession,
+    rawUserInput
+  );
   const browserFollowUpIntentBlock = buildBrowserFollowUpIntentBlock(
     runtimeReconciledSession,
     rawUserInput
@@ -927,6 +983,7 @@ export async function buildConversationAwareExecutionInput(
     !recentActionBlock &&
     !activeWorkspaceBlock &&
     !browserSessionBlock &&
+    !explicitBrowserUrlOwnershipGuardBlock &&
     !browserFollowUpIntentBlock &&
     !artifactEditContextBlock &&
     !desktopOrganizationContextBlock &&
@@ -986,6 +1043,9 @@ export async function buildConversationAwareExecutionInput(
   }
   if (browserSessionBlock) {
     lines.push("", browserSessionBlock);
+  }
+  if (explicitBrowserUrlOwnershipGuardBlock) {
+    lines.push("", explicitBrowserUrlOwnershipGuardBlock);
   }
   if (browserFollowUpIntentBlock) {
     lines.push("", browserFollowUpIntentBlock);

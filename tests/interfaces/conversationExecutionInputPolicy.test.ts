@@ -1521,6 +1521,69 @@ test("buildConversationAwareExecutionInput derives workspace root and artifact f
   assert.match(executionInput, /Preview URL: file:\/\/\/C:\/Users\/testuser\/Desktop\/drone-company\/index\.html/);
 });
 
+test("buildConversationAwareExecutionInput adds an ownership guard for explicit untracked localhost URLs", async () => {
+  const session = buildSession();
+  session.browserSessions.push({
+    id: "browser-owned-1",
+    label: "Tracked landing page preview",
+    url: "http://127.0.0.1:4173/index.html",
+    visibility: "visible",
+    status: "open",
+    sourceJobId: "job-owned-1",
+    openedAt: "2026-03-03T00:00:20.000Z",
+    closedAt: null,
+    controllerKind: "playwright_managed",
+    controlAvailable: true,
+    browserProcessPid: 42001,
+    linkedProcessLeaseId: "proc-owned-1",
+    linkedProcessCwd: "C:\\Users\\testuser\\Desktop\\drone-company",
+    linkedProcessPid: 42002,
+    workspaceRootPath: "C:\\Users\\testuser\\Desktop\\drone-company"
+  });
+  session.activeWorkspace = {
+    id: "workspace:drone-company",
+    label: "Current project workspace",
+    rootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
+    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
+    previewUrl: "http://127.0.0.1:4173/index.html",
+    browserSessionId: "browser-owned-1",
+    browserSessionIds: ["browser-owned-1"],
+    browserSessionStatus: "open",
+    browserProcessPid: 42001,
+    previewProcessLeaseId: "proc-owned-1",
+    previewProcessLeaseIds: ["proc-owned-1"],
+    previewProcessCwd: "C:\\Users\\testuser\\Desktop\\drone-company",
+    lastKnownPreviewProcessPid: 42002,
+    stillControllable: true,
+    ownershipState: "tracked",
+    previewStackState: "browser_and_preview",
+    lastChangedPaths: ["C:\\Users\\testuser\\Desktop\\drone-company\\index.html"],
+    sourceJobId: "job-owned-1",
+    updatedAt: "2026-03-03T00:00:25.000Z"
+  };
+
+  const executionInput = await buildConversationAwareExecutionInput(
+    session,
+    "Please close http://127.0.0.1:59999/index.html only if it is actually the page from this project. If you cannot prove that, leave it alone instead of guessing.",
+    10
+  );
+
+  assert.match(executionInput, /Explicit browser-ownership guard:/);
+  assert.match(
+    executionInput,
+    /not one of the tracked project pages in this chat: http:\/\/127\.0\.0\.1:59999\/index\.html/
+  );
+  assert.match(
+    executionInput,
+    /Do not close, reopen, or stop the tracked project preview as a substitute for that foreign URL\./
+  );
+  assert.match(
+    executionInput,
+    /Unless this run can prove that exact explicit URL belongs to the current tracked project, leave it alone and explain that ownership was not proven\./
+  );
+  assert.doesNotMatch(executionInput, /Natural browser-session follow-up:/);
+});
+
 
 test("buildConversationAwareExecutionInput can use media continuity cues to surface bounded contextual recall", async () => {
   const session = buildSession({

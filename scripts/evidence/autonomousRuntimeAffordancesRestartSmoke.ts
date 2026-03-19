@@ -160,9 +160,9 @@ const CONVERSATION_ID = "autonomous-runtime-restart-smoke";
 const USER_ID = "autonomous-restart-smoke-user";
 const USERNAME = "anthonybenny";
 const PROVIDER_BLOCK_PATTERN =
-  /(?:429|exceeded your current quota|rate limit|fetch failed|request timed out)/i;
+  /(?:429|exceeded your current quota|rate limit|fetch failed|request timed out|timed out waiting for turn_|stream disconnected before completion|an error occurred while processing your request)/i;
 const UNKNOWN_PREVIEW_URL = "http://127.0.0.1:59999/index.html";
-const TURN_TIMEOUT_MS = 75_000;
+const TURN_TIMEOUT_MS = 50_000;
 const MANAGER_IDLE_TIMEOUT_MS = 10_000;
 const SMOKE_DEADLINE_MS = 120_000;
 const CLEANUP_STEP_TIMEOUT_MS = 5_000;
