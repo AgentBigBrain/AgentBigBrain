@@ -12,12 +12,22 @@ import { ensureEnvLoaded } from "./core/envLoader";
 import { makeId } from "./core/ids";
 import { TaskRequest } from "./core/types";
 import { createModelClientFromEnv } from "./models/createModelClient";
+import { runCodexCliCommand } from "./models/codex/cli";
+import { readCodexAuthStatus } from "./models/codex/authStore";
+import { resolveCodexModel } from "./models/codex/modelResolution";
+import { normalizeModelBackend } from "./models/backendConfig";
+import { buildCodexProfileEnvironment } from "./models/codex/profileState";
 
-export type CliMode = "task" | "autonomous" | "daemon";
+export type CliMode = "task" | "autonomous" | "daemon" | "auth";
+export type CodexAuthAction = "login" | "status" | "logout";
 
 export interface ParsedCliCommand {
   mode: CliMode;
-  goal: string;
+  goal?: string;
+  provider?: "codex";
+  action?: CodexAuthAction;
+  deviceAuth?: boolean;
+  profileId?: string | null;
 }
 
 interface ParsedCliFailure {
@@ -42,11 +52,13 @@ export interface DaemonContract {
 
 const USAGE_TEXT = [
   "Usage: node dist/index.js [--autonomous | --daemon] <goal text>",
+  "       node dist/index.js auth codex <login|status|logout> [--device-auth] [--profile <id>]",
   "",
   "Modes:",
   "  default       Run one governed task and exit.",
   "  --autonomous  Run bounded autonomous iterations for one goal.",
   "  --daemon      Chain goals with explicit daemon safeguards.",
+  "  auth codex    Manage Codex subscription-backed login state.",
   "",
   "Daemon contract (fail-closed):",
   "  BRAIN_ALLOW_DAEMON_MODE=true",
@@ -136,6 +148,10 @@ export function parseCliArgs(rawArgs: readonly string[]): ParsedCliArgs {
     return toParseFailure(0, "stdout", renderUsage());
   }
 
+  if (rawArgs[0]?.trim().toLowerCase() === "auth") {
+    return parseAuthCliArgs(rawArgs.slice(1));
+  }
+
   let mode: CliMode = "task";
   const goalTokens: string[] = [];
 
@@ -194,6 +210,61 @@ export function parseCliArgs(rawArgs: readonly string[]): ParsedCliArgs {
     command: {
       mode,
       goal
+    }
+  };
+}
+
+/**
+ * Parses owner-facing auth subcommands into a typed CLI contract.
+ *
+ * @param rawArgs - CLI args after the leading `auth` token.
+ * @returns Parsed auth command or structured parse failure.
+ */
+function parseAuthCliArgs(rawArgs: readonly string[]): ParsedCliArgs {
+  const provider = rawArgs[0]?.trim().toLowerCase();
+  if (provider !== "codex") {
+    return toParseFailure(1, "stderr", `Unsupported auth provider.\n${renderUsage()}`);
+  }
+
+  const action = rawArgs[1]?.trim().toLowerCase();
+  if (action !== "login" && action !== "status" && action !== "logout") {
+    return toParseFailure(1, "stderr", `Unsupported auth action.\n${renderUsage()}`);
+  }
+
+  let deviceAuth = false;
+  let profileId: string | null = null;
+  for (let index = 2; index < rawArgs.length; index += 1) {
+    const token = rawArgs[index]?.trim();
+    if (!token) {
+      continue;
+    }
+    if (token === "--device-auth") {
+      deviceAuth = true;
+      continue;
+    }
+    if (token === "--profile") {
+      const value = rawArgs[index + 1]?.trim();
+      if (!value) {
+        return toParseFailure(1, "stderr", "Missing value for --profile.");
+      }
+      profileId = value;
+      index += 1;
+      continue;
+    }
+    if (token.startsWith("-")) {
+      return toParseFailure(1, "stderr", `Unknown flag: ${token}\n${renderUsage()}`);
+    }
+    return toParseFailure(1, "stderr", `Unexpected auth argument: ${token}\n${renderUsage()}`);
+  }
+
+  return {
+    ok: true,
+    command: {
+      mode: "auth",
+      provider: "codex",
+      action,
+      deviceAuth,
+      profileId
     }
   };
 }
@@ -317,6 +388,105 @@ function buildTaskRequest(goal: string): TaskRequest {
 }
 
 /**
+ * Renders redacted owner-facing Codex auth status text.
+ *
+ * @returns Human-readable Codex auth status.
+ */
+export async function renderCodexAuthStatus(env: NodeJS.ProcessEnv = process.env): Promise<string> {
+  const effectiveEnv = buildCodexProfileEnvironment(env);
+  const status = await readCodexAuthStatus(effectiveEnv);
+  const activeBackend = normalizeModelBackend(effectiveEnv.BRAIN_MODEL_BACKEND);
+  const modelMappings = [
+    `small-fast-model -> ${resolveCodexModel("small-fast-model", effectiveEnv).providerModel}`,
+    `small-policy-model -> ${resolveCodexModel("small-policy-model", effectiveEnv).providerModel}`,
+    `medium-general-model -> ${resolveCodexModel("medium-general-model", effectiveEnv).providerModel}`,
+    `medium-policy-model -> ${resolveCodexModel("medium-policy-model", effectiveEnv).providerModel}`,
+    `large-reasoning-model -> ${resolveCodexModel("large-reasoning-model", effectiveEnv).providerModel}`
+  ];
+  if (!status.available || !status.auth) {
+    return [
+      "Codex auth status: unavailable",
+      `Active backend: ${activeBackend}`,
+      "Resolved role mappings:",
+      ...modelMappings.map((mapping) => `  - ${mapping}`),
+      `State dir: ${status.stateDir}`,
+      `Auth file: ${status.authFilePath}`,
+      `Legacy fallback: ${status.usingLegacyFallback ? "yes" : "no"}`,
+      "Reason: no usable Codex login state was found."
+    ].join("\n");
+  }
+
+  return [
+    "Codex auth status: available",
+    `Active backend: ${activeBackend}`,
+    `Profile: ${status.profileId}`,
+    `State dir: ${status.stateDir}`,
+    `Auth file: ${status.authFilePath}`,
+    `Legacy fallback: ${status.usingLegacyFallback ? "yes" : "no"}`,
+    `Auth mode: ${status.auth.authMode || "unknown"}`,
+    `Account id: ${status.auth.accountId ?? "unknown"}`,
+    `Last refresh: ${status.auth.lastRefreshAt ?? "unknown"}`,
+    `Access token present: ${status.auth.accessTokenPresent ? "yes" : "no"}`,
+    `Refresh token present: ${status.auth.refreshTokenPresent ? "yes" : "no"}`,
+    "Resolved role mappings:",
+    ...modelMappings.map((mapping) => `  - ${mapping}`)
+  ].join("\n");
+}
+
+/**
+ * Executes owner-facing Codex auth management commands.
+ *
+ * @param command - Parsed auth command.
+ */
+async function runAuthMode(command: ParsedCliCommand): Promise<void> {
+  if (command.provider !== "codex" || !command.action) {
+    throw new Error("Auth mode requires a concrete provider and action.");
+  }
+
+  const authEnv = buildCodexProfileEnvironment(process.env, command.profileId ?? null);
+
+  if (command.action === "status") {
+    console.log(await renderCodexAuthStatus(authEnv));
+    return;
+  }
+
+  if (command.action === "login") {
+    const args = ["login"];
+    if (command.deviceAuth) {
+      args.push("--device-auth");
+    }
+    const result = await runCodexCliCommand(args, {
+      env: authEnv
+    });
+    if (result.stdout.trim()) {
+      console.log(result.stdout.trim());
+    }
+    if (result.stderr.trim()) {
+      console.error(result.stderr.trim());
+    }
+    if (result.exitCode !== 0) {
+      throw new Error(`Codex login failed with exit code ${result.exitCode}.`);
+    }
+    console.log(await renderCodexAuthStatus(authEnv));
+    return;
+  }
+
+  const logoutResult = await runCodexCliCommand(["logout"], {
+    env: authEnv
+  });
+  if (logoutResult.stdout.trim()) {
+    console.log(logoutResult.stdout.trim());
+  }
+  if (logoutResult.stderr.trim()) {
+    console.error(logoutResult.stderr.trim());
+  }
+  if (logoutResult.exitCode !== 0) {
+    throw new Error(`Codex logout failed with exit code ${logoutResult.exitCode}.`);
+  }
+  console.log(await renderCodexAuthStatus(authEnv));
+}
+
+/**
  * Executes one governed task via the production orchestrator path.
  *
  * **Why it exists:**
@@ -398,18 +568,23 @@ export async function runCliFromArgv(rawArgs: readonly string[]): Promise<number
 
   const signalLifecycle = registerSignalHandlers(parsed.command.mode);
   try {
+    if (parsed.command.mode === "auth") {
+      await runAuthMode(parsed.command);
+      return 0;
+    }
+
     if (parsed.command.mode === "task") {
-      await runTaskMode(parsed.command.goal);
+      await runTaskMode(parsed.command.goal ?? "");
       return 0;
     }
 
     if (parsed.command.mode === "autonomous") {
-      await runLoopMode(parsed.command.goal, "autonomous", signalLifecycle.signal);
+      await runLoopMode(parsed.command.goal ?? "", "autonomous", signalLifecycle.signal);
       return 0;
     }
 
     const daemonContract = resolveDaemonContract(process.env);
-    await runLoopMode(parsed.command.goal, "daemon", signalLifecycle.signal, daemonContract);
+    await runLoopMode(parsed.command.goal ?? "", "daemon", signalLifecycle.signal, daemonContract);
     return 0;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

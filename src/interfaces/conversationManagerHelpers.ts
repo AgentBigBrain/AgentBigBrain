@@ -183,6 +183,8 @@ export function buildSessionSeed(message: ConversationKeySeedInput): Conversatio
     sessionSchemaVersion: "v2",
     conversationStack: createEmptyConversationStackV1(message.receivedAt),
     updatedAt: message.receivedAt,
+    modelBackendOverride: null,
+    codexAuthProfileId: null,
     activeProposal: null,
     activeClarification: null,
     modeContinuity: null,
@@ -365,7 +367,23 @@ export function normalizeTurnText(value: string): string {
  * @returns Assistant turn text normalized for storage and prompt-context reuse.
  */
 export function normalizeAssistantTurnText(value: string): string {
-  return normalizeTurnText(stripLabelStyleOpening(value));
+  const stripped = stripLabelStyleOpening(value).replace(/\r\n/g, "\n");
+  const paragraphs = stripped
+    .split(/\n\s*\n/)
+    .map((paragraph) =>
+      paragraph
+        .replace(/[^\S\n]+/g, " ")
+        .replace(/\n+/g, " ")
+        .trim()
+    )
+    .filter((paragraph) => paragraph.length > 0);
+  const normalized = (paragraphs.length > 0
+    ? paragraphs.join("\n\n")
+    : stripped.replace(/\s+/g, " ").trim());
+  if (normalized.length <= MAX_STORED_TURN_CHARS) {
+    return normalized;
+  }
+  return `${normalized.slice(0, MAX_STORED_TURN_CHARS - 3)}...`;
 }
 
 /**

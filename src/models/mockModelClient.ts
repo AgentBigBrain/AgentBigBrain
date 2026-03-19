@@ -163,6 +163,7 @@ export class MockModelClient implements ModelClient {
     promptTokens: 0,
     completionTokens: 0,
     totalTokens: 0,
+    billingMode: "unknown",
     estimatedSpendUsd: 0
   };
 

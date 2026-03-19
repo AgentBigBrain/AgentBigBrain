@@ -30,6 +30,8 @@ function createBaseInput(): EvaluateTaskRunnerPreflightInput {
     config,
     cumulativeEstimatedCostUsd: 0.01,
     estimatedModelSpendUsd: 0,
+    cumulativeModelCalls: 0,
+    modelBillingMode: "api_usd",
     idempotencyKey: "task_task_runner_preflight_1:1:action_task_runner_preflight_1",
     mode: "fast_path" as const,
     nowIso: "2026-03-07T12:00:00.000Z",
@@ -64,6 +66,21 @@ test("evaluateTaskRunnerPreflight returns a proposal for non-network actions", (
   assert.equal(outcome.proposal?.taskId, "task_task_runner_preflight_1");
   assert.equal(outcome.connectorReceiptInput, undefined);
   assert.equal(outcome.approvalGrant, undefined);
+});
+
+test("evaluateTaskRunnerPreflight blocks non-API model-call overflow before proposal creation", () => {
+  const input = createBaseInput();
+  input.modelBillingMode = "subscription_quota";
+  input.cumulativeModelCalls = input.config.limits.maxCumulativeNonApiModelCalls + 1;
+
+  const outcome = evaluateTaskRunnerPreflight(input);
+
+  assert.equal(outcome.proposal, undefined);
+  assert.deepEqual(outcome.blockedOutcome?.actionResult.blockedBy, ["MODEL_CALL_LIMIT_EXCEEDED"]);
+  assert.deepEqual(outcome.blockedOutcome?.traceDetails, {
+    blockCode: "MODEL_CALL_LIMIT_EXCEEDED",
+    blockCategory: "runtime"
+  });
 });
 
 test("evaluateTaskRunnerPreflight blocks network_write actions without JIT approval", () => {

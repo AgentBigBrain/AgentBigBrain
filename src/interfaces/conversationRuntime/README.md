@@ -117,6 +117,9 @@ The latest slices moved queue/ack, worker-loop, and pulse-state ownership here s
 - `directConversationReply.ts` owns the bounded direct-conversation helper that lets the runtime
   synthesize ordinary conversational replies without queueing background work or fabricating task
   progress
+- `modelBackendSelection.ts` owns canonical per-session backend/profile selection so interface
+  sessions can resolve backend overrides and Codex profile routing without leaking provider wiring
+  into gateways
 - `conversationRoutingDirectReplies.ts` owns the extracted casual-chat and capability-discovery
   direct-reply helpers reused by the stable conversation-routing entrypoint so ordinary
   conversation and normal capability checks can stay out of the worker queue

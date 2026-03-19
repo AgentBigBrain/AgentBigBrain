@@ -274,7 +274,8 @@ export class TelegramAdapter {
    */
   async runDirectConversationTurn(
     text: string,
-    receivedAt: string
+    receivedAt: string,
+    _session?: { modelBackendOverride?: string | null; codexAuthProfileId?: string | null } | null
   ): Promise<ConversationExecutionResult> {
     return {
       summary: await runDirectConversationReply(text, receivedAt),

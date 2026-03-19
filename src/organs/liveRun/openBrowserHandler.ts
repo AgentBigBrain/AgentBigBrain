@@ -268,6 +268,7 @@ export async function executeOpenBrowser(
   const linkedProcessLeaseId = linkedPreviewProcessSnapshot?.leaseId ?? linkedPreviewProcessLeaseId;
   const linkedProcessCwd = linkedPreviewProcessSnapshot?.cwd ?? workspaceRootPath;
   const linkedProcessPid = linkedPreviewProcessSnapshot?.pid ?? null;
+  const lifecycleCode = isLoopbackHttpUrl ? "PROCESS_READY" : null;
   const timeoutMs = resolveReadinessProbeTimeoutMs(
     context.config,
     typeof params.timeoutMs === "number" ? params.timeoutMs : undefined
@@ -332,7 +333,8 @@ export async function executeOpenBrowser(
             linkedProcessLeaseId: reusedSession.linkedProcessLeaseId,
             linkedProcessCwd: reusedSession.linkedProcessCwd,
             linkedProcessPid: reusedSession.linkedProcessPid,
-            openMethod: reusedSession.controllerKind
+            openMethod: reusedSession.controllerKind,
+            processLifecycleStatus: lifecycleCode
           })
         );
       }
@@ -398,7 +400,8 @@ export async function executeOpenBrowser(
             linkedProcessLeaseId: snapshot.linkedProcessLeaseId,
             linkedProcessCwd: snapshot.linkedProcessCwd,
             linkedProcessPid: snapshot.linkedProcessPid,
-            openMethod: playwrightRuntime.sourceModule
+            openMethod: playwrightRuntime.sourceModule,
+            processLifecycleStatus: lifecycleCode
           })
         );
       } catch (error) {
@@ -456,7 +459,8 @@ export async function executeOpenBrowser(
         linkedProcessLeaseId: snapshot.linkedProcessLeaseId,
         linkedProcessCwd: snapshot.linkedProcessCwd,
         linkedProcessPid: snapshot.linkedProcessPid,
-        openMethod: launchSpec.openMethod
+        openMethod: launchSpec.openMethod,
+        processLifecycleStatus: lifecycleCode
       })
     );
   } catch (error) {

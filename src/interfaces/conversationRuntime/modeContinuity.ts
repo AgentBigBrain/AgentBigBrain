@@ -3,6 +3,7 @@
  */
 
 import { extractExecutionPreferences } from "./executionPreferenceExtraction";
+import { isDirectConversationOnlyRequest } from "./directConversationIntent";
 import type { ResolvedConversationIntentMode } from "./intentModeContracts";
 import type { ConversationIntentMode, ConversationSession } from "../sessionStore";
 
@@ -91,6 +92,9 @@ export function resolveModeContinuityIntent(
 
   const normalized = userInput.trim();
   if (!normalized) {
+    return null;
+  }
+  if (isDirectConversationOnlyRequest(normalized)) {
     return null;
   }
 

@@ -170,7 +170,7 @@ function requiresBrowserVerificationEvidence(goal: string): boolean {
       normalized
     ) ||
     /\bverify\b[\s\S]{0,80}\b(playwright|page|screenshot)\b/.test(normalized) ||
-    /\b(open|check|inspect|review)\b[\s\S]{0,80}\b(browser|homepage|ui|page|render|rendering)\b/.test(
+    /\b(check|inspect|review)\b[\s\S]{0,80}\b(browser|homepage|ui|page|render|rendering)\b/.test(
       normalized
     ) ||
     /\b(playwright|browser)\b[\s\S]{0,80}\b(verify|verification|proof|check|inspect)\b/.test(

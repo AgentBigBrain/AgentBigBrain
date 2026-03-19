@@ -335,3 +335,95 @@ test("handleConversationCommand uses media-normalized voice command text for /sk
   assert.match(reply, /^Available skills:/);
   assert.match(reply, /triage_planner_failure/);
 });
+
+test("handleConversationCommand updates and reports the per-session backend override", async () => {
+  const session = buildSession();
+
+  const setReply = await handleConversationCommand(
+    session,
+    buildMessage("/backend codex_oauth"),
+    buildDependencies(() => {
+      throw new Error("enqueueJob should not run for /backend");
+    })
+  );
+  assert.equal(session.modelBackendOverride, "codex_oauth");
+  assert.match(setReply, /Session backend override set to codex_oauth/);
+
+  const statusReply = await handleConversationCommand(
+    session,
+    buildMessage("/backend status"),
+    buildDependencies(() => {
+      throw new Error("enqueueJob should not run for /backend status");
+    })
+  );
+  assert.equal(
+    statusReply,
+    "Session backend override: codex_oauth."
+  );
+
+  const clearReply = await handleConversationCommand(
+    session,
+    buildMessage("/backend clear"),
+    buildDependencies(() => {
+      throw new Error("enqueueJob should not run for /backend clear");
+    })
+  );
+  assert.equal(session.modelBackendOverride, null);
+  assert.equal(session.codexAuthProfileId, null);
+  assert.match(clearReply, /Cleared the session backend override/);
+});
+
+test("handleConversationCommand fails closed for unsupported backend overrides", async () => {
+  const session = buildSession();
+
+  const reply = await handleConversationCommand(
+    session,
+    buildMessage("/backend made_up_backend"),
+    buildDependencies(() => {
+      throw new Error("enqueueJob should not run for unsupported /backend");
+    })
+  );
+
+  assert.equal(session.modelBackendOverride, null);
+  assert.equal(
+    reply,
+    "Unsupported backend. Use /backend status, /backend clear, or one of: mock, ollama, openai_api, codex_oauth."
+  );
+});
+
+test("handleConversationCommand updates and clears the per-session Codex profile override", async () => {
+  const session = buildSession();
+
+  const setReply = await handleConversationCommand(
+    session,
+    buildMessage("/profile work"),
+    buildDependencies(() => {
+      throw new Error("enqueueJob should not run for /profile");
+    })
+  );
+  assert.equal(session.codexAuthProfileId, "work");
+  assert.equal(session.modelBackendOverride, "codex_oauth");
+  assert.match(setReply, /Session Codex profile override set to work/);
+
+  const statusReply = await handleConversationCommand(
+    session,
+    buildMessage("/profile status"),
+    buildDependencies(() => {
+      throw new Error("enqueueJob should not run for /profile status");
+    })
+  );
+  assert.equal(
+    statusReply,
+    "Session Codex profile override: work."
+  );
+
+  const clearReply = await handleConversationCommand(
+    session,
+    buildMessage("/profile clear"),
+    buildDependencies(() => {
+      throw new Error("enqueueJob should not run for /profile clear");
+    })
+  );
+  assert.equal(session.codexAuthProfileId, null);
+  assert.match(clearReply, /Cleared the session Codex profile override/);
+});

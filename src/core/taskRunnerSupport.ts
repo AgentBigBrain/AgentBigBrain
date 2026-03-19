@@ -2,7 +2,7 @@
  * @fileoverview Provides shared normalization, verification-prompt, and usage helpers reused across runtime surfaces.
  */
 
-import { ModelClient, ModelUsageSnapshot } from "../models/types";
+import { ModelBillingMode, ModelClient, ModelUsageSnapshot } from "../models/types";
 import { VerificationCategoryV1 } from "./types";
 import { containsAgentPulseRequestMarker, extractActiveRequestSegment } from "./currentRequestExtraction";
 import { isVerificationClaimPrompt, resolveVerificationCategoryFromPrompt } from "./verificationPromptClassifier";
@@ -59,6 +59,7 @@ export function emptyUsageSnapshot(): ModelUsageSnapshot {
     promptTokens: 0,
     completionTokens: 0,
     totalTokens: 0,
+    billingMode: "unknown",
     estimatedSpendUsd: 0
   };
 }
@@ -79,6 +80,7 @@ export function diffUsageSnapshot(
     promptTokens: Math.max(0, end.promptTokens - start.promptTokens),
     completionTokens: Math.max(0, end.completionTokens - start.completionTokens),
     totalTokens: Math.max(0, end.totalTokens - start.totalTokens),
+    billingMode: end.billingMode,
     estimatedSpendUsd: Number(Math.max(0, end.estimatedSpendUsd - start.estimatedSpendUsd).toFixed(8))
   };
 }
@@ -94,4 +96,46 @@ export function readModelUsageSnapshot(modelClient: ModelClient): ModelUsageSnap
     return modelClient.getUsageSnapshot();
   }
   return emptyUsageSnapshot();
+}
+
+/**
+ * Builds a user-facing model-usage summary string aligned with the billing mode.
+ *
+ * @param usage - Usage snapshot delta for the run.
+ * @param maxSpendUsd - Configured API spend ceiling.
+ * @returns Human-facing model-usage summary fragment.
+ */
+export function renderModelUsageSummary(
+  usage: ModelUsageSnapshot,
+  maxSpendUsd: number
+): string {
+  if (usage.billingMode === "api_usd") {
+    return (
+      `Model usage spend (provider-usage estimated) ${usage.estimatedSpendUsd.toFixed(6)}/` +
+      `${maxSpendUsd.toFixed(2)} USD.`
+    );
+  }
+
+  if (usage.billingMode === "subscription_quota") {
+    return (
+      `Model usage (subscription-backed) ${usage.calls} call(s), ` +
+      `${usage.totalTokens} token(s).`
+    );
+  }
+
+  if (usage.billingMode === "local") {
+    return `Model usage (local backend) ${usage.calls} call(s), ${usage.totalTokens} token(s).`;
+  }
+
+  return `Model usage ${usage.calls} call(s), ${usage.totalTokens} token(s).`;
+}
+
+/**
+ * Returns true when USD-based model-spend enforcement applies to the current billing mode.
+ *
+ * @param billingMode - Billing mode reported by the active model client.
+ * @returns True when USD spend should be enforced.
+ */
+export function shouldEnforceUsdModelSpendLimit(billingMode: ModelBillingMode): boolean {
+  return billingMode === "api_usd";
 }

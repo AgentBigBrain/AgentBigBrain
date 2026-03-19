@@ -336,25 +336,40 @@ Main surfaces:
 Supported backends:
 
 - mock
-- OpenAI-compatible
+- openai_api
+- codex_oauth
 - Ollama
 
-OpenAI backend note:
+OpenAI API backend note:
 
-- the OpenAI runtime resolves model aliases to provider ids, selects a transport (`chat/completions`
-  or `responses`) per model-family compatibility policy, and normalizes both transport shapes back
-  into the same structured-output validation path
-- current operator guidance is centered on the GPT-4.1 and GPT-5.x families, with `chat/completions`
-  preferred for `gpt-4.1*`, `responses` preferred for `gpt-5*`, and explicit lower-latency
-  reasoning settings applied for GPT-5-family autonomous runs
+- the OpenAI runtime resolves model aliases to provider ids, selects a transport
+  (`chat/completions` or `responses`) per model-family compatibility policy, and normalizes both
+  transport shapes back into the same structured-output validation path
+- current operator guidance is centered on the GPT-4.1 and GPT-5.x families, with
+  `chat/completions` preferred for `gpt-4.1*`, `responses` preferred for `gpt-5*`, and explicit
+  lower-latency reasoning settings applied for GPT-5-family autonomous runs
+
+Codex OAuth backend note:
+
+- the Codex runtime is a separate backend, not a new auth mode on the OpenAI API client
+- it reuses operator-owned local Codex auth state and resolves backend-specific `CODEX_MODEL_*`
+  aliases to supported Codex model ids
+- it preserves the same structured-output contract and fails closed when auth, model support, or
+  schema validation cannot be proven
 
 The runtime treats model output as untrusted until it is normalized and validated.
 
 Media note:
 
-- image understanding depends on a vision-capable model path
-- voice-note understanding depends on a transcription-capable model path
+- in phase 1, media understanding remains on the explicit OpenAI API media path
+- image understanding depends on a vision-capable OpenAI API model path
+- voice-note understanding depends on an OpenAI API transcription-capable path
 - video is currently transport-plus-fallback, not full multimodal clip reasoning
+
+Local intent note:
+
+- the optional local intent seam remains Ollama-backed and separate from the main text backend
+- selecting `codex_oauth` or `openai_api` does not implicitly change that local intent provider
 
 ## 10) Extension Points
 

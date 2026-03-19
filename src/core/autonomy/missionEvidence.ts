@@ -223,6 +223,13 @@ export function isReadinessProofEvidenceAction(
       entry.executionMetadata?.processLifecycleStatus === "PROCESS_READY"
     );
   }
+  if (entry.action.type === "open_browser") {
+    return (
+      entry.executionMetadata?.browserSession === true &&
+      entry.executionMetadata?.browserSessionStatus === "open" &&
+      entry.executionMetadata?.processLifecycleStatus === "PROCESS_READY"
+    );
+  }
   if (entry.action.type !== "probe_http" && entry.action.type !== "verify_browser") {
     return false;
   }

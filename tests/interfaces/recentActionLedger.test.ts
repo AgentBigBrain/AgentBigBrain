@@ -634,6 +634,7 @@ test("deriveConversationLedgersFromTaskRunResult links an open browser session b
       promptTokens: 0,
       completionTokens: 0,
       totalTokens: 0,
+      billingMode: "unknown",
       estimatedSpendUsd: 0
     },
     startedAt: "2026-03-12T00:00:01.000Z",
@@ -722,6 +723,7 @@ test("deriveConversationLedgersFromTaskRunResult prefers explicit browser owners
       promptTokens: 0,
       completionTokens: 0,
       totalTokens: 0,
+      billingMode: "unknown",
       estimatedSpendUsd: 0
     },
     startedAt: "2026-03-12T00:00:01.000Z",
@@ -869,6 +871,7 @@ test("deriveConversationLedgersFromTaskRunResult links an open browser session t
       promptTokens: 0,
       completionTokens: 0,
       totalTokens: 0,
+      billingMode: "unknown",
       estimatedSpendUsd: 0
     },
     startedAt: "2026-03-12T00:00:01.000Z",
@@ -978,6 +981,7 @@ test("deriveConversationLedgersFromTaskRunResult marks a stopped managed preview
       promptTokens: 0,
       completionTokens: 0,
       totalTokens: 0,
+      billingMode: "unknown",
       estimatedSpendUsd: 0
     },
     startedAt: "2026-03-12T00:00:01.000Z",
@@ -1069,6 +1073,7 @@ test("deriveConversationLedgersFromTaskRunResult records linked browser cleanup 
       promptTokens: 0,
       completionTokens: 0,
       totalTokens: 0,
+      billingMode: "unknown",
       estimatedSpendUsd: 0
     },
     startedAt: "2026-03-14T00:00:01.000Z",

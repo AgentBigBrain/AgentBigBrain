@@ -24,6 +24,7 @@ export interface BrainConfig {
     maxEstimatedCostUsd: number;
     maxCumulativeEstimatedCostUsd: number;
     maxCumulativeModelSpendUsd: number;
+    maxCumulativeNonApiModelCalls: number;
     maxSubagentsPerTask: number;
     maxSubagentDepth: number;
     maxActionsPerTask: number;

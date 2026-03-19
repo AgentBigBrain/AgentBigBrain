@@ -33,6 +33,32 @@ import { SqliteVectorStore } from "./vectorStore";
 import { WorkflowLearningStore } from "./workflowLearningStore";
 import { BrainConfig } from "./config";
 import { resolveUserOwnedPathHints } from "../organs/plannerPolicy/userOwnedPathHints";
+import type { ModelClient } from "../models/types";
+
+export interface SharedBrainRuntimeDependencies {
+  readonly baseConfig: BrainConfig;
+  readonly memoryStore: SemanticMemoryStore;
+  readonly plannerFailureStore: SqlitePlannerFailureStore;
+  readonly executor: ToolExecutorOrgan;
+  readonly governors: ReturnType<typeof createDefaultGovernors>;
+  readonly masterGovernor: MasterGovernor;
+  readonly stateStore: StateStore;
+  readonly personalityStore: PersonalityStore;
+  readonly governanceMemoryStore: GovernanceMemoryStore;
+  readonly executionReceiptStore: ExecutionReceiptStore;
+  readonly workflowLearningStore: WorkflowLearningStore;
+  readonly judgmentPatternStore: JudgmentPatternStore;
+  readonly profileMemoryStore: ProfileMemoryStore | undefined;
+  readonly skillRegistryStore: SkillRegistryStore;
+  readonly distillerLedgerStore: DistillerMergeLedgerStore;
+  readonly satelliteCloneCoordinator: SatelliteCloneCoordinator;
+}
+
+export interface BuiltBrainRuntime {
+  readonly config: BrainConfig;
+  readonly modelClient: ModelClient;
+  readonly brain: BrainOrchestrator;
+}
 
 /**
  * Builds embedding stack for this module's runtime flow.
@@ -115,31 +141,37 @@ function resolveLiveRunRuntimePathFromEnv(): string {
  * - Additional imported collaborators are also used in this function body.
  * @returns Computed `BrainOrchestrator` result.
  */
-export function buildDefaultBrain(): BrainOrchestrator {
-  const config = createBrainConfigFromEnv();
-  const modelClient = createModelClientFromEnv();
-  const embeddingStack = buildEmbeddingStack(config);
+/**
+ * Builds the shared runtime dependencies reused across backend-specific brain instances.
+ *
+ * **Why it exists:**
+ * Interface per-session backend overrides still need one shared live-run core so browser/process
+ * registries, ledgers, and executor state stay coherent across conversations.
+ *
+ * **What it talks to:**
+ * - Uses `createBrainConfigFromEnv` from `./config`.
+ * - Uses `ToolExecutorOrgan` from `../organs/executor`.
+ * - Uses the stable persistence stores in `src/core/`.
+ *
+ * @param env - Environment map used for baseline runtime construction.
+ * @returns Shared runtime dependencies that can be paired with multiple backend/model clients.
+ */
+export function createSharedBrainRuntimeDependencies(
+  env: NodeJS.ProcessEnv = process.env
+): SharedBrainRuntimeDependencies {
+  const baseConfig = createBrainConfigFromEnv(env);
+  const embeddingStack = buildEmbeddingStack(baseConfig);
   const memoryStore = new SemanticMemoryStore(
     undefined,
     embeddingStack.embeddingProvider,
     embeddingStack.vectorStore ?? undefined
   );
   const plannerFailureStore = new SqlitePlannerFailureStore(
-    config.persistence.ledgerSqlitePath
+    baseConfig.persistence.ledgerSqlitePath
   );
-  const userOwnedPathHints = resolveUserOwnedPathHints();
-  const planner = new PlannerOrgan(modelClient, memoryStore, plannerFailureStore, {
-    platform: config.shellRuntime.profile.platform,
-    shellKind: config.shellRuntime.profile.shellKind,
-    invocationMode: config.shellRuntime.profile.invocationMode,
-    commandMaxChars: config.shellRuntime.profile.commandMaxChars,
-    desktopPath: userOwnedPathHints.desktopPath,
-    documentsPath: userOwnedPathHints.documentsPath,
-    downloadsPath: userOwnedPathHints.downloadsPath
-  });
   const liveRunRuntimePath = resolveLiveRunRuntimePathFromEnv();
   const executor = new ToolExecutorOrgan(
-    config,
+    baseConfig,
     undefined,
     new ManagedProcessRegistry({
       snapshotPath: path.join(liveRunRuntimePath, "managed_processes.json")
@@ -150,80 +182,158 @@ export function buildDefaultBrain(): BrainOrchestrator {
     })
   );
   const governors = createDefaultGovernors();
-  const masterGovernor = new MasterGovernor(config.governance.supermajorityThreshold);
+  const masterGovernor = new MasterGovernor(baseConfig.governance.supermajorityThreshold);
   const stateStore = new StateStore();
   const personalityStore = new PersonalityStore();
   const governanceMemoryStore = new GovernanceMemoryStore(undefined, {
-    backend: config.persistence.ledgerBackend,
-    sqlitePath: config.persistence.ledgerSqlitePath,
-    exportJsonOnWrite: config.persistence.exportJsonOnWrite
+    backend: baseConfig.persistence.ledgerBackend,
+    sqlitePath: baseConfig.persistence.ledgerSqlitePath,
+    exportJsonOnWrite: baseConfig.persistence.exportJsonOnWrite
   });
   const executionReceiptStore = new ExecutionReceiptStore(undefined, {
-    backend: config.persistence.ledgerBackend,
-    sqlitePath: config.persistence.ledgerSqlitePath,
-    exportJsonOnWrite: config.persistence.exportJsonOnWrite
+    backend: baseConfig.persistence.ledgerBackend,
+    sqlitePath: baseConfig.persistence.ledgerSqlitePath,
+    exportJsonOnWrite: baseConfig.persistence.exportJsonOnWrite
   });
   const workflowLearningStore = new WorkflowLearningStore(undefined, {
-    backend: config.persistence.ledgerBackend,
-    sqlitePath: config.persistence.ledgerSqlitePath,
-    exportJsonOnWrite: config.persistence.exportJsonOnWrite
+    backend: baseConfig.persistence.ledgerBackend,
+    sqlitePath: baseConfig.persistence.ledgerSqlitePath,
+    exportJsonOnWrite: baseConfig.persistence.exportJsonOnWrite
   });
   const skillRegistryStore = new SkillRegistryStore(
     path.resolve(process.cwd(), "runtime/skills")
   );
   const distillerLedgerStore = new DistillerMergeLedgerStore(undefined, {
-    backend: config.persistence.ledgerBackend,
-    sqlitePath: config.persistence.ledgerSqlitePath,
-    exportJsonOnWrite: config.persistence.exportJsonOnWrite
+    backend: baseConfig.persistence.ledgerBackend,
+    sqlitePath: baseConfig.persistence.ledgerSqlitePath,
+    exportJsonOnWrite: baseConfig.persistence.exportJsonOnWrite
   });
   const satelliteCloneCoordinator = new SatelliteCloneCoordinator({
-    maxClonesPerTask: config.limits.maxSubagentsPerTask,
-    maxDepth: config.limits.maxSubagentDepth,
+    maxClonesPerTask: baseConfig.limits.maxSubagentsPerTask,
+    maxDepth: baseConfig.limits.maxSubagentDepth,
     maxBudgetUsd: 1
   });
-  const reflection = new ReflectionOrgan(
+  const judgmentPatternStore = new JudgmentPatternStore(undefined, {
+    backend: baseConfig.persistence.ledgerBackend,
+    sqlitePath: baseConfig.persistence.ledgerSqlitePath,
+    exportJsonOnWrite: baseConfig.persistence.exportJsonOnWrite
+  });
+  const profileMemoryStore = ProfileMemoryStore.fromEnv();
+
+  return {
+    baseConfig,
     memoryStore,
+    plannerFailureStore,
+    executor,
+    governors,
+    masterGovernor,
+    stateStore,
+    personalityStore,
+    governanceMemoryStore,
+    executionReceiptStore,
+    workflowLearningStore,
+    judgmentPatternStore,
+    profileMemoryStore,
+    skillRegistryStore,
+    distillerLedgerStore,
+    satelliteCloneCoordinator
+  };
+}
+
+/**
+ * Builds one backend-specific brain runtime on top of the shared executor and store dependencies.
+ *
+ * **Why it exists:**
+ * Session-aware backend overrides need a way to rebuild only the model-bound layers while
+ * preserving the same managed-process, browser-session, and ledger runtime core.
+ *
+ * **What it talks to:**
+ * - Uses `createBrainConfigFromEnv` from `./config`.
+ * - Uses `createModelClientFromEnv` from `../models/createModelClient`.
+ * - Uses planner, reflection, and memory broker organs that depend on the selected model client.
+ *
+ * @param shared - Shared runtime dependencies created once for the process.
+ * @param env - Environment map carrying the selected backend/profile configuration.
+ * @returns Backend-specific config, model client, and orchestrator tuple.
+ */
+export function buildBrainRuntimeFromEnvironment(
+  shared: SharedBrainRuntimeDependencies,
+  env: NodeJS.ProcessEnv = process.env
+): BuiltBrainRuntime {
+  const config = createBrainConfigFromEnv(env);
+  const modelClient = createModelClientFromEnv(env);
+  const userOwnedPathHints = resolveUserOwnedPathHints();
+  const planner = new PlannerOrgan(modelClient, shared.memoryStore, shared.plannerFailureStore, {
+    platform: config.shellRuntime.profile.platform,
+    shellKind: config.shellRuntime.profile.shellKind,
+    invocationMode: config.shellRuntime.profile.invocationMode,
+    commandMaxChars: config.shellRuntime.profile.commandMaxChars,
+    desktopPath: userOwnedPathHints.desktopPath,
+    documentsPath: userOwnedPathHints.documentsPath,
+    downloadsPath: userOwnedPathHints.downloadsPath
+  });
+  const reflection = new ReflectionOrgan(
+    shared.memoryStore,
     modelClient,
     {
       reflectOnSuccess: config.reflection.reflectOnSuccess
     },
     {
-      distillerLedgerStore,
-      satelliteCloneCoordinator
+      distillerLedgerStore: shared.distillerLedgerStore,
+      satelliteCloneCoordinator: shared.satelliteCloneCoordinator
     }
   );
-  const judgmentPatternStore = new JudgmentPatternStore(undefined, {
-    backend: config.persistence.ledgerBackend,
-    sqlitePath: config.persistence.ledgerSqlitePath,
-    exportJsonOnWrite: config.persistence.exportJsonOnWrite
-  });
-  const profileMemoryStore = ProfileMemoryStore.fromEnv();
   const memoryBroker = new MemoryBrokerOrgan(
-    profileMemoryStore,
+    shared.profileMemoryStore,
     undefined,
     undefined,
     new LanguageUnderstandingOrgan(modelClient)
   );
 
-  return new BrainOrchestrator(
+  const brain = new BrainOrchestrator(
     config,
     planner,
-    executor,
-    governors,
-    masterGovernor,
-    stateStore,
+    shared.executor,
+    shared.governors,
+    shared.masterGovernor,
+    shared.stateStore,
     modelClient,
     reflection,
-    personalityStore,
-    governanceMemoryStore,
-    profileMemoryStore,
+    shared.personalityStore,
+    shared.governanceMemoryStore,
+    shared.profileMemoryStore,
     memoryBroker,
-    executionReceiptStore,
+    shared.executionReceiptStore,
     undefined,
     undefined,
     undefined,
-    workflowLearningStore,
-    judgmentPatternStore,
-    skillRegistryStore
+    shared.workflowLearningStore,
+    shared.judgmentPatternStore,
+    shared.skillRegistryStore
   );
+
+  return {
+    config,
+    modelClient,
+    brain
+  };
+}
+
+/**
+ * Builds the default process-wide brain used by CLI and legacy single-backend entrypoints.
+ *
+ * **Why it exists:**
+ * Preserves the old `buildDefaultBrain()` surface for callers that do not need session-aware
+ * backend overrides while reusing the shared/runtime split internally.
+ *
+ * **What it talks to:**
+ * - Uses `createSharedBrainRuntimeDependencies` and `buildBrainRuntimeFromEnvironment` in this
+ *   module.
+ *
+ * @returns Process-default orchestrator instance.
+ */
+export function buildDefaultBrain(): BrainOrchestrator {
+  return buildBrainRuntimeFromEnvironment(
+    createSharedBrainRuntimeDependencies()
+  ).brain;
 }

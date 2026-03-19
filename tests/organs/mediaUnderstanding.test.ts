@@ -3,6 +3,9 @@
  */
 
 import assert from "node:assert/strict";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { test } from "node:test";
 
 import type { ConversationInboundMediaEnvelope } from "../../src/interfaces/mediaRuntime/contracts";
@@ -12,24 +15,33 @@ import {
   interpretMediaAttachment,
   MediaUnderstandingOrgan
 } from "../../src/organs/mediaUnderstanding/mediaInterpretation";
+import { interpretImageAttachment } from "../../src/organs/mediaUnderstanding/imageUnderstanding";
 
 test("createMediaUnderstandingConfigFromEnv falls back to bounded defaults", () => {
   const originalEnv = {
+    BRAIN_MODEL_BACKEND: process.env.BRAIN_MODEL_BACKEND,
     OPENAI_API_KEY: process.env.OPENAI_API_KEY,
     OPENAI_BASE_URL: process.env.OPENAI_BASE_URL,
+    OPENAI_MODEL_SMALL_FAST: process.env.OPENAI_MODEL_SMALL_FAST,
+    CODEX_MODEL_SMALL_FAST: process.env.CODEX_MODEL_SMALL_FAST,
     BRAIN_MEDIA_VISION_MODEL: process.env.BRAIN_MEDIA_VISION_MODEL,
     BRAIN_MEDIA_TRANSCRIPTION_MODEL: process.env.BRAIN_MEDIA_TRANSCRIPTION_MODEL,
     BRAIN_MEDIA_REQUEST_TIMEOUT_MS: process.env.BRAIN_MEDIA_REQUEST_TIMEOUT_MS
   };
 
+  delete process.env.BRAIN_MODEL_BACKEND;
   delete process.env.OPENAI_API_KEY;
   delete process.env.OPENAI_BASE_URL;
+  delete process.env.OPENAI_MODEL_SMALL_FAST;
+  delete process.env.CODEX_MODEL_SMALL_FAST;
   delete process.env.BRAIN_MEDIA_VISION_MODEL;
   delete process.env.BRAIN_MEDIA_TRANSCRIPTION_MODEL;
   delete process.env.BRAIN_MEDIA_REQUEST_TIMEOUT_MS;
 
   try {
     const config = createMediaUnderstandingConfigFromEnv();
+    assert.equal(config.requestedBackend, "inherit_text_backend");
+    assert.equal(config.resolvedBackend, "mock");
     assert.equal(config.openAIApiKey, null);
     assert.equal(config.openAIBaseUrl, "https://api.openai.com/v1");
     assert.ok(config.requestTimeoutMs >= 1_000);
@@ -41,6 +53,141 @@ test("createMediaUnderstandingConfigFromEnv falls back to bounded defaults", () 
         process.env[key] = value;
       }
     }
+  }
+});
+
+test("createMediaUnderstandingConfigFromEnv can keep media on the explicit OpenAI API path when the main backend is codex_oauth", () => {
+  const originalEnv = {
+    BRAIN_MODEL_BACKEND: process.env.BRAIN_MODEL_BACKEND,
+    BRAIN_MEDIA_BACKEND: process.env.BRAIN_MEDIA_BACKEND,
+    OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+    OPENAI_MODEL_SMALL_FAST: process.env.OPENAI_MODEL_SMALL_FAST,
+    CODEX_MODEL_SMALL_FAST: process.env.CODEX_MODEL_SMALL_FAST,
+    BRAIN_MEDIA_VISION_MODEL: process.env.BRAIN_MEDIA_VISION_MODEL
+  };
+
+  process.env.BRAIN_MODEL_BACKEND = "codex_oauth";
+  process.env.BRAIN_MEDIA_BACKEND = "openai_api";
+  delete process.env.OPENAI_API_KEY;
+  process.env.OPENAI_MODEL_SMALL_FAST = "gpt-4.1-mini";
+  process.env.CODEX_MODEL_SMALL_FAST = "gpt-5.4-mini";
+  delete process.env.BRAIN_MEDIA_VISION_MODEL;
+
+  try {
+    const config = createMediaUnderstandingConfigFromEnv();
+    assert.equal(config.requestedBackend, "openai_api");
+    assert.equal(config.resolvedBackend, "openai_api");
+    assert.equal(config.openAIApiKey, null);
+    assert.equal(config.visionModel, "gpt-4.1-mini");
+  } finally {
+    for (const [key, value] of Object.entries(originalEnv)) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+  }
+});
+
+test("createMediaUnderstandingConfigFromEnv can inherit the text backend and fail closed for unsupported Codex media paths", () => {
+  const originalEnv = {
+    BRAIN_MODEL_BACKEND: process.env.BRAIN_MODEL_BACKEND,
+    BRAIN_MEDIA_BACKEND: process.env.BRAIN_MEDIA_BACKEND,
+    OPENAI_API_KEY: process.env.OPENAI_API_KEY
+  };
+
+  process.env.BRAIN_MODEL_BACKEND = "codex_oauth";
+  process.env.BRAIN_MEDIA_BACKEND = "inherit_text_backend";
+  process.env.OPENAI_API_KEY = "sk-test";
+
+  try {
+    const config = createMediaUnderstandingConfigFromEnv();
+    assert.equal(config.requestedBackend, "inherit_text_backend");
+    assert.equal(config.resolvedBackend, "codex_oauth");
+    assert.equal(config.openAIApiKey, null);
+  } finally {
+    for (const [key, value] of Object.entries(originalEnv)) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+  }
+});
+
+test("interpretImageAttachment uses the Codex bearer token when media inherits the Codex backend", async () => {
+  const originalFetch = globalThis.fetch;
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-media-codex-"));
+  try {
+    const profileDir = path.join(tempDir, "default");
+    await mkdir(profileDir, { recursive: true });
+    await writeFile(
+      path.join(profileDir, "auth.json"),
+      JSON.stringify({
+        auth_mode: "chatgpt",
+        tokens: {
+          access_token: "codex-access-token",
+          refresh_token: "refresh-token"
+        }
+      }),
+      "utf8"
+    );
+
+    let seenAuthorizationHeader: string | null = null;
+    globalThis.fetch = (async (_input, init) => {
+      seenAuthorizationHeader = new Headers(init?.headers).get("Authorization");
+      return new Response(
+        JSON.stringify({
+          output_text: "Codex-backed image summary."
+        }),
+        {
+          status: 200,
+          headers: {
+            "Content-Type": "application/json"
+          }
+        }
+      );
+    }) as typeof fetch;
+
+    const interpretation = await interpretImageAttachment(
+      {
+        requestedBackend: "inherit_text_backend",
+        resolvedBackend: "codex_oauth",
+        openAIApiKey: null,
+        openAIBaseUrl: "https://api.openai.com/v1",
+        visionModel: "gpt-5.4-mini",
+        transcriptionModel: "whisper-1",
+        requestTimeoutMs: 45_000,
+        env: {
+          CODEX_AUTH_STATE_DIR: tempDir,
+          HOME: tempDir,
+          USERPROFILE: tempDir
+        }
+      },
+      {
+        kind: "image",
+        provider: "telegram",
+        fileId: "image-codex-1",
+        fileUniqueId: "image-codex-1",
+        mimeType: "image/png",
+        fileName: "ui.png",
+        sizeBytes: 2048,
+        caption: null,
+        durationSeconds: null,
+        width: 1280,
+        height: 720
+      },
+      Buffer.from("png-data", "utf8")
+    );
+
+    assert.equal(seenAuthorizationHeader, "Bearer codex-access-token");
+    assert.equal(interpretation.summary, "Codex-backed image summary.");
+    assert.match(interpretation.provenance, /Codex OAuth-backed OpenAI image summary model gpt-5\.4-mini/);
+  } finally {
+    globalThis.fetch = originalFetch;
+    await rm(tempDir, { recursive: true, force: true });
   }
 });
 
@@ -57,11 +204,13 @@ test("computeMediaFixtureKey returns a stable sha256 digest", () => {
 test("interpretMediaAttachment prefers fixture catalog entries over fallback logic", async () => {
   const buffer = Buffer.from("voice fixture", "utf8");
   const fixtureKey = computeMediaFixtureKey(buffer);
-  const interpretation = await interpretMediaAttachment(
-    {
-      openAIApiKey: null,
-      openAIBaseUrl: "https://api.openai.com/v1",
-      visionModel: "gpt-4.1-mini",
+    const interpretation = await interpretMediaAttachment(
+      {
+        requestedBackend: "openai_api",
+        resolvedBackend: "openai_api",
+        openAIApiKey: null,
+        openAIBaseUrl: "https://api.openai.com/v1",
+        visionModel: "gpt-4.1-mini",
       transcriptionModel: "whisper-1",
       requestTimeoutMs: 45_000
     },
@@ -134,6 +283,8 @@ test("MediaUnderstandingOrgan enriches all attachments in one envelope", async (
   };
   const organ = new MediaUnderstandingOrgan(
     {
+      requestedBackend: "openai_api",
+      resolvedBackend: "openai_api",
       openAIApiKey: null,
       openAIBaseUrl: "https://api.openai.com/v1",
       visionModel: "gpt-4.1-mini",

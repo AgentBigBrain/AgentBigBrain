@@ -93,6 +93,7 @@ test("renderConversationStatus keeps default /status human-first while preservin
   assert.match(rendered, /Queue: 1 request waiting after the current run\./);
   assert.match(rendered, /Draft: none\./);
   assert.match(rendered, /Agent Pulse: off\./);
+  assert.match(rendered, /Model backend: process default\./);
   assert.match(rendered, /Recent activity:/);
   assert.match(rendered, /- Completed: input-job-3/);
   assert.match(rendered, /run \/status debug/);
@@ -123,8 +124,20 @@ test("renderConversationStatusDebug preserves detailed ack and delivery metadata
   assert.match(rendered, /Running ack: state=SENT, generation=4/);
   assert.match(rendered, /Running final delivery: outcome=not_attempted, attempts=1/);
   assert.match(rendered, /Active draft: none/);
+  assert.match(rendered, /Model backend override: none/);
+  assert.match(rendered, /Codex profile override: none/);
   assert.match(rendered, /Recent jobs:/);
   assert.match(rendered, /- job-1 \(running\)/);
+});
+
+test("renderConversationStatus shows per-session backend and Codex profile overrides", () => {
+  const session = buildSession();
+  session.modelBackendOverride = "codex_oauth";
+  session.codexAuthProfileId = "work";
+
+  const rendered = renderConversationStatus(session);
+
+  assert.match(rendered, /Model backend: codex_oauth \(Codex profile work\)\./);
 });
 
 test("renderAgentPulseStatus and resetAgentPulseRuntimeStatus keep pulse metadata deterministic", () => {

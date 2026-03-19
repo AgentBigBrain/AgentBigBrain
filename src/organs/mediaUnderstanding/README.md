@@ -24,6 +24,9 @@ transport parsing but before conversation execution and memory brokerage.
 ## Current Provider Coverage
 - Images can use provider-backed vision when `BRAIN_MEDIA_VISION_MODEL` resolves to a usable vision-capable model.
 - Voice notes can use provider-backed transcription when `BRAIN_MEDIA_TRANSCRIPTION_MODEL` is available.
+- When `BRAIN_MEDIA_BACKEND` inherits `codex_oauth`, media requests reuse the operator-owned
+  Codex bearer credential ephemerally at request time instead of persisting tokens into runtime
+  memory or session state.
 - Short video currently remains on bounded metadata/caption fallback. That is deliberate: the runtime does not yet have a clip-analysis path with strong enough cost, latency, and truthfulness controls to claim deeper understanding.
 
 ## Related Tests

@@ -46,10 +46,10 @@ Built in TypeScript with only **2 runtime dependencies** (`ws`, `onnxruntime-nod
 <a id="zero-dependency-core"></a>
 **📦 Minimal Dependencies** — Only 2 runtime packages. No heavyweight SDKs. Crypto, HTTP, SQLite, and process control all use Node.js built-ins.
 
-**🧭 Broad OpenAI Coverage** — The OpenAI adapter now supports the practical GPT-4.1 through
-GPT-5.3 range used in this repo, including `gpt-4.1-mini`, `gpt-4.1`, `gpt-5`, `gpt-5.1`,
-`gpt-5.2`, and `gpt-5.3-codex`, with model-family-aware transport selection and live-smoke
-verification. Setup details live in [docs/SETUP.md](./docs/SETUP.md).
+**🧭 Multi-Backend Model Routing** — The runtime now supports `mock`, `ollama`, `openai_api`, and
+`codex_oauth` backends behind the same logical role aliases, with fail-closed backend
+normalization, backend-specific model mapping, and truthful usage reporting. Setup details live in
+[docs/SETUP.md](./docs/SETUP.md).
 
 ---
 
@@ -296,7 +296,16 @@ Low-risk actions take the **fast path** — only the security governor votes, so
 
 ### Can I use this with my own model?
 
-Yes. Set `BRAIN_MODEL_BACKEND=openai` and configure `OPENAI_API_KEY`. You can point it at any OpenAI-compatible API (including local models) using `OPENAI_BASE_URL`. The OpenAI path supports model-family-aware transport selection across Chat Completions and Responses, and there is also an Ollama adapter for local models. The optional local intent engine is a separate Ollama-backed seam, so you can keep the main planner on OpenAI while using a local Phi model for bounded front-door intent classification. See **[docs/SETUP.md](docs/SETUP.md)** for all model options.
+Yes. The main text backend is now explicit:
+
+- `BRAIN_MODEL_BACKEND=openai_api` for OpenAI-compatible API access with `OPENAI_API_KEY`
+- `BRAIN_MODEL_BACKEND=codex_oauth` for subscription-backed Codex CLI/OAuth usage
+- `BRAIN_MODEL_BACKEND=ollama` for local Ollama models
+
+You can still point the OpenAI API path at a compatible endpoint with `OPENAI_BASE_URL`. The
+optional local intent engine is separate, so you can keep the main planner on `openai_api` or
+`codex_oauth` while using a local Phi model for front-door intent classification. See
+**[docs/SETUP.md](docs/SETUP.md)** for backend and auth details.
 
 ### How do I connect it to Telegram or Discord?
 
@@ -306,8 +315,15 @@ Set `BRAIN_INTERFACE_PROVIDER` to `telegram`, `discord`, or `both`, add your bot
 
 Yes, but the current media support is intentionally limited and truthful.
 
-- Images: supported through the Telegram media-ingest path. Rich interpretation requires a vision-capable OpenAI model. If that path is unavailable, the runtime falls back to a simple caption or file-metadata summary.
-- Voice notes: supported through the Telegram media-ingest path. Rich interpretation requires the transcription path, which defaults to `whisper-1`. If transcription is unavailable, the runtime falls back to basic media context instead of fabricating a transcript.
+- Images: supported through the Telegram media-ingest path. Rich interpretation can use the
+  explicit OpenAI API media path or follow the active `codex_oauth` backend when the chosen media
+  model supports image understanding. If that is not available, the runtime falls back to a simple
+  caption or file summary.
+- Voice notes: supported through the Telegram media-ingest path. Rich interpretation can use the
+  explicit OpenAI API transcription path or follow the active `codex_oauth` backend where that
+  media auth path is supported. The default transcription model remains `whisper-1`. If
+  transcription is unavailable, the runtime falls back to basic media context instead of making up
+  a transcript.
 - Video: accepted as input. Today the runtime uses file metadata and captions for video, not full clip analysis.
 
 See **[docs/SETUP.md](docs/SETUP.md)** for the exact media-related env settings and current operator limits.
@@ -332,7 +348,7 @@ Common issues and their fixes:
 
 | Problem | Fix |
 |---------|-----|
-| `OPENAI_API_KEY` missing | Set the key in `.env`, or use `BRAIN_MODEL_BACKEND=mock` for local testing |
+| `OPENAI_API_KEY` missing | Set the key in `.env` for `BRAIN_MODEL_BACKEND=openai_api`, or use `mock`, `ollama`, or `codex_oauth` instead |
 | Full-access mode fails at startup | Set `BRAIN_ALLOW_FULL_ACCESS=true` alongside `BRAIN_RUNTIME_MODE=full_access` |
 | Daemon exits immediately | All three latches required: `BRAIN_ALLOW_DAEMON_MODE=true`, `BRAIN_MAX_AUTONOMOUS_ITERATIONS > 0`, `BRAIN_MAX_DAEMON_GOAL_ROLLOVERS > 0` |
 | `GLOBAL_DEADLINE_EXCEEDED` | Increase `BRAIN_PER_TURN_DEADLINE_MS` (e.g., `120000` for heavy tasks) |
@@ -349,7 +365,7 @@ For the full error-code-to-env-variable map, see **[docs/ERROR_CODE_ENV_MAP.md](
 | **Core** | `src/core/` | Orchestrator, task runner, hard constraints, config, execution receipts |
 | **Organs** | `src/organs/` | Cognitive modules — planner, executor, reflection, memory, classifiers |
 | **Governors** | `src/governors/` | 7 council governors, code review gate, master vote aggregation |
-| **Models** | `src/models/` | Provider adapters (OpenAI, Ollama, mock) behind a shared interface |
+| **Models** | `src/models/` | Provider adapters (`openai_api`, `codex_oauth`, `ollama`, `mock`) behind a shared interface |
 | **Interfaces** | `src/interfaces/` | Telegram, Discord, federation server, session management |
 | **Tests** | `tests/` | 150+ test files covering every maturity stage |
 

@@ -198,6 +198,11 @@ export function renderConversationStatus(session: ConversationSession): string {
   lines.push(
     `Agent Pulse: ${session.agentPulse.optIn ? `on (${session.agentPulse.mode} mode)` : "off"}.`
   );
+  lines.push(
+    `Model backend: ${session.modelBackendOverride ?? "process default"}${
+      session.codexAuthProfileId ? ` (Codex profile ${session.codexAuthProfileId})` : ""
+    }.`
+  );
 
   const recentActivityLines = buildRecentActivityLines(session, runningJob?.id ?? null);
   if (recentActivityLines.length > 0) {
@@ -244,6 +249,8 @@ export function renderConversationStatusDebug(session: ConversationSession): str
     lines.push("Active draft: none");
   }
   lines.push(`Conversation turns: ${session.conversationTurns.length}`);
+  lines.push(`Model backend override: ${session.modelBackendOverride ?? "none"}`);
+  lines.push(`Codex profile override: ${session.codexAuthProfileId ?? "none"}`);
   lines.push(
     `Agent Pulse: ${session.agentPulse.optIn ? "on" : "off"} ` +
     `(mode=${session.agentPulse.mode}, route=${session.agentPulse.routeStrategy})`

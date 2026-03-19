@@ -3,13 +3,13 @@
  */
 
 import { MAIN_AGENT_ID } from "../../core/agentIdentity";
-import { createBrainConfigFromEnv } from "../../core/config";
+import { createBrainConfigFromEnv, type BrainConfig } from "../../core/config";
 import { makeId } from "../../core/ids";
 import { selectModelForRole } from "../../core/modelRouting";
 import type { TaskRequest } from "../../core/types";
 import { stripLabelStyleOpening } from "../userFacing/languageSurface";
 import { createModelClientFromEnv } from "../../models/createModelClient";
-import type { ResponseSynthesisModelOutput } from "../../models/types";
+import type { ModelClient, ResponseSynthesisModelOutput } from "../../models/types";
 
 /** Builds the synthetic task envelope used for direct conversational replies. */
 function buildDirectConversationTask(
@@ -42,13 +42,34 @@ export async function runDirectConversationReply(
   input: string,
   receivedAt: string
 ): Promise<string> {
+  return runDirectConversationReplyWithRuntime(
+    input,
+    receivedAt,
+    createBrainConfigFromEnv(),
+    createModelClientFromEnv()
+  );
+}
+
+/**
+ * Generates a direct conversational reply using the provided runtime configuration and model client.
+ *
+ * @param input - Current conversational turn, optionally including bounded chat context.
+ * @param receivedAt - Timestamp used for deterministic synthetic task metadata.
+ * @param config - Brain config whose routing determines the synthesizer model.
+ * @param modelClient - Model client bound to the requested backend.
+ * @returns User-facing conversational reply text.
+ */
+export async function runDirectConversationReplyWithRuntime(
+  input: string,
+  receivedAt: string,
+  config: BrainConfig,
+  modelClient: ModelClient
+): Promise<string> {
   const normalizedInput = input.trim();
   if (!normalizedInput) {
     return "";
   }
 
-  const config = createBrainConfigFromEnv();
-  const modelClient = createModelClientFromEnv();
   const task = buildDirectConversationTask(normalizedInput, receivedAt);
   const output = await modelClient.completeJson<ResponseSynthesisModelOutput>({
     model: selectModelForRole("synthesizer", config),

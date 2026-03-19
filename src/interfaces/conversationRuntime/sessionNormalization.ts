@@ -10,6 +10,7 @@ import type { ConversationStackV1, SessionSchemaVersionV1 } from "../../core/typ
 import { createEmptyInterfaceSessionFile } from "./sessionPersistence";
 import type { InterfaceSessionFile } from "./contracts";
 import type { ConversationClassifierEvent, ConversationJob, ConversationSession } from "./sessionStateContracts";
+import { normalizeModelBackend } from "../../models/backendConfig";
 import {
   normalizeActiveClarification,
   normalizeActiveWorkspaceRecord,
@@ -96,6 +97,14 @@ export function normalizeSession(raw: Partial<ConversationSession>): Conversatio
     sessionSchemaVersion: stackMigration.sessionSchemaVersion,
     conversationStack: stackMigration.conversationStack,
     updatedAt: raw.updatedAt,
+    modelBackendOverride:
+      typeof raw.modelBackendOverride === "string"
+        ? normalizeModelBackend(raw.modelBackendOverride)
+        : null,
+    codexAuthProfileId:
+      typeof raw.codexAuthProfileId === "string" && raw.codexAuthProfileId.trim().length > 0
+        ? raw.codexAuthProfileId.trim()
+        : null,
     activeProposal,
     activeClarification,
     modeContinuity: normalizeModeContinuityState(raw.modeContinuity),

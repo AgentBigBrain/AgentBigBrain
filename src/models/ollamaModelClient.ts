@@ -43,6 +43,7 @@ export class OllamaModelClient implements ModelClient {
         promptTokens: 0,
         completionTokens: 0,
         totalTokens: 0,
+        billingMode: "local",
         estimatedSpendUsd: 0
     };
 

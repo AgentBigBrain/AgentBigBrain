@@ -47,6 +47,17 @@ test("resolveConversationIntentMode detects natural status and artifact recall r
   assert.equal(resolution.clarification, null);
 });
 
+test("resolveConversationIntentMode keeps explicit conversational interludes off the work path even when the preview should stay open", async () => {
+  const resolution = await resolveConversationIntentMode(
+    "Before changing anything, just talk with me for a minute about what makes AI Drone City feel playful. Reply in two short paragraphs and keep the page open."
+  );
+
+  assert.equal(resolution.mode, "chat");
+  assert.equal(resolution.confidence, "high");
+  assert.equal(resolution.clarification, null);
+  assert.equal(resolution.matchedRuleId, "intent_mode_direct_conversation_only");
+});
+
 test("resolveConversationIntentMode treats what's-the-status wording as status or recall", async () => {
   const resolution = await resolveConversationIntentMode(
     "What's the status?"

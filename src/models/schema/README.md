@@ -6,6 +6,7 @@ deterministic validation for provider and mock model clients.
 
 The current extracted slice moves schema ownership behind:
 - `contracts.ts`
+- `jsonSchemas.ts`
 - `validation.ts`
 
 The stable `schemaValidation.ts` entrypoint remains for compatibility, but canonical schema
@@ -18,6 +19,7 @@ validation logic now lives here.
 
 ## Outputs
 - canonical known-schema contracts for structured model requests
+- JSON Schema payloads for backends that accept schema files directly
 - normalized planner output payloads at the model boundary
 - deterministic validation failures for malformed provider or mock responses
 

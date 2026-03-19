@@ -34,23 +34,26 @@ The current extracted slice moves canonical OpenAI schema-envelope ownership beh
 - deterministic strict-schema transformations for known structured model schemas
 
 ## Operator Notes
-This runtime now targets the practical OpenAI model range most operators are likely to use in this
-repo:
+This is the API-key backend used when `BRAIN_MODEL_BACKEND=openai_api`.
 
-- `gpt-4.1-mini`
-- `gpt-4.1`
-- `gpt-5`
-- `gpt-5.1`
-- `gpt-5.2`
-- `gpt-5.3-codex`
+These are the OpenAI API models this repo is most likely to use:
 
-Recommended default routing for broad coverage:
+- `gpt-5-nano`
+- `gpt-5-mini`
+- `gpt-5.4`
+- `gpt-5.4-mini`
 
-- `small_fast=gpt-4.1-mini`
-- `small_policy=gpt-4.1-mini`
-- `medium_general=gpt-4.1`
-- `medium_policy=gpt-4.1-mini`
-- `large_reasoning=gpt-5.3-codex`
+Recommended routing for direct OpenAI API billing:
+
+- `small_fast=gpt-5-nano`
+- `small_policy=gpt-5-nano`
+- `medium_general=gpt-5-mini`
+- `medium_policy=gpt-5-nano`
+- `large_reasoning=gpt-5.4`
+
+If you want subscription-backed routing instead, use `BRAIN_MODEL_BACKEND=codex_oauth` and map the
+same role aliases through `CODEX_MODEL_*`. Do not try to point the OpenAI API backend at Codex
+auth.
 
 Recommended transport and timeout settings:
 
@@ -58,14 +61,13 @@ Recommended transport and timeout settings:
 - `OPENAI_TIMEOUT_MS=300000` for autonomous or live-smoke runs
 
 ## Compatibility Matrix
-The compatibility policy is model-family aware rather than model-name-only.
+Transport choice is based on the model family, not just the exact model name.
 
 | Model family | Preferred transport | Notes |
 | --- | --- | --- |
-| `gpt-4.1*` | `chat_completions` | Best default for the current structured-output path in this repo. |
-| `gpt-5` | `responses` | Uses explicit low-latency reasoning effort to avoid slow default behavior in long autonomous runs. |
-| `gpt-5.1` / `gpt-5.2` | `responses` | Uses lighter reasoning settings for faster autonomous turn completion. |
-| `gpt-5.3-codex` | `responses` | Supported in the same compatibility layer and live-smoke matrix. |
+| `gpt-4.1*` | `chat_completions` | Legacy compatibility path kept for operators still pinned to 4.1-family API models. |
+| `gpt-5*` | `responses` | Default modern structured-output path for current OpenAI API routing in this repo. |
+| `gpt-5.4*` | `responses` | Supported in the same strict-schema and live-smoke compatibility layer. |
 | unknown models | `auto` or fail-closed | Controlled by `OPENAI_COMPATIBILITY_STRICT`. |
 
 Structured-output fallback rules:

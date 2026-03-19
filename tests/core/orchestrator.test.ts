@@ -320,6 +320,7 @@ class ModelSpendBudgetModelClient implements ModelClient {
     promptTokens: 0,
     completionTokens: 0,
     totalTokens: 0,
+    billingMode: "api_usd",
     estimatedSpendUsd: 0
   };
 

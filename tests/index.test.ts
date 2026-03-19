@@ -3,9 +3,12 @@
  */
 
 import assert from "node:assert/strict";
+import os from "node:os";
+import path from "node:path";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { test } from "node:test";
 
-import { parseCliArgs, resolveDaemonContract } from "../src/index";
+import { parseCliArgs, renderCodexAuthStatus, resolveDaemonContract } from "../src/index";
 
 test("parseCliArgs fails closed with usage when goal text is missing", () => {
   const parsed = parseCliArgs([]);
@@ -81,6 +84,39 @@ test("parseCliArgs rejects unknown flags", () => {
   assert.match(parsed.failure.message, /Unknown flag/);
 });
 
+test("parseCliArgs supports Codex auth status commands", () => {
+  const parsed = parseCliArgs(["auth", "codex", "status"]);
+  assert.equal(parsed.ok, true);
+  if (!parsed.ok) {
+    return;
+  }
+  assert.equal(parsed.command.mode, "auth");
+  assert.equal(parsed.command.provider, "codex");
+  assert.equal(parsed.command.action, "status");
+});
+
+test("parseCliArgs supports Codex auth login device-auth commands", () => {
+  const parsed = parseCliArgs(["auth", "codex", "login", "--device-auth"]);
+  assert.equal(parsed.ok, true);
+  if (!parsed.ok) {
+    return;
+  }
+  assert.equal(parsed.command.mode, "auth");
+  assert.equal(parsed.command.action, "login");
+  assert.equal(parsed.command.deviceAuth, true);
+});
+
+test("parseCliArgs supports Codex auth logout profile commands", () => {
+  const parsed = parseCliArgs(["auth", "codex", "logout", "--profile", "default"]);
+  assert.equal(parsed.ok, true);
+  if (!parsed.ok) {
+    return;
+  }
+  assert.equal(parsed.command.mode, "auth");
+  assert.equal(parsed.command.action, "logout");
+  assert.equal(parsed.command.profileId, "default");
+});
+
 test("resolveDaemonContract requires explicit daemon acknowledgement latch", () => {
   assert.throws(
     () =>
@@ -131,4 +167,58 @@ test("resolveDaemonContract returns bounded rollover settings when contract is v
     BRAIN_MAX_AUTONOMOUS_ITERATIONS: "5"
   });
   assert.deepEqual(contract, { maxGoalRollovers: 3 });
+});
+
+test("renderCodexAuthStatus includes backend and resolved role mappings without leaking token values", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-index-codex-"));
+  const originalEnv = {
+    BRAIN_MODEL_BACKEND: process.env.BRAIN_MODEL_BACKEND,
+    CODEX_AUTH_STATE_DIR: process.env.CODEX_AUTH_STATE_DIR,
+    HOME: process.env.HOME,
+    USERPROFILE: process.env.USERPROFILE,
+    CODEX_MODEL_SMALL_FAST: process.env.CODEX_MODEL_SMALL_FAST,
+    CODEX_MODEL_LARGE_REASONING: process.env.CODEX_MODEL_LARGE_REASONING
+  };
+
+  try {
+    const profileDir = path.join(tempDir, "default");
+    await mkdir(profileDir, { recursive: true });
+    await writeFile(
+      path.join(profileDir, "auth.json"),
+      JSON.stringify({
+        auth_mode: "chatgpt",
+        last_refresh: "2026-03-18T01:02:03.000Z",
+        tokens: {
+          access_token: "secret-access",
+          refresh_token: "secret-refresh",
+          account_id: "acct_123"
+        }
+      }),
+      "utf8"
+    );
+
+    process.env.BRAIN_MODEL_BACKEND = "codex_oauth";
+    process.env.CODEX_AUTH_STATE_DIR = tempDir;
+    process.env.HOME = tempDir;
+    process.env.USERPROFILE = tempDir;
+    process.env.CODEX_MODEL_SMALL_FAST = "gpt-5.4-mini";
+    process.env.CODEX_MODEL_LARGE_REASONING = "gpt-5.4";
+
+    const rendered = await renderCodexAuthStatus();
+    assert.match(rendered, /Active backend: codex_oauth/);
+    assert.match(rendered, /Resolved role mappings:/);
+    assert.match(rendered, /small-fast-model -> gpt-5\.4-mini/);
+    assert.match(rendered, /large-reasoning-model -> gpt-5\.4/);
+    assert.equal(rendered.includes("secret-access"), false);
+    assert.equal(rendered.includes("secret-refresh"), false);
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+    for (const [key, value] of Object.entries(originalEnv)) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+  }
 });

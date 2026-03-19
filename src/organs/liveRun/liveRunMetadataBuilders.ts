@@ -50,6 +50,7 @@ export function buildBrowserSessionExecutionMetadata(details: {
   linkedProcessCwd?: string | null;
   linkedProcessPid?: number | null;
   openMethod?: string | null;
+  processLifecycleStatus?: RuntimeTraceDetailValue | null;
 }): Record<string, RuntimeTraceDetailValue> {
   return {
     browserSession: true,
@@ -64,7 +65,8 @@ export function buildBrowserSessionExecutionMetadata(details: {
     browserSessionLinkedProcessLeaseId: details.linkedProcessLeaseId ?? null,
     browserSessionLinkedProcessCwd: details.linkedProcessCwd ?? null,
     browserSessionLinkedProcessPid: details.linkedProcessPid ?? null,
-    browserOpenMethod: details.openMethod ?? null
+    browserOpenMethod: details.openMethod ?? null,
+    processLifecycleStatus: details.processLifecycleStatus ?? null
   };
 }
 

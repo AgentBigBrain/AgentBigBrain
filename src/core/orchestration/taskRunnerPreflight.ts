@@ -5,6 +5,7 @@
 import { type BrainConfig } from "../config";
 import { evaluateHardConstraints } from "../hardConstraints";
 import { evaluateStage685RuntimeGuard } from "../stage6_85RuntimeGuards";
+import type { ModelBillingMode } from "../../models/types";
 import {
   type ActionRunResult,
   type ApprovalGrantV1,
@@ -26,6 +27,8 @@ export interface EvaluateTaskRunnerPreflightInput {
   config: BrainConfig;
   cumulativeEstimatedCostUsd: number;
   estimatedModelSpendUsd: number;
+  cumulativeModelCalls: number;
+  modelBillingMode: ModelBillingMode;
   idempotencyKey: string;
   mode: ActionRunResult["mode"];
   nowIso: string;
@@ -151,7 +154,10 @@ function evaluateRuntimeLimitBlock(
     };
   }
 
-  if (input.estimatedModelSpendUsd > input.config.limits.maxCumulativeModelSpendUsd) {
+  if (
+    input.modelBillingMode === "api_usd" &&
+    input.estimatedModelSpendUsd > input.config.limits.maxCumulativeModelSpendUsd
+  ) {
     return {
       actionResult: buildBlockedActionResult({
         action: input.action,
@@ -168,6 +174,31 @@ function evaluateRuntimeLimitBlock(
       }),
       traceDetails: {
         blockCode: "MODEL_SPEND_LIMIT_EXCEEDED",
+        blockCategory: "runtime"
+      }
+    };
+  }
+
+  if (
+    input.modelBillingMode !== "api_usd" &&
+    input.cumulativeModelCalls > input.config.limits.maxCumulativeNonApiModelCalls
+  ) {
+    return {
+      actionResult: buildBlockedActionResult({
+        action: input.action,
+        mode: input.mode,
+        blockedBy: ["MODEL_CALL_LIMIT_EXCEEDED"],
+        violations: [
+          {
+            code: "MODEL_CALL_LIMIT_EXCEEDED",
+            message:
+              `Model calls ${input.cumulativeModelCalls} exceed max ` +
+              `${input.config.limits.maxCumulativeNonApiModelCalls}.`
+          }
+        ]
+      }),
+      traceDetails: {
+        blockCode: "MODEL_CALL_LIMIT_EXCEEDED",
         blockCategory: "runtime"
       }
     };

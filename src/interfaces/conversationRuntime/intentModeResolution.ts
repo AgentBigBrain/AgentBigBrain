@@ -11,6 +11,7 @@ import { resolveClarificationOptions } from "../../organs/languageUnderstanding/
 import { resolveExecutionIntentUnderstanding } from "../../organs/languageUnderstanding/executionIntentUnderstanding";
 import { resolveExecutionIntentClarification } from "./executionIntentClarification";
 import { extractExecutionPreferences } from "./executionPreferenceExtraction";
+import { isDirectConversationOnlyRequest } from "./directConversationIntent";
 import type { ResolvedConversationIntentMode } from "./intentModeContracts";
 
 const REVIEW_PATTERNS: readonly RegExp[] = [
@@ -42,6 +43,17 @@ export async function resolveConversationIntentMode(
       confidence: "low",
       matchedRuleId: "intent_mode_empty_input",
       explanation: "Empty input falls back to neutral chat mode.",
+      clarification: null
+    };
+  }
+
+  if (isDirectConversationOnlyRequest(normalized)) {
+    return {
+      mode: "chat",
+      confidence: "high",
+      matchedRuleId: "intent_mode_direct_conversation_only",
+      explanation:
+        "The user explicitly asked for a conversational interlude before any further changes or workflow actions.",
       clarification: null
     };
   }

@@ -160,7 +160,8 @@ export async function buildDirectCasualConversationReply(
     stripLabelStyleOpening(
       (await input.runDirectConversationTurn(
         directConversationInput,
-        input.receivedAt
+        input.receivedAt,
+        input.session
       ))?.summary.trim() ?? ""
     )
   );

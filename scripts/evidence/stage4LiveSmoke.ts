@@ -26,11 +26,11 @@ async function runSmoke(): Promise<SmokeResult> {
   const backend = (process.env.BRAIN_MODEL_BACKEND ?? "").trim().toLowerCase();
   const hasApiKey = typeof process.env.OPENAI_API_KEY === "string" && process.env.OPENAI_API_KEY.length > 0;
 
-  if (backend !== "openai" || !hasApiKey) {
+  if ((backend !== "openai" && backend !== "openai_api") || !hasApiKey) {
     return {
       status: "NOT_RUN",
       details:
-        "Live smoke not executed. Set BRAIN_MODEL_BACKEND=openai and OPENAI_API_KEY to run this manual checkpoint."
+        "Live smoke not executed. Set BRAIN_MODEL_BACKEND=openai_api (or legacy openai) and OPENAI_API_KEY to run this manual checkpoint."
     };
   }
 

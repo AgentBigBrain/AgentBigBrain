@@ -7,7 +7,6 @@ import {
   computeShellProfileFingerprint,
   computeShellSpawnSpecFingerprint,
 } from "../../core/shellRuntimeProfile";
-import type { ShellRuntimeProfileV1 } from "../../core/types";
 import { ShellCommandActionParams } from "../../core/types";
 import { buildExecutionOutcome, normalizeOptionalString } from "../liveRun/contracts";
 import {

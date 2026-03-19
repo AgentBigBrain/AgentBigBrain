@@ -23,8 +23,10 @@ For runtime troubleshooting by error/reason code, see:
 
 Optional by mode:
 
-- OpenAI API key (if `BRAIN_MODEL_BACKEND=openai`).
-- Local Ollama runtime (if `BRAIN_MODEL_BACKEND=ollama` or `BRAIN_LOCAL_INTENT_MODEL_ENABLED=true`).
+- OpenAI API key (if `BRAIN_MODEL_BACKEND=openai_api`).
+- Local Codex auth state plus Codex CLI (if `BRAIN_MODEL_BACKEND=codex_oauth`).
+- Local Ollama runtime (if `BRAIN_MODEL_BACKEND=ollama` or
+  `BRAIN_LOCAL_INTENT_MODEL_ENABLED=true`).
 - Telegram bot token and/or Discord bot token (if using `dev:interface`).
 
 ## 2) Install and Build
@@ -73,7 +75,7 @@ Operational implication:
 |---|---|---|
 | `BRAIN_RUNTIME_MODE` | Runtime profile: `isolated` or `full_access`. | `isolated` |
 | `BRAIN_ALLOW_FULL_ACCESS` | Safety latch required when using `full_access`. | `false` unless explicitly needed |
-| `BRAIN_MODEL_BACKEND` | Model provider selector (`mock`, `openai`, `ollama`). | `mock` for local bring-up |
+| `BRAIN_MODEL_BACKEND` | Model provider selector (`mock`, `openai_api`, `codex_oauth`, `ollama`). | `mock` for local bring-up |
 | `BRAIN_LOCAL_INTENT_MODEL_ENABLED` | Enables the optional bounded local intent-model classifier for front-door routing. | `false` by default |
 | `BRAIN_ENABLE_REAL_SHELL` | Enables real shell-command execution path. | `false` until you need live shell actions |
 | `BRAIN_ENABLE_REAL_NETWORK_WRITE` | Enables real network-write side effects. | `false` by default |
@@ -81,6 +83,7 @@ Operational implication:
 | `BRAIN_MAX_ACTION_COST_USD` | Per-action estimated budget cap. | `1.25` |
 | `BRAIN_MAX_CUMULATIVE_COST_USD` | Per-task cumulative action budget cap. | `10` |
 | `BRAIN_MAX_MODEL_SPEND_USD` | Per-task cumulative model spend cap. | `10` |
+| `BRAIN_MAX_NON_API_MODEL_CALLS_PER_TASK` | Per-task model-call cap for non-API backends like `codex_oauth` and `ollama`. | `250` |
 | `BRAIN_MAX_AUTONOMOUS_ITERATIONS` | Iteration cap for autonomous loops. | `.env.example` sets `100`; code fallback is `15` if unset |
 | `BRAIN_AUTONOMOUS_MAX_CONSECUTIVE_NO_PROGRESS` | Consecutive zero-progress iterations allowed before autonomous stall-abort. | `3` |
 | `BRAIN_PER_TURN_DEADLINE_MS` | Per-task action-loop deadline before `GLOBAL_DEADLINE_EXCEEDED` blocks remaining actions. | `.env.example` sets `120000`; code fallback is `20000` if unset |
@@ -111,19 +114,53 @@ This setting is shared by the governed runtime, so it applies to CLI autonomous 
 BRAIN_MODEL_BACKEND=mock
 ```
 
-### OpenAI backend
+### OpenAI API backend
 
 ```env
-BRAIN_MODEL_BACKEND=openai
+BRAIN_MODEL_BACKEND=openai_api
 OPENAI_API_KEY=<your_openai_api_key>
 OPENAI_TIMEOUT_MS=300000
 OPENAI_TRANSPORT_MODE=auto
 ```
 
+Legacy note:
+
+- `BRAIN_MODEL_BACKEND=openai` still normalizes to `openai_api` for backward compatibility.
+
+### Codex OAuth backend
+
+```env
+BRAIN_MODEL_BACKEND=codex_oauth
+CODEX_TIMEOUT_MS=180000
+CODEX_MODEL_SMALL_FAST=gpt-5.4-mini
+CODEX_MODEL_SMALL_POLICY=gpt-5.4-mini
+CODEX_MODEL_MEDIUM_GENERAL=gpt-5.4-mini
+CODEX_MODEL_MEDIUM_POLICY=gpt-5.4-mini
+CODEX_MODEL_LARGE_REASONING=gpt-5.4
+```
+
+Owner-facing setup commands:
+
+```bash
+npm run dev -- auth codex status
+npm run dev -- auth codex login
+npm run dev -- auth codex logout
+```
+
+Optional overrides:
+
+- `CODEX_AUTH_STATE_DIR`: alternate Codex auth-state root
+- `CODEX_CLI_PATH`: explicit Codex CLI path
+- `CODEX_TIMEOUT_MS`: Codex request timeout override
+- `CODEX_MODEL_*`: backend-specific role mappings
+
 ### Media understanding (images, voice notes, and short video)
 
-The runtime can ingest Telegram screenshots, voice notes, and short videos, but the interpretation quality depends on the configured media path.
+The runtime can ingest Telegram screenshots, voice notes, and short videos, but the interpretation
+quality depends on the configured media path.
 
+- In phase 1, this media path remains explicit OpenAI API configuration even when the main text
+  backend is `codex_oauth` or `ollama`.
 - Images use a vision-capable OpenAI model.
 - Voice notes use the transcription endpoint.
 - Video is accepted as input, but the current runtime only produces simple metadata/caption summaries. It does **not** yet claim full video understanding.
@@ -231,7 +268,7 @@ draft`, or other natural follow-up wording.
 It does not replace your main planner model, and it cannot approve actions on its own. The normal
 safety checks and execution rules still decide what is allowed to run.
 
-You can enable it even when `BRAIN_MODEL_BACKEND=openai`.
+You can enable it even when `BRAIN_MODEL_BACKEND=openai_api` or `BRAIN_MODEL_BACKEND=codex_oauth`.
 
 1. Install and run Ollama locally.
 2. Pull the preferred Phi model:
@@ -776,10 +813,18 @@ This section covers every key currently present in `.env.example` and what to ex
 
 - `BRAIN_MODEL_BACKEND`: selects provider path.
   - `mock`: deterministic local model responses, no external provider call.
-  - `openai`: runtime uses OpenAI path and requires `OPENAI_API_KEY`.
+  - `openai_api`: runtime uses the OpenAI API path and requires `OPENAI_API_KEY`.
+  - `codex_oauth`: runtime uses the Codex CLI/auth path and requires valid local Codex auth state.
   - `ollama`: runtime uses local Ollama endpoint and model mapping.
+  - Legacy `openai` is normalized to `openai_api`.
 - `OPENAI_API_KEY`: credential for OpenAI calls.
-  - Missing/blank with `BRAIN_MODEL_BACKEND=openai` causes startup/runtime failure for provider calls.
+  - Missing/blank with `BRAIN_MODEL_BACKEND=openai_api` causes startup/runtime failure for provider calls.
+- `CODEX_AUTH_STATE_DIR`: optional override for the operator-owned Codex auth-state root.
+- `CODEX_CLI_PATH`: optional explicit Codex CLI binary path.
+- `CODEX_TIMEOUT_MS`: Codex backend request timeout.
+- `CODEX_MODEL_SMALL_FAST`, `CODEX_MODEL_SMALL_POLICY`, `CODEX_MODEL_MEDIUM_GENERAL`, `CODEX_MODEL_MEDIUM_POLICY`, `CODEX_MODEL_LARGE_REASONING`: alias-to-provider model mapping for the Codex backend.
+  - Changing these remaps which Codex-supported provider model each runtime role uses.
+  - Unsupported model ids fail closed instead of being accepted silently.
 - `OPENAI_BASE_URL` (optional, commented in template): OpenAI endpoint override.
   - Change only if you intentionally route to a compatible proxy/service.
 - `OPENAI_TIMEOUT_MS`: client timeout for OpenAI requests.
@@ -830,9 +875,13 @@ This section covers every key currently present in `.env.example` and what to ex
 - `BRAIN_MEDIA_VISION_MODEL`: model used for screenshot/image interpretation.
   - If unset, the runtime falls back to `OPENAI_MODEL_SMALL_FAST`, then `gpt-4.1-mini`.
   - If the selected model is not actually vision-capable in your provider environment, image understanding falls back to a simple summary.
+  - Phase-1 boundary: this setting still belongs to the OpenAI API media path even when the main
+    text backend is `codex_oauth`.
 - `BRAIN_MEDIA_TRANSCRIPTION_MODEL`: model used for voice-note transcription.
   - If unset, the runtime defaults to `whisper-1`.
   - If transcription is unavailable, the runtime falls back to basic media context rather than fabricating a transcript.
+  - Phase-1 boundary: this setting still belongs to the OpenAI API media path even when the main
+    text backend is `codex_oauth`.
 - `BRAIN_MEDIA_REQUEST_TIMEOUT_MS`: timeout for provider-backed media interpretation requests.
   - Raise it if image or transcription requests time out.
   - Lower it if you want quicker fail-closed fallback behavior.
@@ -868,6 +917,9 @@ Current video limitation:
   - Lower value ends/blocks long expensive runs sooner.
 - `BRAIN_MAX_MODEL_SPEND_USD`: per-task model spend ceiling.
   - Lower value constrains LLM-heavy tasks.
+- `BRAIN_MAX_NON_API_MODEL_CALLS_PER_TASK`: per-task model-call ceiling for non-API backends.
+  - Applies when billing mode is `subscription_quota`, `local`, or another non-USD mode.
+  - Lower value constrains long Codex/Ollama runs even when there is no API-dollar spend signal.
 - `BRAIN_MAX_SUBAGENTS_PER_TASK`: max satellite/subagent count.
   - Lower value reduces parallel delegation breadth.
 - `BRAIN_MAX_SUBAGENT_DEPTH`: max delegation depth.

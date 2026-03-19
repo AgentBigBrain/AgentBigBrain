@@ -4,6 +4,7 @@ runtime/
 *.log
 .env
 .env.local
+.playwright-cli/
 
 /models/
 docs/stages/

@@ -776,7 +776,8 @@ test("selectUserFacingSummary surfaces an approved browser-open execution failur
         {
           governorId: "security",
           approve: false,
-          reason: "Governor timeout or failure."
+          reason: "Governor timeout or failure.",
+          confidence: 0
         }
       ]
     },

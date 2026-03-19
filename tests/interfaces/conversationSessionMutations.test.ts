@@ -118,6 +118,22 @@ test("recordUserTurn and recordAssistantTurn normalize text and cap turn history
   );
 });
 
+test("recordAssistantTurn preserves blank-line paragraph boundaries", () => {
+  const session = buildSession();
+
+  recordAssistantTurn(
+    session,
+    " First paragraph with extra   spacing.\n\n Second paragraph stays separate. ",
+    "2026-03-03T00:00:03.000Z",
+    4
+  );
+
+  assert.equal(
+    session.conversationTurns[0]?.text,
+    "First paragraph with extra spacing.\n\nSecond paragraph stays separate."
+  );
+});
+
 test("backfillTurnsFromRecentJobsIfNeeded reconstructs turns from recent jobs in chronological order", () => {
   const session = buildSession();
   session.recentJobs = [

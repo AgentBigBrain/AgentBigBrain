@@ -7,6 +7,10 @@ import type {
   ConversationInboundMediaInterpretation
 } from "../../interfaces/mediaRuntime/contracts";
 import type { MediaUnderstandingConfig } from "./contracts";
+import {
+  describeMediaAuthorizationSource,
+  resolveMediaAuthorizationToken
+} from "./auth";
 import { buildFallbackMediaInterpretation } from "./mediaModelFallback";
 
 /**
@@ -58,11 +62,15 @@ export async function interpretImageAttachment(
   attachment: ConversationInboundMediaAttachment,
   buffer: Buffer | null
 ): Promise<ConversationInboundMediaInterpretation> {
-  if (!buffer || !config.openAIApiKey) {
+  if (!buffer) {
     return buildFallbackMediaInterpretation(attachment);
   }
 
   try {
+    const authorizationToken = await resolveMediaAuthorizationToken(config);
+    if (!authorizationToken) {
+      return buildFallbackMediaInterpretation(attachment);
+    }
     const abortController = new AbortController();
     const timeout = setTimeout(() => abortController.abort(), config.requestTimeoutMs);
     const mimeType = attachment.mimeType ?? "image/jpeg";
@@ -70,7 +78,7 @@ export async function interpretImageAttachment(
     const response = await fetch(`${config.openAIBaseUrl}/responses`, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${config.openAIApiKey}`,
+        Authorization: `Bearer ${authorizationToken}`,
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
@@ -107,7 +115,7 @@ export async function interpretImageAttachment(
       transcript: null,
       ocrText: null,
       confidence: 0.74,
-      provenance: `OpenAI image summary model ${config.visionModel}`,
+      provenance: `${describeMediaAuthorizationSource(config)} image summary model ${config.visionModel}`,
       source: "openai_image",
       entityHints: []
     };

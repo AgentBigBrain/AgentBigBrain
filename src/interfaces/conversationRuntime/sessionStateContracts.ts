@@ -4,6 +4,7 @@
 
 import type { PulseEmissionRecordV1 } from "../../core/stage6_86PulseCandidates";
 import type { ConversationStackV1 } from "../../core/types";
+import type { ModelBackend } from "../../models/types";
 
 export type ProposalStatus = "pending" | "approved" | "cancelled" | "executed";
 export type ConversationJobStatus = "queued" | "running" | "completed" | "failed";
@@ -310,6 +311,8 @@ export interface ConversationSession {
   sessionSchemaVersion?: "v1" | "v2";
   conversationStack?: ConversationStackV1;
   updatedAt: string;
+  modelBackendOverride?: ModelBackend | null;
+  codexAuthProfileId?: string | null;
   activeProposal: PendingProposal | null;
   activeClarification: ActiveClarificationState | null;
   modeContinuity: ConversationModeContinuityState | null;

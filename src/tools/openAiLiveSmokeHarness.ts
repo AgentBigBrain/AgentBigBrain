@@ -118,7 +118,7 @@ export async function runOpenAiLiveSmoke(
   const backend = (process.env.BRAIN_MODEL_BACKEND ?? "").trim().toLowerCase();
   const hasOpenAiKey =
     typeof process.env.OPENAI_API_KEY === "string" && process.env.OPENAI_API_KEY.length > 0;
-  const openAiConfigured = backend === "openai" && hasOpenAiKey;
+  const openAiConfigured = (backend === "openai" || backend === "openai_api") && hasOpenAiKey;
 
   if (!openAiConfigured) {
     return {
@@ -127,7 +127,7 @@ export async function runOpenAiLiveSmoke(
       backend,
       status: "NOT_RUN",
       details:
-        "OpenAI live smoke not executed. Set BRAIN_MODEL_BACKEND=openai and OPENAI_API_KEY.",
+        "OpenAI live smoke not executed. Set BRAIN_MODEL_BACKEND=openai_api (or legacy openai) and OPENAI_API_KEY.",
       promptResults: [],
       passCriteria: {
         openAiConfigured: false,

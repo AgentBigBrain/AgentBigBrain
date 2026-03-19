@@ -4,13 +4,15 @@
 
 import { ActionType } from "../core/types";
 
-export type ModelBackend = "mock" | "openai" | "ollama" | "anthropic";
+export type ModelBackend = "mock" | "openai_api" | "ollama" | "codex_oauth";
+export type ModelBillingMode = "api_usd" | "subscription_quota" | "local" | "unknown";
 
 export interface ModelUsageSnapshot {
   calls: number;
   promptTokens: number;
   completionTokens: number;
   totalTokens: number;
+  billingMode: ModelBillingMode;
   estimatedSpendUsd: number;
 }
 

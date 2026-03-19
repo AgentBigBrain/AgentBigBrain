@@ -17,6 +17,7 @@ export interface TaskRunResult {
     promptTokens: number;
     completionTokens: number;
     totalTokens: number;
+    billingMode: "api_usd" | "subscription_quota" | "local" | "unknown";
     estimatedSpendUsd: number;
   };
   startedAt: string;

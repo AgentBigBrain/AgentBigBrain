@@ -45,7 +45,11 @@ export interface ConversationExecutionResult {
 
 export type RunDirectConversationTurn = (
   input: string,
-  receivedAt: string
+  receivedAt: string,
+  session?: {
+    modelBackendOverride?: import("../../models/types").ModelBackend | null;
+    codexAuthProfileId?: string | null;
+  } | null
 ) => Promise<ConversationExecutionResult>;
 
 export interface ConversationExecutionProgressUpdate {

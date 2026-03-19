@@ -5,7 +5,7 @@
 import { type ModelUsageSnapshot } from "../../models/types";
 import { buildMissionPostmortem, evaluateRetryBudget, type RetryBudgetDecision } from "../stage6_85RecoveryPolicy";
 import { throwIfAborted } from "../runtimeAbort";
-import { diffUsageSnapshot } from "../taskRunnerSupport";
+import { diffUsageSnapshot, renderModelUsageSummary } from "../taskRunnerSupport";
 import { type AppendRuntimeTraceEventInput } from "../runtimeTraceLogger";
 import { type BrainConfig } from "../config";
 import { type BrainState, type MissionCheckpointV1, type ProfileMemoryStatus, type TaskRunResult } from "../types";
@@ -145,8 +145,7 @@ export async function executeLocalOrchestratorTask(
       `Completed task with ${approvedCount} approved action(s) and ${blockedCount} blocked action(s) ` +
       `across ${attemptsExecuted} plan attempt(s). Estimated approved action cost ` +
       `${cumulativeApprovedEstimatedCostUsd.toFixed(2)}/${input.config.limits.maxCumulativeEstimatedCostUsd.toFixed(2)} USD.` +
-      ` Model usage spend (provider-usage estimated) ${usageDelta.estimatedSpendUsd.toFixed(6)}/` +
-      `${input.config.limits.maxCumulativeModelSpendUsd.toFixed(2)} USD.` +
+      ` ${renderModelUsageSummary(usageDelta, input.config.limits.maxCumulativeModelSpendUsd)}` +
       (missionPostmortem
         ? ` Recovery postmortem: ${missionPostmortem.blockCode} (${missionPostmortem.rootCause}).`
         : "") +
@@ -175,6 +174,7 @@ export async function executeLocalOrchestratorTask(
       attemptsExecuted,
       estimatedApprovedCostUsd: Number(cumulativeApprovedEstimatedCostUsd.toFixed(4)),
       modelSpendUsd: Number(usageDelta.estimatedSpendUsd.toFixed(8)),
+      modelBillingMode: usageDelta.billingMode,
       firstPrinciplesRequired: currentPlan.firstPrinciples?.required ?? false,
       firstPrinciplesTriggerCount: currentPlan.firstPrinciples?.triggerReasons.length ?? 0,
       workflowHintCount: currentPlan.learningHints?.workflowHintCount ?? 0,

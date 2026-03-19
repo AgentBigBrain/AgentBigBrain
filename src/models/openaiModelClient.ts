@@ -16,7 +16,7 @@ import {
 } from "./openai/pricingPolicy";
 
 export class OpenAIModelClient implements ModelClient {
-  readonly backend = "openai" as const;
+  readonly backend = "openai_api" as const;
   private readonly baseUrl: string;
   private readonly requestTimeoutMs: number;
   private readonly defaultPricing: OpenAITokenPricing;
@@ -29,6 +29,7 @@ export class OpenAIModelClient implements ModelClient {
     promptTokens: 0,
     completionTokens: 0,
     totalTokens: 0,
+    billingMode: "api_usd",
     estimatedSpendUsd: 0
   };
 

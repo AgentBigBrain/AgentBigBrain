@@ -257,6 +257,8 @@ export class TaskRunner {
         cumulativeEstimatedCostUsd:
           cumulativeApprovedEstimatedCostUsd + approvedEstimatedCostDeltaUsd,
         estimatedModelSpendUsd: usageDelta.estimatedSpendUsd,
+        cumulativeModelCalls: usageDelta.calls,
+        modelBillingMode: usageDelta.billingMode,
         idempotencyKey,
         mode,
         nowIso,

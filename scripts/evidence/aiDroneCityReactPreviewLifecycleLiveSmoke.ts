@@ -123,7 +123,9 @@ const CONVERSATION_ID = `ai-drone-city-react-preview-lifecycle-smoke-${RUN_ID}`;
 const USER_ID = "ai-drone-city-preview-smoke-user";
 const USERNAME = "anthonybenny";
 const FOLDER_NAME = "AI Drone City";
-const TURN_TIMEOUT_MS = 180_000;
+const TURN_TIMEOUT_MS = Number.isFinite(Number(process.env.AI_DRONE_CITY_PREVIEW_SMOKE_TURN_TIMEOUT_MS))
+  ? Math.max(60_000, Number(process.env.AI_DRONE_CITY_PREVIEW_SMOKE_TURN_TIMEOUT_MS))
+  : 300_000;
 const CONVERSATION_TIMEOUT_MS = 30_000;
 const SMOKE_DEADLINE_MS = 420_000;
 const CLEANUP_STEP_TIMEOUT_MS = 3_000;
@@ -679,6 +681,8 @@ async function main(): Promise<void> {
       {
         interpretConversationIntent: async (input, recentTurns, pulseRuleContext) =>
           adapter.interpretConversationIntent(input, recentTurns, pulseRuleContext),
+        runDirectConversationTurn: async (input, receivedAt, session) =>
+          adapter.runDirectConversationTurn(input, receivedAt, session),
         listManagedProcessSnapshots: async () => adapter.listManagedProcessSnapshots(),
         listBrowserSessionSnapshots: async () => adapter.listBrowserSessionSnapshots(),
         localIntentModelResolver,
@@ -1001,6 +1005,8 @@ async function main(): Promise<void> {
     await writeFile(ARTIFACT_PATH, JSON.stringify(artifact, null, 2) + os.EOL, "utf8");
     throw error;
   } finally {
+    await cleanupTrackedSmokeResources(latestSession).catch(() => undefined);
+    await cleanupLingeringPlaywrightAutomationBrowsers().catch(() => undefined);
     if (smokeModelSnapshot) {
       restoreEnv(smokeModelSnapshot);
     }

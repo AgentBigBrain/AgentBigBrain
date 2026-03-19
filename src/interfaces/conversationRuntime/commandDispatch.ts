@@ -30,6 +30,7 @@ import { approveProposal } from "./followUpResolution";
 import { routeConversationChatInput } from "./conversationRouting";
 import { handleMemoryReviewCommand } from "./memoryReviewCommand";
 import { renderSkillInventory } from "../../organs/skillRegistry/skillInspection";
+import { normalizeModelBackend } from "../../models/backendConfig";
 
 /**
  * Resolves `/status` command output with human-first default text and explicit debug fallback.
@@ -50,6 +51,68 @@ export function resolveStatusCommandResponse(
     return renderConversationStatusDebug(session);
   }
   return "Usage: /status [debug]";
+}
+
+/**
+ * Resolves `/backend` command output and mutations for per-session backend override.
+ *
+ * @param session - Mutable session state being rendered or updated.
+ * @param argument - Optional backend argument.
+ * @returns User-facing backend status or mutation result.
+ */
+function resolveBackendCommandResponse(
+  session: ConversationSession,
+  argument: string
+): string {
+  const normalizedArgument = argument.trim().toLowerCase();
+  if (!normalizedArgument || normalizedArgument === "status") {
+    return `Session backend override: ${session.modelBackendOverride ?? "none (using process default)"}.`;
+  }
+  if (normalizedArgument === "clear" || normalizedArgument === "default") {
+    session.modelBackendOverride = null;
+    session.updatedAt = new Date().toISOString();
+    return "Cleared the session backend override. This conversation will use the process default backend again.";
+  }
+  let normalizedBackend;
+  try {
+    normalizedBackend = normalizeModelBackend(normalizedArgument);
+  } catch {
+    return "Unsupported backend. Use /backend status, /backend clear, or one of: mock, ollama, openai_api, codex_oauth.";
+  }
+  session.modelBackendOverride = normalizedBackend;
+  session.updatedAt = new Date().toISOString();
+  if (normalizedBackend !== "codex_oauth") {
+    session.codexAuthProfileId = null;
+  }
+  return `Session backend override set to ${normalizedBackend}. New direct replies and task runs in this conversation will use that backend.`;
+}
+
+/**
+ * Resolves `/profile` command output and mutations for Codex session profile override.
+ *
+ * @param session - Mutable session state being rendered or updated.
+ * @param argument - Optional profile argument.
+ * @returns User-facing profile status or mutation result.
+ */
+function resolveProfileCommandResponse(
+  session: ConversationSession,
+  argument: string
+): string {
+  const normalizedArgument = argument.trim();
+  if (!normalizedArgument || normalizedArgument.toLowerCase() === "status") {
+    return `Session Codex profile override: ${session.codexAuthProfileId ?? "none (using default profile)"}.`;
+  }
+  if (normalizedArgument.toLowerCase() === "clear" || normalizedArgument.toLowerCase() === "default") {
+    session.codexAuthProfileId = null;
+    session.updatedAt = new Date().toISOString();
+    return "Cleared the session Codex profile override. This conversation will use the default Codex profile when Codex is selected.";
+  }
+  session.codexAuthProfileId = normalizedArgument;
+  if (!session.modelBackendOverride) {
+    session.modelBackendOverride = "codex_oauth";
+  }
+  session.updatedAt = new Date().toISOString();
+  return `Session Codex profile override set to ${normalizedArgument}. This conversation will use that Codex profile when the Codex backend is selected.`;
 }
 
 /**
@@ -77,6 +140,14 @@ export async function handleConversationCommand(
 
   if (command === "status") {
     return resolveStatusCommandResponse(session, argument);
+  }
+
+  if (command === "backend") {
+    return resolveBackendCommandResponse(session, argument);
+  }
+
+  if (command === "profile") {
+    return resolveProfileCommandResponse(session, argument);
   }
 
   if (command === "propose") {

@@ -35,6 +35,14 @@ import { runGatewayCheckpointReview } from "./checkpointReviewRouting";
 import { createDynamicPulseEntityGraphGetter } from "./entityGraphRuntime";
 import { renderPulseUserFacingSummaryV1 } from "./pulseUxRuntime";
 import { selectUserFacingSummary } from "./userFacingResult";
+import {
+  extractChannelIdFromConversationKey,
+  isInterfaceDebugEnabled
+} from "./discordGatewaySupport";
+import {
+  runGatewaySessionAutonomousTask,
+  runGatewaySessionTextTask
+} from "./gatewaySessionExecution";
 import { runCheckpoint611LiveReview } from "./CheckpointReviewRunners/stage6_5Checkpoint6_11Live";
 import { runCheckpoint613LiveReview } from "./CheckpointReviewRunners/stage6_5Checkpoint6_13Live";
 import { runCheckpoint675LiveReview } from "../core/stage6_75CheckpointLive";
@@ -42,45 +50,13 @@ import { EntityGraphStore } from "../core/entityGraphStore";
 import { buildDiscordCapabilitySummary } from "./conversationRuntime/capabilityIntrospection";
 import { SkillRegistryStore } from "../organs/skillRegistry/skillRegistryStore";
 import type { LocalIntentModelResolver } from "../organs/languageUnderstanding/localIntentModelContracts";
+import { InterfaceBrainRegistry } from "./interfaceBrainRegistry";
 
 interface DiscordGatewayOptions {
   sessionStore?: InterfaceSessionStore;
   entityGraphStore?: EntityGraphStore;
   localIntentModelResolver?: LocalIntentModelResolver;
-}
-
-/**
- * Evaluates interface debug enabled and returns a deterministic policy signal.
- *
- * **Why it exists:**
- * Keeps the interface debug enabled policy check explicit and testable before side effects.
- *
- * **What it talks to:**
- * - Uses local constants/helpers within this module.
- * @returns `true` when this check passes.
- */
-function isInterfaceDebugEnabled(): boolean {
-  return (process.env.BRAIN_INTERFACE_DEBUG ?? "").trim().toLowerCase() === "true";
-}
-
-/**
- * Derives channel id from conversation key from available runtime inputs.
- *
- * **Why it exists:**
- * Keeps derivation logic for channel id from conversation key in one place so downstream policy uses the same signal.
- *
- * **What it talks to:**
- * - Uses local constants/helpers within this module.
- *
- * @param conversationKey - Lookup key or map field identifier.
- * @returns Computed `string | null` result.
- */
-function extractChannelIdFromConversationKey(conversationKey: string): string | null {
-  const segments = conversationKey.split(":");
-  if (segments.length < 3 || segments[0] !== "discord") {
-    return null;
-  }
-  return segments[1] || null;
+  brainRegistry?: InterfaceBrainRegistry;
 }
 
 export class DiscordGateway {
@@ -98,6 +74,7 @@ export class DiscordGateway {
   private readonly autonomousAbortControllers = new Map<string, AbortController>();
   private readonly entityGraphStore: EntityGraphStore;
   private readonly skillRegistryStore = new SkillRegistryStore(path.resolve(process.cwd(), "runtime/skills"));
+  private readonly brainRegistry: InterfaceBrainRegistry;
 
   /**
    * Initializes `DiscordGateway` with deterministic runtime dependencies.
@@ -123,11 +100,6 @@ export class DiscordGateway {
     private readonly config: DiscordInterfaceConfig,
     options: DiscordGatewayOptions = {}
   ) {
-    const runDirectConversationTurn =
-      typeof this.adapter.runDirectConversationTurn === "function"
-        ? async (input: string, receivedAt: string) =>
-            this.adapter.runDirectConversationTurn(input, receivedAt)
-        : undefined;
     const listManagedProcessSnapshots =
       typeof this.adapter.listManagedProcessSnapshots === "function"
         ? async () => this.adapter.listManagedProcessSnapshots()
@@ -138,6 +110,7 @@ export class DiscordGateway {
         : undefined;
     this.sessionStore = options.sessionStore ?? new InterfaceSessionStore();
     this.entityGraphStore = options.entityGraphStore ?? new EntityGraphStore();
+    this.brainRegistry = options.brainRegistry ?? new InterfaceBrainRegistry();
     this.conversationManager = new ConversationManager(this.sessionStore, {
       ackDelayMs: this.config.security.ackDelayMs,
       showCompletionPrefix: this.config.security.showCompletionPrefix,
@@ -147,7 +120,8 @@ export class DiscordGateway {
     }, {
       interpretConversationIntent: async (input, recentTurns, pulseRuleContext) =>
         this.adapter.interpretConversationIntent(input, recentTurns, pulseRuleContext),
-      runDirectConversationTurn,
+      runDirectConversationTurn: async (input, receivedAt, session) =>
+        this.brainRegistry.runDirectConversationForSession(session ?? null, input, receivedAt),
       queryContinuityEpisodes: async (request) => {
         const graph = await this.entityGraphStore.getGraph();
         return this.adapter.queryContinuityEpisodes(graph, request);
@@ -220,18 +194,21 @@ export class DiscordGateway {
             systemInput,
             receivedAt,
             async (input, timestamp) => {
-              const runResult = await this.adapter.runTextTask(input, timestamp);
-              const baseSummary = selectUserFacingSummary(runResult, {
-                showTechnicalSummary: false,
-                showSafetyCodes: false
-              });
+              const execution = await this.brainRegistry.runTaskForSession(session, input, timestamp);
+              const baseSummary = execution.taskRunResult
+                ? selectUserFacingSummary(execution.taskRunResult, {
+                    showTechnicalSummary: false,
+                    showSafetyCodes: false
+                  })
+                : execution.summary;
               return {
                 summary: renderPulseUserFacingSummaryV1(
                   session,
                   systemInput,
                   baseSummary,
                   timestamp
-                )
+                ),
+                taskRunResult: execution.taskRunResult ?? null
               };
             },
             notifier
@@ -491,6 +468,7 @@ export class DiscordGateway {
     );
 
     const notifier = this.createConversationNotifier(prepared.channelId);
+    const sessionKey = `discord:${prepared.channelId}:${prepared.userId}`;
     await handleAcceptedTransportConversation({
       inbound: {
         provider: "discord",
@@ -508,18 +486,23 @@ export class DiscordGateway {
       entityGraphStore: this.entityGraphStore,
       dynamicPulseEnabled: this.config.security.enableDynamicPulse,
       abortControllers: this.autonomousAbortControllers,
-      runTextTask: async (input: string, receivedAt: string) => {
-        const runResult = await this.adapter.runTextTask(input, receivedAt);
-        return {
-          summary: selectUserFacingSummary(runResult, {
+      runTextTask: (input: string, receivedAt: string) =>
+        runGatewaySessionTextTask(
+          this.sessionStore,
+          this.brainRegistry,
+          sessionKey,
+          input,
+          receivedAt,
+          {
             showTechnicalSummary: this.config.security.showTechnicalSummary,
             showSafetyCodes: this.config.security.showSafetyCodes
-          }),
-          taskRunResult: runResult
-        };
-      },
+          }
+        ),
       runAutonomousTask: (goal, timestamp, progressSender, signal, initialExecutionInput) =>
-        this.adapter.runAutonomousTask(
+        runGatewaySessionAutonomousTask(
+          this.sessionStore,
+          this.brainRegistry,
+          sessionKey,
           goal,
           timestamp,
           progressSender,

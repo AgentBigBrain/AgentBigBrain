@@ -134,6 +134,42 @@ function buildApprovedStartProcessResult(actionId: string): ActionRunResult {
 }
 
 /**
+ * Builds an approved localhost browser-open result that already proved readiness for autonomy tests.
+ *
+ * @param actionId - Action id to assign.
+ * @returns Approved browser-open action result with localhost readiness metadata.
+ */
+function buildApprovedOpenBrowserReadyResult(actionId: string): ActionRunResult {
+  return {
+    action: {
+      id: actionId,
+      type: "open_browser",
+      description: "open the running localhost preview in a visible browser",
+      params: {
+        url: "http://127.0.0.1:3000/"
+      },
+      estimatedCostUsd: 0.03
+    },
+    mode: "escalation_path",
+    approved: true,
+    output: "Opened http://127.0.0.1:3000/ in a visible browser window and left it open for you.",
+    executionStatus: "success",
+    executionMetadata: {
+      browserSession: true,
+      browserSessionId: "browser_session:action_open_browser_ready_1",
+      browserSessionUrl: "http://127.0.0.1:3000/",
+      browserSessionStatus: "open",
+      browserSessionVisibility: "visible",
+      browserSessionControlAvailable: true,
+      processLifecycleStatus: "PROCESS_READY"
+    },
+    blockedBy: [],
+    violations: [],
+    votes: []
+  };
+}
+
+/**
  * Builds a blocked HTTP-readiness probe result for autonomy-module tests.
  *
  * @param actionId - Action id to assign.
@@ -202,6 +238,13 @@ test("countApprovedReadinessProofActions treats port-only proof as insufficient 
 
   assert.equal(countApprovedReadinessProofActions(result), 1);
   assert.equal(countApprovedReadinessProofActions(result, true), 0);
+});
+
+test("countApprovedReadinessProofActions counts localhost open_browser success as readiness proof", () => {
+  const result = buildTaskResult([buildApprovedOpenBrowserReadyResult("open_browser_ready_1")]);
+
+  assert.equal(countApprovedReadinessProofActions(result), 1);
+  assert.equal(countApprovedReadinessProofActions(result, true), 1);
 });
 
 test("mission evidence helpers resolve missing requirements and build deterministic retry guidance", () => {

@@ -7,6 +7,10 @@ import type {
   ConversationInboundMediaInterpretation
 } from "../../interfaces/mediaRuntime/contracts";
 import type { MediaUnderstandingConfig } from "./contracts";
+import {
+  describeMediaAuthorizationSource,
+  resolveMediaAuthorizationToken
+} from "./auth";
 import { buildFallbackMediaInterpretation } from "./mediaModelFallback";
 
 /**
@@ -22,11 +26,15 @@ export async function interpretVoiceAttachment(
   attachment: ConversationInboundMediaAttachment,
   buffer: Buffer | null
 ): Promise<ConversationInboundMediaInterpretation> {
-  if (!buffer || !config.openAIApiKey) {
+  if (!buffer) {
     return buildFallbackMediaInterpretation(attachment);
   }
 
   try {
+    const authorizationToken = await resolveMediaAuthorizationToken(config);
+    if (!authorizationToken) {
+      return buildFallbackMediaInterpretation(attachment);
+    }
     const abortController = new AbortController();
     const timeout = setTimeout(() => abortController.abort(), config.requestTimeoutMs);
     const formData = new FormData();
@@ -43,7 +51,7 @@ export async function interpretVoiceAttachment(
     const response = await fetch(`${config.openAIBaseUrl}/audio/transcriptions`, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${config.openAIApiKey}`
+        Authorization: `Bearer ${authorizationToken}`
       },
       body: formData,
       signal: abortController.signal
@@ -64,7 +72,7 @@ export async function interpretVoiceAttachment(
       transcript,
       ocrText: null,
       confidence: 0.82,
-      provenance: `OpenAI transcription model ${config.transcriptionModel}`,
+      provenance: `${describeMediaAuthorizationSource(config)} transcription model ${config.transcriptionModel}`,
       source: "openai_transcription",
       entityHints: []
     };

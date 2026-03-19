@@ -2,7 +2,10 @@
  * @fileoverview Starts the live messaging interface runtime and routes Telegram/Discord events into the governed brain orchestrator.
  */
 
-import { buildDefaultBrain } from "../core/buildBrain";
+import {
+  buildBrainRuntimeFromEnvironment,
+  createSharedBrainRuntimeDependencies
+} from "../core/buildBrain";
 import { BrainOrchestrator } from "../core/orchestrator";
 import { MediaUnderstandingOrgan } from "../organs/mediaUnderstanding/mediaInterpretation";
 import {
@@ -26,6 +29,7 @@ import {
 import { InterfaceSessionStore } from "./sessionStore";
 import { TelegramAdapter } from "./telegramAdapter";
 import { TelegramGateway } from "./telegramGateway";
+import { InterfaceBrainRegistry } from "./interfaceBrainRegistry";
 
 interface GatewayRuntime {
   start(): Promise<void>;
@@ -35,6 +39,7 @@ interface GatewayRuntime {
 interface GatewayRuntimePersistence {
   sessionStore: InterfaceSessionStore;
   entityGraphStore: EntityGraphStore;
+  brainRegistry: InterfaceBrainRegistry;
 }
 
 interface InterfaceRuntimeOptionalDependencies {
@@ -87,6 +92,7 @@ function createTelegramGatewayRuntime(
   return new TelegramGateway(adapter, config, {
     sessionStore: persistence.sessionStore,
     entityGraphStore: persistence.entityGraphStore,
+    brainRegistry: persistence.brainRegistry,
     mediaUnderstandingOrgan,
     localIntentModelResolver: optionalDependencies.localIntentModelResolver
   });
@@ -135,6 +141,7 @@ function createDiscordGatewayRuntime(
   return new DiscordGateway(adapter, config, {
     sessionStore: persistence.sessionStore,
     entityGraphStore: persistence.entityGraphStore,
+    brainRegistry: persistence.brainRegistry,
     localIntentModelResolver: optionalDependencies.localIntentModelResolver
   });
 }
@@ -453,10 +460,13 @@ export async function runInterfaceRuntime(): Promise<void> {
     sqlitePath: brainConfig.persistence.ledgerSqlitePath,
     exportJsonOnWrite: brainConfig.persistence.exportJsonOnWrite
   });
-  const brain = buildDefaultBrain();
+  const sharedBrainRuntime = createSharedBrainRuntimeDependencies(process.env);
+  const brainRegistry = new InterfaceBrainRegistry(process.env, sharedBrainRuntime);
+  const brain = buildBrainRuntimeFromEnvironment(sharedBrainRuntime, process.env).brain;
   const gateways = createGatewayRuntimes(brain, config, {
     sessionStore,
-    entityGraphStore
+    entityGraphStore,
+    brainRegistry
   }, {
     localIntentModelResolver
   });

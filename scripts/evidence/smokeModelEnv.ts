@@ -104,12 +104,12 @@ export function resolveRequiredRealSmokeBackend(
     };
   }
 
-  if (effectiveBackend === "openai" && !(process.env.OPENAI_API_KEY ?? "").trim()) {
+  if ((effectiveBackend === "openai" || effectiveBackend === "openai_api") && !(process.env.OPENAI_API_KEY ?? "").trim()) {
     return {
       ...selection,
       effectiveBackend,
       blockerReason:
-        "Live smoke requires a real model backend, but BRAIN_MODEL_BACKEND=openai is missing OPENAI_API_KEY."
+        "Live smoke requires a real model backend, but BRAIN_MODEL_BACKEND=openai_api is missing OPENAI_API_KEY."
     };
   }
 

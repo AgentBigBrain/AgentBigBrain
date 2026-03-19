@@ -31,6 +31,10 @@ import { runGatewayCheckpointReview } from "./checkpointReviewRouting";
 import { createDynamicPulseEntityGraphGetter } from "./entityGraphRuntime";
 import { renderPulseUserFacingSummaryV1 } from "./pulseUxRuntime";
 import { selectUserFacingSummary } from "./userFacingResult";
+import {
+  runGatewaySessionAutonomousTask,
+  runGatewaySessionTextTask
+} from "./gatewaySessionExecution";
 import { runCheckpoint611LiveReview } from "./CheckpointReviewRunners/stage6_5Checkpoint6_11Live";
 import { runCheckpoint613LiveReview } from "./CheckpointReviewRunners/stage6_5Checkpoint6_13Live";
 import { runCheckpoint675LiveReview } from "../core/stage6_75CheckpointLive";
@@ -39,12 +43,14 @@ import { buildTelegramCapabilitySummary } from "./conversationRuntime/capability
 import { MediaUnderstandingOrgan } from "../organs/mediaUnderstanding/mediaInterpretation";
 import { SkillRegistryStore } from "../organs/skillRegistry/skillRegistryStore";
 import type { LocalIntentModelResolver } from "../organs/languageUnderstanding/localIntentModelContracts";
+import { InterfaceBrainRegistry } from "./interfaceBrainRegistry";
 export type { TelegramOutboundDeliveryObservation } from "./transportRuntime/contracts";
 interface TelegramGatewayOptions {
   sessionStore?: InterfaceSessionStore;
   entityGraphStore?: EntityGraphStore;
   mediaUnderstandingOrgan?: MediaUnderstandingOrgan;
   localIntentModelResolver?: LocalIntentModelResolver;
+  brainRegistry?: InterfaceBrainRegistry;
   onOutboundDelivery?: TelegramOutboundDeliveryObserver;
 }
 export class TelegramGateway {
@@ -58,6 +64,7 @@ export class TelegramGateway {
   private readonly mediaUnderstandingOrgan?: MediaUnderstandingOrgan;
   private readonly onOutboundDelivery?: TelegramOutboundDeliveryObserver;
   private readonly skillRegistryStore = new SkillRegistryStore(path.resolve(process.cwd(), "runtime/skills"));
+  private readonly brainRegistry: InterfaceBrainRegistry;
   private nextDraftId = 1;
   /**
    * Initializes `TelegramGateway` with deterministic runtime dependencies.
@@ -83,11 +90,6 @@ export class TelegramGateway {
     private readonly config: TelegramInterfaceConfig,
     options: TelegramGatewayOptions = {}
   ) {
-    const runDirectConversationTurn =
-      typeof this.adapter.runDirectConversationTurn === "function"
-        ? async (input: string, receivedAt: string) =>
-            this.adapter.runDirectConversationTurn(input, receivedAt)
-        : undefined;
     const listManagedProcessSnapshots =
       typeof this.adapter.listManagedProcessSnapshots === "function"
         ? async () => this.adapter.listManagedProcessSnapshots()
@@ -100,6 +102,7 @@ export class TelegramGateway {
     this.entityGraphStore = options.entityGraphStore ?? new EntityGraphStore();
     this.mediaUnderstandingOrgan = options.mediaUnderstandingOrgan;
     this.onOutboundDelivery = options.onOutboundDelivery;
+    this.brainRegistry = options.brainRegistry ?? new InterfaceBrainRegistry();
     this.conversationManager = new ConversationManager(this.sessionStore, {
       ackDelayMs: this.config.security.ackDelayMs,
       showCompletionPrefix: this.config.security.showCompletionPrefix,
@@ -109,7 +112,9 @@ export class TelegramGateway {
     }, {
       interpretConversationIntent: async (input, recentTurns, pulseRuleContext) =>
         this.adapter.interpretConversationIntent(input, recentTurns, pulseRuleContext),
-      runDirectConversationTurn,
+      runDirectConversationTurn: async (input, receivedAt, session) => {
+        return this.brainRegistry.runDirectConversationForSession(session ?? null, input, receivedAt);
+      },
       queryContinuityEpisodes: async (request) => {
         const graph = await this.entityGraphStore.getGraph();
         return this.adapter.queryContinuityEpisodes(graph, request);
@@ -182,18 +187,16 @@ export class TelegramGateway {
             systemInput,
             receivedAt,
             async (input, timestamp) => {
-              const runResult = await this.adapter.runTextTask(input, timestamp);
-              const baseSummary = selectUserFacingSummary(runResult, {
-                showTechnicalSummary: false,
-                showSafetyCodes: false
-              });
+              const execution = await this.brainRegistry.runTaskForSession(session, input, timestamp);
+              const baseSummary = execution.taskRunResult
+                ? selectUserFacingSummary(execution.taskRunResult, {
+                    showTechnicalSummary: false,
+                    showSafetyCodes: false
+                  })
+                : execution.summary;
               return {
-                summary: renderPulseUserFacingSummaryV1(
-                  session,
-                  systemInput,
-                  baseSummary,
-                  timestamp
-                )
+                summary: renderPulseUserFacingSummaryV1(session, systemInput, baseSummary, timestamp),
+                taskRunResult: execution.taskRunResult ?? null
               };
             },
             notifier
@@ -310,6 +313,7 @@ export class TelegramGateway {
     const notifier = this.createConversationNotifier(enrichedPrepared.chatId, {
       nativeDraftStreamingAllowed: enrichedPrepared.conversationVisibility === "private"
     });
+    const sessionKey = `telegram:${enrichedPrepared.chatId}:${enrichedPrepared.userId}`;
     await handleAcceptedTransportConversation({
       inbound: {
         provider: "telegram",
@@ -327,18 +331,23 @@ export class TelegramGateway {
       entityGraphStore: this.entityGraphStore,
       dynamicPulseEnabled: this.config.security.enableDynamicPulse,
       abortControllers: this.autonomousAbortControllers,
-      runTextTask: async (input: string, receivedAt: string) => {
-        const runResult = await this.adapter.runTextTask(input, receivedAt);
-        return {
-          summary: selectUserFacingSummary(runResult, {
+      runTextTask: (input: string, receivedAt: string) =>
+        runGatewaySessionTextTask(
+          this.sessionStore,
+          this.brainRegistry,
+          sessionKey,
+          input,
+          receivedAt,
+          {
             showTechnicalSummary: this.config.security.showTechnicalSummary,
             showSafetyCodes: this.config.security.showSafetyCodes
-          }),
-          taskRunResult: runResult
-        };
-      },
+          }
+        ),
       runAutonomousTask: (goal, timestamp, progressSender, signal, initialExecutionInput) =>
-        this.adapter.runAutonomousTask(
+        runGatewaySessionAutonomousTask(
+          this.sessionStore,
+          this.brainRegistry,
+          sessionKey,
           goal,
           timestamp,
           progressSender,

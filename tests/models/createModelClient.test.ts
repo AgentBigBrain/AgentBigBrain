@@ -54,7 +54,7 @@ test("createModelClientFromEnv returns mock backend when backend is configured a
 test("createModelClientFromEnv throws when openai key is missing", async () => {
   await withEnv(
     {
-      BRAIN_MODEL_BACKEND: "openai",
+      BRAIN_MODEL_BACKEND: "openai_api",
       OPENAI_API_KEY: undefined
     },
     async () => {
@@ -69,12 +69,25 @@ test("createModelClientFromEnv throws when openai key is missing", async () => {
 test("createModelClientFromEnv returns openai backend when key exists", async () => {
   await withEnv(
     {
+      BRAIN_MODEL_BACKEND: "openai_api",
+      OPENAI_API_KEY: "test-key"
+    },
+    async () => {
+      const client = createModelClientFromEnv();
+      assert.equal(client.backend, "openai_api");
+    }
+  );
+});
+
+test("createModelClientFromEnv preserves legacy openai alias", async () => {
+  await withEnv(
+    {
       BRAIN_MODEL_BACKEND: "openai",
       OPENAI_API_KEY: "test-key"
     },
     async () => {
       const client = createModelClientFromEnv();
-      assert.equal(client.backend, "openai");
+      assert.equal(client.backend, "openai_api");
     }
   );
 });
@@ -87,6 +100,32 @@ test("createModelClientFromEnv returns ollama backend when configured", async ()
     async () => {
       const client = createModelClientFromEnv();
       assert.equal(client.backend, "ollama");
+    }
+  );
+});
+
+test("createModelClientFromEnv returns codex backend when configured", async () => {
+  await withEnv(
+    {
+      BRAIN_MODEL_BACKEND: "codex_oauth"
+    },
+    async () => {
+      const client = createModelClientFromEnv();
+      assert.equal(client.backend, "codex_oauth");
+    }
+  );
+});
+
+test("createModelClientFromEnv fails closed for unsupported backend names", async () => {
+  await withEnv(
+    {
+      BRAIN_MODEL_BACKEND: "mystery_backend"
+    },
+    async () => {
+      assert.throws(
+        () => createModelClientFromEnv(),
+        /Unsupported BRAIN_MODEL_BACKEND/i
+      );
     }
   );
 });

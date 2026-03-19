@@ -346,11 +346,14 @@ test("executeStartProcess routes simple Windows npm preview commands through cmd
   process.env.WINDIR = originalWindir ?? "C:\\Windows";
 
   try {
+    const baseShellConfig = buildShellEnabledConfig();
     const context = buildLiveRunContext({
       config: buildShellEnabledConfig({
         shellRuntime: {
+          timeoutBoundsMs: baseShellConfig.shellRuntime.timeoutBoundsMs,
+          commandMaxCharsBounds: baseShellConfig.shellRuntime.commandMaxCharsBounds,
           profile: {
-            ...buildShellEnabledConfig().shellRuntime.profile,
+            ...baseShellConfig.shellRuntime.profile,
             platform: "win32",
             shellKind: "powershell",
             executable: "powershell.exe",
@@ -829,6 +832,7 @@ test("executeOpenBrowser launches a visible browser session and records session 
     );
     assert.equal(outcome.executionMetadata?.browserSessionId, "browser_session:action_open_browser");
     assert.equal(outcome.executionMetadata?.browserSessionControlAvailable, false);
+    assert.equal(outcome.executionMetadata?.processLifecycleStatus, "PROCESS_READY");
     assert.equal(calls.length, 1);
   } finally {
     await new Promise<void>((resolve, reject) => {
@@ -900,6 +904,7 @@ test("executeOpenBrowser allows local file preview urls without localhost readin
     assert.equal(outcome.executionMetadata?.browserSession, true);
     assert.equal(outcome.executionMetadata?.browserSessionStatus, "open");
     assert.match(String(outcome.executionMetadata?.browserSessionUrl ?? ""), /^file:\/\//i);
+    assert.equal(outcome.executionMetadata?.processLifecycleStatus ?? null, null);
     assert.equal(calls.length, 1);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });

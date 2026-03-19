@@ -35,7 +35,7 @@ This top-level folder owns the transport and lifecycle path that consumes both s
 
 ## Primary Files
 - Transport entrypoints and runtime wiring: `discordAdapter.ts`, `discordApiUrl.ts`,
-  `discordGateway.ts`, `discordRateLimit.ts`, `interfaceRuntime.ts`,
+  `discordGateway.ts`, `discordGatewaySupport.ts`, `discordRateLimit.ts`, `interfaceRuntime.ts`,
   `interfaceRuntimeLock.ts`, `runtimeConfig.ts`,
   `telegramAdapter.ts`, `telegramGateway.ts`, plus the extracted
   `src/interfaces/mediaRuntime/` ingest subsystem and
@@ -45,6 +45,7 @@ This top-level folder owns the transport and lifecycle path that consumes both s
   `conversationExecutionInputPolicy.ts`, `conversationIngressLifecycle.ts`,
   `conversationManager.ts`, `conversationManagerHelpers.ts`,
   `conversationSessionMutations.ts`, `conversationWorkerLifecycle.ts`,
+  `gatewaySessionExecution.ts`, `interfaceBrainRegistry.ts`,
   `autonomousConversationExecutionResult.ts`, `routingMap.ts`,
   `sessionStore.ts`, plus the extracted `src/interfaces/conversationRuntime/` persistence and
   pulse/helper plus delivery subsystem.

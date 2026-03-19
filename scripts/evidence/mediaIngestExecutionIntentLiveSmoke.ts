@@ -98,6 +98,11 @@ interface CapturedTextTaskRun {
   receivedAt: string;
 }
 
+interface CapturedDirectConversationRun {
+  input: string;
+  receivedAt: string;
+}
+
 interface TelegramLiveSmokeHarness {
   tempDir: string;
   sessionStore: InterfaceSessionStore;
@@ -105,6 +110,7 @@ interface TelegramLiveSmokeHarness {
   profileStore: ProfileMemoryStore;
   sends: CapturedTelegramSend[];
   textTaskRuns: CapturedTextTaskRun[];
+  directConversationRuns: CapturedDirectConversationRun[];
   restoreFetch(): void;
 }
 
@@ -375,7 +381,7 @@ async function waitForFinalDeliverySettled(
   await waitFor(async () => {
     const session = await store.getSession(conversationId);
     if (!session || session.recentJobs.length === 0) {
-      return false;
+      return true;
     }
     return session.recentJobs[0]?.finalDeliveryOutcome !== "not_attempted";
   });
@@ -455,6 +461,7 @@ async function createHarness(
   );
   const sends: CapturedTelegramSend[] = [];
   const textTaskRuns: CapturedTextTaskRun[] = [];
+  const directConversationRuns: CapturedDirectConversationRun[] = [];
   const descriptorPath = `fixtures/${scenario.fixtureFile}`;
   const originalFetch = globalThis.fetch;
 
@@ -532,6 +539,7 @@ async function createHarness(
     profileStore,
     sends,
     textTaskRuns,
+    directConversationRuns,
     restoreFetch() {
       globalThis.fetch = originalFetch;
     }
@@ -546,6 +554,21 @@ async function createHarness(
  */
 function createTelegramAdapterHarness(harness: TelegramLiveSmokeHarness): TelegramAdapter {
   const languageOrgan = new LanguageUnderstandingOrgan(new MediaIngestLiveSmokeEpisodeModelClient());
+  const runTextTask = async (input: string, receivedAt: string) => {
+    harness.textTaskRuns.push({ input, receivedAt });
+    const additionalEpisodeCandidates = await languageOrgan.extractEpisodeCandidates({
+      text: input,
+      sourceTaskId: `media_live_smoke_${harness.textTaskRuns.length}`,
+      observedAt: receivedAt
+    });
+    await harness.profileStore.ingestFromTaskInput(
+      `media_live_smoke_${harness.textTaskRuns.length}`,
+      input,
+      receivedAt,
+      { additionalEpisodeCandidates }
+    );
+    return buildTaskRunResult(input, "Understood. I'll take it from here.");
+  };
 
   return {
     validateMessage: () => ({
@@ -553,21 +576,7 @@ function createTelegramAdapterHarness(harness: TelegramLiveSmokeHarness): Telegr
       code: "ACCEPTED",
       message: "Inbound message accepted."
     }),
-    runTextTask: async (input: string, receivedAt: string) => {
-      harness.textTaskRuns.push({ input, receivedAt });
-      const additionalEpisodeCandidates = await languageOrgan.extractEpisodeCandidates({
-        text: input,
-        sourceTaskId: `media_live_smoke_${harness.textTaskRuns.length}`,
-        observedAt: receivedAt
-      });
-      await harness.profileStore.ingestFromTaskInput(
-        `media_live_smoke_${harness.textTaskRuns.length}`,
-        input,
-        receivedAt,
-        { additionalEpisodeCandidates }
-      );
-      return buildTaskRunResult(input, "Understood. I'll take it from here.");
-    },
+    runTextTask,
     runAutonomousTask: async () => "Autonomous execution was not expected in this live smoke.",
     evaluateAgentPulse: async (_request: AgentPulseEvaluationRequest) => buildDisabledPulseEvaluation(),
     interpretConversationIntent: async (
@@ -697,6 +706,61 @@ function createTelegramAdapterHarness(harness: TelegramLiveSmokeHarness): Telegr
 }
 
 /**
+ * Creates a minimal session-aware brain-registry harness for gateway tests.
+ *
+ * @param harness - Runtime harness for this scenario.
+ * @returns Brain-registry-compatible object used by the Telegram gateway.
+ */
+function createBrainRegistryHarness(harness: TelegramLiveSmokeHarness): unknown {
+  const languageOrgan = new LanguageUnderstandingOrgan(new MediaIngestLiveSmokeEpisodeModelClient());
+  return {
+    runTaskForSession: async (_session: unknown, input: string, receivedAt: string) => {
+      harness.textTaskRuns.push({ input, receivedAt });
+      const additionalEpisodeCandidates = await languageOrgan.extractEpisodeCandidates({
+        text: input,
+        sourceTaskId: `media_live_smoke_${harness.textTaskRuns.length}`,
+        observedAt: receivedAt
+      });
+      await harness.profileStore.ingestFromTaskInput(
+        `media_live_smoke_${harness.textTaskRuns.length}`,
+        input,
+        receivedAt,
+        { additionalEpisodeCandidates }
+      );
+      const taskRunResult = buildTaskRunResult(input, "Understood. I'll take it from here.");
+      return {
+        summary: taskRunResult.summary,
+        taskRunResult
+      };
+    },
+    runDirectConversationForSession: async (_session: unknown, input: string, receivedAt: string) => {
+      harness.directConversationRuns.push({ input, receivedAt });
+      const additionalEpisodeCandidates = await languageOrgan.extractEpisodeCandidates({
+        text: input,
+        sourceTaskId: `media_direct_live_smoke_${harness.directConversationRuns.length}`,
+        observedAt: receivedAt
+      });
+      if (additionalEpisodeCandidates.length > 0) {
+        await harness.profileStore.ingestFromTaskInput(
+          `media_direct_live_smoke_${harness.directConversationRuns.length}`,
+          input,
+          receivedAt,
+          { additionalEpisodeCandidates }
+        );
+      }
+      return {
+        summary: "Understood. I'll keep that in mind.",
+        taskRunResult: null
+      };
+    },
+    runAutonomousTaskForSession: async () => ({
+      summary: "Autonomous execution was not expected in this live smoke.",
+      taskRunResult: null
+    })
+  };
+}
+
+/**
  * Builds a short human-readable transcript preview for artifact rendering.
  *
  * @param scenario - Scenario under test.
@@ -735,7 +799,8 @@ async function runScenario(
     const gateway = new TelegramGateway(adapter, buildTelegramConfig(), {
       sessionStore: harness.sessionStore,
       entityGraphStore: harness.entityGraphStore,
-      mediaUnderstandingOrgan: organ
+      mediaUnderstandingOrgan: organ,
+      brainRegistry: createBrainRegistryHarness(harness) as never
     });
 
     const update = buildTelegramUpdateForScenario(scenario, fixtureBuffer.length, {
@@ -834,6 +899,10 @@ async function runScenario(
         episode.summary.toLowerCase().includes("billy") ||
         episode.entityRefs.some((entity) => entity.toLowerCase().includes("billy"))
       );
+      const directConversationInput =
+        harness.directConversationRuns.find((run) =>
+          run.input.includes(scenario.expectedInterpretation.transcript ?? "")
+        )?.input ?? null;
       checks.push({
         label: "voice_followup_memory_written",
         passed: Boolean(billyEpisode),
@@ -850,13 +919,18 @@ async function runScenario(
       checks.push({
         label: "voice_input_reached_runtime",
         passed:
-          harness.textTaskRuns.length === 1 &&
           Boolean(
             recentJob?.executionInput?.includes(
               scenario.expectedInterpretation.transcript ?? ""
+            ) ||
+            directConversationInput?.includes(
+              scenario.expectedInterpretation.transcript ?? ""
             )
           ),
-        observed: recentJob?.executionInput ?? "<missing execution input>"
+        observed:
+          recentJob?.executionInput ??
+          directConversationInput ??
+          "<missing execution input>"
       });
     }
 

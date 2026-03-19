@@ -522,6 +522,76 @@ test("routeConversationMessageInput answers casual chat turns directly without q
   );
 });
 
+test("routeConversationMessageInput keeps explicit conversational interludes direct while leaving the preview open", async () => {
+  const session = buildSession({
+    modeContinuity: {
+      activeMode: "autonomous",
+      source: "natural_intent",
+      confidence: "HIGH",
+      lastAffirmedAt: "2026-03-11T18:05:00.000Z",
+      lastUserInput: "Handle this end to end and leave AI Drone City open."
+    },
+    activeWorkspace: {
+      id: "workspace:ai-drone-city",
+      label: "AI Drone City",
+      rootPath: "C:\\Users\\testuser\\Desktop\\AI Drone City",
+      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\AI Drone City\\dist\\index.html",
+      previewUrl: "http://127.0.0.1:49263/",
+      browserSessionId: "browser_session:ai-drone-city",
+      browserSessionIds: ["browser_session:ai-drone-city"],
+      browserSessionStatus: "open",
+      browserProcessPid: 52056,
+      previewProcessLeaseId: "proc_ai_drone_city",
+      previewProcessLeaseIds: ["proc_ai_drone_city"],
+      previewProcessCwd: "C:\\Users\\testuser\\Desktop\\AI Drone City",
+      lastKnownPreviewProcessPid: 49236,
+      stillControllable: true,
+      ownershipState: "tracked",
+      previewStackState: "browser_and_preview",
+      lastChangedPaths: ["C:\\Users\\testuser\\Desktop\\AI Drone City"],
+      sourceJobId: "job-1",
+      updatedAt: "2026-03-11T18:05:10.000Z"
+    },
+    browserSessions: [
+      buildConversationBrowserSessionFixture({
+        id: "browser_session:ai-drone-city",
+        label: "AI Drone City preview",
+        url: "http://127.0.0.1:49263/",
+        sourceJobId: "job-1",
+        openedAt: "2026-03-11T18:05:10.000Z",
+        linkedProcessLeaseId: "proc_ai_drone_city",
+        linkedProcessCwd: "C:\\Users\\testuser\\Desktop\\AI Drone City"
+      })
+    ]
+  });
+
+  const result = await routeConversationMessageInput(
+    session,
+    "Before changing anything, just talk with me for a minute about what makes AI Drone City feel playful. Reply in two short paragraphs and keep the page open.",
+    "2026-03-11T18:06:00.000Z",
+    buildDependencies(
+      () => {
+        throw new Error("enqueueJob should not run for a conversational interlude");
+      },
+      {
+        runDirectConversationTurn: async () => ({
+          summary: "AI Drone City feels playful because the pacing is light and the motion stays inviting instead of noisy.\n\nThe colors and airy spacing give it room to feel curious, so the page can stay open as a playful preview while we talk."
+        })
+      }
+    )
+  );
+
+  assert.equal(result.shouldStartWorker, false);
+  assert.match(result.reply, /\n\n/);
+  assert.equal(session.runningJobId, null);
+  assert.equal(session.queuedJobs.length, 0);
+  assert.equal(session.browserSessions[0]?.status, "open");
+  assert.match(
+    session.conversationTurns[session.conversationTurns.length - 1]?.text ?? "",
+    /\n\n/
+  );
+});
+
 test("routeConversationMessageInput normalizes third-person self-reference in direct chat replies", async () => {
   const session = buildSession();
 

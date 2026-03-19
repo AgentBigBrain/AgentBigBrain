@@ -29,6 +29,7 @@ import {
   buildMutableConfigForRuntimeMode,
   resolveConfiguredShellRuntimeProfile
 } from "./configRuntime/platformProfiles";
+import { resolveCodexAuthFilePath } from "../models/codex/authStore";
 
 export type {
   BrainConfig,
@@ -70,6 +71,7 @@ export const DEFAULT_BRAIN_CONFIG: BrainConfig = {
     maxEstimatedCostUsd: 1.25,
     maxCumulativeEstimatedCostUsd: 10,
     maxCumulativeModelSpendUsd: 10,
+    maxCumulativeNonApiModelCalls: 250,
     maxSubagentsPerTask: 2,
     maxSubagentDepth: 1,
     maxActionsPerTask: 8,
@@ -90,11 +92,13 @@ export const DEFAULT_BRAIN_CONFIG: BrainConfig = {
       "maxestimatedcostusd",
       "maxcumulativeestimatedcostusd",
       "maxcumulativemodelspendusd",
+      "maxcumulativenonapimodelcalls",
       "maxsubagentspertask",
       "maxsubagentdepth",
       "brain_max_action_cost_usd",
       "brain_max_cumulative_cost_usd",
       "brain_max_model_spend_usd",
+      "brain_max_non_api_model_calls_per_task",
       "brain_max_subagents_per_task",
       "brain_max_subagent_depth",
       "brain_autonomous_max_consecutive_no_progress",
@@ -372,6 +376,10 @@ export function createBrainConfigFromEnv(env: NodeJS.ProcessEnv = process.env): 
     env.BRAIN_MAX_MODEL_SPEND_USD,
     config.limits.maxCumulativeModelSpendUsd
   );
+  config.limits.maxCumulativeNonApiModelCalls = parsePositiveInteger(
+    env.BRAIN_MAX_NON_API_MODEL_CALLS_PER_TASK,
+    config.limits.maxCumulativeNonApiModelCalls
+  );
   config.limits.maxSubagentsPerTask = parsePositiveInteger(
     env.BRAIN_MAX_SUBAGENTS_PER_TASK,
     config.limits.maxSubagentsPerTask
@@ -403,6 +411,7 @@ export function createBrainConfigFromEnv(env: NodeJS.ProcessEnv = process.env): 
   if (profileMemoryPath) {
     appendProtectedPathPrefix(config.dna.protectedPathPrefixes, profileMemoryPath);
   }
+  appendProtectedPathPrefix(config.dna.protectedPathPrefixes, resolveCodexAuthFilePath(env));
 
   return config;
 }
