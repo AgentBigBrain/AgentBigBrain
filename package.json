@@ -130,7 +130,7 @@
   },
   "dependencies": {
     "onnxruntime-node": "^1.24.2",
-    "ws": "^8.19.0"
+    "ws": "^8.20.0"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
