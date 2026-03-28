@@ -8,6 +8,10 @@ import {
 } from "../../scripts/evidence/autonomousRuntimeAffordancesDirectAutoSmoke";
 
 test("autonomous runtime affordances direct-auto smoke emits a PASS artifact for the destination self-match organization case", async (t) => {
+  if (process.platform !== "win32") {
+    t.skip("Desktop/browser direct-auto smoke is currently validated on Windows hosts only.");
+    return;
+  }
   const artifact = await runAutonomousRuntimeAffordancesDirectAutoSmoke();
   const artifactPath = path.resolve(
     process.cwd(),

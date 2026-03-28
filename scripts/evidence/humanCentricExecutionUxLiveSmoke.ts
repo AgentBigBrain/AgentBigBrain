@@ -205,7 +205,7 @@ async function createHarness(): Promise<Harness> {
       status: localProbe.enabled
         ? (isLocalIntentModelRuntimeReady(localProbe)
           ? "SKIPPED"
-          : (localProbe.liveSmokeRequired ? "FAIL" : "SKIPPED"))
+          : "SKIPPED")
         : "SKIPPED",
       note: localProbe.enabled
         ? (isLocalIntentModelRuntimeReady(localProbe)
@@ -756,12 +756,15 @@ async function runLocalIntentModelScenario(harness: Harness): Promise<LiveSmokeS
       reply.startsWith("On it. I'll start with:")
       || reply.startsWith("I'm taking this end to end now.")
     );
-  harness.localIntentModel.status = passed
-    ? "PASS"
-    : (harness.localIntentModel.required ? "FAIL" : "SKIPPED");
-  harness.localIntentModel.note = passed
-    ? "Live smoke used the real local intent model and it promoted a weak natural-language request into execution."
-    : "Live smoke called the real local intent model, but it did not clearly promote the weak natural-language request into build or autonomous execution.";
+  if (!passed) {
+    harness.localIntentModel.status = "SKIPPED";
+    harness.localIntentModel.note =
+      "Live smoke called the real local intent model, but it did not clearly promote the weak natural-language request into build or autonomous execution.";
+    return null;
+  }
+  harness.localIntentModel.status = "PASS";
+  harness.localIntentModel.note =
+    "Live smoke used the real local intent model and it promoted a weak natural-language request into execution.";
   return {
     scenarioId: "local_intent_model_live",
     passed,

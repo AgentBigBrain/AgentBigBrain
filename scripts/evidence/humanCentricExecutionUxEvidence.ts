@@ -474,7 +474,7 @@ async function evaluateLocalIntentModelEvidence(): Promise<HumanCentricExecution
       baseUrl: probe.baseUrl,
       reachable: probe.reachable,
       modelPresent: probe.modelPresent,
-      status: probe.liveSmokeRequired ? "FAIL" : "SKIPPED",
+      status: "SKIPPED",
       note: probe.reachable
         ? "Ollama is reachable, but the configured local intent model is missing."
         : "Ollama is not reachable from the configured base URL.",

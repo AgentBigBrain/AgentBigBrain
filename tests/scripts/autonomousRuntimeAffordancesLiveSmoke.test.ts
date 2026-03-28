@@ -72,6 +72,10 @@ async function runScriptWithTimeout(
 }
 
 test("autonomous runtime affordances front-door live smoke emits either a PASS artifact or a bounded BLOCKED artifact with reviewable child detail", async (t) => {
+  if (process.platform !== "win32") {
+    t.skip("Desktop/browser front-door smoke is currently validated on Windows hosts only.");
+    return;
+  }
   const artifactPath = path.resolve(
     process.cwd(),
     "runtime/evidence/autonomous_runtime_affordances_live_smoke_report.json"

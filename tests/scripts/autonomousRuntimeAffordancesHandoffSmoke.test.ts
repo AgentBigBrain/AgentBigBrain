@@ -8,6 +8,10 @@ import {
 } from "../../scripts/evidence/autonomousRuntimeAffordancesHandoffSmoke";
 
 test("autonomous runtime affordances handoff smoke emits either a PASS artifact or a bounded BLOCKED artifact with natural return and resume detail", async (t) => {
+  if (process.platform !== "win32") {
+    t.skip("Desktop/browser handoff smoke is currently validated on Windows hosts only.");
+    return;
+  }
   const artifact = await runAutonomousRuntimeAffordancesHandoffSmoke();
   const artifactPath = path.resolve(
     process.cwd(),

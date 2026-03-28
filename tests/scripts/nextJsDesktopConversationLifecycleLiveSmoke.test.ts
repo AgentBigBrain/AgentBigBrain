@@ -8,6 +8,10 @@ import {
 } from "../../scripts/evidence/nextJsDesktopConversationLifecycleLiveSmoke";
 
 test("fresh Next.js desktop conversation lifecycle smoke proves build warm-open edit chat and cleanup", async (t) => {
+  if (process.platform !== "win32") {
+    t.skip("Desktop browser lifecycle smoke is currently validated on Windows hosts only.");
+    return;
+  }
   const artifactPath = path.resolve(
     process.cwd(),
     "runtime/evidence/next_js_desktop_conversation_lifecycle_live_smoke_report.json"

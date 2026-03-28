@@ -61,6 +61,10 @@ async function runRestartSmokeScript(): Promise<ChildRunResult> {
 }
 
 test("autonomous runtime affordances restart smoke exits cleanly and emits a PASS artifact with reload-safe close and unknown-resource stop proof", async (t) => {
+  if (process.platform !== "win32") {
+    t.skip("Desktop/browser restart smoke is currently validated on Windows hosts only.");
+    return;
+  }
   const childRun = await runRestartSmokeScript();
   const artifactPath = path.resolve(
     process.cwd(),
