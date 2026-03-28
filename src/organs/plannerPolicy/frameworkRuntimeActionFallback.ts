@@ -10,7 +10,9 @@ import { PlannedAction } from "../../core/types";
 import { PlannerExecutionEnvironmentContext } from "./executionStyleContracts";
 import { extractRequestedFrameworkFolderName } from "./frameworkBuildActionHeuristics";
 import {
+  buildFrameworkBuildProofCommand,
   buildFrameworkScaffoldCommand,
+  buildFrameworkWorkspaceProofCommand,
   extractTrackedPreviewProcessLeaseId,
   extractTrackedPreviewUrl,
   extractTrackedWorkspaceRoot,
@@ -22,6 +24,7 @@ import {
   resolveFrameworkLoopbackTarget,
   resolveTrackedPreviewLoopbackTarget
 } from "./frameworkRuntimeActionFallbackSupport";
+import { getPathModuleForPathValue } from "./frameworkPathSupport";
 import {
   buildDeterministicFrameworkTrackedEditFallbackActions,
   extractTrackedBrowserSessionId
@@ -38,6 +41,19 @@ import {
 } from "./liveVerificationPolicy";
 
 const TRACKED_WORKSPACE_REFERENCE_PATTERN = /\b(?:reuse|existing|current|same|tracked)\b/i;
+const SUPPORTED_FRAMEWORK_FALLBACK_SHELL_KINDS = new Set([
+  "powershell",
+  "pwsh",
+  "bash",
+  "zsh",
+  "wsl_bash"
+]);
+type SupportedFrameworkFallbackShellKind =
+  | "powershell"
+  | "pwsh"
+  | "bash"
+  | "zsh"
+  | "wsl_bash";
 
 /**
  * Builds deterministic bounded framework-app fallback actions when model planning still fails
@@ -52,8 +68,8 @@ export function buildDeterministicFrameworkBuildFallbackActions(
   executionEnvironment: PlannerExecutionEnvironmentContext | null
 ): PlannedAction[] {
   if (
-    executionEnvironment?.platform !== "win32" ||
-    executionEnvironment.shellKind !== "powershell" ||
+    !executionEnvironment ||
+    !SUPPORTED_FRAMEWORK_FALLBACK_SHELL_KINDS.has(executionEnvironment.shellKind) ||
     !executionEnvironment.desktopPath
   ) {
     return [];
@@ -71,7 +87,7 @@ export function buildDeterministicFrameworkBuildFallbackActions(
   }
   const kind = resolveFrameworkFallbackKind(requestContext, trackedWorkspaceRoot);
   const trackedWorkspaceFolderName = trackedWorkspaceRoot
-    ? path.win32.basename(trackedWorkspaceRoot)
+    ? getPathModuleForPathValue(trackedWorkspaceRoot).basename(trackedWorkspaceRoot)
     : null;
   const prefersTrackedWorkspaceFolderName =
     trackedWorkspaceFolderName !== null &&
@@ -83,9 +99,21 @@ export function buildDeterministicFrameworkBuildFallbackActions(
   if (!kind || !requestedFolderName) {
     return [];
   }
+  const requestedShellKind =
+    executionEnvironment.shellKind as SupportedFrameworkFallbackShellKind;
 
+  const targetPathModule = getPathModuleForPathValue(
+    trackedWorkspaceRoot ?? executionEnvironment.desktopPath
+  );
+  const requestedFinalFolderPath = targetPathModule.join(
+    executionEnvironment.desktopPath.replace(/[\\\/]+$/, ""),
+    requestedFolderName
+  );
   const finalFolderPath =
-    `${executionEnvironment.desktopPath.replace(/[\\\/]+$/, "")}\\${requestedFolderName}`;
+    trackedWorkspaceRoot &&
+    targetPathModule.basename(trackedWorkspaceRoot) === requestedFolderName
+      ? trackedWorkspaceRoot
+      : requestedFinalFolderPath;
   const trackedPreviewLoopbackTarget = resolveTrackedPreviewLoopbackTarget(trackedPreviewUrl);
   const loopbackTarget =
     trackedPreviewLoopbackTarget ?? resolveFrameworkLoopbackTarget(kind, activeRequest);
@@ -93,7 +121,8 @@ export function buildDeterministicFrameworkBuildFallbackActions(
   const scaffoldCommand = buildFrameworkScaffoldCommand(
     kind,
     finalFolderPath,
-    requestedFolderName
+    requestedFolderName,
+    requestedShellKind
   );
   const liveVerificationRequested = isLiveVerificationBuildRequest(requestContext);
   const browserVerificationRequested =
@@ -134,7 +163,7 @@ export function buildDeterministicFrameworkBuildFallbackActions(
     liveUrl,
     trackedPreviewProcessLeaseId,
     trackedBrowserSessionId,
-    requestedShellKind: executionEnvironment.shellKind,
+    requestedShellKind,
     startCommand
   });
   if (trackedLiveEditActions.length > 0) {
@@ -150,7 +179,7 @@ export function buildDeterministicFrameworkBuildFallbackActions(
       command: scaffoldCommand,
       cwd: executionEnvironment.desktopPath,
       workdir: executionEnvironment.desktopPath,
-      requestedShellKind: executionEnvironment.shellKind,
+      requestedShellKind,
       timeoutMs: 120_000
     },
     estimatedCostUsd: estimateActionCostUsd({
@@ -175,7 +204,7 @@ export function buildDeterministicFrameworkBuildFallbackActions(
       command: "npm install",
       cwd: finalFolderPath,
       workdir: finalFolderPath,
-      requestedShellKind: executionEnvironment.shellKind,
+      requestedShellKind,
       timeoutMs: 120_000
     },
     estimatedCostUsd: estimateActionCostUsd({
@@ -192,7 +221,7 @@ export function buildDeterministicFrameworkBuildFallbackActions(
       command: "npm run build",
       cwd: finalFolderPath,
       workdir: finalFolderPath,
-      requestedShellKind: executionEnvironment.shellKind,
+      requestedShellKind,
       timeoutMs: 120_000
     },
     estimatedCostUsd: estimateActionCostUsd({
@@ -201,11 +230,9 @@ export function buildDeterministicFrameworkBuildFallbackActions(
     })
   };
 
-  const workspaceProofCommand =
-    "$missing=@(); if (!(Test-Path '.\\package.json')) { $missing += 'package.json' }; " +
-    "if (!(Test-Path '.\\node_modules')) { $missing += 'node_modules' }; " +
-    "if ($missing.Count -gt 0) { throw ('Workspace not ready; missing: ' + ($missing -join ', ')) }; " +
-    "Get-Item .\\package.json,.\\node_modules | Select-Object Name,FullName";
+  const workspaceProofCommand = buildFrameworkWorkspaceProofCommand(
+    requestedShellKind
+  );
   const workspaceProofAction: PlannedAction = {
     id: makeId("action"),
     type: "shell_command",
@@ -215,7 +242,7 @@ export function buildDeterministicFrameworkBuildFallbackActions(
       command: workspaceProofCommand,
       cwd: finalFolderPath,
       workdir: finalFolderPath,
-      requestedShellKind: executionEnvironment.shellKind,
+      requestedShellKind,
       timeoutMs: 30_000
     },
     estimatedCostUsd: estimateActionCostUsd({
@@ -224,26 +251,10 @@ export function buildDeterministicFrameworkBuildFallbackActions(
     })
   };
 
-  const buildProofCommand =
-    kind === "next_js"
-      ? [
-          "$missing=@()",
-          "if (!(Test-Path '.\\package.json')) { $missing += 'package.json' }",
-          "if (!(Test-Path '.\\node_modules')) { $missing += 'node_modules' }",
-          "if (!(Test-Path '.\\app\\page.js') -and !(Test-Path '.\\app\\page.tsx') -and !(Test-Path '.\\src\\app\\page.js') -and !(Test-Path '.\\src\\app\\page.tsx')) { $missing += 'app/page' }",
-          "if (!(Test-Path '.\\.next\\BUILD_ID')) { $missing += '.next/BUILD_ID' }",
-          "if ($missing.Count -gt 0) { throw ('Landing page build proof missing: ' + ($missing -join ', ')) }",
-          "Get-Item .\\package.json,.\\node_modules,.\\.next\\BUILD_ID | Select-Object Name,FullName"
-        ].join("; ")
-      : [
-          "$missing=@()",
-          "if (!(Test-Path '.\\package.json')) { $missing += 'package.json' }",
-          "if (!(Test-Path '.\\node_modules')) { $missing += 'node_modules' }",
-          "if (!(Test-Path '.\\src\\App.jsx') -and !(Test-Path '.\\src\\App.tsx') -and !(Test-Path '.\\src\\App.js') -and !(Test-Path '.\\src\\App.ts')) { $missing += 'src/App' }",
-          "if (!(Test-Path '.\\dist\\index.html')) { $missing += 'dist/index.html' }",
-          "if ($missing.Count -gt 0) { throw ('Landing page build proof missing: ' + ($missing -join ', ')) }",
-          "Get-Item .\\package.json,.\\node_modules,.\\dist\\index.html | Select-Object Name,FullName"
-        ].join("; ");
+  const buildProofCommand = buildFrameworkBuildProofCommand(
+    kind,
+    requestedShellKind
+  );
   const buildProofAction: PlannedAction = {
     id: makeId("action"),
     type: "shell_command",
@@ -253,7 +264,7 @@ export function buildDeterministicFrameworkBuildFallbackActions(
       command: buildProofCommand,
       cwd: finalFolderPath,
       workdir: finalFolderPath,
-      requestedShellKind: executionEnvironment.shellKind,
+      requestedShellKind,
       timeoutMs: 30_000
     },
     estimatedCostUsd: estimateActionCostUsd({
@@ -277,7 +288,7 @@ export function buildDeterministicFrameworkBuildFallbackActions(
       command: startCommand,
       cwd: finalFolderPath,
       workdir: finalFolderPath,
-      requestedShellKind: executionEnvironment.shellKind,
+      requestedShellKind,
       timeoutMs: 120_000
     },
     estimatedCostUsd: estimateActionCostUsd({

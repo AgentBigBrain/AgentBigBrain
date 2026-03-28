@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
+import { ShellKindV1 } from "../../core/runtimeTypes/taskPlanningTypes";
 
 import {
   extractRequestedFrameworkFolderName,
@@ -125,6 +126,11 @@ function escapePowerShellSingleQuoted(value: string): string {
   return value.replace(/'/g, "''");
 }
 
+/** Escapes one string for single-quoted POSIX shell literals. */
+function escapePosixSingleQuoted(value: string): string {
+  return value.replace(/'/g, "'\"'\"'");
+}
+
 /** Extracts the tracked workspace root from wrapped conversation execution input when present. */
 export function extractTrackedWorkspaceRoot(requestContext: string): string | null {
   const rawRoot =
@@ -212,40 +218,144 @@ export function resolveFrameworkFallbackKind(
 export function buildFrameworkScaffoldCommand(
   kind: FrameworkFallbackKind,
   finalFolderPath: string,
-  requestedFolderName: string
+  requestedFolderName: string,
+  requestedShellKind: ShellKindV1
 ): string {
   const safeSlug = toFrameworkPackageSafeSlug(
     extractRequestedFrameworkFolderName(requestedFolderName) ?? requestedFolderName
   );
-  const scaffoldCommand =
-    kind === "next_js"
-      ? [
-          `npx create-next-app@latest '${escapePowerShellSingleQuoted(safeSlug)}'`,
-          "--js",
-          "--eslint",
-          "--app",
-          "--use-npm",
-          "--yes",
-          "--skip-install",
-          "--no-tailwind",
-          "--no-src-dir",
-          "--disable-git",
-          "--no-react-compiler"
-        ].join(" ")
-      : `npx create-vite@latest --template react-ts --no-interactive '${escapePowerShellSingleQuoted(safeSlug)}'`;
+  const powerShellLike =
+    requestedShellKind === "powershell" || requestedShellKind === "pwsh";
+  const scaffoldCommand = kind === "next_js"
+    ? [
+        `npx create-next-app@latest '${
+          powerShellLike
+            ? escapePowerShellSingleQuoted(safeSlug)
+            : escapePosixSingleQuoted(safeSlug)
+        }'`,
+        "--js",
+        "--eslint",
+        "--app",
+        "--use-npm",
+        "--yes",
+        "--skip-install",
+        "--no-tailwind",
+        "--no-src-dir",
+        "--disable-git",
+        "--no-react-compiler"
+      ].join(" ")
+    : `npx create-vite@latest --template react-ts --no-interactive '${
+        powerShellLike
+          ? escapePowerShellSingleQuoted(safeSlug)
+          : escapePosixSingleQuoted(safeSlug)
+      }'`;
+  if (powerShellLike) {
+    return [
+      `$final = '${escapePowerShellSingleQuoted(finalFolderPath)}'`,
+      `$tempRoot = Join-Path $env:TEMP 'agentbigbrain-framework-scaffold'`,
+      `$temp = Join-Path $tempRoot '${escapePowerShellSingleQuoted(safeSlug)}'`,
+      "if (!(Test-Path $tempRoot)) { New-Item -ItemType Directory -Path $tempRoot -Force | Out-Null }",
+      "if (Test-Path $temp) { Remove-Item $temp -Recurse -Force }",
+      "if (Test-Path (Join-Path $final 'package.json')) { Set-Location $final; exit 0 }",
+      "Set-Location $tempRoot",
+      scaffoldCommand,
+      "if (!(Test-Path $temp)) { if (Test-Path (Join-Path $final 'package.json')) { Set-Location $final; exit 0 }; throw ('Framework scaffold did not create expected temp workspace: ' + $temp) }",
+      "if (!(Test-Path $final)) { New-Item -ItemType Directory -Path $final -Force | Out-Null }",
+      "Get-ChildItem -Force $temp | ForEach-Object { Move-Item $_.FullName -Destination $final -Force }",
+      "Remove-Item $temp -Recurse -Force",
+      "Set-Location $final"
+    ].join("; ");
+  }
   return [
-    `$final = '${escapePowerShellSingleQuoted(finalFolderPath)}'`,
-    `$tempRoot = Join-Path $env:TEMP 'agentbigbrain-framework-scaffold'`,
-    `$temp = Join-Path $tempRoot '${escapePowerShellSingleQuoted(safeSlug)}'`,
-    "if (!(Test-Path $tempRoot)) { New-Item -ItemType Directory -Path $tempRoot -Force | Out-Null }",
-    "if (Test-Path $temp) { Remove-Item $temp -Recurse -Force }",
-    "if (Test-Path (Join-Path $final 'package.json')) { Set-Location $final; exit 0 }",
-    "Set-Location $tempRoot",
+    `final='${escapePosixSingleQuoted(finalFolderPath)}'`,
+    "temp_root=\"${TMPDIR:-/tmp}/agentbigbrain-framework-scaffold\"",
+    `temp=\"$temp_root/${escapePosixSingleQuoted(safeSlug)}\"`,
+    "mkdir -p \"$temp_root\"",
+    "rm -rf \"$temp\"",
+    "if [ -f \"$final/package.json\" ]; then cd \"$final\"; exit 0; fi",
+    "cd \"$temp_root\"",
     scaffoldCommand,
-    "if (!(Test-Path $temp)) { if (Test-Path (Join-Path $final 'package.json')) { Set-Location $final; exit 0 }; throw ('Framework scaffold did not create expected temp workspace: ' + $temp) }",
-    "if (!(Test-Path $final)) { New-Item -ItemType Directory -Path $final -Force | Out-Null }",
-    "Get-ChildItem -Force $temp | ForEach-Object { Move-Item $_.FullName -Destination $final -Force }",
-    "Remove-Item $temp -Recurse -Force",
-    "Set-Location $final"
+    "if [ ! -d \"$temp\" ]; then if [ -f \"$final/package.json\" ]; then cd \"$final\"; exit 0; fi; echo \"Framework scaffold did not create expected temp workspace: $temp\" >&2; exit 1; fi",
+    "mkdir -p \"$final\"",
+    "find \"$temp\" -mindepth 1 -maxdepth 1 -exec mv {} \"$final\"/ \\;",
+    "rm -rf \"$temp\"",
+    "cd \"$final\""
   ].join("; ");
+}
+
+/**
+ * Builds the bounded workspace-readiness proof command for the active framework shell.
+ *
+ * @param shellKind - Requested runtime shell for the deterministic fallback lane.
+ * @returns Shell command that proves package.json and node_modules exist in the workspace.
+ */
+export function buildFrameworkWorkspaceProofCommand(shellKind: string): string {
+  if (shellKind === "powershell" || shellKind === "pwsh") {
+    return (
+      "$missing=@(); if (!(Test-Path '.\\package.json')) { $missing += 'package.json' }; " +
+      "if (!(Test-Path '.\\node_modules')) { $missing += 'node_modules' }; " +
+      "if ($missing.Count -gt 0) { throw ('Workspace not ready; missing: ' + ($missing -join ', ')) }; " +
+      "Get-Item .\\package.json,.\\node_modules | Select-Object Name,FullName"
+    );
+  }
+  return [
+    "missing=\"\"",
+    "[ -e './package.json' ] || missing=\"$missing package.json\"",
+    "[ -e './node_modules' ] || missing=\"$missing node_modules\"",
+    "if [ -n \"$missing\" ]; then echo \"Workspace not ready; missing:${missing}\" >&2; exit 1; fi",
+    "printf '%s\\n' './package.json' './node_modules'"
+  ].join("; ");
+}
+
+/**
+ * Builds the bounded source-and-build proof command for the active framework shell.
+ *
+ * @param kind - Framework family being scaffolded or reused.
+ * @param shellKind - Requested runtime shell for the deterministic fallback lane.
+ * @returns Shell command that proves the expected framework source and build artifacts exist.
+ */
+export function buildFrameworkBuildProofCommand(
+  kind: FrameworkFallbackKind,
+  shellKind: string
+): string {
+  if (shellKind === "powershell" || shellKind === "pwsh") {
+    return kind === "next_js"
+      ? [
+          "$missing=@()",
+          "if (!(Test-Path '.\\package.json')) { $missing += 'package.json' }",
+          "if (!(Test-Path '.\\node_modules')) { $missing += 'node_modules' }",
+          "if (!(Test-Path '.\\app\\page.js') -and !(Test-Path '.\\app\\page.tsx') -and !(Test-Path '.\\src\\app\\page.js') -and !(Test-Path '.\\src\\app\\page.tsx')) { $missing += 'app/page' }",
+          "if (!(Test-Path '.\\.next\\BUILD_ID')) { $missing += '.next/BUILD_ID' }",
+          "if ($missing.Count -gt 0) { throw ('Landing page build proof missing: ' + ($missing -join ', ')) }",
+          "Get-Item .\\package.json,.\\node_modules,.\\.next\\BUILD_ID | Select-Object Name,FullName"
+        ].join("; ")
+      : [
+          "$missing=@()",
+          "if (!(Test-Path '.\\package.json')) { $missing += 'package.json' }",
+          "if (!(Test-Path '.\\node_modules')) { $missing += 'node_modules' }",
+          "if (!(Test-Path '.\\src\\App.jsx') -and !(Test-Path '.\\src\\App.tsx') -and !(Test-Path '.\\src\\App.js') -and !(Test-Path '.\\src\\App.ts')) { $missing += 'src/App' }",
+          "if (!(Test-Path '.\\dist\\index.html')) { $missing += 'dist/index.html' }",
+          "if ($missing.Count -gt 0) { throw ('Landing page build proof missing: ' + ($missing -join ', ')) }",
+          "Get-Item .\\package.json,.\\node_modules,.\\dist\\index.html | Select-Object Name,FullName"
+        ].join("; ");
+  }
+  return kind === "next_js"
+    ? [
+        "missing=\"\"",
+        "[ -e './package.json' ] || missing=\"$missing package.json\"",
+        "[ -e './node_modules' ] || missing=\"$missing node_modules\"",
+        "[ -e './app/page.js' ] || [ -e './app/page.tsx' ] || [ -e './src/app/page.js' ] || [ -e './src/app/page.tsx' ] || missing=\"$missing app/page\"",
+        "[ -e './.next/BUILD_ID' ] || missing=\"$missing .next/BUILD_ID\"",
+        "if [ -n \"$missing\" ]; then echo \"Landing page build proof missing:${missing}\" >&2; exit 1; fi",
+        "printf '%s\\n' './package.json' './node_modules' './.next/BUILD_ID'"
+      ].join("; ")
+    : [
+        "missing=\"\"",
+        "[ -e './package.json' ] || missing=\"$missing package.json\"",
+        "[ -e './node_modules' ] || missing=\"$missing node_modules\"",
+        "[ -e './src/App.jsx' ] || [ -e './src/App.tsx' ] || [ -e './src/App.js' ] || [ -e './src/App.ts' ] || missing=\"$missing src/App\"",
+        "[ -e './dist/index.html' ] || missing=\"$missing dist/index.html\"",
+        "if [ -n \"$missing\" ]; then echo \"Landing page build proof missing:${missing}\" >&2; exit 1; fi",
+        "printf '%s\\n' './package.json' './node_modules' './dist/index.html'"
+      ].join("; ");
 }

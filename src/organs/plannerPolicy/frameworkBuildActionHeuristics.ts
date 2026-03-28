@@ -267,7 +267,7 @@ export function hasFrameworkAppNonInPlaceScaffoldRepair(
       requestedFolderLower !== null &&
       lowerCommand.includes(safeSlug) &&
       lowerCommand.includes(requestedFolderLower) &&
-      /\b(?:move-item|copy-item|rename-item)\b/i.test(command);
+      /\b(?:move-item|copy-item|rename-item|mv|cp)\b/i.test(command);
     return !hasBoundedExactFolderMerge;
   });
 }

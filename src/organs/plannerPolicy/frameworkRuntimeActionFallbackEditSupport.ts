@@ -18,7 +18,7 @@ interface FrameworkTrackedEditActionInput {
   readonly liveUrl: string;
   readonly trackedPreviewProcessLeaseId: string | null;
   readonly trackedBrowserSessionId: string | null;
-  readonly requestedShellKind: "powershell" | "bash";
+  readonly requestedShellKind: "powershell" | "pwsh" | "bash" | "zsh" | "wsl_bash";
   readonly startCommand: string;
 }
 
