@@ -212,12 +212,13 @@ function extractViteScaffoldTargetRoot(command: string, cwd: string): string | n
     cwd,
     powerShellAssignments
   );
+  const pathModule = getPathModuleForContext(scaffoldCwd, rawTarget);
   const resolvedTarget = resolvePowerShellLocationExpression(
     rawTarget,
     scaffoldCwd,
     powerShellAssignments
   );
-  return resolvedTarget ? path.resolve(resolvedTarget) : path.resolve(scaffoldCwd, rawTarget);
+  return resolvedTarget ?? pathModule.resolve(scaffoldCwd, rawTarget);
 }
 
 /**
@@ -334,12 +335,13 @@ function extractNextScaffoldTargetRoot(command: string, cwd: string): string | n
   if (!rawTarget) {
     return null;
   }
+  const pathModule = getPathModuleForContext(scaffoldCwd, rawTarget);
   const resolvedTarget = resolvePowerShellLocationExpression(
     rawTarget,
     scaffoldCwd,
     powerShellAssignments
   );
-  return resolvedTarget ? path.resolve(resolvedTarget) : path.resolve(scaffoldCwd, rawTarget);
+  return resolvedTarget ?? pathModule.resolve(scaffoldCwd, rawTarget);
 }
 
 /**

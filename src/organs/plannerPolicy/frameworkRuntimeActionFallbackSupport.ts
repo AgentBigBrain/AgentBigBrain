@@ -5,6 +5,7 @@ import {
   extractRequestedFrameworkFolderName,
   toFrameworkPackageSafeSlug
 } from "./frameworkBuildActionHeuristics";
+import { getPathModuleForPathValue } from "./frameworkPathSupport";
 import { requiresFrameworkAppScaffoldAction } from "./liveVerificationPolicy";
 
 export type FrameworkFallbackKind = "vite_react" | "next_js";
@@ -96,9 +97,10 @@ export function hasFrameworkBuildArtifacts(
   kind: FrameworkFallbackKind,
   workspaceRoot: string
 ): boolean {
+  const pathModule = getPathModuleForPathValue(workspaceRoot);
   return kind === "next_js"
-    ? existsSync(path.join(workspaceRoot, ".next", "BUILD_ID"))
-    : existsSync(path.join(workspaceRoot, "dist", "index.html"));
+    ? existsSync(pathModule.join(workspaceRoot, ".next", "BUILD_ID"))
+    : existsSync(pathModule.join(workspaceRoot, "dist", "index.html"));
 }
 
 /** Detects a natural-language follow-up that asks to start or warm the tracked preview. */
@@ -150,24 +152,25 @@ export function extractTrackedPreviewProcessLeaseId(requestContext: string): str
 function inferFrameworkKindFromWorkspace(
   workspaceRoot: string
 ): FrameworkFallbackKind | null {
+  const pathModule = getPathModuleForPathValue(workspaceRoot);
   if (
-    existsSync(path.join(workspaceRoot, "next-env.d.ts")) ||
-    existsSync(path.join(workspaceRoot, "next.config.js")) ||
-    existsSync(path.join(workspaceRoot, "next.config.mjs")) ||
-    existsSync(path.join(workspaceRoot, "app")) ||
-    existsSync(path.join(workspaceRoot, "src", "app"))
+    existsSync(pathModule.join(workspaceRoot, "next-env.d.ts")) ||
+    existsSync(pathModule.join(workspaceRoot, "next.config.js")) ||
+    existsSync(pathModule.join(workspaceRoot, "next.config.mjs")) ||
+    existsSync(pathModule.join(workspaceRoot, "app")) ||
+    existsSync(pathModule.join(workspaceRoot, "src", "app"))
   ) {
     return "next_js";
   }
   if (
-    existsSync(path.join(workspaceRoot, "vite.config.ts")) ||
-    existsSync(path.join(workspaceRoot, "vite.config.js")) ||
-    existsSync(path.join(workspaceRoot, "src", "main.tsx")) ||
-    existsSync(path.join(workspaceRoot, "src", "main.jsx"))
+    existsSync(pathModule.join(workspaceRoot, "vite.config.ts")) ||
+    existsSync(pathModule.join(workspaceRoot, "vite.config.js")) ||
+    existsSync(pathModule.join(workspaceRoot, "src", "main.tsx")) ||
+    existsSync(pathModule.join(workspaceRoot, "src", "main.jsx"))
   ) {
     return "vite_react";
   }
-  const packageJsonPath = path.join(workspaceRoot, "package.json");
+  const packageJsonPath = pathModule.join(workspaceRoot, "package.json");
   if (!existsSync(packageJsonPath)) {
     return null;
   }
