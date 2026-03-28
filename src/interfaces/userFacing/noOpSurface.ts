@@ -78,6 +78,7 @@ const EXECUTION_NOOP_RESPONSE_PATTERNS: readonly RegExp[] = [
   /\b(?:i\s+cannot|i\s+can't|cannot|can't)\b[\s\S]{0,180}\b(?:execute|perform|run|complete|capture|compile|schedule|build)\b[\s\S]{0,120}\bin this run\b/i,
   /\bi\s+(?:could not|couldn't)\b[\s\S]{0,180}\b(?:execute|perform|run|complete|capture|compile|schedule|build)\b[\s\S]{0,120}\bin this run\b/i,
   /\bunable to\b[\s\S]{0,180}\b(?:execute|perform|run|complete|capture|compile|schedule|build)\b[\s\S]{0,120}\bin this run\b/i,
+  /\bi\s+(?:did\s+not|didn't)\s+complete\s+the\s+requested\s+live\s+app\s+run\s+in\s+this\s+run\b/i,
   /\b(?:i\s+cannot|i\s+can't|cannot|can't)\b[\s\S]{0,180}\b(?:execute|perform|run|complete|capture|compile|schedule|build)\b[\s\S]{0,180}\b(?:without\s+further\s+details|without\s+more\s+information|unless\s+you\s+provide|please\s+provide\s+more\s+information)\b/i
 ] as const;
 const EXECUTION_CAPABILITY_LIMITATION_RESPONSE_PATTERNS: readonly RegExp[] = [

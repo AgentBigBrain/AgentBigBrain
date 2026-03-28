@@ -15,7 +15,13 @@ export type ConversationIntentSemanticHint =
   | "while_away_review"
   | "wrap_up_summary"
   | "explain_handoff"
-  | "resume_handoff";
+  | "resume_handoff"
+  | "status_change_summary"
+  | "status_return_handoff"
+  | "status_location"
+  | "status_browser"
+  | "status_progress"
+  | "status_waiting";
 
 export interface IntentClarificationCandidate {
   kind: "execution_mode";

@@ -32,6 +32,59 @@ import {
 } from "./conversationWorkerAutoRecoverySupport";
 
 /**
+ * Returns whether newer queued work should take precedence over automatic recovery retries.
+ *
+ * @param session - Mutable conversation session after the completed job has been persisted.
+ * @returns `true` when automatic recovery should fail closed instead of queuing behind newer work.
+ */
+function hasNewerQueuedWork(session: ConversationSession): boolean {
+  return session.queuedJobs.length > 0;
+}
+
+/**
+ * Returns whether automatic workspace-recovery retries are still compatible with the shared session domain.
+ *
+ * @param session - Mutable conversation session after the completed job has been persisted.
+ * @returns `true` when recovery remains workflow-compatible or legacy metadata is still unknown.
+ */
+function hasWorkflowCompatibleRecoveryContext(session: ConversationSession): boolean {
+  const workspaceSnapshotLane = session.activeWorkspace?.domainSnapshotLane ?? null;
+  const handoffSnapshotLane = session.returnHandoff?.domainSnapshotLane ?? null;
+  if (workspaceSnapshotLane === "workflow") {
+    return true;
+  }
+  if (handoffSnapshotLane === "workflow") {
+    return true;
+  }
+  if (
+    workspaceSnapshotLane === "profile" ||
+    workspaceSnapshotLane === "relationship" ||
+    workspaceSnapshotLane === "system_policy" ||
+    handoffSnapshotLane === "profile" ||
+    handoffSnapshotLane === "relationship" ||
+    handoffSnapshotLane === "system_policy"
+  ) {
+    return false;
+  }
+  if (session.domainContext.dominantLane === "workflow") {
+    return true;
+  }
+  if (
+    session.domainContext.dominantLane === "profile" ||
+    session.domainContext.dominantLane === "relationship" ||
+    session.domainContext.dominantLane === "system_policy"
+  ) {
+    return false;
+  }
+  return (
+    session.modeContinuity?.activeMode === "plan" ||
+    session.modeContinuity?.activeMode === "build" ||
+    session.modeContinuity?.activeMode === "autonomous" ||
+    session.modeContinuity?.activeMode === "review"
+  ) || session.domainContext.dominantLane === "unknown";
+}
+
+/**
  * Resolves the most human-facing organization request text available for a queued automatic
  * workspace-recovery retry.
  *
@@ -152,6 +205,12 @@ export function enqueueAutomaticTrackedWorkspaceRecoveryRetry(
   completedJob: ConversationJob,
   taskRunResult: TaskRunResult
 ): boolean {
+  if (hasNewerQueuedWork(session)) {
+    return false;
+  }
+  if (!hasWorkflowCompatibleRecoveryContext(session)) {
+    return false;
+  }
   const sourceInput = resolveAutomaticTrackedWorkspaceRecoverySourceInput(
     completedJob,
     taskRunResult
@@ -169,6 +228,14 @@ export function enqueueAutomaticTrackedWorkspaceRecoveryRetry(
     session.activeClarification = null;
     session.progressState = null;
     completedJob.resultSummary = retryNotice;
+    completedJob.recoveryTrace = {
+      kind: "workspace_auto_recovery",
+      status: "attempting",
+      summary: retryNotice,
+      updatedAt: retryReceivedAt,
+      recoveryClass: "WORKSPACE_HOLDER_CONFLICT",
+      fingerprint: null
+    };
     replaceLatestAssistantTurnText(session, previousSummary, retryNotice);
     return true;
   }
@@ -210,6 +277,14 @@ export function enqueueAutomaticTrackedWorkspaceRecoveryRetry(
     session.activeClarification = null;
     session.progressState = null;
     completedJob.resultSummary = retryNotice;
+    completedJob.recoveryTrace = {
+      kind: "workspace_auto_recovery",
+      status: "attempting",
+      summary: retryNotice,
+      updatedAt: retryReceivedAt,
+      recoveryClass: "WORKSPACE_HOLDER_CONFLICT",
+      fingerprint: null
+    };
     replaceLatestAssistantTurnText(session, previousSummary, retryNotice);
     return true;
   }
@@ -236,6 +311,14 @@ export function enqueueAutomaticTrackedWorkspaceRecoveryRetry(
   session.activeClarification = null;
   session.progressState = null;
   completedJob.resultSummary = retryNotice;
+  completedJob.recoveryTrace = {
+    kind: "workspace_auto_recovery",
+    status: "attempting",
+    summary: retryNotice,
+    updatedAt: retryReceivedAt,
+    recoveryClass: "WORKSPACE_HOLDER_CONFLICT",
+    fingerprint: null
+  };
   replaceLatestAssistantTurnText(session, previousSummary, retryNotice);
   return true;
 }

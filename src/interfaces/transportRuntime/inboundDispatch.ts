@@ -17,6 +17,10 @@ import type {
   InboundEntityGraphMutationInput
 } from "../entityGraphRuntime";
 import { maybeRecordInboundEntityGraphMutation } from "../entityGraphRuntime";
+import type {
+  EntityDomainHintInterpretationResolver,
+  EntityTypeInterpretationResolver
+} from "../../organs/languageUnderstanding/localIntentModelContracts";
 import { runAutonomousTransportTask } from "./deliveryLifecycle";
 
 export interface ConversationManagerLike {
@@ -35,6 +39,10 @@ export interface HandleAcceptedTransportConversationInput {
   entityGraphStore: EntityGraphStoreLike;
   dynamicPulseEnabled: boolean;
   abortControllers: Map<string, AbortController>;
+  entityTypeInterpretationResolver?: EntityTypeInterpretationResolver;
+  entityDomainHintInterpretationResolver?: EntityDomainHintInterpretationResolver;
+  resolveEntityGraphDomainHint?():
+    Promise<"profile" | "relationship" | "workflow" | "system_policy" | null>;
   runTextTask(
     input: string,
     receivedAt: string,
@@ -148,10 +156,18 @@ export async function deliverPreparedTransportResponse(
 export async function handleAcceptedTransportConversation(
   input: HandleAcceptedTransportConversationInput
 ): Promise<void> {
+  const domainHint = await input.resolveEntityGraphDomainHint?.();
   await maybeRecordInboundEntityGraphMutation(
     input.entityGraphStore,
     input.dynamicPulseEnabled,
-    input.entityGraphEvent,
+    {
+      ...input.entityGraphEvent,
+      domainHint: domainHint ?? null
+    },
+    {
+      entityTypeInterpretationResolver: input.entityTypeInterpretationResolver,
+      entityDomainHintInterpretationResolver: input.entityDomainHintInterpretationResolver
+    },
     input.onEntityGraphMutationFailure
   );
 

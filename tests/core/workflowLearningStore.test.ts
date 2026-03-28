@@ -152,3 +152,29 @@ test("deriveWorkflowObservationFromTaskRun extracts active request and outcome d
   assert.equal(observation.outcome, "success");
   assert.equal(observation.contextTags.includes("release"), true);
 });
+
+test("workflow store biases relevant patterns toward the active session lane", async () => {
+  await withWorkflowLearningStore(async ({ filePath }) => {
+    const store = new WorkflowLearningStore(filePath);
+    await store.recordObservation({
+      workflowKey: "status_update:project_summary",
+      outcome: "success",
+      observedAt: "2026-03-03T00:00:00.000Z",
+      domainLane: "workflow",
+      contextTags: ["status", "summary"]
+    });
+    await store.recordObservation({
+      workflowKey: "status_update:personal_checkin",
+      outcome: "success",
+      observedAt: "2026-03-03T00:01:00.000Z",
+      domainLane: "profile",
+      contextTags: ["status", "summary"]
+    });
+
+    const workflowHints = await store.getRelevantPatterns("status summary", 2, "workflow");
+    const profileHints = await store.getRelevantPatterns("status summary", 2, "profile");
+
+    assert.equal(workflowHints[0]?.domainLane, "workflow");
+    assert.equal(profileHints[0]?.domainLane, "profile");
+  });
+});

@@ -11,6 +11,7 @@ import type {
   ListManagedProcessSnapshots,
   ListAvailableSkills,
   QueryConversationContinuityFacts,
+  RememberConversationProfileInput,
   ConversationIntentInterpreter,
   ConversationManagerConfig,
   ConversationNotifier,
@@ -21,7 +22,19 @@ import type {
   ExecuteConversationTask,
   RunDirectConversationTurn
 } from "./managerContracts";
-import type { LocalIntentModelResolver } from "../../organs/languageUnderstanding/localIntentModelContracts";
+import type {
+  AutonomyBoundaryInterpretationResolver,
+  ContinuationInterpretationResolver,
+  ContextualFollowupInterpretationResolver,
+  ContextualReferenceInterpretationResolver,
+  EntityReferenceInterpretationResolver,
+  HandoffControlInterpretationResolver,
+  IdentityInterpretationResolver,
+  LocalIntentModelResolver,
+  StatusRecallBoundaryInterpretationResolver,
+  TopicKeyInterpretationResolver
+} from "../../organs/languageUnderstanding/localIntentModelContracts";
+import type { ProposalReplyInterpretationResolver } from "../../organs/languageUnderstanding/localIntentModelProposalReplyContracts";
 import type { ConversationSession } from "../sessionStore";
 
 export interface InterfaceSessionFile {
@@ -76,10 +89,23 @@ export interface ConversationIngressDependencies extends ConversationIngressRule
   interpretConversationIntent?: ConversationIntentInterpreter;
   runDirectConversationTurn?: RunDirectConversationTurn;
   localIntentModelResolver?: LocalIntentModelResolver;
+  autonomyBoundaryInterpretationResolver?: AutonomyBoundaryInterpretationResolver;
+  statusRecallBoundaryInterpretationResolver?: StatusRecallBoundaryInterpretationResolver;
+  continuationInterpretationResolver?: ContinuationInterpretationResolver;
+  contextualFollowupInterpretationResolver?: ContextualFollowupInterpretationResolver;
+  contextualReferenceInterpretationResolver?: ContextualReferenceInterpretationResolver;
+  entityReferenceInterpretationResolver?: EntityReferenceInterpretationResolver;
+  handoffControlInterpretationResolver?: HandoffControlInterpretationResolver;
+  identityInterpretationResolver?: IdentityInterpretationResolver;
+  proposalReplyInterpretationResolver?: ProposalReplyInterpretationResolver;
+  topicKeyInterpretationResolver?: TopicKeyInterpretationResolver;
   intentInterpreterConfidenceThreshold: number;
   runCheckpointReview?: ConversationCheckpointReviewRunner;
   queryContinuityEpisodes?: QueryConversationContinuityEpisodes;
   queryContinuityFacts?: QueryConversationContinuityFacts;
+  getEntityGraph?: import("./managerContracts").GetConversationEntityGraph;
+  reconcileEntityAliasCandidate?: import("./managerContracts").ReconcileConversationEntityAliasCandidate;
+  rememberConversationProfileInput?: RememberConversationProfileInput;
   reviewConversationMemory?: ReviewConversationMemory;
   resolveConversationMemoryEpisode?: ResolveConversationMemoryEpisode;
   markConversationMemoryEpisodeWrong?: MarkConversationMemoryEpisodeWrong;

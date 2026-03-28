@@ -6,5 +6,6 @@ export {
   conversationBelongsToProvider,
   selectPulseTargetSession,
   shouldSkipSessionForPulse,
+  shouldSuppressPulseForSessionDomain,
   sortByMostRecentSessionUpdate
 } from "../proactiveRuntime/deliveryPolicy";

@@ -4,6 +4,7 @@
 
 import type {
   ConversationDeliveryResult,
+  ConversationOutboundDeliveryTrace,
   ConversationNotifierTransport
 } from "../conversationRuntime/managerContracts";
 
@@ -72,6 +73,13 @@ export interface TelegramOutboundDeliveryObservation {
   chatId: string;
   text: string;
   at: string;
+  sequence: number;
+  source: ConversationOutboundDeliveryTrace["source"] | null;
+  sessionKey: string | null;
+  jobId: string | null;
+  jobCreatedAt: string | null;
+  inboundEventId: string | null;
+  inboundReceivedAt: string | null;
   messageId?: string | null;
   draftId?: number | null;
 }
@@ -84,9 +92,22 @@ export interface TelegramNotifierFactoryInput {
   renderOutboundText(text: string): string;
   nativeDraftStreamingEnabled: boolean;
   allocateDraftId(): number;
-  sendReply(text: string): Promise<ConversationDeliveryResult>;
-  editReply(messageId: string, text: string): Promise<ConversationDeliveryResult>;
-  sendDraftUpdate(draftId: number, text: string): Promise<ConversationDeliveryResult>;
+  allocateDeliverySequence(): number;
+  baseTrace?: Omit<ConversationOutboundDeliveryTrace, "source">;
+  sendReply(
+    text: string,
+    trace?: ConversationOutboundDeliveryTrace
+  ): Promise<ConversationDeliveryResult>;
+  editReply(
+    messageId: string,
+    text: string,
+    trace?: ConversationOutboundDeliveryTrace
+  ): Promise<ConversationDeliveryResult>;
+  sendDraftUpdate(
+    draftId: number,
+    text: string,
+    trace?: ConversationOutboundDeliveryTrace
+  ): Promise<ConversationDeliveryResult>;
 }
 
 export interface TransportNotifierFactories {

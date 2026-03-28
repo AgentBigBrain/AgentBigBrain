@@ -59,6 +59,7 @@ export function normalizeAgentPulseSessionState(candidate: unknown): AgentPulseS
       lastDecisionCandidate === "RELATIONSHIP_ROLE_SUPPRESSED" ||
       lastDecisionCandidate === "CONTEXT_DRIFT_SUPPRESSED" ||
       lastDecisionCandidate === "CONTEXTUAL_TOPIC_COOLDOWN" ||
+      lastDecisionCandidate === "SESSION_DOMAIN_SUPPRESSED" ||
       lastDecisionCandidate === "QUIET_HOURS" ||
       lastDecisionCandidate === "RATE_LIMIT" ||
       lastDecisionCandidate === "NOT_EVALUATED" ||

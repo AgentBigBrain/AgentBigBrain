@@ -23,26 +23,26 @@ function buildCheckpointFixture(): { graph: EntityGraphV1; stack: ConversationSt
     updatedAt: "2025-10-01T00:00:00.000Z",
     entities: [
       {
-        entityKey: "entity_billy",
-        canonicalName: "Billy",
+        entityKey: "entity_owen",
+        canonicalName: "Owen",
         entityType: "person",
         disambiguator: null,
-        aliases: ["Billy"],
+        aliases: ["Owen"],
         firstSeenAt: "2025-10-01T00:00:00.000Z",
         lastSeenAt: "2026-02-25T00:00:00.000Z",
         salience: 6,
-        evidenceRefs: ["trace:entity_billy"]
+        evidenceRefs: ["trace:entity_owen"]
       },
       {
-        entityKey: "entity_flare_labs",
-        canonicalName: "Flare Labs",
+        entityKey: "entity_lantern_labs",
+        canonicalName: "Lantern Labs",
         entityType: "org",
         disambiguator: null,
-        aliases: ["Flare Labs"],
+        aliases: ["Lantern Labs"],
         firstSeenAt: "2025-10-01T00:00:00.000Z",
         lastSeenAt: "2026-02-20T00:00:00.000Z",
         salience: 5,
-        evidenceRefs: ["trace:entity_flare"]
+        evidenceRefs: ["trace:entity_lantern"]
       },
       {
         entityKey: "entity_project_aurora",
@@ -59,7 +59,7 @@ function buildCheckpointFixture(): { graph: EntityGraphV1; stack: ConversationSt
     edges: [
       {
         edgeKey: "edge_bridge_candidate",
-        sourceEntityKey: "entity_flare_labs",
+        sourceEntityKey: "entity_lantern_labs",
         targetEntityKey: "entity_project_aurora",
         relationType: "co_mentioned",
         status: "uncertain",
@@ -71,8 +71,8 @@ function buildCheckpointFixture(): { graph: EntityGraphV1; stack: ConversationSt
       },
       {
         edgeKey: "edge_stale_confirmed",
-        sourceEntityKey: "entity_billy",
-        targetEntityKey: "entity_flare_labs",
+        sourceEntityKey: "entity_owen",
+        targetEntityKey: "entity_lantern_labs",
         relationType: "coworker",
         status: "confirmed",
         coMentionCount: 6,
@@ -106,7 +106,7 @@ function buildCheckpointFixture(): { graph: EntityGraphV1; stack: ConversationSt
     threadKey: activeThreadKey!,
     text: "Remind me later to finalize budget runway assumptions.",
     observedAt: "2026-02-28T09:05:00.000Z",
-    entityRefs: ["entity_flare_labs"],
+    entityRefs: ["entity_lantern_labs"],
     priorityHint: 0.74
   });
   return {
@@ -173,15 +173,15 @@ function suppressesCandidatesOnDailyCapAndIntervalCooldown(): void {
     ...createEmptyEntityGraphV1("2026-03-01T00:00:00.000Z"),
     entities: [
       {
-        entityKey: "entity_flare_ops",
-        canonicalName: "Flare Ops",
+        entityKey: "entity_lantern_ops",
+        canonicalName: "Lantern Ops",
         entityType: "org" as const,
         disambiguator: null,
-        aliases: ["Flare Ops"],
+        aliases: ["Lantern Ops"],
         firstSeenAt: "2026-02-20T00:00:00.000Z",
         lastSeenAt: "2026-03-01T11:55:00.000Z",
         salience: 5,
-        evidenceRefs: ["trace:flare_ops"]
+        evidenceRefs: ["trace:lantern_ops"]
       }
     ]
   };
@@ -204,12 +204,12 @@ function suppressesCandidatesOnDailyCapAndIntervalCooldown(): void {
         {
           emittedAt: "2026-03-01T08:30:00.000Z",
           reasonCode: "USER_REQUESTED_FOLLOWUP",
-          candidateEntityRefs: ["entity_flare_ops"]
+          candidateEntityRefs: ["entity_lantern_ops"]
         },
         {
           emittedAt: "2026-03-01T10:30:00.000Z",
           reasonCode: "USER_REQUESTED_FOLLOWUP",
-          candidateEntityRefs: ["entity_flare_ops"]
+          candidateEntityRefs: ["entity_lantern_ops"]
         }
       ]
     },
@@ -244,7 +244,7 @@ function suppressesPrivacySensitiveCandidatesDeterministically(): void {
   assert.ok(
     result.decisions.some(
       (entry) =>
-        entry.candidate.entityRefs.includes("entity_billy") &&
+        entry.candidate.entityRefs.includes("entity_owen") &&
         entry.decision.decisionCode === "SUPPRESS" &&
         entry.decision.blockDetailReason === "PRIVACY_SENSITIVE"
     )
@@ -266,7 +266,7 @@ function suppressesBridgeCandidatesWhenBridgeCooldownActive(): void {
         {
           emittedAt: "2026-02-25T12:00:00.000Z",
           reasonCode: "RELATIONSHIP_CLARIFICATION",
-          candidateEntityRefs: ["entity_flare_labs", "entity_project_aurora"]
+          candidateEntityRefs: ["entity_lantern_labs", "entity_project_aurora"]
         }
       ]
     },

@@ -28,6 +28,8 @@ resolution, and structured-output execution for the `codex_oauth` backend.
 - Auth inspection is metadata-only; the source of truth remains the operator-owned Codex state.
 - Unsupported provider models must fail closed.
 - Structured output must still pass the repo's schema validation after Codex returns.
+- Structured `codex exec` prompts must be streamed over stdin rather than embedded in argv so large
+  conversational requests do not fail at process-spawn time on Windows hosts.
 
 ## Related Tests
 - `tests/models/createModelClient.test.ts`

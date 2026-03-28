@@ -435,6 +435,67 @@ test("resource governor ignores advisory vetoes for explicit my-desktop React in
   assert.equal(vote.rejectCategory, undefined);
 });
 
+test("security governor ignores advisory vetoes for bounded desktop readiness proof shell actions", async () => {
+  const securityGovernor = getGovernorById("security");
+  const targetFolder =
+    `${HOST_TEST_DESKTOP_DIR}${HOST_TEST_PATH_SEPARATOR}downtown Detroit drones`;
+  const vote = await securityGovernor.evaluate(
+    buildProposal({
+      type: "shell_command",
+      description: "Perform a finite readiness proof that the workspace now contains package.json and node_modules.",
+      params: {
+        command:
+          "$missing=@(); " +
+          "if (!(Test-Path '.\\\\package.json')) { $missing += 'package.json' }; " +
+          "if (!(Test-Path '.\\\\node_modules')) { $missing += 'node_modules' }; " +
+          "if ($missing.Count -gt 0) { throw ('Workspace not ready; missing: ' + ($missing -join ', ')) }; " +
+          "Get-Item .\\\\package.json,.\\\\node_modules | Select-Object Name,FullName",
+        cwd: targetFolder,
+        workdir: targetFolder,
+        requestedShellKind: "powershell",
+        timeoutMs: 30000
+      }
+    }),
+    buildContext(
+      "security",
+      "Please make a Next.js landing page on my desktop called downtown Detroit drones, build it fully, and stop once it is ready without opening anything yet."
+    )
+  );
+
+  assert.equal(vote.approve, true);
+  assert.equal(vote.rejectCategory, undefined);
+});
+
+test("security governor ignores advisory vetoes for tracked framework edit rebuild shell actions without restating the desktop path", async () => {
+  const securityGovernor = getGovernorById("security");
+  const targetFolder =
+    `${HOST_TEST_DESKTOP_DIR}${HOST_TEST_PATH_SEPARATOR}downtown Detroit drones`;
+  const vote = await securityGovernor.evaluate(
+    buildProposal({
+      type: "shell_command",
+      description: "Rebuild the tracked Next.js workspace after the requested live section edit.",
+      params: {
+        command: "npm run build",
+        cwd: targetFolder,
+        workdir: targetFolder,
+        requestedShellKind: "powershell",
+        timeoutMs: 120000
+      }
+    }),
+    buildContext(
+      "security",
+      [
+        'One tweak while it stays open: change the second section heading to "Steady local rollout"',
+        'and make that section mention "Built for neighborhood teams."',
+        "Keep the page running and refresh whatever needs to refresh so the live page shows the update."
+      ].join(" ")
+    )
+  );
+
+  assert.equal(vote.approve, true);
+  assert.equal(vote.rejectCategory, undefined);
+});
+
 test("security governor ignores advisory vetoes for explicit absolute Desktop-path list_directory build actions", async () => {
   const securityGovernor = getGovernorById("security");
   const targetFolder =
@@ -527,6 +588,103 @@ test("security governor ignores advisory vetoes for bounded desktop organization
     buildContext(
       "security",
       "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects."
+    )
+  );
+
+  assert.equal(vote.approve, true);
+  assert.equal(vote.rejectCategory, undefined);
+});
+
+test("security governor ignores advisory vetoes for temp-scaffold finalize shell actions in follow-up build turns", async () => {
+  const securityGovernor = getGovernorById("security");
+  const targetFolder =
+    `${HOST_TEST_DESKTOP_DIR}${HOST_TEST_PATH_SEPARATOR}downtown-detroit-drones`;
+  const vote = await securityGovernor.evaluate(
+    buildProposal({
+      type: "shell_command",
+      description: "Finalize the scaffolded Next.js app into the requested Desktop folder.",
+      params: {
+        command:
+          `$final='${targetFolder}'; ` +
+          "$tempRoot=Join-Path $env:TEMP 'agentbigbrain-framework-scaffold'; " +
+          "$temp=Join-Path $tempRoot 'downtown-detroit-drones'; " +
+          "if (Test-Path (Join-Path $final 'package.json')) { Set-Location $final; exit 0 }; " +
+          "if (!(Test-Path $temp)) { throw ('Framework scaffold temp workspace missing: ' + $temp) }; " +
+          "if (!(Test-Path $final)) { New-Item -ItemType Directory -Path $final -Force | Out-Null }; " +
+          "Get-ChildItem -Force $temp | ForEach-Object { Move-Item $_.FullName -Destination $final -Force }; " +
+          "Remove-Item $temp -Recurse -Force; " +
+          "Set-Location $final",
+        cwd: HOST_TEST_DESKTOP_DIR,
+        workdir: HOST_TEST_DESKTOP_DIR,
+        requestedShellKind: "powershell",
+        timeoutMs: 120000
+      }
+    }),
+    buildContext(
+      "security",
+      [
+        "Finish the project end to end.",
+        "Use the scaffolded Next.js app at `C:\\Users\\testuser\\AppData\\Local\\Temp\\agentbigbrain-framework-scaffold\\downtown-detroit-drones`,",
+        "move or copy it to the desktop as a folder named `downtown-detroit-drones`,",
+        "implement the landing page for Downtown Detroit Drones,",
+        "then install/run it, verify it works, and open it in the browser from the desktop location."
+      ].join(" ")
+    )
+  );
+
+  assert.equal(vote.approve, true);
+  assert.equal(vote.rejectCategory, undefined);
+});
+
+test("security governor ignores advisory vetoes for finish-the-project desktop page writes", async () => {
+  const securityGovernor = getGovernorById("security");
+  const targetFolder =
+    `${HOST_TEST_DESKTOP_DIR}${HOST_TEST_PATH_SEPARATOR}downtown-detroit-drones`;
+  const vote = await securityGovernor.evaluate(
+    buildProposal({
+      type: "write_file",
+      description: "Write the Next.js landing page into the exact requested Desktop workspace.",
+      params: {
+        path: `${targetFolder}${HOST_TEST_PATH_SEPARATOR}app${HOST_TEST_PATH_SEPARATOR}page.tsx`,
+        content: "export default function Page() { return <main>Downtown Detroit Drones</main>; }"
+      }
+    }),
+    buildContext(
+      "security",
+      [
+        "Finish the project end to end.",
+        "Use the scaffolded Next.js app at `C:\\Users\\testuser\\AppData\\Local\\Temp\\agentbigbrain-framework-scaffold\\downtown-detroit-drones`,",
+        "move or copy it to the desktop as a folder named `downtown-detroit-drones`,",
+        "implement the landing page for Downtown Detroit Drones,",
+        "then install/run it, verify it works, and open it in the browser from the desktop location."
+      ].join(" ")
+    )
+  );
+
+  assert.equal(vote.approve, true);
+  assert.equal(vote.rejectCategory, undefined);
+});
+
+test("security governor ignores advisory vetoes for bounded desktop organization shell actions staged from temp cwd", async () => {
+  const securityGovernor = getGovernorById("security");
+  const vote = await securityGovernor.evaluate(
+    buildProposal({
+      type: "shell_command",
+      description: "Create the destination folder and move matching Drone folders into it from a temp execution context.",
+      params: {
+        command:
+          `New-Item -ItemType Directory -Force -Path "${HOST_TEST_DESKTOP_DIR}${HOST_TEST_PATH_SEPARATOR}Testing-Auto"; ` +
+          `Move-Item -Path "${HOST_TEST_DESKTOP_DIR}${HOST_TEST_PATH_SEPARATOR}Drone*" ` +
+          `-Destination "${HOST_TEST_DESKTOP_DIR}${HOST_TEST_PATH_SEPARATOR}Testing-Auto"`,
+        cwd: "C:\\Users\\benac\\AppData\\Local\\Temp",
+        workdir: "C:\\Users\\benac\\AppData\\Local\\Temp",
+        requestedShellKind: "powershell",
+        timeoutMs: 120000
+      }
+    }),
+    buildContext(
+      "security",
+      "Please gather every folder on my desktop whose name begins with Drone into a single desktop folder called Testing-Auto."
     )
   );
 

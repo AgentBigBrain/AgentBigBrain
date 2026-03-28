@@ -8,6 +8,7 @@ import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 
+import { createEmptyConversationDomainContext } from "../../src/core/sessionContext";
 import { AgentPulseScheduler } from "../../src/interfaces/agentPulseScheduler";
 import { buildSessionSeed } from "../../src/interfaces/conversationManagerHelpers";
 import { ConversationSession, InterfaceSessionStore } from "../../src/interfaces/sessionStore";
@@ -77,6 +78,20 @@ function buildPulseEvaluation(
       requiresRevalidation: false
     },
     ...overrides
+  };
+}
+
+function buildWorkflowDomainContext(conversationId: string): ConversationSession["domainContext"] {
+  return {
+    ...createEmptyConversationDomainContext(conversationId),
+    dominantLane: "workflow",
+    continuitySignals: {
+      activeWorkspace: true,
+      returnHandoff: false,
+      modeContinuity: true
+    },
+    activeSince: "2026-03-01T12:00:00.000Z",
+    lastUpdatedAt: "2026-03-01T12:00:00.000Z"
   };
 }
 
@@ -570,6 +585,63 @@ test("agent pulse scheduler records suppression decision when no reason is allow
   }
 });
 
+test("agent pulse scheduler suppresses stale-fact legacy pulses during workflow continuity", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-pulse-scheduler-workflow-legacy-"));
+  const store = new InterfaceSessionStore(path.join(tempDir, "sessions.json"));
+  await store.setSession(
+    buildSession("telegram:chat-workflow-legacy:user-1", {
+      domainContext: buildWorkflowDomainContext("telegram:chat-workflow-legacy:user-1")
+    })
+  );
+
+  let evaluateCalls = 0;
+  let enqueueCalls = 0;
+  const updates: Array<{ key: string; lastDecisionCode?: string; lastPulseReason?: string | null }> = [];
+  try {
+    const scheduler = new AgentPulseScheduler(
+      {
+        provider: "telegram",
+        sessionStore: store,
+        evaluateAgentPulse: async () => {
+          evaluateCalls += 1;
+          return buildPulseEvaluation({});
+        },
+        enqueueSystemJob: async () => {
+          enqueueCalls += 1;
+          return true;
+        },
+        updatePulseState: async (key, update) => {
+          updates.push({
+            key,
+            lastDecisionCode: update.lastDecisionCode,
+            lastPulseReason: update.lastPulseReason
+          });
+        },
+        enableDynamicPulse: false
+      },
+      {
+        tickIntervalMs: 1_000,
+        reasonPriority: ["stale_fact_revalidation", "unresolved_commitment"]
+      }
+    );
+
+    await scheduler.runTickOnce();
+
+    assert.equal(evaluateCalls, 1);
+    assert.equal(enqueueCalls, 1);
+    assert.ok(
+      updates.some(
+        (update) =>
+          update.key === "telegram:chat-workflow-legacy:user-1" &&
+          update.lastDecisionCode === "ALLOWED" &&
+          update.lastPulseReason === "unresolved_commitment"
+      )
+    );
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
 test("agent pulse scheduler preserves highest-priority suppression reason", async () => {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-pulse-scheduler-priority-"));
   const store = new InterfaceSessionStore(path.join(tempDir, "sessions.json"));
@@ -928,6 +1000,64 @@ test("dynamic pulse path calls evaluatePulseCandidatesV1 and enqueues when enabl
     assert.ok(enqueuedPrompts[0].includes("STALE_FACT_REVALIDATION"));
     assert.ok(enqueuedPrompts[0].includes("entity-toolchain"));
     assert.ok(updates.some((u) => u.lastDecisionCode === "DYNAMIC_SENT"));
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("dynamic pulse path suppresses workflow-continuity sessions before graph evaluation", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-pulse-dynamic-workflow-suppress-"));
+  const nowIso = new Date().toISOString();
+  const store = new InterfaceSessionStore(path.join(tempDir, "sessions.json"));
+  await store.setSession(
+    buildSession("telegram:chat-dynamic-workflow:user-1", {
+      domainContext: buildWorkflowDomainContext("telegram:chat-dynamic-workflow:user-1"),
+      conversationStack: buildMinimalConversationStack(nowIso),
+      conversationTurns: [
+        { role: "user", text: "Morning, anything new?", at: nowIso }
+      ]
+    })
+  );
+
+  let graphCalls = 0;
+  let enqueueCalls = 0;
+  const updates: Array<{ key: string; lastDecisionCode?: string }> = [];
+  try {
+    const scheduler = new AgentPulseScheduler(
+      {
+        provider: "telegram",
+        sessionStore: store,
+        evaluateAgentPulse: async () => buildPulseEvaluation({}),
+        enqueueSystemJob: async () => {
+          enqueueCalls += 1;
+          return true;
+        },
+        updatePulseState: async (key, update) => {
+          updates.push({ key, lastDecisionCode: update.lastDecisionCode });
+        },
+        enableDynamicPulse: true,
+        getEntityGraph: async () => {
+          graphCalls += 1;
+          return buildMinimalEntityGraph(nowIso);
+        }
+      },
+      {
+        tickIntervalMs: 1_000,
+        reasonPriority: ["stale_fact_revalidation"]
+      }
+    );
+
+    await scheduler.runTickOnce();
+
+    assert.equal(graphCalls, 0);
+    assert.equal(enqueueCalls, 0);
+    assert.ok(
+      updates.some(
+        (update) =>
+          update.key === "telegram:chat-dynamic-workflow:user-1" &&
+          update.lastDecisionCode === "SESSION_DOMAIN_SUPPRESSED"
+      )
+    );
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }

@@ -77,7 +77,15 @@ export function selectReturnHandoff(
   if (!incoming) {
     return existing;
   }
-  return incoming.updatedAt >= existing.updatedAt ? incoming : existing;
+  const preferred = incoming.updatedAt >= existing.updatedAt ? incoming : existing;
+  const fallback = preferred === incoming ? existing : incoming;
+  return {
+    ...preferred,
+    domainSnapshotLane:
+      preferred.domainSnapshotLane ?? fallback.domainSnapshotLane ?? null,
+    domainSnapshotRecordedAt:
+      preferred.domainSnapshotRecordedAt ?? fallback.domainSnapshotRecordedAt ?? null
+  };
 }
 
 /**

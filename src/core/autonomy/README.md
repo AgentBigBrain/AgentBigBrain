@@ -28,6 +28,7 @@ here.
 - `workspaceRecoverySignalBuilders.ts`
 - `workspaceRecoveryRuntimeContext.ts`
 - `agentLoopProgress.ts`
+- `structuredRecoveryRuntime.ts`
 - `agentLoopRuntimeSupport.ts`
 - `agentLoopUserTurnGate.ts`
 - `workspaceRecoveryBlockedPathParsing.ts`
@@ -61,6 +62,8 @@ here.
   non-preview local folder locks
 - blocked-folder parsing and inspection-metadata extraction reused by workspace-lock recovery
 - human-first autonomous working, retrying, and verification progress text
+- loop-level structured recovery resolution that turns typed repair budgets into bounded retry or
+  fail-closed abort actions before the model next-step path runs
 - model-backed next-step and proactive-goal policy decisions
 - completion-gate decisions
 - missing-evidence classifications

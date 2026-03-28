@@ -1,40 +1,50 @@
-/**
- * @fileoverview Owns canonical queue-routing and execution-input assembly below the stable ingress coordinator.
- */
-
+/** @fileoverview Owns canonical queue-routing and execution-input assembly below the stable ingress coordinator. */
 import { recordClassifierEvent } from "../conversationClassifierEvents";
 import { buildConversationAwareExecutionInput, resolveFollowUpInput } from "../conversationExecutionInputPolicy";
 import type { FollowUpRuleContext } from "../conversationManagerHelpers";
-import { setActiveClarification, setModeContinuity, setProgressState, recordAssistantTurn, clearActiveClarification, recordUserTurn } from "../conversationSessionMutations";
+import { setModeContinuity, clearActiveClarification, recordAssistantTurn, recordUserTurn } from "../conversationSessionMutations";
 import { buildRoutingExecutionHintV1, classifyRoutingIntentV1 } from "../routingMap";
 import type { ConversationSession } from "../sessionStore";
 import type { ConversationInboundMediaEnvelope } from "../mediaRuntime/contracts";
-import type { LocalIntentModelResolver } from "../../organs/languageUnderstanding/localIntentModelContracts";
-import type { ListBrowserSessionSnapshots, DescribeRuntimeCapabilities, ListManagedProcessSnapshots, ListAvailableSkills, QueryConversationContinuityEpisodes, QueryConversationContinuityFacts, RunDirectConversationTurn } from "./managerContracts";
+import type { AutonomyBoundaryInterpretationResolver, ContinuationInterpretationResolver, ContextualFollowupInterpretationResolver, ContextualReferenceInterpretationResolver, EntityReferenceInterpretationResolver, HandoffControlInterpretationResolver, IdentityInterpretationResolver, LocalIntentModelResolver, StatusRecallBoundaryInterpretationResolver, TopicKeyInterpretationResolver } from "../../organs/languageUnderstanding/localIntentModelContracts";
+import type { TopicKeyInterpretationSignalV1 } from "../../core/stage6_86ConversationStack";
+import type { GetConversationEntityGraph, ListBrowserSessionSnapshots, DescribeRuntimeCapabilities, ListManagedProcessSnapshots, ListAvailableSkills, QueryConversationContinuityEpisodes, QueryConversationContinuityFacts, RememberConversationProfileInput, RunDirectConversationTurn } from "./managerContracts";
 import { buildAutonomousExecutionInput } from "./managerContracts";
-import { buildClarifiedExecutionInput, createActiveClarificationState, resolveClarificationAnswer } from "./clarificationBroker";
+import { buildClarifiedExecutionInput, resolveClarificationAnswer } from "./clarificationBroker";
 import { resolveModeContinuityIntent } from "./modeContinuity";
 import { resolveConversationIntentMode } from "./intentModeResolution";
 import type { ResolvedConversationIntentMode } from "./intentModeContracts";
-import { renderConversationStatusOrRecall } from "./recentActionLedger";
-import { applyActiveAutonomousPauseRequest, applyReturnHandoffPauseRequest } from "./returnHandoffControl";
+import { applyActiveAutonomousPauseRequest, applyReturnHandoffPauseRequest, applyValidatedActiveAutonomousPause, applyValidatedReturnHandoffPause } from "./returnHandoffControl";
+import { buildHandoffControlInterpretationResolution, resolveInterpretedHandoffControlSignal } from "./returnHandoffControlInterpretationSupport";
 import { resolveReturnHandoffContinuationIntent } from "./returnHandoffContinuation";
-import { buildAutonomousInitialExecutionInput, buildLocalIntentSessionHints, toContinuityConfidence } from "./conversationRoutingSupport";
-import { buildCapabilityDiscoveryReply, buildRecordedReply, buildDirectCasualConversationReply, isReturnHandoffResumeIntent } from "./conversationRoutingDirectReplies";
+import { buildAutonomousInitialExecutionInput, buildLocalIntentSessionHints, resolveConversationContinuationInterpretationIntent, toContinuityConfidence } from "./conversationRoutingSupport";
+import { isReturnHandoffResumeIntent } from "./conversationRoutingDirectReplies";
 import { enqueueFollowUpLinkedToPriorAssistantPrompt } from "./conversationRoutingQueueSupport";
-export interface ConversationEnqueueResult {
-  reply: string;
-  shouldStartWorker: boolean;
-}
+import { applyConversationDomainSignalWindowForTurn } from "./sessionDomainRouting";
+import { maybeResolveConversationRoutingInlineReply } from "./conversationRoutingInlineReplies";
+import { buildDeterministicDirectChatFallbackReply, buildRecentIdentityInterpretationContext, shouldPreserveDeterministicDirectChatTurn } from "./chatTurnSignals";
+import { resolveConversationTopicKeyInterpretationSignal } from "./conversationTopicKeyInterpretation";
+export interface ConversationEnqueueResult { reply: string; shouldStartWorker: boolean; }
 export interface ConversationRoutingDependencies {
   followUpRuleContext: FollowUpRuleContext;
   queryContinuityEpisodes?: QueryConversationContinuityEpisodes;
   queryContinuityFacts?: QueryConversationContinuityFacts;
+  rememberConversationProfileInput?: RememberConversationProfileInput;
   listAvailableSkills?: ListAvailableSkills;
   describeRuntimeCapabilities?: DescribeRuntimeCapabilities;
   listManagedProcessSnapshots?: ListManagedProcessSnapshots;
   listBrowserSessionSnapshots?: ListBrowserSessionSnapshots;
   localIntentModelResolver?: LocalIntentModelResolver;
+  autonomyBoundaryInterpretationResolver?: AutonomyBoundaryInterpretationResolver;
+  statusRecallBoundaryInterpretationResolver?: StatusRecallBoundaryInterpretationResolver;
+  continuationInterpretationResolver?: ContinuationInterpretationResolver;
+  contextualFollowupInterpretationResolver?: ContextualFollowupInterpretationResolver;
+  contextualReferenceInterpretationResolver?: ContextualReferenceInterpretationResolver;
+  entityReferenceInterpretationResolver?: EntityReferenceInterpretationResolver;
+  handoffControlInterpretationResolver?: HandoffControlInterpretationResolver;
+  identityInterpretationResolver?: IdentityInterpretationResolver;
+  topicKeyInterpretationResolver?: TopicKeyInterpretationResolver;
+  getEntityGraph?: GetConversationEntityGraph;
   abortActiveAutonomousRun?(): boolean;
   config: {
     allowAutonomousViaInterface: boolean;
@@ -51,24 +61,27 @@ export interface ConversationRoutingDependencies {
     isSystemJob?: boolean
   ): ConversationEnqueueResult;
 }
-/**
- * Resolves one canonical front-door routing decision for a user turn, including active
- * clarification handling, natural capability discovery, and safe execution-input assembly.
- *
- * @param session - Current mutable conversation session.
- * @param input - Current user input text.
- * @param receivedAt - ISO timestamp for the turn.
- * @param deps - Routing dependencies and enqueue hooks.
- * @param media - Optional normalized media envelope associated with the turn.
- * @returns Queue reply plus worker-start decision for the ingress coordinator.
- */
+/** Records one user turn while attaching any precomputed topic-key interpretation signal. */
+function recordTopicAwareUserTurn(
+  session: ConversationSession,
+  input: string,
+  receivedAt: string,
+  maxConversationTurns: number,
+  topicKeyInterpretation: TopicKeyInterpretationSignalV1 | null
+): void {
+  recordUserTurn(session, input, receivedAt, maxConversationTurns, {
+    topicKeyInterpretation
+  });
+}
+/** Resolves one canonical front-door routing decision for a user turn. */
 async function resolveCanonicalConversationRouting(
   session: ConversationSession,
   input: string,
   receivedAt: string,
   deps: ConversationRoutingDependencies,
   media: ConversationInboundMediaEnvelope | null = null,
-  preResolvedIntentMode: ResolvedConversationIntentMode | null = null
+  preResolvedIntentMode: ResolvedConversationIntentMode | null = null,
+  topicKeyInterpretation: TopicKeyInterpretationSignalV1 | null = null
 ): Promise<ConversationEnqueueResult> {
   const routingClassification = classifyRoutingIntentV1(input);
   const managedProcessSnapshots = deps.listManagedProcessSnapshots
@@ -92,7 +105,7 @@ async function resolveCanonicalConversationRouting(
       ) {
         const reply =
           "Okay. I will leave those folders and preview holders alone for now.";
-        recordUserTurn(session, input, receivedAt, deps.config.maxConversationTurns);
+        recordTopicAwareUserTurn(session, input, receivedAt, deps.config.maxConversationTurns, topicKeyInterpretation);
         recordAssistantTurn(
           session,
           reply,
@@ -116,6 +129,16 @@ async function resolveCanonicalConversationRouting(
         lastUserInput: input,
         lastClarificationId: activeClarification.id
       });
+      applyConversationDomainSignalWindowForTurn(
+        session,
+        input,
+        receivedAt,
+        classifyRoutingIntentV1(activeClarification.sourceInput),
+        activeClarification.kind === "execution_mode" &&
+          clarificationAnswer.selectedOptionId === "plan"
+          ? "plan"
+          : "build"
+      );
       const enqueueResult = deps.enqueueJob(
         session,
         activeClarification.sourceInput,
@@ -135,13 +158,16 @@ async function resolveCanonicalConversationRouting(
           media,
           managedProcessSnapshots,
           undefined,
-          browserSessionSnapshots
+          browserSessionSnapshots,
+          deps.contextualReferenceInterpretationResolver,
+          deps.getEntityGraph,
+          deps.entityReferenceInterpretationResolver
         )
       );
-      recordUserTurn(session, input, receivedAt, deps.config.maxConversationTurns);
+      recordTopicAwareUserTurn(session, input, receivedAt, deps.config.maxConversationTurns, topicKeyInterpretation);
       return enqueueResult;
     }
-    recordUserTurn(session, input, receivedAt, deps.config.maxConversationTurns);
+    recordTopicAwareUserTurn(session, input, receivedAt, deps.config.maxConversationTurns, topicKeyInterpretation);
     recordAssistantTurn(
       session,
       session.activeClarification.question,
@@ -160,13 +186,13 @@ async function resolveCanonicalConversationRouting(
     deps.abortActiveAutonomousRun ?? null
   );
   if (activePauseReply) {
-    recordUserTurn(session, input, receivedAt, deps.config.maxConversationTurns);
+    recordTopicAwareUserTurn(session, input, receivedAt, deps.config.maxConversationTurns, topicKeyInterpretation);
     recordAssistantTurn(session, activePauseReply, receivedAt, deps.config.maxConversationTurns);
     return { reply: activePauseReply, shouldStartWorker: false };
   }
   const pauseReply = applyReturnHandoffPauseRequest(session, input, receivedAt);
   if (pauseReply) {
-    recordUserTurn(session, input, receivedAt, deps.config.maxConversationTurns);
+    recordTopicAwareUserTurn(session, input, receivedAt, deps.config.maxConversationTurns, topicKeyInterpretation);
     recordAssistantTurn(session, pauseReply, receivedAt, deps.config.maxConversationTurns);
     return { reply: pauseReply, shouldStartWorker: false };
   }
@@ -176,117 +202,100 @@ async function resolveCanonicalConversationRouting(
       input,
       routingClassification,
       deps.localIntentModelResolver,
-      buildLocalIntentSessionHints(session)
+      buildLocalIntentSessionHints(session),
+      deps.contextualFollowupInterpretationResolver,
+      deps.autonomyBoundaryInterpretationResolver,
+      deps.statusRecallBoundaryInterpretationResolver
     ));
+  const interpretedHandoffControl = await resolveInterpretedHandoffControlSignal(
+    session,
+    input,
+    resolvedIntentMode,
+    deps.handoffControlInterpretationResolver,
+    routingClassification
+  );
+  if (interpretedHandoffControl?.kind === "pause_request") {
+    const interpretedActivePauseReply = applyValidatedActiveAutonomousPause(
+      session,
+      receivedAt,
+      deps.abortActiveAutonomousRun ?? null
+    );
+    if (interpretedActivePauseReply) {
+      recordTopicAwareUserTurn(session, input, receivedAt, deps.config.maxConversationTurns, topicKeyInterpretation);
+      recordAssistantTurn(session, interpretedActivePauseReply, receivedAt, deps.config.maxConversationTurns);
+      return { reply: interpretedActivePauseReply, shouldStartWorker: false };
+    }
+    const interpretedPauseReply = applyValidatedReturnHandoffPause(session, receivedAt);
+    if (interpretedPauseReply) {
+      recordTopicAwareUserTurn(session, input, receivedAt, deps.config.maxConversationTurns, topicKeyInterpretation);
+      recordAssistantTurn(session, interpretedPauseReply, receivedAt, deps.config.maxConversationTurns);
+      return { reply: interpretedPauseReply, shouldStartWorker: false };
+    }
+  }
   const effectiveIntentMode =
+    buildHandoffControlInterpretationResolution(interpretedHandoffControl) ??
     resolveReturnHandoffContinuationIntent(session, input, resolvedIntentMode) ??
     resolveModeContinuityIntent(session, input, resolvedIntentMode) ??
+    await resolveConversationContinuationInterpretationIntent(
+      session,
+      input,
+      resolvedIntentMode,
+      deps.continuationInterpretationResolver,
+      routingClassification
+    ) ??
     resolvedIntentMode;
-  const shouldResumeReturnHandoff = isReturnHandoffResumeIntent(
-    effectiveIntentMode
-  );
-  if (effectiveIntentMode.mode === "discover_available_capabilities") {
-    const reply = await buildCapabilityDiscoveryReply({
-      userInput: input,
-      receivedAt,
-      describeRuntimeCapabilities: deps.describeRuntimeCapabilities,
-      listAvailableSkills: deps.listAvailableSkills,
-      runDirectConversationTurn: deps.runDirectConversationTurn
-    });
-    return buildRecordedReply({
-      session,
-      userInput: input,
-      reply,
-      receivedAt,
-      maxConversationTurns: deps.config.maxConversationTurns,
-      activeMode: "discover_available_capabilities",
-      confidence: toContinuityConfidence(effectiveIntentMode.confidence)
-    });
+  const shouldResumeReturnHandoff = isReturnHandoffResumeIntent(effectiveIntentMode);
+  const inlineReply = await maybeResolveConversationRoutingInlineReply({
+    session,
+    userInput: input,
+    receivedAt,
+    deps,
+    media,
+    routingClassification,
+    effectiveIntentMode,
+    managedProcessSnapshots,
+    browserSessionSnapshots
+  });
+  if (inlineReply) {
+    return inlineReply;
   }
-  if (effectiveIntentMode.mode === "status_or_recall") {
-    const reply = renderConversationStatusOrRecall(session, input, effectiveIntentMode.semanticHint ?? null);
-    return buildRecordedReply({
-      session,
-      userInput: input,
-      reply,
-      receivedAt,
-      maxConversationTurns: deps.config.maxConversationTurns,
-      activeMode: "status_or_recall",
-      confidence: toContinuityConfidence(effectiveIntentMode.confidence)
-    });
-  }
-  if (effectiveIntentMode.clarification) {
-    const clarificationState = createActiveClarificationState(
-      input,
-      receivedAt,
-      effectiveIntentMode.clarification
-    );
-    setActiveClarification(session, clarificationState);
-    setProgressState(session, {
-      status: "waiting_for_user",
-      message: clarificationState.question,
-      jobId: null,
-      updatedAt: receivedAt
-    });
-    recordUserTurn(session, input, receivedAt, deps.config.maxConversationTurns);
-    recordAssistantTurn(
-      session,
-      clarificationState.question,
-      receivedAt,
-      deps.config.maxConversationTurns
-    );
-    return {
-      reply: clarificationState.question,
-      shouldStartWorker: false
-    };
-  }
-  const shouldDirectCasualConversation =
-    deps.directCasualChatEnabled !== false &&
+  if (
     effectiveIntentMode.mode === "chat" &&
-    typeof deps.runDirectConversationTurn === "function";
-  if (shouldDirectCasualConversation) {
-    const reply = await buildDirectCasualConversationReply({
-      session,
-      input,
-      media,
-      receivedAt,
-      maxContextTurnsForExecution: deps.config.maxContextTurnsForExecution,
-      routingClassification,
-      queryContinuityEpisodes: deps.queryContinuityEpisodes,
-      queryContinuityFacts: deps.queryContinuityFacts,
-      managedProcessSnapshots,
-      semanticHint: effectiveIntentMode.semanticHint ?? null,
-      browserSessionSnapshots,
-      runDirectConversationTurn: deps.runDirectConversationTurn!
-    });
-    if (!reply) {
-      return {
-        reply: "",
-        shouldStartWorker: false
-      };
+    deps.directCasualChatEnabled !== false &&
+    typeof deps.runDirectConversationTurn !== "function"
+  ) {
+    const recentIdentityContext = buildRecentIdentityInterpretationContext(session.conversationTurns.slice(-4));
+    if (shouldPreserveDeterministicDirectChatTurn(input, recentIdentityContext)) {
+      const reply = buildDeterministicDirectChatFallbackReply(input);
+      recordTopicAwareUserTurn(session, input, receivedAt, deps.config.maxConversationTurns, topicKeyInterpretation);
+      recordAssistantTurn(session, reply, receivedAt, deps.config.maxConversationTurns);
+      applyConversationDomainSignalWindowForTurn(
+        session,
+        input,
+        receivedAt,
+        routingClassification,
+        effectiveIntentMode.mode
+      );
+      return { reply, shouldStartWorker: false };
     }
-    recordUserTurn(session, input, receivedAt, deps.config.maxConversationTurns);
-    recordAssistantTurn(
-      session,
-      reply,
-      receivedAt,
-      deps.config.maxConversationTurns
-    );
-    return {
-      reply,
-      shouldStartWorker: false
-    };
   }
   if (effectiveIntentMode.mode === "autonomous") {
     if (!deps.config.allowAutonomousViaInterface) {
       const reply =
         "End-to-end autonomous runs are turned off in this environment right now. If you want, tell me to build it now and I'll do a normal run.";
-      recordUserTurn(session, input, receivedAt, deps.config.maxConversationTurns);
+      recordTopicAwareUserTurn(session, input, receivedAt, deps.config.maxConversationTurns, topicKeyInterpretation);
       recordAssistantTurn(
         session,
         reply,
         receivedAt,
         deps.config.maxConversationTurns
+      );
+      applyConversationDomainSignalWindowForTurn(
+        session,
+        input,
+        receivedAt,
+        routingClassification,
+        effectiveIntentMode.mode
       );
       return {
         reply,
@@ -306,7 +315,10 @@ async function resolveCanonicalConversationRouting(
         media,
         managedProcessSnapshots,
         effectiveIntentMode.semanticHint ?? null,
-        browserSessionSnapshots
+        browserSessionSnapshots,
+        deps.contextualReferenceInterpretationResolver,
+        deps.getEntityGraph,
+        deps.entityReferenceInterpretationResolver
       ),
       routingClassification
         ? buildRoutingExecutionHintV1(routingClassification)
@@ -318,7 +330,7 @@ async function resolveCanonicalConversationRouting(
       receivedAt,
       buildAutonomousExecutionInput(input, autonomousExecutionInput)
     );
-    recordUserTurn(session, input, receivedAt, deps.config.maxConversationTurns);
+    recordTopicAwareUserTurn(session, input, receivedAt, deps.config.maxConversationTurns, topicKeyInterpretation);
     setModeContinuity(session, {
       activeMode: "autonomous",
       source: "natural_intent",
@@ -326,6 +338,13 @@ async function resolveCanonicalConversationRouting(
       lastAffirmedAt: receivedAt,
       lastUserInput: input
     });
+    applyConversationDomainSignalWindowForTurn(
+      session,
+      input,
+      receivedAt,
+      routingClassification,
+      effectiveIntentMode.mode
+    );
     return {
       reply:
         shouldResumeReturnHandoff
@@ -351,10 +370,13 @@ async function resolveCanonicalConversationRouting(
       media,
       managedProcessSnapshots,
       effectiveIntentMode.semanticHint ?? null,
-      browserSessionSnapshots
+      browserSessionSnapshots,
+      deps.contextualReferenceInterpretationResolver,
+      deps.getEntityGraph,
+      deps.entityReferenceInterpretationResolver
     )
   );
-  recordUserTurn(session, input, receivedAt, deps.config.maxConversationTurns);
+  recordTopicAwareUserTurn(session, input, receivedAt, deps.config.maxConversationTurns, topicKeyInterpretation);
   if (effectiveIntentMode.mode !== "unclear" && effectiveIntentMode.mode !== "chat") {
     setModeContinuity(session, {
       activeMode: effectiveIntentMode.mode,
@@ -364,6 +386,13 @@ async function resolveCanonicalConversationRouting(
       lastUserInput: input
     });
   }
+  applyConversationDomainSignalWindowForTurn(
+    session,
+    input,
+    receivedAt,
+    routingClassification,
+    effectiveIntentMode.mode
+  );
   return shouldResumeReturnHandoff
     ? {
         reply: "I'm picking that back up from the last checkpoint now.",
@@ -397,12 +426,14 @@ export async function routeConversationChatInput(
       }
     );
   }
-  const followUpResolution = resolveFollowUpInput(
+  const routingClassification = classifyRoutingIntentV1(normalizedInput);
+  const followUpResolution = await resolveFollowUpInput(
     session,
     normalizedInput,
-    deps.followUpRuleContext
+    deps.followUpRuleContext,
+    deps.continuationInterpretationResolver,
+    routingClassification
   );
-  const routingClassification = classifyRoutingIntentV1(normalizedInput);
   recordClassifierEvent(
     session,
     normalizedInput,
@@ -411,9 +442,7 @@ export async function routeConversationChatInput(
   );
 
   const followUpLinkedToPriorAssistantPrompt =
-    followUpResolution.classification.isShortFollowUp
-    && followUpResolution.executionInput !== normalizedInput;
-
+    followUpResolution.linkedToPriorAssistantPrompt;
   if (followUpLinkedToPriorAssistantPrompt) {
     return enqueueFollowUpLinkedToPriorAssistantPrompt(
       session,
@@ -435,15 +464,7 @@ export async function routeConversationChatInput(
     }
   );
 }
-/**
- * Routes plain inbound conversation text through follow-up classification and queue insertion.
- *
- * @param session - Mutable conversation session receiving queued work.
- * @param input - Raw inbound user text after ingress-level trimming.
- * @param receivedAt - Message timestamp used for persisted turn metadata.
- * @param deps - Routing dependencies exposed by the stable ingress coordinator.
- * @returns Queue insertion result for the stable ingress coordinator.
- */
+/** Routes plain inbound conversation text through follow-up classification and queue insertion. */
 export async function routeConversationMessageInput(
   session: ConversationSession,
   input: string,
@@ -452,53 +473,38 @@ export async function routeConversationMessageInput(
   media: ConversationInboundMediaEnvelope | null = null
 ): Promise<ConversationEnqueueResult> {
   if (session.activeClarification) {
-    return resolveCanonicalConversationRouting(
-      session,
-      input,
-      receivedAt,
-      deps,
-      media
-    );
+    return resolveCanonicalConversationRouting(session, input, receivedAt, deps, media);
   }
 
-  const followUpResolution = resolveFollowUpInput(
+  const routingClassification = classifyRoutingIntentV1(input);
+  const followUpResolution = await resolveFollowUpInput(
     session,
     input,
-    deps.followUpRuleContext
+    deps.followUpRuleContext,
+    deps.continuationInterpretationResolver,
+    routingClassification
   );
-  const routingClassification = classifyRoutingIntentV1(input);
   const preResolvedIntentMode = await resolveConversationIntentMode(
     input,
     routingClassification,
     deps.localIntentModelResolver,
-    buildLocalIntentSessionHints(session)
+    buildLocalIntentSessionHints(session),
+    deps.contextualFollowupInterpretationResolver,
+    deps.autonomyBoundaryInterpretationResolver,
+    deps.statusRecallBoundaryInterpretationResolver
   );
-  if (
-    preResolvedIntentMode.mode === "chat" ||
-    preResolvedIntentMode.mode === "discover_available_capabilities" ||
-    preResolvedIntentMode.mode === "status_or_recall"
-  ) {
-    return resolveCanonicalConversationRouting(
-      session,
-      input,
-      receivedAt,
-      deps,
-      media,
-      preResolvedIntentMode
-    );
-  }
-  recordClassifierEvent(
-    session,
-    input,
-    receivedAt,
-    followUpResolution.classification
-  );
-
+  const topicKeyInterpretation = await resolveConversationTopicKeyInterpretationSignal(session, input, receivedAt, routingClassification, preResolvedIntentMode, deps.topicKeyInterpretationResolver);
+  recordClassifierEvent(session, input, receivedAt, followUpResolution.classification);
   const followUpLinkedToPriorAssistantPrompt =
-    followUpResolution.classification.isShortFollowUp
-    && followUpResolution.executionInput !== input;
-
+    followUpResolution.linkedToPriorAssistantPrompt;
+  const recentIdentityContext = buildRecentIdentityInterpretationContext(session.conversationTurns.slice(-4));
+  const preserveDirectConversationChatTurn =
+    preResolvedIntentMode.mode === "chat" &&
+    shouldPreserveDeterministicDirectChatTurn(input, recentIdentityContext);
   if (followUpLinkedToPriorAssistantPrompt) {
+    if (preserveDirectConversationChatTurn) {
+      return resolveCanonicalConversationRouting(session, input, receivedAt, deps, media, preResolvedIntentMode, topicKeyInterpretation);
+    }
     return enqueueFollowUpLinkedToPriorAssistantPrompt(
       session,
       input,
@@ -506,16 +512,9 @@ export async function routeConversationMessageInput(
       receivedAt,
       routingClassification,
       deps,
-      media
+      media,
+      topicKeyInterpretation
     );
   }
-
-  return resolveCanonicalConversationRouting(
-    session,
-    input,
-    receivedAt,
-    deps,
-    media,
-    preResolvedIntentMode
-  );
+  return resolveCanonicalConversationRouting(session, input, receivedAt, deps, media, preResolvedIntentMode, topicKeyInterpretation);
 }

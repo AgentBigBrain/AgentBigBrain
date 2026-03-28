@@ -5,7 +5,8 @@
 import type { WorkspaceRecoverySignal } from "./workspaceRecoveryPolicy";
 import {
   MISSION_REQUIREMENT_PROCESS_STOP,
-  MISSION_REQUIREMENT_SIDE_EFFECT
+  MISSION_REQUIREMENT_SIDE_EFFECT,
+  type RecoveryFailureClass
 } from "./contracts";
 
 type AutonomousWorkingKind =
@@ -224,6 +225,31 @@ export function buildRetryingStateMessage(
     case "generic":
     default:
       return "I'm moving into the next step now and keeping the run on track.";
+  }
+}
+
+/**
+ * Builds a human-first retry message for one bounded structured recovery attempt.
+ *
+ * @param recoveryClass - Typed recovery class the loop is handling.
+ * @returns Human-readable structured-recovery progress text.
+ */
+export function buildStructuredRecoveryStateMessage(
+  recoveryClass: RecoveryFailureClass
+): string {
+  switch (recoveryClass) {
+    case "DEPENDENCY_MISSING":
+      return "I found a missing dependency. I'm doing one bounded repair and then retrying the original step.";
+    case "VERSION_INCOMPATIBLE":
+      return "I found a dependency version mismatch. I'm doing one bounded alignment pass before retrying the original step.";
+    case "PROCESS_PORT_IN_USE":
+      return "The requested localhost port was occupied. I'm retrying once on a free loopback port.";
+    case "PROCESS_NOT_READY":
+      return "The local target started but isn't ready yet. I'm checking the tracked target and retrying readiness once.";
+    case "TARGET_NOT_RUNNING":
+      return "The tracked local target stopped before proof completed. I'm doing one restart-and-reverify pass.";
+    default:
+      return "I found a bounded recoverable runtime issue. I'm trying one safe repair before I continue.";
   }
 }
 

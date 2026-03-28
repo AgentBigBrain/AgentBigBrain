@@ -64,6 +64,35 @@ export interface LiveRunExecutorContext {
   isProcessRunning(pid: number): boolean;
 }
 
+type RecoveryExecutionMetadata = Record<string, RuntimeTraceDetailValue>;
+
+/**
+ * Adds one native recovery classification to execution metadata.
+ *
+ * **Why it exists:**
+ * Live-run handlers should emit machine-readable recovery facts at the source so autonomy does not
+ * need to reverse-map older failure codes or scrape free-form output.
+ *
+ * **What it talks to:**
+ * - Uses local helpers within this module.
+ *
+ * @param metadata - Existing execution metadata to extend.
+ * @param recoveryClass - Native generic recovery class for this outcome.
+ * @param provenance - Native recovery provenance for this outcome.
+ * @returns Metadata with native recovery fields attached.
+ */
+export function withRecoveryFailureMetadata(
+  metadata: RecoveryExecutionMetadata,
+  recoveryClass: string,
+  provenance: string
+): RecoveryExecutionMetadata {
+  return {
+    ...metadata,
+    recoveryFailureClass: recoveryClass,
+    recoveryFailureProvenance: provenance
+  };
+}
+
 /**
  * Normalizes optional string input into a stable nullable string.
  *
@@ -143,6 +172,9 @@ export function buildManagedProcessExecutionMetadata(
     processCwd: snapshot.cwd,
     processShellExecutable: snapshot.shellExecutable,
     processShellKind: snapshot.shellKind,
+    processRequestedHost: snapshot.requestedHost,
+    processRequestedPort: snapshot.requestedPort,
+    processRequestedUrl: snapshot.requestedUrl,
     processStartedAt: snapshot.startedAt,
     processExitCode: snapshot.exitCode,
     processSignal: snapshot.signal,
@@ -175,7 +207,7 @@ export function buildManagedProcessStartFailureExecutionMetadata(details: {
   requestedUrl: string;
   suggestedPort: number | null;
 }): Record<string, RuntimeTraceDetailValue> {
-  return {
+  return withRecoveryFailureMetadata({
     managedProcess: true,
     processLifecycleStatus: "PROCESS_START_FAILED",
     processCommandFingerprint: details.commandFingerprint,
@@ -190,7 +222,7 @@ export function buildManagedProcessStartFailureExecutionMetadata(details: {
     processSuggestedPort: details.suggestedPort,
     processSuggestedUrl:
       details.suggestedPort !== null ? `http://localhost:${details.suggestedPort}` : null
-  };
+  }, "PROCESS_PORT_IN_USE", "runtime_live_run");
 }
 
 /**
@@ -218,7 +250,7 @@ export function buildReadinessProbeExecutionMetadata(details: {
   expectedStatus?: number | null;
   observedStatus?: number | null;
 }): Record<string, RuntimeTraceDetailValue> {
-  return {
+  const metadata: Record<string, RuntimeTraceDetailValue> = {
     readinessProbe: true,
     probeKind: details.probeKind,
     probeReady: details.ready,
@@ -231,6 +263,9 @@ export function buildReadinessProbeExecutionMetadata(details: {
     probeExpectedStatus: details.expectedStatus ?? null,
     probeObservedStatus: details.observedStatus ?? null
   };
+  return details.ready
+    ? metadata
+    : withRecoveryFailureMetadata(metadata, "PROCESS_NOT_READY", "runtime_live_run");
 }
 
 /**
@@ -313,12 +348,15 @@ export function inferManagedProcessLoopbackTarget(
   command: string
 ): ManagedProcessLoopbackTargetHint | null {
   const normalizedCommand = command.trim().toLowerCase();
+  const explicitHostMatch =
+    normalizedCommand.match(/(?:^|\s)--(?:bind|hostname|host)(?:=|\s+)(127\.0\.0\.1|localhost|::1)\b/) ??
+    normalizedCommand.match(/\b(127\.0\.0\.1|localhost|::1):\d{2,5}\b/);
+  const host = explicitHostMatch?.[1] ?? "localhost";
   const patterns = [
     /\bhttp\.server\s+(\d{2,5})\b/,
-    /\b--port\s+(\d{2,5})\b/,
-    /\b-p\s+(\d{2,5})\b/,
-    /\blocalhost:(\d{2,5})\b/,
-    /\b127\.0\.0\.1:(\d{2,5})\b/
+    /(?:^|\s)--port(?:=|\s+)(\d{2,5})\b/,
+    /(?:^|\s)-p\s+(\d{2,5})\b/,
+    /\b(?:localhost|127\.0\.0\.1|::1):(\d{2,5})\b/
   ];
   for (const pattern of patterns) {
     const match = normalizedCommand.match(pattern);
@@ -330,9 +368,9 @@ export function inferManagedProcessLoopbackTarget(
       continue;
     }
     return {
-      host: "localhost",
+      host,
       port,
-      url: `http://localhost:${port}`
+      url: `http://${host === "::1" ? "[::1]" : host}:${port}`
     };
   }
   return null;
@@ -529,16 +567,18 @@ export async function performLocalPortProbe(
   return new Promise((resolve, reject) => {
     const socket = new net.Socket();
     let settled = false;
+    let shouldDestroySocket = true;
 
     const finalize = (callback: () => void): void => {
       if (settled) {
         return;
       }
       settled = true;
-      socket.removeAllListeners();
-      socket.destroy();
       if (signal && typeof signal.removeEventListener === "function") {
         signal.removeEventListener("abort", handleAbort);
+      }
+      if (shouldDestroySocket && !socket.destroyed) {
+        socket.destroy();
       }
       callback();
     };
@@ -553,6 +593,8 @@ export async function performLocalPortProbe(
 
     socket.setTimeout(timeoutMs);
     socket.once("connect", () => {
+      shouldDestroySocket = false;
+      socket.end();
       finalize(() => resolve(true));
     });
     socket.once("timeout", () => {
@@ -604,16 +646,18 @@ export async function performLocalHttpProbe(
       }
     );
     let settled = false;
+    let shouldDestroyRequest = true;
 
     const finalize = (callback: () => void): void => {
       if (settled) {
         return;
       }
       settled = true;
-      request.removeAllListeners();
-      request.destroy();
       if (signal && typeof signal.removeEventListener === "function") {
         signal.removeEventListener("abort", handleAbort);
+      }
+      if (shouldDestroyRequest && !request.destroyed) {
+        request.destroy();
       }
       callback();
     };
@@ -631,6 +675,9 @@ export async function performLocalHttpProbe(
     });
     request.once("error", () => {
       finalize(() => resolve(null));
+    });
+    request.once("response", () => {
+      shouldDestroyRequest = false;
     });
     request.end();
   });

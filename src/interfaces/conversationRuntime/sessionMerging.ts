@@ -6,6 +6,7 @@ import {
   buildConversationStackFromTurnsV1,
   isConversationStackV1
 } from "../../core/stage6_86ConversationStack";
+import { selectConversationDomainContext } from "../../core/sessionContext";
 import type {
   ConversationBrowserSessionRecord,
   ConversationClassifierEvent,
@@ -71,6 +72,21 @@ function choosePreferredConversationJob(
   }
   if (!existing.errorMessage && incoming.errorMessage) {
     return incoming;
+  }
+  if (existing.recoveryTrace && !incoming.recoveryTrace) {
+    return existing;
+  }
+  if (!existing.recoveryTrace && incoming.recoveryTrace) {
+    return incoming;
+  }
+  if (
+    existing.recoveryTrace &&
+    incoming.recoveryTrace &&
+    existing.recoveryTrace.updatedAt !== incoming.recoveryTrace.updatedAt
+  ) {
+    return existing.recoveryTrace.updatedAt > incoming.recoveryTrace.updatedAt
+      ? existing
+      : incoming;
   }
   if (existing.pauseRequestedAt && !incoming.pauseRequestedAt) {
     return existing;
@@ -351,6 +367,11 @@ export function mergeConversationSession(
     activeClarification: selectActiveClarification(
       existing.activeClarification,
       incoming.activeClarification
+    ),
+    domainContext: selectConversationDomainContext(
+      existing.domainContext,
+      incoming.domainContext,
+      existing.conversationId
     ),
     modeContinuity: selectModeContinuity(existing.modeContinuity ?? null, incoming.modeContinuity ?? null),
     progressState: mergedProgressState,

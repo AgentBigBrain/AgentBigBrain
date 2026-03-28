@@ -8,7 +8,11 @@ import path from "node:path";
 import { mkdtemp, rm } from "node:fs/promises";
 import { test } from "node:test";
 
-import { CodexModelClient } from "../../src/models/codexModelClient";
+import {
+  CodexModelClient,
+  MIN_CODEX_PLANNER_REQUEST_TIMEOUT_MS,
+  resolveCodexRequestTimeoutMs
+} from "../../src/models/codexModelClient";
 
 test("CodexModelClient starts with subscription billing mode and zero spend", () => {
   const client = new CodexModelClient();
@@ -16,6 +20,12 @@ test("CodexModelClient starts with subscription billing mode and zero spend", ()
   assert.equal(usage.calls, 0);
   assert.equal(usage.billingMode, "subscription_quota");
   assert.equal(usage.estimatedSpendUsd, 0);
+});
+
+test("resolveCodexRequestTimeoutMs gives planner turns a higher bounded timeout floor", () => {
+  assert.equal(resolveCodexRequestTimeoutMs("planner_v1", 180_000), MIN_CODEX_PLANNER_REQUEST_TIMEOUT_MS);
+  assert.equal(resolveCodexRequestTimeoutMs("planner_v1", 600_000), 600_000);
+  assert.equal(resolveCodexRequestTimeoutMs("response_v1", 180_000), 180_000);
 });
 
 test("CodexModelClient fails closed when Codex auth is unavailable", async () => {

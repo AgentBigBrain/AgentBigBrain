@@ -25,8 +25,8 @@ test("buildQueryAwarePlanningContext prioritizes matching contact facts under a 
     confidence: 0.95
   }).nextState;
   state = upsertTemporalProfileFact(state, {
-    key: "contact.billy.name",
-    value: "Billy",
+    key: "contact.owen.name",
+    value: "Owen",
     sensitive: false,
     sourceTaskId: "task_contact_name",
     source: "test",
@@ -34,8 +34,8 @@ test("buildQueryAwarePlanningContext prioritizes matching contact facts under a 
     confidence: 0.95
   }).nextState;
   state = upsertTemporalProfileFact(state, {
-    key: "contact.billy.work_association",
-    value: "Flare Web Design",
+    key: "contact.owen.work_association",
+    value: "Lantern Studio",
     sensitive: false,
     sourceTaskId: "task_contact_work",
     source: "test",
@@ -52,12 +52,12 @@ test("buildQueryAwarePlanningContext prioritizes matching contact facts under a 
     confidence: 0.95
   }).nextState;
 
-  const context = buildQueryAwarePlanningContext(state, 3, "who is Billy?");
+  const context = buildQueryAwarePlanningContext(state, 3, "who is Owen?");
 
   assert.equal(context.includes("identity.preferred_name: Benny"), true);
-  assert.equal(context.includes("contact.billy.name: Billy"), true);
+  assert.equal(context.includes("contact.owen.name: Owen"), true);
   assert.equal(
-    context.includes("contact.billy.work_association: Flare Web Design"),
+    context.includes("contact.owen.work_association: Lantern Studio"),
     true
   );
   assert.equal(context.includes("preference.editor: Helix"), false);

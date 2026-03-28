@@ -18,15 +18,18 @@ import { isPathWithinPrefix, resolveWorkspacePath } from "./pathRuntime";
 import {
   appendChunkToBuffer,
   appendWindowsPowerShellPackageManagerFailureChecks,
+  buildShellRecoveryFailureMetadata,
   emptyCappedTextBuffer,
   hasKnownShellPartialFailure,
   normalizeWindowsPowerShellPackageManagerCommand,
+  resolveShellFailureRecoveryMetadata,
   resolveCommandAwareShellEnvironment,
   resolveEffectiveShellProfile,
+  resolveShellSuccessWorkspaceRoot,
   resolveShellCommandTimeoutMs,
   resolveShellPostconditionFailure
 } from "./shellExecutionSupport";
-
+import { buildEffectiveShellSpawnSpec } from "./shellCommandStaging";
 const PROCESS_TREE_TERMINATION_TIMEOUT_MS = 2_000;
 
 /**
@@ -51,7 +54,6 @@ export function resolveShellCommandCwd(
   }
   return cwd;
 }
-
 /**
  * Terminates a child process and, when possible, its full process tree.
  *
@@ -77,7 +79,6 @@ export async function terminateProcessTree(
 
   return terminateProcessTreeByPid(shellSpawn, pid, child);
 }
-
 /**
  * Terminates a process tree using a known PID when the original child handle is unavailable.
  *
@@ -155,7 +156,6 @@ export async function terminateProcessTreeByPid(
     }
   }
 }
-
 /**
  * Checks whether a process id still appears alive from the current runtime.
  *
@@ -173,7 +173,6 @@ export function isProcessRunningByPid(pid: number): boolean {
     return (error as NodeJS.ErrnoException).code === "EPERM";
   }
 }
-
 /**
  * Runs a shell process with bounded stdout/stderr capture, timeout enforcement, and abort handling.
  *
@@ -250,6 +249,12 @@ async function runShellProcess(
     child.stderr.on("data", (chunk: Buffer) => {
       stderrBuffer = appendChunkToBuffer(stderrBuffer, chunk);
     });
+    child.stdout.once("error", (error) => {
+      finalize(() => reject(error));
+    });
+    child.stderr.once("error", (error) => {
+      finalize(() => reject(error));
+    });
     child.once("error", (error) => {
       finalize(() => reject(error));
     });
@@ -266,7 +271,6 @@ async function runShellProcess(
     });
   });
 }
-
 /**
  * Executes a shell command action under the resolved runtime shell profile.
  *
@@ -322,13 +326,14 @@ export async function executeShellCommandAction(
     effectiveShellProfile,
     windowsNormalizedCommand
   );
-  const spawnSpec = buildShellSpawnSpec({
-    profile: effectiveShellProfile,
-    command: normalizedCommand,
-    cwd: resolvedCwd,
+  const stagedShellCommand = await buildEffectiveShellSpawnSpec(
+    effectiveShellProfile,
+    normalizedCommand,
+    resolvedCwd,
     timeoutMs,
-    envKeyNames: shellEnvironment.envKeyNames
-  });
+    shellEnvironment.envKeyNames
+  );
+  const spawnSpec = stagedShellCommand.spawnSpec;
   const shellProfileFingerprint = computeShellProfileFingerprint(effectiveShellProfile);
   const shellSpawnSpecFingerprint = computeShellSpawnSpecFingerprint(spawnSpec);
 
@@ -380,7 +385,8 @@ export async function executeShellCommandAction(
         outcome: buildExecutionOutcome(
           "failed",
           `Shell failed:\n${combinedOutput}`,
-          "ACTION_EXECUTION_FAILED"
+          "ACTION_EXECUTION_FAILED",
+          resolveShellFailureRecoveryMetadata(combinedOutput)
         ),
         telemetry
       };
@@ -391,7 +397,8 @@ export async function executeShellCommandAction(
           outcome: buildExecutionOutcome(
             "failed",
             `Shell failed (exit code ${result.exitCode ?? "unknown"}):\n${combinedOutput}`,
-            "ACTION_EXECUTION_FAILED"
+            "ACTION_EXECUTION_FAILED",
+            resolveShellFailureRecoveryMetadata(combinedOutput)
           ),
           telemetry
         };
@@ -414,17 +421,28 @@ export async function executeShellCommandAction(
         outcome: buildExecutionOutcome(
           "failed",
           postconditionFailure.message,
-          "ACTION_EXECUTION_FAILED"
+          "ACTION_EXECUTION_FAILED",
+          resolveShellFailureRecoveryMetadata(postconditionFailure.message)
         ),
         telemetry
       };
     }
+    const workspaceRootPath = await resolveShellSuccessWorkspaceRoot(
+      normalizedCommand,
+      resolvedCwd
+    );
     return {
       outcome: buildExecutionOutcome(
         "success",
         combinedOutput.length > 0
           ? `Shell success:\n${combinedOutput}`
-          : "Shell success: command returned no output."
+          : "Shell success: command returned no output.",
+        undefined,
+        workspaceRootPath
+          ? {
+              directoryPath: workspaceRootPath
+            }
+          : undefined
       ),
       telemetry
     };
@@ -432,12 +450,24 @@ export async function executeShellCommandAction(
     if (isAbortError(error)) {
       throw error;
     }
+    const runtimeError = error as NodeJS.ErrnoException;
+    const mechanicalRecoveryMetadata =
+      runtimeError.code === "ENOENT"
+        ? buildShellRecoveryFailureMetadata("EXECUTABLE_NOT_FOUND")
+        : runtimeError.code === "ENAMETOOLONG"
+          ? buildShellRecoveryFailureMetadata("COMMAND_TOO_LONG")
+          : undefined;
     return {
       outcome: buildExecutionOutcome(
         "failed",
-        `Shell failed: ${(error as Error).message}`,
-        "ACTION_EXECUTION_FAILED"
+        `Shell failed: ${runtimeError.message}`,
+        "ACTION_EXECUTION_FAILED",
+        mechanicalRecoveryMetadata
       )
     };
+  } finally {
+    if (stagedShellCommand.cleanup) {
+      await stagedShellCommand.cleanup().catch(() => undefined);
+    }
   }
 }

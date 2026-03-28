@@ -6,7 +6,10 @@ import { ModelClient } from "./types";
 import { MockModelClient } from "./mockModelClient";
 import { OllamaModelClient } from "./ollamaModelClient";
 import { OpenAIModelClient } from "./openaiModelClient";
-import { CodexModelClient } from "./codexModelClient";
+import {
+  CodexModelClient,
+  DEFAULT_CODEX_REQUEST_TIMEOUT_MS
+} from "./codexModelClient";
 import {
   parseOpenAICompatibilityStrict,
   parseOpenAITransportMode
@@ -115,7 +118,10 @@ export function createModelClientFromEnv(env: NodeJS.ProcessEnv = process.env): 
 
   if (backend === "codex_oauth") {
     return new CodexModelClient({
-      requestTimeoutMs: parseTimeoutMs(env.CODEX_TIMEOUT_MS, 180_000),
+      requestTimeoutMs: parseTimeoutMs(
+        env.CODEX_TIMEOUT_MS,
+        DEFAULT_CODEX_REQUEST_TIMEOUT_MS
+      ),
       isolatedWorkingDirectory: env.CODEX_ISOLATED_WORKDIR,
       env
     });

@@ -2,6 +2,15 @@
  * @fileoverview Provides deterministic session mutation helpers for recent-job ledgers and bounded conversation turn history.
  */
 
+import { applyDomainSignalWindow, type ConversationDomainSignalWindowUpdate } from "../core/sessionContext";
+import {
+  applyAssistantTurnToConversationStackV1,
+  applyUserTurnToConversationStackV1,
+  buildConversationStackFromTurnsV1,
+  createEmptyConversationStackV1,
+  isConversationStackV1,
+  type TopicKeyInterpretationSignalV1
+} from "../core/stage6_86ConversationStack";
 import {
   ActiveClarificationState,
   ConversationActiveWorkspaceRecord,
@@ -20,6 +29,47 @@ import {
   normalizeTurnText,
   sortTurnsByTime
 } from "./conversationManagerHelpers";
+
+/**
+ * Narrows one shared domain lane into the persisted snapshot subset used on workspace and handoff records.
+ *
+ * @param lane - Candidate lane from the shared conversation-domain context.
+ * @returns Persistable snapshot lane or `null` when the lane is unknown.
+ */
+function normalizePersistedDomainSnapshotLane(
+  lane: ConversationSession["domainContext"]["dominantLane"] | null | undefined
+): "profile" | "relationship" | "workflow" | "system_policy" | null {
+  return lane === "profile" ||
+    lane === "relationship" ||
+    lane === "workflow" ||
+    lane === "system_policy"
+    ? lane
+    : null;
+}
+
+/**
+ * Resolves the current session-domain snapshot that should be stamped onto continuity records.
+ *
+ * @param session - Session carrying the shared domain context.
+ * @param fallbackObservedAt - Best-effort timestamp when the shared context has not recorded one yet.
+ * @returns Persistable snapshot lane plus recorded-at timestamp.
+ */
+function resolveSessionDomainSnapshot(
+  session: ConversationSession,
+  fallbackObservedAt: string | null
+): {
+  lane: "profile" | "relationship" | "workflow" | "system_policy" | null;
+  recordedAt: string | null;
+} {
+  return {
+    lane: normalizePersistedDomainSnapshotLane(session.domainContext.dominantLane),
+    recordedAt:
+      session.domainContext.lastUpdatedAt ??
+      session.domainContext.activeSince ??
+      fallbackObservedAt ??
+      session.updatedAt
+  };
+}
 
 /**
  * Finds a job by ID in a session's recent-job ledger.
@@ -83,9 +133,20 @@ export function recordUserTurn(
   session: ConversationSession,
   text: string,
   at: string,
-  maxConversationTurns: number
+  maxConversationTurns: number,
+  options: {
+    topicKeyInterpretation?: TopicKeyInterpretationSignalV1 | null;
+  } = {}
 ): void {
-  pushConversationTurn(session, "user", text, at, maxConversationTurns);
+  const recordedTurn = pushConversationTurn(session, "user", text, at, maxConversationTurns);
+  if (!recordedTurn) {
+    return;
+  }
+  syncConversationStackWithRecordedTurn(
+    session,
+    recordedTurn,
+    options.topicKeyInterpretation ?? null
+  );
 }
 
 /**
@@ -108,7 +169,11 @@ export function recordAssistantTurn(
   at: string,
   maxConversationTurns: number
 ): void {
-  pushConversationTurn(session, "assistant", text, at, maxConversationTurns);
+  const recordedTurn = pushConversationTurn(session, "assistant", text, at, maxConversationTurns);
+  if (!recordedTurn) {
+    return;
+  }
+  syncConversationStackWithRecordedTurn(session, recordedTurn, null);
 }
 
 /**
@@ -133,17 +198,19 @@ export function pushConversationTurn(
   text: string,
   at: string,
   maxConversationTurns: number
-): void {
+): ConversationTurn | null {
   const normalized = role === "assistant"
     ? normalizeAssistantTurnText(text)
     : normalizeTurnText(text);
   if (!normalized) {
-    return;
+    return null;
   }
 
-  session.conversationTurns = [...session.conversationTurns, { role, text: normalized, at }].slice(
+  const turn: ConversationTurn = { role, text: normalized, at };
+  session.conversationTurns = [...session.conversationTurns, turn].slice(
     -maxConversationTurns
   );
+  return turn;
 }
 
 /**
@@ -203,6 +270,70 @@ export function backfillTurnsFromRecentJobsIfNeeded(
   }
 
   session.conversationTurns = sortTurnsByTime(recoveredTurns).slice(-maxConversationTurns);
+  const latestTurnAt = session.conversationTurns[session.conversationTurns.length - 1]?.at ?? session.updatedAt;
+  session.conversationStack = buildConversationStackFromTurnsV1(
+    session.conversationTurns,
+    latestTurnAt,
+    {}
+  );
+}
+
+/**
+ * Rebuilds stack state for all historical turns before the newest recorded turn.
+ *
+ * **Why it exists:**
+ * Legacy sessions may still lack a valid persisted `conversationStack`. Rebuilding only the prior
+ * history lets the newest user turn apply one bounded interpreted topic-key signal without replaying
+ * that signal across older turns.
+ *
+ * **What it talks to:**
+ * - Calls `buildConversationStackFromTurnsV1` and `createEmptyConversationStackV1`.
+ *
+ * @param session - Session whose bounded turn history has already been updated.
+ * @param recordedTurn - The newest stored turn that still needs incremental stack application.
+ * @returns Canonical stack state for all turns that came before `recordedTurn`.
+ */
+function rebuildConversationStackBeforeRecordedTurn(
+  session: ConversationSession,
+  recordedTurn: ConversationTurn
+) {
+  const historicalTurns = session.conversationTurns.slice(0, -1);
+  if (historicalTurns.length === 0) {
+    return createEmptyConversationStackV1(recordedTurn.at);
+  }
+  const historicalUpdatedAt = historicalTurns[historicalTurns.length - 1]?.at ?? recordedTurn.at;
+  return buildConversationStackFromTurnsV1(historicalTurns, historicalUpdatedAt, {});
+}
+
+/**
+ * Applies one newly stored turn to the session's Stage 6.86 conversation stack incrementally.
+ *
+ * **Why it exists:**
+ * Live ingress should keep `conversationStack` current on every stored turn instead of waiting for
+ * later normalization or merge replay, while still allowing one precomputed topic-key signal on the
+ * newest ambiguous user turn only.
+ *
+ * **What it talks to:**
+ * - Calls Stage 6.86 stack helpers from `../core/stage6_86ConversationStack`.
+ * - Mutates `session.conversationStack`.
+ *
+ * @param session - Session whose stack should advance by one turn.
+ * @param recordedTurn - Newly stored turn already present in `session.conversationTurns`.
+ * @param topicKeyInterpretation - Optional validated topic-key interpretation for the newest user turn.
+ */
+function syncConversationStackWithRecordedTurn(
+  session: ConversationSession,
+  recordedTurn: ConversationTurn,
+  topicKeyInterpretation: TopicKeyInterpretationSignalV1 | null
+): void {
+  const baseStack = isConversationStackV1(session.conversationStack)
+    ? session.conversationStack
+    : rebuildConversationStackBeforeRecordedTurn(session, recordedTurn);
+  session.conversationStack = recordedTurn.role === "user"
+    ? applyUserTurnToConversationStackV1(baseStack, recordedTurn, {
+        topicKeyInterpretation
+      })
+    : applyAssistantTurnToConversationStackV1(baseStack, recordedTurn);
 }
 
 /**
@@ -292,7 +423,22 @@ export function setReturnHandoff(
   session: ConversationSession,
   returnHandoff: ConversationReturnHandoffRecord | null
 ): void {
-  session.returnHandoff = returnHandoff;
+  if (!returnHandoff) {
+    session.returnHandoff = null;
+    return;
+  }
+  const snapshot = resolveSessionDomainSnapshot(session, returnHandoff.updatedAt);
+  session.returnHandoff = {
+    ...returnHandoff,
+    domainSnapshotLane:
+      returnHandoff.domainSnapshotLane ??
+      session.activeWorkspace?.domainSnapshotLane ??
+      snapshot.lane,
+    domainSnapshotRecordedAt:
+      returnHandoff.domainSnapshotRecordedAt ??
+      session.activeWorkspace?.domainSnapshotRecordedAt ??
+      snapshot.recordedAt
+  };
 }
 
 /**
@@ -399,5 +545,36 @@ export function setActiveWorkspace(
   session: ConversationSession,
   workspace: ConversationActiveWorkspaceRecord | null
 ): void {
-  session.activeWorkspace = workspace;
+  if (!workspace) {
+    session.activeWorkspace = null;
+    return;
+  }
+  const snapshot = resolveSessionDomainSnapshot(session, workspace.updatedAt);
+  session.activeWorkspace = {
+    ...workspace,
+    domainSnapshotLane: workspace.domainSnapshotLane ?? snapshot.lane,
+    domainSnapshotRecordedAt:
+      workspace.domainSnapshotRecordedAt ?? snapshot.recordedAt
+  };
+}
+
+/**
+ * Applies one bounded domain-context update to the current session.
+ *
+ * **Why it exists:**
+ * Routing, memory, and lifecycle surfaces need one canonical mutation path for persisted
+ * conversation-domain signals instead of open-coding window merges.
+ *
+ * **What it talks to:**
+ * - Calls `applyDomainSignalWindow`.
+ * - Mutates `session.domainContext`.
+ *
+ * @param session - Session receiving the domain-context update.
+ * @param update - Bounded lane, routing, and continuity signals for the current turn.
+ */
+export function applyConversationDomainSignalWindow(
+  session: ConversationSession,
+  update: ConversationDomainSignalWindowUpdate
+): void {
+  session.domainContext = applyDomainSignalWindow(session.domainContext, update);
 }

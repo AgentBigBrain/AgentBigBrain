@@ -12,25 +12,25 @@ test("parseProfileMediaIngestInput strips attached media context from direct tex
     "Please fix this before lunch.",
     "",
     "Attached media context:",
-    "- Voice note transcript: My name is Benny and Billy fell down last week.",
-    "- image summary: The screenshot shows Billy falling near the stairs. OCR text: Billy fell down near the stairs"
+    "- Voice note transcript: My name is Benny and Owen fell down last week.",
+    "- image summary: The screenshot shows Owen falling near the stairs. OCR text: Owen fell down near the stairs"
   ].join("\n"));
 
   assert.equal(parsed.directUserText, "Please fix this before lunch.");
   assert.deepEqual(parsed.transcriptFragments, [
-    "My name is Benny and Billy fell down last week."
+    "My name is Benny and Owen fell down last week."
   ]);
   assert.deepEqual(parsed.summaryFragments, [
-    "The screenshot shows Billy falling near the stairs."
+    "The screenshot shows Owen falling near the stairs."
   ]);
   assert.deepEqual(parsed.ocrFragments, [
-    "Billy fell down near the stairs"
+    "Owen fell down near the stairs"
   ]);
   assert.deepEqual(parsed.allNarrativeFragments, [
     "Please fix this before lunch.",
-    "My name is Benny and Billy fell down last week.",
-    "The screenshot shows Billy falling near the stairs.",
-    "Billy fell down near the stairs"
+    "My name is Benny and Owen fell down last week.",
+    "The screenshot shows Owen falling near the stairs.",
+    "Owen fell down near the stairs"
   ]);
 });
 

@@ -34,6 +34,30 @@ export function deriveWorkflowQueryTokens(query: string): string[] {
 }
 
 /**
+ * Computes a bounded session-domain adjustment for one workflow pattern.
+ *
+ * @param pattern - Candidate workflow pattern.
+ * @param sessionDomainLane - Current session lane, if known.
+ * @returns Deterministic ranking adjustment.
+ */
+function computeWorkflowDomainScore(
+  pattern: Pick<WorkflowPattern, "domainLane">,
+  sessionDomainLane: string | null | undefined
+): number {
+  if (!sessionDomainLane || sessionDomainLane === "unknown") {
+    return 0;
+  }
+  const normalizedPatternLane = pattern.domainLane.trim().toLowerCase();
+  if (!normalizedPatternLane || normalizedPatternLane === "unknown") {
+    return 0.1;
+  }
+  if (normalizedPatternLane === sessionDomainLane) {
+    return 0.9;
+  }
+  return -0.35;
+}
+
+/**
  * Computes a deterministic relevance score for one workflow pattern.
  *
  * @param pattern - Workflow pattern candidate.
@@ -42,7 +66,8 @@ export function deriveWorkflowQueryTokens(query: string): string[] {
  */
 export function computeWorkflowPatternScore(
   pattern: WorkflowPattern,
-  queryTokens: readonly string[]
+  queryTokens: readonly string[],
+  sessionDomainLane?: string | null
 ): number {
   const haystacks = [
     pattern.workflowKey.toLowerCase(),
@@ -61,8 +86,16 @@ export function computeWorkflowPatternScore(
   const reliabilityScore = pattern.successCount - pattern.failureCount - pattern.suppressedCount * 0.5;
   const verificationBonus = pattern.linkedSkillVerificationStatus === "verified" ? 1.25 : 0;
   const activeBonus = pattern.status === "active" ? 1 : -1;
+  const domainScore = computeWorkflowDomainScore(pattern, sessionDomainLane);
   return Number(
-    (overlapScore * 1.4 + pattern.confidence + reliabilityScore * 0.15 + verificationBonus + activeBonus)
+    (
+      overlapScore * 1.4 +
+      pattern.confidence +
+      reliabilityScore * 0.15 +
+      verificationBonus +
+      activeBonus +
+      domainScore
+    )
       .toFixed(4)
   );
 }
@@ -78,7 +111,8 @@ export function computeWorkflowPatternScore(
 export function rankRelevantWorkflowPatterns(
   patterns: readonly WorkflowPattern[],
   query: string,
-  limit: number
+  limit: number,
+  sessionDomainLane?: string | null
 ): readonly WorkflowPattern[] {
   const normalizedLimit = Number.isFinite(limit) ? Math.max(1, Math.floor(limit)) : 1;
   const queryTokens = deriveWorkflowQueryTokens(query);
@@ -86,7 +120,7 @@ export function rankRelevantWorkflowPatterns(
     .filter((pattern) => pattern.status === "active")
     .map((pattern) => ({
       pattern,
-      score: computeWorkflowPatternScore(pattern, queryTokens)
+      score: computeWorkflowPatternScore(pattern, queryTokens, sessionDomainLane)
     }))
     .sort((left, right) => {
       if (left.score !== right.score) {

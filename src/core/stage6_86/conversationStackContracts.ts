@@ -10,10 +10,25 @@ export interface ConversationStackTurnV1 {
   at: string;
 }
 
+export type TopicKeyInterpretationKindV1 =
+  | "retain_active_thread"
+  | "resume_paused_thread"
+  | "switch_topic_candidate"
+  | "non_topic_turn"
+  | "uncertain";
+
+export interface TopicKeyInterpretationSignalV1 {
+  kind: TopicKeyInterpretationKindV1;
+  selectedTopicKey: string | null;
+  selectedThreadKey: string | null;
+  confidence: "low" | "medium" | "high";
+}
+
 export interface ApplyConversationTurnOptionsV1 {
   activeMissionThreadKey?: string | null;
   maxThreads?: number;
   topicSwitchThreshold?: number;
+  topicKeyInterpretation?: TopicKeyInterpretationSignalV1 | null;
 }
 
 export interface ConversationStackMigrationInputV1 {

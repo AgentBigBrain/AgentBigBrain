@@ -11,6 +11,21 @@ import type {
 } from "./sessionStateContracts";
 
 /**
+ * Normalizes persisted domain-snapshot lanes into the supported shared-lane subset.
+ *
+ * @param value - Persisted candidate lane label.
+ * @returns Normalized snapshot lane or `null` when absent/unsupported.
+ */
+function normalizeDomainSnapshotLane(value: unknown): ConversationActiveWorkspaceRecord["domainSnapshotLane"] {
+  return value === "profile" ||
+    value === "relationship" ||
+    value === "workflow" ||
+    value === "system_policy"
+    ? value
+    : null;
+}
+
+/**
  * Normalizes unknown persisted values into integer process ids when available.
  *
  * @param value - Persisted candidate value.
@@ -157,6 +172,11 @@ export function normalizeActiveWorkspaceRecord(
         )
       : [],
     sourceJobId: typeof candidate.sourceJobId === "string" ? candidate.sourceJobId : null,
+    domainSnapshotLane: normalizeDomainSnapshotLane(candidate.domainSnapshotLane),
+    domainSnapshotRecordedAt:
+      typeof candidate.domainSnapshotRecordedAt === "string"
+        ? candidate.domainSnapshotRecordedAt
+        : null,
     updatedAt: candidate.updatedAt
   };
 }

@@ -195,6 +195,7 @@ export interface CheckProcessActionParams extends Record<string, unknown> {
 export interface StopProcessActionParams extends Record<string, unknown> {
   leaseId?: string;
   pid?: number;
+  preserveLinkedBrowserSessions?: boolean;
 }
 
 export interface ProbePortActionParams extends Record<string, unknown> {

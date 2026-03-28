@@ -2,6 +2,7 @@
  * @fileoverview Canonical routing and delivery-selection helpers for proactive follow-up.
  */
 
+import type { AgentPulseReason } from "../../core/agentPulse";
 import type { ConversationSession } from "../sessionStore";
 import type { ProactiveTargetSelection } from "./contracts";
 import { shouldSuppressForPulseGap } from "./cooldownPolicy";
@@ -37,6 +38,32 @@ export function shouldSkipSessionForPulse(session: ConversationSession): boolean
     return true;
   }
   return false;
+}
+
+/**
+ * Returns whether workflow-dominant active continuity should suppress a pulse reason.
+ *
+ * Explicit user-requested follow-ups and unresolved commitments still remain eligible.
+ */
+export function shouldSuppressPulseForSessionDomain(
+  session: ConversationSession,
+  reason: AgentPulseReason | "dynamic"
+): boolean {
+  if (session.domainContext.dominantLane !== "workflow") {
+    return false;
+  }
+
+  const continuity = session.domainContext.continuitySignals;
+  const hasActiveWorkflowContinuity =
+    continuity.activeWorkspace || continuity.returnHandoff || continuity.modeContinuity;
+  if (!hasActiveWorkflowContinuity) {
+    return false;
+  }
+
+  return !(
+    reason === "unresolved_commitment" ||
+    reason === "user_requested_followup"
+  );
 }
 
 /**

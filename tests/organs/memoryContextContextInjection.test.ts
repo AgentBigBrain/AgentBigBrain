@@ -28,20 +28,20 @@ function buildTask(userInput: string): TaskRequest {
 
 test("sanitizeProfileContextForModelEgress redacts sensitive lines deterministically", () => {
   const result = sanitizeProfileContextForModelEgress([
-    "contact.billy.name: Billy",
-    "contact.billy.email: billy@example.com",
-    "contact.billy.phone: 555-1234"
+    "contact.owen.name: Owen",
+    "contact.owen.email: owen@example.com",
+    "contact.owen.phone: 555-1234"
   ].join("\n"));
 
   assert.equal(result.redactedFieldCount, 2);
-  assert.match(result.sanitizedContext, /contact\.billy\.name: Billy/);
-  assert.match(result.sanitizedContext, /contact\.billy\.email: \[REDACTED\]/);
-  assert.match(result.sanitizedContext, /contact\.billy\.phone: \[REDACTED\]/);
+  assert.match(result.sanitizedContext, /contact\.owen\.name: Owen/);
+  assert.match(result.sanitizedContext, /contact\.owen\.email: \[REDACTED\]/);
+  assert.match(result.sanitizedContext, /contact\.owen\.phone: \[REDACTED\]/);
 });
 
 test("buildInjectedContextPacket includes broker metadata and context block", () => {
   const packet = buildInjectedContextPacket(
-    buildTask("who is Billy?"),
+    buildTask("who is Owen?"),
     ["relationship"],
     {
       profile: 0,
@@ -51,13 +51,13 @@ test("buildInjectedContextPacket includes broker metadata and context block", ()
       unknown: 0
     },
     "profile_context_relevant",
-    "contact.billy.name: Billy"
+    "contact.owen.name: Owen"
   );
 
   assert.match(packet, /\[AgentFriendMemoryBroker\]/);
   assert.match(packet, /domainBoundaryDecision=inject_profile_context/);
   assert.match(packet, /\[AgentFriendProfileContext\]/);
-  assert.match(packet, /contact\.billy\.name: Billy/);
+  assert.match(packet, /contact\.owen\.name: Owen/);
 });
 
 test("buildSuppressedContextPacket marks suppression and omits raw profile facts", () => {
@@ -81,8 +81,8 @@ test("buildSuppressedContextPacket marks suppression and omits raw profile facts
 test("countRetrievedProfileFacts ignores headers and counts fact lines only", () => {
   const context = [
     "[AgentFriendProfileContext]",
-    "contact.billy.name: Billy",
-    "contact.billy.work_association: Flare Web Design",
+    "contact.owen.name: Owen",
+    "contact.owen.work_association: Lantern Studio",
     ""
   ].join("\n");
 
@@ -91,7 +91,7 @@ test("countRetrievedProfileFacts ignores headers and counts fact lines only", ()
 
 test("sanitizeEpisodeContextForModelEgress redacts sensitive episode lines deterministically", () => {
   const result = sanitizeEpisodeContextForModelEgress([
-    "- situation: Billy follow-up | status=unresolved | summary=Billy's phone number is 555-1234."
+    "- situation: Owen follow-up | status=unresolved | summary=Owen's phone number is 555-1234."
   ].join("\n"));
 
   assert.equal(result.redactedFieldCount, 1);
@@ -100,7 +100,7 @@ test("sanitizeEpisodeContextForModelEgress redacts sensitive episode lines deter
 
 test("buildInjectedContextPacket appends bounded episode context when provided", () => {
   const packet = buildInjectedContextPacket(
-    buildTask("How is Billy doing after the fall?"),
+    buildTask("How is Owen doing after the fall?"),
     ["relationship"],
     {
       profile: 0,
@@ -110,17 +110,17 @@ test("buildInjectedContextPacket appends bounded episode context when provided",
       unknown: 0
     },
     "profile_context_relevant",
-    "contact.billy.name: Billy",
-    "- situation: Billy fell down | status=unresolved | observedAt=2026-03-08T10:00:00.000Z | summary=Billy fell down a few weeks ago and the outcome was unresolved."
+    "contact.owen.name: Owen",
+    "- situation: Owen fell down | status=unresolved | observedAt=2026-03-08T10:00:00.000Z | summary=Owen fell down a few weeks ago and the outcome was unresolved."
   );
 
   assert.match(packet, /\[AgentFriendEpisodeContext\]/);
-  assert.match(packet, /Billy fell down/);
+  assert.match(packet, /Owen fell down/);
 });
 
 test("countRetrievedEpisodeSummaries counts rendered situation lines only", () => {
   const context = [
-    "- situation: Billy fell down | status=unresolved | summary=Still waiting on the outcome.",
+    "- situation: Owen fell down | status=unresolved | summary=Still waiting on the outcome.",
     "- situation: Tax filing issue | status=outcome_unknown | summary=No final update yet."
   ].join("\n");
 

@@ -1,63 +1,18 @@
-/**
- * @fileoverview Handles conversational commands with per-session queueing, job-status visibility, and proposal approval workflows.
- */
-
-import {
-  AgentPulseMode,
-  AgentPulseDecisionCode,
-  AgentPulseRouteStrategy,
-  ConversationSession,
-  InterfaceSessionStore
-} from "./sessionStore";
+/** @fileoverview Handles conversational commands with per-session queueing, job-status visibility, and proposal approval workflows. */
+import { AgentPulseMode, AgentPulseDecisionCode, AgentPulseRouteStrategy, ConversationSession, InterfaceSessionStore } from "./sessionStore";
 import type { PulseEmissionRecordV1 } from "../core/stage6_86PulseCandidates";
 import { processConversationMessage } from "./conversationIngressLifecycle";
-import {
-  type PulseLexicalRuleContext,
-  createPulseLexicalRuleContext,
-  createFollowUpRuleContext,
-  type FollowUpRuleContext
-} from "./conversationManagerHelpers";
-import {
-  clearConversationAckTimer,
-  enqueueConversationJob
-} from "./conversationRuntime/conversationLifecycle";
-import {
-  enqueueConversationSystemJob,
-  setConversationWorkerBinding,
-  startConversationWorkerIfNeeded,
-  type SessionWorkerBinding
-} from "./conversationRuntime/conversationWorkerRuntime";
+import { type PulseLexicalRuleContext, createPulseLexicalRuleContext, createFollowUpRuleContext, type FollowUpRuleContext } from "./conversationManagerHelpers";
+import { clearConversationAckTimer, enqueueConversationJob } from "./conversationRuntime/conversationLifecycle";
+import { enqueueConversationSystemJob, setConversationWorkerBinding, startConversationWorkerIfNeeded, type SessionWorkerBinding } from "./conversationRuntime/conversationWorkerRuntime";
 import { updateConversationAgentPulseState } from "./conversationRuntime/pulseState";
-import {
-  AUTONOMOUS_EXECUTION_PREFIX,
-  buildAutonomousExecutionInput,
-  type ConversationCheckpointReviewRunner,
-  type ConversationIntentInterpreter,
-  type ConversationManagerConfig,
-  type ConversationManagerDependencies,
-  type ConversationNotifier,
-  type QueryConversationContinuityFacts,
-  type QueryConversationContinuityEpisodes,
-  type ExecuteConversationTask
-} from "./conversationRuntime/managerContracts";
-export {
-  buildAutonomousExecutionInput,
-  parseAutonomousExecutionInput
-} from "./conversationRuntime/managerContracts";
+import { AUTONOMOUS_EXECUTION_PREFIX, buildAutonomousExecutionInput, type ConversationCheckpointReviewRunner, type ConversationIntentInterpreter, type ConversationManagerConfig, type ConversationManagerDependencies, type ConversationInboundMessage, type ConversationNotifier, type RememberConversationProfileInput, type QueryConversationContinuityFacts, type QueryConversationContinuityEpisodes, type ExecuteConversationTask } from "./conversationRuntime/managerContracts";
+export { buildAutonomousExecutionInput, parseAutonomousExecutionInput } from "./conversationRuntime/managerContracts";
 export type {
-  ConversationCheckpointReviewResult,
-  ConversationDeliveryResult,
-  ConversationExecutionResult,
-  ConversationInboundMessage,
-  ConversationIntentInterpreter,
-  ConversationManagerConfig,
-  ConversationManagerDependencies,
-  ConversationNotifier,
-  ConversationNotifierCapabilities,
-  ConversationNotifierTransport,
-  ExecuteConversationTask
+  ConversationCheckpointReviewResult, ConversationDeliveryResult, ConversationExecutionResult,
+  ConversationInboundMessage, ConversationIntentInterpreter, ConversationManagerConfig, ConversationManagerDependencies,
+  ConversationNotifier, ConversationNotifierCapabilities, ConversationNotifierTransport, ExecuteConversationTask
 } from "./conversationRuntime/managerContracts";
-import type { ConversationInboundMessage } from "./conversationRuntime/managerContracts";
 const DEFAULT_CONVERSATION_MANAGER_CONFIG: ConversationManagerConfig = {
   maxProposalInputChars: 5_000,
   heartbeatIntervalMs: 15_000,
@@ -75,7 +30,6 @@ const DEFAULT_CONVERSATION_MANAGER_CONFIG: ConversationManagerConfig = {
   allowAutonomousViaInterface: false
 };
 const DEFAULT_INTENT_INTERPRETER_CONFIDENCE_THRESHOLD = 0.85;
-
 export class ConversationManager {
   private readonly activeWorkers = new Set<string>();
   private readonly ackTimers = new Map<string, NodeJS.Timeout>();
@@ -84,11 +38,19 @@ export class ConversationManager {
   private readonly interpretConversationIntent?: ConversationIntentInterpreter;
   private readonly runDirectConversationTurn?: ConversationManagerDependencies["runDirectConversationTurn"];
   private readonly localIntentModelResolver?: ConversationManagerDependencies["localIntentModelResolver"];
+  private readonly autonomyBoundaryInterpretationResolver?: ConversationManagerDependencies["autonomyBoundaryInterpretationResolver"];
+  private readonly statusRecallBoundaryInterpretationResolver?: ConversationManagerDependencies["statusRecallBoundaryInterpretationResolver"];
+  private readonly continuationInterpretationResolver?: ConversationManagerDependencies["continuationInterpretationResolver"];
+  private readonly contextualFollowupInterpretationResolver?: ConversationManagerDependencies["contextualFollowupInterpretationResolver"];
+  private readonly contextualReferenceInterpretationResolver?: ConversationManagerDependencies["contextualReferenceInterpretationResolver"];
+  private readonly entityReferenceInterpretationResolver?: ConversationManagerDependencies["entityReferenceInterpretationResolver"]; private readonly identityInterpretationResolver?: ConversationManagerDependencies["identityInterpretationResolver"];
+  private readonly proposalReplyInterpretationResolver?: ConversationManagerDependencies["proposalReplyInterpretationResolver"];
+  private readonly handoffControlInterpretationResolver?: ConversationManagerDependencies["handoffControlInterpretationResolver"];
+  private readonly topicKeyInterpretationResolver?: ConversationManagerDependencies["topicKeyInterpretationResolver"];
   private readonly intentInterpreterConfidenceThreshold: number;
-  private readonly runCheckpointReview?: ConversationCheckpointReviewRunner;
-  private readonly queryContinuityEpisodes?: QueryConversationContinuityEpisodes;
-  private readonly queryContinuityFacts?: QueryConversationContinuityFacts;
-  private readonly reviewConversationMemory?: ConversationManagerDependencies["reviewConversationMemory"];
+  private readonly runCheckpointReview?: ConversationCheckpointReviewRunner; private readonly queryContinuityEpisodes?: QueryConversationContinuityEpisodes;
+  private readonly queryContinuityFacts?: QueryConversationContinuityFacts; private readonly getEntityGraph?: ConversationManagerDependencies["getEntityGraph"]; private readonly reconcileEntityAliasCandidate?: ConversationManagerDependencies["reconcileEntityAliasCandidate"];
+  private readonly rememberConversationProfileInput?: RememberConversationProfileInput; private readonly reviewConversationMemory?: ConversationManagerDependencies["reviewConversationMemory"];
   private readonly resolveConversationMemoryEpisode?: ConversationManagerDependencies["resolveConversationMemoryEpisode"];
   private readonly markConversationMemoryEpisodeWrong?: ConversationManagerDependencies["markConversationMemoryEpisodeWrong"];
   private readonly forgetConversationMemoryEpisode?: ConversationManagerDependencies["forgetConversationMemoryEpisode"];
@@ -99,7 +61,6 @@ export class ConversationManager {
   private readonly abortActiveAutonomousRun?: ConversationManagerDependencies["abortActiveAutonomousRun"];
   private readonly followUpRuleContext: FollowUpRuleContext;
   private readonly pulseLexicalRuleContext: PulseLexicalRuleContext;
-
   /**
    * Creates the conversation queue/session coordinator used by interface gateways.
    *
@@ -116,13 +77,20 @@ export class ConversationManager {
     config: Partial<ConversationManagerConfig> = {},
     dependencies: ConversationManagerDependencies = {}
   ) {
-    this.config = {
-      ...DEFAULT_CONVERSATION_MANAGER_CONFIG,
-      ...config
-    };
+    this.config = { ...DEFAULT_CONVERSATION_MANAGER_CONFIG, ...config };
     this.interpretConversationIntent = dependencies.interpretConversationIntent;
     this.runDirectConversationTurn = dependencies.runDirectConversationTurn;
     this.localIntentModelResolver = dependencies.localIntentModelResolver;
+    this.autonomyBoundaryInterpretationResolver = dependencies.autonomyBoundaryInterpretationResolver;
+    this.statusRecallBoundaryInterpretationResolver = dependencies.statusRecallBoundaryInterpretationResolver;
+    this.continuationInterpretationResolver = dependencies.continuationInterpretationResolver;
+    this.contextualFollowupInterpretationResolver = dependencies.contextualFollowupInterpretationResolver;
+    this.contextualReferenceInterpretationResolver = dependencies.contextualReferenceInterpretationResolver;
+    this.entityReferenceInterpretationResolver = dependencies.entityReferenceInterpretationResolver;
+    this.identityInterpretationResolver = dependencies.identityInterpretationResolver;
+    this.proposalReplyInterpretationResolver = dependencies.proposalReplyInterpretationResolver;
+    this.handoffControlInterpretationResolver = dependencies.handoffControlInterpretationResolver;
+    this.topicKeyInterpretationResolver = dependencies.topicKeyInterpretationResolver;
     this.intentInterpreterConfidenceThreshold = Math.max(
       0,
       Math.min(
@@ -133,7 +101,8 @@ export class ConversationManager {
     );
     this.runCheckpointReview = dependencies.runCheckpointReview;
     this.queryContinuityEpisodes = dependencies.queryContinuityEpisodes;
-    this.queryContinuityFacts = dependencies.queryContinuityFacts;
+    this.queryContinuityFacts = dependencies.queryContinuityFacts; this.getEntityGraph = dependencies.getEntityGraph; this.reconcileEntityAliasCandidate = dependencies.reconcileEntityAliasCandidate;
+    this.rememberConversationProfileInput = dependencies.rememberConversationProfileInput;
     this.reviewConversationMemory = dependencies.reviewConversationMemory;
     this.resolveConversationMemoryEpisode = dependencies.resolveConversationMemoryEpisode;
     this.markConversationMemoryEpisodeWrong = dependencies.markConversationMemoryEpisodeWrong;
@@ -146,7 +115,6 @@ export class ConversationManager {
     this.followUpRuleContext = createFollowUpRuleContext(this.config.followUpOverridePath);
     this.pulseLexicalRuleContext = createPulseLexicalRuleContext(this.config.pulseLexicalOverridePath);
   }
-
   /**
    * Enqueues an internal system-triggered job (for example Agent Pulse delivery).
    *
@@ -277,11 +245,24 @@ export class ConversationManager {
       pulseLexicalRuleContext: this.pulseLexicalRuleContext,
       interpretConversationIntent: this.interpretConversationIntent,
       runDirectConversationTurn: this.runDirectConversationTurn,
-      localIntentModelResolver: this.localIntentModelResolver,
+        localIntentModelResolver: this.localIntentModelResolver,
+        autonomyBoundaryInterpretationResolver: this.autonomyBoundaryInterpretationResolver,
+        statusRecallBoundaryInterpretationResolver: this.statusRecallBoundaryInterpretationResolver,
+        continuationInterpretationResolver: this.continuationInterpretationResolver,
+        contextualFollowupInterpretationResolver: this.contextualFollowupInterpretationResolver,
+        contextualReferenceInterpretationResolver: this.contextualReferenceInterpretationResolver,
+      entityReferenceInterpretationResolver: this.entityReferenceInterpretationResolver,
+      handoffControlInterpretationResolver: this.handoffControlInterpretationResolver,
+      identityInterpretationResolver: this.identityInterpretationResolver,
+      proposalReplyInterpretationResolver: this.proposalReplyInterpretationResolver,
+      topicKeyInterpretationResolver: this.topicKeyInterpretationResolver,
       intentInterpreterConfidenceThreshold: this.intentInterpreterConfidenceThreshold,
       runCheckpointReview: this.runCheckpointReview,
       queryContinuityEpisodes: this.queryContinuityEpisodes,
       queryContinuityFacts: this.queryContinuityFacts,
+      getEntityGraph: this.getEntityGraph,
+      reconcileEntityAliasCandidate: this.reconcileEntityAliasCandidate,
+      rememberConversationProfileInput: this.rememberConversationProfileInput,
       reviewConversationMemory: this.reviewConversationMemory,
       resolveConversationMemoryEpisode: this.resolveConversationMemoryEpisode,
       markConversationMemoryEpisodeWrong: this.markConversationMemoryEpisodeWrong,
@@ -323,7 +304,6 @@ export class ConversationManager {
       buildAutonomousExecutionInput: (goal) => buildAutonomousExecutionInput(goal)
     });
   }
-
   /**
    * Waits for queued background worker activity and notifier timers to settle for this manager.
    *

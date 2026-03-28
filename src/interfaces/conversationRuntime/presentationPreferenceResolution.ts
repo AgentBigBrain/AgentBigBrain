@@ -10,11 +10,13 @@ export interface PresentationPreferences {
 
 const KEEP_VISIBLE_PATTERNS: readonly RegExp[] = [
   /\b(show (?:it|me)|keep (?:it|the browser|the page) (?:open|up|visible)|leave (?:it|the browser|the page) open)\b/i,
+  /\bleave (?:it|that|the (?:landing page|homepage|page|site|app|preview)) up\b/i,
   /\b(let me (?:see|view) it (?:later|when i get home|afterward))\b/i
 ] as const;
 
 const LEAVE_OPEN_PATTERNS: readonly RegExp[] = [
   /\bleave (?:it|the browser|the page) open\b/i,
+  /\bleave (?:it|that|the (?:landing page|homepage|page|site|app|preview)) up\b/i,
   /\bdo not close (?:it|the browser|the page)\b/i,
   /\bkeep (?:it|that|the app|the page) running\b/i
 ] as const;

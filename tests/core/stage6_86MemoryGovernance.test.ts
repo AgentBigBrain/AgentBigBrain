@@ -22,15 +22,15 @@ function createFixtureStores(): Stage686MemoryStoresV1 {
       updatedAt: "2026-03-01T00:00:00.000Z",
       entities: [
         {
-          entityKey: "entity_flare_labs",
-          canonicalName: "Flare Labs",
+          entityKey: "entity_lantern_labs",
+          canonicalName: "Lantern Labs",
           entityType: "org",
           disambiguator: null,
-          aliases: ["Flare Labs"],
+          aliases: ["Lantern Labs"],
           firstSeenAt: "2025-10-01T00:00:00.000Z",
           lastSeenAt: "2026-03-01T00:00:00.000Z",
           salience: 6,
-          evidenceRefs: ["trace:entity_flare_labs"]
+          evidenceRefs: ["trace:entity_lantern_labs"]
         },
         {
           entityKey: "entity_aurora",
@@ -61,7 +61,7 @@ function createFixtureStores(): Stage686MemoryStoresV1 {
             {
               loopId: "loop_budget_1",
               threadKey: "thread_budget",
-              entityRefs: ["entity_flare_labs"],
+              entityRefs: ["entity_lantern_labs"],
               createdAt: "2026-03-01T00:00:00.000Z",
               lastMentionedAt: "2026-03-01T00:00:00.000Z",
               priority: 0.61,
@@ -104,7 +104,7 @@ function appliesDeterministicMutationAndProducesReceiptWithDiff(): void {
       operation: "upsert",
       mutationPath: ["entities", "0", "aliases"],
       payload: {
-        values: ["Flare Labs", "Flare"]
+        values: ["Lantern Labs", "Lantern"]
       },
       evidenceRefs: ["evidence:mutation_entity_alias"]
     },
@@ -139,7 +139,7 @@ function blocksAliasCollisionWithTypedConflict(): void {
       operation: "merge",
       mutationPath: ["entities", "0"],
       payload: {
-        entityKey: "entity_flare_labs",
+        entityKey: "entity_lantern_labs",
         aliases: ["Aurora"]
       },
       evidenceRefs: ["evidence:alias_collision"]

@@ -9,7 +9,11 @@ import {
   evaluateAutonomousNextStep,
   evaluateProactiveAutonomousGoal
 } from "./agentLoopModelPolicy";
-import type { MissionEvidenceCounters } from "./contracts";
+import {
+  hasTaskRunResultBlockCode,
+  type MissionEvidenceCounters,
+  type RecoveryFailureClass
+} from "./contracts";
 import type { LoopbackTargetHint } from "./liveRunRecovery";
 
 /**
@@ -45,6 +49,10 @@ export type AutonomousLoopState =
   | "completed"
   | "stopped";
 
+export type AutonomousLoopRecoveryKind =
+  | "structured_executor_recovery"
+  | "workspace_auto_recovery";
+
 /**
  * Human-readable state update emitted during one autonomous loop run.
  */
@@ -52,6 +60,9 @@ export interface AutonomousLoopStateUpdate {
   state: AutonomousLoopState;
   iteration: number;
   message: string;
+  recoveryKind?: AutonomousLoopRecoveryKind | null;
+  recoveryClass?: RecoveryFailureClass | null;
+  recoveryFingerprint?: string | null;
 }
 
 /**
@@ -107,8 +118,8 @@ export async function evaluateProactiveAutonomousGoalPolicy(
  * not continue reasoning after the mission already exhausted its recovery budget.
  *
  * @param result - Latest autonomous-loop task result.
- * @returns `true` when the task summary already reports mission stop-limit exhaustion.
+ * @returns `true` when the task result contains the terminal mission-stop block code.
  */
 export function hasMissionStopLimitReached(result: TaskRunResult): boolean {
-  return /\bRecovery postmortem:\s*MISSION_STOP_LIMIT_REACHED\b/i.test(result.summary);
+  return hasTaskRunResultBlockCode(result, "MISSION_STOP_LIMIT_REACHED");
 }

@@ -11,16 +11,94 @@ import type {
   ConversationJobStatus,
   ConversationModeContinuityState,
   ConversationProgressState,
+  ConversationRecoveryTrace,
   ConversationReturnHandoffRecord,
   ConversationRecentActionRecord,
   ConversationTurn
 } from "./sessionStateContracts";
+import type { RecoveryFailureClass } from "../../core/autonomy/contracts";
 export {
   normalizeActiveWorkspaceRecord,
   normalizeBrowserSessionRecord,
   normalizeClassifierEventRecord,
   normalizePathDestinationRecord
 } from "./sessionNormalizationOwnershipRecords";
+
+/**
+ * Normalizes persisted handoff-domain snapshot lanes into the supported shared-lane subset.
+ *
+ * @param value - Persisted candidate lane label.
+ * @returns Normalized snapshot lane or `null` when absent/unsupported.
+ */
+function normalizeDomainSnapshotLane(value: unknown): ConversationReturnHandoffRecord["domainSnapshotLane"] {
+  return value === "profile" ||
+    value === "relationship" ||
+    value === "workflow" ||
+    value === "system_policy"
+    ? value
+    : null;
+}
+
+/**
+ * Normalizes one persisted recovery failure class into the supported autonomy subset.
+ *
+ * @param value - Persisted candidate recovery class.
+ * @returns Canonical recovery failure class or `null` when unsupported.
+ */
+function normalizeRecoveryFailureClass(value: unknown): RecoveryFailureClass | null {
+  return value === "EXECUTABLE_NOT_FOUND" ||
+    value === "COMMAND_TOO_LONG" ||
+    value === "DEPENDENCY_MISSING" ||
+    value === "VERSION_INCOMPATIBLE" ||
+    value === "PROCESS_PORT_IN_USE" ||
+    value === "PROCESS_NOT_READY" ||
+    value === "TARGET_NOT_RUNNING" ||
+    value === "AUTH_NOT_INITIALIZED" ||
+    value === "REMOTE_RATE_LIMITED" ||
+    value === "REMOTE_UNAVAILABLE" ||
+    value === "BROWSER_START_BLOCKED" ||
+    value === "WORKSPACE_HOLDER_CONFLICT" ||
+    value === "TRANSCRIPTION_BACKEND_UNAVAILABLE" ||
+    value === "UNKNOWN_EXECUTION_FAILURE"
+    ? value
+    : null;
+}
+
+/**
+ * Normalizes one persisted conversation recovery trace into the stable runtime shape.
+ *
+ * @param candidate - Persisted recovery trace candidate.
+ * @returns Canonical recovery trace or `null` when invalid.
+ */
+function normalizeRecoveryTrace(
+  candidate: Partial<ConversationRecoveryTrace> | null | undefined
+): ConversationRecoveryTrace | null {
+  if (
+    !candidate ||
+    (candidate.kind !== "structured_executor_recovery" &&
+      candidate.kind !== "workspace_auto_recovery" &&
+      candidate.kind !== "stale_session_recovery") ||
+    (candidate.status !== "attempting" &&
+      candidate.status !== "recovered" &&
+      candidate.status !== "failed") ||
+    typeof candidate.summary !== "string" ||
+    typeof candidate.updatedAt !== "string"
+  ) {
+    return null;
+  }
+
+  return {
+    kind: candidate.kind,
+    status: candidate.status,
+    summary: candidate.summary,
+    updatedAt: candidate.updatedAt,
+    recoveryClass: normalizeRecoveryFailureClass(candidate.recoveryClass),
+    fingerprint:
+      typeof candidate.fingerprint === "string" && candidate.fingerprint.trim().length > 0
+        ? candidate.fingerprint
+        : null
+  };
+}
 
 /**
  * Normalizes one clarification option into the stable runtime shape.
@@ -140,6 +218,7 @@ export function normalizeConversationJob(job: Partial<ConversationJob>): Convers
     status: typeof job.status === "string" ? (job.status as ConversationJobStatus) : "queued",
     resultSummary: typeof job.resultSummary === "string" ? job.resultSummary : null,
     errorMessage: typeof job.errorMessage === "string" ? job.errorMessage : null,
+    recoveryTrace: normalizeRecoveryTrace(job.recoveryTrace),
     isSystemJob: job.isSystemJob === true ? true : undefined,
     ackTimerGeneration,
     ackEligibleAt: typeof job.ackEligibleAt === "string" ? job.ackEligibleAt : null,
@@ -244,7 +323,8 @@ export function normalizeProgressStateRecord(
     status: candidate.status,
     message: candidate.message,
     jobId: typeof candidate.jobId === "string" ? candidate.jobId : null,
-    updatedAt: candidate.updatedAt
+    updatedAt: candidate.updatedAt,
+    recoveryTrace: normalizeRecoveryTrace(candidate.recoveryTrace)
   };
 }
 
@@ -283,6 +363,11 @@ export function normalizeReturnHandoffRecord(
       ? candidate.changedPaths.filter((value): value is string => typeof value === "string")
       : [],
     sourceJobId: typeof candidate.sourceJobId === "string" ? candidate.sourceJobId : null,
+    domainSnapshotLane: normalizeDomainSnapshotLane(candidate.domainSnapshotLane),
+    domainSnapshotRecordedAt:
+      typeof candidate.domainSnapshotRecordedAt === "string"
+        ? candidate.domainSnapshotRecordedAt
+        : null,
     updatedAt: candidate.updatedAt
   };
 }

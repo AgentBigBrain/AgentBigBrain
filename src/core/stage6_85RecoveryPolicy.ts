@@ -4,11 +4,18 @@
 
 export type {
   MissionPostmortemV1,
+  StructuredRecoveryExecutionPlan,
+  StructuredRecoveryExecutionStop,
+  StructuredRecoveryPolicyDecision,
   ResumeSafetyDecision,
   RetryBudgetDecision
 } from "./stage6_85/recovery";
 export {
+  buildStructuredRecoveryExecutionPlan,
+  buildRecoveryAttemptFingerprint,
   buildMissionPostmortem,
+  evaluateStructuredRecoveryPolicy,
+  isStructuredRecoveryInstruction,
   evaluateResumeSafety,
   evaluateRetryBudget,
   resolveLastDurableCheckpoint,

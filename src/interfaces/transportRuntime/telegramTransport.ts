@@ -3,6 +3,7 @@
  */
 
 import type {
+  ConversationOutboundDeliveryTrace,
   ConversationDeliveryResult,
   ConversationNotifierTransport
 } from "../conversationRuntime/managerContracts";
@@ -44,15 +45,25 @@ export function createTelegramConversationNotifier(
       supportsEdit: !useNativeDraftStreaming,
       supportsNativeStreaming: useNativeDraftStreaming
     },
-    send: async (messageText: string) =>
-      input.sendReply(input.renderOutboundText(messageText)),
+    send: async (
+      messageText: string,
+      trace?: ConversationOutboundDeliveryTrace
+    ) =>
+      input.sendReply(input.renderOutboundText(messageText), trace),
     edit: useNativeDraftStreaming
       ? undefined
-      : async (messageId: string, messageText: string) =>
-        input.editReply(messageId, input.renderOutboundText(messageText)),
+      : async (
+        messageId: string,
+        messageText: string,
+        trace?: ConversationOutboundDeliveryTrace
+      ) =>
+        input.editReply(messageId, input.renderOutboundText(messageText), trace),
     stream: useNativeDraftStreaming && draftId !== null
-      ? async (messageText: string) =>
-        input.sendDraftUpdate(draftId, input.renderOutboundText(messageText))
+      ? async (
+        messageText: string,
+        trace?: ConversationOutboundDeliveryTrace
+      ) =>
+        input.sendDraftUpdate(draftId, input.renderOutboundText(messageText), trace)
       : undefined
   };
 }

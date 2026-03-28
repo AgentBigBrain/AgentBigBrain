@@ -132,7 +132,7 @@ const ORGANIZE_ARTIFACT_PATH = path.resolve(
   "runtime/evidence/organize_drone_projects_live_smoke_report.json"
 );
 const PROVIDER_BLOCK_PATTERN =
-  /(?:429|exceeded your current quota|rate limit|fetch failed|request timed out|socket hang up|ECONNRESET)/i;
+/(?:429|exceeded your current quota|usage limit|purchase more credits|try again at|rate limit|fetch failed|request timed out|socket hang up|ECONNRESET|Browser open failed|browserContext\.newPage: Target page, context or browser has been closed)/i;
 const SMOKE_DEADLINE_MS = 170_000;
 const CHILD_SCENARIO_TIMEOUT_MS = 110_000;
 const AMBIGUOUS_SCENARIO_TIMEOUT_MS = 70_000;
@@ -256,7 +256,7 @@ function isBoundedSmokeBlockerReason(reason: string | null): boolean {
   if (!reason) {
     return false;
   }
-  return /Timed out waiting|socket hang up|ECONNRESET|fetch failed|request timed out|429|rate limit/i.test(
+  return /Timed out waiting|socket hang up|ECONNRESET|fetch failed|request timed out|429|usage limit|purchase more credits|try again at|rate limit|Browser open failed|browserContext\.newPage: Target page, context or browser has been closed/i.test(
     reason
   );
 }

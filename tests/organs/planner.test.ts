@@ -39,6 +39,17 @@ class PlannerFailureModelClient implements ModelClient {
   }
 }
 
+class PlannerTimeoutModelClient implements ModelClient {
+  readonly backend = "mock" as const;
+
+  async completeJson<T>(request: StructuredCompletionRequest): Promise<T> {
+    if (request.schemaName !== "planner_v1") {
+      throw new Error(`Unexpected schema: ${request.schemaName}`);
+    }
+    throw new Error("Codex request timed out after 600000ms.");
+  }
+}
+
 class RespondWithoutMessageModelClient implements ModelClient {
   readonly backend = "mock" as const;
   private readonly calls: string[] = [];
@@ -1406,6 +1417,138 @@ test("planner throws when planner model fails", async () => {
   });
 });
 
+test("planner uses deterministic framework build fallback before model planning for named live Next.js requests", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-planner-timeout-fallback-"));
+  try {
+    const memoryStore = new SemanticMemoryStore(path.join(tempDir, "semantic_memory.json"));
+    const planner = new PlannerOrgan(
+      new PlannerFailureModelClient(),
+      memoryStore,
+      undefined,
+      {
+        platform: "win32",
+        shellKind: "powershell",
+        invocationMode: "inline_command",
+        commandMaxChars: 4000,
+        desktopPath: "C:\\Users\\testuser\\Desktop",
+        documentsPath: "C:\\Users\\testuser\\Documents",
+        downloadsPath: "C:\\Users\\testuser\\Downloads"
+      }
+    );
+
+    const plan = await planner.plan(
+      buildTask(
+        "Please create a Next.js landing page called Drone City on my Desktop. It should have a flying drone in the hero, feel polished and modern, and work as a single-page landing page. After you finish, start it locally, open it in my browser, and leave it up for me to view."
+      ),
+      "mock-planner"
+    );
+
+    assert.match(
+      plan.plannerNotes ?? "",
+      /deterministic_framework_build_fallback=shell_command/i
+    );
+    assert.ok(plan.actions.length >= 8);
+    assert.equal(plan.actions[0]?.type, "shell_command");
+    assert.equal(plan.actions.at(-1)?.type, "open_browser");
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("planner uses deterministic framework workspace-preparation fallback before model planning for scaffold-only turns", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-planner-workspace-prep-"));
+  try {
+    const memoryStore = new SemanticMemoryStore(path.join(tempDir, "semantic_memory.json"));
+    const planner = new PlannerOrgan(
+      new PlannerFailureModelClient(),
+      memoryStore,
+      undefined,
+      {
+        platform: "win32",
+        shellKind: "powershell",
+        invocationMode: "inline_command",
+        commandMaxChars: 4000,
+        desktopPath: "C:\\Users\\testuser\\Desktop",
+        documentsPath: "C:\\Users\\testuser\\Documents",
+        downloadsPath: "C:\\Users\\testuser\\Downloads"
+      }
+    );
+
+    const plan = await planner.plan(
+      buildTask(
+        "Can you get a new Next.js landing-page workspace started on my desktop and call it Downtown Detroit Drones? Just get the workspace ready for edits with the dependencies installed. Do not run it or open anything yet."
+      ),
+      "mock-planner"
+    );
+
+    assert.match(
+      plan.plannerNotes ?? "",
+      /deterministic_framework_workspace_preparation_fallback=shell_command/i
+    );
+    assert.equal(plan.actions.length, 3);
+    assert.equal(plan.actions[0]?.type, "shell_command");
+    assert.equal(plan.actions[1]?.type, "shell_command");
+    assert.equal(plan.actions[2]?.type, "shell_command");
+    assert.match(String(plan.actions[0]?.params.command), /create-next-app@latest/i);
+    assert.equal(
+      plan.actions[1]?.params.cwd,
+      "C:\\Users\\testuser\\Desktop\\Downtown Detroit Drones"
+    );
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("planner uses deterministic framework build fallback before model planning for tracked workspace build continuations", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-planner-framework-continuation-"));
+  try {
+    const memoryStore = new SemanticMemoryStore(path.join(tempDir, "semantic_memory.json"));
+    const planner = new PlannerOrgan(
+      new PlannerFailureModelClient(),
+      memoryStore,
+      undefined,
+      {
+        platform: "win32",
+        shellKind: "powershell",
+        invocationMode: "inline_command",
+        commandMaxChars: 4000,
+        desktopPath: "C:\\Users\\testuser\\Desktop",
+        documentsPath: "C:\\Users\\testuser\\Documents",
+        downloadsPath: "C:\\Users\\testuser\\Downloads"
+      }
+    );
+
+    const wrappedInput = [
+      "You are in an ongoing conversation with the same user.",
+      "Recent conversation context (oldest to newest):",
+      "- user: Can you get a new Next.js landing-page workspace started on my desktop and call it Downtown Detroit Drones? Just get the workspace ready for edits with the dependencies installed. Do not run it or open anything yet.",
+      "- assistant: I ran the command successfully.",
+      "",
+      "Current tracked workspace in this chat:",
+      "- Root path: C:\\Users\\testuser\\Desktop\\Downtown Detroit Drones",
+      "",
+      "Current user request:",
+      "Great. Now turn that Downtown Detroit Drones workspace into the real landing page. Keep it calm and modern, avoid blue, put a small flying drone in the hero, use four main sections, add a clear call to action and a footer menu, then build it. Stop once the source and build proof are there, but do not run it or open anything yet."
+    ].join("\n");
+
+    const plan = await planner.plan(buildTask(wrappedInput), "mock-planner");
+
+    assert.match(
+      plan.plannerNotes ?? "",
+      /deterministic_framework_build_fallback=shell_command/i
+    );
+    assert.equal(plan.actions[0]?.type, "shell_command");
+    assert.equal(plan.actions[1]?.type, "write_file");
+    assert.equal(plan.actions[4]?.type, "shell_command");
+    assert.equal(plan.actions[5]?.type, "shell_command");
+    assert.equal(plan.actions[6]?.type, "shell_command");
+    assert.match(String(plan.actions[5]?.params.command), /\bnpm run build\b/i);
+    assert.match(String(plan.actions[6]?.params.command), /\.next\\BUILD_ID/i);
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
 test("planner throws when planner returns no valid actions", async () => {
   await withPlannerClient(new InvalidPlannerActionsModelClient(), async (planner) => {
     await assert.rejects(
@@ -2238,7 +2381,7 @@ test("planner repairs fresh framework-app requests when first plan only writes s
   });
 });
 
-test("planner repairs framework-app requests that try to recreate the named folder from its parent", async () => {
+test("planner normalizes named framework-app scaffolds that would recreate the folder from its parent", async () => {
   const modelClient = new NonInPlaceFrameworkScaffoldThenRepairModelClient();
 
   await withPlannerClient(modelClient, async (planner) => {
@@ -2247,10 +2390,15 @@ test("planner repairs framework-app requests that try to recreate the named fold
       "mock-planner"
     );
 
-    assert.equal(modelClient.getPlannerCallCount(), 2);
-    assert.equal(plan.actions.length, 1);
+    assert.equal(modelClient.getPlannerCallCount(), 0);
+    assert.ok(plan.actions.length >= 3);
     assert.equal(plan.actions[0].type, "shell_command");
-    assert.match(String(plan.actions[0].params.command), /create vite@latest \./i);
+    assert.match(
+      String(plan.actions[0].params.command),
+      /create-vite@latest --template react-ts --no-interactive 'ai-drone-city'/i
+    );
+    assert.match(String(plan.actions[0].params.command), /AI Drone City/i);
+    assert.match(plan.plannerNotes ?? "", /deterministic_framework_build_fallback=shell_command/i);
   });
 });
 

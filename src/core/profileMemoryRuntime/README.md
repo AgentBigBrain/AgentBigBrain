@@ -36,6 +36,8 @@ full `profileMemoryStore.ts` implementation.
 - key, value, sensitivity, and topic normalization helpers in `profileMemoryNormalization.ts`
 - canonical persisted state normalization helpers in `profileMemoryStateNormalization.ts`
 - deterministic user-input candidate extraction in `profileMemoryExtraction.ts`
+- deterministic preferred-name fast-path normalization and validated semantic-candidate ingestion in
+  `profileMemoryPreferredNameValidation.ts`
 - contact-focused named-entity and relationship extraction in `profileMemoryContactExtraction.ts`
 - canonical encryption envelope and key parsing helpers in `profileMemoryEncryption.ts`
 - pulse continuity helpers in `profileMemoryPulse.ts`

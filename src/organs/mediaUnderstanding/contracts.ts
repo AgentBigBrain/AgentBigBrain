@@ -14,10 +14,15 @@ export const DEFAULT_MEDIA_VISION_MODEL = process.env.BRAIN_MEDIA_VISION_MODEL?.
 export const DEFAULT_MEDIA_TRANSCRIPTION_MODEL = process.env.BRAIN_MEDIA_TRANSCRIPTION_MODEL?.trim() || "whisper-1";
 export const DEFAULT_MEDIA_REQUEST_TIMEOUT_MS = 45_000;
 export type MediaUnderstandingBackend = ModelBackend | "inherit_text_backend" | "disabled";
+export type MediaUnderstandingModality = "vision" | "transcription";
 
 export interface MediaUnderstandingConfig {
   requestedBackend: MediaUnderstandingBackend;
   resolvedBackend: ModelBackend | "disabled";
+  requestedVisionBackend: MediaUnderstandingBackend;
+  resolvedVisionBackend: ModelBackend | "disabled";
+  requestedTranscriptionBackend: MediaUnderstandingBackend;
+  resolvedTranscriptionBackend: ModelBackend | "disabled";
   openAIApiKey: string | null;
   openAIBaseUrl: string;
   visionModel: string;
@@ -49,11 +54,27 @@ export function createMediaUnderstandingConfigFromEnv(): MediaUnderstandingConfi
   const resolvedBackend = requestedBackend === "inherit_text_backend"
     ? resolveModelBackendFromEnv(process.env)
     : requestedBackend;
+  const requestedVisionBackend = resolveMediaUnderstandingBackend(
+    process.env.BRAIN_MEDIA_VISION_BACKEND ?? process.env.BRAIN_MEDIA_BACKEND
+  );
+  const resolvedVisionBackend = requestedVisionBackend === "inherit_text_backend"
+    ? resolveModelBackendFromEnv(process.env)
+    : requestedVisionBackend;
+  const requestedTranscriptionBackend = resolveMediaUnderstandingBackend(
+    process.env.BRAIN_MEDIA_TRANSCRIPTION_BACKEND ?? process.env.BRAIN_MEDIA_BACKEND
+  );
+  const resolvedTranscriptionBackend = requestedTranscriptionBackend === "inherit_text_backend"
+    ? resolveModelBackendFromEnv(process.env)
+    : requestedTranscriptionBackend;
   return {
     requestedBackend,
     resolvedBackend,
+    requestedVisionBackend,
+    resolvedVisionBackend,
+    requestedTranscriptionBackend,
+    resolvedTranscriptionBackend,
     openAIApiKey:
-      resolvedBackend === "openai_api"
+      resolvedVisionBackend === "openai_api" || resolvedTranscriptionBackend === "openai_api"
         ? process.env.OPENAI_API_KEY?.trim() || null
         : null,
     openAIBaseUrl: (process.env.OPENAI_BASE_URL?.trim() || "https://api.openai.com/v1").replace(/\/+$/, ""),

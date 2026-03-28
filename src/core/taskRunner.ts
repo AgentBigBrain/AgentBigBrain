@@ -398,7 +398,8 @@ export class TaskRunner {
         proposalId: proposal.id,
         signal,
         stage686RuntimeActionEngine: this.stage686RuntimeActionEngine,
-        taskId: task.id
+        taskId: task.id,
+        userInput: task.userInput
       });
       if (!executionResult.actionResult.approved) {
         missionState = await recordBlockedActionOutcome({

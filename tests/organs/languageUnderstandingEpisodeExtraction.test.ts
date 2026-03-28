@@ -42,10 +42,10 @@ test("LanguageUnderstandingOrgan normalizes bounded model-assisted episode candi
     new StubLanguageEpisodeModelClient({
       episodes: [
         {
-          subjectName: "Billy",
+          subjectName: "Owen",
           eventSummary: "had a medical situation",
           supportingSnippet:
-            "Billy had this scare at the hospital a few weeks ago and we still do not know what the doctors found.",
+            "Owen had this scare at the hospital a few weeks ago and we still do not know what the doctors found.",
           status: "unresolved",
           confidence: 0.88,
           tags: ["medical", "followup"]
@@ -56,7 +56,7 @@ test("LanguageUnderstandingOrgan normalizes bounded model-assisted episode candi
 
   const candidates = await organ.extractEpisodeCandidates({
     text: [
-      "Billy had this scare at the hospital a few weeks ago.",
+      "Owen had this scare at the hospital a few weeks ago.",
       "We still do not know what the doctors found."
     ].join(" "),
     sourceTaskId: "task_language_episode_extract_1",
@@ -64,11 +64,11 @@ test("LanguageUnderstandingOrgan normalizes bounded model-assisted episode candi
   });
 
   assert.equal(candidates.length, 1);
-  assert.equal(candidates[0]?.title, "Billy had a medical situation");
+  assert.equal(candidates[0]?.title, "Owen had a medical situation");
   assert.equal(candidates[0]?.sourceKind, "assistant_inference");
   assert.equal(candidates[0]?.status, "unresolved");
   assert.equal(candidates[0]?.sensitive, false);
-  assert.deepEqual(candidates[0]?.entityRefs, ["contact.billy"]);
+  assert.deepEqual(candidates[0]?.entityRefs, ["contact.owen"]);
   assert.match(
     organ["modelClient"] instanceof StubLanguageEpisodeModelClient
       ? organ["modelClient"].recordedRequest?.systemPrompt ?? ""
@@ -83,7 +83,7 @@ test("LanguageUnderstandingOrgan fails closed when the model errors", async () =
   );
 
   const candidates = await organ.extractEpisodeCandidates({
-    text: "Billy had a rough breakup recently and I never told you whether things calmed down.",
+    text: "Owen had a rough breakup recently and I never told you whether things calmed down.",
     sourceTaskId: "task_language_episode_extract_2",
     observedAt: "2026-03-08T16:10:00.000Z"
   });

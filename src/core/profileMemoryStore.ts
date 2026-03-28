@@ -25,6 +25,7 @@ import {
 } from "./profileMemoryRuntime/profileMemoryEpisodePlanningContext";
 import { selectProfileEpisodesForPlanningQuery } from "./profileMemoryRuntime/profileMemoryEpisodePlanningContext";
 import {
+  buildValidatedProfileFactCandidates,
   extractProfileFactCandidatesFromUserInput
 } from "./profileMemoryRuntime/profileMemoryExtraction";
 import {
@@ -64,6 +65,7 @@ import {
   type AgentPulseEvaluationResult,
   type ProfileAccessRequest,
   type ProfileIngestResult,
+  type ProfileValidatedFactCandidateInput,
   type ProfileReadableEpisode,
   type ProfileReadableFact
 } from "./profileMemoryRuntime/contracts";
@@ -91,6 +93,7 @@ export type {
 
 export interface ProfileMemoryIngestOptions {
   additionalEpisodeCandidates?: readonly CreateProfileEpisodeRecordInput[];
+  validatedFactCandidates?: readonly ProfileValidatedFactCandidateInput[];
 }
 
 export class ProfileMemoryStore {
@@ -213,7 +216,8 @@ export class ProfileMemoryStore {
     userInput: string,
     observedAt: string,
     options: ProfileMemoryIngestOptions = {}
-  ): Promise<ProfileIngestResult> {    const state = await this.load();
+  ): Promise<ProfileIngestResult> {
+    const state = await this.load();
     const mediaIngest = parseProfileMediaIngestInput(userInput);
     const factSourceTexts = dedupeProfileIngestTexts([
       mediaIngest.directUserText,
@@ -222,11 +226,17 @@ export class ProfileMemoryStore {
     const extractedCandidates = factSourceTexts.flatMap((text) =>
       extractProfileFactCandidatesFromUserInput(text, taskId, observedAt)
     );
+    const validatedCandidates = buildValidatedProfileFactCandidates(
+      options.validatedFactCandidates ?? [],
+      taskId,
+      observedAt
+    );
     const inferredResolutionCandidates = factSourceTexts.flatMap((text) =>
       buildInferredCommitmentResolutionCandidates(state, text, taskId, observedAt)
     );
     const candidates = [
       ...extractedCandidates,
+      ...validatedCandidates,
       ...inferredResolutionCandidates
     ];
     const applyResult = applyProfileFactCandidates(state, candidates);
@@ -419,7 +429,10 @@ export class ProfileMemoryStore {
       unresolvedCommitmentCount,
       contextualLinkageConfidence: request.contextualLinkageConfidence,
       lastPulseSentAtIso: request.lastPulseSentAtIso,
-      overrideQuietHours: request.overrideQuietHours === true
+      overrideQuietHours: request.overrideQuietHours === true,
+      sessionDominantLane: request.sessionDominantLane ?? null,
+      sessionHasActiveWorkflowContinuity: request.sessionHasActiveWorkflowContinuity === true,
+      overrideSessionDomainSuppression: request.overrideSessionDomainSuppression === true
     });
     const decision = applyRelationshipAwareTemporalNudging(
       baseDecision,

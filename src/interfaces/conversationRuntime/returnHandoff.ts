@@ -59,6 +59,8 @@ export function buildConversationReturnHandoff(
     previewUrl: activeWorkspace?.previewUrl ?? null,
     changedPaths: activeWorkspace?.lastChangedPaths.slice(0, 5) ?? [],
     sourceJobId: job.id,
+    domainSnapshotLane: activeWorkspace?.domainSnapshotLane ?? null,
+    domainSnapshotRecordedAt: activeWorkspace?.domainSnapshotRecordedAt ?? null,
     updatedAt: job.completedAt ?? new Date().toISOString()
   };
 }

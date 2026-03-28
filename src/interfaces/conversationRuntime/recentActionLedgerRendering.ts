@@ -6,6 +6,7 @@ import type {
   ConversationBrowserSessionRecord,
   ConversationPathDestinationRecord,
   ConversationProgressState,
+  ConversationRecoveryTrace,
   ConversationRecentActionRecord,
   ConversationReturnHandoffRecord,
   ConversationSession
@@ -147,6 +148,12 @@ export function renderProgressStateLine(
     case "working":
       return `I'm working on ${progressState.message}.`;
     case "retrying":
+      if (progressState.recoveryTrace?.kind === "structured_executor_recovery") {
+        return `I'm in a bounded runtime recovery step: ${progressState.message}.`;
+      }
+      if (progressState.recoveryTrace?.kind === "workspace_auto_recovery") {
+        return `I'm retrying with a narrow workspace recovery step: ${progressState.message}.`;
+      }
       return `I'm retrying with a narrower recovery step: ${progressState.message}.`;
     case "verifying":
       return `I'm verifying the result now: ${progressState.message}.`;
@@ -158,6 +165,27 @@ export function renderProgressStateLine(
       return `I stopped the last autonomous run: ${progressState.message}.`;
     default:
       return "I'm not actively working on anything right now.";
+  }
+}
+
+/**
+ * Renders a concise human-facing recovery attribution line for persisted job/session history.
+ *
+ * @param recoveryTrace - Persisted recovery trace attached to a job or progress snapshot.
+ * @returns Human-readable recovery attribution line.
+ */
+export function renderRecoveryTraceLine(
+  recoveryTrace: ConversationRecoveryTrace
+): string {
+  switch (recoveryTrace.status) {
+    case "attempting":
+      return `Latest recovery step: ${recoveryTrace.summary}`;
+    case "recovered":
+      return `Last run recovered automatically: ${recoveryTrace.summary}`;
+    case "failed":
+      return `Last recovery stopped without completing the request: ${recoveryTrace.summary}`;
+    default:
+      return recoveryTrace.summary;
   }
 }
 

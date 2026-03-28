@@ -13,9 +13,9 @@ export function buildPlannerRepairReasonGuidance(repairReason: string): string {
     repairReason.startsWith("invalid_execution_style_build_plan:FRAMEWORK_APP_SCAFFOLD_ACTION_REQUIRED")
   ) {
     return (
-      " The prior plan failed because it treated a fresh framework-app request like a file-only edit. " +
-      "Repair by including at least one real toolchain step that can scaffold, install, build, preview, or run the app, such as npm/npx/pnpm/yarn/bun create, install, build, dev, start, or preview. " +
-      "Do not return only src-file writes for a new React/Vite/Next/Vue/Svelte/Angular app request."
+      " The prior plan failed because it treated a fresh framework-app request like an already-ready workspace. " +
+      "Repair by including at least one real scaffold or bootstrap step that can materialize package.json in the exact workspace, such as create-next-app/create-vite, a bounded temp-slug scaffold merge, or an explicit package.json bootstrap or repair step in the target folder. " +
+      "Generic npm install, npm run build, npm run dev, or npm run start commands do not satisfy this by themselves when package.json is not already proven present."
     );
   }
   if (
@@ -35,6 +35,18 @@ export function buildPlannerRepairReasonGuidance(repairReason: string): string {
       "Repair by scaffolding or repairing in place inside the exact requested folder when package.json is missing, for example by setting the cwd to that folder and using '.' as the scaffold target. " +
       "If that exact folder already contains Vite-like source files such as index.html, src/main.jsx, src/App.jsx, or src/index.css, prefer repairing the workspace in place by writing the missing package.json and any standard Vite metadata before install/build instead of rerunning create-vite. " +
       "Do not rerun create-vite or similar against the folder name from outside that folder."
+    );
+  }
+  if (
+    repairReason.startsWith(
+      "invalid_execution_style_build_plan:FRAMEWORK_APP_PACKAGE_SAFE_SCAFFOLD_REQUIRED"
+    )
+  ) {
+    return (
+      " The prior plan failed because it fed the exact requested human-facing folder name into a create-style scaffold even though that name is not a safe npm package name. " +
+      "Repair by preserving the exact requested folder for the final workspace, but scaffold through a package-safe lowercase slug instead, then move the generated contents into the exact requested folder. " +
+      "Continue install/build/run from the exact requested folder after the move. " +
+      "Do not run create-next-app, create-vite, or similar directly against the unsafe exact folder name, and do not rely on '.' inside that unsafe exact folder."
     );
   }
   if (

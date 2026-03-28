@@ -1,8 +1,9 @@
 # Memory Context
 
 ## Responsibility
-This subsystem owns the deterministic query-extraction, domain-boundary, context-injection, and
-memory-access-audit helpers that sit behind the stable `memoryBroker.ts` entrypoint.
+This subsystem owns the deterministic query-extraction, probing, domain-boundary,
+context-injection, and memory-access-audit helpers that sit behind the stable `memoryBroker.ts`
+entrypoint.
 
 ## Inputs
 - raw planner/task user input and wrapped conversation payloads
@@ -12,7 +13,9 @@ memory-access-audit helpers that sit behind the stable `memoryBroker.ts` entrypo
 
 ## Outputs
 - shared memory-broker contracts in `contracts.ts`
-- current-request extraction, probing detection, and domain-boundary scoring in `queryPlanning.ts`
+- thin query-planning entrypoint re-exports in `queryPlanning.ts`
+- current-request extraction and probing detection in `queryPlanningProbing.ts`
+- domain-boundary scoring and ingest gating in `queryPlanningDomainBoundary.ts`
 - profile-context sanitization and planner-packet rendering in `contextInjection.ts`
 - episode-context sanitization and summary counting in `episodeContextInjection.ts`
 - append-only audit helper routing in `auditEvents.ts`
@@ -27,6 +30,9 @@ memory-access-audit helpers that sit behind the stable `memoryBroker.ts` entrypo
 - Query extraction and planning-context ranking here should eventually consume canonical
   `src/core/languageRuntime/` helpers and bounded `src/organs/memorySynthesis/` outputs rather
   than growing more local lexical heuristics.
+- `queryPlanning.ts` remains a thin facade; detailed extraction, probing, and domain-boundary logic
+  belong in `queryPlanningProbing.ts` and `queryPlanningDomainBoundary.ts` rather than drifting
+  back into a single oversized file.
 
 ## Related Tests
 - `tests/organs/memoryBroker.test.ts`

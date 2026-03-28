@@ -50,11 +50,11 @@ function buildEntityGraph(): EntityGraphV1 {
     updatedAt: "2026-03-08T12:00:00.000Z",
     entities: [
       {
-        entityKey: "entity_billy",
-        canonicalName: "Billy",
+        entityKey: "entity_owen",
+        canonicalName: "Owen",
         entityType: "person",
         disambiguator: null,
-        aliases: ["Billy"],
+        aliases: ["Owen"],
         firstSeenAt: "2026-02-10T12:00:00.000Z",
         lastSeenAt: "2026-03-08T11:00:00.000Z",
         salience: 1,
@@ -67,15 +67,15 @@ function buildEntityGraph(): EntityGraphV1 {
 
 function buildPulseCandidate(): PulseCandidateV1 {
   return {
-    candidateId: "candidate_billy",
+    candidateId: "candidate_owen",
     reasonCode: "RELATIONSHIP_CLARIFICATION",
-    entityRefs: ["entity_billy"],
+    entityRefs: ["entity_owen"],
     evidenceRefs: [],
     threadKey: null,
     score: 0.4,
     scoreBreakdown: buildPulseScoreBreakdownFixture(),
     lastTouchedAt: "2026-03-08T11:00:00.000Z",
-    stableHash: "candidate_billy_hash"
+    stableHash: "candidate_owen_hash"
   };
 }
 
@@ -101,7 +101,7 @@ test("relationship-clarification qualification suppresses low-value generic nudg
   const allowed = shouldSuppressRelationshipClarificationPulse({
     candidate: buildPulseCandidate(),
     graph: buildEntityGraph(),
-    recentConversationText: "Billy came up again and I wondered how Billy was doing after the fall",
+    recentConversationText: "Owen came up again and I wondered how Owen was doing after the fall",
     openLoopCount: 1,
     repeatedNegativeOutcomes: 0
   });

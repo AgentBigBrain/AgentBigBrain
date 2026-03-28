@@ -12,7 +12,10 @@ import {
 } from "../../core/autonomy/workspaceRecoveryCommandBuilders";
 import { isTrackedArtifactEditPreviewPlan } from "./buildExecutionActionHeuristics";
 import { hasNonRespondAction, requiresExecutableBuildPlan } from "./buildExecutionPolicy";
-import type { RequiredActionType } from "./executionStyleContracts";
+import type {
+  PlannerExecutionEnvironmentContext,
+  RequiredActionType
+} from "./executionStyleContracts";
 
 const LINKED_PREVIEW_LEASE_INLINE_PATTERN = /\blinkedPreviewLease=([A-Za-z0-9:_-]+)/i;
 const LINKED_PREVIEW_CWD_INLINE_PATTERN = /\blinkedPreviewCwd=([^\n]+)/i;

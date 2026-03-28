@@ -9,11 +9,32 @@ import type {
 
 export type { ActionType, ExecutionMode } from "./runtimeTypes/actionTypes";
 export {
+  MAX_CONVERSATION_DOMAIN_LANE_HISTORY,
+  MAX_CONVERSATION_DOMAIN_ROUTING_SIGNALS,
+  applyDomainSignalWindow,
+  createEmptyConversationDomainContext,
+  detectCrossDomainDip,
+  isConversationDomainContextMeaningful,
+  normalizeConversationDomainContext,
+  resolveSessionDomain,
+  selectConversationDomainContext
+} from "./sessionContext";
+export {
   ALL_GOVERNOR_IDS,
   FULL_COUNCIL_GOVERNOR_IDS,
   isGovernorId,
   type GovernorId
 } from "./runtimeTypes/governanceTypes";
+export type {
+  ConversationDomainContext,
+  ConversationDomainContinuitySignals,
+  ConversationDomainLane,
+  ConversationDomainLaneSignal,
+  ConversationDomainLaneSignalSource,
+  ConversationDomainRoutingMode,
+  ConversationDomainRoutingSignal,
+  ConversationDomainSignalWindowUpdate
+} from "./sessionContext";
 export type {
   CheckProcessActionParams,
   CloseBrowserActionParams,

@@ -6,11 +6,11 @@ import { classifyRoutingIntentV1 } from "../../interfaces/routingMap";
 import { extractActiveRequestSegment } from "../../core/currentRequestExtraction";
 
 const BUILD_EXECUTION_VERB_PATTERN =
-  /\b(create|build|make|generate|scaffold|setup|set up|spin up|run|start|launch|fix|repair)\b/i;
+  /\b(create|build|make|generate|scaffold|setup|set up|spin up|run|start|launch|fix|repair|finish|complete|implement|continue)\b/i;
 const BUILD_EXECUTION_TARGET_PATTERN =
   /\b(app|application|project|dashboard|site|website|landing\s+page|homepage|web\s+page|page|frontend|backend|api|cli|repo|repository|react|next\.?js|vue|svelte|angular|vite)\b/i;
 const BUILD_EXECUTION_DESTINATION_PATTERN =
-  /\bon\s+my\s+(desktop|documents|downloads)\b|\b(?:in|inside|at|under|from|go\s+to)\s+(?:the\s+)?['"]?[a-z]:\\|\b(?:in|inside|at|under|from|go\s+to)\s+(?:the\s+)?['"]?\/(?:users|home|tmp|var|opt)\//i;
+  /\b(?:on|to)\s+(?:my|the)\s+(desktop|documents|downloads)\b|\b(?:in|inside|at|under|from|go\s+to)\s+(?:the\s+)?['"]?[a-z]:\\|\b(?:in|inside|at|under|from|go\s+to)\s+(?:the\s+)?['"]?\/(?:users|home|tmp|var|opt)\//i;
 const LOCAL_WORKSPACE_ORGANIZATION_VERB_PATTERN =
   /\b(?:organize|group|sort|move|collect|gather|tidy|clean\s+up)\b/i;
 const LOCAL_WORKSPACE_ORGANIZATION_TARGET_PATTERN =
@@ -29,6 +29,36 @@ const NATURAL_BROWSER_CONTROL_FOLLOW_UP_PATTERN =
   /^\s*(?:open|reopen|show|bring\s+(?:back|up)|pull\s+up|close|shut|dismiss|hide)\b[\s\S]{0,50}\b(?:browser|tab|window|preview|page|landing page|homepage)\b/i;
 const FRAMEWORK_APP_REQUEST_PATTERN =
   /\b(?:react|vite|next\.?js|nextjs|vue|svelte|angular)\b/i;
+const FRAMEWORK_APP_BOOTSTRAP_CUE_PATTERN =
+  /\b(?:create|make|generate|scaffold|bootstrap|spin\s+up|set\s+up|setup|get\b[\s\S]{0,24}\bstarted|from\s+scratch|fresh|new)\b/i;
+const FRAMEWORK_APP_NAMED_WORKSPACE_CUE_PATTERN =
+  /\b(?:called|named|folder\s+called|project\s+called|workspace\s+called)\b/i;
+const FRAMEWORK_APP_SCAFFOLD_CONTINUATION_PATTERN =
+  /\bscaffold(?:ed|ing)\b|agentbigbrain-framework-scaffold/i;
+const FRAMEWORK_WORKSPACE_PREPARATION_PATTERN =
+  /\b(?:workspace|ready\s+for\s+edits|dependencies\s+installed|stop\s+after\s+the\s+workspace\s+is\s+ready|do\s+not\s+run\b|do\s+not\s+open\b|don't\s+run\b|don't\s+open\b)\b/i;
+const FRAMEWORK_BUILD_LIFECYCLE_BUILD_PATTERN =
+  /\b(?:turn\s+that|make|build|finish|complete|implement)\b[\s\S]{0,120}\b(?:landing\s+page|homepage|page|site|app|workspace|project)\b/i;
+const FRAMEWORK_BUILD_LIFECYCLE_PREVIEW_PATTERN =
+  /\b(?:start|launch|serve|preview)\b[\s\S]{0,120}\b(?:localhost|127\.0\.0\.1|::1|loopback|preview|server|host|port|page|site|app)\b|\b(?:localhost|127\.0\.0\.1|::1|loopback|preview|server|host|port)\b[\s\S]{0,120}\b(?:start|launch|serve|preview|running|ready)\b/i;
+const FRAMEWORK_BUILD_LIFECYCLE_OPEN_PATTERN =
+  /\b(?:open|reopen|show|bring\s+(?:back|up)|pull\s+up)\b[\s\S]{0,120}\b(?:browser|tab|window|preview|landing\s+page|homepage|page|site|app)\b/i;
+const FRAMEWORK_BUILD_LIFECYCLE_EDIT_PATTERN =
+  /\b(?:change|edit|tweak|update|replace|rewrite|refresh)\b[\s\S]{0,120}\b(?:section|heading|hero|footer|copy|text|cta|button|content|page)\b/i;
+const FRAMEWORK_BUILD_LIFECYCLE_CLOSE_PATTERN =
+  /^\s*(?:(?:thanks|thank you|ok|okay|alright|all right|now)[\s,!.:-]+)*(?:please\s+)?(?:close|shut|stop|dismiss|hide)\b/i;
+const NEGATED_LIVE_RUN_PATTERN =
+  /\bdo\s+not\s+(?:start|run|launch|serve)\b[\s\S]{0,80}\b(?:localhost|127\.0\.0\.1|::1|loopback|server|service|api|backend|dev\s+server|preview\s+server|preview\/dev\s+server|preview)\b|\bdo\s+not\s+(?:probe|check|confirm|verify)\b[\s\S]{0,80}\b(?:localhost|127\.0\.0\.1|::1|loopback|http|port|ready|readiness)\b/i;
+const NEGATED_BROWSER_VERIFICATION_PATTERN =
+  /\bdo\s+not\s+(?:(?:open|reopen)\s+or\s+)?(?:verify|check|inspect|review)\b[\s\S]{0,80}\b(?:browser|homepage|ui|page|render|renders|rendering)\b/i;
+const NEGATED_BROWSER_OPEN_PATTERN =
+  /\bdo\s+not\s+open\b[\s\S]{0,60}\b(?:browser|tab|window|page|site|preview|it)\b/i;
+const NATURAL_LOCAL_START_PATTERN =
+  /\b(?:start|launch|run)\b[\s\S]{0,32}\b(?:it|the app|the site|the page)\b[\s\S]{0,24}\b(?:locally|local)\b/i;
+const NATURAL_BROWSER_OPEN_PATTERN =
+  /\bopen\b[\s\S]{0,24}\b(?:it|the app|the site|the page)\b[\s\S]{0,24}\bin\s+my\s+browser\b/i;
+const NATURAL_BROWSER_LEAVE_UP_PATTERN =
+  /\bleave\b[\s\S]{0,24}\b(?:it|the app|the site|the page)\b[\s\S]{0,24}\bup\b[\s\S]{0,24}\b(?:for me to|so i can)\s+(?:see|view|look)\b/i;
 
 /**
  * Normalizes planner-facing request text down to the active user request segment.
@@ -38,6 +68,36 @@ const FRAMEWORK_APP_REQUEST_PATTERN =
  */
 function normalizeActiveRequest(currentUserRequest: string): string {
   return extractActiveRequestSegment(currentUserRequest).trim();
+}
+
+/**
+ * Returns whether the request explicitly suppresses live-run/start-or-probe work for this turn.
+ *
+ * @param currentUserRequest - Active planner-facing request text.
+ * @returns `true` when the user explicitly says not to start/verify a live runtime yet.
+ */
+export function suppressesLiveRunWork(currentUserRequest: string): boolean {
+  return NEGATED_LIVE_RUN_PATTERN.test(normalizeActiveRequest(currentUserRequest));
+}
+
+/**
+ * Returns whether the request explicitly suppresses browser/UI verification for this turn.
+ *
+ * @param currentUserRequest - Active planner-facing request text.
+ * @returns `true` when browser verification is explicitly negated.
+ */
+function suppressesBrowserVerification(currentUserRequest: string): boolean {
+  return NEGATED_BROWSER_VERIFICATION_PATTERN.test(normalizeActiveRequest(currentUserRequest));
+}
+
+/**
+ * Returns whether the request explicitly suppresses opening a browser for this turn.
+ *
+ * @param currentUserRequest - Active planner-facing request text.
+ * @returns `true` when browser opening is explicitly negated.
+ */
+function suppressesBrowserOpen(currentUserRequest: string): boolean {
+  return NEGATED_BROWSER_OPEN_PATTERN.test(normalizeActiveRequest(currentUserRequest));
 }
 
 /**
@@ -92,7 +152,51 @@ export function requiresFrameworkAppScaffoldAction(
   const activeRequest = normalizeActiveRequest(currentUserRequest);
   return (
     isExecutionStyleBuildRequest(activeRequest) &&
-    FRAMEWORK_APP_REQUEST_PATTERN.test(activeRequest)
+    FRAMEWORK_APP_REQUEST_PATTERN.test(activeRequest) &&
+    (
+      FRAMEWORK_APP_BOOTSTRAP_CUE_PATTERN.test(activeRequest) ||
+      FRAMEWORK_APP_NAMED_WORKSPACE_CUE_PATTERN.test(activeRequest) ||
+      FRAMEWORK_APP_SCAFFOLD_CONTINUATION_PATTERN.test(activeRequest)
+    )
+  );
+}
+
+/**
+ * Evaluates whether a framework-app request is a narrow workspace-preparation turn that should
+ * stay on the deterministic scaffold/install/proof path instead of paying full planner latency.
+ */
+export function isFrameworkWorkspacePreparationRequest(
+  currentUserRequest: string
+): boolean {
+  const activeRequest = normalizeActiveRequest(currentUserRequest);
+  return (
+    requiresFrameworkAppScaffoldAction(activeRequest) &&
+    !isLiveVerificationBuildRequest(activeRequest) &&
+    !requiresBrowserVerificationBuildRequest(activeRequest) &&
+    !requiresPersistentBrowserOpenBuildRequest(activeRequest) &&
+    FRAMEWORK_WORKSPACE_PREPARATION_PATTERN.test(activeRequest)
+  );
+}
+
+/**
+ * Evaluates whether a request is still in the deterministic framework build lifecycle lane:
+ * scaffold/build/start/open and bounded tracked edit turns should stay on the bounded framework
+ * runtime path, while close and unrelated conversational turns should not.
+ */
+export function isDeterministicFrameworkBuildLaneRequest(
+  currentUserRequest: string
+): boolean {
+  const activeRequest = normalizeActiveRequest(currentUserRequest);
+  if (FRAMEWORK_BUILD_LIFECYCLE_CLOSE_PATTERN.test(activeRequest)) {
+    return false;
+  }
+  return (
+    requiresFrameworkAppScaffoldAction(activeRequest) ||
+    isFrameworkWorkspacePreparationRequest(activeRequest) ||
+    FRAMEWORK_BUILD_LIFECYCLE_BUILD_PATTERN.test(activeRequest) ||
+    FRAMEWORK_BUILD_LIFECYCLE_PREVIEW_PATTERN.test(activeRequest) ||
+    FRAMEWORK_BUILD_LIFECYCLE_OPEN_PATTERN.test(activeRequest) ||
+    FRAMEWORK_BUILD_LIFECYCLE_EDIT_PATTERN.test(activeRequest)
   );
 }
 
@@ -138,11 +242,16 @@ export function isLiveVerificationBuildRequest(currentUserRequest: string): bool
   if (!isExecutionStyleBuildRequest(activeRequest)) {
     return false;
   }
+  if (suppressesLiveRunWork(activeRequest)) {
+    return false;
+  }
   return (
     /\bnpm\s+start\b/i.test(activeRequest) ||
     /\bnpm\s+run\s+dev\b/i.test(activeRequest) ||
     /\b(?:pnpm|yarn)\s+(?:start|dev)\b/i.test(activeRequest) ||
     /\b(?:next|vite)\s+dev\b/i.test(activeRequest) ||
+    NATURAL_LOCAL_START_PATTERN.test(activeRequest) ||
+    NATURAL_BROWSER_OPEN_PATTERN.test(activeRequest) ||
     /\bdev\s+server\b/i.test(activeRequest) ||
     /\b(localhost|127\.0\.0\.1|::1|loopback)\b/i.test(activeRequest) ||
     /\b(run|start|launch|serve)\b[\s\S]{0,80}\b(server|service|api|backend|dev\s+server)\b/i.test(
@@ -171,6 +280,9 @@ export function requiresBrowserVerificationBuildRequest(
   if (!isExecutionStyleBuildRequest(activeRequest)) {
     return false;
   }
+  if (suppressesBrowserVerification(activeRequest)) {
+    return false;
+  }
   return (
     /\bverify\b[\s\S]{0,80}\b(ui|homepage|browser|render|renders|rendering)\b/i.test(
       activeRequest
@@ -192,10 +304,15 @@ export function requiresPersistentBrowserOpenBuildRequest(
   if (!isExecutionStyleBuildRequest(activeRequest)) {
     return false;
   }
+  if (suppressesBrowserOpen(activeRequest)) {
+    return false;
+  }
   return (
     /\bleave\b[\s\S]{0,40}\b(browser|page|site|window|it)\b[\s\S]{0,20}\bopen\b/i.test(
       activeRequest
     ) ||
+    NATURAL_BROWSER_OPEN_PATTERN.test(activeRequest) ||
+    NATURAL_BROWSER_LEAVE_UP_PATTERN.test(activeRequest) ||
     /\bkeep\b[\s\S]{0,40}\b(browser|page|site|window|it)\b[\s\S]{0,20}\bopen\b/i.test(
       activeRequest
     ) ||

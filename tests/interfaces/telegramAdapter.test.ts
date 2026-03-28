@@ -206,10 +206,13 @@ test("telegram adapter autonomous summary reports stopped state when loop aborts
       }
     );
 
-    assert.match(summary.summary, /Autonomous task stopped after 0 iteration\(s\)/i);
-    assert.match(summary.summary, /Why it stopped: Stopped because you cancelled the run\./i);
+    assert.match(
+      summary.summary,
+      /I started this, but the run stopped before it finished after 0 iteration\(s\)\./i
+    );
+    assert.match(summary.summary, /Stopped because you cancelled the run\./i);
     assert.equal(
-      progressMessages.some((message) => /Stopped after 0 iteration\(s\)\. Stopped because you cancelled the run\./i.test(message)),
+      progressMessages.some((message) => /I started this, but I hit a blocker before I could finish it after 0 iteration\(s\)\. Stopped because you cancelled the run\./i.test(message)),
       true
     );
     assert.equal(

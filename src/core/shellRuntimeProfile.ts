@@ -733,6 +733,106 @@ function resolveSingleExecutable(
     }
   }
 
+  if (platform === "win32") {
+    return resolveKnownWindowsExecutable(trimmed, env);
+  }
+
+  return null;
+}
+
+/**
+ * Resolves known Windows shell executable locations when PATH-based resolution is unavailable.
+ *
+ * **Why it exists:**
+ * Interface and service hosts can start with a reduced PATH while still having built-in Windows shells
+ * installed in deterministic system locations. This keeps real-shell execution fail-closed without
+ * requiring PATH to be complete.
+ *
+ * **What it talks to:**
+ * - Uses `existsSync` (import `existsSync`) from `node:fs`.
+ * - Uses `path` (import `default`) from `node:path`.
+ *
+ * @param executable - Stable identifier used to reference an entity or record.
+ * @param env - Value for env.
+ * @returns Computed `string | null` result.
+ */
+function resolveKnownWindowsExecutable(
+  executable: string,
+  env: NodeJS.ProcessEnv
+): string | null {
+  const normalized = executable.trim().toLowerCase();
+  if (normalized.length === 0) {
+    return null;
+  }
+
+  const systemRoot = firstDefinedNonEmpty(env.SYSTEMROOT, env.SystemRoot, env.WINDIR, env.windir);
+  const comSpec = firstDefinedNonEmpty(env.ComSpec, env.COMSPEC);
+  const programFiles = firstDefinedNonEmpty(
+    env.ProgramW6432,
+    env.PROGRAMW6432,
+    env["ProgramFiles"],
+    env.PROGRAMFILES
+  );
+  const programFilesX86 = firstDefinedNonEmpty(
+    env["ProgramFiles(x86)"],
+    env.PROGRAMFILES_X86
+  );
+
+  const candidatePaths: string[] = [];
+  if (normalized === "powershell" || normalized === "powershell.exe") {
+    if (systemRoot) {
+      candidatePaths.push(
+        path.join(systemRoot, "System32", "WindowsPowerShell", "v1.0", "powershell.exe")
+      );
+    }
+  } else if (normalized === "cmd" || normalized === "cmd.exe") {
+    if (comSpec) {
+      candidatePaths.push(comSpec);
+    }
+    if (systemRoot) {
+      candidatePaths.push(path.join(systemRoot, "System32", "cmd.exe"));
+    }
+  } else if (normalized === "pwsh" || normalized === "pwsh.exe") {
+    if (programFiles) {
+      candidatePaths.push(path.join(programFiles, "PowerShell", "7", "pwsh.exe"));
+    }
+    if (programFilesX86) {
+      candidatePaths.push(path.join(programFilesX86, "PowerShell", "7", "pwsh.exe"));
+    }
+  }
+
+  for (const candidatePath of candidatePaths) {
+    if (candidatePath && existsSync(candidatePath)) {
+      return candidatePath;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Returns the first defined non-empty string from a list of environment-like values.
+ *
+ * **Why it exists:**
+ * Windows exposes some environment keys with inconsistent casing between hosts. This helper keeps
+ * fallback resolution deterministic without repeating trimming logic.
+ *
+ * **What it talks to:**
+ * - Uses local constants/helpers within this module.
+ *
+ * @param values - Primary value processed by this function.
+ * @returns Resulting string value.
+ */
+function firstDefinedNonEmpty(...values: Array<string | undefined>): string | null {
+  for (const value of values) {
+    if (typeof value !== "string") {
+      continue;
+    }
+    const trimmed = value.trim();
+    if (trimmed.length > 0) {
+      return trimmed;
+    }
+  }
   return null;
 }
 

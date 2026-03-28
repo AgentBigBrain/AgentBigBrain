@@ -25,6 +25,9 @@ export interface ManagedProcessSnapshot {
   shellKind: string;
   startedAt: string;
   statusCode: ManagedProcessLifecycleCode;
+  requestedHost: string | null;
+  requestedPort: number | null;
+  requestedUrl: string | null;
   exitCode: number | null;
   signal: string | null;
   stopRequested: boolean;
@@ -147,6 +150,9 @@ export class ManagedProcessRegistry {
     cwd: string;
     shellExecutable: string;
     shellKind: string;
+    requestedHost?: string | null;
+    requestedPort?: number | null;
+    requestedUrl?: string | null;
     taskId?: string;
   }): ManagedProcessSnapshot {
     const leaseId = makeId("proc", this.entropySource);
@@ -162,6 +168,9 @@ export class ManagedProcessRegistry {
       shellKind: input.shellKind,
       startedAt: new Date(startedAtMs).toISOString(),
       statusCode: "PROCESS_STARTED",
+      requestedHost: input.requestedHost ?? null,
+      requestedPort: input.requestedPort ?? null,
+      requestedUrl: input.requestedUrl ?? null,
       exitCode: null,
       signal: null,
       stopRequested: false
@@ -583,6 +592,14 @@ function normalizeManagedProcessSnapshot(value: unknown): ManagedProcessSnapshot
       candidate.statusCode === "PROCESS_START_FAILED"
         ? candidate.statusCode
         : "PROCESS_STARTED",
+    requestedHost:
+      typeof candidate.requestedHost === "string" ? candidate.requestedHost : null,
+    requestedPort:
+      typeof candidate.requestedPort === "number" && Number.isInteger(candidate.requestedPort)
+        ? candidate.requestedPort
+        : null,
+    requestedUrl:
+      typeof candidate.requestedUrl === "string" ? candidate.requestedUrl : null,
     exitCode:
       typeof candidate.exitCode === "number" && Number.isInteger(candidate.exitCode)
         ? candidate.exitCode

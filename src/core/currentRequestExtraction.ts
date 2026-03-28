@@ -8,6 +8,7 @@ const USER_QUESTION_MARKER = "User question:";
 const AGENT_PULSE_REQUEST_MARKER = "Agent Pulse request:";
 const RECENT_CONVERSATION_CONTEXT_MARKER = "Recent conversation context (oldest to newest):";
 const TRAILING_AGENTFRIEND_SECTION_PATTERN = /^\[AgentFriend[A-Za-z]+\]/;
+const AUTONOMOUS_EXECUTION_PREFIX = "[AUTONOMOUS_LOOP_GOAL]";
 
 /**
  * Extracts the trailing section after the last occurrence of a marker.
@@ -89,6 +90,51 @@ function boundRequestBeforeAgentFriendSections(value: string): string {
 }
 
 /**
+ * Extracts the active request payload from an autonomous-loop execution envelope.
+ *
+ * **Why it exists:**
+ * Autonomous runtime packets can wrap the first user turn in a JSON envelope that includes both
+ * the high-level goal and a richer `initialExecutionInput`. Downstream routing and planner policy
+ * need the inner active request, not the raw envelope text.
+ *
+ * **What it talks to:**
+ * - Local autonomous execution prefix only; does not import interface-runtime contracts.
+ *
+ * @param userInput - Raw execution input that may be tagged as an autonomous loop goal.
+ * @returns Inner request-like payload, or `null` when the input is not an autonomous envelope.
+ */
+function extractAutonomousExecutionPayload(userInput: string): string | null {
+  if (!userInput.startsWith(AUTONOMOUS_EXECUTION_PREFIX)) {
+    return null;
+  }
+
+  const payload = userInput.slice(AUTONOMOUS_EXECUTION_PREFIX.length).trim();
+  if (!payload) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(payload) as {
+      goal?: unknown;
+      initialExecutionInput?: unknown;
+    };
+    if (
+      typeof parsed.initialExecutionInput === "string" &&
+      parsed.initialExecutionInput.trim().length > 0
+    ) {
+      return parsed.initialExecutionInput.trim();
+    }
+    if (typeof parsed.goal === "string" && parsed.goal.trim().length > 0) {
+      return parsed.goal.trim();
+    }
+  } catch {
+    // Fall back to the legacy plain-text autonomous goal payload below.
+  }
+
+  return payload;
+}
+
+/**
  * Checks whether user input includes the agent-pulse request marker.
  *
  * **Why it exists:**
@@ -120,6 +166,11 @@ export function extractActiveRequestSegment(userInput: string): string {
   const normalized = userInput.trim();
   if (!normalized) {
     return "";
+  }
+
+  const autonomousPayload = extractAutonomousExecutionPayload(normalized);
+  if (autonomousPayload) {
+    return extractActiveRequestSegment(autonomousPayload);
   }
 
   const currentRequest = extractSectionAfterMarker(normalized, CURRENT_USER_REQUEST_MARKER);

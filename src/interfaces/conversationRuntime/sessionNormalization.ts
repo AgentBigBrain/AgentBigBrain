@@ -6,6 +6,7 @@ import {
   isConversationStackV1,
   migrateSessionConversationStackToV2
 } from "../../core/stage6_86ConversationStack";
+import { normalizeConversationDomainContext } from "../../core/sessionContext";
 import type { ConversationStackV1, SessionSchemaVersionV1 } from "../../core/types";
 import { createEmptyInterfaceSessionFile } from "./sessionPersistence";
 import type { InterfaceSessionFile } from "./contracts";
@@ -25,6 +26,7 @@ import {
   normalizeRecentActionRecord
 } from "./sessionNormalizationRecords";
 import { normalizeAgentPulseSessionState } from "./sessionPulseNormalization";
+import { normalizeConversationTransportIdentity } from "./transportIdentity";
 
 /**
  * Normalizes one persisted conversation session into the stable runtime shape.
@@ -88,6 +90,7 @@ export function normalizeSession(raw: Partial<ConversationSession>): Conversatio
     conversationId: raw.conversationId,
     userId: raw.userId,
     username: raw.username,
+    transportIdentity: normalizeConversationTransportIdentity(raw.transportIdentity),
     conversationVisibility:
       raw.conversationVisibility === "private" ||
       raw.conversationVisibility === "public" ||
@@ -107,6 +110,7 @@ export function normalizeSession(raw: Partial<ConversationSession>): Conversatio
         : null,
     activeProposal,
     activeClarification,
+    domainContext: normalizeConversationDomainContext(raw.domainContext, raw.conversationId),
     modeContinuity: normalizeModeContinuityState(raw.modeContinuity),
     progressState: normalizeProgressStateRecord(raw.progressState),
     returnHandoff: normalizeReturnHandoffRecord(raw.returnHandoff),

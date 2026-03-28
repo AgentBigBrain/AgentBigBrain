@@ -139,7 +139,7 @@ export function splitIntoContextSentences(text: string): string[] {
 }
 
 /**
- * Converts a contact token such as `billy.joel` into display-form text.
+ * Converts a contact token such as `owen.joel` into display-form text.
  *
  * @param contactToken - Canonical contact token.
  * @returns Human-readable display name.

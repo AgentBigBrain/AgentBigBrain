@@ -21,15 +21,15 @@ function buildBridgeFixtureGraph(): EntityGraphV1 {
     updatedAt: "2026-03-01T00:00:00.000Z",
     entities: [
       {
-        entityKey: "entity_flare_labs",
-        canonicalName: "Flare Labs",
+        entityKey: "entity_lantern_labs",
+        canonicalName: "Lantern Labs",
         entityType: "org",
         disambiguator: null,
-        aliases: ["Flare Labs"],
+        aliases: ["Lantern Labs"],
         firstSeenAt: "2025-10-01T00:00:00.000Z",
         lastSeenAt: "2026-02-25T00:00:00.000Z",
         salience: 6,
-        evidenceRefs: ["trace:entity_flare_labs"]
+        evidenceRefs: ["trace:entity_lantern_labs"]
       },
       {
         entityKey: "entity_project_aurora",
@@ -47,7 +47,7 @@ function buildBridgeFixtureGraph(): EntityGraphV1 {
       {
         edgeKey: "edge_bridge_primary",
         sourceEntityKey: "entity_project_aurora",
-        targetEntityKey: "entity_flare_labs",
+        targetEntityKey: "entity_lantern_labs",
         relationType: "co_mentioned",
         status: "uncertain",
         coMentionCount: 7,
@@ -78,7 +78,7 @@ function buildBridgePulseCandidate(): PulseCandidateV1 {
     },
     lastTouchedAt: "2026-02-25T00:00:00.000Z",
     threadKey: "thread_budget",
-    entityRefs: ["entity_flare_labs", "entity_project_aurora"],
+    entityRefs: ["entity_lantern_labs", "entity_project_aurora"],
     evidenceRefs: ["trace:candidate_bridge_primary"],
     stableHash: "hash_bridge_primary"
   };
@@ -141,7 +141,7 @@ function blocksBridgeQuestionWhenCooldownIsActiveForPair(): void {
       {
         questionId: "bridge_q_prior",
         conversationKey: "thread_budget",
-        sourceEntityKey: "entity_flare_labs",
+        sourceEntityKey: "entity_lantern_labs",
         targetEntityKey: "entity_project_aurora",
         askedAt: "2026-02-26T12:00:00.000Z",
         status: "deferred",
@@ -169,7 +169,7 @@ function blocksBridgeQuestionWhenConversationCapIsReached(): void {
       {
         questionId: "bridge_q_prior",
         conversationKey: "thread_budget",
-        sourceEntityKey: "entity_flare_labs",
+        sourceEntityKey: "entity_lantern_labs",
         targetEntityKey: "entity_project_aurora",
         askedAt: "2026-02-20T12:00:00.000Z",
         status: "asked",
@@ -210,7 +210,7 @@ function blocksBridgeQuestionWhenPrivacySensitivePairDetected(): void {
     graph: buildBridgeFixtureGraph(),
     candidate: buildBridgePulseCandidate(),
     observedAt: "2026-03-01T12:00:00.000Z",
-    privacyOptOutEntityKeys: ["entity_flare_labs"]
+    privacyOptOutEntityKeys: ["entity_lantern_labs"]
   });
 
   assert.equal(result.approved, false);
@@ -271,7 +271,7 @@ function deferredBridgeAnswerExtendsCooldownWithDeterministicBackoff(): void {
       {
         questionId: "bridge_q_previous",
         conversationKey: "thread_budget",
-        sourceEntityKey: "entity_flare_labs",
+        sourceEntityKey: "entity_lantern_labs",
         targetEntityKey: "entity_project_aurora",
         askedAt: "2026-02-20T12:00:00.000Z",
         status: "deferred",

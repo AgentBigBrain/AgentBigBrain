@@ -9,7 +9,19 @@ import {
 import { BrainOrchestrator } from "../core/orchestrator";
 import { MediaUnderstandingOrgan } from "../organs/mediaUnderstanding/mediaInterpretation";
 import {
+  createAutonomyBoundaryInterpretationResolverFromEnv,
+  createContinuationInterpretationResolverFromEnv,
+  createContextualFollowupInterpretationResolverFromEnv,
+  createContextualReferenceInterpretationResolverFromEnv,
+  createEntityDomainHintInterpretationResolverFromEnv,
+  createEntityReferenceInterpretationResolverFromEnv,
+  createEntityTypeInterpretationResolverFromEnv,
+  createHandoffControlInterpretationResolverFromEnv,
+  createIdentityInterpretationResolverFromEnv,
   createLocalIntentModelResolverFromEnv,
+  createProposalReplyInterpretationResolverFromEnv,
+  createStatusRecallBoundaryInterpretationResolverFromEnv,
+  createTopicKeyInterpretationResolverFromEnv,
   isLocalIntentModelRuntimeReady,
   probeLocalIntentModelFromEnv
 } from "../organs/languageUnderstanding/localIntentModelRuntime";
@@ -44,6 +56,18 @@ interface GatewayRuntimePersistence {
 
 interface InterfaceRuntimeOptionalDependencies {
   localIntentModelResolver?: ReturnType<typeof createLocalIntentModelResolverFromEnv>;
+  autonomyBoundaryInterpretationResolver?: ReturnType<typeof createAutonomyBoundaryInterpretationResolverFromEnv>;
+  statusRecallBoundaryInterpretationResolver?: ReturnType<typeof createStatusRecallBoundaryInterpretationResolverFromEnv>;
+  continuationInterpretationResolver?: ReturnType<typeof createContinuationInterpretationResolverFromEnv>;
+  contextualFollowupInterpretationResolver?: ReturnType<typeof createContextualFollowupInterpretationResolverFromEnv>;
+  contextualReferenceInterpretationResolver?: ReturnType<typeof createContextualReferenceInterpretationResolverFromEnv>;
+  entityDomainHintInterpretationResolver?: ReturnType<typeof createEntityDomainHintInterpretationResolverFromEnv>;
+  entityReferenceInterpretationResolver?: ReturnType<typeof createEntityReferenceInterpretationResolverFromEnv>;
+  entityTypeInterpretationResolver?: ReturnType<typeof createEntityTypeInterpretationResolverFromEnv>;
+  handoffControlInterpretationResolver?: ReturnType<typeof createHandoffControlInterpretationResolverFromEnv>;
+  identityInterpretationResolver?: ReturnType<typeof createIdentityInterpretationResolverFromEnv>;
+  proposalReplyInterpretationResolver?: ReturnType<typeof createProposalReplyInterpretationResolverFromEnv>;
+  topicKeyInterpretationResolver?: ReturnType<typeof createTopicKeyInterpretationResolverFromEnv>;
 }
 
 /**
@@ -94,7 +118,19 @@ function createTelegramGatewayRuntime(
     entityGraphStore: persistence.entityGraphStore,
     brainRegistry: persistence.brainRegistry,
     mediaUnderstandingOrgan,
-    localIntentModelResolver: optionalDependencies.localIntentModelResolver
+    localIntentModelResolver: optionalDependencies.localIntentModelResolver,
+    autonomyBoundaryInterpretationResolver: optionalDependencies.autonomyBoundaryInterpretationResolver,
+    statusRecallBoundaryInterpretationResolver: optionalDependencies.statusRecallBoundaryInterpretationResolver,
+    continuationInterpretationResolver: optionalDependencies.continuationInterpretationResolver,
+    contextualFollowupInterpretationResolver: optionalDependencies.contextualFollowupInterpretationResolver,
+    contextualReferenceInterpretationResolver: optionalDependencies.contextualReferenceInterpretationResolver,
+    entityDomainHintInterpretationResolver: optionalDependencies.entityDomainHintInterpretationResolver,
+    entityReferenceInterpretationResolver: optionalDependencies.entityReferenceInterpretationResolver,
+    entityTypeInterpretationResolver: optionalDependencies.entityTypeInterpretationResolver,
+    handoffControlInterpretationResolver: optionalDependencies.handoffControlInterpretationResolver,
+    identityInterpretationResolver: optionalDependencies.identityInterpretationResolver,
+    proposalReplyInterpretationResolver: optionalDependencies.proposalReplyInterpretationResolver,
+    topicKeyInterpretationResolver: optionalDependencies.topicKeyInterpretationResolver
   });
 }
 
@@ -142,7 +178,19 @@ function createDiscordGatewayRuntime(
     sessionStore: persistence.sessionStore,
     entityGraphStore: persistence.entityGraphStore,
     brainRegistry: persistence.brainRegistry,
-    localIntentModelResolver: optionalDependencies.localIntentModelResolver
+    localIntentModelResolver: optionalDependencies.localIntentModelResolver,
+    autonomyBoundaryInterpretationResolver: optionalDependencies.autonomyBoundaryInterpretationResolver,
+    statusRecallBoundaryInterpretationResolver: optionalDependencies.statusRecallBoundaryInterpretationResolver,
+    continuationInterpretationResolver: optionalDependencies.continuationInterpretationResolver,
+    contextualFollowupInterpretationResolver: optionalDependencies.contextualFollowupInterpretationResolver,
+    contextualReferenceInterpretationResolver: optionalDependencies.contextualReferenceInterpretationResolver,
+    entityDomainHintInterpretationResolver: optionalDependencies.entityDomainHintInterpretationResolver,
+    entityReferenceInterpretationResolver: optionalDependencies.entityReferenceInterpretationResolver,
+    entityTypeInterpretationResolver: optionalDependencies.entityTypeInterpretationResolver,
+    handoffControlInterpretationResolver: optionalDependencies.handoffControlInterpretationResolver,
+    identityInterpretationResolver: optionalDependencies.identityInterpretationResolver,
+    proposalReplyInterpretationResolver: optionalDependencies.proposalReplyInterpretationResolver,
+    topicKeyInterpretationResolver: optionalDependencies.topicKeyInterpretationResolver
   });
 }
 
@@ -448,6 +496,19 @@ export async function runInterfaceRuntime(): Promise<void> {
   const config = createInterfaceRuntimeConfigFromEnv();
   const brainConfig = createBrainConfigFromEnv();
   const localIntentModelResolver = createLocalIntentModelResolverFromEnv();
+  const autonomyBoundaryInterpretationResolver = createAutonomyBoundaryInterpretationResolverFromEnv();
+  const statusRecallBoundaryInterpretationResolver = createStatusRecallBoundaryInterpretationResolverFromEnv();
+  const continuationInterpretationResolver = createContinuationInterpretationResolverFromEnv();
+  const contextualFollowupInterpretationResolver = createContextualFollowupInterpretationResolverFromEnv();
+  const contextualReferenceInterpretationResolver = createContextualReferenceInterpretationResolverFromEnv();
+  const entityReferenceInterpretationResolver = createEntityReferenceInterpretationResolverFromEnv();
+  const entityDomainHintInterpretationResolver =
+    createEntityDomainHintInterpretationResolverFromEnv();
+  const entityTypeInterpretationResolver = createEntityTypeInterpretationResolverFromEnv();
+  const handoffControlInterpretationResolver = createHandoffControlInterpretationResolverFromEnv();
+  const identityInterpretationResolver = createIdentityInterpretationResolverFromEnv();
+  const proposalReplyInterpretationResolver = createProposalReplyInterpretationResolverFromEnv();
+  const topicKeyInterpretationResolver = createTopicKeyInterpretationResolverFromEnv();
   logCrossPlatformProfileMemoryWarningIfNeeded(config);
   await logLocalIntentModelStatus();
   const sessionStore = new InterfaceSessionStore(undefined, {
@@ -468,7 +529,19 @@ export async function runInterfaceRuntime(): Promise<void> {
     entityGraphStore,
     brainRegistry
   }, {
-    localIntentModelResolver
+    localIntentModelResolver,
+    autonomyBoundaryInterpretationResolver,
+    statusRecallBoundaryInterpretationResolver,
+    continuationInterpretationResolver,
+    contextualFollowupInterpretationResolver,
+    contextualReferenceInterpretationResolver,
+    entityDomainHintInterpretationResolver,
+    entityReferenceInterpretationResolver,
+    entityTypeInterpretationResolver,
+    handoffControlInterpretationResolver,
+    identityInterpretationResolver,
+    proposalReplyInterpretationResolver,
+    topicKeyInterpretationResolver
   });
   const detachHandlers = registerShutdownHandlers(() => {
     stopAllGateways(gateways);

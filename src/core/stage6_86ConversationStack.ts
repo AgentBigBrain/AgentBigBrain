@@ -14,5 +14,6 @@ export {
   type ApplyConversationTurnOptionsV1,
   type ConversationStackMigrationInputV1,
   type ConversationStackMigrationResultV1,
-  type ConversationStackTurnV1
+  type ConversationStackTurnV1,
+  type TopicKeyInterpretationSignalV1
 } from "./stage6_86/conversationStack";

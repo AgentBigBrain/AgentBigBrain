@@ -102,6 +102,7 @@ export async function executeStopProcess(
   params: StopProcessActionParams
 ): Promise<ExecutorExecutionOutcome> {
   const leaseId = normalizeOptionalString(params.leaseId);
+  const preserveLinkedBrowserSessions = params.preserveLinkedBrowserSessions === true;
   const recoveredPid =
     typeof params.pid === "number" && Number.isInteger(params.pid) && params.pid > 0
       ? params.pid
@@ -170,10 +171,20 @@ export async function executeStopProcess(
         "PROCESS_STOP_FAILED"
       );
     }
+    const preservedBrowserSessionCount =
+      preserveLinkedBrowserSessions && leaseId !== null
+        ? context.browserSessionRegistry
+            .listSnapshots()
+            .filter(
+              (linkedSnapshot) =>
+                linkedSnapshot.status === "open" &&
+                linkedSnapshot.linkedProcessLeaseId === leaseId
+            ).length
+        : 0;
     const cleanedBrowserSessionResults =
-      leaseId !== null
-        ? await closeLinkedBrowserSessionsForLease(context, leaseId)
-        : [];
+      preserveLinkedBrowserSessions || leaseId === null
+        ? []
+        : await closeLinkedBrowserSessionsForLease(context, leaseId);
     const cleanedBrowserSessions = cleanedBrowserSessionResults.map(
       (result) => result.snapshot
     );
@@ -193,6 +204,9 @@ export async function executeStopProcess(
           : `Process stopped: pid ${recoveredPid}.`,
         closedBrowserSessionCount > 0
           ? `Closed ${closedBrowserSessionCount} linked browser window${closedBrowserSessionCount === 1 ? "" : "s"}.`
+          : null,
+        preservedBrowserSessionCount > 0
+          ? `Preserved ${preservedBrowserSessionCount} linked browser window${preservedBrowserSessionCount === 1 ? "" : "s"} for the upcoming live refresh.`
           : null,
         staleMarkedBrowserSessionCount > 0
           ? `Marked ${staleMarkedBrowserSessionCount} linked browser session${staleMarkedBrowserSessionCount === 1 ? "" : "s"} stale after shutting down the preview process.`

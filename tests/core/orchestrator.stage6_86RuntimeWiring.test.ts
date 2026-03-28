@@ -27,6 +27,7 @@ import {
 import { ToolExecutorOrgan } from "../../src/organs/executor";
 import { PlannerOrgan } from "../../src/organs/planner";
 import { ReflectionOrgan } from "../../src/organs/reflection";
+import type { BridgeQuestionTimingInterpretationResolver } from "../../src/organs/languageUnderstanding/localIntentModelContracts";
 
 class FixedStage686PlannerModelClient extends MockModelClient {
   /**
@@ -88,7 +89,8 @@ function buildTask(userInput: string): TaskRequest {
  */
 async function withStage686RuntimeBrain(
   plannerActions: PlannerModelOutput["actions"],
-  callback: (brain: BrainOrchestrator, tempDir: string) => Promise<void>
+  callback: (brain: BrainOrchestrator, tempDir: string) => Promise<void>,
+  bridgeQuestionTimingInterpretationResolver?: BridgeQuestionTimingInterpretationResolver
 ): Promise<void> {
   const originalCwd = process.cwd();
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbb-stage686-runtime-"));
@@ -109,7 +111,17 @@ async function withStage686RuntimeBrain(
       modelClient,
       new ReflectionOrgan(memoryStore, modelClient),
       new PersonalityStore(path.join(tempDir, "personality.json")),
-      new GovernanceMemoryStore(path.join(tempDir, "governance_memory.json"))
+      new GovernanceMemoryStore(path.join(tempDir, "governance_memory.json")),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      bridgeQuestionTimingInterpretationResolver
     );
     await callback(brain, tempDir);
   } finally {
@@ -282,5 +294,55 @@ test("stage 6.86 runtime wiring executes bridge-question emission then answer-re
         }) ?? false;
       assert.equal(hasConfirmedRelation, true);
     }
+  );
+});
+
+test("stage 6.86 runtime wiring can soft-defer bridge emission when conversational timing is awkward", async () => {
+  const bridgeQuestionTimingInterpretationResolver: BridgeQuestionTimingInterpretationResolver = async () => ({
+    source: "local_intent_model",
+    kind: "defer_for_context",
+    confidence: "high",
+    explanation: "The user is focused on active workflow execution."
+  });
+  await withStage686RuntimeBrain(
+    [
+      {
+        type: "pulse_emit",
+        description: "Attempt bridge question for two entities.",
+        params: {
+          kind: "bridge_question",
+          reasonCode: "RELATIONSHIP_CLARIFICATION",
+          threadKey: "thread_relationship",
+          entityRefs: ["entity_alpha", "entity_beta"],
+          evidenceRefs: ["trace:stage686:bridge_emit"]
+        }
+      }
+    ],
+    async (brain) => {
+      const result = await brain.runTask(buildTask("please finish the css deployment fix first"));
+      assert.equal(result.actionResults.length, 1);
+      assert.equal(result.actionResults[0]?.approved, true);
+      assert.match(result.actionResults[0]?.output ?? "", /Bridge question deferred for context/i);
+      assert.equal(
+        result.actionResults[0]?.executionMetadata?.stage686BridgeTimingDeferred,
+        true
+      );
+      assert.equal(
+        result.actionResults[0]?.executionMetadata?.stage686BridgeTimingDecision,
+        "defer_for_context"
+      );
+
+      const runtimeStateRaw = await readFile(
+        path.resolve(process.cwd(), "runtime/stage6_86_runtime_state.json"),
+        "utf8"
+      );
+      const runtimeState = JSON.parse(runtimeStateRaw) as {
+        pendingBridgeQuestions?: unknown[];
+        pulseState?: { emittedTodayCount?: unknown };
+      };
+      assert.deepEqual(runtimeState.pendingBridgeQuestions, []);
+      assert.equal(runtimeState.pulseState?.emittedTodayCount, 0);
+    },
+    bridgeQuestionTimingInterpretationResolver
   );
 });

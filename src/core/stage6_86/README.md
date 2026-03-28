@@ -7,11 +7,13 @@ legacy top-level `stage6_86*` files.
 The current extracted slice moves bridge-question, conversation-stack, entity-graph, media-continuity,
 pulse-candidate, runtime-action, and runtime-state ownership behind:
 - `bridgeQuestions.ts`
+- `bridgeQuestionTimingSupport.ts`
 - `conversationStack.ts`
 - `conversationStackContracts.ts`
 - `conversationStackHelpers.ts`
 - `contracts.ts`
 - `entityGraph.ts`
+- `entityGraphAliasReconciliation.ts`
 - `mediaContinuityLinking.ts`
 - `memoryGovernance.ts`
 - `openLoops.ts`
@@ -40,8 +42,11 @@ Canonical behavior for those entrypoints now lives here.
 
 ## Outputs
 - deterministic bridge-question gating, rendering, and answer-resolution helpers for Stage 6.86
+- deterministic bounded bridge-question timing interpretation helpers for Stage 6.86
 - deterministic conversation-stack threading, topic switching, and migration helpers for Stage 6.86
 - deterministic entity extraction, graph mutation, and relation-promotion helpers for Stage 6.86
+- deterministic validated entity-type-hint application for ambiguous ingress extraction candidates
+- deterministic alias-candidate validation and bounded alias reconciliation helpers for Stage 6.86
 - deterministic entity lookup-term helpers for Stage 6.86 continuity linkage
 - deterministic interpreted-media continuity-linking hints for Stage 6.86 recall grounding
 - deterministic pulse-candidate generation, suppression, and emission-history normalization for
@@ -73,6 +78,7 @@ Canonical behavior for those entrypoints now lives here.
 - `tests/core/stage6_86BridgeQuestions.test.ts`
 - `tests/core/stage6_86ConversationStack.test.ts`
 - `tests/core/stage6_86EntityGraph.test.ts`
+- `tests/core/entityGraphStore.test.ts`
 - `tests/core/stage6_86MediaContinuityLinking.test.ts`
 - `tests/core/stage6_86PulseCandidates.test.ts`
 - `tests/core/stage6_86RuntimeActions.test.ts`

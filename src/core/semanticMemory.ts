@@ -11,12 +11,14 @@ import { withFileLock, writeFileAtomic } from "./fileLock";
 import { makeId } from "./ids";
 import { countLanguageTermOverlap } from "./languageRuntime/languageScoring";
 import { extractSemanticConceptTerms } from "./languageRuntime/queryIntentTerms";
+import type { ConversationDomainLane } from "./sessionContext";
 import { SqliteVectorStore } from "./vectorStore";
 
 const MAX_LESSONS = 300;
 const MIN_LINK_OVERLAP = 2;
 
 export type LessonMemoryType = "fact" | "experience" | "belief";
+export type SemanticLessonDomainTag = Exclude<ConversationDomainLane, "unknown">;
 
 export interface LessonSignalMetadataV1 {
   schemaVersion: 1;
@@ -37,6 +39,7 @@ export interface SemanticLesson {
   concepts: string[];
   relatedLessonIds: string[];
   memoryType: LessonMemoryType;
+  domainTag: SemanticLessonDomainTag | null;
   signalMetadata?: LessonSignalMetadataV1;
 }
 
@@ -59,6 +62,28 @@ export interface SemanticMemory {
  */
 function normalizeConcept(token: string): string {
   return token.trim().toLowerCase();
+}
+
+/**
+ * Normalizes a candidate semantic-memory domain tag into the supported lane subset.
+ *
+ * **Why it exists:**
+ * Lessons are stored long-term, so their optional domain metadata must stay within the shared
+ * session-domain contract instead of accumulating free-form labels.
+ *
+ * **What it talks to:**
+ * - Uses the local supported domain-tag union in this module.
+ *
+ * @param value - Candidate persisted or runtime domain label.
+ * @returns Normalized domain tag or `null` when absent/unsupported.
+ */
+function normalizeSemanticLessonDomainTag(value: unknown): SemanticLessonDomainTag | null {
+  return value === "profile" ||
+    value === "relationship" ||
+    value === "workflow" ||
+    value === "system_policy"
+    ? value
+    : null;
 }
 
 /**
@@ -95,6 +120,37 @@ function calculateOverlap(left: string[], right: string[]): number {
 }
 
 /**
+ * Computes a bounded retrieval bonus for lessons that match the current session lane.
+ *
+ * **Why it exists:**
+ * Semantic memory should bias toward same-domain lessons without filtering legacy domain-agnostic
+ * entries out of retrieval results.
+ *
+ * **What it talks to:**
+ * - Uses `SemanticLesson` persisted metadata plus the shared session-domain lane.
+ *
+ * @param lesson - Candidate lesson under retrieval ranking.
+ * @param sessionDomainLane - Current session lane, if known.
+ * @returns Deterministic bonus or penalty applied to lesson ranking.
+ */
+function computeSemanticLessonDomainScore(
+  lesson: Pick<SemanticLesson, "domainTag">,
+  sessionDomainLane: ConversationDomainLane | null
+): number {
+  const normalizedSessionDomain = normalizeSemanticLessonDomainTag(sessionDomainLane);
+  if (!normalizedSessionDomain) {
+    return 0;
+  }
+  if (lesson.domainTag === normalizedSessionDomain) {
+    return 0.2;
+  }
+  if (lesson.domainTag === null) {
+    return 0.05;
+  }
+  return -0.05;
+}
+
+/**
  * Builds lesson for this module's runtime flow.
  *
  * **Why it exists:**
@@ -116,7 +172,8 @@ function buildLesson(
   sourceTaskId: string | null,
   committedByAgentId: string,
   memoryType: LessonMemoryType = "experience",
-  signalMetadata: LessonSignalMetadataV1 | null = null
+  signalMetadata: LessonSignalMetadataV1 | null = null,
+  domainTag: SemanticLessonDomainTag | null = null
 ): SemanticLesson {
   return {
     id: makeId("lesson"),
@@ -127,6 +184,7 @@ function buildLesson(
     concepts: extractConcepts(text),
     relatedLessonIds: [],
     memoryType,
+    domainTag: normalizeSemanticLessonDomainTag(domainTag),
     signalMetadata: signalMetadata ?? undefined
   };
 }
@@ -266,6 +324,7 @@ function coerceLegacyMemory(input: unknown): SemanticMemory {
             ? rawLesson.memoryType
             : "experience";
         const signalMetadata = normalizeLessonSignalMetadata(rawLesson.signalMetadata);
+        const domainTag = normalizeSemanticLessonDomainTag(rawLesson.domainTag);
         return {
           id:
             typeof rawLesson.id === "string" && rawLesson.id.trim()
@@ -285,6 +344,7 @@ function coerceLegacyMemory(input: unknown): SemanticMemory {
           concepts,
           relatedLessonIds,
           memoryType,
+          domainTag,
           signalMetadata: signalMetadata ?? undefined
         } satisfies SemanticLesson;
       })
@@ -370,7 +430,8 @@ export class SemanticMemoryStore {
     sourceTaskId: string | null = null,
     committedByAgentId: string = MAIN_AGENT_ID,
     memoryType: LessonMemoryType = "experience",
-    signalMetadata: LessonSignalMetadataV1 | null = null
+    signalMetadata: LessonSignalMetadataV1 | null = null,
+    domainTag: SemanticLessonDomainTag | null = null
   ): Promise<void> {
     const normalized = lessonText.trim();
     if (!normalized) {
@@ -397,7 +458,8 @@ export class SemanticMemoryStore {
         sourceTaskId,
         normalizedAgentId,
         memoryType,
-        signalMetadata
+        signalMetadata,
+        domainTag
       );
       persistedLessonId = lesson.id;
       this.connectLesson(memory.lessons, lesson);
@@ -455,7 +517,8 @@ export class SemanticMemoryStore {
   async getRelevantLessons(
     query: string,
     limit = 6,
-    memoryType?: LessonMemoryType
+    memoryType?: LessonMemoryType,
+    sessionDomainLane: ConversationDomainLane | null = null
   ): Promise<SemanticLesson[]> {
     const memory = await this.load();
     const queryConcepts = extractConcepts(query);
@@ -466,7 +529,20 @@ export class SemanticMemoryStore {
     }
 
     if (queryConcepts.length === 0) {
-      return candidates.slice(-limit);
+      return [...candidates]
+        .sort((left, right) => {
+          const scoreOrder =
+            computeSemanticLessonDomainScore(right, sessionDomainLane) -
+            computeSemanticLessonDomainScore(left, sessionDomainLane);
+          if (scoreOrder !== 0) {
+            return scoreOrder;
+          }
+          if (left.createdAt !== right.createdAt) {
+            return right.createdAt.localeCompare(left.createdAt);
+          }
+          return left.id.localeCompare(right.id);
+        })
+        .slice(0, limit);
     }
 
     // --- Keyword path: inverted concept index ---
@@ -530,12 +606,29 @@ export class SemanticMemoryStore {
       if (candidateSet && !candidateSet.has(id)) continue;
       const kScore = (keywordScores.get(id) ?? 0) / maxKeywordScore;
       const vScore = vectorScores.get(id) ?? 0;
-      const blended = KEYWORD_WEIGHT * kScore + VECTOR_WEIGHT * vScore;
+      const lesson = lessonMap.get(id);
+      if (!lesson) {
+        continue;
+      }
+      const blended =
+        KEYWORD_WEIGHT * kScore +
+        VECTOR_WEIGHT * vScore +
+        computeSemanticLessonDomainScore(lesson, sessionDomainLane);
       hybridScored.push([id, blended]);
     }
 
     return hybridScored
-      .sort((a, b) => b[1] - a[1])
+      .sort((left, right) => {
+        if (left[1] !== right[1]) {
+          return right[1] - left[1];
+        }
+        const leftLesson = lessonMap.get(left[0]);
+        const rightLesson = lessonMap.get(right[0]);
+        if (leftLesson && rightLesson && leftLesson.createdAt !== rightLesson.createdAt) {
+          return rightLesson.createdAt.localeCompare(leftLesson.createdAt);
+        }
+        return left[0].localeCompare(right[0]);
+      })
       .slice(0, limit)
       .map(([id]) => lessonMap.get(id))
       .filter((lesson): lesson is SemanticLesson => lesson !== undefined);

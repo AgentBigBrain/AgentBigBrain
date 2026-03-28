@@ -16,6 +16,7 @@ implemented here.
 - `managedProcessRegistry.ts`
 - `playwrightBrowserProcessIntrospection.ts`
 - `startProcessHandler.ts`
+- `managedProcessTargetResolution.ts`
 - `checkProcessHandler.ts`
 - `stopProcessHandler.ts`
 - `probeHttpHandler.ts`
@@ -40,6 +41,8 @@ implemented here.
 
 ## Outputs
 - typed managed-process lease metadata
+- trusted loopback-target resolution for generic workspace-native dev or preview commands when the
+  workspace config pins a concrete localhost target
 - tracked browser-session metadata and close/open control handles
 - browser-session ownership metadata including runtime-managed browser pid plus linked preview
   lease, cwd, and pid when a visible browser belongs to a local preview stack
@@ -76,6 +79,9 @@ implemented here.
   truthful local file or loopback metadata instead of pretending localhost verification happened.
 - `start_process` must fail early on occupied requested loopback ports instead of pretending the
   process started cleanly.
+- Generic workspace-native server commands such as `npm run dev` or `npm run preview` must keep a
+  typed loopback target when trusted workspace config pins one, so later readiness and browser
+  proof stays on the actual app instead of drifting to planner defaults.
 - Browser proof must never overclaim: runtime-unavailable and expectation failures must remain
   typed.
 - Browser open/close follow-ups must operate on tracked sessions instead of guessing from free-form

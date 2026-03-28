@@ -76,7 +76,8 @@ env-parsing helpers while `config.ts` remains the stable config entrypoint.
   `src/core/workflowLearningRuntime/workflowInspection.ts`.
 - Config, identity, and platform/runtime support: `appleSiliconRuntime.ts`, `config.ts`,
   `crossPlatformPath.ts`, `envLoader.ts`, `fileLock.ts`, `ids.ts`, `personality.ts`,
-  `personalityStore.ts`, `runtimeEntropy.ts`, `shellRuntimeProfile.ts`, `sqliteStore.ts`,
+  `personalityStore.ts`, `runtimeEntropy.ts`, `sessionContext.ts`, `shellRuntimeProfile.ts`,
+  `sqliteStore.ts`,
   `stateStore.ts`, `types.ts`.
 - Extracted runtime-types subsystem: `src/core/runtimeTypes/actionTypes.ts`,
   `src/core/runtimeTypes/decisionSupportTypes.ts`,
@@ -171,7 +172,8 @@ env-parsing helpers while `config.ts` remains the stable config entrypoint.
 - shared runtime helpers consumed by `src/governors/`, `src/interfaces/`, `src/models/`, and
   `src/organs/`, including bounded episodic-memory queries and freshness-ranked unresolved
   situations for active-conversation recall, private remembered-situation review/update, or pulse
-  grounding
+  grounding, plus the shared conversation-domain contract and reducers consumed by interface
+  routing, broker integration, and lifecycle coordination
 
 ## Invariants
 - Shared contracts belong here before they belong in higher layers.
@@ -212,6 +214,8 @@ env-parsing helpers while `config.ts` remains the stable config entrypoint.
 - Safety-critical lexical policy should remain deterministic here or in the dedicated governor or
   intent surfaces; richer human-language understanding belongs in bounded higher-level runtimes or
   organs, not in fail-closed hard-constraint code.
+- Shared session-domain reducers and contracts belong here before routing, broker, or lifecycle
+  layers start inventing separate per-conversation domain state.
 
 ## Related Tests
 - `tests/core/agentLoop.test.ts`
@@ -282,6 +286,7 @@ env-parsing helpers while `config.ts` remains the stable config entrypoint.
 - `tests/core/stage6_86RuntimeStateStore.test.ts`
 - `tests/core/liveRunRecovery.test.ts`
 - `tests/core/loopCleanupPolicy.test.ts`
+- `tests/core/sessionContext.test.ts`
 
 ## When to Update This README
 Update this README when:

@@ -45,6 +45,34 @@ function buildTask(userInput: string): TaskRequest {
   };
 }
 
+function buildWorkflowDomainContext() {
+  return {
+    conversationId: "telegram:chat:user",
+    dominantLane: "workflow" as const,
+    recentLaneHistory: [
+      {
+        lane: "workflow" as const,
+        observedAt: "2026-03-20T12:00:00.000Z",
+        source: "routing_mode" as const,
+        weight: 2
+      }
+    ],
+    recentRoutingSignals: [
+      {
+        mode: "build" as const,
+        observedAt: "2026-03-20T12:00:00.000Z"
+      }
+    ],
+    continuitySignals: {
+      activeWorkspace: true,
+      returnHandoff: false,
+      modeContinuity: true
+    },
+    activeSince: "2026-03-20T12:00:00.000Z",
+    lastUpdatedAt: "2026-03-20T12:01:00.000Z"
+  };
+}
+
 class CapturingPlannerModelClient implements ModelClient {
   readonly backend = "mock" as const;
   private readonly delegate = new MockModelClient();
@@ -82,7 +110,7 @@ class InjectedSensitiveProfileStore {
     return [
       "contact.email: owner@example.com",
       "contact.phone: +1 555 0100",
-      "employment.current: Flare"
+      "employment.current: Lantern"
     ].join("\n");
   }
 
@@ -101,9 +129,9 @@ class InjectedSensitiveProfileStore {
   async queryFactsForPlanningContext(): Promise<readonly ProfileReadableFact[]> {
     return [
       {
-        factId: "fact_flare",
+        factId: "fact_lantern",
         key: "employment.current",
-        value: "Flare",
+        value: "Lantern",
         status: "confirmed",
         observedAt: new Date(0).toISOString(),
         lastUpdatedAt: new Date(0).toISOString(),
@@ -209,7 +237,7 @@ test("orchestrator enriches planner input with non-sensitive profile context fro
   );
 
   try {
-    await brain.runTask(buildTask("I work at Flare. Give me a concise status update."));
+    await brain.runTask(buildTask("I work at Lantern. Give me a concise status update."));
 
     const plannerPayload = JSON.parse(modelClient.lastPlannerUserPrompt) as {
       userInput?: string;
@@ -217,10 +245,10 @@ test("orchestrator enriches planner input with non-sensitive profile context fro
     const plannerInput = plannerPayload.userInput ?? "";
 
     assert.match(plannerInput, /\[AgentFriendProfileContext\]/);
-    assert.match(plannerInput, /employment\.current: Flare/i);
+    assert.match(plannerInput, /employment\.current: Lantern/i);
 
     const encryptedRaw = await readFile(encryptedProfilePath, "utf8");
-    assert.equal(encryptedRaw.includes("Flare"), false);
+    assert.equal(encryptedRaw.includes("Lantern"), false);
     assert.equal(encryptedRaw.includes("employment.current"), false);
   } finally {
     await rm(tempDir, { recursive: true, force: true });
@@ -239,7 +267,7 @@ test("orchestrator degrades gracefully when encrypted profile memory cannot be d
   const nowIso = new Date().toISOString();
 
   const seededProfileStore = new ProfileMemoryStore(encryptedProfilePath, seedProfileKey, 90);
-  await seededProfileStore.ingestFromTaskInput("seed-task", "I work at Flare.", nowIso);
+  await seededProfileStore.ingestFromTaskInput("seed-task", "I work at Lantern.", nowIso);
 
   const modelClient = new CapturingPlannerModelClient();
   const memoryStore = new SemanticMemoryStore(semanticPath);
@@ -329,7 +357,7 @@ test("orchestrator redacts sensitive profile fields before planner model egress"
     assert.match(plannerInput, /redactedSensitiveFields=2/);
     assert.match(plannerInput, /contact\.email: \[REDACTED\]/);
     assert.match(plannerInput, /contact\.phone: \[REDACTED\]/);
-    assert.match(plannerInput, /employment\.current: Flare/);
+    assert.match(plannerInput, /employment\.current: Lantern/);
     assert.equal(plannerInput.includes("owner@example.com"), false);
     assert.equal(plannerInput.includes("+1 555 0100"), false);
   } finally {
@@ -377,19 +405,132 @@ test("orchestrator ingests only current user request from conversation-wrapper e
     "- assistant: noted.",
     "",
     "Current user request:",
-    "who is Billy?"
+    "who is Owen?"
   ].join("\n");
 
   try {
     await brain.runTask(buildTask(wrappedInput));
-    assert.equal(capturingStore.lastIngestInput, "who is Billy?");
+    assert.equal(capturingStore.lastIngestInput, "who is Owen?");
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }
 });
 
-test("orchestrator recalls Billy contact context across conversation-wrapper turns", async () => {
-  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-orch-profile-billy-"));
+test("orchestrator remembers validated identity candidates through the canonical profile-memory store seam", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-orch-profile-validated-identity-"));
+  const statePath = path.join(tempDir, "state.json");
+  const semanticPath = path.join(tempDir, "semantic_memory.json");
+  const personalityPath = path.join(tempDir, "personality_profile.json");
+  const governancePath = path.join(tempDir, "governance_memory.json");
+  const encryptedProfilePath = path.join(tempDir, "profile_memory.secure.json");
+  const profileKey = Buffer.alloc(32, 19);
+
+  const modelClient = new CapturingPlannerModelClient();
+  const memoryStore = new SemanticMemoryStore(semanticPath);
+  const config = {
+    ...DEFAULT_BRAIN_CONFIG,
+    dna: {
+      ...DEFAULT_BRAIN_CONFIG.dna,
+      immutableKeywords: [...DEFAULT_BRAIN_CONFIG.dna.immutableKeywords],
+      protectedPathPrefixes: [...DEFAULT_BRAIN_CONFIG.dna.protectedPathPrefixes]
+    }
+  };
+  const profileStore = new ProfileMemoryStore(encryptedProfilePath, profileKey, 90);
+
+  const brain = new BrainOrchestrator(
+    config,
+    new PlannerOrgan(modelClient, memoryStore),
+    new ToolExecutorOrgan(config),
+    createDefaultGovernors(),
+    new MasterGovernor(config.governance.supermajorityThreshold),
+    new StateStore(statePath),
+    modelClient,
+    new ReflectionOrgan(memoryStore, modelClient),
+    new PersonalityStore(personalityPath),
+    new GovernanceMemoryStore(governancePath),
+    profileStore
+  );
+
+  try {
+    const remembered = await brain.rememberConversationProfileInput(
+      {
+        validatedFactCandidates: [
+          {
+            key: "identity.preferred_name",
+            candidateValue: "Avery",
+            source: "conversation.identity_interpretation",
+            confidence: 0.95
+          }
+        ]
+      },
+      "2026-03-21T12:05:00.000Z"
+    );
+
+    assert.equal(remembered, true);
+    const facts = await profileStore.readFacts({
+      purpose: "operator_view",
+      includeSensitive: true,
+      explicitHumanApproval: true,
+      approvalId: "approval_orchestrator_validated_identity_1",
+      maxFacts: 10
+    });
+    assert.equal(
+      facts.some((fact) => fact.key === "identity.preferred_name" && fact.value === "Avery"),
+      true
+    );
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("orchestrator passes session domain context into broker gating for workflow-only requests", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-orch-profile-domain-gate-"));
+  const statePath = path.join(tempDir, "state.json");
+  const semanticPath = path.join(tempDir, "semantic_memory.json");
+  const personalityPath = path.join(tempDir, "personality_profile.json");
+  const governancePath = path.join(tempDir, "governance_memory.json");
+
+  const modelClient = new CapturingPlannerModelClient();
+  const memoryStore = new SemanticMemoryStore(semanticPath);
+  const config = {
+    ...DEFAULT_BRAIN_CONFIG,
+    dna: {
+      ...DEFAULT_BRAIN_CONFIG.dna,
+      immutableKeywords: [...DEFAULT_BRAIN_CONFIG.dna.immutableKeywords],
+      protectedPathPrefixes: [...DEFAULT_BRAIN_CONFIG.dna.protectedPathPrefixes]
+    }
+  };
+  const capturingStore = new CapturingIngestProfileStore();
+
+  const brain = new BrainOrchestrator(
+    config,
+    new PlannerOrgan(modelClient, memoryStore),
+    new ToolExecutorOrgan(config),
+    createDefaultGovernors(),
+    new MasterGovernor(config.governance.supermajorityThreshold),
+    new StateStore(statePath),
+    modelClient,
+    new ReflectionOrgan(memoryStore, modelClient),
+    new PersonalityStore(personalityPath),
+    new GovernanceMemoryStore(governancePath),
+    capturingStore as unknown as ProfileMemoryStore
+  );
+
+  try {
+    await brain.runTask(
+      buildTask("Call me when the deployment is done and run the workspace build."),
+      {
+        conversationDomainContext: buildWorkflowDomainContext()
+      }
+    );
+    assert.equal(capturingStore.lastIngestInput, "");
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("orchestrator recalls Owen contact context across conversation-wrapper turns", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-orch-profile-owen-"));
   const statePath = path.join(tempDir, "state.json");
   const semanticPath = path.join(tempDir, "semantic_memory.json");
   const personalityPath = path.join(tempDir, "personality_profile.json");
@@ -423,29 +564,29 @@ test("orchestrator recalls Billy contact context across conversation-wrapper tur
     profileStore
   );
 
-  const billyNarrativeInput = [
+  const owenNarrativeInput = [
     "You are in an ongoing conversation with the same user.",
     "Recent conversation context (oldest to newest):",
     "- user: what's my name?",
     "- assistant: your name is Benny.",
     "",
     "Current user request:",
-    "I went to school with a guy named Billy, and he also used to work with me at Flare Web Design."
+    "I went to school with a guy named Owen, and he also used to work with me at Lantern Studio."
   ].join("\n");
 
-  const billyRecallInput = [
+  const owenRecallInput = [
     "You are in an ongoing conversation with the same user.",
     "Recent conversation context (oldest to newest):",
-    "- user: I went to school with a guy named Billy, and he also used to work with me at Flare Web Design.",
+    "- user: I went to school with a guy named Owen, and he also used to work with me at Lantern Studio.",
     "- assistant: Thanks for sharing that context.",
     "",
     "Current user request:",
-    "who is Billy?"
+    "who is Owen?"
   ].join("\n");
 
   try {
-    await brain.runTask(buildTask(billyNarrativeInput));
-    await brain.runTask(buildTask(billyRecallInput));
+    await brain.runTask(buildTask(owenNarrativeInput));
+    await brain.runTask(buildTask(owenRecallInput));
 
     const plannerPayload = JSON.parse(modelClient.lastPlannerUserPrompt) as {
       userInput?: string;
@@ -453,9 +594,9 @@ test("orchestrator recalls Billy contact context across conversation-wrapper tur
     const plannerInput = plannerPayload.userInput ?? "";
 
     assert.match(plannerInput, /\[AgentFriendProfileContext\]/);
-    assert.match(plannerInput, /contact\.billy\.name: Billy/i);
-    assert.match(plannerInput, /contact\.billy\.relationship: work_peer/i);
-    assert.match(plannerInput, /contact\.billy\.work_association: Flare Web Design/i);
+    assert.match(plannerInput, /contact\.owen\.name: Owen/i);
+    assert.match(plannerInput, /contact\.owen\.relationship: work_peer/i);
+    assert.match(plannerInput, /contact\.owen\.work_association: Lantern Studio/i);
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }

@@ -32,6 +32,10 @@ import {
   stripExecutionStyleRespondActions
 } from "./explicitActionRepairSupport";
 import {
+  normalizeNextJsRouteWriteActions,
+  normalizeUnsafeFrameworkScaffoldActions
+} from "./frameworkActionRepairSupport";
+import {
   PlannerActionPreparationResult,
   PlannerExecutionEnvironmentContext,
   PlannerActionValidationResult,
@@ -45,7 +49,8 @@ export function preparePlannerActions(
   plannerOutput: unknown,
   currentUserRequest: string,
   requiredActionType: RequiredActionType,
-  fullExecutionInput: string = currentUserRequest
+  fullExecutionInput: string = currentUserRequest,
+  executionEnvironment: PlannerExecutionEnvironmentContext | null = null
 ): PlannerActionPreparationResult {
   let actions = normalizeModelActions(extractActionCandidates(plannerOutput));
   actions = normalizeRequiredCreateSkillParams(
@@ -59,6 +64,16 @@ export function preparePlannerActions(
       requiredActionType
   );
   actions = stripExecutionStyleRespondActions(actions, currentUserRequest);
+  actions = normalizeUnsafeFrameworkScaffoldActions(
+    actions,
+    currentUserRequest,
+    executionEnvironment
+  );
+  actions = normalizeNextJsRouteWriteActions(
+    actions,
+    currentUserRequest,
+    executionEnvironment
+  );
   actions = normalizeTrackedArtifactPreviewRefreshActions(
     actions,
     currentUserRequest,

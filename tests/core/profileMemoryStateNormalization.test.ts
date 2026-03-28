@@ -21,8 +21,8 @@ test("normalizeProfileMemoryState drops malformed facts and preserves valid muta
     episodes: [
       {
         id: "episode_valid",
-        title: "Billy fall situation",
-        summary: "Billy fell down and the outcome was not mentioned yet.",
+        title: "Owen fall situation",
+        summary: "Owen fell down and the outcome was not mentioned yet.",
         status: "unresolved",
         sourceTaskId: "task_episode_state_normalization",
         source: "test",
@@ -33,8 +33,8 @@ test("normalizeProfileMemoryState drops malformed facts and preserves valid muta
         lastMentionedAt: "2026-03-07T00:05:00.000Z",
         lastUpdatedAt: "2026-03-07T00:05:00.000Z",
         resolvedAt: null,
-        entityRefs: ["entity_billy"],
-        openLoopRefs: ["loop_billy"],
+        entityRefs: ["entity_owen"],
+        openLoopRefs: ["loop_owen"],
         tags: ["followup"]
       },
       {
@@ -74,7 +74,7 @@ test("normalizeProfileMemoryState drops malformed facts and preserves valid muta
 
   assert.equal(normalized.facts.length, 1);
   assert.equal(normalized.episodes.length, 1);
-  assert.equal(normalized.episodes[0]?.title, "Billy fall situation");
+  assert.equal(normalized.episodes[0]?.title, "Owen fall situation");
   assert.equal(normalized.facts[0]?.key, "followup.tax.filing");
   assert.equal(
     normalized.facts[0]?.mutationAudit?.rulepackVersion,

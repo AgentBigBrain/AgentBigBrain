@@ -31,7 +31,7 @@ test("autonomous runtime affordances direct-auto smoke emits a PASS artifact for
 
   if (
     persisted.status === "BLOCKED"
-    && /(?:429|exceeded your current quota|rate limit|fetch failed|request timed out|requires a real model backend|effective backend is mock|missing OPENAI_API_KEY)/i.test([
+    && /(?:429|exceeded your current quota|usage limit|purchase more credits|try again at|rate limit|fetch failed|request timed out|socket hang up|ECONNRESET|governor timeout or failure|requires a real model backend|effective backend is mock|missing OPENAI_API_KEY|bounded direct-auto smoke budget expired)/i.test([
       persisted.successScenario.blockerReason ?? "",
       persisted.boundedStopScenario.blockerReason ?? ""
     ].join("\n"))

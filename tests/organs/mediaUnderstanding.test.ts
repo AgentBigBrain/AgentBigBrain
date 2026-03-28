@@ -24,6 +24,9 @@ test("createMediaUnderstandingConfigFromEnv falls back to bounded defaults", () 
     OPENAI_BASE_URL: process.env.OPENAI_BASE_URL,
     OPENAI_MODEL_SMALL_FAST: process.env.OPENAI_MODEL_SMALL_FAST,
     CODEX_MODEL_SMALL_FAST: process.env.CODEX_MODEL_SMALL_FAST,
+    BRAIN_MEDIA_BACKEND: process.env.BRAIN_MEDIA_BACKEND,
+    BRAIN_MEDIA_VISION_BACKEND: process.env.BRAIN_MEDIA_VISION_BACKEND,
+    BRAIN_MEDIA_TRANSCRIPTION_BACKEND: process.env.BRAIN_MEDIA_TRANSCRIPTION_BACKEND,
     BRAIN_MEDIA_VISION_MODEL: process.env.BRAIN_MEDIA_VISION_MODEL,
     BRAIN_MEDIA_TRANSCRIPTION_MODEL: process.env.BRAIN_MEDIA_TRANSCRIPTION_MODEL,
     BRAIN_MEDIA_REQUEST_TIMEOUT_MS: process.env.BRAIN_MEDIA_REQUEST_TIMEOUT_MS
@@ -34,6 +37,9 @@ test("createMediaUnderstandingConfigFromEnv falls back to bounded defaults", () 
   delete process.env.OPENAI_BASE_URL;
   delete process.env.OPENAI_MODEL_SMALL_FAST;
   delete process.env.CODEX_MODEL_SMALL_FAST;
+  delete process.env.BRAIN_MEDIA_BACKEND;
+  delete process.env.BRAIN_MEDIA_VISION_BACKEND;
+  delete process.env.BRAIN_MEDIA_TRANSCRIPTION_BACKEND;
   delete process.env.BRAIN_MEDIA_VISION_MODEL;
   delete process.env.BRAIN_MEDIA_TRANSCRIPTION_MODEL;
   delete process.env.BRAIN_MEDIA_REQUEST_TIMEOUT_MS;
@@ -42,6 +48,10 @@ test("createMediaUnderstandingConfigFromEnv falls back to bounded defaults", () 
     const config = createMediaUnderstandingConfigFromEnv();
     assert.equal(config.requestedBackend, "inherit_text_backend");
     assert.equal(config.resolvedBackend, "mock");
+    assert.equal(config.requestedVisionBackend, "inherit_text_backend");
+    assert.equal(config.resolvedVisionBackend, "mock");
+    assert.equal(config.requestedTranscriptionBackend, "inherit_text_backend");
+    assert.equal(config.resolvedTranscriptionBackend, "mock");
     assert.equal(config.openAIApiKey, null);
     assert.equal(config.openAIBaseUrl, "https://api.openai.com/v1");
     assert.ok(config.requestTimeoutMs >= 1_000);
@@ -60,6 +70,8 @@ test("createMediaUnderstandingConfigFromEnv can keep media on the explicit OpenA
   const originalEnv = {
     BRAIN_MODEL_BACKEND: process.env.BRAIN_MODEL_BACKEND,
     BRAIN_MEDIA_BACKEND: process.env.BRAIN_MEDIA_BACKEND,
+    BRAIN_MEDIA_VISION_BACKEND: process.env.BRAIN_MEDIA_VISION_BACKEND,
+    BRAIN_MEDIA_TRANSCRIPTION_BACKEND: process.env.BRAIN_MEDIA_TRANSCRIPTION_BACKEND,
     OPENAI_API_KEY: process.env.OPENAI_API_KEY,
     OPENAI_MODEL_SMALL_FAST: process.env.OPENAI_MODEL_SMALL_FAST,
     CODEX_MODEL_SMALL_FAST: process.env.CODEX_MODEL_SMALL_FAST,
@@ -68,6 +80,8 @@ test("createMediaUnderstandingConfigFromEnv can keep media on the explicit OpenA
 
   process.env.BRAIN_MODEL_BACKEND = "codex_oauth";
   process.env.BRAIN_MEDIA_BACKEND = "openai_api";
+  delete process.env.BRAIN_MEDIA_VISION_BACKEND;
+  delete process.env.BRAIN_MEDIA_TRANSCRIPTION_BACKEND;
   delete process.env.OPENAI_API_KEY;
   process.env.OPENAI_MODEL_SMALL_FAST = "gpt-4.1-mini";
   process.env.CODEX_MODEL_SMALL_FAST = "gpt-5.4-mini";
@@ -77,6 +91,10 @@ test("createMediaUnderstandingConfigFromEnv can keep media on the explicit OpenA
     const config = createMediaUnderstandingConfigFromEnv();
     assert.equal(config.requestedBackend, "openai_api");
     assert.equal(config.resolvedBackend, "openai_api");
+    assert.equal(config.requestedVisionBackend, "openai_api");
+    assert.equal(config.resolvedVisionBackend, "openai_api");
+    assert.equal(config.requestedTranscriptionBackend, "openai_api");
+    assert.equal(config.resolvedTranscriptionBackend, "openai_api");
     assert.equal(config.openAIApiKey, null);
     assert.equal(config.visionModel, "gpt-4.1-mini");
   } finally {
@@ -94,18 +112,61 @@ test("createMediaUnderstandingConfigFromEnv can inherit the text backend and fai
   const originalEnv = {
     BRAIN_MODEL_BACKEND: process.env.BRAIN_MODEL_BACKEND,
     BRAIN_MEDIA_BACKEND: process.env.BRAIN_MEDIA_BACKEND,
+    BRAIN_MEDIA_VISION_BACKEND: process.env.BRAIN_MEDIA_VISION_BACKEND,
+    BRAIN_MEDIA_TRANSCRIPTION_BACKEND: process.env.BRAIN_MEDIA_TRANSCRIPTION_BACKEND,
     OPENAI_API_KEY: process.env.OPENAI_API_KEY
   };
 
   process.env.BRAIN_MODEL_BACKEND = "codex_oauth";
   process.env.BRAIN_MEDIA_BACKEND = "inherit_text_backend";
+  delete process.env.BRAIN_MEDIA_VISION_BACKEND;
+  delete process.env.BRAIN_MEDIA_TRANSCRIPTION_BACKEND;
   process.env.OPENAI_API_KEY = "sk-test";
 
   try {
     const config = createMediaUnderstandingConfigFromEnv();
     assert.equal(config.requestedBackend, "inherit_text_backend");
     assert.equal(config.resolvedBackend, "codex_oauth");
+    assert.equal(config.requestedVisionBackend, "inherit_text_backend");
+    assert.equal(config.resolvedVisionBackend, "codex_oauth");
+    assert.equal(config.requestedTranscriptionBackend, "inherit_text_backend");
+    assert.equal(config.resolvedTranscriptionBackend, "codex_oauth");
     assert.equal(config.openAIApiKey, null);
+  } finally {
+    for (const [key, value] of Object.entries(originalEnv)) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+  }
+});
+
+test("createMediaUnderstandingConfigFromEnv can split vision and transcription backends by modality", () => {
+  const originalEnv = {
+    BRAIN_MODEL_BACKEND: process.env.BRAIN_MODEL_BACKEND,
+    BRAIN_MEDIA_BACKEND: process.env.BRAIN_MEDIA_BACKEND,
+    BRAIN_MEDIA_VISION_BACKEND: process.env.BRAIN_MEDIA_VISION_BACKEND,
+    BRAIN_MEDIA_TRANSCRIPTION_BACKEND: process.env.BRAIN_MEDIA_TRANSCRIPTION_BACKEND,
+    OPENAI_API_KEY: process.env.OPENAI_API_KEY
+  };
+
+  process.env.BRAIN_MODEL_BACKEND = "codex_oauth";
+  process.env.BRAIN_MEDIA_BACKEND = "inherit_text_backend";
+  process.env.BRAIN_MEDIA_VISION_BACKEND = "codex_oauth";
+  process.env.BRAIN_MEDIA_TRANSCRIPTION_BACKEND = "openai_api";
+  process.env.OPENAI_API_KEY = "sk-test";
+
+  try {
+    const config = createMediaUnderstandingConfigFromEnv();
+    assert.equal(config.requestedBackend, "inherit_text_backend");
+    assert.equal(config.resolvedBackend, "codex_oauth");
+    assert.equal(config.requestedVisionBackend, "codex_oauth");
+    assert.equal(config.resolvedVisionBackend, "codex_oauth");
+    assert.equal(config.requestedTranscriptionBackend, "openai_api");
+    assert.equal(config.resolvedTranscriptionBackend, "openai_api");
+    assert.equal(config.openAIApiKey, "sk-test");
   } finally {
     for (const [key, value] of Object.entries(originalEnv)) {
       if (value === undefined) {
@@ -155,6 +216,10 @@ test("interpretImageAttachment uses the Codex bearer token when media inherits t
       {
         requestedBackend: "inherit_text_backend",
         resolvedBackend: "codex_oauth",
+        requestedVisionBackend: "codex_oauth",
+        resolvedVisionBackend: "codex_oauth",
+        requestedTranscriptionBackend: "inherit_text_backend",
+        resolvedTranscriptionBackend: "codex_oauth",
         openAIApiKey: null,
         openAIBaseUrl: "https://api.openai.com/v1",
         visionModel: "gpt-5.4-mini",
@@ -208,6 +273,10 @@ test("interpretMediaAttachment prefers fixture catalog entries over fallback log
       {
         requestedBackend: "openai_api",
         resolvedBackend: "openai_api",
+        requestedVisionBackend: "openai_api",
+        resolvedVisionBackend: "openai_api",
+        requestedTranscriptionBackend: "openai_api",
+        resolvedTranscriptionBackend: "openai_api",
         openAIApiKey: null,
         openAIBaseUrl: "https://api.openai.com/v1",
         visionModel: "gpt-4.1-mini",
@@ -285,6 +354,10 @@ test("MediaUnderstandingOrgan enriches all attachments in one envelope", async (
     {
       requestedBackend: "openai_api",
       resolvedBackend: "openai_api",
+      requestedVisionBackend: "openai_api",
+      resolvedVisionBackend: "openai_api",
+      requestedTranscriptionBackend: "openai_api",
+      resolvedTranscriptionBackend: "openai_api",
       openAIApiKey: null,
       openAIBaseUrl: "https://api.openai.com/v1",
       visionModel: "gpt-4.1-mini",

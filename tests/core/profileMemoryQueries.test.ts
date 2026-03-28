@@ -18,7 +18,7 @@ test("readProfileFacts hides sensitive facts without explicit approval", () => {
   let state = createEmptyProfileMemoryState();
   state = upsertTemporalProfileFact(state, {
     key: "employment.current",
-    value: "Flare",
+    value: "Lantern",
     sensitive: false,
     sourceTaskId: "task_profile_query_read_1",
     source: "test",
@@ -73,7 +73,7 @@ test("buildProfilePlanningContext preserves query-aware non-sensitive grounding"
   let state = createEmptyProfileMemoryState();
   state = upsertTemporalProfileFact(state, {
     key: "employment.current",
-    value: "Flare",
+    value: "Lantern",
     sensitive: false,
     sourceTaskId: "task_profile_query_context_1",
     source: "test",
@@ -90,8 +90,8 @@ test("buildProfilePlanningContext preserves query-aware non-sensitive grounding"
     confidence: 0.95
   }).nextState;
   state = upsertTemporalProfileFact(state, {
-    key: "contact.billy.name",
-    value: "Billy",
+    key: "contact.owen.name",
+    value: "Owen",
     sensitive: false,
     sourceTaskId: "task_profile_query_context_3",
     source: "test",
@@ -99,8 +99,8 @@ test("buildProfilePlanningContext preserves query-aware non-sensitive grounding"
     confidence: 0.95
   }).nextState;
   state = upsertTemporalProfileFact(state, {
-    key: "contact.billy.work_association",
-    value: "Flare Web Design",
+    key: "contact.owen.work_association",
+    value: "Lantern Studio",
     sensitive: false,
     sourceTaskId: "task_profile_query_context_4",
     source: "test",
@@ -108,14 +108,14 @@ test("buildProfilePlanningContext preserves query-aware non-sensitive grounding"
     confidence: 0.95
   }).nextState;
 
-  const planningContext = buildProfilePlanningContext(state, 4, "who is Billy?");
+  const planningContext = buildProfilePlanningContext(state, 4, "who is Owen?");
 
-  assert.equal(planningContext.includes("contact.billy.name: Billy"), true);
+  assert.equal(planningContext.includes("contact.owen.name: Owen"), true);
   assert.equal(
-    planningContext.includes("contact.billy.work_association: Flare Web Design"),
+    planningContext.includes("contact.owen.work_association: Lantern Studio"),
     true
   );
-  assert.equal(planningContext.includes("employment.current: Flare"), true);
+  assert.equal(planningContext.includes("employment.current: Lantern"), true);
   assert.equal(planningContext.includes("address"), false);
   assert.equal(planningContext.includes("123 Main Street"), false);
 });

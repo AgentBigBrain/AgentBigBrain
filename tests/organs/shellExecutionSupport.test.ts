@@ -1,106 +1,249 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import test from "node:test";
 
-import type { ShellRuntimeProfileV1 } from "../../src/core/types";
+import { resolveShellRuntimeProfile } from "../../src/core/shellRuntimeProfile";
 import {
+  appendWindowsPowerShellPackageManagerFailureChecks,
+  normalizeWindowsPowerShellPackageManagerCommand,
   resolveCommandAwareShellEnvironment,
-  resolveEffectiveShellProfile
+  resolveEffectiveShellProfile,
+  resolveShellPostconditionFailure,
+  resolveShellSuccessWorkspaceRoot
 } from "../../src/organs/executionRuntime/shellExecutionSupport";
 
-function buildWindowsPowerShellProfile(): ShellRuntimeProfileV1 {
-  return {
-    profileVersion: "v1",
+function buildWindowsPowerShellProfile() {
+  return resolveShellRuntimeProfile({
+    requestedProfile: "powershell",
+    executableOverride: null,
     platform: "win32",
-    shellKind: "powershell",
-    executable: "powershell.exe",
-    invocationMode: "inline_command",
-    wrapperArgs: ["-NoProfile", "-NonInteractive", "-Command"],
-    encoding: "utf8",
-    commandMaxChars: 4000,
-    timeoutMsDefault: 10_000,
-    envPolicy: {
-      mode: "allowlist",
-      allowlist: ["PATH", "HOME", "USERPROFILE", "TEMP", "SYSTEMROOT"],
-      denylist: ["TOKEN", "SECRET", "PASSWORD", "AUTH", "COOKIE"]
+    env: {
+      PATH: "C:\\Windows\\System32\\WindowsPowerShell\\v1.0",
+      SYSTEMROOT: "C:\\Windows",
+      ComSpec: "C:\\Windows\\System32\\cmd.exe",
+      PATHEXT: ".COM;.EXE;.BAT;.CMD",
+      WINDIR: "C:\\Windows"
     },
-    cwdPolicy: {
-      allowRelative: true,
-      normalize: "native",
-      denyOutsideSandbox: false
-    }
-  };
+    allowRealShellExecution: false,
+    timeoutMsDefault: 10_000,
+    commandMaxChars: 4_000,
+    envMode: "allowlist",
+    envAllowlistKeys: ["PATH", "SYSTEMROOT"],
+    envDenylistKeys: ["TOKEN"],
+    allowExecutionPolicyBypass: false,
+    wslDistro: null,
+    denyOutsideSandboxCwd: true,
+    allowRelativeCwd: true
+  });
 }
 
-test("resolveEffectiveShellProfile routes simple Windows npm commands through cmd.exe", () => {
-  const effectiveProfile = resolveEffectiveShellProfile(
-    buildWindowsPowerShellProfile(),
-    "npm run preview -- --host 127.0.0.1 --port 4173"
-  );
+test("resolveEffectiveShellProfile keeps Windows npm commands on PowerShell", () => {
+  const profile = buildWindowsPowerShellProfile();
 
-  assert.equal(effectiveProfile.shellKind, "cmd");
-  assert.equal(effectiveProfile.executable, "cmd.exe");
-  assert.deepEqual(effectiveProfile.wrapperArgs, ["/d", "/c"]);
+  const effectiveProfile = resolveEffectiveShellProfile(profile, "npm install");
+
+  assert.equal(effectiveProfile.shellKind, "powershell");
+  assert.equal(effectiveProfile.executable, "powershell");
+  assert.deepEqual(effectiveProfile.wrapperArgs, ["-NoProfile", "-NonInteractive", "-Command"]);
 });
 
-test("resolveCommandAwareShellEnvironment adds launcher vars for Windows package-manager commands", () => {
-  const sourceEnv: NodeJS.ProcessEnv = {
-    PATH: "C:\\Windows\\System32",
-    HOME: "C:\\Users\\testuser",
-    USERPROFILE: "C:\\Users\\testuser",
-    TEMP: "C:\\Temp",
+test("Windows PowerShell package-manager commands normalize to .cmd launchers with exit checks", () => {
+  const profile = buildWindowsPowerShellProfile();
+
+  const normalized = normalizeWindowsPowerShellPackageManagerCommand(
+    profile,
+    "npm install react"
+  );
+  const guarded = appendWindowsPowerShellPackageManagerFailureChecks(profile, normalized);
+
+  assert.equal(normalized, "npm.cmd install react");
+  assert.match(
+    guarded,
+    /^npm\.cmd install react; if \(\$LASTEXITCODE -ne 0\) \{ exit \$LASTEXITCODE \}$/i
+  );
+});
+
+test("resolveCommandAwareShellEnvironment preserves launcher variables for PowerShell npm commands", () => {
+  const profile = buildWindowsPowerShellProfile();
+
+  const resolution = resolveCommandAwareShellEnvironment(profile, "npm install", {
+    PATH: "C:\\Windows\\System32\\WindowsPowerShell\\v1.0",
     SYSTEMROOT: "C:\\Windows",
     ComSpec: "C:\\Windows\\System32\\cmd.exe",
     PATHEXT: ".COM;.EXE;.BAT;.CMD",
     WINDIR: "C:\\Windows"
-  };
+  });
 
-  const resolution = resolveCommandAwareShellEnvironment(
-    buildWindowsPowerShellProfile(),
-    "npm run preview -- --host 127.0.0.1 --port 4173",
-    sourceEnv
+  assert.equal(resolution.env.ComSpec, "C:\\Windows\\System32\\cmd.exe");
+  assert.equal(resolution.env.PATHEXT, ".COM;.EXE;.BAT;.CMD");
+  assert.equal(resolution.env.WINDIR, "C:\\Windows");
+  assert.deepEqual(
+    resolution.envKeyNames,
+    ["ComSpec", "PATH", "PATHEXT", "SYSTEMROOT", "WINDIR"]
   );
-
-  assert.equal(resolution.env.ComSpec, sourceEnv.ComSpec);
-  assert.equal(resolution.env.PATHEXT, sourceEnv.PATHEXT);
-  assert.equal(resolution.env.WINDIR, sourceEnv.WINDIR);
-  assert.deepEqual(resolution.envKeyNames, [
-    "ComSpec",
-    "HOME",
-    "PATH",
-    "PATHEXT",
-    "SYSTEMROOT",
-    "TEMP",
-    "USERPROFILE",
-    "WINDIR"
-  ]);
 });
 
-test("resolveCommandAwareShellEnvironment leaves non-package-manager commands unchanged", () => {
-  const sourceEnv: NodeJS.ProcessEnv = {
-    PATH: "C:\\Windows\\System32",
-    HOME: "C:\\Users\\testuser",
-    USERPROFILE: "C:\\Users\\testuser",
-    TEMP: "C:\\Temp",
-    SYSTEMROOT: "C:\\Windows",
-    ComSpec: "C:\\Windows\\System32\\cmd.exe",
-    PATHEXT: ".COM;.EXE;.BAT;.CMD",
-    WINDIR: "C:\\Windows"
-  };
+test("resolveCommandAwareShellEnvironment preserves launcher variables for embedded PowerShell npm commands", () => {
+  const profile = buildWindowsPowerShellProfile();
 
   const resolution = resolveCommandAwareShellEnvironment(
-    buildWindowsPowerShellProfile(),
-    "python -m http.server 4173",
-    sourceEnv
+    profile,
+    "$project = 'C:\\Users\\testuser\\Desktop\\Drone App'; Set-Location $project; npm.cmd create vite@latest . -- --template react",
+    {
+      PATH: "C:\\Windows\\System32\\WindowsPowerShell\\v1.0",
+      SYSTEMROOT: "C:\\Windows",
+      ComSpec: "C:\\Windows\\System32\\cmd.exe",
+      PATHEXT: ".COM;.EXE;.BAT;.CMD",
+      WINDIR: "C:\\Windows"
+    }
   );
 
-  assert.deepEqual(resolution.envKeyNames, [
-    "HOME",
-    "PATH",
-    "SYSTEMROOT",
-    "TEMP",
-    "USERPROFILE"
-  ]);
-  assert.equal("ComSpec" in resolution.env, false);
-  assert.equal("PATHEXT" in resolution.env, false);
-  assert.equal("WINDIR" in resolution.env, false);
+  assert.equal(resolution.env.ComSpec, "C:\\Windows\\System32\\cmd.exe");
+  assert.equal(resolution.env.PATHEXT, ".COM;.EXE;.BAT;.CMD");
+  assert.equal(resolution.env.WINDIR, "C:\\Windows");
+  assert.deepEqual(
+    resolution.envKeyNames,
+    ["ComSpec", "PATH", "PATHEXT", "SYSTEMROOT", "WINDIR"]
+  );
+});
+
+test("resolveShellSuccessWorkspaceRoot returns scaffold target for PowerShell Vite bootstrap commands", async () => {
+  const workspaceRoot = await resolveShellSuccessWorkspaceRoot(
+    "$project = 'Drone Preview App'; Set-Location 'C:\\Users\\testuser\\OneDrive\\Desktop'; npm.cmd create vite@latest $project -- --template react",
+    "C:\\Users\\testuser\\OneDrive\\Desktop"
+  );
+
+  assert.equal(
+    workspaceRoot,
+    "C:\\Users\\testuser\\OneDrive\\Desktop\\Drone Preview App"
+  );
+});
+
+test("resolveShellSuccessWorkspaceRoot returns scaffold target for option-first Vite bootstrap commands", async () => {
+  const workspaceRoot = await resolveShellSuccessWorkspaceRoot(
+    "Set-Location 'C:\\Users\\testuser\\OneDrive\\Desktop'; npx.cmd create-vite@latest --template react-ts --no-interactive 'Drone Preview App'",
+    "C:\\Users\\testuser\\OneDrive\\Desktop"
+  );
+
+  assert.equal(
+    workspaceRoot,
+    "C:\\Users\\testuser\\OneDrive\\Desktop\\Drone Preview App"
+  );
+});
+
+test("resolveShellSuccessWorkspaceRoot returns cwd for successful install inside a Vite workspace", async () => {
+  const workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "abb-shell-workspace-"));
+  try {
+    await writeFile(
+      path.join(workspaceRoot, "package.json"),
+      JSON.stringify({
+        name: "drone-preview-app",
+        private: true,
+        scripts: {
+          dev: "vite",
+          build: "vite build"
+        },
+        devDependencies: {
+          vite: "^7.0.0"
+        }
+      }),
+      "utf8"
+    );
+
+    const resolved = await resolveShellSuccessWorkspaceRoot("npm install", workspaceRoot);
+
+    assert.equal(resolved, workspaceRoot);
+  } finally {
+    await rm(workspaceRoot, { recursive: true, force: true });
+  }
+});
+
+test("resolveShellSuccessWorkspaceRoot returns final Desktop folder for bounded Next.js scaffold commands", async () => {
+  const workspaceRoot = await resolveShellSuccessWorkspaceRoot(
+    "$final = 'C:\\Users\\testuser\\OneDrive\\Desktop\\Downtown Detroit Drones'; $tempRoot = Join-Path $env:TEMP 'agentbigbrain-framework-scaffold'; $temp = Join-Path $tempRoot 'downtown-detroit-drones'; Set-Location $tempRoot; npx.cmd create-next-app@latest 'downtown-detroit-drones' --js --eslint --app --use-npm --yes --skip-install --no-tailwind --no-src-dir --disable-git --no-react-compiler; Get-ChildItem -Force $temp | ForEach-Object { Move-Item $_.FullName -Destination $final -Force }; Remove-Item $temp -Recurse -Force; Set-Location $final",
+    "C:\\Users\\testuser\\OneDrive\\Desktop"
+  );
+
+  assert.equal(
+    workspaceRoot,
+    "C:\\Users\\testuser\\OneDrive\\Desktop\\Downtown Detroit Drones"
+  );
+});
+
+test("resolveShellSuccessWorkspaceRoot returns cwd for successful install inside a Next.js workspace", async () => {
+  const workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "abb-next-shell-workspace-"));
+  try {
+    await writeFile(
+      path.join(workspaceRoot, "package.json"),
+      JSON.stringify({
+        name: "downtown-detroit-drones",
+        private: true,
+        scripts: {
+          dev: "next dev",
+          build: "next build"
+        },
+        dependencies: {
+          next: "^16.0.0",
+          react: "^19.0.0",
+          "react-dom": "^19.0.0"
+        }
+      }),
+      "utf8"
+    );
+
+    const resolved = await resolveShellSuccessWorkspaceRoot("npm install", workspaceRoot);
+
+    assert.equal(resolved, workspaceRoot);
+  } finally {
+    await rm(workspaceRoot, { recursive: true, force: true });
+  }
+});
+
+test("resolveShellPostconditionFailure validates Next.js build output", async () => {
+  const workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "abb-next-build-workspace-"));
+  try {
+    await writeFile(
+      path.join(workspaceRoot, "package.json"),
+      JSON.stringify({
+        name: "downtown-detroit-drones",
+        private: true,
+        scripts: {
+          build: "next build"
+        },
+        dependencies: {
+          next: "^16.0.0"
+        }
+      }),
+      "utf8"
+    );
+
+    const missingBuildFailure = await resolveShellPostconditionFailure(
+      "npm run build",
+      workspaceRoot
+    );
+    assert.match(
+      missingBuildFailure?.message ?? "",
+      /\.next[\\/]+BUILD_ID/i
+    );
+
+    await mkdir(path.join(workspaceRoot, ".next"), { recursive: true });
+    await writeFile(path.join(workspaceRoot, ".next", "BUILD_ID"), "build-123", "utf8");
+
+    const noFailure = await resolveShellPostconditionFailure("npm run build", workspaceRoot);
+    assert.equal(noFailure, null);
+  } finally {
+    await rm(workspaceRoot, { recursive: true, force: true });
+  }
+});
+
+test("resolveShellPostconditionFailure validates option-first Vite scaffold target instead of template flags", async () => {
+  const failure = await resolveShellPostconditionFailure(
+    "Set-Location 'C:\\Users\\testuser\\OneDrive\\Desktop'; npx.cmd create-vite@latest --template react-ts --no-interactive 'Drone Preview App'",
+    "C:\\Users\\testuser\\OneDrive\\Desktop"
+  );
+
+  assert.match(failure?.message ?? "", /Drone Preview App[\\/]+package\.json/i);
+  assert.doesNotMatch(failure?.message ?? "", /--template[\\/]+package\.json/i);
 });

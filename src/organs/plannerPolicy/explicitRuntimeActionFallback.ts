@@ -6,6 +6,9 @@ import { estimateActionCostUsd } from "../../core/actionCostPolicy";
 import { makeId } from "../../core/ids";
 import { PlannedAction } from "../../core/types";
 import { RequiredActionType } from "./executionStyleContracts";
+import { buildDeterministicFrameworkBuildFallbackActions } from "./frameworkRuntimeActionFallback";
+
+export { buildDeterministicFrameworkBuildFallbackActions } from "./frameworkRuntimeActionFallback";
 
 const WINDOWS_PATH_START_PATTERN = /[A-Za-z]:\\/g;
 const BLOCKED_PATHS_SECTION_PATTERNS = [
@@ -18,6 +21,12 @@ const PATH_CLAUSE_DELIMITER_PATTERNS = [
   /\s+now\b/i,
   /\s+then\b/i
 ] as const;
+const TRACKED_BROWSER_SESSION_ID_PATTERN = /\bsessionId=([A-Za-z0-9:_-]+)/i;
+const TRACKED_BROWSER_URL_PATTERN = /\burl=([^\s;]+)/i;
+const PREVIEW_PROCESS_LEASES_LINE_PATTERN = /^-\s*Preview process leases:\s*(.+)$/im;
+const LINKED_PREVIEW_LEASE_INLINE_PATTERN = /\blinkedPreviewLease=([A-Za-z0-9:_-]+)/i;
+const LINKED_PREVIEW_PROCESS_LINE_PATTERN =
+  /\bLinked preview process:\s*leaseId=([A-Za-z0-9:_-]+)/i;
 
 /**
  * Normalizes one Windows path candidate into a trimmed stable form.
@@ -169,6 +178,85 @@ function buildInspectWorkspaceResourcesAction(rootPath: string): PlannedAction {
 }
 
 /**
+ * Extracts exact tracked preview-process lease ids from the conversation-aware execution input.
+ *
+ * @param fullExecutionInput - Conversation-aware execution payload sent to the planner.
+ * @returns Exact preview-process lease ids, or an empty list when the current request context has none.
+ */
+function extractTrackedPreviewLeaseIds(fullExecutionInput: string): string[] {
+  const previewLeaseListMatch = fullExecutionInput.match(PREVIEW_PROCESS_LEASES_LINE_PATTERN);
+  const leaseIds = [
+    ...(previewLeaseListMatch?.[1]
+      ?.split(",")
+      .map((value) => value.trim())
+      .filter((value) => /^[A-Za-z0-9:_-]+$/.test(value)) ?? []),
+    fullExecutionInput.match(LINKED_PREVIEW_LEASE_INLINE_PATTERN)?.[1] ?? null,
+    fullExecutionInput.match(LINKED_PREVIEW_PROCESS_LINE_PATTERN)?.[1] ?? null
+  ].filter((value): value is string => typeof value === "string" && value.trim().length > 0);
+  return [...new Set(leaseIds)];
+}
+
+/**
+ * Extracts the best tracked browser session id and URL for one close-browser follow-up fallback.
+ *
+ * @param fullExecutionInput - Conversation-aware execution payload sent to the planner.
+ * @returns Exact tracked browser session id and URL when present.
+ */
+function extractTrackedBrowserCloseTarget(
+  fullExecutionInput: string
+): { sessionId: string | null; url: string | null } {
+  return {
+    sessionId: fullExecutionInput.match(TRACKED_BROWSER_SESSION_ID_PATTERN)?.[1]?.trim() ?? null,
+    url: fullExecutionInput.match(TRACKED_BROWSER_URL_PATTERN)?.[1]?.trim() ?? null
+  };
+}
+
+/**
+ * Builds a deterministic close-browser fallback for tracked browser-session follow-ups.
+ *
+ * @param fullExecutionInput - Conversation-aware execution payload sent to the planner.
+ * @returns Bounded close-browser and linked preview-stop actions, or an empty list when the tracked target is missing.
+ */
+function buildTrackedCloseBrowserFallbackActions(
+  fullExecutionInput: string
+): PlannedAction[] {
+  const { sessionId, url } = extractTrackedBrowserCloseTarget(fullExecutionInput);
+  if (!sessionId && !url) {
+    return [];
+  }
+  const closeBrowserParams = sessionId ? { sessionId } : { url: url! };
+  const actions: PlannedAction[] = [
+    {
+      id: makeId("action"),
+      type: "close_browser",
+      description: "Close the tracked browser window for the current local page.",
+      params: closeBrowserParams,
+      estimatedCostUsd: estimateActionCostUsd({
+        type: "close_browser",
+        params: closeBrowserParams
+      })
+    }
+  ];
+  for (const leaseId of extractTrackedPreviewLeaseIds(fullExecutionInput)) {
+    actions.push({
+      id: makeId("action"),
+      type: "stop_process",
+      description: "Stop the tracked local preview process linked to that browser page.",
+      params: {
+        leaseId
+      },
+      estimatedCostUsd: estimateActionCostUsd({
+        type: "stop_process",
+        params: {
+          leaseId
+        }
+      })
+    });
+  }
+  return actions;
+}
+
+/**
  * Builds bounded fallback actions when the user explicitly requested a governed runtime action by
  * name and the planner still failed to emit that action after repair.
  *
@@ -178,7 +266,8 @@ function buildInspectWorkspaceResourcesAction(rootPath: string): PlannedAction {
  */
 export function buildDeterministicExplicitRuntimeActionFallbackActions(
   currentUserRequest: string,
-  requiredActionType: RequiredActionType
+  requiredActionType: RequiredActionType,
+  fullExecutionInput = currentUserRequest
 ): PlannedAction[] {
   const extractedPaths = extractWindowsPaths(currentUserRequest);
   if (requiredActionType === "inspect_path_holders") {
@@ -188,6 +277,9 @@ export function buildDeterministicExplicitRuntimeActionFallbackActions(
     return extractedPaths.length > 0
       ? [buildInspectWorkspaceResourcesAction(extractedPaths[0])]
       : [];
+  }
+  if (requiredActionType === "close_browser") {
+    return buildTrackedCloseBrowserFallbackActions(fullExecutionInput);
   }
   return [];
 }

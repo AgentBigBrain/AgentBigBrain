@@ -7,7 +7,8 @@ import { test } from "node:test";
 
 import {
   classifyTrustRenderDecision,
-  createTrustLexicalRuleContext
+  createTrustLexicalRuleContext,
+  isSimulatedOutput
 } from "../../src/interfaces/trustLexicalClassifier";
 
 test("classifyTrustRenderDecision returns RENDER_APPROVED for non-claim text with clean execution state", () => {
@@ -134,5 +135,31 @@ test("createTrustLexicalRuleContext applies tightening-only additive override pa
   assert.equal(
     classification.evidence.matchedRuleId,
     "trust_lexical_v1_side_effect_claim_without_execution"
+  );
+});
+
+test("isSimulatedOutput does not treat real workspace or package names containing preview as simulated", () => {
+  const context = createTrustLexicalRuleContext(null);
+
+  assert.equal(
+    isSimulatedOutput(
+      "Write success: C:\\temp\\drone-react-preview\\src\\App.jsx",
+      context
+    ),
+    false
+  );
+  assert.equal(
+    isSimulatedOutput(
+      "Shell success:\n> drone-react-preview@0.0.0 build\n> vite build",
+      context
+    ),
+    false
+  );
+  assert.equal(
+    isSimulatedOutput(
+      "This run stayed in preview mode only because real shell execution was disabled by policy.",
+      context
+    ),
+    true
   );
 });

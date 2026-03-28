@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import {
+  applyDomainSignalWindow,
+  createEmptyConversationDomainContext
+} from "../../src/core/sessionContext";
 import { buildConversationSessionFixture } from "../helpers/conversationFixtures";
 import { mergeConversationSession } from "../../src/interfaces/conversationRuntime/sessionMerging";
 import type { ConversationSession } from "../../src/interfaces/sessionStore";
@@ -436,6 +440,98 @@ test("mergeConversationSession preserves the newer active workspace while backfi
   ]);
 });
 
+test("mergeConversationSession backfills active-workspace and handoff domain snapshots from the older matching record", () => {
+  const existing = buildSession({
+    activeWorkspace: {
+      id: "workspace:drone-company",
+      label: "Current project workspace",
+      rootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
+      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
+      previewUrl: null,
+      browserSessionId: null,
+      browserSessionIds: [],
+      browserSessionStatus: null,
+      browserProcessPid: null,
+      previewProcessLeaseId: null,
+      previewProcessLeaseIds: [],
+      previewProcessCwd: null,
+      lastKnownPreviewProcessPid: null,
+      stillControllable: false,
+      ownershipState: "stale",
+      previewStackState: "detached",
+      lastChangedPaths: ["C:\\Users\\testuser\\Desktop\\drone-company\\index.html"],
+      sourceJobId: "job-1",
+      domainSnapshotLane: "workflow",
+      domainSnapshotRecordedAt: "2026-03-13T12:00:00.000Z",
+      updatedAt: "2026-03-13T12:00:00.000Z"
+    },
+    returnHandoff: {
+      id: "handoff:job-1",
+      status: "completed",
+      goal: "Finish the landing page",
+      summary: "Ready for review.",
+      nextSuggestedStep: null,
+      workspaceRootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
+      primaryArtifactPath: null,
+      previewUrl: null,
+      changedPaths: [],
+      sourceJobId: "job-1",
+      domainSnapshotLane: "workflow",
+      domainSnapshotRecordedAt: "2026-03-13T12:00:00.000Z",
+      updatedAt: "2026-03-13T12:00:00.000Z"
+    }
+  });
+  const incoming = buildSession({
+    updatedAt: "2026-03-13T12:05:00.000Z",
+    activeWorkspace: {
+      id: "workspace:drone-company",
+      label: "Current project workspace",
+      rootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
+      primaryArtifactPath: null,
+      previewUrl: null,
+      browserSessionId: null,
+      browserSessionIds: [],
+      browserSessionStatus: null,
+      browserProcessPid: null,
+      previewProcessLeaseId: null,
+      previewProcessLeaseIds: [],
+      previewProcessCwd: null,
+      lastKnownPreviewProcessPid: null,
+      stillControllable: false,
+      ownershipState: "stale",
+      previewStackState: "detached",
+      lastChangedPaths: [],
+      sourceJobId: "job-2",
+      updatedAt: "2026-03-13T12:05:00.000Z"
+    },
+    returnHandoff: {
+      id: "handoff:job-1",
+      status: "completed",
+      goal: "Finish the landing page",
+      summary: "Ready for review.",
+      nextSuggestedStep: null,
+      workspaceRootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
+      primaryArtifactPath: null,
+      previewUrl: null,
+      changedPaths: [],
+      sourceJobId: "job-1",
+      updatedAt: "2026-03-13T12:05:00.000Z"
+    }
+  });
+
+  const merged = mergeConversationSession(existing, incoming);
+  assert.equal(merged.activeWorkspace?.domainSnapshotLane, "workflow");
+  assert.equal(
+    merged.activeWorkspace?.domainSnapshotRecordedAt,
+    "2026-03-13T12:00:00.000Z"
+  );
+  assert.equal(merged.returnHandoff?.domainSnapshotLane, "workflow");
+  assert.equal(
+    merged.returnHandoff?.domainSnapshotRecordedAt,
+    "2026-03-13T12:00:00.000Z"
+  );
+});
+
 test("mergeConversationSession trusts the newer workspace ownership state once control truth changes", () => {
   const existing = buildSession({
     activeWorkspace: {
@@ -563,4 +659,47 @@ test("mergeConversationSession does not backfill stale preview continuity into a
     "C:\\Users\\testuser\\Desktop\\React Landing Page\\src\\App.jsx",
     "C:\\Users\\testuser\\Desktop\\React Landing Page\\src\\index.css"
   ]);
+});
+
+test("mergeConversationSession keeps the meaningful domain context when a fresher partial update is empty", () => {
+  const existing = buildSession({
+    domainContext: applyDomainSignalWindow(createEmptyConversationDomainContext("chat-1"), {
+      observedAt: "2026-03-07T12:00:00.000Z",
+      laneSignals: [
+        { lane: "workflow", observedAt: "2026-03-07T12:00:00.000Z", source: "routing_mode", weight: 1 }
+      ]
+    })
+  });
+  const incoming = buildSession({
+    updatedAt: "2026-03-07T12:05:00.000Z",
+    domainContext: createEmptyConversationDomainContext("chat-1")
+  });
+
+  const merged = mergeConversationSession(existing, incoming);
+  assert.equal(merged.domainContext.dominantLane, "workflow");
+  assert.equal(merged.domainContext.recentLaneHistory.length, 1);
+});
+
+test("mergeConversationSession prefers the fresher meaningful domain context when it is updated", () => {
+  const existing = buildSession({
+    domainContext: applyDomainSignalWindow(createEmptyConversationDomainContext("chat-1"), {
+      observedAt: "2026-03-07T12:00:00.000Z",
+      laneSignals: [
+        { lane: "workflow", observedAt: "2026-03-07T12:00:00.000Z", source: "routing_mode", weight: 1 }
+      ]
+    })
+  });
+  const incoming = buildSession({
+    updatedAt: "2026-03-07T12:05:00.000Z",
+    domainContext: applyDomainSignalWindow(createEmptyConversationDomainContext("chat-1"), {
+      observedAt: "2026-03-07T12:05:00.000Z",
+      laneSignals: [
+        { lane: "profile", observedAt: "2026-03-07T12:05:00.000Z", source: "keyword", weight: 1 }
+      ]
+    })
+  });
+
+  const merged = mergeConversationSession(existing, incoming);
+  assert.equal(merged.domainContext.dominantLane, "profile");
+  assert.equal(merged.domainContext.lastUpdatedAt, "2026-03-07T12:05:00.000Z");
 });

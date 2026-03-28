@@ -388,6 +388,8 @@ interface MockShellSpawnResult {
   exitCode?: number;
   signal?: NodeJS.Signals | null;
   error?: Error;
+  stdoutError?: Error;
+  stderrError?: Error;
 }
 
 interface MockShellSpawnCall {
@@ -430,6 +432,14 @@ function createMockShellSpawn(result: MockShellSpawnResult): {
     queueMicrotask(() => {
       if (result.error) {
         child.emit("error", result.error);
+        return;
+      }
+      if (result.stdoutError) {
+        (child.stdout as EventEmitter).emit("error", result.stdoutError);
+        return;
+      }
+      if (result.stderrError) {
+        (child.stderr as EventEmitter).emit("error", result.stderrError);
         return;
       }
       if (result.stdout) {
@@ -1058,15 +1068,16 @@ test("ToolExecutorOrgan routes Windows npm commands through cmd and fails closed
     assert.equal(outcome.failureCode, "ACTION_EXECUTION_FAILED");
     assert.match(outcome.output, /did not create the expected package\.json/i);
     assert.equal(mockSpawn.calls.length, 1);
-    assert.equal(mockSpawn.calls[0].executable, "cmd.exe");
+    assert.equal(mockSpawn.calls[0].executable, "powershell.exe");
     assert.deepEqual(mockSpawn.calls[0].args, [
-      "/d",
-      "/c",
-      'npm.cmd create vite@latest "AI Drone City" -- --template react'
+      "-NoProfile",
+      "-NonInteractive",
+      "-Command",
+      'npm.cmd create vite@latest "AI Drone City" -- --template react; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }'
     ]);
-    assert.equal(mockSpawn.calls[0].options.windowsVerbatimArguments, true);
+    assert.equal(mockSpawn.calls[0].options.windowsVerbatimArguments, false);
     const telemetry = executor.consumeShellExecutionTelemetry("action_shell_command");
-    assert.equal(telemetry?.shellKind, "cmd");
+    assert.equal(telemetry?.shellKind, "powershell");
   });
 });
 
@@ -1190,6 +1201,160 @@ test("ToolExecutorOrgan keeps PowerShell multi-step npm scripts on PowerShell wh
     assert.match(
       String(mockSpawn.calls[0].args[3]),
       /npm\.cmd install;\s*if \(\$LASTEXITCODE -ne 0\) \{ exit \$LASTEXITCODE \};\s*npm\.cmd run build;\s*if \(\$LASTEXITCODE -ne 0\) \{ exit \$LASTEXITCODE \};\s*write-output 'done'/i
+    );
+  });
+});
+
+test("ToolExecutorOrgan emits native recovery metadata when shell spawn cannot resolve the executable", async () => {
+  await withTempCwd(async () => {
+    const spawnError = Object.assign(new Error("spawn ENOENT"), {
+      code: "ENOENT"
+    });
+    const mockSpawn = createMockShellSpawn({
+      error: spawnError
+    });
+    const config = buildShellEnabledConfig({
+      shellRuntime: {
+        ...DEFAULT_BRAIN_CONFIG.shellRuntime,
+        profile: {
+          ...DEFAULT_BRAIN_CONFIG.shellRuntime.profile,
+          shellKind: "cmd",
+          executable: "cmd.exe",
+          wrapperArgs: ["/d", "/c"],
+          cwdPolicy: {
+            ...DEFAULT_BRAIN_CONFIG.shellRuntime.profile.cwdPolicy,
+            denyOutsideSandbox: false
+          }
+        }
+      }
+    });
+    const executor = new ToolExecutorOrgan(config, mockSpawn.spawn);
+    const outcome = await executor.executeWithOutcome(buildShellAction("npm run dev"));
+
+    assert.equal(outcome.status, "failed");
+    assert.equal(outcome.failureCode, "ACTION_EXECUTION_FAILED");
+    assert.equal(outcome.executionMetadata?.recoveryFailureClass, "EXECUTABLE_NOT_FOUND");
+    assert.equal(outcome.executionMetadata?.recoveryFailureProvenance, "executor_mechanical");
+  });
+});
+
+test("ToolExecutorOrgan fails cleanly when shell stdout emits a socket error", async () => {
+  await withTempCwd(async () => {
+    const stdoutError = Object.assign(new Error("read ENOTCONN"), {
+      code: "ENOTCONN"
+    });
+    const mockSpawn = createMockShellSpawn({
+      stdoutError
+    });
+    const config = buildShellEnabledConfig({
+      shellRuntime: {
+        ...DEFAULT_BRAIN_CONFIG.shellRuntime,
+        profile: {
+          ...DEFAULT_BRAIN_CONFIG.shellRuntime.profile,
+          cwdPolicy: {
+            ...DEFAULT_BRAIN_CONFIG.shellRuntime.profile.cwdPolicy,
+            denyOutsideSandbox: false
+          }
+        }
+      }
+    });
+    const executor = new ToolExecutorOrgan(config, mockSpawn.spawn);
+    const outcome = await executor.executeWithOutcome(buildShellAction("npm run dev"));
+
+    assert.equal(outcome.status, "failed");
+    assert.equal(outcome.failureCode, "ACTION_EXECUTION_FAILED");
+    assert.match(outcome.output, /ENOTCONN/i);
+  });
+});
+
+test("ToolExecutorOrgan emits native dependency-missing recovery metadata from deterministic shell output", async () => {
+  await withTempCwd(async () => {
+    const mockSpawn = createMockShellSpawn({
+      stderr: "Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@vitejs/plugin-react' imported from vite.config.js\n",
+      exitCode: 1
+    });
+    const config = buildShellEnabledConfig({
+      shellRuntime: {
+        ...DEFAULT_BRAIN_CONFIG.shellRuntime,
+        profile: {
+          ...DEFAULT_BRAIN_CONFIG.shellRuntime.profile,
+          shellKind: "cmd",
+          executable: "cmd.exe",
+          wrapperArgs: ["/d", "/c"],
+          cwdPolicy: {
+            ...DEFAULT_BRAIN_CONFIG.shellRuntime.profile.cwdPolicy,
+            denyOutsideSandbox: false
+          }
+        }
+      }
+    });
+    const executor = new ToolExecutorOrgan(config, mockSpawn.spawn);
+    const outcome = await executor.executeWithOutcome(buildShellAction("npm run build"));
+
+    assert.equal(outcome.status, "failed");
+    assert.equal(outcome.executionMetadata?.recoveryFailureClass, "DEPENDENCY_MISSING");
+    assert.equal(outcome.executionMetadata?.recoveryFailureProvenance, "executor_mechanical");
+  });
+});
+
+test("ToolExecutorOrgan emits native version-incompatible recovery metadata from deterministic shell output", async () => {
+  await withTempCwd(async () => {
+    const mockSpawn = createMockShellSpawn({
+      stderr: "npm ERR! code ERESOLVE\nnpm ERR! ERESOLVE could not resolve dependency tree\n",
+      exitCode: 1
+    });
+    const config = buildShellEnabledConfig({
+      shellRuntime: {
+        ...DEFAULT_BRAIN_CONFIG.shellRuntime,
+        profile: {
+          ...DEFAULT_BRAIN_CONFIG.shellRuntime.profile,
+          shellKind: "cmd",
+          executable: "cmd.exe",
+          wrapperArgs: ["/d", "/c"],
+          cwdPolicy: {
+            ...DEFAULT_BRAIN_CONFIG.shellRuntime.profile.cwdPolicy,
+            denyOutsideSandbox: false
+          }
+        }
+      }
+    });
+    const executor = new ToolExecutorOrgan(config, mockSpawn.spawn);
+    const outcome = await executor.executeWithOutcome(buildShellAction("npm install"));
+
+    assert.equal(outcome.status, "failed");
+    assert.equal(outcome.executionMetadata?.recoveryFailureClass, "VERSION_INCOMPATIBLE");
+    assert.equal(outcome.executionMetadata?.recoveryFailureProvenance, "executor_mechanical");
+  });
+});
+
+test("ToolExecutorOrgan stages oversized Windows PowerShell commands through a temp script file", async () => {
+  await withTempCwd(async () => {
+    const mockSpawn = createMockShellSpawn({
+      stdout: "done\n",
+      exitCode: 0
+    });
+    const config = buildWindowsPowerShellShellEnabledConfig();
+    const executor = new ToolExecutorOrgan(config, mockSpawn.spawn);
+    const oversizedCommand = `Write-Output '${"A".repeat(
+      config.shellRuntime.profile.commandMaxChars + 128
+    )}'`;
+
+    const outcome = await executor.executeWithOutcome(buildShellAction(oversizedCommand));
+
+    assert.equal(outcome.status, "success");
+    assert.equal(mockSpawn.calls.length, 1);
+    assert.equal(mockSpawn.calls[0].executable, "powershell.exe");
+    assert.deepEqual(mockSpawn.calls[0].args.slice(0, 3), [
+      "-NoProfile",
+      "-NonInteractive",
+      "-File"
+    ]);
+    assert.match(String(mockSpawn.calls[0].args[3]), /agentbigbrain-shell-command-.*\.ps1$/i);
+    assert.equal(
+      mockSpawn.calls[0].args.some(
+        (entry) => typeof entry === "string" && entry.includes(oversizedCommand)
+      ),
+      false
     );
   });
 });
@@ -1394,11 +1559,48 @@ test("ToolExecutorOrgan fails managed process start early when the requested loo
       assert.match(outcome.output, /already occupied before startup/i);
       assert.equal(outcome.executionMetadata?.processLifecycleStatus, "PROCESS_START_FAILED");
       assert.equal(outcome.executionMetadata?.processStartupFailureKind, "PORT_IN_USE");
+      assert.equal(outcome.executionMetadata?.recoveryFailureClass, "PROCESS_PORT_IN_USE");
+      assert.equal(outcome.executionMetadata?.recoveryFailureProvenance, "runtime_live_run");
       assert.equal(outcome.executionMetadata?.processRequestedPort, port);
       assert.equal(outcome.executionMetadata?.processRequestedUrl, `http://localhost:${port}`);
       assert.equal(typeof outcome.executionMetadata?.processSuggestedPort, "number");
       assert.equal(mockSpawn.calls.length, 0);
     });
+  });
+});
+
+test("ToolExecutorOrgan emits native recovery metadata when managed process startup hits command length limits", async () => {
+  await withTempCwd(async () => {
+    const spawnError = Object.assign(new Error("spawn ENAMETOOLONG"), {
+      code: "ENAMETOOLONG"
+    });
+    const mockSpawn = createMockShellSpawn({
+      error: spawnError
+    });
+    const config = buildShellEnabledConfig({
+      shellRuntime: {
+        ...DEFAULT_BRAIN_CONFIG.shellRuntime,
+        profile: {
+          ...DEFAULT_BRAIN_CONFIG.shellRuntime.profile,
+          shellKind: "cmd",
+          executable: "cmd.exe",
+          wrapperArgs: ["/d", "/c"],
+          cwdPolicy: {
+            ...DEFAULT_BRAIN_CONFIG.shellRuntime.profile.cwdPolicy,
+            denyOutsideSandbox: false
+          }
+        }
+      }
+    });
+    const executor = new ToolExecutorOrgan(config, mockSpawn.spawn);
+    const outcome = await executor.executeWithOutcome(
+      buildStartProcessAction("npm run dev", { cwd: "runtime/sandbox/app" })
+    );
+
+    assert.equal(outcome.status, "failed");
+    assert.equal(outcome.failureCode, "PROCESS_START_FAILED");
+    assert.equal(outcome.executionMetadata?.recoveryFailureClass, "COMMAND_TOO_LONG");
+    assert.equal(outcome.executionMetadata?.recoveryFailureProvenance, "executor_mechanical");
   });
 });
 
@@ -1443,6 +1645,8 @@ test("ToolExecutorOrgan tears down managed process lease when the owning signal 
     assert.match(checkOutcome.output, /Process stopped: lease /i);
     assert.equal(checkOutcome.executionMetadata?.processLifecycleStatus, "PROCESS_STOPPED");
     assert.equal(checkOutcome.executionMetadata?.processStopRequested, true);
+    assert.equal(checkOutcome.executionMetadata?.recoveryFailureClass, "TARGET_NOT_RUNNING");
+    assert.equal(checkOutcome.executionMetadata?.recoveryFailureProvenance, "runtime_live_run");
   });
 });
 
@@ -1550,6 +1754,8 @@ test("ToolExecutorOrgan reports PROCESS_NOT_READY when local TCP port is closed"
       assert.equal(outcome.executionMetadata?.processLifecycleStatus, "PROCESS_NOT_READY");
       assert.equal(outcome.executionMetadata?.probeKind, "port");
       assert.equal(outcome.executionMetadata?.probeReady, false);
+      assert.equal(outcome.executionMetadata?.recoveryFailureClass, "PROCESS_NOT_READY");
+      assert.equal(outcome.executionMetadata?.recoveryFailureProvenance, "runtime_live_run");
     });
   });
 });
@@ -1584,6 +1790,8 @@ test("ToolExecutorOrgan reports PROCESS_NOT_READY when local HTTP status mismatc
       assert.equal(outcome.executionMetadata?.probeKind, "http");
       assert.equal(outcome.executionMetadata?.probeReady, false);
       assert.equal(outcome.executionMetadata?.probeObservedStatus, 503);
+      assert.equal(outcome.executionMetadata?.recoveryFailureClass, "PROCESS_NOT_READY");
+      assert.equal(outcome.executionMetadata?.recoveryFailureProvenance, "runtime_live_run");
     });
   });
 });
@@ -1679,6 +1887,8 @@ test("ToolExecutorOrgan returns typed runtime-unavailable failure for browser ve
     assert.equal(outcome.failureCode, "BROWSER_VERIFY_RUNTIME_UNAVAILABLE");
     assert.equal(outcome.executionMetadata?.browserVerification, true);
     assert.equal(outcome.executionMetadata?.browserVerifyPassed, false);
+    assert.equal(outcome.executionMetadata?.recoveryFailureClass, "DEPENDENCY_MISSING");
+    assert.equal(outcome.executionMetadata?.recoveryFailureProvenance, "runtime_live_run");
   });
 });
 

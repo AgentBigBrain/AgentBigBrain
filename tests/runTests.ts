@@ -15,6 +15,10 @@ interface ParsedRunnerArgs {
   passThroughArgs: string[];
 }
 
+function hasExplicitTestConcurrencyArg(args: readonly string[]): boolean {
+  return args.some((arg) => arg === "--test-concurrency" || arg.startsWith("--test-concurrency="));
+}
+
 /**
  * Implements `parseRunnerArgs` behavior within module scope.
  * Interacts with local collaborators through imported modules and typed inputs/outputs.
@@ -121,6 +125,9 @@ async function main(): Promise<void> {
   const tsxArgs: string[] = ["--test"];
   if (parsed.watch) {
     tsxArgs.push("--watch");
+  }
+  if (parsed.targetId === "all" && !hasExplicitTestConcurrencyArg(parsed.passThroughArgs)) {
+    tsxArgs.push("--test-concurrency=1");
   }
   tsxArgs.push(...target.patterns, ...parsed.passThroughArgs);
 

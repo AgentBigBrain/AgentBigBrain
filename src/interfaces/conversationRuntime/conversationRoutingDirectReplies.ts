@@ -13,12 +13,19 @@ import type { ConversationInboundMediaEnvelope } from "../mediaRuntime/contracts
 import type { RoutingMapClassificationV1 } from "../routingMap";
 import type { ManagedProcessSnapshot } from "../../organs/liveRun/managedProcessRegistry";
 import type { BrowserSessionSnapshot } from "../../organs/liveRun/browserSessionRegistry";
+import type {
+  ContextualReferenceInterpretationResolver,
+  EntityReferenceInterpretationResolver,
+  IdentityInterpretationResolver
+} from "../../organs/languageUnderstanding/localIntentModelContracts";
 import { renderSkillInventory } from "../../organs/skillRegistry/skillInspection";
 import type {
   DescribeRuntimeCapabilities,
+  GetConversationEntityGraph,
   ListAvailableSkills,
   QueryConversationContinuityEpisodes,
   QueryConversationContinuityFacts,
+  RememberConversationProfileInput,
   RunDirectConversationTurn
 } from "./managerContracts";
 import type {
@@ -30,6 +37,11 @@ import {
   buildCapabilityDiscoveryConversationInput,
   renderCapabilityDiscoveryResponse
 } from "./capabilityIntrospectionRendering";
+import {
+  buildDeterministicSelfIdentityDeclarationReply,
+  buildDeterministicSelfIdentityReply,
+  buildModelAssistedSelfIdentityReply
+} from "./selfIdentityPrompting";
 
 export interface DirectCasualConversationReplyInput {
   session: ConversationSession;
@@ -39,6 +51,11 @@ export interface DirectCasualConversationReplyInput {
   routingClassification: RoutingMapClassificationV1 | null;
   queryContinuityEpisodes?: QueryConversationContinuityEpisodes;
   queryContinuityFacts?: QueryConversationContinuityFacts;
+  rememberConversationProfileInput?: RememberConversationProfileInput;
+  identityInterpretationResolver?: IdentityInterpretationResolver;
+  contextualReferenceInterpretationResolver?: ContextualReferenceInterpretationResolver;
+  entityReferenceInterpretationResolver?: EntityReferenceInterpretationResolver;
+  getEntityGraph?: GetConversationEntityGraph;
   media: ConversationInboundMediaEnvelope | null;
   managedProcessSnapshots?: readonly ManagedProcessSnapshot[];
   semanticHint?: ConversationIntentSemanticHint | null;
@@ -138,6 +155,36 @@ function enforceDirectConversationReplyFormat(
 export async function buildDirectCasualConversationReply(
   input: DirectCasualConversationReplyInput
 ): Promise<string> {
+  const deterministicSelfIdentityDeclarationReply =
+    await buildDeterministicSelfIdentityDeclarationReply(
+      input.input,
+      input.receivedAt,
+      input.rememberConversationProfileInput
+    );
+  if (deterministicSelfIdentityDeclarationReply) {
+    return deterministicSelfIdentityDeclarationReply;
+  }
+  const modelAssistedSelfIdentityReply =
+    await buildModelAssistedSelfIdentityReply(
+      input.session,
+      input.input,
+      input.receivedAt,
+      input.routingClassification,
+      input.queryContinuityFacts,
+      input.rememberConversationProfileInput,
+      input.identityInterpretationResolver
+    );
+  if (modelAssistedSelfIdentityReply) {
+    return modelAssistedSelfIdentityReply;
+  }
+  const deterministicSelfIdentityReply = await buildDeterministicSelfIdentityReply(
+    input.session,
+    input.input,
+    input.queryContinuityFacts
+  );
+  if (deterministicSelfIdentityReply) {
+    return deterministicSelfIdentityReply;
+  }
   const conversationAwareInput = await buildConversationAwareExecutionInput(
     input.session,
     input.input,
@@ -149,7 +196,10 @@ export async function buildDirectCasualConversationReply(
     input.media,
     input.managedProcessSnapshots,
     input.semanticHint ?? null,
-    input.browserSessionSnapshots
+    input.browserSessionSnapshots,
+    input.contextualReferenceInterpretationResolver,
+    input.getEntityGraph,
+    input.entityReferenceInterpretationResolver
   );
   const directConversationInput = buildDirectConversationReplyInput(
     input.input,

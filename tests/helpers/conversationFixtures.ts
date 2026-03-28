@@ -41,6 +41,17 @@ export function buildConversationSessionFixture(
       seededConversationId.startsWith(`${provider}:`)
         ? seededConversationId
         : baseSession.conversationId,
+    domainContext:
+      overrides.domainContext ??
+      {
+        ...baseSession.domainContext,
+        conversationId:
+          typeof overrides.conversationId === "string" && overrides.conversationId.length > 0
+            ? overrides.conversationId
+            : seededConversationId.startsWith(`${provider}:`)
+              ? seededConversationId
+              : baseSession.conversationId
+      },
     ...overrides
   };
 }

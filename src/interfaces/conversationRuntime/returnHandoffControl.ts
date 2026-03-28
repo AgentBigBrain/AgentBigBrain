@@ -250,6 +250,29 @@ function renderActiveAutonomousPauseReply(
 }
 
 /**
+ * Applies a durable pause mutation after pause intent has already been validated upstream.
+ *
+ * @param session - Current conversation session.
+ * @param receivedAt - Timestamp for the pause mutation.
+ * @returns User-facing reply, or `null` when no durable handoff exists.
+ */
+export function applyValidatedReturnHandoffPause(
+  session: ConversationSession,
+  receivedAt: string
+): string | null {
+  if (!session.returnHandoff) {
+    return null;
+  }
+  const pausedHandoff = buildPausedReturnHandoff(session.returnHandoff, receivedAt);
+  setReturnHandoff(session, pausedHandoff);
+  setProgressState(
+    session,
+    buildPausedReturnHandoffProgressState(pausedHandoff.sourceJobId, receivedAt)
+  );
+  return renderReturnHandoffPauseReply(pausedHandoff);
+}
+
+/**
  * Applies a durable pause mutation when the user explicitly wants to leave the rest of the work for
  * later.
  *
@@ -263,37 +286,25 @@ export function applyReturnHandoffPauseRequest(
   userInput: string,
   receivedAt: string
 ): string | null {
-  if (!session.returnHandoff || !isReturnHandoffPauseRequest(userInput)) {
-    return null;
-  }
-  const pausedHandoff = buildPausedReturnHandoff(session.returnHandoff, receivedAt);
-  setReturnHandoff(session, pausedHandoff);
-  setProgressState(
-    session,
-    buildPausedReturnHandoffProgressState(pausedHandoff.sourceJobId, receivedAt)
-  );
-  return renderReturnHandoffPauseReply(pausedHandoff);
-}
-
-/**
- * Applies a live autonomous pause request by aborting the active autonomous run and preserving an
- * interim checkpoint until the worker persists the settled result.
- *
- * @param session - Current conversation session.
- * @param userInput - Raw inbound user wording.
- * @param receivedAt - Timestamp for the pause mutation.
- * @param abortActiveAutonomousRun - Real abort callback for the active transport-managed run.
- * @returns User-facing reply, or `null` when the turn is not a pausable active autonomous run.
- */
-export function applyActiveAutonomousPauseRequest(
-  session: ConversationSession,
-  userInput: string,
-  receivedAt: string,
-  abortActiveAutonomousRun?: (() => boolean) | null
-): string | null {
   if (!isReturnHandoffPauseRequest(userInput)) {
     return null;
   }
+  return applyValidatedReturnHandoffPause(session, receivedAt);
+}
+
+/**
+ * Applies a live autonomous pause request after pause intent has already been validated upstream.
+ *
+ * @param session - Current conversation session.
+ * @param receivedAt - Timestamp for the pause mutation.
+ * @param abortActiveAutonomousRun - Real abort callback for the active transport-managed run.
+ * @returns User-facing reply, or `null` when there is no pausable active autonomous run.
+ */
+export function applyValidatedActiveAutonomousPause(
+  session: ConversationSession,
+  receivedAt: string,
+  abortActiveAutonomousRun?: (() => boolean) | null
+): string | null {
   const runningAutonomousJob = resolveRunningAutonomousJob(session);
   if (!runningAutonomousJob) {
     return null;
@@ -316,4 +327,26 @@ export function applyActiveAutonomousPauseRequest(
     updatedAt: receivedAt
   });
   return renderActiveAutonomousPauseReply(pausedHandoff);
+}
+
+/**
+ * Applies a live autonomous pause request by aborting the active autonomous run and preserving an
+ * interim checkpoint until the worker persists the settled result.
+ *
+ * @param session - Current conversation session.
+ * @param userInput - Raw inbound user wording.
+ * @param receivedAt - Timestamp for the pause mutation.
+ * @param abortActiveAutonomousRun - Real abort callback for the active transport-managed run.
+ * @returns User-facing reply, or `null` when the turn is not a pausable active autonomous run.
+ */
+export function applyActiveAutonomousPauseRequest(
+  session: ConversationSession,
+  userInput: string,
+  receivedAt: string,
+  abortActiveAutonomousRun?: (() => boolean) | null
+): string | null {
+  if (!isReturnHandoffPauseRequest(userInput)) {
+    return null;
+  }
+  return applyValidatedActiveAutonomousPause(session, receivedAt, abortActiveAutonomousRun);
 }

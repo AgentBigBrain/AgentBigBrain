@@ -12,6 +12,13 @@ import {
   buildRoutingExecutionHintV1,
   type RoutingMapClassificationV1
 } from "./routingMap";
+import { routeContinuationInterpretationModel } from "../organs/languageUnderstanding/localIntentModelRouter";
+import type {
+  ContinuationInterpretationResolver,
+  ContextualReferenceInterpretationResolver,
+  EntityReferenceInterpretationResolver,
+  LocalIntentModelConfidence
+} from "../organs/languageUnderstanding/localIntentModelContracts";
 import { buildReuseIntentContextBlock } from "./conversationRuntime/reuseIntentContext";
 import { buildReturnHandoffContinuationBlock } from "./conversationRuntime/returnHandoffContinuation";
 import {
@@ -24,7 +31,15 @@ import {
   renderTurnsForContext
 } from "./conversationManagerHelpers";
 import { buildContextualRecallBlock } from "./conversationRuntime/contextualRecall";
+import { buildLocalIntentSessionHints } from "./conversationRuntime/conversationRoutingSupport";
+import { buildSelfIdentityRecallBlock } from "./conversationRuntime/selfIdentityPrompting";
+import {
+  analyzeConversationChatTurnSignals,
+  isRelationshipConversationRecallTurn
+} from "./conversationRuntime/chatTurnSignals";
+import { buildTurnLocalStatusUpdateInstructionBlock, hasTurnLocalFirstPersonStatusUpdate } from "./conversationRuntime/turnLocalStatusUpdate";
 import type {
+  GetConversationEntityGraph,
   QueryConversationContinuityEpisodes,
   QueryConversationContinuityFacts
 } from "./conversationRuntime/managerContracts";
@@ -37,10 +52,6 @@ import {
 } from "../core/crossPlatformPath";
 import { reconcileConversationExecutionRuntimeSession } from "./conversationRuntime/executionInputRuntimeOwnership";
 
-const FIRST_PERSON_STATUS_UPDATE_PATTERN =
-  /\bmy\s+[a-z0-9][a-z0-9_.\-/\s]{0,120}\s+is\s+[a-z0-9][^.!?\n]{0,120}/i;
-const STATUS_UPDATE_VALUE_MARKER_PATTERN =
-  /\b(?:pending|open|stuck|unresolved|incomplete|complete|completed|done|resolved)\b/i;
 const NATURAL_BROWSER_CLOSE_REFERENCE_PATTERN =
   /\b(?:close|shut|dismiss|hide)\b[\s\S]{0,50}\b(?:browser|tab|window|preview|page|landing page|homepage)\b/i;
 const NATURAL_BROWSER_OPEN_REFERENCE_PATTERN =
@@ -50,6 +61,8 @@ const NATURAL_BROWSER_OPEN_VERB_PATTERN =
   /\b(?:reopen|show|bring\s+(?:back|up)|pull\s+up)\b/i;
 const EXPLICIT_URL_REFERENCE_PATTERN =
   /\b(?:https?:\/\/|file:\/\/\/)[^\s<>"')\]]+/gi;
+const AMBIGUOUS_FOLLOW_UP_MAX_TOKENS = 8;
+const AMBIGUOUS_FOLLOW_UP_MAX_CHARS = 80;
 const NATURAL_ARTIFACT_EDIT_VERB_PATTERN =
   /\b(?:change|edit|update|replace|swap|revise|tweak|adjust|make)\b/i;
 const NATURAL_ARTIFACT_EDIT_TARGET_PATTERN =
@@ -62,15 +75,19 @@ const STRONG_LOCAL_ORGANIZATION_VERB_PATTERN =
   /\b(?:organize|move|group|gather|sort|clean up|collect|tidy)\b/i;
 const WEAK_LOCAL_ORGANIZATION_VERB_PATTERN = /\bput\b/i;
 const LOCAL_ORGANIZATION_TARGET_PATTERN =
-  /\b(?:folder|folders|directory|directories|workspace|workspaces|project|projects)\b/i;
+  /\b(?:file|files|folder|folders|directory|directories|item|items|workspace|workspaces|project|projects)\b/i;
 const LOCAL_ORGANIZATION_COLLECTION_PATTERN =
-  /\b(?:every|all)\s+(?:folder|folders|directory|directories|workspace|workspaces|project|projects)\b/i;
+  /\b(?:every|all)\s+(?:file|files|folder|folders|directory|directories|item|items|workspace|workspaces|project|projects)(?:\s+and\s+(?:file|files|folder|folders|directory|directories|item|items))?\b/i;
 const SIMPLE_DESKTOP_DESTINATION_PATTERN =
   /\b(?:into|inside|under|to)\s+(?:a\s+folder\s+called\s+)?["'`]?([a-z0-9][a-z0-9_-]{0,80})["'`]?/i;
 const ORGANIZATION_PREFIX_PATTERN =
   /\bstarts?\s+with\s+["'`]?([a-z0-9._-]{2,80})["'`]?/i;
+const ORGANIZATION_CONTAINS_WORD_PATTERN =
+  /\b(?:with|containing?|contain(?:s|ing)?)\s+(?:the\s+word\s+)?["'`]?([a-z0-9._-]{2,80})["'`]?/i;
 const EXPLICIT_ALL_MATCHING_FOLDERS_PATTERN =
-  /\b(?:all of them|every folder|all matching folders)\b/i;
+  /\b(?:all of them|every folder|every file|all matching folders|all matching files|every file and folder|every folder and file)\b/i;
+const LOCAL_ORGANIZATION_FILE_AND_FOLDER_PATTERN =
+  /\bfiles?\s+and\s+folders?\b|\bfolders?\s+and\s+files?\b/i;
 const RECENT_ACTION_CONTEXT_PRIORITY: Readonly<Record<string, number>> = {
   file: 0,
   folder: 1,
@@ -80,6 +97,11 @@ const RECENT_ACTION_CONTEXT_PRIORITY: Readonly<Record<string, number>> = {
   task_summary: 5
 };
 const GENERIC_WORKSPACE_SEGMENT_NAMES = new Set(["dist", "build", "out", "public", "site", "app"]);
+const PROFILE_DETOUR_PATTERN =
+  /\b(?:my name is|call me|i go by|remember that i|i prefer|my favorite|my birthday|i live|i moved|my job|i work at)\b/i;
+const RELATIONSHIP_DETOUR_PATTERN =
+  /\b(?:my )?(?:friend|coworker|colleague|manager|neighbor|relative|teammate|contact|partner)\b/i;
+const WORKFLOW_CONTINUITY_ROUTING_TYPES = new Set(["execution_surface", "diagnostics"]);
 
 /**
  * Extracts stable human-readable workspace or artifact names from tracked browser metadata.
@@ -217,6 +239,24 @@ function extractExplicitBrowserUrlReferences(
 }
 
 /**
+ * Collects comparable tracked browser-target URLs remembered for the current chat.
+ *
+ * @param session - Current conversation session.
+ * @returns Deduplicated normalized tracked browser URLs.
+ */
+function collectTrackedBrowserTargetUrls(
+  session: ConversationSession
+): readonly string[] {
+  const trackedUrls = [
+    session.activeWorkspace?.previewUrl ?? null,
+    ...session.browserSessions.map((browserSession) => browserSession.url)
+  ]
+    .map((url) => normalizeComparableBrowserUrl(url))
+    .filter((url): url is string => typeof url === "string" && url.length > 0);
+  return [...new Set(trackedUrls)];
+}
+
+/**
  * Returns whether the user named an explicit URL that does not match any tracked browser target.
  *
  * @param normalizedInput - Current user wording normalized for follow-up analysis.
@@ -274,12 +314,7 @@ function buildExplicitBrowserUrlOwnershipGuardBlock(
     return null;
   }
 
-  const trackedUrls = [
-    session.activeWorkspace?.previewUrl ?? null,
-    ...session.browserSessions.map((browserSession) => browserSession.url)
-  ]
-    .map((url) => normalizeComparableBrowserUrl(url))
-    .filter((url): url is string => typeof url === "string" && url.length > 0);
+  const trackedUrls = collectTrackedBrowserTargetUrls(session);
   const untrackedUrls = explicitUrls.filter((url) => !trackedUrls.includes(url));
   if (untrackedUrls.length === 0) {
     return null;
@@ -297,9 +332,182 @@ function buildExplicitBrowserUrlOwnershipGuardBlock(
   return lines.join("\n");
 }
 
+/**
+ * Builds the deterministic no-op reply for explicit foreign browser URLs that cannot be proven to
+ * belong to the tracked project state for this chat.
+ *
+ * @param session - Current conversation session.
+ * @param userInput - Raw current user wording.
+ * @returns Stable no-op ownership explanation, or `null` when no foreign explicit URL was named.
+ */
+export function buildExplicitBrowserOwnershipNoOpReply(
+  session: ConversationSession,
+  userInput: string
+): string | null {
+  const normalizedInput = normalizeWhitespace(userInput);
+  if (!normalizedInput) {
+    return null;
+  }
+  const guardBlock = buildExplicitBrowserUrlOwnershipGuardBlock(session, normalizedInput);
+  if (!guardBlock) {
+    return null;
+  }
+  const explicitUrls = extractExplicitBrowserUrlReferences(normalizedInput);
+  const trackedUrls = collectTrackedBrowserTargetUrls(session);
+  const foreignUrl = explicitUrls.find((url) => !trackedUrls.includes(url));
+  if (!foreignUrl) {
+    return null;
+  }
+  const lines = [
+    `I left \`${foreignUrl}\` alone. Reason: \`ownership_not_proven\`.`
+  ];
+  if (trackedUrls.length > 0) {
+    lines.push(
+      `In this run, the only project page I can tie to this project from the conversation is \`${trackedUrls[0]}\`, and I do not have execution evidence that this explicit URL belongs to the same project.`
+    );
+  } else {
+    lines.push(
+      "In this run, I do not have execution evidence linking that explicit URL to a tracked project page in this chat."
+    );
+  }
+  return lines.join(" ");
+}
+
 export interface FollowUpResolution {
   executionInput: string;
   classification: FollowUpClassification;
+  linkedToPriorAssistantPrompt: boolean;
+}
+
+/**
+ * Counts bounded whitespace-separated tokens for ambiguous follow-up eligibility.
+ *
+ * @param value - Raw user input text.
+ * @returns Number of bounded tokens.
+ */
+function countWhitespaceTokens(value: string): number {
+  const normalized = normalizeWhitespace(value);
+  if (!normalized) {
+    return 0;
+  }
+  return normalized.split(" ").length;
+}
+
+/**
+ * Maps local-model confidence into the existing follow-up classifier tier.
+ *
+ * @param confidence - Lowercase confidence emitted by continuation interpretation.
+ * @returns Uppercase follow-up confidence tier.
+ */
+function toFollowUpConfidenceTier(
+  confidence: LocalIntentModelConfidence
+): FollowUpClassification["confidenceTier"] {
+  switch (confidence) {
+    case "high":
+      return "HIGH";
+    case "medium":
+      return "MED";
+    default:
+      return "LOW";
+  }
+}
+
+/**
+ * Maps continuation follow-up categories into the existing deterministic follow-up category shape.
+ *
+ * @param category - Optional follow-up category returned by continuation interpretation.
+ * @returns Compatible deterministic follow-up category.
+ */
+function toFollowUpCategory(
+  category: "ack" | "approve" | "deny" | "adjust" | "question" | null
+): FollowUpClassification["category"] {
+  switch (category) {
+    case "approve":
+      return "APPROVE";
+    case "deny":
+      return "DENY";
+    default:
+      return "ACK";
+  }
+}
+
+/**
+ * Returns whether one ambiguous answer is eligible for bounded continuation interpretation.
+ *
+ * @param userInput - Raw current user wording.
+ * @param classification - Deterministic follow-up classification.
+ * @param hasPriorAssistantQuestion - Whether a recent assistant clarification prompt exists.
+ * @param routingClassification - Optional deterministic routing hint for the same turn.
+ * @returns `true` when the model is allowed to help on this bounded ambiguous follow-up.
+ */
+function shouldAttemptContinuationFollowUpInterpretation(
+  userInput: string,
+  classification: FollowUpClassification,
+  hasPriorAssistantQuestion: boolean,
+  routingClassification: RoutingMapClassificationV1 | null
+): boolean {
+  if (classification.isShortFollowUp) {
+    return false;
+  }
+  if (!hasPriorAssistantQuestion) {
+    return false;
+  }
+  const normalized = normalizeWhitespace(userInput);
+  if (!normalized || normalized.includes("\n")) {
+    return false;
+  }
+  if (normalized.length > AMBIGUOUS_FOLLOW_UP_MAX_CHARS) {
+    return false;
+  }
+  const tokenCount = countWhitespaceTokens(normalized);
+  if (tokenCount === 0 || tokenCount > AMBIGUOUS_FOLLOW_UP_MAX_TOKENS) {
+    return false;
+  }
+  if (routingClassification?.routeType === "execution_surface" &&
+      routingClassification.commandIntent !== null) {
+    return false;
+  }
+  const signals = analyzeConversationChatTurnSignals(normalized);
+  if (
+    signals.questionLike ||
+    signals.primaryKind === "self_identity_query" ||
+    signals.primaryKind === "assistant_identity_query" ||
+    signals.primaryKind === "status_or_recall" ||
+    isRelationshipConversationRecallTurn(normalized)
+  ) {
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Builds the wrapped execution-input payload for a follow-up linked to the prior assistant prompt.
+ *
+ * @param classification - Follow-up classification metadata used for auditing.
+ * @param assistantQuestion - Prior assistant clarification text.
+ * @param userInput - Raw current user wording.
+ * @param interpretationExplanation - Optional bounded model explanation for ambiguous linked replies.
+ * @returns Wrapped execution-input text for downstream planning.
+ */
+function buildLinkedFollowUpExecutionInput(
+  classification: FollowUpClassification,
+  assistantQuestion: string,
+  userInput: string,
+  interpretationExplanation: string | null = null
+): string {
+  const lines = [
+    "Follow-up user response to prior assistant clarification.",
+    `Follow-up classifier: ${classification.matchedRuleId}`,
+    `Follow-up rulepack: ${classification.rulepackVersion}`,
+    `Follow-up category: ${classification.category}`,
+    `Follow-up confidence: ${classification.confidenceTier}`,
+    `Previous assistant question: ${normalizeAssistantTurnText(assistantQuestion)}`,
+    `User follow-up answer: ${normalizeWhitespace(userInput)}`
+  ];
+  if (interpretationExplanation) {
+    lines.splice(5, 0, `Follow-up interpretation: ${interpretationExplanation}`);
+  }
+  return lines.join("\n");
 }
 
 /**
@@ -337,6 +545,62 @@ function buildModeContinuityBlock(session: ConversationSession): string | null {
     `- Last affirmed at: ${session.modeContinuity.lastAffirmedAt}`,
     `- Last user wording: ${session.modeContinuity.lastUserInput}`
   ].join("\n");
+}
+
+/**
+ * Returns whether the current turn should suppress workflow continuity context despite active work state.
+ *
+ * @param session - Current conversation session carrying possible workflow continuity.
+ * @param userInput - Raw current user wording.
+ * @param routingClassification - Optional deterministic routing classification for the same turn.
+ * @returns `true` when the current turn looks like a personal detour rather than workflow continuation.
+ */
+function shouldSuppressWorkflowContinuityBlocks(
+  session: ConversationSession,
+  userInput: string,
+  routingClassification: RoutingMapClassificationV1 | null
+): boolean {
+  const normalizedInput = normalizeWhitespace(userInput);
+  if (!normalizedInput) {
+    return false;
+  }
+
+  const workflowContinuityActive =
+    session.activeWorkspace !== null ||
+    session.returnHandoff !== null ||
+    session.modeContinuity?.activeMode === "plan" ||
+    session.modeContinuity?.activeMode === "build" ||
+    session.modeContinuity?.activeMode === "autonomous" ||
+    session.modeContinuity?.activeMode === "review" ||
+    (
+      session.domainContext.dominantLane === "workflow" &&
+      (
+        session.domainContext.continuitySignals.activeWorkspace ||
+        session.domainContext.continuitySignals.returnHandoff ||
+        session.domainContext.continuitySignals.modeContinuity
+      )
+    );
+  if (!workflowContinuityActive) {
+    return false;
+  }
+  if (isRelationshipConversationRecallTurn(normalizedInput)) {
+    return true;
+  }
+  if (WORKFLOW_CONTINUITY_ROUTING_TYPES.has(routingClassification?.routeType ?? "")) {
+    return false;
+  }
+  if (
+    /\bdesktop\b/i.test(normalizedInput) &&
+    LOCAL_ORGANIZATION_TARGET_PATTERN.test(normalizedInput) &&
+    (STRONG_LOCAL_ORGANIZATION_VERB_PATTERN.test(normalizedInput) ||
+      WEAK_LOCAL_ORGANIZATION_VERB_PATTERN.test(normalizedInput))
+  ) {
+    return true;
+  }
+  if (NATURAL_ARTIFACT_EDIT_VERB_PATTERN.test(normalizedInput) && NATURAL_ARTIFACT_EDIT_TARGET_PATTERN.test(normalizedInput)) {
+    return false;
+  }
+  return PROFILE_DETOUR_PATTERN.test(normalizedInput) || RELATIONSHIP_DETOUR_PATTERN.test(normalizedInput);
 }
 
 /**
@@ -721,6 +985,7 @@ function isLocalOrganizationRequest(userInput: string): boolean {
     (
       LOCAL_ORGANIZATION_COLLECTION_PATTERN.test(userInput) ||
       ORGANIZATION_PREFIX_PATTERN.test(userInput) ||
+      ORGANIZATION_CONTAINS_WORD_PATTERN.test(userInput) ||
       EXPLICIT_ALL_MATCHING_FOLDERS_PATTERN.test(userInput)
     )
   );
@@ -745,6 +1010,32 @@ function extractSimpleDesktopDestinationName(userInput: string): string | null {
  */
 function extractOrganizationFolderPrefix(userInput: string): string | null {
   return userInput.match(ORGANIZATION_PREFIX_PATTERN)?.[1]?.trim() ?? null;
+}
+
+/**
+ * Describes the explicit Desktop-name matching rule the user supplied.
+ *
+ * @param userInput - Raw current wording.
+ * @returns Match descriptor, or `null` when no bounded naming rule is present.
+ */
+function extractOrganizationMatchDescriptor(
+  userInput: string
+): { mode: "starts_with" | "contains_word"; term: string } | null {
+  const prefix = extractOrganizationFolderPrefix(userInput);
+  if (prefix) {
+    return {
+      mode: "starts_with",
+      term: prefix
+    };
+  }
+  const containsWord = userInput.match(ORGANIZATION_CONTAINS_WORD_PATTERN)?.[1]?.trim() ?? null;
+  if (!containsWord) {
+    return null;
+  }
+  return {
+    mode: "contains_word",
+    term: containsWord
+  };
 }
 
 /**
@@ -824,18 +1115,25 @@ function buildDesktopOrganizationExecutionContextBlock(
 
   const rememberedDesktopRoot = collectRememberedDesktopRoots(session)[0] ?? null;
   const destinationFolderName = extractSimpleDesktopDestinationName(normalizedInput);
-  const requestedFolderPrefix = extractOrganizationFolderPrefix(normalizedInput);
+  const requestedMatchDescriptor = extractOrganizationMatchDescriptor(normalizedInput);
   const activeWorkspaceFolderName = session.activeWorkspace?.rootPath
     ? basenameCrossPlatformPath(session.activeWorkspace.rootPath)
     : null;
-  const activeWorkspaceMatchesRequestedPrefix =
+  const includeFilesAndFolders = LOCAL_ORGANIZATION_FILE_AND_FOLDER_PATTERN.test(normalizedInput);
+  const activeWorkspaceMatchesRequestedSelector =
     Boolean(activeWorkspaceFolderName) &&
-    Boolean(requestedFolderPrefix) &&
-    activeWorkspaceFolderName!.toLowerCase().startsWith(requestedFolderPrefix!.toLowerCase());
+    Boolean(requestedMatchDescriptor) &&
+    (
+      requestedMatchDescriptor!.mode === "starts_with"
+        ? activeWorkspaceFolderName!.toLowerCase().startsWith(requestedMatchDescriptor!.term.toLowerCase())
+        : activeWorkspaceFolderName!.toLowerCase().includes(requestedMatchDescriptor!.term.toLowerCase())
+    );
 
   const lines = [
     "Natural desktop-organization follow-up:",
-    "- The user is asking for a real Desktop folder move, not just an inspection or summary."
+    includeFilesAndFolders
+      ? "- The user is asking for a real Desktop file-and-folder move, not just an inspection or summary."
+      : "- The user is asking for a real Desktop folder move, not just an inspection or summary."
   ];
   if (rememberedDesktopRoot) {
     lines.push(`- Strongest remembered Desktop root in this chat: ${rememberedDesktopRoot}`);
@@ -846,21 +1144,34 @@ function buildDesktopOrganizationExecutionContextBlock(
       `- Treat the named destination as ${normalizeCrossPlatformPath(`${rememberedDesktopRoot}${separator}${destinationFolderName}`)} unless fresher path evidence in this chat proves a different location.`
     );
   }
-  if (requestedFolderPrefix) {
-    lines.push(`- Match Desktop folders whose names start with ${requestedFolderPrefix}.`);
+  if (requestedMatchDescriptor?.mode === "starts_with") {
+    lines.push(`- Match Desktop folders whose names start with ${requestedMatchDescriptor.term}.`);
   }
-  if (activeWorkspaceMatchesRequestedPrefix && activeWorkspaceFolderName) {
+  if (requestedMatchDescriptor?.mode === "contains_word") {
     lines.push(
-      `- The current tracked workspace folder ${activeWorkspaceFolderName} also matches that requested prefix; include it in the move unless the user explicitly excluded it.`
+      includeFilesAndFolders
+        ? `- Match Desktop files and folders whose names contain the word ${requestedMatchDescriptor.term}.`
+        : `- Match Desktop folders whose names contain the word ${requestedMatchDescriptor.term}.`
+    );
+  }
+  if (activeWorkspaceMatchesRequestedSelector && activeWorkspaceFolderName) {
+    lines.push(
+      requestedMatchDescriptor?.mode === "contains_word"
+        ? `- The current tracked workspace folder ${activeWorkspaceFolderName} also matches that requested word rule; include it in the move unless the user explicitly excluded it.`
+        : `- The current tracked workspace folder ${activeWorkspaceFolderName} also matches that requested prefix; include it in the move unless the user explicitly excluded it.`
     );
   }
   if (EXPLICIT_ALL_MATCHING_FOLDERS_PATTERN.test(normalizedInput)) {
     lines.push(
-      "- The user explicitly authorized moving all matching folders now; do not ask again before executing the move unless a new blocker appears."
+      includeFilesAndFolders
+        ? "- The user explicitly authorized moving all matching files and folders now; do not ask again before executing the move unless a new blocker appears."
+        : "- The user explicitly authorized moving all matching folders now; do not ask again before executing the move unless a new blocker appears."
     );
   }
   lines.push(
-    "- This run must include a real folder move side effect. Do not satisfy this request by only listing, reading, or summarizing directories."
+    includeFilesAndFolders
+      ? "- This run must include a real Desktop move side effect for matching files and folders. Do not satisfy this request by only listing, reading, or summarizing Desktop contents."
+      : "- This run must include a real folder move side effect. Do not satisfy this request by only listing, reading, or summarizing directories."
   );
   return lines.join("\n");
 }
@@ -872,22 +1183,10 @@ function buildDesktopOrganizationExecutionContextBlock(
  * @returns Instruction block appended to execution input, or `null` when no status update is detected.
  */
 export function buildTurnLocalStatusUpdateBlock(userInput: string): string | null {
-  const normalizedInput = normalizeWhitespace(userInput);
-  if (!normalizedInput) {
+  if (!hasTurnLocalFirstPersonStatusUpdate(userInput)) {
     return null;
   }
-  if (!FIRST_PERSON_STATUS_UPDATE_PATTERN.test(normalizedInput)) {
-    return null;
-  }
-  if (!STATUS_UPDATE_VALUE_MARKER_PATTERN.test(normalizedInput)) {
-    return null;
-  }
-
-  return [
-    "Turn-local status update (authoritative for this turn):",
-    `- User stated: ${normalizedInput}`,
-    "- Response rule: acknowledge this latest status and do not assert an older contradictory status as fact."
-  ].join("\n");
+  return buildTurnLocalStatusUpdateInstructionBlock(userInput);
 }
 
 /**
@@ -910,7 +1209,10 @@ export async function buildConversationAwareExecutionInput(
   media?: ConversationInboundMediaEnvelope | null,
   managedProcessSnapshots?: readonly ManagedProcessSnapshot[],
   semanticHint: ConversationIntentSemanticHint | null = null,
-  browserSessionSnapshots?: readonly BrowserSessionSnapshot[]
+  browserSessionSnapshots?: readonly BrowserSessionSnapshot[],
+  contextualReferenceInterpretationResolver?: ContextualReferenceInterpretationResolver,
+  getEntityGraph?: GetConversationEntityGraph,
+  entityReferenceInterpretationResolver?: EntityReferenceInterpretationResolver
 ): Promise<string> {
   const runtimeReconciledSession = reconcileConversationExecutionRuntimeSession(
     session,
@@ -919,60 +1221,105 @@ export async function buildConversationAwareExecutionInput(
   );
   const recentTurns = session.conversationTurns.slice(-maxContextTurnsForExecution);
   const rawUserInput = sourceUserInput ?? executionInput;
+  const suppressWorkflowContinuityBlocks = shouldSuppressWorkflowContinuityBlocks(
+    runtimeReconciledSession,
+    rawUserInput,
+    routingClassification
+  );
+  const selfIdentityRecallBlock = await buildSelfIdentityRecallBlock(
+    runtimeReconciledSession,
+    rawUserInput,
+    queryContinuityFacts
+  );
   const statusUpdateBlock = buildTurnLocalStatusUpdateBlock(rawUserInput);
   const contextualRecallBlock = await buildContextualRecallBlock(
     runtimeReconciledSession,
     rawUserInput,
     queryContinuityEpisodes,
     queryContinuityFacts,
-    media
+    media,
+    contextualReferenceInterpretationResolver,
+    getEntityGraph,
+    entityReferenceInterpretationResolver
   );
   const mediaContextBlock = buildConversationMediaContextBlock(media);
-  const modeContinuityBlock = buildModeContinuityBlock(runtimeReconciledSession);
-  const progressStateBlock = buildProgressStateBlock(runtimeReconciledSession);
-  const returnHandoffBlock = buildReturnHandoffBlock(runtimeReconciledSession);
-  const returnHandoffContinuationBlock = buildReturnHandoffContinuationBlock(
-    runtimeReconciledSession,
-    rawUserInput,
-    semanticHint
-  );
-  const recentActionBlock = buildRecentActionBlock(runtimeReconciledSession);
-  const activeWorkspaceBlock = buildActiveWorkspaceBlock(runtimeReconciledSession);
-  const browserSessionBlock = buildBrowserSessionBlock(runtimeReconciledSession);
-  const explicitBrowserUrlOwnershipGuardBlock = buildExplicitBrowserUrlOwnershipGuardBlock(
-    runtimeReconciledSession,
-    rawUserInput
-  );
-  const browserFollowUpIntentBlock = buildBrowserFollowUpIntentBlock(
-    runtimeReconciledSession,
-    rawUserInput
-  );
-  const artifactEditContextBlock = buildRecentArtifactEditContextBlock(
-    runtimeReconciledSession,
-    rawUserInput
-  );
   const desktopOrganizationContextBlock = buildDesktopOrganizationExecutionContextBlock(
     runtimeReconciledSession,
     rawUserInput
   );
-  const workspaceRecoveryContextBlock = buildWorkspaceRecoveryContextBlock(
-    runtimeReconciledSession,
-    rawUserInput,
-    managedProcessSnapshots
-  );
-  const pathDestinationBlock = buildPathDestinationContextBlock(
-    runtimeReconciledSession,
-    rawUserInput
-  );
-  const reusePreferenceBlock = buildReuseIntentContextBlock(
-    runtimeReconciledSession,
-    rawUserInput
-  );
+  const explicitBrowserUrlOwnershipGuardBlock = suppressWorkflowContinuityBlocks
+    ? null
+    : buildExplicitBrowserUrlOwnershipGuardBlock(
+      runtimeReconciledSession,
+      rawUserInput
+    );
+  const suppressTrackedExecutionHintsForForeignBrowserUrl =
+    explicitBrowserUrlOwnershipGuardBlock !== null;
+  const suppressTrackedExecutionHints =
+    suppressWorkflowContinuityBlocks ||
+    suppressTrackedExecutionHintsForForeignBrowserUrl;
+  const modeContinuityBlock = suppressTrackedExecutionHints
+    ? null
+    : buildModeContinuityBlock(runtimeReconciledSession);
+  const progressStateBlock = suppressTrackedExecutionHints
+    ? null
+    : buildProgressStateBlock(runtimeReconciledSession);
+  const returnHandoffBlock = suppressTrackedExecutionHints
+    ? null
+    : buildReturnHandoffBlock(runtimeReconciledSession);
+  const returnHandoffContinuationBlock = suppressTrackedExecutionHints
+    ? null
+    : buildReturnHandoffContinuationBlock(
+      runtimeReconciledSession,
+      rawUserInput,
+      semanticHint
+    );
+  const recentActionBlock = suppressTrackedExecutionHints
+    ? null
+    : buildRecentActionBlock(runtimeReconciledSession);
+  const activeWorkspaceBlock = suppressTrackedExecutionHints
+    ? null
+    : buildActiveWorkspaceBlock(runtimeReconciledSession);
+  const browserSessionBlock = suppressTrackedExecutionHints
+    ? null
+    : buildBrowserSessionBlock(runtimeReconciledSession);
+  const browserFollowUpIntentBlock = suppressTrackedExecutionHints
+    ? null
+    : buildBrowserFollowUpIntentBlock(
+      runtimeReconciledSession,
+      rawUserInput
+    );
+  const artifactEditContextBlock = suppressTrackedExecutionHints
+    ? null
+    : buildRecentArtifactEditContextBlock(
+      runtimeReconciledSession,
+      rawUserInput
+    );
+  const workspaceRecoveryContextBlock = suppressTrackedExecutionHints
+    ? null
+    : buildWorkspaceRecoveryContextBlock(
+      runtimeReconciledSession,
+      rawUserInput,
+      managedProcessSnapshots
+    );
+  const pathDestinationBlock = suppressTrackedExecutionHints
+    ? null
+    : buildPathDestinationContextBlock(
+      runtimeReconciledSession,
+      rawUserInput
+    );
+  const reusePreferenceBlock = suppressTrackedExecutionHints
+    ? null
+    : buildReuseIntentContextBlock(
+      runtimeReconciledSession,
+      rawUserInput
+    );
   const routingHint = routingClassification
     ? buildRoutingExecutionHintV1(routingClassification)
     : null;
   if (
     recentTurns.length === 0 &&
+    !selfIdentityRecallBlock &&
     !statusUpdateBlock &&
     !contextualRecallBlock &&
     !mediaContextBlock &&
@@ -1016,6 +1363,9 @@ export async function buildConversationAwareExecutionInput(
 
   if (statusUpdateBlock) {
     lines.push("", statusUpdateBlock);
+  }
+  if (selfIdentityRecallBlock) {
+    lines.push("", selfIdentityRecallBlock);
   }
   if (contextualRecallBlock) {
     lines.push("", contextualRecallBlock);
@@ -1081,11 +1431,13 @@ export async function buildConversationAwareExecutionInput(
  * @param followUpRuleContext - Loaded follow-up rulepack context.
  * @returns Follow-up classification metadata plus the execution payload to send downstream.
  */
-export function resolveFollowUpInput(
+export async function resolveFollowUpInput(
   session: ConversationSession,
   userInput: string,
-  followUpRuleContext: FollowUpRuleContext
-): FollowUpResolution {
+  followUpRuleContext: FollowUpRuleContext,
+  continuationInterpretationResolver?: ContinuationInterpretationResolver,
+  routingClassification: RoutingMapClassificationV1 | null = null
+): Promise<FollowUpResolution> {
   const lastAssistantPrompt = [...session.conversationTurns]
     .reverse()
     .find(
@@ -1098,31 +1450,75 @@ export function resolveFollowUpInput(
     ruleContext: followUpRuleContext
   });
 
-  if (!classification.isShortFollowUp) {
-    return {
-      executionInput: userInput,
-      classification
-    };
-  }
-
   if (!lastAssistantPrompt) {
     return {
       executionInput: userInput,
-      classification
+      classification,
+      linkedToPriorAssistantPrompt: false
+    };
+  }
+
+  if (!classification.isShortFollowUp) {
+    if (
+      !shouldAttemptContinuationFollowUpInterpretation(
+        userInput,
+        classification,
+        true,
+        routingClassification
+      )
+    ) {
+      return {
+        executionInput: userInput,
+        classification,
+        linkedToPriorAssistantPrompt: false
+      };
+    }
+
+    const continuationInterpretation = await routeContinuationInterpretationModel(
+      {
+        userInput,
+        routingClassification,
+        sessionHints: buildLocalIntentSessionHints(session),
+        recentAssistantTurn: lastAssistantPrompt.text
+      },
+      continuationInterpretationResolver
+    );
+
+    if (
+      continuationInterpretation?.kind !== "short_follow_up" ||
+      continuationInterpretation.continuationTarget !== "prior_assistant_turn" ||
+      continuationInterpretation.confidence === "low"
+    ) {
+      return {
+        executionInput: userInput,
+        classification,
+        linkedToPriorAssistantPrompt: false
+      };
+    }
+
+    const interpretedClassification: FollowUpClassification = {
+      isShortFollowUp: true,
+      category: toFollowUpCategory(continuationInterpretation.followUpCategory),
+      confidenceTier: toFollowUpConfidenceTier(continuationInterpretation.confidence),
+      matchedRuleId: `follow_up_v1_local_continuation_${continuationInterpretation.kind}`,
+      rulepackVersion: "ContinuationInterpretationV1"
+    };
+    return {
+      executionInput: buildLinkedFollowUpExecutionInput(
+        interpretedClassification,
+        lastAssistantPrompt.text,
+        userInput,
+        continuationInterpretation.explanation
+      ),
+      classification: interpretedClassification,
+      linkedToPriorAssistantPrompt: true
     };
   }
 
   return {
-    executionInput: [
-      "Follow-up user response to prior assistant clarification.",
-      `Follow-up classifier: ${classification.matchedRuleId}`,
-      `Follow-up rulepack: ${classification.rulepackVersion}`,
-      `Follow-up category: ${classification.category}`,
-      `Follow-up confidence: ${classification.confidenceTier}`,
-      `Previous assistant question: ${normalizeAssistantTurnText(lastAssistantPrompt.text)}`,
-      `User follow-up answer: ${normalizeWhitespace(userInput)}`
-    ].join("\n"),
-    classification
+    executionInput: userInput,
+    classification,
+    linkedToPriorAssistantPrompt: true
   };
 }
 

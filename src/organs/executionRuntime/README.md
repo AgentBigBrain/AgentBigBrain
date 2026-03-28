@@ -17,6 +17,7 @@ verification-state rendering stay owned by `src/organs/skillRegistry/`.
 - `skillRuntime.ts`
 - `shellExecution.ts`
 - `shellExecutionSupport.ts`
+- `shellCommandStaging.ts`
 - `shellExecutionPostconditions.ts`
 
 ## Inputs
@@ -30,6 +31,8 @@ verification-state rendering stay owned by `src/organs/skillRegistry/`.
 - shell execution telemetry records for runtime traces
 - shell postcondition checks and Windows package-manager normalization used to fail closed when
   scaffold/build commands do not leave behind the required local artifacts
+- staged temp-script fallback for oversized shell commands so bounded execution does not depend on
+  platform argv limits
 - extracted scaffold/build postcondition helpers so `shellExecutionSupport.ts` can stay focused on
   command shaping and launcher policy
 - stable skill-artifact execution and bounded file-action responses

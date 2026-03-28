@@ -3,9 +3,37 @@
  */
 
 import { ensureEnvLoaded } from "../../core/envLoader";
-import type { LocalIntentModelResolver } from "./localIntentModelContracts";
+import type {
+  AutonomyBoundaryInterpretationResolver,
+  BridgeQuestionTimingInterpretationResolver,
+  ContinuationInterpretationResolver,
+  ContextualFollowupInterpretationResolver,
+  ContextualReferenceInterpretationResolver,
+  EntityDomainHintInterpretationResolver,
+  EntityReferenceInterpretationResolver,
+  EntityTypeInterpretationResolver,
+  HandoffControlInterpretationResolver,
+  IdentityInterpretationResolver,
+  LocalIntentModelResolver,
+  StatusRecallBoundaryInterpretationResolver,
+  TopicKeyInterpretationResolver
+} from "./localIntentModelContracts";
+import type { ProposalReplyInterpretationResolver } from "./localIntentModelProposalReplyContracts";
 import {
+  createOllamaAutonomyBoundaryInterpretationResolver,
+  createOllamaBridgeQuestionTimingInterpretationResolver,
+  createOllamaContinuationInterpretationResolver,
+  createOllamaContextualFollowupInterpretationResolver,
+  createOllamaContextualReferenceInterpretationResolver,
+  createOllamaEntityDomainHintInterpretationResolver,
+  createOllamaEntityReferenceInterpretationResolver,
+  createOllamaEntityTypeInterpretationResolver,
+  createOllamaHandoffControlInterpretationResolver,
+  createOllamaIdentityInterpretationResolver,
   createOllamaLocalIntentModelResolver,
+  createOllamaProposalReplyInterpretationResolver,
+  createOllamaStatusRecallBoundaryInterpretationResolver,
+  createOllamaTopicKeyInterpretationResolver,
   probeOllamaLocalIntentModel,
   type OllamaLocalIntentModelProbeResult
 } from "./ollamaLocalIntentModel";
@@ -118,6 +146,240 @@ export function createLocalIntentModelResolverFromEnv(
     return undefined;
   }
   return createOllamaLocalIntentModelResolver(config, deps);
+}
+
+/**
+ * Creates the optional identity-interpretation resolver from env.
+ *
+ * @param env - Environment source used for configuration.
+ * @param deps - Optional dependency overrides for tests.
+ * @returns Configured identity interpreter when enabled, otherwise `undefined`.
+ */
+export function createIdentityInterpretationResolverFromEnv(
+  env: NodeJS.ProcessEnv = process.env,
+  deps: LocalIntentModelRuntimeDependencies = {}
+): IdentityInterpretationResolver | undefined {
+  const config = createLocalIntentModelRuntimeConfigFromEnv(env);
+  if (!config.enabled) {
+    return undefined;
+  }
+  return createOllamaIdentityInterpretationResolver(config, deps);
+}
+
+/**
+ * Creates the optional proposal-reply-interpretation resolver from env.
+ *
+ * @param env - Environment source used for configuration.
+ * @param deps - Optional dependency overrides for tests.
+ * @returns Configured proposal-reply interpreter when enabled, otherwise `undefined`.
+ */
+export function createProposalReplyInterpretationResolverFromEnv(
+  env: NodeJS.ProcessEnv = process.env,
+  deps: LocalIntentModelRuntimeDependencies = {}
+): ProposalReplyInterpretationResolver | undefined {
+  const config = createLocalIntentModelRuntimeConfigFromEnv(env);
+  if (!config.enabled) {
+    return undefined;
+  }
+  return createOllamaProposalReplyInterpretationResolver(config, deps);
+}
+
+/**
+ * Creates the optional continuation-interpretation resolver from env.
+ *
+ * @param env - Environment source used for configuration.
+ * @param deps - Optional dependency overrides for tests.
+ * @returns Configured continuation interpreter when enabled, otherwise `undefined`.
+ */
+export function createContinuationInterpretationResolverFromEnv(
+  env: NodeJS.ProcessEnv = process.env,
+  deps: LocalIntentModelRuntimeDependencies = {}
+): ContinuationInterpretationResolver | undefined {
+  const config = createLocalIntentModelRuntimeConfigFromEnv(env);
+  if (!config.enabled) {
+    return undefined;
+  }
+  return createOllamaContinuationInterpretationResolver(config, deps);
+}
+
+/**
+ * Creates the optional contextual-reference-interpretation resolver from env.
+ *
+ * @param env - Environment source used for configuration.
+ * @param deps - Optional dependency overrides for tests.
+ * @returns Configured contextual-reference interpreter when enabled, otherwise `undefined`.
+ */
+export function createContextualReferenceInterpretationResolverFromEnv(
+  env: NodeJS.ProcessEnv = process.env,
+  deps: LocalIntentModelRuntimeDependencies = {}
+): ContextualReferenceInterpretationResolver | undefined {
+  const config = createLocalIntentModelRuntimeConfigFromEnv(env);
+  if (!config.enabled) {
+    return undefined;
+  }
+  return createOllamaContextualReferenceInterpretationResolver(config, deps);
+}
+
+/**
+ * Creates the optional topic-key-interpretation resolver from env.
+ *
+ * @param env - Environment source used for configuration.
+ * @param deps - Optional dependency overrides for tests.
+ * @returns Configured topic-key interpreter when enabled, otherwise `undefined`.
+ */
+export function createTopicKeyInterpretationResolverFromEnv(
+  env: NodeJS.ProcessEnv = process.env,
+  deps: LocalIntentModelRuntimeDependencies = {}
+): TopicKeyInterpretationResolver | undefined {
+  const config = createLocalIntentModelRuntimeConfigFromEnv(env);
+  if (!config.enabled) {
+    return undefined;
+  }
+  return createOllamaTopicKeyInterpretationResolver(config, deps);
+}
+
+/**
+ * Creates the optional entity-reference-interpretation resolver from env.
+ *
+ * @param env - Environment source used for configuration.
+ * @param deps - Optional dependency overrides for tests.
+ * @returns Configured entity-reference interpreter when enabled, otherwise `undefined`.
+ */
+export function createEntityReferenceInterpretationResolverFromEnv(
+  env: NodeJS.ProcessEnv = process.env,
+  deps: LocalIntentModelRuntimeDependencies = {}
+): EntityReferenceInterpretationResolver | undefined {
+  const config = createLocalIntentModelRuntimeConfigFromEnv(env);
+  if (!config.enabled) {
+    return undefined;
+  }
+  return createOllamaEntityReferenceInterpretationResolver(config, deps);
+}
+
+/**
+ * Creates the optional entity-type-interpretation resolver from env.
+ *
+ * @param env - Environment source used for configuration.
+ * @param deps - Optional dependency overrides for tests.
+ * @returns Configured entity-type interpreter when enabled, otherwise `undefined`.
+ */
+export function createEntityTypeInterpretationResolverFromEnv(
+  env: NodeJS.ProcessEnv = process.env,
+  deps: LocalIntentModelRuntimeDependencies = {}
+): EntityTypeInterpretationResolver | undefined {
+  const config = createLocalIntentModelRuntimeConfigFromEnv(env);
+  if (!config.enabled) {
+    return undefined;
+  }
+  return createOllamaEntityTypeInterpretationResolver(config, deps);
+}
+
+/**
+ * Creates the optional entity-domain-hint-interpretation resolver from env.
+ *
+ * @param env - Environment source used for configuration.
+ * @param deps - Optional dependency overrides for tests.
+ * @returns Configured entity-domain-hint interpreter when enabled, otherwise `undefined`.
+ */
+export function createEntityDomainHintInterpretationResolverFromEnv(
+  env: NodeJS.ProcessEnv = process.env,
+  deps: LocalIntentModelRuntimeDependencies = {}
+): EntityDomainHintInterpretationResolver | undefined {
+  const config = createLocalIntentModelRuntimeConfigFromEnv(env);
+  if (!config.enabled) {
+    return undefined;
+  }
+  return createOllamaEntityDomainHintInterpretationResolver(config, deps);
+}
+
+/**
+ * Creates the optional handoff-control-interpretation resolver from env.
+ *
+ * @param env - Environment source used for configuration.
+ * @param deps - Optional dependency overrides for tests.
+ * @returns Configured handoff-control interpreter when enabled, otherwise `undefined`.
+ */
+export function createHandoffControlInterpretationResolverFromEnv(
+  env: NodeJS.ProcessEnv = process.env,
+  deps: LocalIntentModelRuntimeDependencies = {}
+): HandoffControlInterpretationResolver | undefined {
+  const config = createLocalIntentModelRuntimeConfigFromEnv(env);
+  if (!config.enabled) {
+    return undefined;
+  }
+  return createOllamaHandoffControlInterpretationResolver(config, deps);
+}
+
+/**
+ * Creates the optional contextual-followup-interpretation resolver from env.
+ *
+ * @param env - Environment source used for configuration.
+ * @param deps - Optional dependency overrides for tests.
+ * @returns Configured contextual-followup interpreter when enabled, otherwise `undefined`.
+ */
+export function createContextualFollowupInterpretationResolverFromEnv(
+  env: NodeJS.ProcessEnv = process.env,
+  deps: LocalIntentModelRuntimeDependencies = {}
+): ContextualFollowupInterpretationResolver | undefined {
+  const config = createLocalIntentModelRuntimeConfigFromEnv(env);
+  if (!config.enabled) {
+    return undefined;
+  }
+  return createOllamaContextualFollowupInterpretationResolver(config, deps);
+}
+
+/**
+ * Creates the optional bridge-question-timing-interpretation resolver from env.
+ *
+ * @param env - Environment source used for configuration.
+ * @param deps - Optional dependency overrides for tests.
+ * @returns Configured bridge-question-timing interpreter when enabled, otherwise `undefined`.
+ */
+export function createBridgeQuestionTimingInterpretationResolverFromEnv(
+  env: NodeJS.ProcessEnv = process.env,
+  deps: LocalIntentModelRuntimeDependencies = {}
+): BridgeQuestionTimingInterpretationResolver | undefined {
+  const config = createLocalIntentModelRuntimeConfigFromEnv(env);
+  if (!config.enabled) {
+    return undefined;
+  }
+  return createOllamaBridgeQuestionTimingInterpretationResolver(config, deps);
+}
+
+/**
+ * Creates the optional autonomy-boundary-interpretation resolver from env.
+ *
+ * @param env - Environment source used for configuration.
+ * @param deps - Optional dependency overrides for tests.
+ * @returns Configured autonomy-boundary interpreter when enabled, otherwise `undefined`.
+ */
+export function createAutonomyBoundaryInterpretationResolverFromEnv(
+  env: NodeJS.ProcessEnv = process.env,
+  deps: LocalIntentModelRuntimeDependencies = {}
+): AutonomyBoundaryInterpretationResolver | undefined {
+  const config = createLocalIntentModelRuntimeConfigFromEnv(env);
+  if (!config.enabled) {
+    return undefined;
+  }
+  return createOllamaAutonomyBoundaryInterpretationResolver(config, deps);
+}
+
+/**
+ * Creates the optional status-recall-boundary-interpretation resolver from env.
+ *
+ * @param env - Environment source used for configuration.
+ * @param deps - Optional dependency overrides for tests.
+ * @returns Configured status/recall boundary interpreter when enabled, otherwise `undefined`.
+ */
+export function createStatusRecallBoundaryInterpretationResolverFromEnv(
+  env: NodeJS.ProcessEnv = process.env,
+  deps: LocalIntentModelRuntimeDependencies = {}
+): StatusRecallBoundaryInterpretationResolver | undefined {
+  const config = createLocalIntentModelRuntimeConfigFromEnv(env);
+  if (!config.enabled) {
+    return undefined;
+  }
+  return createOllamaStatusRecallBoundaryInterpretationResolver(config, deps);
 }
 
 /**

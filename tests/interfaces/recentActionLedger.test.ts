@@ -209,6 +209,89 @@ test("renderConversationStatusOrRecall returns a review-oriented durable handoff
   assert.match(reply, /Next step: Tell me what section you want changed next\./);
 });
 
+test("renderConversationStatusOrRecall does not fall back to stale handoff review output for generic conversational wording", () => {
+  const session = buildSession({
+    returnHandoff: {
+      id: "handoff:blocked-review",
+      status: "completed",
+      goal: "Finish the page and leave it ready for review.",
+      summary:
+        "I couldn't execute that request in this run. What happened: one or more governed actions were blocked before execution.",
+      nextSuggestedStep: "Ask for the exact block code and approval diff.",
+      workspaceRootPath: "C:\\Users\\testuser\\Desktop\\Sample World",
+      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\Sample World\\src\\index.css",
+      previewUrl: "file:///C:/Users/testuser/Desktop/drone-company-landing.html",
+      changedPaths: [
+        "C:\\Users\\testuser\\Desktop\\Sample World\\src\\index.css",
+        "C:\\Users\\testuser\\Desktop\\Sample World\\src\\App.jsx"
+      ],
+      sourceJobId: "job-blocked",
+      updatedAt: "2026-03-20T19:43:00.000Z"
+    }
+  });
+
+  const reply = renderConversationStatusOrRecall(session, "Hi");
+
+  assert.equal(reply, "I don't have a tracked status update for that.");
+  assert.doesNotMatch(reply, /ready to review/i);
+  assert.doesNotMatch(reply, /workspace:/i);
+});
+
+test("renderConversationStatusOrRecall ignores semantic handoff hints for assistant-identity wording", () => {
+  const session = buildSession({
+    returnHandoff: {
+      id: "handoff:blocked-review-assistant-identity",
+      status: "completed",
+      goal: "Finish the page and leave it ready for review.",
+      summary:
+        "I couldn't execute that request in this run. What happened: one or more governed actions were blocked before execution.",
+      nextSuggestedStep: "Ask for the exact block code and approval diff.",
+      workspaceRootPath: "C:\\Users\\testuser\\Desktop\\Sample World",
+      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\Sample World\\src\\index.css",
+      previewUrl: "file:///C:/Users/testuser/Desktop/drone-company-landing.html",
+      changedPaths: [
+        "C:\\Users\\testuser\\Desktop\\Sample World\\src\\index.css",
+        "C:\\Users\\testuser\\Desktop\\Sample World\\src\\App.jsx"
+      ],
+      sourceJobId: "job-blocked-assistant-identity",
+      updatedAt: "2026-03-20T19:43:00.000Z"
+    }
+  });
+
+  const reply = renderConversationStatusOrRecall(
+    session,
+    "And you are?",
+    "review_ready"
+  );
+
+  assert.equal(reply, "I don't have a tracked status update for that.");
+  assert.doesNotMatch(reply, /ready to review/i);
+  assert.doesNotMatch(reply, /workspace:/i);
+});
+
+test("renderConversationStatusOrRecall still falls back to durable handoff output for explicit generic status wording", () => {
+  const session = buildSession({
+    returnHandoff: {
+      id: "handoff:status-fallback",
+      status: "waiting_for_user",
+      goal: "Finish the landing page and pause for review.",
+      summary: "I finished the draft and paused at the review checkpoint.",
+      nextSuggestedStep: "Tell me what section you want me to refine next.",
+      workspaceRootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
+      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
+      previewUrl: "http://127.0.0.1:4177/index.html",
+      changedPaths: ["C:\\Users\\testuser\\Desktop\\drone-company\\index.html"],
+      sourceJobId: "job-status-fallback",
+      updatedAt: "2026-03-20T19:43:30.000Z"
+    }
+  });
+
+  const reply = renderConversationStatusOrRecall(session, "What's the status?");
+
+  assert.match(reply, /I'm not actively working on anything right now\./);
+  assert.match(reply, /Paused work: I finished the draft and paused at the review checkpoint\./);
+});
+
 test("renderConversationStatusOrRecall treats rough-draft review prompts as paused handoff summaries", () => {
   const session = buildSession({
     returnHandoff: {
@@ -264,6 +347,34 @@ test("renderConversationStatusOrRecall uses the durable handoff for while-you-we
   assert.match(reply, /Workspace: C:\\Users\\testuser\\Desktop\\drone-company/);
   assert.match(reply, /Then review: review C:\\Users\\testuser\\Desktop\\drone-company\\index\.html\./);
   assert.match(reply, /After you review it: Tell me which section you want me to refine next\./);
+});
+
+test("renderConversationStatusOrRecall honors semantic handoff hints for ambiguous saved-work review wording", () => {
+  const session = buildSession({
+    returnHandoff: {
+      id: "handoff:semantic-review-ready",
+      status: "completed",
+      goal: "Finish the landing page and leave it ready for review.",
+      summary: "I finished the landing page draft and left the preview ready for review.",
+      nextSuggestedStep: "Tell me which section you want me to refine next.",
+      workspaceRootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
+      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
+      previewUrl: "http://127.0.0.1:4177/index.html",
+      changedPaths: ["C:\\Users\\testuser\\Desktop\\drone-company\\index.html"],
+      sourceJobId: "job-semantic-review-ready",
+      updatedAt: "2026-03-12T00:00:09.100Z"
+    }
+  });
+
+  const reply = renderConversationStatusOrRecall(
+    session,
+    "Anything I should eyeball from that draft before we move on?",
+    "review_ready"
+  );
+
+  assert.match(reply, /Here is what is ready to review: I finished the landing page draft and left the preview ready for review\./);
+  assert.match(reply, /Status: Finished and ready for your review\./);
+  assert.match(reply, /Preview: http:\/\/127\.0\.0\.1:4177\/index\.html/);
 });
 
 test("renderConversationStatusOrRecall guides the user to the first review surface when asked where to start", () => {
@@ -501,6 +612,239 @@ test("renderConversationStatusOrRecall falls back to the latest concrete locatio
 
   assert.match(reply, /Current workspace:/);
   assert.match(reply, /C:\\Users\\testuser\\Desktop\\123/);
+});
+
+test("renderConversationStatusOrRecall honors the status_change_summary semantic hint even for generic wording", () => {
+  const session = buildSession({
+    recentJobs: [
+      buildConversationJobFixture({
+        id: "job-change-summary",
+        input: "change the hero to a slider",
+        executionInput: "change the hero to a slider",
+        createdAt: "2026-03-12T00:00:03.000Z",
+        startedAt: "2026-03-12T00:00:03.500Z",
+        completedAt: "2026-03-12T00:00:05.000Z",
+        status: "completed",
+        resultSummary: "I updated index.html and styles.css.",
+        ackEligibleAt: "2026-03-12T00:00:03.100Z"
+      })
+    ],
+    recentActions: [
+      {
+        id: "file-action-styles",
+        kind: "file",
+        label: "File styles.css",
+        location: "C:\\Users\\testuser\\Desktop\\123\\styles.css",
+        status: "updated",
+        sourceJobId: "job-change-summary",
+        at: "2026-03-12T00:00:04.000Z",
+        summary: "Updated the slider styling."
+      },
+      {
+        id: "file-action-index",
+        kind: "file",
+        label: "File index.html",
+        location: "C:\\Users\\testuser\\Desktop\\123\\index.html",
+        status: "updated",
+        sourceJobId: "job-change-summary",
+        at: "2026-03-12T00:00:03.000Z",
+        summary: "Updated the hero markup to a slider."
+      }
+    ]
+  });
+
+  const reply = renderConversationStatusOrRecall(
+    session,
+    "Okay.",
+    "status_change_summary"
+  );
+
+  assert.match(reply, /^I updated styles\.css and index\.html\./);
+  assert.doesNotMatch(reply, /Most recent actions:/);
+});
+
+test("renderConversationStatusOrRecall honors the status_return_handoff semantic hint even for generic wording", () => {
+  const session = buildSession({
+    returnHandoff: {
+      id: "handoff:semantic-status-return",
+      status: "completed",
+      goal: "Finish the landing page draft and leave it ready for review.",
+      summary: "I finished the landing page draft and left the preview ready for review.",
+      nextSuggestedStep: "Tell me which section you want me to refine next.",
+      workspaceRootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
+      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
+      previewUrl: "http://127.0.0.1:4177/index.html",
+      changedPaths: ["C:\\Users\\testuser\\Desktop\\drone-company\\index.html"],
+      sourceJobId: "job-semantic-status-return",
+      updatedAt: "2026-03-12T00:00:09.100Z"
+    }
+  });
+
+  const reply = renderConversationStatusOrRecall(
+    session,
+    "Okay.",
+    "status_return_handoff"
+  );
+
+  assert.match(reply, /Last completed work: I finished the landing page draft and left the preview ready for review\./);
+  assert.match(reply, /Workspace: C:\\Users\\testuser\\Desktop\\drone-company/);
+});
+
+test("renderConversationStatusOrRecall honors the status_location semantic hint even for generic wording", () => {
+  const session = buildSession({
+    activeWorkspace: {
+      id: "workspace:semantic-location",
+      label: "Current project workspace",
+      rootPath: "C:\\Users\\testuser\\Desktop\\123",
+      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\123\\index.html",
+      previewUrl: "file:///C:/Users/testuser/Desktop/123/index.html",
+      browserSessionId: "browser-session-1",
+      browserSessionIds: ["browser-session-1"],
+      browserSessionStatus: "open",
+      browserProcessPid: 42001,
+      previewProcessLeaseId: null,
+      previewProcessLeaseIds: [],
+      previewProcessCwd: "C:\\Users\\testuser\\Desktop\\123",
+      lastKnownPreviewProcessPid: null,
+      stillControllable: true,
+      ownershipState: "tracked",
+      previewStackState: "browser_only",
+      lastChangedPaths: ["C:\\Users\\testuser\\Desktop\\123\\index.html"],
+      sourceJobId: "job-semantic-location",
+      updatedAt: "2026-03-12T00:00:05.000Z"
+    }
+  });
+
+  const reply = renderConversationStatusOrRecall(
+    session,
+    "Okay.",
+    "status_location"
+  );
+
+  assert.match(reply, /Current workspace:/);
+  assert.match(reply, /C:\\Users\\testuser\\Desktop\\123/);
+});
+
+test("renderConversationStatusOrRecall honors the status_browser semantic hint even for generic wording", () => {
+  const session = buildSession({
+    activeWorkspace: {
+      id: "workspace:semantic-browser",
+      label: "Current project workspace",
+      rootPath: "C:\\Users\\testuser\\Desktop\\123",
+      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\123\\index.html",
+      previewUrl: "http://127.0.0.1:4177/",
+      browserSessionId: "browser-session-semantic",
+      browserSessionIds: ["browser-session-semantic"],
+      browserSessionStatus: "open",
+      browserProcessPid: 42001,
+      previewProcessLeaseId: "proc_preview_1",
+      previewProcessLeaseIds: ["proc_preview_1"],
+      previewProcessCwd: "C:\\Users\\testuser\\Desktop\\123",
+      lastKnownPreviewProcessPid: 43125,
+      stillControllable: true,
+      ownershipState: "tracked",
+      previewStackState: "browser_only",
+      lastChangedPaths: ["C:\\Users\\testuser\\Desktop\\123\\index.html"],
+      sourceJobId: "job-semantic-browser",
+      updatedAt: "2026-03-12T00:00:05.000Z"
+    },
+    browserSessions: [
+      buildConversationBrowserSessionFixture({
+        id: "browser-session-semantic",
+        label: "Browser window",
+        url: "http://127.0.0.1:4177/",
+        status: "open",
+        openedAt: "2026-03-12T00:00:05.000Z",
+        sourceJobId: "job-semantic-browser",
+        linkedProcessLeaseId: "proc_preview_1",
+        linkedProcessCwd: "C:\\Users\\testuser\\Desktop\\123",
+        linkedProcessPid: 43125
+      })
+    ]
+  });
+
+  const reply = renderConversationStatusOrRecall(
+    session,
+    "Okay.",
+    "status_browser"
+  );
+
+  assert.match(reply, /Tracked workspace preview: http:\/\/127\.0\.0\.1:4177\/ \(open\)\./);
+  assert.match(reply, /Open browser sessions:/);
+  assert.match(reply, /Browser window: http:\/\/127\.0\.0\.1:4177\/ \(linked preview lease proc_preview_1\)/);
+});
+
+test("renderConversationStatusOrRecall honors the status_progress semantic hint even for generic wording", () => {
+  const session = buildSession({
+    progressState: {
+      status: "working",
+      message: "repairing the hero section and verifying the preview",
+      jobId: "job-progress",
+      updatedAt: "2026-03-12T00:00:05.000Z"
+    }
+  });
+
+  const reply = renderConversationStatusOrRecall(
+    session,
+    "Okay.",
+    "status_progress"
+  );
+
+  assert.equal(reply, "I'm working on repairing the hero section and verifying the preview.");
+});
+
+test("renderConversationStatusOrRecall honors the status_waiting semantic hint even for generic wording", () => {
+  const session = buildSession({
+    progressState: {
+      status: "waiting_for_user",
+      message: "whether you want me to plan it first or build it now",
+      jobId: null,
+      updatedAt: "2026-03-12T00:00:05.000Z"
+    }
+  });
+
+  const reply = renderConversationStatusOrRecall(
+    session,
+    "Okay.",
+    "status_waiting"
+  );
+
+  assert.equal(
+    reply,
+    "I'm waiting on you for whether you want me to plan it first or build it now."
+  );
+});
+
+test("renderConversationStatusOrRecall surfaces recovered runtime repairs in generic status recall", () => {
+  const session = buildSession({
+    recentJobs: [
+      buildConversationJobFixture({
+        id: "job-recovered-runtime",
+        input: "start the local python app and leave it open",
+        executionInput: "start the local python app and leave it open",
+        createdAt: "2026-03-12T00:00:01.000Z",
+        startedAt: "2026-03-12T00:00:01.500Z",
+        completedAt: "2026-03-12T00:00:04.000Z",
+        status: "completed",
+        resultSummary: "I started the local Python app and left it open in the browser.",
+        recoveryTrace: {
+          kind: "structured_executor_recovery",
+          status: "recovered",
+          summary:
+            "Recovered automatically after one bounded missing-dependency repair and retried the Python start step.",
+          updatedAt: "2026-03-12T00:00:03.000Z",
+          recoveryClass: "DEPENDENCY_MISSING",
+          fingerprint: "dep-python-1"
+        },
+        ackEligibleAt: "2026-03-12T00:00:01.100Z"
+      })
+    ]
+  });
+
+  const reply = renderConversationStatusOrRecall(session, "What's the status?");
+
+  assert.match(reply, /Last run recovered automatically:/i);
+  assert.match(reply, /missing-dependency repair/i);
 });
 
 test("renderConversationStatusOrRecall describes orphaned workspaces as attributable instead of current", () => {

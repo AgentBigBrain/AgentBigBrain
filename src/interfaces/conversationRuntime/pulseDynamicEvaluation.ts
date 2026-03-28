@@ -25,6 +25,8 @@ import {
   computeRelationshipAgeDays,
   type DynamicPulsePromptContext
 } from "./pulsePrompting";
+import type { ConversationDomainLane, EntityGraphV1 } from "../../core/types";
+import { shouldSuppressPulseForSessionDomain } from "./pulseScheduling";
 
 const RELATIONSHIP_CLARIFICATION_RECENT_TURN_WINDOW = 8;
 
@@ -38,11 +40,65 @@ export interface DynamicPulseEvaluationParams {
 }
 
 /**
+ * Applies a soft session-domain bias to the entity graph used during dynamic pulse scoring.
+ *
+ * **Why it exists:**
+ * Entity ingress can now carry bounded domain hints. Dynamic pulse should prefer entities that
+ * match the current session lane, while still falling back to the full graph when no compatible
+ * candidates exist.
+ *
+ * **What it talks to:**
+ * - Uses `EntityGraphV1` (import type `EntityGraphV1`) from `../../core/types`.
+ *
+ * @param graph - Shared entity graph snapshot for candidate evaluation.
+ * @param dominantLane - Current session lane used for soft preference.
+ * @returns Domain-biased graph view, or the original graph when no bias applies.
+ */
+export function buildDomainBiasedPulseGraph(
+  graph: EntityGraphV1,
+  dominantLane: ConversationDomainLane | null | undefined
+): EntityGraphV1 {
+  if (!dominantLane || dominantLane === "unknown") {
+    return graph;
+  }
+
+  const keptEntities = graph.entities.filter(
+    (entity) => entity.domainHint === null || entity.domainHint === dominantLane
+  );
+  if (keptEntities.length === 0 || keptEntities.length === graph.entities.length) {
+    return graph;
+  }
+
+  const keptEntityKeys = new Set(keptEntities.map((entity) => entity.entityKey));
+  return {
+    ...graph,
+    entities: keptEntities,
+    edges: graph.edges.filter(
+      (edge) =>
+        keptEntityKeys.has(edge.sourceEntityKey) &&
+        keptEntityKeys.has(edge.targetEntityKey)
+    )
+  };
+}
+
+/**
  * Evaluates the Stage 6.86 dynamic pulse candidate path for one selected session.
  */
 export async function evaluateDynamicPulse(
   params: DynamicPulseEvaluationParams
 ): Promise<void> {
+  if (shouldSuppressPulseForSessionDomain(params.targetSession, "dynamic")) {
+    await params.applyPulseStateToUserSessions(params.userSessions, {
+      lastDecisionCode: "SESSION_DOMAIN_SUPPRESSED",
+      lastEvaluatedAt: params.nowIso,
+      lastContextualLexicalEvidence: null,
+      lastPulseReason: null,
+      lastPulseTargetConversationId: params.targetSession.conversationId,
+      updatedAt: params.nowIso
+    });
+    return;
+  }
+
   let graph;
   try {
     graph = await params.deps.getEntityGraph?.();
@@ -65,13 +121,27 @@ export async function evaluateDynamicPulse(
   const recentPulseHistory: readonly PulseEmissionRecordV1[] =
     params.targetSession.agentPulse.recentEmissions ?? [];
 
-  const result = evaluatePulseCandidatesV1({
+  const biasedGraph = buildDomainBiasedPulseGraph(
     graph,
+    params.targetSession.domainContext.dominantLane
+  );
+  const biasedResult = evaluatePulseCandidatesV1({
+    graph: biasedGraph,
     stack,
     observedAt: params.nowIso,
     recentPulseHistory,
     activeMissionWorkExists
   });
+  const result = biasedResult.emittedCandidate
+    ? biasedResult
+    : evaluatePulseCandidatesV1({
+        graph,
+        stack,
+        observedAt: params.nowIso,
+        recentPulseHistory,
+        activeMissionWorkExists
+      });
+  const effectiveGraph = biasedResult.emittedCandidate ? biasedGraph : graph;
 
   if (!result.emittedCandidate) {
     await params.applyPulseStateToUserSessions(params.userSessions, {
@@ -87,7 +157,7 @@ export async function evaluateDynamicPulse(
 
   if (shouldSuppressRelationshipClarificationPulse({
     candidate: result.emittedCandidate,
-    graph,
+    graph: effectiveGraph,
     recentConversationText: params.targetSession.conversationTurns
       .slice(-RELATIONSHIP_CLARIFICATION_RECENT_TURN_WINDOW)
       .map((turn) => turn.text.toLowerCase())
@@ -123,7 +193,7 @@ export async function evaluateDynamicPulse(
   );
 
   const relationshipAgeDays = computeRelationshipAgeDays(
-    graph,
+    effectiveGraph,
     params.targetSession,
     nowMs
   );

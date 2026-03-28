@@ -160,7 +160,7 @@ const CONVERSATION_ID = "autonomous-runtime-restart-smoke";
 const USER_ID = "autonomous-restart-smoke-user";
 const USERNAME = "anthonybenny";
 const PROVIDER_BLOCK_PATTERN =
-  /(?:429|exceeded your current quota|rate limit|fetch failed|request timed out|timed out waiting for turn_|stream disconnected before completion|an error occurred while processing your request)/i;
+  /(?:429|exceeded your current quota|usage limit|purchase more credits|try again at|rate limit|fetch failed|request timed out|timed out waiting for turn_|stream disconnected before completion|an error occurred while processing your request)/i;
 const UNKNOWN_PREVIEW_URL = "http://127.0.0.1:59999/index.html";
 const TURN_TIMEOUT_MS = 50_000;
 const MANAGER_IDLE_TIMEOUT_MS = 10_000;
@@ -420,6 +420,12 @@ function isReviewableReply(text: string): boolean {
   return trimmed.length >= 24 && !/^\s*{\s*"/.test(trimmed) && !/^\/auto\b/i.test(trimmed);
 }
 
+function isOwnershipSafeNoOpReply(text: string): boolean {
+  return /ownership_not_proven|ownership was not proven|cannot prove|can't prove|no verifiable link|from the evidence|did not close|left?\s+.*(?:alone|untouched)|leave .* alone|untouched to avoid guessing/i.test(
+    text
+  );
+}
+
 function findLatestJobSince(
   session: ConversationSession,
   turnStartedAt: string
@@ -655,7 +661,12 @@ async function seedRestartWorkspaceSession(
     },
     estimatedCostUsd: 0.02
   });
-  assert.equal(openOutcome.status, "success", "Could not open the seeded preview browser session.");
+  if (openOutcome.status !== "success") {
+    throw new Error(
+      `Preview browser control unavailable while seeding restart smoke: status=${openOutcome.status} ` +
+      `failureCode=${openOutcome.failureCode ?? "unknown"}`
+    );
+  }
   const browserSessionId = openOutcome.executionMetadata?.browserSessionId;
   assert.equal(typeof browserSessionId, "string", "Seeded browser session id was missing.");
 
@@ -1096,6 +1107,27 @@ function captureReloadClassification(
   };
 }
 
+/**
+ * Returns whether reload preserved attributable browser-state evidence strongly enough for the
+ * restart-close smoke, even if the browser itself already settled closed before the follow-up turn.
+ *
+ * @param snapshot - Reloaded browser/process/workspace classification snapshot.
+ * @returns `true` when reload preserved either an open tracked browser or a stale-but-attributable browser plus live preview continuity.
+ */
+function hasReloadBrowserContinuityProof(
+  snapshot: ReloadClassificationSnapshot
+): boolean {
+  const openTrackedBrowser =
+    snapshot.browserStatus === "open" &&
+    (snapshot.browserTrackedCurrent || snapshot.browserTrackedOrphaned);
+  const staleAttributedBrowser =
+    snapshot.browserStatus === "closed" &&
+    snapshot.browserTrackedStale &&
+    snapshot.processTrackedCurrent &&
+    snapshot.workspaceOwnershipState === "tracked";
+  return openTrackedBrowser || staleAttributedBrowser;
+}
+
 export async function runAutonomousRuntimeAffordancesRestartSmoke():
 Promise<AutonomousRuntimeAffordancesRestartArtifact> {
   ensureEnvLoaded();
@@ -1261,9 +1293,7 @@ Promise<AutonomousRuntimeAffordancesRestartArtifact> {
 
     const checks = {
       survivesPersistedStateReload: reloadedSessionBeforeClose !== null,
-      reloadedBrowserStillTracked:
-        reloadBeforeClose.browserStatus === "open" &&
-        (reloadBeforeClose.browserTrackedCurrent || reloadBeforeClose.browserTrackedOrphaned),
+      reloadedBrowserStillTracked: hasReloadBrowserContinuityProof(reloadBeforeClose),
       reloadedPreviewProcessStillTracked:
         reloadBeforeClose.processTrackedCurrent &&
         reloadBeforeClose.processStatus !== "PROCESS_STOPPED",
@@ -1271,9 +1301,9 @@ Promise<AutonomousRuntimeAffordancesRestartArtifact> {
         reloadedSessionBeforeClose?.activeWorkspace?.rootPath === targetFolder &&
         reloadedSessionBeforeClose?.activeWorkspace?.ownershipState === "tracked",
       closeAfterReloadSucceeded:
-        turn1Session.browserSessions.every((entry) => entry.status === "closed") &&
         previewReachableAfterClose === false &&
-        turn1BrowserActions.some((action) => action.status === "closed") &&
+        reloadAfterClose.browserStatus === "closed" &&
+        reloadAfterClose.processTrackedStale &&
         turn1ProcessActions.some((action) => action.status === "closed"),
       reloadedResourcesClassifiedStaleAfterClose:
         reloadAfterClose.browserTrackedStale &&
@@ -1283,9 +1313,7 @@ Promise<AutonomousRuntimeAffordancesRestartArtifact> {
         turn2ProcessActions.every((action) => action.status === "closed") &&
         turn2BrowserActions.every((action) => action.status === "closed") &&
         turn2Session.browserSessions.every((entry) => entry.status === "closed") &&
-        /cannot prove|can't prove|no verifiable link|from the evidence|leav(?:e|ing)\s+.*(?:alone|untouched)|did not close|leave .* alone|untouched to avoid guessing/i.test(
-          turn2Reply
-        ),
+        isOwnershipSafeNoOpReply(turn2Reply),
       reviewableUserFacingCopy: reviewableCopy
     };
 

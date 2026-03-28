@@ -14,14 +14,14 @@ import { createEmptyProfileMemoryState } from "../../src/core/profileMemory";
 test("applyProfileEpisodeCandidates creates and then updates one matching episode deterministically", () => {
   const baseState = createEmptyProfileMemoryState();
   const firstResult = applyProfileEpisodeCandidates(baseState, [{
-    title: "Billy fell down",
-    summary: "Billy fell down three weeks ago.",
+    title: "Owen fell down",
+    summary: "Owen fell down three weeks ago.",
     sourceTaskId: "task_profile_episode_mutation_1",
     source: "test",
     sourceKind: "explicit_user_statement",
     sensitive: false,
     observedAt: "2026-03-08T12:00:00.000Z",
-    entityRefs: ["contact.billy"],
+    entityRefs: ["contact.owen"],
     tags: ["fall", "followup"]
   }]);
 
@@ -30,14 +30,14 @@ test("applyProfileEpisodeCandidates creates and then updates one matching episod
   assert.equal(firstResult.nextState.episodes.length, 1);
 
   const secondResult = applyProfileEpisodeCandidates(firstResult.nextState, [{
-    title: "Billy fell down",
-    summary: "Billy fell down three weeks ago and I never heard how it ended.",
+    title: "Owen fell down",
+    summary: "Owen fell down three weeks ago and I never heard how it ended.",
     sourceTaskId: "task_profile_episode_mutation_2",
     source: "test",
     sourceKind: "explicit_user_statement",
     sensitive: false,
     observedAt: "2026-03-08T12:05:00.000Z",
-    entityRefs: ["contact.billy"],
+    entityRefs: ["contact.owen"],
     tags: ["fall", "followup"]
   }]);
 
@@ -46,20 +46,20 @@ test("applyProfileEpisodeCandidates creates and then updates one matching episod
   assert.equal(secondResult.nextState.episodes.length, 1);
   assert.equal(
     secondResult.nextState.episodes[0]?.summary,
-    "Billy fell down three weeks ago and I never heard how it ended."
+    "Owen fell down three weeks ago and I never heard how it ended."
   );
 });
 
 test("applyProfileEpisodeResolutions marks an existing episode resolved", () => {
   const seeded = applyProfileEpisodeCandidates(createEmptyProfileMemoryState(), [{
-    title: "Billy fell down",
-    summary: "Billy fell down three weeks ago.",
+    title: "Owen fell down",
+    summary: "Owen fell down three weeks ago.",
     sourceTaskId: "task_profile_episode_mutation_3",
     source: "test",
     sourceKind: "explicit_user_statement",
     sensitive: false,
     observedAt: "2026-03-08T12:00:00.000Z",
-    entityRefs: ["contact.billy"],
+    entityRefs: ["contact.owen"],
     tags: ["fall", "followup"]
   }]).nextState;
   const episodeId = seeded.episodes[0]?.id;
@@ -71,8 +71,8 @@ test("applyProfileEpisodeResolutions marks an existing episode resolved", () => 
     sourceTaskId: "task_profile_episode_mutation_4",
     source: "test",
     observedAt: "2026-03-08T12:10:00.000Z",
-    summary: "Billy fell down: Billy is doing better now after the fall.",
-    entityRefs: ["contact.billy"],
+    summary: "Owen fell down: Owen is doing better now after the fall.",
+    entityRefs: ["contact.owen"],
     tags: ["fall", "followup"]
   }]);
 

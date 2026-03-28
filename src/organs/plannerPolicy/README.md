@@ -14,6 +14,7 @@ belongs here.
 - `buildExecutionPlanMessaging.ts`
 - `buildExecutionActionHeuristics.ts`
 - `frameworkBuildActionHeuristics.ts`
+- `frameworkActionRepairSupport.ts`
 - `buildExecutionRecoveryPolicy.ts`
 - `liveVerificationPolicy.ts`
 - `userOwnedPathHints.ts`
@@ -25,6 +26,11 @@ belongs here.
 - `skillActionNormalization.ts`
 - `explicitActionRepair.ts`
 - `explicitRuntimeActionFallback.ts`
+- `frameworkRuntimeActionFallback.ts`
+- `frameworkRuntimeActionFallbackSupport.ts`
+- `frameworkRuntimeActionFallbackContent.ts`
+- `frameworkRuntimeActionFallbackEditSupport.ts`
+- `frameworkRuntimeActionFallbackWriteSupport.ts`
 - `promptAssembly.ts`
 - `promptAssemblyRepairGuidance.ts`
 - `promptAssemblyRecoveryGuidance.ts`
@@ -52,6 +58,11 @@ belongs here.
   tracked artifact-edit preview allowance
 - framework-app specific scaffold/preview heuristics used to require native preview commands,
   reject directory-only reuse guards, and keep oversized shell/start commands fail-closed
+- framework-app repair normalization that rewrites unsafe scaffold commands and keeps Next.js route
+  writes pinned to the active `app/` tree instead of drifting into stale `src/app/` duplicates
+- deterministic framework landing-page fallback content, write-target resolution, and runtime
+  action synthesis split into focused helper files so planner fallback stays reviewable and under
+  the subsystem size budget
 - user-owned path and destination hints for safer continuity-aware local execution
 - planner action normalization and alias cleanup
 - explicit-action intent classification and filtering

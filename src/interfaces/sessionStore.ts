@@ -20,6 +20,16 @@ export {
   detectTimezoneFromMessage,
   resolveUserLocalTime
 } from "./conversationRuntime/sessionPulseMetadata";
+export type {
+  ConversationDomainContext,
+  ConversationDomainContinuitySignals,
+  ConversationDomainLane,
+  ConversationDomainLaneSignal,
+  ConversationDomainLaneSignalSource,
+  ConversationDomainRoutingMode,
+  ConversationDomainRoutingSignal,
+  ConversationDomainSignalWindowUpdate
+} from "../core/sessionContext";
 export type { ResolvedUserLocalTime } from "./conversationRuntime/sessionPulseMetadata";
 export type {
   ActiveClarificationOption,
@@ -51,6 +61,9 @@ export type {
   ConversationPathDestinationRecord,
   ConversationProgressState,
   ConversationProgressStatus,
+  ConversationRecoveryKind,
+  ConversationRecoveryStatus,
+  ConversationRecoveryTrace,
   ConversationReturnHandoffRecord,
   ConversationReturnHandoffStatus,
   ConversationRecentActionKind,
@@ -58,6 +71,8 @@ export type {
   ConversationRecentActionStatus,
   ConversationSession,
   ConversationTurn,
+  ConversationTransportIdentityRecord,
+  ConversationTransportProvider,
   ConversationTurnRole,
   ConversationVisibility,
   PendingProposal,

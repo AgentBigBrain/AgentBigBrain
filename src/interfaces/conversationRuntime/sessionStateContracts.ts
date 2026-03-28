@@ -3,6 +3,12 @@
  */
 
 import type { PulseEmissionRecordV1 } from "../../core/stage6_86PulseCandidates";
+import type {
+  ConversationDomainContext,
+  ConversationDomainLane,
+  ConversationDomainRoutingMode
+} from "../../core/sessionContext";
+import type { RecoveryFailureClass } from "../../core/autonomy/contracts";
 import type { ConversationStackV1 } from "../../core/types";
 import type { ModelBackend } from "../../models/types";
 
@@ -43,16 +49,8 @@ export type ConversationClassifierIntent =
   | null;
 export type AgentPulseMode = "private" | "public";
 export type AgentPulseRouteStrategy = "last_private_used" | "current_conversation";
-export type ConversationIntentMode =
-  | "chat"
-  | "explain"
-  | "plan"
-  | "build"
-  | "autonomous"
-  | "review"
-  | "discover_available_capabilities"
-  | "status_or_recall"
-  | "unclear";
+export type ConversationIntentMode = ConversationDomainRoutingMode;
+export type ConversationTransportProvider = "telegram" | "discord";
 export type ConversationIntentModeSource =
   | "slash_command"
   | "voice_command"
@@ -92,6 +90,11 @@ export type ConversationWorkspacePreviewStackState =
   | "preview_only"
   | "detached";
 export type ConversationReturnHandoffStatus = "completed" | "stopped" | "waiting_for_user";
+export type ConversationRecoveryKind =
+  | "structured_executor_recovery"
+  | "workspace_auto_recovery"
+  | "stale_session_recovery";
+export type ConversationRecoveryStatus = "attempting" | "recovered" | "failed";
 export type AgentPulseDecisionCode =
   | "ALLOWED"
   | "DISABLED"
@@ -103,6 +106,7 @@ export type AgentPulseDecisionCode =
   | "RELATIONSHIP_ROLE_SUPPRESSED"
   | "CONTEXT_DRIFT_SUPPRESSED"
   | "CONTEXTUAL_TOPIC_COOLDOWN"
+  | "SESSION_DOMAIN_SUPPRESSED"
   | "QUIET_HOURS"
   | "RATE_LIMIT"
   | "NOT_EVALUATED"
@@ -196,11 +200,21 @@ export interface ConversationRecentActionRecord {
   summary: string;
 }
 
+export interface ConversationRecoveryTrace {
+  kind: ConversationRecoveryKind;
+  status: ConversationRecoveryStatus;
+  summary: string;
+  updatedAt: string;
+  recoveryClass?: RecoveryFailureClass | null;
+  fingerprint?: string | null;
+}
+
 export interface ConversationProgressState {
   status: ConversationProgressStatus;
   message: string;
   jobId: string | null;
   updatedAt: string;
+  recoveryTrace?: ConversationRecoveryTrace | null;
 }
 
 export interface ConversationReturnHandoffRecord {
@@ -214,7 +228,18 @@ export interface ConversationReturnHandoffRecord {
   previewUrl: string | null;
   changedPaths: string[];
   sourceJobId: string | null;
+  domainSnapshotLane?: ConversationDomainLane | null;
+  domainSnapshotRecordedAt?: string | null;
   updatedAt: string;
+}
+
+export interface ConversationTransportIdentityRecord {
+  provider: ConversationTransportProvider;
+  username: string | null;
+  displayName: string | null;
+  givenName: string | null;
+  familyName: string | null;
+  observedAt: string;
 }
 
 export interface ConversationBrowserSessionRecord {
@@ -262,6 +287,8 @@ export interface ConversationActiveWorkspaceRecord {
   previewStackState: ConversationWorkspacePreviewStackState;
   lastChangedPaths: string[];
   sourceJobId: string | null;
+  domainSnapshotLane?: ConversationDomainLane | null;
+  domainSnapshotRecordedAt?: string | null;
   updatedAt: string;
 }
 
@@ -275,6 +302,7 @@ export interface ConversationJob {
   status: ConversationJobStatus;
   resultSummary: string | null;
   errorMessage: string | null;
+  recoveryTrace?: ConversationRecoveryTrace | null;
   isSystemJob?: boolean;
   ackTimerGeneration: number;
   ackEligibleAt: string | null;
@@ -307,6 +335,7 @@ export interface ConversationSession {
   conversationId: string;
   userId: string;
   username: string;
+  transportIdentity?: ConversationTransportIdentityRecord | null;
   conversationVisibility: ConversationVisibility;
   sessionSchemaVersion?: "v1" | "v2";
   conversationStack?: ConversationStackV1;
@@ -315,6 +344,7 @@ export interface ConversationSession {
   codexAuthProfileId?: string | null;
   activeProposal: PendingProposal | null;
   activeClarification: ActiveClarificationState | null;
+  domainContext: ConversationDomainContext;
   modeContinuity: ConversationModeContinuityState | null;
   progressState: ConversationProgressState | null;
   returnHandoff: ConversationReturnHandoffRecord | null;

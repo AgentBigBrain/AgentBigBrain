@@ -22,7 +22,7 @@ import {
  */
 function extractsDeterministicEntityCandidates(): void {
   const input = {
-    text: "Billy and Sarah met at Flare Labs before Project Aurora review.",
+    text: "Owen and Sarah met at Lantern Labs before Project Aurora review.",
     observedAt: "2026-03-01T00:00:00.000Z",
     evidenceRef: "trace:entity_extract_001"
   };
@@ -32,7 +32,7 @@ function extractsDeterministicEntityCandidates(): void {
 
   assert.deepEqual(first, second);
   assert.ok(first.nodes.length >= 3);
-  assert.ok(first.nodes.some((node) => node.canonicalName === "Billy"));
+  assert.ok(first.nodes.some((node) => node.canonicalName === "Owen"));
   assert.ok(first.nodes.some((node) => node.canonicalName === "Sarah"));
 }
 
@@ -44,7 +44,7 @@ function appliesEntityExtractionWithCoMentionEdges(): void {
   const observedAt = "2026-03-01T00:00:00.000Z";
   const graph = createEmptyEntityGraphV1(observedAt);
   const extraction = extractEntityCandidates({
-    text: "Billy and Sarah met at Flare Labs.",
+    text: "Owen and Sarah met at Lantern Labs.",
     observedAt,
     evidenceRef: "trace:entity_extract_002"
   });
@@ -77,7 +77,7 @@ function appliesEntityExtractionWithCoMentionEdges(): void {
 function surfacesAliasCollisionWithoutSilentMerge(): void {
   const observedAt = "2026-03-01T00:00:00.000Z";
   const existingEntityKey = buildEntityKey("William Bena", "person", null);
-  const incomingEntityKey = buildEntityKey("Billy Bena", "person", null);
+  const incomingEntityKey = buildEntityKey("Owen Bena", "person", null);
   const seededGraph: EntityGraphV1 = {
     schemaVersion: "v1",
     updatedAt: observedAt,
@@ -87,7 +87,7 @@ function surfacesAliasCollisionWithoutSilentMerge(): void {
         canonicalName: "William Bena",
         entityType: "person",
         disambiguator: null,
-        aliases: ["Billy"],
+        aliases: ["Owen"],
         firstSeenAt: observedAt,
         lastSeenAt: observedAt,
         salience: 1,
@@ -103,10 +103,10 @@ function surfacesAliasCollisionWithoutSilentMerge(): void {
       nodes: [
         {
           entityKey: incomingEntityKey,
-          canonicalName: "Billy Bena",
+          canonicalName: "Owen Bena",
           entityType: "person",
           disambiguator: null,
-          aliases: ["Billy", "Billy Bena"],
+          aliases: ["Owen", "Owen Bena"],
           firstSeenAt: observedAt,
           lastSeenAt: observedAt,
           salience: 1,
@@ -124,7 +124,7 @@ function surfacesAliasCollisionWithoutSilentMerge(): void {
   assert.equal(mutation.aliasConflicts[0]?.existingEntityKey, existingEntityKey);
   const incoming = mutation.graph.entities.find((entity) => entity.entityKey === incomingEntityKey);
   assert.ok(incoming);
-  assert.equal(incoming?.aliases.includes("Billy"), false);
+  assert.equal(incoming?.aliases.includes("Owen"), false);
 }
 
 /**
@@ -253,19 +253,19 @@ function keepsCoMentionEdgesUncertainUntilExplicitConfirmation(): void {
   const seeded = applyEntityExtractionToGraph(
     createEmptyEntityGraphV1(observedAt),
     extractEntityCandidates({
-      text: "Billy and Sarah reviewed Project Aurora.",
+      text: "Owen and Sarah reviewed Project Aurora.",
       observedAt,
       evidenceRef: "trace:relation_seed"
     }),
     observedAt,
     "trace:relation_seed"
   ).graph;
-  const billy = seeded.entities.find((entity) => entity.canonicalName === "Billy");
+  const owen = seeded.entities.find((entity) => entity.canonicalName === "Owen");
   const sarah = seeded.entities.find((entity) => entity.canonicalName === "Sarah");
-  assert.ok(billy && sarah);
+  assert.ok(owen && sarah);
 
   const denied = promoteRelationEdgeWithConfirmation(seeded, {
-    sourceEntityKey: billy!.entityKey,
+    sourceEntityKey: owen!.entityKey,
     targetEntityKey: sarah!.entityKey,
     relationType: "friend",
     explicitUserConfirmation: false,
@@ -276,7 +276,7 @@ function keepsCoMentionEdgesUncertainUntilExplicitConfirmation(): void {
   assert.equal(denied.promoted, false);
   assert.equal(denied.deniedConflictCode, "INSUFFICIENT_EVIDENCE");
   const edge = denied.graph.edges.find((entry) =>
-    [entry.sourceEntityKey, entry.targetEntityKey].includes(billy!.entityKey) &&
+    [entry.sourceEntityKey, entry.targetEntityKey].includes(owen!.entityKey) &&
     [entry.sourceEntityKey, entry.targetEntityKey].includes(sarah!.entityKey)
   );
   assert.ok(edge);
@@ -293,19 +293,19 @@ function promotesRelationOnlyWithExplicitConfirmation(): void {
   const seeded = applyEntityExtractionToGraph(
     createEmptyEntityGraphV1(observedAt),
     extractEntityCandidates({
-      text: "Billy and Sarah reviewed Project Aurora.",
+      text: "Owen and Sarah reviewed Project Aurora.",
       observedAt,
       evidenceRef: "trace:relation_seed_2"
     }),
     observedAt,
     "trace:relation_seed_2"
   ).graph;
-  const billy = seeded.entities.find((entity) => entity.canonicalName === "Billy");
+  const owen = seeded.entities.find((entity) => entity.canonicalName === "Owen");
   const sarah = seeded.entities.find((entity) => entity.canonicalName === "Sarah");
-  assert.ok(billy && sarah);
+  assert.ok(owen && sarah);
 
   const promoted = promoteRelationEdgeWithConfirmation(seeded, {
-    sourceEntityKey: billy!.entityKey,
+    sourceEntityKey: owen!.entityKey,
     targetEntityKey: sarah!.entityKey,
     relationType: "coworker",
     explicitUserConfirmation: true,
@@ -346,11 +346,11 @@ function appliesRecencyWeightedCoMentionStrengthIncrements(): void {
  */
 function buildsDeterministicEntityLookupTerms(): void {
   const terms = getEntityLookupTerms({
-    canonicalName: "Billy Bena",
-    aliases: ["Billy", "William Bena"]
+    canonicalName: "Owen Bena",
+    aliases: ["Owen", "William Bena"]
   });
 
-  assert.deepEqual(terms, ["bena", "billy", "william"]);
+  assert.deepEqual(terms, ["bena", "owen", "william"]);
 }
 
 test(

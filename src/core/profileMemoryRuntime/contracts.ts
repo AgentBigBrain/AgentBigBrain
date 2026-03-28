@@ -4,6 +4,7 @@
 
 import { type AgentPulseDecision, type AgentPulseReason } from "../agentPulse";
 import { type ProfileFactRecord, type ProfileMutationAuditMetadataV1 } from "../profileMemory";
+import type { ConversationDomainLane } from "../sessionContext";
 import type { ProfileEpisodeRecord } from "./profileMemoryEpisodeContracts";
 
 export type ProfileAccessPurpose = "planning_context" | "operator_view" | "governor_review";
@@ -60,6 +61,19 @@ export interface ProfileIngestResult {
   supersededFacts: number;
 }
 
+export interface ProfileValidatedFactCandidateInput {
+  key: string;
+  candidateValue: string;
+  sensitive?: boolean;
+  source: string;
+  confidence?: number;
+}
+
+export interface ProfileMemoryIngestRequest {
+  userInput?: string;
+  validatedFactCandidates?: readonly ProfileValidatedFactCandidateInput[];
+}
+
 export interface AgentPulseEvaluationRequest {
   nowIso: string;
   userOptIn: boolean;
@@ -67,6 +81,9 @@ export interface AgentPulseEvaluationRequest {
   contextualLinkageConfidence?: number;
   lastPulseSentAtIso: string | null;
   overrideQuietHours?: boolean;
+  sessionDominantLane?: ConversationDomainLane | null;
+  sessionHasActiveWorkflowContinuity?: boolean;
+  overrideSessionDomainSuppression?: boolean;
 }
 
 export type AgentPulseRelationshipRole =

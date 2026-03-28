@@ -39,7 +39,7 @@ test("MemoryAccessAuditStore appends normalized events with hashed queries", asy
   await withAuditStore(async (store) => {
     await store.appendEvent({
       taskId: "task_1",
-      query: "who is billy?",
+      query: "who is owen?",
       retrievedCount: 2,
       retrievedEpisodeCount: 1,
       redactedCount: 1,

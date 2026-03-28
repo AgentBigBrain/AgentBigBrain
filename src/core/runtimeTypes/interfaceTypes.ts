@@ -83,6 +83,7 @@ export interface EntityNodeV1 {
   canonicalName: string;
   entityType: EntityTypeV1;
   disambiguator: string | null;
+  domainHint: "profile" | "relationship" | "workflow" | "system_policy" | null;
   aliases: readonly string[];
   firstSeenAt: string;
   lastSeenAt: string;

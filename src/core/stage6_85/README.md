@@ -18,6 +18,7 @@ quality-gate, recovery, clone-workflow, workflow-replay, and runtime-guard owner
 - `playbookSeeds.ts`
 - `qualityGates.ts`
 - `recovery.ts`
+- `structuredRecoveryExecution.ts`
 - `runtimeGuards.ts`
 - `workflowReplay.ts`
 
@@ -48,6 +49,7 @@ Canonical behavior for those entrypoints now lives here.
 - deterministic playbook intent extraction, seed compilation, registry validation, and planner fallback context
 - deterministic quality-gate profiles, verification gates, and truthfulness checks
 - deterministic retry-budget, resume-safety, and postmortem shaping
+- deterministic bounded structured-recovery execution builders for first-wave repair classes
 - deterministic parallel-spike bounds, clone queue validation, packet envelopes, and merge eligibility
 - deterministic workflow capture, replay compilation, conflict detection, and workflow receipts
 - deterministic runtime-guard enforcement for resume safety and workflow replay

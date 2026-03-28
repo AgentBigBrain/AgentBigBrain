@@ -38,6 +38,66 @@ function buildQueuedJob(createdAt: string): ConversationJob {
   };
 }
 
+test("enqueueAutomaticTrackedWorkspaceRecoveryRetry fails closed when the tracked workspace was not born in workflow context", () => {
+  const nowIso = "2026-03-14T22:10:00.000Z";
+  const session = buildSessionSeed({
+    provider: "telegram",
+    conversationId: "chat-auto-recovery-domain-gate",
+    userId: "user-1",
+    username: "owner",
+    conversationVisibility: "private",
+    receivedAt: nowIso
+  });
+  session.domainContext.dominantLane = "profile";
+  session.activeWorkspace = {
+    id: "workspace-1",
+    label: "Current project workspace",
+    rootPath: "C:\\Users\\testuser\\OneDrive\\Desktop\\drone-company-a",
+    primaryArtifactPath: null,
+    previewUrl: null,
+    browserSessionId: null,
+    browserSessionIds: [],
+    browserSessionStatus: null,
+    browserProcessPid: null,
+    previewProcessLeaseId: null,
+    previewProcessLeaseIds: [],
+    previewProcessCwd: null,
+    lastKnownPreviewProcessPid: null,
+    stillControllable: true,
+    ownershipState: "tracked",
+    previewStackState: "detached",
+    lastChangedPaths: [],
+    sourceJobId: "job-seed",
+    domainSnapshotLane: "profile",
+    domainSnapshotRecordedAt: nowIso,
+    updatedAt: nowIso
+  };
+
+  const queued = enqueueAutomaticTrackedWorkspaceRecoveryRetry(
+    session,
+    {
+      ...buildQueuedJob(nowIso),
+      id: "job-completed",
+      input: "Organize the project folders.",
+      status: "completed",
+      startedAt: nowIso,
+      completedAt: nowIso,
+      resultSummary: "Blocked by an open preview holder."
+    },
+    {
+      task: {
+        id: "task-auto-recovery-domain-gate",
+        goal: "Organize the project folders.",
+        userInput: "Organize the project folders.",
+        createdAt: nowIso
+      }
+    } as TaskRunResult
+  );
+
+  assert.equal(queued, false);
+  assert.equal(session.queuedJobs.length, 0);
+});
+
 test("enqueueAutomaticTrackedWorkspaceRecoveryRetry queues one post-shutdown organization retry when the move was never retried", () => {
   const nowIso = "2026-03-14T22:10:00.000Z";
   const completedAt = "2026-03-14T22:10:05.000Z";
@@ -229,6 +289,9 @@ test("enqueueAutomaticTrackedWorkspaceRecoveryRetry queues one post-shutdown org
     session.conversationTurns[session.conversationTurns.length - 1]?.text,
     "I shut down the exact tracked preview holders that were blocking those folders. I'm retrying the move now and will verify the destination before I finish."
   );
+  assert.equal(completedJob.recoveryTrace?.kind, "workspace_auto_recovery");
+  assert.equal(completedJob.recoveryTrace?.status, "attempting");
+  assert.equal(completedJob.recoveryTrace?.recoveryClass, "WORKSPACE_HOLDER_CONFLICT");
 });
 
 test("enqueueAutomaticTrackedWorkspaceRecoveryRetry queues a marker-bearing exact-holder recovery input", () => {
@@ -357,6 +420,8 @@ test("enqueueAutomaticTrackedWorkspaceRecoveryRetry queues a marker-bearing exac
     session.queuedJobs[0]?.executionInput ?? "",
     /\[WORKSPACE_RECOVERY_STOP_EXACT\]/
   );
+  assert.equal(completedJob.recoveryTrace?.kind, "workspace_auto_recovery");
+  assert.equal(completedJob.recoveryTrace?.status, "attempting");
   assert.match(
     session.queuedJobs[0]?.executionInput ?? "",
     /Stop only these exact preview holders/i
@@ -499,6 +564,137 @@ test("enqueueAutomaticTrackedWorkspaceRecoveryRetry does not queue inspect-first
   assert.equal(
     session.conversationTurns[session.conversationTurns.length - 1]?.text,
     "I couldn't move those folders yet because one or more are still open in a local preview process. I can inspect the matching holders, shut down only exact tracked ones, and retry the move. Do you want me to do that?"
+  );
+});
+
+test("enqueueAutomaticTrackedWorkspaceRecoveryRetry does not queue behind newer queued user work", () => {
+  const nowIso = "2026-03-20T14:00:00.000Z";
+  const completedAt = "2026-03-20T14:00:05.000Z";
+  const sourceInput =
+    "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.";
+  const session = buildSessionSeed({
+    provider: "telegram",
+    conversationId: "chat-auto-recovery-newer-queued-work",
+    userId: "user-1",
+    username: "owner",
+    conversationVisibility: "private",
+    receivedAt: nowIso
+  });
+  session.queuedJobs.push({
+    ...buildQueuedJob(nowIso),
+    id: "job-follow-up",
+    input: "Remember that I prefer dark mode.",
+    executionInput: "Remember that I prefer dark mode."
+  });
+  session.conversationTurns.push(
+    {
+      role: "user",
+      text: sourceInput,
+      at: nowIso
+    },
+    {
+      role: "assistant",
+      text:
+        "I couldn't move those folders yet because exact tracked preview holders are still keeping them busy.",
+      at: completedAt
+    }
+  );
+
+  const completedJob: ConversationJob = {
+    ...buildQueuedJob(nowIso),
+    input: sourceInput,
+    executionInput: sourceInput,
+    status: "completed",
+    startedAt: nowIso,
+    completedAt,
+    resultSummary:
+      "I couldn't move those folders yet because exact tracked preview holders are still keeping them busy.",
+    errorMessage: null
+  };
+
+  const queued = enqueueAutomaticTrackedWorkspaceRecoveryRetry(session, completedJob, {
+    task: {
+      id: "task-auto-recovery-newer-queued-work",
+      goal: sourceInput,
+      userInput: sourceInput,
+      createdAt: nowIso
+    },
+    plan: {
+      taskId: "task-auto-recovery-newer-queued-work",
+      plannerNotes: "Inspect exact holders and recover.",
+      actions: [
+        {
+          id: "action-inspect",
+          type: "inspect_workspace_resources",
+          description: "Inspect the blocked drone workspace resources.",
+          params: {
+            workspaceRoot: "C:\\Users\\testuser\\OneDrive\\Desktop\\drone-company-a"
+          },
+          estimatedCostUsd: 0.05
+        }
+      ]
+    },
+    actionResults: [
+      {
+        action: {
+          id: "action-shell",
+          type: "shell_command",
+          description: "Attempt the move.",
+          params: {
+            command: "Move-Item ..."
+          },
+          estimatedCostUsd: 0.18
+        },
+        mode: "escalation_path",
+        approved: false,
+        output:
+          "Move-Item : The process cannot access the file because it is being used by another process.",
+        blockedBy: [],
+        violations: [
+          {
+            code: "ACTION_EXECUTION_FAILED",
+            message:
+              "The process cannot access the file because it is being used by another process."
+          }
+        ],
+        votes: []
+      },
+      {
+        action: {
+          id: "action-inspect",
+          type: "inspect_workspace_resources",
+          description: "Inspect the blocked drone workspace resources.",
+          params: {
+            workspaceRoot: "C:\\Users\\testuser\\OneDrive\\Desktop\\drone-company-a"
+          },
+          estimatedCostUsd: 0.05
+        },
+        mode: "fast_path",
+        approved: true,
+        output: "Inspection complete.",
+        executionMetadata: {
+          runtimeOwnershipInspection: true,
+          inspectionRecommendedNextAction: "stop_exact_tracked_holders",
+          inspectionOwnershipClassification: "tracked_exact",
+          inspectionPreviewProcessLeaseIds: "proc_preview_a,proc_preview_b"
+        },
+        blockedBy: [],
+        violations: [],
+        votes: []
+      }
+    ],
+    summary:
+      "I couldn't move those folders yet because exact tracked preview holders are still keeping them busy.",
+    startedAt: nowIso,
+    completedAt
+  });
+
+  assert.equal(queued, false);
+  assert.equal(session.queuedJobs.length, 1);
+  assert.equal(session.queuedJobs[0]?.id, "job-follow-up");
+  assert.equal(
+    completedJob.resultSummary,
+    "I couldn't move those folders yet because exact tracked preview holders are still keeping them busy."
   );
 });
 

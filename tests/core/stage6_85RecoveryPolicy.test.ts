@@ -6,7 +6,9 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
+  buildRecoveryAttemptFingerprint,
   buildMissionPostmortem,
+  evaluateStructuredRecoveryPolicy,
   evaluateResumeSafety,
   evaluateRetryBudget,
   resolveLastDurableCheckpoint,
@@ -120,6 +122,83 @@ function buildsDeterministicMissionPostmortemArtifact(): void {
   assert.equal(postmortem.remediationSteps.length, 3);
 }
 
+/**
+ * Implements `evaluatesStructuredRecoveryBudgetsDeterministically` behavior within module scope.
+ * Interacts with local collaborators through imported modules and typed inputs/outputs.
+ */
+function evaluatesStructuredRecoveryBudgetsDeterministically(): void {
+  const fingerprint = buildRecoveryAttemptFingerprint(
+    {
+      recoveryClass: "DEPENDENCY_MISSING",
+      provenance: "executor_mechanical",
+      sourceCode: "ACTION_EXECUTION_FAILED",
+      actionType: "shell_command",
+      realm: "shell",
+      detail: null
+    },
+    "repair_missing_dependency"
+  );
+
+  const allowed = evaluateStructuredRecoveryPolicy({
+    snapshot: {
+      missionStopLimitReached: false,
+      failureSignals: [
+        {
+          recoveryClass: "DEPENDENCY_MISSING",
+          provenance: "executor_mechanical",
+          sourceCode: "ACTION_EXECUTION_FAILED",
+          actionType: "shell_command",
+          realm: "shell",
+          detail: null
+        }
+      ],
+      proofGaps: ["ARTIFACT_MUTATION_MISSING"],
+      repairOptions: [
+        {
+          optionId: "repair_missing_dependency",
+          allowedRung: "bounded_repair_iteration",
+          budgetHint: "single_repair_attempt",
+          detail: "repair the missing dependency"
+        }
+      ],
+      remainingBudgetHint: "single_repair_attempt",
+      environmentFacts: {}
+    },
+    attemptCounts: new Map<string, number>()
+  });
+  assert.equal(allowed.outcome, "attempt_repair");
+  assert.equal(allowed.builderPending, true);
+
+  const blocked = evaluateStructuredRecoveryPolicy({
+    snapshot: {
+      missionStopLimitReached: false,
+      failureSignals: [
+        {
+          recoveryClass: "DEPENDENCY_MISSING",
+          provenance: "executor_mechanical",
+          sourceCode: "ACTION_EXECUTION_FAILED",
+          actionType: "shell_command",
+          realm: "shell",
+          detail: null
+        }
+      ],
+      proofGaps: ["ARTIFACT_MUTATION_MISSING"],
+      repairOptions: [
+        {
+          optionId: "repair_missing_dependency",
+          allowedRung: "bounded_repair_iteration",
+          budgetHint: "single_repair_attempt",
+          detail: "repair the missing dependency"
+        }
+      ],
+      remainingBudgetHint: "single_repair_attempt",
+      environmentFacts: {}
+    },
+    attemptCounts: new Map([[fingerprint, 1]])
+  });
+  assert.equal(blocked.outcome, "stop");
+}
+
 test(
   "stage 6.85 recovery policy sorts checkpoints deterministically and resolves last durable checkpoint",
   sortsCheckpointsDeterministicallyAndResolvesLastDurable
@@ -135,4 +214,8 @@ test(
 test(
   "stage 6.85 recovery policy builds deterministic mission postmortem artifacts",
   buildsDeterministicMissionPostmortemArtifact
+);
+test(
+  "stage 6.85 recovery policy evaluates structured recovery budgets deterministically",
+  evaluatesStructuredRecoveryBudgetsDeterministically
 );

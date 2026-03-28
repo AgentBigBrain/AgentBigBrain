@@ -8,6 +8,7 @@ import {
   EXECUTION_STYLE_PROCESS_NEVER_READY_REASON_CODE,
   MISSION_REQUIREMENT_BROWSER,
   MISSION_REQUIREMENT_READINESS,
+  hasTaskRunResultBlockCode,
   formatReasonWithCode,
   type MissionCompletionContract,
   type MissionRequirementId
@@ -247,7 +248,7 @@ export function resolveLiveVerificationBlockedAbortReason(
     blockedReasons.has("security") ||
     blockedReasons.has("continuity") ||
     blockedReasons.has("utility") ||
-    /\bMISSION_STOP_LIMIT_REACHED\b/i.test(result.summary);
+    hasTaskRunResultBlockCode(result, "MISSION_STOP_LIMIT_REACHED");
   if (!environmentBlocked) {
     return null;
   }

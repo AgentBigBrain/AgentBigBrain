@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { buildConversationSessionFixture } from "../helpers/conversationFixtures";
+import { createEmptyConversationDomainContext } from "../../src/core/sessionContext";
 import {
   normalizeSession,
   normalizeState
@@ -64,6 +65,10 @@ test("normalizeSession migrates legacy session payloads to the stable runtime sh
   assert.ok(normalized?.conversationStack);
   assert.equal(normalized?.classifierEvents?.[0]?.intent, "on");
   assert.equal(normalized?.agentPulse.recentEmissions?.length, 1);
+  assert.deepEqual(
+    normalized?.domainContext,
+    createEmptyConversationDomainContext("telegram:chat-1:user-1")
+  );
 });
 
 test("normalizeState drops invalid conversation entries", () => {
@@ -89,4 +94,25 @@ test("normalizeState drops invalid conversation entries", () => {
   });
 
   assert.deepEqual(Object.keys(normalized.conversations), ["valid"]);
+});
+
+test("normalizeSession preserves the session-domain pulse suppression decision code", () => {
+  const now = "2026-03-07T12:00:00.000Z";
+  const normalized = normalizeSession({
+    ...buildConversationSessionFixture(
+      {
+        updatedAt: now,
+        agentPulse: {
+          ...buildConversationSessionFixture().agentPulse,
+          lastDecisionCode: "SESSION_DOMAIN_SUPPRESSED"
+        }
+      },
+      {
+        conversationId: "telegram:chat-2:user-1",
+        receivedAt: now
+      }
+    )
+  });
+
+  assert.equal(normalized?.agentPulse.lastDecisionCode, "SESSION_DOMAIN_SUPPRESSED");
 });

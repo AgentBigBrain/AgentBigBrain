@@ -74,7 +74,7 @@ export const TrustLexicalRulepackV1 = {
   simulatedOutputPatterns: [
     "\\bsimulated\\b",
     "\\bdry\\s*run\\b",
-    "\\bpreview\\b",
+    "\\bpreview\\s+(?:only|mode)\\b",
     "\\brequires\\s+governance\\s+workflow\\b",
     "\\bdisabled\\s+by\\s+policy\\b"
   ] as const

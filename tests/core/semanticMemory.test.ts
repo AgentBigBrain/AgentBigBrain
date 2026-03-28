@@ -169,6 +169,49 @@ test("SemanticMemoryStore persists optional lesson signal metadata", async () =>
   });
 });
 
+test("SemanticMemoryStore boosts same-domain lessons without filtering legacy null tags", async () => {
+  await withMemoryStore(async (store) => {
+    await store.appendLesson(
+      "Status update should stay personal and concise.",
+      "task_profile_1",
+      undefined,
+      "fact",
+      null,
+      "profile"
+    );
+    await store.appendLesson(
+      "Status update should include build and deploy state.",
+      "task_workflow_1",
+      undefined,
+      "experience",
+      null,
+      "workflow"
+    );
+    await store.appendLesson("Status update should mention the next step.", "task_legacy_1");
+
+    const workflowRelevant = await store.getRelevantLessons(
+      "status update",
+      3,
+      undefined,
+      "workflow"
+    );
+    const profileRelevant = await store.getRelevantLessons(
+      "status update",
+      3,
+      undefined,
+      "profile"
+    );
+
+    assert.equal(workflowRelevant[0]?.domainTag, "workflow");
+    assert.equal(profileRelevant[0]?.domainTag, "profile");
+    assert.equal(
+      workflowRelevant.some((lesson) => lesson.domainTag === null),
+      true,
+      "legacy null-tag lessons should remain eligible"
+    );
+  });
+});
+
 // --- Phase 1.3: Inverted concept index tests ---
 
 test("SemanticMemoryStore builds and persists concept index", async () => {

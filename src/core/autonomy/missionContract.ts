@@ -8,6 +8,9 @@ import {
 } from "../../interfaces/routingMap";
 import type { MissionCompletionContract } from "./contracts";
 
+const NEGATED_LIVE_RUN_PATTERN =
+  /\bdo\s+not\s+(?:start|run|launch|serve)\b[\s\S]{0,80}\b(?:localhost|127\.0\.0\.1|::1|loopback|server|service|api|backend|dev\s+server|preview\s+server|preview\/dev\s+server|preview)\b|\bdo\s+not\s+(?:probe|check|confirm|verify)\b[\s\S]{0,80}\b(?:localhost|127\.0\.0\.1|::1|loopback|http|port|ready|readiness)\b/i;
+
 /**
  * Normalizes text for deterministic case-insensitive mission checks.
  *
@@ -101,6 +104,16 @@ function extractGoalPathHints(goal: string): string[] {
  */
 function requiresArtifactMutationEvidence(goal: string): boolean {
   const normalized = normalizeEvidenceText(goal);
+  const workspaceBootstrapPreparationPattern =
+    /\b(?:scaffold|bootstrap|install\s+dependencies|node_modules|package\.json|ready\s+for\s+edits|workspace\s+is\s+ready)\b/;
+  const directContentMutationPattern =
+    /\b(customi[sz]e|replace|modify|edit|redesign|restyle|theme|style|component|components|layout|ui|interface|chart|charts|portfolio|homepage|hero|section|footer|navigation|copy|headline)\b/;
+  if (
+    workspaceBootstrapPreparationPattern.test(normalized) &&
+    !directContentMutationPattern.test(normalized)
+  ) {
+    return false;
+  }
   const mutationIntentPattern =
     /\b(customi[sz]e|replace|modify|edit|redesign|restyle|theme|style|component|components|layout|ui|interface|chart|charts|portfolio|homepage|page)\b/;
   const artifactSurfacePattern =
@@ -127,6 +140,9 @@ function requiresReadinessEvidence(goal: string): boolean {
     return false;
   }
   const normalized = normalizeEvidenceText(goal);
+  if (NEGATED_LIVE_RUN_PATTERN.test(normalized)) {
+    return false;
+  }
   return (
     /\bnpm\s+start\b/.test(normalized) ||
     /\bnpm\s+run\s+dev\b/.test(normalized) ||

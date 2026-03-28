@@ -10,7 +10,8 @@ import {
   isLoopbackBrowserVerificationHost,
   LiveRunExecutorContext,
   normalizeOptionalString,
-  resolveBrowserVerificationTimeoutMs
+  resolveBrowserVerificationTimeoutMs,
+  withRecoveryFailureMetadata
 } from "./contracts";
 
 /**
@@ -120,7 +121,11 @@ export async function executeBrowserVerification(
           "failed",
           verificationResult.detail,
           "BROWSER_VERIFY_RUNTIME_UNAVAILABLE",
-          executionMetadata
+          withRecoveryFailureMetadata(
+            executionMetadata,
+            "DEPENDENCY_MISSING",
+            "runtime_live_run"
+          )
         );
       case "failed":
       default:

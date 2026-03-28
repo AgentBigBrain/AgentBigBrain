@@ -78,7 +78,7 @@ export function renderConversationCommandHelpText(): string {
     "Voice command tip: in a voice note, say \"command skills\" for /skills or \"command auto ...\" for /auto.",
     "/pulse on",
     "/memory",
-    "/memory resolve episode_abc123 Billy recovered and is fine now",
+    "/memory resolve episode_abc123 Owen recovered and is fine now",
     "/review 6.85.A",
     "/status",
     "/status debug",

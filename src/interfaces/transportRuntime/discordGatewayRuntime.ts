@@ -10,6 +10,7 @@ import { applyInvocationHints } from "../invocationHints";
 import { applyInvocationPolicy } from "../invocationPolicy";
 import type { DiscordInterfaceConfig } from "../runtimeConfig";
 import type { ConversationDeliveryResult } from "../conversationRuntime/managerContracts";
+import { buildConversationTransportIdentityRecord } from "../conversationRuntime/transportIdentity";
 import {
   createDiscordConversationNotifier,
   editDiscordChannelMessage,
@@ -21,6 +22,7 @@ import { shouldNotifyRejectedInvocation } from "./rateLimitPolicy";
 export interface DiscordAuthor {
   id?: string;
   username?: string;
+  global_name?: string;
   bot?: boolean;
 }
 
@@ -30,6 +32,7 @@ export interface DiscordMessageCreateData {
   guild_id?: string;
   content?: string;
   author?: DiscordAuthor;
+  member?: { nick?: string };
   timestamp?: string;
 }
 
@@ -47,6 +50,7 @@ export interface PreparedDiscordAcceptedMessage {
   channelId: string;
   userId: string;
   username: string;
+  transportIdentity: DiscordInboundMessage["transportIdentity"];
   conversationVisibility: "private" | "public";
   inbound: DiscordInboundMessage;
   entityGraphEvent: DiscordEntityGraphEvent;
@@ -123,11 +127,20 @@ export function prepareDiscordMessageCreate(
   }
 
   const receivedAt = input.data.timestamp ?? new Date().toISOString();
+  const transportIdentity = buildConversationTransportIdentityRecord({
+    provider: "discord",
+    username,
+    displayName: input.data.member?.nick ?? input.data.author?.global_name ?? null,
+    givenName: null,
+    familyName: null,
+    observedAt: receivedAt
+  });
   const inbound: DiscordInboundMessage = {
     messageId,
     channelId,
     userId,
     username,
+    transportIdentity,
     text: invocation.normalizedText,
     authToken: input.sharedSecret,
     receivedAt
@@ -160,6 +173,7 @@ export function prepareDiscordMessageCreate(
     channelId,
     userId,
     username,
+    transportIdentity,
     conversationVisibility: resolveDiscordConversationVisibility(input.data.guild_id),
     inbound,
     entityGraphEvent: {

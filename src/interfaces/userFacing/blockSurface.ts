@@ -129,7 +129,152 @@ export function resolveBlockedActionMessage(
     return buildLiveBuildPolicyBlockedMessage(policyCodes, options);
   }
 
+  const runtimeFailureDetail = resolveRuntimeExecutionFailureDetail(runResult);
+  if (runtimeFailureDetail) {
+    return buildRuntimeExecutionBlockedMessage(runtimeFailureDetail, policyCodes, options);
+  }
+
   return buildGenericBlockedMessage(policyCodes, options);
+}
+
+/**
+ * Returns `true` when a blocked action represents a concrete runtime execution failure.
+ *
+ * @param runResult - Blocked action result to inspect.
+ * @returns `true` when the action failed during runtime execution.
+ */
+function isRuntimeExecutionFailureResult(
+  runResult: TaskRunResult["actionResults"][number]
+): boolean {
+  if (runResult.approved) {
+    return false;
+  }
+  if (runResult.executionFailureCode === "ACTION_EXECUTION_FAILED") {
+    return true;
+  }
+  if (runResult.blockedBy.includes("ACTION_EXECUTION_FAILED")) {
+    return true;
+  }
+  return runResult.violations.some((violation) => violation.code === "ACTION_EXECUTION_FAILED");
+}
+
+/**
+ * Scores runtime execution failures so higher-signal runtime steps win over early inspection noise.
+ *
+ * @param actionType - Action type to score.
+ * @returns Relative priority score.
+ */
+function resolveRuntimeExecutionFailurePriority(
+  actionType: TaskRunResult["actionResults"][number]["action"]["type"]
+): number {
+  switch (actionType) {
+    case "open_browser":
+      return 100;
+    case "verify_browser":
+      return 95;
+    case "start_process":
+      return 92;
+    case "probe_http":
+    case "probe_port":
+      return 90;
+    case "shell_command":
+      return 85;
+    case "write_file":
+      return 80;
+    case "delete_file":
+      return 78;
+    case "network_write":
+      return 70;
+    case "list_directory":
+      return 20;
+    default:
+      return 10;
+  }
+}
+
+/**
+ * Extracts the most useful human-readable runtime execution failure detail from a blocked action.
+ *
+ * @param result - Blocked action result to inspect.
+ * @returns Normalized failure detail, or `null` when none exists.
+ */
+function resolveRuntimeExecutionFailureDetailFromResult(
+  result: TaskRunResult["actionResults"][number]
+): string | null {
+  const output = typeof result.output === "string" ? result.output.trim() : "";
+  if (output.length > 0) {
+    return output;
+  }
+
+  const violationMessage = result.violations
+    .filter((violation) => violation.code === "ACTION_EXECUTION_FAILED")
+    .map((violation) => violation.message.trim())
+    .find((message) => message.length > 0);
+  if (violationMessage) {
+    return violationMessage;
+  }
+
+  const fallbackViolationMessage = result.violations
+    .map((violation) => violation.message.trim())
+    .find((message) => message.length > 0);
+  if (fallbackViolationMessage) {
+    return fallbackViolationMessage;
+  }
+
+  return null;
+}
+
+/**
+ * Resolves the strongest runtime execution failure detail from one blocked run.
+ *
+ * @param runResult - Task execution result to inspect.
+ * @returns Best available runtime execution failure detail, or `null`.
+ */
+function resolveRuntimeExecutionFailureDetail(runResult: TaskRunResult): string | null {
+  let preferredResult: TaskRunResult["actionResults"][number] | null = null;
+  let preferredPriority = -1;
+  let preferredIndex = -1;
+  runResult.actionResults.forEach((result, index) => {
+    if (!isRuntimeExecutionFailureResult(result)) {
+      return;
+    }
+    const priority = resolveRuntimeExecutionFailurePriority(result.action.type);
+    if (priority > preferredPriority || (priority === preferredPriority && index > preferredIndex)) {
+      preferredResult = result;
+      preferredPriority = priority;
+      preferredIndex = index;
+    }
+  });
+  if (!preferredResult) {
+    return null;
+  }
+  return resolveRuntimeExecutionFailureDetailFromResult(preferredResult);
+}
+
+/**
+ * Builds the user-facing message for concrete runtime execution failures.
+ *
+ * @param detail - Normalized runtime failure detail.
+ * @param policyCodes - Block/violation codes to append when enabled.
+ * @param options - Rendering options that control safety-code visibility.
+ * @returns Runtime failure explanation text.
+ */
+function buildRuntimeExecutionBlockedMessage(
+  detail: string,
+  policyCodes: string[],
+  options: BlockMessageRenderOptions
+): string {
+  const normalizedDetail = detail.trim();
+  const suffixedDetail = /[.!?]$/.test(normalizedDetail)
+    ? normalizedDetail
+    : `${normalizedDetail}.`;
+  return (
+    "I couldn't finish this run. " +
+    `What happened: a runtime execution step failed: ${suffixedDetail} ` +
+    "Why it didn't execute: the command or environment failed during execution after planning and approval had already advanced. " +
+    "What to do next: inspect the failing step and retry after fixing that runtime issue." +
+    formatTechnicalCodeTail(policyCodes, options)
+  );
 }
 
 /**

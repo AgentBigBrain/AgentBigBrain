@@ -3,6 +3,9 @@
  */
 
 import assert from "node:assert/strict";
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { test } from "node:test";
 
 import { TaskRequest } from "../../src/core/types";
@@ -23,6 +26,12 @@ import {
   buildPlannerSystemPrompt
 } from "../../src/organs/plannerPolicy/promptAssembly";
 import {
+  buildFrameworkLandingPageContent,
+  buildFrameworkLandingPageStyles,
+  buildNextLayoutContent,
+  buildNextTypeScriptLayoutContent
+} from "../../src/organs/plannerPolicy/frameworkRuntimeActionFallbackContent";
+import {
   assessExecutionStyleBuildPlan,
   requiresExecutableBuildPlan
 } from "../../src/organs/plannerPolicy/buildExecutionPolicy";
@@ -31,16 +40,24 @@ import {
   buildWorkspaceRecoveryPostShutdownRetryInput
 } from "../../src/core/autonomy/workspaceRecoveryPolicy";
 import {
+  isDeterministicFrameworkBuildLaneRequest,
   isExecutionStyleBuildRequest,
+  isFrameworkWorkspacePreparationRequest,
   isLocalWorkspaceOrganizationRequest,
-  requiresFrameworkAppScaffoldAction
+  isLiveVerificationBuildRequest,
+  requiresBrowserVerificationBuildRequest,
+  requiresFrameworkAppScaffoldAction,
+  requiresPersistentBrowserOpenBuildRequest
 } from "../../src/organs/plannerPolicy/liveVerificationPolicy";
 import {
   buildNonExplicitRunSkillFallbackAction,
   enforceRunSkillIntentPolicy,
   ensureRespondMessages
 } from "../../src/organs/plannerPolicy/responseSynthesisFallback";
-import { buildDeterministicExplicitRuntimeActionFallbackActions } from "../../src/organs/plannerPolicy/explicitRuntimeActionFallback";
+import {
+  buildDeterministicExplicitRuntimeActionFallbackActions,
+  buildDeterministicFrameworkBuildFallbackActions
+} from "../../src/organs/plannerPolicy/explicitRuntimeActionFallback";
 import { buildDeterministicWorkspaceRecoveryFallbackActions } from "../../src/organs/plannerPolicy/workspaceRecoveryFallback";
 import { buildWorkspaceRecoverySignalFixture } from "../helpers/conversationFixtures";
 
@@ -78,6 +95,18 @@ function buildExecutionEnvironment(): PlannerExecutionEnvironmentContext {
     desktopPath: "/home/testuser/Desktop",
     documentsPath: "/home/testuser/Documents",
     downloadsPath: "/home/testuser/Downloads"
+  };
+}
+
+function buildWindowsExecutionEnvironment(): PlannerExecutionEnvironmentContext {
+  return {
+    platform: "win32",
+    shellKind: "powershell",
+    invocationMode: "inline_command",
+    commandMaxChars: 4000,
+    desktopPath: "C:\\Users\\testuser\\Desktop",
+    documentsPath: "C:\\Users\\testuser\\Documents",
+    downloadsPath: "C:\\Users\\testuser\\Downloads"
   };
 }
 
@@ -311,7 +340,7 @@ test("preparePlannerActions appends tracked preview refresh after artifact edits
 
 test("evaluatePlannerActionValidation and assertPlannerActionValidation fail closed for missing browser proof", () => {
   const currentUserRequest =
-    "Create a React app on my Desktop, run the app, and verify the homepage UI. Execute now.";
+    "Run the existing React app in the \"C:\\Users\\testuser\\Desktop\\drone-company\" folder and verify the homepage UI. Execute now.";
   const validation = evaluatePlannerActionValidation(currentUserRequest, null, [
     {
       id: "action_shell_build",
@@ -352,7 +381,7 @@ test("evaluatePlannerActionValidation and assertPlannerActionValidation fail clo
 
 test("evaluatePlannerActionValidation and assertPlannerActionValidation fail closed for missing persistent browser open step", () => {
   const currentUserRequest =
-    "Create a React app on my Desktop, run it, verify the homepage UI, and leave it open for me when you're done. Execute now.";
+    "Run the existing React app in the \"C:\\Users\\testuser\\Desktop\\drone-company\" folder, verify the homepage UI, and leave it open for me when you're done. Execute now.";
   const validation = evaluatePlannerActionValidation(currentUserRequest, null, [
     {
       id: "action_shell_build",
@@ -492,7 +521,7 @@ test("fresh framework-app requests require a real scaffold-capable action instea
   );
   assert.throws(
     () => assertPlannerActionValidation(validation, null),
-    /fresh framework-app request like a file-only edit/i
+    /already-ready workspace/i
   );
 });
 
@@ -533,12 +562,131 @@ test("framework-app requests accept real toolchain actions for scaffold/build fl
   assert.equal(validation.buildPlanAssessment.issueCode, null);
 });
 
+test("execution-style build detection accepts natural finish-the-project framework follow-ups", () => {
+  const currentUserRequest =
+    "Finish the project end to end. Use the scaffolded Next.js app at `C:\\Users\\testuser\\AppData\\Local\\Temp\\agentbigbrain-framework-scaffold\\downtown-detroit-drones`, move or copy it to the desktop as a folder named `downtown-detroit-drones`, implement the landing page for Downtown Detroit Drones, then install/run it, verify it works, and open it in the browser from the desktop location.";
+
+  assert.equal(isExecutionStyleBuildRequest(currentUserRequest), true);
+  assert.equal(requiresFrameworkAppScaffoldAction(currentUserRequest), true);
+  assert.equal(isLiveVerificationBuildRequest(currentUserRequest), true);
+});
+
+test("framework workspace-preparation detection matches natural scaffold-only turns and excludes existing-app runs", () => {
+  const workspacePrepRequest =
+    "Can you get a new Next.js landing-page workspace started on my desktop and call it Downtown Detroit Drones? Just get the workspace ready for edits with the dependencies installed. Do not run it or open anything yet.";
+  const existingRunRequest =
+    "Please run my existing Next.js app on my Desktop and open it in the browser for me.";
+
+  assert.equal(requiresFrameworkAppScaffoldAction(workspacePrepRequest), true);
+  assert.equal(isFrameworkWorkspacePreparationRequest(workspacePrepRequest), true);
+  assert.equal(requiresFrameworkAppScaffoldAction(existingRunRequest), false);
+  assert.equal(isFrameworkWorkspacePreparationRequest(existingRunRequest), false);
+});
+
+test("deterministic framework build-lane detection covers tracked build, preview, and edit turns but excludes close turns", () => {
+  const buildTurnRequest =
+    "Great. Now turn that Downtown Detroit Drones workspace into the real landing page. Keep it calm and modern, avoid blue, put a small flying drone in the hero, use four main sections, add a clear call to action and a footer menu, then build it. Stop once the source and build proof are there, but do not run it or open anything yet.";
+  const previewTurnRequest =
+    "Nice. Pull up the Downtown Detroit Drones landing page you just built so it is ready to view, but do not pop the browser open yet. Use a real localhost run on host 127.0.0.1 and port 54928, and keep that preview server running.";
+  const editTurnRequest =
+    'One tweak while it stays open: change the second section heading to "Steady local rollout" and make that section mention "Built for neighborhood teams." Keep the page running and refresh whatever needs to refresh so the live page shows the update.';
+  const closeTurnRequest =
+    "Thanks. Please close the Downtown Detroit Drones landing page now, including the browser window and the linked localhost server.";
+
+  assert.equal(isDeterministicFrameworkBuildLaneRequest(buildTurnRequest), true);
+  assert.equal(isDeterministicFrameworkBuildLaneRequest(previewTurnRequest), true);
+  assert.equal(isDeterministicFrameworkBuildLaneRequest(editTurnRequest), true);
+  assert.equal(isDeterministicFrameworkBuildLaneRequest(closeTurnRequest), false);
+});
+
+test("preparePlannerActions rewrites temp-scaffold finalize commands into the bounded merge form", () => {
+  const currentUserRequest =
+    "Finish the project end to end. Use the scaffolded Next.js app at `C:\\Users\\testuser\\AppData\\Local\\Temp\\agentbigbrain-framework-scaffold\\downtown-detroit-drones`, move or copy it to the desktop as a folder named `downtown-detroit-drones`, implement the landing page for Downtown Detroit Drones, then install/run it, verify it works, and open it in the browser from the desktop location.";
+  const preparation = preparePlannerActions(
+    {
+      plannerNotes: "finalize the scaffold and continue the run",
+      actions: [
+        {
+          type: "shell_command",
+          description: "Copy the scaffolded app to the desktop folder.",
+          params: {
+            command:
+              "$src='C:\\Users\\testuser\\AppData\\Local\\Temp\\agentbigbrain-framework-scaffold\\downtown-detroit-drones'; " +
+              "$dst='C:\\Users\\testuser\\Desktop\\downtown-detroit-drones'; " +
+              "if (Test-Path $dst) { Remove-Item -Recurse -Force $dst }; " +
+              "New-Item -ItemType Directory -Path $dst -Force | Out-Null; " +
+              "Get-ChildItem -Force $src | ForEach-Object { Move-Item $_.FullName -Destination $dst -Force }"
+          }
+        }
+      ]
+    },
+    currentUserRequest,
+    null,
+    undefined,
+    buildWindowsExecutionEnvironment()
+  );
+
+  assert.equal(preparation.actions.length, 1);
+  assert.equal(preparation.actions[0]?.type, "shell_command");
+  assert.match(String(preparation.actions[0]?.params.command), /agentbigbrain-framework-scaffold/i);
+  assert.doesNotMatch(
+    String(preparation.actions[0]?.params.command),
+    /Remove-Item\s+-Recurse\s+-Force\s+\$dst/i
+  );
+  assert.match(String(preparation.actions[0]?.params.command), /Get-ChildItem -Force \$temp/i);
+  assert.equal(preparation.actions[0]?.params.cwd, "C:\\Users\\testuser\\Desktop");
+});
+
 test('execution-style build detection accepts explicit Desktop paths phrased as in the "..." folder', () => {
   const currentUserRequest =
     'Fix the React/Vite project in the "C:\\Users\\testuser\\OneDrive\\Desktop\\AI Drone City" folder, install dependencies if needed, build it, and open it in the browser.';
 
   assert.equal(isExecutionStyleBuildRequest(currentUserRequest), true);
+  assert.equal(requiresFrameworkAppScaffoldAction(currentUserRequest), false);
+});
+
+test("scaffold-only framework-app turns do not require live verification when preview is explicitly deferred", () => {
+  const currentUserRequest =
+    "Create a new React single page app on my Desktop. Scaffold it and install dependencies, but do not start a preview server, do not verify localhost, and do not open a browser yet.";
+
+  assert.equal(isExecutionStyleBuildRequest(currentUserRequest), true);
   assert.equal(requiresFrameworkAppScaffoldAction(currentUserRequest), true);
+  assert.equal(isLiveVerificationBuildRequest(currentUserRequest), false);
+  assert.equal(requiresBrowserVerificationBuildRequest(currentUserRequest), false);
+  assert.equal(requiresPersistentBrowserOpenBuildRequest(currentUserRequest), false);
+});
+
+test("preview-only framework-app turns can require live verification without requiring browser-open proof yet", () => {
+  const currentUserRequest =
+    "Reuse the existing React workspace on my Desktop. Start its localhost preview server on 127.0.0.1:4173, leave that preview running, and do not open a browser yet.";
+
+  assert.equal(isExecutionStyleBuildRequest(currentUserRequest), true);
+  assert.equal(requiresFrameworkAppScaffoldAction(currentUserRequest), false);
+  assert.equal(isLiveVerificationBuildRequest(currentUserRequest), true);
+  assert.equal(requiresBrowserVerificationBuildRequest(currentUserRequest), false);
+  assert.equal(requiresPersistentBrowserOpenBuildRequest(currentUserRequest), false);
+});
+
+test("scaffold-only framework-app turns stay non-live when preview/dev server wording is explicitly deferred", () => {
+  const currentUserRequest =
+    "Create a new React single page app on my Desktop. Scaffold it, install dependencies, and stop after the workspace is ready for edits. Do not start any preview/dev server, do not probe localhost, and do not open or verify a browser yet.";
+
+  assert.equal(isExecutionStyleBuildRequest(currentUserRequest), true);
+  assert.equal(requiresFrameworkAppScaffoldAction(currentUserRequest), true);
+  assert.equal(isLiveVerificationBuildRequest(currentUserRequest), false);
+  assert.equal(requiresBrowserVerificationBuildRequest(currentUserRequest), false);
+  assert.equal(requiresPersistentBrowserOpenBuildRequest(currentUserRequest), false);
+});
+
+test("natural start-locally and open-in-browser phrasing still classifies as a live persistent framework request", () => {
+  const currentUserRequest =
+    "Please create a Next.js landing page called Drone City on my Desktop. After you finish, start it locally, open it in my browser, and leave it up for me to view.";
+
+  assert.equal(isExecutionStyleBuildRequest(currentUserRequest), true);
+  assert.equal(requiresFrameworkAppScaffoldAction(currentUserRequest), true);
+  assert.equal(isLiveVerificationBuildRequest(currentUserRequest), true);
+  assert.equal(requiresBrowserVerificationBuildRequest(currentUserRequest), false);
+  assert.equal(requiresPersistentBrowserOpenBuildRequest(currentUserRequest), true);
 });
 
 test("fresh framework-app requests fail closed when scaffold logic keys reuse on folder existence alone", () => {
@@ -588,7 +736,7 @@ test("fresh framework-app requests fail closed when scaffold logic keys reuse on
 
 test("fresh framework-app requests fail closed when package.json-guarded scaffold recreates the named folder from its parent", () => {
   const currentUserRequest =
-    "Create a React landing page app on my Desktop in a folder called AI Drone City, open it in a browser, and leave it open for me.";
+    "Create a React landing page app on my Desktop in a folder called drone-city, open it in a browser, and leave it open for me.";
   const validation = evaluatePlannerActionValidation(currentUserRequest, null, [
     {
       id: "action_scaffold_named_folder_from_parent",
@@ -597,10 +745,10 @@ test("fresh framework-app requests fail closed when package.json-guarded scaffol
       params: {
         command: [
           "$desktop = 'C:\\Users\\testuser\\Desktop'",
-          "$app = Join-Path $desktop 'AI Drone City'",
+          "$app = Join-Path $desktop 'drone-city'",
           "if (!(Test-Path (Join-Path $app 'package.json'))) {",
           "  Set-Location $desktop",
-          "  npm create vite@latest 'AI Drone City' -- --template react",
+          "  npm create vite@latest 'drone-city' -- --template react",
           "}",
           "Set-Location $app",
           "npm install"
@@ -630,9 +778,238 @@ test("fresh framework-app requests fail closed when package.json-guarded scaffol
   );
 });
 
+test("fresh framework-app requests accept package-safe temp-slug scaffolds that merge into the exact named folder", () => {
+  const assessment = assessExecutionStyleBuildPlan(
+    "Create a React app on my Desktop in a folder called AI Drone City and execute now.",
+    [
+      {
+        id: "action_framework_safe_slug_merge",
+        type: "shell_command",
+        description: "Scaffold through a safe slug and merge into the exact folder.",
+        params: {
+          command: [
+            `$desktop = '${buildWindowsExecutionEnvironment().desktopPath}'`,
+            "$target = 'AI Drone City'",
+            "$slug = 'ai-drone-city'",
+            "$targetPath = Join-Path $desktop $target",
+            "$slugPath = Join-Path $desktop $slug",
+            "if (!(Test-Path (Join-Path $targetPath 'package.json'))) {",
+            "  npm create vite@latest $slug -- --template react",
+            "  if (Test-Path $targetPath) {",
+            "    Get-ChildItem -Force $slugPath | Move-Item -Destination $targetPath",
+            "    Remove-Item $slugPath -Force",
+            "  } else {",
+            "    Rename-Item -Path $slugPath -NewName $target",
+            "  }",
+            "}",
+            "Set-Location $targetPath",
+            "npm install"
+          ].join("; ")
+        }
+      }
+    ],
+    null,
+    buildWindowsExecutionEnvironment()
+  );
+
+  assert.deepEqual(assessment, {
+    valid: true,
+    issueCode: null
+  });
+});
+
+test("fresh Next.js framework-app requests fail closed when create-next-app targets an unsafe exact folder name", () => {
+  const currentUserRequest =
+    "Please create a Next.js landing page called Drone City on my Desktop, start it locally, open it in my browser, and leave it up for me to view.";
+  const validation = evaluatePlannerActionValidation(currentUserRequest, null, [
+    {
+      id: "action_scaffold_named_folder_from_parent",
+      type: "shell_command",
+      description: "Scaffold or reuse the Next.js app.",
+      params: {
+        command: [
+          "$desktop = 'C:\\Users\\testuser\\Desktop'",
+          "$project = Join-Path $desktop 'Drone City'",
+          "if (!(Test-Path (Join-Path $project 'package.json'))) {",
+          "  Set-Location $desktop",
+          "  npx create-next-app@latest $project --ts --eslint --app --src-dir --use-npm --skip-install --yes",
+          "}",
+          "Set-Location $project",
+          "npm install"
+        ].join("; ")
+      },
+      estimatedCostUsd: 0.25
+    },
+    {
+      id: "action_start_preview",
+      type: "start_process",
+      description: "Start the Next.js app.",
+      params: {
+        command: "npm run start -- --hostname 127.0.0.1 --port 3000",
+        cwd: "C:\\Users\\testuser\\Desktop\\Drone City"
+      },
+      estimatedCostUsd: 0.15
+    },
+    {
+      id: "action_probe_http",
+      type: "probe_http",
+      description: "Wait for localhost readiness.",
+      params: {
+        url: "http://127.0.0.1:3000",
+        expectedStatus: 200
+      },
+      estimatedCostUsd: 0.04
+    },
+    {
+      id: "action_open_browser",
+      type: "open_browser",
+      description: "Leave the app open in the browser.",
+      params: {
+        url: "http://127.0.0.1:3000"
+      },
+      estimatedCostUsd: 0.03
+    }
+  ]);
+
+  assert.equal(validation.needsRepair, true);
+  assert.equal(
+    validation.buildPlanAssessment.issueCode,
+    "FRAMEWORK_APP_PACKAGE_SAFE_SCAFFOLD_REQUIRED"
+  );
+  assert.throws(
+    () => assertPlannerActionValidation(validation, null),
+    /not a safe npm package name/i
+  );
+});
+
+test("fresh framework workspace-prep requests fail closed when the plan only creates an empty folder and then builds", () => {
+  const currentUserRequest =
+    "Can you get a new Next.js landing-page workspace started on my desktop and call it Downtown Detroit Drones? Just get the workspace ready for edits with the dependencies installed. Do not run it or open anything yet.";
+  const validation = evaluatePlannerActionValidation(currentUserRequest, null, [
+    {
+      id: "action_create_empty_folder",
+      type: "shell_command",
+      description: "Create the requested Desktop folder.",
+      params: {
+        command: [
+          "$desktop = 'C:\\Users\\testuser\\Desktop'",
+          "$project = Join-Path $desktop 'Downtown Detroit Drones'",
+          "if (!(Test-Path $project)) { New-Item -ItemType Directory -Path $project -Force | Out-Null }",
+          "Set-Location $project"
+        ].join("; ")
+      },
+      estimatedCostUsd: 0.25
+    },
+    {
+      id: "action_build_without_scaffold",
+      type: "shell_command",
+      description: "Build the workspace if package.json is already there.",
+      params: {
+        command: [
+          "if (!(Test-Path '.\\package.json')) { Write-Error 'package.json not found in the target workspace.'; exit 1 }",
+          "npm.cmd run build",
+          "if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }"
+        ].join("; ")
+      },
+      estimatedCostUsd: 0.25
+    }
+  ]);
+
+  assert.equal(validation.needsRepair, true);
+  assert.equal(
+    validation.buildPlanAssessment.issueCode,
+    "FRAMEWORK_APP_SCAFFOLD_ACTION_REQUIRED"
+  );
+  assert.throws(
+    () => assertPlannerActionValidation(validation, null),
+    /materialize package\.json/i
+  );
+});
+
+test("preparePlannerActions rewrites named framework-app scaffolds that still build from a parent safe slug", () => {
+  const currentUserRequest =
+    "Create a React landing page app on my Desktop in a folder called Drone City, open it in a browser, and leave it open for me.";
+  const preparation = preparePlannerActions(
+    {
+      plannerNotes: "scaffold through a safe slug from the desktop root",
+      actions: [
+        {
+          type: "shell_command",
+          description: "Scaffold the React app from the desktop root.",
+          params: {
+            command: [
+              "$desktop = 'C:\\Users\\testuser\\Desktop'",
+              "Set-Location $desktop",
+              "npm create vite@latest 'drone-city' -- --template react",
+              "Set-Location (Join-Path $desktop 'Drone City')",
+              "npm install"
+            ].join("; ")
+          }
+        }
+      ]
+    },
+    currentUserRequest,
+    null,
+    currentUserRequest,
+    {
+      platform: "win32",
+      shellKind: "powershell",
+      invocationMode: "inline_command",
+      commandMaxChars: 4096,
+      desktopPath: "C:\\Users\\testuser\\Desktop",
+      documentsPath: "C:\\Users\\testuser\\Documents",
+      downloadsPath: "C:\\Users\\testuser\\Downloads"
+    }
+  );
+
+  assert.equal(preparation.actions.length, 1);
+  assert.match(String(preparation.actions[0].params.command), /Move-Item/i);
+  assert.match(String(preparation.actions[0].params.command), /Drone City/i);
+  assert.match(String(preparation.actions[0].params.command), /drone-city/i);
+  assert.match(String(preparation.actions[0].params.command), /package\.json/i);
+});
+
+test("preparePlannerActions rewrites temp-slug framework merges that would collide with an existing exact folder", () => {
+  const currentUserRequest =
+    "Please create a Next.js landing page called Drone City on my Desktop, start it locally, open it in my browser, and leave it up for me to view.";
+  const preparation = preparePlannerActions(
+    {
+      plannerNotes: "scaffold through a temp slug and merge into the existing exact folder",
+      actions: [
+        {
+          type: "shell_command",
+          description: "Scaffold the Next.js app through a temp slug and merge into the final folder.",
+          params: {
+            command: [
+              "$final = 'C:\\Users\\testuser\\Desktop\\Drone City'",
+              "$temp = Join-Path (Join-Path $env:TEMP 'agentbigbrain-framework-scaffold') 'drone-city'",
+              "$tempRoot = Split-Path -Parent $temp",
+              "Set-Location $tempRoot",
+              "npx create-next-app@latest 'drone-city' --ts --eslint --app --use-npm --yes --skip-install --no-tailwind",
+              "if (!(Test-Path $final)) { New-Item -ItemType Directory -Path $final -Force | Out-Null }",
+              "Get-ChildItem -Force $temp | ForEach-Object { Move-Item $_.FullName -Destination $final -Force }",
+              "Remove-Item $temp -Recurse -Force",
+              "Set-Location $final",
+              "npm install"
+            ].join("; ")
+          }
+        }
+      ]
+    },
+    currentUserRequest,
+    null,
+    currentUserRequest,
+    buildWindowsExecutionEnvironment()
+  );
+
+  assert.equal(preparation.actions.length, 1);
+  assert.match(String(preparation.actions[0].params.command), /package\.json/i);
+  assert.match(String(preparation.actions[0].params.command), /if \(Test-Path \(Join-Path \$final 'package\.json'\)\)/i);
+});
+
 test("framework-app live-run requests fail closed when they use an ad-hoc preview server", () => {
   const currentUserRequest =
-    "Create a React landing page app on my Desktop, run it locally on localhost, open it in a browser, and leave it open for me.";
+    "Run the existing React landing page app in the \"C:\\Users\\testuser\\Desktop\\AI Drone City\" folder locally on localhost, open it in a browser, and leave it open for me.";
   const validation = evaluatePlannerActionValidation(currentUserRequest, null, [
     {
       id: "action_repair_workspace",
@@ -728,7 +1105,7 @@ test("execution-style build requests fail closed when shell commands exceed the 
 
 test("framework-app start_process plans fail closed when they use an ad-hoc preview server even without explicit localhost wording", () => {
   const currentUserRequest =
-    "Create a React landing page app on my Desktop, open it in the browser, and leave it open for me.";
+    "Run the existing React landing page app in the \"C:\\Users\\testuser\\Desktop\\AI Drone City\" folder and leave it open for me in the browser.";
   const validation = evaluatePlannerActionValidation(currentUserRequest, null, [
     {
       id: "action_repair_workspace",
@@ -972,7 +1349,7 @@ test("local workspace organization classification ignores trailing AgentFriend b
     "domainBoundaryDecision=inject_profile_context",
     "",
     "[AgentFriendProfileContext]",
-    "contact.billy.note: moved projects earlier."
+    "contact.owen.note: moved projects earlier."
   ].join("\n");
 
   assert.equal(isExecutionStyleBuildRequest(wrappedRequest), false);
@@ -2230,9 +2607,9 @@ test("buildPlannerRepairSystemPrompt explains framework app scaffold repairs", (
       "invalid_execution_style_build_plan:FRAMEWORK_APP_SCAFFOLD_ACTION_REQUIRED"
   });
 
-  assert.match(prompt, /fresh framework-app request like a file-only edit/i);
-  assert.match(prompt, /real toolchain step that can scaffold, install, build, preview, or run the app/i);
-  assert.match(prompt, /Do not return only src-file writes/i);
+  assert.match(prompt, /fresh framework-app request like an already-ready workspace/i);
+  assert.match(prompt, /real scaffold or bootstrap step that can materialize package\.json/i);
+  assert.match(prompt, /Generic npm install, npm run build, npm run dev, or npm run start commands do not satisfy this/i);
 });
 
 test("buildPlannerRepairSystemPrompt explains framework app artifact-check repairs", () => {
@@ -2757,6 +3134,511 @@ test("buildDeterministicExplicitRuntimeActionFallbackActions synthesizes inspect
   assert.equal(actions.length, 1);
   assert.equal(actions[0]?.type, "inspect_workspace_resources");
   assert.equal(actions[0]?.params.rootPath, "C:\\Users\\testuser\\Desktop\\drone-company-a");
+});
+
+test("buildDeterministicExplicitRuntimeActionFallbackActions synthesizes tracked close-browser cleanup from browser follow-up context", () => {
+  const currentUserRequest =
+    "Thanks. Please close Drone React Preview Smoke 1774659110753, the browser window, and the localhost preview server so we can move on.";
+  const fullExecutionInput = [
+    "Tracked browser sessions:",
+    "- Browser window: sessionId=browser_session:action_demo; url=http://127.0.0.1:60048/; status=open; visibility=visible; controller=playwright_managed; control=available; linkedPreviewLease=proc_preview_demo; linkedPreviewPid=55584; linkedPreviewCwd=C:\\Users\\testuser\\Desktop\\Drone React Preview Smoke 1774659110753",
+    "",
+    "Natural browser-session follow-up:",
+    "- Preferred browser session: Browser window; sessionId=browser_session:action_demo; url=http://127.0.0.1:60048/; status=open; control=available",
+    "- Linked preview process: leaseId=proc_preview_demo; cwd=C:\\Users\\testuser\\Desktop\\Drone React Preview Smoke 1774659110753",
+    "- If the user wants that visible page closed now, prefer close_browser with params.sessionId=browser_session:action_demo and then stop_process with params.leaseId=proc_preview_demo so the linked local preview stack shuts down fully. Do not stop unrelated processes.",
+    "",
+    "Current user request:",
+    currentUserRequest
+  ].join("\n");
+
+  const actions = buildDeterministicExplicitRuntimeActionFallbackActions(
+    currentUserRequest,
+    "close_browser",
+    fullExecutionInput
+  );
+
+  assert.deepEqual(
+    actions.map((action) => action.type),
+    ["close_browser", "stop_process"]
+  );
+  assert.equal(actions[0]?.params.sessionId, "browser_session:action_demo");
+  assert.equal(actions[1]?.params.leaseId, "proc_preview_demo");
+});
+
+test("buildDeterministicFrameworkBuildFallbackActions does not hijack tracked close-browser follow-ups", () => {
+  const currentUserRequest = [
+    "Current tracked workspace in this chat:",
+    "- Root path: C:\\Users\\testuser\\Desktop\\Drone React Preview Smoke 1774659110753",
+    "- Preview URL: http://127.0.0.1:60048/",
+    "- Browser session id: browser_session:action_demo",
+    "- Preview process lease: proc_preview_demo",
+    "",
+    "Tracked browser sessions:",
+    "- Browser window: sessionId=browser_session:action_demo; url=http://127.0.0.1:60048/; status=open; visibility=visible; controller=playwright_managed; control=available; linkedPreviewLease=proc_preview_demo; linkedPreviewCwd=C:\\Users\\testuser\\Desktop\\Drone React Preview Smoke 1774659110753",
+    "",
+    "Current user request:",
+    "Thanks. Please close Drone React Preview Smoke 1774659110753, the browser window, and the localhost preview server so we can move on."
+  ].join("\n");
+
+  const actions = buildDeterministicFrameworkBuildFallbackActions(
+    currentUserRequest,
+    buildWindowsExecutionEnvironment()
+  );
+
+  assert.deepEqual(actions, []);
+});
+
+test("deterministic framework build-lane detection treats polite close phrasing as a close turn", () => {
+  assert.equal(
+    isDeterministicFrameworkBuildLaneRequest(
+      "Thanks. Please close Drone React Preview Smoke 1774659110753, the browser window, and the localhost preview server so we can move on."
+    ),
+    false
+  );
+});
+
+test("buildDeterministicFrameworkBuildFallbackActions synthesizes safe-slug scaffold/install/proof actions for named React folders on Windows", () => {
+  const actions = buildDeterministicFrameworkBuildFallbackActions(
+    "Handle this first step only: create a new React single page app in a folder called Drone React Preview Smoke 1774618922998 on my desktop. Use a real scaffold-capable toolchain step, then install dependencies so package.json and node_modules exist. For this turn, stop after the workspace is ready for edits.",
+    buildWindowsExecutionEnvironment()
+  );
+
+  assert.equal(actions.length, 3);
+  assert.equal(actions[0]?.type, "shell_command");
+  assert.equal(actions[1]?.type, "shell_command");
+  assert.equal(actions[2]?.type, "shell_command");
+  assert.match(String(actions[0]?.params.command), /agentbigbrain-framework-scaffold/i);
+  assert.match(String(actions[0]?.params.command), /create-vite@latest/i);
+  assert.match(String(actions[0]?.params.command), /--template react-ts/i);
+  assert.match(String(actions[0]?.params.command), /--no-interactive/i);
+  assert.match(String(actions[0]?.params.command), /drone-react-preview-smoke-1774618922998/i);
+  assert.match(String(actions[0]?.params.command), /Drone React Preview Smoke 1774618922998/i);
+  assert.equal(
+    actions[1]?.params.cwd,
+    "C:\\Users\\testuser\\Desktop\\Drone React Preview Smoke 1774618922998"
+  );
+});
+
+test("buildDeterministicFrameworkBuildFallbackActions keeps autonomous scaffold-only React turns on workspace-ready proof instead of live preview actions", () => {
+  const wrappedAutonomousInput = `[AUTONOMOUS_LOOP_GOAL] ${JSON.stringify({
+    goal: "Handle this first step only.",
+    initialExecutionInput: [
+      "You are in an ongoing conversation with the same user.",
+      "Deterministic routing hint:",
+      "Intent surface: build_scaffold. Prefer governed finite proof steps first (for example scaffold, edit, install, build, finite verification) with explicit approval-diff rendering before write actions. Only use managed process plus probe actions when the user clearly asks to run or verify a live app/session.",
+      "",
+      "Current user request:",
+      "Handle this first step only: create a new React single page app in a folder called Drone React Preview Smoke 1774661430563 on my desktop. Use a real scaffold-capable toolchain step, then install dependencies so package.json and node_modules exist. For this turn, stop after the workspace is ready for edits. Do not start a preview server, do not verify localhost, and do not open a browser yet."
+    ].join("\n")
+  })}`;
+
+  const actions = buildDeterministicFrameworkBuildFallbackActions(
+    wrappedAutonomousInput,
+    buildWindowsExecutionEnvironment()
+  );
+
+  assert.deepEqual(
+    actions.map((action) => action.type),
+    ["shell_command", "shell_command", "shell_command"]
+  );
+  assert.equal(actions.some((action) => action.type === "start_process"), false);
+  assert.equal(actions.some((action) => action.type === "probe_http"), false);
+  assert.equal(actions.some((action) => action.type === "open_browser"), false);
+  assert.match(String(actions[2]?.params.command), /Workspace not ready/i);
+});
+
+test("buildDeterministicFrameworkBuildFallbackActions prefers the exact Desktop path over repair-turn prose when resolving React folder names", () => {
+  const currentUserRequest = [
+    "You are in an ongoing conversation with the same user.",
+    "Current user request:",
+    "Inspect `C:\\Users\\testuser\\Desktop\\Drone React Preview Smoke 1774663596997` and verify whether the exact folder itself, not a nested subfolder, is already a valid React single-page app scaffold created by a real scaffold-capable toolchain. Use finite file inspection only: check `package.json` plus expected scaffold files such as `index.html`, `src`, and React/Vite scripts. If the scaffold is valid, report success with concrete evidence and stop. If it is not valid, recreate the React app directly in that exact folder using a real scaffold toolchain, install dependencies so `package.json` and `node_modules` exist there, and stop once the workspace is ready for edits. Do not start a preview server, do not verify localhost, and do not open a browser."
+  ].join("\n");
+
+  const actions = buildDeterministicFrameworkBuildFallbackActions(
+    currentUserRequest,
+    buildWindowsExecutionEnvironment()
+  );
+
+  assert.equal(actions.length, 3);
+  assert.match(
+    String(actions[0]?.params.command),
+    /Drone React Preview Smoke 1774663596997/i
+  );
+  assert.match(
+    String(actions[0]?.params.command),
+    /drone-react-preview-smoke-1774663596997/i
+  );
+  assert.doesNotMatch(
+    String(actions[0]?.params.command),
+    /exact folder itself|nested subfolder/i
+  );
+  assert.equal(
+    actions[1]?.params.cwd,
+    "C:\\Users\\testuser\\Desktop\\Drone React Preview Smoke 1774663596997"
+  );
+});
+
+test("buildDeterministicFrameworkBuildFallbackActions prefers the tracked workspace basename for natural existing-workspace React follow-ups", () => {
+  const currentUserRequest = [
+    "Current tracked workspace in this chat:",
+    "- Root path: C:\\Users\\testuser\\Desktop\\Drone React Preview Smoke 1774664217532",
+    "",
+    "Current user request:",
+    "Reuse the existing Drone React Preview Smoke 1774664217532 workspace on my desktop. Turn it into a calm drone-themed landing page with one homepage hero and four additional sections. Write the real page implementation, then run the build so dist/index.html exists. For this turn, stop after the source edits and build proof exist. Do not start a preview server, do not verify localhost, and do not open a browser yet."
+  ].join("\n");
+
+  const actions = buildDeterministicFrameworkBuildFallbackActions(
+    currentUserRequest,
+    buildWindowsExecutionEnvironment()
+  );
+
+  assert.equal(actions.length >= 5, true);
+  assert.match(
+    String(actions[0]?.params.command),
+    /Drone React Preview Smoke 1774664217532/i
+  );
+  assert.doesNotMatch(
+    String(actions[0]?.params.command),
+    /existing Drone React Preview Smoke 1774664217532/i
+  );
+  assert.equal(
+    actions[1]?.params.path,
+    "C:\\Users\\testuser\\Desktop\\Drone React Preview Smoke 1774664217532\\src\\App.jsx"
+  );
+});
+
+test("buildDeterministicFrameworkBuildFallbackActions keeps non-live Next.js build turns on source-plus-build proof instead of workspace-only proof", () => {
+  const currentUserRequest = [
+    "Recent conversation context (oldest to newest):",
+    "- user: Can you get a new Next.js landing-page workspace started on my desktop and call it Downtown Detroit Drones? Just get the workspace ready for edits with the dependencies installed. Do not run it or open anything yet.",
+    "- assistant: I ran the command successfully.",
+    "",
+    "Current tracked workspace in this chat:",
+    "- Root path: C:\\Users\\testuser\\Desktop\\Downtown Detroit Drones",
+    "",
+    "Current user request:",
+    "Great. Now turn that Downtown Detroit Drones workspace into the real landing page. Keep it calm and modern, avoid blue, put a small flying drone in the hero, use four main sections, add a clear call to action and a footer menu, then build it. Stop once the source and build proof are there, but do not run it or open anything yet."
+  ].join("\n");
+  const actions = buildDeterministicFrameworkBuildFallbackActions(
+    currentUserRequest,
+    buildWindowsExecutionEnvironment()
+  );
+
+  assert.equal(actions[0]?.type, "shell_command");
+  assert.equal(actions[1]?.type, "write_file");
+  assert.equal(actions[2]?.type, "write_file");
+  assert.equal(actions[3]?.type, "write_file");
+  assert.equal(actions[4]?.type, "shell_command");
+  assert.equal(actions[5]?.type, "shell_command");
+  assert.equal(actions[6]?.type, "shell_command");
+  assert.match(String(actions[5]?.params.command), /\bnpm run build\b/i);
+  assert.match(String(actions[6]?.params.command), /\.next\\BUILD_ID/i);
+  assert.doesNotMatch(String(actions[6]?.params.command), /Workspace not ready/i);
+  assert.equal(actions.some((action) => action.type === "start_process"), false);
+  assert.equal(actions.some((action) => action.type === "open_browser"), false);
+});
+
+test("buildDeterministicFrameworkBuildFallbackActions reuses an already-built tracked Next.js workspace for preview start follow-ups", () => {
+  const tempRoot = mkdtempSync(path.join(os.tmpdir(), "planner-policy-next-preview-followup-"));
+  const projectPath = path.join(tempRoot, "Downtown Detroit Drones");
+  try {
+    mkdirSync(path.join(projectPath, "app"), { recursive: true });
+    mkdirSync(path.join(projectPath, ".next"), { recursive: true });
+    mkdirSync(path.join(projectPath, "node_modules"), { recursive: true });
+    writeFileSync(path.join(projectPath, "package.json"), "{\n  \"name\": \"downtown-detroit-drones\"\n}\n", "utf8");
+    writeFileSync(path.join(projectPath, "next-env.d.ts"), "/// <reference types=\"next\" />\n", "utf8");
+    writeFileSync(path.join(projectPath, ".next", "BUILD_ID"), "smoke-build\n", "utf8");
+
+    const currentUserRequest = [
+      "Current tracked workspace in this chat:",
+      `- Root path: ${projectPath}`,
+      "",
+      "Current user request:",
+      "Nice. Pull up the Downtown Detroit Drones landing page you just built so it is ready to view, but do not pop the browser open yet. Use a real localhost run on host 127.0.0.1 and port 54928, and keep that preview server running."
+    ].join("\n");
+
+    const actions = buildDeterministicFrameworkBuildFallbackActions(
+      currentUserRequest,
+      {
+        ...buildWindowsExecutionEnvironment(),
+        desktopPath: tempRoot
+      }
+    );
+
+    assert.deepEqual(
+      actions.map((action) => action.type),
+      ["start_process", "probe_http"]
+    );
+    assert.match(String(actions[0]?.params.command), /--hostname 127\.0\.0\.1 --port 54928/i);
+    assert.equal(actions[1]?.params.url, "http://127.0.0.1:54928");
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("buildDeterministicFrameworkBuildFallbackActions reuses an already-built tracked Next.js workspace for browser-open follow-ups", () => {
+  const tempRoot = mkdtempSync(path.join(os.tmpdir(), "planner-policy-next-open-followup-"));
+  const projectPath = path.join(tempRoot, "Downtown Detroit Drones");
+  const previewProcessLeaseId = "proc_preview_downtown";
+  try {
+    mkdirSync(path.join(projectPath, "app"), { recursive: true });
+    mkdirSync(path.join(projectPath, ".next"), { recursive: true });
+    mkdirSync(path.join(projectPath, "node_modules"), { recursive: true });
+    writeFileSync(path.join(projectPath, "package.json"), "{\n  \"name\": \"downtown-detroit-drones\"\n}\n", "utf8");
+    writeFileSync(path.join(projectPath, "next-env.d.ts"), "/// <reference types=\"next\" />\n", "utf8");
+    writeFileSync(path.join(projectPath, ".next", "BUILD_ID"), "smoke-build\n", "utf8");
+
+    const currentUserRequest = [
+      "Current tracked workspace in this chat:",
+      `- Root path: ${projectPath}`,
+      "- Preview URL: http://127.0.0.1:54928",
+      `- Preview process lease: ${previewProcessLeaseId}`,
+      "",
+      "Current user request:",
+      "Alright, open that Downtown Detroit Drones landing page in my browser and leave it up for me. Use the same tracked localhost run that is already live on port 54928."
+    ].join("\n");
+
+    const actions = buildDeterministicFrameworkBuildFallbackActions(
+      currentUserRequest,
+      {
+        ...buildWindowsExecutionEnvironment(),
+        desktopPath: tempRoot
+      }
+    );
+
+    assert.deepEqual(
+      actions.map((action) => action.type),
+      ["probe_http", "open_browser"]
+    );
+    assert.equal(actions[0]?.params.url, "http://127.0.0.1:54928/");
+    assert.equal(actions[1]?.params.url, "http://127.0.0.1:54928/");
+    assert.equal(actions[1]?.params.rootPath, projectPath);
+    assert.equal(actions[1]?.params.previewProcessLeaseId, previewProcessLeaseId);
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("buildDeterministicFrameworkBuildFallbackActions synthesizes tracked Next.js live-edit actions while the preview stays open", () => {
+  const tempRoot = mkdtempSync(path.join(os.tmpdir(), "planner-policy-next-edit-followup-"));
+  const projectPath = path.join(tempRoot, "Downtown Detroit Drones");
+  const previewProcessLeaseId = "proc_preview_downtown";
+  const browserSessionId = "browser_session:downtown";
+  try {
+    mkdirSync(path.join(projectPath, "app"), { recursive: true });
+    mkdirSync(path.join(projectPath, ".next"), { recursive: true });
+    mkdirSync(path.join(projectPath, "node_modules"), { recursive: true });
+    writeFileSync(path.join(projectPath, "package.json"), "{\n  \"name\": \"downtown-detroit-drones\"\n}\n", "utf8");
+    writeFileSync(path.join(projectPath, "next-env.d.ts"), "/// <reference types=\"next\" />\n", "utf8");
+    writeFileSync(path.join(projectPath, ".next", "BUILD_ID"), "smoke-build\n", "utf8");
+    writeFileSync(
+      path.join(projectPath, "app", "page.js"),
+      [
+        "const sections = [",
+        "  { title: 'Guided setup', text: 'A calm structure that explains the product without rushing the reader.' },",
+        "  { title: 'Quiet confidence', text: 'Soft visual rhythm, clear copy, and a hero that feels stable instead of noisy.' },",
+        "  { title: 'Flight planning', text: 'A simple feature story that makes the path from interest to action feel obvious.' }",
+        "];",
+        "",
+        "export default function Home() {",
+        "  return <main>{sections.map((section) => <section key={section.title}><h3>{section.title}</h3><p>{section.text}</p></section>)}</main>;",
+        "}",
+        ""
+      ].join("\n"),
+      "utf8"
+    );
+
+    const currentUserRequest = [
+      "Current tracked workspace in this chat:",
+      `- Root path: ${projectPath}`,
+      "- Preview URL: http://127.0.0.1:54928",
+      `- Browser session id: ${browserSessionId}`,
+      `- Preview process lease: ${previewProcessLeaseId}`,
+      "",
+      "Current user request:",
+      'One tweak while it stays open: change the second section heading to "Steady local rollout" and make that section mention "Built for neighborhood teams." Keep the page running and refresh whatever needs to refresh so the live page shows the update.'
+    ].join("\n");
+
+    const actions = buildDeterministicFrameworkBuildFallbackActions(
+      currentUserRequest,
+      {
+        ...buildWindowsExecutionEnvironment(),
+        desktopPath: tempRoot
+      }
+    );
+
+    assert.deepEqual(
+      actions.map((action) => action.type),
+      ["write_file", "probe_http", "open_browser"]
+    );
+    assert.match(String(actions[0]?.params.content), /Steady local rollout/);
+    assert.match(String(actions[0]?.params.content), /Built for neighborhood teams/);
+    assert.equal(actions[1]?.params.url, "http://127.0.0.1:54928/");
+    assert.equal(actions[2]?.params.url, "http://127.0.0.1:54928/");
+    assert.equal(actions[2]?.params.rootPath, projectPath);
+    assert.equal("previewProcessLeaseId" in (actions[2]?.params ?? {}), false);
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("buildDeterministicFrameworkBuildFallbackActions synthesizes a full live Next.js landing-page lifecycle for timeout recovery", () => {
+  const currentUserRequest =
+    "Please create a Next.js landing page called Drone City on my Desktop. It should have a flying drone in the hero, feel polished and modern, and work as a single-page landing page. After you finish, start it locally, open it in my browser, and leave it up for me to view.";
+  const actions = buildDeterministicFrameworkBuildFallbackActions(
+    currentUserRequest,
+    buildWindowsExecutionEnvironment()
+  );
+
+  assert.ok(actions.length >= 8);
+  assert.equal(actions[0]?.type, "shell_command");
+  assert.match(String(actions[0]?.params.command), /create-next-app@latest/i);
+  assert.match(String(actions[0]?.params.command), /--app\b/i);
+  assert.match(String(actions[0]?.params.command), /--skip-install\b/i);
+  assert.match(String(actions[0]?.params.command), /--no-tailwind\b/i);
+  assert.match(String(actions[0]?.params.command), /--no-src-dir\b/i);
+  assert.match(String(actions[0]?.params.command), /--disable-git\b/i);
+  assert.match(String(actions[0]?.params.command), /--no-react-compiler\b/i);
+  assert.equal(actions[1]?.type, "write_file");
+  assert.equal(actions[2]?.type, "write_file");
+  assert.equal(actions[3]?.type, "write_file");
+  assert.equal(actions[4]?.type, "shell_command");
+  assert.equal(actions[5]?.type, "shell_command");
+  assert.equal(actions[6]?.type, "shell_command");
+  assert.equal(actions[7]?.type, "start_process");
+  assert.match(String(actions[7]?.params.command), /npm run dev -- --hostname 127\.0\.0\.1 --port 3000/i);
+  assert.equal(actions[8]?.type, "probe_http");
+  assert.equal(actions[8]?.params.url, "http://127.0.0.1:3000");
+  assert.equal(actions[9]?.type, "open_browser");
+  assert.equal(actions[9]?.params.url, "http://127.0.0.1:3000");
+  assert.equal(actions[9]?.params.rootPath, "C:\\Users\\testuser\\Desktop\\Drone City");
+  assert.match(String(actions[2]?.params.content), /flying drone hero/i);
+});
+
+test("framework landing-page fallback content stays generic when the request is not drone-specific", () => {
+  const currentUserRequest =
+    "Please create a polished modern landing page called Big Beans on my Desktop and leave it open for review when finished.";
+  const pageContent = buildFrameworkLandingPageContent(
+    "next_js",
+    "Big Beans",
+    currentUserRequest
+  );
+  const styleContent = buildFrameworkLandingPageStyles(currentUserRequest);
+
+  assert.doesNotMatch(pageContent, /\bflying drone hero\b/i);
+  assert.doesNotMatch(pageContent, /\bdrone-stage\b/i);
+  assert.match(pageContent, /Featured flow/);
+  assert.match(pageContent, /polished first impression/i);
+  assert.match(styleContent, /\.hero-orb-stage/);
+  assert.doesNotMatch(styleContent, /\.drone-stage/);
+});
+
+test("Next.js fallback layouts import globals.css so generated landing pages do not render unstyled", () => {
+  const javaScriptLayout = buildNextLayoutContent("Drone City");
+  const typeScriptLayout = buildNextTypeScriptLayoutContent("Drone City");
+
+  assert.match(javaScriptLayout, /import "\.\/globals\.css";/);
+  assert.match(typeScriptLayout, /import "\.\/globals\.css";/);
+});
+
+test("buildDeterministicFrameworkBuildFallbackActions rewrites existing Next.js tsx route files instead of shadow js files", () => {
+  const tempRoot = mkdtempSync(path.join(os.tmpdir(), "planner-policy-next-fallback-"));
+  const projectPath = path.join(tempRoot, "Drone City");
+  const appPath = path.join(projectPath, "app");
+  try {
+    mkdirSync(appPath, { recursive: true });
+    writeFileSync(path.join(projectPath, "package.json"), "{\n  \"name\": \"drone-city\"\n}\n", "utf8");
+    writeFileSync(path.join(projectPath, "tsconfig.json"), "{\n  \"compilerOptions\": {}\n}\n", "utf8");
+    writeFileSync(path.join(projectPath, "next-env.d.ts"), "/// <reference types=\"next\" />\n", "utf8");
+    writeFileSync(path.join(appPath, "layout.tsx"), "export default function Layout({ children }: any) { return children; }\n", "utf8");
+    writeFileSync(path.join(appPath, "page.tsx"), "export default function Page() { return null; }\n", "utf8");
+    writeFileSync(path.join(appPath, "layout.js"), "export default function Layout({ children }) { return children; }\n", "utf8");
+    writeFileSync(path.join(appPath, "page.js"), "export default function Page() { return null; }\n", "utf8");
+
+    const actions = buildDeterministicFrameworkBuildFallbackActions(
+      "Please create a Next.js landing page called Drone City on my Desktop. It should have a flying drone in the hero, feel polished and modern, and work as a single-page landing page. After you finish, start it locally, open it in my browser, and leave it up for me to view.",
+      {
+        ...buildWindowsExecutionEnvironment(),
+        desktopPath: tempRoot
+      }
+    );
+
+    const writePaths = actions
+      .filter((action) => action.type === "write_file")
+      .map((action) => String((action.params as Record<string, unknown>).path));
+    assert.ok(writePaths.includes(path.join(projectPath, "app", "layout.tsx")));
+    assert.ok(writePaths.includes(path.join(projectPath, "app", "page.tsx")));
+    assert.ok(writePaths.includes(path.join(projectPath, "app", "layout.js")));
+    assert.ok(writePaths.includes(path.join(projectPath, "app", "page.js")));
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("preparePlannerActions rewrites Next.js src/app writes into the active root app tree", () => {
+  const tempRoot = mkdtempSync(path.join(os.tmpdir(), "planner-policy-next-route-root-"));
+  const projectPath = path.join(tempRoot, "Drone City");
+  const rootAppPath = path.join(projectPath, "app");
+  const srcAppPath = path.join(projectPath, "src", "app");
+  try {
+    mkdirSync(rootAppPath, { recursive: true });
+    mkdirSync(srcAppPath, { recursive: true });
+    writeFileSync(path.join(projectPath, "package.json"), "{\n  \"name\": \"drone-city\"\n}\n", "utf8");
+    writeFileSync(path.join(projectPath, "next-env.d.ts"), "/// <reference types=\"next\" />\n", "utf8");
+    writeFileSync(path.join(rootAppPath, "layout.tsx"), "export default function Layout({ children }: any) { return children; }\n", "utf8");
+    writeFileSync(path.join(rootAppPath, "page.tsx"), "export default function Page() { return null; }\n", "utf8");
+
+    const preparation = preparePlannerActions(
+      {
+        plannerNotes: "write the generated Next.js route files",
+        actions: [
+          {
+            type: "write_file",
+            description: "write the page",
+            params: {
+              path: path.join(projectPath, "src", "app", "page.tsx"),
+              content: "export default function Page() { return <main className=\"pageShell\">Drone City</main>; }\n"
+            }
+          },
+          {
+            type: "write_file",
+            description: "write the layout",
+            params: {
+              path: path.join(projectPath, "src", "app", "layout.tsx"),
+              content: "export default function Layout({ children }: any) { return children; }\n"
+            }
+          },
+          {
+            type: "write_file",
+            description: "write the stylesheet",
+            params: {
+              path: path.join(projectPath, "src", "app", "globals.css"),
+              content: ".pageShell { color: red; }\n"
+            }
+          }
+        ]
+      },
+      "Please create a Next.js landing page called Drone City on my Desktop. It should have a flying drone in the hero, feel polished and modern, and work as a single-page landing page. After you finish, start it locally, open it in my browser, and leave it up for me to view.",
+      null,
+      undefined,
+      {
+        ...buildWindowsExecutionEnvironment(),
+        desktopPath: tempRoot
+      }
+    );
+
+    const writePaths = preparation.actions
+      .filter((action) => action.type === "write_file")
+      .map((action) => String(action.params.path));
+    assert.deepEqual(writePaths, [
+      path.join(projectPath, "app", "page.tsx"),
+      path.join(projectPath, "app", "layout.tsx"),
+      path.join(projectPath, "app", "globals.css")
+    ]);
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
 });
 
 test("inferRequiredActionType recognizes later-in-sentence inspect tool requests", () => {

@@ -4,22 +4,88 @@
 
 import type { ProfileFactUpsertInput } from "../profileMemory";
 import {
-  canonicalizeProfileKey, isSensitiveKey, normalizeProfileKey, normalizeProfileValue,
-  normalizeResolutionTopicKey, trimTrailingClausePunctuation
+  canonicalizeProfileKey,
+  isSensitiveKey,
+  normalizeProfileKey,
+  normalizeProfileValue,
+  normalizeResolutionTopicKey
 } from "./profileMemoryNormalization";
 import { extractNamedContactFacts } from "./profileMemoryContactExtraction";
+import {
+  buildValidatedProfileFactCandidates,
+  looksLikeCommandStylePreferredName,
+  trimPreferredNameValue,
+  validatePreferredNameCandidateValue
+} from "./profileMemoryPreferredNameValidation";
+
+const EXPLICIT_PREFERRED_NAME_SENTENCE_PATTERNS = [
+  /^(?:my\s+name\s+(?:is|was|=)\s+)(.+)$/i,
+  /^(?:(?:you\s+can\s+)?call\s+me\s+)(.+)$/i,
+  /^(?:i\s+go\s+by\s+)(.+)$/i
+] as const;
+
+export {
+  buildValidatedProfileFactCandidates,
+  validatePreferredNameCandidateValue
+} from "./profileMemoryPreferredNameValidation";
 
 /**
- * Trims common trailing clause continuations from name-like captures.
+ * Splits raw user text into bounded explicit-declaration segments before regex fast-path extraction.
  *
- * @param value - Raw captured preferred-name clause.
- * @returns Sanitized preferred-name text.
+ * @param userInput - Raw user wording under analysis.
+ * @returns Ordered candidate segments that can independently hold explicit profile statements.
  */
-function trimPreferredNameValue(value: string): string {
-  return trimTrailingClausePunctuation(value)
-    .replace(/\s+and\b[\s\S]*$/i, "")
-    .replace(/\s+(?:but|because|so)\b[\s\S]*$/i, "")
-    .trim();
+function splitExplicitProfileSegments(userInput: string): readonly string[] {
+  return userInput
+    .split(/[\n.!?;:]+|,\s+/)
+    .map((segment) => segment.trim())
+    .filter((segment) => segment.length > 0);
+}
+
+/**
+ * Extracts canonical preferred-name values from raw user wording.
+ *
+ * @param userInput - Raw user utterance under analysis.
+ * @returns Deduplicated preferred-name values in extraction priority order.
+ */
+export function extractPreferredNameValuesFromUserInput(
+  userInput: string
+): readonly string[] {
+  const text = userInput.trim();
+  if (!text) {
+    return [];
+  }
+
+  const preferredNames: string[] = [];
+  const seen = new Set<string>();
+  const maybeAddPreferredName = (value: string): void => {
+    const normalizedValue = normalizeProfileValue(value);
+    if (!normalizedValue || seen.has(normalizedValue)) {
+      return;
+    }
+    seen.add(normalizedValue);
+    preferredNames.push(normalizedValue);
+  };
+
+  for (const segment of splitExplicitProfileSegments(text)) {
+    for (const pattern of EXPLICIT_PREFERRED_NAME_SENTENCE_PATTERNS) {
+      const match = pattern.exec(segment);
+      if (!match) {
+        continue;
+      }
+      const preferredName = trimPreferredNameValue(match[1] ?? "");
+      if (
+        pattern === EXPLICIT_PREFERRED_NAME_SENTENCE_PATTERNS[1] &&
+        looksLikeCommandStylePreferredName(preferredName)
+      ) {
+        break;
+      }
+      maybeAddPreferredName(preferredName);
+      break;
+    }
+  }
+
+  return preferredNames;
 }
 
 /**
@@ -66,57 +132,21 @@ export function extractProfileFactCandidatesFromUserInput(
     maybeAddCandidate(namedContactFact);
   }
 
-  const resolvedFollowupFacts = extractResolvedFollowupFacts(
-    text,
-    sourceTaskId,
-    observedAt
-  );
+  const resolvedFollowupFacts = extractResolvedFollowupFacts(text, sourceTaskId, observedAt);
   for (const resolvedFollowupFact of resolvedFollowupFacts) {
     maybeAddCandidate(resolvedFollowupFact);
   }
 
-  const namePattern =
-    /\bmy\s+name\s+(?:is|was|=)\s+(.+?)(?:\s+and\b|[.!?\n]|$)/i;
-  const nameMatch = namePattern.exec(text);
-  if (nameMatch) {
+  const preferredNameValues = extractPreferredNameValuesFromUserInput(text);
+  if (preferredNameValues.length > 0) {
     maybeAddCandidate({
       key: "identity.preferred_name",
-      value: trimPreferredNameValue(nameMatch[1]),
+      value: preferredNameValues[0]!,
       sensitive: false,
       sourceTaskId,
       source: "user_input_pattern.name_phrase",
       observedAt,
-      confidence: toSentenceConfidence(nameMatch[0])
-    });
-  }
-
-  const callMePattern =
-    /\b(?:you\s+can\s+)?call\s+me\s+(.+?)(?:\s+and\b|[.!?\n]|$)/i;
-  const callMeMatch = callMePattern.exec(text);
-  if (callMeMatch) {
-    maybeAddCandidate({
-      key: "identity.preferred_name",
-      value: trimPreferredNameValue(callMeMatch[1]),
-      sensitive: false,
-      sourceTaskId,
-      source: "user_input_pattern.call_me",
-      observedAt,
-      confidence: toSentenceConfidence(callMeMatch[0])
-    });
-  }
-
-  const goByPattern =
-    /\bi\s+go\s+by\s+(.+?)(?:\s+and\b|[.!?\n]|$)/i;
-  const goByMatch = goByPattern.exec(text);
-  if (goByMatch) {
-    maybeAddCandidate({
-      key: "identity.preferred_name",
-      value: trimPreferredNameValue(goByMatch[1]),
-      sensitive: false,
-      sourceTaskId,
-      source: "user_input_pattern.go_by",
-      observedAt,
-      confidence: toSentenceConfidence(goByMatch[0])
+      confidence: 0.95
     });
   }
 
@@ -140,8 +170,7 @@ export function extractProfileFactCandidatesFromUserInput(
     });
   }
 
-  const workPattern =
-    /\bi\s+work\s+(?:at|for)\s+([^.!?\n]+?)(?=(?:\s+and\b)|[.!?\n]|$)/i;
+  const workPattern = /\bi\s+work\s+(?:at|for)\s+([^.!?\n]+?)(?=(?:\s+and\b)|[.!?\n]|$)/i;
   const workMatch = workPattern.exec(text);
   if (workMatch) {
     maybeAddCandidate({
@@ -155,8 +184,7 @@ export function extractProfileFactCandidatesFromUserInput(
     });
   }
 
-  const jobPattern =
-    /\bmy\s+(?:new\s+)?job\s+is\s+([^.!?\n]+?)(?=(?:\s+and\b)|[.!?\n]|$)/i;
+  const jobPattern = /\bmy\s+(?:new\s+)?job\s+is\s+([^.!?\n]+?)(?=(?:\s+and\b)|[.!?\n]|$)/i;
   const jobMatch = jobPattern.exec(text);
   if (jobMatch) {
     maybeAddCandidate({
@@ -170,8 +198,7 @@ export function extractProfileFactCandidatesFromUserInput(
     });
   }
 
-  const residencePattern =
-    /\bi\s+(?:live in|moved to)\s+([^.!?\n]+?)(?=(?:\s+and\b)|[.!?\n]|$)/i;
+  const residencePattern = /\bi\s+(?:live in|moved to)\s+([^.!?\n]+?)(?=(?:\s+and\b)|[.!?\n]|$)/i;
   const residenceMatch = residencePattern.exec(text);
   if (residenceMatch) {
     maybeAddCandidate({
@@ -226,8 +253,7 @@ function extractResolvedFollowupFacts(
 
   for (const pattern of resolutionPatterns) {
     for (const match of text.matchAll(pattern)) {
-      const rawTopic = trimTrailingClausePunctuation(match[1] ?? "");
-      const topicKey = normalizeResolutionTopicKey(rawTopic);
+      const topicKey = normalizeResolutionTopicKey(match[1] ?? "");
       if (!topicKey) {
         continue;
       }

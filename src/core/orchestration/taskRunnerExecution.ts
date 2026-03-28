@@ -40,6 +40,7 @@ export interface ExecuteTaskRunnerActionInput {
   signal?: AbortSignal;
   stage686RuntimeActionEngine: Stage686Runtime;
   taskId: string;
+  userInput: string;
 }
 
 export interface ExecuteTaskRunnerActionResult {
@@ -65,6 +66,7 @@ export async function executeTaskRunnerAction(
     proposalId: input.proposalId,
     missionId: input.taskId,
     missionAttemptId: input.missionAttemptId,
+    userInput: input.userInput,
     action: input.action
   });
 

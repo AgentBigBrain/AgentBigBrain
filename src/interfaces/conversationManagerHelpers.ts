@@ -9,6 +9,8 @@ import {
   ConversationVisibility,
   PendingProposal
 } from "./sessionStore";
+import { createEmptyConversationDomainContext } from "../core/sessionContext";
+import { normalizeConversationTransportIdentity } from "./conversationRuntime/transportIdentity";
 import {
   classifyPulseLexicalCommand,
   createPulseLexicalRuleContext,
@@ -57,6 +59,7 @@ export interface ConversationKeySeedInput {
   conversationId: string;
   userId: string;
   username: string;
+  transportIdentity?: ConversationSession["transportIdentity"];
   conversationVisibility: ConversationVisibility;
   receivedAt: string;
 }
@@ -179,6 +182,7 @@ export function buildSessionSeed(message: ConversationKeySeedInput): Conversatio
     conversationId: buildConversationKey(message),
     userId: message.userId,
     username: message.username,
+    transportIdentity: normalizeConversationTransportIdentity(message.transportIdentity),
     conversationVisibility: message.conversationVisibility,
     sessionSchemaVersion: "v2",
     conversationStack: createEmptyConversationStackV1(message.receivedAt),
@@ -187,6 +191,7 @@ export function buildSessionSeed(message: ConversationKeySeedInput): Conversatio
     codexAuthProfileId: null,
     activeProposal: null,
     activeClarification: null,
+    domainContext: createEmptyConversationDomainContext(buildConversationKey(message)),
     modeContinuity: null,
     progressState: null,
     returnHandoff: null,
@@ -445,12 +450,20 @@ export function buildRecoveredStaleJob(
     id: jobId,
     input: "__recovered_stale_job__",
     createdAt: startedAt,
-    startedAt,
-    completedAt,
-    status: "failed",
-    resultSummary: null,
-    errorMessage: "Recovered stale running job after runtime interruption.",
-    ackTimerGeneration: 0,
+      startedAt,
+      completedAt,
+      status: "failed",
+      resultSummary: null,
+      errorMessage: "Recovered stale running job after runtime interruption.",
+      recoveryTrace: {
+        kind: "stale_session_recovery",
+        status: "failed",
+        summary: "Recovered stale running job after runtime interruption.",
+        updatedAt: completedAt,
+        recoveryClass: null,
+        fingerprint: null
+      },
+      ackTimerGeneration: 0,
     ackEligibleAt: null,
     ackLifecycleState: "CANCELLED",
     ackMessageId: null,
@@ -460,6 +473,47 @@ export function buildRecoveredStaleJob(
     finalDeliveryOutcome: "failed",
     finalDeliveryAttemptCount: 1,
     finalDeliveryLastErrorCode: "STALE_RUNNING_JOB_RECOVERED",
+    finalDeliveryLastAttemptAt: completedAt
+  };
+}
+
+/**
+ * Creates a synthetic failed queued-job record when persisted queue state outlives the worker that
+ * should have processed it.
+ *
+ * @param job - Persisted queued job being recovered.
+ * @param completedAt - Recovery timestamp.
+ * @returns Failed job snapshot suitable for recent-job ledgers.
+ */
+export function buildRecoveredStaleQueuedJob(
+  job: ConversationJob,
+  completedAt: string
+): ConversationJob {
+  return {
+    ...job,
+    startedAt: job.startedAt ?? job.createdAt,
+      completedAt,
+      status: "failed",
+      resultSummary: null,
+      errorMessage: "Recovered stale queued job after runtime interruption.",
+      recoveryTrace: {
+        kind: "stale_session_recovery",
+        status: "failed",
+        summary: "Recovered stale queued job after runtime interruption.",
+        updatedAt: completedAt,
+        recoveryClass: null,
+        fingerprint: null
+      },
+      ackTimerGeneration: Math.max(1, job.ackTimerGeneration + 1),
+    ackEligibleAt: null,
+    ackLifecycleState: "CANCELLED",
+    ackMessageId: null,
+    ackSentAt: null,
+    ackEditAttemptCount: 0,
+    ackLastErrorCode: "STALE_QUEUED_JOB_RECOVERED",
+    finalDeliveryOutcome: "failed",
+    finalDeliveryAttemptCount: Math.max(1, job.finalDeliveryAttemptCount),
+    finalDeliveryLastErrorCode: "STALE_QUEUED_JOB_RECOVERED",
     finalDeliveryLastAttemptAt: completedAt
   };
 }

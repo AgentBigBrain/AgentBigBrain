@@ -4,6 +4,7 @@
 
 import type { LedgerBackend } from "../config";
 import type { EntityGraphStore } from "../entityGraphStore";
+import type { BridgeQuestionTimingInterpretationResolver } from "../../organs/languageUnderstanding/localIntentModelContracts";
 import type { Stage686PulseStateV1 } from "./memoryGovernance";
 import type {
   BridgeQuestionV1,
@@ -33,6 +34,7 @@ export interface Stage686RuntimeActionEngineOptions {
   exportJsonOnWrite: boolean;
   entityGraphStore?: EntityGraphStore;
   runtimeStateStore?: Stage686RuntimeStateAdapter;
+  bridgeQuestionTimingInterpretationResolver?: BridgeQuestionTimingInterpretationResolver;
 }
 
 export interface ExecuteStage686RuntimeActionInput {
@@ -40,6 +42,7 @@ export interface ExecuteStage686RuntimeActionInput {
   proposalId: string;
   missionId: string;
   missionAttemptId: number;
+  userInput?: string;
   action: TaskRunResult["plan"]["actions"][number];
 }
 

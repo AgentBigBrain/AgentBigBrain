@@ -104,7 +104,7 @@ test("applyProfileFactCandidates deduplicates equivalent writes before mutation"
   const result = applyProfileFactCandidates(state, [
     {
       key: "employment.current",
-      value: "Flare",
+      value: "Lantern",
       sensitive: false,
       sourceTaskId: "task_profile_mutation_apply_1",
       source: "test",
@@ -113,7 +113,7 @@ test("applyProfileFactCandidates deduplicates equivalent writes before mutation"
     },
     {
       key: "employment.current",
-      value: "flare",
+      value: "lantern",
       sensitive: false,
       sourceTaskId: "task_profile_mutation_apply_2",
       source: "test",
@@ -125,5 +125,5 @@ test("applyProfileFactCandidates deduplicates equivalent writes before mutation"
   assert.equal(result.appliedFacts, 1);
   assert.equal(result.supersededFacts, 0);
   assert.equal(result.nextState.facts.length, 1);
-  assert.equal(result.nextState.facts[0]?.value, "Flare");
+  assert.equal(result.nextState.facts[0]?.value, "Lantern");
 });

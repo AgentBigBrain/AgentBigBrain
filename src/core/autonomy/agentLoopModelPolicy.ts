@@ -11,6 +11,7 @@ import { BrainConfig } from "../config";
 import { selectModelForRole } from "../modelRouting";
 import { TaskRunResult } from "../types";
 import {
+  buildAutonomousRecoverySnapshot,
   MISSION_REQUIREMENT_PROCESS_STOP,
   type MissionCompletionContract,
   type MissionEvidenceCounters
@@ -82,6 +83,11 @@ export async function evaluateAutonomousNextStep(
     missionContract,
     missionEvidence
   );
+  const recoverySnapshot = buildAutonomousRecoverySnapshot({
+    result: lastResult,
+    missionContract,
+    missingRequirements
+  });
   const startPortConflict = findManagedProcessStartPortConflictFailure(lastResult);
   if (missionContract.requireReadinessProof && startPortConflict) {
     if (
@@ -200,12 +206,37 @@ export async function evaluateAutonomousNextStep(
         overarchingGoal,
         lastTaskInput: lastResult.task.userInput,
         lastTaskSummary: lastResult.summary,
+        recoverySnapshot,
         actionResults: lastResult.actionResults.map((entry) => ({
           type: entry.action.type,
           description: entry.action.description,
           approved: entry.approved,
+          executionStatus: entry.executionStatus ?? null,
+          executionFailureCode: entry.executionFailureCode ?? null,
           output: entry.output,
-          blockedBy: entry.blockedBy
+          blockedBy: entry.blockedBy,
+          executionMetadata: {
+            processLifecycleStatus:
+              typeof entry.executionMetadata?.processLifecycleStatus === "string"
+                ? entry.executionMetadata.processLifecycleStatus
+                : null,
+            processStartupFailureKind:
+              typeof entry.executionMetadata?.processStartupFailureKind === "string"
+                ? entry.executionMetadata.processStartupFailureKind
+                : null,
+            processRequestedUrl:
+              typeof entry.executionMetadata?.processRequestedUrl === "string"
+                ? entry.executionMetadata.processRequestedUrl
+                : null,
+            probeUrl:
+              typeof entry.executionMetadata?.probeUrl === "string"
+                ? entry.executionMetadata.probeUrl
+                : null,
+            browserVerifyUrl:
+              typeof entry.executionMetadata?.browserVerifyUrl === "string"
+                ? entry.executionMetadata.browserVerifyUrl
+                : null
+          }
         }))
       })
     });

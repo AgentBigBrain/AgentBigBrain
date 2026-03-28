@@ -13,7 +13,13 @@ import { type GovernanceMemoryStore } from "../governanceMemory";
 import { type ExecutionReceiptStore } from "../advancedAutonomyRuntime";
 import { type AppendRuntimeTraceEventInput } from "../runtimeTraceLogger";
 import { type Stage686RuntimeActionEngine } from "../stage6_86/runtimeActions";
-import { type BrainState, type ProfileMemoryStatus, type TaskRunResult, type WorkflowPattern } from "../types";
+import {
+  type BrainState,
+  type ConversationDomainContext,
+  type ProfileMemoryStatus,
+  type TaskRunResult,
+  type WorkflowPattern
+} from "../types";
 import { type JudgmentPattern } from "../judgmentPatterns";
 import { type WorkflowSkillBridgeSummary } from "../../organs/skillRegistry/workflowSkillBridge";
 
@@ -39,6 +45,7 @@ export interface PlannerLearningContext {
 
 export interface RunTaskOptions {
   signal?: AbortSignal;
+  conversationDomainContext?: ConversationDomainContext | null;
 }
 
 export interface TaskRunnerDependencies {

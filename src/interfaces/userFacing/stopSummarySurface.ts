@@ -61,7 +61,7 @@ export function buildAutonomousGoalAbortedProgressMessage(
   reason: string
 ): string {
   return (
-    `Stopped after ${totalIterations} iteration(s). ${humanizeAutonomousStopReason(reason)}\n` +
+    `I started this, but I hit a blocker before I could finish it after ${totalIterations} iteration(s). ${humanizeAutonomousStopReason(reason)}\n` +
     `${totalApproved} action(s) approved, ${totalBlocked} blocked.`
   );
 }
@@ -78,9 +78,9 @@ export function buildAutonomousTerminalSummaryMessage(
 ): string {
   if (!completed) {
     return (
-      `Autonomous task stopped after ${totalIterations} iteration(s). ` +
-      `${totalApproved} approved, ${totalBlocked} blocked. ` +
-      `Why it stopped: ${humanizeAutonomousStopReason(reason ?? "Unknown stop reason.")}`
+      `I started this, but the run stopped before it finished after ${totalIterations} iteration(s). ` +
+      `${humanizeAutonomousStopReason(reason ?? "Unknown stop reason.")} ` +
+      `Approved ${totalApproved}, blocked ${totalBlocked}.`
     );
   }
 

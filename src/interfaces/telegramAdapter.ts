@@ -16,6 +16,7 @@ import {
   AgentPulseEvaluationRequest,
   AgentPulseEvaluationResult
 } from "../core/profileMemoryStore";
+import type { ProfileMemoryIngestRequest } from "../core/profileMemoryRuntime/contracts";
 import { AutonomousLoop, AutonomousLoopCallbacks } from "../core/agentLoop";
 import { createModelClientFromEnv } from "../models/createModelClient";
 import { createBrainConfigFromEnv } from "../core/config";
@@ -39,12 +40,14 @@ import type { ConversationInboundMediaEnvelope } from "./mediaRuntime/contracts"
 import { hasConversationMedia } from "./mediaRuntime/contracts";
 import type { ManagedProcessSnapshot } from "../organs/liveRun/managedProcessRegistry";
 import type { BrowserSessionSnapshot } from "../organs/liveRun/browserSessionRegistry";
+import type { ConversationTransportIdentityRecord } from "./sessionStore";
 
 export interface TelegramInboundMessage {
   updateId: number;
   chatId: string;
   userId: string;
   username: string;
+  transportIdentity?: ConversationTransportIdentityRecord | null;
   text: string;
   media?: ConversationInboundMediaEnvelope | null;
   authToken: string;
@@ -630,6 +633,20 @@ export class TelegramAdapter {
       lastUpdatedAt: fact.lastUpdatedAt,
       confidence: fact.confidence
     }));
+  }
+
+  /**
+   * Persists bounded direct-conversation profile memory through the orchestrator seam.
+   *
+   * @param input - Raw direct conversational user wording or validated fact candidates.
+   * @param receivedAt - Observation timestamp for the turn.
+   * @returns `true` when profile memory accepted at least one canonical fact or episode update.
+   */
+  async rememberConversationProfileInput(
+    input: string | ProfileMemoryIngestRequest,
+    receivedAt: string
+  ): Promise<boolean> {
+    return this.brain.rememberConversationProfileInput(input, receivedAt);
   }
 
   /**

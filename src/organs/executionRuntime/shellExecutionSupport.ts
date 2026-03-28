@@ -6,6 +6,7 @@ import type { ShellRuntimeProfileV1 } from "../../core/types";
 import { ShellCommandActionParams } from "../../core/types";
 import type { CappedTextBuffer, ShellExecutionDependencies } from "./contracts";
 export {
+  resolveShellSuccessWorkspaceRoot,
   resolveShellPostconditionFailure,
   type ShellPostconditionFailure
 } from "./shellExecutionPostconditions";
@@ -18,8 +19,6 @@ const KNOWN_SHELL_PARTIAL_FAILURE_PATTERNS: readonly RegExp[] = [
   /\$last(exit)?code.+has not been set/i,
   /\bnpm\.ps1\b[\s\S]{0,240}\bvariableisundefined\b/i
 ] as const;
-const WINDOWS_NODE_PACKAGE_MANAGER_COMMAND_PATTERN = /^\s*(?:npm|npx)(?:\.cmd)?\b/i;
-const WINDOWS_POWERSHELL_SCRIPT_TOKEN_PATTERN = /[;\r\n{}$]/;
 const WINDOWS_POWERSHELL_EMBEDDED_NODE_PACKAGE_MANAGER_PATTERN =
   /(^|[;{\r\n]\s*)(npm|npx)(?=\s)/gim;
 const WINDOWS_POWERSHELL_PACKAGE_MANAGER_SEGMENT_PATTERN =
@@ -31,6 +30,49 @@ const WINDOWS_PACKAGE_MANAGER_LAUNCHER_ENV_KEYS = [
   "PATHEXT",
   "WINDIR"
 ] as const;
+const SHELL_DEPENDENCY_MISSING_PATTERNS: readonly RegExp[] = [
+  /\berr_module_not_found\b/i,
+  /\bcannot find module\b/i,
+  /\bcannot find package\b/i,
+  /\bmodule not found\b/i,
+  /\bmodulenotfounderror\b/i,
+  /\bno module named\b/i
+] as const;
+const SHELL_VERSION_INCOMPATIBLE_PATTERNS: readonly RegExp[] = [
+  /\beresolve\b/i,
+  /\brequires a peer of\b/i,
+  /\bpeer dep(?:endency)?\b/i,
+  /\bunsupported engine\b/i,
+  /\bconflicting peer dependency\b/i,
+  /\bcould not resolve dependency\b/i
+] as const;
+
+/**
+ * Returns whether the command contains a Windows package-manager invocation, either as the first
+ * shell segment or later in a multi-statement PowerShell script.
+ *
+ * @param command - Raw shell command requested by the planner/runtime.
+ * @returns `true` when the command includes an npm/npx/pnpm/yarn/bun launcher segment.
+ */
+function containsWindowsPackageManagerCommand(command: string): boolean {
+  WINDOWS_POWERSHELL_PACKAGE_MANAGER_SEGMENT_PATTERN.lastIndex = 0;
+  return (
+    WINDOWS_PACKAGE_MANAGER_COMMAND_PATTERN.test(command) ||
+    WINDOWS_POWERSHELL_PACKAGE_MANAGER_SEGMENT_PATTERN.test(command)
+  );
+}
+
+export interface ShellRecoveryFailureClassification {
+  recoveryClass: "DEPENDENCY_MISSING" | "VERSION_INCOMPATIBLE";
+  provenance: "executor_mechanical";
+  detail: string;
+}
+
+export type ShellRecoveryFailureMetadata = Record<string, string> & {
+  recoveryFailureClass: string;
+  recoveryFailureProvenance: "executor_mechanical";
+  recoveryFailureDetail?: string;
+};
 
 /** Appends one stdout/stderr chunk into a bounded capture buffer. */
 export function appendChunkToBuffer(
@@ -75,29 +117,63 @@ export function hasKnownShellPartialFailure(stderrText: string): boolean {
   return KNOWN_SHELL_PARTIAL_FAILURE_PATTERNS.some((pattern) => pattern.test(normalized));
 }
 
-/**
- * Returns `true` when this Windows shell command should avoid PowerShell's npm.ps1 wrapper.
- *
- * @param profile - Runtime shell profile selected from config.
- * @param command - Raw shell command requested by the planner/runtime.
- * @returns `true` when the command should run through `cmd.exe`.
- */
-function shouldPreferWindowsCmdForCommand(
-  profile: ShellRuntimeProfileV1,
-  command: string
-): boolean {
-  return (
-    profile.platform === "win32" &&
-    (profile.shellKind === "powershell" || profile.shellKind === "pwsh") &&
-    WINDOWS_NODE_PACKAGE_MANAGER_COMMAND_PATTERN.test(command) &&
-    !WINDOWS_POWERSHELL_SCRIPT_TOKEN_PATTERN.test(command)
-  );
+/** Classifies deterministic dependency or version failures from shell output text when present. */
+export function resolveShellRecoveryFailureClassification(
+  shellOutputText: string
+): ShellRecoveryFailureClassification | null {
+  const normalized = shellOutputText.trim();
+  if (normalized.length === 0) {
+    return null;
+  }
+  if (SHELL_DEPENDENCY_MISSING_PATTERNS.some((pattern) => pattern.test(normalized))) {
+    return {
+      recoveryClass: "DEPENDENCY_MISSING",
+      provenance: "executor_mechanical",
+      detail: "Shell output showed a missing dependency or module import."
+    };
+  }
+  if (SHELL_VERSION_INCOMPATIBLE_PATTERNS.some((pattern) => pattern.test(normalized))) {
+    return {
+      recoveryClass: "VERSION_INCOMPATIBLE",
+      provenance: "executor_mechanical",
+      detail: "Shell output showed an incompatible dependency or toolchain version."
+    };
+  }
+  return null;
+}
+
+/** Builds native recovery metadata for deterministic shell spawn failures. */
+export function buildShellRecoveryFailureMetadata(
+  recoveryClass: "EXECUTABLE_NOT_FOUND" | "COMMAND_TOO_LONG"
+): ShellRecoveryFailureMetadata {
+  return {
+    recoveryFailureClass: recoveryClass,
+    recoveryFailureProvenance: "executor_mechanical"
+  };
+}
+
+/** Resolves native shell recovery metadata from one deterministic shell failure payload. */
+export function resolveShellFailureRecoveryMetadata(
+  shellOutputText: string
+): ShellRecoveryFailureMetadata | undefined {
+  const classification = resolveShellRecoveryFailureClassification(shellOutputText);
+  if (!classification) {
+    return undefined;
+  }
+  return {
+    recoveryFailureClass: classification.recoveryClass,
+    recoveryFailureProvenance: classification.provenance,
+    recoveryFailureDetail: classification.detail
+  };
 }
 
 /**
- * Returns the effective shell profile for this command, overriding Windows npm/npx commands to
- * `cmd.exe` so local package-manager invocations do not get routed through PowerShell script
- * wrappers.
+ * Returns the effective shell profile for this command.
+ *
+ * Windows package-manager commands now stay on the configured PowerShell profile and rely on
+ * `.cmd` launcher normalization instead of forcing a `cmd.exe` shell hop. That keeps execution
+ * working in stripped Windows environments where PowerShell is present but `cmd.exe` is not
+ * available to the runtime.
  *
  * @param profile - Runtime shell profile selected from config.
  * @param command - Raw shell command requested by the planner/runtime.
@@ -105,17 +181,9 @@ function shouldPreferWindowsCmdForCommand(
  */
 export function resolveEffectiveShellProfile(
   profile: ShellRuntimeProfileV1,
-  command: string
+  _command: string
 ): ShellRuntimeProfileV1 {
-  if (!shouldPreferWindowsCmdForCommand(profile, command)) {
-    return profile;
-  }
-  return {
-    ...profile,
-    shellKind: "cmd",
-    executable: "cmd.exe",
-    wrapperArgs: ["/d", "/c"]
-  };
+  return profile;
 }
 
 /**
@@ -160,7 +228,7 @@ export function resolveCommandAwareShellEnvironment(
   if (
     profile.platform !== "win32" ||
     profile.envPolicy.mode !== "allowlist" ||
-    !WINDOWS_PACKAGE_MANAGER_COMMAND_PATTERN.test(command)
+    !containsWindowsPackageManagerCommand(command)
   ) {
     return resolution;
   }

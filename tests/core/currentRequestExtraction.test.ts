@@ -28,7 +28,7 @@ test("extractActiveRequestSegment excludes trailing AgentFriend broker packets a
     "retrievalMode=query_aware",
     "",
     "[AgentFriendProfileContext]",
-    "contact.billy.note: moved projects earlier."
+    "contact.owen.note: moved projects earlier."
   ].join("\n");
 
   assert.equal(
@@ -59,6 +59,32 @@ test("extractActiveRequestSegment returns trimmed raw input when no markers are 
   assert.equal(
     extractActiveRequestSegment("   just a direct request   "),
     "just a direct request"
+  );
+});
+
+test("extractActiveRequestSegment unwraps legacy plain-text autonomous loop goals", () => {
+  assert.equal(
+    extractActiveRequestSegment(
+      "[AUTONOMOUS_LOOP_GOAL] Please organize my desktop folders into one place."
+    ),
+    "Please organize my desktop folders into one place."
+  );
+});
+
+test("extractActiveRequestSegment unwraps autonomous JSON envelopes and returns the inner current user request", () => {
+  const input = `[AUTONOMOUS_LOOP_GOAL] ${JSON.stringify({
+    goal: "Handle the first step only.",
+    initialExecutionInput: [
+      "You are in an ongoing conversation with the same user.",
+      "",
+      "Current user request:",
+      "Create a React app called Calm Drone on my desktop. Stop after the workspace is ready for edits. Do not start a preview server yet."
+    ].join("\n")
+  })}`;
+
+  assert.equal(
+    extractActiveRequestSegment(input),
+    "Create a React app called Calm Drone on my desktop. Stop after the workspace is ready for edits. Do not start a preview server yet."
   );
 });
 

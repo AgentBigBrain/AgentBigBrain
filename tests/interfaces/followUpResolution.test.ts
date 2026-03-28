@@ -185,3 +185,134 @@ test("handleImplicitProposalFlow executes direct clarifying answers while propos
   assert.equal(session.conversationTurns[0]?.role, "user");
   assert.equal(session.conversationTurns[1]?.role, "assistant");
 });
+
+test("handleImplicitProposalFlow keeps lexical approve fast paths primary without invoking proposal interpretation", async () => {
+  const session = buildSession();
+  let interpretationCalls = 0;
+
+  const reply = await handleImplicitProposalFlow(
+    session,
+    buildMessage("approve"),
+    async () => {
+      throw new Error("executeTask should not run for approve");
+    },
+    buildDeps({
+      proposalReplyInterpretationResolver: async () => {
+        interpretationCalls += 1;
+        return {
+          source: "local_intent_model",
+          kind: "approve",
+          adjustmentText: null,
+          confidence: "high",
+          explanation: "Should never be used."
+        };
+      }
+    })
+  );
+
+  assert.equal(interpretationCalls, 0);
+  assert.equal(session.activeProposal, null);
+  assert.ok(reply.includes("Draft draft-1 approved."));
+});
+
+test("handleImplicitProposalFlow promotes ambiguous active-draft approval through proposal interpretation", async () => {
+  const session = buildSession({
+    conversationTurns: [
+      {
+        role: "assistant",
+        text: "I drafted a focused-work plan for approval.",
+        at: "2026-03-07T15:02:00.000Z"
+      }
+    ]
+  });
+
+  const reply = await handleImplicitProposalFlow(
+    session,
+    buildMessage("looks good, run it"),
+    async () => {
+      throw new Error("executeTask should not run for interpreted approve");
+    },
+    buildDeps({
+      proposalReplyInterpretationResolver: async () => ({
+        source: "local_intent_model",
+        kind: "approve",
+        adjustmentText: null,
+        confidence: "high",
+        explanation: "The user is approving the active draft."
+      })
+    })
+  );
+
+  assert.equal(session.activeProposal, null);
+  assert.ok(reply.includes("Draft draft-1 approved."));
+});
+
+test("handleImplicitProposalFlow applies interpreted bounded adjustments through canonical draft helpers", async () => {
+  const session = buildSession({
+    conversationTurns: [
+      {
+        role: "assistant",
+        text: "I drafted a daily summary automation for you.",
+        at: "2026-03-07T15:02:00.000Z"
+      }
+    ]
+  });
+
+  const reply = await handleImplicitProposalFlow(
+    session,
+    buildMessage("make it weekly instead"),
+    async () => {
+      throw new Error("executeTask should not run for interpreted adjust");
+    },
+    buildDeps({
+      proposalReplyInterpretationResolver: async () => ({
+        source: "local_intent_model",
+        kind: "adjust",
+        adjustmentText: "make it weekly instead",
+        confidence: "high",
+        explanation: "The user wants to revise the active draft."
+      })
+    })
+  );
+
+  assert.equal(session.activeProposal?.status, "pending");
+  assert.match(session.activeProposal?.currentInput ?? "", /Adjustment requested by user: make it weekly instead/);
+  assert.ok(reply.includes("Draft draft-1 updated."));
+});
+
+test("handleImplicitProposalFlow fails closed on low-confidence proposal interpretation", async () => {
+  const session = buildSession({
+    conversationTurns: [
+      {
+        role: "assistant",
+        text: "I drafted a weekly summary for you.",
+        at: "2026-03-07T15:02:00.000Z"
+      }
+    ]
+  });
+  let executedInput = "";
+
+  const reply = await handleImplicitProposalFlow(
+    session,
+    buildMessage("looks fine"),
+    async (input) => {
+      executedInput = input;
+      return {
+        summary: "I can explain the draft before you approve it."
+      };
+    },
+    buildDeps({
+      proposalReplyInterpretationResolver: async () => ({
+        source: "local_intent_model",
+        kind: "approve",
+        adjustmentText: null,
+        confidence: "low",
+        explanation: "Too uncertain to trust."
+      })
+    })
+  );
+
+  assert.match(executedInput, /pending automation proposal/i);
+  assert.equal(session.activeProposal?.status, "pending");
+  assert.ok(reply.includes("Draft draft-1 is still pending."));
+});

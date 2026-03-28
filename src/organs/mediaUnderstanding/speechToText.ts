@@ -31,7 +31,7 @@ export async function interpretVoiceAttachment(
   }
 
   try {
-    const authorizationToken = await resolveMediaAuthorizationToken(config);
+    const authorizationToken = await resolveMediaAuthorizationToken(config, "transcription");
     if (!authorizationToken) {
       return buildFallbackMediaInterpretation(attachment);
     }
@@ -72,7 +72,7 @@ export async function interpretVoiceAttachment(
       transcript,
       ocrText: null,
       confidence: 0.82,
-      provenance: `${describeMediaAuthorizationSource(config)} transcription model ${config.transcriptionModel}`,
+      provenance: `${describeMediaAuthorizationSource(config, "transcription")} transcription model ${config.transcriptionModel}`,
       source: "openai_transcription",
       entityHints: []
     };

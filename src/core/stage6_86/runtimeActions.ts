@@ -12,6 +12,7 @@ import {
   evaluateBridgeQuestionEmissionV1,
   resolveBridgeQuestionAnswerV1
 } from "./bridgeQuestions";
+import { resolveOptionalBridgeQuestionTimingDeferSignalV1 } from "./bridgeQuestionTimingSupport";
 import {
   resolveOpenLoopOnConversationStackV1,
   selectOpenLoopsForPulseV1,
@@ -163,6 +164,7 @@ function ensureEntity(graph: EntityGraphV1, entityKey: string, observedAt: strin
         canonicalName: entityKey.replace(/^entity_/, "").replace(/[_-]+/g, " "),
         entityType: "concept" as const,
         disambiguator: null,
+        domainHint: null,
         aliases: [entityKey],
         firstSeenAt: observedAt,
         lastSeenAt: observedAt,
@@ -223,6 +225,8 @@ function ensureCoMentionEdge(
 export class Stage686RuntimeActionEngine {
   private readonly entityGraphStore: EntityGraphStore;
   private readonly runtimeStateStore: Stage686RuntimeStateAdapter;
+  private readonly bridgeQuestionTimingInterpretationResolver:
+    Stage686RuntimeActionEngineOptions["bridgeQuestionTimingInterpretationResolver"];
 
   /**
    * Initializes Stage 6.86 runtime action engine dependencies.
@@ -244,6 +248,8 @@ export class Stage686RuntimeActionEngine {
         sqlitePath: options.sqlitePath,
         exportJsonOnWrite: options.exportJsonOnWrite
       });
+    this.bridgeQuestionTimingInterpretationResolver =
+      options.bridgeQuestionTimingInterpretationResolver;
   }
 
   /**
@@ -507,6 +513,45 @@ export class Stage686RuntimeActionEngine {
         };
       }
       const question = decision.bridgeQuestion;
+      const bridgeTimingDeferSignal = await resolveOptionalBridgeQuestionTimingDeferSignalV1({
+        userInput: input.userInput,
+        questionPrompt: question.prompt,
+        entityLabels: [question.sourceEntityKey, question.targetEntityKey].map((entityKey) => {
+          return graph.entities.find((entity) => entity.entityKey === entityKey)?.canonicalName ?? entityKey;
+        }),
+        bridgeQuestionTimingInterpretationResolver: this.bridgeQuestionTimingInterpretationResolver
+      });
+      if (bridgeTimingDeferSignal) {
+        await this.entityGraphStore.persistGraph(graph);
+        await this.runtimeStateStore.save({
+          updatedAt: observedAt,
+          conversationStack: nextStack,
+          pulseState: nextPulseState,
+          pendingBridgeQuestions: nextPendingQuestions,
+          lastMemoryMutationReceiptHash: runtimeState.lastMemoryMutationReceiptHash
+        });
+        return {
+          approved: true,
+          output: `Bridge question deferred for context: ${question.questionId}.`,
+          violationCode: null,
+          violationMessage: null,
+          executionMetadata: {
+            stage686PulseKind: kind,
+            stage686BridgeQuestionId: question.questionId,
+            stage686BridgeThreadKey: question.threadKey ?? null,
+            stage686BridgeTimingDecision: bridgeTimingDeferSignal.kind,
+            stage686BridgeTimingDeferred: true
+          },
+          traceDetails: {
+            stage686PulseKind: kind,
+            stage686BridgeQuestionId: question.questionId,
+            stage686BridgeThreadKey: question.threadKey ?? null,
+            stage686BridgeTimingDecision: bridgeTimingDeferSignal.kind,
+            stage686BridgeTimingDeferred: true,
+            stage686BridgeTimingExplanation: bridgeTimingDeferSignal.explanation
+          }
+        };
+      }
       nextPendingQuestions = [...nextPendingQuestions.filter((entry) => entry.questionId !== question.questionId), question]
         .sort((left, right) => left.createdAt.localeCompare(right.createdAt))
         .slice(-64);

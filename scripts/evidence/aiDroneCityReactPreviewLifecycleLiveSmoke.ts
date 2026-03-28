@@ -1,7 +1,8 @@
 /**
- * @fileoverview Runs a real conversation-manager smoke for the reusable Desktop React preview
- * workflow: reuse `AI Drone City`, start a localhost preview server, open it in the browser, keep
- * it open through a normal chat turn, then close both the browser and linked preview process.
+ * @fileoverview Runs a real conversation-manager smoke for a fresh Desktop React preview
+ * workflow: create a new React landing-page workspace, start a localhost preview server, open it
+ * in the browser, keep it open through a normal chat turn, then close both the browser and linked
+ * preview process.
  */
 
 import assert from "node:assert/strict";
@@ -121,8 +122,8 @@ const LIVE_RUN_RUNTIME_PATH = path.resolve(
 );
 const CONVERSATION_ID = `ai-drone-city-react-preview-lifecycle-smoke-${RUN_ID}`;
 const USER_ID = "ai-drone-city-preview-smoke-user";
-const USERNAME = "anthonybenny";
-const FOLDER_NAME = "AI Drone City";
+const USERNAME = "averybrooks11";
+const FOLDER_NAME = `Drone React Preview Smoke ${RUN_ID}`;
 const TURN_TIMEOUT_MS = Number.isFinite(Number(process.env.AI_DRONE_CITY_PREVIEW_SMOKE_TURN_TIMEOUT_MS))
   ? Math.max(60_000, Number(process.env.AI_DRONE_CITY_PREVIEW_SMOKE_TURN_TIMEOUT_MS))
   : 300_000;
@@ -133,7 +134,9 @@ const DIRECT_REPLY_SETTLE_MS = 2_000;
 const KEEP_TEMP_ARTIFACTS =
   process.env.AI_DRONE_CITY_PREVIEW_SMOKE_KEEP_TMP?.trim().toLowerCase() === "true";
 const PROVIDER_BLOCK_PATTERN =
-  /(?:429|exceeded your current quota|rate limit|fetch failed|request timed out|socket hang up|ECONNRESET|effective backend is mock|missing OPENAI_API_KEY)/i;
+  /(?:429|exceeded your current quota|usage limit|purchase more credits|try again at|rate limit|fetch failed|request timed out|socket hang up|ECONNRESET|effective backend is mock|missing OPENAI_API_KEY|provider or runtime step timed out)/i;
+const BOUNDED_RUNTIME_BLOCK_PATTERN =
+  /(?:\bEXECUTABLE_NOT_FOUND\b|\bCOMMAND_TOO_LONG\b|\bDEPENDENCY_MISSING\b|\bVERSION_INCOMPATIBLE\b|\bPROCESS_NOT_READY\b|\bTARGET_NOT_RUNNING\b|unable to resolve pwsh or powershell executable|Deterministic recovery stopped for (?:EXECUTABLE_NOT_FOUND|COMMAND_TOO_LONG|DEPENDENCY_MISSING|VERSION_INCOMPATIBLE|PROCESS_NOT_READY|TARGET_NOT_RUNNING)|Timed out waiting for turn_\d+ to complete)/i;
 
 const CAPABILITY_SUMMARY_FIXTURE: ConversationCapabilitySummary = {
   provider: "telegram",
@@ -552,6 +555,42 @@ function findProviderBlockerReason(
   return assistantTurn?.text ?? null;
 }
 
+function findBoundedRuntimeBlockerReason(
+  session: ConversationSession | null,
+  createdAtFloor?: string
+): string | null {
+  if (!session) {
+    return null;
+  }
+  const blockedJob = [...session.recentJobs]
+    .reverse()
+    .find(
+      (job) =>
+        (!createdAtFloor || job.createdAt >= createdAtFloor) &&
+        (
+          (job.status === "failed" && typeof job.errorMessage === "string") ||
+          typeof job.resultSummary === "string"
+        ) &&
+        BOUNDED_RUNTIME_BLOCK_PATTERN.test(
+          [job.errorMessage ?? "", job.resultSummary ?? ""].join("\n")
+        )
+    );
+  if (blockedJob) {
+    return [blockedJob.errorMessage ?? "", blockedJob.resultSummary ?? ""]
+      .filter((value) => value.trim().length > 0)
+      .join("\n");
+  }
+  const assistantTurn = [...session.conversationTurns]
+    .reverse()
+    .find(
+      (turn) =>
+        turn.role === "assistant" &&
+        (!createdAtFloor || turn.at >= createdAtFloor) &&
+        BOUNDED_RUNTIME_BLOCK_PATTERN.test(turn.text)
+    );
+  return assistantTurn?.text ?? null;
+}
+
 async function cleanupTrackedSmokeResources(session: ConversationSession | null): Promise<void> {
   const browserSessionId = extractTrackedBrowserSessionId(session);
   const previewProcessLeaseId = extractPreviewProcessLeaseId(session);
@@ -572,7 +611,7 @@ async function cleanupTrackedSmokeResources(session: ConversationSession | null)
     await awaitCleanup(cleanupExecutor.executeWithOutcome({
       id: `cleanup:${browserSessionId}:close_browser`,
       type: "close_browser",
-      description: `Close lingering AI Drone City preview browser session ${browserSessionId}.`,
+      description: `Close lingering React preview browser session ${browserSessionId}.`,
       params: {
         sessionId: browserSessionId
       },
@@ -583,7 +622,7 @@ async function cleanupTrackedSmokeResources(session: ConversationSession | null)
     await awaitCleanup(cleanupExecutor.executeWithOutcome({
       id: `cleanup:${previewProcessLeaseId}:stop_process`,
       type: "stop_process",
-      description: `Stop lingering AI Drone City preview process ${previewProcessLeaseId}.`,
+      description: `Stop lingering React preview process ${previewProcessLeaseId}.`,
       params: {
         leaseId: previewProcessLeaseId
       },
@@ -592,7 +631,8 @@ async function cleanupTrackedSmokeResources(session: ConversationSession | null)
   }
 }
 
-async function main(): Promise<void> {
+export async function runAiDroneCityReactPreviewLifecycleLiveSmoke():
+Promise<AiDroneCityPreviewLifecycleArtifact> {
   ensureEnvLoaded();
   await mkdir(path.dirname(ARTIFACT_PATH), { recursive: true });
   await cleanupLingeringPlaywrightAutomationBrowsers().catch(() => undefined);
@@ -601,15 +641,12 @@ async function main(): Promise<void> {
 
   const desktopPath = await resolveDesktopPath();
   const targetFolderPath = path.join(desktopPath, FOLDER_NAME);
+  await rm(targetFolderPath, { recursive: true, force: true }).catch(() => undefined);
   const variantNamesBefore = await listTargetVariantNames(desktopPath, FOLDER_NAME);
   const packageJsonPath = path.join(targetFolderPath, "package.json");
   const distIndexPath = path.join(targetFolderPath, "dist", "index.html");
   const nodeModulesPath = path.join(targetFolderPath, "node_modules");
   const existingWorkspacePresent = await pathExists(packageJsonPath);
-  const existingWorkspaceReady =
-    existingWorkspacePresent &&
-    (await isDirectory(nodeModulesPath)) &&
-    (await pathExists(distIndexPath));
   const previewPort = await reserveLoopbackPort();
   const expectedPreviewBaseUrl = `http://127.0.0.1:${previewPort}`;
   const envSnapshot = applyEnvOverrides({
@@ -637,17 +674,27 @@ async function main(): Promise<void> {
     }
     smokeModelSnapshot = applyEnvOverrides(buildSmokeModelEnvOverrides(localProbe).envOverrides);
 
-    const openTurnInput = existingWorkspaceReady
-      ? `Handle this end to end: reuse the existing ${FOLDER_NAME} React workspace on my desktop. ` +
-        `Start its local preview server from that workspace on the exact loopback URL ${expectedPreviewBaseUrl}/, open that running localhost preview in the browser for me, and leave it open. ` +
-        `Do not recreate the project or reinstall packages if ${FOLDER_NAME}\\package.json, ${FOLDER_NAME}\\node_modules, and ${FOLDER_NAME}\\dist\\index.html are already present. ` +
-        `Only repair what is missing. Use host 127.0.0.1 and port ${previewPort}. Do not open dist/index.html directly when a real localhost preview server can be started.`
-      : `Handle this end to end: build or repair the ${FOLDER_NAME} React workspace on my desktop, then start its local preview server on ${expectedPreviewBaseUrl}/, open that localhost preview in the browser, and leave it open for me. Use host 127.0.0.1 and port ${previewPort}.`;
+    const scaffoldTurnInput =
+      `Handle this first step only: create a new React single page app in a folder called ${FOLDER_NAME} on my desktop. ` +
+      "Use a real scaffold-capable toolchain step, then install dependencies so package.json and node_modules exist. " +
+      "For this turn, stop after the workspace is ready for edits. Do not start a preview server, do not verify localhost, and do not open a browser yet.";
+    const buildTurnInput =
+      `Reuse the existing ${FOLDER_NAME} workspace on my desktop. ` +
+      "Turn it into a calm drone-themed landing page with one homepage hero and four additional sections. " +
+      "Write the real page implementation, then run the build so dist/index.html exists. " +
+      "For this turn, stop after the source edits and build proof exist. Do not start a preview server, do not verify localhost, and do not open a browser yet.";
+    const previewTurnInput =
+      `Reuse the existing ${FOLDER_NAME} workspace on my desktop. ` +
+      `Start its localhost preview server using host 127.0.0.1 and port ${previewPort}, leave that preview running, and do not open a browser yet. ` +
+      "Do not open dist/index.html directly when a real localhost preview server can be started.";
+    const openBrowserTurnInput =
+      `Open the running localhost preview for ${FOLDER_NAME} in the browser and leave it open for me. ` +
+      `Use the tracked preview that is already running on host 127.0.0.1 port ${previewPort}.`;
     const conversationTurnInput =
-      `Looks good. Before changing anything, just talk with me for a minute about what makes ${FOLDER_NAME} feel playful. ` +
+      `Looks good. Before changing anything, just talk with me for a minute about whether ${FOLDER_NAME} feels calm enough. ` +
       "Reply in two short paragraphs and keep the page open.";
     const closeTurnInput =
-      `Thanks. Please close ${FOLDER_NAME} and anything it needs so we can move on.`;
+      `Thanks. Please close ${FOLDER_NAME}, the browser window, and the localhost preview server so we can move on.`;
 
     const brain = buildDefaultBrain();
     const adapter = new TelegramAdapter(brain, {
@@ -779,113 +826,182 @@ async function main(): Promise<void> {
     };
 
     const turn1At = new Date().toISOString();
-    const sessionAfterTurn1 = await runTurn(1, openTurnInput, turn1At);
+    const sessionAfterTurn1 = await runTurn(1, scaffoldTurnInput, turn1At);
     const turn1ProviderBlocker = findProviderBlockerReason(sessionAfterTurn1, turn1At);
     if (turn1ProviderBlocker) {
       throw new Error(turn1ProviderBlocker);
     }
-    const previewUrl = extractPreviewUrl(sessionAfterTurn1);
-    const browserSessionId = extractTrackedBrowserSessionId(sessionAfterTurn1);
-    const previewProcessLeaseId = extractPreviewProcessLeaseId(sessionAfterTurn1);
-    const variantNamesAfterOpen = await listTargetVariantNames(desktopPath, FOLDER_NAME);
-    const openBrowserSession =
-      sessionAfterTurn1.browserSessions.find((entry) => entry.status === "open") ?? null;
+    const turn1RuntimeBlocker = findBoundedRuntimeBlockerReason(sessionAfterTurn1, turn1At);
+    if (turn1RuntimeBlocker) {
+      throw new Error(turn1RuntimeBlocker);
+    }
+    assert.equal(extractTargetFolder(sessionAfterTurn1), targetFolderPath);
+    assert.ok(await isDirectory(targetFolderPath), "React preview smoke target folder is missing.");
+    assert.ok(
+      await pathExists(packageJsonPath),
+      "React preview smoke package.json is missing."
+    );
+    assert.ok(await isDirectory(nodeModulesPath), "React preview smoke node_modules is missing.");
+    assert.equal(
+      sessionAfterTurn1.browserSessions.some((entry) => entry.status === "open"),
+      false,
+      "Turn 1 unexpectedly opened a browser before the preview-open step."
+    );
+    assert.equal(
+      Boolean(extractPreviewProcessLeaseId(sessionAfterTurn1)),
+      false,
+      "Turn 1 unexpectedly started a preview process before the preview-start step."
+    );
+
+    const turn2At = new Date(Date.now() + 5_000).toISOString();
+    const sessionAfterTurn2 = await runTurn(2, buildTurnInput, turn2At);
+    const turn2ProviderBlocker = findProviderBlockerReason(sessionAfterTurn2, turn2At);
+    if (turn2ProviderBlocker) {
+      throw new Error(turn2ProviderBlocker);
+    }
+    const turn2RuntimeBlocker = findBoundedRuntimeBlockerReason(sessionAfterTurn2, turn2At);
+    if (turn2RuntimeBlocker) {
+      throw new Error(turn2RuntimeBlocker);
+    }
+    assert.equal(extractTargetFolder(sessionAfterTurn2), targetFolderPath);
+    assert.ok(await pathExists(distIndexPath), "Turn 2 React preview smoke dist/index.html is missing.");
+    assert.equal(
+      sessionAfterTurn2.browserSessions.some((entry) => entry.status === "open"),
+      false,
+      "Turn 2 unexpectedly opened a browser before the browser-open step."
+    );
+    assert.equal(
+      Boolean(extractPreviewProcessLeaseId(sessionAfterTurn2)),
+      false,
+      "Turn 2 unexpectedly started a preview process before the preview-start step."
+    );
+
+    const turn3At = new Date(Date.now() + 10_000).toISOString();
+    const sessionAfterTurn3 = await runTurn(3, previewTurnInput, turn3At);
+    const turn3ProviderBlocker = findProviderBlockerReason(sessionAfterTurn3, turn3At);
+    if (turn3ProviderBlocker) {
+      throw new Error(turn3ProviderBlocker);
+    }
+    const turn3RuntimeBlocker = findBoundedRuntimeBlockerReason(sessionAfterTurn3, turn3At);
+    if (turn3RuntimeBlocker) {
+      throw new Error(turn3RuntimeBlocker);
+    }
+    const previewUrl = extractPreviewUrl(sessionAfterTurn3);
+    const previewProcessLeaseId = extractPreviewProcessLeaseId(sessionAfterTurn3);
+    const runningWorkspacePreviewProcessCountAfterStart =
+      await countRunningWorkspacePreviewProcesses(adapter, targetFolderPath);
+    assert.ok(isLoopbackHttpPreviewUrl(previewUrl), "Turn 3 did not record a localhost preview URL.");
+    assert.ok(
+      previewUrl?.startsWith(expectedPreviewBaseUrl),
+      `Turn 3 did not use the requested preview URL ${expectedPreviewBaseUrl}/.`
+    );
+    assert.ok(previewProcessLeaseId, "Turn 3 did not leave a linked preview-process lease.");
+    assert.equal(
+      sessionAfterTurn3.browserSessions.some((entry) => entry.status === "open"),
+      false,
+      "Turn 3 unexpectedly opened a browser before the browser-open step."
+    );
     const previewReadyAfterOpen = await isPreviewReady(previewUrl);
     const previewProcessRunningAfterOpen = await isPreviewProcessRunning(
       adapter,
       previewProcessLeaseId
     );
-    const runningWorkspacePreviewProcessCountAfterOpen =
-      await countRunningWorkspacePreviewProcesses(adapter, targetFolderPath);
-    assert.equal(extractTargetFolder(sessionAfterTurn1), targetFolderPath);
-    assert.ok(await isDirectory(targetFolderPath), "AI Drone City target folder is missing.");
+    assert.ok(previewReadyAfterOpen, "Turn 3 preview is not ready.");
+    assert.ok(previewProcessRunningAfterOpen, "Turn 3 preview process is not still running.");
     assert.ok(
-      await pathExists(packageJsonPath),
-      "AI Drone City package.json is missing."
-    );
-    assert.ok(await isDirectory(nodeModulesPath), "AI Drone City node_modules is missing.");
-    assert.ok(await pathExists(distIndexPath), "AI Drone City dist/index.html is missing.");
-    assert.ok(isLoopbackHttpPreviewUrl(previewUrl), "Turn 1 did not record a localhost preview URL.");
-    assert.ok(
-      previewUrl?.startsWith(expectedPreviewBaseUrl),
-      `Turn 1 did not use the requested preview URL ${expectedPreviewBaseUrl}/.`
-    );
-    assert.ok(browserSessionId, "Turn 1 did not leave a tracked browser session open.");
-    assert.ok(openBrowserSession, "Turn 1 did not leave an open browser session.");
-    assert.ok(previewProcessLeaseId, "Turn 1 did not leave a linked preview-process lease.");
-    assert.ok(previewReadyAfterOpen, "Turn 1 preview is not ready.");
-    assert.ok(previewProcessRunningAfterOpen, "Turn 1 preview process is not still running.");
-    assert.ok(
-      runningWorkspacePreviewProcessCountAfterOpen >= 1,
-      "Turn 1 did not leave any AI Drone City preview process running."
-    );
-    assert.ok(
-      variantNamesAfterOpen.length <= Math.max(variantNamesBefore.length, 1),
-      `AI Drone City created duplicate Desktop folders: before=${variantNamesBefore.join(",")} after=${variantNamesAfterOpen.join(",")}`
+      runningWorkspacePreviewProcessCountAfterStart >= 1,
+      "Turn 3 did not leave any React preview process running."
     );
 
-    const turn2At = new Date(Date.now() + 5_000).toISOString();
-    const sessionAfterTurn2 = await runTurn(2, conversationTurnInput, turn2At, true);
-    const turn2Capture = allTurns[allTurns.length - 1];
-    const latestAssistantTurn = [...sessionAfterTurn2.conversationTurns]
+    const turn4At = new Date(Date.now() + 15_000).toISOString();
+    const sessionAfterTurn4 = await runTurn(4, openBrowserTurnInput, turn4At);
+    const turn4ProviderBlocker = findProviderBlockerReason(sessionAfterTurn4, turn4At);
+    if (turn4ProviderBlocker) {
+      throw new Error(turn4ProviderBlocker);
+    }
+    const turn4RuntimeBlocker = findBoundedRuntimeBlockerReason(sessionAfterTurn4, turn4At);
+    if (turn4RuntimeBlocker) {
+      throw new Error(turn4RuntimeBlocker);
+    }
+    const browserSessionId = extractTrackedBrowserSessionId(sessionAfterTurn4);
+    const variantNamesAfterOpen = await listTargetVariantNames(desktopPath, FOLDER_NAME);
+    const openBrowserSession =
+      sessionAfterTurn4.browserSessions.find((entry) => entry.status === "open") ?? null;
+    const runningWorkspacePreviewProcessCountAfterOpen =
+      await countRunningWorkspacePreviewProcesses(adapter, targetFolderPath);
+    assert.ok(browserSessionId, "Turn 4 did not leave a tracked browser session open.");
+    assert.ok(openBrowserSession, "Turn 4 did not leave an open browser session.");
+    assert.ok(
+      variantNamesAfterOpen.length <= Math.max(variantNamesBefore.length, 1),
+      `React preview smoke created duplicate Desktop folders: before=${variantNamesBefore.join(",")} after=${variantNamesAfterOpen.join(",")}`
+    );
+
+    const turn5At = new Date(Date.now() + 20_000).toISOString();
+    const sessionAfterTurn5 = await runTurn(5, conversationTurnInput, turn5At, true);
+    const turn5Capture = allTurns[allTurns.length - 1];
+    const latestAssistantTurn = [...sessionAfterTurn5.conversationTurns]
       .reverse()
       .find((turn) => turn.role === "assistant");
     const conversationReply =
-      extractLatestUserVisibleReply(turn2Capture?.notifications ?? []) ??
+      extractLatestUserVisibleReply(turn5Capture?.notifications ?? []) ??
       latestAssistantTurn?.text ??
       "";
     const browserDuringConversation =
-      sessionAfterTurn2.browserSessions.find((entry) => entry.id === browserSessionId) ??
-      sessionAfterTurn2.browserSessions.find((entry) => entry.status === "open") ??
+      sessionAfterTurn5.browserSessions.find((entry) => entry.id === browserSessionId) ??
+      sessionAfterTurn5.browserSessions.find((entry) => entry.status === "open") ??
       null;
-    const turn2FreshJobs = sessionAfterTurn2.recentJobs.filter(
-      (job) => job.createdAt >= turn2At
+    const turn5FreshJobs = sessionAfterTurn5.recentJobs.filter(
+      (job) => job.createdAt >= turn5At
     );
     const previewProcessStillRunningDuringConversation = await isPreviewProcessRunning(
       adapter,
       previewProcessLeaseId
     );
-    assert.match(conversationReply, /\n\n/, "Turn 2 did not stay conversational.");
+    assert.match(conversationReply, /\n\n/, "Turn 5 did not stay conversational.");
     assert.equal(
-      sessionAfterTurn2.queuedJobs.length,
+      sessionAfterTurn5.queuedJobs.length,
       0,
-      "Turn 2 unexpectedly left queued work behind."
+      "Turn 5 unexpectedly left queued work behind."
     );
     assert.equal(
-      sessionAfterTurn2.runningJobId,
+      sessionAfterTurn5.runningJobId,
       null,
-      "Turn 2 unexpectedly left work running."
+      "Turn 5 unexpectedly left work running."
     );
     assert.equal(
-      turn2FreshJobs.some((job) => job.executionInput.startsWith("[AUTONOMOUS_LOOP_GOAL]")),
+      turn5FreshJobs.some((job) => job.executionInput.startsWith("[AUTONOMOUS_LOOP_GOAL]")),
       false,
-      "Turn 2 unexpectedly restarted autonomous execution."
+      "Turn 5 unexpectedly restarted autonomous execution."
     );
     assert.equal(
       browserDuringConversation?.status,
       "open",
-      "AI Drone City browser did not remain open during conversation."
+      "React preview browser did not remain open during conversation."
     );
     assert.equal(
       previewProcessStillRunningDuringConversation,
       true,
-      "AI Drone City preview process did not remain running during conversation."
+      "React preview process did not remain running during conversation."
     );
     assert.equal(
       await isPreviewReady(previewUrl),
       true,
-      "AI Drone City localhost preview stopped responding during conversation."
+      "React localhost preview stopped responding during conversation."
     );
 
-    const turn3At = new Date(Date.now() + 10_000).toISOString();
-    const sessionAfterTurn3 = await runTurn(3, closeTurnInput, turn3At);
-    const turn3ProviderBlocker = findProviderBlockerReason(sessionAfterTurn3, turn3At);
-    if (turn3ProviderBlocker) {
-      throw new Error(turn3ProviderBlocker);
+    const turn6At = new Date(Date.now() + 25_000).toISOString();
+    const sessionAfterTurn6 = await runTurn(6, closeTurnInput, turn6At);
+    const turn6ProviderBlocker = findProviderBlockerReason(sessionAfterTurn6, turn6At);
+    if (turn6ProviderBlocker) {
+      throw new Error(turn6ProviderBlocker);
+    }
+    const turn6RuntimeBlocker = findBoundedRuntimeBlockerReason(sessionAfterTurn6, turn6At);
+    if (turn6RuntimeBlocker) {
+      throw new Error(turn6RuntimeBlocker);
     }
     const trackedBrowserAfterClose =
-      sessionAfterTurn3.browserSessions.find((entry) => entry.id === browserSessionId) ??
-      sessionAfterTurn3.browserSessions[0] ??
+      sessionAfterTurn6.browserSessions.find((entry) => entry.id === browserSessionId) ??
+      sessionAfterTurn6.browserSessions[0] ??
       null;
     const previewStopped = !(await isPreviewReady(previewUrl));
     const previewProcessStopped = await isPreviewProcessStopped(adapter, previewProcessLeaseId);
@@ -947,10 +1063,11 @@ async function main(): Promise<void> {
 
     if (artifact.status !== "PASS") {
       throw new Error(
-        "AI Drone City React preview lifecycle smoke failed. " +
+        "React preview lifecycle smoke failed. " +
         JSON.stringify(artifact.checks)
       );
     }
+    return artifact;
   } catch (error) {
     const localProbe = await probeLocalIntentModelFromEnv().catch(() => ({
       enabled: false,
@@ -965,7 +1082,11 @@ async function main(): Promise<void> {
     const artifact: AiDroneCityPreviewLifecycleArtifact = {
       generatedAt: new Date().toISOString(),
       command: COMMAND_NAME,
-      status: PROVIDER_BLOCK_PATTERN.test(String(error)) ? "BLOCKED" : "FAIL",
+      status:
+        PROVIDER_BLOCK_PATTERN.test(String(error)) ||
+        BOUNDED_RUNTIME_BLOCK_PATTERN.test(String(error))
+          ? "BLOCKED"
+          : "FAIL",
       blockerReason: error instanceof Error ? error.message : String(error),
       localIntentModel: {
         enabled: localProbe.enabled,
@@ -1020,6 +1141,10 @@ async function main(): Promise<void> {
     }
     restoreEnv(envSnapshot);
   }
+}
+
+async function main(): Promise<void> {
+  await runAiDroneCityReactPreviewLifecycleLiveSmoke();
 }
 
 if (require.main === module) {

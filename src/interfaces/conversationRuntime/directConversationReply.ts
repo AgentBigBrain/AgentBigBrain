@@ -82,6 +82,9 @@ export async function runDirectConversationReplyWithRuntime(
       "You may speak in first person. " +
       "If the user asks your name or what to call you, answering with 'BigBrain' is appropriate. " +
       "If the user asks what you are, answer plainly without pretending to be human. " +
+      "If the provided prompt includes known identity facts about the user, answer self-identity questions from those facts. " +
+      "If the prompt only includes a low-confidence transport identity hint, you may mention it cautiously as a transport/profile hint rather than confirmed memory. " +
+      "Do not say you only know the user's name 'from this chat' when the prompt already gives you a concrete identity fact. " +
       "Answer the user's current conversational turn itself. " +
       "If they want to pause work and chat for a minute, do that instead of continuing the previous workflow output. " +
       "Do not restate, continue, or paraphrase the last workflow summary unless the user explicitly asks about that work. " +

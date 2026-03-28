@@ -8,7 +8,12 @@ import { type SkillInventoryEntry } from "../../organs/skillRegistry/contracts";
 import { buildWorkflowSkillBridgeSummary } from "../../organs/skillRegistry/workflowSkillBridge";
 import { extractActiveRequestSegment } from "../currentRequestExtraction";
 import { type AppendRuntimeTraceEventInput } from "../runtimeTraceLogger";
-import { type TaskRequest, type TaskRunResult, type WorkflowPattern } from "../types";
+import {
+  type ConversationDomainContext,
+  type TaskRequest,
+  type TaskRunResult,
+  type WorkflowPattern
+} from "../types";
 import { type JudgmentPattern, type JudgmentPatternStore } from "../judgmentPatterns";
 import { type WorkflowLearningStore } from "../workflowLearningStore";
 import {
@@ -21,10 +26,18 @@ export interface BuildProfileAwareInputDependencies {
   memoryBroker: Pick<MemoryBrokerOrgan, "buildPlannerInput">;
 }
 
+export interface BuildProfileAwareInputOptions {
+  conversationDomainContext?: ConversationDomainContext | null;
+}
+
 export interface LoadPlannerLearningContextDependencies {
   workflowLearningStore?: Pick<WorkflowLearningStore, "getRelevantPatterns">;
   judgmentPatternStore?: Pick<JudgmentPatternStore, "getRelevantPatterns">;
   listAvailableSkills?: () => Promise<readonly SkillInventoryEntry[]>;
+}
+
+export interface LoadPlannerLearningContextOptions {
+  conversationDomainContext?: ConversationDomainContext | null;
 }
 
 export interface PlanOrchestratorAttemptInput {
@@ -38,6 +51,7 @@ export interface PlanOrchestratorAttemptInput {
   task: TaskRequest;
   attemptNumber: number;
   userInput: string;
+  conversationDomainContext?: ConversationDomainContext | null;
 }
 
 /**
@@ -49,9 +63,12 @@ export interface PlanOrchestratorAttemptInput {
  */
 export async function buildProfileAwareInput(
   deps: BuildProfileAwareInputDependencies,
-  task: TaskRequest
+  task: TaskRequest,
+  options: BuildProfileAwareInputOptions = {}
 ): Promise<ProfileAwareInput> {
-  return deps.memoryBroker.buildPlannerInput(task);
+  return deps.memoryBroker.buildPlannerInput(task, {
+    sessionDomainContext: options.conversationDomainContext
+  });
 }
 
 /**
@@ -63,7 +80,8 @@ export async function buildProfileAwareInput(
  */
 export async function loadPlannerLearningContext(
   deps: LoadPlannerLearningContextDependencies,
-  plannerUserInput: string
+  plannerUserInput: string,
+  options: LoadPlannerLearningContextOptions = {}
 ): Promise<PlannerLearningContext> {
   const contextQuery = extractActiveRequestSegment(plannerUserInput).trim();
   if (!contextQuery) {
@@ -77,7 +95,11 @@ export async function loadPlannerLearningContext(
   let workflowHints: readonly WorkflowPattern[] = [];
   if (deps.workflowLearningStore) {
     try {
-      workflowHints = await deps.workflowLearningStore.getRelevantPatterns(contextQuery, 3);
+      workflowHints = await deps.workflowLearningStore.getRelevantPatterns(
+        contextQuery,
+        3,
+        options.conversationDomainContext?.dominantLane ?? null
+      );
     } catch (error) {
       console.error(
         `[WorkflowLearning] non-fatal hint retrieval failure: ${(error as Error).message}`
@@ -142,7 +164,9 @@ export async function planOrchestratorAttempt(
     {
       playbookSelection: playbookPlanningContext,
       workflowHints: input.plannerLearningContext.workflowHints,
-      judgmentHints: input.plannerLearningContext.judgmentHints
+      judgmentHints: input.plannerLearningContext.judgmentHints,
+      workflowBridge: input.plannerLearningContext.workflowBridge,
+      conversationDomainContext: input.conversationDomainContext ?? null
     }
   );
   const cappedActions = rawPlan.actions.slice(0, input.maxActionsPerTask);

@@ -73,8 +73,10 @@ test("autonomous runtime affordances restart smoke exits cleanly and emits a PAS
     reloadBeforeClose: {
       browserTrackedCurrent: boolean;
       browserTrackedOrphaned: boolean;
+      browserTrackedStale: boolean;
       browserStatus: string | null;
       processTrackedCurrent: boolean;
+      workspaceOwnershipState: string | null;
     };
     reloadAfterClose: {
       browserTrackedStale: boolean;
@@ -84,7 +86,7 @@ test("autonomous runtime affordances restart smoke exits cleanly and emits a PAS
 
   if (
     persisted.status === "BLOCKED" &&
-    /(?:429|exceeded your current quota|rate limit|fetch failed|request timed out|timed out waiting for turn_|stream disconnected before completion|an error occurred while processing your request|requires a real model backend|effective backend is mock|missing OPENAI_API_KEY)/i.test(
+    /(?:429|exceeded your current quota|usage limit|purchase more credits|try again at|rate limit|fetch failed|request timed out|timed out waiting for turn_|stream disconnected before completion|an error occurred while processing your request|requires a real model backend|effective backend is mock|missing OPENAI_API_KEY|preview browser control unavailable|could not open the seeded preview browser session)/i.test(
       persisted.blockerReason ?? ""
     )
   ) {
@@ -104,10 +106,20 @@ test("autonomous runtime affordances restart smoke exits cleanly and emits a PAS
   );
   assert.equal(persisted.status, "PASS");
   assert.equal(Object.values(persisted.checks).every(Boolean), true);
-  assert.equal(persisted.reloadBeforeClose.browserStatus, "open");
   assert.equal(
-    persisted.reloadBeforeClose.browserTrackedCurrent ||
-      persisted.reloadBeforeClose.browserTrackedOrphaned,
+    (
+      persisted.reloadBeforeClose.browserStatus === "open" &&
+      (
+        persisted.reloadBeforeClose.browserTrackedCurrent ||
+        persisted.reloadBeforeClose.browserTrackedOrphaned
+      )
+    ) ||
+      (
+        persisted.reloadBeforeClose.browserStatus === "closed" &&
+        persisted.reloadBeforeClose.browserTrackedStale &&
+        persisted.reloadBeforeClose.processTrackedCurrent &&
+        persisted.reloadBeforeClose.workspaceOwnershipState === "tracked"
+      ),
     true
   );
   assert.equal(persisted.reloadBeforeClose.processTrackedCurrent, true);

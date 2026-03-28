@@ -17,6 +17,7 @@ export interface CodexClientRuntimeSettings {
   requestTimeoutMs: number;
   workingDirectory: string;
   env?: NodeJS.ProcessEnv;
+  spawnProcess?: typeof spawn;
 }
 
 interface CodexThreadEvent {
@@ -77,6 +78,31 @@ function buildCodexPrompt(request: StructuredCompletionRequest): string {
 }
 
 /**
+ * Builds the bounded `codex exec` argument list for one structured turn.
+ *
+ * @param model - Resolved Codex model metadata.
+ * @param schemaPath - JSON Schema file path passed to `codex exec --output-schema`.
+ * @returns CLI arguments that keep the prompt off the command line.
+ */
+function buildStructuredCodexExecArgs(
+  model: ResolvedCodexModel,
+  schemaPath: string
+): string[] {
+  return [
+    "exec",
+    "--json",
+    "--skip-git-repo-check",
+    "--sandbox",
+    "read-only",
+    "--model",
+    model.providerModel,
+    "--output-schema",
+    schemaPath,
+    "-"
+  ];
+}
+
+/**
  * Executes one structured Codex CLI turn and validates the final JSON payload.
  *
  * @param settings - Codex runtime settings including timeout and isolated working directory.
@@ -130,24 +156,14 @@ async function executeStructuredCodexTurn(
   const cliPath = resolveCodexCliPath(settings.env);
   const prompt = buildCodexPrompt(request);
   const env = settings.env ?? process.env;
+  const spawnProcess = settings.spawnProcess ?? spawn;
 
   return await new Promise<CodexStructuredTurnResult>((resolve, reject) => {
-    const args = [
-      "exec",
-      "--json",
-      "--skip-git-repo-check",
-      "--sandbox",
-      "read-only",
-      "--model",
-      model.providerModel,
-      "--output-schema",
-      schemaPath,
-      prompt
-    ];
-    const child = spawn(cliPath, args, {
+    const args = buildStructuredCodexExecArgs(model, schemaPath);
+    const child = spawnProcess(cliPath, args, {
       cwd: settings.workingDirectory,
       env,
-      stdio: ["ignore", "pipe", "pipe"]
+      stdio: ["pipe", "pipe", "pipe"]
     });
     const items: unknown[] = [];
     let stderr = "";
@@ -227,6 +243,16 @@ async function executeStructuredCodexTurn(
     child.on("error", (error) => {
       rejectOnce(new Error(`Failed to launch Codex CLI: ${error.message}`));
     });
+
+    child.stdin.setDefaultEncoding("utf8");
+    child.stdin.on("error", (error) => {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (settled || code === "EPIPE") {
+        return;
+      }
+      rejectOnce(new Error(`Failed to stream Codex prompt: ${(error as Error).message}`));
+    });
+    child.stdin.end(prompt);
 
     child.on("close", (code) => {
       cleanup();

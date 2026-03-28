@@ -6,6 +6,7 @@ import {
   DistilledPacketV1,
   FirstPrinciplesPacketV1,
   Plan,
+  ConversationDomainContext,
   PlannerLearningHintSummaryV1,
   TaskRequest,
   WorkflowPattern
@@ -28,18 +29,14 @@ import {
   PlannerFailureStore
 } from "../core/plannerFailureStore";
 import { Stage685PlaybookPlanningContext } from "../core/stage6_85PlaybookRuntime";
-import {
-  inferRequiredActionType,
-} from "./plannerPolicy/explicitActionIntent";
+import { inferRequiredActionType } from "./plannerPolicy/explicitActionIntent";
 import {
   normalizeFingerprintSegment,
   PLANNER_FAILURE_COOLDOWN_MS,
   PLANNER_FAILURE_MAX_STRIKES,
   PLANNER_FAILURE_WINDOW_MS
 } from "./plannerPolicy/plannerFailurePolicy";
-import {
-  PlannerExecutionEnvironmentContext,
-} from "./plannerPolicy/executionStyleContracts";
+import { PlannerExecutionEnvironmentContext } from "./plannerPolicy/executionStyleContracts";
 import { resolveUserOwnedPathHints } from "./plannerPolicy/userOwnedPathHints";
 import {
   assertPlannerActionValidation,
@@ -57,13 +54,26 @@ import {
   ensureRespondMessages,
   synthesizeRespondMessage
 } from "./plannerPolicy/responseSynthesisFallback";
-import { buildDeterministicExplicitRuntimeActionFallbackActions } from "./plannerPolicy/explicitRuntimeActionFallback";
+import {
+  buildDeterministicExplicitRuntimeActionFallbackActions,
+  buildDeterministicFrameworkBuildFallbackActions
+} from "./plannerPolicy/explicitRuntimeActionFallback";
 import { buildDeterministicWorkspaceRecoveryFallbackActions } from "./plannerPolicy/workspaceRecoveryFallback";
 import {
   buildLearningHintSummary,
   buildLearningPromptGuidance
 } from "./plannerPolicy/learningPromptGuidance";
 import { type WorkflowSkillBridgeSummary } from "./skillRegistry/workflowSkillBridge";
+import {
+  distillPlannerLessons,
+  type DistilledRelevantLesson,
+  isPlannerTimeoutFailure,
+  resolveDefaultExecutionEnvironmentContext
+} from "./plannerSupport";
+import {
+  isDeterministicFrameworkBuildLaneRequest,
+  isFrameworkWorkspacePreparationRequest
+} from "./plannerPolicy/liveVerificationPolicy";
 
 const FIRST_PRINCIPLES_RISK_PATTERNS: readonly RegExp[] = [
   /\b(delete|remove|rm)\b/i,
@@ -86,93 +96,7 @@ export interface PlannerPlanOptions {
   workflowHints?: readonly WorkflowPattern[];
   judgmentHints?: readonly JudgmentPattern[];
   workflowBridge?: WorkflowSkillBridgeSummary | null;
-}
-
-interface DistilledRelevantLesson {
-  packet: DistilledPacketV1;
-  concepts: readonly string[];
-}
-
-/**
- * Resolves default execution environment context from available runtime context.
- *
- * **Why it exists:**
- * Prevents divergent selection of default execution environment context by keeping rules in one function.
- *
- * **What it talks to:**
- * - Uses local constants/helpers within this module.
- * @returns Computed `PlannerExecutionEnvironmentContext` result.
- */
-function resolveDefaultExecutionEnvironmentContext(): PlannerExecutionEnvironmentContext {
-  const platform = process.platform === "win32" || process.platform === "darwin" || process.platform === "linux"
-    ? process.platform
-    : "linux";
-  const shellKind = platform === "win32" ? "powershell" : "bash";
-  const userOwnedPaths = resolveUserOwnedPathHints();
-  return {
-    platform,
-    shellKind,
-    invocationMode: "inline_command",
-    commandMaxChars: 4_000,
-    desktopPath: userOwnedPaths.desktopPath,
-    documentsPath: userOwnedPaths.documentsPath,
-    downloadsPath: userOwnedPaths.downloadsPath
-  };
-}
-
-/**
- * Distills planner lessons while suppressing quarantined memory entries.
- *
- * **Why it exists:**
- * Planner memory should improve planning quality, but one quarantined lesson must not abort a live
- * user task when the lesson can simply be excluded from prompt context.
- *
- * **What it talks to:**
- * - Uses `SemanticLesson` (import `SemanticLesson`) from `../core/semanticMemory`.
- * - Uses `buildDefaultRetrievalQuarantinePolicy` from `../core/retrievalQuarantine`.
- * - Uses `distillExternalContent` from `../core/retrievalQuarantine`.
- * - Uses `requireDistilledPacketForPlanner` from `../core/retrievalQuarantine`.
- *
- * @param relevantLessons - Retrieved lesson candidates from semantic memory.
- * @param retrievalPolicy - Deterministic retrieval quarantine policy for this planning pass.
- * @returns Planner-safe distilled lessons ready for prompt inclusion.
- */
-function distillPlannerLessons(
-  relevantLessons: readonly SemanticLesson[],
-  retrievalPolicy: ReturnType<typeof buildDefaultRetrievalQuarantinePolicy>
-): DistilledRelevantLesson[] {
-  const distilledLessons: DistilledRelevantLesson[] = [];
-  for (const lesson of relevantLessons) {
-    const distillation = distillExternalContent(
-      {
-        sourceKind: "document",
-        sourceId: lesson.id,
-        contentType: "text/plain",
-        rawContent: lesson.text,
-        observedAt: lesson.createdAt
-      },
-      retrievalPolicy
-    );
-    if (!distillation.ok) {
-      console.warn(
-        `[Planner] Suppressing quarantined lesson ${lesson.id}: ` +
-        `${distillation.blockCode} (${distillation.reason})`
-      );
-      continue;
-    }
-    const packetValidation = requireDistilledPacketForPlanner(distillation.packet);
-    if (packetValidation) {
-      throw new Error(
-        `Retrieval quarantine packet validation failed for lesson ${lesson.id}: ` +
-        `${packetValidation.blockCode} (${packetValidation.reason})`
-      );
-    }
-    distilledLessons.push({
-      packet: distillation.packet,
-      concepts: lesson.concepts
-    });
-  }
-  return distilledLessons;
+  conversationDomainContext?: ConversationDomainContext | null;
 }
 
 export class PlannerOrgan {
@@ -477,7 +401,12 @@ export class PlannerOrgan {
     await this.cleanupFailureFingerprintState(nowMs);
     await this.assertFailureCooldownOpen(failureFingerprint, nowMs);
 
-    const relevantLessons = await this.memoryStore.getRelevantLessons(task.userInput, 8);
+    const relevantLessons = await this.memoryStore.getRelevantLessons(
+      task.userInput,
+      8,
+      undefined,
+      options.conversationDomainContext?.dominantLane ?? null
+    );
     const retrievalPolicy = buildDefaultRetrievalQuarantinePolicy(new Date().toISOString());
     const distilledLessons = distillPlannerLessons(relevantLessons, retrievalPolicy);
     const lessonsText = distilledLessons.length > 0
@@ -525,6 +454,38 @@ export class PlannerOrgan {
     );
     const requiredActionType = inferRequiredActionType(currentUserRequest, task.userInput);
     const playbookSelection = options.playbookSelection ?? null;
+    const eagerDeterministicFrameworkBuildActions =
+      isDeterministicFrameworkBuildLaneRequest(task.userInput)
+        ? buildDeterministicFrameworkBuildFallbackActions(
+            task.userInput,
+            this.executionEnvironment
+          )
+        : [];
+
+    if (eagerDeterministicFrameworkBuildActions.length > 0) {
+      const fallbackValidation = evaluatePlannerActionValidation(
+        currentUserRequest,
+        requiredActionType,
+        eagerDeterministicFrameworkBuildActions,
+        task.userInput,
+        this.executionEnvironment
+      );
+      assertPlannerActionValidation(fallbackValidation, requiredActionType);
+      await this.clearFailureFingerprint(failureFingerprint);
+      const isWorkspacePreparationOnly = isFrameworkWorkspacePreparationRequest(task.userInput);
+      return {
+        taskId: task.id,
+        plannerNotes:
+          isWorkspacePreparationOnly
+            ? "Deterministic framework workspace-preparation fallback " +
+              `(deterministic_framework_workspace_preparation_fallback=${eagerDeterministicFrameworkBuildActions[0]?.type ?? "unknown"})`
+            : "Deterministic framework build lifecycle fallback " +
+              `(deterministic_framework_build_fallback=${eagerDeterministicFrameworkBuildActions[0]?.type ?? "unknown"})`,
+        firstPrinciples: firstPrinciplesPacket,
+        learningHints,
+        actions: eagerDeterministicFrameworkBuildActions
+      };
+    }
 
     try {
       // Planner failures are fatal by policy: no deterministic fallback plan generation.
@@ -543,7 +504,8 @@ export class PlannerOrgan {
         output,
         currentUserRequest,
         requiredActionType,
-        task.userInput
+        task.userInput,
+        this.executionEnvironment
       );
       const initialValidation = evaluatePlannerActionValidation(
         currentUserRequest,
@@ -570,7 +532,8 @@ export class PlannerOrgan {
           repairedOutput,
           currentUserRequest,
           requiredActionType,
-          task.userInput
+          task.userInput,
+          this.executionEnvironment
         );
         const repairedValidation = evaluatePlannerActionValidation(
           currentUserRequest,
@@ -607,11 +570,40 @@ export class PlannerOrgan {
             actions: deterministicWorkspaceRecoveryFallbackActions
           };
         }
+        const deterministicFrameworkBuildFallbackActions =
+          repairedPreparation.actions.length === 0 || repairedValidation.needsRepair
+            ? buildDeterministicFrameworkBuildFallbackActions(
+                task.userInput,
+                this.executionEnvironment
+              )
+            : [];
+        if (deterministicFrameworkBuildFallbackActions.length > 0) {
+          const fallbackValidation = evaluatePlannerActionValidation(
+            currentUserRequest,
+            requiredActionType,
+            deterministicFrameworkBuildFallbackActions,
+            task.userInput,
+            this.executionEnvironment
+          );
+          assertPlannerActionValidation(fallbackValidation, requiredActionType);
+          await this.clearFailureFingerprint(failureFingerprint);
+          return {
+            taskId: task.id,
+            plannerNotes:
+              `${repairedOutput.plannerNotes || output.plannerNotes || "Model planner output"} ` +
+              `(backend=${this.modelClient.backend}, model=${plannerModel}, repair=true, ` +
+              `deterministic_framework_build_fallback=${deterministicFrameworkBuildFallbackActions[0]?.type ?? "unknown"})`,
+            firstPrinciples: firstPrinciplesPacket,
+            learningHints,
+            actions: deterministicFrameworkBuildFallbackActions
+          };
+        }
         const deterministicExplicitRuntimeFallbackActions =
           repairedPreparation.actions.length === 0 || repairedValidation.needsRepair
             ? buildDeterministicExplicitRuntimeActionFallbackActions(
                 currentUserRequest,
-                requiredActionType
+                requiredActionType,
+                task.userInput
               )
             : [];
         if (deterministicExplicitRuntimeFallbackActions.length > 0) {
@@ -720,6 +712,34 @@ export class PlannerOrgan {
         actions: postPolicy.actions
       };
     } catch (error) {
+      const deterministicFrameworkBuildFallbackActions =
+        isPlannerTimeoutFailure(error)
+          ? buildDeterministicFrameworkBuildFallbackActions(
+              task.userInput,
+              this.executionEnvironment
+            )
+          : [];
+      if (deterministicFrameworkBuildFallbackActions.length > 0) {
+        const fallbackValidation = evaluatePlannerActionValidation(
+          currentUserRequest,
+          requiredActionType,
+          deterministicFrameworkBuildFallbackActions,
+          task.userInput,
+          this.executionEnvironment
+        );
+        assertPlannerActionValidation(fallbackValidation, requiredActionType);
+        await this.clearFailureFingerprint(failureFingerprint);
+        return {
+          taskId: task.id,
+          plannerNotes:
+            `Planner timed out before model planning completed ` +
+            `(backend=${this.modelClient.backend}, model=${plannerModel}, ` +
+            `deterministic_framework_build_timeout_fallback=${deterministicFrameworkBuildFallbackActions[0]?.type ?? "unknown"})`,
+          firstPrinciples: firstPrinciplesPacket,
+          learningHints,
+          actions: deterministicFrameworkBuildFallbackActions
+        };
+      }
       await this.recordFailureFingerprint(failureFingerprint, Date.now());
       throw error;
     }

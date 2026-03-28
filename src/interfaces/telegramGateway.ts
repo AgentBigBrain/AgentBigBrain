@@ -1,6 +1,4 @@
-/**
- * @fileoverview Implements Telegram long-poll transport that maps platform updates into secure adapter messages.
- */
+/** @fileoverview Implements Telegram long-poll transport that maps platform updates into secure adapter messages. */
 import path from "node:path";
 import { TelegramAdapter } from "./telegramAdapter";
 import { AgentPulseScheduler } from "./agentPulseScheduler";
@@ -8,33 +6,21 @@ import { ConversationManager } from "./conversationManager";
 import { type ConversationNotifierTransport } from "./conversationRuntime/managerContracts";
 import { TelegramInterfaceConfig } from "./runtimeConfig";
 import { InterfaceSessionStore } from "./sessionStore";
-import type {
-  TelegramNotifierOptions,
-  TelegramOutboundDeliveryObserver
-} from "./transportRuntime/contracts";
+import type { TelegramNotifierOptions, TelegramOutboundDeliveryObserver } from "./transportRuntime/contracts";
 import { deliverPreparedTransportResponse, handleAcceptedTransportConversation } from "./transportRuntime/inboundDispatch";
 import { pollTelegramUpdatesOnce, runTelegramPollingLoop } from "./transportRuntime/gatewayLifecycle";
 import { abortAutonomousTransportTask } from "./transportRuntime/autonomousAbortControl";
-import {
-  allocateNextTelegramDraftId,
-  createTelegramGatewayNotifier,
-  prepareTelegramUpdate,
-  type TelegramUpdate
-} from "./transportRuntime/telegramGatewayRuntime";
+import { prepareTelegramUpdate, type TelegramUpdate } from "./transportRuntime/telegramGatewayRuntime";
+import { allocateNextTelegramDraftId, createTelegramGatewayNotifier } from "./transportRuntime/telegramGatewayNotifier";
 import { sendObservedTelegramGatewayReply } from "./transportRuntime/telegramGatewayObservation";
-import {
-  enrichAcceptedTelegramUpdateWithMedia,
-  extractTelegramChatIdFromConversationKey
-} from "./transportRuntime/telegramConversationDispatch";
+import { buildTelegramDirectReplyObservation, buildTelegramNotifierBaseTrace, buildTelegramTransportResponseObservation } from "./transportRuntime/telegramOutboundDeliveryTracing";
+import { enrichAcceptedTelegramUpdateWithMedia, extractTelegramChatIdFromConversationKey } from "./transportRuntime/telegramConversationDispatch";
 import { runStage685CheckpointLiveReview } from "./CheckpointReviewRunners/stage685CheckpointReviewRunner";
 import { runGatewayCheckpointReview } from "./checkpointReviewRouting";
 import { createDynamicPulseEntityGraphGetter } from "./entityGraphRuntime";
 import { renderPulseUserFacingSummaryV1 } from "./pulseUxRuntime";
 import { selectUserFacingSummary } from "./userFacingResult";
-import {
-  runGatewaySessionAutonomousTask,
-  runGatewaySessionTextTask
-} from "./gatewaySessionExecution";
+import { runGatewaySessionAutonomousTask, runGatewaySessionTextTask } from "./gatewaySessionExecution";
 import { runCheckpoint611LiveReview } from "./CheckpointReviewRunners/stage6_5Checkpoint6_11Live";
 import { runCheckpoint613LiveReview } from "./CheckpointReviewRunners/stage6_5Checkpoint6_13Live";
 import { runCheckpoint675LiveReview } from "../core/stage6_75CheckpointLive";
@@ -42,20 +28,11 @@ import { EntityGraphStore } from "../core/entityGraphStore";
 import { buildTelegramCapabilitySummary } from "./conversationRuntime/capabilityIntrospection";
 import { MediaUnderstandingOrgan } from "../organs/mediaUnderstanding/mediaInterpretation";
 import { SkillRegistryStore } from "../organs/skillRegistry/skillRegistryStore";
-import type { LocalIntentModelResolver } from "../organs/languageUnderstanding/localIntentModelContracts";
-import { InterfaceBrainRegistry } from "./interfaceBrainRegistry";
-export type { TelegramOutboundDeliveryObservation } from "./transportRuntime/contracts";
-interface TelegramGatewayOptions {
-  sessionStore?: InterfaceSessionStore;
-  entityGraphStore?: EntityGraphStore;
-  mediaUnderstandingOrgan?: MediaUnderstandingOrgan;
-  localIntentModelResolver?: LocalIntentModelResolver;
-  brainRegistry?: InterfaceBrainRegistry;
-  onOutboundDelivery?: TelegramOutboundDeliveryObserver;
-}
+import type { AutonomyBoundaryInterpretationResolver, ContinuationInterpretationResolver, ContextualFollowupInterpretationResolver, ContextualReferenceInterpretationResolver, EntityDomainHintInterpretationResolver, EntityReferenceInterpretationResolver, EntityTypeInterpretationResolver, HandoffControlInterpretationResolver, IdentityInterpretationResolver, LocalIntentModelResolver, StatusRecallBoundaryInterpretationResolver, TopicKeyInterpretationResolver } from "../organs/languageUnderstanding/localIntentModelContracts";
+import type { ProposalReplyInterpretationResolver } from "../organs/languageUnderstanding/localIntentModelProposalReplyContracts";
+import { InterfaceBrainRegistry } from "./interfaceBrainRegistry"; export type { TelegramOutboundDeliveryObservation } from "./transportRuntime/contracts"; interface TelegramGatewayOptions { sessionStore?: InterfaceSessionStore; entityGraphStore?: EntityGraphStore; mediaUnderstandingOrgan?: MediaUnderstandingOrgan; localIntentModelResolver?: LocalIntentModelResolver; autonomyBoundaryInterpretationResolver?: AutonomyBoundaryInterpretationResolver; statusRecallBoundaryInterpretationResolver?: StatusRecallBoundaryInterpretationResolver; continuationInterpretationResolver?: ContinuationInterpretationResolver; contextualFollowupInterpretationResolver?: ContextualFollowupInterpretationResolver; contextualReferenceInterpretationResolver?: ContextualReferenceInterpretationResolver; entityDomainHintInterpretationResolver?: EntityDomainHintInterpretationResolver; entityReferenceInterpretationResolver?: EntityReferenceInterpretationResolver; entityTypeInterpretationResolver?: EntityTypeInterpretationResolver; handoffControlInterpretationResolver?: HandoffControlInterpretationResolver; identityInterpretationResolver?: IdentityInterpretationResolver; proposalReplyInterpretationResolver?: ProposalReplyInterpretationResolver; topicKeyInterpretationResolver?: TopicKeyInterpretationResolver; brainRegistry?: InterfaceBrainRegistry; onOutboundDelivery?: TelegramOutboundDeliveryObserver; }
 export class TelegramGateway {
-  private running = false;
-  private nextOffset = 0;
+  private running = false; private nextOffset = 0; private nextOutboundDeliverySequence = 1;
   private readonly sessionStore: InterfaceSessionStore;
   private readonly conversationManager: ConversationManager;
   private readonly pulseScheduler: AgentPulseScheduler;
@@ -63,6 +40,8 @@ export class TelegramGateway {
   private readonly entityGraphStore: EntityGraphStore;
   private readonly mediaUnderstandingOrgan?: MediaUnderstandingOrgan;
   private readonly onOutboundDelivery?: TelegramOutboundDeliveryObserver;
+  private readonly entityDomainHintInterpretationResolver?: EntityDomainHintInterpretationResolver;
+  private readonly entityTypeInterpretationResolver?: EntityTypeInterpretationResolver;
   private readonly skillRegistryStore = new SkillRegistryStore(path.resolve(process.cwd(), "runtime/skills"));
   private readonly brainRegistry: InterfaceBrainRegistry;
   private nextDraftId = 1;
@@ -85,23 +64,15 @@ export class TelegramGateway {
    * @param config - Configuration or policy settings applied here.
    * @param options - Optional tuning knobs for this operation.
    */
-  constructor(
-    private readonly adapter: TelegramAdapter,
-    private readonly config: TelegramInterfaceConfig,
-    options: TelegramGatewayOptions = {}
-  ) {
-    const listManagedProcessSnapshots =
-      typeof this.adapter.listManagedProcessSnapshots === "function"
-        ? async () => this.adapter.listManagedProcessSnapshots()
-        : undefined;
-    const listBrowserSessionSnapshots =
-      typeof this.adapter.listBrowserSessionSnapshots === "function"
-        ? async () => this.adapter.listBrowserSessionSnapshots()
-        : undefined;
+  constructor(private readonly adapter: TelegramAdapter, private readonly config: TelegramInterfaceConfig, options: TelegramGatewayOptions = {}) {
+    const listManagedProcessSnapshots = typeof this.adapter.listManagedProcessSnapshots === "function" ? async () => this.adapter.listManagedProcessSnapshots() : undefined;
+    const listBrowserSessionSnapshots = typeof this.adapter.listBrowserSessionSnapshots === "function" ? async () => this.adapter.listBrowserSessionSnapshots() : undefined;
     this.sessionStore = options.sessionStore ?? new InterfaceSessionStore();
     this.entityGraphStore = options.entityGraphStore ?? new EntityGraphStore();
     this.mediaUnderstandingOrgan = options.mediaUnderstandingOrgan;
     this.onOutboundDelivery = options.onOutboundDelivery;
+    this.entityDomainHintInterpretationResolver = options.entityDomainHintInterpretationResolver;
+    this.entityTypeInterpretationResolver = options.entityTypeInterpretationResolver;
     this.brainRegistry = options.brainRegistry ?? new InterfaceBrainRegistry();
     this.conversationManager = new ConversationManager(this.sessionStore, {
       ackDelayMs: this.config.security.ackDelayMs,
@@ -123,6 +94,8 @@ export class TelegramGateway {
         const graph = await this.entityGraphStore.getGraph();
         return this.adapter.queryContinuityFacts(graph, request);
       },
+      rememberConversationProfileInput: async (userInput, receivedAt) =>
+        this.adapter.rememberConversationProfileInput(userInput, receivedAt),
       reviewConversationMemory: async (request) =>
         this.adapter.reviewConversationMemory(
           request.reviewTaskId,
@@ -154,9 +127,20 @@ export class TelegramGateway {
           request.nowIso
         ),
       localIntentModelResolver: options.localIntentModelResolver,
+      autonomyBoundaryInterpretationResolver: options.autonomyBoundaryInterpretationResolver,
+      statusRecallBoundaryInterpretationResolver: options.statusRecallBoundaryInterpretationResolver,
+      continuationInterpretationResolver: options.continuationInterpretationResolver,
+      contextualFollowupInterpretationResolver: options.contextualFollowupInterpretationResolver,
+      contextualReferenceInterpretationResolver: options.contextualReferenceInterpretationResolver,
+      entityReferenceInterpretationResolver: options.entityReferenceInterpretationResolver,
+      handoffControlInterpretationResolver: options.handoffControlInterpretationResolver,
+      identityInterpretationResolver: options.identityInterpretationResolver,
+      proposalReplyInterpretationResolver: options.proposalReplyInterpretationResolver,
+      topicKeyInterpretationResolver: options.topicKeyInterpretationResolver,
+      getEntityGraph: async () => this.entityGraphStore.getGraph(),
+      reconcileEntityAliasCandidate: async (request) => { const result = await this.entityGraphStore.reconcileAliasCandidate(request); return { acceptedAlias: result.acceptedAlias, rejectionReason: result.rejectionReason }; },
       listAvailableSkills: async () => this.skillRegistryStore.listAvailableSkills(),
-      describeRuntimeCapabilities: async () =>
-        buildTelegramCapabilitySummary(this.config),
+      describeRuntimeCapabilities: async () => buildTelegramCapabilitySummary(this.config),
       listManagedProcessSnapshots,
       listBrowserSessionSnapshots,
       abortActiveAutonomousRun: (conversationId) =>
@@ -181,6 +165,8 @@ export class TelegramGateway {
           }
           const notifier = this.createConversationNotifier(chatId, {
             nativeDraftStreamingAllowed: session.conversationVisibility === "private"
+          }, {
+            sessionKey: session.conversationId
           });
           return this.conversationManager.enqueueSystemJob(
             session.conversationId,
@@ -219,6 +205,9 @@ export class TelegramGateway {
 
   /** Starts Telegram polling and pulse scheduling for this gateway instance. */
   async start(): Promise<void> {
+    if (this.running) {
+      return;
+    }
     this.running = true;
     this.pulseScheduler.start();
     await runTelegramPollingLoop({
@@ -232,10 +221,7 @@ export class TelegramGateway {
   }
 
   /** Stops Telegram polling and background pulse work for this gateway instance. */
-  stop(): void {
-    this.running = false;
-    this.pulseScheduler.stop();
-  }
+  stop(): void { this.running = false; this.pulseScheduler.stop(); }
 
   /** Polls Telegram once and advances the gateway offset cursor. */
   private async pollOnce(): Promise<void> {
@@ -250,6 +236,21 @@ export class TelegramGateway {
 
   /** Processes one Telegram update through validation, enrichment, and conversation handling. */
   private async processUpdate(update: TelegramUpdate): Promise<void> {
+    const inboundEventId = String(update.update_id ?? "");
+    const deliverTransportResponse = async (
+      chatId: string,
+      text: string
+    ) =>
+      sendObservedTelegramGatewayReply(
+        this.config,
+        chatId,
+        text,
+        this.onOutboundDelivery,
+        buildTelegramTransportResponseObservation(
+          this.allocateOutboundDeliverySequence(),
+          inboundEventId
+        )
+      );
     const prepared = prepareTelegramUpdate({
       update,
       sharedSecret: this.config.security.sharedSecret,
@@ -264,13 +265,7 @@ export class TelegramGateway {
     if (prepared.kind === "rejected") {
       await deliverPreparedTransportResponse(
         prepared.responseText,
-        (text: string) =>
-          sendObservedTelegramGatewayReply(
-            this.config,
-            prepared.chatId,
-            text,
-            this.onOutboundDelivery
-          ),
+        (text: string) => deliverTransportResponse(prepared.chatId, text),
         "TELEGRAM_SEND_FAILED"
       );
       return;
@@ -278,13 +273,7 @@ export class TelegramGateway {
     if (prepared.kind === "stop") {
       await deliverPreparedTransportResponse(
         prepared.responseText,
-        (text: string) =>
-          sendObservedTelegramGatewayReply(
-            this.config,
-            prepared.chatId,
-            text,
-            this.onOutboundDelivery
-          ),
+        (text: string) => deliverTransportResponse(prepared.chatId, text),
         "TELEGRAM_SEND_FAILED"
       );
       return;
@@ -298,28 +287,23 @@ export class TelegramGateway {
     if (enrichedPrepared.kind === "rejected") {
       await deliverPreparedTransportResponse(
         enrichedPrepared.responseText,
-        (text: string) =>
-          sendObservedTelegramGatewayReply(
-            this.config,
-            enrichedPrepared.chatId,
-            text,
-            this.onOutboundDelivery
-          ),
+        (text: string) => deliverTransportResponse(enrichedPrepared.chatId, text),
         "TELEGRAM_SEND_FAILED"
       );
       return;
     }
 
+    const sessionKey = `telegram:${enrichedPrepared.chatId}:${enrichedPrepared.userId}`;
     const notifier = this.createConversationNotifier(enrichedPrepared.chatId, {
       nativeDraftStreamingAllowed: enrichedPrepared.conversationVisibility === "private"
-    });
-    const sessionKey = `telegram:${enrichedPrepared.chatId}:${enrichedPrepared.userId}`;
+    }, buildTelegramNotifierBaseTrace(sessionKey, inboundEventId, enrichedPrepared.inbound.receivedAt ?? null));
     await handleAcceptedTransportConversation({
       inbound: {
         provider: "telegram",
         conversationId: enrichedPrepared.chatId,
         userId: enrichedPrepared.userId,
         username: enrichedPrepared.username,
+        transportIdentity: enrichedPrepared.transportIdentity ?? null,
         conversationVisibility: enrichedPrepared.conversationVisibility,
         text: enrichedPrepared.inbound.text,
         media: enrichedPrepared.inbound.media ?? null,
@@ -330,7 +314,13 @@ export class TelegramGateway {
       conversationManager: this.conversationManager,
       entityGraphStore: this.entityGraphStore,
       dynamicPulseEnabled: this.config.security.enableDynamicPulse,
+      entityDomainHintInterpretationResolver: this.config.security.enableDynamicPulse ? this.entityDomainHintInterpretationResolver : undefined,
+      entityTypeInterpretationResolver: this.config.security.enableDynamicPulse ? this.entityTypeInterpretationResolver : undefined,
       abortControllers: this.autonomousAbortControllers,
+      resolveEntityGraphDomainHint: async () => {
+        const domainHint = (await this.sessionStore.getSession(sessionKey))?.domainContext.dominantLane ?? "unknown";
+        return domainHint === "unknown" ? null : domainHint;
+      },
       runTextTask: (input: string, receivedAt: string) =>
         runGatewaySessionTextTask(
           this.sessionStore,
@@ -359,7 +349,13 @@ export class TelegramGateway {
           this.config,
           enrichedPrepared.chatId,
           reply,
-          this.onOutboundDelivery
+          this.onOutboundDelivery,
+          buildTelegramDirectReplyObservation(
+            this.allocateOutboundDeliverySequence(),
+            sessionKey,
+            inboundEventId,
+            enrichedPrepared.inbound.receivedAt ?? null
+          )
         ),
       deliveryFailureCode: "TELEGRAM_SEND_FAILED",
       onEntityGraphMutationFailure: (error) => {
@@ -367,25 +363,37 @@ export class TelegramGateway {
       }
     });
   }
-
   /** Creates the notifier transport used for one Telegram conversation. */
   private createConversationNotifier(
     chatId: string,
-    options: TelegramNotifierOptions
+    options: TelegramNotifierOptions,
+    baseTrace?: {
+      sessionKey?: string | null;
+      inboundEventId?: string | null;
+      inboundReceivedAt?: string | null;
+    }
   ): ConversationNotifierTransport {
     return createTelegramGatewayNotifier(
       this.config,
       chatId,
       options,
       () => this.allocateDraftId(),
+      () => this.allocateOutboundDeliverySequence(),
+      baseTrace,
       this.onOutboundDelivery
     );
   }
-
   /** Allocates the next deterministic Telegram draft identifier for native draft streaming. */
   private allocateDraftId(): number {
     const allocation = allocateNextTelegramDraftId(this.nextDraftId);
     this.nextDraftId = allocation.nextDraftId;
     return allocation.draftId;
+  }
+
+  /** Allocates a monotonic sequence for observed outbound deliveries in this gateway instance. */
+  private allocateOutboundDeliverySequence(): number {
+    const sequence = this.nextOutboundDeliverySequence;
+    this.nextOutboundDeliverySequence += 1;
+    return sequence;
   }
 }

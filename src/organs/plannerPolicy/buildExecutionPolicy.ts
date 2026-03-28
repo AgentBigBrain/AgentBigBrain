@@ -30,6 +30,7 @@ import {
   isWorkspaceRecoveryPostShutdownRetryInstruction,
   isTrackedArtifactEditPreviewPlan
 } from "./buildExecutionActionHeuristics";
+import { hasFrameworkAppUnsafePackageNameScaffold } from "./frameworkBuildActionHeuristics";
 import {
   hasBroadProcessNameShutdownAction,
   hasCandidateOnlyHolderShutdownAction,
@@ -298,6 +299,16 @@ export function assessExecutionStyleBuildPlan(
 
   if (
     requiresFrameworkAppScaffoldAction(currentUserRequest) &&
+    hasFrameworkAppUnsafePackageNameScaffold(currentUserRequest, actions)
+  ) {
+    return {
+      valid: false,
+      issueCode: "FRAMEWORK_APP_PACKAGE_SAFE_SCAFFOLD_REQUIRED"
+    };
+  }
+
+  if (
+    requiresFrameworkAppScaffoldAction(currentUserRequest) &&
     hasFrameworkAppNonInPlaceScaffoldRepair(currentUserRequest, actions)
   ) {
     return {
@@ -306,10 +317,7 @@ export function assessExecutionStyleBuildPlan(
     };
   }
 
-  if (
-    requiresFrameworkAppScaffoldAction(currentUserRequest) &&
-    hasFrameworkAppAdHocPreviewServer(currentUserRequest, actions)
-  ) {
+  if (hasFrameworkAppAdHocPreviewServer(currentUserRequest, actions)) {
     return {
       valid: false,
       issueCode: "FRAMEWORK_APP_NATIVE_PREVIEW_REQUIRED"

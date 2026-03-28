@@ -11,9 +11,12 @@ import { withFileLock, writeFileAtomic } from "./fileLock";
 import { withSqliteDatabase } from "./sqliteStore";
 import { EntityGraphV1 } from "./types";
 import {
+  applyEntityAliasCandidateToGraph,
   applyEntityExtractionToGraph,
   createEmptyEntityGraphV1,
   extractEntityCandidates,
+  Stage686EntityAliasCandidateInput,
+  Stage686EntityAliasMutationResult,
   Stage686EntityExtractionInput,
   Stage686EntityGraphMutationOptions,
   Stage686EntityGraphMutationResult
@@ -111,6 +114,35 @@ export class EntityGraphStore {
       options
     );
     await this.persistGraph(mutation.graph);
+    return mutation;
+  }
+
+  /**
+   * Reconciles one bounded alias candidate against an existing entity node.
+   *
+   * **Why it exists:**
+   * Gives higher-level conversational interpretation seams one explicit store API for alias
+   * reconciliation so they do not mutate entity-graph snapshots directly or bypass canonical
+   * collision handling.
+   *
+   * **What it talks to:**
+   * - Uses `applyEntityAliasCandidateToGraph` (import `applyEntityAliasCandidateToGraph`) from `./stage6_86EntityGraph`.
+   * - Uses `Stage686EntityAliasCandidateInput` (import `Stage686EntityAliasCandidateInput`) from `./stage6_86EntityGraph`.
+   * - Uses `Stage686EntityAliasMutationResult` (import `Stage686EntityAliasMutationResult`) from `./stage6_86EntityGraph`.
+   *
+   * @param input - Alias candidate and provenance for this reconciliation attempt.
+   * @param options - Optional tuning knobs for bounded alias growth.
+   * @returns Promise resolving to the deterministic alias-reconciliation result.
+   */
+  async reconcileAliasCandidate(
+    input: Stage686EntityAliasCandidateInput,
+    options: Stage686EntityGraphMutationOptions = {}
+  ): Promise<Stage686EntityAliasMutationResult> {
+    const currentGraph = await this.getGraph();
+    const mutation = applyEntityAliasCandidateToGraph(currentGraph, input, options);
+    if (mutation.graph !== currentGraph) {
+      await this.persistGraph(mutation.graph);
+    }
     return mutation;
   }
 
@@ -429,6 +461,14 @@ function normalizeEntityNode(value: unknown, index: number): EntityGraphV1["enti
     typeof candidate.canonicalName !== "string" ||
     typeof candidate.entityType !== "string" ||
     !(candidate.disambiguator === null || typeof candidate.disambiguator === "string") ||
+    !(
+      candidate.domainHint === undefined ||
+      candidate.domainHint === null ||
+      candidate.domainHint === "profile" ||
+      candidate.domainHint === "relationship" ||
+      candidate.domainHint === "workflow" ||
+      candidate.domainHint === "system_policy"
+    ) ||
     !isStringArray(candidate.aliases) ||
     typeof candidate.firstSeenAt !== "string" ||
     typeof candidate.lastSeenAt !== "string" ||
@@ -451,6 +491,7 @@ function normalizeEntityNode(value: unknown, index: number): EntityGraphV1["enti
     canonicalName: candidate.canonicalName,
     entityType: candidate.entityType,
     disambiguator: candidate.disambiguator,
+    domainHint: candidate.domainHint ?? null,
     aliases: [...candidate.aliases].sort((left, right) => left.localeCompare(right)),
     firstSeenAt: candidate.firstSeenAt,
     lastSeenAt: candidate.lastSeenAt,

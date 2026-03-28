@@ -35,7 +35,12 @@ export function createPersistentConversationStatusSender(
   if (!canUseConversationAckTimerForSession(sessionKey, notify)) {
     return null;
   }
-  return createAutonomousProgressSender(notify);
+  return createAutonomousProgressSender(notify, {
+    source: "worker_status_panel",
+    sessionKey,
+    jobId: job.id,
+    jobCreatedAt: job.createdAt
+  });
 }
 
 /**
@@ -103,13 +108,17 @@ export function buildTerminalPersistentStatusUpdate(
   if (job.status === "completed") {
     return {
       status: "completed",
-      message: "Finished this request. The final reply is below."
+      message: job.recoveryTrace?.status === "recovered"
+        ? "Finished this request after a bounded automatic recovery. The final reply is below."
+        : "Finished this request. The final reply is below."
     };
   }
   return {
     status: "stopped",
     message: job.errorMessage?.trim().length
-      ? `Blocked: ${job.errorMessage}`
+      ? job.recoveryTrace?.status === "failed"
+        ? `Blocked after a bounded recovery attempt: ${job.errorMessage}`
+        : `Blocked: ${job.errorMessage}`
       : "This run hit a blocker before it could finish."
   };
 }

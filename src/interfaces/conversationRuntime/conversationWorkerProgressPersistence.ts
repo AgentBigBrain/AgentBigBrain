@@ -31,6 +31,12 @@ export async function persistConversationExecutionProgress(
     return;
   }
   const updatedAt = new Date().toISOString();
+  const persistedRecoveryTrace = update.recoveryTrace
+    ? {
+        ...update.recoveryTrace,
+        updatedAt
+      }
+    : null;
   setProgressState(session, {
     status: update.status,
     message: update.message,
@@ -40,8 +46,13 @@ export async function persistConversationExecutionProgress(
       update.status === "stopped"
         ? null
         : jobId,
-    updatedAt
+    updatedAt,
+    recoveryTrace: persistedRecoveryTrace
   });
+  const runningJob = session.recentJobs.find((candidate) => candidate.id === jobId);
+  if (runningJob) {
+    runningJob.recoveryTrace = persistedRecoveryTrace;
+  }
   session.updatedAt = updatedAt;
   await store.setSession(session);
 }

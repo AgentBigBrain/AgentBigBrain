@@ -123,7 +123,7 @@ const SMOKE_DEADLINE_MS = 360_000;
 const CLEANUP_STEP_TIMEOUT_MS = 3_000;
 const DIRECT_REPLY_SETTLE_MS = 2_000;
 const PROVIDER_BLOCK_PATTERN =
-  /(?:429|exceeded your current quota|rate limit|fetch failed|request timed out|socket hang up|ECONNRESET|effective backend is mock|missing OPENAI_API_KEY)/i;
+/(?:429|exceeded your current quota|usage limit|purchase more credits|try again at|rate limit|fetch failed|request timed out|socket hang up|ECONNRESET|effective backend is mock|missing OPENAI_API_KEY)/i;
 
 const CAPABILITY_SUMMARY_FIXTURE: ConversationCapabilitySummary = {
   provider: "telegram",

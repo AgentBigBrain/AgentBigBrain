@@ -8,30 +8,8 @@ import type {
   TelegramOutboundDeliveryObservation,
   TelegramOutboundDeliveryObserver
 } from "./contracts";
-import { sendTelegramGatewayReply } from "./telegramGatewayRuntime";
-
-/**
- * Records one successful Telegram outbound delivery for an optional observer without breaking runtime flow.
- *
- * @param observer - Optional outbound delivery observer.
- * @param event - Canonical outbound delivery observation.
- * @returns Promise resolving after the observer settles.
- */
-export async function observeTelegramOutboundDelivery(
-  observer: TelegramOutboundDeliveryObserver | undefined,
-  event: TelegramOutboundDeliveryObservation
-): Promise<void> {
-  if (!observer) {
-    return;
-  }
-  try {
-    await observer(event);
-  } catch (error) {
-    console.warn(
-      `[TelegramGateway] outbound delivery observer failed: ${error instanceof Error ? error.message : String(error)}`
-    );
-  }
-}
+import { sendTelegramGatewayReply } from "./telegramGatewayNotifier";
+import { observeTelegramOutboundDeliverySafely } from "./telegramOutboundDeliveryTracing";
 
 /**
  * Sends one direct/final Telegram reply and records the delivered text for optional observers.
@@ -46,15 +24,25 @@ export async function sendObservedTelegramGatewayReply(
   config: TelegramInterfaceConfig,
   chatId: string,
   text: string,
-  observer?: TelegramOutboundDeliveryObserver
+  observer?: TelegramOutboundDeliveryObserver,
+  observation?: Partial<
+    Omit<TelegramOutboundDeliveryObservation, "kind" | "chatId" | "text" | "at" | "messageId" | "draftId">
+  >
 ): Promise<ConversationDeliveryResult> {
   const result = await sendTelegramGatewayReply(config, chatId, text);
   if (result.ok) {
-    await observeTelegramOutboundDelivery(observer, {
+    await observeTelegramOutboundDeliverySafely(observer, {
       kind: "send",
       chatId,
       text,
       at: new Date().toISOString(),
+      sequence: observation?.sequence ?? 0,
+      source: observation?.source ?? null,
+      sessionKey: observation?.sessionKey ?? null,
+      jobId: observation?.jobId ?? null,
+      jobCreatedAt: observation?.jobCreatedAt ?? null,
+      inboundEventId: observation?.inboundEventId ?? null,
+      inboundReceivedAt: observation?.inboundReceivedAt ?? null,
       messageId: result.messageId
     });
   }

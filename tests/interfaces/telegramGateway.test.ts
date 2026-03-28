@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { TelegramAdapter } from "../../src/interfaces/telegramAdapter";
+import type { ConversationOutboundDeliveryTrace } from "../../src/interfaces/conversationRuntime/managerContracts";
 import {
   TelegramGateway,
   type TelegramOutboundDeliveryObservation
@@ -16,15 +17,30 @@ import { buildTelegramInterfaceConfigFixture } from "../helpers/conversationFixt
 interface TelegramGatewayTestHarness {
   createConversationNotifier(
     chatId: string,
-    options: { nativeDraftStreamingAllowed: boolean }
+    options: { nativeDraftStreamingAllowed: boolean },
+    baseTrace?: {
+      sessionKey?: string | null;
+      inboundEventId?: string | null;
+      inboundReceivedAt?: string | null;
+    }
   ): {
     capabilities: {
       supportsEdit: boolean;
       supportsNativeStreaming: boolean;
     };
-    send: (message: string) => Promise<{ ok: boolean; messageId: string | null; errorCode: string | null }>;
-    stream?: (message: string) => Promise<{ ok: boolean; messageId: string | null; errorCode: string | null }>;
-    edit?: (messageId: string, message: string) => Promise<{ ok: boolean; messageId: string | null; errorCode: string | null }>;
+    send: (
+      message: string,
+      trace?: ConversationOutboundDeliveryTrace
+    ) => Promise<{ ok: boolean; messageId: string | null; errorCode: string | null }>;
+    stream?: (
+      message: string,
+      trace?: ConversationOutboundDeliveryTrace
+    ) => Promise<{ ok: boolean; messageId: string | null; errorCode: string | null }>;
+    edit?: (
+      messageId: string,
+      message: string,
+      trace?: ConversationOutboundDeliveryTrace
+    ) => Promise<{ ok: boolean; messageId: string | null; errorCode: string | null }>;
   };
 }
 
@@ -169,6 +185,8 @@ test("telegram gateway outbound observer records successful send and edit delive
   assert.deepEqual(
     observed.map((event) => ({
       kind: event.kind,
+      sequence: event.sequence,
+      source: event.source,
       chatId: event.chatId,
       text: event.text,
       messageId: event.messageId ?? null
@@ -176,12 +194,16 @@ test("telegram gateway outbound observer records successful send and edit delive
     [
       {
         kind: "send",
+        sequence: 1,
+        source: null,
         chatId: "12345",
         text: "hello there",
         messageId: "88"
       },
       {
         kind: "edit",
+        sequence: 2,
+        source: null,
         chatId: "12345",
         text: "updated status",
         messageId: "88"
@@ -214,6 +236,8 @@ test("telegram gateway outbound observer records successful native draft deliver
   assert.deepEqual(
     observed.map((event) => ({
       kind: event.kind,
+      sequence: event.sequence,
+      source: event.source,
       chatId: event.chatId,
       text: event.text,
       draftId: event.draftId ?? null
@@ -221,10 +245,97 @@ test("telegram gateway outbound observer records successful native draft deliver
     [
       {
         kind: "draft",
+        sequence: 1,
+        source: null,
         chatId: "12345",
         text: "Still working...",
         draftId: 1
       }
     ]
   );
+});
+
+test("telegram gateway outbound observer failures do not perturb successful delivery", async () => {
+  const gateway = buildGateway(false, async () => {
+    throw new Error("observer boom");
+  });
+  const notifier = (gateway as unknown as TelegramGatewayTestHarness).createConversationNotifier(
+    "12345",
+    { nativeDraftStreamingAllowed: true }
+  );
+
+  await withMockFetch(
+    (async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        ok: true,
+        result: {
+          message_id: 91
+        }
+      })
+    })) as unknown as typeof fetch,
+    async () => {
+      const result = await notifier.send("hello despite observer failure");
+      assert.deepEqual(result, {
+        ok: true,
+        messageId: "91",
+        errorCode: null
+      });
+    }
+  );
+});
+
+test("telegram gateway outbound observer merges base and per-send trace metadata", async () => {
+  const observed: TelegramOutboundDeliveryObservation[] = [];
+  const gateway = buildGateway(false, async (event) => {
+    observed.push(event);
+  });
+  const notifier = (gateway as unknown as TelegramGatewayTestHarness).createConversationNotifier(
+    "12345",
+    { nativeDraftStreamingAllowed: true },
+    {
+      sessionKey: "telegram:12345:user-1",
+      inboundEventId: "update-1",
+      inboundReceivedAt: "2026-03-20T20:00:00.000Z"
+    }
+  );
+
+  await withMockFetch(
+    (async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        ok: true,
+        result: {
+          message_id: 92
+        }
+      })
+    })) as unknown as typeof fetch,
+    async () => {
+      await notifier.send("final reply", {
+        source: "worker_final",
+        jobId: "job-1",
+        jobCreatedAt: "2026-03-20T19:59:00.000Z"
+      });
+    }
+  );
+
+  assert.deepEqual(observed, [
+    {
+      kind: "send",
+      chatId: "12345",
+      text: "final reply",
+      at: observed[0]!.at,
+      sequence: 1,
+      source: "worker_final",
+      sessionKey: "telegram:12345:user-1",
+      jobId: "job-1",
+      jobCreatedAt: "2026-03-20T19:59:00.000Z",
+      inboundEventId: "update-1",
+      inboundReceivedAt: "2026-03-20T20:00:00.000Z",
+      messageId: "92",
+      draftId: undefined
+    }
+  ]);
 });

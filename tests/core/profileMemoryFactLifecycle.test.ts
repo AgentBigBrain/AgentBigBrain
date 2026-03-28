@@ -22,7 +22,7 @@ test("upsertTemporalProfileFact supersedes older active fact for the same key wi
 
   const second = upsertTemporalProfileFact(first.nextState, {
     key: "employment.current",
-    value: "Flare",
+    value: "Lantern",
     sensitive: false,
     sourceTaskId: "task_runtime_lifecycle_2",
     source: "test",
@@ -37,6 +37,6 @@ test("upsertTemporalProfileFact supersedes older active fact for the same key wi
 
   assert.equal(supersededFacts.length, 1);
   assert.equal(activeFacts.length, 1);
-  assert.equal(activeFacts[0]?.value, "Flare");
+  assert.equal(activeFacts[0]?.value, "Lantern");
   assert.equal(second.supersededFactIds.length, 1);
 });

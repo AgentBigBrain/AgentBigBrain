@@ -439,8 +439,8 @@ async function stage6MemoryAccessAuditLoggingWritesAppendOnlyRetrievalEventsAndB
   );
 
   try {
-    await brain.runTask(buildTask("I used to work with Billy at Flare Web Design."));
-    await brain.runTask(buildTask("who is Billy?"));
+    await brain.runTask(buildTask("I used to work with Owen at Lantern Studio."));
+    await brain.runTask(buildTask("who is Owen?"));
     const firstRawAudit = await readFile(path.join(tempDir, "runtime/memory_access_log.json"), "utf8");
     const firstDocument = JSON.parse(firstRawAudit) as {
       events: Array<{
@@ -453,7 +453,7 @@ async function stage6MemoryAccessAuditLoggingWritesAppendOnlyRetrievalEventsAndB
     const firstCount = firstDocument.events.length;
     assert.ok(firstCount >= 1);
 
-    await brain.runTask(buildTask("who is Billy?"));
+    await brain.runTask(buildTask("who is Owen?"));
     const secondRawAudit = await readFile(path.join(tempDir, "runtime/memory_access_log.json"), "utf8");
     const secondDocument = JSON.parse(secondRawAudit) as {
       events: Array<{

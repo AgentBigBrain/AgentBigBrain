@@ -13,7 +13,8 @@ import {
   type ApplyConversationTurnOptionsV1,
   type ConversationStackMigrationInputV1,
   type ConversationStackMigrationResultV1,
-  type ConversationStackTurnV1
+  type ConversationStackTurnV1,
+  type TopicKeyInterpretationSignalV1
 } from "./conversationStackContracts";
 import {
   assertValidIsoTimestamp,
@@ -41,8 +42,37 @@ export type {
   ApplyConversationTurnOptionsV1,
   ConversationStackMigrationInputV1,
   ConversationStackMigrationResultV1,
-  ConversationStackTurnV1
+  ConversationStackTurnV1,
+  TopicKeyInterpretationSignalV1
 } from "./conversationStackContracts";
+
+const TOPIC_INTERPRETATION_AMBIGUITY_DELTA = 0.08;
+
+interface TopicRoutingInterpretationInputV1 {
+  currentActive: ThreadFrameV1 | null;
+  explicitReturn: ThreadFrameV1 | "AMBIGUOUS" | null;
+  hasReturnSignal: boolean;
+  pausedThreads: readonly ThreadFrameV1[];
+  primaryCandidate: TopicKeyCandidateV1 | null;
+  secondaryCandidate: TopicKeyCandidateV1 | null;
+  topicSwitchThreshold: number;
+  interpretation: TopicKeyInterpretationSignalV1 | null | undefined;
+}
+
+type TopicRoutingInterpretationOutcomeV1 =
+  | {
+      kind: "retain_active_thread";
+      thread: ThreadFrameV1;
+    }
+  | {
+      kind: "resume_paused_thread";
+      thread: ThreadFrameV1;
+    }
+  | {
+      kind: "switch_topic_candidate";
+      topicKey: string;
+    }
+  | null;
 
 /**
  * Builds empty conversation stack v1 for this module's runtime flow.
@@ -186,6 +216,88 @@ function findPrimaryTopicCandidate(text: string, observedAt: string): TopicKeyCa
 }
 
 /**
+ * Returns `true` when deterministic topic selection is weak or closely contested.
+ *
+ * @param primaryCandidate - Highest-confidence deterministic topic candidate.
+ * @param secondaryCandidate - Runner-up deterministic topic candidate.
+ * @param topicSwitchThreshold - Minimum deterministic confidence required for a switch.
+ * @returns `true` when interpreter assistance is allowed for topic selection.
+ */
+function hasAmbiguousTopicSelection(
+  primaryCandidate: TopicKeyCandidateV1 | null,
+  secondaryCandidate: TopicKeyCandidateV1 | null,
+  topicSwitchThreshold: number
+): boolean {
+  if (!primaryCandidate || primaryCandidate.confidence < topicSwitchThreshold) {
+    return true;
+  }
+  if (!secondaryCandidate) {
+    return false;
+  }
+  return primaryCandidate.confidence - secondaryCandidate.confidence <= TOPIC_INTERPRETATION_AMBIGUITY_DELTA;
+}
+
+/**
+ * Resolves one validated precomputed topic-routing interpretation when deterministic selection is
+ * ambiguous.
+ *
+ * @param input - Deterministic routing state plus optional precomputed interpretation.
+ * @returns One safe interpreted routing decision or `null`.
+ */
+function resolveTopicRoutingInterpretationV1(
+  input: TopicRoutingInterpretationInputV1
+): TopicRoutingInterpretationOutcomeV1 {
+  const interpretation = input.interpretation;
+  if (!interpretation || interpretation.confidence === "low") {
+    return null;
+  }
+
+  const topicSelectionAmbiguous = hasAmbiguousTopicSelection(
+    input.primaryCandidate,
+    input.secondaryCandidate,
+    input.topicSwitchThreshold
+  );
+  const returnSelectionAmbiguous =
+    input.explicitReturn === "AMBIGUOUS"
+    || (input.hasReturnSignal && input.explicitReturn === null);
+  if (!topicSelectionAmbiguous && !returnSelectionAmbiguous) {
+    return null;
+  }
+
+  if (interpretation.kind === "retain_active_thread") {
+    return input.currentActive
+      ? {
+          kind: "retain_active_thread",
+          thread: input.currentActive
+        }
+      : null;
+  }
+
+  if (interpretation.kind === "resume_paused_thread") {
+    const resumed = interpretation.selectedThreadKey
+      ? input.pausedThreads.find((thread) => thread.threadKey === interpretation.selectedThreadKey) ?? null
+      : null;
+    return resumed
+      ? {
+          kind: "resume_paused_thread",
+          thread: resumed
+        }
+      : null;
+  }
+
+  if (interpretation.kind === "switch_topic_candidate") {
+    return interpretation.selectedTopicKey
+      ? {
+          kind: "switch_topic_candidate",
+          topicKey: interpretation.selectedTopicKey
+        }
+      : null;
+  }
+
+  return null;
+}
+
+/**
  * Executes user turn to conversation stack v1 as part of this module's control flow.
  *
  * @param stack - Current conversation stack state.
@@ -253,6 +365,56 @@ export function applyUserTurnToConversationStackV1(
     };
   }
 
+  const candidates = deriveTopicKeyCandidatesV1(normalizedTurnText, turn.at);
+  const primaryCandidate = candidates[0] ?? null;
+  const interpretedRouting = resolveTopicRoutingInterpretationV1({
+    currentActive,
+    explicitReturn,
+    hasReturnSignal,
+    pausedThreads: [...threadMap.values()].filter((thread) => thread.state === "paused"),
+    primaryCandidate,
+    secondaryCandidate: candidates[1] ?? null,
+    topicSwitchThreshold,
+    interpretation: options.topicKeyInterpretation
+  });
+  if (interpretedRouting?.kind === "retain_active_thread" && currentActive) {
+    threadMap.set(currentActive.threadKey, {
+      ...currentActive,
+      lastTouchedAt: turn.at,
+      resumeHint: turnHint
+    });
+    touchTopicNode(topicsByKey, currentActive.topicKey, currentActive.topicLabel, turn.at);
+    return {
+      schemaVersion: "v1",
+      updatedAt: turn.at,
+      activeThreadKey: currentActive.threadKey,
+      threads: evictThreadsOverCap(
+        setActiveThread([...threadMap.values()], currentActive.threadKey),
+        currentActive.threadKey,
+        maxThreads
+      ),
+      topics: sortTopicNodes([...topicsByKey.values()])
+    };
+  }
+  if (interpretedRouting?.kind === "resume_paused_thread") {
+    const resumed = interpretedRouting.thread;
+    threadMap.set(resumed.threadKey, {
+      ...resumed,
+      state: "active",
+      lastTouchedAt: turn.at,
+      resumeHint: turnHint
+    });
+    touchTopicNode(topicsByKey, resumed.topicKey, resumed.topicLabel, turn.at);
+    const resumedThreads = setActiveThread([...threadMap.values()], resumed.threadKey);
+    const cappedResumedThreads = evictThreadsOverCap(resumedThreads, resumed.threadKey, maxThreads);
+    return {
+      schemaVersion: "v1",
+      updatedAt: turn.at,
+      activeThreadKey: resumed.threadKey,
+      threads: cappedResumedThreads,
+      topics: sortTopicNodes([...topicsByKey.values()])
+    };
+  }
   if (explicitReturn === "AMBIGUOUS" && currentActive) {
     threadMap.set(currentActive.threadKey, {
       ...currentActive,
@@ -272,7 +434,6 @@ export function applyUserTurnToConversationStackV1(
       topics: sortTopicNodes([...topicsByKey.values()])
     };
   }
-
   if (hasReturnSignal && explicitReturn === null && currentActive) {
     threadMap.set(currentActive.threadKey, {
       ...currentActive,
@@ -292,9 +453,44 @@ export function applyUserTurnToConversationStackV1(
       topics: sortTopicNodes([...topicsByKey.values()])
     };
   }
-
-  const primaryCandidate = findPrimaryTopicCandidate(normalizedTurnText, turn.at);
-  if (!primaryCandidate || primaryCandidate.confidence < topicSwitchThreshold) {
+  const selectedTopicKey = interpretedRouting?.kind === "switch_topic_candidate"
+    ? interpretedRouting.topicKey
+    : primaryCandidate?.topicKey ?? null;
+  const selectedCandidate = selectedTopicKey
+    ? candidates.find((candidate) => candidate.topicKey === selectedTopicKey) ?? null
+    : null;
+  const effectiveCandidate = interpretedRouting?.kind === "switch_topic_candidate"
+    ? selectedCandidate
+    : primaryCandidate;
+  if (interpretedRouting?.kind !== "switch_topic_candidate" && !effectiveCandidate) {
+    if (currentActive) {
+      threadMap.set(currentActive.threadKey, {
+        ...currentActive,
+        lastTouchedAt: turn.at,
+        resumeHint: turnHint
+      });
+      touchTopicNode(topicsByKey, currentActive.topicKey, currentActive.topicLabel, turn.at);
+      return {
+        schemaVersion: "v1",
+        updatedAt: turn.at,
+        activeThreadKey: currentActive.threadKey,
+        threads: evictThreadsOverCap(
+          setActiveThread([...threadMap.values()], currentActive.threadKey),
+          currentActive.threadKey,
+          maxThreads
+        ),
+        topics: sortTopicNodes([...topicsByKey.values()])
+      };
+    }
+    return {
+      ...stack,
+      updatedAt: turn.at
+    };
+  }
+  if (
+    interpretedRouting?.kind !== "switch_topic_candidate"
+    && (!effectiveCandidate || effectiveCandidate.confidence < topicSwitchThreshold)
+  ) {
     if (currentActive) {
       threadMap.set(currentActive.threadKey, {
         ...currentActive,
@@ -320,7 +516,8 @@ export function applyUserTurnToConversationStackV1(
     };
   }
 
-  const existingByTopic = [...threadMap.values()].find((thread) => thread.topicKey === primaryCandidate.topicKey);
+  const winner = effectiveCandidate!;
+  const existingByTopic = [...threadMap.values()].find((thread) => thread.topicKey === winner.topicKey);
   const nextActiveThread: ThreadFrameV1 = existingByTopic
     ? {
         ...existingByTopic,
@@ -328,7 +525,7 @@ export function applyUserTurnToConversationStackV1(
         lastTouchedAt: turn.at,
         resumeHint: turnHint
       }
-    : buildThreadFromTopicCandidate(primaryCandidate, turn.at, turnHint);
+    : buildThreadFromTopicCandidate(winner, turn.at, turnHint);
 
   threadMap.set(nextActiveThread.threadKey, nextActiveThread);
   touchTopicNode(topicsByKey, nextActiveThread.topicKey, nextActiveThread.topicLabel, turn.at);

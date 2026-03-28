@@ -13,6 +13,8 @@ import {
   buildConversationKey,
   buildSessionSeed
 } from "./conversationManagerHelpers";
+import { normalizeConversationTransportIdentity } from "./conversationRuntime/transportIdentity";
+import { reconcileInterpretedEntityAliasCandidateForTurn } from "./conversationRuntime/contextualEntityReferenceInterpretationSupport";
 import { backfillPulseResponseOutcome, expireStaleEmissions } from "./pulseEmissionLifecycle";
 import { backfillTurnsFromRecentJobsIfNeeded } from "./conversationSessionMutations";
 import type { ConversationIngressDependencies } from "./conversationRuntime/contracts";
@@ -52,6 +54,33 @@ function buildStartedWorkReply(input: string): string {
 }
 
 /**
+ * Memoizes one bounded entity-reference interpreter for the lifetime of a single inbound turn so
+ * direct-reply execution-input assembly and later alias reconciliation do not pay for the same
+ * semantic call twice.
+ *
+ * @param resolver - Optional shared entity-reference interpreter.
+ * @returns Per-turn memoized resolver preserving fail-closed behavior.
+ */
+function memoizeEntityReferenceInterpretationResolver(
+  resolver: ConversationIngressDependencies["entityReferenceInterpretationResolver"]
+): ConversationIngressDependencies["entityReferenceInterpretationResolver"] {
+  if (!resolver) {
+    return resolver;
+  }
+  const cache = new Map<string, ReturnType<typeof resolver>>();
+  return async (request) => {
+    const cacheKey = JSON.stringify(request);
+    const cached = cache.get(cacheKey);
+    if (cached) {
+      return cached;
+    }
+    const pending = resolver(request);
+    cache.set(cacheKey, pending);
+    return pending;
+  };
+}
+
+/**
  * Processes one inbound message through command/pulse/proposal/queueing paths and persists session mutations.
  *
  * @param message - Inbound provider message.
@@ -72,6 +101,12 @@ export async function processConversationMessage(
   }
 
   const sessionKey = buildConversationKey(message);
+  const memoizedEntityReferenceInterpretationResolver =
+    memoizeEntityReferenceInterpretationResolver(deps.entityReferenceInterpretationResolver);
+  const invocationDeps: ConversationIngressDependencies = {
+    ...deps,
+    entityReferenceInterpretationResolver: memoizedEntityReferenceInterpretationResolver
+  };
   deps.setWorkerBinding(sessionKey, executeTask, notify);
   const session = (await deps.store.getSession(sessionKey)) ?? buildSessionSeed(message);
   recoverStaleRunningJobIfNeeded({
@@ -86,6 +121,8 @@ export async function processConversationMessage(
     deps.config.maxConversationTurns
   );
   session.username = message.username;
+  session.transportIdentity =
+    normalizeConversationTransportIdentity(message.transportIdentity) ?? session.transportIdentity;
   session.conversationVisibility = message.conversationVisibility;
   session.updatedAt = message.receivedAt;
 
@@ -107,11 +144,19 @@ export async function processConversationMessage(
     return reply;
   }
 
+  await reconcileInterpretedEntityAliasCandidateForTurn(
+    session,
+    trimmed,
+    message.receivedAt,
+    deps.getEntityGraph,
+    memoizedEntityReferenceInterpretationResolver,
+    deps.reconcileEntityAliasCandidate
+  );
   const invocation = await resolveConversationInvocation(
     session,
     message,
     executeTask,
-    deps
+    invocationDeps
   );
   await deps.store.setSession(session);
   if (invocation.shouldStartWorker) {

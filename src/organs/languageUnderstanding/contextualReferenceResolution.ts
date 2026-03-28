@@ -20,6 +20,12 @@ const VAGUE_CALLBACK_PATTERNS: readonly RegExp[] = [
   /\bhow is (?:he|she|they)\b/i,
   /\bhear back\b/i
 ];
+const CONTEXTUAL_RESUME_CUE_PATTERNS: readonly RegExp[] = [
+  /\b(?:go|come)\s+back\s+to\b/i,
+  /\bcircle\s+back\s+to\b/i,
+  /\breturn\s+to\b/i,
+  /\brevisit\b/i
+];
 
 export interface ContextualReferenceTurn {
   role: "user" | "assistant";
@@ -70,7 +76,8 @@ export function resolveContextualReferenceHints(
 ): ContextualReferenceResolution {
   const directTerms = extractContextualRecallTerms(request.userInput, request.profileId);
   const hasRecallCue = DIRECT_RECALL_CUE_PATTERNS.some((pattern) => pattern.test(request.userInput))
-    || VAGUE_CALLBACK_PATTERNS.some((pattern) => pattern.test(request.userInput));
+    || VAGUE_CALLBACK_PATTERNS.some((pattern) => pattern.test(request.userInput))
+    || CONTEXTUAL_RESUME_CUE_PATTERNS.some((pattern) => pattern.test(request.userInput));
   const shouldExpandContext =
     directTerms.length < 2 || hasRecallCue;
   if (!shouldExpandContext) {

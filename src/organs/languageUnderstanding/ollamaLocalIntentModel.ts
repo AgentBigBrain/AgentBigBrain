@@ -1,13 +1,23 @@
 /**
- * @fileoverview Provides a bounded Ollama-backed local intent-model resolver for the human-centric execution front door.
+ * @fileoverview Provides the shared Ollama-backed local intent-model provider surface for execution intent and bounded conversational interpretation tasks.
  */
 
-import type {
-  LocalIntentModelResolver,
-  LocalIntentModelSignal,
-  LocalIntentModelSessionHints
-} from "./localIntentModelContracts";
+import type { LocalIntentModelResolver, LocalIntentModelSignal, LocalIntentModelSessionHints } from "./localIntentModelContracts";
 import type { ConversationIntentSemanticHint } from "../../interfaces/conversationRuntime/intentModeContracts";
+
+export { createOllamaIdentityInterpretationResolver } from "./ollamaIdentityInterpretation";
+export { createOllamaProposalReplyInterpretationResolver } from "./ollamaProposalReplyInterpretation";
+export { createOllamaContinuationInterpretationResolver } from "./ollamaContinuationInterpretation";
+export { createOllamaAutonomyBoundaryInterpretationResolver } from "./ollamaAutonomyBoundaryInterpretation";
+export { createOllamaBridgeQuestionTimingInterpretationResolver } from "./ollamaBridgeQuestionTimingInterpretation";
+export { createOllamaContextualFollowupInterpretationResolver } from "./ollamaContextualFollowupInterpretation";
+export { createOllamaContextualReferenceInterpretationResolver } from "./ollamaContextualReferenceInterpretation";
+export { createOllamaStatusRecallBoundaryInterpretationResolver } from "./ollamaStatusRecallBoundaryInterpretation";
+export { createOllamaTopicKeyInterpretationResolver } from "./ollamaTopicKeyInterpretation";
+export { createOllamaEntityDomainHintInterpretationResolver } from "./ollamaEntityDomainHintInterpretation";
+export { createOllamaEntityReferenceInterpretationResolver } from "./ollamaEntityReferenceInterpretation";
+export { createOllamaEntityTypeInterpretationResolver } from "./ollamaEntityTypeInterpretation";
+export { createOllamaHandoffControlInterpretationResolver } from "./ollamaHandoffControlInterpretation";
 
 export interface OllamaLocalIntentModelConfig {
   baseUrl: string;
@@ -138,7 +148,10 @@ function buildLocalIntentPrompt(
     "Optional semanticHint values: review_ready, guided_review, next_review_step, while_away_review, wrap_up_summary, explain_handoff, resume_handoff.",
     "Use semanticHint only when the session hints show durable return-handoff context.",
     "Use autonomous only when the user clearly wants the assistant to handle the task end to end.",
-    "Promote to autonomous when the user says things like 'go until you finish', 'keep going until it's done', 'take this end to end', or 'handle the whole thing for me'.",
+    "Phrases like 'end to end', 'take care of it', or 'handle everything' are ambiguous on their own.",
+    "Only use autonomous for those ambiguous phrases when the same request clearly contains workflow or execution context, or when session hints show workflow continuity.",
+    "If session hints show a profile or relationship lane without workflow continuity, prefer chat or build over autonomous for ambiguous end-to-end wording.",
+    "Promote to autonomous when the user says strong completion phrases like 'go until you finish' or 'keep going until it's done', or when end-to-end phrasing appears with clear workflow context.",
     "Use build when the user clearly wants execution or implementation now, but not necessarily a long autonomous loop.",
     "Use build for concrete browser control requests like opening, reopening, or closing a tracked local browser window.",
     "Use plan when the user wants explanation or a plan first and does not want execution yet.",
@@ -157,6 +170,8 @@ function buildLocalIntentPrompt(
     "Examples:",
     '- "Could you take care of this end to end and leave the browser open for me later tonight?" => {"mode":"autonomous","confidence":"high"}',
     '- "Build a landing page for my desktop folder, go until you finish, then run it in a browser and leave it open for me." => {"mode":"autonomous","confidence":"high"}',
+    '- With session hints showing domainDominantLane="profile" and workflowContinuityActive=false: "Could you take care of this end to end and remember that I like dark mode?" => {"mode":"chat","confidence":"low"}',
+    '- With session hints showing workflowContinuityActive=true: "Take care of it end to end and leave the preview open for me." => {"mode":"autonomous","confidence":"medium"}',
     '- "Please talk me through the plan first and do not run anything yet." => {"mode":"plan","confidence":"high"}',
     '- "What did you put on my desktop and what are you doing right now?" => {"mode":"status_or_recall","confidence":"high"}',
     '- "Close the browser for our landing page." => {"mode":"build","confidence":"high"}',

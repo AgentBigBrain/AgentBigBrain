@@ -48,7 +48,12 @@
    - Prefer richer typed intent outputs and better runtime context over growing phrase lists or
      regex-heavy routing.
    - Keep lexical helpers as a thin deterministic shell for explicit commands, very high-precision
-     cues, and fail-closed fallback behavior.
+     cues, and fail-closed fallback behavior only.
+   - Do not solve ambiguous conversational bugs by layering on more regex or phrase-pattern
+     patches when the real issue is missing conversational interpretation.
+   - If a bug depends on recent turns, mixed workflow/chat continuity, identity context, or
+     conversational phrasing nuance, the preferred repair is a bounded shared-interpreter task or a
+     stronger typed intent signal, not a larger lexical rule pack.
    - Do not let intent understanding silently become permission. Understanding what the user means
      is separate from deciding what the runtime is allowed to do.
 8. Prefer narrow recovery over blunt recovery.

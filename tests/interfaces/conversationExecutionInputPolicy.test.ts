@@ -50,7 +50,7 @@ test("buildTurnLocalStatusUpdateBlock only emits block for first-person status u
   assert.equal(missingStatus, null);
 });
 
-test("resolveFollowUpInput wraps short follow-up answers with prior assistant clarification context", () => {
+test("resolveFollowUpInput wraps short follow-up answers with prior assistant clarification context", async () => {
   const session = buildSession();
   session.conversationTurns.push({
     role: "assistant",
@@ -58,19 +58,18 @@ test("resolveFollowUpInput wraps short follow-up answers with prior assistant cl
     at: "2026-03-03T00:00:10.000Z"
   });
 
-  const resolution = resolveFollowUpInput(
+  const resolution = await resolveFollowUpInput(
     session,
     "private",
     createFollowUpRuleContext(null)
   );
 
   assert.equal(resolution.classification.isShortFollowUp, true);
-  assert.match(resolution.executionInput, /Follow-up user response to prior assistant clarification/);
-  assert.match(resolution.executionInput, /Previous assistant question:/);
-  assert.match(resolution.executionInput, /User follow-up answer: private/);
+  assert.equal(resolution.linkedToPriorAssistantPrompt, true);
+  assert.equal(resolution.executionInput, "private");
 });
 
-test("resolveFollowUpInput strips robotic assistant labels from prior clarification prompts", () => {
+test("resolveFollowUpInput strips robotic assistant labels from prior clarification prompts", async () => {
   const session = buildSession();
   session.conversationTurns.push({
     role: "assistant",
@@ -78,14 +77,105 @@ test("resolveFollowUpInput strips robotic assistant labels from prior clarificat
     at: "2026-03-03T00:00:10.000Z"
   });
 
-  const resolution = resolveFollowUpInput(
+  const resolution = await resolveFollowUpInput(
     session,
     "build it now",
     createFollowUpRuleContext(null)
   );
 
-  assert.match(resolution.executionInput, /Previous assistant question: Would you like me to build it now or plan it first\?/);
-  assert.doesNotMatch(resolution.executionInput, /AI assistant answer:/i);
+  assert.equal(resolution.linkedToPriorAssistantPrompt, true);
+  assert.equal(resolution.executionInput, "build it now");
+});
+
+test("resolveFollowUpInput uses continuation interpretation for bounded ambiguous follow-up leftovers", async () => {
+  const session = buildSession();
+  session.modeContinuity = {
+    activeMode: "build",
+    source: "natural_intent",
+    confidence: "HIGH",
+    lastAffirmedAt: "2026-03-03T00:00:09.000Z",
+    lastUserInput: "Build the landing page and save it where we used before."
+  };
+  session.conversationTurns.push({
+    role: "assistant",
+    text: "Should I save this in the same folder as before or create a new folder?",
+    at: "2026-03-03T00:00:10.000Z"
+  });
+
+  const resolution = await resolveFollowUpInput(
+    session,
+    "same folder as before",
+    createFollowUpRuleContext(null),
+    async (request) => {
+      assert.equal(request.recentAssistantTurn, "Should I save this in the same folder as before or create a new folder?");
+      return {
+        source: "local_intent_model",
+        kind: "short_follow_up",
+        followUpCategory: "ack",
+        continuationTarget: "prior_assistant_turn",
+        candidateValue: null,
+        confidence: "medium",
+        explanation: "The user is answering the prior folder clarification."
+      };
+    },
+    classifyRoutingIntentV1("same folder as before")
+  );
+
+  assert.equal(resolution.classification.isShortFollowUp, true);
+  assert.equal(resolution.classification.rulepackVersion, "ContinuationInterpretationV1");
+  assert.match(resolution.executionInput, /Follow-up interpretation: The user is answering the prior folder clarification\./);
+  assert.match(resolution.executionInput, /User follow-up answer: same folder as before/);
+});
+
+test("resolveFollowUpInput fails closed when continuation interpretation is low confidence", async () => {
+  const session = buildSession();
+  session.conversationTurns.push({
+    role: "assistant",
+    text: "Should I save this in the same folder as before or create a new folder?",
+    at: "2026-03-03T00:00:10.000Z"
+  });
+
+  const resolution = await resolveFollowUpInput(
+    session,
+    "same folder as before",
+    createFollowUpRuleContext(null),
+    async () => ({
+      source: "local_intent_model",
+      kind: "short_follow_up",
+      followUpCategory: "ack",
+      continuationTarget: "prior_assistant_turn",
+      candidateValue: null,
+      confidence: "low",
+      explanation: "Low confidence."
+    }),
+    classifyRoutingIntentV1("same folder as before")
+  );
+
+  assert.equal(resolution.classification.isShortFollowUp, false);
+  assert.equal(resolution.executionInput, "same folder as before");
+});
+
+test("resolveFollowUpInput keeps question-like relationship recall off the continuation follow-up path", async () => {
+  const session = buildSession();
+  session.conversationTurns.push({
+    role: "assistant",
+    text: "Do you want me to keep going there?",
+    at: "2026-03-03T00:00:10.000Z"
+  });
+
+  const resolution = await resolveFollowUpInput(
+    session,
+    "So, yeah, who is Milo?",
+    createFollowUpRuleContext(null),
+    async () => {
+      throw new Error("continuation interpretation should not run for question-like relationship recall");
+    },
+    classifyRoutingIntentV1("So, yeah, who is Milo?")
+  );
+
+  assert.equal(resolution.classification.isShortFollowUp, false);
+  assert.equal(resolution.linkedToPriorAssistantPrompt, false);
+  assert.equal(resolution.executionInput, "So, yeah, who is Milo?");
 });
 
 
@@ -133,6 +223,132 @@ test("buildConversationAwareExecutionInput returns raw input when no context, st
   );
 
   assert.equal(executionInput, "just do this");
+});
+
+test("buildConversationAwareExecutionInput adds bounded self-identity facts for direct recall turns", async () => {
+  const session = buildSession();
+  const executionInput = await buildConversationAwareExecutionInput(
+    session,
+    "Who am I?",
+    10,
+    null,
+    "Who am I?",
+    undefined,
+    async () => [
+      {
+        factId: "fact_identity_preferred_name",
+        key: "identity.preferred_name",
+        value: "Avery",
+        status: "active",
+        observedAt: "2026-03-19T12:00:00.000Z",
+        lastUpdatedAt: "2026-03-20T16:00:00.000Z",
+        confidence: 0.98
+      },
+      {
+        factId: "fact_relationship_manager",
+        key: "relationship.manager_name",
+        value: "Pat",
+        status: "active",
+        observedAt: "2026-03-19T12:00:00.000Z",
+        lastUpdatedAt: "2026-03-19T12:00:00.000Z",
+        confidence: 0.75
+      }
+    ]
+  );
+
+  assert.match(executionInput, /Direct self-identity recall context:/);
+  assert.match(executionInput, /identity\.preferred_name: Avery/);
+  assert.doesNotMatch(executionInput, /relationship\.manager_name/i);
+  assert.match(
+    executionInput,
+    /Do not say you only know their name 'from this chat' when these facts are present\./
+  );
+});
+
+test("buildConversationAwareExecutionInput falls back to a low-confidence transport identity hint when no facts exist", async () => {
+  const session = buildSession({
+    transportIdentity: {
+      provider: "telegram",
+      username: "averybrooks",
+      displayName: "Avery Brooks",
+      givenName: "Avery",
+      familyName: "Bena",
+      observedAt: "2026-03-20T20:48:00.000Z"
+    }
+  });
+  const executionInput = await buildConversationAwareExecutionInput(
+    session,
+    "Who am I?",
+    10,
+    null,
+    "Who am I?"
+  );
+
+  assert.match(executionInput, /Direct self-identity recall context:/);
+  assert.match(executionInput, /Low-confidence transport identity hint:/);
+  assert.match(executionInput, /Source: transport display name/);
+  assert.match(executionInput, /Candidate display name: Avery Brooks/);
+  assert.match(executionInput, /Trust rule: this hint came from transport metadata and is not a stored profile fact\./);
+  assert.doesNotMatch(executionInput, /No bounded non-sensitive identity facts were found for this user yet\.\n- Response rule: say you do not know yet/i);
+});
+
+test("buildConversationAwareExecutionInput keeps confirmed identity facts authoritative over transport hints", async () => {
+  const session = buildSession({
+    transportIdentity: {
+      provider: "telegram",
+      username: "averybrooks",
+      displayName: "Avery Brooks",
+      givenName: "Avery",
+      familyName: "Bena",
+      observedAt: "2026-03-20T20:48:00.000Z"
+    }
+  });
+  const executionInput = await buildConversationAwareExecutionInput(
+    session,
+    "Who am I?",
+    10,
+    null,
+    "Who am I?",
+    undefined,
+    async () => [
+      {
+        factId: "fact_identity_preferred_name",
+        key: "identity.preferred_name",
+        value: "Tony",
+        status: "active",
+        observedAt: "2026-03-19T12:00:00.000Z",
+        lastUpdatedAt: "2026-03-20T16:00:00.000Z",
+        confidence: 0.99
+      }
+    ]
+  );
+
+  assert.match(executionInput, /identity\.preferred_name: Tony/);
+  assert.doesNotMatch(executionInput, /Low-confidence transport identity hint:/);
+});
+
+test("buildConversationAwareExecutionInput rejects generic usernames as identity hints", async () => {
+  const session = buildSession({
+    transportIdentity: {
+      provider: "telegram",
+      username: "agentowner",
+      displayName: null,
+      givenName: null,
+      familyName: null,
+      observedAt: "2026-03-20T20:48:00.000Z"
+    }
+  });
+  const executionInput = await buildConversationAwareExecutionInput(
+    session,
+    "Who am I?",
+    10,
+    null,
+    "Who am I?"
+  );
+
+  assert.match(executionInput, /Direct self-identity recall context:/);
+  assert.doesNotMatch(executionInput, /Low-confidence transport identity hint:/);
+  assert.match(executionInput, /Response rule: say you do not know yet instead of inventing or inferring a name\./);
 });
 
 test("buildConversationAwareExecutionInput includes conversation context, status guardrails, and routing hint", async () => {
@@ -316,22 +532,146 @@ test("buildConversationAwareExecutionInput adds the durable continuation block w
   assert.match(executionInput, /Prior goal: Keep refining the drone landing page draft\./);
 });
 
+test("buildConversationAwareExecutionInput suppresses workflow continuity blocks for profile detours", async () => {
+  const session = buildSession();
+  session.modeContinuity = {
+    activeMode: "build",
+    source: "natural_intent",
+    confidence: "HIGH",
+    lastAffirmedAt: "2026-03-03T00:00:25.000Z",
+    lastUserInput: "Build the release notes app."
+  };
+  session.progressState = {
+    status: "working",
+    message: "building the release notes app",
+    jobId: "job-1",
+    updatedAt: "2026-03-03T00:00:30.000Z"
+  };
+  session.returnHandoff = {
+    id: "handoff:job-0",
+    status: "completed",
+    goal: "Build the release notes app.",
+    summary: "I finished a usable draft and left the preview ready.",
+    nextSuggestedStep: "Tell me what to refine next.",
+    workspaceRootPath: "C:\\Users\\testuser\\Desktop\\123",
+    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\123\\index.html",
+    previewUrl: "http://localhost:3000",
+    changedPaths: ["C:\\Users\\testuser\\Desktop\\123\\index.html"],
+    sourceJobId: "job-0",
+    updatedAt: "2026-03-03T00:00:29.000Z"
+  };
+  session.activeWorkspace = {
+    id: "workspace:desktop-123",
+    label: "Current project workspace",
+    rootPath: "C:\\Users\\testuser\\Desktop\\123",
+    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\123\\index.html",
+    previewUrl: "http://localhost:3000",
+    browserSessionId: "browser-1",
+    browserSessionIds: ["browser-1"],
+    browserSessionStatus: "open",
+    browserProcessPid: 41001,
+    previewProcessLeaseId: null,
+    previewProcessLeaseIds: [],
+    previewProcessCwd: "C:\\Users\\testuser\\Desktop\\123",
+    lastKnownPreviewProcessPid: null,
+    stillControllable: true,
+    ownershipState: "tracked",
+    previewStackState: "browser_only",
+    lastChangedPaths: ["C:\\Users\\testuser\\Desktop\\123\\index.html"],
+    sourceJobId: "job-1",
+    updatedAt: "2026-03-03T00:00:20.000Z"
+  };
+  session.domainContext.dominantLane = "workflow";
+  session.domainContext.continuitySignals = {
+    activeWorkspace: true,
+    returnHandoff: true,
+    modeContinuity: true
+  };
+
+  const executionInput = await buildConversationAwareExecutionInput(
+    session,
+    "Remember that I prefer dark mode.",
+    10
+  );
+
+  assert.doesNotMatch(executionInput, /Current working mode from earlier in this chat:/);
+  assert.doesNotMatch(executionInput, /Latest durable work handoff in this chat:/);
+  assert.doesNotMatch(executionInput, /Current tracked workspace in this chat:/);
+  assert.equal(executionInput, "Remember that I prefer dark mode.");
+});
+
+test("buildConversationAwareExecutionInput preserves workflow continuity blocks for workflow follow-ups", async () => {
+  const session = buildSession();
+  session.modeContinuity = {
+    activeMode: "build",
+    source: "natural_intent",
+    confidence: "HIGH",
+    lastAffirmedAt: "2026-03-03T00:00:25.000Z",
+    lastUserInput: "Build the release notes app."
+  };
+  session.returnHandoff = {
+    id: "handoff:job-0",
+    status: "completed",
+    goal: "Build the release notes app.",
+    summary: "I finished a usable draft and left the preview ready.",
+    nextSuggestedStep: "Tell me what to refine next.",
+    workspaceRootPath: "C:\\Users\\testuser\\Desktop\\123",
+    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\123\\index.html",
+    previewUrl: "http://localhost:3000",
+    changedPaths: ["C:\\Users\\testuser\\Desktop\\123\\index.html"],
+    sourceJobId: "job-0",
+    updatedAt: "2026-03-03T00:00:29.000Z"
+  };
+  session.activeWorkspace = {
+    id: "workspace:desktop-123",
+    label: "Current project workspace",
+    rootPath: "C:\\Users\\testuser\\Desktop\\123",
+    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\123\\index.html",
+    previewUrl: "http://localhost:3000",
+    browserSessionId: "browser-1",
+    browserSessionIds: ["browser-1"],
+    browserSessionStatus: "open",
+    browserProcessPid: 41001,
+    previewProcessLeaseId: null,
+    previewProcessLeaseIds: [],
+    previewProcessCwd: "C:\\Users\\testuser\\Desktop\\123",
+    lastKnownPreviewProcessPid: null,
+    stillControllable: true,
+    ownershipState: "tracked",
+    previewStackState: "browser_only",
+    lastChangedPaths: ["C:\\Users\\testuser\\Desktop\\123\\index.html"],
+    sourceJobId: "job-1",
+    updatedAt: "2026-03-03T00:00:20.000Z"
+  };
+
+  const executionInput = await buildConversationAwareExecutionInput(
+    session,
+    "Update the landing page hero copy.",
+    10,
+    classifyRoutingIntentV1("Update the landing page hero copy.")
+  );
+
+  assert.match(executionInput, /Current working mode from earlier in this chat:/);
+  assert.match(executionInput, /Latest durable work handoff in this chat:/);
+  assert.match(executionInput, /Current tracked workspace in this chat:/);
+});
+
 test("buildConversationAwareExecutionInput strips robotic assistant labels from recent conversation context", async () => {
   const session = buildSession();
   session.conversationTurns.push({
     role: "assistant",
-    text: "AI assistant answer: Billy seems to be doing better now.",
+    text: "AI assistant answer: Owen seems to be doing better now.",
     at: "2026-03-03T00:00:20.000Z"
   });
 
   const executionInput = await buildConversationAwareExecutionInput(
     session,
-    "How is Billy doing?",
+    "How is Owen doing?",
     10
   );
 
   assert.match(executionInput, /Recent conversation context \(oldest to newest\):/);
-  assert.match(executionInput, /- assistant: Billy seems to be doing better now\./);
+  assert.match(executionInput, /- assistant: Owen seems to be doing better now\./);
   assert.doesNotMatch(executionInput, /AI assistant answer:/i);
 });
 
@@ -403,7 +743,7 @@ test("buildConversationAwareExecutionInput can inject episode-aware contextual r
   const session = buildSession();
   session.conversationTurns.push({
     role: "user",
-    text: "Billy fell down a few weeks ago.",
+    text: "Owen fell down a few weeks ago.",
     at: "2026-02-14T15:00:00.000Z"
   });
   session.conversationStack = {
@@ -421,16 +761,16 @@ test("buildConversationAwareExecutionInput can inject episode-aware contextual r
         lastTouchedAt: "2026-03-03T00:00:00.000Z"
       },
       {
-        threadKey: "thread_billy",
-        topicKey: "billy_fall",
-        topicLabel: "Billy Fall",
+        threadKey: "thread_owen",
+        topicKey: "owen_fall",
+        topicLabel: "Owen Fall",
         state: "paused",
-        resumeHint: "Billy fell down and you wanted to hear how it ended up.",
+        resumeHint: "Owen fell down and you wanted to hear how it ended up.",
         openLoops: [
           {
-            loopId: "loop_billy",
-            threadKey: "thread_billy",
-            entityRefs: ["billy"],
+            loopId: "loop_owen",
+            threadKey: "thread_owen",
+            entityRefs: ["owen"],
             createdAt: "2026-02-14T15:00:00.000Z",
             lastMentionedAt: "2026-02-14T15:00:00.000Z",
             priority: 0.8,
@@ -449,8 +789,8 @@ test("buildConversationAwareExecutionInput can inject episode-aware contextual r
         mentionCount: 1
       },
       {
-        topicKey: "billy_fall",
-        label: "Billy Fall",
+        topicKey: "owen_fall",
+        label: "Owen Fall",
         firstSeenAt: "2026-02-14T15:00:00.000Z",
         lastSeenAt: "2026-02-14T15:00:00.000Z",
         mentionCount: 1
@@ -460,28 +800,28 @@ test("buildConversationAwareExecutionInput can inject episode-aware contextual r
 
   const executionInput = await buildConversationAwareExecutionInput(
     session,
-    "Follow-up user response to prior assistant clarification.\nUser follow-up answer: Billy seems better now.",
+    "Follow-up user response to prior assistant clarification.\nUser follow-up answer: Owen seems better now.",
     10,
     null,
-    "How is Billy doing lately?",
+    "How is Owen doing lately?",
     async () => [
       {
-        episodeId: "episode_billy_fall",
-        title: "Billy fell down",
-        summary: "Billy fell down a few weeks ago and the outcome never got resolved.",
+        episodeId: "episode_owen_fall",
+        title: "Owen fell down",
+        summary: "Owen fell down a few weeks ago and the outcome never got resolved.",
         status: "unresolved",
         lastMentionedAt: "2026-02-14T15:00:00.000Z",
-        entityRefs: ["Billy"],
+        entityRefs: ["Owen"],
         entityLinks: [
           {
-            entityKey: "entity_billy",
-            canonicalName: "Billy"
+            entityKey: "entity_owen",
+            canonicalName: "Owen"
           }
         ],
         openLoopLinks: [
           {
-            loopId: "loop_billy",
-            threadKey: "thread_billy",
+            loopId: "loop_owen",
+            threadKey: "thread_owen",
             status: "open",
             priority: 0.8
           }
@@ -492,9 +832,9 @@ test("buildConversationAwareExecutionInput can inject episode-aware contextual r
 
   assert.match(executionInput, /Contextual recall opportunity \(optional\):/);
   assert.match(executionInput, /older unresolved situation/i);
-  assert.match(executionInput, /Relevant situation: Billy fell down/i);
+  assert.match(executionInput, /Relevant situation: Owen fell down/i);
   assert.match(executionInput, /Current user request:/);
-  assert.match(executionInput, /User follow-up answer: Billy seems better now\./);
+  assert.match(executionInput, /User follow-up answer: Owen seems better now\./);
 });
 
 test("buildConversationAwareExecutionInput includes natural reuse preference guidance when the user asks to use the same approach", async () => {
@@ -1435,6 +1775,79 @@ test("buildConversationAwareExecutionInput grounds the Telegram desktop cleanup 
   assert.match(executionInput, /This run must include a real folder move side effect\./i);
 });
 
+test("buildConversationAwareExecutionInput grounds broad Desktop cleanup for matching files and folders", async () => {
+  const session = buildSession();
+  session.modeContinuity = {
+    activeMode: "build",
+    source: "natural_intent",
+    confidence: "HIGH",
+    lastAffirmedAt: "2026-03-03T00:00:24.000Z",
+    lastUserInput: "Build the drone React app and leave it open in the browser."
+  };
+  session.returnHandoff = {
+    id: "handoff:drone-react-live-smoke-2",
+    status: "completed",
+    goal: "Build the drone React app and leave it open in the browser.",
+    summary: "I built the app and left the preview open.",
+    nextSuggestedStep: "Tell me what to change next.",
+    workspaceRootPath: "C:\\Users\\testuser\\Desktop\\drone-react-live-smoke-2",
+    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\drone-react-live-smoke-2\\package.json",
+    previewUrl: "http://127.0.0.1:4173/",
+    changedPaths: [
+      "C:\\Users\\testuser\\Desktop\\drone-react-live-smoke-2\\package.json"
+    ],
+    sourceJobId: "job-cleanup-2",
+    updatedAt: "2026-03-03T00:00:25.000Z"
+  };
+  session.activeWorkspace = {
+    id: "workspace:drone-react-live-smoke-2",
+    label: "Drone React workspace",
+    rootPath: "C:\\Users\\testuser\\Desktop\\drone-react-live-smoke-2",
+    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\drone-react-live-smoke-2\\package.json",
+    previewUrl: "http://127.0.0.1:4173/",
+    browserSessionId: "browser-detached-cleanup-2",
+    browserSessionIds: ["browser-detached-cleanup-2"],
+    browserSessionStatus: "closed",
+    browserProcessPid: null,
+    previewProcessLeaseId: null,
+    previewProcessLeaseIds: [],
+    previewProcessCwd: null,
+    lastKnownPreviewProcessPid: null,
+    stillControllable: false,
+    ownershipState: "stale",
+    previewStackState: "detached",
+    lastChangedPaths: [
+      "C:\\Users\\testuser\\Desktop\\drone-react-live-smoke-2\\package.json"
+    ],
+    sourceJobId: "job-cleanup-2",
+    updatedAt: "2026-03-03T00:00:25.000Z"
+  };
+
+  const executionInput = await buildConversationAwareExecutionInput(
+    session,
+    'Please put every file and folder on my desktop with the word "drone" into a folder called drone-dump.',
+    10
+  );
+
+  assert.match(executionInput, /Natural desktop-organization follow-up:/);
+  assert.match(executionInput, /real Desktop file-and-folder move, not just an inspection or summary/i);
+  assert.match(executionInput, /Strongest remembered Desktop root in this chat: C:\\Users\\testuser\\Desktop/i);
+  assert.match(executionInput, /Treat the named destination as C:\\Users\\testuser\\Desktop\\drone-dump/i);
+  assert.match(executionInput, /Match Desktop files and folders whose names contain the word drone\./i);
+  assert.match(
+    executionInput,
+    /The current tracked workspace folder drone-react-live-smoke-2 also matches that requested word rule; include it in the move unless the user explicitly excluded it\./i
+  );
+  assert.match(
+    executionInput,
+    /This run must include a real Desktop move side effect for matching files and folders\./i
+  );
+  assert.doesNotMatch(executionInput, /Current working mode from earlier in this chat:/);
+  assert.doesNotMatch(executionInput, /Latest durable work handoff in this chat:/);
+  assert.doesNotMatch(executionInput, /Current tracked workspace in this chat:/);
+  assert.doesNotMatch(executionInput, /Tracked browser sessions:/);
+});
+
 test("buildConversationAwareExecutionInput does not misread build destinations as Desktop cleanup work", async () => {
   const executionInput = await buildConversationAwareExecutionInput(
     buildSession(),
@@ -1584,13 +1997,89 @@ test("buildConversationAwareExecutionInput adds an ownership guard for explicit 
   assert.doesNotMatch(executionInput, /Natural browser-session follow-up:/);
 });
 
+test("buildConversationAwareExecutionInput keeps the ownership guard authoritative after the tracked preview is already stale", async () => {
+  const session = buildSession();
+  session.modeContinuity = {
+    activeMode: "build",
+    source: "natural_intent",
+    confidence: "HIGH",
+    lastAffirmedAt: "2026-03-03T00:00:24.000Z",
+    lastUserInput: "Please close the landing page we left open earlier so we can move on."
+  };
+  session.returnHandoff = {
+    id: "handoff:job-owned-stale",
+    status: "completed",
+    goal: "Please close the landing page we left open earlier so we can move on.",
+    summary: "I closed the tracked landing page window from earlier and shut down its linked local preview process.",
+    nextSuggestedStep: null,
+    workspaceRootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
+    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
+    previewUrl: "http://127.0.0.1:4173/index.html",
+    changedPaths: ["C:\\Users\\testuser\\Desktop\\drone-company\\index.html"],
+    sourceJobId: "job-owned-stale",
+    updatedAt: "2026-03-03T00:00:25.000Z"
+  };
+  session.browserSessions.push({
+    id: "browser-owned-stale",
+    label: "Tracked landing page preview",
+    url: "http://127.0.0.1:4173/index.html",
+    visibility: "visible",
+    status: "closed",
+    sourceJobId: "job-owned-stale",
+    openedAt: "2026-03-03T00:00:20.000Z",
+    closedAt: "2026-03-03T00:00:24.000Z",
+    controllerKind: "playwright_managed",
+    controlAvailable: false,
+    browserProcessPid: 42001,
+    linkedProcessLeaseId: "proc-owned-stale",
+    linkedProcessCwd: "C:\\Users\\testuser\\Desktop\\drone-company",
+    linkedProcessPid: 42002,
+    workspaceRootPath: "C:\\Users\\testuser\\Desktop\\drone-company"
+  });
+  session.activeWorkspace = {
+    id: "workspace:drone-company",
+    label: "Current project workspace",
+    rootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
+    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
+    previewUrl: "http://127.0.0.1:4173/index.html",
+    browserSessionId: "browser-owned-stale",
+    browserSessionIds: ["browser-owned-stale"],
+    browserSessionStatus: "closed",
+    browserProcessPid: 42001,
+    previewProcessLeaseId: "proc-owned-stale",
+    previewProcessLeaseIds: ["proc-owned-stale"],
+    previewProcessCwd: "C:\\Users\\testuser\\Desktop\\drone-company",
+    lastKnownPreviewProcessPid: 42002,
+    stillControllable: false,
+    ownershipState: "stale",
+    previewStackState: "detached",
+    lastChangedPaths: ["C:\\Users\\testuser\\Desktop\\drone-company\\index.html"],
+    sourceJobId: "job-owned-stale",
+    updatedAt: "2026-03-03T00:00:25.000Z"
+  };
+
+  const executionInput = await buildConversationAwareExecutionInput(
+    session,
+    "There is another localhost page I opened myself earlier. If you cannot prove it belongs to this project, leave it alone instead of guessing. Please close http://127.0.0.1:59999/index.html only if it is actually the page from this project.",
+    10
+  );
+
+  assert.match(executionInput, /Explicit browser-ownership guard:/);
+  assert.doesNotMatch(executionInput, /Natural browser-session follow-up:/);
+  assert.doesNotMatch(executionInput, /prefer stop_process with params\.leaseId=proc-owned-stale/i);
+  assert.doesNotMatch(executionInput, /prefer close_browser with params\.sessionId=browser-owned-stale/i);
+  assert.doesNotMatch(executionInput, /Current tracked workspace in this chat:/);
+  assert.doesNotMatch(executionInput, /Latest durable work handoff in this chat:/);
+  assert.doesNotMatch(executionInput, /Current working mode from earlier in this chat:/);
+});
+
 
 test("buildConversationAwareExecutionInput can use media continuity cues to surface bounded contextual recall", async () => {
   const session = buildSession({
     conversationTurns: [
       {
         role: "user",
-        text: "We never really found out how Billy's MRI turned out.",
+        text: "We never really found out how Owen's MRI turned out.",
         at: "2026-02-14T15:00:00.000Z"
       }
     ],
@@ -1609,16 +2098,16 @@ test("buildConversationAwareExecutionInput can use media continuity cues to surf
           lastTouchedAt: "2026-03-03T00:00:00.000Z"
         },
         {
-          threadKey: "thread_billy",
-          topicKey: "billy_mri",
-          topicLabel: "Billy MRI",
+          threadKey: "thread_owen",
+          topicKey: "owen_mri",
+          topicLabel: "Owen MRI",
           state: "paused",
-          resumeHint: "Billy was waiting on MRI results and the outcome never got resolved.",
+          resumeHint: "Owen was waiting on MRI results and the outcome never got resolved.",
           openLoops: [
             {
-              loopId: "loop_billy_mri",
-              threadKey: "thread_billy",
-              entityRefs: ["billy", "mri"],
+              loopId: "loop_owen_mri",
+              threadKey: "thread_owen",
+              entityRefs: ["owen", "mri"],
               createdAt: "2026-02-14T15:00:00.000Z",
               lastMentionedAt: "2026-02-14T15:00:00.000Z",
               priority: 0.9,
@@ -1637,8 +2126,8 @@ test("buildConversationAwareExecutionInput can use media continuity cues to surf
           mentionCount: 1
         },
         {
-          topicKey: "billy_mri",
-          label: "Billy MRI",
+          topicKey: "owen_mri",
+          label: "Owen MRI",
           firstSeenAt: "2026-02-14T15:00:00.000Z",
           lastSeenAt: "2026-02-14T15:00:00.000Z",
           mentionCount: 1
@@ -1655,22 +2144,22 @@ test("buildConversationAwareExecutionInput can use media continuity cues to surf
     "Please review the screenshot and tell me what to do next.",
     async () => [
       {
-        episodeId: "episode_billy_mri",
-        title: "Billy MRI results were still pending",
-        summary: "Billy was waiting on MRI results and the outcome never got resolved.",
+        episodeId: "episode_owen_mri",
+        title: "Owen MRI results were still pending",
+        summary: "Owen was waiting on MRI results and the outcome never got resolved.",
         status: "outcome_unknown",
         lastMentionedAt: "2026-02-14T15:00:00.000Z",
-        entityRefs: ["Billy", "MRI"],
+        entityRefs: ["Owen", "MRI"],
         entityLinks: [
           {
-            entityKey: "entity_billy",
-            canonicalName: "Billy"
+            entityKey: "entity_owen",
+            canonicalName: "Owen"
           }
         ],
         openLoopLinks: [
           {
-            loopId: "loop_billy_mri",
-            threadKey: "thread_billy",
+            loopId: "loop_owen_mri",
+            threadKey: "thread_owen",
             status: "open",
             priority: 0.9
           }
@@ -1683,23 +2172,23 @@ test("buildConversationAwareExecutionInput can use media continuity cues to surf
         {
           kind: "image",
           provider: "telegram",
-          fileId: "image-billy-1",
-          fileUniqueId: "image-billy-uniq-1",
+          fileId: "image-owen-1",
+          fileUniqueId: "image-owen-uniq-1",
           mimeType: "image/png",
-          fileName: "billy-update.png",
+          fileName: "owen-update.png",
           sizeBytes: 2048,
-          caption: "Here is the note about Billy.",
+          caption: "Here is the note about Owen.",
           durationSeconds: null,
           width: 1024,
           height: 768,
           interpretation: {
-            summary: "The screenshot mentions Billy and says the MRI results still have not come back.",
+            summary: "The screenshot mentions Owen and says the MRI results still have not come back.",
             transcript: null,
-            ocrText: "Billy MRI results still pending",
+            ocrText: "Owen MRI results still pending",
             confidence: 0.93,
             provenance: "fixture screenshot",
             source: "fixture_catalog",
-            entityHints: ["Billy", "MRI"]
+            entityHints: ["Owen", "MRI"]
           }
         }
       ]
@@ -1707,8 +2196,8 @@ test("buildConversationAwareExecutionInput can use media continuity cues to surf
   );
 
   assert.match(executionInput, /Contextual recall opportunity \(optional\):/);
-  assert.match(executionInput, /Media continuity cues: billy, mri/);
-  assert.match(executionInput, /Relevant situation: Billy MRI results were still pending/i);
+  assert.match(executionInput, /Media continuity cues: owen, mri/);
+  assert.match(executionInput, /Relevant situation: Owen MRI results were still pending/i);
 });
 
 test("buildAgentPulseExecutionInput includes pulse safety instructions and bounded context", () => {

@@ -28,15 +28,44 @@ import {
   renderBrowserSessionLine,
   renderPathDestinationLine,
   renderProgressStateLine,
+  renderRecoveryTraceLine,
   renderReturnHandoffSummary,
   renderRecentActionLine
 } from "./recentActionLedgerRendering";
+import {
+  analyzeConversationChatTurnSignals,
+  shouldAllowImplicitReturnHandoffStatusFallback
+} from "./chatTurnSignals";
 import type {
   ConversationBrowserSessionRecord,
   ConversationPathDestinationRecord,
   ConversationRecentActionRecord,
   ConversationSession
 } from "../sessionStore";
+
+/**
+ * Returns whether one semantic hint should be trusted as an implicit durable-handoff status signal.
+ *
+ * @param semanticHint - Optional resolved conversational status hint.
+ * @returns `true` when the hint belongs to a durable handoff/status surface.
+ */
+function isImplicitReturnHandoffSemanticHint(
+  semanticHint: ConversationIntentSemanticHint | null
+): boolean {
+  switch (semanticHint) {
+    case "review_ready":
+    case "guided_review":
+    case "next_review_step":
+    case "while_away_review":
+    case "wrap_up_summary":
+    case "explain_handoff":
+    case "resume_handoff":
+    case "status_return_handoff":
+      return true;
+    default:
+      return false;
+  }
+}
 
 export interface RecentActionLedgerLimits {
   maxRecentActions: number;
@@ -493,6 +522,7 @@ function renderLatestChangeSummary(session: ConversationSession): string | null 
   );
 
   const lines: string[] = [];
+  let recoveryLineAdded = false;
   if (fileActions.length > 0) {
     const fileNames = fileActions
       .map((action) => action.location)
@@ -547,17 +577,37 @@ export function renderConversationStatusOrRecall(
   semanticHint: ConversationIntentSemanticHint | null = null
 ): string {
   const normalizedInput = userInput.toLowerCase();
-  const focusOnRecentAction = CHANGE_RECALL_PATTERN.test(normalizedInput);
+  const chatSignals = analyzeConversationChatTurnSignals(userInput);
+  const canTrustImplicitSemanticHandoff =
+    isImplicitReturnHandoffSemanticHint(semanticHint) &&
+    chatSignals.primaryKind !== "plain_chat" &&
+    chatSignals.primaryKind !== "self_identity_query" &&
+    chatSignals.primaryKind !== "assistant_identity_query";
+  const focusOnRecentAction =
+    semanticHint === "status_change_summary" ||
+    CHANGE_RECALL_PATTERN.test(normalizedInput);
   const focusOnReturnHandoff =
-    semanticHint !== null || RETURN_HANDOFF_PATTERN.test(normalizedInput);
-  const focusOnLocation = /\b(where|desktop|folder|path|put)\b/.test(normalizedInput);
-  const focusOnBrowser = /\b(browser|tab|window|leave open|left open|open)\b/.test(normalizedInput);
-  const focusOnProgress = /\b(status|doing|happening|working|stuck|waiting|next)\b/.test(normalizedInput);
-  const focusOnWaiting = /\b(waiting on|waiting for|need from me|need from us|what are you waiting on)\b/.test(normalizedInput);
+    canTrustImplicitSemanticHandoff ||
+    semanticHint === "status_return_handoff" ||
+    RETURN_HANDOFF_PATTERN.test(normalizedInput);
+  const focusOnLocation =
+    semanticHint === "status_location" ||
+    /\b(where|desktop|folder|path|put)\b/.test(normalizedInput);
+  const focusOnBrowser =
+    semanticHint === "status_browser" ||
+    /\b(browser|tab|window|leave open|left open|open)\b/.test(normalizedInput);
+  const focusOnProgress =
+    semanticHint === "status_progress" ||
+    /\b(status|doing|happening|working|stuck|waiting|next)\b/.test(normalizedInput);
+  const focusOnWaiting =
+    semanticHint === "status_waiting" ||
+    /\b(waiting on|waiting for|need from me|need from us|what are you waiting on)\b/.test(normalizedInput);
 
   const lines: string[] = [];
+  let recoveryLineAdded = false;
 
   const progressState = session.progressState;
+  const latestRecoveryTrace = latestCompletedJob(session)?.recoveryTrace ?? null;
   if (focusOnWaiting) {
     if (progressState?.status === "waiting_for_user") {
       lines.push(`I'm waiting on you for ${progressState.message}.`);
@@ -567,7 +617,12 @@ export function renderConversationStatusOrRecall(
   } else if (progressState && (focusOnProgress || (!focusOnLocation && !focusOnBrowser && !focusOnRecentAction))) {
     lines.push(renderProgressStateLine(progressState));
   } else if (focusOnProgress) {
-    lines.push("I'm not actively working on anything right now.");
+    if (latestRecoveryTrace) {
+      lines.push(renderRecoveryTraceLine(latestRecoveryTrace));
+      recoveryLineAdded = true;
+    } else {
+      lines.push("I'm not actively working on anything right now.");
+    }
   }
 
   if (focusOnReturnHandoff && session.returnHandoff) {
@@ -632,15 +687,32 @@ export function renderConversationStatusOrRecall(
     return lines.join("\n");
   }
 
+  if (
+    focusOnProgress &&
+    progressState &&
+    !focusOnLocation &&
+    !focusOnBrowser &&
+    !focusOnRecentAction &&
+    !focusOnReturnHandoff
+  ) {
+    return lines.join("\n");
+  }
+
   if (!focusOnLocation && !focusOnBrowser && !focusOnRecentAction && !focusOnReturnHandoff) {
+    if (latestRecoveryTrace && !recoveryLineAdded) {
+      lines.push(renderRecoveryTraceLine(latestRecoveryTrace));
+    }
     if (session.recentActions.length > 0) {
       lines.push("Most recent actions:");
       lines.push(...session.recentActions.slice(0, 3).map(renderRecentActionLine));
     } else {
-      if (session.returnHandoff) {
+      if (
+        session.returnHandoff &&
+        shouldAllowImplicitReturnHandoffStatusFallback(userInput, semanticHint)
+      ) {
         lines.push(renderReturnHandoffSummary(session.returnHandoff, userInput, semanticHint));
       } else {
-        lines.push("I haven't completed a tracked action in this chat yet.");
+        lines.push("I don't have a tracked status update for that.");
       }
     }
   }

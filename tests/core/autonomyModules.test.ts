@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
+  buildAutonomousRecoverySnapshot,
   EXECUTION_STYLE_STALL_REASON_CODE,
   EXECUTION_STYLE_LIVE_VERIFICATION_BLOCKED_REASON_CODE,
   MISSION_REQUIREMENT_BROWSER,
@@ -15,6 +16,8 @@ import {
   formatReasonWithCode,
   type MissionCompletionContract
 } from "../../src/core/autonomy/contracts";
+import { evaluateAutonomousNextStep } from "../../src/core/autonomy/agentLoopModelPolicy";
+import { hasMissionStopLimitReached } from "../../src/core/autonomy/agentLoopRuntimeSupport";
 import { buildMissionCompletionContract } from "../../src/core/autonomy/missionContract";
 import {
   buildManagedProcessStopRetryInput,
@@ -29,11 +32,18 @@ import {
 } from "../../src/core/autonomy/completionGate";
 import {
   buildRetryingStateMessage,
+  buildStructuredRecoveryStateMessage,
   buildVerificationStateMessage,
   buildWorkingStateMessage,
   buildWorkspaceRecoveryStateMessage
 } from "../../src/core/autonomy/agentLoopProgress";
+import { DEFAULT_BRAIN_CONFIG } from "../../src/core/config";
 import { humanizeAutonomousStopReason } from "../../src/core/autonomy/stopReasonText";
+import {
+  buildRecoveryAttemptFingerprint,
+  buildStructuredRecoveryExecutionPlan,
+  evaluateStructuredRecoveryPolicy
+} from "../../src/core/stage6_85/recovery";
 import { type ActionRunResult, type TaskRunResult } from "../../src/core/types";
 import { buildWorkspaceRecoverySignalFixture } from "../helpers/conversationFixtures";
 
@@ -196,6 +206,111 @@ function buildBlockedProbeHttpGovernanceResult(actionId: string): ActionRunResul
   };
 }
 
+/**
+ * Builds a blocked shell action result for executor-missing tests.
+ *
+ * @param actionId - Action id to assign.
+ * @returns Blocked shell action result with missing-executable metadata.
+ */
+function buildBlockedShellExecutableMissingResult(actionId: string): ActionRunResult {
+  return {
+    action: {
+      id: actionId,
+      type: "shell_command",
+      description: "run a shell command",
+      params: {
+        command: "python app.py"
+      },
+      estimatedCostUsd: 0.03
+    },
+    mode: "escalation_path",
+    approved: false,
+    output: "Shell failed: executable not found.",
+    executionStatus: "blocked",
+    executionFailureCode: "SHELL_EXECUTABLE_NOT_FOUND",
+    blockedBy: ["SHELL_EXECUTABLE_NOT_FOUND"],
+    violations: [
+      {
+        code: "SHELL_EXECUTABLE_NOT_FOUND",
+        message: "Shell executable missing."
+      }
+    ],
+    votes: []
+  };
+}
+
+/**
+ * Builds a blocked shell action result carrying a deterministically identifiable missing dependency.
+ *
+ * @param actionId - Action id to assign.
+ * @returns Blocked shell action result with native recovery metadata.
+ */
+function buildBlockedMissingDependencyShellResult(actionId: string): ActionRunResult {
+  return {
+    action: {
+      id: actionId,
+      type: "shell_command",
+      description: "build the current app",
+      params: {
+        command: "npm run build",
+        cwd: "C:\\Users\\benac\\OneDrive\\Desktop\\Calm Drone"
+      },
+      estimatedCostUsd: 0.08
+    },
+    mode: "escalation_path",
+    approved: false,
+    output:
+      "Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@vitejs/plugin-react' imported from C:\\Users\\benac\\OneDrive\\Desktop\\Calm Drone\\vite.config.js",
+    executionStatus: "failed",
+    executionFailureCode: "ACTION_EXECUTION_FAILED",
+    executionMetadata: {
+      recoveryFailureClass: "DEPENDENCY_MISSING",
+      recoveryFailureProvenance: "executor_mechanical"
+    },
+    blockedBy: ["ACTION_EXECUTION_FAILED"],
+    violations: [
+      {
+        code: "ACTION_EXECUTION_FAILED",
+        message: "Build failed because a dependency is missing."
+      }
+    ],
+    votes: []
+  };
+}
+
+/**
+ * Builds a blocked action result carrying the terminal mission-stop block code.
+ *
+ * @param actionId - Action id to assign.
+ * @returns Blocked action result with `MISSION_STOP_LIMIT_REACHED`.
+ */
+function buildBlockedMissionStopLimitResult(actionId: string): ActionRunResult {
+  return {
+    action: {
+      id: actionId,
+      type: "respond",
+      description: "report mission stop",
+      params: {
+        message: "stopped"
+      },
+      estimatedCostUsd: 0.01
+    },
+    mode: "fast_path",
+    approved: false,
+    output: "Mission stop limit reached.",
+    executionStatus: "blocked",
+    executionFailureCode: "MISSION_STOP_LIMIT_REACHED",
+    blockedBy: ["MISSION_STOP_LIMIT_REACHED"],
+    violations: [
+      {
+        code: "MISSION_STOP_LIMIT_REACHED",
+        message: "Mission stop budget exhausted."
+      }
+    ],
+    votes: []
+  };
+}
+
 test("buildMissionCompletionContract captures finite live-run mission requirements", () => {
   const contract = buildMissionCompletionContract(
     "Create a tiny local site in C:\\demo, run it on localhost, verify the homepage UI in a real browser, keep the flow finite, and then stop the process. Execute now."
@@ -228,6 +343,19 @@ test("buildMissionCompletionContract does not force localhost readiness for a st
 
   assert.equal(contract.executionStyle, true);
   assert.equal(contract.requireRealSideEffect, true);
+  assert.equal(contract.requireReadinessProof, false);
+  assert.equal(contract.requireBrowserProof, false);
+  assert.equal(contract.requireProcessStopProof, false);
+});
+
+test("buildMissionCompletionContract does not force artifact-mutation proof for scaffold-only workspace bootstrap turns", () => {
+  const contract = buildMissionCompletionContract(
+    "Handle this first step only: create a new React single page app in a folder on my desktop. Use a real scaffold-capable toolchain step, then install dependencies so package.json and node_modules exist. Stop after the workspace is ready for edits. Do not start a preview server, do not verify localhost, and do not open a browser yet."
+  );
+
+  assert.equal(contract.executionStyle, true);
+  assert.equal(contract.requireRealSideEffect, true);
+  assert.equal(contract.requireArtifactMutation, false);
   assert.equal(contract.requireReadinessProof, false);
   assert.equal(contract.requireBrowserProof, false);
   assert.equal(contract.requireProcessStopProof, false);
@@ -339,6 +467,256 @@ test("resolveLiveVerificationBlockedAbortReason ignores mixed iterations that ma
   assert.equal(reason, null);
 });
 
+test("buildAutonomousRecoverySnapshot derives generic recovery classes and proof gaps", () => {
+  const contract: MissionCompletionContract = {
+    executionStyle: true,
+    requireRealSideEffect: true,
+    requireTargetPathTouch: false,
+    requireArtifactMutation: false,
+    requireReadinessProof: true,
+    requireBrowserProof: false,
+    requireProcessStopProof: false,
+    targetPathHints: []
+  };
+  const result = buildTaskResult([
+    buildBlockedShellExecutableMissingResult("shell_missing_exec_1")
+  ]);
+  const missingRequirements = resolveMissingMissionRequirements(contract, {
+    realSideEffects: 0,
+    targetPathTouches: 0,
+    artifactMutations: 0,
+    readinessProofs: 0,
+    browserProofs: 0,
+    processStopProofs: 0
+  });
+
+  const snapshot = buildAutonomousRecoverySnapshot({
+    result,
+    missionContract: contract,
+    missingRequirements
+  });
+
+  assert.equal(snapshot.missionStopLimitReached, false);
+  assert.deepEqual(snapshot.proofGaps, [
+    "REAL_SIDE_EFFECT_MISSING",
+    "READINESS_PROOF_MISSING"
+  ]);
+  assert.equal(snapshot.failureSignals.length, 1);
+  assert.equal(snapshot.failureSignals[0]?.recoveryClass, "EXECUTABLE_NOT_FOUND");
+  assert.equal(snapshot.failureSignals[0]?.provenance, "executor_mechanical");
+  assert.equal(snapshot.repairOptions[0]?.optionId, "resolve_known_executable");
+  assert.equal(snapshot.remainingBudgetHint, "executor_native_only");
+});
+
+test("buildAutonomousRecoverySnapshot prefers native recovery metadata over legacy code mapping", () => {
+  const contract: MissionCompletionContract = {
+    executionStyle: true,
+    requireRealSideEffect: true,
+    requireTargetPathTouch: false,
+    requireArtifactMutation: false,
+    requireReadinessProof: false,
+    requireBrowserProof: false,
+    requireProcessStopProof: false,
+    targetPathHints: []
+  };
+  const result = buildTaskResult([
+    {
+      action: {
+        id: "shell_native_recovery_1",
+        type: "shell_command",
+        description: "run npm command",
+        params: {
+          command: "npm run dev"
+        },
+        estimatedCostUsd: 0.03
+      },
+      mode: "escalation_path",
+      approved: false,
+      output: "Shell failed: spawn ENOENT",
+      executionStatus: "failed",
+      executionFailureCode: "ACTION_EXECUTION_FAILED",
+      executionMetadata: {
+        recoveryFailureClass: "EXECUTABLE_NOT_FOUND",
+        recoveryFailureProvenance: "executor_mechanical"
+      },
+      blockedBy: ["ACTION_EXECUTION_FAILED"],
+      violations: [
+        {
+          code: "ACTION_EXECUTION_FAILED",
+          message: "Shell failed."
+        }
+      ],
+      votes: []
+    }
+  ]);
+  const missingRequirements = resolveMissingMissionRequirements(contract, {
+    realSideEffects: 0,
+    targetPathTouches: 0,
+    artifactMutations: 0,
+    readinessProofs: 0,
+    browserProofs: 0,
+    processStopProofs: 0
+  });
+
+  const snapshot = buildAutonomousRecoverySnapshot({
+    result,
+    missionContract: contract,
+    missingRequirements
+  });
+
+  assert.deepEqual(snapshot.failureSignals, [
+    {
+      recoveryClass: "EXECUTABLE_NOT_FOUND",
+      provenance: "executor_mechanical",
+      sourceCode: "ACTION_EXECUTION_FAILED",
+      actionType: "shell_command",
+      realm: "shell",
+      detail: null
+    }
+  ]);
+});
+
+test("hasMissionStopLimitReached reads typed block codes instead of summary text", () => {
+  const result = buildTaskResult([
+    buildBlockedMissionStopLimitResult("mission_stop_limit_1")
+  ]);
+  result.summary = "summary without recovery postmortem marker";
+
+  assert.equal(hasMissionStopLimitReached(result), true);
+});
+
+test("evaluateAutonomousNextStep passes structured recovery snapshot to the model", async () => {
+  const prompts: Array<Record<string, unknown>> = [];
+  const result = buildTaskResult([
+    buildBlockedShellExecutableMissingResult("shell_missing_exec_prompt_1")
+  ]);
+  const modelClient = {
+    completeJson: async (request: { userPrompt: string }) => {
+      prompts.push(JSON.parse(request.userPrompt) as Record<string, unknown>);
+      return {
+        isGoalMet: false,
+        reasoning: "need deterministic repair",
+        nextUserInput: "retry with known executable"
+      };
+    }
+  } as unknown as {
+    completeJson: (request: { userPrompt: string }) => Promise<{
+      isGoalMet: boolean;
+      reasoning: string;
+      nextUserInput: string;
+    }>;
+  };
+
+  await evaluateAutonomousNextStep(
+    modelClient as never,
+    DEFAULT_BRAIN_CONFIG,
+    "Write a file in the workspace.",
+    result,
+    {
+      realSideEffects: 0,
+      targetPathTouches: 0,
+      artifactMutations: 0,
+      readinessProofs: 0,
+      browserProofs: 0,
+      processStopProofs: 0
+    },
+    null,
+    null
+  );
+
+  const recoverySnapshot = prompts[0]?.recoverySnapshot as Record<string, unknown> | undefined;
+  assert.ok(recoverySnapshot);
+  assert.equal(recoverySnapshot?.remainingBudgetHint, "executor_native_only");
+  const failureSignals = recoverySnapshot?.failureSignals as Array<Record<string, unknown>>;
+  assert.equal(failureSignals[0]?.recoveryClass, "EXECUTABLE_NOT_FOUND");
+  const repairOptions = recoverySnapshot?.repairOptions as Array<Record<string, unknown>>;
+  assert.equal(repairOptions[0]?.optionId, "resolve_known_executable");
+});
+
+test("evaluateStructuredRecoveryPolicy and builder produce one bounded dependency repair plan", () => {
+  const contract: MissionCompletionContract = {
+    executionStyle: true,
+    requireRealSideEffect: true,
+    requireTargetPathTouch: false,
+    requireArtifactMutation: false,
+    requireReadinessProof: false,
+    requireBrowserProof: false,
+    requireProcessStopProof: false,
+    targetPathHints: []
+  };
+  const result = buildTaskResult([
+    buildBlockedMissingDependencyShellResult("shell_missing_dependency_1")
+  ]);
+  const snapshot = buildAutonomousRecoverySnapshot({
+    result,
+    missionContract: contract,
+    missingRequirements: resolveMissingMissionRequirements(contract, {
+      realSideEffects: 0,
+      targetPathTouches: 0,
+      artifactMutations: 0,
+      readinessProofs: 0,
+      browserProofs: 0,
+      processStopProofs: 0
+    })
+  });
+
+  const decision = evaluateStructuredRecoveryPolicy({
+    snapshot,
+    attemptCounts: new Map()
+  });
+  const executionPlan = buildStructuredRecoveryExecutionPlan({
+    overarchingGoal: "Build the app and leave it working.",
+    missionRequiresBrowserProof: false,
+    result,
+    decision,
+    trackedManagedProcessLeaseId: null,
+    trackedLoopbackTarget: null
+  });
+
+  assert.equal(decision.outcome, "attempt_repair");
+  assert.equal(decision.optionId, "repair_missing_dependency");
+  assert.ok(executionPlan && "nextUserInput" in executionPlan);
+  assert.match(executionPlan?.nextUserInput ?? "", /\[STRUCTURED_RECOVERY_OPTION:repair_missing_dependency\]/i);
+  assert.match(executionPlan?.nextUserInput ?? "", /@vitejs\/plugin-react/i);
+  assert.match(executionPlan?.nextUserInput ?? "", /npm install\s+"?@vitejs\/plugin-react"?/i);
+});
+
+test("evaluateStructuredRecoveryPolicy stops when a bounded repair fingerprint exhausts its budget", () => {
+  const signal = {
+    recoveryClass: "DEPENDENCY_MISSING" as const,
+    provenance: "executor_mechanical" as const,
+    sourceCode: "ACTION_EXECUTION_FAILED" as const,
+    actionType: "shell_command" as const,
+    realm: "shell",
+    detail: "A dependency is missing."
+  };
+  const optionId = "repair_missing_dependency";
+  const fingerprint = buildRecoveryAttemptFingerprint(signal, optionId);
+
+  const decision = evaluateStructuredRecoveryPolicy({
+    snapshot: {
+      missionStopLimitReached: false,
+      failureSignals: [signal],
+      proofGaps: ["REAL_SIDE_EFFECT_MISSING"],
+      repairOptions: [
+        {
+          optionId,
+          allowedRung: "bounded_repair_iteration",
+          budgetHint: "single_repair_attempt",
+          detail: "Install only the missing dependency."
+        }
+      ],
+      remainingBudgetHint: "single_repair_attempt",
+      environmentFacts: {}
+    },
+    attemptCounts: new Map([[fingerprint, 1]])
+  });
+
+  assert.equal(decision.outcome, "stop");
+  assert.equal(decision.fingerprint, fingerprint);
+  assert.match(decision.reason, /budget is exhausted/i);
+});
+
 test("formatManagedProcessNeverReadyReason keeps the target label and shared reason-code prefix", () => {
   const reason = formatManagedProcessNeverReadyReason("http://localhost:8125");
 
@@ -405,6 +783,17 @@ test("agentLoopProgress renders human-first working, verification, and narrow re
   assert.match(verification, /preview stack was actually shut down/i);
   assert.match(recovery, /exact tracked holders/i);
   assert.match(recovery, /narrow shutdown path/i);
+});
+
+test("agentLoopProgress renders bounded structured recovery status updates", () => {
+  assert.equal(
+    buildStructuredRecoveryStateMessage("DEPENDENCY_MISSING"),
+    "I found a missing dependency. I'm doing one bounded repair and then retrying the original step."
+  );
+  assert.match(
+    buildStructuredRecoveryStateMessage("PROCESS_PORT_IN_USE"),
+    /free loopback port/i
+  );
 });
 
 test("agentLoopProgress keeps edit and generic autonomous work calmer than raw prompt echoes", () => {

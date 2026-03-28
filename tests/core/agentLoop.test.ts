@@ -354,7 +354,12 @@ function buildBlockedProbeHttpNotReadyResult(
 function buildApprovedStartProcessResult(
   actionId: string,
   leaseId = "proc_loop_live_1",
-  command = "python -m http.server 3000"
+  command = "python -m http.server 3000",
+  loopbackTarget?: {
+    host: string;
+    port: number;
+    url: string;
+  }
 ): ActionRunResult {
   return {
     action: {
@@ -374,7 +379,10 @@ function buildApprovedStartProcessResult(
     executionMetadata: {
       processLeaseId: leaseId,
       processLifecycleStatus: "PROCESS_STARTED",
-      processPid: 4242
+      processPid: 4242,
+      processRequestedHost: loopbackTarget?.host,
+      processRequestedPort: loopbackTarget?.port,
+      processRequestedUrl: loopbackTarget?.url
     },
     blockedBy: [],
     violations: [],
@@ -670,6 +678,43 @@ function buildBlockedFolderInUseShellResult(actionId: string): ActionRunResult {
     executionFailureCode: "ACTION_EXECUTION_FAILED",
     blockedBy: [],
     violations: [],
+    votes: []
+  };
+}
+
+/**
+ * Implements `buildBlockedMissingDependencyShellResult` behavior within module scope.
+ * Interacts with local collaborators through imported modules and typed inputs/outputs.
+ */
+function buildBlockedMissingDependencyShellResult(actionId: string): ActionRunResult {
+  return {
+    action: {
+      id: actionId,
+      type: "shell_command",
+      description: "build the current app",
+      params: {
+        command: "npm run build",
+        cwd: "C:\\Users\\benac\\OneDrive\\Desktop\\Calm Drone"
+      },
+      estimatedCostUsd: 0.08
+    },
+    mode: "escalation_path",
+    approved: false,
+    output:
+      "Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@vitejs/plugin-react' imported from C:\\Users\\benac\\OneDrive\\Desktop\\Calm Drone\\vite.config.js",
+    executionStatus: "failed",
+    executionFailureCode: "ACTION_EXECUTION_FAILED",
+    executionMetadata: {
+      recoveryFailureClass: "DEPENDENCY_MISSING",
+      recoveryFailureProvenance: "executor_mechanical"
+    },
+    blockedBy: ["ACTION_EXECUTION_FAILED"],
+    violations: [
+      {
+        code: "ACTION_EXECUTION_FAILED",
+        message: "Build failed because a dependency is missing."
+      }
+    ],
     votes: []
   };
 }
@@ -3308,9 +3353,46 @@ test("AutonomousLoop aborts immediately when an inner task exhausts its retry bu
         plan: {
           taskId: task.id,
           plannerNotes: "stub",
-          actions: [buildApprovedWriteFileResult("write_retry_budget_stop_1").action]
+          actions: [
+            buildApprovedWriteFileResult("write_retry_budget_stop_1").action,
+            {
+              id: "respond_retry_budget_stop_1",
+              type: "respond",
+              description: "report retry budget exhaustion",
+              params: {
+                message: "Mission stop."
+              },
+              estimatedCostUsd: 0.01
+            }
+          ]
         },
-        actionResults: [buildApprovedWriteFileResult("write_retry_budget_stop_1")],
+        actionResults: [
+          buildApprovedWriteFileResult("write_retry_budget_stop_1"),
+          {
+            action: {
+              id: "respond_retry_budget_stop_1",
+              type: "respond",
+              description: "report retry budget exhaustion",
+              params: {
+                message: "Mission stop."
+              },
+              estimatedCostUsd: 0.01
+            },
+            mode: "fast_path",
+            approved: false,
+            output: "Mission retry budget exhausted.",
+            executionStatus: "blocked",
+            executionFailureCode: "MISSION_STOP_LIMIT_REACHED",
+            blockedBy: ["MISSION_STOP_LIMIT_REACHED"],
+            violations: [
+              {
+                code: "MISSION_STOP_LIMIT_REACHED",
+                message: "Mission retry budget exhausted."
+              }
+            ],
+            votes: []
+          }
+        ],
         summary:
           "Completed task with 1 approved action(s) and 2 blocked action(s) across 2 plan attempt(s). " +
           "Estimated approved action cost 0.08/10.00 USD. Model usage spend (provider-usage estimated) 0.000200/10.00 USD. " +
@@ -3404,6 +3486,96 @@ test("AutonomousLoop retries a live-run goal on a suggested free port after star
   assert.match(orchestrator.receivedInputs[1] ?? "", /probe_http url="http:\/\/localhost:8125"/i);
   assert.match(orchestrator.receivedInputs[3] ?? "", /^stop_process leaseId="proc_port_conflict_1"/i);
   assert.match(goalMetReasoning, /browser verification passed/i);
+});
+
+test("AutonomousLoop schedules one bounded dependency repair iteration before falling back to the model", async () => {
+  const orchestrator = new ScriptedOrchestrator([
+    [buildBlockedMissingDependencyShellResult("shell_missing_dependency_loop_1")],
+    [buildApprovedWriteFileResult("write_dependency_repair_loop_1")]
+  ]);
+  let modelCalls = 0;
+  const modelClient: ModelClient = {
+    backend: "mock",
+    async completeJson<T>(request: StructuredCompletionRequest): Promise<T> {
+      if (request.schemaName === "autonomous_next_step_v1") {
+        modelCalls += 1;
+        return {
+          isGoalMet: true,
+          reasoning: "the bounded repair finished and the workspace mutation succeeded",
+          nextUserInput: ""
+        } as T;
+      }
+      if (request.schemaName === "proactive_goal_v1") {
+        return {
+          proactiveGoal: "noop",
+          reasoning: "noop"
+        } as T;
+      }
+      throw new Error(`Unsupported schema in test stub: ${request.schemaName}`);
+    }
+  };
+  const loop = new AutonomousLoop(
+    orchestrator as unknown as BrainOrchestrator,
+    modelClient,
+    { ...DEFAULT_BRAIN_CONFIG, runtime: { ...DEFAULT_BRAIN_CONFIG.runtime, isDaemonMode: false } }
+  );
+
+  await loop.run("Build the current app and fix any missing dependency if one deterministic repair is obvious.");
+
+  assert.equal(orchestrator.receivedInputs.length, 2);
+  assert.match(
+    orchestrator.receivedInputs[1] ?? "",
+    /\[STRUCTURED_RECOVERY_OPTION:repair_missing_dependency\]/i
+  );
+  assert.match(orchestrator.receivedInputs[1] ?? "", /@vitejs\/plugin-react/i);
+  assert.equal(modelCalls, 1);
+});
+
+test("AutonomousLoop stops cleanly when the same bounded dependency repair fingerprint fails twice", async () => {
+  const orchestrator = new ScriptedOrchestrator([
+    [buildBlockedMissingDependencyShellResult("shell_missing_dependency_stop_1")],
+    [buildBlockedMissingDependencyShellResult("shell_missing_dependency_stop_2")]
+  ]);
+  let modelCalls = 0;
+  const modelClient: ModelClient = {
+    backend: "mock",
+    async completeJson<T>(request: StructuredCompletionRequest): Promise<T> {
+      if (request.schemaName === "autonomous_next_step_v1") {
+        modelCalls += 1;
+        throw new Error("The model should not be called while bounded repair handles this failure.");
+      }
+      if (request.schemaName === "proactive_goal_v1") {
+        return {
+          proactiveGoal: "noop",
+          reasoning: "noop"
+        } as T;
+      }
+      throw new Error(`Unsupported schema in test stub: ${request.schemaName}`);
+    }
+  };
+  const loop = new AutonomousLoop(
+    orchestrator as unknown as BrainOrchestrator,
+    modelClient,
+    { ...DEFAULT_BRAIN_CONFIG, runtime: { ...DEFAULT_BRAIN_CONFIG.runtime, isDaemonMode: false } }
+  );
+  let abortedReason = "";
+
+  await loop.run(
+    "Build the current app and repair exactly one obvious missing dependency if needed.",
+    {
+      onGoalAborted: async (reason) => {
+        abortedReason = reason;
+      }
+    }
+  );
+
+  assert.equal(orchestrator.receivedInputs.length, 2);
+  assert.match(
+    orchestrator.receivedInputs[1] ?? "",
+    /\[STRUCTURED_RECOVERY_OPTION:repair_missing_dependency\]/i
+  );
+  assert.equal(modelCalls, 0);
+  assert.match(abortedReason, /deterministic missing-dependency repair budget is exhausted/i);
 });
 
 test("AutonomousLoop checks the managed-process lease after localhost readiness is not ready", async () => {
@@ -3571,6 +3743,65 @@ test("AutonomousLoop preserves the original loopback URL across readiness retrie
   assert.doesNotMatch(orchestrator.receivedInputs[3] ?? "", /3000/i);
   assert.match(orchestrator.receivedInputs[4] ?? "", /^probe_http url="http:\/\/localhost:8000"/i);
   assert.match(orchestrator.receivedInputs[5] ?? "", /^stop_process leaseId="proc_target_8000_1"/i);
+});
+
+test("AutonomousLoop preserves typed loopback targets from generic workspace-native start commands", async () => {
+  const orchestrator = new ScriptedOrchestrator([
+    [
+      buildApprovedStartProcessResult(
+        "start_process_vite_target_1",
+        "proc_vite_target_1",
+        "npm run dev",
+        {
+          host: "localhost",
+          port: 4173,
+          url: "http://localhost:4173"
+        }
+      ),
+      buildBlockedProbeHttpNotReadyResult(
+        "probe_http_vite_target_not_ready_1",
+        "http://localhost:4173"
+      )
+    ],
+    [buildApprovedCheckProcessStillRunningResult("check_process_vite_target_1", "proc_vite_target_1")],
+    [buildBlockedProbeHttpNotReadyResult("probe_http_vite_wrong_port_not_ready_1", "http://localhost:5173")],
+    [buildApprovedCheckProcessStillRunningResult("check_process_vite_target_2", "proc_vite_target_1")],
+    [buildApprovedProbeHttpReadyResult("probe_http_vite_target_ready_1", "http://localhost:4173")]
+  ]);
+  const modelClient = new StubLoopModelClient([
+    {
+      isGoalMet: true,
+      reasoning: "localhost readiness was proven",
+      nextUserInput: ""
+    }
+  ]);
+  const loop = new AutonomousLoop(
+    orchestrator as unknown as BrainOrchestrator,
+    modelClient,
+    {
+      ...DEFAULT_BRAIN_CONFIG,
+      limits: {
+        ...DEFAULT_BRAIN_CONFIG.limits,
+        maxAutonomousIterations: 5,
+        maxAutonomousConsecutiveNoProgressIterations: 5
+      },
+      runtime: { ...DEFAULT_BRAIN_CONFIG.runtime, isDaemonMode: false }
+    }
+  );
+
+  await loop.run(
+    "Build the Vite app, run npm run dev, wait until localhost is ready, verify the page, and keep the proof pinned to the actual preview port. Execute now."
+  );
+
+  assert.equal(orchestrator.receivedInputs.length, 6);
+  assert.match(orchestrator.receivedInputs[1] ?? "", /check_process/i);
+  assert.match(orchestrator.receivedInputs[1] ?? "", /http:\/\/localhost:4173/i);
+  assert.match(orchestrator.receivedInputs[2] ?? "", /^probe_http url="http:\/\/localhost:4173"/i);
+  assert.match(orchestrator.receivedInputs[3] ?? "", /check_process/i);
+  assert.match(orchestrator.receivedInputs[3] ?? "", /http:\/\/localhost:4173/i);
+  assert.doesNotMatch(orchestrator.receivedInputs[3] ?? "", /5173/i);
+  assert.match(orchestrator.receivedInputs[4] ?? "", /^probe_http url="http:\/\/localhost:4173"/i);
+  assert.match(orchestrator.receivedInputs[5] ?? "", /^stop_process leaseId="proc_vite_target_1"/i);
 });
 
 test("AutonomousLoop stops and cleans up a managed process that never becomes HTTP-ready", async () => {

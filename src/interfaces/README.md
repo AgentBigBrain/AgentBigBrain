@@ -86,6 +86,8 @@ This top-level folder owns the transport and lifecycle path that consumes both s
   situations without leaking raw memory internals
 - private-only `/memory` command responses that let the user inspect, resolve, correct, or forget
   bounded remembered situations without exposing raw encrypted-store internals
+- persisted shared conversation-domain context so routing, broker, and lifecycle helpers can read
+  one per-conversation domain source of truth instead of re-inferring domain independently
 
 ## Invariants
 - Transport lifecycle logic should stay at this top level; wording logic should stay in
@@ -149,6 +151,9 @@ This top-level folder owns the transport and lifecycle path that consumes both s
   second proactive outreach channel.
 - Active-conversation contextual recall should prefer concrete unresolved situations backed by
   bounded episodic memory over generic paused-topic overlap when both are available.
+- Inbound Stage 6.86 entity-graph mutation may use bounded validated conversational type hints for
+  ambiguous request-local entity candidates, but it must remain deterministic-first and fail-closed
+  when the interpreter is missing, low confidence, or unsupported.
 - Future human-centric proactive follow-up scoring should live in a bounded runtime such as
   `src/interfaces/proactiveRuntime/`, not by loosening generic pulse heuristics inside unrelated
   transport or delivery code.
@@ -161,6 +166,9 @@ This top-level folder owns the transport and lifecycle path that consumes both s
   confirmation text.
 - Conversation lifecycle behavior should remain discoverable here rather than spread into unrelated
   transport helpers.
+- Interface session writes must preserve the shared conversation-domain context unless a fresher
+  meaningful replacement is available; empty partial writes must not wipe active session-domain
+  state.
 
 ## Related Tests
 - `tests/interfaces/userFacingResult.test.ts`
@@ -212,4 +220,5 @@ Update this README when:
 - in-conversation contextual recall rules change materially
 - episodic-memory-backed conversation recall wiring changes materially
 - remembered-situation review or mutation command behavior changes materially
+- shared conversation-domain session ownership or merge behavior changes materially
 - the related-test surface changes because interface responsibilities moved

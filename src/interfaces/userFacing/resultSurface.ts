@@ -515,6 +515,24 @@ function resolveRespondSurfaceSummary(
   }
 
   if (
+    approvedRealNonRespondExecution &&
+    primaryExecutionOutcomeLine &&
+    routingClassification.category === "BUILD_SCAFFOLD" &&
+    (isExecutionNoOpResponse(trustedOutputForRender) ||
+      isExecutionCapabilityLimitationResponse(trustedOutputForRender) ||
+      isExecutionPolicyRefusalResponse(trustedOutputForRender))
+  ) {
+    trustedOutputForRender =
+      blockedMessage && !isInspectionOnlyDirectExecutionOutcome(primaryExecutionOutcomeLine)
+        ? buildPartialExecutionBlockedSummary(
+            primaryExecutionOutcomeLine,
+            blockedMessage,
+            policyCodes
+          )
+        : primaryExecutionOutcomeLine;
+  }
+
+  if (
     blockedMessage &&
     approvedRealNonRespondExecution &&
     primaryExecutionOutcomeLine &&

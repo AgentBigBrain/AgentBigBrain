@@ -6,6 +6,7 @@ import { assertAckInvariants } from "./ackStateMachine";
 import { backfillPulseSnippet } from "./pulseEmissionLifecycle";
 import { elapsedSeconds } from "./conversationManagerHelpers";
 import {
+  applyConversationDomainSignalWindow,
   findRecentJob,
   recordAssistantTurn,
   setActiveClarification,
@@ -39,6 +40,7 @@ import type { BrowserSessionSnapshot } from "../organs/liveRun/browserSessionReg
 import type { ManagedProcessSnapshot } from "../organs/liveRun/managedProcessRegistry";
 import type { TaskRunResult } from "../core/types";
 import type {
+  ConversationOutboundDeliveryTrace,
   ConversationExecutionProgressUpdate,
   ConversationExecutionResult,
   ConversationNotifierTransport,
@@ -52,6 +54,30 @@ export type {
   ConversationNotifierTransport,
   ExecuteConversationTask
 } from "./conversationRuntime/managerContracts";
+
+const WORKFLOW_CONTINUITY_MODES = new Set([
+  "plan",
+  "build",
+  "autonomous",
+  "review"
+] as const);
+
+/**
+ * Narrows conversation modes down to the subset that should count as workflow continuity.
+ *
+ * @param mode - Candidate continuity mode persisted on the session.
+ * @returns `true` when the mode should reinforce workflow-domain continuity.
+ */
+function isWorkflowContinuityMode(
+  mode: NonNullable<ConversationSession["modeContinuity"]>["activeMode"] | null | undefined
+): mode is "plan" | "build" | "autonomous" | "review" {
+  return (
+    mode === "plan" ||
+    mode === "build" ||
+    mode === "autonomous" ||
+    mode === "review"
+  );
+}
 
 /**
  * Evaluates notifier native-streaming support and returns a deterministic policy signal.
@@ -70,6 +96,46 @@ function canUseNativeStreaming(
   notify: ConversationNotifierTransport
 ): boolean {
   return notify.capabilities.supportsNativeStreaming && typeof notify.stream === "function";
+}
+
+/**
+ * Syncs worker-owned continuity state back into the shared domain context after lifecycle mutations.
+ *
+ * @param session - Conversation session whose continuity signals should be aligned.
+ * @param observedAt - Timestamp to stamp onto the bounded domain update.
+ */
+function syncConversationDomainContinuityFromLifecycle(
+  session: ConversationSession,
+  observedAt: string
+): void {
+  const continuitySignals = {
+    activeWorkspace: session.activeWorkspace !== null,
+    returnHandoff: session.returnHandoff !== null,
+    modeContinuity: session.modeContinuity !== null
+  };
+  const workflowContinuityActive =
+    continuitySignals.activeWorkspace ||
+    continuitySignals.returnHandoff ||
+    (
+      session.modeContinuity !== null &&
+      isWorkflowContinuityMode(session.modeContinuity.activeMode) &&
+      WORKFLOW_CONTINUITY_MODES.has(session.modeContinuity.activeMode)
+    );
+
+  applyConversationDomainSignalWindow(session, {
+    observedAt,
+    laneSignals: workflowContinuityActive
+      ? [
+          {
+            lane: "workflow",
+            observedAt,
+            source: "continuity_state",
+            weight: 1
+          }
+        ]
+      : [],
+    continuitySignals
+  });
 }
 
 /**
@@ -897,6 +963,7 @@ export function markQueuedJobRunning(input: MarkQueuedJobRunningInput): void {
   job.completedAt = null;
   job.errorMessage = null;
   job.resultSummary = null;
+  job.recoveryTrace = null;
   job.ackMessageId = null;
   job.ackSentAt = null;
   job.ackLastErrorCode = null;
@@ -956,6 +1023,7 @@ export function shouldSuppressWorkerHeartbeat(
 }
 
 export interface ExecuteRunningJobInput {
+  sessionKey: string;
   job: ConversationJob;
   executeTask: ExecuteConversationTask;
   notify: ConversationNotifierTransport;
@@ -984,6 +1052,7 @@ export async function executeRunningJob(
   input: ExecuteRunningJobInput
 ): Promise<ConversationExecutionResult | null> {
   const {
+    sessionKey,
     job,
     executeTask,
     notify,
@@ -993,9 +1062,15 @@ export async function executeRunningJob(
     onExecutionSettled
   } = input;
   const useNativeStreaming = !suppressHeartbeat && canUseNativeStreaming(notify);
+  const progressTrace: ConversationOutboundDeliveryTrace = {
+    source: "worker_progress",
+    sessionKey,
+    jobId: job.id,
+    jobCreatedAt: job.createdAt
+  };
 
   if (useNativeStreaming) {
-    void notify.stream!(buildConversationWorkerProgressMessage(job)).catch(() => undefined);
+    void notify.stream!(buildConversationWorkerProgressMessage(job), progressTrace).catch(() => undefined);
   }
 
   const heartbeat = suppressHeartbeat
@@ -1007,10 +1082,10 @@ export async function executeRunningJob(
         const elapsed = elapsedSeconds(job.startedAt ?? job.createdAt);
         const progressText = buildConversationWorkerProgressMessage(job, elapsed);
         if (useNativeStreaming) {
-          void notify.stream!(progressText).catch(() => undefined);
+          void notify.stream!(progressText, progressTrace).catch(() => undefined);
           return;
         }
-        void notify.send(progressText).catch(() => undefined);
+        void notify.send(progressText, progressTrace).catch(() => undefined);
       }, heartbeatIntervalMs);
 
   try {
@@ -1084,6 +1159,8 @@ export function persistExecutedJobOutcome(input: PersistJobOutcomeInput): Conver
   persistedRunningJob.completedAt = executedJob.completedAt;
   persistedRunningJob.resultSummary = executedJob.resultSummary;
   persistedRunningJob.errorMessage = executedJob.errorMessage;
+  persistedRunningJob.recoveryTrace =
+    executedJob.recoveryTrace ?? persistedRunningJob.recoveryTrace ?? null;
 
   const invariant = assertAckInvariants(persistedRunningJob);
   if (!invariant.ok) {
@@ -1180,6 +1257,10 @@ export function persistExecutedJobOutcome(input: PersistJobOutcomeInput): Conver
       )
     );
   }
+  syncConversationDomainContinuityFromLifecycle(
+    session,
+    persistedRunningJob.completedAt ?? session.updatedAt
+  );
 
   if (persistedRunningJob.status === "completed") {
     backfillPulseSnippet(session, persistedRunningJob);

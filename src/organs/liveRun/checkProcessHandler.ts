@@ -7,7 +7,8 @@ import {
   buildExecutionOutcome,
   buildManagedProcessExecutionMetadata,
   LiveRunExecutorContext,
-  normalizeOptionalString
+  normalizeOptionalString,
+  withRecoveryFailureMetadata
 } from "./contracts";
 
 /**
@@ -75,7 +76,11 @@ export async function executeCheckProcess(
       "success",
       `Process stopped: lease ${snapshot.leaseId} (${exitDetail}).`,
       undefined,
-      buildManagedProcessExecutionMetadata(snapshot, "PROCESS_STOPPED")
+      withRecoveryFailureMetadata(
+        buildManagedProcessExecutionMetadata(snapshot, "PROCESS_STOPPED"),
+        "TARGET_NOT_RUNNING",
+        "runtime_live_run"
+      )
     );
   }
 

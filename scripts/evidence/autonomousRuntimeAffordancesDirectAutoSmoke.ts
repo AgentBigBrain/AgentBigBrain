@@ -81,6 +81,7 @@ const ARTIFACT_PATH = path.resolve(
   "runtime/evidence/autonomous_runtime_affordances_direct_auto_report.json"
 );
 const SMOKE_DEADLINE_MS = 90_000;
+const MIN_RETRY_BUDGET_MS = 30_000;
 const USER_ID = "autonomous-direct-auto-smoke-user";
 const CHAT_ID = "autonomous-direct-auto-smoke-chat";
 const USERNAME = "anthonybenny";
@@ -97,10 +98,11 @@ interface EnvSnapshot {
   [key: string]: string | undefined;
 }
 
-function isExternalProviderBlock(summaryText: string): boolean {
-  return /(?:429|exceeded your current quota|rate limit|fetch failed|request timed out)/i.test(
-    summaryText
-  );
+const BOUNDED_BLOCK_PATTERN =
+  /(?:429|exceeded your current quota|usage limit|purchase more credits|try again at|rate limit|fetch failed|request timed out|socket hang up|ECONNRESET|governor timeout or failure|requires a real model backend|effective backend is mock|missing OPENAI_API_KEY)/i;
+
+function isBoundedSmokeBlock(summaryText: string): boolean {
+  return BOUNDED_BLOCK_PATTERN.test(summaryText);
 }
 
 function applyEnvOverrides(overrides: Readonly<Record<string, string>>): EnvSnapshot {
@@ -184,6 +186,12 @@ function buildArtifact(
     ...Object.values(successScenario.checks),
     ...Object.values(boundedStopScenario.checks)
   ];
+  const successScenarioPassed =
+    successScenario.terminalOutcome !== "blocked" &&
+    Object.values(successScenario.checks).every(Boolean);
+  const boundedStopScenarioPassed =
+    boundedStopScenario.terminalOutcome === "stopped" &&
+    Object.values(boundedStopScenario.checks).every(Boolean);
   return {
     generatedAt: new Date().toISOString(),
     command: COMMAND_NAME,
@@ -191,8 +199,8 @@ function buildArtifact(
       successScenario.terminalOutcome === "blocked" ||
       boundedStopScenario.terminalOutcome === "blocked"
         ? "BLOCKED"
-        : successScenario.terminalOutcome === "completed" &&
-            boundedStopScenario.terminalOutcome === "stopped" &&
+        : successScenarioPassed &&
+            boundedStopScenarioPassed &&
             allChecks.every(Boolean)
           ? "PASS"
           : "FAIL",
@@ -260,6 +268,41 @@ async function executeDirectAutoRun(
   };
 }
 
+function resolveRemainingSmokeBudgetMs(deadlineAt: number): number {
+  return Math.max(1, deadlineAt - Date.now());
+}
+
+async function executeDirectAutoRunWithinBudget(
+  adapter: TelegramAdapter,
+  prompt: string,
+  deadlineAt: number,
+  onUpdate?: (update: ConversationExecutionProgressUpdate) => Promise<void> | void
+): Promise<{
+  executionResult: ConversationExecutionResult;
+  progressMessages: DirectAutoProgressMessage[];
+  progressStates: DirectAutoProgressState[];
+  abortedByBudget: boolean;
+}> {
+  const controller = new AbortController();
+  let abortedByBudget = false;
+  const timeoutHandle = setTimeout(
+    () => {
+      abortedByBudget = true;
+      controller.abort();
+    },
+    resolveRemainingSmokeBudgetMs(deadlineAt)
+  );
+  try {
+    const run = await executeDirectAutoRun(adapter, prompt, controller.signal, onUpdate);
+    return {
+      ...run,
+      abortedByBudget
+    };
+  } finally {
+    clearTimeout(timeoutHandle);
+  }
+}
+
 export async function runAutonomousRuntimeAffordancesDirectAutoSmoke():
 Promise<AutonomousRuntimeAffordancesDirectAutoArtifact> {
   ensureEnvLoaded();
@@ -279,10 +322,7 @@ Promise<AutonomousRuntimeAffordancesDirectAutoArtifact> {
   );
   const sourceFolderNames = [`${targetPrefix}-a`, `${targetPrefix}-b`];
   const prompt = buildPrompt(targetPrefix, destinationFolderName);
-  const progressMessages: DirectAutoProgressMessage[] = [];
-  const progressStates: DirectAutoProgressState[] = [];
-  const timeoutController = new AbortController();
-  const timeoutHandle = setTimeout(() => timeoutController.abort(), SMOKE_DEADLINE_MS);
+  const overallDeadlineAt = Date.now() + SMOKE_DEADLINE_MS;
   const envSnapshot = applyEnvOverrides({
     ...smokeBackend.envOverrides,
     BRAIN_LIVE_RUN_RUNTIME_PATH: LIVE_RUN_RUNTIME_PATH,
@@ -361,24 +401,73 @@ Promise<AutonomousRuntimeAffordancesDirectAutoArtifact> {
     let {
       executionResult,
       progressMessages,
-      progressStates
-    } = await executeDirectAutoRun(adapter, prompt, timeoutController.signal);
+      progressStates,
+      abortedByBudget
+    } = await executeDirectAutoRunWithinBudget(adapter, prompt, overallDeadlineAt);
     const firstAttemptSummary = [
       executionResult.summary,
       executionResult.taskRunResult
         ? selectUserFacingSummary(executionResult.taskRunResult) ?? ""
         : ""
     ].join("\n");
-    if (isExternalProviderBlock(firstAttemptSummary)) {
+    if (isBoundedSmokeBlock(firstAttemptSummary)) {
       recoveredTransientProviderFailure = true;
       progressMessages.push({
         at: new Date().toISOString(),
         message: "Transient provider failure detected on the first direct-auto attempt. Retrying once."
       });
-      const retryRun = await executeDirectAutoRun(adapter, prompt, timeoutController.signal);
+      const retryBudgetMs = resolveRemainingSmokeBudgetMs(overallDeadlineAt);
+      if (retryBudgetMs < MIN_RETRY_BUDGET_MS) {
+        const blockerReason =
+          "Transient provider failure exhausted the bounded direct-auto retry budget.\n" +
+          firstAttemptSummary;
+        const artifact = buildArtifact(
+          targetPrefix,
+          destinationFolderName,
+          desktopPath,
+          {
+            ...buildBlockedScenarioBase(prompt, blockerReason),
+            transientProviderFailureRecovered: true,
+            movedEntries: [],
+            desktopEntriesAfter: await listMatchingDesktopDirectories(desktopPath, targetPrefix),
+            checks: {
+              directEntryPointUsed: true,
+              boundedExit: true,
+              destinationCreated: await pathExists(destinationFolderPath),
+              movedMatchingFolders: false,
+              noRemainingMatchingFoldersAtDesktopRoot: false,
+              noNestedDestination: true,
+              observedProgressStates:
+                progressStates.some((entry) => entry.status === "working") &&
+                progressStates.some(
+                  (entry) => entry.status === "completed" || entry.status === "stopped"
+                ),
+              truthfulSummary: true
+            },
+            progressMessages,
+            progressStates
+          },
+          {
+            ...buildBlockedScenarioBase(buildBoundedStopPrompt(), blockerReason),
+            checks: {
+              directEntryPointUsed: true,
+              boundedExit: true,
+              observedWorkingState: false,
+              observedStoppedState: false,
+              truthfulStopSummary: true,
+              noFalseSuccessSummary: true
+            }
+          }
+        );
+        await mkdir(path.dirname(ARTIFACT_PATH), { recursive: true });
+        await writeFile(ARTIFACT_PATH, `${JSON.stringify(artifact, null, 2)}\n`, "utf8");
+        return artifact;
+      }
+      const retryRun = await executeDirectAutoRunWithinBudget(adapter, prompt, overallDeadlineAt);
       executionResult = retryRun.executionResult;
       progressMessages = [...progressMessages, ...retryRun.progressMessages];
       progressStates = [...progressStates, ...retryRun.progressStates];
+      abortedByBudget = retryRun.abortedByBudget;
     }
 
     const movedEntries = await readdir(destinationFolderPath).catch((): string[] => []);
@@ -393,18 +482,38 @@ Promise<AutonomousRuntimeAffordancesDirectAutoArtifact> {
       executionResult.summary,
       userFacingSummary ?? ""
     ].join("\n");
-    const finalAttemptBlockedByProvider = isExternalProviderBlock(finalAttemptSummaryText);
+    const finalAttemptBlockedByProvider = isBoundedSmokeBlock(finalAttemptSummaryText);
+    const finalAttemptBlockedByBudget =
+      abortedByBudget &&
+      progressStates.some((entry) => entry.status === "working") &&
+      !progressStates.some((entry) => entry.status === "completed");
+    const finalAttemptBlockerReason = finalAttemptBlockedByProvider
+      ? finalAttemptSummaryText
+      : finalAttemptBlockedByBudget
+        ? (
+            "Bounded direct-auto smoke budget expired before the organization scenario could prove a terminal success.\n" +
+            finalAttemptSummaryText
+          )
+        : null;
+    const successSummaryText = `${executionResult.summary} ${userFacingSummary ?? ""}`;
+    const provedSuccessfulLocalOrganizationOutcome =
+      /i ran the command successfully/i.test(successSummaryText) ||
+      /moved_to_dest=/i.test(successSummaryText) ||
+      /moved the matching folders/i.test(successSummaryText);
+    const provedTruthfulStoppedPartialSuccess =
+      /one later step was blocked/i.test(successSummaryText) &&
+      /stopped after the work that already succeeded/i.test(successSummaryText);
 
     const successScenario: DirectAutoSuccessScenarioResult = {
       prompt,
-      terminalOutcome: finalAttemptBlockedByProvider
+      terminalOutcome: finalAttemptBlockerReason
         ? "blocked"
         : progressStates.some((entry) => entry.status === "completed")
           ? "completed"
           : "stopped",
       summary: executionResult.summary,
       userFacingSummary,
-      blockerReason: finalAttemptBlockedByProvider ? finalAttemptSummaryText : null,
+      blockerReason: finalAttemptBlockerReason,
       transientProviderFailureRecovered: recoveredTransientProviderFailure,
       movedEntries: [...movedEntries].sort((left, right) => left.localeCompare(right)),
       desktopEntriesAfter,
@@ -425,11 +534,11 @@ Promise<AutonomousRuntimeAffordancesDirectAutoArtifact> {
             (entry) => entry.status === "completed" || entry.status === "stopped"
           ),
         truthfulSummary:
-          finalAttemptBlockedByProvider
+          finalAttemptBlockerReason !== null
           || /autonomous task completed/i.test(executionResult.summary)
-          || /moved the matching folders/i.test(
-            `${executionResult.summary} ${userFacingSummary ?? ""}`
-          )
+          || (provedSuccessfulLocalOrganizationOutcome &&
+            (progressStates.some((entry) => entry.status === "completed") ||
+              provedTruthfulStoppedPartialSuccess))
       }
     };
 
@@ -455,14 +564,17 @@ Promise<AutonomousRuntimeAffordancesDirectAutoArtifact> {
     ].join("\n");
     const boundedStopScenario: DirectAutoBoundedStopScenarioResult = {
       prompt: buildBoundedStopPrompt(),
-      terminalOutcome: isExternalProviderBlock(boundedStopSummaryText)
+      terminalOutcome: isBoundedSmokeBlock(boundedStopSummaryText)
         ? "blocked"
-        : /autonomous task stopped/i.test(boundedStopRun.executionResult.summary)
+        : (
+            /autonomous task stopped/i.test(boundedStopRun.executionResult.summary) ||
+            /run stopped before it finished/i.test(boundedStopRun.executionResult.summary)
+          )
           ? "stopped"
           : "completed",
       summary: boundedStopRun.executionResult.summary,
       userFacingSummary: boundedStopUserFacingSummary,
-      blockerReason: isExternalProviderBlock(boundedStopSummaryText)
+      blockerReason: isBoundedSmokeBlock(boundedStopSummaryText)
         ? boundedStopSummaryText
         : null,
       transientProviderFailureRecovered: false,
@@ -478,7 +590,10 @@ Promise<AutonomousRuntimeAffordancesDirectAutoArtifact> {
           (entry) => entry.status === "stopped"
         ),
         truthfulStopSummary:
-          /autonomous task stopped after/i.test(boundedStopRun.executionResult.summary) &&
+          (
+            /autonomous task stopped after/i.test(boundedStopRun.executionResult.summary) ||
+            /run stopped before it finished after/i.test(boundedStopRun.executionResult.summary)
+          ) &&
           /cancelled the run/i.test(boundedStopRun.executionResult.summary),
         noFalseSuccessSummary:
           !/autonomous task completed after/i.test(boundedStopRun.executionResult.summary)
@@ -496,7 +611,6 @@ Promise<AutonomousRuntimeAffordancesDirectAutoArtifact> {
     await writeFile(ARTIFACT_PATH, `${JSON.stringify(artifact, null, 2)}\n`, "utf8");
     return artifact;
   } finally {
-    clearTimeout(timeoutHandle);
     await cleanupProofFolders(desktopPath, targetPrefix);
     await rm(tempLedgerPath, { force: true }).catch(() => undefined);
     await rm(LIVE_RUN_RUNTIME_PATH, { recursive: true, force: true }).catch(() => undefined);

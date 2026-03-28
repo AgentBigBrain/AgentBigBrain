@@ -2,6 +2,8 @@
  * @fileoverview Deterministic Agent Pulse policy for opt-in proactive check-ins with quiet-hour and rate-limit controls.
  */
 
+import type { ConversationDomainLane } from "./sessionContext";
+
 export type AgentPulseReason =
   | "stale_fact_revalidation"
   | "unresolved_commitment"
@@ -25,6 +27,9 @@ export interface AgentPulseEvaluationInput {
   contextualLinkageConfidence?: number;
   lastPulseSentAtIso: string | null;
   overrideQuietHours: boolean;
+  sessionDominantLane?: ConversationDomainLane | null;
+  sessionHasActiveWorkflowContinuity?: boolean;
+  overrideSessionDomainSuppression?: boolean;
 }
 
 export interface AgentPulseDecision {
@@ -39,6 +44,7 @@ export interface AgentPulseDecision {
     | "RELATIONSHIP_ROLE_SUPPRESSED"
     | "CONTEXT_DRIFT_SUPPRESSED"
     | "CONTEXTUAL_TOPIC_COOLDOWN"
+    | "SESSION_DOMAIN_SUPPRESSED"
     | "QUIET_HOURS"
     | "RATE_LIMIT";
   suppressedBy: string[];
@@ -210,6 +216,20 @@ export function evaluateAgentPulsePolicy(
       allowed: false,
       decisionCode: "NO_CONTEXTUAL_LINKAGE",
       suppressedBy: ["reason.requires_contextual_linkage"],
+      nextEligibleAtIso: null
+    };
+  }
+
+  if (
+    input.overrideSessionDomainSuppression !== true &&
+    input.sessionDominantLane === "workflow" &&
+    input.sessionHasActiveWorkflowContinuity === true &&
+    (input.reason === "stale_fact_revalidation" || input.reason === "contextual_followup")
+  ) {
+    return {
+      allowed: false,
+      decisionCode: "SESSION_DOMAIN_SUPPRESSED",
+      suppressedBy: ["session.domain.workflow"],
       nextEligibleAtIso: null
     };
   }

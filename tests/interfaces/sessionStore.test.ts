@@ -92,6 +92,8 @@ test("session store persists and reloads conversation session state", async () =
     assert.equal(loadedSession?.conversationTurns.length, 1);
     assert.equal(loadedSession?.classifierEvents?.length, 1);
     assert.equal(loadedSession?.agentPulse.optIn, true);
+    assert.equal(loadedSession?.domainContext.conversationId, "telegram:chat-1:user-1");
+    assert.equal(loadedSession?.domainContext.dominantLane, "unknown");
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }

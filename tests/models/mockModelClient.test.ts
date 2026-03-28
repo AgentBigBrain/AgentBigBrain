@@ -232,14 +232,14 @@ test("MockModelClient supports bounded language episode extraction schema", asyn
     systemPrompt: "language-understanding",
     userPrompt: JSON.stringify({
       text: [
-        "Billy had this scare at the hospital a few weeks ago.",
+        "Owen had this scare at the hospital a few weeks ago.",
         "We still do not know what the doctors found."
       ].join(" ")
     })
   });
 
   assert.equal(output.episodes.length, 1);
-  assert.equal(output.episodes[0]?.subjectName, "Billy");
+  assert.equal(output.episodes[0]?.subjectName, "Owen");
   assert.equal(output.episodes[0]?.eventSummary, "had a medical situation");
   assert.equal(output.episodes[0]?.status, "unresolved");
 });

@@ -431,11 +431,12 @@ export class WorkflowLearningStore {
    */
   async getRelevantPatterns(
     query: string,
-    limit = DEFAULT_RELEVANT_PATTERN_LIMIT
+    limit = DEFAULT_RELEVANT_PATTERN_LIMIT,
+    sessionDomainLane: string | null = null
   ): Promise<readonly WorkflowPattern[]> {
     const normalizedLimit = Number.isFinite(limit) ? Math.max(1, Math.floor(limit)) : 1;
     const document = await this.load();
-    return rankRelevantWorkflowPatterns(document.patterns, query, normalizedLimit);
+    return rankRelevantWorkflowPatterns(document.patterns, query, normalizedLimit, sessionDomainLane);
   }
 
   /**

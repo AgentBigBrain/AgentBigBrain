@@ -157,6 +157,51 @@ function normalizeLoopbackTargetUrl(rawUrl: string | null): LoopbackTargetHint |
 }
 
 /**
+ * Resolves a canonical loopback target from action execution metadata when present.
+ *
+ * @param entry - Action result entry from task execution.
+ * @returns Canonical loopback target, or `null`.
+ */
+function extractLoopbackTargetHintFromMetadata(
+  entry: ActionResultEntry
+): LoopbackTargetHint | null {
+  const metadataTarget =
+    normalizeLoopbackTargetUrl(
+      typeof entry.executionMetadata?.processRequestedUrl === "string"
+        ? entry.executionMetadata.processRequestedUrl
+        : null
+    ) ??
+    normalizeLoopbackTargetUrl(
+      typeof entry.executionMetadata?.probeUrl === "string"
+        ? entry.executionMetadata.probeUrl
+        : typeof entry.executionMetadata?.browserVerifyUrl === "string"
+          ? entry.executionMetadata.browserVerifyUrl
+          : null
+    );
+  if (metadataTarget) {
+    return metadataTarget;
+  }
+
+  const metadataHost =
+    typeof entry.executionMetadata?.processRequestedHost === "string"
+      ? entry.executionMetadata.processRequestedHost
+      : null;
+  const metadataPort =
+    typeof entry.executionMetadata?.processRequestedPort === "number" &&
+    Number.isInteger(entry.executionMetadata.processRequestedPort)
+      ? entry.executionMetadata.processRequestedPort
+      : null;
+  if (metadataHost && metadataPort !== null && isLoopbackHostname(metadataHost)) {
+    return {
+      url: `http://${metadataHost === "::1" ? "[::1]" : metadataHost}:${metadataPort}`,
+      host: metadataHost,
+      port: metadataPort
+    };
+  }
+  return null;
+}
+
+/**
  * Parses one probable loopback port from a managed-process command.
  *
  * **Why it exists:**
@@ -214,6 +259,10 @@ function inferLoopbackTargetFromCommand(command: string): LoopbackTargetHint | n
  * @returns Canonical loopback target, or `null` when no target can be derived.
  */
 function extractLoopbackTargetHint(entry: ActionResultEntry): LoopbackTargetHint | null {
+  const metadataTarget = extractLoopbackTargetHintFromMetadata(entry);
+  if (metadataTarget) {
+    return metadataTarget;
+  }
   if (entry.action.type === "probe_http" || entry.action.type === "verify_browser") {
     return (
       normalizeLoopbackTargetUrl(readActionStringParam(entry.action, "url")) ??
@@ -482,21 +531,7 @@ export function describeLoopbackTarget(target: LoopbackTargetHint | null): strin
   return null;
 }
 
-/**
- * Builds a deterministic recovery instruction for a started process that is not ready yet.
- *
- * **Why it exists:**
- * When a live process spawned but localhost did not become ready, the next useful step is to
- * inspect the managed-process lease instead of repeating the same probe blindly.
- *
- * **What it talks to:**
- * - Uses `describeLoopbackTarget` from this module.
- *
- * @param leaseId - Managed-process lease id created by the successful start action.
- * @param target - Loopback target already inferred for this live run, if any.
- * @param requireHttpReachability - When `true`, prefers HTTP readiness over port-only probing.
- * @returns Explicit recovery subtask instruction.
- */
+/** Builds the first bounded readiness-recovery instruction after a managed process starts but localhost is not ready yet. */
 export function buildManagedProcessCheckRecoveryInput(
   leaseId: string,
   target: LoopbackTargetHint | null,
@@ -521,21 +556,7 @@ export function buildManagedProcessCheckRecoveryInput(
   );
 }
 
-/**
- * Builds a deterministic retry instruction after `check_process` confirms the app is still running.
- *
- * **Why it exists:**
- * A running managed process plus missing readiness proof means the loop should retry the readiness
- * probe, not fall back to generic browser-install or manual-check language.
- *
- * **What it talks to:**
- * - Uses local loopback-target formatting within this module.
- *
- * @param leaseId - Managed-process lease id confirmed as still running.
- * @param requireHttpReachability - When `true`, prefers HTTP readiness over a port-only check.
- * @param target - Loopback target already inferred for this live run, if any.
- * @returns Explicit retry subtask instruction.
- */
+/** Builds the bounded readiness retry once `check_process` proves the managed process is still running. */
 export function buildManagedProcessStillRunningRetryInput(
   leaseId: string,
   requireHttpReachability = false,
@@ -571,24 +592,23 @@ export function buildManagedProcessStillRunningRetryInput(
   );
 }
 
-/**
- * Builds a deterministic restart instruction after `check_process` confirms the app already stopped.
- *
- * **Why it exists:**
- * When the managed process dies before readiness proof, the loop should restart or explain the
- * stop result instead of continuing to probe a dead localhost target.
- *
- * **What it talks to:**
- * - Uses local helpers within this module.
- *
- * @param leaseId - Managed-process lease id confirmed as stopped.
- * @returns Explicit restart subtask instruction.
- */
-export function buildManagedProcessStoppedRecoveryInput(leaseId: string): string {
+/** Builds the bounded restart instruction after `check_process` proves the managed process already stopped. */
+export function buildManagedProcessStoppedRecoveryInput(
+  leaseId: string,
+  target: LoopbackTargetHint | null = null,
+  requireHttpReachability = false
+): string {
+  const targetLabel = describeLoopbackTarget(target);
+  const proofInstruction = requireHttpReachability
+    ? target?.url
+      ? `prove HTTP readiness at ${target.url} before any page-level proof`
+      : "prove HTTP readiness before any page-level proof"
+    : target?.url
+      ? `prove localhost readiness at ${target.url} before any page-level proof`
+      : "prove localhost readiness before any page-level proof";
   return (
-    `Managed process lease ${leaseId} stopped before localhost readiness was proven. ` +
-    "Explain the stop result plainly, restart the local server once if needed, and prove " +
-    "readiness before any page-level proof. " +
+    `Managed process lease ${leaseId} stopped before localhost readiness was proven${targetLabel ? ` for ${targetLabel}` : ""}. ` +
+    `Explain the stop result plainly, restart the local server once if needed, and ${proofInstruction}. ` +
     "When restarting, use start_process with supported params only (`command`, `cwd`/`workdir`, `requestedShellKind`, optional `timeoutMs`) " +
     "and prefer a raw server command instead of `zsh -lc` wrappers."
   );

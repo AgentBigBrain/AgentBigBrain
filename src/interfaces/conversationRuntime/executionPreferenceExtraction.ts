@@ -7,10 +7,13 @@ import {
   type PresentationPreferences
 } from "./presentationPreferenceResolution";
 
+export type AutonomousExecutionSignalStrength = "none" | "ambiguous" | "strong";
+
 export interface ExtractedExecutionPreferences {
   planOnly: boolean;
   executeNow: boolean;
   autonomousExecution: boolean;
+  autonomousExecutionStrength: AutonomousExecutionSignalStrength;
   naturalSkillDiscovery: boolean;
   statusOrRecall: boolean;
   reusePriorApproach: boolean;
@@ -71,17 +74,23 @@ const DIRECT_EXECUTION_PATTERNS: readonly RegExp[] = [
 
 const BROWSER_CONTROL_EXECUTION_PATTERNS: readonly RegExp[] = [
   /\b(?:close|reopen|open)\b[\s\S]{0,50}\b(?:browser|tab|window|page|preview)\b/i,
+  /\bopen\b[\s\S]{0,120}\bin\s+my\s+browser\b/i,
+  /\b(?:pull\s+up|show)\b[\s\S]{0,120}\b(?:landing\s+page|homepage|page|site|app|preview)\b/i,
   /\b(?:turn on|bring up|bring back)\b[\s\S]{0,20}\bbrowser\b/i,
-  /\b(?:bring|leave|keep)\b[\s\S]{0,40}\b(?:browser|tab|window|page|preview)\b[\s\S]{0,20}\bopen\b/i
+  /\b(?:bring|leave|keep)\b[\s\S]{0,40}\b(?:browser|tab|window|page|preview)\b[\s\S]{0,20}\bopen\b/i,
+  /\bleave\b[\s\S]{0,40}\b(?:it|that|the\s+(?:landing\s+page|homepage|page|site|app|preview))\b[\s\S]{0,20}\bup\b/i
 ] as const;
 
-const AUTONOMOUS_EXECUTION_PATTERNS: readonly RegExp[] = [
-  /\b(end to end|start to finish|all the way through)\b/i,
+const STRONG_AUTONOMOUS_EXECUTION_PATTERNS: readonly RegExp[] = [
   /\b(?:go|keep going|work|run)\s+until\s+(?:you\s+finish|it(?:'s| is)\s+done|you(?:'re| are)\s+done)\b/i,
-  /\b(?:take|handle)\s+(?:this|it|that)\s+(?:end to end|all the way through)\b/i,
-  /\b(?:take care of|handle)\s+(?:the whole thing|everything|it|this|that)\b/i,
   /\bsee\s+(?:it|this|that)\s+through\b/i,
   /\bfinish\s+(?:the whole thing|everything|it|this|that)\b/i
+] as const;
+
+const AMBIGUOUS_AUTONOMOUS_EXECUTION_PATTERNS: readonly RegExp[] = [
+  /\b(end to end|start to finish|all the way through)\b/i,
+  /\b(?:take|handle)\s+(?:this|it|that)\s+(?:end to end|all the way through)\b/i,
+  /\b(?:take care of|handle)\s+(?:the whole thing|everything|it|this|that)\b/i
 ] as const;
 
 const STATUS_OR_RECALL_PATTERNS: readonly RegExp[] = [
@@ -153,11 +162,33 @@ export function isNaturalSkillDiscoveryRequest(value: string): boolean {
  * @returns `true` when the text clearly requests autonomous end-to-end handling.
  */
 export function isNaturalAutonomousExecutionRequest(value: string): boolean {
+  return resolveAutonomousExecutionSignalStrength(value) !== "none";
+}
+
+/**
+ * Returns how strongly a text asks the assistant to own the work end to end.
+ *
+ * @param value - Raw inbound user text before queue routing.
+ * @returns `strong`, `ambiguous`, or `none` for deterministic higher-level disambiguation.
+ */
+export function resolveAutonomousExecutionSignalStrength(
+  value: string
+): AutonomousExecutionSignalStrength {
   const normalized = value.trim();
   if (!normalized) {
-    return false;
+    return "none";
   }
-  return AUTONOMOUS_EXECUTION_PATTERNS.some((pattern) => pattern.test(normalized));
+  if (
+    STRONG_AUTONOMOUS_EXECUTION_PATTERNS.some((pattern) => pattern.test(normalized))
+  ) {
+    return "strong";
+  }
+  if (
+    AMBIGUOUS_AUTONOMOUS_EXECUTION_PATTERNS.some((pattern) => pattern.test(normalized))
+  ) {
+    return "ambiguous";
+  }
+  return "none";
 }
 
 /**
@@ -168,12 +199,14 @@ export function isNaturalAutonomousExecutionRequest(value: string): boolean {
  */
 export function extractExecutionPreferences(value: string): ExtractedExecutionPreferences {
   const normalized = value.trim();
+  const autonomousExecutionStrength = resolveAutonomousExecutionSignalStrength(normalized);
   return {
     planOnly: PLAN_ONLY_PATTERNS.some((pattern) => pattern.test(normalized)),
     executeNow:
       DIRECT_EXECUTION_PATTERNS.some((pattern) => pattern.test(normalized)) ||
       BROWSER_CONTROL_EXECUTION_PATTERNS.some((pattern) => pattern.test(normalized)),
-    autonomousExecution: isNaturalAutonomousExecutionRequest(normalized),
+    autonomousExecution: autonomousExecutionStrength !== "none",
+    autonomousExecutionStrength,
     naturalSkillDiscovery: isNaturalSkillDiscoveryRequest(normalized),
     statusOrRecall: STATUS_OR_RECALL_PATTERNS.some((pattern) => pattern.test(normalized)),
     reusePriorApproach: REUSE_PRIOR_APPROACH_PATTERNS.some((pattern) => pattern.test(normalized)),

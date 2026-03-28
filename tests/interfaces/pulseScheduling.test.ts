@@ -5,10 +5,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import { createEmptyConversationDomainContext } from "../../src/core/sessionContext";
 import {
   conversationBelongsToProvider,
   selectPulseTargetSession,
   shouldSkipSessionForPulse,
+  shouldSuppressPulseForSessionDomain,
   sortByMostRecentSessionUpdate
 } from "../../src/interfaces/conversationRuntime/pulseScheduling";
 import type { ConversationSession } from "../../src/interfaces/sessionStore";
@@ -39,6 +41,20 @@ function buildSession(
       receivedAt: nowIso
     }
   );
+}
+
+function buildWorkflowDomainContext(conversationId: string): ConversationSession["domainContext"] {
+  return {
+    ...createEmptyConversationDomainContext(conversationId),
+    dominantLane: "workflow",
+    continuitySignals: {
+      activeWorkspace: true,
+      returnHandoff: false,
+      modeContinuity: true
+    },
+    activeSince: "2026-03-01T12:00:00.000Z",
+    lastUpdatedAt: "2026-03-01T12:00:00.000Z"
+  };
 }
 
 test("conversationBelongsToProvider matches only the active provider prefix", () => {
@@ -118,6 +134,37 @@ test("shouldSkipSessionForPulse enforces opt-in, active work, and human-scale mi
         }
       })
     ),
+    false
+  );
+});
+
+test("shouldSuppressPulseForSessionDomain only suppresses non-explicit workflow-session pulse reasons", () => {
+  const workflowSession = buildSession("telegram:chat-1:user-1", {
+    domainContext: buildWorkflowDomainContext("telegram:chat-1:user-1")
+  });
+
+  assert.equal(
+    shouldSuppressPulseForSessionDomain(workflowSession, "stale_fact_revalidation"),
+    true
+  );
+  assert.equal(
+    shouldSuppressPulseForSessionDomain(workflowSession, "contextual_followup"),
+    true
+  );
+  assert.equal(
+    shouldSuppressPulseForSessionDomain(workflowSession, "dynamic"),
+    true
+  );
+  assert.equal(
+    shouldSuppressPulseForSessionDomain(workflowSession, "unresolved_commitment"),
+    false
+  );
+  assert.equal(
+    shouldSuppressPulseForSessionDomain(workflowSession, "user_requested_followup"),
+    false
+  );
+  assert.equal(
+    shouldSuppressPulseForSessionDomain(buildSession("telegram:chat-2:user-1"), "stale_fact_revalidation"),
     false
   );
 });

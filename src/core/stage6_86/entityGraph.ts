@@ -20,11 +20,28 @@ const ENTITY_STOP_WORDS = new Set([
   "A",
   "An",
   "And",
+  "Can",
+  "Could",
+  "Do",
+  "Does",
+  "Did",
+  "Explain",
+  "How",
   "Or",
   "But",
   "If",
+  "So",
   "Then",
   "When",
+  "Who",
+  "What",
+  "Where",
+  "Why",
+  "These",
+  "This",
+  "Those",
+  "Relationships",
+  "Relationship",
   "While",
   "Today",
   "Tomorrow",
@@ -38,16 +55,30 @@ const MAX_ENTITY_MAX_ALIASES = 64;
 const MAX_GRAPH_EDGES_PER_ENTITY_DEFAULT = 200;
 const ENTITY_MAX_ALIASES_DEFAULT = 8;
 const CO_MENTION_RECENCY_HALFLIFE_DAYS = 30;
+const ENTITY_DOMAIN_HINTS = ["profile", "relationship", "workflow", "system_policy"] as const;
 
 export interface Stage686EntityExtractionInput {
   text: string;
   observedAt: string;
   evidenceRef: string;
+  domainHint?: "profile" | "relationship" | "workflow" | "system_policy" | null;
+  entityTypeHints?: readonly Stage686EntityTypeHint[] | null;
+  entityDomainHints?: readonly Stage686EntityDomainHint[] | null;
 }
 
 export interface Stage686EntityExtractionResult {
   nodes: readonly EntityNodeV1[];
   coMentionPairs: readonly Readonly<[string, string]>[];
+}
+
+export interface Stage686EntityTypeHint {
+  candidateName: string;
+  entityType: EntityTypeV1;
+}
+
+export interface Stage686EntityDomainHint {
+  candidateName: string;
+  domainHint: Extract<EntityNodeV1["domainHint"], "profile" | "relationship" | "workflow">;
 }
 
 export interface Stage686AliasConflict {
@@ -161,6 +192,57 @@ function normalizeAliasKey(value: string): string {
 }
 
 /**
+ * Normalizes a candidate session-domain hint into the supported entity-domain subset.
+ *
+ * **Why it exists:**
+ * Keeps ingress-carried domain hints bounded to the shared lane contract so entity persistence
+ * does not accumulate arbitrary free-form tags.
+ *
+ * **What it talks to:**
+ * - Uses local allowed-value constants in this module.
+ *
+ * @param value - Candidate domain hint from interface/runtime context.
+ * @returns Normalized domain hint or `null` when absent/unsupported.
+ */
+function normalizeEntityDomainHint(
+  value: unknown
+): EntityNodeV1["domainHint"] {
+  return typeof value === "string" &&
+    (ENTITY_DOMAIN_HINTS as readonly string[]).includes(value)
+    ? (value as EntityNodeV1["domainHint"])
+    : null;
+}
+
+/**
+ * Merges a persisted and incoming entity-domain hint without creating hard partitions.
+ *
+ * **Why it exists:**
+ * Entity ingress can observe the same entity across personal and workflow sessions. When that
+ * evidence conflicts, the safer deterministic shape is to degrade the hint to `null`.
+ *
+ * **What it talks to:**
+ * - Uses normalized domain-hint labels only.
+ *
+ * @param existing - Previously persisted domain hint.
+ * @param incoming - Newly observed domain hint.
+ * @returns The reconciled domain hint for the entity node.
+ */
+function mergeEntityDomainHint(
+  existing: Stage686EntityExtractionInput["domainHint"],
+  incoming: Stage686EntityExtractionInput["domainHint"]
+): EntityNodeV1["domainHint"] {
+  const normalizedExisting = normalizeEntityDomainHint(existing);
+  const normalizedIncoming = normalizeEntityDomainHint(incoming);
+  if (!normalizedExisting) {
+    return normalizedIncoming;
+  }
+  if (!normalizedIncoming) {
+    return normalizedExisting;
+  }
+  return normalizedExisting === normalizedIncoming ? normalizedExisting : null;
+}
+
+/**
  * Converts values into canonical name form for consistent downstream use.
  *
  * **Why it exists:**
@@ -173,7 +255,7 @@ function normalizeAliasKey(value: string): string {
  * @returns Resulting string value.
  */
 function toCanonicalName(raw: string): string {
-  const normalized = normalizeWhitespace(raw);
+  const normalized = normalizeEntityCandidate(raw);
   if (!normalized) {
     return "";
   }
@@ -208,6 +290,118 @@ function deriveEntityType(raw: string): EntityTypeV1 {
   }
 
   return "thing";
+}
+
+/**
+ * Normalizes one raw regex entity match into a bounded candidate name, dropping clause-boundary
+ * fragments and leading conversational glue so the graph does not persist junk entities.
+ *
+ * @param raw - Raw regex entity match candidate.
+ * @returns Bounded canonicalizable entity text, or an empty string when the match is not safe.
+ */
+function normalizeEntityCandidate(raw: string): string {
+  const normalized = normalizeWhitespace(raw);
+  if (!normalized) {
+    return "";
+  }
+  if (/[.!?]\s+[A-Z]/.test(normalized)) {
+    return "";
+  }
+  const cleanedTokens = normalized
+    .split(" ")
+    .map((token) => token.replace(/^[^A-Za-z0-9']+|[^A-Za-z0-9']+$/g, ""))
+    .filter(Boolean);
+  while (cleanedTokens.length > 0 && ENTITY_STOP_WORDS.has(cleanedTokens[0])) {
+    cleanedTokens.shift();
+  }
+  while (
+    cleanedTokens.length > 0 &&
+    ENTITY_STOP_WORDS.has(cleanedTokens[cleanedTokens.length - 1])
+  ) {
+    cleanedTokens.pop();
+  }
+  return normalizeWhitespace(cleanedTokens.join(" "));
+}
+
+/**
+ * Builds a bounded lookup map for validated interpreted entity-type hints.
+ *
+ * **Why it exists:**
+ * Shared conversational interpretation may supply higher-precision type hints for deterministic
+ * request-local candidates. This helper keeps that input bounded and normalized before extraction.
+ *
+ * **What it talks to:**
+ * - Uses local normalization helpers and `EntityTypeV1`.
+ *
+ * @param value - Optional validated entity-type hints carried with one extraction request.
+ * @returns Normalized candidate-name -> entity-type map.
+ */
+function buildEntityTypeHintMap(
+  value: readonly Stage686EntityTypeHint[] | null | undefined
+): ReadonlyMap<string, EntityTypeV1> {
+  const mapped = new Map<string, EntityTypeV1>();
+  for (const hint of value ?? []) {
+    if (!hint || typeof hint !== "object") {
+      continue;
+    }
+    const candidateName = toCanonicalName(String(hint.candidateName ?? ""));
+    const normalizedKey = normalizeAliasKey(candidateName);
+    if (!normalizedKey) {
+      continue;
+    }
+    if (![
+      "person",
+      "place",
+      "org",
+      "event",
+      "thing",
+      "concept"
+    ].includes(String(hint.entityType ?? ""))) {
+      continue;
+    }
+    if (!mapped.has(normalizedKey)) {
+      mapped.set(normalizedKey, hint.entityType);
+    }
+  }
+  return mapped;
+}
+
+/**
+ * Builds a bounded lookup map for validated interpreted entity-domain hints.
+ *
+ * **Why it exists:**
+ * Shared conversational interpretation may supply higher-precision per-observation domain hints
+ * for deterministic request-local candidates. This helper keeps that input bounded and normalized
+ * before extraction.
+ *
+ * **What it talks to:**
+ * - Uses local normalization helpers and entity-domain allowed values.
+ *
+ * @param value - Optional validated entity-domain hints carried with one extraction request.
+ * @returns Normalized candidate-name -> domain-hint map.
+ */
+function buildEntityDomainHintMap(
+  value: readonly Stage686EntityDomainHint[] | null | undefined
+): ReadonlyMap<string, Extract<EntityNodeV1["domainHint"], "profile" | "relationship" | "workflow">> {
+  const mapped = new Map<
+    string,
+    Extract<EntityNodeV1["domainHint"], "profile" | "relationship" | "workflow">
+  >();
+  for (const hint of value ?? []) {
+    if (!hint || typeof hint !== "object") {
+      continue;
+    }
+    const candidateName = toCanonicalName(String(hint.candidateName ?? ""));
+    const normalizedKey = normalizeAliasKey(candidateName);
+    const domainHint = normalizeEntityDomainHint(hint.domainHint);
+    if (!normalizedKey || !domainHint || domainHint === "system_policy") {
+      continue;
+    }
+    if (!mapped.has(normalizedKey)) {
+      mapped.set(normalizedKey, domainHint);
+    }
+  }
+  return mapped;
 }
 
 /**
@@ -402,6 +596,9 @@ export function extractEntityCandidates(
   }
 
   const nodesByKey = new Map<string, EntityNodeV1>();
+  const normalizedDomainHint = normalizeEntityDomainHint(input.domainHint);
+  const entityTypeHintMap = buildEntityTypeHintMap(input.entityTypeHints);
+  const entityDomainHintMap = buildEntityDomainHintMap(input.entityDomainHints);
   const matches = text.match(ENTITY_PATTERN) ?? [];
   for (const match of matches) {
     const canonicalName = toCanonicalName(match);
@@ -409,7 +606,10 @@ export function extractEntityCandidates(
       continue;
     }
 
-    const entityType = deriveEntityType(canonicalName);
+    const entityType =
+      entityTypeHintMap.get(normalizeAliasKey(canonicalName)) ?? deriveEntityType(canonicalName);
+    const resolvedDomainHint =
+      entityDomainHintMap.get(normalizeAliasKey(canonicalName)) ?? normalizedDomainHint;
     const entityKey = buildEntityKey(canonicalName, entityType, null);
     if (nodesByKey.has(entityKey)) {
       continue;
@@ -420,6 +620,7 @@ export function extractEntityCandidates(
       canonicalName,
       entityType,
       disambiguator: null,
+      domainHint: resolvedDomainHint,
       aliases: [canonicalName],
       firstSeenAt: input.observedAt,
       lastSeenAt: input.observedAt,
@@ -496,6 +697,7 @@ export function applyEntityExtractionToGraph(
           ...incoming,
           firstSeenAt: observedAt,
           lastSeenAt: observedAt,
+          domainHint: normalizeEntityDomainHint(incoming.domainHint),
           evidenceRefs: [evidenceRef]
         };
 
@@ -528,6 +730,7 @@ export function applyEntityExtractionToGraph(
     const mergedEvidenceRefs = mergeStringList(candidate.evidenceRefs, [evidenceRef], 64);
     entities.set(candidate.entityKey, {
       ...candidate,
+      domainHint: mergeEntityDomainHint(candidate.domainHint, incoming.domainHint),
       aliases: acceptedAliases,
       lastSeenAt: observedAt,
       salience: Math.max(1, Number((candidate.salience + 1).toFixed(4))),

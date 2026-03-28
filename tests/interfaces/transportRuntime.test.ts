@@ -44,10 +44,14 @@ import {
   sendTelegramDraftUpdate
 } from "../../src/interfaces/transportRuntime/telegramTransport";
 import {
-  allocateNextTelegramDraftId,
   prepareTelegramUpdate,
-  sendTelegramGatewayReply
 } from "../../src/interfaces/transportRuntime/telegramGatewayRuntime";
+import { enrichAcceptedTelegramUpdateWithMedia } from "../../src/interfaces/transportRuntime/telegramConversationDispatch";
+import {
+  allocateNextTelegramDraftId,
+  sendTelegramGatewayReply
+} from "../../src/interfaces/transportRuntime/telegramGatewayNotifier";
+import { sendObservedTelegramGatewayReply } from "../../src/interfaces/transportRuntime/telegramGatewayObservation";
 import type { ConversationInboundMessage } from "../../src/interfaces/conversationRuntime/managerContracts";
 import { buildTelegramInterfaceConfigFixture } from "../helpers/conversationFixtures";
 
@@ -253,7 +257,11 @@ test("prepareDiscordMessageCreate returns accepted payloads with normalized runt
       author: {
         id: "u1",
         username: "tester",
+        global_name: "Avery Brooks",
         bot: false
+      },
+      member: {
+        nick: "Avery"
       },
       timestamp: "2026-03-07T10:00:00.000Z"
     },
@@ -278,6 +286,14 @@ test("prepareDiscordMessageCreate returns accepted payloads with normalized runt
   assert.equal(result.channelId, "c1");
   assert.equal(result.conversationVisibility, "public");
   assert.equal(result.inbound.text, "build status");
+  assert.deepEqual(result.transportIdentity, {
+    provider: "discord",
+    username: "tester",
+    displayName: "Avery",
+    givenName: null,
+    familyName: null,
+    observedAt: "2026-03-07T10:00:00.000Z"
+  });
   assert.deepEqual(result.entityGraphEvent, {
     provider: "discord",
     conversationId: "c1",
@@ -420,7 +436,7 @@ test("handleAcceptedTransportConversation routes text execution and final reply 
     receivedAt: "2026-03-07T10:00:00.000Z"
   };
   const deliveries: string[] = [];
-  const entityGraphWrites: string[] = [];
+  const entityGraphWrites: Array<{ evidenceRef: string; domainHint: string | null | undefined }> = [];
 
   await handleAcceptedTransportConversation({
     inbound,
@@ -446,11 +462,15 @@ test("handleAcceptedTransportConversation routes text execution and final reply 
     entityGraphStore: {
       getGraph: async () => buildEmptyEntityGraph(),
       upsertFromExtractionInput: async (input) => {
-        entityGraphWrites.push(input.evidenceRef);
+        entityGraphWrites.push({
+          evidenceRef: input.evidenceRef,
+          domainHint: input.domainHint
+        });
       }
     },
     dynamicPulseEnabled: true,
     abortControllers: new Map<string, AbortController>(),
+    resolveEntityGraphDomainHint: async () => "workflow",
     runTextTask: async () => "normalized summary",
     runAutonomousTask: async () => ({ summary: "autonomous summary" }),
     deliverReply: async (reply: string) => {
@@ -461,7 +481,12 @@ test("handleAcceptedTransportConversation routes text execution and final reply 
   });
 
   assert.deepEqual(deliveries, ["final reply"]);
-  assert.deepEqual(entityGraphWrites, ["interface:discord:channel-1:event-1"]);
+  assert.deepEqual(entityGraphWrites, [
+    {
+      evidenceRef: "interface:discord:channel-1:event-1",
+      domainHint: "workflow"
+    }
+  ]);
 });
 
 test("handleAcceptedTransportConversation routes autonomous execution through progress sender", async () => {
@@ -533,6 +558,7 @@ test("createTelegramConversationNotifier enables native draft streaming when req
     renderOutboundText: (text: string) => `wrapped:${text}`,
     nativeDraftStreamingEnabled: true,
     allocateDraftId: () => 42,
+    allocateDeliverySequence: () => 1,
     sendReply: async (text: string) => {
       deliveries.push({ kind: "send", text });
       return { ok: true, messageId: "1", errorCode: null };
@@ -649,6 +675,79 @@ test("sendTelegramGatewayReply applies invocation hints before transport deliver
   assert.match(capturedBody, /bigbrain \/status/);
 });
 
+test("sendObservedTelegramGatewayReply records direct-reply trace metadata", async () => {
+  const observed: Array<{
+    kind: string;
+    sequence: number;
+    source: string | null;
+    sessionKey: string | null;
+    inboundEventId: string | null;
+    inboundReceivedAt: string | null;
+    chatId: string;
+    text: string;
+    messageId: string | null;
+  }> = [];
+
+  await withMockFetch(
+    (async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        ok: true,
+        result: {
+          message_id: 55
+        }
+      })
+    })) as unknown as typeof fetch,
+    async () => {
+      const result = await sendObservedTelegramGatewayReply(
+        buildTelegramInterfaceConfigFixture(),
+        "12345",
+        "Hi there",
+        async (event) => {
+          observed.push({
+            kind: event.kind,
+            sequence: event.sequence,
+            source: event.source,
+            sessionKey: event.sessionKey,
+            inboundEventId: event.inboundEventId,
+            inboundReceivedAt: event.inboundReceivedAt,
+            chatId: event.chatId,
+            text: event.text,
+            messageId: event.messageId ?? null
+          });
+        },
+        {
+          sequence: 7,
+          source: "direct_reply",
+          sessionKey: "telegram:12345:user-1",
+          inboundEventId: "update-77",
+          inboundReceivedAt: "2026-03-20T20:10:00.000Z"
+        }
+      );
+      assert.deepEqual(result, {
+        ok: true,
+        messageId: "55",
+        errorCode: null
+      });
+    }
+  );
+
+  assert.deepEqual(observed, [
+    {
+      kind: "send",
+      sequence: 7,
+      source: "direct_reply",
+      sessionKey: "telegram:12345:user-1",
+      inboundEventId: "update-77",
+      inboundReceivedAt: "2026-03-20T20:10:00.000Z",
+      chatId: "12345",
+      text: "Hi there",
+      messageId: "55"
+    }
+  ]);
+});
+
 test("prepareTelegramUpdate returns accepted payloads with normalized runtime metadata", () => {
   const result = prepareTelegramUpdate({
     update: {
@@ -661,7 +760,9 @@ test("prepareTelegramUpdate returns accepted payloads with normalized runtime me
         },
         from: {
           id: 200,
-          username: "tester"
+          username: "tester",
+          first_name: "Avery",
+          last_name: "Bena"
         },
         date: 1_700_000_000
       }
@@ -687,6 +788,14 @@ test("prepareTelegramUpdate returns accepted payloads with normalized runtime me
   assert.equal(result.userId, "200");
   assert.equal(result.conversationVisibility, "private");
   assert.equal(result.inbound.text, "status");
+  assert.deepEqual(result.transportIdentity, {
+    provider: "telegram",
+    username: "tester",
+    displayName: "Avery Bena",
+    givenName: "Avery",
+    familyName: "Bena",
+    observedAt: "2023-11-14T22:13:20.000Z"
+  });
   assert.equal(result.entityGraphEvent.eventId, "44");
 });
 
@@ -702,7 +811,9 @@ test("prepareTelegramUpdate accepts greeting-plus-alias invocations", () => {
         },
         from: {
           id: 200,
-          username: "tester"
+          username: "tester",
+          first_name: "Avery",
+          last_name: "Bena"
         },
         date: 1_700_000_000
       }
@@ -725,6 +836,14 @@ test("prepareTelegramUpdate accepts greeting-plus-alias invocations", () => {
     return;
   }
   assert.equal(result.inbound.text, "Hi");
+  assert.deepEqual(result.transportIdentity, {
+    provider: "telegram",
+    username: "tester",
+    displayName: "Avery Bena",
+    givenName: "Avery",
+    familyName: "Bena",
+    observedAt: "2023-11-14T22:13:20.000Z"
+  });
 });
 
 test("prepareTelegramUpdate accepts private plain-text messages without alias in one-to-one chats", () => {
@@ -739,7 +858,9 @@ test("prepareTelegramUpdate accepts private plain-text messages without alias in
         },
         from: {
           id: 200,
-          username: "tester"
+          username: "tester",
+          first_name: "Avery",
+          last_name: "Bena"
         },
         date: 1_700_000_000
       }
@@ -776,7 +897,9 @@ test("prepareTelegramUpdate still requires alias in group chats", () => {
         },
         from: {
           id: 200,
-          username: "tester"
+          username: "tester",
+          first_name: "Avery",
+          last_name: "Bena"
         },
         date: 1_700_000_000
       }
@@ -858,6 +981,93 @@ test("prepareTelegramUpdate accepts private media-only messages and defers canon
   assert.equal(result.inbound.media?.attachments.length, 1);
   assert.equal(result.inbound.media?.attachments[0]?.kind, "image");
   assert.equal(result.entityGraphEvent.text, "Please review the attached image and respond based on what it shows.");
+});
+
+test("enrichAcceptedTelegramUpdateWithMedia rejects media-only untranscribed voice notes", async () => {
+  const prepared = prepareTelegramUpdate({
+    update: {
+      update_id: 48,
+      message: {
+        chat: {
+          id: 100,
+          type: "private"
+        },
+        from: {
+          id: 200,
+          username: "tester"
+        },
+        voice: {
+          file_id: "voice-1",
+          file_unique_id: "voice-uniq-1",
+          duration: 4,
+          mime_type: "audio/ogg",
+          file_size: 2048
+        },
+        date: 1_700_000_000
+      }
+    },
+    sharedSecret: "shared-secret",
+    invocationPolicy: {
+      requireNameCall: true,
+      aliases: ["bigbrain"]
+    },
+    mediaConfig: {
+      enabled: true,
+      maxAttachments: 4,
+      maxAttachmentBytes: 12000000,
+      maxDownloadBytes: 20000000,
+      maxVoiceSeconds: 180,
+      maxVideoSeconds: 90,
+      allowImages: true,
+      allowVoiceNotes: true,
+      allowVideos: true,
+      allowDocuments: false
+    },
+    validateMessage: () => ({
+      accepted: true,
+      code: "ACCEPTED",
+      message: "ok"
+    }),
+    abortControllers: new Map<string, AbortController>()
+  });
+
+  assert.equal(prepared.kind, "accepted");
+  if (prepared.kind !== "accepted") {
+    return;
+  }
+
+  const enriched = await enrichAcceptedTelegramUpdateWithMedia({
+    prepared: {
+      ...prepared,
+      inbound: {
+        ...prepared.inbound,
+        media: {
+          attachments: [
+            {
+              ...prepared.inbound.media!.attachments[0]!,
+              interpretation: {
+                summary: "The user attached a voice note, but transcription is unavailable in this environment.",
+                transcript: null,
+                ocrText: null,
+                confidence: 0.10,
+                provenance: "metadata fallback",
+                source: "metadata_fallback",
+                entityHints: []
+              }
+            }
+          ]
+        }
+      }
+    },
+    config: buildTelegramInterfaceConfigFixture()
+  });
+
+  assert.deepEqual(enriched, {
+    kind: "rejected",
+    chatId: "100",
+    responseText:
+      "I received your voice note, but I couldn't transcribe it in this environment. Please resend it as text or try again where voice transcription is available."
+  });
 });
 
 test("prepareTelegramUpdate surfaces transport-facing rejections and wrapped draft ids", () => {

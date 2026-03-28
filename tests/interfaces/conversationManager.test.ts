@@ -8,6 +8,8 @@ import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 
+import { createEmptyConversationDomainContext } from "../../src/core/sessionContext";
+import type { TaskRunResult } from "../../src/core/types";
 import {
   ConversationInboundMessage,
   ConversationManager as BaseConversationManager,
@@ -126,6 +128,188 @@ function buildMessageAt(text: string, receivedAt: string): ConversationInboundMe
     conversationVisibility: "private",
     text,
     receivedAt
+  };
+}
+
+/**
+ * Builds a minimal governed task result for conversation-manager workflow tests.
+ */
+function buildTaskRunResult(
+  userInput: string,
+  summary: string,
+  actionResults: TaskRunResult["actionResults"]
+): TaskRunResult {
+  return {
+    task: {
+      id: "task_fixture",
+      agentId: "main-agent",
+      goal: "Handle user request safely and efficiently.",
+      userInput,
+      createdAt: new Date().toISOString()
+    },
+    plan: {
+      taskId: "task_fixture",
+      plannerNotes: "fixture plan",
+      actions: actionResults.map((result) => result.action)
+    },
+    actionResults,
+    summary,
+    startedAt: new Date().toISOString(),
+    completedAt: new Date().toISOString()
+  };
+}
+
+/**
+ * Builds an approved write-file result for workflow continuity tests.
+ */
+function buildApprovedWriteFileActionResult(
+  actionId: string,
+  filePath: string
+): TaskRunResult["actionResults"][number] {
+  return {
+    action: {
+      id: actionId,
+      type: "write_file",
+      description: "write file",
+      params: {
+        path: filePath,
+        content: "<html></html>"
+      },
+      estimatedCostUsd: 0.05
+    },
+    mode: "escalation_path",
+    approved: true,
+    output: `Write success: ${filePath}`,
+    executionStatus: "success",
+    executionMetadata: {
+      filePath
+    },
+    blockedBy: [],
+    violations: [],
+    votes: []
+  };
+}
+
+/**
+ * Builds an approved open-browser result for workflow continuity tests.
+ */
+function buildApprovedOpenBrowserActionResult(
+  actionId: string,
+  sessionId: string,
+  url: string,
+  workspaceRootPath: string,
+  linkedProcessLeaseId: string
+): TaskRunResult["actionResults"][number] {
+  return {
+    action: {
+      id: actionId,
+      type: "open_browser",
+      description: "open browser",
+      params: {
+        url,
+        previewProcessLeaseId: linkedProcessLeaseId,
+        rootPath: workspaceRootPath
+      },
+      estimatedCostUsd: 0.04
+    },
+    mode: "escalation_path",
+    approved: true,
+    output: `Opened ${url} in a visible browser window and left it open for you.`,
+    executionStatus: "success",
+    executionMetadata: {
+      browserSession: true,
+      browserSessionId: sessionId,
+      browserSessionUrl: url,
+      browserSessionStatus: "open",
+      browserSessionVisibility: "visible",
+      browserSessionControlAvailable: true,
+      browserSessionWorkspaceRootPath: workspaceRootPath,
+      browserSessionLinkedProcessLeaseId: linkedProcessLeaseId,
+      browserSessionLinkedProcessCwd: workspaceRootPath,
+      browserSessionLinkedProcessPid: 4242
+    },
+    blockedBy: [],
+    violations: [],
+    votes: []
+  };
+}
+
+/**
+ * Builds an approved close-browser result for workflow continuity tests.
+ */
+function buildApprovedCloseBrowserActionResult(
+  actionId: string,
+  sessionId: string,
+  url: string,
+  workspaceRootPath: string,
+  linkedProcessLeaseId: string
+): TaskRunResult["actionResults"][number] {
+  return {
+    action: {
+      id: actionId,
+      type: "close_browser",
+      description: "close browser",
+      params: {
+        sessionId
+      },
+      estimatedCostUsd: 0.03
+    },
+    mode: "escalation_path",
+    approved: true,
+    output: `Closed ${url}.`,
+    executionStatus: "success",
+    executionMetadata: {
+      browserSession: true,
+      browserSessionId: sessionId,
+      browserSessionUrl: url,
+      browserSessionStatus: "closed",
+      browserSessionVisibility: "visible",
+      browserSessionControlAvailable: false,
+      browserSessionWorkspaceRootPath: workspaceRootPath,
+      browserSessionLinkedProcessLeaseId: linkedProcessLeaseId,
+      browserSessionLinkedProcessCwd: workspaceRootPath,
+      browserSessionLinkedProcessPid: 4242
+    },
+    blockedBy: [],
+    violations: [],
+    votes: []
+  };
+}
+
+/**
+ * Builds an approved shell/process result for local-runtime proof tests.
+ */
+function buildApprovedRunningShellActionResult(
+  actionId: string,
+  cwd: string,
+  probeUrl: string,
+  leaseId: string
+): TaskRunResult["actionResults"][number] {
+  return {
+    action: {
+      id: actionId,
+      type: "shell_command",
+      description: "start local process",
+      params: {
+        command: "python app.py",
+        cwd
+      },
+      estimatedCostUsd: 0.03
+    },
+    mode: "escalation_path",
+    approved: true,
+    output: `Started local process in ${cwd}.`,
+    executionStatus: "success",
+    executionMetadata: {
+      processCwd: cwd,
+      processLeaseId: leaseId,
+      processPid: 5050,
+      processLifecycleStatus: "PROCESS_READY",
+      probeUrl
+    },
+    blockedBy: [],
+    violations: [],
+    votes: []
   };
 }
 
@@ -795,7 +979,7 @@ test("conversation manager uses prior turns for follow-up conversational request
 
   try {
     await manager.handleMessage(
-      buildMessage("/chat give me a flare puzzle"),
+      buildMessage("/chat give me a lantern puzzle"),
       async (input) => {
         executedInputs.push(input);
         return { summary: "Puzzle 1: I glow in code reviews. What am I?" };
@@ -833,9 +1017,9 @@ test("conversation manager uses prior turns for follow-up conversational request
     );
 
     assert.equal(executedInputs.length, 2);
-    assert.equal(executedInputs[0], "give me a flare puzzle");
+    assert.equal(executedInputs[0], "give me a lantern puzzle");
     assert.ok(executedInputs[1].includes("Recent conversation context (oldest to newest):"));
-    assert.ok(executedInputs[1].includes("- user: give me a flare puzzle"));
+    assert.ok(executedInputs[1].includes("- user: give me a lantern puzzle"));
     assert.ok(executedInputs[1].includes("- assistant: Puzzle 1: I glow in code reviews. What am I?"));
     assert.ok(executedInputs[1].includes("Current user request:"));
     assert.ok(executedInputs[1].includes("make another"));
@@ -1183,6 +1367,146 @@ test("conversation manager supports pulse opt-in command flow", async () => {
     );
     assert.ok(disableReply.includes("Agent Pulse is now OFF"));
     assert.ok(disableReply.includes("Last decision: NOT_EVALUATED"));
+  } finally {
+    await removeTempDirWithRetry(tempDir);
+  }
+});
+
+test("conversation manager clears orphaned stale progress and stale queued jobs before direct chat", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-conversation-stale-queue-chat-"));
+  const store = new InterfaceSessionStore(path.join(tempDir, "sessions.json"));
+  const manager = new ConversationManager(store, {
+    heartbeatIntervalMs: 10,
+    maxRecentJobs: 20,
+    staleRunningJobRecoveryMs: 2_000,
+    maxConversationTurns: 40,
+    maxContextTurnsForExecution: 10
+  }, {
+    runDirectConversationTurn: async () => ({ summary: "Hi." })
+  });
+  const staleCreatedAt = "2026-03-20T00:00:00.000Z";
+
+  try {
+    await store.setSession(
+      buildConversationSessionFixture(
+        {
+          updatedAt: staleCreatedAt,
+          progressState: {
+            status: "working",
+            message: "I'm working on that now.",
+            jobId: "job_orphaned",
+            updatedAt: staleCreatedAt
+          },
+          queuedJobs: [
+            buildConversationJobFixture({
+              id: "job_queued_stale_1",
+              input: "old queued request one",
+              createdAt: staleCreatedAt
+            }),
+            buildConversationJobFixture({
+              id: "job_queued_stale_2",
+              input: "old queued request two",
+              createdAt: staleCreatedAt
+            })
+          ],
+          runningJobId: null
+        },
+        {
+          conversationId: "chat-1",
+          receivedAt: staleCreatedAt
+        }
+      )
+    );
+
+    const reply = await manager.handleMessage(
+      buildMessageAt("Hi", "2026-03-26T12:06:30.000Z"),
+      async () => {
+        throw new Error("executeTask should not run for direct chat");
+      },
+      async () => {}
+    );
+    assert.equal(reply, "Hi.");
+
+    const session = await store.getSession("telegram:chat-1:user-1");
+    assert.ok(session);
+    assert.equal(session?.progressState, null);
+    assert.equal(session?.queuedJobs.length, 0);
+    assert.ok(
+      session?.recentJobs.some(
+        (job) =>
+          job.id === "job_queued_stale_1" &&
+          job.status === "failed" &&
+          job.errorMessage === "Recovered stale queued job after runtime interruption." &&
+          job.recoveryTrace?.kind === "stale_session_recovery" &&
+          job.recoveryTrace.status === "failed"
+      )
+    );
+    assert.ok(
+      session?.recentJobs.some(
+        (job) =>
+          job.id === "job_queued_stale_2" &&
+          job.status === "failed" &&
+          job.errorMessage === "Recovered stale queued job after runtime interruption." &&
+          job.recoveryTrace?.kind === "stale_session_recovery" &&
+          job.recoveryTrace.status === "failed"
+      )
+    );
+  } finally {
+    await removeTempDirWithRetry(tempDir);
+  }
+});
+
+test("conversation manager keeps explicit pulse commands authoritative during workflow-heavy sessions", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-conversation-pulse-workflow-"));
+  const store = new InterfaceSessionStore(path.join(tempDir, "sessions.json"));
+  const manager = new ConversationManager(store);
+  const conversationId = "telegram:chat-1:user-1";
+
+  try {
+    await store.setSession(
+      buildConversationSessionFixture(
+        {
+          domainContext: {
+            ...createEmptyConversationDomainContext(conversationId),
+            dominantLane: "workflow",
+            continuitySignals: {
+              activeWorkspace: true,
+              returnHandoff: true,
+              modeContinuity: true
+            },
+            activeSince: "2026-03-07T11:00:00.000Z",
+            lastUpdatedAt: "2026-03-07T12:00:00.000Z"
+          },
+          agentPulse: {
+            ...buildConversationSessionFixture().agentPulse,
+            optIn: true,
+            lastDecisionCode: "SESSION_DOMAIN_SUPPRESSED"
+          }
+        },
+        {
+          conversationId: "chat-1",
+          receivedAt: "2026-03-07T12:00:00.000Z"
+        }
+      )
+    );
+
+    const statusReply = await manager.handleMessage(
+      buildMessage("/pulse status"),
+      async (input) => ({ summary: input }),
+      async () => { }
+    );
+    assert.ok(statusReply.includes("Agent Pulse: on"));
+    assert.ok(statusReply.includes("Last decision: SESSION_DOMAIN_SUPPRESSED"));
+
+    const disableReply = await manager.handleMessage(
+      buildMessage("/pulse off"),
+      async (input) => ({ summary: input }),
+      async () => { }
+    );
+    assert.ok(disableReply.includes("Agent Pulse is now OFF"));
+
+    const session = await store.getSession(conversationId);
+    assert.equal(session?.agentPulse.optIn, false);
   } finally {
     await removeTempDirWithRetry(tempDir);
   }
@@ -1566,6 +1890,1464 @@ test("conversation manager fails closed when injected intent interpreter throws"
       }
     );
     assert.ok(status.includes("Agent Pulse: on"));
+  } finally {
+    await removeTempDirWithRetry(tempDir);
+  }
+});
+
+test("conversation manager keeps greetings and identity turns direct under saved handoff context", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-conversation-direct-greeting-"));
+  const store = new InterfaceSessionStore(path.join(tempDir, "sessions.json"));
+  const conversationKey = "telegram:chat-1:user-1";
+  let localResolverCalls = 0;
+  const manager = new ConversationManager(
+    store,
+    {},
+    {
+      localIntentModelResolver: async () => {
+        localResolverCalls += 1;
+        return {
+          source: "local_intent_model",
+          mode: "status_or_recall",
+          confidence: "medium",
+          matchedRuleId: "local_intent_model_misread_casual_turn_as_handoff_status",
+          explanation: "Incorrectly treated the conversational turn as saved-work recall.",
+          clarification: null,
+          semanticHint: "review_ready"
+        };
+      },
+      runDirectConversationTurn: async (input) => {
+        if (/Current user request:\nHi/i.test(input)) {
+          return { summary: "Hey." };
+        }
+        if (/Current user request:\nAnd you are\?/i.test(input)) {
+          return { summary: "I'm AgentBigBrain." };
+        }
+        throw new Error(`Unexpected direct conversation input: ${input}`);
+      }
+    }
+  );
+
+  await store.setSession(
+    buildConversationSessionFixture({
+      domainContext: {
+        ...createEmptyConversationDomainContext(conversationKey),
+        dominantLane: "workflow",
+        continuitySignals: {
+          activeWorkspace: true,
+          returnHandoff: true,
+          modeContinuity: true
+        },
+        activeSince: "2026-03-20T19:43:00.000Z",
+        lastUpdatedAt: "2026-03-20T19:43:00.000Z"
+      },
+      modeContinuity: {
+        activeMode: "build",
+        source: "natural_intent",
+        confidence: "HIGH",
+        lastAffirmedAt: "2026-03-20T19:43:00.000Z",
+        lastUserInput: "Build the landing page and leave it ready for review."
+      },
+      returnHandoff: {
+        id: "handoff:blocked-job",
+        status: "completed",
+        goal: "Finish the drone-company landing page and leave it ready for review.",
+        summary:
+          "I couldn't execute that request in this run. What happened: one or more governed actions were blocked before execution. Why it didn't execute: a safety, governance, or runtime policy denied the requested side effect. What to do next: ask for the exact block code and approval diff, then retry with a narrower allowed action.",
+        nextSuggestedStep: "Ask for the exact block code and approval diff, then retry with a narrower allowed action.",
+        workspaceRootPath: "C:\\Users\\benac\\OneDrive\\Desktop\\Sample World",
+        primaryArtifactPath: "C:\\Users\\benac\\OneDrive\\Desktop\\Sample World\\src\\index.css",
+        previewUrl: "file:///C:/Users/benac/OneDrive/Desktop/drone-company-landing.html",
+        changedPaths: [
+          "C:\\Users\\benac\\OneDrive\\Desktop\\Sample World\\src\\index.css",
+          "C:\\Users\\benac\\OneDrive\\Desktop\\Sample World\\src\\App.jsx"
+        ],
+        sourceJobId: "job-blocked",
+        updatedAt: "2026-03-20T19:43:00.000Z"
+      }
+    })
+  );
+
+  try {
+    const greetingReply = await manager.handleMessage(
+      buildMessageAt("Hi", "2026-03-20T19:44:00.000Z"),
+      async () => {
+        throw new Error("executeTask should not run for a direct greeting");
+      },
+      async () => {}
+    );
+    assert.equal(greetingReply, "Hey.");
+    assert.equal(/ready to review/i.test(greetingReply), false);
+
+    const identityReply = await manager.handleMessage(
+      {
+        ...buildMessageAt("What's my name?", "2026-03-20T19:44:05.000Z"),
+        transportIdentity: {
+          provider: "telegram",
+          username: "avery",
+          displayName: null,
+          givenName: "Avery",
+          familyName: null,
+          observedAt: "2026-03-20T19:44:05.000Z"
+        }
+      },
+      async () => {
+        throw new Error("executeTask should not run for direct identity recall");
+      },
+      async () => {}
+    );
+    assert.equal(
+      identityReply,
+      "Your Telegram profile shows Avery, but I don't have that saved as a confirmed name fact yet."
+    );
+    assert.equal(/ready to review/i.test(identityReply), false);
+    assert.equal(localResolverCalls, 0);
+
+    const assistantIdentityReply = await manager.handleMessage(
+      buildMessageAt("And you are?", "2026-03-20T19:44:08.000Z"),
+      async () => {
+        throw new Error("executeTask should not run for assistant identity recall");
+      },
+      async () => {}
+    );
+    assert.equal(assistantIdentityReply, "I'm AgentBigBrain.");
+    assert.equal(/ready to review/i.test(assistantIdentityReply), false);
+    assert.equal(localResolverCalls, 0);
+
+    const session = await store.getSession(conversationKey);
+    assert.ok(session);
+    assert.equal(session?.queuedJobs.length, 0);
+    assert.equal(session?.runningJobId, null);
+  } finally {
+    await removeTempDirWithRetry(tempDir);
+  }
+});
+
+test("conversation manager uses bounded identity facts for self-identity direct chat", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-conversation-identity-facts-"));
+  const store = new InterfaceSessionStore(path.join(tempDir, "sessions.json"));
+  const manager = new ConversationManager(
+    store,
+    {},
+    {
+      queryContinuityFacts: async () => [
+        {
+          factId: "fact_identity_preferred_name",
+          key: "identity.preferred_name",
+          value: "Avery",
+          status: "active",
+          observedAt: "2026-03-20T17:45:00.000Z",
+          lastUpdatedAt: "2026-03-20T17:45:00.000Z",
+          confidence: 0.99
+        }
+      ],
+      runDirectConversationTurn: async () => {
+        throw new Error("runDirectConversationTurn should not run for deterministic self-identity replies");
+      }
+    }
+  );
+
+  try {
+    const firstReply = await manager.handleMessage(
+      buildMessageAt("Who am I?", "2026-03-20T17:46:00.000Z"),
+      async () => {
+        throw new Error("executeTask should not run for self-identity direct chat");
+      },
+      async () => {}
+    );
+    assert.equal(firstReply, "You're Avery.");
+
+    const secondReply = await manager.handleMessage(
+      buildMessageAt("You should know my name", "2026-03-20T17:46:05.000Z"),
+      async () => {
+        throw new Error("executeTask should not run for self-identity follow-up chat");
+      },
+      async () => {}
+    );
+    assert.equal(secondReply, "You're Avery.");
+
+    const session = await store.getSession("telegram:chat-1:user-1");
+    assert.ok(session);
+    assert.equal(session?.queuedJobs.length, 0);
+    assert.equal(session?.runningJobId, null);
+  } finally {
+    await removeTempDirWithRetry(tempDir);
+  }
+});
+
+test("conversation manager keeps direct who-am-i questions on the identity path even when only relationship facts exist", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-conversation-identity-vs-relationship-"));
+  const store = new InterfaceSessionStore(path.join(tempDir, "sessions.json"));
+  const manager = new ConversationManager(
+    store,
+    {},
+    {
+      queryContinuityFacts: async () => [
+        {
+          factId: "fact_relationship_manager_only",
+          key: "relationship.manager_name",
+          value: "Morgan",
+          status: "active",
+          observedAt: "2026-03-20T17:45:00.000Z",
+          lastUpdatedAt: "2026-03-20T17:45:00.000Z",
+          confidence: 0.9
+        }
+      ],
+      runDirectConversationTurn: async () => {
+        throw new Error("runDirectConversationTurn should not run for deterministic self-identity replies");
+      }
+    }
+  );
+
+  try {
+    const reply = await manager.handleMessage(
+      buildMessageAt("Do you know who I am?", "2026-03-20T17:46:00.000Z"),
+      async () => {
+        throw new Error("executeTask should not run for self-identity direct chat");
+      },
+      async () => {}
+    );
+    assert.equal(reply, "I don't know your name yet.");
+  } finally {
+    await removeTempDirWithRetry(tempDir);
+  }
+});
+
+test("conversation manager keeps assistant-identity acknowledgements and objections conversational under queued workflow state", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-conversation-assistant-identity-followup-"));
+  const store = new InterfaceSessionStore(path.join(tempDir, "sessions.json"));
+  let localResolverCalls = 0;
+  let identityInterpretationCalls = 0;
+  const directInputs: string[] = [];
+  const manager = new ConversationManager(
+    store,
+    {},
+    {
+      localIntentModelResolver: async () => {
+        localResolverCalls += 1;
+        return {
+          source: "local_intent_model",
+          mode: "build",
+          confidence: "high",
+          matchedRuleId: "local_intent_model_misread_assistant_identity_followup_as_work",
+          explanation: "Incorrectly treated the conversational follow-up as work.",
+          clarification: null
+        };
+      },
+      identityInterpretationResolver: async () => {
+        identityInterpretationCalls += 1;
+        return {
+          source: "local_intent_model",
+          kind: "assistant_identity_query",
+          candidateValue: null,
+          confidence: "high",
+          shouldPersist: false,
+          explanation: "Incorrectly treated the acknowledgement as another assistant-identity question."
+        };
+      },
+      runDirectConversationTurn: async (input) => {
+        directInputs.push(input);
+        if (/Current user request:\nI know you are\./i.test(input)) {
+          return { summary: "Okay." };
+        }
+        if (/Current user request:\nI didn't say to work on that\./i.test(input)) {
+          return { summary: "Okay, I won't treat that as a new work request." };
+        }
+        throw new Error(`Unexpected direct conversation input: ${input}`);
+      }
+    }
+  );
+
+  try {
+    await store.setSession(
+      buildConversationSessionFixture({
+        conversationTurns: [
+          {
+            role: "user",
+            text: "Who are you?",
+            at: "2026-03-25T23:42:00.000Z"
+          },
+          {
+            role: "assistant",
+            text: "I'm BigBrain.",
+            at: "2026-03-25T23:42:01.000Z"
+          }
+        ],
+        runningJobId: "job-running",
+        queuedJobs: [
+          buildConversationJobFixture({
+            id: "job-queued-identity-followup",
+            input: "finish the landing page",
+            executionInput: "finish the landing page",
+            createdAt: "2026-03-25T23:41:50.000Z"
+          })
+        ]
+      })
+    );
+
+    const acknowledgementReply = await manager.handleMessage(
+      buildMessageAt("I know you are.", "2026-03-25T23:42:05.000Z"),
+      async () => {
+        throw new Error("executeTask should not run for assistant-identity acknowledgement chat");
+      },
+      async () => {}
+    );
+    assert.equal(acknowledgementReply, "Okay.");
+
+    const objectionReply = await manager.handleMessage(
+      buildMessageAt("I didn't say to work on that.", "2026-03-25T23:42:08.000Z"),
+      async () => {
+        throw new Error("executeTask should not run for assistant-identity objection chat");
+      },
+      async () => {}
+    );
+    assert.equal(objectionReply, "Okay, I won't treat that as a new work request.");
+    assert.equal(localResolverCalls, 0);
+    assert.equal(identityInterpretationCalls, 0);
+    assert.equal(directInputs.length, 2);
+
+    const session = await store.getSession("telegram:chat-1:user-1");
+    assert.ok(session);
+    assert.equal(session?.queuedJobs.length, 1);
+    assert.equal(session?.runningJobId, null);
+  } finally {
+    await removeTempDirWithRetry(tempDir);
+  }
+});
+
+test("conversation manager keeps question-like relationship recall off the queued continuation path after an assistant prompt", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-conversation-relationship-followup-chat-"));
+  const store = new InterfaceSessionStore(path.join(tempDir, "sessions.json"));
+  const manager = new ConversationManager(store, {}, {
+    runDirectConversationTurn: async (input) => {
+      if (/Current user request:\nSo, yeah, who is Milo\?/i.test(input)) {
+        return { summary: "Milo is the person you said used to work with you." };
+      }
+      throw new Error(`Unexpected direct conversation input: ${input}`);
+    }
+  });
+
+  try {
+    await store.setSession(
+      buildConversationSessionFixture({
+        conversationTurns: [
+          {
+            role: "assistant",
+            text: "Do you want me to keep going there?",
+            at: "2026-03-26T20:04:00.000Z"
+          }
+        ]
+      })
+    );
+
+    const reply = await manager.handleMessage(
+      buildMessageAt("So, yeah, who is Milo?", "2026-03-26T20:06:00.000Z"),
+      async () => {
+        throw new Error("executeTask should not run for question-like relationship recall chat");
+      },
+      async () => {}
+    );
+    assert.equal(reply, "Milo is the person you said used to work with you.");
+
+    const session = await store.getSession("telegram:chat-1:user-1");
+    assert.ok(session);
+    assert.equal(session?.queuedJobs.length, 0);
+    assert.equal(session?.runningJobId, null);
+  } finally {
+    await removeTempDirWithRetry(tempDir);
+  }
+});
+
+test("conversation manager keeps relationship recap and entity follow-up chat direct under stale build continuity", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-conversation-relationship-recap-"));
+  const store = new InterfaceSessionStore(path.join(tempDir, "sessions.json"));
+  const conversationKey = "telegram:chat-1:user-1";
+  let localResolverCalls = 0;
+  const directInputs: string[] = [];
+  const manager = new ConversationManager(
+    store,
+    {},
+    {
+      localIntentModelResolver: async () => {
+        localResolverCalls += 1;
+        return {
+          source: "local_intent_model",
+          mode: "build",
+          confidence: "high",
+          matchedRuleId: "local_intent_model_misread_relationship_recap_as_build_followup",
+          explanation: "Incorrectly treated the relationship recap turn as build continuity.",
+          clarification: null
+        };
+      },
+      runDirectConversationTurn: async (input) => {
+        directInputs.push(input);
+        assert.doesNotMatch(input, /Current working mode from earlier in this chat:/i);
+        if (/Current user request:\nCan you re explain all these relationships I just told you\?/i.test(input)) {
+          return {
+            summary:
+              "You work at Northstar Creative and you own Lantern Studio.\n\nMilo is your boss at Northstar Creative, and Owen used to work for you at Lantern Studio."
+          };
+        }
+        if (/Current user request:\nAnd Milo, who is he\?/i.test(input)) {
+          return {
+            summary: "Milo is your boss at Northstar Creative."
+          };
+        }
+        throw new Error(`Unexpected direct conversation input: ${input}`);
+      }
+    }
+  );
+
+  await store.setSession(
+    buildConversationSessionFixture({
+      conversationTurns: [
+        {
+          role: "user",
+          text: "Who am I?",
+          at: "2026-03-26T15:35:00.000Z"
+        },
+        {
+          role: "assistant",
+          text: "You're Avery.",
+          at: "2026-03-26T15:36:00.000Z"
+        },
+        {
+          role: "user",
+          text:
+            "I work with a guy named Milo, and I used to work with a person named Owen. Milo is married, and Owen has a girlfriend. I work with Milo at Northstar Creative and I used to work with Owen at Lantern Studio.",
+          at: "2026-03-26T15:37:00.000Z"
+        },
+        {
+          role: "assistant",
+          text: "Got it - you work with Milo at Northstar Creative, and you used to work with Owen at Lantern Studio.",
+          at: "2026-03-26T15:37:05.000Z"
+        },
+        {
+          role: "user",
+          text: "I own Lantern Studio, but I also work at Northstar Creative.",
+          at: "2026-03-26T15:37:15.000Z"
+        },
+        {
+          role: "user",
+          text: "Owen used to work for me, but Milo is my boss.",
+          at: "2026-03-26T15:37:30.000Z"
+        },
+        {
+          role: "assistant",
+          text: "Got it. Owen used to work for you, and Milo is your boss.",
+          at: "2026-03-26T15:38:00.000Z"
+        }
+      ],
+      domainContext: {
+        ...createEmptyConversationDomainContext(conversationKey),
+        dominantLane: "workflow",
+        continuitySignals: {
+          activeWorkspace: true,
+          returnHandoff: true,
+          modeContinuity: true
+        },
+        activeSince: "2026-03-26T10:51:00.000Z",
+        lastUpdatedAt: "2026-03-26T15:38:00.000Z"
+      },
+      modeContinuity: {
+        activeMode: "build",
+        source: "natural_intent",
+        confidence: "HIGH",
+        lastAffirmedAt: "2026-03-26T10:51:00.000Z",
+        lastUserInput: "Build the Sky Drone Max landing page and leave it open in the browser."
+      },
+      returnHandoff: {
+        id: "handoff:sky-drone-max",
+        status: "stopped",
+        goal: "Finish the Sky Drone Max landing page and leave it running in the browser.",
+        summary:
+          "I couldn't execute that request in this run. What happened: governance blocked the requested action. Why it didn't execute: Security governor rejected this request.",
+        nextSuggestedStep: "Retry with a safer and narrower request.",
+        workspaceRootPath: "C:\\Users\\benac\\OneDrive\\Desktop\\Sky Drone Max",
+        primaryArtifactPath: "C:\\Users\\benac\\OneDrive\\Desktop\\Sky Drone Max\\src\\index.css",
+        previewUrl: null,
+        changedPaths: [
+          "C:\\Users\\benac\\OneDrive\\Desktop\\Sky Drone Max\\src\\index.css",
+          "C:\\Users\\benac\\OneDrive\\Desktop\\Sky Drone Max\\src\\App.jsx"
+        ],
+        sourceJobId: "job-sky-drone-max",
+        updatedAt: "2026-03-26T10:55:00.000Z"
+      },
+      recentActions: [
+        {
+          id: "recent_task_summary_sky_drone_max",
+          kind: "task_summary",
+          label: "Sky Drone Max task summary",
+          location: null,
+          status: "failed",
+          sourceJobId: "job-sky-drone-max",
+          at: "2026-03-26T10:55:00.000Z",
+          summary:
+            "Latest completed task: Completed task with 0 approved action(s) and 2 blocked action(s) across 2 plan attempt(s). Recovery postmortem: MISSION_STOP_LIMIT_REACHED."
+        },
+        {
+          id: "recent_file_index_css_sky_drone_max",
+          kind: "file",
+          label: "index.css",
+          location: "C:\\Users\\benac\\OneDrive\\Desktop\\Sky Drone Max\\src\\index.css",
+          status: "updated",
+          sourceJobId: "job-sky-drone-max",
+          at: "2026-03-26T10:54:50.000Z",
+          summary: "Updated index.css for Sky Drone Max."
+        }
+      ]
+    })
+  );
+
+  try {
+    const relationshipReply = await manager.handleMessage(
+      buildMessageAt(
+        "Can you re explain all these relationships I just told you?",
+        "2026-03-26T15:38:10.000Z"
+      ),
+      async () => {
+        throw new Error("executeTask should not run for relationship recap chat");
+      },
+      async () => {}
+    );
+    assert.match(relationshipReply, /Milo is your boss at Northstar Creative/i);
+    assert.doesNotMatch(relationshipReply, /governance blocked|Most recent actions/i);
+
+    const miloReply = await manager.handleMessage(
+      buildMessageAt("And Milo, who is he?", "2026-03-26T15:40:00.000Z"),
+      async () => {
+        throw new Error("executeTask should not run for relationship entity follow-up chat");
+      },
+      async () => {}
+    );
+    assert.equal(miloReply, "Milo is your boss at Northstar Creative.");
+    assert.doesNotMatch(miloReply, /Most recent actions|MISSION_STOP_LIMIT_REACHED/i);
+
+    assert.equal(localResolverCalls, 0);
+    assert.equal(directInputs.length, 2);
+
+    const session = await store.getSession(conversationKey);
+    assert.ok(session);
+    assert.equal(session?.queuedJobs.length, 0);
+    assert.equal(session?.runningJobId, null);
+  } finally {
+    await removeTempDirWithRetry(tempDir);
+  }
+});
+
+test("conversation manager can answer self-identity from low-confidence transport identity hints", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-conversation-identity-transport-"));
+  const store = new InterfaceSessionStore(path.join(tempDir, "sessions.json"));
+  const manager = new ConversationManager(store, {}, {
+    runDirectConversationTurn: async () => {
+      throw new Error("runDirectConversationTurn should not run for deterministic self-identity replies");
+    }
+  });
+
+  try {
+    const reply = await manager.handleMessage(
+      {
+        ...buildMessageAt("Who am I?", "2026-03-20T20:49:00.000Z"),
+        transportIdentity: {
+          provider: "telegram",
+          username: "averybrooks",
+          displayName: "Avery Brooks",
+          givenName: "Avery",
+          familyName: "Bena",
+          observedAt: "2026-03-20T20:49:00.000Z"
+        }
+      },
+      async () => {
+        throw new Error("executeTask should not run for self-identity direct chat");
+      },
+      async () => {}
+    );
+    assert.equal(
+      reply,
+      "Your Telegram profile shows Avery Brooks, but I don't have that saved as a confirmed name fact yet."
+    );
+
+    const session = await store.getSession("telegram:chat-1:user-1");
+    assert.ok(session);
+    assert.equal(session?.transportIdentity?.givenName, "Avery");
+  } finally {
+    await removeTempDirWithRetry(tempDir);
+  }
+});
+
+test("conversation manager persists direct self-identity declarations and recalls them later without queueing work", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-conversation-identity-declaration-"));
+  const store = new InterfaceSessionStore(path.join(tempDir, "sessions.json"));
+  let rememberedPreferredName: string | null = null;
+  const manager = new ConversationManager(store, {}, {
+    queryContinuityFacts: async () =>
+      rememberedPreferredName
+        ? [
+            {
+              factId: "fact_identity_preferred_name_runtime",
+              key: "identity.preferred_name",
+              value: rememberedPreferredName,
+              status: "active",
+              observedAt: "2026-03-20T23:10:00.000Z",
+              lastUpdatedAt: "2026-03-20T23:10:00.000Z",
+              confidence: 0.99
+            }
+          ]
+        : [],
+    rememberConversationProfileInput: async (userInput) => {
+      if (/my name is avery/i.test(userInput)) {
+        rememberedPreferredName = "Avery";
+        return true;
+      }
+      return false;
+    },
+    runDirectConversationTurn: async () => {
+      throw new Error("runDirectConversationTurn should not run for deterministic identity declaration or recall replies");
+    }
+  });
+
+  try {
+    const initialReply = await manager.handleMessage(
+      {
+        ...buildMessageAt("What is my name?", "2026-03-20T23:09:00.000Z"),
+        username: "avery_brooks"
+      },
+      async () => {
+        throw new Error("executeTask should not run for self-identity direct chat");
+      },
+      async () => {}
+    );
+    assert.equal(
+      initialReply,
+      "Your Telegram username looks like Avery Brooks, but I don't have that saved as a confirmed name fact yet."
+    );
+
+    const declarationReply = await manager.handleMessage(
+      {
+        ...buildMessageAt("My name is Avery, yes.", "2026-03-20T23:10:00.000Z"),
+        username: "avery_brooks"
+      },
+      async () => {
+        throw new Error("executeTask should not run for self-identity declaration chat");
+      },
+      async () => {}
+    );
+    assert.equal(declarationReply, "Okay, I'll remember that you're Avery.");
+
+    const recalledReply = await manager.handleMessage(
+      {
+        ...buildMessageAt("What is my name?", "2026-03-20T23:10:05.000Z"),
+        username: "avery_brooks"
+      },
+      async () => {
+        throw new Error("executeTask should not run for self-identity recall chat");
+      },
+      async () => {}
+    );
+    assert.equal(recalledReply, "You're Avery.");
+
+    const session = await store.getSession("telegram:chat-1:user-1");
+    assert.ok(session);
+    assert.equal(session?.queuedJobs.length, 0);
+    assert.equal(session?.runningJobId, null);
+  } finally {
+    await removeTempDirWithRetry(tempDir);
+  }
+});
+
+test("conversation manager uses model-assisted identity interpretation for ambiguous self-identity declarations and keeps mixed no-plus-identity recall off the worker path", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-conversation-identity-discourse-tail-"));
+  const store = new InterfaceSessionStore(path.join(tempDir, "sessions.json"));
+  let rememberedPreferredName: string | null = null;
+  const rememberedInputs: unknown[] = [];
+  const interpretedInputs: string[] = [];
+  const manager = new ConversationManager(store, {}, {
+    queryContinuityFacts: async () =>
+      rememberedPreferredName
+        ? [
+            {
+              factId: "fact_identity_preferred_name_discourse_tail",
+              key: "identity.preferred_name",
+              value: rememberedPreferredName,
+              status: "active",
+              observedAt: "2026-03-20T23:44:00.000Z",
+              lastUpdatedAt: "2026-03-20T23:44:00.000Z",
+              confidence: 0.99
+            }
+          ]
+        : [],
+    rememberConversationProfileInput: async (input) => {
+      rememberedInputs.push(input);
+      const preferredNameCandidate =
+        typeof input === "string"
+          ? /my name is avery/i.test(input)
+            ? "Avery"
+            : null
+          : input.validatedFactCandidates?.find(
+              (candidate) => candidate.key === "identity.preferred_name"
+            )?.candidateValue ?? null;
+      if (preferredNameCandidate === "Avery") {
+        rememberedPreferredName = "Avery";
+        return true;
+      }
+      return false;
+    },
+    identityInterpretationResolver: async (request) => {
+      interpretedInputs.push(request.userInput);
+      if (/my name is avery/i.test(request.userInput)) {
+        return {
+          source: "local_intent_model",
+          kind: "self_identity_declaration",
+          candidateValue: "Avery",
+          confidence: "medium",
+          shouldPersist: true,
+          explanation: "The user is explicitly reaffirming their own name."
+        };
+      }
+      return null;
+    },
+    runDirectConversationTurn: async () => {
+      throw new Error("runDirectConversationTurn should not run for model-assisted identity declaration or mixed identity recall replies");
+    }
+  });
+
+  try {
+    const declarationReply = await manager.handleMessage(
+      {
+        ...buildMessageAt("I already told you my name is Avery several times.", "2026-03-20T23:44:00.000Z"),
+        username: "avery_brooks"
+      },
+      async () => {
+        throw new Error("executeTask should not run for self-identity declaration chat");
+      },
+      async () => {}
+    );
+    assert.equal(declarationReply, "Okay, I'll remember that you're Avery.");
+    assert.deepEqual(interpretedInputs, [
+      "I already told you my name is Avery several times."
+    ]);
+    assert.deepEqual(rememberedInputs, [
+      {
+        validatedFactCandidates: [
+          {
+            key: "identity.preferred_name",
+            candidateValue: "Avery",
+            source: "conversation.identity_interpretation",
+            confidence: 0.95
+          }
+        ]
+      }
+    ]);
+
+    const recalledReply = await manager.handleMessage(
+      {
+        ...buildMessageAt("no what is my name", "2026-03-20T23:44:05.000Z"),
+        username: "avery_brooks"
+      },
+      async () => {
+        throw new Error("executeTask should not run for mixed no-plus-identity recall chat");
+      },
+      async () => {}
+    );
+    assert.equal(recalledReply, "You're Avery.");
+
+    const session = await store.getSession("telegram:chat-1:user-1");
+    assert.ok(session);
+    assert.equal(session?.queuedJobs.length, 0);
+    assert.equal(session?.runningJobId, null);
+  } finally {
+    await removeTempDirWithRetry(tempDir);
+  }
+});
+
+test("conversation manager fails closed for ambiguous identity declarations when the shared interpreter is unavailable", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-conversation-identity-no-model-"));
+  const store = new InterfaceSessionStore(path.join(tempDir, "sessions.json"));
+  let rememberCalls = 0;
+  const manager = new ConversationManager(store, {}, {
+    rememberConversationProfileInput: async () => {
+      rememberCalls += 1;
+      return false;
+    },
+    runDirectConversationTurn: async () => {
+      throw new Error("runDirectConversationTurn should not run when ambiguous identity interpretation fails closed");
+    }
+  });
+
+  try {
+    const reply = await manager.handleMessage(
+      {
+        ...buildMessageAt("I already told you my name is Avery several times.", "2026-03-20T23:45:00.000Z"),
+        username: "avery_brooks"
+      },
+      async () => {
+        throw new Error("executeTask should not run for ambiguous self-identity declaration chat");
+      },
+      async () => {}
+    );
+    assert.equal(
+      reply,
+      "If you're telling me your name, say it in a short direct form like \"My name is Avery.\" and I'll remember it."
+    );
+    assert.equal(rememberCalls, 0);
+
+    const session = await store.getSession("telegram:chat-1:user-1");
+    assert.ok(session);
+    assert.equal(session?.queuedJobs.length, 0);
+    assert.equal(session?.runningJobId, null);
+  } finally {
+    await removeTempDirWithRetry(tempDir);
+  }
+});
+
+test("conversation manager fails closed for ambiguous identity declarations when the shared interpreter times out", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-conversation-identity-timeout-"));
+  const store = new InterfaceSessionStore(path.join(tempDir, "sessions.json"));
+  let rememberCalls = 0;
+  let interpretationCalls = 0;
+  const manager = new ConversationManager(store, {}, {
+    rememberConversationProfileInput: async () => {
+      rememberCalls += 1;
+      return false;
+    },
+    identityInterpretationResolver: async () => {
+      interpretationCalls += 1;
+      throw new Error("Request timed out while waiting for the local identity interpreter.");
+    },
+    runDirectConversationTurn: async () => {
+      throw new Error("runDirectConversationTurn should not run when ambiguous identity interpretation times out");
+    }
+  });
+
+  try {
+    const reply = await manager.handleMessage(
+      {
+        ...buildMessageAt("I already told you my name is Avery several times.", "2026-03-20T23:46:00.000Z"),
+        username: "avery_brooks"
+      },
+      async () => {
+        throw new Error("executeTask should not run for ambiguous self-identity declaration chat");
+      },
+      async () => {}
+    );
+    assert.equal(
+      reply,
+      "If you're telling me your name, say it in a short direct form like \"My name is Avery.\" and I'll remember it."
+    );
+    assert.equal(rememberCalls, 0);
+    assert.equal(interpretationCalls, 1);
+
+    const session = await store.getSession("telegram:chat-1:user-1");
+    assert.ok(session);
+    assert.equal(session?.queuedJobs.length, 0);
+    assert.equal(session?.runningJobId, null);
+  } finally {
+    await removeTempDirWithRetry(tempDir);
+  }
+});
+
+test("conversation manager still fails closed for self-identity when only a generic username exists", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-conversation-identity-generic-handle-"));
+  const store = new InterfaceSessionStore(path.join(tempDir, "sessions.json"));
+  const manager = new ConversationManager(store, {}, {
+    runDirectConversationTurn: async () => {
+      throw new Error("runDirectConversationTurn should not run for deterministic self-identity replies");
+    }
+  });
+
+  try {
+    const reply = await manager.handleMessage(
+      {
+        ...buildMessageAt("Who am I?", "2026-03-20T20:50:00.000Z"),
+        transportIdentity: {
+          provider: "telegram",
+          username: "agentowner",
+          displayName: null,
+          givenName: null,
+          familyName: null,
+          observedAt: "2026-03-20T20:50:00.000Z"
+        }
+      },
+      async () => {
+        throw new Error("executeTask should not run for self-identity direct chat");
+      },
+      async () => {}
+    );
+    assert.equal(reply, "I don't know your name yet.");
+  } finally {
+    await removeTempDirWithRetry(tempDir);
+  }
+});
+
+test("conversation manager reconciles one interpreted entity alias candidate through the bounded store callback without queueing work", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-conversation-entity-alias-"));
+  const store = new InterfaceSessionStore(path.join(tempDir, "sessions.json"));
+  const receivedAt = "2026-03-21T09:00:10.000Z";
+  const aliasMutations: Array<{
+    entityKey: string;
+    aliasCandidate: string;
+    observedAt: string;
+    evidenceRef: string;
+  }> = [];
+  let interpretationCalls = 0;
+  await store.setSession(
+    buildConversationSessionFixture(
+      {
+        updatedAt: "2026-03-21T09:00:00.000Z",
+        conversationTurns: [
+          {
+            role: "user",
+            text: "Sarah said the client meeting went badly.",
+            at: "2026-03-21T08:59:00.000Z"
+          },
+          {
+            role: "assistant",
+            text: "If she comes up again, I can help you revisit that situation.",
+            at: "2026-03-21T08:59:10.000Z"
+          }
+        ]
+      },
+      {
+        conversationId: "chat-1",
+        receivedAt: "2026-03-21T09:00:00.000Z"
+      }
+    )
+  );
+  const manager = new ConversationManager(store, {}, {
+    runDirectConversationTurn: async () => ({ summary: "Okay." }),
+    getEntityGraph: async () => ({
+      schemaVersion: "v1",
+      updatedAt: "2026-03-21T09:00:00.000Z",
+      entities: [
+        {
+          entityKey: "entity_sarah",
+          canonicalName: "Sarah",
+          entityType: "person",
+          disambiguator: null,
+          domainHint: "relationship",
+          aliases: ["Sarah"],
+          firstSeenAt: "2026-03-21T08:59:00.000Z",
+          lastSeenAt: "2026-03-21T08:59:00.000Z",
+          salience: 2,
+          evidenceRefs: ["trace:sarah"]
+        },
+        {
+          entityKey: "entity_sarah_lee",
+          canonicalName: "Sarah Lee",
+          entityType: "person",
+          disambiguator: null,
+          domainHint: "relationship",
+          aliases: ["Sarah Lee"],
+          firstSeenAt: "2026-03-21T08:59:00.000Z",
+          lastSeenAt: "2026-03-21T08:59:00.000Z",
+          salience: 1,
+          evidenceRefs: ["trace:sarah_lee"]
+        }
+      ],
+      edges: []
+    }),
+    entityReferenceInterpretationResolver: async (request) => {
+      interpretationCalls += 1;
+      assert.equal(request.userInput, "I mean Sarah Connor, not Sarah Lee.");
+      assert.equal(request.candidateEntities?.length, 2);
+      return {
+        source: "local_intent_model",
+        kind: "entity_alias_candidate",
+        selectedEntityKeys: ["entity_sarah"],
+        aliasCandidate: "Sarah Connor",
+        confidence: "medium",
+        explanation: "The user is clarifying which Sarah they meant."
+      };
+    },
+    reconcileEntityAliasCandidate: async (request) => {
+      aliasMutations.push(request);
+      return {
+        acceptedAlias: request.aliasCandidate,
+        rejectionReason: null
+      };
+    }
+  });
+
+  try {
+    const reply = await manager.handleMessage(
+      {
+        ...buildMessageAt("I mean Sarah Connor, not Sarah Lee.", receivedAt),
+        username: "agentowner"
+      },
+      async () => {
+        throw new Error("executeTask should not run for bounded entity-alias clarification chat");
+      },
+      async () => {}
+    );
+    assert.equal(reply, "Okay.");
+    assert.equal(interpretationCalls, 1);
+    assert.equal(aliasMutations.length, 1);
+    assert.deepEqual(aliasMutations[0], {
+      entityKey: "entity_sarah",
+      aliasCandidate: "Sarah Connor",
+      observedAt: receivedAt,
+      evidenceRef:
+        "conversation.entity_alias_interpretation:telegram:chat-1:user-1:2026-03-21T09:00:10.000Z:entity_sarah"
+    });
+
+    const session = await store.getSession("telegram:chat-1:user-1");
+    assert.ok(session);
+    assert.equal(session?.queuedJobs.length, 0);
+    assert.equal(session?.runningJobId, null);
+  } finally {
+    await removeTempDirWithRetry(tempDir);
+  }
+});
+
+test("conversation manager preserves browser workflow continuity through build, edit, chat, and close sequence", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-conversation-browser-sequence-"));
+  const store = new InterfaceSessionStore(path.join(tempDir, "sessions.json"));
+  const manager = new ConversationManager(store, {
+    heartbeatIntervalMs: 10,
+    ackDelayMs: 1,
+    maxRecentJobs: 20,
+    staleRunningJobRecoveryMs: 60_000,
+    maxConversationTurns: 40,
+    maxContextTurnsForExecution: 10
+  }, {
+    runDirectConversationTurn: async (input) => {
+      if (/Current user request:\nWho are you\?/i.test(input)) {
+        return { summary: "I'm BigBrain." };
+      }
+      throw new Error(`Unexpected direct conversation input: ${input}`);
+    }
+  });
+  const notifications: string[] = [];
+  const executedInputs: string[] = [];
+  const workspaceRootPath = "C:\\Users\\testuser\\Desktop\\drone-company";
+  const artifactPath = `${workspaceRootPath}\\index.html`;
+  const previewUrl = "http://127.0.0.1:4173/index.html";
+  const browserSessionId = "browser_session:drone-company";
+  const previewLeaseId = "proc_preview_drone_company";
+
+  try {
+    const buildReply = await manager.handleMessage(
+      buildMessageAt(
+        "Execute now and build a landing page for air drones, save it in drone-company on my desktop, and leave it open for me.",
+        "2026-03-20T17:47:00.000Z"
+      ),
+      async (input) => {
+        executedInputs.push(input);
+        return {
+          summary: "I built the landing page and left the preview open for you.",
+          taskRunResult: buildTaskRunResult(input, "I built the landing page and left the preview open for you.", [
+            buildApprovedWriteFileActionResult("action_write_file_build", artifactPath),
+            buildApprovedOpenBrowserActionResult(
+              "action_open_browser_build",
+              browserSessionId,
+              previewUrl,
+              workspaceRootPath,
+              previewLeaseId
+            )
+          ])
+        };
+      },
+      async (message) => {
+        notifications.push(message);
+      }
+    );
+    assert.match(buildReply, /On it\./i);
+
+    await waitForAsync(async () => {
+      const session = await store.getSession("telegram:chat-1:user-1");
+      return session?.activeWorkspace?.browserSessionStatus === "open";
+    }, 120_000);
+
+    const afterBuild = await store.getSession("telegram:chat-1:user-1");
+    assert.ok(afterBuild);
+    assert.equal(afterBuild?.activeWorkspace?.rootPath, workspaceRootPath);
+    assert.equal(afterBuild?.activeWorkspace?.browserSessionStatus, "open");
+    assert.equal(afterBuild?.browserSessions[0]?.status, "open");
+
+    const editReply = await manager.handleMessage(
+      buildMessageAt("Change the hero section to a slider.", "2026-03-20T17:47:10.000Z"),
+      async (input) => {
+        executedInputs.push(input);
+        return {
+          summary: "I updated the hero section to a slider and kept the preview open.",
+          taskRunResult: buildTaskRunResult(input, "I updated the hero section to a slider and kept the preview open.", [
+            buildApprovedWriteFileActionResult("action_write_file_edit", artifactPath)
+          ])
+        };
+      },
+      async (message) => {
+        notifications.push(message);
+      }
+    );
+    assert.match(editReply, /On it\./i);
+
+    await waitFor(
+      () => notifications.some((message) => /hero section to a slider/i.test(message)),
+      120_000
+    );
+
+    const afterEdit = await store.getSession("telegram:chat-1:user-1");
+    assert.ok(afterEdit);
+    assert.equal(afterEdit?.activeWorkspace?.browserSessionStatus, "open");
+    assert.equal(afterEdit?.browserSessions[0]?.status, "open");
+
+    const executedBeforeChat = executedInputs.length;
+    const chatReply = await manager.handleMessage(
+      buildMessageAt("Who are you?", "2026-03-20T17:47:20.000Z"),
+      async () => {
+        throw new Error("executeTask should not run for direct chat in workflow continuity");
+      },
+      async (message) => {
+        notifications.push(message);
+      }
+    );
+    assert.equal(chatReply, "I'm BigBrain.");
+    assert.equal(executedInputs.length, executedBeforeChat);
+
+    const afterChat = await store.getSession("telegram:chat-1:user-1");
+    assert.ok(afterChat);
+    assert.equal(afterChat?.activeWorkspace?.browserSessionStatus, "open");
+    assert.equal(afterChat?.browserSessions[0]?.status, "open");
+
+    const closeReply = await manager.handleMessage(
+      buildMessageAt("Close the landing page browser now.", "2026-03-20T17:47:30.000Z"),
+      async (input) => {
+        executedInputs.push(input);
+        return {
+          summary: "I closed the landing page preview.",
+          taskRunResult: buildTaskRunResult(input, "I closed the landing page preview.", [
+            buildApprovedCloseBrowserActionResult(
+              "action_close_browser",
+              browserSessionId,
+              previewUrl,
+              workspaceRootPath,
+              previewLeaseId
+            )
+          ])
+        };
+      },
+      async (message) => {
+        notifications.push(message);
+      }
+    );
+    assert.match(closeReply, /On it\./i);
+
+    await waitForAsync(async () => {
+      const session = await store.getSession("telegram:chat-1:user-1");
+      return session?.activeWorkspace?.browserSessionStatus === "closed";
+    }, 120_000);
+
+    const afterClose = await store.getSession("telegram:chat-1:user-1");
+    assert.ok(afterClose);
+    assert.equal(afterClose?.activeWorkspace?.browserSessionStatus, "closed");
+    assert.ok(
+      afterClose?.activeWorkspace?.ownershipState === "stale" ||
+      afterClose?.activeWorkspace?.ownershipState === "orphaned"
+    );
+    assert.equal(afterClose?.browserSessions[0]?.status, "closed");
+    assert.equal(executedInputs.length, 3);
+  } finally {
+    await removeTempDirWithRetry(tempDir);
+  }
+});
+
+test("conversation manager preserves browser workflow continuity through multi-paragraph chat and unrelated Desktop organization", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-conversation-browser-multiparagraph-sequence-"));
+  const store = new InterfaceSessionStore(path.join(tempDir, "sessions.json"));
+  const manager = new ConversationManager(store, {
+    heartbeatIntervalMs: 10,
+    ackDelayMs: 1,
+    maxRecentJobs: 20,
+    staleRunningJobRecoveryMs: 60_000,
+    maxConversationTurns: 50,
+    maxContextTurnsForExecution: 10
+  }, {
+    runDirectConversationTurn: async (input) => {
+      if (/Current user request:\nBefore you change anything else, just talk with me for a minute about the tone\./i.test(input)) {
+        return {
+          summary:
+            "The page already feels calm because the spacing gives each section room to breathe instead of pushing everything at once.\n\nIf we keep the preview open, we can make the hero more premium without losing that softer first impression."
+        };
+      }
+      if (/Current user request:\nThanks\.\n\nBefore you close it, talk me through whether the call to action feels calmer now\./i.test(input)) {
+        return {
+          summary:
+            "Yes, it feels calmer now because the call to action reads as an invitation instead of a push.\n\nThe softer phrasing and the open preview make it easy to judge the tone before we close the browser."
+        };
+      }
+      throw new Error(`Unexpected direct conversation input: ${input}`);
+    }
+  });
+  const notifications: string[] = [];
+  const executedInputs: string[] = [];
+  const workspaceRootPath = "C:\\Users\\testuser\\Desktop\\drone-company";
+  const artifactPath = `${workspaceRootPath}\\index.html`;
+  const cleanupManifestPath = "C:\\Users\\testuser\\Desktop\\drone-reference-cleanup\\manifest.txt";
+  const previewUrl = "http://127.0.0.1:4173/index.html";
+  const browserSessionId = "browser_session:drone-company";
+  const previewLeaseId = "proc_preview_drone_company";
+
+  try {
+    const buildReply = await manager.handleMessage(
+      buildMessageAt(
+        "Execute now and build a landing page for air drones, save it in drone-company on my desktop, and leave it open for me.",
+        "2026-03-25T23:47:00.000Z"
+      ),
+      async (input) => {
+        executedInputs.push(input);
+        return {
+          summary: "I built the landing page and left the preview open for you.",
+          taskRunResult: buildTaskRunResult(input, "I built the landing page and left the preview open for you.", [
+            buildApprovedWriteFileActionResult("action_write_file_build_multiparagraph", artifactPath),
+            buildApprovedOpenBrowserActionResult(
+              "action_open_browser_build_multiparagraph",
+              browserSessionId,
+              previewUrl,
+              workspaceRootPath,
+              previewLeaseId
+            )
+          ])
+        };
+      },
+      async (message) => {
+        notifications.push(message);
+      }
+    );
+    assert.match(buildReply, /On it\./i);
+
+    await waitForAsync(async () => {
+      const session = await store.getSession("telegram:chat-1:user-1");
+      return session?.activeWorkspace?.browserSessionStatus === "open";
+    }, 120_000);
+
+    const executedBeforeFirstChat = executedInputs.length;
+    const firstChatReply = await manager.handleMessage(
+      buildMessageAt(
+        "Before you change anything else, just talk with me for a minute about the tone.\n\nReply in two short paragraphs and keep the page open.",
+        "2026-03-25T23:47:10.000Z"
+      ),
+      async () => {
+        throw new Error("executeTask should not run for multi-paragraph chat during workflow continuity");
+      },
+      async (message) => {
+        notifications.push(message);
+      }
+    );
+    assert.match(firstChatReply, /\n\n/);
+    assert.equal(executedInputs.length, executedBeforeFirstChat);
+
+    const afterFirstChat = await store.getSession("telegram:chat-1:user-1");
+    assert.ok(afterFirstChat);
+    assert.equal(afterFirstChat?.browserSessions[0]?.status, "open");
+
+    const editReply = await manager.handleMessage(
+      buildMessageAt("Change the hero section so it feels calmer and more premium.", "2026-03-25T23:47:20.000Z"),
+      async (input) => {
+        executedInputs.push(input);
+        return {
+          summary: "I updated the hero section and kept the preview open.",
+          taskRunResult: buildTaskRunResult(input, "I updated the hero section and kept the preview open.", [
+            buildApprovedWriteFileActionResult("action_write_file_edit_multiparagraph", artifactPath)
+          ])
+        };
+      },
+      async (message) => {
+        notifications.push(message);
+      }
+    );
+    assert.match(editReply, /On it\./i);
+    await waitFor(
+      () => notifications.some((message) => /updated the hero section/i.test(message)),
+      120_000
+    );
+
+    const organizeReply = await manager.handleMessage(
+      buildMessageAt(
+        "While that's open, organize the loose drone reference notes on my Desktop into a folder called drone-reference-cleanup.",
+        "2026-03-25T23:47:30.000Z"
+      ),
+      async (input) => {
+        executedInputs.push(input);
+        return {
+          summary: "I organized the loose drone reference notes into drone-reference-cleanup on your Desktop.",
+          taskRunResult: buildTaskRunResult(input, "I organized the loose drone reference notes into drone-reference-cleanup on your Desktop.", [
+            buildApprovedWriteFileActionResult("action_write_file_desktop_cleanup_manifest", cleanupManifestPath)
+          ])
+        };
+      },
+      async (message) => {
+        notifications.push(message);
+      }
+    );
+    assert.match(organizeReply, /On it\./i);
+    await waitFor(
+      () => notifications.some((message) => /organized the loose drone reference notes/i.test(message)),
+      120_000
+    );
+    assert.match(executedInputs[2] ?? "", /drone-reference-cleanup/i);
+
+    const executedBeforeSecondChat = executedInputs.length;
+    const secondChatReply = await manager.handleMessage(
+      buildMessageAt(
+        "Thanks.\n\nBefore you close it, talk me through whether the call to action feels calmer now.",
+        "2026-03-25T23:47:40.000Z"
+      ),
+      async () => {
+        throw new Error("executeTask should not run for the second multi-paragraph workflow conversation turn");
+      },
+      async (message) => {
+        notifications.push(message);
+      }
+    );
+    assert.match(secondChatReply, /\n\n/);
+    assert.equal(executedInputs.length, executedBeforeSecondChat);
+
+    const afterSecondChat = await store.getSession("telegram:chat-1:user-1");
+    assert.ok(afterSecondChat);
+    assert.equal(
+      afterSecondChat?.browserSessions.find((session) => session.id === browserSessionId)?.status,
+      "open"
+    );
+
+    const closeReply = await manager.handleMessage(
+      buildMessageAt("Close the landing page browser now.", "2026-03-25T23:47:50.000Z"),
+      async (input) => {
+        executedInputs.push(input);
+        return {
+          summary: "I closed the landing page preview.",
+          taskRunResult: buildTaskRunResult(input, "I closed the landing page preview.", [
+            buildApprovedCloseBrowserActionResult(
+              "action_close_browser_multiparagraph",
+              browserSessionId,
+              previewUrl,
+              workspaceRootPath,
+              previewLeaseId
+            )
+          ])
+        };
+      },
+      async (message) => {
+        notifications.push(message);
+      }
+    );
+    assert.match(closeReply, /On it\./i);
+
+    await waitForAsync(async () => {
+      const session = await store.getSession("telegram:chat-1:user-1");
+      return session?.browserSessions.find((browserSession) => browserSession.id === browserSessionId)?.status === "closed";
+    }, 120_000);
+    assert.match(executedInputs[3] ?? "", /browser_session:drone-company|Close the landing page browser now/i);
+
+    const afterClose = await store.getSession("telegram:chat-1:user-1");
+    assert.ok(afterClose);
+    assert.equal(
+      afterClose?.browserSessions.find((session) => session.id === browserSessionId)?.status,
+      "closed"
+    );
+    assert.equal(executedInputs.length, 4);
+  } finally {
+    await removeTempDirWithRetry(tempDir);
+  }
+});
+
+test("conversation manager persists bounded recovery attribution for a Python workflow and surfaces it in status recall", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-conversation-python-recovery-"));
+  const store = new InterfaceSessionStore(path.join(tempDir, "sessions.json"));
+  const manager = new ConversationManager(store, {
+    heartbeatIntervalMs: 10,
+    ackDelayMs: 1,
+    maxRecentJobs: 20,
+    staleRunningJobRecoveryMs: 60_000,
+    maxConversationTurns: 50,
+    maxContextTurnsForExecution: 10
+  });
+  const notifications: string[] = [];
+  const workspaceRootPath = "C:\\Users\\testuser\\Desktop\\calm-drone-python";
+  const artifactPath = `${workspaceRootPath}\\app.py`;
+  const previewUrl = "http://127.0.0.1:5050/";
+  const browserSessionId = "browser_session:calm-drone-python";
+  const previewLeaseId = "proc_preview_calm_drone_python";
+  const recoverySummary =
+    "Recovered automatically after one bounded missing-dependency repair and retried the Python start step.";
+
+  try {
+    const reply = await manager.handleMessage(
+      buildMessageAt(
+        "Build now: create a small Calm Drone Python app on my Desktop and leave it running in the browser.",
+        "2026-03-26T13:00:00.000Z"
+      ),
+      async (input, _receivedAt, onProgressUpdate) => {
+        await onProgressUpdate?.({
+          status: "retrying",
+          message:
+            "I found a missing dependency. I'm doing one bounded repair and then retrying the original step.",
+          recoveryTrace: {
+            kind: "structured_executor_recovery",
+            status: "attempting",
+            summary:
+              "I found a missing dependency. I'm doing one bounded repair and then retrying the original step.",
+            updatedAt: "2026-03-26T13:00:01.000Z",
+            recoveryClass: "DEPENDENCY_MISSING",
+            fingerprint: "dep-missing-calm-drone-python"
+          }
+        });
+        await onProgressUpdate?.({
+          status: "completed",
+          message: "The Python app is running and the browser is open for review.",
+          recoveryTrace: {
+            kind: "structured_executor_recovery",
+            status: "recovered",
+            summary: recoverySummary,
+            updatedAt: "2026-03-26T13:00:02.000Z",
+            recoveryClass: "DEPENDENCY_MISSING",
+            fingerprint: "dep-missing-calm-drone-python"
+          }
+        });
+        return {
+          summary: "I started the Calm Drone Python app and left it open in the browser.",
+          taskRunResult: buildTaskRunResult(
+            input,
+            "I started the Calm Drone Python app and left it open in the browser.",
+            [
+              buildApprovedWriteFileActionResult("action_write_python_app", artifactPath),
+              buildApprovedRunningShellActionResult(
+                "action_start_python_app",
+                workspaceRootPath,
+                previewUrl,
+                previewLeaseId
+              ),
+              buildApprovedOpenBrowserActionResult(
+                "action_open_python_browser",
+                browserSessionId,
+                previewUrl,
+                workspaceRootPath,
+                previewLeaseId
+              )
+            ]
+          )
+        };
+      },
+      async (message) => {
+        notifications.push(message);
+      }
+    );
+    assert.match(reply, /On it\./i);
+
+    await waitFor(
+      () => notifications.some((message) => /Calm Drone Python app/i.test(message)),
+      120_000
+    );
+
+    const session = await store.getSession("telegram:chat-1:user-1");
+    assert.ok(session);
+    assert.equal(session?.progressState?.status, "completed");
+    assert.equal(session?.progressState?.recoveryTrace?.status, "recovered");
+    assert.equal(
+      session?.recentJobs[0]?.recoveryTrace?.recoveryClass,
+      "DEPENDENCY_MISSING"
+    );
+    assert.equal(session?.recentJobs[0]?.recoveryTrace?.status, "recovered");
+
   } finally {
     await removeTempDirWithRetry(tempDir);
   }

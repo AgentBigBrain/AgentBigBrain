@@ -2,48 +2,23 @@
  * @fileoverview Canonical Telegram gateway helpers for inbound parsing and outbound notifier wiring.
  */
 
-import type {
-  TelegramAdapterValidationResult,
-  TelegramInboundMessage
-} from "../telegramAdapter";
+import type { TelegramAdapterValidationResult, TelegramInboundMessage } from "../telegramAdapter";
 import { applyInvocationHints } from "../invocationHints";
 import { applyInvocationPolicy } from "../invocationPolicy";
 import type { TelegramInterfaceConfig } from "../runtimeConfig";
+import { buildConversationInboundUserInput } from "../mediaRuntime/mediaNormalization";
 import {
-  buildConversationInboundUserInput
-} from "../mediaRuntime/mediaNormalization";
-import {
-  DEFAULT_TELEGRAM_MEDIA_RUNTIME_CONFIG,
-  type TelegramMediaRuntimeConfig,
-  validateTelegramMediaAttachments
+  DEFAULT_TELEGRAM_MEDIA_RUNTIME_CONFIG, type TelegramMediaRuntimeConfig, validateTelegramMediaAttachments
 } from "../mediaRuntime/mediaLimits";
 import {
-  extractTelegramMediaEnvelope,
-  type TelegramDocumentAttachment,
-  type TelegramPhotoSize,
-  type TelegramVideoAttachment,
-  type TelegramVoiceAttachment
+  extractTelegramMediaEnvelope, type TelegramDocumentAttachment, type TelegramPhotoSize,
+  type TelegramVideoAttachment, type TelegramVoiceAttachment
 } from "../mediaRuntime/telegramMediaIngress";
-import type { ConversationDeliveryResult } from "../conversationRuntime/managerContracts";
-import type {
-  TelegramNotifierOptions,
-  TelegramOutboundDeliveryObservation
-} from "./contracts";
-import {
-  createTelegramConversationNotifier,
-  editTelegramReply,
-  sendTelegramDraftUpdate,
-  sendTelegramReply
-} from "./telegramTransport";
+import { buildConversationTransportIdentityRecord } from "../conversationRuntime/transportIdentity";
 import { abortAutonomousTransportTaskIfRequested } from "./autonomousAbortControl";
 import { shouldNotifyRejectedInvocation } from "./rateLimitPolicy";
 
-export type {
-  TelegramDocumentAttachment,
-  TelegramPhotoSize,
-  TelegramVideoAttachment,
-  TelegramVoiceAttachment
-} from "../mediaRuntime/telegramMediaIngress";
+export type { TelegramDocumentAttachment, TelegramPhotoSize, TelegramVideoAttachment, TelegramVoiceAttachment } from "../mediaRuntime/telegramMediaIngress";
 
 export interface TelegramUpdateMessage {
   text?: string;
@@ -53,7 +28,12 @@ export interface TelegramUpdateMessage {
   video?: TelegramVideoAttachment;
   document?: TelegramDocumentAttachment;
   chat?: { id?: number | string; type?: string };
-  from?: { id?: number | string; username?: string };
+  from?: {
+    id?: number | string;
+    username?: string;
+    first_name?: string;
+    last_name?: string;
+  };
   date?: number;
 }
 
@@ -75,6 +55,7 @@ export interface PreparedTelegramAcceptedUpdate {
   chatId: string;
   userId: string;
   username: string;
+  transportIdentity: TelegramInboundMessage["transportIdentity"];
   conversationVisibility: "private" | "public" | "unknown";
   inbound: TelegramInboundMessage;
   entityGraphEvent: TelegramEntityGraphEvent;
@@ -96,17 +77,12 @@ export interface PreparedTelegramStopUpdate {
   responseText: string;
 }
 
-export type PreparedTelegramUpdateResult =
-  | PreparedTelegramAcceptedUpdate
-  | PreparedTelegramIgnoredUpdate
-  | PreparedTelegramRejectedUpdate
-  | PreparedTelegramStopUpdate;
+export type PreparedTelegramUpdateResult = PreparedTelegramAcceptedUpdate
+  | PreparedTelegramIgnoredUpdate | PreparedTelegramRejectedUpdate | PreparedTelegramStopUpdate;
 
 export interface PrepareTelegramUpdateInput {
-  update: TelegramUpdate;
-  sharedSecret: string;
-  invocationPolicy: TelegramInterfaceConfig["security"]["invocation"];
-  mediaConfig?: TelegramInterfaceConfig["media"];
+  update: TelegramUpdate; sharedSecret: string;
+  invocationPolicy: TelegramInterfaceConfig["security"]["invocation"]; mediaConfig?: TelegramInterfaceConfig["media"];
   validateMessage(message: TelegramInboundMessage): TelegramAdapterValidationResult;
   abortControllers: Map<string, AbortController>;
 }
@@ -236,11 +212,22 @@ export function prepareTelegramUpdate(
   }
 
   const receivedAt = new Date((message?.date ?? Math.floor(Date.now() / 1000)) * 1000).toISOString();
+  const transportIdentity = buildConversationTransportIdentityRecord({
+    provider: "telegram",
+    username,
+    displayName: [message?.from?.first_name, message?.from?.last_name]
+      .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+      .join(" "),
+    givenName: message?.from?.first_name ?? null,
+    familyName: message?.from?.last_name ?? null,
+    observedAt: receivedAt
+  });
   const inbound: TelegramInboundMessage = {
     updateId: input.update.update_id,
     chatId,
     userId,
     username,
+    transportIdentity,
     text: normalizedText,
     media,
     authToken: input.sharedSecret,
@@ -273,6 +260,7 @@ export function prepareTelegramUpdate(
     chatId,
     userId,
     username,
+    transportIdentity,
     conversationVisibility,
     inbound,
     entityGraphEvent: {
@@ -283,158 +271,6 @@ export function prepareTelegramUpdate(
       observedAt: receivedAt
     }
   };
-}
-
-/**
- * Sends a user-facing Telegram reply using gateway config and invocation-hint rendering.
- *
- * @param config - Active Telegram interface configuration.
- * @param chatId - Destination chat identifier.
- * @param text - User-facing text to send.
- * @returns Delivery result from the transport helper.
- */
-export async function sendTelegramGatewayReply(
-  config: TelegramInterfaceConfig,
-  chatId: string,
-  text: string
-): Promise<ConversationDeliveryResult> {
-  return sendTelegramReply({
-    apiBaseUrl: config.apiBaseUrl,
-    botToken: config.botToken,
-    chatId,
-    text: applyInvocationHints(text, config.security.invocation)
-  });
-}
-
-/**
- * Edits a previously sent Telegram reply using gateway config and invocation-hint rendering.
- *
- * @param config - Active Telegram interface configuration.
- * @param chatId - Destination chat identifier.
- * @param messageId - Existing Telegram message identifier.
- * @param text - Updated user-facing text.
- * @returns Delivery result from the transport helper.
- */
-export async function editTelegramGatewayReply(
-  config: TelegramInterfaceConfig,
-  chatId: string,
-  messageId: string,
-  text: string
-): Promise<ConversationDeliveryResult> {
-  return editTelegramReply({
-    apiBaseUrl: config.apiBaseUrl,
-    botToken: config.botToken,
-    chatId,
-    messageId,
-    text: applyInvocationHints(text, config.security.invocation)
-  });
-}
-
-/**
- * Sends a Telegram native draft update using gateway config and invocation-hint rendering.
- *
- * @param config - Active Telegram interface configuration.
- * @param chatId - Destination chat identifier.
- * @param draftId - Stable draft identifier for the stream.
- * @param text - Draft update text.
- * @returns Delivery result from the transport helper.
- */
-export async function sendTelegramGatewayDraftUpdate(
-  config: TelegramInterfaceConfig,
-  chatId: string,
-  draftId: number,
-  text: string
-): Promise<ConversationDeliveryResult> {
-  return sendTelegramDraftUpdate({
-    apiBaseUrl: config.apiBaseUrl,
-    botToken: config.botToken,
-    chatId,
-    draftId,
-    text: applyInvocationHints(text, config.security.invocation)
-  });
-}
-
-/**
- * Allocates the next Telegram draft identifier with wraparound.
- *
- * @param currentDraftId - Current in-memory draft counter.
- * @returns Allocated draft id and next counter value.
- */
-export function allocateNextTelegramDraftId(
-  currentDraftId: number
-): { draftId: number; nextDraftId: number } {
-  const draftId = currentDraftId;
-  const nextDraftId = currentDraftId + 1 > 2_147_483_647 ? 1 : currentDraftId + 1;
-  return { draftId, nextDraftId };
-}
-
-/**
- * Creates a Telegram conversation notifier bound to one chat using canonical gateway wrappers.
- *
- * @param config - Active Telegram interface configuration.
- * @param chatId - Destination chat identifier.
- * @param options - Per-notifier capability options.
- * @param allocateDraftId - Draft id allocator supplied by the gateway state holder.
- * @returns Conversation notifier bound to the supplied chat.
- */
-export function createTelegramGatewayNotifier(
-  config: TelegramInterfaceConfig,
-  chatId: string,
-  options: TelegramNotifierOptions,
-  allocateDraftId: () => number,
-  observeOutboundDelivery?: (
-    event: TelegramOutboundDeliveryObservation
-  ) => void | Promise<void>
-) {
-  return createTelegramConversationNotifier({
-    renderOutboundText: (messageText: string) =>
-      applyInvocationHints(messageText, config.security.invocation),
-    nativeDraftStreamingEnabled:
-      config.streamingTransportMode === "native_draft" &&
-      config.nativeDraftStreaming &&
-      options.nativeDraftStreamingAllowed,
-    allocateDraftId,
-    sendReply: async (messageText: string) => {
-      const result = await sendTelegramGatewayReply(config, chatId, messageText);
-      if (result.ok) {
-        await observeOutboundDelivery?.({
-          kind: "send",
-          chatId,
-          text: messageText,
-          at: new Date().toISOString(),
-          messageId: result.messageId
-        });
-      }
-      return result;
-    },
-    editReply: async (messageId: string, messageText: string) => {
-      const result = await editTelegramGatewayReply(config, chatId, messageId, messageText);
-      if (result.ok) {
-        await observeOutboundDelivery?.({
-          kind: "edit",
-          chatId,
-          text: messageText,
-          at: new Date().toISOString(),
-          messageId
-        });
-      }
-      return result;
-    },
-    sendDraftUpdate: async (draftId: number, messageText: string) => {
-      const result = await sendTelegramGatewayDraftUpdate(config, chatId, draftId, messageText);
-      if (result.ok) {
-        await observeOutboundDelivery?.({
-          kind: "draft",
-          chatId,
-          text: messageText,
-          at: new Date().toISOString(),
-          draftId,
-          messageId: result.messageId
-        });
-      }
-      return result;
-    }
-  });
 }
 
 

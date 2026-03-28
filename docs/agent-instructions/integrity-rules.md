@@ -9,3 +9,6 @@
 5. Never fabricate command output, benchmark values, logs, or test outcomes.
 6. If environment limits prevent verification, state the exact blocker and the specific
    commands or artifacts still pending.
+7. Build and test passing alone is not sufficient evidence of feature completion. A feature that
+   was never coded will also pass build and test. Include symbol-level grep evidence for
+   implementation claims.

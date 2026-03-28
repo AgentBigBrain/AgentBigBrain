@@ -132,6 +132,95 @@ function resumesUniquePausedThreadOnExplicitReturn(): void {
 }
 
 /**
+ * Implements `resumesPausedThreadFromInterpretedReturnWhenDeterministicReturnIsAmbiguous`
+ * behavior within module scope.
+ * Interacts with local collaborators through imported modules and typed inputs/outputs.
+ */
+function resumesPausedThreadFromInterpretedReturnWhenDeterministicReturnIsAmbiguous(): void {
+  let stack = buildConversationStackFromTurnsV1(
+    [
+      {
+        role: "user",
+        text: "Let's discuss sprint backlog planning.",
+        at: "2026-03-01T10:00:00.000Z"
+      },
+      {
+        role: "user",
+        text: "Now let's discuss release launch checklist.",
+        at: "2026-03-01T10:01:00.000Z"
+      },
+      {
+        role: "user",
+        text: "Now let's discuss budget runway assumptions.",
+        at: "2026-03-01T10:02:00.000Z"
+      }
+    ],
+    "2026-03-01T10:02:00.000Z"
+  );
+
+  const sprintThread = stack.threads.find((thread) => thread.topicKey.includes("sprint"));
+  assert.ok(sprintThread);
+
+  stack = applyUserTurnToConversationStackV1(
+    stack,
+    {
+      role: "user",
+      text: "Let's go back.",
+      at: "2026-03-01T10:03:00.000Z"
+    },
+    {
+      topicKeyInterpretation: {
+        kind: "resume_paused_thread",
+        selectedTopicKey: null,
+        selectedThreadKey: sprintThread!.threadKey,
+        confidence: "high"
+      }
+    }
+  );
+
+  assert.equal(stack.activeThreadKey, sprintThread!.threadKey);
+}
+
+/**
+ * Implements `switchesWeakTopicFromInterpretedCandidateWhenDeterministicConfidenceIsTooLow`
+ * behavior within module scope.
+ * Interacts with local collaborators through imported modules and typed inputs/outputs.
+ */
+function switchesWeakTopicFromInterpretedCandidateWhenDeterministicConfidenceIsTooLow(): void {
+  const seeded = buildConversationStackFromTurnsV1(
+    [
+      {
+        role: "user",
+        text: "Let's discuss sprint backlog planning.",
+        at: "2026-03-01T10:00:00.000Z"
+      }
+    ],
+    "2026-03-01T10:00:00.000Z"
+  );
+
+  const updated = applyUserTurnToConversationStackV1(
+    seeded,
+    {
+      role: "user",
+      text: "Budget",
+      at: "2026-03-01T10:01:00.000Z"
+    },
+    {
+      topicKeyInterpretation: {
+        kind: "switch_topic_candidate",
+        selectedTopicKey: "budget",
+        selectedThreadKey: null,
+        confidence: "high"
+      }
+    }
+  );
+
+  const active = updated.threads.find((thread) => thread.threadKey === updated.activeThreadKey);
+  assert.ok(active);
+  assert.equal(active?.topicKey, "budget");
+}
+
+/**
  * Implements `keepsMissionThreadActiveWhenMissionPriorityIsSet` behavior within module scope.
  * Interacts with local collaborators through imported modules and typed inputs/outputs.
  */
@@ -212,6 +301,14 @@ test(
 test(
   "stage 6.86 conversation stack resumes a unique paused thread on explicit return phrasing",
   resumesUniquePausedThreadOnExplicitReturn
+);
+test(
+  "stage 6.86 conversation stack can resume one paused thread from interpreted return output when deterministic return is ambiguous",
+  resumesPausedThreadFromInterpretedReturnWhenDeterministicReturnIsAmbiguous
+);
+test(
+  "stage 6.86 conversation stack can switch to one interpreted weak topic candidate when deterministic confidence is too low",
+  switchesWeakTopicFromInterpretedCandidateWhenDeterministicConfidenceIsTooLow
 );
 test(
   "stage 6.86 conversation stack keeps mission-priority thread active under competing topic cues",

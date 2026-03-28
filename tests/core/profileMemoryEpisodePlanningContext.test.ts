@@ -16,14 +16,14 @@ test("buildProfileEpisodePlanningContext renders bounded unresolved situations f
     ...createEmptyProfileMemoryState(),
     episodes: [
       createProfileEpisodeRecord({
-        title: "Billy fell down",
-        summary: "Billy fell down a few weeks ago and the outcome was unresolved.",
+        title: "Owen fell down",
+        summary: "Owen fell down a few weeks ago and the outcome was unresolved.",
         sourceTaskId: "task_episode_planning_1",
         source: "test",
         sourceKind: "explicit_user_statement",
         sensitive: false,
         observedAt: "2026-03-08T10:00:00.000Z",
-        entityRefs: ["contact.billy"],
+        entityRefs: ["contact.owen"],
         tags: ["injury", "followup"]
       }),
       createProfileEpisodeRecord({
@@ -42,10 +42,10 @@ test("buildProfileEpisodePlanningContext renders bounded unresolved situations f
   const context = buildProfileEpisodePlanningContext(
     state,
     2,
-    "How is Billy doing after the fall?"
+    "How is Owen doing after the fall?"
   );
 
-  assert.match(context, /Billy fell down/);
+  assert.match(context, /Owen fell down/);
   assert.match(context, /status=unresolved/);
   assert.doesNotMatch(context, /Quarterly filing status/);
 });
@@ -55,8 +55,8 @@ test("buildProfileEpisodePlanningContext suppresses resolved and sensitive episo
     ...createEmptyProfileMemoryState(),
     episodes: [
       createProfileEpisodeRecord({
-        title: "Billy fell down",
-        summary: "Billy fell down and later recovered fully.",
+        title: "Owen fell down",
+        summary: "Owen fell down and later recovered fully.",
         sourceTaskId: "task_episode_planning_3",
         source: "test",
         sourceKind: "explicit_user_statement",
@@ -64,7 +64,7 @@ test("buildProfileEpisodePlanningContext suppresses resolved and sensitive episo
         observedAt: "2026-03-08T10:00:00.000Z",
         status: "resolved",
         resolvedAt: "2026-03-08T12:00:00.000Z",
-        entityRefs: ["contact.billy"]
+        entityRefs: ["contact.owen"]
       }),
       createProfileEpisodeRecord({
         title: "Private family health situation",

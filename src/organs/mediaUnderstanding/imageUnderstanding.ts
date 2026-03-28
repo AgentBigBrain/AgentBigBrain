@@ -67,7 +67,7 @@ export async function interpretImageAttachment(
   }
 
   try {
-    const authorizationToken = await resolveMediaAuthorizationToken(config);
+    const authorizationToken = await resolveMediaAuthorizationToken(config, "vision");
     if (!authorizationToken) {
       return buildFallbackMediaInterpretation(attachment);
     }
@@ -115,7 +115,7 @@ export async function interpretImageAttachment(
       transcript: null,
       ocrText: null,
       confidence: 0.74,
-      provenance: `${describeMediaAuthorizationSource(config)} image summary model ${config.visionModel}`,
+      provenance: `${describeMediaAuthorizationSource(config, "vision")} image summary model ${config.visionModel}`,
       source: "openai_image",
       entityHints: []
     };

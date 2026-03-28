@@ -5,6 +5,10 @@
 import { buildConversationStackFromTurnsV1 } from "../../core/stage6_86ConversationStack";
 import { countLanguageTermOverlap } from "../../core/languageRuntime/languageScoring";
 import { extractContextualRecallTerms } from "../../core/languageRuntime/queryIntentTerms";
+import {
+  findBestOpenLoopResumeMatchV1,
+  getOpenLoopLookupTermsV1
+} from "../../core/stage6_86/openLoops";
 import type {
   ConversationStackV1,
   ThreadFrameV1
@@ -25,6 +29,23 @@ const MAX_SUPPORTING_CUE_CHARS = 180;
 const MAX_EPISODE_QUERY_CANDIDATES = 3;
 const RECENT_ASSISTANT_DUPLICATE_LOOKBACK = 4;
 const MIN_TOPIC_LABEL_OVERLAP = 1;
+
+/**
+ * Collects deterministic lookup terms from one paused thread's open loops.
+ *
+ * @param thread - Paused thread candidate under evaluation.
+ * @returns Stable lowercased open-loop lookup terms for the thread.
+ */
+function collectThreadOpenLoopTerms(thread: ThreadFrameV1): readonly string[] {
+  const normalized = new Set<string>();
+  for (const loop of thread.openLoops) {
+    const terms = getOpenLoopLookupTermsV1(loop, thread);
+    for (const term of terms) {
+      normalized.add(term);
+    }
+  }
+  return [...normalized];
+}
 
 /**
  * Tokenizes freeform text into bounded lower-case topic terms for recall matching.
@@ -91,15 +112,22 @@ function findBestPausedThreadMatch(
 
     const topicLabelTokens = tokenizeTopicTerms(thread.topicLabel);
     const labelOverlap = countTokenOverlap(userTokens, topicLabelTokens);
-    if (labelOverlap < MIN_TOPIC_LABEL_OVERLAP) {
-      continue;
-    }
-
     const resumeTokens = tokenizeTopicTerms(thread.resumeHint);
     const resumeOverlap = countTokenOverlap(userTokens, resumeTokens);
+    const openLoopTerms = collectThreadOpenLoopTerms(thread);
+    const openLoopOverlap = countTokenOverlap(userTokens, openLoopTerms);
+    const strongestOverlap = Math.max(labelOverlap, resumeOverlap, openLoopOverlap);
+    if (strongestOverlap < MIN_TOPIC_LABEL_OVERLAP) {
+      continue;
+    }
     const openLoopCount = thread.openLoops.filter((loop) => loop.status === "open").length;
     const ageBoost = Math.max(0, 1 - ((nowMs - lastTouchedMs) / MAX_CONTEXTUAL_RECALL_AGE_MS));
-    const score = (labelOverlap * 3) + resumeOverlap + (openLoopCount * 0.5) + ageBoost;
+    const score =
+      (labelOverlap * 3) +
+      (resumeOverlap * 2) +
+      (openLoopOverlap * 2) +
+      (openLoopCount * 0.5) +
+      ageBoost;
 
     if (score > bestScore) {
       bestScore = score;
@@ -214,6 +242,7 @@ export function buildPausedThreadRecallCandidate(
   }
 
   const openLoopCount = matchedThread.openLoops.filter((loop) => loop.status === "open").length;
+  const openLoopTerms = collectThreadOpenLoopTerms(matchedThread);
   return {
     kind: "thread",
     threadKey: matchedThread.threadKey,
@@ -221,10 +250,52 @@ export function buildPausedThreadRecallCandidate(
     supportingCue: buildThreadSupportingCue(session, matchedThread, userTokens),
     openLoopCount,
     lastTouchedAt: matchedThread.lastTouchedAt,
+    matchSource: "thread_context",
     relevanceScore: openLoopCount + countTokenOverlap(
       userTokens,
-      tokenizeTopicTerms(`${matchedThread.topicLabel} ${matchedThread.resumeHint}`)
+      [
+        ...tokenizeTopicTerms(`${matchedThread.topicLabel} ${matchedThread.resumeHint}`),
+        ...openLoopTerms
+      ]
     )
+  };
+}
+
+/**
+ * Builds a loop-aware paused-thread recall candidate from interpreted open-loop resume hints.
+ *
+ * @param session - Conversation session containing prior turns.
+ * @param stack - Canonical conversation stack for evaluation.
+ * @param hintTerms - Interpreted open-loop resume hints.
+ * @returns Open-loop-backed recall candidate, or `null` when no bounded loop match exists.
+ */
+export function buildOpenLoopResumeRecallCandidate(
+  session: ConversationSession,
+  stack: ConversationStackV1,
+  hintTerms: readonly string[]
+): ContextualRecallCandidate | null {
+  const match = findBestOpenLoopResumeMatchV1(stack, hintTerms);
+  if (!match) {
+    return null;
+  }
+
+  const matchedThread = stack.threads.find((thread) => thread.threadKey === match.threadKey);
+  if (!matchedThread) {
+    return null;
+  }
+
+  const openLoopCount = matchedThread.openLoops.filter((loop) => loop.status === "open").length;
+  return {
+    kind: "thread",
+    threadKey: matchedThread.threadKey,
+    topicLabel: matchedThread.topicLabel,
+    supportingCue: buildThreadSupportingCue(session, matchedThread, hintTerms),
+    openLoopCount,
+    lastTouchedAt: matchedThread.lastTouchedAt,
+    relevanceScore: (match.overlapCount * 4) + openLoopCount + match.priority,
+    matchSource: "open_loop_resume",
+    matchedOpenLoopId: match.loopId,
+    matchedHintTerms: match.matchedTerms
   };
 }
 

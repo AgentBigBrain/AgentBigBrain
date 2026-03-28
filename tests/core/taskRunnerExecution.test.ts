@@ -87,7 +87,8 @@ function createExecutionInput(): {
     stage686RuntimeActionEngine: {
       execute: async () => null
     },
-    taskId: "task_task_runner_execution_1"
+    taskId: "task_task_runner_execution_1",
+    userInput: "respond to the user"
   };
   return {
     input,
@@ -103,7 +104,9 @@ test("executeTaskRunnerAction returns a blocked result when executor execution f
     output: "boom",
     failureCode: "ACTION_EXECUTION_FAILED",
     executionMetadata: {
-      shellExitCode: 1
+      shellExitCode: 1,
+      recoveryFailureClass: "EXECUTABLE_NOT_FOUND",
+      recoveryFailureProvenance: "executor_mechanical"
     }
   });
 
@@ -116,6 +119,11 @@ test("executeTaskRunnerAction returns a blocked result when executor execution f
     blockCode: "ACTION_EXECUTION_FAILED",
     blockCategory: "runtime"
   });
+  assert.equal(result.actionResult.executionMetadata?.recoveryFailureClass, "EXECUTABLE_NOT_FOUND");
+  assert.equal(
+    result.actionResult.executionMetadata?.recoveryFailureProvenance,
+    "executor_mechanical"
+  );
   assert.equal(result.outputLength, 4);
   assert.deepEqual(traceEvents, []);
 });

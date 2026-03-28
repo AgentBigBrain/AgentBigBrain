@@ -14,6 +14,14 @@ const EXACT_BROWSER_SESSION_IDS_PATTERN = /exact tracked browser session ids:\s*
 const EXACT_PREVIEW_LEASE_IDS_PATTERN = /exact tracked preview lease ids:\s*([^\n]+)/i;
 const NO_EXACT_TRACKED_WORKSPACE_HOLDER_PATTERN =
   /no exact tracked workspace holder is currently known for this request/i;
+const STRUCTURED_RECOVERY_OPTION_PATTERN =
+  /\[STRUCTURED_RECOVERY_OPTION:([a-z0-9_]+)\]/i;
+const STRUCTURED_RECOVERY_CWD_PATTERN = /Preferred repair cwd:\s*([^\n]+)/i;
+const STRUCTURED_RECOVERY_FAILED_COMMAND_PATTERN = /Original failed command:\s*([^\n]+)/i;
+const STRUCTURED_RECOVERY_RECOMMENDED_COMMAND_PATTERN =
+  /Recommended narrow repair command:\s*([^\n]+)/i;
+const STRUCTURED_RECOVERY_DEPENDENCY_PATTERN =
+  /(?:Detected missing dependency|Detected incompatibility hint):\s*([^\n]+)/i;
 
 /**
  * Reads one single-line field value from the planner-facing request context.
@@ -46,7 +54,8 @@ export function buildWorkspaceRecoveryActionPolicyGuidance(
     !hasWorkspaceRecoveryContext &&
     !inspectFirstMarker &&
     !exactStopMarker &&
-    !postShutdownRetryMarker
+    !postShutdownRetryMarker &&
+    !STRUCTURED_RECOVERY_OPTION_PATTERN.test(currentUserRequest)
   ) {
     return "";
   }
@@ -130,5 +139,50 @@ export function buildWorkspaceRecoveryActionPolicyGuidance(
   parts.push(
     "Do not ignore exact runtime ids from the request context and replace them with broad process-name shutdown."
   );
+  const structuredRecoveryOption = readSingleLineValue(
+    STRUCTURED_RECOVERY_OPTION_PATTERN,
+    currentUserRequest
+  );
+  if (structuredRecoveryOption) {
+    const repairCwd = readSingleLineValue(
+      STRUCTURED_RECOVERY_CWD_PATTERN,
+      currentUserRequest
+    );
+    const failedCommand = readSingleLineValue(
+      STRUCTURED_RECOVERY_FAILED_COMMAND_PATTERN,
+      currentUserRequest
+    );
+    const recommendedCommand = readSingleLineValue(
+      STRUCTURED_RECOVERY_RECOMMENDED_COMMAND_PATTERN,
+      currentUserRequest
+    );
+    const dependencyHint = readSingleLineValue(
+      STRUCTURED_RECOVERY_DEPENDENCY_PATTERN,
+      currentUserRequest
+    );
+    parts.push(
+      `This request is a structured bounded recovery iteration for option ${structuredRecoveryOption}. Keep the plan narrow and recovery-shaped.`
+    );
+    if (repairCwd) {
+      parts.push(`Prefer the repair cwd ${repairCwd} for any bounded shell or manifest step.`);
+    }
+    if (failedCommand) {
+      parts.push(`After the bounded repair, rerun exactly this failed command once: ${failedCommand}.`);
+    }
+    if (recommendedCommand) {
+      parts.push(`Prefer this existing deterministic repair command when policy allows it: ${recommendedCommand}.`);
+    }
+    if (dependencyHint) {
+      parts.push(`Only repair the named dependency or incompatibility hint: ${dependencyHint}.`);
+    }
+    if (
+      structuredRecoveryOption === "repair_missing_dependency" ||
+      structuredRecoveryOption === "align_dependency_version"
+    ) {
+      parts.push(
+        "Do not broaden this repair into npm update, yarn upgrade, pnpm up, bun update, audit-fix, full reinstall, scaffold reset, or unrelated dependency cleanup."
+      );
+    }
+  }
   return `\nDeterministic workspace recovery grounding: ${parts.join(" ")}`;
 }

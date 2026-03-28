@@ -136,7 +136,7 @@ const CLEANUP_TIMEOUT_MS = 180_000;
 const SMOKE_DEADLINE_MS = 480_000;
 const POLL_INTERVAL_MS = 250;
 const PROVIDER_BLOCK_PATTERN =
-  /(?:429|exceeded your current quota|rate limit|fetch failed|request timed out|socket hang up|ECONNRESET|effective backend is mock|missing OPENAI_API_KEY)/i;
+/(?:429|exceeded your current quota|usage limit|purchase more credits|try again at|rate limit|fetch failed|request timed out|socket hang up|ECONNRESET|effective backend is mock|missing OPENAI_API_KEY)/i;
 const PLACEHOLDER_PATTERNS: readonly RegExp[] = [
   /I'?m starting on that now/i,
   /Working on your request now/i,

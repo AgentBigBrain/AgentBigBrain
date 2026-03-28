@@ -17,13 +17,14 @@ import {
   buildManagedProcessExecutionMetadata,
   buildManagedProcessStartFailureExecutionMetadata,
   findAvailableLoopbackPort,
-  inferManagedProcessLoopbackTarget,
   LiveRunExecutorContext,
   MANAGED_PROCESS_PORT_PRECHECK_TIMEOUT_MS,
   normalizeOptionalString,
   performLocalPortProbe,
+  withRecoveryFailureMetadata,
   waitForManagedProcessStart
 } from "./contracts";
+import { resolveManagedProcessLoopbackTarget } from "./managedProcessTargetResolution";
 
 /**
  * Executes `start_process` with managed-process lease registration and loopback preflight checks.
@@ -94,7 +95,7 @@ export async function executeStartProcess(
     timeoutMs: effectiveShellProfile.timeoutMsDefault,
     envKeyNames: shellEnvironment.envKeyNames
   });
-  const loopbackTarget = inferManagedProcessLoopbackTarget(command);
+  const loopbackTarget = await resolveManagedProcessLoopbackTarget(command, resolvedCwd);
 
   if (loopbackTarget) {
     const portAlreadyOccupied = await performLocalPortProbe(
@@ -148,6 +149,9 @@ export async function executeStartProcess(
       cwd: spawnSpec.cwd,
       shellExecutable: spawnSpec.executable,
       shellKind: effectiveShellProfile.shellKind,
+      requestedHost: loopbackTarget?.host ?? null,
+      requestedPort: loopbackTarget?.port ?? null,
+      requestedUrl: loopbackTarget?.url ?? null,
       taskId
     });
     bindAbortCleanupForManagedProcess(context, snapshot.leaseId, child, signal);
@@ -161,10 +165,46 @@ export async function executeStartProcess(
     if (isAbortError(error)) {
       throw error;
     }
+    const runtimeError = error as NodeJS.ErrnoException;
+    const recoveryMetadata =
+      runtimeError.code === "ENOENT"
+        ? withRecoveryFailureMetadata(
+          {
+            managedProcess: true,
+            processLifecycleStatus: "PROCESS_START_FAILED",
+            processCommandFingerprint: commandFingerprint,
+            processCwd: spawnSpec.cwd,
+            processShellExecutable: spawnSpec.executable,
+            processShellKind: effectiveShellProfile.shellKind,
+            processRequestedHost: loopbackTarget?.host ?? null,
+            processRequestedPort: loopbackTarget?.port ?? null,
+            processRequestedUrl: loopbackTarget?.url ?? null
+          },
+          "EXECUTABLE_NOT_FOUND",
+          "executor_mechanical"
+        )
+        : runtimeError.code === "ENAMETOOLONG"
+          ? withRecoveryFailureMetadata(
+            {
+              managedProcess: true,
+              processLifecycleStatus: "PROCESS_START_FAILED",
+              processCommandFingerprint: commandFingerprint,
+              processCwd: spawnSpec.cwd,
+              processShellExecutable: spawnSpec.executable,
+              processShellKind: effectiveShellProfile.shellKind,
+              processRequestedHost: loopbackTarget?.host ?? null,
+              processRequestedPort: loopbackTarget?.port ?? null,
+              processRequestedUrl: loopbackTarget?.url ?? null
+            },
+            "COMMAND_TOO_LONG",
+            "executor_mechanical"
+          )
+          : undefined;
     return buildExecutionOutcome(
       "failed",
-      `Process start failed: ${(error as Error).message}`,
-      "PROCESS_START_FAILED"
+      `Process start failed: ${runtimeError.message}`,
+      "PROCESS_START_FAILED",
+      recoveryMetadata
     );
   }
 }

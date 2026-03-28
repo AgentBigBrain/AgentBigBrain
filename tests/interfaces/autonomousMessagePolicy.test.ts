@@ -103,7 +103,7 @@ test("buildAutonomousGoalAbortedProgressMessage keeps totals while hiding raw re
   );
 
   assert.doesNotMatch(rendered, /\[reasonCode=/i);
-  assert.match(rendered, /Stopped after 4 iteration\(s\)\./i);
+  assert.match(rendered, /I started this, but I hit a blocker before I could finish it after 4 iteration\(s\)\./i);
   assert.match(rendered, /configured iteration limit/i);
   assert.match(rendered, /next step: narrow the goal or raise the iteration limit/i);
   assert.match(rendered, /2 action\(s\) approved, 1 blocked\./i);
@@ -132,9 +132,10 @@ test("buildAutonomousTerminalSummaryMessage returns human-first stopped summarie
     "Cancelled by user."
   );
 
-  assert.match(rendered, /Autonomous task stopped after 3 iteration\(s\)\./i);
-  assert.match(rendered, /Why it stopped: Stopped because you cancelled the run\./i);
+  assert.match(rendered, /I started this, but the run stopped before it finished after 3 iteration\(s\)\./i);
+  assert.match(rendered, /Stopped because you cancelled the run\./i);
   assert.match(rendered, /Next step: restart the run when you are ready to continue\./i);
+  assert.match(rendered, /Approved 2, blocked 1\./i);
 });
 
 test("buildAutonomousTerminalSummaryMessage keeps completed summaries human-first", () => {

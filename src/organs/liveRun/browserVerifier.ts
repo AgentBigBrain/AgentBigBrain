@@ -204,6 +204,22 @@ function normalizeOptionalExpectation(value: string | null | undefined): string 
 }
 
 /**
+ * Normalizes human-facing text into a separator-tolerant comparison form so browser verification
+ * can treat spaces, dashes, underscores, and punctuation as equivalent when checking titles or
+ * visible copy.
+ *
+ * @param value - Raw observed or expected browser text.
+ * @returns Lowercased comparison form with separators collapsed.
+ */
+function normalizeExpectationComparableText(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+/**
  * Evaluates one observed value against an optional case-insensitive substring expectation.
  *
  * **Why it exists:**
@@ -224,7 +240,14 @@ function matchesOptionalExpectation(
   if (!expectedValue) {
     return null;
   }
-  return observedValue.toLowerCase().includes(expectedValue.toLowerCase());
+  const normalizedObservedValue = observedValue.toLowerCase();
+  const normalizedExpectedValue = expectedValue.toLowerCase();
+  if (normalizedObservedValue.includes(normalizedExpectedValue)) {
+    return true;
+  }
+  return normalizeExpectationComparableText(observedValue).includes(
+    normalizeExpectationComparableText(expectedValue)
+  );
 }
 
 /**

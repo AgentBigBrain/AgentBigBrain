@@ -17,7 +17,7 @@ test("normalizeProfileKey collapses punctuation and whitespace into dotted form"
 });
 
 test("normalizeProfileValue collapses repeated whitespace", () => {
-  assert.equal(normalizeProfileValue("  Flare   Web   Design  "), "Flare Web Design");
+  assert.equal(normalizeProfileValue("  Lantern   Studio  "), "Lantern Studio");
 });
 
 test("isSensitiveKey detects normalized sensitive keys", () => {

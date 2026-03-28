@@ -2,7 +2,7 @@
  * @fileoverview Shared contracts for memory-context query planning, context injection, and audit routing.
  */
 
-import type { ProfileMemoryStatus } from "../../core/types";
+import type { ConversationDomainContext, ProfileMemoryStatus } from "../../core/types";
 
 export type MemoryDomainLane = "profile" | "relationship" | "workflow" | "system_policy" | "unknown";
 export type DomainBoundaryDecision = "inject_profile_context" | "suppress_profile_context";
@@ -71,6 +71,10 @@ export interface ProfileContextSanitizationResult {
 export interface MemoryBrokerInputResult {
   userInput: string;
   profileMemoryStatus: ProfileMemoryStatus;
+}
+
+export interface MemoryBrokerBuildInputOptions {
+  sessionDomainContext?: ConversationDomainContext | null;
 }
 
 export interface MemoryBrokerOptions {

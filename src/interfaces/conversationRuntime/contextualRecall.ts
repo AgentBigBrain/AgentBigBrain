@@ -5,14 +5,13 @@
 import type { ConversationInboundMediaEnvelope } from "../mediaRuntime/contracts";
 import { normalizeWhitespace } from "../conversationManagerHelpers";
 import type { ConversationSession } from "../sessionStore";
-import type {
-  QueryConversationContinuityEpisodes,
-  QueryConversationContinuityFacts
-} from "./managerContracts";
+import type { ContextualReferenceInterpretationResolver, EntityReferenceInterpretationResolver } from "../../organs/languageUnderstanding/localIntentModelContracts";
+import type { GetConversationEntityGraph, QueryConversationContinuityEpisodes, QueryConversationContinuityFacts } from "./managerContracts";
 import { resolveContextualReferenceHints } from "../../organs/languageUnderstanding/contextualReferenceResolution";
 import { buildRecallSynthesis } from "../../organs/memorySynthesis/recallSynthesis";
 import { buildMediaContinuityHints } from "../../core/stage6_86/mediaContinuityLinking";
 import {
+  buildOpenLoopResumeRecallCandidate,
   buildEpisodeRecallCandidates,
   buildPausedThreadRecallCandidate,
   hasRecentDuplicateAssistantRecall,
@@ -23,6 +22,11 @@ import {
   selectBestContextualRecallCandidate,
   type ContextualRecallCandidate
 } from "./contextualRecallRanking";
+import {
+  resolveInterpretedContextualReferenceHints,
+  type InterpretedContextualReferenceHints
+} from "./contextualReferenceInterpretationSupport";
+import { resolveInterpretedEntityReferenceHints, type InterpretedEntityReferenceHints } from "./contextualEntityReferenceInterpretationSupport";
 
 export type { ContextualRecallCandidate } from "./contextualRecallRanking";
 
@@ -35,6 +39,15 @@ const GENERIC_RECALL_DETAIL_TERMS = new Set([
   "week",
   "weeks"
 ]);
+
+interface ContextualRecallSignals {
+  stack: ReturnType<typeof resolveConversationStack>;
+  resolvedReference: ReturnType<typeof resolveContextualReferenceHints>;
+  mediaHints: ReturnType<typeof buildMediaContinuityHints>;
+  interpretedHints: InterpretedContextualReferenceHints | null; interpretedEntityHints: InterpretedEntityReferenceHints | null;
+  resolvedHints: readonly string[];
+  userTokens: readonly string[];
+}
 
 /**
  * Deduplicates resolved recall hints while preserving their original order.
@@ -89,8 +102,15 @@ function hasStrongDirectEpisodeOverlap(
 function shouldSuppressWeakContextualRecall(
   candidate: ContextualRecallCandidate,
   resolvedReference: ReturnType<typeof resolveContextualReferenceHints>,
-  mediaRecallHints: readonly string[] = []
+  mediaRecallHints: readonly string[] = [],
+  interpretedHints: InterpretedContextualReferenceHints | null = null
 ): boolean {
+  if (
+    candidate.matchSource === "open_loop_resume" &&
+    interpretedHints?.kind === "open_loop_resume_reference"
+  ) {
+    return false;
+  }
   const directTerms = resolvedReference.directTerms;
   const candidateTerms = tokenizeTopicTerms([
     candidate.topicLabel,
@@ -116,6 +136,127 @@ function shouldSuppressWeakContextualRecall(
 }
 
 /**
+ * Builds the bounded hint bundle used by contextual recall before ranking candidates.
+ *
+ * @param session - Conversation session providing prior turns and stack state.
+ * @param userInput - Current raw user message before execution wrapping.
+ * @param media - Optional interpreted media envelope that may provide continuity cues.
+ * @param contextualReferenceInterpretationResolver - Optional bounded contextual-reference interpreter.
+ * @returns Deterministic and model-assisted recall hints for the current turn.
+ */
+async function resolveContextualRecallSignals(
+  session: ConversationSession,
+  userInput: string,
+  media: ConversationInboundMediaEnvelope | null,
+  contextualReferenceInterpretationResolver?: ContextualReferenceInterpretationResolver,
+  getEntityGraph?: GetConversationEntityGraph,
+  entityReferenceInterpretationResolver?: EntityReferenceInterpretationResolver
+): Promise<ContextualRecallSignals> {
+  const normalizedInput = normalizeWhitespace(userInput);
+  const stack = resolveConversationStack(session);
+  const resolvedReference = resolveContextualReferenceHints({
+    userInput: normalizedInput,
+    recentTurns: session.conversationTurns,
+    threads: stack.threads
+  });
+  const mediaHints = buildMediaContinuityHints(media);
+  const interpretedHints = await resolveInterpretedContextualReferenceHints(
+    session,
+    stack,
+    normalizedInput,
+    resolvedReference,
+    contextualReferenceInterpretationResolver
+  );
+  const interpretedEntityHints = await resolveInterpretedEntityReferenceHints(session, normalizedInput, resolvedReference, getEntityGraph, entityReferenceInterpretationResolver);
+  const modelHints = interpretedHints ? [...interpretedHints.entityHints, ...interpretedHints.topicHints] : [];
+  const entityHints = interpretedEntityHints?.resolvedEntityHints ?? [];
+  const resolvedHints = dedupeRecallHints([
+    ...resolvedReference.resolvedHints,
+    ...modelHints,
+    ...entityHints,
+    ...mediaHints.recallHints
+  ]);
+  const fallbackTokens = dedupeRecallHints([
+    ...tokenizeTopicTerms(normalizedInput),
+    ...modelHints,
+    ...entityHints,
+    ...mediaHints.recallHints
+  ]);
+  const userTokens = resolvedHints.length > 0 ? resolvedHints : fallbackTokens;
+  return {
+    stack,
+    resolvedReference,
+    mediaHints,
+    interpretedHints,
+    interpretedEntityHints,
+    resolvedHints,
+    userTokens
+  };
+}
+
+/**
+ * Selects the best contextual recall candidate from one already-resolved signal bundle.
+ *
+ * @param session - Conversation session providing prior turns and stack state.
+ * @param signals - Deterministic and model-assisted recall hints for the current turn.
+ * @param queryContinuityEpisodes - Optional bounded episodic-memory query capability.
+ * @returns One grounded recall candidate, or `null` when no bounded recall should be offered.
+ */
+async function resolveContextualRecallCandidateFromSignals(
+  session: ConversationSession,
+  signals: ContextualRecallSignals,
+  queryContinuityEpisodes?: QueryConversationContinuityEpisodes
+): Promise<ContextualRecallCandidate | null> {
+  if (signals.userTokens.length === 0) {
+    return null;
+  }
+
+  const nowMs = Date.parse(session.updatedAt);
+  const openLoopResumeCandidate = signals.interpretedHints?.kind === "open_loop_resume_reference"
+    ? buildOpenLoopResumeRecallCandidate(
+      session,
+      signals.stack,
+      [...signals.interpretedHints.entityHints, ...signals.interpretedHints.topicHints]
+    )
+    : null;
+  const pausedThreadCandidate = Number.isFinite(nowMs)
+    ? buildPausedThreadRecallCandidate(session, signals.stack, signals.userTokens, nowMs)
+    : null;
+  const episodeQueryHints = signals.interpretedEntityHints?.resolvedEntityHints.length ? signals.interpretedEntityHints.resolvedEntityHints : signals.userTokens;
+  const episodeCandidates = await buildEpisodeRecallCandidates(
+    session,
+    signals.stack,
+    episodeQueryHints,
+    queryContinuityEpisodes
+  );
+  const bestCandidate = selectBestContextualRecallCandidate([
+    ...(openLoopResumeCandidate ? [openLoopResumeCandidate] : []),
+    ...(pausedThreadCandidate ? [pausedThreadCandidate] : []),
+    ...episodeCandidates
+  ]);
+  if (!bestCandidate) {
+    return null;
+  }
+
+  if (
+    shouldSuppressWeakContextualRecall(
+      bestCandidate,
+      signals.resolvedReference,
+      signals.mediaHints.recallHints,
+      signals.interpretedHints
+    )
+  ) {
+    return null;
+  }
+
+  if (hasRecentDuplicateAssistantRecall(session, bestCandidate, signals.userTokens)) {
+    return null;
+  }
+
+  return bestCandidate;
+}
+
+/**
  * Resolves one bounded in-conversation contextual recall opportunity for the current user turn.
  *
  * @param session - Conversation session providing prior turns and stack state.
@@ -128,56 +269,29 @@ export async function resolveContextualRecallCandidate(
   session: ConversationSession,
   userInput: string,
   queryContinuityEpisodes?: QueryConversationContinuityEpisodes,
-  media?: ConversationInboundMediaEnvelope | null
+  media?: ConversationInboundMediaEnvelope | null,
+  contextualReferenceInterpretationResolver?: ContextualReferenceInterpretationResolver,
+  getEntityGraph?: GetConversationEntityGraph,
+  entityReferenceInterpretationResolver?: EntityReferenceInterpretationResolver
 ): Promise<ContextualRecallCandidate | null> {
   const normalizedInput = normalizeWhitespace(userInput);
   if (!normalizedInput) {
     return null;
   }
 
-  const stack = resolveConversationStack(session);
-  const resolvedReference = resolveContextualReferenceHints({
-    userInput: normalizedInput,
-    recentTurns: session.conversationTurns,
-    threads: stack.threads
-  });
-  const mediaHints = buildMediaContinuityHints(media);
-  const userTokens = dedupeRecallHints(
-    resolvedReference.resolvedHints.length > 0
-      ? [...resolvedReference.resolvedHints, ...mediaHints.recallHints]
-      : [...tokenizeTopicTerms(normalizedInput), ...mediaHints.recallHints]
-  );
-  if (userTokens.length === 0) {
-    return null;
-  }
-
-  const nowMs = Date.parse(session.updatedAt);
-  const pausedThreadCandidate = Number.isFinite(nowMs)
-    ? buildPausedThreadRecallCandidate(session, stack, userTokens, nowMs)
-    : null;
-  const episodeCandidates = await buildEpisodeRecallCandidates(
+  const signals = await resolveContextualRecallSignals(
     session,
-    stack,
-    userTokens,
+    normalizedInput,
+    media ?? null,
+    contextualReferenceInterpretationResolver,
+    getEntityGraph,
+    entityReferenceInterpretationResolver
+  );
+  return resolveContextualRecallCandidateFromSignals(
+    session,
+    signals,
     queryContinuityEpisodes
   );
-  const bestCandidate = selectBestContextualRecallCandidate([
-    ...(pausedThreadCandidate ? [pausedThreadCandidate] : []),
-    ...episodeCandidates
-  ]);
-  if (!bestCandidate) {
-    return null;
-  }
-
-  if (shouldSuppressWeakContextualRecall(bestCandidate, resolvedReference, mediaHints.recallHints)) {
-    return null;
-  }
-
-  if (hasRecentDuplicateAssistantRecall(session, bestCandidate, userTokens)) {
-    return null;
-  }
-
-  return bestCandidate;
 }
 
 /**
@@ -195,31 +309,37 @@ export async function buildContextualRecallBlock(
   userInput: string,
   queryContinuityEpisodes?: QueryConversationContinuityEpisodes,
   queryContinuityFacts?: QueryConversationContinuityFacts,
-  media?: ConversationInboundMediaEnvelope | null
+  media?: ConversationInboundMediaEnvelope | null,
+  contextualReferenceInterpretationResolver?: ContextualReferenceInterpretationResolver,
+  getEntityGraph?: GetConversationEntityGraph,
+  entityReferenceInterpretationResolver?: EntityReferenceInterpretationResolver
 ): Promise<string | null> {
   const normalizedInput = normalizeWhitespace(userInput);
-  const stack = resolveConversationStack(session);
-  const resolvedReference = resolveContextualReferenceHints({
-    userInput: normalizedInput,
-    recentTurns: session.conversationTurns,
-    threads: stack.threads
-  });
-  const mediaHints = buildMediaContinuityHints(media);
-  const candidate = await resolveContextualRecallCandidate(
+  const signals = await resolveContextualRecallSignals(
     session,
-    userInput,
-    queryContinuityEpisodes,
-    media
+    normalizedInput,
+    media ?? null,
+    contextualReferenceInterpretationResolver,
+    getEntityGraph,
+    entityReferenceInterpretationResolver
+  );
+  const {
+    stack,
+    resolvedReference,
+    mediaHints,
+    interpretedHints,
+    interpretedEntityHints,
+    resolvedHints
+  } = signals;
+  const candidate = await resolveContextualRecallCandidateFromSignals(
+    session,
+    signals,
+    queryContinuityEpisodes
   );
   if (!candidate) {
     return null;
   }
 
-  const resolvedHints = dedupeRecallHints(
-    resolvedReference.resolvedHints.length > 0
-      ? [...resolvedReference.resolvedHints, ...mediaHints.recallHints]
-      : [...tokenizeTopicTerms(normalizedInput), ...mediaHints.recallHints]
-  );
   const supportingEpisodes = queryContinuityEpisodes && resolvedHints.length > 0
     ? await queryContinuityEpisodes({
       stack,
@@ -241,6 +361,15 @@ export async function buildContextualRecallBlock(
   const mediaEvidenceLine = mediaHints.evidence.length > 0
     ? [`- Media cue sources: ${mediaHints.evidence.join(", ")}`]
     : [];
+  const modelEvidenceLine = interpretedHints ? [
+    `- Model-assisted contextual hints: ${[...interpretedHints.entityHints, ...interpretedHints.topicHints].join(", ")}`,
+    `- Model-assisted cue type: ${interpretedHints.kind}`,
+    `- Model-assisted rationale: ${interpretedHints.explanation}`
+  ] : [];
+  const entityModelEvidenceLine = interpretedEntityHints ? [
+    `- Model-assisted entity references: ${interpretedEntityHints.selectedEntityLabels.join(", ")}`,
+    `- Model-assisted entity rationale: ${interpretedEntityHints.explanation}`
+  ] : [];
 
   if (candidate.kind === "episode") {
     return [
@@ -252,6 +381,8 @@ export async function buildContextualRecallBlock(
       `- Situation status: ${candidate.episodeStatus ?? "unresolved"}`,
       `- Related open loops: ${candidate.openLoopCount}`,
       `- Last mentioned: ${candidate.lastTouchedAt}`,
+      ...modelEvidenceLine,
+      ...entityModelEvidenceLine,
       ...mediaCueLine,
       ...mediaEvidenceLine,
       ...(resolvedReference.usedFallbackContext
@@ -275,7 +406,15 @@ export async function buildContextualRecallBlock(
     `- The user just re-mentioned an older paused topic: ${candidate.topicLabel}`,
     `- Prior thread cue: ${candidate.supportingCue}`,
     `- Open loops on that thread: ${candidate.openLoopCount}`,
+    ...(candidate.matchSource === "open_loop_resume" && candidate.matchedOpenLoopId
+      ? [`- Matched unresolved loop: ${candidate.matchedOpenLoopId}`]
+      : []),
+    ...(candidate.matchSource === "open_loop_resume" && candidate.matchedHintTerms && candidate.matchedHintTerms.length > 0
+      ? [`- Matched open-loop cues: ${candidate.matchedHintTerms.join(", ")}`]
+      : []),
     `- Last touched: ${candidate.lastTouchedAt}`,
+    ...modelEvidenceLine,
+    ...entityModelEvidenceLine,
     ...mediaCueLine,
     ...mediaEvidenceLine,
     ...(resolvedReference.usedFallbackContext

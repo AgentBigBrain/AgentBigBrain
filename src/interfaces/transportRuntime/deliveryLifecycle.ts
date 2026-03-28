@@ -3,6 +3,7 @@
  */
 
 import type {
+  ConversationOutboundDeliveryTrace,
   ConversationExecutionResult,
   ConversationExecutionProgressUpdate,
   ConversationNotifierTransport
@@ -33,7 +34,8 @@ export interface RunAutonomousTransportTaskInput {
  * @returns Best-effort progress sender that preserves existing send/edit/stream semantics.
  */
 export function createAutonomousProgressSender(
-  notifier: ConversationNotifierTransport
+  notifier: ConversationNotifierTransport,
+  trace?: ConversationOutboundDeliveryTrace
 ): (message: string) => Promise<void> {
   let progressMessageId: string | null = null;
 
@@ -42,18 +44,18 @@ export function createAutonomousProgressSender(
       notifier.capabilities.supportsNativeStreaming &&
       typeof notifier.stream === "function"
     ) {
-      await notifier.stream(message).catch(() => undefined);
+      await notifier.stream(message, trace).catch(() => undefined);
       return;
     }
 
     if (progressMessageId && typeof notifier.edit === "function") {
-      const editResult = await notifier.edit(progressMessageId, message).catch(() => null);
+      const editResult = await notifier.edit(progressMessageId, message, trace).catch(() => null);
       if (editResult?.ok) {
         return;
       }
     }
 
-    const sendResult = await notifier.send(message).catch(() => null);
+    const sendResult = await notifier.send(message, trace).catch(() => null);
     if (sendResult?.ok && sendResult.messageId) {
       progressMessageId = sendResult.messageId;
     }
@@ -71,7 +73,9 @@ export async function runAutonomousTransportTask(
 ): Promise<ConversationExecutionResult> {
   const abortController = new AbortController();
   input.abortControllers.set(input.conversationId, abortController);
-  const progressSender = createAutonomousProgressSender(input.notifier);
+  const progressSender = createAutonomousProgressSender(input.notifier, {
+    source: "autonomous_progress"
+  });
 
   try {
     return await input.runAutonomousTask(

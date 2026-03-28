@@ -4,6 +4,7 @@
 
 import { isRateLimitedErrorCode } from "../ackStateMachine";
 import type {
+  ConversationOutboundDeliveryTrace,
   ConversationDeliveryResult,
   ConversationNotifierTransport
 } from "./managerContracts";
@@ -39,7 +40,8 @@ export interface EditableAckPreviewResult {
  */
 export async function streamNativeFinalPreview(
   notify: ConversationNotifierTransport,
-  finalMessage: string
+  finalMessage: string,
+  trace?: ConversationOutboundDeliveryTrace
 ): Promise<void> {
   if (!notify.capabilities.supportsNativeStreaming || typeof notify.stream !== "function") {
     return;
@@ -56,7 +58,7 @@ export async function streamNativeFinalPreview(
   const baseDelayMs = resolveNativePreviewBaseDelayMs(steps.length);
 
   for (let index = 0; index < steps.length; index += 1) {
-    const delivery = await notify.stream(steps[index]);
+    const delivery = await notify.stream(steps[index], trace);
     if (!delivery.ok) {
       return;
     }
@@ -87,7 +89,8 @@ export async function streamNativeFinalPreview(
 export async function streamEditableAckPreview(
   notify: ConversationNotifierTransport,
   ackMessageId: string,
-  finalMessage: string
+  finalMessage: string,
+  trace?: ConversationOutboundDeliveryTrace
 ): Promise<EditableAckPreviewResult> {
   if (typeof notify.edit !== "function") {
     return { deliveredFullText: false };
@@ -109,7 +112,8 @@ export async function streamEditableAckPreview(
     const delivery = await editPreviewStepWithRetry(
       notify,
       ackMessageId,
-      stepText
+      stepText,
+      trace
     );
     if (!delivery.ok) {
       return { deliveredFullText: false };
@@ -303,12 +307,13 @@ function derivePreviewStepDelayMs(stepText: string, baseDelayMs: number): number
 async function editPreviewStepWithRetry(
   notify: ConversationNotifierTransport,
   ackMessageId: string,
-  message: string
+  message: string,
+  trace?: ConversationOutboundDeliveryTrace
 ): Promise<ConversationDeliveryResult> {
-  const firstAttempt = await notify.edit!(ackMessageId, message);
+  const firstAttempt = await notify.edit!(ackMessageId, message, trace);
   if (firstAttempt.ok || !isRateLimitedErrorCode(firstAttempt.errorCode)) {
     return firstAttempt;
   }
   await sleep(EDITABLE_ACK_PREVIEW_RATE_LIMIT_RETRY_DELAY_MS);
-  return notify.edit!(ackMessageId, message);
+  return notify.edit!(ackMessageId, message, trace);
 }

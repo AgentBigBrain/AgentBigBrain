@@ -7,6 +7,8 @@ import path from "node:path";
 
 const VITE_SCAFFOLD_COMMAND_PATTERN =
   /\b(?:npm|npx)(?:\.cmd)?\s+(?:create\s+vite(?:@latest)?|create-vite(?:@latest)?|init\s+vite(?:@latest)?)\b/i;
+const NEXT_SCAFFOLD_COMMAND_PATTERN =
+  /\b(?:npx(?:\.cmd)?\s+create-next-app(?:@latest)?|npm(?:\.cmd)?\s+create\s+next-app(?:@latest)?)\b/i;
 const POWERSHELL_VARIABLE_ASSIGNMENT_PATTERN =
   /\$([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?:"([^"]+)"|'([^']+)')/g;
 const POWERSHELL_SET_LOCATION_PATTERN =
@@ -14,10 +16,24 @@ const POWERSHELL_SET_LOCATION_PATTERN =
 const NPM_RUN_BUILD_COMMAND_PATTERN = /^\s*npm(?:\.cmd)?\s+run\s+build\b/i;
 const PACKAGE_JSON_FILENAME = "package.json";
 const VITE_DIST_INDEX_RELATIVE_PATH = path.join("dist", "index.html");
+const NEXT_BUILD_ID_RELATIVE_PATH = path.join(".next", "BUILD_ID");
 
 export interface ShellPostconditionFailure {
   message: string;
 }
+
+const PACKAGE_MANAGER_WORKSPACE_COMMAND_PATTERN =
+  /^\s*(?:npm|npx|pnpm|yarn|bun)(?:\.cmd)?\s+(?:install|ci|run\s+(?:build|dev|preview|start))\b/i;
+const VITE_NATIVE_WORKSPACE_COMMAND_PATTERN =
+  /^\s*vite\b(?:\s+(?:build|dev|preview))\b/i;
+const SHELL_ARGUMENT_SEPARATOR_TOKENS = new Set(["&&", "||", "|"]);
+const SHELL_OPTIONS_WITH_VALUE = new Set(["-t", "--template", "--variant"]);
+const SHELL_BOOLEAN_OPTIONS = new Set([
+  "-i",
+  "--immediate",
+  "--interactive",
+  "--no-interactive"
+]);
 
 /**
  * Checks whether a local filesystem path currently exists.
@@ -111,6 +127,64 @@ function resolvePowerShellWorkingDirectoryBeforeScaffold(
 }
 
 /**
+ * Tokenizes one bounded shell command suffix into quoted or whitespace-delimited arguments.
+ *
+ * @param value - Command suffix that appears after the scaffold executable name.
+ * @returns Ordered argument tokens without surrounding quotes.
+ */
+function tokenizeShellSuffix(value: string): string[] {
+  const tokens: string[] = [];
+  for (const match of value.matchAll(/"([^"]+)"|'([^']+)'|([^\s;]+)/g)) {
+    const token = match[1] ?? match[2] ?? match[3] ?? "";
+    if (token.length > 0) {
+      tokens.push(token);
+    }
+  }
+  return tokens;
+}
+
+/**
+ * Extracts the first positional shell argument from one token stream while skipping bounded
+ * scaffold flags and terminating when the command suffix moves into a later shell segment.
+ *
+ * @param tokens - Ordered command suffix tokens.
+ * @returns First positional argument token, or `null` when none can be resolved safely.
+ */
+function extractFirstPositionalShellArgument(tokens: readonly string[]): string | null {
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index]?.trim() ?? "";
+    if (!token) {
+      continue;
+    }
+    if (SHELL_ARGUMENT_SEPARATOR_TOKENS.has(token)) {
+      break;
+    }
+    if (token === "--") {
+      continue;
+    }
+    const normalizedToken = token.toLowerCase();
+    if (
+      normalizedToken.startsWith("--template=") ||
+      normalizedToken.startsWith("--variant=")
+    ) {
+      continue;
+    }
+    if (SHELL_OPTIONS_WITH_VALUE.has(normalizedToken)) {
+      index += 1;
+      continue;
+    }
+    if (SHELL_BOOLEAN_OPTIONS.has(normalizedToken)) {
+      continue;
+    }
+    if (normalizedToken.startsWith("-")) {
+      continue;
+    }
+    return token;
+  }
+  return null;
+}
+
+/**
  * Extracts the target project directory for a Vite scaffold shell command when the command names
  * one explicitly.
  *
@@ -124,10 +198,9 @@ function extractViteScaffoldTargetRoot(command: string, cwd: string): string | n
   if (!scaffoldMatch) {
     return null;
   }
-  const targetMatch = normalized.match(
-    /(?:create\s+vite(?:@latest)?|create-vite(?:@latest)?|init\s+vite(?:@latest)?)\s+(?:"([^"]+)"|'([^']+)'|([^\s]+))/i
-  );
-  const rawTarget = targetMatch?.[1] ?? targetMatch?.[2] ?? targetMatch?.[3] ?? null;
+  const rawSuffix = normalized.slice(scaffoldMatch.index + scaffoldMatch[0].length).trim();
+  const suffixTokens = tokenizeShellSuffix(rawSuffix);
+  const rawTarget = extractFirstPositionalShellArgument(suffixTokens);
   if (!rawTarget) {
     return null;
   }
@@ -178,6 +251,126 @@ async function isViteWorkspace(cwd: string): Promise<boolean> {
 }
 
 /**
+ * Determines whether the current working directory is already a Next.js workspace.
+ *
+ * @param cwd - Effective working directory used for the shell command.
+ * @returns `true` when the workspace contains Next.js scripts or dependencies.
+ */
+async function isNextWorkspace(cwd: string): Promise<boolean> {
+  const packageJsonPath = path.join(cwd, PACKAGE_JSON_FILENAME);
+  if (!(await pathExists(packageJsonPath))) {
+    return false;
+  }
+  try {
+    const packageJsonText = await readFile(packageJsonPath, "utf8");
+    const packageJson = JSON.parse(packageJsonText) as {
+      scripts?: Record<string, unknown>;
+      dependencies?: Record<string, unknown>;
+      devDependencies?: Record<string, unknown>;
+    };
+    const buildScript =
+      typeof packageJson.scripts?.build === "string" ? packageJson.scripts.build : null;
+    if (buildScript && /\bnext\s+build\b/i.test(buildScript)) {
+      return true;
+    }
+    return (
+      Object.prototype.hasOwnProperty.call(packageJson.dependencies ?? {}, "next") ||
+      Object.prototype.hasOwnProperty.call(packageJson.devDependencies ?? {}, "next")
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Determines whether the current working directory is a recognized local frontend workspace.
+ *
+ * @param cwd - Effective working directory used for the shell command.
+ * @returns `true` when the workspace is recognized as Vite or Next.js.
+ */
+async function isRecognizedFrontendWorkspace(cwd: string): Promise<boolean> {
+  if (await isViteWorkspace(cwd)) {
+    return true;
+  }
+  return isNextWorkspace(cwd);
+}
+
+/**
+ * Extracts the final Desktop project directory for a Next.js scaffold shell command.
+ *
+ * Generated framework scaffold commands often bootstrap in a temp slug and then move the finished
+ * project into an exact human-facing Desktop folder tracked by `$final`. When that bounded final
+ * destination is present, continuity should anchor there rather than to the temp slug.
+ *
+ * @param command - Raw shell command requested by the planner/runtime.
+ * @param cwd - Effective cwd used for the shell execution.
+ * @returns Absolute project root, or `null` when the command is not a recognized Next scaffold.
+ */
+function extractNextScaffoldTargetRoot(command: string, cwd: string): string | null {
+  const normalized = command.trim();
+  const scaffoldMatch = NEXT_SCAFFOLD_COMMAND_PATTERN.exec(normalized);
+  if (!scaffoldMatch) {
+    return null;
+  }
+  const powerShellAssignments = extractPowerShellVariableAssignments(normalized);
+  const explicitFinalRoot = powerShellAssignments.get("final");
+  if (explicitFinalRoot) {
+    return path.resolve(cwd, explicitFinalRoot);
+  }
+  const scaffoldCwd = resolvePowerShellWorkingDirectoryBeforeScaffold(
+    normalized.slice(0, scaffoldMatch.index),
+    cwd,
+    powerShellAssignments
+  );
+  const targetMatch = normalized.match(
+    /(?:create-next-app|next-app)(?:@latest)?\s+(?:"([^"]+)"|'([^']+)'|(\$[A-Za-z_][A-Za-z0-9_]*)|([^\s;]+))/i
+  );
+  const rawTarget =
+    targetMatch?.[1] ?? targetMatch?.[2] ?? targetMatch?.[3] ?? targetMatch?.[4] ?? null;
+  if (!rawTarget) {
+    return null;
+  }
+  const resolvedTarget = resolvePowerShellLocationExpression(
+    rawTarget,
+    scaffoldCwd,
+    powerShellAssignments
+  );
+  return resolvedTarget ? path.resolve(resolvedTarget) : path.resolve(scaffoldCwd, rawTarget);
+}
+
+/**
+ * Resolves the strongest workspace root that a successful shell command just acted on.
+ *
+ * @param command - Raw shell command requested by the planner/runtime.
+ * @param cwd - Effective cwd used for the shell command.
+ * @returns Workspace root path, or `null` when no bounded workspace anchor applies.
+ */
+export async function resolveShellSuccessWorkspaceRoot(
+  command: string,
+  cwd: string
+): Promise<string | null> {
+  const nextScaffoldRoot = extractNextScaffoldTargetRoot(command, cwd);
+  if (nextScaffoldRoot) {
+    return nextScaffoldRoot;
+  }
+
+  const viteScaffoldRoot = extractViteScaffoldTargetRoot(command, cwd);
+  if (viteScaffoldRoot) {
+    return viteScaffoldRoot;
+  }
+
+  if (
+    (PACKAGE_MANAGER_WORKSPACE_COMMAND_PATTERN.test(command) ||
+      VITE_NATIVE_WORKSPACE_COMMAND_PATTERN.test(command)) &&
+    (await isRecognizedFrontendWorkspace(cwd))
+  ) {
+    return cwd;
+  }
+
+  return null;
+}
+
+/**
  * Resolves deterministic shell postcondition failures for scaffold/build commands that must leave
  * behind concrete local artifacts before downstream steps may proceed.
  *
@@ -189,6 +382,18 @@ export async function resolveShellPostconditionFailure(
   command: string,
   cwd: string
 ): Promise<ShellPostconditionFailure | null> {
+  const nextScaffoldRoot = extractNextScaffoldTargetRoot(command, cwd);
+  if (nextScaffoldRoot) {
+    const packageJsonPath = path.join(nextScaffoldRoot, PACKAGE_JSON_FILENAME);
+    if (!(await pathExists(packageJsonPath))) {
+      return {
+        message:
+          `Shell failed: Next.js scaffold did not create the expected ${PACKAGE_JSON_FILENAME} at ${packageJsonPath}.`
+      };
+    }
+    return null;
+  }
+
   const viteScaffoldRoot = extractViteScaffoldTargetRoot(command, cwd);
   if (viteScaffoldRoot) {
     const packageJsonPath = path.join(viteScaffoldRoot, PACKAGE_JSON_FILENAME);
@@ -207,6 +412,17 @@ export async function resolveShellPostconditionFailure(
       return {
         message:
           `Shell failed: Vite build did not produce the expected ${VITE_DIST_INDEX_RELATIVE_PATH} at ${distIndexPath}.`
+      };
+    }
+    return null;
+  }
+
+  if (NPM_RUN_BUILD_COMMAND_PATTERN.test(command) && (await isNextWorkspace(cwd))) {
+    const buildIdPath = path.join(cwd, NEXT_BUILD_ID_RELATIVE_PATH);
+    if (!(await pathExists(buildIdPath))) {
+      return {
+        message:
+          `Shell failed: Next.js build did not produce the expected ${NEXT_BUILD_ID_RELATIVE_PATH} at ${buildIdPath}.`
       };
     }
   }

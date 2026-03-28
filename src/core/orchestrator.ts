@@ -5,6 +5,7 @@
 import { BrainConfig } from "./config";
 import { selectModelForRole } from "./modelRouting";
 import { ExecutionReceiptStore } from "./advancedAutonomyRuntime";
+import { makeId } from "./ids";
 import {
   createFederatedOutboundRuntimeConfigFromEnv
 } from "./federatedOutboundDelegation";
@@ -41,8 +42,10 @@ import { GovernanceMemoryStore } from "./governanceMemory";
 import {
   ProfileMemoryStore
 } from "./profileMemoryStore";
+import type { ProfileMemoryIngestRequest } from "./profileMemoryRuntime/contracts";
 import { AppendRuntimeTraceEventInput, RuntimeTraceLogger } from "./runtimeTraceLogger";
 import { TaskRunner } from "./taskRunner";
+import { Stage686RuntimeActionEngine } from "./stage6_86/runtimeActions";
 import { resolveStage685PlaybookPlanningContext } from "./stage6_85/playbookRuntime";
 import { FederatedHttpClient } from "../interfaces/federatedClient";
 import {
@@ -77,6 +80,8 @@ import { persistLearningSignals } from "./orchestration/orchestratorLearning";
 import {
   readModelUsageSnapshot as readModelUsageSnapshotFromClient
 } from "./taskRunnerSupport";
+import { createBridgeQuestionTimingInterpretationResolverFromEnv } from "../organs/languageUnderstanding/localIntentModelRuntime";
+import type { BridgeQuestionTimingInterpretationResolver } from "../organs/languageUnderstanding/localIntentModelContracts";
 
 export class BrainOrchestrator {
   private readonly memoryBroker: MemoryBrokerOrgan;
@@ -141,7 +146,9 @@ export class BrainOrchestrator {
       createFederatedOutboundRuntimeConfigFromEnv,
     private readonly workflowLearningStore?: WorkflowLearningStore,
     private readonly judgmentPatternStore?: JudgmentPatternStore,
-    private readonly skillRegistryStore?: Pick<SkillRegistryStore, "listAvailableSkills">
+    private readonly skillRegistryStore?: Pick<SkillRegistryStore, "listAvailableSkills">,
+    private readonly bridgeQuestionTimingInterpretationResolver: BridgeQuestionTimingInterpretationResolver | undefined =
+      createBridgeQuestionTimingInterpretationResolverFromEnv()
   ) {
     this.memoryBroker = memoryBroker ?? new MemoryBrokerOrgan(profileMemoryStore);
     this.intentInterpreter = new IntentInterpreterOrgan(this.modelClient);
@@ -153,7 +160,13 @@ export class BrainOrchestrator {
       executor: this.executor,
       governanceMemoryStore: this.governanceMemoryStore,
       executionReceiptStore: this.executionReceiptStore,
-      appendTraceEvent: this.appendTraceEvent.bind(this)
+      appendTraceEvent: this.appendTraceEvent.bind(this),
+      stage686RuntimeActionEngine: new Stage686RuntimeActionEngine({
+        backend: this.config.persistence.ledgerBackend,
+        sqlitePath: this.config.persistence.ledgerSqlitePath,
+        exportJsonOnWrite: this.config.persistence.exportJsonOnWrite,
+        bridgeQuestionTimingInterpretationResolver: this.bridgeQuestionTimingInterpretationResolver
+      })
     });
   }
 
@@ -270,6 +283,34 @@ export class BrainOrchestrator {
       entityHints,
       maxFacts
     );
+  }
+
+  /**
+   * Persists bounded direct-conversation profile memory through the canonical store seam.
+   *
+   * @param input - Raw direct conversational user wording or validated fact candidates.
+   * @param receivedAt - Observation timestamp for the turn.
+   * @returns `true` when profile memory accepted at least one canonical fact or episode update.
+   */
+  async rememberConversationProfileInput(
+    input: string | ProfileMemoryIngestRequest,
+    receivedAt: string
+  ): Promise<boolean> {
+    if (!this.profileMemoryStore) {
+      return false;
+    }
+    const request = typeof input === "string"
+      ? { userInput: input }
+      : input;
+    const result = await this.profileMemoryStore.ingestFromTaskInput(
+      makeId("task"),
+      request.userInput ?? "",
+      receivedAt,
+      {
+        validatedFactCandidates: request.validatedFactCandidates
+      }
+    );
+    return result.appliedFacts > 0;
   }
 
   /**
@@ -496,7 +537,10 @@ export class BrainOrchestrator {
       {
         memoryBroker: this.memoryBroker
       },
-      task
+      task,
+      {
+        conversationDomainContext: options.conversationDomainContext
+      }
     );
     const profileMemoryStatus = profileAwareInput.profileMemoryStatus;
     const profileAwareUserInput = profileAwareInput.userInput;
@@ -506,7 +550,10 @@ export class BrainOrchestrator {
         judgmentPatternStore: this.judgmentPatternStore,
         listAvailableSkills: this.skillRegistryStore?.listAvailableSkills.bind(this.skillRegistryStore)
       },
-      profileAwareUserInput
+      profileAwareUserInput,
+      {
+        conversationDomainContext: options.conversationDomainContext
+      }
     );
     const plannerModel = selectModelForRole("planner", this.config);
     const synthesizerModel = selectModelForRole("synthesizer", this.config);
@@ -526,7 +573,8 @@ export class BrainOrchestrator {
           synthesizerModel,
           task,
           attemptNumber,
-          userInput: attemptUserInput
+          userInput: attemptUserInput,
+          conversationDomainContext: options.conversationDomainContext
         }),
       profileAwareUserInput,
       profileMemoryStatus,

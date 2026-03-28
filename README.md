@@ -41,7 +41,7 @@ Built in TypeScript with only **2 runtime dependencies** (`ws`, `onnxruntime-nod
 
 **💬 Multi-Interface** — CLI, Telegram bot, Discord bot, and an HTTP federation protocol for agent-to-agent communication.
 
-**🧭 Human-Centric Front Door** — You can talk to it like a normal person without losing the safety rails. Clear natural requests still go through the same routing and approval checks, and you can optionally add a small local Ollama intent helper for more natural phrasing and smoother resume or handoff turns.
+**🧭 Human-Centric Front Door** — You can talk to it like a normal person without losing the safety rails. Clear natural requests still go through the same routing and approval checks, and you can optionally add a small local Ollama conversational interpreter for bounded tasks like front-door intent, identity, follow-up, and resume or handoff disambiguation.
 
 <a id="zero-dependency-core"></a>
 **📦 Minimal Dependencies** — Only 2 runtime packages. No heavyweight SDKs. Crypto, HTTP, SQLite, and process control all use Node.js built-ins.
@@ -211,7 +211,7 @@ BRAIN_MODEL_BACKEND=mock
 BRAIN_RUNTIME_MODE=isolated
 ```
 
-Optional: enable the bounded local intent engine for more natural front-door routing while keeping the main planner/provider path unchanged:
+Optional: enable the bounded local conversational interpreter for more natural front-door routing and other conversational disambiguation while keeping the main planner/provider path unchanged:
 
 ```bash
 ollama pull phi4-mini
@@ -303,8 +303,9 @@ Yes. The main text backend is now explicit:
 - `BRAIN_MODEL_BACKEND=ollama` for local Ollama models
 
 You can still point the OpenAI API path at a compatible endpoint with `OPENAI_BASE_URL`. The
-optional local intent engine is separate, so you can keep the main planner on `openai_api` or
-`codex_oauth` while using a local Phi model for front-door intent classification. See
+optional local conversational interpreter is separate, so you can keep the main planner on
+`openai_api` or `codex_oauth` while using a local Phi model for bounded conversational
+interpretation tasks like front-door intent, identity, and follow-up disambiguation. See
 **[docs/SETUP.md](docs/SETUP.md)** for backend and auth details.
 
 ### How do I connect it to Telegram or Discord?
@@ -317,11 +318,12 @@ Yes, but the current media support is intentionally limited and truthful.
 
 - Images: supported through the Telegram media-ingest path. Rich interpretation can use the
   explicit OpenAI API media path or follow the active `codex_oauth` backend when the chosen media
-  model supports image understanding. If that is not available, the runtime falls back to a simple
-  caption or file summary.
+  model supports image understanding. You can now also split media by modality, for example:
+  screenshots on `codex_oauth` and voice transcription on `openai_api`. If image understanding is
+  not available, the runtime falls back to a simple caption or file summary.
 - Voice notes: supported through the Telegram media-ingest path. Rich interpretation can use the
-  explicit OpenAI API transcription path or follow the active `codex_oauth` backend where that
-  media auth path is supported. The default transcription model remains `whisper-1`. If
+  explicit OpenAI API transcription path or a separately configured transcription backend. The
+  default transcription model remains `whisper-1`. If
   transcription is unavailable, the runtime falls back to basic media context instead of making up
   a transcript.
 - Video: accepted as input. Today the runtime uses file metadata and captions for video, not full clip analysis.

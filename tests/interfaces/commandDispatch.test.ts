@@ -237,9 +237,9 @@ test("handleConversationCommand routes /memory through canonical review dispatch
           capturedReviewTaskId = request.reviewTaskId;
           return [
             {
-              episodeId: "episode_billy_fall",
-              title: "Billy fell down",
-              summary: "Billy fell down and the outcome was unresolved.",
+              episodeId: "episode_owen_fall",
+              title: "Owen fell down",
+              summary: "Owen fell down and the outcome was unresolved.",
               status: "unresolved",
               lastMentionedAt: "2026-03-07T10:00:00.000Z",
               resolvedAt: null,
@@ -254,7 +254,7 @@ test("handleConversationCommand routes /memory through canonical review dispatch
 
   assert.match(capturedReviewTaskId, /^memory_review_/);
   assert.match(reply, /Remembered situations:/);
-  assert.match(reply, /Billy fell down/);
+  assert.match(reply, /Owen fell down/);
 });
 
 test("handleConversationCommand renders the canonical skill inventory for /skills", async () => {

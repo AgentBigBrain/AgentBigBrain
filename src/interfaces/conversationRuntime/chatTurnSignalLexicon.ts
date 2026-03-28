@@ -1,0 +1,189 @@
+/**
+ * @fileoverview Shared bounded cue lexicon for conversation-runtime short-turn analysis.
+ */
+
+export const EXPLICIT_ARTIFACT_PATTERN = /(?:[a-z]:\\|\/|https?:\/\/|file:\/\/\/)/i;
+export const QUESTION_MARK_PATTERN = /[?\u00bf]/;
+export const QUESTION_LEAD_TERMS = new Set([
+  "who",
+  "what",
+  "when",
+  "where",
+  "why",
+  "how",
+  "quien",
+  "qui\u00e9n",
+  "que",
+  "qu\u00e9",
+  "como",
+  "c\u00f3mo"
+]);
+export const SELF_REFERENCE_TERMS = new Set(["i", "i'm", "me", "my", "am", "yo", "mi", "soy"]);
+export const ASSISTANT_REFERENCE_TERMS = new Set([
+  "you",
+  "your",
+  "you're",
+  "u",
+  "tu",
+  "t\u00fa",
+  "te",
+  "eres"
+]);
+export const NAME_CONCEPT_TERMS = new Set([
+  "name",
+  "named",
+  "call",
+  "called",
+  "nombre",
+  "llamo"
+]);
+export const IDENTITY_GRAMMAR_TERMS = new Set([
+  "am",
+  "are",
+  "i",
+  "i'm",
+  "me",
+  "my",
+  "you",
+  "your",
+  "you're",
+  "who",
+  "what",
+  "name",
+  "named",
+  "called",
+  "call",
+  "soy",
+  "eres",
+  "yo",
+  "mi",
+  "tu",
+  "t\u00fa",
+  "nombre"
+]);
+export const IDENTITY_RECALL_ASSERTION_TERMS = new Set(["know", "remember", "recall"]);
+export const WORKFLOW_CUE_TERMS = new Set([
+  "build",
+  "building",
+  "create",
+  "created",
+  "fix",
+  "fixed",
+  "implement",
+  "implemented",
+  "run",
+  "running",
+  "execute",
+  "executed",
+  "deploy",
+  "deployed",
+  "open",
+  "opened",
+  "close",
+  "closed",
+  "reopen",
+  "resume",
+  "continue",
+  "organize",
+  "move",
+  "edit",
+  "update",
+  "updated",
+  "change",
+  "repair",
+  "ship",
+  "scaffold",
+  "stop"
+]);
+export const STATUS_CUE_TERMS = new Set([
+  "status",
+  "review",
+  "draft",
+  "ready",
+  "changed",
+  "change",
+  "happening",
+  "doing",
+  "where",
+  "put",
+  "finished",
+  "finish",
+  "complete",
+  "completed",
+  "done",
+  "left",
+  "look",
+  "inspect",
+  "recall",
+  "remember",
+  "waiting",
+  "stuck",
+  "working",
+  "next"
+]);
+export const ARTIFACT_CUE_TERMS = new Set([
+  "browser",
+  "tab",
+  "window",
+  "preview",
+  "workspace",
+  "folder",
+  "file",
+  "desktop",
+  "repo",
+  "repository",
+  "project",
+  "app",
+  "site",
+  "page",
+  "artifact",
+  "process",
+  "url",
+  "path"
+]);
+export const FOLLOW_UP_DECISION_TERMS = new Set([
+  "confirm",
+  "confirmed",
+  "approve",
+  "approved",
+  "yes",
+  "yep",
+  "yeah",
+  "no",
+  "nope",
+  "cancel",
+  "okay",
+  "ok",
+  "sure"
+]);
+export const CHAT_FILLER_TERMS = new Set([
+  "and",
+  "hey",
+  "hello",
+  "hi",
+  "hola",
+  "bonjour",
+  "sup",
+  "yo"
+]);
+
+export const RELATIONSHIP_CUE_TERMS = new Set([
+  "relationship",
+  "relationships",
+  "friend",
+  "friends",
+  "coworker",
+  "coworkers",
+  "colleague",
+  "colleagues",
+  "teammate",
+  "teammates",
+  "boss",
+  "manager",
+  "girlfriend",
+  "boyfriend",
+  "wife",
+  "husband",
+  "partner",
+  "married"
+]);

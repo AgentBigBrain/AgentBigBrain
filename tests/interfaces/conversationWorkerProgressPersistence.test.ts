@@ -151,7 +151,8 @@ test("persistConversationExecutionProgress ignores updates for jobs that are no 
       status: "waiting_for_user",
       message: "pick this back up when you're ready, and I'll continue from the saved checkpoint",
       jobId: null,
-      updatedAt: "2026-03-15T12:05:05.000Z"
+      updatedAt: "2026-03-15T12:05:05.000Z",
+      recoveryTrace: null
     };
     session.recentJobs = [
       {

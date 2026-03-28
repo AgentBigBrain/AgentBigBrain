@@ -78,9 +78,9 @@ function buildEpisode(
   overrides: Partial<ConversationMemoryReviewRecord> = {}
 ): ConversationMemoryReviewRecord {
   return {
-    episodeId: "episode_billy_fall",
-    title: "Billy fell down",
-    summary: "Billy fell down a few weeks ago and the outcome was unresolved.",
+    episodeId: "episode_owen_fall",
+    title: "Owen fell down",
+    summary: "Owen fell down a few weeks ago and the outcome was unresolved.",
     status: "unresolved",
     lastMentionedAt: "2026-03-07T10:00:00.000Z",
     resolvedAt: null,
@@ -122,7 +122,7 @@ test("handleMemoryReviewCommand renders bounded remembered situations", async ()
   const request = capturedRequest as ConversationMemoryReviewRequest;
   assert.equal(request.maxEpisodes, 5);
   assert.match(reply, /^Remembered situations:/);
-  assert.match(reply, /Billy fell down \(episode_billy_fall\)/);
+  assert.match(reply, /Owen fell down \(episode_owen_fall\)/);
   assert.match(reply, /\/memory resolve <episode-id>/);
 });
 
@@ -143,7 +143,7 @@ test("handleMemoryReviewCommand routes resolve/wrong/forget mutations", async ()
 
   const resolveReply = await handleMemoryReviewCommand(
     buildSession(),
-    buildMessage("/memory resolve episode_billy_fall Billy recovered"),
+    buildMessage("/memory resolve episode_owen_fall Owen recovered"),
     buildDependencies({
       resolveConversationMemoryEpisode: async (request) => {
         calls.push(`resolve:${request.episodeId}:${request.note}`);
@@ -153,12 +153,12 @@ test("handleMemoryReviewCommand routes resolve/wrong/forget mutations", async ()
         });
       }
     }),
-    "resolve episode_billy_fall Billy recovered"
+    "resolve episode_owen_fall Owen recovered"
   );
 
   const wrongReply = await handleMemoryReviewCommand(
     buildSession(),
-    buildMessage("/memory wrong episode_billy_fall Wrong Billy"),
+    buildMessage("/memory wrong episode_owen_fall Wrong Owen"),
     buildDependencies({
       markConversationMemoryEpisodeWrong: async (request) => {
         calls.push(`wrong:${request.episodeId}:${request.note}`);
@@ -167,29 +167,29 @@ test("handleMemoryReviewCommand routes resolve/wrong/forget mutations", async ()
         });
       }
     }),
-    "wrong episode_billy_fall Wrong Billy"
+    "wrong episode_owen_fall Wrong Owen"
   );
 
   const forgetReply = await handleMemoryReviewCommand(
     buildSession(),
-    buildMessage("/memory forget episode_billy_fall"),
+    buildMessage("/memory forget episode_owen_fall"),
     buildDependencies({
       forgetConversationMemoryEpisode: async (request) => {
         calls.push(`forget:${request.episodeId}`);
         return buildEpisode();
       }
     }),
-    "forget episode_billy_fall"
+    "forget episode_owen_fall"
   );
 
   assert.deepEqual(calls, [
-    "resolve:episode_billy_fall:Billy recovered",
-    "wrong:episode_billy_fall:Wrong Billy",
-    "forget:episode_billy_fall"
+    "resolve:episode_owen_fall:Owen recovered",
+    "wrong:episode_owen_fall:Wrong Owen",
+    "forget:episode_owen_fall"
   ]);
-  assert.equal(resolveReply, 'Marked "Billy fell down" as resolved.');
-  assert.equal(wrongReply, 'Marked "Billy fell down" as no longer relevant.');
-  assert.equal(forgetReply, 'Forgot "Billy fell down".');
+  assert.equal(resolveReply, 'Marked "Owen fell down" as resolved.');
+  assert.equal(wrongReply, 'Marked "Owen fell down" as no longer relevant.');
+  assert.equal(forgetReply, 'Forgot "Owen fell down".');
 });
 
 test("handleMemoryReviewCommand fails closed when runtime review support is unavailable", async () => {
@@ -201,9 +201,9 @@ test("handleMemoryReviewCommand fails closed when runtime review support is unav
   );
   const mutationReply = await handleMemoryReviewCommand(
     buildSession(),
-    buildMessage("/memory resolve episode_billy_fall"),
+    buildMessage("/memory resolve episode_owen_fall"),
     buildDependencies(),
-    "resolve episode_billy_fall"
+    "resolve episode_owen_fall"
   );
 
   assert.equal(listReply, "Memory review is unavailable in this runtime.");

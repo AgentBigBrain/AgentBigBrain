@@ -200,8 +200,8 @@ test("selectRelevantEpisodesForPulse excludes stale and terminal situations", ()
     ...createEmptyProfileMemoryState(),
     episodes: [
       createProfileEpisodeRecord({
-        title: "Billy finished rehab",
-        summary: "Billy finished rehab and fully recovered.",
+        title: "Owen finished rehab",
+        summary: "Owen finished rehab and fully recovered.",
         sourceTaskId: "task_profile_pulse_episode_1",
         source: "test",
         sourceKind: "explicit_user_statement",
@@ -210,29 +210,29 @@ test("selectRelevantEpisodesForPulse excludes stale and terminal situations", ()
         lastMentionedAt: "2026-03-05T10:00:00.000Z",
         status: "resolved",
         resolvedAt: "2026-03-05T12:00:00.000Z",
-        entityRefs: ["contact.billy"]
+        entityRefs: ["contact.owen"]
       }),
       createProfileEpisodeRecord({
-        title: "Billy changed jobs",
-        summary: "Billy changed jobs and the outcome never got resolved.",
+        title: "Owen changed jobs",
+        summary: "Owen changed jobs and the outcome never got resolved.",
         sourceTaskId: "task_profile_pulse_episode_2",
         source: "test",
         sourceKind: "explicit_user_statement",
         sensitive: false,
         observedAt: "2025-10-01T10:00:00.000Z",
         lastMentionedAt: "2025-10-01T10:00:00.000Z",
-        entityRefs: ["contact.billy"]
+        entityRefs: ["contact.owen"]
       }),
       createProfileEpisodeRecord({
-        title: "Billy fell down",
-        summary: "Billy fell down and the outcome was never mentioned.",
+        title: "Owen fell down",
+        summary: "Owen fell down and the outcome was never mentioned.",
         sourceTaskId: "task_profile_pulse_episode_3",
         source: "test",
         sourceKind: "explicit_user_statement",
         sensitive: false,
         observedAt: "2026-03-07T10:00:00.000Z",
         lastMentionedAt: "2026-03-07T10:00:00.000Z",
-        entityRefs: ["contact.billy"]
+        entityRefs: ["contact.owen"]
       })
     ]
   };
@@ -246,6 +246,6 @@ test("selectRelevantEpisodesForPulse excludes stale and terminal situations", ()
 
   assert.deepEqual(
     relevantEpisodes.map((episode) => episode.title),
-    ["Billy fell down"]
+    ["Owen fell down"]
   );
 });

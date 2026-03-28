@@ -1,4 +1,4 @@
-﻿/**
+/**
  * @fileoverview Tests deterministic Stage 6.86 UX rendering behavior for pulse summaries, thread context strips, and suppression silence.
  */
 
@@ -32,7 +32,7 @@ function buildConversationStackFixture(): ConversationStackV1 {
           {
             loopId: "loop_budget_1",
             threadKey: "thread_budget",
-            entityRefs: ["entity_flare_labs"],
+            entityRefs: ["entity_lantern_labs"],
             createdAt: "2026-03-01T00:00:00.000Z",
             lastMentionedAt: "2026-03-01T00:00:00.000Z",
             priority: 0.62,
@@ -88,7 +88,7 @@ function buildPulseCandidateFixture(): PulseCandidateV1 {
     },
     lastTouchedAt: "2026-03-01T00:00:00.000Z",
     threadKey: "thread_budget",
-    entityRefs: ["entity_flare_labs"],
+    entityRefs: ["entity_lantern_labs"],
     evidenceRefs: ["trace:pulse_candidate_ux"],
     stableHash: "hash_pulse_candidate_ux"
   };

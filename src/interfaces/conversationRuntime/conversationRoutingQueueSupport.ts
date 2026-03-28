@@ -2,18 +2,22 @@
  * @fileoverview Shared queue-enqueue helpers for the stable conversation-routing entrypoint.
  */
 
+import type { TopicKeyInterpretationSignalV1 } from "../../core/stage6_86ConversationStack";
 import {
   buildConversationAwareExecutionInput
 } from "../conversationExecutionInputPolicy";
-import { recordUserTurn } from "../conversationSessionMutations";
+import { applyConversationDomainSignalWindow, recordUserTurn } from "../conversationSessionMutations";
 import type { ConversationSession } from "../sessionStore";
 import type { ConversationInboundMediaEnvelope } from "../mediaRuntime/contracts";
+import type { ContextualReferenceInterpretationResolver, EntityReferenceInterpretationResolver } from "../../organs/languageUnderstanding/localIntentModelContracts";
 import type {
+  GetConversationEntityGraph,
   ListBrowserSessionSnapshots,
   ListManagedProcessSnapshots,
   QueryConversationContinuityEpisodes,
   QueryConversationContinuityFacts
 } from "./managerContracts";
+import { buildConversationDomainSignalWindowForTurn } from "./sessionDomainRouting";
 
 export interface ConversationRoutingQueueResult {
   reply: string;
@@ -27,6 +31,9 @@ export interface ConversationRoutingQueueDependencies {
   };
   queryContinuityEpisodes?: QueryConversationContinuityEpisodes;
   queryContinuityFacts?: QueryConversationContinuityFacts;
+  contextualReferenceInterpretationResolver?: ContextualReferenceInterpretationResolver;
+  entityReferenceInterpretationResolver?: EntityReferenceInterpretationResolver;
+  getEntityGraph?: GetConversationEntityGraph;
   listManagedProcessSnapshots?: ListManagedProcessSnapshots;
   listBrowserSessionSnapshots?: ListBrowserSessionSnapshots;
   enqueueJob(
@@ -58,7 +65,8 @@ export async function enqueueFollowUpLinkedToPriorAssistantPrompt(
   receivedAt: string,
   routingClassification: Parameters<typeof buildConversationAwareExecutionInput>[3],
   deps: ConversationRoutingQueueDependencies,
-  media: ConversationInboundMediaEnvelope | null = null
+  media: ConversationInboundMediaEnvelope | null = null,
+  topicKeyInterpretation: TopicKeyInterpretationSignalV1 | null = null
 ): Promise<ConversationRoutingQueueResult> {
   const managedProcessSnapshots = deps.listManagedProcessSnapshots
     ? await deps.listManagedProcessSnapshots()
@@ -81,9 +89,25 @@ export async function enqueueFollowUpLinkedToPriorAssistantPrompt(
       media,
       managedProcessSnapshots,
       null,
-      browserSessionSnapshots
+      browserSessionSnapshots,
+      deps.contextualReferenceInterpretationResolver,
+      deps.getEntityGraph,
+      deps.entityReferenceInterpretationResolver
     )
   );
-  recordUserTurn(session, input, receivedAt, deps.config.maxConversationTurns);
+  recordUserTurn(session, input, receivedAt, deps.config.maxConversationTurns, {
+    topicKeyInterpretation
+  });
+  applyConversationDomainSignalWindow(
+    session,
+    buildConversationDomainSignalWindowForTurn(
+      session,
+      input,
+      receivedAt,
+      routingClassification ?? null,
+      session.modeContinuity?.activeMode ??
+        (routingClassification?.routeType === "execution_surface" ? "build" : null)
+    )
+  );
   return enqueueResult;
 }

@@ -19,6 +19,33 @@ import {
   streamEditableAckPreview,
   streamNativeFinalPreview
 } from "./deliveryPreview";
+import type {
+  ConversationJob
+} from "../sessionStore";
+
+/**
+ * Builds stable outbound-trace metadata for worker-owned delivery operations.
+ *
+ * @param source - Delivery phase being emitted.
+ * @param sessionKey - Conversation session that owns the job.
+ * @param job - Persisted job supplying stable identifiers.
+ * @returns Structured outbound trace attached to transport sends/edits/streams.
+ */
+function buildWorkerDeliveryTrace(
+  source:
+    | "worker_ack"
+    | "worker_final_preview"
+    | "worker_final",
+  sessionKey: string,
+  job: ConversationJob
+) {
+  return {
+    source,
+    sessionKey,
+    jobId: job.id,
+    jobCreatedAt: job.createdAt
+  } as const;
+}
 
 /**
  * Schedules delayed ack timer delivery for one running job when transport/session capabilities allow it.
@@ -107,7 +134,10 @@ export async function handleAckTimerFire(input: HandleAckTimerFireInput): Promis
 
   const ackMessage =
     "I'm on it. I'll keep you posted here as I go.";
-  const delivery = await notify.send(ackMessage);
+  const delivery = await notify.send(
+    ackMessage,
+    buildWorkerDeliveryTrace("worker_ack", sessionKey, runningJob)
+  );
   if (!delivery.ok) {
     setAckLifecycleState(
       runningJob,
@@ -194,14 +224,24 @@ export async function deliverFinalMessage(input: DeliverFinalMessageInput): Prom
 
   if (runningOrRecentJob.isSystemJob !== true) {
     if (canUseAckEdit && canEditInTransport) {
+      const previewTrace = buildWorkerDeliveryTrace(
+        "worker_final_preview",
+        sessionKey,
+        runningOrRecentJob
+      );
       const previewResult = await streamEditableAckPreview(
         notify,
         runningOrRecentJob.ackMessageId!,
-        finalMessage
+        finalMessage,
+        previewTrace
       );
       editablePreviewDeliveredFullText = previewResult.deliveredFullText;
     } else {
-      await streamNativeFinalPreview(notify, finalMessage);
+      await streamNativeFinalPreview(
+        notify,
+        finalMessage,
+        buildWorkerDeliveryTrace("worker_final_preview", sessionKey, runningOrRecentJob)
+      );
     }
   }
 
@@ -228,7 +268,11 @@ export async function deliverFinalMessage(input: DeliverFinalMessageInput): Prom
     runningOrRecentJob.ackEditAttemptCount += 1;
     runningOrRecentJob.finalDeliveryAttemptCount += 1;
     runningOrRecentJob.finalDeliveryLastAttemptAt = baseNowIso;
-    const editResult = await notify.edit!(runningOrRecentJob.ackMessageId!, finalMessage);
+    const editResult = await notify.edit!(
+      runningOrRecentJob.ackMessageId!,
+      finalMessage,
+      buildWorkerDeliveryTrace("worker_final", sessionKey, runningOrRecentJob)
+    );
     if (editResult.ok) {
       setAckLifecycleState(
         runningOrRecentJob,
@@ -250,7 +294,10 @@ export async function deliverFinalMessage(input: DeliverFinalMessageInput): Prom
   const sendAttemptAt = new Date().toISOString();
   runningOrRecentJob.finalDeliveryAttemptCount += 1;
   runningOrRecentJob.finalDeliveryLastAttemptAt = sendAttemptAt;
-  const sendResult = await notify.send(finalMessage);
+  const sendResult = await notify.send(
+    finalMessage,
+    buildWorkerDeliveryTrace("worker_final", sessionKey, runningOrRecentJob)
+  );
   if (sendResult.ok) {
     runningOrRecentJob.finalDeliveryOutcome = "sent";
     runningOrRecentJob.finalDeliveryLastErrorCode = null;

@@ -5,7 +5,27 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import type { LocalIntentModelSessionHints } from "../../src/organs/languageUnderstanding/localIntentModelContracts";
 import { resolveConversationIntentMode } from "../../src/interfaces/conversationRuntime/intentModeResolution";
+
+function buildSessionHints(
+  overrides: Partial<LocalIntentModelSessionHints> = {}
+): LocalIntentModelSessionHints {
+  return {
+    hasActiveWorkspace: false,
+    hasReturnHandoff: false,
+    returnHandoffStatus: null,
+    returnHandoffPreviewAvailable: false,
+    returnHandoffPrimaryArtifactAvailable: false,
+    returnHandoffChangedPathCount: 0,
+    returnHandoffNextSuggestedStepAvailable: false,
+    modeContinuity: null,
+    domainDominantLane: "unknown",
+    domainContinuityActive: false,
+    workflowContinuityActive: false,
+    ...overrides
+  };
+}
 
 test("resolveConversationIntentMode detects natural capability discovery requests", async () => {
   const resolution = await resolveConversationIntentMode(
@@ -47,9 +67,69 @@ test("resolveConversationIntentMode detects natural status and artifact recall r
   assert.equal(resolution.clarification, null);
 });
 
+test("resolveConversationIntentMode keeps explicit status wording authoritative during workflow continuity", async () => {
+  const resolution = await resolveConversationIntentMode(
+    "What's the status on the deploy and what did you leave open for me?",
+    null,
+    undefined,
+    buildSessionHints({
+      hasActiveWorkspace: true,
+      modeContinuity: "build",
+      domainDominantLane: "workflow",
+      domainContinuityActive: true,
+      workflowContinuityActive: true
+    })
+  );
+
+  assert.equal(resolution.mode, "status_or_recall");
+  assert.equal(resolution.confidence, "high");
+  assert.equal(resolution.clarification, null);
+  assert.equal(resolution.matchedRuleId, "intent_mode_status_or_recall");
+});
+
+test("resolveConversationIntentMode keeps capability discovery authoritative during workflow continuity", async () => {
+  const resolution = await resolveConversationIntentMode(
+    "What can you help me with from here?",
+    null,
+    undefined,
+    buildSessionHints({
+      hasActiveWorkspace: true,
+      modeContinuity: "autonomous",
+      domainDominantLane: "workflow",
+      domainContinuityActive: true,
+      workflowContinuityActive: true
+    })
+  );
+
+  assert.equal(resolution.mode, "discover_available_capabilities");
+  assert.equal(resolution.confidence, "high");
+  assert.equal(resolution.clarification, null);
+  assert.equal(resolution.matchedRuleId, "intent_mode_capability_discovery");
+});
+
 test("resolveConversationIntentMode keeps explicit conversational interludes off the work path even when the preview should stay open", async () => {
   const resolution = await resolveConversationIntentMode(
     "Before changing anything, just talk with me for a minute about what makes AI Drone City feel playful. Reply in two short paragraphs and keep the page open."
+  );
+
+  assert.equal(resolution.mode, "chat");
+  assert.equal(resolution.confidence, "high");
+  assert.equal(resolution.clarification, null);
+  assert.equal(resolution.matchedRuleId, "intent_mode_direct_conversation_only");
+});
+
+test("resolveConversationIntentMode keeps direct-chat interludes authoritative during workflow continuity", async () => {
+  const resolution = await resolveConversationIntentMode(
+    "Before changing anything, just talk with me for a minute about whether this feels calmer.",
+    null,
+    undefined,
+    buildSessionHints({
+      hasActiveWorkspace: true,
+      modeContinuity: "build",
+      domainDominantLane: "workflow",
+      domainContinuityActive: true,
+      workflowContinuityActive: true
+    })
   );
 
   assert.equal(resolution.mode, "chat");
@@ -104,6 +184,166 @@ test("resolveConversationIntentMode treats guided review and while-away completi
   assert.equal(whileGoneResolution.clarification, null);
 });
 
+test("resolveConversationIntentMode keeps explicit contextual status follow-ups off the work path without the generic local model", async () => {
+  let localResolverCalled = false;
+
+  const resolution = await resolveConversationIntentMode(
+    "Update me later on the Sarah draft.",
+    null,
+    async () => {
+      localResolverCalled = true;
+      return {
+        source: "local_intent_model",
+        mode: "build",
+        confidence: "high",
+        matchedRuleId: "local_intent_model_incorrect_build",
+        explanation: "The generic local model should not be needed for explicit contextual status follow-ups.",
+        clarification: null
+      };
+    },
+    buildSessionHints({
+      domainDominantLane: "workflow",
+      workflowContinuityActive: true
+    })
+  );
+
+  assert.equal(localResolverCalled, false);
+  assert.equal(resolution.mode, "status_or_recall");
+  assert.equal(resolution.matchedRuleId, "intent_mode_contextual_followup_status_lexical");
+});
+
+test("resolveConversationIntentMode keeps explicit reminder follow-ups on the chat path without invoking the generic local model", async () => {
+  let localResolverCalled = false;
+
+  const resolution = await resolveConversationIntentMode(
+    "Remind me later about the Sarah draft.",
+    null,
+    async () => {
+      localResolverCalled = true;
+      return {
+        source: "local_intent_model",
+        mode: "build",
+        confidence: "high",
+        matchedRuleId: "local_intent_model_incorrect_reminder_build",
+        explanation: "The generic local model should not reinterpret explicit reminder follow-ups as work.",
+        clarification: null
+      };
+    }
+  );
+
+  assert.equal(localResolverCalled, false);
+  assert.equal(resolution.mode, "chat");
+  assert.equal(resolution.matchedRuleId, "intent_mode_contextual_followup_reminder_lexical");
+});
+
+test("resolveConversationIntentMode can use the contextual follow-up interpreter for ambiguous later-update wording", async () => {
+  let localResolverCalled = false;
+  let capturedCandidateTokens: readonly string[] | undefined;
+
+  const resolution = await resolveConversationIntentMode(
+    "Keep me posted on the Sarah draft.",
+    null,
+    async () => {
+      localResolverCalled = true;
+      return {
+        source: "local_intent_model",
+        mode: "build",
+        confidence: "high",
+        matchedRuleId: "local_intent_model_incorrect_contextual_followup_build",
+        explanation: "The generic local model should not run when the bounded contextual follow-up interpreter already resolved the turn.",
+        clarification: null
+      };
+    },
+    buildSessionHints({
+      domainDominantLane: "workflow",
+      workflowContinuityActive: true
+    }),
+    async (request) => {
+      capturedCandidateTokens = request.deterministicCandidateTokens;
+      return {
+        source: "local_intent_model",
+        kind: "status_followup",
+        candidateTokens: ["sarah", "draft"],
+        confidence: "medium",
+        explanation: "The user wants a later status update on the Sarah draft thread."
+      };
+    }
+  );
+
+  assert.equal(localResolverCalled, false);
+  assert.deepEqual(capturedCandidateTokens, ["sarah", "draft"]);
+  assert.equal(resolution.mode, "status_or_recall");
+  assert.equal(resolution.matchedRuleId, "intent_mode_contextual_followup_status_followup_model");
+});
+
+test("resolveConversationIntentMode fails closed for ambiguous contextual follow-up wording when the dedicated interpreter is unavailable", async () => {
+  let localResolverCalled = false;
+
+  const resolution = await resolveConversationIntentMode(
+    "Keep me posted on the Sarah draft.",
+    null,
+    async () => {
+      localResolverCalled = true;
+      return {
+        source: "local_intent_model",
+        mode: "build",
+        confidence: "high",
+        matchedRuleId: "local_intent_model_incorrect_no_model_build",
+        explanation: "The generic local model should not run when contextual follow-up interpretation is unavailable.",
+        clarification: null
+      };
+    },
+    buildSessionHints({
+      domainDominantLane: "workflow",
+      workflowContinuityActive: true
+    })
+  );
+
+  assert.equal(localResolverCalled, false);
+  assert.equal(resolution.mode, "chat");
+  assert.equal(resolution.matchedRuleId, "intent_mode_default_chat");
+});
+
+test("resolveConversationIntentMode keeps first-person status facts off the contextual follow-up path", async () => {
+  let contextualResolverCalled = false;
+  let localResolverCalled = false;
+
+  const resolution = await resolveConversationIntentMode(
+    "my followup.tax filing is pending.",
+    null,
+    async () => {
+      localResolverCalled = true;
+      return {
+        source: "local_intent_model",
+        mode: "build",
+        confidence: "high",
+        matchedRuleId: "local_intent_model_incorrect_status_fact_build",
+        explanation: "Generic local intent should not steal first-person status facts.",
+        clarification: null
+      };
+    },
+    buildSessionHints({
+      domainDominantLane: "workflow",
+      workflowContinuityActive: true
+    }),
+    async () => {
+      contextualResolverCalled = true;
+      return {
+        source: "local_intent_model",
+        kind: "status_followup",
+        selectedTopicAnchors: ["tax", "filing"],
+        confidence: "high",
+        explanation: "Incorrect contextual follow-up interpretation for a first-person status fact."
+      };
+    }
+  );
+
+  assert.equal(contextualResolverCalled, false);
+  assert.equal(localResolverCalled, false);
+  assert.equal(resolution.mode, "chat");
+  assert.equal(resolution.matchedRuleId, "intent_mode_default_chat");
+});
+
 test("resolveConversationIntentMode returns a persisted clarification candidate for ambiguous build requests", async () => {
   const resolution = await resolveConversationIntentMode(
     "Please create me that landing page we talked about yesterday with a hero and a strong call to action."
@@ -130,23 +370,385 @@ test("resolveConversationIntentMode promotes strong end-to-end wording into auto
   assert.equal(resolution.matchedRuleId, "intent_mode_autonomous_execution");
 });
 
-test("resolveConversationIntentMode can promote a weak deterministic match through the optional local intent model", async () => {
+test("resolveConversationIntentMode keeps ambiguous end-to-end wording off autonomous mode in a profile session without workflow continuity", async () => {
   const resolution = await resolveConversationIntentMode(
-    "Could you own this for me and keep it open for me later tonight?",
+    "Could you take care of this end to end and remember that I prefer dark mode?",
     null,
-    async () => ({
-      source: "local_intent_model",
-      mode: "autonomous",
-      confidence: "high",
-      matchedRuleId: "local_intent_model_autonomous_request",
-      explanation: "The local intent model recognized a clear autonomous execution request.",
-      clarification: null
+    undefined,
+    buildSessionHints({
+      domainDominantLane: "profile",
+      domainContinuityActive: true
+    })
+  );
+
+  assert.equal(resolution.mode, "chat");
+  assert.equal(resolution.confidence, "low");
+  assert.equal(resolution.clarification, null);
+  assert.equal(resolution.matchedRuleId, "intent_mode_default_chat");
+});
+
+test("resolveConversationIntentMode still promotes ambiguous end-to-end wording when workflow continuity is active", async () => {
+  const resolution = await resolveConversationIntentMode(
+    "Take care of it end to end and leave the preview open for me.",
+    null,
+    undefined,
+    buildSessionHints({
+      hasActiveWorkspace: true,
+      modeContinuity: "build",
+      domainDominantLane: "profile",
+      domainContinuityActive: true,
+      workflowContinuityActive: true
     })
   );
 
   assert.equal(resolution.mode, "autonomous");
   assert.equal(resolution.confidence, "high");
+  assert.equal(resolution.clarification, null);
+  assert.equal(resolution.matchedRuleId, "intent_mode_autonomous_execution");
+});
+
+test("resolveConversationIntentMode can use the autonomy-boundary interpreter for ambiguous end-to-end wording in a non-workflow session", async () => {
+  let capturedSignalStrength: string | null | undefined;
+
+  const resolution = await resolveConversationIntentMode(
+    "Could you take care of this end to end and leave the page polished?",
+    null,
+    undefined,
+    buildSessionHints({
+      domainDominantLane: "profile",
+      domainContinuityActive: true
+    }),
+    undefined,
+    async (request) => {
+      capturedSignalStrength = request.deterministicSignalStrength;
+      return {
+        source: "local_intent_model",
+        kind: "promote_to_autonomous",
+        confidence: "medium",
+        explanation: "The user is delegating end-to-end ownership for the current artifact."
+      };
+    }
+  );
+
+  assert.equal(capturedSignalStrength, "ambiguous");
+  assert.equal(resolution.mode, "autonomous");
+  assert.equal(resolution.confidence, "medium");
+  assert.equal(resolution.matchedRuleId, "intent_mode_autonomy_boundary_model_autonomous");
+  assert.equal(resolution.clarification, null);
+});
+
+test("resolveConversationIntentMode keeps strong deterministic autonomy promotion ahead of the autonomy-boundary interpreter", async () => {
+  let autonomyBoundaryResolverCalled = false;
+
+  const resolution = await resolveConversationIntentMode(
+    "Finish the whole thing and keep going until it's done.",
+    null,
+    undefined,
+    buildSessionHints({
+      domainDominantLane: "profile",
+      domainContinuityActive: true
+    }),
+    undefined,
+    async () => {
+      autonomyBoundaryResolverCalled = true;
+      return {
+        source: "local_intent_model",
+        kind: "keep_as_chat",
+        confidence: "high",
+        explanation: "This should never run for strong deterministic autonomy prompts."
+      };
+    }
+  );
+
+  assert.equal(autonomyBoundaryResolverCalled, false);
+  assert.equal(resolution.mode, "autonomous");
+  assert.equal(resolution.confidence, "high");
+  assert.equal(resolution.matchedRuleId, "intent_mode_autonomous_execution");
+});
+
+test("resolveConversationIntentMode fails closed for ambiguous autonomy wording when the dedicated interpreter is unavailable", async () => {
+  let localResolverCalled = false;
+
+  const resolution = await resolveConversationIntentMode(
+    "Could you take care of this end to end and remember that I prefer dark mode?",
+    null,
+    async () => {
+      localResolverCalled = true;
+      return {
+        source: "local_intent_model",
+        mode: "autonomous",
+        confidence: "high",
+        matchedRuleId: "local_intent_model_incorrect_autonomous_fallback",
+        explanation: "The generic local intent model should stay suppressed for ambiguous autonomy leftovers.",
+        clarification: null
+      };
+    },
+    buildSessionHints({
+      domainDominantLane: "profile",
+      domainContinuityActive: true
+    })
+  );
+
+  assert.equal(localResolverCalled, false);
+  assert.equal(resolution.mode, "chat");
+  assert.equal(resolution.confidence, "low");
+  assert.equal(resolution.matchedRuleId, "intent_mode_default_chat");
+});
+
+test("resolveConversationIntentMode can use the status-recall-boundary interpreter to keep ambiguous mixed wording on the build path", async () => {
+  let localResolverCalled = false;
+  let capturedDeterministicPreference: string | null | undefined;
+
+  const resolution = await resolveConversationIntentMode(
+    "Please update the hero section and tell me what you changed.",
+    null,
+    async () => {
+      localResolverCalled = true;
+      return {
+        source: "local_intent_model",
+        mode: "status_or_recall",
+        confidence: "high",
+        matchedRuleId: "local_intent_model_should_not_run_for_status_recall_boundary_build",
+        explanation: "The generic local model should stay suppressed when the dedicated boundary interpreter resolves the overlap.",
+        clarification: null
+      };
+    },
+    buildSessionHints({
+      hasActiveWorkspace: true,
+      modeContinuity: "build",
+      domainDominantLane: "workflow",
+      domainContinuityActive: true,
+      workflowContinuityActive: true
+    }),
+    undefined,
+    undefined,
+    async (request) => {
+      capturedDeterministicPreference = request.deterministicPreference;
+      return {
+        source: "local_intent_model",
+        kind: "execute_now",
+        focus: null,
+        confidence: "medium",
+        explanation: "The user is asking for fresh execution, not a status recap."
+      };
+    }
+  );
+
+  assert.equal(localResolverCalled, false);
+  assert.equal(capturedDeterministicPreference, "status_or_recall");
+  assert.equal(resolution.mode, "build");
+  assert.equal(resolution.confidence, "medium");
+  assert.equal(resolution.matchedRuleId, "intent_mode_status_recall_boundary_model_build");
+  assert.equal(resolution.clarification, null);
+});
+
+test("resolveConversationIntentMode can use the status-recall-boundary interpreter to preserve status recall with a focused semantic hint", async () => {
+  let localResolverCalled = false;
+
+  const resolution = await resolveConversationIntentMode(
+    "Please update the hero section and where did you put it?",
+    null,
+    async () => {
+      localResolverCalled = true;
+      return {
+        source: "local_intent_model",
+        mode: "build",
+        confidence: "high",
+        matchedRuleId: "local_intent_model_should_not_run_for_status_recall_boundary_status",
+        explanation: "The generic local model should stay suppressed when the dedicated boundary interpreter keeps the turn on status recall.",
+        clarification: null
+      };
+    },
+    buildSessionHints({
+      hasActiveWorkspace: true,
+      modeContinuity: "build",
+      domainDominantLane: "workflow",
+      domainContinuityActive: true,
+      workflowContinuityActive: true
+    }),
+    undefined,
+    undefined,
+    async () => ({
+      source: "local_intent_model",
+      kind: "status_or_recall",
+      focus: "location",
+      confidence: "medium",
+      explanation: "The user is asking where the tracked artifact lives before deciding on more changes."
+    })
+  );
+
+  assert.equal(localResolverCalled, false);
+  assert.equal(resolution.mode, "status_or_recall");
+  assert.equal(resolution.confidence, "medium");
+  assert.equal(resolution.matchedRuleId, "intent_mode_status_recall_boundary_model_status");
+  assert.equal(resolution.semanticHint, "status_location");
+  assert.equal(resolution.clarification, null);
+});
+
+test("resolveConversationIntentMode keeps explicit status wording ahead of the status-recall-boundary interpreter when there is no execute-now overlap", async () => {
+  let statusRecallBoundaryResolverCalled = false;
+
+  const resolution = await resolveConversationIntentMode(
+    "Tell me what you changed.",
+    null,
+    undefined,
+    buildSessionHints({
+      hasActiveWorkspace: true,
+      modeContinuity: "build",
+      domainDominantLane: "workflow",
+      domainContinuityActive: true,
+      workflowContinuityActive: true
+    }),
+    undefined,
+    undefined,
+    async () => {
+      statusRecallBoundaryResolverCalled = true;
+      return {
+        source: "local_intent_model",
+        kind: "execute_now",
+        focus: null,
+        confidence: "high",
+        explanation: "This should never run for explicit pure status wording."
+      };
+    }
+  );
+
+  assert.equal(statusRecallBoundaryResolverCalled, false);
+  assert.equal(resolution.mode, "status_or_recall");
+  assert.equal(resolution.confidence, "high");
+  assert.equal(resolution.matchedRuleId, "intent_mode_status_or_recall");
+  assert.equal(resolution.clarification, null);
+});
+
+test("resolveConversationIntentMode fails closed for ambiguous status/build overlap when the dedicated boundary interpreter is unavailable", async () => {
+  let localResolverCalled = false;
+
+  const resolution = await resolveConversationIntentMode(
+    "Please update the hero section and tell me what you changed.",
+    null,
+    async () => {
+      localResolverCalled = true;
+      return {
+        source: "local_intent_model",
+        mode: "build",
+        confidence: "high",
+        matchedRuleId: "local_intent_model_incorrect_status_recall_overlap_build",
+        explanation: "The generic local intent model should stay suppressed for ambiguous status/build overlap.",
+        clarification: null
+      };
+    },
+    buildSessionHints({
+      hasActiveWorkspace: true,
+      modeContinuity: "build",
+      domainDominantLane: "workflow",
+      domainContinuityActive: true,
+      workflowContinuityActive: true
+    })
+  );
+
+  assert.equal(localResolverCalled, false);
+  assert.equal(resolution.mode, "status_or_recall");
+  assert.equal(resolution.confidence, "high");
+  assert.equal(resolution.matchedRuleId, "intent_mode_status_or_recall");
+  assert.equal(resolution.clarification, null);
+});
+
+test("resolveConversationIntentMode can promote a weak deterministic match through the optional local intent model", async () => {
+  let capturedDomainLane: string | undefined;
+
+  const resolution = await resolveConversationIntentMode(
+    "Could you own this for me and keep it open for me later tonight?",
+    null,
+    async (request) => {
+      capturedDomainLane = request.sessionHints?.domainDominantLane;
+      return {
+        source: "local_intent_model",
+        mode: "autonomous",
+        confidence: "high",
+        matchedRuleId: "local_intent_model_autonomous_request",
+        explanation: "The local intent model recognized a clear autonomous execution request.",
+        clarification: null
+      };
+    },
+    buildSessionHints({
+      domainDominantLane: "workflow",
+      domainContinuityActive: true,
+      workflowContinuityActive: true
+    })
+  );
+
+  assert.equal(capturedDomainLane, "workflow");
+  assert.equal(resolution.mode, "autonomous");
+  assert.equal(resolution.confidence, "high");
   assert.equal(resolution.matchedRuleId, "local_intent_model_autonomous_request");
+});
+
+test("resolveConversationIntentMode keeps ambiguous self-identity declarations off the work path even when workflow continuity is active", async () => {
+  let localResolverCalled = false;
+
+  const resolution = await resolveConversationIntentMode(
+    "I already told you my name is Avery several times.",
+    null,
+    async () => {
+      localResolverCalled = true;
+      return {
+        source: "local_intent_model",
+        mode: "build",
+        confidence: "high",
+        matchedRuleId: "local_intent_model_incorrect_build",
+        explanation: "The local intent model incorrectly treated the turn as executable work.",
+        clarification: null
+      };
+    },
+    buildSessionHints({
+      hasActiveWorkspace: true,
+      modeContinuity: "build",
+      domainDominantLane: "workflow",
+      domainContinuityActive: true,
+      workflowContinuityActive: true,
+      recentIdentityConversationActive: true
+    })
+  );
+
+  assert.equal(localResolverCalled, false);
+  assert.equal(resolution.mode, "chat");
+  assert.equal(resolution.confidence, "low");
+  assert.equal(resolution.matchedRuleId, "intent_mode_default_chat");
+});
+
+test("resolveConversationIntentMode keeps short identity follow-ups off the work path even when the last assistant turn was a question", async () => {
+  let localResolverCalled = false;
+
+  const resolution = await resolveConversationIntentMode(
+    "No",
+    null,
+    async () => {
+      localResolverCalled = true;
+      return {
+        source: "local_intent_model",
+        mode: "build",
+        confidence: "high",
+        matchedRuleId: "local_intent_model_incorrect_follow_up_build",
+        explanation: "The local intent model incorrectly treated the short identity follow-up as work.",
+        clarification: null
+      };
+    },
+    buildSessionHints({
+      hasActiveWorkspace: true,
+      hasRecentAssistantQuestion: true,
+      hasRecentAssistantIdentityPrompt: true,
+      recentIdentityConversationActive: true,
+      modeContinuity: "build",
+      domainDominantLane: "workflow",
+      domainContinuityActive: true,
+      workflowContinuityActive: true
+    })
+  );
+
+  assert.equal(localResolverCalled, false);
+  assert.equal(resolution.mode, "chat");
+  assert.equal(resolution.confidence, "low");
+  assert.equal(resolution.matchedRuleId, "intent_mode_default_chat");
 });
 
 test("resolveConversationIntentMode does not let the local intent model downgrade explicit autonomous wording", async () => {
@@ -216,6 +818,31 @@ test("resolveConversationIntentMode keeps the Telegram live-smoke edit wording o
   assert.equal(resolution.mode, "build");
   assert.equal(resolution.confidence, "high");
   assert.equal(resolution.clarification, null);
+});
+
+test("resolveConversationIntentMode keeps natural browser-open follow-ups on the build path during tracked workflow continuity", async () => {
+  const resolution = await resolveConversationIntentMode(
+    "Alright, open that Downtown Detroit Drones landing page in my browser and leave it up for me. Use the same tracked localhost run that is already live on port 57860.",
+    null,
+    undefined,
+    buildSessionHints({
+      hasActiveWorkspace: true,
+      hasReturnHandoff: true,
+      returnHandoffStatus: "completed",
+      returnHandoffPreviewAvailable: true,
+      returnHandoffPrimaryArtifactAvailable: true,
+      returnHandoffChangedPathCount: 4,
+      modeContinuity: "build",
+      domainDominantLane: "workflow",
+      domainContinuityActive: true,
+      workflowContinuityActive: true
+    })
+  );
+
+  assert.equal(resolution.mode, "build");
+  assert.equal(resolution.confidence, "high");
+  assert.equal(resolution.clarification, null);
+  assert.equal(resolution.matchedRuleId, "intent_mode_execute_now");
 });
 
 test("resolveConversationIntentMode keeps the Telegram live-smoke cleanup wording on the build path", async () => {

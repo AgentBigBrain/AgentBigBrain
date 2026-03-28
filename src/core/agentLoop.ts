@@ -56,6 +56,7 @@ import {
     containsWorkspaceRecoveryPostInspectionRetryMarker,
     containsWorkspaceRecoveryStopExactMarker
 } from "./autonomy/workspaceRecoveryCommandBuilders";
+import { resolveStructuredRecoveryRuntimeDecision } from "./autonomy/structuredRecoveryRuntime";
 
 export type {
     AutonomousLoopCallbacks,
@@ -63,45 +64,14 @@ export type {
     AutonomousLoopStateUpdate
 } from "./autonomy/agentLoopRuntimeSupport";
 export class AutonomousLoop {
-    /**
-     * Initializes `AutonomousLoop` with deterministic runtime dependencies.
-     *
-     * **Why it exists:**
-     * Captures required dependencies at initialization time so runtime behavior remains explicit.
-     *
-     * **What it talks to:**
-     * - Uses `ModelClient` (import `ModelClient`) from `../models/types`.
-     * - Uses `BrainConfig` (import `BrainConfig`) from `./config`.
-     * - Uses `BrainOrchestrator` (import `BrainOrchestrator`) from `./orchestrator`.
-     *
-     * @param orchestrator - Value for orchestrator.
-     * @param modelClient - Value for model client.
-     * @param config - Configuration or policy settings applied here.
-     */
+    /** Initializes the autonomous loop with explicit orchestration, model, and runtime dependencies. */
     constructor(
         private readonly orchestrator: BrainOrchestrator,
         private readonly modelClient: ModelClient,
         private readonly config: BrainConfig
     ) { }
 
-    /**
-     * Evaluates the next autonomous step through the extracted model-policy helper.
-     *
-     * **Why it exists:**
-     * Preserves a stable, testable loop-evaluation seam even when the inner runtime helpers are
-     * refactored into smaller autonomy modules.
-     *
-     * **What it talks to:**
-     * - Uses `evaluateAutonomousNextStepPolicy` (import `evaluateAutonomousNextStepPolicy`) from
-     *   `./autonomy/agentLoopRuntimeSupport`.
-     *
-     * @param overarchingGoal - Current mission goal text.
-     * @param lastResult - Result from the latest autonomous-loop iteration.
-     * @param missionEvidence - Cumulative deterministic mission evidence so far.
-     * @param trackedManagedProcessLeaseId - Tracked managed-process lease, if any.
-     * @param trackedLoopbackTarget - Tracked loopback target, if any.
-     * @returns Promise resolving to the next-step policy decision.
-     */
+    /** Delegates next-step model evaluation through the extracted autonomy-policy seam. */
     async evaluateNextStep(
         overarchingGoal: string,
         lastResult: TaskRunResult,
@@ -120,20 +90,7 @@ export class AutonomousLoop {
         );
     }
 
-    /**
-     * Evaluates the next proactive daemon goal through the extracted model-policy helper.
-     *
-     * **Why it exists:**
-     * Keeps proactive-goal generation available as an explicit class seam so tests and future
-     * runtime wiring do not depend on private helper imports.
-     *
-     * **What it talks to:**
-     * - Uses `evaluateProactiveAutonomousGoalPolicy` (import
-     *   `evaluateProactiveAutonomousGoalPolicy`) from `./autonomy/agentLoopRuntimeSupport`.
-     *
-     * @param previousGoal - Goal that just completed.
-     * @returns Promise resolving to the next proactive-goal decision.
-     */
+    /** Delegates proactive-goal generation through the extracted autonomy-policy seam. */
     async evaluateProactiveGoal(previousGoal: string) {
         return await evaluateProactiveAutonomousGoalPolicy(
             this.modelClient,
@@ -142,13 +99,7 @@ export class AutonomousLoop {
         );
     }
 
-    /**
-     * Runs the autonomous goal-resolution loop with optional progress callbacks.
-     * Each iteration plans, governs, and executes a subtask, then evaluates whether the goal is met.
-     * Pass an {@link AbortSignal} to allow external cancellation (e.g. user "stop" command).
-     * In daemon mode, an optional rollover limit can bound how many proactive goal hand-offs occur
-     * before the loop exits.
-     */
+    /** Runs the bounded autonomous loop, including retries, proof gates, cleanup, and optional daemon rollover. */
     async run(
         overarchingGoal: string,
         callbacks?: AutonomousLoopCallbacks,
@@ -194,6 +145,7 @@ export class AutonomousLoop {
             let trackedLoopbackTarget: LoopbackTargetHint | null = null;
             let readinessFailureLeaseId: string | null = null;
             let readinessFailureCount = 0;
+            const structuredRecoveryAttemptCounts = new Map<string, number>();
             let goalMetInCurrentLoop = false;
             const abortCurrentLoop = async (
                 reason: string,
@@ -331,7 +283,6 @@ export class AutonomousLoop {
                     readinessFailureCount = 0;
                 }
                 const missingAfter = resolveMissingMissionRequirements(missionContract, missionEvidence);
-
                 const blocked = result.actionResults.filter(r => !r.approved).length;
                 console.log(`\n[Iteration ${iteration} Completed] ${result.summary}`);
                 await callbacks?.onIterationComplete?.(
@@ -442,7 +393,8 @@ export class AutonomousLoop {
                     await callbacks?.onStateChange?.({
                         state: "retrying",
                         iteration,
-                        message: buildWorkspaceRecoveryStateMessage(workspaceRecoverySignal)
+                        message: buildWorkspaceRecoveryStateMessage(workspaceRecoverySignal),
+                        recoveryKind: "workspace_auto_recovery"
                     });
                     currentInput = buildWorkspaceRecoveryNextUserInput(
                         currentOverarchingGoal,
@@ -472,7 +424,8 @@ export class AutonomousLoop {
                         iteration,
                         message: buildWorkspaceRecoveryStateMessage(
                             inspectionOnlyWorkspaceRecoverySignal
-                        )
+                        ),
+                        recoveryKind: "workspace_auto_recovery"
                     });
                     currentInput =
                         inspectionOnlyWorkspaceRecoverySignal.recommendedAction ===
@@ -496,11 +449,51 @@ export class AutonomousLoop {
                         state: "retrying",
                         iteration,
                         message:
-                            "I shut down the exact tracked holders that were blocking the move. I'm retrying the folder move now and will verify what changed."
+                            "I shut down the exact tracked holders that were blocking the move. I'm retrying the folder move now and will verify what changed.",
+                        recoveryKind: "workspace_auto_recovery"
                     });
                     currentInput = buildWorkspaceRecoveryPostShutdownRetryInput(
                         currentOverarchingGoal
                     );
+                    continue;
+                }
+
+                const structuredRecoveryDecision = resolveStructuredRecoveryRuntimeDecision({
+                    overarchingGoal: currentOverarchingGoal,
+                    missionContract,
+                    missingRequirements: missingAfter,
+                    result,
+                    attemptCounts: structuredRecoveryAttemptCounts,
+                    trackedManagedProcessLeaseId,
+                    trackedLoopbackTarget
+                });
+                if (structuredRecoveryDecision.outcome === "abort") {
+                    await abortCurrentLoop(
+                        structuredRecoveryDecision.reason,
+                        iteration,
+                        structuredRecoveryDecision.cleanupManagedProcess
+                    );
+                    break;
+                }
+                if (structuredRecoveryDecision.outcome === "retry") {
+                    const previousAttempts =
+                        structuredRecoveryAttemptCounts.get(
+                            structuredRecoveryDecision.fingerprint
+                        ) ?? 0;
+                    structuredRecoveryAttemptCounts.set(
+                        structuredRecoveryDecision.fingerprint,
+                        previousAttempts + 1
+                    );
+                    console.log(`\n[Structured Recovery] ${structuredRecoveryDecision.reasoning}`);
+                    await callbacks?.onStateChange?.({
+                        state: "retrying",
+                        iteration,
+                        message: structuredRecoveryDecision.progressMessage,
+                        recoveryKind: "structured_executor_recovery",
+                        recoveryClass: structuredRecoveryDecision.recoveryClass,
+                        recoveryFingerprint: structuredRecoveryDecision.fingerprint
+                    });
+                    currentInput = structuredRecoveryDecision.nextUserInput;
                     continue;
                 }
 

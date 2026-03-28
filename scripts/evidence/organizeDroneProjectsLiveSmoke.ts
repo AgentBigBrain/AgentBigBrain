@@ -150,7 +150,7 @@ const LIVE_RUN_RUNTIME_PATH = path.resolve(
 const MANAGED_PROCESS_SNAPSHOT_PATH = path.join(LIVE_RUN_RUNTIME_PATH, "managed_processes.json");
 const BROWSER_SESSION_SNAPSHOT_PATH = path.join(LIVE_RUN_RUNTIME_PATH, "browser_sessions.json");
 const PROVIDER_BLOCK_PATTERN =
-  /(?:429|exceeded your current quota|rate limit|fetch failed|request timed out|socket hang up|ECONNRESET)/i;
+/(?:429|exceeded your current quota|usage limit|purchase more credits|try again at|rate limit|fetch failed|request timed out|socket hang up|ECONNRESET)/i;
 const TURN_TIMEOUT_MS = 50_000;
 const SMOKE_DEADLINE_MS = 70_000;
 const CLEANUP_STEP_TIMEOUT_MS = 3_000;

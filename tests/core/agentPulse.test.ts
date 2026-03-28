@@ -94,6 +94,58 @@ test("agent pulse blocks contextual-followup reason without linkage confidence",
   assert.equal(decision.decisionCode, "NO_CONTEXTUAL_LINKAGE");
 });
 
+test("agent pulse suppresses stale-fact revalidation during workflow-dominant sessions", () => {
+  const decision = evaluateAgentPulsePolicy(
+    buildPolicy(),
+    buildInput({
+      reason: "stale_fact_revalidation",
+      staleFactCount: 2,
+      sessionDominantLane: "workflow",
+      sessionHasActiveWorkflowContinuity: true
+    })
+  );
+
+  assert.equal(decision.allowed, false);
+  assert.equal(decision.decisionCode, "SESSION_DOMAIN_SUPPRESSED");
+});
+
+test("agent pulse keeps unresolved commitments eligible during workflow-dominant sessions", () => {
+  const decision = evaluateAgentPulsePolicy(
+    buildPolicy({
+      quietHoursStartHourLocal: 1,
+      quietHoursEndHourLocal: 5
+    }),
+    buildInput({
+      reason: "unresolved_commitment",
+      staleFactCount: 0,
+      unresolvedCommitmentCount: 1,
+      sessionDominantLane: "workflow",
+      sessionHasActiveWorkflowContinuity: true
+    })
+  );
+
+  assert.equal(decision.allowed, true);
+  assert.equal(decision.decisionCode, "ALLOWED");
+});
+
+test("agent pulse does not suppress workflow-lane sessions when continuity is inactive", () => {
+  const decision = evaluateAgentPulsePolicy(
+    buildPolicy({
+      quietHoursStartHourLocal: 1,
+      quietHoursEndHourLocal: 5
+    }),
+    buildInput({
+      reason: "stale_fact_revalidation",
+      staleFactCount: 2,
+      sessionDominantLane: "workflow",
+      sessionHasActiveWorkflowContinuity: false
+    })
+  );
+
+  assert.equal(decision.allowed, true);
+  assert.equal(decision.decisionCode, "ALLOWED");
+});
+
 test("agent pulse blocks during quiet hours unless override is enabled", () => {
   const policy = buildPolicy({
     quietHoursStartHourLocal: 22,

@@ -21,7 +21,11 @@ import {
 } from "../../src/organs/liveRun/browserVerifier";
 import { BrowserSessionRegistry } from "../../src/organs/liveRun/browserSessionRegistry";
 import { executeCloseBrowser } from "../../src/organs/liveRun/closeBrowserHandler";
-import { LiveRunExecutorContext } from "../../src/organs/liveRun/contracts";
+import {
+  inferManagedProcessLoopbackTarget,
+  LiveRunExecutorContext,
+  performLocalHttpProbe
+} from "../../src/organs/liveRun/contracts";
 import { executeBrowserVerification } from "../../src/organs/liveRun/browserVerificationHandler";
 import { executeCheckProcess } from "../../src/organs/liveRun/checkProcessHandler";
 import {
@@ -149,6 +153,17 @@ test("isLikelyLoopbackPreviewCandidate filters unrelated loopback services after
   );
   assert.equal(isLikelyLoopbackPreviewCandidate("node.exe", "node vite dev"), true);
   assert.equal(isLikelyLoopbackPreviewCandidate("python.exe", null), true);
+});
+
+test("inferManagedProcessLoopbackTarget recognizes Next.js hostname flags", () => {
+  assert.deepEqual(
+    inferManagedProcessLoopbackTarget("npm run start -- --hostname 127.0.0.1 --port 3000"),
+    {
+      host: "127.0.0.1",
+      port: 3000,
+      url: "http://127.0.0.1:3000"
+    }
+  );
 });
 
 function buildShellEnabledConfig(overrides: Partial<BrainConfig> = {}): BrainConfig {
@@ -330,14 +345,76 @@ test("executeStartProcess registers a managed-process lease after spawn", async 
   assert.equal(outcome.status, "success");
   assert.equal(calls.length, 1);
   assert.equal(outcome.executionMetadata?.processLifecycleStatus, "PROCESS_STARTED");
+  assert.equal(outcome.executionMetadata?.processRequestedPort, 8125);
+  assert.equal(outcome.executionMetadata?.processRequestedUrl, "http://localhost:8125");
   const leaseId = String(outcome.executionMetadata?.processLeaseId ?? "");
   assert.ok(leaseId.length > 0);
   assert.equal(registry.getSnapshot(leaseId)?.statusCode, "PROCESS_STARTED");
 });
 
-test("executeStartProcess routes simple Windows npm preview commands through cmd.exe with launcher env keys", async () => {
+test("executeStartProcess resolves a trusted Vite loopback target for generic npm run dev commands", async () => {
   const { calls, spawn } = createManagedProcessShellSpawn();
   const registry = new ManagedProcessRegistry();
+  const workspaceDir = mkdtempSync(path.join(os.tmpdir(), "abb-live-run-vite-loopback-"));
+  const port = await reserveUnusedTcpPort();
+  writeFileSync(
+    path.join(workspaceDir, "package.json"),
+    JSON.stringify(
+      {
+        name: "calm-drone",
+        private: true,
+        scripts: {
+          dev: "vite"
+        }
+      },
+      null,
+      2
+    ),
+    "utf8"
+  );
+  writeFileSync(
+    path.join(workspaceDir, "vite.config.js"),
+    [
+      "export default {",
+      "  server: {",
+      `    port: ${port}`,
+      "  },",
+      "  preview: {",
+      `    port: ${port}`,
+      "  }",
+      "};"
+    ].join("\n"),
+    "utf8"
+  );
+
+  try {
+    const context = buildLiveRunContext({
+      shellSpawn: spawn,
+      managedProcessRegistry: registry,
+      resolveShellCommandCwd: () => workspaceDir
+    });
+
+    const outcome = await executeStartProcess(context, "action_start_vite_live_run", {
+      command: "npm run dev",
+      cwd: workspaceDir
+    });
+
+    assert.equal(outcome.status, "success");
+    assert.equal(calls.length, 1);
+    assert.equal(outcome.executionMetadata?.processRequestedHost, "localhost");
+    assert.equal(outcome.executionMetadata?.processRequestedPort, port);
+    assert.equal(outcome.executionMetadata?.processRequestedUrl, `http://localhost:${port}`);
+    const leaseId = String(outcome.executionMetadata?.processLeaseId ?? "");
+    assert.equal(registry.getSnapshot(leaseId)?.requestedPort, port);
+  } finally {
+    rmSync(workspaceDir, { recursive: true, force: true });
+  }
+});
+
+test("executeStartProcess routes simple Windows npm preview commands through PowerShell with launcher env keys", async () => {
+  const { calls, spawn } = createManagedProcessShellSpawn();
+  const registry = new ManagedProcessRegistry();
+  const port = await reserveUnusedTcpPort();
   const originalComSpec = process.env.ComSpec;
   const originalPathExt = process.env.PATHEXT;
   const originalWindir = process.env.WINDIR;
@@ -371,17 +448,18 @@ test("executeStartProcess routes simple Windows npm preview commands through cmd
     });
 
     const outcome = await executeStartProcess(context, "action_start_windows_preview", {
-      command: "npm run preview -- --host 127.0.0.1 --port 4173",
+      command: `npm run preview -- --host 127.0.0.1 --port ${port}`,
       cwd: process.cwd()
     });
 
     assert.equal(outcome.status, "success");
     assert.equal(calls.length, 1);
-    assert.equal(calls[0]?.executable, "cmd.exe");
+    assert.equal(calls[0]?.executable, "powershell.exe");
     assert.deepEqual(calls[0]?.args, [
-      "/d",
-      "/c",
-      "npm run preview -- --host 127.0.0.1 --port 4173"
+      "-NoProfile",
+      "-NonInteractive",
+      "-Command",
+      `npm run preview -- --host 127.0.0.1 --port ${port}`
     ]);
     const spawnedEnv = (calls[0]?.options.env ?? {}) as NodeJS.ProcessEnv;
     assert.equal(spawnedEnv.ComSpec, process.env.ComSpec);
@@ -440,6 +518,64 @@ test("executeStartProcess fails early when the requested loopback port is alread
   }
 });
 
+test("executeStartProcess fails early for occupied Next.js hostname ports too", async () => {
+  const server = net.createServer();
+  await new Promise<void>((resolve) => {
+    server.listen(0, "127.0.0.1", () => resolve());
+  });
+
+  try {
+    const address = server.address();
+    assert.ok(address && typeof address !== "string");
+    let spawnCalls = 0;
+    const context = buildLiveRunContext({
+      shellSpawn: ((() => {
+        spawnCalls += 1;
+        return createManagedProcessChild();
+      }) as unknown) as typeof import("node:child_process").spawn
+    });
+
+    const outcome = await executeStartProcess(context, "action_conflict_next_start", {
+      command: `npm run start -- --hostname 127.0.0.1 --port ${address.port}`,
+      cwd: process.cwd()
+    });
+
+    assert.equal(outcome.status, "failed");
+    assert.equal(outcome.failureCode, "PROCESS_START_FAILED");
+    assert.equal(outcome.executionMetadata?.processStartupFailureKind, "PORT_IN_USE");
+    assert.equal(outcome.executionMetadata?.processRequestedHost, "127.0.0.1");
+    assert.equal(outcome.executionMetadata?.processRequestedPort, address.port);
+    assert.equal(spawnCalls, 0);
+  } finally {
+    await new Promise<void>((resolve, reject) => {
+      server.close((error) => (error ? reject(error) : resolve()));
+    });
+  }
+});
+
+test("performLocalHttpProbe fails closed when a loopback socket resets mid-request", async () => {
+  const resetServer = net.createServer((socket) => {
+    socket.destroy();
+  });
+  await new Promise<void>((resolve) => {
+    resetServer.listen(0, "127.0.0.1", () => resolve());
+  });
+
+  try {
+    const address = resetServer.address();
+    assert.ok(address && typeof address !== "string");
+    const observedStatus = await performLocalHttpProbe(
+      new URL(`http://127.0.0.1:${address.port}/index.html`),
+      1_000
+    );
+    assert.equal(observedStatus, null);
+  } finally {
+    await new Promise<void>((resolve, reject) => {
+      resetServer.close((error) => (error ? reject(error) : resolve()));
+    });
+  }
+});
+
 test("executeCheckProcess and executeStopProcess use the managed-process registry contract", async () => {
   const registry = new ManagedProcessRegistry();
   const child = createManagedProcessChild(9333);
@@ -466,6 +602,56 @@ test("executeCheckProcess and executeStopProcess use the managed-process registr
   const stopOutcome = await executeStopProcess(context, { leaseId: snapshot.leaseId });
   assert.equal(stopOutcome.status, "success");
   assert.equal(stopOutcome.executionMetadata?.processLifecycleStatus, "PROCESS_STOPPED");
+});
+
+test("executeStopProcess can preserve linked browser sessions during tracked live refresh restarts", async () => {
+  const registry = new ManagedProcessRegistry();
+  const browserSessionRegistry = new BrowserSessionRegistry();
+  const child = createManagedProcessChild(9444);
+  const snapshot = registry.registerStarted({
+    actionId: "action_registry_live_refresh",
+    child,
+    commandFingerprint: "fingerprint-refresh",
+    cwd: process.cwd(),
+    shellExecutable: "node",
+    shellKind: "powershell"
+  });
+  const managedBrowserHandles = createManagedBrowserSessionHandles(7555);
+  browserSessionRegistry.registerManagedSession({
+    sessionId: "browser_session:live_refresh",
+    url: "http://127.0.0.1:4173/",
+    visibility: "visible",
+    openedAt: new Date().toISOString(),
+    browser: managedBrowserHandles.browser,
+    context: managedBrowserHandles.context,
+    page: managedBrowserHandles.page,
+    browserProcessPid: managedBrowserHandles.browserProcessPid,
+    workspaceRootPath: process.cwd(),
+    linkedProcessLeaseId: snapshot.leaseId,
+    linkedProcessCwd: snapshot.cwd,
+    linkedProcessPid: snapshot.pid
+  });
+  const context = buildLiveRunContext({
+    managedProcessRegistry: registry,
+    browserSessionRegistry,
+    terminateProcessTree: async (processChild) => {
+      processChild.emit("close", 0, "SIGTERM");
+      return true;
+    }
+  });
+
+  const stopOutcome = await executeStopProcess(context, {
+    leaseId: snapshot.leaseId,
+    preserveLinkedBrowserSessions: true
+  });
+
+  assert.equal(stopOutcome.status, "success");
+  assert.equal(stopOutcome.executionMetadata?.processLifecycleStatus, "PROCESS_STOPPED");
+  assert.match(stopOutcome.output, /Preserved 1 linked browser window/i);
+  assert.equal(
+    browserSessionRegistry.getSnapshot("browser_session:live_refresh")?.status,
+    "open"
+  );
 });
 
 test("executeStopProcess recovers a persisted managed-process lease by pid after runtime churn", async () => {

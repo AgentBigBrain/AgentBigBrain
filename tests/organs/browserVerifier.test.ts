@@ -157,3 +157,38 @@ test("PlaywrightBrowserVerifier honors visible-window override", async () => {
   assert.equal(result.status, "verified");
   assert.match(result.detail, /local visible Chromium window/i);
 });
+
+test("PlaywrightBrowserVerifier treats slug titles as matching human-spaced expectations", async () => {
+  const chromium = {
+    launch: async () => ({
+      newContext: async () => ({
+        newPage: async () => ({
+          goto: async () => undefined,
+          title: async () => "downtown-detroit-drones",
+          textContent: async () =>
+            "downtown-detroit-dronesStoryFlowTrustLaunchSingle-page landing experience",
+          close: async () => undefined
+        }),
+        close: async () => undefined
+      }),
+      close: async () => undefined
+    })
+  };
+  const verifier = new PlaywrightBrowserVerifier({
+    chromiumLoader: async () => ({
+      chromium,
+      sourceModule: "playwright"
+    })
+  });
+
+  const result = await verifier.verify({
+    url: "http://127.0.0.1:3000/",
+    expectedTitle: "Downtown Detroit Drones",
+    expectedText: "Downtown Detroit Drones",
+    timeoutMs: 2000
+  });
+
+  assert.equal(result.status, "verified");
+  assert.equal(result.matchedTitle, true);
+  assert.equal(result.matchedText, true);
+});

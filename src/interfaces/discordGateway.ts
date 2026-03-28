@@ -1,7 +1,6 @@
 /**
  * @fileoverview Implements a minimal Discord gateway + REST transport that maps MESSAGE_CREATE events into secure adapter messages.
  */
-
 import path from "node:path";
 import { DiscordAdapter } from "./discordAdapter";
 import { AgentPulseScheduler } from "./agentPulseScheduler";
@@ -9,16 +8,8 @@ import { ConversationManager } from "./conversationManager";
 import { type ConversationNotifierTransport } from "./conversationRuntime/managerContracts";
 import { DiscordInterfaceConfig } from "./runtimeConfig";
 import { InterfaceSessionStore } from "./sessionStore";
-import {
-  deliverPreparedTransportResponse,
-  handleAcceptedTransportConversation
-} from "./transportRuntime/inboundDispatch";
-import {
-  createDiscordGatewayNotifier,
-  type DiscordMessageCreateData,
-  prepareDiscordMessageCreate,
-  sendDiscordGatewayMessage
-} from "./transportRuntime/discordGatewayRuntime";
+import { deliverPreparedTransportResponse, handleAcceptedTransportConversation } from "./transportRuntime/inboundDispatch";
+import { createDiscordGatewayNotifier, type DiscordMessageCreateData, prepareDiscordMessageCreate, sendDiscordGatewayMessage } from "./transportRuntime/discordGatewayRuntime";
 import {
   attachDiscordSocketLifecycle,
   handleDiscordHelloLifecycle,
@@ -35,30 +26,22 @@ import { runGatewayCheckpointReview } from "./checkpointReviewRouting";
 import { createDynamicPulseEntityGraphGetter } from "./entityGraphRuntime";
 import { renderPulseUserFacingSummaryV1 } from "./pulseUxRuntime";
 import { selectUserFacingSummary } from "./userFacingResult";
-import {
-  extractChannelIdFromConversationKey,
-  isInterfaceDebugEnabled
-} from "./discordGatewaySupport";
-import {
-  runGatewaySessionAutonomousTask,
-  runGatewaySessionTextTask
-} from "./gatewaySessionExecution";
+import { extractChannelIdFromConversationKey, isInterfaceDebugEnabled } from "./discordGatewaySupport";
+import { runGatewaySessionAutonomousTask, runGatewaySessionTextTask } from "./gatewaySessionExecution";
 import { runCheckpoint611LiveReview } from "./CheckpointReviewRunners/stage6_5Checkpoint6_11Live";
 import { runCheckpoint613LiveReview } from "./CheckpointReviewRunners/stage6_5Checkpoint6_13Live";
 import { runCheckpoint675LiveReview } from "../core/stage6_75CheckpointLive";
 import { EntityGraphStore } from "../core/entityGraphStore";
 import { buildDiscordCapabilitySummary } from "./conversationRuntime/capabilityIntrospection";
 import { SkillRegistryStore } from "../organs/skillRegistry/skillRegistryStore";
-import type { LocalIntentModelResolver } from "../organs/languageUnderstanding/localIntentModelContracts";
+import type { AutonomyBoundaryInterpretationResolver, ContinuationInterpretationResolver, ContextualFollowupInterpretationResolver, ContextualReferenceInterpretationResolver, EntityDomainHintInterpretationResolver, EntityReferenceInterpretationResolver, EntityTypeInterpretationResolver, HandoffControlInterpretationResolver, IdentityInterpretationResolver, LocalIntentModelResolver, StatusRecallBoundaryInterpretationResolver, TopicKeyInterpretationResolver } from "../organs/languageUnderstanding/localIntentModelContracts";
+import type { ProposalReplyInterpretationResolver } from "../organs/languageUnderstanding/localIntentModelProposalReplyContracts";
 import { InterfaceBrainRegistry } from "./interfaceBrainRegistry";
-
 interface DiscordGatewayOptions {
   sessionStore?: InterfaceSessionStore;
   entityGraphStore?: EntityGraphStore;
-  localIntentModelResolver?: LocalIntentModelResolver;
-  brainRegistry?: InterfaceBrainRegistry;
+  localIntentModelResolver?: LocalIntentModelResolver; autonomyBoundaryInterpretationResolver?: AutonomyBoundaryInterpretationResolver; statusRecallBoundaryInterpretationResolver?: StatusRecallBoundaryInterpretationResolver; continuationInterpretationResolver?: ContinuationInterpretationResolver; contextualFollowupInterpretationResolver?: ContextualFollowupInterpretationResolver; contextualReferenceInterpretationResolver?: ContextualReferenceInterpretationResolver; entityDomainHintInterpretationResolver?: EntityDomainHintInterpretationResolver; entityReferenceInterpretationResolver?: EntityReferenceInterpretationResolver; entityTypeInterpretationResolver?: EntityTypeInterpretationResolver; handoffControlInterpretationResolver?: HandoffControlInterpretationResolver; identityInterpretationResolver?: IdentityInterpretationResolver; proposalReplyInterpretationResolver?: ProposalReplyInterpretationResolver; topicKeyInterpretationResolver?: TopicKeyInterpretationResolver; brainRegistry?: InterfaceBrainRegistry;
 }
-
 export class DiscordGateway {
   private running = false;
   private socket: DiscordSocket | null = null;
@@ -73,9 +56,10 @@ export class DiscordGateway {
   private readonly debugEnabled = isInterfaceDebugEnabled();
   private readonly autonomousAbortControllers = new Map<string, AbortController>();
   private readonly entityGraphStore: EntityGraphStore;
+  private readonly entityDomainHintInterpretationResolver?: EntityDomainHintInterpretationResolver;
+  private readonly entityTypeInterpretationResolver?: EntityTypeInterpretationResolver;
   private readonly skillRegistryStore = new SkillRegistryStore(path.resolve(process.cwd(), "runtime/skills"));
   private readonly brainRegistry: InterfaceBrainRegistry;
-
   /**
    * Initializes `DiscordGateway` with deterministic runtime dependencies.
    *
@@ -95,11 +79,7 @@ export class DiscordGateway {
    * @param config - Configuration or policy settings applied here.
    * @param options - Optional tuning knobs for this operation.
    */
-  constructor(
-    private readonly adapter: DiscordAdapter,
-    private readonly config: DiscordInterfaceConfig,
-    options: DiscordGatewayOptions = {}
-  ) {
+  constructor(private readonly adapter: DiscordAdapter, private readonly config: DiscordInterfaceConfig, options: DiscordGatewayOptions = {}) {
     const listManagedProcessSnapshots =
       typeof this.adapter.listManagedProcessSnapshots === "function"
         ? async () => this.adapter.listManagedProcessSnapshots()
@@ -110,6 +90,8 @@ export class DiscordGateway {
         : undefined;
     this.sessionStore = options.sessionStore ?? new InterfaceSessionStore();
     this.entityGraphStore = options.entityGraphStore ?? new EntityGraphStore();
+    this.entityDomainHintInterpretationResolver = options.entityDomainHintInterpretationResolver;
+    this.entityTypeInterpretationResolver = options.entityTypeInterpretationResolver;
     this.brainRegistry = options.brainRegistry ?? new InterfaceBrainRegistry();
     this.conversationManager = new ConversationManager(this.sessionStore, {
       ackDelayMs: this.config.security.ackDelayMs,
@@ -130,6 +112,8 @@ export class DiscordGateway {
         const graph = await this.entityGraphStore.getGraph();
         return this.adapter.queryContinuityFacts(graph, request);
       },
+      rememberConversationProfileInput: async (userInput, receivedAt) =>
+        this.adapter.rememberConversationProfileInput(userInput, receivedAt),
       reviewConversationMemory: async (request) =>
         this.adapter.reviewConversationMemory(
           request.reviewTaskId,
@@ -161,6 +145,18 @@ export class DiscordGateway {
           request.nowIso
         ),
       localIntentModelResolver: options.localIntentModelResolver,
+      autonomyBoundaryInterpretationResolver: options.autonomyBoundaryInterpretationResolver,
+      statusRecallBoundaryInterpretationResolver: options.statusRecallBoundaryInterpretationResolver,
+      continuationInterpretationResolver: options.continuationInterpretationResolver,
+      contextualFollowupInterpretationResolver: options.contextualFollowupInterpretationResolver,
+      contextualReferenceInterpretationResolver: options.contextualReferenceInterpretationResolver,
+      entityReferenceInterpretationResolver: options.entityReferenceInterpretationResolver,
+      handoffControlInterpretationResolver: options.handoffControlInterpretationResolver,
+      identityInterpretationResolver: options.identityInterpretationResolver,
+      proposalReplyInterpretationResolver: options.proposalReplyInterpretationResolver,
+      topicKeyInterpretationResolver: options.topicKeyInterpretationResolver,
+      getEntityGraph: async () => this.entityGraphStore.getGraph(),
+      reconcileEntityAliasCandidate: async (request) => { const result = await this.entityGraphStore.reconcileAliasCandidate(request); return { acceptedAlias: result.acceptedAlias, rejectionReason: result.rejectionReason }; },
       listAvailableSkills: async () => this.skillRegistryStore.listAvailableSkills(),
       describeRuntimeCapabilities: async () =>
         buildDiscordCapabilitySummary(
@@ -475,17 +471,24 @@ export class DiscordGateway {
         conversationId: prepared.channelId,
         userId: prepared.userId,
         username: prepared.username,
+        transportIdentity: prepared.transportIdentity ?? null,
         conversationVisibility: prepared.conversationVisibility,
         text: prepared.inbound.text,
         receivedAt: prepared.inbound.receivedAt ?? new Date().toISOString()
       },
       entityGraphEvent: prepared.entityGraphEvent,
-      notifier
-      ,
+      notifier,
       conversationManager: this.conversationManager,
       entityGraphStore: this.entityGraphStore,
       dynamicPulseEnabled: this.config.security.enableDynamicPulse,
+      entityDomainHintInterpretationResolver: this.config.security.enableDynamicPulse ? this.entityDomainHintInterpretationResolver : undefined,
+      entityTypeInterpretationResolver: this.config.security.enableDynamicPulse ? this.entityTypeInterpretationResolver : undefined,
       abortControllers: this.autonomousAbortControllers,
+      resolveEntityGraphDomainHint: async () => {
+        const session = await this.sessionStore.getSession(sessionKey);
+        const domainHint = session?.domainContext.dominantLane ?? "unknown";
+        return domainHint === "unknown" ? null : domainHint;
+      },
       runTextTask: (input: string, receivedAt: string) =>
         runGatewaySessionTextTask(
           this.sessionStore,

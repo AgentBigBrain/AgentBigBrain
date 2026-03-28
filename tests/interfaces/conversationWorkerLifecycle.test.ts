@@ -338,6 +338,11 @@ test("persistExecutedJobOutcome turns a paused autonomous run into a waiting che
     "pick this back up when you're ready, and I'll continue from the saved checkpoint"
   );
   assert.equal(session.returnHandoff?.workspaceRootPath, "C:\\Users\\testuser\\Desktop\\drone-company");
+  assert.equal(session.domainContext.dominantLane, "workflow");
+  assert.equal(session.domainContext.continuitySignals.activeWorkspace, true);
+  assert.equal(session.domainContext.continuitySignals.returnHandoff, true);
+  assert.equal(session.domainContext.recentLaneHistory.at(-1)?.lane, "workflow");
+  assert.equal(session.domainContext.recentLaneHistory.at(-1)?.source, "continuity_state");
 });
 
 test("shouldSuppressWorkerHeartbeat suppresses autonomous and system jobs", () => {
@@ -549,6 +554,144 @@ test("persistExecutedJobOutcome writes canonical recent-job state and assistant 
     },
     false
   ), "Request failed: No route.");
+});
+
+test("persistExecutedJobOutcome promotes scaffold shell workspace roots into active workspace continuity", () => {
+  const nowIso = "2026-03-27T03:10:00.000Z";
+  const completedAt = "2026-03-27T03:10:05.000Z";
+  const session = buildSessionSeed({
+    provider: "telegram",
+    conversationId: "chat-shell-workspace-root",
+    userId: "user-1",
+    username: "owner",
+    conversationVisibility: "private",
+    receivedAt: nowIso
+  });
+  session.runningJobId = "job-shell-workspace-root";
+  const runningJob: ConversationJob = {
+    ...buildQueuedJob(nowIso),
+    id: "job-shell-workspace-root",
+    status: "running",
+    startedAt: nowIso
+  };
+  session.recentJobs = [runningJob];
+
+  persistExecutedJobOutcome({
+    session,
+    executedJob: {
+      ...runningJob,
+      status: "completed",
+      completedAt,
+      resultSummary:
+        "Autonomous task completed after 1 iteration(s). I finished the goal with 2 approved action(s) and 0 blocked.",
+      errorMessage: null
+    },
+    executionResult: {
+      summary:
+        "Autonomous task completed after 1 iteration(s). I finished the goal with 2 approved action(s) and 0 blocked.",
+      taskRunResult: {
+        task: {
+          id: "task-shell-workspace-root",
+          goal: "Create the React workspace and stop after install.",
+          userInput: "Create the React workspace and stop after install.",
+          createdAt: nowIso
+        },
+        plan: {
+          taskId: "task-shell-workspace-root",
+          plannerNotes: "Scaffold and install.",
+          actions: [
+            {
+              id: "action-shell-scaffold",
+              type: "shell_command",
+              description: "Scaffold the workspace.",
+              params: {
+                command: "npm create vite@latest Drone Preview App -- --template react",
+                cwd: "C:\\Users\\testuser\\Desktop"
+              },
+              estimatedCostUsd: 0.2
+            },
+            {
+              id: "action-shell-install",
+              type: "shell_command",
+              description: "Install dependencies.",
+              params: {
+                command: "npm install",
+                cwd: "C:\\Users\\testuser\\Desktop\\Drone Preview App"
+              },
+              estimatedCostUsd: 0.2
+            }
+          ]
+        },
+        actionResults: [
+          {
+            action: {
+              id: "action-shell-scaffold",
+              type: "shell_command",
+              description: "Scaffold the workspace.",
+              params: {
+                command: "npm create vite@latest Drone Preview App -- --template react",
+                cwd: "C:\\Users\\testuser\\Desktop"
+              },
+              estimatedCostUsd: 0.2
+            },
+            mode: "escalation_path",
+            approved: true,
+            output: "Shell success: scaffolded the React app.",
+            executionStatus: "success",
+            blockedBy: [],
+            violations: [],
+            votes: [],
+            executionMetadata: {
+              directoryPath: "C:\\Users\\testuser\\Desktop\\Drone Preview App"
+            }
+          },
+          {
+            action: {
+              id: "action-shell-install",
+              type: "shell_command",
+              description: "Install dependencies.",
+              params: {
+                command: "npm install",
+                cwd: "C:\\Users\\testuser\\Desktop\\Drone Preview App"
+              },
+              estimatedCostUsd: 0.2
+            },
+            mode: "escalation_path",
+            approved: true,
+            output: "Shell success: installed dependencies.",
+            executionStatus: "success",
+            blockedBy: [],
+            violations: [],
+            votes: [],
+            executionMetadata: {
+              directoryPath: "C:\\Users\\testuser\\Desktop\\Drone Preview App"
+            }
+          }
+        ],
+        summary:
+          "Autonomous task completed after 1 iteration(s). I finished the goal with 2 approved action(s) and 0 blocked.",
+        startedAt: nowIso,
+        completedAt
+      }
+    },
+    maxRecentJobs: 20,
+    maxRecentActions: 12,
+    maxBrowserSessions: 6,
+    maxPathDestinations: 8,
+    maxConversationTurns: 40
+  });
+
+  assert.equal(session.activeWorkspace?.rootPath, "C:\\Users\\testuser\\Desktop\\Drone Preview App");
+  assert.equal(session.activeWorkspace?.primaryArtifactPath, null);
+  assert.equal(session.activeWorkspace?.previewUrl, null);
+  assert.equal(session.activeWorkspace?.ownershipState, "stale");
+  assert.ok(
+    session.pathDestinations.some(
+      (destination) =>
+        destination.resolvedPath === "C:\\Users\\testuser\\Desktop\\Drone Preview App"
+    )
+  );
+  assert.equal(session.returnHandoff?.workspaceRootPath, "C:\\Users\\testuser\\Desktop\\Drone Preview App");
 });
 
 test("persistExecutedJobOutcome retains every live preview lease for the current workspace when the browser session links only the newest one", () => {

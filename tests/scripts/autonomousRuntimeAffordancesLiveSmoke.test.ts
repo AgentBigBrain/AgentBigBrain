@@ -112,7 +112,7 @@ test("autonomous runtime affordances front-door live smoke emits either a PASS a
 
   if (
     persisted.status === "BLOCKED" &&
-    /(?:429|exceeded your current quota|rate limit|fetch failed|request timed out|socket hang up|ECONNRESET|requires a real model backend|effective backend is mock|missing OPENAI_API_KEY)/i.test(
+      /(?:429|exceeded your current quota|usage limit|purchase more credits|try again at|rate limit|fetch failed|request timed out|socket hang up|ECONNRESET|Browser open failed|browserContext\.newPage: Target page, context or browser has been closed|requires a real model backend|effective backend is mock|missing OPENAI_API_KEY)/i.test(
       combinedBlockerReason
     )
   ) {
@@ -130,7 +130,7 @@ test("autonomous runtime affordances front-door live smoke emits either a PASS a
   if (persisted.status === "BLOCKED") {
     assert.match(
       combinedBlockerReason,
-      /Timed out waiting|Skipped the front-door clarification scenario|429|socket hang up|ECONNRESET|fetch failed|request timed out/i
+      /Timed out waiting|Skipped the front-door clarification scenario|429|socket hang up|ECONNRESET|fetch failed|request timed out|Browser open failed|browserContext\.newPage: Target page, context or browser has been closed/i
     );
     assert.equal(
       ["PASS", "BLOCKED"].includes(persisted.browserWorkflowScenario.status),

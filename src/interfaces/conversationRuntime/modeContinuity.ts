@@ -4,6 +4,10 @@
 
 import { extractExecutionPreferences } from "./executionPreferenceExtraction";
 import { isDirectConversationOnlyRequest } from "./directConversationIntent";
+import {
+  buildRecentIdentityInterpretationContext,
+  shouldPreserveDeterministicDirectChatTurn
+} from "./chatTurnSignals";
 import type { ResolvedConversationIntentMode } from "./intentModeContracts";
 import type { ConversationIntentMode, ConversationSession } from "../sessionStore";
 
@@ -36,6 +40,7 @@ const CONTINUABLE_MODES = new Set<ConversationIntentMode>([
   "autonomous",
   "review"
 ]);
+const CONTINUATION_INTERPRETATION_MAX_CHARS = 160;
 
 /**
  * Builds a promoted intent result when the current utterance clearly means "keep doing the same kind of work."
@@ -59,6 +64,70 @@ function buildContinuityResolution(
     explanation,
     clarification: null
   };
+}
+
+/**
+ * Returns whether a bounded model-assisted continuation check is allowed for this turn after the
+ * deterministic continuity fast path has already failed.
+ *
+ * @param session - Current conversation session containing the last affirmed working mode.
+ * @param userInput - Raw current user text.
+ * @param resolvedIntentMode - Canonical intent result before model-assisted continuity promotion.
+ * @returns `true` when a bounded continuation-interpretation call is allowed.
+ */
+export function shouldAttemptModeContinuityInterpretation(
+  session: ConversationSession,
+  userInput: string,
+  resolvedIntentMode: ResolvedConversationIntentMode
+): boolean {
+  const continuity = session.modeContinuity;
+  if (!continuity) {
+    return false;
+  }
+  if (resolvedIntentMode.mode !== "chat" && resolvedIntentMode.mode !== "unclear") {
+    return false;
+  }
+  if (resolvedIntentMode.clarification) {
+    return false;
+  }
+  if (!CONTINUABLE_MODES.has(continuity.activeMode)) {
+    return false;
+  }
+  const normalized = userInput.trim();
+  if (!normalized || normalized.includes("\n") || normalized.length > CONTINUATION_INTERPRETATION_MAX_CHARS) {
+    return false;
+  }
+  const recentIdentityContext = buildRecentIdentityInterpretationContext(
+    session.conversationTurns.slice(-4)
+  );
+  if (
+    isDirectConversationOnlyRequest(normalized) ||
+    shouldPreserveDeterministicDirectChatTurn(normalized, recentIdentityContext)
+  ) {
+    return false;
+  }
+  return resolveModeContinuityIntent(session, userInput, resolvedIntentMode) === null;
+}
+
+/**
+ * Builds a promoted continuity intent from a validated continuation-interpretation result.
+ *
+ * @param session - Current conversation session with the active continuity mode.
+ * @param explanation - Bounded explanation returned by continuation interpretation.
+ * @param confidence - Confidence returned by continuation interpretation.
+ * @returns Promoted continuity intent preserving the active working mode.
+ */
+export function buildModeContinuityInterpretationResolution(
+  session: ConversationSession,
+  explanation: string,
+  confidence: "high" | "medium" | "low"
+): ResolvedConversationIntentMode {
+  return buildContinuityResolution(
+    session,
+    "intent_mode_continuity_local_interpretation",
+    explanation,
+    confidence === "high" ? "high" : "medium"
+  );
 }
 
 /**

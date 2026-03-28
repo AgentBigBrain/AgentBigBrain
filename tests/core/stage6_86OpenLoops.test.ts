@@ -8,6 +8,7 @@ import { test } from "node:test";
 import { buildConversationStackFromTurnsV1 } from "../../src/core/stage6_86ConversationStack";
 import {
   detectOpenLoopTriggerV1,
+  findBestOpenLoopResumeMatchV1,
   getOpenLoopLookupTermsV1,
   resolveOpenLoopOnConversationStackV1,
   selectOpenLoopsForPulseV1,
@@ -225,17 +226,66 @@ function resolvesOpenLoopAndKeepsItOutOfPulseSelection(): void {
 function buildsDeterministicOpenLoopLookupTerms(): void {
   const terms = getOpenLoopLookupTermsV1(
     {
-      entityRefs: ["Billy", "contact.billy"]
+      entityRefs: ["Owen", "contact.owen"]
     },
     {
-      topicLabel: "Billy Fall",
-      resumeHint: "Billy fell down and you wanted an update later."
+      topicLabel: "Owen Fall",
+      resumeHint: "Owen fell down and you wanted an update later."
     }
   );
 
-  assert.equal(terms.includes("billy"), true);
+  assert.equal(terms.includes("owen"), true);
   assert.equal(terms.includes("fall"), true);
   assert.equal(terms.includes("later"), true);
+}
+
+/**
+ * Implements `selectsDeterministicOpenLoopResumeMatchFromHintTerms` behavior within module scope.
+ * Interacts with local collaborators through imported modules and typed inputs/outputs.
+ */
+function selectsDeterministicOpenLoopResumeMatchFromHintTerms(): void {
+  const seeded = buildConversationStackFromTurnsV1(
+    [
+      {
+        role: "user",
+        text: "Let's talk about family follow ups.",
+        at: "2026-03-01T09:00:00.000Z"
+      },
+      {
+        role: "user",
+        text: "Switch to release readiness.",
+        at: "2026-03-01T09:10:00.000Z"
+      }
+    ],
+    "2026-03-01T09:10:00.000Z"
+  );
+  const familyThread = seeded.threads.find((thread) => thread.topicKey.includes("family"));
+  const releaseThread = seeded.threads.find((thread) => thread.topicKey.includes("release"));
+  assert.ok(familyThread && releaseThread);
+
+  const withFirstLoop = upsertOpenLoopOnConversationStackV1({
+    stack: seeded,
+    threadKey: familyThread!.threadKey,
+    text: "Remind me later to check whether Sarah got the MRI results.",
+    observedAt: "2026-03-01T09:02:00.000Z",
+    entityRefs: ["sarah", "mri"],
+    priorityHint: 0.8
+  }).stack;
+  const withSecondLoop = upsertOpenLoopOnConversationStackV1({
+    stack: withFirstLoop,
+    threadKey: releaseThread!.threadKey,
+    text: "Remind me later to confirm the deploy rollback owner.",
+    observedAt: "2026-03-01T09:12:00.000Z",
+    entityRefs: ["deploy", "rollback"],
+    priorityHint: 0.6
+  }).stack;
+
+  const selection = findBestOpenLoopResumeMatchV1(withSecondLoop, ["sarah", "mri"]);
+
+  assert.ok(selection);
+  assert.equal(selection?.threadKey, familyThread?.threadKey);
+  assert.equal(selection?.matchedTerms.includes("sarah"), true);
+  assert.equal(selection?.matchedTerms.includes("mri"), true);
 }
 
 test(
@@ -261,4 +311,8 @@ test(
 test(
   "stage 6.86 open loops build deterministic lookup terms for continuity linkage",
   buildsDeterministicOpenLoopLookupTerms
+);
+test(
+  "stage 6.86 open loops select the best deterministic resume match from interpreted hint terms",
+  selectsDeterministicOpenLoopResumeMatchFromHintTerms
 );

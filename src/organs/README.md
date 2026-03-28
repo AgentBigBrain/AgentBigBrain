@@ -11,9 +11,12 @@ subsystems own detailed
 live-run, non-live-run execution, planner-policy, memory-broker, reflection-runtime,
 intent-runtime, bounded media-understanding, and skill registry/inspection support modules; the
 top-level files here keep the stable orchestration entrypoints and remaining single-surface organs.
+`plannerSupport.ts` now holds shared planner timeout, environment, and lesson-distillation helpers
+so `planner.ts` stays under the entrypoint size budget.
 
 ## Primary Files
 - Stable orchestration entrypoints: `executor.ts`, `planner.ts`.
+- Planner entrypoint support: `plannerSupport.ts`.
 - Non-live-run execution subsystem: `executionRuntime/contracts.ts`,
   `executionRuntime/fileMutationExecution.ts`, `executionRuntime/skillRuntime.ts`,
   `executionRuntime/shellExecution.ts`.
@@ -22,8 +25,10 @@ top-level files here keep the stable orchestration entrypoints and remaining sin
   `skillRegistry/skillRegistryStore.ts`, `skillRegistry/skillSuggestionPolicy.ts`,
   `skillRegistry/skillVerification.ts`, `skillRegistry/skillVerificationContracts.ts`,
   `skillRegistry/workflowSkillBridge.ts`.
-- Memory brokerage subsystem: `memoryContext/contracts.ts`, `memoryContext/queryPlanning.ts`,
-  `memoryContext/contextInjection.ts`, `memoryContext/auditEvents.ts`.
+- Memory brokerage subsystem: `memoryBrokerPlannerInput.ts`, `memoryContext/contracts.ts`,
+  `memoryContext/queryPlanning.ts`, `memoryContext/queryPlanningProbing.ts`,
+  `memoryContext/queryPlanningDomainBoundary.ts`, `memoryContext/contextInjection.ts`,
+  `memoryContext/auditEvents.ts`.
 - Media understanding subsystem: `mediaUnderstanding/contracts.ts`,
   `mediaUnderstanding/imageUnderstanding.ts`, `mediaUnderstanding/speechToText.ts`,
   `mediaUnderstanding/videoUnderstanding.ts`, `mediaUnderstanding/mediaInterpretation.ts`,
@@ -61,7 +66,8 @@ top-level files here keep the stable orchestration entrypoints and remaining sin
 - Planner action normalization, explicit-action intent inference, planner failure cooldown policy,
   and skill fallback scaffolding belong in `plannerPolicy/`, not in new top-level helper files.
 - `memoryBroker.ts` remains the stable broker entrypoint; detailed query planning, context
-  injection, and audit helpers belong in `memoryContext/`.
+  injection, audit helpers, and planner-input assembly belong in `memoryContext/` and
+  `memoryBrokerPlannerInput.ts`.
 - Explicit user review/correction/forget flows for remembered situations should stay brokered
   through `memoryBroker.ts`; transport layers must not reach directly into encrypted profile-memory
   storage.

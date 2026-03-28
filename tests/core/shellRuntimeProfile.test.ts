@@ -3,7 +3,7 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -222,6 +222,43 @@ test("resolve shell runtime profile detects explicit executable when real shell 
   });
 
   assert.equal(profile.executable, executablePath);
+});
+
+test("resolve shell runtime profile falls back to known Windows PowerShell location when PATH is stripped", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-shell-runtime-win-"));
+  const windowsPowerShellPath = path.join(
+    tempDir,
+    "System32",
+    "WindowsPowerShell",
+    "v1.0",
+    "powershell.exe"
+  );
+  await mkdir(path.dirname(windowsPowerShellPath), { recursive: true });
+  await writeFile(windowsPowerShellPath, "echo", "utf8");
+
+  const profile = resolveShellRuntimeProfile({
+    requestedProfile: "auto",
+    executableOverride: null,
+    platform: "win32",
+    env: {
+      PATH: "",
+      PATHEXT: ".EXE;.CMD",
+      SYSTEMROOT: tempDir
+    },
+    allowRealShellExecution: true,
+    timeoutMsDefault: 10000,
+    commandMaxChars: 4000,
+    envMode: "allowlist",
+    envAllowlistKeys: ["PATH", "SYSTEMROOT"],
+    envDenylistKeys: ["TOKEN"],
+    allowExecutionPolicyBypass: false,
+    wslDistro: null,
+    denyOutsideSandboxCwd: true,
+    allowRelativeCwd: true
+  });
+
+  assert.equal(profile.shellKind, "powershell");
+  assert.equal(profile.executable, windowsPowerShellPath);
 });
 
 test("resolve shell environment allowlist mode includes allowed keys and redacts denylist keys", () => {

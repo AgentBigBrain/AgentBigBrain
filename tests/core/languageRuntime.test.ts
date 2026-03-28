@@ -32,29 +32,29 @@ test("extractConversationTopicTerms removes generic chat scaffolding", () => {
 
 test("extractContextualRecallTerms preserves human situation anchors from natural phrasing", () => {
   const terms = extractContextualRecallTerms(
-    "How did that whole thing with Billy at the hospital end up?"
+    "How did that whole thing with Owen at the hospital end up?"
   );
 
-  assert.deepEqual(terms, ["whole", "billy", "hospital", "end"]);
+  assert.deepEqual(terms, ["whole", "owen", "hospital", "end"]);
 });
 
 test("planning and episode planning query terms stay bounded but domain-specific", () => {
   assert.deepEqual(
-    extractPlanningQueryTerms("Who is Billy related to now?"),
-    ["billy"]
+    extractPlanningQueryTerms("Who is Owen related to now?"),
+    ["owen"]
   );
   assert.deepEqual(
-    extractEpisodePlanningQueryTerms("How is Billy doing after the fall?"),
-    ["billy", "doing", "after", "fall"]
+    extractEpisodePlanningQueryTerms("How is Owen doing after the fall?"),
+    ["owen", "doing", "after", "fall"]
   );
 });
 
 test("extractEpisodeLinkingTerms strips episode boilerplate while keeping meaningful links", () => {
   const terms = extractEpisodeLinkingTerms(
-    "Billy fell down after the accident and that situation is still unresolved."
+    "Owen fell down after the accident and that situation is still unresolved."
   );
 
-  assert.deepEqual(terms, ["billy", "fell", "accident", "unresolved"]);
+  assert.deepEqual(terms, ["owen", "fell", "accident", "unresolved"]);
 });
 
 test("extractSemanticConceptTerms keeps longer reusable concepts and allows unicode words", () => {
@@ -67,25 +67,25 @@ test("extractSemanticConceptTerms keeps longer reusable concepts and allows unic
 
 test("countLanguageTermOverlap counts exact deterministic overlap only", () => {
   assert.equal(
-    countLanguageTermOverlap(["billy", "hospital", "resolved"], ["billy", "resolved", "later"]),
+    countLanguageTermOverlap(["owen", "hospital", "resolved"], ["owen", "resolved", "later"]),
     2
   );
-  assert.equal(countLanguageTermOverlap([], ["billy"]), 0);
+  assert.equal(countLanguageTermOverlap([], ["owen"]), 0);
 });
 
 test("spanish language profile keeps meaningful situation terms", () => {
   assert.deepEqual(
     extractContextualRecallTerms(
-      "¿Cómo terminó todo eso con Billy en el hospital?",
+      "¿Cómo terminó todo eso con Owen en el hospital?",
       "generic_es"
     ),
-    ["terminó", "todo", "billy", "hospital"]
+    ["terminó", "todo", "owen", "hospital"]
   );
   assert.deepEqual(
     extractPlanningQueryTerms(
-      "¿Quién está relacionado con Billy ahora?",
+      "¿Quién está relacionado con Owen ahora?",
       "generic_es"
     ),
-    ["está", "billy"]
+    ["está", "owen"]
   );
 });

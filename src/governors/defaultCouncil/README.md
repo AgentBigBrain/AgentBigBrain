@@ -11,6 +11,7 @@ Key files:
 - `liveRunExemptions.ts`
 - `trackedArtifactExemptions.ts`
 - `userOwnedBuildExemptions.ts`
+- `userOwnedBuildExemptionsSupport.ts`
 - `modelAdvisory.ts`
 - `ethicsGovernor.ts`
 - `logicGovernor.ts`

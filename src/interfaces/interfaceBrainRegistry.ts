@@ -15,7 +15,7 @@ import {
   buildConversationModelEnvironment,
   resolveConversationModelSelection
 } from "./conversationRuntime/modelBackendSelection";
-import type { ConversationSession } from "./sessionStore";
+import type { ConversationRecoveryTrace, ConversationSession } from "./sessionStore";
 import type { ConversationExecutionProgressUpdate, ConversationExecutionResult } from "./conversationRuntime/managerContracts";
 import { runDirectConversationReplyWithRuntime } from "./conversationRuntime/directConversationReply";
 import { AutonomousLoop } from "../core/agentLoop";
@@ -109,12 +109,17 @@ export class InterfaceBrainRegistry {
    * @returns Governed conversation execution result.
    */
   async runTaskForSession(
-    session: Pick<ConversationSession, "modelBackendOverride" | "codexAuthProfileId"> | null | undefined,
+    session: Pick<
+      ConversationSession,
+      "modelBackendOverride" | "codexAuthProfileId" | "domainContext"
+    > | null | undefined,
     input: string,
     receivedAt: string
   ): Promise<ConversationExecutionResult> {
     const { runtime } = this.getRuntimeForSession(session);
-    const runResult = await runtime.brain.runTask(buildInterfaceTaskRequest(input, receivedAt));
+    const runResult = await runtime.brain.runTask(buildInterfaceTaskRequest(input, receivedAt), {
+      conversationDomainContext: session?.domainContext ?? null
+    });
     return {
       summary: runResult.summary,
       taskRunResult: runResult
@@ -184,6 +189,17 @@ export class InterfaceBrainRegistry {
     let latestTaskCompletedAt: string | null = null;
     let terminalProgressStateEmitted = false;
     let terminalProgressMessageEmitted = false;
+    let latestRecoveryTrace: ConversationRecoveryTrace | null = null;
+    const buildTerminalRecoveryTrace = (
+      status: "recovered" | "failed"
+    ): ConversationRecoveryTrace | null =>
+      latestRecoveryTrace
+        ? {
+            ...latestRecoveryTrace,
+            status,
+            updatedAt: new Date().toISOString()
+          }
+        : null;
 
     const shouldSendProgress = (iteration: number, approved: number): boolean => {
       if (iteration === 1 || approved > 0) {
@@ -197,9 +213,21 @@ export class InterfaceBrainRegistry {
         goal,
         {
           onStateChange: async (update) => {
+            const updatedAt = new Date().toISOString();
+            if (update.recoveryKind) {
+              latestRecoveryTrace = {
+                kind: update.recoveryKind,
+                status: "attempting",
+                summary: update.message,
+                updatedAt,
+                recoveryClass: update.recoveryClass ?? null,
+                fingerprint: update.recoveryFingerprint ?? null
+              };
+            }
             await onProgressUpdate?.({
               status: update.state,
-              message: update.message
+              message: update.message,
+              recoveryTrace: latestRecoveryTrace
             });
             if (update.state === "completed" || update.state === "stopped") {
               terminalProgressStateEmitted = true;
@@ -238,7 +266,8 @@ export class InterfaceBrainRegistry {
             if (!terminalProgressStateEmitted) {
               await onProgressUpdate?.({
                 status: "completed",
-                message: reasoning
+                message: reasoning,
+                recoveryTrace: buildTerminalRecoveryTrace("recovered")
               });
               terminalProgressStateEmitted = true;
             }
@@ -258,7 +287,8 @@ export class InterfaceBrainRegistry {
             if (!terminalProgressStateEmitted) {
               await onProgressUpdate?.({
                 status: "stopped",
-                message: humanizeAutonomousStopReason(reason)
+                message: humanizeAutonomousStopReason(reason),
+                recoveryTrace: buildTerminalRecoveryTrace("failed")
               });
               terminalProgressStateEmitted = true;
             }
@@ -291,7 +321,8 @@ export class InterfaceBrainRegistry {
       if (!terminalProgressStateEmitted) {
         await onProgressUpdate?.({
           status: "stopped",
-          message: humanizeAutonomousStopReason(terminalReason)
+          message: humanizeAutonomousStopReason(terminalReason),
+          recoveryTrace: buildTerminalRecoveryTrace("failed")
         });
       }
       if (!terminalProgressMessageEmitted) {

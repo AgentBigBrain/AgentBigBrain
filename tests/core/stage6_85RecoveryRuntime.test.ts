@@ -6,7 +6,9 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
+  buildRecoveryAttemptFingerprint,
   buildMissionPostmortem,
+  evaluateStructuredRecoveryPolicy,
   evaluateResumeSafety,
   evaluateRetryBudget,
   resolveLastDurableCheckpoint,
@@ -70,4 +72,84 @@ test("stage6_85 recovery runtime preserves deterministic postmortem shaping", ()
   });
   assert.equal(postmortem.lastDurableCheckpoint?.actionId, "b_action");
   assert.equal(postmortem.remediationSteps.length, 3);
+});
+
+test("stage6_85 recovery runtime budgets structured repair attempts deterministically", () => {
+  const decision = evaluateStructuredRecoveryPolicy({
+    snapshot: {
+      missionStopLimitReached: false,
+      failureSignals: [
+        {
+          recoveryClass: "PROCESS_PORT_IN_USE",
+          provenance: "runtime_live_run",
+          sourceCode: "PROCESS_START_FAILED",
+          actionType: "start_process",
+          realm: "local_runtime",
+          detail: "localhost port already occupied"
+        }
+      ],
+      proofGaps: ["READINESS_PROOF_MISSING"],
+      repairOptions: [
+        {
+          optionId: "retry_with_alternate_port",
+          allowedRung: "bounded_repair_iteration",
+          budgetHint: "single_repair_attempt",
+          detail: "retry on a free loopback port"
+        }
+      ],
+      remainingBudgetHint: "single_repair_attempt",
+      environmentFacts: {}
+    },
+    attemptCounts: new Map<string, number>()
+  });
+
+  assert.equal(decision.outcome, "attempt_repair");
+  assert.equal(decision.allowedRung, "bounded_repair_iteration");
+  assert.equal(decision.builderPending, false);
+  assert.equal(decision.maxAttempts, 1);
+  assert.equal(decision.fingerprint, "PROCESS_PORT_IN_USE|retry_with_alternate_port|runtime_live_run|local_runtime|PROCESS_START_FAILED");
+});
+
+test("stage6_85 recovery runtime stops when a structured repair budget is exhausted", () => {
+  const fingerprint = buildRecoveryAttemptFingerprint(
+    {
+      recoveryClass: "PROCESS_PORT_IN_USE",
+      provenance: "runtime_live_run",
+      sourceCode: "PROCESS_START_FAILED",
+      actionType: "start_process",
+      realm: "local_runtime",
+      detail: null
+    },
+    "retry_with_alternate_port"
+  );
+  const decision = evaluateStructuredRecoveryPolicy({
+    snapshot: {
+      missionStopLimitReached: false,
+      failureSignals: [
+        {
+          recoveryClass: "PROCESS_PORT_IN_USE",
+          provenance: "runtime_live_run",
+          sourceCode: "PROCESS_START_FAILED",
+          actionType: "start_process",
+          realm: "local_runtime",
+          detail: null
+        }
+      ],
+      proofGaps: ["READINESS_PROOF_MISSING"],
+      repairOptions: [
+        {
+          optionId: "retry_with_alternate_port",
+          allowedRung: "bounded_repair_iteration",
+          budgetHint: "single_repair_attempt",
+          detail: "retry on a free loopback port"
+        }
+      ],
+      remainingBudgetHint: "single_repair_attempt",
+      environmentFacts: {}
+    },
+    attemptCounts: new Map([[fingerprint, 1]])
+  });
+
+  assert.equal(decision.outcome, "stop");
+  assert.equal(decision.allowedRung, "bounded_repair_iteration");
 });

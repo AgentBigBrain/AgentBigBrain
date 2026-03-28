@@ -191,6 +191,10 @@ export function selectActiveWorkspace(
     stillControllable: preferred.stillControllable,
     ownershipState: preferred.ownershipState,
     previewStackState: preferred.previewStackState,
+    domainSnapshotLane:
+      preferred.domainSnapshotLane ?? fallback.domainSnapshotLane ?? null,
+    domainSnapshotRecordedAt:
+      preferred.domainSnapshotRecordedAt ?? fallback.domainSnapshotRecordedAt ?? null,
     lastChangedPaths:
       preferred.lastChangedPaths.length > 0
         ? preferred.lastChangedPaths

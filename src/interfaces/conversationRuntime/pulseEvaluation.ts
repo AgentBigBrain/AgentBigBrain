@@ -20,7 +20,8 @@ import {
 import { buildPulsePrompt } from "./pulsePrompting";
 import {
   selectPulseTargetSession,
-  shouldSkipSessionForPulse
+  shouldSkipSessionForPulse,
+  shouldSuppressPulseForSessionDomain
 } from "./pulseScheduling";
 import { evaluateDynamicPulse } from "./pulseDynamicEvaluation";
 
@@ -64,6 +65,22 @@ export async function evaluatePulseForUser(
     return;
   }
 
+  if (
+    params.deps.enableDynamicPulse &&
+    params.deps.getEntityGraph &&
+    shouldSuppressPulseForSessionDomain(targetSelection.targetSession, "dynamic")
+  ) {
+    await params.applyPulseStateToUserSessions(params.userSessions, {
+      lastDecisionCode: "SESSION_DOMAIN_SUPPRESSED",
+      lastEvaluatedAt: params.nowIso,
+      lastContextualLexicalEvidence: null,
+      lastPulseReason: null,
+      lastPulseTargetConversationId: targetSelection.targetSession.conversationId,
+      updatedAt: params.nowIso
+    });
+    return;
+  }
+
   if (params.deps.enableDynamicPulse && params.deps.getEntityGraph) {
     await evaluateDynamicPulse({
       controllerSession: params.controllerSession,
@@ -86,6 +103,23 @@ export async function evaluatePulseForUser(
   );
 
   for (const reason of params.config.reasonPriority) {
+    if (shouldSuppressPulseForSessionDomain(targetSelection.targetSession, reason)) {
+      lastEvaluation = buildSuppressedEvaluation({
+        allowed: false,
+        decisionCode: "SESSION_DOMAIN_SUPPRESSED",
+        suppressedBy: ["session.domain.workflow"],
+        nextEligibleAtIso: null
+      });
+      selectedReason = reason;
+      if (!highestPrioritySuppression) {
+        highestPrioritySuppression = {
+          evaluation: lastEvaluation,
+          reason
+        };
+      }
+      continue;
+    }
+
     if (reason === "contextual_followup" && !contextualCandidate.eligible) {
       lastEvaluation = buildSuppressedEvaluation({
         allowed: false,
@@ -114,7 +148,12 @@ export async function evaluatePulseForUser(
         reason === "contextual_followup"
           ? contextualCandidate.linkageConfidence
           : undefined,
-      lastPulseSentAtIso: params.controllerSession.agentPulse.lastPulseSentAt
+      lastPulseSentAtIso: params.controllerSession.agentPulse.lastPulseSentAt,
+      sessionDominantLane: targetSelection.targetSession.domainContext.dominantLane,
+      sessionHasActiveWorkflowContinuity:
+        targetSelection.targetSession.domainContext.continuitySignals.activeWorkspace ||
+        targetSelection.targetSession.domainContext.continuitySignals.returnHandoff ||
+        targetSelection.targetSession.domainContext.continuitySignals.modeContinuity
     });
     lastEvaluation = evaluation;
     selectedReason = reason;

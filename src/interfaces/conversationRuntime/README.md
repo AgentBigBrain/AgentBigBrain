@@ -31,6 +31,8 @@ contract and persistence entrypoint while:
   stable session-normalization entrypoint
 - `sessionNormalizationOwnershipRecords.ts` owns the extracted browser, path, workspace, and
   classifier normalization helpers reused by the stable record-normalization entrypoint
+- `src/core/sessionContext.ts` owns the shared conversation-domain contract and reducers that the
+  session runtime now persists, normalizes, and merge-selects through the stable session entrypoint
 - `sessionPulseNormalization.ts` owns canonical Agent Pulse session-state normalization below the
   stable session-normalization entrypoint
 - `sessionMerging.ts` owns canonical session merge and deduplication policy
@@ -44,7 +46,10 @@ contract and persistence entrypoint while:
 The latest slices moved queue/ack, worker-loop, and pulse-state ownership here so
 `conversationManager.ts` can stay the stable conversation manager entrypoint while:
 - `managerContracts.ts` owns the canonical conversation-manager contracts plus autonomous
-  execution-input helpers used by extracted interface runtime modules and transport gateways
+  execution-input helpers used by extracted interface runtime modules and transport gateways, and
+  now also carries the bounded entity-alias reconciliation callback contract so conversational
+  interpretation can submit one validated alias candidate without mutating entity-graph snapshots
+  directly
 - `conversationLifecycle.ts` owns canonical ack-timer gating, queue insertion, and ack lifecycle
   transitions
 - `deliveryContracts.ts` owns canonical ack/final-delivery contracts used by the stable delivery
@@ -78,10 +83,57 @@ The latest slices moved queue/ack, worker-loop, and pulse-state ownership here s
 - `conversationRouting.ts` owns canonical `/chat` and free-form queue routing plus execution-input
   assembly below `conversationIngressLifecycle.ts`
 - `conversationRoutingSupport.ts` owns small extracted confidence and autonomous-brief helpers so
-  the stable conversation-routing entrypoint can stay within its size budget
+  the stable conversation-routing entrypoint can stay within its size budget while still surfacing
+  bounded identity-context hints to the optional local intent-model seam
 - `conversationRoutingQueueSupport.ts` owns the extracted follow-up-linked queue enqueue helper so
   the stable conversation-routing entrypoint can stay within its size budget without duplicating
   continuity-aware enqueue logic
+- `conversationRoutingInlineReplies.ts` owns the extracted inline reply routing for direct
+  conversation, capability discovery, status/recall, and clarification turns so the stable
+  conversation-routing entrypoint can stay thin while those no-worker paths still share the same
+  domain-signal persistence rules
+- `contextualFollowupInterpretationSupport.ts` owns bounded lexical fast paths plus fail-closed
+  promotion for the shared contextual-followup interpreter so softer `keep me posted` / `update me
+  later` wording can reuse the local conversational runtime without turning execution-mode
+  selection into a model-owned decision
+- `turnLocalStatusUpdate.ts` owns the shared bounded first-person status-update detector and
+  canonical execution-input instruction block so execution input assembly and conversational
+  follow-up guards can agree on when `my ... is pending` style turns should stay authoritative for
+  the current turn
+- `conversationTopicKeyInterpretation.ts` owns bounded eligibility, request shaping, and fail-closed
+  mapping for the shared topic-key interpreter so live ingress can precompute one Stage 6.86
+  topic/thread hint before recording an ambiguous user turn without making conversation-stack
+  replay async
+- `chatTurnSignals.ts` owns structural short-turn signal analysis plus bounded no-worker fallback
+  replies and the stable re-export surface for short-turn signal analysis, identity-eligibility
+  checks, and bounded no-worker chat fallbacks
+- `chatTurnSignalAnalysis.ts` owns the structural feature extractor used by chat routing so
+  greetings, identity turns, workflow cues, and status cues can be evaluated from one bounded
+  token/cue analysis path
+- `chatTurnSignalShapes.ts` owns the bounded token-sequence helpers reused by short-turn analysis
+  so direct identity questions, identity meta-questions, and callback/workflow shapes stay
+  centralized without rebloating the main signal-analysis entrypoint
+- `chatTurnRelationshipRecall.ts` owns bounded relationship-summary and pronoun-follow-up
+  detection so turns like `re explain these relationships` or `who is he?` stay conversational
+  even when stale workflow continuity is still present on the session
+- `chatTurnIdentityEligibility.ts` owns identity-interpretation eligibility and recent-identity
+  follow-up preservation so short turns like `No` can stay off stale workflow routing when the
+  surrounding conversation is already identity-focused
+- `chatTurnSignalLexicon.ts` owns the bounded cue lexicon shared by the short-turn analysis path so
+  token/cue budgets stay centralized instead of drifting across routing helpers
+- `transportIdentity.ts` owns canonical transport-identity normalization plus low-confidence
+  name-hint selection so direct self-identity replies can reuse provider identity metadata without
+  silently turning handles into stored profile memory
+- `selfIdentityPrompting.ts` owns canonical bounded self-identity recall prompt assembly so direct
+  conversation can prefer confirmed profile facts, fall back to typed transport hints, and still
+  fail closed for generic handles
+- `selfIdentityInterpretationSupport.ts` owns canonical deterministic validation plus recent-turn
+  context helpers for model-assisted self-identity interpretation so ambiguous declarations can use
+  the shared local interpreter without bypassing canonical memory writes or falling back to regex
+  tail chopping
+- `sessionDomainRouting.ts` owns bounded session-domain hint derivation and turn-level domain
+  signal updates so intent routing, memory brokerage, and lifecycle continuity can share one
+  persisted per-conversation domain picture without re-implementing lane heuristics
 - `invocationResolution.ts` owns canonical non-command invocation branching across pulse control,
   proposal follow-up, and queue routing below `conversationIngressLifecycle.ts`
 - `commandDispatch.ts` owns canonical slash-command dispatch below `conversationIngressLifecycle.ts`
@@ -95,6 +147,15 @@ The latest slices moved queue/ack, worker-loop, and pulse-state ownership here s
   context below `conversationExecutionInputPolicy.ts`
 - `contextualRecall.ts` owns canonical in-conversation contextual recall matching for active user
   turns below `conversationExecutionInputPolicy.ts`
+- `contextualReferenceInterpretationSupport.ts` owns bounded eligibility, request shaping, and
+  fail-closed validation for the shared contextual-reference interpreter used by contextual recall
+  so vague callback wording can reuse the local conversational runtime without turning Stage 6.86
+  recall into a model-only feature
+- `contextualEntityReferenceInterpretationSupport.ts` owns deterministic candidate selection plus
+  bounded fail-closed wiring for the shared entity-reference interpreter so contextual recall can
+  scope ambiguous people/topic callbacks through existing entity-graph candidates without turning
+  entity traversal or recall selection into a model-owned decision, and can now also submit one
+  validated alias candidate through the explicit store callback seam during inbound turn handling
 - `contextualRecallSupport.ts` owns shared tokenization, cue-building, duplicate-suppression, and
   episodic/paused-thread candidate assembly used by bounded contextual recall
 - `contextualRecallRanking.ts` owns canonical prioritization between generic paused-thread recall
@@ -145,6 +206,10 @@ The latest slices moved queue/ack, worker-loop, and pulse-state ownership here s
   review the same durable handoff state without queueing unnecessary work, and can now also stop
   an in-flight autonomous run through the real gateway abort path before the worker settles the
   paused checkpoint
+- `returnHandoffControlInterpretationSupport.ts` owns bounded eligibility, request shaping, and
+  fail-closed promotion for the shared handoff-control interpreter so ambiguous pause/review turns
+  can reuse the local conversational runtime without turning durable handoff mutation or review
+  rendering into a model-owned decision
 - `returnHandoffContinuation.ts` owns canonical session-aware resume detection and continuation
   grounding so phrases like `pick that back up` or `continue from there` can continue prior work
   from the durable handoff checkpoint instead of restarting from scratch
@@ -194,6 +259,13 @@ The latest slices moved queue/ack, worker-loop, and pulse-state ownership here s
   evaluation for natural pulse grounding
 - optional local intent-model resolver callbacks supplied by interface wiring when the repo enables
   richer local intent understanding
+- optional contextual-followup interpretation resolver callbacks supplied by interface wiring when
+  softer status/check-in/reminder wording needs bounded semantic help before the generic
+  execution-intent tie-breaker is allowed to run
+- optional contextual-reference interpretation resolver callbacks supplied by interface wiring when
+  vague recall wording needs bounded semantic help before deterministic Stage 6.86 recall ranking
+- optional entity-alias reconciliation callbacks supplied by interface wiring when bounded
+  conversational alias clarification should flow into the canonical Stage 6.86 store seam
 
 ## Outputs
 - persisted interface session snapshots in JSON and SQLite backends
@@ -201,6 +273,8 @@ The latest slices moved queue/ack, worker-loop, and pulse-state ownership here s
 - deterministic bootstrap/import behavior when SQLite backends start from JSON snapshots
 - canonical session normalization, merge policy, and Agent Pulse session metadata helpers for the
   stable session entrypoint and stable pulse scheduler entrypoint
+- canonical persistence, normalization, and merge-selection wiring for the shared
+  `ConversationDomainContext` contract owned by `src/core/sessionContext.ts`
 - canonical extracted clarification/progress/return-handoff state-selection helpers reused by the
   stable session-merge entrypoint
 - canonical active-workspace merge selection so tracked project continuity survives session writes
@@ -249,6 +323,9 @@ The latest slices moved queue/ack, worker-loop, and pulse-state ownership here s
 - canonical small routing-support helpers reused by the stable conversation-routing entrypoint
 - canonical extracted follow-up-linked queue enqueue helper reused by both `/chat` and free-form
   routing so short continuity turns do not duplicate continuity-aware enqueue logic
+- canonical session-domain hint derivation and bounded per-turn domain signal updates so direct
+  chat, status/recall, workflow continuity, and policy surfaces can persist one shared
+  `ConversationDomainContext`
 - canonical non-command invocation-resolution helpers for the stable ingress entrypoint
 - canonical slash-command dispatch helpers for the stable ingress entrypoint
 - canonical stale-running-job recovery helpers for the stable ingress entrypoint
@@ -275,6 +352,10 @@ The latest slices moved queue/ack, worker-loop, and pulse-state ownership here s
   without accidentally restarting governed execution
 - canonical direct-conversation reply helpers so ordinary conversation and natural capability
   checks can be answered inline instead of starting governed work
+- canonical transport-identity normalization and low-confidence human-name hint selection for
+  provider metadata already present on the session
+- canonical bounded self-identity prompt assembly so direct chat can distinguish confirmed memory
+  facts from transport-only hints
 - canonical routing precedence and active-clarification brokers so the front door can stay
   stateful instead of relying on disposable prompts
 - canonical post-execution recovery clarifications so recoverable blocked runs can ask one short
@@ -317,6 +398,9 @@ The latest slices moved queue/ack, worker-loop, and pulse-state ownership here s
   subsystem.
 - Session normalization, merge, and shared Agent Pulse session metadata helpers here must preserve
   existing session semantics; extraction should only move ownership, not change persisted behavior.
+- Session normalization and merge helpers here must preserve the shared conversation-domain context
+  unless a fresher meaningful replacement is present; newer empty defaults must not erase an active
+  per-conversation domain snapshot.
 - Active-workspace merge selection here must preserve the newest continuity snapshot while
   backfilling missing project-root, preview, artifact, browser/process ownership, and control-state
   fields instead of dropping them on a later partial update.
@@ -373,6 +457,9 @@ The latest slices moved queue/ack, worker-loop, and pulse-state ownership here s
 - Direct-conversation reply helpers here must stay bounded to ordinary conversation and capability
   discovery. They may improve natural user-facing phrasing, but they must not silently authorize
   task execution or bypass the governed worker path for real side effects.
+- Transport-identity helpers here must keep trust levels explicit. Provider usernames, display
+  names, or first names may inform low-confidence self-identity replies, but they must not be
+  silently upgraded into stored profile facts or claimed as confirmed memory.
 - Direct-conversation intent detection here must stay conservative and user-explicit; it can keep a
   turn off the queue when the user clearly asks for conversation, but it must not swallow genuine
   execution requests just because the wording is friendly.
@@ -383,6 +470,10 @@ The latest slices moved queue/ack, worker-loop, and pulse-state ownership here s
   move mutation ownership, not change Pulse behavior.
 - Conversation-routing helpers here must preserve `/chat` and free-form queue semantics; extraction
   should only move routing ownership, not change ingress behavior.
+- Session-domain routing helpers here must stay bounded and conservative. They may reinforce active
+  workflow or profile lanes from explicit routing and continuity evidence, but they must not let a
+  casual greeting, capability question, or generic status check rewrite the session lane on its
+  own.
 - Invocation-resolution helpers here must preserve pulse/follow-up/queue branching semantics;
   extraction should only move invocation ownership, not change ingress behavior.
 - Command-dispatch helpers here must preserve slash-command semantics; extraction should only move
@@ -397,6 +488,9 @@ The latest slices moved queue/ack, worker-loop, and pulse-state ownership here s
   bytes or become a generic multimodal transport envelope downstream.
 - Contextual recall helpers here must stay bounded and optional; they may suggest one natural
   same-conversation follow-up, but must not turn into a separate proactive pulse path.
+- Contextual recall may use the shared contextual-reference interpreter only on bounded ambiguous
+  leftovers; deterministic recall hints, Stage 6.86 topic/open-loop state, and duplicate-safety
+  suppression must remain the primary control path.
 - Contextual recall should prefer concrete unresolved situations linked through episodic memory
   over generic paused-topic overlap when that situation is available, recent, and not repetitious.
 - Contextual recall should suppress bare repeated-name revivals when the current turn lacks a real
@@ -462,6 +556,10 @@ The latest slices moved queue/ack, worker-loop, and pulse-state ownership here s
 - `tests/interfaces/mediaContextRendering.test.ts`
 - `tests/interfaces/contextualRecall.test.ts`
 - `tests/interfaces/conversationExecutionInputPolicy.test.ts`
+- `tests/interfaces/chatTurnSignals.test.ts`
+- `tests/interfaces/conversationRoutingSupport.test.ts`
+- `tests/interfaces/selfIdentityPrompting.test.ts`
+- `tests/interfaces/transportIdentity.test.ts`
 - `tests/interfaces/clarificationBroker.test.ts`
 - `tests/interfaces/conversationWorkerLifecycle.test.ts`
 - `tests/interfaces/memoryReviewCommand.test.ts`
@@ -485,6 +583,8 @@ Update this README when:
 - session persistence or bootstrap responsibilities change materially
 - session normalization, session merge, timezone detection, or user-style fingerprint
   responsibilities change materially
+- shared conversation-domain persistence, normalization, or merge-selection behavior changes
+  materially
 - pulse target-selection, contextual follow-up, or pulse-prompt responsibilities change materially
 - bounded unresolved-situation pulse-grounding responsibilities change materially
 - user-facing pulse suppression or pulse message-body rules change materially
@@ -498,6 +598,7 @@ Update this README when:
 - queued-worker progress narration responsibilities change materially
 - `/chat` or free-form queue-routing responsibilities change materially
 - conversation-routing support helper ownership changes materially
+- session-domain hint derivation or per-turn domain signal behavior changes materially
 - non-command invocation-resolution responsibilities change materially
 - slash-command dispatch responsibilities change materially
 - stale-running-job recovery responsibilities change materially
@@ -514,7 +615,15 @@ Update this README when:
 - direct-conversation reply ownership or the ordinary-conversation/capability-discovery
   queue-bypass rules
   change materially
+- transport-identity normalization, hint-selection heuristics, or bounded self-identity prompt
+  assembly changes materially
 - the optional local intent-model seam or its fail-closed routing rules change materially
+- bounded conversational entity-alias reconciliation callback wiring changes materially
+- bounded handoff-control interpretation or return-handoff pause/review promotion rules change
+  materially
+- structural identity-eligibility or identity-context session-hint rules change materially
+- turn-local first-person status-update detection or canonical instruction-block behavior changes
+  materially
 - mode-continuity promotion rules or active-mode carry-forward behavior change materially
 - proposal approval, proposal-reply interpretation, or follow-up resolution responsibilities change
   materially

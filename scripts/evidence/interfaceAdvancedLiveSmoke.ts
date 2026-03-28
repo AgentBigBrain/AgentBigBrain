@@ -249,7 +249,7 @@ const SCENARIOS: readonly AdvancedScenario[] = [
       `/auto create a React app at ${HOST_TEST_FINANCE_DASHBOARD_DIR}. Execute now using ${HOST_TEST_SHELL_NAME}. Create files directly; if blocked, stop and tell me exactly why.`,
     expectJob: true,
     requiredAllInReplies: [
-      /Autonomous task stopped after/i
+      /(?:Autonomous task stopped after|run stopped before it finished after)/i
     ],
     requiredAnyInReplies: [
       /could not verify enough real execution progress/i,

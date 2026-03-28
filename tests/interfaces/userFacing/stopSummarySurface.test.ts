@@ -70,6 +70,7 @@ test("buildAutonomousGoalAbortedProgressMessage includes actionable stop guidanc
 
   const message = buildAutonomousGoalAbortedProgressMessage(3, 2, 1, reason);
 
+  assert.match(message, /I started this, but I hit a blocker before I could finish it after 3 iteration\(s\)\./i);
   assert.match(message, /planner never produced a valid live-run verification plan/i);
   assert.match(message, /Next step:/i);
 });
@@ -80,7 +81,8 @@ test("buildAutonomousTerminalSummaryMessage reuses humanized stop text", () => {
 
   const message = buildAutonomousTerminalSummaryMessage(false, 4, 2, 2, reason);
 
-  assert.match(message, /Why it stopped:/i);
+  assert.match(message, /I started this, but the run stopped before it finished after 4 iteration\(s\)\./i);
   assert.match(message, /browser or UI proof/i);
+  assert.match(message, /Approved 2, blocked 2\./i);
   assert.equal(isRunSkillFailureLine("Run skill failed: artifact missing."), true);
 });

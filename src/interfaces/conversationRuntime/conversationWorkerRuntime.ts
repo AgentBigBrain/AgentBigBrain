@@ -346,6 +346,7 @@ export async function processConversationQueue(
     }
 
     const executionResult = await executeRunningJob({
+      sessionKey,
       job: nextJob,
       executeTask: activeExecuteTask,
       notify: activeNotify,

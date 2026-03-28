@@ -3,6 +3,21 @@
  */
 
 import { MissionCheckpointV1, Stage675BlockCode } from "../types";
+import {
+  MAX_MANAGED_PROCESS_READINESS_FAILURES,
+  type AutonomousRecoverySnapshot,
+  type RecoveryFailureClass,
+  type RecoveryFailureSignal,
+  type RecoveryRung
+} from "../autonomy/contracts";
+export type {
+  StructuredRecoveryExecutionPlan,
+  StructuredRecoveryExecutionStop
+} from "./structuredRecoveryExecution";
+export {
+  buildStructuredRecoveryExecutionPlan,
+  isStructuredRecoveryInstruction
+} from "./structuredRecoveryExecution";
 
 export interface RetryBudgetDecision {
   shouldRetry: boolean;
@@ -26,6 +41,114 @@ export interface MissionPostmortemV1 {
   lastDurableCheckpoint: MissionCheckpointV1 | null;
   remediationSteps: readonly string[];
 }
+
+export interface StructuredRecoveryPolicyDecision {
+  outcome: "none" | "attempt_repair" | "stop";
+  recoveryClass: RecoveryFailureClass | null;
+  allowedRung: RecoveryRung | null;
+  optionId: string | null;
+  fingerprint: string | null;
+  attemptsUsed: number;
+  maxAttempts: number | null;
+  cooldownIterations: number;
+  builderPending: boolean;
+  reason: string;
+}
+
+interface RecoveryPolicyRule {
+  optionId: string;
+  allowedRung: RecoveryRung;
+  maxAttempts: number;
+  cooldownIterations: number;
+  builderPending: boolean;
+  stopReason: string;
+  retryReason: string;
+}
+
+const RECOVERY_POLICY_RULES: Record<RecoveryFailureClass, RecoveryPolicyRule | null> = {
+  EXECUTABLE_NOT_FOUND: {
+    optionId: "resolve_known_executable",
+    allowedRung: "executor_native_adaptation",
+    maxAttempts: 0,
+    cooldownIterations: 0,
+    builderPending: false,
+    stopReason:
+      "Executable resolution is an executor-native repair. If this class still surfaced, the bounded native adaptation path is already exhausted for this run.",
+    retryReason: "Retry only when the executor has a deterministic alternate executable."
+  },
+  COMMAND_TOO_LONG: {
+    optionId: "stage_command_via_script",
+    allowedRung: "executor_native_adaptation",
+    maxAttempts: 0,
+    cooldownIterations: 0,
+    builderPending: false,
+    stopReason:
+      "Oversized-command staging is an executor-native repair. If this class still surfaced, the native staging path is already exhausted for this run.",
+    retryReason: "Retry only when the executor can stage the command through a deterministic temp script."
+  },
+  DEPENDENCY_MISSING: {
+    optionId: "repair_missing_dependency",
+    allowedRung: "bounded_repair_iteration",
+    maxAttempts: 1,
+    cooldownIterations: 0,
+    builderPending: true,
+    stopReason:
+      "The deterministic missing-dependency repair budget is exhausted for this run.",
+    retryReason:
+      "One bounded dependency-repair iteration is allowed when the missing dependency is identified deterministically."
+  },
+  VERSION_INCOMPATIBLE: {
+    optionId: "align_dependency_version",
+    allowedRung: "bounded_repair_iteration",
+    maxAttempts: 1,
+    cooldownIterations: 0,
+    builderPending: true,
+    stopReason:
+      "The deterministic version-alignment repair budget is exhausted for this run.",
+    retryReason:
+      "One bounded version-alignment iteration is allowed when the incompatible dependency is identified deterministically."
+  },
+  PROCESS_PORT_IN_USE: {
+    optionId: "retry_with_alternate_port",
+    allowedRung: "bounded_repair_iteration",
+    maxAttempts: 1,
+    cooldownIterations: 0,
+    builderPending: false,
+    stopReason:
+      "The deterministic alternate-port repair budget is exhausted for this run.",
+    retryReason:
+      "One bounded alternate-port restart is allowed when the conflicting localhost port is identified deterministically."
+  },
+  PROCESS_NOT_READY: {
+    optionId: "retry_readiness_proof",
+    allowedRung: "same_iteration_typed_continuation",
+    maxAttempts: MAX_MANAGED_PROCESS_READINESS_FAILURES,
+    cooldownIterations: 0,
+    builderPending: false,
+    stopReason:
+      "The deterministic readiness-check continuation budget is exhausted for this run.",
+    retryReason:
+      "One typed readiness-continuation step is allowed before falling back to broader loop policy."
+  },
+  TARGET_NOT_RUNNING: {
+    optionId: "restart_target_then_reverify",
+    allowedRung: "bounded_repair_iteration",
+    maxAttempts: 1,
+    cooldownIterations: 0,
+    builderPending: false,
+    stopReason:
+      "The deterministic restart-and-reverify budget is exhausted for this run.",
+    retryReason:
+      "One bounded restart-and-reverify iteration is allowed when the tracked target stopped unexpectedly."
+  },
+  AUTH_NOT_INITIALIZED: null,
+  REMOTE_RATE_LIMITED: null,
+  REMOTE_UNAVAILABLE: null,
+  BROWSER_START_BLOCKED: null,
+  WORKSPACE_HOLDER_CONFLICT: null,
+  TRANSCRIPTION_BACKEND_UNAVAILABLE: null,
+  UNKNOWN_EXECUTION_FAILURE: null
+};
 
 /**
  * Normalizes ordering for mission checkpoints.
@@ -106,6 +229,140 @@ export function evaluateRetryBudget(
   };
 }
 
+/**
+ * Builds one deterministic fingerprint for recovery-attempt budgeting.
+ *
+ * @param signal - Recovery signal chosen for the next recovery policy decision.
+ * @param optionId - Selected recovery option identifier.
+ * @returns Stable recovery-attempt fingerprint.
+ */
+export function buildRecoveryAttemptFingerprint(
+  signal: RecoveryFailureSignal,
+  optionId: string
+): string {
+  return [
+    signal.recoveryClass,
+    optionId,
+    signal.provenance,
+    signal.realm ?? "",
+    signal.sourceCode ?? ""
+  ].join("|");
+}
+
+/**
+ * Evaluates bounded recovery policy for the current structured recovery snapshot.
+ *
+ * @param snapshot - Structured recovery snapshot derived from the latest task result.
+ * @param attemptCounts - Previously consumed recovery-attempt counts keyed by fingerprint.
+ * @returns Canonical recovery-policy decision for the current loop step.
+ */
+export function evaluateStructuredRecoveryPolicy(input: {
+  snapshot: AutonomousRecoverySnapshot;
+  attemptCounts: ReadonlyMap<string, number>;
+}): StructuredRecoveryPolicyDecision {
+  const primarySignal = input.snapshot.failureSignals[0] ?? null;
+  if (!primarySignal) {
+    return {
+      outcome: "none",
+      recoveryClass: null,
+      allowedRung: null,
+      optionId: null,
+      fingerprint: null,
+      attemptsUsed: 0,
+      maxAttempts: null,
+      cooldownIterations: 0,
+      builderPending: false,
+      reason: "No structured recovery signal is present."
+    };
+  }
+
+  const rule = RECOVERY_POLICY_RULES[primarySignal.recoveryClass];
+  if (!rule) {
+    return {
+      outcome: "none",
+      recoveryClass: primarySignal.recoveryClass,
+      allowedRung: null,
+      optionId: null,
+      fingerprint: null,
+      attemptsUsed: 0,
+      maxAttempts: null,
+      cooldownIterations: 0,
+      builderPending: false,
+      reason: "No bounded recovery contract exists yet for this recovery class."
+    };
+  }
+
+  const option = input.snapshot.repairOptions.find(
+    (candidate) => candidate.optionId === rule.optionId
+  );
+  if (!option) {
+    return {
+      outcome: "stop",
+      recoveryClass: primarySignal.recoveryClass,
+      allowedRung: rule.allowedRung,
+      optionId: rule.optionId,
+      fingerprint: buildRecoveryAttemptFingerprint(primarySignal, rule.optionId),
+      attemptsUsed: 0,
+      maxAttempts: rule.maxAttempts,
+      cooldownIterations: rule.cooldownIterations,
+      builderPending: rule.builderPending,
+      reason: `The recovery snapshot did not expose the expected bounded repair option ${rule.optionId}.`
+    };
+  }
+
+  const fingerprint = buildRecoveryAttemptFingerprint(primarySignal, rule.optionId);
+  const attemptsUsed = input.attemptCounts.get(fingerprint) ?? 0;
+  if (rule.maxAttempts <= 0) {
+    return {
+      outcome: "stop",
+      recoveryClass: primarySignal.recoveryClass,
+      allowedRung: rule.allowedRung,
+      optionId: rule.optionId,
+      fingerprint,
+      attemptsUsed,
+      maxAttempts: rule.maxAttempts,
+      cooldownIterations: rule.cooldownIterations,
+      builderPending: rule.builderPending,
+      reason: rule.stopReason
+    };
+  }
+
+  if (attemptsUsed >= rule.maxAttempts) {
+    return {
+      outcome: "stop",
+      recoveryClass: primarySignal.recoveryClass,
+      allowedRung: rule.allowedRung,
+      optionId: rule.optionId,
+      fingerprint,
+      attemptsUsed,
+      maxAttempts: rule.maxAttempts,
+      cooldownIterations: rule.cooldownIterations,
+      builderPending: rule.builderPending,
+      reason: rule.stopReason
+    };
+  }
+
+  return {
+    outcome: "attempt_repair",
+    recoveryClass: primarySignal.recoveryClass,
+    allowedRung: rule.allowedRung,
+    optionId: rule.optionId,
+    fingerprint,
+    attemptsUsed,
+    maxAttempts: rule.maxAttempts,
+    cooldownIterations: rule.cooldownIterations,
+    builderPending: rule.builderPending,
+    reason: rule.retryReason
+  };
+}
+
+/**
+ * Reads one trimmed string param from an action result when present.
+ *
+ * @param result - Executed action result entry.
+ * @param key - Param key to read.
+ * @returns Trimmed string value, or `null`.
+ */
 /**
  * Evaluates deterministic resume safety constraints.
  *

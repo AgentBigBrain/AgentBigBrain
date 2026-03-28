@@ -582,8 +582,130 @@ test("selectUserFacingSummary prefers a proven file update over later inspection
 
   const selected = selectUserFacingSummary(runResult);
   assert.match(selected, /I created or updated C:\\temp\\drone-company\\index\.html\./i);
-  assert.match(selected, /One later step was blocked \(ACTION_EXECUTION_FAILED\)/i);
+  assert.match(selected, /One later runtime step failed \(ACTION_EXECUTION_FAILED\): Browser verification failed\./i);
   assert.doesNotMatch(selected, /I checked C:\\temp\\drone-company\./i);
+});
+
+test("selectUserFacingSummary carries exact runtime failure detail through partial-success summaries", () => {
+  const runResult = buildRunResult("technical summary", [
+    {
+      action: {
+        id: "action_write_file_runtime_partial_success",
+        type: "write_file",
+        description: "update landing page",
+        params: {
+          path: "C:\\temp\\sky-drone-max\\src\\index.css",
+          content: "body { color: #123456; }"
+        },
+        estimatedCostUsd: 0.08
+      },
+      mode: "escalation_path",
+      approved: true,
+      output: "Write success: C:\\temp\\sky-drone-max\\src\\index.css",
+      blockedBy: [],
+      violations: [],
+      votes: []
+    },
+    {
+      action: {
+        id: "action_shell_runtime_failure_after_write",
+        type: "shell_command",
+        description: "start preview",
+        params: {
+          command: "npm run dev"
+        },
+        estimatedCostUsd: 0.12
+      },
+      mode: "escalation_path",
+      approved: false,
+      output: "Shell failed (exit code 1):\nMissing script: dev",
+      blockedBy: ["ACTION_EXECUTION_FAILED"],
+      violations: [
+        {
+          code: "ACTION_EXECUTION_FAILED",
+          message: "Shell failed (exit code 1): Missing script: dev"
+        }
+      ],
+      votes: []
+    }
+  ], {
+    userInput: "build the landing page and leave it open in the browser"
+  });
+
+  const selected = selectUserFacingSummary(runResult);
+  assert.match(selected, /I created or updated C:\\temp\\sky-drone-max\\src\\index\.css\./i);
+  assert.match(selected, /One later runtime step failed \(ACTION_EXECUTION_FAILED\): Shell failed \(exit code 1\):/i);
+  assert.match(selected, /Missing script: dev/i);
+});
+
+test("selectUserFacingSummary prefers proven build edits over respond no-op narration when real work executed", () => {
+  const runResult = buildRunResult("technical summary", [
+    {
+      action: {
+        id: "action_respond_false_build_noop",
+        type: "respond",
+        description: "reply",
+        params: {
+          message:
+            "I didn't complete the requested live app run in this run. What happened: the build request reached a live-run verification step without enough executed proof to claim the app was running or the UI was verified."
+        },
+        estimatedCostUsd: 0.02
+      },
+      mode: "fast_path",
+      approved: true,
+      output:
+        "I didn't complete the requested live app run in this run. What happened: the build request reached a live-run verification step without enough executed proof to claim the app was running or the UI was verified.",
+      blockedBy: [],
+      violations: [],
+      votes: []
+    },
+    {
+      action: {
+        id: "action_write_react_app",
+        type: "write_file",
+        description: "update React app",
+        params: {
+          path: "C:\\temp\\drone-react-preview\\src\\App.jsx",
+          content: "export default function App() { return null; }"
+        },
+        estimatedCostUsd: 0.08
+      },
+      mode: "escalation_path",
+      approved: true,
+      output: "Write success: C:\\temp\\drone-react-preview\\src\\App.jsx",
+      blockedBy: [],
+      violations: [],
+      votes: []
+    },
+    {
+      action: {
+        id: "action_build_react_app",
+        type: "shell_command",
+        description: "build app",
+        params: {
+          command: "npm run build"
+        },
+        estimatedCostUsd: 0.12
+      },
+      mode: "escalation_path",
+      approved: true,
+      output:
+        "Shell success:\n> drone-react-preview@0.0.0 build\n> vite build\n\nbuilt in 200ms",
+      blockedBy: [],
+      violations: [],
+      votes: []
+    }
+  ], {
+    userInput:
+      "Reuse the existing drone React workspace on my desktop, turn it into a calm drone-themed landing page, and run the build so dist/index.html exists."
+  });
+
+  const selected = selectUserFacingSummary(runResult, {
+    showTechnicalSummary: false
+  });
+  assert.match(selected, /I created or updated C:\\temp\\drone-react-preview\\src\\App\.jsx\./i);
+  assert.doesNotMatch(selected, /I didn't complete the requested live app run in this run\./i);
+  assert.doesNotMatch(selected, /BUILD_NO_SIDE_EFFECT_EXECUTED/i);
 });
 
 test("selectUserFacingSummary prefers proof-backed partial success over a generic blocked respond summary after a file update", () => {
@@ -653,7 +775,7 @@ test("selectUserFacingSummary prefers proof-backed partial success over a generi
 
   const selected = selectUserFacingSummary(runResult);
   assert.match(selected, /I created or updated C:\\temp\\drone-company\\index\.html\./i);
-  assert.match(selected, /One later step was blocked \(ACTION_EXECUTION_FAILED\)/i);
+  assert.match(selected, /One later runtime step failed \(ACTION_EXECUTION_FAILED\): Browser verification failed\./i);
   assert.doesNotMatch(selected, /^I couldn't execute that request in this run\./i);
 });
 
@@ -721,7 +843,7 @@ test("selectUserFacingSummary prefers the open page over later browser-verificat
 
   const selected = selectUserFacingSummary(runResult);
   assert.match(selected, /I opened http:\/\/127\.0\.0\.1:4177\/index\.html in your browser and left it open\./i);
-  assert.match(selected, /One later step was blocked \(ACTION_EXECUTION_FAILED\)/i);
+  assert.match(selected, /One later runtime step failed \(ACTION_EXECUTION_FAILED\): Follow-up command failed\./i);
   assert.doesNotMatch(selected, /^Browser verification passed:/i);
 });
 
@@ -897,7 +1019,7 @@ test("selectUserFacingSummary prefers readiness proof over a generic blocked res
 
   const selected = selectUserFacingSummary(runResult);
   assert.match(selected, /HTTP ready: http:\/\/127\.0\.0\.1:4177\/ responded with expected status 200\./i);
-  assert.match(selected, /One later step was blocked \(ACTION_EXECUTION_FAILED\)/i);
+  assert.match(selected, /One later runtime step failed \(ACTION_EXECUTION_FAILED\): Browser verification failed\./i);
   assert.doesNotMatch(selected, /^I couldn't execute that request in this run\./i);
 });
 
@@ -4932,6 +5054,45 @@ test("selectUserFacingSummary reports blocked mission diagnostics for run_skill 
     selected,
     /- Verification gate: not_applicable \(completion-claim gate not requested for this prompt\)/i
   );
+});
+
+test("selectUserFacingSummary surfaces exact runtime failure detail for blocked shell execution runs", () => {
+  const runResult = buildRunResult(
+    "Completed task with 0 approved action(s) and 1 blocked action(s).",
+    [
+      {
+        action: {
+          id: "action_shell_runtime_failure_blocked_summary",
+          type: "shell_command",
+          description: "start preview server",
+          params: {
+            command: "npm run dev"
+          },
+          estimatedCostUsd: 0.08
+        },
+        mode: "escalation_path",
+        approved: false,
+        output: "Shell failed: spawn ENAMETOOLONG",
+        blockedBy: ["ACTION_EXECUTION_FAILED"],
+        violations: [
+          {
+            code: "ACTION_EXECUTION_FAILED",
+            message: "Shell failed: spawn ENAMETOOLONG"
+          }
+        ],
+        votes: []
+      }
+    ],
+    {
+      userInput: "build it and leave it open for me"
+    }
+  );
+
+  const selected = selectUserFacingSummary(runResult, {
+    showTechnicalSummary: false
+  });
+  assert.match(selected, /What happened: a runtime execution step failed: Shell failed: spawn ENAMETOOLONG\./i);
+  assert.match(selected, /What to do next: inspect the failing step and retry after fixing that runtime issue\./i);
 });
 
 test("selectUserFacingSummary routes schedule prompts to typed unsupported no-op when no side effects executed", () => {

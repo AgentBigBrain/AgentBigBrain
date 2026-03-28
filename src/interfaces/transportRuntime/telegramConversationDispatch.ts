@@ -13,6 +13,7 @@ import type {
   PreparedTelegramRejectedUpdate
 } from "./telegramGatewayRuntime";
 import type { MediaUnderstandingOrgan } from "../../organs/mediaUnderstanding/mediaInterpretation";
+import type { ConversationInboundMediaEnvelope } from "../mediaRuntime/contracts";
 
 /**
  * Derives one Telegram chat id from a canonical conversation key.
@@ -34,6 +35,38 @@ export interface EnrichAcceptedTelegramUpdateWithMediaInput {
   prepared: PreparedTelegramAcceptedUpdate;
   config: TelegramInterfaceConfig;
   mediaUnderstandingOrgan?: MediaUnderstandingOrgan;
+}
+
+/**
+ * Returns whether a Telegram media-only turn is an unsupported voice note with no usable
+ * transcript, so the transport should fail closed instead of inventing semantic user input.
+ *
+ * @param canonicalText - Current canonical text assembled before media enrichment.
+ * @param media - Interpreted media envelope for the accepted Telegram update.
+ * @returns `true` when the turn is a voice-only fallback with no transcript and no explicit text.
+ */
+function isUntranscribedMediaOnlyVoiceNote(
+  canonicalText: string,
+  media: ConversationInboundMediaEnvelope | null
+): boolean {
+  if (canonicalText.trim().length > 0) {
+    return false;
+  }
+  if (!media || media.attachments.length !== 1) {
+    return false;
+  }
+  const [attachment] = media.attachments;
+  if (attachment?.kind !== "voice") {
+    return false;
+  }
+  const interpretation = attachment.interpretation;
+  if (!interpretation || interpretation.transcript?.trim()) {
+    return false;
+  }
+  return (
+    interpretation.source === "metadata_fallback" ||
+    interpretation.source === "unavailable"
+  );
 }
 
 /**
@@ -83,6 +116,20 @@ export async function enrichAcceptedTelegramUpdateWithMedia(
           "I couldn't safely read that media attachment. Please resend it or describe it in text."
       };
     }
+  }
+
+  if (
+    isUntranscribedMediaOnlyVoiceNote(
+      input.prepared.inbound.text,
+      interpretedMedia
+    )
+  ) {
+    return {
+      kind: "rejected",
+      chatId: input.prepared.chatId,
+      responseText:
+        "I received your voice note, but I couldn't transcribe it in this environment. Please resend it as text or try again where voice transcription is available."
+    };
   }
 
   const canonicalUserInput = buildConversationInboundUserInput(

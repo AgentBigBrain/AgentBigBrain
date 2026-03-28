@@ -76,7 +76,12 @@ function buildBlockedStartProcessPortInUseResult(
 
 function buildApprovedStartProcessResult(
   actionId: string,
-  command = "python -m http.server 8125"
+  command = "python -m http.server 8125",
+  loopbackTarget?: {
+    host: string;
+    port: number;
+    url: string;
+  }
 ): ActionRunResult {
   return {
     action: {
@@ -95,7 +100,10 @@ function buildApprovedStartProcessResult(
     executionStatus: "success",
     executionMetadata: {
       processLeaseId: "proc_live_run_recovery",
-      processLifecycleStatus: "PROCESS_STARTED"
+      processLifecycleStatus: "PROCESS_STARTED",
+      processRequestedHost: loopbackTarget?.host,
+      processRequestedPort: loopbackTarget?.port,
+      processRequestedUrl: loopbackTarget?.url
     },
     blockedBy: [],
     violations: [],
@@ -188,6 +196,24 @@ test("loopback-target tracking preserves an explicit 127.0.0.1 bind from the sta
     url: "http://127.0.0.1:8125",
     host: "127.0.0.1",
     port: 8125
+  } satisfies LoopbackTargetHint);
+});
+
+test("loopback-target tracking prefers typed start metadata for generic workspace-native commands", () => {
+  const startResult = buildTaskResult([
+    buildApprovedStartProcessResult("start_process_generic_target_1", "npm run dev", {
+      host: "localhost",
+      port: 4173,
+      url: "http://localhost:4173"
+    })
+  ]);
+
+  const target = resolveTrackedLoopbackTarget(null, startResult);
+
+  assert.deepEqual(target, {
+    url: "http://localhost:4173",
+    host: "localhost",
+    port: 4173
   } satisfies LoopbackTargetHint);
 });
 

@@ -5,11 +5,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import { buildConversationStackFromTurnsV1 } from "../../src/core/stage6_86ConversationStack";
 import {
   backfillTurnsFromRecentJobsIfNeeded,
   findRecentJob,
   recordAssistantTurn,
   recordUserTurn,
+  setActiveWorkspace,
+  setReturnHandoff,
   upsertRecentJob
 } from "../../src/interfaces/conversationSessionMutations";
 import { buildSessionSeed } from "../../src/interfaces/conversationManagerHelpers";
@@ -116,10 +119,18 @@ test("recordUserTurn and recordAssistantTurn normalize text and cap turn history
     session.conversationTurns.map((turn) => `${turn.role}:${turn.text}`),
     ["assistant:Second reply", "user:Third turn"]
   );
+  assert.ok(session.conversationStack);
+  assert.equal(session.conversationStack?.activeThreadKey !== null, true);
 });
 
 test("recordAssistantTurn preserves blank-line paragraph boundaries", () => {
   const session = buildSession();
+  recordUserTurn(
+    session,
+    "Landing page hero section",
+    "2026-03-03T00:00:02.000Z",
+    4
+  );
 
   recordAssistantTurn(
     session,
@@ -129,9 +140,60 @@ test("recordAssistantTurn preserves blank-line paragraph boundaries", () => {
   );
 
   assert.equal(
-    session.conversationTurns[0]?.text,
+    session.conversationTurns[1]?.text,
     "First paragraph with extra spacing.\n\nSecond paragraph stays separate."
   );
+  assert.equal(session.conversationStack?.updatedAt, "2026-03-03T00:00:03.000Z");
+});
+
+test("recordUserTurn applies one precomputed topic-key interpretation to the live conversation stack", () => {
+  const session = buildSession();
+  session.conversationTurns = [
+    {
+      role: "user",
+      text: "Landing page hero section",
+      at: "2026-03-03T00:00:01.000Z"
+    },
+    {
+      role: "assistant",
+      text: "I updated the landing page hero section.",
+      at: "2026-03-03T00:00:02.000Z"
+    },
+    {
+      role: "user",
+      text: "API auth retry bug",
+      at: "2026-03-03T00:00:03.000Z"
+    },
+    {
+      role: "assistant",
+      text: "I investigated the API auth retry bug.",
+      at: "2026-03-03T00:00:04.000Z"
+    }
+  ];
+  session.conversationStack = buildConversationStackFromTurnsV1(
+    session.conversationTurns,
+    "2026-03-03T00:00:04.000Z",
+    {}
+  );
+  const pausedThread = session.conversationStack.threads.find((thread) => thread.state === "paused");
+  assert.ok(pausedThread);
+
+  recordUserTurn(
+    session,
+    "continue that",
+    "2026-03-03T00:00:05.000Z",
+    10,
+    {
+      topicKeyInterpretation: {
+        kind: "resume_paused_thread",
+        selectedTopicKey: null,
+        selectedThreadKey: pausedThread.threadKey,
+        confidence: "high"
+      }
+    }
+  );
+
+  assert.equal(session.conversationStack?.activeThreadKey, pausedThread.threadKey);
 });
 
 test("backfillTurnsFromRecentJobsIfNeeded reconstructs turns from recent jobs in chronological order", () => {
@@ -167,6 +229,8 @@ test("backfillTurnsFromRecentJobsIfNeeded reconstructs turns from recent jobs in
       "assistant:Done 3"
     ]
   );
+  assert.ok(session.conversationStack);
+  assert.equal(session.conversationStack?.updatedAt, "2026-03-03T00:03:40.000Z");
 });
 
 test("backfillTurnsFromRecentJobsIfNeeded does not overwrite existing turns", () => {
@@ -185,4 +249,85 @@ test("backfillTurnsFromRecentJobsIfNeeded does not overwrite existing turns", ()
     text: "existing",
     at: "2026-03-03T00:00:01.000Z"
   }]);
+});
+
+test("setActiveWorkspace stamps the current session-domain snapshot when one is available", () => {
+  const session = buildSession();
+  session.domainContext.dominantLane = "workflow";
+  session.domainContext.lastUpdatedAt = "2026-03-03T00:10:00.000Z";
+
+  setActiveWorkspace(session, {
+    id: "workspace-1",
+    label: "Drone Company",
+    rootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
+    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\drone-company\\src\\App.jsx",
+    previewUrl: "http://127.0.0.1:4173/",
+    browserSessionId: null,
+    browserSessionIds: [],
+    browserSessionStatus: null,
+    browserProcessPid: null,
+    previewProcessLeaseId: null,
+    previewProcessLeaseIds: [],
+    previewProcessCwd: null,
+    lastKnownPreviewProcessPid: null,
+    stillControllable: true,
+    ownershipState: "tracked",
+    previewStackState: "browser_only",
+    lastChangedPaths: [],
+    sourceJobId: "job-1",
+    updatedAt: "2026-03-03T00:10:05.000Z"
+  });
+
+  assert.equal(session.activeWorkspace?.domainSnapshotLane, "workflow");
+  assert.equal(
+    session.activeWorkspace?.domainSnapshotRecordedAt,
+    "2026-03-03T00:10:00.000Z"
+  );
+});
+
+test("setReturnHandoff inherits the active workspace domain snapshot when present", () => {
+  const session = buildSession();
+  session.activeWorkspace = {
+    id: "workspace-1",
+    label: "Drone Company",
+    rootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
+    primaryArtifactPath: null,
+    previewUrl: null,
+    browserSessionId: null,
+    browserSessionIds: [],
+    browserSessionStatus: null,
+    browserProcessPid: null,
+    previewProcessLeaseId: null,
+    previewProcessLeaseIds: [],
+    previewProcessCwd: null,
+    lastKnownPreviewProcessPid: null,
+    stillControllable: false,
+    ownershipState: "stale",
+    previewStackState: "detached",
+    lastChangedPaths: [],
+    sourceJobId: "job-1",
+    domainSnapshotLane: "workflow",
+    domainSnapshotRecordedAt: "2026-03-03T00:15:00.000Z",
+    updatedAt: "2026-03-03T00:15:30.000Z"
+  };
+
+  setReturnHandoff(session, {
+    id: "handoff:job-1",
+    status: "completed",
+    goal: "Finish the landing page",
+    summary: "Ready for review.",
+    nextSuggestedStep: null,
+    workspaceRootPath: session.activeWorkspace.rootPath,
+    primaryArtifactPath: null,
+    previewUrl: null,
+    changedPaths: [],
+    sourceJobId: "job-1",
+    updatedAt: "2026-03-03T00:16:00.000Z"
+  });
+
+  assert.equal(session.returnHandoff?.domainSnapshotLane, "workflow");
+  assert.equal(
+    session.returnHandoff?.domainSnapshotRecordedAt,
+    "2026-03-03T00:15:00.000Z"
+  );
 });

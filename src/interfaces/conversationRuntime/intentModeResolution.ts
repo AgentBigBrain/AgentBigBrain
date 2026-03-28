@@ -4,8 +4,11 @@
 
 import type { RoutingMapClassificationV1 } from "../routingMap";
 import type {
+  AutonomyBoundaryInterpretationResolver,
+  ContextualFollowupInterpretationResolver,
   LocalIntentModelResolver,
-  LocalIntentModelSessionHints
+  LocalIntentModelSessionHints,
+  StatusRecallBoundaryInterpretationResolver
 } from "../../organs/languageUnderstanding/localIntentModelContracts";
 import { resolveClarificationOptions } from "../../organs/languageUnderstanding/clarificationIntentRanking";
 import { resolveExecutionIntentUnderstanding } from "../../organs/languageUnderstanding/executionIntentUnderstanding";
@@ -13,6 +16,19 @@ import { resolveExecutionIntentClarification } from "./executionIntentClarificat
 import { extractExecutionPreferences } from "./executionPreferenceExtraction";
 import { isDirectConversationOnlyRequest } from "./directConversationIntent";
 import type { ResolvedConversationIntentMode } from "./intentModeContracts";
+import {
+  resolveConversationAutonomyBoundaryInterpretationIntent,
+  resolveConversationStatusRecallBoundaryInterpretationIntent
+} from "./conversationRoutingSupport";
+import { analyzeConversationChatTurnSignals } from "./chatTurnSignals";
+import {
+  resolveContextualFollowupIntentResolution,
+  resolveDeterministicContextualFollowupIntent
+} from "./contextualFollowupInterpretationSupport";
+import {
+  shouldAttemptAutonomyBoundaryInterpretation,
+  shouldPromoteAmbiguousAutonomousExecution
+} from "./sessionDomainRouting";
 
 const REVIEW_PATTERNS: readonly RegExp[] = [
   /\byou did (?:this|that) wrong\b/i,
@@ -34,7 +50,10 @@ export async function resolveConversationIntentMode(
   userInput: string,
   routingClassification: RoutingMapClassificationV1 | null = null,
   localIntentModelResolver?: LocalIntentModelResolver,
-  sessionHints: LocalIntentModelSessionHints | null = null
+  sessionHints: LocalIntentModelSessionHints | null = null,
+  contextualFollowupInterpretationResolver?: ContextualFollowupInterpretationResolver,
+  autonomyBoundaryInterpretationResolver?: AutonomyBoundaryInterpretationResolver,
+  statusRecallBoundaryInterpretationResolver?: StatusRecallBoundaryInterpretationResolver
 ): Promise<ResolvedConversationIntentMode> {
   const normalized = userInput.trim();
   if (!normalized) {
@@ -59,6 +78,24 @@ export async function resolveConversationIntentMode(
   }
 
   const preferences = extractExecutionPreferences(normalized);
+  const shouldDeterministicallyPromoteAmbiguousAutonomy =
+    preferences.autonomousExecutionStrength === "ambiguous" &&
+    shouldPromoteAmbiguousAutonomousExecution(
+      normalized,
+      routingClassification,
+      sessionHints
+    );
+  const autonomousExecutionDetected =
+    preferences.autonomousExecutionStrength === "strong" ||
+    shouldDeterministicallyPromoteAmbiguousAutonomy;
+  const shouldAttemptAutonomyBoundaryResolution =
+    preferences.autonomousExecutionStrength === "ambiguous" &&
+    !shouldDeterministicallyPromoteAmbiguousAutonomy &&
+    shouldAttemptAutonomyBoundaryInterpretation(
+      routingClassification,
+      sessionHints
+    );
+  let suppressGenericLocalIntentModel = false;
   if (preferences.naturalSkillDiscovery) {
     return resolveExecutionIntentUnderstanding(
       normalized,
@@ -77,6 +114,19 @@ export async function resolveConversationIntentMode(
   }
 
   if (preferences.statusOrRecall) {
+    if (preferences.executeNow) {
+      const statusRecallBoundaryResolution =
+        await resolveConversationStatusRecallBoundaryInterpretationIntent(
+          normalized,
+          routingClassification,
+          sessionHints,
+          statusRecallBoundaryInterpretationResolver
+        );
+      if (statusRecallBoundaryResolution) {
+        return statusRecallBoundaryResolution;
+      }
+      suppressGenericLocalIntentModel = true;
+    }
     return resolveExecutionIntentUnderstanding(
       normalized,
       routingClassification,
@@ -108,7 +158,14 @@ export async function resolveConversationIntentMode(
     );
   }
 
-  if (preferences.autonomousExecution) {
+  const deterministicContextualFollowupIntent = resolveDeterministicContextualFollowupIntent(
+    normalized
+  );
+  if (deterministicContextualFollowupIntent) {
+    return deterministicContextualFollowupIntent;
+  }
+
+  if (autonomousExecutionDetected) {
     return resolveExecutionIntentUnderstanding(
       normalized,
       routingClassification,
@@ -121,8 +178,26 @@ export async function resolveConversationIntentMode(
         clarification: null
       },
       localIntentModelResolver,
-      sessionHints
+      sessionHints,
+      undefined,
+      {
+        suppressGenericLocalIntentModel
+      }
     );
+  }
+
+  if (shouldAttemptAutonomyBoundaryResolution) {
+    const autonomyBoundaryResolution =
+      await resolveConversationAutonomyBoundaryInterpretationIntent(
+        normalized,
+        routingClassification,
+        sessionHints,
+        autonomyBoundaryInterpretationResolver
+      );
+    if (autonomyBoundaryResolution) {
+      return autonomyBoundaryResolution;
+    }
+    suppressGenericLocalIntentModel = true;
   }
 
   if (preferences.executeNow) {
@@ -137,7 +212,11 @@ export async function resolveConversationIntentMode(
         clarification: null
       },
       localIntentModelResolver,
-      sessionHints
+      sessionHints,
+      undefined,
+      {
+        suppressGenericLocalIntentModel
+      }
     );
   }
 
@@ -153,7 +232,36 @@ export async function resolveConversationIntentMode(
         clarification: null
       },
       localIntentModelResolver,
-      sessionHints
+      sessionHints,
+      contextualFollowupInterpretationResolver,
+      {
+        suppressGenericLocalIntentModel
+      }
+    );
+  }
+
+  const structuralTurnSignals = analyzeConversationChatTurnSignals(normalized);
+  if (
+    structuralTurnSignals.primaryKind === "workflow_candidate" &&
+    structuralTurnSignals.containsWorkflowCallbackCue
+  ) {
+    return resolveExecutionIntentUnderstanding(
+      normalized,
+      routingClassification,
+      {
+        mode: "build",
+        confidence: "high",
+        matchedRuleId: "intent_mode_structural_workflow_callback",
+        explanation:
+          "Structural turn signals detected callback-style workflow language that should stay on the work path rather than drifting onto identity chat.",
+        clarification: null
+      },
+      localIntentModelResolver,
+      sessionHints,
+      contextualFollowupInterpretationResolver,
+      {
+        suppressGenericLocalIntentModel
+      }
     );
   }
 
@@ -179,6 +287,32 @@ export async function resolveConversationIntentMode(
     );
   }
 
+  const contextualFollowupResolution = await resolveContextualFollowupIntentResolution(
+    normalized,
+    {
+      mode: "chat",
+      confidence: "low",
+      matchedRuleId: "intent_mode_default_chat",
+      explanation: "No stronger execution or capability intent was detected.",
+      clarification: null
+    },
+    routingClassification,
+    sessionHints,
+    contextualFollowupInterpretationResolver
+  );
+  if (contextualFollowupResolution.resolvedIntentMode) {
+    return contextualFollowupResolution.resolvedIntentMode;
+  }
+  if (contextualFollowupResolution.preserveDeterministic) {
+    return {
+      mode: "chat",
+      confidence: "low",
+      matchedRuleId: "intent_mode_default_chat",
+      explanation: "No stronger execution or capability intent was detected.",
+      clarification: null
+    };
+  }
+
   return resolveExecutionIntentUnderstanding(
     normalized,
     routingClassification,
@@ -189,7 +323,8 @@ export async function resolveConversationIntentMode(
       explanation: "No stronger execution or capability intent was detected.",
       clarification: null
     },
-    localIntentModelResolver,
-    sessionHints
+    suppressGenericLocalIntentModel ? undefined : localIntentModelResolver,
+    sessionHints,
+    contextualFollowupInterpretationResolver
   );
 }

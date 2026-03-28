@@ -7,6 +7,7 @@ import {
   OpenLoopV1,
   ThreadFrameV1
 } from "../types";
+import { countLanguageTermOverlap } from "../languageRuntime/languageScoring";
 import { sha256HexFromCanonicalJson } from "../normalizers/canonicalizationRules";
 import { isConversationStackV1 } from "./conversationStack";
 
@@ -98,6 +99,18 @@ export interface OpenLoopPulseSelectionResultV1 {
   suppressed: readonly OpenLoopPulseCandidateV1[];
 }
 
+export interface OpenLoopResumeMatchV1 {
+  loopId: string;
+  threadKey: string;
+  threadState: ThreadFrameV1["state"];
+  topicLabel: string;
+  matchedTerms: readonly string[];
+  lookupTerms: readonly string[];
+  overlapCount: number;
+  priority: number;
+  lastTouchedAt: string;
+}
+
 /**
  * Builds deterministic lookup terms for one open loop plus its owning thread context.
  *
@@ -122,6 +135,94 @@ export function getOpenLoopLookupTermsV1(
     }
   }
   return [...normalized].sort((left, right) => left.localeCompare(right));
+}
+
+/**
+ * Resolves the best open-loop resume match from bounded interpreted hint terms.
+ *
+ * @param stack - Canonical conversation stack to inspect.
+ * @param hintTerms - Normalized lexical hints proposed by deterministic or interpreted context.
+ * @returns Best open-loop resume match, or `null` when no bounded overlap exists.
+ */
+export function findBestOpenLoopResumeMatchV1(
+  stack: ConversationStackV1,
+  hintTerms: readonly string[]
+): OpenLoopResumeMatchV1 | null {
+  if (!isConversationStackV1(stack)) {
+    throw new Error("Invalid ConversationStackV1 payload.");
+  }
+
+  const normalizedHints = [...new Set(
+    hintTerms
+      .filter((term) => typeof term === "string")
+      .flatMap((term) => normalizeWhitespace(term).toLowerCase().match(/[a-z0-9]+/g) ?? [])
+      .filter((term) => term.trim().length >= 3)
+  )].sort((left, right) => left.localeCompare(right));
+  if (normalizedHints.length === 0) {
+    return null;
+  }
+
+  let best: OpenLoopResumeMatchV1 | null = null;
+  let bestScore = -1;
+
+  for (const thread of stack.threads) {
+    if (thread.state === "resolved") {
+      continue;
+    }
+    for (const loop of thread.openLoops) {
+      if (loop.status !== "open") {
+        continue;
+      }
+      const lookupTerms = getOpenLoopLookupTermsV1(loop, thread);
+      const matchedTerms = lookupTerms.filter((term) => normalizedHints.includes(term));
+      const overlapCount = countLanguageTermOverlap(normalizedHints, lookupTerms);
+      if (overlapCount <= 0 || matchedTerms.length === 0) {
+        continue;
+      }
+
+      const stateWeight = thread.state === "paused" ? 2 : 1;
+      const recencyValue = Number.isFinite(Date.parse(thread.lastTouchedAt))
+        ? Date.parse(thread.lastTouchedAt) / 1_000_000_000_000
+        : 0;
+      const score = (overlapCount * 10) + (loop.priority * 2) + stateWeight + recencyValue;
+      const candidate: OpenLoopResumeMatchV1 = {
+        loopId: loop.loopId,
+        threadKey: thread.threadKey,
+        threadState: thread.state,
+        topicLabel: thread.topicLabel,
+        matchedTerms,
+        lookupTerms,
+        overlapCount,
+        priority: loop.priority,
+        lastTouchedAt: thread.lastTouchedAt
+      };
+
+      if (score > bestScore) {
+        best = candidate;
+        bestScore = score;
+        continue;
+      }
+      if (score === bestScore && best) {
+        if (candidate.threadState !== best.threadState) {
+          best = candidate.threadState === "paused" ? candidate : best;
+          continue;
+        }
+        if (candidate.priority !== best.priority) {
+          best = candidate.priority > best.priority ? candidate : best;
+          continue;
+        }
+        if (candidate.lastTouchedAt !== best.lastTouchedAt) {
+          best = candidate.lastTouchedAt > best.lastTouchedAt ? candidate : best;
+          continue;
+        }
+        if (candidate.loopId.localeCompare(best.loopId) < 0) {
+          best = candidate;
+        }
+      }
+    }
+  }
+
+  return best;
 }
 
 /**

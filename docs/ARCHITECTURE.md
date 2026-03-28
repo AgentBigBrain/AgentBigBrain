@@ -207,8 +207,9 @@ Main supporting surfaces:
 
 The front door can also use an optional bounded local intent-model seam from
 `src/organs/languageUnderstanding/` when deterministic routing confidence stays weak. That seam is
-currently Ollama-backed and used only for mode and semantic-hint classification. It does not
-replace the planner, and it does not authorize risky actions by itself.
+currently Ollama-backed and now supports multiple bounded conversational interpretation tasks such
+as mode routing, identity, follow-up, and resume or handoff disambiguation. It does not replace
+the planner, and it does not authorize risky actions by itself.
 
 ## 6) Interface and Conversation Model
 
@@ -361,14 +362,16 @@ The runtime treats model output as untrusted until it is normalized and validate
 
 Media note:
 
-- in phase 1, media understanding remains on the explicit OpenAI API media path
-- image understanding depends on a vision-capable OpenAI API model path
-- voice-note understanding depends on an OpenAI API transcription-capable path
+- media can keep one shared backend or split by modality
+- image understanding can follow `codex_oauth` or the explicit OpenAI API path
+- voice-note understanding can be forced onto an explicit OpenAI API transcription-capable path
 - video is currently transport-plus-fallback, not full multimodal clip reasoning
 
 Local intent note:
 
 - the optional local intent seam remains Ollama-backed and separate from the main text backend
+- it now supports multiple bounded conversational interpretation tasks rather than only front-door
+  mode classification
 - selecting `codex_oauth` or `openai_api` does not implicitly change that local intent provider
 
 ## 10) Extension Points

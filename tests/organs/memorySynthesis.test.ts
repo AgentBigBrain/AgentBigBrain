@@ -14,22 +14,22 @@ import type {
 
 function buildEpisode(): MemorySynthesisEpisodeRecord {
   return {
-    episodeId: "episode_billy_fall",
-    title: "Billy fell down",
-    summary: "Billy fell down a few weeks ago and the outcome is still unresolved.",
+    episodeId: "episode_owen_fall",
+    title: "Owen fell down",
+    summary: "Owen fell down a few weeks ago and the outcome is still unresolved.",
     status: "unresolved",
     lastMentionedAt: "2026-02-14T15:00:00.000Z",
-    entityRefs: ["Billy"],
+    entityRefs: ["Owen"],
     entityLinks: [
       {
-        entityKey: "entity_billy",
-        canonicalName: "Billy"
+        entityKey: "entity_owen",
+        canonicalName: "Owen"
       }
     ],
     openLoopLinks: [
       {
-        loopId: "loop_billy",
-        threadKey: "thread_billy",
+        loopId: "loop_owen",
+        threadKey: "thread_owen",
         status: "open",
         priority: 0.9
       }
@@ -41,8 +41,8 @@ function buildFacts(): readonly MemorySynthesisFactRecord[] {
   return [
     {
       factId: "fact_work_association",
-      key: "contact.billy.work_association",
-      value: "Flare Web Design",
+      key: "contact.owen.work_association",
+      value: "Lantern Studio",
       status: "confirmed",
       observedAt: "2026-02-10T12:00:00.000Z",
       lastUpdatedAt: "2026-02-10T12:00:00.000Z",
@@ -55,8 +55,8 @@ test("buildRecallSynthesis returns one bounded supported hypothesis", () => {
   const synthesis = buildRecallSynthesis([buildEpisode()], buildFacts());
 
   assert.ok(synthesis);
-  assert.equal(synthesis?.topicLabel, "Billy fell down");
-  assert.match(synthesis?.summary ?? "", /Flare Web Design/i);
+  assert.equal(synthesis?.topicLabel, "Owen fell down");
+  assert.match(synthesis?.summary ?? "", /Lantern Studio/i);
   assert.ok((synthesis?.evidence.length ?? 0) >= 3);
 });
 

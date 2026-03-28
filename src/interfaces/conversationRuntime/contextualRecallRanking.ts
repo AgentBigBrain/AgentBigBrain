@@ -12,6 +12,9 @@ export interface ContextualRecallCandidate {
   openLoopCount: number;
   lastTouchedAt: string;
   relevanceScore: number;
+  matchSource?: "thread_context" | "open_loop_resume";
+  matchedOpenLoopId?: string;
+  matchedHintTerms?: readonly string[];
   episodeId?: string;
   episodeStatus?: ProfileEpisodeStatus;
   episodeSummary?: string;
@@ -38,11 +41,12 @@ function computeContextualRecallScore(candidate: ContextualRecallCandidate): num
     ? EPISODE_STATUS_PRIORITY[candidate.episodeStatus] * 2
     : 0;
   const openLoopWeight = candidate.openLoopCount * 0.5;
+  const openLoopResumeWeight = candidate.matchSource === "open_loop_resume" ? 2 : 0;
   const recencyValue = Date.parse(candidate.lastTouchedAt);
   const recencyWeight = Number.isFinite(recencyValue)
     ? recencyValue / 1_000_000_000_000
     : 0;
-  return candidate.relevanceScore + kindWeight + statusWeight + openLoopWeight + recencyWeight;
+  return candidate.relevanceScore + kindWeight + statusWeight + openLoopWeight + openLoopResumeWeight + recencyWeight;
 }
 
 /**

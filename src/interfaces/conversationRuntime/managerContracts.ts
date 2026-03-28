@@ -4,6 +4,8 @@
 
 import type {
   ConversationProgressStatus,
+  ConversationRecoveryTrace,
+  ConversationTransportIdentityRecord,
   ConversationVisibility
 } from "../sessionStore";
 import type { ConversationInboundMediaEnvelope } from "../mediaRuntime/contracts";
@@ -12,16 +14,30 @@ import type {
   PulseLexicalRuleContext
 } from "../conversationManagerHelpers";
 import type {
+  EntityGraphV1,
   ConversationStackV1,
   OpenLoopV1
 } from "../../core/types";
 import type { ProfileEpisodeStatus } from "../../core/profileMemory";
+import type { ProfileMemoryIngestRequest } from "../../core/profileMemoryRuntime/contracts";
 import type { SkillInventoryEntry } from "../../organs/skillRegistry/contracts";
 import type {
   InterpretedConversationIntent,
   IntentInterpreterTurn
 } from "../../organs/intentInterpreter";
-import type { LocalIntentModelResolver } from "../../organs/languageUnderstanding/localIntentModelContracts";
+import type {
+  AutonomyBoundaryInterpretationResolver,
+  ContinuationInterpretationResolver,
+  ContextualFollowupInterpretationResolver,
+  ContextualReferenceInterpretationResolver,
+  EntityReferenceInterpretationResolver,
+  HandoffControlInterpretationResolver,
+  IdentityInterpretationResolver,
+  LocalIntentModelResolver,
+  StatusRecallBoundaryInterpretationResolver,
+  TopicKeyInterpretationResolver
+} from "../../organs/languageUnderstanding/localIntentModelContracts";
+import type { ProposalReplyInterpretationResolver } from "../../organs/languageUnderstanding/localIntentModelProposalReplyContracts";
 import type { ManagedProcessSnapshot } from "../../organs/liveRun/managedProcessRegistry";
 import type { BrowserSessionSnapshot } from "../../organs/liveRun/browserSessionRegistry";
 import type { TaskRunResult } from "../../core/types";
@@ -32,6 +48,7 @@ export interface ConversationInboundMessage {
   conversationId: string;
   userId: string;
   username: string;
+  transportIdentity?: ConversationTransportIdentityRecord | null;
   conversationVisibility: ConversationVisibility;
   text: string;
   media?: ConversationInboundMediaEnvelope | null;
@@ -55,6 +72,7 @@ export type RunDirectConversationTurn = (
 export interface ConversationExecutionProgressUpdate {
   status: Exclude<ConversationProgressStatus, "idle">;
   message: string;
+  recoveryTrace?: ConversationRecoveryTrace | null;
 }
 
 export type ConversationCapabilityStatus = "available" | "limited" | "unavailable";
@@ -96,6 +114,25 @@ export interface ConversationDeliveryResult {
   errorCode: string | null;
 }
 
+export type ConversationOutboundDeliverySource =
+  | "transport_response"
+  | "direct_reply"
+  | "autonomous_progress"
+  | "worker_ack"
+  | "worker_progress"
+  | "worker_status_panel"
+  | "worker_final_preview"
+  | "worker_final";
+
+export interface ConversationOutboundDeliveryTrace {
+  source: ConversationOutboundDeliverySource;
+  sessionKey?: string | null;
+  jobId?: string | null;
+  jobCreatedAt?: string | null;
+  inboundEventId?: string | null;
+  inboundReceivedAt?: string | null;
+}
+
 export interface ConversationNotifierCapabilities {
   supportsEdit: boolean;
   supportsNativeStreaming: boolean;
@@ -103,9 +140,19 @@ export interface ConversationNotifierCapabilities {
 
 export interface ConversationNotifierTransport {
   capabilities: ConversationNotifierCapabilities;
-  send(message: string): Promise<ConversationDeliveryResult>;
-  edit?(messageId: string, message: string): Promise<ConversationDeliveryResult>;
-  stream?(message: string): Promise<ConversationDeliveryResult>;
+  send(
+    message: string,
+    trace?: ConversationOutboundDeliveryTrace
+  ): Promise<ConversationDeliveryResult>;
+  edit?(
+    messageId: string,
+    message: string,
+    trace?: ConversationOutboundDeliveryTrace
+  ): Promise<ConversationDeliveryResult>;
+  stream?(
+    message: string,
+    trace?: ConversationOutboundDeliveryTrace
+  ): Promise<ConversationDeliveryResult>;
 }
 
 export type ConversationNotifier =
@@ -231,6 +278,29 @@ export type QueryConversationContinuityFacts = (
   request: ConversationContinuityFactQueryRequest
 ) => Promise<readonly ConversationContinuityFactRecord[]>;
 
+export type GetConversationEntityGraph = () => Promise<EntityGraphV1>;
+
+export interface ConversationEntityAliasCandidateRequest {
+  entityKey: string;
+  aliasCandidate: string;
+  observedAt: string;
+  evidenceRef: string;
+}
+
+export interface ConversationEntityAliasCandidateResult {
+  acceptedAlias: string | null;
+  rejectionReason: string | null;
+}
+
+export type ReconcileConversationEntityAliasCandidate = (
+  request: ConversationEntityAliasCandidateRequest
+) => Promise<ConversationEntityAliasCandidateResult | null>;
+
+export type RememberConversationProfileInput = (
+  input: string | ProfileMemoryIngestRequest,
+  receivedAt: string
+) => Promise<boolean>;
+
 export type ListManagedProcessSnapshots = () => Promise<readonly ManagedProcessSnapshot[]>;
 export type ListBrowserSessionSnapshots = () => Promise<readonly BrowserSessionSnapshot[]>;
 
@@ -255,10 +325,23 @@ export interface ConversationManagerDependencies {
   interpretConversationIntent?: ConversationIntentInterpreter;
   runDirectConversationTurn?: RunDirectConversationTurn;
   localIntentModelResolver?: LocalIntentModelResolver;
+  autonomyBoundaryInterpretationResolver?: AutonomyBoundaryInterpretationResolver;
+  statusRecallBoundaryInterpretationResolver?: StatusRecallBoundaryInterpretationResolver;
+  continuationInterpretationResolver?: ContinuationInterpretationResolver;
+  contextualFollowupInterpretationResolver?: ContextualFollowupInterpretationResolver;
+  contextualReferenceInterpretationResolver?: ContextualReferenceInterpretationResolver;
+  entityReferenceInterpretationResolver?: EntityReferenceInterpretationResolver;
+  handoffControlInterpretationResolver?: HandoffControlInterpretationResolver;
+  identityInterpretationResolver?: IdentityInterpretationResolver;
+  proposalReplyInterpretationResolver?: ProposalReplyInterpretationResolver;
+  topicKeyInterpretationResolver?: TopicKeyInterpretationResolver;
   intentInterpreterConfidenceThreshold?: number;
   runCheckpointReview?: ConversationCheckpointReviewRunner;
   queryContinuityEpisodes?: QueryConversationContinuityEpisodes;
   queryContinuityFacts?: QueryConversationContinuityFacts;
+  getEntityGraph?: GetConversationEntityGraph;
+  reconcileEntityAliasCandidate?: ReconcileConversationEntityAliasCandidate;
+  rememberConversationProfileInput?: RememberConversationProfileInput;
   reviewConversationMemory?: ReviewConversationMemory;
   resolveConversationMemoryEpisode?: ResolveConversationMemoryEpisode;
   markConversationMemoryEpisodeWrong?: MarkConversationMemoryEpisodeWrong;

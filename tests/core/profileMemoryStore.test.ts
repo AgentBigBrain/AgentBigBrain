@@ -50,7 +50,7 @@ test("profile memory persists encrypted content and omits plaintext values at re
   await withProfileStore(async (store, filePath) => {
     await store.ingestFromTaskInput(
       "task_profile_1",
-      "my address is 123 Main Street and I work at Flare",
+      "my address is 123 Main Street and I work at Lantern",
       "2026-02-23T00:00:00.000Z"
     );
 
@@ -64,7 +64,7 @@ test("readFacts hides sensitive fields unless explicit approval is present", asy
   await withProfileStore(async (store) => {
     await store.ingestFromTaskInput(
       "task_profile_2",
-      "my address is 123 Main Street and my job is Flare",
+      "my address is 123 Main Street and my job is Lantern",
       "2026-02-23T00:00:00.000Z"
     );
 
@@ -91,7 +91,7 @@ test("planning context excludes sensitive facts and includes active non-sensitiv
   await withProfileStore(async (store) => {
     await store.ingestFromTaskInput(
       "task_profile_3",
-      "my address is 123 Main Street and my job is Flare",
+      "my address is 123 Main Street and my job is Lantern",
       "2026-02-23T00:00:00.000Z"
     );
 
@@ -111,14 +111,14 @@ test("planning context is query-aware and surfaces matching contact facts", asyn
     );
     await store.ingestFromTaskInput(
       "task_profile_query_2",
-      "I used to work with Billy at Flare Web Design.",
+      "I used to work with Owen at Lantern Studio.",
       "2026-02-24T00:01:00.000Z"
     );
 
-    const planningContext = await store.getPlanningContext(4, "who is Billy?");
-    assert.equal(planningContext.includes("contact.billy.name: Billy"), true);
+    const planningContext = await store.getPlanningContext(4, "who is Owen?");
+    assert.equal(planningContext.includes("contact.owen.name: Owen"), true);
     assert.equal(
-      planningContext.includes("contact.billy.work_association: Flare Web Design"),
+      planningContext.includes("contact.owen.work_association: Lantern Studio"),
       true
     );
   });
@@ -128,16 +128,16 @@ test("episode planning context is query-aware and surfaces matching unresolved s
   await withProfileStore(async (store) => {
     await store.ingestFromTaskInput(
       "task_profile_episode_context_1",
-      "Billy fell down three weeks ago and I never told you how it ended.",
+      "Owen fell down three weeks ago and I never told you how it ended.",
       "2026-03-08T10:00:00.000Z"
     );
 
     const episodePlanningContext = await store.getEpisodePlanningContext(
       2,
-      "How is Billy doing after the fall?"
+      "How is Owen doing after the fall?"
     );
 
-    assert.match(episodePlanningContext, /Billy fell down/);
+    assert.match(episodePlanningContext, /Owen fell down/);
     assert.match(episodePlanningContext, /status=unresolved/);
   });
 });
@@ -148,8 +148,8 @@ test("readEpisodes hides sensitive episodes unless explicit approval is present"
       ...createEmptyProfileMemoryState(),
       episodes: [
         createProfileEpisodeRecord({
-          title: "Billy fell down",
-          summary: "Billy fell down and the outcome was unresolved.",
+          title: "Owen fell down",
+          summary: "Owen fell down and the outcome was unresolved.",
           sourceTaskId: "task_profile_store_read_episode_1",
           source: "test",
           sourceKind: "explicit_user_statement",
@@ -178,7 +178,7 @@ test("readEpisodes hides sensitive episodes unless explicit approval is present"
       explicitHumanApproval: false
     });
     assert.equal(withoutApproval.length, 1);
-    assert.equal(withoutApproval[0]?.title, "Billy fell down");
+    assert.equal(withoutApproval[0]?.title, "Owen fell down");
 
     const withApproval = await store.readEpisodes({
       purpose: "operator_view",
@@ -197,14 +197,14 @@ test("queryEpisodesForContinuity returns linked unresolved episodes for re-menti
       ...createEmptyProfileMemoryState(),
       episodes: [
         createProfileEpisodeRecord({
-          title: "Billy fell down",
-          summary: "Billy fell down a few weeks ago and the outcome was unresolved.",
+          title: "Owen fell down",
+          summary: "Owen fell down a few weeks ago and the outcome was unresolved.",
           sourceTaskId: "task_profile_store_query_episode_1",
           source: "test",
           sourceKind: "explicit_user_statement",
           sensitive: false,
           observedAt,
-          entityRefs: ["contact.billy"],
+          entityRefs: ["contact.owen"],
           tags: ["followup", "injury"]
         })
       ]
@@ -215,7 +215,7 @@ test("queryEpisodesForContinuity returns linked unresolved episodes for re-menti
     const graph = applyEntityExtractionToGraph(
       createEmptyEntityGraphV1(observedAt),
       extractEntityCandidates({
-        text: "Billy checked in after the fall.",
+        text: "Owen checked in after the fall.",
         observedAt,
         evidenceRef: "trace:store_query_episode_1"
       }),
@@ -226,7 +226,7 @@ test("queryEpisodesForContinuity returns linked unresolved episodes for re-menti
       [
         {
           role: "user",
-          text: "Billy fell down a few weeks ago.",
+          text: "Owen fell down a few weeks ago.",
           at: observedAt
         }
       ],
@@ -235,17 +235,17 @@ test("queryEpisodesForContinuity returns linked unresolved episodes for re-menti
     const stack = upsertOpenLoopOnConversationStackV1({
       stack: seededStack,
       threadKey: seededStack.activeThreadKey!,
-      text: "Remind me later to ask how Billy is doing after the fall.",
+      text: "Remind me later to ask how Owen is doing after the fall.",
       observedAt,
-      entityRefs: ["Billy"]
+      entityRefs: ["Owen"]
     }).stack;
 
     const matches = await store.queryEpisodesForContinuity(graph, stack, {
-      entityHints: ["Billy"]
+      entityHints: ["Owen"]
     });
 
     assert.equal(matches.length, 1);
-    assert.equal(matches[0]?.episode.title, "Billy fell down");
+    assert.equal(matches[0]?.episode.title, "Owen fell down");
     assert.equal(matches[0]?.entityLinks.length > 0, true);
     assert.equal(matches[0]?.openLoopLinks.length > 0, true);
   });
@@ -257,15 +257,15 @@ test("profile memory store load preserves persisted episodic-memory state", asyn
       ...createEmptyProfileMemoryState(),
       episodes: [
         createProfileEpisodeRecord({
-          title: "Billy fall situation",
-          summary: "Billy fell down a few weeks ago and the outcome was never mentioned.",
+          title: "Owen fall situation",
+          summary: "Owen fell down a few weeks ago and the outcome was never mentioned.",
           sourceTaskId: "task_profile_store_episode_1",
           source: "test",
           sourceKind: "explicit_user_statement",
           sensitive: false,
           observedAt: "2026-03-08T10:00:00.000Z",
-          entityRefs: ["entity_billy"],
-          openLoopRefs: ["loop_billy"],
+          entityRefs: ["entity_owen"],
+          openLoopRefs: ["loop_owen"],
           tags: ["followup", "injury"]
         })
       ]
@@ -275,8 +275,8 @@ test("profile memory store load preserves persisted episodic-memory state", asyn
 
     const loaded = await store.load();
     assert.equal(loaded.episodes.length, 1);
-    assert.equal(loaded.episodes[0]?.title, "Billy fall situation");
-    assert.deepEqual(loaded.episodes[0]?.entityRefs, ["entity_billy"]);
+    assert.equal(loaded.episodes[0]?.title, "Owen fall situation");
+    assert.deepEqual(loaded.episodes[0]?.entityRefs, ["entity_owen"]);
   });
 });
 
@@ -286,26 +286,26 @@ test("profile memory store load consolidates duplicate episodic-memory records",
       ...createEmptyProfileMemoryState(),
       episodes: [
         createProfileEpisodeRecord({
-          title: "Billy fell down",
-          summary: "Billy fell down near the stairs.",
+          title: "Owen fell down",
+          summary: "Owen fell down near the stairs.",
           sourceTaskId: "task_profile_store_episode_consolidation_1",
           source: "test",
           sourceKind: "explicit_user_statement",
           sensitive: false,
           observedAt: "2026-03-01T10:00:00.000Z",
-          entityRefs: ["contact.billy"],
+          entityRefs: ["contact.owen"],
           openLoopRefs: ["loop_old"],
           tags: ["injury"]
         }),
         createProfileEpisodeRecord({
-          title: "Billy fell down",
-          summary: "Billy fell down near the stairs and the outcome was unresolved.",
+          title: "Owen fell down",
+          summary: "Owen fell down near the stairs and the outcome was unresolved.",
           sourceTaskId: "task_profile_store_episode_consolidation_2",
           source: "test",
           sourceKind: "assistant_inference",
           sensitive: false,
           observedAt: "2026-03-02T10:00:00.000Z",
-          entityRefs: ["contact.billy"],
+          entityRefs: ["contact.owen"],
           openLoopRefs: ["loop_new"],
           tags: ["followup", "injury"]
         })
@@ -325,18 +325,18 @@ test("ingestFromTaskInput extracts and later resolves bounded episodic-memory si
   await withProfileStore(async (store) => {
     await store.ingestFromTaskInput(
       "task_profile_store_episode_ingest_1",
-      "Billy fell down three weeks ago and I never told you how it ended.",
+      "Owen fell down three weeks ago and I never told you how it ended.",
       "2026-03-08T10:00:00.000Z"
     );
 
     let state = await store.load();
     assert.equal(state.episodes.length, 1);
-    assert.equal(state.episodes[0]?.title, "Billy fell down");
+    assert.equal(state.episodes[0]?.title, "Owen fell down");
     assert.equal(state.episodes[0]?.status, "unresolved");
 
     await store.ingestFromTaskInput(
       "task_profile_store_episode_ingest_2",
-      "Billy is doing better now after the fall.",
+      "Owen is doing better now after the fall.",
       "2026-03-08T12:00:00.000Z"
     );
 
@@ -355,7 +355,7 @@ test("ingestFromTaskInput uses voice transcripts for durable fact and episode ex
         "Please fix this before lunch.",
         "",
         "Attached media context:",
-        "- Voice note transcript: My name is Benny and Billy fell down last week."
+        "- Voice note transcript: My name is Benny and Owen fell down last week."
       ].join("\n"),
       "2026-03-08T13:00:00.000Z"
     );
@@ -373,7 +373,7 @@ test("ingestFromTaskInput uses voice transcripts for durable fact and episode ex
     );
 
     const episodes = await store.reviewEpisodesForUser(5, "2026-03-08T13:05:00.000Z");
-    assert.equal(episodes.some((episode) => episode.title === "Billy fell down"), true);
+    assert.equal(episodes.some((episode) => episode.title === "Owen fell down"), true);
   });
 });
 
@@ -395,8 +395,8 @@ test("ingestFromTaskInput suppresses generic media-only prompts but still accept
         "You did this wrong.",
         "",
         "Attached media context:",
-        "- image summary: Billy fell down near the stairs and the outcome still sounds unresolved.",
-        "- OCR text: Billy fell down near the stairs"
+        "- image summary: Owen fell down near the stairs and the outcome still sounds unresolved.",
+        "- OCR text: Owen fell down near the stairs"
       ].join("\n"),
       "2026-03-08T14:10:00.000Z"
     );
@@ -411,7 +411,7 @@ test("ingestFromTaskInput suppresses generic media-only prompts but still accept
     assert.equal(facts.some((fact) => fact.key === "identity.preferred_name"), false);
 
     const episodes = await store.reviewEpisodesForUser(5, "2026-03-08T14:15:00.000Z");
-    assert.equal(episodes.some((episode) => episode.title === "Billy fell down"), true);
+    assert.equal(episodes.some((episode) => episode.title === "Owen fell down"), true);
   });
 });
 
@@ -469,14 +469,81 @@ test("evaluateAgentPulse allows stale-fact revalidation when stale facts exist",
   });
 });
 
+test("ingestFromTaskInput accepts validated identity candidates without requiring discourse-heavy raw extraction", async () => {
+  await withProfileStore(async (store) => {
+    const result = await store.ingestFromTaskInput(
+      "task_profile_store_validated_identity_1",
+      "I already told you my name is Avery several times.",
+      "2026-03-21T12:00:00.000Z",
+      {
+        validatedFactCandidates: [
+          {
+            key: "identity.preferred_name",
+            candidateValue: "Avery",
+            source: "conversation.identity_interpretation",
+            confidence: 0.95
+          }
+        ]
+      }
+    );
+
+    assert.equal(result.appliedFacts, 1);
+
+    const facts = await store.readFacts({
+      purpose: "operator_view",
+      includeSensitive: true,
+      explicitHumanApproval: true,
+      approvalId: "approval_profile_validated_identity_1",
+      maxFacts: 10
+    });
+    assert.equal(
+      facts.some((fact) => fact.key === "identity.preferred_name" && fact.value === "Avery"),
+      true
+    );
+  });
+});
+
+test("evaluateAgentPulse suppresses stale-fact revalidation for workflow-dominant sessions", async () => {
+  await withProfileStore(async (store) => {
+    await store.ingestFromTaskInput(
+      "task_profile_stale_workflow_1",
+      "my favorite editor is vscode",
+      "2025-01-10T00:00:00.000Z"
+    );
+
+    const evaluation = await store.evaluateAgentPulse(
+      {
+        enabled: true,
+        timezoneOffsetMinutes: 0,
+        quietHoursStartHourLocal: 22,
+        quietHoursEndHourLocal: 8,
+        minIntervalMinutes: 0
+      },
+      {
+        nowIso: "2026-02-23T15:00:00.000Z",
+        userOptIn: true,
+        reason: "stale_fact_revalidation",
+        lastPulseSentAtIso: null,
+        sessionDominantLane: "workflow",
+        sessionHasActiveWorkflowContinuity: true,
+        overrideQuietHours: true
+      }
+    );
+
+    assert.equal(evaluation.staleFactCount > 0, true);
+    assert.equal(evaluation.decision.allowed, false);
+    assert.equal(evaluation.decision.decisionCode, "SESSION_DOMAIN_SUPPRESSED");
+  });
+});
+
 test("evaluateAgentPulse exposes bounded fresh unresolved situations for pulse grounding", async () => {
   await withProfileStore(async (store, filePath) => {
     const seededState = {
       ...createEmptyProfileMemoryState(),
       episodes: [
         createProfileEpisodeRecord({
-          title: "Billy finished rehab",
-          summary: "Billy finished rehab and fully recovered.",
+          title: "Owen finished rehab",
+          summary: "Owen finished rehab and fully recovered.",
           sourceTaskId: "task_profile_store_pulse_episode_1",
           source: "test",
           sourceKind: "explicit_user_statement",
@@ -485,18 +552,18 @@ test("evaluateAgentPulse exposes bounded fresh unresolved situations for pulse g
           lastMentionedAt: "2026-03-05T10:00:00.000Z",
           status: "resolved",
           resolvedAt: "2026-03-05T12:00:00.000Z",
-          entityRefs: ["contact.billy"]
+          entityRefs: ["contact.owen"]
         }),
         createProfileEpisodeRecord({
-          title: "Billy fell down",
-          summary: "Billy fell down and the outcome is unresolved.",
+          title: "Owen fell down",
+          summary: "Owen fell down and the outcome is unresolved.",
           sourceTaskId: "task_profile_store_pulse_episode_2",
           source: "test",
           sourceKind: "explicit_user_statement",
           sensitive: false,
           observedAt: "2026-03-07T10:00:00.000Z",
           lastMentionedAt: "2026-03-07T10:00:00.000Z",
-          entityRefs: ["contact.billy"]
+          entityRefs: ["contact.owen"]
         })
       ]
     };
@@ -524,7 +591,7 @@ test("evaluateAgentPulse exposes bounded fresh unresolved situations for pulse g
     assert.equal(evaluation.decision.allowed, true);
     assert.deepEqual(
       evaluation.relevantEpisodes.map((episode) => episode.title),
-      ["Billy fell down"]
+      ["Owen fell down"]
     );
   });
 });
@@ -864,7 +931,7 @@ test("reviewEpisodesForUser and explicit user episode updates remain bounded and
   await withProfileStore(async (store) => {
     await store.ingestFromTaskInput(
       "task_profile_store_user_review_1",
-      "Billy fell down three weeks ago and I never told you how it ended.",
+      "Owen fell down three weeks ago and I never told you how it ended.",
       "2026-03-08T10:00:00.000Z"
     );
 
@@ -880,7 +947,7 @@ test("reviewEpisodesForUser and explicit user episode updates remain bounded and
       "resolved",
       "memory_resolve_1",
       "/memory resolve episode",
-      "Billy recovered and is fine now.",
+      "Owen recovered and is fine now.",
       "2026-03-08T11:00:00.000Z"
     );
     assert.equal(resolved?.status, "resolved");

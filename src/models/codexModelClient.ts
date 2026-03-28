@@ -16,6 +16,30 @@ export interface CodexModelClientOptions {
   env?: NodeJS.ProcessEnv;
 }
 
+export const DEFAULT_CODEX_REQUEST_TIMEOUT_MS = 180_000;
+export const MIN_CODEX_PLANNER_REQUEST_TIMEOUT_MS = 420_000;
+
+/**
+ * Resolves the effective Codex timeout for one structured schema request.
+ *
+ * Planner turns regularly carry the heaviest prompt payloads in this runtime, especially for
+ * end-to-end build requests with repair/playbook context. Keep the general timeout modest, but
+ * give planner calls a higher floor so legitimate planning work does not fail closed before the
+ * first plan exists.
+ *
+ * @param schemaName - Structured schema being requested from Codex.
+ * @param defaultTimeoutMs - Baseline client timeout configured for the runtime.
+ * @returns Effective timeout budget for the specific schema request.
+ */
+export function resolveCodexRequestTimeoutMs(
+  schemaName: string,
+  defaultTimeoutMs: number
+): number {
+  return schemaName === "planner_v1"
+    ? Math.max(defaultTimeoutMs, MIN_CODEX_PLANNER_REQUEST_TIMEOUT_MS)
+    : defaultTimeoutMs;
+}
+
 export class CodexModelClient implements ModelClient {
   readonly backend = "codex_oauth" as const;
   private readonly requestTimeoutMs: number;
@@ -36,7 +60,10 @@ export class CodexModelClient implements ModelClient {
    * @param options - Timeout, working-directory, and environment overrides.
    */
   constructor(options: CodexModelClientOptions = {}) {
-    this.requestTimeoutMs = Math.max(1_000, options.requestTimeoutMs ?? 180_000);
+    this.requestTimeoutMs = Math.max(
+      1_000,
+      options.requestTimeoutMs ?? DEFAULT_CODEX_REQUEST_TIMEOUT_MS
+    );
     this.isolatedWorkingDirectory = path.resolve(
       options.isolatedWorkingDirectory ?? os.tmpdir()
     );
@@ -76,7 +103,10 @@ export class CodexModelClient implements ModelClient {
     const resolvedModel = resolveCodexModel(request.model, this.env);
     const result = await completeCodexJsonRequest<T>(
       {
-        requestTimeoutMs: this.requestTimeoutMs,
+        requestTimeoutMs: resolveCodexRequestTimeoutMs(
+          request.schemaName,
+          this.requestTimeoutMs
+        ),
         workingDirectory: this.isolatedWorkingDirectory,
         env: this.env
       },

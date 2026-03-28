@@ -13,8 +13,17 @@ export {
   type Stage686AliasConflict,
   type Stage686EntityExtractionInput,
   type Stage686EntityExtractionResult,
+  type Stage686EntityDomainHint,
   type Stage686EntityGraphMutationOptions,
   type Stage686EntityGraphMutationResult,
+  type Stage686EntityTypeHint,
   type Stage686RelationPromotionInput,
   type Stage686RelationPromotionResult
 } from "./stage6_86/entityGraph";
+export {
+  applyEntityAliasCandidateToGraph,
+  validateEntityAliasCandidateValue,
+  type Stage686EntityAliasCandidateInput,
+  type Stage686EntityAliasMutationOptions,
+  type Stage686EntityAliasMutationResult
+} from "./stage6_86/entityGraphAliasReconciliation";
