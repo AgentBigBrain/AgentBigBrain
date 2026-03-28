@@ -4,6 +4,7 @@
 
 import { access, readFile } from "node:fs/promises";
 import path from "node:path";
+import { getPathModuleForContext } from "./shellExecutionPathSupport";
 
 const VITE_SCAFFOLD_COMMAND_PATTERN =
   /\b(?:npm|npx)(?:\.cmd)?\s+(?:create\s+vite(?:@latest)?|create-vite(?:@latest)?|init\s+vite(?:@latest)?)\b/i;
@@ -83,6 +84,7 @@ function resolvePowerShellLocationExpression(
   cwd: string,
   assignments: ReadonlyMap<string, string>
 ): string | null {
+  const pathModule = getPathModuleForContext(cwd, expression);
   const trimmed = expression.trim();
   if (!trimmed) {
     return null;
@@ -96,9 +98,9 @@ function resolvePowerShellLocationExpression(
     if (!assignedValue) {
       return null;
     }
-    return path.resolve(cwd, assignedValue);
+    return pathModule.resolve(cwd, assignedValue);
   }
-  return path.resolve(cwd, trimmed);
+  return pathModule.resolve(cwd, trimmed);
 }
 
 /**
@@ -225,7 +227,8 @@ function extractViteScaffoldTargetRoot(command: string, cwd: string): string | n
  * @returns `true` when the workspace contains Vite scripts or dependencies.
  */
 async function isViteWorkspace(cwd: string): Promise<boolean> {
-  const packageJsonPath = path.join(cwd, PACKAGE_JSON_FILENAME);
+  const pathModule = getPathModuleForContext(cwd);
+  const packageJsonPath = pathModule.join(cwd, PACKAGE_JSON_FILENAME);
   if (!(await pathExists(packageJsonPath))) {
     return false;
   }
@@ -257,7 +260,8 @@ async function isViteWorkspace(cwd: string): Promise<boolean> {
  * @returns `true` when the workspace contains Next.js scripts or dependencies.
  */
 async function isNextWorkspace(cwd: string): Promise<boolean> {
-  const packageJsonPath = path.join(cwd, PACKAGE_JSON_FILENAME);
+  const pathModule = getPathModuleForContext(cwd);
+  const packageJsonPath = pathModule.join(cwd, PACKAGE_JSON_FILENAME);
   if (!(await pathExists(packageJsonPath))) {
     return false;
   }
@@ -315,7 +319,7 @@ function extractNextScaffoldTargetRoot(command: string, cwd: string): string | n
   const powerShellAssignments = extractPowerShellVariableAssignments(normalized);
   const explicitFinalRoot = powerShellAssignments.get("final");
   if (explicitFinalRoot) {
-    return path.resolve(cwd, explicitFinalRoot);
+    return getPathModuleForContext(cwd, explicitFinalRoot).resolve(cwd, explicitFinalRoot);
   }
   const scaffoldCwd = resolvePowerShellWorkingDirectoryBeforeScaffold(
     normalized.slice(0, scaffoldMatch.index),
@@ -384,7 +388,10 @@ export async function resolveShellPostconditionFailure(
 ): Promise<ShellPostconditionFailure | null> {
   const nextScaffoldRoot = extractNextScaffoldTargetRoot(command, cwd);
   if (nextScaffoldRoot) {
-    const packageJsonPath = path.join(nextScaffoldRoot, PACKAGE_JSON_FILENAME);
+    const packageJsonPath = getPathModuleForContext(nextScaffoldRoot).join(
+      nextScaffoldRoot,
+      PACKAGE_JSON_FILENAME
+    );
     if (!(await pathExists(packageJsonPath))) {
       return {
         message:
@@ -396,7 +403,10 @@ export async function resolveShellPostconditionFailure(
 
   const viteScaffoldRoot = extractViteScaffoldTargetRoot(command, cwd);
   if (viteScaffoldRoot) {
-    const packageJsonPath = path.join(viteScaffoldRoot, PACKAGE_JSON_FILENAME);
+    const packageJsonPath = getPathModuleForContext(viteScaffoldRoot).join(
+      viteScaffoldRoot,
+      PACKAGE_JSON_FILENAME
+    );
     if (!(await pathExists(packageJsonPath))) {
       return {
         message:
@@ -407,7 +417,7 @@ export async function resolveShellPostconditionFailure(
   }
 
   if (NPM_RUN_BUILD_COMMAND_PATTERN.test(command) && (await isViteWorkspace(cwd))) {
-    const distIndexPath = path.join(cwd, VITE_DIST_INDEX_RELATIVE_PATH);
+    const distIndexPath = getPathModuleForContext(cwd).join(cwd, VITE_DIST_INDEX_RELATIVE_PATH);
     if (!(await pathExists(distIndexPath))) {
       return {
         message:
@@ -418,7 +428,7 @@ export async function resolveShellPostconditionFailure(
   }
 
   if (NPM_RUN_BUILD_COMMAND_PATTERN.test(command) && (await isNextWorkspace(cwd))) {
-    const buildIdPath = path.join(cwd, NEXT_BUILD_ID_RELATIVE_PATH);
+    const buildIdPath = getPathModuleForContext(cwd).join(cwd, NEXT_BUILD_ID_RELATIVE_PATH);
     if (!(await pathExists(buildIdPath))) {
       return {
         message:

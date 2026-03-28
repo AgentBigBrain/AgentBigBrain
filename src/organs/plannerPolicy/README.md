@@ -15,6 +15,7 @@ belongs here.
 - `buildExecutionActionHeuristics.ts`
 - `frameworkBuildActionHeuristics.ts`
 - `frameworkActionRepairSupport.ts`
+- `frameworkPathSupport.ts`
 - `buildExecutionRecoveryPolicy.ts`
 - `liveVerificationPolicy.ts`
 - `userOwnedPathHints.ts`
@@ -60,6 +61,8 @@ belongs here.
   reject directory-only reuse guards, and keep oversized shell/start commands fail-closed
 - framework-app repair normalization that rewrites unsafe scaffold commands and keeps Next.js route
   writes pinned to the active `app/` tree instead of drifting into stale `src/app/` duplicates
+- path-style-aware framework helpers so Windows workspace roots, route rewrites, and fallback write
+  targets stay stable even when tests or recovery run on non-Windows hosts
 - deterministic framework landing-page fallback content, write-target resolution, and runtime
   action synthesis split into focused helper files so planner fallback stays reviewable and under
   the subsystem size budget

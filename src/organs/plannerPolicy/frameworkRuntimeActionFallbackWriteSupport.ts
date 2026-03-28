@@ -15,6 +15,7 @@ import {
   buildNextLayoutContent,
   buildNextTypeScriptLayoutContent
 } from "./frameworkRuntimeActionFallbackContent";
+import { getPathModuleForPathValue } from "./frameworkPathSupport";
 
 export interface FrameworkLandingPageTargetPaths {
   readonly primaryViewPath: string;
@@ -37,22 +38,23 @@ export function resolveFrameworkLandingPageTargetPaths(
   kind: "vite_react" | "next_js",
   finalFolderPath: string
 ): FrameworkLandingPageTargetPaths {
+  const pathModule = getPathModuleForPathValue(finalFolderPath);
   if (kind === "next_js") {
-    const appDirectoryPath = path.join(finalFolderPath, "app");
-    const nextPageTsxPath = path.join(appDirectoryPath, "page.tsx");
-    const nextPageJsPath = path.join(appDirectoryPath, "page.js");
-    const nextLayoutTsxPath = path.join(appDirectoryPath, "layout.tsx");
-    const nextLayoutJsPath = path.join(appDirectoryPath, "layout.js");
+    const appDirectoryPath = pathModule.join(finalFolderPath, "app");
+    const nextPageTsxPath = pathModule.join(appDirectoryPath, "page.tsx");
+    const nextPageJsPath = pathModule.join(appDirectoryPath, "page.js");
+    const nextLayoutTsxPath = pathModule.join(appDirectoryPath, "layout.tsx");
+    const nextLayoutJsPath = pathModule.join(appDirectoryPath, "layout.js");
     const useTypeScriptView =
       existsSync(nextPageTsxPath) ||
       (!existsSync(nextPageJsPath) &&
-        (existsSync(path.join(finalFolderPath, "tsconfig.json")) ||
-          existsSync(path.join(finalFolderPath, "next-env.d.ts"))));
+        (existsSync(pathModule.join(finalFolderPath, "tsconfig.json")) ||
+          existsSync(pathModule.join(finalFolderPath, "next-env.d.ts"))));
     const useTypeScriptLayout =
       existsSync(nextLayoutTsxPath) ||
       (!existsSync(nextLayoutJsPath) &&
-        (existsSync(path.join(finalFolderPath, "tsconfig.json")) ||
-          existsSync(path.join(finalFolderPath, "next-env.d.ts"))));
+        (existsSync(pathModule.join(finalFolderPath, "tsconfig.json")) ||
+          existsSync(pathModule.join(finalFolderPath, "next-env.d.ts"))));
     return {
       primaryViewPath: useTypeScriptView ? nextPageTsxPath : nextPageJsPath,
       primaryViewAliasPath:
@@ -68,21 +70,21 @@ export function resolveFrameworkLandingPageTargetPaths(
           : !useTypeScriptLayout && existsSync(nextLayoutTsxPath)
             ? nextLayoutTsxPath
             : null,
-      stylesheetPath: path.join(appDirectoryPath, "globals.css"),
+      stylesheetPath: pathModule.join(appDirectoryPath, "globals.css"),
       useTypeScriptView,
       useTypeScriptLayout
     };
   }
 
-  const sourceDirectoryPath = path.join(finalFolderPath, "src");
-  const reactViewTsxPath = path.join(sourceDirectoryPath, "App.tsx");
-  const reactViewJsxPath = path.join(sourceDirectoryPath, "App.jsx");
+  const sourceDirectoryPath = pathModule.join(finalFolderPath, "src");
+  const reactViewTsxPath = pathModule.join(sourceDirectoryPath, "App.tsx");
+  const reactViewJsxPath = pathModule.join(sourceDirectoryPath, "App.jsx");
   const useTypeScriptView =
     existsSync(reactViewTsxPath) ||
     (!existsSync(reactViewJsxPath) &&
-      (existsSync(path.join(finalFolderPath, "tsconfig.json")) ||
-        existsSync(path.join(sourceDirectoryPath, "main.tsx")) ||
-        existsSync(path.join(finalFolderPath, "vite-env.d.ts"))));
+      (existsSync(pathModule.join(finalFolderPath, "tsconfig.json")) ||
+        existsSync(pathModule.join(sourceDirectoryPath, "main.tsx")) ||
+        existsSync(pathModule.join(finalFolderPath, "vite-env.d.ts"))));
   return {
     primaryViewPath: useTypeScriptView ? reactViewTsxPath : reactViewJsxPath,
     primaryViewAliasPath:
@@ -93,7 +95,7 @@ export function resolveFrameworkLandingPageTargetPaths(
           : null,
     layoutPath: null,
     layoutAliasPath: null,
-    stylesheetPath: path.join(sourceDirectoryPath, "index.css"),
+    stylesheetPath: pathModule.join(sourceDirectoryPath, "index.css"),
     useTypeScriptView,
     useTypeScriptLayout: false
   };
@@ -124,7 +126,9 @@ export function buildFrameworkLandingPageWriteActions(
   const styleContent = buildFrameworkLandingPageStyles(currentUserRequest);
   const actions: PlannedAction[] = [];
   if (kind === "next_js") {
-    const nextLayoutPath = targetPaths.layoutPath ?? path.join(finalFolderPath, "app", "layout.js");
+    const pathModule = getPathModuleForPathValue(finalFolderPath);
+    const nextLayoutPath =
+      targetPaths.layoutPath ?? pathModule.join(finalFolderPath, "app", "layout.js");
     const nextLayoutContent = layoutContent ?? buildNextLayoutContent(appTitle);
     actions.push({
       id: makeId("action"),

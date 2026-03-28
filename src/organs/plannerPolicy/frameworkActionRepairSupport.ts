@@ -13,6 +13,10 @@ import {
   isFrameworkPackageSafeFolderName,
   toFrameworkPackageSafeSlug
 } from "./frameworkBuildActionHeuristics";
+import {
+  getPathModuleForPathValue,
+  resolvePreferredNextRouteDirectory
+} from "./frameworkPathSupport";
 
 const FRAMEWORK_CREATE_INVOCATION_PATTERN =
   /\b((?:npm(?:\.cmd)?\s+create\s+(?:vite|next-app)(?:@latest)?|npx(?:\.cmd)?\s+(?:create-vite|create-next-app)(?:@latest)?|pnpm(?:\.cmd)?\s+create\s+(?:vite|next-app)(?:@latest)?|yarn(?:\.cmd)?\s+create\s+(?:vite|next-app)(?:@latest)?|bun\s+create\s+(?:vite|next-app)(?:@latest)?))\s+(?:"[^"]+"|'[^']+'|\S+)\s*([^;]*)/i;
@@ -66,7 +70,7 @@ function resolveRequestedFrameworkWorkspacePath(
   if (!requestedFolderName || !rootPath) {
     return null;
   }
-  return path.join(rootPath, requestedFolderName);
+  return getPathModuleForPathValue(rootPath).join(rootPath, requestedFolderName);
 }
 
 /**
@@ -314,25 +318,6 @@ export function normalizeUnsafeFrameworkScaffoldActions(
 }
 
 /**
- * Chooses the active Next.js app-router root for one workspace. When both `app` and `src/app`
- * exist, the root `app` directory wins because Next resolves that route tree first.
- *
- * @param workspacePath - Exact Next.js workspace root.
- * @returns Preferred Next.js route directory.
- */
-function resolvePreferredNextRouteDirectory(workspacePath: string): string {
-  const rootAppDirectoryPath = path.join(workspacePath, "app");
-  const srcAppDirectoryPath = path.join(workspacePath, "src", "app");
-  if (existsSync(rootAppDirectoryPath)) {
-    return rootAppDirectoryPath;
-  }
-  if (existsSync(srcAppDirectoryPath)) {
-    return srcAppDirectoryPath;
-  }
-  return rootAppDirectoryPath;
-}
-
-/**
  * Rewrites model-emitted Next.js route writes into the active route root so a workspace cannot end
  * up with split `app/...` and `src/app/...` trees that drift out of sync.
  *
@@ -356,9 +341,13 @@ export function normalizeNextJsRouteWriteActions(
   if (!workspacePath) {
     return actions;
   }
-  const rootAppDirectoryPath = path.join(workspacePath, "app");
-  const srcAppDirectoryPath = path.join(workspacePath, "src", "app");
-  const preferredRouteDirectoryPath = resolvePreferredNextRouteDirectory(workspacePath);
+  const pathModule = getPathModuleForPathValue(workspacePath);
+  const rootAppDirectoryPath = pathModule.join(workspacePath, "app");
+  const srcAppDirectoryPath = pathModule.join(workspacePath, "src", "app");
+  const preferredRouteDirectoryPath = resolvePreferredNextRouteDirectory(
+    workspacePath,
+    existsSync
+  );
   const rewritableBasenames = new Set([
     "page.tsx",
     "page.js",
@@ -371,15 +360,15 @@ export function normalizeNextJsRouteWriteActions(
     if (action.type !== "write_file" || typeof action.params.path !== "string") {
       return action;
     }
-    const actionPath = path.normalize(action.params.path);
-    const currentDirectoryPath = path.dirname(actionPath);
-    const basename = path.basename(actionPath);
+    const actionPath = pathModule.normalize(action.params.path);
+    const currentDirectoryPath = pathModule.dirname(actionPath);
+    const basename = pathModule.basename(actionPath);
     const targetsKnownNextRouteDirectory =
       currentDirectoryPath === rootAppDirectoryPath || currentDirectoryPath === srcAppDirectoryPath;
     if (!targetsKnownNextRouteDirectory || !rewritableBasenames.has(basename)) {
       return action;
     }
-    const normalizedPath = path.join(preferredRouteDirectoryPath, basename);
+    const normalizedPath = pathModule.join(preferredRouteDirectoryPath, basename);
     if (normalizedPath === actionPath) {
       return action;
     }
