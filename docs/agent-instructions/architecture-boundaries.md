@@ -10,3 +10,10 @@
 7. Keep governors single-lens, deterministic-first, and decoupled from executor details.
 8. Keep interface ingress routed through orchestrator-governed execution flow.
 9. Keep user-facing truth or overclaim policy centralized in `src/interfaces/userFacingResult.ts`.
+10. Treat cross-platform execution as a core runtime boundary, not a later polish step.
+   - New workflow, scaffold, shell, browser, filesystem, or live-run logic should work on Windows,
+     macOS, and Linux unless a platform limit is explicitly unavoidable.
+   - Keep platform-specific shims narrow and isolated behind shared helpers or adapters; do not let
+     Windows-only path, shell, or process assumptions leak through generic runtime code.
+   - When a workflow is intentionally platform-limited, make that constraint explicit in the owning
+     contract, README, and user-facing behavior instead of silently assuming Windows.

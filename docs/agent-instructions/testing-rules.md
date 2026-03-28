@@ -18,3 +18,10 @@
    only isolated unit phrases.
 9. When a behavior depends on live runtime sequencing or transport timing, extend the relevant
    smoke or evidence scenario as well; do not assume unit coverage alone is enough.
+10. For workflow, scaffold, shell, path, filesystem, process, or browser changes, prove the logic
+    is not accidentally Windows-only.
+   - Add or update tests that cover Windows-style and POSIX-style paths when path handling matters.
+   - When host OS and target OS can differ, cover that mismatch explicitly instead of relying only
+     on the local development machine.
+   - Do not mark a workflow as done if it only passes on one OS because generic runtime code leaked
+     platform assumptions.

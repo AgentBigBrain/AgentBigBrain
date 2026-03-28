@@ -78,3 +78,10 @@
        cannot prove which workspace or page it targets, clarification is still the right outcome.
      - If recovery would require broad app shutdown like `node`, `Code`, `OneDrive`, or
        `explorer`, that is the wrong recovery shape even if it sounds convenient.
+9. Keep cross-platform behavior human-centric.
+   - Users should not need to phrase requests differently just because they are on Windows, macOS,
+     or Linux.
+   - Prefer shared workflow behavior with thin platform adapters over OS-specific user experience
+     forks.
+   - Natural requests like `put it on my desktop`, `open the page`, or `close that app` should map
+     to the correct platform resource without making the user supply shell-specific wording.
