@@ -50,6 +50,8 @@ const STRUCTURED_RECOVERY_VERSION_HINT_PATTERNS: readonly RegExp[] = [
   /\bconflicting peer dependency:\s+([@A-Za-z0-9._/-]+@?[^\s,;)]*)/i,
   /\bunsupported engine\b[\s\S]{0,120}\bfor\s+([@A-Za-z0-9._/-]+@?[^\s,;)]*)/i
 ] as const;
+const SAFE_PACKAGE_SPECIFIER_PATTERN =
+  /^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*(?:@[a-z0-9][a-z0-9._-]*)?$/i;
 
 /**
  * Reads one trimmed string param from an action result when present.
@@ -85,6 +87,20 @@ function normalizeStructuredRecoveryText(value: string): string {
  */
 function quoteStructuredRecoveryValue(value: string): string {
   return /[\s"]/u.test(value) ? `"${value.replace(/"/g, '\\"')}"` : value;
+}
+
+/**
+ * Verifies one dependency or version hint is safe to echo into a shell repair command.
+ *
+ * @param value - Raw dependency or package-specifier candidate.
+ * @returns Safe normalized specifier, or `null` when the value is not shell-safe.
+ */
+function sanitizeStructuredRecoveryPackageSpecifier(value: string): string | null {
+  const normalized = normalizeStructuredRecoveryText(value);
+  if (!normalized || !SAFE_PACKAGE_SPECIFIER_PATTERN.test(normalized)) {
+    return null;
+  }
+  return normalized;
 }
 
 /**
@@ -192,7 +208,11 @@ function buildNodeRepairCommand(
   packageManager: "npm" | "pnpm" | "yarn" | "bun" | null,
   dependencyName: string
 ): string | null {
-  const quotedDependency = quoteStructuredRecoveryValue(dependencyName);
+  const safeDependency = sanitizeStructuredRecoveryPackageSpecifier(dependencyName);
+  if (!safeDependency) {
+    return null;
+  }
+  const quotedDependency = quoteStructuredRecoveryValue(safeDependency);
   switch (packageManager) {
     case "pnpm":
       return `pnpm add ${quotedDependency}`;
@@ -231,13 +251,21 @@ function buildStructuredDependencyRepairInput(
           "The runtime identified a missing dependency, but it could not deterministically name the missing package or module from the current failure output."
       };
     }
+    const safeDependency = sanitizeStructuredRecoveryPackageSpecifier(dependencyName);
+    if (!safeDependency) {
+      return {
+        recoveryClass: "DEPENDENCY_MISSING",
+        reason:
+          "The runtime identified a missing dependency, but the parsed package or module name was not shell-safe enough for deterministic auto-repair."
+      };
+    }
     return {
       recoveryClass: "DEPENDENCY_MISSING",
       optionId,
       allowedRung: "bounded_repair_iteration",
       fingerprint,
       reasoning:
-        `Detected a missing dependency (${dependencyName}) and scheduled one bounded repair before retrying the original step.`,
+        `Detected a missing dependency (${safeDependency}) and scheduled one bounded repair before retrying the original step.`,
       progressMessage:
         "I found a missing dependency. I'm doing one bounded repair and then retrying the original step.",
       nextUserInput: [
@@ -246,9 +274,9 @@ function buildStructuredDependencyRepairInput(
         "This is one bounded deterministic dependency-repair iteration. Keep it narrow.",
         repairContext.cwd ? `Preferred repair cwd: ${repairContext.cwd}` : "",
         `Original failed command: ${repairContext.command}`,
-        `Detected missing dependency: ${dependencyName}`,
+        `Detected missing dependency: ${safeDependency}`,
         packageManager
-          ? `Recommended narrow repair command: ${buildNodeRepairCommand(packageManager, dependencyName)}`
+          ? `Recommended narrow repair command: ${buildNodeRepairCommand(packageManager, safeDependency)}`
           : "Repair only the detected dependency above with the workspace's existing package manager or interpreter.",
         `After the repair, rerun exactly this failed command once: ${repairContext.command}`,
         "Do not broaden this into general upgrades, scaffold resets, or unrelated cleanup. If the bounded repair cannot be completed safely from the current workspace state, stop and explain the exact blocker."
@@ -266,13 +294,21 @@ function buildStructuredDependencyRepairInput(
         "The runtime identified a version incompatibility, but it could not deterministically extract the conflicting dependency hint from the current failure output."
     };
   }
+  const safeVersionHint = sanitizeStructuredRecoveryPackageSpecifier(versionHint);
+  if (!safeVersionHint) {
+    return {
+      recoveryClass: "VERSION_INCOMPATIBLE",
+      reason:
+        "The runtime identified a version incompatibility, but the parsed dependency hint was not shell-safe enough for deterministic auto-repair."
+    };
+  }
   return {
     recoveryClass: "VERSION_INCOMPATIBLE",
     optionId,
     allowedRung: "bounded_repair_iteration",
     fingerprint,
     reasoning:
-      `Detected a version incompatibility (${versionHint}) and scheduled one bounded alignment pass before retrying the original step.`,
+      `Detected a version incompatibility (${safeVersionHint}) and scheduled one bounded alignment pass before retrying the original step.`,
     progressMessage:
       "I found a dependency version mismatch. I'm doing one bounded alignment pass before retrying the original step.",
     nextUserInput: [
@@ -281,7 +317,7 @@ function buildStructuredDependencyRepairInput(
       "This is one bounded deterministic dependency-version repair iteration. Keep it narrow.",
       repairContext.cwd ? `Preferred repair cwd: ${repairContext.cwd}` : "",
       `Original failed command: ${repairContext.command}`,
-      `Detected incompatibility hint: ${versionHint}`,
+      `Detected incompatibility hint: ${safeVersionHint}`,
       "Align only the dependency or version relationship named above. Do not run broad upgrade, audit-fix, or full reinstall commands.",
       `After the alignment, rerun exactly this failed command once: ${repairContext.command}`,
       "If the incompatible version cannot be aligned safely from the current workspace state, stop and explain the exact blocker."

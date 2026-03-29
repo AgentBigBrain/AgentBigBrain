@@ -40,6 +40,13 @@ test("parseFederatedOutboundIntent returns null when tag is absent", () => {
   assert.equal(intent, null);
 });
 
+test("parseFederatedOutboundIntent fails closed for malformed target ids", () => {
+  const intent = parseFederatedOutboundIntent(
+    "[federate:agent beta quote=1.25] Please summarize release notes."
+  );
+  assert.equal(intent, null);
+});
+
 test("createFederatedOutboundRuntimeConfigFromEnv defaults to disabled mode", () => {
   const config = createFederatedOutboundRuntimeConfigFromEnv({});
   assert.equal(config.enabled, false);

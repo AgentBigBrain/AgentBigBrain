@@ -72,7 +72,12 @@ export function normalizeProfileValue(input: string): string {
  * @returns Sanitized clause text.
  */
 export function trimTrailingClausePunctuation(value: string): string {
-  return normalizeProfileValue(value).replace(/[,:;]+$/g, "").trim();
+  const normalized = normalizeProfileValue(value);
+  let end = normalized.length;
+  while (end > 0 && [",", ":", ";"].includes(normalized[end - 1]!)) {
+    end -= 1;
+  }
+  return normalized.slice(0, end).trim();
 }
 
 /**

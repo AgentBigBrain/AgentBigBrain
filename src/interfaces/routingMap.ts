@@ -119,6 +119,16 @@ const OBSERVABILITY_EXPORT_PATTERNS: readonly RegExp[] = [
   /\bexport\b.*\bredacted\s+evidence\s+bundle\b/i,
   /\bevidence\s+bundle\b/i
 ] as const;
+const EXECUTION_NOW_SEQUENCE_TOKENS = [
+  ["build", "now"],
+  ["create", "now"],
+  ["make", "now"],
+  ["generate", "now"],
+  ["scaffold", "now"],
+  ["set up", "now"],
+  ["setup", "now"],
+  ["spin up", "now"]
+] as const;
 
 /**
  * Derives current user request for routing from available runtime inputs.
@@ -184,6 +194,25 @@ function matchesAny(text: string, patterns: readonly RegExp[]): boolean {
 }
 
 /**
+ * Evaluates whether ordered phrase tokens appear in sequence within one text.
+ *
+ * @param text - Lower-level message content under evaluation.
+ * @param orderedTokens - Ordered phrases that must appear in sequence.
+ * @returns `true` when every phrase appears in order.
+ */
+function containsOrderedPhrases(text: string, orderedTokens: readonly string[]): boolean {
+  let searchIndex = 0;
+  for (const token of orderedTokens) {
+    const tokenIndex = text.indexOf(token, searchIndex);
+    if (tokenIndex < 0) {
+      return false;
+    }
+    searchIndex = tokenIndex + token.length;
+  }
+  return true;
+}
+
+/**
  * Evaluates build execution intent and returns a deterministic policy signal.
  *
  * **Why it exists:**
@@ -209,7 +238,7 @@ function isGenericBuildExecutionIntent(text: string): boolean {
   if (
     matchesAny(text, BUILD_EXECUTION_DESTINATION_PATTERNS) ||
     /\bexecute\s+now\b/i.test(text) ||
-    /\b(?:build|create|make|generate|scaffold|set up|setup|spin up)\s+(?:this|it)?\s*now\b/i.test(text) ||
+    EXECUTION_NOW_SEQUENCE_TOKENS.some((tokens) => containsOrderedPhrases(text, tokens)) ||
     /\brun\s+(?:it|commands?)\b/i.test(text)
   ) {
     return true;

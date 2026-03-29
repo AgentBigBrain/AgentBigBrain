@@ -2,7 +2,7 @@
  * @fileoverview Canonical Stage 6.85 playbook-registry helpers for envelope loading and deterministic hash coverage validation.
  */
 
-import { access, readFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 
 import { isSchemaEnvelopeV1, verifySchemaEnvelopeV1 } from "../schemaEnvelope";
@@ -67,23 +67,21 @@ export async function loadPlaybookRegistryEnvelope(
   registryPath: string
 ): Promise<SchemaEnvelopeV1<PlaybookRegistryPayloadV1> | null> {
   try {
-    await access(registryPath);
+    const raw = await readFile(registryPath, "utf8");
+    const parsed = JSON.parse(raw) as unknown;
+    if (!isSchemaEnvelopeV1(parsed) || !verifySchemaEnvelopeV1(parsed)) {
+      return null;
+    }
+    if (parsed.schemaName !== "PlaybookRegistryV1") {
+      return null;
+    }
+    if (!isPlaybookRegistryPayloadV1(parsed.payload)) {
+      return null;
+    }
+    return parsed as SchemaEnvelopeV1<PlaybookRegistryPayloadV1>;
   } catch {
     return null;
   }
-
-  const raw = await readFile(registryPath, "utf8");
-  const parsed = JSON.parse(raw) as unknown;
-  if (!isSchemaEnvelopeV1(parsed) || !verifySchemaEnvelopeV1(parsed)) {
-    return null;
-  }
-  if (parsed.schemaName !== "PlaybookRegistryV1") {
-    return null;
-  }
-  if (!isPlaybookRegistryPayloadV1(parsed.payload)) {
-    return null;
-  }
-  return parsed as SchemaEnvelopeV1<PlaybookRegistryPayloadV1>;
 }
 
 /**

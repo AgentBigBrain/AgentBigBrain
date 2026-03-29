@@ -13,6 +13,46 @@ import {
 } from "./profileMemoryNormalization";
 
 const HEDGED_CONFIDENCE_PATTERNS = ["maybe", "might be", "not sure", "i think", "possibly"];
+const DIRECT_RELATIONSHIP_DESCRIPTORS = new Set([
+  "friend",
+  "guy",
+  "person",
+  "coworker",
+  "colleague",
+  "manager",
+  "neighbor",
+  "relative",
+  "teammate",
+  "classmate"
+]);
+const WORK_WITH_PREFIXES = [
+  "i work with ",
+  "we work with ",
+  "i worked with ",
+  "we worked with ",
+  "i used to work with ",
+  "we used to work with "
+] as const;
+
+/**
+ * Trims company or association tails that continue into appositive commentary.
+ *
+ * @param value - Raw association text.
+ * @returns Trimmed association value.
+ */
+function trimAssociationValue(value: string): string {
+  const trimmed = trimTrailingClausePunctuation(value);
+  const commaIndex = trimmed.indexOf(",");
+  return commaIndex >= 0 ? trimmed.slice(0, commaIndex).trim() : trimmed;
+}
+const WORK_WITH_ME_ASSOCIATION_PREFIXES = [
+  "work with me at ",
+  "worked with me at ",
+  "works with me at ",
+  "work with me for ",
+  "worked with me for ",
+  "works with me for "
+] as const;
 
 /**
  * Extracts named-contact facts and relationship associations from narrative phrasing.
@@ -77,20 +117,101 @@ export function extractNamedContactFacts(
     }
   }
 
-  const workPeerPattern =
-    /\b(?:i|we)\s+(?:used\s+to\s+)?work(?:ed|s)?\s+with\s+([A-Za-z][A-Za-z' -]{1,40})(?:\s+(?:at|for)\s+([^.!?\n,]+?))?(?=(?:\s+and\b)|,|[.!?\n]|$)/gi;
-  for (const match of text.matchAll(workPeerPattern)) {
-    let displayName = trimTrailingClausePunctuation(match[1]);
-    let company = trimTrailingClausePunctuation(match[2] ?? "");
-    if (!company) {
-      const inlineAssociationSplit = displayName.split(/\s+(?:at|for)\s+/i);
-      if (inlineAssociationSplit.length > 1) {
-        displayName = trimTrailingClausePunctuation(inlineAssociationSplit[0]);
-        company = trimTrailingClausePunctuation(
-          inlineAssociationSplit.slice(1).join(" ")
-        );
-      }
+  for (const segment of splitIntoContextSentences(text)) {
+    const relationIndex = segment.toLowerCase().indexOf(" is my ");
+    if (relationIndex <= 0) {
+      continue;
     }
+    const displayName = trimTrailingClausePunctuation(segment.slice(0, relationIndex));
+    if (displayName.split(/\s+/).filter(Boolean).length > 3) {
+      continue;
+    }
+    const contactToken = normalizeProfileKey(displayName);
+    if (!contactToken) {
+      continue;
+    }
+    const descriptorAndCompany = segment.slice(relationIndex + " is my ".length).trim();
+    const associationIndex = (() => {
+      const atIndex = descriptorAndCompany.toLowerCase().indexOf(" at ");
+      const forIndex = descriptorAndCompany.toLowerCase().indexOf(" for ");
+      if (atIndex < 0) {
+        return forIndex;
+      }
+      if (forIndex < 0) {
+        return atIndex;
+      }
+      return Math.min(atIndex, forIndex);
+    })();
+    const descriptor = normalizeRelationshipDescriptor(
+      associationIndex >= 0
+        ? descriptorAndCompany.slice(0, associationIndex)
+        : descriptorAndCompany
+    );
+    if (!DIRECT_RELATIONSHIP_DESCRIPTORS.has(descriptor)) {
+      continue;
+    }
+    const company =
+      associationIndex >= 0
+        ? trimAssociationValue(descriptorAndCompany.slice(associationIndex + 4))
+        : "";
+    detectedContacts.add(contactToken);
+    candidates.push({
+      key: `contact.${contactToken}.name`,
+      value: displayName,
+      sensitive: false,
+      sourceTaskId,
+      source: "user_input_pattern.direct_contact_relationship",
+      observedAt,
+      confidence: toSentenceConfidence(segment)
+    });
+    candidates.push({
+      key: `contact.${contactToken}.relationship`,
+      value: descriptor,
+      sensitive: false,
+      sourceTaskId,
+      source: "user_input_pattern.direct_contact_relationship",
+      observedAt,
+      confidence: toSentenceConfidence(segment)
+    });
+    if (company) {
+      candidates.push({
+        key: `contact.${contactToken}.work_association`,
+        value: company,
+        sensitive: false,
+        sourceTaskId,
+        source: "user_input_pattern.direct_contact_relationship",
+        observedAt,
+        confidence: toSentenceConfidence(segment)
+      });
+    }
+  }
+
+  for (const segment of splitIntoContextSentences(text)) {
+    const normalizedSegment = segment.toLowerCase();
+    const prefix = WORK_WITH_PREFIXES.find((candidate) => normalizedSegment.startsWith(candidate));
+    if (!prefix) {
+      continue;
+    }
+    const remainder = segment.slice(prefix.length).trim();
+    const associationIndex = (() => {
+      const atIndex = remainder.toLowerCase().indexOf(" at ");
+      const forIndex = remainder.toLowerCase().indexOf(" for ");
+      if (atIndex < 0) {
+        return forIndex;
+      }
+      if (forIndex < 0) {
+        return atIndex;
+      }
+      return Math.min(atIndex, forIndex);
+    })();
+    let displayName = remainder;
+    let company = "";
+    if (associationIndex >= 0) {
+      displayName = remainder.slice(0, associationIndex);
+      company = remainder.slice(associationIndex + 4);
+    }
+    displayName = trimTrailingClausePunctuation(displayName);
+    company = trimAssociationValue(company);
 
     const contactToken = normalizeProfileKey(displayName);
     if (!contactToken) {
@@ -105,7 +226,7 @@ export function extractNamedContactFacts(
       sourceTaskId,
       source: "user_input_pattern.work_with_contact",
       observedAt,
-      confidence: toSentenceConfidence(match[0])
+      confidence: toSentenceConfidence(segment)
     });
     candidates.push({
       key: `contact.${contactToken}.relationship`,
@@ -114,7 +235,7 @@ export function extractNamedContactFacts(
       sourceTaskId,
       source: "user_input_pattern.work_with_contact",
       observedAt,
-      confidence: toSentenceConfidence(match[0])
+      confidence: toSentenceConfidence(segment)
     });
 
     if (company) {
@@ -125,17 +246,28 @@ export function extractNamedContactFacts(
         sourceTaskId,
         source: "user_input_pattern.work_with_contact",
         observedAt,
-        confidence: toSentenceConfidence(match[0])
+        confidence: toSentenceConfidence(segment)
       });
     }
   }
 
   if (detectedContacts.size === 1) {
     const [contactToken] = [...detectedContacts];
-    const workAssociationPattern =
-      /\b(?:used\s+to\s+)?work(?:ed|s)?\s+with\s+me\s+(?:at|for)\s+([^.!?\n,]+?)(?=(?:\s+and\b)|,|[.!?\n]|$)/i;
-    const workAssociationMatch = workAssociationPattern.exec(text);
-    if (workAssociationMatch) {
+    const associationSegment = splitIntoContextSentences(text).find((segment) =>
+      WORK_WITH_ME_ASSOCIATION_PREFIXES.some((prefix) =>
+        segment.toLowerCase().includes(prefix)
+      )
+    );
+    const associationPrefix = associationSegment
+      ? WORK_WITH_ME_ASSOCIATION_PREFIXES.find((prefix) =>
+          associationSegment.toLowerCase().includes(prefix)
+        ) ?? null
+      : null;
+    if (associationSegment && associationPrefix) {
+      const startIndex = associationSegment.toLowerCase().indexOf(associationPrefix);
+      const associationValue = trimTrailingClausePunctuation(
+        associationSegment.slice(startIndex + associationPrefix.length)
+      );
       candidates.push({
         key: `contact.${contactToken}.relationship`,
         value: "work_peer",
@@ -143,16 +275,16 @@ export function extractNamedContactFacts(
         sourceTaskId,
         source: "user_input_pattern.work_association",
         observedAt,
-        confidence: toSentenceConfidence(workAssociationMatch[0])
+        confidence: toSentenceConfidence(associationSegment)
       });
       candidates.push({
         key: `contact.${contactToken}.work_association`,
-        value: trimTrailingClausePunctuation(workAssociationMatch[1]),
+        value: trimAssociationValue(associationValue),
         sensitive: false,
         sourceTaskId,
         source: "user_input_pattern.work_association",
         observedAt,
-        confidence: toSentenceConfidence(workAssociationMatch[0])
+        confidence: toSentenceConfidence(associationSegment)
       });
     }
   }
@@ -201,6 +333,13 @@ function extractContextInferredContactTokens(text: string): string[] {
   for (const pattern of patterns) {
     for (const match of text.matchAll(pattern)) {
       const rawName = trimTrailingClausePunctuation(match[1] ?? "");
+      if (
+        rawName.split(/\s+/).filter(Boolean).length > 3 ||
+        rawName.toLowerCase().startsWith("my ") ||
+        rawName.toLowerCase().includes(" name ")
+      ) {
+        continue;
+      }
       const token = normalizeProfileKey(rawName);
       if (!token || token === "i") {
         continue;

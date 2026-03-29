@@ -41,11 +41,96 @@ function normalizeEvidenceText(input: string): string {
  * @returns Canonical normalized path token.
  */
 function normalizePathHint(value: string): string {
-  return normalizeEvidenceText(value)
-    .replace(/^["'\s(]+/, "")
-    .replace(/["'\s),.;:]+$/, "")
-    .replace(/\//g, "\\")
-    .replace(/\\+/g, "\\");
+  const normalized = normalizeEvidenceText(value).replace(/\//g, "\\");
+  let start = 0;
+  let end = normalized.length;
+  while (start < end && ["\"", "'", " ", "("].includes(normalized[start]!)) {
+    start += 1;
+  }
+  while (end > start && ["\"", "'", " ", ")", ",", ".", ";", ":"].includes(normalized[end - 1]!)) {
+    end -= 1;
+  }
+  let collapsed = "";
+  for (let index = start; index < end; index += 1) {
+    const currentChar = normalized[index]!;
+    if (currentChar === "\\" && collapsed.endsWith("\\")) {
+      continue;
+    }
+    collapsed += currentChar;
+  }
+  return collapsed;
+}
+
+/**
+ * Returns whether one token is a Windows-style absolute path.
+ *
+ * @param value - Path-like token candidate.
+ * @returns `true` when the token is an absolute Windows path.
+ */
+function looksLikeWindowsAbsolutePath(value: string): boolean {
+  return /^[a-z]:\\/i.test(value);
+}
+
+/**
+ * Returns whether one token is a Unix-style absolute path in the allowed user/runtime roots.
+ *
+ * @param value - Path-like token candidate.
+ * @returns `true` when the token is an allowed Unix absolute path.
+ */
+function looksLikeUnixAbsolutePath(value: string): boolean {
+  const normalized = value.toLowerCase();
+  return (
+    normalized.startsWith("/users/") ||
+    normalized.startsWith("/home/") ||
+    normalized.startsWith("/tmp/") ||
+    normalized.startsWith("/var/") ||
+    normalized.startsWith("/opt/") ||
+    normalized.startsWith("/mnt/")
+  );
+}
+
+/**
+ * Extracts quoted path-like tokens from one mission goal.
+ *
+ * @param goal - Mission goal text.
+ * @returns Raw quoted path candidates.
+ */
+function extractQuotedPathCandidates(goal: string): string[] {
+  const candidates: string[] = [];
+  let activeQuote: "\"" | "'" | null = null;
+  let current = "";
+  for (const currentChar of goal) {
+    if (activeQuote === null && (currentChar === "\"" || currentChar === "'")) {
+      activeQuote = currentChar;
+      current = "";
+      continue;
+    }
+    if (activeQuote !== null && currentChar === activeQuote) {
+      if (looksLikeWindowsAbsolutePath(current) || looksLikeUnixAbsolutePath(current)) {
+        candidates.push(current);
+      }
+      activeQuote = null;
+      current = "";
+      continue;
+    }
+    if (activeQuote !== null) {
+      current += currentChar;
+    }
+  }
+  return candidates;
+}
+
+/**
+ * Extracts whitespace-delimited path-like tokens from one mission goal.
+ *
+ * @param goal - Mission goal text.
+ * @returns Raw unquoted path candidates.
+ */
+function extractTokenPathCandidates(goal: string): string[] {
+  return goal
+    .split(/\s+/)
+    .map((token) => token.trim())
+    .filter((token) => looksLikeWindowsAbsolutePath(token) || looksLikeUnixAbsolutePath(token));
 }
 
 /**
@@ -62,22 +147,10 @@ function normalizePathHint(value: string): string {
  * @returns Canonical explicit path hints found in the goal.
  */
 function extractGoalPathHints(goal: string): string[] {
-  const candidates: string[] = [];
-  const quotedPathPattern = /["']([^"']*(?:[a-z]:\\|\/)[^"']*)["']/gi;
-  const windowsPathPattern = /\b[a-z]:\\[^\s"']+/gi;
-  const unixPathPattern = /(?:^|\s)(\/(?:users|home|tmp|var|opt|mnt)[^\s"']*)/gi;
-
-  let match: RegExpExecArray | null = null;
-  while ((match = quotedPathPattern.exec(goal)) !== null) {
-    candidates.push(match[1]);
-  }
-  while ((match = windowsPathPattern.exec(goal)) !== null) {
-    candidates.push(match[0]);
-  }
-  while ((match = unixPathPattern.exec(goal)) !== null) {
-    candidates.push(match[1]);
-  }
-
+  const candidates = [
+    ...extractQuotedPathCandidates(goal),
+    ...extractTokenPathCandidates(goal)
+  ];
   const deduped = new Set<string>();
   for (const candidate of candidates) {
     const normalized = normalizePathHint(candidate);

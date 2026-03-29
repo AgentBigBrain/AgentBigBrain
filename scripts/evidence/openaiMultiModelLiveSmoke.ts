@@ -4,16 +4,7 @@
  */
 
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import {
-  access,
-  mkdtemp,
-  mkdir,
-  readdir,
-  readFile,
-  rm,
-  stat,
-  writeFile
-} from "node:fs/promises";
+import { access, mkdtemp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -483,9 +474,14 @@ async function startStaticSiteServer(rootDir: string, entryRelativePath: string)
         response.end("Forbidden");
         return;
       }
-      const fileStats = await stat(candidatePath);
-      const finalPath = fileStats.isDirectory() ? path.join(candidatePath, "index.html") : candidatePath;
-      const contents = await readFile(finalPath);
+      let finalPath = candidatePath;
+      let contents: Buffer;
+      try {
+        contents = await readFile(finalPath);
+      } catch {
+        finalPath = path.join(candidatePath, "index.html");
+        contents = await readFile(finalPath);
+      }
       response.writeHead(200, {
         "content-type": buildContentType(finalPath),
         "cache-control": "no-store"

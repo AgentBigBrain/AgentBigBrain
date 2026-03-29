@@ -18,10 +18,40 @@ import {
   validatePreferredNameCandidateValue
 } from "./profileMemoryPreferredNameValidation";
 
-const EXPLICIT_PREFERRED_NAME_SENTENCE_PATTERNS = [
-  /^(?:my\s+name\s+(?:is|was|=)\s+)(.+)$/i,
-  /^(?:(?:you\s+can\s+)?call\s+me\s+)(.+)$/i,
-  /^(?:i\s+go\s+by\s+)(.+)$/i
+const EXPLICIT_PREFERRED_NAME_PREFIXES = [
+  "my name is ",
+  "my name was ",
+  "my name = ",
+  "call me ",
+  "you can call me ",
+  "i go by "
+] as const;
+const FOLLOWUP_RESOLUTION_PREFIXES = [
+  "i no longer need help with ",
+  "we no longer need help with ",
+  "i do not need help with ",
+  "we do not need help with ",
+  "i don't need help with ",
+  "we don't need help with ",
+  "i'm all set with ",
+  "i am all set with ",
+  "we are all set with "
+] as const;
+const NOTIFICATION_RESOLUTION_PREFIXES = [
+  "turn off notifications for ",
+  "turn off notifications about ",
+  "turn off the notifications for ",
+  "turn off the notifications about ",
+  "turn off reminders for ",
+  "turn off reminders about ",
+  "stop notifications for ",
+  "stop notifications about ",
+  "stop reminders for ",
+  "stop reminders about ",
+  "disable notifications for ",
+  "disable notifications about ",
+  "disable reminders for ",
+  "disable reminders about "
 ] as const;
 
 export {
@@ -36,10 +66,133 @@ export {
  * @returns Ordered candidate segments that can independently hold explicit profile statements.
  */
 function splitExplicitProfileSegments(userInput: string): readonly string[] {
-  return userInput
-    .split(/[\n.!?;:]+|,\s+/)
-    .map((segment) => segment.trim())
-    .filter((segment) => segment.length > 0);
+  const segments: string[] = [];
+  let current = "";
+  for (let index = 0; index < userInput.length; index += 1) {
+    const currentChar = userInput[index]!;
+    const nextChar = userInput[index + 1] ?? "";
+    const isHardDelimiter = currentChar === "\n" || ".!?;:".includes(currentChar);
+    const isCommaDelimiter = currentChar === "," && /\s/.test(nextChar);
+    if (isHardDelimiter || isCommaDelimiter) {
+      const trimmed = current.trim();
+      if (trimmed.length > 0) {
+        segments.push(trimmed);
+      }
+      current = "";
+      continue;
+    }
+    current += currentChar;
+  }
+  const trailing = current.trim();
+  if (trailing.length > 0) {
+    segments.push(trailing);
+  }
+  return segments;
+}
+
+/**
+ * Extracts a suffix value when one segment starts with any explicit prefix.
+ *
+ * @param segment - Segment under analysis.
+ * @param prefixes - Lowercase prefixes to match.
+ * @returns Raw suffix value, or `null`.
+ */
+function extractSegmentValueAfterPrefix(
+  segment: string,
+  prefixes: readonly string[]
+): string | null {
+  const normalized = segment.trim().toLowerCase();
+  for (const prefix of prefixes) {
+    if (normalized.startsWith(prefix)) {
+      return segment.trim().slice(prefix.length).trim();
+    }
+  }
+  return null;
+}
+
+/**
+ * Extracts a suffix value when one segment contains any explicit prefix later in the sentence.
+ *
+ * @param segment - Segment under analysis.
+ * @param prefixes - Lowercase prefixes to locate.
+ * @returns Raw suffix value, or `null`.
+ */
+function extractSegmentValueAfterContainedPrefix(
+  segment: string,
+  prefixes: readonly string[]
+): string | null {
+  const normalized = segment.trim().toLowerCase();
+  for (const prefix of prefixes) {
+    const prefixIndex = normalized.indexOf(prefix);
+    if (prefixIndex >= 0) {
+      return segment.trim().slice(prefixIndex + prefix.length).trim();
+    }
+  }
+  return null;
+}
+
+/**
+ * Trims one clause at the first coordinating continuation marker.
+ *
+ * @param value - Raw clause text.
+ * @param markers - Ordered continuation markers.
+ * @returns Bounded clause value.
+ */
+function trimAtContinuationMarker(value: string, markers: readonly string[]): string {
+  const normalized = value.toLowerCase();
+  let end = value.length;
+  for (const marker of markers) {
+    const markerIndex = normalized.indexOf(marker);
+    if (markerIndex >= 0 && markerIndex < end) {
+      end = markerIndex;
+    }
+  }
+  return value.slice(0, end).trim();
+}
+
+/**
+ * Extracts bounded `my <key> is <value>` facts without backtracking-heavy regex.
+ *
+ * @param text - Raw user text under analysis.
+ * @returns Ordered key/value matches.
+ */
+function extractMyFactMatches(text: string): Array<{ key: string; value: string; sourceText: string }> {
+  const matches: Array<{ key: string; value: string; sourceText: string }> = [];
+  const normalized = text.toLowerCase();
+  let searchIndex = 0;
+  while (searchIndex < normalized.length) {
+    const myIndex = normalized.indexOf("my ", searchIndex);
+    if (myIndex < 0) {
+      break;
+    }
+    const isIndex = normalized.indexOf(" is ", myIndex + 3);
+    if (isIndex < 0) {
+      break;
+    }
+    const rawKey = text.slice(myIndex + 3, isIndex).trim();
+    if (!/^[a-z][a-z0-9 _.'/-]{1,80}$/i.test(rawKey)) {
+      searchIndex = myIndex + 3;
+      continue;
+    }
+    const valueStart = isIndex + 4;
+    let valueEnd = text.length;
+    for (const marker of [" and my ", "\n", ".", "!", "?"]) {
+      const markerIndex = normalized.indexOf(marker, valueStart);
+      if (markerIndex >= 0 && markerIndex < valueEnd) {
+        valueEnd = markerIndex;
+      }
+    }
+    const value = text.slice(valueStart, valueEnd).trim();
+    if (value.length > 0) {
+      matches.push({
+        key: rawKey,
+        value,
+        sourceText: text.slice(myIndex, valueEnd).trim()
+      });
+    }
+    searchIndex = valueStart;
+  }
+  return matches;
 }
 
 /**
@@ -68,21 +221,21 @@ export function extractPreferredNameValuesFromUserInput(
   };
 
   for (const segment of splitExplicitProfileSegments(text)) {
-    for (const pattern of EXPLICIT_PREFERRED_NAME_SENTENCE_PATTERNS) {
-      const match = pattern.exec(segment);
-      if (!match) {
-        continue;
-      }
-      const preferredName = trimPreferredNameValue(match[1] ?? "");
-      if (
-        pattern === EXPLICIT_PREFERRED_NAME_SENTENCE_PATTERNS[1] &&
-        looksLikeCommandStylePreferredName(preferredName)
-      ) {
-        break;
-      }
-      maybeAddPreferredName(preferredName);
-      break;
+    const preferredNameValue = extractSegmentValueAfterPrefix(
+      segment,
+      EXPLICIT_PREFERRED_NAME_PREFIXES
+    );
+    if (!preferredNameValue) {
+      continue;
     }
+    const preferredName = trimPreferredNameValue(preferredNameValue);
+    if (
+      segment.trim().toLowerCase().includes("call me ") &&
+      looksLikeCommandStylePreferredName(preferredName)
+    ) {
+      continue;
+    }
+    maybeAddPreferredName(preferredName);
   }
 
   return preferredNames;
@@ -150,11 +303,9 @@ export function extractProfileFactCandidatesFromUserInput(
     });
   }
 
-  const myFactPattern =
-    /\bmy\s+([a-z][a-z0-9 _.'/-]{1,80}?)\s+is\s+([^.!?\n]+?)(?=(?:\s+and\s+my\s+[a-z])|[.!?\n]|$)/gi;
-  for (const match of text.matchAll(myFactPattern)) {
-    const rawKey = match[1];
-    const value = match[2];
+  for (const match of extractMyFactMatches(text)) {
+    const rawKey = match.key;
+    const value = match.value;
     const key = normalizeProfileKey(rawKey);
     if (canonicalizeProfileKey(key) === "identity.preferred_name") {
       continue;
@@ -166,49 +317,58 @@ export function extractProfileFactCandidatesFromUserInput(
       sourceTaskId,
       source: "user_input_pattern.my_is",
       observedAt,
-      confidence: toSentenceConfidence(match[0])
+      confidence: toSentenceConfidence(match.sourceText)
     });
   }
 
-  const workPattern = /\bi\s+work\s+(?:at|for)\s+([^.!?\n]+?)(?=(?:\s+and\b)|[.!?\n]|$)/i;
-  const workMatch = workPattern.exec(text);
-  if (workMatch) {
+  const workValue = splitExplicitProfileSegments(text)
+    .map((segment) =>
+      extractSegmentValueAfterContainedPrefix(segment, ["i work at ", "i work for "])
+    )
+    .find((value) => Boolean(value));
+  if (workValue) {
     maybeAddCandidate({
       key: "employment.current",
-      value: workMatch[1],
+      value: trimAtContinuationMarker(workValue, [" and "]),
       sensitive: false,
       sourceTaskId,
       source: "user_input_pattern.work_at",
       observedAt,
-      confidence: toSentenceConfidence(workMatch[0])
+      confidence: toSentenceConfidence(workValue)
     });
   }
 
-  const jobPattern = /\bmy\s+(?:new\s+)?job\s+is\s+([^.!?\n]+?)(?=(?:\s+and\b)|[.!?\n]|$)/i;
-  const jobMatch = jobPattern.exec(text);
-  if (jobMatch) {
+  const jobValue = splitExplicitProfileSegments(text)
+    .map((segment) =>
+      extractSegmentValueAfterContainedPrefix(segment, ["my job is ", "my new job is "])
+    )
+    .find((value) => Boolean(value));
+  if (jobValue) {
     maybeAddCandidate({
       key: "employment.current",
-      value: jobMatch[1],
+      value: trimAtContinuationMarker(jobValue, [" and "]),
       sensitive: false,
       sourceTaskId,
       source: "user_input_pattern.job_is",
       observedAt,
-      confidence: toSentenceConfidence(jobMatch[0])
+      confidence: toSentenceConfidence(jobValue)
     });
   }
 
-  const residencePattern = /\bi\s+(?:live in|moved to)\s+([^.!?\n]+?)(?=(?:\s+and\b)|[.!?\n]|$)/i;
-  const residenceMatch = residencePattern.exec(text);
-  if (residenceMatch) {
+  const residenceValue = splitExplicitProfileSegments(text)
+    .map((segment) =>
+      extractSegmentValueAfterContainedPrefix(segment, ["i live in ", "i moved to "])
+    )
+    .find((value) => Boolean(value));
+  if (residenceValue) {
     maybeAddCandidate({
       key: "residence.current",
-      value: residenceMatch[1],
+      value: trimAtContinuationMarker(residenceValue, [" and "]),
       sensitive: true,
       sourceTaskId,
       source: "user_input_pattern.residence",
       observedAt,
-      confidence: toSentenceConfidence(residenceMatch[0])
+      confidence: toSentenceConfidence(residenceValue)
     });
   }
 
@@ -246,28 +406,28 @@ function extractResolvedFollowupFacts(
   observedAt: string
 ): ProfileFactUpsertInput[] {
   const candidates: ProfileFactUpsertInput[] = [];
-  const resolutionPatterns = [
-    /\b(?:i|we)\s+(?:no\s+longer\s+need\s+help\s+with|do\s+not\s+need\s+help\s+with|don't\s+need\s+help\s+with|am\s+all\s+set\s+with|are\s+all\s+set\s+with)\s+([^.!?\n]+?)(?=(?:\s+anymore\b)?(?:[.!?\n]|$))/gi,
-    /\b(?:turn\s+off|stop|disable)\s+(?:the\s+)?(?:notifications?|reminders?)\s+(?:for|about)\s+([^.!?\n]+?)(?=(?:\s+anymore\b)?(?:[.!?\n]|$))/gi
-  ];
-
-  for (const pattern of resolutionPatterns) {
-    for (const match of text.matchAll(pattern)) {
-      const topicKey = normalizeResolutionTopicKey(match[1] ?? "");
-      if (!topicKey) {
-        continue;
-      }
-
-      candidates.push({
-        key: `followup.${topicKey}`,
-        value: "resolved",
-        sensitive: false,
-        sourceTaskId,
-        source: "user_input_pattern.followup_resolved",
-        observedAt,
-        confidence: toSentenceConfidence(match[0])
-      });
+  for (const segment of splitExplicitProfileSegments(text)) {
+    const resolutionValue =
+      extractSegmentValueAfterPrefix(segment, FOLLOWUP_RESOLUTION_PREFIXES) ??
+      extractSegmentValueAfterPrefix(segment, NOTIFICATION_RESOLUTION_PREFIXES);
+    if (!resolutionValue) {
+      continue;
     }
+    const topicKey = normalizeResolutionTopicKey(
+      trimAtContinuationMarker(resolutionValue, [" anymore", " and "])
+    );
+    if (!topicKey) {
+      continue;
+    }
+    candidates.push({
+      key: `followup.${topicKey}`,
+      value: "resolved",
+      sensitive: false,
+      sourceTaskId,
+      source: "user_input_pattern.followup_resolved",
+      observedAt,
+      confidence: toSentenceConfidence(segment)
+    });
   }
 
   return candidates;

@@ -8,7 +8,8 @@ import { test } from "node:test";
 import {
   isSensitiveKey,
   normalizeProfileKey,
-  normalizeProfileValue
+  normalizeProfileValue,
+  trimTrailingClausePunctuation
 } from "../../src/core/profileMemoryRuntime/profileMemoryNormalization";
 
 test("normalizeProfileKey collapses punctuation and whitespace into dotted form", () => {
@@ -23,4 +24,8 @@ test("normalizeProfileValue collapses repeated whitespace", () => {
 test("isSensitiveKey detects normalized sensitive keys", () => {
   assert.equal(isSensitiveKey("Residence.Current"), true);
   assert.equal(isSensitiveKey("employment.current"), false);
+});
+
+test("trimTrailingClausePunctuation removes trailing clause separators without trimming inner text", () => {
+  assert.equal(trimTrailingClausePunctuation("Lantern Studio,;"), "Lantern Studio");
 });

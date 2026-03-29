@@ -3,7 +3,7 @@
  */
 
 import { exec as execCallback } from "node:child_process";
-import { access, mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 
@@ -121,19 +121,17 @@ function stripUtf8Bom(value: string): string {
  */
 async function readLiveSmokeStatus(): Promise<"PASS" | "FAIL" | "NOT_RUN"> {
   try {
-    await access(LIVE_SMOKE_PATH);
+    const content = await readFile(LIVE_SMOKE_PATH, "utf8");
+    if (content.includes("Status: PASS")) {
+      return "PASS";
+    }
+    if (content.includes("Status: FAIL")) {
+      return "FAIL";
+    }
+    return "NOT_RUN";
   } catch {
     return "NOT_RUN";
   }
-
-  const content = await readFile(LIVE_SMOKE_PATH, "utf8");
-  if (content.includes("Status: PASS")) {
-    return "PASS";
-  }
-  if (content.includes("Status: FAIL")) {
-    return "FAIL";
-  }
-  return "NOT_RUN";
 }
 
 /**

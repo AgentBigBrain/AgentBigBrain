@@ -681,6 +681,52 @@ test("evaluateStructuredRecoveryPolicy and builder produce one bounded dependenc
   assert.match(executionPlan?.nextUserInput ?? "", /npm install\s+"?@vitejs\/plugin-react"?/i);
 });
 
+test("buildStructuredRecoveryExecutionPlan fails closed when a parsed dependency name is not shell-safe", () => {
+  const contract: MissionCompletionContract = {
+    executionStyle: true,
+    requireRealSideEffect: true,
+    requireTargetPathTouch: false,
+    requireArtifactMutation: false,
+    requireReadinessProof: false,
+    requireBrowserProof: false,
+    requireProcessStopProof: false,
+    targetPathHints: []
+  };
+  const result = buildTaskResult([
+    {
+      ...buildBlockedMissingDependencyShellResult("shell_missing_dependency_unsafe"),
+      output: `Cannot find module "@vitejs/plugin-react; rm -rf /"`
+    }
+  ]);
+  const snapshot = buildAutonomousRecoverySnapshot({
+    result,
+    missionContract: contract,
+    missingRequirements: resolveMissingMissionRequirements(contract, {
+      realSideEffects: 0,
+      targetPathTouches: 0,
+      artifactMutations: 0,
+      readinessProofs: 0,
+      browserProofs: 0,
+      processStopProofs: 0
+    })
+  });
+  const decision = evaluateStructuredRecoveryPolicy({
+    snapshot,
+    attemptCounts: new Map()
+  });
+  const executionPlan = buildStructuredRecoveryExecutionPlan({
+    overarchingGoal: "Build the app and leave it working.",
+    missionRequiresBrowserProof: false,
+    result,
+    decision,
+    trackedManagedProcessLeaseId: null,
+    trackedLoopbackTarget: null
+  });
+
+  assert.ok(executionPlan && "reason" in executionPlan);
+  assert.match(executionPlan?.reason ?? "", /not shell-safe/i);
+});
+
 test("evaluateStructuredRecoveryPolicy stops when a bounded repair fingerprint exhausts its budget", () => {
   const signal = {
     recoveryClass: "DEPENDENCY_MISSING" as const,

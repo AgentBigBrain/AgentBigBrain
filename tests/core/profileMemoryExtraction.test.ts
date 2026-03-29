@@ -51,6 +51,22 @@ test("canonical extraction helper emits resolved follow-up markers from suppress
   );
 });
 
+test("canonical extraction helper emits resolved follow-up markers from conversational completion phrasing", () => {
+  const candidates = extractProfileFactCandidatesFromUserInput(
+    "I'm all set with the dentist reminder anymore.",
+    "task_profile_extract_followup_conversational",
+    "2026-03-07T12:00:00.000Z"
+  );
+
+  assert.equal(
+    candidates.some(
+      (candidate) =>
+        candidate.key === "followup.dentist.reminder" && candidate.value === "resolved"
+    ),
+    true
+  );
+});
+
 test("canonical extraction helper does not treat workflow call-me phrasing as a preferred name", () => {
   const candidates = extractProfileFactCandidatesFromUserInput(
     "Call me when the deployment is done and run the workspace build.",

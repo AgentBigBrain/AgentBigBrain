@@ -321,7 +321,12 @@ export function parseUserProtectedPathPrefixes(value: string | undefined): strin
  * @returns Resulting string value.
  */
 function normalizeProtectedPathPrefix(value: string): string {
-  return value.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+  const slashNormalized = value.replace(/\\/g, "/");
+  let end = slashNormalized.length;
+  while (end > 0 && slashNormalized[end - 1] === "/") {
+    end -= 1;
+  }
+  return slashNormalized.slice(0, end).toLowerCase();
 }
 
 /**

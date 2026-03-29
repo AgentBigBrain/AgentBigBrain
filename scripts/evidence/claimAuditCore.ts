@@ -3,7 +3,7 @@
  */
 
 import { exec as execCallback } from "node:child_process";
-import { access, readFile, stat } from "node:fs/promises";
+import { access, readFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 
@@ -591,25 +591,17 @@ async function auditArtifactEvidence(
 ): Promise<EvidenceAuditResult> {
   const artifactPath = path.resolve(cwd, evidence.path);
   try {
-    const artifactStats = await stat(artifactPath);
-    if (!artifactStats.isFile()) {
+    const artifactContents = await readFile(artifactPath);
+    if (evidence.minBytes !== undefined && artifactContents.byteLength < evidence.minBytes) {
       return {
         ok: false,
         evidenceType: evidence.type,
         artifactPath: toRelativePath(cwd, artifactPath),
-        detail: "Artifact path exists but is not a file."
-      };
-    }
-    if (evidence.minBytes !== undefined && artifactStats.size < evidence.minBytes) {
-      return {
-        ok: false,
-        evidenceType: evidence.type,
-        artifactPath: toRelativePath(cwd, artifactPath),
-        detail: `Artifact size ${artifactStats.size} is smaller than required minimum ${evidence.minBytes}.`
+        detail: `Artifact size ${artifactContents.byteLength} is smaller than required minimum ${evidence.minBytes}.`
       };
     }
     if (evidence.mustContain !== undefined) {
-      const raw = await readFile(artifactPath, "utf8");
+      const raw = artifactContents.toString("utf8");
       if (!raw.includes(evidence.mustContain)) {
         return {
           ok: false,

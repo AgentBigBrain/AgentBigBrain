@@ -81,3 +81,16 @@ test("stage 6.85 playbook registry fails closed for invalid or mismatched covera
     );
   });
 });
+
+test("stage 6.85 playbook registry returns null when the registry file is missing", async () => {
+  const tempDir = await mkdtemp(
+    path.join(os.tmpdir(), "agentbigbrain-stage685-playbook-registry-missing-")
+  );
+  const registryPath = path.join(tempDir, "missing_registry.json");
+  try {
+    const loaded = await loadPlaybookRegistryEnvelope(registryPath);
+    assert.equal(loaded, null);
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});

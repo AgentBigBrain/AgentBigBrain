@@ -929,9 +929,6 @@ function writeFallbackOrganizationArtifactSync(blockerReason: string): void {
 }
 
 function refreshExistingOrganizationArtifactCleanupChecksSync(): void {
-  if (!existsSync(ARTIFACT_PATH)) {
-    return;
-  }
   try {
     const persistedArtifact = JSON.parse(readFileSync(ARTIFACT_PATH, "utf8")) as Artifact;
     persistedArtifact.cleanupChecks = buildFallbackCleanupChecks();

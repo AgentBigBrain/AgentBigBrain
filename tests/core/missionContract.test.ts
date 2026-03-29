@@ -27,3 +27,14 @@ test("buildMissionCompletionContract still requires browser verification for exp
   assert.equal(contract.requireReadinessProof, true);
   assert.equal(contract.requireBrowserProof, true);
 });
+
+test("buildMissionCompletionContract captures quoted and unquoted explicit target paths", () => {
+  const contract = buildMissionCompletionContract(
+    `Create the app in "C:\\Users\\example\\Desktop\\Drone City" and also verify /home/example/tmp/demo-preview before you finish.`
+  );
+
+  assert.deepEqual(contract.targetPathHints, [
+    "c:\\users\\example\\desktop\\drone city",
+    "\\home\\example\\tmp\\demo-preview"
+  ]);
+});

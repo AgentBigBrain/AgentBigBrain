@@ -49,9 +49,6 @@ export interface FederatedOutboundPolicyDecision {
   target: FederatedOutboundTargetContract | null;
 }
 
-const OUTBOUND_INTENT_PATTERN =
-  /^\s*\[federate:([a-zA-Z0-9_-]{1,64})\s+quote=([0-9]+(?:\.[0-9]+)?)\]\s*([\s\S]+)$/i;
-
 /**
  * Parses permissive boolean env values.
  *
@@ -266,17 +263,29 @@ export function createFederatedOutboundRuntimeConfigFromEnv(
 export function parseFederatedOutboundIntent(
   userInput: string
 ): FederatedOutboundIntent | null {
-  const match = userInput.match(OUTBOUND_INTENT_PATTERN);
-  if (!match) {
+  const trimmed = userInput.trim();
+  if (!trimmed.toLowerCase().startsWith("[federate:")) {
     return null;
   }
-
-  const targetAgentId = match[1].trim();
-  const quotedCostUsd = Number(match[2]);
-  const delegatedUserInput = match[3].trim();
+  const closingBracketIndex = trimmed.indexOf("]");
+  if (closingBracketIndex < 0) {
+    return null;
+  }
+  const header = trimmed.slice(1, closingBracketIndex).trim();
+  const delegatedUserInput = trimmed.slice(closingBracketIndex + 1).trim();
   if (!delegatedUserInput) {
     return null;
   }
+  const headerBody = header.slice("federate:".length).trim();
+  const quoteIndex = headerBody.toLowerCase().indexOf(" quote=");
+  if (quoteIndex <= 0) {
+    return null;
+  }
+  const targetAgentId = headerBody.slice(0, quoteIndex).trim();
+  if (!/^[a-zA-Z0-9_-]{1,64}$/.test(targetAgentId)) {
+    return null;
+  }
+  const quotedCostUsd = Number(headerBody.slice(quoteIndex + " quote=".length).trim());
   if (!Number.isFinite(quotedCostUsd) || quotedCostUsd < 0) {
     return null;
   }
