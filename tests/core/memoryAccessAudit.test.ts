@@ -40,6 +40,7 @@ test("MemoryAccessAuditStore appends normalized events with hashed queries", asy
     await store.appendEvent({
       taskId: "task_1",
       query: "who is owen?",
+      storeLoadCount: 2,
       retrievedCount: 2,
       retrievedEpisodeCount: 1,
       redactedCount: 1,
@@ -51,6 +52,7 @@ test("MemoryAccessAuditStore appends normalized events with hashed queries", asy
     const [event] = document.events;
     assert.equal(event.eventType, "retrieval");
     assert.equal(event.taskId, "task_1");
+    assert.equal(event.storeLoadCount, 2);
     assert.equal(event.retrievedCount, 2);
     assert.equal(event.retrievedEpisodeCount, 1);
     assert.equal(event.redactedCount, 1);

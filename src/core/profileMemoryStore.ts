@@ -3,6 +3,7 @@
  */
 
 import {
+  type ProfileFactUpsertInput,
   DEFAULT_PROFILE_STALE_AFTER_DAYS,
   markStaleFactsAsUncertain,
   ProfileMemoryState
@@ -14,16 +15,6 @@ import {
   AgentPulsePolicyConfig,
   evaluateAgentPulsePolicy
 } from "./agentPulse";
-import {
-  buildProfilePlanningContext,
-  queryProfileFactsForContinuity,
-  readProfileEpisodes,
-  readProfileFacts
-} from "./profileMemoryRuntime/profileMemoryQueries";
-import {
-  buildProfileEpisodePlanningContext
-} from "./profileMemoryRuntime/profileMemoryEpisodePlanningContext";
-import { selectProfileEpisodesForPlanningQuery } from "./profileMemoryRuntime/profileMemoryEpisodePlanningContext";
 import {
   buildValidatedProfileFactCandidates,
   extractProfileFactCandidatesFromUserInput
@@ -40,9 +31,20 @@ import {
   saveProfileMemoryState
 } from "./profileMemoryRuntime/profileMemoryPersistence";
 import {
+  createProfileMemoryReadSession,
+  type ProfileMemoryReadSession
+} from "./profileMemoryRuntime/profileMemoryReadSession";
+import { isCompatibilityVisibleFactLike } from "./profileMemoryRuntime/profileMemoryCompatibilityVisibility";
+import { recordProfileMemoryStoreLoad } from "./profileMemoryRuntime/profileMemoryRequestTelemetry";
+import {
+  findProfileMemoryIngestReceipt,
+  recordProfileMemoryIngestReceipt
+} from "./profileMemoryRuntime/profileMemoryIngestIdempotency";
+import {
   applyProfileEpisodeCandidates,
   applyProfileEpisodeResolutions
 } from "./profileMemoryRuntime/profileMemoryEpisodeMutations";
+import { governProfileMemoryCandidates } from "./profileMemoryRuntime/profileMemoryTruthGovernance";
 import {
   applyProfileFactCandidates,
   buildInferredCommitmentResolutionCandidates,
@@ -65,12 +67,13 @@ import {
   type AgentPulseEvaluationResult,
   type ProfileAccessRequest,
   type ProfileIngestResult,
+  type ProfileMemoryRequestTelemetry,
+  type ProfileMemoryWriteProvenance,
   type ProfileValidatedFactCandidateInput,
   type ProfileReadableEpisode,
   type ProfileReadableFact
 } from "./profileMemoryRuntime/contracts";
 import {
-  queryProfileEpisodesForContinuity,
   type ProfileEpisodeContinuityQueryRequest
 } from "./profileMemoryRuntime/profileMemoryEpisodeQueries";
 import type { ProfileFactContinuityQueryRequest } from "./profileMemoryRuntime/profileMemoryQueries";
@@ -94,6 +97,8 @@ export type {
 export interface ProfileMemoryIngestOptions {
   additionalEpisodeCandidates?: readonly CreateProfileEpisodeRecordInput[];
   validatedFactCandidates?: readonly ProfileValidatedFactCandidateInput[];
+  provenance?: ProfileMemoryWriteProvenance;
+  requestTelemetry?: ProfileMemoryRequestTelemetry;
 }
 
 export class ProfileMemoryStore {
@@ -157,7 +162,8 @@ export class ProfileMemoryStore {
    *   `./profileMemoryRuntime/profileMemoryPersistence`.
    * @returns Normalized profile state, persisted if reconciliation made deterministic changes.
    */
-  async load(): Promise<ProfileMemoryState> {
+  async load(requestTelemetry?: ProfileMemoryRequestTelemetry): Promise<ProfileMemoryState> {
+    recordProfileMemoryStoreLoad(requestTelemetry);
     const nowIso = new Date().toISOString();
     const state = await loadPersistedProfileMemoryState(this.filePath, this.encryptionKey);
     const staleResult = markStaleFactsAsUncertain(
@@ -197,6 +203,25 @@ export class ProfileMemoryStore {
   }
 
   /**
+   * Opens one request-scoped read facade over a reconciled profile-memory snapshot.
+   *
+   * **Why it exists:**
+   * Higher-level request paths such as brokered planner assembly may need multiple read projections
+   * from the same canonical state. This method lets them reuse one reconciled snapshot without
+   * stacking independent `load()` calls.
+   *
+   * @returns Request-scoped read session over the current reconciled profile state.
+   */
+  async openReadSession(
+    requestTelemetry?: ProfileMemoryRequestTelemetry
+  ): Promise<ProfileMemoryReadSession> {
+    return createProfileMemoryReadSession(
+      await this.load(requestTelemetry),
+      this.staleAfterDays
+    );
+  }
+
+  /**
    * Extracts and applies profile-memory mutations from one task/user input.
    *
    * **Why it exists:**
@@ -217,7 +242,13 @@ export class ProfileMemoryStore {
     observedAt: string,
     options: ProfileMemoryIngestOptions = {}
   ): Promise<ProfileIngestResult> {
-    const state = await this.load();
+    const state = await this.load(options.requestTelemetry);
+    if (findProfileMemoryIngestReceipt(state, options.provenance)) {
+      return {
+        appliedFacts: 0,
+        supersededFacts: 0
+      };
+    }
     const mediaIngest = parseProfileMediaIngestInput(userInput);
     const factSourceTexts = dedupeProfileIngestTexts([
       mediaIngest.directUserText,
@@ -239,7 +270,6 @@ export class ProfileMemoryStore {
       ...validatedCandidates,
       ...inferredResolutionCandidates
     ];
-    const applyResult = applyProfileFactCandidates(state, candidates);
     const extractedEpisodeCandidates = mediaIngest.allNarrativeFragments.flatMap((text) =>
       extractProfileEpisodeCandidatesFromUserInput(text, taskId, observedAt)
     );
@@ -247,6 +277,17 @@ export class ProfileMemoryStore {
       ...extractedEpisodeCandidates,
       ...(options.additionalEpisodeCandidates ?? [])
     ];
+    const preResolutionGovernance = governProfileMemoryCandidates({
+      factCandidates: candidates,
+      episodeCandidates: mergedEpisodeCandidates,
+      episodeResolutionCandidates: []
+    });
+    const applyResult = applyProfileFactCandidates(state, [
+      ...preResolutionGovernance.allowedCurrentStateFactCandidates,
+      ...selectCompatibilitySafeSupportOnlyFactCandidates(
+        preResolutionGovernance.allowedSupportOnlyFactCandidates
+      )
+    ]);
     const inferredEpisodeResolutionCandidates = factSourceTexts.flatMap((text) =>
       buildInferredProfileEpisodeResolutionCandidates(
         applyResult.nextState,
@@ -255,13 +296,18 @@ export class ProfileMemoryStore {
         observedAt
       )
     );
+    const resolutionGovernance = governProfileMemoryCandidates({
+      factCandidates: [],
+      episodeCandidates: [],
+      episodeResolutionCandidates: inferredEpisodeResolutionCandidates
+    });
     const episodeCandidateResult = applyProfileEpisodeCandidates(
       applyResult.nextState,
-      mergedEpisodeCandidates
+      [...preResolutionGovernance.allowedEpisodeCandidates]
     );
     const episodeResolutionResult = applyProfileEpisodeResolutions(
       episodeCandidateResult.nextState,
-      inferredEpisodeResolutionCandidates
+      [...resolutionGovernance.allowedEpisodeResolutionCandidates]
     );
 
     const totalAppliedFacts = applyResult.appliedFacts +
@@ -275,7 +321,13 @@ export class ProfileMemoryStore {
       };
     }
 
-    await this.save(episodeResolutionResult.nextState);
+    await this.save(
+      recordProfileMemoryIngestReceipt(episodeResolutionResult.nextState, {
+        provenance: options.provenance,
+        sourceTaskId: taskId,
+        recordedAt: observedAt
+      })
+    );
     return {
       appliedFacts: totalAppliedFacts,
       supersededFacts: applyResult.supersededFacts
@@ -298,8 +350,7 @@ export class ProfileMemoryStore {
    * @returns Rendered profile context block for planner prompt injection.
    */
   async getPlanningContext(maxFacts = 6, queryInput = ""): Promise<string> {
-    const state = await this.load();
-    return buildProfilePlanningContext(state, maxFacts, queryInput);
+    return (await this.openReadSession()).getPlanningContext(maxFacts, queryInput);
   }
 
   /**
@@ -313,11 +364,7 @@ export class ProfileMemoryStore {
     maxFacts = 6,
     queryInput = ""
   ): Promise<readonly ProfileReadableFact[]> {
-    const state = await this.load();
-    return queryProfileFactsForContinuity(state, {
-      entityHints: [queryInput],
-      maxFacts
-    });
+    return (await this.openReadSession()).queryFactsForPlanningContext(maxFacts, queryInput);
   }
 
   /**
@@ -340,14 +387,7 @@ export class ProfileMemoryStore {
     queryInput = "",
     nowIso = new Date().toISOString()
   ): Promise<string> {
-    const state = await this.load();
-    return buildProfileEpisodePlanningContext(
-      state,
-      maxEpisodes,
-      queryInput,
-      nowIso,
-      this.staleAfterDays
-    );
+    return (await this.openReadSession()).getEpisodePlanningContext(maxEpisodes, queryInput, nowIso);
   }
 
   /**
@@ -363,29 +403,11 @@ export class ProfileMemoryStore {
     queryInput = "",
     nowIso = new Date().toISOString()
   ): Promise<readonly ProfileReadableEpisode[]> {
-    const state = await this.load();
-    return selectProfileEpisodesForPlanningQuery(
-      state,
+    return (await this.openReadSession()).queryEpisodesForPlanningContext(
       maxEpisodes,
       queryInput,
-      nowIso,
-      this.staleAfterDays
-    ).map((episode) => ({
-      episodeId: episode.id,
-      title: episode.title,
-      summary: episode.summary,
-      status: episode.status,
-      sensitive: episode.sensitive,
-      sourceKind: episode.sourceKind,
-      observedAt: episode.observedAt,
-      lastMentionedAt: episode.lastMentionedAt,
-      lastUpdatedAt: episode.lastUpdatedAt,
-      resolvedAt: episode.resolvedAt,
-      confidence: episode.confidence,
-      entityRefs: [...episode.entityRefs],
-      openLoopRefs: [...episode.openLoopRefs],
-      tags: [...episode.tags]
-    }));
+      nowIso
+    );
   }
 
   /**
@@ -467,8 +489,7 @@ export class ProfileMemoryStore {
    * @returns Sorted readable fact entries filtered by sensitivity rules.
    */
   async readFacts(request: ProfileAccessRequest): Promise<ProfileReadableFact[]> {
-    const state = await this.load();
-    return readProfileFacts(state, request);
+    return (await this.openReadSession()).readFacts(request);
   }
 
   /**
@@ -484,10 +505,7 @@ export class ProfileMemoryStore {
     stack: ConversationStackV1,
     request: ProfileFactContinuityQueryRequest
   ): Promise<readonly ProfileReadableFact[]> {
-    void graph;
-    void stack;
-    const state = await this.load();
-    return queryProfileFactsForContinuity(state, request);
+    return (await this.openReadSession()).queryFactsForContinuity(graph, stack, request);
   }
 
   /**
@@ -500,8 +518,7 @@ export class ProfileMemoryStore {
     request: ProfileAccessRequest,
     nowIso = new Date().toISOString()
   ): Promise<ProfileReadableEpisode[]> {
-    const state = await this.load();
-    return readProfileEpisodes(state, request, nowIso, this.staleAfterDays);
+    return (await this.openReadSession()).readEpisodes(request, nowIso);
   }
 
   /**
@@ -612,14 +629,11 @@ export class ProfileMemoryStore {
     request: ProfileEpisodeContinuityQueryRequest,
     nowIso = new Date().toISOString()
   ) {
-    const state = await this.load();
-    return queryProfileEpisodesForContinuity(
-      state,
+    return (await this.openReadSession()).queryEpisodesForContinuity(
       graph,
       stack,
       request,
-      nowIso,
-      this.staleAfterDays
+      nowIso
     );
   }
 
@@ -686,6 +700,19 @@ function dedupeProfileIngestTexts(values: readonly string[]): readonly string[] 
     ordered.push(normalized);
   }
   return ordered;
+}
+
+/**
+ * Filters support-only legacy facts down to the subset that can still safely project into the
+ * current flat compatibility store without pretending to be singular current-state truth.
+ *
+ * @param candidates - Governance-classified support-only fact candidates.
+ * @returns Support-only candidates that remain compatibility-safe for flat fact projection.
+ */
+function selectCompatibilitySafeSupportOnlyFactCandidates(
+  candidates: readonly ProfileFactUpsertInput[]
+): readonly ProfileFactUpsertInput[] {
+  return candidates.filter((candidate) => isCompatibilityVisibleFactLike(candidate));
 }
 
 /**

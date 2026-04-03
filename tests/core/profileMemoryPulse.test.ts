@@ -80,6 +80,231 @@ test("assessRelationshipRole returns the newest active relationship role", () =>
   assert.ok(assessment.roleFactId);
 });
 
+test("assessRelationshipRole recognizes acquaintance from contact relationship facts", () => {
+  let state = createEmptyProfileMemoryState();
+  state = upsertTemporalProfileFact(state, {
+    key: "contact.riley.relationship",
+    value: "acquaintance",
+    sensitive: false,
+    sourceTaskId: "relationship_acquaintance_contact",
+    source: "test.seed",
+    observedAt: "2026-02-02T00:00:00.000Z",
+    confidence: 0.9
+  }).nextState;
+
+  const assessment = assessRelationshipRole(state);
+  assert.equal(assessment.role, "acquaintance");
+  assert.ok(assessment.roleFactId);
+});
+
+test("assessRelationshipRole maps classmate contact relationships to acquaintance", () => {
+  let state = createEmptyProfileMemoryState();
+  state = upsertTemporalProfileFact(state, {
+    key: "contact.iris.relationship",
+    value: "classmate",
+    sensitive: false,
+    sourceTaskId: "relationship_classmate_contact",
+    source: "test.seed",
+    observedAt: "2026-02-02T00:00:00.000Z",
+    confidence: 0.9
+  }).nextState;
+
+  const assessment = assessRelationshipRole(state);
+  assert.equal(assessment.role, "acquaintance");
+  assert.ok(assessment.roleFactId);
+});
+
+test("assessRelationshipRole maps partner-family contact relationships to partner", () => {
+  for (const value of ["partner", "married", "wife", "husband", "girlfriend", "boyfriend"]) {
+    let state = createEmptyProfileMemoryState();
+    state = upsertTemporalProfileFact(state, {
+      key: "contact.iris.relationship",
+      value,
+      sensitive: false,
+      sourceTaskId: `relationship_${value}_contact`,
+      source: "test.seed",
+      observedAt: "2026-02-02T00:00:00.000Z",
+      confidence: 0.9
+    }).nextState;
+
+    const assessment = assessRelationshipRole(state);
+    assert.equal(assessment.role, "partner");
+    assert.ok(assessment.roleFactId);
+  }
+});
+
+test("assessRelationshipRole maps cousin to distant_relative", () => {
+  let state = createEmptyProfileMemoryState();
+  state = upsertTemporalProfileFact(state, {
+    key: "relationship.role",
+    value: "cousin",
+    sensitive: false,
+    sourceTaskId: "relationship_cousin",
+    source: "test.seed",
+    observedAt: "2026-02-02T00:00:00.000Z",
+    confidence: 0.9
+  }).nextState;
+
+  const assessment = assessRelationshipRole(state);
+  assert.equal(assessment.role, "distant_relative");
+  assert.ok(assessment.roleFactId);
+});
+
+test("assessRelationshipRole maps close-kinship contact relationships to distant_relative", () => {
+  for (const value of ["mom", "mother", "dad", "father", "sister", "brother"]) {
+    let state = createEmptyProfileMemoryState();
+    state = upsertTemporalProfileFact(state, {
+      key: "contact.rosa.relationship",
+      value,
+      sensitive: false,
+      sourceTaskId: `relationship_${value}_contact`,
+      source: "test.seed",
+      observedAt: "2026-02-02T00:00:00.000Z",
+      confidence: 0.9
+    }).nextState;
+
+    const assessment = assessRelationshipRole(state);
+    assert.equal(assessment.role, "distant_relative");
+    assert.ok(assessment.roleFactId);
+  }
+});
+
+test("assessRelationshipRole maps family and family-member relationships to distant_relative", () => {
+  for (const fact of [
+    { key: "contact.rosa.relationship", value: "family" },
+    { key: "contact.rosa.relationship", value: "family member" },
+    { key: "family.member", value: "Rosa" }
+  ]) {
+    let state = createEmptyProfileMemoryState();
+    state = upsertTemporalProfileFact(state, {
+      key: fact.key,
+      value: fact.value,
+      sensitive: false,
+      sourceTaskId: `relationship_${fact.key.replace(/[^a-z0-9]+/gi, "_")}`,
+      source: "test.seed",
+      observedAt: "2026-04-03T12:00:00.000Z",
+      confidence: 0.9
+    }).nextState;
+
+    const assessment = assessRelationshipRole(state);
+    assert.equal(assessment.role, "distant_relative");
+    assert.ok(assessment.roleFactId);
+  }
+});
+
+test("assessRelationshipRole maps broader close-kinship relationships to distant_relative", () => {
+  for (const value of ["son", "daughter", "parent", "child", "sibling"]) {
+    let state = createEmptyProfileMemoryState();
+    state = upsertTemporalProfileFact(state, {
+      key: "contact.rosa.relationship",
+      value,
+      sensitive: false,
+      sourceTaskId: `relationship_${value}_contact`,
+      source: "test.seed",
+      observedAt: "2026-04-03T12:00:00.000Z",
+      confidence: 0.9
+    }).nextState;
+
+    const assessment = assessRelationshipRole(state);
+    assert.equal(assessment.role, "distant_relative");
+    assert.ok(assessment.roleFactId);
+  }
+});
+
+test("assessRelationshipRole fails closed on ambiguous bare report phrasing", () => {
+  let state = createEmptyProfileMemoryState();
+  state = upsertTemporalProfileFact(state, {
+    key: "relationship.role",
+    value: "report",
+    sensitive: false,
+    sourceTaskId: "relationship_report",
+    source: "test.seed",
+    observedAt: "2026-02-02T00:00:00.000Z",
+    confidence: 0.9
+  }).nextState;
+
+  const assessment = assessRelationshipRole(state);
+  assert.equal(assessment.role, "unknown");
+  assert.equal(assessment.roleFactId, null);
+});
+
+test("assessRelationshipRole keeps roommate fail-closed until pulse taxonomy expands", () => {
+  let state = createEmptyProfileMemoryState();
+  state = upsertTemporalProfileFact(state, {
+    key: "contact.kai.relationship",
+    value: "roommate",
+    sensitive: false,
+    sourceTaskId: "relationship_roommate",
+    source: "test.seed",
+    observedAt: "2026-02-02T00:00:00.000Z",
+    confidence: 0.9
+  }).nextState;
+
+  const assessment = assessRelationshipRole(state);
+  assert.equal(assessment.role, "unknown");
+  assert.equal(assessment.roleFactId, null);
+});
+
+test("assessRelationshipRole ignores historical support-only contact relationships", () => {
+  let state = createEmptyProfileMemoryState();
+  state = upsertTemporalProfileFact(state, {
+    key: "contact.owen.relationship",
+    value: "work_peer",
+    sensitive: false,
+    sourceTaskId: "relationship_historical_work_peer",
+    source: "user_input_pattern.work_with_contact_historical",
+    observedAt: "2026-04-03T12:00:00.000Z",
+    confidence: 0.95
+  }).nextState;
+
+  const assessment = assessRelationshipRole(state);
+  assert.equal(assessment.role, "unknown");
+  assert.equal(assessment.roleFactId, null);
+});
+
+test("assessRelationshipRole ignores severed support-only contact relationships", () => {
+  let state = createEmptyProfileMemoryState();
+  state = upsertTemporalProfileFact(state, {
+    key: "contact.jordan.relationship",
+    value: "manager",
+    sensitive: false,
+    sourceTaskId: "relationship_severed_manager",
+    source: "user_input_pattern.direct_contact_relationship_severed",
+    observedAt: "2026-04-03T12:00:00.000Z",
+    confidence: 0.95
+  }).nextState;
+
+  const assessment = assessRelationshipRole(state);
+  assert.equal(assessment.role, "unknown");
+  assert.equal(assessment.roleFactId, null);
+});
+
+test("assessRelationshipRole still recognizes corroborated current relationships after historical support-only facts", () => {
+  let state = createEmptyProfileMemoryState();
+  state = upsertTemporalProfileFact(state, {
+    key: "contact.owen.relationship",
+    value: "work_peer",
+    sensitive: false,
+    sourceTaskId: "relationship_historical_work_peer",
+    source: "user_input_pattern.work_with_contact_historical",
+    observedAt: "2026-04-03T12:00:00.000Z",
+    confidence: 0.95
+  }).nextState;
+  state = upsertTemporalProfileFact(state, {
+    key: "contact.sam.relationship",
+    value: "friend",
+    sensitive: false,
+    sourceTaskId: "relationship_current_friend",
+    source: "user_input_pattern.direct_contact_relationship",
+    observedAt: "2026-04-03T12:05:00.000Z",
+    confidence: 0.95
+  }).nextState;
+
+  const assessment = assessRelationshipRole(state);
+  assert.equal(assessment.role, "friend");
+  assert.ok(assessment.roleFactId);
+});
+
 test("assessContextDrift detects uncertain active and superseded domain facts", () => {
   let state = createEmptyProfileMemoryState();
   state = upsertTemporalProfileFact(state, {

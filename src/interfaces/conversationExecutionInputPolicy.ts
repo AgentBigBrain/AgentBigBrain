@@ -32,6 +32,7 @@ import {
 } from "./conversationManagerHelpers";
 import { buildContextualRecallBlock } from "./conversationRuntime/contextualRecall";
 import { buildLocalIntentSessionHints } from "./conversationRuntime/conversationRoutingSupport";
+import { buildBoundConversationContinuityQueries } from "./conversationRuntime/continuityReadSession";
 import { buildSelfIdentityRecallBlock } from "./conversationRuntime/selfIdentityPrompting";
 import {
   analyzeConversationChatTurnSignals,
@@ -40,6 +41,7 @@ import {
 import { buildTurnLocalStatusUpdateInstructionBlock, hasTurnLocalFirstPersonStatusUpdate } from "./conversationRuntime/turnLocalStatusUpdate";
 import type {
   GetConversationEntityGraph,
+  OpenConversationContinuityReadSession,
   QueryConversationContinuityEpisodes,
   QueryConversationContinuityFacts
 } from "./conversationRuntime/managerContracts";
@@ -100,7 +102,7 @@ const GENERIC_WORKSPACE_SEGMENT_NAMES = new Set(["dist", "build", "out", "public
 const PROFILE_DETOUR_PATTERN =
   /\b(?:my name is|call me|i go by|remember that i|i prefer|my favorite|my birthday|i live|i moved|my job|i work at)\b/i;
 const RELATIONSHIP_DETOUR_PATTERN =
-  /\b(?:my )?(?:friend|coworker|colleague|manager|neighbor|relative|teammate|contact|partner)\b/i;
+  /\b(?:my )?(?:friend|employee|coworker|colleague|teammate|classmate|peer|work\s+peer|boss|manager|supervisor|team\s+lead|direct\s+report|neighbor|neighbour|relative|distant\s+relative|family(?:\s+members?)?|cousin|aunt|uncle|mom|mother|dad|father|son|daughter|parent|child|sibling|sister|brother|roommate|spouse|wife|husband|girlfriend|boyfriend|partner|married|contact)\b/i;
 const WORKFLOW_CONTINUITY_ROUTING_TYPES = new Set(["execution_surface", "diagnostics"]);
 
 /**
@@ -1212,7 +1214,8 @@ export async function buildConversationAwareExecutionInput(
   browserSessionSnapshots?: readonly BrowserSessionSnapshot[],
   contextualReferenceInterpretationResolver?: ContextualReferenceInterpretationResolver,
   getEntityGraph?: GetConversationEntityGraph,
-  entityReferenceInterpretationResolver?: EntityReferenceInterpretationResolver
+  entityReferenceInterpretationResolver?: EntityReferenceInterpretationResolver,
+  openContinuityReadSession?: OpenConversationContinuityReadSession
 ): Promise<string> {
   const runtimeReconciledSession = reconcileConversationExecutionRuntimeSession(
     session,
@@ -1226,17 +1229,22 @@ export async function buildConversationAwareExecutionInput(
     rawUserInput,
     routingClassification
   );
+  const continuityQueries = buildBoundConversationContinuityQueries({
+    queryContinuityEpisodes,
+    queryContinuityFacts,
+    openContinuityReadSession
+  });
   const selfIdentityRecallBlock = await buildSelfIdentityRecallBlock(
     runtimeReconciledSession,
     rawUserInput,
-    queryContinuityFacts
+    continuityQueries.queryContinuityFacts
   );
   const statusUpdateBlock = buildTurnLocalStatusUpdateBlock(rawUserInput);
   const contextualRecallBlock = await buildContextualRecallBlock(
     runtimeReconciledSession,
     rawUserInput,
-    queryContinuityEpisodes,
-    queryContinuityFacts,
+    continuityQueries.queryContinuityEpisodes,
+    continuityQueries.queryContinuityFacts,
     media,
     contextualReferenceInterpretationResolver,
     getEntityGraph,

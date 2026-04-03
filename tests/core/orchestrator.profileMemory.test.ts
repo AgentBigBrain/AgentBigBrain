@@ -12,9 +12,12 @@ import { DEFAULT_BRAIN_CONFIG } from "../../src/core/config";
 import { makeId } from "../../src/core/ids";
 import { BrainOrchestrator } from "../../src/core/orchestrator";
 import { ProfileMemoryStore } from "../../src/core/profileMemoryStore";
+import { createEmptyConversationStackV1 } from "../../src/core/stage6_86ConversationStack";
+import { createEmptyEntityGraphV1 } from "../../src/core/stage6_86EntityGraph";
 import type {
   ProfileReadableEpisode,
-  ProfileReadableFact
+  ProfileReadableFact,
+  ProfileMemoryWriteProvenance
 } from "../../src/core/profileMemoryRuntime/contracts";
 import { SemanticMemoryStore } from "../../src/core/semanticMemory";
 import { StateStore } from "../../src/core/stateStore";
@@ -152,16 +155,22 @@ class InjectedSensitiveProfileStore {
 
 class CapturingIngestProfileStore {
   lastIngestInput = "";
+  lastProvenance: ProfileMemoryWriteProvenance | null = null;
+  lastTaskId = "";
 
   /**
  * Implements `ingestFromTaskInput` behavior within class CapturingIngestProfileStore.
  * Interacts with local collaborators through imported modules and typed inputs/outputs.
  */
   async ingestFromTaskInput(
-    _taskId: string,
-    userInput: string
+    taskId: string,
+    userInput: string,
+    _observedAt?: string,
+    options?: { provenance?: ProfileMemoryWriteProvenance }
   ): Promise<{ appliedFacts: number; supersededFacts: number }> {
+    this.lastTaskId = taskId;
     this.lastIngestInput = userInput;
+    this.lastProvenance = options?.provenance ?? null;
     return {
       appliedFacts: 0,
       supersededFacts: 0
@@ -198,6 +207,19 @@ class CapturingIngestProfileStore {
  */
   async queryEpisodesForPlanningContext(): Promise<readonly ProfileReadableEpisode[]> {
     return [];
+  }
+}
+
+class CountingContinuityProfileStore extends ProfileMemoryStore {
+  loadCount = 0;
+
+  /**
+ * Implements `load` behavior within class CountingContinuityProfileStore.
+ * Interacts with local collaborators through imported modules and typed inputs/outputs.
+ */
+  async load() {
+    this.loadCount += 1;
+    return super.load();
   }
 }
 
@@ -483,6 +505,75 @@ test("orchestrator remembers validated identity candidates through the canonical
   }
 });
 
+test("orchestrator forwards conversational write provenance and derives a stable synthetic source task id", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-orch-profile-provenance-"));
+  const statePath = path.join(tempDir, "state.json");
+  const semanticPath = path.join(tempDir, "semantic_memory.json");
+  const personalityPath = path.join(tempDir, "personality_profile.json");
+  const governancePath = path.join(tempDir, "governance_memory.json");
+
+  const modelClient = new CapturingPlannerModelClient();
+  const memoryStore = new SemanticMemoryStore(semanticPath);
+  const config = {
+    ...DEFAULT_BRAIN_CONFIG,
+    dna: {
+      ...DEFAULT_BRAIN_CONFIG.dna,
+      immutableKeywords: [...DEFAULT_BRAIN_CONFIG.dna.immutableKeywords],
+      protectedPathPrefixes: [...DEFAULT_BRAIN_CONFIG.dna.protectedPathPrefixes]
+    }
+  };
+  const capturingStore = new CapturingIngestProfileStore();
+
+  const brain = new BrainOrchestrator(
+    config,
+    new PlannerOrgan(modelClient, memoryStore),
+    new ToolExecutorOrgan(config),
+    createDefaultGovernors(),
+    new MasterGovernor(config.governance.supermajorityThreshold),
+    new StateStore(statePath),
+    modelClient,
+    new ReflectionOrgan(memoryStore, modelClient),
+    new PersonalityStore(personalityPath),
+    new GovernanceMemoryStore(governancePath),
+    capturingStore as unknown as ProfileMemoryStore
+  );
+
+  try {
+    const remembered = await brain.rememberConversationProfileInput(
+      {
+        userInput: "I work with Milo at Northstar Creative.",
+        provenance: {
+          conversationId: "telegram:chat-1:user-1",
+          turnId: "turn_abc123abc123abc123abc123",
+          dominantLaneAtWrite: "relationship",
+          threadKey: "thread_contacts",
+          sourceSurface: "conversation_profile_input",
+          sourceFingerprint: "0123456789abcdef0123456789abcdef"
+        }
+      },
+      "2026-03-27T14:05:00.000Z"
+    );
+
+    assert.equal(remembered, false);
+    assert.equal(capturingStore.lastIngestInput, "I work with Milo at Northstar Creative.");
+    assert.equal(capturingStore.lastProvenance?.conversationId, "telegram:chat-1:user-1");
+    assert.equal(capturingStore.lastProvenance?.turnId, "turn_abc123abc123abc123abc123");
+    assert.equal(capturingStore.lastProvenance?.dominantLaneAtWrite, "relationship");
+    assert.equal(capturingStore.lastProvenance?.threadKey, "thread_contacts");
+    assert.equal(capturingStore.lastProvenance?.sourceSurface, "conversation_profile_input");
+    assert.equal(
+      capturingStore.lastProvenance?.sourceFingerprint,
+      "0123456789abcdef0123456789abcdef"
+    );
+    assert.match(
+      capturingStore.lastTaskId,
+      /^profile_ingest_conversation_profile_input_[a-f0-9]{24}$/
+    );
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
 test("orchestrator passes session domain context into broker gating for workflow-only requests", async () => {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-orch-profile-domain-gate-"));
   const statePath = path.join(tempDir, "state.json");
@@ -597,6 +688,71 @@ test("orchestrator recalls Owen contact context across conversation-wrapper turn
     assert.match(plannerInput, /contact\.owen\.name: Owen/i);
     assert.match(plannerInput, /contact\.owen\.relationship: work_peer/i);
     assert.match(plannerInput, /contact\.owen\.work_association: Lantern Studio/i);
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("orchestrator continuity read sessions reuse one profile-memory snapshot across fact and episode reads", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-orch-profile-continuity-session-"));
+  const statePath = path.join(tempDir, "state.json");
+  const semanticPath = path.join(tempDir, "semantic_memory.json");
+  const personalityPath = path.join(tempDir, "personality_profile.json");
+  const governancePath = path.join(tempDir, "governance_memory.json");
+  const encryptedProfilePath = path.join(tempDir, "profile_memory.secure.json");
+  const profileKey = Buffer.alloc(32, 31);
+  const nowIso = "2026-03-26T15:39:10.000Z";
+
+  const modelClient = new CapturingPlannerModelClient();
+  const memoryStore = new SemanticMemoryStore(semanticPath);
+  const config = {
+    ...DEFAULT_BRAIN_CONFIG,
+    dna: {
+      ...DEFAULT_BRAIN_CONFIG.dna,
+      immutableKeywords: [...DEFAULT_BRAIN_CONFIG.dna.immutableKeywords],
+      protectedPathPrefixes: [...DEFAULT_BRAIN_CONFIG.dna.protectedPathPrefixes]
+    }
+  };
+  const profileStore = new CountingContinuityProfileStore(encryptedProfilePath, profileKey, 90);
+  await profileStore.ingestFromTaskInput(
+    "seed-owen",
+    "I work with Owen at Lantern Studio. Owen fell down a few weeks ago.",
+    nowIso
+  );
+
+  const brain = new BrainOrchestrator(
+    config,
+    new PlannerOrgan(modelClient, memoryStore),
+    new ToolExecutorOrgan(config),
+    createDefaultGovernors(),
+    new MasterGovernor(config.governance.supermajorityThreshold),
+    new StateStore(statePath),
+    modelClient,
+    new ReflectionOrgan(memoryStore, modelClient),
+    new PersonalityStore(personalityPath),
+    new GovernanceMemoryStore(governancePath),
+    profileStore
+  );
+
+  try {
+    profileStore.loadCount = 0;
+    const readSession = await brain.openContinuityReadSession(createEmptyEntityGraphV1(nowIso));
+    assert.ok(readSession);
+
+    const facts = await readSession?.queryContinuityFacts(
+      createEmptyConversationStackV1(nowIso),
+      ["owen"],
+      3
+    );
+    const episodes = await readSession?.queryContinuityEpisodes(
+      createEmptyConversationStackV1(nowIso),
+      ["owen"],
+      3
+    );
+
+    assert.equal(profileStore.loadCount, 1);
+    assert.ok((facts ?? []).some((fact) => fact.key.startsWith("contact.owen.")));
+    assert.ok(Array.isArray(episodes));
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }

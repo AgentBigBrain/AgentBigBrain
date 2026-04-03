@@ -43,6 +43,10 @@ import {
   ProfileMemoryStore
 } from "./profileMemoryStore";
 import type { ProfileMemoryIngestRequest } from "./profileMemoryRuntime/contracts";
+import {
+  buildProfileMemorySourceTaskIdFromProvenance,
+  normalizeProfileMemoryIngestRequest
+} from "./profileMemoryRuntime/profileMemoryIngestProvenance";
 import { AppendRuntimeTraceEventInput, RuntimeTraceLogger } from "./runtimeTraceLogger";
 import { TaskRunner } from "./taskRunner";
 import { Stage686RuntimeActionEngine } from "./stage6_86/runtimeActions";
@@ -66,6 +70,7 @@ import {
   resolveRememberedSituation as resolveRememberedSituationFromRuntime,
   reviewRememberedSituations as reviewRememberedSituationsFromRuntime
 } from "./orchestration/orchestratorContinuation";
+import { openOrchestratorContinuityReadSession } from "./orchestration/orchestratorContinuityReadSession";
 import { maybeRunOutboundFederatedTask } from "./orchestration/orchestratorFederation";
 import {
   buildProfileAwareInput,
@@ -249,9 +254,7 @@ export class BrainOrchestrator {
     maxEpisodes = 3
   ) {
     return queryOrchestratorContinuityEpisodes(
-      {
-        profileMemoryStore: this.profileMemoryStore
-      },
+      { profileMemoryStore: this.profileMemoryStore },
       graph,
       stack,
       entityHints,
@@ -275,14 +278,17 @@ export class BrainOrchestrator {
     maxFacts = 3
   ) {
     return queryOrchestratorContinuityFacts(
-      {
-        profileMemoryStore: this.profileMemoryStore
-      },
+      { profileMemoryStore: this.profileMemoryStore },
       graph,
       stack,
       entityHints,
       maxFacts
     );
+  }
+
+  /** Opens one bounded continuity read session over the current profile-memory snapshot. */
+  async openContinuityReadSession(graph: EntityGraphV1) {
+    return openOrchestratorContinuityReadSession({ profileMemoryStore: this.profileMemoryStore }, graph);
   }
 
   /**
@@ -299,15 +305,18 @@ export class BrainOrchestrator {
     if (!this.profileMemoryStore) {
       return false;
     }
-    const request = typeof input === "string"
+    const request = normalizeProfileMemoryIngestRequest(typeof input === "string"
       ? { userInput: input }
-      : input;
+      : input);
+    const sourceTaskId =
+      buildProfileMemorySourceTaskIdFromProvenance(request.provenance) ?? makeId("task");
     const result = await this.profileMemoryStore.ingestFromTaskInput(
-      makeId("task"),
+      sourceTaskId,
       request.userInput ?? "",
       receivedAt,
       {
-        validatedFactCandidates: request.validatedFactCandidates
+        validatedFactCandidates: request.validatedFactCandidates,
+        provenance: request.provenance
       }
     );
     return result.appliedFacts > 0;

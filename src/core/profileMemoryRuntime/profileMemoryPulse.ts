@@ -21,13 +21,35 @@ import {
   compareProfileEpisodesForLifecyclePriority
 } from "./profileMemoryEpisodeConsolidation";
 import { isTerminalProfileEpisodeStatus } from "./profileMemoryEpisodeState";
+import { isCompatibilityVisibleFactLike } from "./profileMemoryCompatibilityVisibility";
 import { isActiveFact } from "./profileMemoryCommitmentSignals";
 
 const RELATIONSHIP_FACT_KEY_HINTS = [
   "relationship",
   "friend",
+  "partner",
+  "married",
+  "spouse",
+  "wife",
+  "husband",
+  "girlfriend",
+  "boyfriend",
   "acquaintance",
+  "classmate",
+  "family",
+  "family member",
   "relative",
+  "mom",
+  "mother",
+  "dad",
+  "father",
+  "son",
+  "daughter",
+  "parent",
+  "child",
+  "sibling",
+  "sister",
+  "brother",
   "manager",
   "employee",
   "coworker",
@@ -36,8 +58,7 @@ const RELATIONSHIP_FACT_KEY_HINTS = [
   "peer",
   "neighbor",
   "boss",
-  "supervisor",
-  "report"
+  "supervisor"
 ];
 
 const RELATIONSHIP_ROLE_ALIASES: Record<
@@ -45,18 +66,32 @@ const RELATIONSHIP_ROLE_ALIASES: Record<
   string[]
 > = {
   friend: ["friend"],
-  acquaintance: ["acquaintance"],
+  partner: ["partner", "married", "spouse", "wife", "husband", "girlfriend", "boyfriend"],
+  acquaintance: ["acquaintance", "classmate"],
   distant_relative: [
     "distant_relative",
     "distant relative",
-    "relative",
-    "cousin",
+      "relative",
+      "family",
+      "family member",
+      "cousin",
     "aunt",
-    "uncle"
+    "uncle",
+      "mom",
+      "mother",
+      "dad",
+      "father",
+      "son",
+      "daughter",
+      "parent",
+      "child",
+      "sibling",
+      "sister",
+      "brother"
   ],
   work_peer: ["work_peer", "work peer", "coworker", "colleague", "teammate", "peer"],
   manager: ["manager", "boss", "supervisor", "team lead", "lead"],
-  employee: ["employee", "direct report", "report"],
+  employee: ["employee", "direct report"],
   neighbor: ["neighbor", "neighbour"]
 };
 
@@ -143,7 +178,7 @@ export function assessRelationshipRole(
   state: ProfileMemoryState
 ): AgentPulseRelationshipAssessment {
   const activeFacts = state.facts
-    .filter((fact) => isActiveFact(fact))
+    .filter((fact) => isActiveFact(fact) && isCompatibilityVisibleFactLike(fact))
     .sort((left, right) => Date.parse(right.lastUpdatedAt) - Date.parse(left.lastUpdatedAt));
 
   for (const fact of activeFacts) {
@@ -255,6 +290,21 @@ function normalizeFactText(value: string): string {
 }
 
 /**
+ * Evaluates whole-alias presence inside normalized relationship text without substring bleed.
+ *
+ * @param normalizedValue - Already-normalized fact text.
+ * @param alias - Relationship alias candidate to search for.
+ * @returns `true` when the alias is present as a bounded term.
+ */
+function hasWholeRelationshipAlias(
+  normalizedValue: string,
+  alias: string
+): boolean {
+  const escapedAlias = normalizeFactText(alias).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(?:^|\\b)${escapedAlias}(?:\\b|$)`, "i").test(normalizedValue);
+}
+
+/**
  * Derives relationship role from text from available runtime inputs.
  *
  * @param value - Primary value processed by this function.
@@ -268,7 +318,7 @@ function inferRelationshipRoleFromText(
     [Exclude<AgentPulseRelationshipRole, "unknown">, string[]]
   >;
   for (const [role, aliases] of roles) {
-    if (aliases.some((alias) => normalized.includes(normalizeFactText(alias)))) {
+    if (aliases.some((alias) => hasWholeRelationshipAlias(normalized, alias))) {
       return role;
     }
   }

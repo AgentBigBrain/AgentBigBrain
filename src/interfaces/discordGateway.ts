@@ -112,6 +112,10 @@ export class DiscordGateway {
         const graph = await this.entityGraphStore.getGraph();
         return this.adapter.queryContinuityFacts(graph, request);
       },
+      openContinuityReadSession: async () => {
+        const graph = await this.entityGraphStore.getGraph();
+        return this.adapter.openContinuityReadSession(graph);
+      },
       rememberConversationProfileInput: async (userInput, receivedAt) =>
         this.adapter.rememberConversationProfileInput(userInput, receivedAt),
       reviewConversationMemory: async (request) =>

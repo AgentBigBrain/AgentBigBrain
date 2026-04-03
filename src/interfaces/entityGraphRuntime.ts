@@ -145,7 +145,7 @@ export async function maybeRecordInboundEntityGraphMutation(
 }
 
 const ENTITY_TYPE_RELATIONSHIP_HINT_PATTERN =
-  /\b(?:friend|friends|coworker|coworkers|colleague|colleagues|teammate|teammates|mom|mother|dad|father|sister|brother|wife|husband|partner|boss|manager|boyfriend|girlfriend|married)\b/i;
+  /\b(?:friend|friends|coworker|coworkers|colleague|colleagues|teammate|teammates|classmate|classmates|mom|mother|dad|father|son|daughter|parent|child|sibling|siblings|sister|brother|family|family member|family members|relative|relatives|cousin|cousins|aunt|uncle|wife|husband|spouse|partner|boss|manager|boyfriend|girlfriend|married|roommate|roommates)\b/i;
 const ENTITY_TYPE_ORG_HINT_PATTERN =
   /\b(?:team|company|lab|labs|group|studio|school|university|org|organization)\b/i;
 const ENTITY_TYPE_EVENT_HINT_PATTERN =
@@ -155,7 +155,7 @@ const ENTITY_TYPE_PLACE_HINT_PATTERN =
 const ENTITY_TYPE_SKIP_PATTERN =
   /:\/\/|[\\/]|`|\.tsx?\b|\.jsx?\b|\b(?:npm|node|powershell|pwsh|cmd|bash|deploy|build|ship|close the browser|open the browser)\b/i;
 const ENTITY_DOMAIN_RELATIONSHIP_HINT_PATTERN =
-  /\b(?:friend|friends|coworker|coworkers|colleague|colleagues|teammate|teammates|boyfriend|girlfriend|partner|wife|husband|mom|mother|dad|father|sister|brother|family|roommate)\b/i;
+  /\b(?:friend|friends|coworker|coworkers|colleague|colleagues|teammate|teammates|classmate|classmates|boyfriend|girlfriend|partner|spouse|wife|husband|married|mom|mother|dad|father|son|daughter|parent|child|sibling|siblings|sister|brother|family|family member|family members|relative|relatives|cousin|cousins|aunt|uncle|roommate|roommates)\b/i;
 const ENTITY_DOMAIN_PROFILE_HINT_PATTERN =
   /\b(?:i love|i like|i prefer|my favorite|favorite|hobby|hobbies|weekend|vacation|birthday|pet|dog|cat|home|apartment|cafe|coffee|restaurant)\b/i;
 const ENTITY_DOMAIN_WORKFLOW_HINT_PATTERN =

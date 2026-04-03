@@ -22,7 +22,8 @@ export function createEmptyProfileMemoryState(): ProfileMemoryState {
     schemaVersion: PROFILE_MEMORY_SCHEMA_VERSION,
     updatedAt: new Date().toISOString(),
     facts: [],
-    episodes: []
+    episodes: [],
+    ingestReceipts: []
   };
 }
 
@@ -91,7 +92,8 @@ export function markStaleFactsAsUncertain(
       schemaVersion: PROFILE_MEMORY_SCHEMA_VERSION,
       updatedAt: nowIso,
       facts: nextFacts,
-      episodes: state.episodes ?? []
+      episodes: state.episodes ?? [],
+      ingestReceipts: state.ingestReceipts ?? []
     },
     updatedFactIds
   };

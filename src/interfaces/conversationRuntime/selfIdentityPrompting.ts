@@ -15,6 +15,7 @@ import type {
 } from "./managerContracts";
 import type { ConversationSession } from "../sessionStore";
 import type { RoutingMapClassificationV1 } from "../routingMap";
+import { buildConversationProfileMemoryWriteRequest } from "./conversationProfileMemoryWrite";
 import { buildLocalIntentSessionHints } from "./conversationRoutingSupport";
 import {
   buildIdentityInterpretationFallbackReply,
@@ -246,7 +247,9 @@ export async function buildModelAssistedSelfIdentityReply(
   const remembered =
     typeof rememberConversationProfileInput === "function"
       ? await rememberConversationProfileInput(
-          {
+          buildConversationProfileMemoryWriteRequest({
+            session,
+            receivedAt,
             validatedFactCandidates: [
               {
                 key: "identity.preferred_name",
@@ -255,7 +258,7 @@ export async function buildModelAssistedSelfIdentityReply(
                 confidence: interpretedIdentity.confidence === "high" ? 0.98 : 0.95
               }
             ]
-          },
+          }),
           receivedAt
         ).catch(() => false)
       : false;
@@ -388,7 +391,8 @@ export async function buildDeterministicSelfIdentityReply(
 export async function buildDeterministicSelfIdentityDeclarationReply(
   userInput: string,
   receivedAt: string,
-  rememberConversationProfileInput?: RememberConversationProfileInput
+  rememberConversationProfileInput?: RememberConversationProfileInput,
+  session?: ConversationSession
 ): Promise<string | null> {
   if (!isSimpleDeterministicSelfIdentityDeclaration(userInput)) {
     return null;
@@ -400,7 +404,16 @@ export async function buildDeterministicSelfIdentityDeclarationReply(
 
   const remembered =
     typeof rememberConversationProfileInput === "function"
-      ? await rememberConversationProfileInput(userInput, receivedAt).catch(() => false)
+      ? await rememberConversationProfileInput(
+          session
+            ? buildConversationProfileMemoryWriteRequest({
+                session,
+                userInput,
+                receivedAt
+              })
+            : userInput,
+          receivedAt
+        ).catch(() => false)
       : false;
   return remembered
     ? `Okay, I'll remember that you're ${preferredName}.`

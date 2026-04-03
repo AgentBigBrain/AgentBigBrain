@@ -600,6 +600,74 @@ test("buildConversationAwareExecutionInput suppresses workflow continuity blocks
   assert.equal(executionInput, "Remember that I prefer dark mode.");
 });
 
+test("buildConversationAwareExecutionInput suppresses workflow continuity blocks for broader governed relationship detours", async () => {
+  const session = buildSession();
+  session.modeContinuity = {
+    activeMode: "build",
+    source: "natural_intent",
+    confidence: "HIGH",
+    lastAffirmedAt: "2026-03-03T00:00:25.000Z",
+    lastUserInput: "Build the release notes app."
+  };
+  session.progressState = {
+    status: "working",
+    message: "building the release notes app",
+    jobId: "job-1",
+    updatedAt: "2026-03-03T00:00:30.000Z"
+  };
+  session.returnHandoff = {
+    id: "handoff:job-0",
+    status: "completed",
+    goal: "Build the release notes app.",
+    summary: "I finished a usable draft and left the preview ready.",
+    nextSuggestedStep: "Tell me what to refine next.",
+    workspaceRootPath: "C:\\Users\\testuser\\Desktop\\123",
+    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\123\\index.html",
+    previewUrl: "http://localhost:3000",
+    changedPaths: ["C:\\Users\\testuser\\Desktop\\123\\index.html"],
+    sourceJobId: "job-0",
+    updatedAt: "2026-03-03T00:00:29.000Z"
+  };
+  session.activeWorkspace = {
+    id: "workspace:desktop-123",
+    label: "Current project workspace",
+    rootPath: "C:\\Users\\testuser\\Desktop\\123",
+    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\123\\index.html",
+    previewUrl: "http://localhost:3000",
+    browserSessionId: "browser-1",
+    browserSessionIds: ["browser-1"],
+    browserSessionStatus: "open",
+    browserProcessPid: 41001,
+    previewProcessLeaseId: null,
+    previewProcessLeaseIds: [],
+    previewProcessCwd: "C:\\Users\\testuser\\Desktop\\123",
+    lastKnownPreviewProcessPid: null,
+    stillControllable: true,
+    ownershipState: "tracked",
+    previewStackState: "browser_only",
+    lastChangedPaths: ["C:\\Users\\testuser\\Desktop\\123\\index.html"],
+    sourceJobId: "job-1",
+    updatedAt: "2026-03-03T00:00:20.000Z"
+  };
+  session.domainContext.dominantLane = "workflow";
+  session.domainContext.continuitySignals = {
+    activeWorkspace: true,
+    returnHandoff: true,
+    modeContinuity: true
+  };
+
+  const executionInput = await buildConversationAwareExecutionInput(
+    session,
+    "My direct report is Casey.",
+    10
+  );
+
+  assert.doesNotMatch(executionInput, /Current working mode from earlier in this chat:/);
+  assert.doesNotMatch(executionInput, /Latest durable work handoff in this chat:/);
+  assert.doesNotMatch(executionInput, /Current tracked workspace in this chat:/);
+  assert.equal(executionInput, "My direct report is Casey.");
+});
+
 test("buildConversationAwareExecutionInput preserves workflow continuity blocks for workflow follow-ups", async () => {
   const session = buildSession();
   session.modeContinuity = {
@@ -835,6 +903,144 @@ test("buildConversationAwareExecutionInput can inject episode-aware contextual r
   assert.match(executionInput, /Relevant situation: Owen fell down/i);
   assert.match(executionInput, /Current user request:/);
   assert.match(executionInput, /User follow-up answer: Owen seems better now\./);
+});
+
+test("buildConversationAwareExecutionInput reuses one continuity read session for contextual recall", async () => {
+  const session = buildSession();
+  session.conversationTurns.push({
+    role: "user",
+    text: "Owen fell down a few weeks ago.",
+    at: "2026-02-14T15:00:00.000Z"
+  });
+  session.conversationStack = {
+    schemaVersion: "v1",
+    updatedAt: "2026-03-03T00:00:00.000Z",
+    activeThreadKey: "thread_current",
+    threads: [
+      {
+        threadKey: "thread_current",
+        topicKey: "release_rollout",
+        topicLabel: "Release Rollout",
+        state: "active",
+        resumeHint: "Need to finish the rollout.",
+        openLoops: [],
+        lastTouchedAt: "2026-03-03T00:00:00.000Z"
+      },
+      {
+        threadKey: "thread_owen",
+        topicKey: "owen_fall",
+        topicLabel: "Owen Fall",
+        state: "paused",
+        resumeHint: "Owen fell down and you wanted to hear how it ended up.",
+        openLoops: [
+          {
+            loopId: "loop_owen",
+            threadKey: "thread_owen",
+            entityRefs: ["owen"],
+            createdAt: "2026-02-14T15:00:00.000Z",
+            lastMentionedAt: "2026-02-14T15:00:00.000Z",
+            priority: 0.8,
+            status: "open"
+          }
+        ],
+        lastTouchedAt: "2026-02-14T15:00:00.000Z"
+      }
+    ],
+    topics: [
+      {
+        topicKey: "release_rollout",
+        label: "Release Rollout",
+        firstSeenAt: "2026-03-03T00:00:00.000Z",
+        lastSeenAt: "2026-03-03T00:00:00.000Z",
+        mentionCount: 1
+      },
+      {
+        topicKey: "owen_fall",
+        label: "Owen Fall",
+        firstSeenAt: "2026-02-14T15:00:00.000Z",
+        lastSeenAt: "2026-02-14T15:00:00.000Z",
+        mentionCount: 1
+      }
+    ]
+  };
+
+  let openedSessions = 0;
+  let continuityEpisodeQueries = 0;
+  let continuityFactQueries = 0;
+
+  const executionInput = await buildConversationAwareExecutionInput(
+    session,
+    "Follow-up user response to prior assistant clarification.\nUser follow-up answer: Owen seems better now.",
+    10,
+    null,
+    "How is Owen doing lately?",
+    async () => {
+      throw new Error("raw continuity episode callback should not run when a read session is available");
+    },
+    async () => {
+      throw new Error("raw continuity fact callback should not run when a read session is available");
+    },
+    undefined,
+    undefined,
+    null,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    async () => {
+      openedSessions += 1;
+      return {
+        queryContinuityEpisodes: async () => {
+          continuityEpisodeQueries += 1;
+          return [
+            {
+              episodeId: "episode_owen_fall",
+              title: "Owen fell down",
+              summary: "Owen fell down a few weeks ago and the outcome never got resolved.",
+              status: "unresolved",
+              lastMentionedAt: "2026-02-14T15:00:00.000Z",
+              entityRefs: ["Owen"],
+              entityLinks: [
+                {
+                  entityKey: "entity_owen",
+                  canonicalName: "Owen"
+                }
+              ],
+              openLoopLinks: [
+                {
+                  loopId: "loop_owen",
+                  threadKey: "thread_owen",
+                  status: "open",
+                  priority: 0.8
+                }
+              ]
+            }
+          ];
+        },
+        queryContinuityFacts: async () => {
+          continuityFactQueries += 1;
+          return [
+            {
+              factId: "fact_owen_relationship",
+              key: "contact.owen.relationship",
+              value: "work_peer",
+              status: "active",
+              observedAt: "2026-02-14T15:00:00.000Z",
+              lastUpdatedAt: "2026-02-14T15:00:00.000Z",
+              confidence: 0.82
+            }
+          ];
+        }
+      };
+    }
+  );
+
+  assert.equal(openedSessions, 1);
+  assert.equal(continuityEpisodeQueries, 2);
+  assert.equal(continuityFactQueries, 1);
+  assert.match(executionInput, /Contextual recall opportunity \(optional\):/);
+  assert.match(executionInput, /Relevant situation: Owen fell down/i);
+  assert.match(executionInput, /Supporting memory hypothesis:/);
 });
 
 test("buildConversationAwareExecutionInput includes natural reuse preference guidance when the user asks to use the same approach", async () => {

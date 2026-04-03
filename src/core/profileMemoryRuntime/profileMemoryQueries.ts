@@ -7,6 +7,7 @@ import {
   buildQueryAwarePlanningContext,
   selectProfileFactsForQuery
 } from "./profileMemoryPlanningContext";
+import { isCompatibilityVisibleFactLike } from "./profileMemoryCompatibilityVisibility";
 import {
   type ProfileAccessRequest,
   type ProfileReadableFact
@@ -46,7 +47,7 @@ export function readProfileFacts(
   request: ProfileAccessRequest
 ): ProfileReadableFact[] {
   const activeFacts = state.facts
-    .filter((fact) => isActiveProfileFact(fact))
+    .filter((fact) => isActiveProfileFact(fact) && isCompatibilityVisibleFactLike(fact))
     .sort((left, right) => Date.parse(right.lastUpdatedAt) - Date.parse(left.lastUpdatedAt));
 
   const sensitiveAllowed = canReadSensitiveFacts(request);

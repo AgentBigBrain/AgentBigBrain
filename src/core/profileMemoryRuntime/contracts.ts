@@ -61,6 +61,10 @@ export interface ProfileIngestResult {
   supersededFacts: number;
 }
 
+export interface ProfileMemoryRequestTelemetry {
+  storeLoadCount: number;
+}
+
 export interface ProfileValidatedFactCandidateInput {
   key: string;
   candidateValue: string;
@@ -69,9 +73,24 @@ export interface ProfileValidatedFactCandidateInput {
   confidence?: number;
 }
 
+export type ProfileMemorySourceSurface =
+  | "conversation_profile_input"
+  | "broker_task_ingest"
+  | "memory_review_episode";
+
+export interface ProfileMemoryWriteProvenance {
+  conversationId?: string;
+  turnId?: string;
+  dominantLaneAtWrite?: ConversationDomainLane | null;
+  threadKey?: string | null;
+  sourceSurface: ProfileMemorySourceSurface;
+  sourceFingerprint?: string;
+}
+
 export interface ProfileMemoryIngestRequest {
   userInput?: string;
   validatedFactCandidates?: readonly ProfileValidatedFactCandidateInput[];
+  provenance?: ProfileMemoryWriteProvenance;
 }
 
 export interface AgentPulseEvaluationRequest {
@@ -88,6 +107,7 @@ export interface AgentPulseEvaluationRequest {
 
 export type AgentPulseRelationshipRole =
   | "friend"
+  | "partner"
   | "acquaintance"
   | "distant_relative"
   | "work_peer"

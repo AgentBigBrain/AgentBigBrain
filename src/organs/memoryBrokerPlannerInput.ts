@@ -6,6 +6,11 @@ import { ProfileMemoryStore } from "../core/profileMemoryStore";
 import { MemoryAccessAuditStore } from "../core/memoryAccessAudit";
 import { LanguageUnderstandingOrgan } from "./languageUnderstanding/episodeExtraction";
 import type { ProfileReadableEpisode, ProfileReadableFact } from "../core/profileMemoryRuntime/contracts";
+import {
+  buildConversationProfileMemoryTurnId,
+  buildProfileMemorySourceFingerprint
+} from "../core/profileMemoryRuntime/profileMemoryIngestProvenance";
+import { createProfileMemoryRequestTelemetry } from "../core/profileMemoryRuntime/profileMemoryRequestTelemetry";
 import type { TaskRequest } from "../core/types";
 import { buildPlannerContextSynthesisBlock } from "./memorySynthesis/plannerContextSynthesis";
 import type { MemorySynthesisEpisodeRecord, MemorySynthesisFactRecord } from "./memorySynthesis/contracts";
@@ -43,6 +48,58 @@ export interface MemoryBrokerPlannerInputDependencies {
   recentProbeSignals: ProbingSignalSnapshot[];
 }
 
+interface BrokerProfileMemoryReadSession {
+  getPlanningContext(maxFacts?: number, queryInput?: string): Promise<string> | string;
+  getEpisodePlanningContext(
+    maxEpisodes?: number,
+    queryInput?: string,
+    nowIso?: string
+  ): Promise<string> | string;
+  queryFactsForPlanningContext(
+    maxFacts?: number,
+    queryInput?: string
+  ): Promise<readonly ProfileReadableFact[]> | readonly ProfileReadableFact[];
+  queryEpisodesForPlanningContext(
+    maxEpisodes?: number,
+    queryInput?: string,
+    nowIso?: string
+  ): Promise<readonly ProfileReadableEpisode[]> | readonly ProfileReadableEpisode[];
+}
+
+/**
+ * Opens one broker-scoped profile-memory read facade, preferring request-scoped snapshot reuse when
+ * the concrete store supports it while keeping older store doubles compatible.
+ *
+ * @param store - Profile-memory store or compatible test double.
+ * @returns Read facade used by planner-input assembly.
+ */
+async function openBrokerProfileMemoryReadSession(
+  store: ProfileMemoryStore,
+  storeTelemetry?: import("../core/profileMemoryRuntime/contracts").ProfileMemoryRequestTelemetry
+): Promise<BrokerProfileMemoryReadSession> {
+  const sessionFactory = (store as ProfileMemoryStore & {
+    openReadSession?: (
+      requestTelemetry?: import("../core/profileMemoryRuntime/contracts").ProfileMemoryRequestTelemetry
+    ) => Promise<BrokerProfileMemoryReadSession>;
+  }).openReadSession;
+  if (typeof sessionFactory === "function") {
+    return sessionFactory.call(store, storeTelemetry);
+  }
+  return {
+    getPlanningContext: (maxFacts = 6, queryInput = "") =>
+      store.getPlanningContext(maxFacts, queryInput),
+    getEpisodePlanningContext: (maxEpisodes = 2, queryInput = "", nowIso = new Date().toISOString()) =>
+      store.getEpisodePlanningContext(maxEpisodes, queryInput, nowIso),
+    queryFactsForPlanningContext: (maxFacts = 6, queryInput = "") =>
+      store.queryFactsForPlanningContext(maxFacts, queryInput),
+    queryEpisodesForPlanningContext: (
+      maxEpisodes = 2,
+      queryInput = "",
+      nowIso = new Date().toISOString()
+    ) => store.queryEpisodesForPlanningContext(maxEpisodes, queryInput, nowIso)
+  };
+}
+
 /**
  * Builds brokered planner input while keeping the entrypoint free of orchestration detail.
  *
@@ -76,6 +133,9 @@ export async function buildBrokeredPlannerInput(
   );
 
   try {
+    const requestTelemetry = createProfileMemoryRequestTelemetry();
+    const sourceFingerprint = buildProfileMemorySourceFingerprint(currentUserRequest);
+    const conversationId = options.sessionDomainContext?.conversationId;
     const additionalEpisodeCandidates = !shouldSkipProfileIngest && deps.languageUnderstandingOrgan
       ? await deps.languageUnderstandingOrgan.extractEpisodeCandidates({
           text: currentUserRequest,
@@ -89,20 +149,39 @@ export async function buildBrokeredPlannerInput(
         currentUserRequest,
         task.createdAt,
         {
-          additionalEpisodeCandidates
+          additionalEpisodeCandidates,
+          provenance: {
+            conversationId,
+            turnId: conversationId
+              ? buildConversationProfileMemoryTurnId(
+                  conversationId,
+                  task.createdAt,
+                  sourceFingerprint
+                )
+              : task.id,
+            dominantLaneAtWrite: options.sessionDomainContext?.dominantLane ?? null,
+            sourceSurface: "broker_task_ingest",
+            sourceFingerprint
+          },
+          requestTelemetry
         }
       );
     }
-    const profileContext = await deps.profileMemoryStore.getPlanningContext(6, currentUserRequest);
-    const episodeContext = await deps.profileMemoryStore.getEpisodePlanningContext(
-      2,
-      currentUserRequest
+    const readSession = await openBrokerProfileMemoryReadSession(
+      deps.profileMemoryStore,
+      requestTelemetry
     );
-    const plannerFacts = await deps.profileMemoryStore.queryFactsForPlanningContext(
+    const profileContext = await readSession.getPlanningContext(6, currentUserRequest);
+    const episodeContext = await readSession.getEpisodePlanningContext(
+      2,
+      currentUserRequest,
+      task.createdAt
+    );
+    const plannerFacts = await readSession.queryFactsForPlanningContext(
       3,
       currentUserRequest
     );
-    const plannerEpisodes = await deps.profileMemoryStore.queryEpisodesForPlanningContext(
+    const plannerEpisodes = await readSession.queryEpisodesForPlanningContext(
       2,
       currentUserRequest,
       task.createdAt
@@ -122,6 +201,7 @@ export async function buildBrokeredPlannerInput(
         deps.memoryAccessAuditStore,
         task.id,
         currentUserRequest,
+        requestTelemetry.storeLoadCount,
         0,
         0,
         0,
@@ -132,6 +212,7 @@ export async function buildBrokeredPlannerInput(
           deps.memoryAccessAuditStore,
           task.id,
           currentUserRequest,
+          requestTelemetry.storeLoadCount,
           0,
           0,
           0,
@@ -174,6 +255,7 @@ export async function buildBrokeredPlannerInput(
       deps.memoryAccessAuditStore,
       task.id,
       currentUserRequest,
+      requestTelemetry.storeLoadCount,
       retrievedCount,
       retrievedEpisodeCount,
       redactedCount,
@@ -184,6 +266,7 @@ export async function buildBrokeredPlannerInput(
         deps.memoryAccessAuditStore,
         task.id,
         currentUserRequest,
+        requestTelemetry.storeLoadCount,
         retrievedCount,
         retrievedEpisodeCount,
         redactedCount,
@@ -239,11 +322,37 @@ export async function buildBrokeredPlannerInput(
   }
 }
 
+/** Appends the standard retrieval audit event for one brokered planner-input build. */
+async function recordAudit(
+  memoryAccessAuditStore: MemoryAccessAuditStore,
+  taskId: string,
+  query: string,
+  storeLoadCount: number,
+  retrievedCount: number,
+  retrievedEpisodeCount: number,
+  redactedCount: number,
+  domainBoundary: DomainBoundaryAssessment
+): Promise<void> {
+  await appendMemoryAccessAudit(
+    memoryAccessAuditStore,
+    taskId,
+    query,
+    retrievedCount,
+    retrievedEpisodeCount,
+    redactedCount,
+    domainBoundary.lanes,
+    {
+      storeLoadCount
+    }
+  );
+}
+
 /** Appends the probing-specific audit event when extraction-style bursts are detected. */
 async function recordProbingAudit(
   memoryAccessAuditStore: MemoryAccessAuditStore,
   taskId: string,
   query: string,
+  storeLoadCount: number,
   retrievedCount: number,
   retrievedEpisodeCount: number,
   redactedCount: number,
@@ -260,33 +369,13 @@ async function recordProbingAudit(
     domainBoundary.lanes,
     {
       eventType: "PROBING_DETECTED",
+      storeLoadCount,
       retrievedEpisodeCount,
       probeSignals: probingAssessment.matchedSignals,
       probeWindowSize: probingAssessment.windowSize,
       probeMatchCount: probingAssessment.matchCount,
       probeMatchRatio: probingAssessment.matchRatio
     }
-  );
-}
-
-/** Appends the standard retrieval audit event for one brokered planner-input build. */
-async function recordAudit(
-  memoryAccessAuditStore: MemoryAccessAuditStore,
-  taskId: string,
-  query: string,
-  retrievedCount: number,
-  retrievedEpisodeCount: number,
-  redactedCount: number,
-  domainBoundary: DomainBoundaryAssessment
-): Promise<void> {
-  await appendMemoryAccessAudit(
-    memoryAccessAuditStore,
-    taskId,
-    query,
-    retrievedCount,
-    retrievedEpisodeCount,
-    redactedCount,
-    domainBoundary.lanes
   );
 }
 

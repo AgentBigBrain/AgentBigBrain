@@ -11,6 +11,11 @@ import { test } from "node:test";
 import { MemoryAccessAuditStore } from "../../src/core/memoryAccessAudit";
 import { ProfileMemoryStore } from "../../src/core/profileMemoryStore";
 import { TaskRequest } from "../../src/core/types";
+import type { ProfileMemoryWriteProvenance } from "../../src/core/profileMemoryRuntime/contracts";
+import {
+  buildConversationProfileMemoryTurnId,
+  buildProfileMemorySourceFingerprint
+} from "../../src/core/profileMemoryRuntime/profileMemoryIngestProvenance";
 import { MockModelClient } from "../../src/models/mockModelClient";
 import { LanguageUnderstandingOrgan } from "../../src/organs/languageUnderstanding/episodeExtraction";
 import { extractCurrentUserRequest, MemoryBrokerOrgan } from "../../src/organs/memoryBroker";
@@ -59,6 +64,50 @@ function buildWorkflowDomainContext(): ConversationDomainContext {
     activeSince: "2026-03-20T12:00:00.000Z",
     lastUpdatedAt: "2026-03-20T12:01:00.000Z"
   };
+}
+
+class CapturingBrokerIngestProfileStore {
+  lastTaskId = "";
+  lastUserInput = "";
+  lastProvenance: ProfileMemoryWriteProvenance | null = null;
+
+  async ingestFromTaskInput(
+    taskId: string,
+    userInput: string,
+    _observedAt: string,
+    options?: { provenance?: ProfileMemoryWriteProvenance }
+  ): Promise<{ appliedFacts: number; supersededFacts: number }> {
+    this.lastTaskId = taskId;
+    this.lastUserInput = userInput;
+    this.lastProvenance = options?.provenance ?? null;
+    return {
+      appliedFacts: 0,
+      supersededFacts: 0
+    };
+  }
+
+  async openReadSession(): Promise<{
+    getPlanningContext(): string;
+    getEpisodePlanningContext(): string;
+    queryFactsForPlanningContext(): readonly [];
+    queryEpisodesForPlanningContext(): readonly [];
+  }> {
+    return {
+      getPlanningContext: () => "",
+      getEpisodePlanningContext: () => "",
+      queryFactsForPlanningContext: () => [],
+      queryEpisodesForPlanningContext: () => []
+    };
+  }
+}
+
+class CountingProfileMemoryStore extends ProfileMemoryStore {
+  loadCount = 0;
+
+  override async load() {
+    this.loadCount += 1;
+    return super.load();
+  }
 }
 
 test("extractCurrentUserRequest parses wrapper payloads deterministically", () => {
@@ -150,7 +199,49 @@ test("memory broker injects query-aware profile context with domain metadata", a
     assert.match(enriched.userInput, /domainBoundaryDecision=inject_profile_context/i);
     assert.match(enriched.userInput, /\[AgentFriendProfileContext\]/);
     assert.match(enriched.userInput, /contact\.owen\.name: Owen/i);
-    assert.match(enriched.userInput, /contact\.owen\.work_association: Lantern Studio/i);
+    assert.match(
+      enriched.userInput,
+      /contact\.owen\.context\.[a-z0-9]+: I used to work with Owen at Lantern Studio/i
+    );
+    assert.doesNotMatch(enriched.userInput, /contact\.owen\.work_association: Lantern Studio/i);
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("memory broker keeps historical school association out of query-aware profile context", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-memory-broker-school-"));
+  const profilePath = path.join(tempDir, "profile_memory.secure.json");
+  const key = Buffer.alloc(32, 43);
+  const store = new ProfileMemoryStore(profilePath, key, 90);
+  const broker = new MemoryBrokerOrgan(store);
+
+  const narrativeTask = buildTask(
+    "task_memory_broker_school_1",
+    "I went to school with a guy named Owen."
+  );
+  const recallTask = buildTask(
+    "task_memory_broker_school_2",
+    [
+      "You are in an ongoing conversation with the same user.",
+      "Recent conversation context (oldest to newest):",
+      "- user: I went to school with a guy named Owen.",
+      "- assistant: thanks for sharing.",
+      "",
+      "Current user request:",
+      "who is Owen?"
+    ].join("\n")
+  );
+
+  try {
+    await broker.buildPlannerInput(narrativeTask);
+    const enriched = await broker.buildPlannerInput(recallTask);
+
+    assert.equal(enriched.profileMemoryStatus, "available");
+    assert.match(enriched.userInput, /\[AgentFriendProfileContext\]/);
+    assert.match(enriched.userInput, /contact\.owen\.name: Owen/i);
+    assert.match(enriched.userInput, /contact\.owen\.relationship: acquaintance/i);
+    assert.doesNotMatch(enriched.userInput, /contact\.owen\.school_association: went_to_school_together/i);
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }
@@ -214,6 +305,7 @@ test("memory broker appends memory-access audit events with required fields", as
         eventType: string;
         taskId: string;
         queryHash: string;
+        storeLoadCount?: number;
         retrievedCount: number;
         retrievedEpisodeCount: number;
         redactedCount: number;
@@ -228,6 +320,7 @@ test("memory broker appends memory-access audit events with required fields", as
     assert.equal(lastEvent.eventType, "retrieval");
     assert.equal(lastEvent.taskId, "task_memory_audit_2");
     assert.match(lastEvent.queryHash, /^[a-f0-9]{64}$/i);
+    assert.equal(lastEvent.storeLoadCount, 2);
     assert.ok(typeof lastEvent.retrievedCount === "number");
     assert.ok(typeof lastEvent.retrievedEpisodeCount === "number");
     assert.ok(typeof lastEvent.redactedCount === "number");
@@ -539,6 +632,149 @@ test("memory broker skips model-assisted episode extraction when workflow contin
     );
 
     assert.equal(extractionCallCount, 0);
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("memory broker preserves relationship ingest under workflow continuity when the request itself is profile-worthy", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-memory-broker-workflow-relationship-"));
+  const profilePath = path.join(tempDir, "profile_memory.secure.json");
+  const key = Buffer.alloc(32, 77);
+  const store = new ProfileMemoryStore(profilePath, key, 90);
+  const broker = new MemoryBrokerOrgan(store);
+
+  try {
+    await broker.buildPlannerInput(
+      buildTask(
+        "task_memory_workflow_relationship_seed",
+        "I work with Owen at Lantern Studio."
+      ),
+      {
+        sessionDomainContext: buildWorkflowDomainContext()
+      }
+    );
+
+    const storedFacts = await store.readFacts({
+      purpose: "operator_view",
+      includeSensitive: false,
+      explicitHumanApproval: false
+    });
+
+    assert.equal(
+      storedFacts.some(
+        (fact) =>
+          fact.key === "contact.owen.work_association" &&
+          fact.value === "Lantern Studio"
+      ),
+      true
+    );
+    assert.equal(
+      storedFacts.some(
+        (fact) =>
+          fact.key === "contact.owen.relationship" &&
+          fact.value === "work_peer"
+      ),
+      true
+    );
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("memory broker preserves relationship ingest for mixed workflow requests when the utterance carries a direct conversational update", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-memory-broker-workflow-mixed-relationship-"));
+  const profilePath = path.join(tempDir, "profile_memory.secure.json");
+  const key = Buffer.alloc(32, 78);
+  const store = new ProfileMemoryStore(profilePath, key, 90);
+  const broker = new MemoryBrokerOrgan(store);
+
+  try {
+    await broker.buildPlannerInput(
+      buildTask(
+        "task_memory_workflow_relationship_mixed",
+        "Execute now and build the landing page. I work with Owen at Lantern Studio."
+      ),
+      {
+        sessionDomainContext: buildWorkflowDomainContext()
+      }
+    );
+
+    const storedFacts = await store.readFacts({
+      purpose: "operator_view",
+      includeSensitive: false,
+      explicitHumanApproval: false
+    });
+
+    assert.equal(
+      storedFacts.some(
+        (fact) =>
+          fact.key === "contact.owen.work_association" &&
+          fact.value === "Lantern Studio"
+      ),
+      true
+    );
+    assert.equal(
+      storedFacts.some(
+        (fact) =>
+          fact.key === "contact.owen.relationship" &&
+          fact.value === "work_peer"
+      ),
+      true
+    );
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("memory broker forwards bounded stream-local provenance on broker-side profile ingest", async () => {
+  const store = new CapturingBrokerIngestProfileStore();
+  const broker = new MemoryBrokerOrgan(store as unknown as ProfileMemoryStore);
+  const task = buildTask(
+    "task_memory_broker_provenance",
+    "I work with Owen at Lantern Studio."
+  );
+
+  const result = await broker.buildPlannerInput(task, {
+    sessionDomainContext: buildWorkflowDomainContext()
+  });
+
+  assert.equal(result.profileMemoryStatus, "available");
+  assert.equal(store.lastTaskId, "task_memory_broker_provenance");
+  assert.equal(store.lastUserInput, "I work with Owen at Lantern Studio.");
+  assert.equal(store.lastProvenance?.conversationId, "telegram:chat:user");
+  assert.equal(
+    store.lastProvenance?.turnId,
+    buildConversationProfileMemoryTurnId(
+      "telegram:chat:user",
+      task.createdAt,
+      buildProfileMemorySourceFingerprint("I work with Owen at Lantern Studio.")
+    )
+  );
+  assert.equal(store.lastProvenance?.dominantLaneAtWrite, "workflow");
+  assert.equal(store.lastProvenance?.sourceSurface, "broker_task_ingest");
+  assert.match(store.lastProvenance?.sourceFingerprint ?? "", /^[a-f0-9]{32}$/);
+});
+
+test("memory broker reuses one reconciled read snapshot during planner assembly", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-memory-broker-read-session-"));
+  const profilePath = path.join(tempDir, "profile_memory.secure.json");
+  const key = Buffer.alloc(32, 79);
+  const store = new CountingProfileMemoryStore(profilePath, key, 90);
+  const broker = new MemoryBrokerOrgan(store);
+
+  try {
+    await broker.buildPlannerInput(
+      buildTask(
+        "task_memory_broker_read_session",
+        "I work with Owen at Lantern Studio."
+      ),
+      {
+        sessionDomainContext: buildWorkflowDomainContext()
+      }
+    );
+
+    assert.equal(store.loadCount, 2);
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }

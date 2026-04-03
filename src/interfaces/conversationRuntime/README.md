@@ -47,9 +47,10 @@ The latest slices moved queue/ack, worker-loop, and pulse-state ownership here s
 `conversationManager.ts` can stay the stable conversation manager entrypoint while:
 - `managerContracts.ts` owns the canonical conversation-manager contracts plus autonomous
   execution-input helpers used by extracted interface runtime modules and transport gateways, and
-  now also carries the bounded entity-alias reconciliation callback contract so conversational
-  interpretation can submit one validated alias candidate without mutating entity-graph snapshots
-  directly
+  now also carries the bounded entity-alias reconciliation callback contract plus the optional
+  continuity read-session opener so conversational interpretation can submit one validated alias
+  candidate without mutating entity-graph snapshots directly, and execution-input assembly can
+  reuse one shared per-turn continuity surface without inventing a second cache
 - `conversationLifecycle.ts` owns canonical ack-timer gating, queue insertion, and ack lifecycle
   transitions
 - `deliveryContracts.ts` owns canonical ack/final-delivery contracts used by the stable delivery
@@ -120,20 +121,28 @@ The latest slices moved queue/ack, worker-loop, and pulse-state ownership here s
   follow-up preservation so short turns like `No` can stay off stale workflow routing when the
   surrounding conversation is already identity-focused
 - `chatTurnSignalLexicon.ts` owns the bounded cue lexicon shared by the short-turn analysis path so
-  token/cue budgets stay centralized instead of drifting across routing helpers
+  token/cue budgets stay centralized instead of drifting across routing helpers, and should stay
+  aligned with the bounded governed relationship vocabulary used elsewhere in runtime memory for
+  cues such as `spouse`, `classmate`, `roommate`, `direct report`, `team lead`, `work peer`, and
+  close-kinship phrasing
 - `transportIdentity.ts` owns canonical transport-identity normalization plus low-confidence
   name-hint selection so direct self-identity replies can reuse provider identity metadata without
   silently turning handles into stored profile memory
 - `selfIdentityPrompting.ts` owns canonical bounded self-identity recall prompt assembly so direct
   conversation can prefer confirmed profile facts, fall back to typed transport hints, and still
   fail closed for generic handles
+- `conversationProfileMemoryWrite.ts` owns the bounded conversational profile-memory write request
+  builder so direct chat and self-identity paths share one canonical request shape plus minimum
+  stream-local provenance before the write reaches `rememberConversationProfileInput(...)`
 - `selfIdentityInterpretationSupport.ts` owns canonical deterministic validation plus recent-turn
   context helpers for model-assisted self-identity interpretation so ambiguous declarations can use
   the shared local interpreter without bypassing canonical memory writes or falling back to regex
   tail chopping
 - `sessionDomainRouting.ts` owns bounded session-domain hint derivation and turn-level domain
   signal updates so intent routing, memory brokerage, and lifecycle continuity can share one
-  persisted per-conversation domain picture without re-implementing lane heuristics
+  persisted per-conversation domain picture without re-implementing lane heuristics, including the
+  bounded relationship-lane vocabulary reused by memory-aware chat detours, including multiword
+  manager, employee, and work-peer families already grounded in governed extraction
 - `invocationResolution.ts` owns canonical non-command invocation branching across pulse control,
   proposal follow-up, and queue routing below `conversationIngressLifecycle.ts`
 - `commandDispatch.ts` owns canonical slash-command dispatch below `conversationIngressLifecycle.ts`
@@ -147,6 +156,10 @@ The latest slices moved queue/ack, worker-loop, and pulse-state ownership here s
   context below `conversationExecutionInputPolicy.ts`
 - `contextualRecall.ts` owns canonical in-conversation contextual recall matching for active user
   turns below `conversationExecutionInputPolicy.ts`
+- `continuityReadSession.ts` owns bounded per-turn continuity query wrappers so self-identity and
+  contextual recall can reuse one shared continuity read session when the live gateway path
+  provides one, while still failing closed back to the stable fact/episode callbacks when it does
+  not
 - `contextualReferenceInterpretationSupport.ts` owns bounded eligibility, request shaping, and
   fail-closed validation for the shared contextual-reference interpreter used by contextual recall
   so vague callback wording can reuse the local conversational runtime without turning Stage 6.86
@@ -185,7 +198,9 @@ The latest slices moved queue/ack, worker-loop, and pulse-state ownership here s
   into gateways
 - `conversationRoutingDirectReplies.ts` owns the extracted casual-chat and capability-discovery
   direct-reply helpers reused by the stable conversation-routing entrypoint so ordinary
-  conversation and normal capability checks can stay out of the worker queue
+  conversation and normal capability checks can stay out of the worker queue, and can now persist
+  bounded direct-chat profile updates through the canonical remembered-profile seam before generic
+  conversation synthesis runs
 - `presentationPreferenceResolution.ts` owns canonical user-facing presentation preference families
   such as `keep it open`, `show it later`, and `run it locally`
 - `routingPrecedence.ts` owns the canonical ordering between slash commands, voice `command <name>`
@@ -457,6 +472,9 @@ The latest slices moved queue/ack, worker-loop, and pulse-state ownership here s
 - Direct-conversation reply helpers here must stay bounded to ordinary conversation and capability
   discovery. They may improve natural user-facing phrasing, but they must not silently authorize
   task execution or bypass the governed worker path for real side effects.
+- Direct-conversation profile writes here must reuse the canonical remembered-profile seam and one
+  shared bounded extraction-backed eligibility posture; they must not grow a second ad hoc
+  chat-memory writer or a broad regex routing pack.
 - Transport-identity helpers here must keep trust levels explicit. Provider usernames, display
   names, or first names may inform low-confidence self-identity replies, but they must not be
   silently upgraded into stored profile facts or claimed as confirmed memory.
@@ -488,6 +506,9 @@ The latest slices moved queue/ack, worker-loop, and pulse-state ownership here s
   bytes or become a generic multimodal transport envelope downstream.
 - Contextual recall helpers here must stay bounded and optional; they may suggest one natural
   same-conversation follow-up, but must not turn into a separate proactive pulse path.
+- Per-turn continuity read sessions here must stay request-scoped and optional. They may reduce
+  repeated continuity reads inside one execution-input build, but they must not become a long-lived
+  cache, a second truth store, or a hidden routing side channel.
 - Contextual recall may use the shared contextual-reference interpreter only on bounded ambiguous
   leftovers; deterministic recall hints, Stage 6.86 topic/open-loop state, and duplicate-safety
   suppression must remain the primary control path.

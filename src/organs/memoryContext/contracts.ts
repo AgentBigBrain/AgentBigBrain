@@ -41,6 +41,7 @@ export interface ProbingRegistrationResult {
 
 export interface MemoryAccessAuditAppendOptions {
   eventType?: "retrieval" | "PROBING_DETECTED";
+  storeLoadCount?: number;
   retrievedEpisodeCount?: number;
   probeSignals?: readonly string[];
   probeWindowSize?: number;

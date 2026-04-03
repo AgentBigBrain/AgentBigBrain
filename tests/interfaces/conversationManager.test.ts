@@ -8,7 +8,10 @@ import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 
+import type { ProfileMemoryIngestRequest } from "../../src/core/profileMemoryRuntime/contracts";
 import { createEmptyConversationDomainContext } from "../../src/core/sessionContext";
+import { ProfileMemoryStore } from "../../src/core/profileMemoryStore";
+import { createEmptyEntityGraphV1 } from "../../src/core/stage6_86EntityGraph";
 import type { TaskRunResult } from "../../src/core/types";
 import {
   ConversationInboundMessage,
@@ -2494,7 +2497,8 @@ test("conversation manager persists direct self-identity declarations and recall
             }
           ]
         : [],
-    rememberConversationProfileInput: async (userInput) => {
+    rememberConversationProfileInput: async (input) => {
+      const userInput = typeof input === "string" ? input : input.userInput ?? "";
       if (/my name is avery/i.test(userInput)) {
         rememberedPreferredName = "Avery";
         return true;
@@ -2626,18 +2630,22 @@ test("conversation manager uses model-assisted identity interpretation for ambig
     assert.deepEqual(interpretedInputs, [
       "I already told you my name is Avery several times."
     ]);
-    assert.deepEqual(rememberedInputs, [
+    assert.equal(rememberedInputs.length, 1);
+    const rememberedRequest = rememberedInputs[0] as ProfileMemoryIngestRequest;
+    assert.deepEqual(rememberedRequest.validatedFactCandidates, [
       {
-        validatedFactCandidates: [
-          {
-            key: "identity.preferred_name",
-            candidateValue: "Avery",
-            source: "conversation.identity_interpretation",
-            confidence: 0.95
-          }
-        ]
+        key: "identity.preferred_name",
+        candidateValue: "Avery",
+        source: "conversation.identity_interpretation",
+        confidence: 0.95
       }
     ]);
+    assert.equal(rememberedRequest.provenance?.conversationId, "telegram:chat-1:user-1");
+    assert.equal(rememberedRequest.provenance?.dominantLaneAtWrite, "unknown");
+    assert.equal(rememberedRequest.provenance?.threadKey, null);
+    assert.equal(rememberedRequest.provenance?.sourceSurface, "conversation_profile_input");
+    assert.match(rememberedRequest.provenance?.turnId ?? "", /^turn_[a-f0-9]{24}$/);
+    assert.match(rememberedRequest.provenance?.sourceFingerprint ?? "", /^[a-f0-9]{32}$/);
 
     const recalledReply = await manager.handleMessage(
       {
@@ -2652,6 +2660,401 @@ test("conversation manager uses model-assisted identity interpretation for ambig
     assert.equal(recalledReply, "You're Avery.");
 
     const session = await store.getSession("telegram:chat-1:user-1");
+    assert.ok(session);
+    assert.equal(session?.queuedJobs.length, 0);
+    assert.equal(session?.runningJobId, null);
+  } finally {
+    await removeTempDirWithRetry(tempDir);
+  }
+});
+
+test("conversation manager forwards bounded conversational provenance on direct relationship updates", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-conversation-relationship-provenance-"));
+  const store = new InterfaceSessionStore(path.join(tempDir, "sessions.json"));
+  const rememberedInputs: ProfileMemoryIngestRequest[] = [];
+  const manager = new ConversationManager(store, {}, {
+    rememberConversationProfileInput: async (input) => {
+      if (typeof input === "string") {
+        throw new Error("direct relationship update should use the bounded request contract");
+      }
+      rememberedInputs.push(input);
+      return true;
+    },
+    runDirectConversationTurn: async () => ({
+      summary: "Noted."
+    })
+  });
+
+  try {
+    const reply = await manager.handleMessage(
+      buildMessageAt(
+        "I work with Milo at Northstar Creative.",
+        "2026-03-26T15:39:00.000Z"
+      ),
+      async () => {
+        throw new Error("executeTask should not run for direct relationship-update chat");
+      },
+      async () => {}
+    );
+
+    assert.equal(reply, "Noted.");
+    assert.equal(rememberedInputs.length, 1);
+    assert.equal(rememberedInputs[0]?.userInput, "I work with Milo at Northstar Creative.");
+    assert.equal(rememberedInputs[0]?.provenance?.conversationId, "telegram:chat-1:user-1");
+    assert.equal(rememberedInputs[0]?.provenance?.dominantLaneAtWrite, "unknown");
+    assert.equal(rememberedInputs[0]?.provenance?.threadKey, null);
+    assert.equal(rememberedInputs[0]?.provenance?.sourceSurface, "conversation_profile_input");
+    assert.match(rememberedInputs[0]?.provenance?.turnId ?? "", /^turn_[a-f0-9]{24}$/);
+    assert.match(rememberedInputs[0]?.provenance?.sourceFingerprint ?? "", /^[a-f0-9]{32}$/);
+  } finally {
+    await removeTempDirWithRetry(tempDir);
+  }
+});
+
+test("conversation manager keeps mixed relationship-plus-build turns off the direct conversational memory seam", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-conversation-mixed-relationship-workflow-"));
+  const store = new InterfaceSessionStore(path.join(tempDir, "sessions.json"));
+  let rememberedInputCount = 0;
+  const executedInputs: string[] = [];
+  const notifications: string[] = [];
+  const manager = new ConversationManager(store, {}, {
+    rememberConversationProfileInput: async () => {
+      rememberedInputCount += 1;
+      return true;
+    },
+    runDirectConversationTurn: async () => {
+      throw new Error("runDirectConversationTurn should not run for mixed relationship-plus-build requests");
+    }
+  });
+
+  try {
+    const reply = await manager.handleMessage(
+      buildMessageAt(
+        "Execute now and build the landing page. I work with Billy at Flare Web Design.",
+        "2026-03-26T15:40:00.000Z"
+      ),
+      async (input) => {
+        executedInputs.push(input);
+        return {
+          summary: "I started the landing page build."
+        };
+      },
+      async (message) => {
+        notifications.push(message);
+      }
+    );
+
+    assert.match(reply, /On it\./i);
+    await waitFor(
+      () => notifications.some((message) => /landing page build/i.test(message)),
+      4_000
+    );
+
+    assert.equal(rememberedInputCount, 0);
+    assert.equal(executedInputs.length, 1);
+    assert.match(
+      executedInputs[0] ?? "",
+      /Execute now and build the landing page\. I work with Billy at Flare Web Design\./
+    );
+  } finally {
+    await removeTempDirWithRetry(tempDir);
+  }
+});
+
+test("conversation manager reuses one continuity read session for direct chat contextual recall", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-conversation-continuity-session-"));
+  const store = new InterfaceSessionStore(path.join(tempDir, "sessions.json"));
+  const conversationKey = "telegram:chat-1:user-1";
+  let openedSessions = 0;
+  let continuityEpisodeQueries = 0;
+  let continuityFactQueries = 0;
+  const directInputs: string[] = [];
+  const manager = new ConversationManager(
+    store,
+    {},
+    {
+      queryContinuityEpisodes: async () => {
+        throw new Error("raw continuity episode callback should not run when a session opener is available");
+      },
+      queryContinuityFacts: async () => {
+        throw new Error("raw continuity fact callback should not run when a session opener is available");
+      },
+      openContinuityReadSession: async () => {
+        openedSessions += 1;
+        return {
+          queryContinuityEpisodes: async () => {
+            continuityEpisodeQueries += 1;
+            return [
+              {
+                episodeId: "episode_owen_fall",
+                title: "Owen fell down",
+                summary: "Owen fell down a few weeks ago and the outcome never got resolved.",
+                status: "unresolved",
+                lastMentionedAt: "2026-02-14T15:00:00.000Z",
+                entityRefs: ["Owen"],
+                entityLinks: [
+                  {
+                    entityKey: "entity_owen",
+                    canonicalName: "Owen"
+                  }
+                ],
+                openLoopLinks: [
+                  {
+                    loopId: "loop_owen",
+                    threadKey: "thread_owen",
+                    status: "open",
+                    priority: 0.8
+                  }
+                ]
+              }
+            ];
+          },
+          queryContinuityFacts: async () => {
+            continuityFactQueries += 1;
+            return [
+              {
+                factId: "fact_owen_relationship",
+                key: "contact.owen.relationship",
+                value: "work_peer",
+                status: "active",
+                observedAt: "2026-02-14T15:00:00.000Z",
+                lastUpdatedAt: "2026-02-14T15:00:00.000Z",
+                confidence: 0.82
+              }
+            ];
+          }
+        };
+      },
+      runDirectConversationTurn: async (input) => {
+        directInputs.push(input);
+        return {
+          summary: "Owen seems better now."
+        };
+      }
+    }
+  );
+
+  await store.setSession(
+    buildConversationSessionFixture({
+      conversationId: conversationKey,
+      conversationTurns: [
+        {
+          role: "user",
+          text: "Owen fell down a few weeks ago.",
+          at: "2026-02-14T15:00:00.000Z"
+        }
+      ],
+      conversationStack: {
+        schemaVersion: "v1",
+        updatedAt: "2026-03-26T15:38:00.000Z",
+        activeThreadKey: "thread_current",
+        threads: [
+          {
+            threadKey: "thread_current",
+            topicKey: "general_chat",
+            topicLabel: "General Chat",
+            state: "active",
+            resumeHint: "Current conversation.",
+            openLoops: [],
+            lastTouchedAt: "2026-03-26T15:38:00.000Z"
+          },
+          {
+            threadKey: "thread_owen",
+            topicKey: "owen_fall",
+            topicLabel: "Owen Fall",
+            state: "paused",
+            resumeHint: "Owen fell down and you wanted to hear how it ended up.",
+            openLoops: [
+              {
+                loopId: "loop_owen",
+                threadKey: "thread_owen",
+                entityRefs: ["owen"],
+                createdAt: "2026-02-14T15:00:00.000Z",
+                lastMentionedAt: "2026-02-14T15:00:00.000Z",
+                priority: 0.8,
+                status: "open"
+              }
+            ],
+            lastTouchedAt: "2026-02-14T15:00:00.000Z"
+          }
+        ],
+        topics: [
+          {
+            topicKey: "general_chat",
+            label: "General Chat",
+            firstSeenAt: "2026-03-26T15:38:00.000Z",
+            lastSeenAt: "2026-03-26T15:38:00.000Z",
+            mentionCount: 1
+          },
+          {
+            topicKey: "owen_fall",
+            label: "Owen Fall",
+            firstSeenAt: "2026-02-14T15:00:00.000Z",
+            lastSeenAt: "2026-02-14T15:00:00.000Z",
+            mentionCount: 1
+          }
+        ]
+      }
+    })
+  );
+
+  try {
+    const reply = await manager.handleMessage(
+      buildMessageAt(
+        "Chat with me about Owen for a minute. How is he doing lately?",
+        "2026-03-26T15:39:00.000Z"
+      ),
+      async () => {
+        throw new Error("executeTask should not run for direct chat contextual recall");
+      },
+      async () => {}
+    );
+
+    assert.equal(reply, "Owen seems better now.");
+    assert.equal(openedSessions, 1);
+    assert.equal(continuityEpisodeQueries, 2);
+    assert.equal(continuityFactQueries, 1);
+    assert.equal(directInputs.length, 1);
+    assert.match(directInputs[0] ?? "", /Contextual recall opportunity \(optional\):/);
+    assert.match(directInputs[0] ?? "", /Relevant situation: Owen fell down/i);
+
+    const session = await store.getSession(conversationKey);
+    assert.ok(session);
+    assert.equal(session?.queuedJobs.length, 0);
+    assert.equal(session?.runningJobId, null);
+  } finally {
+    await removeTempDirWithRetry(tempDir);
+  }
+});
+
+test("conversation manager remembers relationship updates through the direct chat seam and reuses them after workflow clutter", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-conversation-relationship-direct-memory-"));
+  const store = new InterfaceSessionStore(path.join(tempDir, "sessions.json"));
+  const profileStore = new ProfileMemoryStore(
+    path.join(tempDir, "profile_memory.secure.json"),
+    Buffer.alloc(32, 91),
+    90
+  );
+  const conversationKey = "telegram:chat-1:user-1";
+  const directInputs: string[] = [];
+  const manager = new ConversationManager(store, {
+    maxConversationTurns: 50,
+    maxContextTurnsForExecution: 10
+  }, {
+    rememberConversationProfileInput: async (input, receivedAt) => {
+      const request = typeof input === "string"
+        ? { userInput: input }
+        : input;
+      const result = await profileStore.ingestFromTaskInput(
+        "task_conversation_relationship_direct_memory",
+        request.userInput ?? "",
+        receivedAt,
+        {
+          validatedFactCandidates: request.validatedFactCandidates
+        }
+      );
+      return result.appliedFacts > 0;
+    },
+    queryContinuityFacts: async (request) =>
+      profileStore.queryFactsForContinuity(
+        createEmptyEntityGraphV1("2026-03-26T15:39:10.000Z"),
+        request.stack,
+        request
+      ),
+    runDirectConversationTurn: async (input) => {
+      directInputs.push(input);
+      if (/Current user request:\nI work with Milo at Northstar Creative\./i.test(input)) {
+        return {
+          summary: "Noted."
+        };
+      }
+      if (/Current user request:\nSo, yeah, who is Milo\?/i.test(input)) {
+        assert.doesNotMatch(input, /Current working mode from earlier in this chat:/i);
+        assert.match(input, /Milo/i);
+        return {
+          summary: "Milo is your coworker at Northstar Creative."
+        };
+      }
+      throw new Error(`Unexpected direct conversation input: ${input}`);
+    }
+  });
+
+  try {
+    await store.setSession(
+      buildConversationSessionFixture({
+        domainContext: {
+          ...createEmptyConversationDomainContext(conversationKey),
+          dominantLane: "workflow",
+          continuitySignals: {
+            activeWorkspace: true,
+            returnHandoff: true,
+            modeContinuity: true
+          },
+          activeSince: "2026-03-26T15:38:00.000Z",
+          lastUpdatedAt: "2026-03-26T15:38:00.000Z"
+        },
+        modeContinuity: {
+          activeMode: "build",
+          source: "natural_intent",
+          confidence: "HIGH",
+          lastAffirmedAt: "2026-03-26T15:38:00.000Z",
+          lastUserInput: "Build the Sky Drone Max landing page and leave it open in the browser."
+        },
+        returnHandoff: {
+          id: "handoff:sky-drone-max",
+          status: "stopped",
+          goal: "Finish the Sky Drone Max landing page and leave it running in the browser.",
+          summary: "The run stopped before it finished.",
+          nextSuggestedStep: "Retry with a narrower request.",
+          workspaceRootPath: "C:\\Users\\benac\\OneDrive\\Desktop\\Sky Drone Max",
+          primaryArtifactPath: "C:\\Users\\benac\\OneDrive\\Desktop\\Sky Drone Max\\src\\App.jsx",
+          previewUrl: null,
+          changedPaths: [
+            "C:\\Users\\benac\\OneDrive\\Desktop\\Sky Drone Max\\src\\App.jsx"
+          ],
+          sourceJobId: "job-sky-drone-max",
+          updatedAt: "2026-03-26T15:38:00.000Z"
+        }
+      })
+    );
+
+    const statementReply = await manager.handleMessage(
+      buildMessageAt(
+        "I work with Milo at Northstar Creative.",
+        "2026-03-26T15:39:00.000Z"
+      ),
+      async () => {
+        throw new Error("executeTask should not run for direct relationship-update chat");
+      },
+      async () => {}
+    );
+    assert.equal(statementReply, "Noted.");
+
+    const storedFacts = await profileStore.readFacts({
+      purpose: "operator_view",
+      includeSensitive: false,
+      explicitHumanApproval: false
+    });
+    assert.equal(
+      storedFacts.some(
+        (fact) =>
+          fact.key === "contact.milo.work_association" &&
+          fact.value === "Northstar Creative"
+      ),
+      true
+    );
+
+    const recallReply = await manager.handleMessage(
+      buildMessageAt("So, yeah, who is Milo?", "2026-03-26T15:39:10.000Z"),
+      async () => {
+        throw new Error("executeTask should not run for direct relationship recall chat");
+      },
+      async () => {}
+    );
+    assert.equal(recallReply, "Milo is your coworker at Northstar Creative.");
+    assert.equal(directInputs.length, 2);
+
+    const session = await store.getSession(conversationKey);
     assert.ok(session);
     assert.equal(session?.queuedJobs.length, 0);
     assert.equal(session?.runningJobId, null);

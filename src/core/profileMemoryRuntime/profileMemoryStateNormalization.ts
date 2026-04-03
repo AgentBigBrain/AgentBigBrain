@@ -4,6 +4,7 @@
 
 import type {
   ProfileFactRecord,
+  ProfileMemoryIngestReceiptRecord,
   ProfileMemoryState,
   ProfileMutationAuditMetadataV1
 } from "../profileMemory";
@@ -73,13 +74,53 @@ export function normalizeProfileMemoryState(raw: unknown): ProfileMemoryState {
     })
     : [];
   const episodes = normalizeProfileMemoryEpisodes((candidate as { episodes?: unknown }).episodes);
+  const ingestReceipts = normalizeProfileMemoryIngestReceipts(
+    (candidate as { ingestReceipts?: unknown }).ingestReceipts
+  );
 
   return {
     schemaVersion: PROFILE_MEMORY_SCHEMA_VERSION,
     updatedAt: safeIsoOrNow(candidate.updatedAt),
     facts,
-    episodes
+    episodes,
+    ingestReceipts
   };
+}
+
+/**
+ * Normalizes persisted ingest-receipt ledgers into a stable bounded shape.
+ *
+ * @param raw - Unknown receipt payload from storage.
+ * @returns Stable bounded ingest receipts.
+ */
+function normalizeProfileMemoryIngestReceipts(
+  raw: unknown
+): ProfileMemoryIngestReceiptRecord[] {
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+  return raw.flatMap((receipt): ProfileMemoryIngestReceiptRecord[] => {
+    if (!receipt || typeof receipt !== "object" || Array.isArray(receipt)) {
+      return [];
+    }
+    const candidate = receipt as Partial<ProfileMemoryIngestReceiptRecord>;
+    if (
+      typeof candidate.receiptKey !== "string" ||
+      typeof candidate.turnId !== "string" ||
+      typeof candidate.sourceFingerprint !== "string" ||
+      typeof candidate.sourceTaskId !== "string" ||
+      typeof candidate.recordedAt !== "string"
+    ) {
+      return [];
+    }
+    return [{
+      receiptKey: candidate.receiptKey,
+      turnId: candidate.turnId,
+      sourceFingerprint: candidate.sourceFingerprint,
+      sourceTaskId: candidate.sourceTaskId,
+      recordedAt: safeIsoOrNow(candidate.recordedAt)
+    }];
+  });
 }
 
 /**

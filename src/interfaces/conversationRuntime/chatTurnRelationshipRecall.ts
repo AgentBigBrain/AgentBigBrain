@@ -20,6 +20,65 @@ const NON_ENTITY_WHO_IS_TERMS = new Set([
   "going"
 ]);
 
+const GENERIC_RELATIONSHIP_RECALL_TERMS = new Set([
+  "a",
+  "about",
+  "again",
+  "an",
+  "and",
+  "are",
+  "change",
+  "changes",
+  "do",
+  "he",
+  "her",
+  "hers",
+  "him",
+  "his",
+  "i",
+  "is",
+  "it",
+  "its",
+  "know",
+  "me",
+  "my",
+  "of",
+  "on",
+  "our",
+  "remember",
+  "situation",
+  "she",
+  "status",
+  "the",
+  "their",
+  "them",
+  "they",
+  "this",
+  "those",
+  "we",
+  "what",
+  "what's",
+  "who",
+  "with",
+  "you",
+  "your"
+]);
+
+/**
+ * Returns whether the current wording carries a concrete person/topic token beyond generic recall
+ * filler so short status-like relationship questions can stay on the conversational memory path.
+ *
+ * @param rawTokens - Normalized surface tokens from the current user wording.
+ * @returns `true` when at least one token looks like a concrete recall subject.
+ */
+function hasSpecificRelationshipSubjectToken(rawTokens: readonly string[]): boolean {
+  return rawTokens.some(
+    (token) =>
+      token.length >= 3 &&
+      !GENERIC_RELATIONSHIP_RECALL_TERMS.has(token)
+  );
+}
+
 /**
  * Returns whether the turn is a bounded relationship-summary or relationship-reference question
  * that should stay on the conversational path instead of inheriting stale workflow continuity.
@@ -41,6 +100,16 @@ export function isRelationshipConversationRecallTurn(userInput: string): boolean
     return false;
   }
   if (signals.containsApprovalCue && !signals.questionLike) {
+    return false;
+  }
+  if (
+    signals.referencesSelf &&
+    rawTokens.includes("remember") &&
+    !signals.containsRelationshipCue &&
+    !rawTokens.includes("with") &&
+    !rawTokens.includes("about") &&
+    !rawTokens.includes("again")
+  ) {
     return false;
   }
   const hasExplainCue =
@@ -67,6 +136,29 @@ export function isRelationshipConversationRecallTurn(userInput: string): boolean
   ) {
     const subjectToken = rawTokens[whoIndex + 2] ?? "";
     if (subjectToken && !NON_ENTITY_WHO_IS_TERMS.has(subjectToken)) {
+      return true;
+    }
+  }
+  if (
+    signals.questionLike &&
+    hasSpecificRelationshipSubjectToken(rawTokens)
+  ) {
+    const statusShapedRelationshipRecall =
+      rawTokens.includes("remember") ||
+      rawTokens.includes("again") ||
+      (
+        rawTokens.includes("going") &&
+        rawTokens.includes("with") &&
+        (
+          rawTokens.includes("what") ||
+          rawTokens.includes("what's")
+        )
+      ) ||
+      (rawTokens.includes("about") && rawTokens.length <= 6) ||
+      ((rawTokens.includes("status") || rawTokens.includes("situation")) &&
+        (rawTokens.includes("with") ||
+          rawTokens.some((token) => token.endsWith("'s"))));
+    if (statusShapedRelationshipRecall) {
       return true;
     }
   }

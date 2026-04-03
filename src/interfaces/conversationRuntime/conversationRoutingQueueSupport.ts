@@ -14,6 +14,7 @@ import type {
   GetConversationEntityGraph,
   ListBrowserSessionSnapshots,
   ListManagedProcessSnapshots,
+  OpenConversationContinuityReadSession,
   QueryConversationContinuityEpisodes,
   QueryConversationContinuityFacts
 } from "./managerContracts";
@@ -31,6 +32,7 @@ export interface ConversationRoutingQueueDependencies {
   };
   queryContinuityEpisodes?: QueryConversationContinuityEpisodes;
   queryContinuityFacts?: QueryConversationContinuityFacts;
+  openContinuityReadSession?: OpenConversationContinuityReadSession;
   contextualReferenceInterpretationResolver?: ContextualReferenceInterpretationResolver;
   entityReferenceInterpretationResolver?: EntityReferenceInterpretationResolver;
   getEntityGraph?: GetConversationEntityGraph;
@@ -92,7 +94,8 @@ export async function enqueueFollowUpLinkedToPriorAssistantPrompt(
       browserSessionSnapshots,
       deps.contextualReferenceInterpretationResolver,
       deps.getEntityGraph,
-      deps.entityReferenceInterpretationResolver
+      deps.entityReferenceInterpretationResolver,
+      deps.openContinuityReadSession
     )
   );
   recordUserTurn(session, input, receivedAt, deps.config.maxConversationTurns, {

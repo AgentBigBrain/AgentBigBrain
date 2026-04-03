@@ -235,11 +235,31 @@ test("isRelationshipConversationRecallTurn keeps direct who-is relationship ques
   assert.equal(isRelationshipConversationRecallTurn("Who is he?"), true);
 });
 
+test("isRelationshipConversationRecallTurn recognizes status-shaped and shorthand relationship recall wording", () => {
+  assert.equal(isRelationshipConversationRecallTurn("What's the status with Billy?"), true);
+  assert.equal(isRelationshipConversationRecallTurn("Do you remember Billy?"), true);
+  assert.equal(isRelationshipConversationRecallTurn("What's Billy's situation again?"), true);
+  assert.equal(isRelationshipConversationRecallTurn("What's going on with Billy and Flare?"), true);
+  assert.equal(isRelationshipConversationRecallTurn("What's going on with my roommate Kai?"), true);
+  assert.equal(isRelationshipConversationRecallTurn("What's going on with my direct report Casey?"), true);
+  assert.equal(isRelationshipConversationRecallTurn("Do you remember my supervisor Dana?"), true);
+  assert.equal(isRelationshipConversationRecallTurn("What about my work peer Nolan?"), true);
+  assert.equal(
+    isRelationshipConversationRecallTurn("Could you take care of this end to end and remember that I prefer dark mode?"),
+    false
+  );
+  assert.equal(isRelationshipConversationRecallTurn("What's the status on the deploy?"), false);
+});
+
 test("shouldAllowImplicitReturnHandoffStatusFallback only permits explicit status-like fallback", () => {
   assert.equal(shouldAllowImplicitReturnHandoffStatusFallback("Hi"), false);
   assert.equal(shouldAllowImplicitReturnHandoffStatusFallback("And you are?"), false);
   assert.equal(shouldAllowImplicitReturnHandoffStatusFallback("What about you?"), false);
   assert.equal(shouldAllowImplicitReturnHandoffStatusFallback("What's the status?"), true);
+  assert.equal(
+    shouldAllowImplicitReturnHandoffStatusFallback("What's the status with Billy?"),
+    false
+  );
   assert.equal(
     shouldAllowImplicitReturnHandoffStatusFallback("Anything else?", "review_ready"),
     true

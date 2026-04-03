@@ -25,6 +25,7 @@ export interface MemoryAccessAuditEvent {
   eventType: MemoryAccessAuditEventType;
   taskId: string;
   queryHash: string;
+  storeLoadCount?: number;
   retrievedCount: number;
   retrievedEpisodeCount: number;
   redactedCount: number;
@@ -42,6 +43,7 @@ interface MemoryAccessAuditDocument {
 interface AppendMemoryAccessAuditInput {
   taskId: string;
   query: string;
+  storeLoadCount?: number;
   retrievedCount: number;
   retrievedEpisodeCount?: number;
   redactedCount: number;
@@ -217,6 +219,7 @@ function coerceMemoryAccessAuditDocument(input: unknown): MemoryAccessAuditDocum
           typeof raw.queryHash === "string" && raw.queryHash.trim().length > 0
             ? raw.queryHash
             : hashQuery(""),
+        storeLoadCount: toNonNegativeInteger(raw.storeLoadCount),
         retrievedCount: toNonNegativeInteger(raw.retrievedCount),
         retrievedEpisodeCount: toNonNegativeInteger(raw.retrievedEpisodeCount),
         redactedCount: toNonNegativeInteger(raw.redactedCount),
@@ -292,6 +295,7 @@ export class MemoryAccessAuditStore {
         eventType,
       taskId: input.taskId,
       queryHash: hashQuery(input.query),
+      storeLoadCount: toNonNegativeInteger(input.storeLoadCount),
       retrievedCount: toNonNegativeInteger(input.retrievedCount),
       retrievedEpisodeCount: toNonNegativeInteger(input.retrievedEpisodeCount),
       redactedCount: toNonNegativeInteger(input.redactedCount),

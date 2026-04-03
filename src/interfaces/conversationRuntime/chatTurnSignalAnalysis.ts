@@ -14,6 +14,7 @@ import {
   NAME_CONCEPT_TERMS,
   QUESTION_LEAD_TERMS,
   QUESTION_MARK_PATTERN,
+  RELATIONSHIP_CUE_PATTERNS,
   RELATIONSHIP_CUE_TERMS,
   SELF_REFERENCE_TERMS,
   STATUS_CUE_TERMS,
@@ -214,7 +215,7 @@ export function analyzeConversationChatTurnSignals(
     rawTokens,
     meaningfulTerms,
     RELATIONSHIP_CUE_TERMS
-  );
+  ) || RELATIONSHIP_CUE_PATTERNS.some((pattern) => pattern.test(normalized));
   const nonIdentityMeaningfulTerms = meaningfulTerms.filter(
     (term) => !IDENTITY_GRAMMAR_TERMS.has(term) && !CHAT_FILLER_TERMS.has(term)
   );

@@ -90,10 +90,10 @@ export class TelegramGateway {
         const graph = await this.entityGraphStore.getGraph();
         return this.adapter.queryContinuityEpisodes(graph, request);
       },
-      queryContinuityFacts: async (request) => {
-        const graph = await this.entityGraphStore.getGraph();
-        return this.adapter.queryContinuityFacts(graph, request);
-      },
+      queryContinuityFacts: async (request) =>
+        this.adapter.queryContinuityFacts(await this.entityGraphStore.getGraph(), request),
+      openContinuityReadSession: async () =>
+        this.adapter.openContinuityReadSession(await this.entityGraphStore.getGraph()),
       rememberConversationProfileInput: async (userInput, receivedAt) =>
         this.adapter.rememberConversationProfileInput(userInput, receivedAt),
       reviewConversationMemory: async (request) =>

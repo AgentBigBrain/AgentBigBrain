@@ -23,6 +23,7 @@ import type {
   DescribeRuntimeCapabilities,
   GetConversationEntityGraph,
   ListAvailableSkills,
+  OpenConversationContinuityReadSession,
   QueryConversationContinuityEpisodes,
   QueryConversationContinuityFacts,
   RememberConversationProfileInput,
@@ -41,6 +42,7 @@ export interface ConversationRoutingInlineReplyDependencies {
   };
   queryContinuityEpisodes?: QueryConversationContinuityEpisodes;
   queryContinuityFacts?: QueryConversationContinuityFacts;
+  openContinuityReadSession?: OpenConversationContinuityReadSession;
   rememberConversationProfileInput?: RememberConversationProfileInput;
   listAvailableSkills?: ListAvailableSkills;
   describeRuntimeCapabilities?: DescribeRuntimeCapabilities;
@@ -201,6 +203,7 @@ export async function maybeResolveConversationRoutingInlineReply(
     routingClassification: input.routingClassification,
     queryContinuityEpisodes: input.deps.queryContinuityEpisodes,
     queryContinuityFacts: input.deps.queryContinuityFacts,
+    openContinuityReadSession: input.deps.openContinuityReadSession,
     rememberConversationProfileInput: input.deps.rememberConversationProfileInput,
     identityInterpretationResolver: input.deps.identityInterpretationResolver,
     contextualReferenceInterpretationResolver: input.deps.contextualReferenceInterpretationResolver,

@@ -141,4 +141,32 @@ test("shouldSkipProfileMemoryIngest becomes session-aware during active workflow
     ),
     true
   );
+  assert.equal(
+    shouldSkipProfileMemoryIngest(
+      "I work with Owen at Lantern Studio.",
+      buildWorkflowDomainContext()
+    ),
+    false
+  );
+  assert.equal(
+    shouldSkipProfileMemoryIngest(
+      "Execute now and build the landing page. I work with Owen at Lantern Studio.",
+      buildWorkflowDomainContext()
+    ),
+    false
+  );
+  assert.equal(
+    shouldSkipProfileMemoryIngest(
+      "Execute now and build the landing page. My spouse is Sam.",
+      buildWorkflowDomainContext()
+    ),
+    false
+  );
+  assert.equal(
+    shouldSkipProfileMemoryIngest(
+      "Execute now and build the landing page. My direct report is Casey.",
+      buildWorkflowDomainContext()
+    ),
+    false
+  );
 });

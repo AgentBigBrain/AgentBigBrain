@@ -18,6 +18,7 @@ files.
 - local orchestrator retry-loop, postmortem, and summary assembly in `orchestratorExecution.ts`
 - local orchestrator continuity, recall, intent, and remembered-situation access in
   `orchestratorContinuation.ts`
+- local orchestrator continuity read-session opening in `orchestratorContinuityReadSession.ts`
 - local orchestrator outbound federated delegation flow in `orchestratorFederation.ts`
 - local orchestrator planner-input enrichment, hint loading, and per-attempt planning in
   `orchestratorPlanning.ts`
@@ -43,6 +44,8 @@ files.
 - Mission checkpoint and failure-summary policy should have one canonical home.
 - New orchestration helpers belong here when they are shared execution-flow concerns, not planner,
   user-facing, or live-run policy concerns.
+- Orchestrator continuity read sessions here must stay request-scoped, bounded, and reuse the
+  stable `ProfileMemoryStore` seam instead of inventing a second persistence or caching layer.
 - `taskRunnerSupport.ts` should stay limited to genuinely shared helpers that are also used outside
   the orchestration subsystem.
 

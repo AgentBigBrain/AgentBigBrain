@@ -278,6 +278,13 @@ export type QueryConversationContinuityFacts = (
   request: ConversationContinuityFactQueryRequest
 ) => Promise<readonly ConversationContinuityFactRecord[]>;
 
+export interface ConversationContinuityReadSession {
+  queryContinuityEpisodes(request: ConversationContinuityEpisodeQueryRequest): Promise<readonly ConversationContinuityEpisodeRecord[]>;
+  queryContinuityFacts(request: ConversationContinuityFactQueryRequest): Promise<readonly ConversationContinuityFactRecord[]>;
+}
+
+export type OpenConversationContinuityReadSession = () => Promise<ConversationContinuityReadSession | null>;
+
 export type GetConversationEntityGraph = () => Promise<EntityGraphV1>;
 
 export interface ConversationEntityAliasCandidateRequest {
@@ -339,6 +346,7 @@ export interface ConversationManagerDependencies {
   runCheckpointReview?: ConversationCheckpointReviewRunner;
   queryContinuityEpisodes?: QueryConversationContinuityEpisodes;
   queryContinuityFacts?: QueryConversationContinuityFacts;
+  openContinuityReadSession?: OpenConversationContinuityReadSession;
   getEntityGraph?: GetConversationEntityGraph;
   reconcileEntityAliasCandidate?: ReconcileConversationEntityAliasCandidate;
   rememberConversationProfileInput?: RememberConversationProfileInput;

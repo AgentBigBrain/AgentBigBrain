@@ -15,6 +15,7 @@ import type {
   ConversationIntentInterpreter,
   ConversationManagerConfig,
   ConversationNotifier,
+  OpenConversationContinuityReadSession,
   QueryConversationContinuityEpisodes,
   ResolveConversationMemoryEpisode,
   ReviewConversationMemory,
@@ -103,6 +104,7 @@ export interface ConversationIngressDependencies extends ConversationIngressRule
   runCheckpointReview?: ConversationCheckpointReviewRunner;
   queryContinuityEpisodes?: QueryConversationContinuityEpisodes;
   queryContinuityFacts?: QueryConversationContinuityFacts;
+  openContinuityReadSession?: OpenConversationContinuityReadSession;
   getEntityGraph?: import("./managerContracts").GetConversationEntityGraph;
   reconcileEntityAliasCandidate?: import("./managerContracts").ReconcileConversationEntityAliasCandidate;
   rememberConversationProfileInput?: RememberConversationProfileInput;

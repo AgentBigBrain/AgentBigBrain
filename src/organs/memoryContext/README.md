@@ -30,6 +30,13 @@ entrypoint.
 - Query extraction and planning-context ranking here should eventually consume canonical
   `src/core/languageRuntime/` helpers and bounded `src/organs/memorySynthesis/` outputs rather
   than growing more local lexical heuristics.
+- Broker ingest gating here may reuse shared bounded profile-extraction signals from
+  `src/core/profileMemoryRuntime/` when that is the canonical way to detect conversational
+  memory-worthy input; this module should not fork a second ad hoc relationship-memory detector.
+- Domain-boundary relationship scoring should stay aligned with the bounded governed relationship
+  vocabulary already supported in runtime memory so broker suppression does not lag behind
+  relationship families such as `spouse`, `classmate`, `roommate`, `direct report`, `team lead`,
+  `work peer`, and close-kinship phrasing.
 - `queryPlanning.ts` remains a thin facade; detailed extraction, probing, and domain-boundary logic
   belong in `queryPlanningProbing.ts` and `queryPlanningDomainBoundary.ts` rather than drifting
   back into a single oversized file.

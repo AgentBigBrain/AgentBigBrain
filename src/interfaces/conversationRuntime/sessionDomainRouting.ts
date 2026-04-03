@@ -20,7 +20,7 @@ const PROFILE_LANE_PATTERNS: readonly RegExp[] = [
 ] as const;
 
 const RELATIONSHIP_LANE_PATTERNS: readonly RegExp[] = [
-  /\b(?:my )?(?:friend|coworker|colleague|manager|neighbor|relative|teammate|contact|partner)\b/i,
+  /\b(?:my )?(?:friend|employee|coworker|colleague|teammate|classmate|peer|work\s+peer|boss|manager|supervisor|team\s+lead|direct\s+report|neighbor|neighbour|relative|distant\s+relative|family(?:\s+members?)?|cousin|aunt|uncle|mom|mother|dad|father|son|daughter|parent|child|sibling|sister|brother|roommate|spouse|wife|husband|girlfriend|boyfriend|partner|married|contact)\b/i,
   /\bwho is\b/i
 ] as const;
 

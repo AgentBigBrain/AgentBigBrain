@@ -20,6 +20,42 @@ const PROFILE_KEY_ALIASES: Record<string, string> = {
   nickname: "identity.preferred_name",
   "preferred.name": "identity.preferred_name"
 };
+const RELATIONSHIP_DESCRIPTOR_ALIASES: Record<string, string> = {
+  guy: "acquaintance",
+  person: "acquaintance",
+  family: "relative",
+  "family member": "relative",
+  mom: "relative",
+  mother: "relative",
+  dad: "relative",
+  father: "relative",
+  son: "relative",
+  daughter: "relative",
+  parent: "relative",
+  child: "relative",
+  sibling: "relative",
+  sister: "relative",
+  brother: "relative",
+  wife: "partner",
+  husband: "partner",
+  spouse: "partner",
+  girlfriend: "partner",
+  boyfriend: "partner",
+  aunt: "relative",
+  uncle: "relative",
+  "distant relative": "relative",
+  boss: "manager",
+  supervisor: "manager",
+  lead: "manager",
+  "team lead": "manager",
+  "direct report": "employee",
+  coworker: "work_peer",
+  colleague: "work_peer",
+  teammate: "work_peer",
+  "work peer": "work_peer",
+  peer: "work_peer",
+  neighbour: "neighbor"
+};
 
 const PLANNING_CONTEXT_PRIORITY_PREFIXES = [
   "identity.preferred_name",
@@ -112,7 +148,8 @@ export function normalizeResolutionTopicKey(rawTopic: string): string {
  * @returns Lowercased normalized descriptor.
  */
 export function normalizeRelationshipDescriptor(value: string): string {
-  return normalizeProfileValue(value).toLowerCase();
+  const normalized = normalizeProfileValue(value).toLowerCase();
+  return RELATIONSHIP_DESCRIPTOR_ALIASES[normalized] ?? normalized;
 }
 
 /**

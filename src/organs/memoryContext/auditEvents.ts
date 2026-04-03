@@ -45,6 +45,7 @@ export async function appendMemoryAccessAudit(
     await auditStore.appendEvent({
       taskId,
       query,
+      storeLoadCount: options?.storeLoadCount,
       retrievedCount,
       retrievedEpisodeCount: options?.retrievedEpisodeCount ?? retrievedEpisodeCount,
       redactedCount,

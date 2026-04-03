@@ -343,7 +343,8 @@ export async function handleImplicitProposalFlow(
         undefined,
         deps.contextualReferenceInterpretationResolver,
         deps.getEntityGraph,
-        deps.entityReferenceInterpretationResolver
+        deps.entityReferenceInterpretationResolver,
+        deps.openContinuityReadSession
       )
     );
     recordUserTurn(session, normalizedInput, message.receivedAt, deps.config.maxConversationTurns);

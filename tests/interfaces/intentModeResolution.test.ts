@@ -87,6 +87,66 @@ test("resolveConversationIntentMode keeps explicit status wording authoritative 
   assert.equal(resolution.matchedRuleId, "intent_mode_status_or_recall");
 });
 
+test("resolveConversationIntentMode keeps status-shaped relationship recall on the chat path during workflow continuity", async () => {
+  const resolution = await resolveConversationIntentMode(
+    "What's the status with Billy?",
+    null,
+    undefined,
+    buildSessionHints({
+      hasActiveWorkspace: true,
+      modeContinuity: "build",
+      domainDominantLane: "workflow",
+      domainContinuityActive: true,
+      workflowContinuityActive: true
+    })
+  );
+
+  assert.equal(resolution.mode, "chat");
+  assert.equal(resolution.confidence, "medium");
+  assert.equal(resolution.clarification, null);
+  assert.equal(resolution.matchedRuleId, "intent_mode_relationship_recall_chat");
+});
+
+test("resolveConversationIntentMode keeps continuity-shaped relationship recall on the chat path during workflow continuity", async () => {
+  const resolution = await resolveConversationIntentMode(
+    "What's going on with Billy and Flare?",
+    null,
+    undefined,
+    buildSessionHints({
+      hasActiveWorkspace: true,
+      modeContinuity: "build",
+      domainDominantLane: "workflow",
+      domainContinuityActive: true,
+      workflowContinuityActive: true
+    })
+  );
+
+  assert.equal(resolution.mode, "chat");
+  assert.equal(resolution.confidence, "medium");
+  assert.equal(resolution.clarification, null);
+  assert.equal(resolution.matchedRuleId, "intent_mode_relationship_recall_chat");
+});
+
+test("resolveConversationIntentMode keeps broader governed relationship recall on the chat path during workflow continuity", async () => {
+  const resolution = await resolveConversationIntentMode(
+    "What's going on with my direct report Casey?",
+    null,
+    undefined,
+    buildSessionHints({
+      hasActiveWorkspace: true,
+      modeContinuity: "build",
+      domainDominantLane: "workflow",
+      domainContinuityActive: true,
+      workflowContinuityActive: true
+    })
+  );
+
+  assert.equal(resolution.mode, "chat");
+  assert.equal(resolution.confidence, "medium");
+  assert.equal(resolution.clarification, null);
+  assert.equal(resolution.matchedRuleId, "intent_mode_relationship_recall_chat");
+});
+
 test("resolveConversationIntentMode keeps capability discovery authoritative during workflow continuity", async () => {
   const resolution = await resolveConversationIntentMode(
     "What can you help me with from here?",

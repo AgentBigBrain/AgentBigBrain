@@ -20,7 +20,10 @@ import {
   resolveConversationAutonomyBoundaryInterpretationIntent,
   resolveConversationStatusRecallBoundaryInterpretationIntent
 } from "./conversationRoutingSupport";
-import { analyzeConversationChatTurnSignals } from "./chatTurnSignals";
+import {
+  analyzeConversationChatTurnSignals,
+  isRelationshipConversationRecallTurn
+} from "./chatTurnSignals";
 import {
   resolveContextualFollowupIntentResolution,
   resolveDeterministicContextualFollowupIntent
@@ -78,6 +81,8 @@ export async function resolveConversationIntentMode(
   }
 
   const preferences = extractExecutionPreferences(normalized);
+  const relationshipConversationRecall =
+    isRelationshipConversationRecallTurn(normalized);
   const shouldDeterministicallyPromoteAmbiguousAutonomy =
     preferences.autonomousExecutionStrength === "ambiguous" &&
     shouldPromoteAmbiguousAutonomousExecution(
@@ -110,6 +115,27 @@ export async function resolveConversationIntentMode(
       },
       localIntentModelResolver,
       sessionHints
+    );
+  }
+
+  if (
+    relationshipConversationRecall &&
+    !preferences.executeNow
+  ) {
+    return resolveExecutionIntentUnderstanding(
+      normalized,
+      routingClassification,
+      {
+        mode: "chat",
+        confidence: "medium",
+        matchedRuleId: "intent_mode_relationship_recall_chat",
+        explanation:
+          "Status-shaped wording still targets a person or relationship recall question, so it should stay on the conversational memory path.",
+        clarification: null
+      },
+      localIntentModelResolver,
+      sessionHints,
+      contextualFollowupInterpretationResolver
     );
   }
 

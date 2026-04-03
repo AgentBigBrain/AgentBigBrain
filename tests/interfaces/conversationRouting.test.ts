@@ -5,6 +5,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import type { ProfileMemoryIngestRequest } from "../../src/core/profileMemoryRuntime/contracts";
 import { buildConversationStackFromTurnsV1 } from "../../src/core/stage6_86ConversationStack";
 import { createEmptyConversationDomainContext } from "../../src/core/sessionContext";
 import {
@@ -966,7 +967,7 @@ test("routeConversationMessageInput keeps greetings and identity recall direct u
 test("routeConversationMessageInput keeps self-identity declarations direct and persists them through the profile-memory seam", async () => {
   const session = buildWorkflowHeavySession();
   let localResolverCalls = 0;
-  let rememberedInput: string | null = null;
+  let rememberedInput: ProfileMemoryIngestRequest | null = null;
 
   const result = await routeConversationMessageInput(
     session,
@@ -988,8 +989,11 @@ test("routeConversationMessageInput keeps self-identity declarations direct and 
             clarification: null
           };
         },
-        rememberConversationProfileInput: async (userInput) => {
-          rememberedInput = userInput;
+        rememberConversationProfileInput: async (input) => {
+          if (typeof input === "string") {
+            throw new Error("self-identity declaration should use the bounded request contract");
+          }
+          rememberedInput = input;
           return true;
         },
         runDirectConversationTurn: async () => {
@@ -1001,7 +1005,13 @@ test("routeConversationMessageInput keeps self-identity declarations direct and 
 
   assert.equal(result.shouldStartWorker, false);
   assert.equal(result.reply, "Okay, I'll remember that you're Avery.");
-  assert.equal(rememberedInput, "My name is Avery, yes.");
+  assert.equal(rememberedInput?.userInput, "My name is Avery, yes.");
+  assert.equal(rememberedInput?.provenance?.conversationId, session.conversationId);
+  assert.equal(rememberedInput?.provenance?.dominantLaneAtWrite, "workflow");
+  assert.equal(rememberedInput?.provenance?.threadKey, null);
+  assert.equal(rememberedInput?.provenance?.sourceSurface, "conversation_profile_input");
+  assert.match(rememberedInput?.provenance?.turnId ?? "", /^turn_[a-f0-9]{24}$/);
+  assert.match(rememberedInput?.provenance?.sourceFingerprint ?? "", /^[a-f0-9]{32}$/);
   assert.equal(localResolverCalls, 0);
 });
 
@@ -1171,6 +1181,99 @@ test("routeConversationMessageInput keeps assistant-identity acknowledgements an
   assert.equal(session.queuedJobs.length, 1);
   assert.equal(session.runningJobId, "job-running");
   assert.equal(directInputs.length, 2);
+});
+
+test("routeConversationMessageInput keeps status-shaped relationship recall on the direct chat path during workflow continuity", async () => {
+  const session = buildWorkflowHeavySession();
+  let directConversationInput = "";
+
+  const result = await routeConversationMessageInput(
+    session,
+    "What's the status with Billy?",
+    "2026-03-26T15:39:10.000Z",
+    buildDependencies(
+      () => {
+        throw new Error("enqueueJob should not run for status-shaped relationship recall chat");
+      },
+      {
+        runDirectConversationTurn: async (input) => {
+          directConversationInput = input;
+          assert.doesNotMatch(input, /Current working mode from earlier in this chat:/i);
+          return {
+            summary: "Billy is someone you used to work with."
+          };
+        }
+      }
+    )
+  );
+
+  assert.equal(result.shouldStartWorker, false);
+  assert.equal(result.reply, "Billy is someone you used to work with.");
+  assert.equal(directConversationInput, "What's the status with Billy?");
+  assert.equal(session.queuedJobs.length, 0);
+  assert.equal(session.runningJobId, null);
+});
+
+test("routeConversationMessageInput keeps continuity-shaped relationship recall off workflow continuity blocks", async () => {
+  const session = buildWorkflowHeavySession();
+  let directConversationInput = "";
+
+  const result = await routeConversationMessageInput(
+    session,
+    "What's going on with Billy and Flare?",
+    "2026-03-26T15:40:20.000Z",
+    buildDependencies(
+      () => {
+        throw new Error("enqueueJob should not run for continuity-shaped relationship recall chat");
+      },
+      {
+        runDirectConversationTurn: async (input) => {
+          directConversationInput = input;
+          assert.doesNotMatch(input, /Current working mode from earlier in this chat:/i);
+          return {
+            summary: "Billy is someone you worked with at Flare."
+          };
+        }
+      }
+    )
+  );
+
+  assert.equal(result.shouldStartWorker, false);
+  assert.equal(result.reply, "Billy is someone you worked with at Flare.");
+  assert.equal(directConversationInput, "What's going on with Billy and Flare?");
+  assert.equal(session.queuedJobs.length, 0);
+  assert.equal(session.runningJobId, null);
+});
+
+test("routeConversationMessageInput keeps broader governed relationship recall off workflow continuity blocks", async () => {
+  const session = buildWorkflowHeavySession();
+  let directConversationInput = "";
+
+  const result = await routeConversationMessageInput(
+    session,
+    "What's going on with my direct report Casey?",
+    "2026-03-26T15:40:40.000Z",
+    buildDependencies(
+      () => {
+        throw new Error("enqueueJob should not run for broadened relationship recall chat");
+      },
+      {
+        runDirectConversationTurn: async (input) => {
+          directConversationInput = input;
+          assert.doesNotMatch(input, /Current working mode from earlier in this chat:/i);
+          return {
+            summary: "Casey is your direct report."
+          };
+        }
+      }
+    )
+  );
+
+  assert.equal(result.shouldStartWorker, false);
+  assert.equal(result.reply, "Casey is your direct report.");
+  assert.equal(directConversationInput, "What's going on with my direct report Casey?");
+  assert.equal(session.queuedJobs.length, 0);
+  assert.equal(session.runningJobId, null);
 });
 
 test("routeConversationMessageInput keeps unattached short deny turns off the worker path during workflow continuity", async () => {

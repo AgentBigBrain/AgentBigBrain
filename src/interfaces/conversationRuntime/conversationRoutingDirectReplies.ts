@@ -2,6 +2,7 @@
  * @fileoverview Shared direct-reply helpers for ordinary conversation and capability discovery.
  */
 
+import { hasConversationalProfileUpdateSignal } from "../../core/profileMemoryRuntime/profileMemoryConversationalSignals";
 import { buildConversationAwareExecutionInput } from "../conversationExecutionInputPolicy";
 import {
   recordAssistantTurn,
@@ -23,6 +24,7 @@ import type {
   DescribeRuntimeCapabilities,
   GetConversationEntityGraph,
   ListAvailableSkills,
+  OpenConversationContinuityReadSession,
   QueryConversationContinuityEpisodes,
   QueryConversationContinuityFacts,
   RememberConversationProfileInput,
@@ -42,6 +44,7 @@ import {
   buildDeterministicSelfIdentityReply,
   buildModelAssistedSelfIdentityReply
 } from "./selfIdentityPrompting";
+import { buildConversationProfileMemoryWriteRequest } from "./conversationProfileMemoryWrite";
 
 export interface DirectCasualConversationReplyInput {
   session: ConversationSession;
@@ -51,6 +54,7 @@ export interface DirectCasualConversationReplyInput {
   routingClassification: RoutingMapClassificationV1 | null;
   queryContinuityEpisodes?: QueryConversationContinuityEpisodes;
   queryContinuityFacts?: QueryConversationContinuityFacts;
+  openContinuityReadSession?: OpenConversationContinuityReadSession;
   rememberConversationProfileInput?: RememberConversationProfileInput;
   identityInterpretationResolver?: IdentityInterpretationResolver;
   contextualReferenceInterpretationResolver?: ContextualReferenceInterpretationResolver;
@@ -147,6 +151,36 @@ function enforceDirectConversationReplyFormat(
 }
 
 /**
+ * Persists bounded conversational profile updates through the canonical profile-memory seam before
+ * the generic direct-chat model path runs.
+ *
+ * @param userInput - Raw conversational user wording.
+ * @param receivedAt - Observation timestamp for the current turn.
+ * @param rememberConversationProfileInput - Optional canonical profile-memory write helper.
+ */
+async function rememberDirectConversationProfileInputIfNeeded(
+  session: ConversationSession,
+  userInput: string,
+  receivedAt: string,
+  rememberConversationProfileInput?: RememberConversationProfileInput
+): Promise<void> {
+  if (
+    typeof rememberConversationProfileInput !== "function" ||
+    !hasConversationalProfileUpdateSignal(userInput)
+  ) {
+    return;
+  }
+  await rememberConversationProfileInput(
+    buildConversationProfileMemoryWriteRequest({
+      session,
+      userInput,
+      receivedAt
+    }),
+    receivedAt
+  ).catch(() => false);
+}
+
+/**
  * Builds the direct conversation reply without queueing worker execution.
  *
  * @param input - Direct conversation reply dependencies.
@@ -159,7 +193,8 @@ export async function buildDirectCasualConversationReply(
     await buildDeterministicSelfIdentityDeclarationReply(
       input.input,
       input.receivedAt,
-      input.rememberConversationProfileInput
+      input.rememberConversationProfileInput,
+      input.session
     );
   if (deterministicSelfIdentityDeclarationReply) {
     return deterministicSelfIdentityDeclarationReply;
@@ -185,6 +220,12 @@ export async function buildDirectCasualConversationReply(
   if (deterministicSelfIdentityReply) {
     return deterministicSelfIdentityReply;
   }
+  await rememberDirectConversationProfileInputIfNeeded(
+    input.session,
+    input.input,
+    input.receivedAt,
+    input.rememberConversationProfileInput
+  );
   const conversationAwareInput = await buildConversationAwareExecutionInput(
     input.session,
     input.input,
@@ -199,7 +240,8 @@ export async function buildDirectCasualConversationReply(
     input.browserSessionSnapshots,
     input.contextualReferenceInterpretationResolver,
     input.getEntityGraph,
-    input.entityReferenceInterpretationResolver
+    input.entityReferenceInterpretationResolver,
+    input.openContinuityReadSession
   );
   const directConversationInput = buildDirectConversationReplyInput(
     input.input,

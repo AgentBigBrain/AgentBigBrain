@@ -2,6 +2,7 @@
  * @fileoverview Deterministic domain-boundary scoring for memory brokerage.
  */
 
+import { hasConversationalProfileUpdateSignal } from "../../core/profileMemoryRuntime/profileMemoryConversationalSignals";
 import type { ConversationDomainContext } from "../../core/types";
 import type {
   DomainBoundaryAssessment,
@@ -52,7 +53,7 @@ function inferDomainLaneScoresFromRequest(currentUserRequest: string): DomainLan
     addLaneScore(scores, "profile", 1);
   }
   if (
-    /\b(friend|coworker|colleague|manager|neighbor|relative|teammate|contact|relationship)\b/.test(
+    /\b(friend|employee|coworker|colleague|teammate|classmate|peer|work\s+peer|boss|manager|supervisor|team\s+lead|direct\s+report|neighbor|neighbour|relative|distant\s+relative|family(?:\s+members?)?|cousin|aunt|uncle|mom|mother|dad|father|son|daughter|parent|child|sibling|sister|brother|roommate|spouse|wife|husband|girlfriend|boyfriend|partner|married|contact|relationship)\b/.test(
       normalized
     ) ||
     /\bwho is\b/.test(normalized) ||
@@ -302,10 +303,16 @@ export function shouldSkipProfileMemoryIngest(
   sessionDomainContext?: ConversationDomainContext | null
 ): boolean {
   const requestScores = inferDomainLaneScoresFromRequest(currentUserRequest);
+  const requestHasConversationalProfileUpdate =
+    hasConversationalProfileUpdateSignal(currentUserRequest);
+  if (requestHasConversationalProfileUpdate) {
+    return false;
+  }
+  const requestProfileSignal = requestScores.profile + requestScores.relationship;
+  const requestNonProfileSignal = requestScores.workflow + requestScores.system_policy;
   const sessionAwareScores = applySessionDomainLaneSignals(requestScores, sessionDomainContext);
   const profileSignal = sessionAwareScores.profile + sessionAwareScores.relationship;
   const nonProfileSignal = sessionAwareScores.workflow + sessionAwareScores.system_policy;
-  const requestNonProfileSignal = requestScores.workflow + requestScores.system_policy;
   const workflowSessionContinuity =
     sessionDomainContext?.dominantLane === "workflow" && hasSessionContinuity(sessionDomainContext);
   if (nonProfileSignal >= 3 && nonProfileSignal > profileSignal) {

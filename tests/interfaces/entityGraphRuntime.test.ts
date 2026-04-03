@@ -237,6 +237,58 @@ test("maybeRecordInboundEntityGraphMutation fails closed to deterministic typing
   }
 });
 
+test("maybeRecordInboundEntityGraphMutation can apply validated entity-type hints for broader kinship wording", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-stage6_86-entity-type-kinship-"));
+  const graphPath = path.join(tempDir, "entity_graph.json");
+  const store = new EntityGraphStore(graphPath, { backend: "json" });
+  let resolverCalls = 0;
+  const resolver: EntityTypeInterpretationResolver = async (request) => {
+    resolverCalls += 1;
+    assert.deepEqual(
+      request.candidateEntities?.map((candidate) => candidate.candidateName),
+      ["Rosa"]
+    );
+    return {
+      source: "local_intent_model",
+      kind: "typed_candidates",
+      typedCandidates: [
+        {
+          candidateName: "Rosa",
+          entityType: "person"
+        }
+      ],
+      confidence: "high",
+      explanation: "Sibling wording is strong person-level relationship context."
+    };
+  };
+
+  try {
+    const persisted = await maybeRecordInboundEntityGraphMutation(
+      store,
+      true,
+      {
+        provider: "telegram",
+        conversationId: "chat-kinship",
+        eventId: "2002",
+        text: "my sibling Rosa is here.",
+        observedAt: "2026-04-03T16:15:00.000Z",
+        domainHint: "workflow"
+      },
+      {
+        entityTypeInterpretationResolver: resolver
+      }
+    );
+
+    assert.equal(persisted, true);
+    assert.equal(resolverCalls, 1);
+    const graph = await store.getGraph();
+    const rosa = graph.entities.find((entity) => entity.canonicalName === "Rosa");
+    assert.equal(rosa?.entityType, "person");
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
 test("maybeRecordInboundEntityGraphMutation can apply validated entity-domain hints before persistence", async () => {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-stage6_86-entity-domain-"));
   const graphPath = path.join(tempDir, "entity_graph.json");
@@ -297,6 +349,62 @@ test("maybeRecordInboundEntityGraphMutation can apply validated entity-domain hi
     const google = graph.entities.find((entity) => entity.canonicalName === "Google");
     assert.equal(sarah?.domainHint, "relationship");
     assert.equal(google?.domainHint, "workflow");
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("maybeRecordInboundEntityGraphMutation can apply validated entity-domain hints for broader partner wording", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-stage6_86-entity-domain-partner-"));
+  const graphPath = path.join(tempDir, "entity_graph.json");
+  const store = new EntityGraphStore(graphPath, { backend: "json" });
+  let resolverCalls = 0;
+  const resolver: EntityDomainHintInterpretationResolver = async (request) => {
+    resolverCalls += 1;
+    assert.deepEqual(
+      request.candidateEntities?.map((candidate) => [
+        candidate.candidateName,
+        candidate.entityType,
+        candidate.deterministicDomainHint
+      ]),
+      [["Sam", "thing", "workflow"]]
+    );
+    return {
+      source: "local_intent_model",
+      kind: "domain_hinted_candidates",
+      domainHintedCandidates: [
+        {
+          candidateName: "Sam",
+          domainHint: "relationship"
+        }
+      ],
+      confidence: "high",
+      explanation: "Spouse wording is strong relationship context."
+    };
+  };
+
+  try {
+    const persisted = await maybeRecordInboundEntityGraphMutation(
+      store,
+      true,
+      {
+        provider: "discord",
+        conversationId: "channel-partner",
+        eventId: "5002",
+        text: "my spouse Sam is here.",
+        observedAt: "2026-04-03T16:20:00.000Z",
+        domainHint: "workflow"
+      },
+      {
+        entityDomainHintInterpretationResolver: resolver
+      }
+    );
+
+    assert.equal(persisted, true);
+    assert.equal(resolverCalls, 1);
+    const graph = await store.getGraph();
+    const sam = graph.entities.find((entity) => entity.canonicalName === "Sam");
+    assert.equal(sam?.domainHint, "relationship");
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }

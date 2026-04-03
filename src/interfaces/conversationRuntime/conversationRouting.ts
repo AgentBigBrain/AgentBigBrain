@@ -8,7 +8,7 @@ import type { ConversationSession } from "../sessionStore";
 import type { ConversationInboundMediaEnvelope } from "../mediaRuntime/contracts";
 import type { AutonomyBoundaryInterpretationResolver, ContinuationInterpretationResolver, ContextualFollowupInterpretationResolver, ContextualReferenceInterpretationResolver, EntityReferenceInterpretationResolver, HandoffControlInterpretationResolver, IdentityInterpretationResolver, LocalIntentModelResolver, StatusRecallBoundaryInterpretationResolver, TopicKeyInterpretationResolver } from "../../organs/languageUnderstanding/localIntentModelContracts";
 import type { TopicKeyInterpretationSignalV1 } from "../../core/stage6_86ConversationStack";
-import type { GetConversationEntityGraph, ListBrowserSessionSnapshots, DescribeRuntimeCapabilities, ListManagedProcessSnapshots, ListAvailableSkills, QueryConversationContinuityEpisodes, QueryConversationContinuityFacts, RememberConversationProfileInput, RunDirectConversationTurn } from "./managerContracts";
+import type { GetConversationEntityGraph, ListBrowserSessionSnapshots, DescribeRuntimeCapabilities, ListManagedProcessSnapshots, ListAvailableSkills, OpenConversationContinuityReadSession, QueryConversationContinuityEpisodes, QueryConversationContinuityFacts, RememberConversationProfileInput, RunDirectConversationTurn } from "./managerContracts";
 import { buildAutonomousExecutionInput } from "./managerContracts";
 import { buildClarifiedExecutionInput, resolveClarificationAnswer } from "./clarificationBroker";
 import { resolveModeContinuityIntent } from "./modeContinuity";
@@ -29,6 +29,7 @@ export interface ConversationRoutingDependencies {
   followUpRuleContext: FollowUpRuleContext;
   queryContinuityEpisodes?: QueryConversationContinuityEpisodes;
   queryContinuityFacts?: QueryConversationContinuityFacts;
+  openContinuityReadSession?: OpenConversationContinuityReadSession;
   rememberConversationProfileInput?: RememberConversationProfileInput;
   listAvailableSkills?: ListAvailableSkills;
   describeRuntimeCapabilities?: DescribeRuntimeCapabilities;
@@ -161,7 +162,8 @@ async function resolveCanonicalConversationRouting(
           browserSessionSnapshots,
           deps.contextualReferenceInterpretationResolver,
           deps.getEntityGraph,
-          deps.entityReferenceInterpretationResolver
+          deps.entityReferenceInterpretationResolver,
+          deps.openContinuityReadSession
         )
       );
       recordTopicAwareUserTurn(session, input, receivedAt, deps.config.maxConversationTurns, topicKeyInterpretation);
@@ -318,7 +320,8 @@ async function resolveCanonicalConversationRouting(
         browserSessionSnapshots,
         deps.contextualReferenceInterpretationResolver,
         deps.getEntityGraph,
-        deps.entityReferenceInterpretationResolver
+        deps.entityReferenceInterpretationResolver,
+        deps.openContinuityReadSession
       ),
       routingClassification
         ? buildRoutingExecutionHintV1(routingClassification)
@@ -373,7 +376,8 @@ async function resolveCanonicalConversationRouting(
       browserSessionSnapshots,
       deps.contextualReferenceInterpretationResolver,
       deps.getEntityGraph,
-      deps.entityReferenceInterpretationResolver
+      deps.entityReferenceInterpretationResolver,
+      deps.openContinuityReadSession
     )
   );
   recordTopicAwareUserTurn(session, input, receivedAt, deps.config.maxConversationTurns, topicKeyInterpretation);

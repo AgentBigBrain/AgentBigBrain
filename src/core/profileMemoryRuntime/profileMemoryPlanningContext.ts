@@ -7,6 +7,7 @@ import {
   type ProfileMemoryState
 } from "../profileMemory";
 import { extractPlanningQueryTerms } from "../languageRuntime/queryIntentTerms";
+import { isCompatibilityVisibleFactLike } from "./profileMemoryCompatibilityVisibility";
 import { planningContextPriority } from "./profileMemoryNormalization";
 
 const IDENTITY_ANCHOR_PREFIXES = ["identity.preferred_name", "identity.name", "name"];
@@ -23,7 +24,7 @@ export function buildPlanningContextFromProfile(
   maxFacts: number
 ): string {
   const activeFacts = state.facts
-    .filter((fact) => isActiveFact(fact) && !fact.sensitive)
+    .filter((fact) => isActiveFact(fact) && !fact.sensitive && isCompatibilityVisibleFactLike(fact))
     .sort((left, right) => {
       const leftPriority = planningContextPriority(left.key);
       const rightPriority = planningContextPriority(right.key);
@@ -94,7 +95,10 @@ export function selectProfileFactsForQuery(
   const queryTokens = extractPlanningQueryTokens(queryInput);
   if (queryTokens.length === 0) {
     return state.facts
-      .filter((fact) => isActiveFact(fact) && !fact.sensitive)
+      .filter(
+        (fact) =>
+          isActiveFact(fact) && !fact.sensitive && isCompatibilityVisibleFactLike(fact)
+      )
       .sort((left, right) => {
         const leftPriority = planningContextPriority(left.key);
         const rightPriority = planningContextPriority(right.key);
@@ -107,7 +111,7 @@ export function selectProfileFactsForQuery(
   }
 
   const activeNonSensitiveFacts = state.facts
-    .filter((fact) => isActiveFact(fact) && !fact.sensitive)
+    .filter((fact) => isActiveFact(fact) && !fact.sensitive && isCompatibilityVisibleFactLike(fact))
     .sort((left, right) => Date.parse(right.lastUpdatedAt) - Date.parse(left.lastUpdatedAt));
 
   const scoredFacts = activeNonSensitiveFacts
@@ -126,7 +130,10 @@ export function selectProfileFactsForQuery(
 
   if (scoredFacts.length === 0) {
     return state.facts
-      .filter((fact) => isActiveFact(fact) && !fact.sensitive)
+      .filter(
+        (fact) =>
+          isActiveFact(fact) && !fact.sensitive && isCompatibilityVisibleFactLike(fact)
+      )
       .sort((left, right) => {
         const leftPriority = planningContextPriority(left.key);
         const rightPriority = planningContextPriority(right.key);

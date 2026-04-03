@@ -63,18 +63,25 @@ test("buildModelAssistedSelfIdentityReply persists canonical identity declaratio
   );
 
   assert.equal(reply, "Okay, I'll remember that you're Avery.");
-  assert.deepEqual(rememberedInputs, [
+  assert.equal(rememberedInputs.length, 1);
+  const rememberedRequest = rememberedInputs[0] as ProfileMemoryIngestRequest;
+  assert.deepEqual(rememberedRequest.validatedFactCandidates, [
     {
-      validatedFactCandidates: [
-        {
-          key: "identity.preferred_name",
-          candidateValue: "Avery",
-          source: "conversation.identity_interpretation",
-          confidence: 0.95
-        }
-      ]
+      key: "identity.preferred_name",
+      candidateValue: "Avery",
+      source: "conversation.identity_interpretation",
+      confidence: 0.95
     }
   ]);
+  assert.equal(rememberedRequest.provenance?.conversationId, session.conversationId);
+  assert.equal(rememberedRequest.provenance?.dominantLaneAtWrite, session.domainContext.dominantLane);
+  assert.equal(
+    rememberedRequest.provenance?.threadKey,
+    session.conversationStack?.activeThreadKey ?? null
+  );
+  assert.equal(rememberedRequest.provenance?.sourceSurface, "conversation_profile_input");
+  assert.match(rememberedRequest.provenance?.turnId ?? "", /^turn_[a-f0-9]{24}$/);
+  assert.match(rememberedRequest.provenance?.sourceFingerprint ?? "", /^[a-f0-9]{32}$/);
 });
 
 test("buildModelAssistedSelfIdentityReply fails closed when the model returns an unsafe candidate", async () => {

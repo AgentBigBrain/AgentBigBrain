@@ -6,7 +6,7 @@ import { type PulseLexicalRuleContext, createPulseLexicalRuleContext, createFoll
 import { clearConversationAckTimer, enqueueConversationJob } from "./conversationRuntime/conversationLifecycle";
 import { enqueueConversationSystemJob, setConversationWorkerBinding, startConversationWorkerIfNeeded, type SessionWorkerBinding } from "./conversationRuntime/conversationWorkerRuntime";
 import { updateConversationAgentPulseState } from "./conversationRuntime/pulseState";
-import { AUTONOMOUS_EXECUTION_PREFIX, buildAutonomousExecutionInput, type ConversationCheckpointReviewRunner, type ConversationIntentInterpreter, type ConversationManagerConfig, type ConversationManagerDependencies, type ConversationInboundMessage, type ConversationNotifier, type RememberConversationProfileInput, type QueryConversationContinuityFacts, type QueryConversationContinuityEpisodes, type ExecuteConversationTask } from "./conversationRuntime/managerContracts";
+import { AUTONOMOUS_EXECUTION_PREFIX, buildAutonomousExecutionInput, type ConversationCheckpointReviewRunner, type ConversationIntentInterpreter, type ConversationManagerConfig, type ConversationManagerDependencies, type ConversationInboundMessage, type ConversationNotifier, type ExecuteConversationTask, type OpenConversationContinuityReadSession, type RememberConversationProfileInput, type QueryConversationContinuityFacts, type QueryConversationContinuityEpisodes } from "./conversationRuntime/managerContracts";
 export { buildAutonomousExecutionInput, parseAutonomousExecutionInput } from "./conversationRuntime/managerContracts";
 export type {
   ConversationCheckpointReviewResult, ConversationDeliveryResult, ConversationExecutionResult,
@@ -50,6 +50,7 @@ export class ConversationManager {
   private readonly intentInterpreterConfidenceThreshold: number;
   private readonly runCheckpointReview?: ConversationCheckpointReviewRunner; private readonly queryContinuityEpisodes?: QueryConversationContinuityEpisodes;
   private readonly queryContinuityFacts?: QueryConversationContinuityFacts; private readonly getEntityGraph?: ConversationManagerDependencies["getEntityGraph"]; private readonly reconcileEntityAliasCandidate?: ConversationManagerDependencies["reconcileEntityAliasCandidate"];
+  private readonly openContinuityReadSession?: OpenConversationContinuityReadSession;
   private readonly rememberConversationProfileInput?: RememberConversationProfileInput; private readonly reviewConversationMemory?: ConversationManagerDependencies["reviewConversationMemory"];
   private readonly resolveConversationMemoryEpisode?: ConversationManagerDependencies["resolveConversationMemoryEpisode"];
   private readonly markConversationMemoryEpisodeWrong?: ConversationManagerDependencies["markConversationMemoryEpisodeWrong"];
@@ -101,7 +102,7 @@ export class ConversationManager {
     );
     this.runCheckpointReview = dependencies.runCheckpointReview;
     this.queryContinuityEpisodes = dependencies.queryContinuityEpisodes;
-    this.queryContinuityFacts = dependencies.queryContinuityFacts; this.getEntityGraph = dependencies.getEntityGraph; this.reconcileEntityAliasCandidate = dependencies.reconcileEntityAliasCandidate;
+    this.queryContinuityFacts = dependencies.queryContinuityFacts; this.openContinuityReadSession = dependencies.openContinuityReadSession; this.getEntityGraph = dependencies.getEntityGraph; this.reconcileEntityAliasCandidate = dependencies.reconcileEntityAliasCandidate;
     this.rememberConversationProfileInput = dependencies.rememberConversationProfileInput;
     this.reviewConversationMemory = dependencies.reviewConversationMemory;
     this.resolveConversationMemoryEpisode = dependencies.resolveConversationMemoryEpisode;
@@ -260,6 +261,7 @@ export class ConversationManager {
       runCheckpointReview: this.runCheckpointReview,
       queryContinuityEpisodes: this.queryContinuityEpisodes,
       queryContinuityFacts: this.queryContinuityFacts,
+      openContinuityReadSession: this.openContinuityReadSession,
       getEntityGraph: this.getEntityGraph,
       reconcileEntityAliasCandidate: this.reconcileEntityAliasCandidate,
       rememberConversationProfileInput: this.rememberConversationProfileInput,

@@ -23,7 +23,8 @@ state, routing precedence, optional local intent-model routing, sticky working-m
 recent-action and progress recall, and remembered destination/reuse context below the stable
 ingress and manager entrypoints. It also now owns persisted recovery clarifications for
 recoverable blocked runs so the assistant can ask one short follow-up question instead of ending a
-safe retry path prematurely.
+safe retry path prematurely, plus bounded per-turn continuity-session reuse so direct chat and
+execution-input recall can share one live continuity surface without adding a second cache layer.
 `src/interfaces/transportRuntime/` now owns canonical outbound Discord/Telegram delivery,
 autonomous progress-delivery bridging, shared transport-facing reject policy, and
 notifier-construction helpers below the stable gateway entrypoints. It also now owns shared
@@ -82,6 +83,8 @@ This top-level folder owns the transport and lifecycle path that consumes both s
 - user-facing proactive pulse messages that omit internal pulse/debug scaffolding
 - active-conversation execution-input hints that can surface one bounded contextual recall when the
   user naturally re-mentions an older unresolved topic or concrete situation
+- bounded per-turn continuity query reuse so execution-input assembly can share one graph/profile
+  snapshot across self-identity and contextual recall reads on the live gateway path
 - bounded pulse-grounding inputs so natural proactive follow-ups can reference useful unresolved
   situations without leaking raw memory internals
 - private-only `/memory` command responses that let the user inspect, resolve, correct, or forget
@@ -153,7 +156,10 @@ This top-level folder owns the transport and lifecycle path that consumes both s
   bounded episodic memory over generic paused-topic overlap when both are available.
 - Inbound Stage 6.86 entity-graph mutation may use bounded validated conversational type hints for
   ambiguous request-local entity candidates, but it must remain deterministic-first and fail-closed
-  when the interpreter is missing, low confidence, or unsupported.
+  when the interpreter is missing, low confidence, or unsupported. That deterministic hint lane
+  should stay aligned with the governed relationship vocabulary used elsewhere in runtime memory,
+  including bounded kinship, partner, and school-tie wording such as `sibling`, `spouse`, and
+  `classmate`, without turning Stage 6.86 ingress into a personal-memory truth owner.
 - Future human-centric proactive follow-up scoring should live in a bounded runtime such as
   `src/interfaces/proactiveRuntime/`, not by loosening generic pulse heuristics inside unrelated
   transport or delivery code.

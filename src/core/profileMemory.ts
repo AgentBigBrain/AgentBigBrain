@@ -116,11 +116,20 @@ export interface ProfileFactRecord {
   mutationAudit?: ProfileMutationAuditMetadataV1;
 }
 
+export interface ProfileMemoryIngestReceiptRecord {
+  receiptKey: string;
+  turnId: string;
+  sourceFingerprint: string;
+  sourceTaskId: string;
+  recordedAt: string;
+}
+
 export interface ProfileMemoryState {
   schemaVersion: number;
   updatedAt: string;
   facts: ProfileFactRecord[];
   episodes: ProfileEpisodeRecord[];
+  ingestReceipts: ProfileMemoryIngestReceiptRecord[];
 }
 
 export interface ProfileFactUpsertInput {

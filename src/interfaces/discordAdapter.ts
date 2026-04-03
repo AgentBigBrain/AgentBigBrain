@@ -30,10 +30,13 @@ import {
 import { buildAutonomousConversationExecutionResult } from "./autonomousConversationExecutionResult";
 import { runDirectConversationReply } from "./conversationRuntime/directConversationReply";
 import type {
+  ConversationContinuityFactQueryRequest,
+  ConversationContinuityFactRecord,
   ConversationExecutionResult,
   ConversationExecutionProgressUpdate,
   ConversationContinuityEpisodeQueryRequest,
   ConversationContinuityEpisodeRecord,
+  ConversationContinuityReadSession,
   ConversationMemoryReviewRecord
 } from "./conversationRuntime/managerContracts";
 import type { ManagedProcessSnapshot } from "../organs/liveRun/managedProcessRegistry";
@@ -127,6 +130,55 @@ function buildTaskFromText(text: string, receivedAt: string): TaskRequest {
     goal: "Handle user request safely and efficiently.",
     userInput: text.trim(),
     createdAt: receivedAt
+  };
+}
+
+/**
+ * Maps core continuity episode results into the interface-facing continuity shape.
+ *
+ * @param entry - Core continuity episode match from the orchestrator boundary.
+ * @returns Interface continuity episode record.
+ */
+function toConversationContinuityEpisodeRecord(
+  entry: Awaited<ReturnType<BrainOrchestrator["queryContinuityEpisodes"]>>[number]
+): ConversationContinuityEpisodeRecord {
+  return {
+    episodeId: entry.episode.id,
+    title: entry.episode.title,
+    summary: entry.episode.summary,
+    status: entry.episode.status,
+    lastMentionedAt: entry.episode.lastMentionedAt,
+    entityRefs: [...entry.episode.entityRefs],
+    entityLinks: entry.entityLinks.map((link) => ({
+      entityKey: link.entityKey,
+      canonicalName: link.canonicalName
+    })),
+    openLoopLinks: entry.openLoopLinks.map((link) => ({
+      loopId: link.loopId,
+      threadKey: link.threadKey,
+      status: link.status,
+      priority: link.priority
+    }))
+  };
+}
+
+/**
+ * Maps core continuity fact results into the interface-facing continuity shape.
+ *
+ * @param fact - Core continuity fact match from the orchestrator boundary.
+ * @returns Interface continuity fact record.
+ */
+function toConversationContinuityFactRecord(
+  fact: Awaited<ReturnType<BrainOrchestrator["queryContinuityFacts"]>>[number]
+): ConversationContinuityFactRecord {
+  return {
+    factId: fact.factId,
+    key: fact.key,
+    value: fact.value,
+    status: fact.status,
+    observedAt: fact.observedAt,
+    lastUpdatedAt: fact.lastUpdatedAt,
+    confidence: fact.confidence
   };
 }
 
@@ -582,24 +634,7 @@ export class DiscordAdapter {
       request.entityHints,
       request.maxEpisodes
     );
-    return linkedEpisodes.map((entry) => ({
-      episodeId: entry.episode.id,
-      title: entry.episode.title,
-      summary: entry.episode.summary,
-      status: entry.episode.status,
-      lastMentionedAt: entry.episode.lastMentionedAt,
-      entityRefs: [...entry.episode.entityRefs],
-      entityLinks: entry.entityLinks.map((link) => ({
-        entityKey: link.entityKey,
-        canonicalName: link.canonicalName
-      })),
-      openLoopLinks: entry.openLoopLinks.map((link) => ({
-        loopId: link.loopId,
-        threadKey: link.threadKey,
-        status: link.status,
-        priority: link.priority
-      }))
-    }));
+    return linkedEpisodes.map(toConversationContinuityEpisodeRecord);
   }
 
   /**
@@ -611,23 +646,49 @@ export class DiscordAdapter {
    */
   async queryContinuityFacts(
     graph: EntityGraphV1,
-    request: import("./conversationRuntime/managerContracts").ConversationContinuityFactQueryRequest
-  ): Promise<readonly import("./conversationRuntime/managerContracts").ConversationContinuityFactRecord[]> {
+    request: ConversationContinuityFactQueryRequest
+  ): Promise<readonly ConversationContinuityFactRecord[]> {
     const facts = await this.brain.queryContinuityFacts(
       graph,
       request.stack,
       request.entityHints,
       request.maxFacts
     );
-    return facts.map((fact) => ({
-      factId: fact.factId,
-      key: fact.key,
-      value: fact.value,
-      status: fact.status,
-      observedAt: fact.observedAt,
-      lastUpdatedAt: fact.lastUpdatedAt,
-      confidence: fact.confidence
-    }));
+    return facts.map(toConversationContinuityFactRecord);
+  }
+
+  /**
+   * Opens one bounded continuity read session that reuses the same graph and profile-memory
+   * snapshot across multiple continuity queries for one conversation turn.
+   *
+   * @param graph - Current Stage 6.86 entity graph.
+   * @returns Conversation continuity read session, or `null` when continuity is unavailable.
+   */
+  async openContinuityReadSession(
+    graph: EntityGraphV1
+  ): Promise<ConversationContinuityReadSession | null> {
+    const readSession = await this.brain.openContinuityReadSession(graph);
+    if (!readSession) {
+      return null;
+    }
+    return {
+      queryContinuityEpisodes: async (request) =>
+        (
+          await readSession.queryContinuityEpisodes(
+            request.stack,
+            request.entityHints,
+            request.maxEpisodes
+          )
+        ).map(toConversationContinuityEpisodeRecord),
+      queryContinuityFacts: async (request) =>
+        (
+          await readSession.queryContinuityFacts(
+            request.stack,
+            request.entityHints,
+            request.maxFacts
+          )
+        ).map(toConversationContinuityFactRecord)
+    };
   }
 
   /**

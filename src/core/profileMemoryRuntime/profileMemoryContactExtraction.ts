@@ -11,47 +11,60 @@ import {
   stableContextHash,
   trimTrailingClausePunctuation
 } from "./profileMemoryNormalization";
+import {
+  sanitizeCapturedContactDisplayName,
+  trimAssociationValue
+} from "./profileMemoryContactExtractionSupport";
 
 const HEDGED_CONFIDENCE_PATTERNS = ["maybe", "might be", "not sure", "i think", "possibly"];
 const DIRECT_RELATIONSHIP_DESCRIPTORS = new Set([
   "friend",
+  "partner",
+  "acquaintance",
   "guy",
   "person",
   "coworker",
   "colleague",
+  "work_peer",
   "manager",
+  "employee",
   "neighbor",
+  "roommate",
   "relative",
+  "cousin",
+  "son",
+  "daughter",
+  "parent",
+  "child",
+  "sibling",
+  "mom",
+  "mother",
+  "dad",
+  "father",
+  "sister",
+  "brother",
   "teammate",
   "classmate"
 ]);
 const WORK_WITH_PREFIXES = [
-  "i work with ",
-  "we work with ",
-  "i worked with ",
-  "we worked with ",
-  "i used to work with ",
-  "we used to work with "
+  { prefix: "i work with ", historical: false },
+  { prefix: "we work with ", historical: false },
+  { prefix: "i worked with ", historical: true },
+  { prefix: "we worked with ", historical: true },
+  { prefix: "i used to work with ", historical: true },
+  { prefix: "we used to work with ", historical: true }
 ] as const;
 
-/**
- * Trims company or association tails that continue into appositive commentary.
- *
- * @param value - Raw association text.
- * @returns Trimmed association value.
- */
-function trimAssociationValue(value: string): string {
-  const trimmed = trimTrailingClausePunctuation(value);
-  const commaIndex = trimmed.indexOf(",");
-  return commaIndex >= 0 ? trimmed.slice(0, commaIndex).trim() : trimmed;
-}
 const WORK_WITH_ME_ASSOCIATION_PREFIXES = [
-  "work with me at ",
-  "worked with me at ",
-  "works with me at ",
-  "work with me for ",
-  "worked with me for ",
-  "works with me for "
+  { prefix: "work with me at ", historical: false },
+  { prefix: "worked with me at ", historical: true },
+  { prefix: "works with me at ", historical: false },
+  { prefix: "work with me for ", historical: false },
+  { prefix: "worked with me for ", historical: true },
+  { prefix: "works with me for ", historical: false },
+  { prefix: "work with me", historical: false },
+  { prefix: "worked with me", historical: true },
+  { prefix: "works with me", historical: false }
 ] as const;
 
 /**
@@ -70,14 +83,15 @@ export function extractNamedContactFacts(
   const candidates: ProfileFactUpsertInput[] = [];
   const detectedContacts = new Set<string>();
   const contactPatterns = [
-    /\b(?:went\s+to\s+school\s+with\s+)?(?:a\s+|an\s+|the\s+)?(friend|guy|person|coworker|colleague|manager|neighbor|relative|teammate|classmate)\s+named\s+([A-Za-z][A-Za-z' -]{1,40})(?=(?:\s+and\b)|,|[.!?\n]|$)/gi,
-    /\bmy\s+(friend|coworker|colleague|manager|neighbor|relative|teammate|classmate)\s+is\s+([A-Za-z][A-Za-z' -]{1,40})(?=(?:\s+and\b)|,|[.!?\n]|$)/gi
+    /\b(?:went\s+to\s+school\s+with\s+)?(?:a\s+|an\s+|the\s+)?(friend|partner|spouse|wife|husband|girlfriend|boyfriend|acquaintance|guy|person|boss|coworker|colleague|work peer|peer|manager|supervisor|lead|team lead|employee|direct report|neighbor|neighbour|roommate|relative|distant relative|family member|cousin|aunt|uncle|mom|mother|dad|father|son|daughter|parent|child|sibling|sister|brother|teammate|classmate)\s+named\s+([A-Za-z][A-Za-z' -]{1,40})(?=(?:\s+and\b)|,|[.!?\n]|$)/gi,
+    /\bmy\s+(friend|partner|spouse|wife|husband|girlfriend|boyfriend|acquaintance|boss|coworker|colleague|work peer|peer|manager|supervisor|lead|team lead|employee|direct report|neighbor|neighbour|roommate|relative|distant relative|family member|cousin|aunt|uncle|mom|mother|dad|father|son|daughter|parent|child|sibling|sister|brother|teammate|classmate)\s+is\s+([A-Za-z][A-Za-z' -]{1,40})(?=(?:\s+and\b)|,|[.!?\n]|$)/gi,
+    /\bmy\s+(friend|partner|spouse|wife|husband|girlfriend|boyfriend|acquaintance|boss|coworker|colleague|work peer|peer|manager|supervisor|lead|team lead|employee|direct report|neighbor|neighbour|roommate|relative|distant relative|family member|cousin|aunt|uncle|mom|mother|dad|father|son|daughter|parent|child|sibling|sister|brother|teammate|classmate)\s+([A-Z][A-Za-z' -]{1,40}?)(?=\s+(?:works?|worked)\s+(?:with|for)\s+me\b)/gi
   ];
 
   for (const pattern of contactPatterns) {
     for (const match of text.matchAll(pattern)) {
       const descriptor = normalizeRelationshipDescriptor(match[1]);
-      const displayName = trimTrailingClausePunctuation(match[2]);
+      const displayName = sanitizeCapturedContactDisplayName(match[2]);
       const contactToken = normalizeProfileKey(displayName);
       if (!contactToken) {
         continue;
@@ -188,11 +202,11 @@ export function extractNamedContactFacts(
 
   for (const segment of splitIntoContextSentences(text)) {
     const normalizedSegment = segment.toLowerCase();
-    const prefix = WORK_WITH_PREFIXES.find((candidate) => normalizedSegment.startsWith(candidate));
-    if (!prefix) {
+    const prefixEntry = WORK_WITH_PREFIXES.find(({ prefix }) => normalizedSegment.startsWith(prefix));
+    if (!prefixEntry) {
       continue;
     }
-    const remainder = segment.slice(prefix.length).trim();
+    const remainder = segment.slice(prefixEntry.prefix.length).trim();
     const associationIndex = (() => {
       const atIndex = remainder.toLowerCase().indexOf(" at ");
       const forIndex = remainder.toLowerCase().indexOf(" for ");
@@ -210,7 +224,7 @@ export function extractNamedContactFacts(
       displayName = remainder.slice(0, associationIndex);
       company = remainder.slice(associationIndex + 4);
     }
-    displayName = trimTrailingClausePunctuation(displayName);
+    displayName = sanitizeCapturedContactDisplayName(displayName);
     company = trimAssociationValue(company);
 
     const contactToken = normalizeProfileKey(displayName);
@@ -224,7 +238,9 @@ export function extractNamedContactFacts(
       value: displayName,
       sensitive: false,
       sourceTaskId,
-      source: "user_input_pattern.work_with_contact",
+      source: prefixEntry.historical
+        ? "user_input_pattern.work_with_contact_historical"
+        : "user_input_pattern.work_with_contact",
       observedAt,
       confidence: toSentenceConfidence(segment)
     });
@@ -233,7 +249,9 @@ export function extractNamedContactFacts(
       value: "work_peer",
       sensitive: false,
       sourceTaskId,
-      source: "user_input_pattern.work_with_contact",
+      source: prefixEntry.historical
+        ? "user_input_pattern.work_with_contact_historical"
+        : "user_input_pattern.work_with_contact",
       observedAt,
       confidence: toSentenceConfidence(segment)
     });
@@ -244,7 +262,9 @@ export function extractNamedContactFacts(
         value: company,
         sensitive: false,
         sourceTaskId,
-        source: "user_input_pattern.work_with_contact",
+        source: prefixEntry.historical
+          ? "user_input_pattern.work_with_contact_historical"
+          : "user_input_pattern.work_with_contact",
         observedAt,
         confidence: toSentenceConfidence(segment)
       });
@@ -254,38 +274,45 @@ export function extractNamedContactFacts(
   if (detectedContacts.size === 1) {
     const [contactToken] = [...detectedContacts];
     const associationSegment = splitIntoContextSentences(text).find((segment) =>
-      WORK_WITH_ME_ASSOCIATION_PREFIXES.some((prefix) =>
+      WORK_WITH_ME_ASSOCIATION_PREFIXES.some(({ prefix }) =>
         segment.toLowerCase().includes(prefix)
       )
     );
-    const associationPrefix = associationSegment
-      ? WORK_WITH_ME_ASSOCIATION_PREFIXES.find((prefix) =>
+    const associationPrefixEntry = associationSegment
+      ? WORK_WITH_ME_ASSOCIATION_PREFIXES.find(({ prefix }) =>
           associationSegment.toLowerCase().includes(prefix)
         ) ?? null
       : null;
-    if (associationSegment && associationPrefix) {
-      const startIndex = associationSegment.toLowerCase().indexOf(associationPrefix);
+    if (associationSegment && associationPrefixEntry) {
+      const startIndex = associationSegment.toLowerCase().indexOf(associationPrefixEntry.prefix);
       const associationValue = trimTrailingClausePunctuation(
-        associationSegment.slice(startIndex + associationPrefix.length)
+        associationSegment.slice(startIndex + associationPrefixEntry.prefix.length)
       );
       candidates.push({
         key: `contact.${contactToken}.relationship`,
         value: "work_peer",
         sensitive: false,
         sourceTaskId,
-        source: "user_input_pattern.work_association",
+        source: associationPrefixEntry.historical
+          ? "user_input_pattern.work_association_historical"
+          : "user_input_pattern.work_association",
         observedAt,
         confidence: toSentenceConfidence(associationSegment)
       });
-      candidates.push({
-        key: `contact.${contactToken}.work_association`,
-        value: trimAssociationValue(associationValue),
-        sensitive: false,
-        sourceTaskId,
-        source: "user_input_pattern.work_association",
-        observedAt,
-        confidence: toSentenceConfidence(associationSegment)
-      });
+      const trimmedAssociationValue = trimAssociationValue(associationValue);
+      if (trimmedAssociationValue) {
+        candidates.push({
+          key: `contact.${contactToken}.work_association`,
+          value: trimmedAssociationValue,
+          sensitive: false,
+          sourceTaskId,
+          source: associationPrefixEntry.historical
+            ? "user_input_pattern.work_association_historical"
+            : "user_input_pattern.work_association",
+          observedAt,
+          confidence: toSentenceConfidence(associationSegment)
+        });
+      }
     }
   }
 
