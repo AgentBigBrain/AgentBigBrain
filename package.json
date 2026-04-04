@@ -129,7 +129,7 @@
     "check:repo": "npm run check:ai-first && npm run check:docs && npm run build && npm test"
   },
   "dependencies": {
-    "onnxruntime-node": "^1.24.2",
+    "onnxruntime-node": "^1.24.3",
     "ws": "^8.19.0"
   },
   "devDependencies": {
