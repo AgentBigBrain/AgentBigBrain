@@ -2188,6 +2188,87 @@ test("historical works-with-me extraction maps relationship history to support-o
   );
 });
 
+test("named-contact narrative keeps used-to-work-with-me association historical", () => {
+  const extractedCandidates = extractProfileFactCandidatesFromUserInput(
+    "I went to school with a guy named Owen, and he also used to work with me at Lantern Studio.",
+    "task_profile_governed_named_contact_historical_work_association",
+    "2026-04-02T12:00:00.000Z"
+  );
+  const governanceResult = governProfileMemoryCandidates({
+    factCandidates: extractedCandidates,
+    episodeCandidates: [],
+    episodeResolutionCandidates: []
+  });
+
+  assert.equal(
+    extractedCandidates.some(
+      (candidate) =>
+        candidate.key === "contact.owen.relationship" &&
+        candidate.value === "acquaintance" &&
+        candidate.source === "user_input_pattern.named_contact"
+    ),
+    true
+  );
+  assert.equal(
+    extractedCandidates.some(
+      (candidate) =>
+        candidate.key === "contact.owen.relationship" &&
+        candidate.value === "work_peer" &&
+        candidate.source === "user_input_pattern.work_association_historical"
+    ),
+    true
+  );
+  assert.equal(
+    extractedCandidates.some(
+      (candidate) =>
+        candidate.key === "contact.owen.work_association" &&
+        candidate.value === "Lantern Studio" &&
+        candidate.source === "user_input_pattern.work_association_historical"
+    ),
+    true
+  );
+  assert.equal(
+    extractedCandidates.some(
+      (candidate) =>
+        candidate.key === "contact.owen.relationship" &&
+        candidate.source === "user_input_pattern.work_association"
+    ),
+    false
+  );
+  assert.equal(
+    governanceResult.allowedCurrentStateFactCandidates.some(
+      (candidate) =>
+        candidate.key === "contact.owen.relationship" &&
+        candidate.value === "work_peer"
+    ),
+    false
+  );
+  assert.equal(
+    governanceResult.allowedCurrentStateFactCandidates.some(
+      (candidate) =>
+        candidate.key === "contact.owen.work_association" &&
+        candidate.value === "Lantern Studio"
+    ),
+    false
+  );
+  assert.equal(
+    governanceResult.allowedSupportOnlyFactCandidates.some(
+      (candidate) =>
+        candidate.key === "contact.owen.relationship" &&
+        candidate.value === "work_peer"
+    ),
+    true
+  );
+  assert.equal(
+    governanceResult.allowedSupportOnlyFactCandidates.some(
+      (candidate) =>
+        candidate.key === "contact.owen.work_association" &&
+        candidate.value === "Lantern Studio"
+    ),
+    true
+  );
+});
+
 test("severed work-linkage extraction maps named-contact endings to support-only governance", () => {
   const extractedCandidates = extractProfileFactCandidatesFromUserInput(
     "I don't work with Owen at Lantern Studio anymore.",

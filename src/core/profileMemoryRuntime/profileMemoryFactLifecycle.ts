@@ -15,13 +15,18 @@ import {
   normalizeProfileKey,
   normalizeProfileValue
 } from "./profileMemoryNormalization";
+import { getProfileMemoryFamilyRegistryEntry } from "./profileMemoryFamilyRegistry";
+import { inferGovernanceFamilyForNormalizedKey } from "./profileMemoryGovernanceFamilyInference";
 import {
   PROFILE_MEMORY_SCHEMA_VERSION
 } from "./profileMemoryState";
+import { createEmptyProfileMemoryGraphState } from "./profileMemoryGraphState";
 import { safeIsoOrNow } from "./profileMemoryStateNormalization";
+import { MEMORY_REVIEW_FACT_CORRECTION_SOURCE } from "./profileMemoryTruthGovernanceSources";
+import type { ProfileMemoryDisplacementPolicy } from "./profileMemoryTruthGovernanceContracts";
 
 /**
- * Upserts one temporal profile fact and supersedes conflicting active facts on the same key.
+ * Upserts one temporal profile fact under the code-owned family displacement policy.
  *
  * @param state - Current profile state snapshot.
  * @param input - Validated profile fact candidate to apply.
@@ -34,6 +39,8 @@ export function upsertTemporalProfileFact(
   assertUpsertInput(input);
   const key = canonicalizeProfileKey(input.key);
   const value = normalizeProfileValue(input.value);
+  const family = inferGovernanceFamilyForNormalizedKey(key, value);
+  const displacementPolicy = getProfileMemoryFamilyRegistryEntry(family).displacementPolicy;
   const confidence = normalizeConfidence(input.confidence);
   const observedAt = safeIsoOrNow(input.observedAt);
   const nowIso = new Date().toISOString();
@@ -41,61 +48,58 @@ export function upsertTemporalProfileFact(
 
   const nextFacts: ProfileFactRecord[] = [];
   const supersededFactIds: string[] = [];
-  let refreshedFact: ProfileFactRecord | null = null;
+  const activeSameKeyFacts: ProfileFactRecord[] = [];
 
   for (const fact of state.facts) {
-    if (!isActiveFact(fact) || fact.key !== key) {
-      nextFacts.push(fact);
+    if (isActiveFact(fact) && fact.key === key) {
+      activeSameKeyFacts.push(fact);
       continue;
     }
-
-    if (keyAndValueMatch(fact, key, value)) {
-      refreshedFact = {
-        ...fact,
-        status:
-          fact.status === "confirmed" && status === "uncertain"
-            ? "confirmed"
-            : status,
-        confidence: Math.max(fact.confidence, confidence),
-        confirmedAt:
-          status === "confirmed"
-            ? fact.confirmedAt ?? nowIso
-            : fact.confirmedAt,
-        lastUpdatedAt: nowIso,
-        mutationAudit: input.mutationAudit ?? fact.mutationAudit
-      };
-      nextFacts.push(refreshedFact);
-      continue;
-    }
-
-    supersededFactIds.push(fact.id);
-    nextFacts.push({
-      ...fact,
-      status: "superseded",
-      supersededAt: nowIso,
-      lastUpdatedAt: nowIso
-    });
+    nextFacts.push(fact);
   }
 
-  const upsertedFact =
-    refreshedFact ?? {
-      id: makeId("profile_fact"),
+  const matchingActiveFacts = activeSameKeyFacts.filter((fact) =>
+    keyAndValueMatch(fact, key, value)
+  );
+  const conflictingActiveFacts = activeSameKeyFacts.filter(
+    (fact) => !keyAndValueMatch(fact, key, value)
+  );
+  const conflictDisposition = resolveConflictDisposition(displacementPolicy, input.source);
+
+  let applied = false;
+  let winnerFact: ProfileFactRecord | null = null;
+
+  if (matchingActiveFacts.length > 0) {
+    winnerFact = refreshProfileFact(matchingActiveFacts[0], status, confidence, nowIso, input);
+    nextFacts.push(winnerFact);
+    applied = true;
+    for (const duplicate of [...matchingActiveFacts.slice(1), ...conflictingActiveFacts]) {
+      supersededFactIds.push(duplicate.id);
+      nextFacts.push(toSupersededFact(duplicate, nowIso));
+    }
+  } else {
+    const challengerStatus =
+      conflictingActiveFacts.length > 0 && conflictDisposition === "preserve"
+        ? "uncertain"
+        : status;
+    if (conflictingActiveFacts.length > 0 && conflictDisposition === "replace") {
+      for (const conflictingFact of conflictingActiveFacts) {
+        supersededFactIds.push(conflictingFact.id);
+        nextFacts.push(toSupersededFact(conflictingFact, nowIso));
+      }
+    } else {
+      nextFacts.push(...conflictingActiveFacts);
+    }
+    winnerFact = createProfileFactRecord(input, {
       key,
       value,
-      sensitive: input.sensitive,
-      status,
       confidence,
-      sourceTaskId: input.sourceTaskId,
-      source: input.source,
       observedAt,
-      confirmedAt: status === "confirmed" ? nowIso : null,
-      supersededAt: null,
-      lastUpdatedAt: nowIso,
-      mutationAudit: input.mutationAudit ?? undefined
-    };
-
-  if (!refreshedFact) {
-    nextFacts.push(upsertedFact);
+      status: challengerStatus,
+      nowIso
+    });
+    nextFacts.push(winnerFact);
+    applied = true;
   }
 
   return {
@@ -104,10 +108,136 @@ export function upsertTemporalProfileFact(
       updatedAt: nowIso,
       facts: nextFacts,
       episodes: state.episodes ?? [],
-      ingestReceipts: state.ingestReceipts ?? []
+      ingestReceipts: state.ingestReceipts ?? [],
+      graph: state.graph ?? createEmptyProfileMemoryGraphState(nowIso)
     },
-    upsertedFact,
-    supersededFactIds
+    upsertedFact: winnerFact ?? createProfileFactRecord(input, {
+      key,
+      value,
+      confidence,
+      observedAt,
+      status,
+      nowIso
+    }),
+    supersededFactIds,
+    applied
+  };
+}
+
+type ProfileFactConflictDisposition = "replace" | "preserve" | "append";
+
+/**
+ * Resolves how one conflicting same-key fact family should behave during canonical upsert.
+ *
+ * @param displacementPolicy - Code-owned family displacement policy from the registry.
+ * @param source - Candidate source under evaluation.
+ * @returns Conflict disposition for the canonical fact lifecycle.
+ */
+function resolveConflictDisposition(
+  displacementPolicy: ProfileMemoryDisplacementPolicy,
+  source: string
+): ProfileFactConflictDisposition {
+  if (source.trim().toLowerCase() === MEMORY_REVIEW_FACT_CORRECTION_SOURCE) {
+    return "replace";
+  }
+
+  switch (displacementPolicy) {
+    case "replace_authoritative_successor":
+    case "resolution_only":
+      return "replace";
+    case "preserve_prior_on_conflict":
+    case "not_applicable":
+      return "preserve";
+    case "append_multi_value":
+      return "append";
+  }
+}
+
+/**
+ * Refreshes one existing active fact when the incoming candidate matches the same normalized key
+ * and value.
+ *
+ * @param fact - Existing active fact selected as the canonical winner.
+ * @param status - Candidate-derived next status.
+ * @param confidence - Candidate-derived confidence.
+ * @param nowIso - Mutation timestamp for the refresh.
+ * @param input - Original upsert input carrying optional mutation-audit metadata.
+ * @returns Refreshed canonical fact record.
+ */
+function refreshProfileFact(
+  fact: ProfileFactRecord,
+  status: ProfileFactStatus,
+  confidence: number,
+  nowIso: string,
+  input: ProfileFactUpsertInput
+): ProfileFactRecord {
+  return {
+    ...fact,
+    status:
+      fact.status === "confirmed" && status === "uncertain"
+        ? "confirmed"
+        : status,
+    confidence: Math.max(fact.confidence, confidence),
+    confirmedAt:
+      status === "confirmed"
+        ? fact.confirmedAt ?? nowIso
+        : fact.confirmedAt,
+    lastUpdatedAt: nowIso,
+    mutationAudit: input.mutationAudit ?? fact.mutationAudit
+  };
+}
+
+/**
+ * Marks one previously active fact as superseded.
+ *
+ * @param fact - Existing active fact to close.
+ * @param nowIso - Mutation timestamp for the supersession.
+ * @returns Superseded fact record.
+ */
+function toSupersededFact(
+  fact: ProfileFactRecord,
+  nowIso: string
+): ProfileFactRecord {
+  return {
+    ...fact,
+    status: "superseded",
+    supersededAt: nowIso,
+    lastUpdatedAt: nowIso
+  };
+}
+
+/**
+ * Creates one canonical fact record for a new winner or preserved challenger write.
+ *
+ * @param input - Original upsert input carrying source and sensitivity metadata.
+ * @param options - Normalized canonical fact fields derived by the lifecycle seam.
+ * @returns New canonical fact record.
+ */
+function createProfileFactRecord(
+  input: ProfileFactUpsertInput,
+  options: {
+    key: string;
+    value: string;
+    confidence: number;
+    observedAt: string;
+    status: ProfileFactStatus;
+    nowIso: string;
+  }
+): ProfileFactRecord {
+  return {
+    id: makeId("profile_fact"),
+    key: options.key,
+    value: options.value,
+    sensitive: input.sensitive,
+    status: options.status,
+    confidence: options.confidence,
+    sourceTaskId: input.sourceTaskId,
+    source: input.source,
+    observedAt: options.observedAt,
+    confirmedAt: options.status === "confirmed" ? options.nowIso : null,
+    supersededAt: null,
+    lastUpdatedAt: options.nowIso,
+    mutationAudit: input.mutationAudit ?? undefined
   };
 }
 

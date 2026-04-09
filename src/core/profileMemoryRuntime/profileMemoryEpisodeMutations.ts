@@ -20,11 +20,13 @@ export interface ProfileEpisodeCandidateApplyResult {
   nextState: ProfileMemoryState;
   createdEpisodes: number;
   updatedEpisodes: number;
+  touchedEpisodeIds: readonly string[];
 }
 
 export interface ProfileEpisodeResolutionApplyResult {
   nextState: ProfileMemoryState;
   resolvedEpisodes: number;
+  touchedEpisodeIds: readonly string[];
 }
 
 const TERMINAL_STATUS_WEIGHT: Record<ProfileEpisodeStatus, number> = {
@@ -51,13 +53,15 @@ export function applyProfileEpisodeCandidates(
     return {
       nextState: state,
       createdEpisodes: 0,
-      updatedEpisodes: 0
+      updatedEpisodes: 0,
+      touchedEpisodeIds: []
     };
   }
 
   const nextEpisodes = [...state.episodes];
   let createdEpisodes = 0;
   let updatedEpisodes = 0;
+  const touchedEpisodeIds = new Set<string>();
 
   for (const candidate of dedupedCandidates) {
     const candidateEntityRefs = mergeStringLists([], candidate.entityRefs);
@@ -66,13 +70,16 @@ export function applyProfileEpisodeCandidates(
       buildEpisodeMatchKey(candidate.title, candidateEntityRefs)
     );
     if (existingIndex < 0) {
-      nextEpisodes.push(createProfileEpisodeRecord(candidate));
+      const createdEpisode = createProfileEpisodeRecord(candidate);
+      nextEpisodes.push(createdEpisode);
       createdEpisodes += 1;
+      touchedEpisodeIds.add(createdEpisode.id);
       continue;
     }
 
     nextEpisodes[existingIndex] = mergeEpisodeRecord(nextEpisodes[existingIndex], candidate);
     updatedEpisodes += 1;
+    touchedEpisodeIds.add(nextEpisodes[existingIndex]!.id);
   }
 
   return {
@@ -82,7 +89,8 @@ export function applyProfileEpisodeCandidates(
       episodes: sortEpisodes(nextEpisodes)
     },
     createdEpisodes,
-    updatedEpisodes
+    updatedEpisodes,
+    touchedEpisodeIds: [...touchedEpisodeIds].sort((left, right) => left.localeCompare(right))
   };
 }
 
@@ -100,13 +108,15 @@ export function applyProfileEpisodeResolutions(
   if (resolutions.length === 0 || state.episodes.length === 0) {
     return {
       nextState: state,
-      resolvedEpisodes: 0
+      resolvedEpisodes: 0,
+      touchedEpisodeIds: []
     };
   }
 
   const dedupedResolutions = dedupeEpisodeResolutions(resolutions);
   const nextEpisodes = [...state.episodes];
   let resolvedEpisodes = 0;
+  const touchedEpisodeIds = new Set<string>();
 
   for (const resolution of dedupedResolutions) {
     const episodeIndex = nextEpisodes.findIndex((episode) => episode.id === resolution.episodeId);
@@ -119,12 +129,14 @@ export function applyProfileEpisodeResolutions(
     }
     nextEpisodes[episodeIndex] = nextEpisode;
     resolvedEpisodes += 1;
+    touchedEpisodeIds.add(nextEpisode.id);
   }
 
   if (resolvedEpisodes === 0) {
     return {
       nextState: state,
-      resolvedEpisodes: 0
+      resolvedEpisodes: 0,
+      touchedEpisodeIds: []
     };
   }
 
@@ -134,7 +146,8 @@ export function applyProfileEpisodeResolutions(
       updatedAt: dedupedResolutions[dedupedResolutions.length - 1]?.observedAt ?? state.updatedAt,
       episodes: sortEpisodes(nextEpisodes)
     },
-    resolvedEpisodes
+    resolvedEpisodes,
+    touchedEpisodeIds: [...touchedEpisodeIds].sort((left, right) => left.localeCompare(right))
   };
 }
 

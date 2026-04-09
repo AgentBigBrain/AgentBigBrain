@@ -20,7 +20,7 @@ import {
   selectRelevantEpisodesForPulse
 } from "../../src/core/profileMemoryRuntime/profileMemoryPulse";
 
-test("countStaleActiveFacts counts only active stale facts", () => {
+test("countStaleActiveFacts counts only confirmed compatibility-visible stale facts", () => {
   let state = createEmptyProfileMemoryState();
   state = upsertTemporalProfileFact(state, {
     key: "favorite.editor",
@@ -54,7 +54,7 @@ test("countStaleActiveFacts counts only active stale facts", () => {
   assert.equal(staleCount, 1);
 });
 
-test("assessRelationshipRole returns the newest active relationship role", () => {
+test("assessRelationshipRole prefers confirmed current relationship role over uncertain challengers", () => {
   let state = createEmptyProfileMemoryState();
   state = upsertTemporalProfileFact(state, {
     key: "relationship.role",
@@ -76,8 +76,34 @@ test("assessRelationshipRole returns the newest active relationship role", () =>
   }).nextState;
 
   const assessment = assessRelationshipRole(state);
-  assert.equal(assessment.role, "friend");
+  assert.equal(assessment.role, "acquaintance");
   assert.ok(assessment.roleFactId);
+});
+
+test("assessRelationshipRole falls back to uncertain relationship role when no confirmed current role exists", () => {
+  const state: ProfileMemoryState = {
+    ...createEmptyProfileMemoryState(),
+    facts: [
+      {
+        id: "fact_uncertain_friend_1",
+        key: "relationship.role",
+        value: "friend",
+        sensitive: false,
+        sourceTaskId: "relationship_uncertain_only",
+        source: "test.seed",
+        observedAt: "2026-02-02T00:00:00.000Z",
+        lastUpdatedAt: "2026-02-02T00:00:00.000Z",
+        status: "uncertain",
+        confirmedAt: null,
+        supersededAt: null,
+        confidence: 0.6
+      }
+    ]
+  };
+
+  const assessment = assessRelationshipRole(state);
+  assert.equal(assessment.role, "friend");
+  assert.equal(assessment.roleFactId, "fact_uncertain_friend_1");
 });
 
 test("assessRelationshipRole recognizes acquaintance from contact relationship facts", () => {

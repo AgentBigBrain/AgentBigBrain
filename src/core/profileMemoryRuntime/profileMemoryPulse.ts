@@ -114,7 +114,7 @@ export function countStaleActiveFacts(
   nowIso: string
 ): number {
   return state.facts.filter((fact) => {
-    if (!isActiveFact(fact)) {
+    if (!isPulseTruthCandidateFact(fact)) {
       return false;
     }
     return assessProfileFactFreshness(fact, staleAfterDays, nowIso).stale;
@@ -177,11 +177,33 @@ export function selectRelevantEpisodesForPulse(
 export function assessRelationshipRole(
   state: ProfileMemoryState
 ): AgentPulseRelationshipAssessment {
-  const activeFacts = state.facts
-    .filter((fact) => isActiveFact(fact) && isCompatibilityVisibleFactLike(fact))
+  const confirmedFacts = state.facts
+    .filter((fact) => isPulseCurrentFact(fact))
+    .sort((left, right) => Date.parse(right.lastUpdatedAt) - Date.parse(left.lastUpdatedAt));
+  const previouslyConfirmedFallbackFacts = state.facts
+    .filter(
+      (fact) =>
+        isActiveFact(fact) &&
+        fact.status === "uncertain" &&
+        fact.confirmedAt !== null &&
+        isCompatibilityVisibleFactLike(fact)
+    )
+    .sort((left, right) => Date.parse(right.lastUpdatedAt) - Date.parse(left.lastUpdatedAt));
+  const unconfirmedFallbackFacts = state.facts
+    .filter(
+      (fact) =>
+        isActiveFact(fact) &&
+        fact.status === "uncertain" &&
+        fact.confirmedAt === null &&
+        isCompatibilityVisibleFactLike(fact)
+    )
     .sort((left, right) => Date.parse(right.lastUpdatedAt) - Date.parse(left.lastUpdatedAt));
 
-  for (const fact of activeFacts) {
+  for (const fact of [
+    ...confirmedFacts,
+    ...previouslyConfirmedFallbackFacts,
+    ...unconfirmedFallbackFacts
+  ]) {
     const role = inferRelationshipRoleFromFact(fact);
     if (!role) {
       continue;
@@ -196,6 +218,47 @@ export function assessRelationshipRole(
     role: "unknown",
     roleFactId: null
   };
+}
+
+/**
+ * Determines whether one fact is current enough to stay canonical on pulse surfaces.
+ *
+ * Preserve-prior challengers remain active as uncertain evidence under Phase 2.5, but pulse
+ * should treat them as drift signals rather than canonical current truth while a confirmed winner
+ * still exists. `assessContextDrift` still consumes those uncertain active facts separately.
+ *
+ * @param fact - Candidate fact from the normalized profile state.
+ * @returns `true` when the fact is confirmed, active, and compatibility-visible.
+ */
+function isPulseCurrentFact(
+  fact: ProfileFactRecord
+): boolean {
+  return (
+    isActiveFact(fact) &&
+    fact.status === "confirmed" &&
+    isCompatibilityVisibleFactLike(fact)
+  );
+}
+
+/**
+ * Determines whether one fact still counts as stale canonical truth for pulse revalidation.
+ *
+ * Stale formerly confirmed facts are downgraded to `uncertain` during load normalization, but
+ * they should still count toward stale-fact revalidation because they represent prior canonical
+ * truth that now needs verification. Preserve-prior challengers never carried confirmed truth, so
+ * they stay drift-only and do not inflate stale-fact counts.
+ *
+ * @param fact - Candidate fact from the normalized profile state.
+ * @returns `true` when the fact is active, compatibility-visible, and was previously confirmed.
+ */
+function isPulseTruthCandidateFact(
+  fact: ProfileFactRecord
+): boolean {
+  return (
+    isActiveFact(fact) &&
+    fact.confirmedAt !== null &&
+    isCompatibilityVisibleFactLike(fact)
+  );
 }
 
 /**

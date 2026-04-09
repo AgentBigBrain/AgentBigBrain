@@ -3,8 +3,10 @@
  */
 
 import type {
+  CorrectConversationMemoryFact,
   ConversationCheckpointReviewRunner,
   DescribeRuntimeCapabilities,
+  ForgetConversationMemoryFact,
   ForgetConversationMemoryEpisode,
   ConversationIngressRuleContexts,
   ListBrowserSessionSnapshots,
@@ -17,6 +19,7 @@ import type {
   ConversationNotifier,
   OpenConversationContinuityReadSession,
   QueryConversationContinuityEpisodes,
+  ReviewConversationMemoryFacts,
   ResolveConversationMemoryEpisode,
   ReviewConversationMemory,
   MarkConversationMemoryEpisodeWrong,
@@ -109,9 +112,12 @@ export interface ConversationIngressDependencies extends ConversationIngressRule
   reconcileEntityAliasCandidate?: import("./managerContracts").ReconcileConversationEntityAliasCandidate;
   rememberConversationProfileInput?: RememberConversationProfileInput;
   reviewConversationMemory?: ReviewConversationMemory;
+  reviewConversationMemoryFacts?: ReviewConversationMemoryFacts;
   resolveConversationMemoryEpisode?: ResolveConversationMemoryEpisode;
   markConversationMemoryEpisodeWrong?: MarkConversationMemoryEpisodeWrong;
   forgetConversationMemoryEpisode?: ForgetConversationMemoryEpisode;
+  correctConversationMemoryFact?: CorrectConversationMemoryFact;
+  forgetConversationMemoryFact?: ForgetConversationMemoryFact;
   listAvailableSkills?: ListAvailableSkills;
   describeRuntimeCapabilities?: DescribeRuntimeCapabilities;
   listManagedProcessSnapshots?: ListManagedProcessSnapshots;

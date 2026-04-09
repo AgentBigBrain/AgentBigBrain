@@ -9,6 +9,10 @@ import type {
 } from "../types";
 import type {
   ProfileAccessRequest,
+  ProfileFactPlanningInspectionRequest,
+  ProfileFactPlanningInspectionResult,
+  ProfileFactReviewRequest,
+  ProfileFactReviewResult,
   ProfileReadableEpisode,
   ProfileReadableFact
 } from "./contracts";
@@ -24,8 +28,10 @@ import {
 import type { LinkedProfileEpisodeRecord } from "./profileMemoryEpisodeLinking";
 import {
   buildProfilePlanningContext,
+  inspectProfileFactsForPlanningContext,
   queryProfileFactsForContinuity,
   readProfileFacts,
+  reviewProfileFactsForUser,
   type ProfileFactContinuityQueryRequest
 } from "./profileMemoryQueries";
 
@@ -73,6 +79,19 @@ export class ProfileMemoryReadSession {
       entityHints: [queryInput],
       maxFacts
     });
+  }
+
+  /**
+   * Returns bounded planning-query facts plus decision-record proof from the shared request
+   * snapshot.
+   *
+   * @param request - Planning inspection request with optional as-of controls.
+   * @returns Selected readable facts plus hidden decision records.
+   */
+  inspectFactsForPlanningContext(
+    request: ProfileFactPlanningInspectionRequest
+  ): ProfileFactPlanningInspectionResult {
+    return inspectProfileFactsForPlanningContext(this.state, request);
   }
 
   /**
@@ -142,6 +161,16 @@ export class ProfileMemoryReadSession {
    */
   readFacts(request: ProfileAccessRequest): ProfileReadableFact[] {
     return readProfileFacts(this.state, request);
+  }
+
+  /**
+   * Returns bounded approval-aware fact-review entries from the shared request snapshot.
+   *
+   * @param request - Fact-review request with query, approval, and as-of controls.
+   * @returns Reviewable fact entries plus hidden decision records.
+   */
+  reviewFactsForUser(request: ProfileFactReviewRequest): ProfileFactReviewResult {
+    return reviewProfileFactsForUser(this.state, request);
   }
 
   /**

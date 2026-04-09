@@ -3,6 +3,9 @@
  */
 
 import type { ProfileEpisodeRecord } from "./profileMemoryRuntime/profileMemoryEpisodeContracts";
+import type {
+  ProfileMemoryGraphState as ProfileMemoryGraphStateShape
+} from "./profileMemoryRuntime/profileMemoryGraphContracts";
 
 export {
   extractProfileFactCandidatesFromUserInput
@@ -30,6 +33,31 @@ export {
   readProfileFacts
 } from "./profileMemoryRuntime/profileMemoryQueries";
 export {
+  PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME,
+  PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME,
+  PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME,
+  PROFILE_MEMORY_GRAPH_SCHEMA_VERSION
+} from "./profileMemoryRuntime/profileMemoryGraphContracts";
+export {
+  PROFILE_MEMORY_FAMILY_REGISTRY,
+  PROFILE_MEMORY_FAMILY_REGISTRY_VERSION,
+  getProfileMemoryFamilyRegistryEntry
+} from "./profileMemoryRuntime/profileMemoryFamilyRegistry";
+export {
+  buildProfileMemoryGraphIndexState,
+  buildProfileMemoryGraphReadModel,
+  createEmptyProfileMemoryGraphIndexState,
+  createEmptyProfileMemoryGraphReadModel
+} from "./profileMemoryRuntime/profileMemoryGraphIndexing";
+export {
+  createEmptyProfileMemoryGraphState,
+  normalizeProfileMemoryGraphState
+} from "./profileMemoryRuntime/profileMemoryGraphState";
+export {
+  createEmptyProfileMemoryMutationJournalState,
+  normalizeProfileMemoryMutationJournalState
+} from "./profileMemoryRuntime/profileMemoryMutationJournal";
+export {
   buildInferredProfileEpisodeResolutionCandidates
 } from "./profileMemoryRuntime/profileMemoryEpisodeResolution";
 export {
@@ -50,6 +78,50 @@ export {
   normalizeProfileKey,
   normalizeProfileValue
 } from "./profileMemoryRuntime/profileMemoryNormalization";
+export type {
+  AgentPulseContextDriftAssessment,
+  AgentPulseContextDriftDomain,
+  AgentPulseEvaluationRequest,
+  AgentPulseEvaluationResult,
+  AgentPulseRelationshipAssessment,
+  AgentPulseRelationshipRole,
+  ProfileAccessPurpose,
+  ProfileAccessRequest,
+  ProfileEpisodeReviewMutationResult,
+  ProfileFactPlanningInspectionEntry,
+  ProfileFactPlanningInspectionRequest,
+  ProfileFactPlanningInspectionResult,
+  ProfileFactReviewEntry,
+  ProfileFactReviewMutationAction,
+  ProfileFactReviewMutationRequest,
+  ProfileFactReviewMutationResult,
+  ProfileFactReviewRequest,
+  ProfileFactReviewResult,
+  ProfileIngestResult,
+  ProfileMemoryIngestRequest,
+  ProfileMemoryRequestTelemetry,
+  ProfileMemorySourceSurface,
+  ProfileMemoryWriteProvenance,
+  ProfilePulseRelevantEpisode,
+  ProfileReadableEpisode,
+  ProfileReadableFact,
+  ProfileValidatedFactCandidateInput
+} from "./profileMemoryRuntime/contracts";
+export type {
+  ProfileMemoryAsOfContract,
+  ProfileMemoryMutationDecisionRecord,
+  ProfileMemoryQueryDecisionDisposition,
+  ProfileMemoryQueryDecisionRecord
+} from "./profileMemoryRuntime/profileMemoryDecisionRecordContracts";
+export type {
+  ProfileMemoryMutationEnvelope,
+  ProfileMemoryMutationRequestCorrelation
+} from "./profileMemoryRuntime/profileMemoryMutationEnvelopeContracts";
+export type {
+  ProfileMemoryRetractionClass,
+  ProfileMemoryRetractionContract,
+  ProfileMemoryRetractionRedactionState
+} from "./profileMemoryRuntime/profileMemoryRetractionContracts";
 export { normalizeProfileMemoryEpisodes } from "./profileMemoryRuntime/profileMemoryEpisodeNormalization";
 export {
   buildPlanningContextFromProfile
@@ -77,6 +149,48 @@ export type {
   ProfileEpisodeSourceKind,
   ProfileEpisodeStatus
 } from "./profileMemoryRuntime/profileMemoryEpisodeContracts";
+export type {
+  GovernedProfileEpisodeCandidate,
+  GovernedProfileEpisodeResolution,
+  GovernedProfileFactCandidate,
+  ProfileMemoryAdjacentDomain,
+  ProfileMemoryAdjacentDomainAccess,
+  ProfileMemoryAdjacentDomainPolicy,
+  ProfileMemoryAnswerModeFallback,
+  ProfileMemoryCompatibilityProjectionPolicy,
+  ProfileMemoryCorroborationMode,
+  ProfileMemoryDisplacementPolicy,
+  ProfileMemoryEndStatePolicy,
+  ProfileMemoryEvidenceClass,
+  ProfileMemoryFamilyRegistryEntry,
+  ProfileMemoryGovernanceAction,
+  ProfileMemoryGovernanceCardinality,
+  ProfileMemoryGovernanceDecision,
+  ProfileMemoryGovernanceFamily,
+  ProfileMemoryGovernanceReason,
+  ProfileMemoryInventoryPolicy,
+  ProfileMemoryMinimumSensitivityFloor,
+  ProfileMemorySourceAuthorityMode,
+  ProfileMemorySupportOnlyLegacyBehavior,
+  ProfileMemoryTruthGovernanceResult
+} from "./profileMemoryRuntime/profileMemoryTruthGovernanceContracts";
+export type {
+  ProfileMemoryGraphClaimPayloadV1,
+  ProfileMemoryGraphClaimRecord,
+  ProfileMemoryGraphCompactionStateV1,
+  ProfileMemoryGraphEventPayloadV1,
+  ProfileMemoryGraphEventRecord,
+  ProfileMemoryGraphIndexStateV1,
+  ProfileMemoryGraphObservationPayloadV1,
+  ProfileMemoryGraphObservationRecord,
+  ProfileMemoryGraphReadModelV1,
+  ProfileMemoryGraphSourceTier,
+  ProfileMemoryGraphState,
+  ProfileMemoryGraphTimePrecision,
+  ProfileMemoryGraphTimeSource,
+  ProfileMemoryMutationJournalEntryV1,
+  ProfileMemoryMutationJournalStateV1
+} from "./profileMemoryRuntime/profileMemoryGraphContracts";
 
 export type ProfileFactStatus = "confirmed" | "uncertain" | "superseded";
 
@@ -130,6 +244,7 @@ export interface ProfileMemoryState {
   facts: ProfileFactRecord[];
   episodes: ProfileEpisodeRecord[];
   ingestReceipts: ProfileMemoryIngestReceiptRecord[];
+  graph: ProfileMemoryGraphStateShape;
 }
 
 export interface ProfileFactUpsertInput {
@@ -147,6 +262,7 @@ export interface ProfileUpsertResult {
   nextState: ProfileMemoryState;
   upsertedFact: ProfileFactRecord;
   supersededFactIds: string[];
+  applied: boolean;
 }
 
 export interface ProfileFreshnessAssessment {

@@ -10,8 +10,20 @@ import {
   buildPlanningContextFromProfile,
   createEmptyProfileMemoryState,
   extractProfileFactCandidatesFromUserInput,
+  getProfileMemoryFamilyRegistryEntry,
   markStaleFactsAsUncertain,
+  PROFILE_MEMORY_FAMILY_REGISTRY,
+  PROFILE_MEMORY_FAMILY_REGISTRY_VERSION,
   upsertTemporalProfileFact
+} from "../../src/core/profileMemory";
+import type {
+  ProfileFactReviewMutationResult,
+  ProfileFactReviewResult,
+  ProfileMemoryFamilyRegistryEntry,
+  ProfileMemoryIngestRequest,
+  ProfileMemoryMutationEnvelope,
+  ProfileMemoryQueryDecisionRecord,
+  ProfileMemoryRetractionContract
 } from "../../src/core/profileMemory";
 
 /**
@@ -22,12 +34,12 @@ function isoDaysAgo(days: number): string {
   return new Date(Date.now() - days * 86_400_000).toISOString();
 }
 
-test("upsert supersedes older active fact for same key with new value", () => {
+test("upsert replaces prior winner for explicit successor families", () => {
   const emptyState = createEmptyProfileMemoryState();
   assert.deepEqual(emptyState.episodes, []);
   const first = upsertTemporalProfileFact(emptyState, {
-    key: "employment.current",
-    value: "Pro-Green",
+    key: "identity.preferred_name",
+    value: "Avery",
     sensitive: false,
     sourceTaskId: "task_1",
     source: "test",
@@ -36,8 +48,8 @@ test("upsert supersedes older active fact for same key with new value", () => {
   });
 
   const second = upsertTemporalProfileFact(first.nextState, {
-    key: "employment.current",
-    value: "Lantern",
+    key: "identity.preferred_name",
+    value: "Ava",
     sensitive: false,
     sourceTaskId: "task_2",
     source: "test",
@@ -52,8 +64,43 @@ test("upsert supersedes older active fact for same key with new value", () => {
 
   assert.equal(supersededFacts.length, 1);
   assert.equal(activeFacts.length, 1);
-  assert.equal(activeFacts[0].value, "Lantern");
+  assert.equal(activeFacts[0].value, "Ava");
   assert.equal(second.supersededFactIds.length, 1);
+  assert.equal(second.applied, true);
+});
+
+test("upsert retains prior winner and keeps preserve-prior challengers uncertain", () => {
+  const emptyState = createEmptyProfileMemoryState();
+  const first = upsertTemporalProfileFact(emptyState, {
+    key: "employment.current",
+    value: "Pro-Green",
+    sensitive: false,
+    sourceTaskId: "task_1_preserve",
+    source: "test",
+    observedAt: "2026-02-20T00:00:00.000Z",
+    confidence: 0.95
+  });
+
+  const second = upsertTemporalProfileFact(first.nextState, {
+    key: "employment.current",
+    value: "Lantern",
+    sensitive: false,
+    sourceTaskId: "task_2_preserve",
+    source: "test",
+    observedAt: "2026-02-21T00:00:00.000Z",
+    confidence: 0.95
+  });
+
+  const activeFacts = second.nextState.facts.filter(
+    (fact) => fact.status !== "superseded" && fact.supersededAt === null
+  );
+  const confirmedFacts = activeFacts.filter((fact) => fact.status === "confirmed");
+  const uncertainFacts = activeFacts.filter((fact) => fact.status === "uncertain");
+  assert.equal(activeFacts.length, 2);
+  assert.equal(confirmedFacts[0].value, "Pro-Green");
+  assert.equal(uncertainFacts[0].value, "Lantern");
+  assert.equal(second.supersededFactIds.length, 0);
+  assert.equal(second.applied, true);
 });
 
 test("upsert refreshes same key/value without creating duplicate active fact", () => {
@@ -149,6 +196,81 @@ test("assessProfileFactFreshness reports expected stale age", () => {
   const freshness = assessProfileFactFreshness(fact, 30, "2026-02-23T00:00:00.000Z");
   assert.equal(freshness.stale, true);
   assert.equal(freshness.ageDays > 30, true);
+});
+
+test("stable profile-memory entrypoint re-exports Phase 2.5 registry and proof contracts", () => {
+  assert.equal(PROFILE_MEMORY_FAMILY_REGISTRY_VERSION, 1);
+  const entry = getProfileMemoryFamilyRegistryEntry(
+    "identity.preferred_name"
+  ) satisfies ProfileMemoryFamilyRegistryEntry;
+  assert.equal(entry.family, "identity.preferred_name");
+  assert.equal(
+    PROFILE_MEMORY_FAMILY_REGISTRY["generic.profile_fact"].minimumSensitivityFloor,
+    "force_sensitive_for_sensitive_keys"
+  );
+
+  const decision: ProfileMemoryQueryDecisionRecord = {
+    family: "generic.profile_fact",
+    evidenceClass: "user_explicit_fact",
+    governanceAction: "allow_current_state",
+    governanceReason: "explicit_user_fact",
+    disposition: "selected_current_state",
+    answerModeFallback: "report_current_state",
+    candidateRefs: ["candidate_1"],
+    evidenceRefs: ["candidate_1"],
+    asOfValidTime: "2026-04-03T21:00:00.000Z",
+    asOfObservedTime: "2026-04-03T21:00:00.000Z"
+  };
+  const retraction: ProfileMemoryRetractionContract = {
+    family: "generic.profile_fact",
+    retractionClass: "forget_or_delete",
+    redactionState: "value_redacted",
+    clearsCompatibilityProjection: true,
+    preservesAuditHandle: true
+  };
+  const envelope: ProfileMemoryMutationEnvelope = {
+    requestCorrelation: {
+      sourceSurface: "memory_review_fact",
+      sourceFingerprint: "source_fingerprint_1"
+    },
+    candidateRefs: ["candidate_1"],
+    governanceDecisions: [
+      {
+        family: "generic.profile_fact",
+        evidenceClass: "user_explicit_fact",
+        governanceAction: "allow_current_state",
+        governanceReason: "memory_review_forget_or_delete",
+        candidateRefs: ["candidate_1"],
+        appliedWriteRefs: ["fact_1"]
+      }
+    ],
+    appliedWriteRefs: ["fact_1"],
+    redactionState: "value_redacted",
+    retraction
+  };
+  const reviewResult: ProfileFactReviewResult = {
+    entries: [],
+    hiddenDecisionRecords: [decision],
+    asOfValidTime: "2026-04-03T21:00:00.000Z",
+    asOfObservedTime: "2026-04-03T21:00:00.000Z"
+  };
+  const mutationResult: ProfileFactReviewMutationResult = {
+    fact: null,
+    mutationEnvelope: envelope
+  };
+  const ingestRequest: ProfileMemoryIngestRequest = {
+    provenance: {
+      sourceSurface: "memory_review_fact",
+      sourceFingerprint: "source_fingerprint_1"
+    }
+  };
+
+  assert.equal(reviewResult.hiddenDecisionRecords[0]?.family, "generic.profile_fact");
+  assert.equal(
+    mutationResult.mutationEnvelope?.retraction?.retractionClass,
+    "forget_or_delete"
+  );
+  assert.equal(ingestRequest.provenance?.sourceSurface, "memory_review_fact");
 });
 
 test("extracts deterministic profile candidates from conversational input", () => {

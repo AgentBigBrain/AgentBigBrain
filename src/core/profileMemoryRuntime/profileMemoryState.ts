@@ -8,8 +8,9 @@ import type {
   ProfileEpisodeRecord,
   ProfileMemoryState
 } from "../profileMemory";
+import { createEmptyProfileMemoryGraphState } from "./profileMemoryGraphState";
 
-export const PROFILE_MEMORY_SCHEMA_VERSION = 2;
+export const PROFILE_MEMORY_SCHEMA_VERSION = 3;
 export const DEFAULT_PROFILE_STALE_AFTER_DAYS = 90;
 
 /**
@@ -18,12 +19,14 @@ export const DEFAULT_PROFILE_STALE_AFTER_DAYS = 90;
  * @returns Empty profile-memory state with current `updatedAt`.
  */
 export function createEmptyProfileMemoryState(): ProfileMemoryState {
+  const nowIso = new Date().toISOString();
   return {
     schemaVersion: PROFILE_MEMORY_SCHEMA_VERSION,
-    updatedAt: new Date().toISOString(),
+    updatedAt: nowIso,
     facts: [],
     episodes: [],
-    ingestReceipts: []
+    ingestReceipts: [],
+    graph: createEmptyProfileMemoryGraphState(nowIso)
   };
 }
 
@@ -93,7 +96,8 @@ export function markStaleFactsAsUncertain(
       updatedAt: nowIso,
       facts: nextFacts,
       episodes: state.episodes ?? [],
-      ingestReceipts: state.ingestReceipts ?? []
+      ingestReceipts: state.ingestReceipts ?? [],
+      graph: state.graph ?? createEmptyProfileMemoryGraphState(nowIso)
     },
     updatedFactIds
   };

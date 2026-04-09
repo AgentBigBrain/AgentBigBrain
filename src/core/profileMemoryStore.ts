@@ -2,6 +2,7 @@
  * @fileoverview Persists encrypted local profile memory with deterministic temporal freshness and access controls.
  */
 
+import { sha256HexFromCanonicalJson } from "./normalizers/canonicalizationRules";
 import {
   type ProfileFactUpsertInput,
   DEFAULT_PROFILE_STALE_AFTER_DAYS,
@@ -34,6 +35,9 @@ import {
   createProfileMemoryReadSession,
   type ProfileMemoryReadSession
 } from "./profileMemoryRuntime/profileMemoryReadSession";
+import {
+  buildProfileMemorySourceFingerprint
+} from "./profileMemoryRuntime/profileMemoryIngestProvenance";
 import { isCompatibilityVisibleFactLike } from "./profileMemoryRuntime/profileMemoryCompatibilityVisibility";
 import { recordProfileMemoryStoreLoad } from "./profileMemoryRuntime/profileMemoryRequestTelemetry";
 import {
@@ -41,10 +45,17 @@ import {
   recordProfileMemoryIngestReceipt
 } from "./profileMemoryRuntime/profileMemoryIngestIdempotency";
 import {
+  buildProfileMemoryIngestMutationEnvelope,
+  buildProfileMemoryFactReviewMutationEnvelope,
+  buildProfileMemoryReviewMutationEnvelope
+} from "./profileMemoryRuntime/profileMemoryMutationEnvelope";
+import {
   applyProfileEpisodeCandidates,
   applyProfileEpisodeResolutions
 } from "./profileMemoryRuntime/profileMemoryEpisodeMutations";
+import { upsertTemporalProfileFact } from "./profileMemoryRuntime/profileMemoryFactLifecycle";
 import { governProfileMemoryCandidates } from "./profileMemoryRuntime/profileMemoryTruthGovernance";
+import type { GovernedProfileFactCandidate } from "./profileMemoryRuntime/profileMemoryTruthGovernanceContracts";
 import {
   applyProfileFactCandidates,
   buildInferredCommitmentResolutionCandidates,
@@ -66,6 +77,11 @@ import {
   type AgentPulseEvaluationRequest,
   type AgentPulseEvaluationResult,
   type ProfileAccessRequest,
+  type ProfileFactReviewMutationRequest,
+  type ProfileFactReviewMutationResult,
+  type ProfileFactReviewRequest,
+  type ProfileFactReviewResult,
+  type ProfileEpisodeReviewMutationResult,
   type ProfileIngestResult,
   type ProfileMemoryRequestTelemetry,
   type ProfileMemoryWriteProvenance,
@@ -77,8 +93,21 @@ import {
   type ProfileEpisodeContinuityQueryRequest
 } from "./profileMemoryRuntime/profileMemoryEpisodeQueries";
 import type { ProfileFactContinuityQueryRequest } from "./profileMemoryRuntime/profileMemoryQueries";
+import { readProfileFacts } from "./profileMemoryRuntime/profileMemoryQueries";
 import { consolidateProfileEpisodes } from "./profileMemoryRuntime/profileMemoryEpisodeConsolidation";
 import type { ProfileEpisodeResolutionStatus } from "./profileMemoryRuntime/profileMemoryEpisodeContracts";
+import {
+  getProfileMemoryFamilyRegistryEntry
+} from "./profileMemoryRuntime/profileMemoryFamilyRegistry";
+import {
+  applyProfileMemoryGraphMutations
+} from "./profileMemoryRuntime/profileMemoryGraphState";
+import {
+  resolveProfileMemoryEffectiveSensitivity
+} from "./profileMemoryRuntime/profileMemoryFactSensitivity";
+import { inferGovernanceFamilyForNormalizedKey } from "./profileMemoryRuntime/profileMemoryGovernanceFamilyInference";
+import { normalizeProfileValue } from "./profileMemoryRuntime/profileMemoryNormalization";
+import { MEMORY_REVIEW_FACT_CORRECTION_SOURCE } from "./profileMemoryRuntime/profileMemoryTruthGovernanceSources";
 import type { CreateProfileEpisodeRecordInput } from "./profileMemory";
 import type {
   ConversationStackV1,
@@ -89,6 +118,10 @@ export type {
   AgentPulseEvaluationRequest,
   AgentPulseEvaluationResult,
   ProfileAccessRequest,
+  ProfileFactReviewMutationRequest,
+  ProfileFactReviewMutationResult,
+  ProfileFactReviewRequest,
+  ProfileFactReviewResult,
   ProfileIngestResult,
   ProfileReadableEpisode,
   ProfileReadableFact
@@ -249,6 +282,12 @@ export class ProfileMemoryStore {
         supersededFacts: 0
       };
     }
+    const sourceFingerprint =
+      options.provenance?.sourceFingerprint ??
+      buildProfileMemorySourceFingerprint(
+        userInput,
+        options.validatedFactCandidates ?? []
+      );
     const mediaIngest = parseProfileMediaIngestInput(userInput);
     const factSourceTexts = dedupeProfileIngestTexts([
       mediaIngest.directUserText,
@@ -309,20 +348,48 @@ export class ProfileMemoryStore {
       episodeCandidateResult.nextState,
       [...resolutionGovernance.allowedEpisodeResolutionCandidates]
     );
+    const mutationEnvelope = options.provenance
+      ? buildProfileMemoryIngestMutationEnvelope({
+          sourceTaskId: taskId,
+          userInput,
+          provenance: options.provenance,
+          finalState: episodeResolutionResult.nextState,
+          factDecisions: preResolutionGovernance.factDecisions,
+          episodeDecisions: preResolutionGovernance.episodeDecisions,
+          episodeResolutionDecisions: resolutionGovernance.episodeResolutionDecisions
+        })
+      : undefined;
+    const touchedEpisodeIds = new Set([
+      ...episodeCandidateResult.touchedEpisodeIds,
+      ...episodeResolutionResult.touchedEpisodeIds
+    ]);
+    const graphMutationResult = applyProfileMemoryGraphMutations({
+      state: episodeResolutionResult.nextState,
+      factDecisions: preResolutionGovernance.factDecisions,
+      touchedEpisodes: episodeResolutionResult.nextState.episodes.filter((episode) =>
+        touchedEpisodeIds.has(episode.id)
+      ),
+      sourceFingerprint,
+      mutationEnvelopeHash: mutationEnvelope
+        ? sha256HexFromCanonicalJson(mutationEnvelope)
+        : null,
+      recordedAt: observedAt
+    });
 
     const totalAppliedFacts = applyResult.appliedFacts +
       episodeCandidateResult.createdEpisodes +
       episodeCandidateResult.updatedEpisodes +
       episodeResolutionResult.resolvedEpisodes;
-    if (totalAppliedFacts === 0) {
+    if (totalAppliedFacts === 0 && !graphMutationResult.changed) {
       return {
         appliedFacts: 0,
-        supersededFacts: 0
+        supersededFacts: 0,
+        ...(mutationEnvelope ? { mutationEnvelope } : {})
       };
     }
 
     await this.save(
-      recordProfileMemoryIngestReceipt(episodeResolutionResult.nextState, {
+      recordProfileMemoryIngestReceipt(graphMutationResult.nextState, {
         provenance: options.provenance,
         sourceTaskId: taskId,
         recordedAt: observedAt
@@ -330,7 +397,8 @@ export class ProfileMemoryStore {
     );
     return {
       appliedFacts: totalAppliedFacts,
-      supersededFacts: applyResult.supersededFacts
+      supersededFacts: applyResult.supersededFacts,
+      ...(mutationEnvelope ? { mutationEnvelope } : {})
     };
   }
 
@@ -365,6 +433,29 @@ export class ProfileMemoryStore {
     queryInput = ""
   ): Promise<readonly ProfileReadableFact[]> {
     return (await this.openReadSession()).queryFactsForPlanningContext(maxFacts, queryInput);
+  }
+
+  /**
+   * Returns bounded planning-query facts plus hidden decision records from the shared read seam.
+   *
+   * @param queryInput - Current query used for bounded relevance ranking.
+   * @param maxFacts - Maximum number of facts to surface.
+   * @param asOfValidTime - Optional valid-time boundary for proof records.
+   * @param asOfObservedTime - Optional observed-time boundary for proof records.
+   * @returns Selected readable facts plus hidden bounded decision records.
+   */
+  async inspectFactsForPlanningContext(
+    queryInput = "",
+    maxFacts = 6,
+    asOfValidTime?: string,
+    asOfObservedTime?: string
+  ) {
+    return (await this.openReadSession()).inspectFactsForPlanningContext({
+      queryInput,
+      maxFacts,
+      asOfValidTime,
+      asOfObservedTime
+    });
   }
 
   /**
@@ -493,6 +584,143 @@ export class ProfileMemoryStore {
   }
 
   /**
+   * Returns bounded approval-aware fact-review entries for the existing private review posture.
+   *
+   * @param queryInput - Optional query text used for relevance ranking.
+   * @param maxFacts - Maximum number of reviewable facts to surface.
+   * @param nowIso - Timestamp used to mint the bounded approval handle.
+   * @returns Reviewable facts plus hidden decision records.
+   */
+  async reviewFactsForUser(
+    queryInput = "",
+    maxFacts = 5,
+    nowIso = new Date().toISOString()
+  ): Promise<ProfileFactReviewResult> {
+    return (await this.openReadSession()).reviewFactsForUser({
+      queryInput,
+      maxFacts,
+      includeSensitive: true,
+      explicitHumanApproval: true,
+      approvalId: `memory_review:${nowIso}`
+    });
+  }
+
+  /**
+   * Applies one bounded explicit user-driven fact review mutation against canonical truth.
+   *
+   * Correction overrides are limited to current-state-eligible families; forget/delete remains
+   * available for any targeted visible fact because it retracts rather than creates truth.
+   *
+   * @param request - Fact-review mutation request.
+   * @returns Updated readable fact plus bounded mutation proof, or `null` when the fact is absent.
+   */
+  async mutateFactFromUser(
+    request: ProfileFactReviewMutationRequest
+  ): Promise<ProfileFactReviewMutationResult> {
+    const state = await this.load();
+    const targetFact = state.facts.find(
+      (fact) => fact.id === request.factId && fact.status !== "superseded" && fact.supersededAt === null
+    );
+    if (!targetFact) {
+      return {
+        fact: null
+      };
+    }
+
+    const family = inferGovernanceFamilyForNormalizedKey(
+      targetFact.key.trim().toLowerCase(),
+      targetFact.value
+    );
+
+    if (request.action === "correct") {
+      const replacementValue = normalizeProfileValue(request.replacementValue ?? "");
+      if (!replacementValue) {
+        throw new Error("Fact correction requires a non-empty replacement value.");
+      }
+      if (!isCurrentStateEligibleFamily(family)) {
+        throw new Error(
+          `Fact family ${family} does not support correction override through bounded fact review.`
+        );
+      }
+
+      const applyResult = upsertTemporalProfileFact(state, {
+        key: targetFact.key,
+        value: replacementValue,
+        sensitive: resolveProfileMemoryEffectiveSensitivity(
+          targetFact.key,
+          targetFact.sensitive,
+          family
+        ),
+        sourceTaskId: request.sourceTaskId,
+        source: MEMORY_REVIEW_FACT_CORRECTION_SOURCE,
+        observedAt: request.nowIso,
+        confidence: 1,
+        mutationAudit: null
+      });
+      if (!applyResult.applied) {
+        throw new Error(
+          "Fact correction did not produce a canonical successor under profile-memory displacement policy."
+        );
+      }
+      const mutationEnvelope = buildProfileMemoryFactReviewMutationEnvelope({
+        fact: targetFact,
+        sourceTaskId: request.sourceTaskId,
+        sourceText: request.sourceText,
+        observedAt: request.nowIso,
+        action: "correct",
+        resultingFact: applyResult.upsertedFact
+      });
+      const graphMutationResult = applyProfileMemoryGraphMutations({
+        state: applyResult.nextState,
+        factDecisions: [buildFactReviewCorrectionGraphDecision(applyResult.upsertedFact)],
+        touchedEpisodes: [],
+        sourceTaskId: request.sourceTaskId,
+        sourceFingerprint: buildProfileMemorySourceFingerprint(request.sourceText),
+        mutationEnvelopeHash: sha256HexFromCanonicalJson(mutationEnvelope),
+        recordedAt: request.nowIso
+      });
+      await this.save(graphMutationResult.nextState);
+      const fact = this.findReadableFactById(
+        graphMutationResult.nextState,
+        applyResult.upsertedFact.id,
+        request.nowIso
+      );
+      return {
+        fact,
+        mutationEnvelope
+      };
+    }
+
+    const nextState: ProfileMemoryState = {
+      ...state,
+      updatedAt: request.nowIso,
+      facts: state.facts.filter((fact) => fact.id !== request.factId)
+    };
+    const mutationEnvelope = buildProfileMemoryFactReviewMutationEnvelope({
+      fact: targetFact,
+      sourceTaskId: request.sourceTaskId,
+      sourceText: request.sourceText,
+      observedAt: request.nowIso,
+      action: "forget"
+    });
+    const graphMutationResult = applyProfileMemoryGraphMutations({
+      state: nextState,
+      factDecisions: [],
+      touchedEpisodes: [],
+      redactedFacts: [targetFact],
+      sourceTaskId: request.sourceTaskId,
+      sourceFingerprint: buildProfileMemorySourceFingerprint(request.sourceText),
+      mutationEnvelopeHash: sha256HexFromCanonicalJson(mutationEnvelope),
+      recordedAt: request.nowIso
+    });
+    await this.save(graphMutationResult.nextState);
+    return {
+      fact: toReadableFact(targetFact),
+      mutationEnvelope
+    };
+  }
+
+  /**
    * Returns bounded non-sensitive profile facts relevant to current continuity/entity hints.
    *
    * @param graph - Current Stage 6.86 entity graph.
@@ -553,7 +781,8 @@ export class ProfileMemoryStore {
    * @param sourceText - User command text that triggered the update.
    * @param note - Optional bounded outcome/correction note.
    * @param nowIso - Timestamp applied to the mutation.
-   * @returns Updated readable episode, or `null` when the episode is unavailable.
+   * @returns Updated readable episode plus bounded mutation proof, or a null episode when the
+   * target is unavailable.
    */
   async updateEpisodeFromUser(
     episodeId: string,
@@ -562,10 +791,12 @@ export class ProfileMemoryStore {
     sourceText: string,
     note?: string,
     nowIso = new Date().toISOString()
-  ): Promise<ProfileReadableEpisode | null> {
+  ): Promise<ProfileEpisodeReviewMutationResult> {
     const state = await this.load();
     if (!state.episodes.some((episode) => episode.id === episodeId)) {
-      return null;
+      return {
+        episode: null
+      };
     }
 
     const applyResult = applyProfileEpisodeResolutions(state, [
@@ -579,12 +810,36 @@ export class ProfileMemoryStore {
         summary: note
       }
     ]);
+    const episode = this.findReadableEpisodeById(applyResult.nextState, episodeId);
     if (applyResult.resolvedEpisodes === 0) {
-      return this.findReadableEpisodeById(applyResult.nextState, episodeId);
+      return {
+        episode
+      };
     }
 
-    await this.save(applyResult.nextState);
-    return this.findReadableEpisodeById(applyResult.nextState, episodeId);
+    const mutationEnvelope = buildProfileMemoryReviewMutationEnvelope({
+      episodeId,
+      sourceTaskId,
+      sourceText,
+      observedAt: nowIso,
+      action: status === "no_longer_relevant" ? "wrong" : "resolve",
+      resultingEpisode: applyResult.nextState.episodes.find((entry) => entry.id === episodeId)
+    });
+    const graphMutationResult = applyProfileMemoryGraphMutations({
+      state: applyResult.nextState,
+      factDecisions: [],
+      touchedEpisodes: applyResult.nextState.episodes.filter((entry) =>
+        applyResult.touchedEpisodeIds.includes(entry.id)
+      ),
+      sourceFingerprint: buildProfileMemorySourceFingerprint(sourceText),
+      mutationEnvelopeHash: sha256HexFromCanonicalJson(mutationEnvelope),
+      recordedAt: nowIso
+    });
+    await this.save(graphMutationResult.nextState);
+    return {
+      episode,
+      mutationEnvelope
+    };
   }
 
   /**
@@ -592,18 +847,21 @@ export class ProfileMemoryStore {
    *
    * @param episodeId - Episode identifier targeted by the user.
    * @param nowIso - Timestamp applied to the mutation.
-   * @returns Removed readable episode, or `null` when no matching episode exists.
+   * @returns Removed readable episode plus bounded mutation proof, or a null episode when no
+   * matching episode exists.
    */
   async forgetEpisodeFromUser(
     episodeId: string,
-    _sourceTaskId: string,
-    _sourceText: string,
+    sourceTaskId: string,
+    sourceText: string,
     nowIso = new Date().toISOString()
-  ): Promise<ProfileReadableEpisode | null> {
+  ): Promise<ProfileEpisodeReviewMutationResult> {
     const state = await this.load();
     const removedEpisode = state.episodes.find((episode) => episode.id === episodeId);
     if (!removedEpisode) {
-      return null;
+      return {
+        episode: null
+      };
     }
 
     const nextState: ProfileMemoryState = {
@@ -611,8 +869,28 @@ export class ProfileMemoryStore {
       updatedAt: nowIso,
       episodes: state.episodes.filter((episode) => episode.id !== episodeId)
     };
-    await this.save(nextState);
-    return toReadableEpisode(removedEpisode);
+    const mutationEnvelope = buildProfileMemoryReviewMutationEnvelope({
+      episodeId,
+      sourceTaskId,
+      sourceText,
+      observedAt: nowIso,
+      action: "forget"
+    });
+    const graphMutationResult = applyProfileMemoryGraphMutations({
+      state: nextState,
+      factDecisions: [],
+      touchedEpisodes: [],
+      redactedEpisodes: [removedEpisode],
+      sourceTaskId,
+      sourceFingerprint: buildProfileMemorySourceFingerprint(sourceText),
+      mutationEnvelopeHash: sha256HexFromCanonicalJson(mutationEnvelope),
+      recordedAt: nowIso
+    });
+    await this.save(graphMutationResult.nextState);
+    return {
+      episode: toReadableEpisode(removedEpisode),
+      mutationEnvelope
+    };
   }
 
   /**
@@ -669,6 +947,28 @@ export class ProfileMemoryStore {
   ): ProfileReadableEpisode | null {
     const episode = state.episodes.find((entry) => entry.id === episodeId);
     return episode ? toReadableEpisode(episode) : null;
+  }
+
+  /**
+   * Finds one readable fact by identifier under the existing approval-aware fact projection rules.
+   *
+   * @param state - Loaded profile-memory state.
+   * @param factId - Target fact identifier.
+   * @param nowIso - Timestamp used to mint the bounded approval handle.
+   * @returns Readable fact, or `null` when absent.
+   */
+  private findReadableFactById(
+    state: ProfileMemoryState,
+    factId: string,
+    nowIso: string
+  ): ProfileReadableFact | null {
+    return readProfileFacts(state, {
+      purpose: "operator_view",
+      includeSensitive: true,
+      explicitHumanApproval: true,
+      approvalId: `memory_review:${nowIso}`,
+      maxFacts: Math.max(20, state.facts.length)
+    }).find((fact) => fact.factId === factId) ?? null;
   }
 }
 
@@ -739,6 +1039,79 @@ function toReadableEpisode(
     entityRefs: [...episode.entityRefs],
     openLoopRefs: [...episode.openLoopRefs],
     tags: [...episode.tags]
+  };
+}
+
+/**
+ * Converts one stored fact into the bounded operator-facing review shape.
+ *
+ * @param fact - Stored fact record.
+ * @returns Readable fact payload used by fact-review mutation results.
+ */
+function toReadableFact(
+  fact: ProfileMemoryState["facts"][number]
+): ProfileReadableFact {
+  const family = inferGovernanceFamilyForNormalizedKey(
+    fact.key.trim().toLowerCase(),
+    fact.value
+  );
+  return {
+    factId: fact.id,
+    key: fact.key,
+    value: fact.value,
+    status: fact.status,
+    sensitive: resolveProfileMemoryEffectiveSensitivity(
+      fact.key,
+      fact.sensitive,
+      family
+    ),
+    observedAt: fact.observedAt,
+    lastUpdatedAt: fact.lastUpdatedAt,
+    confidence: fact.confidence,
+    mutationAudit: fact.mutationAudit
+  };
+}
+
+/**
+ * Evaluates whether one governed family may accept explicit fact-correction overrides.
+ *
+ * @param family - Canonical governed family under evaluation.
+ * @returns `true` when bounded fact review may create replacement truth for the family.
+ */
+function isCurrentStateEligibleFamily(
+  family: ReturnType<typeof inferGovernanceFamilyForNormalizedKey>
+): boolean {
+  return getProfileMemoryFamilyRegistryEntry(family).currentStateEligible;
+}
+
+/**
+ * Builds one bounded governed fact decision for explicit review-driven correction so the stable
+ * graph mutation seam can persist the same current-state change as the flat compatibility surface.
+ *
+ * @param fact - Canonical successor fact produced by bounded review correction.
+ * @returns Governed fact decision compatible with graph observation and claim persistence.
+ */
+function buildFactReviewCorrectionGraphDecision(
+  fact: ProfileFactUpsertInput & { id: string }
+): GovernedProfileFactCandidate {
+  return {
+    candidate: {
+      key: fact.key,
+      value: fact.value,
+      sensitive: fact.sensitive,
+      sourceTaskId: fact.sourceTaskId,
+      source: fact.source,
+      observedAt: fact.observedAt
+    },
+    decision: {
+      family: inferGovernanceFamilyForNormalizedKey(
+        fact.key.trim().toLowerCase(),
+        fact.value
+      ),
+      evidenceClass: "user_explicit_fact",
+      action: "allow_current_state",
+      reason: "memory_review_correction_override"
+    }
   };
 }
 

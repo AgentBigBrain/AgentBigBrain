@@ -8,6 +8,11 @@ import {
 } from "../profileMemory";
 import { extractPlanningQueryTerms } from "../languageRuntime/queryIntentTerms";
 import { isCompatibilityVisibleFactLike } from "./profileMemoryCompatibilityVisibility";
+import { getProfileMemoryFamilyRegistryEntry } from "./profileMemoryFamilyRegistry";
+import {
+  isStoredProfileFactEffectivelySensitive
+} from "./profileMemoryFactSensitivity";
+import { inferGovernanceFamilyForNormalizedKey } from "./profileMemoryGovernanceFamilyInference";
 import { planningContextPriority } from "./profileMemoryNormalization";
 
 const IDENTITY_ANCHOR_PREFIXES = ["identity.preferred_name", "identity.name", "name"];
@@ -24,7 +29,12 @@ export function buildPlanningContextFromProfile(
   maxFacts: number
 ): string {
   const activeFacts = state.facts
-    .filter((fact) => isActiveFact(fact) && !fact.sensitive && isCompatibilityVisibleFactLike(fact))
+    .filter(
+      (fact) =>
+        isActiveFact(fact) &&
+        !isProfileFactEffectivelySensitive(fact) &&
+        isCompatibilityVisibleFactLike(fact)
+    )
     .sort((left, right) => {
       const leftPriority = planningContextPriority(left.key);
       const rightPriority = planningContextPriority(right.key);
@@ -85,33 +95,46 @@ export function buildQueryAwarePlanningContext(
 export function selectProfileFactsForQuery(
   state: ProfileMemoryState,
   maxFacts: number,
-  queryInput: string
+  queryInput: string,
+  options: {
+    includeSensitive?: boolean;
+  } = {}
 ): readonly ProfileFactRecord[] {
   const safeMaxFacts = Math.max(0, maxFacts);
+  const includeSensitive = options.includeSensitive === true;
   if (safeMaxFacts === 0) {
     return [];
   }
 
   const queryTokens = extractPlanningQueryTokens(queryInput);
   if (queryTokens.length === 0) {
-    return state.facts
-      .filter(
-        (fact) =>
-          isActiveFact(fact) && !fact.sensitive && isCompatibilityVisibleFactLike(fact)
-      )
-      .sort((left, right) => {
-        const leftPriority = planningContextPriority(left.key);
-        const rightPriority = planningContextPriority(right.key);
-        if (leftPriority !== rightPriority) {
-          return leftPriority - rightPriority;
-        }
-        return Date.parse(right.lastUpdatedAt) - Date.parse(left.lastUpdatedAt);
-      })
-      .slice(0, safeMaxFacts);
+    return selectFactsWithinInventoryPolicy(
+      state.facts
+        .filter(
+          (fact) =>
+            isActiveFact(fact) &&
+            (includeSensitive || !isProfileFactEffectivelySensitive(fact)) &&
+            isCompatibilityVisibleFactLike(fact)
+        )
+        .sort((left, right) => {
+          const leftPriority = planningContextPriority(left.key);
+          const rightPriority = planningContextPriority(right.key);
+          if (leftPriority !== rightPriority) {
+            return leftPriority - rightPriority;
+          }
+          return Date.parse(right.lastUpdatedAt) - Date.parse(left.lastUpdatedAt);
+        }),
+      safeMaxFacts
+    );
   }
 
   const activeNonSensitiveFacts = state.facts
-    .filter((fact) => isActiveFact(fact) && !fact.sensitive && isCompatibilityVisibleFactLike(fact))
+    .filter(
+      (fact) =>
+        isActiveFact(fact) &&
+        (includeSensitive || !isProfileFactEffectivelySensitive(fact)) &&
+        isCompatibilityVisibleFactLike(fact)
+    )
     .sort((left, right) => Date.parse(right.lastUpdatedAt) - Date.parse(left.lastUpdatedAt));
 
   const scoredFacts = activeNonSensitiveFacts
@@ -129,26 +152,34 @@ export function selectProfileFactsForQuery(
     .map((entry) => entry.fact);
 
   if (scoredFacts.length === 0) {
-    return state.facts
-      .filter(
-        (fact) =>
-          isActiveFact(fact) && !fact.sensitive && isCompatibilityVisibleFactLike(fact)
-      )
-      .sort((left, right) => {
-        const leftPriority = planningContextPriority(left.key);
-        const rightPriority = planningContextPriority(right.key);
-        if (leftPriority !== rightPriority) {
-          return leftPriority - rightPriority;
-        }
-        return Date.parse(right.lastUpdatedAt) - Date.parse(left.lastUpdatedAt);
-      })
-      .slice(0, safeMaxFacts);
+    return selectFactsWithinInventoryPolicy(
+      state.facts
+        .filter(
+          (fact) =>
+            isActiveFact(fact) &&
+            (includeSensitive || !isProfileFactEffectivelySensitive(fact)) &&
+            isCompatibilityVisibleFactLike(fact)
+        )
+        .sort((left, right) => {
+          const leftPriority = planningContextPriority(left.key);
+          const rightPriority = planningContextPriority(right.key);
+          if (leftPriority !== rightPriority) {
+            return leftPriority - rightPriority;
+          }
+          return Date.parse(right.lastUpdatedAt) - Date.parse(left.lastUpdatedAt);
+        }),
+      safeMaxFacts
+    );
   }
 
   const selected: ProfileFactRecord[] = [];
   const selectedIds = new Set<string>();
+  const inventoryCounts = new Map<string, number>();
   const addFact = (fact: ProfileFactRecord): void => {
     if (selectedIds.has(fact.id)) {
+      return;
+    }
+    if (!canSelectFactUnderInventoryPolicy(fact, inventoryCounts)) {
       return;
     }
     selectedIds.add(fact.id);
@@ -184,6 +215,88 @@ export function selectProfileFactsForQuery(
 }
 
 /**
+ * Applies registry-owned inventory policy to one ordered fact list.
+ *
+ * @param facts - Ordered facts under evaluation.
+ * @param maxFacts - Maximum number of facts to keep.
+ * @returns Facts that remain visible after inventory-policy caps are applied.
+ */
+function selectFactsWithinInventoryPolicy(
+  facts: readonly ProfileFactRecord[],
+  maxFacts: number
+): readonly ProfileFactRecord[] {
+  const selected: ProfileFactRecord[] = [];
+  const inventoryCounts = new Map<string, number>();
+
+  for (const fact of facts) {
+    if (selected.length >= maxFacts) {
+      break;
+    }
+    if (!canSelectFactUnderInventoryPolicy(fact, inventoryCounts)) {
+      continue;
+    }
+    selected.push(fact);
+  }
+
+  return selected;
+}
+
+/**
+ * Evaluates whether one fact still fits inside the registry-owned inventory cap for its family.
+ *
+ * @param fact - Fact under evaluation.
+ * @param inventoryCounts - Mutable scope counter map for the current selection pass.
+ * @returns `true` when the fact may be selected.
+ */
+function canSelectFactUnderInventoryPolicy(
+  fact: ProfileFactRecord,
+  inventoryCounts: Map<string, number>
+): boolean {
+  const { scopeKey, maxVisibleEntries } = getInventoryScopeLimit(fact);
+  const currentCount = inventoryCounts.get(scopeKey) ?? 0;
+  if (currentCount >= maxVisibleEntries) {
+    return false;
+  }
+  inventoryCounts.set(scopeKey, currentCount + 1);
+  return true;
+}
+
+/**
+ * Resolves the registry-owned inventory scope and cap for one fact.
+ *
+ * @param fact - Fact under evaluation.
+ * @returns Scope key plus maximum visible entry count for that scope.
+ */
+function getInventoryScopeLimit(fact: ProfileFactRecord): {
+  scopeKey: string;
+  maxVisibleEntries: number;
+} {
+  const normalizedKey = fact.key.trim().toLowerCase();
+  const family = inferGovernanceFamilyForNormalizedKey(normalizedKey, fact.value);
+  const familyEntry = getProfileMemoryFamilyRegistryEntry(family);
+
+  if (familyEntry.inventoryPolicy === "bounded_multi_value") {
+    const contextScopeMatch = normalizedKey.match(/^(contact\.[^.]+\.context)\.[^.]+$/);
+    return {
+      scopeKey: contextScopeMatch?.[1] ?? normalizedKey,
+      maxVisibleEntries: 2
+    };
+  }
+
+  if (familyEntry.inventoryPolicy === "auxiliary_hidden") {
+    return {
+      scopeKey: normalizedKey,
+      maxVisibleEntries: 0
+    };
+  }
+
+  return {
+    scopeKey: normalizedKey,
+    maxVisibleEntries: 1
+  };
+}
+
+/**
  * Evaluates whether a profile fact remains active for context ranking.
  *
  * @param fact - Profile fact under evaluation.
@@ -191,6 +304,17 @@ export function selectProfileFactsForQuery(
  */
 function isActiveFact(fact: ProfileFactRecord): boolean {
   return fact.status !== "superseded" && fact.supersededAt === null;
+}
+
+/**
+ * Evaluates whether a stored fact should be treated as sensitive after the code-owned family floor
+ * is enforced.
+ *
+ * @param fact - Stored fact under evaluation.
+ * @returns `true` when the fact is effectively sensitive on bounded planning/query surfaces.
+ */
+function isProfileFactEffectivelySensitive(fact: ProfileFactRecord): boolean {
+  return isStoredProfileFactEffectivelySensitive(fact);
 }
 
 /**

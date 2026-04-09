@@ -37,6 +37,8 @@ import type {
   ConversationContinuityEpisodeQueryRequest,
   ConversationContinuityEpisodeRecord,
   ConversationContinuityReadSession,
+  ConversationMemoryFactReviewRecord,
+  ConversationMemoryFactReviewResult,
   ConversationMemoryReviewRecord
 } from "./conversationRuntime/managerContracts";
 import type { ManagedProcessSnapshot } from "../organs/liveRun/managedProcessRegistry";
@@ -724,6 +726,24 @@ export class DiscordAdapter {
   }
 
   /**
+   * Returns bounded remembered facts for explicit user review commands.
+   *
+   * @param reviewTaskId - Synthetic task id for audit linkage.
+   * @param query - User-facing review command text.
+   * @param nowIso - Timestamp applied to ranking/audit.
+   * @param maxFacts - Maximum number of facts to surface.
+   * @returns Bounded remembered facts for future command rendering.
+   */
+  async reviewConversationMemoryFacts(
+    reviewTaskId: string,
+    query: string,
+    nowIso: string,
+    maxFacts = 5
+  ): Promise<ConversationMemoryFactReviewResult> {
+    return this.brain.reviewRememberedFacts(reviewTaskId, query, nowIso, maxFacts);
+  }
+
+  /**
    * Marks one remembered situation resolved through an explicit user command.
    *
    * @param episodeId - Episode identifier targeted by the user.
@@ -790,6 +810,58 @@ export class DiscordAdapter {
   ): Promise<ConversationMemoryReviewRecord | null> {
     return this.brain.forgetRememberedSituation(
       episodeId,
+      sourceTaskId,
+      sourceText,
+      nowIso
+    );
+  }
+
+  /**
+   * Corrects one bounded remembered fact through an explicit user command.
+   *
+   * @param factId - Fact identifier targeted by the user.
+   * @param replacementValue - Replacement value approved by the user.
+   * @param sourceTaskId - Synthetic task id for mutation provenance.
+   * @param sourceText - User command text that triggered the mutation.
+   * @param nowIso - Timestamp applied to the mutation.
+   * @param note - Optional bounded correction note.
+   * @returns Updated remembered fact, or `null` when unavailable.
+   */
+  async correctConversationMemoryFact(
+    factId: string,
+    replacementValue: string,
+    sourceTaskId: string,
+    sourceText: string,
+    nowIso: string,
+    note?: string
+  ): Promise<ConversationMemoryFactReviewRecord | null> {
+    return this.brain.correctRememberedFact(
+      factId,
+      replacementValue,
+      sourceTaskId,
+      sourceText,
+      nowIso,
+      note
+    );
+  }
+
+  /**
+   * Forgets one bounded remembered fact through an explicit user command.
+   *
+   * @param factId - Fact identifier targeted by the user.
+   * @param sourceTaskId - Synthetic task id for mutation provenance.
+   * @param sourceText - User command text that triggered the mutation.
+   * @param nowIso - Timestamp applied to the mutation.
+   * @returns Updated remembered fact, or `null` when unavailable.
+   */
+  async forgetConversationMemoryFact(
+    factId: string,
+    sourceTaskId: string,
+    sourceText: string,
+    nowIso: string
+  ): Promise<ConversationMemoryFactReviewRecord | null> {
+    return this.brain.forgetRememberedFact(
+      factId,
       sourceTaskId,
       sourceText,
       nowIso

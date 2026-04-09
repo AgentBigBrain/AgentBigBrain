@@ -28,6 +28,7 @@ test("applyProfileEpisodeCandidates creates and then updates one matching episod
   assert.equal(firstResult.createdEpisodes, 1);
   assert.equal(firstResult.updatedEpisodes, 0);
   assert.equal(firstResult.nextState.episodes.length, 1);
+  assert.deepEqual(firstResult.touchedEpisodeIds, [firstResult.nextState.episodes[0]!.id]);
 
   const secondResult = applyProfileEpisodeCandidates(firstResult.nextState, [{
     title: "Owen fell down",
@@ -44,6 +45,7 @@ test("applyProfileEpisodeCandidates creates and then updates one matching episod
   assert.equal(secondResult.createdEpisodes, 0);
   assert.equal(secondResult.updatedEpisodes, 1);
   assert.equal(secondResult.nextState.episodes.length, 1);
+  assert.deepEqual(secondResult.touchedEpisodeIds, [firstResult.nextState.episodes[0]!.id]);
   assert.equal(
     secondResult.nextState.episodes[0]?.summary,
     "Owen fell down three weeks ago and I never heard how it ended."
@@ -77,6 +79,7 @@ test("applyProfileEpisodeResolutions marks an existing episode resolved", () => 
   }]);
 
   assert.equal(resolutionResult.resolvedEpisodes, 1);
+  assert.deepEqual(resolutionResult.touchedEpisodeIds, [episodeId]);
   assert.equal(resolutionResult.nextState.episodes[0]?.status, "resolved");
   assert.equal(resolutionResult.nextState.episodes[0]?.resolvedAt, "2026-03-08T12:10:00.000Z");
 });

@@ -56,12 +56,15 @@ const WORK_WITH_PREFIXES = [
 ] as const;
 
 const WORK_WITH_ME_ASSOCIATION_PREFIXES = [
+  { prefix: "used to work with me at ", historical: true },
   { prefix: "work with me at ", historical: false },
   { prefix: "worked with me at ", historical: true },
   { prefix: "works with me at ", historical: false },
+  { prefix: "used to work with me for ", historical: true },
   { prefix: "work with me for ", historical: false },
   { prefix: "worked with me for ", historical: true },
   { prefix: "works with me for ", historical: false },
+  { prefix: "used to work with me", historical: true },
   { prefix: "work with me", historical: false },
   { prefix: "worked with me", historical: true },
   { prefix: "works with me", historical: false }

@@ -43,10 +43,22 @@ export interface RememberedSituationDependencies {
   memoryBroker: Pick<
     MemoryBrokerOrgan,
     | "reviewRememberedSituations"
+    | "reviewRememberedFacts"
     | "resolveRememberedSituation"
     | "markRememberedSituationWrong"
     | "forgetRememberedSituation"
+    | "correctRememberedFact"
+    | "forgetRememberedFact"
   >;
+}
+
+/** Builds the fail-closed empty remembered-fact review result. */
+function buildEmptyRememberedFactReviewResult(): Awaited<
+  ReturnType<MemoryBrokerOrgan["reviewRememberedFacts"]>
+> {
+  return Object.assign([], {
+    hiddenDecisionRecords: []
+  }) as Awaited<ReturnType<MemoryBrokerOrgan["reviewRememberedFacts"]>>;
 }
 
 /**
@@ -253,6 +265,30 @@ export async function reviewRememberedSituations(
 }
 
 /**
+ * Reviews bounded remembered facts for explicit user review commands.
+ *
+ * @returns Remembered facts or an empty additive review result on failure.
+ */
+export async function reviewRememberedFacts(
+  deps: RememberedSituationDependencies,
+  reviewTaskId: string,
+  query: string,
+  nowIso: string,
+  maxFacts = 5
+) {
+  try {
+    return await deps.memoryBroker.reviewRememberedFacts(
+      reviewTaskId,
+      query,
+      nowIso,
+      maxFacts
+    );
+  } catch {
+    return buildEmptyRememberedFactReviewResult();
+  }
+}
+
+/**
  * Marks one remembered situation resolved via explicit user command.
  *
  * @param deps - Memory-broker collaborators.
@@ -336,6 +372,58 @@ export async function forgetRememberedSituation(
   try {
     return await deps.memoryBroker.forgetRememberedSituation(
       episodeId,
+      sourceTaskId,
+      sourceText,
+      nowIso
+    );
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Corrects one remembered fact via explicit user review input.
+ *
+ * @returns Bounded fact-mutation result or `null` on failure.
+ */
+export async function correctRememberedFact(
+  deps: RememberedSituationDependencies,
+  factId: string,
+  replacementValue: string,
+  sourceTaskId: string,
+  sourceText: string,
+  nowIso: string,
+  note?: string
+) {
+  try {
+    return await deps.memoryBroker.correctRememberedFact(
+      factId,
+      replacementValue,
+      sourceTaskId,
+      sourceText,
+      nowIso,
+      note
+    );
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Forgets one remembered fact via explicit user review input.
+ *
+ * @returns Bounded fact-mutation result or `null` on failure.
+ */
+export async function forgetRememberedFact(
+  deps: RememberedSituationDependencies,
+  factId: string,
+  sourceTaskId: string,
+  sourceText: string,
+  nowIso: string
+) {
+  try {
+    return await deps.memoryBroker.forgetRememberedFact(
+      factId,
       sourceTaskId,
       sourceText,
       nowIso

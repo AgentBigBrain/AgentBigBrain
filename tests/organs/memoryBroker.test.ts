@@ -9,6 +9,11 @@ import path from "node:path";
 import { test } from "node:test";
 
 import { MemoryAccessAuditStore } from "../../src/core/memoryAccessAudit";
+import {
+  createEmptyProfileMemoryState,
+  upsertTemporalProfileFact
+} from "../../src/core/profileMemory";
+import { saveProfileMemoryState } from "../../src/core/profileMemoryRuntime/profileMemoryPersistence";
 import { ProfileMemoryStore } from "../../src/core/profileMemoryStore";
 import { TaskRequest } from "../../src/core/types";
 import type { ProfileMemoryWriteProvenance } from "../../src/core/profileMemoryRuntime/contracts";
@@ -537,6 +542,31 @@ test("memory broker supports bounded remembered-situation review and explicit us
       "Owen recovered and is fine now."
     );
     assert.equal(resolved?.status, "resolved");
+    assert.equal(
+      resolved?.mutationEnvelope?.requestCorrelation.sourceSurface,
+      "memory_review_episode"
+    );
+    assert.equal(
+      resolved?.mutationEnvelope?.governanceDecisions[0]?.governanceReason,
+      "memory_review_resolution"
+    );
+    assert.equal(resolved?.mutationEnvelope?.retraction, undefined);
+
+    const markedWrong = await broker.markRememberedSituationWrong(
+      reviewed[0]!.episodeId,
+      "task_memory_review_wrong",
+      "/memory wrong",
+      "2026-03-08T12:15:00.000Z",
+      "That memory is wrong."
+    );
+    assert.equal(
+      markedWrong?.mutationEnvelope?.governanceDecisions[0]?.governanceReason,
+      "memory_review_correction_override"
+    );
+    assert.equal(
+      markedWrong?.mutationEnvelope?.retraction?.retractionClass,
+      "correction_override"
+    );
 
     const forgotten = await broker.forgetRememberedSituation(
       reviewed[0]!.episodeId,
@@ -545,6 +575,15 @@ test("memory broker supports bounded remembered-situation review and explicit us
       "2026-03-08T12:20:00.000Z"
     );
     assert.equal(forgotten?.episodeId, reviewed[0]?.episodeId);
+    assert.equal(
+      forgotten?.mutationEnvelope?.governanceDecisions[0]?.governanceReason,
+      "memory_review_forget_or_delete"
+    );
+    assert.equal(
+      forgotten?.mutationEnvelope?.retraction?.retractionClass,
+      "forget_or_delete"
+    );
+    assert.equal(forgotten?.mutationEnvelope?.redactionState, "value_redacted");
 
     const finalReview = await broker.reviewRememberedSituations(
       "task_memory_review_list_2",
@@ -552,6 +591,140 @@ test("memory broker supports bounded remembered-situation review and explicit us
       "2026-03-08T12:30:00.000Z"
     );
     assert.equal(finalReview.length, 0);
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("memory broker supports bounded fact review and explicit fact updates", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-memory-broker-fact-review-"));
+  const profilePath = path.join(tempDir, "profile_memory.secure.json");
+  const key = Buffer.alloc(32, 62);
+  const store = new ProfileMemoryStore(profilePath, key, 90);
+  const broker = new MemoryBrokerOrgan(store);
+
+  try {
+    await broker.buildPlannerInput(
+      buildTask(
+        "task_memory_fact_review_seed",
+        "My name is Avery."
+      )
+    );
+
+    const reviewed = await broker.reviewRememberedFacts(
+      "task_memory_fact_review_list",
+      "Avery",
+      "2026-04-03T18:20:00.000Z"
+    );
+    assert.equal(reviewed.length, 1);
+    assert.equal(reviewed[0]?.key, "identity.preferred_name");
+    assert.equal(reviewed[0]?.value, "Avery");
+    assert.equal(reviewed[0]?.decisionRecord?.disposition, "selected_current_state");
+    assert.deepEqual(reviewed.hiddenDecisionRecords, []);
+
+    const corrected = await broker.correctRememberedFact(
+      reviewed[0]!.factId,
+      "Ava",
+      "task_memory_fact_review_correct",
+      "/memory correct fact",
+      "2026-04-03T18:21:00.000Z"
+    );
+    assert.equal(corrected?.key, "identity.preferred_name");
+    assert.equal(corrected?.value, "Ava");
+    assert.equal(
+      corrected?.mutationEnvelope?.requestCorrelation.sourceSurface,
+      "memory_review_fact"
+    );
+    assert.equal(
+      corrected?.mutationEnvelope?.governanceDecisions[0]?.governanceReason,
+      "memory_review_correction_override"
+    );
+    assert.equal(
+      corrected?.mutationEnvelope?.retraction?.retractionClass,
+      "correction_override"
+    );
+
+    const forgotten = await broker.forgetRememberedFact(
+      corrected!.factId,
+      "task_memory_fact_review_forget",
+      "/memory forget fact",
+      "2026-04-03T18:22:00.000Z"
+    );
+    assert.equal(forgotten?.factId, corrected?.factId);
+    assert.equal(
+      forgotten?.mutationEnvelope?.governanceDecisions[0]?.governanceReason,
+      "memory_review_forget_or_delete"
+    );
+    assert.equal(
+      forgotten?.mutationEnvelope?.retraction?.retractionClass,
+      "forget_or_delete"
+    );
+    assert.equal(forgotten?.mutationEnvelope?.redactionState, "value_redacted");
+
+    const finalReview = await broker.reviewRememberedFacts(
+      "task_memory_fact_review_list_2",
+      "Ava",
+      "2026-04-03T18:23:00.000Z"
+    );
+    assert.equal(finalReview.length, 0);
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("memory broker carries hidden fact-review decision records without breaking array-style review", async () => {
+  const tempDir = await mkdtemp(
+    path.join(os.tmpdir(), "agentbigbrain-memory-broker-fact-proof-review-")
+  );
+  const profilePath = path.join(tempDir, "profile_memory.secure.json");
+  const key = Buffer.alloc(32, 83);
+  const store = new ProfileMemoryStore(profilePath, key, 90);
+  const broker = new MemoryBrokerOrgan(store);
+
+  try {
+    let seededState = createEmptyProfileMemoryState();
+    seededState = upsertTemporalProfileFact(seededState, {
+      key: "contact.sarah.name",
+      value: "Sarah",
+      sensitive: false,
+      sourceTaskId: "task_memory_fact_hidden_hint",
+      source: "user_input_pattern.contact_entity_hint",
+      observedAt: "2026-04-03T19:00:00.000Z",
+      confidence: 0.75
+    }).nextState;
+    seededState = upsertTemporalProfileFact(seededState, {
+      key: "contact.sarah.context.abc12345",
+      value: "I know Sarah from yoga.",
+      sensitive: false,
+      sourceTaskId: "task_memory_fact_hidden_context",
+      source: "user_input_pattern.contact_context",
+      observedAt: "2026-04-03T19:01:00.000Z",
+      confidence: 0.95
+    }).nextState;
+    await saveProfileMemoryState(profilePath, key, seededState);
+
+    const reviewed = await broker.reviewRememberedFacts(
+      "task_memory_fact_review_hidden",
+      "Sarah",
+      "2026-04-03T19:05:00.000Z"
+    );
+
+    assert.equal(reviewed.length, 1);
+    assert.match(reviewed[0]?.key ?? "", /^contact\.sarah\.context\.[a-f0-9]{8}$/);
+    assert.equal(reviewed[0]?.decisionRecord?.disposition, "selected_supporting_history");
+    assert.equal(reviewed.hiddenDecisionRecords.length, 1);
+    assert.equal(reviewed.hiddenDecisionRecords[0]?.family, "contact.entity_hint");
+    assert.equal(
+      reviewed.hiddenDecisionRecords[0]?.governanceReason,
+      "contact_entity_hint_requires_corroboration"
+    );
+    assert.equal(reviewed.hiddenDecisionRecords[0]?.disposition, "needs_corroboration");
+    assert.deepEqual(reviewed.hiddenDecisionRecords[0]?.candidateRefs, [
+      seededState.facts[0]!.id
+    ]);
+    assert.deepEqual(reviewed.hiddenDecisionRecords[0]?.evidenceRefs, [
+      seededState.facts[0]!.id
+    ]);
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }

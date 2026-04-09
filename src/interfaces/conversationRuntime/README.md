@@ -50,7 +50,12 @@ The latest slices moved queue/ack, worker-loop, and pulse-state ownership here s
   now also carries the bounded entity-alias reconciliation callback contract plus the optional
   continuity read-session opener so conversational interpretation can submit one validated alias
   candidate without mutating entity-graph snapshots directly, and execution-input assembly can
-  reuse one shared per-turn continuity surface without inventing a second cache
+  reuse one shared per-turn continuity surface without inventing a second cache, and now also
+  carries additive bounded remembered-fact review and mutation contracts so the stable interface
+  seam can define later fact-review surfaces without bypassing brokered memory ownership
+- `memoryReviewContracts.ts` owns the extracted bounded remembered-situation and remembered-fact
+  review/mutation contract families reused by manager/runtime/gateway seams so the stable manager
+  contract surface can stay under the module-size gate without widening the `/memory` command path
 - `conversationLifecycle.ts` owns canonical ack-timer gating, queue insertion, and ack lifecycle
   transitions
 - `deliveryContracts.ts` owns canonical ack/final-delivery contracts used by the stable delivery
@@ -529,6 +534,10 @@ The latest slices moved queue/ack, worker-loop, and pulse-state ownership here s
   brokered; they must not expose raw encrypted-store internals or bypass approval-aware reads.
 - Remembered-situation mutation commands here must remain explicit about the action taken
   (`resolved`, `wrong`, `forgotten`) and must not silently rewrite memory.
+- Bounded remembered-fact review or mutation contracts here must stay additive and brokered. They
+  may prepare later private fact-review surfaces, but they must not bypass the orchestrator or
+  memory-broker seams or silently widen the existing `/memory` command surface ahead of an
+  explicit cutover.
 - The conversation front door must have one canonical intent seam. Slash commands, voice
   `command <name>` promotion, active clarification, proposal/review follow-up, and natural
   execution intent should converge through the same precedence model rather than drifting into

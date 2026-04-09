@@ -15,13 +15,20 @@ and planner-context enrichment.
 ## Outputs
 - one bounded synthesis hypothesis or suppression
 - supporting evidence records with confidence
+- additive bounded decision records copied from inspected supporting facts when available
 - planner-facing synthesis block
+- explicit `legacy_adapter_only` marking on `BoundedMemorySynthesis` until touched consumers are
+  cut over to temporal synthesis
 
 ## Invariants
 - synthesis stays bounded and typed
 - weak support suppresses output instead of inventing a hypothesis
 - evidence must remain explainable from the contributing facts/episodes/open loops
 - this subsystem must not bypass sensitivity or approval gates; callers only pass already-safe data
+- `BoundedMemorySynthesis` remains a legacy compatibility adapter and must not become a co-equal
+  truth contract beside later temporal synthesis outputs
+- bounded decision records carried on the legacy adapter remain proof-only metadata; they must not
+  create new authority, visibility, or mutation paths inside synthesis
 
 ## Related Tests
 - `tests/organs/memorySynthesis.test.ts`

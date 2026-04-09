@@ -53,8 +53,12 @@ so `planner.ts` stays under the entrypoint size budget.
   interpretations, reflection lessons, and pulse-intent classification
 - governed skill manifests, verification state, inventory summaries, and workflow-linked preferred
   skill suggestions
-- explicit remembered-situation review/update brokerage so private interface controls can resolve,
-  correct, or forget episodic memory through stable organ boundaries
+- explicit remembered-situation and remembered-fact review/update brokerage so private interface
+  controls can resolve, correct, or forget episodic memory and bounded profile facts through
+  stable organ boundaries
+- additive proof-bearing review and mutation brokerage so hidden fact-review decisions and bounded
+  mutation envelopes can cross the stable organ boundary without forcing user-facing review
+  rendering to adopt a new prompt or journal contract early
 
 ## Invariants
 - `planner.ts` and `executor.ts` remain stable thin entrypoints; detailed policy or capability logic
@@ -68,11 +72,14 @@ so `planner.ts` stays under the entrypoint size budget.
 - `memoryBroker.ts` remains the stable broker entrypoint; detailed query planning, context
   injection, audit helpers, and planner-input assembly belong in `memoryContext/` and
   `memoryBrokerPlannerInput.ts`.
-- Explicit user review/correction/forget flows for remembered situations should stay brokered
-  through `memoryBroker.ts`; transport layers must not reach directly into encrypted profile-memory
-  storage.
+- Explicit user review/correction/forget flows for remembered situations and bounded remembered
+  facts should stay brokered through `memoryBroker.ts`; transport layers must not reach directly
+  into encrypted profile-memory storage.
 - Remembered-situation resolve, wrong, and forget flows should stay explicit and deterministic at
   the broker boundary; `memoryBroker.ts` should not silently rewrite episodic memory.
+- When store-side review or mutation proof becomes live, `memoryBroker.ts` should preserve it
+  additively instead of flattening bounded decision records or mutation envelopes back into
+  untyped review rows.
 - Future richer language understanding should converge under bounded `languageUnderstanding/` and
   `memorySynthesis/` organs rather than adding more bespoke lexical heuristics across unrelated
   organs.

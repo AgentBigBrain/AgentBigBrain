@@ -6,7 +6,8 @@ scripts that are intentionally kept outside the main runtime path.
 
 ## Primary Files
 - Maintainability and contract checks: `checkFunctionDocs.ts`, `checkModuleSize.ts`,
-  `checkReasonCodeUniqueness.ts`, `checkSubsystemReadmeSync.ts`, `checkVersioning.ts`,
+  `checkReasonCodeUniqueness.ts`, `checkSubsystemReadmeSync.ts`,
+  `checkTemporalMemoryRegistry.ts`, `checkVersioning.ts`,
   `checkUserFacingStopPhraseDuplication.ts`.
 - Smoke/evidence helpers: `openAiLiveSmokeHarness.ts`, `stage6_85Clones.ts`,
   `stage6_85Latency.ts`, `stage6_85MissionUx.ts`, `stage6_85Observability.ts`,
@@ -31,11 +32,17 @@ scripts that are intentionally kept outside the main runtime path.
 - `checkModuleSize.ts` and `checkSubsystemReadmeSync.ts` are the canonical contract gates for the
   intentionally kept thin entrypoints and folder-level README discovery surface after the cleanup
   plans.
+- `checkTemporalMemoryRegistry.ts` is the canonical CI gate for code-owned profile-memory family
+  registry coverage and policy-coherence checks once Phase 2.5 starts promoting truth-governance
+  policy out of plan prose. That includes family coverage, inventory/cardinality coherence,
+  compatibility-projection posture, approved `contact.*` projection-table coverage, and answer-mode
+  fallback requirements for corroboration or support-only families.
 
 ## Related Tests
 - `tests/tools/checkModuleSize.test.ts`
 - `tests/tools/checkReasonCodeUniqueness.test.ts`
 - `tests/tools/checkSubsystemReadmeSync.test.ts`
+- `tests/tools/checkTemporalMemoryRegistry.test.ts`
 - `tests/tools/checkUserFacingStopPhraseDuplication.test.ts`
 
 ## When to Update This README

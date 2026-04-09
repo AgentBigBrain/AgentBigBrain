@@ -96,36 +96,27 @@ export class TelegramGateway {
         this.adapter.openContinuityReadSession(await this.entityGraphStore.getGraph()),
       rememberConversationProfileInput: async (userInput, receivedAt) =>
         this.adapter.rememberConversationProfileInput(userInput, receivedAt),
-      reviewConversationMemory: async (request) =>
-        this.adapter.reviewConversationMemory(
-          request.reviewTaskId,
-          request.query,
-          request.nowIso,
-          request.maxEpisodes
-        ),
-      resolveConversationMemoryEpisode: async (request) =>
-        this.adapter.resolveConversationMemoryEpisode(
-          request.episodeId,
-          request.sourceTaskId,
-          request.sourceText,
-          request.nowIso,
-          request.note
-        ),
-      markConversationMemoryEpisodeWrong: async (request) =>
-        this.adapter.markConversationMemoryEpisodeWrong(
-          request.episodeId,
-          request.sourceTaskId,
-          request.sourceText,
-          request.nowIso,
-          request.note
-        ),
-      forgetConversationMemoryEpisode: async (request) =>
-        this.adapter.forgetConversationMemoryEpisode(
-          request.episodeId,
-          request.sourceTaskId,
-          request.sourceText,
-          request.nowIso
-        ),
+      reviewConversationMemory: async (request) => this.adapter.reviewConversationMemory(
+        request.reviewTaskId, request.query, request.nowIso, request.maxEpisodes
+      ),
+      reviewConversationMemoryFacts: async (request) => this.adapter.reviewConversationMemoryFacts(
+        request.reviewTaskId, request.query, request.nowIso, request.maxFacts ?? 5
+      ),
+      resolveConversationMemoryEpisode: async (request) => this.adapter.resolveConversationMemoryEpisode(
+        request.episodeId, request.sourceTaskId, request.sourceText, request.nowIso, request.note
+      ),
+      markConversationMemoryEpisodeWrong: async (request) => this.adapter.markConversationMemoryEpisodeWrong(
+        request.episodeId, request.sourceTaskId, request.sourceText, request.nowIso, request.note
+      ),
+      forgetConversationMemoryEpisode: async (request) => this.adapter.forgetConversationMemoryEpisode(
+        request.episodeId, request.sourceTaskId, request.sourceText, request.nowIso
+      ),
+      correctConversationMemoryFact: async (request) => this.adapter.correctConversationMemoryFact(
+        request.factId, request.replacementValue, request.sourceTaskId, request.sourceText, request.nowIso, request.note
+      ),
+      forgetConversationMemoryFact: async (request) => this.adapter.forgetConversationMemoryFact(
+        request.factId, request.sourceTaskId, request.sourceText, request.nowIso
+      ),
       localIntentModelResolver: options.localIntentModelResolver,
       autonomyBoundaryInterpretationResolver: options.autonomyBoundaryInterpretationResolver,
       statusRecallBoundaryInterpretationResolver: options.statusRecallBoundaryInterpretationResolver,

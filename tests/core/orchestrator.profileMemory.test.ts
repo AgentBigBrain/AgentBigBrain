@@ -15,10 +15,12 @@ import { ProfileMemoryStore } from "../../src/core/profileMemoryStore";
 import { createEmptyConversationStackV1 } from "../../src/core/stage6_86ConversationStack";
 import { createEmptyEntityGraphV1 } from "../../src/core/stage6_86EntityGraph";
 import type {
+  ProfileMemoryMutationEnvelope,
+  ProfileMemoryQueryDecisionRecord,
   ProfileReadableEpisode,
   ProfileReadableFact,
   ProfileMemoryWriteProvenance
-} from "../../src/core/profileMemoryRuntime/contracts";
+} from "../../src/core/profileMemory";
 import { SemanticMemoryStore } from "../../src/core/semanticMemory";
 import { StateStore } from "../../src/core/stateStore";
 import { TaskRequest } from "../../src/core/types";
@@ -30,6 +32,7 @@ import {
   ModelClient,
   StructuredCompletionRequest
 } from "../../src/models/types";
+import type { MemoryBrokerOrgan } from "../../src/organs/memoryBroker";
 import { ToolExecutorOrgan } from "../../src/organs/executor";
 import { PlannerOrgan } from "../../src/organs/planner";
 import { ReflectionOrgan } from "../../src/organs/reflection";
@@ -73,6 +76,46 @@ function buildWorkflowDomainContext() {
     },
     activeSince: "2026-03-20T12:00:00.000Z",
     lastUpdatedAt: "2026-03-20T12:01:00.000Z"
+  };
+}
+
+function buildFactDecisionRecord(
+  overrides: Partial<ProfileMemoryQueryDecisionRecord> = {}
+): ProfileMemoryQueryDecisionRecord {
+  return {
+    family: "generic.profile_fact",
+    evidenceClass: "user_explicit_fact",
+    governanceAction: "allow_current_state",
+    governanceReason: "explicit_user_fact",
+    disposition: "selected_current_state",
+    answerModeFallback: "report_current_state",
+    candidateRefs: ["candidate_fact_1"],
+    evidenceRefs: ["fact_1"],
+    ...overrides
+  };
+}
+
+function buildFactMutationEnvelope(
+  overrides: Partial<ProfileMemoryMutationEnvelope> = {}
+): ProfileMemoryMutationEnvelope {
+  return {
+    requestCorrelation: {
+      sourceSurface: "memory_review_fact"
+    },
+    candidateRefs: ["candidate_fact_1"],
+    governanceDecisions: [
+      {
+        family: "generic.profile_fact",
+        evidenceClass: "user_explicit_fact",
+        governanceAction: "allow_current_state",
+        governanceReason: "memory_review_correction_override",
+        candidateRefs: ["candidate_fact_1"],
+        appliedWriteRefs: ["write_fact_1"]
+      }
+    ],
+    appliedWriteRefs: ["write_fact_1"],
+    redactionState: "not_requested",
+    ...overrides
   };
 }
 
@@ -686,8 +729,162 @@ test("orchestrator recalls Owen contact context across conversation-wrapper turn
 
     assert.match(plannerInput, /\[AgentFriendProfileContext\]/);
     assert.match(plannerInput, /contact\.owen\.name: Owen/i);
-    assert.match(plannerInput, /contact\.owen\.relationship: work_peer/i);
-    assert.match(plannerInput, /contact\.owen\.work_association: Lantern Studio/i);
+    assert.match(plannerInput, /contact\.owen\.relationship: acquaintance/i);
+    assert.match(
+      plannerInput,
+      /contact\.owen\.context\.[a-z0-9]+: I went to school with a guy named Owen, and he also used to work with me at Lantern Studio/i
+    );
+    assert.doesNotMatch(plannerInput, /contact\.owen\.work_association: Lantern Studio/i);
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("orchestrator exposes bounded remembered-fact review and mutation passthroughs", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-orch-profile-fact-review-"));
+  const statePath = path.join(tempDir, "state.json");
+  const semanticPath = path.join(tempDir, "semantic_memory.json");
+  const personalityPath = path.join(tempDir, "personality_profile.json");
+  const governancePath = path.join(tempDir, "governance_memory.json");
+
+  const modelClient = new CapturingPlannerModelClient();
+  const memoryStore = new SemanticMemoryStore(semanticPath);
+  const config = {
+    ...DEFAULT_BRAIN_CONFIG,
+    dna: {
+      ...DEFAULT_BRAIN_CONFIG.dna,
+      immutableKeywords: [...DEFAULT_BRAIN_CONFIG.dna.immutableKeywords],
+      protectedPathPrefixes: [...DEFAULT_BRAIN_CONFIG.dna.protectedPathPrefixes]
+    }
+  };
+  const fakeBroker = {
+    reviewRememberedSituations: async () => [],
+    resolveRememberedSituation: async () => null,
+    markRememberedSituationWrong: async () => null,
+    forgetRememberedSituation: async () => null,
+    reviewRememberedFacts: async () =>
+      Object.assign(
+        [
+          {
+            factId: "fact_owen_role",
+            key: "contact.owen.relationship",
+            value: "acquaintance",
+            status: "confirmed",
+            confidence: 0.88,
+            sensitive: false,
+            observedAt: "2026-03-30T12:00:00.000Z",
+            lastUpdatedAt: "2026-03-30T12:00:00.000Z",
+            decisionRecord: buildFactDecisionRecord()
+          }
+        ],
+        {
+          hiddenDecisionRecords: [
+            buildFactDecisionRecord({
+              family: "contact.entity_hint",
+              evidenceClass: "user_hint_or_context",
+              governanceAction: "support_only_legacy",
+              governanceReason: "contact_entity_hint_requires_corroboration",
+              disposition: "needs_corroboration",
+              answerModeFallback: "report_insufficient_evidence",
+              candidateRefs: ["candidate_hint_1"],
+              evidenceRefs: ["hint_1"]
+            })
+          ]
+        }
+      ),
+    correctRememberedFact: async () => ({
+      factId: "fact_owen_role",
+      key: "contact.owen.relationship",
+      value: "friend",
+      status: "confirmed",
+      confidence: 0.92,
+      sensitive: false,
+      observedAt: "2026-03-30T12:00:00.000Z",
+      lastUpdatedAt: "2026-03-31T12:00:00.000Z",
+      mutationEnvelope: buildFactMutationEnvelope()
+    }),
+    forgetRememberedFact: async () => ({
+      factId: "fact_owen_role",
+      key: "contact.owen.relationship",
+      value: "[redacted]",
+      status: "superseded",
+      confidence: 0.92,
+      sensitive: false,
+      observedAt: "2026-03-30T12:00:00.000Z",
+      lastUpdatedAt: "2026-03-31T12:05:00.000Z",
+      mutationEnvelope: buildFactMutationEnvelope({
+        appliedWriteRefs: [],
+        redactionState: "value_redacted",
+        retraction: {
+          family: "generic.profile_fact",
+          retractionClass: "forget_or_delete",
+          redactionState: "value_redacted",
+          clearsCompatibilityProjection: true,
+          preservesAuditHandle: true
+        }
+      })
+    })
+  } satisfies Pick<
+    MemoryBrokerOrgan,
+    | "reviewRememberedSituations"
+    | "resolveRememberedSituation"
+    | "markRememberedSituationWrong"
+    | "forgetRememberedSituation"
+    | "reviewRememberedFacts"
+    | "correctRememberedFact"
+    | "forgetRememberedFact"
+  >;
+
+  const brain = new BrainOrchestrator(
+    config,
+    new PlannerOrgan(modelClient, memoryStore),
+    new ToolExecutorOrgan(config),
+    createDefaultGovernors(),
+    new MasterGovernor(config.governance.supermajorityThreshold),
+    new StateStore(statePath),
+    modelClient,
+    new ReflectionOrgan(memoryStore, modelClient),
+    new PersonalityStore(personalityPath),
+    new GovernanceMemoryStore(governancePath),
+    undefined,
+    fakeBroker as unknown as MemoryBrokerOrgan
+  );
+
+  try {
+    const reviewed = await brain.reviewRememberedFacts(
+      "review_fact_1",
+      "What do you remember about Owen?",
+      "2026-03-31T12:10:00.000Z",
+      3
+    );
+    const corrected = await brain.correctRememberedFact(
+      "fact_owen_role",
+      "friend",
+      "memory_correct_1",
+      "/memory fact correct fact_owen_role friend",
+      "2026-03-31T12:11:00.000Z",
+      "Use the newer relationship wording."
+    );
+    const forgotten = await brain.forgetRememberedFact(
+      "fact_owen_role",
+      "memory_forget_1",
+      "/memory fact forget fact_owen_role",
+      "2026-03-31T12:12:00.000Z"
+    );
+
+    assert.equal(reviewed[0]?.factId, "fact_owen_role");
+    assert.equal(reviewed[0]?.decisionRecord?.family, "generic.profile_fact");
+    assert.equal(reviewed.hiddenDecisionRecords[0]?.disposition, "needs_corroboration");
+    assert.equal(corrected?.value, "friend");
+    assert.equal(
+      corrected?.mutationEnvelope?.requestCorrelation.sourceSurface,
+      "memory_review_fact"
+    );
+    assert.equal(forgotten?.status, "superseded");
+    assert.equal(
+      forgotten?.mutationEnvelope?.retraction?.retractionClass,
+      "forget_or_delete"
+    );
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }

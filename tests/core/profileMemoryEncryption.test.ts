@@ -43,11 +43,11 @@ test("encryptProfileMemoryState and decryptProfileMemoryState round-trip normali
   const encryptionKey = Buffer.alloc(32, 11);
   let state = createEmptyProfileMemoryState();
   state = upsertTemporalProfileFact(state, {
-    key: "preferences.favorite_color",
-    value: "green",
+    key: "employment.current",
+    value: "Lantern",
     sensitive: false,
     sourceTaskId: "task_profile_memory_encryption_roundtrip",
-    source: "test",
+    source: "user_input_pattern.work_at",
     observedAt: "2026-03-07T00:00:00.000Z",
     confidence: 0.9
   }).nextState;
@@ -56,6 +56,13 @@ test("encryptProfileMemoryState and decryptProfileMemoryState round-trip normali
   const decrypted = decryptProfileMemoryState(envelope, encryptionKey);
 
   assert.equal(decrypted.facts.length, 1);
-  assert.equal(decrypted.facts[0]?.key, "preferences.favorite_color");
-  assert.equal(decrypted.facts[0]?.value, "green");
+  assert.equal(decrypted.facts[0]?.key, "employment.current");
+  assert.equal(decrypted.facts[0]?.value, "Lantern");
+  assert.equal(decrypted.graph.observations.length, 1);
+  assert.equal(decrypted.graph.claims.length, 1);
+  assert.equal(decrypted.graph.mutationJournal.entries.length, 2);
+  assert.equal(
+    decrypted.graph.readModel.currentClaimIdsByKey["employment.current"],
+    decrypted.graph.claims[0]?.payload.claimId
+  );
 });

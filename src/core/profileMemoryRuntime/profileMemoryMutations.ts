@@ -165,16 +165,20 @@ export function applyProfileFactCandidates(
   }
 
   let nextState = state;
+  let appliedFacts = 0;
   let supersededFacts = 0;
   for (const candidate of dedupedCandidates) {
     const upserted = upsertTemporalProfileFact(nextState, candidate);
     nextState = upserted.nextState;
+    if (upserted.applied) {
+      appliedFacts += 1;
+    }
     supersededFacts += upserted.supersededFactIds.length;
   }
 
   return {
     nextState,
-    appliedFacts: dedupedCandidates.length,
+    appliedFacts,
     supersededFacts
   };
 }

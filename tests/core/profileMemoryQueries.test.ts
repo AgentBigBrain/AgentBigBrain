@@ -11,8 +11,11 @@ import {
 } from "../../src/core/profileMemory";
 import {
   buildProfilePlanningContext,
+  inspectProfileFactsForPlanningContext,
+  inspectProfileFactQuery,
   queryProfileFactsForContinuity,
-  readProfileFacts
+  readProfileFacts,
+  reviewProfileFactsForUser
 } from "../../src/core/profileMemoryRuntime/profileMemoryQueries";
 
 test("readProfileFacts hides sensitive facts without explicit approval", () => {
@@ -68,6 +71,148 @@ test("readProfileFacts returns sensitive facts only with explicit operator appro
   assert.equal(readable.length, 1);
   assert.equal(readable[0]?.key, "address");
   assert.equal(readable[0]?.value, "123 Main Street");
+});
+
+test("registry sensitivity floors hide residence facts even when legacy state marked them non-sensitive", () => {
+  let state = createEmptyProfileMemoryState();
+  state = upsertTemporalProfileFact(state, {
+    key: "employment.current",
+    value: "Lantern",
+    sensitive: false,
+    sourceTaskId: "task_profile_query_residence_floor_employment",
+    source: "test",
+    observedAt: "2026-04-03T00:00:00.000Z",
+    confidence: 0.95
+  }).nextState;
+  state = upsertTemporalProfileFact(state, {
+    key: "residence.current",
+    value: "Detroit",
+    sensitive: false,
+    sourceTaskId: "task_profile_query_residence_floor_residence",
+    source: "user_input_pattern.residence",
+    observedAt: "2026-04-03T00:01:00.000Z",
+    confidence: 0.95
+  }).nextState;
+
+  const readableWithoutApproval = readProfileFacts(state, {
+    purpose: "operator_view",
+    includeSensitive: false,
+    explicitHumanApproval: false
+  });
+  const readableWithApproval = readProfileFacts(state, {
+    purpose: "operator_view",
+    includeSensitive: true,
+    explicitHumanApproval: true,
+    approvalId: "approval_profile_query_residence_floor"
+  });
+  const planningContext = buildProfilePlanningContext(state, 4, "");
+
+  assert.equal(
+    readableWithoutApproval.some((fact) => fact.key === "residence.current"),
+    false
+  );
+  assert.equal(
+    readableWithApproval.some(
+      (fact) => fact.key === "residence.current" && fact.value === "Detroit"
+    ),
+    true
+  );
+  assert.equal(
+    readableWithApproval.some(
+      (fact) =>
+        fact.key === "residence.current" &&
+        fact.value === "Detroit" &&
+        fact.sensitive === true
+    ),
+    true
+  );
+  assert.equal(planningContext.includes("residence.current: Detroit"), false);
+  assert.equal(planningContext.includes("employment.current: Lantern"), true);
+});
+
+test("generic sensitive-key facts stay approval-gated even when legacy state marked them non-sensitive", () => {
+  let state = createEmptyProfileMemoryState();
+  state = upsertTemporalProfileFact(state, {
+    key: "employment.current",
+    value: "Lantern",
+    sensitive: false,
+    sourceTaskId: "task_profile_query_generic_floor_employment",
+    source: "test",
+    observedAt: "2026-04-03T00:00:00.000Z",
+    confidence: 0.95
+  }).nextState;
+  state = upsertTemporalProfileFact(state, {
+    key: "email.address",
+    value: "avery@example.com",
+    sensitive: false,
+    sourceTaskId: "task_profile_query_generic_floor_email",
+    source: "user_input_pattern.my_is",
+    observedAt: "2026-04-03T00:01:00.000Z",
+    confidence: 0.95
+  }).nextState;
+
+  const readableWithoutApproval = readProfileFacts(state, {
+    purpose: "operator_view",
+    includeSensitive: true,
+    explicitHumanApproval: false
+  });
+  const readableWithApproval = readProfileFacts(state, {
+    purpose: "operator_view",
+    includeSensitive: true,
+    explicitHumanApproval: true,
+    approvalId: "approval_profile_query_generic_floor"
+  });
+  const planningContext = buildProfilePlanningContext(state, 4, "what is my email?");
+  const continuityFacts = queryProfileFactsForContinuity(state, {
+    entityHints: ["email"],
+    maxFacts: 4
+  });
+  const reviewWithoutApproval = reviewProfileFactsForUser(state, {
+    queryInput: "email",
+    maxFacts: 4,
+    includeSensitive: true,
+    explicitHumanApproval: false
+  });
+  const reviewWithApproval = reviewProfileFactsForUser(state, {
+    queryInput: "email",
+    maxFacts: 4,
+    includeSensitive: true,
+    explicitHumanApproval: true,
+    approvalId: "approval_profile_review_generic_floor"
+  });
+
+  assert.equal(
+    readableWithoutApproval.some((fact) => fact.key === "email.address"),
+    false
+  );
+  assert.equal(
+    readableWithApproval.some(
+      (fact) =>
+        fact.key === "email.address" &&
+        fact.value === "avery@example.com" &&
+        fact.sensitive === true
+    ),
+    true
+  );
+  assert.equal(planningContext.includes("email.address"), false);
+  assert.equal(planningContext.includes("avery@example.com"), false);
+  assert.equal(
+    continuityFacts.some((fact) => fact.key === "email.address"),
+    false
+  );
+  assert.equal(
+    reviewWithoutApproval.entries.some((entry) => entry.fact.key === "email.address"),
+    false
+  );
+  assert.equal(
+    reviewWithApproval.entries.some(
+      (entry) =>
+        entry.fact.key === "email.address" &&
+        entry.fact.sensitive === true &&
+        entry.decisionRecord.disposition === "selected_current_state"
+    ),
+    true
+  );
 });
 
 test("buildProfilePlanningContext preserves query-aware non-sensitive grounding", () => {
@@ -291,6 +436,283 @@ test("read and planning surfaces hide corroboration-free contact entity hints wh
     ),
     true
   );
+});
+
+test("inspectProfileFactQuery emits bounded decision records for selected support history and hidden corroboration facts", () => {
+  let state = createEmptyProfileMemoryState();
+  state = upsertTemporalProfileFact(state, {
+    key: "contact.sarah.name",
+    value: "Sarah",
+    sensitive: false,
+    sourceTaskId: "task_profile_query_inspect_hint_name",
+    source: "user_input_pattern.contact_entity_hint",
+    observedAt: "2026-04-03T00:12:00.000Z",
+    confidence: 0.75
+  }).nextState;
+  state = upsertTemporalProfileFact(state, {
+    key: "contact.sarah.context.abc12345",
+    value: "I know Sarah from yoga.",
+    sensitive: false,
+    sourceTaskId: "task_profile_query_inspect_context",
+    source: "user_input_pattern.contact_context",
+    observedAt: "2026-04-03T00:11:00.000Z",
+    confidence: 0.95
+  }).nextState;
+
+  const inspection = inspectProfileFactQuery(state, {
+    queryInput: "who is Sarah?",
+    maxFacts: 4,
+    asOfValidTime: "2026-04-03T01:00:00.000Z",
+    asOfObservedTime: "2026-04-03T00:30:00.000Z"
+  });
+
+  assert.equal(inspection.selectedFacts.length, 1);
+  assert.equal(inspection.selectedFacts[0]?.key, "contact.sarah.context.abc12345");
+  assert.deepEqual(inspection.decisionRecords, [
+    {
+      family: "contact.entity_hint",
+      evidenceClass: "user_hint_or_context",
+      governanceAction: "support_only_legacy",
+      governanceReason: "contact_entity_hint_requires_corroboration",
+      disposition: "needs_corroboration",
+      answerModeFallback: "report_insufficient_evidence",
+      candidateRefs: [state.facts[0]!.id],
+      evidenceRefs: [state.facts[0]!.id],
+      asOfValidTime: "2026-04-03T01:00:00.000Z",
+      asOfObservedTime: "2026-04-03T00:30:00.000Z"
+    },
+    {
+      family: "contact.context",
+      evidenceClass: "user_hint_or_context",
+      governanceAction: "support_only_legacy",
+      governanceReason: "contact_context_is_support_only",
+      disposition: "selected_supporting_history",
+      answerModeFallback: "report_supporting_history",
+      candidateRefs: [state.facts[1]!.id],
+      evidenceRefs: [state.facts[1]!.id],
+      asOfValidTime: "2026-04-03T01:00:00.000Z",
+      asOfObservedTime: "2026-04-03T00:30:00.000Z"
+    }
+  ]);
+});
+
+test("reviewProfileFactsForUser surfaces approval-aware sensitive facts plus hidden corroboration decisions", () => {
+  let state = createEmptyProfileMemoryState();
+  state = upsertTemporalProfileFact(state, {
+    key: "residence.current",
+    value: "Detroit",
+    sensitive: false,
+    sourceTaskId: "task_profile_review_fact_residence",
+    source: "user_input_pattern.residence",
+    observedAt: "2026-04-03T01:00:00.000Z",
+    confidence: 0.95
+  }).nextState;
+  state = upsertTemporalProfileFact(state, {
+    key: "contact.sarah.name",
+    value: "Sarah",
+    sensitive: false,
+    sourceTaskId: "task_profile_review_fact_hint_name",
+    source: "user_input_pattern.contact_entity_hint",
+    observedAt: "2026-04-03T01:01:00.000Z",
+    confidence: 0.75
+  }).nextState;
+  state = upsertTemporalProfileFact(state, {
+    key: "contact.sarah.context.abc12345",
+    value: "I know Sarah from yoga.",
+    sensitive: false,
+    sourceTaskId: "task_profile_review_fact_context",
+    source: "user_input_pattern.contact_context",
+    observedAt: "2026-04-03T01:02:00.000Z",
+    confidence: 0.95
+  }).nextState;
+
+  const review = reviewProfileFactsForUser(state, {
+    queryInput: "Sarah Detroit",
+    maxFacts: 4,
+    includeSensitive: true,
+    explicitHumanApproval: true,
+    approvalId: "approval_profile_review_fact_1",
+    asOfValidTime: "2026-04-03T02:00:00.000Z",
+    asOfObservedTime: "2026-04-03T01:30:00.000Z"
+  });
+
+  assert.equal(review.entries.length, 2);
+  assert.deepEqual(
+    review.entries.map((entry) => ({
+      key: entry.fact.key,
+      sensitive: entry.fact.sensitive,
+      disposition: entry.decisionRecord.disposition
+    })),
+    [
+      {
+        key: "contact.sarah.context.abc12345",
+        sensitive: false,
+        disposition: "selected_supporting_history"
+      },
+      {
+        key: "residence.current",
+        sensitive: true,
+        disposition: "selected_current_state"
+      }
+    ]
+  );
+  assert.deepEqual(review.hiddenDecisionRecords, [
+    {
+      family: "contact.entity_hint",
+      evidenceClass: "user_hint_or_context",
+      governanceAction: "support_only_legacy",
+      governanceReason: "contact_entity_hint_requires_corroboration",
+      disposition: "needs_corroboration",
+      answerModeFallback: "report_insufficient_evidence",
+      candidateRefs: [state.facts[1]!.id],
+      evidenceRefs: [state.facts[1]!.id],
+      asOfValidTime: "2026-04-03T02:00:00.000Z",
+      asOfObservedTime: "2026-04-03T01:30:00.000Z"
+    }
+  ]);
+});
+
+test("reviewProfileFactsForUser keeps registry-forced sensitive families hidden without explicit approval", () => {
+  let state = createEmptyProfileMemoryState();
+  state = upsertTemporalProfileFact(state, {
+    key: "residence.current",
+    value: "Detroit",
+    sensitive: false,
+    sourceTaskId: "task_profile_review_fact_residence_hidden",
+    source: "user_input_pattern.residence",
+    observedAt: "2026-04-03T03:00:00.000Z",
+    confidence: 0.95
+  }).nextState;
+
+  const review = reviewProfileFactsForUser(state, {
+    queryInput: "Detroit",
+    maxFacts: 3,
+    includeSensitive: true,
+    explicitHumanApproval: false
+  });
+
+  assert.deepEqual(review.entries, []);
+  assert.deepEqual(review.hiddenDecisionRecords, []);
+});
+
+test("inspectProfileFactsForPlanningContext returns selected facts plus bounded decision records", () => {
+  let state = createEmptyProfileMemoryState();
+  state = upsertTemporalProfileFact(state, {
+    key: "contact.owen.name",
+    value: "Owen",
+    sensitive: false,
+    sourceTaskId: "task_profile_query_planning_inspection_name",
+    source: "user_input_pattern.named_contact",
+    observedAt: "2026-04-03T00:00:00.000Z",
+    confidence: 0.95
+  }).nextState;
+  state = upsertTemporalProfileFact(state, {
+    key: "contact.owen.work_association",
+    value: "Lantern Studio",
+    sensitive: false,
+    sourceTaskId: "task_profile_query_planning_inspection_work",
+    source: "user_input_pattern.work_with_contact",
+    observedAt: "2026-04-03T00:01:00.000Z",
+    confidence: 0.95
+  }).nextState;
+  state = upsertTemporalProfileFact(state, {
+    key: "contact.sarah.name",
+    value: "Sarah",
+    sensitive: false,
+    sourceTaskId: "task_profile_query_planning_inspection_hint",
+    source: "user_input_pattern.contact_entity_hint",
+    observedAt: "2026-04-03T00:02:00.000Z",
+    confidence: 0.7
+  }).nextState;
+
+  const inspection = inspectProfileFactsForPlanningContext(state, {
+    queryInput: "who is Owen?",
+    maxFacts: 3,
+    asOfObservedTime: "2026-04-03T00:03:00.000Z"
+  });
+
+  assert.equal(inspection.entries.length, 2);
+  assert.equal(inspection.entries[0]?.fact.key, "contact.owen.name");
+  assert.equal(inspection.entries[1]?.fact.key, "contact.owen.work_association");
+  assert.equal(
+    inspection.entries.every(
+      (entry) => entry.decisionRecord.asOfObservedTime === "2026-04-03T00:03:00.000Z"
+    ),
+    true
+  );
+  assert.equal(inspection.hiddenDecisionRecords.length, 1);
+  assert.equal(inspection.hiddenDecisionRecords[0]?.family, "contact.entity_hint");
+  assert.equal(inspection.hiddenDecisionRecords[0]?.disposition, "needs_corroboration");
+});
+
+test("planning and continuity selectors cap multi-value contact context under registry inventory policy", () => {
+  let state = createEmptyProfileMemoryState();
+  state = upsertTemporalProfileFact(state, {
+    key: "identity.preferred_name",
+    value: "Benny",
+    sensitive: false,
+    sourceTaskId: "task_profile_query_inventory_identity",
+    source: "test",
+    observedAt: "2026-04-03T00:30:00.000Z",
+    confidence: 0.95
+  }).nextState;
+  state = upsertTemporalProfileFact(state, {
+    key: "contact.owen.name",
+    value: "Owen",
+    sensitive: false,
+    sourceTaskId: "task_profile_query_inventory_name",
+    source: "test",
+    observedAt: "2026-04-03T00:31:00.000Z",
+    confidence: 0.95
+  }).nextState;
+  state = upsertTemporalProfileFact(state, {
+    key: "contact.owen.context.ctx001",
+    value: "Owen said the launch slipped.",
+    sensitive: false,
+    sourceTaskId: "task_profile_query_inventory_context_1",
+    source: "user_input_pattern.contact_context",
+    observedAt: "2026-04-03T00:32:00.000Z",
+    confidence: 0.95
+  }).nextState;
+  state = upsertTemporalProfileFact(state, {
+    key: "contact.owen.context.ctx002",
+    value: "Owen prefers late meetings.",
+    sensitive: false,
+    sourceTaskId: "task_profile_query_inventory_context_2",
+    source: "user_input_pattern.contact_context",
+    observedAt: "2026-04-03T00:33:00.000Z",
+    confidence: 0.95
+  }).nextState;
+  state = upsertTemporalProfileFact(state, {
+    key: "contact.owen.context.ctx003",
+    value: "Owen mentioned the Harbor client.",
+    sensitive: false,
+    sourceTaskId: "task_profile_query_inventory_context_3",
+    source: "user_input_pattern.contact_context",
+    observedAt: "2026-04-03T00:34:00.000Z",
+    confidence: 0.95
+  }).nextState;
+
+  const planningContext = buildProfilePlanningContext(state, 5, "what about Owen?");
+  const continuityFacts = queryProfileFactsForContinuity(state, {
+    entityHints: ["Owen"],
+    maxFacts: 5
+  });
+  const planningContextLines = planningContext
+    .split("\n")
+    .filter((line) => line.startsWith("- "));
+  const planningContextEntries = planningContextLines.filter((line) =>
+    line.includes("contact.owen.context.")
+  );
+  const continuityContextFacts = continuityFacts.filter((fact) =>
+    fact.key.startsWith("contact.owen.context.")
+  );
+
+  assert.equal(planningContext.includes("identity.preferred_name: Benny"), true);
+  assert.equal(planningContext.includes("contact.owen.name: Owen"), true);
+  assert.equal(planningContextEntries.length, 2);
+  assert.equal(planningContextLines.length, 4);
+  assert.equal(continuityContextFacts.length, 2);
 });
 
 test("read and planning surfaces fail closed for malformed legacy contact-entity-hint facts", () => {

@@ -6,6 +6,10 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { governProfileMemoryCandidates } from "../../src/core/profileMemoryRuntime/profileMemoryTruthGovernance";
+import {
+  assertProfileMemoryAdjacentDomainAccessAllowed,
+  assertProfileMemoryGovernanceDecisionAllowed
+} from "../../src/core/profileMemoryRuntime/profileMemoryFamilyRegistry";
 
 test("truth governance allows validated preferred-name candidates as current-state facts", () => {
   const result = governProfileMemoryCandidates({
@@ -923,6 +927,62 @@ test("truth governance only allows the live current self employment and residenc
   assert.equal(result.quarantinedFactCandidates.length, 2);
 });
 
+test("truth governance applies the registry sensitivity floor to residence facts", () => {
+  const result = governProfileMemoryCandidates({
+    factCandidates: [
+      {
+        key: "residence.current",
+        value: "Chicago",
+        sensitive: false,
+        sourceTaskId: "task_truth_governance_residence_floor_current",
+        source: "user_input_pattern.residence",
+        observedAt: "2026-04-03T12:00:00.000Z",
+        confidence: 0.9
+      },
+      {
+        key: "residence.current",
+        value: "Detroit",
+        sensitive: false,
+        sourceTaskId: "task_truth_governance_residence_floor_historical",
+        source: "user_input_pattern.residence_historical",
+        observedAt: "2026-04-03T12:00:00.000Z",
+        confidence: 0.9
+      }
+    ],
+    episodeCandidates: [],
+    episodeResolutionCandidates: []
+  });
+
+  assert.equal(result.allowedCurrentStateFactCandidates[0]?.sensitive, true);
+  assert.equal(result.allowedSupportOnlyFactCandidates[0]?.sensitive, true);
+});
+
+test("truth governance applies the registry sensitivity floor to generic sensitive-key facts", () => {
+  const result = governProfileMemoryCandidates({
+    factCandidates: [
+      {
+        key: "email.address",
+        value: "avery@example.com",
+        sensitive: false,
+        sourceTaskId: "task_truth_governance_generic_sensitive_floor",
+        source: "user_input_pattern.my_is",
+        observedAt: "2026-04-03T12:00:00.000Z",
+        confidence: 0.9
+      }
+    ],
+    episodeCandidates: [],
+    episodeResolutionCandidates: []
+  });
+
+  assert.deepEqual(result.factDecisions[0]?.decision, {
+    family: "generic.profile_fact",
+    evidenceClass: "user_explicit_fact",
+    action: "allow_current_state",
+    reason: "legacy_fact_family_default"
+  });
+  assert.equal(result.allowedCurrentStateFactCandidates[0]?.sensitive, true);
+});
+
 test("truth governance marks follow-up resolution facts as end-state candidates", () => {
   const result = governProfileMemoryCandidates({
     factCandidates: [
@@ -1325,6 +1385,101 @@ test("truth governance quarantines unsupported fact sources", () => {
   });
   assert.equal(result.allowedCurrentStateFactCandidates.length, 0);
   assert.equal(result.quarantinedFactCandidates.length, 1);
+});
+
+test("truth governance allows the live fact-review correction source only for current-state families", () => {
+  const result = governProfileMemoryCandidates({
+    factCandidates: [
+      {
+        key: "identity.preferred_name",
+        value: "Ava",
+        sensitive: false,
+        sourceTaskId: "task_truth_governance_fact_review_name",
+        source: "memory_review.fact_correction",
+        observedAt: "2026-04-03T18:13:00.000Z",
+        confidence: 1
+      },
+      {
+        key: "contact.sarah.context.abc12345",
+        value: "I know Sarah from yoga.",
+        sensitive: false,
+        sourceTaskId: "task_truth_governance_fact_review_context",
+        source: "memory_review.fact_correction",
+        observedAt: "2026-04-03T18:14:00.000Z",
+        confidence: 1
+      }
+    ],
+    episodeCandidates: [],
+    episodeResolutionCandidates: []
+  });
+
+  assert.deepEqual(
+    result.factDecisions.map((entry) => entry.decision),
+    [
+      {
+        family: "identity.preferred_name",
+        evidenceClass: "user_explicit_fact",
+        action: "allow_current_state",
+        reason: "memory_review_correction_override"
+      },
+      {
+        family: "contact.context",
+        evidenceClass: "user_explicit_fact",
+        action: "quarantine",
+        reason: "unsupported_source"
+      }
+    ]
+  );
+});
+
+test("family registry rejects governance actions that violate family policy", () => {
+  assert.throws(
+    () =>
+      assertProfileMemoryGovernanceDecisionAllowed({
+        family: "episode.candidate",
+        evidenceClass: "assistant_inference",
+        action: "allow_current_state",
+        reason: "assistant_inference_episode"
+      }),
+    /not current-state eligible/i
+  );
+
+  assert.doesNotThrow(() =>
+    assertProfileMemoryGovernanceDecisionAllowed({
+      family: "contact.context",
+      evidenceClass: "user_hint_or_context",
+      action: "support_only_legacy",
+      reason: "contact_context_is_support_only"
+    })
+  );
+});
+
+test("family registry rejects adjacent-domain truth actions that the family policy disallows", () => {
+  assert.throws(
+    () =>
+      assertProfileMemoryAdjacentDomainAccessAllowed(
+        "conversation.relationship_interpretation",
+        {
+          family: "contact.relationship",
+          evidenceClass: "validated_structured_candidate",
+          action: "allow_current_state",
+          reason: "validated_semantic_candidate"
+        }
+      ),
+    /does not allow structured_conversation to create authoritative truth decisions/i
+  );
+
+  assert.doesNotThrow(() =>
+    assertProfileMemoryAdjacentDomainAccessAllowed(
+      "profile_state_reconciliation.followup_resolved",
+      {
+        family: "followup.resolution",
+        evidenceClass: "reconciliation_or_projection",
+        action: "allow_end_state",
+        reason: "followup_resolution_end_state"
+      }
+    )
+  );
 });
 
 test("truth governance only allows the live generic explicit fact source", () => {

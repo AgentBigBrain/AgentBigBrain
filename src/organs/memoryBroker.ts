@@ -6,6 +6,8 @@ import { ProfileMemoryStore } from "../core/profileMemoryStore";
 import { MemoryAccessAuditStore } from "../core/memoryAccessAudit";
 import { LanguageUnderstandingOrgan } from "./languageUnderstanding/episodeExtraction";
 import type { ProfileEpisodeStatus } from "../core/profileMemory";
+import type { ProfileMemoryQueryDecisionRecord } from "../core/profileMemoryRuntime/profileMemoryDecisionRecordContracts";
+import type { ProfileMemoryMutationEnvelope } from "../core/profileMemoryRuntime/profileMemoryMutationEnvelopeContracts";
 import type { TaskRequest } from "../core/types";
 import type {
   MemoryBrokerBuildInputOptions,
@@ -33,6 +35,24 @@ export interface MemoryReviewEpisode {
   resolvedAt: string | null;
   confidence: number;
   sensitive: boolean;
+  mutationEnvelope?: ProfileMemoryMutationEnvelope;
+}
+
+export interface MemoryReviewFact {
+  factId: string;
+  key: string;
+  value: string;
+  status: string;
+  confidence: number;
+  sensitive: boolean;
+  observedAt: string;
+  lastUpdatedAt: string;
+  decisionRecord?: ProfileMemoryQueryDecisionRecord;
+  mutationEnvelope?: ProfileMemoryMutationEnvelope;
+}
+
+export interface MemoryReviewFactResult extends ReadonlyArray<MemoryReviewFact> {
+  hiddenDecisionRecords: readonly ProfileMemoryQueryDecisionRecord[];
 }
 
 export class MemoryBrokerOrgan {
@@ -96,6 +116,41 @@ export class MemoryBrokerOrgan {
     }));
   }
 
+  /** Returns bounded remembered facts for an explicit user review request. */
+  async reviewRememberedFacts(
+    reviewTaskId: string,
+    query: string,
+    nowIso: string,
+    maxFacts = 5
+  ): Promise<MemoryReviewFactResult> {
+    if (!this.profileMemoryStore) {
+      return Object.assign([], {
+        hiddenDecisionRecords: []
+      }) as MemoryReviewFactResult;
+    }
+
+    const review = await this.profileMemoryStore.reviewFactsForUser(query, maxFacts, nowIso);
+    const domainBoundary = assessDomainBoundary(query, "");
+    await this.recordAudit(
+      reviewTaskId,
+      query,
+      review.entries.length,
+      0,
+      review.hiddenDecisionRecords.length,
+      domainBoundary
+    );
+    return Object.assign(
+      review.entries.map((entry) =>
+        this.toMemoryReviewFact(entry.fact, {
+          decisionRecord: entry.decisionRecord
+        })
+      ),
+      {
+        hiddenDecisionRecords: review.hiddenDecisionRecords
+      }
+    ) as MemoryReviewFactResult;
+  }
+
   /** Marks one remembered situation resolved through an explicit user instruction. */
   async resolveRememberedSituation(
     episodeId: string,
@@ -108,7 +163,7 @@ export class MemoryBrokerOrgan {
       return null;
     }
 
-    const episode = await this.profileMemoryStore.updateEpisodeFromUser(
+    const result = await this.profileMemoryStore.updateEpisodeFromUser(
       episodeId,
       "resolved",
       sourceTaskId,
@@ -116,7 +171,11 @@ export class MemoryBrokerOrgan {
       note,
       nowIso
     );
-    return episode ? this.toMemoryReviewEpisode(episode) : null;
+    return result.episode
+      ? this.toMemoryReviewEpisode(result.episode, {
+          mutationEnvelope: result.mutationEnvelope
+        })
+      : null;
   }
 
   /** Marks one remembered situation as wrong or no longer relevant. */
@@ -131,7 +190,7 @@ export class MemoryBrokerOrgan {
       return null;
     }
 
-    const episode = await this.profileMemoryStore.updateEpisodeFromUser(
+    const result = await this.profileMemoryStore.updateEpisodeFromUser(
       episodeId,
       "no_longer_relevant",
       sourceTaskId,
@@ -139,7 +198,11 @@ export class MemoryBrokerOrgan {
       note,
       nowIso
     );
-    return episode ? this.toMemoryReviewEpisode(episode) : null;
+    return result.episode
+      ? this.toMemoryReviewEpisode(result.episode, {
+          mutationEnvelope: result.mutationEnvelope
+        })
+      : null;
   }
 
   /** Forgets one remembered situation entirely through an explicit user instruction. */
@@ -153,13 +216,71 @@ export class MemoryBrokerOrgan {
       return null;
     }
 
-    const episode = await this.profileMemoryStore.forgetEpisodeFromUser(
+    const result = await this.profileMemoryStore.forgetEpisodeFromUser(
       episodeId,
       sourceTaskId,
       sourceText,
       nowIso
     );
-    return episode ? this.toMemoryReviewEpisode(episode) : null;
+    return result.episode
+      ? this.toMemoryReviewEpisode(result.episode, {
+          mutationEnvelope: result.mutationEnvelope
+        })
+      : null;
+  }
+
+  /** Corrects one bounded remembered fact through an explicit user instruction. */
+  async correctRememberedFact(
+    factId: string,
+    replacementValue: string,
+    sourceTaskId: string,
+    sourceText: string,
+    nowIso: string,
+    note?: string
+  ): Promise<MemoryReviewFact | null> {
+    if (!this.profileMemoryStore) {
+      return null;
+    }
+
+    const result = await this.profileMemoryStore.mutateFactFromUser({
+      factId,
+      action: "correct",
+      replacementValue,
+      note,
+      nowIso,
+      sourceTaskId,
+      sourceText
+    });
+    return result.fact
+      ? this.toMemoryReviewFact(result.fact, {
+          mutationEnvelope: result.mutationEnvelope
+        })
+      : null;
+  }
+
+  /** Forgets one bounded remembered fact through an explicit user instruction. */
+  async forgetRememberedFact(
+    factId: string,
+    sourceTaskId: string,
+    sourceText: string,
+    nowIso: string
+  ): Promise<MemoryReviewFact | null> {
+    if (!this.profileMemoryStore) {
+      return null;
+    }
+
+    const result = await this.profileMemoryStore.mutateFactFromUser({
+      factId,
+      action: "forget",
+      nowIso,
+      sourceTaskId,
+      sourceText
+    });
+    return result.fact
+      ? this.toMemoryReviewFact(result.fact, {
+          mutationEnvelope: result.mutationEnvelope
+        })
+      : null;
   }
 
   /** Appends the standard retrieval audit event for one remembered-situation review. */
@@ -184,7 +305,10 @@ export class MemoryBrokerOrgan {
 
   /** Converts a readable profile-memory episode into the brokered review shape. */
   private toMemoryReviewEpisode(
-    episode: Awaited<ReturnType<ProfileMemoryStore["reviewEpisodesForUser"]>>[number]
+    episode: Awaited<ReturnType<ProfileMemoryStore["reviewEpisodesForUser"]>>[number],
+    options: {
+      mutationEnvelope?: ProfileMemoryMutationEnvelope;
+    } = {}
   ): MemoryReviewEpisode {
     return {
       episodeId: episode.episodeId,
@@ -194,7 +318,30 @@ export class MemoryBrokerOrgan {
       lastMentionedAt: episode.lastMentionedAt,
       resolvedAt: episode.resolvedAt,
       confidence: episode.confidence,
-      sensitive: episode.sensitive
+      sensitive: episode.sensitive,
+      mutationEnvelope: options.mutationEnvelope
+    };
+  }
+
+  /** Converts a readable profile-memory fact into the brokered review shape. */
+  private toMemoryReviewFact(
+    fact: Awaited<ReturnType<ProfileMemoryStore["reviewFactsForUser"]>>["entries"][number]["fact"],
+    options: {
+      decisionRecord?: ProfileMemoryQueryDecisionRecord;
+      mutationEnvelope?: ProfileMemoryMutationEnvelope;
+    } = {}
+  ): MemoryReviewFact {
+    return {
+      factId: fact.factId,
+      key: fact.key,
+      value: fact.value,
+      status: fact.status,
+      confidence: fact.confidence,
+      sensitive: fact.sensitive,
+      observedAt: fact.observedAt,
+      lastUpdatedAt: fact.lastUpdatedAt,
+      decisionRecord: options.decisionRecord,
+      mutationEnvelope: options.mutationEnvelope
     };
   }
 }

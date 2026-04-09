@@ -6,6 +6,11 @@ import { type AgentPulseDecision, type AgentPulseReason } from "../agentPulse";
 import { type ProfileFactRecord, type ProfileMutationAuditMetadataV1 } from "../profileMemory";
 import type { ConversationDomainLane } from "../sessionContext";
 import type { ProfileEpisodeRecord } from "./profileMemoryEpisodeContracts";
+import type { ProfileMemoryMutationEnvelope } from "./profileMemoryMutationEnvelopeContracts";
+import type {
+  ProfileMemoryAsOfContract,
+  ProfileMemoryQueryDecisionRecord
+} from "./profileMemoryDecisionRecordContracts";
 
 export type ProfileAccessPurpose = "planning_context" | "operator_view" | "governor_review";
 
@@ -59,6 +64,62 @@ export interface ProfilePulseRelevantEpisode {
 export interface ProfileIngestResult {
   appliedFacts: number;
   supersededFacts: number;
+  mutationEnvelope?: ProfileMemoryMutationEnvelope;
+}
+
+export interface ProfileEpisodeReviewMutationResult {
+  episode: ProfileReadableEpisode | null;
+  mutationEnvelope?: ProfileMemoryMutationEnvelope;
+}
+
+export interface ProfileFactReviewEntry {
+  fact: ProfileReadableFact;
+  decisionRecord: ProfileMemoryQueryDecisionRecord;
+}
+
+export interface ProfileFactPlanningInspectionEntry {
+  fact: ProfileReadableFact;
+  decisionRecord: ProfileMemoryQueryDecisionRecord;
+}
+
+export interface ProfileFactPlanningInspectionRequest extends ProfileMemoryAsOfContract {
+  queryInput?: string;
+  maxFacts?: number;
+}
+
+export interface ProfileFactPlanningInspectionResult extends ProfileMemoryAsOfContract {
+  entries: readonly ProfileFactPlanningInspectionEntry[];
+  hiddenDecisionRecords: readonly ProfileMemoryQueryDecisionRecord[];
+}
+
+export interface ProfileFactReviewRequest extends ProfileMemoryAsOfContract {
+  queryInput?: string;
+  maxFacts?: number;
+  includeSensitive?: boolean;
+  explicitHumanApproval?: boolean;
+  approvalId?: string;
+}
+
+export interface ProfileFactReviewResult extends ProfileMemoryAsOfContract {
+  entries: readonly ProfileFactReviewEntry[];
+  hiddenDecisionRecords: readonly ProfileMemoryQueryDecisionRecord[];
+}
+
+export type ProfileFactReviewMutationAction = "correct" | "forget";
+
+export interface ProfileFactReviewMutationRequest {
+  factId: string;
+  action: ProfileFactReviewMutationAction;
+  replacementValue?: string;
+  note?: string;
+  nowIso: string;
+  sourceTaskId: string;
+  sourceText: string;
+}
+
+export interface ProfileFactReviewMutationResult {
+  fact: ProfileReadableFact | null;
+  mutationEnvelope?: ProfileMemoryMutationEnvelope;
 }
 
 export interface ProfileMemoryRequestTelemetry {
@@ -76,7 +137,8 @@ export interface ProfileValidatedFactCandidateInput {
 export type ProfileMemorySourceSurface =
   | "conversation_profile_input"
   | "broker_task_ingest"
-  | "memory_review_episode";
+  | "memory_review_episode"
+  | "memory_review_fact";
 
 export interface ProfileMemoryWriteProvenance {
   conversationId?: string;

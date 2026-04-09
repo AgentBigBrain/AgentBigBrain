@@ -18,8 +18,26 @@ import type {
   ConversationStackV1,
   OpenLoopV1
 } from "../../core/types";
-import type { ProfileEpisodeStatus } from "../../core/profileMemory";
-import type { ProfileMemoryIngestRequest } from "../../core/profileMemoryRuntime/contracts";
+import type {
+  ProfileEpisodeStatus,
+  ProfileMemoryIngestRequest
+} from "../../core/profileMemory";
+import type {
+  ConversationMemoryFactReviewRecord,
+  ConversationMemoryFactReviewRequest,
+  ConversationMemoryFactReviewResult,
+  ConversationMemoryFactMutationRequest,
+  ConversationMemoryMutationRequest,
+  ConversationMemoryReviewRecord,
+  ConversationMemoryReviewRequest,
+  CorrectConversationMemoryFact,
+  ForgetConversationMemoryEpisode,
+  ForgetConversationMemoryFact,
+  MarkConversationMemoryEpisodeWrong,
+  ResolveConversationMemoryEpisode,
+  ReviewConversationMemory,
+  ReviewConversationMemoryFacts
+} from "./memoryReviewContracts";
 import type { SkillInventoryEntry } from "../../organs/skillRegistry/contracts";
 import type {
   InterpretedConversationIntent,
@@ -209,50 +227,22 @@ export interface ConversationContinuityFactRecord {
   confidence: number;
 }
 
-export interface ConversationMemoryReviewRecord {
-  episodeId: string;
-  title: string;
-  summary: string;
-  status: ProfileEpisodeStatus;
-  lastMentionedAt: string;
-  resolvedAt: string | null;
-  confidence: number;
-  sensitive: boolean;
-}
-
-export interface ConversationMemoryReviewRequest {
-  reviewTaskId: string;
-  query: string;
-  nowIso: string;
-  maxEpisodes?: number;
-}
-
-export type ReviewConversationMemory = (
-  request: ConversationMemoryReviewRequest
-) => Promise<readonly ConversationMemoryReviewRecord[]>;
-
-export interface ConversationMemoryMutationRequest {
-  episodeId: string;
-  note?: string;
-  nowIso: string;
-  sourceTaskId: string;
-  sourceText: string;
-}
-
-export type ResolveConversationMemoryEpisode = (
-  request: ConversationMemoryMutationRequest
-) => Promise<ConversationMemoryReviewRecord | null>;
-
-export type MarkConversationMemoryEpisodeWrong = (
-  request: ConversationMemoryMutationRequest
-) => Promise<ConversationMemoryReviewRecord | null>;
-
-export type ForgetConversationMemoryEpisode = (
-  request: Pick<
-    ConversationMemoryMutationRequest,
-    "episodeId" | "nowIso" | "sourceTaskId" | "sourceText"
-  >
-) => Promise<ConversationMemoryReviewRecord | null>;
+export type {
+  ConversationMemoryFactReviewRecord,
+  ConversationMemoryFactReviewRequest,
+  ConversationMemoryFactReviewResult,
+  ConversationMemoryFactMutationRequest,
+  ConversationMemoryMutationRequest,
+  ConversationMemoryReviewRecord,
+  ConversationMemoryReviewRequest,
+  CorrectConversationMemoryFact,
+  ForgetConversationMemoryEpisode,
+  ForgetConversationMemoryFact,
+  MarkConversationMemoryEpisodeWrong,
+  ResolveConversationMemoryEpisode,
+  ReviewConversationMemory,
+  ReviewConversationMemoryFacts
+} from "./memoryReviewContracts";
 
 export type ListAvailableSkills = () => Promise<readonly SkillInventoryEntry[]>;
 
@@ -351,9 +341,12 @@ export interface ConversationManagerDependencies {
   reconcileEntityAliasCandidate?: ReconcileConversationEntityAliasCandidate;
   rememberConversationProfileInput?: RememberConversationProfileInput;
   reviewConversationMemory?: ReviewConversationMemory;
+  reviewConversationMemoryFacts?: ReviewConversationMemoryFacts;
   resolveConversationMemoryEpisode?: ResolveConversationMemoryEpisode;
   markConversationMemoryEpisodeWrong?: MarkConversationMemoryEpisodeWrong;
   forgetConversationMemoryEpisode?: ForgetConversationMemoryEpisode;
+  correctConversationMemoryFact?: CorrectConversationMemoryFact;
+  forgetConversationMemoryFact?: ForgetConversationMemoryFact;
   listAvailableSkills?: ListAvailableSkills;
   describeRuntimeCapabilities?: DescribeRuntimeCapabilities;
   listManagedProcessSnapshots?: ListManagedProcessSnapshots;

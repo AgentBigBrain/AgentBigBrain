@@ -5,7 +5,11 @@
 import { ProfileMemoryStore } from "../core/profileMemoryStore";
 import { MemoryAccessAuditStore } from "../core/memoryAccessAudit";
 import { LanguageUnderstandingOrgan } from "./languageUnderstanding/episodeExtraction";
-import type { ProfileReadableEpisode, ProfileReadableFact } from "../core/profileMemoryRuntime/contracts";
+import type {
+  ProfileFactPlanningInspectionResult,
+  ProfileReadableEpisode,
+  ProfileReadableFact
+} from "../core/profileMemoryRuntime/contracts";
 import {
   buildConversationProfileMemoryTurnId,
   buildProfileMemorySourceFingerprint
@@ -59,6 +63,14 @@ interface BrokerProfileMemoryReadSession {
     maxFacts?: number,
     queryInput?: string
   ): Promise<readonly ProfileReadableFact[]> | readonly ProfileReadableFact[];
+  inspectFactsForPlanningContext?(
+    request: {
+      queryInput?: string;
+      maxFacts?: number;
+      asOfValidTime?: string;
+      asOfObservedTime?: string;
+    }
+  ): Promise<ProfileFactPlanningInspectionResult> | ProfileFactPlanningInspectionResult;
   queryEpisodesForPlanningContext(
     maxEpisodes?: number,
     queryInput?: string,
@@ -77,6 +89,14 @@ async function openBrokerProfileMemoryReadSession(
   store: ProfileMemoryStore,
   storeTelemetry?: import("../core/profileMemoryRuntime/contracts").ProfileMemoryRequestTelemetry
 ): Promise<BrokerProfileMemoryReadSession> {
+  const planningInspectionReader = (store as ProfileMemoryStore & {
+    inspectFactsForPlanningContext?: (
+      queryInput?: string,
+      maxFacts?: number,
+      asOfValidTime?: string,
+      asOfObservedTime?: string
+    ) => Promise<ProfileFactPlanningInspectionResult>;
+  }).inspectFactsForPlanningContext;
   const sessionFactory = (store as ProfileMemoryStore & {
     openReadSession?: (
       requestTelemetry?: import("../core/profileMemoryRuntime/contracts").ProfileMemoryRequestTelemetry
@@ -92,6 +112,28 @@ async function openBrokerProfileMemoryReadSession(
       store.getEpisodePlanningContext(maxEpisodes, queryInput, nowIso),
     queryFactsForPlanningContext: (maxFacts = 6, queryInput = "") =>
       store.queryFactsForPlanningContext(maxFacts, queryInput),
+    ...(typeof planningInspectionReader === "function"
+      ? {
+          inspectFactsForPlanningContext: ({
+            queryInput = "",
+            maxFacts = 6,
+            asOfValidTime,
+            asOfObservedTime
+          }: {
+            queryInput?: string;
+            maxFacts?: number;
+            asOfValidTime?: string;
+            asOfObservedTime?: string;
+          }) =>
+            planningInspectionReader.call(
+              store,
+              queryInput,
+              maxFacts,
+              asOfValidTime,
+              asOfObservedTime
+            )
+        }
+      : {}),
     queryEpisodesForPlanningContext: (
       maxEpisodes = 2,
       queryInput = "",
@@ -177,10 +219,21 @@ export async function buildBrokeredPlannerInput(
       currentUserRequest,
       task.createdAt
     );
-    const plannerFacts = await readSession.queryFactsForPlanningContext(
-      3,
-      currentUserRequest
-    );
+    const plannerFactInspection = typeof readSession.inspectFactsForPlanningContext === "function"
+      ? await readSession.inspectFactsForPlanningContext({
+          queryInput: currentUserRequest,
+          maxFacts: 3,
+          asOfObservedTime: task.createdAt
+        })
+      : {
+          entries: (await readSession.queryFactsForPlanningContext(3, currentUserRequest)).map((fact) => ({
+            fact,
+            decisionRecord: undefined
+          })),
+          hiddenDecisionRecords: [],
+          asOfObservedTime: task.createdAt,
+          asOfValidTime: undefined
+        };
     const plannerEpisodes = await readSession.queryEpisodesForPlanningContext(
       2,
       currentUserRequest,
@@ -188,7 +241,9 @@ export async function buildBrokeredPlannerInput(
     );
     const memorySynthesisContext = buildPlannerContextSynthesisBlock(
       plannerEpisodes.map((episode) => toMemorySynthesisEpisodeRecord(episode)),
-      plannerFacts.map((fact) => toMemorySynthesisFactRecord(fact))
+      plannerFactInspection.entries.map((entry) =>
+        toMemorySynthesisFactRecord(entry.fact, entry.decisionRecord)
+      )
     );
 
     if (!profileContext && !episodeContext) {
@@ -404,7 +459,10 @@ function toMemorySynthesisEpisodeRecord(
 }
 
 /** Converts one readable planner fact into the bounded synthesis fact shape. */
-function toMemorySynthesisFactRecord(fact: ProfileReadableFact): MemorySynthesisFactRecord {
+function toMemorySynthesisFactRecord(
+  fact: ProfileReadableFact,
+  decisionRecord?: ProfileFactPlanningInspectionResult["entries"][number]["decisionRecord"]
+): MemorySynthesisFactRecord {
   return {
     factId: fact.factId,
     key: fact.key,
@@ -412,6 +470,7 @@ function toMemorySynthesisFactRecord(fact: ProfileReadableFact): MemorySynthesis
     status: fact.status,
     observedAt: fact.observedAt,
     lastUpdatedAt: fact.lastUpdatedAt,
-    confidence: fact.confidence
+    confidence: fact.confidence,
+    decisionRecord
   };
 }

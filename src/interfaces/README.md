@@ -89,6 +89,9 @@ This top-level folder owns the transport and lifecycle path that consumes both s
   situations without leaking raw memory internals
 - private-only `/memory` command responses that let the user inspect, resolve, correct, or forget
   bounded remembered situations without exposing raw encrypted-store internals
+- additive bounded remembered-fact review or mutation contracts on the stable manager, adapter, and
+  gateway seams so later private surfaces can inspect or correct profile facts without reaching
+  into broker or store internals directly
 - persisted shared conversation-domain context so routing, broker, and lifecycle helpers can read
   one per-conversation domain source of truth instead of re-inferring domain independently
 
@@ -167,6 +170,10 @@ This top-level folder owns the transport and lifecycle path that consumes both s
   suppression over broader interruption frequency.
 - User-facing remembered-situation review must stay private-only, bounded, and explicit about what
   is remembered versus later corrected or forgotten.
+- Bounded remembered-fact review contracts may exist at the stable interface seam before a broader
+  public command surface ships, but transport layers must still broker those requests through the
+  orchestrator and memory-broker boundaries instead of reaching into encrypted profile-memory
+  storage directly.
 - User-facing remembered-situation mutation flows must be explicit about whether a situation was
   marked resolved, marked wrong, or forgotten; they must not hide memory changes behind vague
   confirmation text.

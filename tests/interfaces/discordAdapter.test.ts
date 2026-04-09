@@ -19,6 +19,10 @@ import { MockModelClient } from "../../src/models/mockModelClient";
 import { PlannerOrgan } from "../../src/organs/planner";
 import { ReflectionOrgan } from "../../src/organs/reflection";
 import { ToolExecutorOrgan } from "../../src/organs/executor";
+import type {
+  ProfileMemoryMutationEnvelope,
+  ProfileMemoryQueryDecisionRecord
+} from "../../src/core/profileMemory";
 import { DiscordAdapter, DiscordAdapterConfig, DiscordInboundMessage } from "../../src/interfaces/discordAdapter";
 import { GovernanceMemoryStore } from "../../src/core/governanceMemory";
 import { WINDOWS_TEST_IMPORTANT_FILE_PATH } from "../support/windowsPathFixtures";
@@ -60,6 +64,46 @@ function buildMessage(overrides: Partial<DiscordInboundMessage> = {}): DiscordIn
     text: "Give me a concise status update.",
     authToken: "stage5-secret",
     receivedAt: new Date().toISOString(),
+    ...overrides
+  };
+}
+
+function buildFactDecisionRecord(
+  overrides: Partial<ProfileMemoryQueryDecisionRecord> = {}
+): ProfileMemoryQueryDecisionRecord {
+  return {
+    family: "generic.profile_fact",
+    evidenceClass: "user_explicit_fact",
+    governanceAction: "allow_current_state",
+    governanceReason: "explicit_user_fact",
+    disposition: "selected_current_state",
+    answerModeFallback: "report_current_state",
+    candidateRefs: ["candidate_fact_1"],
+    evidenceRefs: ["fact_1"],
+    ...overrides
+  };
+}
+
+function buildFactMutationEnvelope(
+  overrides: Partial<ProfileMemoryMutationEnvelope> = {}
+): ProfileMemoryMutationEnvelope {
+  return {
+    requestCorrelation: {
+      sourceSurface: "memory_review_fact"
+    },
+    candidateRefs: ["candidate_fact_1"],
+    governanceDecisions: [
+      {
+        family: "generic.profile_fact",
+        evidenceClass: "user_explicit_fact",
+        governanceAction: "allow_current_state",
+        governanceReason: "memory_review_correction_override",
+        candidateRefs: ["candidate_fact_1"],
+        appliedWriteRefs: ["write_fact_1"]
+      }
+    ],
+    appliedWriteRefs: ["write_fact_1"],
+    redactionState: "not_requested",
     ...overrides
   };
 }
@@ -202,4 +246,129 @@ test("discord adapter autonomous summary reports stopped state when loop aborts"
       true
     );
   });
+});
+
+test("discord adapter exposes bounded remembered-fact review and mutation passthroughs", async () => {
+  const captured = {
+    review: null as null | readonly unknown[],
+    correct: null as null | readonly unknown[],
+    forget: null as null | readonly unknown[]
+  };
+  const adapter = new DiscordAdapter(
+    {
+      reviewRememberedFacts: async (...args: unknown[]) => {
+        captured.review = args;
+        return Object.assign(
+          [
+            {
+              factId: "fact_owen",
+              key: "contact.owen.relationship",
+              value: "friend",
+              status: "confirmed",
+              confidence: 0.94,
+              sensitive: false,
+              observedAt: "2026-03-31T12:00:00.000Z",
+              lastUpdatedAt: "2026-03-31T12:00:00.000Z",
+              decisionRecord: buildFactDecisionRecord()
+            }
+          ],
+          {
+            hiddenDecisionRecords: [
+              buildFactDecisionRecord({
+                family: "contact.entity_hint",
+                evidenceClass: "user_hint_or_context",
+                governanceAction: "support_only_legacy",
+                governanceReason: "contact_entity_hint_requires_corroboration",
+                disposition: "needs_corroboration",
+                answerModeFallback: "report_insufficient_evidence",
+                candidateRefs: ["candidate_hint_1"],
+                evidenceRefs: ["hint_1"]
+              })
+            ]
+          }
+        );
+      },
+      correctRememberedFact: async (...args: unknown[]) => {
+        captured.correct = args;
+        return {
+          factId: "fact_owen",
+          key: "contact.owen.relationship",
+          value: "coworker",
+          status: "confirmed",
+          confidence: 0.95,
+          sensitive: false,
+          observedAt: "2026-03-31T12:00:00.000Z",
+          lastUpdatedAt: "2026-03-31T12:05:00.000Z",
+          mutationEnvelope: buildFactMutationEnvelope()
+        };
+      },
+      forgetRememberedFact: async (...args: unknown[]) => {
+        captured.forget = args;
+        return {
+          factId: "fact_owen",
+          key: "contact.owen.relationship",
+          value: "[redacted]",
+          status: "superseded",
+          confidence: 0.95,
+          sensitive: false,
+          observedAt: "2026-03-31T12:00:00.000Z",
+          lastUpdatedAt: "2026-03-31T12:06:00.000Z",
+          mutationEnvelope: buildFactMutationEnvelope({
+            appliedWriteRefs: [],
+            redactionState: "value_redacted"
+          })
+        };
+      }
+    } as unknown as BrainOrchestrator,
+    buildAdapterConfig()
+  );
+
+  const reviewed = await adapter.reviewConversationMemoryFacts(
+    "review_fact_1",
+    "what do you remember about Owen?",
+    "2026-03-31T12:10:00.000Z",
+    4
+  );
+  const corrected = await adapter.correctConversationMemoryFact(
+    "fact_owen",
+    "coworker",
+    "memory_correct_1",
+    "/memory fact correct fact_owen coworker",
+    "2026-03-31T12:11:00.000Z",
+    "Use the newer wording."
+  );
+  const forgotten = await adapter.forgetConversationMemoryFact(
+    "fact_owen",
+    "memory_forget_1",
+    "/memory fact forget fact_owen",
+    "2026-03-31T12:12:00.000Z"
+  );
+
+  assert.deepEqual(captured.review, [
+    "review_fact_1",
+    "what do you remember about Owen?",
+    "2026-03-31T12:10:00.000Z",
+    4
+  ]);
+  assert.equal(reviewed[0]?.decisionRecord?.family, "generic.profile_fact");
+  assert.equal(reviewed.hiddenDecisionRecords[0]?.disposition, "needs_corroboration");
+  assert.deepEqual(captured.correct, [
+    "fact_owen",
+    "coworker",
+    "memory_correct_1",
+    "/memory fact correct fact_owen coworker",
+    "2026-03-31T12:11:00.000Z",
+    "Use the newer wording."
+  ]);
+  assert.equal(
+    corrected?.mutationEnvelope?.requestCorrelation.sourceSurface,
+    "memory_review_fact"
+  );
+  assert.deepEqual(captured.forget, [
+    "fact_owen",
+    "memory_forget_1",
+    "/memory fact forget fact_owen",
+    "2026-03-31T12:12:00.000Z"
+  ]);
+  assert.equal(forgotten?.mutationEnvelope?.redactionState, "value_redacted");
 });

@@ -10,7 +10,7 @@ import type {
 } from "../profileMemory";
 import type { ProfileMemoryWriteProvenance } from "./contracts";
 
-const MAX_PROFILE_MEMORY_INGEST_RECEIPTS = 256;
+export const MAX_PROFILE_MEMORY_INGEST_RECEIPTS = 256;
 
 /**
  * Builds one stable receipt key for a turn-local provenance boundary.

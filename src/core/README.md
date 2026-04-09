@@ -100,6 +100,12 @@ env-parsing helpers while `config.ts` remains the stable config entrypoint.
   `modelRouting.ts`, `onnxEmbeddingProvider.ts`, `profileMemory.ts`, `profileMemoryCrypto.ts`,
   `profileMemoryPlanningContext.ts`, `profileMemoryStore.ts`, `semanticMemory.ts`,
   `vectorStore.ts`, `workflowLearningStore.ts`.
+- `profileMemory.ts` remains the stable public entrypoint for temporal profile-memory helpers and
+  now also re-exports the Phase 2.5 family-registry, proof, mutation-envelope, and retraction
+  contracts so bounded callers do not have to depend on deep runtime subpaths for live policy
+  shapes. Phase 3 additive graph-backed persistence contracts now enter through that same stable
+  entrypoint and stay under `profileMemoryStore.ts` rather than creating a second persistence
+  surface.
 - Extracted profile-memory runtime subsystem: `src/core/profileMemoryRuntime/contracts.ts`,
   `src/core/profileMemoryRuntime/profileMemoryCommitmentSignals.ts`,
   `src/core/profileMemoryRuntime/profileMemoryCommitmentTopics.ts`,
@@ -173,9 +179,10 @@ env-parsing helpers while `config.ts` remains the stable config entrypoint.
 - persisted receipts, memory state, profile state, and stage-policy state
 - shared runtime helpers consumed by `src/governors/`, `src/interfaces/`, `src/models/`, and
   `src/organs/`, including bounded episodic-memory queries and freshness-ranked unresolved
-  situations for active-conversation recall, private remembered-situation review/update, or pulse
-  grounding, plus the shared conversation-domain contract and reducers consumed by interface
-  routing, broker integration, and lifecycle coordination
+  situations for active-conversation recall, private remembered-situation review/update, bounded
+  remembered-fact review/update contract passthroughs, or pulse grounding, plus the shared
+  conversation-domain contract and reducers consumed by interface routing, broker integration, and
+  lifecycle coordination
 
 ## Invariants
 - Shared contracts belong here before they belong in higher layers.
@@ -208,6 +215,9 @@ env-parsing helpers while `config.ts` remains the stable config entrypoint.
   systems.
 - Explicit user review/correction of remembered situations should still route through stable brokered
   or interface entrypoints, not direct encrypted-store access from transport layers.
+- Explicit user review/correction of bounded remembered facts should follow the same rule: stable
+  orchestrator, broker, and interface entrypoints may expose contracts, but transport or gateway
+  code must not bypass them for direct encrypted-store access.
 - Remembered-situation resolve, wrong, and forget flows must stay bounded, deterministic, and
   approval-aware even when private user controls exist at the interface layer.
 - Conversational language generalization for memory, recall, and planner-context ranking should

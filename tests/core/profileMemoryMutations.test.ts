@@ -127,3 +127,40 @@ test("applyProfileFactCandidates deduplicates equivalent writes before mutation"
   assert.equal(result.nextState.facts.length, 1);
   assert.equal(result.nextState.facts[0]?.value, "Lantern");
 });
+
+test("applyProfileFactCandidates retains the prior winner and keeps preserve-prior challengers uncertain", () => {
+  const state = createEmptyProfileMemoryState();
+  const result = applyProfileFactCandidates(state, [
+    {
+      key: "employment.current",
+      value: "Pro-Green",
+      sensitive: false,
+      sourceTaskId: "task_profile_mutation_conflict_1",
+      source: "test",
+      observedAt: "2026-02-25T00:00:00.000Z",
+      confidence: 0.95
+    },
+    {
+      key: "employment.current",
+      value: "Lantern",
+      sensitive: false,
+      sourceTaskId: "task_profile_mutation_conflict_2",
+      source: "test",
+      observedAt: "2026-02-25T00:00:01.000Z",
+      confidence: 0.95
+    }
+  ]);
+
+  const activeFacts = result.nextState.facts.filter(
+    (fact) => fact.status !== "superseded" && fact.supersededAt === null
+  );
+
+  const confirmedFacts = activeFacts.filter((fact) => fact.status === "confirmed");
+  const uncertainFacts = activeFacts.filter((fact) => fact.status === "uncertain");
+
+  assert.equal(result.appliedFacts, 2);
+  assert.equal(result.supersededFacts, 0);
+  assert.equal(activeFacts.length, 2);
+  assert.equal(confirmedFacts[0]?.value, "Pro-Green");
+  assert.equal(uncertainFacts[0]?.value, "Lantern");
+});

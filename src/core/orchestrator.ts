@@ -61,12 +61,15 @@ import type { ManagedProcessSnapshot } from "../organs/liveRun/managedProcessReg
 import type { BrowserSessionSnapshot } from "../organs/liveRun/browserSessionRegistry";
 import { executeLocalOrchestratorTask } from "./orchestration/orchestratorExecution";
 import {
+  correctRememberedFact as correctRememberedFactFromRuntime,
   evaluateOrchestratorAgentPulse,
   forgetRememberedSituation as forgetRememberedSituationFromRuntime,
+  forgetRememberedFact as forgetRememberedFactFromRuntime,
   interpretOrchestratorConversationIntent,
   markRememberedSituationWrong as markRememberedSituationWrongFromRuntime,
   queryOrchestratorContinuityEpisodes,
   queryOrchestratorContinuityFacts,
+  reviewRememberedFacts as reviewRememberedFactsFromRuntime,
   resolveRememberedSituation as resolveRememberedSituationFromRuntime,
   reviewRememberedSituations as reviewRememberedSituationsFromRuntime
 } from "./orchestration/orchestratorContinuation";
@@ -322,53 +325,14 @@ export class BrainOrchestrator {
     return result.appliedFacts > 0;
   }
 
-  /**
-   * Lists managed-process lease snapshots currently owned by this orchestrator runtime.
-   *
-   * **Why it exists:**
-   * Interface continuity flows need a runtime-authoritative way to inspect open preview leases so
-   * follow-up requests can clean them up without guessing from stale chat state alone.
-   *
-   * **What it talks to:**
-   * - Uses `ToolExecutorOrgan.listManagedProcessSnapshots()` from `../organs/executor`.
-   *
-   * @returns Caller-owned managed-process snapshots.
-   */
-  listManagedProcessSnapshots(): readonly ManagedProcessSnapshot[] {
-    return this.executor.listManagedProcessSnapshots();
-  }
+  /** Lists best-effort live managed process snapshots from the executor registry. */
+  listManagedProcessSnapshots(): readonly ManagedProcessSnapshot[] { return this.executor.listManagedProcessSnapshots(); }
 
-  /**
-   * Lists browser-session snapshots currently owned by this orchestrator runtime.
-   *
-   * **Why it exists:**
-   * Interface continuity flows need a runtime-authoritative view of tracked browser control state
-   * so restart-churn follow-ups do not trust stale session metadata alone.
-   *
-   * **What it talks to:**
-   * - Uses `ToolExecutorOrgan.listBrowserSessionSnapshots()` from `../organs/executor`.
-   *
-   * @returns Caller-owned browser-session snapshots.
-   */
-  listBrowserSessionSnapshots(): readonly BrowserSessionSnapshot[] {
-    return this.executor.listBrowserSessionSnapshots();
-  }
+  /** Lists best-effort live browser session snapshots from the executor registry. */
+  listBrowserSessionSnapshots(): readonly BrowserSessionSnapshot[] { return this.executor.listBrowserSessionSnapshots(); }
 
-  /**
-   * Returns bounded remembered situations for explicit user review flows.
-   *
-   * @param reviewTaskId - Synthetic task id for audit linkage.
-   * @param query - User-facing review command text.
-   * @param nowIso - Timestamp applied to ranking/audit.
-   * @param maxEpisodes - Maximum number of situations to surface.
-   * @returns Bounded remembered situations, or an empty list when unavailable.
-   */
-  async reviewRememberedSituations(
-    reviewTaskId: string,
-    query: string,
-    nowIso: string,
-    maxEpisodes = 5
-  ) {
+  /** Reviews bounded remembered situations through the broker-owned review seam. */
+  async reviewRememberedSituations(reviewTaskId: string, query: string, nowIso: string, maxEpisodes = 5) {
     return reviewRememberedSituationsFromRuntime(
       {
         memoryBroker: this.memoryBroker
@@ -380,16 +344,20 @@ export class BrainOrchestrator {
     );
   }
 
-  /**
-   * Marks one remembered situation resolved via an explicit user command.
-   *
-   * @param episodeId - Episode identifier targeted by the user.
-   * @param sourceTaskId - Synthetic task id for mutation provenance.
-   * @param sourceText - User command text that triggered the mutation.
-   * @param nowIso - Timestamp applied to the mutation.
-   * @param note - Optional bounded outcome note.
-   * @returns Updated remembered situation, or `null` when unavailable.
-   */
+  /** Reviews bounded remembered facts through the broker-owned review seam. */
+  async reviewRememberedFacts(reviewTaskId: string, query: string, nowIso: string, maxFacts = 5) {
+    return reviewRememberedFactsFromRuntime(
+      {
+        memoryBroker: this.memoryBroker
+      },
+      reviewTaskId,
+      query,
+      nowIso,
+      maxFacts
+    );
+  }
+
+  /** Marks one remembered situation resolved through the broker-owned review seam. */
   async resolveRememberedSituation(
     episodeId: string,
     sourceTaskId: string,
@@ -409,16 +377,7 @@ export class BrainOrchestrator {
     );
   }
 
-  /**
-   * Marks one remembered situation wrong/no longer relevant via an explicit user command.
-   *
-   * @param episodeId - Episode identifier targeted by the user.
-   * @param sourceTaskId - Synthetic task id for mutation provenance.
-   * @param sourceText - User command text that triggered the mutation.
-   * @param nowIso - Timestamp applied to the mutation.
-   * @param note - Optional bounded correction note.
-   * @returns Updated remembered situation, or `null` when unavailable.
-   */
+  /** Marks one remembered situation wrong through the broker-owned review seam. */
   async markRememberedSituationWrong(
     episodeId: string,
     sourceTaskId: string,
@@ -438,13 +397,7 @@ export class BrainOrchestrator {
     );
   }
 
-  /**
-   * Forgets one remembered situation via an explicit user command.
-   *
-   * @param episodeId - Episode identifier targeted by the user.
-   * @param nowIso - Timestamp applied to the mutation.
-   * @returns Removed remembered situation, or `null` when unavailable.
-   */
+  /** Forgets one remembered situation through the broker-owned review seam. */
   async forgetRememberedSituation(
     episodeId: string,
     sourceTaskId: string,
@@ -456,6 +409,46 @@ export class BrainOrchestrator {
         memoryBroker: this.memoryBroker
       },
       episodeId,
+      sourceTaskId,
+      sourceText,
+      nowIso
+    );
+  }
+
+  /** Corrects one remembered fact through the broker-owned review seam. */
+  async correctRememberedFact(
+    factId: string,
+    replacementValue: string,
+    sourceTaskId: string,
+    sourceText: string,
+    nowIso: string,
+    note?: string
+  ) {
+    return correctRememberedFactFromRuntime(
+      {
+        memoryBroker: this.memoryBroker
+      },
+      factId,
+      replacementValue,
+      sourceTaskId,
+      sourceText,
+      nowIso,
+      note
+    );
+  }
+
+  /** Forgets one remembered fact through the broker-owned review seam. */
+  async forgetRememberedFact(
+    factId: string,
+    sourceTaskId: string,
+    sourceText: string,
+    nowIso: string
+  ) {
+    return forgetRememberedFactFromRuntime(
+      {
+        memoryBroker: this.memoryBroker
+      },
+      factId,
       sourceTaskId,
       sourceText,
       nowIso

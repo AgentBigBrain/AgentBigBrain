@@ -52,9 +52,12 @@ export class ConversationManager {
   private readonly queryContinuityFacts?: QueryConversationContinuityFacts; private readonly getEntityGraph?: ConversationManagerDependencies["getEntityGraph"]; private readonly reconcileEntityAliasCandidate?: ConversationManagerDependencies["reconcileEntityAliasCandidate"];
   private readonly openContinuityReadSession?: OpenConversationContinuityReadSession;
   private readonly rememberConversationProfileInput?: RememberConversationProfileInput; private readonly reviewConversationMemory?: ConversationManagerDependencies["reviewConversationMemory"];
+  private readonly reviewConversationMemoryFacts?: ConversationManagerDependencies["reviewConversationMemoryFacts"];
   private readonly resolveConversationMemoryEpisode?: ConversationManagerDependencies["resolveConversationMemoryEpisode"];
   private readonly markConversationMemoryEpisodeWrong?: ConversationManagerDependencies["markConversationMemoryEpisodeWrong"];
   private readonly forgetConversationMemoryEpisode?: ConversationManagerDependencies["forgetConversationMemoryEpisode"];
+  private readonly correctConversationMemoryFact?: ConversationManagerDependencies["correctConversationMemoryFact"];
+  private readonly forgetConversationMemoryFact?: ConversationManagerDependencies["forgetConversationMemoryFact"];
   private readonly listAvailableSkills?: ConversationManagerDependencies["listAvailableSkills"];
   private readonly describeRuntimeCapabilities?: ConversationManagerDependencies["describeRuntimeCapabilities"];
   private readonly listManagedProcessSnapshots?: ConversationManagerDependencies["listManagedProcessSnapshots"];
@@ -105,9 +108,12 @@ export class ConversationManager {
     this.queryContinuityFacts = dependencies.queryContinuityFacts; this.openContinuityReadSession = dependencies.openContinuityReadSession; this.getEntityGraph = dependencies.getEntityGraph; this.reconcileEntityAliasCandidate = dependencies.reconcileEntityAliasCandidate;
     this.rememberConversationProfileInput = dependencies.rememberConversationProfileInput;
     this.reviewConversationMemory = dependencies.reviewConversationMemory;
+    this.reviewConversationMemoryFacts = dependencies.reviewConversationMemoryFacts;
     this.resolveConversationMemoryEpisode = dependencies.resolveConversationMemoryEpisode;
     this.markConversationMemoryEpisodeWrong = dependencies.markConversationMemoryEpisodeWrong;
     this.forgetConversationMemoryEpisode = dependencies.forgetConversationMemoryEpisode;
+    this.correctConversationMemoryFact = dependencies.correctConversationMemoryFact;
+    this.forgetConversationMemoryFact = dependencies.forgetConversationMemoryFact;
     this.listAvailableSkills = dependencies.listAvailableSkills;
     this.describeRuntimeCapabilities = dependencies.describeRuntimeCapabilities;
     this.listManagedProcessSnapshots = dependencies.listManagedProcessSnapshots;
@@ -266,9 +272,12 @@ export class ConversationManager {
       reconcileEntityAliasCandidate: this.reconcileEntityAliasCandidate,
       rememberConversationProfileInput: this.rememberConversationProfileInput,
       reviewConversationMemory: this.reviewConversationMemory,
+      reviewConversationMemoryFacts: this.reviewConversationMemoryFacts,
       resolveConversationMemoryEpisode: this.resolveConversationMemoryEpisode,
       markConversationMemoryEpisodeWrong: this.markConversationMemoryEpisodeWrong,
       forgetConversationMemoryEpisode: this.forgetConversationMemoryEpisode,
+      correctConversationMemoryFact: this.correctConversationMemoryFact,
+      forgetConversationMemoryFact: this.forgetConversationMemoryFact,
       listAvailableSkills: this.listAvailableSkills,
       describeRuntimeCapabilities: this.describeRuntimeCapabilities,
       listManagedProcessSnapshots: this.listManagedProcessSnapshots,

@@ -3,6 +3,9 @@
  */
 
 import type { ProfileEpisodeStatus } from "../../core/profileMemory";
+import type {
+  ProfileMemoryQueryDecisionRecord
+} from "../../core/profileMemoryRuntime/profileMemoryDecisionRecordContracts";
 
 export interface MemorySynthesisEpisodeEntityLink {
   entityKey: string;
@@ -35,6 +38,7 @@ export interface MemorySynthesisFactRecord {
   observedAt: string;
   lastUpdatedAt: string;
   confidence: number;
+  decisionRecord?: TemporalMemorySynthesisDecisionRecord;
 }
 
 export type MemorySynthesisEvidenceKind =
@@ -49,7 +53,20 @@ export interface MemorySynthesisEvidence {
   detail: string;
 }
 
+export type TemporalMemorySynthesisDecisionDisposition =
+  | "selected_current_state"
+  | "selected_supporting_history"
+  | "ambiguous_contested"
+  | "insufficient_evidence"
+  | "needs_corroboration"
+  | "quarantined";
+
+export type TemporalMemorySynthesisDecisionRecord = ProfileMemoryQueryDecisionRecord;
+
+export type BoundedMemorySynthesisContractMode = "legacy_adapter_only";
+
 export interface BoundedMemorySynthesis {
+  contractMode: BoundedMemorySynthesisContractMode;
   topicLabel: string;
   summary: string;
   confidence: number;
@@ -57,4 +74,5 @@ export interface BoundedMemorySynthesis {
   primaryEpisode: MemorySynthesisEpisodeRecord;
   supportingFacts: readonly MemorySynthesisFactRecord[];
   evidence: readonly MemorySynthesisEvidence[];
+  decisionRecords?: readonly TemporalMemorySynthesisDecisionRecord[];
 }

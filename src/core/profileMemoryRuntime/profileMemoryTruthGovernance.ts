@@ -16,40 +16,23 @@ import {
   type ProfileMemoryGovernanceFamily,
   type ProfileMemoryTruthGovernanceResult
 } from "./profileMemoryTruthGovernanceContracts";
+import {
+  getProfileMemoryFamilyRegistryEntry
+} from "./profileMemoryFamilyRegistry";
+import { applyProfileMemoryMinimumSensitivityFloorToFactCandidate } from "./profileMemoryFactSensitivity";
 import { inferGovernanceFamilyForNormalizedKey } from "./profileMemoryGovernanceFamilyInference";
-
-const ALLOWED_EXPLICIT_CONTACT_NAME_SOURCES = new Set([
-  "user_input_pattern.named_contact",
-  "user_input_pattern.direct_contact_relationship",
-  "user_input_pattern.direct_contact_relationship_historical",
-  "user_input_pattern.direct_contact_relationship_severed",
-  "user_input_pattern.work_with_contact",
-  "user_input_pattern.work_with_contact_historical",
-  "user_input_pattern.work_with_contact_severed"
-]);
-
-const ALLOWED_EXPLICIT_CURRENT_CONTACT_RELATIONSHIP_SOURCES = new Set([
-  "user_input_pattern.named_contact",
-  "user_input_pattern.direct_contact_relationship",
-  "user_input_pattern.work_with_contact",
-  "user_input_pattern.work_association"
-]);
-
-const ALLOWED_EXPLICIT_CURRENT_CONTACT_WORK_ASSOCIATION_SOURCES = new Set([
-  "user_input_pattern.direct_contact_relationship",
-  "user_input_pattern.work_with_contact",
-  "user_input_pattern.work_association"
-]);
-const ALLOWED_EXPLICIT_CONTACT_CONTEXT_SOURCES = new Set([
-  "user_input_pattern.contact_context"
-]);
-const ALLOWED_EXPLICIT_EPISODE_SOURCES = new Set([
-  "user_input_pattern.episode_candidate"
-]);
-const ALLOWED_ASSISTANT_INFERENCE_EPISODE_SOURCES = new Set([
-  "language_understanding.episode_extraction"
-]);
-
+import {
+  buildCanonicalGovernanceDecision,
+  buildEpisodeGovernanceDecision,
+  buildEpisodeResolutionGovernanceDecision
+} from "./profileMemoryTruthGovernanceDecisionSupport";
+import {
+  ALLOWED_EXPLICIT_CONTACT_CONTEXT_SOURCES,
+  ALLOWED_EXPLICIT_CONTACT_NAME_SOURCES,
+  ALLOWED_EXPLICIT_CURRENT_CONTACT_RELATIONSHIP_SOURCES,
+  ALLOWED_EXPLICIT_CURRENT_CONTACT_WORK_ASSOCIATION_SOURCES,
+  MEMORY_REVIEW_FACT_CORRECTION_SOURCE
+} from "./profileMemoryTruthGovernanceSources";
 /**
  * Classifies one fact candidate into a closed evidence class, family, action, and reason.
  *
@@ -59,6 +42,13 @@ const ALLOWED_ASSISTANT_INFERENCE_EPISODE_SOURCES = new Set([
 function buildFactGovernanceDecision(candidate: ProfileFactUpsertInput): ProfileMemoryGovernanceDecision {
   const normalizedKey = candidate.key.trim().toLowerCase();
   const normalizedSource = candidate.source.trim().toLowerCase();
+  const buildDecision = (
+    family: ProfileMemoryGovernanceFamily,
+    evidenceClass: ProfileMemoryEvidenceClass,
+    action: ProfileMemoryGovernanceDecision["action"],
+    reason: ProfileMemoryGovernanceDecision["reason"]
+  ): ProfileMemoryGovernanceDecision =>
+    buildCanonicalGovernanceDecision(normalizedSource, family, evidenceClass, action, reason);
   const isValidatedStructuredSource = normalizedSource.startsWith("conversation.");
   const isExplicitUserSource = normalizedSource.startsWith("user_input_pattern.");
   const isProjectionSource = normalizedSource.startsWith("profile_state_reconciliation.");
@@ -89,6 +79,25 @@ function buildFactGovernanceDecision(candidate: ProfileFactUpsertInput): Profile
     normalizedSource === "profile_state_reconciliation.followup_resolved";
   const isContactEntityHintSource =
     normalizedSource === "user_input_pattern.contact_entity_hint";
+  const inferredFamily = inferGovernanceFamilyForNormalizedKey(normalizedKey, candidate.value);
+
+  if (normalizedSource === MEMORY_REVIEW_FACT_CORRECTION_SOURCE) {
+    const familyEntry = getProfileMemoryFamilyRegistryEntry(inferredFamily);
+    if (familyEntry.currentStateEligible) {
+      return buildDecision(
+        inferredFamily,
+        "user_explicit_fact",
+        "allow_current_state",
+        "memory_review_correction_override"
+      );
+    }
+    return buildDecision(
+      inferredFamily,
+      "user_explicit_fact",
+      "quarantine",
+      "unsupported_source"
+    );
+  }
 
   if (isContactEntityHintSource) {
     if (/^contact\.[^.]+\.name$/.test(normalizedKey)) {
@@ -100,13 +109,12 @@ function buildFactGovernanceDecision(candidate: ProfileFactUpsertInput): Profile
       );
     }
     return buildDecision(
-      inferGovernanceFamilyForNormalizedKey(normalizedKey, candidate.value),
+      inferredFamily,
       "user_hint_or_context",
       "quarantine",
       "unsupported_source"
     );
   }
-
   if (normalizedKey === "identity.preferred_name") {
     if (isAllowedStructuredIdentitySource) {
       return buildDecision("identity.preferred_name", "validated_structured_candidate", "allow_current_state", "validated_semantic_candidate");
@@ -305,86 +313,6 @@ function buildFactGovernanceDecision(candidate: ProfileFactUpsertInput): Profile
   }
   return buildDecision("generic.profile_fact", "assistant_inference", "quarantine", "unsupported_source");
 }
-
-/**
- * Classifies one episode candidate into a closed evidence class and governance action.
- *
- * @param candidate - Episode candidate headed toward canonical mutation.
- * @returns Machine-checkable governance decision.
- */
-function buildEpisodeGovernanceDecision(
-  candidate: CreateProfileEpisodeRecordInput
-): ProfileMemoryGovernanceDecision {
-  const normalizedSource = candidate.source.trim().toLowerCase();
-  if (normalizedSource.startsWith("conversation.")) {
-    return buildDecision("episode.candidate", "validated_structured_candidate", "quarantine", "unsupported_source");
-  }
-  if (normalizedSource.startsWith("profile_state_reconciliation.")) {
-    return buildDecision("episode.candidate", "reconciliation_or_projection", "quarantine", "unsupported_source");
-  }
-  if (candidate.sourceKind === "explicit_user_statement") {
-    if (ALLOWED_EXPLICIT_EPISODE_SOURCES.has(normalizedSource)) {
-      return buildDecision("episode.candidate", "user_explicit_episode", "allow_episode_support", "explicit_user_episode");
-    }
-    return buildDecision("episode.candidate", "user_explicit_episode", "quarantine", "unsupported_source");
-  }
-  if (candidate.sourceKind === "assistant_inference") {
-    if (ALLOWED_ASSISTANT_INFERENCE_EPISODE_SOURCES.has(normalizedSource)) {
-      return buildDecision("episode.candidate", "assistant_inference", "allow_episode_support", "assistant_inference_episode");
-    }
-    return buildDecision("episode.candidate", "assistant_inference", "quarantine", "unsupported_source");
-  }
-  return buildDecision("episode.candidate", "assistant_inference", "quarantine", "unsupported_source");
-}
-
-/**
- * Classifies one episode-resolution candidate into a deterministic end-state governance action.
- *
- * @param candidate - Episode-resolution candidate headed toward canonical mutation.
- * @returns Machine-checkable governance decision.
- */
-function buildEpisodeResolutionGovernanceDecision(
-  candidate: ProfileEpisodeResolutionInput
-): ProfileMemoryGovernanceDecision {
-  const normalizedSource = candidate.source.trim().toLowerCase();
-  if (normalizedSource === "user_input_pattern.episode_resolution_inferred") {
-    return buildDecision("episode.resolution", "assistant_inference", "allow_end_state", "episode_resolution_end_state");
-  }
-  if (normalizedSource.startsWith("conversation.")) {
-    return buildDecision("episode.resolution", "validated_structured_candidate", "quarantine", "unsupported_source");
-  }
-  if (normalizedSource.startsWith("profile_state_reconciliation.")) {
-    return buildDecision("episode.resolution", "reconciliation_or_projection", "quarantine", "unsupported_source");
-  }
-  if (normalizedSource.startsWith("user_input_pattern.")) {
-    return buildDecision("episode.resolution", "user_explicit_fact", "quarantine", "unsupported_source");
-  }
-  return buildDecision("episode.resolution", "assistant_inference", "quarantine", "unsupported_source");
-}
-
-/**
- * Builds one stable governance decision object from the closed contract values.
- *
- * @param family - Canonical family bucket for the candidate.
- * @param evidenceClass - Closed evidence class.
- * @param action - Governance action to apply.
- * @param reason - Deterministic machine-checkable reason.
- * @returns Stable governance decision.
- */
-function buildDecision(
-  family: ProfileMemoryGovernanceFamily,
-  evidenceClass: ProfileMemoryEvidenceClass,
-  action: ProfileMemoryGovernanceDecision["action"],
-  reason: ProfileMemoryGovernanceDecision["reason"]
-): ProfileMemoryGovernanceDecision {
-  return {
-    family,
-    evidenceClass,
-    action,
-    reason
-  };
-}
-
 /**
  * Normalizes current fact, episode, and episode-resolution candidates through one deterministic
  * governance layer before canonical mutation.
@@ -400,10 +328,16 @@ export function governProfileMemoryCandidates(input: {
   episodeCandidates: readonly CreateProfileEpisodeRecordInput[];
   episodeResolutionCandidates: readonly ProfileEpisodeResolutionInput[];
 }): ProfileMemoryTruthGovernanceResult {
-  const factDecisions = input.factCandidates.map((candidate): GovernedProfileFactCandidate => ({
-    candidate,
-    decision: buildFactGovernanceDecision(candidate)
-  }));
+  const factDecisions = input.factCandidates.map((candidate): GovernedProfileFactCandidate => {
+    const decision = buildFactGovernanceDecision(candidate);
+    return {
+      candidate: applyProfileMemoryMinimumSensitivityFloorToFactCandidate(
+        candidate,
+        decision.family
+      ),
+      decision
+    };
+  });
   const episodeDecisions = input.episodeCandidates.map((candidate): GovernedProfileEpisodeCandidate => ({
     candidate,
     decision: buildEpisodeGovernanceDecision(candidate)

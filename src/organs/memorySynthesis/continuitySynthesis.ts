@@ -115,6 +115,7 @@ function buildEpisodeSynthesisCandidate(
     : "";
 
   return {
+    contractMode: "legacy_adapter_only",
     topicLabel: episode.title,
     summary:
       `${episode.summary}${supportingFactSummary}`.trim(),
@@ -122,6 +123,9 @@ function buildEpisodeSynthesisCandidate(
     openLoopCount,
     primaryEpisode: episode,
     supportingFacts,
-    evidence
+    evidence,
+    decisionRecords: supportingFacts
+      .map((fact) => fact.decisionRecord)
+      .filter((record): record is NonNullable<typeof record> => record !== undefined)
   };
 }
