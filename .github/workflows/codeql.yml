@@ -38,6 +38,10 @@ jobs:
           queries: security-and-quality
 
       - name: Install dependencies
+        env:
+          # CodeQL only needs the CPU runtime path used by the repo build/tests.
+          # Skip the optional CUDA package fetch to keep GitHub-hosted installs deterministic.
+          ONNXRUNTIME_NODE_INSTALL: skip
         run: npm ci
 
       - name: Build

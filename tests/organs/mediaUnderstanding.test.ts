@@ -16,6 +16,7 @@ import {
   MediaUnderstandingOrgan
 } from "../../src/organs/mediaUnderstanding/mediaInterpretation";
 import { interpretImageAttachment } from "../../src/organs/mediaUnderstanding/imageUnderstanding";
+import { interpretVoiceAttachment } from "../../src/organs/mediaUnderstanding/speechToText";
 
 test("createMediaUnderstandingConfigFromEnv falls back to bounded defaults", () => {
   const originalEnv = {
@@ -222,6 +223,8 @@ test("interpretImageAttachment uses the Codex bearer token when media inherits t
         resolvedTranscriptionBackend: "codex_oauth",
         openAIApiKey: null,
         openAIBaseUrl: "https://api.openai.com/v1",
+        ollamaApiKey: null,
+        ollamaBaseUrl: "http://localhost:11434",
         visionModel: "gpt-5.4-mini",
         transcriptionModel: "whisper-1",
         requestTimeoutMs: 45_000,
@@ -279,11 +282,13 @@ test("interpretMediaAttachment prefers fixture catalog entries over fallback log
         resolvedTranscriptionBackend: "openai_api",
         openAIApiKey: null,
         openAIBaseUrl: "https://api.openai.com/v1",
+        ollamaApiKey: null,
+        ollamaBaseUrl: "http://localhost:11434",
         visionModel: "gpt-4.1-mini",
-      transcriptionModel: "whisper-1",
-      requestTimeoutMs: 45_000
-    },
-    {
+        transcriptionModel: "whisper-1",
+        requestTimeoutMs: 45_000
+      },
+      {
       attachment: {
         kind: "voice",
         provider: "telegram",
@@ -356,13 +361,15 @@ test("MediaUnderstandingOrgan enriches all attachments in one envelope", async (
       resolvedBackend: "openai_api",
       requestedVisionBackend: "openai_api",
       resolvedVisionBackend: "openai_api",
-      requestedTranscriptionBackend: "openai_api",
-      resolvedTranscriptionBackend: "openai_api",
-      openAIApiKey: null,
-      openAIBaseUrl: "https://api.openai.com/v1",
-      visionModel: "gpt-4.1-mini",
-      transcriptionModel: "whisper-1",
-      requestTimeoutMs: 45_000
+        requestedTranscriptionBackend: "openai_api",
+        resolvedTranscriptionBackend: "openai_api",
+        openAIApiKey: null,
+        openAIBaseUrl: "https://api.openai.com/v1",
+        ollamaApiKey: null,
+        ollamaBaseUrl: "http://localhost:11434",
+        visionModel: "gpt-4.1-mini",
+        transcriptionModel: "whisper-1",
+        requestTimeoutMs: 45_000
     },
     {
       [computeMediaFixtureKey(imageBuffer)]: {
@@ -397,4 +404,136 @@ test("MediaUnderstandingOrgan enriches all attachments in one envelope", async (
   assert.equal(enriched?.attachments.length, 2);
   assert.equal(enriched?.attachments[0]?.interpretation?.summary, "Image fixture shows a failing save dialog.");
   assert.equal(enriched?.attachments[1]?.interpretation?.transcript, "Please fix the save flow before we ship.");
+});
+
+test("interpretImageAttachment can use a local Ollama vision model without auth", async () => {
+  const originalFetch = globalThis.fetch;
+  let seenAuthorizationHeader: string | null = null;
+  let seenUrl = "";
+  try {
+    globalThis.fetch = (async (input, init) => {
+      seenUrl = typeof input === "string" ? input : input.toString();
+      seenAuthorizationHeader = new Headers(init?.headers).get("Authorization");
+      return new Response(
+        JSON.stringify({
+          message: {
+            content: "Local Gemma summary."
+          }
+        }),
+        {
+          status: 200,
+          headers: {
+            "Content-Type": "application/json"
+          }
+        }
+      );
+    }) as typeof fetch;
+
+    const interpretation = await interpretImageAttachment(
+      {
+        requestedBackend: "ollama",
+        resolvedBackend: "ollama",
+        requestedVisionBackend: "ollama",
+        resolvedVisionBackend: "ollama",
+        requestedTranscriptionBackend: "disabled",
+        resolvedTranscriptionBackend: "disabled",
+        openAIApiKey: null,
+        openAIBaseUrl: "https://api.openai.com/v1",
+        ollamaApiKey: null,
+        ollamaBaseUrl: "http://localhost:11434",
+        visionModel: "gemma4-local",
+        transcriptionModel: "whisper-1",
+        requestTimeoutMs: 45_000
+      },
+      {
+        kind: "image",
+        provider: "telegram",
+        fileId: "image-ollama-1",
+        fileUniqueId: "image-ollama-1",
+        mimeType: "image/png",
+        fileName: "dashboard.png",
+        sizeBytes: 1024,
+        caption: null,
+        durationSeconds: null,
+        width: 1280,
+        height: 720
+      },
+      Buffer.from("png-data", "utf8")
+    );
+
+    assert.equal(seenUrl, "http://localhost:11434/api/chat");
+    assert.equal(seenAuthorizationHeader, null);
+    assert.equal(interpretation.summary, "Local Gemma summary.");
+    assert.equal(interpretation.source, "ollama_image");
+    assert.match(interpretation.provenance, /Ollama local model image summary model gemma4-local/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("interpretVoiceAttachment can use multimodal audio models on a local OpenAI-compatible endpoint", async () => {
+  const originalFetch = globalThis.fetch;
+  let seenAuthorizationHeader: string | null = null;
+  let seenUrl = "";
+  let seenBody = "";
+  try {
+    globalThis.fetch = (async (input, init) => {
+      seenUrl = typeof input === "string" ? input : input.toString();
+      seenAuthorizationHeader = new Headers(init?.headers).get("Authorization");
+      seenBody = typeof init?.body === "string" ? init.body : "";
+      return new Response(
+        JSON.stringify({
+          output_text: "Please swing by after lunch."
+        }),
+        {
+          status: 200,
+          headers: {
+            "Content-Type": "application/json"
+          }
+        }
+      );
+    }) as typeof fetch;
+
+    const interpretation = await interpretVoiceAttachment(
+      {
+        requestedBackend: "openai_api",
+        resolvedBackend: "openai_api",
+        requestedVisionBackend: "disabled",
+        resolvedVisionBackend: "disabled",
+        requestedTranscriptionBackend: "openai_api",
+        resolvedTranscriptionBackend: "openai_api",
+        openAIApiKey: null,
+        openAIBaseUrl: "http://127.0.0.1:8080/v1",
+        ollamaApiKey: null,
+        ollamaBaseUrl: "http://localhost:11434",
+        visionModel: "gpt-4.1-mini",
+        transcriptionModel: "google/gemma-4-E4B-it",
+        requestTimeoutMs: 45_000
+      },
+      {
+        kind: "voice",
+        provider: "telegram",
+        fileId: "voice-gemma-1",
+        fileUniqueId: "voice-gemma-1",
+        mimeType: "audio/ogg",
+        fileName: "voice-note.ogg",
+        sizeBytes: 1024,
+        caption: null,
+        durationSeconds: 8,
+        width: null,
+        height: null
+      },
+      Buffer.from("voice-data", "utf8")
+    );
+
+    assert.equal(seenUrl, "http://127.0.0.1:8080/v1/responses");
+    assert.equal(seenAuthorizationHeader, null);
+    assert.match(seenBody, /input_audio/);
+    assert.match(seenBody, /google\/gemma-4-E4B-it/);
+    assert.equal(interpretation.transcript, "Please swing by after lunch.");
+    assert.equal(interpretation.source, "multimodal_audio");
+    assert.match(interpretation.provenance, /OpenAI-compatible local model transcription model google\/gemma-4-E4B-it/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });

@@ -10,7 +10,12 @@ import type {
 import type { ModelBackend } from "../../models/types";
 import { resolveModelBackendFromEnv } from "../../models/backendConfig";
 
-export const DEFAULT_MEDIA_VISION_MODEL = process.env.BRAIN_MEDIA_VISION_MODEL?.trim() || process.env.OPENAI_MODEL_SMALL_FAST?.trim() || "gpt-4.1-mini";
+export const DEFAULT_MEDIA_VISION_MODEL =
+  process.env.BRAIN_MEDIA_VISION_MODEL?.trim()
+  || process.env.OPENAI_MODEL_SMALL_FAST?.trim()
+  || process.env.OLLAMA_MODEL_SMALL_FAST?.trim()
+  || process.env.OLLAMA_MODEL_DEFAULT?.trim()
+  || "gpt-4.1-mini";
 export const DEFAULT_MEDIA_TRANSCRIPTION_MODEL = process.env.BRAIN_MEDIA_TRANSCRIPTION_MODEL?.trim() || "whisper-1";
 export const DEFAULT_MEDIA_REQUEST_TIMEOUT_MS = 45_000;
 export type MediaUnderstandingBackend = ModelBackend | "inherit_text_backend" | "disabled";
@@ -25,6 +30,8 @@ export interface MediaUnderstandingConfig {
   resolvedTranscriptionBackend: ModelBackend | "disabled";
   openAIApiKey: string | null;
   openAIBaseUrl: string;
+  ollamaApiKey: string | null;
+  ollamaBaseUrl: string;
   visionModel: string;
   transcriptionModel: string;
   requestTimeoutMs: number;
@@ -78,6 +85,11 @@ export function createMediaUnderstandingConfigFromEnv(): MediaUnderstandingConfi
         ? process.env.OPENAI_API_KEY?.trim() || null
         : null,
     openAIBaseUrl: (process.env.OPENAI_BASE_URL?.trim() || "https://api.openai.com/v1").replace(/\/+$/, ""),
+    ollamaApiKey:
+      resolvedVisionBackend === "ollama" || resolvedTranscriptionBackend === "ollama"
+        ? process.env.OLLAMA_API_KEY?.trim() || null
+        : null,
+    ollamaBaseUrl: (process.env.OLLAMA_BASE_URL?.trim() || "http://localhost:11434").replace(/\/+$/, ""),
     visionModel: process.env.BRAIN_MEDIA_VISION_MODEL?.trim() || DEFAULT_MEDIA_VISION_MODEL,
     transcriptionModel: process.env.BRAIN_MEDIA_TRANSCRIPTION_MODEL?.trim() || DEFAULT_MEDIA_TRANSCRIPTION_MODEL,
     requestTimeoutMs: Number.isFinite(Number(process.env.BRAIN_MEDIA_REQUEST_TIMEOUT_MS))

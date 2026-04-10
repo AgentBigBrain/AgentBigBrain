@@ -18,6 +18,11 @@ jobs:
           cache: "npm"
 
       - name: Install dependencies
+        env:
+          # The base onnxruntime-node package already contains the CPU runtime we test against.
+          # GitHub-hosted Linux runners do not need the optional CUDA EP download, and the NuGet
+          # fetch can fail transiently or time out during bootstrap.
+          ONNXRUNTIME_NODE_INSTALL: skip
         run: npm ci
 
       - name: Build

@@ -7,6 +7,7 @@ import type {
   MediaUnderstandingConfig,
   MediaUnderstandingModality
 } from "./contracts";
+import { isLocalOpenAICompatibleBaseUrl } from "./providerSupport";
 
 /**
  * Resolves the effective provider backend for one media-understanding modality.
@@ -31,16 +32,25 @@ function resolveMediaBackendForModality(
  * @param modality - Media-understanding modality using the provider auth path.
  * @returns Bearer token for the configured backend, or `null` when provider auth is unavailable.
  */
-export async function resolveMediaAuthorizationToken(
+export async function resolveMediaAuthorizationHeaders(
   config: MediaUnderstandingConfig,
   modality: MediaUnderstandingModality
-): Promise<string | null> {
+): Promise<Record<string, string> | null> {
   const resolvedBackend = resolveMediaBackendForModality(config, modality);
   if (resolvedBackend === "openai_api") {
-    return config.openAIApiKey;
+    if (config.openAIApiKey) {
+      return { Authorization: `Bearer ${config.openAIApiKey}` };
+    }
+    return isLocalOpenAICompatibleBaseUrl(config.openAIBaseUrl) ? {} : null;
   }
   if (resolvedBackend === "codex_oauth") {
-    return await readCodexBearerToken(config.env ?? process.env);
+    const bearerToken = await readCodexBearerToken(config.env ?? process.env);
+    return bearerToken ? { Authorization: `Bearer ${bearerToken}` } : null;
+  }
+  if (resolvedBackend === "ollama") {
+    return config.ollamaApiKey
+      ? { Authorization: `Bearer ${config.ollamaApiKey}` }
+      : {};
   }
   return null;
 }
@@ -56,7 +66,16 @@ export function describeMediaAuthorizationSource(
   config: MediaUnderstandingConfig,
   modality: MediaUnderstandingModality
 ): string {
-  return resolveMediaBackendForModality(config, modality) === "codex_oauth"
-    ? "Codex OAuth-backed OpenAI"
-    : "OpenAI";
+  const resolvedBackend = resolveMediaBackendForModality(config, modality);
+  if (resolvedBackend === "codex_oauth") {
+    return "Codex OAuth-backed OpenAI";
+  }
+  if (resolvedBackend === "ollama") {
+    return config.ollamaApiKey ? "Ollama API-key model" : "Ollama local model";
+  }
+  if (resolvedBackend === "openai_api" && !config.openAIApiKey
+    && isLocalOpenAICompatibleBaseUrl(config.openAIBaseUrl)) {
+    return "OpenAI-compatible local model";
+  }
+  return "OpenAI";
 }

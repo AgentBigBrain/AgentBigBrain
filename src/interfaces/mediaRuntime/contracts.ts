@@ -5,7 +5,9 @@
 export type ConversationInboundMediaKind = "image" | "voice" | "video" | "document";
 export type ConversationInboundMediaInterpretationSource =
   | "openai_image"
+  | "ollama_image"
   | "openai_transcription"
+  | "multimodal_audio"
   | "fixture_catalog"
   | "caption_fallback"
   | "metadata_fallback"

@@ -180,14 +180,18 @@ BRAIN_MEDIA_REQUEST_TIMEOUT_MS=45000
 
 How each setting works:
 
-- `BRAIN_MEDIA_VISION_MODEL`: vision-capable model for screenshots/images. If unset, the runtime falls back to `OPENAI_MODEL_SMALL_FAST`, then `gpt-4.1-mini`.
-- `BRAIN_MEDIA_TRANSCRIPTION_MODEL`: transcription model for voice notes. If unset, the runtime defaults to `whisper-1`.
+- `BRAIN_MEDIA_VISION_MODEL`: vision-capable model for screenshots/images. If unset, the runtime falls back to `OPENAI_MODEL_SMALL_FAST`, then `OLLAMA_MODEL_SMALL_FAST` / `OLLAMA_MODEL_DEFAULT`, then `gpt-4.1-mini`.
+- `BRAIN_MEDIA_TRANSCRIPTION_MODEL`: transcription model for voice notes. If unset, the runtime defaults to `whisper-1`. Dedicated models such as `whisper-1` stay on `/audio/transcriptions`; non-whisper models such as Gemma 4 automatically use the multimodal audio-understanding path instead.
 - `BRAIN_MEDIA_REQUEST_TIMEOUT_MS`: timeout used by the image/transcription calls.
 
 What to expect today:
 
 - screenshots can produce OCR/summary style context when the vision path is available
 - voice notes can produce transcript-backed context when the transcription path is available
+- `BRAIN_MEDIA_VISION_BACKEND=ollama` now supports local image understanding directly.
+- local multimodal-audio models such as Gemma 4 currently ride the `openai_api` media path by
+  pointing `OPENAI_BASE_URL` at a loopback OpenAI-compatible server; when the base URL is local,
+  the media runtime no longer requires an API key just to attach audio for transcription.
 - short videos currently use file metadata and captions even when an API key is configured
 
 Video note: the current runtime does not yet have a dedicated clip-analysis path. Video is accepted and routed correctly, but interpretation is limited to file metadata and captions.
@@ -873,17 +877,18 @@ This section covers every key currently present in `.env.example` and what to ex
 ### Media understanding
 
 - `BRAIN_MEDIA_VISION_MODEL`: model used for screenshot/image interpretation.
-  - If unset, the runtime falls back to `OPENAI_MODEL_SMALL_FAST`, then `gpt-4.1-mini`.
+  - If unset, the runtime falls back to `OPENAI_MODEL_SMALL_FAST`, then `OLLAMA_MODEL_SMALL_FAST` / `OLLAMA_MODEL_DEFAULT`, then `gpt-4.1-mini`.
   - If the selected model is not actually vision-capable in your provider environment, image understanding falls back to a simple summary.
-  - Phase-1 boundary: this setting still belongs to the OpenAI API media path even when the main
-    text backend is `codex_oauth`.
+  - `BRAIN_MEDIA_VISION_BACKEND=ollama` is now a supported local path for image-capable models such as Gemma 4.
 - `BRAIN_MEDIA_TRANSCRIPTION_MODEL`: model used for voice-note transcription.
   - If unset, the runtime defaults to `whisper-1`.
+  - Dedicated transcription models such as `whisper-1` stay on `/audio/transcriptions`.
+  - Non-whisper models such as Gemma 4 automatically use the multimodal audio path instead.
   - If transcription is unavailable, the runtime falls back to basic media context rather than fabricating a transcript.
-  - Phase-1 boundary: this setting still belongs to the OpenAI API media path even when the main
-    text backend is `codex_oauth`.
-- `BRAIN_MEDIA_REQUEST_TIMEOUT_MS`: timeout for provider-backed media interpretation requests.
-  - Raise it if image or transcription requests time out.
+  - The current local multimodal-audio path is `BRAIN_MEDIA_TRANSCRIPTION_BACKEND=openai_api` with
+    `OPENAI_BASE_URL` pointed at a loopback OpenAI-compatible server.
+  - `BRAIN_MEDIA_REQUEST_TIMEOUT_MS`: timeout for provider-backed media interpretation requests.
+    - Raise it if image or transcription requests time out.
   - Lower it if you want quicker fail-closed fallback behavior.
 
 Current video limitation:
