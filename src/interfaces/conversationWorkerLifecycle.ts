@@ -4,6 +4,7 @@
 
 import { assertAckInvariants } from "./ackStateMachine";
 import { backfillPulseSnippet } from "./pulseEmissionLifecycle";
+import { shouldSuppressPulseUserFacingDeliveryV1 } from "./pulseUxRuntime";
 import { elapsedSeconds } from "./conversationManagerHelpers";
 import {
   applyConversationDomainSignalWindow,
@@ -1154,6 +1155,10 @@ export function persistExecutedJobOutcome(input: PersistJobOutcomeInput): Conver
     maxPathDestinations,
     maxConversationTurns
   } = input;
+  const suppressUserDelivery = shouldSuppressCompletedSystemJobUserDelivery(
+    executedJob,
+    executionResult
+  );
   const persistedRunningJob = findRecentJob(session, executedJob.id) ?? executedJob;
   persistedRunningJob.status = executedJob.status;
   persistedRunningJob.completedAt = executedJob.completedAt;
@@ -1247,7 +1252,7 @@ export function persistExecutedJobOutcome(input: PersistJobOutcomeInput): Conver
     persistedRunningJob.resultSummary = buildClosedPreviewStackSummary(session);
   }
 
-  if (persistedRunningJob.status === "completed") {
+  if (persistedRunningJob.status === "completed" && !suppressUserDelivery) {
     setReturnHandoff(
       session,
       buildConversationReturnHandoff(
@@ -1265,7 +1270,11 @@ export function persistExecutedJobOutcome(input: PersistJobOutcomeInput): Conver
   if (persistedRunningJob.status === "completed") {
     backfillPulseSnippet(session, persistedRunningJob);
   }
-  if (persistedRunningJob.status === "completed" && persistedRunningJob.resultSummary) {
+  if (
+    persistedRunningJob.status === "completed" &&
+    persistedRunningJob.resultSummary &&
+    !suppressUserDelivery
+  ) {
     recordAssistantTurn(
       session,
       persistedRunningJob.resultSummary,
@@ -1278,17 +1287,76 @@ export function persistExecutedJobOutcome(input: PersistJobOutcomeInput): Conver
 }
 
 /**
- * Detects the deterministic system-job blocked state that should suppress duplicate final delivery.
+ * Resolves whether a completed job should stay out of user-facing delivery surfaces.
+ *
+ * **Why it exists:**
+ * System-job suppression should not depend solely on one caller remembering to set a flag. The
+ * worker already has both the queued system input and the final summary, so it can infer when a
+ * blocked pulse outcome must stay internal.
+ *
+ * **What it talks to:**
+ * - Uses `ConversationExecutionResult` (import type `ConversationExecutionResult`) from
+ *   `./conversationRuntime/managerContracts`.
+ * - Uses `shouldSuppressPulseUserFacingDeliveryV1` from `./pulseUxRuntime`.
+ * - Uses local blocked-summary shape checks within this module.
+ *
+ * @param job - Persisted or in-memory completed job being evaluated.
+ * @param executionResult - Optional structured execution result from the current worker run.
+ * @returns `true` when the result should stay off user-facing delivery surfaces.
+ */
+function shouldSuppressCompletedSystemJobUserDelivery(
+  job: ConversationJob,
+  executionResult?: ConversationExecutionResult | null
+): boolean {
+  if (executionResult?.suppressUserDelivery === true) {
+    return true;
+  }
+  if (job.isSystemJob !== true) {
+    return false;
+  }
+  const summary = executionResult?.summary ?? job.resultSummary ?? "";
+  if (
+    shouldSuppressPulseUserFacingDeliveryV1(
+      job.executionInput ?? job.input,
+      typeof summary === "string" ? summary : ""
+    )
+  ) {
+    return true;
+  }
+  return (
+    typeof summary === "string" &&
+    (
+      summary.includes("State: blocked") ||
+      summary.includes("What happened: governance blocked the requested action")
+    )
+  );
+}
+
+/**
+ * Detects the deterministic system-job state that should suppress user-facing delivery.
+ *
+ * **Why it exists:**
+ * Background system jobs can complete successfully from the queue's perspective while still
+ * producing internal-only blocked or suppressed outcomes. The worker needs one canonical guard so
+ * those summaries do not leak into user-visible delivery or duplicate persistence paths.
+ *
+ * **What it talks to:**
+ * - Uses `ConversationExecutionResult` (import type `ConversationExecutionResult`) from
+ *   `./conversationRuntime/managerContracts`.
+ * - Uses local summary-shape checks within this module.
  *
  * @param job - Persisted job outcome being evaluated.
- * @returns `true` when this job already emitted blocked output and should skip final send/edit.
+ * @param executionResult - Optional structured execution result from the current worker run.
+ * @returns `true` when this job should skip final send/edit and visible assistant-turn persistence.
  */
-export function isBlockedSystemJobOutcome(job: ConversationJob): boolean {
+export function isBlockedSystemJobOutcome(
+  job: ConversationJob,
+  executionResult?: ConversationExecutionResult | null
+): boolean {
   return (
     job.isSystemJob === true &&
     job.status === "completed" &&
-    typeof job.resultSummary === "string" &&
-    job.resultSummary.includes("State: blocked")
+    shouldSuppressCompletedSystemJobUserDelivery(job, executionResult)
   );
 }
 

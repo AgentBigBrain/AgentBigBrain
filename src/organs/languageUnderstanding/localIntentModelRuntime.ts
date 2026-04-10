@@ -124,7 +124,7 @@ export function createLocalIntentModelRuntimeConfigFromEnv(
     enabled: parseBoolean(env.BRAIN_LOCAL_INTENT_MODEL_ENABLED, false),
     provider,
     baseUrl: (env.BRAIN_LOCAL_INTENT_MODEL_BASE_URL ?? "http://127.0.0.1:11434").trim(),
-    model: (env.BRAIN_LOCAL_INTENT_MODEL_NAME ?? "phi4-mini:latest").trim(),
+    model: (env.BRAIN_LOCAL_INTENT_MODEL_NAME ?? "gemma4:latest").trim(),
     timeoutMs: parsePositiveInteger(env.BRAIN_LOCAL_INTENT_MODEL_TIMEOUT_MS, 45000),
     liveSmokeRequired: parseBoolean(env.BRAIN_LOCAL_INTENT_MODEL_LIVE_SMOKE_REQUIRED, false)
   };

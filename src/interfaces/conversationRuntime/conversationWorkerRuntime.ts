@@ -403,7 +403,7 @@ export async function processConversationQueue(
     }
     await store.setSession(updatedSession);
 
-    if (isBlockedSystemJobOutcome(persistedRunningJob)) {
+    if (isBlockedSystemJobOutcome(persistedRunningJob, executionResult)) {
       persistedRunningJob.finalDeliveryOutcome = "sent";
       upsertRecentJob(updatedSession, persistedRunningJob, config.maxRecentJobs);
       await store.setSession(updatedSession);

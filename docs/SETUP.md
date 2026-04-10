@@ -189,9 +189,12 @@ What to expect today:
 - screenshots can produce OCR/summary style context when the vision path is available
 - voice notes can produce transcript-backed context when the transcription path is available
 - `BRAIN_MEDIA_VISION_BACKEND=ollama` now supports local image understanding directly.
-- local multimodal-audio models such as Gemma 4 currently ride the `openai_api` media path by
-  pointing `OPENAI_BASE_URL` at a loopback OpenAI-compatible server; when the base URL is local,
-  the media runtime no longer requires an API key just to attach audio for transcription.
+- `BRAIN_MEDIA_TRANSCRIPTION_BACKEND=ollama` now supports local multimodal-audio models such as
+  Gemma 4 by targeting Ollama's OpenAI-compatible `/v1/responses` surface behind the native Ollama
+  backend selection.
+- `BRAIN_MEDIA_TRANSCRIPTION_BACKEND=openai_api` still works for other loopback
+  OpenAI-compatible servers; when the base URL is local, the media runtime does not require an API
+  key just to attach audio for transcription.
 - short videos currently use file metadata and captions even when an API key is configured
 
 Video note: the current runtime does not yet have a dedicated clip-analysis path. Video is accepted and routed correctly, but interpretation is limited to file metadata and captions.
@@ -275,10 +278,10 @@ safety checks and execution rules still decide what is allowed to run.
 You can enable it even when `BRAIN_MODEL_BACKEND=openai_api` or `BRAIN_MODEL_BACKEND=codex_oauth`.
 
 1. Install and run Ollama locally.
-2. Pull the preferred Phi model:
+2. Pull the preferred Gemma 4 model:
 
 ```bash
-ollama pull phi4-mini
+ollama pull gemma4
 ```
 
 3. Add the local intent block:
@@ -287,7 +290,7 @@ ollama pull phi4-mini
 BRAIN_LOCAL_INTENT_MODEL_ENABLED=true
 BRAIN_LOCAL_INTENT_MODEL_PROVIDER=ollama
 BRAIN_LOCAL_INTENT_MODEL_BASE_URL=http://127.0.0.1:11434
-BRAIN_LOCAL_INTENT_MODEL_NAME=phi4-mini:latest
+BRAIN_LOCAL_INTENT_MODEL_NAME=gemma4:latest
 BRAIN_LOCAL_INTENT_MODEL_TIMEOUT_MS=45000
 BRAIN_LOCAL_INTENT_MODEL_LIVE_SMOKE_REQUIRED=false
 ```
@@ -297,7 +300,7 @@ How each setting works:
 - `BRAIN_LOCAL_INTENT_MODEL_ENABLED`: turns this helper on.
 - `BRAIN_LOCAL_INTENT_MODEL_PROVIDER`: which local provider to use. Right now this must be `ollama`.
 - `BRAIN_LOCAL_INTENT_MODEL_BASE_URL`: where Ollama is running.
-- `BRAIN_LOCAL_INTENT_MODEL_NAME`: which local model tag to use. The current default is `phi4-mini:latest`.
+- `BRAIN_LOCAL_INTENT_MODEL_NAME`: which local model tag to use. The current default is `gemma4:latest`.
 - `BRAIN_LOCAL_INTENT_MODEL_TIMEOUT_MS`: how long to wait before giving up and falling back.
 - `BRAIN_LOCAL_INTENT_MODEL_LIVE_SMOKE_REQUIRED`: when `true`, related live smokes fail if this helper was expected but not reachable.
 
@@ -867,8 +870,8 @@ This section covers every key currently present in `.env.example` and what to ex
 - `BRAIN_LOCAL_INTENT_MODEL_BASE_URL`: where Ollama is running.
   - Default is `http://127.0.0.1:11434`.
 - `BRAIN_LOCAL_INTENT_MODEL_NAME`: which Ollama model tag to use for this helper.
-  - Default is `phi4-mini:latest`.
-  - Pull `phi4-mini` in Ollama first so this tag resolves.
+  - Default is `gemma4:latest`.
+  - Pull `gemma4` in Ollama first so this tag resolves.
 - `BRAIN_LOCAL_INTENT_MODEL_TIMEOUT_MS`: how long to wait before falling back.
   - Raise it if the local model is slow on the current machine.
 - `BRAIN_LOCAL_INTENT_MODEL_LIVE_SMOKE_REQUIRED`: makes related live smokes fail when this helper was expected but not actually reachable.
@@ -885,8 +888,10 @@ This section covers every key currently present in `.env.example` and what to ex
   - Dedicated transcription models such as `whisper-1` stay on `/audio/transcriptions`.
   - Non-whisper models such as Gemma 4 automatically use the multimodal audio path instead.
   - If transcription is unavailable, the runtime falls back to basic media context rather than fabricating a transcript.
-  - The current local multimodal-audio path is `BRAIN_MEDIA_TRANSCRIPTION_BACKEND=openai_api` with
-    `OPENAI_BASE_URL` pointed at a loopback OpenAI-compatible server.
+  - `BRAIN_MEDIA_TRANSCRIPTION_BACKEND=ollama` now supports local multimodal-audio Gemma 4 runs by
+    targeting Ollama's OpenAI-compatible `/v1/responses` surface automatically.
+  - `BRAIN_MEDIA_TRANSCRIPTION_BACKEND=openai_api` remains available for other loopback
+    OpenAI-compatible servers.
   - `BRAIN_MEDIA_REQUEST_TIMEOUT_MS`: timeout for provider-backed media interpretation requests.
     - Raise it if image or transcription requests time out.
   - Lower it if you want quicker fail-closed fallback behavior.

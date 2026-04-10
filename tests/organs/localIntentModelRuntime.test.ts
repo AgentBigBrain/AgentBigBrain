@@ -597,6 +597,16 @@ test("createLocalIntentModelRuntimeConfigFromEnv parses env-backed config", () =
   });
 });
 
+test("createLocalIntentModelRuntimeConfigFromEnv defaults to Gemma 4 when the local model name is omitted", () => {
+  const config = createLocalIntentModelRuntimeConfigFromEnv({
+    BRAIN_LOCAL_INTENT_MODEL_ENABLED: "true",
+    BRAIN_LOCAL_INTENT_MODEL_PROVIDER: "ollama",
+    BRAIN_LOCAL_INTENT_MODEL_BASE_URL: "http://127.0.0.1:11434"
+  });
+
+  assert.equal(config.model, "gemma4:latest");
+});
+
 test("createLocalIntentModelResolverFromEnv returns undefined when disabled", () => {
   const resolver = createLocalIntentModelResolverFromEnv({
     BRAIN_LOCAL_INTENT_MODEL_ENABLED: "false"

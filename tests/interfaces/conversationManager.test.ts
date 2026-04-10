@@ -6570,12 +6570,10 @@ test("enqueueSystemJob marks job as system job and suppresses blocked result del
 
     const blockedSummary = [
       "I couldn't execute that request in this run.",
-      "",
-      "Run summary:",
-      "- State: blocked",
-      "- What will run: respond",
-      "- What ran: none"
-    ].join("\n");
+      "What happened: governance blocked the requested action.",
+      "Why it didn't execute: Security governor rejected this request.",
+      "What to do next: request the exact rejected step with typed codes, then submit a safer/narrower alternative."
+    ].join(" ");
 
     const enqueued = await manager.enqueueSystemJob(
       "telegram:chat-1:user-1",
@@ -6594,7 +6592,9 @@ test("enqueueSystemJob marks job as system job and suppresses blocked result del
     await sleep(2_000);
 
     assert.equal(
-      notifications.some((message) => message.includes("State: blocked")),
+      notifications.some((message) =>
+        /governance blocked the requested action/i.test(message)
+      ),
       false,
       "Blocked system job result should not be delivered to the user"
     );
@@ -6606,6 +6606,13 @@ test("enqueueSystemJob marks job as system job and suppresses blocked result del
     );
     assert.ok(systemJob, "System job should exist in recent jobs");
     assert.equal(systemJob!.finalDeliveryOutcome, "sent");
+    assert.equal(
+      loaded!.conversationTurns.some((turn) =>
+        /governance blocked the requested action/i.test(turn.text)
+      ),
+      false,
+      "Blocked pulse output should stay out of stored assistant turns"
+    );
   } finally {
     await removeTempDirWithRetry(tempDir);
   }

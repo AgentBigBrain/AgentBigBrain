@@ -18,7 +18,10 @@ import { enrichAcceptedTelegramUpdateWithMedia, extractTelegramChatIdFromConvers
 import { runStage685CheckpointLiveReview } from "./CheckpointReviewRunners/stage685CheckpointReviewRunner";
 import { runGatewayCheckpointReview } from "./checkpointReviewRouting";
 import { createDynamicPulseEntityGraphGetter } from "./entityGraphRuntime";
-import { renderPulseUserFacingSummaryV1 } from "./pulseUxRuntime";
+import {
+  renderPulseUserFacingSummaryV1,
+  shouldSuppressPulseUserFacingDeliveryV1
+} from "./pulseUxRuntime";
 import { selectUserFacingSummary } from "./userFacingResult";
 import { runGatewaySessionAutonomousTask, runGatewaySessionTextTask } from "./gatewaySessionExecution";
 import { runCheckpoint611LiveReview } from "./CheckpointReviewRunners/stage6_5Checkpoint6_11Live";
@@ -173,7 +176,11 @@ export class TelegramGateway {
                 : execution.summary;
               return {
                 summary: renderPulseUserFacingSummaryV1(session, systemInput, baseSummary, timestamp),
-                taskRunResult: execution.taskRunResult ?? null
+                taskRunResult: execution.taskRunResult ?? null,
+                suppressUserDelivery: shouldSuppressPulseUserFacingDeliveryV1(
+                  systemInput,
+                  baseSummary
+                )
               };
             },
             notifier

@@ -537,3 +537,70 @@ test("interpretVoiceAttachment can use multimodal audio models on a local OpenAI
     globalThis.fetch = originalFetch;
   }
 });
+
+test("interpretVoiceAttachment can use multimodal Gemma audio through Ollama's local compatibility endpoint", async () => {
+  const originalFetch = globalThis.fetch;
+  let seenAuthorizationHeader: string | null = null;
+  let seenUrl = "";
+  let seenBody = "";
+  try {
+    globalThis.fetch = (async (input, init) => {
+      seenUrl = typeof input === "string" ? input : input.toString();
+      seenAuthorizationHeader = new Headers(init?.headers).get("Authorization");
+      seenBody = typeof init?.body === "string" ? init.body : "";
+      return new Response(
+        JSON.stringify({
+          output_text: "Call Billy after lunch."
+        }),
+        {
+          status: 200,
+          headers: {
+            "Content-Type": "application/json"
+          }
+        }
+      );
+    }) as typeof fetch;
+
+    const interpretation = await interpretVoiceAttachment(
+      {
+        requestedBackend: "ollama",
+        resolvedBackend: "ollama",
+        requestedVisionBackend: "disabled",
+        resolvedVisionBackend: "disabled",
+        requestedTranscriptionBackend: "ollama",
+        resolvedTranscriptionBackend: "ollama",
+        openAIApiKey: null,
+        openAIBaseUrl: "https://api.openai.com/v1",
+        ollamaApiKey: null,
+        ollamaBaseUrl: "http://localhost:11434",
+        visionModel: "gemma4:latest",
+        transcriptionModel: "gemma4:latest",
+        requestTimeoutMs: 45_000
+      },
+      {
+        kind: "voice",
+        provider: "telegram",
+        fileId: "voice-gemma-ollama-1",
+        fileUniqueId: "voice-gemma-ollama-1",
+        mimeType: "audio/ogg",
+        fileName: "voice-note.ogg",
+        sizeBytes: 1024,
+        caption: null,
+        durationSeconds: 8,
+        width: null,
+        height: null
+      },
+      Buffer.from("voice-data", "utf8")
+    );
+
+    assert.equal(seenUrl, "http://localhost:11434/v1/responses");
+    assert.equal(seenAuthorizationHeader, null);
+    assert.match(seenBody, /input_audio/);
+    assert.match(seenBody, /gemma4:latest/);
+    assert.equal(interpretation.transcript, "Call Billy after lunch.");
+    assert.equal(interpretation.source, "multimodal_audio");
+    assert.match(interpretation.provenance, /Ollama local model transcription model gemma4:latest/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

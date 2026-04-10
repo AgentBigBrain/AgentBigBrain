@@ -74,6 +74,28 @@ export function isLocalOpenAICompatibleBaseUrl(baseUrl: string): boolean {
 }
 
 /**
+ * Resolves the OpenAI-compatible base URL exposed by Ollama.
+ *
+ * **Why it exists:**
+ * The media runtime should treat Ollama as its own backend while still targeting the compatibility
+ * surface Ollama exposes for multimodal requests. Centralizing that URL normalization keeps audio
+ * routing deterministic instead of scattering `/v1` handling across callers.
+ *
+ * **What it talks to:**
+ * - Uses local string normalization helpers within this module.
+ *
+ * @param baseUrl - Configured Ollama base URL, with or without the `/v1` suffix.
+ * @returns Canonical base URL that targets Ollama's OpenAI-compatible surface.
+ */
+export function resolveOllamaOpenAICompatibilityBaseUrl(baseUrl: string): string {
+  const trimmed = baseUrl.trim().replace(/\/+$/, "");
+  if (!trimmed) {
+    return "http://localhost:11434/v1";
+  }
+  return /\/v1$/i.test(trimmed) ? trimmed : `${trimmed}/v1`;
+}
+
+/**
  * Returns the audio format token used by multimodal chat-style providers.
  *
  * @param mimeType - Attachment MIME type when known.

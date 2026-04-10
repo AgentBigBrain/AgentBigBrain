@@ -8,7 +8,10 @@ import { test } from "node:test";
 import { createEmptyConversationStackV1 } from "../../src/core/stage6_86ConversationStack";
 import { buildSessionSeed } from "../../src/interfaces/conversationManagerHelpers";
 import { ConversationSession } from "../../src/interfaces/sessionStore";
-import { renderPulseUserFacingSummaryV1 } from "../../src/interfaces/pulseUxRuntime";
+import {
+  renderPulseUserFacingSummaryV1,
+  shouldSuppressPulseUserFacingDeliveryV1
+} from "../../src/interfaces/pulseUxRuntime";
 
 /**
  * Implements `buildSession` behavior within module scope.
@@ -129,6 +132,36 @@ function supportsLegacyLowerCaseStage686ReasonCodes(): void {
   assert.equal(rendered, "Could you confirm whether your current deployment timeline changed?");
 }
 
+/**
+ * Implements `suppressesBlockedStage686PulseSummaries` behavior within module scope.
+ * Interacts with local collaborators through imported modules and typed inputs/outputs.
+ */
+function suppressesBlockedStage686PulseSummaries(): void {
+  const shouldSuppress = shouldSuppressPulseUserFacingDeliveryV1(
+    "Agent Pulse proactive check-in request.\nReason code: TOPIC_DRIFT_RESUME",
+    [
+      "I couldn't execute that request in this run.",
+      "What happened: governance blocked the requested action.",
+      "Why it didn't execute: Security governor rejected this request."
+    ].join(" ")
+  );
+
+  assert.equal(shouldSuppress, true);
+}
+
+/**
+ * Implements `keepsNaturalStage686PulseSummariesVisible` behavior within module scope.
+ * Interacts with local collaborators through imported modules and typed inputs/outputs.
+ */
+function keepsNaturalStage686PulseSummariesVisible(): void {
+  const shouldSuppress = shouldSuppressPulseUserFacingDeliveryV1(
+    "Agent Pulse proactive check-in request.\nReason code: stale_fact_revalidation",
+    "Quick check-in: are you still working with Billy at Flare Web Design?"
+  );
+
+  assert.equal(shouldSuppress, false);
+}
+
 test(
   "pulse ux runtime strips stage 6.86 envelope metadata from live delivery output",
   rendersStage686PulseEnvelopeWhenReasonCodeIsPresent
@@ -140,4 +173,12 @@ test(
 test(
   "pulse ux runtime supports lower-case stage 6.86 reason-code prompts without leaking envelope metadata",
   supportsLegacyLowerCaseStage686ReasonCodes
+);
+test(
+  "pulse ux runtime suppresses governance-blocked stage 6.86 pulse summaries",
+  suppressesBlockedStage686PulseSummaries
+);
+test(
+  "pulse ux runtime keeps natural stage 6.86 pulse summaries visible",
+  keepsNaturalStage686PulseSummariesVisible
 );

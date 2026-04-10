@@ -15,8 +15,32 @@ import { buildFallbackMediaInterpretation } from "./mediaModelFallback";
 import {
   extractResponsesOutputText,
   isDedicatedTranscriptionModel,
-  resolveAudioFormat
+  resolveAudioFormat,
+  resolveOllamaOpenAICompatibilityBaseUrl
 } from "./providerSupport";
+
+/**
+ * Resolves the provider endpoint used for multimodal audio transcription requests.
+ *
+ * **Why it exists:**
+ * Dedicated transcription models and multimodal chat models do not share the same transport
+ * surface, and Ollama exposes its multimodal local path through the OpenAI-compatible `/v1`
+ * boundary rather than the native `/api/chat` image-only shape.
+ *
+ * **What it talks to:**
+ * - Uses `MediaUnderstandingConfig` (import type `MediaUnderstandingConfig`) from `./contracts`.
+ * - Uses `resolveOllamaOpenAICompatibilityBaseUrl` from `./providerSupport`.
+ *
+ * @param config - Media-understanding provider config.
+ * @returns Canonical base URL for multimodal audio transcription requests.
+ */
+function resolveMultimodalTranscriptionBaseUrl(
+  config: MediaUnderstandingConfig
+): string {
+  return config.resolvedTranscriptionBackend === "ollama"
+    ? resolveOllamaOpenAICompatibilityBaseUrl(config.ollamaBaseUrl)
+    : config.openAIBaseUrl;
+}
 
 /**
  * Attempts bounded transcription for one voice-note attachment.
@@ -44,8 +68,12 @@ export async function interpretVoiceAttachment(
     const timeout = setTimeout(() => abortController.abort(), config.requestTimeoutMs);
     const mimeType = attachment.mimeType ?? "audio/ogg";
     const extension = resolveAudioFormat(mimeType, attachment.fileName);
+    const transcriptionBackend = config.resolvedTranscriptionBackend;
     let response: Response;
-    if (isDedicatedTranscriptionModel(config.transcriptionModel)) {
+    if (
+      isDedicatedTranscriptionModel(config.transcriptionModel) &&
+      transcriptionBackend !== "ollama"
+    ) {
       const formData = new FormData();
       formData.append("model", config.transcriptionModel);
       formData.append(
@@ -62,7 +90,7 @@ export async function interpretVoiceAttachment(
         signal: abortController.signal
       });
     } else {
-      response = await fetch(`${config.openAIBaseUrl}/responses`, {
+      response = await fetch(`${resolveMultimodalTranscriptionBaseUrl(config)}/responses`, {
         method: "POST",
         headers: {
           ...authorizationHeaders,

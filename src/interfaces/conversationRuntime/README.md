@@ -478,6 +478,9 @@ The latest slices moved queue/ack, worker-loop, and pulse-state ownership here s
   ownership, not change pulse behavior.
 - User-facing proactive pulse delivery must emit only the final message body; internal reason codes,
   previews, and thread diagnostics belong in debug or diagnostic surfaces, not end-user messages.
+- Governance-blocked or otherwise suppressed Agent Pulse outcomes must stay internal; they may be
+  retained on the job ledger for diagnostics, but they must not append assistant turns, overwrite
+  return handoff state, or surface as proactive user messages.
 - User-facing pulse prompts should sound natural; they may be truthful about AI identity when
   relevant, but must not prepend label-style openings like `AI assistant response:` or
   `AI assistant check-in:` and should not volunteer AI identity in ordinary greetings or casual

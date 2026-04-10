@@ -98,6 +98,7 @@ export interface ConversationInboundMessage {
 export interface ConversationExecutionResult {
   summary: string;
   taskRunResult?: TaskRunResult | null;
+  suppressUserDelivery?: boolean;
 }
 
 export type RunDirectConversationTurn = (

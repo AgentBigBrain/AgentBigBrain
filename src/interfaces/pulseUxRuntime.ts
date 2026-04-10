@@ -9,6 +9,13 @@ import {
 import { ConversationSession } from "./sessionStore";
 
 const FALLBACK_PULSE_MESSAGE = "Checking in.";
+const BLOCKED_PULSE_SUMMARY_PATTERNS = [
+  /^I couldn't execute that request in this run\./i,
+  /\bWhat happened:\s*governance blocked the requested action\b/i,
+  /\bWhat happened:\s*one or more governed actions were blocked before execution\b/i,
+  /(?:^|\n)\s*-\s*State:\s*blocked\b/i,
+  /\bTechnical reason code:\s*COMMUNICATION_NO_SIDE_EFFECT_EXECUTED\b/i
+] as const;
 
 /**
  * Evaluates stage 6.86 pulse reason code and returns a deterministic policy signal.
@@ -99,6 +106,36 @@ function buildPulseMessage(baseSummary: string): string {
     return FALLBACK_PULSE_MESSAGE;
   }
   return normalized;
+}
+
+/**
+ * Returns whether a pulse summary should be suppressed from user delivery.
+ *
+ * **Why it exists:**
+ * Agent Pulse is proactive background work. If governance blocks the pulse itself, leaking that
+ * internal failure into the chat looks like an unsolicited assistant reply rather than a
+ * user-requested outcome.
+ *
+ * **What it talks to:**
+ * - Uses local Stage 6.86 reason-code extraction helpers within this module.
+ * - Uses local blocked-summary pattern constants within this module.
+ *
+ * @param systemInput - Internal system prompt text queued for pulse execution.
+ * @param baseSummary - Candidate user-facing summary returned from governed execution.
+ * @returns `true` when the pulse result should stay internal instead of being delivered to the user.
+ */
+export function shouldSuppressPulseUserFacingDeliveryV1(
+  systemInput: string,
+  baseSummary: string
+): boolean {
+  if (!extractPulseReasonCode(systemInput)) {
+    return false;
+  }
+  const normalized = baseSummary.trim();
+  if (!normalized) {
+    return true;
+  }
+  return BLOCKED_PULSE_SUMMARY_PATTERNS.some((pattern) => pattern.test(normalized));
 }
 
 /**

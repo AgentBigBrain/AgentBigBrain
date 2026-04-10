@@ -4376,6 +4376,13 @@ test("isBlockedSystemJobOutcome only matches completed blocked system outputs", 
     isSystemJob: true,
     resultSummary: "State: blocked (policy)."
   };
+  const governanceBlocked = {
+    ...buildQueuedJob(nowIso),
+    status: "completed" as const,
+    isSystemJob: true,
+    resultSummary:
+      "I couldn't execute that request in this run. What happened: governance blocked the requested action."
+  };
   const normal = {
     ...buildQueuedJob(nowIso),
     status: "completed" as const,
@@ -4384,7 +4391,58 @@ test("isBlockedSystemJobOutcome only matches completed blocked system outputs", 
   };
 
   assert.equal(isBlockedSystemJobOutcome(blocked), true);
+  assert.equal(isBlockedSystemJobOutcome(governanceBlocked), true);
+  assert.equal(
+    isBlockedSystemJobOutcome(normal, {
+      summary: "Suppressed pulse",
+      suppressUserDelivery: true
+    }),
+    true
+  );
   assert.equal(isBlockedSystemJobOutcome(normal), false);
+});
+
+test("persistExecutedJobOutcome keeps suppressed system summaries out of assistant turns and handoff", () => {
+  const nowIso = "2026-03-03T00:00:00.000Z";
+  const session = buildSessionSeed({
+    provider: "telegram",
+    conversationId: "chat-1",
+    userId: "user-1",
+    username: "owner",
+    conversationVisibility: "private",
+    receivedAt: nowIso
+  });
+  const queuedJob = {
+    ...buildQueuedJob(nowIso),
+    id: "job-pulse-1",
+    isSystemJob: true
+  };
+  const completedJob = {
+    ...queuedJob,
+    status: "completed" as const,
+    completedAt: "2026-03-03T00:00:05.000Z",
+    resultSummary:
+      "I couldn't execute that request in this run. What happened: governance blocked the requested action."
+  };
+  session.recentJobs = [queuedJob];
+
+  const persisted = persistExecutedJobOutcome({
+    session,
+    executedJob: completedJob,
+    executionResult: {
+      summary: completedJob.resultSummary!,
+      suppressUserDelivery: true
+    },
+    maxRecentJobs: 10,
+    maxRecentActions: 10,
+    maxBrowserSessions: 5,
+    maxPathDestinations: 10,
+    maxConversationTurns: 10
+  });
+
+  assert.equal(persisted.resultSummary, completedJob.resultSummary);
+  assert.equal(session.conversationTurns.length, 0);
+  assert.equal(session.returnHandoff, null);
 });
 
 test("persistExecutedJobOutcome downgrades the active workspace when stop_process closes the linked browser session too", () => {
