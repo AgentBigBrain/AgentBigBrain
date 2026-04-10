@@ -8,8 +8,14 @@ import type { DatabaseSync } from "node:sqlite";
 
 import { LedgerBackend } from "./config";
 import { withFileLock, writeFileAtomic } from "./fileLock";
+import { sha256HexFromCanonicalJson } from "./normalizers/canonicalizationRules";
 import { withSqliteDatabase } from "./sqliteStore";
-import { EntityGraphV1 } from "./types";
+import {
+  EntityAlignmentDecisionActionV1,
+  EntityAlignmentDecisionRecordV1,
+  EntityGraphV1,
+  MemoryConflictCodeV1
+} from "./types";
 import {
   applyEntityAliasCandidateToGraph,
   applyEntityExtractionToGraph,
@@ -23,11 +29,22 @@ import {
 } from "./stage6_86EntityGraph";
 
 const SQLITE_ENTITY_GRAPH_STATE_TABLE = "entity_graph_state";
+const MAX_ENTITY_GRAPH_DECISION_RECORDS = 128;
 
 interface EntityGraphStoreOptions {
   backend?: LedgerBackend;
   sqlitePath?: string;
   exportJsonOnWrite?: boolean;
+}
+
+export interface RecordEntityGraphAlignmentDecisionInput {
+  action: EntityAlignmentDecisionActionV1;
+  entityKey: string;
+  targetEntityKey?: string | null;
+  aliasValue?: string | null;
+  reasonCode?: MemoryConflictCodeV1 | null;
+  observedAt: string;
+  evidenceRefs?: readonly string[];
 }
 
 /**
@@ -140,10 +157,39 @@ export class EntityGraphStore {
   ): Promise<Stage686EntityAliasMutationResult> {
     const currentGraph = await this.getGraph();
     const mutation = applyEntityAliasCandidateToGraph(currentGraph, input, options);
-    if (mutation.graph !== currentGraph) {
-      await this.persistGraph(mutation.graph);
+    const decisionInput = buildAliasCandidateAlignmentDecisionInput(mutation, input);
+    const graphWithDecision = decisionInput
+      ? appendEntityGraphDecisionRecord(mutation.graph, decisionInput).graph
+      : mutation.graph;
+    if (graphWithDecision !== currentGraph) {
+      await this.persistGraph(graphWithDecision);
     }
-    return mutation;
+    return {
+      ...mutation,
+      graph: graphWithDecision
+    };
+  }
+
+  /**
+   * Appends one durable alignment decision record without mutating entity topology.
+   *
+   * **Why it exists:**
+   * Phase 5b needs explicit replayable records for bounded quarantine, unquarantine, and rollback
+   * actions even when entity nodes and edges stay unchanged.
+   *
+   * **What it talks to:**
+   * - Uses local deterministic decision-record helpers in this module.
+   *
+   * @param input - Canonical alignment decision payload to persist.
+   * @returns Promise resolving to the persisted decision record.
+   */
+  async recordAlignmentDecision(
+    input: RecordEntityGraphAlignmentDecisionInput
+  ): Promise<EntityAlignmentDecisionRecordV1> {
+    const currentGraph = await this.getGraph();
+    const appended = appendEntityGraphDecisionRecord(currentGraph, input);
+    await this.persistGraph(appended.graph);
+    return appended.decisionRecord;
   }
 
   /**
@@ -400,6 +446,115 @@ function isStringArray(value: unknown): value is string[] {
 }
 
 /**
+ * Builds the bounded durable alignment-decision payload implied by alias reconciliation.
+ *
+ * @param mutation - Alias-reconciliation result before durable decision-record append.
+ * @param input - Alias candidate request that produced the mutation.
+ * @returns Canonical decision input, or `null` when no durable decision should be written.
+ */
+function buildAliasCandidateAlignmentDecisionInput(
+  mutation: Stage686EntityAliasMutationResult,
+  input: Stage686EntityAliasCandidateInput
+): RecordEntityGraphAlignmentDecisionInput | null {
+  if (mutation.acceptedAlias) {
+    return {
+      action: "merge",
+      entityKey: input.entityKey,
+      aliasValue: mutation.acceptedAlias,
+      observedAt: input.observedAt,
+      evidenceRefs: [input.evidenceRef]
+    };
+  }
+  return mutation.rejectionReason === "ALIAS_COLLISION"
+    ? {
+        action: "quarantine",
+        entityKey: input.entityKey,
+        targetEntityKey: mutation.aliasConflicts[0]?.existingEntityKey ?? null,
+        aliasValue: input.aliasCandidate,
+        reasonCode: "ALIAS_COLLISION",
+        observedAt: input.observedAt,
+        evidenceRefs: [input.evidenceRef]
+      }
+    : null;
+}
+
+/**
+ * Appends one deterministic alignment decision record to the entity graph envelope.
+ *
+ * @param graph - Current entity-graph snapshot.
+ * @param input - Canonical alignment decision payload.
+ * @returns Updated graph plus the appended decision record.
+ */
+function appendEntityGraphDecisionRecord(
+  graph: EntityGraphV1,
+  input: RecordEntityGraphAlignmentDecisionInput
+): { graph: EntityGraphV1; decisionRecord: EntityAlignmentDecisionRecordV1 } {
+  const decisionRecord = buildEntityGraphDecisionRecord(input);
+  if ((graph.decisionRecords ?? []).some((record) => record.decisionId === decisionRecord.decisionId)) {
+    return { graph, decisionRecord };
+  }
+  return {
+    graph: {
+      ...graph,
+      updatedAt: input.observedAt,
+      decisionRecords: [...(graph.decisionRecords ?? []), decisionRecord].slice(
+        -MAX_ENTITY_GRAPH_DECISION_RECORDS
+      )
+    },
+    decisionRecord
+  };
+}
+
+/**
+ * Builds one canonical alignment decision record for durable entity-graph audit.
+ *
+ * @param input - Canonical alignment decision payload.
+ * @returns Deterministic durable decision record.
+ */
+function buildEntityGraphDecisionRecord(
+  input: RecordEntityGraphAlignmentDecisionInput
+): EntityAlignmentDecisionRecordV1 {
+  const normalizedAliasValue = normalizeOptionalGraphString(input.aliasValue);
+  const normalizedTargetEntityKey = normalizeOptionalGraphString(input.targetEntityKey);
+  const evidenceRefs = normalizeStringArray(input.evidenceRefs ?? []);
+  const decisionPayload = {
+    action: input.action,
+    recordedAt: input.observedAt,
+    entityKey: input.entityKey.trim(),
+    targetEntityKey: normalizedTargetEntityKey,
+    aliasValue: normalizedAliasValue,
+    reasonCode: input.reasonCode ?? null,
+    evidenceRefs
+  };
+  return {
+    decisionId: `entity_graph_decision_${sha256HexFromCanonicalJson(decisionPayload).slice(0, 24)}`,
+    ...decisionPayload
+  };
+}
+
+/**
+ * Normalizes an optional graph-owned string field to one bounded deterministic form.
+ *
+ * @param value - Candidate optional string.
+ * @returns Trimmed string or `null`.
+ */
+function normalizeOptionalGraphString(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+/**
+ * Deduplicates and orders string arrays for durable entity-graph storage.
+ *
+ * @param values - Candidate string values.
+ * @returns Stable ordered unique strings.
+ */
+function normalizeStringArray(values: readonly string[]): string[] {
+  return [...new Set(values.map((value) => value.trim()).filter(Boolean))].sort((left, right) =>
+    left.localeCompare(right)
+  );
+}
+
+/**
  * Normalizes entity graph into a stable shape for `entityGraphStore` logic.
  *
  * **Why it exists:**
@@ -423,17 +578,28 @@ function normalizeEntityGraph(value: unknown): EntityGraphV1 {
   if (typeof candidate.updatedAt !== "string" || !Number.isFinite(Date.parse(candidate.updatedAt))) {
     throw new Error("Malformed entity graph: updatedAt must be an ISO timestamp string.");
   }
-  if (!Array.isArray(candidate.entities) || !Array.isArray(candidate.edges)) {
-    throw new Error("Malformed entity graph: entities/edges must be arrays.");
+  if (
+    !Array.isArray(candidate.entities) ||
+    !Array.isArray(candidate.edges) ||
+    !(
+      candidate.decisionRecords === undefined ||
+      Array.isArray(candidate.decisionRecords)
+    )
+  ) {
+    throw new Error("Malformed entity graph: entities/edges/decisionRecords must be arrays.");
   }
 
   const entities = candidate.entities.map((entity, index) => normalizeEntityNode(entity, index));
   const edges = candidate.edges.map((edge, index) => normalizeRelationEdge(edge, index));
+  const decisionRecords = (candidate.decisionRecords ?? []).map((decisionRecord, index) =>
+    normalizeEntityGraphDecisionRecord(decisionRecord, index)
+  );
   return {
     schemaVersion: "v1",
     updatedAt: candidate.updatedAt,
     entities: entities.sort((left, right) => left.entityKey.localeCompare(right.entityKey)),
-    edges: edges.sort((left, right) => left.edgeKey.localeCompare(right.edgeKey))
+    edges: edges.sort((left, right) => left.edgeKey.localeCompare(right.edgeKey)),
+    decisionRecords
   };
 }
 
@@ -554,5 +720,51 @@ function normalizeRelationEdge(value: unknown, index: number): EntityGraphV1["ed
     firstObservedAt: candidate.firstObservedAt,
     lastObservedAt: candidate.lastObservedAt,
     evidenceRefs: [...candidate.evidenceRefs].sort((left, right) => left.localeCompare(right))
+  };
+}
+
+/**
+ * Normalizes one durable entity-graph alignment decision record.
+ *
+ * @param value - Raw persisted decision record.
+ * @param index - Decision-record index under normalization.
+ * @returns Stable normalized decision record.
+ */
+function normalizeEntityGraphDecisionRecord(
+  value: unknown,
+  index: number
+): EntityAlignmentDecisionRecordV1 {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`Malformed entity-graph decision record at index ${index}.`);
+  }
+
+  const candidate = value as Partial<EntityAlignmentDecisionRecordV1>;
+  if (
+    typeof candidate.decisionId !== "string" ||
+    !["merge", "quarantine", "unquarantine", "rollback"].includes(candidate.action ?? "") ||
+    typeof candidate.recordedAt !== "string" ||
+    typeof candidate.entityKey !== "string" ||
+    !(candidate.targetEntityKey === null || candidate.targetEntityKey === undefined || typeof candidate.targetEntityKey === "string") ||
+    !(candidate.aliasValue === null || candidate.aliasValue === undefined || typeof candidate.aliasValue === "string") ||
+    !(candidate.reasonCode === null || candidate.reasonCode === undefined || typeof candidate.reasonCode === "string") ||
+    !isStringArray(candidate.evidenceRefs)
+  ) {
+    throw new Error(`Malformed entity-graph decision record at index ${index}.`);
+  }
+  if (!Number.isFinite(Date.parse(candidate.recordedAt))) {
+    throw new Error(
+      `Malformed entity-graph decision record at index ${index}: invalid recordedAt.`
+    );
+  }
+
+  return {
+    decisionId: candidate.decisionId,
+    action: candidate.action as EntityAlignmentDecisionActionV1,
+    recordedAt: candidate.recordedAt,
+    entityKey: candidate.entityKey,
+    targetEntityKey: candidate.targetEntityKey ?? null,
+    aliasValue: candidate.aliasValue ?? null,
+    reasonCode: candidate.reasonCode ?? null,
+    evidenceRefs: normalizeStringArray(candidate.evidenceRefs)
   };
 }

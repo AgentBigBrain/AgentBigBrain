@@ -3,6 +3,8 @@
  */
 
 import { countLanguageTermOverlap } from "../../core/languageRuntime/languageScoring";
+import type { ProfileMemoryRequestTelemetry } from "../../core/profileMemoryRuntime/contracts";
+import { recordProfileMemoryAliasSafetyDecision } from "../../core/profileMemoryRuntime/profileMemoryRequestTelemetry";
 import { getEntityLookupTerms } from "../../core/stage6_86/entityGraph";
 import type { EntityGraphV1, EntityNodeV1 } from "../../core/types";
 import {
@@ -294,7 +296,6 @@ async function resolveEntityReferenceInterpretation(
 
   if (
     !interpretation ||
-    interpretation.confidence === "low" ||
     interpretation.selectedEntityKeys.length === 0
   ) {
     return null;
@@ -356,7 +357,11 @@ export async function resolveInterpretedEntityReferenceHints(
     getEntityGraph,
     resolver
   );
-  if (!resolved || resolved.interpretation.kind !== "entity_scoped_reference") {
+  if (
+    !resolved ||
+    resolved.interpretation.kind !== "entity_scoped_reference" ||
+    resolved.interpretation.confidence === "low"
+  ) {
     return null;
   }
 
@@ -390,7 +395,8 @@ export async function reconcileInterpretedEntityAliasCandidateForTurn(
   observedAt: string,
   getEntityGraph?: GetConversationEntityGraph,
   resolver?: EntityReferenceInterpretationResolver,
-  reconcileEntityAliasCandidate?: ReconcileConversationEntityAliasCandidate
+  reconcileEntityAliasCandidate?: ReconcileConversationEntityAliasCandidate,
+  requestTelemetry?: ProfileMemoryRequestTelemetry
 ): Promise<ConversationEntityAliasCandidateResult | null> {
   if (!resolver || !getEntityGraph || !reconcileEntityAliasCandidate) {
     return null;
@@ -412,6 +418,9 @@ export async function reconcileInterpretedEntityAliasCandidateForTurn(
     getEntityGraph,
     resolver
   );
+  if (resolved?.interpretation.kind === "entity_alias_candidate") {
+    recordProfileMemoryAliasSafetyDecision(requestTelemetry);
+  }
   if (
     !resolved ||
     resolved.interpretation.kind !== "entity_alias_candidate" ||

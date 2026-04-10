@@ -8,18 +8,14 @@ import type {
   ConversationTransportIdentityRecord,
   ConversationVisibility
 } from "../sessionStore";
+import type { MemoryAccessAuditStore } from "../../core/memoryAccessAudit";
 import type { ConversationInboundMediaEnvelope } from "../mediaRuntime/contracts";
 import type {
   FollowUpRuleContext,
   PulseLexicalRuleContext
 } from "../conversationManagerHelpers";
+import type { EntityGraphV1 } from "../../core/types";
 import type {
-  EntityGraphV1,
-  ConversationStackV1,
-  OpenLoopV1
-} from "../../core/types";
-import type {
-  ProfileEpisodeStatus,
   ProfileMemoryIngestRequest
 } from "../../core/profileMemory";
 import type {
@@ -60,6 +56,32 @@ import type { ManagedProcessSnapshot } from "../../organs/liveRun/managedProcess
 import type { BrowserSessionSnapshot } from "../../organs/liveRun/browserSessionRegistry";
 import type { TaskRunResult } from "../../core/types";
 import { buildConversationInboundUserInput } from "../mediaRuntime/mediaNormalization";
+import type {
+  ConversationContinuityEpisodeQueryRequest,
+  ConversationContinuityEpisodeRecord,
+  ConversationContinuityFactQueryRequest,
+  ConversationContinuityFactRecord,
+  ConversationContinuityFactResult,
+  ConversationContinuityReadSession,
+  GetConversationEntityGraph,
+  OpenConversationContinuityReadSession,
+  QueryConversationContinuityEpisodes,
+  QueryConversationContinuityFacts
+} from "./continuityContracts";
+export type {
+  ConversationContinuityEpisodeEntityLink,
+  ConversationContinuityEpisodeOpenLoopLink,
+  ConversationContinuityEpisodeQueryRequest,
+  ConversationContinuityEpisodeRecord,
+  ConversationContinuityFactQueryRequest,
+  ConversationContinuityFactRecord,
+  ConversationContinuityFactResult,
+  ConversationContinuityReadSession,
+  GetConversationEntityGraph,
+  OpenConversationContinuityReadSession,
+  QueryConversationContinuityEpisodes,
+  QueryConversationContinuityFacts
+} from "./continuityContracts";
 
 export interface ConversationInboundMessage {
   provider: "telegram" | "discord";
@@ -92,7 +114,6 @@ export interface ConversationExecutionProgressUpdate {
   message: string;
   recoveryTrace?: ConversationRecoveryTrace | null;
 }
-
 export type ConversationCapabilityStatus = "available" | "limited" | "unavailable";
 
 export interface ConversationCapabilityRecord {
@@ -131,7 +152,6 @@ export interface ConversationDeliveryResult {
   messageId: string | null;
   errorCode: string | null;
 }
-
 export type ConversationOutboundDeliverySource =
   | "transport_response"
   | "direct_reply"
@@ -194,39 +214,6 @@ export type ConversationCheckpointReviewRunner = (
   checkpointId: string
 ) => Promise<ConversationCheckpointReviewResult | null>;
 
-export interface ConversationContinuityEpisodeEntityLink {
-  entityKey: string;
-  canonicalName: string;
-}
-
-export interface ConversationContinuityEpisodeOpenLoopLink {
-  loopId: string;
-  threadKey: string;
-  status: OpenLoopV1["status"];
-  priority: number;
-}
-
-export interface ConversationContinuityEpisodeRecord {
-  episodeId: string;
-  title: string;
-  summary: string;
-  status: ProfileEpisodeStatus;
-  lastMentionedAt: string;
-  entityRefs: readonly string[];
-  entityLinks: readonly ConversationContinuityEpisodeEntityLink[];
-  openLoopLinks: readonly ConversationContinuityEpisodeOpenLoopLink[];
-}
-
-export interface ConversationContinuityFactRecord {
-  factId: string;
-  key: string;
-  value: string;
-  status: string;
-  observedAt: string;
-  lastUpdatedAt: string;
-  confidence: number;
-}
-
 export type {
   ConversationMemoryFactReviewRecord,
   ConversationMemoryFactReviewRequest,
@@ -248,35 +235,6 @@ export type ListAvailableSkills = () => Promise<readonly SkillInventoryEntry[]>;
 
 export type DescribeRuntimeCapabilities = () => Promise<ConversationCapabilitySummary>;
 
-export interface ConversationContinuityEpisodeQueryRequest {
-  stack: ConversationStackV1;
-  entityHints: readonly string[];
-  maxEpisodes?: number;
-}
-
-export type QueryConversationContinuityEpisodes = (
-  request: ConversationContinuityEpisodeQueryRequest
-) => Promise<readonly ConversationContinuityEpisodeRecord[]>;
-
-export interface ConversationContinuityFactQueryRequest {
-  stack: ConversationStackV1;
-  entityHints: readonly string[];
-  maxFacts?: number;
-}
-
-export type QueryConversationContinuityFacts = (
-  request: ConversationContinuityFactQueryRequest
-) => Promise<readonly ConversationContinuityFactRecord[]>;
-
-export interface ConversationContinuityReadSession {
-  queryContinuityEpisodes(request: ConversationContinuityEpisodeQueryRequest): Promise<readonly ConversationContinuityEpisodeRecord[]>;
-  queryContinuityFacts(request: ConversationContinuityFactQueryRequest): Promise<readonly ConversationContinuityFactRecord[]>;
-}
-
-export type OpenConversationContinuityReadSession = () => Promise<ConversationContinuityReadSession | null>;
-
-export type GetConversationEntityGraph = () => Promise<EntityGraphV1>;
-
 export interface ConversationEntityAliasCandidateRequest {
   entityKey: string;
   aliasCandidate: string;
@@ -297,7 +255,6 @@ export type RememberConversationProfileInput = (
   input: string | ProfileMemoryIngestRequest,
   receivedAt: string
 ) => Promise<boolean>;
-
 export type ListManagedProcessSnapshots = () => Promise<readonly ManagedProcessSnapshot[]>;
 export type ListBrowserSessionSnapshots = () => Promise<readonly BrowserSessionSnapshot[]>;
 
@@ -351,6 +308,7 @@ export interface ConversationManagerDependencies {
   describeRuntimeCapabilities?: DescribeRuntimeCapabilities;
   listManagedProcessSnapshots?: ListManagedProcessSnapshots;
   listBrowserSessionSnapshots?: ListBrowserSessionSnapshots;
+  memoryAccessAuditStore?: MemoryAccessAuditStore;
   abortActiveAutonomousRun?(conversationId: string): boolean;
 }
 
@@ -358,7 +316,6 @@ export interface ConversationIngressRuleContexts {
   followUpRuleContext: FollowUpRuleContext;
   pulseLexicalRuleContext: PulseLexicalRuleContext;
 }
-
 export const AUTONOMOUS_EXECUTION_PREFIX = "[AUTONOMOUS_LOOP_GOAL]";
 
 export interface AutonomousExecutionEnvelope {

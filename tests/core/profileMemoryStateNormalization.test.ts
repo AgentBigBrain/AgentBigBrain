@@ -2822,7 +2822,7 @@ test("normalizeProfileMemoryState trims padded graph semantic identity, clears b
     (entry) => entry.payload.eventId === "event_profile_graph_metadata_blank"
   );
 
-  assert.equal(observation?.payload.stableRefId, null);
+  assert.equal(observation?.payload.stableRefId, "stable_self_profile_owner");
   assert.equal(observation?.payload.family, "identity.preferred_name");
   assert.equal(observation?.payload.normalizedKey, "identity.preferred_name");
   assert.equal(observation?.payload.normalizedValue, "Avery");
@@ -2843,7 +2843,7 @@ test("normalizeProfileMemoryState trims padded graph semantic identity, clears b
     claim?.payload.endedByClaimId,
     "claim_profile_graph_metadata_blank_successor"
   );
-  assert.equal(event?.payload.stableRefId, null);
+  assert.equal(event?.payload.stableRefId, "stable_self_profile_owner");
   assert.equal(event?.payload.family, "episode.candidate");
   assert.equal(event?.payload.sourceTaskId, "task_profile_graph_metadata_event");
   assert.equal(
@@ -2882,6 +2882,179 @@ test("normalizeProfileMemoryState trims padded graph semantic identity, clears b
     normalized.graph.readModel.currentClaimIdsByKey["identity.preferred_name"],
     "claim_profile_graph_metadata_blank_successor"
   );
+});
+
+test("normalizeProfileMemoryState preserves stable refs across legacy fact backfill repair", () => {
+  const recordedAt = "2026-04-09T15:00:00.000Z";
+  const normalized = normalizeProfileMemoryState({
+    updatedAt: recordedAt,
+    facts: [
+      {
+        id: "profile_fact_stable_ref_backfill",
+        key: "identity.preferred_name",
+        value: "Avery",
+        sensitive: false,
+        status: "confirmed",
+        confidence: 0.95,
+        sourceTaskId: "task_profile_graph_stable_ref_backfill",
+        source: "user_input_pattern.name_phrase",
+        observedAt: recordedAt,
+        confirmedAt: recordedAt,
+        supersededAt: null,
+        lastUpdatedAt: recordedAt
+      }
+    ],
+    graph: {
+      updatedAt: recordedAt,
+      observations: [
+        createSchemaEnvelopeV1(
+          PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME,
+          {
+            observationId: "observation_profile_graph_stable_ref_backfill",
+            stableRefId: "stable_self_profile_owner",
+            family: "identity.preferred_name",
+            normalizedKey: "identity.preferred_name",
+            normalizedValue: "Avery",
+            redactionState: "not_requested",
+            redactedAt: null,
+            sensitive: false,
+            sourceTaskId: "task_profile_graph_stable_ref_backfill",
+            sourceFingerprint: "fingerprint_profile_graph_stable_ref_backfill_observation",
+            sourceTier: "explicit_user_statement",
+            assertedAt: recordedAt,
+            observedAt: recordedAt,
+            timePrecision: "instant",
+            timeSource: "user_stated",
+            entityRefIds: []
+          },
+          recordedAt
+        )
+      ],
+      claims: [
+        createSchemaEnvelopeV1(
+          PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME,
+          {
+            claimId: "claim_profile_graph_stable_ref_backfill",
+            stableRefId: "stable_self_profile_owner",
+            family: "identity.preferred_name",
+            normalizedKey: "identity.preferred_name",
+            normalizedValue: "Avery",
+            redactionState: "not_requested",
+            redactedAt: null,
+            sensitive: false,
+            sourceTaskId: "task_profile_graph_stable_ref_backfill",
+            sourceFingerprint: "fingerprint_profile_graph_stable_ref_backfill_claim",
+            sourceTier: "explicit_user_statement",
+            assertedAt: recordedAt,
+            validFrom: recordedAt,
+            validTo: null,
+            endedAt: null,
+            endedByClaimId: null,
+            timePrecision: "instant",
+            timeSource: "user_stated",
+            derivedFromObservationIds: ["observation_profile_graph_stable_ref_backfill"],
+            projectionSourceIds: ["profile_fact_stable_ref_backfill"],
+            entityRefIds: [],
+            active: true
+          },
+          recordedAt
+        )
+      ],
+      events: [],
+      mutationJournal: {
+        schemaVersion: "v1",
+        nextWatermark: 2,
+        entries: [
+          {
+            journalEntryId: "journal_profile_graph_stable_ref_backfill",
+            watermark: 1,
+            recordedAt,
+            sourceTaskId: "task_profile_graph_stable_ref_backfill",
+            sourceFingerprint: "fingerprint_profile_graph_stable_ref_backfill_observation",
+            mutationEnvelopeHash: null,
+            observationIds: ["observation_profile_graph_stable_ref_backfill"],
+            claimIds: ["claim_profile_graph_stable_ref_backfill"],
+            eventIds: [],
+            redactionState: "not_requested"
+          }
+        ]
+      }
+    }
+  });
+
+  const claim = normalized.graph.claims.find(
+    (entry) => entry.payload.claimId === "claim_profile_graph_stable_ref_backfill"
+  );
+  assert.equal(claim?.payload.stableRefId, "stable_self_profile_owner");
+});
+
+test("normalizeProfileMemoryState preserves durable graph decision records for stable-ref rekey history", () => {
+  const recordedAt = "2026-04-09T16:35:00.000Z";
+  const normalized = normalizeProfileMemoryState({
+    updatedAt: recordedAt,
+    graph: {
+      updatedAt: recordedAt,
+      observations: [],
+      claims: [],
+      events: [],
+      decisionRecords: [
+        {
+          action: "rekey",
+          recordedAt: ` ${recordedAt} `,
+          fromStableRefId: " stable_contact_owen ",
+          toStableRefId: " stable_contact_owen_primary ",
+          sourceTaskId: " task_profile_graph_stable_ref_rekey ",
+          sourceFingerprint: " fingerprint_profile_graph_stable_ref_rekey ",
+          mutationEnvelopeHash: " mutation_envelope_profile_graph_stable_ref_rekey ",
+          observationIds: [
+            " observation_profile_graph_stable_ref_rekey ",
+            " observation_profile_graph_stable_ref_rekey "
+          ],
+          claimIds: [" claim_profile_graph_stable_ref_rekey "],
+          eventIds: [" event_profile_graph_stable_ref_rekey "]
+        }
+      ],
+      mutationJournal: {
+        schemaVersion: "v1",
+        nextWatermark: 1,
+        entries: []
+      }
+    }
+  });
+
+  const decisionPayload = {
+    action: "rekey",
+    recordedAt,
+    fromStableRefId: "stable_contact_owen",
+    toStableRefId: "stable_contact_owen_primary",
+    sourceTaskId: "task_profile_graph_stable_ref_rekey",
+    sourceFingerprint: "fingerprint_profile_graph_stable_ref_rekey",
+    mutationEnvelopeHash: "mutation_envelope_profile_graph_stable_ref_rekey",
+    observationIds: ["observation_profile_graph_stable_ref_rekey"],
+    claimIds: ["claim_profile_graph_stable_ref_rekey"],
+    eventIds: ["event_profile_graph_stable_ref_rekey"]
+  };
+  const decisionRecord = normalized.graph.decisionRecords?.[0];
+
+  assert.equal(normalized.graph.decisionRecords?.length, 1);
+  assert.equal(
+    decisionRecord?.decisionId,
+    `profile_memory_graph_decision_${sha256HexFromCanonicalJson(decisionPayload).slice(0, 24)}`
+  );
+  assert.equal(decisionRecord?.action, "rekey");
+  assert.equal(decisionRecord?.fromStableRefId, "stable_contact_owen");
+  assert.equal(decisionRecord?.toStableRefId, "stable_contact_owen_primary");
+  assert.equal(
+    decisionRecord?.sourceTaskId,
+    "task_profile_graph_stable_ref_rekey"
+  );
+  assert.equal(
+    decisionRecord?.mutationEnvelopeHash,
+    "mutation_envelope_profile_graph_stable_ref_rekey"
+  );
+  assert.deepEqual(decisionRecord?.observationIds, ["observation_profile_graph_stable_ref_rekey"]);
+  assert.deepEqual(decisionRecord?.claimIds, ["claim_profile_graph_stable_ref_rekey"]);
+  assert.deepEqual(decisionRecord?.eventIds, ["event_profile_graph_stable_ref_rekey"]);
 });
 
 test("normalizeProfileMemoryState recovers retained journal entries when journalEntryId is malformed", () => {
@@ -6561,7 +6734,7 @@ test("normalizeProfileMemoryState collapses semantic-duplicate active claims to 
   assert.equal(inactiveClaims.length, 2);
   assert.notEqual(activeClaims[0]?.payload.claimId, "claim_profile_graph_duplicate_active_1");
   assert.notEqual(activeClaims[0]?.payload.claimId, "claim_profile_graph_duplicate_active_2");
-  assert.equal(activeClaims[0]?.payload.stableRefId, null);
+  assert.equal(activeClaims[0]?.payload.stableRefId, "stable_self_profile_owner");
   assert.equal(activeClaims[0]?.payload.sensitive, true);
   assert.deepEqual(
     [...(activeClaims[0]?.payload.derivedFromObservationIds ?? [])].sort((left, right) =>
@@ -6732,7 +6905,7 @@ test("normalizeProfileMemoryState keeps semantic-duplicate retained current clai
     activeClaims[0]?.payload.claimId,
     "claim_profile_graph_duplicate_loser_lineage_current"
   );
-  assert.equal(activeClaims[0]?.payload.stableRefId, null);
+  assert.equal(activeClaims[0]?.payload.stableRefId, "stable_self_profile_owner");
   assert.equal(activeClaims[0]?.payload.sourceTaskId, null);
   assert.deepEqual(
     [...(activeClaims[0]?.payload.derivedFromObservationIds ?? [])].sort((left, right) =>

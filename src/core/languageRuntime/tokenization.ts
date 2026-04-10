@@ -5,6 +5,8 @@
 import type { TokenizationRequest } from "./contracts";
 import { getStopWordsForLanguageDomain } from "./stopWordPolicy";
 
+const LANGUAGE_INITIALISM_PATTERN = /\b(?:[\p{L}\p{N}]\.){2,}(?:[\p{L}\p{N}]\.?)?/gu;
+
 const LANGUAGE_TOKEN_PATTERN = /[\p{L}\p{N}]+(?:['’-][\p{L}\p{N}]+)*/gu;
 
 /**
@@ -24,7 +26,10 @@ export function normalizeLanguageToken(value: string): string {
  * @returns Stable unique normalized terms.
  */
 export function tokenizeLanguageTerms(request: TokenizationRequest): readonly string[] {
-  const matches = request.text.match(LANGUAGE_TOKEN_PATTERN) ?? [];
+  const matches = [
+    ...(request.text.match(LANGUAGE_TOKEN_PATTERN) ?? []),
+    ...(request.text.match(LANGUAGE_INITIALISM_PATTERN) ?? [])
+  ];
   const stopWords = getStopWordsForLanguageDomain(request.domain, request.profileId);
   const minTokenLength = request.minTokenLength ?? 3;
   const maxTokens = request.maxTokens ?? Number.POSITIVE_INFINITY;

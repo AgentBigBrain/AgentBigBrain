@@ -311,7 +311,8 @@ export function applyEntityAliasCandidateToGraph(
       schemaVersion: "v1",
       updatedAt: input.observedAt,
       entities: sortEntityNodes([...entities.values()]),
-      edges: sortRelationEdges([...graph.edges])
+      edges: sortRelationEdges([...graph.edges]),
+      decisionRecords: graph.decisionRecords ?? []
     },
     entityKey: input.entityKey,
     acceptedAlias: validatedAlias,

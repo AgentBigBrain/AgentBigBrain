@@ -35,6 +35,16 @@ interface FileLockInspection {
 const DEFAULT_LOCK_TIMEOUT_MS = 15_000;
 const DEFAULT_POLL_INTERVAL_MS = 25;
 const DEFAULT_MALFORMED_STALE_AFTER_MS = 60_000;
+const DEFAULT_ATOMIC_RENAME_RETRY_COUNT = 8;
+const DEFAULT_ATOMIC_RENAME_RETRY_DELAY_MS = 25;
+
+interface AtomicWriteDependencies {
+  mkdirImpl?: typeof mkdir;
+  writeFileImpl?: typeof writeFile;
+  renameImpl?: typeof rename;
+  rmImpl?: typeof rm;
+  sleepImpl?: (durationMs: number) => Promise<void>;
+}
 
 /**
  * Evaluates node errno and returns a deterministic policy signal.
@@ -68,6 +78,25 @@ async function sleep(durationMs: number): Promise<void> {
   await new Promise<void>((resolve) => {
     setTimeout(resolve, durationMs);
   });
+}
+
+/**
+ * Returns whether an atomic rename should retry after a transient filesystem denial.
+ *
+ * **Why it exists:**
+ * Windows hosts running under OneDrive or endpoint scanners can briefly deny the final rename even
+ * after the temp file is fully written. Bounded retries keep the atomic-write contract stable
+ * without masking permanent failures.
+ *
+ * **What it talks to:**
+ * - Uses local constants/helpers within this module.
+ *
+ * @param error - Candidate filesystem error thrown by `rename`.
+ * @returns `true` when the rename failure is transient enough to retry.
+ */
+function shouldRetryAtomicRename(error: unknown): boolean {
+  return isNodeErrno(error) &&
+    (error.code === "EPERM" || error.code === "EACCES" || error.code === "EBUSY");
 }
 
 /** Checks whether the process that owns a file lock is still alive. */
@@ -336,18 +365,39 @@ export function buildAtomicWriteTempFilePath(
 export async function writeFileAtomic(
   filePath: string,
   content: string,
-  entropySource: RuntimeEntropySource = DEFAULT_RUNTIME_ENTROPY_SOURCE
+  entropySource: RuntimeEntropySource = DEFAULT_RUNTIME_ENTROPY_SOURCE,
+  deps: AtomicWriteDependencies = {}
 ): Promise<void> {
+  const mkdirImpl = deps.mkdirImpl ?? mkdir;
+  const writeFileImpl = deps.writeFileImpl ?? writeFile;
+  const renameImpl = deps.renameImpl ?? rename;
+  const rmImpl = deps.rmImpl ?? rm;
+  const sleepImpl = deps.sleepImpl ?? sleep;
   const dirPath = path.dirname(filePath);
-  await mkdir(dirPath, { recursive: true });
+  await mkdirImpl(dirPath, { recursive: true });
 
   const tempFilePath = buildAtomicWriteTempFilePath(filePath, entropySource);
 
   try {
-    await writeFile(tempFilePath, content, "utf8");
-    await rename(tempFilePath, filePath);
+    await writeFileImpl(tempFilePath, content, "utf8");
+    let renameAttempts = 0;
+    while (true) {
+      try {
+        await renameImpl(tempFilePath, filePath);
+        break;
+      } catch (error) {
+        if (
+          !shouldRetryAtomicRename(error) ||
+          renameAttempts >= DEFAULT_ATOMIC_RENAME_RETRY_COUNT
+        ) {
+          throw error;
+        }
+        renameAttempts += 1;
+        await sleepImpl(DEFAULT_ATOMIC_RENAME_RETRY_DELAY_MS);
+      }
+    }
   } catch (error) {
-    await rm(tempFilePath, { force: true });
+    await rmImpl(tempFilePath, { force: true });
     throw error;
   }
 }

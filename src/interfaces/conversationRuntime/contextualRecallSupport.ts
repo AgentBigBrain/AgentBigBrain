@@ -323,6 +323,8 @@ export async function buildEpisodeRecallCandidates(
     matches = await queryContinuityEpisodes({
       stack,
       entityHints: userTokens,
+      semanticMode: "event_history",
+      relevanceScope: "conversation_local",
       maxEpisodes: MAX_EPISODE_QUERY_CANDIDATES
     });
   } catch {

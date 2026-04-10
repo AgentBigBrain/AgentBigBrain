@@ -15,6 +15,7 @@ import {
   extractResolvedFollowupFacts,
   extractSegmentValueAfterContainedPrefix,
   extractSegmentValueAfterPrefix,
+  extractWrappedProfileMemoryClauses,
   splitExplicitProfileSegments,
   toSentenceConfidence,
   trimAtContinuationMarker
@@ -112,6 +113,7 @@ export function extractProfileFactCandidatesFromUserInput(
   if (!text) {
     return candidates;
   }
+  const extractionTexts = [text, ...extractWrappedProfileMemoryClauses(text)];
 
   const maybeAddCandidate = (candidate: ProfileFactUpsertInput): void => {
     const normalizedKey = canonicalizeProfileKey(candidate.key);
@@ -132,25 +134,35 @@ export function extractProfileFactCandidatesFromUserInput(
     });
   };
 
-  for (const contactFactGroup of [
-    extractSeveredNamedContactFacts(text, sourceTaskId, observedAt),
-    extractHistoricalDirectContactRelationshipFacts(text, sourceTaskId, observedAt),
-    extractNamedContactEmployeeLinkFacts(text, sourceTaskId, observedAt),
-    extractNamedContactWorkPeerLinkFacts(text, sourceTaskId, observedAt),
-    extractCurrentDirectContactRelationshipFacts(text, sourceTaskId, observedAt),
-    extractNamedContactFacts(text, sourceTaskId, observedAt)
-  ]) {
-    for (const contactFact of contactFactGroup) {
-      maybeAddCandidate(contactFact);
+  for (const extractionText of extractionTexts) {
+    for (const contactFactGroup of [
+      extractSeveredNamedContactFacts(extractionText, sourceTaskId, observedAt),
+      extractHistoricalDirectContactRelationshipFacts(extractionText, sourceTaskId, observedAt),
+      extractNamedContactEmployeeLinkFacts(extractionText, sourceTaskId, observedAt),
+      extractNamedContactWorkPeerLinkFacts(extractionText, sourceTaskId, observedAt),
+      extractCurrentDirectContactRelationshipFacts(extractionText, sourceTaskId, observedAt),
+      extractNamedContactFacts(extractionText, sourceTaskId, observedAt)
+    ]) {
+      for (const contactFact of contactFactGroup) {
+        maybeAddCandidate(contactFact);
+      }
     }
   }
 
-  const resolvedFollowupFacts = extractResolvedFollowupFacts(text, sourceTaskId, observedAt);
-  for (const resolvedFollowupFact of resolvedFollowupFacts) {
-    maybeAddCandidate(resolvedFollowupFact);
+  for (const extractionText of extractionTexts) {
+    const resolvedFollowupFacts = extractResolvedFollowupFacts(
+      extractionText,
+      sourceTaskId,
+      observedAt
+    );
+    for (const resolvedFollowupFact of resolvedFollowupFacts) {
+      maybeAddCandidate(resolvedFollowupFact);
+    }
   }
 
-  const preferredNameValues = extractPreferredNameValuesFromUserInput(text);
+  const preferredNameValues = extractionTexts.flatMap((extractionText) =>
+    extractPreferredNameValuesFromUserInput(extractionText)
+  );
   if (preferredNameValues.length > 0) {
     maybeAddCandidate({
       key: "identity.preferred_name",
@@ -163,28 +175,31 @@ export function extractProfileFactCandidatesFromUserInput(
     });
   }
 
-  for (const match of extractMyFactMatches(text)) {
-    const rawKey = match.key;
-    const value = match.value;
-    if (shouldSkipGenericMyFactForNamedContact(rawKey, value, seen)) {
-      continue;
+  for (const extractionText of extractionTexts) {
+    for (const match of extractMyFactMatches(extractionText)) {
+      const rawKey = match.key;
+      const value = match.value;
+      if (shouldSkipGenericMyFactForNamedContact(rawKey, value, seen)) {
+        continue;
+      }
+      const key = normalizeProfileKey(rawKey);
+      if (canonicalizeProfileKey(key) === "identity.preferred_name") {
+        continue;
+      }
+      maybeAddCandidate({
+        key,
+        value,
+        sensitive: isSensitiveKey(key),
+        sourceTaskId,
+        source: "user_input_pattern.my_is",
+        observedAt,
+        confidence: toSentenceConfidence(match.sourceText)
+      });
     }
-    const key = normalizeProfileKey(rawKey);
-    if (canonicalizeProfileKey(key) === "identity.preferred_name") {
-      continue;
-    }
-    maybeAddCandidate({
-      key,
-      value,
-      sensitive: isSensitiveKey(key),
-      sourceTaskId,
-      source: "user_input_pattern.my_is",
-      observedAt,
-      confidence: toSentenceConfidence(match.sourceText)
-    });
   }
 
-  const workValue = splitExplicitProfileSegments(text)
+  const workValue = extractionTexts
+    .flatMap((extractionText) => splitExplicitProfileSegments(extractionText))
     .map((segment) =>
       extractSegmentValueAfterContainedPrefix(segment, ["i work at ", "i work for "])
     )
@@ -201,7 +216,8 @@ export function extractProfileFactCandidatesFromUserInput(
     });
   }
 
-  const jobValue = splitExplicitProfileSegments(text)
+  const jobValue = extractionTexts
+    .flatMap((extractionText) => splitExplicitProfileSegments(extractionText))
     .map((segment) =>
       extractSegmentValueAfterContainedPrefix(segment, ["my job is ", "my new job is "])
     )
@@ -218,7 +234,8 @@ export function extractProfileFactCandidatesFromUserInput(
     });
   }
 
-  const residenceValue = splitExplicitProfileSegments(text)
+  const residenceValue = extractionTexts
+    .flatMap((extractionText) => splitExplicitProfileSegments(extractionText))
     .map((segment) =>
       extractSegmentValueAfterContainedPrefix(segment, ["i live in ", "i moved to "])
     )
@@ -235,9 +252,15 @@ export function extractProfileFactCandidatesFromUserInput(
     });
   }
 
-  const historicalFactCandidates = extractHistoricalProfileFactCandidates(text, sourceTaskId, observedAt);
-  for (const historicalFactCandidate of historicalFactCandidates) {
-    maybeAddCandidate(historicalFactCandidate);
+  for (const extractionText of extractionTexts) {
+    const historicalFactCandidates = extractHistoricalProfileFactCandidates(
+      extractionText,
+      sourceTaskId,
+      observedAt
+    );
+    for (const historicalFactCandidate of historicalFactCandidates) {
+      maybeAddCandidate(historicalFactCandidate);
+    }
   }
 
   return candidates;

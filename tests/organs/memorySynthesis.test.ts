@@ -5,8 +5,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import type { TemporalMemorySynthesis } from "../../src/core/profileMemoryRuntime/profileMemoryTemporalQueryContracts";
 import { buildPlannerContextSynthesisBlock } from "../../src/organs/memorySynthesis/plannerContextSynthesis";
-import { buildRecallSynthesis } from "../../src/organs/memorySynthesis/recallSynthesis";
+import {
+  buildRecallSynthesis,
+  renderRecallSynthesisSupportLines
+} from "../../src/organs/memorySynthesis/recallSynthesis";
+import { buildTemporalMemorySynthesisFromCompatibilityRecords } from "../../src/organs/memorySynthesis/temporalSynthesisAdapter";
 import type {
   MemorySynthesisEpisodeRecord,
   MemorySynthesisFactRecord,
@@ -77,6 +82,11 @@ test("buildRecallSynthesis returns one bounded supported hypothesis", () => {
     synthesis?.decisionRecords?.[0]?.asOfObservedTime,
     "2026-02-14T15:00:00.000Z"
   );
+  assert.deepEqual(renderRecallSynthesisSupportLines(synthesis), [
+    "- Current State: contact.work_association: Lantern Studio; Owen fell down: Owen fell down a few weeks ago and the outcome is still unresolved.",
+    "- Historical Context: none",
+    "- Contradiction Notes: none"
+  ]);
 });
 
 test("buildPlannerContextSynthesisBlock suppresses weak unsupported synthesis", () => {
@@ -97,4 +107,104 @@ test("buildPlannerContextSynthesisBlock suppresses weak unsupported synthesis", 
   );
 
   assert.equal(block, "");
+});
+
+test("buildPlannerContextSynthesisBlock renders a bounded temporal split view", () => {
+  const temporalSynthesis = buildTemporalMemorySynthesisFromCompatibilityRecords(
+    [buildEpisode()],
+    buildFacts()
+  );
+  assert.ok(temporalSynthesis);
+
+  const block = buildPlannerContextSynthesisBlock(temporalSynthesis!);
+
+  assert.match(block, /Temporal memory context \(bounded\):/);
+  assert.match(block, /Current State:/);
+  assert.match(block, /Historical Context:/);
+  assert.match(block, /Contradiction Notes:/);
+  assert.match(block, /Lantern Studio/);
+});
+
+test("buildRecallSynthesis records shadow parity mismatch when temporal recall diverges from compatibility fallback", () => {
+  const compatibilityTemporal = buildTemporalMemorySynthesisFromCompatibilityRecords(
+    [buildEpisode()],
+    buildFacts()
+  );
+  assert.ok(compatibilityTemporal);
+  const divergentTemporal: TemporalMemorySynthesis = {
+    ...compatibilityTemporal!,
+    currentState: [],
+    historicalContext: [],
+    contradictionNotes: ["Need corroboration before surfacing this current relationship state."],
+    answerMode: "insufficient_evidence",
+    laneMetadata: compatibilityTemporal!.laneMetadata.map((lane) => ({
+      ...lane,
+      answerMode: "insufficient_evidence",
+      dominantLane: "insufficient_evidence",
+      supportingLanes: []
+    }))
+  };
+
+  const synthesis = buildRecallSynthesis(
+    divergentTemporal,
+    [buildEpisode()],
+    buildFacts()
+  );
+
+  assert.ok(synthesis?.shadowParity);
+  assert.equal(synthesis?.shadowParity?.compared, true);
+  assert.equal(synthesis?.shadowParity?.decisionMatches, false);
+  assert.equal(synthesis?.shadowParity?.renderMatches, false);
+  assert.deepEqual(
+    synthesis?.shadowParity?.mismatchedFields,
+    [
+      "answer_mode",
+      "current_state",
+      "contradiction_notes",
+      "lane_boundaries",
+      "rendered_split_view"
+    ]
+  );
+});
+
+test("buildRecallSynthesis records shadow parity mismatch for quarantined identity fail-closed recall", () => {
+  const compatibilityTemporal = buildTemporalMemorySynthesisFromCompatibilityRecords(
+    [buildEpisode()],
+    buildFacts()
+  );
+  assert.ok(compatibilityTemporal);
+  const quarantinedTemporal: TemporalMemorySynthesis = {
+    ...compatibilityTemporal!,
+    currentState: [],
+    historicalContext: [],
+    contradictionNotes: ["I can't safely tell which Owen this refers to yet."],
+    answerMode: "quarantined_identity",
+    laneMetadata: compatibilityTemporal!.laneMetadata.map((lane) => ({
+      ...lane,
+      answerMode: "quarantined_identity",
+      dominantLane: "quarantined_identity",
+      supportingLanes: []
+    }))
+  };
+
+  const synthesis = buildRecallSynthesis(
+    quarantinedTemporal,
+    [buildEpisode()],
+    buildFacts()
+  );
+
+  assert.ok(synthesis?.shadowParity);
+  assert.equal(synthesis?.shadowParity?.compared, true);
+  assert.equal(synthesis?.shadowParity?.decisionMatches, false);
+  assert.equal(synthesis?.shadowParity?.renderMatches, false);
+  assert.deepEqual(
+    synthesis?.shadowParity?.mismatchedFields,
+    [
+      "answer_mode",
+      "current_state",
+      "contradiction_notes",
+      "lane_boundaries",
+      "rendered_split_view"
+    ]
+  );
 });

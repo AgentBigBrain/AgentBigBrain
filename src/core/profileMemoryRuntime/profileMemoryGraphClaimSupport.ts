@@ -21,6 +21,7 @@ import {
   rebuildProfileMemoryGraphEnvelope,
   selectProfileMemoryGraphCurrentWinnerFactsByKey
 } from "./profileMemoryGraphStateSupport";
+import { listSupportOnlyTransitionKeys } from "./profileMemorySupportOnlyTransitionLifecycle";
 import type { GovernedProfileFactCandidate } from "./profileMemoryTruthGovernanceContracts";
 
 /**
@@ -49,6 +50,13 @@ export function reconcileProfileMemoryCurrentClaims(input: {
       )
       .map((entry) => entry.candidate.key.trim().toLowerCase())
   );
+  for (const key of listSupportOnlyTransitionKeys(
+    input.factDecisions
+      .filter((entry) => entry.decision.action === "support_only_legacy")
+      .map((entry) => entry.candidate)
+  )) {
+    claimRelevantKeys.add(key);
+  }
   if (claimRelevantKeys.size === 0) {
     return {
       nextClaims: [...input.existingClaims],

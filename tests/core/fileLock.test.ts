@@ -9,6 +9,7 @@ import {
   open,
   readdir,
   readFile,
+  rename as renameFile,
   rm,
   stat,
   utimes,
@@ -69,6 +70,43 @@ test("writeFileAtomic writes destination file and leaves no temp artifact", asyn
 
     const persisted = await readFile(targetPath, "utf8");
     assert.equal(persisted, '{"ok":true}');
+
+    const files = await readdir(path.dirname(targetPath));
+    const tempFiles = files.filter((fileName) => fileName.includes(".tmp-"));
+    assert.equal(tempFiles.length, 0);
+  });
+});
+
+test("writeFileAtomic retries transient rename denial and still commits atomically", async () => {
+  await withTempDir(async (tempDir) => {
+    const targetPath = path.join(tempDir, "runtime", "artifact.json");
+    const retrySleeps: number[] = [];
+    let renameAttempts = 0;
+
+    await writeFileAtomic(
+      targetPath,
+      '{"ok":true}',
+      buildDeterministicEntropySource(),
+      {
+        renameImpl: async (fromPath, toPath) => {
+          renameAttempts += 1;
+          if (renameAttempts < 3) {
+            const error = new Error("transient rename denial") as NodeJS.ErrnoException;
+            error.code = "EPERM";
+            throw error;
+          }
+          await renameFile(fromPath, toPath);
+        },
+        sleepImpl: async (durationMs) => {
+          retrySleeps.push(durationMs);
+        }
+      }
+    );
+
+    const persisted = await readFile(targetPath, "utf8");
+    assert.equal(persisted, '{"ok":true}');
+    assert.equal(renameAttempts, 3);
+    assert.deepEqual(retrySleeps, [25, 25]);
 
     const files = await readdir(path.dirname(targetPath));
     const tempFiles = files.filter((fileName) => fileName.includes(".tmp-"));

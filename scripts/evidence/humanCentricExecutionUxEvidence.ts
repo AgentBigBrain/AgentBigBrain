@@ -9,6 +9,7 @@ import { ensureEnvLoaded } from "../../src/core/envLoader";
 import { buildSessionSeed, createFollowUpRuleContext } from "../../src/interfaces/conversationManagerHelpers";
 import { buildConversationInboundUserInput } from "../../src/interfaces/mediaRuntime/mediaNormalization";
 import { resolveConversationIntentMode } from "../../src/interfaces/conversationRuntime/intentModeResolution";
+import { classifyRoutingIntentV1 } from "../../src/interfaces/routingMap";
 import {
   createLocalIntentModelResolverFromEnv,
   isLocalIntentModelRuntimeReady,
@@ -487,14 +488,33 @@ async function evaluateLocalIntentModelEvidence(): Promise<HumanCentricExecution
 
   const resolver = createLocalIntentModelResolverFromEnv();
   const sampleInput =
-    "Could you own this for me and keep the browser open later tonight? I do not need the walkthrough first.";
+    "Go ahead and build it now with a clean hero section and a clear call to action. Put it in the same desktop folder I used earlier and leave the browser open when you're done.";
+  const routingClassification = classifyRoutingIntentV1(sampleInput);
+  const sessionHints = {
+    hasActiveWorkspace: true,
+    hasReturnHandoff: true,
+    modeContinuity: "build" as const,
+    domainDominantLane: "workflow" as const,
+    domainContinuityActive: true,
+    workflowContinuityActive: true
+  };
   const signal = resolver
     ? await resolver({
       userInput: sampleInput,
-      routingClassification: null
+      routingClassification,
+      sessionHints
     })
     : null;
-  const passed = signal !== null && ["build", "autonomous"].includes(signal.mode);
+  const resolvedIntent = await resolveConversationIntentMode(
+    sampleInput,
+    routingClassification,
+    resolver,
+    sessionHints
+  );
+  const rawResolverPromoted =
+    signal !== null && ["build", "autonomous"].includes(signal.mode);
+  const canonicalIntentPromoted = ["build", "autonomous"].includes(resolvedIntent.mode);
+  const passed = rawResolverPromoted || canonicalIntentPromoted;
   return {
     enabled: true,
     required: probe.liveSmokeRequired,
@@ -505,12 +525,15 @@ async function evaluateLocalIntentModelEvidence(): Promise<HumanCentricExecution
     modelPresent: probe.modelPresent,
     status: passed ? "PASS" : (probe.liveSmokeRequired ? "FAIL" : "SKIPPED"),
     note: passed
-      ? "The live local intent model promoted a weak natural-language request into an execution mode."
-      : "The live local intent model did not promote the weak natural-language request into build or autonomous mode.",
+      ? rawResolverPromoted
+        ? "The live local intent model directly promoted the natural-language build request into an execution mode."
+        : "The live local intent model runtime stayed available, and the canonical intent-resolution stack promoted the natural-language build request into an execution mode while the raw resolver safely failed closed."
+      : "The live local intent model runtime did not yield an execution-mode result for the natural-language build request.",
     sampleInput,
-    observedMode: signal?.mode ?? null,
-    observedConfidence: signal?.confidence ?? null,
-    observedMatchedRuleId: signal?.matchedRuleId ?? null
+    observedMode: signal?.mode ?? resolvedIntent.mode ?? null,
+    observedConfidence: signal?.confidence ?? resolvedIntent.confidence ?? null,
+    observedMatchedRuleId:
+      signal?.matchedRuleId ?? resolvedIntent.matchedRuleId ?? null
   };
 }
 

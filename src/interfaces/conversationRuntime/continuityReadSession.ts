@@ -2,6 +2,8 @@
  * @fileoverview Builds bounded per-turn continuity query wrappers over an optional shared read session.
  */
 
+import type { ProfileMemoryRequestTelemetry } from "../../core/profileMemoryRuntime/contracts";
+import { recordProfileMemoryRetrievalOperation } from "../../core/profileMemoryRuntime/profileMemoryRequestTelemetry";
 import type {
   ConversationContinuityReadSession,
   OpenConversationContinuityReadSession,
@@ -18,6 +20,7 @@ interface BuildBoundConversationContinuityQueriesInput {
   queryContinuityEpisodes?: QueryConversationContinuityEpisodes;
   queryContinuityFacts?: QueryConversationContinuityFacts;
   openContinuityReadSession?: OpenConversationContinuityReadSession;
+  requestTelemetry?: ProfileMemoryRequestTelemetry;
 }
 
 /**
@@ -51,6 +54,7 @@ export function buildBoundConversationContinuityQueries(
     queryContinuityEpisodes:
       input.queryContinuityEpisodes || input.openContinuityReadSession
         ? async (request) => {
+            recordProfileMemoryRetrievalOperation(input.requestTelemetry);
             const session = await resolveSession();
             if (session) {
               return session.queryContinuityEpisodes(request);
@@ -63,6 +67,7 @@ export function buildBoundConversationContinuityQueries(
     queryContinuityFacts:
       input.queryContinuityFacts || input.openContinuityReadSession
         ? async (request) => {
+            recordProfileMemoryRetrievalOperation(input.requestTelemetry);
             const session = await resolveSession();
             if (session) {
               return session.queryContinuityFacts(request);

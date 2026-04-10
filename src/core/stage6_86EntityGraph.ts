@@ -9,6 +9,7 @@ export {
   createEmptyEntityGraphV1,
   extractEntityCandidates,
   getEntityLookupTerms,
+  queryEntityGraphNodesByCanonicalOrAlias,
   promoteRelationEdgeWithConfirmation,
   type Stage686AliasConflict,
   type Stage686EntityExtractionInput,

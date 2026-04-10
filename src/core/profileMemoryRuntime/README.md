@@ -22,13 +22,15 @@ full `profileMemoryStore.ts` implementation.
 - bounded turn-local ingest receipt helpers in `profileMemoryIngestIdempotency.ts`
 - deterministic retained ingest-receipt recovery and ordering helpers in
   `profileMemoryIngestReceiptNormalizationSupport.ts`
-- request-scoped store-load telemetry helpers in `profileMemoryRequestTelemetry.ts`
+- request-scoped profile-memory telemetry helpers in `profileMemoryRequestTelemetry.ts`
 - commitment signal classification helpers in `profileMemoryCommitmentSignals.ts`
 - unresolved commitment topic extraction and matching in `profileMemoryCommitmentTopics.ts`
 - canonical state creation and freshness helpers in `profileMemoryState.ts`
 - additive graph-backed observation, claim, event, journal, index, read-model, and compaction
   contracts in `profileMemoryGraphContracts.ts`
 - additive graph-backed state creation and fail-closed normalization in `profileMemoryGraphState.ts`
+- additive graph-backed dual-write mutation batching for the stable encrypted-store seam in
+  `profileMemoryGraphMutations.ts`
 - additive graph-backed observation-lane persistence helpers in
   `profileMemoryGraphObservationSupport.ts`
 - additive graph-backed observation redaction-lifecycle normalization helpers in
@@ -100,6 +102,16 @@ full `profileMemoryStore.ts` implementation.
   `profileMemoryMutationJournalReplaySupport.ts`
 - retained mutation-journal reference pruning helpers in
   `profileMemoryMutationJournalReferenceSupport.ts`
+- canonical bounded temporal query contracts in `profileMemoryTemporalQueryContracts.ts`
+- retrieval-only bounded temporal evidence selection in `profileMemoryTemporalQueries.ts`
+- temporal evidence projection, lifecycle, and ranking helpers in
+  `profileMemoryTemporalQueryEvidenceSupport.ts`
+- temporal focus-entity selection helpers in `profileMemoryTemporalQuerySupport.ts`
+- deterministic temporal truth synthesis in `profileMemoryTemporalSynthesis.ts`
+- deterministic temporal lane arbitration helpers in
+  `profileMemoryTemporalSynthesisSupport.ts`
+- bounded stable-ref grouping and resolved-current graph query helpers in
+  `profileMemoryGraphQueries.ts`
 - canonical episodic-memory contracts in `profileMemoryEpisodeContracts.ts`
 - canonical episodic-memory state helpers in `profileMemoryEpisodeState.ts`
 - canonical episodic-memory normalization helpers in `profileMemoryEpisodeNormalization.ts`
@@ -116,6 +128,8 @@ full `profileMemoryStore.ts` implementation.
   `profileMemoryEpisodeConsolidation.ts`
 - bounded interpreted media-ingest normalization in `profileMemoryMediaIngest.ts`
 - canonical fact upsert lifecycle helpers in `profileMemoryFactLifecycle.ts`
+- bounded support-only transition repair for stale compatibility winners in
+  `profileMemorySupportOnlyTransitionLifecycle.ts`
 - key, value, sensitivity, and topic normalization helpers in `profileMemoryNormalization.ts`
 - fail-closed retained flat-fact semantic normalization helpers in
   `profileMemoryFactRecordNormalizationSupport.ts`
@@ -170,6 +184,14 @@ full `profileMemoryStore.ts` implementation.
 - registry-backed multi-value inventory caps for bounded query/planning selectors in
   `profileMemoryPlanningContext.ts`
 - request-scoped reconciled read-session reuse in `profileMemoryReadSession.ts`
+- shared bounded continuity-scope query helpers in
+  `profileMemoryContinuityScopeSupport.ts`
+- shared graph-aware fact-continuity hint expansion, scoped-thread metadata, and compatibility
+  temporal fallback helpers in `profileMemoryFactContinuitySupport.ts`
+- shared readable-fact projection, sensitivity gating, and query-disposition helpers in
+  `profileMemoryFactQuerySupport.ts`
+- shared bounded continuity and fact-inspection contracts in
+  `profileMemoryQueryContracts.ts`
 - closed truth-governance contracts in `profileMemoryTruthGovernanceContracts.ts`
 - code-owned family registry entries plus registry-backed action guards in
   `profileMemoryFamilyRegistry.ts`
@@ -814,6 +836,10 @@ full `profileMemoryStore.ts` implementation.
   repair without rewriting the retained observation or minting replay churn. A fresh canonical
   observation append now also has explicit public overflow coverage, so the oldest retained replay
   row trims on the same call when that observation lane exceeds `maxJournalEntries`.
+- Load-time graph normalization now also reattaches effective personal-memory stable refs after
+  legacy fact or episode backfill, replay repair, and final pruning, so encrypted reload cannot
+  silently wipe self or provisional contact identity handles just because retained compatibility
+  projections rebuilt the same claim or event payload with `stableRefId: null`.
 - When new family-registry, proof, mutation-envelope, or retraction contracts become live here,
   `profileMemory.ts` should re-export those bounded shapes so callers can stay on the stable core
   entrypoint instead of reaching into deep runtime paths by default.
@@ -848,14 +874,82 @@ full `profileMemoryStore.ts` implementation.
 - Turn-local ingest idempotency belongs here so direct-chat and broker-side writes can share one
   bounded duplicate-prevention contract at the canonical store seam instead of adding parallel
   retry guards in higher layers.
-- Request-scoped store-load telemetry belongs here so Phase 1.5 can prove bounded read reuse
-  through existing broker and later conversational request paths without inventing a second store.
+- Request-scoped profile-memory telemetry belongs here so later phases can count bounded ingest,
+  retrieval, synthesis, render, alias-safety, identity-safety, and prompt-owner surfaces through
+  existing broker and conversational request paths without inventing a second store.
 - Request-scoped read-session reuse belongs here so broker and later conversational consumers can
   reuse one reconciled profile snapshot without turning `ProfileMemoryStore` into multiple read
   owners.
 - Truth-governance classification belongs here before canonical mutation so profile facts,
   support-only legacy context, episode support, and quarantined candidates do not diverge into
   competing policy layers at the store seam.
+- One canonical normalization and governance path now feeds both graph-backed records and the
+  stable `facts[]` / `episodes[]` migration surfaces, so compatibility projections must remain
+  derived outputs instead of becoming a second truth owner beside graph observations, claims, and
+  events.
+- `profileMemoryGraphMutations.ts` is now the dedicated Phase 4 dual-write seam: `ProfileMemoryStore`
+  may still own encrypted persistence, but live graph mutation batching, replay-safe journal
+  updates, and compatibility-preserving graph writes must stay centralized there instead of
+  drifting back into one-off store branches.
+- `profileMemoryGraphDecisionRecordSupport.ts` now owns the bounded durable decision-record append
+  helper used by Phase 5 rekey and alignment flows, and
+  `profileMemoryGraphStableRefRekeySupport.ts` now owns the generic stable-ref lane rewrite helper,
+  so replayable decision audit and rekey-specific record rewrites stay deterministic without
+  bloating the main mutation seam past subsystem-size limits.
+- That same mutation seam now also owns explicit Phase 5a stable-ref rekey: bounded personal-memory
+  rekey may rewrite already-issued stable refs locally, but it must remain distinct from any later
+  Stage 6.86 merge, alias, or entity-alignment decision path.
+- Personal-memory stable-ref rekey now also appends one bounded durable graph decision record in
+  the encrypted profile-memory graph so local rekeys remain replayable and auditable without
+  pretending they were Stage 6.86 merges.
+- `profileMemoryGraphQueries.ts` is now the bounded Phase 5a stable-ref seam: live graph mutation
+  batching must attach effective self/contact stable refs there, stable-ref grouping must stay
+  query-only and bounded there, and provisional contact truth must fail closed out of
+  `resolved_current` outputs until later alignment explicitly promotes it.
+- Phase 6 temporal retrieval is now split on purpose: `profileMemoryTemporalQueries.ts` stays
+  retrieval-only and bounded, while `profileMemoryTemporalSynthesis.ts` alone may derive
+  `Current State`, `Historical Context`, and `Contradiction Notes` from that slice. Higher layers
+  must not re-derive winners independently from raw claims, observations, or events.
+- `TemporalMemorySynthesis` is now the canonical internal temporal output. `BoundedMemorySynthesis`
+  remains legacy compatibility only through the one-way adapter in
+  `src/organs/memorySynthesis/temporalSynthesisAdapter.ts`; adapter output must not be persisted or
+  reused as a second truth owner.
+- Phase 6 continuity query contracts now separate semantic mode from relevance scope. The initial
+  live scope set is `thread_local`, `conversation_local`, and `global_profile`, and those fields
+  now pass through the live conversation-runtime continuity request shapes instead of stopping at
+  type signatures.
+- Phase 6.5 fact continuity is now graph-aware on the live read path too:
+  `queryProfileFactsForContinuity(...)` no longer discards the shared Stage 6.86 graph or
+  conversation stack, expands explicit entity hints through exact canonical or alias matches,
+  carries scoped thread keys into bounded temporal retrieval, and returns an array-shaped fact
+  result with typed temporal metadata (`semanticMode`, `relevanceScope`, `scopedThreadKeys`, and
+  `temporalSynthesis`). When graph-backed temporal retrieval has no bounded focus entity but
+  compatibility fact selection still surfaces bounded truth, that same continuity seam now fails
+  closed onto one degraded compatibility temporal slice instead of dropping back to flat fact lines
+  alone.
+- Support-only historical or severed transitions on `support_only_transition` families now also
+  close stale current winners on both the flat compatibility lane and the graph-backed claim lane,
+  so successor coworker updates cannot leave ended current truth silently active while the new
+  winner is already live.
+- Temporal continuity now follows `global truth, local relevance`: thread/open-loop and
+  conversation-local scope may bias which bounded facts or episodes surface for one turn, but they
+  must never override canonical governance, source authority, end-state handling, or singular-
+  family displacement rules during synthesis.
+- Bounded temporal retrieval now preserves higher-authority active candidates ahead of low-
+  authority recency churn when family or event caps apply. Corroboration depth and recency still
+  act as deterministic salience, but only after authority and lifecycle gates have already kept
+  the eligible slice fail-closed.
+- Direct self-identity continuity remains explicitly global-profile scoped even after Phase 6
+  temporal cutover, while active conversational recall uses conversation-local scope so same-stream
+  follow-ups can recover bounded prior context after clutter or interruption without forcing the
+  user to restate the whole background.
+- `profileMemoryGraphAlignmentSupport.ts` is now the bounded Phase 5b attachment seam: conservative
+  Stage 6.86 exact-match lookup may annotate existing stable-ref groups with `primaryEntityKey` /
+  `observedEntityKey`, but ambiguous or quarantined lanes must still fail closed without handing
+  truth ownership away from encrypted personal memory.
+- Stage 6.86 alias merge/quarantine decisions, plus explicit unquarantine and rollback actions,
+  now persist bounded durable decision records on the entity-graph store side so Phase 5b
+  alignment stays reviewable without changing personal-memory truth ownership.
 - The code-owned family registry here is now the canonical source for family-level cardinality,
   support-only posture, end-state eligibility, adjacent-domain access, and compatibility-projection
   defaults; Phase 2.5 may still expand those contracts, but new family policy must not be added as
@@ -1122,6 +1216,14 @@ full `profileMemoryStore.ts` implementation.
   `I work with a guy named Milo at Northstar Creative.`, `A person named Milo works with me.`, or
   `My friend Riley works with me at Lantern Studio.` do not persist malformed contact tokens such
   as `contact.a.guy.named.milo` or `contact.milo.at.northstar.creative`.
+- Named-contact extraction here must also keep same-name or dotted-initial collisions on bounded
+  qualified contact lanes when the conversational qualifier changes, while alias-clarification
+  sentences like `The Jordan from Northstar sometimes goes by J.R.` must reattach to the original
+  Northstar Jordan lane instead of minting a third ambiguous contact token.
+- Reminder-style profile wrappers should unwrap into the same bounded declarative extraction path
+  before governance, so mixed wording such as `After that, remind me that Priya is my coworker at
+  Northstar.` still yields the canonical contact truth while adjacent workflow/file labels stay
+  non-authoritative until a real profile fact is stated.
 - When explicit named-contact relationship extraction already captured `contact.<token>.name`, the
   generic `my_is` fallback must fail closed for that same relationship sentence instead of
   persisting a parallel flat fact such as `supervisor = Dana`.
@@ -1151,9 +1253,12 @@ full `profileMemoryStore.ts` implementation.
 - `tests/core/profileMemoryEncryption.test.ts`
 - `tests/core/profileMemoryPlanningContext.test.ts`
 - `tests/core/profileMemoryPulse.test.ts`
+- `tests/core/profileMemoryTemporalSynthesis.test.ts`
 - `tests/core/profileMemoryPersistence.test.ts`
 - `tests/core/profileMemoryStore.test.ts`
 - `tests/core/profileMemory.test.ts`
+- `tests/core/profileMemoryGraphQueries.test.ts`
+- `tests/organs/memorySynthesisTemporalAdapter.test.ts`
 
 ## When to Update This README
 Update this README when:

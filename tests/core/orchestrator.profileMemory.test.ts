@@ -255,6 +255,8 @@ class CapturingIngestProfileStore {
 
 class CountingContinuityProfileStore extends ProfileMemoryStore {
   loadCount = 0;
+  lastFactContinuityRequest: Parameters<ProfileMemoryStore["queryFactsForContinuity"]>[2] | null = null;
+  lastEpisodeContinuityRequest: Parameters<ProfileMemoryStore["queryEpisodesForContinuity"]>[2] | null = null;
 
   /**
  * Implements `load` behavior within class CountingContinuityProfileStore.
@@ -263,6 +265,49 @@ class CountingContinuityProfileStore extends ProfileMemoryStore {
   async load() {
     this.loadCount += 1;
     return super.load();
+  }
+
+  async openReadSession() {
+    const readSession = await super.openReadSession();
+    return {
+      ...readSession,
+      queryFactsForContinuity: (
+        graph: Parameters<typeof readSession.queryFactsForContinuity>[0],
+        stack: Parameters<typeof readSession.queryFactsForContinuity>[1],
+        request: Parameters<typeof readSession.queryFactsForContinuity>[2]
+      ) => {
+        this.lastFactContinuityRequest = request;
+        return readSession.queryFactsForContinuity(graph, stack, request);
+      },
+      queryEpisodesForContinuity: (
+        graph: Parameters<typeof readSession.queryEpisodesForContinuity>[0],
+        stack: Parameters<typeof readSession.queryEpisodesForContinuity>[1],
+        request: Parameters<typeof readSession.queryEpisodesForContinuity>[2],
+        nowIso?: Parameters<typeof readSession.queryEpisodesForContinuity>[3]
+      ) => {
+        this.lastEpisodeContinuityRequest = request;
+        return readSession.queryEpisodesForContinuity(graph, stack, request, nowIso);
+      }
+    };
+  }
+
+  async queryFactsForContinuity(
+    graph: Parameters<ProfileMemoryStore["queryFactsForContinuity"]>[0],
+    stack: Parameters<ProfileMemoryStore["queryFactsForContinuity"]>[1],
+    request: Parameters<ProfileMemoryStore["queryFactsForContinuity"]>[2]
+  ) {
+    this.lastFactContinuityRequest = request;
+    return super.queryFactsForContinuity(graph, stack, request);
+  }
+
+  async queryEpisodesForContinuity(
+    graph: Parameters<ProfileMemoryStore["queryEpisodesForContinuity"]>[0],
+    stack: Parameters<ProfileMemoryStore["queryEpisodesForContinuity"]>[1],
+    request: Parameters<ProfileMemoryStore["queryEpisodesForContinuity"]>[2],
+    nowIso?: Parameters<ProfileMemoryStore["queryEpisodesForContinuity"]>[3]
+  ) {
+    this.lastEpisodeContinuityRequest = request;
+    return super.queryEpisodesForContinuity(graph, stack, request, nowIso);
   }
 }
 
@@ -420,9 +465,10 @@ test("orchestrator redacts sensitive profile fields before planner model egress"
     assert.match(plannerInput, /\[AgentFriendProfileContext\]/);
     assert.match(plannerInput, /\[AgentFriendProfileEgressGuard\]/);
     assert.match(plannerInput, /redactedSensitiveFields=2/);
-    assert.match(plannerInput, /contact\.email: \[REDACTED\]/);
-    assert.match(plannerInput, /contact\.phone: \[REDACTED\]/);
+    assert.match(plannerInput, /Current State:/);
     assert.match(plannerInput, /employment\.current: Lantern/);
+    assert.doesNotMatch(plannerInput, /contact\.email:/);
+    assert.doesNotMatch(plannerInput, /contact\.phone:/);
     assert.equal(plannerInput.includes("owner@example.com"), false);
     assert.equal(plannerInput.includes("+1 555 0100"), false);
   } finally {
@@ -728,11 +774,12 @@ test("orchestrator recalls Owen contact context across conversation-wrapper turn
     const plannerInput = plannerPayload.userInput ?? "";
 
     assert.match(plannerInput, /\[AgentFriendProfileContext\]/);
-    assert.match(plannerInput, /contact\.owen\.name: Owen/i);
-    assert.match(plannerInput, /contact\.owen\.relationship: acquaintance/i);
+    assert.match(plannerInput, /Current State:/i);
+    assert.match(plannerInput, /contact\.relationship: acquaintance/i);
+    assert.match(plannerInput, /Historical Context:/i);
     assert.match(
       plannerInput,
-      /contact\.owen\.context\.[a-z0-9]+: I went to school with a guy named Owen, and he also used to work with me at Lantern Studio/i
+      /contact\.context \(historical\): I went to school with a guy named Owen, and he also used to work with me at Lantern Studio/i
     );
     assert.doesNotMatch(plannerInput, /contact\.owen\.work_association: Lantern Studio/i);
   } finally {
@@ -939,17 +986,33 @@ test("orchestrator continuity read sessions reuse one profile-memory snapshot ac
     const facts = await readSession?.queryContinuityFacts(
       createEmptyConversationStackV1(nowIso),
       ["owen"],
-      3
+      3,
+      {
+        semanticMode: "relationship_inventory",
+        relevanceScope: "conversation_local",
+        asOfObservedTime: nowIso
+      }
     );
     const episodes = await readSession?.queryContinuityEpisodes(
       createEmptyConversationStackV1(nowIso),
       ["owen"],
-      3
+      3,
+      {
+        semanticMode: "event_history",
+        relevanceScope: "thread_local",
+        asOfObservedTime: nowIso
+      }
     );
 
     assert.equal(profileStore.loadCount, 1);
     assert.ok((facts ?? []).some((fact) => fact.key.startsWith("contact.owen.")));
     assert.ok(Array.isArray(episodes));
+    assert.equal(profileStore.lastFactContinuityRequest?.semanticMode, "relationship_inventory");
+    assert.equal(profileStore.lastFactContinuityRequest?.relevanceScope, "conversation_local");
+    assert.equal(profileStore.lastFactContinuityRequest?.asOfObservedTime, nowIso);
+    assert.equal(profileStore.lastEpisodeContinuityRequest?.semanticMode, "event_history");
+    assert.equal(profileStore.lastEpisodeContinuityRequest?.relevanceScope, "thread_local");
+    assert.equal(profileStore.lastEpisodeContinuityRequest?.asOfObservedTime, nowIso);
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }

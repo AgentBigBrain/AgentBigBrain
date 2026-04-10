@@ -14,10 +14,21 @@ import {
   buildConversationProfileMemoryTurnId,
   buildProfileMemorySourceFingerprint
 } from "../core/profileMemoryRuntime/profileMemoryIngestProvenance";
-import { createProfileMemoryRequestTelemetry } from "../core/profileMemoryRuntime/profileMemoryRequestTelemetry";
+import {
+  createProfileMemoryRequestTelemetry,
+  recordProfileMemoryIngestOperation,
+  recordProfileMemoryPromptSurfaceMetrics,
+  recordProfileMemoryRenderOperation,
+  recordProfileMemoryRetrievalOperation,
+  recordProfileMemorySynthesisOperation
+} from "../core/profileMemoryRuntime/profileMemoryRequestTelemetry";
 import type { TaskRequest } from "../core/types";
 import { buildPlannerContextSynthesisBlock } from "./memorySynthesis/plannerContextSynthesis";
 import type { MemorySynthesisEpisodeRecord, MemorySynthesisFactRecord } from "./memorySynthesis/contracts";
+import {
+  adaptTemporalMemorySynthesisToBoundedMemorySynthesis,
+  buildTemporalMemorySynthesisFromCompatibilityRecords
+} from "./memorySynthesis/temporalSynthesisAdapter";
 import { appendMemoryAccessAudit } from "./memoryContext/auditEvents";
 import {
   buildInjectedContextPacket,
@@ -76,6 +87,11 @@ interface BrokerProfileMemoryReadSession {
     queryInput?: string,
     nowIso?: string
   ): Promise<readonly ProfileReadableEpisode[]> | readonly ProfileReadableEpisode[];
+}
+
+export interface BrokerPromptCutoverGateResult {
+  decision: "allow" | "block";
+  reasons: readonly string[];
 }
 
 /**
@@ -139,6 +155,32 @@ async function openBrokerProfileMemoryReadSession(
       queryInput = "",
       nowIso = new Date().toISOString()
     ) => store.queryEpisodesForPlanningContext(maxEpisodes, queryInput, nowIso)
+  };
+}
+
+/**
+ * Assesses whether the broker prompt-facing temporal cutover stays inside bounded telemetry
+ * thresholds.
+ *
+ * @param requestTelemetry - Request-scoped profile-memory telemetry collected during broker assembly.
+ * @returns Cutover decision plus deterministic threshold reasons.
+ */
+export function assessBrokerPromptCutoverGate(
+  requestTelemetry: import("../core/profileMemoryRuntime/contracts").ProfileMemoryRequestTelemetry
+): BrokerPromptCutoverGateResult {
+  const reasons: string[] = [];
+  if (requestTelemetry.storeLoadCount > 3) {
+    reasons.push("store_load_count_exceeded");
+  }
+  if (requestTelemetry.mixedMemoryOwnerDecisionCount > 0) {
+    reasons.push("mixed_memory_owner_decision_detected");
+  }
+  if (requestTelemetry.promptMemorySurfaceCount > 1) {
+    reasons.push("prompt_memory_surface_count_exceeded");
+  }
+  return {
+    decision: reasons.length > 0 ? "block" : "allow",
+    reasons
   };
 }
 
@@ -208,17 +250,21 @@ export async function buildBrokeredPlannerInput(
           requestTelemetry
         }
       );
+      recordProfileMemoryIngestOperation(requestTelemetry);
     }
     const readSession = await openBrokerProfileMemoryReadSession(
       deps.profileMemoryStore,
       requestTelemetry
     );
+    recordProfileMemoryRetrievalOperation(requestTelemetry);
     const profileContext = await readSession.getPlanningContext(6, currentUserRequest);
+    recordProfileMemoryRetrievalOperation(requestTelemetry);
     const episodeContext = await readSession.getEpisodePlanningContext(
       2,
       currentUserRequest,
       task.createdAt
     );
+    recordProfileMemoryRetrievalOperation(requestTelemetry);
     const plannerFactInspection = typeof readSession.inspectFactsForPlanningContext === "function"
       ? await readSession.inspectFactsForPlanningContext({
           queryInput: currentUserRequest,
@@ -234,28 +280,49 @@ export async function buildBrokeredPlannerInput(
           asOfObservedTime: task.createdAt,
           asOfValidTime: undefined
         };
+    recordProfileMemoryRetrievalOperation(requestTelemetry);
     const plannerEpisodes = await readSession.queryEpisodesForPlanningContext(
       2,
       currentUserRequest,
       task.createdAt
     );
+    const plannerSynthesisEpisodes = plannerEpisodes.map((episode) =>
+      toMemorySynthesisEpisodeRecord(episode)
+    );
+    const plannerSynthesisFacts = plannerFactInspection.entries.map((entry) =>
+      toMemorySynthesisFactRecord(entry.fact, entry.decisionRecord)
+    );
+    const plannerTemporalSynthesis = buildTemporalMemorySynthesisFromCompatibilityRecords(
+      plannerSynthesisEpisodes,
+      plannerSynthesisFacts
+    );
+    if (plannerTemporalSynthesis) {
+      recordProfileMemorySynthesisOperation(requestTelemetry);
+    }
+    const plannerSynthesis = plannerTemporalSynthesis
+      ? adaptTemporalMemorySynthesisToBoundedMemorySynthesis(
+          plannerTemporalSynthesis,
+          plannerSynthesisEpisodes,
+          plannerSynthesisFacts
+        )
+      : null;
     const memorySynthesisContext = buildPlannerContextSynthesisBlock(
-      plannerEpisodes.map((episode) => toMemorySynthesisEpisodeRecord(episode)),
-      plannerFactInspection.entries.map((entry) =>
-        toMemorySynthesisFactRecord(entry.fact, entry.decisionRecord)
-      )
+      plannerTemporalSynthesis
     );
 
-    if (!profileContext && !episodeContext) {
+    if (!profileContext && !episodeContext && !memorySynthesisContext) {
       const domainBoundary = assessDomainBoundary(
         currentUserRequest,
-        "",
+        [],
         options.sessionDomainContext
       );
+      const promptCutoverGate = assessBrokerPromptCutoverGate(requestTelemetry);
       await recordAudit(
         deps.memoryAccessAuditStore,
         task.id,
         currentUserRequest,
+        requestTelemetry,
+        promptCutoverGate,
         requestTelemetry.storeLoadCount,
         0,
         0,
@@ -267,6 +334,8 @@ export async function buildBrokeredPlannerInput(
           deps.memoryAccessAuditStore,
           task.id,
           currentUserRequest,
+          requestTelemetry,
+          promptCutoverGate,
           requestTelemetry.storeLoadCount,
           0,
           0,
@@ -283,15 +352,9 @@ export async function buildBrokeredPlannerInput(
 
     const sanitizedProfileContext = sanitizeProfileContextForModelEgress(profileContext);
     const sanitizedEpisodeContext = sanitizeEpisodeContextForModelEgress(episodeContext);
-    const brokeredMemoryContext = [
-      sanitizedProfileContext.sanitizedContext,
-      sanitizedEpisodeContext.sanitizedContext
-    ]
-      .filter((section) => section.trim().length > 0)
-      .join("\n");
     const assessedDomainBoundary = assessDomainBoundary(
       currentUserRequest,
-      brokeredMemoryContext,
+      plannerSynthesis?.laneBoundaries ?? [],
       options.sessionDomainContext
     );
     const domainBoundary: DomainBoundaryAssessment = probing.assessment.detected
@@ -306,10 +369,38 @@ export async function buildBrokeredPlannerInput(
     const redactedCount =
       sanitizedProfileContext.redactedFieldCount + sanitizedEpisodeContext.redactedFieldCount;
 
+    const brokeredContext =
+      domainBoundary.decision === "suppress_profile_context"
+        ? ""
+        : (() => {
+            const egressGuardFooter =
+              redactedCount > 0
+                ? ["[AgentFriendProfileEgressGuard]", `redactedSensitiveFields=${redactedCount}`].join("\n")
+                : "";
+            return memorySynthesisContext.trim().length > 0
+              ? [memorySynthesisContext, egressGuardFooter]
+                  .filter((section) => section.trim().length > 0)
+                  .join("\n")
+              : `${sanitizedProfileContext.sanitizedContext}${egressGuardFooter ? `\n${egressGuardFooter}` : ""}`;
+          })();
+    const promptMemoryOwnerCount = brokeredContext.trim().length > 0 ? 1 : 0;
+    const promptMemorySurfaceCount = brokeredContext.trim().length > 0 ? 1 : 0;
+    if (promptMemorySurfaceCount > 0) {
+      recordProfileMemoryRenderOperation(requestTelemetry);
+    }
+    recordProfileMemoryPromptSurfaceMetrics(
+      requestTelemetry,
+      promptMemoryOwnerCount,
+      promptMemorySurfaceCount
+    );
+    const promptCutoverGate = assessBrokerPromptCutoverGate(requestTelemetry);
+
     await recordAudit(
       deps.memoryAccessAuditStore,
       task.id,
       currentUserRequest,
+      requestTelemetry,
+      promptCutoverGate,
       requestTelemetry.storeLoadCount,
       retrievedCount,
       retrievedEpisodeCount,
@@ -321,6 +412,8 @@ export async function buildBrokeredPlannerInput(
         deps.memoryAccessAuditStore,
         task.id,
         currentUserRequest,
+        requestTelemetry,
+        promptCutoverGate,
         requestTelemetry.storeLoadCount,
         retrievedCount,
         retrievedEpisodeCount,
@@ -330,23 +423,22 @@ export async function buildBrokeredPlannerInput(
       );
     }
 
-    if (domainBoundary.decision === "suppress_profile_context") {
+    if (
+      domainBoundary.decision === "suppress_profile_context" ||
+      promptCutoverGate.decision === "block"
+    ) {
       return {
         userInput: buildSuppressedContextPacket(
           task,
           domainBoundary.lanes,
           domainBoundary.scores,
-          domainBoundary.reason
+          promptCutoverGate.decision === "block"
+            ? `prompt_cutover_gate_blocked:${promptCutoverGate.reasons.join(",")}`
+            : domainBoundary.reason
         ),
         profileMemoryStatus: "available"
       };
     }
-
-    const egressGuardFooter =
-      redactedCount > 0
-        ? `\n[AgentFriendProfileEgressGuard]\nredactedSensitiveFields=${redactedCount}`
-        : "";
-    const brokeredContext = `${sanitizedProfileContext.sanitizedContext}${egressGuardFooter}`;
 
     return {
       userInput: buildInjectedContextPacket(
@@ -354,9 +446,7 @@ export async function buildBrokeredPlannerInput(
         domainBoundary.lanes,
         domainBoundary.scores,
         domainBoundary.reason,
-        brokeredContext,
-        sanitizedEpisodeContext.sanitizedContext,
-        memorySynthesisContext
+        brokeredContext
       ),
       profileMemoryStatus: "available"
     };
@@ -382,6 +472,8 @@ async function recordAudit(
   memoryAccessAuditStore: MemoryAccessAuditStore,
   taskId: string,
   query: string,
+  requestTelemetry: import("../core/profileMemoryRuntime/contracts").ProfileMemoryRequestTelemetry,
+  promptCutoverGate: BrokerPromptCutoverGateResult,
   storeLoadCount: number,
   retrievedCount: number,
   retrievedEpisodeCount: number,
@@ -397,7 +489,16 @@ async function recordAudit(
     redactedCount,
     domainBoundary.lanes,
     {
-      storeLoadCount
+      storeLoadCount,
+      ingestOperationCount: requestTelemetry.ingestOperationCount,
+      retrievalOperationCount: requestTelemetry.retrievalOperationCount,
+      synthesisOperationCount: requestTelemetry.synthesisOperationCount,
+      renderOperationCount: requestTelemetry.renderOperationCount,
+      promptMemoryOwnerCount: requestTelemetry.promptMemoryOwnerCount,
+      promptMemorySurfaceCount: requestTelemetry.promptMemorySurfaceCount,
+      mixedMemoryOwnerDecisionCount: requestTelemetry.mixedMemoryOwnerDecisionCount,
+      promptCutoverGateDecision: promptCutoverGate.decision,
+      promptCutoverGateReasons: promptCutoverGate.reasons
     }
   );
 }
@@ -407,6 +508,8 @@ async function recordProbingAudit(
   memoryAccessAuditStore: MemoryAccessAuditStore,
   taskId: string,
   query: string,
+  requestTelemetry: import("../core/profileMemoryRuntime/contracts").ProfileMemoryRequestTelemetry,
+  promptCutoverGate: BrokerPromptCutoverGateResult,
   storeLoadCount: number,
   retrievedCount: number,
   retrievedEpisodeCount: number,
@@ -425,6 +528,15 @@ async function recordProbingAudit(
     {
       eventType: "PROBING_DETECTED",
       storeLoadCount,
+      ingestOperationCount: requestTelemetry.ingestOperationCount,
+      retrievalOperationCount: requestTelemetry.retrievalOperationCount,
+      synthesisOperationCount: requestTelemetry.synthesisOperationCount,
+      renderOperationCount: requestTelemetry.renderOperationCount,
+      promptMemoryOwnerCount: requestTelemetry.promptMemoryOwnerCount,
+      promptMemorySurfaceCount: requestTelemetry.promptMemorySurfaceCount,
+      mixedMemoryOwnerDecisionCount: requestTelemetry.mixedMemoryOwnerDecisionCount,
+      promptCutoverGateDecision: promptCutoverGate.decision,
+      promptCutoverGateReasons: promptCutoverGate.reasons,
       retrievedEpisodeCount,
       probeSignals: probingAssessment.matchedSignals,
       probeWindowSize: probingAssessment.windowSize,

@@ -9,10 +9,17 @@ import path from "node:path";
 import { test } from "node:test";
 
 import type { ProfileMemoryIngestRequest } from "../../src/core/profileMemoryRuntime/contracts";
+import type { TemporalMemorySynthesis } from "../../src/core/profileMemoryRuntime/profileMemoryTemporalQueryContracts";
+import { MemoryAccessAuditStore } from "../../src/core/memoryAccessAudit";
 import { createEmptyConversationDomainContext } from "../../src/core/sessionContext";
 import { ProfileMemoryStore } from "../../src/core/profileMemoryStore";
-import { createEmptyEntityGraphV1 } from "../../src/core/stage6_86EntityGraph";
+import {
+  applyEntityExtractionToGraph,
+  createEmptyEntityGraphV1,
+  extractEntityCandidates
+} from "../../src/core/stage6_86EntityGraph";
 import type { TaskRunResult } from "../../src/core/types";
+import { MemoryBrokerOrgan } from "../../src/organs/memoryBroker";
 import {
   ConversationInboundMessage,
   ConversationManager as BaseConversationManager,
@@ -20,6 +27,7 @@ import {
 } from "../../src/interfaces/conversationManager";
 import { buildConversationInboundUserInput } from "../../src/interfaces/mediaRuntime/mediaNormalization";
 import { InterfaceSessionStore as BaseInterfaceSessionStore } from "../../src/interfaces/sessionStore";
+import { buildLegacyCompatibleTemporalSynthesis } from "../../src/organs/memorySynthesis/temporalSynthesisAdapter";
 import {
   buildConversationJobFixture,
   buildConversationSessionFixture
@@ -132,6 +140,68 @@ function buildMessageAt(text: string, receivedAt: string): ConversationInboundMe
     text,
     receivedAt
   };
+}
+
+function buildQuarantinedJordanContinuityFacts() {
+  const supportingEpisode = {
+    episodeId: "episode_jordan_identity_ambiguity",
+    title: "Jordan identity ambiguity remains unresolved",
+    summary: "Two Jordans and an overlapping J.R. alias still need disambiguation.",
+    status: "unresolved" as const,
+    lastMentionedAt: "2026-03-28T10:02:00.000Z",
+    entityRefs: ["Jordan", "J.R."],
+    entityLinks: [],
+    openLoopLinks: []
+  };
+  const supportingFact = {
+    factId: "fact_jordan_identity_ambiguity",
+    key: "contact.jordan.work_association",
+    value: "Northstar",
+    status: "confirmed",
+    observedAt: "2026-03-28T10:01:00.000Z",
+    lastUpdatedAt: "2026-03-28T10:01:00.000Z",
+    confidence: 0.88
+  };
+  const compatibilitySynthesis = buildLegacyCompatibleTemporalSynthesis(
+    [supportingEpisode],
+    [supportingFact]
+  );
+  assert.ok(compatibilitySynthesis);
+  const temporalSynthesis: TemporalMemorySynthesis = {
+    ...compatibilitySynthesis.temporalSynthesis,
+    currentState: [],
+    historicalContext: [],
+    contradictionNotes: [
+      "I can't safely tell whether Jordan means the Northstar contact or the Ember contact yet, and J.R. could mean the Northstar Jordan or the Harbor contact."
+    ],
+    answerMode: "quarantined_identity",
+    laneMetadata: compatibilitySynthesis.temporalSynthesis.laneMetadata.map((lane) => ({
+      ...lane,
+      answerMode: "quarantined_identity",
+      dominantLane: "quarantined_identity",
+      supportingLanes: []
+    }))
+  };
+  return Object.assign(
+    [
+      {
+        factId: supportingFact.factId,
+        key: supportingFact.key,
+        value: supportingFact.value,
+        status: supportingFact.status,
+        observedAt: supportingFact.observedAt,
+        lastUpdatedAt: supportingFact.lastUpdatedAt,
+        confidence: supportingFact.confidence
+      }
+    ],
+    {
+      semanticMode: "relationship_inventory" as const,
+      relevanceScope: "conversation_local" as const,
+      scopedThreadKeys: ["thread_jordan_identity_ambiguity"],
+      temporalSynthesis,
+      laneBoundaries: compatibilitySynthesis.laneBoundaries
+    }
+  );
 }
 
 /**
@@ -569,6 +639,192 @@ test("conversation manager applies proposal-reply classifier intents for adjust 
     assert.ok(
       classifierEvents.every((event) => event.rulepackVersion === "FollowUpRulepackV1")
     );
+  } finally {
+    await removeTempDirWithRetry(tempDir);
+  }
+});
+
+test("conversation manager serves bounded fact review through the real /memory command path", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-conversation-memory-fact-review-"));
+  const store = new InterfaceSessionStore(path.join(tempDir, "sessions.json"));
+  const manager = new ConversationManager(store, {}, {
+    reviewConversationMemoryFacts: async (request) => {
+      assert.equal(request.reviewTaskId, "memory_fact_review_2026_03_31T12_10_00_000Z");
+      assert.equal(request.query, "Avery");
+      assert.equal(request.maxFacts, 5);
+      return Object.assign(
+        [
+          {
+            factId: "fact_preferred_name",
+            key: "identity.preferred_name",
+            value: "Avery",
+            status: "confirmed",
+            confidence: 0.98,
+            sensitive: false,
+            observedAt: "2026-03-31T12:00:00.000Z",
+            lastUpdatedAt: "2026-03-31T12:00:00.000Z",
+            decisionRecord: {
+              family: "identity.preferred_name",
+              evidenceClass: "user_explicit_fact",
+              governanceAction: "allow_current_state",
+              governanceReason: "explicit_user_fact",
+              disposition: "selected_current_state",
+              answerModeFallback: "report_current_state",
+              candidateRefs: ["fact_preferred_name"],
+              evidenceRefs: ["fact_preferred_name"]
+            }
+          }
+        ],
+        {
+          hiddenDecisionRecords: [
+            {
+              family: "contact.entity_hint",
+              evidenceClass: "user_hint_or_context",
+              governanceAction: "support_only_legacy",
+              governanceReason: "contact_entity_hint_requires_corroboration",
+              disposition: "needs_corroboration",
+              answerModeFallback: "report_insufficient_evidence",
+              candidateRefs: ["candidate_hint_1"],
+              evidenceRefs: ["hint_1"]
+            }
+          ],
+          asOfObservedTime: "2026-03-31T12:10:00.000Z",
+          asOfValidTime: undefined
+        }
+      );
+    }
+  });
+
+  try {
+    const reply = await manager.handleMessage(
+      buildMessageAt("/memory fact Avery", "2026-03-31T12:10:00.000Z"),
+      async () => {
+        throw new Error("executeTask should not run for bounded /memory fact review");
+      },
+      async () => {}
+    );
+
+    assert.match(reply, /^Remembered facts:/);
+    assert.match(reply, /Current State:/);
+    assert.match(reply, /identity\.preferred_name: Avery \(fact_preferred_name\)/);
+    assert.match(reply, /Historical Context:\n- none/);
+    assert.match(reply, /Ambiguity Notes:/);
+    assert.match(reply, /held back until it has stronger corroboration/i);
+    assert.doesNotMatch(reply, /candidate_hint_1/);
+    assert.doesNotMatch(reply, /hint_1/);
+  } finally {
+    await removeTempDirWithRetry(tempDir);
+  }
+});
+
+test("conversation manager serves bounded episode review and mutations through the real /memory command path", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-conversation-memory-episode-review-"));
+  const store = new InterfaceSessionStore(path.join(tempDir, "sessions.json"));
+  const calls: string[] = [];
+  const manager = new ConversationManager(store, {}, {
+    reviewConversationMemory: async (request) => {
+      assert.equal(request.reviewTaskId, "memory_review_2026_03_31T12_20_00_000Z");
+      assert.equal(request.query, "/memory");
+      assert.equal(request.maxEpisodes, 5);
+      calls.push("list");
+      return [
+        {
+          episodeId: "episode_owen_fall",
+          title: "Owen fell down",
+          summary: "Owen fell down a few weeks ago and the outcome was unresolved.",
+          status: "unresolved",
+          lastMentionedAt: "2026-03-31T12:05:00.000Z",
+          resolvedAt: null,
+          confidence: 0.92,
+          sensitive: false
+        }
+      ];
+    },
+    resolveConversationMemoryEpisode: async (request) => {
+      calls.push(`resolve:${request.episodeId}:${request.note}`);
+      return {
+        episodeId: request.episodeId,
+        title: "Owen fell down",
+        summary: "Owen fell down a few weeks ago and the outcome was unresolved.",
+        status: "resolved",
+        lastMentionedAt: "2026-03-31T12:05:00.000Z",
+        resolvedAt: request.nowIso,
+        confidence: 0.92,
+        sensitive: false
+      };
+    },
+    markConversationMemoryEpisodeWrong: async (request) => {
+      calls.push(`wrong:${request.episodeId}:${request.note}`);
+      return {
+        episodeId: request.episodeId,
+        title: "Owen fell down",
+        summary: "Owen fell down a few weeks ago and the outcome was unresolved.",
+        status: "no_longer_relevant",
+        lastMentionedAt: "2026-03-31T12:05:00.000Z",
+        resolvedAt: null,
+        confidence: 0.92,
+        sensitive: false
+      };
+    },
+    forgetConversationMemoryEpisode: async (request) => {
+      calls.push(`forget:${request.episodeId}`);
+      return {
+        episodeId: request.episodeId,
+        title: "Owen fell down",
+        summary: "Owen fell down a few weeks ago and the outcome was unresolved.",
+        status: "unresolved",
+        lastMentionedAt: "2026-03-31T12:05:00.000Z",
+        resolvedAt: null,
+        confidence: 0.92,
+        sensitive: false
+      };
+    }
+  });
+
+  try {
+    const reviewReply = await manager.handleMessage(
+      buildMessageAt("/memory", "2026-03-31T12:20:00.000Z"),
+      async () => {
+        throw new Error("executeTask should not run for bounded /memory episode review");
+      },
+      async () => {}
+    );
+    assert.match(reviewReply, /^Remembered situations:/);
+    assert.match(reviewReply, /Owen fell down \(episode_owen_fall\)/);
+    assert.match(reviewReply, /\/memory resolve <episode-id>/);
+
+    const resolveReply = await manager.handleMessage(
+      buildMessageAt("/memory resolve episode_owen_fall Owen recovered", "2026-03-31T12:20:10.000Z"),
+      async () => {
+        throw new Error("executeTask should not run for bounded /memory episode resolve");
+      },
+      async () => {}
+    );
+    assert.equal(resolveReply, 'Marked "Owen fell down" as resolved.');
+
+    const wrongReply = await manager.handleMessage(
+      buildMessageAt("/memory wrong episode_owen_fall Wrong Owen", "2026-03-31T12:20:20.000Z"),
+      async () => {
+        throw new Error("executeTask should not run for bounded /memory episode wrong");
+      },
+      async () => {}
+    );
+    assert.equal(wrongReply, 'Marked "Owen fell down" as no longer relevant.');
+
+    const forgetReply = await manager.handleMessage(
+      buildMessageAt("/memory forget episode_owen_fall", "2026-03-31T12:20:30.000Z"),
+      async () => {
+        throw new Error("executeTask should not run for bounded /memory episode forget");
+      },
+      async () => {}
+    );
+    assert.equal(forgetReply, 'Forgot "Owen fell down".');
+    assert.deepEqual(calls, [
+      "list",
+      "resolve:episode_owen_fall:Owen recovered",
+      "wrong:episode_owen_fall:Wrong Owen",
+      "forget:episode_owen_fall"
+    ]);
   } finally {
     await removeTempDirWithRetry(tempDir);
   }
@@ -2478,6 +2734,63 @@ test("conversation manager can answer self-identity from low-confidence transpor
   }
 });
 
+test("conversation manager records bounded self-identity parity telemetry on the direct recall path", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-conversation-identity-audit-"));
+  const store = new InterfaceSessionStore(path.join(tempDir, "sessions.json"));
+  const auditStore = new MemoryAccessAuditStore(path.join(tempDir, "memory_access_log.json"));
+  const receivedAt = "2026-03-20T20:49:30.000Z";
+  const manager = new ConversationManager(store, {}, {
+    memoryAccessAuditStore: auditStore,
+    queryContinuityFacts: async () => [
+      {
+        factId: "fact_identity_preferred_name",
+        key: "identity.preferred_name",
+        value: "Avery",
+        status: "active",
+        observedAt: "2026-03-20T20:40:00.000Z",
+        lastUpdatedAt: "2026-03-20T20:45:00.000Z",
+        confidence: 0.99
+      }
+    ],
+    runDirectConversationTurn: async () => {
+      throw new Error("runDirectConversationTurn should not run for deterministic self-identity replies");
+    }
+  });
+
+  try {
+    const reply = await manager.handleMessage(
+      {
+        ...buildMessageAt("Who am I?", receivedAt),
+        transportIdentity: {
+          provider: "telegram",
+          username: "morgan_handle",
+          displayName: "Morgan",
+          givenName: "Morgan",
+          familyName: null,
+          observedAt: receivedAt
+        }
+      },
+      async () => {
+        throw new Error("executeTask should not run for self-identity direct chat");
+      },
+      async () => {}
+    );
+    assert.equal(reply, "You're Avery.");
+
+    const document = await auditStore.load();
+    assert.equal(document.events.length, 1);
+    const [event] = document.events;
+    assert.equal(event?.taskId, `direct_self_identity:${receivedAt}`);
+    assert.equal(event?.identitySafetyDecisionCount, 1);
+    assert.equal(event?.selfIdentityParityCheckCount, 1);
+    assert.equal(event?.selfIdentityParityMismatchCount, 1);
+    assert.equal(event?.retrievalOperationCount, 1);
+    assert.deepEqual(event?.domainLanes, ["profile"]);
+  } finally {
+    await removeTempDirWithRetry(tempDir);
+  }
+});
+
 test("conversation manager persists direct self-identity declarations and recalls them later without queueing work", async () => {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-conversation-identity-declaration-"));
   const store = new InterfaceSessionStore(path.join(tempDir, "sessions.json"));
@@ -2761,13 +3074,302 @@ test("conversation manager keeps mixed relationship-plus-build turns off the dir
   }
 });
 
+test("conversation manager keeps workflow-label clutter out of personal truth and still ingests explicit reminder clauses under workflow-dominant posture", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-conversation-relationship-battle-f-"));
+  const store = new InterfaceSessionStore(path.join(tempDir, "sessions.json"));
+  const profileStore = new ProfileMemoryStore(
+    path.join(tempDir, "profile_memory.secure.json"),
+    Buffer.alloc(32, 119),
+    90
+  );
+  const broker = new MemoryBrokerOrgan(profileStore);
+  const conversationKey = "telegram:chat-1:user-1";
+  const directInputs: string[] = [];
+  const executedInputs: string[] = [];
+  const rememberedInputs: ProfileMemoryIngestRequest[] = [];
+  const notifications: string[] = [];
+  const workflowDomainContext = {
+    ...createEmptyConversationDomainContext(conversationKey),
+    dominantLane: "workflow" as const,
+    continuitySignals: {
+      activeWorkspace: true,
+      returnHandoff: true,
+      modeContinuity: true
+    },
+    activeSince: "2026-03-28T10:00:00.000Z",
+    lastUpdatedAt: "2026-03-28T10:00:45.000Z"
+  };
+  const manager = new ConversationManager(store, {
+    maxConversationTurns: 40,
+    maxContextTurnsForExecution: 10
+  }, {
+    rememberConversationProfileInput: async (input, receivedAt) => {
+      const request = typeof input === "string"
+        ? { userInput: input }
+        : input;
+      rememberedInputs.push(request);
+      const result = await profileStore.ingestFromTaskInput(
+        `task_conversation_relationship_battle_f_direct_${rememberedInputs.length}`,
+        request.userInput ?? "",
+        receivedAt,
+        {
+          validatedFactCandidates: request.validatedFactCandidates
+        }
+      );
+      return result.appliedFacts > 0;
+    },
+    queryContinuityFacts: async (request) => {
+      return profileStore.queryFactsForContinuity(
+        createEmptyEntityGraphV1("2026-03-28T10:01:00.000Z"),
+        request.stack,
+        request
+      );
+    },
+    runDirectConversationTurn: async (input) => {
+      directInputs.push(input);
+      if (
+        input ===
+          "Open Jordan-Northstar-hero-v2.html from my Desktop and duplicate the Milo-Lumen assets folder." ||
+        /Current user request:\nOpen Jordan-Northstar-hero-v2\.html from my Desktop and duplicate the Milo-Lumen assets folder\./i.test(input)
+      ) {
+        return {
+          summary: "I can help with that file work."
+        };
+      }
+      assert.doesNotMatch(input, /Current working mode from earlier in this chat:/i);
+      if (/Current user request:\nWho do I know from work\?/i.test(input)) {
+        return {
+          summary: "You haven't pinned anyone specific from work yet."
+        };
+      }
+      if (
+        input === "After that, remind me that Priya is my coworker at Northstar." ||
+        /Current user request:\nAfter that, remind me that Priya is my coworker at Northstar\./i.test(input)
+      ) {
+        return {
+          summary: "Okay, I'll remember that Priya is your coworker at Northstar."
+        };
+      }
+      if (/Current user request:\nWho do I work with now\?/i.test(input)) {
+        assert.match(input, /Priya/i);
+        return {
+          summary: "Right now, Priya."
+        };
+      }
+      throw new Error(`Unexpected direct conversation input: ${input}`);
+    }
+  });
+
+  try {
+    await store.setSession(
+      buildConversationSessionFixture({
+        conversationId: conversationKey,
+        conversationTurns: [
+          {
+            role: "user",
+            text: "Open the landing page on my Desktop and duplicate the hero.",
+            at: "2026-03-28T10:00:00.000Z"
+          },
+          {
+            role: "assistant",
+            text: "I duplicated the hero.",
+            at: "2026-03-28T10:00:05.000Z"
+          },
+          {
+            role: "user",
+            text: "Rename the mobile draft and keep the browser preview open.",
+            at: "2026-03-28T10:00:30.000Z"
+          },
+          {
+            role: "assistant",
+            text: "The mobile draft is renamed and the preview is still open.",
+            at: "2026-03-28T10:00:45.000Z"
+          }
+        ],
+        domainContext: workflowDomainContext,
+        modeContinuity: {
+          activeMode: "build",
+          source: "natural_intent",
+          confidence: "HIGH",
+          lastAffirmedAt: "2026-03-28T10:00:45.000Z",
+          lastUserInput: "Rename the mobile draft and keep the browser preview open."
+        },
+        returnHandoff: {
+          id: "handoff:phase8-battle-f",
+          status: "stopped",
+          goal: "Finish the landing page file work and keep the preview recoverable.",
+          summary: "The workflow draft exists and the preview can be resumed.",
+          nextSuggestedStep: "Tell me which file operation you want next.",
+          workspaceRootPath: "C:\\Users\\benac\\OneDrive\\Desktop\\Northstar Landing",
+          primaryArtifactPath: "C:\\Users\\benac\\OneDrive\\Desktop\\Northstar Landing\\index.html",
+          previewUrl: null,
+          changedPaths: [
+            "C:\\Users\\benac\\OneDrive\\Desktop\\Northstar Landing\\index.html"
+          ],
+          sourceJobId: "job-phase8-battle-f",
+          updatedAt: "2026-03-28T10:00:45.000Z"
+        }
+      })
+    );
+
+    const negativeReply = await manager.handleMessage(
+      buildMessageAt(
+        "Open Jordan-Northstar-hero-v2.html from my Desktop and duplicate the Milo-Lumen assets folder.",
+        "2026-03-28T10:01:00.000Z"
+      ),
+      async (input) => {
+        executedInputs.push(input);
+        await broker.buildPlannerInput(
+          {
+            id: `task_conversation_relationship_battle_f_${executedInputs.length}`,
+            goal: "Handle the workflow request safely.",
+            userInput: input,
+            createdAt: "2026-03-28T10:01:00.000Z"
+          },
+          {
+            sessionDomainContext: workflowDomainContext
+          }
+        );
+        return {
+          summary: "I opened the file and duplicated the folder."
+        };
+      },
+      async (message) => {
+        notifications.push(message);
+      }
+    );
+    assert.match(negativeReply, /On it\.|I can help with that file work\./i);
+    if (/On it\./i.test(negativeReply)) {
+      await waitFor(
+        () => notifications.includes("I opened the file and duplicated the folder."),
+        4_000
+      );
+    }
+
+    const factsAfterNegativeTurn = await profileStore.readFacts({
+      purpose: "operator_view",
+      includeSensitive: false,
+      explicitHumanApproval: false,
+      maxFacts: 50
+    });
+    assert.equal(
+      factsAfterNegativeTurn.some(
+        (fact) =>
+          fact.key.startsWith("contact.jordan.") || fact.key.startsWith("contact.milo.")
+      ),
+      false
+    );
+
+    const inventoryReply = await manager.handleMessage(
+      buildMessageAt("Who do I know from work?", "2026-03-28T10:01:10.000Z"),
+      async () => {
+        throw new Error("executeTask should not run for work-inventory recall after workflow-label clutter");
+      },
+      async () => {}
+    );
+    assert.equal(inventoryReply, "You haven't pinned anyone specific from work yet.");
+
+    const positiveReply = await manager.handleMessage(
+      buildMessageAt(
+        "After that, remind me that Priya is my coworker at Northstar.",
+        "2026-03-28T10:01:20.000Z"
+      ),
+      async (input) => {
+        executedInputs.push(input);
+        await broker.buildPlannerInput(
+          {
+            id: `task_conversation_relationship_battle_f_${executedInputs.length}`,
+            goal: "Handle the workflow request safely.",
+            userInput: input,
+            createdAt: "2026-03-28T10:01:20.000Z"
+          },
+          {
+            sessionDomainContext: workflowDomainContext
+          }
+        );
+        return {
+          summary: "Okay, I'll remember that Priya is your coworker at Northstar."
+        };
+      },
+      async (message) => {
+        notifications.push(message);
+      }
+    );
+    assert.match(
+      positiveReply,
+      /Okay, I'll remember that Priya is your coworker at Northstar\.|On it\./i
+    );
+    if (/On it\./i.test(positiveReply)) {
+      await waitFor(
+        () => notifications.includes("Okay, I'll remember that Priya is your coworker at Northstar."),
+        4_000
+      );
+    }
+
+    const factsAfterPositiveTurn = await profileStore.readFacts({
+      purpose: "operator_view",
+      includeSensitive: false,
+      explicitHumanApproval: false,
+      maxFacts: 50
+    });
+    assert.equal(
+      factsAfterPositiveTurn.some(
+        (fact) =>
+          fact.key === "contact.priya.work_association" &&
+          fact.value === "Northstar"
+      ),
+      true
+    );
+    assert.equal(
+      factsAfterPositiveTurn.some(
+        (fact) =>
+          fact.key === "contact.priya.relationship" &&
+          fact.value === "work_peer"
+      ),
+      true
+    );
+
+    const currentReply = await manager.handleMessage(
+      buildMessageAt("Who do I work with now?", "2026-03-28T10:01:30.000Z"),
+      async () => {
+        throw new Error("executeTask should not run for current coworker recall after mixed-turn memory update");
+      },
+      async () => {}
+    );
+    assert.equal(currentReply, "Right now, Priya.");
+    assert.equal(
+      executedInputs.some((input) => /Jordan-Northstar-hero-v2\.html/i.test(input)) ||
+        directInputs.some((input) => /Jordan-Northstar-hero-v2\.html/i.test(input)),
+      true
+    );
+    assert.equal(
+      rememberedInputs.some((request) => /Jordan-Northstar-hero-v2\.html/i.test(request.userInput ?? "")),
+      false
+    );
+    assert.equal(
+      executedInputs.some((input) => /Priya is my coworker at Northstar/i.test(input)) ||
+        rememberedInputs.some((request) => /Priya is my coworker at Northstar/i.test(request.userInput ?? "")),
+      true
+    );
+
+    const session = await store.getSession(conversationKey);
+    assert.ok(session);
+    assert.equal(session?.queuedJobs.length, 0);
+    assert.equal(session?.runningJobId, null);
+  } finally {
+    await removeTempDirWithRetry(tempDir);
+  }
+});
+
 test("conversation manager reuses one continuity read session for direct chat contextual recall", async () => {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-conversation-continuity-session-"));
   const store = new InterfaceSessionStore(path.join(tempDir, "sessions.json"));
+  const auditStore = new MemoryAccessAuditStore(path.join(tempDir, "memory_access_log.json"));
   const conversationKey = "telegram:chat-1:user-1";
   let openedSessions = 0;
   let continuityEpisodeQueries = 0;
   let continuityFactQueries = 0;
+  let entityReferenceInterpretationCalls = 0;
   const directInputs: string[] = [];
   const manager = new ConversationManager(
     store,
@@ -2779,11 +3381,14 @@ test("conversation manager reuses one continuity read session for direct chat co
       queryContinuityFacts: async () => {
         throw new Error("raw continuity fact callback should not run when a session opener is available");
       },
+      memoryAccessAuditStore: auditStore,
       openContinuityReadSession: async () => {
         openedSessions += 1;
         return {
-          queryContinuityEpisodes: async () => {
+          queryContinuityEpisodes: async (request) => {
             continuityEpisodeQueries += 1;
+            assert.equal(request.semanticMode, "event_history");
+            assert.equal(request.relevanceScope, "conversation_local");
             return [
               {
                 episodeId: "episode_owen_fall",
@@ -2809,8 +3414,10 @@ test("conversation manager reuses one continuity read session for direct chat co
               }
             ];
           },
-          queryContinuityFacts: async () => {
+          queryContinuityFacts: async (request) => {
             continuityFactQueries += 1;
+            assert.equal(request.semanticMode, "relationship_inventory");
+            assert.equal(request.relevanceScope, "conversation_local");
             return [
               {
                 factId: "fact_owen_relationship",
@@ -2823,6 +3430,34 @@ test("conversation manager reuses one continuity read session for direct chat co
               }
             ];
           }
+        };
+      },
+      getEntityGraph: async () => ({
+        ...createEmptyEntityGraphV1("2026-03-26T15:39:00.000Z"),
+        entities: [
+          {
+            entityKey: "entity_owen",
+            canonicalName: "Owen",
+            entityType: "person",
+            disambiguator: null,
+            domainHint: "relationship",
+            aliases: ["Owen"],
+            firstSeenAt: "2026-02-14T15:00:00.000Z",
+            lastSeenAt: "2026-03-26T15:39:00.000Z",
+            salience: 1,
+            evidenceRefs: ["trace:owen_context"]
+          }
+        ]
+      }),
+      entityReferenceInterpretationResolver: async () => {
+        entityReferenceInterpretationCalls += 1;
+        return {
+          source: "local_intent_model",
+          kind: "entity_scoped_reference",
+          selectedEntityKeys: ["entity_owen"],
+          aliasCandidate: null,
+          confidence: "high",
+          explanation: "The user is asking about Owen."
         };
       },
       runDirectConversationTurn: async (input) => {
@@ -2914,9 +3549,22 @@ test("conversation manager reuses one continuity read session for direct chat co
     assert.equal(openedSessions, 1);
     assert.equal(continuityEpisodeQueries, 2);
     assert.equal(continuityFactQueries, 1);
+    assert.equal(entityReferenceInterpretationCalls, 1);
     assert.equal(directInputs.length, 1);
     assert.match(directInputs[0] ?? "", /Contextual recall opportunity \(optional\):/);
     assert.match(directInputs[0] ?? "", /Relevant situation: Owen fell down/i);
+    const auditDocument = await auditStore.load();
+    assert.equal(auditDocument.events.length, 1);
+    const [event] = auditDocument.events;
+    assert.equal(event?.taskId, "direct_memory_prompt:2026-03-26T15:39:00.000Z");
+    assert.equal(event?.retrievalOperationCount, 3);
+    assert.equal(event?.synthesisOperationCount, 1);
+    assert.equal(event?.renderOperationCount, 1);
+    assert.equal(event?.promptMemoryOwnerCount, 1);
+    assert.equal(event?.promptMemorySurfaceCount, 1);
+    assert.equal(event?.mixedMemoryOwnerDecisionCount, 0);
+    assert.equal(event?.identitySafetyDecisionCount, 1);
+    assert.deepEqual(event?.domainLanes, ["profile"]);
 
     const session = await store.getSession(conversationKey);
     assert.ok(session);
@@ -2963,7 +3611,10 @@ test("conversation manager remembers relationship updates through the direct cha
       ),
     runDirectConversationTurn: async (input) => {
       directInputs.push(input);
-      if (/Current user request:\nI work with Milo at Northstar Creative\./i.test(input)) {
+      if (
+        input === "I work with Milo at Northstar Creative." ||
+        /Current user request:\nI work with Milo at Northstar Creative\./i.test(input)
+      ) {
         return {
           summary: "Noted."
         };
@@ -2972,7 +3623,14 @@ test("conversation manager remembers relationship updates through the direct cha
         assert.doesNotMatch(input, /Current working mode from earlier in this chat:/i);
         assert.match(input, /Milo/i);
         return {
-          summary: "Milo is your coworker at Northstar Creative."
+          summary: "Current State: Milo is your coworker at Northstar Creative. Historical Context: You first mentioned him while talking about a client meeting. Contradiction Notes: none."
+        };
+      }
+      if (/Current user request:\nwait whos Milo again\?/i.test(input)) {
+        assert.doesNotMatch(input, /Current working mode from earlier in this chat:/i);
+        assert.match(input, /Milo/i);
+        return {
+          summary: "Current State: Milo is your coworker at Northstar Creative. Historical Context: You first mentioned him while talking about a client meeting. Contradiction Notes: none."
         };
       }
       throw new Error(`Unexpected direct conversation input: ${input}`);
@@ -3051,13 +3709,2079 @@ test("conversation manager remembers relationship updates through the direct cha
       },
       async () => {}
     );
-    assert.equal(recallReply, "Milo is your coworker at Northstar Creative.");
-    assert.equal(directInputs.length, 2);
+    assert.equal(
+      recallReply,
+      "Milo is your coworker at Northstar Creative. Previously, you first mentioned him while talking about a client meeting."
+    );
+    assert.doesNotMatch(
+      recallReply,
+      /Current State:|Historical Context:|Contradiction Notes:|supporting evidence|resolved_current/i
+    );
+    const shorthandRecallReply = await manager.handleMessage(
+      buildMessageAt("wait whos Milo again?", "2026-03-26T15:39:20.000Z"),
+      async () => {
+        throw new Error("executeTask should not run for shorthand direct relationship recall chat");
+      },
+      async () => {}
+    );
+    assert.equal(
+      shorthandRecallReply,
+      "Milo is your coworker at Northstar Creative. Previously, you first mentioned him while talking about a client meeting."
+    );
+    assert.doesNotMatch(
+      shorthandRecallReply,
+      /Current State:|Historical Context:|Contradiction Notes:|supporting evidence|resolved_current/i
+    );
+    assert.equal(directInputs.length, 3);
 
     const session = await store.getSession(conversationKey);
     assert.ok(session);
     assert.equal(session?.queuedJobs.length, 0);
     assert.equal(session?.runningJobId, null);
+  } finally {
+    await removeTempDirWithRetry(tempDir);
+  }
+});
+
+test("conversation manager keeps relationship inventory and current-vs-history recall stable through workflow-heavy clutter", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-conversation-relationship-battle-a-"));
+  const store = new InterfaceSessionStore(path.join(tempDir, "sessions.json"));
+  const profileStore = new ProfileMemoryStore(
+    path.join(tempDir, "profile_memory.secure.json"),
+    Buffer.alloc(32, 93),
+    90
+  );
+  const conversationKey = "telegram:chat-1:user-1";
+  const directInputs: string[] = [];
+  const manager = new ConversationManager(store, {
+    maxConversationTurns: 40,
+    maxContextTurnsForExecution: 10
+  }, {
+    rememberConversationProfileInput: async (input, receivedAt) => {
+      const request = typeof input === "string"
+        ? { userInput: input }
+        : input;
+      const result = await profileStore.ingestFromTaskInput(
+        "task_conversation_relationship_battle_a",
+        request.userInput ?? "",
+        receivedAt,
+        {
+          validatedFactCandidates: request.validatedFactCandidates
+        }
+      );
+      return result.appliedFacts > 0;
+    },
+    queryContinuityFacts: async (request) => {
+      return profileStore.queryFactsForContinuity(
+        createEmptyEntityGraphV1("2026-03-26T15:39:10.000Z"),
+        request.stack,
+        request
+      );
+    },
+    runDirectConversationTurn: async (input) => {
+      directInputs.push(input);
+      assert.doesNotMatch(input, /Current working mode from earlier in this chat:/i);
+      if (
+        /Current user request:\nI work with Jordan at Northstar\. I used to work with Milo at Lumen Studio\. Jordan's married, and Milo has a girlfriend\./i.test(input)
+      ) {
+        return {
+          summary: "Got it - Jordan's current at Northstar, and Milo's the older Lumen Studio connection."
+        };
+      }
+      if (/Current user request:\nwho are ppl i know\?/i.test(input)) {
+        assert.match(input, /Jordan/i);
+        assert.match(input, /Milo/i);
+        return {
+          summary: "You've mentioned Jordan and Milo. Jordan's the Northstar coworker; Milo's the older Lumen Studio one."
+        };
+      }
+      if (/Current user request:\nwho do i work with now\?/i.test(input)) {
+        assert.match(input, /Jordan/i);
+        return {
+          summary: "Right now, Jordan."
+        };
+      }
+      if (/Current user request:\nwho did i work with bfore\?/i.test(input)) {
+        assert.match(input, /Milo/i);
+        return {
+          summary: "Before that, Milo at Lumen Studio."
+        };
+      }
+      if (/Current user request:\nwaht about milo and lumen\?/i.test(input)) {
+        assert.match(input, /Milo/i);
+        assert.match(input, /Lumen Studio/i);
+        return {
+          summary: "Milo's the one you used to work with at Lumen Studio."
+        };
+      }
+      if (/Current user request:\ndo u rember milo\?/i.test(input)) {
+        assert.match(input, /Milo/i);
+        return {
+          summary: "Yes - you used to work with Milo at Lumen Studio."
+        };
+      }
+      throw new Error(`Unexpected direct conversation input: ${input}`);
+    }
+  });
+
+  try {
+    await store.setSession(
+      buildConversationSessionFixture({
+        conversationId: conversationKey,
+        conversationTurns: [
+          {
+            role: "user",
+            text: "Open the landing page on my Desktop and duplicate the hero into a new file.",
+            at: "2026-03-26T15:34:00.000Z"
+          },
+          {
+            role: "assistant",
+            text: "I duplicated the hero into a new file on your Desktop.",
+            at: "2026-03-26T15:34:20.000Z"
+          },
+          {
+            role: "user",
+            text: "Then tidy up the browser tabs for that project.",
+            at: "2026-03-26T15:34:30.000Z"
+          },
+          {
+            role: "assistant",
+            text: "I kept the reference tabs together for that project.",
+            at: "2026-03-26T15:34:45.000Z"
+          },
+          {
+            role: "user",
+            text: "Now build a second variant for mobile and put it in a new folder on the Desktop.",
+            at: "2026-03-26T15:38:00.000Z"
+          },
+          {
+            role: "assistant",
+            text: "I sketched the mobile variant into a new Desktop folder.",
+            at: "2026-03-26T15:38:20.000Z"
+          },
+          {
+            role: "user",
+            text: "Also check whether the browser still has the reference site open.",
+            at: "2026-03-26T15:38:30.000Z"
+          },
+          {
+            role: "assistant",
+            text: "The reference site is still open in the browser.",
+            at: "2026-03-26T15:38:45.000Z"
+          }
+        ],
+        domainContext: {
+          ...createEmptyConversationDomainContext(conversationKey),
+          dominantLane: "workflow",
+          continuitySignals: {
+            activeWorkspace: true,
+            returnHandoff: true,
+            modeContinuity: true
+          },
+          activeSince: "2026-03-26T15:34:00.000Z",
+          lastUpdatedAt: "2026-03-26T15:38:45.000Z"
+        },
+        modeContinuity: {
+          activeMode: "build",
+          source: "natural_intent",
+          confidence: "HIGH",
+          lastAffirmedAt: "2026-03-26T15:38:30.000Z",
+          lastUserInput: "Also check whether the browser still has the reference site open."
+        },
+        returnHandoff: {
+          id: "handoff:phase8-battle-a",
+          status: "stopped",
+          goal: "Finish the landing page variants and keep the preview recoverable.",
+          summary: "The workflow draft exists and the browser context can be resumed.",
+          nextSuggestedStep: "Tell me which design thread you want to pick up next.",
+          workspaceRootPath: "C:\\Users\\benac\\OneDrive\\Desktop\\Northstar Landing",
+          primaryArtifactPath: "C:\\Users\\benac\\OneDrive\\Desktop\\Northstar Landing\\index.html",
+          previewUrl: null,
+          changedPaths: [
+            "C:\\Users\\benac\\OneDrive\\Desktop\\Northstar Landing\\index.html"
+          ],
+          sourceJobId: "job-phase8-battle-a",
+          updatedAt: "2026-03-26T15:38:45.000Z"
+        }
+      })
+    );
+
+    const ingestReply = await manager.handleMessage(
+      buildMessageAt(
+        "I work with Jordan at Northstar. I used to work with Milo at Lumen Studio. Jordan's married, and Milo has a girlfriend.",
+        "2026-03-26T15:39:00.000Z"
+      ),
+      async () => {
+        throw new Error("executeTask should not run for direct relationship-ingest chat");
+      },
+      async () => {}
+    );
+    assert.equal(
+      ingestReply,
+      "Got it - Jordan's current at Northstar, and Milo's the older Lumen Studio connection."
+    );
+
+    const storedFacts = await profileStore.readFacts({
+      purpose: "operator_view",
+      includeSensitive: false,
+      explicitHumanApproval: false
+    });
+    assert.equal(
+      storedFacts.some(
+        (fact) =>
+          fact.key === "contact.jordan.work_association" &&
+          fact.value === "Northstar"
+      ),
+      true
+    );
+    assert.equal(
+      storedFacts.some(
+        (fact) =>
+          /^contact\.milo\.context\.[a-f0-9]{8}$/.test(fact.key) &&
+          fact.value === "I used to work with Milo at Lumen Studio"
+      ),
+      true
+    );
+
+    const inventoryReply = await manager.handleMessage(
+      buildMessageAt("who are ppl i know?", "2026-03-26T15:39:10.000Z"),
+      async () => {
+        throw new Error("executeTask should not run for broad relationship inventory recall chat");
+      },
+      async () => {}
+    );
+    assert.equal(
+      inventoryReply,
+      "You've mentioned Jordan and Milo. Jordan's the Northstar coworker; Milo's the older Lumen Studio one."
+    );
+    assert.doesNotMatch(
+      inventoryReply,
+      /Current State:|Historical Context:|Contradiction Notes:|supporting evidence|resolved_current/i
+    );
+
+    const currentReply = await manager.handleMessage(
+      buildMessageAt("who do i work with now?", "2026-03-26T15:39:20.000Z"),
+      async () => {
+        throw new Error("executeTask should not run for current relationship recall chat");
+      },
+      async () => {}
+    );
+    assert.equal(currentReply, "Right now, Jordan.");
+    assert.doesNotMatch(currentReply, /Milo|browser|preview|Current State:/i);
+
+    const historyReply = await manager.handleMessage(
+      buildMessageAt("who did i work with bfore?", "2026-03-26T15:39:30.000Z"),
+      async () => {
+        throw new Error("executeTask should not run for historical relationship recall chat");
+      },
+      async () => {}
+    );
+    assert.equal(historyReply, "Before that, Milo at Lumen Studio.");
+    assert.doesNotMatch(historyReply, /Jordan|Current State:|Historical Context:/i);
+
+    const indirectReply = await manager.handleMessage(
+      buildMessageAt("waht about milo and lumen?", "2026-03-26T15:39:40.000Z"),
+      async () => {
+        throw new Error("executeTask should not run for indirect relationship recall chat");
+      },
+      async () => {}
+    );
+    assert.equal(
+      indirectReply,
+      "Milo's the one you used to work with at Lumen Studio."
+    );
+    assert.doesNotMatch(indirectReply, /browser|preview|workflow|supporting evidence/i);
+
+    const negativeControlReply = await manager.handleMessage(
+      buildMessageAt("do u rember milo?", "2026-03-26T15:39:50.000Z"),
+      async () => {
+        throw new Error("executeTask should not run for typo-bearing relationship recall chat");
+      },
+      async () => {}
+    );
+    assert.equal(
+      negativeControlReply,
+      "Yes - you used to work with Milo at Lumen Studio."
+    );
+    assert.doesNotMatch(
+      negativeControlReply,
+      /Most recent actions|workflow|browser|preview|Current State:|Historical Context:/i
+    );
+
+    assert.equal(directInputs.length, 6);
+
+    const session = await store.getSession(conversationKey);
+    assert.ok(session);
+    assert.equal(session?.queuedJobs.length, 0);
+    assert.equal(session?.runningJobId, null);
+  } finally {
+    await removeTempDirWithRetry(tempDir);
+  }
+});
+
+test("conversation manager keeps interrupted third-person contact recall and object follow-ups stable through workflow-heavy clutter", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-conversation-relationship-battle-b-"));
+  const store = new InterfaceSessionStore(path.join(tempDir, "sessions.json"));
+  const profileStore = new ProfileMemoryStore(
+    path.join(tempDir, "profile_memory.secure.json"),
+    Buffer.alloc(32, 95),
+    90
+  );
+  const conversationKey = "telegram:chat-1:user-1";
+  const directInputs: string[] = [];
+  const manager = new ConversationManager(store, {
+    maxConversationTurns: 40,
+    maxContextTurnsForExecution: 10
+  }, {
+    rememberConversationProfileInput: async (input, receivedAt) => {
+      const request = typeof input === "string"
+        ? { userInput: input }
+        : input;
+      const result = await profileStore.ingestFromTaskInput(
+        "task_conversation_relationship_battle_b",
+        request.userInput ?? "",
+        receivedAt,
+        {
+          validatedFactCandidates: request.validatedFactCandidates
+        }
+      );
+      return result.appliedFacts > 0;
+    },
+    queryContinuityFacts: async (request) => {
+      return profileStore.queryFactsForContinuity(
+        createEmptyEntityGraphV1("2026-03-27T16:12:00.000Z"),
+        request.stack,
+        request
+      );
+    },
+    runDirectConversationTurn: async (input) => {
+      directInputs.push(input);
+      assert.doesNotMatch(input, /Current working mode from earlier in this chat:/i);
+      if (
+        /Current user request:\nBilly used to be at Flare\. He's at Northstar now\. He drives a gray Accord\./i.test(input)
+      ) {
+        return {
+          summary: "Got it - Billy's at Northstar now, and Flare was the earlier connection."
+        };
+      }
+      if (/Current user request:\nwaht about billy and flare\?/i.test(input)) {
+        assert.match(input, /Billy/i);
+        assert.match(input, /Northstar/i);
+        assert.match(input, /Flare/i);
+        return {
+          summary: "Billy's at Northstar now. Flare was the earlier connection."
+        };
+      }
+      if (/Current user request:\nand the accord\?/i.test(input)) {
+        assert.match(input, /Billy/i);
+        assert.match(input, /gray Accord/i);
+        return {
+          summary: "That's Billy's gray Accord."
+        };
+      }
+      throw new Error(`Unexpected direct conversation input: ${input}`);
+    }
+  });
+
+  const appendWorkflowClutter = async (
+    conversationTurns: Array<{ role: "user" | "assistant"; text: string; at: string }>,
+    lastUserInput: string,
+    updatedAt: string
+  ): Promise<void> => {
+    const session = await store.getSession(conversationKey);
+    assert.ok(session);
+    await store.setSession({
+      ...session,
+      conversationTurns: [...session.conversationTurns, ...conversationTurns],
+      domainContext: {
+        ...session.domainContext,
+        dominantLane: "workflow",
+        continuitySignals: {
+          activeWorkspace: true,
+          returnHandoff: true,
+          modeContinuity: true
+        },
+        lastUpdatedAt: updatedAt
+      },
+      modeContinuity: {
+        activeMode: "build",
+        source: "natural_intent",
+        confidence: "HIGH",
+        lastAffirmedAt: updatedAt,
+        lastUserInput
+      },
+      returnHandoff: session.returnHandoff
+        ? {
+            ...session.returnHandoff,
+            status: "stopped",
+            updatedAt
+          }
+        : null
+    });
+  };
+
+  try {
+    await store.setSession(
+      buildConversationSessionFixture({
+        conversationId: conversationKey,
+        conversationTurns: [
+          {
+            role: "user",
+            text: "Open the landing page on my Desktop and duplicate the hero into a new file.",
+            at: "2026-03-27T16:04:00.000Z"
+          },
+          {
+            role: "assistant",
+            text: "I duplicated the hero into a new file on your Desktop.",
+            at: "2026-03-27T16:04:20.000Z"
+          },
+          {
+            role: "user",
+            text: "Then tidy up the browser tabs for that project.",
+            at: "2026-03-27T16:04:30.000Z"
+          },
+          {
+            role: "assistant",
+            text: "I kept the reference tabs together for that project.",
+            at: "2026-03-27T16:04:45.000Z"
+          }
+        ],
+        domainContext: {
+          ...createEmptyConversationDomainContext(conversationKey),
+          dominantLane: "workflow",
+          continuitySignals: {
+            activeWorkspace: true,
+            returnHandoff: true,
+            modeContinuity: true
+          },
+          activeSince: "2026-03-27T16:04:00.000Z",
+          lastUpdatedAt: "2026-03-27T16:04:45.000Z"
+        },
+        modeContinuity: {
+          activeMode: "build",
+          source: "natural_intent",
+          confidence: "HIGH",
+          lastAffirmedAt: "2026-03-27T16:04:30.000Z",
+          lastUserInput: "Then tidy up the browser tabs for that project."
+        },
+        returnHandoff: {
+          id: "handoff:phase8-battle-b",
+          status: "stopped",
+          goal: "Finish the landing page variants and keep the preview recoverable.",
+          summary: "The workflow draft exists and the browser context can be resumed.",
+          nextSuggestedStep: "Tell me which design thread you want to pick up next.",
+          workspaceRootPath: "C:\\Users\\benac\\OneDrive\\Desktop\\Northstar Landing",
+          primaryArtifactPath: "C:\\Users\\benac\\OneDrive\\Desktop\\Northstar Landing\\index.html",
+          previewUrl: null,
+          changedPaths: [
+            "C:\\Users\\benac\\OneDrive\\Desktop\\Northstar Landing\\index.html"
+          ],
+          sourceJobId: "job-phase8-battle-b",
+          updatedAt: "2026-03-27T16:04:45.000Z"
+        }
+      })
+    );
+
+    const ingestReply = await manager.handleMessage(
+      buildMessageAt(
+        "Billy used to be at Flare. He's at Northstar now. He drives a gray Accord.",
+        "2026-03-27T16:09:00.000Z"
+      ),
+      async () => {
+        throw new Error("executeTask should not run for third-person contact ingest chat");
+      },
+      async () => {}
+    );
+    assert.equal(
+      ingestReply,
+      "Got it - Billy's at Northstar now, and Flare was the earlier connection."
+    );
+
+    const storedFacts = await profileStore.readFacts({
+      purpose: "operator_view",
+      includeSensitive: false,
+      explicitHumanApproval: false
+    });
+    assert.equal(
+      storedFacts.some(
+        (fact) =>
+          fact.key === "contact.billy.work_association" &&
+          fact.value === "Northstar"
+      ),
+      true
+    );
+    assert.equal(
+      storedFacts.some(
+        (fact) =>
+          fact.key === "contact.billy.work_association" &&
+          fact.value === "Flare"
+      ),
+      false
+    );
+
+    await appendWorkflowClutter(
+      [
+        {
+          role: "user",
+          text: "Open the last landing page draft.",
+          at: "2026-03-27T16:10:00.000Z"
+        },
+        {
+          role: "assistant",
+          text: "I opened the last landing page draft.",
+          at: "2026-03-27T16:10:05.000Z"
+        },
+        {
+          role: "user",
+          text: "Duplicate the pricing section.",
+          at: "2026-03-27T16:10:10.000Z"
+        },
+        {
+          role: "assistant",
+          text: "I duplicated the pricing section.",
+          at: "2026-03-27T16:10:15.000Z"
+        },
+        {
+          role: "user",
+          text: "Find the screenshot from earlier.",
+          at: "2026-03-27T16:10:20.000Z"
+        },
+        {
+          role: "assistant",
+          text: "I found the screenshot from earlier.",
+          at: "2026-03-27T16:10:25.000Z"
+        },
+        {
+          role: "user",
+          text: "Switch back to the browser tab with the reference site.",
+          at: "2026-03-27T16:10:30.000Z"
+        },
+        {
+          role: "assistant",
+          text: "I'm back on the browser tab with the reference site.",
+          at: "2026-03-27T16:10:35.000Z"
+        }
+      ],
+      "Switch back to the browser tab with the reference site.",
+      "2026-03-27T16:10:35.000Z"
+    );
+
+    const historyReply = await manager.handleMessage(
+      buildMessageAt("waht about billy and flare?", "2026-03-27T16:10:45.000Z"),
+      async () => {
+        throw new Error("executeTask should not run for interrupted Billy history recall chat");
+      },
+      async () => {}
+    );
+    assert.equal(historyReply, "Billy's at Northstar now. Flare was the earlier connection.");
+    assert.doesNotMatch(
+      historyReply,
+      /gray Accord|Current State:|Historical Context:|Contradiction Notes:|supporting evidence/i
+    );
+
+    await appendWorkflowClutter(
+      [
+        {
+          role: "user",
+          text: "Okay, back to the Desktop task - rename the mobile file and move it into the archive folder.",
+          at: "2026-03-27T16:11:00.000Z"
+        },
+        {
+          role: "assistant",
+          text: "I renamed the mobile file and moved it into the archive folder.",
+          at: "2026-03-27T16:11:10.000Z"
+        }
+      ],
+      "Okay, back to the Desktop task - rename the mobile file and move it into the archive folder.",
+      "2026-03-27T16:11:10.000Z"
+    );
+
+    const objectReply = await manager.handleMessage(
+      buildMessageAt("and the accord?", "2026-03-27T16:11:20.000Z"),
+      async () => {
+        throw new Error("executeTask should not run for short object relationship follow-up chat");
+      },
+      async () => {}
+    );
+    assert.equal(objectReply, "That's Billy's gray Accord.");
+    assert.doesNotMatch(
+      objectReply,
+      /workflow|browser|preview|Current State:|Historical Context:|supporting evidence/i
+    );
+
+    assert.equal(directInputs.length, 3);
+
+    const session = await store.getSession(conversationKey);
+    assert.ok(session);
+    assert.equal(session?.queuedJobs.length, 0);
+    assert.equal(session?.runningJobId, null);
+  } finally {
+    await removeTempDirWithRetry(tempDir);
+  }
+});
+
+test("conversation manager keeps coworker successor updates and no-flap recall stable through workflow-heavy clutter", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-conversation-relationship-battle-c-"));
+  const store = new InterfaceSessionStore(path.join(tempDir, "sessions.json"));
+  const profileStore = new ProfileMemoryStore(
+    path.join(tempDir, "profile_memory.secure.json"),
+    Buffer.alloc(32, 94),
+    90
+  );
+  const conversationKey = "telegram:chat-1:user-1";
+  const directInputs: string[] = [];
+  const manager = new ConversationManager(store, {
+    maxConversationTurns: 40,
+    maxContextTurnsForExecution: 10
+  }, {
+    rememberConversationProfileInput: async (input, receivedAt) => {
+      const request = typeof input === "string"
+        ? { userInput: input }
+        : input;
+      const result = await profileStore.ingestFromTaskInput(
+        "task_conversation_relationship_battle_c",
+        request.userInput ?? "",
+        receivedAt,
+        {
+          validatedFactCandidates: request.validatedFactCandidates
+        }
+      );
+      return result.appliedFacts > 0;
+    },
+    queryContinuityFacts: async (request) => {
+      return profileStore.queryFactsForContinuity(
+        createEmptyEntityGraphV1("2026-03-27T16:11:00.000Z"),
+        request.stack,
+        request
+      );
+    },
+    runDirectConversationTurn: async (input) => {
+      directInputs.push(input);
+      if (
+        /Current user request:\nI work with Jordan at Northstar\. I used to work with Milo at Lumen Studio\./i.test(input)
+      ) {
+        return {
+          summary: "Got it - Jordan's current at Northstar, and Milo's the older Lumen Studio connection."
+        };
+      }
+      if (
+        /Current user request:\nI don't work with Jordan anymore\. I work with Priya at Northstar now\./i.test(input)
+      ) {
+        assert.match(input, /Jordan/i);
+        assert.match(input, /Priya/i);
+        return {
+          summary: "Okay - Priya's the current Northstar coworker now, and Jordan's the older one."
+        };
+      }
+      if (/Current user request:\nWho do I work with now\?/i.test(input)) {
+        assert.match(input, /Priya/i);
+        return {
+          summary: "Right now, Priya."
+        };
+      }
+      if (/Current user request:\nWho have I worked with before\?/i.test(input)) {
+        assert.match(input, /Jordan/i);
+        assert.match(input, /Milo/i);
+        return {
+          summary: "Before that, Jordan at Northstar and Milo at Lumen Studio."
+        };
+      }
+      if (/Current user request:\nI think maybe Jordan still might be there, not sure\./i.test(input)) {
+        assert.match(input, /Priya/i);
+        return {
+          summary: "Maybe, but the clearer current link is still Priya."
+        };
+      }
+      if (/Current user request:\nSo do I still work with Jordan\?/i.test(input)) {
+        assert.match(input, /Jordan/i);
+        assert.match(input, /Priya/i);
+        return {
+          summary: "No, not anymore."
+        };
+      }
+      throw new Error(`Unexpected direct conversation input: ${input}`);
+    }
+  });
+
+  try {
+    await store.setSession(
+      buildConversationSessionFixture({
+        conversationId: conversationKey,
+        conversationTurns: [
+          {
+            role: "user",
+            text: "Open the landing page on my Desktop and duplicate the hero into a new file.",
+            at: "2026-03-27T16:04:00.000Z"
+          },
+          {
+            role: "assistant",
+            text: "I duplicated the hero into a new file on your Desktop.",
+            at: "2026-03-27T16:04:20.000Z"
+          },
+          {
+            role: "user",
+            text: "Then tidy up the browser tabs for that project.",
+            at: "2026-03-27T16:04:30.000Z"
+          },
+          {
+            role: "assistant",
+            text: "I kept the reference tabs together for that project.",
+            at: "2026-03-27T16:04:45.000Z"
+          },
+          {
+            role: "user",
+            text: "Now build a second variant for mobile and put it in a new folder on the Desktop.",
+            at: "2026-03-27T16:08:00.000Z"
+          },
+          {
+            role: "assistant",
+            text: "I sketched the mobile variant into a new Desktop folder.",
+            at: "2026-03-27T16:08:20.000Z"
+          }
+        ],
+        domainContext: {
+          ...createEmptyConversationDomainContext(conversationKey),
+          dominantLane: "workflow",
+          continuitySignals: {
+            activeWorkspace: true,
+            returnHandoff: true,
+            modeContinuity: true
+          },
+          activeSince: "2026-03-27T16:04:00.000Z",
+          lastUpdatedAt: "2026-03-27T16:08:20.000Z"
+        },
+        modeContinuity: {
+          activeMode: "build",
+          source: "natural_intent",
+          confidence: "HIGH",
+          lastAffirmedAt: "2026-03-27T16:08:00.000Z",
+          lastUserInput: "Now build a second variant for mobile and put it in a new folder on the Desktop."
+        },
+        returnHandoff: {
+          id: "handoff:phase8-battle-c",
+          status: "stopped",
+          goal: "Finish the landing page variants and keep the preview recoverable.",
+          summary: "The workflow draft exists and the browser context can be resumed.",
+          nextSuggestedStep: "Tell me which design thread you want to pick up next.",
+          workspaceRootPath: "C:\\Users\\benac\\OneDrive\\Desktop\\Northstar Landing",
+          primaryArtifactPath: "C:\\Users\\benac\\OneDrive\\Desktop\\Northstar Landing\\index.html",
+          previewUrl: null,
+          changedPaths: [
+            "C:\\Users\\benac\\OneDrive\\Desktop\\Northstar Landing\\index.html"
+          ],
+          sourceJobId: "job-phase8-battle-c",
+          updatedAt: "2026-03-27T16:08:20.000Z"
+        }
+      })
+    );
+
+    const initialReply = await manager.handleMessage(
+      buildMessageAt(
+        "I work with Jordan at Northstar. I used to work with Milo at Lumen Studio.",
+        "2026-03-27T16:09:00.000Z"
+      ),
+      async () => {
+        throw new Error("executeTask should not run for direct relationship-ingest chat");
+      },
+      async () => {}
+    );
+    assert.equal(
+      initialReply,
+      "Got it - Jordan's current at Northstar, and Milo's the older Lumen Studio connection."
+    );
+
+    const updateReply = await manager.handleMessage(
+      buildMessageAt(
+        "I don't work with Jordan anymore. I work with Priya at Northstar now.",
+        "2026-03-27T16:09:15.000Z"
+      ),
+      async () => {
+        throw new Error("executeTask should not run for coworker successor updates");
+      },
+      async () => {}
+    );
+    assert.equal(
+      updateReply,
+      "Okay - Priya's the current Northstar coworker now, and Jordan's the older one."
+    );
+
+    const storedFacts = await profileStore.readFacts({
+      purpose: "operator_view",
+      includeSensitive: false,
+      explicitHumanApproval: false
+    });
+    assert.equal(
+      storedFacts.some(
+        (fact) =>
+          fact.key === "contact.priya.work_association" &&
+          fact.value === "Northstar"
+      ),
+      true
+    );
+    assert.equal(
+      storedFacts.some(
+        (fact) =>
+          fact.key === "contact.priya.work_association" &&
+          fact.value === "Northstar now"
+      ),
+      false
+    );
+    assert.equal(
+      storedFacts.some(
+        (fact) =>
+          fact.key === "contact.jordan.relationship" &&
+          fact.value === "work_peer"
+      ),
+      false
+    );
+    assert.equal(
+      storedFacts.some(
+        (fact) =>
+          fact.key === "contact.jordan.work_association" &&
+          fact.value === "Northstar"
+      ),
+      false
+    );
+
+    const currentReply = await manager.handleMessage(
+      buildMessageAt("Who do I work with now?", "2026-03-27T16:09:30.000Z"),
+      async () => {
+        throw new Error("executeTask should not run for current coworker recall chat");
+      },
+      async () => {}
+    );
+    assert.equal(currentReply, "Right now, Priya.");
+    assert.doesNotMatch(currentReply, /Jordan|Milo|Current State:|Historical Context:/i);
+
+    const historyReply = await manager.handleMessage(
+      buildMessageAt("Who have I worked with before?", "2026-03-27T16:09:40.000Z"),
+      async () => {
+        throw new Error("executeTask should not run for historical coworker recall chat");
+      },
+      async () => {}
+    );
+    assert.equal(historyReply, "Before that, Jordan at Northstar and Milo at Lumen Studio.");
+    assert.doesNotMatch(historyReply, /Priya|Current State:|Historical Context:/i);
+
+    const hedgedReply = await manager.handleMessage(
+      buildMessageAt("I think maybe Jordan still might be there, not sure.", "2026-03-27T16:09:50.000Z"),
+      async () => {
+        throw new Error("executeTask should not run for hedged coworker ambiguity chat");
+      },
+      async () => {}
+    );
+    assert.equal(
+      hedgedReply,
+      "Maybe, but the clearer current link is still Priya."
+    );
+    assert.doesNotMatch(hedgedReply, /Current State:|Historical Context:|supporting evidence/i);
+
+    const followupReply = await manager.handleMessage(
+      buildMessageAt("So do I still work with Jordan?", "2026-03-27T16:10:00.000Z"),
+      async () => {
+        throw new Error("executeTask should not run for ended coworker follow-up chat");
+      },
+      async () => {}
+    );
+    assert.equal(followupReply, "No, not anymore.");
+    assert.doesNotMatch(
+      followupReply,
+      /workflow|browser|preview|Current State:|Historical Context:|supporting evidence/i
+    );
+
+    assert.equal(directInputs.length, 6);
+
+    const session = await store.getSession(conversationKey);
+    assert.ok(session);
+    assert.equal(session?.queuedJobs.length, 0);
+    assert.equal(session?.runningJobId, null);
+  } finally {
+    await removeTempDirWithRetry(tempDir);
+  }
+});
+
+test("conversation manager keeps event participant-role recall and fail-closed abstention stable through workflow-heavy clutter", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-conversation-relationship-battle-d-"));
+  const store = new InterfaceSessionStore(path.join(tempDir, "sessions.json"));
+  const profileStore = new ProfileMemoryStore(
+    path.join(tempDir, "profile_memory.secure.json"),
+    Buffer.alloc(32, 99),
+    90
+  );
+  const conversationKey = "telegram:chat-1:user-1";
+  const directInputs: string[] = [];
+  const transferObservedAt = "2026-03-28T17:09:00.000Z";
+  const transferGraph = applyEntityExtractionToGraph(
+    createEmptyEntityGraphV1(transferObservedAt),
+    extractEntityCandidates({
+      text: "Milo sold Jordan the gray Accord in late 2024.",
+      observedAt: transferObservedAt,
+      evidenceRef: "trace:phase8_battle_d_transfer"
+    }),
+    transferObservedAt,
+    "trace:phase8_battle_d_transfer"
+  ).graph;
+  const manager = new ConversationManager(store, {
+    maxConversationTurns: 40,
+    maxContextTurnsForExecution: 10
+  }, {
+    rememberConversationProfileInput: async (input, receivedAt) => {
+      const request = typeof input === "string"
+        ? { userInput: input }
+        : input;
+      const result = await profileStore.ingestFromTaskInput(
+        "task_conversation_relationship_battle_d",
+        request.userInput ?? "",
+        receivedAt,
+        {
+          validatedFactCandidates: request.validatedFactCandidates
+        }
+      );
+      return result.appliedFacts > 0;
+    },
+    queryContinuityEpisodes: async (request) =>
+      (await profileStore.queryEpisodesForContinuity(
+        transferGraph,
+        request.stack,
+        request
+      )).map(({ episode, entityLinks, openLoopLinks }) => ({
+        episodeId: episode.id,
+        title: episode.title,
+        summary: episode.summary,
+        status: episode.status,
+        lastMentionedAt: episode.lastMentionedAt,
+        entityRefs: [...episode.entityRefs],
+        entityLinks: entityLinks.map((entry) => ({
+          entityKey: entry.entityKey,
+          canonicalName: entry.canonicalName
+        })),
+        openLoopLinks: openLoopLinks.map((entry) => ({
+          loopId: entry.loopId,
+          threadKey: entry.threadKey,
+          status: entry.status,
+          priority: entry.priority
+        }))
+      })),
+    runDirectConversationTurn: async (input) => {
+      directInputs.push(input);
+      assert.doesNotMatch(input, /Current working mode from earlier in this chat:/i);
+      if (
+        /Current user request:\nMilo sold Jordan the gray Accord in late 2024\./i.test(input)
+      ) {
+        return {
+          summary: "Got it - Milo sold the gray Accord to Jordan in late 2024."
+        };
+      }
+      if (/Current user request:\nWho sold Jordan the gray Accord\?/i.test(input)) {
+        assert.match(input, /gray Accord/i);
+        return {
+          summary: "Milo did."
+        };
+      }
+      if (/Current user request:\nWho bought the gray Accord\?/i.test(input)) {
+        assert.match(input, /gray Accord/i);
+        return {
+          summary: "Jordan did."
+        };
+      }
+      if (/Current user request:\nWhat happened with the gray Accord\?/i.test(input)) {
+        assert.match(input, /gray Accord/i);
+        return {
+          summary: "Milo sold the gray Accord to Jordan in late 2024."
+        };
+      }
+      if (/Current user request:\nWho handled the paperwork\?/i.test(input)) {
+        assert.doesNotMatch(input, /Relevant situation:/i);
+        return {
+          summary: "You never mentioned who handled the paperwork."
+        };
+      }
+      throw new Error(`Unexpected direct conversation input: ${input}`);
+    }
+  });
+
+  const appendWorkflowClutter = async (
+    conversationTurns: Array<{ role: "user" | "assistant"; text: string; at: string }>,
+    lastUserInput: string,
+    updatedAt: string
+  ): Promise<void> => {
+    const session = await store.getSession(conversationKey);
+    assert.ok(session);
+    await store.setSession({
+      ...session,
+      conversationTurns: [...session.conversationTurns, ...conversationTurns],
+      domainContext: {
+        ...session.domainContext,
+        dominantLane: "workflow",
+        continuitySignals: {
+          activeWorkspace: true,
+          returnHandoff: true,
+          modeContinuity: true
+        },
+        lastUpdatedAt: updatedAt
+      },
+      modeContinuity: {
+        activeMode: "build",
+        source: "natural_intent",
+        confidence: "HIGH",
+        lastAffirmedAt: updatedAt,
+        lastUserInput
+      },
+      returnHandoff: session.returnHandoff
+        ? {
+            ...session.returnHandoff,
+            status: "stopped",
+            updatedAt
+          }
+        : null
+    });
+  };
+
+  try {
+    await store.setSession(
+      buildConversationSessionFixture({
+        conversationId: conversationKey,
+        conversationTurns: [
+          {
+            role: "user",
+            text: "Open the landing page on my Desktop and duplicate the hero into a new file.",
+            at: "2026-03-28T17:04:00.000Z"
+          },
+          {
+            role: "assistant",
+            text: "I duplicated the hero into a new file on your Desktop.",
+            at: "2026-03-28T17:04:20.000Z"
+          },
+          {
+            role: "user",
+            text: "Then tidy up the browser tabs for that project.",
+            at: "2026-03-28T17:04:30.000Z"
+          },
+          {
+            role: "assistant",
+            text: "I kept the reference tabs together for that project.",
+            at: "2026-03-28T17:04:45.000Z"
+          }
+        ],
+        domainContext: {
+          ...createEmptyConversationDomainContext(conversationKey),
+          dominantLane: "workflow",
+          continuitySignals: {
+            activeWorkspace: true,
+            returnHandoff: true,
+            modeContinuity: true
+          },
+          activeSince: "2026-03-28T17:04:00.000Z",
+          lastUpdatedAt: "2026-03-28T17:04:45.000Z"
+        },
+        modeContinuity: {
+          activeMode: "build",
+          source: "natural_intent",
+          confidence: "HIGH",
+          lastAffirmedAt: "2026-03-28T17:04:30.000Z",
+          lastUserInput: "Then tidy up the browser tabs for that project."
+        },
+        returnHandoff: {
+          id: "handoff:phase8-battle-d",
+          status: "stopped",
+          goal: "Finish the landing page variants and keep the preview recoverable.",
+          summary: "The workflow draft exists and the browser context can be resumed.",
+          nextSuggestedStep: "Tell me which design thread you want to pick up next.",
+          workspaceRootPath: "C:\\Users\\benac\\OneDrive\\Desktop\\Northstar Landing",
+          primaryArtifactPath: "C:\\Users\\benac\\OneDrive\\Desktop\\Northstar Landing\\index.html",
+          previewUrl: null,
+          changedPaths: [
+            "C:\\Users\\benac\\OneDrive\\Desktop\\Northstar Landing\\index.html"
+          ],
+          sourceJobId: "job-phase8-battle-d",
+          updatedAt: "2026-03-28T17:04:45.000Z"
+        }
+      })
+    );
+
+    const ingestReply = await manager.handleMessage(
+      buildMessageAt(
+        "Milo sold Jordan the gray Accord in late 2024.",
+        transferObservedAt
+      ),
+      async () => {
+        throw new Error("executeTask should not run for direct event-ingest chat");
+      },
+      async () => {}
+    );
+    assert.equal(
+      ingestReply,
+      "Got it - Milo sold the gray Accord to Jordan in late 2024."
+    );
+
+    const storedEpisodes = await profileStore.readEpisodes({
+      purpose: "operator_view",
+      includeSensitive: false,
+      explicitHumanApproval: false
+    });
+    assert.equal(
+      storedEpisodes.some((episode) => episode.title === "Milo sold Jordan the gray Accord"),
+      true
+    );
+
+    await appendWorkflowClutter(
+      [
+        {
+          role: "user",
+          text: "Open the last landing page draft.",
+          at: "2026-03-28T17:10:00.000Z"
+        },
+        {
+          role: "assistant",
+          text: "I opened the last landing page draft.",
+          at: "2026-03-28T17:10:05.000Z"
+        },
+        {
+          role: "user",
+          text: "Duplicate the pricing section.",
+          at: "2026-03-28T17:10:10.000Z"
+        },
+        {
+          role: "assistant",
+          text: "I duplicated the pricing section.",
+          at: "2026-03-28T17:10:15.000Z"
+        },
+        {
+          role: "user",
+          text: "Find the screenshot from earlier.",
+          at: "2026-03-28T17:10:20.000Z"
+        },
+        {
+          role: "assistant",
+          text: "I found the screenshot from earlier.",
+          at: "2026-03-28T17:10:25.000Z"
+        }
+      ],
+      "Find the screenshot from earlier.",
+      "2026-03-28T17:10:25.000Z"
+    );
+
+    const sellerReply = await manager.handleMessage(
+      buildMessageAt("Who sold Jordan the gray Accord?", "2026-03-28T17:10:35.000Z"),
+      async () => {
+        throw new Error("executeTask should not run for event seller recall chat");
+      },
+      async () => {}
+    );
+    assert.equal(sellerReply, "Milo did.");
+
+    const buyerReply = await manager.handleMessage(
+      buildMessageAt("Who bought the gray Accord?", "2026-03-28T17:10:45.000Z"),
+      async () => {
+        throw new Error("executeTask should not run for event buyer recall chat");
+      },
+      async () => {}
+    );
+    assert.equal(buyerReply, "Jordan did.");
+
+    await appendWorkflowClutter(
+      [
+        {
+          role: "user",
+          text: "Switch back to the browser tab with the reference site.",
+          at: "2026-03-28T17:11:00.000Z"
+        },
+        {
+          role: "assistant",
+          text: "I'm back on the browser tab with the reference site.",
+          at: "2026-03-28T17:11:05.000Z"
+        }
+      ],
+      "Switch back to the browser tab with the reference site.",
+      "2026-03-28T17:11:05.000Z"
+    );
+
+    const summaryReply = await manager.handleMessage(
+      buildMessageAt("What happened with the gray Accord?", "2026-03-28T17:11:15.000Z"),
+      async () => {
+        throw new Error("executeTask should not run for bounded event summary recall chat");
+      },
+      async () => {}
+    );
+    assert.equal(summaryReply, "Milo sold the gray Accord to Jordan in late 2024.");
+    assert.doesNotMatch(
+      summaryReply,
+      /Current State:|Historical Context:|Contradiction Notes:|supporting evidence|resolved_current/i
+    );
+
+    const negativeControlReply = await manager.handleMessage(
+      buildMessageAt("Who handled the paperwork?", "2026-03-28T17:11:25.000Z"),
+      async () => {
+        throw new Error("executeTask should not run for missing-role event recall chat");
+      },
+      async () => {}
+    );
+    assert.equal(negativeControlReply, "You never mentioned who handled the paperwork.");
+    assert.doesNotMatch(
+      negativeControlReply,
+      /workflow|browser|preview|Current State:|Historical Context:|supporting evidence/i
+    );
+
+    assert.equal(directInputs.length, 5);
+
+    const session = await store.getSession(conversationKey);
+    assert.ok(session);
+    assert.equal(session?.queuedJobs.length, 0);
+    assert.equal(session?.runningJobId, null);
+  } finally {
+    await removeTempDirWithRetry(tempDir);
+  }
+});
+
+test("conversation manager keeps same-name ambiguity and alias-collision recall natural through workflow-heavy clutter", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-conversation-relationship-battle-e-"));
+  const store = new InterfaceSessionStore(path.join(tempDir, "sessions.json"));
+  const profileStore = new ProfileMemoryStore(
+    path.join(tempDir, "profile_memory.secure.json"),
+    Buffer.alloc(32, 98),
+    90
+  );
+  const conversationKey = "telegram:chat-1:user-1";
+  const directInputs: string[] = [];
+  const manager = new ConversationManager(store, {
+    maxConversationTurns: 40,
+    maxContextTurnsForExecution: 10
+  }, {
+    rememberConversationProfileInput: async (input, receivedAt) => {
+      const request = typeof input === "string"
+        ? { userInput: input }
+        : input;
+      const result = await profileStore.ingestFromTaskInput(
+        "task_conversation_relationship_battle_e",
+        request.userInput ?? "",
+        receivedAt,
+        {
+          validatedFactCandidates: request.validatedFactCandidates
+        }
+      );
+      return result.appliedFacts > 0;
+    },
+    queryContinuityFacts: async (request) =>
+      profileStore.queryFactsForContinuity(
+        createEmptyEntityGraphV1("2026-03-28T09:59:20.000Z"),
+        request.stack,
+        request
+      ),
+    runDirectConversationTurn: async (input) => {
+      directInputs.push(input);
+      if (
+        input === "I work with Jordan at Northstar." ||
+        /Current user request:\nI work with Jordan at Northstar\./i.test(input)
+      ) {
+        return {
+          summary: "Got it - Jordan's the Northstar coworker."
+        };
+      }
+      if (
+        input === "I also know another Jordan at Ember. That's a different Jordan from Northstar." ||
+        /Current user request:\nI also know another Jordan at Ember\. That's a different Jordan from Northstar\./i.test(input)
+      ) {
+        return {
+          summary: "Okay - I'll keep the Ember Jordan separate from the Northstar one."
+        };
+      }
+      if (
+        input === "The Jordan from Northstar sometimes goes by J.R." ||
+        /Current user request:\nThe Jordan from Northstar sometimes goes by J\.R\./i.test(input)
+      ) {
+        return {
+          summary: "Okay - I'll remember that alias for the Northstar Jordan."
+        };
+      }
+      if (
+        input === "I met a different J.R. from Harbor last month." ||
+        /Current user request:\nI met a different J\.R\. from Harbor last month\./i.test(input)
+      ) {
+        return {
+          summary: "Understood - that J.R. may be someone else from Harbor."
+        };
+      }
+      if (/Current user request:\nWhat about Jordan\?/i.test(input)) {
+        assert.match(input, /Contradiction Notes:/i);
+        assert.match(input, /Northstar/i);
+        assert.match(input, /Ember/i);
+        return {
+          summary: "Which Jordan - Northstar or Ember?"
+        };
+      }
+      if (/Current user request:\nWho's J\.R\.\?/i.test(input)) {
+        assert.match(input, /Contradiction Notes:/i);
+        assert.match(input, /J\.R\./i);
+        assert.match(input, /Harbor/i);
+        return {
+          summary: "I have two possible J.R. matches there - the Northstar Jordan and someone from Harbor."
+        };
+      }
+      throw new Error(`Unexpected direct conversation input: ${input}`);
+    }
+  });
+
+  const appendWorkflowClutter = async (
+    conversationTurns: Array<{ role: "user" | "assistant"; text: string; at: string }>,
+    lastUserInput: string,
+    updatedAt: string
+  ): Promise<void> => {
+    const session = await store.getSession(conversationKey);
+    assert.ok(session);
+    await store.setSession({
+      ...session,
+      conversationTurns: [...session.conversationTurns, ...conversationTurns],
+      domainContext: {
+        ...session.domainContext,
+        dominantLane: "workflow",
+        continuitySignals: {
+          activeWorkspace: true,
+          returnHandoff: true,
+          modeContinuity: true
+        },
+        lastUpdatedAt: updatedAt
+      },
+      modeContinuity: {
+        activeMode: "build",
+        source: "natural_intent",
+        confidence: "HIGH",
+        lastAffirmedAt: updatedAt,
+        lastUserInput
+      },
+      returnHandoff: session.returnHandoff
+        ? {
+            ...session.returnHandoff,
+            status: "stopped",
+            updatedAt
+          }
+        : null
+    });
+  };
+
+  try {
+    await store.setSession(
+      buildConversationSessionFixture({
+        conversationId: conversationKey,
+        conversationTurns: [],
+        domainContext: {
+          ...createEmptyConversationDomainContext(conversationKey),
+          dominantLane: "workflow",
+          continuitySignals: {
+            activeWorkspace: true,
+            returnHandoff: true,
+            modeContinuity: true
+          },
+          activeSince: "2026-03-28T09:55:30.000Z",
+          lastUpdatedAt: "2026-03-28T09:55:30.000Z"
+        },
+        modeContinuity: {
+          activeMode: "build",
+          source: "natural_intent",
+          confidence: "HIGH",
+          lastAffirmedAt: "2026-03-28T09:55:30.000Z",
+          lastUserInput: "Keep the landing page workflow open while we sort out any relationship recall."
+        },
+        returnHandoff: {
+          id: "handoff:phase8-battle-e",
+          status: "stopped",
+          goal: "Finish the landing page variants and keep the preview recoverable.",
+          summary: "The workflow draft exists and the browser context can be resumed.",
+          nextSuggestedStep: "Tell me which design thread you want to pick up next.",
+          workspaceRootPath: "C:\\Users\\benac\\OneDrive\\Desktop\\Northstar Landing",
+          primaryArtifactPath: "C:\\Users\\benac\\OneDrive\\Desktop\\Northstar Landing\\index.html",
+          previewUrl: null,
+          changedPaths: [
+            "C:\\Users\\benac\\OneDrive\\Desktop\\Northstar Landing\\index.html"
+          ],
+          sourceJobId: "job-phase8-battle-e",
+          updatedAt: "2026-03-28T09:55:30.000Z"
+        }
+      })
+    );
+
+    assert.equal(
+      await manager.handleMessage(
+        buildMessageAt("I work with Jordan at Northstar.", "2026-03-28T09:56:00.000Z"),
+        async () => {
+          throw new Error("executeTask should not run for same-name relationship ingest chat");
+        },
+        async () => {}
+      ),
+      "Got it - Jordan's the Northstar coworker."
+    );
+
+    assert.equal(
+      await manager.handleMessage(
+        buildMessageAt(
+          "I also know another Jordan at Ember. That's a different Jordan from Northstar.",
+          "2026-03-28T09:57:00.000Z"
+        ),
+        async () => {
+          throw new Error("executeTask should not run for second same-name ingest chat");
+        },
+        async () => {}
+      ),
+      "Okay - I'll keep the Ember Jordan separate from the Northstar one."
+    );
+
+    assert.equal(
+      await manager.handleMessage(
+        buildMessageAt(
+          "The Jordan from Northstar sometimes goes by J.R.",
+          "2026-03-28T09:57:20.000Z"
+        ),
+        async () => {
+          throw new Error("executeTask should not run for alias-bearing relationship ingest chat");
+        },
+        async () => {}
+      ),
+      "Okay - I'll remember that alias for the Northstar Jordan."
+    );
+
+    assert.equal(
+      await manager.handleMessage(
+        buildMessageAt(
+          "I met a different J.R. from Harbor last month.",
+          "2026-03-28T09:57:40.000Z"
+        ),
+        async () => {
+          throw new Error("executeTask should not run for conflicting alias ingest chat");
+        },
+        async () => {}
+      ),
+      "Understood - that J.R. may be someone else from Harbor."
+    );
+
+    const storedFacts = await profileStore.readFacts({
+      purpose: "operator_view",
+      includeSensitive: false,
+      explicitHumanApproval: false
+    });
+    assert.equal(
+      storedFacts.some(
+        (fact) => fact.key === "contact.jordan_ember.name" && fact.value === "Jordan"
+      ),
+      true
+    );
+    assert.equal(
+      storedFacts.some(
+        (fact) => fact.key === "contact.jr_harbor.name" && fact.value === "J.R."
+      ),
+      true
+    );
+
+    await appendWorkflowClutter(
+      [
+        {
+          role: "user",
+          text: "Switch back to the browser tab with the Northstar reference site.",
+          at: "2026-03-28T09:58:30.000Z"
+        },
+        {
+          role: "assistant",
+          text: "I'm back on the Northstar reference tab.",
+          at: "2026-03-28T09:58:40.000Z"
+        }
+      ],
+      "Switch back to the browser tab with the Northstar reference site.",
+      "2026-03-28T09:58:40.000Z"
+    );
+
+    const jordanReply = await manager.handleMessage(
+      buildMessageAt("What about Jordan?", "2026-03-28T09:59:00.000Z"),
+      async () => {
+        throw new Error("executeTask should not run for same-name ambiguity recall chat");
+      },
+      async () => {}
+    );
+    assert.equal(jordanReply, "Which Jordan - Northstar or Ember?");
+    assert.doesNotMatch(
+      jordanReply,
+      /Current State:|Historical Context:|Contradiction Notes:|supporting evidence|workflow|browser/i
+    );
+
+    const aliasReply = await manager.handleMessage(
+      buildMessageAt("Who's J.R.?", "2026-03-28T09:59:20.000Z"),
+      async () => {
+        throw new Error("executeTask should not run for alias-collision recall chat");
+      },
+      async () => {}
+    );
+    assert.equal(
+      aliasReply,
+      "I have two possible J.R. matches there - the Northstar Jordan and someone from Harbor."
+    );
+    assert.doesNotMatch(
+      aliasReply,
+      /Current State:|Historical Context:|Contradiction Notes:|supporting evidence|workflow|browser/i
+    );
+
+    assert.equal(directInputs.length, 6);
+
+    const session = await store.getSession(conversationKey);
+    assert.ok(session);
+    assert.equal(session?.queuedJobs.length, 0);
+    assert.equal(session?.runningJobId, null);
+  } finally {
+    await removeTempDirWithRetry(tempDir);
+  }
+});
+
+test("conversation manager reuses global relationship truth across conversations without leaking old workflow clutter", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-conversation-relationship-cross-conversation-"));
+  const store = new InterfaceSessionStore(path.join(tempDir, "sessions.json"));
+  const profileStore = new ProfileMemoryStore(
+    path.join(tempDir, "profile_memory.secure.json"),
+    Buffer.alloc(32, 96),
+    90
+  );
+  const conversationOneKey = "telegram:chat-1:user-1";
+  const conversationTwoKey = "telegram:chat-2:user-1";
+  const directInputs: string[] = [];
+  const buildConversationTwoMessageAt = (text: string, receivedAt: string): ConversationInboundMessage => ({
+    provider: "telegram",
+    conversationId: "chat-2",
+    userId: "user-1",
+    username: "agentowner",
+    conversationVisibility: "private",
+    text,
+    receivedAt
+  });
+  const manager = new ConversationManager(store, {
+    maxConversationTurns: 40,
+    maxContextTurnsForExecution: 10
+  }, {
+    rememberConversationProfileInput: async (input, receivedAt) => {
+      const request = typeof input === "string"
+        ? { userInput: input }
+        : input;
+      const result = await profileStore.ingestFromTaskInput(
+        "task_conversation_relationship_cross_conversation",
+        request.userInput ?? "",
+        receivedAt,
+        {
+          validatedFactCandidates: request.validatedFactCandidates
+        }
+      );
+      return result.appliedFacts > 0;
+    },
+    queryContinuityFacts: async (request) => {
+      return profileStore.queryFactsForContinuity(
+        createEmptyEntityGraphV1("2026-03-27T16:25:00.000Z"),
+        request.stack,
+        request
+      );
+    },
+    runDirectConversationTurn: async (input) => {
+      directInputs.push(input);
+      if (
+        /Current user request:\nI work with Jordan at Northstar\. I used to work with Milo at Lumen Studio\./i.test(input)
+      ) {
+        return {
+          summary: "Got it - Jordan's current at Northstar, and Milo's the older Lumen Studio connection."
+        };
+      }
+      if (
+        /Current user request:\nBilly used to be at Flare\. He's at Northstar now\. He drives a gray Accord\./i.test(input)
+      ) {
+        return {
+          summary: "Got it - Billy's at Northstar now, and Flare was the earlier connection."
+        };
+      }
+      if (/Current user request:\nWho do I work with now\?/i.test(input)) {
+        assert.doesNotMatch(input, /landing page|reference site|browser tabs/i);
+        return {
+          summary: "Right now, Jordan."
+        };
+      }
+      if (/Current user request:\nWhat about Billy and Flare\?/i.test(input)) {
+        assert.match(input, /Billy/i);
+        assert.match(input, /Flare/i);
+        assert.doesNotMatch(input, /landing page|reference site|browser tabs/i);
+        return {
+          summary: "Billy's at Northstar now. Flare was the earlier connection."
+        };
+      }
+      throw new Error(`Unexpected direct conversation input: ${input}`);
+    }
+  });
+
+  try {
+    await store.setSession(
+      buildConversationSessionFixture({
+        conversationId: conversationOneKey,
+        conversationTurns: [
+          {
+            role: "user",
+            text: "Open the landing page on my Desktop and duplicate the hero into a new file.",
+            at: "2026-03-27T16:20:00.000Z"
+          },
+          {
+            role: "assistant",
+            text: "I duplicated the hero into a new file on your Desktop.",
+            at: "2026-03-27T16:20:20.000Z"
+          },
+          {
+            role: "user",
+            text: "Then tidy up the browser tabs for that project.",
+            at: "2026-03-27T16:20:30.000Z"
+          },
+          {
+            role: "assistant",
+            text: "I kept the reference tabs together for that project.",
+            at: "2026-03-27T16:20:45.000Z"
+          }
+        ],
+        domainContext: {
+          ...createEmptyConversationDomainContext(conversationOneKey),
+          dominantLane: "workflow",
+          continuitySignals: {
+            activeWorkspace: true,
+            returnHandoff: true,
+            modeContinuity: true
+          },
+          activeSince: "2026-03-27T16:20:00.000Z",
+          lastUpdatedAt: "2026-03-27T16:20:45.000Z"
+        }
+      })
+    );
+
+    await manager.handleMessage(
+      buildMessageAt(
+        "I work with Jordan at Northstar. I used to work with Milo at Lumen Studio.",
+        "2026-03-27T16:21:00.000Z"
+      ),
+      async () => {
+        throw new Error("executeTask should not run for cross-conversation ingest chat");
+      },
+      async () => {}
+    );
+
+    await manager.handleMessage(
+      buildMessageAt(
+        "Billy used to be at Flare. He's at Northstar now. He drives a gray Accord.",
+        "2026-03-27T16:21:20.000Z"
+      ),
+      async () => {
+        throw new Error("executeTask should not run for cross-conversation Billy ingest chat");
+      },
+      async () => {}
+    );
+
+    await store.setSession(
+      buildConversationSessionFixture({
+        conversationId: conversationTwoKey,
+        conversationTurns: [
+          {
+            role: "user",
+            text: "Can you help me think through dinner plans later?",
+            at: "2026-03-27T16:23:00.000Z"
+          },
+          {
+            role: "assistant",
+            text: "Sure - we can come back to that later.",
+            at: "2026-03-27T16:23:05.000Z"
+          }
+        ]
+      })
+    );
+
+    const currentReply = await manager.handleMessage(
+      buildConversationTwoMessageAt("Who do I work with now?", "2026-03-27T16:23:20.000Z"),
+      async () => {
+        throw new Error("executeTask should not run for cross-conversation current recall chat");
+      },
+      async () => {}
+    );
+    assert.equal(currentReply, "Right now, Jordan.");
+
+    const billyReply = await manager.handleMessage(
+      buildConversationTwoMessageAt("What about Billy and Flare?", "2026-03-27T16:23:35.000Z"),
+      async () => {
+        throw new Error("executeTask should not run for cross-conversation Billy recall chat");
+      },
+      async () => {}
+    );
+    assert.equal(billyReply, "Billy's at Northstar now. Flare was the earlier connection.");
+    assert.equal(directInputs.length, 4);
+  } finally {
+    await removeTempDirWithRetry(tempDir);
+  }
+});
+
+test("conversation manager keeps repeated read-only relationship recall stable without mutating canonical memory", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-conversation-relationship-read-stability-"));
+  const store = new InterfaceSessionStore(path.join(tempDir, "sessions.json"));
+  const profileMemoryPath = path.join(tempDir, "profile_memory.secure.json");
+  const profileStore = new ProfileMemoryStore(
+    profileMemoryPath,
+    Buffer.alloc(32, 97),
+    90
+  );
+  const conversationKey = "telegram:chat-1:user-1";
+  const directInputs: string[] = [];
+  const manager = new ConversationManager(store, {
+    maxConversationTurns: 40,
+    maxContextTurnsForExecution: 10
+  }, {
+    rememberConversationProfileInput: async (input, receivedAt) => {
+      const request = typeof input === "string"
+        ? { userInput: input }
+        : input;
+      const result = await profileStore.ingestFromTaskInput(
+        "task_conversation_relationship_read_stability",
+        request.userInput ?? "",
+        receivedAt,
+        {
+          validatedFactCandidates: request.validatedFactCandidates
+        }
+      );
+      return result.appliedFacts > 0;
+    },
+    queryContinuityFacts: async (request) => {
+      return profileStore.queryFactsForContinuity(
+        createEmptyEntityGraphV1("2026-03-27T16:33:00.000Z"),
+        request.stack,
+        request
+      );
+    },
+    runDirectConversationTurn: async (input) => {
+      directInputs.push(input);
+      if (
+        /Current user request:\nI work with Jordan at Northstar\. I used to work with Milo at Lumen Studio\./i.test(input)
+      ) {
+        return {
+          summary: "Got it - Jordan's current at Northstar, and Milo's the older Lumen Studio connection."
+        };
+      }
+      if (/Current user request:\nWhat about Milo and Lumen\?/i.test(input)) {
+        assert.doesNotMatch(input, /Current working mode from earlier in this chat:/i);
+        return {
+          summary: "Milo's the one you used to work with at Lumen Studio."
+        };
+      }
+      throw new Error(`Unexpected direct conversation input: ${input}`);
+    }
+  });
+
+  try {
+    await store.setSession(
+      buildConversationSessionFixture({
+        conversationId: conversationKey,
+        conversationTurns: [
+          {
+            role: "user",
+            text: "Open the landing page on my Desktop and duplicate the hero into a new file.",
+            at: "2026-03-27T16:30:00.000Z"
+          },
+          {
+            role: "assistant",
+            text: "I duplicated the hero into a new file on your Desktop.",
+            at: "2026-03-27T16:30:20.000Z"
+          }
+        ],
+        domainContext: {
+          ...createEmptyConversationDomainContext(conversationKey),
+          dominantLane: "workflow",
+          continuitySignals: {
+            activeWorkspace: true,
+            returnHandoff: true,
+            modeContinuity: true
+          },
+          activeSince: "2026-03-27T16:30:00.000Z",
+          lastUpdatedAt: "2026-03-27T16:30:20.000Z"
+        }
+      })
+    );
+
+    await manager.handleMessage(
+      buildMessageAt(
+        "I work with Jordan at Northstar. I used to work with Milo at Lumen Studio.",
+        "2026-03-27T16:31:00.000Z"
+      ),
+      async () => {
+        throw new Error("executeTask should not run for read-stability ingest chat");
+      },
+      async () => {}
+    );
+
+    const factsBefore = await profileStore.readFacts({
+      purpose: "operator_view",
+      includeSensitive: false,
+      explicitHumanApproval: false
+    });
+    const bytesBefore = await readFile(profileMemoryPath);
+
+    const firstReply = await manager.handleMessage(
+      buildMessageAt("What about Milo and Lumen?", "2026-03-27T16:31:15.000Z"),
+      async () => {
+        throw new Error("executeTask should not run for first read-stability recall chat");
+      },
+      async () => {}
+    );
+    const secondReply = await manager.handleMessage(
+      buildMessageAt("What about Milo and Lumen?", "2026-03-27T16:31:30.000Z"),
+      async () => {
+        throw new Error("executeTask should not run for second read-stability recall chat");
+      },
+      async () => {}
+    );
+
+    assert.equal(firstReply, "Milo's the one you used to work with at Lumen Studio.");
+    assert.equal(secondReply, firstReply);
+
+    const factsAfter = await profileStore.readFacts({
+      purpose: "operator_view",
+      includeSensitive: false,
+      explicitHumanApproval: false
+    });
+    const bytesAfter = await readFile(profileMemoryPath);
+
+    assert.deepEqual(factsAfter, factsBefore);
+    assert.deepEqual(bytesAfter, bytesBefore);
+    assert.equal(directInputs.length, 3);
+  } finally {
+    await removeTempDirWithRetry(tempDir);
+  }
+});
+
+test("conversation manager applies bounded fact review correction and forget through the real command path", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-conversation-memory-fact-mutation-"));
+  const store = new InterfaceSessionStore(path.join(tempDir, "sessions.json"));
+  const profileStore = new ProfileMemoryStore(
+    path.join(tempDir, "profile_memory.secure.json"),
+    Buffer.alloc(32, 98),
+    90
+  );
+  const conversationKey = "telegram:chat-1:user-1";
+  const followUpConversationKey = "telegram:chat-2:user-1";
+  const directInputs: string[] = [];
+  const buildFollowUpMessageAt = (text: string, receivedAt: string): ConversationInboundMessage => ({
+    provider: "telegram",
+    conversationId: "chat-2",
+    userId: "user-1",
+    username: "agentowner",
+    conversationVisibility: "private",
+    text,
+    receivedAt
+  });
+  const manager = new ConversationManager(store, {
+    maxConversationTurns: 40,
+    maxContextTurnsForExecution: 10
+  }, {
+    rememberConversationProfileInput: async (input, receivedAt) => {
+      const request = typeof input === "string"
+        ? { userInput: input }
+        : input;
+      const result = await profileStore.ingestFromTaskInput(
+        "task_conversation_memory_fact_mutation",
+        request.userInput ?? "",
+        receivedAt,
+        {
+          validatedFactCandidates: request.validatedFactCandidates
+        }
+      );
+      return result.appliedFacts > 0;
+    },
+    queryContinuityFacts: async (request) => {
+      return profileStore.queryFactsForContinuity(
+        createEmptyEntityGraphV1("2026-03-27T16:45:00.000Z"),
+        request.stack,
+        request
+      );
+    },
+    reviewConversationMemoryFacts: async (request) => {
+      const review = await profileStore.reviewFactsForUser(
+        request.query,
+        request.maxFacts,
+        request.nowIso
+      );
+      return Object.assign(
+        review.entries.map((entry) => ({
+          factId: entry.fact.factId,
+          key: entry.fact.key,
+          value: entry.fact.value,
+          status: entry.fact.status,
+          confidence: entry.fact.confidence,
+          sensitive: entry.fact.sensitive,
+          observedAt: entry.fact.observedAt,
+          lastUpdatedAt: entry.fact.lastUpdatedAt,
+          decisionRecord: entry.decisionRecord
+        })),
+        {
+          hiddenDecisionRecords: review.hiddenDecisionRecords,
+          asOfObservedTime: review.asOfObservedTime,
+          asOfValidTime: review.asOfValidTime
+        }
+      );
+    },
+    correctConversationMemoryFact: async (request) =>
+      (await profileStore.mutateFactFromUser({
+        action: "correct",
+        factId: request.factId,
+        replacementValue: request.replacementValue,
+        note: request.note,
+        nowIso: request.nowIso,
+        sourceTaskId: request.sourceTaskId,
+        sourceText: request.sourceText
+      })).fact,
+    forgetConversationMemoryFact: async (request) =>
+      (await profileStore.mutateFactFromUser({
+        action: "forget",
+        factId: request.factId,
+        nowIso: request.nowIso,
+        sourceTaskId: request.sourceTaskId,
+        sourceText: request.sourceText
+      })).fact,
+    runDirectConversationTurn: async (input) => {
+      directInputs.push(input);
+      if (
+        /Current user request:\nI work with Milo at Northstar Creative\./i.test(input)
+      ) {
+        return {
+          summary: "Got it - Milo's your coworker at Northstar Creative."
+        };
+      }
+      if (/Current user request:\nWhat about Milo and Lumen\?/i.test(input)) {
+        if (/Lumen Studio/i.test(input)) {
+          return {
+            summary: "Milo's the one you work with at Lumen Studio now."
+          };
+        }
+        assert.doesNotMatch(input, /Lumen Studio/i);
+        return {
+          summary: "Not Lumen Studio. The older detail I still have is Northstar Creative."
+        };
+      }
+      throw new Error(`Unexpected direct conversation input: ${input}`);
+    }
+  });
+
+  try {
+    await store.setSession(
+      buildConversationSessionFixture({
+        conversationId: conversationKey
+      })
+    );
+
+    const ingestReply = await manager.handleMessage(
+      buildMessageAt(
+        "I work with Milo at Northstar Creative.",
+        "2026-03-27T16:40:00.000Z"
+      ),
+      async () => {
+        throw new Error("executeTask should not run for fact-mutation ingest chat");
+      },
+      async () => {}
+    );
+    assert.equal(ingestReply, "Got it - Milo's your coworker at Northstar Creative.");
+
+    const factsAfterIngest = await profileStore.readFacts({
+      purpose: "operator_view",
+      includeSensitive: false,
+      explicitHumanApproval: false
+    });
+    const currentWorkFact = factsAfterIngest.find(
+      (fact) =>
+        fact.key === "contact.milo.work_association" &&
+        fact.value === "Northstar Creative"
+    );
+    assert.ok(currentWorkFact);
+
+    const reviewReply = await manager.handleMessage(
+      buildMessageAt("/memory fact Milo", "2026-03-27T16:40:10.000Z"),
+      async () => {
+        throw new Error("executeTask should not run for bounded /memory fact review mutation test");
+      },
+      async () => {}
+    );
+    assert.match(reviewReply, /^Remembered facts:/);
+    assert.match(reviewReply, /contact\.milo\.work_association: Northstar Creative/);
+    assert.match(reviewReply, new RegExp(currentWorkFact.factId));
+
+    const correctReply = await manager.handleMessage(
+      buildMessageAt(
+        `/memory fact correct ${currentWorkFact.factId} Lumen Studio`,
+        "2026-03-27T16:40:20.000Z"
+      ),
+      async () => {
+        throw new Error("executeTask should not run for bounded fact correction command");
+      },
+      async () => {}
+    );
+    assert.equal(
+      correctReply,
+      'Updated remembered fact "contact.milo.work_association" to "Lumen Studio".'
+    );
+
+    const correctedRecallReply = await manager.handleMessage(
+      buildMessageAt("What about Milo and Lumen?", "2026-03-27T16:40:30.000Z"),
+      async () => {
+        throw new Error("executeTask should not run for corrected relationship recall chat");
+      },
+      async () => {}
+    );
+    assert.equal(correctedRecallReply, "Milo's the one you work with at Lumen Studio now.");
+
+    const factsAfterCorrection = await profileStore.readFacts({
+      purpose: "operator_view",
+      includeSensitive: false,
+      explicitHumanApproval: false
+    });
+    const correctedWorkFact = factsAfterCorrection.find(
+      (fact) =>
+        fact.key === "contact.milo.work_association" &&
+        fact.value === "Lumen Studio"
+    );
+    assert.ok(correctedWorkFact);
+
+    const forgetReply = await manager.handleMessage(
+      buildMessageAt(
+        `/memory fact forget ${correctedWorkFact.factId}`,
+        "2026-03-27T16:40:40.000Z"
+      ),
+      async () => {
+        throw new Error("executeTask should not run for bounded fact forget command");
+      },
+      async () => {}
+    );
+    assert.equal(
+      forgetReply,
+      'Forgot remembered fact "contact.milo.work_association".'
+    );
+
+    await store.setSession(
+      buildConversationSessionFixture({
+        conversationId: followUpConversationKey
+      })
+    );
+
+    const forgottenRecallReply = await manager.handleMessage(
+      buildFollowUpMessageAt("What about Milo and Lumen?", "2026-03-27T16:40:50.000Z"),
+      async () => {
+        throw new Error("executeTask should not run for forgotten relationship recall chat");
+      },
+      async () => {}
+    );
+    assert.equal(
+      forgottenRecallReply,
+      "Not Lumen Studio. The older detail I still have is Northstar Creative."
+    );
+
+    const factsAfterForget = await profileStore.readFacts({
+      purpose: "operator_view",
+      includeSensitive: false,
+      explicitHumanApproval: false
+    });
+    assert.equal(
+      factsAfterForget.some(
+        (fact) =>
+          fact.key === "contact.milo.work_association" &&
+          (fact.value === "Northstar Creative" || fact.value === "Lumen Studio")
+      ),
+      false
+    );
+    assert.equal(directInputs.length, 3);
   } finally {
     await removeTempDirWithRetry(tempDir);
   }
@@ -3185,6 +5909,7 @@ test("conversation manager still fails closed for self-identity when only a gene
 test("conversation manager reconciles one interpreted entity alias candidate through the bounded store callback without queueing work", async () => {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-conversation-entity-alias-"));
   const store = new InterfaceSessionStore(path.join(tempDir, "sessions.json"));
+  const auditStore = new MemoryAccessAuditStore(path.join(tempDir, "memory_access_log.json"));
   const receivedAt = "2026-03-21T09:00:10.000Z";
   const aliasMutations: Array<{
     entityKey: string;
@@ -3217,6 +5942,7 @@ test("conversation manager reconciles one interpreted entity alias candidate thr
     )
   );
   const manager = new ConversationManager(store, {}, {
+    memoryAccessAuditStore: auditStore,
     runDirectConversationTurn: async () => ({ summary: "Okay." }),
     getEntityGraph: async () => ({
       schemaVersion: "v1",
@@ -3297,6 +6023,14 @@ test("conversation manager reconciles one interpreted entity alias candidate thr
     assert.ok(session);
     assert.equal(session?.queuedJobs.length, 0);
     assert.equal(session?.runningJobId, null);
+    const auditDocument = await auditStore.load();
+    assert.equal(auditDocument.events.length, 1);
+    assert.equal(auditDocument.events[0]?.taskId, `direct_entity_alias:${receivedAt}`);
+    assert.equal(auditDocument.events[0]?.aliasSafetyDecisionCount, 1);
+    assert.deepEqual(auditDocument.events[0]?.domainLanes, ["profile"]);
+    assert.equal(auditDocument.events[0]?.retrievedCount, 0);
+    assert.equal(auditDocument.events[0]?.retrievedEpisodeCount, 0);
+    assert.equal(auditDocument.events[0]?.redactedCount, 0);
   } finally {
     await removeTempDirWithRetry(tempDir);
   }

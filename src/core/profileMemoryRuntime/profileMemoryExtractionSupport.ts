@@ -32,6 +32,20 @@ const NOTIFICATION_RESOLUTION_PREFIXES = [
   "disable reminders for ",
   "disable reminders about "
 ] as const;
+const PROFILE_MEMORY_CLAUSE_PREFIXES = [
+  "remember that ",
+  "remind me that ",
+  "also remember that ",
+  "also remind me that ",
+  "please remember that ",
+  "please remind me that ",
+  "just remember that ",
+  "just remind me that ",
+  "and remember that ",
+  "and remind me that ",
+  "after that remember that ",
+  "after that remind me that "
+] as const;
 
 /**
  * Splits raw user text into bounded explicit-declaration segments before regex fast-path extraction.
@@ -62,6 +76,32 @@ export function splitExplicitProfileSegments(userInput: string): readonly string
     segments.push(trailing);
   }
   return segments;
+}
+
+/**
+ * Extracts bounded declarative clauses wrapped in reminder-style wording so profile-memory
+ * extraction can reuse the same deterministic fact extractors on the inner statement.
+ *
+ * @param userInput - Raw user wording under analysis.
+ * @returns Unique unwrapped reminder clauses in encounter order.
+ */
+export function extractWrappedProfileMemoryClauses(userInput: string): readonly string[] {
+  const clauses: string[] = [];
+  const seen = new Set<string>();
+  for (const segment of splitExplicitProfileSegments(userInput)) {
+    const clause = extractSegmentValueAfterPrefix(segment, PROFILE_MEMORY_CLAUSE_PREFIXES);
+    const trimmedClause = clause?.trim() ?? "";
+    if (!trimmedClause) {
+      continue;
+    }
+    const normalizedClause = trimmedClause.toLowerCase();
+    if (seen.has(normalizedClause)) {
+      continue;
+    }
+    seen.add(normalizedClause);
+    clauses.push(trimmedClause);
+  }
+  return clauses;
 }
 
 /**

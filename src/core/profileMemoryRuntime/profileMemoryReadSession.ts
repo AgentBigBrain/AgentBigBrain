@@ -31,9 +31,12 @@ import {
   inspectProfileFactsForPlanningContext,
   queryProfileFactsForContinuity,
   readProfileFacts,
-  reviewProfileFactsForUser,
-  type ProfileFactContinuityQueryRequest
+  reviewProfileFactsForUser
 } from "./profileMemoryQueries";
+import type {
+  ProfileFactContinuityQueryRequest,
+  ProfileFactContinuityResult
+} from "./profileMemoryQueryContracts";
 
 /**
  * Stable request-scoped read facade over one already-reconciled profile-memory snapshot.
@@ -75,10 +78,10 @@ export class ProfileMemoryReadSession {
     maxFacts = 6,
     queryInput = ""
   ): readonly ProfileReadableFact[] {
-    return queryProfileFactsForContinuity(this.state, {
-      entityHints: [queryInput],
+    return inspectProfileFactsForPlanningContext(this.state, {
+      queryInput,
       maxFacts
-    });
+    }).entries.map((entry) => entry.fact);
   }
 
   /**
@@ -185,10 +188,8 @@ export class ProfileMemoryReadSession {
     graph: EntityGraphV1,
     stack: ConversationStackV1,
     request: ProfileFactContinuityQueryRequest
-  ): readonly ProfileReadableFact[] {
-    void graph;
-    void stack;
-    return queryProfileFactsForContinuity(this.state, request);
+  ): ProfileFactContinuityResult {
+    return queryProfileFactsForContinuity(this.state, graph, request, stack);
   }
 
   /**

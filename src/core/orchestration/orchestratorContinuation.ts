@@ -12,6 +12,12 @@ import {
   type ConversationStackV1,
   type EntityGraphV1
 } from "../types";
+import type {
+  ProfileEpisodeContinuityQueryRequest
+} from "../profileMemoryRuntime/profileMemoryEpisodeQueries";
+import type {
+  ProfileFactContinuityQueryRequest
+} from "../profileMemoryRuntime/profileMemoryQueryContracts";
 import { type BrainConfig } from "../config";
 import {
   type InterpretedConversationIntent,
@@ -188,7 +194,8 @@ export async function queryOrchestratorContinuityEpisodes(
   graph: EntityGraphV1,
   stack: ConversationStackV1,
   entityHints: readonly string[],
-  maxEpisodes = 3
+  maxEpisodes = 3,
+  requestOptions: Omit<ProfileEpisodeContinuityQueryRequest, "entityHints" | "maxEpisodes"> = {}
 ) {
   if (!deps.profileMemoryStore) {
     return [];
@@ -197,7 +204,8 @@ export async function queryOrchestratorContinuityEpisodes(
   try {
     return await deps.profileMemoryStore.queryEpisodesForContinuity(graph, stack, {
       entityHints,
-      maxEpisodes
+      maxEpisodes,
+      ...requestOptions
     });
   } catch {
     return [];
@@ -219,7 +227,8 @@ export async function queryOrchestratorContinuityFacts(
   graph: EntityGraphV1,
   stack: ConversationStackV1,
   entityHints: readonly string[],
-  maxFacts = 3
+  maxFacts = 3,
+  requestOptions: Omit<ProfileFactContinuityQueryRequest, "entityHints" | "maxFacts"> = {}
 ) {
   if (!deps.profileMemoryStore) {
     return [];
@@ -228,7 +237,8 @@ export async function queryOrchestratorContinuityFacts(
   try {
     return await deps.profileMemoryStore.queryFactsForContinuity(graph, stack, {
       entityHints,
-      maxFacts
+      maxFacts,
+      ...requestOptions
     });
   } catch {
     return [];

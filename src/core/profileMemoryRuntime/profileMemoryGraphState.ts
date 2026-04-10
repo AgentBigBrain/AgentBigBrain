@@ -1,7 +1,7 @@
 /**
  * @fileoverview Canonical additive graph-state creation and normalization helpers.
  */
-import type { ProfileFactRecord, ProfileMemoryState } from "../profileMemory";
+import type { ProfileFactRecord } from "../profileMemory";
 import { PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, PROFILE_MEMORY_GRAPH_SCHEMA_VERSION, type ProfileMemoryGraphState } from "./profileMemoryGraphContracts";
 import type { ProfileEpisodeRecord } from "./profileMemoryEpisodeContracts";
 import { compactProfileMemoryGraphClaims } from "./profileMemoryGraphClaimCompactionSupport";
@@ -9,9 +9,7 @@ import { repairProfileMemoryGraphAuthoritativeActiveClaimConflicts } from "./pro
 import { repairProfileMemoryGraphSemanticDuplicateClaims } from "./profileMemoryGraphClaimDeduplicationSupport";
 import { pruneProfileMemoryGraphClaimSuccessors } from "./profileMemoryGraphClaimSuccessorSupport";
 import { collectProfileMemoryGraphReplayBackfillClaimIds } from "./profileMemoryGraphClaimReplaySupport";
-import { reconcileProfileMemoryCurrentClaims } from "./profileMemoryGraphClaimSupport";
-import { backfillProfileMemoryGraphEventsFromEpisodes, collectProfileMemoryGraphReplayBackfillEventIds, redactProfileMemoryGraphEvents, upsertProfileMemoryGraphEvents } from "./profileMemoryGraphEventSupport";
-import { redactProfileMemoryGraphFacts } from "./profileMemoryGraphFactRedactionSupport";
+import { backfillProfileMemoryGraphEventsFromEpisodes, collectProfileMemoryGraphReplayBackfillEventIds } from "./profileMemoryGraphEventSupport";
 import { compactProfileMemoryGraphEvents } from "./profileMemoryGraphEventCompactionSupport";
 import { pruneProfileMemoryGraphEntityRefs } from "./profileMemoryGraphEntityRefSupport";
 import { backfillProfileMemoryGraphObservationsFromLegacyClaims } from "./profileMemoryGraphLegacyClaimObservationBackfillSupport";
@@ -23,14 +21,14 @@ import { normalizeProfileMemoryGraphClaimPayloadCandidate, normalizeProfileMemor
 import { compactProfileMemoryGraphObservations } from "./profileMemoryGraphObservationCompactionSupport";
 import { pruneProfileMemoryGraphObservationLineage } from "./profileMemoryGraphObservationLineageSupport";
 import { pruneProfileMemoryGraphProjectionSources } from "./profileMemoryGraphProjectionSourceSupport";
+import { attachProfileMemoryGraphStableRefs } from "./profileMemoryGraphQueries";
 import { collectProfileMemoryGraphReplayBackfillObservationIds } from "./profileMemoryGraphObservationReplaySupport";
-import { upsertProfileMemoryGraphObservations } from "./profileMemoryGraphObservationSupport";
-import { collectValidProfileMemoryGraphEpisodeProjectionSourceIds, finalizeProfileMemoryGraphState, firstNonEmptyString, safeIsoOrFallback } from "./profileMemoryGraphStateSupport";
+import { collectValidProfileMemoryGraphEpisodeProjectionSourceIds, finalizeProfileMemoryGraphState, safeIsoOrFallback } from "./profileMemoryGraphStateSupport";
 import { normalizeProfileMemoryGraphClaimRecords, normalizeProfileMemoryGraphEventRecords, normalizeProfileMemoryGraphObservationRecords } from "./profileMemoryGraphTimeNormalizationSupport";
 import { appendProfileMemoryGraphReplayBackfillEntries } from "./profileMemoryMutationJournalReplaySupport";
-import { appendProfileMemoryMutationJournalEntry, compactProfileMemoryMutationJournalState, createEmptyProfileMemoryMutationJournalState, normalizeProfileMemoryMutationJournalState } from "./profileMemoryMutationJournal";
+import { compactProfileMemoryMutationJournalState, createEmptyProfileMemoryMutationJournalState, normalizeProfileMemoryMutationJournalState } from "./profileMemoryMutationJournal";
 import { clampProfileMemoryGraphCompactionSnapshotWatermark, clampProfileMemoryGraphMutationJournalNextWatermark } from "./profileMemoryMutationJournalWindowSupport";
-import type { GovernedProfileFactCandidate } from "./profileMemoryTruthGovernanceContracts";
+import { sha256HexFromCanonicalJson } from "../normalizers/canonicalizationRules";
 /**
  * Creates an empty additive graph-backed profile-memory state.
  *
@@ -45,6 +43,7 @@ export function createEmptyProfileMemoryGraphState(updatedAt: string = new Date(
     observations: [],
     claims: [],
     events: [],
+    decisionRecords: [],
     mutationJournal,
     indexes: createEmptyProfileMemoryGraphIndexState(),
     readModel: buildProfileMemoryGraphReadModel({
@@ -136,6 +135,10 @@ export function normalizeProfileMemoryGraphState(
     events: eventBackfillResult.nextEvents,
     recordedAt: updatedAt
   });
+  const decisionRecords = normalizeProfileMemoryGraphDecisionRecords(
+    candidate.decisionRecords,
+    updatedAt
+  );
   const validEpisodeProjectionSourceIds = collectValidProfileMemoryGraphEpisodeProjectionSourceIds(episodesForBackfill);
   let mutationJournal = normalizeProfileMemoryMutationJournalState(candidate.mutationJournal, updatedAt);
   const replaySafeCompaction = clampProfileMemoryGraphCompactionSnapshotWatermark({ compaction: normalizedCompaction, state: mutationJournal });
@@ -222,6 +225,17 @@ export function normalizeProfileMemoryGraphState(
     events: projectionSourcePruningResult.nextEvents,
     recordedAt: updatedAt
   });
+  const stableRefAttachmentResult = attachProfileMemoryGraphStableRefs({
+    observations: entityRefPruningResult.nextObservations,
+    claims: entityRefPruningResult.nextClaims,
+    events: entityRefPruningResult.nextEvents,
+    touchedObservationIds: entityRefPruningResult.nextObservations.map(
+      (observation) => observation.payload.observationId
+    ),
+    touchedClaimIds: entityRefPruningResult.nextClaims.map((claim) => claim.payload.claimId),
+    touchedEventIds: entityRefPruningResult.nextEvents.map((event) => event.payload.eventId),
+    recordedAt: updatedAt
+  });
   return finalizeProfileMemoryGraphState({
     graph: {
       schemaVersion: PROFILE_MEMORY_GRAPH_SCHEMA_VERSION,
@@ -229,6 +243,7 @@ export function normalizeProfileMemoryGraphState(
       observations: [],
       claims: [],
       events: [],
+      decisionRecords,
       mutationJournal: createEmptyProfileMemoryMutationJournalState(),
       indexes: createEmptyProfileMemoryGraphIndexState(),
       readModel: buildProfileMemoryGraphReadModel({
@@ -239,211 +254,99 @@ export function normalizeProfileMemoryGraphState(
       compaction: createDefaultProfileMemoryGraphCompactionState()
     },
     updatedAt,
-    observations: entityRefPruningResult.nextObservations,
-    claims: entityRefPruningResult.nextClaims,
-    events: entityRefPruningResult.nextEvents,
+    observations: stableRefAttachmentResult.nextObservations,
+    claims: stableRefAttachmentResult.nextClaims,
+    events: stableRefAttachmentResult.nextEvents,
     mutationJournal: journalCompactionResult.nextState,
     compaction: eventCompactionResult.nextCompaction
   });
 }
-/**
- * Applies one bounded graph mutation batch under the stable profile-memory store seam.
- *
- * @param input - Canonical post-mutation state plus governed fact and episode mutations.
- * @returns Updated profile state and whether the additive graph changed.
- */
-export function applyProfileMemoryGraphMutations(input: {
-  state: ProfileMemoryState;
-  factDecisions: readonly GovernedProfileFactCandidate[];
-  touchedEpisodes: readonly ProfileEpisodeRecord[];
-  redactedEpisodes?: readonly ProfileEpisodeRecord[];
-  redactedFacts?: readonly ProfileFactRecord[];
-  sourceTaskId?: string | null;
-  sourceFingerprint: string;
-  mutationEnvelopeHash: string | null;
-  recordedAt: string;
-}): { nextState: ProfileMemoryState; changed: boolean } {
-  const observationDecisions = input.factDecisions.filter(
-    (entry) => entry.decision.action !== "quarantine"
-  );
-  const redactedEpisodes = input.redactedEpisodes ?? [];
-  const redactedFacts = input.redactedFacts ?? [];
-  if (observationDecisions.length === 0 &&
-    input.touchedEpisodes.length === 0 &&
-    redactedEpisodes.length === 0 &&
-    redactedFacts.length === 0) {
-    return {
-      nextState: input.state,
-      changed: false
-    };
-  }
 
-  const graph = input.state.graph ?? createEmptyProfileMemoryGraphState(input.recordedAt);
-  const observationResult = upsertProfileMemoryGraphObservations({
-    existingObservations: graph.observations,
-    factDecisions: observationDecisions,
-    sourceFingerprint: input.sourceFingerprint,
-    recordedAt: input.recordedAt
-  });
-  const claimResult = reconcileProfileMemoryCurrentClaims({
-    existingClaims: graph.claims,
-    observations: observationResult.nextObservations,
-    facts: input.state.facts,
-    factDecisions: input.factDecisions,
-    recordedAt: input.recordedAt
-  });
-  const eventResult = upsertProfileMemoryGraphEvents({
-    existingEvents: graph.events,
-    touchedEpisodes: input.touchedEpisodes,
-    sourceFingerprint: input.sourceFingerprint,
-    recordedAt: input.recordedAt
-  });
-  const factRedactionResult = redactProfileMemoryGraphFacts({
-    existingObservations: observationResult.nextObservations,
-    existingClaims: claimResult.nextClaims,
-    redactedFacts,
-    sourceTaskId: input.sourceTaskId ?? null,
-    sourceFingerprint: input.sourceFingerprint,
-    recordedAt: input.recordedAt
-  });
-  const redactionResult = redactProfileMemoryGraphEvents({
-    existingEvents: eventResult.nextEvents,
-    redactedEpisodes,
-    sourceTaskId: input.sourceTaskId ?? null,
-    sourceFingerprint: input.sourceFingerprint,
-    recordedAt: input.recordedAt
-  });
-  const observationNormalizationResult = normalizeProfileMemoryGraphObservationRecords({
-    observations: factRedactionResult.nextObservations,
-    recordedAt: input.recordedAt
-  });
-  const claimNormalizationResult = normalizeProfileMemoryGraphClaimRecords({
-    claims: factRedactionResult.nextClaims,
-    recordedAt: input.recordedAt
-  });
-  const eventNormalizationResult = normalizeProfileMemoryGraphEventRecords({
-    events: redactionResult.nextEvents,
-    recordedAt: input.recordedAt
-  });
-  const journalResult = appendProfileMemoryMutationJournalEntry(graph.mutationJournal, {
-    recordedAt: input.recordedAt,
-    sourceTaskId: firstNonEmptyString([
-      input.sourceTaskId ?? "",
-      ...observationDecisions.map((entry) => entry.candidate.sourceTaskId),
-      ...input.touchedEpisodes.map((episode) => episode.sourceTaskId),
-      ...redactedEpisodes.map((episode) => episode.sourceTaskId),
-      ...redactedFacts.map((fact) => fact.sourceTaskId)
-    ]),
-    sourceFingerprint: input.sourceFingerprint,
-    mutationEnvelopeHash: input.mutationEnvelopeHash,
-    observationIds: [
-      ...observationResult.touchedObservationIds,
-      ...factRedactionResult.touchedObservationIds
-    ],
-    claimIds: [
-      ...claimResult.touchedClaimIds,
-      ...factRedactionResult.touchedClaimIds
-    ],
-    eventIds: [...eventResult.touchedEventIds, ...redactionResult.touchedEventIds],
-    redactionState: redactionResult.changed || factRedactionResult.changed
-      ? "redacted"
-      : "not_requested"
-  });
-  const prunedJournalResult = pruneProfileMemoryGraphMutationJournalReferences({
-    state: journalResult.nextState,
-    observations: observationNormalizationResult.nextObservations,
-    claims: claimNormalizationResult.nextClaims,
-    events: eventNormalizationResult.nextEvents
-  });
-  const journalCompactionResult = compactProfileMemoryMutationJournalState({
-    state: prunedJournalResult.nextState,
-    compaction: graph.compaction,
-    recordedAt: input.recordedAt
-  });
-  const claimCompactionResult = compactProfileMemoryGraphClaims({
-    claims: claimNormalizationResult.nextClaims,
-    mutationJournal: journalCompactionResult.nextState,
-    compaction: journalCompactionResult.nextCompaction,
-    recordedAt: input.recordedAt
-  });
-  const claimSuccessorPruningResult = pruneProfileMemoryGraphClaimSuccessors({
-    claims: claimCompactionResult.nextClaims,
-    recordedAt: input.recordedAt
-  });
-  const observationCompactionResult = compactProfileMemoryGraphObservations({
-    observations: observationNormalizationResult.nextObservations,
-    claims: claimSuccessorPruningResult.nextClaims,
-    events: eventNormalizationResult.nextEvents,
-    mutationJournal: journalCompactionResult.nextState,
-    compaction: claimCompactionResult.nextCompaction,
-    recordedAt: input.recordedAt
-  });
-  const observationLineagePruningResult = pruneProfileMemoryGraphObservationLineage({
-    observations: observationCompactionResult.nextObservations,
-    claims: claimSuccessorPruningResult.nextClaims,
-    events: eventNormalizationResult.nextEvents,
-    recordedAt: input.recordedAt
-  });
-  const projectionSourcePruningResult = pruneProfileMemoryGraphProjectionSources({
-    facts: input.state.facts,
-    episodes: input.state.episodes.filter(
-      (episode) => !redactedEpisodes.some((redactedEpisode) => redactedEpisode.id === episode.id)
-    ),
-    claims: observationLineagePruningResult.nextClaims,
-    events: observationLineagePruningResult.nextEvents,
-    recordedAt: input.recordedAt
-  });
-  const eventCompactionResult = compactProfileMemoryGraphEvents({
-    events: projectionSourcePruningResult.nextEvents,
-    mutationJournal: journalCompactionResult.nextState,
-    compaction: observationCompactionResult.nextCompaction,
-    recordedAt: input.recordedAt
-  });
-  const entityRefPruningResult = pruneProfileMemoryGraphEntityRefs({
-    observations: observationCompactionResult.nextObservations,
-    claims: projectionSourcePruningResult.nextClaims,
-    events: eventCompactionResult.nextEvents,
-    recordedAt: input.recordedAt
-  });
-  if (
-    !observationResult.changed &&
-    !claimResult.changed &&
-    !eventResult.changed &&
-    !factRedactionResult.changed &&
-    !observationNormalizationResult.changed &&
-    !redactionResult.changed &&
-    !eventNormalizationResult.changed &&
-    !claimNormalizationResult.changed &&
-    !journalResult.appended &&
-    !prunedJournalResult.changed &&
-    !journalCompactionResult.changed &&
-    !claimCompactionResult.changed &&
-    !claimSuccessorPruningResult.changed &&
-    !observationCompactionResult.changed &&
-    !observationLineagePruningResult.changed &&
-    !projectionSourcePruningResult.changed &&
-    !eventCompactionResult.changed &&
-    !entityRefPruningResult.changed
-  ) {
-    return {
-      nextState: input.state,
-      changed: false
-    };
+/**
+ * Normalizes persisted profile-memory graph decision records into one canonical durable shape.
+ *
+ * @param raw - Candidate persisted decision-record array.
+ * @param fallbackRecordedAt - Fallback timestamp for malformed decision records.
+ * @returns Stable ordered durable decision records.
+ */
+function normalizeProfileMemoryGraphDecisionRecords(
+  raw: unknown,
+  fallbackRecordedAt: string
+): ProfileMemoryGraphState["decisionRecords"] {
+  if (!Array.isArray(raw)) {
+    return [];
   }
-  return {
-    nextState: {
-      ...input.state,
-      updatedAt: input.recordedAt,
-      graph: finalizeProfileMemoryGraphState({
-        graph,
-        updatedAt: input.recordedAt,
-        observations: entityRefPruningResult.nextObservations,
-        claims: entityRefPruningResult.nextClaims,
-        events: entityRefPruningResult.nextEvents,
-        mutationJournal: journalCompactionResult.nextState,
-        compaction: eventCompactionResult.nextCompaction
-      })
-    },
-    changed: true
+  return raw
+    .flatMap((value) => {
+      const normalized = normalizeProfileMemoryGraphDecisionRecord(value, fallbackRecordedAt);
+      return normalized ? [normalized] : [];
+    })
+    .sort((left, right) =>
+      left.recordedAt === right.recordedAt
+        ? left.decisionId.localeCompare(right.decisionId)
+        : left.recordedAt.localeCompare(right.recordedAt)
+    );
+}
+
+/**
+ * Normalizes one persisted profile-memory graph decision record or drops malformed entries.
+ *
+ * @param value - Candidate persisted decision record.
+ * @param fallbackRecordedAt - Fallback timestamp for malformed timestamps.
+ * @returns Canonical durable decision record or `null`.
+ */
+function normalizeProfileMemoryGraphDecisionRecord(
+  value: unknown,
+  fallbackRecordedAt: string
+) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  const candidate = value as Partial<NonNullable<ProfileMemoryGraphState["decisionRecords"]>[number]>;
+  if (
+    typeof candidate.action !== "string" ||
+    !["merge", "quarantine", "unquarantine", "rekey", "rollback"].includes(candidate.action)
+  ) {
+    return null;
+  }
+  const recordedAt = safeIsoOrFallback(candidate.recordedAt, fallbackRecordedAt);
+  const decisionPayload = {
+    action: candidate.action,
+    recordedAt,
+    fromStableRefId: normalizeDecisionRecordString(candidate.fromStableRefId),
+    toStableRefId: normalizeDecisionRecordString(candidate.toStableRefId),
+    sourceTaskId: normalizeDecisionRecordString(candidate.sourceTaskId),
+    sourceFingerprint: normalizeDecisionRecordString(candidate.sourceFingerprint),
+    mutationEnvelopeHash: normalizeDecisionRecordString(candidate.mutationEnvelopeHash),
+    observationIds: normalizeDecisionRecordStringArray(candidate.observationIds),
+    claimIds: normalizeDecisionRecordStringArray(candidate.claimIds),
+    eventIds: normalizeDecisionRecordStringArray(candidate.eventIds)
   };
+  return {
+    decisionId:
+      normalizeDecisionRecordString(candidate.decisionId) ??
+      `profile_memory_graph_decision_${sha256HexFromCanonicalJson(decisionPayload).slice(0, 24)}`,
+    ...decisionPayload
+  };
+}
+
+/** Normalizes one optional decision-record string field. */
+function normalizeDecisionRecordString(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+/** Deduplicates and orders decision-record id lists. */
+function normalizeDecisionRecordStringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? [
+        ...new Set(
+          value
+            .filter(
+              (entry): entry is string =>
+                typeof entry === "string" && Boolean(entry.trim())
+            )
+            .map((entry) => entry.trim())
+        )
+      ].sort((left, right) => left.localeCompare(right))
+    : [];
 }

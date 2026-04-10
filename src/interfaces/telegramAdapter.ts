@@ -16,7 +16,11 @@ import {
   AgentPulseEvaluationRequest,
   AgentPulseEvaluationResult
 } from "../core/profileMemoryStore";
-import type { ProfileMemoryIngestRequest } from "../core/profileMemoryRuntime/contracts";
+import type {
+  ProfileMemoryIngestRequest,
+  ProfileReadableFact
+} from "../core/profileMemoryRuntime/contracts";
+import type { ProfileFactContinuityResult } from "../core/profileMemoryRuntime/profileMemoryQueryContracts";
 import { AutonomousLoop, AutonomousLoopCallbacks } from "../core/agentLoop";
 import { createModelClientFromEnv } from "../models/createModelClient";
 import { createBrainConfigFromEnv } from "../core/config";
@@ -31,6 +35,7 @@ import { buildAutonomousConversationExecutionResult } from "./autonomousConversa
 import { runDirectConversationReply } from "./conversationRuntime/directConversationReply";
 import type {
   ConversationContinuityFactQueryRequest,
+  ConversationContinuityFactResult,
   ConversationContinuityFactRecord,
   ConversationExecutionResult,
   ConversationExecutionProgressUpdate,
@@ -46,6 +51,7 @@ import { hasConversationMedia } from "./mediaRuntime/contracts";
 import type { ManagedProcessSnapshot } from "../organs/liveRun/managedProcessRegistry";
 import type { BrowserSessionSnapshot } from "../organs/liveRun/browserSessionRegistry";
 import type { ConversationTransportIdentityRecord } from "./sessionStore";
+import { toLaneBoundary } from "../organs/memorySynthesis/temporalSynthesisAdapterCompatibilitySupport";
 
 export interface TelegramInboundMessage {
   updateId: number;
@@ -174,7 +180,7 @@ function toConversationContinuityEpisodeRecord(
  * @returns Interface continuity fact record.
  */
 function toConversationContinuityFactRecord(
-  fact: Awaited<ReturnType<BrainOrchestrator["queryContinuityFacts"]>>[number]
+  fact: ProfileFactContinuityResult[number]
 ): ConversationContinuityFactRecord {
   return {
     factId: fact.factId,
@@ -185,6 +191,39 @@ function toConversationContinuityFactRecord(
     lastUpdatedAt: fact.lastUpdatedAt,
     confidence: fact.confidence
   };
+}
+
+/**
+ * Maps one core continuity fact result into the interface-facing continuity shape.
+ *
+ * @param facts - Core continuity fact result from the orchestrator boundary.
+ * @returns Interface continuity fact result with temporal metadata attached.
+ */
+function toConversationContinuityFactResult(
+  facts: ProfileFactContinuityResult | readonly ProfileReadableFact[]
+): ConversationContinuityFactResult {
+  const temporalSynthesis = "temporalSynthesis" in facts ? facts.temporalSynthesis : null;
+  const semanticMode = "semanticMode" in facts ? facts.semanticMode : "relationship_inventory";
+  const relevanceScope = "relevanceScope" in facts ? facts.relevanceScope : "global_profile";
+  const scopedThreadKeys = "scopedThreadKeys" in facts ? facts.scopedThreadKeys : [];
+  return Object.assign(
+    facts.map(toConversationContinuityFactRecord),
+    {
+      semanticMode,
+      relevanceScope,
+      scopedThreadKeys: [...scopedThreadKeys],
+      temporalSynthesis,
+      laneBoundaries: temporalSynthesis
+        ? temporalSynthesis.laneMetadata.map((lane) =>
+            toLaneBoundary(lane, {
+              semanticMode,
+              relevanceScope,
+              scopedThreadKeys
+            })
+          )
+        : []
+    }
+  ) as ConversationContinuityFactResult;
 }
 
 export class TelegramAdapter {
@@ -639,7 +678,13 @@ export class TelegramAdapter {
       graph,
       request.stack,
       request.entityHints,
-      request.maxEpisodes
+      request.maxEpisodes,
+      {
+        semanticMode: request.semanticMode,
+        relevanceScope: request.relevanceScope,
+        asOfValidTime: request.asOfValidTime,
+        asOfObservedTime: request.asOfObservedTime
+      }
     );
     return linkedEpisodes.map(toConversationContinuityEpisodeRecord);
   }
@@ -654,14 +699,20 @@ export class TelegramAdapter {
   async queryContinuityFacts(
     graph: EntityGraphV1,
     request: ConversationContinuityFactQueryRequest
-  ): Promise<readonly ConversationContinuityFactRecord[]> {
+  ): Promise<ConversationContinuityFactResult> {
     const facts = await this.brain.queryContinuityFacts(
       graph,
       request.stack,
       request.entityHints,
-      request.maxFacts
+      request.maxFacts,
+      {
+        semanticMode: request.semanticMode,
+        relevanceScope: request.relevanceScope,
+        asOfValidTime: request.asOfValidTime,
+        asOfObservedTime: request.asOfObservedTime
+      }
     );
-    return facts.map(toConversationContinuityFactRecord);
+    return toConversationContinuityFactResult(facts);
   }
 
   /**
@@ -684,17 +735,29 @@ export class TelegramAdapter {
           await readSession.queryContinuityEpisodes(
             request.stack,
             request.entityHints,
-            request.maxEpisodes
+            request.maxEpisodes,
+            {
+              semanticMode: request.semanticMode,
+              relevanceScope: request.relevanceScope,
+              asOfValidTime: request.asOfValidTime,
+              asOfObservedTime: request.asOfObservedTime
+            }
           )
         ).map(toConversationContinuityEpisodeRecord),
       queryContinuityFacts: async (request) =>
-        (
+        toConversationContinuityFactResult(
           await readSession.queryContinuityFacts(
             request.stack,
             request.entityHints,
-            request.maxFacts
+            request.maxFacts,
+            {
+              semanticMode: request.semanticMode,
+              relevanceScope: request.relevanceScope,
+              asOfValidTime: request.asOfValidTime,
+              asOfObservedTime: request.asOfObservedTime
+            }
           )
-        ).map(toConversationContinuityFactRecord)
+        )
     };
   }
 

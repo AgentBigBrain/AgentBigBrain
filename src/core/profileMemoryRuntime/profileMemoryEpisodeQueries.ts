@@ -17,9 +17,21 @@ import {
   linkProfileEpisodesToContinuity,
   type LinkedProfileEpisodeRecord
 } from "./profileMemoryEpisodeLinking";
+import {
+  collectProfileMemoryContinuityScopeText,
+  selectProfileMemoryContinuityScopedThreads
+} from "./profileMemoryContinuityScopeSupport";
+import type {
+  ProfileMemoryTemporalRelevanceScope,
+  ProfileMemoryTemporalSemanticMode
+} from "./profileMemoryTemporalQueryContracts";
 
 export interface ProfileEpisodeContinuityQueryRequest {
   entityHints: readonly string[];
+  semanticMode?: ProfileMemoryTemporalSemanticMode;
+  relevanceScope?: ProfileMemoryTemporalRelevanceScope;
+  asOfValidTime?: string;
+  asOfObservedTime?: string;
   maxEpisodes?: number;
   includeResolved?: boolean;
 }
@@ -101,8 +113,28 @@ export function readProfileEpisodes(
  */
 function tokenizeHintTerms(value: string): readonly string[] {
   const matches = value.toLowerCase().match(/[a-z0-9]+/g) ?? [];
-  return [...new Set(matches.filter((entry) => entry.trim().length >= 3))].sort();
+  return [...new Set(
+    matches.filter(
+      (entry) => entry.trim().length >= 3 && !PROFILE_EPISODE_HINT_STOP_WORDS.has(entry)
+    )
+  )].sort();
 }
+
+const PROFILE_EPISODE_HINT_STOP_WORDS = new Set([
+  "a",
+  "about",
+  "again",
+  "and",
+  "are",
+  "did",
+  "for",
+  "how",
+  "the",
+  "what",
+  "when",
+  "who",
+  "with"
+]);
 
 /**
  * Counts deterministic overlap between hint terms and linked episode surfaces.
@@ -138,6 +170,62 @@ function countHintOverlap(
 }
 
 /**
+ * Converts bounded scoped thread text into deterministic hint terms for episode ranking.
+ *
+ * @param stack - Current conversation stack.
+ * @param relevanceScope - Requested local relevance scope.
+ * @returns Stable hint terms derived from scoped thread text.
+ */
+function buildScopedHintTerms(
+  stack: ConversationStackV1,
+  relevanceScope: ProfileMemoryTemporalRelevanceScope
+): readonly string[] {
+  const scopedTerms = new Set<string>();
+  for (const scopedText of collectProfileMemoryContinuityScopeText(stack, relevanceScope)) {
+    for (const term of tokenizeHintTerms(scopedText)) {
+      scopedTerms.add(term);
+    }
+  }
+  return [...scopedTerms].sort();
+}
+
+/**
+ * Scores how strongly one linked episode belongs to the active local scope.
+ *
+ * @param linkedEpisode - Linked episode candidate under scoring.
+ * @param stack - Current conversation stack.
+ * @param relevanceScope - Requested local relevance scope.
+ * @param scopedHintTerms - Terms recovered from the bounded local scope.
+ * @returns Deterministic scoped relevance score.
+ */
+function scoreScopedEpisodeRelevance(
+  linkedEpisode: LinkedProfileEpisodeRecord,
+  stack: ConversationStackV1,
+  relevanceScope: ProfileMemoryTemporalRelevanceScope,
+  scopedHintTerms: readonly string[]
+): number {
+  if (relevanceScope === "global_profile") {
+    return 0;
+  }
+
+  const scopedThreadKeys = new Set(
+    selectProfileMemoryContinuityScopedThreads(stack, relevanceScope).map((thread) => thread.threadKey)
+  );
+  const scopedThreadLinkMatches = linkedEpisode.openLoopLinks.filter((entry) =>
+    scopedThreadKeys.has(entry.threadKey)
+  ).length;
+  const scopedHintOverlap = countHintOverlap(scopedHintTerms, linkedEpisode);
+  const activeThreadBoost =
+    relevanceScope === "thread_local" &&
+    stack.activeThreadKey !== null &&
+    linkedEpisode.openLoopLinks.some((entry) => entry.threadKey === stack.activeThreadKey)
+      ? 3
+      : 0;
+
+  return (scopedThreadLinkMatches * 2) + scopedHintOverlap + activeThreadBoost;
+}
+
+/**
  * Selects bounded episodic-memory records for a re-mentioned entity/topic.
  *
  * @param state - Loaded profile-memory state.
@@ -154,7 +242,14 @@ export function queryProfileEpisodesForContinuity(
   nowIso = state.updatedAt,
   staleAfterDays = 90
 ): readonly LinkedProfileEpisodeRecord[] {
-  const hintTerms = tokenizeHintTerms(request.entityHints.join(" "));
+  const scopedHintTerms = buildScopedHintTerms(
+    stack,
+    request.relevanceScope ?? "global_profile"
+  );
+  const hintTerms = [...new Set([
+    ...tokenizeHintTerms(request.entityHints.join(" ")),
+    ...scopedHintTerms
+  ])].sort();
   if (hintTerms.length === 0) {
     return [];
   }
@@ -164,7 +259,13 @@ export function queryProfileEpisodesForContinuity(
     .filter((entry) => request.includeResolved === true || !isTerminalProfileEpisodeStatus(entry.episode.status))
     .map((entry) => ({
       entry,
-      hintOverlap: countHintOverlap(hintTerms, entry)
+      hintOverlap: countHintOverlap(hintTerms, entry),
+      scopedRelevance: scoreScopedEpisodeRelevance(
+        entry,
+        stack,
+        request.relevanceScope ?? "global_profile",
+        scopedHintTerms
+      )
     }))
     .filter(({ entry, hintOverlap }) =>
       hintOverlap > 0 &&
@@ -173,6 +274,9 @@ export function queryProfileEpisodesForContinuity(
     .sort((left, right) => {
       if (left.hintOverlap !== right.hintOverlap) {
         return right.hintOverlap - left.hintOverlap;
+      }
+      if (left.scopedRelevance !== right.scopedRelevance) {
+        return right.scopedRelevance - left.scopedRelevance;
       }
       const leftLinkCount = left.entry.entityLinks.length + left.entry.openLoopLinks.length;
       const rightLinkCount = right.entry.entityLinks.length + right.entry.openLoopLinks.length;

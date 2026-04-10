@@ -10,14 +10,23 @@ import {
   resolveContextualRecallCandidate
 } from "../../src/interfaces/conversationRuntime/contextualRecall";
 import { buildSessionSeed } from "../../src/interfaces/conversationManagerHelpers";
-import type { QueryConversationContinuityEpisodes } from "../../src/interfaces/conversationRuntime/managerContracts";
+import type {
+  QueryConversationContinuityEpisodes
+} from "../../src/interfaces/conversationRuntime/managerContracts";
 import type {
   EntityGraphV1,
   ConversationStackV1
 } from "../../src/core/types";
+import type { TemporalMemorySynthesis } from "../../src/core/profileMemoryRuntime/profileMemoryTemporalQueryContracts";
+import { createProfileMemoryRequestTelemetry } from "../../src/core/profileMemoryRuntime/profileMemoryRequestTelemetry";
 import type {
   ConversationSession
 } from "../../src/interfaces/sessionStore";
+import { buildLegacyCompatibleTemporalSynthesis } from "../../src/organs/memorySynthesis/temporalSynthesisAdapter";
+import type {
+  MemorySynthesisEpisodeRecord,
+  MemorySynthesisFactRecord
+} from "../../src/organs/memorySynthesis/contracts";
 
 /**
  * Creates a stable session fixture for contextual-recall tests.
@@ -136,6 +145,8 @@ test("resolveContextualRecallCandidate prefers a concrete unresolved episode ove
   });
   const queryContinuityEpisodes = buildEpisodeQuery(async (request) => {
     assert.ok(request.entityHints.includes("owen"));
+    assert.equal(request.semanticMode, "event_history");
+    assert.equal(request.relevanceScope, "conversation_local");
     return [
       {
         episodeId: "episode_owen_fall",
@@ -686,6 +697,362 @@ test("buildContextualRecallBlock does not invoke contextual-reference interpreta
 
   assert.equal(interpretationCalls, 0);
   assert.equal(block, null);
+});
+
+test("buildContextualRecallBlock preserves global truth and conversation-local relevance across workflow digression and interruption", async () => {
+  const session = buildSession({
+    conversationTurns: [
+      {
+        role: "user",
+        text: "I work with Owen at Lantern Studio, and his fall still feels unresolved.",
+        at: "2026-02-14T15:00:00.000Z"
+      },
+      {
+        role: "assistant",
+        text: "I can keep that in mind.",
+        at: "2026-02-14T15:01:00.000Z"
+      },
+      {
+        role: "user",
+        text: "Now switch back to the deployment workflow and finish the release.",
+        at: "2026-03-08T10:40:00.000Z"
+      },
+      {
+        role: "assistant",
+        text: "I'll focus on the release workflow.",
+        at: "2026-03-08T10:41:00.000Z"
+      },
+      {
+        role: "user",
+        text: "Also, lunch was chaotic and I got interrupted twice.",
+        at: "2026-03-08T10:45:00.000Z"
+      }
+    ],
+    conversationStack: buildPausedOwenStack()
+  });
+  const supportingEpisode: MemorySynthesisEpisodeRecord = {
+    episodeId: "episode_owen_fall",
+    title: "Owen fell down",
+    summary: "Owen fell down a few weeks ago and the outcome still feels unresolved.",
+    status: "unresolved",
+    lastMentionedAt: "2026-02-14T15:00:00.000Z",
+    entityRefs: ["Owen"],
+    entityLinks: [
+      {
+        entityKey: "entity_owen",
+        canonicalName: "Owen"
+      }
+    ],
+    openLoopLinks: [
+      {
+        loopId: "loop_owen",
+        threadKey: "thread_owen",
+        status: "open",
+        priority: 0.8
+      }
+    ]
+  };
+  const supportingFact: MemorySynthesisFactRecord = {
+    factId: "fact_owen_work",
+    key: "contact.owen.work_association",
+    value: "Lantern Studio",
+    status: "confirmed",
+    observedAt: "2026-02-10T12:00:00.000Z",
+    lastUpdatedAt: "2026-02-10T12:00:00.000Z",
+    confidence: 0.88
+  };
+  const typedSynthesis = buildLegacyCompatibleTemporalSynthesis(
+    [supportingEpisode],
+    [supportingFact]
+  );
+  assert.ok(typedSynthesis);
+  const queryContinuityEpisodes = buildEpisodeQuery(async (request) => {
+    assert.equal(request.relevanceScope, "conversation_local");
+    return [
+      {
+        episodeId: supportingEpisode.episodeId,
+        title: supportingEpisode.title,
+        summary: supportingEpisode.summary,
+        status: supportingEpisode.status,
+        lastMentionedAt: supportingEpisode.lastMentionedAt,
+        entityRefs: supportingEpisode.entityRefs,
+        entityLinks: supportingEpisode.entityLinks,
+        openLoopLinks: supportingEpisode.openLoopLinks
+      }
+    ];
+  });
+  const queryContinuityFacts = async (request: {
+    relevanceScope?: string;
+  }) =>
+    Object.assign(
+      [
+        {
+          factId: supportingFact.factId,
+          key: supportingFact.key,
+          value: supportingFact.value,
+          status: supportingFact.status,
+          observedAt: supportingFact.observedAt,
+          lastUpdatedAt: supportingFact.lastUpdatedAt,
+          confidence: supportingFact.confidence
+        }
+      ],
+      {
+        semanticMode: "relationship_inventory" as const,
+        relevanceScope: request.relevanceScope ?? "conversation_local",
+        scopedThreadKeys: ["thread_owen"],
+        temporalSynthesis: typedSynthesis?.temporalSynthesis ?? null,
+        laneBoundaries: typedSynthesis?.laneBoundaries ?? []
+      }
+    );
+
+  const block = await buildContextualRecallBlock(
+    session,
+    "Did that ever settle down after everything else that was going on?",
+    queryContinuityEpisodes,
+    queryContinuityFacts
+  );
+
+  assert.ok(block);
+  assert.match(block ?? "", /Owen fell down/i);
+  assert.match(block ?? "", /Lantern Studio/i);
+  assert.match(block ?? "", /Current State:/);
+  assert.match(block ?? "", /Historical Context:/);
+});
+
+test("buildContextualRecallBlock adds a fail-closed shadow parity guard when temporal recall diverges from compatibility fallback", async () => {
+  const session = buildSession({
+    conversationTurns: [
+      {
+        role: "user",
+        text: "Owen fell down a few weeks ago and I still do not know how that ended.",
+        at: "2026-02-14T15:00:00.000Z"
+      }
+    ],
+    conversationStack: buildPausedOwenStack()
+  });
+  const supportingEpisode: MemorySynthesisEpisodeRecord = {
+    episodeId: "episode_owen_fall",
+    title: "Owen fell down",
+    summary: "Owen fell down a few weeks ago and the outcome still feels unresolved.",
+    status: "unresolved",
+    lastMentionedAt: "2026-02-14T15:00:00.000Z",
+    entityRefs: ["Owen"],
+    entityLinks: [
+      {
+        entityKey: "entity_owen",
+        canonicalName: "Owen"
+      }
+    ],
+    openLoopLinks: [
+      {
+        loopId: "loop_owen",
+        threadKey: "thread_owen",
+        status: "open",
+        priority: 0.8
+      }
+    ]
+  };
+  const supportingFact: MemorySynthesisFactRecord = {
+    factId: "fact_owen_work",
+    key: "contact.owen.work_association",
+    value: "Lantern Studio",
+    status: "confirmed",
+    observedAt: "2026-02-10T12:00:00.000Z",
+    lastUpdatedAt: "2026-02-10T12:00:00.000Z",
+    confidence: 0.88
+  };
+  const compatibilitySynthesis = buildLegacyCompatibleTemporalSynthesis(
+    [supportingEpisode],
+    [supportingFact]
+  );
+  assert.ok(compatibilitySynthesis);
+  const divergentTemporal: TemporalMemorySynthesis = {
+    ...compatibilitySynthesis!.temporalSynthesis,
+    currentState: [],
+    historicalContext: [],
+    contradictionNotes: ["Need corroboration before surfacing this current relationship state."],
+    answerMode: "insufficient_evidence",
+    laneMetadata: compatibilitySynthesis!.temporalSynthesis.laneMetadata.map((lane) => ({
+      ...lane,
+      answerMode: "insufficient_evidence",
+      dominantLane: "insufficient_evidence",
+      supportingLanes: []
+    }))
+  };
+  const queryContinuityEpisodes = buildEpisodeQuery(async () => [
+    {
+      episodeId: supportingEpisode.episodeId,
+      title: supportingEpisode.title,
+      summary: supportingEpisode.summary,
+      status: supportingEpisode.status,
+      lastMentionedAt: supportingEpisode.lastMentionedAt,
+      entityRefs: supportingEpisode.entityRefs,
+      entityLinks: supportingEpisode.entityLinks,
+      openLoopLinks: supportingEpisode.openLoopLinks
+    }
+  ]);
+  const queryContinuityFacts = async () =>
+    Object.assign(
+      [
+        {
+          factId: supportingFact.factId,
+          key: supportingFact.key,
+          value: supportingFact.value,
+          status: supportingFact.status,
+          observedAt: supportingFact.observedAt,
+          lastUpdatedAt: supportingFact.lastUpdatedAt,
+          confidence: supportingFact.confidence
+        }
+      ],
+      {
+        semanticMode: "relationship_inventory" as const,
+        relevanceScope: "conversation_local" as const,
+        scopedThreadKeys: ["thread_owen"],
+        temporalSynthesis: divergentTemporal,
+        laneBoundaries: compatibilitySynthesis?.laneBoundaries ?? []
+      }
+    );
+  const requestTelemetry = createProfileMemoryRequestTelemetry();
+
+  const block = await buildContextualRecallBlock(
+    session,
+    "Did that ever settle down after everything else that was going on?",
+    queryContinuityEpisodes,
+    queryContinuityFacts,
+    null,
+    undefined,
+    undefined,
+    undefined,
+    requestTelemetry
+  );
+
+  assert.ok(block);
+  assert.match(block ?? "", /Shadow parity guard:/);
+  assert.match(block ?? "", /answer mode/i);
+  assert.match(block ?? "", /current-state summary/i);
+  assert.match(block ?? "", /fail closed if the answer still feels uncertain/i);
+  assert.match(block ?? "", /Current State: none/);
+  assert.match(block ?? "", /Contradiction Notes: Need corroboration/i);
+  assert.doesNotMatch(block ?? "", /Lantern Studio/i);
+  assert.equal(requestTelemetry.synthesisOperationCount, 1);
+  assert.equal(requestTelemetry.renderOperationCount, 1);
+});
+
+test("buildContextualRecallBlock keeps quarantined identity in fail-closed shadow parity mode", async () => {
+  const session = buildSession({
+    conversationTurns: [
+      {
+        role: "user",
+        text: "Owen was involved somehow, but there are two different Owens in this story.",
+        at: "2026-02-14T15:00:00.000Z"
+      }
+    ],
+    conversationStack: buildPausedOwenStack()
+  });
+  const supportingEpisode: MemorySynthesisEpisodeRecord = {
+    episodeId: "episode_owen_fall_quarantine",
+    title: "Owen fell down",
+    summary: "An older Owen thread stayed unresolved and later got tangled with another Owen reference.",
+    status: "unresolved",
+    lastMentionedAt: "2026-02-14T15:00:00.000Z",
+    entityRefs: ["Owen"],
+    entityLinks: [
+      {
+        entityKey: "entity_owen",
+        canonicalName: "Owen"
+      }
+    ],
+    openLoopLinks: [
+      {
+        loopId: "loop_owen",
+        threadKey: "thread_owen",
+        status: "open",
+        priority: 0.8
+      }
+    ]
+  };
+  const supportingFact: MemorySynthesisFactRecord = {
+    factId: "fact_owen_work_quarantine",
+    key: "contact.owen.work_association",
+    value: "Lantern Studio",
+    status: "confirmed",
+    observedAt: "2026-02-10T12:00:00.000Z",
+    lastUpdatedAt: "2026-02-10T12:00:00.000Z",
+    confidence: 0.88
+  };
+  const compatibilitySynthesis = buildLegacyCompatibleTemporalSynthesis(
+    [supportingEpisode],
+    [supportingFact]
+  );
+  assert.ok(compatibilitySynthesis);
+  const quarantinedTemporal: TemporalMemorySynthesis = {
+    ...compatibilitySynthesis!.temporalSynthesis,
+    currentState: [],
+    historicalContext: [],
+    contradictionNotes: ["I can't safely tell which Owen this refers to yet."],
+    answerMode: "quarantined_identity",
+    laneMetadata: compatibilitySynthesis!.temporalSynthesis.laneMetadata.map((lane) => ({
+      ...lane,
+      answerMode: "quarantined_identity",
+      dominantLane: "quarantined_identity",
+      supportingLanes: []
+    }))
+  };
+  const queryContinuityEpisodes = buildEpisodeQuery(async () => [
+    {
+      episodeId: supportingEpisode.episodeId,
+      title: supportingEpisode.title,
+      summary: supportingEpisode.summary,
+      status: supportingEpisode.status,
+      lastMentionedAt: supportingEpisode.lastMentionedAt,
+      entityRefs: supportingEpisode.entityRefs,
+      entityLinks: supportingEpisode.entityLinks,
+      openLoopLinks: supportingEpisode.openLoopLinks
+    }
+  ]);
+  const queryContinuityFacts = async () =>
+    Object.assign(
+      [
+        {
+          factId: supportingFact.factId,
+          key: supportingFact.key,
+          value: supportingFact.value,
+          status: supportingFact.status,
+          observedAt: supportingFact.observedAt,
+          lastUpdatedAt: supportingFact.lastUpdatedAt,
+          confidence: supportingFact.confidence
+        }
+      ],
+      {
+        semanticMode: "relationship_inventory" as const,
+        relevanceScope: "conversation_local" as const,
+        scopedThreadKeys: ["thread_owen"],
+        temporalSynthesis: quarantinedTemporal,
+        laneBoundaries: compatibilitySynthesis?.laneBoundaries ?? []
+      }
+    );
+  const requestTelemetry = createProfileMemoryRequestTelemetry();
+
+  const block = await buildContextualRecallBlock(
+    session,
+    "When Owen came up again, it made me realize I still do not know which Owen that older unresolved thread was about.",
+    queryContinuityEpisodes,
+    queryContinuityFacts,
+    null,
+    undefined,
+    undefined,
+    undefined,
+    requestTelemetry
+  );
+
+  assert.ok(block);
+  assert.match(block ?? "", /Shadow parity guard:/);
+  assert.match(block ?? "", /answer mode/i);
+  assert.match(block ?? "", /Contradiction Notes: I can't safely tell which Owen this refers to yet\./i);
+  assert.match(block ?? "", /Current State: none/i);
+  assert.doesNotMatch(block ?? "", /Lantern Studio/i);
+  assert.equal(requestTelemetry.synthesisOperationCount, 1);
+  assert.equal(requestTelemetry.renderOperationCount, 1);
 });
 
 test("resolveContextualRecallCandidate uses entity-reference interpretation to scope ambiguous recall to the selected entity", async () => {

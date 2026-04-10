@@ -37,6 +37,9 @@ state-driven retry and verification updates used during `/auto`.
   but the runtime still emitted structured `MOVED_TO_DEST`, `DEST_CONTENTS`,
   `MOVED_TARGETS`, `ROOT_REMAINING_MATCHES`, or related verification markers
 - label-style opening cleanup for model-authored replies
+- ordinary-chat memory-answer normalization so internal split-view labels like `Current State`,
+  `Historical Context`, `Contradiction Notes`, or `Supporting Evidence` do not leak onto the final
+  user-facing chat surface
 - blocked and no-op explanations
 - trust-safe respond rendering
 - debug/diagnostic mission summaries
@@ -50,6 +53,8 @@ state-driven retry and verification updates used during `/auto`.
   enabled.
 - User-facing replies should strip robotic label-style openings like `AI assistant response:` even
   if the model emits them.
+- User-facing ordinary chat should flatten internal memory-panel labels back into natural prose
+  instead of showing raw split-view headings or diagnostic phrases directly to the user.
 - Folder-organization replies must not claim success unless the destination listing proves the move
   actually landed there, or the governed move step emitted bounded move-proof output that names what
   moved and what remained.

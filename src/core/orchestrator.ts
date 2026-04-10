@@ -43,10 +43,12 @@ import {
   ProfileMemoryStore
 } from "./profileMemoryStore";
 import type { ProfileMemoryIngestRequest } from "./profileMemoryRuntime/contracts";
+import type { ProfileEpisodeContinuityQueryRequest } from "./profileMemoryRuntime/profileMemoryEpisodeQueries";
 import {
   buildProfileMemorySourceTaskIdFromProvenance,
   normalizeProfileMemoryIngestRequest
 } from "./profileMemoryRuntime/profileMemoryIngestProvenance";
+import type { ProfileFactContinuityQueryRequest } from "./profileMemoryRuntime/profileMemoryQueryContracts";
 import { AppendRuntimeTraceEventInput, RuntimeTraceLogger } from "./runtimeTraceLogger";
 import { TaskRunner } from "./taskRunner";
 import { Stage686RuntimeActionEngine } from "./stage6_86/runtimeActions";
@@ -254,14 +256,16 @@ export class BrainOrchestrator {
     graph: EntityGraphV1,
     stack: ConversationStackV1,
     entityHints: readonly string[],
-    maxEpisodes = 3
+    maxEpisodes = 3,
+    requestOptions: Omit<ProfileEpisodeContinuityQueryRequest, "entityHints" | "maxEpisodes"> = {}
   ) {
     return queryOrchestratorContinuityEpisodes(
       { profileMemoryStore: this.profileMemoryStore },
       graph,
       stack,
       entityHints,
-      maxEpisodes
+      maxEpisodes,
+      requestOptions
     );
   }
 
@@ -278,14 +282,16 @@ export class BrainOrchestrator {
     graph: EntityGraphV1,
     stack: ConversationStackV1,
     entityHints: readonly string[],
-    maxFacts = 3
+    maxFacts = 3,
+    requestOptions: Omit<ProfileFactContinuityQueryRequest, "entityHints" | "maxFacts"> = {}
   ) {
     return queryOrchestratorContinuityFacts(
       { profileMemoryStore: this.profileMemoryStore },
       graph,
       stack,
       entityHints,
-      maxFacts
+      maxFacts,
+      requestOptions
     );
   }
 

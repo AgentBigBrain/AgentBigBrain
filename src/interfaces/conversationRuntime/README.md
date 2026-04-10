@@ -53,6 +53,9 @@ The latest slices moved queue/ack, worker-loop, and pulse-state ownership here s
   reuse one shared per-turn continuity surface without inventing a second cache, and now also
   carries additive bounded remembered-fact review and mutation contracts so the stable interface
   seam can define later fact-review surfaces without bypassing brokered memory ownership
+- `continuityContracts.ts` owns the extracted continuity episode/fact query and result contracts so
+  the stable manager contract seam can stay under the module-size gate while adapters, recall, and
+  per-turn read-session helpers keep sharing one canonical continuity shape
 - `memoryReviewContracts.ts` owns the extracted bounded remembered-situation and remembered-fact
   review/mutation contract families reused by manager/runtime/gateway seams so the stable manager
   contract surface can stay under the module-size gate without widening the `/memory` command path
@@ -119,9 +122,12 @@ The latest slices moved queue/ack, worker-loop, and pulse-state ownership here s
 - `chatTurnSignalShapes.ts` owns the bounded token-sequence helpers reused by short-turn analysis
   so direct identity questions, identity meta-questions, and callback/workflow shapes stay
   centralized without rebloating the main signal-analysis entrypoint
-- `chatTurnRelationshipRecall.ts` owns bounded relationship-summary and pronoun-follow-up
-  detection so turns like `re explain these relationships` or `who is he?` stay conversational
-  even when stale workflow continuity is still present on the session
+- `chatTurnRelationshipRecall.ts` owns bounded relationship-summary, event participant-role, and
+  pronoun-follow-up detection so turns like `re explain these relationships`,
+  `who sold Jordan the gray Accord?`, `who is he?`, same-name ambiguity prompts like
+  `what about Jordan?`, or contracted initials-style recall like `who's J.R.?` stay
+  conversational, fail closed with one short ambiguity answer when needed, and do not fall back to
+  stale workflow continuity
 - `chatTurnIdentityEligibility.ts` owns identity-interpretation eligibility and recent-identity
   follow-up preservation so short turns like `No` can stay off stale workflow routing when the
   surrounding conversation is already identity-focused
@@ -136,6 +142,9 @@ The latest slices moved queue/ack, worker-loop, and pulse-state ownership here s
 - `selfIdentityPrompting.ts` owns canonical bounded self-identity recall prompt assembly so direct
   conversation can prefer confirmed profile facts, fall back to typed transport hints, and still
   fail closed for generic handles
+- `selfIdentityPromptingSupport.ts` owns the extracted self-identity recall-context, provider, and
+  parity helpers so the stable prompting seam can stay under the module-size gate without changing
+  direct-chat identity behavior
 - `conversationProfileMemoryWrite.ts` owns the bounded conversational profile-memory write request
   builder so direct chat and self-identity paths share one canonical request shape plus minimum
   stream-local provenance before the write reaches `rememberConversationProfileInput(...)`
@@ -161,6 +170,15 @@ The latest slices moved queue/ack, worker-loop, and pulse-state ownership here s
   context below `conversationExecutionInputPolicy.ts`
 - `contextualRecall.ts` owns canonical in-conversation contextual recall matching for active user
   turns below `conversationExecutionInputPolicy.ts`
+- `relationshipContinuityContext.ts` owns bounded relationship-memory continuity prompt assembly for
+  short ordinary-chat follow-ups and bounded event-memory callbacks that need graph-aware
+  continuity without reviving workflow blocks
+- `contextualRecallContinuitySupport.ts` owns the extracted structured continuity-result narrowing,
+  fact projection, and hint-dedupe helpers reused by bounded contextual recall so the stable
+  contextual-recall entrypoint stays under the module-size gate
+- `contextualRecallShadowParitySupport.ts` owns the extracted shadow-parity label rendering and
+  weak-recall suppression helpers reused by bounded contextual recall so the stable entrypoint can
+  stay under the module-size gate without changing Phase 7 fail-closed behavior
 - `continuityReadSession.ts` owns bounded per-turn continuity query wrappers so self-identity and
   contextual recall can reuse one shared continuity read session when the live gateway path
   provides one, while still failing closed back to the stable fact/episode callbacks when it does
@@ -179,9 +197,11 @@ The latest slices moved queue/ack, worker-loop, and pulse-state ownership here s
 - `contextualRecallRanking.ts` owns canonical prioritization between generic paused-thread recall
   and concrete unresolved-situation recall backed by episodic memory
 - `memoryReviewCommand.ts` owns the bounded private `/memory` review and mutation command surface
-  below `commandDispatch.ts`
-- `memoryReviewRendering.ts` owns the canonical user-facing rendering for remembered-situation
-  review and mutation responses, including explicit resolve, wrong, and forget outcomes
+  below `commandDispatch.ts`, including the additive `/memory fact ...` review, correction, and
+  forget path that stays brokered and private-only
+- `memoryReviewRendering.ts` owns the canonical user-facing rendering for remembered-situation and
+  remembered-fact review/mutation responses, including explicit resolve, wrong, forget, fact
+  correction, and fact forget outcomes
 - `intentModeContracts.ts` owns the canonical front-door intent-mode contracts for natural
   execution, capability discovery, and clarification results
 - `intentModeResolution.ts` owns canonical deterministic intent-mode routing plus the optional
@@ -206,6 +226,9 @@ The latest slices moved queue/ack, worker-loop, and pulse-state ownership here s
   conversation and normal capability checks can stay out of the worker queue, and can now persist
   bounded direct-chat profile updates through the canonical remembered-profile seam before generic
   conversation synthesis runs
+- `conversationRoutingDirectRepliesSupport.ts` owns the extracted direct-chat control-line and
+  reply-format helpers reused by the stable direct-reply seam so Phase 7 ordinary-chat rendering
+  can stay under the module-size gate without changing user-facing behavior
 - `presentationPreferenceResolution.ts` owns canonical user-facing presentation preference families
   such as `keep it open`, `show it later`, and `run it locally`
 - `routingPrecedence.ts` owns the canonical ordering between slash commands, voice `command <name>`
@@ -477,12 +500,21 @@ The latest slices moved queue/ack, worker-loop, and pulse-state ownership here s
 - Direct-conversation reply helpers here must stay bounded to ordinary conversation and capability
   discovery. They may improve natural user-facing phrasing, but they must not silently authorize
   task execution or bypass the governed worker path for real side effects.
+- Ordinary direct-chat memory answers here may consume split-view synthesis internally, but the
+  final user-facing reply must flatten labels such as `Current State`, `Historical Context`,
+  `Contradiction Notes`, or `Supporting Evidence` back into natural prose before delivery.
 - Direct-conversation profile writes here must reuse the canonical remembered-profile seam and one
   shared bounded extraction-backed eligibility posture; they must not grow a second ad hoc
   chat-memory writer or a broad regex routing pack.
 - Transport-identity helpers here must keep trust levels explicit. Provider usernames, display
   names, or first names may inform low-confidence self-identity replies, but they must not be
   silently upgraded into stored profile facts or claimed as confirmed memory.
+- Direct self-identity replies here may emit bounded Phase 7 audit telemetry for identity-safety
+  and self-identity parity checks when an audit store is attached, but they must not create a
+  second long-lived memory log or bypass the append-only audit seam.
+- Direct alias-clarification turns may emit bounded Phase 7 audit telemetry for alias-safety when
+  an audit store is attached, but they must stay append-only, request-scoped, and profile-lane
+  scoped instead of inventing a second entity-alignment log.
 - Direct-conversation intent detection here must stay conservative and user-explicit; it can keep a
   turn off the queue when the user clearly asks for conversation, but it must not swallow genuine
   execution requests just because the wording is friendly.
@@ -530,14 +562,15 @@ The latest slices moved queue/ack, worker-loop, and pulse-state ownership here s
   helpers here should stay focused on recall-specific cue assembly and suppression policy.
 - Future proactive utility scoring should live in a bounded dedicated runtime rather than being
   smuggled into contextual recall or generic pulse heuristics here.
-- Remembered-situation review and mutation commands here must stay private-only, bounded, and
-  brokered; they must not expose raw encrypted-store internals or bypass approval-aware reads.
+- Remembered-situation and remembered-fact review and mutation commands here must stay private-only,
+  bounded, and brokered; they must not expose raw encrypted-store internals or bypass
+  approval-aware reads.
 - Remembered-situation mutation commands here must remain explicit about the action taken
   (`resolved`, `wrong`, `forgotten`) and must not silently rewrite memory.
-- Bounded remembered-fact review or mutation contracts here must stay additive and brokered. They
-  may prepare later private fact-review surfaces, but they must not bypass the orchestrator or
-  memory-broker seams or silently widen the existing `/memory` command surface ahead of an
-  explicit cutover.
+- Bounded remembered-fact review or mutation flows here must stay additive and brokered. The
+  explicit `/memory fact ...` cutover may expose review, correction, and forget affordances, but
+  it must remain private-only, approval-aware, and bounded to current state, historical context,
+  and ambiguity notes rather than raw observation dumps.
 - The conversation front door must have one canonical intent seam. Slash commands, voice
   `command <name>` promotion, active clarification, proposal/review follow-up, and natural
   execution intent should converge through the same precedence model rather than drifting into

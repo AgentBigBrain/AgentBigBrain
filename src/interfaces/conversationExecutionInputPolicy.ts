@@ -2,6 +2,8 @@
  * @fileoverview Builds conversation-aware execution payloads and follow-up envelopes for conversation manager flows.
  */
 
+import type { ProfileMemoryRequestTelemetry } from "../core/profileMemoryRuntime/contracts";
+import { recordProfileMemoryPromptSurfaceMetrics } from "../core/profileMemoryRuntime/profileMemoryRequestTelemetry";
 import type { ConversationSession } from "./sessionStore";
 import type { ConversationIntentSemanticHint } from "./conversationRuntime/intentModeContracts";
 import type { ConversationInboundMediaEnvelope } from "./mediaRuntime/contracts";
@@ -35,11 +37,16 @@ import { buildLocalIntentSessionHints } from "./conversationRuntime/conversation
 import { buildBoundConversationContinuityQueries } from "./conversationRuntime/continuityReadSession";
 import { buildSelfIdentityRecallBlock } from "./conversationRuntime/selfIdentityPrompting";
 import {
+  buildRelationshipContinuityContextBlock,
+  shouldUseRelationshipContinuityContext
+} from "./conversationRuntime/relationshipContinuityContext";
+import {
   analyzeConversationChatTurnSignals,
   isRelationshipConversationRecallTurn
 } from "./conversationRuntime/chatTurnSignals";
 import { buildTurnLocalStatusUpdateInstructionBlock, hasTurnLocalFirstPersonStatusUpdate } from "./conversationRuntime/turnLocalStatusUpdate";
 import type {
+  ConversationContinuityReadSession,
   GetConversationEntityGraph,
   OpenConversationContinuityReadSession,
   QueryConversationContinuityEpisodes,
@@ -585,7 +592,7 @@ function shouldSuppressWorkflowContinuityBlocks(
   if (!workflowContinuityActive) {
     return false;
   }
-  if (isRelationshipConversationRecallTurn(normalizedInput)) {
+  if (shouldUseRelationshipContinuityContext(session, normalizedInput)) {
     return true;
   }
   if (WORKFLOW_CONTINUITY_ROUTING_TYPES.has(routingClassification?.routeType ?? "")) {
@@ -1215,7 +1222,8 @@ export async function buildConversationAwareExecutionInput(
   contextualReferenceInterpretationResolver?: ContextualReferenceInterpretationResolver,
   getEntityGraph?: GetConversationEntityGraph,
   entityReferenceInterpretationResolver?: EntityReferenceInterpretationResolver,
-  openContinuityReadSession?: OpenConversationContinuityReadSession
+  openContinuityReadSession?: OpenConversationContinuityReadSession,
+  requestTelemetry?: ProfileMemoryRequestTelemetry
 ): Promise<string> {
   const runtimeReconciledSession = reconcileConversationExecutionRuntimeSession(
     session,
@@ -1229,15 +1237,30 @@ export async function buildConversationAwareExecutionInput(
     rawUserInput,
     routingClassification
   );
+  let sharedContinuityReadSessionPromise: Promise<ConversationContinuityReadSession | null> | null = null;
+  const resolveTurnContinuityReadSession = openContinuityReadSession
+    ? async () => {
+        sharedContinuityReadSessionPromise ??= openContinuityReadSession().catch(() => null);
+        return sharedContinuityReadSessionPromise;
+      }
+    : undefined;
   const continuityQueries = buildBoundConversationContinuityQueries({
     queryContinuityEpisodes,
     queryContinuityFacts,
-    openContinuityReadSession
+    openContinuityReadSession: resolveTurnContinuityReadSession,
+    requestTelemetry
   });
   const selfIdentityRecallBlock = await buildSelfIdentityRecallBlock(
     runtimeReconciledSession,
     rawUserInput,
-    continuityQueries.queryContinuityFacts
+    continuityQueries.queryContinuityFacts,
+    requestTelemetry
+  );
+  const relationshipContinuityBlock = await buildRelationshipContinuityContextBlock(
+    runtimeReconciledSession,
+    rawUserInput,
+    continuityQueries.queryContinuityFacts,
+    requestTelemetry
   );
   const statusUpdateBlock = buildTurnLocalStatusUpdateBlock(rawUserInput);
   const contextualRecallBlock = await buildContextualRecallBlock(
@@ -1248,7 +1271,8 @@ export async function buildConversationAwareExecutionInput(
     media,
     contextualReferenceInterpretationResolver,
     getEntityGraph,
-    entityReferenceInterpretationResolver
+    entityReferenceInterpretationResolver,
+    requestTelemetry
   );
   const mediaContextBlock = buildConversationMediaContextBlock(media);
   const desktopOrganizationContextBlock = buildDesktopOrganizationExecutionContextBlock(
@@ -1325,9 +1349,20 @@ export async function buildConversationAwareExecutionInput(
   const routingHint = routingClassification
     ? buildRoutingExecutionHintV1(routingClassification)
     : null;
+  const memoryPromptSurfaceCount = [
+    selfIdentityRecallBlock,
+    relationshipContinuityBlock,
+    contextualRecallBlock
+  ].filter((block): block is string => typeof block === "string" && block.length > 0).length;
+  recordProfileMemoryPromptSurfaceMetrics(
+    requestTelemetry,
+    memoryPromptSurfaceCount > 0 ? 1 : 0,
+    memoryPromptSurfaceCount
+  );
   if (
     recentTurns.length === 0 &&
     !selfIdentityRecallBlock &&
+    !relationshipContinuityBlock &&
     !statusUpdateBlock &&
     !contextualRecallBlock &&
     !mediaContextBlock &&
@@ -1374,6 +1409,9 @@ export async function buildConversationAwareExecutionInput(
   }
   if (selfIdentityRecallBlock) {
     lines.push("", selfIdentityRecallBlock);
+  }
+  if (relationshipContinuityBlock) {
+    lines.push("", relationshipContinuityBlock);
   }
   if (contextualRecallBlock) {
     lines.push("", contextualRecallBlock);

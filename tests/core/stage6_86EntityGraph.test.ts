@@ -13,6 +13,7 @@ import {
   createEmptyEntityGraphV1,
   extractEntityCandidates,
   getEntityLookupTerms,
+  queryEntityGraphNodesByCanonicalOrAlias,
   promoteRelationEdgeWithConfirmation
 } from "../../src/core/stage6_86EntityGraph";
 
@@ -353,6 +354,52 @@ function buildsDeterministicEntityLookupTerms(): void {
   assert.deepEqual(terms, ["bena", "owen", "william"]);
 }
 
+/**
+ * Implements `queriesEntityGraphNodesByCanonicalOrAliasWithExactNormalizedMatches` behavior within
+ * module scope. Interacts with local collaborators through imported modules and typed
+ * inputs/outputs.
+ */
+function queriesEntityGraphNodesByCanonicalOrAliasWithExactNormalizedMatches(): void {
+  const observedAt = "2026-03-03T00:00:00.000Z";
+  const graph: EntityGraphV1 = {
+    schemaVersion: "v1",
+    updatedAt: observedAt,
+    entities: [
+      {
+        entityKey: buildEntityKey("William Bena", "person", null),
+        canonicalName: "William Bena",
+        entityType: "person",
+        disambiguator: null,
+        aliases: ["Owen", "Owen Bena"],
+        firstSeenAt: observedAt,
+        lastSeenAt: observedAt,
+        salience: 1,
+        evidenceRefs: ["trace:owen"]
+      },
+      {
+        entityKey: buildEntityKey("Owen Labs", "org", null),
+        canonicalName: "Owen Labs",
+        entityType: "org",
+        disambiguator: null,
+        aliases: ["Lantern"],
+        firstSeenAt: observedAt,
+        lastSeenAt: observedAt,
+        salience: 1,
+        evidenceRefs: ["trace:owen_labs"]
+      }
+    ],
+    edges: []
+  };
+
+  const aliasMatches = queryEntityGraphNodesByCanonicalOrAlias(graph, " Owen ");
+  const canonicalMatches = queryEntityGraphNodesByCanonicalOrAlias(graph, "owen labs");
+  const partialMatches = queryEntityGraphNodesByCanonicalOrAlias(graph, "ow");
+
+  assert.deepEqual(aliasMatches.map((entity) => entity.canonicalName), ["William Bena"]);
+  assert.deepEqual(canonicalMatches.map((entity) => entity.canonicalName), ["Owen Labs"]);
+  assert.deepEqual(partialMatches, []);
+}
+
 test(
   "stage 6.86 entity graph extracts deterministic entity candidates from recurring conversation text",
   extractsDeterministicEntityCandidates
@@ -384,4 +431,8 @@ test(
 test(
   "stage 6.86 entity graph builds deterministic lookup terms for continuity linkage",
   buildsDeterministicEntityLookupTerms
+);
+test(
+  "stage 6.86 entity graph resolves exact canonical or alias matches without partial-name collapse",
+  queriesEntityGraphNodesByCanonicalOrAliasWithExactNormalizedMatches
 );

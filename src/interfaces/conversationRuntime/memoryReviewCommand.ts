@@ -5,18 +5,34 @@
 import { normalizeWhitespace, splitCommand } from "../conversationManagerHelpers";
 import type { ConversationSession } from "../sessionStore";
 import type { ConversationIngressDependencies } from "./contracts";
-import type { ConversationInboundMessage } from "./managerContracts";
+import type {
+  ConversationInboundMessage,
+  ConversationMemoryMutationRequest
+} from "./managerContracts";
 import {
+  renderMemoryReviewFactList,
+  renderMemoryReviewFactMutationResult,
   renderMemoryReviewHelpText,
   renderMemoryReviewList,
   renderMemoryReviewMutationResult
 } from "./memoryReviewRendering";
 
-type MemoryReviewMutationAction = "resolve" | "wrong" | "forget";
+type MemoryReviewEpisodeMutationAction = "resolve" | "wrong" | "forget";
+type MemoryReviewFactMutationAction = "correct" | "forget";
+type MemoryReviewAction =
+  | "list"
+  | "help"
+  | MemoryReviewEpisodeMutationAction
+  | "fact_list"
+  | "fact_correct"
+  | "fact_forget";
 
 interface ParsedMemoryReviewAction {
-  action: "list" | "help" | MemoryReviewMutationAction;
+  action: MemoryReviewAction;
   episodeId: string | null;
+  factId: string | null;
+  query: string;
+  replacementValue: string;
   note: string;
 }
 
@@ -57,44 +73,105 @@ export async function handleMemoryReviewCommand(
     return renderMemoryReviewList(episodes);
   }
 
-  if (!parsed.episodeId) {
-    return renderMemoryReviewHelpText();
+  if (parsed.action === "fact_list") {
+    if (!parsed.query) {
+      return renderMemoryReviewHelpText();
+    }
+    if (!deps.reviewConversationMemoryFacts) {
+      return "Memory review is unavailable in this runtime.";
+    }
+    const facts = await deps.reviewConversationMemoryFacts({
+      reviewTaskId: buildMemoryReviewTaskId("fact_review", message.receivedAt),
+      query: parsed.query,
+      nowIso: message.receivedAt,
+      maxFacts: 5
+    });
+    return renderMemoryReviewFactList(facts);
   }
 
-  const mutationRequest = {
-    episodeId: parsed.episodeId,
-    note: parsed.note || undefined,
-    nowIso: message.receivedAt,
-    sourceTaskId: buildMemoryReviewTaskId(parsed.action, message.receivedAt),
-    sourceText: message.text
-  };
-
   if (parsed.action === "resolve") {
+    if (!parsed.episodeId) {
+      return renderMemoryReviewHelpText();
+    }
     if (!deps.resolveConversationMemoryEpisode) {
       return "Memory review is unavailable in this runtime.";
     }
+    const mutationRequest: ConversationMemoryMutationRequest = {
+      episodeId: parsed.episodeId,
+      note: parsed.note || undefined,
+      nowIso: message.receivedAt,
+      sourceTaskId: buildMemoryReviewTaskId(parsed.action, message.receivedAt),
+      sourceText: message.text
+    };
     const episode = await deps.resolveConversationMemoryEpisode(mutationRequest);
     return renderMemoryReviewMutationResult("resolve", episode);
   }
 
   if (parsed.action === "wrong") {
+    if (!parsed.episodeId) {
+      return renderMemoryReviewHelpText();
+    }
     if (!deps.markConversationMemoryEpisodeWrong) {
       return "Memory review is unavailable in this runtime.";
     }
+    const mutationRequest: ConversationMemoryMutationRequest = {
+      episodeId: parsed.episodeId,
+      note: parsed.note || undefined,
+      nowIso: message.receivedAt,
+      sourceTaskId: buildMemoryReviewTaskId(parsed.action, message.receivedAt),
+      sourceText: message.text
+    };
     const episode = await deps.markConversationMemoryEpisodeWrong(mutationRequest);
     return renderMemoryReviewMutationResult("wrong", episode);
   }
 
-  if (!deps.forgetConversationMemoryEpisode) {
+  if (parsed.action === "forget") {
+    if (!parsed.episodeId) {
+      return renderMemoryReviewHelpText();
+    }
+    if (!deps.forgetConversationMemoryEpisode) {
+      return "Memory review is unavailable in this runtime.";
+    }
+    const episode = await deps.forgetConversationMemoryEpisode({
+      episodeId: parsed.episodeId,
+      nowIso: message.receivedAt,
+      sourceTaskId: buildMemoryReviewTaskId(parsed.action, message.receivedAt),
+      sourceText: message.text
+    });
+    return renderMemoryReviewMutationResult("forget", episode);
+  }
+
+  if (!parsed.factId) {
+    return renderMemoryReviewHelpText();
+  }
+  if (parsed.action === "fact_correct") {
+    if (!parsed.replacementValue) {
+      return renderMemoryReviewHelpText();
+    }
+    if (!deps.correctConversationMemoryFact) {
+      return "Memory review is unavailable in this runtime.";
+    }
+    const fact = await deps.correctConversationMemoryFact({
+      factId: parsed.factId,
+      replacementValue: parsed.replacementValue,
+      note: parsed.note || undefined,
+      nowIso: message.receivedAt,
+      sourceTaskId: buildMemoryReviewTaskId("fact_correct", message.receivedAt),
+      sourceText: message.text
+    });
+    return renderMemoryReviewFactMutationResult("correct", fact);
+  }
+
+  if (!deps.forgetConversationMemoryFact) {
     return "Memory review is unavailable in this runtime.";
   }
-  const episode = await deps.forgetConversationMemoryEpisode({
-    episodeId: mutationRequest.episodeId,
-    nowIso: mutationRequest.nowIso,
-    sourceTaskId: mutationRequest.sourceTaskId,
-    sourceText: mutationRequest.sourceText
+  const fact = await deps.forgetConversationMemoryFact({
+    factId: parsed.factId,
+    nowIso: message.receivedAt,
+    sourceTaskId: buildMemoryReviewTaskId("fact_forget", message.receivedAt),
+    sourceText: message.text
   });
-  return renderMemoryReviewMutationResult("forget", episode);
+  return renderMemoryReviewFactMutationResult("forget", fact);
 }
 
 /**
@@ -109,6 +186,9 @@ function parseMemoryReviewAction(argument: string): ParsedMemoryReviewAction {
     return {
       action: "list",
       episodeId: null,
+      factId: null,
+      query: "",
+      replacementValue: "",
       note: ""
     };
   }
@@ -118,6 +198,9 @@ function parseMemoryReviewAction(argument: string): ParsedMemoryReviewAction {
     return {
       action: "help",
       episodeId: null,
+      factId: null,
+      query: "",
+      replacementValue: "",
       note: ""
     };
   }
@@ -125,14 +208,23 @@ function parseMemoryReviewAction(argument: string): ParsedMemoryReviewAction {
     return {
       action: "list",
       episodeId: null,
+      factId: null,
+      query: "",
+      replacementValue: "",
       note: ""
     };
+  }
+  if (command === "fact" || command === "facts") {
+    return parseFactReviewAction(remainder);
   }
   if (command === "resolve" || command === "wrong" || command === "forget") {
     const parsedTarget = parseEpisodeTarget(remainder);
     return {
       action: command,
       episodeId: parsedTarget.episodeId,
+      factId: null,
+      query: "",
+      replacementValue: "",
       note: parsedTarget.note
     };
   }
@@ -140,6 +232,72 @@ function parseMemoryReviewAction(argument: string): ParsedMemoryReviewAction {
   return {
     action: "help",
     episodeId: null,
+    factId: null,
+    query: "",
+    replacementValue: "",
+    note: ""
+  };
+}
+
+/**
+ * Parses `/memory fact ...` subcommands into bounded deterministic fact review or mutation shapes.
+ *
+ * @param argument - Raw fact-command argument text.
+ * @returns Parsed fact review action.
+ */
+function parseFactReviewAction(argument: string): ParsedMemoryReviewAction {
+  const normalized = normalizeWhitespace(argument);
+  if (!normalized) {
+    return {
+      action: "help",
+      episodeId: null,
+      factId: null,
+      query: "",
+      replacementValue: "",
+      note: ""
+    };
+  }
+
+  const { command, argument: remainder } = splitCommand(normalized);
+  if (command === "list") {
+    return {
+      action: "fact_list",
+      episodeId: null,
+      factId: null,
+      query: normalizeWhitespace(remainder),
+      replacementValue: "",
+      note: ""
+    };
+  }
+  if (command === "correct") {
+    const parsedTarget = parseFactCorrectionTarget(remainder);
+    return {
+      action: "fact_correct",
+      episodeId: null,
+      factId: parsedTarget.factId,
+      query: "",
+      replacementValue: parsedTarget.replacementValue,
+      note: parsedTarget.note
+    };
+  }
+  if (command === "forget") {
+    const parsedTarget = parseFactTarget(remainder);
+    return {
+      action: "fact_forget",
+      episodeId: null,
+      factId: parsedTarget.factId,
+      query: "",
+      replacementValue: "",
+      note: ""
+    };
+  }
+
+  return {
+    action: "fact_list",
+    episodeId: null,
+    factId: null,
+    query: normalized,
+    replacementValue: "",
     note: ""
   };
 }
@@ -172,6 +330,55 @@ function parseEpisodeTarget(
   return {
     episodeId: normalized.slice(0, firstSpace),
     note: normalized.slice(firstSpace + 1).trim()
+  };
+}
+
+/**
+ * Parses one remembered-fact target id from a mutation command tail.
+ *
+ * @param value - Raw fact mutation argument text after the action name.
+ * @returns Parsed target fact id.
+ */
+function parseFactTarget(
+  value: string
+): { factId: string | null } {
+  const normalized = normalizeWhitespace(value);
+  return {
+    factId: normalized || null
+  };
+}
+
+/**
+ * Parses one remembered-fact correction payload from a mutation command tail.
+ *
+ * @param value - Raw fact correction argument text after the action name.
+ * @returns Parsed target fact id, replacement value, and optional note.
+ */
+function parseFactCorrectionTarget(
+  value: string
+): { factId: string | null; replacementValue: string; note: string } {
+  const normalized = normalizeWhitespace(value);
+  if (!normalized) {
+    return {
+      factId: null,
+      replacementValue: "",
+      note: ""
+    };
+  }
+
+  const firstSpace = normalized.indexOf(" ");
+  if (firstSpace < 0) {
+    return {
+      factId: normalized,
+      replacementValue: "",
+      note: ""
+    };
+  }
+
+  return {
+    factId: normalized.slice(0, firstSpace),
+    replacementValue: normalized.slice(firstSpace + 1).trim(),
+    note: ""
   };
 }
 

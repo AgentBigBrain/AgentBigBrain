@@ -18,6 +18,7 @@ export type MemoryAccessDomainLane =
   | "unknown";
 
 export type MemoryAccessAuditEventType = "retrieval" | "PROBING_DETECTED";
+export type MemoryAccessCutoverGateDecision = "allow" | "block";
 
 export interface MemoryAccessAuditEvent {
   id: string;
@@ -26,6 +27,19 @@ export interface MemoryAccessAuditEvent {
   taskId: string;
   queryHash: string;
   storeLoadCount?: number;
+  ingestOperationCount?: number;
+  retrievalOperationCount?: number;
+  synthesisOperationCount?: number;
+  renderOperationCount?: number;
+  promptMemoryOwnerCount?: number;
+  promptMemorySurfaceCount?: number;
+  mixedMemoryOwnerDecisionCount?: number;
+  aliasSafetyDecisionCount?: number;
+  identitySafetyDecisionCount?: number;
+  selfIdentityParityCheckCount?: number;
+  selfIdentityParityMismatchCount?: number;
+  promptCutoverGateDecision?: MemoryAccessCutoverGateDecision;
+  promptCutoverGateReasons?: string[];
   retrievedCount: number;
   retrievedEpisodeCount: number;
   redactedCount: number;
@@ -44,6 +58,19 @@ interface AppendMemoryAccessAuditInput {
   taskId: string;
   query: string;
   storeLoadCount?: number;
+  ingestOperationCount?: number;
+  retrievalOperationCount?: number;
+  synthesisOperationCount?: number;
+  renderOperationCount?: number;
+  promptMemoryOwnerCount?: number;
+  promptMemorySurfaceCount?: number;
+  mixedMemoryOwnerDecisionCount?: number;
+  aliasSafetyDecisionCount?: number;
+  identitySafetyDecisionCount?: number;
+  selfIdentityParityCheckCount?: number;
+  selfIdentityParityMismatchCount?: number;
+  promptCutoverGateDecision?: MemoryAccessCutoverGateDecision;
+  promptCutoverGateReasons?: readonly string[];
   retrievedCount: number;
   retrievedEpisodeCount?: number;
   redactedCount: number;
@@ -91,6 +118,22 @@ function isMemoryAccessDomainLane(value: unknown): value is MemoryAccessDomainLa
  */
 function isMemoryAccessAuditEventType(value: unknown): value is MemoryAccessAuditEventType {
   return value === "retrieval" || value === "PROBING_DETECTED";
+}
+
+/**
+ * Evaluates cutover gate decision and returns a deterministic policy signal.
+ *
+ * **Why it exists:**
+ * Keeps the cutover gate decision contract explicit and testable before persistence.
+ *
+ * **What it talks to:**
+ * - Uses local constants/helpers within this module.
+ *
+ * @param value - Primary value processed by this function.
+ * @returns Computed `value is MemoryAccessCutoverGateDecision` result.
+ */
+function isMemoryAccessCutoverGateDecision(value: unknown): value is MemoryAccessCutoverGateDecision {
+  return value === "allow" || value === "block";
 }
 
 /**
@@ -155,6 +198,23 @@ function normalizeProbeSignals(value: unknown): string[] {
 }
 
 /**
+ * Converts values into normalized cutover-gate reasons form for consistent downstream use.
+ *
+ * **Why it exists:**
+ * Keeps conversion rules for cutover-gate reasons deterministic so callers do not duplicate mapping
+ * logic.
+ *
+ * **What it talks to:**
+ * - Uses `normalizeProbeSignals(...)` within this module for bounded string normalization.
+ *
+ * @param value - Primary value processed by this function.
+ * @returns Ordered collection produced by this step.
+ */
+function normalizeCutoverGateReasons(value: unknown): string[] {
+  return normalizeProbeSignals(value);
+}
+
+/**
  * Computes a deterministic fingerprint for query.
  *
  * **Why it exists:**
@@ -203,6 +263,7 @@ function coerceMemoryAccessAuditDocument(input: unknown): MemoryAccessAuditDocum
         ? raw.eventType
         : "retrieval";
       const probeSignals = normalizeProbeSignals(raw.probeSignals);
+      const cutoverGateReasons = normalizeCutoverGateReasons(raw.promptCutoverGateReasons);
       const probeWindowSize = toNonNegativeInteger(raw.probeWindowSize);
       const probeMatchCount = toNonNegativeInteger(raw.probeMatchCount);
       const probeMatchRatio = toUnitIntervalNumber(raw.probeMatchRatio);
@@ -220,6 +281,21 @@ function coerceMemoryAccessAuditDocument(input: unknown): MemoryAccessAuditDocum
             ? raw.queryHash
             : hashQuery(""),
         storeLoadCount: toNonNegativeInteger(raw.storeLoadCount),
+        ingestOperationCount: toNonNegativeInteger(raw.ingestOperationCount),
+        retrievalOperationCount: toNonNegativeInteger(raw.retrievalOperationCount),
+        synthesisOperationCount: toNonNegativeInteger(raw.synthesisOperationCount),
+        renderOperationCount: toNonNegativeInteger(raw.renderOperationCount),
+        promptMemoryOwnerCount: toNonNegativeInteger(raw.promptMemoryOwnerCount),
+        promptMemorySurfaceCount: toNonNegativeInteger(raw.promptMemorySurfaceCount),
+        mixedMemoryOwnerDecisionCount: toNonNegativeInteger(raw.mixedMemoryOwnerDecisionCount),
+        aliasSafetyDecisionCount: toNonNegativeInteger(raw.aliasSafetyDecisionCount),
+        identitySafetyDecisionCount: toNonNegativeInteger(raw.identitySafetyDecisionCount),
+        selfIdentityParityCheckCount: toNonNegativeInteger(raw.selfIdentityParityCheckCount),
+        selfIdentityParityMismatchCount: toNonNegativeInteger(raw.selfIdentityParityMismatchCount),
+        promptCutoverGateDecision: isMemoryAccessCutoverGateDecision(raw.promptCutoverGateDecision)
+          ? raw.promptCutoverGateDecision
+          : "allow",
+        promptCutoverGateReasons: cutoverGateReasons.length > 0 ? cutoverGateReasons : undefined,
         retrievedCount: toNonNegativeInteger(raw.retrievedCount),
         retrievedEpisodeCount: toNonNegativeInteger(raw.retrievedEpisodeCount),
         redactedCount: toNonNegativeInteger(raw.redactedCount),
@@ -289,16 +365,32 @@ export class MemoryAccessAuditStore {
         ? input.eventType
         : "retrieval";
       const probeSignals = normalizeProbeSignals(input.probeSignals);
+      const cutoverGateReasons = normalizeCutoverGateReasons(input.promptCutoverGateReasons);
       const event: MemoryAccessAuditEvent = {
         id: makeId("memory_access"),
         recordedAt: new Date().toISOString(),
         eventType,
-      taskId: input.taskId,
-      queryHash: hashQuery(input.query),
-      storeLoadCount: toNonNegativeInteger(input.storeLoadCount),
-      retrievedCount: toNonNegativeInteger(input.retrievedCount),
-      retrievedEpisodeCount: toNonNegativeInteger(input.retrievedEpisodeCount),
-      redactedCount: toNonNegativeInteger(input.redactedCount),
+        taskId: input.taskId,
+        queryHash: hashQuery(input.query),
+        storeLoadCount: toNonNegativeInteger(input.storeLoadCount),
+        ingestOperationCount: toNonNegativeInteger(input.ingestOperationCount),
+        retrievalOperationCount: toNonNegativeInteger(input.retrievalOperationCount),
+        synthesisOperationCount: toNonNegativeInteger(input.synthesisOperationCount),
+        renderOperationCount: toNonNegativeInteger(input.renderOperationCount),
+        promptMemoryOwnerCount: toNonNegativeInteger(input.promptMemoryOwnerCount),
+        promptMemorySurfaceCount: toNonNegativeInteger(input.promptMemorySurfaceCount),
+        mixedMemoryOwnerDecisionCount: toNonNegativeInteger(input.mixedMemoryOwnerDecisionCount),
+        aliasSafetyDecisionCount: toNonNegativeInteger(input.aliasSafetyDecisionCount),
+        identitySafetyDecisionCount: toNonNegativeInteger(input.identitySafetyDecisionCount),
+        selfIdentityParityCheckCount: toNonNegativeInteger(input.selfIdentityParityCheckCount),
+        selfIdentityParityMismatchCount: toNonNegativeInteger(input.selfIdentityParityMismatchCount),
+        promptCutoverGateDecision: isMemoryAccessCutoverGateDecision(input.promptCutoverGateDecision)
+          ? input.promptCutoverGateDecision
+          : "allow",
+        promptCutoverGateReasons: cutoverGateReasons.length > 0 ? cutoverGateReasons : undefined,
+        retrievedCount: toNonNegativeInteger(input.retrievedCount),
+        retrievedEpisodeCount: toNonNegativeInteger(input.retrievedEpisodeCount),
+        redactedCount: toNonNegativeInteger(input.redactedCount),
         domainLanes: normalizedLanes.length > 0 ? normalizedLanes : ["unknown"],
         probeSignals: probeSignals.length > 0 ? probeSignals : undefined,
         probeWindowSize:

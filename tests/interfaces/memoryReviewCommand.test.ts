@@ -9,6 +9,7 @@ import { buildSessionSeed } from "../../src/interfaces/conversationManagerHelper
 import type { ConversationIngressDependencies } from "../../src/interfaces/conversationRuntime/contracts";
 import { handleMemoryReviewCommand } from "../../src/interfaces/conversationRuntime/memoryReviewCommand";
 import type {
+  ConversationMemoryFactReviewResult,
   ConversationInboundMessage,
   ConversationMemoryReviewRequest,
   ConversationMemoryReviewRecord
@@ -90,6 +91,49 @@ function buildEpisode(
   };
 }
 
+function buildFactReviewResult(): ConversationMemoryFactReviewResult {
+  return Object.assign(
+    [
+      {
+        factId: "fact_preferred_name",
+        key: "identity.preferred_name",
+        value: "Avery",
+        status: "confirmed",
+        confidence: 0.98,
+        sensitive: false,
+        observedAt: "2026-04-03T18:20:00.000Z",
+        lastUpdatedAt: "2026-04-03T18:20:00.000Z",
+        decisionRecord: {
+          family: "identity.preferred_name",
+          evidenceClass: "user_explicit_fact",
+          governanceAction: "allow_current_state",
+          governanceReason: "explicit_user_fact",
+          disposition: "selected_current_state",
+          answerModeFallback: "report_current_state",
+          candidateRefs: ["fact_preferred_name"],
+          evidenceRefs: ["fact_preferred_name"]
+        }
+      }
+    ],
+    {
+      hiddenDecisionRecords: [
+        {
+          family: "contact.entity_hint",
+          evidenceClass: "user_hint_or_context",
+          governanceAction: "support_only_legacy",
+          governanceReason: "contact_entity_hint_requires_corroboration",
+          disposition: "needs_corroboration",
+          answerModeFallback: "report_insufficient_evidence",
+          candidateRefs: ["candidate_hint_1"],
+          evidenceRefs: ["hint_1"]
+        }
+      ],
+      asOfObservedTime: "2026-04-03T18:20:00.000Z",
+      asOfValidTime: undefined
+    }
+  ) as ConversationMemoryFactReviewResult;
+}
+
 test("handleMemoryReviewCommand blocks non-private usage", async () => {
   const reply = await handleMemoryReviewCommand(
     buildSession(),
@@ -136,6 +180,7 @@ test("handleMemoryReviewCommand renders help and usage deterministically", async
 
   assert.match(reply, /^Usage: \/memory \[list\]/);
   assert.match(reply, /private-only/i);
+  assert.match(reply, /\/memory fact <query>/);
 });
 
 test("handleMemoryReviewCommand routes resolve/wrong/forget mutations", async () => {
@@ -192,6 +237,85 @@ test("handleMemoryReviewCommand routes resolve/wrong/forget mutations", async ()
   assert.equal(forgetReply, 'Forgot "Owen fell down".');
 });
 
+test("handleMemoryReviewCommand renders bounded remembered facts through the private command path", async () => {
+  const reply = await handleMemoryReviewCommand(
+    buildSession(),
+    buildMessage("/memory fact Avery"),
+    buildDependencies({
+      reviewConversationMemoryFacts: async (request) => {
+        assert.equal(request.reviewTaskId, "memory_fact_review_2026_03_08T12_00_05_000Z");
+        assert.equal(request.query, "Avery");
+        assert.equal(request.maxFacts, 5);
+        return buildFactReviewResult();
+      }
+    }),
+    "fact Avery"
+  );
+
+  assert.match(reply, /^Remembered facts:/);
+  assert.match(reply, /Current State:/);
+  assert.match(reply, /identity\.preferred_name: Avery \(fact_preferred_name\)/);
+  assert.match(reply, /Historical Context:\n- none/);
+  assert.match(reply, /Ambiguity Notes:/);
+  assert.match(reply, /held back until it has stronger corroboration/i);
+  assert.match(reply, /\/memory fact correct <fact-id> <replacement value>/);
+  assert.doesNotMatch(reply, /candidate_hint_1/);
+  assert.doesNotMatch(reply, /hint_1/);
+});
+
+test("handleMemoryReviewCommand routes fact correction and forget mutations", async () => {
+  const calls: string[] = [];
+
+  const correctReply = await handleMemoryReviewCommand(
+    buildSession(),
+    buildMessage("/memory fact correct fact_preferred_name Ava"),
+    buildDependencies({
+      correctConversationMemoryFact: async (request) => {
+        calls.push(`correct:${request.factId}:${request.replacementValue}`);
+        return {
+          factId: request.factId,
+          key: "identity.preferred_name",
+          value: request.replacementValue,
+          status: "confirmed",
+          confidence: 0.98,
+          sensitive: false,
+          observedAt: "2026-04-03T18:20:00.000Z",
+          lastUpdatedAt: request.nowIso
+        };
+      }
+    }),
+    "fact correct fact_preferred_name Ava"
+  );
+
+  const forgetReply = await handleMemoryReviewCommand(
+    buildSession(),
+    buildMessage("/memory fact forget fact_preferred_name"),
+    buildDependencies({
+      forgetConversationMemoryFact: async (request) => {
+        calls.push(`forget:${request.factId}`);
+        return {
+          factId: request.factId,
+          key: "identity.preferred_name",
+          value: "[redacted]",
+          status: "superseded",
+          confidence: 0.98,
+          sensitive: false,
+          observedAt: "2026-04-03T18:20:00.000Z",
+          lastUpdatedAt: request.nowIso
+        };
+      }
+    }),
+    "fact forget fact_preferred_name"
+  );
+
+  assert.deepEqual(calls, [
+    "correct:fact_preferred_name:Ava",
+    "forget:fact_preferred_name"
+  ]);
+  assert.equal(correctReply, 'Updated remembered fact "identity.preferred_name" to "Ava".');
+  assert.equal(forgetReply, 'Forgot remembered fact "identity.preferred_name".');
+});
+
 test("handleMemoryReviewCommand fails closed when runtime review support is unavailable", async () => {
   const listReply = await handleMemoryReviewCommand(
     buildSession(),
@@ -205,7 +329,14 @@ test("handleMemoryReviewCommand fails closed when runtime review support is unav
     buildDependencies(),
     "resolve episode_owen_fall"
   );
+  const factReply = await handleMemoryReviewCommand(
+    buildSession(),
+    buildMessage("/memory fact Avery"),
+    buildDependencies(),
+    "fact Avery"
+  );
 
   assert.equal(listReply, "Memory review is unavailable in this runtime.");
   assert.equal(mutationReply, "Memory review is unavailable in this runtime.");
+  assert.equal(factReply, "Memory review is unavailable in this runtime.");
 });

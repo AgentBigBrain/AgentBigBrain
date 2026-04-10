@@ -16,7 +16,13 @@ import {
 import { saveProfileMemoryState } from "../../src/core/profileMemoryRuntime/profileMemoryPersistence";
 import { ProfileMemoryStore } from "../../src/core/profileMemoryStore";
 import { TaskRequest } from "../../src/core/types";
-import type { ProfileMemoryWriteProvenance } from "../../src/core/profileMemoryRuntime/contracts";
+import type {
+  ProfileFactPlanningInspectionResult,
+  ProfileMemoryRequestTelemetry,
+  ProfileMemoryWriteProvenance,
+  ProfileReadableFact
+} from "../../src/core/profileMemoryRuntime/contracts";
+import type { ProfileMemoryQueryDecisionRecord } from "../../src/core/profileMemoryRuntime/profileMemoryDecisionRecordContracts";
 import {
   buildConversationProfileMemoryTurnId,
   buildProfileMemorySourceFingerprint
@@ -24,6 +30,7 @@ import {
 import { MockModelClient } from "../../src/models/mockModelClient";
 import { LanguageUnderstandingOrgan } from "../../src/organs/languageUnderstanding/episodeExtraction";
 import { extractCurrentUserRequest, MemoryBrokerOrgan } from "../../src/organs/memoryBroker";
+import { assessBrokerPromptCutoverGate } from "../../src/organs/memoryBrokerPlannerInput";
 import type { ConversationDomainContext } from "../../src/core/types";
 
 /**
@@ -203,15 +210,68 @@ test("memory broker injects query-aware profile context with domain metadata", a
     assert.match(enriched.userInput, /domainLanes=.*relationship/i);
     assert.match(enriched.userInput, /domainBoundaryDecision=inject_profile_context/i);
     assert.match(enriched.userInput, /\[AgentFriendProfileContext\]/);
-    assert.match(enriched.userInput, /contact\.owen\.name: Owen/i);
-    assert.match(
-      enriched.userInput,
-      /contact\.owen\.context\.[a-z0-9]+: I used to work with Owen at Lantern Studio/i
-    );
+    assert.match(enriched.userInput, /Temporal memory context \(bounded\):/i);
+    assert.match(enriched.userInput, /Current State:/i);
+    assert.match(enriched.userInput, /Historical Context:/i);
     assert.doesNotMatch(enriched.userInput, /contact\.owen\.work_association: Lantern Studio/i);
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }
+});
+
+test("memory broker scores typed relationship lane metadata without depending on rendered profile prefixes", async () => {
+  const fact: ProfileReadableFact = {
+    factId: "fact_relationship_lane",
+    key: "contact.owen.work_association",
+    value: "Lantern Studio",
+    status: "confirmed",
+    observedAt: "2026-04-09T10:00:00.000Z",
+    lastUpdatedAt: "2026-04-09T10:00:00.000Z",
+    confidence: 0.92,
+    sensitive: false
+  };
+  const decisionRecord: ProfileMemoryQueryDecisionRecord = {
+    family: "contact.work_association",
+    evidenceClass: "user_explicit_fact",
+    governanceAction: "allow_current_state",
+    governanceReason: "explicit_user_fact",
+    disposition: "selected_current_state",
+    answerModeFallback: "report_ambiguous_contested",
+    candidateRefs: ["fact_relationship_lane"],
+    evidenceRefs: ["fact_relationship_lane"]
+  };
+  const store = {
+    async ingestFromTaskInput() {
+      return { appliedFacts: 0, supersededFacts: 0 };
+    },
+    async openReadSession() {
+      return {
+        getPlanningContext: () => "remember the person from earlier",
+        getEpisodePlanningContext: () => "",
+        queryFactsForPlanningContext: () => [fact],
+        inspectFactsForPlanningContext: () =>
+          ({
+            entries: [{ fact, decisionRecord }],
+            hiddenDecisionRecords: [],
+            asOfObservedTime: undefined,
+            asOfValidTime: undefined
+          }) satisfies ProfileFactPlanningInspectionResult,
+        queryEpisodesForPlanningContext: () => []
+      };
+    }
+  } as unknown as ProfileMemoryStore;
+  const broker = new MemoryBrokerOrgan(store);
+
+  const enriched = await broker.buildPlannerInput(
+    buildTask("task_memory_broker_typed_lane", "who is Owen?")
+  );
+
+  assert.equal(enriched.profileMemoryStatus, "available");
+  assert.match(enriched.userInput, /domainLanes=.*relationship/i);
+  assert.match(enriched.userInput, /domainBoundaryDecision=inject_profile_context/i);
+  assert.match(enriched.userInput, /\[AgentFriendProfileContext\]/);
+  assert.match(enriched.userInput, /Current State:/i);
+  assert.doesNotMatch(enriched.userInput, /\[AgentFriendMemorySynthesis\]/i);
 });
 
 test("memory broker keeps historical school association out of query-aware profile context", async () => {
@@ -244,8 +304,8 @@ test("memory broker keeps historical school association out of query-aware profi
 
     assert.equal(enriched.profileMemoryStatus, "available");
     assert.match(enriched.userInput, /\[AgentFriendProfileContext\]/);
-    assert.match(enriched.userInput, /contact\.owen\.name: Owen/i);
-    assert.match(enriched.userInput, /contact\.owen\.relationship: acquaintance/i);
+    assert.match(enriched.userInput, /Current State:/i);
+    assert.match(enriched.userInput, /Historical Context:/i);
     assert.doesNotMatch(enriched.userInput, /contact\.owen\.school_association: went_to_school_together/i);
   } finally {
     await rm(tempDir, { recursive: true, force: true });
@@ -311,6 +371,15 @@ test("memory broker appends memory-access audit events with required fields", as
         taskId: string;
         queryHash: string;
         storeLoadCount?: number;
+        ingestOperationCount?: number;
+        retrievalOperationCount?: number;
+        synthesisOperationCount?: number;
+        renderOperationCount?: number;
+        promptMemoryOwnerCount?: number;
+        promptMemorySurfaceCount?: number;
+        mixedMemoryOwnerDecisionCount?: number;
+        promptCutoverGateDecision?: string;
+        promptCutoverGateReasons?: string[];
         retrievedCount: number;
         retrievedEpisodeCount: number;
         redactedCount: number;
@@ -326,6 +395,15 @@ test("memory broker appends memory-access audit events with required fields", as
     assert.equal(lastEvent.taskId, "task_memory_audit_2");
     assert.match(lastEvent.queryHash, /^[a-f0-9]{64}$/i);
     assert.equal(lastEvent.storeLoadCount, 2);
+    assert.ok(typeof lastEvent.ingestOperationCount === "number");
+    assert.ok(typeof lastEvent.retrievalOperationCount === "number");
+    assert.ok(typeof lastEvent.synthesisOperationCount === "number");
+    assert.ok(typeof lastEvent.renderOperationCount === "number");
+    assert.equal(lastEvent.promptMemoryOwnerCount, 1);
+    assert.equal(lastEvent.promptMemorySurfaceCount, 1);
+    assert.equal(lastEvent.mixedMemoryOwnerDecisionCount, 0);
+    assert.equal(lastEvent.promptCutoverGateDecision, "allow");
+    assert.deepEqual(lastEvent.promptCutoverGateReasons ?? [], []);
     assert.ok(typeof lastEvent.retrievedCount === "number");
     assert.ok(typeof lastEvent.retrievedEpisodeCount === "number");
     assert.ok(typeof lastEvent.redactedCount === "number");
@@ -359,12 +437,38 @@ test("memory broker injects bounded unresolved episode context for relevant foll
     );
 
     assert.equal(enriched.profileMemoryStatus, "available");
-    assert.match(enriched.userInput, /\[AgentFriendEpisodeContext\]/);
+    assert.match(enriched.userInput, /\[AgentFriendProfileContext\]/);
     assert.match(enriched.userInput, /Owen fell down/);
-    assert.match(enriched.userInput, /status=unresolved/);
+    assert.match(enriched.userInput, /Historical Context:/);
+    assert.doesNotMatch(enriched.userInput, /\[AgentFriendEpisodeContext\]/);
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }
+});
+
+test("assessBrokerPromptCutoverGate blocks prompt cutover when telemetry exceeds bounded thresholds", () => {
+  const telemetry: ProfileMemoryRequestTelemetry = {
+    storeLoadCount: 4,
+    ingestOperationCount: 1,
+    retrievalOperationCount: 4,
+    synthesisOperationCount: 1,
+    renderOperationCount: 1,
+    promptMemoryOwnerCount: 2,
+    promptMemorySurfaceCount: 2,
+    mixedMemoryOwnerDecisionCount: 1,
+    identitySafetyDecisionCount: 0,
+    selfIdentityParityCheckCount: 0,
+    selfIdentityParityMismatchCount: 0
+  };
+
+  const gate = assessBrokerPromptCutoverGate(telemetry);
+
+  assert.equal(gate.decision, "block");
+  assert.deepEqual(gate.reasons, [
+    "store_load_count_exceeded",
+    "mixed_memory_owner_decision_detected",
+    "prompt_memory_surface_count_exceeded"
+  ]);
 });
 
 test("memory broker stores richer model-assisted situations that deterministic regexes would miss", async () => {
@@ -398,9 +502,10 @@ test("memory broker stores richer model-assisted situations that deterministic r
     );
 
     assert.equal(enriched.profileMemoryStatus, "available");
-    assert.match(enriched.userInput, /\[AgentFriendEpisodeContext\]/);
+    assert.match(enriched.userInput, /\[AgentFriendProfileContext\]/);
     assert.match(enriched.userInput, /Owen had a medical situation/);
-    assert.match(enriched.userInput, /status=unresolved/);
+    assert.match(enriched.userInput, /Historical Context:/);
+    assert.doesNotMatch(enriched.userInput, /\[AgentFriendEpisodeContext\]/);
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }
@@ -435,10 +540,11 @@ test("memory broker injects one bounded planner synthesis block when facts and e
     );
 
     assert.equal(enriched.profileMemoryStatus, "available");
-    assert.match(enriched.userInput, /\[AgentFriendMemorySynthesis\]/);
-    assert.match(enriched.userInput, /synthesized situation:/i);
-    assert.match(enriched.userInput, /topic=Owen fell down/i);
-    assert.match(enriched.userInput, /evidence=fact:contact\.owen\..* -> /i);
+    assert.match(enriched.userInput, /\[AgentFriendProfileContext\]/);
+    assert.match(enriched.userInput, /Temporal memory context \(bounded\):/i);
+    assert.match(enriched.userInput, /Current State:/i);
+    assert.match(enriched.userInput, /Historical Context:/i);
+    assert.doesNotMatch(enriched.userInput, /\[AgentFriendMemorySynthesis\]/i);
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }
@@ -891,6 +997,51 @@ test("memory broker preserves relationship ingest for mixed workflow requests wh
       storedFacts.some(
         (fact) =>
           fact.key === "contact.owen.relationship" &&
+          fact.value === "work_peer"
+      ),
+      true
+    );
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("memory broker preserves reminder-style coworker ingest for mixed workflow requests", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-memory-broker-workflow-reminder-relationship-"));
+  const profilePath = path.join(tempDir, "profile_memory.secure.json");
+  const key = Buffer.alloc(32, 118);
+  const store = new ProfileMemoryStore(profilePath, key, 90);
+  const broker = new MemoryBrokerOrgan(store);
+
+  try {
+    await broker.buildPlannerInput(
+      buildTask(
+        "task_memory_workflow_relationship_reminder",
+        "After that, remind me that Priya is my coworker at Northstar."
+      ),
+      {
+        sessionDomainContext: buildWorkflowDomainContext()
+      }
+    );
+
+    const storedFacts = await store.readFacts({
+      purpose: "operator_view",
+      includeSensitive: false,
+      explicitHumanApproval: false
+    });
+
+    assert.equal(
+      storedFacts.some(
+        (fact) =>
+          fact.key === "contact.priya.work_association" &&
+          fact.value === "Northstar"
+      ),
+      true
+    );
+    assert.equal(
+      storedFacts.some(
+        (fact) =>
+          fact.key === "contact.priya.relationship" &&
           fact.value === "work_peer"
       ),
       true

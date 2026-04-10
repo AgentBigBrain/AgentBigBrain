@@ -101,7 +101,7 @@ test("registerAndAssessProbing detects extraction-style bursts once the sample t
 test("assessDomainBoundary suppresses profile context for workflow-dominant requests", () => {
   const boundary = assessDomainBoundary(
     "My workspace repo build deployment needs governor policy approval.",
-    ""
+    []
   );
 
   assert.equal(boundary.decision, "suppress_profile_context");
@@ -113,7 +113,7 @@ test("assessDomainBoundary suppresses profile context for workflow-dominant requ
 test("assessDomainBoundary suppresses mixed profile cues during active workflow continuity", () => {
   const boundary = assessDomainBoundary(
     "Deploy the workspace repo and my favorite editor is Helix.",
-    "",
+    [],
     buildWorkflowDomainContext()
   );
 

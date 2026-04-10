@@ -63,6 +63,7 @@ import {
   countUnresolvedCommitments,
   extractUnresolvedCommitmentTopics
 } from "./profileMemoryRuntime/profileMemoryMutations";
+import { applySupportOnlyTransitionFactCandidates } from "./profileMemoryRuntime/profileMemorySupportOnlyTransitionLifecycle";
 import {
   buildInferredProfileEpisodeResolutionCandidates
 } from "./profileMemoryRuntime/profileMemoryEpisodeResolution";
@@ -92,7 +93,7 @@ import {
 import {
   type ProfileEpisodeContinuityQueryRequest
 } from "./profileMemoryRuntime/profileMemoryEpisodeQueries";
-import type { ProfileFactContinuityQueryRequest } from "./profileMemoryRuntime/profileMemoryQueries";
+import type { ProfileFactContinuityQueryRequest } from "./profileMemoryRuntime/profileMemoryQueryContracts";
 import { readProfileFacts } from "./profileMemoryRuntime/profileMemoryQueries";
 import { consolidateProfileEpisodes } from "./profileMemoryRuntime/profileMemoryEpisodeConsolidation";
 import type { ProfileEpisodeResolutionStatus } from "./profileMemoryRuntime/profileMemoryEpisodeContracts";
@@ -100,8 +101,18 @@ import {
   getProfileMemoryFamilyRegistryEntry
 } from "./profileMemoryRuntime/profileMemoryFamilyRegistry";
 import {
-  applyProfileMemoryGraphMutations
-} from "./profileMemoryRuntime/profileMemoryGraphState";
+  applyProfileMemoryGraphMutations,
+  applyProfileMemoryGraphStableRefRekey
+} from "./profileMemoryRuntime/profileMemoryGraphMutations";
+import {
+  queryProfileMemoryGraphAlignedStableRefGroups,
+  type ProfileMemoryGraphAlignedStableRefGroup
+} from "./profileMemoryRuntime/profileMemoryGraphAlignmentSupport";
+import {
+  queryProfileMemoryGraphResolvedCurrentClaims,
+  queryProfileMemoryGraphStableRefGroups,
+  type ProfileMemoryGraphStableRefGroup
+} from "./profileMemoryRuntime/profileMemoryGraphQueries";
 import {
   resolveProfileMemoryEffectiveSensitivity
 } from "./profileMemoryRuntime/profileMemoryFactSensitivity";
@@ -109,6 +120,7 @@ import { inferGovernanceFamilyForNormalizedKey } from "./profileMemoryRuntime/pr
 import { normalizeProfileValue } from "./profileMemoryRuntime/profileMemoryNormalization";
 import { MEMORY_REVIEW_FACT_CORRECTION_SOURCE } from "./profileMemoryRuntime/profileMemoryTruthGovernanceSources";
 import type { CreateProfileEpisodeRecordInput } from "./profileMemory";
+import type { ProfileMemoryGraphClaimRecord } from "./profileMemoryRuntime/profileMemoryGraphContracts";
 import type {
   ConversationStackV1,
   EntityGraphV1
@@ -321,7 +333,11 @@ export class ProfileMemoryStore {
       episodeCandidates: mergedEpisodeCandidates,
       episodeResolutionCandidates: []
     });
-    const applyResult = applyProfileFactCandidates(state, [
+    const supportOnlyTransitionResult = applySupportOnlyTransitionFactCandidates(
+      state,
+      preResolutionGovernance.allowedSupportOnlyFactCandidates
+    );
+    const applyResult = applyProfileFactCandidates(supportOnlyTransitionResult.nextState, [
       ...preResolutionGovernance.allowedCurrentStateFactCandidates,
       ...selectCompatibilitySafeSupportOnlyFactCandidates(
         preResolutionGovernance.allowedSupportOnlyFactCandidates
@@ -397,7 +413,7 @@ export class ProfileMemoryStore {
     );
     return {
       appliedFacts: totalAppliedFacts,
-      supersededFacts: applyResult.supersededFacts,
+      supersededFacts: supportOnlyTransitionResult.supersededFacts + applyResult.supersededFacts,
       ...(mutationEnvelope ? { mutationEnvelope } : {})
     };
   }
@@ -913,6 +929,144 @@ export class ProfileMemoryStore {
       request,
       nowIso
     );
+  }
+
+  /**
+   * Returns graph-backed truth grouped by effective personal-memory stable ref.
+   *
+   * **Why it exists:**
+   * Phase 5a needs one public store seam that surfaces self/contact identity grouping before
+   * Stage 6.86 alignment or full temporal retrieval cutover.
+   *
+   * **What it talks to:**
+   * - Uses `queryProfileMemoryGraphStableRefGroups` (import
+   *   `queryProfileMemoryGraphStableRefGroups`) from
+   *   `./profileMemoryRuntime/profileMemoryGraphQueries`.
+   *
+   * @returns Stable-ref groups derived from canonical graph-backed state.
+   */
+  async queryGraphStableRefGroups(): Promise<readonly ProfileMemoryGraphStableRefGroup[]> {
+    return queryProfileMemoryGraphStableRefGroups((await this.load()).graph);
+  }
+
+  /**
+   * Returns graph-backed stable-ref groups with bounded Stage 6.86 entity-key attachment.
+   *
+   * **Why it exists:**
+   * Phase 5b needs one additive public seam that can expose conservative `primaryEntityKey` /
+   * `observedEntityKey` alignment while keeping truth ownership inside encrypted profile memory.
+   *
+   * **What it talks to:**
+   * - Uses `queryProfileMemoryGraphAlignedStableRefGroups` (import
+   *   `queryProfileMemoryGraphAlignedStableRefGroups`) from
+   *   `./profileMemoryRuntime/profileMemoryGraphAlignmentSupport`.
+   *
+   * @param entityGraph - Shared Stage 6.86 entity graph snapshot used only for bounded alignment.
+   * @returns Stable-ref groups annotated with conservative entity-key attachment.
+   */
+  async queryAlignedGraphStableRefGroups(
+    entityGraph: EntityGraphV1
+  ): Promise<readonly ProfileMemoryGraphAlignedStableRefGroup[]> {
+    return queryProfileMemoryGraphAlignedStableRefGroups({
+      graph: (await this.load()).graph,
+      entityGraph
+    });
+  }
+
+  /**
+   * Returns only current-surface-eligible graph claims whose stable refs are resolved-current.
+   *
+   * **Why it exists:**
+   * Phase 5a must keep provisional or quarantined identity out of resolved-current outputs until
+   * later alignment or policy explicitly promotes it.
+   *
+   * **What it talks to:**
+   * - Uses `queryProfileMemoryGraphResolvedCurrentClaims` (import
+   *   `queryProfileMemoryGraphResolvedCurrentClaims`) from
+   *   `./profileMemoryRuntime/profileMemoryGraphQueries`.
+   *
+   * @returns Resolved-current graph claim records.
+   */
+  async queryResolvedCurrentGraphClaims(): Promise<readonly ProfileMemoryGraphClaimRecord[]> {
+    return queryProfileMemoryGraphResolvedCurrentClaims((await this.load()).graph);
+  }
+
+  /**
+   * Rekeys one explicit personal-memory stable-ref lane without invoking Stage 6.86 merge logic.
+   *
+   * **Why it exists:**
+   * Phase 5a needs a bounded deterministic rekey seam that can rewrite already-issued stable refs
+   * inside personal memory while keeping truth ownership local to the encrypted profile-memory
+   * store.
+   *
+   * **What it talks to:**
+   * - Uses `applyProfileMemoryGraphStableRefRekey` (import
+   *   `applyProfileMemoryGraphStableRefRekey`) from
+   *   `./profileMemoryRuntime/profileMemoryGraphMutations`.
+   *
+   * @param fromStableRefId - Existing stable ref to rewrite.
+   * @param toStableRefId - Replacement stable ref id.
+   * @param sourceTaskId - Canonical source task id for the explicit rekey request.
+   * @param sourceText - Bounded operator text describing the rekey.
+   * @param nowIso - Timestamp applied to the mutation.
+   * @returns Change flag plus bounded mutation proof when a rekey occurs.
+   */
+  async rekeyGraphStableRef(
+    fromStableRefId: string,
+    toStableRefId: string,
+    sourceTaskId: string,
+    sourceText: string,
+    nowIso = new Date().toISOString()
+  ): Promise<{
+    changed: boolean;
+    mutationEnvelope?: {
+      schemaVersion: "v1";
+      action: "stable_ref_rekey";
+      fromStableRefId: string;
+      toStableRefId: string;
+      sourceTaskId: string;
+      sourceText: string;
+      observedAt: string;
+    };
+  }> {
+    const normalizedFromStableRefId = fromStableRefId.trim();
+    const normalizedToStableRefId = toStableRefId.trim();
+    if (!normalizedFromStableRefId.startsWith("stable_")) {
+      throw new Error("Stable-ref rekey requires a canonical source stable ref id.");
+    }
+    if (!normalizedToStableRefId.startsWith("stable_")) {
+      throw new Error("Stable-ref rekey requires a canonical replacement stable ref id.");
+    }
+    if (normalizedFromStableRefId === normalizedToStableRefId) {
+      return { changed: false };
+    }
+    const state = await this.load();
+    const mutationEnvelope = {
+      schemaVersion: "v1" as const,
+      action: "stable_ref_rekey" as const,
+      fromStableRefId: normalizedFromStableRefId,
+      toStableRefId: normalizedToStableRefId,
+      sourceTaskId,
+      sourceText,
+      observedAt: nowIso
+    };
+    const rekeyResult = applyProfileMemoryGraphStableRefRekey({
+      state,
+      fromStableRefId: normalizedFromStableRefId,
+      toStableRefId: normalizedToStableRefId,
+      sourceTaskId,
+      sourceFingerprint: buildProfileMemorySourceFingerprint(sourceText),
+      mutationEnvelopeHash: sha256HexFromCanonicalJson(mutationEnvelope),
+      recordedAt: nowIso
+    });
+    if (!rekeyResult.changed) {
+      return { changed: false };
+    }
+    await this.save(rekeyResult.nextState);
+    return {
+      changed: true,
+      mutationEnvelope
+    };
   }
 
   /**

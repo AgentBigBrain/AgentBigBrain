@@ -124,6 +124,17 @@ export interface ProfileFactReviewMutationResult {
 
 export interface ProfileMemoryRequestTelemetry {
   storeLoadCount: number;
+  ingestOperationCount: number;
+  retrievalOperationCount: number;
+  synthesisOperationCount: number;
+  renderOperationCount: number;
+  promptMemoryOwnerCount: number;
+  promptMemorySurfaceCount: number;
+  mixedMemoryOwnerDecisionCount: number;
+  aliasSafetyDecisionCount: number;
+  identitySafetyDecisionCount: number;
+  selfIdentityParityCheckCount: number;
+  selfIdentityParityMismatchCount: number;
 }
 
 export interface ProfileValidatedFactCandidateInput {

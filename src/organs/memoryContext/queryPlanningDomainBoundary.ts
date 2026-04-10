@@ -7,6 +7,7 @@ import type { ConversationDomainContext } from "../../core/types";
 import type {
   DomainBoundaryAssessment,
   DomainLaneScores,
+  MemoryBoundaryLaneOutput,
   MemoryDomainLane
 } from "./contracts";
 
@@ -160,43 +161,36 @@ function applySessionDomainLaneSignals(
 }
 
 /**
- * Adds lane signals inferred from the rendered brokered memory-context payload.
+ * Adds lane signals inferred from typed brokered memory-boundary output.
  *
  * @param baseScores - Existing lane scores.
- * @param memoryContext - Sanitized brokered memory payload.
+ * @param laneBoundaries - Typed brokered lane metadata.
  * @returns Updated lane scores.
  */
-function applyProfileContextLaneSignals(
+function applyMemoryBoundaryLaneSignals(
   baseScores: DomainLaneScores,
-  memoryContext: string
+  laneBoundaries: readonly MemoryBoundaryLaneOutput[]
 ): DomainLaneScores {
   const scores: DomainLaneScores = { ...baseScores };
-  const lines = memoryContext
-    .split(/\r?\n/)
-    .map((line) => line.trim().toLowerCase())
-    .filter((line) => line.length > 0);
-
-  for (const line of lines) {
-    if (line.startsWith("contact.") || line.includes(".relationship:")) {
-      addLaneScore(scores, "relationship", 1);
-    }
+  for (const lane of laneBoundaries) {
     if (
-      line.startsWith("identity.") ||
-      line.startsWith("employment.") ||
-      line.startsWith("residence.") ||
-      line.startsWith("location.")
+      lane.answerMode === "insufficient_evidence" ||
+      lane.answerMode === "quarantined_identity" ||
+      lane.domainLane === "unknown"
     ) {
-      addLaneScore(scores, "profile", 1);
+      continue;
     }
-    if (line.startsWith("workflow.") || line.startsWith("project.") || line.startsWith("task.")) {
-      addLaneScore(scores, "workflow", 1);
+
+    const baseDelta =
+      lane.answerMode === "current"
+        ? 2
+        : lane.answerMode === "historical" || lane.answerMode === "ambiguous"
+          ? 1
+          : 0;
+    if (baseDelta <= 0) {
+      continue;
     }
-    if (line.startsWith("policy.") || line.includes("governor") || line.includes("constraint")) {
-      addLaneScore(scores, "system_policy", 1);
-    }
-    if (line.startsWith("- situation:") || line.startsWith("episode.")) {
-      addLaneScore(scores, "relationship", 1);
-    }
+    addLaneScore(scores, lane.domainLane, baseDelta);
   }
 
   return scores;
@@ -230,18 +224,18 @@ function selectDomainLanes(scores: DomainLaneScores): MemoryDomainLane[] {
  * Assesses whether profile context should be injected or suppressed for the current request.
  *
  * @param currentUserRequest - Active user request used for lane scoring.
- * @param memoryContext - Sanitized brokered memory-context payload, if available.
+ * @param laneBoundaries - Typed brokered memory-boundary payload, if available.
  * @param sessionDomainContext - Optional shared domain context used to bias the decision.
  * @returns Deterministic lane scores plus the inject/suppress decision.
  */
 export function assessDomainBoundary(
   currentUserRequest: string,
-  memoryContext: string,
+  laneBoundaries: readonly MemoryBoundaryLaneOutput[],
   sessionDomainContext?: ConversationDomainContext | null
 ): DomainBoundaryAssessment {
   const requestScores = inferDomainLaneScoresFromRequest(currentUserRequest);
   const sessionAwareRequestScores = applySessionDomainLaneSignals(requestScores, sessionDomainContext);
-  const scores = applyProfileContextLaneSignals(sessionAwareRequestScores, memoryContext);
+  const scores = applyMemoryBoundaryLaneSignals(sessionAwareRequestScores, laneBoundaries);
   const lanes = selectDomainLanes(scores);
   const profileSignal = scores.profile + scores.relationship;
   const nonProfileSignal = scores.workflow + scores.system_policy;
@@ -254,7 +248,20 @@ export function assessDomainBoundary(
       lanes,
       scores,
       decision: "suppress_profile_context",
-      reason: "no_profile_signal"
+      reason: nonProfileSignal > 0 ? "non_profile_dominant_request" : "no_profile_signal"
+    };
+  }
+
+  if (
+    requestProfileSignal <= 0 &&
+    requestNonProfileSignal > 0 &&
+    nonProfileSignal >= profileSignal
+  ) {
+    return {
+      lanes,
+      scores,
+      decision: "suppress_profile_context",
+      reason: "non_profile_dominant_request"
     };
   }
 

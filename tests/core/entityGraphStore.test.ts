@@ -197,8 +197,14 @@ async function aliasCandidateReconciliationPersistsValidatedAlias(): Promise<voi
 
     assert.equal(mutation.acceptedAlias, "Sarah Connor");
     assert.equal(mutation.rejectionReason, null);
+    assert.equal(mutation.graph.decisionRecords?.length, 1);
+    assert.equal(mutation.graph.decisionRecords?.[0]?.action, "merge");
+    assert.equal(mutation.graph.decisionRecords?.[0]?.entityKey, "entity_sarah");
+    assert.equal(mutation.graph.decisionRecords?.[0]?.aliasValue, "Sarah Connor");
     const graph = await store.getGraph();
     assert.deepEqual(graph.entities[0]?.aliases, ["Sarah", "Sarah Connor"]);
+    assert.equal(graph.decisionRecords?.length, 1);
+    assert.equal(graph.decisionRecords?.[0]?.action, "merge");
   });
 }
 
@@ -253,8 +259,74 @@ async function aliasCandidateReconciliationRejectsCollidingAlias(): Promise<void
     assert.equal(mutation.acceptedAlias, null);
     assert.equal(mutation.rejectionReason, "ALIAS_COLLISION");
     assert.equal(mutation.aliasConflicts.length, 1);
+    assert.equal(mutation.graph.decisionRecords?.length, 1);
+    assert.equal(mutation.graph.decisionRecords?.[0]?.action, "quarantine");
+    assert.equal(mutation.graph.decisionRecords?.[0]?.reasonCode, "ALIAS_COLLISION");
+    assert.equal(mutation.graph.decisionRecords?.[0]?.aliasValue, "Sarah Connor");
+    assert.equal(
+      mutation.graph.decisionRecords?.[0]?.targetEntityKey,
+      "entity_sarah_connor"
+    );
     const graph = await store.getGraph();
     assert.deepEqual(graph.entities[0]?.aliases, ["Sarah"]);
+    assert.equal(graph.decisionRecords?.length, 1);
+    assert.equal(graph.decisionRecords?.[0]?.action, "quarantine");
+  });
+}
+
+/**
+ * Implements `alignmentDecisionRecordPersistenceSupportsUnquarantineAndRollback` behavior within module scope.
+ * Interacts with local collaborators through imported modules and typed inputs/outputs.
+ */
+async function alignmentDecisionRecordPersistenceSupportsUnquarantineAndRollback(): Promise<void> {
+  await withTempDir(async (tempDir) => {
+    const graphPath = path.join(tempDir, "entity_graph.json");
+    const store = new EntityGraphStore(graphPath, { backend: "json" });
+    await store.persistGraph({
+      schemaVersion: "v1",
+      updatedAt: "2026-03-01T00:00:00.000Z",
+      entities: [
+        {
+          entityKey: "entity_sarah",
+          canonicalName: "Sarah",
+          entityType: "person",
+          disambiguator: null,
+          domainHint: "relationship",
+          aliases: ["Sarah"],
+          firstSeenAt: "2026-03-01T00:00:00.000Z",
+          lastSeenAt: "2026-03-01T00:00:00.000Z",
+          salience: 1,
+          evidenceRefs: ["trace:seed_sarah"]
+        }
+      ],
+      edges: []
+    });
+
+    const unquarantine = await store.recordAlignmentDecision({
+      action: "unquarantine",
+      entityKey: "entity_sarah",
+      aliasValue: "Sarah Connor",
+      observedAt: "2026-03-03T00:00:00.000Z",
+      evidenceRefs: ["trace:unquarantine"]
+    });
+    const rollback = await store.recordAlignmentDecision({
+      action: "rollback",
+      entityKey: "entity_sarah",
+      targetEntityKey: "entity_sarah_prev",
+      observedAt: "2026-03-04T00:00:00.000Z",
+      evidenceRefs: ["trace:rollback"]
+    });
+
+    assert.equal(unquarantine.action, "unquarantine");
+    assert.equal(rollback.action, "rollback");
+
+    const graph = await store.getGraph();
+    assert.deepEqual(
+      graph.decisionRecords?.map((record) => record.action),
+      ["unquarantine", "rollback"]
+    );
+    assert.equal(graph.decisionRecords?.[0]?.aliasValue, "Sarah Connor");
+    assert.equal(graph.decisionRecords?.[1]?.targetEntityKey, "entity_sarah_prev");
   });
 }
 
@@ -371,6 +443,10 @@ test(
 test(
   "stage 6.86 entity graph store rejects alias candidates that collide with another entity",
   aliasCandidateReconciliationRejectsCollidingAlias
+);
+test(
+  "stage 6.86 entity graph store persists unquarantine and rollback alignment decision records",
+  alignmentDecisionRecordPersistenceSupportsUnquarantineAndRollback
 );
 test(
   "stage 6.86 entity graph store applies validated entity type hints before persistence",

@@ -6,6 +6,10 @@ import type { ProfileEpisodeStatus } from "../../core/profileMemory";
 import type {
   ProfileMemoryQueryDecisionRecord
 } from "../../core/profileMemoryRuntime/profileMemoryDecisionRecordContracts";
+import type {
+  TemporalMemorySynthesis
+} from "../../core/profileMemoryRuntime/profileMemoryTemporalQueryContracts";
+import type { MemoryBoundaryLaneOutput } from "../memoryContext/contracts";
 
 export interface MemorySynthesisEpisodeEntityLink {
   entityKey: string;
@@ -65,6 +69,13 @@ export type TemporalMemorySynthesisDecisionRecord = ProfileMemoryQueryDecisionRe
 
 export type BoundedMemorySynthesisContractMode = "legacy_adapter_only";
 
+export interface BoundedMemorySynthesisShadowParity {
+  compared: boolean;
+  decisionMatches: boolean;
+  renderMatches: boolean;
+  mismatchedFields: readonly string[];
+}
+
 export interface BoundedMemorySynthesis {
   contractMode: BoundedMemorySynthesisContractMode;
   topicLabel: string;
@@ -75,4 +86,7 @@ export interface BoundedMemorySynthesis {
   supportingFacts: readonly MemorySynthesisFactRecord[];
   evidence: readonly MemorySynthesisEvidence[];
   decisionRecords?: readonly TemporalMemorySynthesisDecisionRecord[];
+  temporalSynthesis: TemporalMemorySynthesis;
+  laneBoundaries: readonly MemoryBoundaryLaneOutput[];
+  shadowParity?: BoundedMemorySynthesisShadowParity;
 }

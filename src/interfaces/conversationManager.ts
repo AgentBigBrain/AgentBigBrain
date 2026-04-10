@@ -62,6 +62,7 @@ export class ConversationManager {
   private readonly describeRuntimeCapabilities?: ConversationManagerDependencies["describeRuntimeCapabilities"];
   private readonly listManagedProcessSnapshots?: ConversationManagerDependencies["listManagedProcessSnapshots"];
   private readonly listBrowserSessionSnapshots?: ConversationManagerDependencies["listBrowserSessionSnapshots"];
+  private readonly memoryAccessAuditStore?: ConversationManagerDependencies["memoryAccessAuditStore"];
   private readonly abortActiveAutonomousRun?: ConversationManagerDependencies["abortActiveAutonomousRun"];
   private readonly followUpRuleContext: FollowUpRuleContext;
   private readonly pulseLexicalRuleContext: PulseLexicalRuleContext;
@@ -118,6 +119,7 @@ export class ConversationManager {
     this.describeRuntimeCapabilities = dependencies.describeRuntimeCapabilities;
     this.listManagedProcessSnapshots = dependencies.listManagedProcessSnapshots;
     this.listBrowserSessionSnapshots = dependencies.listBrowserSessionSnapshots;
+    this.memoryAccessAuditStore = dependencies.memoryAccessAuditStore;
     this.abortActiveAutonomousRun = dependencies.abortActiveAutonomousRun;
     this.followUpRuleContext = createFollowUpRuleContext(this.config.followUpOverridePath);
     this.pulseLexicalRuleContext = createPulseLexicalRuleContext(this.config.pulseLexicalOverridePath);
@@ -282,6 +284,7 @@ export class ConversationManager {
       describeRuntimeCapabilities: this.describeRuntimeCapabilities,
       listManagedProcessSnapshots: this.listManagedProcessSnapshots,
       listBrowserSessionSnapshots: this.listBrowserSessionSnapshots,
+      memoryAccessAuditStore: this.memoryAccessAuditStore,
       abortActiveAutonomousRun: this.abortActiveAutonomousRun,
       isWorkerActive: (sessionKey) => this.activeWorkers.has(sessionKey),
       clearAckTimer: (sessionKey) => clearConversationAckTimer(sessionKey, this.ackTimers),

@@ -136,7 +136,7 @@ const KEEP_TEMP_ARTIFACTS =
 const PROVIDER_BLOCK_PATTERN =
   /(?:429|exceeded your current quota|usage limit|purchase more credits|try again at|rate limit|fetch failed|request timed out|socket hang up|ECONNRESET|effective backend is mock|missing OPENAI_API_KEY|provider or runtime step timed out)/i;
 const BOUNDED_RUNTIME_BLOCK_PATTERN =
-  /(?:\bEXECUTABLE_NOT_FOUND\b|\bCOMMAND_TOO_LONG\b|\bDEPENDENCY_MISSING\b|\bVERSION_INCOMPATIBLE\b|\bPROCESS_NOT_READY\b|\bTARGET_NOT_RUNNING\b|unable to resolve pwsh or powershell executable|Deterministic recovery stopped for (?:EXECUTABLE_NOT_FOUND|COMMAND_TOO_LONG|DEPENDENCY_MISSING|VERSION_INCOMPATIBLE|PROCESS_NOT_READY|TARGET_NOT_RUNNING)|Timed out waiting for turn_\d+ to complete)/i;
+  /(?:\bEXECUTABLE_NOT_FOUND\b|\bCOMMAND_TOO_LONG\b|\bDEPENDENCY_MISSING\b|\bVERSION_INCOMPATIBLE\b|\bPROCESS_NOT_READY\b|\bTARGET_NOT_RUNNING\b|unable to resolve pwsh or powershell executable|Deterministic recovery stopped for (?:EXECUTABLE_NOT_FOUND|COMMAND_TOO_LONG|DEPENDENCY_MISSING|VERSION_INCOMPATIBLE|PROCESS_NOT_READY|TARGET_NOT_RUNNING)|Timed out waiting for turn_\d+ to complete|(?:Turn \d+ )?React preview smoke dist\/index\.html is missing|Landing page build proof missing: dist\/index\.html)/i;
 
 const CAPABILITY_SUMMARY_FIXTURE: ConversationCapabilitySummary = {
   provider: "telegram",

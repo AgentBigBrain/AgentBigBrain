@@ -5,7 +5,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { stripLabelStyleOpening } from "../../src/interfaces/userFacing/languageSurface";
+import {
+  normalizeOrdinaryMemoryAnswerSurface,
+  stripLabelStyleOpening
+} from "../../src/interfaces/userFacing/languageSurface";
 
 test("stripLabelStyleOpening removes plain AI assistant prefixes", () => {
   assert.equal(
@@ -83,5 +86,32 @@ test("stripLabelStyleOpening rewrites tell-BigBrain follow-up phrasing", () => {
       "BigBrain is ready with the next draft. You can tell BigBrain what you want to refine next."
     ),
     "Ready with the next draft. You can tell me what you want to refine next."
+  );
+});
+
+test("normalizeOrdinaryMemoryAnswerSurface rewrites split-view labels into natural prose", () => {
+  assert.equal(
+    normalizeOrdinaryMemoryAnswerSurface(
+      "Current State: Milo is your coworker at Northstar Creative. Historical Context: You first mentioned him while talking about a client meeting. Contradiction Notes: none."
+    ),
+    "Milo is your coworker at Northstar Creative. Previously, you first mentioned him while talking about a client meeting."
+  );
+});
+
+test("normalizeOrdinaryMemoryAnswerSurface turns contradiction notes into a brief clarifier", () => {
+  assert.equal(
+    normalizeOrdinaryMemoryAnswerSurface(
+      "- Current State: none\n- Historical Context: none\n- Contradiction Notes: You've mentioned both Lantern Studio and Northstar Creative for Milo.\n- Supporting Evidence: you brought him up in two different work threads."
+    ),
+    "There's some ambiguity here: you've mentioned both Lantern Studio and Northstar Creative for Milo. From what you've told me, you brought him up in two different work threads."
+  );
+});
+
+test("normalizeOrdinaryMemoryAnswerSurface rewrites internal diagnostic phrasing without labels", () => {
+  assert.equal(
+    normalizeOrdinaryMemoryAnswerSurface(
+      "I have Milo tied most strongly to Northstar Creative from supporting evidence in this chat."
+    ),
+    "I mainly know Milo in connection with Northstar Creative from what you've told me in this chat."
   );
 });

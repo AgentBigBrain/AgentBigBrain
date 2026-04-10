@@ -41,6 +41,18 @@ test("MemoryAccessAuditStore appends normalized events with hashed queries", asy
       taskId: "task_1",
       query: "who is owen?",
       storeLoadCount: 2,
+      ingestOperationCount: 1,
+      retrievalOperationCount: 4,
+      synthesisOperationCount: 1,
+      renderOperationCount: 1,
+      promptMemoryOwnerCount: 1,
+      promptMemorySurfaceCount: 1,
+      mixedMemoryOwnerDecisionCount: 0,
+      aliasSafetyDecisionCount: 1,
+      identitySafetyDecisionCount: 2,
+      selfIdentityParityCheckCount: 1,
+      selfIdentityParityMismatchCount: 1,
+      promptCutoverGateDecision: "allow",
       retrievedCount: 2,
       retrievedEpisodeCount: 1,
       redactedCount: 1,
@@ -53,6 +65,19 @@ test("MemoryAccessAuditStore appends normalized events with hashed queries", asy
     assert.equal(event.eventType, "retrieval");
     assert.equal(event.taskId, "task_1");
     assert.equal(event.storeLoadCount, 2);
+    assert.equal(event.ingestOperationCount, 1);
+    assert.equal(event.retrievalOperationCount, 4);
+    assert.equal(event.synthesisOperationCount, 1);
+    assert.equal(event.renderOperationCount, 1);
+    assert.equal(event.promptMemoryOwnerCount, 1);
+    assert.equal(event.promptMemorySurfaceCount, 1);
+    assert.equal(event.mixedMemoryOwnerDecisionCount, 0);
+    assert.equal(event.aliasSafetyDecisionCount, 1);
+    assert.equal(event.identitySafetyDecisionCount, 2);
+    assert.equal(event.selfIdentityParityCheckCount, 1);
+    assert.equal(event.selfIdentityParityMismatchCount, 1);
+    assert.equal(event.promptCutoverGateDecision, "allow");
+    assert.equal(event.promptCutoverGateReasons, undefined);
     assert.equal(event.retrievedCount, 2);
     assert.equal(event.retrievedEpisodeCount, 1);
     assert.equal(event.redactedCount, 1);

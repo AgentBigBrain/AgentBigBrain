@@ -40,6 +40,7 @@ import type {
 } from "../../organs/languageUnderstanding/localIntentModelContracts";
 import type { ProposalReplyInterpretationResolver } from "../../organs/languageUnderstanding/localIntentModelProposalReplyContracts";
 import type { ConversationSession } from "../sessionStore";
+import type { MemoryAccessAuditStore } from "../../core/memoryAccessAudit";
 
 export interface InterfaceSessionFile {
   conversations: Record<string, ConversationSession>;
@@ -122,6 +123,7 @@ export interface ConversationIngressDependencies extends ConversationIngressRule
   describeRuntimeCapabilities?: DescribeRuntimeCapabilities;
   listManagedProcessSnapshots?: ListManagedProcessSnapshots;
   listBrowserSessionSnapshots?: ListBrowserSessionSnapshots;
+  memoryAccessAuditStore?: MemoryAccessAuditStore;
   abortActiveAutonomousRun?(conversationId: string): boolean;
   isWorkerActive(sessionKey: string): boolean;
   clearAckTimer(sessionKey: string): void;

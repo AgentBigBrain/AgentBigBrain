@@ -47,6 +47,7 @@ export interface ConversationRoutingInlineReplyDependencies {
   listAvailableSkills?: ListAvailableSkills;
   describeRuntimeCapabilities?: DescribeRuntimeCapabilities;
   getEntityGraph?: GetConversationEntityGraph;
+  memoryAccessAuditStore?: import("../../core/memoryAccessAudit").MemoryAccessAuditStore;
   directCasualChatEnabled?: boolean;
   runDirectConversationTurn?: RunDirectConversationTurn;
   identityInterpretationResolver?: IdentityInterpretationResolver;
@@ -209,6 +210,7 @@ export async function maybeResolveConversationRoutingInlineReply(
     contextualReferenceInterpretationResolver: input.deps.contextualReferenceInterpretationResolver,
     entityReferenceInterpretationResolver: input.deps.entityReferenceInterpretationResolver,
     getEntityGraph: input.deps.getEntityGraph,
+    memoryAccessAuditStore: input.deps.memoryAccessAuditStore,
     managedProcessSnapshots: input.managedProcessSnapshots,
     semanticHint: input.effectiveIntentMode.semanticHint ?? null,
     browserSessionSnapshots: input.browserSessionSnapshots,

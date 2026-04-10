@@ -9,6 +9,8 @@ import {
   createEmptyProfileMemoryState,
   upsertTemporalProfileFact
 } from "../../src/core/profileMemory";
+import { buildEntityKey, createEmptyEntityGraphV1 } from "../../src/core/stage6_86EntityGraph";
+import { normalizeProfileMemoryGraphState } from "../../src/core/profileMemoryRuntime/profileMemoryGraphState";
 import {
   buildProfilePlanningContext,
   inspectProfileFactsForPlanningContext,
@@ -17,6 +19,7 @@ import {
   readProfileFacts,
   reviewProfileFactsForUser
 } from "../../src/core/profileMemoryRuntime/profileMemoryQueries";
+import { createEmptyConversationStackV1 } from "../../src/core/stage6_86ConversationStack";
 
 test("readProfileFacts hides sensitive facts without explicit approval", () => {
   let state = createEmptyProfileMemoryState();
@@ -264,6 +267,108 @@ test("buildProfilePlanningContext preserves query-aware non-sensitive grounding"
   assert.equal(planningContext.includes("employment.current: Lantern"), true);
   assert.equal(planningContext.includes("address"), false);
   assert.equal(planningContext.includes("123 Main Street"), false);
+});
+
+test("queryProfileFactsForContinuity expands continuity hints through the shared entity graph and returns typed temporal metadata", () => {
+  let state = createEmptyProfileMemoryState();
+  state = upsertTemporalProfileFact(state, {
+    key: "contact.william_bena.name",
+    value: "William Bena",
+    sensitive: false,
+    sourceTaskId: "task_profile_query_continuity_graph_name",
+    source: "test",
+    observedAt: "2026-04-09T10:00:00.000Z",
+    confidence: 0.95
+  }).nextState;
+  state = upsertTemporalProfileFact(state, {
+    key: "contact.william_bena.work_association",
+    value: "Lantern Studio",
+    sensitive: false,
+    sourceTaskId: "task_profile_query_continuity_graph_work",
+    source: "test",
+    observedAt: "2026-04-09T10:01:00.000Z",
+    confidence: 0.94
+  }).nextState;
+  state = {
+    ...state,
+    graph: normalizeProfileMemoryGraphState(
+      state.graph,
+      "2026-04-09T10:02:00.000Z",
+      state.episodes,
+      state.facts
+    )
+  };
+
+  const graph = {
+    ...createEmptyEntityGraphV1("2026-04-09T10:02:00.000Z"),
+    entities: [
+      {
+        entityKey: buildEntityKey("William Bena", "person", null),
+        canonicalName: "William Bena",
+        aliases: ["Owen"],
+        entityType: "person",
+        memoryStatus: "active",
+        domainHint: "relationship",
+        evidenceRefs: [],
+        createdAt: "2026-04-09T10:02:00.000Z",
+        updatedAt: "2026-04-09T10:02:00.000Z"
+      }
+    ]
+  };
+  const stack = {
+    ...createEmptyConversationStackV1("2026-04-09T10:03:00.000Z"),
+    activeThreadKey: "thread_owen",
+    threads: [
+      {
+        threadKey: "thread_owen",
+        topicKey: "topic_owen",
+        topicLabel: "Owen follow-up",
+        state: "active",
+        resumeHint: "Need to remember who Owen is and how we know him.",
+        openLoops: [],
+        lastTouchedAt: "2026-04-09T10:03:00.000Z"
+      }
+    ],
+    topics: [
+      {
+        topicKey: "topic_owen",
+        label: "Owen follow-up",
+        firstSeenAt: "2026-04-09T10:03:00.000Z",
+        lastSeenAt: "2026-04-09T10:03:00.000Z",
+        mentionCount: 1
+      }
+    ]
+  };
+
+  const continuityFacts = queryProfileFactsForContinuity(
+    state,
+    graph,
+    {
+      entityHints: ["Owen"],
+      semanticMode: "relationship_inventory",
+      relevanceScope: "conversation_local",
+      maxFacts: 3
+    },
+    stack
+  );
+
+  assert.equal(
+    continuityFacts.some(
+      (fact) =>
+        fact.key === "contact.william_bena.work_association" &&
+        fact.value === "Lantern Studio"
+    ),
+    true
+  );
+  assert.equal(continuityFacts.semanticMode, "relationship_inventory");
+  assert.equal(continuityFacts.relevanceScope, "conversation_local");
+  assert.deepEqual(continuityFacts.scopedThreadKeys, ["thread_owen"]);
+  assert.ok(continuityFacts.temporalSynthesis);
+  assert.ok(
+    continuityFacts.temporalSynthesis?.laneMetadata.some(
+      (lane) => lane.family === "contact.work_association"
+    )
+  );
 });
 
 test("read and planning surfaces hide compatibility-unsafe legacy support-only facts", () => {
@@ -1206,5 +1311,105 @@ test("read and planning surfaces fail closed for malformed legacy self-historica
         fact.value === "Ben"
     ),
     false
+  );
+});
+
+test("queryProfileFactsForContinuity uses thread-local scope to recover the active-thread person without explicit entity hints", () => {
+  let state = createEmptyProfileMemoryState();
+  state = upsertTemporalProfileFact(state, {
+    key: "contact.milo.name",
+    value: "Milo",
+    sensitive: false,
+    sourceTaskId: "task_profile_query_scope_fact_name_milo",
+    source: "test",
+    observedAt: "2026-04-09T16:00:00.000Z",
+    confidence: 0.95
+  }).nextState;
+  state = upsertTemporalProfileFact(state, {
+    key: "contact.milo.work_association",
+    value: "Northstar Creative",
+    sensitive: false,
+    sourceTaskId: "task_profile_query_scope_fact_work_milo",
+    source: "test",
+    observedAt: "2026-04-09T16:01:00.000Z",
+    confidence: 0.95
+  }).nextState;
+  state = upsertTemporalProfileFact(state, {
+    key: "contact.nora.name",
+    value: "Nora",
+    sensitive: false,
+    sourceTaskId: "task_profile_query_scope_fact_name_nora",
+    source: "test",
+    observedAt: "2026-04-09T16:02:00.000Z",
+    confidence: 0.95
+  }).nextState;
+  state = upsertTemporalProfileFact(state, {
+    key: "contact.nora.work_association",
+    value: "Riverpoint Labs",
+    sensitive: false,
+    sourceTaskId: "task_profile_query_scope_fact_work_nora",
+    source: "test",
+    observedAt: "2026-04-09T16:03:00.000Z",
+    confidence: 0.95
+  }).nextState;
+
+  const stack = {
+    schemaVersion: "v1",
+    updatedAt: "2026-04-09T16:04:00.000Z",
+    activeThreadKey: "thread_milo",
+    threads: [
+      {
+        threadKey: "thread_milo",
+        topicKey: "topic_milo",
+        topicLabel: "Milo at Northstar Creative",
+        state: "active",
+        resumeHint: "You mentioned working with Milo at Northstar Creative.",
+        openLoops: [
+          {
+            loopId: "loop_milo",
+            threadKey: "thread_milo",
+            entityRefs: ["Milo", "Northstar Creative"],
+            createdAt: "2026-04-09T16:04:00.000Z",
+            lastMentionedAt: "2026-04-09T16:04:00.000Z",
+            priority: 1,
+            status: "open"
+          }
+        ],
+        lastTouchedAt: "2026-04-09T16:04:00.000Z"
+      },
+      {
+        threadKey: "thread_build",
+        topicKey: "topic_build",
+        topicLabel: "Build the landing page",
+        state: "paused",
+        resumeHint: "Keep refining the landing page build.",
+        openLoops: [],
+        lastTouchedAt: "2026-04-09T16:03:30.000Z"
+      }
+    ],
+    topics: []
+  } as const;
+
+  const continuityFacts = queryProfileFactsForContinuity(
+    state,
+    {
+      entityHints: [],
+      relevanceScope: "thread_local",
+      maxFacts: 2
+    },
+    stack
+  );
+
+  assert.equal(
+    continuityFacts.some(
+      (fact) =>
+        fact.key === "contact.milo.work_association" &&
+        fact.value === "Northstar Creative"
+    ),
+    true
+  );
+  assert.equal(
+    continuityFacts[0]?.key.startsWith("contact.milo."),
+    true
   );
 });

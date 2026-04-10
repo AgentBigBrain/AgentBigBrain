@@ -3,10 +3,12 @@
  */
 
 import type { ProfileMemoryStore } from "../profileMemoryStore";
-import type {
-  ProfileReadableFact
-} from "../profileMemoryRuntime/contracts";
 import type { LinkedProfileEpisodeRecord } from "../profileMemoryRuntime/profileMemoryEpisodeLinking";
+import type { ProfileEpisodeContinuityQueryRequest } from "../profileMemoryRuntime/profileMemoryEpisodeQueries";
+import type {
+  ProfileFactContinuityQueryRequest,
+  ProfileFactContinuityResult
+} from "../profileMemoryRuntime/profileMemoryQueryContracts";
 import type {
   ConversationStackV1,
   EntityGraphV1
@@ -20,13 +22,15 @@ export interface OrchestratorContinuityReadSession {
   queryContinuityEpisodes(
     stack: ConversationStackV1,
     entityHints: readonly string[],
-    maxEpisodes?: number
+    maxEpisodes?: number,
+    requestOptions?: Omit<ProfileEpisodeContinuityQueryRequest, "entityHints" | "maxEpisodes">
   ): Promise<readonly LinkedProfileEpisodeRecord[]>;
   queryContinuityFacts(
     stack: ConversationStackV1,
     entityHints: readonly string[],
-    maxFacts?: number
-  ): Promise<readonly ProfileReadableFact[]>;
+    maxFacts?: number,
+    requestOptions?: Omit<ProfileFactContinuityQueryRequest, "entityHints" | "maxFacts">
+  ): Promise<ProfileFactContinuityResult>;
 }
 
 /**
@@ -51,20 +55,24 @@ export async function openOrchestratorContinuityReadSession(
       queryContinuityEpisodes: async (
         stack: ConversationStackV1,
         entityHints: readonly string[],
-        maxEpisodes = 3
+        maxEpisodes = 3,
+        requestOptions: Omit<ProfileEpisodeContinuityQueryRequest, "entityHints" | "maxEpisodes"> = {}
       ) =>
         readSession.queryEpisodesForContinuity(graph, stack, {
           entityHints,
-          maxEpisodes
+          maxEpisodes,
+          ...requestOptions
         }),
       queryContinuityFacts: async (
         stack: ConversationStackV1,
         entityHints: readonly string[],
-        maxFacts = 3
+        maxFacts = 3,
+        requestOptions: Omit<ProfileFactContinuityQueryRequest, "entityHints" | "maxFacts"> = {}
       ) =>
         readSession.queryFactsForContinuity(graph, stack, {
           entityHints,
-          maxFacts
+          maxFacts,
+          ...requestOptions
         })
     };
   } catch {

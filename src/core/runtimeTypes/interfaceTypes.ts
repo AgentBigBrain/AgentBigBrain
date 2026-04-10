@@ -63,6 +63,16 @@ export type RelationTypeV1 =
 
 export type MemoryStatusV1 = "uncertain" | "confirmed" | "superseded";
 
+export const STAGE_6_86_ALIGNMENT_DECISION_ACTIONS = [
+  "merge",
+  "quarantine",
+  "unquarantine",
+  "rollback"
+] as const;
+
+export type EntityAlignmentDecisionActionV1 =
+  (typeof STAGE_6_86_ALIGNMENT_DECISION_ACTIONS)[number];
+
 export const STAGE_6_86_PULSE_REASON_CODES = [
   "OPEN_LOOP_RESUME",
   "RELATIONSHIP_CLARIFICATION",
@@ -104,11 +114,23 @@ export interface RelationEdgeV1 {
   evidenceRefs: readonly string[];
 }
 
+export interface EntityAlignmentDecisionRecordV1 {
+  decisionId: string;
+  action: EntityAlignmentDecisionActionV1;
+  recordedAt: string;
+  entityKey: string;
+  targetEntityKey: string | null;
+  aliasValue: string | null;
+  reasonCode: MemoryConflictCodeV1 | null;
+  evidenceRefs: readonly string[];
+}
+
 export interface EntityGraphV1 {
   schemaVersion: "v1";
   updatedAt: string;
   entities: readonly EntityNodeV1[];
   edges: readonly RelationEdgeV1[];
+  decisionRecords?: readonly EntityAlignmentDecisionRecordV1[];
 }
 
 export interface TopicNodeV1 {

@@ -3,6 +3,7 @@
  */
 
 import { extractProfileFactCandidatesFromUserInput } from "./profileMemoryExtraction";
+import { extractProfileEpisodeCandidatesFromUserInput } from "./profileMemoryEpisodeExtraction";
 
 const CONVERSATIONAL_PROFILE_UPDATE_FACT_PREFIXES = [
   "identity.",
@@ -21,11 +22,19 @@ const SIGNAL_ASSESSMENT_OBSERVED_AT = "1970-01-01T00:00:00.000Z";
  * @returns `true` when bounded identity/contact/employment/residence facts are extractable.
  */
 export function hasConversationalProfileUpdateSignal(userInput: string): boolean {
-  return extractProfileFactCandidatesFromUserInput(
+  const factSignal = extractProfileFactCandidatesFromUserInput(
     userInput,
     SIGNAL_ASSESSMENT_SOURCE_TASK_ID,
     SIGNAL_ASSESSMENT_OBSERVED_AT
   ).some((candidate) =>
     CONVERSATIONAL_PROFILE_UPDATE_FACT_PREFIXES.some((prefix) => candidate.key.startsWith(prefix))
   );
+  if (factSignal) {
+    return true;
+  }
+  return extractProfileEpisodeCandidatesFromUserInput(
+    userInput,
+    SIGNAL_ASSESSMENT_SOURCE_TASK_ID,
+    SIGNAL_ASSESSMENT_OBSERVED_AT
+  ).length > 0;
 }

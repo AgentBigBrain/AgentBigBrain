@@ -137,6 +137,29 @@ export function getEntityLookupTerms(
 }
 
 /**
+ * Returns entity nodes whose canonical name or accepted alias exactly matches one candidate label.
+ *
+ * @param graph - Shared Stage 6.86 entity graph snapshot.
+ * @param candidateName - Bounded visible-name candidate to resolve.
+ * @returns Stable ordered entity matches, or an empty array when no exact match exists.
+ */
+export function queryEntityGraphNodesByCanonicalOrAlias(
+  graph: EntityGraphV1,
+  candidateName: string
+): readonly EntityNodeV1[] {
+  const normalizedCandidate = normalizeAliasKey(candidateName);
+  if (!normalizedCandidate) {
+    return [];
+  }
+  return sortEntityNodes(
+    graph.entities.filter((entity) =>
+      normalizeAliasKey(entity.canonicalName) === normalizedCandidate ||
+      entity.aliases.some((alias) => normalizeAliasKey(alias) === normalizedCandidate)
+    )
+  );
+}
+
+/**
  * Applies deterministic validity checks for valid iso timestamp.
  *
  * **Why it exists:**
@@ -567,7 +590,8 @@ export function createEmptyEntityGraphV1(updatedAt: string): EntityGraphV1 {
     schemaVersion: "v1",
     updatedAt,
     entities: [],
-    edges: []
+    edges: [],
+    decisionRecords: []
   };
 }
 
@@ -781,7 +805,8 @@ export function applyEntityExtractionToGraph(
     schemaVersion: "v1",
     updatedAt: observedAt,
     entities: sortEntityNodes([...entities.values()]),
-    edges: sortRelationEdges([...edges.values()])
+    edges: sortRelationEdges([...edges.values()]),
+    decisionRecords: graph.decisionRecords ?? []
   };
 
   return {

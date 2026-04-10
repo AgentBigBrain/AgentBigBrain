@@ -8,6 +8,7 @@ import {
   normalizeConversationChatTurnWhitespace,
   type ConversationChatTurnSignals
 } from "./chatTurnSignalAnalysis";
+import { isRelationshipConversationRecallTurn } from "./chatTurnRelationshipRecall";
 
 export type IdentityInterpretationEligibilityReason =
   | "self_identity_query"
@@ -328,8 +329,9 @@ export function buildRecentIdentityInterpretationContext(
  * stale workflow context exists elsewhere in the session.
  *
  * **Why it exists:**
- * Direct conversation should preserve lightweight identity turns and bounded identity follow-ups
- * before the execution-intent model gets a chance to reinterpret them under stale workflow state.
+ * Direct conversation should preserve lightweight identity turns, bounded identity follow-ups, and
+ * ordinary relationship-memory recall before the execution-intent model gets a chance to reinterpret
+ * them under stale workflow state.
  *
  * **What it talks to:**
  * - Uses `analyzeConversationChatTurnSignals` from `./chatTurnSignalAnalysis`.
@@ -347,6 +349,7 @@ export function shouldPreserveDeterministicDirectChatTurn(
   const identityEligibility = assessIdentityInterpretationEligibility(userInput, context);
   return (
     signals.lightweightConversation ||
+    isRelationshipConversationRecallTurn(userInput) ||
     (signals.interpersonalConversation && context.recentAssistantIdentityAnswer === true) ||
     identityEligibility.eligible
   );

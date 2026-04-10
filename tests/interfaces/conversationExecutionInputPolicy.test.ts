@@ -905,7 +905,7 @@ test("buildConversationAwareExecutionInput can inject episode-aware contextual r
   assert.match(executionInput, /User follow-up answer: Owen seems better now\./);
 });
 
-test("buildConversationAwareExecutionInput reuses one continuity read session for contextual recall", async () => {
+test("buildConversationAwareExecutionInput reuses one continuity read session across relationship and contextual recall blocks", async () => {
   const session = buildSession();
   session.conversationTurns.push({
     role: "user",
@@ -1037,10 +1037,11 @@ test("buildConversationAwareExecutionInput reuses one continuity read session fo
 
   assert.equal(openedSessions, 1);
   assert.equal(continuityEpisodeQueries, 2);
-  assert.equal(continuityFactQueries, 1);
+  assert.equal(continuityFactQueries, 2);
   assert.match(executionInput, /Contextual recall opportunity \(optional\):/);
   assert.match(executionInput, /Relevant situation: Owen fell down/i);
-  assert.match(executionInput, /Supporting memory hypothesis:/);
+  assert.match(executionInput, /Current State:/);
+  assert.match(executionInput, /Historical Context:/);
 });
 
 test("buildConversationAwareExecutionInput includes natural reuse preference guidance when the user asks to use the same approach", async () => {

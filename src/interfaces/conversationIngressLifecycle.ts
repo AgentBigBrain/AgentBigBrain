@@ -13,6 +13,9 @@ import {
   buildConversationKey,
   buildSessionSeed
 } from "./conversationManagerHelpers";
+import { createProfileMemoryRequestTelemetry } from "../core/profileMemoryRuntime/profileMemoryRequestTelemetry";
+import type { ProfileMemoryRequestTelemetry } from "../core/profileMemoryRuntime/contracts";
+import { appendMemoryAccessAudit } from "../organs/memoryContext/auditEvents";
 import { normalizeConversationTransportIdentity } from "./conversationRuntime/transportIdentity";
 import { reconcileInterpretedEntityAliasCandidateForTurn } from "./conversationRuntime/contextualEntityReferenceInterpretationSupport";
 import { backfillPulseResponseOutcome, expireStaleEmissions } from "./pulseEmissionLifecycle";
@@ -51,6 +54,40 @@ function summarizeStartedWorkInput(input: string): string {
  */
 function buildStartedWorkReply(input: string): string {
   return `On it. I'll start with: ${summarizeStartedWorkInput(input)}`;
+}
+
+/**
+ * Persists one bounded alias-safety telemetry snapshot for a direct alias-clarification turn.
+ *
+ * @param deps - Ingress dependencies carrying the optional audit store.
+ * @param userInput - Raw user wording that triggered alias reconciliation.
+ * @param receivedAt - Timestamp attached to the inbound turn.
+ * @param requestTelemetry - Request-scoped telemetry collected during alias reconciliation.
+ */
+async function recordDirectAliasSafetyAuditIfNeeded(
+  deps: Pick<ConversationIngressDependencies, "memoryAccessAuditStore">,
+  userInput: string,
+  receivedAt: string,
+  requestTelemetry: ProfileMemoryRequestTelemetry
+): Promise<void> {
+  if (
+    !deps.memoryAccessAuditStore ||
+    requestTelemetry.aliasSafetyDecisionCount === 0
+  ) {
+    return;
+  }
+  await appendMemoryAccessAudit(
+    deps.memoryAccessAuditStore,
+    `direct_entity_alias:${receivedAt}`,
+    userInput,
+    0,
+    0,
+    0,
+    ["profile"],
+    {
+      aliasSafetyDecisionCount: requestTelemetry.aliasSafetyDecisionCount
+    }
+  );
 }
 
 /**
@@ -101,6 +138,7 @@ export async function processConversationMessage(
   }
 
   const sessionKey = buildConversationKey(message);
+  const requestTelemetry = createProfileMemoryRequestTelemetry();
   const memoizedEntityReferenceInterpretationResolver =
     memoizeEntityReferenceInterpretationResolver(deps.entityReferenceInterpretationResolver);
   const invocationDeps: ConversationIngressDependencies = {
@@ -150,7 +188,14 @@ export async function processConversationMessage(
     message.receivedAt,
     deps.getEntityGraph,
     memoizedEntityReferenceInterpretationResolver,
-    deps.reconcileEntityAliasCandidate
+    deps.reconcileEntityAliasCandidate,
+    requestTelemetry
+  );
+  await recordDirectAliasSafetyAuditIfNeeded(
+    deps,
+    trimmed,
+    message.receivedAt,
+    requestTelemetry
   );
   const invocation = await resolveConversationInvocation(
     session,

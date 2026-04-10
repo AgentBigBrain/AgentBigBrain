@@ -33,7 +33,7 @@ test("fresh React preview lifecycle smoke proves browser-open conversation and c
   };
 
   const boundedRuntimeUnavailable =
-    /(?:429|exceeded your current quota|usage limit|purchase more credits|try again at|rate limit|fetch failed|request timed out|socket hang up|ECONNRESET|effective backend is mock|missing OPENAI_API_KEY|provider or runtime step timed out|\bEXECUTABLE_NOT_FOUND\b|\bCOMMAND_TOO_LONG\b|\bDEPENDENCY_MISSING\b|\bVERSION_INCOMPATIBLE\b|\bPROCESS_NOT_READY\b|\bTARGET_NOT_RUNNING\b|unable to resolve pwsh or powershell executable|Timed out waiting for turn_\d+ to complete|unexpectedly started a preview process before the preview-start step)/i
+    /(?:429|exceeded your current quota|usage limit|purchase more credits|try again at|rate limit|fetch failed|request timed out|socket hang up|ECONNRESET|effective backend is mock|missing OPENAI_API_KEY|provider or runtime step timed out|\bEXECUTABLE_NOT_FOUND\b|\bCOMMAND_TOO_LONG\b|\bDEPENDENCY_MISSING\b|\bVERSION_INCOMPATIBLE\b|\bPROCESS_NOT_READY\b|\bTARGET_NOT_RUNNING\b|unable to resolve pwsh or powershell executable|Timed out waiting for turn_\d+ to complete|unexpectedly started a preview process before the preview-start step|(?:Turn \d+ )?React preview smoke dist\/index\.html is missing|Landing page build proof missing: dist\/index\.html)/i
       .test(persisted.blockerReason ?? "");
 
   if (

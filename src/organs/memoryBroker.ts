@@ -95,7 +95,7 @@ export class MemoryBrokerOrgan {
     }
 
     const episodes = await this.profileMemoryStore.reviewEpisodesForUser(maxEpisodes, nowIso);
-    const domainBoundary = assessDomainBoundary(query, "");
+    const domainBoundary = assessDomainBoundary(query, []);
     await this.recordAudit(
       reviewTaskId,
       query,
@@ -130,7 +130,7 @@ export class MemoryBrokerOrgan {
     }
 
     const review = await this.profileMemoryStore.reviewFactsForUser(query, maxFacts, nowIso);
-    const domainBoundary = assessDomainBoundary(query, "");
+    const domainBoundary = assessDomainBoundary(query, []);
     await this.recordAudit(
       reviewTaskId,
       query,

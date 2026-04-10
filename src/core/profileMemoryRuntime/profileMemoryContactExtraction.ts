@@ -8,15 +8,20 @@ import {
   normalizeProfileKey,
   normalizeRelationshipDescriptor,
   splitIntoContextSentences,
-  stableContextHash,
   trimTrailingClausePunctuation
 } from "./profileMemoryNormalization";
 import {
+  buildDisplayNameContactToken,
+  buildQualifiedContactToken,
+  extractContactContextFacts,
+  extractContextInferredContactTokens,
+  extractThirdPersonContactAssociationAndContextFacts,
+  matchWorkWithMeAssociationPrefix,
   sanitizeCapturedContactDisplayName,
+  toSentenceConfidence,
   trimAssociationValue
 } from "./profileMemoryContactExtractionSupport";
 
-const HEDGED_CONFIDENCE_PATTERNS = ["maybe", "might be", "not sure", "i think", "possibly"];
 const DIRECT_RELATIONSHIP_DESCRIPTORS = new Set([
   "friend",
   "partner",
@@ -55,21 +60,6 @@ const WORK_WITH_PREFIXES = [
   { prefix: "we used to work with ", historical: true }
 ] as const;
 
-const WORK_WITH_ME_ASSOCIATION_PREFIXES = [
-  { prefix: "used to work with me at ", historical: true },
-  { prefix: "work with me at ", historical: false },
-  { prefix: "worked with me at ", historical: true },
-  { prefix: "works with me at ", historical: false },
-  { prefix: "used to work with me for ", historical: true },
-  { prefix: "work with me for ", historical: false },
-  { prefix: "worked with me for ", historical: true },
-  { prefix: "works with me for ", historical: false },
-  { prefix: "used to work with me", historical: true },
-  { prefix: "work with me", historical: false },
-  { prefix: "worked with me", historical: true },
-  { prefix: "works with me", historical: false }
-] as const;
-
 /**
  * Extracts named-contact facts and relationship associations from narrative phrasing.
  *
@@ -85,6 +75,11 @@ export function extractNamedContactFacts(
 ): ProfileFactUpsertInput[] {
   const candidates: ProfileFactUpsertInput[] = [];
   const detectedContacts = new Set<string>();
+  const detectedContactDisplayNames = new Map<string, string>();
+  const rememberDetectedContact = (contactToken: string, displayName: string): void => {
+    detectedContacts.add(contactToken);
+    detectedContactDisplayNames.set(contactToken, displayName);
+  };
   const contactPatterns = [
     /\b(?:went\s+to\s+school\s+with\s+)?(?:a\s+|an\s+|the\s+)?(friend|partner|spouse|wife|husband|girlfriend|boyfriend|acquaintance|guy|person|boss|coworker|colleague|work peer|peer|manager|supervisor|lead|team lead|employee|direct report|neighbor|neighbour|roommate|relative|distant relative|family member|cousin|aunt|uncle|mom|mother|dad|father|son|daughter|parent|child|sibling|sister|brother|teammate|classmate)\s+named\s+([A-Za-z][A-Za-z' -]{1,40})(?=(?:\s+and\b)|,|[.!?\n]|$)/gi,
     /\bmy\s+(friend|partner|spouse|wife|husband|girlfriend|boyfriend|acquaintance|boss|coworker|colleague|work peer|peer|manager|supervisor|lead|team lead|employee|direct report|neighbor|neighbour|roommate|relative|distant relative|family member|cousin|aunt|uncle|mom|mother|dad|father|son|daughter|parent|child|sibling|sister|brother|teammate|classmate)\s+is\s+([A-Za-z][A-Za-z' -]{1,40})(?=(?:\s+and\b)|,|[.!?\n]|$)/gi,
@@ -99,7 +94,7 @@ export function extractNamedContactFacts(
       if (!contactToken) {
         continue;
       }
-      detectedContacts.add(contactToken);
+      rememberDetectedContact(contactToken, displayName);
 
       candidates.push({
         key: `contact.${contactToken}.name`,
@@ -135,6 +130,49 @@ export function extractNamedContactFacts(
   }
 
   for (const segment of splitIntoContextSentences(text)) {
+    const alternateContactMatch = segment.match(
+      /^i(?:\s+also)?\s+(?:know|met)\s+(?:another|a\s+different)\s+([A-Z][A-Za-z'.-]{0,30})\s+(?:at|from)\s+([A-Z][A-Za-z0-9'&.-]*(?:\s+[A-Z][A-Za-z0-9'&.-]*)*?)(?:\s+last\s+month)?$/i
+    );
+    if (alternateContactMatch) {
+      const displayName = sanitizeCapturedContactDisplayName(alternateContactMatch[1] ?? "");
+      const qualifier = trimAssociationValue(alternateContactMatch[2] ?? "");
+      const contactToken = buildQualifiedContactToken(displayName, qualifier);
+      if (contactToken) {
+        rememberDetectedContact(contactToken, displayName);
+        candidates.push({
+          key: `contact.${contactToken}.name`,
+          value: displayName,
+          sensitive: false,
+          sourceTaskId,
+          source: "user_input_pattern.named_contact",
+          observedAt,
+          confidence: toSentenceConfidence(segment)
+        });
+        continue;
+      }
+    }
+
+    const aliasQualifiedContactMatch = segment.match(
+      /^the\s+([A-Z][A-Za-z'.-]{0,30})\s+from\s+([A-Z][A-Za-z0-9'&.-]*(?:\s+[A-Z][A-Za-z0-9'&.-]*)*)\s+sometimes\s+goes\s+by\s+([A-Z][A-Za-z'.-]{0,20})$/i
+    );
+    if (aliasQualifiedContactMatch) {
+      const displayName = sanitizeCapturedContactDisplayName(aliasQualifiedContactMatch[1] ?? "");
+      const contactToken = buildDisplayNameContactToken(displayName);
+      if (contactToken) {
+        rememberDetectedContact(contactToken, displayName);
+        candidates.push({
+          key: `contact.${contactToken}.name`,
+          value: displayName,
+          sensitive: false,
+          sourceTaskId,
+          source: "user_input_pattern.named_contact",
+          observedAt,
+          confidence: toSentenceConfidence(segment)
+        });
+        continue;
+      }
+    }
+
     const relationIndex = segment.toLowerCase().indexOf(" is my ");
     if (relationIndex <= 0) {
       continue;
@@ -171,7 +209,7 @@ export function extractNamedContactFacts(
       associationIndex >= 0
         ? trimAssociationValue(descriptorAndCompany.slice(associationIndex + 4))
         : "";
-    detectedContacts.add(contactToken);
+    rememberDetectedContact(contactToken, displayName);
     candidates.push({
       key: `contact.${contactToken}.name`,
       value: displayName,
@@ -234,7 +272,7 @@ export function extractNamedContactFacts(
     if (!contactToken) {
       continue;
     }
-    detectedContacts.add(contactToken);
+    rememberDetectedContact(contactToken, displayName);
 
     candidates.push({
       key: `contact.${contactToken}.name`,
@@ -274,17 +312,32 @@ export function extractNamedContactFacts(
     }
   }
 
+  for (const thirdPersonFact of extractThirdPersonContactAssociationAndContextFacts(
+    text,
+    sourceTaskId,
+    observedAt
+  )) {
+    const contactMatch = thirdPersonFact.key.match(/^contact\.([^.]+)\./);
+    if (contactMatch?.[1]) {
+      const contactToken = contactMatch[1];
+      if (thirdPersonFact.key === `contact.${contactToken}.name`) {
+        rememberDetectedContact(contactToken, thirdPersonFact.value);
+      } else if (!detectedContactDisplayNames.has(contactToken)) {
+        rememberDetectedContact(contactToken, displayNameFromContactToken(contactToken));
+      } else {
+        detectedContacts.add(contactToken);
+      }
+    }
+    candidates.push(thirdPersonFact);
+  }
+
   if (detectedContacts.size === 1) {
     const [contactToken] = [...detectedContacts];
     const associationSegment = splitIntoContextSentences(text).find((segment) =>
-      WORK_WITH_ME_ASSOCIATION_PREFIXES.some(({ prefix }) =>
-        segment.toLowerCase().includes(prefix)
-      )
+      matchWorkWithMeAssociationPrefix(segment) !== null
     );
     const associationPrefixEntry = associationSegment
-      ? WORK_WITH_ME_ASSOCIATION_PREFIXES.find(({ prefix }) =>
-          associationSegment.toLowerCase().includes(prefix)
-        ) ?? null
+      ? matchWorkWithMeAssociationPrefix(associationSegment)
       : null;
     if (associationSegment && associationPrefixEntry) {
       const startIndex = associationSegment.toLowerCase().indexOf(associationPrefixEntry.prefix);
@@ -321,7 +374,7 @@ export function extractNamedContactFacts(
 
   const inferredContactTokens = extractContextInferredContactTokens(text);
   for (const inferredToken of inferredContactTokens) {
-    detectedContacts.add(inferredToken);
+    rememberDetectedContact(inferredToken, displayNameFromContactToken(inferredToken));
     candidates.push({
       key: `contact.${inferredToken}.name`,
       value: displayNameFromContactToken(inferredToken),
@@ -336,6 +389,7 @@ export function extractNamedContactFacts(
   const contextFacts = extractContactContextFacts(
     text,
     detectedContacts,
+    detectedContactDisplayNames,
     sourceTaskId,
     observedAt
   );
@@ -344,103 +398,4 @@ export function extractNamedContactFacts(
   }
 
   return candidates;
-}
-
-/**
- * Detects likely named-contact tokens from conversational mention patterns.
- *
- * @param text - Raw user text under analysis.
- * @returns Inferred canonical contact tokens.
- */
-function extractContextInferredContactTokens(text: string): string[] {
-  const tokens = new Set<string>();
-  const patterns = [
-    /\b([A-Z][A-Za-z' -]{1,40}?)\s+and\s+i\b/gi,
-    /\bi(?:'ve| have)?\s+known\s+([A-Z][A-Za-z' -]{1,40})\b/gi,
-    /\bi\s+know\s+([A-Z][A-Za-z' -]{1,40})\b/gi
-  ];
-
-  for (const pattern of patterns) {
-    for (const match of text.matchAll(pattern)) {
-      const rawName = trimTrailingClausePunctuation(match[1] ?? "");
-      if (
-        rawName.split(/\s+/).filter(Boolean).length > 3 ||
-        rawName.toLowerCase().startsWith("my ") ||
-        rawName.toLowerCase().includes(" name ")
-      ) {
-        continue;
-      }
-      const token = normalizeProfileKey(rawName);
-      if (!token || token === "i") {
-        continue;
-      }
-      tokens.add(token);
-    }
-  }
-
-  return [...tokens];
-}
-
-/**
- * Builds dynamic contact-context facts from sentence-level mentions.
- *
- * @param text - Raw user text under analysis.
- * @param contactTokens - Canonical contact tokens already detected.
- * @param sourceTaskId - Task id used to attribute extracted facts.
- * @param observedAt - Observation timestamp applied to extracted facts.
- * @returns Contact context candidates.
- */
-function extractContactContextFacts(
-  text: string,
-  contactTokens: Set<string>,
-  sourceTaskId: string,
-  observedAt: string
-): ProfileFactUpsertInput[] {
-  const candidates: ProfileFactUpsertInput[] = [];
-  if (contactTokens.size === 0) {
-    return candidates;
-  }
-
-  const sentences = splitIntoContextSentences(text);
-  for (const contactToken of contactTokens) {
-    const displayName = displayNameFromContactToken(contactToken);
-    const namePattern = new RegExp(`\\b${displayName}\\b`, "i");
-    let addedContextCount = 0;
-
-    for (const sentence of sentences) {
-      if (!namePattern.test(sentence)) {
-        continue;
-      }
-      const keySuffix = stableContextHash(`${contactToken}:${sentence}`);
-      candidates.push({
-        key: `contact.${contactToken}.context.${keySuffix}`,
-        value: sentence,
-        sensitive: false,
-        sourceTaskId,
-        source: "user_input_pattern.contact_context",
-        observedAt,
-        confidence: toSentenceConfidence(sentence)
-      });
-      addedContextCount += 1;
-      if (addedContextCount >= 3) {
-        break;
-      }
-    }
-  }
-
-  return candidates;
-}
-
-/**
- * Builds deterministic confidence scores for extracted sentences.
- *
- * @param text - Source sentence or phrase.
- * @returns Confidence score in the `[0, 1]` range.
- */
-function toSentenceConfidence(text: string): number {
-  const normalized = text.toLowerCase();
-  const hedged = HEDGED_CONFIDENCE_PATTERNS.some((pattern) =>
-    normalized.includes(pattern)
-  );
-  return hedged ? 0.6 : 0.95;
 }

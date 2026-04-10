@@ -90,6 +90,11 @@ const EPISODE_PATTERNS: readonly EpisodePattern[] = [
   }
 ];
 
+const EPISODE_TRANSFER_PATTERN = new RegExp(
+  `\\b${EPISODE_SUBJECT_PATTERN}\\s+sold\\s+${EPISODE_SUBJECT_PATTERN}\\s+the\\s+([A-Za-z0-9' -]+)\\b`,
+  "i"
+);
+
 /**
  * Extracts bounded episodic-memory candidates from raw user text.
  *
@@ -113,6 +118,16 @@ export function extractProfileEpisodeCandidatesFromUserInput(
   const sentences = splitIntoEpisodeSentences(userInput);
 
   for (const sentence of sentences) {
+    const transferCandidate = extractTransferEpisodeCandidate(
+      sentence,
+      sourceTaskId,
+      observedAt,
+      seen
+    );
+    if (transferCandidate) {
+      candidates.push(transferCandidate);
+      continue;
+    }
     for (const episodePattern of EPISODE_PATTERNS) {
       const match = episodePattern.pattern.exec(sentence);
       if (!match) {
@@ -150,6 +165,83 @@ export function extractProfileEpisodeCandidatesFromUserInput(
   }
 
   return candidates;
+}
+
+/**
+ * Extracts one bounded person-to-person transfer event episode from a natural-language sentence.
+ *
+ * **Why it exists:**
+ * Phase 8 needs real conversational ingest for event-shaped relational memory such as
+ * `Milo sold Jordan the gray Accord in late 2024.` before transcript-shaped participant-role recall
+ * can be proven through the live manager/runtime path.
+ *
+ * **What it talks to:**
+ * - Uses `trimTrailingClausePunctuation`, `displayNameFromContactToken`, and
+ *   `normalizeProfileValue` from `./profileMemoryNormalization`.
+ * - Uses local episode extraction helpers within this module.
+ *
+ * @param sentence - One normalized sentence-like segment from the current user turn.
+ * @param sourceTaskId - Task id used for traceability on extracted episodes.
+ * @param observedAt - Observation timestamp applied to extracted episodes.
+ * @param seen - Current per-utterance dedupe set.
+ * @returns Canonical transfer episode candidate, or `null` when the sentence does not match.
+ */
+function extractTransferEpisodeCandidate(
+  sentence: string,
+  sourceTaskId: string,
+  observedAt: string,
+  seen: Set<string>
+): CreateProfileEpisodeRecordInput | null {
+  const match = EPISODE_TRANSFER_PATTERN.exec(sentence);
+  if (!match) {
+    return null;
+  }
+
+  const sellerRawName = trimTrailingClausePunctuation(match[1] ?? "");
+  const buyerRawName = trimTrailingClausePunctuation(match[2] ?? "");
+  const rawObject = trimTrailingClausePunctuation(match[3] ?? "");
+  const sellerToken = extractEpisodeContactToken(sellerRawName);
+  const buyerToken = extractEpisodeContactToken(buyerRawName);
+  const objectSurface = trimTransferEpisodeObjectSurface(rawObject);
+  if (!sellerToken || !buyerToken || !objectSurface || sellerToken === buyerToken) {
+    return null;
+  }
+
+  const sellerDisplayName = displayNameFromContactToken(sellerToken);
+  const buyerDisplayName = displayNameFromContactToken(buyerToken);
+  const title = `${sellerDisplayName} sold ${buyerDisplayName} the ${objectSurface}`;
+  const summary = trimTrailingClausePunctuation(sentence);
+  const signature = `sale|${sellerToken}|${buyerToken}|${objectSurface.toLowerCase()}`;
+  if (seen.has(signature)) {
+    return null;
+  }
+  seen.add(signature);
+  return {
+    title,
+    summary,
+    sourceTaskId,
+    source: "user_input_pattern.episode_candidate",
+    sourceKind: "explicit_user_statement",
+    sensitive: false,
+    observedAt,
+    confidence: toEpisodeConfidence(sentence),
+    entityRefs: [`contact.${sellerToken}`, `contact.${buyerToken}`, objectSurface],
+    tags: ["followup", "transaction", "transfer"]
+  };
+}
+
+/**
+ * Trims trailing time-only phrasing from one transfer-event object surface.
+ *
+ * @param rawObject - Raw object surface captured from the transfer-event regex.
+ * @returns Canonical object surface, or an empty string when nothing bounded remains.
+ */
+function trimTransferEpisodeObjectSurface(rawObject: string): string {
+  const withoutTrailingTime = rawObject.replace(
+    /\s+in\s+(?:late|early|mid)?\s*[A-Za-z0-9' -]+$/i,
+    ""
+  );
+  return normalizeProfileValue(withoutTrailingTime);
 }
 
 /**

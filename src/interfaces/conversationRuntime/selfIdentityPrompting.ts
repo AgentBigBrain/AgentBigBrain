@@ -3,6 +3,12 @@
  */
 
 import { extractPreferredNameValuesFromUserInput } from "../../core/profileMemoryRuntime/profileMemoryExtraction";
+import type { ProfileMemoryRequestTelemetry } from "../../core/profileMemoryRuntime/contracts";
+import {
+  recordProfileMemoryIdentitySafetyDecision,
+  recordProfileMemoryRenderOperation,
+  recordProfileMemorySelfIdentityParity
+} from "../../core/profileMemoryRuntime/profileMemoryRequestTelemetry";
 import type { IdentityInterpretationResolver } from "../../organs/languageUnderstanding/localIntentModelContracts";
 import { routeIdentityInterpretationModel } from "../../organs/languageUnderstanding/localIntentModelRouter";
 import {
@@ -24,137 +30,10 @@ import {
   validateInterpretedPreferredNameCandidate
 } from "./selfIdentityInterpretationSupport";
 import {
-  buildConversationTransportIdentityRecord,
-  selectConversationTransportIdentityNameHint
-} from "./transportIdentity";
-
-const SELF_IDENTITY_CONTINUITY_FACT_HINTS = [
-  "identity",
-  "preferred name",
-  "name",
-  "call me",
-  "go by"
-] as const;
-const SELF_IDENTITY_FACT_KEY_PRIORITIES = new Map<string, number>([
-  ["identity.preferred_name", 0],
-  ["identity.display_name", 1],
-  ["identity.legal_name", 2],
-  ["identity.name", 3]
-]);
-interface ResolvedSelfIdentityRecallContext {
-  identityFacts: Awaited<ReturnType<NonNullable<QueryConversationContinuityFacts>>>;
-  transportHint: ReturnType<typeof selectConversationTransportIdentityNameHint>;
-  hasFactLookup: boolean;
-}
-
-/**
- * Builds a low-confidence username-only transport identity fallback for older sessions that do not
- * yet carry the richer transport-identity record.
- *
- * @param session - Conversation session carrying persisted username metadata.
- * @returns Username-derived transport identity, or `null` when provider inference is unavailable.
- */
-function resolveUsernameFallbackIdentity(
-  session: ConversationSession
-) {
-  const providerCandidate = session.conversationId.split(":", 1)[0];
-  if (providerCandidate !== "telegram" && providerCandidate !== "discord") {
-    return null;
-  }
-  return buildConversationTransportIdentityRecord({
-    provider: providerCandidate,
-    username: session.username,
-    displayName: null,
-    givenName: null,
-    familyName: null,
-    observedAt: session.updatedAt
-  });
-}
-
-/**
- * Resolves the conversation transport provider from persisted session metadata for user-facing
- * identity replies.
- *
- * @param session - Conversation session carrying transport/provider metadata.
- * @returns Canonical provider id, or `null` when unknown.
- */
-function resolveConversationTransportProvider(session: ConversationSession): "telegram" | "discord" | null {
-  if (session.transportIdentity?.provider === "telegram" || session.transportIdentity?.provider === "discord") {
-    return session.transportIdentity.provider;
-  }
-  const providerCandidate = session.conversationId.split(":", 1)[0];
-  return providerCandidate === "telegram" || providerCandidate === "discord"
-    ? providerCandidate
-    : null;
-}
-
-/**
- * Returns whether one continuity fact key is a direct user-identity fact suitable for self-recall.
- *
- * @param key - Fact key under evaluation.
- * @returns `true` when the key names the user's own identity rather than another topic.
- */
-function isSelfIdentityFactKey(key: string): boolean {
-  const normalized = key.replace(/\s+/g, " ").trim().toLowerCase();
-  return (
-    normalized === "identity.preferred_name" ||
-    normalized === "identity.display_name" ||
-    normalized === "identity.legal_name" ||
-    normalized === "identity.name"
-  );
-}
-
-/**
- * Sorts identity facts so preferred display names win before broader identity fields.
- *
- * @param left - Left fact candidate.
- * @param right - Right fact candidate.
- * @returns Stable priority comparison for direct self-identity answers.
- */
-function compareSelfIdentityFacts(
-  left: Awaited<ReturnType<NonNullable<QueryConversationContinuityFacts>>>[number],
-  right: Awaited<ReturnType<NonNullable<QueryConversationContinuityFacts>>>[number]
-): number {
-  const leftPriority = SELF_IDENTITY_FACT_KEY_PRIORITIES.get(left.key.toLowerCase()) ?? 99;
-  const rightPriority = SELF_IDENTITY_FACT_KEY_PRIORITIES.get(right.key.toLowerCase()) ?? 99;
-  if (leftPriority !== rightPriority) {
-    return leftPriority - rightPriority;
-  }
-  return right.lastUpdatedAt.localeCompare(left.lastUpdatedAt);
-}
-
-/**
- * Resolves typed self-identity context from confirmed facts first, then transport metadata hints.
- *
- * @param session - Conversation session carrying continuity and transport metadata.
- * @param queryContinuityFacts - Optional bounded fact query helper.
- * @returns Resolved self-identity context for prompt or deterministic reply assembly.
- */
-async function resolveSelfIdentityRecallContext(
-  session: ConversationSession,
-  queryContinuityFacts?: QueryConversationContinuityFacts
-): Promise<ResolvedSelfIdentityRecallContext> {
-  const stack = session.conversationStack;
-  const hasFactLookup = Boolean(stack && queryContinuityFacts);
-  const queriedFacts =
-    stack && queryContinuityFacts
-      ? await queryContinuityFacts({
-          stack,
-          entityHints: SELF_IDENTITY_CONTINUITY_FACT_HINTS,
-          maxFacts: 6
-        }).catch(() => [])
-      : [];
-  return {
-    identityFacts: queriedFacts
-      .filter((fact) => isSelfIdentityFactKey(fact.key))
-      .sort(compareSelfIdentityFacts)
-      .slice(0, 3),
-    transportHint: selectConversationTransportIdentityNameHint(
-      session.transportIdentity ?? resolveUsernameFallbackIdentity(session)
-    ),
-    hasFactLookup
-  };
-}
+  hasSelfIdentityParity,
+  resolveConversationTransportProvider,
+  resolveSelfIdentityRecallContext
+} from "./selfIdentityPromptingSupport";
 
 /**
  * Returns the strongest canonical preferred-name declaration present in raw user wording.
@@ -188,7 +67,8 @@ export async function buildModelAssistedSelfIdentityReply(
   routingClassification: RoutingMapClassificationV1 | null,
   queryContinuityFacts?: QueryConversationContinuityFacts,
   rememberConversationProfileInput?: RememberConversationProfileInput,
-  identityInterpretationResolver?: IdentityInterpretationResolver
+  identityInterpretationResolver?: IdentityInterpretationResolver,
+  requestTelemetry?: ProfileMemoryRequestTelemetry
 ): Promise<string | null> {
   const sessionHints = buildLocalIntentSessionHints(session);
   const eligibility = assessIdentityInterpretationEligibility(userInput, {
@@ -204,6 +84,7 @@ export async function buildModelAssistedSelfIdentityReply(
   ) {
     return null;
   }
+  recordProfileMemoryIdentitySafetyDecision(requestTelemetry);
   const interpretedIdentity = await routeIdentityInterpretationModel(
     {
       userInput,
@@ -224,7 +105,8 @@ export async function buildModelAssistedSelfIdentityReply(
     return buildDeterministicSelfIdentityReply(
       session,
       userInput,
-      queryContinuityFacts
+      queryContinuityFacts,
+      requestTelemetry
     );
   }
   if (interpretedIdentity.kind === "assistant_identity_query") {
@@ -241,7 +123,22 @@ export async function buildModelAssistedSelfIdentityReply(
     interpretedIdentity.candidateValue
   );
   if (!preferredName) {
+    const deterministicCandidate = validateInterpretedPreferredNameCandidate(
+      extractSelfIdentityDeclarationValue(userInput)
+    );
+    if (deterministicCandidate) {
+      recordProfileMemorySelfIdentityParity(requestTelemetry, false);
+    }
     return buildIdentityInterpretationFallbackReply(eligibility.reason);
+  }
+  const deterministicCandidate = validateInterpretedPreferredNameCandidate(
+    extractSelfIdentityDeclarationValue(userInput)
+  );
+  if (deterministicCandidate) {
+    recordProfileMemorySelfIdentityParity(
+      requestTelemetry,
+      hasSelfIdentityParity(deterministicCandidate, preferredName)
+    );
   }
 
   const remembered =
@@ -278,7 +175,8 @@ export async function buildModelAssistedSelfIdentityReply(
 export async function buildSelfIdentityRecallBlock(
   session: ConversationSession,
   userInput: string,
-  queryContinuityFacts?: QueryConversationContinuityFacts
+  queryContinuityFacts?: QueryConversationContinuityFacts,
+  requestTelemetry?: ProfileMemoryRequestTelemetry
 ): Promise<string | null> {
   const signals = analyzeConversationChatTurnSignals(userInput);
   if (signals.primaryKind !== "self_identity_query") {
@@ -293,10 +191,12 @@ export async function buildSelfIdentityRecallBlock(
   ];
   const { identityFacts, transportHint, hasFactLookup } = await resolveSelfIdentityRecallContext(
     session,
-    queryContinuityFacts
+    queryContinuityFacts,
+    requestTelemetry
   );
 
   if (identityFacts.length > 0) {
+    recordProfileMemoryRenderOperation(requestTelemetry);
     return [
       ...identityFactGuardLines,
       "- Known non-sensitive identity facts for this user:",
@@ -316,6 +216,7 @@ export async function buildSelfIdentityRecallBlock(
         : transportHint.source === "given_name"
           ? "transport given name"
           : "transport username";
+    recordProfileMemoryRenderOperation(requestTelemetry);
     return [
       ...identityFactGuardLines,
       "- No confirmed non-sensitive identity facts were found for this user yet.",
@@ -334,6 +235,7 @@ export async function buildSelfIdentityRecallBlock(
     hasFactLookup
       ? "- No bounded non-sensitive identity facts were found for this user yet."
       : "- No bounded identity-fact lookup is available in this execution path.";
+  recordProfileMemoryRenderOperation(requestTelemetry);
   return [
     ...identityFactGuardLines,
     unavailableFactLookupLine,
@@ -352,16 +254,25 @@ export async function buildSelfIdentityRecallBlock(
 export async function buildDeterministicSelfIdentityReply(
   session: ConversationSession,
   userInput: string,
-  queryContinuityFacts?: QueryConversationContinuityFacts
+  queryContinuityFacts?: QueryConversationContinuityFacts,
+  requestTelemetry?: ProfileMemoryRequestTelemetry
 ): Promise<string | null> {
   const signals = analyzeConversationChatTurnSignals(userInput);
   if (signals.primaryKind !== "self_identity_query") {
     return null;
   }
+  recordProfileMemoryIdentitySafetyDecision(requestTelemetry);
   const { identityFacts, transportHint } = await resolveSelfIdentityRecallContext(
     session,
-    queryContinuityFacts
+    queryContinuityFacts,
+    requestTelemetry
   );
+  if (identityFacts.length > 0 && transportHint) {
+    recordProfileMemorySelfIdentityParity(
+      requestTelemetry,
+      hasSelfIdentityParity(identityFacts[0]!.value, transportHint.value)
+    );
+  }
   if (identityFacts.length > 0) {
     return `You're ${identityFacts[0]!.value}.`;
   }
@@ -392,7 +303,8 @@ export async function buildDeterministicSelfIdentityDeclarationReply(
   userInput: string,
   receivedAt: string,
   rememberConversationProfileInput?: RememberConversationProfileInput,
-  session?: ConversationSession
+  session?: ConversationSession,
+  requestTelemetry?: ProfileMemoryRequestTelemetry
 ): Promise<string | null> {
   if (!isSimpleDeterministicSelfIdentityDeclaration(userInput)) {
     return null;
@@ -401,6 +313,7 @@ export async function buildDeterministicSelfIdentityDeclarationReply(
   if (!preferredName) {
     return null;
   }
+  recordProfileMemoryIdentitySafetyDecision(requestTelemetry);
 
   const remembered =
     typeof rememberConversationProfileInput === "function"

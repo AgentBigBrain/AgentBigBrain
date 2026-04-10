@@ -26,6 +26,18 @@ export type ProfileMemoryGraphTimeSource =
 
 export type ProfileMemoryGraphRedactionState = "not_requested" | "redacted";
 
+export type ProfileMemoryGraphStableRefResolution =
+  | "resolved_current"
+  | "quarantined"
+  | "provisional";
+
+export type ProfileMemoryGraphDecisionActionV1 =
+  | "merge"
+  | "quarantine"
+  | "unquarantine"
+  | "rekey"
+  | "rollback";
+
 export interface ProfileMemoryGraphObservationPayloadV1 {
   observationId: string;
   stableRefId: string | null;
@@ -155,12 +167,27 @@ export interface ProfileMemoryGraphCompactionStateV1 {
   maxJournalEntries: number;
 }
 
+export interface ProfileMemoryGraphDecisionRecordV1 {
+  decisionId: string;
+  action: ProfileMemoryGraphDecisionActionV1;
+  recordedAt: string;
+  fromStableRefId: string | null;
+  toStableRefId: string | null;
+  sourceTaskId: string | null;
+  sourceFingerprint: string | null;
+  mutationEnvelopeHash: string | null;
+  observationIds: string[];
+  claimIds: string[];
+  eventIds: string[];
+}
+
 export interface ProfileMemoryGraphState {
   schemaVersion: "v1";
   updatedAt: string;
   observations: ProfileMemoryGraphObservationRecord[];
   claims: ProfileMemoryGraphClaimRecord[];
   events: ProfileMemoryGraphEventRecord[];
+  decisionRecords?: ProfileMemoryGraphDecisionRecordV1[];
   mutationJournal: ProfileMemoryMutationJournalStateV1;
   indexes: ProfileMemoryGraphIndexStateV1;
   readModel: ProfileMemoryGraphReadModelV1;

@@ -111,7 +111,7 @@ test("canonical extraction helper still captures short preferred-name call-me ph
   );
 });
 
-test("conversational profile update signal recognizes direct relationship and work facts", () => {
+test("conversational profile update signal recognizes direct relationship, work, and episode facts", () => {
   assert.equal(
     hasConversationalProfileUpdateSignal(
       "I work with a guy named Milo at Northstar Creative."
@@ -120,6 +120,12 @@ test("conversational profile update signal recognizes direct relationship and wo
   );
   assert.equal(
     hasConversationalProfileUpdateSignal("I live in Detroit now."),
+    true
+  );
+  assert.equal(
+    hasConversationalProfileUpdateSignal(
+      "Milo sold Jordan the gray Accord in late 2024."
+    ),
     true
   );
 });
@@ -136,6 +142,120 @@ test("conversational profile update signal ignores workflow callback phrasing an
       "Deploy the workspace repo and my favorite editor is Helix."
     ),
     false
+  );
+});
+
+test("conversational profile update signal unwraps reminder-style named-contact clauses", () => {
+  assert.equal(
+    hasConversationalProfileUpdateSignal(
+      "After that, remind me that Priya is my coworker at Northstar."
+    ),
+    true
+  );
+});
+
+test("named-contact extraction unwraps reminder-style coworker clauses into canonical contact facts", () => {
+  const candidates = extractProfileFactCandidatesFromUserInput(
+    "After that, remind me that Priya is my coworker at Northstar.",
+    "task_profile_extract_wrapped_coworker_clause",
+    "2026-04-09T18:00:00.000Z"
+  );
+
+  assert.equal(
+    candidates.some(
+      (candidate) =>
+        candidate.key === "contact.priya.name" && candidate.value === "Priya"
+    ),
+    true
+  );
+  assert.equal(
+    candidates.some(
+      (candidate) =>
+        candidate.key === "contact.priya.relationship" && candidate.value === "work_peer"
+    ),
+    true
+  );
+  assert.equal(
+    candidates.some(
+      (candidate) =>
+        candidate.key === "contact.priya.work_association" && candidate.value === "Northstar"
+    ),
+    true
+  );
+});
+
+test("named-contact extraction keeps second same-name contacts separate by qualifier", () => {
+  const candidates = extractProfileFactCandidatesFromUserInput(
+    "I also know another Jordan at Ember. That's a different Jordan from Northstar.",
+    "task_profile_extract_same_name_qualifier",
+    "2026-04-09T18:10:00.000Z"
+  );
+
+  assert.equal(
+    candidates.some(
+      (candidate) =>
+        candidate.key === "contact.jordan_ember.name" &&
+        candidate.value === "Jordan"
+    ),
+    true
+  );
+  assert.equal(
+    candidates.some(
+      (candidate) =>
+        candidate.key.startsWith("contact.jordan_ember.context.") &&
+        /Jordan at Ember|different Jordan from Northstar/i.test(candidate.value)
+    ),
+    true
+  );
+});
+
+test("named-contact extraction keeps alias-bearing same-name context attached to the original contact lane", () => {
+  const candidates = extractProfileFactCandidatesFromUserInput(
+    "The Jordan from Northstar sometimes goes by J.R.",
+    "task_profile_extract_same_name_alias",
+    "2026-04-09T18:11:00.000Z"
+  );
+
+  assert.equal(
+    candidates.some(
+      (candidate) =>
+        candidate.key === "contact.jordan.name" &&
+        candidate.value === "Jordan"
+    ),
+    true
+  );
+  assert.equal(
+    candidates.some(
+      (candidate) =>
+        candidate.key.startsWith("contact.jordan.context.") &&
+        /J\.R\./i.test(candidate.value)
+    ),
+    true
+  );
+});
+
+test("named-contact extraction keeps conflicting dotted-initial aliases on a separate qualified lane", () => {
+  const candidates = extractProfileFactCandidatesFromUserInput(
+    "I met a different J.R. from Harbor last month.",
+    "task_profile_extract_alias_collision",
+    "2026-04-09T18:12:00.000Z"
+  );
+
+  assert.equal(
+    candidates.some(
+      (candidate) =>
+        candidate.key === "contact.jr_harbor.name" &&
+        candidate.value === "J.R."
+    ),
+    true
+  );
+  assert.equal(
+    candidates.some(
+      (candidate) =>
+        candidate.key.startsWith("contact.jr_harbor.context.") &&
+        /Harbor/i.test(candidate.value)
+    ),
+    true
   );
 });
 
@@ -2264,6 +2384,80 @@ test("named-contact narrative keeps used-to-work-with-me association historical"
       (candidate) =>
         candidate.key === "contact.owen.work_association" &&
         candidate.value === "Lantern Studio"
+    ),
+    true
+  );
+});
+
+test("third-person contact continuity extraction keeps current organization, historical organization, and resolved vehicle context bounded", () => {
+  const extractedCandidates = extractProfileFactCandidatesFromUserInput(
+    "Billy used to be at Flare. He's at Northstar now. He drives a gray Accord.",
+    "task_profile_governed_third_person_contact_continuity_extract",
+    "2026-04-09T12:00:00.000Z"
+  );
+  const governanceResult = governProfileMemoryCandidates({
+    factCandidates: extractedCandidates,
+    episodeCandidates: [],
+    episodeResolutionCandidates: []
+  });
+
+  assert.equal(
+    extractedCandidates.some(
+      (candidate) =>
+        candidate.key === "contact.billy.name" &&
+        candidate.value === "Billy" &&
+        candidate.source === "user_input_pattern.named_contact"
+    ),
+    true
+  );
+  assert.equal(
+    extractedCandidates.some(
+      (candidate) =>
+        candidate.key === "contact.billy.work_association" &&
+        candidate.value === "Flare" &&
+        candidate.source === "user_input_pattern.work_association_historical"
+    ),
+    true
+  );
+  assert.equal(
+    extractedCandidates.some(
+      (candidate) =>
+        candidate.key === "contact.billy.work_association" &&
+        candidate.value === "Northstar" &&
+        candidate.source === "user_input_pattern.work_association"
+    ),
+    true
+  );
+  assert.equal(
+    extractedCandidates.some(
+      (candidate) =>
+        /^contact\.billy\.context\.[a-f0-9]{8}$/.test(candidate.key) &&
+        candidate.value === "Billy drives a gray Accord" &&
+        candidate.source === "user_input_pattern.contact_context"
+    ),
+    true
+  );
+  assert.equal(
+    governanceResult.allowedCurrentStateFactCandidates.some(
+      (candidate) =>
+        candidate.key === "contact.billy.work_association" &&
+        candidate.value === "Northstar"
+    ),
+    true
+  );
+  assert.equal(
+    governanceResult.allowedSupportOnlyFactCandidates.some(
+      (candidate) =>
+        candidate.key === "contact.billy.work_association" &&
+        candidate.value === "Flare"
+    ),
+    true
+  );
+  assert.equal(
+    governanceResult.allowedSupportOnlyFactCandidates.some(
+      (candidate) =>
+        /^contact\.billy\.context\.[a-f0-9]{8}$/.test(candidate.key) &&
+        candidate.value === "Billy drives a gray Accord"
     ),
     true
   );

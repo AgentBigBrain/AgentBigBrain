@@ -233,6 +233,8 @@ test("buildDeterministicDirectChatFallbackReply returns bounded no-worker replie
 test("isRelationshipConversationRecallTurn keeps direct who-is relationship questions off the short follow-up path", () => {
   assert.equal(isRelationshipConversationRecallTurn("So, yeah, who is Milo?"), true);
   assert.equal(isRelationshipConversationRecallTurn("Who is he?"), true);
+  assert.equal(isRelationshipConversationRecallTurn("Who's J.R.?"), true);
+  assert.equal(isRelationshipConversationRecallTurn("Whos J.R.?"), true);
 });
 
 test("isRelationshipConversationRecallTurn recognizes status-shaped and shorthand relationship recall wording", () => {
@@ -240,6 +242,10 @@ test("isRelationshipConversationRecallTurn recognizes status-shaped and shorthan
   assert.equal(isRelationshipConversationRecallTurn("Do you remember Billy?"), true);
   assert.equal(isRelationshipConversationRecallTurn("What's Billy's situation again?"), true);
   assert.equal(isRelationshipConversationRecallTurn("What's going on with Billy and Flare?"), true);
+  assert.equal(isRelationshipConversationRecallTurn("Who sold Jordan the gray Accord?"), true);
+  assert.equal(isRelationshipConversationRecallTurn("Who bought the gray Accord?"), true);
+  assert.equal(isRelationshipConversationRecallTurn("What happened with the gray Accord?"), true);
+  assert.equal(isRelationshipConversationRecallTurn("Who handled the paperwork?"), true);
   assert.equal(isRelationshipConversationRecallTurn("What's going on with my roommate Kai?"), true);
   assert.equal(isRelationshipConversationRecallTurn("What's going on with my direct report Casey?"), true);
   assert.equal(isRelationshipConversationRecallTurn("Do you remember my supervisor Dana?"), true);
@@ -249,6 +255,7 @@ test("isRelationshipConversationRecallTurn recognizes status-shaped and shorthan
     false
   );
   assert.equal(isRelationshipConversationRecallTurn("What's the status on the deploy?"), false);
+  assert.equal(isRelationshipConversationRecallTurn("What happened with the deploy?"), false);
 });
 
 test("shouldAllowImplicitReturnHandoffStatusFallback only permits explicit status-like fallback", () => {

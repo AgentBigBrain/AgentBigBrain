@@ -64,6 +64,21 @@ const GENERIC_RELATIONSHIP_RECALL_TERMS = new Set([
   "your"
 ]);
 
+const RELATIONSHIP_INVENTORY_TERMS = new Set([
+  "people",
+  "ppl",
+  "folks",
+  "anyone"
+]);
+
+const EVENT_PARTICIPANT_RECALL_TERMS = new Set([
+  "sold",
+  "bought",
+  "handled",
+  "paperwork",
+  "happened"
+]);
+
 /**
  * Returns whether the current wording carries a concrete person/topic token beyond generic recall
  * filler so short status-like relationship questions can stay on the conversational memory path.
@@ -76,6 +91,85 @@ function hasSpecificRelationshipSubjectToken(rawTokens: readonly string[]): bool
     (token) =>
       token.length >= 3 &&
       !GENERIC_RELATIONSHIP_RECALL_TERMS.has(token)
+  );
+}
+
+/**
+ * Returns whether the turn includes a typo-tolerant "remember" cue.
+ *
+ * @param rawTokens - Normalized surface tokens from the current user wording.
+ * @returns `true` when one token still clearly points at "remember".
+ */
+function hasApproximateRememberCue(rawTokens: readonly string[]): boolean {
+  return rawTokens.some((token) => token === "remember" || /^rem[a-z]{2,}$/.test(token));
+}
+
+/**
+ * Returns whether the wording is asking for a broad people-inventory recall.
+ *
+ * @param rawTokens - Normalized surface tokens from the current user wording.
+ * @param questionLike - Whether the turn structurally reads as a question.
+ * @returns `true` when the wording is a people-I-know style relationship inventory prompt.
+ */
+function isRelationshipInventoryRecallShape(
+  rawTokens: readonly string[],
+  questionLike: boolean
+): boolean {
+  if (!questionLike) {
+    return false;
+  }
+  if (!rawTokens.includes("who")) {
+    return false;
+  }
+  return (
+    rawTokens.some((token) => RELATIONSHIP_INVENTORY_TERMS.has(token)) &&
+    (rawTokens.includes("know") || hasApproximateRememberCue(rawTokens))
+  );
+}
+
+/**
+ * Returns whether one raw token is a contracted `who is` lead such as `who's`.
+ *
+ * @param token - Raw normalized surface token.
+ * @returns `true` when the token carries a contracted `who is` shape.
+ */
+function isContractedWhoIsLeadToken(token: string): boolean {
+  return token === "who's" || token === "whos";
+}
+
+/**
+ * Returns whether the current wording is asking for bounded event-memory recall rather than
+ * workflow/status continuity.
+ *
+ * **Why it exists:**
+ * Phase 8 needs ordinary-chat participant-role and event-summary prompts such as
+ * `Who sold Jordan the gray Accord?` to stay on the direct memory path without adding a parallel
+ * routing surface separate from relationship recall.
+ *
+ * **What it talks to:**
+ * - Uses local constants/helpers within this module.
+ *
+ * @param rawTokens - Normalized surface tokens from the current user wording.
+ * @param questionLike - Whether the turn structurally reads as a question.
+ * @returns `true` when the wording is a bounded event-memory recall prompt.
+ */
+function isEventMemoryRecallShape(
+  rawTokens: readonly string[],
+  questionLike: boolean
+): boolean {
+  if (!questionLike) {
+    return false;
+  }
+  if (!rawTokens.some((token) => EVENT_PARTICIPANT_RECALL_TERMS.has(token))) {
+    return false;
+  }
+  if (rawTokens.includes("who") && hasSpecificRelationshipSubjectToken(rawTokens)) {
+    return true;
+  }
+  return (
+    rawTokens.includes("what") &&
+    rawTokens.includes("happened") &&
+    hasSpecificRelationshipSubjectToken(rawTokens)
   );
 }
 
@@ -121,6 +215,12 @@ export function isRelationshipConversationRecallTurn(userInput: string): boolean
   if (signals.containsRelationshipCue && hasExplainCue) {
     return true;
   }
+  if (isEventMemoryRecallShape(rawTokens, signals.questionLike)) {
+    return true;
+  }
+  if (isRelationshipInventoryRecallShape(rawTokens, signals.questionLike)) {
+    return true;
+  }
   if (
     rawTokens.includes("who") &&
     rawTokens.includes("is") &&
@@ -139,12 +239,19 @@ export function isRelationshipConversationRecallTurn(userInput: string): boolean
       return true;
     }
   }
+  const contractedWhoIndex = rawTokens.findIndex((token) => isContractedWhoIsLeadToken(token));
+  if (signals.questionLike && contractedWhoIndex >= 0) {
+    const subjectToken = rawTokens[contractedWhoIndex + 1] ?? "";
+    if (subjectToken && !NON_ENTITY_WHO_IS_TERMS.has(subjectToken)) {
+      return true;
+    }
+  }
   if (
     signals.questionLike &&
     hasSpecificRelationshipSubjectToken(rawTokens)
   ) {
     const statusShapedRelationshipRecall =
-      rawTokens.includes("remember") ||
+      hasApproximateRememberCue(rawTokens) ||
       rawTokens.includes("again") ||
       (
         rawTokens.includes("going") &&
@@ -152,6 +259,16 @@ export function isRelationshipConversationRecallTurn(userInput: string): boolean
         (
           rawTokens.includes("what") ||
           rawTokens.includes("what's")
+        )
+      ) ||
+      (
+        rawTokens.includes("work") &&
+        rawTokens.includes("with") &&
+        (
+          rawTokens.includes("who") ||
+          rawTokens.includes("did") ||
+          rawTokens.includes("before") ||
+          rawTokens.includes("bfore")
         )
       ) ||
       (rawTokens.includes("about") && rawTokens.length <= 6) ||

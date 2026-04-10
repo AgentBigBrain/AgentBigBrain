@@ -62,6 +62,7 @@ const PLANNING_CONTEXT_PRIORITY_PREFIXES = [
   "identity.name",
   "name"
 ];
+const DOTTED_INITIAL_PLACEHOLDER = "__profile_memory_initial_dot__";
 
 /**
  * Canonicalizes raw profile-fact keys into deterministic dotted form.
@@ -174,9 +175,18 @@ export function stableContextHash(input: string): string {
  * @returns Normalized segments suitable for context extraction.
  */
 export function splitIntoContextSentences(text: string): string[] {
-  return text
+  const protectedInitialisms = text.replace(
+    /\b(?:[A-Za-z0-9]\.){2,}(?:[A-Za-z0-9]\.?)?/g,
+    (match) => match.replace(/\./g, DOTTED_INITIAL_PLACEHOLDER)
+  );
+  return protectedInitialisms
     .split(/[\n.!?]+/)
-    .map((segment) => normalizeProfileValue(segment))
+    .map((segment) =>
+      normalizeProfileValue(segment).replace(
+        new RegExp(DOTTED_INITIAL_PLACEHOLDER, "g"),
+        "."
+      )
+    )
     .filter((segment) => segment.length >= 8);
 }
 

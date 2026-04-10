@@ -34,3 +34,23 @@ test("canonical episode extraction deduplicates equivalent sentences in one utte
   assert.equal(candidates.length, 1);
   assert.equal(candidates[0]?.title, "Owen fell down");
 });
+
+test("canonical episode extraction captures bounded transfer events with both people and the shared object surface", () => {
+  const candidates = extractProfileEpisodeCandidatesFromUserInput(
+    "Milo sold Jordan the gray Accord in late 2024.",
+    "task_profile_episode_extract_transfer_1",
+    "2026-04-09T19:00:00.000Z"
+  );
+
+  assert.equal(candidates.length, 1);
+  assert.equal(candidates[0]?.title, "Milo sold Jordan the gray Accord");
+  assert.equal(
+    candidates[0]?.summary,
+    "Milo sold Jordan the gray Accord in late 2024"
+  );
+  assert.deepEqual(
+    candidates[0]?.entityRefs,
+    ["contact.milo", "contact.jordan", "gray Accord"]
+  );
+  assert.deepEqual(candidates[0]?.tags, ["followup", "transaction", "transfer"]);
+});

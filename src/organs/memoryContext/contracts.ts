@@ -3,6 +3,14 @@
  */
 
 import type { ConversationDomainContext, ProfileMemoryStatus } from "../../core/types";
+import type {
+  ProfileMemoryTemporalAnswerMode,
+  ProfileMemoryTemporalLaneKind
+} from "../../core/profileMemoryRuntime/profileMemoryTemporalQueryContracts";
+import type {
+  ProfileMemoryTemporalRelevanceScope,
+  ProfileMemoryTemporalSemanticMode
+} from "../../core/profileMemoryRuntime/profileMemoryTemporalQueryContracts";
 
 export type MemoryDomainLane = "profile" | "relationship" | "workflow" | "system_policy" | "unknown";
 export type DomainBoundaryDecision = "inject_profile_context" | "suppress_profile_context";
@@ -42,6 +50,19 @@ export interface ProbingRegistrationResult {
 export interface MemoryAccessAuditAppendOptions {
   eventType?: "retrieval" | "PROBING_DETECTED";
   storeLoadCount?: number;
+  ingestOperationCount?: number;
+  retrievalOperationCount?: number;
+  synthesisOperationCount?: number;
+  renderOperationCount?: number;
+  promptMemoryOwnerCount?: number;
+  promptMemorySurfaceCount?: number;
+  mixedMemoryOwnerDecisionCount?: number;
+  aliasSafetyDecisionCount?: number;
+  identitySafetyDecisionCount?: number;
+  selfIdentityParityCheckCount?: number;
+  selfIdentityParityMismatchCount?: number;
+  promptCutoverGateDecision?: "allow" | "block";
+  promptCutoverGateReasons?: readonly string[];
   retrievedEpisodeCount?: number;
   probeSignals?: readonly string[];
   probeWindowSize?: number;
@@ -80,4 +101,17 @@ export interface MemoryBrokerBuildInputOptions {
 
 export interface MemoryBrokerOptions {
   probingDetector?: Partial<ProbingDetectorConfig>;
+}
+
+export interface MemoryBoundaryLaneOutput {
+  laneId: string;
+  domainLane: MemoryDomainLane;
+  semanticMode: ProfileMemoryTemporalSemanticMode;
+  relevanceScope: ProfileMemoryTemporalRelevanceScope;
+  scopedThreadKeys: readonly string[];
+  answerMode: ProfileMemoryTemporalAnswerMode;
+  dominantLane: ProfileMemoryTemporalLaneKind;
+  supportingLanes: readonly ProfileMemoryTemporalLaneKind[];
+  overflowNote: string | null;
+  degradedNotes: readonly string[];
 }

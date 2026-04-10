@@ -26,13 +26,15 @@ import {
 import { ProfileMemoryStore } from "../../src/core/profileMemoryStore";
 import { buildProfileMemorySourceFingerprint } from "../../src/core/profileMemoryRuntime/profileMemoryIngestProvenance";
 import { saveProfileMemoryState } from "../../src/core/profileMemoryRuntime/profileMemoryPersistence";
-import { applyProfileMemoryGraphMutations } from "../../src/core/profileMemoryRuntime/profileMemoryGraphState";
+import { applyProfileMemoryGraphMutations } from "../../src/core/profileMemoryRuntime/profileMemoryGraphMutations";
 import { normalizeProfileMemoryState } from "../../src/core/profileMemoryRuntime/profileMemoryStateNormalization";
 import {
-  buildConversationStackFromTurnsV1
+  buildConversationStackFromTurnsV1,
+  createEmptyConversationStackV1
 } from "../../src/core/stage6_86ConversationStack";
 import {
   applyEntityExtractionToGraph,
+  buildEntityKey,
   createEmptyEntityGraphV1,
   extractEntityCandidates
 } from "../../src/core/stage6_86EntityGraph";
@@ -2667,7 +2669,7 @@ test("profile memory load trims padded graph semantic identity, clears blank opt
       (entry) => entry.payload.eventId === "event_profile_graph_store_metadata_blank"
     );
 
-    assert.equal(observation?.payload.stableRefId, null);
+    assert.equal(observation?.payload.stableRefId, "stable_self_profile_owner");
     assert.equal(observation?.payload.family, "identity.preferred_name");
     assert.equal(observation?.payload.normalizedKey, "identity.preferred_name");
     assert.equal(observation?.payload.normalizedValue, "Avery");
@@ -2688,7 +2690,7 @@ test("profile memory load trims padded graph semantic identity, clears blank opt
       claim?.payload.endedByClaimId,
       "claim_profile_graph_store_metadata_blank_successor"
     );
-    assert.equal(event?.payload.stableRefId, null);
+    assert.equal(event?.payload.stableRefId, "stable_self_profile_owner");
     assert.equal(event?.payload.family, "episode.candidate");
     assert.equal(event?.payload.sourceTaskId, "task_profile_graph_store_metadata_event");
     assert.equal(
@@ -6286,7 +6288,7 @@ test("profile memory load collapses semantic-duplicate active claims to one cano
       activeClaims[0]?.payload.claimId,
       "claim_profile_graph_store_duplicate_active_2"
     );
-    assert.equal(activeClaims[0]?.payload.stableRefId, null);
+    assert.equal(activeClaims[0]?.payload.stableRefId, "stable_self_profile_owner");
     assert.equal(activeClaims[0]?.payload.sensitive, true);
     assert.deepEqual(
       [...(activeClaims[0]?.payload.derivedFromObservationIds ?? [])].sort((left, right) =>
@@ -6462,7 +6464,7 @@ test("profile memory load keeps semantic-duplicate retained current claims from 
       activeClaims[0]?.payload.claimId,
       "claim_profile_graph_store_duplicate_loser_lineage_current"
     );
-    assert.equal(activeClaims[0]?.payload.stableRefId, null);
+    assert.equal(activeClaims[0]?.payload.stableRefId, "stable_self_profile_owner");
     assert.equal(activeClaims[0]?.payload.sourceTaskId, null);
     assert.deepEqual(
       [...(activeClaims[0]?.payload.derivedFromObservationIds ?? [])].sort((left, right) =>
@@ -9096,7 +9098,7 @@ test("profile memory load keeps already-canonical retained current-claim lanes i
     };
     const existingObservation = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
       observationId,
-      stableRefId: null,
+      stableRefId: "stable_self_profile_owner",
       family: "identity.preferred_name",
       normalizedKey: "identity.preferred_name",
       normalizedValue: "Avery",
@@ -9114,7 +9116,7 @@ test("profile memory load keeps already-canonical retained current-claim lanes i
     }, retainedCreatedAt);
     const existingClaim = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
       claimId,
-      stableRefId: null,
+      stableRefId: "stable_self_profile_owner",
       family: "identity.preferred_name",
       normalizedKey: "identity.preferred_name",
       normalizedValue: "Avery",
@@ -16218,7 +16220,7 @@ test("profile memory store does not project historical self employment or reside
     });
 
     assert.deepEqual(ingestResult, {
-      appliedFacts: 0,
+      appliedFacts: 2,
       supersededFacts: 0
     });
     assert.equal(
@@ -18147,7 +18149,7 @@ test("profile memory store keeps works-for-me employee-direction current while h
   });
 });
 
-test("profile memory store keeps works-with-me work-peer direction current while historical and severed variants fail closed", async () => {
+test("profile memory store closes works-with-me work-peer current winners when historical and severed variants arrive", async () => {
   await withProfileStore(async (store) => {
     const currentResult = await store.ingestFromTaskInput(
       "task_profile_governance_current_work_peer_link",
@@ -18202,7 +18204,7 @@ test("profile memory store keeps works-with-me work-peer direction current while
 
     assert.deepEqual(historicalResult, {
       appliedFacts: 1,
-      supersededFacts: 0
+      supersededFacts: 2
     });
     assert.equal(
       historicalFacts.some(
@@ -18218,15 +18220,15 @@ test("profile memory store keeps works-with-me work-peer direction current while
           fact.key === "contact.owen.relationship" &&
           fact.value === "work_peer"
       ),
-      true
+      false
     );
     assert.equal(
-      historicalFacts.filter(
+      historicalFacts.some(
         (fact) =>
           fact.key === "contact.owen.work_association" &&
           fact.value === "Lantern Studio"
-      ).length,
-      1
+      ),
+      false
     );
 
     const severedResult = await store.ingestFromTaskInput(
@@ -18258,15 +18260,214 @@ test("profile memory store keeps works-with-me work-peer direction current while
           fact.key === "contact.owen.relationship" &&
           fact.value === "work_peer"
       ),
-      true
+      false
     );
     assert.equal(
-      severedFacts.filter(
+      severedFacts.some(
         (fact) =>
           fact.key === "contact.owen.work_association" &&
           fact.value === "Lantern Studio"
-      ).length,
-      1
+      ),
+      false
+    );
+  });
+});
+
+test("profile memory store closes prior current coworker winners and preserves historical recall after successor updates", async () => {
+  await withProfileStore(async (store) => {
+    const initialResult = await store.ingestFromTaskInput(
+      "task_profile_contact_successor_initial",
+      "I work with Jordan at Northstar. I used to work with Milo at Lumen Studio.",
+      "2026-04-09T10:00:00.000Z"
+    );
+    const updateResult = await store.ingestFromTaskInput(
+      "task_profile_contact_successor_update",
+      "I don't work with Jordan anymore. I work with Priya at Northstar now.",
+      "2026-04-09T10:05:00.000Z"
+    );
+    const factsAfterUpdate = await store.readFacts({
+      purpose: "operator_view",
+      includeSensitive: false,
+      explicitHumanApproval: false,
+      maxFacts: 50
+    });
+    const continuityAfterUpdate = await store.queryFactsForContinuity(
+      createEmptyEntityGraphV1("2026-04-09T10:05:00.000Z"),
+      createEmptyConversationStackV1("2026-04-09T10:05:00.000Z"),
+      {
+        entityHints: ["Jordan", "Priya", "Milo", "Northstar"],
+        semanticMode: "relationship_inventory",
+        relevanceScope: "global_profile",
+        maxFacts: 10
+      }
+    );
+
+    assert.deepEqual(initialResult, {
+      appliedFacts: 6,
+      supersededFacts: 0
+    });
+    assert.deepEqual(updateResult, {
+      appliedFacts: 5,
+      supersededFacts: 2
+    });
+    assert.equal(
+      factsAfterUpdate.some(
+        (fact) =>
+          fact.key === "contact.jordan.relationship" &&
+          fact.value === "work_peer"
+      ),
+      false
+    );
+    assert.equal(
+      factsAfterUpdate.some(
+        (fact) =>
+          fact.key === "contact.jordan.work_association" &&
+          fact.value === "Northstar"
+      ),
+      false
+    );
+    assert.equal(
+      factsAfterUpdate.some(
+        (fact) =>
+          fact.key === "contact.priya.work_association" &&
+          fact.value === "Northstar"
+      ),
+      true
+    );
+    assert.equal(
+      factsAfterUpdate.some(
+        (fact) =>
+          fact.key === "contact.priya.work_association" &&
+          fact.value === "Northstar now"
+      ),
+      false
+    );
+    assert.deepEqual(continuityAfterUpdate.temporalSynthesis?.currentState, [
+      "contact.relationship: work_peer",
+      "contact.work_association: Northstar"
+    ]);
+    assert.deepEqual(continuityAfterUpdate.temporalSynthesis?.historicalContext, [
+      "contact.relationship (historical): work_peer",
+      "contact.work_association (historical): Northstar"
+    ]);
+    assert.equal(
+      continuityAfterUpdate.temporalSynthesis?.laneMetadata.some(
+        (entry) =>
+          entry.focusStableRefId === "stable_contact_priya" &&
+          entry.family === "contact.relationship" &&
+          entry.answerMode === "current"
+      ),
+      true
+    );
+    assert.equal(
+      continuityAfterUpdate.temporalSynthesis?.laneMetadata.some(
+        (entry) =>
+          entry.focusStableRefId === "stable_contact_jordan" &&
+          entry.family === "contact.relationship" &&
+          entry.answerMode === "historical"
+      ),
+      true
+    );
+
+    const hedgedResult = await store.ingestFromTaskInput(
+      "task_profile_contact_successor_hedged",
+      "I think maybe Jordan still might be there, not sure.",
+      "2026-04-09T10:06:00.000Z"
+    );
+    const continuityAfterHedge = await store.queryFactsForContinuity(
+      createEmptyEntityGraphV1("2026-04-09T10:06:00.000Z"),
+      createEmptyConversationStackV1("2026-04-09T10:06:00.000Z"),
+      {
+        entityHints: ["Jordan", "Priya", "Milo", "Northstar"],
+        semanticMode: "relationship_inventory",
+        relevanceScope: "global_profile",
+        maxFacts: 10
+      }
+    );
+
+    assert.deepEqual(hedgedResult, {
+      appliedFacts: 0,
+      supersededFacts: 0
+    });
+    assert.deepEqual(
+      continuityAfterHedge.temporalSynthesis,
+      continuityAfterUpdate.temporalSynthesis
+    );
+  });
+});
+
+test("profile memory store keeps third-person contact continuity available for current organization plus historical and object follow-ups", async () => {
+  await withProfileStore(async (store) => {
+    const ingestResult = await store.ingestFromTaskInput(
+      "task_profile_contact_billy_continuity",
+      "Billy used to be at Flare. He's at Northstar now. He drives a gray Accord.",
+      "2026-04-09T11:00:00.000Z"
+    );
+    const readableFacts = await store.readFacts({
+      purpose: "operator_view",
+      includeSensitive: false,
+      explicitHumanApproval: false,
+      maxFacts: 50
+    });
+    const continuityFacts = await store.queryFactsForContinuity(
+      createEmptyEntityGraphV1("2026-04-09T11:00:00.000Z"),
+      createEmptyConversationStackV1("2026-04-09T11:00:00.000Z"),
+      {
+        entityHints: ["Billy", "Flare", "Northstar", "Accord"],
+        semanticMode: "relationship_inventory",
+        relevanceScope: "conversation_local",
+        maxFacts: 10
+      }
+    );
+
+    assert.equal(ingestResult.appliedFacts > 0, true);
+    assert.equal(
+      readableFacts.some(
+        (fact) =>
+          fact.key === "contact.billy.name" &&
+          fact.value === "Billy"
+      ),
+      true
+    );
+    assert.equal(
+      readableFacts.some(
+        (fact) =>
+          fact.key === "contact.billy.work_association" &&
+          fact.value === "Northstar"
+      ),
+      true
+    );
+    assert.equal(
+      readableFacts.some(
+        (fact) =>
+          fact.key === "contact.billy.work_association" &&
+          fact.value === "Flare"
+      ),
+      false
+    );
+    assert.equal(
+      continuityFacts.some(
+        (fact) =>
+          fact.key === "contact.billy.work_association" &&
+          fact.value === "Northstar"
+      ),
+      true
+    );
+    assert.equal(
+      continuityFacts.some(
+        (fact) =>
+          /^contact\.billy\.context\.[a-f0-9]{8}$/.test(fact.key) &&
+          fact.value === "Billy used to be at Flare"
+      ),
+      true
+    );
+    assert.equal(
+      continuityFacts.some(
+        (fact) =>
+          /^contact\.billy\.context\.[a-f0-9]{8}$/.test(fact.key) &&
+          fact.value === "Billy drives a gray Accord"
+      ),
+      true
     );
   });
 });
@@ -18807,6 +19008,670 @@ test("ingestFromTaskInput accepts validated identity candidates without requirin
       facts.some((fact) => fact.key === "identity.preferred_name" && fact.value === "Avery"),
       true
     );
+  });
+});
+
+test("ingestFromTaskInput dual-writes validated candidates into compatibility facts and graph-backed claim truth", async () => {
+  await withProfileStore(async (store) => {
+    await store.ingestFromTaskInput(
+      "task_profile_store_validated_identity_dual_write",
+      "I already told you my name is Avery several times.",
+      "2026-04-08T20:00:00.000Z",
+      {
+        validatedFactCandidates: [
+          {
+            key: "identity.preferred_name",
+            candidateValue: "Avery",
+            source: "conversation.identity_interpretation",
+            confidence: 0.95
+          }
+        ]
+      }
+    );
+
+    const state = await store.load();
+    const graphObservation = state.graph.observations[0];
+    const graphClaim = state.graph.claims[0];
+
+    assert.equal(
+      state.facts.some((fact) => fact.key === "identity.preferred_name" && fact.value === "Avery"),
+      true
+    );
+    assert.equal(state.graph.observations.length, 1);
+    assert.equal(state.graph.claims.length, 1);
+    assert.equal(graphObservation?.payload.sourceTier, "validated_structured_candidate");
+    assert.equal(graphClaim?.payload.family, "identity.preferred_name");
+    assert.equal(graphClaim?.payload.normalizedValue, "Avery");
+    assert.equal(graphClaim?.payload.sourceTier, "validated_structured_candidate");
+    assert.deepEqual(
+      graphClaim?.payload.derivedFromObservationIds,
+      [graphObservation!.payload.observationId]
+    );
+    assert.equal(
+      state.graph.readModel.currentClaimIdsByKey["identity.preferred_name"],
+      graphClaim?.payload.claimId
+    );
+  });
+});
+
+test("ingestFromTaskInput persists stable refs and keeps provisional contact truth out of resolved_current outputs", async () => {
+  await withProfileStore(async (store) => {
+    await store.ingestFromTaskInput(
+      "task_profile_store_stable_ref_self",
+      "My name is Avery.",
+      "2026-04-09T15:00:00.000Z",
+      {
+        validatedFactCandidates: [
+          {
+            key: "identity.preferred_name",
+            candidateValue: "Avery",
+            source: "conversation.identity_interpretation",
+            confidence: 0.95
+          }
+        ]
+      }
+    );
+    await store.ingestFromTaskInput(
+      "task_profile_store_stable_ref_contact",
+      "Owen is my friend.",
+      "2026-04-09T15:05:00.000Z",
+      {
+        additionalEpisodeCandidates: [
+          {
+            title: "Owen follow-up",
+            summary: "Owen still owes the form.",
+            sourceTaskId: "task_profile_store_stable_ref_contact",
+            source: "user_input_pattern.episode_candidate",
+            sourceKind: "explicit_user_statement",
+            sensitive: false,
+            observedAt: "2026-04-09T15:05:00.000Z",
+            entityRefs: ["contact.owen"]
+          }
+        ]
+      }
+    );
+
+    const state = await store.load();
+    const selfClaim = state.graph.claims.find(
+      (claim) => claim.payload.normalizedKey === "identity.preferred_name"
+    );
+    const contactClaim = state.graph.claims.find(
+      (claim) => claim.payload.normalizedKey === "contact.owen.relationship"
+    );
+    const contactEvent = state.graph.events.find(
+      (event) => event.payload.entityRefIds.includes("contact.owen")
+    );
+
+    assert.equal(selfClaim?.payload.stableRefId, "stable_self_profile_owner");
+    assert.equal(contactClaim?.payload.stableRefId, "stable_contact_owen");
+    assert.equal(contactEvent?.payload.stableRefId, "stable_contact_owen");
+
+    const groups = await store.queryGraphStableRefGroups();
+    const selfGroup = groups.find(
+      (group) => group.stableRefId === "stable_self_profile_owner"
+    );
+    const contactGroup = groups.find(
+      (group) => group.stableRefId === "stable_contact_owen"
+    );
+    const resolvedCurrentClaims = await store.queryResolvedCurrentGraphClaims();
+
+    assert.equal(selfGroup?.claimIds.includes(selfClaim?.payload.claimId ?? ""), true);
+    assert.equal(
+      contactGroup?.claimIds.includes(contactClaim?.payload.claimId ?? ""),
+      true
+    );
+    assert.equal(
+      contactGroup?.eventIds.includes(contactEvent?.payload.eventId ?? ""),
+      true
+    );
+    assert.deepEqual(
+      resolvedCurrentClaims.map((claim) => claim.payload.claimId),
+      selfClaim ? [selfClaim.payload.claimId] : []
+    );
+  });
+});
+
+test("queryResolvedCurrentGraphClaims excludes quarantined stable refs after encrypted load", async () => {
+  await withProfileStore(async (store, filePath) => {
+    const encryptionKey = Buffer.alloc(32, 7);
+    const seededState = {
+      ...createEmptyProfileMemoryState(),
+      graph: {
+        ...createEmptyProfileMemoryState().graph,
+        observations: [],
+        claims: [
+          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+            claimId: "claim_profile_store_stable_ref_self",
+            stableRefId: "stable_self_profile_owner",
+            family: "identity.preferred_name",
+            normalizedKey: "identity.preferred_name",
+            normalizedValue: "Avery",
+            redactionState: "not_requested",
+            redactedAt: null,
+            sensitive: false,
+            sourceTaskId: "task_profile_store_stable_ref_self",
+            sourceFingerprint: "fingerprint_profile_store_stable_ref_self",
+            sourceTier: "explicit_user_statement",
+            assertedAt: "2026-04-09T16:00:00.000Z",
+            validFrom: "2026-04-09T16:00:00.000Z",
+            validTo: null,
+            endedAt: null,
+            endedByClaimId: null,
+            timePrecision: "instant",
+            timeSource: "user_stated",
+            derivedFromObservationIds: [],
+            projectionSourceIds: ["fact_profile_store_stable_ref_self"],
+            entityRefIds: [],
+            active: true
+          }),
+          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+            claimId: "claim_profile_store_stable_ref_quarantine",
+            stableRefId: "stable_quarantine_contact_owen",
+            family: "contact.relationship.current",
+            normalizedKey: "contact.owen.relationship",
+            normalizedValue: "friend",
+            redactionState: "not_requested",
+            redactedAt: null,
+            sensitive: false,
+            sourceTaskId: "task_profile_store_stable_ref_quarantine",
+            sourceFingerprint: "fingerprint_profile_store_stable_ref_quarantine",
+            sourceTier: "explicit_user_statement",
+            assertedAt: "2026-04-09T16:05:00.000Z",
+            validFrom: "2026-04-09T16:05:00.000Z",
+            validTo: null,
+            endedAt: null,
+            endedByClaimId: null,
+            timePrecision: "instant",
+            timeSource: "user_stated",
+            derivedFromObservationIds: [],
+            projectionSourceIds: ["fact_profile_store_stable_ref_quarantine"],
+            entityRefIds: [],
+            active: true
+          })
+        ],
+        events: [
+          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+            eventId: "event_profile_store_stable_ref_quarantine",
+            stableRefId: "stable_quarantine_contact_owen",
+            family: "episode.candidate",
+            title: "Owen ambiguity",
+            summary: "Owen stays quarantined pending later alignment.",
+            redactionState: "not_requested",
+            redactedAt: null,
+            sensitive: false,
+            sourceTaskId: "task_profile_store_event_stable_ref_quarantine",
+            sourceFingerprint: "fingerprint_profile_store_event_stable_ref_quarantine",
+            sourceTier: "explicit_user_statement",
+            assertedAt: "2026-04-09T16:05:00.000Z",
+            observedAt: "2026-04-09T16:05:00.000Z",
+            validFrom: "2026-04-09T16:05:00.000Z",
+            validTo: null,
+            timePrecision: "instant",
+            timeSource: "user_stated",
+            derivedFromObservationIds: [],
+            projectionSourceIds: ["episode_profile_store_stable_ref_quarantine"],
+            entityRefIds: ["contact.owen"]
+          })
+        ]
+      }
+    };
+
+    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+
+    const groups = await store.queryGraphStableRefGroups();
+    const quarantinedGroup = groups.find(
+      (group) => group.stableRefId === "stable_quarantine_contact_owen"
+    );
+    const resolvedCurrentClaims = await store.queryResolvedCurrentGraphClaims();
+
+    assert.equal(quarantinedGroup?.resolution, "quarantined");
+    assert.deepEqual(quarantinedGroup?.claimIds, ["claim_profile_store_stable_ref_quarantine"]);
+    assert.deepEqual(quarantinedGroup?.eventIds, ["event_profile_store_stable_ref_quarantine"]);
+    assert.deepEqual(
+      resolvedCurrentClaims.map((claim) => claim.payload.claimId),
+      ["claim_profile_store_stable_ref_self"]
+    );
+  });
+});
+
+test("queryAlignedGraphStableRefGroups attaches bounded Stage 6.86 entity keys without promoting provisional truth", async () => {
+  await withProfileStore(async (store, filePath) => {
+    const encryptionKey = Buffer.alloc(32, 7);
+    const seededState = {
+      ...createEmptyProfileMemoryState(),
+      graph: {
+        ...createEmptyProfileMemoryState().graph,
+        claims: [
+          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+            claimId: "claim_profile_store_aligned_stable_ref",
+            stableRefId: "stable_contact_owen",
+            family: "contact.relationship.current",
+            normalizedKey: "contact.owen.relationship",
+            normalizedValue: "friend",
+            redactionState: "not_requested",
+            redactedAt: null,
+            sensitive: false,
+            sourceTaskId: "task_profile_store_aligned_stable_ref",
+            sourceFingerprint: "fingerprint_profile_store_aligned_stable_ref",
+            sourceTier: "explicit_user_statement",
+            assertedAt: "2026-04-09T16:15:00.000Z",
+            validFrom: "2026-04-09T16:15:00.000Z",
+            validTo: null,
+            endedAt: null,
+            endedByClaimId: null,
+            timePrecision: "instant",
+            timeSource: "user_stated",
+            derivedFromObservationIds: [],
+            projectionSourceIds: ["fact_profile_store_aligned_stable_ref"],
+            entityRefIds: ["contact.owen"],
+            active: true
+          })
+        ]
+      }
+    };
+    const entityKey = buildEntityKey("William Bena", "person", null);
+    const entityGraph = {
+      ...createEmptyEntityGraphV1("2026-04-09T16:15:00.000Z"),
+      entities: [
+        {
+          entityKey,
+          canonicalName: "William Bena",
+          entityType: "person" as const,
+          disambiguator: null,
+          aliases: ["Owen"],
+          firstSeenAt: "2026-04-09T16:15:00.000Z",
+          lastSeenAt: "2026-04-09T16:15:00.000Z",
+          salience: 1,
+          evidenceRefs: ["trace:profile_store_aligned_stable_ref"]
+        }
+      ]
+    };
+
+    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+
+    const groups = await store.queryAlignedGraphStableRefGroups(entityGraph);
+    const alignedGroup = groups.find((group) => group.stableRefId === "stable_contact_owen");
+    const resolvedCurrentClaims = await store.queryResolvedCurrentGraphClaims();
+
+    assert.equal(alignedGroup?.resolution, "provisional");
+    assert.equal(alignedGroup?.primaryEntityKey, entityKey);
+    assert.equal(alignedGroup?.observedEntityKey, entityKey);
+    assert.deepEqual(
+      resolvedCurrentClaims.map((claim) => claim.payload.claimId),
+      []
+    );
+  });
+});
+
+test("queryAlignedGraphStableRefGroups keeps quarantined stable refs available for ambiguity surfaces while excluding them from resolved_current", async () => {
+  await withProfileStore(async (store, filePath) => {
+    const encryptionKey = Buffer.alloc(32, 7);
+    const seededState = {
+      ...createEmptyProfileMemoryState(),
+      graph: {
+        ...createEmptyProfileMemoryState().graph,
+        claims: [
+          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+            claimId: "claim_profile_store_aligned_quarantine",
+            stableRefId: "stable_quarantine_contact_owen",
+            family: "contact.relationship.current",
+            normalizedKey: "contact.owen.relationship",
+            normalizedValue: "friend",
+            redactionState: "not_requested",
+            redactedAt: null,
+            sensitive: false,
+            sourceTaskId: "task_profile_store_aligned_quarantine",
+            sourceFingerprint: "fingerprint_profile_store_aligned_quarantine_claim",
+            sourceTier: "explicit_user_statement",
+            assertedAt: "2026-04-09T16:20:00.000Z",
+            validFrom: "2026-04-09T16:20:00.000Z",
+            validTo: null,
+            endedAt: null,
+            endedByClaimId: null,
+            timePrecision: "instant",
+            timeSource: "user_stated",
+            derivedFromObservationIds: [],
+            projectionSourceIds: ["fact_profile_store_aligned_quarantine"],
+            entityRefIds: ["contact.owen"],
+            active: true
+          })
+        ],
+        events: [
+          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+            eventId: "event_profile_store_aligned_quarantine",
+            stableRefId: "stable_quarantine_contact_owen",
+            family: "episode.candidate",
+            title: "Owen ambiguity",
+            summary: "Owen may match a Stage 6.86 entity but stays quarantined.",
+            redactionState: "not_requested",
+            redactedAt: null,
+            sensitive: false,
+            sourceTaskId: "task_profile_store_aligned_quarantine_event",
+            sourceFingerprint: "fingerprint_profile_store_aligned_quarantine_event",
+            sourceTier: "explicit_user_statement",
+            assertedAt: "2026-04-09T16:20:00.000Z",
+            observedAt: "2026-04-09T16:20:00.000Z",
+            validFrom: "2026-04-09T16:20:00.000Z",
+            validTo: null,
+            timePrecision: "instant",
+            timeSource: "user_stated",
+            projectionSourceIds: ["episode_profile_store_aligned_quarantine"],
+            entityRefIds: ["contact.owen"]
+          })
+        ]
+      }
+    };
+    const entityKey = buildEntityKey("Owen", "person", null);
+    const entityGraph = {
+      ...createEmptyEntityGraphV1("2026-04-09T16:20:00.000Z"),
+      entities: [
+        {
+          entityKey,
+          canonicalName: "Owen",
+          entityType: "person" as const,
+          disambiguator: null,
+          aliases: ["Owen"],
+          firstSeenAt: "2026-04-09T16:20:00.000Z",
+          lastSeenAt: "2026-04-09T16:20:00.000Z",
+          salience: 1,
+          evidenceRefs: ["trace:profile_store_aligned_quarantine"]
+        }
+      ]
+    };
+
+    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+
+    const groups = await store.queryAlignedGraphStableRefGroups(entityGraph);
+    const quarantinedGroup = groups.find(
+      (group) => group.stableRefId === "stable_quarantine_contact_owen"
+    );
+    const resolvedCurrentClaims = await store.queryResolvedCurrentGraphClaims();
+
+    assert.equal(quarantinedGroup?.resolution, "quarantined");
+    assert.equal(quarantinedGroup?.primaryEntityKey, null);
+    assert.equal(quarantinedGroup?.observedEntityKey, entityKey);
+    assert.deepEqual(quarantinedGroup?.claimIds, [
+      "claim_profile_store_aligned_quarantine"
+    ]);
+    assert.deepEqual(
+      resolvedCurrentClaims.map((claim) => claim.payload.claimId),
+      []
+    );
+  });
+});
+
+test("rekeyGraphStableRef deterministically rewrites one provisional stable-ref lane without Stage 6.86 merge", async () => {
+  await withProfileStore(async (store, filePath) => {
+    const encryptionKey = Buffer.alloc(32, 7);
+    const seededState = {
+      ...createEmptyProfileMemoryState(),
+      graph: {
+        ...createEmptyProfileMemoryState().graph,
+        observations: [
+          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+            observationId: "observation_profile_store_stable_ref_rekey",
+            stableRefId: "stable_contact_owen",
+            family: "contact.name",
+            normalizedKey: "contact.owen.name",
+            normalizedValue: "Owen",
+            redactionState: "not_requested",
+            redactedAt: null,
+            sensitive: false,
+            sourceTaskId: "task_profile_store_stable_ref_rekey",
+            sourceFingerprint: "fingerprint_profile_store_stable_ref_rekey_observation",
+            sourceTier: "explicit_user_statement",
+            assertedAt: "2026-04-09T16:30:00.000Z",
+            observedAt: "2026-04-09T16:30:00.000Z",
+            timePrecision: "instant",
+            timeSource: "user_stated",
+            entityRefIds: ["contact.owen"]
+          })
+        ],
+        claims: [
+          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+            claimId: "claim_profile_store_stable_ref_self_for_rekey",
+            stableRefId: "stable_self_profile_owner",
+            family: "identity.preferred_name",
+            normalizedKey: "identity.preferred_name",
+            normalizedValue: "Avery",
+            redactionState: "not_requested",
+            redactedAt: null,
+            sensitive: false,
+            sourceTaskId: "task_profile_store_stable_ref_self_for_rekey",
+            sourceFingerprint: "fingerprint_profile_store_stable_ref_self_for_rekey",
+            sourceTier: "explicit_user_statement",
+            assertedAt: "2026-04-09T16:29:00.000Z",
+            validFrom: "2026-04-09T16:29:00.000Z",
+            validTo: null,
+            endedAt: null,
+            endedByClaimId: null,
+            timePrecision: "instant",
+            timeSource: "user_stated",
+            derivedFromObservationIds: [],
+            projectionSourceIds: ["fact_profile_store_stable_ref_self_for_rekey"],
+            entityRefIds: [],
+            active: true
+          }),
+          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+            claimId: "claim_profile_store_stable_ref_rekey",
+            stableRefId: "stable_contact_owen",
+            family: "contact.relationship.current",
+            normalizedKey: "contact.owen.relationship",
+            normalizedValue: "friend",
+            redactionState: "not_requested",
+            redactedAt: null,
+            sensitive: false,
+            sourceTaskId: "task_profile_store_stable_ref_rekey",
+            sourceFingerprint: "fingerprint_profile_store_stable_ref_rekey_claim",
+            sourceTier: "explicit_user_statement",
+            assertedAt: "2026-04-09T16:30:00.000Z",
+            validFrom: "2026-04-09T16:30:00.000Z",
+            validTo: null,
+            endedAt: null,
+            endedByClaimId: null,
+            timePrecision: "instant",
+            timeSource: "user_stated",
+            derivedFromObservationIds: ["observation_profile_store_stable_ref_rekey"],
+            projectionSourceIds: ["fact_profile_store_stable_ref_rekey"],
+            entityRefIds: ["contact.owen"],
+            active: true
+          })
+        ],
+        events: [
+          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+            eventId: "event_profile_store_stable_ref_rekey",
+            stableRefId: "stable_contact_owen",
+            family: "episode.candidate",
+            title: "Owen follow-up",
+            summary: "Owen still owes the form.",
+            redactionState: "not_requested",
+            redactedAt: null,
+            sensitive: false,
+            sourceTaskId: "task_profile_store_event_stable_ref_rekey",
+            sourceFingerprint: "fingerprint_profile_store_event_stable_ref_rekey",
+            sourceTier: "explicit_user_statement",
+            assertedAt: "2026-04-09T16:30:00.000Z",
+            observedAt: "2026-04-09T16:30:00.000Z",
+            validFrom: "2026-04-09T16:30:00.000Z",
+            validTo: null,
+            timePrecision: "instant",
+            timeSource: "user_stated",
+            derivedFromObservationIds: [],
+            projectionSourceIds: ["episode_profile_store_stable_ref_rekey"],
+            entityRefIds: ["contact.owen"]
+          })
+        ]
+      }
+    };
+
+    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+
+    const result = await store.rekeyGraphStableRef(
+      "stable_contact_owen",
+      "stable_contact_owen_primary",
+      "task_profile_store_stable_ref_rekey_apply",
+      "Rekey Owen's provisional stable ref inside personal memory.",
+      "2026-04-09T16:35:00.000Z"
+    );
+    const state = await store.load();
+    const groups = await store.queryGraphStableRefGroups();
+    const resolvedCurrentClaims = await store.queryResolvedCurrentGraphClaims();
+
+    const rekeyedObservation = state.graph.observations.find(
+      (observation) =>
+        observation.payload.observationId === "observation_profile_store_stable_ref_rekey"
+    );
+    const rekeyedClaim = state.graph.claims.find(
+      (claim) => claim.payload.claimId === "claim_profile_store_stable_ref_rekey"
+    );
+    const rekeyedEvent = state.graph.events.find(
+      (event) => event.payload.eventId === "event_profile_store_stable_ref_rekey"
+    );
+    const rekeyedGroup = groups.find(
+      (group) => group.stableRefId === "stable_contact_owen_primary"
+    );
+
+    assert.equal(result.changed, true);
+    assert.equal(result.mutationEnvelope?.action, "stable_ref_rekey");
+    assert.equal(rekeyedObservation?.payload.stableRefId, "stable_contact_owen_primary");
+    assert.equal(rekeyedClaim?.payload.stableRefId, "stable_contact_owen_primary");
+    assert.equal(rekeyedEvent?.payload.stableRefId, "stable_contact_owen_primary");
+    assert.equal(
+      groups.some((group) => group.stableRefId === "stable_contact_owen"),
+      false
+    );
+    assert.equal(rekeyedGroup?.resolution, "provisional");
+    assert.deepEqual(rekeyedGroup?.observationIds, ["observation_profile_store_stable_ref_rekey"]);
+    assert.deepEqual(rekeyedGroup?.claimIds, ["claim_profile_store_stable_ref_rekey"]);
+    assert.deepEqual(rekeyedGroup?.eventIds, ["event_profile_store_stable_ref_rekey"]);
+    assert.deepEqual(
+      resolvedCurrentClaims.map((claim) => claim.payload.claimId),
+      ["claim_profile_store_stable_ref_self_for_rekey"]
+    );
+    assert.equal(state.graph.decisionRecords?.length, 1);
+    assert.equal(state.graph.decisionRecords?.[0]?.action, "rekey");
+    assert.equal(
+      state.graph.decisionRecords?.[0]?.fromStableRefId,
+      "stable_contact_owen"
+    );
+    assert.equal(
+      state.graph.decisionRecords?.[0]?.toStableRefId,
+      "stable_contact_owen_primary"
+    );
+    assert.equal(
+      state.graph.decisionRecords?.[0]?.mutationEnvelopeHash,
+      sha256HexFromCanonicalJson(result.mutationEnvelope)
+    );
+    assert.deepEqual(
+      state.graph.decisionRecords?.[0]?.observationIds,
+      ["observation_profile_store_stable_ref_rekey"]
+    );
+    assert.deepEqual(
+      state.graph.decisionRecords?.[0]?.claimIds,
+      ["claim_profile_store_stable_ref_rekey"]
+    );
+    assert.deepEqual(
+      state.graph.decisionRecords?.[0]?.eventIds,
+      ["event_profile_store_stable_ref_rekey"]
+    );
+    assert.equal(state.graph.mutationJournal.entries.at(-1)?.sourceTaskId, "task_profile_store_stable_ref_rekey_apply");
+    assert.equal(
+      state.graph.mutationJournal.entries.at(-1)?.mutationEnvelopeHash,
+      sha256HexFromCanonicalJson(result.mutationEnvelope)
+    );
+  });
+});
+
+test("ingestFromTaskInput merges same-value refreshes into one current claim while preserving support observations", async () => {
+  await withProfileStore(async (store) => {
+    await store.ingestFromTaskInput(
+      "task_profile_store_same_value_refresh_1",
+      "My name is Avery.",
+      "2026-04-08T20:10:00.000Z"
+    );
+    await store.ingestFromTaskInput(
+      "task_profile_store_same_value_refresh_2",
+      "My name is Avery.",
+      "2026-04-08T20:11:00.000Z"
+    );
+
+    const state = await store.load();
+    const activeClaims = state.graph.claims.filter((claim) => claim.payload.active);
+
+    assert.equal(activeClaims.length, 1);
+    assert.equal(activeClaims[0]?.payload.normalizedValue, "Avery");
+    assert.equal(state.graph.observations.length, 2);
+    assert.equal(
+      activeClaims[0]?.payload.derivedFromObservationIds.length,
+      2
+    );
+    assert.equal(
+      state.graph.readModel.currentClaimIdsByKey["identity.preferred_name"],
+      activeClaims[0]?.payload.claimId
+    );
+  });
+});
+
+test("ingestFromTaskInput closes prior singular-family claims with explicit successor linkage on value changes", async () => {
+  await withProfileStore(async (store) => {
+    await store.ingestFromTaskInput(
+      "task_profile_store_successor_refresh_1",
+      "My name is Avery.",
+      "2026-04-08T20:20:00.000Z"
+    );
+    await store.ingestFromTaskInput(
+      "task_profile_store_successor_refresh_2",
+      "My name is Ava.",
+      "2026-04-08T20:21:00.000Z"
+    );
+
+    const state = await store.load();
+    const activeClaim = state.graph.claims.find((claim) => claim.payload.active);
+    const closedClaim = state.graph.claims.find((claim) => !claim.payload.active);
+
+    assert.equal(state.graph.claims.length, 2);
+    assert.equal(activeClaim?.payload.normalizedValue, "Ava");
+    assert.equal(closedClaim?.payload.normalizedValue, "Avery");
+    assert.equal(closedClaim?.payload.endedByClaimId, activeClaim?.payload.claimId ?? null);
+    assert.equal(closedClaim?.payload.validTo, "2026-04-08T20:21:00.000Z");
+    assert.equal(
+      state.graph.readModel.currentClaimIdsByKey["identity.preferred_name"],
+      activeClaim?.payload.claimId
+    );
+  });
+});
+
+test("ingestFromTaskInput stays idempotent across retry provenance and does not duplicate graph writes", async () => {
+  await withProfileStore(async (store) => {
+    const provenance = {
+      turnId: "turn_profile_store_retry_idempotent_1",
+      sourceSurface: "conversation_profile_input" as const,
+      sourceFingerprint: "fingerprint_profile_store_retry_idempotent_1"
+    };
+
+    const first = await store.ingestFromTaskInput(
+      "task_profile_store_retry_idempotent_1",
+      "My name is Avery.",
+      "2026-04-08T20:30:00.000Z",
+      { provenance }
+    );
+    const second = await store.ingestFromTaskInput(
+      "task_profile_store_retry_idempotent_1_retry",
+      "My name is Avery.",
+      "2026-04-08T20:30:00.000Z",
+      { provenance }
+    );
+
+    const state = await store.load();
+
+    assert.equal(first.appliedFacts, 1);
+    assert.equal(second.appliedFacts, 0);
+    assert.equal(second.supersededFacts, 0);
+    assert.equal(state.ingestReceipts.length, 1);
+    assert.ok(findProfileMemoryIngestReceipt(state, provenance));
+    assert.equal(state.graph.observations.length, 1);
+    assert.equal(state.graph.claims.length, 1);
+    assert.equal(state.graph.mutationJournal.entries.length, 1);
   });
 });
 

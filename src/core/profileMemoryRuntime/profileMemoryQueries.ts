@@ -1,7 +1,12 @@
 /**
- * @fileoverview Query helpers for profile-memory planning context and readable fact access.
+ * @fileoverview Query helpers for profile-memory planning context, graph-aware continuity facts,
+ * and readable fact access.
  */
 
+import {
+  createEmptyEntityGraphV1
+} from "../stage6_86EntityGraph";
+import type { ConversationStackV1, EntityGraphV1 } from "../types";
 import { type ProfileFactRecord, type ProfileMemoryState } from "../profileMemory";
 import {
   buildQueryAwarePlanningContext,
@@ -10,7 +15,6 @@ import {
 import { isCompatibilityVisibleFactLike } from "./profileMemoryCompatibilityVisibility";
 import { getProfileMemoryFamilyRegistryEntry } from "./profileMemoryFamilyRegistry";
 import type { ProfileMemoryQueryDecisionRecord } from "./profileMemoryDecisionRecordContracts";
-import { isStoredProfileFactEffectivelySensitive } from "./profileMemoryFactSensitivity";
 import { governProfileMemoryCandidates } from "./profileMemoryTruthGovernance";
 import {
   type ProfileAccessRequest,
@@ -23,23 +27,42 @@ import {
   type ProfileReadableFact
 } from "./contracts";
 import { readProfileEpisodes } from "./profileMemoryEpisodeQueries";
-
-export interface ProfileFactContinuityQueryRequest {
-  entityHints: readonly string[];
-  maxFacts?: number;
-}
-
-export interface ProfileFactQueryInspectionRequest {
-  queryInput: string;
-  maxFacts?: number;
-  asOfValidTime?: string;
-  asOfObservedTime?: string;
-}
-
-export interface ProfileFactQueryInspectionResult {
-  selectedFacts: readonly ProfileReadableFact[];
-  decisionRecords: readonly ProfileMemoryQueryDecisionRecord[];
-}
+import {
+  buildProfileMemoryContinuityScopeQueryInput,
+} from "./profileMemoryContinuityScopeSupport";
+import {
+  buildProfileFactContinuityFallbackTemporalSlice,
+  buildProfileFactContinuityResult,
+  collectProfileMemoryContinuityScopedThreadKeys,
+  expandProfileMemoryContinuityEntityHints
+} from "./profileMemoryFactContinuitySupport";
+import {
+  canReadSensitiveFacts,
+  deriveQueryDecisionDisposition,
+  isActiveProfileFact,
+  isProfileFactEffectivelySensitive,
+  toReadableFact,
+  toStateFactRecord
+} from "./profileMemoryFactQuerySupport";
+import type {
+  ProfileFactContinuityQueryRequest,
+  ProfileFactContinuityResult,
+  ProfileFactQueryInspectionRequest,
+  ProfileFactQueryInspectionResult
+} from "./profileMemoryQueryContracts";
+import { queryProfileMemoryTemporalEvidence } from "./profileMemoryTemporalQueries";
+import type {
+  ProfileMemoryTemporalRelevanceScope,
+  ProfileMemoryTemporalSemanticMode,
+  TemporalMemorySynthesis
+} from "./profileMemoryTemporalQueryContracts";
+import { synthesizeProfileMemoryTemporalEvidence } from "./profileMemoryTemporalSynthesis";
+export type {
+  ProfileFactContinuityQueryRequest,
+  ProfileFactContinuityResult,
+  ProfileFactQueryInspectionRequest,
+  ProfileFactQueryInspectionResult
+} from "./profileMemoryQueryContracts";
 
 /**
  * Builds bounded fact-review entries plus hidden decision records for one approval-aware review
@@ -190,23 +213,132 @@ export { readProfileEpisodes };
 /**
  * Returns bounded non-sensitive facts that overlap the supplied continuity/entity hints.
  *
+ * **Why it exists:**
+ * Some continuity callers only have normalized profile state plus the current stack, so this
+ * overload keeps the public seam graph-aware by creating an empty shared entity-graph snapshot
+ * when the live graph is not provided explicitly.
+ *
+ * **What it talks to:**
+ * - Uses `createEmptyEntityGraphV1` (import) from `../stage6_86EntityGraph`.
+ * - Uses continuity helpers from `./profileMemoryFactContinuitySupport`.
+ *
  * @param state - Loaded profile-memory state.
  * @param request - Continuity-aware fact query request.
+ * @param stack - Optional current conversation stack used for scoped relevance metadata.
  * @returns Deterministically selected readable facts.
  */
 export function queryProfileFactsForContinuity(
   state: ProfileMemoryState,
-  request: ProfileFactContinuityQueryRequest
-): readonly ProfileReadableFact[] {
-  const queryInput = request.entityHints.join(" ").trim();
+  request: ProfileFactContinuityQueryRequest,
+  stack?: ConversationStackV1
+): ProfileFactContinuityResult;
+
+/**
+ * Returns bounded non-sensitive facts that overlap the supplied continuity/entity hints.
+ *
+ * **Why it exists:**
+ * Store and orchestration callers that already hold the shared Stage 6.86 graph should not have
+ * to discard it before continuity retrieval, so this overload keeps the graph-aware seam explicit.
+ *
+ * **What it talks to:**
+ * - Uses shared `EntityGraphV1` (import type) from `../types`.
+ * - Uses continuity helpers from `./profileMemoryFactContinuitySupport`.
+ *
+ * @param state - Loaded profile-memory state.
+ * @param graph - Current shared entity-graph snapshot used to expand continuity hints.
+ * @param request - Continuity-aware fact query request.
+ * @param stack - Optional current conversation stack used for scoped relevance metadata.
+ * @returns Deterministically selected readable facts.
+ */
+export function queryProfileFactsForContinuity(
+  state: ProfileMemoryState,
+  graph: EntityGraphV1,
+  request: ProfileFactContinuityQueryRequest,
+  stack?: ConversationStackV1
+): ProfileFactContinuityResult;
+
+/**
+ * Returns bounded non-sensitive facts that overlap the supplied continuity/entity hints.
+ *
+ * **Why it exists:**
+ * Phase 6.5 cuts the continuity seam over to graph-aware hint expansion plus typed temporal
+ * synthesis metadata without breaking older array-style fact consumers.
+ *
+ * **What it talks to:**
+ * - Uses `createEmptyEntityGraphV1` (import) from `../stage6_86EntityGraph`.
+ * - Uses continuity-scope helpers from `./profileMemoryContinuityScopeSupport`.
+ * - Uses continuity fallback helpers from `./profileMemoryFactContinuitySupport`.
+ * - Uses `queryProfileMemoryTemporalEvidence` (import) from `./profileMemoryTemporalQueries`.
+ * - Uses `synthesizeProfileMemoryTemporalEvidence` (import) from `./profileMemoryTemporalSynthesis`.
+ *
+ * @param state - Loaded profile-memory state.
+ * @param graphOrRequest - Either the shared entity graph or the continuity request.
+ * @param requestOrStack - Either the continuity request or the current conversation stack.
+ * @param stackOverride - Optional conversation stack when the entity graph is supplied explicitly.
+ * @returns Deterministically selected readable facts plus typed continuity metadata.
+ */
+export function queryProfileFactsForContinuity(
+  state: ProfileMemoryState,
+  graphOrRequest: EntityGraphV1 | ProfileFactContinuityQueryRequest,
+  requestOrStack?: ProfileFactContinuityQueryRequest | ConversationStackV1,
+  stackOverride?: ConversationStackV1
+): ProfileFactContinuityResult {
+  const graph = isEntityGraphInput(graphOrRequest)
+    ? graphOrRequest
+    : createEmptyEntityGraphV1(state.updatedAt);
+  const request = isEntityGraphInput(graphOrRequest)
+    ? (requestOrStack as ProfileFactContinuityQueryRequest)
+    : graphOrRequest;
+  const stack = isEntityGraphInput(graphOrRequest)
+    ? stackOverride
+    : (requestOrStack as ConversationStackV1 | undefined);
+  const semanticMode = request.semanticMode ?? "relationship_inventory";
+  const relevanceScope = request.relevanceScope ?? "global_profile";
+  const expandedEntityHints = expandProfileMemoryContinuityEntityHints(
+    graph,
+    Array.isArray(request.entityHints) ? request.entityHints : []
+  );
+  const queryInput = buildProfileMemoryContinuityScopeQueryInput(
+    expandedEntityHints,
+    relevanceScope,
+    stack
+  );
+  const scopedThreadKeys = collectProfileMemoryContinuityScopedThreadKeys(stack, relevanceScope);
   if (!queryInput) {
-    return [];
+    return buildProfileFactContinuityResult([], semanticMode, relevanceScope, scopedThreadKeys, null);
   }
 
-  return inspectProfileFactQuery(state, {
+  const selectedFacts = inspectProfileFactQuery(state, {
     queryInput,
     maxFacts: request.maxFacts
   }).selectedFacts;
+  const temporalSlice = queryProfileMemoryTemporalEvidence(state, {
+    semanticMode,
+    relevanceScope,
+    entityHints: expandedEntityHints,
+    queryText: queryInput,
+    asOfValidTime: request.asOfValidTime,
+    asOfObservedTime: request.asOfObservedTime
+  });
+  const synthesisSlice = temporalSlice.focusEntities.length > 0
+    ? temporalSlice
+    : buildProfileFactContinuityFallbackTemporalSlice(selectedFacts, {
+        semanticMode,
+        relevanceScope,
+        asOfValidTime: request.asOfValidTime,
+        asOfObservedTime: request.asOfObservedTime
+      });
+  const temporalSynthesis =
+    synthesisSlice.focusEntities.length > 0
+      ? synthesizeProfileMemoryTemporalEvidence(synthesisSlice)
+      : null;
+  return buildProfileFactContinuityResult(
+    selectedFacts,
+    semanticMode,
+    relevanceScope,
+    scopedThreadKeys,
+    temporalSynthesis
+  );
 }
 
 /**
@@ -305,122 +437,13 @@ function inspectProfileFactQueryWithPolicy(
 }
 
 /**
- * Evaluates whether a profile access request includes explicit human approval metadata.
+ * Checks whether one continuity-query argument is the shared Stage 6.86 entity graph.
  *
- * @param request - Access request under evaluation.
- * @returns `true` when the request includes explicit approval.
+ * @param value - Candidate second argument supplied to `queryProfileFactsForContinuity(...)`.
+ * @returns `true` when the value is an entity graph snapshot.
  */
-function isApprovalValid(request: ProfileAccessRequest): boolean {
-  return (
-    request.explicitHumanApproval === true &&
-    typeof request.approvalId === "string" &&
-    request.approvalId.trim().length > 0
-  );
-}
-
-/**
- * Evaluates whether sensitive profile facts may be returned for this request.
- *
- * @param request - Access request under evaluation.
- * @returns `true` when sensitive facts may be shown.
- */
-function canReadSensitiveFacts(request: ProfileAccessRequest): boolean {
-  if (!request.includeSensitive) {
-    return false;
-  }
-  if (request.purpose !== "operator_view") {
-    return false;
-  }
-  return isApprovalValid(request);
-}
-
-/**
- * Evaluates whether a profile fact remains active for readable query surfaces.
- *
- * @param fact - Profile fact under evaluation.
- * @returns `true` when the fact is active and not superseded.
- */
-function isActiveProfileFact(fact: ProfileFactRecord): boolean {
-  return fact.status !== "superseded" && fact.supersededAt === null;
-}
-
-/**
- * Evaluates whether one stored fact should be treated as sensitive after the code-owned family
- * floor is enforced.
- *
- * @param fact - Stored fact under evaluation.
- * @returns `true` when the fact is effectively sensitive on bounded read/query surfaces.
- */
-function isProfileFactEffectivelySensitive(fact: ProfileFactRecord): boolean {
-  return isStoredProfileFactEffectivelySensitive(fact);
-}
-
-/**
- * Projects one active fact into the public readable-fact shape used by bounded review surfaces.
- *
- * @param fact - Active fact record under projection.
- * @returns Readable fact view.
- */
-function toReadableFact(fact: ProfileFactRecord): ProfileReadableFact {
-  return {
-    factId: fact.id,
-    key: fact.key,
-    value: fact.value,
-    status: fact.status,
-    sensitive: isProfileFactEffectivelySensitive(fact),
-    observedAt: fact.observedAt,
-    lastUpdatedAt: fact.lastUpdatedAt,
-    confidence: fact.confidence,
-    mutationAudit: fact.mutationAudit
-  };
-}
-
-/**
- * Recovers the backing state fact record for one readable-fact projection.
- *
- * @param state - Loaded profile-memory state.
- * @param fact - Readable fact projection.
- * @returns Backing state fact record.
- */
-function toStateFactRecord(
-  state: ProfileMemoryState,
-  fact: ProfileReadableFact
-): ProfileFactRecord {
-  const stateFact = state.facts.find((entry) => entry.id === fact.factId);
-  if (!stateFact) {
-    throw new Error(`Readable fact ${fact.factId} is missing from profile-memory state.`);
-  }
-  return stateFact;
-}
-
-/**
- * Converts one governance action plus visibility posture into a bounded query-time disposition.
- *
- * @param action - Governance action assigned to the fact source.
- * @param compatibilityVisible - Whether the fact is allowed on compatibility surfaces.
- * @param selected - Whether the fact survived bounded query selection.
- * @param corroborationMode - Family-level corroboration posture.
- * @returns Deterministic query-time disposition.
- */
-function deriveQueryDecisionDisposition(
-  action: "allow_current_state" | "allow_episode_support" | "support_only_legacy" | "allow_end_state" | "quarantine",
-  compatibilityVisible: boolean,
-  selected: boolean,
-  corroborationMode: "not_required" | "required_before_current_state" | "required_before_any_visibility"
-): ProfileMemoryQueryDecisionRecord["disposition"] {
-  if (action === "quarantine") {
-    return "quarantined";
-  }
-  if (selected) {
-    return action === "support_only_legacy"
-      ? "selected_supporting_history"
-      : "selected_current_state";
-  }
-  if (!compatibilityVisible) {
-    if (corroborationMode !== "not_required") {
-      return "needs_corroboration";
-    }
-    return "insufficient_evidence";
-  }
-  return "ambiguous_contested";
+function isEntityGraphInput(
+  value: EntityGraphV1 | ProfileFactContinuityQueryRequest
+): value is EntityGraphV1 {
+  return "entities" in value && "edges" in value;
 }

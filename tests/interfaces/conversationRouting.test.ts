@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import type { ProfileMemoryIngestRequest } from "../../src/core/profileMemoryRuntime/contracts";
+import type { TemporalMemorySynthesis } from "../../src/core/profileMemoryRuntime/profileMemoryTemporalQueryContracts";
 import { buildConversationStackFromTurnsV1 } from "../../src/core/stage6_86ConversationStack";
 import { createEmptyConversationDomainContext } from "../../src/core/sessionContext";
 import {
@@ -20,6 +21,7 @@ import {
 import { parseAutonomousExecutionInput } from "../../src/interfaces/conversationRuntime/managerContracts";
 import type { ConversationJob, ConversationSession } from "../../src/interfaces/sessionStore";
 import type { SkillInventoryEntry } from "../../src/organs/skillRegistry/contracts";
+import { buildLegacyCompatibleTemporalSynthesis } from "../../src/organs/memorySynthesis/temporalSynthesisAdapter";
 import type { ConversationCapabilitySummary } from "../../src/interfaces/conversationRuntime/managerContracts";
 import {
   buildConversationBrowserSessionFixture,
@@ -149,6 +151,92 @@ function buildWorkflowHeavySession(
     ],
     ...overrides
   });
+}
+
+function buildQuarantinedJordanContinuityFacts() {
+  const supportingEpisode = {
+    episodeId: "episode_jordan_identity_ambiguity",
+    title: "Jordan identity ambiguity remains unresolved",
+    summary: "Two Jordans and an overlapping J.R. alias still need disambiguation.",
+    status: "unresolved" as const,
+    lastMentionedAt: "2026-03-28T09:59:00.000Z",
+    entityRefs: ["Jordan", "J.R."],
+    entityLinks: [],
+    openLoopLinks: []
+  };
+  const supportingFact = {
+    factId: "fact_jordan_identity_ambiguity",
+    key: "contact.jordan.work_association",
+    value: "Northstar",
+    status: "confirmed",
+    observedAt: "2026-03-28T09:58:00.000Z",
+    lastUpdatedAt: "2026-03-28T09:58:00.000Z",
+    confidence: 0.88
+  };
+  const compatibilitySynthesis = buildLegacyCompatibleTemporalSynthesis(
+    [supportingEpisode],
+    [supportingFact]
+  );
+  assert.ok(compatibilitySynthesis);
+  const temporalSynthesis: TemporalMemorySynthesis = {
+    ...compatibilitySynthesis.temporalSynthesis,
+    currentState: [],
+    historicalContext: [],
+    contradictionNotes: [
+      "I can't safely tell whether Jordan means the Northstar contact or the Ember contact yet, and J.R. could mean the Northstar Jordan or the Harbor contact."
+    ],
+    answerMode: "quarantined_identity",
+    laneMetadata: compatibilitySynthesis.temporalSynthesis.laneMetadata.map((lane) => ({
+      ...lane,
+      answerMode: "quarantined_identity",
+      dominantLane: "quarantined_identity",
+      supportingLanes: []
+    }))
+  };
+  return Object.assign(
+    [
+      {
+        factId: supportingFact.factId,
+        key: supportingFact.key,
+        value: supportingFact.value,
+        status: supportingFact.status,
+        observedAt: supportingFact.observedAt,
+        lastUpdatedAt: supportingFact.lastUpdatedAt,
+        confidence: supportingFact.confidence
+      }
+    ],
+    {
+      semanticMode: "relationship_inventory" as const,
+      relevanceScope: "conversation_local" as const,
+      scopedThreadKeys: ["thread_jordan_identity_ambiguity"],
+      temporalSynthesis,
+      laneBoundaries: compatibilitySynthesis.laneBoundaries
+    }
+  );
+}
+
+function buildAccordSaleContinuityEpisodes() {
+  return [
+    {
+      episodeId: "episode_gray_accord_sale",
+      title: "Milo sold Jordan the gray Accord",
+      summary: "Milo sold Jordan the gray Accord in late 2024.",
+      status: "unresolved" as const,
+      lastMentionedAt: "2026-03-29T11:00:00.000Z",
+      entityRefs: ["contact.milo", "contact.jordan", "gray Accord"],
+      entityLinks: [
+        {
+          entityKey: "entity_milo",
+          canonicalName: "Milo"
+        },
+        {
+          entityKey: "entity_jordan",
+          canonicalName: "Jordan"
+        }
+      ],
+      openLoopLinks: []
+    }
+  ] as const;
 }
 
 test("routeConversationMessageInput promotes strong end-to-end wording into autonomous execution", async () => {
@@ -1214,6 +1302,37 @@ test("routeConversationMessageInput keeps status-shaped relationship recall on t
   assert.equal(session.runningJobId, null);
 });
 
+test("routeConversationMessageInput keeps broad people-inventory recall on the direct chat path during workflow continuity", async () => {
+  const session = buildWorkflowHeavySession();
+  let directConversationInput = "";
+
+  const result = await routeConversationMessageInput(
+    session,
+    "who are ppl i know?",
+    "2026-03-26T15:39:15.000Z",
+    buildDependencies(
+      () => {
+        throw new Error("enqueueJob should not run for broad relationship inventory recall chat");
+      },
+      {
+        runDirectConversationTurn: async (input) => {
+          directConversationInput = input;
+          assert.doesNotMatch(input, /Current working mode from earlier in this chat:/i);
+          return {
+            summary: "You've mentioned Jordan and Milo."
+          };
+        }
+      }
+    )
+  );
+
+  assert.equal(result.shouldStartWorker, false);
+  assert.equal(result.reply, "You've mentioned Jordan and Milo.");
+  assert.equal(directConversationInput, "who are ppl i know?");
+  assert.equal(session.queuedJobs.length, 0);
+  assert.equal(session.runningJobId, null);
+});
+
 test("routeConversationMessageInput keeps continuity-shaped relationship recall off workflow continuity blocks", async () => {
   const session = buildWorkflowHeavySession();
   let directConversationInput = "";
@@ -1241,6 +1360,391 @@ test("routeConversationMessageInput keeps continuity-shaped relationship recall 
   assert.equal(result.shouldStartWorker, false);
   assert.equal(result.reply, "Billy is someone you worked with at Flare.");
   assert.equal(directConversationInput, "What's going on with Billy and Flare?");
+  assert.equal(session.queuedJobs.length, 0);
+  assert.equal(session.runningJobId, null);
+});
+
+test("routeConversationMessageInput keeps typo-bearing Billy history follow-up on the direct chat path during workflow continuity", async () => {
+  const session = buildWorkflowHeavySession({
+    conversationTurns: [
+      {
+        role: "user",
+        text: "Billy used to be at Flare. He's at Northstar now. He drives a gray Accord.",
+        at: "2026-03-27T16:09:00.000Z"
+      },
+      {
+        role: "assistant",
+        text: "Got it - Billy's at Northstar now, and Flare was the earlier connection.",
+        at: "2026-03-27T16:09:05.000Z"
+      },
+      {
+        role: "user",
+        text: "Open the last landing page draft.",
+        at: "2026-03-27T16:10:00.000Z"
+      },
+      {
+        role: "assistant",
+        text: "I opened the last landing page draft.",
+        at: "2026-03-27T16:10:10.000Z"
+      }
+    ]
+  });
+  let directConversationInput = "";
+
+  const result = await routeConversationMessageInput(
+    session,
+    "waht about billy and flare?",
+    "2026-03-27T16:10:20.000Z",
+    buildDependencies(
+      () => {
+        throw new Error("enqueueJob should not run for typo-bearing Billy history recall chat");
+      },
+      {
+        runDirectConversationTurn: async (input) => {
+          directConversationInput = input;
+          assert.doesNotMatch(input, /Current working mode from earlier in this chat:/i);
+          return {
+            summary: "Billy's at Northstar now. Flare was the earlier connection."
+          };
+        }
+      }
+    )
+  );
+
+  assert.equal(result.shouldStartWorker, false);
+  assert.equal(result.reply, "Billy's at Northstar now. Flare was the earlier connection.");
+  assert.match(directConversationInput, /Current user request:\nwaht about billy and flare\?/i);
+  assert.doesNotMatch(directConversationInput, /Current working mode from earlier in this chat:/i);
+  assert.equal(session.queuedJobs.length, 0);
+  assert.equal(session.runningJobId, null);
+});
+
+test("routeConversationMessageInput keeps short object relationship follow-up on the direct chat path during workflow continuity", async () => {
+  const session = buildWorkflowHeavySession({
+    conversationTurns: [
+      {
+        role: "user",
+        text: "Billy used to be at Flare. He's at Northstar now. He drives a gray Accord.",
+        at: "2026-03-27T16:09:00.000Z"
+      },
+      {
+        role: "assistant",
+        text: "Got it - Billy's at Northstar now, and Flare was the earlier connection.",
+        at: "2026-03-27T16:09:05.000Z"
+      },
+      {
+        role: "user",
+        text: "waht about billy and flare?",
+        at: "2026-03-27T16:10:20.000Z"
+      },
+      {
+        role: "assistant",
+        text: "Billy's at Northstar now. Flare was the earlier connection.",
+        at: "2026-03-27T16:10:25.000Z"
+      },
+      {
+        role: "user",
+        text: "Okay, back to the Desktop task - rename the mobile file and move it into the archive folder.",
+        at: "2026-03-27T16:10:35.000Z"
+      },
+      {
+        role: "assistant",
+        text: "I renamed the mobile file and moved it into the archive folder.",
+        at: "2026-03-27T16:10:45.000Z"
+      }
+    ]
+  });
+  let directConversationInput = "";
+
+  const result = await routeConversationMessageInput(
+    session,
+    "and the accord?",
+    "2026-03-27T16:10:55.000Z",
+    buildDependencies(
+      () => {
+        throw new Error("enqueueJob should not run for short object relationship follow-up chat");
+      },
+      {
+        runDirectConversationTurn: async (input) => {
+          directConversationInput = input;
+          assert.doesNotMatch(input, /Current working mode from earlier in this chat:/i);
+          return {
+            summary: "That's Billy's gray Accord."
+          };
+        }
+      }
+    )
+  );
+
+  assert.equal(result.shouldStartWorker, false);
+  assert.equal(result.reply, "That's Billy's gray Accord.");
+  assert.match(directConversationInput, /Current user request:\nand the accord\?/i);
+  assert.doesNotMatch(directConversationInput, /Current working mode from earlier in this chat:/i);
+  assert.equal(session.queuedJobs.length, 0);
+  assert.equal(session.runningJobId, null);
+});
+
+test("routeConversationMessageInput keeps transfer-event recall on the direct chat path during workflow continuity", async () => {
+  const session = buildWorkflowHeavySession({
+    conversationTurns: [
+      {
+        role: "user",
+        text: "Milo sold Jordan the gray Accord in late 2024.",
+        at: "2026-03-29T10:58:00.000Z"
+      },
+      {
+        role: "assistant",
+        text: "Got it - Milo sold Jordan the gray Accord in late 2024.",
+        at: "2026-03-29T10:58:05.000Z"
+      },
+      {
+        role: "user",
+        text: "Switch back to the browser tab with the reference site.",
+        at: "2026-03-29T10:59:00.000Z"
+      },
+      {
+        role: "assistant",
+        text: "I'm back on the reference tab.",
+        at: "2026-03-29T10:59:05.000Z"
+      }
+    ]
+  });
+  let directConversationInput = "";
+
+  const result = await routeConversationMessageInput(
+    session,
+    "Who sold Jordan the gray Accord?",
+    "2026-03-29T11:00:00.000Z",
+    buildDependencies(
+      () => {
+        throw new Error("enqueueJob should not run for event participant recall chat");
+      },
+      {
+        queryContinuityEpisodes: async (request) => {
+          assert.equal(request.semanticMode, "event_history");
+          return buildAccordSaleContinuityEpisodes();
+        },
+        runDirectConversationTurn: async (input) => {
+          directConversationInput = input;
+          assert.doesNotMatch(input, /Current working mode from earlier in this chat:/i);
+          assert.match(input, /Relevant situation: Milo sold Jordan the gray Accord/i);
+          assert.match(input, /gray Accord/i);
+          return {
+            summary: "Milo sold it to Jordan in late 2024."
+          };
+        }
+      }
+    )
+  );
+
+  assert.equal(result.shouldStartWorker, false);
+  assert.equal(result.reply, "Milo sold it to Jordan in late 2024.");
+  assert.match(directConversationInput, /Current user request:\nWho sold Jordan the gray Accord\?/i);
+  assert.equal(session.queuedJobs.length, 0);
+  assert.equal(session.runningJobId, null);
+});
+
+test("routeConversationMessageInput keeps missing participant-role follow-up on the direct chat path during workflow continuity", async () => {
+  const session = buildWorkflowHeavySession({
+    conversationTurns: [
+      {
+        role: "user",
+        text: "Milo sold Jordan the gray Accord in late 2024.",
+        at: "2026-03-29T10:58:00.000Z"
+      },
+      {
+        role: "assistant",
+        text: "Got it - Milo sold Jordan the gray Accord in late 2024.",
+        at: "2026-03-29T10:58:05.000Z"
+      },
+      {
+        role: "user",
+        text: "What happened with the gray Accord?",
+        at: "2026-03-29T10:59:20.000Z"
+      },
+      {
+        role: "assistant",
+        text: "Milo sold it to Jordan in late 2024.",
+        at: "2026-03-29T10:59:25.000Z"
+      }
+    ]
+  });
+  let directConversationInput = "";
+
+  const result = await routeConversationMessageInput(
+    session,
+    "Who handled the paperwork?",
+    "2026-03-29T11:00:30.000Z",
+    buildDependencies(
+      () => {
+        throw new Error("enqueueJob should not run for insufficient event-role recall chat");
+      },
+      {
+        queryContinuityEpisodes: async () => [],
+        runDirectConversationTurn: async (input) => {
+          directConversationInput = input;
+          assert.doesNotMatch(input, /Current working mode from earlier in this chat:/i);
+          assert.doesNotMatch(input, /Relevant situation:/i);
+          return {
+            summary: "You never mentioned who handled the paperwork."
+          };
+        }
+      }
+    )
+  );
+
+  assert.equal(result.shouldStartWorker, false);
+  assert.equal(result.reply, "You never mentioned who handled the paperwork.");
+  assert.match(directConversationInput, /Current user request:\nWho handled the paperwork\?/i);
+  assert.equal(session.queuedJobs.length, 0);
+  assert.equal(session.runningJobId, null);
+});
+
+test("routeConversationMessageInput keeps same-name ambiguity recall on the direct chat path during workflow continuity", async () => {
+  const session = buildWorkflowHeavySession({
+    conversationTurns: [
+      {
+        role: "user",
+        text: "I work with Jordan at Northstar.",
+        at: "2026-03-28T09:56:00.000Z"
+      },
+      {
+        role: "assistant",
+        text: "Got it - Jordan's the Northstar coworker.",
+        at: "2026-03-28T09:56:05.000Z"
+      },
+      {
+        role: "user",
+        text: "I also know another Jordan at Ember. That's a different Jordan from Northstar.",
+        at: "2026-03-28T09:57:00.000Z"
+      },
+      {
+        role: "assistant",
+        text: "Okay - I'll keep the Ember Jordan separate from the Northstar one.",
+        at: "2026-03-28T09:57:05.000Z"
+      },
+      {
+        role: "user",
+        text: "Open the last landing page draft and check the reference browser tab.",
+        at: "2026-03-28T09:58:00.000Z"
+      },
+      {
+        role: "assistant",
+        text: "I reopened the draft and the reference tab.",
+        at: "2026-03-28T09:58:10.000Z"
+      }
+    ]
+  });
+  let directConversationInput = "";
+
+  const result = await routeConversationMessageInput(
+    session,
+    "What about Jordan?",
+    "2026-03-28T09:59:00.000Z",
+    buildDependencies(
+      () => {
+        throw new Error("enqueueJob should not run for same-name ambiguity recall chat");
+      },
+      {
+        queryContinuityFacts: async () => buildQuarantinedJordanContinuityFacts(),
+        runDirectConversationTurn: async (input) => {
+          directConversationInput = input;
+          assert.doesNotMatch(input, /Current working mode from earlier in this chat:/i);
+          assert.match(input, /Contradiction Notes:/i);
+          assert.match(input, /Northstar/i);
+          assert.match(input, /Ember/i);
+          return {
+            summary: "Which Jordan - Northstar or Ember?"
+          };
+        }
+      }
+    )
+  );
+
+  assert.equal(result.shouldStartWorker, false);
+  assert.equal(result.reply, "Which Jordan - Northstar or Ember?");
+  assert.match(directConversationInput, /Current user request:\nWhat about Jordan\?/i);
+  assert.equal(session.queuedJobs.length, 0);
+  assert.equal(session.runningJobId, null);
+});
+
+test("routeConversationMessageInput keeps alias-collision recall on the direct chat path during workflow continuity", async () => {
+  const session = buildWorkflowHeavySession({
+    conversationTurns: [
+      {
+        role: "user",
+        text: "I work with Jordan at Northstar.",
+        at: "2026-03-28T10:01:00.000Z"
+      },
+      {
+        role: "assistant",
+        text: "Got it - Jordan's the Northstar coworker.",
+        at: "2026-03-28T10:01:05.000Z"
+      },
+      {
+        role: "user",
+        text: "The Jordan from Northstar sometimes goes by J.R.",
+        at: "2026-03-28T10:01:20.000Z"
+      },
+      {
+        role: "assistant",
+        text: "Okay - I'll remember that alias for the Northstar Jordan.",
+        at: "2026-03-28T10:01:25.000Z"
+      },
+      {
+        role: "user",
+        text: "I met a different J.R. from Harbor last month.",
+        at: "2026-03-28T10:01:40.000Z"
+      },
+      {
+        role: "assistant",
+        text: "Understood - that J.R. may be someone else from Harbor.",
+        at: "2026-03-28T10:01:45.000Z"
+      },
+      {
+        role: "user",
+        text: "Switch back to the browser tab with the reference site.",
+        at: "2026-03-28T10:02:00.000Z"
+      },
+      {
+        role: "assistant",
+        text: "I'm back on the reference tab.",
+        at: "2026-03-28T10:02:05.000Z"
+      }
+    ]
+  });
+  let directConversationInput = "";
+
+  const result = await routeConversationMessageInput(
+    session,
+    "Who's J.R.?",
+    "2026-03-28T10:02:20.000Z",
+    buildDependencies(
+      () => {
+        throw new Error("enqueueJob should not run for alias-collision recall chat");
+      },
+      {
+        queryContinuityFacts: async () => buildQuarantinedJordanContinuityFacts(),
+        runDirectConversationTurn: async (input) => {
+          directConversationInput = input;
+          assert.doesNotMatch(input, /Current working mode from earlier in this chat:/i);
+          assert.match(input, /Contradiction Notes:/i);
+          assert.match(input, /J\.R\./i);
+          assert.match(input, /Harbor/i);
+          return {
+            summary: "I have two possible J.R. matches there - the Northstar Jordan and someone from Harbor."
+          };
+        }
+      }
+    )
+  );
+
+  assert.equal(result.shouldStartWorker, false);
+  assert.equal(
+    result.reply,
+    "I have two possible J.R. matches there - the Northstar Jordan and someone from Harbor."
+  );
+  assert.match(directConversationInput, /Current user request:\nWho's J\.R\.\?/i);
   assert.equal(session.queuedJobs.length, 0);
   assert.equal(session.runningJobId, null);
 });
