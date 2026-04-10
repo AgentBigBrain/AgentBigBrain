@@ -189,9 +189,11 @@ What to expect today:
 - screenshots can produce OCR/summary style context when the vision path is available
 - voice notes can produce transcript-backed context when the transcription path is available
 - `BRAIN_MEDIA_VISION_BACKEND=ollama` now supports local image understanding directly.
-- `BRAIN_MEDIA_TRANSCRIPTION_BACKEND=ollama` now supports local multimodal-audio models such as
-  Gemma 4 by targeting Ollama's OpenAI-compatible `/v1/responses` surface behind the native Ollama
-  backend selection.
+- `BRAIN_MEDIA_TRANSCRIPTION_BACKEND=ollama` currently remains experimental for local
+  multimodal-audio models such as Gemma 4. The runtime can target Ollama's OpenAI-compatible
+  `/v1/responses` surface, but real audio support depends on the exact Ollama build and model
+  packaging. We are monitoring Ollama for stable native local audio support before recommending it
+  as the default voice-note path.
 - `BRAIN_MEDIA_TRANSCRIPTION_BACKEND=openai_api` still works for other loopback
   OpenAI-compatible servers; when the base URL is local, the media runtime does not require an API
   key just to attach audio for transcription.
@@ -888,8 +890,11 @@ This section covers every key currently present in `.env.example` and what to ex
   - Dedicated transcription models such as `whisper-1` stay on `/audio/transcriptions`.
   - Non-whisper models such as Gemma 4 automatically use the multimodal audio path instead.
   - If transcription is unavailable, the runtime falls back to basic media context rather than fabricating a transcript.
-  - `BRAIN_MEDIA_TRANSCRIPTION_BACKEND=ollama` now supports local multimodal-audio Gemma 4 runs by
-    targeting Ollama's OpenAI-compatible `/v1/responses` surface automatically.
+  - `BRAIN_MEDIA_TRANSCRIPTION_BACKEND=ollama` is currently experimental for local Gemma-style
+    audio runs. The runtime can target Ollama's OpenAI-compatible `/v1/responses` surface, but the
+    working audio capability still depends on what Ollama exposes for that specific build.
+  - We are monitoring Ollama for stable native local audio support before recommending it as the
+    default local voice-note path.
   - `BRAIN_MEDIA_TRANSCRIPTION_BACKEND=openai_api` remains available for other loopback
     OpenAI-compatible servers.
   - `BRAIN_MEDIA_REQUEST_TIMEOUT_MS`: timeout for provider-backed media interpretation requests.

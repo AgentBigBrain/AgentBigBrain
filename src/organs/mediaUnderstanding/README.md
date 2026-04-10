@@ -31,9 +31,11 @@ transport parsing but before conversation execution and memory brokerage.
   memory or session state.
 - `BRAIN_MEDIA_VISION_BACKEND=ollama` now supports local image understanding directly through
   Ollama's `/api/chat` surface.
-- `BRAIN_MEDIA_TRANSCRIPTION_BACKEND=ollama` now supports local multimodal-audio models such as
-  Gemma 4 by targeting Ollama's OpenAI-compatible `/v1/responses` surface behind the native Ollama
-  backend selection.
+- `BRAIN_MEDIA_TRANSCRIPTION_BACKEND=ollama` is currently an experimental local multimodal-audio
+  path for models such as Gemma 4. The runtime can target Ollama's OpenAI-compatible
+  `/v1/responses` surface, but real audio support still depends on the exact Ollama build and model
+  packaging. We are monitoring Ollama for stable native local audio support before recommending it
+  as the default voice-note path.
 - `BRAIN_MEDIA_TRANSCRIPTION_BACKEND=openai_api` still supports other loopback OpenAI-compatible
   servers without an API key when `OPENAI_BASE_URL` points at localhost.
 - Short video currently remains on bounded metadata/caption fallback. That is deliberate: the runtime does not yet have a clip-analysis path with strong enough cost, latency, and truthfulness controls to claim deeper understanding.
