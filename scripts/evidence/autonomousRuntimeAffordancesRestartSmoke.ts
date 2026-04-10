@@ -350,38 +350,6 @@ function extractPreviewUrl(session: ConversationSession): string | null {
   return recentUrl?.location ?? null;
 }
 
-function extractTargetFolder(session: ConversationSession): string | null {
-  if (session.activeWorkspace?.rootPath) {
-    return session.activeWorkspace.rootPath;
-  }
-  if (session.activeWorkspace?.primaryArtifactPath) {
-    return path.dirname(session.activeWorkspace.primaryArtifactPath);
-  }
-  const browserWorkspacePath = session.browserSessions.find(
-    (entry) => typeof entry.workspaceRootPath === "string" && entry.workspaceRootPath.trim().length > 0
-  )?.workspaceRootPath;
-  if (browserWorkspacePath) {
-    return browserWorkspacePath;
-  }
-  const processPath = session.pathDestinations.find((entry) => entry.id.startsWith("path:process:"));
-  if (processPath) {
-    return processPath.resolvedPath;
-  }
-  const filePath = session.pathDestinations.find((entry) => entry.resolvedPath.endsWith("index.html"));
-  if (filePath) {
-    return path.dirname(filePath.resolvedPath);
-  }
-  const previewUrl = extractPreviewUrl(session);
-  if (previewUrl?.startsWith("file://")) {
-    try {
-      return path.dirname(fileURLToPath(previewUrl));
-    } catch {
-      return null;
-    }
-  }
-  return null;
-}
-
 function extractLatestAssistantReply(session: ConversationSession): string {
   return [...session.conversationTurns]
     .reverse()

@@ -5,7 +5,6 @@
 
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 
 import type { ConversationSession } from "../../src/interfaces/sessionStore";
 import { buildSessionSeed } from "../../src/interfaces/conversationManagerHelpers";

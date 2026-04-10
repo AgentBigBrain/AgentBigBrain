@@ -6,7 +6,6 @@
 import { mkdtemp, mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 
 import { ProfileMemoryStore } from "../../src/core/profileMemoryStore";
 import type { CreateProfileEpisodeRecordInput } from "../../src/core/profileMemory";
