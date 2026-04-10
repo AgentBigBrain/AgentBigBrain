@@ -1234,11 +1234,6 @@ Promise<AutonomousRuntimeAffordancesRestartArtifact> {
       await writeRestartArtifact(artifact);
       return artifact;
     }
-    const turn1BrowserActions = turn1Job
-      ? turn1Session.recentActions.filter(
-          (action) => action.sourceJobId === turn1Job.id && action.kind === "browser_session"
-        )
-      : [];
     const turn1ProcessActions = turn1Job
       ? turn1Session.recentActions.filter(
           (action) => action.sourceJobId === turn1Job.id && action.kind === "process"

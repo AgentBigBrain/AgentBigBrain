@@ -9,7 +9,7 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -401,28 +401,6 @@ function findLatestJobSince(
     return null;
   }
   return matchingJobs.sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0] ?? null;
-}
-
-function extractLatestChangedFileNames(session: ConversationSession): string[] {
-  const latestCompletedJob = session.recentJobs
-    .filter((job) => job.status === "completed")
-    .sort((left, right) => {
-      const leftTimestamp = left.completedAt ?? left.startedAt ?? left.createdAt;
-      const rightTimestamp = right.completedAt ?? right.startedAt ?? right.createdAt;
-      return rightTimestamp.localeCompare(leftTimestamp);
-    })[0];
-  if (!latestCompletedJob) {
-    return [];
-  }
-  return session.recentActions
-    .filter(
-      (action) =>
-        action.sourceJobId === latestCompletedJob.id &&
-        action.kind === "file" &&
-        typeof action.location === "string"
-    )
-    .map((action) => path.basename(action.location as string))
-    .filter((fileName, index, array) => fileName.length > 0 && array.indexOf(fileName) === index);
 }
 
 async function cleanupTrackedSmokeResources(session: ConversationSession | null): Promise<void> {

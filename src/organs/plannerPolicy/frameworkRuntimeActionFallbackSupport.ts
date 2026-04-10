@@ -1,6 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
-import path from "node:path";
-import { ShellKindV1 } from "../../core/runtimeTypes/taskPlanningTypes";
+import type { ShellKindV1 } from "../../core/runtimeTypes/taskPlanningTypes";
 
 import {
   extractRequestedFrameworkFolderName,
@@ -268,7 +267,7 @@ export function buildFrameworkScaffoldCommand(
   }
   return [
     `final='${escapePosixSingleQuoted(finalFolderPath)}'`,
-    "temp_root=\"${TMPDIR:-/tmp}/agentbigbrain-framework-scaffold\"",
+    'temp_root="/tmp/agentbigbrain-framework-scaffold"',
     `temp=\"$temp_root/${escapePosixSingleQuoted(safeSlug)}\"`,
     "mkdir -p \"$temp_root\"",
     "rm -rf \"$temp\"",

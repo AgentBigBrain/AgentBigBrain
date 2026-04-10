@@ -80,16 +80,6 @@ function normalizeStructuredRecoveryText(value: string): string {
 }
 
 /**
- * Quotes one shell-ish value only when whitespace or quotes require it.
- *
- * @param value - Raw value to render.
- * @returns Shell-safe rendered value.
- */
-function quoteStructuredRecoveryValue(value: string): string {
-  return /[\s"]/u.test(value) ? `"${value.replace(/"/g, '\\"')}"` : value;
-}
-
-/**
  * Verifies one dependency or version hint is safe to echo into a shell repair command.
  *
  * @param value - Raw dependency or package-specifier candidate.
@@ -212,16 +202,15 @@ function buildNodeRepairCommand(
   if (!safeDependency) {
     return null;
   }
-  const quotedDependency = quoteStructuredRecoveryValue(safeDependency);
   switch (packageManager) {
     case "pnpm":
-      return `pnpm add ${quotedDependency}`;
+      return `pnpm add ${safeDependency}`;
     case "yarn":
-      return `yarn add ${quotedDependency}`;
+      return `yarn add ${safeDependency}`;
     case "bun":
-      return `bun add ${quotedDependency}`;
+      return `bun add ${safeDependency}`;
     case "npm":
-      return `npm install ${quotedDependency}`;
+      return `npm install ${safeDependency}`;
     default:
       return null;
   }

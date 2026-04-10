@@ -5,7 +5,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { buildSessionSeed } from "../../src/interfaces/conversationManagerHelpers";
 import type { ConversationSessionRecoveryDependencies } from "../../src/interfaces/conversationRuntime/contracts";
 import { recoverStaleRunningJobIfNeeded } from "../../src/interfaces/conversationRuntime/sessionRecovery";
 import type {

@@ -315,7 +315,6 @@ export function shouldSkipProfileMemoryIngest(
   if (requestHasConversationalProfileUpdate) {
     return false;
   }
-  const requestProfileSignal = requestScores.profile + requestScores.relationship;
   const requestNonProfileSignal = requestScores.workflow + requestScores.system_policy;
   const sessionAwareScores = applySessionDomainLaneSignals(requestScores, sessionDomainContext);
   const profileSignal = sessionAwareScores.profile + sessionAwareScores.relationship;

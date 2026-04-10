@@ -204,18 +204,6 @@ export function deriveTopicKeyCandidatesV1(
 }
 
 /**
- * Resolves the highest-confidence topic candidate for a turn.
- *
- * @param text - Source text used for topic extraction.
- * @param observedAt - Timestamp attached to derived topic candidates.
- * @returns Highest-confidence topic candidate or `null` when none are available.
- */
-function findPrimaryTopicCandidate(text: string, observedAt: string): TopicKeyCandidateV1 | null {
-  const candidates = deriveTopicKeyCandidatesV1(text, observedAt);
-  return candidates[0] ?? null;
-}
-
-/**
  * Returns `true` when deterministic topic selection is weak or closely contested.
  *
  * @param primaryCandidate - Highest-confidence deterministic topic candidate.

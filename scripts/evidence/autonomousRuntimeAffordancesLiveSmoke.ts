@@ -1302,9 +1302,9 @@ Promise<AutonomousRuntimeAffordancesLiveSmokeArtifact> {
       return artifact;
     }
 
-    let browserWorkflowScenario = buildFailedFrontDoorScenarioSummary(null);
-    let exactHolderRecoveryScenario = buildFailedFrontDoorScenarioSummary(null);
-    let ambiguousClarificationScenario = buildFailedAmbiguousClarificationScenario(null);
+    let browserWorkflowScenario: FrontDoorScenarioSummary;
+    let exactHolderRecoveryScenario: FrontDoorScenarioSummary;
+    let ambiguousClarificationScenario: AmbiguousClarificationScenario;
 
     try {
       exactHolderRecoveryScenario = await runExactHolderRecoveryScenario(deadlineAtMs);

@@ -147,11 +147,10 @@ export async function resolveConversationIntentMode(
           routingClassification,
           sessionHints,
           statusRecallBoundaryInterpretationResolver
-        );
+      );
       if (statusRecallBoundaryResolution) {
         return statusRecallBoundaryResolution;
       }
-      suppressGenericLocalIntentModel = true;
     }
     return resolveExecutionIntentUnderstanding(
       normalized,

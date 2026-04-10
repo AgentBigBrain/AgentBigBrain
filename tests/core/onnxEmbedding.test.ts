@@ -19,7 +19,6 @@ import { test } from "node:test";
 import { cosineSimilarity } from "../../src/core/embeddingProvider";
 import { OnnxEmbeddingProvider } from "../../src/core/onnxEmbeddingProvider";
 import { SqliteVectorStore } from "../../src/core/vectorStore";
-import { SemanticMemoryStore } from "../../src/core/semanticMemory";
 
 const MODEL_DIR = path.resolve(process.cwd(), "models", "all-MiniLM-L6-v2");
 const MODEL_AVAILABLE = existsSync(path.join(MODEL_DIR, "model.onnx")) &&

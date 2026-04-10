@@ -183,9 +183,6 @@ function buildWordPreviewSteps(
   if (steps.length === 0 || steps[steps.length - 1] !== previewTerminal) {
     steps.push(previewTerminal);
   }
-  if (includeFinalText && steps[steps.length - 1] !== normalized) {
-    steps.push(normalized);
-  }
   return steps;
 }
 
@@ -233,9 +230,6 @@ function buildCharacterPreviewSteps(
   const previewTerminal = characters.slice(0, previewCharacterCount).join("");
   if (steps.length === 0 || steps[steps.length - 1] !== previewTerminal) {
     steps.push(previewTerminal);
-  }
-  if (includeFinalText && steps[steps.length - 1] !== normalized) {
-    steps.push(normalized);
   }
   return steps;
 }

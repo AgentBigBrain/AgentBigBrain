@@ -5,7 +5,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { buildSessionSeed } from "../../src/interfaces/conversationManagerHelpers";
 import { buildDynamicPulsePrompt, buildPulsePrompt, computeRelationshipAgeDays } from "../../src/interfaces/conversationRuntime/pulsePrompting";
 import type { ContextualFollowupCandidate } from "../../src/interfaces/conversationRuntime/pulseContextualFollowup";
 import type { AgentPulseEvaluationResult } from "../../src/core/profileMemoryStore";

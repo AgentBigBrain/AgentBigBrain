@@ -53,9 +53,6 @@ export function computeTemporalMemoryRegistryDiagnostics(
 ): TemporalMemoryRegistryDiagnostics {
   const issues: TemporalMemoryRegistryIssue[] = [];
   const familySet = new Set<string>(families);
-  const contactFamilySet = new Set<string>(
-    families.filter((family) => family.startsWith("contact."))
-  );
   const canonicalContactFamilySet = new Set<string>(
     PROFILE_MEMORY_GOVERNANCE_FAMILIES.filter((family) => family.startsWith("contact."))
   );

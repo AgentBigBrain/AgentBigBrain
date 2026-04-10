@@ -932,6 +932,10 @@ Promise<AiDroneCityPreviewLifecycleArtifact> {
     assert.ok(browserSessionId, "Turn 4 did not leave a tracked browser session open.");
     assert.ok(openBrowserSession, "Turn 4 did not leave an open browser session.");
     assert.ok(
+      runningWorkspacePreviewProcessCountAfterOpen >= 1,
+      "Turn 4 did not keep the React preview process running after opening the browser."
+    );
+    assert.ok(
       variantNamesAfterOpen.length <= Math.max(variantNamesBefore.length, 1),
       `React preview smoke created duplicate Desktop folders: before=${variantNamesBefore.join(",")} after=${variantNamesAfterOpen.join(",")}`
     );

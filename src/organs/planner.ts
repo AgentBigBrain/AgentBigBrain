@@ -11,7 +11,7 @@ import {
   TaskRequest,
   WorkflowPattern
 } from "../core/types";
-import { SemanticLesson, SemanticMemoryStore } from "../core/semanticMemory";
+import type { SemanticMemoryStore } from "../core/semanticMemory";
 import {
   createFirstPrinciplesRubric,
   validateFirstPrinciplesRubric

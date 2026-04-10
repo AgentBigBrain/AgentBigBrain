@@ -262,16 +262,6 @@ export function compactProfileMemoryMutationJournalState(input: {
 }
 
 /**
- * Checks whether one candidate is a non-negative integer.
- *
- * @param value - Unknown candidate.
- * @returns `true` when the value is a non-negative integer.
- */
-function isNonNegativeInteger(value: unknown): value is number {
-  return typeof value === "number" && Number.isInteger(value) && value >= 0;
-}
-
-/**
  * Checks whether one candidate is a positive integer.
  *
  * @param value - Unknown candidate.

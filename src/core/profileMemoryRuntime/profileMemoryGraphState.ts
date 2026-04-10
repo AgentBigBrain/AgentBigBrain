@@ -15,7 +15,7 @@ import { pruneProfileMemoryGraphEntityRefs } from "./profileMemoryGraphEntityRef
 import { backfillProfileMemoryGraphObservationsFromLegacyClaims } from "./profileMemoryGraphLegacyClaimObservationBackfillSupport";
 import { backfillProfileMemoryGraphFromLegacyFacts } from "./profileMemoryGraphLegacyFactBackfillSupport";
 import { pruneProfileMemoryGraphMutationJournalReferences } from "./profileMemoryMutationJournalReferenceSupport";
-import { buildProfileMemoryGraphIndexState, buildProfileMemoryGraphReadModel, createEmptyProfileMemoryGraphIndexState } from "./profileMemoryGraphIndexing";
+import { buildProfileMemoryGraphReadModel, createEmptyProfileMemoryGraphIndexState } from "./profileMemoryGraphIndexing";
 import { createDefaultProfileMemoryGraphCompactionState, normalizeGraphEnvelopeArray, normalizeProfileMemoryGraphCompactionState } from "./profileMemoryGraphNormalizationSupport";
 import { normalizeProfileMemoryGraphClaimPayloadCandidate, normalizeProfileMemoryGraphEventPayloadCandidate, normalizeProfileMemoryGraphObservationPayloadCandidate } from "./profileMemoryGraphPayloadNormalizationSupport";
 import { compactProfileMemoryGraphObservations } from "./profileMemoryGraphObservationCompactionSupport";

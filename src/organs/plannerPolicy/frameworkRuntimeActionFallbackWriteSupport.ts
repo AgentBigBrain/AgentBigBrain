@@ -4,7 +4,6 @@
  */
 
 import { existsSync } from "node:fs";
-import path from "node:path";
 
 import { estimateActionCostUsd } from "../../core/actionCostPolicy";
 import { makeId } from "../../core/ids";

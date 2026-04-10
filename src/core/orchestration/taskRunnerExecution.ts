@@ -72,12 +72,9 @@ export async function executeTaskRunnerAction(
 
   let preparedOutput: string | null = null;
   let usedPreparedOutput = false;
-  let output = "";
+  let output: string;
   let shellExecutionTelemetry: ShellExecutionTelemetry | undefined;
-  let executionOutcome: ExecutorExecutionOutcome = {
-    status: "success",
-    output: ""
-  };
+  let executionOutcome: ExecutorExecutionOutcome;
   let stage686ExecutionMetadata: Metadata | undefined;
   let stage686TraceDetails: Metadata | undefined;
 

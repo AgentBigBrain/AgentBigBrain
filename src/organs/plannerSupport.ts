@@ -7,7 +7,7 @@ import {
   DistilledPacketV1,
   PlannerLearningHintSummaryV1
 } from "../core/types";
-import { SemanticLesson } from "../core/semanticMemory";
+import type { SemanticLesson } from "../core/semanticMemory";
 import {
   buildDefaultRetrievalQuarantinePolicy,
   distillExternalContent,

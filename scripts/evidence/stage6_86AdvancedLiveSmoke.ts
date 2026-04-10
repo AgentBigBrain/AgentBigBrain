@@ -512,12 +512,12 @@ function runRelationshipBridgeSingleShotScenario(): Stage686AdvancedScenarioResu
     "Bridge clarification asks once and then respects cooldown",
     transcript,
     observedAt,
-    [
-      buildCheck(
-        "bridge_candidate_present",
-        bridgeCandidate !== null,
-        `Bridge candidate ${bridgeCandidate.candidateId} is available for evaluation.`
-      ),
+      [
+        buildCheck(
+          "bridge_candidate_present",
+          true,
+          `Bridge candidate ${bridgeCandidate.candidateId} is available for evaluation.`
+        ),
       buildCheck(
         "bridge_emission_approved",
         emission.approved,

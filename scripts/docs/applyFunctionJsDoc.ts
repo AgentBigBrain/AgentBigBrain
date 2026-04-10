@@ -676,6 +676,10 @@ function inferReturnDescription(returnType: string | null): string | null {
   return `Computed \`${returnType}\` result.`;
 }
 
+function sanitizeJsDocText(value: string): string {
+  return value.replace(/\*\//g, "*\\/").replace(/\s+/g, " ").trim();
+}
+
 function buildCommentText(input: {
   functionName: string;
   indent: string;
@@ -687,13 +691,12 @@ function buildCommentText(input: {
   returnType: string | null;
 }): string {
   const { indent, newline } = input;
-  const functionLabel = input.functionName.split(".").pop() ?? input.functionName;
   const lines: string[] = [];
   lines.push(`${indent}/**`);
-  lines.push(`${indent} * ${input.whatItDoes}`);
+  lines.push(`${indent} * ${sanitizeJsDocText(input.whatItDoes)}`);
   lines.push(`${indent} *`);
   lines.push(`${indent} * **Why it exists:**`);
-  lines.push(`${indent} * ${input.whyItExists}`);
+  lines.push(`${indent} * ${sanitizeJsDocText(input.whyItExists)}`);
   lines.push(`${indent} *`);
   lines.push(`${indent} * **What it talks to:**`);
 
@@ -702,7 +705,7 @@ function buildCommentText(input: {
   } else {
     for (const collaborator of input.collaborators.slice(0, 6)) {
       lines.push(
-        `${indent} * - Uses \`${collaborator.localName}\` (import \`${collaborator.importedName}\`) from \`${collaborator.source}\`.`
+        `${indent} * - Uses \`${sanitizeJsDocText(collaborator.localName)}\` (import \`${sanitizeJsDocText(collaborator.importedName)}\`) from \`${sanitizeJsDocText(collaborator.source)}\`.`
       );
     }
     if (input.collaborators.length > 6) {
@@ -713,13 +716,15 @@ function buildCommentText(input: {
   if (input.parameterNames.length > 0) {
     lines.push(`${indent} *`);
     for (const parameterName of input.parameterNames) {
-      lines.push(`${indent} * @param ${parameterName} - ${inferParamDescription(parameterName)}`);
+      lines.push(
+        `${indent} * @param ${sanitizeJsDocText(parameterName)} - ${sanitizeJsDocText(inferParamDescription(parameterName))}`
+      );
     }
   }
 
   const returnDescription = inferReturnDescription(input.returnType);
   if (returnDescription) {
-    lines.push(`${indent} * @returns ${returnDescription}`);
+    lines.push(`${indent} * @returns ${sanitizeJsDocText(returnDescription)}`);
   }
 
   lines.push(`${indent} */`);

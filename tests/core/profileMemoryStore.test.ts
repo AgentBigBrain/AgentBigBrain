@@ -5893,10 +5893,13 @@ test("profile memory load prunes dangling journal refs to missing graph records"
   await withProfileStore(async (store, filePath) => {
     const encryptionKey = Buffer.alloc(32, 7);
     const emptyState = createEmptyProfileMemoryState();
+    const emptyGraphState = (({ compaction, mutationJournal, ...graphState }) => graphState)(
+      emptyState.graph
+    );
     const seededState = {
       ...emptyState,
       graph: {
-        ...emptyState.graph,
+        ...emptyGraphState,
         updatedAt: "2026-04-04T15:00:00.000Z",
         observations: [
           createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {

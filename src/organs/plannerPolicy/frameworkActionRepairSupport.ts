@@ -4,7 +4,6 @@
  */
 
 import { existsSync } from "node:fs";
-import path from "node:path";
 import { estimateActionCostUsd } from "../../core/actionCostPolicy";
 import type { PlannedAction } from "../../core/types";
 import type { PlannerExecutionEnvironmentContext } from "./executionStyleContracts";

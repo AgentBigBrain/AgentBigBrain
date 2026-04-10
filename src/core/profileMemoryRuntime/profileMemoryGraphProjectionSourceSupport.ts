@@ -180,16 +180,6 @@ function dedupeSortedStrings(values: readonly string[], validIds: ReadonlySet<st
 }
 
 /**
- * Sorts and deduplicates one projection-source array without pruning.
- *
- * @param values - Candidate retained source ids.
- * @returns Sorted unique source ids.
- */
-function sortUniqueStrings(values: readonly string[]): string[] {
-  return [...new Set(values)].sort((left, right) => left.localeCompare(right));
-}
-
-/**
  * Checks whether two string arrays already match exactly.
  *
  * @param left - Left array.

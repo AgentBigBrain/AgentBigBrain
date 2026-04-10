@@ -9,7 +9,6 @@ import path from "node:path";
 import { test } from "node:test";
 
 import type { ProfileMemoryIngestRequest } from "../../src/core/profileMemoryRuntime/contracts";
-import type { TemporalMemorySynthesis } from "../../src/core/profileMemoryRuntime/profileMemoryTemporalQueryContracts";
 import { MemoryAccessAuditStore } from "../../src/core/memoryAccessAudit";
 import { createEmptyConversationDomainContext } from "../../src/core/sessionContext";
 import { ProfileMemoryStore } from "../../src/core/profileMemoryStore";
@@ -27,7 +26,6 @@ import {
 } from "../../src/interfaces/conversationManager";
 import { buildConversationInboundUserInput } from "../../src/interfaces/mediaRuntime/mediaNormalization";
 import { InterfaceSessionStore as BaseInterfaceSessionStore } from "../../src/interfaces/sessionStore";
-import { buildLegacyCompatibleTemporalSynthesis } from "../../src/organs/memorySynthesis/temporalSynthesisAdapter";
 import {
   buildConversationJobFixture,
   buildConversationSessionFixture
@@ -140,68 +138,6 @@ function buildMessageAt(text: string, receivedAt: string): ConversationInboundMe
     text,
     receivedAt
   };
-}
-
-function buildQuarantinedJordanContinuityFacts() {
-  const supportingEpisode = {
-    episodeId: "episode_jordan_identity_ambiguity",
-    title: "Jordan identity ambiguity remains unresolved",
-    summary: "Two Jordans and an overlapping J.R. alias still need disambiguation.",
-    status: "unresolved" as const,
-    lastMentionedAt: "2026-03-28T10:02:00.000Z",
-    entityRefs: ["Jordan", "J.R."],
-    entityLinks: [],
-    openLoopLinks: []
-  };
-  const supportingFact = {
-    factId: "fact_jordan_identity_ambiguity",
-    key: "contact.jordan.work_association",
-    value: "Northstar",
-    status: "confirmed",
-    observedAt: "2026-03-28T10:01:00.000Z",
-    lastUpdatedAt: "2026-03-28T10:01:00.000Z",
-    confidence: 0.88
-  };
-  const compatibilitySynthesis = buildLegacyCompatibleTemporalSynthesis(
-    [supportingEpisode],
-    [supportingFact]
-  );
-  assert.ok(compatibilitySynthesis);
-  const temporalSynthesis: TemporalMemorySynthesis = {
-    ...compatibilitySynthesis.temporalSynthesis,
-    currentState: [],
-    historicalContext: [],
-    contradictionNotes: [
-      "I can't safely tell whether Jordan means the Northstar contact or the Ember contact yet, and J.R. could mean the Northstar Jordan or the Harbor contact."
-    ],
-    answerMode: "quarantined_identity",
-    laneMetadata: compatibilitySynthesis.temporalSynthesis.laneMetadata.map((lane) => ({
-      ...lane,
-      answerMode: "quarantined_identity",
-      dominantLane: "quarantined_identity",
-      supportingLanes: []
-    }))
-  };
-  return Object.assign(
-    [
-      {
-        factId: supportingFact.factId,
-        key: supportingFact.key,
-        value: supportingFact.value,
-        status: supportingFact.status,
-        observedAt: supportingFact.observedAt,
-        lastUpdatedAt: supportingFact.lastUpdatedAt,
-        confidence: supportingFact.confidence
-      }
-    ],
-    {
-      semanticMode: "relationship_inventory" as const,
-      relevanceScope: "conversation_local" as const,
-      scopedThreadKeys: ["thread_jordan_identity_ambiguity"],
-      temporalSynthesis,
-      laneBoundaries: compatibilitySynthesis.laneBoundaries
-    }
-  );
 }
 
 /**

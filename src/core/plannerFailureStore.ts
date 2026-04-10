@@ -33,7 +33,7 @@ export interface PlannerFailureStore {
  * @returns Computed `PlannerFailureFingerprintEntry | undefined` result.
  */
 function normalizeEntry(input: unknown): PlannerFailureFingerprintEntry | undefined {
-  if (typeof input !== "object" || input === null) {
+  if (input == null || typeof input !== "object") {
     return undefined;
   }
 

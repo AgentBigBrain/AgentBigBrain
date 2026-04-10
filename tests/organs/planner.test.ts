@@ -39,17 +39,6 @@ class PlannerFailureModelClient implements ModelClient {
   }
 }
 
-class PlannerTimeoutModelClient implements ModelClient {
-  readonly backend = "mock" as const;
-
-  async completeJson<T>(request: StructuredCompletionRequest): Promise<T> {
-    if (request.schemaName !== "planner_v1") {
-      throw new Error(`Unexpected schema: ${request.schemaName}`);
-    }
-    throw new Error("Codex request timed out after 600000ms.");
-  }
-}
-
 class RespondWithoutMessageModelClient implements ModelClient {
   readonly backend = "mock" as const;
   private readonly calls: string[] = [];
