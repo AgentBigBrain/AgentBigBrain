@@ -24,6 +24,7 @@ const PLANNER_ACTION_TYPES: readonly ActionType[] = [
   "verify_browser",
   "open_browser",
   "close_browser",
+  "stop_folder_runtime_processes",
   "inspect_path_holders",
   "inspect_workspace_resources",
   "memory_mutation",
@@ -101,6 +102,9 @@ const PLANNER_ACTION_TYPE_ALIASES: Record<string, ActionType> = {
   close_browser: "close_browser",
   browser_close: "close_browser",
   close_tab: "close_browser",
+  stop_folder_runtime_processes: "stop_folder_runtime_processes",
+  stop_runtime_folder_processes: "stop_folder_runtime_processes",
+  folder_runtime_process_sweep: "stop_folder_runtime_processes",
   inspect_path_holders: "inspect_path_holders",
   inspect_path_holder: "inspect_path_holders",
   inspect_holders: "inspect_path_holders",
@@ -224,6 +228,8 @@ export function defaultPlannerActionDescription(type: ActionType): string {
       return "Open a local page in a visible browser window and leave it open.";
     case "close_browser":
       return "Close a tracked browser window that the runtime previously opened.";
+    case "stop_folder_runtime_processes":
+      return "Inspect matching user-owned folders and stop only exact local server processes tied to those folders.";
     case "inspect_path_holders":
       return "Inspect runtime-owned holders or preview resources that still match one local path.";
     case "inspect_workspace_resources":

@@ -4,7 +4,9 @@
 
 import type { RecoveryFailureClass, RecoveryRung } from "../autonomy/contracts";
 import type { LoopbackTargetHint } from "../autonomy/liveRunRecovery";
+import type { ApprovedManagedProcessStartContext } from "../autonomy/loopCleanupPolicy";
 import {
+  buildManagedProcessConcreteRestartRecoveryInput,
   buildManagedProcessCheckRecoveryInput,
   buildManagedProcessPortConflictRecoveryInput,
   buildManagedProcessStillRunningRetryInput,
@@ -14,6 +16,7 @@ import {
 } from "../autonomy/liveRunRecovery";
 import {
   findApprovedManagedProcessCheckResult,
+  findApprovedManagedProcessStartContext,
   findApprovedManagedProcessStartLeaseId
 } from "../autonomy/loopCleanupPolicy";
 import type { TaskRunResult } from "../types";
@@ -338,6 +341,7 @@ export function buildStructuredRecoveryExecutionPlan(input: {
   result: TaskRunResult;
   decision: StructuredRecoveryPolicyDecision;
   trackedManagedProcessLeaseId: string | null;
+  trackedManagedProcessStartContext: ApprovedManagedProcessStartContext | null;
   trackedLoopbackTarget: LoopbackTargetHint | null;
 }): StructuredRecoveryExecutionPlan | StructuredRecoveryExecutionStop | null {
   if (
@@ -435,6 +439,9 @@ export function buildStructuredRecoveryExecutionPlan(input: {
       const checkedManagedProcess = findApprovedManagedProcessCheckResult(input.result);
       const activeLeaseId =
         checkedManagedProcess?.leaseId ?? input.trackedManagedProcessLeaseId;
+      const approvedStartContext =
+        findApprovedManagedProcessStartContext(input.result) ??
+        input.trackedManagedProcessStartContext;
       if (!activeLeaseId) {
         return {
           recoveryClass: "TARGET_NOT_RUNNING",
@@ -451,11 +458,24 @@ export function buildStructuredRecoveryExecutionPlan(input: {
           "The tracked local target stopped before proof completed. Scheduling one bounded restart-and-reverify pass.",
         progressMessage:
           "The tracked local target stopped before proof completed. I'm doing one restart-and-reverify pass.",
-        nextUserInput: buildManagedProcessStoppedRecoveryInput(
-          activeLeaseId,
-          input.trackedLoopbackTarget,
-          input.missionRequiresBrowserProof
-        )
+        nextUserInput:
+          approvedStartContext &&
+          approvedStartContext.leaseId === activeLeaseId &&
+          approvedStartContext.command
+            ? buildManagedProcessConcreteRestartRecoveryInput(
+                {
+                  leaseId: activeLeaseId,
+                  command: approvedStartContext.command,
+                  cwd: approvedStartContext.cwd
+                },
+                input.trackedLoopbackTarget,
+                input.missionRequiresBrowserProof
+              )
+            : buildManagedProcessStoppedRecoveryInput(
+                activeLeaseId,
+                input.trackedLoopbackTarget,
+                input.missionRequiresBrowserProof
+              )
       };
     }
     case "repair_missing_dependency":

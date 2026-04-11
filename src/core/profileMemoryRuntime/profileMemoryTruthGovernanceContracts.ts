@@ -91,6 +91,15 @@ export const PROFILE_MEMORY_GOVERNANCE_CARDINALITIES = [
 export type ProfileMemoryGovernanceCardinality =
   typeof PROFILE_MEMORY_GOVERNANCE_CARDINALITIES[number];
 
+export const PROFILE_MEMORY_CURRENT_STATE_ADMISSION_POLICIES = [
+  "not_allowed",
+  "explicit_live_source_only",
+  "validated_or_explicit_live_source_only"
+] as const;
+
+export type ProfileMemoryCurrentStateAdmissionPolicy =
+  typeof PROFILE_MEMORY_CURRENT_STATE_ADMISSION_POLICIES[number];
+
 export const PROFILE_MEMORY_END_STATE_POLICIES = [
   "none",
   "support_only_transition",
@@ -211,6 +220,7 @@ export interface ProfileMemoryFamilyRegistryEntry {
   family: ProfileMemoryGovernanceFamily;
   cardinality: ProfileMemoryGovernanceCardinality;
   currentStateEligible: boolean;
+  currentStateAdmissionPolicy: ProfileMemoryCurrentStateAdmissionPolicy;
   episodeSupportEligible: boolean;
   endStatePolicy: ProfileMemoryEndStatePolicy;
   displacementPolicy: ProfileMemoryDisplacementPolicy;

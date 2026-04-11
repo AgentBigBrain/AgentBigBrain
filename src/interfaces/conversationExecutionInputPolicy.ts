@@ -59,13 +59,15 @@ import {
   dirnameCrossPlatformPath,
   normalizeCrossPlatformPath
 } from "../core/crossPlatformPath";
+import { requestMatchesRuntimeTargetReference } from "../core/runtimeTargetReference";
+import { requiresFrameworkAppScaffoldAction } from "../organs/plannerPolicy/liveVerificationPolicy";
 import { reconcileConversationExecutionRuntimeSession } from "./conversationRuntime/executionInputRuntimeOwnership";
 
 const NATURAL_BROWSER_CLOSE_REFERENCE_PATTERN =
   /\b(?:close|shut|dismiss|hide)\b[\s\S]{0,50}\b(?:browser|tab|window|preview|page|landing page|homepage)\b/i;
 const NATURAL_BROWSER_OPEN_REFERENCE_PATTERN =
   /\b(?:open|reopen|show|bring\s+(?:back|up)|pull\s+up)\b[\s\S]{0,50}\b(?:browser|tab|window|preview|page|landing page|homepage)\b/i;
-const NATURAL_BROWSER_CLOSE_VERB_PATTERN = /\b(?:close|shut|dismiss|hide)\b/i;
+const NATURAL_BROWSER_CLOSE_VERB_PATTERN = /\b(?:close|dismiss|hide)\b/i;
 const NATURAL_BROWSER_OPEN_VERB_PATTERN =
   /\b(?:reopen|show|bring\s+(?:back|up)|pull\s+up)\b/i;
 const EXPLICIT_URL_REFERENCE_PATTERN =
@@ -110,7 +112,126 @@ const PROFILE_DETOUR_PATTERN =
   /\b(?:my name is|call me|i go by|remember that i|i prefer|my favorite|my birthday|i live|i moved|my job|i work at)\b/i;
 const RELATIONSHIP_DETOUR_PATTERN =
   /\b(?:my )?(?:friend|employee|coworker|colleague|teammate|classmate|peer|work\s+peer|boss|manager|supervisor|team\s+lead|direct\s+report|neighbor|neighbour|relative|distant\s+relative|family(?:\s+members?)?|cousin|aunt|uncle|mom|mother|dad|father|son|daughter|parent|child|sibling|sister|brother|roommate|spouse|wife|husband|girlfriend|boyfriend|partner|married|contact)\b/i;
+const RUNTIME_PROCESS_INSPECTION_VERB_PATTERN =
+  /\b(?:inspect|check|verify|confirm|make sure|find out|see if|look at)\b/i;
+const RUNTIME_PROCESS_SHUTDOWN_VERB_PATTERN =
+  /\b(?:stop|shut\s+down|turn\s+off|kill)\b/i;
+const RUNTIME_PROCESS_TARGET_PATTERN =
+  /\b(?:still\s+running|running|server|servers|preview(?:\s+stack|\s+server)?|process(?:es)?|localhost|loopback|port|dev\s+server)\b/i;
 const WORKFLOW_CONTINUITY_ROUTING_TYPES = new Set(["execution_surface", "diagnostics"]);
+const QUOTED_RUNTIME_TARGET_PATTERN = /["'`“”]([^"'`“”\n]{3,80})["'`“”]/g;
+
+/**
+ * Evaluates whether the current wording is asking about inspecting or stopping existing runtime
+ * processes rather than building or editing project files.
+ *
+ * @param userInput - Raw current user wording.
+ * @returns `true` when the request is process-management oriented.
+ */
+function isLikelyRuntimeProcessManagementRequest(userInput: string): boolean {
+  const normalizedInput = normalizeWhitespace(userInput);
+  if (!normalizedInput) {
+    return false;
+  }
+  return (
+    (
+      RUNTIME_PROCESS_INSPECTION_VERB_PATTERN.test(normalizedInput) ||
+      RUNTIME_PROCESS_SHUTDOWN_VERB_PATTERN.test(normalizedInput)
+    ) &&
+    RUNTIME_PROCESS_TARGET_PATTERN.test(normalizedInput)
+  );
+}
+
+/**
+ * Builds bounded process-management guidance so shutdown and running-state checks stay grounded on
+ * runtime inspection/termination work instead of drifting into build or scaffold actions.
+ *
+ * @param session - Current conversation session.
+ * @param userInput - Raw current user wording.
+ * @returns Process-management guidance block, or `null` when the turn is not such a request.
+ */
+function buildRuntimeProcessManagementContextBlock(
+  session: ConversationSession,
+  userInput: string
+): string | null {
+  const normalizedInput = normalizeWhitespace(userInput);
+  if (!isLikelyRuntimeProcessManagementRequest(normalizedInput)) {
+    return null;
+  }
+
+  const referencesTrackedTarget = inputMentionsTrackedBrowserTarget(
+    normalizedInput,
+    session
+  );
+  const trackedRuntimeRootPath =
+    session.activeWorkspace?.rootPath ??
+    session.returnHandoff?.workspaceRootPath ??
+    null;
+  const trackedWorkspace = session.activeWorkspace;
+  const trackedPreviewUrl =
+    trackedWorkspace?.previewUrl ??
+    session.returnHandoff?.previewUrl ??
+    null;
+  const trackedBrowserSessionId = trackedWorkspace?.browserSessionId ?? null;
+  const exactTrackedPreviewLeaseIds =
+    trackedWorkspace?.previewProcessLeaseIds.filter((leaseId) => leaseId.trim().length > 0) ?? [];
+  const lines = [
+    "Runtime process-management context:",
+    "- This turn is about inspecting or stopping an existing runtime, not creating, scaffolding, installing, building, or editing a project.",
+    "- Do not create, modify, build, install, scaffold, or rename project files for this turn."
+  ];
+
+  if (referencesTrackedTarget && trackedRuntimeRootPath) {
+    lines.push(
+      `- Tracked runtime target: rootPath=${trackedRuntimeRootPath}; ownership=${session.activeWorkspace?.ownershipState ?? "unknown"}; previewState=${session.activeWorkspace?.previewStackState ?? "unknown"}`
+    );
+    if (trackedPreviewUrl) {
+      lines.push(`- Tracked preview URL: ${trackedPreviewUrl}`);
+    }
+    if (trackedBrowserSessionId) {
+      lines.push(`- Tracked browser session id: ${trackedBrowserSessionId}`);
+    }
+    if (exactTrackedPreviewLeaseIds.length > 0) {
+      lines.push(`- Exact tracked preview lease ids: ${exactTrackedPreviewLeaseIds.join(", ")}`);
+    }
+    lines.push(
+      "- Prefer inspect_workspace_resources first so this run proves whether the tracked preview/browser/process stack is still active before any restart, rebuild, or readiness probe."
+    );
+    if (RUNTIME_PROCESS_SHUTDOWN_VERB_PATTERN.test(normalizedInput)) {
+      lines.push(
+        "- If the user wants the tracked runtime shut down and exact tracked preview lease ids are present, prefer stop_process for those exact lease ids only."
+      );
+      if (
+        trackedWorkspace &&
+        (trackedWorkspace.browserSessionStatus === "closed" ||
+          !trackedWorkspace.stillControllable)
+      ) {
+        lines.push(
+          "- Do not require close_browser as proof of success when the tracked browser session is already closed or direct browser control is unavailable."
+        );
+      }
+    } else {
+      lines.push(
+        "- If the user is only asking whether it is still running, inspect first and report the result. Do not restart, rebuild, or probe unrelated URLs."
+      );
+    }
+    return lines.join("\n");
+  }
+
+  lines.push(
+    "- The request does not target the currently tracked workspace by name, so do not reuse stale build continuity or project handoff state as a substitute."
+  );
+  if (/\bdesktop\b/i.test(normalizedInput) && /\bfolders?\b/i.test(normalizedInput)) {
+    lines.push(
+      "- If the user named Desktop folders or folder-name rules, first enumerate those matching folders, then inspect running processes tied to those exact folders, stop only matched processes, and verify the result."
+    );
+  } else {
+    lines.push(
+      "- Inspect the exact runtime/process target the user named, stop only matched processes when shutdown was requested, and verify the result."
+    );
+  }
+  return lines.join("\n");
+}
 
 /**
  * Extracts stable human-readable workspace or artifact names from tracked browser metadata.
@@ -159,6 +280,31 @@ function pushTrackedBrowserReferenceCandidate(
 }
 
 /**
+ * Extracts bounded natural-language project names from prior workflow wording.
+ *
+ * @param candidates - Mutable candidate-name set accumulated for one session.
+ * @param rawValue - Prior natural-language text that may name a tracked project or workspace.
+ */
+function pushTrackedNaturalReferenceCandidates(
+  candidates: Set<string>,
+  rawValue: string | null | undefined
+): void {
+  if (typeof rawValue !== "string") {
+    return;
+  }
+  const normalized = normalizeWhitespace(rawValue);
+  if (!normalized) {
+    return;
+  }
+  for (const match of normalized.matchAll(QUOTED_RUNTIME_TARGET_PATTERN)) {
+    const candidate = match[1]?.trim().toLowerCase();
+    if (candidate && candidate.length >= 3) {
+      candidates.add(candidate);
+    }
+  }
+}
+
+/**
  * Collects names that users may naturally use to refer to the currently tracked browser target.
  *
  * @param session - Current conversation session.
@@ -174,6 +320,24 @@ function collectTrackedBrowserReferenceCandidates(
     session.activeWorkspace?.primaryArtifactPath
   );
   pushTrackedBrowserReferenceCandidate(candidates, session.activeWorkspace?.previewUrl);
+  pushTrackedBrowserReferenceCandidate(
+    candidates,
+    session.returnHandoff?.workspaceRootPath
+  );
+  pushTrackedBrowserReferenceCandidate(
+    candidates,
+    session.returnHandoff?.primaryArtifactPath
+  );
+  pushTrackedBrowserReferenceCandidate(candidates, session.returnHandoff?.previewUrl);
+  pushTrackedNaturalReferenceCandidates(
+    candidates,
+    session.modeContinuity?.lastUserInput ?? null
+  );
+  pushTrackedNaturalReferenceCandidates(candidates, session.returnHandoff?.goal ?? null);
+  pushTrackedNaturalReferenceCandidates(candidates, session.returnHandoff?.summary ?? null);
+  for (const turn of session.conversationTurns.slice(-8)) {
+    pushTrackedNaturalReferenceCandidates(candidates, turn.text);
+  }
   for (const browserSession of session.browserSessions) {
     pushTrackedBrowserReferenceCandidate(candidates, browserSession.workspaceRootPath);
     pushTrackedBrowserReferenceCandidate(candidates, browserSession.url);
@@ -192,9 +356,9 @@ function inputMentionsTrackedBrowserTarget(
   normalizedInput: string,
   session: ConversationSession
 ): boolean {
-  const normalizedLower = normalizedInput.toLowerCase();
-  return collectTrackedBrowserReferenceCandidates(session).some((candidate) =>
-    normalizedLower.includes(candidate)
+  return requestMatchesRuntimeTargetReference(
+    normalizedInput,
+    collectTrackedBrowserReferenceCandidates(session)
   );
 }
 
@@ -258,6 +422,7 @@ function collectTrackedBrowserTargetUrls(
 ): readonly string[] {
   const trackedUrls = [
     session.activeWorkspace?.previewUrl ?? null,
+    session.returnHandoff?.previewUrl ?? null,
     ...session.browserSessions.map((browserSession) => browserSession.url)
   ]
     .map((url) => normalizeComparableBrowserUrl(url))
@@ -593,6 +758,15 @@ function shouldSuppressWorkflowContinuityBlocks(
     return false;
   }
   if (shouldUseRelationshipContinuityContext(session, normalizedInput)) {
+    return true;
+  }
+  if (requiresFrameworkAppScaffoldAction(normalizedInput)) {
+    return true;
+  }
+  if (
+    isLikelyRuntimeProcessManagementRequest(normalizedInput) &&
+    !inputMentionsTrackedBrowserTarget(normalizedInput, session)
+  ) {
     return true;
   }
   if (WORKFLOW_CONTINUITY_ROUTING_TYPES.has(routingClassification?.routeType ?? "")) {
@@ -1275,6 +1449,11 @@ export async function buildConversationAwareExecutionInput(
     requestTelemetry
   );
   const mediaContextBlock = buildConversationMediaContextBlock(media);
+  const runtimeProcessManagementContextBlock =
+    buildRuntimeProcessManagementContextBlock(
+      runtimeReconciledSession,
+      rawUserInput
+    );
   const desktopOrganizationContextBlock = buildDesktopOrganizationExecutionContextBlock(
     runtimeReconciledSession,
     rawUserInput
@@ -1366,6 +1545,7 @@ export async function buildConversationAwareExecutionInput(
     !statusUpdateBlock &&
     !contextualRecallBlock &&
     !mediaContextBlock &&
+    !runtimeProcessManagementContextBlock &&
     !modeContinuityBlock &&
     !progressStateBlock &&
     !returnHandoffBlock &&
@@ -1418,6 +1598,9 @@ export async function buildConversationAwareExecutionInput(
   }
   if (mediaContextBlock) {
     lines.push("", mediaContextBlock);
+  }
+  if (runtimeProcessManagementContextBlock) {
+    lines.push("", runtimeProcessManagementContextBlock);
   }
   if (modeContinuityBlock) {
     lines.push("", modeContinuityBlock);

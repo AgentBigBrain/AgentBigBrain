@@ -13,10 +13,6 @@ import {
 } from "../core/types";
 import type { SemanticMemoryStore } from "../core/semanticMemory";
 import {
-  createFirstPrinciplesRubric,
-  validateFirstPrinciplesRubric
-} from "../core/advancedAutonomyFoundation";
-import {
   buildDefaultRetrievalQuarantinePolicy,
   distillExternalContent,
   requireDistilledPacketForPlanner
@@ -58,11 +54,18 @@ import {
   buildDeterministicExplicitRuntimeActionFallbackActions,
   buildDeterministicFrameworkBuildFallbackActions
 } from "./plannerPolicy/explicitRuntimeActionFallback";
+import { buildDeterministicDesktopRuntimeProcessSweepFallbackActions } from "./plannerPolicy/desktopRuntimeProcessSweepFallback";
+import { buildDeterministicLocalOrganizationFallbackActions } from "./plannerPolicy/localOrganizationRuntimeActionFallback";
 import { buildDeterministicWorkspaceRecoveryFallbackActions } from "./plannerPolicy/workspaceRecoveryFallback";
 import {
   buildLearningHintSummary,
   buildLearningPromptGuidance
 } from "./plannerPolicy/learningPromptGuidance";
+import {
+  buildDeterministicFirstPrinciplesPacket,
+  buildFirstPrinciplesPromptGuidance,
+  resolveFirstPrinciplesTriggerDecision
+} from "./plannerPolicy/plannerFirstPrinciplesSupport";
 import { type WorkflowSkillBridgeSummary } from "./skillRegistry/workflowSkillBridge";
 import {
   distillPlannerLessons,
@@ -75,20 +78,20 @@ import {
   isFrameworkWorkspacePreparationRequest
 } from "./plannerPolicy/liveVerificationPolicy";
 
-const FIRST_PRINCIPLES_RISK_PATTERNS: readonly RegExp[] = [
-  /\b(delete|remove|rm)\b/i,
-  /\b(network|api|webhook|endpoint|http[s]?:\/\/)\b/i,
-  /\b(secret|token|credential|password|private key)\b/i,
-  /\b(deploy|production|rollback|database migration)\b/i,
-  /\b(self[-\s]?modify|modify (?:agent|runtime|policy|governor|constraint))\b/i,
-  /\b(memory_mutation|pulse_emit)\b/i,
-  /\b(shell|terminal|powershell|bash|zsh|cmd(?:\.exe)?)\b/i
-];
-const FIRST_PRINCIPLES_NOVEL_REQUEST_MIN_WORDS = 16;
+const LOCAL_ORGANIZATION_FALLBACK_ERROR_PATTERN =
+  /Planner model (?:did not include a real folder-move step for this local organization request|retried the local organization move without also proving what moved into the destination and what remained at the original root|selected the named destination folder as part of the same move set, which risks nesting the destination inside itself|used cmd-style shell moves for a Windows PowerShell organization request|used invalid PowerShell variable interpolation for a Windows organization move command)/i;
 
-interface FirstPrinciplesTriggerDecision {
-  required: boolean;
-  reasons: readonly string[];
+/**
+ * Evaluates whether a planner failure should trigger the bounded local-organization fallback path.
+ *
+ * @param error - Unknown planner failure.
+ * @returns `true` when the failure is one of the known local-organization validation misses.
+ */
+function isLocalOrganizationFallbackEligibleError(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    LOCAL_ORGANIZATION_FALLBACK_ERROR_PATTERN.test(error.message)
+  );
 }
 
 export interface PlannerPlanOptions {
@@ -124,138 +127,6 @@ export class PlannerOrgan {
     private readonly executionEnvironment: PlannerExecutionEnvironmentContext =
       resolveDefaultExecutionEnvironmentContext()
   ) { }
-
-  /**
-   * Resolves whether first-principles rubric planning is mandatory for this request.
-   *
-   * **Why it exists:**
-   * Stage 6.10 requires deterministic trigger logic for high-risk and novel requests so first-
-   * principles policy is applied consistently before planner action generation.
-   *
-   * **What it talks to:**
-   * - Uses local high-risk regex guards and novelty thresholds in this module.
-   *
-   * @param currentUserRequest - Active request segment extracted from conversation/task input.
-   * @param relevantLessonCount - Number of retrieved lessons available for this request.
-   * @returns Trigger decision with explicit deterministic reasons.
-   */
-  private resolveFirstPrinciplesTriggerDecision(
-    currentUserRequest: string,
-    relevantLessonCount: number
-  ): FirstPrinciplesTriggerDecision {
-    const reasons: string[] = [];
-    for (const pattern of FIRST_PRINCIPLES_RISK_PATTERNS) {
-      if (pattern.test(currentUserRequest)) {
-        reasons.push(`risk_pattern:${pattern.source}`);
-      }
-    }
-
-    const wordCount = currentUserRequest
-      .trim()
-      .split(/\s+/)
-      .filter((entry) => entry.trim().length > 0).length;
-    if (
-      reasons.length === 0 &&
-      relevantLessonCount === 0 &&
-      wordCount >= FIRST_PRINCIPLES_NOVEL_REQUEST_MIN_WORDS
-    ) {
-      reasons.push("novel_request:no_relevant_lessons");
-    }
-
-    return {
-      required: reasons.length > 0,
-      reasons: reasons.sort((left, right) => left.localeCompare(right))
-    };
-  }
-
-  /**
-   * Builds a deterministic first-principles rubric for high-risk/novel planning requests.
-   *
-   * **Why it exists:**
-   * The planner must explicitly ground facts, assumptions, constraints, and unknowns before
-   * proposing actions when Stage 6.10 trigger conditions are met.
-   *
-   * **What it talks to:**
-   * - Uses Stage 6.5 rubric helpers (`createFirstPrinciplesRubric`, `validateFirstPrinciplesRubric`).
-   *
-   * @param task - Current task metadata.
-   * @param currentUserRequest - Active request segment extracted from conversation/task input.
-   * @param triggerReasons - Trigger reasons that required first-principles policy.
-   * @returns Validated rubric packet used to guide planner prompts and persisted plan metadata.
-   */
-  private buildDeterministicFirstPrinciplesPacket(
-    task: TaskRequest,
-    currentUserRequest: string,
-    triggerReasons: readonly string[]
-  ): FirstPrinciplesPacketV1 {
-    const rubric = createFirstPrinciplesRubric({
-      facts: [
-        `task.goal=${task.goal}`,
-        `task.currentUserRequest=${currentUserRequest}`,
-        "runtime.mode=governed_execution"
-      ],
-      assumptions: [
-        "external_system_state_may_be_stale",
-        "planner_output_is_untrusted_until_constraints_and_governors_pass",
-        "execution_receipts_and_traces_must_remain_auditable"
-      ],
-      constraints: [
-        "all_actions_must_pass_hard_constraints",
-        "all_side_effects_require_governor_approval",
-        "budget_and_deadline_limits_are_fail_closed"
-      ],
-      unknowns: [
-        "external_dependency_availability",
-        "current_filesystem_or_service_state_before_read",
-        "human_intent_details_not_explicitly_stated"
-      ],
-      minimalPlan:
-        "Derive the minimum safe action set for the active request, keep scope bounded, " +
-        "and prioritize verifiable outputs with deterministic fallbacks."
-    });
-    const validation = validateFirstPrinciplesRubric(rubric);
-    if (!validation.valid) {
-      throw new Error(
-        "First-principles rubric validation failed: " + validation.violationCodes.join(", ")
-      );
-    }
-
-    return {
-      required: true,
-      triggerReasons,
-      rubric,
-      validation
-    };
-  }
-
-  /**
-   * Builds first-principles prompt guidance from rubric packet metadata.
-   *
-   * **Why it exists:**
-   * Planner prompts should include explicit rubric context so model planning reflects required
-   * facts/assumptions/constraints/unknowns for high-risk and novel tasks.
-   *
-   * **What it talks to:**
-   * - Uses `FirstPrinciplesPacketV1` planning metadata.
-   *
-   * @param packet - First-principles packet prepared for the current request.
-   * @returns Prompt-ready rubric guidance text, or empty string when policy is not required.
-   */
-  private buildFirstPrinciplesPromptGuidance(packet: FirstPrinciplesPacketV1): string {
-    if (!packet.required || !packet.rubric) {
-      return "";
-    }
-    return (
-      "\nFirst-Principles Rubric (required):\n" +
-      `- triggerReasons: ${packet.triggerReasons.join(", ")}\n` +
-      `- facts: ${packet.rubric.facts.join(" | ")}\n` +
-      `- assumptions: ${packet.rubric.assumptions.join(" | ")}\n` +
-      `- constraints: ${packet.rubric.constraints.join(" | ")}\n` +
-      `- unknowns: ${packet.rubric.unknowns.join(" | ")}\n` +
-      `- minimalPlan: ${packet.rubric.minimalPlan}\n` +
-      "Use this rubric as the mandatory planning baseline before emitting actions."
-    );
-  }
 
   /**
    * Builds failure fingerprint for this module's runtime flow.
@@ -422,12 +293,12 @@ export class PlannerOrgan {
           .join("\n")}`
       : "";
     const currentUserRequest = extractCurrentUserRequest(task.userInput);
-    const firstPrinciplesTriggerDecision = this.resolveFirstPrinciplesTriggerDecision(
+    const firstPrinciplesTriggerDecision = resolveFirstPrinciplesTriggerDecision(
       currentUserRequest,
       relevantLessons.length
     );
     const firstPrinciplesPacket: FirstPrinciplesPacketV1 = firstPrinciplesTriggerDecision.required
-      ? this.buildDeterministicFirstPrinciplesPacket(
+      ? buildDeterministicFirstPrinciplesPacket(
         task,
         currentUserRequest,
         firstPrinciplesTriggerDecision.reasons
@@ -436,9 +307,9 @@ export class PlannerOrgan {
         required: false,
         triggerReasons: [],
         rubric: null,
-        validation: null
+          validation: null
       };
-    const firstPrinciplesGuidance = this.buildFirstPrinciplesPromptGuidance(firstPrinciplesPacket);
+    const firstPrinciplesGuidance = buildFirstPrinciplesPromptGuidance(firstPrinciplesPacket);
     const workflowHints = (options.workflowHints ?? []).slice(0, 3);
     const judgmentHints = (options.judgmentHints ?? []).slice(0, 3);
     const workflowBridge = options.workflowBridge ?? null;
@@ -454,36 +325,67 @@ export class PlannerOrgan {
     );
     const requiredActionType = inferRequiredActionType(currentUserRequest, task.userInput);
     const playbookSelection = options.playbookSelection ?? null;
-    const eagerDeterministicFrameworkBuildActions =
-      isDeterministicFrameworkBuildLaneRequest(task.userInput)
-        ? buildDeterministicFrameworkBuildFallbackActions(
-            task.userInput,
-            this.executionEnvironment
-          )
-        : [];
+    const eagerDeterministicFrameworkBuildActions = isDeterministicFrameworkBuildLaneRequest(task.userInput)
+      ? buildDeterministicFrameworkBuildFallbackActions(task.userInput, this.executionEnvironment, task.goal)
+      : [];
 
     if (eagerDeterministicFrameworkBuildActions.length > 0) {
       const fallbackValidation = evaluatePlannerActionValidation(
-        currentUserRequest,
-        requiredActionType,
-        eagerDeterministicFrameworkBuildActions,
-        task.userInput,
-        this.executionEnvironment
+        currentUserRequest, requiredActionType, eagerDeterministicFrameworkBuildActions, task.userInput, this.executionEnvironment
       );
       assertPlannerActionValidation(fallbackValidation, requiredActionType);
       await this.clearFailureFingerprint(failureFingerprint);
       const isWorkspacePreparationOnly = isFrameworkWorkspacePreparationRequest(task.userInput);
       return {
         taskId: task.id,
-        plannerNotes:
-          isWorkspacePreparationOnly
-            ? "Deterministic framework workspace-preparation fallback " +
-              `(deterministic_framework_workspace_preparation_fallback=${eagerDeterministicFrameworkBuildActions[0]?.type ?? "unknown"})`
-            : "Deterministic framework build lifecycle fallback " +
-              `(deterministic_framework_build_fallback=${eagerDeterministicFrameworkBuildActions[0]?.type ?? "unknown"})`,
+        plannerNotes: isWorkspacePreparationOnly
+          ? "Deterministic framework workspace-preparation fallback " +
+            `(deterministic_framework_workspace_preparation_fallback=${eagerDeterministicFrameworkBuildActions[0]?.type ?? "unknown"})`
+          : "Deterministic framework build lifecycle fallback " +
+            `(deterministic_framework_build_fallback=${eagerDeterministicFrameworkBuildActions[0]?.type ?? "unknown"})`,
         firstPrinciples: firstPrinciplesPacket,
         learningHints,
         actions: eagerDeterministicFrameworkBuildActions
+      };
+    }
+
+    const eagerDeterministicDesktopRuntimeProcessSweepActions = buildDeterministicDesktopRuntimeProcessSweepFallbackActions(
+      task.userInput,
+      this.executionEnvironment
+    );
+    if (eagerDeterministicDesktopRuntimeProcessSweepActions.length > 0) {
+      const fallbackValidation = evaluatePlannerActionValidation(
+        currentUserRequest, requiredActionType, eagerDeterministicDesktopRuntimeProcessSweepActions, task.userInput, this.executionEnvironment
+      );
+      assertPlannerActionValidation(fallbackValidation, requiredActionType);
+      await this.clearFailureFingerprint(failureFingerprint);
+      return {
+        taskId: task.id,
+        plannerNotes: "Deterministic desktop runtime process sweep fallback " +
+          `(deterministic_desktop_runtime_process_sweep_fallback=${eagerDeterministicDesktopRuntimeProcessSweepActions[0]?.type ?? "unknown"})`,
+        firstPrinciples: firstPrinciplesPacket,
+        learningHints,
+        actions: eagerDeterministicDesktopRuntimeProcessSweepActions
+      };
+    }
+
+    const eagerDeterministicLocalOrganizationActions = buildDeterministicLocalOrganizationFallbackActions(
+      task.userInput,
+      this.executionEnvironment
+    );
+    if (eagerDeterministicLocalOrganizationActions.length > 0) {
+      const fallbackValidation = evaluatePlannerActionValidation(
+        currentUserRequest, requiredActionType, eagerDeterministicLocalOrganizationActions, task.userInput, this.executionEnvironment
+      );
+      assertPlannerActionValidation(fallbackValidation, requiredActionType);
+      await this.clearFailureFingerprint(failureFingerprint);
+      return {
+        taskId: task.id,
+        plannerNotes: "Deterministic local organization fallback " +
+          `(deterministic_local_organization_fallback=${eagerDeterministicLocalOrganizationActions[0]?.type ?? "unknown"})`,
+        firstPrinciples: firstPrinciplesPacket,
+        learningHints,
+        actions: eagerDeterministicLocalOrganizationActions
       };
     }
 
@@ -570,34 +472,6 @@ export class PlannerOrgan {
             actions: deterministicWorkspaceRecoveryFallbackActions
           };
         }
-        const deterministicFrameworkBuildFallbackActions =
-          repairedPreparation.actions.length === 0 || repairedValidation.needsRepair
-            ? buildDeterministicFrameworkBuildFallbackActions(
-                task.userInput,
-                this.executionEnvironment
-              )
-            : [];
-        if (deterministicFrameworkBuildFallbackActions.length > 0) {
-          const fallbackValidation = evaluatePlannerActionValidation(
-            currentUserRequest,
-            requiredActionType,
-            deterministicFrameworkBuildFallbackActions,
-            task.userInput,
-            this.executionEnvironment
-          );
-          assertPlannerActionValidation(fallbackValidation, requiredActionType);
-          await this.clearFailureFingerprint(failureFingerprint);
-          return {
-            taskId: task.id,
-            plannerNotes:
-              `${repairedOutput.plannerNotes || output.plannerNotes || "Model planner output"} ` +
-              `(backend=${this.modelClient.backend}, model=${plannerModel}, repair=true, ` +
-              `deterministic_framework_build_fallback=${deterministicFrameworkBuildFallbackActions[0]?.type ?? "unknown"})`,
-            firstPrinciples: firstPrinciplesPacket,
-            learningHints,
-            actions: deterministicFrameworkBuildFallbackActions
-          };
-        }
         const deterministicExplicitRuntimeFallbackActions =
           repairedPreparation.actions.length === 0 || repairedValidation.needsRepair
             ? buildDeterministicExplicitRuntimeActionFallbackActions(
@@ -625,6 +499,63 @@ export class PlannerOrgan {
             firstPrinciples: firstPrinciplesPacket,
             learningHints,
             actions: deterministicExplicitRuntimeFallbackActions
+          };
+        }
+        const deterministicLocalOrganizationFallbackActions =
+          repairedPreparation.actions.length === 0 || repairedValidation.needsRepair
+            ? buildDeterministicLocalOrganizationFallbackActions(
+                task.userInput,
+                this.executionEnvironment
+              )
+            : [];
+        if (deterministicLocalOrganizationFallbackActions.length > 0) {
+          const fallbackValidation = evaluatePlannerActionValidation(
+            currentUserRequest,
+            requiredActionType,
+            deterministicLocalOrganizationFallbackActions,
+            task.userInput,
+            this.executionEnvironment
+          );
+          assertPlannerActionValidation(fallbackValidation, requiredActionType);
+          await this.clearFailureFingerprint(failureFingerprint);
+          return {
+            taskId: task.id,
+            plannerNotes:
+              `${repairedOutput.plannerNotes || output.plannerNotes || "Model planner output"} ` +
+              `(backend=${this.modelClient.backend}, model=${plannerModel}, repair=true, ` +
+              `deterministic_local_organization_fallback=${deterministicLocalOrganizationFallbackActions[0]?.type ?? "unknown"})`,
+            firstPrinciples: firstPrinciplesPacket,
+            learningHints,
+            actions: deterministicLocalOrganizationFallbackActions
+          };
+        }
+        const deterministicFrameworkBuildFallbackActions =
+          repairedPreparation.actions.length === 0 || repairedValidation.needsRepair
+            ? buildDeterministicFrameworkBuildFallbackActions(
+                task.userInput,
+                this.executionEnvironment,
+                task.goal
+              )
+            : [];
+        if (deterministicFrameworkBuildFallbackActions.length > 0) {
+          const fallbackValidation = evaluatePlannerActionValidation(
+            currentUserRequest,
+            requiredActionType,
+            deterministicFrameworkBuildFallbackActions,
+            task.userInput,
+            this.executionEnvironment
+          );
+          assertPlannerActionValidation(fallbackValidation, requiredActionType);
+          await this.clearFailureFingerprint(failureFingerprint);
+          return {
+            taskId: task.id,
+            plannerNotes:
+              `${repairedOutput.plannerNotes || output.plannerNotes || "Model planner output"} ` +
+              `(backend=${this.modelClient.backend}, model=${plannerModel}, repair=true, ` +
+              `deterministic_framework_build_fallback=${deterministicFrameworkBuildFallbackActions[0]?.type ?? "unknown"})`,
+            firstPrinciples: firstPrinciplesPacket,
+            learningHints,
+            actions: deterministicFrameworkBuildFallbackActions
           };
         }
         if (repairedPreparation.actions.length === 0) {
@@ -712,11 +643,72 @@ export class PlannerOrgan {
         actions: postPolicy.actions
       };
     } catch (error) {
+      const deterministicExplicitRuntimeFallbackActions =
+        buildDeterministicExplicitRuntimeActionFallbackActions(
+          currentUserRequest,
+          requiredActionType,
+          task.userInput
+        );
+      if (deterministicExplicitRuntimeFallbackActions.length > 0) {
+        const fallbackValidation = evaluatePlannerActionValidation(
+          currentUserRequest,
+          requiredActionType,
+          deterministicExplicitRuntimeFallbackActions,
+          task.userInput,
+          this.executionEnvironment
+        );
+        assertPlannerActionValidation(fallbackValidation, requiredActionType);
+        await this.clearFailureFingerprint(failureFingerprint);
+        return {
+          taskId: task.id,
+          plannerNotes:
+            `${error instanceof Error ? error.message : "Planner explicit runtime fallback triggered"} ` +
+            `(backend=${this.modelClient.backend}, model=${plannerModel}, ` +
+            `deterministic_explicit_runtime_fallback=${deterministicExplicitRuntimeFallbackActions[0]?.type ?? "unknown"})`,
+          firstPrinciples: firstPrinciplesPacket,
+          learningHints,
+          actions: deterministicExplicitRuntimeFallbackActions
+        };
+      }
+      const deterministicLocalOrganizationFallbackActions =
+        isPlannerTimeoutFailure(error) ||
+        isLocalOrganizationFallbackEligibleError(error)
+          ? buildDeterministicLocalOrganizationFallbackActions(
+              task.userInput,
+              this.executionEnvironment
+            )
+          : [];
+      if (deterministicLocalOrganizationFallbackActions.length > 0) {
+        const fallbackValidation = evaluatePlannerActionValidation(
+          currentUserRequest,
+          requiredActionType,
+          deterministicLocalOrganizationFallbackActions,
+          task.userInput,
+          this.executionEnvironment
+        );
+        assertPlannerActionValidation(fallbackValidation, requiredActionType);
+        await this.clearFailureFingerprint(failureFingerprint);
+        return {
+          taskId: task.id,
+          plannerNotes:
+            isPlannerTimeoutFailure(error)
+              ? `Planner timed out before model planning completed ` +
+                `(backend=${this.modelClient.backend}, model=${plannerModel}, ` +
+                `deterministic_local_organization_timeout_fallback=${deterministicLocalOrganizationFallbackActions[0]?.type ?? "unknown"})`
+              : `${error instanceof Error ? error.message : "Planner local organization validation failed"} ` +
+                `(backend=${this.modelClient.backend}, model=${plannerModel}, ` +
+                `deterministic_local_organization_validation_fallback=${deterministicLocalOrganizationFallbackActions[0]?.type ?? "unknown"})`,
+          firstPrinciples: firstPrinciplesPacket,
+          learningHints,
+          actions: deterministicLocalOrganizationFallbackActions
+        };
+      }
       const deterministicFrameworkBuildFallbackActions =
         isPlannerTimeoutFailure(error)
           ? buildDeterministicFrameworkBuildFallbackActions(
               task.userInput,
-              this.executionEnvironment
+              this.executionEnvironment,
+              task.goal
             )
           : [];
       if (deterministicFrameworkBuildFallbackActions.length > 0) {

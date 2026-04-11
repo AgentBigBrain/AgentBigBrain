@@ -3,9 +3,9 @@
  */
 
 import assert from "node:assert/strict";
-import { ChildProcessWithoutNullStreams } from "node:child_process";
+import { ChildProcess, ChildProcessWithoutNullStreams, spawn, spawnSync } from "node:child_process";
 import { EventEmitter } from "node:events";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import * as http from "node:http";
 import * as net from "node:net";
 import os from "node:os";
@@ -38,6 +38,7 @@ import type { PlaywrightChromiumRuntime } from "../../src/organs/liveRun/playwri
 import { executeProbeHttp } from "../../src/organs/liveRun/probeHttpHandler";
 import { executeProbePort } from "../../src/organs/liveRun/probePortHandler";
 import { executeStartProcess } from "../../src/organs/liveRun/startProcessHandler";
+import { executeStopFolderRuntimeProcesses } from "../../src/organs/liveRun/stopFolderRuntimeProcessesHandler";
 import { executeStopProcess } from "../../src/organs/liveRun/stopProcessHandler";
 import {
   buildTrackedPidArrayLiteral,
@@ -202,6 +203,69 @@ async function reserveUnusedTcpPort(): Promise<number> {
     server.close((error) => (error ? reject(error) : resolve()));
   });
   return port;
+}
+
+async function waitForListeningHttpServer(url: string, timeoutMs = 10_000): Promise<void> {
+  const deadlineAt = Date.now() + timeoutMs;
+  while (Date.now() < deadlineAt) {
+    try {
+      const probeResult = await performLocalHttpProbe(new URL(url), 1_000);
+      if (probeResult === 200) {
+        return;
+      }
+    } catch {
+      // Keep polling until timeout.
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  throw new Error(`Timed out waiting for ${url} to start listening.`);
+}
+
+function stopRealProcessTree(pid: number | null): boolean {
+  if (!Number.isInteger(pid) || (pid ?? 0) <= 0) {
+    return false;
+  }
+  const result = spawnSync("taskkill", ["/PID", String(pid), "/T", "/F"], {
+    stdio: "ignore",
+    windowsHide: true
+  });
+  return result.status === 0;
+}
+
+async function spawnNamedFolderServer(
+  folderPath: string,
+  port: number,
+  marker: string
+): Promise<ChildProcess> {
+  const scriptPath = path.join(folderPath, "serve-preview-server.js");
+  writeFileSync(
+    scriptPath,
+    [
+      "const http = require('node:http');",
+      "const host = process.argv[2] || '127.0.0.1';",
+      "const port = Number(process.argv[3]);",
+      "const marker = process.argv[4] || 'ok';",
+      "const server = http.createServer((request, response) => {",
+      "  response.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' });",
+      "  response.end(marker);",
+      "});",
+      "server.listen(port, host, () => {",
+      "  process.stdout.write(`LISTENING:${port}\\n`);",
+      "});",
+      "const shutdown = () => server.close(() => process.exit(0));",
+      "process.on('SIGTERM', shutdown);",
+      "process.on('SIGINT', shutdown);",
+      "setInterval(() => {}, 1000);"
+    ].join("\n"),
+    "utf8"
+  );
+  const child = spawn(process.execPath, [scriptPath, "127.0.0.1", String(port), marker], {
+    cwd: folderPath,
+    stdio: ["ignore", "pipe", "pipe"],
+    windowsHide: true
+  });
+  await waitForListeningHttpServer(`http://127.0.0.1:${port}/`);
+  return child;
 }
 
 function createManagedProcessChild(pid = 4242): ChildProcessWithoutNullStreams {
@@ -553,6 +617,169 @@ test("executeStartProcess fails early for occupied Next.js hostname ports too", 
   }
 });
 
+test("executeStartProcess adopts an already-live same-workspace preview holder instead of retrying a new port", async () => {
+  const server = http.createServer((_request, response) => {
+    response.writeHead(200, { "content-type": "text/html" });
+    response.end("<!doctype html><title>Detroit City Two</title>");
+  });
+  await new Promise<void>((resolve) => {
+    server.listen(0, "127.0.0.1", () => resolve());
+  });
+
+  try {
+    const address = server.address();
+    assert.ok(address && typeof address !== "string");
+    const registry = new ManagedProcessRegistry();
+    let spawnCalls = 0;
+    const workspaceDir = "C:\\Users\\testuser\\Desktop\\Detroit City Two";
+    const context = buildLiveRunContext({
+      shellSpawn: ((() => {
+        spawnCalls += 1;
+        return createManagedProcessChild();
+      }) as unknown) as typeof import("node:child_process").spawn,
+      managedProcessRegistry: registry,
+      inspectSystemPreviewCandidates: async () => [
+        {
+          pid: 24456,
+          port: address.port,
+          processName: "node.exe",
+          commandLine:
+            `"node" "${workspaceDir}\\node_modules\\next\\dist\\bin\\next" dev --hostname 127.0.0.1 --port ${address.port}`,
+          confidence: "medium",
+          reason: "served_index_matches_target_workspace",
+          holderKind: "preview_server"
+        }
+      ]
+    });
+
+    const outcome = await executeStartProcess(context, "action_adopt_recovered_preview", {
+      command: `npm run dev -- --hostname 127.0.0.1 --port ${address.port}`,
+      cwd: workspaceDir
+    });
+
+    assert.equal(outcome.status, "success");
+    assert.equal(outcome.executionMetadata?.processRecoveredFromUntrackedPreview, true);
+    assert.equal(outcome.executionMetadata?.processRecoveredReason, "same_workspace_preview_holder");
+    assert.equal(outcome.executionMetadata?.processLifecycleStatus, "PROCESS_STILL_RUNNING");
+    assert.equal(outcome.executionMetadata?.processPid, 24456);
+    assert.equal(outcome.executionMetadata?.processRequestedPort, address.port);
+    assert.equal(spawnCalls, 0);
+    const leaseId = String(outcome.executionMetadata?.processLeaseId ?? "");
+    assert.ok(leaseId.length > 0);
+    assert.equal(registry.getSnapshot(leaseId)?.pid, 24456);
+    assert.equal(registry.getSnapshot(leaseId)?.requestedPort, address.port);
+  } finally {
+    await new Promise<void>((resolve, reject) => {
+      server.close((error) => (error ? reject(error) : resolve()));
+    });
+  }
+});
+
+test("executeStartProcess fails closed when an occupied same-workspace preview port is not HTTP-ready", async () => {
+  const resetServer = net.createServer((socket) => {
+    socket.destroy();
+  });
+  await new Promise<void>((resolve) => {
+    resetServer.listen(0, "127.0.0.1", () => resolve());
+  });
+
+  try {
+    const address = resetServer.address();
+    assert.ok(address && typeof address !== "string");
+    const registry = new ManagedProcessRegistry();
+    let spawnCalls = 0;
+    const workspaceDir = "C:\\Users\\testuser\\Desktop\\Detroit City Two";
+    const context = buildLiveRunContext({
+      shellSpawn: ((() => {
+        spawnCalls += 1;
+        return createManagedProcessChild();
+      }) as unknown) as typeof import("node:child_process").spawn,
+      managedProcessRegistry: registry,
+      inspectSystemPreviewCandidates: async () => [
+        {
+          pid: 24456,
+          port: address.port,
+          processName: "node.exe",
+          commandLine:
+            `"node" "${workspaceDir}\\node_modules\\next\\dist\\bin\\next" dev --hostname 127.0.0.1 --port ${address.port}`,
+          confidence: "medium",
+          reason: "listening_on_preview_port",
+          holderKind: "preview_server"
+        }
+      ]
+    });
+
+    const outcome = await executeStartProcess(context, "action_do_not_adopt_unready_preview", {
+      command: `npm run dev -- --hostname 127.0.0.1 --port ${address.port}`,
+      cwd: workspaceDir
+    });
+
+    assert.equal(outcome.status, "failed");
+    assert.equal(outcome.failureCode, "PROCESS_START_FAILED");
+    assert.equal(outcome.executionMetadata?.processStartupFailureKind, "PORT_IN_USE");
+    assert.equal(outcome.executionMetadata?.processRecoveredFromUntrackedPreview, undefined);
+    assert.equal(spawnCalls, 0);
+    assert.equal(registry.listSnapshots().length, 0);
+  } finally {
+    await new Promise<void>((resolve, reject) => {
+      resetServer.close((error) => (error ? reject(error) : resolve()));
+    });
+  }
+});
+
+test("executeStartProcess promotes the same-workspace preview holder when a framework wrapper exits after spawn", async () => {
+  const registry = new ManagedProcessRegistry({
+    isProcessAlive: (pid) => pid === 24456
+  });
+  const workspaceDir = "C:\\Users\\testuser\\Desktop\\Detroit City Two";
+  const port = await reserveUnusedTcpPort();
+  let spawnCalls = 0;
+  const context = buildLiveRunContext({
+    shellSpawn: ((() => {
+      spawnCalls += 1;
+      const child = createManagedProcessChild(8444);
+      queueMicrotask(() => {
+        child.emit("spawn");
+      });
+      setTimeout(() => {
+        child.emit("close", 1, null);
+      }, 25);
+      return child;
+    }) as unknown) as typeof import("node:child_process").spawn,
+    managedProcessRegistry: registry,
+    resolveShellCommandCwd: () => workspaceDir,
+    inspectSystemPreviewCandidates: async () => [
+      {
+        pid: 24456,
+        port,
+        processName: "node.exe",
+        commandLine:
+          `"node" "${workspaceDir}\\node_modules\\next\\dist\\server\\lib\\start-server.js"`,
+        confidence: "medium",
+        reason: "command_line_workspace_match",
+        holderKind: "preview_server"
+      }
+    ]
+  });
+
+  const outcome = await executeStartProcess(context, "action_promote_framework_preview_holder", {
+    command: `npm run dev -- --hostname 127.0.0.1 --port ${port}`,
+    cwd: workspaceDir
+  });
+
+  assert.equal(outcome.status, "success");
+  assert.equal(outcome.executionMetadata?.processRecoveredFromUntrackedPreview, true);
+  assert.equal(outcome.executionMetadata?.processRecoveredReason, "same_workspace_preview_holder");
+  assert.equal(outcome.executionMetadata?.processLifecycleStatus, "PROCESS_STILL_RUNNING");
+  assert.equal(outcome.executionMetadata?.processPid, 24456);
+  assert.equal(outcome.executionMetadata?.processRequestedPort, port);
+  assert.equal(spawnCalls, 1);
+  const leaseId = String(outcome.executionMetadata?.processLeaseId ?? "");
+  assert.ok(leaseId.length > 0);
+  assert.equal(registry.getSnapshot(leaseId)?.pid, 24456);
+  assert.equal(registry.getSnapshot(leaseId)?.statusCode, "PROCESS_STILL_RUNNING");
+});
+
 test("performLocalHttpProbe fails closed when a loopback socket resets mid-request", async () => {
   const resetServer = net.createServer((socket) => {
     socket.destroy();
@@ -842,6 +1069,61 @@ test("executeStopProcess marks reloaded linked managed browser sessions stale wh
   }
 });
 
+test("executeStopFolderRuntimeProcesses stops only exact listening server processes tied to matching folders", async (t) => {
+  if (process.platform !== "win32") {
+    t.skip("Folder runtime process sweep uses Windows-local inspection.");
+    return;
+  }
+
+  const desktopRoot = mkdtempSync(path.join(os.tmpdir(), "abb-live-run-folder-sweep-"));
+  const droneAlphaPath = path.join(desktopRoot, "drone-alpha");
+  const droneBetaPath = path.join(desktopRoot, "Drone-beta");
+  const calmCityPath = path.join(desktopRoot, "calm-city");
+  mkdirSync(droneAlphaPath, { recursive: true });
+  mkdirSync(droneBetaPath, { recursive: true });
+  mkdirSync(calmCityPath, { recursive: true });
+
+  const droneAlphaPort = await reserveUnusedTcpPort();
+  const droneBetaPort = await reserveUnusedTcpPort();
+  const calmCityPort = await reserveUnusedTcpPort();
+  const children: ChildProcess[] = [];
+
+  try {
+    children.push(await spawnNamedFolderServer(droneAlphaPath, droneAlphaPort, "drone-alpha"));
+    children.push(await spawnNamedFolderServer(droneBetaPath, droneBetaPort, "drone-beta"));
+    children.push(await spawnNamedFolderServer(calmCityPath, calmCityPort, "calm-city"));
+
+    const context = buildLiveRunContext({
+      terminateProcessTreeByPid: async (pid) => stopRealProcessTree(pid)
+    });
+
+    const outcome = await executeStopFolderRuntimeProcesses(context, {
+      rootPath: desktopRoot,
+      selectorMode: "starts_with",
+      selectorTerm: "drone"
+    });
+
+    assert.equal(outcome.status, "success");
+    assert.equal(outcome.executionMetadata?.folderRuntimeProcessSweep, true);
+    assert.equal(outcome.executionMetadata?.folderRuntimeProcessSweepMatchedFolderCount, 2);
+    assert.equal(outcome.executionMetadata?.folderRuntimeProcessSweepInitialCandidateCount, 2);
+    assert.equal(outcome.executionMetadata?.folderRuntimeProcessSweepStoppedCount, 2);
+    assert.equal(outcome.executionMetadata?.folderRuntimeProcessSweepRemainingCount, 0);
+    assert.equal(outcome.executionMetadata?.folderRuntimeProcessSweepVerifiedClear, true);
+    assert.match(outcome.output, /Stopped 2 exact server processes/i);
+    assert.match(String(outcome.executionMetadata?.folderRuntimeProcessSweepMatchedFolders ?? ""), /drone-alpha/i);
+    assert.match(String(outcome.executionMetadata?.folderRuntimeProcessSweepMatchedFolders ?? ""), /Drone-beta/i);
+    assert.equal(await performLocalHttpProbe(new URL(`http://127.0.0.1:${droneAlphaPort}/`), 1_000), null);
+    assert.equal(await performLocalHttpProbe(new URL(`http://127.0.0.1:${droneBetaPort}/`), 1_000), null);
+    assert.equal(await performLocalHttpProbe(new URL(`http://127.0.0.1:${calmCityPort}/`), 1_000), 200);
+  } finally {
+    for (const child of children) {
+      stopRealProcessTree(child.pid ?? null);
+    }
+    rmSync(desktopRoot, { recursive: true, force: true });
+  }
+});
+
 test("executeCheckProcess reports persisted leases as stopped when the recovered pid is no longer running", async () => {
   const tempDir = mkdtempSync(path.join(os.tmpdir(), "abb-live-run-check-"));
   try {
@@ -870,6 +1152,139 @@ test("executeCheckProcess reports persisted leases as stopped when the recovered
       "PROCESS_STOPPED"
     );
   } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("executeCheckProcess recovers an exact same-workspace preview holder when the tracked wrapper pid went stale", async () => {
+  const tempDir = mkdtempSync(path.join(os.tmpdir(), "abb-live-run-check-recovered-preview-"));
+  try {
+    const workspaceDir = "C:\\Users\\testuser\\Desktop\\Detroit City";
+    const readyServer = http.createServer((_request, response) => {
+      response.writeHead(200, { "content-type": "text/html" });
+      response.end("<!doctype html><title>Detroit City</title>");
+    });
+    await new Promise<void>((resolve) => {
+      readyServer.listen(0, "127.0.0.1", () => resolve());
+    });
+    const address = readyServer.address();
+    assert.ok(address && typeof address !== "string");
+    const snapshotPath = path.join(tempDir, "managed_processes.json");
+    const seedRegistry = new ManagedProcessRegistry({ snapshotPath });
+    const snapshot = seedRegistry.registerStarted({
+      actionId: "action_registry_rehydrate_recovered_preview",
+      child: createManagedProcessChild(8444),
+      commandFingerprint: "fingerprint-recovered-preview",
+      cwd: workspaceDir,
+      shellExecutable: "node",
+      shellKind: "powershell",
+      requestedHost: "127.0.0.1",
+      requestedPort: address.port,
+      requestedUrl: `http://127.0.0.1:${address.port}`
+    });
+    const recoveredRegistry = new ManagedProcessRegistry({
+      snapshotPath,
+      isProcessAlive: (pid) => pid === 39168
+    });
+    const context = buildLiveRunContext({
+      managedProcessRegistry: recoveredRegistry,
+      isProcessRunning: () => false,
+      inspectSystemPreviewCandidates: async () => [
+        {
+          pid: 39168,
+          port: address.port,
+          processName: "node.exe",
+          commandLine:
+            `"node" "C:\\Users\\testuser\\Desktop\\Detroit City\\node_modules\\next\\dist\\bin\\next" dev --hostname 127.0.0.1 --port ${address.port}`,
+          confidence: "low",
+          reason: "listening_loopback_preview_candidate",
+          holderKind: "preview_server"
+        }
+      ]
+    });
+
+    const outcome = await executeCheckProcess(context, { leaseId: snapshot.leaseId });
+
+    assert.equal(outcome.status, "success");
+    assert.equal(outcome.executionMetadata?.processLifecycleStatus, "PROCESS_STILL_RUNNING");
+    assert.equal(outcome.executionMetadata?.processRecoveredFromUntrackedPreview, true);
+    assert.equal(outcome.executionMetadata?.processPid, 39168);
+    assert.equal(outcome.executionMetadata?.processRequestedPort, address.port);
+    assert.equal(
+      outcome.executionMetadata?.processRequestedUrl,
+      `http://127.0.0.1:${address.port}`
+    );
+    assert.equal(
+      recoveredRegistry.getSnapshot(snapshot.leaseId)?.statusCode,
+      "PROCESS_STILL_RUNNING"
+    );
+    assert.equal(recoveredRegistry.getSnapshot(snapshot.leaseId)?.pid, 39168);
+    assert.equal(recoveredRegistry.getSnapshot(snapshot.leaseId)?.requestedPort, address.port);
+    await new Promise<void>((resolve, reject) => {
+      readyServer.close((error) => (error ? reject(error) : resolve()));
+    });
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("executeCheckProcess does not recover a same-workspace preview holder when localhost is not HTTP-ready", async () => {
+  const tempDir = mkdtempSync(path.join(os.tmpdir(), "abb-live-run-check-unready-preview-"));
+  const resetServer = net.createServer((socket) => {
+    socket.destroy();
+  });
+  await new Promise<void>((resolve) => {
+    resetServer.listen(0, "127.0.0.1", () => resolve());
+  });
+
+  try {
+    const address = resetServer.address();
+    assert.ok(address && typeof address !== "string");
+    const workspaceDir = "C:\\Users\\testuser\\Desktop\\Detroit City";
+    const snapshotPath = path.join(tempDir, "managed_processes.json");
+    const seedRegistry = new ManagedProcessRegistry({ snapshotPath });
+    const snapshot = seedRegistry.registerStarted({
+      actionId: "action_registry_rehydrate_unready_preview",
+      child: createManagedProcessChild(8444),
+      commandFingerprint: "fingerprint-unready-preview",
+      cwd: workspaceDir,
+      shellExecutable: "node",
+      shellKind: "powershell",
+      requestedHost: "127.0.0.1",
+      requestedPort: address.port,
+      requestedUrl: `http://127.0.0.1:${address.port}`
+    });
+    const recoveredRegistry = new ManagedProcessRegistry({
+      snapshotPath,
+      isProcessAlive: () => false
+    });
+    const context = buildLiveRunContext({
+      managedProcessRegistry: recoveredRegistry,
+      isProcessRunning: () => false,
+      inspectSystemPreviewCandidates: async () => [
+        {
+          pid: 39168,
+          port: address.port,
+          processName: "node.exe",
+          commandLine:
+            `"node" "C:\\Users\\testuser\\Desktop\\Detroit City\\node_modules\\next\\dist\\bin\\next" dev --hostname 127.0.0.1 --port ${address.port}`,
+          confidence: "low",
+          reason: "listening_loopback_preview_candidate",
+          holderKind: "preview_server"
+        }
+      ]
+    });
+
+    const outcome = await executeCheckProcess(context, { leaseId: snapshot.leaseId });
+
+    assert.equal(outcome.status, "success");
+    assert.equal(outcome.executionMetadata?.processLifecycleStatus, "PROCESS_STOPPED");
+    assert.equal(outcome.executionMetadata?.processRecoveredFromUntrackedPreview, undefined);
+    assert.equal(recoveredRegistry.getSnapshot(snapshot.leaseId)?.statusCode, "PROCESS_STOPPED");
+  } finally {
+    await new Promise<void>((resolve, reject) => {
+      resetServer.close((error) => (error ? reject(error) : resolve()));
+    });
     rmSync(tempDir, { recursive: true, force: true });
   }
 });
@@ -1061,6 +1476,60 @@ test("executeOpenBrowser reuses an existing managed browser session for the same
       secondOutcome.executionMetadata?.browserSessionId,
       firstOutcome.executionMetadata?.browserSessionId
     );
+  } finally {
+    await new Promise<void>((resolve, reject) => {
+      server.close((error) => (error ? reject(error) : resolve()));
+    });
+  }
+});
+
+test("executeOpenBrowser does not reuse an existing managed browser session when the same local URL belongs to a different workspace", async () => {
+  const server = http.createServer((_request, response) => {
+    response.writeHead(200, { "Content-Type": "text/plain" });
+    response.end("ok");
+  });
+  await new Promise<void>((resolve) => {
+    server.listen(0, "127.0.0.1", () => resolve());
+  });
+
+  const stubRuntime = createStubPlaywrightRuntime();
+  try {
+    const address = server.address();
+    assert.ok(address && typeof address !== "string");
+    const url = `http://127.0.0.1:${address.port}/`;
+    const context = buildLiveRunContext({
+      playwrightChromiumLoader: async () => stubRuntime.runtime
+    });
+
+    const firstOutcome = await executeOpenBrowser(context, "action_open_browser_detroit_three", {
+      url,
+      rootPath: "C:\\Users\\testuser\\Desktop\\Detroit City Three",
+      previewProcessLeaseId: "proc_detroit_three"
+    });
+    const secondOutcome = await executeOpenBrowser(context, "action_open_browser_detroit_two", {
+      url,
+      rootPath: "C:\\Users\\testuser\\Desktop\\Detroit City Two",
+      previewProcessLeaseId: "proc_detroit_two"
+    });
+
+    assert.equal(firstOutcome.status, "success");
+    assert.equal(secondOutcome.status, "success");
+    assert.equal(stubRuntime.getLaunchCount(), 2);
+    assert.notEqual(
+      secondOutcome.executionMetadata?.browserSessionId,
+      firstOutcome.executionMetadata?.browserSessionId
+    );
+
+    const firstSnapshot = context.browserSessionRegistry.getSnapshot(
+      String(firstOutcome.executionMetadata?.browserSessionId ?? "")
+    );
+    const secondSnapshot = context.browserSessionRegistry.getSnapshot(
+      String(secondOutcome.executionMetadata?.browserSessionId ?? "")
+    );
+    assert.equal(firstSnapshot?.workspaceRootPath, "C:\\Users\\testuser\\Desktop\\Detroit City Three");
+    assert.equal(firstSnapshot?.linkedProcessLeaseId, "proc_detroit_three");
+    assert.equal(secondSnapshot?.workspaceRootPath, "C:\\Users\\testuser\\Desktop\\Detroit City Two");
+    assert.equal(secondSnapshot?.linkedProcessLeaseId, "proc_detroit_two");
   } finally {
     await new Promise<void>((resolve, reject) => {
       server.close((error) => (error ? reject(error) : resolve()));
@@ -3528,6 +3997,34 @@ test("executeInspectWorkspaceResources upgrades one exact-path shell holder into
   assert.match(outcome.output, /shell_workspace/i);
   assert.match(outcome.output, /clarify_before_exact_non_preview_shutdown/i);
   assert.match(outcome.output, /explorer\.exe/i);
+});
+
+test("executeInspectWorkspaceResources keeps OneDrive-rooted PowerShell holders in the shell lane", async () => {
+  const untrackedCandidates: readonly UntrackedHolderCandidate[] = [
+    {
+      pid: 58260,
+      port: null,
+      processName: "powershell.exe",
+      commandLine:
+        "powershell.exe -NoExit -Command Set-Location C:\\Users\\testuser\\OneDrive\\Desktop\\Detroit City Two",
+      confidence: "medium",
+      reason: "command_line_matches_target_path",
+      holderKind: "shell_workspace"
+    }
+  ];
+  const context = buildLiveRunContext({
+    inspectSystemPreviewCandidates: async () => untrackedCandidates
+  });
+
+  const outcome = await executeInspectWorkspaceResources(context, {
+    rootPath: "C:\\Users\\testuser\\OneDrive\\Desktop\\Detroit City Two"
+  });
+
+  assert.equal(outcome.status, "success");
+  assert.equal(outcome.executionMetadata?.inspectionUntrackedCandidateKinds, "shell_workspace");
+  assert.doesNotMatch(String(outcome.executionMetadata?.inspectionUntrackedCandidateKinds), /sync_client/i);
+  assert.match(outcome.output, /powershell\.exe/i);
+  assert.match(outcome.output, /shell_workspace/i);
 });
 
 test("executeInspectWorkspaceResources upgrades one exact-path sync holder into targeted confirmation", async () => {

@@ -232,14 +232,19 @@ function buildStopProcessAction(leaseId?: string): PlannedAction {
  * Implements `buildProbePortAction` behavior within module scope.
  * Interacts with local collaborators through imported modules and typed inputs/outputs.
  */
-function buildProbePortAction(port?: number, host = "127.0.0.1"): PlannedAction {
+function buildProbePortAction(
+  port?: number,
+  host = "127.0.0.1",
+  timeoutMs?: number
+): PlannedAction {
   return {
     id: "action_probe_port",
     type: "probe_port",
     description: "probe local tcp port",
     params: {
       ...(typeof host === "string" ? { host } : {}),
-      ...(typeof port === "number" ? { port } : {})
+      ...(typeof port === "number" ? { port } : {}),
+      ...(typeof timeoutMs === "number" ? { timeoutMs } : {})
     },
     estimatedCostUsd: 0.03
   };
@@ -1746,7 +1751,7 @@ test("ToolExecutorOrgan reports PROCESS_NOT_READY when local TCP port is closed"
   await withTempCwd(async () => {
     await withUnusedTcpPort(async (port) => {
       const executor = new ToolExecutorOrgan(DEFAULT_BRAIN_CONFIG);
-      const outcome = await executor.executeWithOutcome(buildProbePortAction(port));
+      const outcome = await executor.executeWithOutcome(buildProbePortAction(port, "127.0.0.1", 750));
 
       assert.equal(outcome.status, "failed");
       assert.match(outcome.output, /Port not ready:/i);

@@ -3,11 +3,13 @@
  */
 
 import { PlannedAction } from "../../core/types";
+import { extractExecutionContextPayload } from "../../core/currentRequestExtraction";
 import {
   basenameCrossPlatformPath,
   dirnameCrossPlatformPath,
   normalizeCrossPlatformPath
 } from "../../core/crossPlatformPath";
+import { requestMatchesRuntimeTargetReference } from "../../core/runtimeTargetReference";
 import { RequiredActionType } from "./executionStyleContracts";
 
 const CREATE_SKILL_INTENT_PATTERN =
@@ -17,19 +19,29 @@ const RUN_SKILL_EXPLICIT_REQUEST_PATTERN =
 const WORKFLOW_RUN_SKILL_REQUEST_PATTERN =
   /\b(workflow|replay|capture|selector\s+drift|browser\s+workflow)\b/i;
 const TRACKED_BROWSER_SESSION_CONTEXT_PATTERN = /\bTracked browser sessions:/i;
+const TRACKED_WORKSPACE_CONTEXT_PATTERN = /\bCurrent tracked workspace in this chat:/i;
 const NATURAL_ARTIFACT_EDIT_CONTEXT_PATTERN = /\bNatural artifact-edit follow-up:/i;
 const NATURAL_CLOSE_BROWSER_FOLLOW_UP_PATTERN =
   /\b(?:close|shut|dismiss|hide)\b[\s\S]{0,50}\b(?:browser|tab|window|preview|page|landing page|homepage)\b/i;
 const NATURAL_OPEN_BROWSER_FOLLOW_UP_PATTERN =
   /\b(?:open|reopen|show|bring\s+(?:back|up)|pull\s+up)\b[\s\S]{0,50}\b(?:browser|tab|window|preview|page|landing page|homepage)\b/i;
-const NATURAL_CLOSE_BROWSER_VERB_PATTERN = /\b(?:close|shut|dismiss|hide)\b/i;
+const NATURAL_CLOSE_BROWSER_VERB_PATTERN = /\b(?:close|dismiss|hide)\b/i;
 const NATURAL_OPEN_BROWSER_VERB_PATTERN =
   /\b(?:reopen|show|bring\s+(?:back|up)|pull\s+up)\b/i;
+const NEGATED_NATURAL_OPEN_BROWSER_PATTERN =
+  /\b(?:do\s+not|don't|dont|without)\b[\s\S]{0,60}\b(?:open|reopen|show|bring\s+(?:back|up)|pull\s+up|pop)\b[\s\S]{0,60}\b(?:browser|tab|window|preview|page|landing page|homepage)\b/i;
+const NATURAL_RUNTIME_INSPECTION_VERB_PATTERN =
+  /\b(?:inspect|check|verify|confirm|make sure|find out|see if|look at)\b/i;
+const NATURAL_RUNTIME_SHUTDOWN_VERB_PATTERN =
+  /\b(?:stop|shut\s+down|turn\s+off|kill)\b/i;
+const NATURAL_RUNTIME_TARGET_PATTERN =
+  /\b(?:still\s+running|running|server|servers|preview(?:\s+stack|\s+server)?|process(?:es)?|localhost|loopback|port|dev\s+server)\b/i;
 const NATURAL_ARTIFACT_EDIT_REQUEST_PATTERN =
   /\b(?:change|edit|update|replace|swap|revise|tweak|adjust|make)\b[\s\S]{0,80}\b(?:hero|header|homepage|landing page|page|site|slider|cta|call to action|section|image|copy|headline|button)\b/i;
 const TRACKED_BROWSER_PATH_BLOCK_PATTERN =
   /\b(?:Root path|Primary artifact|Preview URL|workspaceRoot|Remembered browser workspace root):\s*([^\n;]+)/gi;
 const TRACKED_BROWSER_URL_PATTERN = /\burl=([^\s;]+)/gi;
+const QUOTED_RUNTIME_TARGET_PATTERN = /["'`“”]([^"'`“”\n]{3,80})["'`“”]/g;
 const GENERIC_BROWSER_WORKSPACE_SEGMENT_NAMES = new Set([
   "dist",
   "build",
@@ -131,6 +143,27 @@ function pushTrackedBrowserReferenceCandidate(
 }
 
 /**
+ * Extracts quoted runtime-target names from broader execution input.
+ *
+ * @param candidates - Mutable candidate-name set accumulated from execution context.
+ * @param rawValue - Full execution input or tracked runtime context block.
+ */
+function pushTrackedNaturalReferenceCandidates(
+  candidates: Set<string>,
+  rawValue: string | null | undefined
+): void {
+  if (typeof rawValue !== "string") {
+    return;
+  }
+  for (const match of rawValue.matchAll(QUOTED_RUNTIME_TARGET_PATTERN)) {
+    const candidate = match[1]?.trim().toLowerCase();
+    if (candidate && candidate.length >= 3) {
+      candidates.add(candidate);
+    }
+  }
+}
+
+/**
  * Evaluates whether the current request refers to the tracked browser target by workspace/app name.
  *
  * @param currentUserRequest - Current natural-language user request.
@@ -141,15 +174,42 @@ function currentUserRequestReferencesTrackedBrowserTarget(
   currentUserRequest: string,
   fullExecutionInput: string
 ): boolean {
+  const normalizedExecutionInput = extractExecutionContextPayload(fullExecutionInput);
   const candidates = new Set<string>();
-  for (const match of fullExecutionInput.matchAll(TRACKED_BROWSER_PATH_BLOCK_PATTERN)) {
+  for (const match of normalizedExecutionInput.matchAll(TRACKED_BROWSER_PATH_BLOCK_PATTERN)) {
     pushTrackedBrowserReferenceCandidate(candidates, match[1] ?? null);
   }
-  for (const match of fullExecutionInput.matchAll(TRACKED_BROWSER_URL_PATTERN)) {
+  for (const match of normalizedExecutionInput.matchAll(TRACKED_BROWSER_URL_PATTERN)) {
     pushTrackedBrowserReferenceCandidate(candidates, match[1] ?? null);
   }
-  const normalizedRequest = currentUserRequest.toLowerCase();
-  return [...candidates].some((candidate) => normalizedRequest.includes(candidate));
+  pushTrackedNaturalReferenceCandidates(candidates, normalizedExecutionInput);
+  return requestMatchesRuntimeTargetReference(currentUserRequest, [...candidates]);
+}
+
+/**
+ * Evaluates whether the wrapped execution input carries tracked runtime ownership context for one
+ * workspace/browser pair from the current chat.
+ *
+ * @param fullExecutionInput - Full conversation-aware execution input containing tracked context.
+ * @returns `true` when tracked runtime context is present.
+ */
+function hasTrackedRuntimeContext(fullExecutionInput: string): boolean {
+  const normalizedExecutionInput = extractExecutionContextPayload(fullExecutionInput);
+  return (
+    TRACKED_WORKSPACE_CONTEXT_PATTERN.test(normalizedExecutionInput) ||
+    TRACKED_BROWSER_SESSION_CONTEXT_PATTERN.test(normalizedExecutionInput)
+  );
+}
+
+/**
+ * Evaluates whether the wrapped execution input carries exact tracked preview-process lease ids.
+ *
+ * @param fullExecutionInput - Full conversation-aware execution input containing tracked context.
+ * @returns `true` when exact tracked preview-process lease ids are present.
+ */
+function hasTrackedPreviewLeaseContext(fullExecutionInput: string): boolean {
+  return /\b(?:Preview process lease|Preview process leases|linkedPreviewLease=|Linked preview process:\s*leaseId=)/i
+    .test(extractExecutionContextPayload(fullExecutionInput));
 }
 
 /**
@@ -170,7 +230,10 @@ export function inferRequiredActionType(
       return explicitRuntimeActionRequest.type;
     }
   }
-  if (TRACKED_BROWSER_SESSION_CONTEXT_PATTERN.test(fullExecutionInput)) {
+  const hasTrackedRuntime = hasTrackedRuntimeContext(fullExecutionInput);
+  if (hasTrackedRuntime) {
+    const suppressesNaturalBrowserOpen =
+      NEGATED_NATURAL_OPEN_BROWSER_PATTERN.test(currentUserRequest);
     const referencesTrackedBrowserTarget = currentUserRequestReferencesTrackedBrowserTarget(
       currentUserRequest,
       fullExecutionInput
@@ -185,13 +248,31 @@ export function inferRequiredActionType(
       return "close_browser";
     }
     if (
-      NATURAL_OPEN_BROWSER_FOLLOW_UP_PATTERN.test(currentUserRequest) ||
+      !suppressesNaturalBrowserOpen &&
       (
-        NATURAL_OPEN_BROWSER_VERB_PATTERN.test(currentUserRequest) &&
-        referencesTrackedBrowserTarget
+        NATURAL_OPEN_BROWSER_FOLLOW_UP_PATTERN.test(currentUserRequest) ||
+        (
+          NATURAL_OPEN_BROWSER_VERB_PATTERN.test(currentUserRequest) &&
+          referencesTrackedBrowserTarget
+        )
       )
     ) {
       return "open_browser";
+    }
+    if (
+      referencesTrackedBrowserTarget &&
+      NATURAL_RUNTIME_INSPECTION_VERB_PATTERN.test(currentUserRequest) &&
+      NATURAL_RUNTIME_TARGET_PATTERN.test(currentUserRequest)
+    ) {
+      return "inspect_workspace_resources";
+    }
+    if (
+      referencesTrackedBrowserTarget &&
+      hasTrackedPreviewLeaseContext(fullExecutionInput) &&
+      NATURAL_RUNTIME_SHUTDOWN_VERB_PATTERN.test(currentUserRequest) &&
+      NATURAL_RUNTIME_TARGET_PATTERN.test(currentUserRequest)
+    ) {
+      return "stop_process";
     }
   }
   if (

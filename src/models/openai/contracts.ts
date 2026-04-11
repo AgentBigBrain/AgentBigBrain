@@ -56,6 +56,9 @@ const PLANNER_ACTION_TYPE_VALUES = [
   "verify_browser",
   "open_browser",
   "close_browser",
+  "inspect_path_holders",
+  "inspect_workspace_resources",
+  "stop_folder_runtime_processes",
   "memory_mutation",
   "pulse_emit"
 ] as const;
@@ -220,6 +223,16 @@ const PLANNER_PARAMS_SCHEMA: Record<string, unknown> = {
         url: { type: "string" }
       },
       required: []
+    },
+    {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        rootPath: { type: "string" },
+        selectorMode: { type: "string", enum: ["starts_with", "contains"] },
+        selectorTerm: { type: "string" }
+      },
+      required: ["rootPath", "selectorMode", "selectorTerm"]
     },
     {
       type: "object",

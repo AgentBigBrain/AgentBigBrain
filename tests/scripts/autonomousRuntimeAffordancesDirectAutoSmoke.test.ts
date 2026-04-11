@@ -7,6 +7,9 @@ import {
   runAutonomousRuntimeAffordancesDirectAutoSmoke
 } from "../../scripts/evidence/autonomousRuntimeAffordancesDirectAutoSmoke";
 
+const KNOWN_BLOCKER_REASON_REGEX =
+  /(?:429|exceeded your current quota|usage limit|purchase more credits|try again at|rate limit|fetch failed|request timed out|socket hang up|ECONNRESET|governor timeout or failure|requires a real model backend|effective backend is mock|missing OPENAI_API_KEY|bounded direct-auto smoke budget expired|Planner model did not include a real folder-move step for this local organization request|Planner model retried the local organization move without also proving what moved into the destination and what remained at the original root|Planner model selected the named destination folder as part of the same move set, which risks nesting the destination inside itself|Planner model used cmd-style shell moves for a Windows PowerShell organization request|Planner model used invalid PowerShell variable interpolation for a Windows organization move command)/i;
+
 test("autonomous runtime affordances direct-auto smoke emits a PASS artifact for the destination self-match organization case", async (t) => {
   if (process.platform !== "win32") {
     t.skip("Desktop/browser direct-auto smoke is currently validated on Windows hosts only.");
@@ -35,7 +38,7 @@ test("autonomous runtime affordances direct-auto smoke emits a PASS artifact for
 
   if (
     persisted.status === "BLOCKED"
-    && /(?:429|exceeded your current quota|usage limit|purchase more credits|try again at|rate limit|fetch failed|request timed out|socket hang up|ECONNRESET|governor timeout or failure|requires a real model backend|effective backend is mock|missing OPENAI_API_KEY|bounded direct-auto smoke budget expired)/i.test([
+    && KNOWN_BLOCKER_REASON_REGEX.test([
       persisted.successScenario.blockerReason ?? "",
       persisted.boundedStopScenario.blockerReason ?? ""
     ].join("\n"))

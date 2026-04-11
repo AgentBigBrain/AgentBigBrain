@@ -10,6 +10,7 @@ import {
   EXECUTION_STYLE_STALL_REASON_CODE,
   EXECUTION_STYLE_LIVE_VERIFICATION_BLOCKED_REASON_CODE,
   MISSION_REQUIREMENT_BROWSER,
+  MISSION_REQUIREMENT_BROWSER_OPEN,
   MISSION_REQUIREMENT_PROCESS_STOP,
   MISSION_REQUIREMENT_READINESS,
   MISSION_REQUIREMENT_SIDE_EFFECT,
@@ -22,6 +23,7 @@ import { buildMissionCompletionContract } from "../../src/core/autonomy/missionC
 import {
   buildManagedProcessStopRetryInput,
   buildMissionEvidenceRetryInput,
+  countApprovedBrowserOpenProofActions,
   countApprovedReadinessProofActions,
   mapRequirementToReasonCode,
   resolveMissingMissionRequirements
@@ -44,6 +46,7 @@ import {
   buildStructuredRecoveryExecutionPlan,
   evaluateStructuredRecoveryPolicy
 } from "../../src/core/stage6_85/recovery";
+import { resolveStructuredRecoveryRuntimeDecision } from "../../src/core/autonomy/structuredRecoveryRuntime";
 import { type ActionRunResult, type TaskRunResult } from "../../src/core/types";
 import { buildWorkspaceRecoverySignalFixture } from "../helpers/conversationFixtures";
 
@@ -207,6 +210,86 @@ function buildBlockedProbeHttpGovernanceResult(actionId: string): ActionRunResul
 }
 
 /**
+ * Builds an approved workspace-resource inspection result for autonomy-module tests.
+ *
+ * @param actionId - Action id to assign.
+ * @param executionMetadata - Structured inspection metadata to attach.
+ * @returns Approved inspection action result.
+ */
+function buildApprovedInspectWorkspaceResourcesResult(
+  actionId: string,
+  executionMetadata: Record<string, unknown>
+): ActionRunResult {
+  return {
+    action: {
+      id: actionId,
+      type: "inspect_workspace_resources",
+      description: "inspect tracked workspace resources",
+      params: {
+        rootPath: "C:\\Users\\testuser\\Desktop\\Detroit City Two",
+        previewUrl: "http://127.0.0.1:3000/",
+        browserSessionId: "browser_session:detroit_two",
+        previewProcessLeaseId: "proc_detroit_two"
+      },
+      estimatedCostUsd: 0.04
+    },
+    mode: "fast_path",
+    approved: true,
+    output: "Inspection complete.",
+    executionStatus: "success",
+    executionMetadata: {
+      runtimeOwnershipInspection: true,
+      runtimeOwnershipInspectionKind: "workspace_resources",
+      inspectionRootPath: "C:\\Users\\testuser\\Desktop\\Detroit City Two",
+      inspectionPreviewUrl: "http://127.0.0.1:3000/",
+      ...executionMetadata
+    },
+    blockedBy: [],
+    violations: [],
+    votes: []
+  };
+}
+
+/**
+ * Builds an approved HTTP-readiness probe result for autonomy-module tests.
+ *
+ * @param actionId - Action id to assign.
+ * @param url - Loopback URL proven ready by the probe.
+ * @returns Approved HTTP-readiness action result.
+ */
+function buildApprovedProbeHttpReadyResult(
+  actionId: string,
+  url: string
+): ActionRunResult {
+  return {
+    action: {
+      id: actionId,
+      type: "probe_http",
+      description: "probe localhost http readiness",
+      params: {
+        url,
+        expectedStatus: 200
+      },
+      estimatedCostUsd: 0.03
+    },
+    mode: "escalation_path",
+    approved: true,
+    output: `HTTP ready: ${url} returned status 200.`,
+    executionStatus: "success",
+    executionMetadata: {
+      readinessProbe: true,
+      probeKind: "http",
+      probeReady: true,
+      probeUrl: url,
+      processLifecycleStatus: "PROCESS_READY"
+    },
+    blockedBy: [],
+    violations: [],
+    votes: []
+  };
+}
+
+/**
  * Builds a blocked shell action result for executor-missing tests.
  *
  * @param actionId - Action id to assign.
@@ -278,6 +361,44 @@ function buildBlockedMissingDependencyShellResult(actionId: string): ActionRunRe
   };
 }
 
+function buildBlockedStartProcessPortInUseResult(
+  actionId: string,
+  requestedPort = 3000,
+  suggestedPort = 63292
+): ActionRunResult {
+  return {
+    action: {
+      id: actionId,
+      type: "start_process",
+      description: "start the local server",
+      params: {
+        command: `npm run dev -- --hostname 127.0.0.1 --port ${requestedPort}`,
+        cwd: "C:\\Users\\benac\\OneDrive\\Desktop\\Detroit City Two"
+      },
+      estimatedCostUsd: 0.28
+    },
+    mode: "escalation_path",
+    approved: false,
+    output:
+      `Process start failed: http://127.0.0.1:${requestedPort} was already occupied before startup. ` +
+      `Try a different free loopback port such as ${suggestedPort}.`,
+    executionStatus: "failed",
+    executionFailureCode: "PROCESS_START_FAILED",
+    executionMetadata: {
+      processStartupFailureKind: "PORT_IN_USE",
+      processRequestedHost: "127.0.0.1",
+      processRequestedPort: requestedPort,
+      processRequestedUrl: `http://127.0.0.1:${requestedPort}`,
+      processSuggestedPort: suggestedPort,
+      processSuggestedUrl: `http://127.0.0.1:${suggestedPort}`,
+      processCwd: "C:\\Users\\benac\\OneDrive\\Desktop\\Detroit City Two"
+    },
+    blockedBy: ["PROCESS_START_FAILED"],
+    violations: [],
+    votes: []
+  };
+}
+
 /**
  * Builds a blocked action result carrying the terminal mission-stop block code.
  *
@@ -321,6 +442,7 @@ test("buildMissionCompletionContract captures finite live-run mission requiremen
   assert.equal(contract.requireTargetPathTouch, true);
   assert.equal(contract.requireReadinessProof, true);
   assert.equal(contract.requireBrowserProof, true);
+  assert.equal(contract.requireBrowserOpenProof, false);
   assert.equal(contract.requireProcessStopProof, true);
   assert.deepEqual(contract.targetPathHints, ["c:\\demo"]);
 });
@@ -333,6 +455,7 @@ test("buildMissionCompletionContract treats Playwright verification language as 
   assert.equal(contract.executionStyle, true);
   assert.equal(contract.requireReadinessProof, true);
   assert.equal(contract.requireBrowserProof, true);
+  assert.equal(contract.requireBrowserOpenProof, false);
   assert.equal(contract.requireProcessStopProof, true);
 });
 
@@ -345,6 +468,7 @@ test("buildMissionCompletionContract does not force localhost readiness for a st
   assert.equal(contract.requireRealSideEffect, true);
   assert.equal(contract.requireReadinessProof, false);
   assert.equal(contract.requireBrowserProof, false);
+  assert.equal(contract.requireBrowserOpenProof, false);
   assert.equal(contract.requireProcessStopProof, false);
 });
 
@@ -358,6 +482,7 @@ test("buildMissionCompletionContract does not force artifact-mutation proof for 
   assert.equal(contract.requireArtifactMutation, false);
   assert.equal(contract.requireReadinessProof, false);
   assert.equal(contract.requireBrowserProof, false);
+  assert.equal(contract.requireBrowserOpenProof, false);
   assert.equal(contract.requireProcessStopProof, false);
 });
 
@@ -375,6 +500,12 @@ test("countApprovedReadinessProofActions counts localhost open_browser success a
   assert.equal(countApprovedReadinessProofActions(result, true), 1);
 });
 
+test("countApprovedBrowserOpenProofActions counts visible open_browser success separately", () => {
+  const result = buildTaskResult([buildApprovedOpenBrowserReadyResult("open_browser_visible_1")]);
+
+  assert.equal(countApprovedBrowserOpenProofActions(result), 1);
+});
+
 test("mission evidence helpers resolve missing requirements and build deterministic retry guidance", () => {
   const contract: MissionCompletionContract = {
     executionStyle: true,
@@ -383,6 +514,7 @@ test("mission evidence helpers resolve missing requirements and build determinis
     requireArtifactMutation: false,
     requireReadinessProof: true,
     requireBrowserProof: true,
+    requireBrowserOpenProof: true,
     requireProcessStopProof: true,
     targetPathHints: []
   };
@@ -393,6 +525,7 @@ test("mission evidence helpers resolve missing requirements and build determinis
     artifactMutations: 0,
     readinessProofs: 0,
     browserProofs: 0,
+    browserOpenProofs: 0,
     processStopProofs: 0
   });
 
@@ -400,6 +533,7 @@ test("mission evidence helpers resolve missing requirements and build determinis
     MISSION_REQUIREMENT_SIDE_EFFECT,
     MISSION_REQUIREMENT_READINESS,
     MISSION_REQUIREMENT_BROWSER,
+    MISSION_REQUIREMENT_BROWSER_OPEN,
     MISSION_REQUIREMENT_PROCESS_STOP
   ]);
   assert.equal(
@@ -427,6 +561,7 @@ test("resolveLiveVerificationBlockedAbortReason returns a typed abort reason for
     requireArtifactMutation: false,
     requireReadinessProof: true,
     requireBrowserProof: true,
+    requireBrowserOpenProof: false,
     requireProcessStopProof: false,
     targetPathHints: []
   };
@@ -454,6 +589,7 @@ test("resolveLiveVerificationBlockedAbortReason ignores mixed iterations that ma
     requireArtifactMutation: false,
     requireReadinessProof: true,
     requireBrowserProof: true,
+    requireBrowserOpenProof: false,
     requireProcessStopProof: false,
     targetPathHints: []
   };
@@ -475,6 +611,7 @@ test("buildAutonomousRecoverySnapshot derives generic recovery classes and proof
     requireArtifactMutation: false,
     requireReadinessProof: true,
     requireBrowserProof: false,
+    requireBrowserOpenProof: false,
     requireProcessStopProof: false,
     targetPathHints: []
   };
@@ -487,6 +624,7 @@ test("buildAutonomousRecoverySnapshot derives generic recovery classes and proof
     artifactMutations: 0,
     readinessProofs: 0,
     browserProofs: 0,
+    browserOpenProofs: 0,
     processStopProofs: 0
   });
 
@@ -516,6 +654,7 @@ test("buildAutonomousRecoverySnapshot prefers native recovery metadata over lega
     requireArtifactMutation: false,
     requireReadinessProof: false,
     requireBrowserProof: false,
+    requireBrowserOpenProof: false,
     requireProcessStopProof: false,
     targetPathHints: []
   };
@@ -555,6 +694,7 @@ test("buildAutonomousRecoverySnapshot prefers native recovery metadata over lega
     artifactMutations: 0,
     readinessProofs: 0,
     browserProofs: 0,
+    browserOpenProofs: 0,
     processStopProofs: 0
   });
 
@@ -618,8 +758,10 @@ test("evaluateAutonomousNextStep passes structured recovery snapshot to the mode
       artifactMutations: 0,
       readinessProofs: 0,
       browserProofs: 0,
+      browserOpenProofs: 0,
       processStopProofs: 0
     },
+    null,
     null,
     null
   );
@@ -641,6 +783,7 @@ test("evaluateStructuredRecoveryPolicy and builder produce one bounded dependenc
     requireArtifactMutation: false,
     requireReadinessProof: false,
     requireBrowserProof: false,
+    requireBrowserOpenProof: false,
     requireProcessStopProof: false,
     targetPathHints: []
   };
@@ -656,6 +799,7 @@ test("evaluateStructuredRecoveryPolicy and builder produce one bounded dependenc
       artifactMutations: 0,
       readinessProofs: 0,
       browserProofs: 0,
+      browserOpenProofs: 0,
       processStopProofs: 0
     })
   });
@@ -670,6 +814,7 @@ test("evaluateStructuredRecoveryPolicy and builder produce one bounded dependenc
     result,
     decision,
     trackedManagedProcessLeaseId: null,
+    trackedManagedProcessStartContext: null,
     trackedLoopbackTarget: null
   });
 
@@ -689,6 +834,7 @@ test("buildStructuredRecoveryExecutionPlan fails closed when a parsed dependency
     requireArtifactMutation: false,
     requireReadinessProof: false,
     requireBrowserProof: false,
+    requireBrowserOpenProof: false,
     requireProcessStopProof: false,
     targetPathHints: []
   };
@@ -707,6 +853,7 @@ test("buildStructuredRecoveryExecutionPlan fails closed when a parsed dependency
       artifactMutations: 0,
       readinessProofs: 0,
       browserProofs: 0,
+      browserOpenProofs: 0,
       processStopProofs: 0
     })
   });
@@ -720,11 +867,568 @@ test("buildStructuredRecoveryExecutionPlan fails closed when a parsed dependency
     result,
     decision,
     trackedManagedProcessLeaseId: null,
+    trackedManagedProcessStartContext: null,
     trackedLoopbackTarget: null
   });
 
   assert.ok(executionPlan && "reason" in executionPlan);
   assert.match(executionPlan?.reason ?? "", /not shell-safe/i);
+});
+
+test("buildStructuredRecoveryExecutionPlan uses the approved start_process context for stopped-target restart recovery", () => {
+  const result = buildTaskResult([
+    {
+      action: {
+        id: "action_restart_start_context",
+        type: "start_process",
+        description: "restart the local server",
+        params: {
+          command: "npm run dev -- --hostname 127.0.0.1 --port 61909",
+          cwd: "C:\\Users\\testuser\\Desktop\\Detroit City"
+        },
+        estimatedCostUsd: 0.28
+      },
+      mode: "escalation_path",
+      approved: true,
+      output: "Process started.",
+      executionStatus: "success",
+      executionMetadata: {
+        processLeaseId: "proc_restart_context_1",
+        processLifecycleStatus: "PROCESS_STARTED",
+        processRequestedHost: "127.0.0.1",
+        processRequestedPort: 61909,
+        processRequestedUrl: "http://127.0.0.1:61909"
+      },
+      blockedBy: [],
+      violations: [],
+      votes: []
+    },
+    {
+      action: {
+        id: "action_restart_check_context",
+        type: "check_process",
+        description: "check the managed process",
+        params: {
+          leaseId: "proc_restart_context_1"
+        },
+        estimatedCostUsd: 0.04
+      },
+      mode: "escalation_path",
+      approved: true,
+      output: "Process stopped: lease proc_restart_context_1.",
+      executionStatus: "success",
+      executionMetadata: {
+        processLeaseId: "proc_restart_context_1",
+        processLifecycleStatus: "PROCESS_STOPPED"
+      },
+      blockedBy: [],
+      violations: [],
+      votes: []
+    }
+  ]);
+
+  const executionPlan = buildStructuredRecoveryExecutionPlan({
+    overarchingGoal: "Build the Detroit City app and leave it open in the browser.",
+    missionRequiresBrowserProof: true,
+    result,
+    decision: {
+      outcome: "attempt_repair",
+      recoveryClass: "TARGET_NOT_RUNNING",
+      optionId: "restart_target_then_reverify",
+      allowedRung: "bounded_repair_iteration",
+      fingerprint: "restart_target_then_reverify:detroit_city"
+    },
+    trackedManagedProcessLeaseId: "proc_restart_context_1",
+    trackedManagedProcessStartContext: null,
+    trackedLoopbackTarget: {
+      url: "http://127.0.0.1:61909",
+      host: "127.0.0.1",
+      port: 61909
+    }
+  });
+
+  assert.ok(executionPlan && "nextUserInput" in executionPlan);
+  assert.match(
+    executionPlan?.nextUserInput ?? "",
+    /^start_process cmd="npm run dev -- --hostname 127\.0\.0\.1 --port 61909" cwd="C:\\\\Users\\\\testuser\\\\Desktop\\\\Detroit City"\./i
+  );
+  assert.match(executionPlan?.nextUserInput ?? "", /prove HTTP readiness at http:\/\/127\.0\.0\.1:61909/i);
+  assert.match(executionPlan?.nextUserInput ?? "", /Do not use shell_command, write_file, scaffold, install/i);
+});
+
+test("buildStructuredRecoveryExecutionPlan reuses tracked start context across later check_process iterations", () => {
+  const result = buildTaskResult([
+    {
+      action: {
+        id: "action_restart_check_context_cross_iteration",
+        type: "check_process",
+        description: "check the managed process",
+        params: {
+          leaseId: "proc_restart_context_2"
+        },
+        estimatedCostUsd: 0.04
+      },
+      mode: "escalation_path",
+      approved: true,
+      output: "Process stopped: lease proc_restart_context_2.",
+      executionStatus: "success",
+      executionMetadata: {
+        processLeaseId: "proc_restart_context_2",
+        processLifecycleStatus: "PROCESS_STOPPED"
+      },
+      blockedBy: [],
+      violations: [],
+      votes: []
+    }
+  ]);
+
+  const executionPlan = buildStructuredRecoveryExecutionPlan({
+    overarchingGoal: "Build the Detroit City app and leave it open in the browser.",
+    missionRequiresBrowserProof: true,
+    result,
+    decision: {
+      outcome: "attempt_repair",
+      recoveryClass: "TARGET_NOT_RUNNING",
+      optionId: "restart_target_then_reverify",
+      allowedRung: "bounded_repair_iteration",
+      fingerprint: "restart_target_then_reverify:detroit_city_cross_iteration"
+    },
+    trackedManagedProcessLeaseId: "proc_restart_context_2",
+    trackedManagedProcessStartContext: {
+      leaseId: "proc_restart_context_2",
+      command: "npm run dev -- --hostname 127.0.0.1 --port 56382",
+      cwd: "C:\\Users\\testuser\\Desktop\\Detroit City"
+    },
+    trackedLoopbackTarget: {
+      url: "http://127.0.0.1:56382",
+      host: "127.0.0.1",
+      port: 56382
+    }
+  });
+
+  assert.ok(executionPlan && "nextUserInput" in executionPlan);
+  assert.match(
+    executionPlan?.nextUserInput ?? "",
+    /^start_process cmd="npm run dev -- --hostname 127\.0\.0\.1 --port 56382" cwd="C:\\\\Users\\\\testuser\\\\Desktop\\\\Detroit City"\./i
+  );
+  assert.match(executionPlan?.nextUserInput ?? "", /Do not use shell_command, write_file, scaffold, install/i);
+  assert.doesNotMatch(executionPlan?.nextUserInput ?? "", /restart the local server once if needed/i);
+});
+
+test("resolveStructuredRecoveryRuntimeDecision does not relaunch localhost for shutdown-only runtime inspection turns", () => {
+  const goal =
+    'please inspect and see if "Detroit City Two" is still running, do this end to end';
+  const missionContract = buildMissionCompletionContract(goal);
+  const result = {
+    ...buildTaskResult([
+      buildBlockedStartProcessPortInUseResult("start_process_shutdown_inspection_conflict")
+    ]),
+    task: {
+      id: "task_shutdown_inspection_conflict",
+      goal,
+      userInput: [
+        "Current tracked workspace in this chat:",
+        "- Root path: C:\\Users\\benac\\OneDrive\\Desktop\\Detroit City Two",
+        "- Preview process lease: proc_detroit_city_two",
+        "",
+        "Current user request:",
+        goal
+      ].join("\n"),
+      createdAt: new Date().toISOString()
+    }
+  } satisfies TaskRunResult;
+
+  const decision = resolveStructuredRecoveryRuntimeDecision({
+    overarchingGoal: goal,
+    missionContract,
+    missingRequirements: resolveMissingMissionRequirements(missionContract, {
+      realSideEffects: 0,
+      targetPathTouches: 0,
+      artifactMutations: 0,
+      readinessProofs: 0,
+      browserProofs: 0,
+      browserOpenProofs: 0,
+      processStopProofs: 0
+    }),
+    result,
+    attemptCounts: new Map(),
+    trackedManagedProcessLeaseId: "proc_detroit_city_two",
+    trackedManagedProcessStartContext: {
+      leaseId: "proc_detroit_city_two",
+      command: "npm run dev -- --hostname 127.0.0.1 --port 3000",
+      cwd: "C:\\Users\\benac\\OneDrive\\Desktop\\Detroit City Two"
+    },
+    trackedLoopbackTarget: {
+      url: "http://127.0.0.1:3000",
+      host: "127.0.0.1",
+      port: 3000
+    }
+  });
+
+  assert.deepEqual(decision, { outcome: "none" });
+});
+
+test("resolveStructuredRecoveryRuntimeDecision keeps alternate-port recovery for browser-open build goals", () => {
+  const goal =
+    'Create a nextjs landing page called "Detroit City Two", run it locally, and leave it open in the browser so I can review it.';
+  const missionContract = buildMissionCompletionContract(goal);
+  const result = {
+    ...buildTaskResult([
+      buildBlockedStartProcessPortInUseResult("start_process_build_conflict")
+    ]),
+    task: {
+      id: "task_browser_open_build_conflict",
+      goal,
+      userInput: [
+        "Current user request:",
+        goal
+      ].join("\n"),
+      createdAt: new Date().toISOString()
+    }
+  } satisfies TaskRunResult;
+
+  const decision = resolveStructuredRecoveryRuntimeDecision({
+    overarchingGoal: goal,
+    missionContract,
+    missingRequirements: resolveMissingMissionRequirements(missionContract, {
+      realSideEffects: 1,
+      targetPathTouches: 1,
+      artifactMutations: 1,
+      readinessProofs: 0,
+      browserProofs: 0,
+      browserOpenProofs: 0,
+      processStopProofs: 0
+    }),
+    result,
+    attemptCounts: new Map(),
+    trackedManagedProcessLeaseId: null,
+    trackedManagedProcessStartContext: null,
+    trackedLoopbackTarget: null
+  });
+
+  assert.equal(decision.outcome, "retry");
+  assert.equal(decision.recoveryClass, "PROCESS_PORT_IN_USE");
+  assert.match(decision.nextUserInput, /probe_http url="http:\/\/127\.0\.0\.1:63292"/i);
+});
+
+test("evaluateAutonomousNextStep reuses tracked start context when check_process later proves the lease stopped", async () => {
+  const result = buildTaskResult([
+    {
+      action: {
+        id: "check_process_model_policy_restart_context",
+        type: "check_process",
+        description: "check the managed process",
+        params: {
+          leaseId: "proc_autonomy_modules_2"
+        },
+        estimatedCostUsd: 0.04
+      },
+      mode: "escalation_path",
+      approved: true,
+      output: "Process stopped: lease proc_autonomy_modules_2.",
+      executionStatus: "success",
+      executionMetadata: {
+        processLeaseId: "proc_autonomy_modules_2",
+        processLifecycleStatus: "PROCESS_STOPPED"
+      },
+      blockedBy: [],
+      violations: [],
+      votes: []
+    }
+  ]);
+
+  const nextStep = await evaluateAutonomousNextStep(
+    { completeJson: async () => ({ isGoalMet: true, reasoning: "unused", nextUserInput: "" }) } as never,
+    DEFAULT_BRAIN_CONFIG,
+    "Create a local app, prove localhost readiness, and leave it open in the browser.",
+    result,
+    {
+      realSideEffects: 1,
+      targetPathTouches: 1,
+      artifactMutations: 1,
+      readinessProofs: 0,
+      browserProofs: 0,
+      browserOpenProofs: 0,
+      processStopProofs: 0
+    },
+    "proc_autonomy_modules_2",
+    {
+      leaseId: "proc_autonomy_modules_2",
+      command: "npm run dev -- --hostname 127.0.0.1 --port 56382",
+      cwd: "C:\\Users\\testuser\\Desktop\\Detroit City"
+    },
+    {
+      url: "http://127.0.0.1:56382",
+      host: "127.0.0.1",
+      port: 56382
+    }
+  );
+
+  assert.equal(nextStep.isGoalMet, false);
+  assert.match(
+    nextStep.nextUserInput,
+    /^start_process cmd="npm run dev -- --hostname 127\.0\.0\.1 --port 56382" cwd="C:\\\\Users\\\\testuser\\\\Desktop\\\\Detroit City"\./i
+  );
+  assert.match(nextStep.nextUserInput, /Do not use shell_command, write_file, scaffold, install, or other file-mutation actions/i);
+});
+
+test("evaluateAutonomousNextStep enriches generic framework restart continuations with tracked workspace and loopback context", async () => {
+  const result = buildTaskResult([
+    {
+      action: {
+        id: "write_page_detroit_city_two",
+        type: "write_file",
+        description: "write the Detroit City Two page",
+        params: {
+          path: "C:\\Users\\benac\\OneDrive\\Desktop\\Detroit City Two\\app\\page.js",
+          content: "export default function Page() { return null; }"
+        },
+        estimatedCostUsd: 0.02
+      },
+      mode: "escalation_path",
+      approved: true,
+      output: "Page updated.",
+      executionStatus: "success",
+      blockedBy: [],
+      violations: [],
+      votes: []
+    }
+  ]);
+
+  const nextStep = await evaluateAutonomousNextStep(
+    {
+      completeJson: async () => ({
+        isGoalMet: false,
+        reasoning: "restart the tracked preview",
+        nextUserInput:
+          "The app is not running, so restart the Next.js landing page from the project on the Desktop, fix any startup error if needed, wait until the local URL is actually ready, then open it in a browser and leave that browser window open for review. After that, report the Desktop project path and the live URL."
+      })
+    } as never,
+    DEFAULT_BRAIN_CONFIG,
+    'I want you to create a nextjs landing page, with 4 sections called "Detroit City Two" and there should be a footer and header, a gritty feeling design, and you need to do this end to end and put it on my desktop, then leave it open in the browser so i can review it.',
+    result,
+    {
+      realSideEffects: 1,
+      targetPathTouches: 1,
+      artifactMutations: 1,
+      readinessProofs: 0,
+      browserProofs: 0,
+      browserOpenProofs: 0,
+      processStopProofs: 0
+    },
+    "proc_detroit_city_two",
+    {
+      leaseId: "proc_detroit_city_two",
+      command: "npm run dev -- --hostname 127.0.0.1 --port 55773",
+      cwd: "C:\\Users\\benac\\OneDrive\\Desktop\\Detroit City Two"
+    },
+    {
+      url: "http://127.0.0.1:55773",
+      host: "127.0.0.1",
+      port: 55773
+    }
+  );
+
+  assert.equal(nextStep.isGoalMet, false);
+  assert.match(
+    nextStep.nextUserInput,
+    /Reuse the existing project at `C:\\Users\\benac\\OneDrive\\Desktop\\Detroit City Two`/i
+  );
+  assert.match(
+    nextStep.nextUserInput,
+    /Reuse the tracked loopback target http:\/\/127\.0\.0\.1:55773/i
+  );
+  assert.match(nextStep.nextUserInput, /restart the Next\.js landing page from the project on the Desktop/i);
+});
+
+test("evaluateAutonomousNextStep enriches runtime shutdown verification continuations with tracked inspect-first context", async () => {
+  const result = buildTaskResult([
+    {
+      action: {
+        id: "check_shutdown_status_detroit_city_two",
+        type: "check_process",
+        description: "check the tracked Detroit City Two process",
+        params: {
+          leaseId: "proc_detroit_city_two"
+        },
+        estimatedCostUsd: 0.04
+      },
+      mode: "escalation_path",
+      approved: false,
+      output: "Process state unavailable in this run.",
+      executionStatus: "blocked",
+      blockedBy: ["resource"],
+      violations: [],
+      votes: []
+    }
+  ]);
+
+  const nextStep = await evaluateAutonomousNextStep(
+    {
+      completeJson: async () => ({
+        isGoalMet: false,
+        reasoning: "need a narrow shutdown verification step",
+        nextUserInput:
+          'Check whether the "Detroit City Two" server is currently running, stop the exact matching process if it is, and verify end to end that no server process remains listening. Use execution evidence only from this run. Report the matched process details, the stop action taken, and the verification result. If you cannot perform or verify the shutdown in this run, state that explicitly and do not claim success.'
+      })
+    } as never,
+    DEFAULT_BRAIN_CONFIG,
+    'did you make sure you shut down "Detroit City Two" so that the server is no longer running? Please do this end to end - check and make sure. If it\'s complete then you succeeded.',
+    result,
+    {
+      realSideEffects: 0,
+      targetPathTouches: 0,
+      artifactMutations: 0,
+      readinessProofs: 0,
+      browserProofs: 0,
+      browserOpenProofs: 0,
+      processStopProofs: 0
+    },
+    "proc_detroit_city_two",
+    {
+      leaseId: "proc_detroit_city_two",
+      command: "npm run dev -- --hostname 127.0.0.1 --port 59025",
+      cwd: "C:\\Users\\benac\\OneDrive\\Desktop\\Detroit City Two"
+    },
+    {
+      url: "http://127.0.0.1:59025",
+      host: "127.0.0.1",
+      port: 59025
+    }
+  );
+
+  assert.equal(nextStep.isGoalMet, false);
+  assert.match(
+    nextStep.nextUserInput,
+    /Treat `C:\\Users\\benac\\OneDrive\\Desktop\\Detroit City Two` as the exact runtime target/i
+  );
+  assert.match(nextStep.nextUserInput, /Use inspect_workspace_resources first/i);
+  assert.match(
+    nextStep.nextUserInput,
+    /Do not create, modify, build, install, scaffold, or rename project files for this turn/i
+  );
+  assert.match(
+    nextStep.nextUserInput,
+    /Treat http:\/\/127\.0\.0\.1:59025 as the last tracked preview URL only/i
+  );
+});
+
+test("evaluateAutonomousNextStep completes shutdown verification from one inspection when no live preview holder remains", async () => {
+  const goal =
+    'did you make sure you shut down "Detroit City Two" so that the server is no longer running? Please do this end to end - check and make sure. If it\'s complete then you succeeded.';
+  const result = {
+    ...buildTaskResult([
+      buildApprovedInspectWorkspaceResourcesResult(
+        "inspect_workspace_shutdown_complete",
+        {
+          inspectionOwnershipClassification: "orphaned_attributable",
+          inspectionRecommendedNextAction: "clarify_before_exact_non_preview_shutdown",
+          inspectionStaleBrowserSessionIds: "browser_session:detroit_two",
+          inspectionStalePreviewProcessLeaseIds: "proc_detroit_two",
+          inspectionUntrackedCandidatePids: "58260",
+          inspectionUntrackedCandidateKinds: "shell_workspace",
+          inspectionUntrackedCandidateNames: "powershell.exe",
+          inspectionUntrackedCandidateConfidences: "high",
+          inspectionUntrackedCandidateReasons: "command_line_matches_target_path"
+        }
+      )
+    ]),
+    task: {
+      id: "task_shutdown_inspection_complete",
+      goal,
+      userInput: [
+        "Current tracked workspace in this chat:",
+        "- Root path: C:\\Users\\testuser\\Desktop\\Detroit City Two",
+        "- Preview process lease: proc_detroit_two",
+        "",
+        "Current user request:",
+        goal
+      ].join("\n"),
+      createdAt: new Date().toISOString()
+    }
+  } satisfies TaskRunResult;
+
+  const nextStep = await evaluateAutonomousNextStep(
+    {
+      completeJson: async () => {
+        throw new Error("runtime shutdown verification should complete from inspection evidence");
+      }
+    } as never,
+    DEFAULT_BRAIN_CONFIG,
+    goal,
+    result,
+    {
+      realSideEffects: 0,
+      targetPathTouches: 0,
+      artifactMutations: 0,
+      readinessProofs: 0,
+      browserProofs: 0,
+      browserOpenProofs: 0,
+      processStopProofs: 0
+    },
+    "proc_detroit_two",
+    {
+      leaseId: "proc_detroit_two",
+      command: "npm run dev -- --hostname 127.0.0.1 --port 3000",
+      cwd: "C:\\Users\\testuser\\Desktop\\Detroit City Two"
+    },
+    {
+      url: "http://127.0.0.1:3000",
+      host: "127.0.0.1",
+      port: 3000
+    }
+  );
+
+  assert.equal(nextStep.isGoalMet, true);
+  assert.equal(nextStep.nextUserInput, "");
+  assert.match(nextStep.reasoning, /does not appear to still be running/i);
+  assert.match(nextStep.reasoning, /powershell\.exe \(pid 58260\)/i);
+});
+
+test("evaluateAutonomousNextStep requires open_browser when the goal says to leave the preview open", async () => {
+  const result = buildTaskResult([
+    buildApprovedProbeHttpReadyResult(
+      "probe_http_browser_open_needed",
+      "http://127.0.0.1:56382"
+    )
+  ]);
+
+  const nextStep = await evaluateAutonomousNextStep(
+    {
+      completeJson: async () => {
+        throw new Error("browser-open completion should not fall back to the model");
+      }
+    } as never,
+    DEFAULT_BRAIN_CONFIG,
+    "Create a local app, prove localhost readiness, and leave it open in the browser.",
+    result,
+    {
+      realSideEffects: 1,
+      targetPathTouches: 1,
+      artifactMutations: 1,
+      readinessProofs: 1,
+      browserProofs: 0,
+      browserOpenProofs: 0,
+      processStopProofs: 0
+    },
+    "proc_autonomy_modules_browser_open",
+    {
+      leaseId: "proc_autonomy_modules_browser_open",
+      command: "npm run dev -- --hostname 127.0.0.1 --port 56382",
+      cwd: "C:\\Users\\testuser\\Desktop\\Detroit City"
+    },
+    {
+      url: "http://127.0.0.1:56382",
+      host: "127.0.0.1",
+      port: 56382
+    }
+  );
+
+  assert.equal(nextStep.isGoalMet, false);
+  assert.match(
+    nextStep.nextUserInput,
+    /^open_browser url="http:\/\/127\.0\.0\.1:56382" rootPath="C:\\\\Users\\\\testuser\\\\Desktop\\\\Detroit City" previewProcessLeaseId="proc_autonomy_modules_browser_open"\./i
+  );
 });
 
 test("evaluateStructuredRecoveryPolicy stops when a bounded repair fingerprint exhausts its budget", () => {

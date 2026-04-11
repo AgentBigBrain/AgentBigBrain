@@ -25,6 +25,10 @@ import {
   ConversationSession
 } from "./sessionStore";
 import { buildConversationWorkerProgressMessage } from "./conversationRuntime/conversationWorkerProgressText";
+import {
+  discoverWorkspacePrimaryArtifactPath,
+  discoverWorkspaceReferencePaths
+} from "./conversationRuntime/workspaceArtifactDiscovery";
 import { deriveConversationLedgersFromTaskRunResult } from "./conversationRuntime/recentActionLedger";
 import { buildConversationReturnHandoff } from "./conversationRuntime/returnHandoff";
 import { buildPausedReturnHandoffProgressState } from "./conversationRuntime/returnHandoffControl";
@@ -166,6 +170,92 @@ function collectWorkspaceChangedPaths(
     changedPaths.push(action.location);
   }
   return changedPaths;
+}
+
+/**
+ * Recovers the newest concrete file/folder evidence already attributed to one workspace root.
+ *
+ * @param session - Session containing recent-action and path-destination ledgers.
+ * @param rootPath - Workspace root whose remembered evidence should be gathered.
+ * @param limit - Maximum number of remembered paths to return.
+ * @returns Ordered file/folder paths attributable to the same workspace root.
+ */
+function collectRememberedWorkspacePaths(
+  session: ConversationSession,
+  rootPath: string | null,
+  limit: number
+): string[] {
+  const comparableRootPath = toComparablePath(rootPath);
+  if (!comparableRootPath) {
+    return [];
+  }
+
+  const rememberedPaths: string[] = [];
+  const seen = new Set<string>();
+  const pushPath = (candidatePath: string | null | undefined): void => {
+    if (!candidatePath || seen.has(candidatePath)) {
+      return;
+    }
+    if (!isSameOrNestedComparablePath(toComparablePath(candidatePath), comparableRootPath)) {
+      return;
+    }
+    seen.add(candidatePath);
+    rememberedPaths.push(candidatePath);
+  };
+
+  for (const action of session.recentActions) {
+    if (action.kind !== "file" && action.kind !== "folder") {
+      continue;
+    }
+    pushPath(action.location);
+    if (rememberedPaths.length >= limit) {
+      return rememberedPaths;
+    }
+  }
+
+  for (const destination of session.pathDestinations) {
+    pushPath(destination.resolvedPath);
+    if (rememberedPaths.length >= limit) {
+      break;
+    }
+  }
+
+  const nestedPaths = rememberedPaths.filter(
+    (candidatePath) => toComparablePath(candidatePath) !== comparableRootPath
+  );
+  if (nestedPaths.length > 0) {
+    return nestedPaths.slice(0, limit);
+  }
+  return rememberedPaths.slice(0, limit);
+}
+
+/**
+ * Resolves file-level workspace references by combining remembered ledgers with safe framework
+ * entrypoint discovery under the exact resolved root.
+ *
+ * @param session - Session containing remembered workspace ledgers.
+ * @param rootPath - Resolved workspace root.
+ * @param limit - Maximum number of paths to return.
+ * @returns Ordered file paths attributable to the workspace.
+ */
+function resolveWorkspaceReferencePaths(
+  session: ConversationSession,
+  rootPath: string | null,
+  limit: number
+): string[] {
+  const rememberedWorkspacePaths = collectRememberedWorkspacePaths(session, rootPath, limit);
+  const rememberedFilePaths = rememberedWorkspacePaths.filter(
+    (candidatePath) => extnameCrossPlatformPath(candidatePath).length > 0
+  );
+  if (rememberedFilePaths.length >= limit) {
+    return rememberedFilePaths.slice(0, limit);
+  }
+
+  const discoveredPaths = discoverWorkspaceReferencePaths(rootPath, limit);
+  return uniqueNonEmpty([
+    ...rememberedFilePaths,
+    ...discoveredPaths
+  ]).slice(0, limit);
 }
 
 /**
@@ -500,19 +590,62 @@ function selectLivePreviewProcessLeaseIds(
  * @param previousWorkspace - Previously tracked workspace snapshot when continuity already exists.
  * @returns Preferred primary artifact path, or `null` when none is known.
  */
-function selectPrimaryArtifactPath(
-  changedPaths: readonly string[],
-  previousWorkspace: ConversationActiveWorkspaceRecord | null
+function selectPrimaryArtifactPathFromPaths(
+  candidatePaths: readonly string[]
 ): string | null {
-  const htmlPath = changedPaths.find((entry) => entry.toLowerCase().endsWith(".html"));
+  const htmlPath = candidatePaths.find((entry) => entry.toLowerCase().endsWith(".html"));
   if (htmlPath) {
     return htmlPath;
   }
-  const filePath = changedPaths.find((entry) => extnameCrossPlatformPath(entry).length > 0);
+  const filePath = candidatePaths.find((entry) => extnameCrossPlatformPath(entry).length > 0);
   if (filePath) {
     return filePath;
   }
-  return previousWorkspace?.primaryArtifactPath ?? null;
+  return null;
+}
+
+/**
+ * Selects the strongest primary artifact path for the tracked workspace.
+ *
+ * @param session - Session containing remembered workspace ledgers.
+ * @param changedPaths - Concrete changed paths emitted by the completed job.
+ * @param rootPath - Resolved workspace root for the current job.
+ * @param previousWorkspace - Previously tracked workspace snapshot when continuity already exists.
+ * @returns Preferred primary artifact path, or `null` when none is known for this workspace.
+ */
+function selectPrimaryArtifactPath(
+  session: ConversationSession,
+  changedPaths: readonly string[],
+  rootPath: string | null,
+  previousWorkspace: ConversationActiveWorkspaceRecord | null
+): string | null {
+  const currentJobArtifactPath = selectPrimaryArtifactPathFromPaths(changedPaths);
+  if (currentJobArtifactPath) {
+    return currentJobArtifactPath;
+  }
+
+  const comparableRootPath = toComparablePath(rootPath);
+  if (
+    previousWorkspace?.primaryArtifactPath &&
+    isSameOrNestedComparablePath(
+      toComparablePath(previousWorkspace.primaryArtifactPath),
+      comparableRootPath
+    )
+  ) {
+    return previousWorkspace.primaryArtifactPath;
+  }
+
+  const rememberedWorkspacePaths = collectRememberedWorkspacePaths(
+    session,
+    rootPath,
+    5
+  );
+  const rememberedArtifactPath = selectPrimaryArtifactPathFromPaths(rememberedWorkspacePaths);
+  if (rememberedArtifactPath) {
+    return rememberedArtifactPath;
+  }
+
+  return discoverWorkspacePrimaryArtifactPath(rootPath);
 }
 
 /**
@@ -596,7 +729,7 @@ function deriveActiveWorkspaceFromSession(
   );
   const currentJobBrowserSession = currentJobBrowserSessions[0] ?? null;
   const changedPaths = collectWorkspaceChangedPaths(session, sourceJobId);
-  const currentJobPrimaryArtifactPath = selectPrimaryArtifactPath(changedPaths, null);
+  const currentJobPrimaryArtifactPath = selectPrimaryArtifactPathFromPaths(changedPaths);
   const currentJobRootPath = resolveWorkspaceRootPath(
     session,
     sourceJobId,
@@ -620,17 +753,25 @@ function deriveActiveWorkspaceFromSession(
           (browserSession) => browserSession.id === previousWorkspace.browserSessionId
         ) ?? null
       : null);
-  const primaryArtifactPath =
-    currentJobPrimaryArtifactPath ??
-    (reusePreviousContinuity ? previousWorkspace?.primaryArtifactPath ?? null : null);
   const rootPath = resolveWorkspaceRootPath(
     session,
     sourceJobId,
     changedPaths,
     currentJobBrowserSession,
     continuityBrowserSession,
-    primaryArtifactPath,
+    currentJobPrimaryArtifactPath,
     reusePreviousContinuity ? previousWorkspace : null
+  );
+  const primaryArtifactPath = selectPrimaryArtifactPath(
+    session,
+    changedPaths,
+    rootPath,
+    reusePreviousContinuity ? previousWorkspace : null
+  );
+  const rememberedWorkspacePaths = resolveWorkspaceReferencePaths(
+    session,
+    rootPath,
+    5
   );
   const previewUrl =
     currentJobBrowserSession?.url ??
@@ -753,7 +894,7 @@ function deriveActiveWorkspaceFromSession(
     lastChangedPaths:
       changedPaths.length > 0
         ? changedPaths.slice(0, 5)
-        : (previousWorkspace?.lastChangedPaths ?? []),
+        : rememberedWorkspacePaths,
     sourceJobId,
     updatedAt
   };
@@ -1030,6 +1171,7 @@ export interface ExecuteRunningJobInput {
   notify: ConversationNotifierTransport;
   heartbeatIntervalMs: number;
   suppressHeartbeat: boolean;
+  onWorkerHeartbeat?: () => void;
   onProgressUpdate?: (update: ConversationExecutionProgressUpdate) => Promise<void>;
   onExecutionSettled(): void;
 }
@@ -1059,6 +1201,7 @@ export async function executeRunningJob(
     notify,
     heartbeatIntervalMs,
     suppressHeartbeat,
+    onWorkerHeartbeat,
     onProgressUpdate,
     onExecutionSettled
   } = input;
@@ -1074,20 +1217,23 @@ export async function executeRunningJob(
     void notify.stream!(buildConversationWorkerProgressMessage(job), progressTrace).catch(() => undefined);
   }
 
-  const heartbeat = suppressHeartbeat
-    ? null
-    : setInterval(() => {
-        if (job.status !== "running") {
-          return;
-        }
-        const elapsed = elapsedSeconds(job.startedAt ?? job.createdAt);
-        const progressText = buildConversationWorkerProgressMessage(job, elapsed);
-        if (useNativeStreaming) {
-          void notify.stream!(progressText, progressTrace).catch(() => undefined);
-          return;
-        }
-        void notify.send(progressText, progressTrace).catch(() => undefined);
-      }, heartbeatIntervalMs);
+  onWorkerHeartbeat?.();
+  const heartbeat = setInterval(() => {
+    if (job.status !== "running") {
+      return;
+    }
+    onWorkerHeartbeat?.();
+    if (suppressHeartbeat) {
+      return;
+    }
+    const elapsed = elapsedSeconds(job.startedAt ?? job.createdAt);
+    const progressText = buildConversationWorkerProgressMessage(job, elapsed);
+    if (useNativeStreaming) {
+      void notify.stream!(progressText, progressTrace).catch(() => undefined);
+      return;
+    }
+    void notify.send(progressText, progressTrace).catch(() => undefined);
+  }, heartbeatIntervalMs);
 
   try {
     const result = await executeTask(
@@ -1107,9 +1253,7 @@ export async function executeRunningJob(
     job.errorMessage = (error as Error).message;
     return null;
   } finally {
-    if (heartbeat) {
-      clearInterval(heartbeat);
-    }
+    clearInterval(heartbeat);
     onExecutionSettled();
   }
 }

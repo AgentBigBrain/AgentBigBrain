@@ -35,8 +35,10 @@ import {
   recordBlockedActionOutcome
 } from "./orchestration/taskRunnerLifecycle";
 import {
+  evaluateDependentWorkspaceExecutionBlock,
   evaluateDependentLiveRunTargetBlock,
   rememberFailedManagedProcessStartTarget,
+  rememberFailedWorkspaceExecutionDependency,
   type FailedManagedProcessStartTarget
 } from "./orchestration/taskRunnerLiveRunGuards";
 import {
@@ -115,11 +117,34 @@ export class TaskRunner {
     const approvalGrantById = new Map<string, ApprovalGrantV1>();
     const connectorReceiptByActionId = new Map<string, TaskRunnerConnectorReceiptSeed>();
     let failedManagedProcessStartTargets: readonly FailedManagedProcessStartTarget[] = [];
-    const missionStopLimits: MissionStopLimitsV1 = buildTaskRunnerMissionStopLimits(this.deps.config);
+    let failedWorkspaceExecutionDependencies:
+      readonly import("./orchestration/taskRunnerLiveRunGuards").FailedWorkspaceExecutionDependency[] = [];
+    const missionStopLimits: MissionStopLimitsV1 = buildTaskRunnerMissionStopLimits(
+      this.deps.config,
+      plan
+    );
 
     for (const action of plan.actions) {
       throwIfAborted(signal);
       const mode = resolveExecutionMode(action, this.deps.config);
+      const dependentWorkspaceBlock = evaluateDependentWorkspaceExecutionBlock(
+        action,
+        mode,
+        failedWorkspaceExecutionDependencies
+      );
+      if (dependentWorkspaceBlock) {
+        missionState = await recordBlockedActionOutcome({
+          actionResult: dependentWorkspaceBlock.actionResult,
+          appendTraceEvent: this.deps.appendTraceEvent,
+          attemptResults,
+          governanceMemoryStore: this.deps.governanceMemoryStore,
+          idempotencyKey: `${task.id}:${missionAttemptId}:${action.id}`,
+          missionState,
+          taskId: task.id,
+          traceDetails: dependentWorkspaceBlock.traceDetails
+        });
+        continue;
+      }
       const dependentLiveRunBlock = evaluateDependentLiveRunTargetBlock(
         action,
         mode,
@@ -277,6 +302,14 @@ export class TaskRunner {
           taskId: task.id,
           traceDetails: preflightOutcome.blockedOutcome.traceDetails
         });
+        failedManagedProcessStartTargets = rememberFailedManagedProcessStartTarget(
+          failedManagedProcessStartTargets,
+          preflightOutcome.blockedOutcome.actionResult
+        );
+        failedWorkspaceExecutionDependencies = rememberFailedWorkspaceExecutionDependency(
+          failedWorkspaceExecutionDependencies,
+          preflightOutcome.blockedOutcome.actionResult
+        );
         continue;
       }
       const proposal = preflightOutcome.proposal;
@@ -326,6 +359,14 @@ export class TaskRunner {
           taskId: task.id,
           traceDetails: governanceOutcome.blockedTraceDetails
         });
+        failedManagedProcessStartTargets = rememberFailedManagedProcessStartTarget(
+          failedManagedProcessStartTargets,
+          governanceOutcome.blockedResult
+        );
+        failedWorkspaceExecutionDependencies = rememberFailedWorkspaceExecutionDependency(
+          failedWorkspaceExecutionDependencies,
+          governanceOutcome.blockedResult
+        );
         continue;
       }
       const combinedVotes = governanceOutcome.combinedVotes;
@@ -416,6 +457,10 @@ export class TaskRunner {
         });
         failedManagedProcessStartTargets = rememberFailedManagedProcessStartTarget(
           failedManagedProcessStartTargets,
+          executionResult.actionResult
+        );
+        failedWorkspaceExecutionDependencies = rememberFailedWorkspaceExecutionDependency(
+          failedWorkspaceExecutionDependencies,
           executionResult.actionResult
         );
         continue;

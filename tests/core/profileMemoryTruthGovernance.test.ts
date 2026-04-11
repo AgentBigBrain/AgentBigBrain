@@ -554,6 +554,35 @@ test("truth governance only allows the live contact current-state sources", () =
   assert.equal(result.quarantinedFactCandidates.length, 3);
 });
 
+test("family registry keeps contact current-state promotion on explicit live sources only", () => {
+  assert.throws(
+    () =>
+      assertProfileMemoryGovernanceDecisionAllowed({
+        family: "contact.relationship",
+        evidenceClass: "validated_structured_candidate",
+        action: "allow_current_state",
+        reason: "validated_semantic_candidate"
+      }),
+    /live explicit-user sources/i
+  );
+  assert.doesNotThrow(() =>
+    assertProfileMemoryGovernanceDecisionAllowed({
+      family: "contact.work_association",
+      evidenceClass: "user_explicit_fact",
+      action: "allow_current_state",
+      reason: "explicit_user_fact"
+    })
+  );
+  assert.doesNotThrow(() =>
+    assertProfileMemoryGovernanceDecisionAllowed({
+      family: "contact.relationship",
+      evidenceClass: "user_explicit_fact",
+      action: "allow_current_state",
+      reason: "memory_review_correction_override"
+    })
+  );
+});
+
 test("truth governance only allows the live school-association support-only source", () => {
   const result = governProfileMemoryCandidates({
     factCandidates: [

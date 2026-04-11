@@ -19,6 +19,7 @@ import {
   ResponseSynthesisModelOutput,
   StructuredCompletionRequest
 } from "../../src/models/types";
+import { buildAutonomousExecutionInput } from "../../src/interfaces/conversationRuntime/managerContracts";
 import { PlannerOrgan } from "../../src/organs/planner";
 import {
   HOST_TEST_DESKTOP_DIR,
@@ -590,6 +591,38 @@ class ExecutionStyleBuildRepairModelClient implements ModelClient {
         }
       ]
     } as T;
+  }
+}
+
+class FailingIfCalledLocalOrganizationModelClient implements ModelClient {
+  readonly backend = "mock" as const;
+  private plannerCallCount = 0;
+
+  getPlannerCallCount(): number {
+    return this.plannerCallCount;
+  }
+
+  async completeJson<T>(request: StructuredCompletionRequest): Promise<T> {
+    if (request.schemaName === "planner_v1") {
+      this.plannerCallCount += 1;
+    }
+    throw new Error("Planner model should not be called for eager deterministic local organization fallback.");
+  }
+}
+
+class FailingIfCalledDesktopRuntimeSweepModelClient implements ModelClient {
+  readonly backend = "mock" as const;
+  private plannerCallCount = 0;
+
+  getPlannerCallCount(): number {
+    return this.plannerCallCount;
+  }
+
+  async completeJson<T>(request: StructuredCompletionRequest): Promise<T> {
+    if (request.schemaName === "planner_v1") {
+      this.plannerCallCount += 1;
+    }
+    throw new Error("Planner model should not be called for eager deterministic desktop runtime process sweep fallback.");
   }
 }
 
@@ -1538,6 +1571,45 @@ test("planner uses deterministic framework build fallback before model planning 
   }
 });
 
+test("planner keeps eager deterministic framework fallback for fresh autonomous Next.js requests even when stale workspace context is present", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-planner-framework-autonomous-fresh-"));
+  try {
+    const memoryStore = new SemanticMemoryStore(path.join(tempDir, "semantic_memory.json"));
+    const planner = new PlannerOrgan(
+      new PlannerFailureModelClient(),
+      memoryStore,
+      undefined,
+      {
+        platform: "win32",
+        shellKind: "powershell",
+        invocationMode: "inline_command",
+        commandMaxChars: 4000,
+        desktopPath: "C:\\Users\\testuser\\Desktop",
+        documentsPath: "C:\\Users\\testuser\\Documents",
+        downloadsPath: "C:\\Users\\testuser\\Downloads"
+      }
+    );
+
+    const wrappedInput = [
+      "[AUTONOMOUS_LOOP_GOAL] {",
+      "\"goal\":\"I want you to create a nextjs landing page, with 4 sections called \\\"Detroit City\\\" and there should be a footer and header, a gritty feeling design, and you need to do this end to end and put it on my desktop, then leave it open in the browser so i can review it. This means you have to run it and leave it open.\",",
+      "\"initialExecutionInput\":\"You are in an ongoing conversation with the same user.\\nUse recent context to resolve references like 'another', 'same style', and 'as before'.\\n\\nLatest durable work handoff in this chat:\\n- Status: completed\\n- Goal: Earlier Detroit City run\\n- Summary: The prior run stopped before the preview was usable.\\n\\nCurrent tracked workspace in this chat:\\n- Label: Detroit City workspace\\n- Root path: C:\\\\Users\\\\testuser\\\\Desktop\\\\Detroit City\\n- Preview URL: http://127.0.0.1:3000\\n- Still controllable: no\\n- Ownership state: stale\\n\\nCurrent user request:\\nI want you to create a nextjs landing page, with 4 sections called \\\"Detroit City\\\" and there should be a footer and header, a gritty feeling design, and you need to do this end to end and put it on my desktop, then leave it open in the browser so i can review it. This means you have to run it and leave it open.\"",
+      "}"
+    ].join("");
+
+    const plan = await planner.plan(buildTask(wrappedInput), "mock-planner");
+
+    assert.match(
+      plan.plannerNotes ?? "",
+      /deterministic_framework_build_fallback=shell_command/i
+    );
+    assert.equal(plan.actions[0]?.type, "shell_command");
+    assert.equal(plan.actions.at(-1)?.type, "open_browser");
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
 test("planner throws when planner returns no valid actions", async () => {
   await withPlannerClient(new InvalidPlannerActionsModelClient(), async (planner) => {
     await assert.rejects(
@@ -1690,6 +1762,89 @@ test("planner organization prompts allow finite shell planning without explicit 
     plannerRequest.systemPrompt,
     /create the destination folder if it is missing, then move only the matching project folders/i
   );
+});
+
+test("planner uses deterministic local-organization fallback before model planning for explicit desktop organization requests", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-planner-local-organization-eager-"));
+  try {
+    const memoryStore = new SemanticMemoryStore(path.join(tempDir, "semantic_memory.json"));
+    const modelClient = new FailingIfCalledLocalOrganizationModelClient();
+    const planner = new PlannerOrgan(
+      modelClient,
+      memoryStore,
+      undefined,
+      {
+        platform: "win32",
+        shellKind: "powershell",
+        invocationMode: "inline_command",
+        commandMaxChars: 4000,
+        desktopPath: "C:\\Users\\testuser\\Desktop",
+        documentsPath: "C:\\Users\\testuser\\Documents",
+        downloadsPath: "C:\\Users\\testuser\\Downloads"
+      }
+    );
+
+    const plan = await planner.plan(
+      buildTask(
+        'Every folder with the name beginning in drone should go in "drone-folder" on my desktop.'
+      ),
+      "mock-planner"
+    );
+
+    assert.equal(modelClient.getPlannerCallCount(), 0);
+    assert.equal(plan.actions.length, 1);
+    assert.equal(plan.actions[0]?.type, "shell_command");
+    assert.match(
+      plan.plannerNotes ?? "",
+      /deterministic_local_organization_fallback=shell_command/i
+    );
+    assert.match(String(plan.actions[0]?.params.command), /ROOT_REMAINING_MATCHES:/i);
+    assert.match(String(plan.actions[0]?.params.command), /DEST_CONTENTS:/i);
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("planner uses deterministic desktop runtime process sweep fallback before model planning for explicit Desktop drone-folder server shutdown requests", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-planner-runtime-sweep-eager-"));
+  try {
+    const memoryStore = new SemanticMemoryStore(path.join(tempDir, "semantic_memory.json"));
+    const modelClient = new FailingIfCalledDesktopRuntimeSweepModelClient();
+    const planner = new PlannerOrgan(
+      modelClient,
+      memoryStore,
+      undefined,
+      {
+        platform: "win32",
+        shellKind: "powershell",
+        invocationMode: "inline_command",
+        commandMaxChars: 4000,
+        desktopPath: "C:\\Users\\testuser\\Desktop",
+        documentsPath: "C:\\Users\\testuser\\Documents",
+        downloadsPath: "C:\\Users\\testuser\\Downloads"
+      }
+    );
+
+    const plan = await planner.plan(
+      buildTask(
+        "Look at all the folders on the desktop that start with drone and Drone, stop the servers that are running in the folders do this end to end"
+      ),
+      "mock-planner"
+    );
+
+    assert.equal(modelClient.getPlannerCallCount(), 0);
+    assert.equal(plan.actions.length, 1);
+    assert.equal(plan.actions[0]?.type, "stop_folder_runtime_processes");
+    assert.match(
+      plan.plannerNotes ?? "",
+      /deterministic_desktop_runtime_process_sweep_fallback=stop_folder_runtime_processes/i
+    );
+    assert.equal(plan.actions[0]?.params.rootPath, "C:\\Users\\testuser\\Desktop");
+    assert.equal(plan.actions[0]?.params.selectorMode, "starts_with");
+    assert.equal(plan.actions[0]?.params.selectorTerm, "drone");
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
 });
 
 test("planner live-verification build prompts can allow managed process planning without explicit shell-name phrasing", async () => {
@@ -2116,6 +2271,89 @@ test("planner keeps exact blocked paths when explicit workspace-recovery inspect
       ]
     );
     assert.match(plan.plannerNotes ?? "", /deterministic_explicit_runtime_fallback=inspect_path_holders/i);
+  });
+});
+
+test("planner synthesizes tracked inspect_workspace_resources from wrapped autonomous runtime inspection requests", async () => {
+  const modelClient = new DeterministicInvalidPlannerModelClient();
+  const currentUserRequest =
+    'did you make sure you shut down "Detroit City Two" so that the server is no longer running? Please do this end to end - check and make sure.';
+  const wrappedExecutionInput = buildAutonomousExecutionInput(
+    currentUserRequest,
+    [
+      "You are in an ongoing conversation with the same user.",
+      "",
+      "Current tracked workspace in this chat:",
+      "- Root path: C:\\Users\\testuser\\Desktop\\Detroit City Two",
+      "- Preview URL: http://127.0.0.1:3000/",
+      "- Preview process lease: proc_detroit_two",
+      "",
+      "Tracked browser sessions:",
+      "- Browser window: sessionId=browser_session:detroit_two; url=http://127.0.0.1:3000/; status=closed; visibility=visible; controller=playwright_managed; control=unavailable; linkedPreviewLease=proc_detroit_two; linkedPreviewCwd=C:\\Users\\testuser\\Desktop\\Detroit City Two",
+      "",
+      "Current user request:",
+      currentUserRequest
+    ].join("\n")
+  );
+
+  await withPlannerClient(modelClient, async (planner) => {
+    const plan = await planner.plan(buildTask(wrappedExecutionInput), "mock-planner");
+
+    assert.equal(plan.actions.length, 1);
+    assert.equal(plan.actions[0]?.type, "inspect_workspace_resources");
+    assert.equal(
+      plan.actions[0]?.params.rootPath,
+      "C:\\Users\\testuser\\Desktop\\Detroit City Two"
+    );
+    assert.equal(plan.actions[0]?.params.previewUrl, "http://127.0.0.1:3000/");
+    assert.equal(
+      plan.actions[0]?.params.browserSessionId,
+      "browser_session:detroit_two"
+    );
+    assert.equal(plan.actions[0]?.params.previewProcessLeaseId, "proc_detroit_two");
+    assert.match(
+      plan.plannerNotes ?? "",
+      /deterministic_explicit_runtime_fallback=inspect_workspace_resources/i
+    );
+  });
+});
+
+test("planner uses deterministic explicit runtime fallback on planner failures for wrapped autonomous runtime inspection requests", async () => {
+  const currentUserRequest =
+    "please inspect and see if Detroit City Two is still running, do this end to end";
+  const wrappedExecutionInput = buildAutonomousExecutionInput(
+    currentUserRequest,
+    [
+      "You are in an ongoing conversation with the same user.",
+      "",
+      "Current tracked workspace in this chat:",
+      "- Root path: C:\\Users\\testuser\\Desktop\\Detroit City Two",
+      "- Preview URL: http://127.0.0.1:3000/",
+      "- Preview process lease: proc_detroit_two",
+      "",
+      "Tracked browser sessions:",
+      "- Browser window: sessionId=browser_session:detroit_two; url=http://127.0.0.1:3000/; status=closed; visibility=visible; controller=playwright_managed; control=unavailable; linkedPreviewLease=proc_detroit_two; linkedPreviewCwd=C:\\Users\\testuser\\Desktop\\Detroit City Two",
+      "",
+      "Current user request:",
+      currentUserRequest
+    ].join("\n")
+  );
+
+  await withPlannerClient(new PlannerFailureModelClient(), async (planner) => {
+    const plan = await planner.plan(buildTask(wrappedExecutionInput), "mock-planner");
+
+    assert.equal(plan.actions.length, 1);
+    assert.equal(plan.actions[0]?.type, "inspect_workspace_resources");
+    assert.equal(
+      plan.actions[0]?.params.rootPath,
+      "C:\\Users\\testuser\\Desktop\\Detroit City Two"
+    );
+    assert.equal(plan.actions[0]?.params.previewUrl, "http://127.0.0.1:3000/");
+    assert.equal(plan.actions[0]?.params.previewProcessLeaseId, "proc_detroit_two");
+    assert.match(
+      plan.plannerNotes ?? "",
+      /deterministic_explicit_runtime_fallback=inspect_workspace_resources/i
+    );
   });
 });
 

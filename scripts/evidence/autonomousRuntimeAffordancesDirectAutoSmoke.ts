@@ -98,11 +98,16 @@ interface EnvSnapshot {
   [key: string]: string | undefined;
 }
 
-const BOUNDED_BLOCK_PATTERN =
+const BOUNDED_PROVIDER_BLOCK_PATTERN =
   /(?:429|exceeded your current quota|usage limit|purchase more credits|try again at|rate limit|fetch failed|request timed out|socket hang up|ECONNRESET|governor timeout or failure|requires a real model backend|effective backend is mock|missing OPENAI_API_KEY)/i;
+const BOUNDED_LOCAL_ORGANIZATION_BLOCK_PATTERN =
+  /(?:Planner model did not include a real folder-move step for this local organization request|Planner model retried the local organization move without also proving what moved into the destination and what remained at the original root|Planner model selected the named destination folder as part of the same move set, which risks nesting the destination inside itself|Planner model used cmd-style shell moves for a Windows PowerShell organization request|Planner model used invalid PowerShell variable interpolation for a Windows organization move command)/i;
 
 function isBoundedSmokeBlock(summaryText: string): boolean {
-  return BOUNDED_BLOCK_PATTERN.test(summaryText);
+  return (
+    BOUNDED_PROVIDER_BLOCK_PATTERN.test(summaryText) ||
+    BOUNDED_LOCAL_ORGANIZATION_BLOCK_PATTERN.test(summaryText)
+  );
 }
 
 function applyEnvOverrides(overrides: Readonly<Record<string, string>>): EnvSnapshot {
@@ -147,6 +152,61 @@ async function pathExists(targetPath: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function parseMovedEntriesFromSummary(summaryText: string): string[] {
+  const movedMatch = summaryText.match(/MOVED_TO_DEST=([^\r\n]*)/i);
+  return (movedMatch?.[1] ?? "")
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0)
+    .sort((left, right) => left.localeCompare(right));
+}
+
+function summaryShowsNoRemainingMatches(summaryText: string): boolean {
+  return /ROOT_REMAINING_MATCHES:\s*(?:\r?\n|$)/i.test(summaryText);
+}
+
+async function readDirectAutoFilesystemProof(input: {
+  destinationFolderPath: string;
+  desktopPath: string;
+  prefix: string;
+  destinationFolderName: string;
+}): Promise<{
+  destinationCreated: boolean;
+  movedEntries: string[];
+  desktopEntriesAfter: readonly string[];
+  nestedDestinationExists: boolean;
+}> {
+  const deadlineAt = Date.now() + 2_000;
+  let destinationCreated = false;
+  let movedEntries: string[] = [];
+  let desktopEntriesAfter: readonly string[] = [];
+  let nestedDestinationExists = false;
+
+  while (Date.now() < deadlineAt) {
+    destinationCreated = await pathExists(input.destinationFolderPath);
+    movedEntries = await readdir(input.destinationFolderPath).catch((): string[] => []);
+    desktopEntriesAfter = await listMatchingDesktopDirectories(input.desktopPath, input.prefix);
+    nestedDestinationExists = await pathExists(
+      path.join(input.destinationFolderPath, input.destinationFolderName)
+    );
+    if (destinationCreated || movedEntries.length > 0 || desktopEntriesAfter.length > 0) {
+      break;
+    }
+    await sleep(100);
+  }
+
+  return {
+    destinationCreated,
+    movedEntries: [...movedEntries].sort((left, right) => left.localeCompare(right)),
+    desktopEntriesAfter,
+    nestedDestinationExists
+  };
 }
 
 async function cleanupProofFolders(desktopPath: string, prefix: string): Promise<void> {
@@ -470,11 +530,6 @@ Promise<AutonomousRuntimeAffordancesDirectAutoArtifact> {
       abortedByBudget = retryRun.abortedByBudget;
     }
 
-    const movedEntries = await readdir(destinationFolderPath).catch((): string[] => []);
-    const desktopEntriesAfter = await listMatchingDesktopDirectories(desktopPath, targetPrefix);
-    const nestedDestinationExists = await pathExists(
-      path.join(destinationFolderPath, destinationFolderName)
-    );
     const userFacingSummary = executionResult.taskRunResult
       ? selectUserFacingSummary(executionResult.taskRunResult)
       : null;
@@ -482,6 +537,27 @@ Promise<AutonomousRuntimeAffordancesDirectAutoArtifact> {
       executionResult.summary,
       userFacingSummary ?? ""
     ].join("\n");
+    const parsedMovedEntries = parseMovedEntriesFromSummary(finalAttemptSummaryText);
+    const parsedNoRemainingMatches = summaryShowsNoRemainingMatches(finalAttemptSummaryText);
+    const filesystemProof = await readDirectAutoFilesystemProof({
+      destinationFolderPath,
+      desktopPath,
+      prefix: targetPrefix,
+      destinationFolderName
+    });
+    const movedEntries =
+      filesystemProof.movedEntries.length > 0
+        ? filesystemProof.movedEntries
+        : parsedMovedEntries;
+    const desktopEntriesAfter =
+      filesystemProof.desktopEntriesAfter.length > 0
+        ? filesystemProof.desktopEntriesAfter
+        : parsedNoRemainingMatches
+          ? [destinationFolderName]
+          : [];
+    const destinationCreated =
+      filesystemProof.destinationCreated || movedEntries.length > 0;
+    const nestedDestinationExists = filesystemProof.nestedDestinationExists;
     const finalAttemptBlockedByProvider = isBoundedSmokeBlock(finalAttemptSummaryText);
     const finalAttemptBlockedByBudget =
       abortedByBudget &&
@@ -515,14 +591,14 @@ Promise<AutonomousRuntimeAffordancesDirectAutoArtifact> {
       userFacingSummary,
       blockerReason: finalAttemptBlockerReason,
       transientProviderFailureRecovered: recoveredTransientProviderFailure,
-      movedEntries: [...movedEntries].sort((left, right) => left.localeCompare(right)),
+      movedEntries,
       desktopEntriesAfter,
       progressMessages,
       progressStates,
       checks: {
         directEntryPointUsed: true,
         boundedExit: true,
-        destinationCreated: await pathExists(destinationFolderPath),
+        destinationCreated,
         movedMatchingFolders:
           sourceFolderNames.every((entry) => movedEntries.includes(entry)),
         noRemainingMatchingFoldersAtDesktopRoot:

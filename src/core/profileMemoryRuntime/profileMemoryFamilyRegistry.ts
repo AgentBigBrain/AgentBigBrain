@@ -1,41 +1,14 @@
 /** @fileoverview Code-owned family registry for profile-memory governance policy. */
-import type { ProfileMemoryAdjacentDomain, ProfileMemoryAdjacentDomainPolicy, ProfileMemoryCompatibilityProjectionPolicy, ProfileMemoryContactGovernanceFamily, ProfileMemoryEvidenceClass, ProfileMemoryFamilyRegistryEntry, ProfileMemoryMinimumSensitivityFloor, ProfileMemoryGovernanceDecision, ProfileMemoryGovernanceFamily } from "./profileMemoryTruthGovernanceContracts";
+import type { ProfileMemoryAdjacentDomain, ProfileMemoryEvidenceClass, ProfileMemoryFamilyRegistryEntry, ProfileMemoryMinimumSensitivityFloor, ProfileMemoryGovernanceDecision, ProfileMemoryGovernanceFamily } from "./profileMemoryTruthGovernanceContracts";
+import {
+  PROFILE_MEMORY_CONTACT_COMPATIBILITY_PROJECTION_TABLE,
+  withAdjacentDomainOverrides
+} from "./profileMemoryFamilyRegistrySupport";
 import { isSensitiveKey } from "./profileMemoryNormalization";
 
-const DEFAULT_ADJACENT_DOMAIN_POLICY: ProfileMemoryAdjacentDomainPolicy = {
-  structured_conversation: "disallowed",
-  reconciliation_projection: "disallowed",
-  assistant_inference: "disallowed",
-  semantic_memory: "auxiliary_only",
-  governance_history: "auxiliary_only",
-  audit_trail: "auxiliary_only",
-  session_continuity: "auxiliary_only",
-  stage6_86: "auxiliary_only"
-};
-
-/**
- * Builds one full adjacent-domain policy by overlaying family-specific access on top of the
- * fail-closed defaults.
- *
- * @param overrides - Family-specific adjacent-domain access overrides.
- * @returns One complete adjacent-domain policy record.
- */
-function withAdjacentDomainOverrides(
-  overrides: Partial<ProfileMemoryAdjacentDomainPolicy>
-): ProfileMemoryAdjacentDomainPolicy {
-  return {
-    ...DEFAULT_ADJACENT_DOMAIN_POLICY,
-    ...overrides
-  };
-}
+export { PROFILE_MEMORY_CONTACT_COMPATIBILITY_PROJECTION_TABLE } from "./profileMemoryFamilyRegistrySupport";
 
 export const PROFILE_MEMORY_FAMILY_REGISTRY_VERSION = 1 as const;
-
-export const PROFILE_MEMORY_CONTACT_COMPATIBILITY_PROJECTION_TABLE: Readonly<Record<ProfileMemoryContactGovernanceFamily, ProfileMemoryCompatibilityProjectionPolicy>> = {
-  "contact.name": "corroboration_hidden", "contact.relationship": "ordinary_current_truth",
-  "contact.work_association": "ordinary_current_truth", "contact.school_association": "support_only_hidden",
-  "contact.context": "support_only_visible", "contact.entity_hint": "corroboration_hidden"
-} as const;
 
 export const PROFILE_MEMORY_FAMILY_REGISTRY: Readonly<
   Record<ProfileMemoryGovernanceFamily, ProfileMemoryFamilyRegistryEntry>
@@ -44,6 +17,7 @@ export const PROFILE_MEMORY_FAMILY_REGISTRY: Readonly<
     family: "identity.preferred_name",
     cardinality: "singular",
     currentStateEligible: true,
+    currentStateAdmissionPolicy: "validated_or_explicit_live_source_only",
     episodeSupportEligible: false,
     endStatePolicy: "none",
     displacementPolicy: "replace_authoritative_successor",
@@ -62,6 +36,7 @@ export const PROFILE_MEMORY_FAMILY_REGISTRY: Readonly<
     family: "employment.current",
     cardinality: "singular",
     currentStateEligible: true,
+    currentStateAdmissionPolicy: "explicit_live_source_only",
     episodeSupportEligible: false,
     endStatePolicy: "support_only_transition",
     displacementPolicy: "preserve_prior_on_conflict",
@@ -78,6 +53,7 @@ export const PROFILE_MEMORY_FAMILY_REGISTRY: Readonly<
     family: "residence.current",
     cardinality: "singular",
     currentStateEligible: true,
+    currentStateAdmissionPolicy: "explicit_live_source_only",
     episodeSupportEligible: false,
     endStatePolicy: "support_only_transition",
     displacementPolicy: "preserve_prior_on_conflict",
@@ -94,6 +70,7 @@ export const PROFILE_MEMORY_FAMILY_REGISTRY: Readonly<
     family: "followup.resolution",
     cardinality: "singular",
     currentStateEligible: false,
+    currentStateAdmissionPolicy: "not_allowed",
     episodeSupportEligible: false,
     endStatePolicy: "canonical_end_state",
     displacementPolicy: "resolution_only",
@@ -113,6 +90,7 @@ export const PROFILE_MEMORY_FAMILY_REGISTRY: Readonly<
     family: "contact.name",
     cardinality: "singular",
     currentStateEligible: true,
+    currentStateAdmissionPolicy: "explicit_live_source_only",
     episodeSupportEligible: false,
     endStatePolicy: "none",
     displacementPolicy: "preserve_prior_on_conflict",
@@ -129,6 +107,7 @@ export const PROFILE_MEMORY_FAMILY_REGISTRY: Readonly<
     family: "contact.relationship",
     cardinality: "singular",
     currentStateEligible: true,
+    currentStateAdmissionPolicy: "explicit_live_source_only",
     episodeSupportEligible: false,
     endStatePolicy: "support_only_transition",
     displacementPolicy: "preserve_prior_on_conflict",
@@ -145,6 +124,7 @@ export const PROFILE_MEMORY_FAMILY_REGISTRY: Readonly<
     family: "contact.work_association",
     cardinality: "singular",
     currentStateEligible: true,
+    currentStateAdmissionPolicy: "explicit_live_source_only",
     episodeSupportEligible: false,
     endStatePolicy: "support_only_transition",
     displacementPolicy: "preserve_prior_on_conflict",
@@ -161,6 +141,7 @@ export const PROFILE_MEMORY_FAMILY_REGISTRY: Readonly<
     family: "contact.school_association",
     cardinality: "singular",
     currentStateEligible: false,
+    currentStateAdmissionPolicy: "not_allowed",
     episodeSupportEligible: false,
     endStatePolicy: "support_only_transition",
     displacementPolicy: "preserve_prior_on_conflict",
@@ -177,6 +158,7 @@ export const PROFILE_MEMORY_FAMILY_REGISTRY: Readonly<
     family: "contact.context",
     cardinality: "multi",
     currentStateEligible: false,
+    currentStateAdmissionPolicy: "not_allowed",
     episodeSupportEligible: false,
     endStatePolicy: "none",
     displacementPolicy: "append_multi_value",
@@ -193,6 +175,7 @@ export const PROFILE_MEMORY_FAMILY_REGISTRY: Readonly<
     family: "contact.entity_hint",
     cardinality: "auxiliary",
     currentStateEligible: false,
+    currentStateAdmissionPolicy: "not_allowed",
     episodeSupportEligible: false,
     endStatePolicy: "none",
     displacementPolicy: "not_applicable",
@@ -209,6 +192,7 @@ export const PROFILE_MEMORY_FAMILY_REGISTRY: Readonly<
     family: "generic.profile_fact",
     cardinality: "singular",
     currentStateEligible: true,
+    currentStateAdmissionPolicy: "validated_or_explicit_live_source_only",
     episodeSupportEligible: false,
     endStatePolicy: "none",
     displacementPolicy: "preserve_prior_on_conflict",
@@ -225,6 +209,7 @@ export const PROFILE_MEMORY_FAMILY_REGISTRY: Readonly<
     family: "episode.candidate",
     cardinality: "episode_only",
     currentStateEligible: false,
+    currentStateAdmissionPolicy: "not_allowed",
     episodeSupportEligible: true,
     endStatePolicy: "none",
     displacementPolicy: "append_multi_value",
@@ -243,6 +228,7 @@ export const PROFILE_MEMORY_FAMILY_REGISTRY: Readonly<
     family: "episode.resolution",
     cardinality: "episode_only",
     currentStateEligible: false,
+    currentStateAdmissionPolicy: "not_allowed",
     episodeSupportEligible: false,
     endStatePolicy: "canonical_end_state",
     displacementPolicy: "resolution_only",
@@ -259,27 +245,14 @@ export const PROFILE_MEMORY_FAMILY_REGISTRY: Readonly<
   }
 } as const;
 
-/**
- * Returns the code-owned family-registry entry for one canonical profile-memory governance family.
- *
- * @param family - Canonical profile-memory family.
- * @returns Registry entry for that family.
- */
+/** Returns the code-owned registry entry for one canonical profile-memory governance family. */
 export function getProfileMemoryFamilyRegistryEntry(
   family: ProfileMemoryGovernanceFamily
 ): ProfileMemoryFamilyRegistryEntry {
   return PROFILE_MEMORY_FAMILY_REGISTRY[family];
 }
 
-/**
- * Infers the adjacent runtime domain that produced one governed candidate source when that source
- * came from an adjacent system instead of a direct explicit-user seam.
- *
- * @param source - Raw candidate source string.
- * @param evidenceClass - Closed evidence class already assigned by governance.
- * @returns Adjacent-domain label, or `null` when the source is part of the direct explicit-user
- * path.
- */
+/** Infers one adjacent runtime domain from the bounded governed source/evidence pair. */
 export function inferProfileMemoryAdjacentDomain(
   source: string,
   evidenceClass: ProfileMemoryEvidenceClass
@@ -320,15 +293,17 @@ export function inferProfileMemoryAdjacentDomain(
   return null;
 }
 
-/**
- * Fails closed when a deterministic governance decision violates the code-owned family registry.
- *
- * @param decision - Governance decision produced by the deterministic truth-governance layer.
- */
+/** Fails closed when one governance decision violates the code-owned family registry. */
 export function assertProfileMemoryGovernanceDecisionAllowed(
   decision: ProfileMemoryGovernanceDecision
 ): void {
   const familyEntry = getProfileMemoryFamilyRegistryEntry(decision.family);
+  const isLiveExplicitCurrentStateDecision =
+    decision.evidenceClass === "user_explicit_fact" &&
+    (
+      decision.reason === "explicit_user_fact" ||
+      decision.reason === "legacy_fact_family_default"
+    );
 
   if (decision.action === "allow_current_state" && !familyEntry.currentStateEligible) {
     throw new Error(
@@ -359,15 +334,37 @@ export function assertProfileMemoryGovernanceDecisionAllowed(
       `Family ${decision.family} does not allow end-state decisions in the profile-memory family registry.`
     );
   }
+  if (decision.action === "allow_current_state") {
+    if (decision.reason === "memory_review_correction_override") {
+      return;
+    }
+    if (
+      familyEntry.currentStateAdmissionPolicy === "explicit_live_source_only" &&
+      !isLiveExplicitCurrentStateDecision
+    ) {
+      throw new Error(
+        `Family ${decision.family} only allows current-state promotion from live explicit-user sources in the profile-memory family registry.`
+      );
+    }
+    if (
+      familyEntry.currentStateAdmissionPolicy ===
+        "validated_or_explicit_live_source_only" &&
+      !(
+        isLiveExplicitCurrentStateDecision ||
+        (
+          decision.evidenceClass === "validated_structured_candidate" &&
+          decision.reason === "validated_semantic_candidate"
+        )
+      )
+    ) {
+      throw new Error(
+        `Family ${decision.family} only allows current-state promotion from live explicit or validated semantic sources in the profile-memory family registry.`
+      );
+    }
+  }
 }
 
-/**
- * Fails closed when a non-user adjacent runtime domain attempts a governance action that the
- * family registry does not authorize for that domain.
- *
- * @param source - Raw candidate source string.
- * @param decision - Governance decision produced by the deterministic truth-governance layer.
- */
+/** Fails closed when one adjacent runtime domain attempts an unauthorized governance action. */
 export function assertProfileMemoryAdjacentDomainAccessAllowed(
   source: string,
   decision: ProfileMemoryGovernanceDecision
@@ -403,28 +400,14 @@ export function assertProfileMemoryAdjacentDomainAccessAllowed(
   }
 }
 
-/**
- * Returns the effective minimum sensitivity floor configured for one canonical profile-memory
- * family.
- *
- * @param family - Canonical profile-memory family.
- * @returns Minimum sensitivity floor for the family.
- */
+/** Returns the effective minimum sensitivity floor for one canonical profile-memory family. */
 export function getProfileMemoryMinimumSensitivityFloor(
   family: ProfileMemoryGovernanceFamily
 ): ProfileMemoryMinimumSensitivityFloor {
   return getProfileMemoryFamilyRegistryEntry(family).minimumSensitivityFloor;
 }
 
-/**
- * Applies the code-owned family-level minimum sensitivity floor to one fact-like candidate or
- * stored fact projection.
- *
- * @param family - Canonical profile-memory family that owns the sensitivity floor.
- * @param sensitive - Existing sensitivity bit on the fact-like record.
- * @param key - Optional fact key used by heuristic-backed family floors.
- * @returns Effective sensitivity after the family floor is enforced.
- */
+/** Applies the family-owned minimum sensitivity floor to one fact-like candidate or projection. */
 export function applyProfileMemoryMinimumSensitivityFloor(
   family: ProfileMemoryGovernanceFamily,
   sensitive: boolean,

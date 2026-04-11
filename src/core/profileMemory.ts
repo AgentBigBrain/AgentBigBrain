@@ -238,12 +238,29 @@ export interface ProfileMemoryIngestReceiptRecord {
   recordedAt: string;
 }
 
+/**
+ * Canonical persisted profile-memory envelope.
+ *
+ * **Why it exists:**
+ * The encrypted store still carries retained compatibility facts and episodes for stable older
+ * read surfaces, but the additive graph is now the authoritative internal truth owner. Keeping
+ * that hierarchy explicit here prevents future runtime code from treating persisted compatibility
+ * arrays as a second co-equal truth surface.
+ *
+ * **What it talks to:**
+ * - Uses `ProfileMemoryGraphStateShape` (import type) from
+ *   `./profileMemoryRuntime/profileMemoryGraphContracts`.
+ * - Uses retained fact and episode contracts exported from this module.
+ */
 export interface ProfileMemoryState {
   schemaVersion: number;
   updatedAt: string;
+  /** Derived compatibility cache kept for stable legacy reads during the cleanup window. */
   facts: ProfileFactRecord[];
+  /** Derived compatibility cache kept for stable legacy episodic reads during the cleanup window. */
   episodes: ProfileEpisodeRecord[];
   ingestReceipts: ProfileMemoryIngestReceiptRecord[];
+  /** Authoritative graph-backed truth surface for temporal relational memory. */
   graph: ProfileMemoryGraphStateShape;
 }
 

@@ -42,7 +42,7 @@ import {
 import { resolveInterpretedEntityReferenceHints, type InterpretedEntityReferenceHints } from "./contextualEntityReferenceInterpretationSupport";
 import {
   dedupeRecallHints,
-  isStructuredContinuityFactResult,
+  ensureStructuredContinuityFactResult,
   toMemorySynthesisFactRecord
 } from "./contextualRecallContinuitySupport";
 import {
@@ -285,13 +285,15 @@ export async function buildContextualRecallBlock(
       maxFacts: 3
     }).catch(() => [])
     : [];
-  const synthesis = isStructuredContinuityFactResult(supportingFacts)
-    ? buildRecallSynthesis(
-        supportingFacts.temporalSynthesis,
-        supportingEpisodes,
-        supportingFacts.map(toMemorySynthesisFactRecord)
-      )
-    : buildRecallSynthesis(supportingEpisodes, supportingFacts);
+  const structuredSupportingFacts = ensureStructuredContinuityFactResult(supportingFacts, {
+    semanticMode: "relationship_inventory",
+    relevanceScope: "conversation_local"
+  });
+  const synthesis = buildRecallSynthesis(
+    structuredSupportingFacts.temporalSynthesis,
+    supportingEpisodes,
+    structuredSupportingFacts.map(toMemorySynthesisFactRecord)
+  );
   if (interpretedEntityHints) {
     recordProfileMemoryIdentitySafetyDecision(requestTelemetry);
   }

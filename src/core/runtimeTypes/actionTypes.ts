@@ -21,6 +21,7 @@ export type ActionType =
   | "verify_browser"
   | "open_browser"
   | "close_browser"
+  | "stop_folder_runtime_processes"
   | "inspect_path_holders"
   | "inspect_workspace_resources"
   | "memory_mutation"

@@ -3,11 +3,6 @@
  */
 
 import type { TemporalMemorySynthesis } from "../../core/profileMemoryRuntime/profileMemoryTemporalQueryContracts";
-import type {
-  MemorySynthesisEpisodeRecord,
-  MemorySynthesisFactRecord
-} from "./contracts";
-import { buildLegacyCompatibleTemporalSynthesis } from "./temporalSynthesisAdapter";
 
 const MAX_PLANNER_CURRENT_STATE_LINES = 3;
 const MAX_PLANNER_HISTORICAL_LINES = 2;
@@ -47,36 +42,17 @@ export function buildPlannerContextSynthesisBlock(
   synthesis: TemporalMemorySynthesis | null
 ): string;
 /**
- * Builds one planner-facing temporal split-view block from compatibility records.
- *
- * @param episodes - Planner-relevant remembered situations.
- * @param facts - Planner-relevant facts.
- * @returns Multi-line synthesis block or empty string when support is weak.
- */
-export function buildPlannerContextSynthesisBlock(
-  episodes: readonly MemorySynthesisEpisodeRecord[],
-  facts?: readonly MemorySynthesisFactRecord[]
-): string;
-/**
  * Builds one bounded planner-facing temporal split-view block.
  *
- * @param synthesisOrEpisodes - Canonical temporal synthesis, or compatibility episodes.
- * @param facts - Planner-relevant facts when compatibility episodes are supplied.
+ * Live planner callers now hand this renderer canonical temporal synthesis directly instead of
+ * rebuilding planner text from compatibility episode/fact arrays inside the renderer itself.
+ *
+ * @param synthesis - Canonical temporal synthesis for the current planner request.
  * @returns Multi-line synthesis block or empty string when support is weak.
  */
 export function buildPlannerContextSynthesisBlock(
-  synthesisOrEpisodes: TemporalMemorySynthesis | null | readonly MemorySynthesisEpisodeRecord[],
-  facts: readonly MemorySynthesisFactRecord[] = []
+  synthesis: TemporalMemorySynthesis | null
 ): string {
-  let synthesis: TemporalMemorySynthesis | null;
-  if (Array.isArray(synthesisOrEpisodes)) {
-    synthesis = buildLegacyCompatibleTemporalSynthesis(
-      synthesisOrEpisodes,
-      facts
-    )?.temporalSynthesis ?? null;
-  } else {
-    synthesis = synthesisOrEpisodes as TemporalMemorySynthesis | null;
-  }
   if (
     !synthesis ||
     (

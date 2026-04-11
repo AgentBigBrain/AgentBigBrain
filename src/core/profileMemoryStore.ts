@@ -35,6 +35,7 @@ import {
   createProfileMemoryReadSession,
   type ProfileMemoryReadSession
 } from "./profileMemoryRuntime/profileMemoryReadSession";
+import type { TemporalMemorySynthesis } from "./profileMemoryRuntime/profileMemoryTemporalQueryContracts";
 import {
   buildProfileMemorySourceFingerprint
 } from "./profileMemoryRuntime/profileMemoryIngestProvenance";
@@ -166,6 +167,50 @@ export class ProfileMemoryStore {
   }
 
   /**
+   * Reconciles one persisted profile-memory snapshot into the deterministic read shape without
+   * mutating disk unless an explicit maintenance or write path chooses to persist it.
+   */
+  private reconcileLoadedState(
+    state: ProfileMemoryState,
+    nowIso = new Date().toISOString()
+  ): {
+    nextState: ProfileMemoryState;
+    shouldPersist: boolean;
+  } {
+    const staleResult = markStaleFactsAsUncertain(state, this.staleAfterDays);
+    let nextState = staleResult.nextState;
+    let shouldPersist = staleResult.updatedFactIds.length > 0;
+
+    const reconciliationCandidates = buildStateReconciliationResolutionCandidates(
+      nextState,
+      nowIso
+    );
+    const reconciliationResult = applyProfileFactCandidates(
+      nextState,
+      reconciliationCandidates
+    );
+    if (reconciliationResult.appliedFacts > 0) {
+      nextState = reconciliationResult.nextState;
+      shouldPersist = true;
+    }
+
+    const consolidationResult = consolidateProfileEpisodes(nextState.episodes);
+    if (consolidationResult.consolidatedEpisodeCount > 0) {
+      nextState = {
+        ...nextState,
+        updatedAt: nowIso,
+        episodes: consolidationResult.episodes
+      };
+      shouldPersist = true;
+    }
+
+    return {
+      nextState,
+      shouldPersist
+    };
+  }
+
+  /**
    * Builds a `ProfileMemoryStore` from environment configuration.
    *
    * **Why it exists:**
@@ -197,54 +242,43 @@ export class ProfileMemoryStore {
    * Loads encrypted profile memory, applies deterministic reconciliation, and returns state.
    *
    * **Why it exists:**
-   * Profile reads are not a pure file fetch: stale-fact downgrades and commitment reconciliation
-   * can mutate state and must be persisted immediately to keep subsequent reads consistent.
+   * Profile reads still need stale-fact downgrades and commitment reconciliation before callers
+   * rank or synthesize results, but the read path itself must stay non-mutating so request-scoped
+   * sessions remain pure snapshots.
    *
    * **What it talks to:**
    * - Uses `markStaleFactsAsUncertain` (import `markStaleFactsAsUncertain`) from `./profileMemory`.
    * - Uses `ProfileMemoryState` (import `ProfileMemoryState`) from `./profileMemory`.
    * - Uses `loadPersistedProfileMemoryState` (import `loadPersistedProfileMemoryState`) from
    *   `./profileMemoryRuntime/profileMemoryPersistence`.
-   * @returns Normalized profile state, persisted if reconciliation made deterministic changes.
+   * @returns Reconciled profile state without mutating persisted storage.
    */
   async load(requestTelemetry?: ProfileMemoryRequestTelemetry): Promise<ProfileMemoryState> {
     recordProfileMemoryStoreLoad(requestTelemetry);
-    const nowIso = new Date().toISOString();
     const state = await loadPersistedProfileMemoryState(this.filePath, this.encryptionKey);
-    const staleResult = markStaleFactsAsUncertain(
-      state,
-      this.staleAfterDays
-    );
-    let nextState = staleResult.nextState;
-    let shouldPersist = staleResult.updatedFactIds.length > 0;
+    return this.reconcileLoadedState(state).nextState;
+  }
 
-    const reconciliationCandidates = buildStateReconciliationResolutionCandidates(
-      nextState,
-      new Date().toISOString()
-    );
-    const reconciliationResult = applyProfileFactCandidates(
-      nextState,
-      reconciliationCandidates
-    );
-    if (reconciliationResult.appliedFacts > 0) {
-      nextState = reconciliationResult.nextState;
-      shouldPersist = true;
+  /**
+   * Reconciles persisted profile memory and writes deterministic repairs explicitly.
+   *
+   * **Why it exists:**
+   * Cleanup work removes silent write-on-read behavior, so callers that truly need stored repair
+   * persistence must opt into it through a dedicated maintenance seam.
+   *
+   * @param requestTelemetry - Optional request-scoped telemetry accumulator.
+   * @returns Reconciled profile state after any explicit persistence.
+   */
+  async repairPersistedState(
+    requestTelemetry?: ProfileMemoryRequestTelemetry
+  ): Promise<ProfileMemoryState> {
+    recordProfileMemoryStoreLoad(requestTelemetry);
+    const state = await loadPersistedProfileMemoryState(this.filePath, this.encryptionKey);
+    const reconciliation = this.reconcileLoadedState(state);
+    if (reconciliation.shouldPersist) {
+      await this.save(reconciliation.nextState);
     }
-
-    const consolidationResult = consolidateProfileEpisodes(nextState.episodes);
-    if (consolidationResult.consolidatedEpisodeCount > 0) {
-      nextState = {
-        ...nextState,
-        updatedAt: nowIso,
-        episodes: consolidationResult.episodes
-      };
-      shouldPersist = true;
-    }
-
-    if (shouldPersist) {
-      await this.save(nextState);
-    }
-    return nextState;
+    return reconciliation.nextState;
   }
 
   /**
@@ -472,6 +506,23 @@ export class ProfileMemoryStore {
       asOfValidTime,
       asOfObservedTime
     });
+  }
+
+  /**
+   * Returns planner-facing canonical temporal synthesis from one shared request snapshot.
+   *
+   * @param queryInput - Current planner query text.
+   * @param asOfObservedTime - Optional observed-time boundary for bounded proof selection.
+   * @returns Canonical temporal synthesis or `null` when nothing relevant is available.
+   */
+  async queryTemporalPlanningSynthesis(
+    queryInput = "",
+    asOfObservedTime = new Date().toISOString()
+  ): Promise<TemporalMemorySynthesis | null> {
+    return (await this.openReadSession()).queryTemporalPlanningSynthesis(
+      queryInput,
+      asOfObservedTime
+    );
   }
 
   /**

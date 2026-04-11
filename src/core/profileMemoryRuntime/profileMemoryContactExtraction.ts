@@ -397,5 +397,33 @@ export function extractNamedContactFacts(
     candidates.push(contextFact);
   }
 
-  return candidates;
+  const workPeerRelationshipContacts = new Set(
+    candidates
+      .filter(
+        (candidate) =>
+          /^contact\.[^.]+\.relationship$/.test(candidate.key) &&
+          candidate.value === "work_peer" &&
+          (
+            candidate.source === "user_input_pattern.work_with_contact" ||
+            candidate.source === "user_input_pattern.work_with_contact_historical" ||
+            candidate.source === "user_input_pattern.work_with_contact_severed" ||
+            candidate.source === "user_input_pattern.work_association" ||
+            candidate.source === "user_input_pattern.work_association_historical"
+          )
+      )
+      .map((candidate) => candidate.key.split(".")[1] ?? "")
+      .filter((contactToken) => contactToken.length > 0)
+  );
+
+  return candidates.filter((candidate) => {
+    const relationshipMatch = candidate.key.match(/^contact\.([^.]+)\.relationship$/);
+    if (!relationshipMatch) {
+      return true;
+    }
+    return !(
+      workPeerRelationshipContacts.has(relationshipMatch[1] ?? "") &&
+      candidate.source === "user_input_pattern.named_contact" &&
+      candidate.value === "acquaintance"
+    );
+  });
 }

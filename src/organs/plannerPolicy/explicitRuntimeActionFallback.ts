@@ -3,6 +3,7 @@
  */
 
 import { estimateActionCostUsd } from "../../core/actionCostPolicy";
+import { extractExecutionContextPayload } from "../../core/currentRequestExtraction";
 import { makeId } from "../../core/ids";
 import { PlannedAction } from "../../core/types";
 import { RequiredActionType } from "./executionStyleContracts";
@@ -23,6 +24,11 @@ const PATH_CLAUSE_DELIMITER_PATTERNS = [
 ] as const;
 const TRACKED_BROWSER_SESSION_ID_PATTERN = /\bsessionId=([A-Za-z0-9:_-]+)/i;
 const TRACKED_BROWSER_URL_PATTERN = /\burl=([^\s;]+)/i;
+const TRACKED_BROWSER_SESSION_ID_LINE_PATTERN = /^-\s*Browser session id:\s*([A-Za-z0-9:_-]+)$/im;
+const TRACKED_WORKSPACE_ROOT_LINE_PATTERN = /^-\s*Root path:\s*(.+)$/im;
+const TRACKED_PREVIEW_URL_LINE_PATTERN = /^-\s*Preview URL:\s*(.+)$/im;
+const TRACKED_PREVIEW_PROCESS_LEASE_LINE_PATTERN =
+  /^-\s*Preview process lease:\s*([A-Za-z0-9:_-]+)$/im;
 const PREVIEW_PROCESS_LEASES_LINE_PATTERN = /^-\s*Preview process leases:\s*(.+)$/im;
 const LINKED_PREVIEW_LEASE_INLINE_PATTERN = /\blinkedPreviewLease=([A-Za-z0-9:_-]+)/i;
 const LINKED_PREVIEW_PROCESS_LINE_PATTERN =
@@ -178,20 +184,65 @@ function buildInspectWorkspaceResourcesAction(rootPath: string): PlannedAction {
 }
 
 /**
+ * Builds a deterministic `inspect_workspace_resources` action from tracked workspace context when
+ * the natural request did not repeat the absolute path.
+ *
+ * @param fullExecutionInput - Conversation-aware execution payload sent to the planner.
+ * @returns Planned action, or `null` when the tracked workspace context is insufficient.
+ */
+function buildTrackedInspectWorkspaceResourcesAction(
+  fullExecutionInput: string
+): PlannedAction | null {
+  const normalizedExecutionInput = extractExecutionContextPayload(fullExecutionInput);
+  const rootPath =
+    normalizedExecutionInput.match(TRACKED_WORKSPACE_ROOT_LINE_PATTERN)?.[1]?.trim() ?? null;
+  if (!rootPath || rootPath === "unknown") {
+    return null;
+  }
+  const previewUrl =
+    normalizedExecutionInput.match(TRACKED_PREVIEW_URL_LINE_PATTERN)?.[1]?.trim() ?? null;
+  const browserSessionId =
+    normalizedExecutionInput.match(TRACKED_BROWSER_SESSION_ID_PATTERN)?.[1]?.trim() ??
+    normalizedExecutionInput.match(TRACKED_BROWSER_SESSION_ID_LINE_PATTERN)?.[1]?.trim() ??
+    null;
+  const previewProcessLeaseId =
+    normalizedExecutionInput.match(TRACKED_PREVIEW_PROCESS_LEASE_LINE_PATTERN)?.[1]?.trim() ??
+    extractTrackedPreviewLeaseIds(normalizedExecutionInput)[0] ??
+    null;
+  const params = {
+    rootPath,
+    ...(previewUrl && previewUrl !== "none" ? { previewUrl } : {}),
+    ...(browserSessionId ? { browserSessionId } : {}),
+    ...(previewProcessLeaseId ? { previewProcessLeaseId } : {})
+  };
+  return {
+    id: makeId("action"),
+    type: "inspect_workspace_resources",
+    description: `Inspect runtime-owned workspace resources for ${rootPath}.`,
+    params,
+    estimatedCostUsd: estimateActionCostUsd({
+      type: "inspect_workspace_resources",
+      params
+    })
+  };
+}
+
+/**
  * Extracts exact tracked preview-process lease ids from the conversation-aware execution input.
  *
  * @param fullExecutionInput - Conversation-aware execution payload sent to the planner.
  * @returns Exact preview-process lease ids, or an empty list when the current request context has none.
  */
 function extractTrackedPreviewLeaseIds(fullExecutionInput: string): string[] {
-  const previewLeaseListMatch = fullExecutionInput.match(PREVIEW_PROCESS_LEASES_LINE_PATTERN);
+  const normalizedExecutionInput = extractExecutionContextPayload(fullExecutionInput);
+  const previewLeaseListMatch = normalizedExecutionInput.match(PREVIEW_PROCESS_LEASES_LINE_PATTERN);
   const leaseIds = [
     ...(previewLeaseListMatch?.[1]
       ?.split(",")
       .map((value) => value.trim())
       .filter((value) => /^[A-Za-z0-9:_-]+$/.test(value)) ?? []),
-    fullExecutionInput.match(LINKED_PREVIEW_LEASE_INLINE_PATTERN)?.[1] ?? null,
-    fullExecutionInput.match(LINKED_PREVIEW_PROCESS_LINE_PATTERN)?.[1] ?? null
+    normalizedExecutionInput.match(LINKED_PREVIEW_LEASE_INLINE_PATTERN)?.[1] ?? null,
+    normalizedExecutionInput.match(LINKED_PREVIEW_PROCESS_LINE_PATTERN)?.[1] ?? null
   ].filter((value): value is string => typeof value === "string" && value.trim().length > 0);
   return [...new Set(leaseIds)];
 }
@@ -205,9 +256,13 @@ function extractTrackedPreviewLeaseIds(fullExecutionInput: string): string[] {
 function extractTrackedBrowserCloseTarget(
   fullExecutionInput: string
 ): { sessionId: string | null; url: string | null } {
+  const normalizedExecutionInput = extractExecutionContextPayload(fullExecutionInput);
   return {
-    sessionId: fullExecutionInput.match(TRACKED_BROWSER_SESSION_ID_PATTERN)?.[1]?.trim() ?? null,
-    url: fullExecutionInput.match(TRACKED_BROWSER_URL_PATTERN)?.[1]?.trim() ?? null
+    sessionId:
+      normalizedExecutionInput.match(TRACKED_BROWSER_SESSION_ID_PATTERN)?.[1]?.trim() ??
+      normalizedExecutionInput.match(TRACKED_BROWSER_SESSION_ID_LINE_PATTERN)?.[1]?.trim() ??
+      null,
+    url: normalizedExecutionInput.match(TRACKED_BROWSER_URL_PATTERN)?.[1]?.trim() ?? null
   };
 }
 
@@ -257,6 +312,32 @@ function buildTrackedCloseBrowserFallbackActions(
 }
 
 /**
+ * Builds bounded `stop_process` fallback actions for exact tracked preview-process lease ids when
+ * the natural request is to shut down the tracked local runtime.
+ *
+ * @param fullExecutionInput - Conversation-aware execution payload sent to the planner.
+ * @returns Deterministic stop-process actions for exact tracked preview leases.
+ */
+function buildTrackedStopProcessFallbackActions(
+  fullExecutionInput: string
+): PlannedAction[] {
+  return extractTrackedPreviewLeaseIds(fullExecutionInput).map((leaseId) => ({
+    id: makeId("action"),
+    type: "stop_process",
+    description: "Stop the exact tracked local preview process for this workspace.",
+    params: {
+      leaseId
+    },
+    estimatedCostUsd: estimateActionCostUsd({
+      type: "stop_process",
+      params: {
+        leaseId
+      }
+    })
+  }));
+}
+
+/**
  * Builds bounded fallback actions when the user explicitly requested a governed runtime action by
  * name and the planner still failed to emit that action after repair.
  *
@@ -274,12 +355,18 @@ export function buildDeterministicExplicitRuntimeActionFallbackActions(
     return extractedPaths.map(buildInspectPathHoldersAction);
   }
   if (requiredActionType === "inspect_workspace_resources") {
-    return extractedPaths.length > 0
-      ? [buildInspectWorkspaceResourcesAction(extractedPaths[0])]
-      : [];
+    if (extractedPaths.length > 0) {
+      return [buildInspectWorkspaceResourcesAction(extractedPaths[0])];
+    }
+    const trackedInspectAction =
+      buildTrackedInspectWorkspaceResourcesAction(fullExecutionInput);
+    return trackedInspectAction ? [trackedInspectAction] : [];
   }
   if (requiredActionType === "close_browser") {
     return buildTrackedCloseBrowserFallbackActions(fullExecutionInput);
+  }
+  if (requiredActionType === "stop_process") {
+    return buildTrackedStopProcessFallbackActions(fullExecutionInput);
   }
   return [];
 }

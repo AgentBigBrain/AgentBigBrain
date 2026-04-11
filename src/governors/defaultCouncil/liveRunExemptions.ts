@@ -3,6 +3,10 @@
  */
 
 import { isAllowedBrowserSessionControlUrl } from "../../core/constraintRuntime/browserConstraints";
+import {
+  isLocalWorkspaceOrganizationRequest,
+  isRuntimeProcessManagementRequest
+} from "../../organs/plannerPolicy/liveVerificationPolicy";
 import { getParamString, normalize } from "./common";
 import { DefaultGovernanceProposal } from "./contracts";
 
@@ -63,6 +67,20 @@ function isLocalBrowserControlUrl(rawUrl: string | undefined): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * Evaluates whether a filesystem path candidate is an absolute local path.
+ *
+ * @param rawPath - Raw path candidate from action params.
+ * @returns `true` when the path is an absolute Windows or POSIX path.
+ */
+function isAbsoluteLocalPath(rawPath: string | undefined): boolean {
+  const normalized = (rawPath ?? "").trim();
+  if (!normalized) {
+    return false;
+  }
+  return /^[A-Za-z]:\\/.test(normalized) || normalized.startsWith("/");
 }
 
 /**
@@ -158,4 +176,73 @@ export function isLoopbackProofAction(proposal: DefaultGovernanceProposal): bool
     return Boolean(getParamString(action.params, "sessionId"));
   }
   return false;
+}
+
+/**
+ * Evaluates proposal and returns whether it is a bounded runtime-ownership inspection action.
+ *
+ * **Why it exists:**
+ * Runtime inspection actions are read-only and deterministic, but generic model-advisory checks can
+ * still stall them. This exemption keeps the bypass narrow: the request must already be a runtime
+ * management or local-organization turn, and the action must carry exact tracked workspace or
+ * holder selectors.
+ *
+ * @param proposal - Proposal under governor review.
+ * @param taskUserInput - Current planner-facing execution input.
+ * @returns `true` when the proposal is a bounded runtime inspection action.
+ */
+export function isRuntimeOwnershipInspectionAction(
+  proposal: DefaultGovernanceProposal,
+  taskUserInput: string
+): boolean {
+  const action = proposal.action;
+  const isScopedRuntimeRequest =
+    isRuntimeProcessManagementRequest(taskUserInput) ||
+    isLocalWorkspaceOrganizationRequest(taskUserInput);
+  if (!isScopedRuntimeRequest) {
+    return false;
+  }
+
+  if (action.type === "inspect_workspace_resources") {
+    return (
+      isAbsoluteLocalPath(getParamString(action.params, "rootPath")) ||
+      isAbsoluteLocalPath(getParamString(action.params, "path")) ||
+      isLocalBrowserControlUrl(getParamString(action.params, "previewUrl")) ||
+      Boolean(getParamString(action.params, "browserSessionId")) ||
+      Boolean(getParamString(action.params, "previewProcessLeaseId"))
+    );
+  }
+
+  if (action.type === "inspect_path_holders") {
+    return isAbsoluteLocalPath(getParamString(action.params, "path"));
+  }
+
+  return false;
+}
+
+/**
+ * Evaluates whether one proposal is the bounded folder-group runtime sweep action used for
+ * explicit user-owned Desktop/Documents/Downloads server shutdown requests.
+ *
+ * @param proposal - Proposal under governor review.
+ * @param taskUserInput - Current planner-facing execution input.
+ * @returns `true` when the proposal is the bounded native folder runtime sweep action.
+ */
+export function isFolderRuntimeProcessSweepAction(
+  proposal: DefaultGovernanceProposal,
+  taskUserInput: string
+): boolean {
+  if (!isRuntimeProcessManagementRequest(taskUserInput)) {
+    return false;
+  }
+  if (proposal.action.type !== "stop_folder_runtime_processes") {
+    return false;
+  }
+  const selectorMode = normalize(getParamString(proposal.action.params, "selectorMode") ?? "");
+  const selectorTerm = normalize(getParamString(proposal.action.params, "selectorTerm") ?? "");
+  return (
+    isAbsoluteLocalPath(getParamString(proposal.action.params, "rootPath")) &&
+    (selectorMode === "starts_with" || selectorMode === "contains") &&
+    selectorTerm.length >= 2
+  );
 }

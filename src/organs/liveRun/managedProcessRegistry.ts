@@ -3,7 +3,7 @@
  */
 
 import { ChildProcessWithoutNullStreams } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { makeId } from "../../core/ids";
@@ -13,6 +13,11 @@ import {
 } from "../../core/runtimeEntropy";
 import { ManagedProcessLifecycleCode } from "../../core/types";
 import { isProcessLikelyAlive } from "./processLiveness";
+import {
+  cloneManagedProcessSnapshot,
+  readManagedProcessPersistedState,
+  type ManagedProcessRegistryPersistedState
+} from "./managedProcessRegistryPersistence";
 
 export interface ManagedProcessSnapshot {
   leaseId: string;
@@ -38,11 +43,6 @@ interface ManagedProcessRuntimeRecord {
   snapshot: ManagedProcessSnapshot;
   closePromise: Promise<ManagedProcessSnapshot>;
   resolveClose: (snapshot: ManagedProcessSnapshot) => void;
-}
-
-interface ManagedProcessRegistryPersistedState {
-  version: 1;
-  snapshots: ManagedProcessSnapshot[];
 }
 
 export interface ManagedProcessRegistryOptions {
@@ -87,10 +87,6 @@ export function isStaleTrackedManagedProcessSnapshot(
  * @param snapshot - Registry-owned snapshot value.
  * @returns Caller-owned snapshot copy.
  */
-function cloneSnapshot(snapshot: ManagedProcessSnapshot): ManagedProcessSnapshot {
-  return { ...snapshot };
-}
-
 /**
  * Stores executor-owned long-running process runtime records.
  */
@@ -192,7 +188,71 @@ export class ManagedProcessRegistry {
     input.child.once("close", (code, signal) => {
       this.markClosed(leaseId, code, signal);
     });
-    return cloneSnapshot(snapshot);
+    return cloneManagedProcessSnapshot(snapshot);
+  }
+
+  /**
+   * Registers a managed-process lease for one already-running local preview holder recovered from
+   * bounded runtime inspection.
+   *
+   * **Why it exists:**
+   * `start_process` can prove that the exact same workspace is already live on localhost before it
+   * spawns anything new. In that case the runtime still needs a canonical lease so later probes,
+   * browser linkage, and stop actions stay deterministic.
+   *
+   * **What it talks to:**
+   * - Uses `makeId` from `../../core/ids`.
+   * - Uses local helpers within this module.
+   *
+   * @param input - Recovered running-process metadata to store under a new lease.
+   * @returns Snapshot recorded for this recovered managed-process lease.
+   */
+  registerRecoveredRunningLease(input: {
+    actionId: string;
+    pid: number;
+    commandFingerprint: string;
+    cwd: string;
+    shellExecutable: string;
+    shellKind: string;
+    requestedHost?: string | null;
+    requestedPort?: number | null;
+    requestedUrl?: string | null;
+    taskId?: string;
+  }): ManagedProcessSnapshot {
+    const leaseId = makeId("proc", this.entropySource);
+    const startedAtMs = this.entropySource.nowMs();
+    const snapshot: ManagedProcessSnapshot = {
+      leaseId,
+      taskId: input.taskId ?? null,
+      actionId: input.actionId,
+      pid: input.pid,
+      commandFingerprint: input.commandFingerprint,
+      cwd: input.cwd,
+      shellExecutable: input.shellExecutable,
+      shellKind: input.shellKind,
+      startedAt: new Date(startedAtMs).toISOString(),
+      statusCode: "PROCESS_STILL_RUNNING",
+      requestedHost: input.requestedHost ?? null,
+      requestedPort: input.requestedPort ?? null,
+      requestedUrl: input.requestedUrl ?? null,
+      exitCode: null,
+      signal: null,
+      stopRequested: false
+    };
+    let resolveClose: ((result: ManagedProcessSnapshot) => void) | null = null;
+    const closePromise = new Promise<ManagedProcessSnapshot>((resolve) => {
+      resolveClose = resolve;
+    });
+    this.records.set(leaseId, {
+      child: null,
+      snapshot,
+      closePromise,
+      resolveClose: (result: ManagedProcessSnapshot) => {
+        resolveClose?.(result);
+      }
+    });
+    this.persistSnapshots();
+    return cloneManagedProcessSnapshot(snapshot);
   }
 
   /**
@@ -220,7 +280,7 @@ export class ManagedProcessRegistry {
       };
       this.persistSnapshots();
     }
-    return cloneSnapshot(record.snapshot);
+    return cloneManagedProcessSnapshot(record.snapshot);
   }
 
   /**
@@ -246,7 +306,7 @@ export class ManagedProcessRegistry {
       stopRequested: true
     };
     this.persistSnapshots();
-    return cloneSnapshot(record.snapshot);
+    return cloneManagedProcessSnapshot(record.snapshot);
   }
 
   /**
@@ -269,7 +329,26 @@ export class ManagedProcessRegistry {
     if (this.reconcileManagedProcessRecord(record)) {
       this.persistSnapshots();
     }
-    return cloneSnapshot(record.snapshot);
+    return cloneManagedProcessSnapshot(record.snapshot);
+  }
+
+  /**
+   * Reads the current managed-process snapshot without reconciling persisted pid liveness first.
+   *
+   * **Why it exists:**
+   * `check_process` may need one last bounded recovery pass before a stale persisted lease is
+   * downgraded to `PROCESS_STOPPED`, so this read path keeps the original snapshot available for
+   * that decision.
+   *
+   * **What it talks to:**
+   * - Uses local helpers within this module.
+   *
+   * @param leaseId - Managed-process lease identifier.
+   * @returns Snapshot copy, or `null` when the lease is unknown.
+   */
+  peekSnapshot(leaseId: string): ManagedProcessSnapshot | null {
+    const record = this.records.get(leaseId);
+    return record ? cloneManagedProcessSnapshot(record.snapshot) : null;
   }
 
   /**
@@ -286,7 +365,7 @@ export class ManagedProcessRegistry {
    */
   listSnapshots(): ManagedProcessSnapshot[] {
     this.reconcilePersistedSnapshots();
-    return [...this.records.values()].map((record) => cloneSnapshot(record.snapshot));
+    return [...this.records.values()].map((record) => cloneManagedProcessSnapshot(record.snapshot));
   }
 
   /**
@@ -332,7 +411,7 @@ export class ManagedProcessRegistry {
       return null;
     }
     if (record.snapshot.statusCode === "PROCESS_STOPPED") {
-      return cloneSnapshot(record.snapshot);
+      return cloneManagedProcessSnapshot(record.snapshot);
     }
     record.child = null;
     record.snapshot = {
@@ -341,9 +420,53 @@ export class ManagedProcessRegistry {
       exitCode,
       signal: signal ?? null
     };
-    record.resolveClose(cloneSnapshot(record.snapshot));
+    record.resolveClose(cloneManagedProcessSnapshot(record.snapshot));
     this.persistSnapshots();
-    return cloneSnapshot(record.snapshot);
+    return cloneManagedProcessSnapshot(record.snapshot);
+  }
+
+  /**
+   * Marks a stale lease as running again after bounded runtime inspection recovers the exact
+   * workspace preview holder under a new pid or loopback target.
+   *
+   * **Why it exists:**
+   * Wrapper shells can exit while the real preview child keeps serving the workspace. This lets
+   * `check_process` refresh the canonical lease instead of forcing later stop or follow-up actions
+   * to keep pointing at a dead pid.
+   *
+   * **What it talks to:**
+   * - Uses local helpers within this module.
+   *
+   * @param leaseId - Managed-process lease identifier.
+   * @param details - Recovered running-process details proved by bounded inspection.
+   * @returns Updated snapshot, or `null` when the lease is unknown.
+   */
+  markRecoveredRunning(
+    leaseId: string,
+    details: {
+      pid: number;
+      requestedHost: string | null;
+      requestedPort: number | null;
+      requestedUrl: string | null;
+    }
+  ): ManagedProcessSnapshot | null {
+    const record = this.records.get(leaseId);
+    if (!record) {
+      return null;
+    }
+    record.child = null;
+    record.snapshot = {
+      ...record.snapshot,
+      pid: details.pid,
+      statusCode: "PROCESS_STILL_RUNNING",
+      requestedHost: details.requestedHost,
+      requestedPort: details.requestedPort,
+      requestedUrl: details.requestedUrl,
+      exitCode: null,
+      signal: null
+    };
+    this.persistSnapshots();
+    return cloneManagedProcessSnapshot(record.snapshot);
   }
 
   /**
@@ -369,14 +492,14 @@ export class ManagedProcessRegistry {
       return null;
     }
     if (record.snapshot.statusCode === "PROCESS_STOPPED") {
-      return cloneSnapshot(record.snapshot);
+      return cloneManagedProcessSnapshot(record.snapshot);
     }
 
     const timeoutPromise = new Promise<null>((resolve) => {
       setTimeout(() => resolve(null), timeoutMs);
     });
     const closed = await Promise.race([record.closePromise, timeoutPromise]);
-    return closed ? cloneSnapshot(closed) : null;
+    return closed ? cloneManagedProcessSnapshot(closed) : null;
   }
 
   /**
@@ -399,7 +522,11 @@ export class ManagedProcessRegistry {
     signal: NodeJS.Signals | string | null
   ): void {
     const record = this.records.get(leaseId);
-    if (!record || record.snapshot.statusCode === "PROCESS_STOPPED") {
+    if (
+      !record ||
+      record.snapshot.statusCode === "PROCESS_STOPPED" ||
+      record.child === null
+    ) {
       return;
     }
     record.snapshot = {
@@ -409,7 +536,7 @@ export class ManagedProcessRegistry {
       signal: signal ?? null
     };
     record.child = null;
-    record.resolveClose(cloneSnapshot(record.snapshot));
+    record.resolveClose(cloneManagedProcessSnapshot(record.snapshot));
     this.persistSnapshots();
   }
 
@@ -474,7 +601,7 @@ export class ManagedProcessRegistry {
       ...record.snapshot,
       statusCode: "PROCESS_STOPPED"
     };
-    record.resolveClose(cloneSnapshot(record.snapshot));
+    record.resolveClose(cloneManagedProcessSnapshot(record.snapshot));
     return true;
   }
 
@@ -495,7 +622,7 @@ export class ManagedProcessRegistry {
     }
     const payload: ManagedProcessRegistryPersistedState = {
       version: 1,
-      snapshots: [...this.records.values()].map((record) => cloneSnapshot(record.snapshot))
+      snapshots: [...this.records.values()].map((record) => cloneManagedProcessSnapshot(record.snapshot))
     };
     mkdirSync(path.dirname(this.snapshotPath), { recursive: true });
     writeFileSync(this.snapshotPath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
@@ -520,91 +647,3 @@ function isManagedProcessRegistryOptions(
  * @param snapshotPath - Optional registry snapshot path.
  * @returns Parsed persisted state, or an empty default on missing/unreadable files.
  */
-function readManagedProcessPersistedState(
-  snapshotPath: string | null
-): ManagedProcessRegistryPersistedState {
-  if (!snapshotPath || !existsSync(snapshotPath)) {
-    return {
-      version: 1,
-      snapshots: []
-    };
-  }
-  try {
-    const parsed = JSON.parse(readFileSync(snapshotPath, "utf8")) as Partial<ManagedProcessRegistryPersistedState>;
-    return {
-      version: 1,
-      snapshots: Array.isArray(parsed.snapshots)
-        ? parsed.snapshots
-            .map((candidate) => normalizeManagedProcessSnapshot(candidate))
-            .filter((candidate): candidate is ManagedProcessSnapshot => candidate !== null)
-        : []
-    };
-  } catch (error) {
-    console.warn(
-      `[ManagedProcessRegistry] Failed to read persisted snapshots from "${snapshotPath}": ${(error as Error).message}`
-    );
-    return {
-      version: 1,
-      snapshots: []
-    };
-  }
-}
-
-/**
- * Normalizes one unknown persisted snapshot into the current registry contract.
- *
- * @param value - Persisted snapshot candidate.
- * @returns Valid snapshot, or `null` when the payload is not usable.
- */
-function normalizeManagedProcessSnapshot(value: unknown): ManagedProcessSnapshot | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return null;
-  }
-  const candidate = value as Partial<ManagedProcessSnapshot>;
-  if (
-    typeof candidate.leaseId !== "string" ||
-    typeof candidate.actionId !== "string" ||
-    typeof candidate.commandFingerprint !== "string" ||
-    typeof candidate.cwd !== "string" ||
-    typeof candidate.shellExecutable !== "string" ||
-    typeof candidate.shellKind !== "string" ||
-    typeof candidate.startedAt !== "string" ||
-    typeof candidate.statusCode !== "string"
-  ) {
-    return null;
-  }
-  return {
-    leaseId: candidate.leaseId,
-    taskId: typeof candidate.taskId === "string" ? candidate.taskId : null,
-    actionId: candidate.actionId,
-    pid: typeof candidate.pid === "number" && Number.isInteger(candidate.pid) ? candidate.pid : null,
-    commandFingerprint: candidate.commandFingerprint,
-    cwd: candidate.cwd,
-    shellExecutable: candidate.shellExecutable,
-    shellKind: candidate.shellKind,
-    startedAt: candidate.startedAt,
-    statusCode:
-      candidate.statusCode === "PROCESS_STARTED" ||
-      candidate.statusCode === "PROCESS_STILL_RUNNING" ||
-      candidate.statusCode === "PROCESS_READY" ||
-      candidate.statusCode === "PROCESS_NOT_READY" ||
-      candidate.statusCode === "PROCESS_STOPPED" ||
-      candidate.statusCode === "PROCESS_START_FAILED"
-        ? candidate.statusCode
-        : "PROCESS_STARTED",
-    requestedHost:
-      typeof candidate.requestedHost === "string" ? candidate.requestedHost : null,
-    requestedPort:
-      typeof candidate.requestedPort === "number" && Number.isInteger(candidate.requestedPort)
-        ? candidate.requestedPort
-        : null,
-    requestedUrl:
-      typeof candidate.requestedUrl === "string" ? candidate.requestedUrl : null,
-    exitCode:
-      typeof candidate.exitCode === "number" && Number.isInteger(candidate.exitCode)
-        ? candidate.exitCode
-        : null,
-    signal: typeof candidate.signal === "string" ? candidate.signal : null,
-    stopRequested: candidate.stopRequested === true
-  };
-}

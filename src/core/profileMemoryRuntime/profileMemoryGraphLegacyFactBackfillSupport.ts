@@ -16,7 +16,9 @@ import {
   normalizeProfileMemoryGraphFactSource,
   normalizeProfileMemoryGraphFactSourceTaskId,
   normalizeProfileMemoryGraphFactValue,
+  normalizeProfileMemoryGraphSourceRecordId,
 } from "./profileMemoryGraphStateSupport";
+import { isProfileMemoryGraphClaimCurrentSurfaceEligible } from "./profileMemoryGraphClaimSurfaceEligibilitySupport";
 import { governProfileMemoryCandidates } from "./profileMemoryTruthGovernance";
 import type { GovernedProfileFactCandidate } from "./profileMemoryTruthGovernanceContracts";
 
@@ -110,7 +112,10 @@ export function backfillProfileMemoryGraphFromLegacyFacts(input: {
   const claimResult = reconcileProfileMemoryCurrentClaims({
     existingClaims: input.existingClaims,
     observations: observationResult.nextObservations,
-    facts: input.facts,
+    facts: preserveAnchoredCurrentWinnerFacts({
+      existingClaims: input.existingClaims,
+      facts: input.facts
+    }),
     factDecisions,
     recordedAt: input.recordedAt
   });
@@ -120,6 +125,85 @@ export function backfillProfileMemoryGraphFromLegacyFacts(input: {
     nextClaims: claimResult.nextClaims,
     changed: observationResult.changed || claimResult.changed
   };
+}
+
+/**
+ * Preserves retained fact winners for keys already anchored to one active current-surface graph
+ * claim. This prevents conflicting flat compatibility facts from displacing a valid graph lane
+ * while still letting stale, invalid, or unanchored lanes repair from retained facts.
+ *
+ * @param input - Existing graph claims plus retained flat facts.
+ * @returns Fact set narrowed only for keys with one anchored current graph winner.
+ */
+function preserveAnchoredCurrentWinnerFacts(input: {
+  existingClaims: readonly ProfileMemoryGraphClaimRecord[];
+  facts: readonly ProfileFactRecord[];
+}): readonly ProfileFactRecord[] {
+  const activeFactsById = new Map<string, ProfileFactRecord>();
+  for (const fact of input.facts) {
+    if (!isActiveProfileMemoryGraphFact(fact)) {
+      continue;
+    }
+    const normalizedFactId = normalizeProfileMemoryGraphSourceRecordId(fact.id);
+    if (normalizedFactId === null) {
+      continue;
+    }
+    activeFactsById.set(normalizedFactId, fact);
+  }
+  if (activeFactsById.size === 0) {
+    return input.facts;
+  }
+
+  const eligibleClaimsByKey = new Map<string, ProfileMemoryGraphClaimRecord[]>();
+  for (const claim of input.existingClaims) {
+    if (!claim.payload.active || !isProfileMemoryGraphClaimCurrentSurfaceEligible(claim)) {
+      continue;
+    }
+    const bucket = eligibleClaimsByKey.get(claim.payload.normalizedKey) ?? [];
+    bucket.push(claim);
+    eligibleClaimsByKey.set(claim.payload.normalizedKey, bucket);
+  }
+
+  const anchoredFactIdsByKey = new Map<string, ReadonlySet<string>>();
+  for (const [key, claims] of eligibleClaimsByKey.entries()) {
+    if (claims.length !== 1) {
+      continue;
+    }
+    const claim = claims[0]!;
+    const anchoredFactIds = claim.payload.projectionSourceIds.flatMap((projectionSourceId) => {
+      const normalizedProjectionSourceId =
+        normalizeProfileMemoryGraphSourceRecordId(projectionSourceId);
+      if (normalizedProjectionSourceId === null) {
+        return [];
+      }
+      const fact = activeFactsById.get(normalizedProjectionSourceId);
+      if (!fact) {
+        return [];
+      }
+      return normalizeProfileMemoryGraphFactKey(fact.key) === claim.payload.normalizedKey &&
+        normalizeProfileMemoryGraphFactValue(fact.value) === claim.payload.normalizedValue
+        ? [normalizedProjectionSourceId]
+        : [];
+    });
+    if (anchoredFactIds.length === 0) {
+      continue;
+    }
+    anchoredFactIdsByKey.set(key, new Set(anchoredFactIds));
+  }
+
+  if (anchoredFactIdsByKey.size === 0) {
+    return input.facts;
+  }
+
+  return input.facts.filter((fact) => {
+    const normalizedKey = normalizeProfileMemoryGraphFactKey(fact.key);
+    const anchoredFactIds = anchoredFactIdsByKey.get(normalizedKey);
+    if (!anchoredFactIds) {
+      return true;
+    }
+    const normalizedFactId = normalizeProfileMemoryGraphSourceRecordId(fact.id);
+    return normalizedFactId !== null && anchoredFactIds.has(normalizedFactId);
+  });
 }
 
 /**

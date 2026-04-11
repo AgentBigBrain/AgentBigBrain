@@ -10,6 +10,7 @@ import { test } from "node:test";
 
 import { TaskRequest } from "../../src/core/types";
 import { ModelClient, StructuredCompletionRequest } from "../../src/models/types";
+import { buildAutonomousExecutionInput } from "../../src/interfaces/conversationRuntime/managerContracts";
 import {
   assertPlannerActionValidation,
   evaluatePlannerActionValidation,
@@ -58,6 +59,10 @@ import {
   buildDeterministicExplicitRuntimeActionFallbackActions,
   buildDeterministicFrameworkBuildFallbackActions
 } from "../../src/organs/plannerPolicy/explicitRuntimeActionFallback";
+import {
+  buildDeterministicDesktopRuntimeProcessSweepFallbackActions,
+  isDesktopFolderRuntimeProcessSweepRequest
+} from "../../src/organs/plannerPolicy/desktopRuntimeProcessSweepFallback";
 import { buildDeterministicWorkspaceRecoveryFallbackActions } from "../../src/organs/plannerPolicy/workspaceRecoveryFallback";
 import { buildWorkspaceRecoverySignalFixture } from "../helpers/conversationFixtures";
 
@@ -3136,6 +3141,115 @@ test("buildDeterministicExplicitRuntimeActionFallbackActions synthesizes inspect
   assert.equal(actions[0]?.params.rootPath, "C:\\Users\\testuser\\Desktop\\drone-company-a");
 });
 
+test("buildDeterministicExplicitRuntimeActionFallbackActions synthesizes tracked inspect_workspace_resources from tracked runtime context", () => {
+  const currentUserRequest =
+    "please inspect and see if Detroit City Two is still running, do this end to end";
+  const fullExecutionInput = [
+    "Current tracked workspace in this chat:",
+    "- Label: Current project workspace",
+    "- Root path: C:\\Users\\testuser\\Desktop\\Detroit City Two",
+    "- Primary artifact: C:\\Users\\testuser\\Desktop\\Detroit City Two\\app\\globals.css",
+    "- Preview URL: http://127.0.0.1:3000/",
+    "- Browser session id: browser_session:detroit_two",
+    "- Preview process lease: proc_detroit_two",
+    "",
+    "Runtime process-management context:",
+    "- Prefer inspect_workspace_resources first so this run proves whether the tracked preview/browser/process stack is still active before any restart, rebuild, or readiness probe.",
+    "",
+    "Current user request:",
+    currentUserRequest
+  ].join("\n");
+
+  const actions = buildDeterministicExplicitRuntimeActionFallbackActions(
+    currentUserRequest,
+    "inspect_workspace_resources",
+    fullExecutionInput
+  );
+
+  assert.equal(actions.length, 1);
+  assert.equal(actions[0]?.type, "inspect_workspace_resources");
+  assert.equal(actions[0]?.params.rootPath, "C:\\Users\\testuser\\Desktop\\Detroit City Two");
+  assert.equal(actions[0]?.params.previewUrl, "http://127.0.0.1:3000/");
+  assert.equal(actions[0]?.params.browserSessionId, "browser_session:detroit_two");
+  assert.equal(actions[0]?.params.previewProcessLeaseId, "proc_detroit_two");
+});
+
+test("buildDeterministicExplicitRuntimeActionFallbackActions synthesizes tracked inspect_workspace_resources from autonomous execution envelopes", () => {
+  const currentUserRequest =
+    "please inspect and see if Detroit City Two is still running, do this end to end";
+  const wrappedExecutionInput = buildAutonomousExecutionInput(
+    currentUserRequest,
+    [
+      "You are in an ongoing conversation with the same user.",
+      "",
+      "Current tracked workspace in this chat:",
+      "- Label: Current project workspace",
+      "- Root path: C:\\Users\\testuser\\Desktop\\Detroit City Two",
+      "- Primary artifact: C:\\Users\\testuser\\Desktop\\Detroit City Two\\app\\globals.css",
+      "- Preview URL: http://127.0.0.1:3000/",
+      "- Browser session id: browser_session:detroit_two",
+      "- Preview process lease: proc_detroit_two",
+      "",
+      "Runtime process-management context:",
+      "- Prefer inspect_workspace_resources first so this run proves whether the tracked preview/browser/process stack is still active before any restart, rebuild, or readiness probe.",
+      "",
+      "Current user request:",
+      currentUserRequest
+    ].join("\n")
+  );
+
+  const actions = buildDeterministicExplicitRuntimeActionFallbackActions(
+    currentUserRequest,
+    "inspect_workspace_resources",
+    wrappedExecutionInput
+  );
+
+  assert.equal(actions.length, 1);
+  assert.equal(actions[0]?.type, "inspect_workspace_resources");
+  assert.equal(actions[0]?.params.rootPath, "C:\\Users\\testuser\\Desktop\\Detroit City Two");
+  assert.equal(actions[0]?.params.browserSessionId, "browser_session:detroit_two");
+  assert.equal(actions[0]?.params.previewProcessLeaseId, "proc_detroit_two");
+});
+
+test("buildDeterministicExplicitRuntimeActionFallbackActions synthesizes exact tracked stop_process actions from tracked preview leases", () => {
+  const currentUserRequest =
+    'did you make sure you shut down "Detroit City Two" so that the server is no longer running? Please do this end to end - check and make sure.';
+  const fullExecutionInput = [
+    "Current tracked workspace in this chat:",
+    "- Root path: C:\\Users\\testuser\\Desktop\\Detroit City Two",
+    "- Preview process leases: proc_detroit_two_a, proc_detroit_two_b",
+    "",
+    "Runtime process-management context:",
+    "- If the user wants the tracked runtime shut down and exact tracked preview lease ids are present, prefer stop_process for those exact lease ids only.",
+    "",
+    "Current user request:",
+    currentUserRequest
+  ].join("\n");
+
+  const actions = buildDeterministicExplicitRuntimeActionFallbackActions(
+    currentUserRequest,
+    "stop_process",
+    fullExecutionInput
+  );
+
+  assert.deepEqual(
+    actions.map((action) => ({
+      type: action.type,
+      leaseId: action.params.leaseId
+    })),
+    [
+      {
+        type: "stop_process",
+        leaseId: "proc_detroit_two_a"
+      },
+      {
+        type: "stop_process",
+        leaseId: "proc_detroit_two_b"
+      }
+    ]
+  );
+});
+
 test("buildDeterministicExplicitRuntimeActionFallbackActions synthesizes tracked close-browser cleanup from browser follow-up context", () => {
   const currentUserRequest =
     "Thanks. Please close Drone React Preview Smoke 1774659110753, the browser window, and the localhost preview server so we can move on.";
@@ -3506,14 +3620,54 @@ test("buildDeterministicFrameworkBuildFallbackActions synthesizes a full live Ne
   assert.equal(actions[4]?.type, "shell_command");
   assert.equal(actions[5]?.type, "shell_command");
   assert.equal(actions[6]?.type, "shell_command");
-  assert.equal(actions[7]?.type, "start_process");
-  assert.match(String(actions[7]?.params.command), /npm run dev -- --hostname 127\.0\.0\.1 --port 3000/i);
-  assert.equal(actions[8]?.type, "probe_http");
-  assert.equal(actions[8]?.params.url, "http://127.0.0.1:3000");
-  assert.equal(actions[9]?.type, "open_browser");
+  assert.equal(actions[7]?.type, "shell_command");
+  assert.equal(actions[4]?.params.timeoutMs, 120000);
+  assert.match(String(actions[4]?.params.command), /\bnpm install --no-audit --no-fund\b/i);
+  assert.match(String(actions[5]?.params.command), /Workspace not ready/i);
+  assert.match(String(actions[6]?.params.command), /\bnpm run build\b/i);
+  assert.match(String(actions[7]?.params.command), /\.next\\BUILD_ID/i);
+  assert.equal(actions[8]?.type, "start_process");
+  assert.match(String(actions[8]?.params.command), /npm run dev -- --hostname 127\.0\.0\.1 --port 3000/i);
+  assert.equal(actions[9]?.type, "probe_http");
   assert.equal(actions[9]?.params.url, "http://127.0.0.1:3000");
-  assert.equal(actions[9]?.params.rootPath, "C:\\Users\\testuser\\Desktop\\Drone City");
+  assert.equal(actions[10]?.type, "open_browser");
+  assert.equal(actions[10]?.params.url, "http://127.0.0.1:3000");
+  assert.equal(actions[10]?.params.rootPath, "C:\\Users\\testuser\\Desktop\\Drone City");
   assert.match(String(actions[2]?.params.content), /flying drone hero/i);
+});
+
+test("buildDeterministicFrameworkBuildFallbackActions reuses an explicit built Next.js workspace path for launch follow-ups", () => {
+  const tempRoot = mkdtempSync(path.join(os.tmpdir(), "planner-policy-next-launch-"));
+  const projectPath = path.join(tempRoot, "Detroit City");
+  const appPath = path.join(projectPath, "app");
+  const nextBuildPath = path.join(projectPath, ".next");
+  try {
+    mkdirSync(appPath, { recursive: true });
+    mkdirSync(nextBuildPath, { recursive: true });
+    writeFileSync(path.join(projectPath, "package.json"), "{\n  \"name\": \"detroit-city\"\n}\n", "utf8");
+    writeFileSync(path.join(projectPath, "next-env.d.ts"), "/// <reference types=\"next\" />\n", "utf8");
+    writeFileSync(path.join(appPath, "page.js"), "export default function Page() { return null; }\n", "utf8");
+    writeFileSync(path.join(nextBuildPath, "BUILD_ID"), "detroit-city-build\n", "utf8");
+
+    const actions = buildDeterministicFrameworkBuildFallbackActions(
+      `From \`${projectPath}\`, launch the Next.js app in a persistent process and keep it running. Wait until the server logs the actual local URL it chose, verify that exact URL responds successfully over HTTP, open that exact URL in the default browser, and leave both the browser window and the server process running for review.`,
+      {
+        ...buildWindowsExecutionEnvironment(),
+        desktopPath: tempRoot
+      }
+    );
+
+    assert.deepEqual(
+      actions.map((action) => action.type),
+      ["start_process", "probe_http", "open_browser"]
+    );
+    assert.equal(actions[0]?.params.cwd, projectPath);
+    assert.equal(actions[1]?.params.url, "http://127.0.0.1:3000");
+    assert.equal(actions[2]?.params.url, "http://127.0.0.1:3000");
+    assert.equal(actions[2]?.params.rootPath, projectPath);
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
 });
 
 test("framework landing-page fallback content stays generic when the request is not drone-specific", () => {
@@ -3532,6 +3686,333 @@ test("framework landing-page fallback content stays generic when the request is 
   assert.match(pageContent, /polished first impression/i);
   assert.match(styleContent, /\.hero-orb-stage/);
   assert.doesNotMatch(styleContent, /\.drone-stage/);
+});
+
+test("framework landing-page fallback content matches gritty Detroit requests instead of the calm generic theme", () => {
+  const currentUserRequest =
+    'I want you to create a nextjs landing page, with 4 sections called "Detroit City" and there should be a footer and header, a gritty feeling design, and you need to do this end to end and put it on my desktop, then leave it open in the browser so i can review it.';
+  const pageContent = buildFrameworkLandingPageContent(
+    "next_js",
+    "Detroit City",
+    currentUserRequest
+  );
+  const styleContent = buildFrameworkLandingPageStyles(currentUserRequest);
+  const sectionCount = pageContent.match(/\{\s*title:\s*'/g)?.length ?? 0;
+
+  assert.match(pageContent, /\bgritty\b/i);
+  assert.match(pageContent, /city-stage/);
+  assert.doesNotMatch(pageContent, /\bflying drone hero\b/i);
+  assert.doesNotMatch(pageContent, /Featured flow/);
+  assert.equal(sectionCount, 4);
+  assert.match(styleContent, /\.city-stage/);
+  assert.doesNotMatch(styleContent, /\.hero-orb-stage/);
+  assert.doesNotMatch(styleContent, /\.drone-stage/);
+});
+
+test("buildDeterministicFrameworkBuildFallbackActions uses the active Detroit request instead of stale calm-drone recall when generating landing-page writes", () => {
+  const wrappedExecutionInput = [
+    "Recent conversation context (oldest to newest):",
+    '- user: build a calm air-drone landing page on my desktop and leave it open in a browser',
+    "",
+    "Current user request:",
+    'I want you to create a nextjs landing page, with 4 sections called "Detroit City" and there should be a footer and header, a gritty feeling design, and you need to do this end to end and put it on my desktop, then leave it open in the browser so i can review it.'
+  ].join("\n");
+
+  const actions = buildDeterministicFrameworkBuildFallbackActions(
+    wrappedExecutionInput,
+    buildWindowsExecutionEnvironment()
+  );
+
+  const pageWriteAction = actions.find(
+    (action) =>
+      action.type === "write_file" &&
+      /app[\\/]+page\.(?:js|tsx)$/i.test(String(action.params.path))
+  );
+  const styleWriteAction = actions.find(
+    (action) =>
+      action.type === "write_file" &&
+      /app[\\/]+globals\.css$/i.test(String(action.params.path))
+  );
+
+  assert.ok(pageWriteAction);
+  assert.ok(styleWriteAction);
+  assert.match(String(pageWriteAction.params.content), /city-stage/);
+  assert.doesNotMatch(String(pageWriteAction.params.content), /drone-stage/);
+  assert.match(String(styleWriteAction.params.content), /\.city-stage/);
+  assert.doesNotMatch(String(styleWriteAction.params.content), /\.drone-stage/);
+});
+
+test("buildDeterministicFrameworkBuildFallbackActions reuses goal workspace and Detroit theme for generic restart follow-ups", () => {
+  const continuationRequest =
+    "The app is not running, so restart the Next.js landing page from the project on the Desktop, fix any startup error if needed, wait until the local URL is actually ready, then open it in a browser and leave that browser window open for review. After that, report the Desktop project path and the live URL.";
+  const goalRequest =
+    'I want you to create a nextjs landing page, with 4 sections called "Detroit City Two" and there should be a footer and header, a gritty feeling design, and you need to do this end to end and put it on my desktop, then leave it open in the browser so i can review it.';
+
+  const actions = buildDeterministicFrameworkBuildFallbackActions(
+    continuationRequest,
+    buildWindowsExecutionEnvironment(),
+    goalRequest
+  );
+
+  const scaffoldAction = actions.find((action) => action.type === "shell_command");
+  const pageWriteAction = actions.find(
+    (action) =>
+      action.type === "write_file" &&
+      /Detroit City Two[\\/]app[\\/]+page\.(?:js|tsx)$/i.test(String(action.params.path))
+  );
+  const styleWriteAction = actions.find(
+    (action) =>
+      action.type === "write_file" &&
+      /Detroit City Two[\\/]app[\\/]globals\.css$/i.test(String(action.params.path))
+  );
+
+  assert.ok(scaffoldAction);
+  assert.match(String(scaffoldAction.params.command), /Detroit City Two/i);
+  assert.match(String(scaffoldAction.params.command), /detroit-city-two/i);
+  assert.ok(pageWriteAction);
+  assert.ok(styleWriteAction);
+  assert.match(String(pageWriteAction.params.content), /city-stage/);
+  assert.doesNotMatch(String(pageWriteAction.params.content), /drone-stage/);
+  assert.match(String(styleWriteAction.params.content), /\.city-stage/);
+  assert.doesNotMatch(String(styleWriteAction.params.content), /\.drone-stage/);
+});
+
+test("buildDeterministicFrameworkBuildFallbackActions keeps the Detroit theme on repair turns that conditionally mention recreating the app", () => {
+  const tempRoot = mkdtempSync(path.join(os.tmpdir(), "planner-policy-detroit-repair-"));
+  const projectPath = path.join(tempRoot, "Detroit City Two");
+  try {
+    mkdirSync(projectPath, { recursive: true });
+    const normalizeComparablePath = (value: unknown): string =>
+      String(value ?? "").replace(/\\/g, "/").toLowerCase();
+    const continuationRequest = [
+      "Current tracked workspace in this chat:",
+      `- Root path: ${projectPath}`,
+      "",
+      "Current user request:",
+      "If the app or project was never fully created on the Desktop, finish creating it there first. Then restart the Next.js landing page, wait until the local URL is ready, open it in the browser, and leave it open for review."
+    ].join("\n");
+    const goalRequest =
+      'I want you to create a nextjs landing page, with 4 sections called "Detroit City Two" and there should be a footer and header, a gritty feeling design, and you need to do this end to end and put it on my desktop, then leave it open in the browser so i can review it.';
+
+    const actions = buildDeterministicFrameworkBuildFallbackActions(
+      continuationRequest,
+      {
+        ...buildWindowsExecutionEnvironment(),
+        desktopPath: tempRoot
+      },
+      goalRequest
+    );
+
+    const pageWriteAction = actions.find(
+      (action) =>
+        action.type === "write_file" &&
+        (
+          normalizeComparablePath(action.params.path) ===
+            normalizeComparablePath(path.join(projectPath, "app", "page.js")) ||
+          normalizeComparablePath(action.params.path) ===
+            normalizeComparablePath(path.join(projectPath, "app", "page.tsx"))
+        )
+    );
+    const styleWriteAction = actions.find(
+      (action) =>
+        action.type === "write_file" &&
+        normalizeComparablePath(action.params.path) ===
+          normalizeComparablePath(path.join(projectPath, "app", "globals.css"))
+    );
+
+    assert.ok(pageWriteAction);
+    assert.ok(styleWriteAction);
+    assert.match(String(pageWriteAction.params.content), /city-stage/);
+    assert.doesNotMatch(String(pageWriteAction.params.content), /drone-stage/);
+    assert.doesNotMatch(String(pageWriteAction.params.content), /Featured flow/);
+    assert.match(String(styleWriteAction.params.content), /\.city-stage/);
+    assert.doesNotMatch(String(styleWriteAction.params.content), /\.drone-stage/);
+    assert.doesNotMatch(String(styleWriteAction.params.content), /\.hero-orb-stage/);
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("black-and-yellow Detroit requests produce a distinct foundry fallback instead of reusing the generic Detroit template", () => {
+  const detroitTwoRequest =
+    'I want you to create a nextjs landing page, with 4 sections called "Detroit City Two" and there should be a footer and header, a gritty feeling design, and you need to do this end to end and put it on my desktop, then leave it open in the browser so i can review it.';
+  const detroitThreeRequest =
+    'I want you to create a nextjs landing page, with 4 sections called "Detroit City Three" and there should be a footer and header, a gritty feeling design (black and yellow), sections should feel spaced out and well thought out and you need to do this end to end and put it on my desktop, then leave it open in the browser so i can review it.';
+
+  const detroitTwoPage = buildFrameworkLandingPageContent(
+    "next_js",
+    "Detroit City Two",
+    detroitTwoRequest
+  );
+  const detroitThreePage = buildFrameworkLandingPageContent(
+    "next_js",
+    "Detroit City Three",
+    detroitThreeRequest
+  );
+  const detroitTwoStyles = buildFrameworkLandingPageStyles(
+    detroitTwoRequest,
+    "Detroit City Two"
+  );
+  const detroitThreeStyles = buildFrameworkLandingPageStyles(
+    detroitThreeRequest,
+    "Detroit City Three"
+  );
+
+  assert.notEqual(detroitTwoPage, detroitThreePage);
+  assert.match(detroitThreePage, /foundry-stage/);
+  assert.doesNotMatch(detroitTwoPage, /foundry-stage/);
+  assert.match(detroitThreeStyles, /--accent:\s*#f6d94a;/i);
+  assert.match(detroitThreeStyles, /Impact, Haettenschweiler/i);
+  assert.doesNotMatch(detroitTwoStyles, /--accent:\s*#f6d94a;/i);
+});
+
+test("generic Detroit requests can land in materially different safe layout families instead of reusing the same page skeleton", () => {
+  const detroitFourRequest =
+    'I want you to create a nextjs landing page, with 4 sections called "Detroit City Four" and there should be a footer and header, a gritty feeling design, and you need to do this end to end and put it on my desktop, then leave it open in the browser so i can review it.';
+  const detroitFiveRequest =
+    'I want you to create a nextjs landing page, with 4 sections called "Detroit City Five" and there should be a footer and header, a gritty feeling design, and you need to do this end to end and put it on my desktop, then leave it open in the browser so i can review it.';
+
+  const detroitFourPage = buildFrameworkLandingPageContent(
+    "next_js",
+    "Detroit City Four",
+    detroitFourRequest
+  );
+  const detroitFivePage = buildFrameworkLandingPageContent(
+    "next_js",
+    "Detroit City Five",
+    detroitFiveRequest
+  );
+  const detroitFourStyles = buildFrameworkLandingPageStyles(
+    detroitFourRequest,
+    "Detroit City Four"
+  );
+  const detroitFiveStyles = buildFrameworkLandingPageStyles(
+    detroitFiveRequest,
+    "Detroit City Five"
+  );
+
+  assert.notEqual(detroitFourPage, detroitFivePage);
+  assert.notEqual(detroitFourStyles, detroitFiveStyles);
+  assert.match(detroitFourPage, /story-bands/);
+  assert.match(detroitFourStyles, /\.story-band/);
+  assert.match(detroitFourPage, /Riverfront entry/);
+  assert.match(detroitFivePage, /story-grid/);
+  assert.match(detroitFiveStyles, /\.story-grid/);
+  assert.match(detroitFiveStyles, /\.city-stage-marquee/);
+  assert.match(detroitFivePage, /Marquee arrival/);
+  assert.doesNotMatch(detroitFourPage, /Marquee arrival/);
+  assert.doesNotMatch(detroitFivePage, /Riverfront entry/);
+});
+
+test("buildDeterministicFrameworkBuildFallbackActions keeps fresh Detroit create requests on the scaffold lane even when the named folder already has build artifacts", () => {
+  const tempRoot = mkdtempSync(path.join(os.tmpdir(), "planner-policy-detroit-fresh-existing-"));
+  const detroitThreePath = path.join(tempRoot, "Detroit City Three");
+  const detroitThreeAppPath = path.join(detroitThreePath, "app");
+  const detroitThreeBuildPath = path.join(detroitThreePath, ".next");
+  try {
+    mkdirSync(detroitThreeAppPath, { recursive: true });
+    mkdirSync(detroitThreeBuildPath, { recursive: true });
+    writeFileSync(
+      path.join(detroitThreePath, "package.json"),
+      "{\n  \"name\": \"detroit-city-three\",\n  \"dependencies\": { \"next\": \"15.0.0\" }\n}\n",
+      "utf8"
+    );
+    writeFileSync(
+      path.join(detroitThreePath, "next-env.d.ts"),
+      "/// <reference types=\"next\" />\n",
+      "utf8"
+    );
+    writeFileSync(path.join(detroitThreeBuildPath, "BUILD_ID"), "detroit-three-build\n", "utf8");
+    writeFileSync(
+      path.join(detroitThreeAppPath, "page.js"),
+      "export default function Page() { return <main>stale detroit three</main>; }\n",
+      "utf8"
+    );
+
+    const currentUserRequest =
+      'I want you to create a nextjs landing page, with 4 sections called "Detroit City Three" and there should be a footer and header, a gritty feeling design (black and yellow), sections should feel spaced out and well thought out and you need to do this end to end and put it on my desktop, then leave it open in the browser so i can review it. This means you have to run it and leave it open.';
+    const wrappedExecutionInput = buildAutonomousExecutionInput(
+      currentUserRequest,
+      [
+        "You are in an ongoing conversation with the same user.",
+        "",
+        "Recent conversation context (oldest to newest):",
+        "- user: Look at all the folders on the desktop that start with drone and Drone, stop the servers that are running in the folders do this end to end",
+        "- assistant: I started this, but the run stopped before it finished after 11 iteration(s). Stopped because you cancelled the run. Next step: restart the run when you are ready to continue. Approved 53, blocked 14.",
+        "",
+        "Current user request:",
+        currentUserRequest
+      ].join("\n")
+    );
+
+    const actions = buildDeterministicFrameworkBuildFallbackActions(
+      wrappedExecutionInput,
+      {
+        ...buildWindowsExecutionEnvironment(),
+        desktopPath: tempRoot
+      },
+      currentUserRequest
+    );
+
+    assert.equal(actions[0]?.type, "shell_command");
+    assert.ok(actions.some((action) => action.type === "write_file"));
+    assert.ok(actions.some((action) => action.type === "start_process"));
+    assert.ok(actions.some((action) => action.type === "open_browser"));
+    assert.notDeepEqual(
+      actions.map((action) => action.type),
+      ["start_process", "probe_http", "open_browser"]
+    );
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("buildDeterministicFrameworkBuildFallbackActions relaunches the explicitly named Detroit project without reusing stale preview ownership from another workspace", () => {
+  const tempRoot = mkdtempSync(path.join(os.tmpdir(), "planner-policy-detroit-switch-"));
+  const detroitTwoPath = path.join(tempRoot, "Detroit City Two");
+  const detroitTwoAppPath = path.join(detroitTwoPath, "app");
+  const detroitTwoBuildPath = path.join(detroitTwoPath, ".next");
+  try {
+    mkdirSync(detroitTwoAppPath, { recursive: true });
+    mkdirSync(detroitTwoBuildPath, { recursive: true });
+    writeFileSync(
+      path.join(detroitTwoPath, "package.json"),
+      "{\n  \"name\": \"detroit-city-two\",\n  \"dependencies\": { \"next\": \"15.0.0\" }\n}\n",
+      "utf8"
+    );
+    writeFileSync(path.join(detroitTwoPath, "next-env.d.ts"), "/// <reference types=\"next\" />\n", "utf8");
+    writeFileSync(path.join(detroitTwoBuildPath, "BUILD_ID"), "detroit-two-build\n", "utf8");
+    writeFileSync(path.join(detroitTwoAppPath, "page.js"), "export default function Page() { return <main>Detroit City Two</main>; }\n", "utf8");
+
+    const wrappedExecutionInput = [
+      "Current tracked workspace in this chat:",
+      "- Root path: C:\\Users\\testuser\\Desktop\\Detroit City Three",
+      "- Preview URL: http://127.0.0.1:56895/",
+      "- Preview process lease: proc_detroit_three",
+      "",
+      "Current user request:",
+      'Start up "Detroit City Two" on the desktop, locate it, and start it, put it up on the browser for me do this end to end'
+    ].join("\n");
+
+    const actions = buildDeterministicFrameworkBuildFallbackActions(
+      wrappedExecutionInput,
+      {
+        ...buildWindowsExecutionEnvironment(),
+        desktopPath: tempRoot
+      }
+    );
+
+    assert.deepEqual(
+      actions.map((action) => action.type),
+      ["start_process", "probe_http", "open_browser"]
+    );
+    assert.equal(actions[0]?.params.cwd, detroitTwoPath);
+    assert.equal(actions[1]?.params.url, "http://127.0.0.1:3000");
+    assert.equal(actions[2]?.params.rootPath, detroitTwoPath);
+    assert.equal("previewProcessLeaseId" in (actions[2]?.params ?? {}), false);
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
 });
 
 test("Next.js fallback layouts import globals.css so generated landing pages do not render unstyled", () => {
@@ -3648,4 +4129,184 @@ test("inferRequiredActionType recognizes later-in-sentence inspect tool requests
     ),
     "inspect_path_holders"
   );
+});
+
+test("inferRequiredActionType recognizes tracked runtime inspection requests as inspect_workspace_resources", () => {
+  const fullExecutionInput = [
+    "Current tracked workspace in this chat:",
+    "- Root path: C:\\Users\\testuser\\Desktop\\Detroit City Two",
+    "- Preview URL: http://127.0.0.1:3000/",
+    "",
+    "Tracked browser sessions:",
+    "- Browser window: sessionId=browser_session:detroit_two; url=http://127.0.0.1:3000/; status=closed; visibility=visible; controller=playwright_managed; control=unavailable; linkedPreviewLease=proc_detroit_two; linkedPreviewCwd=C:\\Users\\testuser\\Desktop\\Detroit City Two",
+    "",
+    "Current user request:",
+    "please inspect and see if Detroit City Two is still running, do this end to end"
+  ].join("\n");
+
+  assert.equal(
+    inferRequiredActionType(
+      "please inspect and see if Detroit City Two is still running, do this end to end",
+      fullExecutionInput
+    ),
+    "inspect_workspace_resources"
+  );
+});
+
+test("inferRequiredActionType recognizes tracked runtime inspection requests inside autonomous execution envelopes", () => {
+  const currentUserRequest =
+    "please inspect and see if Detroit City Two is still running, do this end to end";
+  const wrappedExecutionInput = buildAutonomousExecutionInput(
+    currentUserRequest,
+    [
+      "You are in an ongoing conversation with the same user.",
+      "",
+      "Current tracked workspace in this chat:",
+      "- Root path: C:\\Users\\testuser\\Desktop\\Detroit City Two",
+      "- Preview URL: http://127.0.0.1:3000/",
+      "",
+      "Tracked browser sessions:",
+      "- Browser window: sessionId=browser_session:detroit_two; url=http://127.0.0.1:3000/; status=closed; visibility=visible; controller=playwright_managed; control=unavailable; linkedPreviewLease=proc_detroit_two; linkedPreviewCwd=C:\\Users\\testuser\\Desktop\\Detroit City Two",
+      "",
+      "Current user request:",
+      currentUserRequest
+    ].join("\n")
+  );
+
+  assert.equal(
+    inferRequiredActionType(currentUserRequest, wrappedExecutionInput),
+    "inspect_workspace_resources"
+  );
+});
+
+test("inferRequiredActionType recognizes natural shorthand for a uniquely tracked runtime target", () => {
+  const fullExecutionInput = [
+    "Current tracked workspace in this chat:",
+    "- Root path: C:\\Users\\testuser\\Desktop\\Detroit City Two",
+    "- Preview process leases: proc_detroit_two",
+    "",
+    "Tracked browser sessions:",
+    "- Browser window: sessionId=browser_session:detroit_two; url=http://127.0.0.1:3000/; status=closed; visibility=visible; controller=playwright_managed; control=unavailable; linkedPreviewLease=proc_detroit_two; linkedPreviewCwd=C:\\Users\\testuser\\Desktop\\Detroit City Two",
+    "",
+    "Current user request:",
+    "did you make sure you shut down the nextjs detroit two we just worked on and verify it is no longer running?"
+  ].join("\n");
+
+  assert.equal(
+    inferRequiredActionType(
+      "did you make sure you shut down the nextjs detroit two we just worked on and verify it is no longer running?",
+      fullExecutionInput
+    ),
+    "inspect_workspace_resources"
+  );
+});
+
+test("inferRequiredActionType treats tracked runtime shutdown verification as inspect-first work instead of browser-close work", () => {
+  const fullExecutionInput = [
+    "Current tracked workspace in this chat:",
+    "- Root path: C:\\Users\\testuser\\Desktop\\Detroit City Two",
+    "- Preview process leases: proc_detroit_two",
+    "",
+    "Tracked browser sessions:",
+    "- Browser window: sessionId=browser_session:detroit_two; url=http://127.0.0.1:3000/; status=closed; visibility=visible; controller=playwright_managed; control=unavailable; linkedPreviewLease=proc_detroit_two; linkedPreviewCwd=C:\\Users\\testuser\\Desktop\\Detroit City Two",
+    "",
+    "Current user request:",
+    'did you make sure you shut down "Detroit City Two" so that the server is no longer running? Please do this end to end - check and make sure.'
+  ].join("\n");
+
+  assert.equal(
+    inferRequiredActionType(
+      'did you make sure you shut down "Detroit City Two" so that the server is no longer running? Please do this end to end - check and make sure.',
+      fullExecutionInput
+    ),
+    "inspect_workspace_resources"
+  );
+});
+
+test("runtime inspection requests do not classify as execution-style framework build work", () => {
+  const currentUserRequest =
+    "please inspect and see if Detroit City Two is still running, do this end to end";
+
+  assert.equal(isExecutionStyleBuildRequest(currentUserRequest), false);
+  assert.equal(isDeterministicFrameworkBuildLaneRequest(currentUserRequest), false);
+  assert.equal(
+    buildDeterministicFrameworkBuildFallbackActions(
+      [
+        "Current tracked workspace in this chat:",
+        "- Root path: C:\\Users\\testuser\\Desktop\\Detroit City Two",
+        "- Preview URL: http://127.0.0.1:3000/",
+        "- Preview process lease: proc_detroit_two",
+        "",
+        "Current user request:",
+        currentUserRequest
+      ].join("\n"),
+      buildWindowsExecutionEnvironment()
+    ).length,
+    0
+  );
+});
+
+test("runtime shutdown verification continuations do not fall through to deterministic framework build fallback", () => {
+  const currentUserRequest =
+    'Check whether the "Detroit City Two" server is currently running, stop the exact matching process if it is, and verify end to end that no server process remains listening. Use execution evidence only from this run. Report the matched process details, the stop action taken, and the verification result. If you cannot perform or verify the shutdown in this run, state that explicitly and do not claim success.';
+
+  assert.equal(isExecutionStyleBuildRequest(currentUserRequest), false);
+  assert.equal(isDeterministicFrameworkBuildLaneRequest(currentUserRequest), false);
+  assert.equal(
+    buildDeterministicFrameworkBuildFallbackActions(
+      currentUserRequest,
+      buildWindowsExecutionEnvironment(),
+      'did you make sure you shut down "Detroit City Two" so that the server is no longer running? Please do this end to end - check and make sure. If it\'s complete then you succeeded.'
+    ).length,
+    0
+  );
+});
+
+test("direct open_browser follow-ups reuse the tracked live preview instead of rebuilding the framework workspace", () => {
+  const currentUserRequest =
+    'open_browser url="http://127.0.0.1:57793" rootPath="C:\\Users\\testuser\\Desktop\\Detroit City Two" previewProcessLeaseId="proc_detroit_two". Local readiness is already proven. Open the exact live preview in a visible browser window and leave it open for review. Do not substitute verify_browser for this step, and do not switch to a different workspace or URL.';
+  const actions = buildDeterministicFrameworkBuildFallbackActions(
+    currentUserRequest,
+    buildWindowsExecutionEnvironment(),
+    'I want you to create a nextjs landing page, with 4 sections called "Detroit City Two" and there should be a footer and header, a gritty feeling design, and you need to do this end to end and put it on my desktop, then leave it open in the browser so i can review it. This means you have to run it and leave it open.'
+  );
+
+  assert.deepEqual(
+    actions.map((action) => action.type),
+    ["open_browser"]
+  );
+  assert.equal(actions[0]?.params.url, "http://127.0.0.1:57793");
+  assert.equal(
+    actions[0]?.params.rootPath,
+    "C:\\Users\\testuser\\Desktop\\Detroit City Two"
+  );
+  assert.equal(actions[0]?.params.previewProcessLeaseId, "proc_detroit_two");
+});
+
+test("isDesktopFolderRuntimeProcessSweepRequest recognizes bounded Desktop folder server-stop sweeps", () => {
+  assert.equal(
+    isDesktopFolderRuntimeProcessSweepRequest(
+      "Look at all the folders on the desktop that start with drone and Drone, stop the servers that are running in the folders do this end to end"
+    ),
+    true
+  );
+  assert.equal(
+    isDesktopFolderRuntimeProcessSweepRequest(
+      "Please create a gritty Detroit City Two Next.js page on my Desktop and leave it open in the browser."
+    ),
+    false
+  );
+});
+
+test("buildDeterministicDesktopRuntimeProcessSweepFallbackActions emits one bounded native sweep action for Desktop drone-folder shutdown requests", () => {
+  const actions = buildDeterministicDesktopRuntimeProcessSweepFallbackActions(
+    "Look at all the folders on the desktop that start with drone and Drone, stop the servers that are running in the folders do this end to end",
+    buildWindowsExecutionEnvironment()
+  );
+
+  assert.equal(actions.length, 1);
+  assert.equal(actions[0]?.type, "stop_folder_runtime_processes");
+  assert.equal(actions[0]?.params.rootPath, "C:\\Users\\testuser\\Desktop");
+  assert.equal(actions[0]?.params.selectorMode, "starts_with");
+  assert.equal(actions[0]?.params.selectorTerm, "drone");
 });

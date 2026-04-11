@@ -1,11 +1,6 @@
-/**
- * @fileoverview Query helpers for profile-memory planning context, graph-aware continuity facts,
- * and readable fact access.
- */
+/** @fileoverview Query helpers for planning context, graph-aware continuity facts, and readable access. */
 
-import {
-  createEmptyEntityGraphV1
-} from "../stage6_86EntityGraph";
+import { createEmptyEntityGraphV1 } from "../stage6_86EntityGraph";
 import type { ConversationStackV1, EntityGraphV1 } from "../types";
 import { type ProfileFactRecord, type ProfileMemoryState } from "../profileMemory";
 import {
@@ -27,9 +22,7 @@ import {
   type ProfileReadableFact
 } from "./contracts";
 import { readProfileEpisodes } from "./profileMemoryEpisodeQueries";
-import {
-  buildProfileMemoryContinuityScopeQueryInput,
-} from "./profileMemoryContinuityScopeSupport";
+import { buildProfileMemoryContinuityScopeQueryInput } from "./profileMemoryContinuityScopeSupport";
 import {
   buildProfileFactContinuityFallbackTemporalSlice,
   buildProfileFactContinuityResult,
@@ -41,6 +34,7 @@ import {
   deriveQueryDecisionDisposition,
   isActiveProfileFact,
   isProfileFactEffectivelySensitive,
+  readAuthoritativeProfileCompatibilityFacts,
   toReadableFact,
   toStateFactRecord
 } from "./profileMemoryFactQuerySupport";
@@ -64,14 +58,7 @@ export type {
   ProfileFactQueryInspectionResult
 } from "./profileMemoryQueryContracts";
 
-/**
- * Builds bounded fact-review entries plus hidden decision records for one approval-aware review
- * surface.
- *
- * @param state - Loaded profile-memory state.
- * @param request - Review query plus approval and as-of controls.
- * @returns Reviewable fact entries plus hidden corroboration or fail-closed decisions.
- */
+/** Builds bounded fact-review entries plus hidden decision records for one approval-aware surface. */
 export function reviewProfileFactsForUser(
   state: ProfileMemoryState,
   request: ProfileFactReviewRequest
@@ -97,14 +84,7 @@ export function reviewProfileFactsForUser(
   };
 }
 
-/**
- * Builds bounded planning-query entries plus hidden decision records for one non-mutating
- * planning or synthesis surface.
- *
- * @param state - Loaded profile-memory state.
- * @param request - Planning query plus optional as-of and sensitivity controls.
- * @returns Selected readable facts plus hidden bounded decision records.
- */
+/** Builds bounded planning-query entries plus hidden decision records for one non-mutating surface. */
 export function inspectProfileFactsForPlanningContext(
   state: ProfileMemoryState,
   request: ProfileFactPlanningInspectionRequest & {
@@ -154,14 +134,7 @@ export function inspectProfileFactsForPlanningContext(
   } satisfies ProfileFactPlanningInspectionResult;
 }
 
-/**
- * Builds planner-facing profile context from normalized profile-memory state.
- *
- * @param state - Loaded profile-memory state.
- * @param maxFacts - Maximum fact count for prompt grounding.
- * @param queryInput - Current query used for relevance ranking.
- * @returns Rendered planning context string.
- */
+/** Builds planner-facing profile context from normalized profile-memory state. */
 export function buildProfilePlanningContext(
   state: ProfileMemoryState,
   maxFacts: number,
@@ -192,12 +165,8 @@ export function readProfileFacts(
   state: ProfileMemoryState,
   request: ProfileAccessRequest
 ): ProfileReadableFact[] {
-  const activeFacts = state.facts
-    .filter(
-      (fact) =>
-        isActiveProfileFact(fact) &&
-        isCompatibilityVisibleFactLike(fact)
-    )
+  const activeFacts = [...readAuthoritativeProfileCompatibilityFacts(state)]
+    .filter((fact) => isCompatibilityVisibleFactLike(fact))
     .sort((left, right) => Date.parse(right.lastUpdatedAt) - Date.parse(left.lastUpdatedAt));
 
   const sensitiveAllowed = canReadSensitiveFacts(request);
@@ -379,7 +348,11 @@ function inspectProfileFactQueryWithPolicy(
   );
   const selectedFactIds = new Set(selectedFactRecords.map((fact) => fact.id));
   const decisionRecords = state.facts
-    .filter((fact) => isActiveProfileFact(fact) && (allowSensitive || !isProfileFactEffectivelySensitive(fact)))
+    .filter(
+      (fact) =>
+        isActiveProfileFact(fact) &&
+        (allowSensitive || !isProfileFactEffectivelySensitive(fact))
+    )
     .flatMap((fact) => {
       const selected = selectedFactIds.has(fact.id);
       const compatibilityVisible = isCompatibilityVisibleFactLike(fact);

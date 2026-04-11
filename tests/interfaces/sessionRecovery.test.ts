@@ -63,6 +63,13 @@ test("recoverStaleRunningJobIfNeeded marks stale jobs failed and clears running 
   const session = buildSession({
     updatedAt: "2026-03-07T17:55:00.000Z",
     runningJobId: "job-1",
+    progressState: {
+      status: "working",
+      message: "Still building the page.",
+      jobId: "job-1",
+      updatedAt: "2026-03-07T17:55:00.000Z",
+      recoveryTrace: null
+    },
     recentJobs: [
       {
         ...buildQueuedJob("job-1"),
@@ -87,12 +94,51 @@ test("recoverStaleRunningJobIfNeeded marks stale jobs failed and clears running 
 
   assert.equal(clearedSessionKey, "telegram:chat-1:user-1");
   assert.equal(session.runningJobId, null);
+  assert.equal(session.progressState, null);
   assert.equal(session.updatedAt, "2026-03-07T18:00:00.000Z");
   const recoveredJob = session.recentJobs.find((job) => job.id === "job-1");
   assert.ok(recoveredJob);
   assert.equal(recoveredJob?.status, "failed");
   assert.equal(recoveredJob?.ackLifecycleState, "CANCELLED");
   assert.equal(recoveredJob?.finalDeliveryLastErrorCode, "STALE_RUNNING_JOB_RECOVERED");
+});
+
+test("recoverStaleRunningJobIfNeeded eagerly recovers orphaned running jobs that lost their worker owner", () => {
+  const session = buildSession({
+    updatedAt: "2026-03-07T17:59:40.000Z",
+    runningJobId: "job-1",
+    progressState: {
+      status: "working",
+      message: "I'm building the page and setting up the preview.",
+      jobId: "job-1",
+      updatedAt: "2026-03-07T17:59:40.000Z",
+      recoveryTrace: null
+    },
+    recentJobs: [
+      {
+        ...buildQueuedJob("job-1"),
+        status: "running",
+        startedAt: "2026-03-07T17:59:40.000Z"
+      }
+    ]
+  });
+
+  recoverStaleRunningJobIfNeeded({
+    sessionKey: "telegram:chat-1:user-1",
+    session,
+    nowIso: "2026-03-07T18:00:00.000Z",
+    deps: buildDependencies({
+      config: {
+        staleRunningJobRecoveryMs: 60_000,
+        maxRecentJobs: 20
+      }
+    })
+  });
+
+  assert.equal(session.runningJobId, null);
+  assert.equal(session.progressState, null);
+  assert.equal(session.recentJobs[0]?.status, "failed");
+  assert.equal(session.recentJobs[0]?.errorMessage, "Recovered stale running job after runtime interruption.");
 });
 
 test("recoverStaleRunningJobIfNeeded leaves active workers untouched", () => {
@@ -114,6 +160,7 @@ test("recoverStaleRunningJobIfNeeded leaves active workers untouched", () => {
     nowIso: "2026-03-07T18:00:00.000Z",
     deps: buildDependencies({
       isWorkerActive: () => true,
+      getWorkerLastSeenAt: () => "2026-03-07T17:59:59.000Z",
       clearAckTimer: () => {
         throw new Error("clearAckTimer should not run when worker is active");
       }
@@ -122,4 +169,39 @@ test("recoverStaleRunningJobIfNeeded leaves active workers untouched", () => {
 
   assert.equal(session.runningJobId, "job-1");
   assert.equal(session.recentJobs[0]?.status, "running");
+});
+
+test("recoverStaleRunningJobIfNeeded fails closed when the worker bit is still set but liveness is stale", () => {
+  const session = buildSession({
+    updatedAt: "2026-03-07T17:55:00.000Z",
+    runningJobId: "job-1",
+    progressState: {
+      status: "working",
+      message: "I'm building the page and setting up the preview.",
+      jobId: "job-1",
+      updatedAt: "2026-03-07T17:55:00.000Z",
+      recoveryTrace: null
+    },
+    recentJobs: [
+      {
+        ...buildQueuedJob("job-1"),
+        status: "running",
+        startedAt: "2026-03-07T17:55:00.000Z"
+      }
+    ]
+  });
+
+  recoverStaleRunningJobIfNeeded({
+    sessionKey: "telegram:chat-1:user-1",
+    session,
+    nowIso: "2026-03-07T18:00:00.000Z",
+    deps: buildDependencies({
+      isWorkerActive: () => true,
+      getWorkerLastSeenAt: () => "2026-03-07T17:55:00.000Z"
+    })
+  });
+
+  assert.equal(session.runningJobId, null);
+  assert.equal(session.progressState, null);
+  assert.equal(session.recentJobs[0]?.status, "failed");
 });

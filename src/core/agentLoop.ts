@@ -7,37 +7,36 @@ import { MAIN_AGENT_ID } from "./agentIdentity";
 import { makeId } from "./ids";
 import { isAbortError } from "./runtimeAbort";
 import { TaskRequest, TaskRunResult } from "./types";
-import { ModelClient } from "../models/types";
+import { type AutonomousNextStepModelOutput, ModelClient } from "../models/types";
 import { BrainConfig } from "./config";
 import { humanizeAutonomousStopReason } from "./autonomy/stopReasonText";
 import {
-    EMPTY_NEXT_STEP_REASON_CODE,
-    EXECUTION_STYLE_STALL_REASON_CODE,
-    GENERIC_STALL_REASON_CODE,
-    MAX_ITERATIONS_REASON_CODE,
-    MAX_MANAGED_PROCESS_READINESS_FAILURES,
-    MISSION_REQUIREMENT_PROCESS_STOP,
-    MISSION_REQUIREMENT_SIDE_EFFECT,
-    TASK_EXECUTION_FAILED_REASON_CODE,
-    formatReasonWithCode,
-    type MissionEvidenceCounters
+    EMPTY_NEXT_STEP_REASON_CODE, EXECUTION_STYLE_STALL_REASON_CODE, GENERIC_STALL_REASON_CODE,
+    MAX_ITERATIONS_REASON_CODE, MAX_MANAGED_PROCESS_READINESS_FAILURES,
+    MISSION_REQUIREMENT_PROCESS_STOP, MISSION_REQUIREMENT_SIDE_EFFECT,
+    TASK_EXECUTION_FAILED_REASON_CODE, formatReasonWithCode, type MissionEvidenceCounters
 } from "./autonomy/contracts";
 import { buildMissionCompletionContract } from "./autonomy/missionContract";
 import {
-    buildManagedProcessStopRetryInput, buildMissionEvidenceRetryInput, countApprovedArtifactMutationActions,
-    countApprovedBrowserProofActions, countApprovedManagedProcessStopActions, countApprovedReadinessProofActions,
-    countApprovedRealSideEffectActions, countApprovedTargetPathTouchActions, mapRequirementToReasonCode,
-    resolveMissingMissionRequirements
+    buildManagedProcessStopRetryInput, buildMissionEvidenceRetryInput,
+    countApprovedArtifactMutationActions, countApprovedBrowserOpenProofActions,
+    countApprovedBrowserProofActions, countApprovedManagedProcessStopActions,
+    countApprovedReadinessProofActions, countApprovedRealSideEffectActions,
+    countApprovedTargetPathTouchActions, mapRequirementToReasonCode, resolveMissingMissionRequirements
 } from "./autonomy/missionEvidence";
 import { formatManagedProcessNeverReadyReason, resolveLiveVerificationBlockedAbortReason } from "./autonomy/completionGate";
 import { describeLoopbackTarget, hasReadinessNotReadyFailure, resolveTrackedLoopbackTarget, type LoopbackTargetHint } from "./autonomy/liveRunRecovery";
-import { cleanupManagedProcessLease, findApprovedManagedProcessCheckResult, resolveTrackedManagedProcessLeaseId } from "./autonomy/loopCleanupPolicy";
+import {
+    cleanupManagedProcessLease,
+    findApprovedManagedProcessCheckResult,
+    resolveTrackedManagedProcessLeaseId,
+    resolveTrackedManagedProcessStartContext,
+    type ApprovedManagedProcessStartContext
+} from "./autonomy/loopCleanupPolicy";
 import { formatLiveRunCompletionReasoning } from "./autonomy/agentLoopModelPolicy";
 import { buildAutonomousUserTurnGateReason } from "./autonomy/agentLoopUserTurnGate";
 import {
-    buildRetryingStateMessage,
-    buildVerificationStateMessage,
-    buildWorkingStateMessage,
+    buildRetryingStateMessage, buildVerificationStateMessage, buildWorkingStateMessage,
     buildWorkspaceRecoveryStateMessage
 } from "./autonomy/agentLoopProgress";
 import { evaluateAutonomousNextStepPolicy, evaluateProactiveAutonomousGoalPolicy, hasMissionStopLimitReached } from "./autonomy/agentLoopRuntimeSupport";
@@ -58,27 +57,13 @@ import {
 } from "./autonomy/workspaceRecoveryCommandBuilders";
 import { resolveStructuredRecoveryRuntimeDecision } from "./autonomy/structuredRecoveryRuntime";
 
-export type {
-    AutonomousLoopCallbacks,
-    AutonomousLoopState,
-    AutonomousLoopStateUpdate
-} from "./autonomy/agentLoopRuntimeSupport";
+export type { AutonomousLoopCallbacks, AutonomousLoopState, AutonomousLoopStateUpdate } from "./autonomy/agentLoopRuntimeSupport";
 export class AutonomousLoop {
     /** Initializes the autonomous loop with explicit orchestration, model, and runtime dependencies. */
-    constructor(
-        private readonly orchestrator: BrainOrchestrator,
-        private readonly modelClient: ModelClient,
-        private readonly config: BrainConfig
-    ) { }
+    constructor(private readonly orchestrator: BrainOrchestrator, private readonly modelClient: ModelClient, private readonly config: BrainConfig) {}
 
-    /** Delegates next-step model evaluation through the extracted autonomy-policy seam. */
-    async evaluateNextStep(
-        overarchingGoal: string,
-        lastResult: TaskRunResult,
-        missionEvidence: MissionEvidenceCounters,
-        trackedManagedProcessLeaseId: string | null,
-        trackedLoopbackTarget: LoopbackTargetHint | null
-    ) {
+    /** Delegates autonomous next-step evaluation so tests can exercise the exact loop policy. */
+    private async evaluateNextStep(overarchingGoal: string, lastResult: TaskRunResult, missionEvidence: MissionEvidenceCounters, trackedManagedProcessLeaseId: string | null, trackedLoopbackTarget: LoopbackTargetHint | null): Promise<AutonomousNextStepModelOutput> {
         return await evaluateAutonomousNextStepPolicy(
             this.modelClient,
             this.config,
@@ -86,16 +71,8 @@ export class AutonomousLoop {
             lastResult,
             missionEvidence,
             trackedManagedProcessLeaseId,
+            null,
             trackedLoopbackTarget
-        );
-    }
-
-    /** Delegates proactive-goal generation through the extracted autonomy-policy seam. */
-    async evaluateProactiveGoal(previousGoal: string) {
-        return await evaluateProactiveAutonomousGoalPolicy(
-            this.modelClient,
-            this.config,
-            previousGoal
         );
     }
 
@@ -139,9 +116,11 @@ export class AutonomousLoop {
                 artifactMutations: 0,
                 readinessProofs: 0,
                 browserProofs: 0,
+                browserOpenProofs: 0,
                 processStopProofs: 0
             };
             let trackedManagedProcessLeaseId: string | null = null;
+            let trackedManagedProcessStartContext: ApprovedManagedProcessStartContext | null = null;
             let trackedLoopbackTarget: LoopbackTargetHint | null = null;
             let readinessFailureLeaseId: string | null = null;
             let readinessFailureCount = 0;
@@ -241,9 +220,11 @@ export class AutonomousLoop {
                 const approvedArtifactMutations = countApprovedArtifactMutationActions(result);
                 const approvedReadinessProofs = countApprovedReadinessProofActions(
                     result,
-                    missionContract.requireBrowserProof
+                    missionContract.requireBrowserProof ||
+                        missionContract.requireBrowserOpenProof
                 );
                 const approvedBrowserProofs = countApprovedBrowserProofActions(result);
+                const approvedBrowserOpenProofs = countApprovedBrowserOpenProofActions(result);
                 const approvedProcessStopProofs = countApprovedManagedProcessStopActions(result);
                 const missingBefore = resolveMissingMissionRequirements(missionContract, missionEvidence);
                 missionEvidence = {
@@ -252,11 +233,17 @@ export class AutonomousLoop {
                     artifactMutations: missionEvidence.artifactMutations + approvedArtifactMutations,
                     readinessProofs: missionEvidence.readinessProofs + approvedReadinessProofs,
                     browserProofs: missionEvidence.browserProofs + approvedBrowserProofs,
+                    browserOpenProofs:
+                        missionEvidence.browserOpenProofs + approvedBrowserOpenProofs,
                     processStopProofs:
                         missionEvidence.processStopProofs + approvedProcessStopProofs
                 };
                 trackedManagedProcessLeaseId = resolveTrackedManagedProcessLeaseId(
                     trackedManagedProcessLeaseId,
+                    result
+                );
+                trackedManagedProcessStartContext = resolveTrackedManagedProcessStartContext(
+                    trackedManagedProcessStartContext,
                     result
                 );
                 trackedLoopbackTarget = resolveTrackedLoopbackTarget(
@@ -354,6 +341,7 @@ export class AutonomousLoop {
                     (
                         missionContract.requireReadinessProof ||
                         missionContract.requireBrowserProof ||
+                        missionContract.requireBrowserOpenProof ||
                         missionContract.requireProcessStopProof
                     );
                 if (liveRunEvidenceComplete) {
@@ -465,6 +453,7 @@ export class AutonomousLoop {
                     result,
                     attemptCounts: structuredRecoveryAttemptCounts,
                     trackedManagedProcessLeaseId,
+                    trackedManagedProcessStartContext,
                     trackedLoopbackTarget
                 });
                 if (structuredRecoveryDecision.outcome === "abort") {
@@ -542,11 +531,14 @@ export class AutonomousLoop {
                     break;
                 }
 
-                const nextStep = await this.evaluateNextStep(
+                const nextStep = await evaluateAutonomousNextStepPolicy(
+                    this.modelClient,
+                    this.config,
                     currentOverarchingGoal,
                     result,
                     missionEvidence,
                     trackedManagedProcessLeaseId,
+                    trackedManagedProcessStartContext,
                     trackedLoopbackTarget
                 );
                 const missingRequirements = resolveMissingMissionRequirements(
@@ -584,7 +576,8 @@ export class AutonomousLoop {
                                     currentOverarchingGoal,
                                     missingRequirements,
                                     missionContract.targetPathHints,
-                                    missionContract.requireBrowserProof
+                                    missionContract.requireBrowserProof ||
+                                        missionContract.requireBrowserOpenProof
                                 );
                     continue;
                 }
@@ -662,6 +655,10 @@ export class AutonomousLoop {
                             trackedManagedProcessLeaseId,
                             cleanupResult
                         );
+                        trackedManagedProcessStartContext = resolveTrackedManagedProcessStartContext(
+                            trackedManagedProcessStartContext,
+                            cleanupResult
+                        );
                         if (
                             resolveMissingMissionRequirements(
                                 missionContract,
@@ -724,7 +721,11 @@ export class AutonomousLoop {
 
             console.log(`\n[Daemon Mode] Generating new proactive goal to run 24/7...\n`);
             try {
-                const nextGoalResult = await this.evaluateProactiveGoal(currentOverarchingGoal);
+                const nextGoalResult = await evaluateProactiveAutonomousGoalPolicy(
+                    this.modelClient,
+                    this.config,
+                    currentOverarchingGoal
+                );
                 currentOverarchingGoal = nextGoalResult.proactiveGoal;
                 currentLoopInitialInput = null;
                 daemonGoalRollovers += 1;

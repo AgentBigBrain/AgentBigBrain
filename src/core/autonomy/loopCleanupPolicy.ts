@@ -12,6 +12,12 @@ export interface ApprovedManagedProcessCheckResult {
   lifecycleStatus: string;
 }
 
+export interface ApprovedManagedProcessStartContext {
+  leaseId: string;
+  command: string | null;
+  cwd: string | null;
+}
+
 type ActionResultEntry = TaskRunResult["actionResults"][number];
 
 /**
@@ -52,6 +58,29 @@ function readManagedProcessLifecycleStatus(entry: ActionResultEntry): string | n
     : null;
 }
 
+/** Reads the planned command from a managed-process action result when present. */
+function readActionCommand(entry: ActionResultEntry): string | null {
+  const value = (entry.action.params as Record<string, unknown>).command;
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+/** Reads the most specific working directory recorded for a managed-process action result. */
+function readActionCwd(entry: ActionResultEntry): string | null {
+  const params = entry.action.params as Record<string, unknown>;
+  const cwd = params.cwd;
+  if (typeof cwd === "string" && cwd.trim().length > 0) {
+    return cwd.trim();
+  }
+  const workdir = params.workdir;
+  if (typeof workdir === "string" && workdir.trim().length > 0) {
+    return workdir.trim();
+  }
+  const metadataCwd = entry.executionMetadata?.processCwd;
+  return typeof metadataCwd === "string" && metadataCwd.trim().length > 0
+    ? metadataCwd.trim()
+    : null;
+}
+
 /**
  * Finds the managed-process lease started during the current iteration.
  *
@@ -76,6 +105,75 @@ export function findApprovedManagedProcessStartLeaseId(result: TaskRunResult): s
     }
   }
   return null;
+}
+
+/**
+ * Finds the latest approved managed-process start context from the current iteration.
+ *
+ * **Why it exists:**
+ * Restart-and-reverify recovery should reuse the exact approved `start_process` command and cwd
+ * whenever possible instead of asking the planner to rediscover them from broader mission text.
+ *
+ * **What it talks to:**
+ * - Uses local lease readers within this module.
+ *
+ * @param result - Task result from one autonomous-loop iteration.
+ * @returns Approved start context, or `null` when unavailable.
+ */
+export function findApprovedManagedProcessStartContext(
+  result: TaskRunResult
+): ApprovedManagedProcessStartContext | null {
+  for (const entry of result.actionResults) {
+    if (!entry.approved || entry.action.type !== "start_process") {
+      continue;
+    }
+    const leaseId = readManagedProcessLeaseId(entry);
+    if (!leaseId) {
+      continue;
+    }
+    return {
+      leaseId,
+      command: readActionCommand(entry),
+      cwd: readActionCwd(entry)
+    };
+  }
+  return null;
+}
+
+/**
+ * Updates the tracked managed-process restart context after one autonomous-loop iteration.
+ *
+ * **Why it exists:**
+ * Restart-and-reverify recovery can happen one or more iterations after the original
+ * `start_process`, so the loop needs to carry the exact approved command and cwd forward.
+ *
+ * **What it talks to:**
+ * - Uses local lease and command readers within this module.
+ *
+ * @param previousContext - Start context tracked before this iteration, if any.
+ * @param result - Task result from one autonomous-loop iteration.
+ * @returns Start context that should remain tracked for later restart recovery, or `null`.
+ */
+export function resolveTrackedManagedProcessStartContext(
+  previousContext: ApprovedManagedProcessStartContext | null,
+  result: TaskRunResult
+): ApprovedManagedProcessStartContext | null {
+  let trackedContext = previousContext;
+  for (const entry of result.actionResults) {
+    if (!entry.approved || entry.action.type !== "start_process") {
+      continue;
+    }
+    const leaseId = readManagedProcessLeaseId(entry);
+    if (!leaseId) {
+      continue;
+    }
+    trackedContext = {
+      leaseId,
+      command: readActionCommand(entry),
+      cwd: readActionCwd(entry)
+    };
+  }
+  return trackedContext;
 }
 
 /**

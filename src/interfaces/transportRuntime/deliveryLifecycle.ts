@@ -63,6 +63,22 @@ export function createAutonomousProgressSender(
 }
 
 /**
+ * Returns whether autonomous progress chatter should stay internal because the worker already owns
+ * the user-visible editable status surface.
+ *
+ * @param notifier - Active transport notifier for the conversation.
+ * @returns `true` when a dedicated worker status panel should be the only progress surface.
+ */
+function shouldSuppressTransportAutonomousProgress(
+  notifier: ConversationNotifierTransport
+): boolean {
+  return (
+    notifier.capabilities.supportsEdit &&
+    !notifier.capabilities.supportsNativeStreaming
+  );
+}
+
+/**
  * Runs one autonomous task with canonical abort-controller lifecycle and progress delivery wiring.
  *
  * @param input - Autonomous execution context for one conversation-scoped run.
@@ -73,9 +89,11 @@ export async function runAutonomousTransportTask(
 ): Promise<ConversationExecutionResult> {
   const abortController = new AbortController();
   input.abortControllers.set(input.conversationId, abortController);
-  const progressSender = createAutonomousProgressSender(input.notifier, {
-    source: "autonomous_progress"
-  });
+  const progressSender = shouldSuppressTransportAutonomousProgress(input.notifier)
+    ? async () => undefined
+    : createAutonomousProgressSender(input.notifier, {
+        source: "autonomous_progress"
+      });
 
   try {
     return await input.runAutonomousTask(

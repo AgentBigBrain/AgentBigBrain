@@ -6,6 +6,7 @@ import path from "node:path";
 
 import { PlannedAction } from "../../core/types";
 import { PlannerExecutionEnvironmentContext } from "./executionStyleContracts";
+import { extractRequestedFrameworkPathFolderName } from "./frameworkRequestPathParsing";
 import {
   isExecutionStyleBuildRequest,
   isLiveVerificationBuildRequest,
@@ -28,6 +29,8 @@ const FRAMEWORK_APP_NATIVE_PREVIEW_COMMAND_PATTERN =
 const FRAMEWORK_APP_AD_HOC_PREVIEW_SERVER_PATTERN =
   /\b(?:npx|npm|pnpm|yarn)\b[\s\S]{0,40}\bserve\b|\bserve\b[\s\S]{0,40}\b-s\s+dist\b/i;
 const REQUESTED_FOLDER_NAME_PATTERNS = [
+  /\b(?:switch\s+to|go\s+back\s+to|back\s+to)\s+["']([^"'\r\n]+?)["'](?=\s+(?:which|that|on|in|inside|under|at)\b|[?.!,]|$)/i,
+  /\b(?:start(?:\s+up)?|launch|run|open|reopen|pull\s+up|bring\s+(?:up|back))\s+["']([^"'\r\n]+?)["'](?=\s+(?:on|in|inside|under|at)\b|[?.!,]|$)/i,
   /\bcall\s+it\s+["']?([^"'\r\n]+?)["']?(?=\s+(?:on|in|inside|under|at|and|then|with)\b|[?.!,]|$)/i,
   /\bname\s+it\s+["']?([^"'\r\n]+?)["']?(?=\s+(?:on|in|inside|under|at|and|then|with)\b|[?.!,]|$)/i,
   /\bfolder\s+called\s+["']?([^"'\r\n]+?)["']?(?=\s+(?:on|in|inside|under|at|and|then|with)\b|[.,]|$)/i,
@@ -36,11 +39,6 @@ const REQUESTED_FOLDER_NAME_PATTERNS = [
   /\bturn\s+that\s+["']?([^"'\r\n]+?)["']?\s+(?:workspace|project|app)\b/i,
   /\b(?:that|the)\s+["']?([^"'\r\n]+?)["']?\s+(?:workspace|project|app)\b/i
 ] as const;
-const REQUESTED_FOLDER_PATH_PATTERNS = [
-  /`([A-Za-z]:\\[^`\r\n]+)`/g,
-  /"([A-Za-z]:\\[^"\r\n]+)"/g,
-  /'([A-Za-z]:\\[^'\r\n]+)'/g
-] as const;
 const SAFE_NPM_PACKAGE_NAME_PATTERN = /^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/;
 const INVALID_REQUESTED_FOLDER_NAME_PATTERNS = [
   /\bfolder itself\b/i,
@@ -48,44 +46,39 @@ const INVALID_REQUESTED_FOLDER_NAME_PATTERNS = [
   /\bpackage\.json\b/i,
   /\bindex\.html\b/i,
   /\bscaffold scripts?\b/i,
-  /\bvalid react single-page\b/i
+  /\bvalid react single-page\b/i,
+  /\bapp\s+is\s+not\s+running\b/i,
+  /\b(?:project|workspace)\s+on\s+the\s+desktop\b/i
 ] as const;
+const GENERIC_FOLDER_NAME_TOKEN_PATTERN =
+  /^(?:(?:the|a|an|my|our|current|existing|same|tracked)\s+)*(?:app|project|workspace|site|page|landing\s+page|homepage)(?:\s+(?:and|or)\s+(?:app|project|workspace|site|page|landing\s+page|homepage))*$/i;
+const GENERIC_FOLDER_NAME_FRAGMENT_PATTERN =
+  /\b(?:app|project|workspace|site|page|landing\s+page|homepage)\b\s+(?:and|or)\s*$/i;
 
 /**
  * Normalizes and validates one extracted human-facing framework folder label.
  */
 function sanitizeRequestedFrameworkFolderName(candidate: string): string | null {
-  const trimmed = candidate.replace(/["'`]+$/g, "").trim();
+  const trimmed = candidate
+    .replace(/["'`]+$/g, "")
+    .replace(/^(?:the\s+)?(?:(?:existing|current|same|tracked)\s+)+/i, "")
+    .trim();
   if (trimmed.length === 0) {
+    return null;
+  }
+  if (/[,:;]/.test(trimmed) && /\b(?:restart|start|launch|open|preview|desktop)\b/i.test(trimmed)) {
     return null;
   }
   if (INVALID_REQUESTED_FOLDER_NAME_PATTERNS.some((pattern) => pattern.test(trimmed))) {
     return null;
   }
-  return trimmed;
-}
-
-/**
- * Extracts the final folder name from an explicit Windows path literal when a repair turn names
- * the exact workspace path directly.
- */
-function extractRequestedFrameworkFolderNameFromPath(
-  currentUserRequest: string
-): string | null {
-  for (const pattern of REQUESTED_FOLDER_PATH_PATTERNS) {
-    for (const match of currentUserRequest.matchAll(pattern)) {
-      const literalPath = match[1]?.trim();
-      if (!literalPath) {
-        continue;
-      }
-      const folderName = path.win32.basename(literalPath.replace(/[\\\/]+$/, ""));
-      const sanitizedFolderName = sanitizeRequestedFrameworkFolderName(folderName);
-      if (sanitizedFolderName) {
-        return sanitizedFolderName;
-      }
-    }
+  if (GENERIC_FOLDER_NAME_TOKEN_PATTERN.test(trimmed)) {
+    return null;
   }
-  return null;
+  if (GENERIC_FOLDER_NAME_FRAGMENT_PATTERN.test(trimmed)) {
+    return null;
+  }
+  return trimmed;
 }
 
 /**
@@ -94,9 +87,13 @@ function extractRequestedFrameworkFolderNameFromPath(
 export function extractRequestedFrameworkFolderName(
   currentUserRequest: string
 ): string | null {
-  const explicitPathFolderName = extractRequestedFrameworkFolderNameFromPath(currentUserRequest);
+  const explicitPathFolderName = extractRequestedFrameworkPathFolderName(currentUserRequest);
   if (explicitPathFolderName) {
-    return explicitPathFolderName;
+    const sanitizedPathFolderName =
+      sanitizeRequestedFrameworkFolderName(explicitPathFolderName);
+    if (sanitizedPathFolderName) {
+      return sanitizedPathFolderName;
+    }
   }
   for (const pattern of REQUESTED_FOLDER_NAME_PATTERNS) {
     const candidate = currentUserRequest.match(pattern)?.[1]?.trim();

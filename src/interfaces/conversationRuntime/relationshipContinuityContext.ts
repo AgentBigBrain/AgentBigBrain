@@ -13,7 +13,10 @@ import { buildRecallSynthesis, renderRecallSynthesisSupportLines } from "../../o
 import { normalizeWhitespace } from "../conversationManagerHelpers";
 import type { ConversationSession } from "../sessionStore";
 import { analyzeConversationChatTurnSignals, isRelationshipConversationRecallTurn } from "./chatTurnSignals";
-import { isStructuredContinuityFactResult, toMemorySynthesisFactRecord } from "./contextualRecallContinuitySupport";
+import {
+  ensureStructuredContinuityFactResult,
+  toMemorySynthesisFactRecord
+} from "./contextualRecallContinuitySupport";
 import { resolveConversationStack } from "./contextualRecallSupport";
 import type { ConversationContinuityFactRecord, ConversationContinuityFactResult } from "./continuityContracts";
 import type { QueryConversationContinuityFacts } from "./managerContracts";
@@ -236,14 +239,15 @@ export async function buildRelationshipContinuityContextBlock(
     relevanceScope: "conversation_local",
     maxFacts: 4
   }).catch(() => []);
-
-  const synthesis = isStructuredContinuityFactResult(supportingFacts)
-    ? buildRecallSynthesis(
-        supportingFacts.temporalSynthesis,
-        [],
-        supportingFacts.map(toMemorySynthesisFactRecord)
-      )
-    : buildRecallSynthesis([], supportingFacts);
+  const structuredSupportingFacts = ensureStructuredContinuityFactResult(supportingFacts, {
+    semanticMode: "relationship_inventory",
+    relevanceScope: "conversation_local"
+  });
+  const synthesis = buildRecallSynthesis(
+    structuredSupportingFacts.temporalSynthesis,
+    [],
+    structuredSupportingFacts.map(toMemorySynthesisFactRecord)
+  );
   if (!synthesis) {
     return null;
   }

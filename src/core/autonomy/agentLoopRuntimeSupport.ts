@@ -15,6 +15,7 @@ import {
   type RecoveryFailureClass
 } from "./contracts";
 import type { LoopbackTargetHint } from "./liveRunRecovery";
+import type { ApprovedManagedProcessStartContext } from "./loopCleanupPolicy";
 
 /**
  * Optional callbacks for observing autonomous loop progress.
@@ -74,6 +75,7 @@ export interface AutonomousLoopStateUpdate {
  * @param lastResult - Latest task result from the autonomous loop.
  * @param missionEvidence - Cumulative deterministic mission evidence so far.
  * @param trackedManagedProcessLeaseId - Tracked managed-process lease, if any.
+ * @param trackedManagedProcessStartContext - Tracked approved `start_process` context, if any.
  * @param trackedLoopbackTarget - Tracked loopback target, if any.
  * @returns Promise resolving to the next-step policy decision.
  */
@@ -84,6 +86,7 @@ export async function evaluateAutonomousNextStepPolicy(
   lastResult: TaskRunResult,
   missionEvidence: MissionEvidenceCounters,
   trackedManagedProcessLeaseId: string | null,
+  trackedManagedProcessStartContext: ApprovedManagedProcessStartContext | null,
   trackedLoopbackTarget: LoopbackTargetHint | null
 ) {
   return await evaluateAutonomousNextStep(
@@ -93,6 +96,7 @@ export async function evaluateAutonomousNextStepPolicy(
     lastResult,
     missionEvidence,
     trackedManagedProcessLeaseId,
+    trackedManagedProcessStartContext,
     trackedLoopbackTarget
   );
 }

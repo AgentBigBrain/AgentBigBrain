@@ -170,3 +170,302 @@ test("processConversationMessage reuses one bounded entity-reference interpretat
       "conversation.entity_alias_interpretation:telegram:chat-1:user-1:2026-03-21T09:00:10.000Z:entity_sarah"
   });
 });
+
+test("processConversationMessage ignores one exact inbound replay instead of queueing duplicate autonomous work", async () => {
+  const receivedAt = "2026-04-10T17:55:53.000Z";
+  const userInput =
+    'I want you to create a nextjs landing page, with 4 sections called "Detroit City 2" and there should be a footer and header, a gritty feeling design, and you need to do this end to end and put it on my desktop, then leave it open in the browser so i can review it. This means you have to run it and leave it open.';
+  const session = buildConversationSessionFixture(
+    {
+      updatedAt: receivedAt,
+      conversationTurns: [
+        {
+          role: "user",
+          text: userInput,
+          at: receivedAt
+        }
+      ],
+      recentJobs: [
+        {
+          id: "job_existing",
+          input: userInput,
+          executionInput: userInput,
+          createdAt: receivedAt,
+          startedAt: receivedAt,
+          completedAt: null,
+          status: "running",
+          resultSummary: null,
+          errorMessage: null,
+          isSystemJob: false,
+          ackTimerGeneration: 0,
+          ackEligibleAt: null,
+          ackLifecycleState: "NOT_SENT",
+          ackMessageId: null,
+          ackSentAt: null,
+          ackEditAttemptCount: 0,
+          ackLastErrorCode: null,
+          finalDeliveryOutcome: "not_attempted",
+          finalDeliveryAttemptCount: 0,
+          finalDeliveryLastErrorCode: null,
+          finalDeliveryLastAttemptAt: null,
+          pauseRequestedAt: null
+        }
+      ],
+      runningJobId: "job_existing"
+    },
+    {
+      conversationId: "chat-1",
+      receivedAt
+    }
+  );
+  let setSessionCalls = 0;
+  let enqueueCalls = 0;
+  const deps = createIngressDeps(session, {
+    store: {
+      getSession: async () => session,
+      setSession: async () => {
+        setSessionCalls += 1;
+      }
+    },
+    enqueueJob: () => {
+      enqueueCalls += 1;
+      return {
+        reply: "Queued.",
+        shouldStartWorker: true
+      };
+    }
+  });
+
+  const reply = await processConversationMessage(
+    buildMessage(userInput, receivedAt),
+    (async () => {
+      throw new Error("executeTask should not run for one exact inbound replay");
+    }) as ExecuteConversationTask,
+    async () => undefined,
+    deps
+  );
+
+  assert.equal(reply, "");
+  assert.equal(enqueueCalls, 0);
+  assert.equal(setSessionCalls, 0);
+});
+
+test("processConversationMessage recovers an orphaned running job before queueing a fresh autonomous request", async () => {
+  const receivedAt = "2026-04-10T18:12:33.000Z";
+  const previousUpdateAt = "2026-04-10T18:12:00.000Z";
+  const userInput =
+    'I want you to create a nextjs landing page, with 4 sections called "Detroit City" and there should be a footer and header, a gritty feeling design, and you need to do this end to end and put it on my desktop, then leave it open in the browser so i can review it. This means you have to run it and leave it open.';
+  const session = buildConversationSessionFixture(
+    {
+      updatedAt: previousUpdateAt,
+      runningJobId: "job_orphaned",
+      progressState: {
+        status: "working",
+        message: "I'm building the page and setting up the preview.",
+        jobId: "job_orphaned",
+        updatedAt: previousUpdateAt,
+        recoveryTrace: null
+      },
+      recentJobs: [
+        {
+          id: "job_orphaned",
+          input: userInput,
+          executionInput: userInput,
+          createdAt: previousUpdateAt,
+          startedAt: previousUpdateAt,
+          completedAt: null,
+          status: "running",
+          resultSummary: null,
+          errorMessage: null,
+          ackTimerGeneration: 0,
+          ackEligibleAt: null,
+          ackLifecycleState: "NOT_SENT",
+          ackMessageId: null,
+          ackSentAt: null,
+          ackEditAttemptCount: 0,
+          ackLastErrorCode: null,
+          finalDeliveryOutcome: "not_attempted",
+          finalDeliveryAttemptCount: 0,
+          finalDeliveryLastErrorCode: null,
+          finalDeliveryLastAttemptAt: null,
+          pauseRequestedAt: null
+        }
+      ]
+    },
+    {
+      conversationId: "chat-1",
+      receivedAt: previousUpdateAt
+    }
+  );
+  let currentSession = session;
+  let enqueueCalls = 0;
+  const deps = createIngressDeps(session, {
+    config: {
+      ...buildConversationIngressConfig(),
+      staleRunningJobRecoveryMs: 60_000
+    },
+    store: {
+      getSession: async () => currentSession,
+      setSession: async (nextSession) => {
+        currentSession = nextSession;
+      }
+    },
+    enqueueJob: (mutableSession, input, createdAt, executionInput) => {
+      enqueueCalls += 1;
+      mutableSession.queuedJobs.push({
+        id: `job_enqueued_${enqueueCalls}`,
+        input,
+        executionInput: executionInput ?? input,
+        createdAt,
+        startedAt: null,
+        completedAt: null,
+        status: "queued",
+        resultSummary: null,
+        errorMessage: null,
+        ackTimerGeneration: 0,
+        ackEligibleAt: null,
+        ackLifecycleState: "NOT_SENT",
+        ackMessageId: null,
+        ackSentAt: null,
+        ackEditAttemptCount: 0,
+        ackLastErrorCode: null,
+        finalDeliveryOutcome: "not_attempted",
+        finalDeliveryAttemptCount: 0,
+        finalDeliveryLastErrorCode: null,
+        finalDeliveryLastAttemptAt: null,
+        pauseRequestedAt: null
+      });
+      return {
+        reply: "Queued.",
+        shouldStartWorker: true
+      };
+    }
+  });
+
+  const reply = await processConversationMessage(
+    buildMessage(userInput, receivedAt),
+    (async () => {
+      throw new Error("executeTask should not run during ingress queueing");
+    }) as ExecuteConversationTask,
+    async () => undefined,
+    deps
+  );
+
+  assert.equal(reply, "Queued.");
+  assert.equal(enqueueCalls, 1);
+  assert.equal(currentSession.runningJobId, null);
+  assert.equal(currentSession.progressState?.status, undefined);
+  assert.equal(currentSession.queuedJobs.length, 1);
+  assert.equal(currentSession.recentJobs.some((job) => job.id === "job_orphaned" && job.status === "failed"), true);
+});
+
+test("processConversationMessage recovers a stale running job even when the worker bit is still set", async () => {
+  const receivedAt = "2026-04-10T18:12:33.000Z";
+  const previousUpdateAt = "2026-04-10T18:10:00.000Z";
+  const userInput =
+    'I want you to create a nextjs landing page, with 4 sections called "Detroit City Two" and there should be a footer and header, a gritty feeling design, and you need to do this end to end and put it on my desktop, then leave it open in the browser so i can review it. This means you have to run it and leave it open.';
+  const session = buildConversationSessionFixture(
+    {
+      updatedAt: previousUpdateAt,
+      runningJobId: "job_stuck",
+      progressState: {
+        status: "working",
+        message: "I'm building the page and setting up the preview.",
+        jobId: "job_stuck",
+        updatedAt: previousUpdateAt,
+        recoveryTrace: null
+      },
+      recentJobs: [
+        {
+          id: "job_stuck",
+          input: userInput,
+          executionInput: userInput,
+          createdAt: previousUpdateAt,
+          startedAt: previousUpdateAt,
+          completedAt: null,
+          status: "running",
+          resultSummary: null,
+          errorMessage: null,
+          ackTimerGeneration: 0,
+          ackEligibleAt: null,
+          ackLifecycleState: "NOT_SENT",
+          ackMessageId: null,
+          ackSentAt: null,
+          ackEditAttemptCount: 0,
+          ackLastErrorCode: null,
+          finalDeliveryOutcome: "not_attempted",
+          finalDeliveryAttemptCount: 0,
+          finalDeliveryLastErrorCode: null,
+          finalDeliveryLastAttemptAt: null,
+          pauseRequestedAt: null
+        }
+      ]
+    },
+    {
+      conversationId: "chat-1",
+      receivedAt: previousUpdateAt
+    }
+  );
+  let currentSession = session;
+  let enqueueCalls = 0;
+  const deps = createIngressDeps(session, {
+    config: {
+      ...buildConversationIngressConfig(),
+      staleRunningJobRecoveryMs: 60_000
+    },
+    store: {
+      getSession: async () => currentSession,
+      setSession: async (nextSession) => {
+        currentSession = nextSession;
+      }
+    },
+    isWorkerActive: () => true,
+    getWorkerLastSeenAt: () => previousUpdateAt,
+    enqueueJob: (mutableSession, input, createdAt, executionInput) => {
+      enqueueCalls += 1;
+      mutableSession.queuedJobs.push({
+        id: `job_enqueued_${enqueueCalls}`,
+        input,
+        executionInput: executionInput ?? input,
+        createdAt,
+        startedAt: null,
+        completedAt: null,
+        status: "queued",
+        resultSummary: null,
+        errorMessage: null,
+        ackTimerGeneration: 0,
+        ackEligibleAt: null,
+        ackLifecycleState: "NOT_SENT",
+        ackMessageId: null,
+        ackSentAt: null,
+        ackEditAttemptCount: 0,
+        ackLastErrorCode: null,
+        finalDeliveryOutcome: "not_attempted",
+        finalDeliveryAttemptCount: 0,
+        finalDeliveryLastErrorCode: null,
+        finalDeliveryLastAttemptAt: null,
+        pauseRequestedAt: null
+      });
+      return {
+        reply: "Queued.",
+        shouldStartWorker: true
+      };
+    }
+  });
+
+  const reply = await processConversationMessage(
+    buildMessage(userInput, receivedAt),
+    (async () => {
+      throw new Error("executeTask should not run during ingress queueing");
+    }) as ExecuteConversationTask,
+    async () => undefined,
+    deps
+  );
+
+  assert.equal(reply, "Queued.");
+  assert.equal(enqueueCalls, 1);
+  assert.equal(currentSession.runningJobId, null);
+  assert.equal(currentSession.progressState?.status, undefined);
+  assert.equal(currentSession.queuedJobs.length, 1);
+  assert.equal(currentSession.recentJobs.some((job) => job.id === "job_stuck" && job.status === "failed"), true);
+});

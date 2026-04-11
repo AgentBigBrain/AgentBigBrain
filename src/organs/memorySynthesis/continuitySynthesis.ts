@@ -7,18 +7,21 @@ import type {
   MemorySynthesisEpisodeRecord,
   MemorySynthesisFactRecord
 } from "./contracts";
-import { buildLegacyCompatibleTemporalSynthesis } from "./temporalSynthesisAdapter";
+import type { TemporalMemorySynthesis } from "../../core/profileMemoryRuntime/profileMemoryTemporalQueryContracts";
+import { buildRecallSynthesis } from "./recallSynthesis";
 
 /**
- * Preserves the legacy continuity entrypoint by delegating to the canonical temporal adapter.
+ * Preserves the continuity synthesis entrypoint while requiring canonical temporal synthesis.
  *
+ * @param temporalSynthesis - Canonical temporal synthesis for this continuity request.
  * @param episodes - Continuity-linked remembered situations.
  * @param facts - Candidate bounded profile facts.
  * @returns Best bounded synthesis, or `null` when support stays weak.
  */
 export function buildContinuityMemorySynthesis(
+  temporalSynthesis: TemporalMemorySynthesis | null,
   episodes: readonly MemorySynthesisEpisodeRecord[],
   facts: readonly MemorySynthesisFactRecord[]
 ): BoundedMemorySynthesis | null {
-  return buildLegacyCompatibleTemporalSynthesis(episodes, facts);
+  return buildRecallSynthesis(temporalSynthesis, episodes, facts);
 }

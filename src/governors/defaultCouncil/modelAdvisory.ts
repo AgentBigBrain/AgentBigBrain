@@ -10,7 +10,12 @@ import {
   DefaultGovernanceProposal,
   DefaultGovernorVote
 } from "./contracts";
-import { isLoopbackProofAction, isManagedProcessLiveRunAction } from "./liveRunExemptions";
+import {
+  isFolderRuntimeProcessSweepAction,
+  isLoopbackProofAction,
+  isManagedProcessLiveRunAction,
+  isRuntimeOwnershipInspectionAction
+} from "./liveRunExemptions";
 import { isTrackedArtifactContinuityAction } from "./trackedArtifactExemptions";
 import { isExplicitUserOwnedBuildWorkspaceAction } from "./userOwnedBuildExemptions";
 
@@ -39,6 +44,8 @@ export async function getModelAdvisoryRejection(
   if (
     isLoopbackProofAction(proposal) ||
     isManagedProcessLiveRunAction(proposal) ||
+    isFolderRuntimeProcessSweepAction(proposal, context.task.userInput) ||
+    isRuntimeOwnershipInspectionAction(proposal, context.task.userInput) ||
     isTrackedArtifactContinuityAction(proposal, context.task.userInput) ||
     isExplicitUserOwnedBuildWorkspaceAction(proposal, context.task.userInput)
   ) {

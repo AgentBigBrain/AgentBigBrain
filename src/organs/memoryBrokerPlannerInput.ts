@@ -10,6 +10,7 @@ import type {
   ProfileReadableEpisode,
   ProfileReadableFact
 } from "../core/profileMemoryRuntime/contracts";
+import type { TemporalMemorySynthesis } from "../core/profileMemoryRuntime/profileMemoryTemporalQueryContracts";
 import {
   buildConversationProfileMemoryTurnId,
   buildProfileMemorySourceFingerprint
@@ -26,8 +27,7 @@ import type { TaskRequest } from "../core/types";
 import { buildPlannerContextSynthesisBlock } from "./memorySynthesis/plannerContextSynthesis";
 import type { MemorySynthesisEpisodeRecord, MemorySynthesisFactRecord } from "./memorySynthesis/contracts";
 import {
-  adaptTemporalMemorySynthesisToBoundedMemorySynthesis,
-  buildTemporalMemorySynthesisFromCompatibilityRecords
+  adaptTemporalMemorySynthesisToBoundedMemorySynthesis
 } from "./memorySynthesis/temporalSynthesisAdapter";
 import { appendMemoryAccessAudit } from "./memoryContext/auditEvents";
 import {
@@ -82,6 +82,10 @@ interface BrokerProfileMemoryReadSession {
       asOfObservedTime?: string;
     }
   ): Promise<ProfileFactPlanningInspectionResult> | ProfileFactPlanningInspectionResult;
+  queryTemporalPlanningSynthesis?(
+    queryInput?: string,
+    asOfObservedTime?: string
+  ): Promise<TemporalMemorySynthesis | null> | TemporalMemorySynthesis | null;
   queryEpisodesForPlanningContext(
     maxEpisodes?: number,
     queryInput?: string,
@@ -113,6 +117,12 @@ async function openBrokerProfileMemoryReadSession(
       asOfObservedTime?: string
     ) => Promise<ProfileFactPlanningInspectionResult>;
   }).inspectFactsForPlanningContext;
+  const temporalPlanningSynthesisReader = (store as ProfileMemoryStore & {
+    queryTemporalPlanningSynthesis?: (
+      queryInput?: string,
+      asOfObservedTime?: string
+    ) => Promise<TemporalMemorySynthesis | null>;
+  }).queryTemporalPlanningSynthesis;
   const sessionFactory = (store as ProfileMemoryStore & {
     openReadSession?: (
       requestTelemetry?: import("../core/profileMemoryRuntime/contracts").ProfileMemoryRequestTelemetry
@@ -148,6 +158,14 @@ async function openBrokerProfileMemoryReadSession(
               asOfValidTime,
               asOfObservedTime
             )
+        }
+      : {}),
+    ...(typeof temporalPlanningSynthesisReader === "function"
+      ? {
+          queryTemporalPlanningSynthesis: (
+            queryInput = "",
+            asOfObservedTime = new Date().toISOString()
+          ) => temporalPlanningSynthesisReader.call(store, queryInput, asOfObservedTime)
         }
       : {}),
     queryEpisodesForPlanningContext: (
@@ -292,10 +310,10 @@ export async function buildBrokeredPlannerInput(
     const plannerSynthesisFacts = plannerFactInspection.entries.map((entry) =>
       toMemorySynthesisFactRecord(entry.fact, entry.decisionRecord)
     );
-    const plannerTemporalSynthesis = buildTemporalMemorySynthesisFromCompatibilityRecords(
-      plannerSynthesisEpisodes,
-      plannerSynthesisFacts
-    );
+    const plannerTemporalSynthesis =
+      typeof readSession.queryTemporalPlanningSynthesis === "function"
+        ? await readSession.queryTemporalPlanningSynthesis(currentUserRequest, task.createdAt)
+        : null;
     if (plannerTemporalSynthesis) {
       recordProfileMemorySynthesisOperation(requestTelemetry);
     }
@@ -306,9 +324,7 @@ export async function buildBrokeredPlannerInput(
           plannerSynthesisFacts
         )
       : null;
-    const memorySynthesisContext = buildPlannerContextSynthesisBlock(
-      plannerTemporalSynthesis
-    );
+    const memorySynthesisContext = buildPlannerContextSynthesisBlock(plannerTemporalSynthesis);
 
     if (!profileContext && !episodeContext && !memorySynthesisContext) {
       const domainBoundary = assessDomainBoundary(

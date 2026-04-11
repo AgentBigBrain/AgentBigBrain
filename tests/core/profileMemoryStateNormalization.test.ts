@@ -273,6 +273,100 @@ test("normalizeProfileMemoryState rebuilds additive graph indexes and drops malf
   assert.equal(normalized.graph.readModel.watermark, 3);
 });
 
+test("normalizeProfileMemoryState keeps the existing graph current winner and projection lineage when conflicting flat facts remain retained", () => {
+  const updatedAt = "2026-04-10T13:30:00.000Z";
+  const normalized = normalizeProfileMemoryState({
+    updatedAt,
+    facts: [
+      {
+        id: "fact_authoritative_owen_work",
+        key: "contact.owen.work_association",
+        value: "Lantern Studio",
+        sensitive: false,
+        status: "confirmed",
+        confidence: 0.92,
+        sourceTaskId: "task_profile_graph_authoritative_work",
+        source: "user_input_pattern.work_with_contact",
+        observedAt: updatedAt,
+        confirmedAt: updatedAt,
+        supersededAt: null,
+        lastUpdatedAt: updatedAt
+      },
+      {
+        id: "fact_conflicting_owen_work",
+        key: "contact.owen.work_association",
+        value: "Beacon Labs",
+        sensitive: false,
+        status: "confirmed",
+        confidence: 0.95,
+        sourceTaskId: "task_profile_graph_conflicting_work",
+        source: "user_input_pattern.work_with_contact",
+        observedAt: updatedAt,
+        confirmedAt: updatedAt,
+        supersededAt: null,
+        lastUpdatedAt: updatedAt
+      }
+    ],
+    graph: {
+      updatedAt,
+      observations: [
+        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+          observationId: "observation_authoritative_owen_work",
+          stableRefId: "stable_contact_owen",
+          family: "contact.work_association",
+          normalizedKey: "contact.owen.work_association",
+          normalizedValue: "Lantern Studio",
+          sensitive: false,
+          sourceTaskId: "task_profile_graph_authoritative_work",
+          sourceFingerprint: "fingerprint_authoritative_owen_work",
+          sourceTier: "explicit_user_statement",
+          assertedAt: updatedAt,
+          observedAt: updatedAt,
+          timePrecision: "instant",
+          timeSource: "user_stated",
+          entityRefIds: ["entity_contact_owen"]
+        })
+      ],
+      claims: [
+        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+          claimId: "claim_authoritative_owen_work",
+          stableRefId: "stable_contact_owen",
+          family: "contact.work_association",
+          normalizedKey: "contact.owen.work_association",
+          normalizedValue: "Lantern Studio",
+          sensitive: false,
+          sourceTaskId: "task_profile_graph_authoritative_work",
+          sourceFingerprint: "fingerprint_authoritative_owen_work",
+          sourceTier: "explicit_user_statement",
+          assertedAt: updatedAt,
+          validFrom: updatedAt,
+          validTo: null,
+          endedAt: null,
+          endedByClaimId: null,
+          timePrecision: "instant",
+          timeSource: "user_stated",
+          derivedFromObservationIds: ["observation_authoritative_owen_work"],
+          projectionSourceIds: ["fact_authoritative_owen_work"],
+          entityRefIds: ["entity_contact_owen"],
+          active: true
+        })
+      ],
+      events: []
+    }
+  });
+
+  assert.equal(normalized.facts.length, 2);
+  const currentClaimId =
+    normalized.graph.readModel.currentClaimIdsByKey["contact.owen.work_association"] ?? null;
+  const currentClaim =
+    normalized.graph.claims.find((claim) => claim.payload.claimId === currentClaimId) ?? null;
+
+  assert.notEqual(currentClaim, null);
+  assert.equal(currentClaim?.payload.normalizedKey, "contact.owen.work_association");
+  assert.equal(currentClaim?.payload.normalizedValue, "Lantern Studio");
+  assert.equal(currentClaim?.payload.active, true);
+});
+
 test("normalizeProfileMemoryState keeps the freshest valid envelope for duplicate graph record ids", () => {
   const normalized = normalizeProfileMemoryState({
     updatedAt: "2026-04-03T20:30:00.000Z",

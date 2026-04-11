@@ -385,7 +385,7 @@ test("extracts named-contact relationship and work/school associations from narr
   assert.ok(contactName);
   assert.equal(contactName?.value, "Owen");
   assert.ok(contactRelationship);
-  assert.equal(contactRelationship?.value, "acquaintance");
+  assert.equal(contactRelationship?.value, "work_peer");
   assert.ok(schoolAssociation);
   assert.equal(schoolAssociation?.value, "went_to_school_together");
   assert.ok(workAssociation);

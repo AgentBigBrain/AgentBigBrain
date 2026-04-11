@@ -1,14 +1,11 @@
 /**
  * @fileoverview Deterministic framework-app runtime fallback actions for planner timeout recovery.
  */
-
-import path from "node:path";
 import { estimateActionCostUsd } from "../../core/actionCostPolicy";
-import { extractActiveRequestSegment } from "../../core/currentRequestExtraction";
 import { makeId } from "../../core/ids";
 import { PlannedAction } from "../../core/types";
 import { PlannerExecutionEnvironmentContext } from "./executionStyleContracts";
-import { extractRequestedFrameworkFolderName } from "./frameworkBuildActionHeuristics";
+import { extractRequestedFrameworkWorkspaceRootPath } from "./frameworkRequestPathParsing";
 import {
   buildFrameworkBuildProofCommand,
   buildFrameworkScaffoldCommand,
@@ -16,7 +13,6 @@ import {
   extractTrackedPreviewProcessLeaseId,
   extractTrackedPreviewUrl,
   extractTrackedWorkspaceRoot,
-  FrameworkFallbackKind,
   hasFrameworkBuildArtifacts,
   isFrameworkBrowserOpenFollowUp,
   isFrameworkPreviewFollowUp,
@@ -24,11 +20,11 @@ import {
   resolveFrameworkLoopbackTarget,
   resolveTrackedPreviewLoopbackTarget
 } from "./frameworkRuntimeActionFallbackSupport";
+import { buildDeterministicFrameworkOpenBrowserFollowUpActions } from "./frameworkRuntimeActionFallbackOpenBrowserSupport";
+import { resolveTrackedFrameworkWorkspaceContext } from "./frameworkRuntimeActionFallbackTrackedContextSupport";
 import { getPathModuleForPathValue } from "./frameworkPathSupport";
-import {
-  buildDeterministicFrameworkTrackedEditFallbackActions,
-  extractTrackedBrowserSessionId
-} from "./frameworkRuntimeActionFallbackEditSupport";
+import { buildDeterministicFrameworkTrackedEditFallbackActions, extractTrackedBrowserSessionId } from "./frameworkRuntimeActionFallbackEditSupport";
+import { resolveFrameworkFallbackRequestContext } from "./frameworkRuntimeActionFallbackGoalSupport";
 import { buildFrameworkLandingPageWriteActions } from "./frameworkRuntimeActionFallbackWriteSupport";
 import {
   isDeterministicFrameworkBuildLaneRequest,
@@ -39,8 +35,6 @@ import {
   requiresPersistentBrowserOpenBuildRequest,
   suppressesLiveRunWork
 } from "./liveVerificationPolicy";
-
-const TRACKED_WORKSPACE_REFERENCE_PATTERN = /\b(?:reuse|existing|current|same|tracked)\b/i;
 const SUPPORTED_FRAMEWORK_FALLBACK_SHELL_KINDS = new Set([
   "powershell",
   "pwsh",
@@ -48,24 +42,13 @@ const SUPPORTED_FRAMEWORK_FALLBACK_SHELL_KINDS = new Set([
   "zsh",
   "wsl_bash"
 ]);
-type SupportedFrameworkFallbackShellKind =
-  | "powershell"
-  | "pwsh"
-  | "bash"
-  | "zsh"
-  | "wsl_bash";
+type SupportedFrameworkFallbackShellKind = "powershell" | "pwsh" | "bash" | "zsh" | "wsl_bash";
 
-/**
- * Builds deterministic bounded framework-app fallback actions when model planning still fails
- * after repair for fresh scaffold/setup turns.
- *
- * @param currentUserRequest - Active framework-app scaffold request.
- * @param executionEnvironment - Planner execution environment context.
- * @returns Deterministic fallback actions, or an empty list when the request cannot be synthesized safely.
- */
+/** Builds deterministic bounded framework-app fallback actions for fresh scaffold/setup recovery. */
 export function buildDeterministicFrameworkBuildFallbackActions(
   requestContext: string,
-  executionEnvironment: PlannerExecutionEnvironmentContext | null
+  executionEnvironment: PlannerExecutionEnvironmentContext | null,
+  goalContext: string | null = null
 ): PlannedAction[] {
   if (
     !executionEnvironment ||
@@ -74,46 +57,74 @@ export function buildDeterministicFrameworkBuildFallbackActions(
   ) {
     return [];
   }
-
   const trackedWorkspaceRoot = extractTrackedWorkspaceRoot(requestContext);
-  const trackedPreviewUrl = extractTrackedPreviewUrl(requestContext);
-  const trackedPreviewProcessLeaseId =
-    extractTrackedPreviewProcessLeaseId(requestContext);
-  const trackedBrowserSessionId =
-    extractTrackedBrowserSessionId(requestContext);
-  const activeRequest = extractActiveRequestSegment(requestContext).trim();
+  const requestResolution = resolveFrameworkFallbackRequestContext(
+    requestContext,
+    goalContext,
+    trackedWorkspaceRoot
+  );
+  const activeRequest = requestResolution.activeRequest;
+  const explicitWorkspaceRoot = extractRequestedFrameworkWorkspaceRootPath(activeRequest);
+  const requestedFolderName = requestResolution.requestedFolderName;
+  const trackedWorkspaceContext = resolveTrackedFrameworkWorkspaceContext(
+    trackedWorkspaceRoot,
+    explicitWorkspaceRoot,
+    requestedFolderName
+  );
+  const effectiveTrackedWorkspaceRoot =
+    trackedWorkspaceContext.effectiveTrackedWorkspaceRoot;
+  const trackedWorkspaceContextAccepted =
+    trackedWorkspaceContext.trackedWorkspaceContextAccepted;
+  const trackedPreviewUrl = trackedWorkspaceContextAccepted
+    ? extractTrackedPreviewUrl(requestContext)
+    : null;
+  const trackedPreviewProcessLeaseId = trackedWorkspaceContextAccepted
+    ? extractTrackedPreviewProcessLeaseId(requestContext)
+    : null;
+  const trackedBrowserSessionId = trackedWorkspaceContextAccepted
+    ? extractTrackedBrowserSessionId(requestContext)
+    : null;
+  const directOpenBrowserFollowUpActions =
+    buildDeterministicFrameworkOpenBrowserFollowUpActions(
+      activeRequest,
+      effectiveTrackedWorkspaceRoot,
+      trackedPreviewProcessLeaseId
+    );
+  if (directOpenBrowserFollowUpActions.length > 0) {
+    return directOpenBrowserFollowUpActions;
+  }
   if (!isDeterministicFrameworkBuildLaneRequest(activeRequest)) {
     return [];
   }
-  const kind = resolveFrameworkFallbackKind(requestContext, trackedWorkspaceRoot);
-  const trackedWorkspaceFolderName = trackedWorkspaceRoot
-    ? getPathModuleForPathValue(trackedWorkspaceRoot).basename(trackedWorkspaceRoot)
-    : null;
-  const prefersTrackedWorkspaceFolderName =
-    trackedWorkspaceFolderName !== null &&
-    TRACKED_WORKSPACE_REFERENCE_PATTERN.test(activeRequest);
-  const requestedFolderName =
-    (prefersTrackedWorkspaceFolderName ? trackedWorkspaceFolderName : null) ??
-    extractRequestedFrameworkFolderName(activeRequest) ??
-    trackedWorkspaceFolderName;
-  if (!kind || !requestedFolderName) {
+  if (!requestedFolderName) {
     return [];
   }
   const requestedShellKind =
     executionEnvironment.shellKind as SupportedFrameworkFallbackShellKind;
-
   const targetPathModule = getPathModuleForPathValue(
-    trackedWorkspaceRoot ?? executionEnvironment.desktopPath
+    explicitWorkspaceRoot ??
+      effectiveTrackedWorkspaceRoot ??
+      executionEnvironment.desktopPath
   );
   const requestedFinalFolderPath = targetPathModule.join(
     executionEnvironment.desktopPath.replace(/[\\\/]+$/, ""),
     requestedFolderName
   );
   const finalFolderPath =
-    trackedWorkspaceRoot &&
-    targetPathModule.basename(trackedWorkspaceRoot) === requestedFolderName
-      ? trackedWorkspaceRoot
-      : requestedFinalFolderPath;
+    explicitWorkspaceRoot ??
+    (effectiveTrackedWorkspaceRoot &&
+    targetPathModule.basename(effectiveTrackedWorkspaceRoot) === requestedFolderName
+      ? effectiveTrackedWorkspaceRoot
+      : requestedFinalFolderPath);
+  const kind = resolveFrameworkFallbackKind(
+    requestContext,
+    effectiveTrackedWorkspaceRoot,
+    finalFolderPath
+  );
+  const themeRequestContext = requestResolution.themeRequestContext;
+  if (!kind) {
+    return [];
+  }
   const trackedPreviewLoopbackTarget = resolveTrackedPreviewLoopbackTarget(trackedPreviewUrl);
   const loopbackTarget =
     trackedPreviewLoopbackTarget ?? resolveFrameworkLoopbackTarget(kind, activeRequest);
@@ -124,6 +135,7 @@ export function buildDeterministicFrameworkBuildFallbackActions(
     requestedFolderName,
     requestedShellKind
   );
+  const scaffoldRequested = requiresFrameworkAppScaffoldAction(activeRequest);
   const liveVerificationRequested = isLiveVerificationBuildRequest(requestContext);
   const browserVerificationRequested =
     requiresBrowserVerificationBuildRequest(requestContext);
@@ -131,13 +143,12 @@ export function buildDeterministicFrameworkBuildFallbackActions(
     requiresPersistentBrowserOpenBuildRequest(requestContext);
   const workspacePreparationOnly =
     isFrameworkWorkspacePreparationRequest(requestContext);
-  const previewFollowUpRequested =
+  const previewFollowUpRequested = !scaffoldRequested &&
     isFrameworkPreviewFollowUp(activeRequest) &&
     !suppressesLiveRunWork(activeRequest);
-  const browserOpenFollowUpRequested = isFrameworkBrowserOpenFollowUp(activeRequest);
-  const builtWorkspaceReady =
-    trackedWorkspaceRoot !== null &&
-    hasFrameworkBuildArtifacts(kind, finalFolderPath);
+  const browserOpenFollowUpRequested =
+    !scaffoldRequested && isFrameworkBrowserOpenFollowUp(activeRequest);
+  const builtWorkspaceReady = hasFrameworkBuildArtifacts(kind, finalFolderPath);
   const trackedPreviewAlreadyRunning = trackedPreviewUrl !== null;
   const liveLifecycleRequested =
     liveVerificationRequested ||
@@ -147,7 +158,11 @@ export function buildDeterministicFrameworkBuildFallbackActions(
     browserOpenFollowUpRequested;
   const canReuseBuiltWorkspaceForLiveLifecycle =
     builtWorkspaceReady &&
-    (previewFollowUpRequested || browserOpenFollowUpRequested);
+    (
+      previewFollowUpRequested ||
+      browserOpenFollowUpRequested ||
+      !scaffoldRequested
+    );
   const canReuseTrackedLivePreview =
     trackedPreviewAlreadyRunning &&
     (previewFollowUpRequested || browserOpenFollowUpRequested);
@@ -155,7 +170,6 @@ export function buildDeterministicFrameworkBuildFallbackActions(
     kind === "next_js"
       ? `npm run dev -- --hostname ${loopbackTarget.host} --port ${loopbackTarget.port}`
       : `npm run preview -- --host ${loopbackTarget.host} --port ${loopbackTarget.port}`;
-
   const trackedLiveEditActions = buildDeterministicFrameworkTrackedEditFallbackActions({
     kind,
     activeRequest,
@@ -169,7 +183,6 @@ export function buildDeterministicFrameworkBuildFallbackActions(
   if (trackedLiveEditActions.length > 0) {
     return trackedLiveEditActions;
   }
-
   const scaffoldAction: PlannedAction = {
     id: makeId("action"),
     type: "shell_command",
@@ -192,16 +205,15 @@ export function buildDeterministicFrameworkBuildFallbackActions(
     kind,
     finalFolderPath,
     requestedFolderName,
-    requestContext
+    themeRequestContext
   );
-
   const installAction: PlannedAction = {
     id: makeId("action"),
     type: "shell_command",
     description:
       "Install dependencies in the exact requested project folder so package.json and node_modules are present there.",
     params: {
-      command: "npm install",
+      command: "npm install --no-audit --no-fund",
       cwd: finalFolderPath,
       workdir: finalFolderPath,
       requestedShellKind,
@@ -209,7 +221,7 @@ export function buildDeterministicFrameworkBuildFallbackActions(
     },
     estimatedCostUsd: estimateActionCostUsd({
       type: "shell_command",
-      params: { command: "npm install", cwd: finalFolderPath }
+      params: { command: "npm install --no-audit --no-fund", cwd: finalFolderPath }
     })
   };
 
@@ -229,7 +241,6 @@ export function buildDeterministicFrameworkBuildFallbackActions(
       params: { command: "npm run build", cwd: finalFolderPath }
     })
   };
-
   const workspaceProofCommand = buildFrameworkWorkspaceProofCommand(
     requestedShellKind
   );
@@ -250,7 +261,6 @@ export function buildDeterministicFrameworkBuildFallbackActions(
       params: { command: workspaceProofCommand, cwd: finalFolderPath }
     })
   };
-
   const buildProofCommand = buildFrameworkBuildProofCommand(
     kind,
     requestedShellKind
@@ -339,7 +349,7 @@ export function buildDeterministicFrameworkBuildFallbackActions(
         params: {
           url: liveUrl,
           rootPath: finalFolderPath,
-          ...(trackedPreviewProcessLeaseId
+          ...(canReuseTrackedLivePreview && trackedPreviewProcessLeaseId
             ? { previewProcessLeaseId: trackedPreviewProcessLeaseId }
             : {}),
           timeoutMs: 30_000
@@ -349,7 +359,7 @@ export function buildDeterministicFrameworkBuildFallbackActions(
           params: {
             url: liveUrl,
             rootPath: finalFolderPath,
-            ...(trackedPreviewProcessLeaseId
+            ...(canReuseTrackedLivePreview && trackedPreviewProcessLeaseId
               ? { previewProcessLeaseId: trackedPreviewProcessLeaseId }
               : {})
           }
@@ -378,6 +388,7 @@ export function buildDeterministicFrameworkBuildFallbackActions(
     scaffoldAction,
     ...writeActions,
     installAction,
+    workspaceProofAction,
     buildAction,
     buildProofAction,
     startAction,

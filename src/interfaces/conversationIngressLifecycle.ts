@@ -11,7 +11,8 @@ import {
 import { detectTimezoneFromMessage } from "./conversationRuntime/sessionPulseMetadata";
 import {
   buildConversationKey,
-  buildSessionSeed
+  buildSessionSeed,
+  normalizeWhitespace
 } from "./conversationManagerHelpers";
 import { createProfileMemoryRequestTelemetry } from "../core/profileMemoryRuntime/profileMemoryRequestTelemetry";
 import type { ProfileMemoryRequestTelemetry } from "../core/profileMemoryRuntime/contracts";
@@ -21,6 +22,7 @@ import { reconcileInterpretedEntityAliasCandidateForTurn } from "./conversationR
 import { backfillPulseResponseOutcome, expireStaleEmissions } from "./pulseEmissionLifecycle";
 import { backfillTurnsFromRecentJobsIfNeeded } from "./conversationSessionMutations";
 import type { ConversationIngressDependencies } from "./conversationRuntime/contracts";
+import type { ConversationSession } from "./sessionStore";
 import {
   handleConversationCommand
 } from "./conversationRuntime/commandDispatch";
@@ -54,6 +56,41 @@ function summarizeStartedWorkInput(input: string): string {
  */
 function buildStartedWorkReply(input: string): string {
   return `On it. I'll start with: ${summarizeStartedWorkInput(input)}`;
+}
+
+/**
+ * Detects one exact inbound replay that should not enqueue or route work twice.
+ *
+ * @param session - Mutable session carrying the latest turn and job ledgers.
+ * @param userInput - Canonical inbound user text for this turn.
+ * @param receivedAt - Provider timestamp attached to the inbound event.
+ * @returns `true` when the same user turn already exists for the same timestamp.
+ */
+function isExactDuplicateInboundReplay(
+  session: ConversationSession,
+  userInput: string,
+  receivedAt: string
+): boolean {
+  const normalizedInput = normalizeWhitespace(userInput);
+  if (!normalizedInput) {
+    return false;
+  }
+  if (
+    session.conversationTurns.some(
+      (turn) =>
+        turn.role === "user" &&
+        turn.at === receivedAt &&
+        normalizeWhitespace(turn.text) === normalizedInput
+    )
+  ) {
+    return true;
+  }
+  return [...session.queuedJobs, ...session.recentJobs].some(
+    (job) =>
+      job.isSystemJob !== true &&
+      job.createdAt === receivedAt &&
+      normalizeWhitespace(job.input) === normalizedInput
+  );
 }
 
 /**
@@ -158,6 +195,9 @@ export async function processConversationMessage(
     deps.config.maxContextTurnsForExecution,
     deps.config.maxConversationTurns
   );
+  if (isExactDuplicateInboundReplay(session, trimmed, message.receivedAt)) {
+    return "";
+  }
   session.username = message.username;
   session.transportIdentity =
     normalizeConversationTransportIdentity(message.transportIdentity) ?? session.transportIdentity;

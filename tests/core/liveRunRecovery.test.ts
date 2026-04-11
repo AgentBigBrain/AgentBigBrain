@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
+  buildManagedProcessConcreteRestartRecoveryInput,
   buildManagedProcessCheckRecoveryInput,
   buildManagedProcessPortConflictRecoveryInput,
   buildManagedProcessStoppedRecoveryInput,
@@ -255,6 +256,30 @@ test("stopped-process recovery prompts steer restarts toward raw start_process c
     buildManagedProcessStoppedRecoveryInput("proc_live_1"),
     /raw server command instead of `zsh -lc` wrappers/i
   );
+});
+
+test("concrete stopped-process recovery prompts pin restart to the approved start_process command", () => {
+  const prompt = buildManagedProcessConcreteRestartRecoveryInput(
+    {
+      leaseId: "proc_live_2",
+      command: "npm run dev -- --hostname 127.0.0.1 --port 61909",
+      cwd: "C:\\Users\\testuser\\Desktop\\Detroit City"
+    },
+    {
+      url: "http://127.0.0.1:61909",
+      host: "127.0.0.1",
+      port: 61909
+    },
+    false
+  );
+
+  assert.match(
+    prompt,
+    /^start_process cmd="npm run dev -- --hostname 127\.0\.0\.1 --port 61909" cwd="C:\\\\Users\\\\testuser\\\\Desktop\\\\Detroit City"\./i
+  );
+  assert.match(prompt, /Only use start_process, check_process, probe_http, probe_port, verify_browser, open_browser, or respond/i);
+  assert.doesNotMatch(prompt, /restart the local server once if needed/i);
+  assert.match(prompt, /Do not use shell_command, write_file, scaffold, install, or other file-mutation actions/i);
 });
 
 test("explicit loopback-port requirements only trigger when the mission pins the port", () => {

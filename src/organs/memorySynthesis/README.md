@@ -20,10 +20,11 @@ and planner-context enrichment.
 - supporting evidence records with confidence
 - additive bounded decision records copied from inspected supporting facts when available
 - planner-facing synthesis block
-- explicit `legacy_adapter_only` marking on `BoundedMemorySynthesis` until touched consumers are
-  cut over to temporal synthesis
+- explicit `legacy_adapter_only` marking on `BoundedMemorySynthesis` for compatibility and shadow-
+  parity surfaces only
 - canonical temporal synthesis adapted into the legacy bounded output through
-  `temporalSynthesisAdapter.ts`
+  `temporalSynthesisAdapter.ts` only where older bounded consumers still need one compatibility
+  packet
 - typed lane-boundary metadata derived from canonical temporal synthesis for broker and continuity
   boundary consumers during the Phase 6.5 cutover
 
@@ -34,6 +35,8 @@ and planner-context enrichment.
 - this subsystem must not bypass sensitivity or approval gates; callers only pass already-safe data
 - `BoundedMemorySynthesis` remains a legacy compatibility adapter and must not become a co-equal
   truth contract beside later temporal synthesis outputs
+- live planner and recall callers must consume canonical temporal synthesis directly; the legacy
+  bounded adapter may only mirror or project that output
 - bounded decision records carried on the legacy adapter remain proof-only metadata; they must not
   create new authority, visibility, or mutation paths inside synthesis
 - lane-boundary metadata emitted here must stay derived from canonical temporal synthesis rather

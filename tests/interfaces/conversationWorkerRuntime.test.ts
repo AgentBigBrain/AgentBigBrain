@@ -107,6 +107,7 @@ test("processConversationQueue drains a queued job and persists the final delive
   const conversationKey = "telegram:chat-1:user-1";
   const notifications: string[] = [];
   const ackTimers = new Map<string, NodeJS.Timeout>();
+  const workerLastSeenAt = new Map<string, string>();
   const workerBindings = new Map<string, SessionWorkerBinding>();
   const notify: ConversationNotifierTransport = {
     capabilities: {
@@ -142,6 +143,7 @@ test("processConversationQueue drains a queued job and persists the final delive
         maxConversationTurns: 20
       }),
       ackTimers,
+      workerLastSeenAt,
       workerBindings,
       autonomousExecutionPrefix: "[AUTONOMOUS_LOOP_GOAL]"
     });
@@ -159,12 +161,91 @@ test("processConversationQueue drains a queued job and persists the final delive
   }
 });
 
+test("processConversationQueue clears ghost running state when terminal persistence fails once after execution", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-conversation-process-runtime-recovery-"));
+  const store = new InterfaceSessionStore(path.join(tempDir, "sessions.json"));
+  const conversationKey = "telegram:chat-1:user-1";
+  const notifications: string[] = [];
+  const ackTimers = new Map<string, NodeJS.Timeout>();
+  const workerLastSeenAt = new Map<string, string>();
+  const workerBindings = new Map<string, SessionWorkerBinding>();
+  const notify: ConversationNotifierTransport = {
+    capabilities: {
+      supportsEdit: false,
+      supportsNativeStreaming: false
+    },
+    send: async (message) => {
+      notifications.push(message);
+      return {
+        ok: true,
+        messageId: `message-${notifications.length}`,
+        errorCode: null
+      };
+    }
+  };
+
+  try {
+    await store.setSession(
+      buildSession(conversationKey, {
+        queuedJobs: [buildQueuedJob()]
+      })
+    );
+
+    const originalSetSession = store.setSession.bind(store);
+    let injectedFailureConsumed = false;
+    store.setSession = async (session) => {
+      const shouldInjectFailure =
+        !injectedFailureConsumed &&
+        session.conversationId === conversationKey &&
+        session.runningJobId === null &&
+        session.recentJobs[0]?.status === "completed";
+      if (shouldInjectFailure) {
+        injectedFailureConsumed = true;
+        throw new Error("Injected post-execution persistence failure.");
+      }
+      await originalSetSession(session);
+    };
+
+    await processConversationQueue({
+      sessionKey: conversationKey,
+      executeTask: async () => ({ summary: "completed runtime slice" }),
+      notify,
+      store,
+      config: buildConversationWorkerRuntimeConfig({
+        ackDelayMs: 5_000,
+        heartbeatIntervalMs: 10,
+        maxRecentJobs: 20,
+        maxConversationTurns: 20
+      }),
+      ackTimers,
+      workerLastSeenAt,
+      workerBindings,
+      autonomousExecutionPrefix: "[AUTONOMOUS_LOOP_GOAL]"
+    });
+
+    const session = await store.getSession(conversationKey);
+    assert.equal(injectedFailureConsumed, true);
+    assert.ok(session);
+    assert.equal(session?.runningJobId, null);
+    assert.equal(session?.progressState, null);
+    assert.equal(session?.queuedJobs.length, 0);
+    assert.equal(session?.recentJobs[0]?.status, "completed");
+    assert.equal(session?.recentJobs[0]?.resultSummary, "completed runtime slice");
+    assert.equal(session?.recentJobs[0]?.finalDeliveryOutcome, "sent");
+    assert.ok(notifications.some((message) => message.includes("completed runtime slice")));
+    assert.equal(ackTimers.size, 0);
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
 test("processConversationQueue uses a persistent editable status message and still sends the final reply separately", async () => {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-conversation-process-status-panel-"));
   const store = new InterfaceSessionStore(path.join(tempDir, "sessions.json"));
   const conversationKey = "telegram:chat-1:user-1";
   const deliveries: Array<{ kind: "send" | "edit"; message: string; messageId?: string }> = [];
   const ackTimers = new Map<string, NodeJS.Timeout>();
+  const workerLastSeenAt = new Map<string, string>();
   const workerBindings = new Map<string, SessionWorkerBinding>();
   const notify: ConversationNotifierTransport = {
     capabilities: {
@@ -215,6 +296,7 @@ test("processConversationQueue uses a persistent editable status message and sti
         maxConversationTurns: 20
       }),
       ackTimers,
+      workerLastSeenAt,
       workerBindings,
       autonomousExecutionPrefix: "[AUTONOMOUS_LOOP_GOAL]"
     });
@@ -237,6 +319,86 @@ test("processConversationQueue uses a persistent editable status message and sti
   }
 });
 
+test("processConversationQueue keeps the persistent status panel blocked when an autonomous run stops before finishing", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-conversation-process-status-panel-stopped-"));
+  const store = new InterfaceSessionStore(path.join(tempDir, "sessions.json"));
+  const conversationKey = "telegram:chat-1:user-1";
+  const deliveries: Array<{ kind: "send" | "edit"; message: string; messageId?: string }> = [];
+  const ackTimers = new Map<string, NodeJS.Timeout>();
+  const workerLastSeenAt = new Map<string, string>();
+  const workerBindings = new Map<string, SessionWorkerBinding>();
+  const notify: ConversationNotifierTransport = {
+    capabilities: {
+      supportsEdit: true,
+      supportsNativeStreaming: false
+    },
+    send: async (message) => {
+      const messageId = `message-${deliveries.length + 1}`;
+      deliveries.push({ kind: "send", message, messageId });
+      return {
+        ok: true,
+        messageId,
+        errorCode: null
+      };
+    },
+    edit: async (messageId, message) => {
+      deliveries.push({ kind: "edit", messageId, message });
+      return {
+        ok: true,
+        messageId,
+        errorCode: null
+      };
+    }
+  };
+
+  try {
+    await store.setSession(
+      buildSession(conversationKey, {
+        queuedJobs: [buildQueuedJob({ executionInput: "[AUTONOMOUS_LOOP_GOAL] blocked runtime test" })]
+      })
+    );
+
+    await processConversationQueue({
+      sessionKey: conversationKey,
+      executeTask: async (_input, _receivedAt, onProgressUpdate) => {
+        await onProgressUpdate?.({
+          status: "verifying",
+          message: "Checking the generated page before finishing."
+        });
+        return {
+          summary:
+            "I started this, but the run stopped before it finished after 5 iteration(s). Deterministic recovery stopped for TARGET_NOT_RUNNING: The deterministic restart-and-reverify budget is exhausted for this run. Next step: inspect the failing step and retry with a narrower request if the same error repeats. Approved 18, blocked 7."
+        };
+      },
+      notify,
+      store,
+      config: buildConversationWorkerRuntimeConfig({
+        ackDelayMs: 5_000,
+        heartbeatIntervalMs: 10,
+        maxRecentJobs: 20,
+        maxConversationTurns: 20
+      }),
+      ackTimers,
+      workerLastSeenAt,
+      workerBindings,
+      autonomousExecutionPrefix: "[AUTONOMOUS_LOOP_GOAL]"
+    });
+
+    const session = await store.getSession(conversationKey);
+    assert.ok(session);
+    assert.equal(session?.recentJobs[0]?.status, "completed");
+    assert.equal(session?.recentJobs[0]?.finalDeliveryOutcome, "sent");
+    assert.equal(deliveries[2]?.kind, "send");
+    assert.match(deliveries[2]?.message ?? "", /run stopped before it finished/i);
+    assert.equal(deliveries[3]?.kind, "edit");
+    assert.match(deliveries[3]?.message ?? "", /Status: Blocked/);
+    assert.match(deliveries[3]?.message ?? "", /hit a blocker before it could finish/i);
+    assert.doesNotMatch(deliveries[3]?.message ?? "", /Status: Done/);
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
 test("processConversationQueue automatically retries exact tracked folder recovery once before asking the user", async () => {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-conversation-process-recovery-"));
   const store = new InterfaceSessionStore(path.join(tempDir, "sessions.json"));
@@ -244,6 +406,7 @@ test("processConversationQueue automatically retries exact tracked folder recove
   const notifications: string[] = [];
   const executionInputs: string[] = [];
   const ackTimers = new Map<string, NodeJS.Timeout>();
+  const workerLastSeenAt = new Map<string, string>();
   const workerBindings = new Map<string, SessionWorkerBinding>();
   const notify: ConversationNotifierTransport = {
     capabilities: {
@@ -383,6 +546,7 @@ test("processConversationQueue automatically retries exact tracked folder recove
         showCompletionPrefix: false
       },
       ackTimers,
+      workerLastSeenAt,
       workerBindings,
       autonomousExecutionPrefix: "[AUTONOMOUS_LOOP_GOAL]"
     });

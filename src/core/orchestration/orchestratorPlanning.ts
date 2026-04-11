@@ -21,6 +21,9 @@ import {
   type ProfileAwareInput,
   type Stage685PlaybookPlanningContextResolver
 } from "./contracts";
+import {
+  shouldPreserveDeterministicFrameworkLifecycleActions
+} from "./deterministicFrameworkLifecyclePolicy";
 
 export interface BuildProfileAwareInputDependencies {
   memoryBroker: Pick<MemoryBrokerOrgan, "buildPlannerInput">;
@@ -169,7 +172,12 @@ export async function planOrchestratorAttempt(
       conversationDomainContext: input.conversationDomainContext ?? null
     }
   );
-  const cappedActions = rawPlan.actions.slice(0, input.maxActionsPerTask);
+  const cappedActions = shouldPreserveDeterministicFrameworkLifecycleActions(
+    rawPlan,
+    input.maxActionsPerTask
+  )
+    ? rawPlan.actions
+    : rawPlan.actions.slice(0, input.maxActionsPerTask);
   const playbookSuffix = playbookPlanningContext.selectedPlaybookId
     ? ` [playbook=${playbookPlanningContext.selectedPlaybookId}]`
     : " [playbook=fallback]";

@@ -16,6 +16,19 @@ test("buildMissionCompletionContract does not require browser verification just 
   assert.equal(contract.executionStyle, true);
   assert.equal(contract.requireReadinessProof, true);
   assert.equal(contract.requireBrowserProof, false);
+  assert.equal(contract.requireBrowserOpenProof, true);
+});
+
+test("buildMissionCompletionContract treats run-and-leave-open landing-page goals as live browser-open missions even without explicit localhost wording", () => {
+  const contract = buildMissionCompletionContract(
+    'I want you to create a nextjs landing page, with 4 sections called "Detroit City" and there should be a footer and header, a gritty feeling design, and you need to do this end to end and put it on my desktop, then leave it open in the browser so i can review it. This means you have to run it and leave it open.'
+  );
+
+  assert.equal(contract.executionStyle, true);
+  assert.equal(contract.requireReadinessProof, true);
+  assert.equal(contract.requireBrowserProof, false);
+  assert.equal(contract.requireBrowserOpenProof, true);
+  assert.equal(contract.requireProcessStopProof, false);
 });
 
 test("buildMissionCompletionContract still requires browser verification for explicit UI verification goals", () => {
@@ -26,6 +39,7 @@ test("buildMissionCompletionContract still requires browser verification for exp
   assert.equal(contract.executionStyle, true);
   assert.equal(contract.requireReadinessProof, true);
   assert.equal(contract.requireBrowserProof, true);
+  assert.equal(contract.requireBrowserOpenProof, false);
 });
 
 test("buildMissionCompletionContract captures quoted and unquoted explicit target paths", () => {

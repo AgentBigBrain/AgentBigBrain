@@ -147,7 +147,11 @@ function isIdentityFollowUpCandidate(
     return false;
   }
   return (
-    signals.primaryKind === "approval_or_control" ||
+    (
+      signals.primaryKind === "approval_or_control" &&
+      signals.rawTokenCount > 0 &&
+      signals.rawTokenCount <= 4
+    ) ||
     (signals.primaryKind === "plain_chat" && signals.rawTokenCount > 0 && signals.rawTokenCount <= 4)
   );
 }
@@ -192,6 +196,14 @@ export function assessIdentityInterpretationEligibility(
       eligible: true,
       ambiguous: false,
       reason: "explicit_self_identity_declaration"
+    };
+  }
+
+  if (isRelationshipConversationRecallTurn(userInput)) {
+    return {
+      eligible: false,
+      ambiguous: false,
+      reason: null
     };
   }
 

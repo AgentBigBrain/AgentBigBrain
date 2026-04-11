@@ -179,6 +179,8 @@ function resolveRuntimeExecutionFailurePriority(
       return 90;
     case "shell_command":
       return 85;
+    case "stop_folder_runtime_processes":
+      return 84;
     case "write_file":
       return 80;
     case "delete_file":

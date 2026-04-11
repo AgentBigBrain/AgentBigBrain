@@ -13,6 +13,7 @@ import {
   adaptTemporalMemorySynthesisToBoundedMemorySynthesis,
   buildLegacyCompatibleTemporalSynthesis
 } from "./temporalSynthesisAdapter";
+import { selectPrimaryEpisodeSupportCandidate } from "./temporalSynthesisAdapterLegacySupport";
 
 /**
  * Serializes the bounded recall decision shape for Phase 7 shadow-parity comparison.
@@ -121,7 +122,11 @@ function renderRecallTemporalSection(
 }
 
 /**
- * Produces one bounded recall synthesis from already-derived temporal output.
+ * Produces one bounded recall synthesis for inline conversation follow-up.
+ *
+ * This helper consumes already-derived temporal synthesis for live runtime callers. The older
+ * compatibility adapter remains bounded to explicit shadow-parity comparison instead of
+ * participating as a second runtime owner of recall decisions.
  *
  * @param temporalSynthesis - Canonical temporal synthesis for this recall surface.
  * @param episodes - Continuity-linked episodes under consideration.
@@ -132,57 +137,22 @@ export function buildRecallSynthesis(
   temporalSynthesis: TemporalMemorySynthesis | null,
   episodes: readonly MemorySynthesisEpisodeRecord[],
   facts: readonly MemorySynthesisFactRecord[]
-): BoundedMemorySynthesis | null;
-/**
- * Produces one bounded recall synthesis from compatibility episode and fact records.
- *
- * @param episodes - Continuity-linked episodes under consideration.
- * @param facts - Continuity-linked facts under consideration.
- * @returns Best bounded synthesis, or `null` when support is too weak.
- */
-export function buildRecallSynthesis(
-  episodes: readonly MemorySynthesisEpisodeRecord[],
-  facts: readonly MemorySynthesisFactRecord[]
-): BoundedMemorySynthesis | null;
-/**
- * Produces one bounded recall synthesis for inline conversation follow-up.
- *
- * This helper prefers already-derived temporal synthesis. It retains a compatibility overload so
- * older callers can still hand it legacy episode/fact records until every recall path is cut over.
- *
- * @param temporalSynthesisOrEpisodes - Canonical temporal synthesis, or compatibility episodes.
- * @param episodesOrFacts - Continuity-linked episodes or facts, depending on the overload.
- * @param maybeFacts - Continuity-linked facts when temporal synthesis is supplied explicitly.
- * @returns Best bounded synthesis, or `null` when support is too weak.
- */
-export function buildRecallSynthesis(
-  temporalSynthesisOrEpisodes:
-    | TemporalMemorySynthesis
-    | null
-    | readonly MemorySynthesisEpisodeRecord[],
-  episodesOrFacts:
-    | readonly MemorySynthesisEpisodeRecord[]
-    | readonly MemorySynthesisFactRecord[],
-  maybeFacts?: readonly MemorySynthesisFactRecord[]
 ): BoundedMemorySynthesis | null {
-  if (Array.isArray(temporalSynthesisOrEpisodes)) {
-    return buildLegacyCompatibleTemporalSynthesis(
-      temporalSynthesisOrEpisodes,
-      episodesOrFacts as readonly MemorySynthesisFactRecord[]
-    );
-  }
-  if (!temporalSynthesisOrEpisodes) {
+  if (!temporalSynthesis) {
     return null;
   }
-  const temporalSynthesis = temporalSynthesisOrEpisodes as TemporalMemorySynthesis;
+  const primaryEpisodeCandidate = selectPrimaryEpisodeSupportCandidate(episodes, facts);
+  if (primaryEpisodeCandidate !== null && primaryEpisodeCandidate.score < 4 && facts.length === 0) {
+    return null;
+  }
   const synthesis = adaptTemporalMemorySynthesisToBoundedMemorySynthesis(
     temporalSynthesis,
-    episodesOrFacts as readonly MemorySynthesisEpisodeRecord[],
-    maybeFacts ?? []
+    episodes,
+    facts
   );
   const compatibilityShadow = buildLegacyCompatibleTemporalSynthesis(
-    episodesOrFacts as readonly MemorySynthesisEpisodeRecord[],
-    maybeFacts ?? []
+    episodes,
+    facts
   );
   return {
     ...synthesis,

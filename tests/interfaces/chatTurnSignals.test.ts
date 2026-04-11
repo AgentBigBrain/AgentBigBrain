@@ -93,6 +93,34 @@ test("assessIdentityInterpretationEligibility treats short follow-ups as identit
   );
 });
 
+test("assessIdentityInterpretationEligibility keeps relationship recall out of the identity follow-up path even with recent identity context", () => {
+  const eligibility = assessIdentityInterpretationEligibility("Who is Billy?", {
+    recentIdentityConversationActive: true,
+    recentAssistantIdentityPrompt: true
+  });
+  assert.equal(eligibility.eligible, false);
+  assert.equal(eligibility.reason, null);
+  assert.equal(
+    shouldPreserveDeterministicDirectChatTurn("Who is Billy?", {
+      recentIdentityConversationActive: true,
+      recentAssistantIdentityPrompt: true
+    }),
+    true
+  );
+});
+
+test("assessIdentityInterpretationEligibility keeps long approval-prefixed relationship updates out of the identity follow-up path", () => {
+  const eligibility = assessIdentityInterpretationEligibility(
+    "Yeah, so Billy is someone I worked previously. He now works somewhere else.",
+    {
+      recentIdentityConversationActive: true,
+      recentAssistantIdentityPrompt: true
+    }
+  );
+  assert.equal(eligibility.eligible, false);
+  assert.equal(eligibility.reason, null);
+});
+
 test("assessIdentityInterpretationEligibility keeps obvious workflow turns out of the identity path even when identity context is active", () => {
   const eligibility = assessIdentityInterpretationEligibility(
     "Deploy my app and leave the preview open.",

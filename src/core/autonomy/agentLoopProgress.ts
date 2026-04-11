@@ -297,6 +297,9 @@ export function buildVerificationStateMessage(
   if (normalizedRequirements.includes("BROWSER_PROOF")) {
     return "I'm verifying the browser result now so I can confirm the page really matches the goal.";
   }
+  if (normalizedRequirements.includes("BROWSER_OPEN_PROOF")) {
+    return "I'm opening the live page now so I can leave the exact browser session up for review.";
+  }
   if (normalizedRequirements.includes("READINESS_PROOF")) {
     return "I'm checking the local preview is actually up before I call this done.";
   }

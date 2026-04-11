@@ -33,10 +33,12 @@ import {
   readProfileFacts,
   reviewProfileFactsForUser
 } from "./profileMemoryQueries";
+import { queryProfileTemporalPlanningSynthesis } from "./profileMemoryPlanningSynthesis";
 import type {
   ProfileFactContinuityQueryRequest,
   ProfileFactContinuityResult
 } from "./profileMemoryQueryContracts";
+import type { TemporalMemorySynthesis } from "./profileMemoryTemporalQueryContracts";
 
 /**
  * Stable request-scoped read facade over one already-reconciled profile-memory snapshot.
@@ -95,6 +97,23 @@ export class ProfileMemoryReadSession {
     request: ProfileFactPlanningInspectionRequest
   ): ProfileFactPlanningInspectionResult {
     return inspectProfileFactsForPlanningContext(this.state, request);
+  }
+
+  /**
+   * Builds planner-facing canonical temporal synthesis from the shared request snapshot.
+   *
+   * @param queryInput - Current query text used for graph-backed temporal retrieval.
+   * @param asOfObservedTime - Optional observed-time boundary for the bounded temporal proof.
+   * @returns Canonical temporal synthesis or `null` when nothing relevant is available.
+   */
+  queryTemporalPlanningSynthesis(
+    queryInput = "",
+    asOfObservedTime = this.state.updatedAt
+  ): TemporalMemorySynthesis | null {
+    return queryProfileTemporalPlanningSynthesis(this.state, {
+      queryInput,
+      asOfObservedTime
+    });
   }
 
   /**

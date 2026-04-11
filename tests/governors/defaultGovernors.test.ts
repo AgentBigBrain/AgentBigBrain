@@ -303,6 +303,49 @@ test("security governor ignores advisory vetoes for tracked artifact follow-up r
   assert.equal(vote.rejectCategory, undefined);
 });
 
+test("security governor ignores advisory vetoes for tracked runtime workspace inspection actions", async () => {
+  const securityGovernor = getGovernorById("security");
+  const vote = await securityGovernor.evaluate(
+    buildProposal({
+      type: "inspect_workspace_resources",
+      description: "Inspect the tracked Detroit City Two workspace, preview, browser session, and preview lease.",
+      params: {
+        rootPath: "C:\\Users\\testuser\\Desktop\\Detroit City Two",
+        previewUrl: "http://127.0.0.1:3000/",
+        browserSessionId: "browser_session:detroit-city-two",
+        previewProcessLeaseId: "proc_detroit_city_two"
+      }
+    }),
+    buildContext(
+      "security",
+      "please inspect and see if Detroit City Two is still running, do this end to end"
+    )
+  );
+
+  assert.equal(vote.approve, true);
+  assert.equal(vote.rejectCategory, undefined);
+});
+
+test("security governor ignores advisory vetoes for exact path-holder inspections during local organization turns", async () => {
+  const securityGovernor = getGovernorById("security");
+  const vote = await securityGovernor.evaluate(
+    buildProposal({
+      type: "inspect_path_holders",
+      description: "Inspect runtime holders for the exact Desktop drone folder before targeted shutdown.",
+      params: {
+        path: "C:\\Users\\testuser\\Desktop\\DroneLand"
+      }
+    }),
+    buildContext(
+      "security",
+      "Look at all the folders on the desktop that start with drone and Drone, stop the servers that are running in the folders do this end to end"
+    )
+  );
+
+  assert.equal(vote.approve, true);
+  assert.equal(vote.rejectCategory, undefined);
+});
+
 test("security governor ignores advisory vetoes for explicit my-desktop write_file build actions", async () => {
   const securityGovernor = getGovernorById("security");
   const vote = await securityGovernor.evaluate(

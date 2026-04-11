@@ -135,6 +135,28 @@ function extractAutonomousExecutionPayload(userInput: string): string | null {
 }
 
 /**
+ * Unwraps execution-input envelopes that carry richer autonomous-loop context.
+ *
+ * **Why it exists:**
+ * Planner-policy and runtime-inspection helpers sometimes need the full embedded execution-input
+ * context, not only the active current-user request segment. This helper normalizes that surface
+ * before downstream line-oriented matching runs.
+ *
+ * **What it talks to:**
+ * - Uses the local autonomous execution prefix parser only.
+ *
+ * @param userInput - Raw execution input that may contain an autonomous execution envelope.
+ * @returns Unwrapped execution payload when present, otherwise the trimmed original input.
+ */
+export function extractExecutionContextPayload(userInput: string): string {
+  const normalized = userInput.trim();
+  if (!normalized) {
+    return "";
+  }
+  return extractAutonomousExecutionPayload(normalized) ?? normalized;
+}
+
+/**
  * Checks whether user input includes the agent-pulse request marker.
  *
  * **Why it exists:**
@@ -163,14 +185,9 @@ export function containsAgentPulseRequestMarker(userInput: string): boolean {
  * @returns Active request segment used for routing, verification, and diagnostics checks.
  */
 export function extractActiveRequestSegment(userInput: string): string {
-  const normalized = userInput.trim();
+  const normalized = extractExecutionContextPayload(userInput);
   if (!normalized) {
     return "";
-  }
-
-  const autonomousPayload = extractAutonomousExecutionPayload(normalized);
-  if (autonomousPayload) {
-    return extractActiveRequestSegment(autonomousPayload);
   }
 
   const currentRequest = extractSectionAfterMarker(normalized, CURRENT_USER_REQUEST_MARKER);

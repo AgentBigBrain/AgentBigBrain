@@ -126,6 +126,7 @@ export interface ConversationIngressDependencies extends ConversationIngressRule
   memoryAccessAuditStore?: MemoryAccessAuditStore;
   abortActiveAutonomousRun?(conversationId: string): boolean;
   isWorkerActive(sessionKey: string): boolean;
+  getWorkerLastSeenAt?(sessionKey: string): string | null;
   clearAckTimer(sessionKey: string): void;
   setWorkerBinding(
     sessionKey: string,
@@ -156,6 +157,7 @@ export interface ConversationSessionRecoveryDependencies {
     "staleRunningJobRecoveryMs" | "maxRecentJobs"
   >;
   isWorkerActive(sessionKey: string): boolean;
+  getWorkerLastSeenAt?(sessionKey: string): string | null;
   clearAckTimer(sessionKey: string): void;
 }
 

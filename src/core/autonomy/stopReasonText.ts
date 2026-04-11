@@ -4,6 +4,7 @@
 
 import {
   EXECUTION_STYLE_BROWSER_GATING_REASON_CODE,
+  EXECUTION_STYLE_BROWSER_OPEN_GATING_REASON_CODE,
   EXECUTION_STYLE_GOAL_GATING_REASON_CODE,
   EXECUTION_STYLE_LIVE_VERIFICATION_BLOCKED_REASON_CODE,
   EXECUTION_STYLE_MUTATION_GATING_REASON_CODE,
@@ -85,6 +86,12 @@ function stripAutonomousReasonCode(reason: string): string {
  * @returns Human-readable stalled-run explanation.
  */
 function humanizeAutonomousStallReason(reason: string): string {
+  if (/\bBROWSER_OPEN_PROOF\b/i.test(reason)) {
+    return appendActionableNextStep(
+      "I stopped because I still did not get proof that the live page was opened and left available in the browser.",
+      "keep the app running, prove localhost readiness, and then rerun the open_browser step so the page is visibly left open."
+    );
+  }
   if (/\bBROWSER_PROOF\b/i.test(reason)) {
     return appendActionableNextStep(
       "I stopped because I still did not get browser or UI proof that the page rendered as expected.",
@@ -258,6 +265,11 @@ export function humanizeAutonomousStopReason(reason: string): string {
       return appendActionableNextStep(
         "I need browser or UI proof before I can say the page rendered as expected.",
         "keep the app running and add verify_browser after readiness passes."
+      );
+    case EXECUTION_STYLE_BROWSER_OPEN_GATING_REASON_CODE:
+      return appendActionableNextStep(
+        "I need proof that the live page was actually opened and left available in the browser.",
+        "keep the app running and add open_browser after readiness passes."
       );
     case EXECUTION_STYLE_LIVE_VERIFICATION_BLOCKED_REASON_CODE:
       return appendActionableNextStep(

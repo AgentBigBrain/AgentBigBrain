@@ -33,7 +33,7 @@ const FRAMEWORK_BROWSER_OPEN_FOLLOW_UP_PATTERN =
 const NEGATED_BROWSER_OPEN_FOLLOW_UP_PATTERN =
   /\bdo\s+not\s+(?:pop\s+the\s+)?browser\s+open\b|\bdo\s+not\s+open\b[\s\S]{0,80}\b(?:browser|tab|window|page|site|preview|it)\b/i;
 const FRAMEWORK_CONTENT_BUILD_PATTERN =
-  /\b(?:turn\s+that|make|build|finish|complete|implement)\b[\s\S]{0,120}\b(?:landing\s+page|homepage|page|site|app|workspace|project)\b/i;
+  /\b(?:turn\s+that|create|make|build|generate|scaffold|bootstrap|set\s+up|setup|spin\s+up|finish|complete|implement)\b[\s\S]{0,120}\b(?:landing\s+page|homepage|page|site|app|workspace|project)\b/i;
 
 /** Parses a tracked preview URL into a reusable loopback target when it stays on localhost. */
 export function resolveTrackedPreviewLoopbackTarget(
@@ -196,7 +196,8 @@ function inferFrameworkKindFromWorkspace(
 /** Resolves a deterministic framework kind from the active request and any tracked workspace. */
 export function resolveFrameworkFallbackKind(
   requestContext: string,
-  trackedWorkspaceRoot: string | null
+  trackedWorkspaceRoot: string | null,
+  namedWorkspaceRoot: string | null = null
 ): FrameworkFallbackKind | null {
   if (/\bnext\.?js\b|\bnextjs\b/i.test(requestContext)) {
     return "next_js";
@@ -204,11 +205,14 @@ export function resolveFrameworkFallbackKind(
   if (/\breact\b|\bvite\b/i.test(requestContext)) {
     return "vite_react";
   }
-  if (!requiresFrameworkAppScaffoldAction(requestContext) && !trackedWorkspaceRoot) {
-    return null;
-  }
   if (trackedWorkspaceRoot) {
     return inferFrameworkKindFromWorkspace(trackedWorkspaceRoot);
+  }
+  if (namedWorkspaceRoot) {
+    return inferFrameworkKindFromWorkspace(namedWorkspaceRoot);
+  }
+  if (!requiresFrameworkAppScaffoldAction(requestContext)) {
+    return null;
   }
   return null;
 }

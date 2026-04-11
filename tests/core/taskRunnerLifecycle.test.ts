@@ -82,11 +82,121 @@ test("buildTaskRunnerMissionStopLimits derives deterministic limits from config"
       maxActionsPerTask: 4,
       maxPlanAttemptsPerTask: 3
     }
+  } as never, {
+    taskId: "task_runner_lifecycle_limits",
+    plannerNotes: "generic plan",
+    actions: []
   } as never);
 
   assert.deepEqual(limits, {
     maxActions: 4,
     maxDenies: 6,
+    maxBytes: 1_048_576
+  });
+});
+
+test("buildTaskRunnerMissionStopLimits preserves deterministic framework live lifecycle action budget", () => {
+  const limits = buildTaskRunnerMissionStopLimits({
+    limits: {
+      maxActionsPerTask: 8,
+      maxPlanAttemptsPerTask: 2
+    }
+  } as never, {
+    taskId: "task_runner_lifecycle_framework_limits",
+    plannerNotes:
+      "Deterministic framework build lifecycle fallback " +
+      "(deterministic_framework_build_fallback=shell_command)",
+    actions: [
+      {
+        id: "action_1",
+        type: "shell_command",
+        description: "scaffold",
+        params: {},
+        estimatedCostUsd: 0.01
+      },
+      {
+        id: "action_2",
+        type: "write_file",
+        description: "layout",
+        params: {},
+        estimatedCostUsd: 0.01
+      },
+      {
+        id: "action_3",
+        type: "write_file",
+        description: "page",
+        params: {},
+        estimatedCostUsd: 0.01
+      },
+      {
+        id: "action_4",
+        type: "write_file",
+        description: "styles",
+        params: {},
+        estimatedCostUsd: 0.01
+      },
+      {
+        id: "action_5",
+        type: "shell_command",
+        description: "install",
+        params: {},
+        estimatedCostUsd: 0.01
+      },
+      {
+        id: "action_6",
+        type: "shell_command",
+        description: "workspace proof",
+        params: {},
+        estimatedCostUsd: 0.01
+      },
+      {
+        id: "action_7",
+        type: "shell_command",
+        description: "build",
+        params: {},
+        estimatedCostUsd: 0.01
+      },
+      {
+        id: "action_8",
+        type: "shell_command",
+        description: "build proof",
+        params: {},
+        estimatedCostUsd: 0.01
+      },
+      {
+        id: "action_9",
+        type: "start_process",
+        description: "start",
+        params: {},
+        estimatedCostUsd: 0.01
+      },
+      {
+        id: "action_10",
+        type: "probe_http",
+        description: "probe",
+        params: {},
+        estimatedCostUsd: 0.01
+      },
+      {
+        id: "action_11",
+        type: "verify_browser",
+        description: "verify",
+        params: {},
+        estimatedCostUsd: 0.01
+      },
+      {
+        id: "action_12",
+        type: "open_browser",
+        description: "open",
+        params: {},
+        estimatedCostUsd: 0.01
+      }
+    ]
+  } as never);
+
+  assert.deepEqual(limits, {
+    maxActions: 12,
+    maxDenies: 4,
     maxBytes: 1_048_576
   });
 });

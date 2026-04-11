@@ -7,6 +7,7 @@ import {
   EXECUTION_STYLE_LIVE_VERIFICATION_BLOCKED_REASON_CODE,
   EXECUTION_STYLE_PROCESS_NEVER_READY_REASON_CODE,
   MISSION_REQUIREMENT_BROWSER,
+  MISSION_REQUIREMENT_BROWSER_OPEN,
   MISSION_REQUIREMENT_READINESS,
   hasTaskRunResultBlockCode,
   formatReasonWithCode,
@@ -14,6 +15,7 @@ import {
   type MissionRequirementId
 } from "./contracts";
 import {
+  isBrowserOpenEvidenceAction,
   isBrowserProofEvidenceAction,
   isReadinessProofEvidenceAction
 } from "./missionEvidence";
@@ -96,7 +98,8 @@ function isLiveVerificationProofActionType(
   return (
     actionType === "probe_port" ||
     actionType === "probe_http" ||
-    actionType === "verify_browser"
+    actionType === "verify_browser" ||
+    actionType === "open_browser"
   );
 }
 
@@ -170,11 +173,21 @@ function describeMissingLiveVerificationProof(
 ): string {
   const missingReadiness = missingRequirements.includes(MISSION_REQUIREMENT_READINESS);
   const missingBrowser = missingRequirements.includes(MISSION_REQUIREMENT_BROWSER);
+  const missingBrowserOpen = missingRequirements.includes(MISSION_REQUIREMENT_BROWSER_OPEN);
+  if (missingReadiness && missingBrowser && missingBrowserOpen) {
+    return "localhost readiness, browser verification, and browser-open proof";
+  }
   if (missingReadiness && missingBrowser) {
     return "localhost readiness and browser verification";
   }
+  if (missingReadiness && missingBrowserOpen) {
+    return "localhost readiness and browser-open proof";
+  }
   if (missingBrowser) {
     return "browser verification";
+  }
+  if (missingBrowserOpen) {
+    return "browser-open proof";
   }
   return "localhost readiness verification";
 }
@@ -205,7 +218,8 @@ export function resolveLiveVerificationBlockedAbortReason(
   }
   if (
     !missingRequirements.includes(MISSION_REQUIREMENT_READINESS) &&
-    !missingRequirements.includes(MISSION_REQUIREMENT_BROWSER)
+    !missingRequirements.includes(MISSION_REQUIREMENT_BROWSER) &&
+    !missingRequirements.includes(MISSION_REQUIREMENT_BROWSER_OPEN)
   ) {
     return null;
   }
@@ -221,8 +235,12 @@ export function resolveLiveVerificationBlockedAbortReason(
   }
   if (
     liveVerificationEntries.some((entry) =>
-      isReadinessProofEvidenceAction(entry, missionContract.requireBrowserProof) ||
-      isBrowserProofEvidenceAction(entry)
+      isReadinessProofEvidenceAction(
+        entry,
+        missionContract.requireBrowserProof || missionContract.requireBrowserOpenProof
+      ) ||
+      isBrowserProofEvidenceAction(entry) ||
+      isBrowserOpenEvidenceAction(entry)
     )
   ) {
     return null;

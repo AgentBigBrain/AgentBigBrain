@@ -4,7 +4,7 @@
 
 import { type ExecutionReceiptStore } from "../advancedAutonomyRuntime";
 import { type BrainConfig } from "../config";
-import { type ActionRunResult } from "../types";
+import { type ActionRunResult, type TaskRunResult } from "../types";
 import { type GovernanceMemoryStore } from "../governanceMemory";
 import { type AppendRuntimeTraceEventInput } from "../runtimeTraceLogger";
 import {
@@ -14,6 +14,7 @@ import {
   type MissionStopLimitsV1
 } from "../stage6_75MissionStateMachine";
 import { appendExecutionReceipt, appendGovernanceEvent } from "./taskRunnerPersistence";
+import { resolveDeterministicFrameworkLifecycleActionLimit } from "./deterministicFrameworkLifecyclePolicy";
 
 type TraceDetails = Record<string, string | number | boolean | null>;
 
@@ -48,11 +49,21 @@ export interface RecordApprovedActionOutcomeInput {
  * Builds deterministic mission stop limits from runtime config.
  *
  * @param config - Runtime brain config.
+ * @param plan - Plan being executed by the task runner.
  * @returns Mission stop limits used by the task runner.
  */
-export function buildTaskRunnerMissionStopLimits(config: BrainConfig): MissionStopLimitsV1 {
+export function buildTaskRunnerMissionStopLimits(
+  config: BrainConfig,
+  plan: TaskRunResult["plan"]
+): MissionStopLimitsV1 {
   return {
-    maxActions: Math.max(1, config.limits.maxActionsPerTask),
+    maxActions: Math.max(
+      1,
+      resolveDeterministicFrameworkLifecycleActionLimit(
+        plan,
+        config.limits.maxActionsPerTask
+      )
+    ),
     maxDenies: Math.max(1, config.limits.maxPlanAttemptsPerTask * 2),
     maxBytes: 1_048_576
   };

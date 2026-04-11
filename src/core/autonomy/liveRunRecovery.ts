@@ -1,9 +1,8 @@
 /**
  * @fileoverview Owns loopback-target inference and deterministic live-run recovery prompts for autonomy.
  */
-
 import type { TaskRunResult } from "../types";
-
+import { buildManagedProcessBrowserOpenRetryInput } from "./liveRunRecoveryPromptSupport";
 export interface ManagedProcessStartPortConflictFailure {
   command: string;
   cwd: string | null;
@@ -17,6 +16,12 @@ export interface LoopbackTargetHint {
   url: string | null;
   host: string | null;
   port: number | null;
+}
+
+export interface ManagedProcessRestartContext {
+  leaseId: string;
+  command: string;
+  cwd: string | null;
 }
 
 type ActionResultEntry = TaskRunResult["actionResults"][number];
@@ -36,6 +41,11 @@ type ActionResultEntry = TaskRunResult["actionResults"][number];
  */
 function normalizeRecoveryText(input: string): string {
   return input.trim().toLowerCase();
+}
+
+/** Escapes a string for inclusion inside quoted structured-recovery instructions. */
+function escapeRecoveryQuotedString(input: string): string {
+  return input.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 }
 
 /**
@@ -611,5 +621,29 @@ export function buildManagedProcessStoppedRecoveryInput(
     `Explain the stop result plainly, restart the local server once if needed, and ${proofInstruction}. ` +
     "When restarting, use start_process with supported params only (`command`, `cwd`/`workdir`, `requestedShellKind`, optional `timeoutMs`) " +
     "and prefer a raw server command instead of `zsh -lc` wrappers."
+  );
+}
+
+/** Builds a concrete restart-and-reverify instruction pinned to the last approved `start_process`. */
+export function buildManagedProcessConcreteRestartRecoveryInput(
+  context: ManagedProcessRestartContext,
+  target: LoopbackTargetHint | null = null,
+  requireHttpReachability = false
+): string {
+  const targetLabel = describeLoopbackTarget(target);
+  const proofInstruction = requireHttpReachability
+    ? target?.url
+      ? `prove HTTP readiness at ${target.url} before any page-level proof`
+      : "prove HTTP readiness before any page-level proof"
+    : target?.url
+      ? `prove localhost readiness at ${target.url} before any page-level proof`
+      : "prove localhost readiness before any page-level proof";
+  const cwdClause = context.cwd ? ` cwd="${escapeRecoveryQuotedString(context.cwd)}"` : "";
+  return (
+    `start_process cmd="${escapeRecoveryQuotedString(context.command)}"${cwdClause}. ` +
+    `Managed process lease ${context.leaseId} stopped before localhost readiness was proven${targetLabel ? ` for ${targetLabel}` : ""}. ` +
+    `Restart the same local server once and ${proofInstruction}. ` +
+    "Only use start_process, check_process, probe_http, probe_port, verify_browser, open_browser, or respond in this recovery pass. " +
+    "Do not use shell_command, write_file, scaffold, install, or other file-mutation actions."
   );
 }

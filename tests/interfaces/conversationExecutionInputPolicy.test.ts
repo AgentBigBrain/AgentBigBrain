@@ -724,6 +724,302 @@ test("buildConversationAwareExecutionInput preserves workflow continuity blocks 
   assert.match(executionInput, /Current tracked workspace in this chat:/);
 });
 
+test("buildConversationAwareExecutionInput suppresses stale workflow continuity blocks for fresh framework scaffold requests", async () => {
+  const session = buildSession();
+  session.modeContinuity = {
+    activeMode: "autonomous",
+    source: "natural_intent",
+    confidence: "HIGH",
+    lastAffirmedAt: "2026-04-10T17:56:52.000Z",
+    lastUserInput: "Create the Detroit City landing page and leave it open."
+  };
+  session.progressState = {
+    status: "stopped",
+    message: "The prior Detroit City run stopped before the preview was usable.",
+    jobId: "job-old",
+    updatedAt: "2026-04-10T17:57:16.000Z"
+  };
+  session.returnHandoff = {
+    id: "handoff:detroit-city-old",
+    status: "completed",
+    goal: "Create the Detroit City landing page and leave it open.",
+    summary: "The prior Detroit City run stopped after planner failure.",
+    nextSuggestedStep: "Retry with a fresh scaffold plan.",
+    workspaceRootPath: "C:\\Users\\testuser\\Desktop\\Detroit City",
+    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\Detroit City\\app\\page.js",
+    previewUrl: "http://127.0.0.1:3000",
+    changedPaths: ["C:\\Users\\testuser\\Desktop\\Detroit City\\app\\page.js"],
+    sourceJobId: "job-old",
+    updatedAt: "2026-04-10T17:57:16.000Z"
+  };
+  session.activeWorkspace = {
+    id: "workspace:detroit-city-old",
+    label: "Detroit City workspace",
+    rootPath: "C:\\Users\\testuser\\Desktop\\Detroit City",
+    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\Detroit City\\app\\page.js",
+    previewUrl: "http://127.0.0.1:3000",
+    browserSessionId: null,
+    browserSessionIds: [],
+    browserSessionStatus: null,
+    browserProcessPid: null,
+    previewProcessLeaseId: null,
+    previewProcessLeaseIds: [],
+    previewProcessCwd: "C:\\Users\\testuser\\Desktop\\Detroit City",
+    lastKnownPreviewProcessPid: null,
+    stillControllable: false,
+    ownershipState: "stale",
+    previewStackState: "detached",
+    lastChangedPaths: ["C:\\Users\\testuser\\Desktop\\Detroit City\\app\\page.js"],
+    sourceJobId: "job-old",
+    updatedAt: "2026-04-10T17:57:16.000Z"
+  };
+  session.domainContext.dominantLane = "workflow";
+  session.domainContext.continuitySignals = {
+    activeWorkspace: true,
+    returnHandoff: true,
+    modeContinuity: true
+  };
+
+  const userInput =
+    'I want you to create a nextjs landing page, with 4 sections called "Detroit City" and there should be a footer and header, a gritty feeling design, and you need to do this end to end and put it on my desktop, then leave it open in the browser so i can review it. This means you have to run it and leave it open.';
+  const executionInput = await buildConversationAwareExecutionInput(
+    session,
+    userInput,
+    10,
+    classifyRoutingIntentV1(userInput)
+  );
+
+  assert.doesNotMatch(executionInput, /Current working mode from earlier in this chat:/);
+  assert.doesNotMatch(executionInput, /Latest durable work handoff in this chat:/);
+  assert.doesNotMatch(executionInput, /Current tracked workspace in this chat:/);
+  assert.match(executionInput, /Deterministic routing hint:/);
+  assert.match(executionInput, /Current user request:/);
+  assert.match(executionInput, /create a nextjs landing page/i);
+});
+
+test("buildConversationAwareExecutionInput grounds tracked runtime inspection against the tracked workspace instead of build/scaffold work", async () => {
+  const session = buildSession();
+  session.modeContinuity = {
+    activeMode: "autonomous",
+    source: "natural_intent",
+    confidence: "HIGH",
+    lastAffirmedAt: "2026-04-11T03:22:29.000Z",
+    lastUserInput:
+      'did you make sure you shut down "Detroit City Two" so that the server is no longer running? Please do this end to end - check and make sure. If it\'s complete then you succeeded.'
+  };
+  session.progressState = {
+    status: "stopped",
+    message: "The prior verification run failed closed for PROCESS_NOT_READY.",
+    jobId: "job-detroit-two-inspect",
+    updatedAt: "2026-04-11T03:24:29.335Z"
+  };
+  session.returnHandoff = {
+    id: "handoff:detroit-city-two",
+    status: "completed",
+    goal: "Please inspect and see if Detroit City Two is still running, do this end to end.",
+    summary:
+      "The prior run failed closed for PROCESS_NOT_READY because no exact managed-process lease was inspected.",
+    nextSuggestedStep: "Inspect the tracked runtime directly before declaring success.",
+    workspaceRootPath: "C:\\Users\\testuser\\Desktop\\Detroit City Two",
+    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\Detroit City Two\\app\\globals.css",
+    previewUrl: "http://127.0.0.1:3000/",
+    changedPaths: ["C:\\Users\\testuser\\Desktop\\Detroit City Two\\app\\globals.css"],
+    sourceJobId: "job-detroit-two-inspect",
+    updatedAt: "2026-04-11T03:24:29.335Z"
+  };
+  session.activeWorkspace = {
+    id: "workspace:detroit-city-two",
+    label: "Current project workspace",
+    rootPath: "C:\\Users\\testuser\\Desktop\\Detroit City Two",
+    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\Detroit City Two\\app\\globals.css",
+    previewUrl: "http://127.0.0.1:3000/",
+    browserSessionId: "browser_session:action_detroit_two",
+    browserSessionIds: ["browser_session:action_detroit_two"],
+    browserSessionStatus: "closed",
+    browserProcessPid: 54944,
+    previewProcessLeaseId: "proc_detroit_two",
+    previewProcessLeaseIds: ["proc_detroit_two"],
+    previewProcessCwd: "C:\\Users\\testuser\\Desktop\\Detroit City Two",
+    lastKnownPreviewProcessPid: 17864,
+    stillControllable: false,
+    ownershipState: "stale",
+    previewStackState: "detached",
+    lastChangedPaths: ["C:\\Users\\testuser\\Desktop\\Detroit City Two\\app\\globals.css"],
+    sourceJobId: "job-detroit-two-inspect",
+    updatedAt: "2026-04-11T03:24:29.335Z"
+  };
+  session.domainContext.dominantLane = "workflow";
+  session.domainContext.continuitySignals = {
+    activeWorkspace: true,
+    returnHandoff: true,
+    modeContinuity: true
+  };
+
+  const userInput = "please inspect and see if Detroit City Two is still running, do this end to end";
+  const executionInput = await buildConversationAwareExecutionInput(
+    session,
+    userInput,
+    10,
+    classifyRoutingIntentV1(userInput)
+  );
+
+  assert.match(executionInput, /Runtime process-management context:/);
+  assert.match(
+    executionInput,
+    /Tracked runtime target: rootPath=C:\\Users\\testuser\\Desktop\\Detroit City Two; ownership=stale; previewState=detached/
+  );
+  assert.match(executionInput, /Exact tracked preview lease ids: proc_detroit_two/);
+  assert.match(executionInput, /Prefer inspect_workspace_resources first/i);
+  assert.match(executionInput, /Current tracked workspace in this chat:/);
+  assert.match(executionInput, /Preview process lease: proc_detroit_two/);
+});
+
+test("buildConversationAwareExecutionInput keeps tracked runtime continuity for natural shorthand that uniquely names the tracked project", async () => {
+  const session = buildSession();
+  session.modeContinuity = {
+    activeMode: "autonomous",
+    source: "natural_intent",
+    confidence: "HIGH",
+    lastAffirmedAt: "2026-04-11T03:22:29.000Z",
+    lastUserInput:
+      'I want you to create a nextjs landing page, with 4 sections called "Detroit City Two" and leave it open.'
+  };
+  session.returnHandoff = {
+    id: "handoff:detroit-city-two",
+    status: "completed",
+    goal: 'Build "Detroit City Two" and leave the preview ready.',
+    summary: "The tracked Detroit City Two preview is detached and needs inspection.",
+    nextSuggestedStep: "Inspect the tracked runtime directly before declaring success.",
+    workspaceRootPath: "C:\\Users\\testuser\\Desktop\\Detroit City Two",
+    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\Detroit City Two\\app\\globals.css",
+    previewUrl: "http://127.0.0.1:3000/",
+    changedPaths: ["C:\\Users\\testuser\\Desktop\\Detroit City Two\\app\\globals.css"],
+    sourceJobId: "job-detroit-two-inspect",
+    updatedAt: "2026-04-11T03:24:29.335Z"
+  };
+  session.activeWorkspace = {
+    id: "workspace:detroit-city-two",
+    label: "Current project workspace",
+    rootPath: "C:\\Users\\testuser\\Desktop\\Detroit City Two",
+    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\Detroit City Two\\app\\globals.css",
+    previewUrl: "http://127.0.0.1:3000/",
+    browserSessionId: "browser_session:action_detroit_two",
+    browserSessionIds: ["browser_session:action_detroit_two"],
+    browserSessionStatus: "closed",
+    browserProcessPid: 54944,
+    previewProcessLeaseId: "proc_detroit_two",
+    previewProcessLeaseIds: ["proc_detroit_two"],
+    previewProcessCwd: "C:\\Users\\testuser\\Desktop\\Detroit City Two",
+    lastKnownPreviewProcessPid: 17864,
+    stillControllable: false,
+    ownershipState: "stale",
+    previewStackState: "detached",
+    lastChangedPaths: ["C:\\Users\\testuser\\Desktop\\Detroit City Two\\app\\globals.css"],
+    sourceJobId: "job-detroit-two-inspect",
+    updatedAt: "2026-04-11T03:24:29.335Z"
+  };
+
+  const userInput =
+    "did you make sure you shut down the nextjs detroit two we just worked on and verify it is no longer running?";
+  const executionInput = await buildConversationAwareExecutionInput(
+    session,
+    userInput,
+    10,
+    classifyRoutingIntentV1(userInput)
+  );
+
+  assert.match(executionInput, /Runtime process-management context:/);
+  assert.match(
+    executionInput,
+    /Tracked runtime target: rootPath=C:\\Users\\testuser\\Desktop\\Detroit City Two; ownership=stale; previewState=detached/
+  );
+  assert.match(executionInput, /Current tracked workspace in this chat:/);
+  assert.match(executionInput, /Preview process lease: proc_detroit_two/);
+  assert.doesNotMatch(
+    executionInput,
+    /The request does not target the currently tracked workspace by name/i
+  );
+});
+
+test("buildConversationAwareExecutionInput suppresses stale tracked workflow continuity for broad Desktop runtime shutdown requests", async () => {
+  const session = buildSession();
+  session.modeContinuity = {
+    activeMode: "autonomous",
+    source: "natural_intent",
+    confidence: "HIGH",
+    lastAffirmedAt: "2026-04-11T03:23:48.000Z",
+    lastUserInput: "please inspect and see if Detroit City Two is still running, do this end to end"
+  };
+  session.progressState = {
+    status: "stopped",
+    message: "The prior Detroit City Two inspection run failed closed.",
+    jobId: "job-detroit-two-stop",
+    updatedAt: "2026-04-11T03:24:29.335Z"
+  };
+  session.returnHandoff = {
+    id: "handoff:detroit-city-two",
+    status: "completed",
+    goal: "please inspect and see if Detroit City Two is still running, do this end to end",
+    summary: "The prior run failed closed for PROCESS_NOT_READY.",
+    nextSuggestedStep: "Inspect the tracked runtime directly.",
+    workspaceRootPath: "C:\\Users\\testuser\\Desktop\\Detroit City Two",
+    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\Detroit City Two\\app\\globals.css",
+    previewUrl: "http://127.0.0.1:3000/",
+    changedPaths: ["C:\\Users\\testuser\\Desktop\\Detroit City Two\\app\\globals.css"],
+    sourceJobId: "job-detroit-two-stop",
+    updatedAt: "2026-04-11T03:24:29.335Z"
+  };
+  session.activeWorkspace = {
+    id: "workspace:detroit-city-two",
+    label: "Current project workspace",
+    rootPath: "C:\\Users\\testuser\\Desktop\\Detroit City Two",
+    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\Detroit City Two\\app\\globals.css",
+    previewUrl: "http://127.0.0.1:3000/",
+    browserSessionId: "browser_session:action_detroit_two",
+    browserSessionIds: ["browser_session:action_detroit_two"],
+    browserSessionStatus: "closed",
+    browserProcessPid: 54944,
+    previewProcessLeaseId: "proc_detroit_two",
+    previewProcessLeaseIds: ["proc_detroit_two"],
+    previewProcessCwd: "C:\\Users\\testuser\\Desktop\\Detroit City Two",
+    lastKnownPreviewProcessPid: 17864,
+    stillControllable: false,
+    ownershipState: "stale",
+    previewStackState: "detached",
+    lastChangedPaths: ["C:\\Users\\testuser\\Desktop\\Detroit City Two\\app\\globals.css"],
+    sourceJobId: "job-detroit-two-stop",
+    updatedAt: "2026-04-11T03:24:29.335Z"
+  };
+  session.domainContext.dominantLane = "workflow";
+  session.domainContext.continuitySignals = {
+    activeWorkspace: true,
+    returnHandoff: true,
+    modeContinuity: true
+  };
+
+  const userInput =
+    "Look at all the folders on the desktop that start with drone and Drone, stop the servers that are running in the folders do this end to end";
+  const executionInput = await buildConversationAwareExecutionInput(
+    session,
+    userInput,
+    10,
+    classifyRoutingIntentV1(userInput)
+  );
+
+  assert.match(executionInput, /Runtime process-management context:/);
+  assert.match(
+    executionInput,
+    /The request does not target the currently tracked workspace by name, so do not reuse stale build continuity or project handoff state as a substitute\./i
+  );
+  assert.match(
+    executionInput,
+    /first enumerate those matching folders, then inspect running processes tied to those exact folders, stop only matched processes, and verify the result\./i
+  );
+  assert.doesNotMatch(executionInput, /Current working mode from earlier in this chat:/);
+  assert.doesNotMatch(executionInput, /Latest durable work handoff in this chat:/);
+  assert.doesNotMatch(executionInput, /Current tracked workspace in this chat:/);
+});
+
 test("buildConversationAwareExecutionInput strips robotic assistant labels from recent conversation context", async () => {
   const session = buildSession();
   session.conversationTurns.push({

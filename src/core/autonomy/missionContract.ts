@@ -10,6 +10,18 @@ import type { MissionCompletionContract } from "./contracts";
 
 const NEGATED_LIVE_RUN_PATTERN =
   /\bdo\s+not\s+(?:start|run|launch|serve)\b[\s\S]{0,80}\b(?:localhost|127\.0\.0\.1|::1|loopback|server|service|api|backend|dev\s+server|preview\s+server|preview\/dev\s+server|preview)\b|\bdo\s+not\s+(?:probe|check|confirm|verify)\b[\s\S]{0,80}\b(?:localhost|127\.0\.0\.1|::1|loopback|http|port|ready|readiness)\b/i;
+const NEGATED_BROWSER_OPEN_PATTERN =
+  /\bdo\s+not\s+open\b[\s\S]{0,60}\b(?:browser|tab|window|page|site|preview|it)\b/i;
+const NATURAL_BROWSER_OPEN_PATTERN =
+  /\bopen\b[\s\S]{0,24}\b(?:it|the app|the site|the page)\b[\s\S]{0,24}\bin\s+my\s+browser\b/i;
+const NATURAL_BROWSER_LEAVE_UP_PATTERN =
+  /\bleave\b[\s\S]{0,24}\b(?:it|the app|the site|the page)\b[\s\S]{0,24}\bup\b[\s\S]{0,24}\b(?:for me to|so i can)\s+(?:see|view|look)\b/i;
+const DIRECT_BROWSER_OPEN_PATTERN =
+  /\bopen\b[\s\S]{0,40}\b(?:browser|tab|window|page|site|preview)\b/i;
+const KEEP_BROWSER_OPEN_PATTERN =
+  /\b(?:leave|keep)\b[\s\S]{0,40}\b(?:browser|page|site|window|preview|it)\b[\s\S]{0,24}\bopen\b/i;
+const RUN_AND_LEAVE_OPEN_PATTERN =
+  /\b(?:run|start|launch|serve)\b[\s\S]{0,120}\b(?:browser|page|site|preview|it)\b[\s\S]{0,40}\bopen\b/i;
 
 /**
  * Normalizes text for deterministic case-insensitive mission checks.
@@ -25,6 +37,24 @@ const NEGATED_LIVE_RUN_PATTERN =
  */
 function normalizeEvidenceText(input: string): string {
   return input.trim().toLowerCase();
+}
+
+/**
+ * Detects explicit user intent to leave a live preview open in a browser.
+ *
+ * @param normalizedGoal - Normalized mission goal text.
+ * @returns `true` when the user explicitly wants a browser window left open for review.
+ */
+function hasBrowserOpenIntent(normalizedGoal: string): boolean {
+  return (
+    DIRECT_BROWSER_OPEN_PATTERN.test(normalizedGoal) ||
+    KEEP_BROWSER_OPEN_PATTERN.test(normalizedGoal) ||
+    NATURAL_BROWSER_OPEN_PATTERN.test(normalizedGoal) ||
+    NATURAL_BROWSER_LEAVE_UP_PATTERN.test(normalizedGoal) ||
+    RUN_AND_LEAVE_OPEN_PATTERN.test(normalizedGoal) ||
+    /\blet me (?:see|view)\b/.test(normalizedGoal) ||
+    /\bso i can (?:see|view|review)\b/.test(normalizedGoal)
+  );
 }
 
 /**
@@ -226,6 +256,10 @@ function requiresReadinessEvidence(goal: string): boolean {
     /\b(run|start|launch|serve)\b[\s\S]{0,80}\b(server|service|backend|api|dev\s+server)\b/.test(
       normalized
     ) ||
+    (
+      /\b(run|start|launch|serve)\b/.test(normalized) &&
+      hasBrowserOpenIntent(normalized)
+    ) ||
     /\b(?:probe|check|confirm|wait\s+until)\b[\s\S]{0,80}\b(?:localhost|http|port|ready|readiness)\b/.test(
       normalized
     ) ||
@@ -267,6 +301,24 @@ function requiresBrowserVerificationEvidence(goal: string): boolean {
     ) ||
     /\b(screenshot|visual(?:ly)?\s+confirm)\b/.test(normalized)
   );
+}
+
+/**
+ * Evaluates whether a mission goal requires proof that the live page was opened in a visible
+ * browser window and left available for review.
+ *
+ * @param goal - Mission goal text.
+ * @returns `true` when completion requires browser-open evidence.
+ */
+function requiresBrowserOpenEvidence(goal: string): boolean {
+  if (!requiresReadinessEvidence(goal)) {
+    return false;
+  }
+  const normalized = normalizeEvidenceText(goal);
+  if (NEGATED_BROWSER_OPEN_PATTERN.test(normalized)) {
+    return false;
+  }
+  return hasBrowserOpenIntent(normalized);
 }
 
 /**
@@ -371,6 +423,7 @@ export function buildMissionCompletionContract(goal: string): MissionCompletionC
     requireArtifactMutation: executionStyle && requiresArtifactMutationEvidence(goal),
     requireReadinessProof: executionStyle && requiresReadinessEvidence(goal),
     requireBrowserProof: executionStyle && requiresBrowserVerificationEvidence(goal),
+    requireBrowserOpenProof: executionStyle && requiresBrowserOpenEvidence(goal),
     requireProcessStopProof: executionStyle && requiresManagedProcessStopEvidence(goal),
     targetPathHints
   };

@@ -229,6 +229,14 @@ export interface CloseBrowserActionParams extends Record<string, unknown> {
   url?: string;
 }
 
+export type FolderRuntimeProcessSelectorMode = "starts_with" | "contains";
+
+export interface StopFolderRuntimeProcessesActionParams extends Record<string, unknown> {
+  rootPath?: string;
+  selectorMode?: FolderRuntimeProcessSelectorMode;
+  selectorTerm?: string;
+}
+
 export interface InspectPathHoldersActionParams extends Record<string, unknown> {
   path?: string;
 }
@@ -280,6 +288,7 @@ export type PlannedActionParamsByType = {
   verify_browser: VerifyBrowserActionParams;
   open_browser: OpenBrowserActionParams;
   close_browser: CloseBrowserActionParams;
+  stop_folder_runtime_processes: StopFolderRuntimeProcessesActionParams;
   inspect_path_holders: InspectPathHoldersActionParams;
   inspect_workspace_resources: InspectWorkspaceResourcesActionParams;
   memory_mutation: MemoryMutationActionParams;

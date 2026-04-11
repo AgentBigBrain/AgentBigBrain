@@ -12,6 +12,7 @@ import { selectModelForRole } from "../modelRouting";
 import { TaskRunResult } from "../types";
 import {
   buildAutonomousRecoverySnapshot,
+  MISSION_REQUIREMENT_BROWSER_OPEN,
   MISSION_REQUIREMENT_PROCESS_STOP,
   type MissionCompletionContract,
   type MissionEvidenceCounters
@@ -24,6 +25,7 @@ import {
 } from "./missionEvidence";
 import {
   buildManagedProcessCheckRecoveryInput,
+  buildManagedProcessConcreteRestartRecoveryInput,
   buildManagedProcessPortConflictRecoveryInput,
   buildManagedProcessStillRunningRetryInput,
   buildManagedProcessStoppedRecoveryInput,
@@ -32,10 +34,16 @@ import {
   hasReadinessNotReadyFailure,
   type LoopbackTargetHint
 } from "./liveRunRecovery";
+import { enrichAutonomousNextUserInput } from "./frameworkContinuationContext";
+import { buildManagedProcessBrowserOpenRetryInput } from "./liveRunRecoveryPromptSupport";
 import {
   findApprovedManagedProcessCheckResult,
-  findApprovedManagedProcessStartLeaseId
+  findApprovedManagedProcessStartContext,
+  findApprovedManagedProcessStartLeaseId,
+  type ApprovedManagedProcessStartContext
 } from "./loopCleanupPolicy";
+import { readRuntimeOwnershipInspectionMetadata } from "./workspaceRecoveryInspectionMetadata";
+import { inferRequiredActionType } from "../../organs/plannerPolicy/explicitActionIntent";
 
 /**
  * Formats deterministic live-run completion reasoning from the mission contract.
@@ -47,9 +55,20 @@ export function formatLiveRunCompletionReasoning(
   missionContract: MissionCompletionContract
 ): string {
   if (missionContract.requireProcessStopProof) {
+    if (missionContract.requireBrowserProof && missionContract.requireBrowserOpenProof) {
+      return "The explicit live-run evidence contract is complete: the build flow executed, localhost readiness was proven, browser verification passed, the preview was opened and left available in the browser, and the managed process was stopped.";
+    }
     return missionContract.requireBrowserProof
       ? "The explicit live-run evidence contract is complete: the build flow executed, localhost readiness was proven, browser verification passed, and the managed process was stopped."
-      : "The explicit live-run evidence contract is complete: the build flow executed, localhost readiness was proven, and the managed process was stopped.";
+      : missionContract.requireBrowserOpenProof
+        ? "The explicit live-run evidence contract is complete: the build flow executed, localhost readiness was proven, the preview was opened and left available in the browser, and the managed process was stopped."
+        : "The explicit live-run evidence contract is complete: the build flow executed, localhost readiness was proven, and the managed process was stopped.";
+  }
+  if (missionContract.requireBrowserProof && missionContract.requireBrowserOpenProof) {
+    return "The explicit live-run evidence contract is complete: the build flow executed, localhost readiness was proven, browser verification passed, and the preview was opened and left available in the browser.";
+  }
+  if (missionContract.requireBrowserOpenProof) {
+    return "The explicit live-run evidence contract is complete: the build flow executed, localhost readiness was proven, and the preview was opened and left available in the browser.";
   }
   if (missionContract.requireBrowserProof) {
     return "The explicit live-run evidence contract is complete: the build flow executed, localhost readiness was proven, and browser verification passed.";
@@ -66,6 +85,7 @@ export function formatLiveRunCompletionReasoning(
  * @param lastResult - Result from the latest autonomous-loop iteration.
  * @param missionEvidence - Cumulative deterministic mission evidence so far.
  * @param trackedManagedProcessLeaseId - Tracked managed-process lease, if any.
+ * @param trackedManagedProcessStartContext - Tracked approved `start_process` context, if any.
  * @param trackedLoopbackTarget - Tracked loopback target, if any.
  * @returns Planner decision describing whether the goal is done or what to do next.
  */
@@ -76,9 +96,17 @@ export async function evaluateAutonomousNextStep(
   lastResult: TaskRunResult,
   missionEvidence: MissionEvidenceCounters,
   trackedManagedProcessLeaseId: string | null,
+  trackedManagedProcessStartContext: ApprovedManagedProcessStartContext | null,
   trackedLoopbackTarget: LoopbackTargetHint | null
 ): Promise<AutonomousNextStepModelOutput> {
   const missionContract = buildMissionCompletionContract(overarchingGoal);
+  const runtimeInspectionCompletion = resolveRuntimeInspectionCompletion(
+    overarchingGoal,
+    lastResult
+  );
+  if (runtimeInspectionCompletion) {
+    return runtimeInspectionCompletion;
+  }
   const missingRequirements = resolveMissingMissionRequirements(
     missionContract,
     missionEvidence
@@ -104,7 +132,7 @@ export async function evaluateAutonomousNextStep(
           "so the local server needs a different free port before readiness or browser proof can continue.",
         nextUserInput: buildManagedProcessPortConflictRecoveryInput(
           startPortConflict,
-          missionContract.requireBrowserProof
+          missionContract.requireBrowserProof || missionContract.requireBrowserOpenProof
         )
       };
     }
@@ -112,6 +140,8 @@ export async function evaluateAutonomousNextStep(
 
   const startedManagedProcessLeaseId = findApprovedManagedProcessStartLeaseId(lastResult);
   const checkedManagedProcess = findApprovedManagedProcessCheckResult(lastResult);
+  const approvedStartContext =
+    findApprovedManagedProcessStartContext(lastResult) ?? trackedManagedProcessStartContext;
   const activeManagedProcessLeaseId =
     startedManagedProcessLeaseId ??
     checkedManagedProcess?.leaseId ??
@@ -128,7 +158,7 @@ export async function evaluateAutonomousNextStep(
       nextUserInput: buildManagedProcessCheckRecoveryInput(
         activeManagedProcessLeaseId,
         trackedLoopbackTarget,
-        missionContract.requireBrowserProof
+        missionContract.requireBrowserProof || missionContract.requireBrowserOpenProof
       )
     };
   }
@@ -136,7 +166,10 @@ export async function evaluateAutonomousNextStep(
   if (
     missionContract.requireReadinessProof &&
     checkedManagedProcess?.lifecycleStatus === "PROCESS_STILL_RUNNING" &&
-    countApprovedReadinessProofActions(lastResult, missionContract.requireBrowserProof) === 0
+    countApprovedReadinessProofActions(
+      lastResult,
+      missionContract.requireBrowserProof || missionContract.requireBrowserOpenProof
+    ) === 0
   ) {
     return {
       isGoalMet: false,
@@ -144,7 +177,7 @@ export async function evaluateAutonomousNextStep(
         "The managed process is still running, so the next step is to retry localhost readiness proof.",
       nextUserInput: buildManagedProcessStillRunningRetryInput(
         checkedManagedProcess.leaseId,
-        missionContract.requireBrowserProof,
+        missionContract.requireBrowserProof || missionContract.requireBrowserOpenProof,
         trackedLoopbackTarget
       )
     };
@@ -153,12 +186,32 @@ export async function evaluateAutonomousNextStep(
   if (
     missionContract.requireReadinessProof &&
     checkedManagedProcess?.lifecycleStatus === "PROCESS_STOPPED" &&
-    countApprovedReadinessProofActions(lastResult, missionContract.requireBrowserProof) === 0
+    countApprovedReadinessProofActions(
+      lastResult,
+      missionContract.requireBrowserProof || missionContract.requireBrowserOpenProof
+    ) === 0
   ) {
     return {
       isGoalMet: false,
       reasoning: "The managed process stopped before localhost readiness was proven.",
-      nextUserInput: buildManagedProcessStoppedRecoveryInput(checkedManagedProcess.leaseId)
+      nextUserInput:
+        approvedStartContext &&
+        approvedStartContext.leaseId === checkedManagedProcess.leaseId &&
+        approvedStartContext.command
+          ? buildManagedProcessConcreteRestartRecoveryInput(
+              {
+                leaseId: checkedManagedProcess.leaseId,
+                command: approvedStartContext.command,
+                cwd: approvedStartContext.cwd
+              },
+              trackedLoopbackTarget,
+              missionContract.requireBrowserProof || missionContract.requireBrowserOpenProof
+            )
+          : buildManagedProcessStoppedRecoveryInput(
+              checkedManagedProcess.leaseId,
+              trackedLoopbackTarget,
+              missionContract.requireBrowserProof || missionContract.requireBrowserOpenProof
+            )
     };
   }
 
@@ -172,6 +225,23 @@ export async function evaluateAutonomousNextStep(
       reasoning:
         "Browser verification is still unavailable because the local Playwright runtime is not ready yet.",
       nextUserInput: buildPlaywrightInstallRecoveryInput(overarchingGoal)
+    };
+  }
+
+  if (
+    missionContract.requireBrowserOpenProof &&
+    missingRequirements.length === 1 &&
+    missingRequirements[0] === MISSION_REQUIREMENT_BROWSER_OPEN
+  ) {
+    return {
+      isGoalMet: false,
+      reasoning:
+        "Local readiness is already proven. The remaining required step is to open the live preview in the browser and leave it open.",
+      nextUserInput: buildManagedProcessBrowserOpenRetryInput({
+        target: trackedLoopbackTarget,
+        rootPath: trackedManagedProcessStartContext?.cwd ?? null,
+        previewProcessLeaseId: trackedManagedProcessLeaseId
+      })
     };
   }
 
@@ -197,7 +267,7 @@ export async function evaluateAutonomousNextStep(
       "Decide if the goal is completely met. If not, formulate the exact next instruction (userInput) the agent needs to perform. " +
       "Return JSON with 'isGoalMet' (boolean), 'reasoning' (string), and 'nextUserInput' (string)." +
       buildLiveRunPromptGuidance(missionContract);
-    return await modelClient.completeJson<AutonomousNextStepModelOutput>({
+    const modelOutput = await modelClient.completeJson<AutonomousNextStepModelOutput>({
       model,
       schemaName: "autonomous_next_step_v1",
       temperature: 0.1,
@@ -240,6 +310,15 @@ export async function evaluateAutonomousNextStep(
         }))
       })
     });
+    return {
+      ...modelOutput,
+      nextUserInput: enrichAutonomousNextUserInput(
+        overarchingGoal,
+        modelOutput.nextUserInput,
+        trackedManagedProcessStartContext,
+        trackedLoopbackTarget
+      )
+    };
   } catch (error) {
     return {
       isGoalMet: true,
@@ -290,18 +369,139 @@ export async function evaluateProactiveAutonomousGoal(
  * @returns Additional prompt text or an empty string when live-run proof is not required.
  */
 function buildLiveRunPromptGuidance(missionContract: MissionCompletionContract): string {
-  if (!(missionContract.requireReadinessProof || missionContract.requireBrowserProof)) {
+  if (
+    !(
+      missionContract.requireReadinessProof ||
+      missionContract.requireBrowserProof ||
+      missionContract.requireBrowserOpenProof
+    )
+  ) {
     return "";
   }
 
   return (
     " For explicit localhost/live/browser verification goals, keep next steps inside governed proof actions. " +
     "Do not ask the user to manually open a browser or manually inspect localhost during the autonomous loop. " +
-    "When a managed process is not running yet, request one finite next step that creates any missing helper artifact and then immediately performs the remaining live proof chain in the same task: start_process, probe_http, verify_browser, and stop_process when required. " +
+    "When a managed process is not running yet, request one finite next step that creates any missing helper artifact and then immediately performs the remaining live proof chain in the same task: start_process, probe_http, verify_browser, open_browser when required, and stop_process when required. " +
     "Do not return a preparatory next step that only writes a helper script or only starts the process without also asking for the remaining proof actions. " +
     "Do not replace verify_browser with shell-based Playwright commands such as npx playwright --version, npx playwright open, or npx playwright test. " +
+    (missionContract.requireBrowserOpenProof
+      ? "If the goal explicitly says to leave the page open, treat open_browser as required completion proof after readiness passes; verify_browser alone is not enough. "
+      : "") +
     "If live proof steps are blocked or unavailable, say so plainly instead of inventing manual or shell-based fallback checks."
   );
+}
+
+const RUNTIME_PROCESS_TARGET_PATTERN =
+  /\b(?:still\s+running|running|server|servers|preview(?:\s+stack|\s+server)?|process(?:es)?|localhost|loopback|port|dev\s+server)\b/i;
+const RUNTIME_SHUTDOWN_VERB_PATTERN =
+  /\b(?:stop|shut\s+down|turn\s+off|kill)\b/i;
+
+/**
+ * Completes inspect-first runtime-management goals from already-proven inspection evidence instead
+ * of replanning a synthetic "report only" turn that can drift back into explicit-action repair.
+ *
+ * @param overarchingGoal - User-facing autonomous goal for the current loop.
+ * @param lastResult - Latest governed task result that may already contain inspection evidence.
+ * @returns Deterministic completion decision, or `null` when another governed step is still required.
+ */
+function resolveRuntimeInspectionCompletion(
+  overarchingGoal: string,
+  lastResult: TaskRunResult
+): AutonomousNextStepModelOutput | null {
+  if (
+    inferRequiredActionType(overarchingGoal, lastResult.task.userInput) !==
+    "inspect_workspace_resources"
+  ) {
+    return null;
+  }
+
+  const inspectionMetadata = readRuntimeOwnershipInspectionMetadata(lastResult);
+  if (!inspectionMetadata) {
+    return null;
+  }
+
+  const previewServerCandidates = inspectionMetadata.untrackedCandidates.filter(
+    (candidate) => candidate.kind === "preview_server"
+  );
+  const nonPreviewCandidates = inspectionMetadata.untrackedCandidates.filter(
+    (candidate) => candidate.kind !== "preview_server"
+  );
+  const hasLivePreviewHolder =
+    inspectionMetadata.previewProcessLeaseIds.length > 0 ||
+    inspectionMetadata.recoveredExactPreviewHolderPids.length > 0 ||
+    previewServerCandidates.length > 0;
+  const shutdownVerificationRequested =
+    RUNTIME_PROCESS_TARGET_PATTERN.test(overarchingGoal) &&
+    RUNTIME_SHUTDOWN_VERB_PATTERN.test(overarchingGoal);
+
+  if (hasLivePreviewHolder && shutdownVerificationRequested) {
+    return null;
+  }
+
+  return {
+    isGoalMet: true,
+    reasoning: buildRuntimeInspectionCompletionReasoning({
+      runtimeActive: hasLivePreviewHolder,
+      nonPreviewCandidates,
+      shutdownVerificationRequested
+    }),
+    nextUserInput: ""
+  };
+}
+
+/**
+ * Builds one concise deterministic completion summary for inspect-only runtime-management turns.
+ *
+ * @param input - Inspection-state facts already proven in the current run.
+ * @returns Human-readable completion reasoning for the autonomous loop.
+ */
+function buildRuntimeInspectionCompletionReasoning(input: {
+  runtimeActive: boolean;
+  nonPreviewCandidates: readonly {
+    pid: number;
+    kind: string | null;
+    name: string | null;
+  }[];
+  shutdownVerificationRequested: boolean;
+}): string {
+  const holderSummary = formatRuntimeInspectionCandidateSummary(input.nonPreviewCandidates);
+  if (input.runtimeActive) {
+    return holderSummary
+      ? `Inspection complete: the tracked runtime still appears active in this run, and I also found non-preview local holders tied to the same workspace (${holderSummary}).`
+      : "Inspection complete: the tracked runtime still appears active in this run.";
+  }
+
+  const completionLead = input.shutdownVerificationRequested
+    ? "Inspection complete: I did not find a current tracked preview process or live preview-server candidate in this run, so the tracked runtime does not appear to still be running."
+    : "Inspection complete: I did not find a current tracked preview process or live preview-server candidate in this run, so the tracked runtime does not appear active.";
+  return holderSummary
+    ? `${completionLead} I only found non-preview local holders tied to the workspace (${holderSummary}).`
+    : completionLead;
+}
+
+/**
+ * Formats bounded non-preview local-holder labels for inspection-only completion summaries.
+ *
+ * @param candidates - Non-preview local-holder candidates recovered from runtime inspection.
+ * @returns Short holder summary, or an empty string when no such candidates remain.
+ */
+function formatRuntimeInspectionCandidateSummary(
+  candidates: readonly {
+    pid: number;
+    kind: string | null;
+    name: string | null;
+  }[]
+): string {
+  if (candidates.length === 0) {
+    return "";
+  }
+  return candidates
+    .map((candidate) => {
+      const label = candidate.name ?? candidate.kind ?? "local process";
+      return `${label} (pid ${candidate.pid})`;
+    })
+    .join(", ");
 }
 
 /**

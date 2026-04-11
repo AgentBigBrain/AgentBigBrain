@@ -40,6 +40,7 @@ import { loadPlaywrightChromium, type PlaywrightChromiumRuntime } from "./liveRu
 import { executeProbeHttp } from "./liveRun/probeHttpHandler";
 import { executeProbePort } from "./liveRun/probePortHandler";
 import { executeStartProcess } from "./liveRun/startProcessHandler";
+import { executeStopFolderRuntimeProcesses } from "./liveRun/stopFolderRuntimeProcessesHandler";
 import { executeStopProcess } from "./liveRun/stopProcessHandler";
 import { inspectSystemPreviewCandidates } from "./liveRun/untrackedPreviewCandidateInspection";
 import type { ManagedProcessSnapshot } from "./liveRun/managedProcessRegistry";
@@ -305,6 +306,9 @@ export class ToolExecutorOrgan {
 
       case "close_browser":
         return executeCloseBrowser(this.buildLiveRunContext(), action.params, signal);
+
+      case "stop_folder_runtime_processes":
+        return executeStopFolderRuntimeProcesses(this.buildLiveRunContext(), action.params);
 
       case "inspect_path_holders":
         return executeInspectPathHolders(this.buildLiveRunContext(), action.params);

@@ -122,7 +122,7 @@ export function buildFrameworkLandingPageWriteActions(
         ? buildNextTypeScriptLayoutContent(appTitle)
         : buildNextLayoutContent(appTitle)
       : null;
-  const styleContent = buildFrameworkLandingPageStyles(currentUserRequest);
+  const styleContent = buildFrameworkLandingPageStyles(currentUserRequest, appTitle);
   const actions: PlannedAction[] = [];
   if (kind === "next_js") {
     const pathModule = getPathModuleForPathValue(finalFolderPath);
@@ -158,7 +158,8 @@ export function buildFrameworkLandingPageWriteActions(
     actions.push({
       id: makeId("action"),
       type: "write_file",
-      description: "Write the Next.js landing page hero and five-section single-page content.",
+      description:
+        "Write the Next.js landing page content using the deterministic request-matched visual theme and section count.",
       params: { path: targetPaths.primaryViewPath, content: viewContent },
       estimatedCostUsd: estimateActionCostUsd({
         type: "write_file",
@@ -181,7 +182,8 @@ export function buildFrameworkLandingPageWriteActions(
     actions.push({
       id: makeId("action"),
       type: "write_file",
-      description: "Write the calm visual system for the Next.js landing page.",
+      description:
+        "Write the deterministic stylesheet for the Next.js landing page theme.",
       params: { path: targetPaths.stylesheetPath, content: styleContent },
       estimatedCostUsd: estimateActionCostUsd({
         type: "write_file",
@@ -194,7 +196,8 @@ export function buildFrameworkLandingPageWriteActions(
   actions.push({
     id: makeId("action"),
     type: "write_file",
-    description: "Write the React landing page hero and five-section single-page content.",
+    description:
+      "Write the React landing page content using the deterministic request-matched visual theme and section count.",
     params: { path: targetPaths.primaryViewPath, content: viewContent },
     estimatedCostUsd: estimateActionCostUsd({
       type: "write_file",
@@ -217,7 +220,8 @@ export function buildFrameworkLandingPageWriteActions(
   actions.push({
     id: makeId("action"),
     type: "write_file",
-    description: "Write the calm visual system for the React landing page.",
+    description:
+      "Write the deterministic stylesheet for the React landing page theme.",
     params: { path: targetPaths.stylesheetPath, content: styleContent },
     estimatedCostUsd: estimateActionCostUsd({
       type: "write_file",

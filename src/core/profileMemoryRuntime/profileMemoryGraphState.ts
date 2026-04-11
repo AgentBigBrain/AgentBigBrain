@@ -57,6 +57,10 @@ export function createEmptyProfileMemoryGraphState(updatedAt: string = new Date(
 /**
  * Normalizes unknown persisted graph payloads into one stable additive graph state.
  *
+ * Compatibility facts and episodes remain deterministic repair/bootstrap inputs during load
+ * normalization, but retained graph claims and events stay authoritative when their lanes already
+ * exist.
+ *
  * @param raw - Unknown graph payload from persisted profile-memory state.
  * @param fallbackUpdatedAt - Fallback timestamp for rebuilt derived surfaces.
  * @returns Stable graph-backed state with rebuilt indexes and read model.
@@ -69,7 +73,14 @@ export function normalizeProfileMemoryGraphState(
 ): ProfileMemoryGraphState {
   const empty = createEmptyProfileMemoryGraphState(fallbackUpdatedAt);
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-    return episodesForBackfill.length === 0 ? empty : normalizeProfileMemoryGraphState({ updatedAt: fallbackUpdatedAt }, fallbackUpdatedAt, episodesForBackfill, factsForBackfill);
+    return episodesForBackfill.length === 0 && factsForBackfill.length === 0
+      ? empty
+      : normalizeProfileMemoryGraphState(
+          { updatedAt: fallbackUpdatedAt },
+          fallbackUpdatedAt,
+          episodesForBackfill,
+          factsForBackfill
+        );
   }
   const candidate = raw as Partial<ProfileMemoryGraphState>;
   const updatedAt = safeIsoOrFallback(candidate.updatedAt, fallbackUpdatedAt);

@@ -55,6 +55,28 @@ test("inferRequiredActionType promotes natural browser follow-ups when tracked s
   );
 });
 
+test("inferRequiredActionType does not require open_browser when a tracked preview warm-up explicitly says not to open the browser yet", () => {
+  const trackedBrowserExecutionInput = [
+    "Current tracked workspace in this chat:",
+    "- Root path: C:\\Users\\testuser\\Desktop\\Downtown Detroit Drones Smoke 1775919630732",
+    "- Preview URL: none",
+    "",
+    "Tracked browser sessions:",
+    "- none",
+    "",
+    "Current user request:",
+    "Nice. Pull up the Downtown Detroit Drones Smoke 1775919630732 landing page you just built so it is ready to view, but do not pop the browser open yet. Use a real localhost run on host 127.0.0.1 and port 49249, and keep that preview server running."
+  ].join("\n");
+
+  assert.equal(
+    inferRequiredActionType(
+      "Nice. Pull up the Downtown Detroit Drones Smoke 1775919630732 landing page you just built so it is ready to view, but do not pop the browser open yet. Use a real localhost run on host 127.0.0.1 and port 49249, and keep that preview server running.",
+      trackedBrowserExecutionInput
+    ),
+    null
+  );
+});
+
 test("inferRequiredActionType treats closing a named tracked workspace as close_browser", () => {
   const trackedBrowserExecutionInput = [
     "Current tracked workspace in this chat:",

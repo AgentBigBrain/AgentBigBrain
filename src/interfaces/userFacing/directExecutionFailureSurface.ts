@@ -90,6 +90,8 @@ function resolveDirectExecutionOutcomePriority(result: ActionRunResult): number 
       return 86;
     case "shell_command":
       return 80;
+    case "stop_folder_runtime_processes":
+      return 79;
     case "network_write":
       return 78;
     case "memory_mutation":
@@ -257,6 +259,11 @@ export function resolveDirectExecutionFailureOutcomeLine(
         `I tried to run the command, ${failureClause}`,
         detail
       );
+    case "stop_folder_runtime_processes":
+      return appendExecutionFailureDetail(
+        `I tried to stop the matching local server processes, ${failureClause}`,
+        detail
+      );
     case "network_write":
       return appendExecutionFailureDetail(
         `I tried to send the request, ${failureClause}`,
@@ -411,6 +418,8 @@ export function resolveDirectExecutionOutcomeLine(
       }
       return output.length > 0 ? output : "I ran the command successfully.";
     }
+    case "stop_folder_runtime_processes":
+      return preferredExecution.output?.trim() || "I stopped the matching local server processes.";
     case "network_write": {
       const output = typeof preferredExecution.output === "string"
         ? preferredExecution.output.trim()

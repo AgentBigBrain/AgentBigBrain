@@ -3,6 +3,9 @@
  */
 
 import assert from "node:assert/strict";
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { test } from "node:test";
 
 import type { TaskRunResult } from "../../src/core/types";
@@ -692,6 +695,428 @@ test("persistExecutedJobOutcome promotes scaffold shell workspace roots into act
     )
   );
   assert.equal(session.returnHandoff?.workspaceRootPath, "C:\\Users\\testuser\\Desktop\\Drone Preview App");
+});
+
+test("persistExecutedJobOutcome reanchors primary artifact and changed paths when a no-write relaunch switches to an older workspace", () => {
+  const nowIso = "2026-04-11T11:56:10.000Z";
+  const completedAt = "2026-04-11T11:56:20.864Z";
+  const detroitThreeRoot = "C:\\Users\\testuser\\Desktop\\Detroit City Three";
+  const detroitTwoRoot = "C:\\Users\\testuser\\Desktop\\Detroit City Two";
+  const detroitTwoPagePath = `${detroitTwoRoot}\\app\\page.js`;
+  const detroitTwoStylesPath = `${detroitTwoRoot}\\app\\globals.css`;
+  const session = buildSessionSeed({
+    provider: "telegram",
+    conversationId: "chat-detroit-two-relaunch",
+    userId: "user-1",
+    username: "owner",
+    conversationVisibility: "private",
+    receivedAt: nowIso
+  });
+  session.runningJobId = "job-detroit-two-relaunch";
+  session.activeWorkspace = {
+    id: "workspace:detroit-three",
+    label: "Current project workspace",
+    rootPath: detroitThreeRoot,
+    primaryArtifactPath: `${detroitThreeRoot}\\app\\globals.css`,
+    previewUrl: "http://127.0.0.1:56895/",
+    browserSessionId: "browser_session:detroit_three",
+    browserSessionIds: ["browser_session:detroit_three"],
+    browserSessionStatus: "closed",
+    browserProcessPid: 5484,
+    previewProcessLeaseId: "proc_detroit_three",
+    previewProcessLeaseIds: ["proc_detroit_three"],
+    previewProcessCwd: detroitThreeRoot,
+    lastKnownPreviewProcessPid: 43228,
+    stillControllable: false,
+    ownershipState: "stale",
+    previewStackState: "detached",
+    lastChangedPaths: [
+      `${detroitThreeRoot}\\app\\globals.css`,
+      `${detroitThreeRoot}\\app\\page.js`
+    ],
+    sourceJobId: "job-detroit-three-build",
+    updatedAt: "2026-04-11T11:40:10.105Z"
+  };
+  session.recentActions = [
+    {
+      id: "job-detroit-two-build:file:page",
+      kind: "file",
+      label: "page.js",
+      location: detroitTwoPagePath,
+      status: "updated",
+      sourceJobId: "job-detroit-two-build",
+      at: "2026-04-11T11:20:00.000Z",
+      summary: "Updated the Detroit City Two page."
+    },
+    {
+      id: "job-detroit-two-build:file:globals",
+      kind: "file",
+      label: "globals.css",
+      location: detroitTwoStylesPath,
+      status: "updated",
+      sourceJobId: "job-detroit-two-build",
+      at: "2026-04-11T11:19:59.000Z",
+      summary: "Updated the Detroit City Two stylesheet."
+    },
+    {
+      id: "job-detroit-three-build:file:globals",
+      kind: "file",
+      label: "globals.css",
+      location: `${detroitThreeRoot}\\app\\globals.css`,
+      status: "updated",
+      sourceJobId: "job-detroit-three-build",
+      at: "2026-04-11T11:19:58.000Z",
+      summary: "Updated the Detroit City Three stylesheet."
+    }
+  ];
+  const runningJob: ConversationJob = {
+    ...buildQueuedJob(nowIso),
+    id: "job-detroit-two-relaunch",
+    input: 'Start up "Detroit City Two" on the desktop and put it up in the browser for me.',
+    executionInput:
+      'Start up "Detroit City Two" on the desktop and put it up in the browser for me.',
+    status: "running",
+    startedAt: nowIso
+  };
+  session.recentJobs = [runningJob];
+
+  persistExecutedJobOutcome({
+    session,
+    executedJob: {
+      ...runningJob,
+      status: "completed",
+      completedAt,
+      resultSummary:
+        "Autonomous task completed after 1 iteration(s). I finished the goal with 3 approved action(s) and 2 blocked.",
+      errorMessage: null
+    },
+    executionResult: {
+      summary:
+        "Autonomous task completed after 1 iteration(s). I finished the goal with 3 approved action(s) and 2 blocked.",
+      taskRunResult: {
+        task: {
+          id: "task-detroit-two-relaunch",
+          goal: 'Start up "Detroit City Two" on the desktop and put it up in the browser for me.',
+          userInput: 'Start up "Detroit City Two" on the desktop and put it up in the browser for me.',
+          createdAt: nowIso
+        },
+        plan: {
+          taskId: "task-detroit-two-relaunch",
+          plannerNotes: "Launch the existing project without rewriting files.",
+          actions: [
+            {
+              id: "action-start",
+              type: "start_process",
+              description: "Start Detroit City Two.",
+              params: {
+                command: "npm run dev -- --hostname 127.0.0.1 --port 3000",
+                cwd: detroitTwoRoot
+              },
+              estimatedCostUsd: 0.2
+            },
+            {
+              id: "action-open",
+              type: "open_browser",
+              description: "Open the Detroit City Two preview.",
+              params: {
+                url: "http://127.0.0.1:3000/",
+                rootPath: detroitTwoRoot,
+                previewProcessLeaseId: "proc_detroit_two_relaunch"
+              },
+              estimatedCostUsd: 0.03
+            }
+          ]
+        },
+        actionResults: [
+          {
+            action: {
+              id: "action-start",
+              type: "start_process",
+              description: "Start Detroit City Two.",
+              params: {
+                command: "npm run dev -- --hostname 127.0.0.1 --port 3000",
+                cwd: detroitTwoRoot
+              },
+              estimatedCostUsd: 0.2
+            },
+            mode: "fast_path",
+            approved: true,
+            output: "Process started.",
+            executionStatus: "success",
+            blockedBy: [],
+            violations: [],
+            votes: [],
+            executionMetadata: {
+              processCwd: detroitTwoRoot,
+              processLeaseId: "proc_detroit_two_relaunch",
+              processLifecycleStatus: "PROCESS_STARTED",
+              processPid: 41308
+            }
+          },
+          {
+            action: {
+              id: "action-open",
+              type: "open_browser",
+              description: "Open the Detroit City Two preview.",
+              params: {
+                url: "http://127.0.0.1:3000/",
+                rootPath: detroitTwoRoot,
+                previewProcessLeaseId: "proc_detroit_two_relaunch"
+              },
+              estimatedCostUsd: 0.03
+            },
+            mode: "fast_path",
+            approved: true,
+            output: "Opened the preview.",
+            executionStatus: "success",
+            blockedBy: [],
+            violations: [],
+            votes: [],
+            executionMetadata: {
+              browserSessionId: "browser_session:detroit_two_relaunch",
+              browserSessionUrl: "http://127.0.0.1:3000/",
+              browserSessionStatus: "open",
+              browserSessionVisibility: "visible",
+              browserSessionControllerKind: "playwright_managed",
+              browserSessionControlAvailable: true,
+              browserSessionBrowserProcessPid: 3908,
+              browserSessionWorkspaceRootPath: detroitTwoRoot,
+              browserSessionLinkedProcessLeaseId: "proc_detroit_two_relaunch",
+              browserSessionLinkedProcessCwd: detroitTwoRoot,
+              browserSessionLinkedProcessPid: 41308
+            }
+          }
+        ],
+        summary:
+          "Autonomous task completed after 1 iteration(s). I finished the goal with 3 approved action(s) and 2 blocked.",
+        startedAt: nowIso,
+        completedAt
+      }
+    },
+    maxRecentJobs: 20,
+    maxRecentActions: 12,
+    maxBrowserSessions: 6,
+    maxPathDestinations: 8,
+    maxConversationTurns: 40
+  });
+
+  assert.equal(session.activeWorkspace?.rootPath, detroitTwoRoot);
+  assert.equal(session.activeWorkspace?.primaryArtifactPath, detroitTwoPagePath);
+  assert.deepEqual(session.activeWorkspace?.lastChangedPaths, [
+    detroitTwoPagePath,
+    detroitTwoStylesPath
+  ]);
+  assert.equal(session.returnHandoff?.workspaceRootPath, detroitTwoRoot);
+  assert.equal(session.returnHandoff?.primaryArtifactPath, detroitTwoPagePath);
+  assert.deepEqual(session.returnHandoff?.changedPaths, [
+    detroitTwoPagePath,
+    detroitTwoStylesPath
+  ]);
+});
+
+test("persistExecutedJobOutcome discovers a stable primary artifact from the relaunched workspace root when prior file ledgers aged out", () => {
+  const nowIso = "2026-04-11T13:55:50.000Z";
+  const completedAt = "2026-04-11T13:56:00.326Z";
+  const tempRoot = mkdtempSync(path.join(os.tmpdir(), "abb-detroit-two-relaunch-"));
+  const detroitTwoRoot = path.join(tempRoot, "Detroit City Two");
+  const detroitTwoAppRoot = path.join(detroitTwoRoot, "app");
+  const detroitTwoPagePath = path.join(detroitTwoAppRoot, "page.js");
+  const detroitTwoStylesPath = path.join(detroitTwoAppRoot, "globals.css");
+
+  mkdirSync(detroitTwoAppRoot, { recursive: true });
+  writeFileSync(detroitTwoPagePath, "export default function Page() { return null; }\n", "utf8");
+  writeFileSync(detroitTwoStylesPath, ":root { color: #111; }\n", "utf8");
+
+  try {
+    const session = buildSessionSeed({
+      provider: "telegram",
+      conversationId: "chat-detroit-two-relaunch-pruned-ledgers",
+      userId: "user-1",
+      username: "owner",
+      conversationVisibility: "private",
+      receivedAt: nowIso
+    });
+    const runningJob: ConversationJob = {
+      ...buildQueuedJob(nowIso),
+      id: "job-detroit-two-relaunch-pruned-ledgers",
+      input: 'Now I want to switch to "Detroit City Two" and open it in the browser again.',
+      executionInput:
+        'Now I want to switch to "Detroit City Two" and open it in the browser again.',
+      status: "running",
+      startedAt: nowIso
+    };
+
+    session.runningJobId = runningJob.id;
+    session.recentJobs = [runningJob];
+    session.activeWorkspace = {
+      id: "workspace:detroit-three",
+      label: "Current project workspace",
+      rootPath: path.join(tempRoot, "Detroit City Three"),
+      primaryArtifactPath: path.join(tempRoot, "Detroit City Three", "app", "globals.css"),
+      previewUrl: "http://localhost:54611/",
+      browserSessionId: "browser_session:detroit_three",
+      browserSessionIds: ["browser_session:detroit_three"],
+      browserSessionStatus: "closed",
+      browserProcessPid: 50672,
+      previewProcessLeaseId: "proc_detroit_three",
+      previewProcessLeaseIds: ["proc_detroit_three"],
+      previewProcessCwd: path.join(tempRoot, "Detroit City Three"),
+      lastKnownPreviewProcessPid: 49068,
+      stillControllable: false,
+      ownershipState: "stale",
+      previewStackState: "detached",
+      lastChangedPaths: [
+        path.join(tempRoot, "Detroit City Three", "app", "globals.css")
+      ],
+      sourceJobId: "job-detroit-three-build",
+      updatedAt: "2026-04-11T13:54:51.463Z"
+    };
+    session.pathDestinations = [
+      {
+        id: "path:process:detroit-two",
+        label: "Process working folder",
+        resolvedPath: detroitTwoRoot,
+        sourceJobId: runningJob.id,
+        at: completedAt
+      }
+    ];
+
+    persistExecutedJobOutcome({
+      session,
+      executedJob: {
+        ...runningJob,
+        status: "completed",
+        completedAt,
+        resultSummary:
+          "Autonomous task completed after 2 iteration(s). I finished the goal with 3 approved action(s) and 3 blocked.",
+        errorMessage: null
+      },
+      executionResult: {
+        summary:
+          "Autonomous task completed after 2 iteration(s). I finished the goal with 3 approved action(s) and 3 blocked.",
+        taskRunResult: {
+          task: {
+            id: "task-detroit-two-relaunch-pruned-ledgers",
+            goal: 'Launch "Detroit City Two" from the desktop and open it in the browser.',
+            userInput:
+              'Launch "Detroit City Two" from the desktop and open it in the browser.',
+            createdAt: nowIso
+          },
+          plan: {
+            taskId: "task-detroit-two-relaunch-pruned-ledgers",
+            plannerNotes: "Relaunch the existing project without rewriting files.",
+            actions: [
+              {
+                id: "action-start",
+                type: "start_process",
+                description: "Start Detroit City Two.",
+                params: {
+                  command: "npm run dev -- --hostname 127.0.0.1 --port 3000",
+                  cwd: detroitTwoRoot
+                },
+                estimatedCostUsd: 0.2
+              },
+              {
+                id: "action-open",
+                type: "open_browser",
+                description: "Open the Detroit City Two preview.",
+                params: {
+                  url: "http://localhost:50312/",
+                  rootPath: detroitTwoRoot,
+                  previewProcessLeaseId: "proc_detroit_two_relaunch"
+                },
+                estimatedCostUsd: 0.03
+              }
+            ]
+          },
+          actionResults: [
+            {
+              action: {
+                id: "action-start",
+                type: "start_process",
+                description: "Start Detroit City Two.",
+                params: {
+                  command: "npm run dev -- --hostname 127.0.0.1 --port 3000",
+                  cwd: detroitTwoRoot
+                },
+                estimatedCostUsd: 0.2
+              },
+              mode: "fast_path",
+              approved: true,
+              output: "Process started.",
+              executionStatus: "success",
+              blockedBy: [],
+              violations: [],
+              votes: [],
+              executionMetadata: {
+                processCwd: detroitTwoRoot,
+                processLeaseId: "proc_detroit_two_relaunch",
+                processLifecycleStatus: "PROCESS_STARTED",
+                processPid: 41308
+              }
+            },
+            {
+              action: {
+                id: "action-open",
+                type: "open_browser",
+                description: "Open the Detroit City Two preview.",
+                params: {
+                  url: "http://localhost:50312/",
+                  rootPath: detroitTwoRoot,
+                  previewProcessLeaseId: "proc_detroit_two_relaunch"
+                },
+                estimatedCostUsd: 0.03
+              },
+              mode: "fast_path",
+              approved: true,
+              output: "Opened the preview.",
+              executionStatus: "success",
+              blockedBy: [],
+              violations: [],
+              votes: [],
+              executionMetadata: {
+                browserSessionId: "browser_session:detroit_two_relaunch",
+                browserSessionUrl: "http://localhost:50312/",
+                browserSessionStatus: "open",
+                browserSessionVisibility: "visible",
+                browserSessionControllerKind: "playwright_managed",
+                browserSessionControlAvailable: true,
+                browserSessionBrowserProcessPid: 3908,
+                browserSessionWorkspaceRootPath: detroitTwoRoot,
+                browserSessionLinkedProcessLeaseId: "proc_detroit_two_relaunch",
+                browserSessionLinkedProcessCwd: detroitTwoRoot,
+                browserSessionLinkedProcessPid: 41308
+              }
+            }
+          ],
+          summary:
+            "Autonomous task completed after 2 iteration(s). I finished the goal with 3 approved action(s) and 3 blocked.",
+          startedAt: nowIso,
+          completedAt
+        }
+      },
+      maxRecentJobs: 20,
+      maxRecentActions: 12,
+      maxBrowserSessions: 6,
+      maxPathDestinations: 8,
+      maxConversationTurns: 40
+    });
+
+    assert.equal(session.activeWorkspace?.rootPath, detroitTwoRoot);
+    assert.equal(session.activeWorkspace?.primaryArtifactPath, detroitTwoPagePath);
+    assert.deepEqual(session.activeWorkspace?.lastChangedPaths, [
+      detroitTwoPagePath,
+      detroitTwoStylesPath
+    ]);
+    assert.equal(session.returnHandoff?.workspaceRootPath, detroitTwoRoot);
+    assert.equal(session.returnHandoff?.primaryArtifactPath, detroitTwoPagePath);
+    assert.deepEqual(session.returnHandoff?.changedPaths, [
+      detroitTwoPagePath,
+      detroitTwoStylesPath
+    ]);
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
 });
 
 test("persistExecutedJobOutcome retains every live preview lease for the current workspace when the browser session links only the newest one", () => {

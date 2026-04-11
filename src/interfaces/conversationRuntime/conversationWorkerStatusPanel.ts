@@ -16,6 +16,28 @@ import type {
 import { buildConversationWorkerProgressMessage } from "./conversationWorkerProgressText";
 import { canUseConversationAckTimerForSession } from "./conversationLifecycle";
 
+const AUTONOMOUS_STOPPED_SUMMARY_PATTERNS: readonly RegExp[] = [
+  /\brun stopped before it finished\b/i,
+  /\bhit a blocker before i could finish\b/i,
+  /\bstopped because\b/i,
+  /\bdeterministic recovery stopped for\b/i
+] as const;
+
+/**
+ * Returns whether a queue-completed job actually ended in a blocked autonomous stop state from
+ * the user's point of view.
+ *
+ * @param job - Persisted completed job outcome.
+ * @returns `true` when the summary is a blocked terminal autonomous result.
+ */
+function hasBlockedTerminalSummary(job: ConversationJob): boolean {
+  const summary = typeof job.resultSummary === "string" ? job.resultSummary.trim() : "";
+  if (!summary) {
+    return false;
+  }
+  return AUTONOMOUS_STOPPED_SUMMARY_PATTERNS.some((pattern) => pattern.test(summary));
+}
+
 /**
  * Returns a dedicated editable status sender when the session/transport supports it.
  *
@@ -105,7 +127,7 @@ export function buildTerminalPersistentStatusUpdate(
       message: session.progressState.message
     };
   }
-  if (job.status === "completed") {
+  if (job.status === "completed" && !hasBlockedTerminalSummary(job)) {
     return {
       status: "completed",
       message: job.recoveryTrace?.status === "recovered"
@@ -115,7 +137,9 @@ export function buildTerminalPersistentStatusUpdate(
   }
   return {
     status: "stopped",
-    message: job.errorMessage?.trim().length
+    message: hasBlockedTerminalSummary(job)
+      ? "This run hit a blocker before it could finish. The final reply is below."
+      : job.errorMessage?.trim().length
       ? job.recoveryTrace?.status === "failed"
         ? `Blocked after a bounded recovery attempt: ${job.errorMessage}`
         : `Blocked: ${job.errorMessage}`

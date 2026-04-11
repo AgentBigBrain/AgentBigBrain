@@ -188,3 +188,41 @@ export function buildRuntimeOwnershipInspectionMetadata(details: {
     inspectionRecommendedNextAction: details.recommendedNextAction
   };
 }
+
+/**
+ * Builds metadata for bounded folder-group runtime shutdown sweeps.
+ *
+ * @param details - Structured sweep details for this outcome.
+ * @returns Metadata bag safe for runtime trace persistence.
+ */
+export function buildFolderRuntimeProcessSweepMetadata(details: {
+  rootPath: string;
+  selectorMode: "starts_with" | "contains";
+  selectorTerm: string;
+  matchedFolders: readonly string[];
+  initialCandidatePids: readonly number[];
+  stoppedPids: readonly number[];
+  remainingPids: readonly number[];
+}): Record<string, RuntimeTraceDetailValue> {
+  return {
+    folderRuntimeProcessSweep: true,
+    folderRuntimeProcessSweepRootPath: details.rootPath,
+    folderRuntimeProcessSweepSelectorMode: details.selectorMode,
+    folderRuntimeProcessSweepSelectorTerm: details.selectorTerm,
+    folderRuntimeProcessSweepMatchedFolderCount: details.matchedFolders.length,
+    folderRuntimeProcessSweepMatchedFolders:
+      details.matchedFolders.length > 0 ? details.matchedFolders.join("|") : null,
+    folderRuntimeProcessSweepInitialCandidateCount: details.initialCandidatePids.length,
+    folderRuntimeProcessSweepInitialCandidatePids:
+      details.initialCandidatePids.length > 0
+        ? details.initialCandidatePids.join(",")
+        : null,
+    folderRuntimeProcessSweepStoppedCount: details.stoppedPids.length,
+    folderRuntimeProcessSweepStoppedPids:
+      details.stoppedPids.length > 0 ? details.stoppedPids.join(",") : null,
+    folderRuntimeProcessSweepRemainingCount: details.remainingPids.length,
+    folderRuntimeProcessSweepRemainingPids:
+      details.remainingPids.length > 0 ? details.remainingPids.join(",") : null,
+    folderRuntimeProcessSweepVerifiedClear: details.remainingPids.length === 0
+  };
+}

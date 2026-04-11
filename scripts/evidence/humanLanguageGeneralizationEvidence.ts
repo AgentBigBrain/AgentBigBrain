@@ -25,6 +25,7 @@ import type {
   MemorySynthesisFactRecord
 } from "../../src/organs/memorySynthesis/contracts";
 import { buildRecallSynthesis } from "../../src/organs/memorySynthesis/recallSynthesis";
+import { buildTemporalMemorySynthesisFromCompatibilityRecords } from "../../src/organs/memorySynthesis/temporalSynthesisAdapter";
 
 type ScenarioCategory =
   | "episode_understanding"
@@ -819,9 +820,17 @@ function evaluateCrossMemorySynthesisScenario(
     openLoopLinks: []
   };
 
+  const positiveTemporalSynthesis = buildTemporalMemorySynthesisFromCompatibilityRecords(
+    [positiveEpisode],
+    [positiveFact]
+  );
+  const weakTemporalSynthesis = buildTemporalMemorySynthesisFromCompatibilityRecords(
+    [weakEpisode],
+    []
+  );
   const synthesis = scenario.polarity === "positive"
-    ? buildRecallSynthesis([positiveEpisode], [positiveFact])
-    : buildRecallSynthesis([weakEpisode], []);
+    ? buildRecallSynthesis(positiveTemporalSynthesis, [positiveEpisode], [positiveFact])
+    : buildRecallSynthesis(weakTemporalSynthesis, [weakEpisode], []);
 
   const observed: ScenarioBehaviorResult[] = [];
   if (scenario.polarity === "positive") {

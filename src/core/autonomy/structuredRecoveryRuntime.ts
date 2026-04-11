@@ -11,13 +11,25 @@ import {
   type RecoveryFailureClass
 } from "./contracts";
 import { buildStructuredRecoveryStateMessage } from "./agentLoopProgress";
+import { buildMissionCompletionContract } from "./missionContract";
 import type { LoopbackTargetHint } from "./liveRunRecovery";
+import type { ApprovedManagedProcessStartContext } from "./loopCleanupPolicy";
 import {
   buildStructuredRecoveryExecutionPlan,
   evaluateStructuredRecoveryPolicy,
   type StructuredRecoveryExecutionStop
 } from "../stage6_85/recovery";
+import { extractActiveRequestSegment } from "../currentRequestExtraction";
 import type { TaskRunResult } from "../types";
+
+const RUNTIME_MANAGEMENT_VERB_PATTERN =
+  /\b(?:inspect|check|confirm|verify|see\s+if|is\b|are\b|stop|shut\s*down|shutdown|close)\b/i;
+const RUNTIME_MANAGEMENT_TARGET_PATTERN =
+  /\b(?:running|run(?:ning)?|server|process|preview|browser|tab|window|session)\b/i;
+const LIVE_LAUNCH_VERB_PATTERN =
+  /\b(?:create|build|scaffold|generate|make|run|start|launch|serve|open|leave)\b/i;
+const LIVE_LAUNCH_TARGET_PATTERN =
+  /\b(?:nextjs|next\.js|vite|app|site|page|preview|browser|localhost|local(?:ly)?|server)\b/i;
 
 export type StructuredRecoveryRuntimeDecision =
   | { outcome: "none" }
@@ -48,8 +60,10 @@ export function resolveStructuredRecoveryRuntimeDecision(input: {
   result: TaskRunResult;
   attemptCounts: ReadonlyMap<string, number>;
   trackedManagedProcessLeaseId: string | null;
+  trackedManagedProcessStartContext: ApprovedManagedProcessStartContext | null;
   trackedLoopbackTarget: LoopbackTargetHint | null;
 }): StructuredRecoveryRuntimeDecision {
+  const activeRequestSegment = extractActiveRequestSegment(input.result.task.userInput);
   const recoverySnapshot = buildAutonomousRecoverySnapshot({
     result: input.result,
     missionContract: input.missionContract,
@@ -59,6 +73,20 @@ export function resolveStructuredRecoveryRuntimeDecision(input: {
     snapshot: recoverySnapshot,
     attemptCounts: input.attemptCounts
   });
+  const activeRequestContract = buildMissionCompletionContract(
+    activeRequestSegment
+  );
+  if (
+    structuredRecoveryDecision.recoveryClass &&
+    isManagedProcessReadinessRecoveryClass(structuredRecoveryDecision.recoveryClass) &&
+    shouldSuppressManagedProcessReadinessRecovery(
+      activeRequestSegment,
+      input.missionContract,
+      activeRequestContract
+    )
+  ) {
+    return { outcome: "none" };
+  }
   if (structuredRecoveryDecision.outcome === "stop") {
     return {
       outcome: "abort",
@@ -77,10 +105,13 @@ export function resolveStructuredRecoveryRuntimeDecision(input: {
 
   const structuredRecoveryPlan = buildStructuredRecoveryExecutionPlan({
     overarchingGoal: input.overarchingGoal,
-    missionRequiresBrowserProof: input.missionContract.requireBrowserProof,
+    missionRequiresBrowserProof:
+      input.missionContract.requireBrowserProof ||
+      input.missionContract.requireBrowserOpenProof,
     result: input.result,
     decision: structuredRecoveryDecision,
     trackedManagedProcessLeaseId: input.trackedManagedProcessLeaseId,
+    trackedManagedProcessStartContext: input.trackedManagedProcessStartContext,
     trackedLoopbackTarget: input.trackedLoopbackTarget
   });
   if (!structuredRecoveryPlan) {
@@ -124,6 +155,64 @@ function shouldCleanupManagedProcessForRecoveryClass(
     recoveryClass === "PROCESS_PORT_IN_USE" ||
     recoveryClass === "PROCESS_NOT_READY" ||
     recoveryClass === "TARGET_NOT_RUNNING"
+  );
+}
+
+/** Suppresses readiness retries when the active request is only about runtime inspection or shutdown. */
+function shouldSuppressManagedProcessReadinessRecovery(
+  activeRequestSegment: string,
+  missionContract: MissionCompletionContract,
+  activeRequestContract: MissionCompletionContract
+): boolean {
+  if (isExplicitRuntimeManagementOnlyRequest(activeRequestSegment)) {
+    return true;
+  }
+  if (
+    allowsManagedProcessReadinessRecovery(missionContract) ||
+    allowsManagedProcessReadinessRecovery(activeRequestContract) ||
+    appearsToRequestLiveLaunch(activeRequestSegment)
+  ) {
+    return false;
+  }
+  return true;
+}
+
+/** Evaluates whether either the mission or active request still requires live-run readiness proof. */
+function allowsManagedProcessReadinessRecovery(
+  missionContract: MissionCompletionContract
+): boolean {
+  return (
+    missionContract.requireReadinessProof ||
+    missionContract.requireBrowserProof ||
+    missionContract.requireBrowserOpenProof
+  );
+}
+
+/** Narrows recovery classes down to the bounded managed-process readiness family. */
+function isManagedProcessReadinessRecoveryClass(
+  recoveryClass: RecoveryFailureClass
+): boolean {
+  return (
+    recoveryClass === "PROCESS_PORT_IN_USE" ||
+    recoveryClass === "PROCESS_NOT_READY" ||
+    recoveryClass === "TARGET_NOT_RUNNING"
+  );
+}
+
+/** Detects runtime-management turns that should not be pulled back into build or launch recovery. */
+function isExplicitRuntimeManagementOnlyRequest(activeRequestSegment: string): boolean {
+  return (
+    RUNTIME_MANAGEMENT_VERB_PATTERN.test(activeRequestSegment) &&
+    RUNTIME_MANAGEMENT_TARGET_PATTERN.test(activeRequestSegment) &&
+    !appearsToRequestLiveLaunch(activeRequestSegment)
+  );
+}
+
+/** Detects whether the active request still appears to ask for a live app launch or preview. */
+function appearsToRequestLiveLaunch(activeRequestSegment: string): boolean {
+  return (
+    LIVE_LAUNCH_VERB_PATTERN.test(activeRequestSegment) &&
+    LIVE_LAUNCH_TARGET_PATTERN.test(activeRequestSegment)
   );
 }
 

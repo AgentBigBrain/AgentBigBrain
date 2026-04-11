@@ -23,6 +23,13 @@ export interface FailedManagedProcessStartTarget extends LoopbackTarget {
   failureKind: string | null;
 }
 
+export interface FailedWorkspaceExecutionDependency {
+  workspaceRoot: string;
+  sourceActionId: string;
+  failureCode: ActionRunResult["executionFailureCode"] | null;
+  stage: "install" | "build" | "workspace_proof" | "build_proof";
+}
+
 interface DependentLiveRunTargetBlock {
   actionResult: ActionRunResult;
   traceDetails: Record<string, string | number | boolean | null>;
@@ -128,6 +135,60 @@ function resolveDependentLoopbackTarget(action: PlannedAction): LoopbackTarget |
   }
 }
 
+/** Reads the best available workspace root hint from a planned or executed action. */
+function readWorkspaceRoot(action: PlannedAction | ActionRunResult["action"]): string | null {
+  const { cwd, workdir, rootPath } = action.params as Record<string, unknown>;
+  return typeof cwd === "string" && cwd.trim().length > 0
+    ? cwd.trim()
+    : typeof workdir === "string" && workdir.trim().length > 0
+      ? workdir.trim()
+      : typeof rootPath === "string" && rootPath.trim().length > 0
+        ? rootPath.trim()
+        : null;
+}
+
+/** Classifies which framework-workspace prerequisite a failed action belonged to. */
+function resolveWorkspaceDependencyStage(
+  action: PlannedAction | ActionRunResult["action"]
+): FailedWorkspaceExecutionDependency["stage"] | null {
+  if (action.type !== "shell_command") {
+    return null;
+  }
+  const command =
+    typeof action.params.command === "string" ? action.params.command : "";
+  if (/\bnpm install\b/i.test(command)) {
+    return "install";
+  }
+  if (/\bnpm run build\b/i.test(command)) {
+    return "build";
+  }
+  if (/workspace not ready/i.test(command)) {
+    return "workspace_proof";
+  }
+  if (/landing page build proof missing/i.test(command)) {
+    return "build_proof";
+  }
+  return null;
+}
+
+/** Resolves which failed workspace dependency should block a later dependent live-run action. */
+function resolveWorkspaceRootForDependentAction(
+  action: PlannedAction,
+  failedDependencies: readonly FailedWorkspaceExecutionDependency[]
+): string | null {
+  const explicitWorkspaceRoot = readWorkspaceRoot(action);
+  if (explicitWorkspaceRoot) {
+    return explicitWorkspaceRoot;
+  }
+  if (failedDependencies.length !== 1) {
+    return null;
+  }
+  if (!resolveDependentLoopbackTarget(action)) {
+    return null;
+  }
+  return failedDependencies[0]?.workspaceRoot ?? null;
+}
+
 /**
  * Extracts the failed loopback target from a blocked `start_process` result when available.
  *
@@ -199,6 +260,31 @@ export function rememberFailedManagedProcessStartTarget(
   return [resolved, ...deduped];
 }
 
+/** Records failed framework-workspace prerequisites so later dependent actions can fail closed. */
+export function rememberFailedWorkspaceExecutionDependency(
+  failedDependencies: readonly FailedWorkspaceExecutionDependency[],
+  actionResult: ActionRunResult
+): FailedWorkspaceExecutionDependency[] {
+  if (actionResult.approved) {
+    return [...failedDependencies];
+  }
+  const workspaceRoot = readWorkspaceRoot(actionResult.action);
+  const stage = resolveWorkspaceDependencyStage(actionResult.action);
+  if (!workspaceRoot || !stage) {
+    return [...failedDependencies];
+  }
+  const resolved: FailedWorkspaceExecutionDependency = {
+    workspaceRoot,
+    sourceActionId: actionResult.action.id,
+    failureCode: actionResult.executionFailureCode ?? "ACTION_EXECUTION_FAILED",
+    stage
+  };
+  const deduped = failedDependencies.filter(
+    (candidate) => candidate.workspaceRoot !== workspaceRoot
+  );
+  return [resolved, ...deduped];
+}
+
 /**
  * Blocks proof or browser actions that still depend on a loopback target whose start already failed.
  *
@@ -264,6 +350,61 @@ export function evaluateDependentLiveRunTargetBlock(
       blockedLoopbackPort: failedTarget.port,
       blockedLoopbackUrl: failedTarget.url,
       blockedSourceActionId: failedTarget.sourceActionId
+    }
+  };
+}
+
+/** Blocks later actions that still depend on a failed framework-workspace prerequisite. */
+export function evaluateDependentWorkspaceExecutionBlock(
+  action: PlannedAction,
+  mode: ActionRunResult["mode"],
+  failedDependencies: readonly FailedWorkspaceExecutionDependency[]
+): DependentLiveRunTargetBlock | null {
+  const workspaceRoot = resolveWorkspaceRootForDependentAction(action, failedDependencies);
+  if (!workspaceRoot) {
+    return null;
+  }
+  const failedDependency = failedDependencies.find(
+    (candidate) => candidate.workspaceRoot === workspaceRoot
+  );
+  if (!failedDependency) {
+    return null;
+  }
+
+  const failureCode = failedDependency.failureCode ?? "ACTION_EXECUTION_FAILED";
+  const output =
+    `${action.type} skipped: an earlier framework workspace prerequisite failed in ${workspaceRoot} ` +
+    `(stage ${failedDependency.stage}). This plan attempt cannot truthfully continue the same ` +
+    "local build or preview chain until that prerequisite succeeds.";
+
+  return {
+    actionResult: buildBlockedActionResult({
+      action,
+      mode,
+      output,
+      executionStatus: "blocked",
+      executionFailureCode: failureCode,
+      executionMetadata: {
+        liveRunDependencyBlocked: true,
+        liveRunDependencySourceActionId: failedDependency.sourceActionId,
+        liveRunDependencyWorkspaceRoot: failedDependency.workspaceRoot,
+        liveRunDependencyStage: failedDependency.stage
+      },
+      blockedBy: [failureCode],
+      violations: [
+        {
+          code: failureCode,
+          message: output
+        }
+      ]
+    }),
+    traceDetails: {
+      blockCode: failureCode,
+      blockCategory: "runtime",
+      liveRunDependencyBlocked: true,
+      blockedWorkspaceRoot: failedDependency.workspaceRoot,
+      blockedDependencyStage: failedDependency.stage,
+      blockedSourceActionId: failedDependency.sourceActionId
     }
   };
 }

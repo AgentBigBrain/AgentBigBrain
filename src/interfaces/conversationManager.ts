@@ -32,6 +32,7 @@ const DEFAULT_CONVERSATION_MANAGER_CONFIG: ConversationManagerConfig = {
 const DEFAULT_INTENT_INTERPRETER_CONFIDENCE_THRESHOLD = 0.85;
 export class ConversationManager {
   private readonly activeWorkers = new Set<string>();
+  private readonly workerLastSeenAt = new Map<string, string>();
   private readonly ackTimers = new Map<string, NodeJS.Timeout>();
   private readonly workerBindings = new Map<string, SessionWorkerBinding>();
   private readonly config: ConversationManagerConfig;
@@ -168,6 +169,7 @@ export class ConversationManager {
           notify: notifier,
           activeWorkers: this.activeWorkers,
           ackTimers: this.ackTimers,
+          workerLastSeenAt: this.workerLastSeenAt,
           workerBindings: this.workerBindings,
           store: this.store,
           listManagedProcessSnapshots: this.listManagedProcessSnapshots,
@@ -287,6 +289,7 @@ export class ConversationManager {
       memoryAccessAuditStore: this.memoryAccessAuditStore,
       abortActiveAutonomousRun: this.abortActiveAutonomousRun,
       isWorkerActive: (sessionKey) => this.activeWorkers.has(sessionKey),
+      getWorkerLastSeenAt: (sessionKey) => this.workerLastSeenAt.get(sessionKey) ?? null,
       clearAckTimer: (sessionKey) => clearConversationAckTimer(sessionKey, this.ackTimers),
       setWorkerBinding: (sessionKey, task, notifier) =>
         setConversationWorkerBinding(this.workerBindings, sessionKey, task, notifier),
@@ -297,6 +300,7 @@ export class ConversationManager {
           notify: notifier,
           activeWorkers: this.activeWorkers,
           ackTimers: this.ackTimers,
+          workerLastSeenAt: this.workerLastSeenAt,
           workerBindings: this.workerBindings,
           store: this.store,
           listManagedProcessSnapshots: this.listManagedProcessSnapshots,

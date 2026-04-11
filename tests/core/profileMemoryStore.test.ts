@@ -25,7 +25,10 @@ import {
 } from "../../src/core/profileMemoryRuntime/profileMemoryIngestIdempotency";
 import { ProfileMemoryStore } from "../../src/core/profileMemoryStore";
 import { buildProfileMemorySourceFingerprint } from "../../src/core/profileMemoryRuntime/profileMemoryIngestProvenance";
-import { saveProfileMemoryState } from "../../src/core/profileMemoryRuntime/profileMemoryPersistence";
+import {
+  loadPersistedProfileMemoryState,
+  saveProfileMemoryState
+} from "../../src/core/profileMemoryRuntime/profileMemoryPersistence";
 import { applyProfileMemoryGraphMutations } from "../../src/core/profileMemoryRuntime/profileMemoryGraphMutations";
 import { normalizeProfileMemoryState } from "../../src/core/profileMemoryRuntime/profileMemoryStateNormalization";
 import {
@@ -86,6 +89,54 @@ test("profile memory persists encrypted content and omits plaintext values at re
     const raw = await readFile(filePath, "utf8");
     assert.equal(raw.includes("123 Main Street"), false);
     assert.equal(raw.includes("employment.current"), false);
+  });
+});
+
+test("profile memory load returns reconciled stale snapshots without rewriting encrypted storage", async () => {
+  await withProfileStore(async (store, filePath) => {
+    let seededState = createEmptyProfileMemoryState();
+    seededState = upsertTemporalProfileFact(seededState, {
+      key: "employment.current",
+      value: "Lantern",
+      sensitive: false,
+      sourceTaskId: "task_profile_load_read_only",
+      source: "user_input_pattern.work_at",
+      observedAt: "2025-01-01T00:00:00.000Z",
+      confidence: 0.95
+    }).nextState;
+    await saveProfileMemoryState(filePath, Buffer.alloc(32, 7), seededState);
+
+    const rawBefore = await readFile(filePath, "utf8");
+    const loaded = await store.load();
+    const rawAfter = await readFile(filePath, "utf8");
+
+    assert.equal(loaded.facts[0]?.status, "uncertain");
+    assert.equal(rawAfter, rawBefore);
+  });
+});
+
+test("profile memory repairPersistedState persists deterministic read-time repairs explicitly", async () => {
+  await withProfileStore(async (store, filePath) => {
+    let seededState = createEmptyProfileMemoryState();
+    seededState = upsertTemporalProfileFact(seededState, {
+      key: "employment.current",
+      value: "Lantern",
+      sensitive: false,
+      sourceTaskId: "task_profile_repair_persist",
+      source: "user_input_pattern.work_at",
+      observedAt: "2025-01-01T00:00:00.000Z",
+      confidence: 0.95
+    }).nextState;
+    await saveProfileMemoryState(filePath, Buffer.alloc(32, 7), seededState);
+
+    const rawBefore = await readFile(filePath, "utf8");
+    const repaired = await store.repairPersistedState();
+    const rawAfter = await readFile(filePath, "utf8");
+    const persisted = await loadPersistedProfileMemoryState(filePath, Buffer.alloc(32, 7));
+
+    assert.equal(repaired.facts[0]?.status, "uncertain");
+    assert.notEqual(rawAfter, rawBefore);
+    assert.equal(persisted.facts[0]?.status, "uncertain");
   });
 });
 

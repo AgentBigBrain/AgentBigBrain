@@ -16,23 +16,12 @@ import {
   executeRunningJob,
   isBlockedSystemJobOutcome,
   markQueuedJobRunning,
-  persistExecutedJobOutcome,
   shouldSuppressWorkerHeartbeat
 } from "../conversationWorkerLifecycle";
-import type {
-  InterfaceSessionStore
-} from "../sessionStore";
-import type {
-  ListBrowserSessionSnapshots,
-  ListManagedProcessSnapshots,
-  ConversationNotifier,
-  ExecuteConversationTask
-} from "./managerContracts";
-import { enqueueAutomaticTrackedWorkspaceRecoveryRetry } from "./conversationWorkerAutoRecovery";
-import {
-  type SessionWorkerBinding,
-  setConversationWorkerBinding
-} from "./conversationWorkerBinding";
+import type { InterfaceSessionStore } from "../sessionStore";
+import type { ConversationNotifier, ExecuteConversationTask, ListBrowserSessionSnapshots, ListManagedProcessSnapshots } from "./managerContracts";
+import { type SessionWorkerBinding, setConversationWorkerBinding } from "./conversationWorkerBinding";
+import { persistWorkerExecutionOutcome } from "./conversationWorkerOutcomePersistence";
 import { persistConversationExecutionProgress } from "./conversationWorkerProgressPersistence";
 import {
   buildInitialPersistentStatusMessage,
@@ -46,7 +35,6 @@ import {
   enqueueConversationJob,
   setConversationAckLifecycleState
 } from "./conversationLifecycle";
-import { collectWorkerRuntimeSnapshots } from "./conversationWorkerRuntimeSnapshots";
 export { setConversationWorkerBinding } from "./conversationWorkerBinding";
 export type { SessionWorkerBinding } from "./conversationWorkerBinding";
 
@@ -101,6 +89,7 @@ export interface ProcessConversationQueueInput {
     | "showCompletionPrefix"
   >;
   ackTimers: Map<string, NodeJS.Timeout>;
+  workerLastSeenAt: Map<string, string>;
   workerBindings: Map<string, SessionWorkerBinding>;
   autonomousExecutionPrefix: string;
 }
@@ -111,6 +100,7 @@ export interface StartConversationWorkerIfNeededInput {
   notify: ConversationNotifier;
   activeWorkers: Set<string>;
   ackTimers: Map<string, NodeJS.Timeout>;
+  workerLastSeenAt: Map<string, string>;
   workerBindings: Map<string, SessionWorkerBinding>;
   store: InterfaceSessionStore;
   listManagedProcessSnapshots?: ListManagedProcessSnapshots;
@@ -144,6 +134,7 @@ export async function startConversationWorkerIfNeeded(
     notify,
     activeWorkers,
     ackTimers,
+    workerLastSeenAt,
     workerBindings,
     store,
     listManagedProcessSnapshots,
@@ -158,8 +149,10 @@ export async function startConversationWorkerIfNeeded(
   }
 
   activeWorkers.add(sessionKey);
+  workerLastSeenAt.set(sessionKey, new Date().toISOString());
   const binding = workerBindings.get(sessionKey);
   if (!binding) {
+    workerLastSeenAt.delete(sessionKey);
     activeWorkers.delete(sessionKey);
     return;
   }
@@ -174,12 +167,14 @@ export async function startConversationWorkerIfNeeded(
       listBrowserSessionSnapshots,
       config,
       ackTimers,
+      workerLastSeenAt,
       workerBindings,
       autonomousExecutionPrefix
     });
   } finally {
     clearConversationAckTimer(sessionKey, ackTimers);
     activeWorkers.delete(sessionKey);
+    workerLastSeenAt.delete(sessionKey);
     const latestSession = await store.getSession(sessionKey);
     const latestBinding = workerBindings.get(sessionKey);
     if (
@@ -194,6 +189,7 @@ export async function startConversationWorkerIfNeeded(
         notify: latestBinding.notifier,
         activeWorkers,
         ackTimers,
+        workerLastSeenAt,
         workerBindings,
         store,
         listManagedProcessSnapshots,
@@ -280,6 +276,7 @@ export async function processConversationQueue(
     listBrowserSessionSnapshots,
     config,
     ackTimers,
+    workerLastSeenAt,
     workerBindings,
     autonomousExecutionPrefix
   } = input;
@@ -356,7 +353,11 @@ export async function processConversationQueue(
         autonomousExecutionPrefix,
         activeNotify
       ),
+      onWorkerHeartbeat: () => {
+        workerLastSeenAt.set(sessionKey, new Date().toISOString());
+      },
       onProgressUpdate: async (update) => {
+        workerLastSeenAt.set(sessionKey, new Date().toISOString());
         await persistConversationExecutionProgress(
           sessionKey,
           nextJob.id,
@@ -370,38 +371,23 @@ export async function processConversationQueue(
       onExecutionSettled: () => clearConversationAckTimer(sessionKey, ackTimers)
     });
 
-    const updatedSession = (await store.getSession(sessionKey)) ?? session;
     const {
-      managedProcessSnapshots,
-      browserSessionSnapshots
-    } = await collectWorkerRuntimeSnapshots({
-      listManagedProcessSnapshots,
-      listBrowserSessionSnapshots
-    });
-    const persistedRunningJob = persistExecutedJobOutcome({
-      session: updatedSession,
+      updatedSession,
+      persistedRunningJob
+    } = await persistWorkerExecutionOutcome({
+      sessionKey,
+      store,
+      session,
       executedJob: nextJob,
       executionResult,
-      browserSessionSnapshots,
-      managedProcessSnapshots,
+      listManagedProcessSnapshots,
+      listBrowserSessionSnapshots,
       maxRecentJobs: config.maxRecentJobs,
       maxRecentActions: config.maxRecentActions,
       maxBrowserSessions: config.maxBrowserSessions,
       maxPathDestinations: config.maxPathDestinations,
       maxConversationTurns: config.maxConversationTurns
     });
-    if (
-      persistedRunningJob.status === "completed" &&
-      executionResult?.taskRunResult &&
-      enqueueAutomaticTrackedWorkspaceRecoveryRetry(
-        updatedSession,
-        persistedRunningJob,
-        executionResult.taskRunResult
-      )
-    ) {
-      upsertRecentJob(updatedSession, persistedRunningJob, config.maxRecentJobs);
-    }
-    await store.setSession(updatedSession);
 
     if (isBlockedSystemJobOutcome(persistedRunningJob, executionResult)) {
       persistedRunningJob.finalDeliveryOutcome = "sent";

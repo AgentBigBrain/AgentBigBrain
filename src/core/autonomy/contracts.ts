@@ -20,6 +20,8 @@ export const EXECUTION_STYLE_READINESS_GATING_REASON_CODE =
   "AUTONOMOUS_EXECUTION_STYLE_READINESS_EVIDENCE_REQUIRED";
 export const EXECUTION_STYLE_BROWSER_GATING_REASON_CODE =
   "AUTONOMOUS_EXECUTION_STYLE_BROWSER_EVIDENCE_REQUIRED";
+export const EXECUTION_STYLE_BROWSER_OPEN_GATING_REASON_CODE =
+  "AUTONOMOUS_EXECUTION_STYLE_BROWSER_OPEN_EVIDENCE_REQUIRED";
 export const EXECUTION_STYLE_PROCESS_STOP_GATING_REASON_CODE =
   "AUTONOMOUS_EXECUTION_STYLE_PROCESS_STOP_EVIDENCE_REQUIRED";
 export const EXECUTION_STYLE_LIVE_VERIFICATION_BLOCKED_REASON_CODE =
@@ -38,6 +40,7 @@ export const MISSION_REQUIREMENT_TARGET_PATH = "TARGET_PATH_TOUCH";
 export const MISSION_REQUIREMENT_MUTATION = "ARTIFACT_MUTATION";
 export const MISSION_REQUIREMENT_READINESS = "READINESS_PROOF";
 export const MISSION_REQUIREMENT_BROWSER = "BROWSER_PROOF";
+export const MISSION_REQUIREMENT_BROWSER_OPEN = "BROWSER_OPEN_PROOF";
 export const MISSION_REQUIREMENT_PROCESS_STOP = "PROCESS_STOP_PROOF";
 
 export const MAX_MANAGED_PROCESS_READINESS_FAILURES = 3;
@@ -61,6 +64,7 @@ export type AutonomousReasonCode =
   | typeof EXECUTION_STYLE_MUTATION_GATING_REASON_CODE
   | typeof EXECUTION_STYLE_READINESS_GATING_REASON_CODE
   | typeof EXECUTION_STYLE_BROWSER_GATING_REASON_CODE
+  | typeof EXECUTION_STYLE_BROWSER_OPEN_GATING_REASON_CODE
   | typeof EXECUTION_STYLE_PROCESS_STOP_GATING_REASON_CODE
   | typeof EXECUTION_STYLE_LIVE_VERIFICATION_BLOCKED_REASON_CODE
   | typeof EXECUTION_STYLE_PROCESS_NEVER_READY_REASON_CODE
@@ -76,6 +80,7 @@ export type MissionRequirementId =
   | typeof MISSION_REQUIREMENT_MUTATION
   | typeof MISSION_REQUIREMENT_READINESS
   | typeof MISSION_REQUIREMENT_BROWSER
+  | typeof MISSION_REQUIREMENT_BROWSER_OPEN
   | typeof MISSION_REQUIREMENT_PROCESS_STOP;
 
 export interface MissionCompletionContract {
@@ -85,6 +90,7 @@ export interface MissionCompletionContract {
   requireArtifactMutation: boolean;
   requireReadinessProof: boolean;
   requireBrowserProof: boolean;
+  requireBrowserOpenProof: boolean;
   requireProcessStopProof: boolean;
   targetPathHints: string[];
 }
@@ -95,6 +101,7 @@ export interface MissionEvidenceCounters {
   artifactMutations: number;
   readinessProofs: number;
   browserProofs: number;
+  browserOpenProofs: number;
   processStopProofs: number;
 }
 
@@ -131,6 +138,7 @@ export const RECOVERY_PROOF_GAPS = [
   "ARTIFACT_MUTATION_MISSING",
   "READINESS_PROOF_MISSING",
   "BROWSER_PROOF_MISSING",
+  "BROWSER_OPEN_PROOF_MISSING",
   "PROCESS_STOP_PROOF_MISSING",
   "TARGET_NOT_RUNNING"
 ] as const;
@@ -431,6 +439,9 @@ function resolveRecoveryProofGaps(
       case MISSION_REQUIREMENT_BROWSER:
         gaps.push("BROWSER_PROOF_MISSING");
         break;
+      case MISSION_REQUIREMENT_BROWSER_OPEN:
+        gaps.push("BROWSER_OPEN_PROOF_MISSING");
+        break;
       case MISSION_REQUIREMENT_PROCESS_STOP:
         gaps.push("PROCESS_STOP_PROOF_MISSING");
         break;
@@ -571,6 +582,7 @@ function resolveRecoveryEnvironmentFacts(
     ),
     readinessRequired: missionContract.requireReadinessProof,
     browserProofRequired: missionContract.requireBrowserProof,
+    browserOpenRequired: missionContract.requireBrowserOpenProof,
     processStopRequired: missionContract.requireProcessStopProof,
     observedTargetUrl
   };

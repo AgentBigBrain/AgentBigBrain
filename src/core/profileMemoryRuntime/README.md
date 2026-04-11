@@ -195,6 +195,8 @@ full `profileMemoryStore.ts` implementation.
 - closed truth-governance contracts in `profileMemoryTruthGovernanceContracts.ts`
 - code-owned family registry entries plus registry-backed action guards in
   `profileMemoryFamilyRegistry.ts`
+- extracted registry support constants for adjacent-domain defaults and contact compatibility
+  projection tables in `profileMemoryFamilyRegistrySupport.ts`
 - approved `contact.*` compatibility-projection table ownership in
   `profileMemoryFamilyRegistry.ts`, so flat contact-surface visibility stays code-owned and CI-
   checked instead of drifting as ad hoc per-family defaults
@@ -228,15 +230,17 @@ full `profileMemoryStore.ts` implementation.
 - Planner context generation stays bounded and deterministic for the same state/query input.
 - State creation, freshness downgrades, fact upserts, and persisted-state normalization belong here
   even when `profileMemory.ts` keeps the stable public export surface.
-- The encrypted profile-memory envelope may now carry additive graph-backed personal-memory state
-  under the stable store boundary, but retrieval must still use the existing compatibility facts
-  and episodes until later phases explicitly cut over.
+- The encrypted profile-memory envelope now carries graph-authoritative personal-memory state plus
+  derived compatibility caches under the stable store boundary. Stable public fact and episode
+  reads may still project from those bounded compatibility surfaces, but planner and continuity
+  retrieval now consume the canonical graph-backed temporal seams instead of rebuilding truth from
+  flat arrays.
 - Phase 3 graph persistence is now live for fact-side observations or claims and episode-backed
   events under the stable store seam, and explicit episode forget now redacts persisted graph
   events into bounded audit markers plus redacted journal entries instead of leaving raw event
-  payloads behind. That still does not change retrieval ownership yet: compatibility facts and
-  bounded episodes remain the only readable surfaces until later phases explicitly cut over to
-  graph-backed retrieval or synthesis.
+  payloads behind. Stable public review and compatibility reads may still project from bounded
+  `facts[]` and `episodes[]`, but planner and continuity paths now cut over through canonical
+  graph-backed retrieval and temporal synthesis instead of re-owning truth on flat arrays.
 - Phase 3 load normalization now backfills missing graph events for legacy non-terminal episodes
   and appends one synthetic replay marker for that bounded backfill. The same bounded repair now
   covers truly legacy active graph events and active graph claims when retained replay coverage is
@@ -914,6 +918,14 @@ full `profileMemoryStore.ts` implementation.
   remains legacy compatibility only through the one-way adapter in
   `src/organs/memorySynthesis/temporalSynthesisAdapter.ts`; adapter output must not be persisted or
   reused as a second truth owner.
+- Planner cutover now follows that contract too: `ProfileMemoryStore.openReadSession()` exposes the
+  canonical `queryTemporalPlanningSynthesis(...)` seam from
+  `profileMemoryPlanningSynthesis.ts`, and `memoryBrokerPlannerInput.ts` consumes that bounded
+  temporal output directly instead of rebuilding planner memory from compatibility facts and
+  episodes.
+- Read-time repair is now explicit instead of silent. `ProfileMemoryStore.load()` returns one
+  reconciled snapshot without persisting it, while `repairPersistedState()` is the only store seam
+  allowed to write deterministic normalization repairs back into encrypted storage.
 - Phase 6 continuity query contracts now separate semantic mode from relevance scope. The initial
   live scope set is `thread_local`, `conversation_local`, and `global_profile`, and those fields
   now pass through the live conversation-runtime continuity request shapes instead of stopping at
@@ -1113,6 +1125,10 @@ full `profileMemoryStore.ts` implementation.
   query/planning selectors. `contact.context` may contribute only a small capped number of entries
   per contact on continuity/planning surfaces instead of crowding out governed current-state facts
   just because multiple support-only context snippets mention the same name.
+- Current-state admission policy is code-owned there too: singular contact families such as
+  `contact.relationship` and `contact.work_association` now require explicit live-source admission
+  before they can own current truth, while historical or severed contact support remains fail
+  closed onto bounded compatibility identity only.
 - Query-time proof is no longer contract-only: bounded query inspection now emits
   `ProfileMemoryQueryDecisionRecord` entries for selected current/supporting facts plus hidden
   corroboration-gated or fail-closed facts, and memory-synthesis contracts now reuse that same

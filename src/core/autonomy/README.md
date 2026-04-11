@@ -17,7 +17,9 @@ here.
 - `missionContract.ts`
 - `missionEvidence.ts`
 - `completionGate.ts`
+- `frameworkContinuationContext.ts`
 - `liveRunRecovery.ts`
+- `liveRunRecoveryPromptSupport.ts`
 - `workspaceRecoveryPolicy.ts`
 - `workspaceRecoveryContextClassification.ts`
 - `workspaceRecoveryNarration.ts`

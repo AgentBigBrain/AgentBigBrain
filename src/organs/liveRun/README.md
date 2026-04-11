@@ -14,6 +14,7 @@ implemented here.
 - `browserSessionRegistry.ts`
 - `browserSessionRegistryPersistence.ts`
 - `managedProcessRegistry.ts`
+- `managedProcessRegistryPersistence.ts`
 - `playwrightBrowserProcessIntrospection.ts`
 - `startProcessHandler.ts`
 - `managedProcessTargetResolution.ts`
@@ -23,6 +24,7 @@ implemented here.
 - `probePortHandler.ts`
 - `openBrowserHandler.ts`
 - `closeBrowserHandler.ts`
+- `stopFolderRuntimeProcessesHandler.ts`
 - `inspectPathHoldersHandler.ts`
 - `inspectWorkspaceResourcesHandler.ts`
 - `inspectWorkspaceResourcesRecovery.ts`
@@ -35,7 +37,7 @@ implemented here.
 ## Inputs
 - approved executor actions such as `start_process`, `check_process`, `stop_process`,
   `probe_http`, `probe_port`, `verify_browser`, `open_browser`, `close_browser`,
-  `inspect_path_holders`, and `inspect_workspace_resources`
+  `inspect_path_holders`, `inspect_workspace_resources`, and `stop_folder_runtime_processes`
 - loopback targets, expected status codes, and browser proof expectations
 - shell/runtime configuration from `src/core/config.ts`
 
@@ -43,6 +45,8 @@ implemented here.
 - typed managed-process lease metadata
 - trusted loopback-target resolution for generic workspace-native dev or preview commands when the
   workspace config pins a concrete localhost target
+- recovered managed-process lease metadata when `check_process` proves the original wrapper died
+  but an exact same-workspace preview holder is still serving the app on loopback
 - tracked browser-session metadata and close/open control handles
 - browser-session ownership metadata including runtime-managed browser pid plus linked preview
   lease, cwd, and pid when a visible browser belongs to a local preview stack
@@ -69,6 +73,9 @@ implemented here.
   shell/file window, or sync client that still owns the folder
 - typed linked-browser cleanup metadata when exact preview-holder shutdown also closes runtime-
   managed browser sessions tied to that same preview lease
+- typed folder-runtime sweep metadata proving which matching user-owned folders were checked, which
+  exact listening local server pids were found, which ones were stopped, and whether any matched
+  listeners remained after verification
 - readiness results (`PROCESS_READY`, `PROCESS_NOT_READY`)
 - browser verification results and proof metadata
 - typed runtime-unavailable or expectation-failure outcomes
@@ -87,6 +94,11 @@ implemented here.
 - Browser open/close follow-ups must operate on tracked sessions instead of guessing from free-form
   text.
 - Managed-process cleanup must operate through the registry contract instead of shell-side guesswork.
+- Broad Desktop-folder runtime sweeps must stay on the typed `stop_folder_runtime_processes`
+  handler instead of dropping back to generic shell execution.
+- `check_process` must prefer exact same-workspace preview-holder recovery over blind restart when
+  bounded local inspection proves the workspace preview is still alive after the original managed
+  child or wrapper pid went stale.
 - Exact preview-holder shutdown must close any still-controllable linked browser sessions tied to
   that same lease and emit typed cleanup metadata instead of leaving those windows falsely
   remembered as open.

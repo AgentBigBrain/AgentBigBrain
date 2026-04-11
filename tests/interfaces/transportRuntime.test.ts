@@ -1531,6 +1531,56 @@ test("runAutonomousTransportTask wires abort-controller lifecycle and removes th
   ]);
 });
 
+test("runAutonomousTransportTask suppresses transport progress chatter when an editable worker status panel owns progress delivery", async () => {
+  const abortControllers = new Map<string, AbortController>();
+  const deliveries: Array<{ kind: "send" | "edit"; message: string }> = [];
+  const progressUpdates: Array<{ status: string; message: string }> = [];
+
+  const result = await runAutonomousTransportTask({
+    conversationId: "telegram:chat-1:user-1",
+    goal: "verify app",
+    receivedAt: "2026-03-07T12:00:00.000Z",
+    notifier: {
+      capabilities: {
+        supportsEdit: true,
+        supportsNativeStreaming: false
+      },
+      send: async (message: string) => {
+        deliveries.push({ kind: "send", message });
+        return { ok: true, messageId: "progress-1", errorCode: null };
+      },
+      edit: async (_messageId: string, message: string) => {
+        deliveries.push({ kind: "edit", message });
+        return { ok: true, messageId: "progress-1", errorCode: null };
+      }
+    },
+    abortControllers,
+    runAutonomousTask: async (_goal, _receivedAt, progressSender, signal, _initialExecutionInput, onProgressUpdate) => {
+      assert.equal(signal.aborted, false);
+      await onProgressUpdate?.({
+        status: "working",
+        message: "Still wiring the preview."
+      });
+      await progressSender("step one");
+      await progressSender("step two");
+      return { summary: "done" };
+    },
+    onProgressUpdate: async (update) => {
+      progressUpdates.push(update);
+    }
+  });
+
+  assert.equal(result.summary, "done");
+  assert.equal(abortControllers.size, 0);
+  assert.deepEqual(deliveries, []);
+  assert.deepEqual(progressUpdates, [
+    {
+      status: "working",
+      message: "Still wiring the preview."
+    }
+  ]);
+});
+
 test("pollTelegramUpdatesOnce returns the next offset and processes each update", async () => {
   const processedUpdates: Array<{ update_id?: number; payload?: string }> = [];
 

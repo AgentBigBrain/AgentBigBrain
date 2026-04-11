@@ -392,7 +392,7 @@ export function buildPlannerRepairSystemPrompt(input: PlannerRepairPromptBuildIn
   return (
     "You are repairing a planner JSON output that had no valid actions. " +
     "Return compact JSON with plannerNotes and actions[]. " +
-    "Actions must use only allowed types: respond, read_file, write_file, delete_file, list_directory, create_skill, run_skill, network_write, self_modify, shell_command, start_process, check_process, stop_process, probe_port, probe_http, verify_browser, open_browser, close_browser, inspect_path_holders, inspect_workspace_resources. " +
+    "Actions must use only allowed types: respond, read_file, write_file, delete_file, list_directory, create_skill, run_skill, network_write, self_modify, shell_command, start_process, check_process, stop_process, probe_port, probe_http, verify_browser, open_browser, close_browser, stop_folder_runtime_processes, inspect_path_holders, inspect_workspace_resources. " +
     "Always produce at least one valid action. For conversational requests, emit respond with params.message. " +
     RESPONSE_IDENTITY_GUARDRAIL +
     RESPONSE_STYLE_GUARDRAIL +
@@ -406,6 +406,7 @@ export function buildPlannerRepairSystemPrompt(input: PlannerRepairPromptBuildIn
     "For verify_browser, include params.url and optional params.expectedTitle/expectedText/timeoutMs. " +
     "For open_browser, include params.url for the local page that should be opened visibly and left open, and include optional params.timeoutMs only when a longer bounded local wait is required. " +
     "For close_browser, include params.sessionId when a tracked browser session id is available; otherwise include params.url for the tracked local page that should be closed. " +
+    "For stop_folder_runtime_processes, include params.rootPath, params.selectorMode, and params.selectorTerm. Use it only for bounded user-owned folder sweeps that stop exact server processes tied to matching folders. " +
     "For inspect_path_holders, include params.path. " +
     "For inspect_workspace_resources, include params.rootPath and any exact known previewUrl/browserSessionId/previewProcessLeaseId values when available. " +
     requiredActionHint +

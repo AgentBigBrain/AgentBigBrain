@@ -4,6 +4,8 @@
 
 import { classifyRoutingIntentV1 } from "../../interfaces/routingMap";
 import { extractActiveRequestSegment } from "../../core/currentRequestExtraction";
+import { extractRequestedFrameworkFolderName } from "./frameworkBuildActionHeuristics";
+import { hasNamedWorkspaceLaunchOpenIntent } from "./namedWorkspaceLaunchSupport";
 
 const BUILD_EXECUTION_VERB_PATTERN =
   /\b(create|build|make|generate|scaffold|setup|set up|spin up|run|start|launch|fix|repair|finish|complete|implement|continue)\b/i;
@@ -59,6 +61,10 @@ const NATURAL_BROWSER_OPEN_PATTERN =
   /\bopen\b[\s\S]{0,24}\b(?:it|the app|the site|the page)\b[\s\S]{0,24}\bin\s+my\s+browser\b/i;
 const NATURAL_BROWSER_LEAVE_UP_PATTERN =
   /\bleave\b[\s\S]{0,24}\b(?:it|the app|the site|the page)\b[\s\S]{0,24}\bup\b[\s\S]{0,24}\b(?:for me to|so i can)\s+(?:see|view|look)\b/i;
+const RUNTIME_PROCESS_MANAGEMENT_VERB_PATTERN =
+  /\b(?:inspect|check|verify|confirm|make sure|find out|see if|look at|stop|shut\s+down|turn\s+off|kill)\b/i;
+const RUNTIME_PROCESS_MANAGEMENT_TARGET_PATTERN =
+  /\b(?:still\s+running|running|server|servers|preview(?:\s+stack|\s+server)?|process(?:es)?|localhost|loopback|port|dev\s+server)\b/i;
 
 /**
  * Normalizes planner-facing request text down to the active user request segment.
@@ -68,6 +74,35 @@ const NATURAL_BROWSER_LEAVE_UP_PATTERN =
  */
 function normalizeActiveRequest(currentUserRequest: string): string {
   return extractActiveRequestSegment(currentUserRequest).trim();
+}
+
+/**
+ * Evaluates whether a request is about inspecting or stopping an existing runtime instead of
+ * building or editing project files.
+ *
+ * @param currentUserRequest - Active planner-facing request text.
+ * @returns `true` when the request is process-management oriented.
+ */
+export function isRuntimeProcessManagementRequest(
+  currentUserRequest: string
+): boolean {
+  const activeRequest = normalizeActiveRequest(currentUserRequest);
+  const hasFrameworkBuildCues =
+    FRAMEWORK_APP_REQUEST_PATTERN.test(activeRequest) &&
+    (
+      FRAMEWORK_APP_BOOTSTRAP_CUE_PATTERN.test(activeRequest) ||
+      FRAMEWORK_APP_NAMED_WORKSPACE_CUE_PATTERN.test(activeRequest) ||
+      FRAMEWORK_APP_SCAFFOLD_CONTINUATION_PATTERN.test(activeRequest) ||
+      FRAMEWORK_BUILD_LIFECYCLE_BUILD_PATTERN.test(activeRequest) ||
+      FRAMEWORK_BUILD_LIFECYCLE_PREVIEW_PATTERN.test(activeRequest) ||
+      FRAMEWORK_BUILD_LIFECYCLE_OPEN_PATTERN.test(activeRequest) ||
+      FRAMEWORK_BUILD_LIFECYCLE_EDIT_PATTERN.test(activeRequest)
+    );
+  return (
+    RUNTIME_PROCESS_MANAGEMENT_VERB_PATTERN.test(activeRequest) &&
+    RUNTIME_PROCESS_MANAGEMENT_TARGET_PATTERN.test(activeRequest) &&
+    !hasFrameworkBuildCues
+  );
 }
 
 /**
@@ -122,8 +157,14 @@ export function isExecutionStyleBuildRequest(currentUserRequest: string): boolea
   if (BUILD_EXPLANATION_ONLY_PATTERN.test(activeRequest)) {
     return false;
   }
+  if (isRuntimeProcessManagementRequest(activeRequest)) {
+    return false;
+  }
   if (isBrowserControlFollowUpRequest(activeRequest)) {
     return false;
+  }
+  if (hasNamedWorkspaceLaunchOpenIntent(activeRequest)) {
+    return true;
   }
   const routingClassification = classifyRoutingIntentV1(activeRequest);
   if (routingClassification.category === "BUILD_SCAFFOLD") {
@@ -190,9 +231,23 @@ export function isDeterministicFrameworkBuildLaneRequest(
   if (FRAMEWORK_BUILD_LIFECYCLE_CLOSE_PATTERN.test(activeRequest)) {
     return false;
   }
+  if (isRuntimeProcessManagementRequest(activeRequest)) {
+    return false;
+  }
+  const hasNamedWorkspaceLaunchFollowUp =
+    hasNamedWorkspaceLaunchOpenIntent(activeRequest) ||
+    (
+      extractRequestedFrameworkFolderName(activeRequest) !== null &&
+      BUILD_EXECUTION_DESTINATION_PATTERN.test(activeRequest) &&
+      (
+        FRAMEWORK_BUILD_LIFECYCLE_PREVIEW_PATTERN.test(activeRequest) ||
+        FRAMEWORK_BUILD_LIFECYCLE_OPEN_PATTERN.test(activeRequest)
+      )
+    );
   return (
     requiresFrameworkAppScaffoldAction(activeRequest) ||
     isFrameworkWorkspacePreparationRequest(activeRequest) ||
+    hasNamedWorkspaceLaunchFollowUp ||
     FRAMEWORK_BUILD_LIFECYCLE_BUILD_PATTERN.test(activeRequest) ||
     FRAMEWORK_BUILD_LIFECYCLE_PREVIEW_PATTERN.test(activeRequest) ||
     FRAMEWORK_BUILD_LIFECYCLE_OPEN_PATTERN.test(activeRequest) ||
@@ -244,6 +299,9 @@ export function isLiveVerificationBuildRequest(currentUserRequest: string): bool
   }
   if (suppressesLiveRunWork(activeRequest)) {
     return false;
+  }
+  if (hasNamedWorkspaceLaunchOpenIntent(activeRequest)) {
+    return true;
   }
   return (
     /\bnpm\s+start\b/i.test(activeRequest) ||
@@ -306,6 +364,9 @@ export function requiresPersistentBrowserOpenBuildRequest(
   }
   if (suppressesBrowserOpen(activeRequest)) {
     return false;
+  }
+  if (hasNamedWorkspaceLaunchOpenIntent(activeRequest)) {
+    return true;
   }
   return (
     /\bleave\b[\s\S]{0,40}\b(browser|page|site|window|it)\b[\s\S]{0,20}\bopen\b/i.test(

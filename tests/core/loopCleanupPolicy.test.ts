@@ -8,8 +8,10 @@ import { test } from "node:test";
 import {
   cleanupManagedProcessLease,
   findApprovedManagedProcessCheckResult,
+  findApprovedManagedProcessStartContext,
   findApprovedManagedProcessStartLeaseId,
-  resolveTrackedManagedProcessLeaseId
+  resolveTrackedManagedProcessLeaseId,
+  resolveTrackedManagedProcessStartContext
 } from "../../src/core/autonomy/loopCleanupPolicy";
 import { BrainOrchestrator } from "../../src/core/orchestrator";
 import { type ActionRunResult, type TaskRequest, type TaskRunResult } from "../../src/core/types";
@@ -153,6 +155,11 @@ test("lease helpers recover start and check metadata deterministically", () => {
   ]);
 
   assert.equal(findApprovedManagedProcessStartLeaseId(startResult), "proc_cleanup_policy_1");
+  assert.deepEqual(findApprovedManagedProcessStartContext(startResult), {
+    leaseId: "proc_cleanup_policy_1",
+    command: "python -m http.server 8125",
+    cwd: "runtime/generated"
+  });
   assert.deepEqual(findApprovedManagedProcessCheckResult(checkResult), {
     leaseId: "proc_cleanup_policy_1",
     lifecycleStatus: "PROCESS_STILL_RUNNING"
@@ -182,6 +189,30 @@ test("tracked lease ids survive checks and clear after stop-proof results", () =
   assert.equal(trackedAfterStart, "proc_cleanup_policy_2");
   assert.equal(trackedAfterCheck, "proc_cleanup_policy_2");
   assert.equal(trackedAfterStop, null);
+});
+
+test("tracked start context survives later check_process iterations", () => {
+  const trackedAfterStart = resolveTrackedManagedProcessStartContext(
+    null,
+    buildTaskResult([buildApprovedStartProcessResult("start_process_cleanup_3", "proc_cleanup_policy_3")])
+  );
+  const trackedAfterCheck = resolveTrackedManagedProcessStartContext(
+    trackedAfterStart,
+    buildTaskResult([
+      buildApprovedCheckProcessResult(
+        "check_process_cleanup_3",
+        "proc_cleanup_policy_3",
+        "PROCESS_STOPPED"
+      )
+    ])
+  );
+
+  assert.deepEqual(trackedAfterStart, {
+    leaseId: "proc_cleanup_policy_3",
+    command: "python -m http.server 8125",
+    cwd: "runtime/generated"
+  });
+  assert.deepEqual(trackedAfterCheck, trackedAfterStart);
 });
 
 test("cleanupManagedProcessLease issues one bounded stop_process task", async () => {

@@ -2308,6 +2308,122 @@ test("conversation manager keeps direct who-am-i questions on the identity path 
   }
 });
 
+test("conversation manager does not misroute relationship recall into the identity fallback after a recent name exchange", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-conversation-identity-followup-relationship-"));
+  const store = new InterfaceSessionStore(path.join(tempDir, "sessions.json"));
+  const directInputs: string[] = [];
+  const manager = new ConversationManager(
+    store,
+    {},
+    {
+      runDirectConversationTurn: async (input) => {
+        directInputs.push(input);
+        assert.match(input, /Current user request:\nWho is Billy\?/i);
+        return {
+          summary: "Billy is the person you worked with at Flare Web Design."
+        };
+      }
+    }
+  );
+
+  try {
+    await store.setSession(
+      buildConversationSessionFixture({
+        conversationId: "telegram:chat-1:user-1",
+        conversationTurns: [
+          {
+            role: "user",
+            text: "Who am I?",
+            at: "2026-04-10T13:31:00.000Z"
+          },
+          {
+            role: "assistant",
+            text: "You're Anthony.",
+            at: "2026-04-10T13:31:01.000Z"
+          }
+        ]
+      })
+    );
+
+    const reply = await manager.handleMessage(
+      buildMessageAt("Who is Billy?", "2026-04-10T13:31:02.000Z"),
+      async () => {
+        throw new Error("executeTask should not run for direct relationship recall");
+      },
+      async () => {}
+    );
+
+    assert.equal(reply, "Billy is the person you worked with at Flare Web Design.");
+    assert.equal(directInputs.length, 1);
+  } finally {
+    await removeTempDirWithRetry(tempDir);
+  }
+});
+
+test("conversation manager does not misroute long approval-prefixed relationship updates into the identity fallback after a recent name exchange", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-conversation-identity-followup-relationship-update-"));
+  const store = new InterfaceSessionStore(path.join(tempDir, "sessions.json"));
+  const rememberedInputs: ProfileMemoryIngestRequest[] = [];
+  const directInputs: string[] = [];
+  const manager = new ConversationManager(
+    store,
+    {},
+    {
+      rememberConversationProfileInput: async (input) => {
+        if (typeof input === "string") {
+          throw new Error("relationship update should use bounded request contract");
+        }
+        rememberedInputs.push(input);
+        return true;
+      },
+      runDirectConversationTurn: async (input) => {
+        directInputs.push(input);
+        assert.doesNotMatch(input, /If you want me to answer or remember your name/i);
+        return {
+          summary: "Okay, I'll keep that in mind about Billy."
+        };
+      }
+    }
+  );
+
+  try {
+    await store.setSession(
+      buildConversationSessionFixture({
+        conversationId: "telegram:chat-1:user-1",
+        conversationTurns: [
+          {
+            role: "user",
+            text: "And who am I?",
+            at: "2026-04-10T13:11:00.000Z"
+          },
+          {
+            role: "assistant",
+            text: "You're Anthony.",
+            at: "2026-04-10T13:11:01.000Z"
+          }
+        ]
+      })
+    );
+
+    const reply = await manager.handleMessage(
+      buildMessageAt(
+        "Yeah, so Billy is someone I worked previously. He now works somewhere else.",
+        "2026-04-10T13:12:00.000Z"
+      ),
+      async () => {
+        throw new Error("executeTask should not run for direct relationship update chat");
+      },
+      async () => {}
+    );
+
+    assert.equal(reply, "Okay, I'll keep that in mind about Billy.");
+    assert.equal(directInputs.length, 1);
+    assert.equal(rememberedInputs.length, 1);
+  } finally {
+    await removeTempDirWithRetry(tempDir);
+  }
+});
+
 test("conversation manager keeps assistant-identity acknowledgements and objections conversational under queued workflow state", async () => {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-conversation-assistant-identity-followup-"));
   const store = new InterfaceSessionStore(path.join(tempDir, "sessions.json"));

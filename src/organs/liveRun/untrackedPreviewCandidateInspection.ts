@@ -366,22 +366,31 @@ function classifyUntrackedHolderKind(
     return "preview_server";
   }
   if (
-    (processName && SYNC_PROCESS_NAME_PATTERN.test(processName)) ||
-    (commandLine && SYNC_COMMANDLINE_PATTERN.test(commandLine))
-  ) {
-    return "sync_client";
-  }
-  if (
-    (processName && EDITOR_WORKSPACE_PROCESS_NAME_PATTERN.test(processName)) ||
-    (commandLine && EDITOR_WORKSPACE_COMMANDLINE_PATTERN.test(commandLine))
+    processName &&
+    EDITOR_WORKSPACE_PROCESS_NAME_PATTERN.test(processName)
   ) {
     return "editor_workspace";
   }
   if (
-    (processName && SHELL_WORKSPACE_PROCESS_NAME_PATTERN.test(processName)) ||
-    (commandLine && SHELL_WORKSPACE_COMMANDLINE_PATTERN.test(commandLine))
+    processName &&
+    SHELL_WORKSPACE_PROCESS_NAME_PATTERN.test(processName)
   ) {
     return "shell_workspace";
+  }
+  if (
+    processName &&
+    SYNC_PROCESS_NAME_PATTERN.test(processName)
+  ) {
+    return "sync_client";
+  }
+  if (commandLine && EDITOR_WORKSPACE_COMMANDLINE_PATTERN.test(commandLine)) {
+    return "editor_workspace";
+  }
+  if (commandLine && SHELL_WORKSPACE_COMMANDLINE_PATTERN.test(commandLine)) {
+    return "shell_workspace";
+  }
+  if (commandLine && SYNC_COMMANDLINE_PATTERN.test(commandLine)) {
+    return "sync_client";
   }
   return "unknown_local_process";
 }

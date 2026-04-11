@@ -208,3 +208,127 @@ test("planOrchestratorAttempt caps actions and annotates planner notes", async (
   assert.equal(capturedPlannerOptions?.conversationDomainContext !== undefined, true);
   assert.equal(capturedPlannerOptions?.workflowBridge !== undefined, true);
 });
+
+test("planOrchestratorAttempt preserves deterministic framework live lifecycle actions past the generic cap", async () => {
+  const plan = await planOrchestratorAttempt({
+    appendTraceEvent: async () => {},
+    maxActionsPerTask: 8,
+    planner: {
+      plan: async () => ({
+        taskId: "task_orchestrator_planning_framework_fallback",
+        plannerNotes:
+          "Deterministic framework build lifecycle fallback " +
+          "(deterministic_framework_build_fallback=shell_command)",
+        actions: [
+          {
+            id: "action_1",
+            type: "shell_command",
+            description: "scaffold",
+            params: { command: "scaffold" },
+            estimatedCostUsd: 0.01
+          },
+          {
+            id: "action_2",
+            type: "write_file",
+            description: "layout",
+            params: { path: "layout.js", content: "" },
+            estimatedCostUsd: 0.01
+          },
+          {
+            id: "action_3",
+            type: "write_file",
+            description: "page",
+            params: { path: "page.js", content: "" },
+            estimatedCostUsd: 0.01
+          },
+          {
+            id: "action_4",
+            type: "write_file",
+            description: "styles",
+            params: { path: "globals.css", content: "" },
+            estimatedCostUsd: 0.01
+          },
+          {
+            id: "action_5",
+            type: "shell_command",
+            description: "install",
+            params: { command: "npm install" },
+            estimatedCostUsd: 0.01
+          },
+          {
+            id: "action_6",
+            type: "shell_command",
+            description: "workspace proof",
+            params: { command: "proof" },
+            estimatedCostUsd: 0.01
+          },
+          {
+            id: "action_7",
+            type: "shell_command",
+            description: "build",
+            params: { command: "npm run build" },
+            estimatedCostUsd: 0.01
+          },
+          {
+            id: "action_8",
+            type: "shell_command",
+            description: "build proof",
+            params: { command: "proof build" },
+            estimatedCostUsd: 0.01
+          },
+          {
+            id: "action_9",
+            type: "start_process",
+            description: "start",
+            params: { command: "npm run dev" },
+            estimatedCostUsd: 0.01
+          },
+          {
+            id: "action_10",
+            type: "probe_http",
+            description: "probe",
+            params: { url: "http://127.0.0.1:3000" },
+            estimatedCostUsd: 0.01
+          },
+          {
+            id: "action_11",
+            type: "open_browser",
+            description: "open",
+            params: { url: "http://127.0.0.1:3000", rootPath: "C:\\Users\\testuser\\Desktop\\Detroit City" },
+            estimatedCostUsd: 0.01
+          }
+        ]
+      })
+    } as never,
+    plannerLearningContext: {
+      workflowHints: [],
+      judgmentHints: [],
+      workflowBridge: null
+    },
+    plannerModel: "planner-model",
+    resolvePlaybookPlanningContext: async (): Promise<Stage685PlaybookPlanningContext> => ({
+      selectedPlaybookId: null,
+      selectedPlaybookName: null,
+      fallbackToPlanner: true,
+      reason: "fallback",
+      requestedTags: [],
+      requiredInputSchema: "none",
+      registryValidated: true,
+      scoreSummary: []
+    }),
+    synthesizerModel: "synth-model",
+    task: {
+      id: "task_orchestrator_planning_framework_fallback",
+      goal: "build and leave open",
+      userInput: "build and leave open",
+      createdAt: "2026-03-07T12:00:00.000Z"
+    },
+    attemptNumber: 1,
+    userInput: "build and leave open"
+  });
+
+  assert.equal(plan.actions.length, 11);
+  assert.equal(plan.actions[8]?.type, "start_process");
+  assert.equal(plan.actions[9]?.type, "probe_http");
+  assert.equal(plan.actions[10]?.type, "open_browser");
+});

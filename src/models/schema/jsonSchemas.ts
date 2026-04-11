@@ -33,6 +33,7 @@ const PLANNER_ACTION_TYPE_VALUES = [
   "verify_browser",
   "open_browser",
   "close_browser",
+  "stop_folder_runtime_processes",
   "inspect_path_holders",
   "inspect_workspace_resources",
   "memory_mutation",
@@ -184,6 +185,19 @@ const PLANNER_PARAMS_SCHEMA = {
         url: STRING_SCHEMA
       },
       required: []
+    },
+    {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        rootPath: STRING_SCHEMA,
+        selectorMode: {
+          type: "string",
+          enum: ["starts_with", "contains"]
+        },
+        selectorTerm: STRING_SCHEMA
+      },
+      required: ["rootPath", "selectorMode", "selectorTerm"]
     },
     {
       type: "object",

@@ -5,8 +5,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import { createSchemaEnvelopeV1 } from "../../src/core/schemaEnvelope";
 import {
   createEmptyProfileMemoryState,
+  PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME,
+  PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME,
   upsertTemporalProfileFact
 } from "../../src/core/profileMemory";
 import { buildEntityKey, createEmptyEntityGraphV1 } from "../../src/core/stage6_86EntityGraph";
@@ -74,6 +77,117 @@ test("readProfileFacts returns sensitive facts only with explicit operator appro
   assert.equal(readable.length, 1);
   assert.equal(readable[0]?.key, "address");
   assert.equal(readable[0]?.value, "123 Main Street");
+});
+
+test("query and planning surfaces follow graph-backed compatibility authority over orphaned flat facts", () => {
+  const updatedAt = "2026-04-10T13:00:00.000Z";
+  const state = {
+    ...createEmptyProfileMemoryState(),
+    updatedAt,
+    facts: [
+      {
+        id: "fact_authoritative_owen_work",
+        key: "contact.owen.work_association",
+        value: "Lantern Studio",
+        sensitive: false,
+        status: "confirmed" as const,
+        confidence: 0.92,
+        sourceTaskId: "task_profile_query_authoritative_work",
+        source: "user_input_pattern.work_with_contact",
+        observedAt: updatedAt,
+        confirmedAt: updatedAt,
+        supersededAt: null,
+        lastUpdatedAt: updatedAt
+      },
+      {
+        id: "fact_orphaned_owen_work",
+        key: "contact.owen.work_association",
+        value: "Beacon Labs",
+        sensitive: false,
+        status: "confirmed" as const,
+        confidence: 0.94,
+        sourceTaskId: "task_profile_query_orphaned_work",
+        source: "user_input_pattern.work_with_contact",
+        observedAt: updatedAt,
+        confirmedAt: updatedAt,
+        supersededAt: null,
+        lastUpdatedAt: updatedAt
+      }
+    ],
+    graph: normalizeProfileMemoryGraphState(
+      {
+        updatedAt,
+        observations: [
+          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+            observationId: "observation_authoritative_owen_work",
+            stableRefId: "stable_contact_owen",
+            family: "contact.work_association",
+            normalizedKey: "contact.owen.work_association",
+            normalizedValue: "Lantern Studio",
+            sensitive: false,
+            sourceTaskId: "task_profile_query_authoritative_work",
+            sourceFingerprint: "fingerprint_authoritative_owen_work",
+            sourceTier: "explicit_user_statement",
+            assertedAt: updatedAt,
+            observedAt: updatedAt,
+            timePrecision: "instant",
+            timeSource: "user_stated",
+            entityRefIds: [buildEntityKey("contact", "owen")]
+          })
+        ],
+        claims: [
+          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+            claimId: "claim_authoritative_owen_work",
+            stableRefId: "stable_contact_owen",
+            family: "contact.work_association",
+            normalizedKey: "contact.owen.work_association",
+            normalizedValue: "Lantern Studio",
+            sensitive: false,
+            sourceTaskId: "task_profile_query_authoritative_work",
+            sourceFingerprint: "fingerprint_authoritative_owen_work",
+            sourceTier: "explicit_user_statement",
+            assertedAt: updatedAt,
+            validFrom: updatedAt,
+            validTo: null,
+            endedAt: null,
+            endedByClaimId: null,
+            timePrecision: "instant",
+            timeSource: "user_stated",
+            derivedFromObservationIds: ["observation_authoritative_owen_work"],
+            projectionSourceIds: ["fact_authoritative_owen_work"],
+            entityRefIds: [buildEntityKey("contact", "owen")],
+            active: true
+          })
+        ],
+        events: []
+      },
+      updatedAt,
+      [],
+      []
+    )
+  };
+
+  const readableFacts = readProfileFacts(state, {
+    purpose: "operator_view",
+    includeSensitive: false,
+    explicitHumanApproval: false
+  });
+  const planningContext = buildProfilePlanningContext(state, 4, "where does Owen work?");
+  const inspection = inspectProfileFactQuery(state, {
+    queryInput: "where does Owen work?",
+    maxFacts: 4
+  });
+
+  assert.deepEqual(
+    readableFacts.map((fact) => fact.value),
+    ["Lantern Studio"]
+  );
+  assert.match(planningContext, /Lantern Studio/);
+  assert.doesNotMatch(planningContext, /Beacon Labs/);
+  assert.deepEqual(
+    inspection.selectedFacts.map((fact) => fact.value),
+    ["Lantern Studio"]
+  );
 });
 
 test("registry sensitivity floors hide residence facts even when legacy state marked them non-sensitive", () => {

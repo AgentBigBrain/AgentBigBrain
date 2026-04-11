@@ -27,6 +27,7 @@ import {
   findNewPlaywrightAutomationBrowserPid,
   listPlaywrightAutomationBrowserProcesses
 } from "./playwrightBrowserProcessIntrospection";
+import type { BrowserSessionSnapshot } from "./browserSessionRegistry";
 import type { ManagedProcessSnapshot } from "./managedProcessRegistry";
 
 interface BrowserOpenLaunchSpec {
@@ -51,6 +52,56 @@ function normalizeComparablePath(value: string | null): string | null {
     return null;
   }
   return trimmed.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+}
+
+/**
+ * Returns whether one tracked browser session still belongs to the same runtime ownership envelope
+ * requested by the current browser-open action.
+ *
+ * @param session - Existing reusable browser session candidate.
+ * @param workspaceRootPath - Requested workspace root for the current open action.
+ * @param linkedProcessLeaseId - Requested linked preview-process lease id.
+ * @param linkedProcessCwd - Requested linked preview-process cwd.
+ * @returns `true` when the existing session is ownership-compatible with the current request.
+ */
+function canReuseBrowserSessionForOwnership(
+  session: BrowserSessionSnapshot,
+  workspaceRootPath: string | null,
+  linkedProcessLeaseId: string | null,
+  linkedProcessCwd: string | null
+): boolean {
+  if (
+    linkedProcessLeaseId &&
+    session.linkedProcessLeaseId &&
+    session.linkedProcessLeaseId !== linkedProcessLeaseId
+  ) {
+    return false;
+  }
+
+  const requestedComparableRoots = new Set(
+    [workspaceRootPath, linkedProcessCwd]
+      .map((value) => normalizeComparablePath(value))
+      .filter((value): value is string => value !== null)
+  );
+  if (requestedComparableRoots.size === 0) {
+    return true;
+  }
+
+  const existingComparableRoots = new Set(
+    [session.workspaceRootPath, session.linkedProcessCwd]
+      .map((value) => normalizeComparablePath(value))
+      .filter((value): value is string => value !== null)
+  );
+  if (existingComparableRoots.size === 0) {
+    return true;
+  }
+
+  for (const comparableRoot of requestedComparableRoots) {
+    if (existingComparableRoots.has(comparableRoot)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /**
@@ -304,7 +355,15 @@ export async function executeOpenBrowser(
     }
 
     const existingSession = context.browserSessionRegistry.findReusableOpenSessionByUrl(normalizedUrl);
-    if (existingSession) {
+    if (
+      existingSession &&
+      canReuseBrowserSessionForOwnership(
+        existingSession,
+        workspaceRootPath,
+        linkedProcessLeaseId,
+        linkedProcessCwd
+      )
+    ) {
       context.browserSessionRegistry.annotateSessionOwnership(existingSession.sessionId, {
         workspaceRootPath,
         linkedProcessLeaseId,

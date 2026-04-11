@@ -656,6 +656,40 @@ function buildApprovedShellResult(actionId: string, command: string): ActionRunR
 }
 
 /**
+ * Implements `buildApprovedOpenBrowserResult` behavior within module scope.
+ * Interacts with local collaborators through imported modules and typed inputs/outputs.
+ */
+function buildApprovedOpenBrowserResult(
+  actionId: string,
+  url = "http://127.0.0.1:3000/"
+): ActionRunResult {
+  return {
+    action: {
+      id: actionId,
+      type: "open_browser",
+      description: "open the live preview in the browser",
+      params: {
+        url
+      },
+      estimatedCostUsd: 0.07
+    },
+    mode: "escalation_path",
+    approved: true,
+    output: `Browser opened: ${url}`,
+    executionStatus: "success",
+    executionMetadata: {
+      browserSession: true,
+      browserSessionStatus: "open",
+      browserSessionUrl: url,
+      processLifecycleStatus: "PROCESS_READY"
+    },
+    blockedBy: [],
+    violations: [],
+    votes: []
+  };
+}
+
+/**
  * Implements `buildBlockedFolderInUseShellResult` behavior within module scope.
  * Interacts with local collaborators through imported modules and typed inputs/outputs.
  */
@@ -1630,6 +1664,61 @@ test("AutonomousLoop allows explicit UI-verification completion after successful
   assert.match(goalMetReasoning, /browser verification passed/i);
 });
 
+test("AutonomousLoop completes after readiness and browser-open proof for run-and-leave-open preview goals", async () => {
+  const orchestrator = new ScriptedOrchestrator([
+    [
+      buildApprovedWriteFileResult("write_run_and_leave_open_1"),
+      buildApprovedStartProcessResult(
+        "start_process_run_and_leave_open_1",
+        "proc_run_and_leave_open_1",
+        "npm run dev",
+        {
+          host: "127.0.0.1",
+          port: 3000,
+          url: "http://127.0.0.1:3000/"
+        }
+      ),
+      buildApprovedProbeHttpReadyResult(
+        "probe_http_run_and_leave_open_1",
+        "http://127.0.0.1:3000/"
+      ),
+      buildApprovedOpenBrowserResult(
+        "open_browser_run_and_leave_open_1",
+        "http://127.0.0.1:3000/"
+      )
+    ]
+  ]);
+  const modelClient: ModelClient = {
+    backend: "mock",
+    async completeJson<T>(_request: StructuredCompletionRequest): Promise<T> {
+      throw new Error("completeJson should not be called after deterministic live browser-open proof");
+    }
+  };
+  const loop = new AutonomousLoop(
+    orchestrator as unknown as BrainOrchestrator,
+    modelClient,
+    { ...DEFAULT_BRAIN_CONFIG, runtime: { ...DEFAULT_BRAIN_CONFIG.runtime, isDaemonMode: false } }
+  );
+
+  let abortedReason = "";
+  let goalMetReasoning = "";
+  await loop.run(
+    'I want you to create a nextjs landing page, then run it and leave it open in the browser so i can review it.',
+    {
+      onGoalAborted: async (reason) => {
+        abortedReason = reason;
+      },
+      onGoalMet: async (reasoning) => {
+        goalMetReasoning = reasoning;
+      }
+    }
+  );
+
+  assert.equal(orchestrator.runCount, 1);
+  assert.equal(abortedReason, "");
+  assert.match(goalMetReasoning, /left available in the browser/i);
+});
+
 test("AutonomousLoop requires stop-process proof for finite live-run goals before completion", async () => {
   const orchestrator = new ScriptedOrchestrator([
     [
@@ -1781,6 +1870,7 @@ test("AutonomousLoop deterministically emits stop_process when cleanup is the on
         artifactMutations: number;
         readinessProofs: number;
         browserProofs: number;
+        browserOpenProofs: number;
         processStopProofs: number;
       },
       trackedManagedProcessLeaseId: string | null,
@@ -1795,6 +1885,7 @@ test("AutonomousLoop deterministically emits stop_process when cleanup is the on
       artifactMutations: 1,
       readinessProofs: 1,
       browserProofs: 1,
+      browserOpenProofs: 0,
       processStopProofs: 0
     },
     "proc_stop_needed_1",

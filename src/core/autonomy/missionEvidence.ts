@@ -6,12 +6,14 @@ import type { TaskRunResult } from "../types";
 import {
   type AutonomousReasonCode,
   EXECUTION_STYLE_BROWSER_GATING_REASON_CODE,
+  EXECUTION_STYLE_BROWSER_OPEN_GATING_REASON_CODE,
   EXECUTION_STYLE_GOAL_GATING_REASON_CODE,
   EXECUTION_STYLE_PROCESS_STOP_GATING_REASON_CODE,
   EXECUTION_STYLE_READINESS_GATING_REASON_CODE,
   EXECUTION_STYLE_TARGET_PATH_GATING_REASON_CODE,
   EXECUTION_STYLE_MUTATION_GATING_REASON_CODE,
   MISSION_REQUIREMENT_BROWSER,
+  MISSION_REQUIREMENT_BROWSER_OPEN,
   MISSION_REQUIREMENT_MUTATION,
   MISSION_REQUIREMENT_PROCESS_STOP,
   MISSION_REQUIREMENT_READINESS,
@@ -288,6 +290,28 @@ export function isBrowserProofEvidenceAction(entry: ActionResultEntry): boolean 
 }
 
 /**
+ * Evaluates action result for browser-open evidence and returns a deterministic signal.
+ *
+ * @param entry - Action result entry from task execution.
+ * @returns `true` when the action proves a visible browser session is open.
+ */
+export function isBrowserOpenEvidenceAction(entry: ActionResultEntry): boolean {
+  if (!entry.approved) {
+    return false;
+  }
+  if (entry.action.type !== "open_browser") {
+    return false;
+  }
+  if (isSimulatedExecutionEvidence(entry.output, entry.executionMetadata)) {
+    return false;
+  }
+  return (
+    entry.executionMetadata?.browserSession === true &&
+    entry.executionMetadata?.browserSessionStatus === "open"
+  );
+}
+
+/**
  * Counts approved browser-proof actions in one task result.
  *
  * **Why it exists:**
@@ -301,6 +325,16 @@ export function isBrowserProofEvidenceAction(entry: ActionResultEntry): boolean 
  */
 export function countApprovedBrowserProofActions(result: TaskRunResult): number {
   return result.actionResults.filter((entry) => isBrowserProofEvidenceAction(entry)).length;
+}
+
+/**
+ * Counts approved browser-open proof actions in one task result.
+ *
+ * @param result - Task result from one autonomous-loop iteration.
+ * @returns Number of approved browser-open actions that left a visible session open.
+ */
+export function countApprovedBrowserOpenProofActions(result: TaskRunResult): number {
+  return result.actionResults.filter((entry) => isBrowserOpenEvidenceAction(entry)).length;
 }
 
 /**
@@ -486,6 +520,9 @@ export function resolveMissingMissionRequirements(
   if (contract.requireBrowserProof && counters.browserProofs <= 0) {
     missing.push(MISSION_REQUIREMENT_BROWSER);
   }
+  if (contract.requireBrowserOpenProof && counters.browserOpenProofs <= 0) {
+    missing.push(MISSION_REQUIREMENT_BROWSER_OPEN);
+  }
   if (contract.requireProcessStopProof && counters.processStopProofs <= 0) {
     missing.push(MISSION_REQUIREMENT_PROCESS_STOP);
   }
@@ -510,6 +547,8 @@ export function mapRequirementToReasonCode(requirement: MissionRequirementId): A
       return EXECUTION_STYLE_PROCESS_STOP_GATING_REASON_CODE;
     case MISSION_REQUIREMENT_BROWSER:
       return EXECUTION_STYLE_BROWSER_GATING_REASON_CODE;
+    case MISSION_REQUIREMENT_BROWSER_OPEN:
+      return EXECUTION_STYLE_BROWSER_OPEN_GATING_REASON_CODE;
     case MISSION_REQUIREMENT_READINESS:
       return EXECUTION_STYLE_READINESS_GATING_REASON_CODE;
     case MISSION_REQUIREMENT_TARGET_PATH:
@@ -570,6 +609,11 @@ export function buildMissionEvidenceRetryInput(
   if (missingRequirements.includes(MISSION_REQUIREMENT_BROWSER)) {
     requirementNotes.push(
       "prove browser/UI expectations with a successful verify_browser action after localhost readiness is available"
+    );
+  }
+  if (missingRequirements.includes(MISSION_REQUIREMENT_BROWSER_OPEN)) {
+    requirementNotes.push(
+      "open the live preview in a visible browser window and leave that tracked browser session open"
     );
   }
   if (missingRequirements.includes(MISSION_REQUIREMENT_PROCESS_STOP)) {

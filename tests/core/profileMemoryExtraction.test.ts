@@ -128,6 +128,12 @@ test("conversational profile update signal recognizes direct relationship, work,
     ),
     true
   );
+  assert.equal(
+    hasConversationalProfileUpdateSignal(
+      "Yeah, so Billy is someone I worked previously. He now works somewhere else."
+    ),
+    true
+  );
 });
 
 test("conversational profile update signal ignores workflow callback phrasing and non-phase-one preferences", () => {
@@ -143,6 +149,7 @@ test("conversational profile update signal ignores workflow callback phrasing an
     ),
     false
   );
+  assert.equal(hasConversationalProfileUpdateSignal("Who is Billy?"), false);
 });
 
 test("conversational profile update signal unwraps reminder-style named-contact clauses", () => {
@@ -2327,7 +2334,7 @@ test("named-contact narrative keeps used-to-work-with-me association historical"
         candidate.value === "acquaintance" &&
         candidate.source === "user_input_pattern.named_contact"
     ),
-    true
+    false
   );
   assert.equal(
     extractedCandidates.some(

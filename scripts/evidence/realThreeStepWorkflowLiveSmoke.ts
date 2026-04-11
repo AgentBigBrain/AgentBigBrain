@@ -301,6 +301,150 @@ async function waitForTurnCompletion(
   throw new Error(`Timed out waiting for ${turnLabel} to complete.`);
 }
 
+async function waitForTrackedPreviewProof(
+  store: InterfaceSessionStore,
+  conversationKey: string,
+  timeoutMs: number
+): Promise<ConversationSession | null> {
+  const startedAt = Date.now();
+  let latestSession: ConversationSession | null = null;
+
+  while (Date.now() - startedAt < timeoutMs) {
+    latestSession = await store.getSession(conversationKey).catch(() => null);
+    if (
+      latestSession &&
+      extractTargetFolder(latestSession) &&
+      extractPreviewUrl(latestSession) &&
+      extractTrackedBrowserSessionId(latestSession)
+    ) {
+      return latestSession;
+    }
+    await sleep(200);
+  }
+
+  return latestSession;
+}
+
+function hasTrackedPreviewProof(session: ConversationSession | null): boolean {
+  return Boolean(
+    session &&
+    extractTargetFolder(session) &&
+    extractPreviewUrl(session) &&
+    extractTrackedBrowserSessionId(session)
+  );
+}
+
+function buildWorkspaceProofTimeoutError(
+  turn: number,
+  session: ConversationSession | null
+): Error {
+  return new Error(
+    `Timed out waiting for turn ${turn} workspace proof.\n` +
+    `Last observed session state:\n${JSON.stringify(
+      session
+        ? {
+            runningJobId: session.runningJobId,
+            queuedJobs: session.queuedJobs.length,
+            progressState: session.progressState,
+            recentActions: session.recentActions,
+            browserSessions: session.browserSessions,
+            pathDestinations: session.pathDestinations,
+            activeWorkspace: session.activeWorkspace,
+            returnHandoff: session.returnHandoff
+          }
+        : null,
+      null,
+      2
+    )}`
+  );
+}
+
+function buildTurnProofTimeoutError(
+  turn: number,
+  proofLabel: string,
+  session: ConversationSession | null
+): Error {
+  return new Error(
+    `Timed out waiting for turn ${turn} ${proofLabel} proof.\n` +
+    `Last observed session state:\n${JSON.stringify(
+      session
+        ? {
+            runningJobId: session.runningJobId,
+            queuedJobs: session.queuedJobs.length,
+            progressState: session.progressState,
+            recentActions: session.recentActions,
+            browserSessions: session.browserSessions,
+            pathDestinations: session.pathDestinations,
+            activeWorkspace: session.activeWorkspace,
+            returnHandoff: session.returnHandoff
+          }
+        : null,
+      null,
+      2
+    )}`
+  );
+}
+
+async function waitForFilePredicate(
+  filePath: string,
+  predicate: (content: string) => boolean,
+  timeoutMs: number
+): Promise<string | null> {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    const content = await readFile(filePath, "utf8").catch(() => null);
+    if (content && predicate(content)) {
+      return content;
+    }
+    await sleep(250);
+  }
+  return null;
+}
+
+async function waitForAssistantReplyPredicate(
+  store: InterfaceSessionStore,
+  conversationKey: string,
+  predicate: (reply: string) => boolean,
+  timeoutMs: number
+): Promise<ConversationSession | null> {
+  const startedAt = Date.now();
+  let latestSession: ConversationSession | null = null;
+  while (Date.now() - startedAt < timeoutMs) {
+    latestSession = await store.getSession(conversationKey).catch(() => null);
+    const latestReply = latestSession ? extractLatestAssistantReply(latestSession) ?? "" : "";
+    if (predicate(latestReply)) {
+      return latestSession;
+    }
+    await sleep(250);
+  }
+  return latestSession;
+}
+
+async function waitForShutdownProof(
+  store: InterfaceSessionStore,
+  conversationKey: string,
+  browserSessionId: string,
+  previewUrl: string,
+  timeoutMs: number
+): Promise<ConversationSession | null> {
+  const startedAt = Date.now();
+  let latestSession: ConversationSession | null = null;
+  while (Date.now() - startedAt < timeoutMs) {
+    latestSession = await store.getSession(conversationKey).catch(() => null);
+    const trackedBrowserSession =
+      latestSession?.browserSessions.find((entry) => entry.id === browserSessionId) ??
+      latestSession?.browserSessions[0] ??
+      null;
+    const browserClosed = trackedBrowserSession?.status === "closed";
+    const previewStopped = await isPreviewReachable(previewUrl) === false;
+    if (browserClosed && previewStopped) {
+      return latestSession;
+    }
+    await sleep(250);
+  }
+  return latestSession;
+}
+
 /**
  * Awaits one best-effort cleanup operation without letting smoke teardown hang forever.
  *
@@ -317,6 +461,9 @@ function extractPreviewUrl(session: ConversationSession): string | null {
   if (session.activeWorkspace?.previewUrl) {
     return session.activeWorkspace.previewUrl;
   }
+  if (session.returnHandoff?.previewUrl) {
+    return session.returnHandoff.previewUrl;
+  }
   const openBrowser = session.browserSessions.find((entry) => entry.status === "open");
   if (openBrowser) {
     return openBrowser.url;
@@ -329,14 +476,26 @@ function extractTargetFolder(session: ConversationSession): string | null {
   if (session.activeWorkspace?.rootPath) {
     return session.activeWorkspace.rootPath;
   }
+  if (session.activeWorkspace?.previewProcessCwd) {
+    return session.activeWorkspace.previewProcessCwd;
+  }
   if (session.activeWorkspace?.primaryArtifactPath) {
     return path.dirname(session.activeWorkspace.primaryArtifactPath);
+  }
+  if (session.returnHandoff?.workspaceRootPath) {
+    return session.returnHandoff.workspaceRootPath;
   }
   const browserWorkspacePath = session.browserSessions.find(
     (entry) => typeof entry.workspaceRootPath === "string" && entry.workspaceRootPath.trim().length > 0
   )?.workspaceRootPath;
   if (browserWorkspacePath) {
     return browserWorkspacePath;
+  }
+  const folderActionPath = session.recentActions.find(
+    (entry) => entry.kind === "folder" && typeof entry.location === "string"
+  )?.location;
+  if (folderActionPath) {
+    return folderActionPath;
   }
   const processPath = session.pathDestinations.find((entry) => entry.id.startsWith("path:process:"));
   if (processPath) {
@@ -499,9 +658,12 @@ function isBoundedTurnTimeoutBlocker(
   session: ConversationSession | null
 ): boolean {
   return (
-    /Timed out waiting for turn_\d+ to complete\./i.test(blockerReason) &&
-    session?.runningJobId !== null &&
-    session?.progressState?.status === "working"
+    (
+      /Timed out waiting for turn_\d+ to complete\./i.test(blockerReason) &&
+      session?.runningJobId !== null &&
+      session?.progressState?.status === "working"
+    ) ||
+    /Timed out waiting for turn \d+ (?:workspace|.+) proof\./i.test(blockerReason)
   );
 }
 
@@ -788,13 +950,22 @@ async function main(): Promise<void> {
     if (turn1ProviderBlocker) {
       throw new Error(turn1ProviderBlocker);
     }
-    const targetFolder = extractTargetFolder(sessionAfterTurn1);
-    const previewUrl = extractPreviewUrl(sessionAfterTurn1);
-    const openBrowserSession = sessionAfterTurn1.browserSessions.find((entry) => entry.status === "open");
+    const stabilizedTurn1Session =
+      await waitForTrackedPreviewProof(
+        store,
+        conversationKey,
+        getRemainingSmokeBudget(deadlineAtMs, 20_000, "turn 1 workspace proof")
+      ) ?? sessionAfterTurn1;
+    if (!hasTrackedPreviewProof(stabilizedTurn1Session)) {
+      throw buildWorkspaceProofTimeoutError(1, stabilizedTurn1Session);
+    }
+    const targetFolder = extractTargetFolder(stabilizedTurn1Session);
+    const previewUrl = extractPreviewUrl(stabilizedTurn1Session);
+    const openBrowserSessionId = extractTrackedBrowserSessionId(stabilizedTurn1Session);
 
     assert.ok(targetFolder, "Turn 1 did not record a target folder.");
     assert.ok(previewUrl, "Turn 1 did not record a preview URL.");
-    assert.ok(openBrowserSession, "Turn 1 did not leave a tracked browser session open.");
+    assert.ok(openBrowserSessionId, "Turn 1 did not leave a tracked browser session open.");
 
     const turn2At = new Date(Date.now() + 5_000).toISOString();
     const sessionAfterTurn2 = await runTurn(2, turn2Input, turn2At);
@@ -808,10 +979,15 @@ async function main(): Promise<void> {
     assert.ok(finalPreviewUrl, "Turn 2 lost the tracked preview URL.");
 
     const indexPath = path.join(finalTargetFolder, "index.html");
-    const indexHtmlAfterTurn2 = await readFile(indexPath, "utf8");
-    const sliderApplied =
-      /slider/i.test(indexHtmlAfterTurn2) || /carousel/i.test(indexHtmlAfterTurn2);
-    assert.ok(sliderApplied, "Turn 2 did not apply a slider/carousel update to index.html.");
+    const indexHtmlAfterTurn2 = await waitForFilePredicate(
+      indexPath,
+      (content) => /slider|carousel/i.test(content),
+      getRemainingSmokeBudget(deadlineAtMs, 12_000, "turn 2 slider proof")
+    );
+    const sliderApplied = indexHtmlAfterTurn2 !== null;
+    if (!sliderApplied) {
+      throw buildTurnProofTimeoutError(2, "slider update", sessionAfterTurn2);
+    }
 
     const sessionAfterTurn3 = await runTurn(
       3,
@@ -821,13 +997,24 @@ async function main(): Promise<void> {
         allowDirectReplyCompletion: true
       }
     );
-    const turn3Reply = extractLatestAssistantReply(sessionAfterTurn3) ?? "";
     const latestChangedFileNames = extractLatestChangedFileNames(sessionAfterTurn2);
     assert.ok(latestChangedFileNames.length > 0, "Turn 2 did not record any changed files to explain.");
+    const stabilizedTurn3Session =
+      await waitForAssistantReplyPredicate(
+        store,
+        conversationKey,
+        (reply) =>
+          latestChangedFileNames.every((fileName) => reply.toLowerCase().includes(fileName.toLowerCase())) &&
+          /slider|carousel/i.test(reply),
+        getRemainingSmokeBudget(deadlineAtMs, 12_000, "turn 3 explanation proof")
+      ) ?? sessionAfterTurn3;
+    const turn3Reply = extractLatestAssistantReply(stabilizedTurn3Session) ?? "";
     const changeRecallExplained =
       latestChangedFileNames.every((fileName) => turn3Reply.toLowerCase().includes(fileName.toLowerCase())) &&
       /slider|carousel/i.test(turn3Reply);
-    assert.ok(changeRecallExplained, "Turn 3 did not explain the recent file changes clearly.");
+    if (!changeRecallExplained) {
+      throw buildTurnProofTimeoutError(3, "change recall", stabilizedTurn3Session);
+    }
 
     const turn4At = new Date(Date.now() + 15_000).toISOString();
     const sessionAfterTurn4 = await runTurn(4, turn4Input, turn4At);
@@ -835,11 +1022,22 @@ async function main(): Promise<void> {
     if (turn4ProviderBlocker) {
       throw new Error(turn4ProviderBlocker);
     }
-    const trackedBrowserSession = sessionAfterTurn4.browserSessions.find(
-      (entry) => entry.id === openBrowserSession.id
-    ) ?? sessionAfterTurn4.browserSessions[0] ?? null;
+    const stabilizedTurn4Session =
+      await waitForShutdownProof(
+        store,
+        conversationKey,
+        openBrowserSessionId,
+        finalPreviewUrl,
+        getRemainingSmokeBudget(deadlineAtMs, 12_000, "turn 4 shutdown proof")
+      ) ?? sessionAfterTurn4;
+    const trackedBrowserSession = stabilizedTurn4Session.browserSessions.find(
+      (entry) => entry.id === openBrowserSessionId
+    ) ?? stabilizedTurn4Session.browserSessions[0] ?? null;
     const browserClosed = trackedBrowserSession?.status === "closed";
     const previewStopped = await isPreviewReachable(finalPreviewUrl) === false;
+    if (!browserClosed || !previewStopped) {
+      throw buildTurnProofTimeoutError(4, "shutdown", stabilizedTurn4Session);
+    }
 
     const artifact: RealThreeStepWorkflowArtifact = {
       generatedAt: new Date().toISOString(),
@@ -850,7 +1048,7 @@ async function main(): Promise<void> {
         sliderApplied &&
         changeRecallExplained &&
         Boolean(finalTargetFolder) &&
-        Boolean(openBrowserSession)
+        Boolean(openBrowserSessionId)
           ? "PASS"
           : "FAIL",
       blockerReason: null,
@@ -866,7 +1064,7 @@ async function main(): Promise<void> {
       checks: {
         routedAutonomous: sessionAfterTurn1.modeContinuity?.activeMode === "autonomous",
         folderCreated: Boolean(finalTargetFolder),
-        browserOpened: Boolean(openBrowserSession),
+        browserOpened: Boolean(openBrowserSessionId),
         sliderApplied,
         changeRecallExplained,
         browserClosed,

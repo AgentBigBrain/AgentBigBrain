@@ -67,9 +67,14 @@ The latest slices moved queue/ack, worker-loop, and pulse-state ownership here s
 - `deliveryLifecycle.ts` owns canonical ack-timer persistence plus final-delivery outcome
   persistence below the stable `conversationDeliveryLifecycle.ts` entrypoint
 - `conversationWorkerRuntime.ts` owns canonical system-job enqueue plus persisted worker-loop
-  execution
+  execution, including bounded in-memory worker-liveness tracking so stale session recovery can
+  distinguish between a genuinely live worker and a dead worker bit that was never cleared
+- `conversationWorkerOutcomePersistence.ts` owns the extracted durable worker-outcome writes that
+  update workspace, handoff, and recent-action state after a run completes
 - `conversationWorkerBinding.ts` owns the extracted worker binding helpers used by the stable
   worker runtime entrypoint
+- `conversationWorkerTerminalRecovery.ts` owns the extracted terminal stuck-state cleanup used
+  when a worker stops without leaving the session in a truthful final state
 - `conversationWorkerStatusPanel.ts` owns the extracted persistent status-message helpers used by
   the stable worker runtime entrypoint
 - `conversationWorkerRuntimeSnapshots.ts` owns best-effort live browser/process snapshot
@@ -447,6 +452,8 @@ The latest slices moved queue/ack, worker-loop, and pulse-state ownership here s
 - Active-workspace merge selection here must preserve the newest continuity snapshot while
   backfilling missing project-root, preview, artifact, browser/process ownership, and control-state
   fields instead of dropping them on a later partial update.
+- `workspaceArtifactDiscovery.ts` owns bounded fallback artifact discovery when an existing
+  workspace is relaunched without producing fresh file-write ledgers.
 - Recent-action ledger derivation here must preserve typed linked-browser cleanup emitted by exact
   runtime stop-process actions so session browser ledgers and active workspace state stay truthful
   after preview-holder cleanup.

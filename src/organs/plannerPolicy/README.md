@@ -14,6 +14,7 @@ belongs here.
 - `buildExecutionPlanMessaging.ts`
 - `buildExecutionActionHeuristics.ts`
 - `frameworkBuildActionHeuristics.ts`
+- `frameworkRequestPathParsing.ts`
 - `frameworkActionRepairSupport.ts`
 - `frameworkPathSupport.ts`
 - `buildExecutionRecoveryPolicy.ts`
@@ -23,15 +24,26 @@ belongs here.
 - `explicitActionIntent.ts`
 - `explicitActionRepairSupport.ts`
 - `learningPromptGuidance.ts`
+- `plannerFirstPrinciplesSupport.ts`
 - `plannerFailurePolicy.ts`
 - `skillActionNormalization.ts`
 - `explicitActionRepair.ts`
 - `explicitRuntimeActionFallback.ts`
+- `desktopRuntimeProcessSweepFallback.ts`
 - `frameworkRuntimeActionFallback.ts`
+- `frameworkRuntimeActionFallbackCityThemeVariants.ts`
+- `frameworkRuntimeActionFallbackGoalSupport.ts`
+- `frameworkRuntimeActionFallbackLayoutSupport.ts`
+- `frameworkRuntimeActionFallbackOpenBrowserSupport.ts`
+- `localOrganizationRuntimeActionFallback.ts`
 - `frameworkRuntimeActionFallbackSupport.ts`
 - `frameworkRuntimeActionFallbackContent.ts`
 - `frameworkRuntimeActionFallbackEditSupport.ts`
+- `frameworkRuntimeActionFallbackThemeSupport.ts`
+- `frameworkRuntimeActionFallbackThemeVariants.ts`
+- `frameworkRuntimeActionFallbackTrackedContextSupport.ts`
 - `frameworkRuntimeActionFallbackWriteSupport.ts`
+- `namedWorkspaceLaunchSupport.ts`
 - `promptAssembly.ts`
 - `promptAssemblyRepairGuidance.ts`
 - `promptAssemblyRecoveryGuidance.ts`
@@ -66,6 +78,13 @@ belongs here.
 - deterministic framework landing-page fallback content, write-target resolution, and runtime
   action synthesis split into focused helper files so planner fallback stays reviewable and under
   the subsystem size budget
+- deterministic framework city-theme, layout, goal, named-workspace launch, tracked-context, and
+  browser-open helper modules so fallback synthesis can vary safely without rebloating the main
+  policy entrypoints
+- deterministic Desktop-folder runtime process sweep fallback for bounded requests like `Desktop
+  folders starting with drone -> stop only exact listening servers tied to those folders`, emitted
+  as the native `stop_folder_runtime_processes` action so broad process-management turns stay out
+  of scaffold/build lanes
 - user-owned path and destination hints for safer continuity-aware local execution
 - planner action normalization and alias cleanup
 - explicit-action intent classification and filtering
@@ -73,17 +92,28 @@ belongs here.
 - skill-name extraction and create/run-skill param normalization
 - workflow-learning preferred-skill and repeated-workflow suggestion guidance injected into planner
   prompt assembly and repair notes
+- first-principles trigger and rubric helpers extracted from the planner entrypoint so high-risk
+  planning policy stays deterministic without regrowing the main planner module
 - explicit-action repair decisions
+- explicit runtime fallback precedence so tracked runtime inspect or shutdown turns stay on their
+  bounded runtime lane instead of drifting into framework-build fallback
 - planner system prompts and repair prompts
 - deterministic repair-guidance snippets reused by prompt assembly
 - deterministic workspace-recovery grounding snippets reused by planner prompt assembly so exact
   tracked workspace ids, browser session ids, preview URLs, and lease ids are reused instead of
   being replaced with broad recovery guesses
+- deterministic local-organization fallback synthesis for explicit user-owned folder-move requests
+  that remain invalid after repair, keeping the move scoped and proving destination/root state in
+  the same command
 - synthesized fallback respond messages when fail-closed repair still cannot produce executable work
 
 ## Invariants
 - Explicit browser/UI verification requests must require `verify_browser`.
 - Tracked browser-control follow-ups should stay distinct from build/live-verification repair rules.
+- Explicit tracked runtime inspection or shutdown turns should outrank framework-build fallback when
+  planner repair fails.
+- Explicit Desktop folder runtime sweeps must stay on deterministic bounded process-management
+  fallback instead of drifting into unrelated scaffold/build work.
 - Execution-style build requests must not silently pass with inspection-only plans.
 - Local organization requests must not pass with destination-creation-only shell steps; they need a
   real move command that retries the scoped move.

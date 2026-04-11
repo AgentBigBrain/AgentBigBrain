@@ -7,7 +7,8 @@ import { test } from "node:test";
 
 import {
   isLoopbackProofAction,
-  isManagedProcessLiveRunAction
+  isManagedProcessLiveRunAction,
+  isRuntimeOwnershipInspectionAction
 } from "../../src/governors/defaultCouncil/liveRunExemptions";
 
 test("isManagedProcessLiveRunAction accepts bounded localhost server starts", () => {
@@ -96,6 +97,59 @@ test("isLoopbackProofAction rejects non-loopback proof actions", () => {
         }
       }
     }),
+    false
+  );
+});
+
+test("isRuntimeOwnershipInspectionAction accepts tracked workspace inspection for runtime management turns", () => {
+  assert.equal(
+    isRuntimeOwnershipInspectionAction(
+      {
+        id: "proposal_5",
+        taskId: "task_5",
+        requestedBy: "planner",
+        rationale: "Inspect the tracked preview/browser/process stack first.",
+        touchesImmutable: false,
+        action: {
+          id: "action_5",
+          type: "inspect_workspace_resources",
+          description: "Inspect tracked workspace resources",
+          estimatedCostUsd: 0.04,
+          params: {
+            rootPath: "C:\\Users\\testuser\\Desktop\\Detroit City Two",
+            previewUrl: "http://127.0.0.1:3000/",
+            browserSessionId: "browser_session:detroit-city-two",
+            previewProcessLeaseId: "proc_detroit_city_two"
+          }
+        }
+      },
+      "please inspect and see if Detroit City Two is still running, do this end to end"
+    ),
+    true
+  );
+});
+
+test("isRuntimeOwnershipInspectionAction rejects unrelated inspections outside runtime-management turns", () => {
+  assert.equal(
+    isRuntimeOwnershipInspectionAction(
+      {
+        id: "proposal_6",
+        taskId: "task_6",
+        requestedBy: "planner",
+        rationale: "Inspect one workspace path.",
+        touchesImmutable: false,
+        action: {
+          id: "action_6",
+          type: "inspect_workspace_resources",
+          description: "Inspect workspace resources",
+          estimatedCostUsd: 0.04,
+          params: {
+            rootPath: "C:\\Users\\testuser\\Desktop\\Detroit City Two"
+          }
+        }
+      },
+      "summarize the design ideas we discussed"
+    ),
     false
   );
 });

@@ -8,6 +8,7 @@
     "../src/**/*"
   ],
   "exclude": [
+    "./temp-probes/**/*",
     "../dist",
     "../runtime",
     "../node_modules"

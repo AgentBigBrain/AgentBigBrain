@@ -69,7 +69,13 @@ function buildFacts(): readonly MemorySynthesisFactRecord[] {
 }
 
 test("buildRecallSynthesis returns one bounded supported hypothesis", () => {
-  const synthesis = buildRecallSynthesis([buildEpisode()], buildFacts());
+  const temporalSynthesis = buildTemporalMemorySynthesisFromCompatibilityRecords(
+    [buildEpisode()],
+    buildFacts()
+  );
+  assert.ok(temporalSynthesis);
+
+  const synthesis = buildRecallSynthesis(temporalSynthesis!, [buildEpisode()], buildFacts());
 
   assert.ok(synthesis);
   assert.equal(synthesis?.contractMode, "legacy_adapter_only");
@@ -89,8 +95,8 @@ test("buildRecallSynthesis returns one bounded supported hypothesis", () => {
   ]);
 });
 
-test("buildPlannerContextSynthesisBlock suppresses weak unsupported synthesis", () => {
-  const block = buildPlannerContextSynthesisBlock(
+test("buildPlannerContextSynthesisBlock renders bounded historical-only temporal synthesis", () => {
+  const temporalSynthesis = buildTemporalMemorySynthesisFromCompatibilityRecords(
     [
       {
         episodeId: "episode_weak",
@@ -105,8 +111,14 @@ test("buildPlannerContextSynthesisBlock suppresses weak unsupported synthesis", 
     ],
     []
   );
+  assert.ok(temporalSynthesis);
 
-  assert.equal(block, "");
+  const block = buildPlannerContextSynthesisBlock(temporalSynthesis);
+
+  assert.match(block, /Temporal memory context \(bounded\):/i);
+  assert.match(block, /Current State:\s*-\s*none/i);
+  assert.match(block, /Historical Context:\s*-\s*Vague concern: Something may have happened at some point\./i);
+  assert.match(block, /Contradiction Notes:\s*-\s*none/i);
 });
 
 test("buildPlannerContextSynthesisBlock renders a bounded temporal split view", () => {

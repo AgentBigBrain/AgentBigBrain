@@ -14,8 +14,41 @@ import {
 } from "./profileMemoryFactSensitivity";
 import { inferGovernanceFamilyForNormalizedKey } from "./profileMemoryGovernanceFamilyInference";
 import { planningContextPriority } from "./profileMemoryNormalization";
+import { readAuthoritativeProfileCompatibilityFacts } from "./profileMemoryFactQuerySupport";
 
 const IDENTITY_ANCHOR_PREFIXES = ["identity.preferred_name", "identity.name", "name"];
+
+/**
+ * Renders one bounded ordered fact collection into planner-facing context lines.
+ *
+ * **Why it exists:**
+ * Planner-context rendering now needs to support both full authoritative compatibility state and
+ * already-selected bounded fact subsets without accidentally re-reading the whole retained fact
+ * array as a second truth owner.
+ *
+ * **What it talks to:**
+ * - Uses local planner-context formatting only.
+ *
+ * @param facts - Already selected bounded fact records.
+ * @param maxFacts - Maximum number of facts to include.
+ * @returns Multi-line bullet block or empty string when no facts remain.
+ */
+function renderPlanningContextFromFacts(
+  facts: readonly ProfileFactRecord[],
+  maxFacts: number
+): string {
+  const boundedFacts = facts.slice(0, Math.max(0, maxFacts));
+  if (boundedFacts.length === 0) {
+    return "";
+  }
+
+  return boundedFacts
+    .map(
+      (fact) =>
+        `- ${fact.key}: ${fact.value} (status=${fact.status}, observedAt=${fact.observedAt})`
+    )
+    .join("\n");
+}
 
 /**
  * Renders a bounded, non-sensitive profile context block for planner prompts.
@@ -28,10 +61,9 @@ export function buildPlanningContextFromProfile(
   state: ProfileMemoryState,
   maxFacts: number
 ): string {
-  const activeFacts = state.facts
+  const activeFacts = readAuthoritativeProfileCompatibilityFacts(state)
     .filter(
       (fact) =>
-        isActiveFact(fact) &&
         !isProfileFactEffectivelySensitive(fact) &&
         isCompatibilityVisibleFactLike(fact)
     )
@@ -42,19 +74,9 @@ export function buildPlanningContextFromProfile(
         return leftPriority - rightPriority;
       }
       return Date.parse(right.lastUpdatedAt) - Date.parse(left.lastUpdatedAt);
-    })
-    .slice(0, Math.max(0, maxFacts));
+    });
 
-  if (activeFacts.length === 0) {
-    return "";
-  }
-
-  return activeFacts
-    .map(
-      (fact) =>
-        `- ${fact.key}: ${fact.value} (status=${fact.status}, observedAt=${fact.observedAt})`
-    )
-    .join("\n");
+  return renderPlanningContextFromFacts(activeFacts, maxFacts);
 }
 
 /**
@@ -71,17 +93,7 @@ export function buildQueryAwarePlanningContext(
   queryInput: string
 ): string {
   const selectedFacts = selectProfileFactsForQuery(state, maxFacts, queryInput);
-  if (selectedFacts.length === 0) {
-    return "";
-  }
-
-  return buildPlanningContextFromProfile(
-    {
-      ...state,
-      facts: [...selectedFacts]
-    },
-    Math.max(0, maxFacts)
-  );
+  return renderPlanningContextFromFacts(selectedFacts, maxFacts);
 }
 
 /**
@@ -109,10 +121,9 @@ export function selectProfileFactsForQuery(
   const queryTokens = extractPlanningQueryTokens(queryInput);
   if (queryTokens.length === 0) {
     return selectFactsWithinInventoryPolicy(
-      state.facts
+      readAuthoritativeProfileCompatibilityFacts(state)
         .filter(
           (fact) =>
-            isActiveFact(fact) &&
             (includeSensitive || !isProfileFactEffectivelySensitive(fact)) &&
             isCompatibilityVisibleFactLike(fact)
         )
@@ -128,10 +139,9 @@ export function selectProfileFactsForQuery(
     );
   }
 
-  const activeNonSensitiveFacts = state.facts
+  const activeNonSensitiveFacts = readAuthoritativeProfileCompatibilityFacts(state)
     .filter(
       (fact) =>
-        isActiveFact(fact) &&
         (includeSensitive || !isProfileFactEffectivelySensitive(fact)) &&
         isCompatibilityVisibleFactLike(fact)
     )
@@ -153,10 +163,9 @@ export function selectProfileFactsForQuery(
 
   if (scoredFacts.length === 0) {
     return selectFactsWithinInventoryPolicy(
-      state.facts
+      readAuthoritativeProfileCompatibilityFacts(state)
         .filter(
           (fact) =>
-            isActiveFact(fact) &&
             (includeSensitive || !isProfileFactEffectivelySensitive(fact)) &&
             isCompatibilityVisibleFactLike(fact)
         )
@@ -294,16 +303,6 @@ function getInventoryScopeLimit(fact: ProfileFactRecord): {
     scopeKey: normalizedKey,
     maxVisibleEntries: 1
   };
-}
-
-/**
- * Evaluates whether a profile fact remains active for context ranking.
- *
- * @param fact - Profile fact under evaluation.
- * @returns `true` when the fact is active.
- */
-function isActiveFact(fact: ProfileFactRecord): boolean {
-  return fact.status !== "superseded" && fact.supersededAt === null;
 }
 
 /**

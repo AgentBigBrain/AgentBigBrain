@@ -17,14 +17,218 @@ import {
   buildManagedProcessExecutionMetadata,
   buildManagedProcessStartFailureExecutionMetadata,
   findAvailableLoopbackPort,
+  isReadyHttpStatus,
   LiveRunExecutorContext,
   MANAGED_PROCESS_PORT_PRECHECK_TIMEOUT_MS,
   normalizeOptionalString,
   performLocalPortProbe,
+  performLocalHttpProbe,
   withRecoveryFailureMetadata,
   waitForManagedProcessStart
 } from "./contracts";
 import { resolveManagedProcessLoopbackTarget } from "./managedProcessTargetResolution";
+import type { UntrackedHolderCandidate } from "./untrackedPreviewCandidateInspection";
+
+const MANAGED_PROCESS_WRAPPER_PROMOTION_GRACE_MS = 400;
+
+/** Normalizes a filesystem-ish path for same-workspace preview-holder comparisons. */
+function normalizeComparablePath(value: string | null): string | null {
+  if (!value) {
+    return null;
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+  const normalized = trimmed.replace(/[\\/]+$/, "");
+  return process.platform === "win32" ? normalized.toLowerCase() : normalized;
+}
+
+/** Rebuilds a canonical loopback URL for a recovered or promoted preview holder. */
+function buildLoopbackRequestedUrl(host: string, port: number): string {
+  return `http://${host === "::1" ? "[::1]" : host}:${port}`;
+}
+
+/** Evaluates whether an inspected untracked holder serves the requested workspace preview. */
+function candidateMatchesRecoveredWorkspacePreview(
+  resolvedCwd: string,
+  candidate: UntrackedHolderCandidate,
+  expectedPort: number | null = null
+): boolean {
+  if (candidate.holderKind !== "preview_server" || candidate.port === null) {
+    return false;
+  }
+  if (expectedPort !== null && candidate.port !== expectedPort) {
+    return false;
+  }
+  if (candidate.reason === "served_index_matches_target_workspace") {
+    return true;
+  }
+  const normalizedCwd = normalizeComparablePath(resolvedCwd);
+  if (!normalizedCwd) {
+    return false;
+  }
+  const normalizedCommandLine = normalizeComparablePath(candidate.commandLine);
+  return normalizedCommandLine?.includes(normalizedCwd) ?? false;
+}
+
+/** Detects framework dev commands that may hand off serving to a child preview process. */
+function isLikelyFrameworkDevCommand(command: string): boolean {
+  return (
+    /\b(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?(?:dev|start|preview)\b/i.test(command) ||
+    /\bnext\s+dev\b/i.test(command) ||
+    /\bvite\b/i.test(command)
+  );
+}
+
+/** Waits briefly for wrapper-based dev commands to promote their real preview child process. */
+async function waitForWrapperPromotionGrace(signal?: AbortSignal): Promise<void> {
+  await new Promise<void>((resolve) => {
+    setTimeout(resolve, MANAGED_PROCESS_WRAPPER_PROMOTION_GRACE_MS);
+  });
+  throwIfAborted(signal);
+}
+
+/** Attempts to adopt an already-running same-workspace preview holder before spawning again. */
+async function tryAdoptExistingWorkspacePreviewHolder(input: {
+  context: LiveRunExecutorContext;
+  actionId: string;
+  commandFingerprint: string;
+  cwd: string;
+  shellExecutable: string;
+  shellKind: string;
+  loopbackTarget: { host: string; port: number; url: string };
+  taskId?: string;
+}): Promise<ExecutorExecutionOutcome | null> {
+  if (!input.context.inspectSystemPreviewCandidates) {
+    return null;
+  }
+  const candidates = await input.context.inspectSystemPreviewCandidates({
+    targetPath: null,
+    rootPath: input.cwd,
+    previewUrl: input.loopbackTarget.url,
+    trackedPids: []
+  });
+  const recoveredCandidate = candidates.find((candidate) =>
+    candidateMatchesRecoveredWorkspacePreview(
+      input.cwd,
+      candidate,
+      input.loopbackTarget.port
+    )
+  );
+  const recoveredPort = recoveredCandidate?.port ?? null;
+  if (!recoveredCandidate || recoveredPort === null) {
+    return null;
+  }
+  const recoveredUrl = buildLoopbackRequestedUrl(input.loopbackTarget.host, recoveredPort);
+  const recoveredReadyStatus = await performLocalHttpProbe(
+    new URL(recoveredUrl),
+    Math.max(MANAGED_PROCESS_PORT_PRECHECK_TIMEOUT_MS, 800),
+    undefined
+  );
+  if (!isReadyHttpStatus(recoveredReadyStatus ?? 0, null)) {
+    return null;
+  }
+  const adoptedSnapshot = input.context.managedProcessRegistry.registerRecoveredRunningLease({
+    actionId: input.actionId,
+    pid: recoveredCandidate.pid,
+    commandFingerprint: input.commandFingerprint,
+    cwd: input.cwd,
+    shellExecutable: input.shellExecutable,
+    shellKind: input.shellKind,
+    requestedHost: input.loopbackTarget.host,
+    requestedPort: recoveredPort,
+    requestedUrl: recoveredUrl,
+    taskId: input.taskId
+  });
+  return buildExecutionOutcome(
+    "success",
+    `Process already running: adopted same-workspace preview holder for lease ${adoptedSnapshot.leaseId} (pid ${adoptedSnapshot.pid}, port ${adoptedSnapshot.requestedPort ?? "unknown"}).`,
+    undefined,
+    {
+      ...buildManagedProcessExecutionMetadata(adoptedSnapshot, "PROCESS_STILL_RUNNING"),
+      processRecoveredFromUntrackedPreview: true,
+      processRecoveredReason: "same_workspace_preview_holder"
+    }
+  );
+}
+
+/** Attempts to promote a started wrapper lease onto the real same-workspace preview holder. */
+async function tryPromoteStartedWorkspacePreviewHolder(input: {
+  context: LiveRunExecutorContext;
+  leaseId: string;
+  cwd: string;
+  loopbackTarget: { host: string; port: number; url: string };
+  command: string;
+  signal?: AbortSignal;
+}): Promise<ExecutorExecutionOutcome | null> {
+  if (
+    !input.context.inspectSystemPreviewCandidates ||
+    !isLikelyFrameworkDevCommand(input.command)
+  ) {
+    return null;
+  }
+
+  await waitForWrapperPromotionGrace(input.signal);
+  const currentSnapshot = input.context.managedProcessRegistry.peekSnapshot(input.leaseId);
+  if (!currentSnapshot) {
+    return null;
+  }
+
+  const candidates = await input.context.inspectSystemPreviewCandidates({
+    targetPath: null,
+    rootPath: input.cwd,
+    previewUrl: input.loopbackTarget.url,
+    trackedPids: typeof currentSnapshot.pid === "number" ? [currentSnapshot.pid] : []
+  });
+  const recoveredCandidate = candidates.find((candidate) =>
+    candidateMatchesRecoveredWorkspacePreview(
+      input.cwd,
+      candidate,
+      input.loopbackTarget.port
+    )
+  );
+  if (!recoveredCandidate) {
+    return null;
+  }
+  const promotedPort = recoveredCandidate.port;
+  if (promotedPort === null) {
+    return null;
+  }
+  if (typeof currentSnapshot.pid === "number" && recoveredCandidate.pid === currentSnapshot.pid) {
+    return null;
+  }
+
+  const promotedSnapshot = input.context.managedProcessRegistry.markRecoveredRunning(
+    input.leaseId,
+    {
+      pid: recoveredCandidate.pid,
+      requestedHost: input.loopbackTarget.host,
+      requestedPort: promotedPort,
+      requestedUrl: buildLoopbackRequestedUrl(
+        input.loopbackTarget.host,
+        promotedPort
+      )
+    }
+  );
+  if (!promotedSnapshot) {
+    return null;
+  }
+
+  return buildExecutionOutcome(
+    "success",
+    `Process started: promoted same-workspace preview holder for lease ${promotedSnapshot.leaseId} (pid ${promotedSnapshot.pid}, port ${promotedSnapshot.requestedPort ?? "unknown"}).`,
+    undefined,
+    {
+      ...buildManagedProcessExecutionMetadata(
+        promotedSnapshot,
+        "PROCESS_STILL_RUNNING"
+      ),
+      processRecoveredFromUntrackedPreview: true,
+      processRecoveredReason: "same_workspace_preview_holder"
+    }
+  );
+}
 
 /**
  * Executes `start_process` with managed-process lease registration and loopback preflight checks.
@@ -105,6 +309,19 @@ export async function executeStartProcess(
       signal
     );
     if (portAlreadyOccupied) {
+      const recoveredOutcome = await tryAdoptExistingWorkspacePreviewHolder({
+        context,
+        actionId,
+        commandFingerprint,
+        cwd: spawnSpec.cwd,
+        shellExecutable: spawnSpec.executable,
+        shellKind: effectiveShellProfile.shellKind,
+        loopbackTarget,
+        taskId
+      });
+      if (recoveredOutcome) {
+        return recoveredOutcome;
+      }
       const suggestedPort = await findAvailableLoopbackPort(signal);
       return buildExecutionOutcome(
         "failed",
@@ -155,6 +372,20 @@ export async function executeStartProcess(
       taskId
     });
     bindAbortCleanupForManagedProcess(context, snapshot.leaseId, child, signal);
+    const promotedOutcome =
+      loopbackTarget
+        ? await tryPromoteStartedWorkspacePreviewHolder({
+            context,
+            leaseId: snapshot.leaseId,
+            cwd: spawnSpec.cwd,
+            loopbackTarget,
+            command,
+            signal
+          })
+        : null;
+    if (promotedOutcome) {
+      return promotedOutcome;
+    }
     return buildExecutionOutcome(
       "success",
       `Process started: lease ${snapshot.leaseId} (pid ${snapshot.pid ?? "unknown"}).`,

@@ -65,6 +65,7 @@ env-parsing helpers while `config.ts` remains the stable config entrypoint.
 - Autonomy foundations, planning context, and prompt classification:
   `advancedAutonomyFoundation.ts`, `advancedAutonomyRuntime.ts`, `autonomyFoundation.ts`,
   `commitmentSignalClassifier.ts`, `currentRequestExtraction.ts`, `plannerActionSchema.ts`,
+  `runtimeTargetReference.ts`,
   `plannerFailureStore.ts`, `verificationPromptClassifier.ts`, `workflowLearningStore.ts`.
 - Extracted workflow-learning runtime subsystem: `src/core/workflowLearningRuntime/contracts.ts`,
   `src/core/workflowLearningRuntime/observationExtraction.ts`,

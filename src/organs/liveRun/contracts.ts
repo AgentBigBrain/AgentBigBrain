@@ -21,6 +21,7 @@ import type { BrowserVerifier } from "./browserVerifier";
 import { BrowserSessionRegistry } from "./browserSessionRegistry";
 export {
   buildBrowserSessionExecutionMetadata,
+  buildFolderRuntimeProcessSweepMetadata,
   buildLinkedBrowserSessionCleanupMetadata,
   buildRuntimeOwnershipInspectionMetadata
 } from "./liveRunMetadataBuilders";
@@ -35,7 +36,7 @@ import type {
 export const MANAGED_PROCESS_START_TIMEOUT_MS = 1_000;
 export const MANAGED_PROCESS_STOP_TIMEOUT_MS = 2_000;
 export const MANAGED_PROCESS_PORT_PRECHECK_TIMEOUT_MS = 250;
-export const READINESS_PROBE_TIMEOUT_MS_DEFAULT = 2_000;
+export const READINESS_PROBE_TIMEOUT_MS_DEFAULT = 12_000;
 export const READINESS_PROBE_ATTEMPT_TIMEOUT_MS = 350;
 export const READINESS_PROBE_RETRY_INTERVAL_MS = 150;
 export const BROWSER_VERIFY_TIMEOUT_MS_DEFAULT = 10_000;

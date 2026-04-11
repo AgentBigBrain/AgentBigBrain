@@ -423,7 +423,7 @@ test("orchestrator degrades gracefully when encrypted profile memory cannot be d
   }
 });
 
-test("orchestrator redacts sensitive profile fields before planner model egress", async () => {
+test("orchestrator suppresses sensitive profile fields before planner model egress", async () => {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-orch-profile-redact-"));
   const statePath = path.join(tempDir, "state.json");
   const semanticPath = path.join(tempDir, "semantic_memory.json");
@@ -463,10 +463,8 @@ test("orchestrator redacts sensitive profile fields before planner model egress"
     };
     const plannerInput = plannerPayload.userInput ?? "";
     assert.match(plannerInput, /\[AgentFriendProfileContext\]/);
-    assert.match(plannerInput, /\[AgentFriendProfileEgressGuard\]/);
-    assert.match(plannerInput, /redactedSensitiveFields=2/);
-    assert.match(plannerInput, /Current State:/);
-    assert.match(plannerInput, /employment\.current: Lantern/);
+    assert.match(plannerInput, /domainBoundaryDecision=suppress_profile_context/);
+    assert.match(plannerInput, /suppressed=true/);
     assert.doesNotMatch(plannerInput, /contact\.email:/);
     assert.doesNotMatch(plannerInput, /contact\.phone:/);
     assert.equal(plannerInput.includes("owner@example.com"), false);
@@ -774,13 +772,8 @@ test("orchestrator recalls Owen contact context across conversation-wrapper turn
     const plannerInput = plannerPayload.userInput ?? "";
 
     assert.match(plannerInput, /\[AgentFriendProfileContext\]/);
-    assert.match(plannerInput, /Current State:/i);
-    assert.match(plannerInput, /contact\.relationship: acquaintance/i);
-    assert.match(plannerInput, /Historical Context:/i);
-    assert.match(
-      plannerInput,
-      /contact\.context \(historical\): I went to school with a guy named Owen, and he also used to work with me at Lantern Studio/i
-    );
+    assert.match(plannerInput, /contact\.owen\.name: Owen/i);
+    assert.match(plannerInput, /contact\.owen\.context\.[a-f0-9]+: I went to school with a guy named Owen, and he also used to work with me at Lantern Studio/i);
     assert.doesNotMatch(plannerInput, /contact\.owen\.work_association: Lantern Studio/i);
   } finally {
     await rm(tempDir, { recursive: true, force: true });

@@ -122,6 +122,95 @@ class CountingProfileMemoryStore extends ProfileMemoryStore {
   }
 }
 
+class TemporalPlanningSynthesisProfileStore {
+  async ingestFromTaskInput(): Promise<{ appliedFacts: number; supersededFacts: number }> {
+    return {
+      appliedFacts: 0,
+      supersededFacts: 0
+    };
+  }
+
+  async openReadSession(): Promise<{
+    getPlanningContext(): string;
+    getEpisodePlanningContext(): string;
+    queryFactsForPlanningContext(): readonly [];
+    queryEpisodesForPlanningContext(): readonly [];
+    queryTemporalPlanningSynthesis(): {
+      currentState: readonly string[];
+      historicalContext: readonly string[];
+      contradictionNotes: readonly string[];
+      answerMode: "current";
+      proof: {
+        synthesisVersion: "v1";
+        semanticMode: "relationship_inventory";
+        relevanceScope: "global_profile";
+        asOfValidTime: null;
+        asOfObservedTime: string;
+        focusStableRefIds: readonly ["stable_contact_billy"];
+        degradedNotes: readonly [];
+      };
+      laneMetadata: readonly [{
+        laneId: "stable_contact_billy:contact.work_association";
+        focusStableRefId: "stable_contact_billy";
+        family: "contact.work_association";
+        answerMode: "current";
+        dominantLane: "current_state";
+        supportingLanes: readonly [];
+        chosenClaimId: "claim_billy_work";
+        supportingObservationIds: readonly [];
+        rejectedClaims: readonly [];
+        lifecycleBuckets: {
+          current: readonly ["claim_billy_work"];
+          historical: readonly [];
+          ended: readonly [];
+          overflowNote: null;
+        };
+        degradedNotes: readonly [];
+      }];
+    };
+  }> {
+    return {
+      getPlanningContext: () => "",
+      getEpisodePlanningContext: () => "",
+      queryFactsForPlanningContext: () => [],
+      queryEpisodesForPlanningContext: () => [],
+      queryTemporalPlanningSynthesis: () => ({
+        currentState: ["Billy is tied to Flare Web Design."],
+        historicalContext: [],
+        contradictionNotes: [],
+        answerMode: "current",
+        proof: {
+          synthesisVersion: "v1",
+          semanticMode: "relationship_inventory",
+          relevanceScope: "global_profile",
+          asOfValidTime: null,
+          asOfObservedTime: "2026-04-10T12:00:00.000Z",
+          focusStableRefIds: ["stable_contact_billy"],
+          degradedNotes: []
+        },
+        laneMetadata: [{
+          laneId: "stable_contact_billy:contact.work_association",
+          focusStableRefId: "stable_contact_billy",
+          family: "contact.work_association",
+          answerMode: "current",
+          dominantLane: "current_state",
+          supportingLanes: [],
+          chosenClaimId: "claim_billy_work",
+          supportingObservationIds: [],
+          rejectedClaims: [],
+          lifecycleBuckets: {
+            current: ["claim_billy_work"],
+            historical: [],
+            ended: [],
+            overflowNote: null
+          },
+          degradedNotes: []
+        }]
+      })
+    };
+  }
+}
+
 test("extractCurrentUserRequest parses wrapper payloads deterministically", () => {
   const wrapped = [
     "You are in an ongoing conversation with the same user.",
@@ -176,6 +265,22 @@ test(
   }
 );
 
+test("memory broker prefers direct temporal planning synthesis over compatibility synthesis rebuilds", async () => {
+  const broker = new MemoryBrokerOrgan(
+    new TemporalPlanningSynthesisProfileStore() as unknown as ProfileMemoryStore
+  );
+
+  const enriched = await broker.buildPlannerInput(
+    buildTask("task_memory_broker_temporal_direct", "Who is Billy?")
+  );
+
+  assert.equal(enriched.profileMemoryStatus, "available");
+  assert.match(enriched.userInput, /\[AgentFriendProfileContext\]/);
+  assert.match(enriched.userInput, /Temporal memory context \(bounded\):/i);
+  assert.match(enriched.userInput, /Billy is tied to Flare Web Design\./);
+  assert.match(enriched.userInput, /domainBoundaryDecision=inject_profile_context/i);
+});
+
 test("memory broker injects query-aware profile context with domain metadata", async () => {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-memory-broker-"));
   const profilePath = path.join(tempDir, "profile_memory.secure.json");
@@ -210,9 +315,8 @@ test("memory broker injects query-aware profile context with domain metadata", a
     assert.match(enriched.userInput, /domainLanes=.*relationship/i);
     assert.match(enriched.userInput, /domainBoundaryDecision=inject_profile_context/i);
     assert.match(enriched.userInput, /\[AgentFriendProfileContext\]/);
-    assert.match(enriched.userInput, /Temporal memory context \(bounded\):/i);
-    assert.match(enriched.userInput, /Current State:/i);
-    assert.match(enriched.userInput, /Historical Context:/i);
+    assert.match(enriched.userInput, /contact\.owen\.name: Owen/i);
+    assert.match(enriched.userInput, /contact\.owen\.context\.[a-f0-9]{8}: I used to work with Owen at Lantern Studio/i);
     assert.doesNotMatch(enriched.userInput, /contact\.owen\.work_association: Lantern Studio/i);
   } finally {
     await rm(tempDir, { recursive: true, force: true });
@@ -256,7 +360,40 @@ test("memory broker scores typed relationship lane metadata without depending on
             asOfObservedTime: undefined,
             asOfValidTime: undefined
           }) satisfies ProfileFactPlanningInspectionResult,
-        queryEpisodesForPlanningContext: () => []
+        queryEpisodesForPlanningContext: () => [],
+        queryTemporalPlanningSynthesis: () => ({
+          currentState: ["Owen is tied to Lantern Studio."],
+          historicalContext: [],
+          contradictionNotes: [],
+          answerMode: "current",
+          proof: {
+            synthesisVersion: "v1",
+            semanticMode: "relationship_inventory",
+            relevanceScope: "global_profile",
+            asOfValidTime: null,
+            asOfObservedTime: "2026-04-09T10:00:00.000Z",
+            focusStableRefIds: ["stable_contact_owen"],
+            degradedNotes: []
+          },
+          laneMetadata: [{
+            laneId: "stable_contact_owen:contact.work_association",
+            focusStableRefId: "stable_contact_owen",
+            family: "contact.work_association",
+            answerMode: "current",
+            dominantLane: "current_state",
+            supportingLanes: [],
+            chosenClaimId: "claim_owen_work",
+            supportingObservationIds: [],
+            rejectedClaims: [],
+            lifecycleBuckets: {
+              current: ["claim_owen_work"],
+              historical: [],
+              ended: [],
+              overflowNote: null
+            },
+            degradedNotes: []
+          }]
+        })
       };
     }
   } as unknown as ProfileMemoryStore;

@@ -13,6 +13,8 @@ import {
 } from "../conversationSessionMutations";
 import type { ConversationSessionRecoveryContext } from "./contracts";
 
+const ORPHANED_RUNNING_JOB_RECOVERY_GRACE_MS = 15_000;
+
 /**
  * Returns whether one persisted timestamp is older than the bounded stale-recovery window.
  *
@@ -101,6 +103,58 @@ function recoverStaleQueuedJobsIfNeeded(
 }
 
 /**
+ * Returns whether a running job lost its active worker long enough that recovery should happen
+ * before the broader stale-session window expires.
+ *
+ * @param session - Session carrying the persisted running job and progress state.
+ * @param nowIso - Current ingress timestamp.
+ * @param thresholdMs - Configured stale-running-job recovery window.
+ * @returns `true` when the running job is orphaned and should fail closed now.
+ */
+function shouldRecoverOrphanedRunningJobEarly(
+  session: ConversationSessionRecoveryContext["session"],
+  nowIso: string,
+  thresholdMs: number
+): boolean {
+  const recoveryWindowMs = Math.min(
+    thresholdMs,
+    ORPHANED_RUNNING_JOB_RECOVERY_GRACE_MS
+  );
+  return (
+    isOlderThanRecoveryWindow(session.progressState?.updatedAt, nowIso, recoveryWindowMs) ||
+    isOlderThanRecoveryWindow(session.updatedAt, nowIso, recoveryWindowMs)
+  );
+}
+
+/**
+ * Returns whether a worker claiming this session key has emitted a fresh enough liveness tick that
+ * stale session recovery should stay suppressed.
+ *
+ * @param sessionKey - Provider-scoped conversation key.
+ * @param nowIso - Current ingress timestamp.
+ * @param deps - Stable recovery dependencies.
+ * @returns `true` when the worker owner is still fresh enough to trust.
+ */
+function hasFreshWorkerOwnership(
+  sessionKey: string,
+  nowIso: string,
+  deps: ConversationSessionRecoveryContext["deps"]
+): boolean {
+  if (!deps.isWorkerActive(sessionKey)) {
+    return false;
+  }
+  const workerLastSeenAt = deps.getWorkerLastSeenAt?.(sessionKey);
+  if (!workerLastSeenAt) {
+    return true;
+  }
+  return !isOlderThanRecoveryWindow(
+    workerLastSeenAt,
+    nowIso,
+    deps.config.staleRunningJobRecoveryMs
+  );
+}
+
+/**
  * Recovers stale running-job state when persisted session metadata outlives the active worker.
  *
  * @param context - Stable ingress recovery context plus mutable session state.
@@ -109,7 +163,7 @@ export function recoverStaleRunningJobIfNeeded(
   context: ConversationSessionRecoveryContext
 ): void {
   const { sessionKey, session, nowIso, deps } = context;
-  if (deps.isWorkerActive(sessionKey)) {
+  if (hasFreshWorkerOwnership(sessionKey, nowIso, deps)) {
     return;
   }
   recoverStaleQueuedJobsIfNeeded(context);
@@ -119,6 +173,11 @@ export function recoverStaleRunningJobIfNeeded(
   }
 
   if (
+    !shouldRecoverOrphanedRunningJobEarly(
+      session,
+      nowIso,
+      deps.config.staleRunningJobRecoveryMs
+    ) &&
     !isOlderThanRecoveryWindow(
       session.updatedAt,
       nowIso,
@@ -170,5 +229,6 @@ export function recoverStaleRunningJobIfNeeded(
   }
 
   session.runningJobId = null;
+  session.progressState = null;
   session.updatedAt = nowIso;
 }
