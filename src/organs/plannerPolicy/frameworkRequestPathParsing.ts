@@ -2,12 +2,12 @@
  * @fileoverview Explicit Windows workspace-path parsing helpers for framework build policy.
  */
 
-import path from "node:path";
+import { getPathModuleForPathValue } from "./frameworkPathSupport";
 
 const REQUESTED_FOLDER_PATH_PATTERNS = [
-  /`([A-Za-z]:\\[^`\r\n]+)`/g,
-  /"([A-Za-z]:\\[^"\r\n]+)"/g,
-  /'([A-Za-z]:\\[^'\r\n]+)'/g
+  /`((?:[A-Za-z]:\\|\/)[^`\r\n]+)`/g,
+  /"((?:[A-Za-z]:\\|\/)[^"\r\n]+)"/g,
+  /'((?:[A-Za-z]:\\|\/)[^'\r\n]+)'/g
 ] as const;
 
 /** Extracts literal Windows paths quoted directly in one framework request. */
@@ -29,7 +29,9 @@ export function extractRequestedFrameworkPathFolderName(
   currentUserRequest: string
 ): string | null {
   for (const literalPath of extractRequestedFrameworkPathLiterals(currentUserRequest)) {
-    const folderName = path.win32.basename(literalPath.replace(/[\\\/]+$/, ""));
+    const normalizedPath = literalPath.replace(/[\\\/]+$/, "");
+    const pathModule = getPathModuleForPathValue(normalizedPath);
+    const folderName = pathModule.basename(normalizedPath);
     if (folderName) {
       return folderName;
     }
@@ -46,8 +48,9 @@ export function extractRequestedFrameworkWorkspaceRootPath(
     if (trimmedPath.length === 0) {
       continue;
     }
-    const looksLikeFilePath = /\.[A-Za-z0-9_-]+$/.test(path.win32.basename(trimmedPath));
-    return looksLikeFilePath ? path.win32.dirname(trimmedPath) : trimmedPath;
+    const pathModule = getPathModuleForPathValue(trimmedPath);
+    const looksLikeFilePath = /\.[A-Za-z0-9_-]+$/.test(pathModule.basename(trimmedPath));
+    return looksLikeFilePath ? pathModule.dirname(trimmedPath) : trimmedPath;
   }
   return null;
 }

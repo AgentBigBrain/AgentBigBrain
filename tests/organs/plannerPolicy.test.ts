@@ -60,6 +60,10 @@ import {
   buildDeterministicFrameworkBuildFallbackActions
 } from "../../src/organs/plannerPolicy/explicitRuntimeActionFallback";
 import {
+  extractRequestedFrameworkPathFolderName,
+  extractRequestedFrameworkWorkspaceRootPath
+} from "../../src/organs/plannerPolicy/frameworkRequestPathParsing";
+import {
   buildDeterministicDesktopRuntimeProcessSweepFallbackActions,
   isDesktopFolderRuntimeProcessSweepRequest
 } from "../../src/organs/plannerPolicy/desktopRuntimeProcessSweepFallback";
@@ -3668,6 +3672,15 @@ test("buildDeterministicFrameworkBuildFallbackActions reuses an explicit built N
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
   }
+});
+
+test("framework request path parsing supports explicit POSIX workspace paths", () => {
+  const projectPath = "/tmp/agentbigbrain/Detroit City";
+  const request =
+    `From \`${projectPath}\`, launch the Next.js app in a persistent process and keep it running.`;
+
+  assert.equal(extractRequestedFrameworkWorkspaceRootPath(request), projectPath);
+  assert.equal(extractRequestedFrameworkPathFolderName(request), "Detroit City");
 });
 
 test("framework landing-page fallback content stays generic when the request is not drone-specific", () => {
