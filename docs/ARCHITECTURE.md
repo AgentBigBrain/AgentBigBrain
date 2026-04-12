@@ -3,15 +3,17 @@
 AgentBigBrain is a governance-first runtime for AI assistants and agents. The model can plan,
 explain, and propose. The runtime decides whether anything is allowed to happen.
 
-This document is the stable architectural reference. It describes how the current runtime is put
-together, where major responsibilities live, and which invariants the system preserves.
+This document is the stable architectural reference for the current codebase. It describes how the
+runtime is assembled, where the main responsibilities live, and which invariants the system keeps.
 
 Operator references:
-- setup and environment wiring: [docs/SETUP.md](SETUP.md)
-- command and prompt examples: [docs/COMMAND_EXAMPLES.md](COMMAND_EXAMPLES.md)
-- runtime reason and block codes: [docs/ERROR_CODE_ENV_MAP.md](ERROR_CODE_ENV_MAP.md)
 
-## 1) System Intent
+- setup and environment wiring: [SETUP.md](./SETUP.md)
+- command and prompt examples: [COMMAND_EXAMPLES.md](./COMMAND_EXAMPLES.md)
+- runtime reason and block codes: [ERROR_CODE_ENV_MAP.md](./ERROR_CODE_ENV_MAP.md)
+- repository overview: [../README.md](../README.md)
+
+## System intent
 
 The runtime is built around four ideas:
 
@@ -27,94 +29,203 @@ In practice, that means:
 - failure is fail-closed
 - claimed work must be backed by evidence
 
-## 2) Top-Level Runtime Surfaces
-
-### Entry Points
+## Entry points and runtime modes
 
 | Surface | File | Responsibility |
 |---|---|---|
-| CLI runtime | `src/index.ts` | Runs one governed task, an autonomous loop, or daemon mode |
-| Interface runtime | `src/interfaces/interfaceRuntime.ts` | Starts Telegram and Discord gateways and routes accepted work into the orchestrator |
-| Federation runtime | `src/interfaces/federationRuntime.ts` | Starts authenticated inbound federation HTTP handling |
+| CLI runtime | `src/index.ts` | runs one governed task, a bounded autonomous loop, guarded daemon mode, and Codex auth commands |
+| Interface runtime | `src/interfaces/interfaceRuntime.ts` | starts Telegram and Discord gateways and routes accepted work into the orchestrator |
+| Federation runtime | `src/interfaces/federationRuntime.ts` | starts authenticated inbound federation HTTP handling |
 
-### Composition Root
+The CLI supports four operational modes:
 
-`src/core/buildBrain.ts` is the composition root. It wires:
+| Mode | Description |
+|---|---|
+| `task` | run one governed task and exit |
+| `autonomous` | run bounded iterations for one goal |
+| `daemon` | chain goals with explicit latches and rollover limits |
+| `auth` | manage Codex login state |
 
-- environment/config loading
-- model client selection
-- organs and governors
-- persistence stores
-- memory surfaces
-- orchestrator runtime
+The CLI contract is strict by design:
 
-That file is intentionally the place where major subsystems come together.
+- unknown flags are rejected
+- empty goals are rejected
+- auth subcommands are typed, not free-form
+- daemon mode is blocked unless the operator sets explicit latches
 
-## 3) Main Runtime Flow
+Daemon mode requires:
 
-```mermaid
-flowchart LR
-    A["Ingress request"] --> B["BrainOrchestrator"]
-    B --> C["Planner"]
-    C --> D["TaskRunner"]
-    D --> E["Hard constraints"]
-    E -->|pass| F["Governor vote"]
-    E -->|fail| X["Blocked"]
-    F -->|approved| G["Execute action"]
-    F -->|rejected| X
-    G --> H["Persist governance + receipts"]
-    H --> I["Update memory, reflection, and learning"]
+```env
+BRAIN_ALLOW_DAEMON_MODE=true
+BRAIN_MAX_AUTONOMOUS_ITERATIONS=...
+BRAIN_MAX_DAEMON_GOAL_ROLLOVERS=...
 ```
 
-Per approved action, the runtime stays deterministic:
+## Composition root and runtime assembly
 
-1. task-level deadline and budget guards
-2. hard constraints
-3. optional code-review preflight for `create_skill`
-4. fast-path or escalation governance vote
-5. execution-claim verification gates where needed
-6. execution
-7. append governance event
-8. append approved-action receipt
+The composition-root file is `src/core/buildBrain.ts`.
 
-## 4) Control Planes
+That file splits runtime construction into two layers:
 
-### Planning Plane
+1. `createSharedBrainRuntimeDependencies()` builds the process-wide runtime core:
+   - stores and ledgers
+   - executor
+   - managed process registry
+   - browser session registry
+   - governors
+   - memory surfaces
+   - shared persistence
 
-Main surface:
+2. `buildBrainRuntimeFromEnvironment()` adds backend-specific layers on top of that shared core:
+   - config
+   - model client
+   - planner
+   - reflection
+   - memory broker
+   - orchestrator
+
+3. `buildDefaultBrain()` preserves the simple single-backend path for callers that do not need
+   per-session backend overrides.
+
+This split matters. Long-lived runtimes such as Telegram and Discord can share one executor, one
+process registry, one browser registry, and one ledger core while still selecting different
+backend settings when needed.
+
+## Topology
+
+```mermaid
+flowchart TB
+    Ingress["CLI / Telegram / Discord / Federation"] --> CompositionRoot["Composition root file (src/core/buildBrain.ts)"]
+    CompositionRoot --> Shared["Shared runtime dependencies"]
+    Shared --> Backend["Backend-specific runtime"]
+    Backend --> Orchestrator["BrainOrchestrator"]
+
+    Orchestrator --> Planner["PlannerOrgan"]
+    Planner --> Runner["TaskRunner"]
+
+    Runner --> Constraints["Hard constraints and stage guards"]
+    Constraints --> Governance["Connector preflight and governor vote"]
+    Governance --> Verify["Verification gate when required"]
+    Verify --> Execute["Tool executor or runtime action"]
+    Execute --> Evidence["Governance memory and execution receipts"]
+
+    Orchestrator --> Memory["Memory and continuity"]
+    Evidence --> Reflection["Reflection and workflow learning"]
+    Reflection --> Memory
+```
+
+The important architectural point is that the orchestrator is not the whole runtime by itself. It
+sits on top of shared stores, registries, and ledgers, and it delegates planning, execution,
+memory brokerage, and reflection to focused subsystems.
+
+## End-to-end task flow
+
+`BrainOrchestrator.runTask()` is the main task entrypoint.
+
+The runtime flow is:
+
+1. Accept task input from the CLI, an interface gateway, or a federation caller.
+2. Optionally attempt outbound federated delegation when that path is configured and allowed.
+3. Load state, continuity, and memory context needed for planning.
+4. Build a plan through `PlannerOrgan`.
+5. Run each action through `TaskRunner`.
+6. Persist governance outcomes and approved-action receipts.
+7. Run reflection and update learning stores.
+8. Return a result that describes what actually happened, not what the model hoped happened.
+
+Inbound federation and outbound federation are separate surfaces. The federation runtime accepts
+external work over HTTP. The orchestrator can also delegate work outward before local planning when
+policy and target config allow it.
+
+Within `TaskRunner`, the order of checks is intentionally strict:
+
+1. deadline and spend checks
+2. mission stop checks and idempotency protection
+3. hard constraints and stage guards
+4. network preflight, connector policy checks, and approval handling when relevant
+5. code-review preflight for `create_skill` when relevant
+6. fast-path or full-council governance
+7. verification gate for certain completion claims
+8. execution
+9. governance log and execution receipt writes
+
+That order is part of the architecture. Later layers do not override earlier deterministic blocks.
+
+## Main control planes
+
+### Orchestration plane
+
+Main surfaces:
+
+- `src/core/orchestrator.ts`
+- `src/core/taskRunner.ts`
+- `src/core/orchestration/`
+
+This plane owns:
+
+- task lifecycle
+- bounded replanning
+- per-action execution loops
+- governance integration
+- persistence and receipts
+- trace-ready runtime state
+- post-run learning updates
+
+The orchestrator also exposes bounded review seams for continuity episodes, continuity facts,
+remembered situations, remembered facts, managed process snapshots, and browser session snapshots.
+
+### Planning plane
+
+Main surfaces:
+
 - `src/organs/planner.ts`
-
-The planner turns user goals into typed action plans. The planner can repair malformed model output,
-normalize provider quirks, and bias planning toward finite proof when the request is execution-heavy.
-
-Canonical planner-policy ownership lives under:
 - `src/organs/plannerPolicy/`
 
-### Deterministic Safety Plane
+The planner turns goals into typed actions. It does more than call a model once.
 
-Main surface:
+It also handles:
+
+- planner failure fingerprints and cooldowns
+- retrieval of relevant lessons
+- workflow and judgment hints
+- deterministic fallback paths for known lanes
+- repair of malformed or incomplete planner output
+- response fallback when the planner misses an explicit run skill
+
+The planner is flexible, but it is still not trusted. All plans are downstream inputs to stricter
+runtime gates.
+
+### Deterministic safety plane
+
+Main surfaces:
+
 - `src/core/hardConstraints.ts`
+- `src/core/orchestration/taskRunnerPreflight.ts`
+- `src/core/stage6_85QualityGatePolicy.ts`
+- `src/core/stage6_86/`
 
-This plane runs before any governor vote. It owns the non-negotiable rules:
+This plane runs before the main governance vote and owns non-negotiable rules such as:
 
 - budget ceilings
-- path boundaries
+- protected path boundaries
 - shell and network execution guards
-- localhost/live-verification constraints
-- communication and identity rules
-- skill-creation schema checks
-- Stage 6.86 runtime action validation
+- stage-gated runtime actions
+- localhost and live-verification rules
+- identity and communication constraints
+- completion-proof gates for certain `respond` actions
 
 If this layer blocks an action, there is no later override.
 
-### Governance Plane
+### Governance plane
 
 Main surfaces:
+
 - `src/governors/defaultGovernors.ts`
 - `src/governors/masterGovernor.ts`
 - `src/governors/voteGate.ts`
+- `src/core/orchestration/taskRunnerGovernance.ts`
 
-The runtime uses seven main governors:
+The default council has seven focused governors:
 
 - ethics
 - logic
@@ -124,14 +235,19 @@ The runtime uses seven main governors:
 - utility
 - compliance
 
-There is also a code-review preflight surface for `create_skill`.
+Governance is layered:
 
-Fast path and escalation path are resolved by execution mode. Low-risk work can stay on a narrow
-path; sensitive work uses the full council.
+- `create_skill` can trigger a code-review preflight before the main council vote
+- low-risk work can use a reduced fast path
+- sensitive work uses the full council
 
-### Execution Plane
+The vote gate is intentionally fail-closed. Timeouts, malformed votes, mismatched governor IDs,
+and missing expected governors are normalized into rejection paths.
+
+### Execution plane
 
 Main surfaces:
+
 - `src/organs/executor.ts`
 - `src/organs/liveRun/`
 - `src/core/stage6_86/`
@@ -139,157 +255,164 @@ Main surfaces:
 The execution layer owns:
 
 - standard tool actions
+- shell and file operations
 - managed-process lifecycle
 - localhost readiness proof
-- browser/UI verification
-- Stage 6.86 runtime actions like `memory_mutation` and `pulse_emit`
+- browser verification
+- Stage 6.86 runtime actions such as bounded memory mutation and pulse emission
 
-### Orchestration Plane
+The executor is also where process and browser snapshot visibility comes from. Those snapshots are
+surfaced back through the orchestrator and interface runtime for operator review.
 
-Main surfaces:
-- `src/core/orchestrator.ts`
-- `src/core/taskRunner.ts`
-- `src/core/orchestration/`
-
-This layer owns:
-
-- task lifecycle
-- bounded replanning
-- per-action execution loops
-- persistence and receipts
-- reflection and learning updates
-- trace-ready runtime state
-
-## 5) Memory Model
-
-AgentBigBrain does not have one giant memory bucket. It has six governed memory systems with
-different jobs.
-
-| Memory system | Main surfaces | What it stores |
-|---|---|---|
-| Profile facts | `src/core/profileMemoryStore.ts`, `src/core/profileMemoryRuntime/` | Durable user facts and preferences |
-| Episodic memory | `src/core/profileMemoryRuntime/profileMemoryEpisode*.ts` | Remembered situations, outcomes, and follow-up state |
-| Continuity state | `src/core/stage6_86/` | Conversation stack, open loops, and entity graph continuity |
-| Governance memory | `src/core/governanceMemory.ts` | Append-only governance outcomes |
-| Semantic memory | `src/core/semanticMemory.ts` | Reusable lessons and concept-linked recall |
-| Workflow learning | `src/core/workflowLearningStore.ts`, `src/core/judgmentPatterns.ts` | Repeated workflow patterns and judgment calibration |
-
-### Memory Access Rules
-
-Memory is not injected into the planner or interface directly from raw stores. Memory access is
-brokered through:
-
-- `src/organs/memoryBroker.ts`
-- `src/organs/memoryContext/`
-- `src/core/memoryAccessAudit.ts`
-
-Key invariants:
-
-- sensitive reads stay fail-closed
-- profile and episode reads remain bounded
-- probing detection can suppress memory injection
-- remembered situations can be reviewed privately through `/memory`, but not dumped unboundedly
-
-### Human-Centric Continuity
-
-The current runtime supports:
-
-- bounded in-conversation contextual recall
-- episodic linking to entities and open loops
-- bounded cross-memory synthesis for recall and planner context
-- human-centric proactive qualification and cooldown logic
-
-Main supporting surfaces:
-- `src/interfaces/conversationRuntime/contextualRecall.ts`
-- `src/organs/languageUnderstanding/`
-- `src/organs/memorySynthesis/`
-- `src/interfaces/proactiveRuntime/`
-
-The front door can also use an optional bounded local intent-model seam from
-`src/organs/languageUnderstanding/` when deterministic routing confidence stays weak. That seam is
-currently Ollama-backed and now supports multiple bounded conversational interpretation tasks such
-as mode routing, identity, follow-up, and resume or handoff disambiguation. It does not replace
-the planner, and it does not authorize risky actions by itself.
-
-## 6) Interface and Conversation Model
+## Interface and conversation runtime
 
 Main surfaces:
+
 - `src/interfaces/interfaceRuntime.ts`
 - `src/interfaces/conversationManager.ts`
 - `src/interfaces/conversationRuntime/`
-- `src/interfaces/transportRuntime/`
 - `src/interfaces/mediaRuntime/`
 - `src/interfaces/userFacing/`
 
-The interface stack is designed so transport handling, conversation state, and user-facing language
-stay separate.
+The interface plane is not a thin wrapper around the CLI.
 
-### What the interface layer owns
+It owns:
 
-- Telegram and Discord ingress/egress
-- per-session queueing and worker execution
+- Telegram and Discord transport handling
+- per-session queueing
+- worker lifecycle
+- draft and approval flows
 - slash-command routing
-- draft/approve flows
-- autonomous loop delivery
-- bounded proactive check-ins
-- bounded contextual recall inside active conversations
-- private remembered-situation review and correction through `/memory`
+- user-facing language cleanup
+- bounded proactive delivery
+- memory review commands
+- media ingest reduction into structured context
 
-### User-facing language model
+When both Telegram and Discord are enabled, they share one orchestrator-side runtime core. That
+keeps session and execution state coherent across providers. Long-lived profile continuity across
+both providers still depends on profile memory being enabled.
 
-The interface layer aims to be:
+`ConversationManager` is the main interface ingress coordinator.
 
-- plain-English first
-- truthful about what executed
-- non-robotic
-- bounded in proactive behavior
+It owns:
 
-That is why user-facing rendering now separates:
+- session load and save
+- command vs natural-language classification
+- immediate acknowledgment timing
+- queueing and worker startup
+- proposal and approval state
+- turn history limits
+- follow-up classification state
+- pulse state updates
 
-- execution summaries
-- block summaries
-- stop summaries
-- language cleanup and phrasing normalization
+Important defaults:
 
-Main surface:
-- `src/interfaces/userFacing/`
+- interface-side autonomous execution is off by default
+- the default local intent confidence threshold is `0.85`
+- conversations are bounded by turn and context limits
 
-## 6A) Media Ingest Model
+That design keeps the interface conversational without letting the front door silently become an
+unrestricted autonomy surface.
+
+## Memory and continuity model
 
 Main surfaces:
+
+- `src/organs/memoryBroker.ts`
+- `src/organs/memoryContext/`
+- `src/core/profileMemoryStore.ts`
+- `src/core/profileMemoryRuntime/`
+- `src/core/stage6_86/`
+- `src/core/memoryAccessAudit.ts`
+
+Memory is brokered. Raw stores are not dumped straight into prompts.
+
+Profile memory is the long-lived personal-memory layer. Inside the encrypted store, the runtime
+keeps a graph-backed truth model for observations, claims, events, and entity references. That
+lets it reason about who a claim is about, when it was observed, what is true now, what used to be
+true, and what is still unresolved or conflicting.
+
+Stage 6.86 continuity is the live runtime layer for the active conversation. It owns the
+conversation stack, entity graph, open loops, pulse state, and runtime-action continuity. It can
+query profile memory for bounded recall, but it is a separate system with a different job.
+
+Stable fact and episode review surfaces still exist for operators and user-facing review, but they
+are bounded reads over the encrypted store rather than the internal truth owner.
+
+The main memory surfaces are:
+
+| Memory system | Main job |
+|---|---|
+| Profile memory graph | durable personal facts, relationships, and time-aware history |
+| Episodic memory | remembered situations, outcomes, and follow-up state |
+| Stage 6.86 continuity | active conversation stack, entity graph, open loops, pulse state |
+| Governance memory | append-only governance outcomes |
+| Semantic memory | reusable lessons and concept-linked recall |
+| Workflow learning | repeated workflow patterns and judgment calibration |
+
+The broker also supports:
+
+- bounded temporal and continuity-linked recall for planning
+- memory access audit logging
+- probing detection
+- remembered-situation review
+- fact review
+- correction and forgetting paths
+
+## Reflection and learning plane
+
+Main surfaces:
+
+- `src/organs/reflection.ts`
+- `src/core/workflowLearningStore.ts`
+- `src/core/judgmentPatterns.ts`
+- `src/core/distillerLedger.ts`
+
+Reflection is post-run learning, not open-ended self-rewrite.
+
+The reflection path can:
+
+- extract lessons from failure
+- extract lessons and near-misses from success
+- normalize and classify lesson signals
+- write lessons to semantic memory
+- route clone-attributed lessons through a distiller merge decision and ledger before commit
+
+Reflection is best-effort by design. A failed reflection write does not invalidate the governed
+run that already happened.
+
+## Media ingest model
+
+Main surfaces:
+
 - `src/interfaces/mediaRuntime/`
 - `src/organs/mediaUnderstanding/`
 - `src/organs/memoryContext/`
 
-The runtime stays text-first internally, so media is interpreted once and then reduced to structured context with clear limits.
+The runtime stays text-first internally. Media is interpreted once, then reduced to structured
+context with explicit limits.
 
 Current model:
 
-1. transport parses the inbound media attachment
+1. transport accepts the media attachment
 2. media runtime downloads and normalizes metadata
-3. media understanding produces a short summary, optional OCR/transcript, confidence, source note, and entity hints
+3. media understanding produces summary text, optional OCR or transcript, confidence, source
+   notes, and entity hints
 4. memory brokerage decides whether any of that belongs in continuity or remembered situations
-5. the rest of the conversation runtime sees structured context, not raw media blobs
+5. the rest of the runtime sees structured context, not raw media blobs
 
-Current capability limits:
+Current capability shape:
 
-- images can use a vision-capable OpenAI model when configured
-- voice notes can use the transcription endpoint when configured
-- short videos currently use file metadata and captions
+- images can use vision-capable model paths when configured
+- voice notes can use transcription when configured
+- video stays on file metadata and caption context rather than full clip analysis
 
-Why video is still fallback-only:
+That choice is deliberate. It keeps the system honest about what it actually understood.
 
-- there is no dedicated clip-analysis path in the current runtime
-- frame sampling, cost, latency, and truthfulness controls are not mature enough yet
-- the runtime currently limits video interpretation to file metadata and captions
-
-That choice is deliberate. It keeps the system honest while still letting video participate in intent clarification and continuity context.
-
-## 7) Live-Run and Verification Model
-
-The runtime supports real local live-run workflows when policy allows them.
+## Local live-run model
 
 Main surfaces:
+
 - `src/organs/liveRun/startProcessHandler.ts`
 - `src/organs/liveRun/checkProcessHandler.ts`
 - `src/organs/liveRun/stopProcessHandler.ts`
@@ -302,11 +425,36 @@ The intended sequence is:
 1. start a managed process
 2. prove localhost readiness
 3. optionally verify the page in a real browser
-4. stop the managed process if the mission requires a finite flow
+4. stop the process if the mission calls for a finite flow
 
-The runtime treats these as governed capabilities, not ad hoc shell tricks.
+These are governed capabilities. They are not treated as loose shell shortcuts.
 
-## 8) Persistence and Audit Artifacts
+## Network and connector governance
+
+Main surfaces:
+
+- `src/core/orchestration/taskRunnerNetworkPreflight.ts`
+- `src/core/orchestration/taskRunnerExecution.ts`
+
+Network writes have their own preflight layer.
+
+That layer can enforce:
+
+- endpoint normalization
+- allowed egress checks
+- connector policy consistency
+- approval scope validation
+- connector receipt seeding
+
+For side-effecting egress, the runtime can require explicit approval material. If the required
+approval ID is missing or out of scope, the action is blocked before execution.
+
+Approved connector writes can also produce receipt data that ties the action to the connector,
+operation class, request payload, response metadata, external identifiers, and mission context.
+That gives operators a durable record of what the runtime was allowed to do and what outside
+object it touched.
+
+## Persistence and audit artifacts
 
 Default local artifacts include:
 
@@ -322,82 +470,69 @@ Default local artifacts include:
 | Stage 6.86 runtime state | `runtime/stage6_86_runtime_state.json` | `src/core/stage6_86/runtimeState.ts` |
 | SQLite ledger backend | `runtime/ledgers.sqlite` | shared sqlite-backed stores |
 
-Approved actions also produce hash-linked execution receipts. Those receipts are the durable proof
-surface for “what actually ran.”
+Approved work leaves two durable proof surfaces:
 
-## 9) Model Layer
+- governance outcomes
+- execution receipts
+
+That split matters. One record explains what the runtime allowed. The other records what actually
+executed.
+
+## Model and backend layer
 
 Main surfaces:
+
 - `src/models/createModelClient.ts`
+- `src/models/backendConfig.ts`
 - `src/models/openaiModelClient.ts`
+- `src/models/ollamaModelClient.ts`
 - `src/models/mockModelClient.ts`
-- `src/models/schema/`
-- `src/models/openai/`
+- `src/models/codex/`
 
 Supported backends:
 
-- mock
-- openai_api
-- codex_oauth
-- Ollama
+| Backend | Purpose |
+|---|---|
+| `mock` | deterministic dry-run and testing path |
+| `ollama` | local model serving |
+| `openai_api` | OpenAI-compatible API access |
+| `codex_oauth` | Codex subscription-backed local auth path |
 
-OpenAI API backend note:
+Notes that matter operationally:
 
-- the OpenAI runtime resolves model aliases to provider ids, selects a transport
-  (`chat/completions` or `responses`) per model-family compatibility policy, and normalizes both
-  transport shapes back into the same structured-output validation path
-- current operator guidance is centered on the GPT-4.1 and GPT-5.x families, with
-  `chat/completions` preferred for `gpt-4.1*`, `responses` preferred for `gpt-5*`, and explicit
-  lower-latency reasoning settings applied for GPT-5-family autonomous runs
+- the `openai` alias still maps to `openai_api`
+- Codex OAuth is a separate backend, not just another auth mode on the OpenAI client
+- local intent interpretation stays a separate optional path and does not automatically switch
+  when the main planner backend changes
+- model output is always treated as untrusted until it is normalized and validated
 
-Codex OAuth backend note:
+## Extension path
 
-- the Codex runtime is a separate backend, not a new auth mode on the OpenAI API client
-- it reuses operator-owned local Codex auth state and resolves backend-specific `CODEX_MODEL_*`
-  aliases to supported Codex model ids
-- it preserves the same structured-output contract and fails closed when auth, model support, or
-  schema validation cannot be proven
-
-The runtime treats model output as untrusted until it is normalized and validated.
-
-Media note:
-
-- media can keep one shared backend or split by modality
-- image understanding can follow `codex_oauth` or the explicit OpenAI API path
-- voice-note understanding can be forced onto an explicit OpenAI API transcription-capable path
-- video is currently transport-plus-fallback, not full multimodal clip reasoning
-
-Local intent note:
-
-- the optional local intent seam remains Ollama-backed and separate from the main text backend
-- it now supports multiple bounded conversational interpretation tasks rather than only front-door
-  mode classification
-- selecting `codex_oauth` or `openai_api` does not implicitly change that local intent provider
-
-## 10) Extension Points
-
-If you add a new action type or runtime capability, the safe path is:
+If you add a new action type or runtime capability, the safe order is:
 
 1. add or update typed contracts
 2. extend hard-constraint coverage
 3. extend governance coverage
-4. route execution in the correct runtime surface
-5. emit durable evidence or receipts as needed
-6. update subsystem READMEs
-7. add targeted tests and, if relevant, smoke evidence
+4. add preflight and approval behavior where needed
+5. route execution in the right runtime surface
+6. emit durable evidence or receipts
+7. update subsystem docs and targeted tests
 
-## 11) Architectural Invariants
+That order is part of how the codebase stays governable.
 
-These are the big ones:
+## Architectural invariants
+
+These are the core invariants:
 
 - no side effect runs before deterministic hard constraints
 - no sensitive side effect runs without governance
+- no completion claim should overstate what the runtime proved
 - approved work must leave durable evidence
 - memory injection must stay bounded and privacy-aware
-- user-facing language should not overclaim what happened
-- stable entrypoints can stay thin, but canonical ownership should live in focused subsystems
+- interface conversation state must stay bounded and recoverable
+- shared runtime state should stay coherent even when provider backends vary
 
-That is the architecture in one sentence:
+In one sentence:
 
-AgentBigBrain lets the model think broadly, but it forces the runtime to act narrowly, audibly, and
-truthfully.
+AgentBigBrain lets the model think broadly, but it forces the runtime to act narrowly, audibly,
+and truthfully.

@@ -130,6 +130,12 @@ These changes do not need their own version bump unless they are part of a relea
 ## Repo Rules
 
 - New work goes into `CHANGELOG.md` under `[Unreleased]`.
+- Keep `[Unreleased]` maintained as a concise operator-facing summary, not a release-day backlog dump.
+- Update `[Unreleased]` in the same change when work affects user-visible behavior, setup,
+  compatibility guidance, operator recovery behavior, or anything that should appear in release
+  notes.
+- Do not fill the changelog with internal-only refactors, test-only cleanup, or file-by-file
+  implementation notes when they do not change what maintainers or operators need to know.
 - Do not bump `package.json` for every merge or every local experiment.
 - Do not infer a version bump only from commit type. Choose the bump based on release impact.
 - When you cut a release, update `package.json` and create the matching released changelog section
@@ -143,6 +149,11 @@ This keeps AI agents from changing the wrong file at the wrong time.
 - Update `package.json` only for an explicit release or version-bump task.
 - Update `CHANGELOG.md` `[Unreleased]` when a change affects users, operators, setup, compatibility,
   or release notes.
+- Keep `[Unreleased]` in the standard Keep a Changelog shape:
+  - `### Added`
+  - `### Changed`
+  - `### Fixed`
+  - `### Security`
 - Update `VERSIONING.md` only when version policy or release workflow changes.
 - If a change might be breaking but the release intent is unclear, do not auto-bump the version.
   Call out the possible release impact instead.
@@ -158,7 +169,10 @@ npm run check:versioning
 This verifies:
 
 - `CHANGELOG.md` has an `[Unreleased]` section.
+- `CHANGELOG.md` `[Unreleased]` keeps the standard `Added`, `Changed`, `Fixed`, and `Security`
+  headings.
 - `CHANGELOG.md` has at least one released version section.
+- `CHANGELOG.md` does not contain malformed mojibake release-heading delimiters.
 - The latest released changelog version matches `package.json`.
 
 ## Release Flow

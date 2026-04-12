@@ -44,6 +44,7 @@ scripts that are intentionally kept outside the main runtime path.
 - `tests/tools/checkSubsystemReadmeSync.test.ts`
 - `tests/tools/checkTemporalMemoryRegistry.test.ts`
 - `tests/tools/checkUserFacingStopPhraseDuplication.test.ts`
+- `tests/tools/checkVersioning.test.ts`
 
 ## When to Update This README
 Update this README when:

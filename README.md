@@ -1,395 +1,273 @@
-# 🧠 AgentBigBrain — Governed AI Assistant & Agent
-
-<div align="center">
-  <img src="img/AgentBigBrain.png" alt="AgentBigBrain - Governed AI Assistant and Agent Framework" />
-</div>
-
-**A framework for AI assistants and agents where every action is checked, voted on, and recorded — before it runs.**
+# AgentBigBrain
 
 [![CI](https://github.com/AgentBigBrain/AgentBigBrain/actions/workflows/ci.yml/badge.svg)](https://github.com/AgentBigBrain/AgentBigBrain/actions/workflows/ci.yml)
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-blue)](./LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-blue)](./tsconfig.json)
-[![Dependencies](https://img.shields.io/badge/runtime_deps-2-brightgreen)](#zero-dependency-core)
+[![Runtime deps](https://img.shields.io/badge/runtime_deps-2-brightgreen)](./package.json)
 
----
+Governance-first TypeScript runtime for AI assistants and autonomous agents.
 
-## 🎯 What Is This?
+AgentBigBrain is built for teams that want an agent runtime where the model can plan, explain, and
+propose work, but the runtime still decides what is allowed to happen. It supports governed CLI
+runs, bounded autonomous loops, Telegram and Discord interfaces, HTTP federation, audited local
+execution, and multiple model backends under one control model.
 
-AgentBigBrain is a framework for building AI assistants and autonomous agents you can actually trust.
+At the npm runtime package level, the project depends on `ws` and `onnxruntime-node`. In practice,
+the full runtime also depends on your chosen backend, auth state, and any optional services you
+enable, such as Telegram, Discord, or Ollama.
 
-> You wouldn't let a new hire run your company unsupervised on day one — you'd check their work, have someone review it, and keep a paper trail. AgentBigBrain holds AI to that same standard.
+Start here:
 
-Most agent frameworks let the AI decide what to do and hope for the best. AgentBigBrain takes a different approach: every action the AI proposes must pass through hard safety checks and a council of specialized reviewers before it's allowed to run. If anything looks wrong, the action is blocked — no exceptions, no overrides.
+- [Setup and environment wiring](./docs/SETUP.md)
+- [Architecture reference](./docs/ARCHITECTURE.md)
+- [Command examples](./docs/COMMAND_EXAMPLES.md)
+- [Runtime error and env map](./docs/ERROR_CODE_ENV_MAP.md)
 
-Think of it like checks and balances for AI. The AI plans. The system verifies. Only then does it act. Every approved action is recorded in a tamper-evident audit trail, so you never have to take the agent's word for it — you can verify exactly what happened and why.
+## Why this repository exists
 
-Built in TypeScript with only **2 runtime dependencies** (`ws`, `onnxruntime-node`). Everything else runs on Node.js built-ins.
+Most agent systems are good at proposing work. Fewer are good at proving that the work was safe,
+allowed, and actually executed. AgentBigBrain is built around that gap.
 
----
+The model stays flexible. The runtime stays strict.
 
-## ✨ Key Features
+What the runtime enforces:
 
-**🏛️ Governor Council** — Seven specialized reviewers (ethics, logic, resource, security, continuity, utility, compliance) vote on every sensitive action. Six out of seven must approve.
+- deterministic hard constraints before model judgment
+- layered governance for risky actions
+- proof gates for certain completion claims
+- durable governance records and execution receipts
+- bounded, privacy-aware memory and continuity
+- governed local live runs instead of ad hoc shell behavior
 
-**🛡️ Safety Guardrails** — Hard rules that run before any voting. If the AI tries something dangerous — running unsafe code, touching protected files, exceeding budgets — it's blocked instantly. No debate, no AI judgment involved.
+## Runtime modes
 
-**🔗 Tamper-Evident Receipts** — Every approved action produces a cryptographic receipt. You don't have to trust the agent — you can verify.
-
-**🧠 Six Governed Memory Systems** — Profile facts, episodic memory, governance memory, semantic memory, workflow learning, and continuity state (entity graph plus open loops). All governed, with private remembered-situation review controls.
-
-**🖼️ Media Input With Safe Limits** — Telegram screenshots, voice notes, and short videos can enter the governed conversation path. Images use a vision-capable model when available, voice notes use transcription when available, and video currently uses file metadata and captions rather than full clip analysis.
-
-**💬 Multi-Interface** — CLI, Telegram bot, Discord bot, and an HTTP federation protocol for agent-to-agent communication.
-
-**🧭 Human-Centric Front Door** — You can talk to it like a normal person without losing the safety rails. Clear natural requests still go through the same routing and approval checks, and you can optionally add a small local Ollama conversational interpreter for bounded tasks like front-door intent, identity, follow-up, and resume or handoff disambiguation.
-
-<a id="zero-dependency-core"></a>
-**📦 Minimal Dependencies** — Only 2 runtime packages. No heavyweight SDKs. Crypto, HTTP, SQLite, and process control all use Node.js built-ins.
-
-**🧭 Multi-Backend Model Routing** — The runtime now supports `mock`, `ollama`, `openai_api`, and
-`codex_oauth` backends behind the same logical role aliases, with fail-closed backend
-normalization, backend-specific model mapping, and truthful usage reporting. Setup details live in
-[docs/SETUP.md](./docs/SETUP.md).
-
----
-
-## 🧭 Design Philosophy & Deep Capabilities
-
-### The model is treated as untrusted
-
-AgentBigBrain does not treat model output as authority. The model proposes. The runtime decides.
-
-That matters because every proposed action still has to survive:
-
-- strict typed contracts
-- deterministic safety rules
-- governance review
-- execution-time verification
-
-The result is a simple design philosophy: intelligence can be flexible, but execution must be
-bounded, auditable, and fail-closed.
-
-### It can grow new tools under governance
-
-The runtime can create and run governed skills. In practice, that means the agent can write a
-useful tool for itself, validate it, and use it later without turning the system into an
-unrestricted self-modifying loop.
-
-This is not open-ended self-rewrite. It is bounded self-extension under policy, review, and audit.
-
-### It remembers situations, not just facts
-
-The memory model is designed to reduce the usual “start from scratch every time” feeling.
-
-The runtime keeps:
-
-- profile facts
-- remembered situations and outcomes
-- continuity state like open loops and entity links
-
-That lets it resume relevant context across sessions, ask better follow-up questions, and revive an
-older unresolved thread when it naturally comes up again, without stuffing full transcripts back
-into every prompt.
-
-### It produces high-signal execution data
-
-Approved actions leave durable receipts and related runtime traces. Over time, that gives you a
-cleaner record of what the agent actually proposed, what was allowed, what ran, and what happened
-afterward.
-
-That data is useful for:
-
-- audits
-- evaluations
-- replay and regression testing
-- future model-training or fine-tuning pipelines
-
----
-
-## 🔄 How It Works
-
-Every action follows the same path — no shortcuts, no exceptions:
-
-<div align="center">
-  <img src="img/AgentBigBrain_Approval-Flow_Diagram.png" alt="How AgentBigBrain keeps you safe — approval flow from AI proposal through safety guardrails, council vote, to execution and audit" width="800" />
-</div>
-
-1. **🎯 Plan** — The AI reads your goal and proposes a concrete list of actions.
-2. **🛡️ Check** — Each action runs through hard safety rules. Anything dangerous is blocked instantly, before any AI judgment is involved.
-3. **🗳️ Vote** — The council of 7 specialized reviewers evaluates the action. Six of seven must approve. If any reviewer times out or returns a bad response, that counts as a "no."
-4. **⚡ Execute & Record** — The action runs. A cryptographic receipt is appended to the tamper-evident audit chain.
-5. **💡 Reflect** — The system analyzes what happened and stores useful lessons for next time.
-
-<details>
-<summary>Text-based flow diagram</summary>
-
-```mermaid
-flowchart LR
-    A["User Goal"] --> B["Planner"]
-    B --> C["Safety Guardrails"]
-    C -->|Pass| D["Council Vote"]
-    C -->|Fail| X["Blocked"]
-    D -->|Approved| E["Execute & Record"]
-    D -->|Rejected| X
-    E --> F["Reflect & Learn"]
-    F -->|Next action| B
-```
-</details>
-
----
-
-## 📊 What Makes This Different
-
-| | Typical Agent Frameworks | AgentBigBrain |
+| Surface | Command | Purpose |
 |---|---|---|
-| Safety | Optional, bolted on later | **Built in from day one** — there is no bypass |
-| Who decides safety? | The AI polices itself | **Hard rules run first**; the AI never controls its own safety checks |
-| Audit trail | Logs, maybe | **Every action has a cryptographic receipt** |
-| Memory | Basic retrieval stores | **Six governed memory systems** for profile facts, episodes, governance, semantic memory, workflow learning, and continuity state — with encryption, probing detection, and private remembered-situation review controls |
-| Dependencies | Dozens of packages | **2 runtime dependencies** |
-| When in doubt | Allow by default | **Block by default** — failing safe is always the answer |
+| Single task | `npm run dev -- "summarize current repo status"` | Run one governed task and exit |
+| Autonomous loop | `npm run dev -- --autonomous "..."` | Run bounded iterations for one goal |
+| Daemon mode | `npm run dev -- --daemon "..."` | Chain goals under explicit safeguards |
+| Codex auth | `npm run dev -- auth codex status` | Inspect or manage local Codex login state |
+| Interface runtime | `npm run dev:interface` | Start Telegram, Discord, or both |
+| Federation runtime | `npm run dev:federation` | Start authenticated inbound federation handling |
 
----
+`npm run dev:federation` starts the inbound HTTP surface. Outbound federation is separate. The
+orchestrator can delegate a task to another agent before local planning when federation policy and
+target config allow it.
 
-## 🧠 Don't Trust, Verify (The AI Onboarding Way)
+Daemon mode is intentionally guarded. It will not start unless all of these are set:
 
-This codebase is dense. It enforces strict cognitive science principles, cryptographic ledgers, and governed execution gates. **Do not read the source code manually. Unless you are up for a challenge, and have an extraordinary amount of time on your hands, and are prepared to read the source code**
+```env
+BRAIN_ALLOW_DAEMON_MODE=true
+BRAIN_MAX_AUTONOMOUS_ITERATIONS=...
+BRAIN_MAX_DAEMON_GOAL_ROLLOVERS=...
+```
 
-Instead, open this project in an AI-native IDE (like Cursor, Antigravity, Codex, or Copilot) and use this exact prompt:
-
-> *"I just cloned the AgentBigBrain repository. I want to build a [insert your use case, e.g., customer support bot / local file organizer / smart contract deployer]. First, read `docs/ARCHITECTURE.md` to understand the high-level concepts. Then, recursively read and index the actual source code in `src/` to verify exactly how the 7 Governors and the execution loop truly operate. Do not blindly trust the documentation—verify it against the code. Finally, tell me exactly which files I need to modify to integrate my use case, how to configure the `.env` file, and what capabilities this agent will safely have."*
-
-**Or, if you just want to understand the system without building anything yet:**
-
-> *"I just cloned the AgentBigBrain repository. Please read `docs/ARCHITECTURE.md` and then recursively read the source code in `src/`. Provide a comprehensive, high-level review of the entire system. Explain the cognitive architecture, how the different memory systems (Episodic, Semantic, etc.) interact, how the 7 Governors enforce safety, and how the 'Society of Mind' orchestration works. Give me a tour of the codebase."*
-
-**Why this works:**
-Because this project enforces strict TypeScript contracts (no `any` types), dependency injection, and zero-dependency boundaries, your IDE's AI will find it incredibly easy to navigate. It won't hallucinate spaghetti code because the interfaces physically won't allow it to compile. 
-
-Ask your AI how the `Governor Council` votes. Ask it how to add a new `ActionType`. Let the IDE do the reading. Although you of course are welcome to as well, just be prepared for a challenge.
-
----
-
-## 🚀 Quickstart
-
-> **Full setup guide:** [docs/SETUP.md](docs/SETUP.md)
+## Quickstart
 
 ### Prerequisites
 
-- **Node.js 22.x** or later
-- **npm**
+- Node.js 22.x or later
+- npm
 
-### Install and Run
+### Install, build, and test
 
 ```bash
 npm install
 npm run build
 npm test
-npm run dev -- "summarize current repo status"
 ```
 
-### Optional: Local Embeddings
-
-Semantic memory uses a local ONNX model. Install it once:
+### Create your local environment file
 
 ```bash
-npm run setup:embeddings
+cp .env.example .env
 ```
 
-If you skip this step, set `BRAIN_ENABLE_EMBEDDINGS=false` to fall back to keyword-only retrieval.
-
-### Configure
-
-```bash
-cp .env.example .env    # or: Copy-Item .env.example .env (PowerShell)
-```
-
-Edit `.env` with your API key and preferred settings. For local testing without an API key:
+For a dry-run starting point with no external model calls:
 
 ```env
 BRAIN_MODEL_BACKEND=mock
 BRAIN_RUNTIME_MODE=isolated
 ```
 
-Optional: enable the bounded local conversational interpreter for more natural front-door routing and other conversational disambiguation while keeping the main planner/provider path unchanged:
+### Run the CLI
 
 ```bash
-ollama pull phi4-mini
+npm run dev -- "summarize current repo status"
+npm run dev -- --autonomous "stabilize runtime wiring plan execution"
 ```
+
+## Backends and auth
+
+| Backend | `BRAIN_MODEL_BACKEND` | Best for | Minimum setup |
+|---|---|---|---|
+| Mock | `mock` | local dry runs and tests | none |
+| OpenAI API | `openai_api` | hosted model access | `OPENAI_API_KEY` |
+| Codex OAuth | `codex_oauth` | local Codex subscription-backed runs | local Codex login state |
+| Ollama | `ollama` | local model serving | running Ollama server |
+
+OpenAI-compatible endpoints can use `OPENAI_BASE_URL`. The `openai` alias maps to `openai_api`.
+
+Codex auth commands:
+
+```bash
+npm run dev -- auth codex login
+npm run dev -- auth codex status
+npm run dev -- auth codex logout
+```
+
+Optional profile-aware login:
+
+```bash
+npm run dev -- auth codex login --profile work
+npm run dev -- auth codex status --profile work
+```
+
+Optional embeddings:
+
+```bash
+npm run setup:embeddings
+```
+
+If you skip embeddings, set:
 
 ```env
-BRAIN_LOCAL_INTENT_MODEL_ENABLED=true
-BRAIN_LOCAL_INTENT_MODEL_PROVIDER=ollama
-BRAIN_LOCAL_INTENT_MODEL_NAME=phi4-mini:latest
+BRAIN_ENABLE_EMBEDDINGS=false
 ```
 
-For the full configuration reference (model backends, shell profiles, interfaces, federation, and all environment variables), see **[docs/SETUP.md](docs/SETUP.md)**.
+## What gets checked before an action runs
 
----
+The runtime path is ordered on purpose:
 
-## 📝 Examples
+1. The planner proposes typed actions.
+2. Preflight checks budget, deadlines, path rules, shell rules, stage rules, and idempotency.
+3. Connector and network preflight checks approval scope for side-effecting egress when needed.
+4. Governance runs through a reduced fast path for low-risk work or the full council for
+   sensitive work.
+5. A verification gate can block `respond` if the runtime does not have enough proof to claim the
+   task is done.
+6. Approved work executes through the executor or a governed runtime action.
+7. Governance outcomes and execution receipts are written as durable evidence, including connector
+   receipts for approved external writes.
 
-### CLI
+That order is part of the runtime contract.
 
-```bash
-# Single governed task
-npm run dev -- "summarize current repo status"
+## Interface runtime
 
-# Bounded autonomous loop
-npm run dev -- --autonomous "stabilize runtime wiring plan execution"
+The interface layer is not a thin wrapper around the CLI. It has its own session store, queueing,
+worker lifecycle, draft flows, slash commands, memory review paths, and media ingress reduction.
 
-# Daemon mode (requires additional env config — see SETUP.md)
-npm run dev -- --daemon "continuously triage repository issues"
-```
+Supported providers:
 
-### Telegram / Discord
+- Telegram
+- Discord
+- both in one shared runtime
+
+Start it with:
 
 ```bash
 npm run dev:interface
 ```
 
-Then use `/chat`, `/propose`, `/auto`, `/memory`, `/status`, and other slash commands. See **[docs/COMMAND_EXAMPLES.md](docs/COMMAND_EXAMPLES.md)** for the full command reference with examples.
+Common interface settings:
 
-### Federation (Agent-to-Agent)
-
-```bash
-npm run dev:federation
+```env
+BRAIN_INTERFACE_PROVIDER=telegram
+BRAIN_INTERFACE_SHARED_SECRET=...
+BRAIN_INTERFACE_ALLOWED_USERNAMES=...
 ```
 
-For federation setup and API usage, see **[docs/SETUP.md](docs/SETUP.md)**.
+Important defaults:
 
----
+- interface-side autonomous execution is off by default
+- Telegram and Discord can share one runtime core when both are enabled
+- long-lived profile continuity across both providers still depends on profile memory being enabled
+- the optional local intent model is separate from the main planner backend
 
-## ❓ FAQ
+Example local intent-model settings:
 
-### What does AgentBigBrain do for an AI assistant or agent?
+```env
+BRAIN_LOCAL_INTENT_MODEL_ENABLED=true
+BRAIN_LOCAL_INTENT_MODEL_PROVIDER=ollama
+BRAIN_LOCAL_INTENT_MODEL_NAME=gemma4:latest
+```
 
-It gives your AI assistant or agent a plan-check-vote-execute loop. The assistant can read files, write files, run shell commands, send network requests, and more — but only after every proposed action passes safety checks and council review. Nothing runs without approval.
+## Memory and continuity
 
-### Is this safe to use?
+AgentBigBrain uses separate memory systems with different jobs instead of pushing everything into
+one growing prompt.
 
-Safety is the core design principle. Every action is checked by hard rules first, then voted on by a council of 7 reviewers. The system is fail-closed: if anything goes wrong — a timeout, a bad response, a missing config — the default answer is "block." You can also run in mock mode (`BRAIN_MODEL_BACKEND=mock`) with no external API calls at all.
+Profile memory is the long-lived personal-memory layer. It lives in an encrypted store and uses a
+graph-backed model so the runtime can track people, claims, timing, and whether something is
+current, historical, resolved, or conflicting.
 
-### What happens if the agent tries something dangerous?
+Stage 6.86 continuity is different. It owns the live conversation stack, entity graph, open
+loops, and pulse state for the active interaction.
 
-It gets blocked. Hard safety rules run before any voting, and they catch things like unsafe code patterns, protected file access, and budget overruns. These rules are deterministic — the agent can't talk its way past them. If an action somehow passes the hard rules, the council can still reject it. If the council times out, the action is blocked. The system always defaults to "no."
+| Memory surface | Purpose |
+|---|---|
+| Profile memory graph | durable personal facts, relationships, and time-aware history |
+| Episodic memory | remembered situations, outcomes, and follow-up context |
+| Stage 6.86 continuity | conversation stack, entity graph, open loops, pulse state |
+| Governance memory | reviewable governance outcomes |
+| Semantic memory | lessons and concept-linked recall |
+| Workflow learning | repeated execution patterns and judgment calibration |
 
-### What are the 7 governors?
+Memory access is brokered. The runtime supports bounded review, correction, forgetting, and
+continuity-linked recall instead of treating memory as write-only.
 
-They're specialized AI reviewers, each looking at the action from a different angle:
+## Local live runs and proof
 
-| Governor | What they check |
-|----------|----------------|
-| **Ethics** | Is it honest and fair? |
-| **Logic** | Does the reasoning hold up? |
-| **Resource** | Is the cost reasonable? |
-| **Security** | Is it safe to run? |
-| **Continuity** | Can we recover if it fails? |
-| **Utility** | Does it actually help the user? |
-| **Compliance** | Does it follow the rules? |
+When policy allows it, the executor can:
 
-Six of seven must approve for the action to proceed.
+- start managed processes
+- prove localhost readiness
+- verify a page in a real browser
+- stop the process when the mission is complete
 
-### What's the difference between fast path and escalation path?
+This is governed runtime behavior. It is not just free-form shell scripting.
 
-Low-risk actions take the **fast path** — only the security governor votes, so they're quick. Higher-risk actions take the **escalation path** — the full council of 7 reviews them. The system decides which path automatically based on the action type.
+## Useful commands
 
-### Can I use this with my own model?
+```bash
+npm run check:repo
+npm run audit:governors
+npm run audit:claims
+npm run audit:ledgers
+npm run audit:traces
+```
 
-Yes. The main text backend is now explicit:
+The repository also includes stage-specific tests and evidence scripts for runtime maturity,
+conversation behavior, live-run proof, and interface flows.
 
-- `BRAIN_MODEL_BACKEND=openai_api` for OpenAI-compatible API access with `OPENAI_API_KEY`
-- `BRAIN_MODEL_BACKEND=codex_oauth` for subscription-backed Codex CLI/OAuth usage
-- `BRAIN_MODEL_BACKEND=ollama` for local Ollama models
+## Repository map
 
-You can still point the OpenAI API path at a compatible endpoint with `OPENAI_BASE_URL`. The
-optional local conversational interpreter is separate, so you can keep the main planner on
-`openai_api` or `codex_oauth` while using a local Phi model for bounded conversational
-interpretation tasks like front-door intent, identity, and follow-up disambiguation. See
-**[docs/SETUP.md](docs/SETUP.md)** for backend and auth details.
-
-### How do I connect it to Telegram or Discord?
-
-Set `BRAIN_INTERFACE_PROVIDER` to `telegram`, `discord`, or `both`, add your bot token(s), and configure the username allowlist. Then run `npm run dev:interface`. Step-by-step instructions are in **[docs/SETUP.md](docs/SETUP.md)**.
-
-### Can it handle screenshots, voice notes, or short video?
-
-Yes, but the current media support is intentionally limited and truthful.
-
-- Images: supported through the Telegram media-ingest path. Rich interpretation can use the
-  explicit OpenAI API media path or follow the active `codex_oauth` backend when the chosen media
-  model supports image understanding. You can now also split media by modality, for example:
-  screenshots on `codex_oauth` and voice transcription on `openai_api`. If image understanding is
-  not available, the runtime falls back to a simple caption or file summary.
-- Voice notes: supported through the Telegram media-ingest path. Rich interpretation can use the
-  explicit OpenAI API transcription path or a separately configured transcription backend. The
-  default transcription model remains `whisper-1`. If
-  transcription is unavailable, the runtime falls back to basic media context instead of making up
-  a transcript.
-- Video: accepted as input. Today the runtime uses file metadata and captions for video, not full clip analysis.
-
-See **[docs/SETUP.md](docs/SETUP.md)** for the exact media-related env settings and current operator limits.
-
-### What are clones?
-
-Clones are short-lived satellite identities the agent can spawn for bounded parallel work. They're not independent sub-agents — they stay under the main agent's governance and their outputs must pass merge checks before integration. Think of them as temporary helpers on a short leash, not autonomous workers.
-
-### How do I know the agent isn't lying about what it did?
-
-You don't have to take its word for it. Every approved action produces a cryptographic receipt containing output digests, vote records, and a hash-chained link to all prior receipts. You can verify the full chain at any time with `npm run audit:ledgers`.
-
-### What are the evolutionary stages?
-
-AgentBigBrain doesn't grant full autonomy all at once. It unlocks capabilities through version-gated stages, and each stage requires proven, auditable milestones before the next one activates. For example, Stage 6.75 adds user-facing approval flows, Stage 6.85 adds mission recovery, and Stage 6.86 adds multi-turn conversations. For the full architecture, see **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
-
----
-
-## 🔧 Troubleshooting
-
-Common issues and their fixes:
-
-| Problem | Fix |
-|---------|-----|
-| `OPENAI_API_KEY` missing | Set the key in `.env` for `BRAIN_MODEL_BACKEND=openai_api`, or use `mock`, `ollama`, or `codex_oauth` instead |
-| Full-access mode fails at startup | Set `BRAIN_ALLOW_FULL_ACCESS=true` alongside `BRAIN_RUNTIME_MODE=full_access` |
-| Daemon exits immediately | All three latches required: `BRAIN_ALLOW_DAEMON_MODE=true`, `BRAIN_MAX_AUTONOMOUS_ITERATIONS > 0`, `BRAIN_MAX_DAEMON_GOAL_ROLLOVERS > 0` |
-| `GLOBAL_DEADLINE_EXCEEDED` | Increase `BRAIN_PER_TURN_DEADLINE_MS` (e.g., `120000` for heavy tasks) |
-| Interface won't start | Check: `BRAIN_INTERFACE_PROVIDER`, `BRAIN_INTERFACE_SHARED_SECRET`, `BRAIN_INTERFACE_ALLOWED_USERNAMES`, and bot token(s) |
-
-For the full error-code-to-env-variable map, see **[docs/ERROR_CODE_ENV_MAP.md](docs/ERROR_CODE_ENV_MAP.md)**.
-
----
-
-## 🏗️ Architecture
-
-| Layer | Directory | What It Does |
+| Area | Directory | What lives there |
 |---|---|---|
-| **Core** | `src/core/` | Orchestrator, task runner, hard constraints, config, execution receipts |
-| **Organs** | `src/organs/` | Cognitive modules — planner, executor, reflection, memory, classifiers |
-| **Governors** | `src/governors/` | 7 council governors, code review gate, master vote aggregation |
-| **Models** | `src/models/` | Provider adapters (`openai_api`, `codex_oauth`, `ollama`, `mock`) behind a shared interface |
-| **Interfaces** | `src/interfaces/` | Telegram, Discord, federation server, session management |
-| **Tests** | `tests/` | 150+ test files covering every maturity stage |
+| Core runtime | `src/core/` | orchestrator, task runner, hard constraints, ledgers, config |
+| Organs | `src/organs/` | planner, executor, reflection, memory, language understanding |
+| Governors | `src/governors/` | council members, vote aggregation, fail-closed governance |
+| Models | `src/models/` | `mock`, `ollama`, `openai_api`, `codex_oauth` adapters |
+| Interfaces | `src/interfaces/` | Telegram, Discord, conversation runtime, federation |
+| Tests and evidence | `tests/`, `scripts/evidence/` | stage tests, live smokes, audits, evidence bundles |
 
-**Entry point:** `src/index.ts` — **Composition root:** `src/core/buildBrain.ts`
+## Documentation map
 
-Full architecture spec: **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**
+- [Architecture reference](./docs/ARCHITECTURE.md)
+- [Setup and environment wiring](./docs/SETUP.md)
+- [Command examples](./docs/COMMAND_EXAMPLES.md)
+- [Runtime error and env map](./docs/ERROR_CODE_ENV_MAP.md)
+- [Contributing](./CONTRIBUTING.md)
+- [Security](./SECURITY.md)
+- [Support](./SUPPORT.md)
+- [Changelog](./CHANGELOG.md)
 
----
+## Security
 
-## 🔒 Security
-
-Report vulnerabilities privately to **security@agentbigbrain.com** or via [GitHub Security Advisories](https://github.com/AgentBigBrain/AgentBigBrain/security/advisories/new). Do not open public issues for security vulnerabilities. See [SECURITY.md](SECURITY.md).
-
-## 🤝 Contributing and Support
-
-- Contributing guide: [CONTRIBUTING.md](CONTRIBUTING.md)
-- Code of Conduct: [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
-- Support channels: [SUPPORT.md](SUPPORT.md)
-- Changelog: [CHANGELOG.md](CHANGELOG.md)
+Report vulnerabilities privately to [security@agentbigbrain.com](mailto:security@agentbigbrain.com)
+or through [GitHub Security Advisories](https://github.com/AgentBigBrain/AgentBigBrain/security/advisories/new).
+Do not open public issues for security reports.
 
 ## License
 
-Apache License, Version 2.0. See [LICENSE](LICENSE).
-
-Copyright (c) 2026 Anthony J. Benacquisto. Part of the AgentBigBrain Trust Protocol. See [NOTICE](NOTICE).
+Apache License 2.0. See [LICENSE](./LICENSE) and [NOTICE](./NOTICE).

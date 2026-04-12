@@ -123,9 +123,9 @@ OPENAI_TIMEOUT_MS=300000
 OPENAI_TRANSPORT_MODE=auto
 ```
 
-Legacy note:
+Alias note:
 
-- `BRAIN_MODEL_BACKEND=openai` still normalizes to `openai_api` for backward compatibility.
+- `BRAIN_MODEL_BACKEND=openai` maps to `openai_api`.
 
 ### Codex OAuth backend
 
@@ -159,47 +159,79 @@ Optional overrides:
 The runtime can ingest Telegram screenshots, voice notes, and short videos, but the interpretation
 quality depends on the configured media path.
 
-- In phase 1, this media path remains explicit OpenAI API configuration even when the main text
-  backend is `codex_oauth` or `ollama`.
-- Images use a vision-capable OpenAI model.
-- Voice notes use the transcription endpoint.
-- Video is accepted as input, but the current runtime only produces simple metadata/caption summaries. It does **not** yet claim full video understanding.
+- Media no longer has to stay on a separate OpenAI-only path. By default it can inherit the main
+  text backend, or you can split vision and transcription by modality.
+- Images can use `openai_api`, `codex_oauth`, or `ollama`, depending on your media backend
+  settings and model support.
+- Voice notes can use a dedicated transcription model such as `whisper-1`, or a multimodal
+  audio-capable model path when the selected backend supports it.
+- Video is accepted as input, but the runtime only produces simple metadata and caption summaries.
+  It does not claim full video understanding.
 
 Truthfulness rule:
 
 - if provider-backed media understanding is unavailable, the runtime falls back to a simple summary
 - it does not invent OCR text, transcripts, or detailed video semantics it cannot prove
 
-Recommended media env block:
+Recommended media env block for inherited media routing:
 
 ```env
-BRAIN_MEDIA_VISION_MODEL=gpt-4.1-mini
+BRAIN_MEDIA_BACKEND=inherit_text_backend
+BRAIN_MEDIA_VISION_BACKEND=inherit_text_backend
+BRAIN_MEDIA_TRANSCRIPTION_BACKEND=inherit_text_backend
+BRAIN_MEDIA_VISION_MODEL=gpt-5.4-mini
+BRAIN_MEDIA_TRANSCRIPTION_MODEL=whisper-1
+BRAIN_MEDIA_REQUEST_TIMEOUT_MS=45000
+```
+
+Example split-modality block:
+
+```env
+BRAIN_MEDIA_BACKEND=inherit_text_backend
+BRAIN_MEDIA_VISION_BACKEND=codex_oauth
+BRAIN_MEDIA_TRANSCRIPTION_BACKEND=openai_api
+BRAIN_MEDIA_VISION_MODEL=gpt-5.4-mini
 BRAIN_MEDIA_TRANSCRIPTION_MODEL=whisper-1
 BRAIN_MEDIA_REQUEST_TIMEOUT_MS=45000
 ```
 
 How each setting works:
 
+- `BRAIN_MEDIA_BACKEND`: default media backend for all modalities. Supported values are
+  `inherit_text_backend`, `openai_api`, `codex_oauth`, `ollama`, `mock`, and `disabled`.
+- `BRAIN_MEDIA_VISION_BACKEND`: optional override just for screenshots and other images. If unset,
+  it falls back to `BRAIN_MEDIA_BACKEND`.
+- `BRAIN_MEDIA_TRANSCRIPTION_BACKEND`: optional override just for voice-note transcription. If
+  unset, it falls back to `BRAIN_MEDIA_BACKEND`.
 - `BRAIN_MEDIA_VISION_MODEL`: vision-capable model for screenshots/images. If unset, the runtime falls back to `OPENAI_MODEL_SMALL_FAST`, then `OLLAMA_MODEL_SMALL_FAST` / `OLLAMA_MODEL_DEFAULT`, then `gpt-4.1-mini`.
 - `BRAIN_MEDIA_TRANSCRIPTION_MODEL`: transcription model for voice notes. If unset, the runtime defaults to `whisper-1`. Dedicated models such as `whisper-1` stay on `/audio/transcriptions`; non-whisper models such as Gemma 4 automatically use the multimodal audio-understanding path instead.
 - `BRAIN_MEDIA_REQUEST_TIMEOUT_MS`: timeout used by the image/transcription calls.
 
-What to expect today:
+Operational notes:
 
 - screenshots can produce OCR/summary style context when the vision path is available
 - voice notes can produce transcript-backed context when the transcription path is available
-- `BRAIN_MEDIA_VISION_BACKEND=ollama` now supports local image understanding directly.
-- `BRAIN_MEDIA_TRANSCRIPTION_BACKEND=ollama` currently remains experimental for local
+- `BRAIN_MEDIA_BACKEND=inherit_text_backend` means media follows the main text backend unless a
+  modality override says otherwise
+- `BRAIN_MEDIA_BACKEND=disabled` skips provider-backed media understanding and falls back to simple
+  summaries only
+- `BRAIN_MEDIA_BACKEND=codex_oauth` reuses the operator's Codex credential ephemerally at request
+  time instead of storing a second media-specific token
+- `BRAIN_MEDIA_VISION_BACKEND=ollama` supports local image understanding directly.
+- `BRAIN_MEDIA_TRANSCRIPTION_BACKEND=ollama` is still experimental for local
   multimodal-audio models such as Gemma 4. The runtime can target Ollama's OpenAI-compatible
   `/v1/responses` surface, but real audio support depends on the exact Ollama build and model
-  packaging. We are monitoring Ollama for stable native local audio support before recommending it
-  as the default voice-note path.
+  packaging. Do not treat it as the default voice-note path.
 - `BRAIN_MEDIA_TRANSCRIPTION_BACKEND=openai_api` still works for other loopback
   OpenAI-compatible servers; when the base URL is local, the media runtime does not require an API
   key just to attach audio for transcription.
-- short videos currently use file metadata and captions even when an API key is configured
+- if your Ollama endpoint is behind an API-key gate, the runtime also honors `OLLAMA_API_KEY`
+- short videos use file metadata and captions even when an API key is configured
 
-Video note: the current runtime does not yet have a dedicated clip-analysis path. Video is accepted and routed correctly, but interpretation is limited to file metadata and captions.
+Video limitation:
+
+- the runtime does not have a dedicated clip-analysis path
+- video interpretation is limited to file metadata and captions
 
 Optional model routing overrides:
 
@@ -229,7 +261,7 @@ OpenAI transport notes:
   unknown model ids instead of failing closed immediately.
 - `OPENAI_ALLOW_JSON_OBJECT_COMPAT_FALLBACK=true` enables one deterministic compatibility retry from
   strict schema mode to `json_object` mode when the provider rejects strict structured output.
-- The current compatibility and live-smoke coverage target the GPT-4.1 and GPT-5.x API families,
+- Verified live-smoke coverage includes the GPT-4.1 and GPT-5.x API families,
   including `gpt-4.1-mini`, `gpt-4.1`, `gpt-5`, `gpt-5.1`,
   `gpt-5.2`, and `gpt-5.3-codex`.
 - Recommended starting point for real autonomous work is:
@@ -268,11 +300,11 @@ OLLAMA_TIMEOUT_MS=60000
 
 ### Optional local intent engine (Ollama-backed)
 
-This is optional.
+This helper is optional.
 
-It adds a small local model that helps the assistant understand natural phrasing a little better
-at the front door. This is useful for messages like `pick that back up`, `show me the rough
-draft`, or other natural follow-up wording.
+It adds a small local model that helps the assistant interpret natural phrasing at the front door.
+This is useful for messages like `pick that back up`, `show me the rough draft`, or other natural
+follow-up wording.
 
 It does not replace your main planner model, and it cannot approve actions on its own. The normal
 safety checks and execution rules still decide what is allowed to run.
@@ -300,9 +332,9 @@ BRAIN_LOCAL_INTENT_MODEL_LIVE_SMOKE_REQUIRED=false
 How each setting works:
 
 - `BRAIN_LOCAL_INTENT_MODEL_ENABLED`: turns this helper on.
-- `BRAIN_LOCAL_INTENT_MODEL_PROVIDER`: which local provider to use. Right now this must be `ollama`.
+- `BRAIN_LOCAL_INTENT_MODEL_PROVIDER`: which local provider to use. This must be `ollama`.
 - `BRAIN_LOCAL_INTENT_MODEL_BASE_URL`: where Ollama is running.
-- `BRAIN_LOCAL_INTENT_MODEL_NAME`: which local model tag to use. The current default is `gemma4:latest`.
+- `BRAIN_LOCAL_INTENT_MODEL_NAME`: which local model tag to use. The default is `gemma4:latest`.
 - `BRAIN_LOCAL_INTENT_MODEL_TIMEOUT_MS`: how long to wait before giving up and falling back.
 - `BRAIN_LOCAL_INTENT_MODEL_LIVE_SMOKE_REQUIRED`: when `true`, related live smokes fail if this helper was expected but not reachable.
 
@@ -612,6 +644,14 @@ TELEGRAM_BOT_TOKEN=<botfather_token>
 DISCORD_BOT_TOKEN=<discord_bot_token>
 ```
 
+Important continuity note:
+
+- `BRAIN_INTERFACE_PROVIDER=both` gives you one shared interface runtime and one shared
+  orchestrator/session stack.
+- It does **not** automatically give Telegram and Discord shared long-lived profile continuity.
+- If you want cross-platform identity/profile facts to carry across both providers, also enable
+  `BRAIN_PROFILE_MEMORY_ENABLED=true` and set a valid `BRAIN_PROFILE_ENCRYPTION_KEY`.
+
 Generate a strong shared secret quickly:
 
 PowerShell:
@@ -641,7 +681,7 @@ Current operator contract:
 - Runtime responses should clearly indicate one state: `Executed`, `Guidance only`, or `Blocked`.
 - Telegram screenshots, voice notes, and short videos are supported as media inputs with safe
   limits. Rich screenshot and voice interpretation depends on the media model settings above; video
-  currently remains on simple fallback.
+  stays on simple fallback.
 
 Extended prompt patterns are in `docs/COMMAND_EXAMPLES.md`.
 
@@ -790,7 +830,7 @@ before running it, and ensure your provider tokens/allowlists point to intention
 The human-language pair has two different jobs:
 
 - `test:human_language_generalization:evidence` proves deterministic scenario coverage
-- `test:human_language_generalization:live_smoke` proves the current runtime can actually surface
+- `test:human_language_generalization:live_smoke` proves the runtime can actually surface
   the intended recall/generalization behavior in a live smoke path
 
 ## 17) Runtime Data Locations
@@ -816,7 +856,7 @@ The human-language pair has two different jobs:
 
 ## 18) Complete `.env.example` Reference
 
-This section covers every key currently present in `.env.example` and what to expect if you change it.
+This section covers every key listed in `.env.example` and what to expect if you change it.
 
 ### Model backend and provider routing
 
@@ -825,7 +865,7 @@ This section covers every key currently present in `.env.example` and what to ex
   - `openai_api`: runtime uses the OpenAI API path and requires `OPENAI_API_KEY`.
   - `codex_oauth`: runtime uses the Codex CLI/auth path and requires valid local Codex auth state.
   - `ollama`: runtime uses local Ollama endpoint and model mapping.
-  - Legacy `openai` is normalized to `openai_api`.
+  - `openai` maps to `openai_api`.
 - `OPENAI_API_KEY`: credential for OpenAI calls.
   - Missing/blank with `BRAIN_MODEL_BACKEND=openai_api` causes startup/runtime failure for provider calls.
 - `CODEX_AUTH_STATE_DIR`: optional override for the operator-owned Codex auth-state root.
@@ -868,7 +908,7 @@ This section covers every key currently present in `.env.example` and what to ex
   - `false`: the runtime uses its normal front-door routing only.
   - `true`: the interface can ask the local helper for extra help with natural phrasing when needed.
 - `BRAIN_LOCAL_INTENT_MODEL_PROVIDER`: which local provider to use.
-  - Right now the runtime supports only `ollama`.
+  - The runtime supports only `ollama`.
 - `BRAIN_LOCAL_INTENT_MODEL_BASE_URL`: where Ollama is running.
   - Default is `http://127.0.0.1:11434`.
 - `BRAIN_LOCAL_INTENT_MODEL_NAME`: which Ollama model tag to use for this helper.
@@ -884,28 +924,27 @@ This section covers every key currently present in `.env.example` and what to ex
 - `BRAIN_MEDIA_VISION_MODEL`: model used for screenshot/image interpretation.
   - If unset, the runtime falls back to `OPENAI_MODEL_SMALL_FAST`, then `OLLAMA_MODEL_SMALL_FAST` / `OLLAMA_MODEL_DEFAULT`, then `gpt-4.1-mini`.
   - If the selected model is not actually vision-capable in your provider environment, image understanding falls back to a simple summary.
-  - `BRAIN_MEDIA_VISION_BACKEND=ollama` is now a supported local path for image-capable models such as Gemma 4.
+  - `BRAIN_MEDIA_VISION_BACKEND=ollama` is a supported local path for image-capable models such as Gemma 4.
 - `BRAIN_MEDIA_TRANSCRIPTION_MODEL`: model used for voice-note transcription.
   - If unset, the runtime defaults to `whisper-1`.
   - Dedicated transcription models such as `whisper-1` stay on `/audio/transcriptions`.
   - Non-whisper models such as Gemma 4 automatically use the multimodal audio path instead.
   - If transcription is unavailable, the runtime falls back to basic media context rather than fabricating a transcript.
-  - `BRAIN_MEDIA_TRANSCRIPTION_BACKEND=ollama` is currently experimental for local Gemma-style
+  - `BRAIN_MEDIA_TRANSCRIPTION_BACKEND=ollama` is experimental for local Gemma-style
     audio runs. The runtime can target Ollama's OpenAI-compatible `/v1/responses` surface, but the
     working audio capability still depends on what Ollama exposes for that specific build.
-  - We are monitoring Ollama for stable native local audio support before recommending it as the
-    default local voice-note path.
+  - Do not treat it as the default local voice-note path.
   - `BRAIN_MEDIA_TRANSCRIPTION_BACKEND=openai_api` remains available for other loopback
     OpenAI-compatible servers.
   - `BRAIN_MEDIA_REQUEST_TIMEOUT_MS`: timeout for provider-backed media interpretation requests.
     - Raise it if image or transcription requests time out.
   - Lower it if you want quicker fail-closed fallback behavior.
 
-Current video limitation:
+Video limitation:
 
-- short videos can be ingested and attached to conversation context, but the current runtime does not expose provider-backed video understanding yet
-- video currently stays on file metadata and captions
-- there is no `.env` switch today that turns video into full clip-understanding behavior
+- short videos can be ingested and attached to conversation context, but the runtime does not expose provider-backed video understanding
+- video stays on file metadata and captions
+- there is no `.env` switch that turns video into full clip-understanding behavior
 
 ### Runtime mode and safety latches
 
@@ -980,11 +1019,30 @@ Current video limitation:
 
 ### Profile memory and pulse behavior
 
+Profile memory stores long-lived personal facts and situations in an encrypted local file.
+Internally, the runtime uses a graph-backed model so it can track who a claim is about, when it
+was observed, and whether it is current, historical, or in conflict.
+
+Stage 6.86 handles live continuity for the current conversation. That includes the conversation
+stack, entity graph, open loops, pulse state, and runtime-action continuity. When profile memory is
+enabled, those Stage 6.86 flows can query the encrypted memory store for longer-lived recall and
+user-reviewed continuity.
+
+Practical guidance:
+
+- Leave profile memory off if you want the simplest local setup and do not need cross-session
+  personal continuity.
+- Turn profile memory on if you want longer-lived recall, cross-platform profile continuity, and
+  private `/memory` review and correction commands.
+- The encrypted file still keeps `facts` and `episodes` arrays for stable read paths, but the
+  internal graph is the authoritative truth surface.
+
 - `BRAIN_PROFILE_MEMORY_ENABLED`: encrypted profile-memory subsystem toggle.
   - `false`: no profile-memory enrichment path.
   - `true`: profile memory path is active and must decrypt/read cleanly.
 - `BRAIN_PROFILE_ENCRYPTION_KEY`: encryption key for profile memory.
-  - Invalid/missing key with enabled profile memory causes protected-memory path failures/degraded behavior.
+  - Must be either 64-character hex or base64-encoded 32 bytes.
+  - Invalid or missing key with enabled profile memory causes protected-memory path failures or degraded behavior.
 - `BRAIN_PROFILE_MEMORY_PATH`: encrypted store location.
   - Change to relocate profile memory storage.
 - `BRAIN_PROFILE_STALE_AFTER_DAYS`: freshness threshold.
@@ -1002,11 +1060,25 @@ Current video limitation:
 - `BRAIN_ENABLE_DYNAMIC_PULSE`: enables dynamic pulse runtime flow.
   - `false`: dynamic pulse execution paths stay off.
 
+Generate a valid profile-memory encryption key:
+
+PowerShell:
+
+```powershell
+[Convert]::ToHexString([System.Security.Cryptography.RandomNumberGenerator]::GetBytes(32))
+```
+
+Node:
+
+```bash
+node -e "console.log(require('node:crypto').randomBytes(32).toString('base64'))"
+```
+
 ### Reflection, embeddings, and persistence
 
 - `BRAIN_REFLECT_ON_SUCCESS`: success-path reflection toggle.
   - Code fallback default is `false` when unset.
-  - `.env.example` currently sets this to `true`.
+  - `.env.example` sets this to `true`.
   - `false`: only blocked-action reflection is stored.
   - `true`: successful runs can also produce lessons.
 - `BRAIN_ENABLE_EMBEDDINGS`: vector embedding subsystem toggle.
@@ -1062,8 +1134,8 @@ Current video limitation:
 
 - `TELEGRAM_STREAMING_TRANSPORT_MODE`: streaming transport mode.
   - `edit`: progress via message edits.
-  - `native_draft`: draft transport path (legacy/compatibility mode).
-- `TELEGRAM_NATIVE_DRAFT_STREAMING`: legacy compatibility toggle.
+  - `native_draft`: draft transport path.
+- `TELEGRAM_NATIVE_DRAFT_STREAMING`: fallback toggle.
   - Used only when explicit transport mode is not set.
 - `TELEGRAM_BOT_TOKEN`: Telegram bot credential.
   - Required when provider includes Telegram.
@@ -1074,6 +1146,15 @@ Current video limitation:
   - Higher value reduces request churn; lower value returns control sooner.
 - `TELEGRAM_POLL_INTERVAL_MS`: delay between poll cycles.
   - Lower value can reduce update latency at cost of more API calls.
+- `TELEGRAM_MEDIA_ENABLED`: master toggle for Telegram media ingest.
+  - `false` disables attachment parsing and download for Telegram ingress.
+- `TELEGRAM_MAX_MEDIA_ATTACHMENTS`: max attachments accepted from one inbound Telegram message.
+- `TELEGRAM_MAX_MEDIA_ATTACHMENT_BYTES`: max attachment size allowed before the runtime refuses it.
+- `TELEGRAM_MAX_MEDIA_DOWNLOAD_BYTES`: max total bytes downloaded for one attachment fetch.
+- `TELEGRAM_MAX_VOICE_SECONDS`: max accepted voice-note length in seconds.
+- `TELEGRAM_MAX_VIDEO_SECONDS`: max accepted short-video length in seconds.
+- `TELEGRAM_ALLOW_IMAGES`, `TELEGRAM_ALLOW_VOICE_NOTES`, `TELEGRAM_ALLOW_VIDEOS`,
+  `TELEGRAM_ALLOW_DOCUMENTS`: per-modality allow or deny switches for Telegram ingress.
 
 ### Discord-specific interface settings
 
@@ -1085,13 +1166,14 @@ Current video limitation:
 - `DISCORD_GATEWAY_INTENTS`: gateway intent bitmask.
   - Changing this changes which event/message types Discord delivers to the bot.
 
-### Additional supported env vars (in code, not currently in `.env.example`)
+### Additional supported env vars (available in code but not listed in `.env.example`)
 
 - `BRAIN_DISABLE_DOTENV`: disables `.env`/`.env.local` loading when set truthy.
 - `BRAIN_USER_PROTECTED_PATHS`: semicolon-separated owner-protected path prefixes; malformed entries fail closed.
 - `BRAIN_SHELL_EXECUTABLE`: explicit shell executable override for runtime shell profile resolution.
 - `BRAIN_SHELL_WSL_DISTRO`: optional distro selector when using `wsl_bash`.
-- `BRAIN_AGENT_PULSE_TIMEZONE_OFFSET_MINUTES`: legacy alias for pulse timezone offset.
+- `OLLAMA_API_KEY`: optional bearer token for Ollama endpoints that are not open on localhost.
+- `BRAIN_AGENT_PULSE_TIMEZONE_OFFSET_MINUTES`: alternate alias for pulse timezone offset.
 - `BRAIN_INTERFACE_ACK_DELAY_MS`: queue acknowledgement delay (`250..3000` enforced).
 - `BRAIN_INTERFACE_FOLLOW_UP_OVERRIDE_PATH`: path to follow-up classifier override file.
 - `BRAIN_INTERFACE_PULSE_LEXICAL_OVERRIDE_PATH`: path to pulse lexical override file.
@@ -1099,6 +1181,13 @@ Current video limitation:
 - `TELEGRAM_API_BASE_URL`: Telegram API base URL override.
 - `DISCORD_API_BASE_URL`: Discord REST API base URL override.
 - `DISCORD_GATEWAY_URL`: Discord gateway discovery URL override.
+- `TELEGRAM_MEDIA_ENABLED`: Telegram attachment-ingest master toggle.
+- `TELEGRAM_MAX_MEDIA_ATTACHMENTS`: max accepted attachments per Telegram message.
+- `TELEGRAM_MAX_MEDIA_ATTACHMENT_BYTES`: max size per Telegram attachment before fail-closed reject.
+- `TELEGRAM_MAX_MEDIA_DOWNLOAD_BYTES`: max bytes downloaded for Telegram attachment fetch.
+- `TELEGRAM_MAX_VOICE_SECONDS`: max Telegram voice-note duration.
+- `TELEGRAM_MAX_VIDEO_SECONDS`: max Telegram video duration.
+- `TELEGRAM_ALLOW_IMAGES`, `TELEGRAM_ALLOW_VOICE_NOTES`, `TELEGRAM_ALLOW_VIDEOS`, `TELEGRAM_ALLOW_DOCUMENTS`: Telegram per-modality allow switches.
 - `BRAIN_FEDERATION_MAX_BODY_BYTES`: inbound federated request body cap.
 - `BRAIN_FEDERATION_RESULT_TTL_MS`: federation result retention TTL.
 - `BRAIN_FEDERATION_EVICTION_INTERVAL_MS`: cleanup sweep interval for federated result cache.
