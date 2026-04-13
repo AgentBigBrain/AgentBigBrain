@@ -13,9 +13,22 @@ import {
 } from "./auth";
 import { buildFallbackMediaInterpretation } from "./mediaModelFallback";
 import {
+  collectEntityHintsFromTexts,
+  parseStructuredMediaOutput,
+  sanitizeEntityHints
+} from "./interpretationSupport";
+import {
   extractOllamaChatOutputText,
   extractResponsesOutputText
 } from "./providerSupport";
+
+const IMAGE_INTERPRETATION_PROMPT = [
+  "Return JSON only with keys summary, ocr_text, and entity_hints.",
+  "Describe the attached image factually in one or two sentences.",
+  "Put any clearly visible UI error text or readable text into ocr_text.",
+  "Put likely business names, project names, or identifiers into entity_hints.",
+  "Do not add markdown fences."
+].join(" ");
 
 /**
  * Attempts bounded interpretation for one image attachment.
@@ -40,7 +53,10 @@ export async function interpretImageAttachment(
       return buildFallbackMediaInterpretation(attachment);
     }
     const abortController = new AbortController();
-    const timeout = setTimeout(() => abortController.abort(), config.requestTimeoutMs);
+    const timeoutMs = config.resolvedVisionBackend === "ollama"
+      ? Math.max(config.requestTimeoutMs, 120_000)
+      : config.requestTimeoutMs;
+    const timeout = setTimeout(() => abortController.abort(), timeoutMs);
     const mimeType = attachment.mimeType ?? "image/jpeg";
     let response: Response;
     if (config.resolvedVisionBackend === "ollama") {
@@ -55,10 +71,22 @@ export async function interpretImageAttachment(
           messages: [
             {
               role: "user",
-              content: "Summarize the attached image in one or two sentences for a coding assistant. Include any visible UI error text or OCR when clear. Keep it factual and bounded.",
+              content: IMAGE_INTERPRETATION_PROMPT,
               images: [buffer.toString("base64")]
             }
           ],
+          format: {
+            type: "object",
+            properties: {
+              summary: { type: "string" },
+              ocr_text: { type: "string" },
+              entity_hints: {
+                type: "array",
+                items: { type: "string" }
+              }
+            },
+            required: ["summary", "ocr_text", "entity_hints"]
+          },
           stream: false
         }),
         signal: abortController.signal
@@ -79,7 +107,7 @@ export async function interpretImageAttachment(
               content: [
                 {
                   type: "input_text",
-                  text: "Summarize the attached image in one or two sentences for a coding assistant. Include any visible UI error text or OCR when clear. Keep it factual and bounded."
+                  text: IMAGE_INTERPRETATION_PROMPT
                 },
                 {
                   type: "input_image",
@@ -97,20 +125,33 @@ export async function interpretImageAttachment(
       return buildFallbackMediaInterpretation(attachment);
     }
     const payload = await response.json();
-    const summary = config.resolvedVisionBackend === "ollama"
+    const rawOutput = config.resolvedVisionBackend === "ollama"
       ? extractOllamaChatOutputText(payload)
       : extractResponsesOutputText(payload);
-    if (!summary) {
+    if (!rawOutput) {
       return buildFallbackMediaInterpretation(attachment);
     }
+    const structuredOutput = parseStructuredMediaOutput(rawOutput);
+    const summary = structuredOutput?.summary ?? rawOutput;
+    const ocrText = structuredOutput?.ocrText ?? null;
+    const structuredEntityHints = structuredOutput?.entityHints ?? [];
+    const entityHints = sanitizeEntityHints([
+      ...structuredEntityHints,
+      ...collectEntityHintsFromTexts([
+        ocrText,
+        summary,
+        attachment.fileName,
+        attachment.caption
+      ])
+    ]);
     return {
       summary,
       transcript: null,
-      ocrText: null,
+      ocrText,
       confidence: 0.74,
       provenance: `${describeMediaAuthorizationSource(config, "vision")} image summary model ${config.visionModel}`,
       source: config.resolvedVisionBackend === "ollama" ? "ollama_image" : "openai_image",
-      entityHints: []
+      entityHints
     };
   } catch {
     return buildFallbackMediaInterpretation(attachment);

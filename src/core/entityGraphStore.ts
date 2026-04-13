@@ -8,6 +8,7 @@ import type { DatabaseSync } from "node:sqlite";
 
 import { LedgerBackend } from "./config";
 import { withFileLock, writeFileAtomic } from "./fileLock";
+import { buildProjectionChangeSet } from "./projections/service";
 import { sha256HexFromCanonicalJson } from "./normalizers/canonicalizationRules";
 import { withSqliteDatabase } from "./sqliteStore";
 import {
@@ -35,6 +36,7 @@ interface EntityGraphStoreOptions {
   backend?: LedgerBackend;
   sqlitePath?: string;
   exportJsonOnWrite?: boolean;
+  onChange?: (changeSet: import("./projections/contracts").ProjectionChangeSet) => Promise<void> | void;
 }
 
 export interface RecordEntityGraphAlignmentDecisionInput {
@@ -57,6 +59,7 @@ export class EntityGraphStore {
   private readonly backend: LedgerBackend;
   private readonly sqlitePath: string;
   private readonly exportJsonOnWrite: boolean;
+  private readonly onChange?: EntityGraphStoreOptions["onChange"];
 
   /**
    * Initializes `EntityGraphStore` with deterministic runtime dependencies.
@@ -77,6 +80,7 @@ export class EntityGraphStore {
     this.backend = options.backend ?? "json";
     this.sqlitePath = options.sqlitePath ?? path.resolve(process.cwd(), "runtime/ledgers.sqlite");
     this.exportJsonOnWrite = options.exportJsonOnWrite ?? true;
+    this.onChange = options.onChange;
   }
 
   /**
@@ -220,6 +224,7 @@ export class EntityGraphStore {
           await writeFileAtomic(this.filePath, `${JSON.stringify(normalized, null, 2)}\n`);
         });
       }
+      await this.notifyProjectionChange(normalized.updatedAt);
       return;
     }
 
@@ -227,6 +232,33 @@ export class EntityGraphStore {
       this.graph = normalized;
       await writeFileAtomic(this.filePath, `${JSON.stringify(normalized, null, 2)}\n`);
     });
+    await this.notifyProjectionChange(normalized.updatedAt);
+  }
+
+  /**
+   * Emits one normalized projection change after entity-graph persistence.
+   *
+   * **Why it exists:**
+   * Stage 6.86 continuity spans runtime state and entity graph separately, so graph persistence
+   * needs its own projection callback instead of assuming runtime-state writes cover everything.
+   *
+   * **What it talks to:**
+   * - Uses `buildProjectionChangeSet(...)` from `./projections/service`.
+   *
+   * @param updatedAt - Graph update timestamp.
+   * @returns Promise resolving after the optional projection callback completes.
+   */
+  private async notifyProjectionChange(updatedAt: string): Promise<void> {
+    if (!this.onChange) {
+      return;
+    }
+    await this.onChange(buildProjectionChangeSet(
+      ["entity_graph_changed", "continuity_changed"],
+      ["entity_graph:persist"],
+      {
+        updatedAt
+      }
+    ));
   }
 
   /**

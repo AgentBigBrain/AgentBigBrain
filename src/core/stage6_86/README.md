@@ -44,7 +44,7 @@ Canonical behavior for those entrypoints now lives here.
 - deterministic bridge-question gating, rendering, and answer-resolution helpers for Stage 6.86
 - deterministic bounded bridge-question timing interpretation helpers for Stage 6.86
 - deterministic conversation-stack threading, topic switching, and migration helpers for Stage 6.86
-- deterministic entity extraction, graph mutation, and relation-promotion helpers for Stage 6.86
+- deterministic entity extraction, low-signal residue pruning, graph mutation, and relation-promotion helpers for Stage 6.86
 - deterministic validated entity-type-hint application for ambiguous ingress extraction candidates
 - deterministic alias-candidate validation and bounded alias reconciliation helpers for Stage 6.86
 - deterministic entity lookup-term helpers for Stage 6.86 continuity linkage

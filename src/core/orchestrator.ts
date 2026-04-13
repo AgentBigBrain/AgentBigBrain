@@ -158,7 +158,8 @@ export class BrainOrchestrator {
     private readonly judgmentPatternStore?: JudgmentPatternStore,
     private readonly skillRegistryStore?: Pick<SkillRegistryStore, "listAvailableSkills">,
     private readonly bridgeQuestionTimingInterpretationResolver: BridgeQuestionTimingInterpretationResolver | undefined =
-      createBridgeQuestionTimingInterpretationResolverFromEnv()
+      createBridgeQuestionTimingInterpretationResolverFromEnv(),
+    private readonly stage686RuntimeActionEngine?: Stage686RuntimeActionEngine
   ) {
     this.memoryBroker = memoryBroker ?? new MemoryBrokerOrgan(profileMemoryStore);
     this.intentInterpreter = new IntentInterpreterOrgan(this.modelClient);
@@ -171,7 +172,7 @@ export class BrainOrchestrator {
       governanceMemoryStore: this.governanceMemoryStore,
       executionReceiptStore: this.executionReceiptStore,
       appendTraceEvent: this.appendTraceEvent.bind(this),
-      stage686RuntimeActionEngine: new Stage686RuntimeActionEngine({
+      stage686RuntimeActionEngine: this.stage686RuntimeActionEngine ?? new Stage686RuntimeActionEngine({
         backend: this.config.persistence.ledgerBackend,
         sqlitePath: this.config.persistence.ledgerSqlitePath,
         exportJsonOnWrite: this.config.persistence.exportJsonOnWrite,

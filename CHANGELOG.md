@@ -8,6 +8,13 @@ stay aligned with `package.json`.
 ## [Unreleased]
 
 ### Added
+- Added a projection subsystem under `src/core/projections/` with a generic sink boundary, an
+  Obsidian vault sink, and a JSON mirror sink for external memory inspection.
+- Added canonical runtime-owned media artifact persistence so Telegram uploads can be mirrored as
+  evidence artifacts with stable identity, provenance, derived meaning, and optional owned asset
+  copies.
+- Added operator tooling for manual Obsidian projection rebuilds, guarded review-action apply
+  batches, and exact-path Obsidian open helpers.
 
 ### Changed
 - Rewrote the top-level README and architecture reference to better match the actual runtime
@@ -20,8 +27,21 @@ stay aligned with `package.json`.
 - Expanded `docs/SETUP.md` to match the current code paths for inherited media backends,
   modality-specific media routing, graph-backed profile memory, Stage 6.86 continuity, Telegram
   media limits, and cross-platform interface continuity requirements.
+- Expanded the README, architecture reference, setup guide, command examples, and the Obsidian
+  projection plan to document the new projection layer, media artifact mirror model, review-action
+  write-back lane, and operator commands.
 
 ### Fixed
+- Shared runtime wiring now owns the entity graph, Stage 6.86 runtime-state adapter, and
+  projection-service fanout together so the external mirror does not miss live continuity state.
+- Obsidian rebuilds now preserve operator-authored review-action notes instead of wiping the entire
+  mirror subtree during full rebuilds.
+- Obsidian entity notes now suppress low-signal lexical artifacts, keep real standalone entities,
+  and render richer overview details so clicked notes do not collapse into nearly empty pages.
+- Obsidian entity notes now keep duplicate canonical names distinct and label continuity-only
+  evidence separately from durable current temporal claims.
+- Stage 6.86 entity extraction now strips more conversational glue before durable graph writes, and
+  operators can run a bounded low-signal cleanup pass against older entity-graph residue.
 
 ### Security
 

@@ -20,23 +20,54 @@ const ENTITY_STOP_WORDS = new Set([
   "A",
   "An",
   "And",
+  "Any",
+  "Attached",
   "Can",
+  "Close",
   "Could",
+  "Create",
   "Do",
   "Does",
   "Did",
   "Explain",
+  "Execute",
+  "Good",
+  "Hi",
+  "Hello",
+  "Hey",
   "How",
   "Or",
   "But",
   "If",
+  "Keep",
+  "Leave",
+  "Look",
+  "Need",
+  "No",
+  "Now",
+  "Okay",
+  "Open",
+  "Please",
+  "Put",
+  "Run",
   "So",
+  "Start",
+  "Status",
+  "Stop",
+  "Sure",
+  "Tell",
   "Then",
+  "Thanks",
+  "That's",
   "When",
   "Who",
   "What",
+  "Whats",
+  "What's",
   "Where",
   "Why",
+  "Yeah",
+  "Yes",
   "These",
   "This",
   "Those",
@@ -98,6 +129,12 @@ export interface Stage686EntityGraphMutationResult {
   acceptedEntityKeys: readonly string[];
   aliasConflicts: readonly Stage686AliasConflict[];
   evictedEdgeKeys: readonly string[];
+}
+
+export interface Stage686EntityGraphPruneResult {
+  graph: EntityGraphV1;
+  removedEntityKeys: readonly string[];
+  removedEdgeKeys: readonly string[];
 }
 
 export interface Stage686RelationPromotionInput {
@@ -347,6 +384,60 @@ function normalizeEntityCandidate(raw: string): string {
 }
 
 /**
+ * Tokenizes one canonical label into normalized alias-key words.
+ *
+ * **Why it exists:**
+ * The Stage 6.86 graph needs a stable token view for low-signal residue detection and pruning
+ * without duplicating normalization details across extraction and cleanup helpers.
+ *
+ * **What it talks to:**
+ * - Uses `normalizeAliasKey(...)` within this module.
+ *
+ * @param value - Canonical or candidate label to tokenize.
+ * @returns Normalized token list.
+ */
+function tokenizeCanonicalLabel(value: string): readonly string[] {
+  const normalized = normalizeAliasKey(value);
+  if (!normalized) {
+    return [];
+  }
+  return normalized.split(" ").filter(Boolean);
+}
+
+/**
+ * Returns whether one canonical label still looks like conversational residue after normalization.
+ *
+ * **Why it exists:**
+ * The runtime should keep durable entities cleaner than the raw ingress text, and this helper
+ * gives both extraction and cleanup one shared low-signal check.
+ *
+ * **What it talks to:**
+ * - Uses `normalizeEntityCandidate(...)` within this module.
+ * - Uses `tokenizeCanonicalLabel(...)` within this module.
+ *
+ * @param canonicalName - Candidate durable entity label.
+ * @returns `true` when the label still looks like low-signal conversational residue.
+ */
+function isLowSignalCanonicalEntityLabel(canonicalName: string): boolean {
+  const normalizedCandidate = normalizeEntityCandidate(canonicalName);
+  if (!normalizedCandidate) {
+    return true;
+  }
+  const rawTokens = tokenizeCanonicalLabel(canonicalName);
+  const normalizedTokens = tokenizeCanonicalLabel(normalizedCandidate);
+  if (normalizedTokens.length === 0) {
+    return true;
+  }
+  if (rawTokens.length > normalizedTokens.length && normalizedTokens.length <= 1) {
+    return true;
+  }
+  if (/[.!?]/.test(canonicalName) && normalizedTokens.length <= 2) {
+    return true;
+  }
+  return false;
+}
+
+/**
  * Builds a bounded lookup map for validated interpreted entity-type hints.
  *
  * **Why it exists:**
@@ -592,6 +683,113 @@ export function createEmptyEntityGraphV1(updatedAt: string): EntityGraphV1 {
     entities: [],
     edges: [],
     decisionRecords: []
+  };
+}
+
+/**
+ * Returns whether one persisted entity node should be pruned as low-signal conversational residue.
+ *
+ * **Why it exists:**
+ * Older graph snapshots can contain sentence-openers and phrase fragments that predate stronger
+ * ingress filtering, so the store needs one deterministic cleanup rule instead of ad hoc manual
+ * JSON edits.
+ *
+ * **What it talks to:**
+ * - Uses `EntityGraphV1` (import `EntityGraphV1`) from `../types`.
+ * - Uses `EntityNodeV1` (import `EntityNodeV1`) from `../types`.
+ * - Uses `isLowSignalCanonicalEntityLabel(...)` within this module.
+ *
+ * @param graph - Current entity graph snapshot.
+ * @param entity - Persisted entity node under review.
+ * @returns `true` when the entity is safe to prune.
+ */
+function shouldPruneLowSignalEntityNode(
+  graph: EntityGraphV1,
+  entity: EntityNodeV1
+): boolean {
+  const normalizedCandidate = normalizeEntityCandidate(entity.canonicalName);
+  const canonicalKey = normalizeAliasKey(entity.canonicalName);
+  const normalizedKey = normalizeAliasKey(normalizedCandidate);
+  const relatedEdges = graph.edges.filter((edge) =>
+    edge.sourceEntityKey === entity.entityKey || edge.targetEntityKey === entity.entityKey
+  );
+  const hasAnchoredRelationship = relatedEdges.some((edge) =>
+    edge.relationType !== "co_mentioned" || edge.status !== "uncertain"
+  );
+  if (hasAnchoredRelationship) {
+    return false;
+  }
+  if (!normalizedCandidate || isLowSignalCanonicalEntityLabel(entity.canonicalName)) {
+    return true;
+  }
+  if (canonicalKey !== normalizedKey) {
+    return true;
+  }
+  if (entity.evidenceRefs.length >= 3 || entity.salience >= 3) {
+    return false;
+  }
+  return false;
+}
+
+/**
+ * Prunes low-signal conversational residue from an existing entity graph snapshot.
+ *
+ * **Why it exists:**
+ * Once stronger ingress filtering lands, operators still need a deterministic way to clean older
+ * graph noise without wiping the whole Stage 6.86 memory surface.
+ *
+ * **What it talks to:**
+ * - Uses `EntityGraphV1` (import `EntityGraphV1`) from `../types`.
+ * - Uses `sortEntityNodes(...)` and `sortRelationEdges(...)` within this module.
+ * - Uses `shouldPruneLowSignalEntityNode(...)` within this module.
+ *
+ * @param graph - Current entity graph snapshot.
+ * @param observedAt - Timestamp applied to the pruned graph snapshot.
+ * @returns Pruned graph plus removed entity and edge keys.
+ */
+export function pruneLowSignalEntitiesFromGraph(
+  graph: EntityGraphV1,
+  observedAt: string
+): Stage686EntityGraphPruneResult {
+  assertValidIsoTimestamp(observedAt, "observedAt");
+  const removedEntityKeys = graph.entities
+    .filter((entity) => shouldPruneLowSignalEntityNode(graph, entity))
+    .map((entity) => entity.entityKey)
+    .sort((left, right) => left.localeCompare(right));
+  if (removedEntityKeys.length === 0) {
+    return {
+      graph: {
+        ...graph,
+        updatedAt: observedAt
+      },
+      removedEntityKeys: [],
+      removedEdgeKeys: []
+    };
+  }
+  const removedEntityKeySet = new Set(removedEntityKeys);
+  const removedEdgeKeys = graph.edges
+    .filter((edge) =>
+      removedEntityKeySet.has(edge.sourceEntityKey) || removedEntityKeySet.has(edge.targetEntityKey)
+    )
+    .map((edge) => edge.edgeKey)
+    .sort((left, right) => left.localeCompare(right));
+  return {
+    graph: {
+      ...graph,
+      updatedAt: observedAt,
+      entities: sortEntityNodes(
+        graph.entities.filter((entity) => !removedEntityKeySet.has(entity.entityKey))
+      ),
+      edges: sortRelationEdges(
+        graph.edges.filter((edge) => !removedEdgeKeys.includes(edge.edgeKey))
+      ),
+      decisionRecords: (graph.decisionRecords ?? []).filter((record) =>
+        !removedEntityKeySet.has(record.entityKey)
+        && !(record.targetEntityKey && removedEntityKeySet.has(record.targetEntityKey))
+      )
+    },
+    removedEntityKeys,
+    removedEdgeKeys
   };
 }
 

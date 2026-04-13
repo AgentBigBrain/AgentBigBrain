@@ -3,6 +3,7 @@
  */
 
 import { sha256HexFromCanonicalJson } from "./normalizers/canonicalizationRules";
+import { buildProjectionChangeSet } from "./projections/service";
 import {
   type ProfileFactUpsertInput,
   DEFAULT_PROFILE_STALE_AFTER_DAYS,
@@ -147,7 +148,13 @@ export interface ProfileMemoryIngestOptions {
   requestTelemetry?: ProfileMemoryRequestTelemetry;
 }
 
+interface ProfileMemoryStoreOptions {
+  onChange?: (changeSet: import("./projections/contracts").ProjectionChangeSet) => Promise<void> | void;
+}
+
 export class ProfileMemoryStore {
+  private readonly onChange?: ProfileMemoryStoreOptions["onChange"];
+
   /**
    * Creates the encrypted profile-memory persistence service.
    *
@@ -161,9 +168,11 @@ export class ProfileMemoryStore {
   constructor(
     private readonly filePath: string,
     private readonly encryptionKey: Buffer,
-    private readonly staleAfterDays: number = DEFAULT_PROFILE_STALE_AFTER_DAYS
+    private readonly staleAfterDays: number = DEFAULT_PROFILE_STALE_AFTER_DAYS,
+    options: ProfileMemoryStoreOptions = {}
   ) {
     assertProfileMemoryKeyLength(encryptionKey);
+    this.onChange = options.onChange;
   }
 
   /**
@@ -225,7 +234,10 @@ export class ProfileMemoryStore {
    * @param env - Environment source (defaults to process env).
    * @returns Configured store instance, or `undefined` when profile memory is disabled.
    */
-  static fromEnv(env: NodeJS.ProcessEnv = process.env): ProfileMemoryStore | undefined {
+  static fromEnv(
+    env: NodeJS.ProcessEnv = process.env,
+    options: ProfileMemoryStoreOptions = {}
+  ): ProfileMemoryStore | undefined {
     const persistenceConfig = createProfileMemoryPersistenceConfigFromEnv(env);
     if (!persistenceConfig) {
       return undefined;
@@ -234,7 +246,8 @@ export class ProfileMemoryStore {
     return new ProfileMemoryStore(
       persistenceConfig.filePath,
       persistenceConfig.encryptionKey,
-      persistenceConfig.staleAfterDays
+      persistenceConfig.staleAfterDays,
+      options
     );
   }
 
@@ -1137,6 +1150,33 @@ export class ProfileMemoryStore {
    */
   private async save(state: ProfileMemoryState): Promise<void> {
     await saveProfileMemoryState(this.filePath, this.encryptionKey, state);
+    await this.notifyProjectionChange(state.updatedAt);
+  }
+
+  /**
+   * Emits one normalized projection change after a profile-memory write.
+   *
+   * **Why it exists:**
+   * Profile memory has several mutation entrypoints, and centralizing the projection callback in
+   * the shared save path avoids missing writes from ingest, correction, forget, or episode updates.
+   *
+   * **What it talks to:**
+   * - Uses `buildProjectionChangeSet(...)` from `./projections/service`.
+   *
+   * @param updatedAt - Timestamp from the persisted profile-memory state.
+   * @returns Promise resolving after the optional projection callback completes.
+   */
+  private async notifyProjectionChange(updatedAt: string): Promise<void> {
+    if (!this.onChange) {
+      return;
+    }
+    await this.onChange(buildProjectionChangeSet(
+      ["profile_memory_changed"],
+      ["profile_memory:save"],
+      {
+        updatedAt
+      }
+    ));
   }
 
   /**

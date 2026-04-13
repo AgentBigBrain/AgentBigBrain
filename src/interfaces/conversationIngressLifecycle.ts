@@ -3,6 +3,7 @@
  */
 
 import {
+  resolveConversationCommandRoutingInput,
   resolveConversationInboundUserInput,
   type ConversationInboundMessage,
   type ConversationNotifier,
@@ -170,6 +171,7 @@ export async function processConversationMessage(
   deps: ConversationIngressDependencies
 ): Promise<string> {
   const trimmed = resolveConversationInboundUserInput(message).trim();
+  const commandRoutingText = resolveConversationCommandRoutingInput(message).trim();
   if (!trimmed) {
     return "I did not receive any text yet. Send a quick message or add a caption and I will continue.";
   }
@@ -213,7 +215,7 @@ export async function processConversationMessage(
     session.agentPulse.userTimezone = detectedTz;
   }
 
-  if (trimmed.startsWith("/")) {
+  if (commandRoutingText.startsWith("/")) {
     const reply = await handleConversationCommand(session, message, deps);
     await deps.store.setSession(session);
     if (session.queuedJobs.length > 0) {

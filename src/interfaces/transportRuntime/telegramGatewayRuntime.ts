@@ -6,7 +6,10 @@ import type { TelegramAdapterValidationResult, TelegramInboundMessage } from "..
 import { applyInvocationHints } from "../invocationHints";
 import { applyInvocationPolicy } from "../invocationPolicy";
 import type { TelegramInterfaceConfig } from "../runtimeConfig";
-import { buildConversationInboundUserInput } from "../mediaRuntime/mediaNormalization";
+import {
+  buildConversationCommandRoutingInput,
+  buildConversationInboundUserInput
+} from "../mediaRuntime/mediaNormalization";
 import {
   DEFAULT_TELEGRAM_MEDIA_RUNTIME_CONFIG, type TelegramMediaRuntimeConfig, validateTelegramMediaAttachments
 } from "../mediaRuntime/mediaLimits";
@@ -229,6 +232,7 @@ export function prepareTelegramUpdate(
     username,
     transportIdentity,
     text: normalizedText,
+    commandRoutingText: buildConversationCommandRoutingInput(normalizedText, media),
     media,
     authToken: input.sharedSecret,
     receivedAt

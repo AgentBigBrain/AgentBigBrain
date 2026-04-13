@@ -18526,6 +18526,104 @@ test("profile memory store keeps third-person contact continuity available for c
   });
 });
 
+test("profile memory store ingests long-form third-person work updates without flattening current and historical organization state", async () => {
+  await withProfileStore(async (store) => {
+    const ingestResult = await store.ingestFromTaskInput(
+      "task_profile_contact_longform_continuity",
+      [
+        "Billy used to work at Flare Web Design as a front-end contractor, but by late February he had started interviewing elsewhere.",
+        "Billy is no longer at Flare Web Design.",
+        "Billy has already started at Crimson Analytics, and Garrett still owns Harbor Signal Studio.",
+        "Garrett prefers short direct updates.",
+        "Billy is still in Ferndale for now, and Garrett is still splitting time between Detroit and Ann Arbor."
+      ].join(" "),
+      "2026-04-12T18:05:00.000Z"
+    );
+    const readableFacts = await store.readFacts({
+      purpose: "operator_view",
+      includeSensitive: false,
+      explicitHumanApproval: false,
+      maxFacts: 50
+    });
+    const continuityFacts = await store.queryFactsForContinuity(
+      createEmptyEntityGraphV1("2026-04-12T18:05:00.000Z"),
+      createEmptyConversationStackV1("2026-04-12T18:05:00.000Z"),
+      {
+        entityHints: ["Billy", "Garrett", "Flare Web Design", "Crimson Analytics"],
+        semanticMode: "relationship_inventory",
+        relevanceScope: "conversation_local",
+        maxFacts: 20
+      }
+    );
+
+    assert.equal(ingestResult.appliedFacts > 0, true);
+    assert.equal(
+      readableFacts.some(
+        (fact) =>
+          fact.key === "contact.billy.work_association" &&
+          fact.value === "Crimson Analytics"
+      ),
+      true
+    );
+    assert.equal(
+      readableFacts.some(
+        (fact) =>
+          fact.key === "contact.billy.work_association" &&
+          fact.value === "Flare Web Design"
+      ),
+      false
+    );
+    assert.equal(
+      continuityFacts.some(
+        (fact) =>
+          fact.key === "contact.billy.work_association" &&
+          fact.value === "Crimson Analytics"
+      ),
+      true
+    );
+    assert.equal(
+      readableFacts.some(
+        (fact) =>
+          /^contact\.garrett\.context\.[a-f0-9]{8}$/.test(fact.key) &&
+          fact.value === "Garrett still owns Harbor Signal Studio"
+      ),
+      true
+    );
+    assert.equal(
+      readableFacts.some(
+        (fact) =>
+          /^contact\.garrett\.context\.[a-f0-9]{8}$/.test(fact.key) &&
+          fact.value === "Garrett still owns Harbor Signal Studio"
+      ),
+      true
+    );
+    assert.equal(
+      readableFacts.some(
+        (fact) =>
+          /^contact\.garrett\.context\.[a-f0-9]{8}$/.test(fact.key) &&
+          fact.value === "Garrett prefers short direct updates"
+      ),
+      true
+    );
+    assert.equal(
+      readableFacts.some(
+        (fact) =>
+          /^contact\.billy\.context\.[a-f0-9]{8}$/.test(fact.key) &&
+          fact.value === "Billy is still in Ferndale for now"
+      ),
+      true
+    );
+    assert.equal(
+      readableFacts.some(
+        (fact) =>
+          /^contact\.garrett\.context\.[a-f0-9]{8}$/.test(fact.key) &&
+          fact.value === "Garrett is still splitting time between Detroit and Ann Arbor"
+      ),
+      true
+    );
+  });
+});
+
 test("planning context is query-aware and surfaces matching contact facts", async () => {
   await withProfileStore(async (store) => {
     await store.ingestFromTaskInput(

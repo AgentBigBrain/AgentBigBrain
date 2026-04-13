@@ -8,6 +8,7 @@ import type { DatabaseSync } from "node:sqlite";
 
 import { LedgerBackend } from "../config";
 import { withFileLock, writeFileAtomic } from "../fileLock";
+import { buildProjectionChangeSet } from "../projections/service";
 import { withSqliteDatabase } from "../sqliteStore";
 import { Stage686PulseStateV1 } from "./memoryGovernance";
 import { createEmptyConversationStackV1, isConversationStackV1 } from "./conversationStack";
@@ -24,6 +25,7 @@ interface Stage686RuntimeStateStoreOptions {
   backend?: LedgerBackend;
   sqlitePath?: string;
   exportJsonOnWrite?: boolean;
+  onChange?: (changeSet: import("../projections/contracts").ProjectionChangeSet) => Promise<void> | void;
 }
 
 interface Stage686RuntimeStateDocumentV1 {
@@ -325,6 +327,7 @@ export class Stage686RuntimeStateStore {
   private readonly backend: LedgerBackend;
   private readonly sqlitePath: string;
   private readonly exportJsonOnWrite: boolean;
+  private readonly onChange?: Stage686RuntimeStateStoreOptions["onChange"];
 
   /**
    * Initializes `Stage686RuntimeStateStore` with deterministic runtime dependencies.
@@ -345,6 +348,7 @@ export class Stage686RuntimeStateStore {
     this.backend = options.backend ?? "json";
     this.sqlitePath = options.sqlitePath ?? path.resolve(process.cwd(), "runtime/ledgers.sqlite");
     this.exportJsonOnWrite = options.exportJsonOnWrite ?? true;
+    this.onChange = options.onChange;
   }
 
   /**
@@ -423,12 +427,14 @@ export class Stage686RuntimeStateStore {
           await writeFileAtomic(this.filePath, `${JSON.stringify(normalized, null, 2)}\n`);
         });
       }
+      await this.notifyProjectionChange(normalized.updatedAt);
       return;
     }
 
     await withFileLock(this.filePath, async () => {
       await writeFileAtomic(this.filePath, `${JSON.stringify(normalized, null, 2)}\n`);
     });
+    await this.notifyProjectionChange(normalized.updatedAt);
   }
 
   /**
@@ -472,6 +478,32 @@ export class Stage686RuntimeStateStore {
          state_json TEXT NOT NULL
        );`
     );
+  }
+
+  /**
+   * Emits one normalized projection change after runtime-state persistence.
+   *
+   * **Why it exists:**
+   * Stage 6.86 runtime state is a canonical continuity seam, and the mirror needs explicit change
+   * signals when bridge queues, pulse state, or conversation stack data changes.
+   *
+   * **What it talks to:**
+   * - Uses `buildProjectionChangeSet(...)` from `../projections/service`.
+   *
+   * @param updatedAt - Runtime-state update timestamp.
+   * @returns Promise resolving after the optional projection callback completes.
+   */
+  private async notifyProjectionChange(updatedAt: string): Promise<void> {
+    if (!this.onChange) {
+      return;
+    }
+    await this.onChange(buildProjectionChangeSet(
+      ["continuity_changed"],
+      ["stage6_86_runtime_state:save"],
+      {
+        updatedAt
+      }
+    ));
   }
 }
 

@@ -32,8 +32,18 @@ import { SatelliteCloneCoordinator } from "./satelliteClone";
 import { SqliteVectorStore } from "./vectorStore";
 import { WorkflowLearningStore } from "./workflowLearningStore";
 import { BrainConfig } from "./config";
+import { EntityGraphStore } from "./entityGraphStore";
+import { MediaArtifactStore } from "./mediaArtifactStore";
+import { Stage686RuntimeStateStore } from "./stage6_86/runtimeState";
+import { Stage686RuntimeActionEngine } from "./stage6_86/runtimeActions";
+import { createProjectionRuntimeConfigFromEnv } from "./projections/config";
+import { ProjectionService } from "./projections/service";
+import { ProjectionStateStore } from "./projections/projectionStateStore";
+import { ObsidianVaultSink } from "./projections/targets/obsidianVaultSink";
+import { JsonMirrorSink } from "./projections/targets/jsonMirrorSink";
 import { resolveUserOwnedPathHints } from "../organs/plannerPolicy/userOwnedPathHints";
 import type { ModelClient } from "../models/types";
+import type { ProjectionChangeSet, ProjectionSink, ProjectionSnapshot } from "./projections/contracts";
 
 export interface SharedBrainRuntimeDependencies {
   readonly baseConfig: BrainConfig;
@@ -52,6 +62,10 @@ export interface SharedBrainRuntimeDependencies {
   readonly skillRegistryStore: SkillRegistryStore;
   readonly distillerLedgerStore: DistillerMergeLedgerStore;
   readonly satelliteCloneCoordinator: SatelliteCloneCoordinator;
+  readonly entityGraphStore: EntityGraphStore;
+  readonly stage686RuntimeStateStore: Stage686RuntimeStateStore;
+  readonly mediaArtifactStore: MediaArtifactStore;
+  readonly projectionService: ProjectionService;
 }
 
 export interface BuiltBrainRuntime {
@@ -126,6 +140,137 @@ function resolveLiveRunRuntimePathFromEnv(): string {
 }
 
 /**
+ * Resolves the shared runtime state root used for JSON sidecars and sqlite bootstrap imports.
+ *
+ * @param env - Environment map used for runtime path resolution.
+ * @param config - Canonical brain config built from the same environment.
+ * @returns Absolute runtime root directory for shared store state.
+ */
+function resolveSharedRuntimeStateRoot(
+  env: NodeJS.ProcessEnv,
+  config: BrainConfig
+): string {
+  const configuredStateJsonPath = env.BRAIN_STATE_JSON_PATH?.trim();
+  if (configuredStateJsonPath) {
+    return path.dirname(path.resolve(configuredStateJsonPath));
+  }
+  if (config.persistence.ledgerBackend === "sqlite") {
+    return path.dirname(path.resolve(config.persistence.ledgerSqlitePath));
+  }
+  return path.resolve(process.cwd(), "runtime");
+}
+
+/**
+ * Builds one absolute shared-runtime store path under the resolved runtime root.
+ *
+ * @param runtimeRoot - Absolute runtime root directory.
+ * @param relativePath - Store-specific relative file or folder path.
+ * @returns Absolute path below the shared runtime root.
+ */
+function resolveSharedRuntimeStorePath(runtimeRoot: string, relativePath: string): string {
+  return path.join(runtimeRoot, relativePath);
+}
+
+/**
+ * Builds the configured projection sinks for the current process.
+ *
+ * **Why it exists:**
+ * Shared runtime boot should be able to swap projection targets without pushing Obsidian-specific
+ * branching into the stores that publish mirror updates.
+ *
+ * **What it talks to:**
+ * - Uses `ObsidianVaultSink` from `./projections/targets/obsidianVaultSink`.
+ * - Uses `JsonMirrorSink` from `./projections/targets/jsonMirrorSink`.
+ * - Uses `NoOpProjectionSink` from `./projections/noopSink`.
+ *
+ * @param env - Environment map used for projection config resolution.
+ * @returns Ordered sink instances for the current process.
+ */
+function createProjectionSinks(env: NodeJS.ProcessEnv = process.env): readonly ProjectionSink[] {
+  const config = createProjectionRuntimeConfigFromEnv(env);
+  const sinks: ProjectionSink[] = [];
+  if (config.obsidian.enabled) {
+    sinks.push(new ObsidianVaultSink({
+      vaultPath: config.obsidian.vaultPath,
+      rootDirectoryName: config.obsidian.rootDirectoryName,
+      mirrorAssets: config.obsidian.mirrorAssets
+    }));
+  }
+  if (config.jsonMirror.enabled) {
+    sinks.push(new JsonMirrorSink({
+      outputPath: config.jsonMirror.outputPath
+    }));
+  }
+  return sinks;
+}
+
+/**
+ * Builds the full projection snapshot provider backed by shared canonical stores.
+ *
+ * **Why it exists:**
+ * Rebuilds and real-time projection syncs should read from the same canonical runtime stores so
+ * the mirror reflects true shared state instead of ad hoc transport-local caches.
+ *
+ * **What it talks to:**
+ * - Uses the shared runtime stores created in this module.
+ *
+ * @param mode - Active projection mode.
+ * @param entityGraphStore - Shared Stage 6.86 entity-graph store.
+ * @param runtimeStateStore - Shared Stage 6.86 runtime-state store.
+ * @param governanceMemoryStore - Governance memory store.
+ * @param executionReceiptStore - Execution receipt store.
+ * @param workflowLearningStore - Workflow learning store.
+ * @param mediaArtifactStore - Media artifact store.
+ * @param profileMemoryStore - Optional profile-memory store.
+ * @returns Snapshot provider closure.
+ */
+function createProjectionSnapshotProvider(
+  mode: ProjectionSnapshot["mode"],
+  entityGraphStore: EntityGraphStore,
+  runtimeStateStore: Stage686RuntimeStateStore,
+  governanceMemoryStore: GovernanceMemoryStore,
+  executionReceiptStore: ExecutionReceiptStore,
+  workflowLearningStore: WorkflowLearningStore,
+  mediaArtifactStore: MediaArtifactStore,
+  profileMemoryStore?: ProfileMemoryStore
+): () => Promise<ProjectionSnapshot> {
+  return async () => {
+    const [
+      entityGraph,
+      runtimeState,
+      governanceReadView,
+      executionReceiptDocument,
+      workflowDocument,
+      mediaArtifactDocument,
+      profileMemory
+    ] = await Promise.all([
+      entityGraphStore.getGraph(),
+      runtimeStateStore.load(),
+      governanceMemoryStore.getReadView(),
+      executionReceiptStore.load(),
+      workflowLearningStore.load(),
+      mediaArtifactStore.load(),
+      profileMemoryStore?.load() ?? Promise.resolve(null)
+    ]);
+
+    return {
+      generatedAt: new Date().toISOString(),
+      mode,
+      profileMemory,
+      resolvedCurrentClaims: profileMemoryStore
+        ? await profileMemoryStore.queryResolvedCurrentGraphClaims()
+        : [],
+      runtimeState,
+      entityGraph,
+      governanceReadView,
+      executionReceipts: executionReceiptDocument.receipts,
+      workflowPatterns: workflowDocument.patterns,
+      mediaArtifacts: mediaArtifactDocument.artifacts
+    };
+  };
+}
+
+/**
  * Builds default brain for this module's runtime flow.
  *
  * **Why it exists:**
@@ -160,9 +305,15 @@ export function createSharedBrainRuntimeDependencies(
   env: NodeJS.ProcessEnv = process.env
 ): SharedBrainRuntimeDependencies {
   const baseConfig = createBrainConfigFromEnv(env);
+  const runtimeStateRoot = resolveSharedRuntimeStateRoot(env, baseConfig);
+  const projectionConfig = createProjectionRuntimeConfigFromEnv(env);
+  let projectionService: ProjectionService | undefined;
+  const publishProjectionChange = async (changeSet: ProjectionChangeSet): Promise<void> => {
+    await projectionService?.notifyChange(changeSet);
+  };
   const embeddingStack = buildEmbeddingStack(baseConfig);
   const memoryStore = new SemanticMemoryStore(
-    undefined,
+    resolveSharedRuntimeStorePath(runtimeStateRoot, "semantic_memory.json"),
     embeddingStack.embeddingProvider,
     embeddingStack.vectorStore ?? undefined
   );
@@ -184,24 +335,69 @@ export function createSharedBrainRuntimeDependencies(
   const governors = createDefaultGovernors();
   const masterGovernor = new MasterGovernor(baseConfig.governance.supermajorityThreshold);
   const stateStore = new StateStore();
-  const personalityStore = new PersonalityStore();
-  const governanceMemoryStore = new GovernanceMemoryStore(undefined, {
-    backend: baseConfig.persistence.ledgerBackend,
-    sqlitePath: baseConfig.persistence.ledgerSqlitePath,
-    exportJsonOnWrite: baseConfig.persistence.exportJsonOnWrite
-  });
-  const executionReceiptStore = new ExecutionReceiptStore(undefined, {
-    backend: baseConfig.persistence.ledgerBackend,
-    sqlitePath: baseConfig.persistence.ledgerSqlitePath,
-    exportJsonOnWrite: baseConfig.persistence.exportJsonOnWrite
-  });
-  const workflowLearningStore = new WorkflowLearningStore(undefined, {
-    backend: baseConfig.persistence.ledgerBackend,
-    sqlitePath: baseConfig.persistence.ledgerSqlitePath,
-    exportJsonOnWrite: baseConfig.persistence.exportJsonOnWrite
-  });
+  const personalityStore = new PersonalityStore(
+    resolveSharedRuntimeStorePath(runtimeStateRoot, "personality_profile.json")
+  );
+  const entityGraphStore = new EntityGraphStore(
+    resolveSharedRuntimeStorePath(runtimeStateRoot, "entity_graph.json"),
+    {
+      backend: baseConfig.persistence.ledgerBackend,
+      sqlitePath: baseConfig.persistence.ledgerSqlitePath,
+      exportJsonOnWrite: baseConfig.persistence.exportJsonOnWrite,
+      onChange: publishProjectionChange
+    }
+  );
+  const stage686RuntimeStateStore = new Stage686RuntimeStateStore(
+    resolveSharedRuntimeStorePath(runtimeStateRoot, "stage6_86_runtime_state.json"),
+    {
+      backend: baseConfig.persistence.ledgerBackend,
+      sqlitePath: baseConfig.persistence.ledgerSqlitePath,
+      exportJsonOnWrite: baseConfig.persistence.exportJsonOnWrite,
+      onChange: publishProjectionChange
+    }
+  );
+  const governanceMemoryStore = new GovernanceMemoryStore(
+    resolveSharedRuntimeStorePath(runtimeStateRoot, "governance_memory.json"),
+    {
+      backend: baseConfig.persistence.ledgerBackend,
+      sqlitePath: baseConfig.persistence.ledgerSqlitePath,
+      exportJsonOnWrite: baseConfig.persistence.exportJsonOnWrite,
+      onChange: publishProjectionChange
+    }
+  );
+  const executionReceiptStore = new ExecutionReceiptStore(
+    resolveSharedRuntimeStorePath(runtimeStateRoot, "execution_receipts.json"),
+    {
+      backend: baseConfig.persistence.ledgerBackend,
+      sqlitePath: baseConfig.persistence.ledgerSqlitePath,
+      exportJsonOnWrite: baseConfig.persistence.exportJsonOnWrite,
+      onChange: publishProjectionChange
+    }
+  );
+  const workflowLearningStore = new WorkflowLearningStore(
+    resolveSharedRuntimeStorePath(runtimeStateRoot, "workflow_learning.json"),
+    {
+      backend: baseConfig.persistence.ledgerBackend,
+      sqlitePath: baseConfig.persistence.ledgerSqlitePath,
+      exportJsonOnWrite: baseConfig.persistence.exportJsonOnWrite,
+      onChange: publishProjectionChange
+    }
+  );
+  const mediaArtifactStore = new MediaArtifactStore(
+    resolveSharedRuntimeStorePath(runtimeStateRoot, "media_artifacts.json"),
+    {
+      backend: baseConfig.persistence.ledgerBackend,
+      sqlitePath: baseConfig.persistence.ledgerSqlitePath,
+      exportJsonOnWrite: baseConfig.persistence.exportJsonOnWrite,
+      assetDirectory: resolveSharedRuntimeStorePath(
+        runtimeStateRoot,
+        path.join("media_artifacts", "assets")
+      ),
+      onChange: publishProjectionChange
+    }
+  );
   const skillRegistryStore = new SkillRegistryStore(
-    path.resolve(process.cwd(), "runtime/skills")
+    resolveSharedRuntimeStorePath(runtimeStateRoot, "skills")
   );
   const distillerLedgerStore = new DistillerMergeLedgerStore(undefined, {
     backend: baseConfig.persistence.ledgerBackend,
@@ -213,12 +409,46 @@ export function createSharedBrainRuntimeDependencies(
     maxDepth: baseConfig.limits.maxSubagentDepth,
     maxBudgetUsd: 1
   });
-  const judgmentPatternStore = new JudgmentPatternStore(undefined, {
-    backend: baseConfig.persistence.ledgerBackend,
-    sqlitePath: baseConfig.persistence.ledgerSqlitePath,
-    exportJsonOnWrite: baseConfig.persistence.exportJsonOnWrite
+  const judgmentPatternStore = new JudgmentPatternStore(
+    resolveSharedRuntimeStorePath(runtimeStateRoot, "judgment_patterns.json"),
+    {
+      backend: baseConfig.persistence.ledgerBackend,
+      sqlitePath: baseConfig.persistence.ledgerSqlitePath,
+      exportJsonOnWrite: baseConfig.persistence.exportJsonOnWrite
+    }
+  );
+  const profileMemoryStore = ProfileMemoryStore.fromEnv(env, {
+    onChange: publishProjectionChange
   });
-  const profileMemoryStore = ProfileMemoryStore.fromEnv();
+  const projectionStateStore = new ProjectionStateStore(
+    resolveSharedRuntimeStorePath(runtimeStateRoot, "projection_state.json"),
+    {
+      backend: baseConfig.persistence.ledgerBackend,
+      sqlitePath: baseConfig.persistence.ledgerSqlitePath,
+      exportJsonOnWrite: baseConfig.persistence.exportJsonOnWrite
+    }
+  );
+  projectionService = new ProjectionService(projectionConfig, {
+    stateStore: projectionStateStore,
+    snapshotProvider: createProjectionSnapshotProvider(
+      projectionConfig.mode,
+      entityGraphStore,
+      stage686RuntimeStateStore,
+      governanceMemoryStore,
+      executionReceiptStore,
+      workflowLearningStore,
+      mediaArtifactStore,
+      profileMemoryStore
+    ),
+    sinks: createProjectionSinks(env),
+    onError: (error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(`[Projection] ${message}`);
+    }
+  });
+  if (projectionService.isEnabled()) {
+    void projectionService.rebuild("process_startup");
+  }
 
   return {
     baseConfig,
@@ -236,7 +466,11 @@ export function createSharedBrainRuntimeDependencies(
     profileMemoryStore,
     skillRegistryStore,
     distillerLedgerStore,
-    satelliteCloneCoordinator
+    satelliteCloneCoordinator,
+    entityGraphStore,
+    stage686RuntimeStateStore,
+    mediaArtifactStore,
+    projectionService
   };
 }
 
@@ -289,6 +523,13 @@ export function buildBrainRuntimeFromEnvironment(
     undefined,
     new LanguageUnderstandingOrgan(modelClient)
   );
+  const stage686RuntimeActionEngine = new Stage686RuntimeActionEngine({
+    backend: config.persistence.ledgerBackend,
+    sqlitePath: config.persistence.ledgerSqlitePath,
+    exportJsonOnWrite: config.persistence.exportJsonOnWrite,
+    entityGraphStore: shared.entityGraphStore,
+    runtimeStateStore: shared.stage686RuntimeStateStore
+  });
 
   const brain = new BrainOrchestrator(
     config,
@@ -309,7 +550,9 @@ export function buildBrainRuntimeFromEnvironment(
     undefined,
     shared.workflowLearningStore,
     shared.judgmentPatternStore,
-    shared.skillRegistryStore
+    shared.skillRegistryStore,
+    undefined,
+    stage686RuntimeActionEngine
   );
 
   return {

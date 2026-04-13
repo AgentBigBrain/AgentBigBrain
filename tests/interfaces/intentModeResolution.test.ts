@@ -419,6 +419,21 @@ test("resolveConversationIntentMode returns a persisted clarification candidate 
   );
 });
 
+test("resolveConversationIntentMode keeps long narrative memory updates off the build clarification path", async () => {
+  const resolution = await resolveConversationIntentMode(
+    [
+      "Billy moved from Flare Web Design to Crimson in February, and the Harbor project timeline shifted a week after that.",
+      "Garrett is still handling the website handoff, and I am going to add corrections and date changes after we talk through it.",
+      "",
+      "Mara is flying in on April 20, Billy said the old office keys are still in the blue folder, and the review call is supposed to happen before the March invoices get closed."
+    ].join("\n\n")
+  );
+
+  assert.equal(resolution.mode, "chat");
+  assert.equal(resolution.clarification, null);
+  assert.equal(resolution.matchedRuleId, "intent_mode_default_chat");
+});
+
 test("resolveConversationIntentMode promotes strong end-to-end wording into autonomous mode", async () => {
   const resolution = await resolveConversationIntentMode(
     "Hey, build me a tech landing page for air drones, go until you finish, put it on my desktop, and leave it open for me when you're done."

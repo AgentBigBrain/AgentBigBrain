@@ -1074,6 +1074,81 @@ Node:
 node -e "console.log(require('node:crypto').randomBytes(32).toString('base64'))"
 ```
 
+### External projection and Obsidian mirror
+
+The projection layer mirrors canonical runtime memory into external inspection targets without
+making those targets the truth owner.
+
+Current sinks:
+
+- `obsidian`: human-readable vault mirror with Markdown notes, `.base` files, and optional asset copies
+- `json`: machine-readable mirror that helps prove the sink seam stays generic
+
+Recommended first setup:
+
+```env
+BRAIN_PROJECTION_SINKS=obsidian
+BRAIN_PROJECTION_REALTIME=true
+BRAIN_PROJECTION_MODE=review_safe
+BRAIN_OBSIDIAN_VAULT_PATH=C:\Users\<you>\Documents\ObsidianVault
+BRAIN_OBSIDIAN_ROOT_DIR=AgentBigBrain
+BRAIN_OBSIDIAN_MIRROR_ASSETS=true
+```
+
+How the main settings work:
+
+- `BRAIN_PROJECTION_SINKS`: comma-separated sink ids.
+  - Supported today: `obsidian`, `json`.
+  - Leave unset to disable the projection subsystem entirely.
+- `BRAIN_PROJECTION_REALTIME`: incremental sync toggle.
+  - `true` updates sinks after canonical writes.
+  - `false` keeps the sink available for manual rebuilds only.
+- `BRAIN_PROJECTION_MODE`: mirror visibility policy.
+  - `review_safe` redacts or suppresses sensitive values and assets where policy requires it.
+  - `operator_full` mirrors the fuller note and asset set for explicitly trusted operators.
+- `BRAIN_OBSIDIAN_VAULT_PATH`: absolute Obsidian vault root.
+  - Required when `obsidian` is enabled.
+- `BRAIN_OBSIDIAN_ROOT_DIR`: machine-owned folder created inside the vault.
+  - Defaults to `AgentBigBrain`.
+- `BRAIN_OBSIDIAN_MIRROR_ASSETS`: asset-copy toggle for raw mirrored uploads.
+  - `true` copies eligible assets into the vault subtree.
+  - `false` keeps the mirror note-only even when artifact records exist.
+- `BRAIN_JSON_MIRROR_PATH`: output file for the optional JSON sink.
+
+What the mirror contains:
+
+- profile-memory entities, claims, and episodes
+- Stage 6.86 continuity summaries and open loops
+- governance decisions
+- execution receipts
+- workflow-learning summaries
+- media artifact notes plus optional mirrored assets
+
+Operator commands:
+
+```bash
+npm run projection:export:obsidian
+npm run projection:apply-review-actions
+npm run projection:open:obsidian
+```
+
+What each command does:
+
+- `projection:export:obsidian`: rebuilds the mirror from canonical runtime state
+- `projection:apply-review-actions`: applies pending structured review-action notes from
+  `AgentBigBrain/40 Review Actions/`
+- `projection:open:obsidian`: opens the dashboard or a targeted mirrored note through an exact-path
+  Obsidian URI
+
+Practical rules:
+
+- start with `review_safe` until you are sure a fuller mirror belongs in that vault
+- if the vault is cloud-synced, treat mirrored assets as a real data-exposure decision
+- the first-class metadata lives on the projected Markdown notes; attachments are mirrored as assets
+  plus companion notes
+- when current Obsidian behavior matters, check the official docs at
+  `https://docs.obsidian.md/Home`
+
 ### Reflection, embeddings, and persistence
 
 - `BRAIN_REFLECT_ON_SUCCESS`: success-path reflection toggle.

@@ -9,6 +9,7 @@ import {
   buildClarifiedExecutionInput,
   createActiveClarificationState,
   createTaskRecoveryClarificationState,
+  isClarificationExpired,
   resolveClarificationAnswer
 } from "../../src/interfaces/conversationRuntime/clarificationBroker";
 import type { IntentClarificationCandidate } from "../../src/interfaces/conversationRuntime/intentModeContracts";
@@ -69,6 +70,17 @@ test("resolveClarificationAnswer stays unresolved when the reply remains ambiguo
   );
 
   assert.equal(resolution, null);
+});
+
+test("isClarificationExpired expires stale execution-mode clarification after the bounded window", () => {
+  const clarification = createActiveClarificationState(
+    "Create me that landing page with a hero and CTA.",
+    "2026-03-11T18:00:00.000Z",
+    EXECUTION_MODE_CANDIDATE
+  );
+
+  assert.equal(isClarificationExpired(clarification, "2026-03-11T21:59:59.000Z"), false);
+  assert.equal(isClarificationExpired(clarification, "2026-03-11T22:00:01.000Z"), true);
 });
 
 test("task recovery clarification resolves yes/no answers and adds a recovery instruction", () => {

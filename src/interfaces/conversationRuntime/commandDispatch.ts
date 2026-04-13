@@ -20,6 +20,7 @@ import {
   splitCommand
 } from "../conversationManagerHelpers";
 import {
+  resolveConversationCommandRoutingInput,
   resolveConversationInboundUserInput,
   type ConversationInboundMessage
 } from "./managerContracts";
@@ -128,7 +129,7 @@ export async function handleConversationCommand(
   message: ConversationInboundMessage,
   deps: ConversationIngressDependencies
 ): Promise<string> {
-  const normalizedCommandInput = resolveConversationInboundUserInput(message).trim();
+  const normalizedCommandInput = resolveConversationCommandRoutingInput(message).trim();
   const commandInput = normalizedCommandInput.startsWith("/")
     ? (normalizedCommandInput.split(/\r?\n/, 1)[0] ?? normalizedCommandInput)
     : normalizedCommandInput;

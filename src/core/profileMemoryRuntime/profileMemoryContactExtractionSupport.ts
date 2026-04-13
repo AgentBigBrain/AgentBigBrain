@@ -13,6 +13,8 @@ import {
 
 const DIRECT_RELATIONSHIP_DESCRIPTOR_PATTERN =
   "(?:friend|partner|spouse|wife|husband|girlfriend|boyfriend|acquaintance|guy|person|boss|coworker|colleague|work\\s+peer|peer|manager|supervisor|lead|team\\s+lead|employee|direct\\s+report|neighbor|neighbour|roommate|relative|distant\\s+relative|family\\s+member|cousin|aunt|uncle|mom|mother|dad|father|son|daughter|parent|child|sibling|sister|brother|teammate|classmate)";
+const THIRD_PERSON_SUBJECT_PATTERN =
+  "(?:[A-Z][A-Za-z'.-]{0,30}(?:\\s+[A-Z][A-Za-z'.-]{0,30}){0,2}|[Hh]e|[Ss]he|[Tt]hey)";
 const WORK_WITH_ME_ASSOCIATION_PREFIXES = [
   { prefix: "used to work with me at ", historical: true },
   { prefix: "work with me at ", historical: false },
@@ -28,15 +30,21 @@ const WORK_WITH_ME_ASSOCIATION_PREFIXES = [
   { prefix: "works with me", historical: false }
 ] as const;
 const THIRD_PERSON_CURRENT_WORK_ASSOCIATION_PATTERNS = [
-  /^(?<subject>[A-Za-z][A-Za-z' -]{1,40}|he|she|they)(?:'s| is)\s+(?<prep>at|for)\s+(?<company>.+)$/i,
-  /^(?<subject>[A-Za-z][A-Za-z' -]{1,40}|he|she|they)\s+works?\s+(?<prep>at|for)\s+(?<company>.+)$/i
+  new RegExp(`^(?<subject>${THIRD_PERSON_SUBJECT_PATTERN})(?:'s| is)(?:\\s+still)?\\s+(?<prep>at|for)\\s+(?<company>.+)$`),
+  new RegExp(`^(?<subject>${THIRD_PERSON_SUBJECT_PATTERN})\\s+works?\\s+(?<prep>at|for)\\s+(?<company>.+)$`),
+  new RegExp(`^(?<subject>${THIRD_PERSON_SUBJECT_PATTERN})\\s+(?:has\\s+already\\s+started|has\\s+started|started|joined)\\s+(?<prep>at|with)\\s+(?<company>.+)$`)
 ] as const;
 const THIRD_PERSON_HISTORICAL_WORK_ASSOCIATION_PATTERNS = [
-  /^(?<subject>[A-Za-z][A-Za-z' -]{1,40}|he|she|they)\s+used to be\s+(?<prep>at|for)\s+(?<company>.+)$/i,
-  /^(?<subject>[A-Za-z][A-Za-z' -]{1,40}|he|she|they)\s+used to work\s+(?<prep>at|for)\s+(?<company>.+)$/i
+  new RegExp(`^(?<subject>${THIRD_PERSON_SUBJECT_PATTERN})\\s+used to be\\s+(?<prep>at|for)\\s+(?<company>.+)$`),
+  new RegExp(`^(?<subject>${THIRD_PERSON_SUBJECT_PATTERN})\\s+used to work\\s+(?<prep>at|for)\\s+(?<company>.+)$`),
+  new RegExp(`^(?<subject>${THIRD_PERSON_SUBJECT_PATTERN})(?:'s| is)\\s+no\\s+longer\\s+(?<prep>at|for)\\s+(?<company>.+)$`),
+  new RegExp(`^(?<subject>${THIRD_PERSON_SUBJECT_PATTERN})\\s+left\\s+(?<company>.+)$`)
 ] as const;
 const THIRD_PERSON_CONTACT_CONTEXT_PATTERNS = [
-  /^(?<subject>[A-Za-z][A-Za-z' -]{1,40}|he|she|they)\s+drives\s+(?<detail>.+)$/i
+  new RegExp(`^(?<subject>${THIRD_PERSON_SUBJECT_PATTERN})\\s+(?<verb>drives)\\s+(?<detail>.+)$`),
+  new RegExp(`^(?<subject>${THIRD_PERSON_SUBJECT_PATTERN})\\s+(?<verb>(?:still\\s+)?owns|prefers)\\s+(?<detail>.+)$`),
+  new RegExp(`^(?<subject>${THIRD_PERSON_SUBJECT_PATTERN})\\s+(?<verb>is\\s+still\\s+in|is\\s+in|lives\\s+in|still\\s+lives\\s+in|has\\s+been\\s+living\\s+in|is\\s+still\\s+living\\s+in)\\s+(?<detail>.+)$`),
+  new RegExp(`^(?<subject>${THIRD_PERSON_SUBJECT_PATTERN})\\s+(?<verb>is\\s+still\\s+splitting\\s+time\\s+between|is\\s+splitting\\s+time\\s+between|still\\s+splitting\\s+time\\s+between|splits\\s+time\\s+between)\\s+(?<detail>.+)$`)
 ] as const;
 
 interface ResolvedThirdPersonContact {
@@ -59,6 +67,83 @@ export function trimAssociationValue(value: string): string {
   }
   const commaIndex = trimmed.indexOf(",");
   return commaIndex >= 0 ? trimmed.slice(0, commaIndex).trim() : trimmed;
+}
+
+/**
+ * Splits one sentence into bounded narrative clauses so long conversational updates still expose
+ * the explicit fact-like fragments used by deterministic contact extraction.
+ *
+ * @param text - Raw user text under analysis.
+ * @returns Ordered sentence/clause fragments.
+ */
+function splitIntoContinuityClauses(text: string): readonly string[] {
+  const clauses: string[] = [];
+  for (const sentence of splitIntoContextSentences(text)) {
+    const fragments = sentence
+      .split(/(?:,\s+|\s+but\s+|\s+while\s+|\s+although\s+|\s+though\s+)/i)
+      .map((fragment) =>
+        trimTrailingClausePunctuation(fragment).replace(/^(?:and|then|also)\s+/i, "")
+      )
+      .filter((fragment) => fragment.length >= 8);
+    if (fragments.length === 0) {
+      clauses.push(sentence);
+      continue;
+    }
+    clauses.push(...fragments);
+  }
+  return clauses;
+}
+
+/**
+ * Extracts the leading organization-like label from a longer clause so role, timing, or
+ * explanatory suffixes do not poison `contact.*.work_association` values.
+ *
+ * @param value - Raw association text captured from the clause.
+ * @returns Bounded organization label, or an empty string when no named label is present.
+ */
+function extractLeadingWorkAssociationLabel(value: string): string {
+  const trimmed = trimAssociationValue(value);
+  const labelMatch = trimmed.match(
+    /^[A-Z0-9][A-Za-z0-9'&.-]*(?:\s+[A-Z0-9][A-Za-z0-9'&.-]*)*/
+  );
+  return trimTrailingClausePunctuation(labelMatch?.[0] ?? "");
+}
+
+/**
+ * Extracts one leading named place or organization label from a bounded detail clause.
+ *
+ * @param value - Raw detail clause under inspection.
+ * @returns Leading named label when present.
+ */
+function extractLeadingAssociationLabel(value: string): string {
+  const trimmed = trimTrailingClausePunctuation(value)
+    .replace(/\b(?:for\s+now|right\s+now|currently|today)\b/gi, "")
+    .trim();
+  const labelMatch = trimmed.match(
+    /^[A-Z0-9][A-Za-z0-9'&.-]*(?:\s+[A-Z0-9][A-Za-z0-9'&.-]*){0,3}/
+  );
+  return trimTrailingClausePunctuation(labelMatch?.[0] ?? "");
+}
+
+/**
+ * Extracts two named places from one bounded split-time clause.
+ *
+ * @param detail - Raw text captured after "between".
+ * @returns Primary and secondary place labels when both are explicit.
+ */
+function extractSplitTimeAssociationLabels(
+  detail: string
+): { primary: string; secondary: string } | null {
+  const trimmed = trimTrailingClausePunctuation(detail);
+  const match = trimmed.match(
+    /^(?<primary>[A-Z][A-Za-z0-9'&.-]*(?:\s+[A-Z][A-Za-z0-9'&.-]*){0,2})\s+and\s+(?<secondary>[A-Z][A-Za-z0-9'&.-]*(?:\s+[A-Z][A-Za-z0-9'&.-]*){0,2})(?=(?:\s+for\b)|(?:\s+because\b)|(?:\s+two\b)|(?:\s+three\b)|(?:\s+days?\b)|[,.]|$)/i
+  );
+  const primary = extractLeadingAssociationLabel(match?.groups?.primary ?? "");
+  const secondary = extractLeadingAssociationLabel(match?.groups?.secondary ?? "");
+  if (!primary || !secondary) {
+    return null;
+  }
+  return { primary, secondary };
 }
 
 /**
@@ -257,7 +342,7 @@ export function extractThirdPersonContactAssociationAndContextFacts(
   const candidates: ProfileFactUpsertInput[] = [];
   let lastResolvedContact: ResolvedThirdPersonContact | null = null;
 
-  for (const sentence of splitIntoContextSentences(text)) {
+  for (const sentence of splitIntoContinuityClauses(text)) {
     const associationMatch = [
       ...THIRD_PERSON_HISTORICAL_WORK_ASSOCIATION_PATTERNS.map((pattern) => ({
         match: sentence.match(pattern),
@@ -273,7 +358,9 @@ export function extractThirdPersonContactAssociationAndContextFacts(
         associationMatch.match.groups?.subject ?? "",
         lastResolvedContact
       );
-      const company = trimAssociationValue(associationMatch.match.groups?.company ?? "");
+      const company = extractLeadingWorkAssociationLabel(
+        associationMatch.match.groups?.company ?? ""
+      );
       if (contact && looksLikeWorkAssociationLabel(company)) {
         if (!isPronounLikeContactSubject(associationMatch.match.groups?.subject ?? "")) {
           candidates.push({
@@ -311,6 +398,7 @@ export function extractThirdPersonContactAssociationAndContextFacts(
       lastResolvedContact
     );
     const detail = trimTrailingClausePunctuation(contextMatch.groups?.detail ?? "");
+    const verb = trimTrailingClausePunctuation(contextMatch.groups?.verb ?? "");
     if (!contact || !detail) {
       continue;
     }
@@ -326,7 +414,59 @@ export function extractThirdPersonContactAssociationAndContextFacts(
         confidence: toSentenceConfidence(sentence)
       });
     }
-    const resolvedSentence = `${contact.displayName} drives ${detail}`;
+    const normalizedVerb = verb.trim().toLowerCase();
+    if (normalizedVerb.includes("owns")) {
+      const organizationLabel = extractLeadingAssociationLabel(detail);
+      if (looksLikeAssociationLabel(organizationLabel)) {
+        candidates.push({
+          key: `contact.${contact.contactToken}.organization_association`,
+          value: organizationLabel,
+          sensitive: false,
+          sourceTaskId,
+          source: "user_input_pattern.organization_association",
+          observedAt,
+          confidence: toSentenceConfidence(sentence)
+        });
+      }
+    }
+    if (normalizedVerb.includes(" in") || normalizedVerb.includes("lives")) {
+      const locationLabel = extractLeadingAssociationLabel(detail);
+      if (looksLikeAssociationLabel(locationLabel)) {
+        candidates.push({
+          key: `contact.${contact.contactToken}.location_association`,
+          value: locationLabel,
+          sensitive: false,
+          sourceTaskId,
+          source: "user_input_pattern.location_association",
+          observedAt,
+          confidence: toSentenceConfidence(sentence)
+        });
+      }
+    }
+    if (normalizedVerb.includes("splitting time between") || normalizedVerb.includes("splits time between")) {
+      const splitLabels = extractSplitTimeAssociationLabels(detail);
+      if (splitLabels) {
+        candidates.push({
+          key: `contact.${contact.contactToken}.primary_location_association`,
+          value: splitLabels.primary,
+          sensitive: false,
+          sourceTaskId,
+          source: "user_input_pattern.location_association",
+          observedAt,
+          confidence: toSentenceConfidence(sentence)
+        });
+        candidates.push({
+          key: `contact.${contact.contactToken}.secondary_location_association`,
+          value: splitLabels.secondary,
+          sensitive: false,
+          sourceTaskId,
+          source: "user_input_pattern.location_association",
+          observedAt,
+          confidence: toSentenceConfidence(sentence)
+        });
+      }
+    }
+    const resolvedSentence = `${contact.displayName} ${verb || "drives"} ${detail}`;
     candidates.push({
       key: `contact.${contact.contactToken}.context.${stableContextHash(
         `${contact.contactToken}:${resolvedSentence}`
@@ -413,7 +553,18 @@ function isPronounLikeContactSubject(subject: string): boolean {
  * @returns `true` when the label looks like a named organization.
  */
 function looksLikeWorkAssociationLabel(value: string): boolean {
-  return /^[A-Z0-9][A-Za-z0-9'&.-]*(?:\s+[A-Z0-9][A-Za-z0-9'&.-]*)*$/.test(value);
+  return value.length > 0;
+}
+
+/**
+ * Returns whether one extracted organization/place label is explicit enough for governed direct
+ * contact association storage.
+ *
+ * @param value - Raw extracted association label.
+ * @returns `true` when the label is bounded and non-empty.
+ */
+function looksLikeAssociationLabel(value: string): boolean {
+  return value.length > 0;
 }
 
 /**

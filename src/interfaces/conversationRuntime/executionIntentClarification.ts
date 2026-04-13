@@ -15,8 +15,13 @@ export interface ExecutionIntentClarificationResolution {
 }
 
 const AMBIGUOUS_BUILD_PATTERNS: readonly RegExp[] = [
-  /\b(create|build|make|generate|implement|add|scaffold|set up|setup|spin up)\b/i,
+  /\b(create|build|make|generate|implement|scaffold|set up|setup|spin up)\b/i,
   /\b(app|application|project|feature|dashboard|site|website|frontend|backend|api|cli|repo|repository|page)\b/i
+] as const;
+
+const AMBIGUOUS_BUILD_REQUEST_LEAD_PATTERNS: readonly RegExp[] = [
+  /^(?:please\s+)?(?:create|build|make|generate|implement|scaffold|set up|setup|spin up)\b/i,
+  /\b(?:can you|could you|would you|will you|please|i need you to|help me|let'?s)\b[\s\S]{0,48}\b(?:create|build|make|generate|implement|scaffold|set up|setup|spin up)\b/i
 ] as const;
 
 const AMBIGUOUS_EXECUTION_PATTERNS: readonly RegExp[] = [
@@ -51,6 +56,17 @@ function matchesAny(text: string, patterns: readonly RegExp[]): boolean {
  */
 function matchesAll(text: string, patterns: readonly RegExp[]): boolean {
   return patterns.every((pattern) => pattern.test(text));
+}
+
+/**
+ * Returns whether ambiguous build wording is framed like an actual build request instead of a
+ * narrative memory update that happens to mention words like `project`.
+ *
+ * @param text - Current user input.
+ * @returns Whether the wording looks like a direct request to create or build something.
+ */
+function isLikelyBuildRequestLead(text: string): boolean {
+  return matchesAny(text, AMBIGUOUS_BUILD_REQUEST_LEAD_PATTERNS);
 }
 
 /**
@@ -89,7 +105,10 @@ export function resolveExecutionIntentClarification(
     };
   }
 
-  if (routingClassification?.category === "BUILD_SCAFFOLD" || matchesAll(normalized, AMBIGUOUS_BUILD_PATTERNS)) {
+  if (
+    routingClassification?.category === "BUILD_SCAFFOLD" ||
+    (matchesAll(normalized, AMBIGUOUS_BUILD_PATTERNS) && isLikelyBuildRequestLead(normalized))
+  ) {
     return {
       question: "Do you want me to plan it first or build it now?",
       mode: "plan_or_build",

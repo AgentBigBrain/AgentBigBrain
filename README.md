@@ -202,7 +202,9 @@ graph-backed model so the runtime can track people, claims, timing, and whether 
 current, historical, resolved, or conflicting.
 
 Stage 6.86 continuity is different. It owns the live conversation stack, entity graph, open
-loops, and pulse state for the active interaction.
+loops, and pulse state for the active interaction. Its entity graph is deterministic-first, but it
+also trims command-style glue and low-signal conversational residue before durable persistence and
+supports bounded cleanup of older graph noise.
 
 | Memory surface | Purpose |
 |---|---|
@@ -215,6 +217,35 @@ loops, and pulse state for the active interaction.
 
 Memory access is brokered. The runtime supports bounded review, correction, forgetting, and
 continuity-linked recall instead of treating memory as write-only.
+
+## External memory projection
+
+The runtime can mirror canonical memory and evidence into external inspection targets without
+making those targets the source of truth.
+
+Current sink shape:
+
+- Obsidian vault mirror for human-readable notes, Bases files, and optional asset copies
+- JSON mirror sink for seam testing and non-Obsidian inspection
+
+What gets mirrored:
+
+- profile-memory entities, claims, and episodes
+- Stage 6.86 continuity summaries and open loops
+- governance decisions
+- execution receipts
+- workflow-learning summaries
+- runtime-owned media artifacts and their derived meaning
+
+How to read the mirror:
+
+- entity notes are continuity notes first, not automatic truth records
+- `Current Temporal Claims` are the durable profile-memory truth surface
+- `interface:telegram:...` evidence refs are provenance pointers to observed turns, not raw chat logs acting as the database
+
+The mirror is read-only first. Guarded write-back exists through structured review-action notes, so
+fact corrections, episode changes, forgetting, and follow-up-loop creation still route through the
+runtime's canonical mutation seams.
 
 ## Local live runs and proof
 
@@ -235,6 +266,10 @@ npm run audit:governors
 npm run audit:claims
 npm run audit:ledgers
 npm run audit:traces
+npm run entity-graph:prune-low-signal
+npm run projection:export:obsidian
+npm run projection:apply-review-actions
+npm run projection:open:obsidian
 ```
 
 The repository also includes stage-specific tests and evidence scripts for runtime maturity,
@@ -244,7 +279,7 @@ conversation behavior, live-run proof, and interface flows.
 
 | Area | Directory | What lives there |
 |---|---|---|
-| Core runtime | `src/core/` | orchestrator, task runner, hard constraints, ledgers, config |
+| Core runtime | `src/core/` | orchestrator, task runner, hard constraints, ledgers, media artifacts, projections, config |
 | Organs | `src/organs/` | planner, executor, reflection, memory, language understanding |
 | Governors | `src/governors/` | council members, vote aggregation, fail-closed governance |
 | Models | `src/models/` | `mock`, `ollama`, `openai_api`, `codex_oauth` adapters |

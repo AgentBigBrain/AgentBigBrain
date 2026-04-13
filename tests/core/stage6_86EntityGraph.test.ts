@@ -13,6 +13,7 @@ import {
   createEmptyEntityGraphV1,
   extractEntityCandidates,
   getEntityLookupTerms,
+  pruneLowSignalEntitiesFromGraph,
   queryEntityGraphNodesByCanonicalOrAlias,
   promoteRelationEdgeWithConfirmation
 } from "../../src/core/stage6_86EntityGraph";
@@ -35,6 +36,23 @@ function extractsDeterministicEntityCandidates(): void {
   assert.ok(first.nodes.length >= 3);
   assert.ok(first.nodes.some((node) => node.canonicalName === "Owen"));
   assert.ok(first.nodes.some((node) => node.canonicalName === "Sarah"));
+}
+
+/**
+ * Implements `dropsConversationalGlueAndKeepsAnchoredProjectNames` behavior within module scope.
+ * Interacts with local collaborators through imported modules and typed inputs/outputs.
+ */
+function dropsConversationalGlueAndKeepsAnchoredProjectNames(): void {
+  const extraction = extractEntityCandidates({
+    text: "Yeah, Start Detroit City Three and leave it open for review.",
+    observedAt: "2026-04-12T12:00:00.000Z",
+    evidenceRef: "trace:entity_extract_glue"
+  });
+
+  assert.deepEqual(
+    extraction.nodes.map((node) => node.canonicalName),
+    ["Detroit City Three"]
+  );
 }
 
 /**
@@ -400,9 +418,71 @@ function queriesEntityGraphNodesByCanonicalOrAliasWithExactNormalizedMatches(): 
   assert.deepEqual(partialMatches, []);
 }
 
+/**
+ * Implements `prunesLowSignalConversationalResidueFromExistingGraph` behavior within module scope.
+ * Interacts with local collaborators through imported modules and typed inputs/outputs.
+ */
+function prunesLowSignalConversationalResidueFromExistingGraph(): void {
+  const observedAt = "2026-04-12T13:00:00.000Z";
+  const yeahKey = buildEntityKey("Yeah", "thing", null);
+  const owenKey = buildEntityKey("Owen", "thing", null);
+  const graph: EntityGraphV1 = {
+    schemaVersion: "v1",
+    updatedAt: observedAt,
+    entities: [
+      {
+        entityKey: yeahKey,
+        canonicalName: "Yeah",
+        entityType: "thing",
+        disambiguator: null,
+        aliases: ["Yeah"],
+        firstSeenAt: observedAt,
+        lastSeenAt: observedAt,
+        salience: 1,
+        evidenceRefs: ["trace:yeah"]
+      },
+      {
+        entityKey: owenKey,
+        canonicalName: "Owen",
+        entityType: "thing",
+        disambiguator: null,
+        aliases: ["Owen"],
+        firstSeenAt: observedAt,
+        lastSeenAt: observedAt,
+        salience: 1,
+        evidenceRefs: ["trace:owen"]
+      }
+    ],
+    edges: [
+      {
+        edgeKey: "edge_prune_001",
+        sourceEntityKey: yeahKey,
+        targetEntityKey: owenKey,
+        relationType: "co_mentioned",
+        status: "uncertain",
+        coMentionCount: 1,
+        strength: 1,
+        firstObservedAt: observedAt,
+        lastObservedAt: observedAt,
+        evidenceRefs: ["trace:edge_prune_001"]
+      }
+    ]
+  };
+
+  const pruned = pruneLowSignalEntitiesFromGraph(graph, "2026-04-12T13:05:00.000Z");
+
+  assert.deepEqual(pruned.removedEntityKeys, [yeahKey]);
+  assert.deepEqual(pruned.graph.entities.map((entity) => entity.canonicalName), ["Owen"]);
+  assert.equal(pruned.graph.edges.length, 0);
+}
+
 test(
   "stage 6.86 entity graph extracts deterministic entity candidates from recurring conversation text",
   extractsDeterministicEntityCandidates
+);
+test(
+  "stage 6.86 entity graph drops conversational glue while keeping anchored project names",
+  dropsConversationalGlueAndKeepsAnchoredProjectNames
 );
 test(
   "stage 6.86 entity graph applies extraction results and emits co-mention uncertain edges",
@@ -435,4 +515,8 @@ test(
 test(
   "stage 6.86 entity graph resolves exact canonical or alias matches without partial-name collapse",
   queriesEntityGraphNodesByCanonicalOrAliasWithExactNormalizedMatches
+);
+test(
+  "stage 6.86 entity graph prunes low-signal conversational residue from existing snapshots",
+  prunesLowSignalConversationalResidueFromExistingGraph
 );

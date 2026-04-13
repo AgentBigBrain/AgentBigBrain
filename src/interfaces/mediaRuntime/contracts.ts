@@ -6,6 +6,7 @@ export type ConversationInboundMediaKind = "image" | "voice" | "video" | "docume
 export type ConversationInboundMediaInterpretationSource =
   | "openai_image"
   | "ollama_image"
+  | "document_text_extraction"
   | "openai_transcription"
   | "multimodal_audio"
   | "fixture_catalog"
@@ -28,6 +29,9 @@ export interface ConversationInboundMediaAttachment {
   provider: "telegram";
   fileId: string;
   fileUniqueId: string | null;
+  artifactId?: string | null;
+  checksumSha256?: string | null;
+  ownedAssetPath?: string | null;
   mimeType: string | null;
   fileName: string | null;
   sizeBytes: number | null;

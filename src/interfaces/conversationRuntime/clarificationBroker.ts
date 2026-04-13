@@ -15,6 +15,9 @@ export interface ClarificationResolutionResult {
   selectedOptionId: ClarificationOptionId;
 }
 
+const EXECUTION_MODE_CLARIFICATION_MAX_AGE_MS = 4 * 60 * 60 * 1000;
+const TASK_RECOVERY_CLARIFICATION_MAX_AGE_MS = 12 * 60 * 60 * 1000;
+
 const CLARIFICATION_OPTION_PATTERNS: Readonly<Record<ClarificationOptionId, readonly RegExp[]>> = {
   plan: [
     /\bplan\b/i,
@@ -180,6 +183,35 @@ export function resolveClarificationAnswer(
   return {
     selectedOptionId: matchedOptionIds[0]
   };
+}
+
+/**
+ * Returns whether one persisted clarification is old enough that the next unrelated user turn
+ * should not stay trapped behind it anymore.
+ *
+ * @param clarification - Active clarification stored on the session.
+ * @param receivedAt - Timestamp of the new user turn.
+ * @returns Whether the clarification should be treated as stale.
+ */
+export function isClarificationExpired(
+  clarification: ActiveClarificationState,
+  receivedAt: string
+): boolean {
+  const clarificationRequestedAt = Date.parse(clarification.requestedAt);
+  const nextTurnAt = Date.parse(receivedAt);
+  if (!Number.isFinite(clarificationRequestedAt) || !Number.isFinite(nextTurnAt)) {
+    return false;
+  }
+
+  const clarificationAgeMs = nextTurnAt - clarificationRequestedAt;
+  if (clarificationAgeMs <= 0) {
+    return false;
+  }
+
+  const maxAgeMs = clarification.kind === "execution_mode"
+    ? EXECUTION_MODE_CLARIFICATION_MAX_AGE_MS
+    : TASK_RECOVERY_CLARIFICATION_MAX_AGE_MS;
+  return clarificationAgeMs > maxAgeMs;
 }
 
 /**

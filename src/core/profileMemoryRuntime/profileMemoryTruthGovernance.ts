@@ -28,6 +28,7 @@ import {
 } from "./profileMemoryTruthGovernanceDecisionSupport";
 import {
   ALLOWED_EXPLICIT_CONTACT_CONTEXT_SOURCES,
+  ALLOWED_EXPLICIT_CURRENT_CONTACT_GENERIC_ASSOCIATION_SOURCES,
   ALLOWED_EXPLICIT_CONTACT_NAME_SOURCES,
   ALLOWED_EXPLICIT_CURRENT_CONTACT_RELATIONSHIP_SOURCES,
   ALLOWED_EXPLICIT_CURRENT_CONTACT_WORK_ASSOCIATION_SOURCES,
@@ -62,7 +63,8 @@ function buildFactGovernanceDecision(candidate: ProfileFactUpsertInput): Profile
   const isAllowedExplicitResidenceSource =
     normalizedSource === "user_input_pattern.residence";
   const isAllowedExplicitGenericFactSource =
-    normalizedSource === "user_input_pattern.my_is";
+    normalizedSource === "user_input_pattern.my_is"
+    || ALLOWED_EXPLICIT_CURRENT_CONTACT_GENERIC_ASSOCIATION_SOURCES.has(normalizedSource);
   const isAllowedExplicitContactNameSource =
     ALLOWED_EXPLICIT_CONTACT_NAME_SOURCES.has(normalizedSource);
   const isAllowedExplicitCurrentContactRelationshipSource =

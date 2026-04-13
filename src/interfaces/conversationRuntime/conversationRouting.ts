@@ -10,7 +10,11 @@ import type { AutonomyBoundaryInterpretationResolver, ContinuationInterpretation
 import type { TopicKeyInterpretationSignalV1 } from "../../core/stage6_86ConversationStack";
 import type { GetConversationEntityGraph, ListBrowserSessionSnapshots, DescribeRuntimeCapabilities, ListManagedProcessSnapshots, ListAvailableSkills, OpenConversationContinuityReadSession, QueryConversationContinuityEpisodes, QueryConversationContinuityFacts, RememberConversationProfileInput, RunDirectConversationTurn } from "./managerContracts";
 import { buildAutonomousExecutionInput } from "./managerContracts";
-import { buildClarifiedExecutionInput, resolveClarificationAnswer } from "./clarificationBroker";
+import {
+  buildClarifiedExecutionInput,
+  isClarificationExpired,
+  resolveClarificationAnswer
+} from "./clarificationBroker";
 import { resolveModeContinuityIntent } from "./modeContinuity";
 import { resolveConversationIntentMode } from "./intentModeResolution";
 import type { ResolvedConversationIntentMode } from "./intentModeContracts";
@@ -169,17 +173,21 @@ async function resolveCanonicalConversationRouting(
       recordTopicAwareUserTurn(session, input, receivedAt, deps.config.maxConversationTurns, topicKeyInterpretation);
       return enqueueResult;
     }
-    recordTopicAwareUserTurn(session, input, receivedAt, deps.config.maxConversationTurns, topicKeyInterpretation);
-    recordAssistantTurn(
-      session,
-      session.activeClarification.question,
-      receivedAt,
-      deps.config.maxConversationTurns
-    );
-    return {
-      reply: session.activeClarification.question,
-      shouldStartWorker: false
-    };
+    if (isClarificationExpired(session.activeClarification, receivedAt)) {
+      clearActiveClarification(session);
+    } else {
+      recordTopicAwareUserTurn(session, input, receivedAt, deps.config.maxConversationTurns, topicKeyInterpretation);
+      recordAssistantTurn(
+        session,
+        session.activeClarification.question,
+        receivedAt,
+        deps.config.maxConversationTurns
+      );
+      return {
+        reply: session.activeClarification.question,
+        shouldStartWorker: false
+      };
+    }
   }
   const activePauseReply = applyActiveAutonomousPauseRequest(
     session,

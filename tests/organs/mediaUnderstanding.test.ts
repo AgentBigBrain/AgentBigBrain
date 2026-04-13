@@ -3,7 +3,7 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -15,6 +15,7 @@ import {
   interpretMediaAttachment,
   MediaUnderstandingOrgan
 } from "../../src/organs/mediaUnderstanding/mediaInterpretation";
+import { interpretDocumentAttachment } from "../../src/organs/mediaUnderstanding/documentUnderstanding";
 import { interpretImageAttachment } from "../../src/organs/mediaUnderstanding/imageUnderstanding";
 import { interpretVoiceAttachment } from "../../src/organs/mediaUnderstanding/speechToText";
 
@@ -469,6 +470,127 @@ test("interpretImageAttachment can use a local Ollama vision model without auth"
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test("interpretImageAttachment parses structured OCR and filters low-signal entity hints", async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = (async () => new Response(
+      JSON.stringify({
+        message: {
+          content: JSON.stringify({
+            summary: "The image shows an approval-flow diagram for AgentBigBrain.",
+            ocr_text: "AgentBigBrain Approval Flow",
+            entity_hints: ["AgentBigBrain", "Approval Flow", "Please"]
+          })
+        }
+      }),
+      {
+        status: 200,
+        headers: {
+          "Content-Type": "application/json"
+        }
+      }
+    )) as typeof fetch;
+
+    const interpretation = await interpretImageAttachment(
+      {
+        requestedBackend: "ollama",
+        resolvedBackend: "ollama",
+        requestedVisionBackend: "ollama",
+        resolvedVisionBackend: "ollama",
+        requestedTranscriptionBackend: "disabled",
+        resolvedTranscriptionBackend: "disabled",
+        openAIApiKey: null,
+        openAIBaseUrl: "https://api.openai.com/v1",
+        ollamaApiKey: null,
+        ollamaBaseUrl: "http://localhost:11434",
+        visionModel: "gemma4-local",
+        transcriptionModel: "whisper-1",
+        requestTimeoutMs: 45_000
+      },
+      {
+        kind: "image",
+        provider: "telegram",
+        fileId: "image-structured-1",
+        fileUniqueId: "image-structured-1",
+        mimeType: "image/png",
+        fileName: "approval-flow.png",
+        sizeBytes: 1024,
+        caption: "Review this diagram.",
+        durationSeconds: null,
+        width: 1280,
+        height: 720
+      },
+      Buffer.from("png-data", "utf8")
+    );
+
+    assert.equal(interpretation.summary, "The image shows an approval-flow diagram for AgentBigBrain.");
+    assert.equal(interpretation.ocrText, "AgentBigBrain Approval Flow");
+    assert.deepEqual(
+      interpretation.entityHints,
+      ["AgentBigBrain", "Approval Flow"]
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("interpretDocumentAttachment extracts readable text and identifiers from the assumed-name PDF", async () => {
+  const pdfPath = path.join(
+    process.cwd(),
+    "scripts",
+    "temp-probes",
+    "temp-probe-files",
+    "pdfs",
+    "CSCL_CD- 541 - Certificate of Assumed Name.pdf"
+  );
+  const pdfBuffer = await readFile(pdfPath);
+
+  const interpretation = await interpretDocumentAttachment(
+    {
+      requestedBackend: "inherit_text_backend",
+      resolvedBackend: "mock",
+      requestedVisionBackend: "inherit_text_backend",
+      resolvedVisionBackend: "mock",
+      requestedTranscriptionBackend: "inherit_text_backend",
+      resolvedTranscriptionBackend: "mock",
+      openAIApiKey: null,
+      openAIBaseUrl: "https://api.openai.com/v1",
+      ollamaApiKey: null,
+      ollamaBaseUrl: "http://localhost:11434",
+      visionModel: "gpt-4.1-mini",
+      transcriptionModel: "whisper-1",
+      requestTimeoutMs: 45_000
+    },
+    {
+      kind: "document",
+      provider: "telegram",
+      fileId: "document-pdf-1",
+      fileUniqueId: "document-pdf-1",
+      mimeType: "application/pdf",
+      fileName: "CSCL_CD- 541 - Certificate of Assumed Name.pdf",
+      sizeBytes: pdfBuffer.length,
+      caption: "Please review the attached PDF.",
+      durationSeconds: null,
+      width: null,
+      height: null
+    },
+    pdfBuffer
+  );
+
+  assert.match(interpretation.summary, /Certificate of Assumed Name filing/i);
+  assert.match(interpretation.summary, /FLARE WEB DESIGN, LLC/i);
+  assert.match(interpretation.summary, /MICHIGAN WEB/i);
+  assert.match(interpretation.summary, /801934923/);
+  assert.match(interpretation.ocrText ?? "", /FLARE WEB DESIGN, LLC/i);
+  assert.match(interpretation.ocrText ?? "", /MICHIGAN WEB/i);
+  assert.match(interpretation.ocrText ?? "", /801934923/);
+  assert.deepEqual(
+    interpretation.entityHints.slice(0, 3),
+    ["FLARE WEB DESIGN, LLC", "MICHIGAN WEB", "801934923"]
+  );
+  assert.equal(interpretation.source, "document_text_extraction");
 });
 
 test("interpretVoiceAttachment can use multimodal audio models on a local OpenAI-compatible endpoint", async () => {

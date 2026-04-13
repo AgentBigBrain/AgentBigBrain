@@ -464,6 +464,65 @@ test("routeConversationMessageInput persists execution-mode clarification and re
   assert.equal(session.modeContinuity?.source, "clarification_answer");
 });
 
+test("routeConversationMessageInput clears stale execution-mode clarification before routing a fresh chat turn", async () => {
+  const session = buildSession({
+    activeClarification: {
+      id: "clarification_2026-04-11T16:48:51.000Z",
+      kind: "execution_mode",
+      sourceInput:
+        "Billy moved from Flare Web Design to Crimson Analytics in February, and Garrett still owns Harbor Signal Studio.",
+      question: "Do you want me to plan it first or build it now?",
+      requestedAt: "2026-04-11T16:48:51.000Z",
+      matchedRuleId: "execution_intent_build_generic",
+      options: [
+        {
+          id: "plan",
+          label: "Plan it first"
+        },
+        {
+          id: "build",
+          label: "Build it now"
+        }
+      ]
+    },
+    progressState: {
+      status: "waiting_for_user",
+      message: "Do you want me to plan it first or build it now?",
+      jobId: null,
+      updatedAt: "2026-04-11T16:48:51.000Z"
+    }
+  });
+  let capturedInput = "";
+
+  const result = await routeConversationMessageInput(
+    session,
+    "What is Flare Web Design?",
+    "2026-04-12T00:13:00.000Z",
+    buildDependencies(
+      () => {
+        throw new Error("enqueueJob should not run for a fresh chat question after a stale clarification");
+      },
+      {
+        runDirectConversationTurn: async (input) => {
+          capturedInput = input;
+          return {
+            summary: "Flare Web Design is a web-design business tied to the relationship context you mentioned earlier."
+          };
+        }
+      }
+    )
+  );
+
+  assert.equal(
+    result.reply,
+    "Flare Web Design is a web-design business tied to the relationship context you mentioned earlier."
+  );
+  assert.equal(result.shouldStartWorker, false);
+  assert.equal(session.activeClarification, null);
+  assert.equal(session.progressState, null);
+  assert.equal(capturedInput, "What is Flare Web Design?");
+});
+
 test("routeConversationMessageInput links ambiguous modeled follow-up answers to the prior assistant clarification", async () => {
   const session = buildSession({
     conversationTurns: [
@@ -2163,6 +2222,41 @@ test("routeConversationMessageInput keeps multi-paragraph conversational turns o
     capturedInput,
     "I've had a long day and I'm still deciding what I want to work on.\n\nCan we just talk it through for a minute before you start anything?"
   );
+});
+
+test("routeConversationMessageInput keeps long narrative memory updates off the execution clarification path", async () => {
+  const session = buildSession();
+  let capturedInput = "";
+
+  const result = await routeConversationMessageInput(
+    session,
+    [
+      "Billy moved from Flare Web Design to Crimson in February, and the Harbor project timeline shifted a week after that.",
+      "Garrett is still handling the website handoff, and I am going to add corrections and date changes after we talk through it.",
+      "",
+      "Mara is flying in on April 20, Billy said the old office keys are still in the blue folder, and the review call is supposed to happen before the March invoices get closed."
+    ].join("\n\n"),
+    "2026-03-11T18:05:11.000Z",
+    buildDependencies(
+      () => {
+        throw new Error("enqueueJob should not run for long narrative memory updates");
+      },
+      {
+        runDirectConversationTurn: async (input) => {
+          capturedInput = input;
+          return {
+            summary: "I have those relationship and timeline details in view, and I'm ready for the corrections when you want to add them."
+          };
+        }
+      }
+    )
+  );
+
+  assert.equal(result.shouldStartWorker, false);
+  assert.match(result.reply, /relationship and timeline details/i);
+  assert.equal(session.activeClarification, null);
+  assert.match(capturedInput, /Billy moved from Flare Web Design to Crimson in February/i);
+  assert.match(capturedInput, /Harbor project timeline shifted a week/i);
 });
 
 test("routeConversationMessageInput keeps before-action multi-paragraph conversation direct during active browser workflow continuity", async () => {

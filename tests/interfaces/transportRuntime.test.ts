@@ -1070,6 +1070,108 @@ test("enrichAcceptedTelegramUpdateWithMedia rejects media-only untranscribed voi
   });
 });
 
+test("enrichAcceptedTelegramUpdateWithMedia preserves raw routing text while enriching canonical entity input", async () => {
+  const prepared = prepareTelegramUpdate({
+    update: {
+      update_id: 49,
+      message: {
+        chat: {
+          id: 100,
+          type: "private"
+        },
+        from: {
+          id: 200,
+          username: "tester"
+        },
+        caption: "Please review the attached PDF and list the business names.",
+        document: {
+          file_id: "doc-1",
+          file_unique_id: "doc-uniq-1",
+          file_name: "filing.pdf",
+          mime_type: "application/pdf",
+          file_size: 4096
+        },
+        date: 1_700_000_000
+      }
+    },
+    sharedSecret: "shared-secret",
+    invocationPolicy: {
+      requireNameCall: true,
+      aliases: ["bigbrain"]
+    },
+    mediaConfig: {
+      enabled: true,
+      maxAttachments: 4,
+      maxAttachmentBytes: 12000000,
+      maxDownloadBytes: 20000000,
+      maxVoiceSeconds: 180,
+      maxVideoSeconds: 90,
+      allowImages: true,
+      allowVoiceNotes: true,
+      allowVideos: true,
+      allowDocuments: true
+    },
+    validateMessage: () => ({
+      accepted: true,
+      code: "ACCEPTED",
+      message: "ok"
+    }),
+    abortControllers: new Map<string, AbortController>()
+  });
+
+  assert.equal(prepared.kind, "accepted");
+  if (prepared.kind !== "accepted") {
+    return;
+  }
+
+  const enriched = await enrichAcceptedTelegramUpdateWithMedia({
+    prepared: {
+      ...prepared,
+      inbound: {
+        ...prepared.inbound,
+        media: {
+          attachments: [
+            {
+              ...prepared.inbound.media!.attachments[0]!,
+              interpretation: {
+                summary: "Certificate of assumed name filing.",
+                transcript: null,
+                ocrText:
+                  "Signed before a notary public in Wayne County. Present entity FLARE WEB DESIGN, LLC.",
+                confidence: 0.92,
+                provenance: "document extraction",
+                source: "fixture_catalog",
+                entityHints: ["FLARE WEB DESIGN, LLC", "Wayne County"]
+              }
+            }
+          ]
+        }
+      },
+      entityGraphEvent: {
+        ...prepared.entityGraphEvent,
+        text: prepared.inbound.text
+      }
+    },
+    config: buildTelegramInterfaceConfigFixture()
+  });
+
+  assert.equal(enriched.kind, "accepted");
+  if (enriched.kind !== "accepted") {
+    return;
+  }
+  assert.equal(
+    enriched.inbound.text,
+    "Please review the attached PDF and list the business names."
+  );
+  assert.equal(
+    enriched.inbound.commandRoutingText,
+    "Please review the attached PDF and list the business names."
+  );
+  assert.match(enriched.entityGraphEvent.text, /Attached media context:/);
+  assert.match(enriched.entityGraphEvent.text, /notary public/i);
+  assert.match(enriched.entityGraphEvent.text, /FLARE WEB DESIGN, LLC/);
+});
+
 test("prepareTelegramUpdate surfaces transport-facing rejections and wrapped draft ids", () => {
   const rejected = prepareTelegramUpdate({
     update: {
