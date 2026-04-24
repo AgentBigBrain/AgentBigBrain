@@ -3,7 +3,10 @@
  */
 
 import { PlannedAction } from "../../core/types";
-import { extractExecutionContextPayload } from "../../core/currentRequestExtraction";
+import {
+  extractExecutionContextPayload,
+  extractResolvedSemanticRouteId
+} from "../../core/currentRequestExtraction";
 import {
   basenameCrossPlatformPath,
   dirnameCrossPlatformPath,
@@ -95,6 +98,18 @@ const EXPLICIT_RUNTIME_ACTION_REQUEST_PATTERNS: readonly {
     pattern: /^\s*(?:start_process\b|(?:use|run|execute)\s+start_process\b)/i
   }
 ] as const;
+
+const SEMANTIC_ROUTE_RUNTIME_FOLLOW_UP_IDS = new Set([
+  "build_request",
+  "static_html_build",
+  "framework_app_build",
+  "status_recall"
+]);
+const SEMANTIC_ROUTE_ARTIFACT_EDIT_IDS = new Set([
+  "build_request",
+  "static_html_build",
+  "framework_app_build"
+]);
 
 export type { RequiredActionType } from "./executionStyleContracts";
 
@@ -219,6 +234,7 @@ export function inferRequiredActionType(
   currentUserRequest: string,
   fullExecutionInput = ""
 ): RequiredActionType {
+  const resolvedSemanticRouteId = extractResolvedSemanticRouteId(fullExecutionInput);
   if (CREATE_SKILL_INTENT_PATTERN.test(currentUserRequest)) {
     return "create_skill";
   }
@@ -231,7 +247,13 @@ export function inferRequiredActionType(
     }
   }
   const hasTrackedRuntime = hasTrackedRuntimeContext(fullExecutionInput);
-  if (hasTrackedRuntime) {
+  if (
+    hasTrackedRuntime &&
+    (
+      resolvedSemanticRouteId === null ||
+      SEMANTIC_ROUTE_RUNTIME_FOLLOW_UP_IDS.has(resolvedSemanticRouteId)
+    )
+  ) {
     const suppressesNaturalBrowserOpen =
       NEGATED_NATURAL_OPEN_BROWSER_PATTERN.test(currentUserRequest);
     const referencesTrackedBrowserTarget = currentUserRequestReferencesTrackedBrowserTarget(
@@ -276,6 +298,10 @@ export function inferRequiredActionType(
     }
   }
   if (
+    (
+      resolvedSemanticRouteId === null ||
+      SEMANTIC_ROUTE_ARTIFACT_EDIT_IDS.has(resolvedSemanticRouteId)
+    ) &&
     NATURAL_ARTIFACT_EDIT_CONTEXT_PATTERN.test(fullExecutionInput) &&
     NATURAL_ARTIFACT_EDIT_REQUEST_PATTERN.test(currentUserRequest)
   ) {

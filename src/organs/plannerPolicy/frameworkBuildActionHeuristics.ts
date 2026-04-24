@@ -2,8 +2,6 @@
  * @fileoverview Framework-app specific action-shape heuristics for execution-style build-policy validation.
  */
 
-import path from "node:path";
-
 import { PlannedAction } from "../../core/types";
 import { PlannerExecutionEnvironmentContext } from "./executionStyleContracts";
 import { extractRequestedFrameworkPathFolderName } from "./frameworkRequestPathParsing";

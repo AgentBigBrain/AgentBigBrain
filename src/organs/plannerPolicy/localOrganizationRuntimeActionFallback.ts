@@ -15,11 +15,15 @@ const SUPPORTED_LOCAL_ORGANIZATION_FALLBACK_SHELL_KINDS = new Set([
   "pwsh"
 ]);
 const DESTINATION_FOLDER_CALLED_PATTERN =
-  /\bfolder called\s+["']?([A-Za-z0-9][A-Za-z0-9._ -]*)["']?/i;
+  /\bfolder called\s+["']?([A-Za-z0-9][A-Za-z0-9._ -]*?)(?=["']?(?:\s+(?:on|in|under)\b|[.?!,]|$))/i;
 const DESTINATION_IMPLICIT_NAME_PATTERN =
   /\b(?:go|belongs?)\b[\s\S]{0,40}\b(?:in|into|under)\s+["']?([A-Za-z0-9][A-Za-z0-9._ -]*)["']?(?=\s+(?:on|in|under)\b|[.?!,]|$)/i;
 const NAME_BEGINS_WITH_PREFIX_PATTERN =
   /\bname\s+beg(?:inning\s+(?:in|with)|ins?\s+with)\s+["']?([A-Za-z0-9][A-Za-z0-9._-]*)["']?/i;
+const EARLIER_PROJECT_FOLDERS_PREFIX_PATTERN =
+  /\b(?:the\s+)?earlier\s+([A-Za-z0-9][A-Za-z0-9._-]*)\s+project\s+folders\b/i;
+const NAMED_PROJECT_FOLDERS_PREFIX_PATTERN =
+  /\b(?:organize|move)\s+(?:the\s+)?([A-Za-z0-9][A-Za-z0-9._-]*)\s+project\s+folders\b/i;
 const USER_DESKTOP_LOCATION_PATTERN = /\bmy\s+desktop\b/i;
 const USER_DOCUMENTS_LOCATION_PATTERN = /\bmy\s+documents\b/i;
 const USER_DOWNLOADS_LOCATION_PATTERN = /\bmy\s+downloads\b/i;
@@ -87,7 +91,17 @@ function extractRequestedDestinationFolderName(
 function extractRequestedOrganizationPrefix(currentUserRequest: string): string | null {
   const activeRequest = extractActiveRequestSegment(currentUserRequest).trim();
   const match = activeRequest.match(NAME_BEGINS_WITH_PREFIX_PATTERN);
-  const prefix = match?.[1]?.trim() ?? "";
+  const earlierProjectFoldersMatch = activeRequest.match(
+    EARLIER_PROJECT_FOLDERS_PREFIX_PATTERN
+  );
+  const namedProjectFoldersMatch = activeRequest.match(
+    NAMED_PROJECT_FOLDERS_PREFIX_PATTERN
+  );
+  const prefix =
+    match?.[1]?.trim() ??
+    earlierProjectFoldersMatch?.[1]?.trim() ??
+    namedProjectFoldersMatch?.[1]?.trim() ??
+    "";
   return prefix.length > 0 ? prefix : null;
 }
 

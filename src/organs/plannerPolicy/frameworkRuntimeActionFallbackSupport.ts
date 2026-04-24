@@ -18,6 +18,10 @@ export interface FrameworkLoopbackTarget {
 
 const TRACKED_WORKSPACE_ROOT_PATTERN =
   /(?:^|\n)-\s+(?:Root path|Workspace root):\s+([^\r\n]+)\s*$/im;
+const FRAMEWORK_BUILD_LANE_PATTERN =
+  /\bExecution lane:\s*framework_app_build\b/i;
+const PREFERRED_FRAMEWORK_PATTERN =
+  /(?:^|\n)Preferred framework:\s*(nextjs|react)\s*\.?$/im;
 const TRACKED_PREVIEW_URL_PATTERN =
   /(?:^|\n)-\s+Preview URL:\s+(?!none\b)([^\r\n]+)\s*$/im;
 const TRACKED_PREVIEW_PROCESS_LEASE_PATTERN =
@@ -137,6 +141,35 @@ export function extractTrackedWorkspaceRoot(requestContext: string): string | nu
   return rawRoot && rawRoot.length > 0 ? rawRoot : null;
 }
 
+/** Returns whether the wrapped execution input already selected the framework build lane. */
+export function hasFrameworkBuildLaneMarker(requestContext: string): boolean {
+  return FRAMEWORK_BUILD_LANE_PATTERN.test(requestContext);
+}
+
+/**
+ * Extracts preferred framework kind.
+ *
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses local constants/helpers within this module.
+ * @param requestContext - Input consumed by this helper.
+ * @returns Result produced by this helper.
+ */
+function extractPreferredFrameworkKind(
+  requestContext: string
+): FrameworkFallbackKind | null {
+  const preferredFramework = requestContext.match(PREFERRED_FRAMEWORK_PATTERN)?.[1]?.trim().toLowerCase();
+  if (preferredFramework === "nextjs") {
+    return "next_js";
+  }
+  if (preferredFramework === "react") {
+    return "vite_react";
+  }
+  return null;
+}
+
 /** Extracts the tracked preview URL from wrapped conversation execution input when present. */
 export function extractTrackedPreviewUrl(requestContext: string): string | null {
   const rawPreviewUrl =
@@ -199,6 +232,10 @@ export function resolveFrameworkFallbackKind(
   trackedWorkspaceRoot: string | null,
   namedWorkspaceRoot: string | null = null
 ): FrameworkFallbackKind | null {
+  const preferredFrameworkKind = extractPreferredFrameworkKind(requestContext);
+  if (preferredFrameworkKind) {
+    return preferredFrameworkKind;
+  }
   if (/\bnext\.?js\b|\bnextjs\b/i.test(requestContext)) {
     return "next_js";
   }

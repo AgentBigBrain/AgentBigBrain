@@ -35,6 +35,7 @@ import {
   normalizeNextJsRouteWriteActions,
   normalizeUnsafeFrameworkScaffoldActions
 } from "./frameworkActionRepairSupport";
+import { normalizeStaticHtmlPreviewActions } from "./staticHtmlPreviewActionNormalization";
 import {
   PlannerActionPreparationResult,
   PlannerExecutionEnvironmentContext,
@@ -63,7 +64,7 @@ export function preparePlannerActions(
     currentUserRequest,
       requiredActionType
   );
-  actions = stripExecutionStyleRespondActions(actions, currentUserRequest);
+  actions = stripExecutionStyleRespondActions(actions, currentUserRequest, requiredActionType);
   actions = normalizeUnsafeFrameworkScaffoldActions(
     actions,
     currentUserRequest,
@@ -79,6 +80,11 @@ export function preparePlannerActions(
     currentUserRequest,
     requiredActionType,
     fullExecutionInput
+  );
+  actions = normalizeStaticHtmlPreviewActions(
+    actions,
+    currentUserRequest,
+    executionEnvironment
   );
   actions = normalizeOpenBrowserWorkspaceContext(actions, fullExecutionInput);
   actions = normalizeLinkedPreviewShutdownActions(

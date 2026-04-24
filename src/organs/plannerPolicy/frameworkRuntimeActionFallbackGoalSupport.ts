@@ -3,7 +3,7 @@
  * separate from the main deterministic lifecycle builder.
  */
 
-import { extractActiveRequestSegment } from "../../core/currentRequestExtraction";
+import { extractSemanticRequestSegment } from "../../core/currentRequestExtraction";
 import { extractRequestedFrameworkFolderName } from "./frameworkBuildActionHeuristics";
 import { getPathModuleForPathValue } from "./frameworkPathSupport";
 import {
@@ -48,9 +48,9 @@ export function resolveFrameworkFallbackRequestContext(
   goalContext: string | null,
   effectiveTrackedWorkspaceRoot: string | null
 ): FrameworkFallbackRequestContext {
-  const activeRequest = extractActiveRequestSegment(requestContext).trim();
+  const activeRequest = extractSemanticRequestSegment(requestContext).trim();
   const goalRequest =
-    typeof goalContext === "string" ? extractActiveRequestSegment(goalContext).trim() : "";
+    typeof goalContext === "string" ? extractSemanticRequestSegment(goalContext).trim() : "";
   if (isRuntimeProcessManagementRequest(activeRequest)) {
     return {
       activeRequest,

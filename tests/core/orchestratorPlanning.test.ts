@@ -63,7 +63,7 @@ test("buildProfileAwareInput delegates to the memory broker", async () => {
     userInput: "planner input",
     profileMemoryStatus: "attached"
   });
-  assert.equal(capturedContext?.dominantLane, "workflow");
+  assert.equal((capturedContext as ConversationDomainContext | null)?.dominantLane, "workflow");
 });
 
 test("loadPlannerLearningContext returns empty hints for blank current request", async () => {
@@ -81,7 +81,11 @@ test("loadPlannerLearningContext passes the session lane into workflow hint retr
   const result = await loadPlannerLearningContext(
     {
       workflowLearningStore: {
-        getRelevantPatterns: async (_query, _limit, sessionDomainLane) => {
+        getRelevantPatterns: async (
+          _query: string,
+          _limit: number,
+          sessionDomainLane: ConversationDomainContext["dominantLane"] | null
+        ) => {
           capturedLane = sessionDomainLane;
           return [];
         }
@@ -122,7 +126,12 @@ test("planOrchestratorAttempt caps actions and annotates planner notes", async (
     },
     maxActionsPerTask: 1,
     planner: {
-      plan: async (_task, _plannerModel, _synthesizerModel, options) => {
+      plan: async (
+        _task: unknown,
+        _plannerModel: unknown,
+        _synthesizerModel: unknown,
+        options: unknown
+      ) => {
         capturedPlannerOptions = (options ?? null) as unknown as Record<string, unknown> | null;
         return {
         taskId: "task_orchestrator_planning_2",
@@ -205,8 +214,14 @@ test("planOrchestratorAttempt caps actions and annotates planner notes", async (
   );
   assert.equal(traceEvents[0]?.eventType, "planner_completed");
   assert.equal((traceEvents[0]?.details as AppendRuntimeTraceEventInput["details"])?.attemptNumber, 2);
-  assert.equal(capturedPlannerOptions?.conversationDomainContext !== undefined, true);
-  assert.equal(capturedPlannerOptions?.workflowBridge !== undefined, true);
+  assert.equal(
+    (capturedPlannerOptions as Record<string, unknown> | null)?.conversationDomainContext !== undefined,
+    true
+  );
+  assert.equal(
+    (capturedPlannerOptions as Record<string, unknown> | null)?.workflowBridge !== undefined,
+    true
+  );
 });
 
 test("planOrchestratorAttempt preserves deterministic framework live lifecycle actions past the generic cap", async () => {
