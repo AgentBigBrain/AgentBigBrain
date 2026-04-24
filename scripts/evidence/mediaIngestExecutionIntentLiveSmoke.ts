@@ -281,7 +281,7 @@ function buildTelegramConfig(): TelegramInterfaceConfig {
     },
     security: {
       sharedSecret: "shared-secret",
-      allowedUsernames: ["anthonybenny"],
+      allowedUsernames: ["fixtureuser"],
       allowedUserIds: [],
       rateLimitWindowMs: 60_000,
       maxEventsPerWindow: 20,
@@ -667,7 +667,7 @@ function createTelegramAdapterHarness(harness: TelegramLiveSmokeHarness): Telegr
         note,
         nowIso
       );
-      return record ? toConversationMemoryReviewRecords([record])[0] ?? null : null;
+      return record.episode ? toConversationMemoryReviewRecords([record.episode])[0] ?? null : null;
     },
     markConversationMemoryEpisodeWrong: async (
       episodeId: string,
@@ -684,7 +684,7 @@ function createTelegramAdapterHarness(harness: TelegramLiveSmokeHarness): Telegr
         note,
         nowIso
       );
-      return record ? toConversationMemoryReviewRecords([record])[0] ?? null : null;
+      return record.episode ? toConversationMemoryReviewRecords([record.episode])[0] ?? null : null;
     },
     forgetConversationMemoryEpisode: async (
       episodeId: string,
@@ -698,7 +698,7 @@ function createTelegramAdapterHarness(harness: TelegramLiveSmokeHarness): Telegr
         sourceText,
         nowIso
       );
-      return record ? toConversationMemoryReviewRecords([record])[0] ?? null : null;
+      return record.episode ? toConversationMemoryReviewRecords([record.episode])[0] ?? null : null;
     },
     listManagedProcessSnapshots: async () => [],
     listBrowserSessionSnapshots: async () => []
@@ -806,7 +806,7 @@ async function runScenario(
     const update = buildTelegramUpdateForScenario(scenario, fixtureBuffer.length, {
       chatId: `chat_${scenario.id}`,
       userId: "3001",
-      username: "anthonybenny",
+      username: "fixtureuser",
       updateId: Math.abs(scenario.id.split("").reduce((acc, char) => (acc * 31 + char.charCodeAt(0)) | 0, 17)),
       dateSeconds: Date.UTC(2026, 2, 10, 18, 0, 0) / 1000
     });
@@ -820,7 +820,7 @@ async function runScenario(
       provider: "telegram",
       conversationId: `chat_${scenario.id}`,
       userId: "3001",
-      username: "anthonybenny",
+      username: "fixtureuser",
       conversationVisibility: "private",
       receivedAt: new Date(Date.UTC(2026, 2, 10, 18, 0, 0)).toISOString()
     });

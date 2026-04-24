@@ -6,6 +6,7 @@ import type {
   ConversationInboundMediaAttachment,
   ConversationInboundMediaInterpretation
 } from "../../interfaces/mediaRuntime/contracts";
+import { collectEntityHintsFromTexts } from "./interpretationSupport";
 
 /**
  * Extracts simple entity-name hints from one caption for fallback media interpretation.
@@ -17,8 +18,7 @@ function collectCaptionEntityHints(caption: string | null): string[] {
   if (!caption) {
     return [];
   }
-  const matches = caption.match(/\b[A-Z][A-Za-z'’-]{1,40}\b/g) ?? [];
-  return [...new Set(matches.map((entry) => entry.trim()).filter((entry) => entry.length > 1))].slice(0, 4);
+  return [...collectEntityHintsFromTexts([caption], 4)];
 }
 
 /**

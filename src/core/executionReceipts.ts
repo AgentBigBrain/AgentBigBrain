@@ -10,6 +10,7 @@ import { hashSha256 } from "./cryptoUtils";
 import { withFileLock, writeFileAtomic } from "./fileLock";
 import { makeId } from "./ids";
 import { sha256HexFromCanonicalJson } from "./normalizers/canonicalizationRules";
+import { buildProjectionChangeSet } from "./projections/service";
 import { withSqliteDatabase } from "./sqliteStore";
 import { ActionRunResult } from "./types";
 
@@ -40,6 +41,7 @@ interface ExecutionReceiptStoreOptions {
     backend?: LedgerBackend;
     sqlitePath?: string;
     exportJsonOnWrite?: boolean;
+    onChange?: (changeSet: import("./projections/contracts").ProjectionChangeSet) => Promise<void> | void;
 }
 
 export interface AppendExecutionReceiptInput {
@@ -210,6 +212,7 @@ export class ExecutionReceiptStore {
     private readonly backend: LedgerBackend;
     private readonly sqlitePath: string;
     private readonly exportJsonOnWrite: boolean;
+    private readonly onChange?: ExecutionReceiptStoreOptions["onChange"];
 
     /**
      * Initializes `ExecutionReceiptStore` with deterministic runtime dependencies.
@@ -230,6 +233,7 @@ export class ExecutionReceiptStore {
         this.backend = options.backend ?? "json";
         this.sqlitePath = options.sqlitePath ?? "runtime/ledgers.sqlite";
         this.exportJsonOnWrite = options.exportJsonOnWrite ?? true;
+        this.onChange = options.onChange;
     }
 
     /**
@@ -281,7 +285,9 @@ export class ExecutionReceiptStore {
         }
 
         if (this.backend === "sqlite") {
-            return this.appendApprovedActionReceiptSqlite(input);
+            const receipt = await this.appendApprovedActionReceiptSqlite(input);
+            await this.notifyProjectionChange(receipt);
+            return receipt;
         }
 
         const outputDigest = hashSha256((input.actionResult.output ?? "").trim());
@@ -329,6 +335,7 @@ export class ExecutionReceiptStore {
             throw new Error("Execution receipt append failed unexpectedly.");
         }
 
+        await this.notifyProjectionChange(appendedReceipt);
         return appendedReceipt;
     }
 
@@ -669,6 +676,33 @@ export class ExecutionReceiptStore {
         await withFileLock(this.filePath, async () => {
             await writeFileAtomic(this.filePath, JSON.stringify(snapshot, null, 2));
         });
+    }
+
+    /**
+     * Emits one normalized projection change after an execution receipt append.
+     *
+     * **Why it exists:**
+     * Receipt writes are a canonical audit seam for the mirror, and this helper keeps optional
+     * projection fanout out of the receipt chain-building logic.
+     *
+     * **What it talks to:**
+     * - Uses `buildProjectionChangeSet(...)` from `./projections/service`.
+     *
+     * @param receipt - Newly appended execution receipt.
+     * @returns Promise resolving after the optional projection callback completes.
+     */
+    private async notifyProjectionChange(receipt: ExecutionReceipt): Promise<void> {
+        if (!this.onChange) {
+            return;
+        }
+        await this.onChange(buildProjectionChangeSet(
+            ["execution_receipts_changed"],
+            [`execution_receipt:${receipt.id}`],
+            {
+                receiptId: receipt.id,
+                actionType: receipt.actionType
+            }
+        ));
     }
 
     /**

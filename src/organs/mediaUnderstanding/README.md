@@ -31,6 +31,10 @@ transport parsing but before conversation execution and memory brokerage.
   memory or session state.
 - `BRAIN_MEDIA_VISION_BACKEND=ollama` now supports local image understanding directly through
   Ollama's `/api/chat` surface.
+- `BRAIN_MEDIA_VISION_FALLBACK_BACKEND` can provide one explicit secondary image-understanding
+  provider when the primary vision backend fails to load or returns no usable output. This keeps
+  the runtime bounded while avoiding silent caption-only degradation on resource-constrained local
+  Gemma runs.
 - `BRAIN_MEDIA_TRANSCRIPTION_BACKEND=ollama` is currently an experimental local multimodal-audio
   path for models such as Gemma 4. The runtime can target Ollama's OpenAI-compatible
   `/v1/responses` surface, but real audio support still depends on the exact Ollama build and model

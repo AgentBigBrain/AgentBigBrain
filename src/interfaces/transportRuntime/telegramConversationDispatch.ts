@@ -2,7 +2,10 @@
  * @fileoverview Shared Telegram gateway helpers for media enrichment and chat-id derivation before conversation dispatch.
  */
 
-import { buildConversationInboundUserInput } from "../mediaRuntime/mediaNormalization";
+import {
+  buildConversationCommandRoutingInput,
+  buildConversationInboundUserInput
+} from "../mediaRuntime/mediaNormalization";
 import {
   downloadTelegramFileBuffer,
   resolveTelegramFileDescriptor
@@ -14,6 +17,7 @@ import type {
 } from "./telegramGatewayRuntime";
 import type { MediaUnderstandingOrgan } from "../../organs/mediaUnderstanding/mediaInterpretation";
 import type { ConversationInboundMediaEnvelope } from "../mediaRuntime/contracts";
+import type { MediaArtifactStore } from "../../core/mediaArtifactStore";
 
 /**
  * Derives one Telegram chat id from a canonical conversation key.
@@ -35,6 +39,7 @@ export interface EnrichAcceptedTelegramUpdateWithMediaInput {
   prepared: PreparedTelegramAcceptedUpdate;
   config: TelegramInterfaceConfig;
   mediaUnderstandingOrgan?: MediaUnderstandingOrgan;
+  mediaArtifactStore?: MediaArtifactStore;
 }
 
 /**
@@ -85,9 +90,9 @@ export async function enrichAcceptedTelegramUpdateWithMedia(
   }
 
   let interpretedMedia = originalMedia;
-  if (input.mediaUnderstandingOrgan) {
+  const buffersByFileId = new Map<string, Buffer>();
+  if (input.mediaUnderstandingOrgan || input.mediaArtifactStore) {
     try {
-      const buffersByFileId = new Map<string, Buffer>();
       for (const attachment of originalMedia.attachments) {
         const descriptor = await resolveTelegramFileDescriptor(
           input.config.apiBaseUrl,
@@ -100,11 +105,13 @@ export async function enrichAcceptedTelegramUpdateWithMedia(
         );
         buffersByFileId.set(attachment.fileId, buffer);
       }
-      interpretedMedia =
-        (await input.mediaUnderstandingOrgan.interpretEnvelope(
-          originalMedia,
-          buffersByFileId
-        )) ?? originalMedia;
+      if (input.mediaUnderstandingOrgan) {
+        interpretedMedia =
+          (await input.mediaUnderstandingOrgan.interpretEnvelope(
+            originalMedia,
+            buffersByFileId
+          )) ?? originalMedia;
+      }
     } catch (error) {
       console.warn(
         `[TelegramGateway] media ingest rejected: ${(error as Error).message}`
@@ -116,6 +123,34 @@ export async function enrichAcceptedTelegramUpdateWithMedia(
           "I couldn't safely read that media attachment. Please resend it or describe it in text."
       };
     }
+  }
+
+  if (input.mediaArtifactStore && interpretedMedia.attachments.length > 0) {
+    const artifactAttachments = [];
+    for (const attachment of interpretedMedia.attachments) {
+      const buffer = buffersByFileId.get(attachment.fileId);
+      if (!buffer) {
+        artifactAttachments.push(attachment);
+        continue;
+      }
+      const artifact = await input.mediaArtifactStore.recordArtifact({
+        attachment,
+        buffer,
+        sourceSurface: "telegram_interface",
+        sourceConversationKey: `telegram:${input.prepared.chatId}:${input.prepared.userId}`,
+        sourceUserId: input.prepared.userId,
+        recordedAt: input.prepared.inbound.receivedAt ?? new Date().toISOString()
+      });
+      artifactAttachments.push({
+        ...attachment,
+        artifactId: artifact.artifactId,
+        checksumSha256: artifact.checksumSha256,
+        ownedAssetPath: artifact.ownedAssetPath
+      });
+    }
+    interpretedMedia = {
+      attachments: artifactAttachments
+    };
   }
 
   if (
@@ -140,7 +175,11 @@ export async function enrichAcceptedTelegramUpdateWithMedia(
     ...input.prepared,
     inbound: {
       ...input.prepared.inbound,
-      text: canonicalUserInput,
+      text: input.prepared.inbound.text,
+      commandRoutingText: buildConversationCommandRoutingInput(
+        input.prepared.inbound.text,
+        interpretedMedia
+      ),
       media: interpretedMedia
     },
     entityGraphEvent: {

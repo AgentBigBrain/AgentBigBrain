@@ -43,7 +43,6 @@ import {
   type ApprovedManagedProcessStartContext
 } from "./loopCleanupPolicy";
 import { readRuntimeOwnershipInspectionMetadata } from "./workspaceRecoveryInspectionMetadata";
-import { inferRequiredActionType } from "../../organs/plannerPolicy/explicitActionIntent";
 
 /**
  * Formats deterministic live-run completion reasoning from the mission contract.
@@ -409,10 +408,13 @@ function resolveRuntimeInspectionCompletion(
   overarchingGoal: string,
   lastResult: TaskRunResult
 ): AutonomousNextStepModelOutput | null {
-  if (
-    inferRequiredActionType(overarchingGoal, lastResult.task.userInput) !==
-    "inspect_workspace_resources"
-  ) {
+  const runtimeManagementRequested =
+    RUNTIME_PROCESS_TARGET_PATTERN.test(overarchingGoal) &&
+    (
+      RUNTIME_SHUTDOWN_VERB_PATTERN.test(overarchingGoal) ||
+      /\b(?:inspect|check|verify|confirm|make\s+sure|see\s+if|look\s+at)\b/i.test(overarchingGoal)
+    );
+  if (!runtimeManagementRequested) {
     return null;
   }
 
@@ -431,18 +433,22 @@ function resolveRuntimeInspectionCompletion(
     inspectionMetadata.previewProcessLeaseIds.length > 0 ||
     inspectionMetadata.recoveredExactPreviewHolderPids.length > 0 ||
     previewServerCandidates.length > 0;
+  const hasCurrentBrowserSession = inspectionMetadata.browserSessionIds.length > 0;
+  const hasOrphanedBrowserSession = inspectionMetadata.orphanedBrowserSessionIds.length > 0;
+  const runtimeStillActive =
+    hasLivePreviewHolder || hasCurrentBrowserSession || hasOrphanedBrowserSession;
   const shutdownVerificationRequested =
     RUNTIME_PROCESS_TARGET_PATTERN.test(overarchingGoal) &&
     RUNTIME_SHUTDOWN_VERB_PATTERN.test(overarchingGoal);
 
-  if (hasLivePreviewHolder && shutdownVerificationRequested) {
+  if (runtimeStillActive && shutdownVerificationRequested) {
     return null;
   }
 
   return {
     isGoalMet: true,
     reasoning: buildRuntimeInspectionCompletionReasoning({
-      runtimeActive: hasLivePreviewHolder,
+      runtimeActive: runtimeStillActive,
       nonPreviewCandidates,
       shutdownVerificationRequested
     }),

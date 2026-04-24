@@ -55,7 +55,7 @@ interface Stage686CheckpointBArtifact {
 export async function runStage686CheckpointB(): Promise<Stage686CheckpointBArtifact> {
   const observedAt = "2026-03-01T00:00:00.000Z";
   const extraction = extractEntityCandidates({
-    text: "Billy and Sarah reviewed Project Aurora at Flare Labs.",
+    text: "Billy and Sarah reviewed Project Aurora at Beacon Labs.",
     observedAt,
     evidenceRef: "trace:stage686_b_001"
   });

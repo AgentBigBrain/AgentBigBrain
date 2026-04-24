@@ -954,7 +954,7 @@ async function runAmbiguousClarificationScenario(
   );
   const conversationId = `autonomy-front-door-clarify-${runId}`;
   const userId = "autonomy-live-smoke-user";
-  const username = "anthonybenny";
+  const username = "fixtureuser";
   const prompt =
     `Please take this from start to finish: move the project folder named ${sourceFolderName} ` +
     `from my desktop into a folder called ${targetRootName} on my desktop. ` +

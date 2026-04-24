@@ -84,7 +84,7 @@ const SMOKE_DEADLINE_MS = 90_000;
 const MIN_RETRY_BUDGET_MS = 30_000;
 const USER_ID = "autonomous-direct-auto-smoke-user";
 const CHAT_ID = "autonomous-direct-auto-smoke-chat";
-const USERNAME = "anthonybenny";
+const USERNAME = "fixtureuser";
 const LIVE_RUN_RUNTIME_PATH = path.resolve(
   process.cwd(),
   `runtime/tmp-autonomous-runtime-affordances-direct-auto-live-run-${Date.now()}`

@@ -558,6 +558,7 @@ function buildBillyEntityGraph(): EntityGraphV1 {
         canonicalName: "Billy",
         entityType: "person",
         disambiguator: null,
+        domainHint: null,
         aliases: ["Billy"],
         firstSeenAt: "2026-02-10T12:00:00.000Z",
         lastSeenAt: "2026-03-08T11:00:00.000Z",

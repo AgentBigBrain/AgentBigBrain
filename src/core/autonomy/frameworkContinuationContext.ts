@@ -27,6 +27,12 @@ function escapeRegexLiteral(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+interface RuntimeInspectionTargetHintPayload {
+  rootPath?: string;
+  previewUrl?: string;
+  previewProcessLeaseId?: string;
+}
+
 /**
  * Evaluates whether one model-produced continuation still needs tracked framework context injected.
  *
@@ -148,7 +154,14 @@ export function enrichTrackedRuntimeManagementNextUserInput(
     "Use inspect_workspace_resources first so this run proves whether the tracked preview, browser, or process stack is still active before any stop or success claim.",
     "Do not create, modify, build, install, scaffold, or rename project files for this turn."
   ];
+  if (normalizedNextUserInput.includes("AUTONOMOUS_RUNTIME_INSPECTION_TARGET ")) {
+    return normalizedNextUserInput;
+  }
   const trackedWorkspaceRoot = trackedManagedProcessStartContext?.cwd?.trim() ?? "";
+  const runtimeInspectionTargetHint: RuntimeInspectionTargetHintPayload = {};
+  if (trackedWorkspaceRoot.length > 0) {
+    runtimeInspectionTargetHint.rootPath = trackedWorkspaceRoot;
+  }
   if (
     trackedWorkspaceRoot.length > 0 &&
     !new RegExp(escapeRegexLiteral(trackedWorkspaceRoot), "i").test(normalizedNextUserInput)
@@ -156,6 +169,9 @@ export function enrichTrackedRuntimeManagementNextUserInput(
     directives.unshift(`Treat \`${trackedWorkspaceRoot}\` as the exact runtime target for this turn.`);
   }
   const trackedLoopbackUrl = trackedLoopbackTarget?.url?.trim() ?? "";
+  if (trackedLoopbackUrl.length > 0) {
+    runtimeInspectionTargetHint.previewUrl = trackedLoopbackUrl;
+  }
   if (
     trackedLoopbackUrl.length > 0 &&
     !new RegExp(escapeRegexLiteral(trackedLoopbackUrl), "i").test(normalizedNextUserInput)
@@ -164,7 +180,15 @@ export function enrichTrackedRuntimeManagementNextUserInput(
       `Treat ${trackedLoopbackUrl} as the last tracked preview URL only; do not restart, rebuild, or probe unrelated URLs in this shutdown or inspection pass.`
     );
   }
-  return `${directives.join(" ")} ${normalizedNextUserInput}`.trim();
+  const trackedLeaseId = trackedManagedProcessStartContext?.leaseId?.trim() ?? "";
+  if (trackedLeaseId.length > 0) {
+    runtimeInspectionTargetHint.previewProcessLeaseId = trackedLeaseId;
+  }
+  const hintPrefix =
+    Object.keys(runtimeInspectionTargetHint).length > 0
+      ? `AUTONOMOUS_RUNTIME_INSPECTION_TARGET ${JSON.stringify(runtimeInspectionTargetHint)}\n`
+      : "";
+  return `${hintPrefix}${directives.join(" ")} ${normalizedNextUserInput}`.trim();
 }
 
 /**

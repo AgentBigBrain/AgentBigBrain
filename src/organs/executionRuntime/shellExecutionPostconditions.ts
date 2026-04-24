@@ -200,13 +200,17 @@ function extractViteScaffoldTargetRoot(command: string, cwd: string): string | n
   if (!scaffoldMatch) {
     return null;
   }
+  const powerShellAssignments = extractPowerShellVariableAssignments(normalized);
+  const explicitFinalRoot = powerShellAssignments.get("final");
+  if (explicitFinalRoot) {
+    return getPathModuleForContext(cwd, explicitFinalRoot).resolve(cwd, explicitFinalRoot);
+  }
   const rawSuffix = normalized.slice(scaffoldMatch.index + scaffoldMatch[0].length).trim();
   const suffixTokens = tokenizeShellSuffix(rawSuffix);
   const rawTarget = extractFirstPositionalShellArgument(suffixTokens);
   if (!rawTarget) {
     return null;
   }
-  const powerShellAssignments = extractPowerShellVariableAssignments(normalized);
   const scaffoldCwd = resolvePowerShellWorkingDirectoryBeforeScaffold(
     normalized.slice(0, scaffoldMatch.index),
     cwd,

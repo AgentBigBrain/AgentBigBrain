@@ -28,12 +28,13 @@ import { runCheckpoint611LiveReview } from "./CheckpointReviewRunners/stage6_5Ch
 import { runCheckpoint613LiveReview } from "./CheckpointReviewRunners/stage6_5Checkpoint6_13Live";
 import { runCheckpoint675LiveReview } from "../core/stage6_75CheckpointLive";
 import { EntityGraphStore } from "../core/entityGraphStore";
+import { MediaArtifactStore } from "../core/mediaArtifactStore";
 import { buildTelegramCapabilitySummary } from "./conversationRuntime/capabilityIntrospection";
 import { MediaUnderstandingOrgan } from "../organs/mediaUnderstanding/mediaInterpretation";
 import { SkillRegistryStore } from "../organs/skillRegistry/skillRegistryStore";
 import type { AutonomyBoundaryInterpretationResolver, ContinuationInterpretationResolver, ContextualFollowupInterpretationResolver, ContextualReferenceInterpretationResolver, EntityDomainHintInterpretationResolver, EntityReferenceInterpretationResolver, EntityTypeInterpretationResolver, HandoffControlInterpretationResolver, IdentityInterpretationResolver, LocalIntentModelResolver, StatusRecallBoundaryInterpretationResolver, TopicKeyInterpretationResolver } from "../organs/languageUnderstanding/localIntentModelContracts";
 import type { ProposalReplyInterpretationResolver } from "../organs/languageUnderstanding/localIntentModelProposalReplyContracts";
-import { InterfaceBrainRegistry } from "./interfaceBrainRegistry"; export type { TelegramOutboundDeliveryObservation } from "./transportRuntime/contracts"; interface TelegramGatewayOptions { sessionStore?: InterfaceSessionStore; entityGraphStore?: EntityGraphStore; mediaUnderstandingOrgan?: MediaUnderstandingOrgan; localIntentModelResolver?: LocalIntentModelResolver; autonomyBoundaryInterpretationResolver?: AutonomyBoundaryInterpretationResolver; statusRecallBoundaryInterpretationResolver?: StatusRecallBoundaryInterpretationResolver; continuationInterpretationResolver?: ContinuationInterpretationResolver; contextualFollowupInterpretationResolver?: ContextualFollowupInterpretationResolver; contextualReferenceInterpretationResolver?: ContextualReferenceInterpretationResolver; entityDomainHintInterpretationResolver?: EntityDomainHintInterpretationResolver; entityReferenceInterpretationResolver?: EntityReferenceInterpretationResolver; entityTypeInterpretationResolver?: EntityTypeInterpretationResolver; handoffControlInterpretationResolver?: HandoffControlInterpretationResolver; identityInterpretationResolver?: IdentityInterpretationResolver; proposalReplyInterpretationResolver?: ProposalReplyInterpretationResolver; topicKeyInterpretationResolver?: TopicKeyInterpretationResolver; brainRegistry?: InterfaceBrainRegistry; onOutboundDelivery?: TelegramOutboundDeliveryObserver; }
+import { InterfaceBrainRegistry } from "./interfaceBrainRegistry"; export type { TelegramOutboundDeliveryObservation } from "./transportRuntime/contracts"; interface TelegramGatewayOptions { sessionStore?: InterfaceSessionStore; entityGraphStore?: EntityGraphStore; mediaArtifactStore?: MediaArtifactStore; mediaUnderstandingOrgan?: MediaUnderstandingOrgan; localIntentModelResolver?: LocalIntentModelResolver; autonomyBoundaryInterpretationResolver?: AutonomyBoundaryInterpretationResolver; statusRecallBoundaryInterpretationResolver?: StatusRecallBoundaryInterpretationResolver; continuationInterpretationResolver?: ContinuationInterpretationResolver; contextualFollowupInterpretationResolver?: ContextualFollowupInterpretationResolver; contextualReferenceInterpretationResolver?: ContextualReferenceInterpretationResolver; entityDomainHintInterpretationResolver?: EntityDomainHintInterpretationResolver; entityReferenceInterpretationResolver?: EntityReferenceInterpretationResolver; entityTypeInterpretationResolver?: EntityTypeInterpretationResolver; handoffControlInterpretationResolver?: HandoffControlInterpretationResolver; identityInterpretationResolver?: IdentityInterpretationResolver; proposalReplyInterpretationResolver?: ProposalReplyInterpretationResolver; topicKeyInterpretationResolver?: TopicKeyInterpretationResolver; brainRegistry?: InterfaceBrainRegistry; onOutboundDelivery?: TelegramOutboundDeliveryObserver; }
 export class TelegramGateway {
   private running = false; private nextOffset = 0; private nextOutboundDeliverySequence = 1;
   private readonly sessionStore: InterfaceSessionStore;
@@ -41,7 +42,7 @@ export class TelegramGateway {
   private readonly pulseScheduler: AgentPulseScheduler;
   private readonly autonomousAbortControllers = new Map<string, AbortController>();
   private readonly entityGraphStore: EntityGraphStore;
-  private readonly mediaUnderstandingOrgan?: MediaUnderstandingOrgan;
+  private readonly mediaArtifactStore?: MediaArtifactStore; private readonly mediaUnderstandingOrgan?: MediaUnderstandingOrgan;
   private readonly onOutboundDelivery?: TelegramOutboundDeliveryObserver;
   private readonly entityDomainHintInterpretationResolver?: EntityDomainHintInterpretationResolver;
   private readonly entityTypeInterpretationResolver?: EntityTypeInterpretationResolver;
@@ -49,29 +50,41 @@ export class TelegramGateway {
   private readonly brainRegistry: InterfaceBrainRegistry;
   private nextDraftId = 1;
   /**
-   * Initializes `TelegramGateway` with deterministic runtime dependencies.
+   * Initializes the TelegramGateway instance with its runtime dependencies.
    *
    * **Why it exists:**
-   * Captures required dependencies at initialization time so runtime behavior remains explicit.
+   * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
    *
    * **What it talks to:**
    * - Uses `EntityGraphStore` (import `EntityGraphStore`) from `../core/entityGraphStore`.
    * - Uses `runCheckpoint675LiveReview` (import `runCheckpoint675LiveReview`) from `../core/stage6_75CheckpointLive`.
    * - Uses `AgentPulseScheduler` (import `AgentPulseScheduler`) from `./agentPulseScheduler`.
+   * - Uses `runGatewayCheckpointReview` (import `runGatewayCheckpointReview`) from `./checkpointReviewRouting`.
    * - Uses `runCheckpoint611LiveReview` (import `runCheckpoint611LiveReview`) from `./CheckpointReviewRunners/stage6_5Checkpoint6_11Live`.
    * - Uses `runCheckpoint613LiveReview` (import `runCheckpoint613LiveReview`) from `./CheckpointReviewRunners/stage6_5Checkpoint6_13Live`.
    * - Uses `runStage685CheckpointLiveReview` (import `runStage685CheckpointLiveReview`) from `./CheckpointReviewRunners/stage685CheckpointReviewRunner`.
-   * - Additional imported collaborators are also used in this function body.
-   *
-   * @param adapter - Value for adapter.
-   * @param config - Configuration or policy settings applied here.
-   * @param options - Optional tuning knobs for this operation.
+   * - Uses `ConversationManager` (import `ConversationManager`) from `./conversationManager`.
+   * - Uses `buildTelegramCapabilitySummary` (import `buildTelegramCapabilitySummary`) from `./conversationRuntime/capabilityIntrospection`.
+   * - Uses `createDynamicPulseEntityGraphGetter` (import `createDynamicPulseEntityGraphGetter`) from `./entityGraphRuntime`.
+   * - Uses `InterfaceBrainRegistry` (import `InterfaceBrainRegistry`) from `./interfaceBrainRegistry`.
+   * - Uses `renderPulseUserFacingSummaryV1` (import `renderPulseUserFacingSummaryV1`) from `./pulseUxRuntime`.
+   * - Uses `shouldSuppressPulseUserFacingDeliveryV1` (import `shouldSuppressPulseUserFacingDeliveryV1`) from `./pulseUxRuntime`.
+   * - Uses `TelegramInterfaceConfig` (import `TelegramInterfaceConfig`) from `./runtimeConfig`.
+   * - Uses `InterfaceSessionStore` (import `InterfaceSessionStore`) from `./sessionStore`.
+   * - Uses `TelegramAdapter` (import `TelegramAdapter`) from `./telegramAdapter`.
+   * - Uses `abortAutonomousTransportTask` (import `abortAutonomousTransportTask`) from `./transportRuntime/autonomousAbortControl`.
+   * - Uses `extractTelegramChatIdFromConversationKey` (import `extractTelegramChatIdFromConversationKey`) from `./transportRuntime/telegramConversationDispatch`.
+   * - Uses `selectUserFacingSummary` (import `selectUserFacingSummary`) from `./userFacingResult`.
+   * @param adapter - Input consumed by this helper.
+   * @param config - Input consumed by this helper.
+   * @param options - Input consumed by this helper.
    */
   constructor(private readonly adapter: TelegramAdapter, private readonly config: TelegramInterfaceConfig, options: TelegramGatewayOptions = {}) {
     const listManagedProcessSnapshots = typeof this.adapter.listManagedProcessSnapshots === "function" ? async () => this.adapter.listManagedProcessSnapshots() : undefined;
     const listBrowserSessionSnapshots = typeof this.adapter.listBrowserSessionSnapshots === "function" ? async () => this.adapter.listBrowserSessionSnapshots() : undefined;
     this.sessionStore = options.sessionStore ?? new InterfaceSessionStore();
     this.entityGraphStore = options.entityGraphStore ?? new EntityGraphStore();
+    this.mediaArtifactStore = options.mediaArtifactStore;
     this.mediaUnderstandingOrgan = options.mediaUnderstandingOrgan;
     this.onOutboundDelivery = options.onOutboundDelivery;
     this.entityDomainHintInterpretationResolver = options.entityDomainHintInterpretationResolver;
@@ -280,7 +293,8 @@ export class TelegramGateway {
     const enrichedPrepared = await enrichAcceptedTelegramUpdateWithMedia({
       prepared,
       config: this.config,
-      mediaUnderstandingOrgan: this.mediaUnderstandingOrgan
+      mediaUnderstandingOrgan: this.mediaUnderstandingOrgan,
+      mediaArtifactStore: this.mediaArtifactStore
     });
     if (enrichedPrepared.kind === "rejected") {
       await deliverPreparedTransportResponse(
@@ -304,6 +318,7 @@ export class TelegramGateway {
         transportIdentity: enrichedPrepared.transportIdentity ?? null,
         conversationVisibility: enrichedPrepared.conversationVisibility,
         text: enrichedPrepared.inbound.text,
+        commandRoutingText: enrichedPrepared.inbound.commandRoutingText,
         media: enrichedPrepared.inbound.media ?? null,
         receivedAt: enrichedPrepared.inbound.receivedAt ?? new Date().toISOString()
       },
@@ -387,7 +402,6 @@ export class TelegramGateway {
     this.nextDraftId = allocation.nextDraftId;
     return allocation.draftId;
   }
-
   /** Allocates a monotonic sequence for observed outbound deliveries in this gateway instance. */
   private allocateOutboundDeliverySequence(): number {
     const sequence = this.nextOutboundDeliverySequence;

@@ -61,6 +61,7 @@ function buildCheckpointGraph(): EntityGraphV1 {
         canonicalName: "Billy",
         entityType: "person",
         disambiguator: null,
+        domainHint: null,
         aliases: ["Billy"],
         firstSeenAt: "2025-10-01T00:00:00.000Z",
         lastSeenAt: "2026-02-25T00:00:00.000Z",
@@ -68,21 +69,23 @@ function buildCheckpointGraph(): EntityGraphV1 {
         evidenceRefs: ["trace:entity_billy"]
       },
       {
-        entityKey: "entity_flare_labs",
-        canonicalName: "Flare Labs",
+        entityKey: "entity_beacon_labs",
+        canonicalName: "Beacon Labs",
         entityType: "org",
         disambiguator: null,
-        aliases: ["Flare Labs"],
+        domainHint: null,
+        aliases: ["Beacon Labs"],
         firstSeenAt: "2025-10-01T00:00:00.000Z",
         lastSeenAt: "2026-02-20T00:00:00.000Z",
         salience: 5,
-        evidenceRefs: ["trace:entity_flare"]
+        evidenceRefs: ["trace:entity_beacon"]
       },
       {
         entityKey: "entity_project_aurora",
         canonicalName: "Project Aurora",
         entityType: "concept",
         disambiguator: null,
+        domainHint: null,
         aliases: ["Project Aurora"],
         firstSeenAt: "2025-10-01T00:00:00.000Z",
         lastSeenAt: "2026-01-15T00:00:00.000Z",
@@ -93,7 +96,7 @@ function buildCheckpointGraph(): EntityGraphV1 {
     edges: [
       {
         edgeKey: "edge_bridge_candidate",
-        sourceEntityKey: "entity_flare_labs",
+        sourceEntityKey: "entity_beacon_labs",
         targetEntityKey: "entity_project_aurora",
         relationType: "co_mentioned",
         status: "uncertain",
@@ -106,7 +109,7 @@ function buildCheckpointGraph(): EntityGraphV1 {
       {
         edgeKey: "edge_stale_confirmed",
         sourceEntityKey: "entity_billy",
-        targetEntityKey: "entity_flare_labs",
+        targetEntityKey: "entity_beacon_labs",
         relationType: "coworker",
         status: "confirmed",
         coMentionCount: 6,
@@ -148,7 +151,7 @@ function buildCheckpointStack() {
     threadKey: activeThreadKey,
     text: "Remind me later to finalize budget runway assumptions.",
     observedAt: "2026-02-28T09:05:00.000Z",
-    entityRefs: ["entity_flare_labs"],
+    entityRefs: ["entity_beacon_labs"],
     priorityHint: 0.74
   }).stack;
 }
@@ -248,7 +251,7 @@ export async function runStage686CheckpointE(): Promise<Stage686CheckpointEArtif
         {
           emittedAt: "2026-03-01T10:45:00.000Z",
           reasonCode: "USER_REQUESTED_FOLLOWUP",
-          candidateEntityRefs: ["entity_flare_labs"]
+          candidateEntityRefs: ["entity_beacon_labs"]
         }
       ]
     },
@@ -271,12 +274,12 @@ export async function runStage686CheckpointE(): Promise<Stage686CheckpointEArtif
         {
           emittedAt: "2026-03-01T08:30:00.000Z",
           reasonCode: "USER_REQUESTED_FOLLOWUP",
-          candidateEntityRefs: ["entity_flare_labs"]
+          candidateEntityRefs: ["entity_beacon_labs"]
         },
         {
           emittedAt: "2026-03-01T10:30:00.000Z",
           reasonCode: "USER_REQUESTED_FOLLOWUP",
-          candidateEntityRefs: ["entity_flare_labs"]
+          candidateEntityRefs: ["entity_beacon_labs"]
         }
       ]
     },
@@ -308,7 +311,7 @@ export async function runStage686CheckpointE(): Promise<Stage686CheckpointEArtif
         {
           emittedAt: "2026-02-25T12:00:00.000Z",
           reasonCode: "RELATIONSHIP_CLARIFICATION",
-          candidateEntityRefs: ["entity_flare_labs", "entity_project_aurora"]
+          candidateEntityRefs: ["entity_beacon_labs", "entity_project_aurora"]
         }
       ]
     },

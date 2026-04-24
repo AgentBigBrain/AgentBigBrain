@@ -8,6 +8,10 @@ import { PassThrough } from "node:stream";
 import { test } from "node:test";
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 
+function lastItem<TItem>(items: readonly TItem[]): TItem | undefined {
+  return items[items.length - 1];
+}
+
 import { completeCodexJsonRequest } from "../../src/models/codex/clientRuntime";
 import type { ResolvedCodexModel } from "../../src/models/codex/contracts";
 
@@ -97,7 +101,7 @@ test("completeCodexJsonRequest streams structured Codex prompts over stdin inste
   );
 
   assert.equal(result.output.message, "ok");
-  assert.equal(captured.args.at(-1), "-");
+  assert.equal(lastItem(captured.args), "-");
   assert.ok(
     !captured.args.some((value) => value.includes("Voice note transcript:")),
     "long prompt text should not be passed as a CLI argument"

@@ -115,7 +115,7 @@ const LIVE_RUN_RUNTIME_PATH = path.resolve(
 );
 const CONVERSATION_ID = `ai-drone-city-react-lifecycle-smoke-${RUN_ID}`;
 const USER_ID = "ai-drone-city-smoke-user";
-const USERNAME = "anthonybenny";
+const USERNAME = "fixtureuser";
 const FOLDER_NAME = "AI Drone City";
 const TURN_TIMEOUT_MS = 180_000;
 const CONVERSATION_TIMEOUT_MS = 30_000;

@@ -23,6 +23,23 @@ import type {
 } from "../../organs/languageUnderstanding/localIntentModelContracts";
 import { runAutonomousTransportTask } from "./deliveryLifecycle";
 
+/**
+ * Formats one transport delivery failure into a stable error message while preserving provider
+ * detail when the transport exposed it.
+ *
+ * @param result - Failed delivery result from the active transport.
+ * @param fallbackFailureCode - Stable fallback code when the transport omitted one.
+ * @returns Error message safe to throw through the gateway poll loop.
+ */
+function buildTransportDeliveryFailureMessage(
+  result: ConversationDeliveryResult,
+  fallbackFailureCode: string
+): string {
+  const code = result.errorCode ?? fallbackFailureCode;
+  const detail = typeof result.errorDetail === "string" ? result.errorDetail.trim() : "";
+  return detail ? `${code}: ${detail}` : code;
+}
+
 export interface ConversationManagerLike {
   handleMessage(
     inbound: ConversationInboundMessage,
@@ -143,7 +160,7 @@ export async function deliverPreparedTransportResponse(
   }
   const sendResult = await deliverResponse(responseText);
   if (!sendResult.ok) {
-    throw new Error(sendResult.errorCode ?? fallbackFailureCode);
+    throw new Error(buildTransportDeliveryFailureMessage(sendResult, fallbackFailureCode));
   }
   return true;
 }
@@ -184,7 +201,9 @@ export async function handleAcceptedTransportConversation(
 
   const sendResult = await input.deliverReply(reply);
   if (!sendResult.ok) {
-    throw new Error(sendResult.errorCode ?? input.deliveryFailureCode);
+    throw new Error(
+      buildTransportDeliveryFailureMessage(sendResult, input.deliveryFailureCode)
+    );
   }
 }
 

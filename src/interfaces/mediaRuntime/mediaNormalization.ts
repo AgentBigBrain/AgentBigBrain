@@ -172,6 +172,29 @@ export function buildMediaOnlyUserInput(
 }
 
 /**
+ * Resolves the bounded text surface used for command and control classification.
+ *
+ * **Why it exists:**
+ * Extracted OCR/document text should help execution and memory, but it must not masquerade as
+ * user-authored control intent. This helper keeps routing text scoped to explicit text/captions
+ * plus voice-only command promotion.
+ *
+ * @param text - Explicit inbound text or caption.
+ * @param media - Optional inbound media envelope.
+ * @returns Command-routing text safe for slash/pulse classification.
+ */
+export function buildConversationCommandRoutingInput(
+  text: string,
+  media: ConversationInboundMediaEnvelope | null | undefined
+): string {
+  const normalizedText = text.trim();
+  if (normalizedText.length > 0) {
+    return normalizedText;
+  }
+  return buildVoiceOnlyCommandText(media) ?? "";
+}
+
+/**
  * Resolves the bounded user-input text for one inbound message, preferring explicit text/caption
  * and falling back to a natural media-only request when necessary.
  *

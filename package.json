@@ -128,14 +128,20 @@
     "check:subsystem_readmes": "npm run check:subsystem-readmes",
     "check:ai-first": "npm run check:no-unused-locals && npm run check:test-types && npm run check:module-size && npm run check:temporal-memory-registry && npm run check:reason-codes && npm run check:stop-phrases && npm run check:subsystem-readmes && npm run check:versioning",
     "check:ai_first": "npm run check:ai-first",
-    "check:repo": "npm run check:ai-first && npm run check:docs && npm run build && npm test"
+    "check:repo": "npm run check:ai-first && npm run check:docs && npm run build && npm test",
+    "projection:export:obsidian": "tsx src/tools/exportObsidianProjection.ts",
+    "projection:apply-review-actions": "tsx src/tools/applyObsidianReviewActions.ts",
+    "projection:open:obsidian": "tsx src/tools/openObsidianProjection.ts",
+    "entity-graph:prune-low-signal": "tsx src/tools/pruneLowSignalEntityGraph.ts"
   },
   "dependencies": {
     "onnxruntime-node": "^1.24.2",
+    "pdfjs-dist": "^5.6.205",
     "ws": "^8.19.0"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
+    "playwright": "^1.59.1",
     "tsx": "^4.20.0",
     "typescript": "^5.8.0"
   }

@@ -26,6 +26,8 @@ export interface MediaUnderstandingConfig {
   resolvedBackend: ModelBackend | "disabled";
   requestedVisionBackend: MediaUnderstandingBackend;
   resolvedVisionBackend: ModelBackend | "disabled";
+  requestedVisionFallbackBackend: MediaUnderstandingBackend;
+  resolvedVisionFallbackBackend: ModelBackend | "disabled";
   requestedTranscriptionBackend: MediaUnderstandingBackend;
   resolvedTranscriptionBackend: ModelBackend | "disabled";
   openAIApiKey: string | null;
@@ -33,6 +35,7 @@ export interface MediaUnderstandingConfig {
   ollamaApiKey: string | null;
   ollamaBaseUrl: string;
   visionModel: string;
+  visionFallbackModel: string | null;
   transcriptionModel: string;
   requestTimeoutMs: number;
   env?: NodeJS.ProcessEnv;
@@ -67,6 +70,12 @@ export function createMediaUnderstandingConfigFromEnv(): MediaUnderstandingConfi
   const resolvedVisionBackend = requestedVisionBackend === "inherit_text_backend"
     ? resolveModelBackendFromEnv(process.env)
     : requestedVisionBackend;
+  const requestedVisionFallbackBackend = resolveMediaUnderstandingBackend(
+    process.env.BRAIN_MEDIA_VISION_FALLBACK_BACKEND ?? "disabled"
+  );
+  const resolvedVisionFallbackBackend = requestedVisionFallbackBackend === "inherit_text_backend"
+    ? resolveModelBackendFromEnv(process.env)
+    : requestedVisionFallbackBackend;
   const requestedTranscriptionBackend = resolveMediaUnderstandingBackend(
     process.env.BRAIN_MEDIA_TRANSCRIPTION_BACKEND ?? process.env.BRAIN_MEDIA_BACKEND
   );
@@ -78,19 +87,29 @@ export function createMediaUnderstandingConfigFromEnv(): MediaUnderstandingConfi
     resolvedBackend,
     requestedVisionBackend,
     resolvedVisionBackend,
+    requestedVisionFallbackBackend,
+    resolvedVisionFallbackBackend,
     requestedTranscriptionBackend,
     resolvedTranscriptionBackend,
     openAIApiKey:
-      resolvedVisionBackend === "openai_api" || resolvedTranscriptionBackend === "openai_api"
+      resolvedVisionBackend === "openai_api"
+        || resolvedVisionFallbackBackend === "openai_api"
+        || resolvedTranscriptionBackend === "openai_api"
         ? process.env.OPENAI_API_KEY?.trim() || null
         : null,
     openAIBaseUrl: (process.env.OPENAI_BASE_URL?.trim() || "https://api.openai.com/v1").replace(/\/+$/, ""),
     ollamaApiKey:
-      resolvedVisionBackend === "ollama" || resolvedTranscriptionBackend === "ollama"
+      resolvedVisionBackend === "ollama"
+        || resolvedVisionFallbackBackend === "ollama"
+        || resolvedTranscriptionBackend === "ollama"
         ? process.env.OLLAMA_API_KEY?.trim() || null
         : null,
     ollamaBaseUrl: (process.env.OLLAMA_BASE_URL?.trim() || "http://localhost:11434").replace(/\/+$/, ""),
     visionModel: process.env.BRAIN_MEDIA_VISION_MODEL?.trim() || DEFAULT_MEDIA_VISION_MODEL,
+    visionFallbackModel: resolveVisionFallbackModel(
+      resolvedVisionFallbackBackend,
+      process.env
+    ),
     transcriptionModel: process.env.BRAIN_MEDIA_TRANSCRIPTION_MODEL?.trim() || DEFAULT_MEDIA_TRANSCRIPTION_MODEL,
     requestTimeoutMs: Number.isFinite(Number(process.env.BRAIN_MEDIA_REQUEST_TIMEOUT_MS))
       ? Math.max(1_000, Number(process.env.BRAIN_MEDIA_REQUEST_TIMEOUT_MS))
@@ -131,4 +150,38 @@ export function resolveMediaUnderstandingBackend(
     `Unsupported BRAIN_MEDIA_BACKEND="${value ?? ""}". ` +
     "Expected one of openai_api, codex_oauth, ollama, mock, inherit_text_backend, or disabled."
   );
+}
+
+/**
+ * Resolves vision fallback model.
+ *
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses `ModelBackend` (import `ModelBackend`) from `../../models/types`.
+ * @param resolvedFallbackBackend - Input consumed by this helper.
+ * @param env - Input consumed by this helper.
+ * @returns Result produced by this helper.
+ */
+function resolveVisionFallbackModel(
+  resolvedFallbackBackend: ModelBackend | "disabled",
+  env: NodeJS.ProcessEnv
+): string | null {
+  const explicitModel = env.BRAIN_MEDIA_VISION_FALLBACK_MODEL?.trim();
+  if (explicitModel) {
+    return explicitModel;
+  }
+  if (resolvedFallbackBackend === "openai_api" || resolvedFallbackBackend === "codex_oauth") {
+    return env.OPENAI_MODEL_MEDIUM_GENERAL?.trim()
+      || env.OPENAI_MODEL_SMALL_FAST?.trim()
+      || "gpt-4.1-mini";
+  }
+  if (resolvedFallbackBackend === "ollama") {
+    return env.OLLAMA_MODEL_SMALL_FAST?.trim()
+      || env.OLLAMA_MODEL_DEFAULT?.trim()
+      || env.BRAIN_MEDIA_VISION_MODEL?.trim()
+      || "gemma4:latest";
+  }
+  return null;
 }

@@ -191,8 +191,15 @@ async function evaluateClarificationScenario(
   const resolution = await resolveConversationIntentMode(userInput);
   const expectClarification = scenario.polarity === "positive";
   const passed = expectClarification
-    ? resolution.mode === "unclear" && resolution.clarification?.kind === "execution_mode"
-    : resolution.mode === "build" && resolution.clarification === null;
+    ? resolution.mode === "clarify_build_format" && resolution.clarification?.kind === "build_format"
+    : (
+      (
+        resolution.mode === "static_html_build" ||
+        resolution.mode === "framework_app_build" ||
+        resolution.mode === "build"
+      ) &&
+      resolution.clarification === null
+    );
   return {
     scenarioId: scenario.id,
     category: scenario.category,
@@ -202,7 +209,7 @@ async function evaluateClarificationScenario(
     transcriptPreview: buildTranscriptPreview(scenario),
     observed: [
       {
-        behavior: expectClarification ? "clarify_plan_or_build" : "no_clarification_needed",
+        behavior: expectClarification ? "clarify_build_format" : "no_clarification_needed",
         passed,
         note: expectClarification
           ? `Resolved mode '${resolution.mode}' with question '${resolution.clarification?.question ?? "none"}'.`
@@ -356,7 +363,7 @@ async function evaluateCapabilityDiscoveryScenario(
       && result.reply.includes("Here is what I can help with in this Telegram chat right now:")
       && result.reply.includes("Reusable skills I can lean on:")
       && result.reply.includes("planner-fix")
-    : enqueueCalled;
+    : !result.reply.includes("Here is what I can help with in this Telegram chat right now:");
   return {
     scenarioId: scenario.id,
     category: scenario.category,
@@ -488,7 +495,7 @@ async function evaluateLocalIntentModelEvidence(): Promise<HumanCentricExecution
 
   const resolver = createLocalIntentModelResolverFromEnv();
   const sampleInput =
-    "Go ahead and build it now with a clean hero section and a clear call to action. Put it in the same desktop folder I used earlier and leave the browser open when you're done.";
+    "Go ahead and build a plain HTML landing page with a clean hero section and a clear call to action. Put it in the same desktop folder I used earlier and leave the browser open when you're done.";
   const routingClassification = classifyRoutingIntentV1(sampleInput);
   const sessionHints = {
     hasActiveWorkspace: true,
@@ -512,8 +519,9 @@ async function evaluateLocalIntentModelEvidence(): Promise<HumanCentricExecution
     sessionHints
   );
   const rawResolverPromoted =
-    signal !== null && ["build", "autonomous"].includes(signal.mode);
-  const canonicalIntentPromoted = ["build", "autonomous"].includes(resolvedIntent.mode);
+    signal !== null && ["static_html_build", "framework_app_build", "build", "autonomous"].includes(signal.mode);
+  const canonicalIntentPromoted =
+    ["static_html_build", "framework_app_build", "build", "autonomous"].includes(resolvedIntent.mode);
   const passed = rawResolverPromoted || canonicalIntentPromoted;
   return {
     enabled: true,
@@ -563,7 +571,7 @@ export async function runHumanCentricExecutionUxEvidence(): Promise<HumanCentric
       (scenario) => scenario.scenarioId === "natural_build_now_positive" && scenario.passed
     ),
     clarificationPromptWorks: scenarioResults.some(
-      (scenario) => scenario.scenarioId === "clarification_plan_or_build_positive" && scenario.passed
+      (scenario) => scenario.scenarioId === "clarification_build_format_positive" && scenario.passed
     ),
     statusRecallWorks: scenarioResults.some(
       (scenario) => scenario.scenarioId === "status_recall_positive" && scenario.passed

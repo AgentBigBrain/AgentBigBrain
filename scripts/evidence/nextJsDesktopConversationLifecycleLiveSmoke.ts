@@ -1027,7 +1027,7 @@ Promise<NextJsDesktopConversationLifecycleArtifact> {
       "Turn 6 unexpectedly left work running."
     );
     assert.equal(
-      turn6FreshJobs.some((job) => job.executionInput.startsWith("[AUTONOMOUS_LOOP_GOAL]")),
+      turn6FreshJobs.some((job) => job.executionInput?.startsWith("[AUTONOMOUS_LOOP_GOAL]") === true),
       false,
       "Turn 6 unexpectedly restarted autonomous execution."
     );
@@ -1180,7 +1180,10 @@ Promise<NextJsDesktopConversationLifecycleArtifact> {
         conversationStayedConversational: false,
         browserRemainedOpenDuringConversation: false,
         previewProcessStillRunningDuringConversation: false,
-        browserClosed: latestSession?.browserSessions.every((entry) => entry.status === "closed") ?? false,
+        browserClosed:
+          (latestSession as ConversationSession | null)?.browserSessions.every(
+            (entry) => entry.status === "closed"
+          ) ?? false,
         previewStopped: false
       },
       targetFolderPath,

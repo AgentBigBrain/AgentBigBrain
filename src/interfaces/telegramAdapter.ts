@@ -60,6 +60,7 @@ export interface TelegramInboundMessage {
   username: string;
   transportIdentity?: ConversationTransportIdentityRecord | null;
   text: string;
+  commandRoutingText?: string;
   media?: ConversationInboundMediaEnvelope | null;
   authToken: string;
   receivedAt?: string;
