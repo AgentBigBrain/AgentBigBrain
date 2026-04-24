@@ -1,15 +1,15 @@
 # Global default owners.
 #
 # IMPORTANT:
-# - Use an email that is linked to a GitHub account with write access.
-# - Only enable "Require review from Code Owners" after this owner target is valid.
+# - Replace OWNER_PLACEHOLDER with a GitHub user or team that has write access.
+# - Only enable "Require review from Code Owners" after the owner target is valid.
 
-* info@michiganwebteam.com
+# * @OWNER_PLACEHOLDER
 
 # Critical policy/runtime surfaces.
-src/core/* info@michiganwebteam.com
-src/governors/* info@michiganwebteam.com
-src/organs/* info@michiganwebteam.com
-src/interfaces/* info@michiganwebteam.com
-docs/* info@michiganwebteam.com
-.github/* info@michiganwebteam.com
+# src/core/* @OWNER_PLACEHOLDER
+# src/governors/* @OWNER_PLACEHOLDER
+# src/organs/* @OWNER_PLACEHOLDER
+# src/interfaces/* @OWNER_PLACEHOLDER
+# docs/* @OWNER_PLACEHOLDER
+# .github/* @OWNER_PLACEHOLDER

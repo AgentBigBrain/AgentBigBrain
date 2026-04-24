@@ -30,6 +30,7 @@ import {
   buildConversationJobFixture,
   buildConversationSessionFixture
 } from "../helpers/conversationFixtures";
+import type { ConversationMemoryFactReviewResult } from "../../src/interfaces/conversationRuntime/managerContracts";
 
 /**
  * Uses the SQLite-backed test store so background worker persistence does not race JSON temp-file
@@ -627,7 +628,7 @@ test("conversation manager serves bounded fact review through the real /memory c
           asOfObservedTime: "2026-03-31T12:10:00.000Z",
           asOfValidTime: undefined
         }
-      );
+      ) as ConversationMemoryFactReviewResult;
     }
   });
 
@@ -2150,12 +2151,12 @@ test("conversation manager keeps greetings and identity turns direct under saved
         summary:
           "I couldn't execute that request in this run. What happened: one or more governed actions were blocked before execution. Why it didn't execute: a safety, governance, or runtime policy denied the requested side effect. What to do next: ask for the exact block code and approval diff, then retry with a narrower allowed action.",
         nextSuggestedStep: "Ask for the exact block code and approval diff, then retry with a narrower allowed action.",
-        workspaceRootPath: "C:\\Users\\benac\\OneDrive\\Desktop\\Sample World",
-        primaryArtifactPath: "C:\\Users\\benac\\OneDrive\\Desktop\\Sample World\\src\\index.css",
-        previewUrl: "file:///C:/Users/benac/OneDrive/Desktop/drone-company-landing.html",
+        workspaceRootPath: "C:\\Users\\testuser\\OneDrive\\Desktop\\Sample World",
+        primaryArtifactPath: "C:\\Users\\testuser\\OneDrive\\Desktop\\Sample World\\src\\index.css",
+        previewUrl: "file:///C:/Users/testuser/OneDrive/Desktop/drone-company-landing.html",
         changedPaths: [
-          "C:\\Users\\benac\\OneDrive\\Desktop\\Sample World\\src\\index.css",
-          "C:\\Users\\benac\\OneDrive\\Desktop\\Sample World\\src\\App.jsx"
+          "C:\\Users\\testuser\\OneDrive\\Desktop\\Sample World\\src\\index.css",
+          "C:\\Users\\testuser\\OneDrive\\Desktop\\Sample World\\src\\App.jsx"
         ],
         sourceJobId: "job-blocked",
         updatedAt: "2026-03-20T19:43:00.000Z"
@@ -2320,7 +2321,7 @@ test("conversation manager does not misroute relationship recall into the identi
         directInputs.push(input);
         assert.match(input, /Current user request:\nWho is Billy\?/i);
         return {
-          summary: "Billy is the person you worked with at Flare Web Design."
+          summary: "Billy is the person you worked with at Sample Web Studio."
         };
       }
     }
@@ -2338,7 +2339,7 @@ test("conversation manager does not misroute relationship recall into the identi
           },
           {
             role: "assistant",
-            text: "You're Anthony.",
+            text: "You're Alex.",
             at: "2026-04-10T13:31:01.000Z"
           }
         ]
@@ -2353,8 +2354,80 @@ test("conversation manager does not misroute relationship recall into the identi
       async () => {}
     );
 
-    assert.equal(reply, "Billy is the person you worked with at Flare Web Design.");
+    assert.equal(reply, "Billy is the person you worked with at Sample Web Studio.");
     assert.equal(directInputs.length, 1);
+  } finally {
+    await removeTempDirWithRetry(tempDir);
+  }
+});
+
+test("conversation manager keeps short relationship questions off the identity fallback after a direct name declaration", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-conversation-name-declaration-relationship-recall-"));
+  const store = new InterfaceSessionStore(path.join(tempDir, "sessions.json"));
+  const directInputs: string[] = [];
+  const manager = new ConversationManager(
+    store,
+    {},
+    {
+      rememberConversationProfileInput: async () => true,
+      identityInterpretationResolver: async () => ({
+        source: "local_intent_model",
+        kind: "self_identity_declaration",
+        candidateValue: "Alex",
+        confidence: "high",
+        shouldPersist: true,
+        explanation: "The user is explicitly stating their preferred name."
+      }),
+      runDirectConversationTurn: async (input) => {
+        directInputs.push(input);
+        if (/Current user request:\s*Do you know Billy\?/i.test(input)) {
+          return {
+            summary: "Billy used to work with Sample Web Studio."
+          };
+        }
+        if (/Current user request:\s*I didn't ask that\./i.test(input)) {
+          return {
+            summary: "You're right. You asked about Billy."
+          };
+        }
+        return {
+          summary: "Direct conversation reply."
+        };
+      }
+    }
+  );
+
+  try {
+    const declarationReply = await manager.handleMessage(
+      buildMessageAt(
+        "My name is Alex and I own Sample Web Studio.",
+        "2026-04-13T17:16:00.000Z"
+      ),
+      async () => {
+        throw new Error("executeTask should not run for direct self-identity declaration");
+      },
+      async () => {}
+    );
+    assert.equal(declarationReply, "Okay, I'll remember that you're Alex.");
+
+    const recallReply = await manager.handleMessage(
+      buildMessageAt("Do you know Billy?", "2026-04-13T17:16:05.000Z"),
+      async () => {
+        throw new Error("executeTask should not run for direct relationship recall");
+      },
+      async () => {}
+    );
+    assert.equal(recallReply, "Billy used to work with Sample Web Studio.");
+
+    const objectionReply = await manager.handleMessage(
+      buildMessageAt("I didn't ask that.", "2026-04-13T17:16:10.000Z"),
+      async () => {
+        throw new Error("executeTask should not run for conversational objection turns");
+      },
+      async () => {}
+    );
+    assert.equal(objectionReply, "You're right. You asked about Billy.");
+    assert.equal(directInputs.length, 2);
   } finally {
     await removeTempDirWithRetry(tempDir);
   }
@@ -2398,7 +2471,7 @@ test("conversation manager does not misroute long approval-prefixed relationship
           },
           {
             role: "assistant",
-            text: "You're Anthony.",
+            text: "You're Alex.",
             at: "2026-04-10T13:11:01.000Z"
           }
         ]
@@ -2674,12 +2747,12 @@ test("conversation manager keeps relationship recap and entity follow-up chat di
         summary:
           "I couldn't execute that request in this run. What happened: governance blocked the requested action. Why it didn't execute: Security governor rejected this request.",
         nextSuggestedStep: "Retry with a safer and narrower request.",
-        workspaceRootPath: "C:\\Users\\benac\\OneDrive\\Desktop\\Sky Drone Max",
-        primaryArtifactPath: "C:\\Users\\benac\\OneDrive\\Desktop\\Sky Drone Max\\src\\index.css",
+        workspaceRootPath: "C:\\Users\\testuser\\OneDrive\\Desktop\\Sky Drone Max",
+        primaryArtifactPath: "C:\\Users\\testuser\\OneDrive\\Desktop\\Sky Drone Max\\src\\index.css",
         previewUrl: null,
         changedPaths: [
-          "C:\\Users\\benac\\OneDrive\\Desktop\\Sky Drone Max\\src\\index.css",
-          "C:\\Users\\benac\\OneDrive\\Desktop\\Sky Drone Max\\src\\App.jsx"
+          "C:\\Users\\testuser\\OneDrive\\Desktop\\Sky Drone Max\\src\\index.css",
+          "C:\\Users\\testuser\\OneDrive\\Desktop\\Sky Drone Max\\src\\App.jsx"
         ],
         sourceJobId: "job-sky-drone-max",
         updatedAt: "2026-03-26T10:55:00.000Z"
@@ -2700,7 +2773,7 @@ test("conversation manager keeps relationship recap and entity follow-up chat di
           id: "recent_file_index_css_sky_drone_max",
           kind: "file",
           label: "index.css",
-          location: "C:\\Users\\benac\\OneDrive\\Desktop\\Sky Drone Max\\src\\index.css",
+          location: "C:\\Users\\testuser\\OneDrive\\Desktop\\Sky Drone Max\\src\\index.css",
           status: "updated",
           sourceJobId: "job-sky-drone-max",
           at: "2026-03-26T10:54:50.000Z",
@@ -3095,7 +3168,7 @@ test("conversation manager keeps mixed relationship-plus-build turns off the dir
   try {
     const reply = await manager.handleMessage(
       buildMessageAt(
-        "Execute now and build the landing page. I work with Billy at Flare Web Design.",
+        "Execute now and build the landing page as plain HTML. I work with Billy at Sample Web Studio.",
         "2026-03-26T15:40:00.000Z"
       ),
       async (input) => {
@@ -3119,7 +3192,7 @@ test("conversation manager keeps mixed relationship-plus-build turns off the dir
     assert.equal(executedInputs.length, 1);
     assert.match(
       executedInputs[0] ?? "",
-      /Execute now and build the landing page\. I work with Billy at Flare Web Design\./
+      /Execute now and build the landing page as plain HTML\. I work with Billy at Sample Web Studio\./
     );
   } finally {
     await removeTempDirWithRetry(tempDir);
@@ -3252,11 +3325,11 @@ test("conversation manager keeps workflow-label clutter out of personal truth an
           goal: "Finish the landing page file work and keep the preview recoverable.",
           summary: "The workflow draft exists and the preview can be resumed.",
           nextSuggestedStep: "Tell me which file operation you want next.",
-          workspaceRootPath: "C:\\Users\\benac\\OneDrive\\Desktop\\Northstar Landing",
-          primaryArtifactPath: "C:\\Users\\benac\\OneDrive\\Desktop\\Northstar Landing\\index.html",
+          workspaceRootPath: "C:\\Users\\testuser\\OneDrive\\Desktop\\Northstar Landing",
+          primaryArtifactPath: "C:\\Users\\testuser\\OneDrive\\Desktop\\Northstar Landing\\index.html",
           previewUrl: null,
           changedPaths: [
-            "C:\\Users\\benac\\OneDrive\\Desktop\\Northstar Landing\\index.html"
+            "C:\\Users\\testuser\\OneDrive\\Desktop\\Northstar Landing\\index.html"
           ],
           sourceJobId: "job-phase8-battle-f",
           updatedAt: "2026-03-28T10:00:45.000Z"
@@ -3716,11 +3789,11 @@ test("conversation manager remembers relationship updates through the direct cha
           goal: "Finish the Sky Drone Max landing page and leave it running in the browser.",
           summary: "The run stopped before it finished.",
           nextSuggestedStep: "Retry with a narrower request.",
-          workspaceRootPath: "C:\\Users\\benac\\OneDrive\\Desktop\\Sky Drone Max",
-          primaryArtifactPath: "C:\\Users\\benac\\OneDrive\\Desktop\\Sky Drone Max\\src\\App.jsx",
+          workspaceRootPath: "C:\\Users\\testuser\\OneDrive\\Desktop\\Sky Drone Max",
+          primaryArtifactPath: "C:\\Users\\testuser\\OneDrive\\Desktop\\Sky Drone Max\\src\\App.jsx",
           previewUrl: null,
           changedPaths: [
-            "C:\\Users\\benac\\OneDrive\\Desktop\\Sky Drone Max\\src\\App.jsx"
+            "C:\\Users\\testuser\\OneDrive\\Desktop\\Sky Drone Max\\src\\App.jsx"
           ],
           sourceJobId: "job-sky-drone-max",
           updatedAt: "2026-03-26T15:38:00.000Z"
@@ -3946,11 +4019,11 @@ test("conversation manager keeps relationship inventory and current-vs-history r
           goal: "Finish the landing page variants and keep the preview recoverable.",
           summary: "The workflow draft exists and the browser context can be resumed.",
           nextSuggestedStep: "Tell me which design thread you want to pick up next.",
-          workspaceRootPath: "C:\\Users\\benac\\OneDrive\\Desktop\\Northstar Landing",
-          primaryArtifactPath: "C:\\Users\\benac\\OneDrive\\Desktop\\Northstar Landing\\index.html",
+          workspaceRootPath: "C:\\Users\\testuser\\OneDrive\\Desktop\\Northstar Landing",
+          primaryArtifactPath: "C:\\Users\\testuser\\OneDrive\\Desktop\\Northstar Landing\\index.html",
           previewUrl: null,
           changedPaths: [
-            "C:\\Users\\benac\\OneDrive\\Desktop\\Northstar Landing\\index.html"
+            "C:\\Users\\testuser\\OneDrive\\Desktop\\Northstar Landing\\index.html"
           ],
           sourceJobId: "job-phase8-battle-a",
           updatedAt: "2026-03-26T15:38:45.000Z"
@@ -4110,18 +4183,18 @@ test("conversation manager keeps interrupted third-person contact recall and obj
       directInputs.push(input);
       assert.doesNotMatch(input, /Current working mode from earlier in this chat:/i);
       if (
-        /Current user request:\nBilly used to be at Flare\. He's at Northstar now\. He drives a gray Accord\./i.test(input)
+        /Current user request:\nBilly used to be at Beacon\. He's at Northstar now\. He drives a gray Accord\./i.test(input)
       ) {
         return {
-          summary: "Got it - Billy's at Northstar now, and Flare was the earlier connection."
+          summary: "Got it - Billy's at Northstar now, and Beacon was the earlier connection."
         };
       }
-      if (/Current user request:\nwaht about billy and flare\?/i.test(input)) {
+      if (/Current user request:\nwaht about billy and beacon\?/i.test(input)) {
         assert.match(input, /Billy/i);
         assert.match(input, /Northstar/i);
-        assert.match(input, /Flare/i);
+        assert.match(input, /Beacon/i);
         return {
-          summary: "Billy's at Northstar now. Flare was the earlier connection."
+          summary: "Billy's at Northstar now. Beacon was the earlier connection."
         };
       }
       if (/Current user request:\nand the accord\?/i.test(input)) {
@@ -4222,11 +4295,11 @@ test("conversation manager keeps interrupted third-person contact recall and obj
           goal: "Finish the landing page variants and keep the preview recoverable.",
           summary: "The workflow draft exists and the browser context can be resumed.",
           nextSuggestedStep: "Tell me which design thread you want to pick up next.",
-          workspaceRootPath: "C:\\Users\\benac\\OneDrive\\Desktop\\Northstar Landing",
-          primaryArtifactPath: "C:\\Users\\benac\\OneDrive\\Desktop\\Northstar Landing\\index.html",
+          workspaceRootPath: "C:\\Users\\testuser\\OneDrive\\Desktop\\Northstar Landing",
+          primaryArtifactPath: "C:\\Users\\testuser\\OneDrive\\Desktop\\Northstar Landing\\index.html",
           previewUrl: null,
           changedPaths: [
-            "C:\\Users\\benac\\OneDrive\\Desktop\\Northstar Landing\\index.html"
+            "C:\\Users\\testuser\\OneDrive\\Desktop\\Northstar Landing\\index.html"
           ],
           sourceJobId: "job-phase8-battle-b",
           updatedAt: "2026-03-27T16:04:45.000Z"
@@ -4236,7 +4309,7 @@ test("conversation manager keeps interrupted third-person contact recall and obj
 
     const ingestReply = await manager.handleMessage(
       buildMessageAt(
-        "Billy used to be at Flare. He's at Northstar now. He drives a gray Accord.",
+        "Billy used to be at Beacon. He's at Northstar now. He drives a gray Accord.",
         "2026-03-27T16:09:00.000Z"
       ),
       async () => {
@@ -4246,7 +4319,7 @@ test("conversation manager keeps interrupted third-person contact recall and obj
     );
     assert.equal(
       ingestReply,
-      "Got it - Billy's at Northstar now, and Flare was the earlier connection."
+      "Got it - Billy's at Northstar now, and Beacon was the earlier connection."
     );
 
     const storedFacts = await profileStore.readFacts({
@@ -4266,7 +4339,7 @@ test("conversation manager keeps interrupted third-person contact recall and obj
       storedFacts.some(
         (fact) =>
           fact.key === "contact.billy.work_association" &&
-          fact.value === "Flare"
+          fact.value === "Beacon"
       ),
       false
     );
@@ -4319,13 +4392,13 @@ test("conversation manager keeps interrupted third-person contact recall and obj
     );
 
     const historyReply = await manager.handleMessage(
-      buildMessageAt("waht about billy and flare?", "2026-03-27T16:10:45.000Z"),
+      buildMessageAt("waht about billy and beacon?", "2026-03-27T16:10:45.000Z"),
       async () => {
         throw new Error("executeTask should not run for interrupted Billy history recall chat");
       },
       async () => {}
     );
-    assert.equal(historyReply, "Billy's at Northstar now. Flare was the earlier connection.");
+    assert.equal(historyReply, "Billy's at Northstar now. Beacon was the earlier connection.");
     assert.doesNotMatch(
       historyReply,
       /gray Accord|Current State:|Historical Context:|Contradiction Notes:|supporting evidence/i
@@ -4515,11 +4588,11 @@ test("conversation manager keeps coworker successor updates and no-flap recall s
           goal: "Finish the landing page variants and keep the preview recoverable.",
           summary: "The workflow draft exists and the browser context can be resumed.",
           nextSuggestedStep: "Tell me which design thread you want to pick up next.",
-          workspaceRootPath: "C:\\Users\\benac\\OneDrive\\Desktop\\Northstar Landing",
-          primaryArtifactPath: "C:\\Users\\benac\\OneDrive\\Desktop\\Northstar Landing\\index.html",
+          workspaceRootPath: "C:\\Users\\testuser\\OneDrive\\Desktop\\Northstar Landing",
+          primaryArtifactPath: "C:\\Users\\testuser\\OneDrive\\Desktop\\Northstar Landing\\index.html",
           previewUrl: null,
           changedPaths: [
-            "C:\\Users\\benac\\OneDrive\\Desktop\\Northstar Landing\\index.html"
+            "C:\\Users\\testuser\\OneDrive\\Desktop\\Northstar Landing\\index.html"
           ],
           sourceJobId: "job-phase8-battle-c",
           updatedAt: "2026-03-27T16:08:20.000Z"
@@ -4839,11 +4912,11 @@ test("conversation manager keeps event participant-role recall and fail-closed a
           goal: "Finish the landing page variants and keep the preview recoverable.",
           summary: "The workflow draft exists and the browser context can be resumed.",
           nextSuggestedStep: "Tell me which design thread you want to pick up next.",
-          workspaceRootPath: "C:\\Users\\benac\\OneDrive\\Desktop\\Northstar Landing",
-          primaryArtifactPath: "C:\\Users\\benac\\OneDrive\\Desktop\\Northstar Landing\\index.html",
+          workspaceRootPath: "C:\\Users\\testuser\\OneDrive\\Desktop\\Northstar Landing",
+          primaryArtifactPath: "C:\\Users\\testuser\\OneDrive\\Desktop\\Northstar Landing\\index.html",
           previewUrl: null,
           changedPaths: [
-            "C:\\Users\\benac\\OneDrive\\Desktop\\Northstar Landing\\index.html"
+            "C:\\Users\\testuser\\OneDrive\\Desktop\\Northstar Landing\\index.html"
           ],
           sourceJobId: "job-phase8-battle-d",
           updatedAt: "2026-03-28T17:04:45.000Z"
@@ -5139,11 +5212,11 @@ test("conversation manager keeps same-name ambiguity and alias-collision recall 
           goal: "Finish the landing page variants and keep the preview recoverable.",
           summary: "The workflow draft exists and the browser context can be resumed.",
           nextSuggestedStep: "Tell me which design thread you want to pick up next.",
-          workspaceRootPath: "C:\\Users\\benac\\OneDrive\\Desktop\\Northstar Landing",
-          primaryArtifactPath: "C:\\Users\\benac\\OneDrive\\Desktop\\Northstar Landing\\index.html",
+          workspaceRootPath: "C:\\Users\\testuser\\OneDrive\\Desktop\\Northstar Landing",
+          primaryArtifactPath: "C:\\Users\\testuser\\OneDrive\\Desktop\\Northstar Landing\\index.html",
           previewUrl: null,
           changedPaths: [
-            "C:\\Users\\benac\\OneDrive\\Desktop\\Northstar Landing\\index.html"
+            "C:\\Users\\testuser\\OneDrive\\Desktop\\Northstar Landing\\index.html"
           ],
           sourceJobId: "job-phase8-battle-e",
           updatedAt: "2026-03-28T09:55:30.000Z"
@@ -5334,10 +5407,10 @@ test("conversation manager reuses global relationship truth across conversations
         };
       }
       if (
-        /Current user request:\nBilly used to be at Flare\. He's at Northstar now\. He drives a gray Accord\./i.test(input)
+        /Current user request:\nBilly used to be at Beacon\. He's at Northstar now\. He drives a gray Accord\./i.test(input)
       ) {
         return {
-          summary: "Got it - Billy's at Northstar now, and Flare was the earlier connection."
+          summary: "Got it - Billy's at Northstar now, and Beacon was the earlier connection."
         };
       }
       if (/Current user request:\nWho do I work with now\?/i.test(input)) {
@@ -5346,12 +5419,12 @@ test("conversation manager reuses global relationship truth across conversations
           summary: "Right now, Jordan."
         };
       }
-      if (/Current user request:\nWhat about Billy and Flare\?/i.test(input)) {
+      if (/Current user request:\nWhat about Billy and Beacon\?/i.test(input)) {
         assert.match(input, /Billy/i);
-        assert.match(input, /Flare/i);
+        assert.match(input, /Beacon/i);
         assert.doesNotMatch(input, /landing page|reference site|browser tabs/i);
         return {
-          summary: "Billy's at Northstar now. Flare was the earlier connection."
+          summary: "Billy's at Northstar now. Beacon was the earlier connection."
         };
       }
       throw new Error(`Unexpected direct conversation input: ${input}`);
@@ -5411,7 +5484,7 @@ test("conversation manager reuses global relationship truth across conversations
 
     await manager.handleMessage(
       buildMessageAt(
-        "Billy used to be at Flare. He's at Northstar now. He drives a gray Accord.",
+        "Billy used to be at Beacon. He's at Northstar now. He drives a gray Accord.",
         "2026-03-27T16:21:20.000Z"
       ),
       async () => {
@@ -5448,13 +5521,13 @@ test("conversation manager reuses global relationship truth across conversations
     assert.equal(currentReply, "Right now, Jordan.");
 
     const billyReply = await manager.handleMessage(
-      buildConversationTwoMessageAt("What about Billy and Flare?", "2026-03-27T16:23:35.000Z"),
+      buildConversationTwoMessageAt("What about Billy and Beacon?", "2026-03-27T16:23:35.000Z"),
       async () => {
         throw new Error("executeTask should not run for cross-conversation Billy recall chat");
       },
       async () => {}
     );
-    assert.equal(billyReply, "Billy's at Northstar now. Flare was the earlier connection.");
+    assert.equal(billyReply, "Billy's at Northstar now. Beacon was the earlier connection.");
     assert.equal(directInputs.length, 4);
   } finally {
     await removeTempDirWithRetry(tempDir);
@@ -6117,7 +6190,7 @@ test("conversation manager preserves browser workflow continuity through build, 
   try {
     const buildReply = await manager.handleMessage(
       buildMessageAt(
-        "Execute now and build a landing page for air drones, save it in drone-company on my desktop, and leave it open for me.",
+        "Execute now and build a Next.js landing page for air drones, save it in drone-company on my desktop, and leave it open for me.",
         "2026-03-20T17:47:00.000Z"
       ),
       async (input) => {
@@ -6229,6 +6302,8 @@ test("conversation manager preserves browser workflow continuity through build, 
     const afterClose = await store.getSession("telegram:chat-1:user-1");
     assert.ok(afterClose);
     assert.equal(afterClose?.activeWorkspace?.browserSessionStatus, "closed");
+    assert.equal(afterClose?.activeWorkspace?.previewUrl, null);
+    assert.equal(afterClose?.activeWorkspace?.previewStackState, "detached");
     assert.ok(
       afterClose?.activeWorkspace?.ownershipState === "stale" ||
       afterClose?.activeWorkspace?.ownershipState === "orphaned"
@@ -6279,7 +6354,7 @@ test("conversation manager preserves browser workflow continuity through multi-p
   try {
     const buildReply = await manager.handleMessage(
       buildMessageAt(
-        "Execute now and build a landing page for air drones, save it in drone-company on my desktop, and leave it open for me.",
+        "Execute now and build a Next.js landing page for air drones, save it in drone-company on my desktop, and leave it open for me.",
         "2026-03-25T23:47:00.000Z"
       ),
       async (input) => {
@@ -6462,7 +6537,7 @@ test("conversation manager persists bounded recovery attribution for a Python wo
   try {
     const reply = await manager.handleMessage(
       buildMessageAt(
-        "Build now: create a small Calm Drone Python app on my Desktop and leave it running in the browser.",
+        "Build now: create a small Calm Drone Python app on my Desktop and leave it running in the browser. Use Python, not HTML or a web framework.",
         "2026-03-26T13:00:00.000Z"
       ),
       async (input, _receivedAt, onProgressUpdate) => {

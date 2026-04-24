@@ -175,7 +175,7 @@ class TemporalPlanningSynthesisProfileStore {
       queryFactsForPlanningContext: () => [],
       queryEpisodesForPlanningContext: () => [],
       queryTemporalPlanningSynthesis: () => ({
-        currentState: ["Billy is tied to Flare Web Design."],
+        currentState: ["Billy is tied to Sample Web Studio."],
         historicalContext: [],
         contradictionNotes: [],
         answerMode: "current",
@@ -277,7 +277,7 @@ test("memory broker prefers direct temporal planning synthesis over compatibilit
   assert.equal(enriched.profileMemoryStatus, "available");
   assert.match(enriched.userInput, /\[AgentFriendProfileContext\]/);
   assert.match(enriched.userInput, /Temporal memory context \(bounded\):/i);
-  assert.match(enriched.userInput, /Billy is tied to Flare Web Design\./);
+  assert.match(enriched.userInput, /Billy is tied to Sample Web Studio\./);
   assert.match(enriched.userInput, /domainBoundaryDecision=inject_profile_context/i);
 });
 
@@ -593,6 +593,7 @@ test("assessBrokerPromptCutoverGate blocks prompt cutover when telemetry exceeds
     promptMemoryOwnerCount: 2,
     promptMemorySurfaceCount: 2,
     mixedMemoryOwnerDecisionCount: 1,
+    aliasSafetyDecisionCount: 0,
     identitySafetyDecisionCount: 0,
     selfIdentityParityCheckCount: 0,
     selfIdentityParityMismatchCount: 0
