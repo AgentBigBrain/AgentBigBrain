@@ -17,7 +17,7 @@ const NO_EXACT_TRACKED_WORKSPACE_HOLDER_PATTERN =
   /no exact tracked workspace holder is currently known for this request/i;
 const ORGANIZATION_MOVE_COMMAND_PATTERN = /\b(?:move-item|mv|move)\b/i;
 const DESTINATION_FOLDER_CALLED_PATTERN =
-  /\bfolder called\s+["']?([A-Za-z0-9][A-Za-z0-9._-]*)["']?/i;
+  /\bfolder called\s+["']?([A-Za-z0-9][A-Za-z0-9._ -]*?)(?=["']?(?:\s+(?:on|in|under)\b|[.?!,]|$))/i;
 const DESTINATION_IMPLICIT_NAME_PATTERN =
   /\b(?:go|belongs?)\b[\s\S]{0,40}\b(?:in|into|under)\s+["']?([A-Za-z0-9][A-Za-z0-9._-]*)["']?(?=\s+(?:on|in|under)\b|[.?!,]|$)/i;
 const POWERSHELL_NAME_LIKE_PATTERN = /\$_\.Name\s*-like\s*['"]([^'"]+)['"]/gi;

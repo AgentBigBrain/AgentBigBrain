@@ -349,7 +349,7 @@ export function buildTelegramUpdateForScenario(
   const attachmentFileId = `fixture_${scenario.id}`;
   const chatId = options.chatId ?? "2001";
   const userId = options.userId ?? "3001";
-  const username = options.username ?? "anthonybenny";
+  const username = options.username ?? "fixtureuser";
   const dateSeconds = options.dateSeconds ?? Math.floor(Date.now() / 1000);
 
   const message: TelegramUpdate["message"] = {

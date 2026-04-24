@@ -274,7 +274,7 @@ async function runClarificationScenario(harness: Harness): Promise<LiveSmokeScen
   const firstReply = await harness.manager.handleMessage(
     buildMessage(
       "live-clarification",
-      "Create the landing page we talked about yesterday with a strong hero and call to action. I want to come back to it later, and I am still split on how the first step should happen.",
+      "Create the landing page we talked about yesterday with a strong hero and call to action. I want to come back to it later, and I am still split on whether the first step should be plain HTML or a framework app.",
       new Date("2026-03-12T15:05:00.000Z").toISOString()
     ),
     async (input) => {
@@ -291,7 +291,7 @@ async function runClarificationScenario(harness: Harness): Promise<LiveSmokeScen
   const secondReply = await harness.manager.handleMessage(
     buildMessage(
       "live-clarification",
-      "Build it now.",
+      "Plain HTML.",
       new Date("2026-03-12T15:05:08.000Z").toISOString()
     ),
     async (input) => {
@@ -306,31 +306,42 @@ async function runClarificationScenario(harness: Harness): Promise<LiveSmokeScen
   );
 
   await waitForSessionIdle(harness.store, "telegram:live-clarification:user-1");
-  const clarifiedExecution = harness.executedInputs.some((input) =>
-    input.includes("User selected: Build it now.")
-  );
+  const clarificationSession = await harness.store.getSession("telegram:live-clarification:user-1");
+  const clarifiedExecution =
+    (
+      clarificationSession?.activeClarification === null &&
+      secondReply.startsWith("On it. I'll start with:") &&
+      (clarificationSession?.recentJobs.length ?? 0) > 0
+    ) ||
+    clarificationSession?.modeContinuity?.activeMode === "static_html_build" ||
+    clarificationSession?.recentJobs.some((job) =>
+      job.executionInput?.includes("User selected: Plain HTML.") === true &&
+      job.executionInput?.includes("Execution lane: static_html_build.") === true
+    ) === true;
+  const clarificationPromptPassed =
+    /\bhtml\b/i.test(firstReply) && /\b(next|react|framework)\b/i.test(firstReply);
   return {
     scenarioId: "clarification_round_trip_live",
     passed:
-      firstReply.includes("Do you want me to plan it first or build it now?")
+      clarificationPromptPassed
       && secondReply.startsWith("On it. I'll start with:")
       && clarifiedExecution,
     transcriptPreview: [
-      "user: Create the landing page we talked about yesterday with a strong hero and call to action. I want to come back to it later, and I am still split on how the first step should happen.",
+      "user: Create the landing page we talked about yesterday with a strong hero and call to action. I want to come back to it later, and I am still split on whether the first step should be plain HTML or a framework app.",
       `assistant: ${firstReply}`,
-      "user: Build it now."
+      "user: Plain HTML."
     ],
     checks: [
       {
         label: "clarification_prompt",
-        passed: firstReply.includes("Do you want me to plan it first or build it now?"),
+        passed: clarificationPromptPassed,
         observed: firstReply
       },
       {
         label: "clarified_execution",
         passed: clarifiedExecution,
         observed: clarifiedExecution
-          ? "execution input includes clarification selection"
+          ? "clarification answer cleared state and triggered execution"
           : "missing clarification annotation in execution input"
       }
     ]
@@ -731,7 +742,7 @@ async function runLocalIntentModelScenario(harness: Harness): Promise<LiveSmokeS
   const reply = await tempManager.handleMessage(
     buildMessage(
       "live-local-intent",
-      "Could you own this for me and keep it open for me later tonight?",
+      "Could you own this for me and build a plain HTML landing page, then keep it open for me later tonight?",
       new Date("2026-03-12T15:35:00.000Z").toISOString()
     ),
     async (input) => {
@@ -751,7 +762,7 @@ async function runLocalIntentModelScenario(harness: Harness): Promise<LiveSmokeS
   harness.localIntentModel.observedConfidence = observedConfidence;
   const passed =
     resolverCalls > 0
-    && (observedMode === "build" || observedMode === "autonomous")
+    && (observedMode === "static_html_build" || observedMode === "build" || observedMode === "autonomous")
     && (
       reply.startsWith("On it. I'll start with:")
       || reply.startsWith("I'm taking this end to end now.")
@@ -769,7 +780,7 @@ async function runLocalIntentModelScenario(harness: Harness): Promise<LiveSmokeS
     scenarioId: "local_intent_model_live",
     passed,
     transcriptPreview: [
-      "user: Could you own this for me and keep it open for me later tonight?",
+      "user: Could you own this for me and build a plain HTML landing page, then keep it open for me later tonight?",
       `assistant: ${reply}`
     ],
     checks: [
@@ -780,7 +791,10 @@ async function runLocalIntentModelScenario(harness: Harness): Promise<LiveSmokeS
       },
       {
         label: "local_model_promoted_execution",
-        passed: observedMode === "build" || observedMode === "autonomous",
+        passed:
+          observedMode === "static_html_build" ||
+          observedMode === "build" ||
+          observedMode === "autonomous",
         observed: `mode=${observedMode ?? "null"} confidence=${observedConfidence ?? "null"}`
       }
     ]

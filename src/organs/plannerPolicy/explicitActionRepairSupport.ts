@@ -3,6 +3,10 @@
  */
 
 import { estimateActionCostUsd } from "../../core/actionCostPolicy";
+import {
+  dirnameCrossPlatformPath,
+  localFileUrlToAbsolutePath
+} from "../../core/crossPlatformPath";
 import { makeId } from "../../core/ids";
 import type { PlannedAction } from "../../core/types";
 import {
@@ -13,7 +17,6 @@ import {
 import { isTrackedArtifactEditPreviewPlan } from "./buildExecutionActionHeuristics";
 import { hasNonRespondAction, requiresExecutableBuildPlan } from "./buildExecutionPolicy";
 import type {
-  PlannerExecutionEnvironmentContext,
   RequiredActionType
 } from "./executionStyleContracts";
 
@@ -27,10 +30,75 @@ const VISIBLE_PREVIEW_URL_LINE_PATTERN =
   /^-\s*Visible preview already exists:\s*([^;\n]+)(?:;.*)?$/im;
 
 /**
- * Deduplicates non-empty string values while preserving first-seen order.
+ * Normalizes optional string.
  *
- * @param values - Candidate string values.
- * @returns Unique non-empty values.
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses local constants/helpers within this module.
+ * @param value - Input consumed by this helper.
+ * @returns Result produced by this helper.
+ */
+function normalizeOptionalString(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+/**
+ * Evaluates whether missing preview process lease id.
+ *
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses local constants/helpers within this module.
+ * @param value - Input consumed by this helper.
+ * @returns Result produced by this helper.
+ */
+function isMissingPreviewProcessLeaseId(value: unknown): boolean {
+  const normalized = normalizeOptionalString(value);
+  return (
+    normalized === null ||
+    normalized.toLowerCase() === "none" ||
+    normalized.toLowerCase() === "null"
+  );
+}
+
+/**
+ * Derives local file workspace root path.
+ *
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses `dirnameCrossPlatformPath` (import `dirnameCrossPlatformPath`) from `../../core/crossPlatformPath`.
+ * - Uses `localFileUrlToAbsolutePath` (import `localFileUrlToAbsolutePath`) from `../../core/crossPlatformPath`.
+ * @param urlValue - Input consumed by this helper.
+ * @returns Result produced by this helper.
+ */
+function deriveLocalFileWorkspaceRootPath(urlValue: unknown): string | null {
+  const normalizedUrl = normalizeOptionalString(urlValue);
+  if (!normalizedUrl?.startsWith("file://")) {
+    return null;
+  }
+  try {
+    const localPath = localFileUrlToAbsolutePath(normalizedUrl);
+    return localPath ? dirnameCrossPlatformPath(localPath) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Uniques non empty.
+ *
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses local constants/helpers within this module.
+ * @param values - Input consumed by this helper.
+ * @returns Result produced by this helper.
  */
 function uniqueNonEmpty(values: readonly (string | null | undefined)[]): string[] {
   const seen = new Set<string>();
@@ -50,10 +118,31 @@ function uniqueNonEmpty(values: readonly (string | null | undefined)[]): string[
 }
 
 /**
- * Extracts exact tracked preview-process lease ids from the conversation-aware execution input.
+ * Normalizes tracked preview lease id.
  *
- * @param fullExecutionInput - Conversation-aware execution payload sent to the planner.
- * @returns Exact preview-process lease ids, or an empty list when the current request context has none.
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses local constants/helpers within this module.
+ * @param value - Input consumed by this helper.
+ * @returns Result produced by this helper.
+ */
+function normalizeTrackedPreviewLeaseId(value: string | null | undefined): string | null {
+  const normalized = normalizeOptionalString(value);
+  return isMissingPreviewProcessLeaseId(normalized) ? null : normalized;
+}
+
+/**
+ * Extracts tracked preview lease ids.
+ *
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses local constants/helpers within this module.
+ * @param fullExecutionInput - Input consumed by this helper.
+ * @returns Result produced by this helper.
  */
 function extractTrackedPreviewLeaseIds(fullExecutionInput: string): string[] {
   const leaseIds: string[] = [];
@@ -62,17 +151,19 @@ function extractTrackedPreviewLeaseIds(fullExecutionInput: string): string[] {
     leaseIds.push(
       ...previewLeaseListMatch[1]
         .split(",")
-        .map((value) => value.trim())
-        .filter((value) => /^[A-Za-z0-9:_-]+$/.test(value))
+        .map((value) => normalizeTrackedPreviewLeaseId(value))
+        .filter((value): value is string => value !== null && /^[A-Za-z0-9:_-]+$/.test(value))
     );
   }
   const inlineMatch = fullExecutionInput.match(LINKED_PREVIEW_LEASE_INLINE_PATTERN);
-  if (inlineMatch?.[1]) {
-    leaseIds.push(inlineMatch[1]);
+  const normalizedInlineLeaseId = normalizeTrackedPreviewLeaseId(inlineMatch?.[1] ?? null);
+  if (normalizedInlineLeaseId) {
+    leaseIds.push(normalizedInlineLeaseId);
   }
   const processLineMatch = fullExecutionInput.match(LINKED_PREVIEW_PROCESS_LINE_PATTERN);
-  if (processLineMatch?.[1]) {
-    leaseIds.push(processLineMatch[1]);
+  const normalizedProcessLineLeaseId = normalizeTrackedPreviewLeaseId(processLineMatch?.[1] ?? null);
+  if (normalizedProcessLineLeaseId) {
+    leaseIds.push(normalizedProcessLineLeaseId);
   }
   return uniqueNonEmpty(leaseIds);
 }
@@ -183,19 +274,35 @@ export function normalizeLinkedPreviewShutdownActions(
     return actions;
   }
   const linkedPreviewLeaseIds = extractTrackedPreviewLeaseIds(fullExecutionInput);
-  if (linkedPreviewLeaseIds.length === 0) {
-    return actions;
-  }
-
-  const hasCloseBrowserAction = actions.some((action) => action.type === "close_browser");
   const filteredActions = actions.filter((action) => {
     if (action.type !== "stop_process") {
       return true;
     }
+    const hasExactPidTarget =
+      typeof action.params.pid === "number" &&
+      Number.isInteger(action.params.pid) &&
+      action.params.pid > 0;
     const leaseId =
-      typeof action.params.leaseId === "string" ? action.params.leaseId.trim() : "";
-    return linkedPreviewLeaseIds.includes(leaseId);
+      typeof action.params.leaseId === "string" ? action.params.leaseId.trim() : null;
+    if (hasExactPidTarget) {
+      return true;
+    }
+    if (isMissingPreviewProcessLeaseId(leaseId)) {
+      return false;
+    }
+    if (linkedPreviewLeaseIds.length === 0) {
+      return true;
+    }
+    return leaseId !== null && linkedPreviewLeaseIds.includes(leaseId);
   });
+
+  if (linkedPreviewLeaseIds.length === 0) {
+    return filteredActions;
+  }
+
+  const hasCloseBrowserAction = filteredActions.some(
+    (action) => action.type === "close_browser"
+  );
 
   if (hasCloseBrowserAction) {
     for (const linkedPreviewLeaseId of linkedPreviewLeaseIds) {
@@ -244,7 +351,8 @@ export function normalizeOpenBrowserWorkspaceContext(
     if (action.type !== "open_browser") {
       return action;
     }
-    const params = {
+    const derivedLocalFileWorkspaceRootPath = deriveLocalFileWorkspaceRootPath(action.params.url);
+    const params: Record<string, unknown> = {
       ...action.params
     };
     if (
@@ -253,8 +361,13 @@ export function normalizeOpenBrowserWorkspaceContext(
     ) {
       params.previewProcessLeaseId = linkedPreviewLeaseId;
     }
-    if (workspaceRootPath && typeof params.rootPath !== "string") {
+    if (derivedLocalFileWorkspaceRootPath) {
+      params.rootPath = derivedLocalFileWorkspaceRootPath;
+    } else if (workspaceRootPath && typeof params.rootPath !== "string") {
       params.rootPath = workspaceRootPath;
+    }
+    if (isMissingPreviewProcessLeaseId(params.previewProcessLeaseId)) {
+      delete params.previewProcessLeaseId;
     }
     return {
       ...action,
@@ -333,9 +446,13 @@ export function normalizeTrackedArtifactPreviewRefreshActions(
  */
 export function stripExecutionStyleRespondActions(
   actions: PlannedAction[],
-  currentUserRequest: string
+  currentUserRequest: string,
+  requiredActionType: RequiredActionType = null
 ): PlannedAction[] {
-  if (!requiresExecutableBuildPlan(currentUserRequest) || !hasNonRespondAction(actions)) {
+  const shouldStripRespond =
+    (requiresExecutableBuildPlan(currentUserRequest) || requiredActionType === "close_browser") &&
+    hasNonRespondAction(actions);
+  if (!shouldStripRespond) {
     return actions;
   }
   return actions.filter((action) => action.type !== "respond");

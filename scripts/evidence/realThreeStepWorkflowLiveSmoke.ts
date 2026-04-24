@@ -108,7 +108,7 @@ const LIVE_RUN_RUNTIME_PATH = path.resolve(
 );
 const CONVERSATION_ID = `real-three-step-smoke-${RUN_ID}`;
 const USER_ID = "real-smoke-user";
-const USERNAME = "anthonybenny";
+const USERNAME = "fixtureuser";
 const TURN_TIMEOUT_MS = 60_000;
 const SMOKE_DEADLINE_MS = 120_000;
 const CLEANUP_STEP_TIMEOUT_MS = 3_000;

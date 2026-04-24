@@ -8,6 +8,10 @@ import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 
+function lastItem<TItem>(items: readonly TItem[]): TItem | undefined {
+  return items[items.length - 1];
+}
+
 import { SemanticMemoryStore } from "../../src/core/semanticMemory";
 import { SqlitePlannerFailureStore } from "../../src/core/plannerFailureStore";
 import { Stage685PlaybookPlanningContext } from "../../src/core/stage6_85PlaybookRuntime";
@@ -1471,7 +1475,7 @@ test("planner uses deterministic framework build fallback before model planning 
     );
     assert.ok(plan.actions.length >= 8);
     assert.equal(plan.actions[0]?.type, "shell_command");
-    assert.equal(plan.actions.at(-1)?.type, "open_browser");
+    assert.equal(lastItem(plan.actions)?.type, "open_browser");
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }
@@ -1604,7 +1608,7 @@ test("planner keeps eager deterministic framework fallback for fresh autonomous 
       /deterministic_framework_build_fallback=shell_command/i
     );
     assert.equal(plan.actions[0]?.type, "shell_command");
-    assert.equal(plan.actions.at(-1)?.type, "open_browser");
+    assert.equal(lastItem(plan.actions)?.type, "open_browser");
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }
@@ -1798,6 +1802,51 @@ test("planner uses deterministic local-organization fallback before model planni
       plan.plannerNotes ?? "",
       /deterministic_local_organization_fallback=shell_command/i
     );
+    assert.match(String(plan.actions[0]?.params.command), /ROOT_REMAINING_MATCHES:/i);
+    assert.match(String(plan.actions[0]?.params.command), /DEST_CONTENTS:/i);
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("planner uses deterministic local-organization fallback before model planning for earlier-project-folder wording", async () => {
+  const tempDir = await mkdtemp(
+    path.join(os.tmpdir(), "agentbigbrain-planner-local-organization-earlier-")
+  );
+  try {
+    const memoryStore = new SemanticMemoryStore(path.join(tempDir, "semantic_memory.json"));
+    const modelClient = new FailingIfCalledLocalOrganizationModelClient();
+    const planner = new PlannerOrgan(
+      modelClient,
+      memoryStore,
+      undefined,
+      {
+        platform: "win32",
+        shellKind: "powershell",
+        invocationMode: "inline_command",
+        commandMaxChars: 4000,
+        desktopPath: "C:\\Users\\testuser\\Desktop",
+        documentsPath: "C:\\Users\\testuser\\Documents",
+        downloadsPath: "C:\\Users\\testuser\\Downloads"
+      }
+    );
+
+    const plan = await planner.plan(
+      buildTask(
+        'Please take this from start to finish: move the earlier drone-company-organize-smoke project folders into a folder called "drone-web-projects" on my desktop.'
+      ),
+      "mock-planner"
+    );
+
+    assert.equal(modelClient.getPlannerCallCount(), 0);
+    assert.equal(plan.actions.length, 1);
+    assert.equal(plan.actions[0]?.type, "shell_command");
+    assert.match(
+      plan.plannerNotes ?? "",
+      /deterministic_local_organization_fallback=shell_command/i
+    );
+    assert.match(String(plan.actions[0]?.params.command), /drone-company-organize-smoke/i);
+    assert.doesNotMatch(String(plan.actions[0]?.params.command), /on my desktop/i);
     assert.match(String(plan.actions[0]?.params.command), /ROOT_REMAINING_MATCHES:/i);
     assert.match(String(plan.actions[0]?.params.command), /DEST_CONTENTS:/i);
   } finally {

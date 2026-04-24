@@ -51,7 +51,7 @@ test("buildConversationDomainSignalWindowForTurn keeps broader governed relation
   );
 
   assert.equal(
-    update.laneSignals.some((signal) => signal.lane === "relationship"),
+    update.laneSignals?.some((signal) => signal.lane === "relationship"),
     true
   );
 });

@@ -78,6 +78,30 @@ test("extractCurrentUserRequest excludes trailing AgentFriend broker packets aft
   );
 });
 
+test("extractCurrentUserRequest strips clarification-display question lines while preserving the selected build lane", () => {
+  const wrapped = [
+    "You are in an ongoing conversation with the same user.",
+    "Current user request:",
+    'Build me a landing page in the exact folder "C:\\Users\\testuser\\Desktop\\Solar Energy Landing Page".',
+    "",
+    "[Clarification resolved: Would you like that built as plain HTML, or as a framework app like Next.js or React?]",
+    "User selected: Plain HTML.",
+    "Build format resolved: create a plain static HTML deliverable.",
+    "Execution lane: static_html_build."
+  ].join("\n");
+
+  assert.equal(
+    extractCurrentUserRequest(wrapped),
+    [
+      'Build me a landing page in the exact folder "C:\\Users\\testuser\\Desktop\\Solar Energy Landing Page".',
+      "",
+      "User selected: Plain HTML.",
+      "Build format resolved: create a plain static HTML deliverable.",
+      "Execution lane: static_html_build."
+    ].join("\n")
+  );
+});
+
 test("registerAndAssessProbing detects extraction-style bursts once the sample threshold is met", () => {
   const config = resolveProbingDetectorConfig({
     windowSize: 6,

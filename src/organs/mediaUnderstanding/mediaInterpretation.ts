@@ -14,6 +14,7 @@ import type {
   MediaUnderstandingConfig
 } from "./contracts";
 import { createMediaUnderstandingConfigFromEnv } from "./contracts";
+import { interpretDocumentAttachment } from "./documentUnderstanding";
 import { interpretImageAttachment } from "./imageUnderstanding";
 import { buildFallbackMediaInterpretation } from "./mediaModelFallback";
 import { interpretVoiceAttachment } from "./speechToText";
@@ -59,6 +60,9 @@ export async function interpretMediaAttachment(
   }
   if (input.attachment.kind === "video") {
     return interpretVideoAttachment(input.attachment);
+  }
+  if (input.attachment.kind === "document") {
+    return interpretDocumentAttachment(config, input.attachment, input.buffer);
   }
   return buildFallbackMediaInterpretation(input.attachment);
 }

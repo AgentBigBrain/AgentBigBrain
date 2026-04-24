@@ -3,10 +3,15 @@
  */
 
 import { classifyRoutingIntentV1 } from "../../interfaces/routingMap";
-import { extractActiveRequestSegment } from "../../core/currentRequestExtraction";
+import { extractSemanticRequestSegment } from "../../core/currentRequestExtraction";
+import { parseExplicitExecutionConstraints } from "../../core/explicitExecutionConstraints";
 import { extractRequestedFrameworkFolderName } from "./frameworkBuildActionHeuristics";
 import { hasNamedWorkspaceLaunchOpenIntent } from "./namedWorkspaceLaunchSupport";
-
+import {
+  isResolvedExecutionStyleBuildRoute,
+  isResolvedFrameworkBuildRoute,
+  isResolvedStaticHtmlBuildRoute
+} from "./liveVerificationSemanticRouteSupport";
 const BUILD_EXECUTION_VERB_PATTERN =
   /\b(create|build|make|generate|scaffold|setup|set up|spin up|run|start|launch|fix|repair|finish|complete|implement|continue)\b/i;
 const BUILD_EXECUTION_TARGET_PATTERN =
@@ -31,6 +36,16 @@ const NATURAL_BROWSER_CONTROL_FOLLOW_UP_PATTERN =
   /^\s*(?:open|reopen|show|bring\s+(?:back|up)|pull\s+up|close|shut|dismiss|hide)\b[\s\S]{0,50}\b(?:browser|tab|window|preview|page|landing page|homepage)\b/i;
 const FRAMEWORK_APP_REQUEST_PATTERN =
   /\b(?:react|vite|next\.?js|nextjs|vue|svelte|angular)\b/i;
+const STATIC_HTML_BUILD_LANE_PATTERN =
+  /\bExecution lane:\s*static_html_build\b/i;
+const STATIC_HTML_BUILD_FORMAT_RESOLVED_PATTERN =
+  /(?:^|\n)Build format resolved:\s*create a plain static HTML deliverable\b/i;
+const EXPLICIT_STATIC_HTML_REQUEST_PATTERN =
+  /\b(?:static\s+single[- ]page|single[- ]file\s+html|single[- ]page\s+site|single[- ]page\s+html|plain\s+html|static\s+html)\b/i;
+const EXPLICIT_INDEX_HTML_ENTRY_PATTERN =
+  /\bindex\.html\b/i;
+const NEGATED_FRAMEWORK_SCAFFOLD_PATTERN =
+  /\bdo\s+not\s+(?:scaffold|use|create|build\s+with|generate\s+with|start\s+with)\b[\s\S]{0,80}\b(?:react|vite|next\.?js|nextjs|vue|svelte|angular)\b/i;
 const FRAMEWORK_APP_BOOTSTRAP_CUE_PATTERN =
   /\b(?:create|make|generate|scaffold|bootstrap|spin\s+up|set\s+up|setup|get\b[\s\S]{0,24}\bstarted|from\s+scratch|fresh|new)\b/i;
 const FRAMEWORK_APP_NAMED_WORKSPACE_CUE_PATTERN =
@@ -50,11 +65,9 @@ const FRAMEWORK_BUILD_LIFECYCLE_EDIT_PATTERN =
 const FRAMEWORK_BUILD_LIFECYCLE_CLOSE_PATTERN =
   /^\s*(?:(?:thanks|thank you|ok|okay|alright|all right|now)[\s,!.:-]+)*(?:please\s+)?(?:close|shut|stop|dismiss|hide)\b/i;
 const NEGATED_LIVE_RUN_PATTERN =
-  /\bdo\s+not\s+(?:start|run|launch|serve)\b[\s\S]{0,80}\b(?:localhost|127\.0\.0\.1|::1|loopback|server|service|api|backend|dev\s+server|preview\s+server|preview\/dev\s+server|preview)\b|\bdo\s+not\s+(?:probe|check|confirm|verify)\b[\s\S]{0,80}\b(?:localhost|127\.0\.0\.1|::1|loopback|http|port|ready|readiness)\b/i;
+  /\bdo\s+not\s+(?:probe|check|confirm|verify)\b[\s\S]{0,80}\b(?:localhost|127\.0\.0\.1|::1|loopback|http|port|ready|readiness)\b/i;
 const NEGATED_BROWSER_VERIFICATION_PATTERN =
   /\bdo\s+not\s+(?:(?:open|reopen)\s+or\s+)?(?:verify|check|inspect|review)\b[\s\S]{0,80}\b(?:browser|homepage|ui|page|render|renders|rendering)\b/i;
-const NEGATED_BROWSER_OPEN_PATTERN =
-  /\bdo\s+not\s+open\b[\s\S]{0,60}\b(?:browser|tab|window|page|site|preview|it)\b/i;
 const NATURAL_LOCAL_START_PATTERN =
   /\b(?:start|launch|run)\b[\s\S]{0,32}\b(?:it|the app|the site|the page)\b[\s\S]{0,24}\b(?:locally|local)\b/i;
 const NATURAL_BROWSER_OPEN_PATTERN =
@@ -65,23 +78,133 @@ const RUNTIME_PROCESS_MANAGEMENT_VERB_PATTERN =
   /\b(?:inspect|check|verify|confirm|make sure|find out|see if|look at|stop|shut\s+down|turn\s+off|kill)\b/i;
 const RUNTIME_PROCESS_MANAGEMENT_TARGET_PATTERN =
   /\b(?:still\s+running|running|server|servers|preview(?:\s+stack|\s+server)?|process(?:es)?|localhost|loopback|port|dev\s+server)\b/i;
+const LIVE_VERIFICATION_REQUEST_PATTERNS: readonly RegExp[] = [
+  /\bnpm\s+start\b/i,
+  /\bnpm\s+run\s+dev\b/i,
+  /\b(?:pnpm|yarn)\s+(?:start|dev)\b/i,
+  /\b(?:next|vite)\s+dev\b/i,
+  NATURAL_LOCAL_START_PATTERN,
+  /\bdev\s+server\b/i,
+  /\b(localhost|127\.0\.0\.1|::1|loopback)\b/i,
+  /\b(run|start|launch|serve)\b[\s\S]{0,80}\b(server|service|api|backend|dev\s+server)\b/i,
+  /\b(?:probe|check|confirm|wait\s+until)\b[\s\S]{0,80}\b(?:localhost|http|port|ready|readiness)\b/i,
+  /\b(?:tell\s+me|let\s+me\s+know|confirm)\b[\s\S]{0,24}\bif\b[\s\S]{0,24}\b(?:it|the app|the site|the page)\b[\s\S]{0,24}\bworked\b/i,
+  /\bverify\b[\s\S]{0,80}\b(ui|homepage|browser|render|renders|rendering)\b/i,
+  /\b(playwright|screenshot|visual(?:ly)?\s+confirm)\b/i
+];
+const BROWSER_VERIFICATION_REQUEST_PATTERNS: readonly RegExp[] = [
+  /\bverify\b[\s\S]{0,80}\b(ui|homepage|browser|render|renders|rendering)\b/i,
+  /\b(check|inspect|review)\b[\s\S]{0,80}\b(browser|homepage|ui|page|render|rendering)\b/i,
+  /\b(screenshot|visual(?:ly)?\s+confirm)\b/i
+];
+const PERSISTENT_BROWSER_OPEN_REQUEST_PATTERNS: readonly RegExp[] = [
+  /\bleave\b[\s\S]{0,40}\b(browser|page|site|window|it)\b[\s\S]{0,20}\bopen\b/i,
+  NATURAL_BROWSER_OPEN_PATTERN,
+  NATURAL_BROWSER_LEAVE_UP_PATTERN,
+  /\bkeep\b[\s\S]{0,40}\b(browser|page|site|window|it)\b[\s\S]{0,20}\bopen\b/i,
+  /\blet me (?:see|view)\b/i,
+  /\bso i can (?:see|view)\b/i
+];
 
 /**
- * Normalizes planner-facing request text down to the active user request segment.
+ * Evaluates whether request matches one named intent pattern set.
  *
- * @param currentUserRequest - Raw planner-facing request text, which may already include wrapped conversation context.
- * @returns Active request text used by deterministic build and organization classifiers.
+ * **Why it exists:**
+ * Keeps dense regex groups centralized so classifier functions read as policy decisions instead
+ * of scattered lexical implementation details.
+ *
+ * **What it talks to:**
+ * - Uses local constants/helpers within this module.
+ * @param activeRequest - Input consumed by this helper.
+ * @param patterns - Input consumed by this helper.
+ * @returns Result produced by this helper.
  */
-function normalizeActiveRequest(currentUserRequest: string): string {
-  return extractActiveRequestSegment(currentUserRequest).trim();
+function matchesAnyRequestPattern(
+  activeRequest: string,
+  patterns: readonly RegExp[]
+): boolean {
+  return patterns.some((pattern) => pattern.test(activeRequest));
 }
 
 /**
- * Evaluates whether a request is about inspecting or stopping an existing runtime instead of
- * building or editing project files.
+ * Normalizes active request.
  *
- * @param currentUserRequest - Active planner-facing request text.
- * @returns `true` when the request is process-management oriented.
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses `extractSemanticRequestSegment` (import `extractSemanticRequestSegment`) from `../../core/currentRequestExtraction`.
+ * @param currentUserRequest - Input consumed by this helper.
+ * @returns Result produced by this helper.
+ */
+function normalizeActiveRequest(currentUserRequest: string): string {
+  return extractSemanticRequestSegment(currentUserRequest).trim();
+}
+/**
+ * Evaluates whether framework scaffold lane.
+ *
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses local constants/helpers within this module.
+ * @param currentUserRequest - Input consumed by this helper.
+ * @returns Result produced by this helper.
+ */
+function suppressesFrameworkScaffoldLane(currentUserRequest: string): boolean {
+  const activeRequest = normalizeActiveRequest(currentUserRequest);
+  if (!NEGATED_FRAMEWORK_SCAFFOLD_PATTERN.test(activeRequest)) {
+    return false;
+  }
+  return (
+    EXPLICIT_STATIC_HTML_REQUEST_PATTERN.test(activeRequest) ||
+    EXPLICIT_INDEX_HTML_ENTRY_PATTERN.test(activeRequest)
+  );
+}
+/**
+ * Evaluates whether static html execution style request.
+ *
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses `isResolvedFrameworkBuildRoute` (import `isResolvedFrameworkBuildRoute`) from `./liveVerificationSemanticRouteSupport`.
+ * - Uses `isResolvedStaticHtmlBuildRoute` (import `isResolvedStaticHtmlBuildRoute`) from `./liveVerificationSemanticRouteSupport`.
+ * @param currentUserRequest - Input consumed by this helper.
+ * @returns Result produced by this helper.
+ */
+export function isStaticHtmlExecutionStyleRequest(
+  currentUserRequest: string
+): boolean {
+  if (isResolvedStaticHtmlBuildRoute(currentUserRequest)) {
+    return true;
+  }
+  if (isResolvedFrameworkBuildRoute(currentUserRequest)) {
+    return false;
+  }
+  const activeRequest = normalizeActiveRequest(currentUserRequest);
+  if (!isExecutionStyleBuildRequest(activeRequest)) {
+    return false;
+  }
+  if (requiresFrameworkAppScaffoldAction(activeRequest)) {
+    return false;
+  }
+  return (
+    EXPLICIT_STATIC_HTML_REQUEST_PATTERN.test(activeRequest) ||
+    EXPLICIT_INDEX_HTML_ENTRY_PATTERN.test(activeRequest) ||
+    suppressesFrameworkScaffoldLane(activeRequest)
+  );
+}
+/**
+ * Evaluates whether runtime process management request.
+ *
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses local constants/helpers within this module.
+ * @param currentUserRequest - Input consumed by this helper.
+ * @returns Result produced by this helper.
  */
 export function isRuntimeProcessManagementRequest(
   currentUserRequest: string
@@ -104,53 +227,87 @@ export function isRuntimeProcessManagementRequest(
     !hasFrameworkBuildCues
   );
 }
-
 /**
- * Returns whether the request explicitly suppresses live-run/start-or-probe work for this turn.
+ * Evaluates whether live run work.
  *
- * @param currentUserRequest - Active planner-facing request text.
- * @returns `true` when the user explicitly says not to start/verify a live runtime yet.
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses `parseExplicitExecutionConstraints` (import `parseExplicitExecutionConstraints`) from `../../core/explicitExecutionConstraints`.
+ * @param currentUserRequest - Input consumed by this helper.
+ * @returns Result produced by this helper.
  */
 export function suppressesLiveRunWork(currentUserRequest: string): boolean {
-  return NEGATED_LIVE_RUN_PATTERN.test(normalizeActiveRequest(currentUserRequest));
+  const activeRequest = normalizeActiveRequest(currentUserRequest);
+  const explicitConstraints = parseExplicitExecutionConstraints(activeRequest);
+  return (
+    explicitConstraints.disallowPreviewStart ||
+    NEGATED_LIVE_RUN_PATTERN.test(activeRequest)
+  );
 }
-
 /**
- * Returns whether the request explicitly suppresses browser/UI verification for this turn.
+ * Evaluates whether browser verification.
  *
- * @param currentUserRequest - Active planner-facing request text.
- * @returns `true` when browser verification is explicitly negated.
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses `parseExplicitExecutionConstraints` (import `parseExplicitExecutionConstraints`) from `../../core/explicitExecutionConstraints`.
+ * @param currentUserRequest - Input consumed by this helper.
+ * @returns Result produced by this helper.
  */
 function suppressesBrowserVerification(currentUserRequest: string): boolean {
-  return NEGATED_BROWSER_VERIFICATION_PATTERN.test(normalizeActiveRequest(currentUserRequest));
+  const activeRequest = normalizeActiveRequest(currentUserRequest);
+  const explicitConstraints = parseExplicitExecutionConstraints(activeRequest);
+  return (
+    explicitConstraints.disallowVisibleBrowserOpen ||
+    NEGATED_BROWSER_VERIFICATION_PATTERN.test(activeRequest)
+  );
 }
-
 /**
- * Returns whether the request explicitly suppresses opening a browser for this turn.
+ * Evaluates whether browser open.
  *
- * @param currentUserRequest - Active planner-facing request text.
- * @returns `true` when browser opening is explicitly negated.
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses `parseExplicitExecutionConstraints` (import `parseExplicitExecutionConstraints`) from `../../core/explicitExecutionConstraints`.
+ * @param currentUserRequest - Input consumed by this helper.
+ * @returns Result produced by this helper.
  */
 function suppressesBrowserOpen(currentUserRequest: string): boolean {
-  return NEGATED_BROWSER_OPEN_PATTERN.test(normalizeActiveRequest(currentUserRequest));
+  const activeRequest = normalizeActiveRequest(currentUserRequest);
+  return parseExplicitExecutionConstraints(activeRequest).disallowVisibleBrowserOpen;
 }
-
 /**
- * Evaluates whether a request is primarily asking to control a tracked browser window from the
- * current conversation rather than asking to build or run a project again.
+ * Evaluates whether browser control follow up request.
  *
- * This is a meaning-level classifier only. It helps the planner know the user likely means
- * "operate on the current page/session," but it does not authorize closing unrelated browser
- * windows or stopping any ambiguous holder process by itself.
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses local constants/helpers within this module.
+ * @param currentUserRequest - Input consumed by this helper.
+ * @returns Result produced by this helper.
  */
 export function isBrowserControlFollowUpRequest(currentUserRequest: string): boolean {
   return NATURAL_BROWSER_CONTROL_FOLLOW_UP_PATTERN.test(
     normalizeActiveRequest(currentUserRequest)
   );
 }
-
 /**
- * Evaluates whether a request is an execution-style build goal rather than guidance-only help.
+ * Evaluates whether execution style build request.
+ *
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses `classifyRoutingIntentV1` (import `classifyRoutingIntentV1`) from `../../interfaces/routingMap`.
+ * - Uses `isResolvedExecutionStyleBuildRoute` (import `isResolvedExecutionStyleBuildRoute`) from `./liveVerificationSemanticRouteSupport`.
+ * - Uses `hasNamedWorkspaceLaunchOpenIntent` (import `hasNamedWorkspaceLaunchOpenIntent`) from `./namedWorkspaceLaunchSupport`.
+ * @param currentUserRequest - Input consumed by this helper.
+ * @returns Result produced by this helper.
  */
 export function isExecutionStyleBuildRequest(currentUserRequest: string): boolean {
   const activeRequest = normalizeActiveRequest(currentUserRequest);
@@ -162,6 +319,9 @@ export function isExecutionStyleBuildRequest(currentUserRequest: string): boolea
   }
   if (isBrowserControlFollowUpRequest(activeRequest)) {
     return false;
+  }
+  if (isResolvedExecutionStyleBuildRoute(currentUserRequest)) {
+    return true;
   }
   if (hasNamedWorkspaceLaunchOpenIntent(activeRequest)) {
     return true;
@@ -182,15 +342,31 @@ export function isExecutionStyleBuildRequest(currentUserRequest: string): boolea
     /\brun\s+(?:it|commands?)\b/i.test(activeRequest)
   );
 }
-
 /**
- * Evaluates whether a request is asking for a fresh framework-app scaffold/build path rather than
- * a static landing-page file or a tracked artifact-edit follow-up.
+ * Evaluates whether framework app scaffold action.
+ *
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses `isResolvedFrameworkBuildRoute` (import `isResolvedFrameworkBuildRoute`) from `./liveVerificationSemanticRouteSupport`.
+ * - Uses `isResolvedStaticHtmlBuildRoute` (import `isResolvedStaticHtmlBuildRoute`) from `./liveVerificationSemanticRouteSupport`.
+ * @param currentUserRequest - Input consumed by this helper.
+ * @returns Result produced by this helper.
  */
 export function requiresFrameworkAppScaffoldAction(
   currentUserRequest: string
 ): boolean {
+  if (isResolvedFrameworkBuildRoute(currentUserRequest)) {
+    return true;
+  }
+  if (isResolvedStaticHtmlBuildRoute(currentUserRequest)) {
+    return false;
+  }
   const activeRequest = normalizeActiveRequest(currentUserRequest);
+  if (suppressesFrameworkScaffoldLane(activeRequest)) {
+    return false;
+  }
   return (
     isExecutionStyleBuildRequest(activeRequest) &&
     FRAMEWORK_APP_REQUEST_PATTERN.test(activeRequest) &&
@@ -201,37 +377,77 @@ export function requiresFrameworkAppScaffoldAction(
     )
   );
 }
-
 /**
- * Evaluates whether a framework-app request is a narrow workspace-preparation turn that should
- * stay on the deterministic scaffold/install/proof path instead of paying full planner latency.
+ * Evaluates whether framework workspace preparation request.
+ *
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses `isResolvedFrameworkBuildRoute` (import `isResolvedFrameworkBuildRoute`) from `./liveVerificationSemanticRouteSupport`.
+ * @param currentUserRequest - Input consumed by this helper.
+ * @returns Result produced by this helper.
  */
 export function isFrameworkWorkspacePreparationRequest(
   currentUserRequest: string
 ): boolean {
+  if (!isResolvedFrameworkBuildRoute(currentUserRequest)) {
+    const activeRequest = normalizeActiveRequest(currentUserRequest);
+    return (
+      requiresFrameworkAppScaffoldAction(activeRequest) &&
+      !isLiveVerificationBuildRequest(activeRequest) &&
+      !requiresBrowserVerificationBuildRequest(activeRequest) &&
+      !requiresPersistentBrowserOpenBuildRequest(activeRequest) &&
+      FRAMEWORK_WORKSPACE_PREPARATION_PATTERN.test(activeRequest)
+    );
+  }
   const activeRequest = normalizeActiveRequest(currentUserRequest);
   return (
-    requiresFrameworkAppScaffoldAction(activeRequest) &&
+    requiresFrameworkAppScaffoldAction(currentUserRequest) &&
     !isLiveVerificationBuildRequest(activeRequest) &&
     !requiresBrowserVerificationBuildRequest(activeRequest) &&
     !requiresPersistentBrowserOpenBuildRequest(activeRequest) &&
     FRAMEWORK_WORKSPACE_PREPARATION_PATTERN.test(activeRequest)
   );
 }
-
 /**
- * Evaluates whether a request is still in the deterministic framework build lifecycle lane:
- * scaffold/build/start/open and bounded tracked edit turns should stay on the bounded framework
- * runtime path, while close and unrelated conversational turns should not.
+ * Evaluates whether deterministic framework build lane request.
+ *
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses `extractRequestedFrameworkFolderName` (import `extractRequestedFrameworkFolderName`) from `./frameworkBuildActionHeuristics`.
+ * - Uses `isResolvedFrameworkBuildRoute` (import `isResolvedFrameworkBuildRoute`) from `./liveVerificationSemanticRouteSupport`.
+ * - Uses `isResolvedStaticHtmlBuildRoute` (import `isResolvedStaticHtmlBuildRoute`) from `./liveVerificationSemanticRouteSupport`.
+ * - Uses `hasNamedWorkspaceLaunchOpenIntent` (import `hasNamedWorkspaceLaunchOpenIntent`) from `./namedWorkspaceLaunchSupport`.
+ * @param currentUserRequest - Input consumed by this helper.
+ * @returns Result produced by this helper.
  */
 export function isDeterministicFrameworkBuildLaneRequest(
   currentUserRequest: string
 ): boolean {
+  if (isResolvedFrameworkBuildRoute(currentUserRequest)) {
+    return true;
+  }
+  if (isResolvedStaticHtmlBuildRoute(currentUserRequest)) {
+    return false;
+  }
   const activeRequest = normalizeActiveRequest(currentUserRequest);
+  if (suppressesFrameworkScaffoldLane(activeRequest)) {
+    return false;
+  }
   if (FRAMEWORK_BUILD_LIFECYCLE_CLOSE_PATTERN.test(activeRequest)) {
     return false;
   }
   if (isRuntimeProcessManagementRequest(activeRequest)) {
+    return false;
+  }
+  if (
+    STATIC_HTML_BUILD_LANE_PATTERN.test(currentUserRequest) ||
+    STATIC_HTML_BUILD_FORMAT_RESOLVED_PATTERN.test(currentUserRequest) ||
+    isStaticHtmlExecutionStyleRequest(activeRequest)
+  ) {
     return false;
   }
   const hasNamedWorkspaceLaunchFollowUp =
@@ -254,14 +470,16 @@ export function isDeterministicFrameworkBuildLaneRequest(
     FRAMEWORK_BUILD_LIFECYCLE_EDIT_PATTERN.test(activeRequest)
   );
 }
-
 /**
- * Evaluates whether a request is a bounded local workspace-organization goal that should be
- * executed rather than answered with guidance-only output.
+ * Evaluates whether local workspace organization request.
  *
- * This classification says the request is execution-shaped local organization work. It does not
- * by itself permit broad recovery or unproven holder shutdown when the runtime cannot tie the
- * blocked path back to an exact owned resource.
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses local constants/helpers within this module.
+ * @param currentUserRequest - Input consumed by this helper.
+ * @returns Result produced by this helper.
  */
 export function isLocalWorkspaceOrganizationRequest(currentUserRequest: string): boolean {
   const activeRequest = normalizeActiveRequest(currentUserRequest);
@@ -288,9 +506,16 @@ export function isLocalWorkspaceOrganizationRequest(currentUserRequest: string):
     BUILD_EXECUTION_DESTINATION_PATTERN.test(activeRequest)
   );
 }
-
 /**
- * Evaluates whether a build request explicitly asks to run and verify a live app/server.
+ * Evaluates whether live verification build request.
+ *
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses `hasNamedWorkspaceLaunchOpenIntent` (import `hasNamedWorkspaceLaunchOpenIntent`) from `./namedWorkspaceLaunchSupport`.
+ * @param currentUserRequest - Input consumed by this helper.
+ * @returns Result produced by this helper.
  */
 export function isLiveVerificationBuildRequest(currentUserRequest: string): boolean {
   const activeRequest = normalizeActiveRequest(currentUserRequest);
@@ -300,36 +525,25 @@ export function isLiveVerificationBuildRequest(currentUserRequest: string): bool
   if (suppressesLiveRunWork(activeRequest)) {
     return false;
   }
-  if (hasNamedWorkspaceLaunchOpenIntent(activeRequest)) {
+  const browserOpenSuppressed = suppressesBrowserOpen(activeRequest);
+  if (!browserOpenSuppressed && hasNamedWorkspaceLaunchOpenIntent(activeRequest)) {
     return true;
   }
   return (
-    /\bnpm\s+start\b/i.test(activeRequest) ||
-    /\bnpm\s+run\s+dev\b/i.test(activeRequest) ||
-    /\b(?:pnpm|yarn)\s+(?:start|dev)\b/i.test(activeRequest) ||
-    /\b(?:next|vite)\s+dev\b/i.test(activeRequest) ||
-    NATURAL_LOCAL_START_PATTERN.test(activeRequest) ||
-    NATURAL_BROWSER_OPEN_PATTERN.test(activeRequest) ||
-    /\bdev\s+server\b/i.test(activeRequest) ||
-    /\b(localhost|127\.0\.0\.1|::1|loopback)\b/i.test(activeRequest) ||
-    /\b(run|start|launch|serve)\b[\s\S]{0,80}\b(server|service|api|backend|dev\s+server)\b/i.test(
-      activeRequest
-    ) ||
-    /\b(?:probe|check|confirm|wait\s+until)\b[\s\S]{0,80}\b(?:localhost|http|port|ready|readiness)\b/i.test(
-      activeRequest
-    ) ||
-    /\b(?:tell\s+me|let\s+me\s+know|confirm)\b[\s\S]{0,24}\bif\b[\s\S]{0,24}\b(?:it|the app|the site|the page)\b[\s\S]{0,24}\bworked\b/i.test(
-      activeRequest
-    ) ||
-    /\bverify\b[\s\S]{0,80}\b(ui|homepage|browser|render|renders|rendering)\b/i.test(
-      activeRequest
-    ) ||
-    /\b(playwright|screenshot|visual(?:ly)?\s+confirm)\b/i.test(activeRequest)
+    (!browserOpenSuppressed && NATURAL_BROWSER_OPEN_PATTERN.test(activeRequest)) ||
+    matchesAnyRequestPattern(activeRequest, LIVE_VERIFICATION_REQUEST_PATTERNS)
   );
 }
-
 /**
- * Evaluates whether a build request explicitly asks for browser/UI proof.
+ * Evaluates whether browser verification build request.
+ *
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses local constants/helpers within this module.
+ * @param currentUserRequest - Input consumed by this helper.
+ * @returns Result produced by this helper.
  */
 export function requiresBrowserVerificationBuildRequest(
   currentUserRequest: string
@@ -341,19 +555,18 @@ export function requiresBrowserVerificationBuildRequest(
   if (suppressesBrowserVerification(activeRequest)) {
     return false;
   }
-  return (
-    /\bverify\b[\s\S]{0,80}\b(ui|homepage|browser|render|renders|rendering)\b/i.test(
-      activeRequest
-    ) ||
-    /\b(check|inspect|review)\b[\s\S]{0,80}\b(browser|homepage|ui|page|render|rendering)\b/i.test(
-      activeRequest
-    ) ||
-    /\b(screenshot|visual(?:ly)?\s+confirm)\b/i.test(activeRequest)
-  );
+  return matchesAnyRequestPattern(activeRequest, BROWSER_VERIFICATION_REQUEST_PATTERNS);
 }
-
 /**
- * Evaluates whether a build request explicitly asks for a visible browser window to remain open.
+ * Evaluates whether persistent browser open build request.
+ *
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses `hasNamedWorkspaceLaunchOpenIntent` (import `hasNamedWorkspaceLaunchOpenIntent`) from `./namedWorkspaceLaunchSupport`.
+ * @param currentUserRequest - Input consumed by this helper.
+ * @returns Result produced by this helper.
  */
 export function requiresPersistentBrowserOpenBuildRequest(
   currentUserRequest: string
@@ -368,22 +581,21 @@ export function requiresPersistentBrowserOpenBuildRequest(
   if (hasNamedWorkspaceLaunchOpenIntent(activeRequest)) {
     return true;
   }
-  return (
-    /\bleave\b[\s\S]{0,40}\b(browser|page|site|window|it)\b[\s\S]{0,20}\bopen\b/i.test(
-      activeRequest
-    ) ||
-    NATURAL_BROWSER_OPEN_PATTERN.test(activeRequest) ||
-    NATURAL_BROWSER_LEAVE_UP_PATTERN.test(activeRequest) ||
-    /\bkeep\b[\s\S]{0,40}\b(browser|page|site|window|it)\b[\s\S]{0,20}\bopen\b/i.test(
-      activeRequest
-    ) ||
-    /\blet me (?:see|view)\b/i.test(activeRequest) ||
-    /\bso i can (?:see|view)\b/i.test(activeRequest)
+  return matchesAnyRequestPattern(
+    activeRequest,
+    PERSISTENT_BROWSER_OPEN_REQUEST_PATTERNS
   );
 }
-
 /**
- * Evaluates whether planner policy may implicitly allow managed live-run process actions.
+ * Allowss implicit managed process for build request.
+ *
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses local constants/helpers within this module.
+ * @param currentUserRequest - Input consumed by this helper.
+ * @returns Result produced by this helper.
  */
 export function allowsImplicitManagedProcessForBuildRequest(
   currentUserRequest: string

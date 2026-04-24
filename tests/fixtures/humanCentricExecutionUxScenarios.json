@@ -40,13 +40,13 @@
       ]
     },
     {
-      "id": "clarification_plan_or_build_positive",
+      "id": "clarification_build_format_positive",
       "category": "clarification",
       "polarity": "positive",
       "title": "Ambiguous build request triggers clarification",
-      "summary": "The user asks for a project but does not clearly choose plan vs build.",
+      "summary": "The user asks for a landing page but does not clearly choose plain HTML or a framework app.",
       "expectedBehavior": [
-        "clarify_plan_or_build"
+        "clarify_build_format"
       ],
       "qualities": {
         "messyLanguage": true
@@ -54,7 +54,7 @@
       "transcript": [
         {
           "speaker": "user",
-          "text": "Can you create that app idea we talked about with a hero and strong call to action. I want to get back to it later, and I am still split on how to handle the first step."
+          "text": "Can you create that landing page idea we talked about with a hero and strong call to action. I want to get back to it later, and I am still split on whether the first step should be plain HTML or a framework."
         }
       ]
     },
@@ -73,7 +73,7 @@
       "transcript": [
         {
           "speaker": "user",
-          "text": "Go ahead and build it now and run the checks when you are done. Ship it as soon as it is stable."
+          "text": "Go ahead and build it as plain HTML now and run the checks when you are done. Ship it as soon as it is stable."
         }
       ]
     },

@@ -9,6 +9,7 @@ import type { DatabaseSync } from "node:sqlite";
 import { adaptWorkflowPatterns } from "./advancedAutonomyFoundation";
 import { LedgerBackend } from "./config";
 import { withFileLock, writeFileAtomic } from "./fileLock";
+import { buildProjectionChangeSet } from "./projections/service";
 import { withSqliteDatabase } from "./sqliteStore";
 import { TaskRunResult, WorkflowAdaptationResult, WorkflowObservation, WorkflowPattern } from "./types";
 import { applyWorkflowObservationMetadata } from "./workflowLearningRuntime/patternLifecycle";
@@ -23,6 +24,7 @@ interface WorkflowLearningStoreOptions {
   backend?: LedgerBackend;
   sqlitePath?: string;
   exportJsonOnWrite?: boolean;
+  onChange?: (changeSet: import("./projections/contracts").ProjectionChangeSet) => Promise<void> | void;
 }
 
 interface WorkflowLearningDocument {
@@ -329,6 +331,7 @@ export class WorkflowLearningStore {
   private readonly backend: LedgerBackend;
   private readonly sqlitePath: string;
   private readonly exportJsonOnWrite: boolean;
+  private readonly onChange?: WorkflowLearningStoreOptions["onChange"];
 
   /**
    * Initializes `WorkflowLearningStore` with deterministic runtime dependencies.
@@ -350,6 +353,7 @@ export class WorkflowLearningStore {
     this.sqlitePath =
       options.sqlitePath ?? path.resolve(process.cwd(), "runtime/ledgers.sqlite");
     this.exportJsonOnWrite = options.exportJsonOnWrite ?? true;
+    this.onChange = options.onChange;
   }
 
   /**
@@ -390,10 +394,12 @@ export class WorkflowLearningStore {
    */
   async recordObservation(observation: WorkflowObservation): Promise<WorkflowAdaptationResult> {
     if (this.backend === "sqlite") {
-      return this.recordObservationSqlite(observation);
+      const adaptation = await this.recordObservationSqlite(observation);
+      await this.notifyProjectionChange(adaptation.updatedPattern.id);
+      return adaptation;
     }
 
-    return withFileLock(this.filePath, async () => {
+    const adaptation = await withFileLock(this.filePath, async () => {
       const document = await this.readJsonDocumentFromFile();
       const adaptation = applyObservationMetadataToAdaptation(
         adaptWorkflowPatterns(document.patterns, observation),
@@ -414,6 +420,8 @@ export class WorkflowLearningStore {
       );
       return nextAdaptation;
     });
+    await this.notifyProjectionChange(adaptation.updatedPattern.id);
+    return adaptation;
   }
 
   /**
@@ -523,6 +531,32 @@ export class WorkflowLearningStore {
     }
 
     return adaptation;
+  }
+
+  /**
+   * Emits one normalized projection change after a workflow-learning update.
+   *
+   * **Why it exists:**
+   * Workflow pattern writes are a canonical mirror seam, and this helper keeps optional projection
+   * fanout out of the ranking and persistence logic.
+   *
+   * **What it talks to:**
+   * - Uses `buildProjectionChangeSet(...)` from `./projections/service`.
+   *
+   * @param patternId - Identifier of the updated workflow pattern.
+   * @returns Promise resolving after the optional projection callback completes.
+   */
+  private async notifyProjectionChange(patternId: string): Promise<void> {
+    if (!this.onChange) {
+      return;
+    }
+    await this.onChange(buildProjectionChangeSet(
+      ["workflow_learning_changed"],
+      [`workflow_pattern:${patternId}`],
+      {
+        patternId
+      }
+    ));
   }
 
   /**

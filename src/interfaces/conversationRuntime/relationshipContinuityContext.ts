@@ -12,7 +12,11 @@ import {
 import { buildRecallSynthesis, renderRecallSynthesisSupportLines } from "../../organs/memorySynthesis/recallSynthesis";
 import { normalizeWhitespace } from "../conversationManagerHelpers";
 import type { ConversationSession } from "../sessionStore";
-import { analyzeConversationChatTurnSignals, isRelationshipConversationRecallTurn } from "./chatTurnSignals";
+import {
+  analyzeConversationChatTurnSignals,
+  isMixedConversationMemoryStatusRecallTurn,
+  isRelationshipConversationRecallTurn
+} from "./chatTurnSignals";
 import {
   ensureStructuredContinuityFactResult,
   toMemorySynthesisFactRecord
@@ -20,6 +24,42 @@ import {
 import { resolveConversationStack } from "./contextualRecallSupport";
 import type { ConversationContinuityFactRecord, ConversationContinuityFactResult } from "./continuityContracts";
 import type { QueryConversationContinuityFacts } from "./managerContracts";
+
+const RELATIONSHIP_CONTINUITY_HINT_NOISE_TERMS = new Set([
+  "and",
+  "active",
+  "at",
+  "back",
+  "closed",
+  "current",
+  "currently",
+  "date",
+  "facts",
+  "fully",
+  "gears",
+  "handles",
+  "historical",
+  "is",
+  "longer",
+  "memory",
+  "no",
+  "open",
+  "pages",
+  "pending",
+  "employment",
+  "status",
+  "still",
+  "switch",
+  "tell",
+  "to",
+  "tracking",
+  "used",
+  "versus",
+  "whether",
+  "which",
+  "who",
+  "work"
+]);
 
 /**
  * Returns whether the current short turn is plausibly continuing a recent personal-memory subject
@@ -95,6 +135,119 @@ function collectRecentMemorySubjectFollowUpHints(
       }
     });
   return matchedRecentTurn ? [...matchedTerms] : [];
+}
+
+/**
+ * Collects broader recent memory subject hints when the user asks for a cross-domain recap without
+ * restating every named person or organization.
+ *
+ * @param session - Conversation session containing recent user turns.
+ * @returns Stable hint terms from the latest memory-bearing user turns.
+ */
+function collectRecentMemorySummaryHints(session: ConversationSession): readonly string[] {
+  const matchedTerms = new Set<string>();
+  let matchedTurns = 0;
+  for (let index = session.conversationTurns.length - 1; index >= 0; index -= 1) {
+    const turn = session.conversationTurns[index];
+    if (turn?.role !== "user") {
+      continue;
+    }
+    if (
+      !hasConversationalProfileUpdateSignal(turn.text) &&
+      !isRelationshipConversationRecallTurn(turn.text)
+    ) {
+      continue;
+    }
+    const turnTerms = extractContextualRecallTerms(turn.text);
+    for (const term of filterRelationshipContinuityHintTerms(turnTerms)) {
+      matchedTerms.add(term);
+      if (matchedTerms.size >= 10) {
+        return [...matchedTerms];
+      }
+    }
+    matchedTurns += 1;
+    if (matchedTurns >= 4) {
+      break;
+    }
+  }
+  return [...matchedTerms];
+}
+
+/**
+ * Filters low-signal meta terms out of relationship continuity hint collection.
+ *
+ * @param terms - Candidate hint terms.
+ * @returns Stable hint terms worth using for continuity retrieval.
+ */
+function filterRelationshipContinuityHintTerms(terms: readonly string[]): readonly string[] {
+  return terms.filter((term) => {
+    const normalizedTerm = normalizeWhitespace(term).toLowerCase();
+    return normalizedTerm.length > 0 && !RELATIONSHIP_CONTINUITY_HINT_NOISE_TERMS.has(normalizedTerm);
+  });
+}
+
+/**
+ * Appends normalized continuity hint terms while keeping one bounded deterministic budget.
+ *
+ * @param target - Mutable ordered set under construction.
+ * @param terms - Candidate hint terms to add.
+ * @param maxHints - Hard maximum number of retained hints.
+ */
+function appendRelationshipContinuityHints(
+  target: Set<string>,
+  terms: readonly string[],
+  maxHints: number
+): void {
+  for (const term of terms) {
+    const normalizedTerm = normalizeWhitespace(term);
+    if (!normalizedTerm) {
+      continue;
+    }
+    target.add(normalizedTerm);
+    if (target.size >= maxHints) {
+      return;
+    }
+  }
+}
+
+/**
+ * Collects bounded entity and topic hints for relationship-memory continuity queries.
+ *
+ * @param session - Conversation session containing recent turns.
+ * @param userInput - Raw current user wording.
+ * @returns Stable deduped hint terms for continuity retrieval.
+ */
+export function collectRelationshipContinuityEntityHints(
+  session: ConversationSession,
+  userInput: string
+): readonly string[] {
+  const normalizedInput = normalizeWhitespace(userInput);
+  if (!normalizedInput) {
+    return [];
+  }
+  const signals = analyzeConversationChatTurnSignals(normalizedInput);
+  const filteredCurrentMeaningfulTerms = filterRelationshipContinuityHintTerms(
+    signals.meaningfulTerms
+  );
+  const recentFollowUpHints = collectRecentMemorySubjectFollowUpHints(
+    session,
+    normalizedInput
+  );
+  const recentSummaryHints = isMixedConversationMemoryStatusRecallTurn(normalizedInput)
+    ? collectRecentMemorySummaryHints(session)
+    : [];
+  const currentMeaningfulTerms = (
+    recentFollowUpHints.length === 0 &&
+    recentSummaryHints.length === 0 &&
+    filteredCurrentMeaningfulTerms.length === 0
+  )
+    ? signals.meaningfulTerms.slice(0, 6)
+    : filteredCurrentMeaningfulTerms.slice(0, 6);
+  const entityHints = new Set<string>();
+  appendRelationshipContinuityHints(entityHints, recentFollowUpHints, 12);
+  appendRelationshipContinuityHints(entityHints, recentSummaryHints, 12);
+  appendRelationshipContinuityHints(entityHints, currentMeaningfulTerms, 12);
+  return [...entityHints];
 }
 
 /**
@@ -191,6 +344,7 @@ export function shouldUseRelationshipContinuityContext(
   }
   return (
     isRelationshipConversationRecallTurn(normalizedInput) ||
+    isMixedConversationMemoryStatusRecallTurn(normalizedInput) ||
     hasConversationalProfileUpdateSignal(normalizedInput) ||
     hasRecentMemorySubjectFollowUpContext(session, normalizedInput)
   );
@@ -223,11 +377,10 @@ export async function buildRelationshipContinuityContextBlock(
     session,
     normalizedInput
   );
-  const entityHints = (
-    recentFollowUpHints.length > 0
-      ? recentFollowUpHints
-      : signals.meaningfulTerms
-  ).slice(0, 6);
+  const entityHints = collectRelationshipContinuityEntityHints(
+    session,
+    normalizedInput
+  );
   if (entityHints.length === 0) {
     return null;
   }
@@ -237,7 +390,7 @@ export async function buildRelationshipContinuityContextBlock(
     entityHints,
     semanticMode: "relationship_inventory",
     relevanceScope: "conversation_local",
-    maxFacts: 4
+    maxFacts: isMixedConversationMemoryStatusRecallTurn(normalizedInput) ? 8 : 4
   }).catch(() => []);
   const structuredSupportingFacts = ensureStructuredContinuityFactResult(supportingFacts, {
     semanticMode: "relationship_inventory",

@@ -441,8 +441,8 @@ export async function runTelegramVoiceDesktopWorkflowLiveSmoke(): Promise<VoiceD
     const cssEntryExists =
       (await pathExists(path.join(targetFolderPath, "src", "index.css"))) ||
       (await pathExists(path.join(targetFolderPath, "src", "App.css")));
-    const blockedActionCount = latestJob?.blockedActionCount ?? null;
-    const approvedActionCount = latestJob?.approvedActionCount ?? null;
+    const blockedActionCount = null;
+    const approvedActionCount = null;
     const blockerReason = latestJob?.errorMessage ?? null;
     const recoveryAttempted = Boolean(latestJob?.recoveryTrace);
     const recoveryRecovered = latestJob?.recoveryTrace?.status === "recovered";

@@ -9,6 +9,9 @@ scripts that are intentionally kept outside the main runtime path.
   `checkReasonCodeUniqueness.ts`, `checkSubsystemReadmeSync.ts`,
   `checkTemporalMemoryRegistry.ts`, `checkVersioning.ts`,
   `checkUserFacingStopPhraseDuplication.ts`.
+- Projection and operator helpers: `exportObsidianProjection.ts`,
+  `applyObsidianReviewActions.ts`, `openObsidianProjection.ts`,
+  `pruneLowSignalEntityGraph.ts`.
 - Smoke/evidence helpers: `openAiLiveSmokeHarness.ts`, `stage6_85Clones.ts`,
   `stage6_85Latency.ts`, `stage6_85MissionUx.ts`, `stage6_85Observability.ts`,
   `stage6_85Playbooks.ts`, `stage6_85QualityGates.ts`, `stage6_85Recovery.ts`,
@@ -24,6 +27,9 @@ scripts that are intentionally kept outside the main runtime path.
 - fail-closed validation results for docs, unused locals/imports, module size, reason codes, and
   README sync
 - smoke/evidence reports and operational diagnostics
+- manual Obsidian projection rebuilds, guarded review-action apply reports, and exact-path
+  Obsidian open helpers
+- deterministic Stage 6.86 graph cleanup for low-signal conversational residue
 
 ## Invariants
 - Repo-maintenance tooling should stay deterministic and runnable from package scripts.
@@ -45,6 +51,7 @@ scripts that are intentionally kept outside the main runtime path.
 - `tests/tools/checkTemporalMemoryRegistry.test.ts`
 - `tests/tools/checkUserFacingStopPhraseDuplication.test.ts`
 - `tests/tools/checkVersioning.test.ts`
+- `tests/tools/obsidianProjectionTools.test.ts`
 
 ## When to Update This README
 Update this README when:
@@ -54,3 +61,5 @@ Update this README when:
 - package-script validation starts enforcing a new repo-wide TypeScript hygiene rule
 - smoke/evidence ownership moves into a different tooling folder
 - the related-test surface changes because tooling ownership moved
+- a new operator-facing projection helper is added, removed, or renamed
+- a new operator-facing Stage 6.86 graph cleanup helper is added, removed, or renamed

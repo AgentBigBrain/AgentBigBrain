@@ -50,6 +50,14 @@ export function isLocalOrganizationRequest(userInput: string): boolean {
  * @returns `true` when folder-organization recovery rules should apply.
  */
 export function isLocalOrganizationRecoveryContext(taskRunResult: TaskRunResult): boolean {
+  const normalizedGoal =
+    typeof taskRunResult.task.goal === "string" ? taskRunResult.task.goal.trim() : "";
+  if (normalizedGoal.length > 0) {
+    return (
+      isLocalOrganizationRequest(normalizedGoal) ||
+      /\bworkspace-recovery\b/i.test(normalizedGoal)
+    );
+  }
   return (
     isLocalOrganizationRequest(taskRunResult.task.userInput) ||
     isLocalOrganizationRequest(taskRunResult.task.goal) ||

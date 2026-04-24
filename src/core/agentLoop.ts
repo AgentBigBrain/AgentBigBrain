@@ -7,7 +7,7 @@ import { MAIN_AGENT_ID } from "./agentIdentity";
 import { makeId } from "./ids";
 import { isAbortError } from "./runtimeAbort";
 import { TaskRequest, TaskRunResult } from "./types";
-import { type AutonomousNextStepModelOutput, ModelClient } from "../models/types";
+import { ModelClient } from "../models/types";
 import { BrainConfig } from "./config";
 import { humanizeAutonomousStopReason } from "./autonomy/stopReasonText";
 import {
@@ -61,20 +61,6 @@ export type { AutonomousLoopCallbacks, AutonomousLoopState, AutonomousLoopStateU
 export class AutonomousLoop {
     /** Initializes the autonomous loop with explicit orchestration, model, and runtime dependencies. */
     constructor(private readonly orchestrator: BrainOrchestrator, private readonly modelClient: ModelClient, private readonly config: BrainConfig) {}
-
-    /** Delegates autonomous next-step evaluation so tests can exercise the exact loop policy. */
-    private async evaluateNextStep(overarchingGoal: string, lastResult: TaskRunResult, missionEvidence: MissionEvidenceCounters, trackedManagedProcessLeaseId: string | null, trackedLoopbackTarget: LoopbackTargetHint | null): Promise<AutonomousNextStepModelOutput> {
-        return await evaluateAutonomousNextStepPolicy(
-            this.modelClient,
-            this.config,
-            overarchingGoal,
-            lastResult,
-            missionEvidence,
-            trackedManagedProcessLeaseId,
-            null,
-            trackedLoopbackTarget
-        );
-    }
 
     /** Runs the bounded autonomous loop, including retries, proof gates, cleanup, and optional daemon rollover. */
     async run(

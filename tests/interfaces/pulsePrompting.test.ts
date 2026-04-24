@@ -230,6 +230,7 @@ test("computeRelationshipAgeDays prefers entity-graph firstSeenAt over conversat
         canonicalName: "agentowner",
         entityType: "person",
         disambiguator: null,
+        domainHint: null,
         aliases: [],
         firstSeenAt: "2026-02-05T15:00:00.000Z",
         lastSeenAt: nowIso,

@@ -13,6 +13,7 @@ import type {
   ConversationIntentMode,
   ConversationReturnHandoffStatus
 } from "../../interfaces/sessionStore";
+import type { RecentAssistantTurnKind } from "../../interfaces/conversationRuntime/recentAssistantTurnContext";
 
 export type LocalIntentModelConfidence = "low" | "medium" | "high";
 
@@ -22,12 +23,14 @@ export interface LocalIntentModelSessionHints {
   hasRecentAssistantQuestion?: boolean;
   hasRecentAssistantIdentityPrompt?: boolean;
   hasRecentAssistantIdentityAnswer?: boolean;
+  recentAssistantTurnKind?: RecentAssistantTurnKind | null;
+  recentAssistantAnswerThreadActive?: boolean;
   recentIdentityConversationActive?: boolean;
-  returnHandoffStatus: ConversationReturnHandoffStatus | null;
-  returnHandoffPreviewAvailable: boolean;
-  returnHandoffPrimaryArtifactAvailable: boolean;
-  returnHandoffChangedPathCount: number;
-  returnHandoffNextSuggestedStepAvailable: boolean;
+  returnHandoffStatus?: ConversationReturnHandoffStatus | null;
+  returnHandoffPreviewAvailable?: boolean;
+  returnHandoffPrimaryArtifactAvailable?: boolean;
+  returnHandoffChangedPathCount?: number;
+  returnHandoffNextSuggestedStepAvailable?: boolean;
   modeContinuity: ConversationIntentMode | null;
   domainDominantLane?: ConversationDomainLane;
   domainContinuityActive?: boolean;

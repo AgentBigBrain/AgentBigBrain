@@ -215,6 +215,28 @@ test("tracked start context survives later check_process iterations", () => {
   assert.deepEqual(trackedAfterCheck, trackedAfterStart);
 });
 
+test("tracked start context recovers cwd from approved stop_process metadata when no start context exists yet", () => {
+  const trackedAfterStop = resolveTrackedManagedProcessStartContext(
+    null,
+    buildTaskResult([
+      {
+        ...buildApprovedStopProcessResult("stop_process_cleanup_4", "proc_cleanup_policy_4"),
+        executionMetadata: {
+          processLeaseId: "proc_cleanup_policy_4",
+          processLifecycleStatus: "PROCESS_STOPPED",
+          processCwd: "runtime\\sandbox\\Foundry Echo"
+        }
+      }
+    ])
+  );
+
+  assert.deepEqual(trackedAfterStop, {
+    leaseId: "proc_cleanup_policy_4",
+    command: null,
+    cwd: "runtime\\sandbox\\Foundry Echo"
+  });
+});
+
 test("cleanupManagedProcessLease issues one bounded stop_process task", async () => {
   const orchestrator = new CleanupStubOrchestrator();
 

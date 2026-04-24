@@ -24,7 +24,6 @@ import {
   hasExplicitSelfIdentityDeclarationShape,
   hasSelfIdentityMetaQuestionShape,
   hasSelfIdentityRecallAssertionShape,
-  hasTokenSequence,
   hasWorkflowCallbackRequestShape
 } from "./chatTurnSignalShapes";
 

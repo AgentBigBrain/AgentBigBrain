@@ -2,7 +2,7 @@
 
 import { createEmptyEntityGraphV1 } from "../stage6_86EntityGraph";
 import type { ConversationStackV1, EntityGraphV1 } from "../types";
-import { type ProfileFactRecord, type ProfileMemoryState } from "../profileMemory";
+import { type ProfileMemoryState } from "../profileMemory";
 import {
   buildQueryAwarePlanningContext,
   selectProfileFactsForQuery
@@ -16,7 +16,6 @@ import {
   type ProfileFactPlanningInspectionEntry,
   type ProfileFactPlanningInspectionRequest,
   type ProfileFactPlanningInspectionResult,
-  type ProfileFactReviewEntry,
   type ProfileFactReviewRequest,
   type ProfileFactReviewResult,
   type ProfileReadableFact
@@ -45,11 +44,6 @@ import type {
   ProfileFactQueryInspectionResult
 } from "./profileMemoryQueryContracts";
 import { queryProfileMemoryTemporalEvidence } from "./profileMemoryTemporalQueries";
-import type {
-  ProfileMemoryTemporalRelevanceScope,
-  ProfileMemoryTemporalSemanticMode,
-  TemporalMemorySynthesis
-} from "./profileMemoryTemporalQueryContracts";
 import { synthesizeProfileMemoryTemporalEvidence } from "./profileMemoryTemporalSynthesis";
 export type {
   ProfileFactContinuityQueryRequest,

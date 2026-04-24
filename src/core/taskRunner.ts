@@ -42,6 +42,12 @@ import {
   type FailedManagedProcessStartTarget
 } from "./orchestration/taskRunnerLiveRunGuards";
 import {
+  applyLiveRunTargetOverrides,
+  applyRuntimeInspectionTargetOverrides,
+  rememberLiveRunTargetOverride,
+  type LoopbackTargetOverride
+} from "./orchestration/taskRunnerLiveRunOverrides";
+import {
   buildBlockedActionResult
 } from "./orchestration/taskRunnerSummary";
 import { evaluateTaskRunnerPreflight } from "./orchestration/taskRunnerPreflight";
@@ -119,6 +125,7 @@ export class TaskRunner {
     let failedManagedProcessStartTargets: readonly FailedManagedProcessStartTarget[] = [];
     let failedWorkspaceExecutionDependencies:
       readonly import("./orchestration/taskRunnerLiveRunGuards").FailedWorkspaceExecutionDependency[] = [];
+    let liveRunTargetOverrides: readonly LoopbackTargetOverride[] = [];
     const missionStopLimits: MissionStopLimitsV1 = buildTaskRunnerMissionStopLimits(
       this.deps.config,
       plan
@@ -126,9 +133,17 @@ export class TaskRunner {
 
     for (const action of plan.actions) {
       throwIfAborted(signal);
-      const mode = resolveExecutionMode(action, this.deps.config);
-      const dependentWorkspaceBlock = evaluateDependentWorkspaceExecutionBlock(
+      let effectiveAction = applyLiveRunTargetOverrides(
         action,
+        liveRunTargetOverrides
+      );
+      effectiveAction = applyRuntimeInspectionTargetOverrides(
+        effectiveAction,
+        task.userInput
+      );
+      const mode = resolveExecutionMode(effectiveAction, this.deps.config);
+      const dependentWorkspaceBlock = evaluateDependentWorkspaceExecutionBlock(
+        effectiveAction,
         mode,
         failedWorkspaceExecutionDependencies
       );
@@ -146,7 +161,7 @@ export class TaskRunner {
         continue;
       }
       const dependentLiveRunBlock = evaluateDependentLiveRunTargetBlock(
-        action,
+        effectiveAction,
         mode,
         failedManagedProcessStartTargets
       );
@@ -170,7 +185,7 @@ export class TaskRunner {
       const nowIso = new Date().toISOString();
       const idempotencyKey =
         normalizeOptionalString(action.params.idempotencyKey) ??
-        `${task.id}:${missionAttemptId}:${action.id}`;
+        `${task.id}:${missionAttemptId}:${effectiveAction.id}`;
       const missionCheckpoint = createMissionCheckpoint(
         missionState,
         missionState.currentPhase,
@@ -276,7 +291,7 @@ export class TaskRunner {
       }
       deterministicActionIds.add(missionCheckpoint.actionId);
       const preflightOutcome = evaluateTaskRunnerPreflight({
-        action,
+        action: effectiveAction,
         approvalGrantById,
         config: this.deps.config,
         cumulativeEstimatedCostUsd:
@@ -336,7 +351,7 @@ export class TaskRunner {
         modelClient: this.deps.modelClient
       });
       const governanceOutcome = await evaluateTaskRunnerGovernance({
-        action,
+        action: effectiveAction,
         mode,
         proposal,
         taskId: task.id,
@@ -391,8 +406,8 @@ export class TaskRunner {
           });
 
           if (!verificationGate.passed) {
-            const blockedResult = buildBlockedActionResult({
-              action,
+          const blockedResult = buildBlockedActionResult({
+              action: effectiveAction,
               mode,
               blockedBy: ["VERIFICATION_GATE_FAILED"],
               violations: [
@@ -426,7 +441,7 @@ export class TaskRunner {
       }
 
       const executionResult = await executeTaskRunnerAction({
-        action,
+        action: effectiveAction,
         appendTraceEvent: this.deps.appendTraceEvent,
         combinedVotes,
         connectorReceiptInput: connectorReceiptByActionId.get(action.id) ?? null,
@@ -465,6 +480,10 @@ export class TaskRunner {
         );
         continue;
       }
+      liveRunTargetOverrides = rememberLiveRunTargetOverride(
+        liveRunTargetOverrides,
+        executionResult.actionResult
+      );
       approvedEstimatedCostDeltaUsd += executionResult.approvedEstimatedCostDeltaUsd;
       missionState = await recordApprovedActionOutcome({
         actionResult: executionResult.actionResult,

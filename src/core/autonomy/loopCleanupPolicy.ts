@@ -160,17 +160,32 @@ export function resolveTrackedManagedProcessStartContext(
 ): ApprovedManagedProcessStartContext | null {
   let trackedContext = previousContext;
   for (const entry of result.actionResults) {
-    if (!entry.approved || entry.action.type !== "start_process") {
+    if (!entry.approved) {
       continue;
     }
     const leaseId = readManagedProcessLeaseId(entry);
     if (!leaseId) {
       continue;
     }
+    if (entry.action.type === "start_process") {
+      trackedContext = {
+        leaseId,
+        command: readActionCommand(entry),
+        cwd: readActionCwd(entry)
+      };
+      continue;
+    }
+    if (trackedContext) {
+      continue;
+    }
+    const recoveredCwd = readActionCwd(entry);
+    if (!recoveredCwd) {
+      continue;
+    }
     trackedContext = {
       leaseId,
       command: readActionCommand(entry),
-      cwd: readActionCwd(entry)
+      cwd: recoveredCwd
     };
   }
   return trackedContext;

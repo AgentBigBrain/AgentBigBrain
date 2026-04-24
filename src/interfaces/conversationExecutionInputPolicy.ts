@@ -1,11 +1,17 @@
 /**
- * @fileoverview Builds conversation-aware execution payloads and follow-up envelopes for conversation manager flows.
+ * @fileoverview Builds conversation-aware execution payloads and follow-up envelopes for
+ * conversation manager flows.
  */
+
+import { pathToFileURL } from "node:url";
 
 import type { ProfileMemoryRequestTelemetry } from "../core/profileMemoryRuntime/contracts";
 import { recordProfileMemoryPromptSurfaceMetrics } from "../core/profileMemoryRuntime/profileMemoryRequestTelemetry";
 import type { ConversationSession } from "./sessionStore";
-import type { ConversationIntentSemanticHint } from "./conversationRuntime/intentModeContracts";
+import type {
+  ConversationIntentSemanticHint,
+  ConversationSemanticRouteId
+} from "./conversationRuntime/intentModeContracts";
 import type { ConversationInboundMediaEnvelope } from "./mediaRuntime/contracts";
 import { buildConversationMediaContextBlock } from "./conversationRuntime/mediaContextRendering";
 import { buildPathDestinationContextBlock } from "./conversationRuntime/pathDestinationContext";
@@ -42,6 +48,7 @@ import {
 } from "./conversationRuntime/relationshipContinuityContext";
 import {
   analyzeConversationChatTurnSignals,
+  isMixedConversationMemoryStatusRecallTurn,
   isRelationshipConversationRecallTurn
 } from "./conversationRuntime/chatTurnSignals";
 import { buildTurnLocalStatusUpdateInstructionBlock, hasTurnLocalFirstPersonStatusUpdate } from "./conversationRuntime/turnLocalStatusUpdate";
@@ -57,8 +64,10 @@ import type { BrowserSessionSnapshot } from "../organs/liveRun/browserSessionReg
 import {
   basenameCrossPlatformPath,
   dirnameCrossPlatformPath,
+  localFileUrlToAbsolutePath,
   normalizeCrossPlatformPath
 } from "../core/crossPlatformPath";
+import { buildExplicitExecutionConstraintContextBlock } from "../core/explicitExecutionConstraints";
 import { requestMatchesRuntimeTargetReference } from "../core/runtimeTargetReference";
 import { requiresFrameworkAppScaffoldAction } from "../organs/plannerPolicy/liveVerificationPolicy";
 import { reconcileConversationExecutionRuntimeSession } from "./conversationRuntime/executionInputRuntimeOwnership";
@@ -90,7 +99,7 @@ const LOCAL_ORGANIZATION_TARGET_PATTERN =
 const LOCAL_ORGANIZATION_COLLECTION_PATTERN =
   /\b(?:every|all)\s+(?:file|files|folder|folders|directory|directories|item|items|workspace|workspaces|project|projects)(?:\s+and\s+(?:file|files|folder|folders|directory|directories|item|items))?\b/i;
 const SIMPLE_DESKTOP_DESTINATION_PATTERN =
-  /\b(?:into|inside|under|to)\s+(?:a\s+folder\s+called\s+)?["'`]?([a-z0-9][a-z0-9_-]{0,80})["'`]?/i;
+  /\b(?:into|inside|under|to)\s+(?:a\s+folder\s+called\s+)?["'`]?([a-z0-9][a-z0-9_-]{0,80})["'`]?(?=\s+(?:on|in|under)\s+my\s+(?:desktop|documents|downloads)\b|[.?!,]|$)/i;
 const ORGANIZATION_PREFIX_PATTERN =
   /\bstarts?\s+with\s+["'`]?([a-z0-9._-]{2,80})["'`]?/i;
 const ORGANIZATION_CONTAINS_WORD_PATTERN =
@@ -120,6 +129,13 @@ const RUNTIME_PROCESS_TARGET_PATTERN =
   /\b(?:still\s+running|running|server|servers|preview(?:\s+stack|\s+server)?|process(?:es)?|localhost|loopback|port|dev\s+server)\b/i;
 const WORKFLOW_CONTINUITY_ROUTING_TYPES = new Set(["execution_surface", "diagnostics"]);
 const QUOTED_RUNTIME_TARGET_PATTERN = /["'`“”]([^"'`“”\n]{3,80})["'`“”]/g;
+
+const STATIC_ARTIFACT_OPEN_REFERENCE_PATTERN =
+  /\b(?:open|reopen|show|bring\s+(?:back|up)|pull\s+up)\b[\s\S]{0,120}\b(?:browser|tab|window|preview|page|site|homepage|it|file)\b/i;
+const STATIC_ARTIFACT_FILE_CUE_PATTERN =
+  /\b(?:index\.html|file:\/\/|local\s+static\s+file|exact\s+local|static\s+file|single[- ]file)\b/i;
+const NEGATED_SERVER_START_PATTERN =
+  /\bdo\s+not\s+start\b[\s\S]{0,60}\b(?:dev\s+server|preview\s+server|server)\b/i;
 
 /**
  * Evaluates whether the current wording is asking about inspecting or stopping existing runtime
@@ -554,6 +570,26 @@ export interface FollowUpResolution {
 }
 
 /**
+ * Returns the most recent assistant turn in the session, if one exists.
+ *
+ * Follow-up anchoring must stay adjacent to the latest assistant reply rather than scanning the
+ * full history for any older clarification prompt. Otherwise stale workflow questions can hijack
+ * later conversational replies.
+ *
+ * @param session - Session state containing the turn history.
+ * @returns Most recent assistant turn, or `null` when none exist.
+ */
+function findMostRecentAssistantTurn(
+  session: ConversationSession
+): ConversationSession["conversationTurns"][number] | null {
+  return (
+    [...session.conversationTurns]
+      .reverse()
+      .find((turn) => turn.role === "assistant") ?? null
+  );
+}
+
+/**
  * Counts bounded whitespace-separated tokens for ambiguous follow-up eligibility.
  *
  * @param value - Raw user input text.
@@ -732,7 +768,8 @@ function buildModeContinuityBlock(session: ConversationSession): string | null {
 function shouldSuppressWorkflowContinuityBlocks(
   session: ConversationSession,
   userInput: string,
-  routingClassification: RoutingMapClassificationV1 | null
+  routingClassification: RoutingMapClassificationV1 | null,
+  semanticRouteId: ConversationSemanticRouteId | null = null
 ): boolean {
   const normalizedInput = normalizeWhitespace(userInput);
   if (!normalizedInput) {
@@ -744,6 +781,8 @@ function shouldSuppressWorkflowContinuityBlocks(
     session.returnHandoff !== null ||
     session.modeContinuity?.activeMode === "plan" ||
     session.modeContinuity?.activeMode === "build" ||
+    session.modeContinuity?.activeMode === "static_html_build" ||
+    session.modeContinuity?.activeMode === "framework_app_build" ||
     session.modeContinuity?.activeMode === "autonomous" ||
     session.modeContinuity?.activeMode === "review" ||
     (
@@ -757,10 +796,20 @@ function shouldSuppressWorkflowContinuityBlocks(
   if (!workflowContinuityActive) {
     return false;
   }
-  if (shouldUseRelationshipContinuityContext(session, normalizedInput)) {
+  if (
+    shouldUseRelationshipContinuityContext(session, normalizedInput) &&
+    !isMixedConversationMemoryStatusRecallTurn(normalizedInput)
+  ) {
     return true;
   }
-  if (requiresFrameworkAppScaffoldAction(normalizedInput)) {
+  if (
+    semanticRouteId === "framework_app_build" ||
+    semanticRouteId === "clarify_build_format" ||
+    (
+      semanticRouteId === null &&
+      requiresFrameworkAppScaffoldAction(normalizedInput)
+    )
+  ) {
     return true;
   }
   if (
@@ -861,6 +910,196 @@ function buildRecentActionBlock(session: ConversationSession): string | null {
     "Recent user-visible actions in this chat:",
     ...lines
   ].join("\n");
+}
+
+/**
+ * Renders the already-resolved semantic route so downstream execution policy can consume it
+ * directly instead of re-inferring route meaning from wording.
+ *
+ * @param semanticRouteId - Canonical semantic route chosen by the conversation front door.
+ * @returns Structured route block, or `null` when no semantic route was provided.
+ */
+function buildResolvedSemanticRouteBlock(
+  semanticRouteId: ConversationSemanticRouteId | null
+): string | null {
+  if (
+    semanticRouteId !== "build_request" &&
+    semanticRouteId !== "static_html_build" &&
+    semanticRouteId !== "framework_app_build" &&
+    semanticRouteId !== "clarify_build_format"
+  ) {
+    return null;
+  }
+  return [
+    "Resolved semantic route:",
+    `- routeId: ${semanticRouteId}`,
+    "- This route was chosen by the conversation intent layer. Planner-policy must consume it before any lexical fallback."
+  ].join("\n");
+}
+
+/**
+ * Absolutes path to local file url.
+ *
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses `normalizeCrossPlatformPath` (import `normalizeCrossPlatformPath`) from `../core/crossPlatformPath`.
+ * - Uses `pathToFileURL` (import `pathToFileURL`) from `node:url`.
+ * @param candidatePath - Input consumed by this helper.
+ * @returns Result produced by this helper.
+ */
+function absolutePathToLocalFileUrl(candidatePath: string | null | undefined): string | null {
+  if (typeof candidatePath !== "string") {
+    return null;
+  }
+  const normalized = normalizeCrossPlatformPath(candidatePath);
+  if (!normalized) {
+    return null;
+  }
+  if (/^[A-Za-z]:\\/.test(normalized)) {
+    return `file:///${encodeURI(normalized.replace(/\\/g, "/"))}`;
+  }
+  if (/^\\\\/.test(normalized)) {
+    const rawSegments = normalized.replace(/^\\\\/, "").split("\\").filter((segment) => segment.length > 0);
+    if (rawSegments.length < 2) {
+      return null;
+    }
+    const [host, ...pathSegments] = rawSegments;
+    return `file://${host}/${encodeURI(pathSegments.join("/"))}`;
+  }
+  if (normalized.startsWith("/")) {
+    return pathToFileURL(normalized).href;
+  }
+  return null;
+}
+
+/**
+ * Evaluates whether like static artifact path.
+ *
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses `normalizeCrossPlatformPath` (import `normalizeCrossPlatformPath`) from `../core/crossPlatformPath`.
+ * @param candidatePath - Input consumed by this helper.
+ * @returns Result produced by this helper.
+ */
+function looksLikeStaticArtifactPath(candidatePath: string | null | undefined): boolean {
+  if (typeof candidatePath !== "string") {
+    return false;
+  }
+  const normalized = normalizeCrossPlatformPath(candidatePath);
+  return /\.html?$/i.test(normalized);
+}
+
+/**
+ * Resolves preferred static artifact path.
+ *
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses `localFileUrlToAbsolutePath` (import `localFileUrlToAbsolutePath`) from `../core/crossPlatformPath`.
+ * - Uses `normalizeCrossPlatformPath` (import `normalizeCrossPlatformPath`) from `../core/crossPlatformPath`.
+ * - Uses `ConversationSession` (import `ConversationSession`) from `./sessionStore`.
+ * @param session - Input consumed by this helper.
+ * @returns Result produced by this helper.
+ */
+function resolvePreferredStaticArtifactPath(session: ConversationSession): string | null {
+  const activeWorkspaceArtifact = session.activeWorkspace?.primaryArtifactPath ?? null;
+  if (looksLikeStaticArtifactPath(activeWorkspaceArtifact)) {
+    return normalizeCrossPlatformPath(activeWorkspaceArtifact!);
+  }
+  const activeWorkspacePreviewArtifact = localFileUrlToAbsolutePath(
+    session.activeWorkspace?.previewUrl ?? ""
+  );
+  if (looksLikeStaticArtifactPath(activeWorkspacePreviewArtifact)) {
+    return normalizeCrossPlatformPath(activeWorkspacePreviewArtifact!);
+  }
+  for (const action of prioritizeRecentActionsForContext(session)) {
+    if (action.kind !== "file" || !looksLikeStaticArtifactPath(action.location)) {
+      continue;
+    }
+    return normalizeCrossPlatformPath(action.location!);
+  }
+  return null;
+}
+
+/**
+ * Builds existing static artifact open context block.
+ *
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses `dirnameCrossPlatformPath` (import `dirnameCrossPlatformPath`) from `../core/crossPlatformPath`.
+ * - Uses `normalizeWhitespace` (import `normalizeWhitespace`) from `./conversationManagerHelpers`.
+ * - Uses `ConversationSession` (import `ConversationSession`) from `./sessionStore`.
+ * @param session - Input consumed by this helper.
+ * @param userInput - Input consumed by this helper.
+ * @returns Result produced by this helper.
+ */
+function buildExistingStaticArtifactOpenContextBlock(
+  session: ConversationSession,
+  userInput: string
+): string | null {
+  const normalizedInput = normalizeWhitespace(userInput);
+  if (!normalizedInput) {
+    return null;
+  }
+  const preferredArtifactPath = resolvePreferredStaticArtifactPath(session);
+  if (!preferredArtifactPath) {
+    return null;
+  }
+  const wantsBrowserOpen =
+    STATIC_ARTIFACT_OPEN_REFERENCE_PATTERN.test(normalizedInput) ||
+    (
+      /\bopen\b/i.test(normalizedInput) &&
+      (
+        STATIC_ARTIFACT_FILE_CUE_PATTERN.test(normalizedInput) ||
+        /\bbrowser\b/i.test(normalizedInput)
+      )
+    );
+  if (!wantsBrowserOpen) {
+    return null;
+  }
+  const directStaticArtifactCue =
+    STATIC_ARTIFACT_FILE_CUE_PATTERN.test(normalizedInput) ||
+    NEGATED_SERVER_START_PATTERN.test(normalizedInput) ||
+    /do\s+not\s+start\s+a\s+dev\s+server/i.test(normalizedInput);
+  if (!directStaticArtifactCue && session.browserSessions.length > 0) {
+    return null;
+  }
+  const preferredFileUrl = absolutePathToLocalFileUrl(preferredArtifactPath);
+  if (!preferredFileUrl) {
+    return null;
+  }
+  const preferredRootPath =
+    session.activeWorkspace?.rootPath ??
+    dirnameCrossPlatformPath(preferredArtifactPath) ??
+    null;
+  const lines = [
+    "Existing local static-artifact open follow-up:",
+    "- The user is asking to open an already-built local artifact, not to rebuild, scaffold, or rewrite the project.",
+    `- Preferred artifact path: ${preferredArtifactPath}`,
+    `- Preferred browser target: ${preferredFileUrl}`
+  ];
+  if (preferredRootPath) {
+    lines.push(`- Preferred root path for browser ownership: ${preferredRootPath}`);
+  }
+  lines.push(
+    `- Prefer open_browser with params.url=${preferredFileUrl}${preferredRootPath ? ` and params.rootPath=${preferredRootPath}` : ""}.`
+  );
+  lines.push(
+    "- Do not create, scaffold, edit, or rewrite project files for this turn unless the user explicitly asks for content changes."
+  );
+  if (NEGATED_SERVER_START_PATTERN.test(normalizedInput)) {
+    lines.push(
+      "- The current turn explicitly forbids starting a dev or preview server, so do not use start_process, probe_http, or localhost verification for this open request."
+    );
+  }
+  return lines.join("\n");
 }
 
 /**
@@ -1397,7 +1636,8 @@ export async function buildConversationAwareExecutionInput(
   getEntityGraph?: GetConversationEntityGraph,
   entityReferenceInterpretationResolver?: EntityReferenceInterpretationResolver,
   openContinuityReadSession?: OpenConversationContinuityReadSession,
-  requestTelemetry?: ProfileMemoryRequestTelemetry
+  requestTelemetry?: ProfileMemoryRequestTelemetry,
+  semanticRouteId: ConversationSemanticRouteId | null = null
 ): Promise<string> {
   const runtimeReconciledSession = reconcileConversationExecutionRuntimeSession(
     session,
@@ -1409,7 +1649,8 @@ export async function buildConversationAwareExecutionInput(
   const suppressWorkflowContinuityBlocks = shouldSuppressWorkflowContinuityBlocks(
     runtimeReconciledSession,
     rawUserInput,
-    routingClassification
+    routingClassification,
+    semanticRouteId
   );
   let sharedContinuityReadSessionPromise: Promise<ConversationContinuityReadSession | null> | null = null;
   const resolveTurnContinuityReadSession = openContinuityReadSession
@@ -1454,6 +1695,9 @@ export async function buildConversationAwareExecutionInput(
       runtimeReconciledSession,
       rawUserInput
     );
+  const explicitExecutionConstraintBlock =
+    buildExplicitExecutionConstraintContextBlock(rawUserInput);
+  const semanticRouteBlock = buildResolvedSemanticRouteBlock(semanticRouteId);
   const desktopOrganizationContextBlock = buildDesktopOrganizationExecutionContextBlock(
     runtimeReconciledSession,
     rawUserInput
@@ -1469,17 +1713,31 @@ export async function buildConversationAwareExecutionInput(
   const suppressTrackedExecutionHints =
     suppressWorkflowContinuityBlocks ||
     suppressTrackedExecutionHintsForForeignBrowserUrl;
+  const existingStaticArtifactOpenBlock = suppressTrackedExecutionHints
+    ? null
+    : buildExistingStaticArtifactOpenContextBlock(
+      runtimeReconciledSession,
+      rawUserInput
+    );
+  const suppressBuildContinuityBiasForStaticArtifactOpen =
+    existingStaticArtifactOpenBlock !== null;
   const modeContinuityBlock = suppressTrackedExecutionHints
     ? null
+    : suppressBuildContinuityBiasForStaticArtifactOpen
+      ? null
     : buildModeContinuityBlock(runtimeReconciledSession);
   const progressStateBlock = suppressTrackedExecutionHints
     ? null
     : buildProgressStateBlock(runtimeReconciledSession);
   const returnHandoffBlock = suppressTrackedExecutionHints
     ? null
+    : suppressBuildContinuityBiasForStaticArtifactOpen
+      ? null
     : buildReturnHandoffBlock(runtimeReconciledSession);
   const returnHandoffContinuationBlock = suppressTrackedExecutionHints
     ? null
+    : suppressBuildContinuityBiasForStaticArtifactOpen
+      ? null
     : buildReturnHandoffContinuationBlock(
       runtimeReconciledSession,
       rawUserInput,
@@ -1546,6 +1804,9 @@ export async function buildConversationAwareExecutionInput(
     !contextualRecallBlock &&
     !mediaContextBlock &&
     !runtimeProcessManagementContextBlock &&
+    !explicitExecutionConstraintBlock &&
+    !semanticRouteBlock &&
+    !existingStaticArtifactOpenBlock &&
     !modeContinuityBlock &&
     !progressStateBlock &&
     !returnHandoffBlock &&
@@ -1601,6 +1862,15 @@ export async function buildConversationAwareExecutionInput(
   }
   if (runtimeProcessManagementContextBlock) {
     lines.push("", runtimeProcessManagementContextBlock);
+  }
+  if (explicitExecutionConstraintBlock) {
+    lines.push("", explicitExecutionConstraintBlock);
+  }
+  if (semanticRouteBlock) {
+    lines.push("", semanticRouteBlock);
+  }
+  if (existingStaticArtifactOpenBlock) {
+    lines.push("", existingStaticArtifactOpenBlock);
   }
   if (modeContinuityBlock) {
     lines.push("", modeContinuityBlock);
@@ -1667,13 +1937,12 @@ export async function resolveFollowUpInput(
   continuationInterpretationResolver?: ContinuationInterpretationResolver,
   routingClassification: RoutingMapClassificationV1 | null = null
 ): Promise<FollowUpResolution> {
-  const lastAssistantPrompt = [...session.conversationTurns]
-    .reverse()
-    .find(
-      (turn) =>
-        turn.role === "assistant" &&
-        isLikelyAssistantClarificationPrompt(turn.text)
-    );
+  const mostRecentAssistantTurn = findMostRecentAssistantTurn(session);
+  const lastAssistantPrompt =
+    mostRecentAssistantTurn &&
+    isLikelyAssistantClarificationPrompt(mostRecentAssistantTurn.text)
+      ? mostRecentAssistantTurn
+      : null;
   const classification = classifyFollowUp(userInput, {
     hasPriorAssistantQuestion: Boolean(lastAssistantPrompt),
     ruleContext: followUpRuleContext

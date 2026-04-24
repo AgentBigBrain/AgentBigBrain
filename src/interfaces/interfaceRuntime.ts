@@ -28,6 +28,7 @@ import {
 import { createBrainConfigFromEnv } from "../core/config";
 import { EntityGraphStore } from "../core/entityGraphStore";
 import { ensureEnvLoaded } from "../core/envLoader";
+import { MediaArtifactStore } from "../core/mediaArtifactStore";
 import { DiscordAdapter } from "./discordAdapter";
 import { DiscordGateway } from "./discordGateway";
 import { acquireInterfaceRuntimeLock } from "./interfaceRuntimeLock";
@@ -51,6 +52,7 @@ interface GatewayRuntime {
 interface GatewayRuntimePersistence {
   sessionStore: InterfaceSessionStore;
   entityGraphStore: EntityGraphStore;
+  mediaArtifactStore: MediaArtifactStore;
   brainRegistry: InterfaceBrainRegistry;
 }
 
@@ -116,6 +118,7 @@ function createTelegramGatewayRuntime(
   return new TelegramGateway(adapter, config, {
     sessionStore: persistence.sessionStore,
     entityGraphStore: persistence.entityGraphStore,
+    mediaArtifactStore: persistence.mediaArtifactStore,
     brainRegistry: persistence.brainRegistry,
     mediaUnderstandingOrgan,
     localIntentModelResolver: optionalDependencies.localIntentModelResolver,
@@ -516,17 +519,13 @@ export async function runInterfaceRuntime(): Promise<void> {
     sqlitePath: brainConfig.persistence.ledgerSqlitePath,
     exportJsonOnWrite: brainConfig.persistence.exportJsonOnWrite
   });
-  const entityGraphStore = new EntityGraphStore(undefined, {
-    backend: brainConfig.persistence.ledgerBackend,
-    sqlitePath: brainConfig.persistence.ledgerSqlitePath,
-    exportJsonOnWrite: brainConfig.persistence.exportJsonOnWrite
-  });
   const sharedBrainRuntime = createSharedBrainRuntimeDependencies(process.env);
   const brainRegistry = new InterfaceBrainRegistry(process.env, sharedBrainRuntime);
   const brain = buildBrainRuntimeFromEnvironment(sharedBrainRuntime, process.env).brain;
   const gateways = createGatewayRuntimes(brain, config, {
     sessionStore,
-    entityGraphStore,
+    entityGraphStore: sharedBrainRuntime.entityGraphStore,
+    mediaArtifactStore: sharedBrainRuntime.mediaArtifactStore,
     brainRegistry
   }, {
     localIntentModelResolver,

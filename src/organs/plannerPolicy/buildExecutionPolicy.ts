@@ -45,6 +45,9 @@ import {
   requiresBrowserVerificationBuildRequest,
   requiresPersistentBrowserOpenBuildRequest
 } from "./liveVerificationPolicy";
+import {
+  assessStaticArtifactOpenPlan
+} from "./staticArtifactOpenSupport";
 
 /**
  * Evaluates whether planner policy may implicitly allow finite shell work for a build request.
@@ -95,11 +98,13 @@ export function assessExecutionStyleBuildPlan(
   executionEnvironment: PlannerExecutionEnvironmentContext | null = null,
   fullExecutionInput = currentUserRequest
 ): ExecutionStyleBuildPlanAssessment {
+  const staticArtifactOpenAssessment = assessStaticArtifactOpenPlan(actions, fullExecutionInput);
+  if (staticArtifactOpenAssessment) {
+    return staticArtifactOpenAssessment;
+  }
+
   if (!requiresExecutableBuildPlan(currentUserRequest, fullExecutionInput)) {
-    return {
-      valid: true,
-      issueCode: null
-    };
+    return { valid: true, issueCode: null };
   }
 
   if (

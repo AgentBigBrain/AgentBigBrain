@@ -322,6 +322,7 @@ export class BrowserSessionRegistry {
     url: string;
     visibility: BrowserSessionVisibility;
     openedAt: string;
+    browserProcessPid?: number | null;
     workspaceRootPath?: string | null;
     linkedProcessLeaseId?: string | null;
     linkedProcessCwd?: string | null;
@@ -335,9 +336,16 @@ export class BrowserSessionRegistry {
       closedAt: null,
       visibility: details.visibility,
       controllerKind: "os_default",
+      // OS-default launches remain attribution-only even when a launcher surfaces a PID.
+      // A shared desktop browser can reuse existing processes, so exact window control is not
+      // reliable enough to advertise as runtime-owned.
       controlAvailable: false,
       handle: null,
-      browserProcessPid: null,
+      browserProcessPid:
+        typeof details.browserProcessPid === "number" &&
+        Number.isInteger(details.browserProcessPid)
+          ? details.browserProcessPid
+          : null,
       workspaceRootPath:
         typeof details.workspaceRootPath === "string" ? details.workspaceRootPath : null,
       linkedProcessLeaseId:
@@ -474,6 +482,7 @@ export class BrowserSessionRegistry {
       await closeIfPossible(record.handle.browser);
       record.handle = null;
     } else if (
+      record.controllerKind === "playwright_managed" &&
       typeof record.browserProcessPid === "number" &&
       closeProcessByPid
     ) {
@@ -579,6 +588,7 @@ export class BrowserSessionRegistry {
       record.controlAvailable =
         record.status === "open" &&
         record.controllerKind === "playwright_managed" &&
+        typeof record.browserProcessPid === "number" &&
         browserProcessStillAlive;
       return false;
     }
@@ -598,6 +608,7 @@ export class BrowserSessionRegistry {
         ...snapshotFromRecord(record),
         controlAvailable:
           record.status === "open" &&
+          record.controllerKind === "playwright_managed" &&
           typeof record.browserProcessPid === "number" &&
           Number.isInteger(record.browserProcessPid),
         browserProcessPid: record.browserProcessPid

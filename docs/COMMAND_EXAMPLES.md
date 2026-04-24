@@ -260,6 +260,49 @@ Why it works:
 - the caption makes the execution intent explicit
 - the runtime can treat this like a direct corrective request
 
+## 6) Obsidian Projection Tooling
+
+These are operator commands, not normal conversation commands. Use them when you want to inspect
+the external mirror or apply pending review actions.
+
+### Rebuild the Obsidian mirror
+
+```bash
+npm run projection:export:obsidian
+```
+
+Use this when:
+- you want a clean rebuild from canonical runtime state
+- you are validating the vault schema
+- you want recovery after the mirror fell behind
+
+### Apply review-action notes
+
+```bash
+npm run projection:apply-review-actions
+```
+
+Use this when:
+- you have pending notes under `AgentBigBrain/40 Review Actions/`
+- you want those structured corrections to flow back through the canonical runtime mutation seams
+
+### Open the dashboard in Obsidian
+
+```bash
+npm run projection:open:obsidian
+```
+
+Open a specific mirrored note by exact path:
+
+```bash
+npm run projection:open:obsidian -- "C:\Users\<you>\Documents\ObsidianVault\AgentBigBrain\10 Entities\person_owen.md"
+```
+
+Why these commands exist:
+- they keep rebuild, write-back, and navigation deterministic
+- they avoid turning Obsidian into the source of truth
+- they make the projection seam usable without requiring custom Obsidian plugin code
+
 ### Voice note with direct execution intent
 
 ```text

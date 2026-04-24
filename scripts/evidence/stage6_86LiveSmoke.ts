@@ -68,21 +68,23 @@ function buildBaseContinuityGraph(
     updatedAt: "2026-02-28T00:00:00.000Z",
     entities: [
       {
-        entityKey: "entity_flare_labs",
-        canonicalName: "Flare Labs",
+        entityKey: "entity_beacon_labs",
+        canonicalName: "Beacon Labs",
         entityType: "org",
         disambiguator: null,
-        aliases: ["Flare Labs"],
+        domainHint: null,
+        aliases: ["Beacon Labs"],
         firstSeenAt: "2025-10-01T00:00:00.000Z",
         lastSeenAt: "2026-02-20T00:00:00.000Z",
         salience: 6,
-        evidenceRefs: ["trace:entity_flare_labs"]
+        evidenceRefs: ["trace:entity_beacon_labs"]
       },
       {
         entityKey: "entity_project_aurora",
         canonicalName: "Project Aurora",
         entityType: "concept",
         disambiguator: null,
+        domainHint: null,
         aliases: ["Project Aurora"],
         firstSeenAt: "2025-10-01T00:00:00.000Z",
         lastSeenAt: "2026-02-20T00:00:00.000Z",
@@ -94,6 +96,7 @@ function buildBaseContinuityGraph(
         canonicalName: "Release Runbook",
         entityType: "thing",
         disambiguator: null,
+        domainHint: null,
         aliases: ["Release Runbook"],
         firstSeenAt: "2025-10-01T00:00:00.000Z",
         lastSeenAt: "2025-11-01T00:00:00.000Z",
@@ -104,7 +107,7 @@ function buildBaseContinuityGraph(
     edges: [
       {
         edgeKey: "edge_bridge_candidate",
-        sourceEntityKey: "entity_flare_labs",
+        sourceEntityKey: "entity_beacon_labs",
         targetEntityKey: "entity_project_aurora",
         relationType: "co_mentioned",
         status: "uncertain",
@@ -116,7 +119,7 @@ function buildBaseContinuityGraph(
       },
       {
         edgeKey: "edge_stale_confirmed",
-        sourceEntityKey: "entity_flare_labs",
+        sourceEntityKey: "entity_beacon_labs",
         targetEntityKey: "entity_release_runbook",
         relationType: "project_related",
         status: "confirmed",
@@ -144,7 +147,7 @@ function buildBaseContinuityStack(): ConversationStackV1 {
       },
       {
         role: "user",
-        text: "Switch to budget runway assumptions at Flare Labs.",
+        text: "Switch to budget runway assumptions at Beacon Labs.",
         at: "2026-02-28T09:00:00.000Z"
       }
     ],
@@ -159,7 +162,7 @@ function buildBaseContinuityStack(): ConversationStackV1 {
     threadKey: activeThreadKey,
     text: "Remind me later to finalize budget runway assumptions.",
     observedAt: "2026-02-28T09:05:00.000Z",
-    entityRefs: ["entity_flare_labs"],
+    entityRefs: ["entity_beacon_labs"],
     priorityHint: 0.74
   }).stack;
 }
@@ -245,12 +248,12 @@ function runEntityRecallScenario(): Stage686LiveScenarioResult {
         {
           emittedAt: "2026-06-01T08:30:00.000Z",
           reasonCode: "USER_REQUESTED_FOLLOWUP",
-          candidateEntityRefs: ["entity_flare_labs"]
+          candidateEntityRefs: ["entity_beacon_labs"]
         },
         {
           emittedAt: "2026-06-01T10:30:00.000Z",
           reasonCode: "USER_REQUESTED_FOLLOWUP",
-          candidateEntityRefs: ["entity_flare_labs"]
+          candidateEntityRefs: ["entity_beacon_labs"]
         }
       ]
     },

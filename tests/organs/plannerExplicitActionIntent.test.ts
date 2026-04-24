@@ -122,6 +122,29 @@ test("inferRequiredActionType promotes tracked artifact-edit follow-ups to write
   );
 });
 
+test("inferRequiredActionType does not promote artifact edits when the resolved semantic route is non-build recall", () => {
+  const trackedArtifactExecutionInput = [
+    "Resolved semantic route:",
+    "- routeId: status_recall",
+    "",
+    "Natural artifact-edit follow-up:",
+    "- The user appears to be editing the artifact already created in this chat rather than asking for a brand-new project.",
+    "- Preferred edit destination: C:\\Users\\testuser\\Desktop\\drone-company",
+    "- Preferred primary artifact: C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
+    "",
+    "Current user request:",
+    "Change the hero image to a slider instead of the landing page."
+  ].join("\n");
+
+  assert.equal(
+    inferRequiredActionType(
+      "Change the hero image to a slider instead of the landing page.",
+      trackedArtifactExecutionInput
+    ),
+    null
+  );
+});
+
 test("filterNonExplicitRunSkillActions removes run_skill work unless the request explicitly asks for it", () => {
   const actions = [
     {

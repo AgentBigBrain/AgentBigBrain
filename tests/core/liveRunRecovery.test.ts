@@ -102,9 +102,9 @@ function buildApprovedStartProcessResult(
     executionMetadata: {
       processLeaseId: "proc_live_run_recovery",
       processLifecycleStatus: "PROCESS_STARTED",
-      processRequestedHost: loopbackTarget?.host,
-      processRequestedPort: loopbackTarget?.port,
-      processRequestedUrl: loopbackTarget?.url
+      processRequestedHost: loopbackTarget?.host ?? null,
+      processRequestedPort: loopbackTarget?.port ?? null,
+      processRequestedUrl: loopbackTarget?.url ?? null
     },
     blockedBy: [],
     violations: [],

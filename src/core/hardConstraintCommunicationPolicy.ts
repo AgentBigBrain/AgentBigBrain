@@ -228,6 +228,17 @@ const PERSONAL_DATA_RECIPIENT_HINT_KEYS = [
   "channel",
   "conversationId"
 ];
+
+const MEDIA_CONTEXT_LINE_PREFIXES = [
+  "attached media context:",
+  "the user sent media with the following interpreted context:",
+  "image summary:",
+  "document summary:",
+  "short video summary:",
+  "video summary:",
+  "voice note transcript:",
+  "ocr text:"
+] as const;
 const PERSONAL_DATA_PHRASE_REGEXES = PERSONAL_DATA_PATTERNS.map((pattern) =>
   new RegExp(
     `\\b${pattern
@@ -555,6 +566,26 @@ function containsSensitiveClassificationHint(params: Record<string, unknown>): b
 }
 
 /**
+ * Removes quoted media-analysis context from communication-safety scans so OCR/document content is
+ * not mistaken for the user's requested speaker identity.
+ *
+ * @param text - Candidate communication text assembled from proposal metadata.
+ * @returns Text with embedded media-context lines stripped.
+ */
+function stripEmbeddedMediaContextForCommunicationSafety(text: string): string {
+  return text
+    .split(/\r?\n/)
+    .filter((line) => {
+      const normalized = line.trim().replace(/^-\s*/, "").toLowerCase();
+      if (!normalized) {
+        return true;
+      }
+      return !MEDIA_CONTEXT_LINE_PREFIXES.some((prefix) => normalized.startsWith(prefix));
+    })
+    .join("\n");
+}
+
+/**
  * Checks whether recipient hint fields are present in params.
  *
  * **Why it exists:**
@@ -631,20 +662,21 @@ export function containsImpersonationSignal(proposal: GovernanceProposal): boole
     proposal.action.description,
     safeStringify(proposal.action.params)
   ].join("\n");
+  const sanitizedTextSignal = stripEmbeddedMediaContextForCommunicationSafety(textSignal);
 
-  if (containsAnyPattern(textSignal, IMPERSONATION_PATTERNS)) {
+  if (containsAnyPattern(sanitizedTextSignal, IMPERSONATION_PATTERNS)) {
     return true;
   }
 
-  if (containsNamedHumanIdentityClaim(textSignal)) {
+  if (containsNamedHumanIdentityClaim(sanitizedTextSignal)) {
     return true;
   }
 
-  if (containsProfileRecallContext(textSignal)) {
+  if (containsProfileRecallContext(sanitizedTextSignal)) {
     return false;
   }
 
-  return containsSemanticImpersonationSignal(textSignal);
+  return containsSemanticImpersonationSignal(sanitizedTextSignal);
 }
 
 /**

@@ -11,10 +11,22 @@ import { countLanguageTermOverlap } from "../languageRuntime/languageScoring";
 import { sha256HexFromCanonicalJson } from "../normalizers/canonicalizationRules";
 import { isConversationStackV1 } from "./conversationStack";
 
-const OPEN_LOOP_DEFER_PATTERN =
-  /\b(?:remind me|circle back|revisit|follow up|not now|later|defer|park this|park it)\b/i;
-const OPEN_LOOP_DECISION_PATTERN =
-  /\b(?:still need to decide|need to choose|decision pending|undecided|to be decided|tbd)\b/i;
+const OPEN_LOOP_DEFER_SEQUENCES: readonly (readonly string[])[] = [
+  ["remind", "me"],
+  ["circle", "back"],
+  ["follow", "up"],
+  ["not", "now"],
+  ["park", "this"],
+  ["park", "it"]
+] as const;
+const OPEN_LOOP_DEFER_TOKENS = new Set(["revisit", "later", "defer"]);
+const OPEN_LOOP_DECISION_SEQUENCES: readonly (readonly string[])[] = [
+  ["still", "need", "to", "decide"],
+  ["need", "to", "choose"],
+  ["decision", "pending"],
+  ["to", "be", "decided"]
+] as const;
+const OPEN_LOOP_DECISION_TOKENS = new Set(["undecided", "tbd"]);
 const MAX_DESCRIPTOR_CHARS = 180;
 const DEFAULT_MAX_OPEN_LOOPS_SURFACED = 1;
 const DEFAULT_OPEN_LOOP_STALE_DAYS = 30;
@@ -260,6 +272,97 @@ function normalizeWhitespace(value: string): string {
 }
 
 /**
+ * Tokenizes open loop text.
+ *
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses local constants/helpers within this module.
+ * @param value - Input consumed by this helper.
+ * @returns Result produced by this helper.
+ */
+function tokenizeOpenLoopText(value: string): readonly string[] {
+  const normalized = normalizeWhitespace(value).toLowerCase();
+  if (!normalized) {
+    return [];
+  }
+  return normalized
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter((token) => token.length > 0);
+}
+
+/**
+ * Evaluates whether token sequence.
+ *
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses local constants/helpers within this module.
+ * @param tokens - Input consumed by this helper.
+ * @param sequence - Input consumed by this helper.
+ * @returns Result produced by this helper.
+ */
+function hasTokenSequence(
+  tokens: readonly string[],
+  sequence: readonly string[]
+): boolean {
+  if (sequence.length === 0 || sequence.length > tokens.length) {
+    return false;
+  }
+  for (let index = 0; index <= tokens.length - sequence.length; index += 1) {
+    let matched = true;
+    for (let offset = 0; offset < sequence.length; offset += 1) {
+      if (tokens[index + offset] !== sequence[offset]) {
+        matched = false;
+        break;
+      }
+    }
+    if (matched) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Evaluates whether any token sequence.
+ *
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses local constants/helpers within this module.
+ * @param tokens - Input consumed by this helper.
+ * @param sequences - Input consumed by this helper.
+ * @returns Result produced by this helper.
+ */
+function hasAnyTokenSequence(
+  tokens: readonly string[],
+  sequences: readonly (readonly string[])[]
+): boolean {
+  return sequences.some((sequence) => hasTokenSequence(tokens, sequence));
+}
+
+/**
+ * Evaluates whether any token.
+ *
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses local constants/helpers within this module.
+ * @param tokens - Input consumed by this helper.
+ * @param allowed - Input consumed by this helper.
+ * @returns Result produced by this helper.
+ */
+function hasAnyToken(tokens: readonly string[], allowed: ReadonlySet<string>): boolean {
+  return tokens.some((token) => allowed.has(token));
+}
+
+/**
  * Normalizes entity refs into a stable shape for `stage6_86OpenLoops` logic.
  *
  * **Why it exists:**
@@ -365,10 +468,14 @@ function toDescriptor(text: string): string {
  * @returns Computed `OpenLoopTriggerCodeV1 | null` result.
  */
 function deriveTriggerCode(text: string): OpenLoopTriggerCodeV1 | null {
-  if (OPEN_LOOP_DEFER_PATTERN.test(text)) {
+  const tokens = tokenizeOpenLoopText(text);
+  if (hasAnyTokenSequence(tokens, OPEN_LOOP_DEFER_SEQUENCES) || hasAnyToken(tokens, OPEN_LOOP_DEFER_TOKENS)) {
     return "DEFERRED_QUESTION";
   }
-  if (OPEN_LOOP_DECISION_PATTERN.test(text)) {
+  if (
+    hasAnyTokenSequence(tokens, OPEN_LOOP_DECISION_SEQUENCES) ||
+    hasAnyToken(tokens, OPEN_LOOP_DECISION_TOKENS)
+  ) {
     return "UNRESOLVED_DECISION";
   }
   return null;

@@ -78,6 +78,7 @@ test("createOllamaLocalIntentModelResolver parses a valid Ollama JSON payload", 
 
   assert.deepEqual(signal, {
     source: "local_intent_model",
+    semanticRouteId: "build_request",
     mode: "build",
     confidence: "high",
     matchedRuleId: "local_intent_model_build_now",
@@ -87,6 +88,55 @@ test("createOllamaLocalIntentModelResolver parses a valid Ollama JSON payload", 
   });
   const requestPayload = JSON.parse(capturedBody) as { prompt?: string };
   assert.match(requestPayload.prompt ?? "", /"hasReturnHandoff":true/);
+});
+
+test("createOllamaLocalIntentModelResolver accepts explicit clarification route ids", async () => {
+  const resolver = createOllamaLocalIntentModelResolver(
+    {
+      baseUrl: "http://127.0.0.1:11434",
+      model: "phi4-mini:latest",
+      timeoutMs: 1000
+    },
+    {
+      fetchImpl: async () =>
+        new Response(
+          JSON.stringify({
+            response: JSON.stringify({
+              routeId: "clarify_execution_mode",
+              confidence: "low",
+              matchedRuleId: "needs_execution_clarification",
+              explanation: "The user request is too ambiguous to route safely."
+            })
+          }),
+          {
+            status: 200,
+            headers: {
+              "Content-Type": "application/json"
+            }
+          }
+        )
+    }
+  );
+
+  const signal = await resolver({
+    userInput: "Could you do that?",
+    routingClassification: null,
+    sessionHints: {
+      hasReturnHandoff: false,
+      modeContinuity: null
+    }
+  });
+
+  assert.deepEqual(signal, {
+    source: "local_intent_model",
+    semanticRouteId: "clarify_execution_mode",
+    mode: "unclear",
+    confidence: "low",
+    matchedRuleId: "local_intent_model_needs_execution_clarification",
+    explanation: "The user request is too ambiguous to route safely.",
+    clarification: null,
+    semanticHint: null
+  });
 });
 
 test("createOllamaLocalIntentModelResolver keeps supported semantic handoff hints from the model", async () => {
@@ -134,6 +184,7 @@ test("createOllamaLocalIntentModelResolver keeps supported semantic handoff hint
 
   assert.deepEqual(signal, {
     source: "local_intent_model",
+    semanticRouteId: "status_recall",
     mode: "status_or_recall",
     confidence: "medium",
     matchedRuleId: "local_intent_model_review_ready_handoff",
@@ -188,6 +239,7 @@ test("createOllamaLocalIntentModelResolver keeps next_review_step semantic hints
 
   assert.deepEqual(signal, {
     source: "local_intent_model",
+    semanticRouteId: "status_recall",
     mode: "status_or_recall",
     confidence: "medium",
     matchedRuleId: "local_intent_model_next_review_step_handoff",
@@ -242,6 +294,7 @@ test("createOllamaLocalIntentModelResolver keeps wrap_up_summary semantic hints 
 
   assert.deepEqual(signal, {
     source: "local_intent_model",
+    semanticRouteId: "status_recall",
     mode: "status_or_recall",
     confidence: "medium",
     matchedRuleId: "local_intent_model_wrap_up_summary_handoff",
@@ -296,6 +349,7 @@ test("createOllamaLocalIntentModelResolver keeps review_ready semantic hints for
 
   assert.deepEqual(signal, {
     source: "local_intent_model",
+    semanticRouteId: "status_recall",
     mode: "status_or_recall",
     confidence: "medium",
     matchedRuleId: "local_intent_model_review_ready_more_to_see_handoff",
@@ -350,6 +404,7 @@ test("createOllamaLocalIntentModelResolver keeps resume_handoff semantic hints f
 
   assert.deepEqual(signal, {
     source: "local_intent_model",
+    semanticRouteId: "build_request",
     mode: "build",
     confidence: "medium",
     matchedRuleId: "local_intent_model_resume_saved_draft",
@@ -404,6 +459,7 @@ test("createOllamaLocalIntentModelResolver keeps explain_handoff semantic hints 
 
   assert.deepEqual(signal, {
     source: "local_intent_model",
+    semanticRouteId: "status_recall",
     mode: "status_or_recall",
     confidence: "medium",
     matchedRuleId: "local_intent_model_explain_saved_draft_changes",

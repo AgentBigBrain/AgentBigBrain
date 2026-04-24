@@ -5,6 +5,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import { classifyRoutingIntentV1 } from "../../src/interfaces/routingMap";
 import type { LocalIntentModelSessionHints } from "../../src/organs/languageUnderstanding/localIntentModelContracts";
 import { resolveConversationIntentMode } from "../../src/interfaces/conversationRuntime/intentModeResolution";
 
@@ -109,7 +110,7 @@ test("resolveConversationIntentMode keeps status-shaped relationship recall on t
 
 test("resolveConversationIntentMode keeps continuity-shaped relationship recall on the chat path during workflow continuity", async () => {
   const resolution = await resolveConversationIntentMode(
-    "What's going on with Billy and Flare?",
+    "What's going on with Billy and Beacon?",
     null,
     undefined,
     buildSessionHints({
@@ -391,7 +392,7 @@ test("resolveConversationIntentMode keeps first-person status facts off the cont
       return {
         source: "local_intent_model",
         kind: "status_followup",
-        selectedTopicAnchors: ["tax", "filing"],
+        candidateTokens: ["tax", "filing"],
         confidence: "high",
         explanation: "Incorrect contextual follow-up interpretation for a first-person status fact."
       };
@@ -404,19 +405,67 @@ test("resolveConversationIntentMode keeps first-person status facts off the cont
   assert.equal(resolution.matchedRuleId, "intent_mode_default_chat");
 });
 
-test("resolveConversationIntentMode returns a persisted clarification candidate for ambiguous build requests", async () => {
+test("resolveConversationIntentMode returns a persisted build-format clarification candidate for ambiguous exact-destination build requests", async () => {
   const resolution = await resolveConversationIntentMode(
-    "Please create me that landing page we talked about yesterday with a hero and a strong call to action."
+    'Please create me that landing page we talked about yesterday with a hero and a strong call to action in the exact folder "C:\\Users\\testuser\\Desktop\\Solar Energy Landing Page".'
+  );
+
+  assert.equal(resolution.mode, "clarify_build_format");
+  assert.equal(resolution.confidence, "medium");
+  assert.ok(resolution.clarification);
+  assert.equal(resolution.clarification?.kind, "build_format");
+  assert.deepEqual(
+    resolution.clarification?.options.map((option) => option.id),
+    ["static_html", "nextjs", "react"]
+  );
+});
+
+test("resolveConversationIntentMode returns a build-format clarification when the user explicitly signals plain-html-versus-framework ambiguity", async () => {
+  const resolution = await resolveConversationIntentMode(
+    "Can you create that landing page idea we talked about with a hero and strong call to action? I am still split on whether the first step should be plain HTML or a framework app."
+  );
+
+  assert.equal(resolution.mode, "clarify_build_format");
+  assert.equal(resolution.confidence, "medium");
+  assert.equal(
+    resolution.clarification?.question,
+    "Would you like that built as plain HTML, or as a framework app like Next.js or React?"
+  );
+});
+
+test("resolveConversationIntentMode keeps plan-or-build clarification authoritative instead of letting the generic local model auto-build", async () => {
+  const resolution = await resolveConversationIntentMode(
+    "BigBrain I recorded a short clip so you can see what the UI is doing. The wrong panel slides in right after the menu opens and the dashboard feels off. Please build the dashboard change using this clip.",
+    null,
+    async () => ({
+      source: "local_intent_model",
+      mode: "build",
+      confidence: "high",
+      matchedRuleId: "local_intent_model_incorrect_video_build",
+      explanation: "The generic local intent model should not silently consume an explicit plan-or-build ambiguity.",
+      clarification: null
+    })
   );
 
   assert.equal(resolution.mode, "unclear");
   assert.equal(resolution.confidence, "medium");
-  assert.ok(resolution.clarification);
+  assert.equal(resolution.matchedRuleId, "execution_intent_build_generic");
   assert.equal(resolution.clarification?.kind, "execution_mode");
-  assert.deepEqual(
-    resolution.clarification?.options.map((option) => option.id),
-    ["plan", "build"]
+});
+
+test("resolveConversationIntentMode keeps long narrative memory updates off the build clarification path", async () => {
+  const resolution = await resolveConversationIntentMode(
+    [
+      "Billy moved from Sample Web Studio to Crimson in February, and the Harbor project timeline shifted a week after that.",
+      "Garrett is still handling the website handoff, and I am going to add corrections and date changes after we talk through it.",
+      "",
+      "Mara is flying in on April 20, Billy said the old office keys are still in the blue folder, and the review call is supposed to happen before the March invoices get closed."
+    ].join("\n\n")
   );
+
+  assert.equal(resolution.mode, "chat");
+  assert.equal(resolution.clarification, null);
+  assert.equal(resolution.matchedRuleId, "intent_mode_default_chat");
 });
 
 test("resolveConversationIntentMode promotes strong end-to-end wording into autonomous mode", async () => {
@@ -811,6 +860,41 @@ test("resolveConversationIntentMode keeps short identity follow-ups off the work
   assert.equal(resolution.matchedRuleId, "intent_mode_default_chat");
 });
 
+test("resolveConversationIntentMode keeps vague conversational follow-ups on the answer thread when the latest assistant turn was informational", async () => {
+  let localResolverCalled = false;
+
+  const resolution = await resolveConversationIntentMode(
+    "Okay, what else?",
+    null,
+    async () => {
+      localResolverCalled = true;
+      return {
+        source: "local_intent_model",
+        mode: "build",
+        confidence: "high",
+        matchedRuleId: "local_intent_model_incorrect_answer_thread_build",
+        explanation: "The local intent model should not steal vague answer-thread follow-ups into work.",
+        clarification: null
+      };
+    },
+    buildSessionHints({
+      hasActiveWorkspace: true,
+      hasReturnHandoff: true,
+      modeContinuity: "build",
+      domainDominantLane: "workflow",
+      domainContinuityActive: true,
+      workflowContinuityActive: true,
+      recentAssistantTurnKind: "informational_answer",
+      recentAssistantAnswerThreadActive: true
+    })
+  );
+
+  assert.equal(localResolverCalled, false);
+  assert.equal(resolution.mode, "chat");
+  assert.equal(resolution.confidence, "medium");
+  assert.equal(resolution.matchedRuleId, "intent_mode_recent_answer_thread_chat");
+});
+
 test("resolveConversationIntentMode does not let the local intent model downgrade explicit autonomous wording", async () => {
   const resolution = await resolveConversationIntentMode(
     "Hey, build me a tech landing page for air drones, go until you finish, put it on my desktop, and leave it open for me when you're done.",
@@ -830,23 +914,82 @@ test("resolveConversationIntentMode does not let the local intent model downgrad
   assert.equal(resolution.matchedRuleId, "intent_mode_autonomous_execution");
 });
 
-test("resolveConversationIntentMode lets the local intent model break ties for natural build wording", async () => {
+test("resolveConversationIntentMode asks for build format instead of guessing on ambiguous exact-destination landing-page wording", async () => {
+  let localResolverCalled = false;
+
   const resolution = await resolveConversationIntentMode(
-    "Hey can you build me a simple tech landing page and leave it open for me to view?",
+    'Okay, build me a simple landing page end to end for a solar company. Put it in the exact folder "C:\\Users\\testuser\\Desktop\\Solar Energy Landing Page" on my Desktop and do not open it yet.',
     null,
-    async () => ({
-      source: "local_intent_model",
-      mode: "build",
-      confidence: "medium",
-      matchedRuleId: "local_intent_model_build_now",
-      explanation: "The local intent model recognized a natural request to build now without a long autonomous loop.",
-      clarification: null
+    async () => {
+      localResolverCalled = true;
+      return {
+        source: "local_intent_model",
+        mode: "framework_app_build",
+        confidence: "high",
+        matchedRuleId: "local_intent_model_should_not_guess_build_format",
+        explanation: "The generic local model should not silently pick a build format when the request stays materially ambiguous.",
+        clarification: null
+      };
+    }
+  );
+
+  assert.equal(localResolverCalled, false);
+  assert.equal(resolution.mode, "clarify_build_format");
+  assert.equal(resolution.confidence, "medium");
+  assert.equal(resolution.matchedRuleId, "intent_mode_build_format_clarify_execution_style");
+  assert.equal(resolution.clarification?.kind, "build_format");
+  assert.deepEqual(
+    resolution.clarification?.options.map((option) => option.id),
+    ["static_html", "nextjs", "react"]
+  );
+});
+
+test("resolveConversationIntentMode sends explicit single-file HTML scaffold requests to the static HTML lane", async () => {
+  let localResolverCalled = false;
+  const userInput =
+    'Create another lightweight single-file HTML landing page in the exact folder "C:\\Users\\testuser\\Desktop\\River Glass" on my Desktop. ' +
+    "Call this one River Glass. Keep it as a static single-page site with an index.html entry file in that exact folder. " +
+    "Do not start a local preview server for this scenario. Open that exact local index.html file directly in the browser with an absolute file:// URL and leave it open when you are done.";
+
+  const resolution = await resolveConversationIntentMode(
+    userInput,
+    classifyRoutingIntentV1(userInput),
+    async () => {
+      localResolverCalled = true;
+      return {
+        source: "local_intent_model",
+        mode: "plan",
+        confidence: "high",
+        matchedRuleId: "local_intent_model_incorrect_plan",
+        explanation: "The local intent model should not downgrade an explicit scaffold execution request into plan mode.",
+        clarification: null
+      };
+    },
+    buildSessionHints({
+      hasActiveWorkspace: true,
+      hasReturnHandoff: true,
+      modeContinuity: "build",
+      domainDominantLane: "workflow",
+      domainContinuityActive: true,
+      workflowContinuityActive: true
     })
   );
 
-  assert.equal(resolution.mode, "build");
-  assert.equal(resolution.confidence, "medium");
-  assert.equal(resolution.matchedRuleId, "local_intent_model_build_now");
+  assert.equal(localResolverCalled, false);
+  assert.equal(resolution.mode, "static_html_build");
+  assert.equal(resolution.confidence, "high");
+  assert.equal(resolution.matchedRuleId, "intent_mode_static_html_build");
+  assert.equal(resolution.clarification, null);
+});
+
+test("resolveConversationIntentMode sends explicit Next.js build requests to the framework app lane", async () => {
+  const resolution = await resolveConversationIntentMode(
+    "Build me a Next.js landing page for a solar company and put it on my desktop."
+  );
+
+  assert.equal(resolution.mode, "framework_app_build");
+  assert.equal(resolution.confidence, "high");
+  assert.equal(resolution.matchedRuleId, "intent_mode_framework_app_build");
   assert.equal(resolution.clarification, null);
 });
 

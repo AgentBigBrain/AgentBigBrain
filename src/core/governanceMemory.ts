@@ -19,6 +19,7 @@ import {
 } from "./types";
 import { withFileLock, writeFileAtomic } from "./fileLock";
 import { makeId } from "./ids";
+import { buildProjectionChangeSet } from "./projections/service";
 import { withSqliteDatabase } from "./sqliteStore";
 
 const DEFAULT_RECENT_LIMIT = 25;
@@ -35,6 +36,7 @@ interface GovernanceMemoryStoreOptions {
   backend?: LedgerBackend;
   sqlitePath?: string;
   exportJsonOnWrite?: boolean;
+  onChange?: (changeSet: import("./projections/contracts").ProjectionChangeSet) => Promise<void> | void;
 }
 
 interface AppendGovernanceMemoryEventInput {
@@ -269,6 +271,7 @@ export class GovernanceMemoryStore {
   private readonly backend: LedgerBackend;
   private readonly sqlitePath: string;
   private readonly exportJsonOnWrite: boolean;
+  private readonly onChange?: GovernanceMemoryStoreOptions["onChange"];
 
   /**
    * Initializes `GovernanceMemoryStore` with deterministic runtime dependencies.
@@ -289,6 +292,7 @@ export class GovernanceMemoryStore {
     this.backend = options.backend ?? "json";
     this.sqlitePath = options.sqlitePath ?? path.resolve(process.cwd(), "runtime/ledgers.sqlite");
     this.exportJsonOnWrite = options.exportJsonOnWrite ?? true;
+    this.onChange = options.onChange;
   }
 
   /**
@@ -306,11 +310,14 @@ export class GovernanceMemoryStore {
    * @returns Promise resolving to GovernanceMemoryEvent.
    */
   async appendEvent(input: AppendGovernanceMemoryEventInput): Promise<GovernanceMemoryEvent> {
+    let event: GovernanceMemoryEvent;
     if (this.backend === "sqlite") {
-      return this.appendEventSqlite(input);
+      event = await this.appendEventSqlite(input);
+      await this.notifyProjectionChange(event);
+      return event;
     }
 
-    return withFileLock(this.filePath, async () => {
+    event = await withFileLock(this.filePath, async () => {
       await this.ensureLoaded(true);
       const normalized = normalizeEvent({
         ...input,
@@ -327,6 +334,8 @@ export class GovernanceMemoryStore {
       await this.persist();
       return normalized;
     });
+    await this.notifyProjectionChange(event);
+    return event;
   }
 
   /**
@@ -423,6 +432,33 @@ export class GovernanceMemoryStore {
    */
   private async persist(): Promise<void> {
     await writeFileAtomic(this.filePath, JSON.stringify(this.state, null, 2));
+  }
+
+  /**
+   * Emits one normalized projection change after a governance event write.
+   *
+   * **Why it exists:**
+   * Governance writes are one canonical mirror seam, and this helper keeps projection publishing
+   * optional and centralized instead of scattering callback branches across JSON and SQLite paths.
+   *
+   * **What it talks to:**
+   * - Uses `buildProjectionChangeSet(...)` from `./projections/service`.
+   *
+   * @param event - Newly appended governance memory event.
+   * @returns Promise resolving after the optional projection callback completes.
+   */
+  private async notifyProjectionChange(event: GovernanceMemoryEvent): Promise<void> {
+    if (!this.onChange) {
+      return;
+    }
+    await this.onChange(buildProjectionChangeSet(
+      ["governance_changed"],
+      [`governance_event:${event.id}`],
+      {
+        eventId: event.id,
+        actionType: event.actionType
+      }
+    ));
   }
 
   /**

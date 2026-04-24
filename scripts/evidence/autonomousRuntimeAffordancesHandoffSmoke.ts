@@ -117,7 +117,7 @@ const SESSION_PATH = path.resolve(
 );
 const CONVERSATION_ID = `autonomous-runtime-handoff-smoke-${Date.now()}`;
 const USER_ID = "autonomous-handoff-smoke-user";
-const USERNAME = "anthonybenny";
+const USERNAME = "fixtureuser";
 const PROVIDER_BLOCK_PATTERN =
 /(?:429|exceeded your current quota|usage limit|purchase more credits|try again at|rate limit|fetch failed|request timed out)/i;
 const TURN_TIMEOUT_MS = 45_000;

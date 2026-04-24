@@ -7,7 +7,7 @@ import { extractExecutionContextPayload } from "../../core/currentRequestExtract
 import { makeId } from "../../core/ids";
 import { PlannedAction } from "../../core/types";
 import { RequiredActionType } from "./executionStyleContracts";
-import { buildDeterministicFrameworkBuildFallbackActions } from "./frameworkRuntimeActionFallback";
+import { buildDeterministicStaticArtifactOpenBrowserFallbackActions } from "./staticArtifactOpenSupport";
 
 export { buildDeterministicFrameworkBuildFallbackActions } from "./frameworkRuntimeActionFallback";
 
@@ -350,6 +350,13 @@ export function buildDeterministicExplicitRuntimeActionFallbackActions(
   requiredActionType: RequiredActionType,
   fullExecutionInput = currentUserRequest
 ): PlannedAction[] {
+  if (requiredActionType === "open_browser") {
+    const trackedStaticArtifactOpenBrowserActions =
+      buildDeterministicStaticArtifactOpenBrowserFallbackActions(fullExecutionInput);
+    if (trackedStaticArtifactOpenBrowserActions.length > 0) {
+      return trackedStaticArtifactOpenBrowserActions;
+    }
+  }
   const extractedPaths = extractWindowsPaths(currentUserRequest);
   if (requiredActionType === "inspect_path_holders") {
     return extractedPaths.map(buildInspectPathHoldersAction);

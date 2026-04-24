@@ -94,7 +94,7 @@ function isLinkedPreviewAlreadyStopped(
  * @param snapshot - Browser-session snapshot currently being evaluated.
  * @returns `true` when an exact runtime-owned browser pid is still available.
  */
-function canCloseManagedBrowserByExactPid(snapshot: BrowserSessionSnapshot): boolean {
+function canCloseBrowserByExactPid(snapshot: BrowserSessionSnapshot): boolean {
   return (
     snapshot.controllerKind === "playwright_managed" &&
     typeof snapshot.browserProcessPid === "number" &&
@@ -134,11 +134,8 @@ export async function executeCloseBrowser(
     );
   }
 
-  if (!snapshot.controlAvailable && !canCloseManagedBrowserByExactPid(snapshot)) {
-    if (
-      snapshot.controllerKind === "playwright_managed" &&
-      isLinkedPreviewAlreadyStopped(context, snapshot)
-    ) {
+  if (!snapshot.controlAvailable && !canCloseBrowserByExactPid(snapshot)) {
+    if (isLinkedPreviewAlreadyStopped(context, snapshot)) {
       const closedSnapshot =
         context.browserSessionRegistry.markSessionClosedFromLinkedResourceShutdown(
           sessionResolution.sessionId
@@ -150,9 +147,13 @@ export async function executeCloseBrowser(
           "BROWSER_SESSION_NOT_FOUND"
         );
       }
+      const output =
+        snapshot.controllerKind === "os_default"
+          ? `The linked preview process was already stopped, but ${closedSnapshot.url} was opened through your normal browser and runtime no longer has exact control of that window. If the page is still visible, close it manually.`
+          : `The linked preview process was already stopped, so I marked the tracked browser session for ${closedSnapshot.url} closed.`;
       return buildExecutionOutcome(
         "success",
-        `The linked preview process was already stopped, so I marked the tracked browser session for ${closedSnapshot.url} closed.`,
+        output,
         undefined,
         buildBrowserSessionExecutionMetadata({
           sessionId: closedSnapshot.sessionId,

@@ -28,6 +28,7 @@ import {
 } from "./profileMemoryTruthGovernanceDecisionSupport";
 import {
   ALLOWED_EXPLICIT_CONTACT_CONTEXT_SOURCES,
+  ALLOWED_EXPLICIT_CURRENT_CONTACT_GENERIC_ASSOCIATION_SOURCES,
   ALLOWED_EXPLICIT_CONTACT_NAME_SOURCES,
   ALLOWED_EXPLICIT_CURRENT_CONTACT_RELATIONSHIP_SOURCES,
   ALLOWED_EXPLICIT_CURRENT_CONTACT_WORK_ASSOCIATION_SOURCES,
@@ -62,7 +63,8 @@ function buildFactGovernanceDecision(candidate: ProfileFactUpsertInput): Profile
   const isAllowedExplicitResidenceSource =
     normalizedSource === "user_input_pattern.residence";
   const isAllowedExplicitGenericFactSource =
-    normalizedSource === "user_input_pattern.my_is";
+    normalizedSource === "user_input_pattern.my_is"
+    || ALLOWED_EXPLICIT_CURRENT_CONTACT_GENERIC_ASSOCIATION_SOURCES.has(normalizedSource);
   const isAllowedExplicitContactNameSource =
     ALLOWED_EXPLICIT_CONTACT_NAME_SOURCES.has(normalizedSource);
   const isAllowedExplicitCurrentContactRelationshipSource =
@@ -268,6 +270,40 @@ function buildFactGovernanceDecision(candidate: ProfileFactUpsertInput): Profile
       return buildDecision("contact.work_association", "user_explicit_fact", "quarantine", "unsupported_source");
     }
     return buildDecision("contact.work_association", "assistant_inference", "quarantine", "unsupported_source");
+  }
+  if (/^contact\.[^.]+\.organization_association$/.test(normalizedKey)) {
+    if (isValidatedStructuredSource) {
+      return buildDecision("contact.organization_association", "validated_structured_candidate", "quarantine", "unsupported_source");
+    }
+    if (isProjectionSource) {
+      return buildDecision("contact.organization_association", "reconciliation_or_projection", "quarantine", "unsupported_source");
+    }
+    if (ALLOWED_EXPLICIT_CURRENT_CONTACT_GENERIC_ASSOCIATION_SOURCES.has(normalizedSource)) {
+      return buildDecision("contact.organization_association", "user_explicit_fact", "allow_current_state", "explicit_user_fact");
+    }
+    if (isExplicitUserSource) {
+      return buildDecision("contact.organization_association", "user_explicit_fact", "quarantine", "unsupported_source");
+    }
+    return buildDecision("contact.organization_association", "assistant_inference", "quarantine", "unsupported_source");
+  }
+  if (
+    /^contact\.[^.]+\.(location_association|primary_location_association|secondary_location_association)$/.test(
+      normalizedKey
+    )
+  ) {
+    if (isValidatedStructuredSource) {
+      return buildDecision("contact.location_association", "validated_structured_candidate", "quarantine", "unsupported_source");
+    }
+    if (isProjectionSource) {
+      return buildDecision("contact.location_association", "reconciliation_or_projection", "quarantine", "unsupported_source");
+    }
+    if (ALLOWED_EXPLICIT_CURRENT_CONTACT_GENERIC_ASSOCIATION_SOURCES.has(normalizedSource)) {
+      return buildDecision("contact.location_association", "user_explicit_fact", "allow_current_state", "explicit_user_fact");
+    }
+    if (isExplicitUserSource) {
+      return buildDecision("contact.location_association", "user_explicit_fact", "quarantine", "unsupported_source");
+    }
+    return buildDecision("contact.location_association", "assistant_inference", "quarantine", "unsupported_source");
   }
   if (/^contact\.[^.]+\.school_association$/.test(normalizedKey)) {
     if (isValidatedStructuredSource) {

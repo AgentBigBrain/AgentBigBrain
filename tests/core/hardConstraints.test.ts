@@ -1572,6 +1572,34 @@ test("does not block respond action that recalls profile facts about the user", 
   );
 });
 
+test("does not block document-analysis responses when quoted OCR contains on-behalf-of language", () => {
+  const proposal = makeProposal({
+    rationale: [
+      "Current user request: Please review the attached PDF and tell me what concrete business names, identifiers, or filings it appears to contain.",
+      "",
+      "Attached media context:",
+      "- document summary: business filing for a limited liability company.",
+      "- OCR text: Legal entity name: ACME SAMPLE DESIGN, LLC. I certify that I am signing this document as an authorized agent. Authorized Agent Signer's Capacity Alex Sample On behalf of ASD."
+    ].join("\n"),
+    action: {
+      id: "action_respond_document_analysis",
+      type: "respond",
+      description: "Summarize the attached filing without inventing relationships.",
+      params: {
+        message:
+          "The filing appears to reference ACME SAMPLE DESIGN, LLC, the trade name SAMPLE TRADE NAME, and registration identifier 123456789."
+      },
+      estimatedCostUsd: 0.05
+    }
+  });
+
+  const violations = evaluateHardConstraints(proposal, DEFAULT_BRAIN_CONFIG);
+  assert.equal(
+    violations.some((violation) => violation.code === "IDENTITY_IMPERSONATION_DENIED"),
+    false
+  );
+});
+
 test("still blocks genuine impersonation even when profile recall stems appear", () => {
   const proposal = makeProposal({
     rationale: "I'll pretend to be a human and pass myself off as the owner.",

@@ -225,6 +225,36 @@ test("buildConversationAwareExecutionInput returns raw input when no context, st
   assert.equal(executionInput, "just do this");
 });
 
+test("buildConversationAwareExecutionInput emits a resolved semantic-route block when one is provided", async () => {
+  const session = buildSession();
+  const executionInput = await buildConversationAwareExecutionInput(
+    session,
+    'Build me a landing page in the exact folder "C:\\Users\\testuser\\Desktop\\Solar Energy Landing Page" on my Desktop.',
+    10,
+    null,
+    'Build me a landing page in the exact folder "C:\\Users\\testuser\\Desktop\\Solar Energy Landing Page" on my Desktop.',
+    undefined,
+    undefined,
+    null,
+    undefined,
+    null,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    "static_html_build"
+  );
+
+  assert.match(executionInput, /Resolved semantic route:/);
+  assert.match(executionInput, /- routeId: static_html_build/);
+  assert.match(
+    executionInput,
+    /Planner-policy must consume it before any lexical fallback\./
+  );
+});
+
 test("buildConversationAwareExecutionInput adds bounded self-identity facts for direct recall turns", async () => {
   const session = buildSession();
   const executionInput = await buildConversationAwareExecutionInput(
@@ -1600,6 +1630,96 @@ test("buildConversationAwareExecutionInput treats closing a named tracked worksp
   assert.match(executionInput, /prefer close_browser with params\.sessionId=browser_session:ai-drone-city/i);
 });
 
+test("buildConversationAwareExecutionInput frames exact local static artifact reopen turns as browser-open follow-ups instead of build continuity", async () => {
+  const session = buildSession();
+  session.modeContinuity = {
+    activeMode: "build",
+    source: "natural_intent",
+    confidence: "HIGH",
+    lastAffirmedAt: "2026-04-14T01:31:30.000Z",
+    lastUserInput:
+      'Create the landing page in "C:\\Users\\testuser\\Desktop\\Solar Energy Landing Page" and do not open it yet.'
+  };
+  session.returnHandoff = {
+    id: "handoff:solar-static-build",
+    status: "completed",
+    goal:
+      'Create the landing page in "C:\\Users\\testuser\\Desktop\\Solar Energy Landing Page" and do not open it yet.',
+    summary:
+      "I created or updated C:\\Users\\testuser\\Desktop\\Solar Energy Landing Page\\index.html.",
+    nextSuggestedStep: "Open the exact local file when the user asks.",
+    workspaceRootPath: "C:\\Users\\testuser\\Desktop\\Solar Energy Landing Page",
+    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\Solar Energy Landing Page\\index.html",
+    previewUrl: null,
+    changedPaths: ["C:\\Users\\testuser\\Desktop\\Solar Energy Landing Page\\index.html"],
+    sourceJobId: "job-solar-static-build",
+    updatedAt: "2026-04-14T01:33:57.677Z"
+  };
+  session.activeWorkspace = {
+    id: "workspace:solar-static",
+    label: "Current project workspace",
+    rootPath: "C:\\Users\\testuser\\Desktop\\Solar Energy Landing Page",
+    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\Solar Energy Landing Page\\index.html",
+    previewUrl: null,
+    browserSessionId: null,
+    browserSessionIds: [],
+    browserSessionStatus: null,
+    browserProcessPid: null,
+    previewProcessLeaseId: null,
+    previewProcessLeaseIds: [],
+    previewProcessCwd: null,
+    lastKnownPreviewProcessPid: null,
+    stillControllable: false,
+    ownershipState: "stale",
+    previewStackState: "detached",
+    lastChangedPaths: ["C:\\Users\\testuser\\Desktop\\Solar Energy Landing Page\\index.html"],
+    sourceJobId: "job-solar-static-build",
+    updatedAt: "2026-04-14T01:33:57.677Z"
+  };
+  session.recentActions.push({
+    id: "action-solar-static-index",
+    kind: "file",
+    label: "File index.html",
+    location: "C:\\Users\\testuser\\Desktop\\Solar Energy Landing Page\\index.html",
+    status: "updated",
+    sourceJobId: "job-solar-static-build",
+    at: "2026-04-14T01:33:57.677Z",
+    summary: "Wrote the static landing page."
+  });
+
+  const executionInput = await buildConversationAwareExecutionInput(
+    session,
+    "Once you're done with the landing page, open it in the browser so I can see it. Use the exact local file at \"C:\\Users\\testuser\\Desktop\\Solar Energy Landing Page\\index.html\". Do not start a dev server. Open the local static file directly with a file URL and leave that exact page open.",
+    10
+  );
+
+  assert.match(executionInput, /Existing local static-artifact open follow-up:/);
+  assert.match(
+    executionInput,
+    /Preferred artifact path: C:\\Users\\testuser\\Desktop\\Solar Energy Landing Page\\index\.html/
+  );
+  assert.match(
+    executionInput,
+    /Preferred browser target: file:\/\/\/C:\/Users\/testuser\/Desktop\/Solar%20Energy%20Landing%20Page\/index\.html/
+  );
+  assert.match(
+    executionInput,
+    /Prefer open_browser with params\.url=file:\/\/\/C:\/Users\/testuser\/Desktop\/Solar%20Energy%20Landing%20Page\/index\.html and params\.rootPath=C:\\Users\\testuser\\Desktop\\Solar Energy Landing Page\./
+  );
+  assert.match(
+    executionInput,
+    /Do not create, scaffold, edit, or rewrite project files for this turn unless the user explicitly asks for content changes\./
+  );
+  assert.match(
+    executionInput,
+    /The current turn explicitly forbids starting a dev or preview server, so do not use start_process, probe_http, or localhost verification for this open request\./
+  );
+  assert.doesNotMatch(executionInput, /Current working mode from earlier in this chat:/);
+  assert.doesNotMatch(executionInput, /Latest durable work handoff in this chat:/);
+  assert.match(executionInput, /Current tracked workspace in this chat:/);
+  assert.match(executionInput, /Recent user-visible actions in this chat:/);
+});
+
 test("buildConversationAwareExecutionInput does not treat keep the page open as a reopen request during normal conversation", async () => {
   const session = buildSession();
   session.browserSessions.push(buildConversationBrowserSessionFixture({
@@ -1704,7 +1824,10 @@ test("buildConversationAwareExecutionInput prefers stop_process first when live 
         cwd: "C:\\Users\\testuser\\Desktop\\drone-company",
         shellExecutable: "powershell.exe",
         shellKind: "powershell",
-        startedAt: "2026-03-03T00:00:20.000Z",
+    requestedHost: null,
+    requestedPort: null,
+    requestedUrl: null,
+    startedAt: "2026-03-03T00:00:20.000Z",
         statusCode: "PROCESS_STILL_RUNNING",
         exitCode: null,
         signal: null,
@@ -1900,7 +2023,10 @@ test("buildConversationAwareExecutionInput surfaces exact tracked workspace reco
         cwd: "C:\\Users\\testuser\\Desktop\\drone-company-live-smoke-1",
         shellExecutable: "powershell.exe",
         shellKind: "powershell",
-        startedAt: "2026-03-03T00:00:10.000Z",
+    requestedHost: null,
+    requestedPort: null,
+    requestedUrl: null,
+    startedAt: "2026-03-03T00:00:10.000Z",
         statusCode: "PROCESS_STILL_RUNNING",
         exitCode: null,
         signal: null,
@@ -1961,7 +2087,10 @@ test("buildConversationAwareExecutionInput distinguishes remembered preview leas
         cwd: "C:\\Users\\testuser\\Desktop\\drone-company-live-smoke-1",
         shellExecutable: "powershell.exe",
         shellKind: "powershell",
-        startedAt: "2026-03-03T00:00:10.000Z",
+    requestedHost: null,
+    requestedPort: null,
+    requestedUrl: null,
+    startedAt: "2026-03-03T00:00:10.000Z",
         statusCode: "PROCESS_STOPPED",
         exitCode: 0,
         signal: null,
@@ -2008,7 +2137,10 @@ test("buildConversationAwareExecutionInput surfaces matching runtime preview lea
         cwd: "C:\\Users\\testuser\\Desktop\\drone-company-live-smoke-1",
         shellExecutable: "powershell.exe",
         shellKind: "powershell",
-        startedAt: "2026-03-03T00:00:10.000Z",
+    requestedHost: null,
+    requestedPort: null,
+    requestedUrl: null,
+    startedAt: "2026-03-03T00:00:10.000Z",
         statusCode: "PROCESS_STILL_RUNNING",
         exitCode: null,
         signal: null,
@@ -2023,7 +2155,10 @@ test("buildConversationAwareExecutionInput surfaces matching runtime preview lea
         cwd: "C:\\Users\\testuser\\Desktop\\totally-different-project",
         shellExecutable: "powershell.exe",
         shellKind: "powershell",
-        startedAt: "2026-03-03T00:00:11.000Z",
+    requestedHost: null,
+    requestedPort: null,
+    requestedUrl: null,
+    startedAt: "2026-03-03T00:00:11.000Z",
         statusCode: "PROCESS_STILL_RUNNING",
         exitCode: null,
         signal: null,
@@ -2094,7 +2229,10 @@ test("buildConversationAwareExecutionInput surfaces attributable remembered root
         cwd: "C:\\Users\\testuser\\Desktop\\drone-company-live-smoke-1",
         shellExecutable: "powershell.exe",
         shellKind: "powershell",
-        startedAt: "2026-03-03T00:00:10.000Z",
+    requestedHost: null,
+    requestedPort: null,
+    requestedUrl: null,
+    startedAt: "2026-03-03T00:00:10.000Z",
         statusCode: "PROCESS_STOPPED",
         exitCode: 0,
         signal: null,
@@ -2349,6 +2487,68 @@ test("buildConversationAwareExecutionInput grounds broad Desktop cleanup for mat
   assert.doesNotMatch(executionInput, /Latest durable work handoff in this chat:/);
   assert.doesNotMatch(executionInput, /Current tracked workspace in this chat:/);
   assert.doesNotMatch(executionInput, /Tracked browser sessions:/);
+});
+
+test("buildConversationAwareExecutionInput does not misread start-to-finish phrasing as the desktop destination folder", async () => {
+  const session = buildSession();
+  session.modeContinuity = {
+    activeMode: "build",
+    source: "natural_intent",
+    confidence: "HIGH",
+    lastAffirmedAt: "2026-03-03T00:00:24.000Z",
+    lastUserInput: "Please build a small drone project in a folder called drone-company-organize-smoke-a."
+  };
+  session.returnHandoff = {
+    id: "handoff:drone-company-organize-smoke-b",
+    status: "completed",
+    goal: "Please build a small drone project in a folder called drone-company-organize-smoke-b.",
+    summary: "Created the second drone-company-organize-smoke workspace.",
+    nextSuggestedStep: "Tell me what to do next.",
+    workspaceRootPath: "C:\\Users\\testuser\\Desktop\\drone-company-organize-smoke-b",
+    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\drone-company-organize-smoke-b\\index.html",
+    previewUrl: null,
+    changedPaths: [
+      "C:\\Users\\testuser\\Desktop\\drone-company-organize-smoke-b\\index.html"
+    ],
+    sourceJobId: "job-cleanup-3",
+    updatedAt: "2026-03-03T00:00:25.000Z"
+  };
+  session.activeWorkspace = {
+    id: "workspace:drone-company-organize-smoke-b",
+    label: "Drone organize workspace",
+    rootPath: "C:\\Users\\testuser\\Desktop\\drone-company-organize-smoke-b",
+    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\drone-company-organize-smoke-b\\index.html",
+    previewUrl: null,
+    browserSessionId: null,
+    browserSessionIds: [],
+    browserSessionStatus: null,
+    browserProcessPid: null,
+    previewProcessLeaseId: null,
+    previewProcessLeaseIds: [],
+    previewProcessCwd: null,
+    lastKnownPreviewProcessPid: null,
+    stillControllable: false,
+    ownershipState: "stale",
+    previewStackState: "detached",
+    lastChangedPaths: [
+      "C:\\Users\\testuser\\Desktop\\drone-company-organize-smoke-b\\index.html"
+    ],
+    sourceJobId: "job-cleanup-3",
+    updatedAt: "2026-03-03T00:00:25.000Z"
+  };
+
+  const executionInput = await buildConversationAwareExecutionInput(
+    session,
+    "Please take this from start to finish: move the earlier drone-company-organize-smoke project folders into a folder called drone-web-projects on my desktop.",
+    10
+  );
+
+  assert.match(executionInput, /Natural desktop-organization follow-up:/);
+  assert.match(
+    executionInput,
+    /Treat the named destination as C:\\Users\\testuser\\Desktop\\drone-web-projects/i
+  );
+  assert.doesNotMatch(executionInput, /Desktop\\finish/i);
 });
 
 test("buildConversationAwareExecutionInput does not misread build destinations as Desktop cleanup work", async () => {

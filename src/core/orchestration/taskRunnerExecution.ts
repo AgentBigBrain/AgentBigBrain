@@ -21,7 +21,16 @@ import {
 } from "./taskRunnerSummary";
 
 type Metadata = Record<string, string | number | boolean | null>;
-type TaskRunnerExecutor = Pick<ToolExecutorOrgan, "prepare" | "executeWithOutcome" | "consumeShellExecutionTelemetry">;
+interface TaskRunnerExecutor {
+  prepare: ToolExecutorOrgan["prepare"];
+  executeWithOutcome: (
+    action: ActionRunResult["action"],
+    signal?: AbortSignal,
+    taskId?: string,
+    executionContext?: { userInput?: string | null }
+  ) => ReturnType<ToolExecutorOrgan["executeWithOutcome"]>;
+  consumeShellExecutionTelemetry: ToolExecutorOrgan["consumeShellExecutionTelemetry"];
+}
 type Stage686Runtime = Pick<Stage686RuntimeActionEngine, "execute">;
 type ShellExecutionTelemetry = ReturnType<ToolExecutorOrgan["consumeShellExecutionTelemetry"]>;
 
@@ -107,7 +116,10 @@ export async function executeTaskRunnerAction(
       executionOutcome = await input.executor.executeWithOutcome(
         input.action,
         input.signal,
-        input.taskId
+        input.taskId,
+        {
+          userInput: input.userInput
+        }
       );
       shellExecutionTelemetry = input.executor.consumeShellExecutionTelemetry(input.action.id) ?? undefined;
     }

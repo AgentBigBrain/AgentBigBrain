@@ -16,6 +16,7 @@ import {
   PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME,
   PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME,
   createEmptyProfileMemoryState,
+  type ProfileMemoryState,
   upsertTemporalProfileFact
 } from "../../src/core/profileMemory";
 import {
@@ -44,6 +45,14 @@ import {
 import {
   upsertOpenLoopOnConversationStackV1
 } from "../../src/core/stage6_86OpenLoops";
+import type {
+  ProfileMemoryGraphClaimPayloadV1,
+  ProfileMemoryGraphClaimRecord,
+  ProfileMemoryGraphEventPayloadV1,
+  ProfileMemoryGraphEventRecord,
+  ProfileMemoryGraphObservationPayloadV1,
+  ProfileMemoryGraphObservationRecord
+} from "../../src/core/profileMemoryRuntime/profileMemoryGraphContracts";
 
 function createPersistedGraphEnvelope<TPayload>(
   schemaName: string,
@@ -59,23 +68,73 @@ function createPersistedGraphEnvelope<TPayload>(
   };
 }
 
+function createGraphObservationEnvelope(
+  payload: ProfileMemoryGraphObservationPayloadV1,
+  createdAt?: string
+): ProfileMemoryGraphObservationRecord {
+  return createSchemaEnvelopeV1(
+    PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME,
+    payload,
+    createdAt
+  ) as ProfileMemoryGraphObservationRecord;
+}
+
+function createGraphClaimEnvelope(
+  payload: ProfileMemoryGraphClaimPayloadV1,
+  createdAt?: string
+): ProfileMemoryGraphClaimRecord {
+  return createSchemaEnvelopeV1(
+    PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME,
+    payload,
+    createdAt
+  ) as ProfileMemoryGraphClaimRecord;
+}
+
+function createGraphEventEnvelope(
+  payload: ProfileMemoryGraphEventPayloadV1,
+  createdAt?: string
+): ProfileMemoryGraphEventRecord {
+  return createSchemaEnvelopeV1(
+    PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME,
+    payload,
+    createdAt
+  ) as ProfileMemoryGraphEventRecord;
+}
+
 /**
  * Implements `withProfileStore` behavior within module scope.
  * Interacts with local collaborators through imported modules and typed inputs/outputs.
  */
 async function withProfileStore(
-  callback: (store: ProfileMemoryStore, filePath: string) => Promise<void>
+  callback: (store: ProfileMemoryStore, filePath: string) => Promise<void>,
+  options: ConstructorParameters<typeof ProfileMemoryStore>[3] = {}
 ): Promise<void> {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-profile-"));
   const filePath = path.join(tempDir, "profile_memory.secure.json");
   const keyBase64 = Buffer.alloc(32, 7).toString("base64");
-  const store = new ProfileMemoryStore(filePath, Buffer.from(keyBase64, "base64"), 90);
+  const store = new ProfileMemoryStore(filePath, Buffer.from(keyBase64, "base64"), 90, options);
 
   try {
     await callback(store, filePath);
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }
+}
+
+async function saveSeededProfileMemoryState(
+  filePath: string,
+  encryptionKey: Buffer,
+  seededState: unknown
+): Promise<void> {
+  await saveProfileMemoryState(filePath, encryptionKey, seededState as ProfileMemoryState);
+}
+
+function asProfileMemoryState(seededState: unknown): ProfileMemoryState {
+  return seededState as ProfileMemoryState;
+}
+
+function lastItem<TItem>(items: readonly TItem[]): TItem | undefined {
+  return items[items.length - 1];
 }
 
 test("profile memory persists encrypted content and omits plaintext values at rest", async () => {
@@ -104,7 +163,7 @@ test("profile memory load returns reconciled stale snapshots without rewriting e
       observedAt: "2025-01-01T00:00:00.000Z",
       confidence: 0.95
     }).nextState;
-    await saveProfileMemoryState(filePath, Buffer.alloc(32, 7), seededState);
+    await saveSeededProfileMemoryState(filePath, Buffer.alloc(32, 7), seededState);
 
     const rawBefore = await readFile(filePath, "utf8");
     const loaded = await store.load();
@@ -127,7 +186,7 @@ test("profile memory repairPersistedState persists deterministic read-time repai
       observedAt: "2025-01-01T00:00:00.000Z",
       confidence: 0.95
     }).nextState;
-    await saveProfileMemoryState(filePath, Buffer.alloc(32, 7), seededState);
+    await saveSeededProfileMemoryState(filePath, Buffer.alloc(32, 7), seededState);
 
     const rawBefore = await readFile(filePath, "utf8");
     const repaired = await store.repairPersistedState();
@@ -200,7 +259,7 @@ test("profile memory load preserves additive graph state during stale-fact recon
         ...seededState.graph,
         updatedAt: "2026-04-03T21:00:00.000Z",
         claims: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+          createGraphClaimEnvelope({
             claimId: "claim_profile_graph_store_load",
             stableRefId: "stable_lantern",
             family: "employment.current",
@@ -243,7 +302,7 @@ test("profile memory load preserves additive graph state during stale-fact recon
         }
       }
     };
-    await saveProfileMemoryState(filePath, Buffer.alloc(32, 7), seededState);
+    await saveSeededProfileMemoryState(filePath, Buffer.alloc(32, 7), seededState);
 
     const loaded = await store.load();
     assert.equal(loaded.graph.claims.length, 1);
@@ -267,7 +326,7 @@ test("profile memory load dedupes duplicate graph claim envelopes before rebuild
         ...emptyState.graph,
         updatedAt: "2026-04-03T21:10:00.000Z",
         claims: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+          createGraphClaimEnvelope({
             claimId: "claim_profile_graph_store_duplicate",
             stableRefId: null,
             family: "identity.preferred_name",
@@ -289,7 +348,7 @@ test("profile memory load dedupes duplicate graph claim envelopes before rebuild
             entityRefIds: [],
             active: true
           }, "2026-04-03T21:00:00.000Z"),
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+          createGraphClaimEnvelope({
             claimId: "claim_profile_graph_store_duplicate",
             stableRefId: null,
             family: "identity.preferred_name",
@@ -314,7 +373,7 @@ test("profile memory load dedupes duplicate graph claim envelopes before rebuild
         ]
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
 
@@ -335,7 +394,7 @@ test("profile memory load repairs authoritative active claims with same-key diff
         ...emptyState.graph,
         updatedAt: "2026-04-04T14:00:00.000Z",
         claims: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+          createGraphClaimEnvelope({
             claimId: "claim_profile_graph_store_conflict_1",
             stableRefId: null,
             family: "identity.preferred_name",
@@ -359,7 +418,7 @@ test("profile memory load repairs authoritative active claims with same-key diff
             entityRefIds: [],
             active: true
           }),
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+          createGraphClaimEnvelope({
             claimId: "claim_profile_graph_store_conflict_2",
             stableRefId: null,
             family: "identity.preferred_name",
@@ -391,7 +450,7 @@ test("profile memory load repairs authoritative active claims with same-key diff
         }
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
     assert.equal(loaded.graph.claims.length, 2);
@@ -432,7 +491,7 @@ test("profile memory load ignores blank-family or blank-key claims in derived fa
         ...emptyState.graph,
         updatedAt: "2026-04-04T16:00:00.000Z",
         claims: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+          createGraphClaimEnvelope({
             claimId: "claim_profile_graph_store_blank_guard_valid",
             stableRefId: null,
             family: "identity.preferred_name",
@@ -456,7 +515,7 @@ test("profile memory load ignores blank-family or blank-key claims in derived fa
             entityRefIds: [],
             active: true
           }),
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+          createGraphClaimEnvelope({
             claimId: "claim_profile_graph_store_blank_guard_family",
             stableRefId: null,
             family: "   ",
@@ -480,7 +539,7 @@ test("profile memory load ignores blank-family or blank-key claims in derived fa
             entityRefIds: [],
             active: true
           }),
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+          createGraphClaimEnvelope({
             claimId: "claim_profile_graph_store_blank_guard_key",
             stableRefId: null,
             family: "identity.preferred_name",
@@ -506,7 +565,7 @@ test("profile memory load ignores blank-family or blank-key claims in derived fa
           })
         ],
         events: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+          createGraphEventEnvelope({
             eventId: "event_profile_graph_store_blank_guard_family",
             stableRefId: null,
             family: "   ",
@@ -536,7 +595,7 @@ test("profile memory load ignores blank-family or blank-key claims in derived fa
         }
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
 
@@ -570,7 +629,7 @@ test("profile memory load does not backfill observations or replay markers for b
         ...emptyState.graph,
         updatedAt: "2026-04-04T16:05:00.000Z",
         claims: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+          createGraphClaimEnvelope({
             claimId: "claim_profile_graph_store_blank_replay_family",
             stableRefId: null,
             family: "   ",
@@ -594,7 +653,7 @@ test("profile memory load does not backfill observations or replay markers for b
             entityRefIds: [],
             active: true
           }),
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+          createGraphClaimEnvelope({
             claimId: "claim_profile_graph_store_blank_replay_key",
             stableRefId: null,
             family: "identity.preferred_name",
@@ -626,7 +685,7 @@ test("profile memory load does not backfill observations or replay markers for b
         }
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
 
@@ -647,7 +706,7 @@ test("profile memory load does not backfill replay or current-state surfaces for
         ...emptyState.graph,
         updatedAt: "2026-04-04T16:06:00.000Z",
         claims: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+          createGraphClaimEnvelope({
             claimId: "claim_profile_graph_store_null_value_replay_null",
             stableRefId: null,
             family: "identity.preferred_name",
@@ -671,7 +730,7 @@ test("profile memory load does not backfill replay or current-state surfaces for
             entityRefIds: [],
             active: true
           }),
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+          createGraphClaimEnvelope({
             claimId: "claim_profile_graph_store_null_value_replay_blank",
             stableRefId: null,
             family: "identity.preferred_name",
@@ -703,7 +762,7 @@ test("profile memory load does not backfill replay or current-state surfaces for
         }
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
 
@@ -725,7 +784,7 @@ test("profile memory load keeps preserve-prior graph claim ambiguity visible wit
         ...emptyState.graph,
         updatedAt: "2026-04-06T00:00:00.000Z",
         claims: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+          createGraphClaimEnvelope({
             claimId: "claim_profile_graph_store_preserve_conflict_1",
             stableRefId: null,
             family: "employment.current",
@@ -749,7 +808,7 @@ test("profile memory load keeps preserve-prior graph claim ambiguity visible wit
             entityRefIds: [],
             active: true
           }),
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+          createGraphClaimEnvelope({
             claimId: "claim_profile_graph_store_preserve_conflict_2",
             stableRefId: null,
             family: "employment.current",
@@ -781,7 +840,7 @@ test("profile memory load keeps preserve-prior graph claim ambiguity visible wit
         }
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
     const activeClaims = loaded.graph.claims.filter((claim) => claim.payload.active);
@@ -831,7 +890,7 @@ test("profile memory load keeps support-only retained graph claims canonical-onl
         ...emptyState.graph,
         updatedAt: "2026-04-06T00:30:00.000Z",
         claims: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+          createGraphClaimEnvelope({
             claimId: "claim_profile_graph_store_support_only_context_1",
             stableRefId: null,
             family: "contact.context",
@@ -855,7 +914,7 @@ test("profile memory load keeps support-only retained graph claims canonical-onl
             entityRefIds: ["entity_owen"],
             active: true
           }),
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+          createGraphClaimEnvelope({
             claimId: "claim_profile_graph_store_followup_resolution_1",
             stableRefId: null,
             family: "followup.resolution",
@@ -887,7 +946,7 @@ test("profile memory load keeps support-only retained graph claims canonical-onl
         }
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
     const supportOnlyClaim = loaded.graph.claims.find(
@@ -943,7 +1002,7 @@ test("profile memory load keeps family-mismatched retained graph claims canonica
         ...emptyState.graph,
         updatedAt: "2026-04-06T00:40:00.000Z",
         claims: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+          createGraphClaimEnvelope({
             claimId: "claim_profile_graph_store_family_mismatch_1",
             stableRefId: null,
             family: "contact.context",
@@ -967,7 +1026,7 @@ test("profile memory load keeps family-mismatched retained graph claims canonica
             entityRefIds: [],
             active: true
           }),
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+          createGraphClaimEnvelope({
             claimId: "claim_profile_graph_store_family_mismatch_followup_1",
             stableRefId: null,
             family: "followup.resolution",
@@ -999,7 +1058,7 @@ test("profile memory load keeps family-mismatched retained graph claims canonica
         }
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
     const mismatchedClaim = loaded.graph.claims.find(
@@ -1047,7 +1106,7 @@ test("profile memory load keeps family-mismatched retained graph claims out of c
         ...emptyState.graph,
         updatedAt: "2026-04-06T00:50:00.000Z",
         claims: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+          createGraphClaimEnvelope({
             claimId: "claim_profile_graph_store_mismatch_authoritative",
             stableRefId: null,
             family: "contact.context",
@@ -1071,7 +1130,7 @@ test("profile memory load keeps family-mismatched retained graph claims out of c
             entityRefIds: [],
             active: true
           }),
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+          createGraphClaimEnvelope({
             claimId: "claim_profile_graph_store_aligned_authoritative",
             stableRefId: null,
             family: "identity.preferred_name",
@@ -1095,7 +1154,7 @@ test("profile memory load keeps family-mismatched retained graph claims out of c
             entityRefIds: [],
             active: true
           }),
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+          createGraphClaimEnvelope({
             claimId: "claim_profile_graph_store_mismatch_preserve",
             stableRefId: null,
             family: "identity.preferred_name",
@@ -1119,7 +1178,7 @@ test("profile memory load keeps family-mismatched retained graph claims out of c
             entityRefIds: [],
             active: true
           }),
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+          createGraphClaimEnvelope({
             claimId: "claim_profile_graph_store_aligned_preserve",
             stableRefId: null,
             family: "employment.current",
@@ -1151,7 +1210,7 @@ test("profile memory load keeps family-mismatched retained graph claims out of c
         }
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
     const mismatchedAuthoritative = loaded.graph.claims.find(
@@ -1208,7 +1267,7 @@ test("profile memory load keeps source-tier-invalid retained graph claims out of
         ...emptyState.graph,
         updatedAt: "2026-04-06T02:10:00.000Z",
         claims: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+          createGraphClaimEnvelope({
             claimId: "claim_profile_graph_store_invalid_source_authoritative",
             stableRefId: null,
             family: "identity.preferred_name",
@@ -1232,7 +1291,7 @@ test("profile memory load keeps source-tier-invalid retained graph claims out of
             entityRefIds: [],
             active: true
           }),
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+          createGraphClaimEnvelope({
             claimId: "claim_profile_graph_store_valid_source_authoritative",
             stableRefId: null,
             family: "identity.preferred_name",
@@ -1256,7 +1315,7 @@ test("profile memory load keeps source-tier-invalid retained graph claims out of
             entityRefIds: [],
             active: true
           }),
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+          createGraphClaimEnvelope({
             claimId: "claim_profile_graph_store_invalid_source_preserve",
             stableRefId: null,
             family: "employment.current",
@@ -1280,7 +1339,7 @@ test("profile memory load keeps source-tier-invalid retained graph claims out of
             entityRefIds: [],
             active: true
           }),
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+          createGraphClaimEnvelope({
             claimId: "claim_profile_graph_store_valid_source_preserve",
             stableRefId: null,
             family: "employment.current",
@@ -1312,7 +1371,7 @@ test("profile memory load keeps source-tier-invalid retained graph claims out of
         }
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
     const invalidAuthoritative = loaded.graph.claims.find(
@@ -1369,7 +1428,7 @@ test("profile memory load dedupes duplicate entity refs inside one retained grap
         ...emptyState.graph,
         updatedAt: "2026-04-04T16:00:00.000Z",
         claims: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+          createGraphClaimEnvelope({
             claimId: "claim_profile_graph_store_entity_ref_duplicate",
             stableRefId: null,
             family: "employment.current",
@@ -1395,7 +1454,7 @@ test("profile memory load dedupes duplicate entity refs inside one retained grap
           })
         ],
         events: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+          createGraphEventEnvelope({
             eventId: "event_profile_graph_store_entity_ref_duplicate",
             stableRefId: null,
             family: "episode.candidate",
@@ -1425,7 +1484,7 @@ test("profile memory load dedupes duplicate entity refs inside one retained grap
         }
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
     assert.deepEqual(loaded.graph.indexes.byEntityRefId, {
@@ -1447,7 +1506,7 @@ test("profile memory load prunes duplicate and dangling observation lineage refs
         ...emptyState.graph,
         updatedAt: "2026-04-04T16:10:00.000Z",
         observations: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+          createGraphObservationEnvelope({
             observationId: "observation_profile_graph_store_lineage_valid",
             stableRefId: null,
             family: "contact.context",
@@ -1467,7 +1526,7 @@ test("profile memory load prunes duplicate and dangling observation lineage refs
           })
         ],
         claims: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+          createGraphClaimEnvelope({
             claimId: "claim_profile_graph_store_lineage_duplicate",
             stableRefId: null,
             family: "employment.current",
@@ -1497,7 +1556,7 @@ test("profile memory load prunes duplicate and dangling observation lineage refs
           })
         ],
         events: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+          createGraphEventEnvelope({
             eventId: "event_profile_graph_store_lineage_duplicate",
             stableRefId: null,
             family: "episode.candidate",
@@ -1531,7 +1590,7 @@ test("profile memory load prunes duplicate and dangling observation lineage refs
         }
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
     assert.deepEqual(
@@ -1555,7 +1614,7 @@ test("profile memory load prunes conflicting same-lane claim lineage refs while 
         ...emptyState.graph,
         updatedAt: "2026-04-04T16:12:00.000Z",
         observations: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+          createGraphObservationEnvelope({
             observationId: "observation_profile_graph_store_lineage_supporting_context",
             stableRefId: null,
             family: "contact.context",
@@ -1573,7 +1632,7 @@ test("profile memory load prunes conflicting same-lane claim lineage refs while 
             timeSource: "user_stated",
             entityRefIds: ["entity_owen"]
           }),
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+          createGraphObservationEnvelope({
             observationId: "observation_profile_graph_store_lineage_conflicting_same_lane",
             stableRefId: null,
             family: "identity.preferred_name",
@@ -1593,7 +1652,7 @@ test("profile memory load prunes conflicting same-lane claim lineage refs while 
           })
         ],
         claims: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+          createGraphClaimEnvelope({
             claimId: "claim_profile_graph_store_lineage_supporting_context_only",
             stableRefId: null,
             family: "identity.preferred_name",
@@ -1629,7 +1688,7 @@ test("profile memory load prunes conflicting same-lane claim lineage refs while 
         }
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
 
@@ -1642,7 +1701,7 @@ test("profile memory load prunes conflicting same-lane claim lineage refs while 
         .sort((left, right) => left.localeCompare(right))
     );
     assert.equal(
-      loaded.graph.mutationJournal.entries[0]?.sourceFingerprint.startsWith(
+      loaded.graph.mutationJournal.entries[0]?.sourceFingerprint?.startsWith(
         "graph_observation_replay_backfill_"
       ),
       true
@@ -1652,7 +1711,7 @@ test("profile memory load prunes conflicting same-lane claim lineage refs while 
       ["claim_profile_graph_store_lineage_supporting_context_only"]
     );
     assert.equal(
-      loaded.graph.mutationJournal.entries[1]?.sourceFingerprint.startsWith(
+      loaded.graph.mutationJournal.entries[1]?.sourceFingerprint?.startsWith(
         "graph_claim_replay_backfill_"
       ),
       true
@@ -1682,7 +1741,7 @@ test("profile memory load prunes malformed claim successor refs", async () => {
         ...emptyState.graph,
         updatedAt: "2026-04-04T16:15:00.000Z",
         claims: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+          createGraphClaimEnvelope({
             claimId: "claim_profile_graph_store_successor_dangling",
             stableRefId: null,
             family: "employment.current",
@@ -1706,7 +1765,7 @@ test("profile memory load prunes malformed claim successor refs", async () => {
             entityRefIds: [],
             active: false
           }),
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+          createGraphClaimEnvelope({
             claimId: "claim_profile_graph_store_successor_active_stray",
             stableRefId: null,
             family: "employment.current",
@@ -1730,7 +1789,7 @@ test("profile memory load prunes malformed claim successor refs", async () => {
             entityRefIds: [],
             active: true
           }),
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+          createGraphClaimEnvelope({
             claimId: "claim_profile_graph_store_successor_closed_valid",
             stableRefId: null,
             family: "identity.preferred_name",
@@ -1754,7 +1813,7 @@ test("profile memory load prunes malformed claim successor refs", async () => {
             entityRefIds: [],
             active: false
           }),
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+          createGraphClaimEnvelope({
             claimId: "claim_profile_graph_store_successor_valid",
             stableRefId: null,
             family: "identity.preferred_name",
@@ -1778,7 +1837,7 @@ test("profile memory load prunes malformed claim successor refs", async () => {
             entityRefIds: [],
             active: true
           }),
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+          createGraphClaimEnvelope({
             claimId: "claim_profile_graph_store_successor_wrong_key",
             stableRefId: null,
             family: "contact.owen.relationship",
@@ -1810,7 +1869,7 @@ test("profile memory load prunes malformed claim successor refs", async () => {
         }
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
     const claimById = new Map(
@@ -1845,7 +1904,7 @@ test("profile memory load repairs malformed claim lifecycle boundaries", async (
         ...emptyState.graph,
         updatedAt: "2026-04-04T16:16:00.000Z",
         claims: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+          createGraphClaimEnvelope({
             claimId: "claim_profile_graph_store_lifecycle_active_stray",
             stableRefId: null,
             family: "employment.current",
@@ -1869,7 +1928,7 @@ test("profile memory load repairs malformed claim lifecycle boundaries", async (
             entityRefIds: [],
             active: true
           }),
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+          createGraphClaimEnvelope({
             claimId: "claim_profile_graph_store_lifecycle_inactive_mismatch",
             stableRefId: null,
             family: "identity.preferred_name",
@@ -1893,7 +1952,7 @@ test("profile memory load repairs malformed claim lifecycle boundaries", async (
             entityRefIds: [],
             active: false
           }),
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+          createGraphClaimEnvelope({
             claimId: "claim_profile_graph_store_lifecycle_redacted_active",
             stableRefId: "stable_owen",
             family: "contact.owen.relationship",
@@ -1925,7 +1984,7 @@ test("profile memory load repairs malformed claim lifecycle boundaries", async (
         }
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
     const claimById = new Map(
@@ -1992,7 +2051,7 @@ test("profile memory load repairs malformed graph timestamps before lifecycle no
         ...emptyState.graph,
         updatedAt: "2026-04-04T16:17:00.000Z",
         observations: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+          createGraphObservationEnvelope({
             observationId: "observation_profile_graph_store_time_redacted_invalid",
             stableRefId: null,
             family: "identity.preferred_name",
@@ -2012,7 +2071,7 @@ test("profile memory load repairs malformed graph timestamps before lifecycle no
           })
         ],
         claims: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+          createGraphClaimEnvelope({
             claimId: "claim_profile_graph_store_time_redacted_invalid",
             stableRefId: null,
             family: "employment.current",
@@ -2038,7 +2097,7 @@ test("profile memory load repairs malformed graph timestamps before lifecycle no
           })
         ],
         events: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+          createGraphEventEnvelope({
             eventId: "event_profile_graph_store_time_redacted_invalid",
             stableRefId: null,
             family: "episode.candidate",
@@ -2063,7 +2122,7 @@ test("profile memory load repairs malformed graph timestamps before lifecycle no
         ]
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
     const observation = loaded.graph.observations.find(
@@ -2107,7 +2166,7 @@ test("profile memory load repairs mixed-policy followup active claim conflicts b
         ...emptyState.graph,
         updatedAt: "2026-04-05T01:00:00.000Z",
         claims: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+          createGraphClaimEnvelope({
             claimId: "claim_profile_graph_store_followup_pending",
             stableRefId: null,
             family: "generic.profile_fact",
@@ -2131,7 +2190,7 @@ test("profile memory load repairs mixed-policy followup active claim conflicts b
             entityRefIds: [],
             active: true
           }),
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+          createGraphClaimEnvelope({
             claimId: "claim_profile_graph_store_followup_resolved",
             stableRefId: null,
             family: "followup.resolution",
@@ -2155,7 +2214,7 @@ test("profile memory load repairs mixed-policy followup active claim conflicts b
             entityRefIds: [],
             active: true
           }),
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+          createGraphClaimEnvelope({
             claimId: "claim_profile_graph_store_followup_waiting",
             stableRefId: null,
             family: "generic.profile_fact",
@@ -2187,7 +2246,7 @@ test("profile memory load repairs mixed-policy followup active claim conflicts b
         }
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
     const activeClaims = loaded.graph.claims.filter((claim) => claim.payload.active);
@@ -2241,7 +2300,7 @@ test("profile memory load trims padded graph payload timestamps before lifecycle
         ...emptyState.graph,
         updatedAt: "2026-04-04T16:20:00.000Z",
         observations: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+          createGraphObservationEnvelope({
             observationId: "observation_profile_graph_store_time_trimmed",
             stableRefId: null,
             family: "identity.preferred_name",
@@ -2261,7 +2320,7 @@ test("profile memory load trims padded graph payload timestamps before lifecycle
           })
         ],
         claims: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+          createGraphClaimEnvelope({
             claimId: "claim_profile_graph_store_time_trimmed",
             stableRefId: null,
             family: "employment.current",
@@ -2287,7 +2346,7 @@ test("profile memory load trims padded graph payload timestamps before lifecycle
           })
         ],
         events: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+          createGraphEventEnvelope({
             eventId: "event_profile_graph_store_time_trimmed",
             stableRefId: null,
             family: "episode.candidate",
@@ -2312,7 +2371,7 @@ test("profile memory load trims padded graph payload timestamps before lifecycle
         ]
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
     const observation = loaded.graph.observations.find(
@@ -2352,7 +2411,7 @@ test("profile memory load repairs malformed observation redaction boundaries", a
         ...emptyState.graph,
         updatedAt: "2026-04-04T16:18:00.000Z",
         observations: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+          createGraphObservationEnvelope({
             observationId: "observation_profile_graph_store_lifecycle_active_stray",
             stableRefId: null,
             family: "employment.current",
@@ -2371,7 +2430,7 @@ test("profile memory load repairs malformed observation redaction boundaries", a
             timeSource: "user_stated",
             entityRefIds: []
           }),
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+          createGraphObservationEnvelope({
             observationId: "observation_profile_graph_store_lifecycle_redacted_raw",
             stableRefId: "stable_avery",
             family: "identity.preferred_name",
@@ -2398,7 +2457,7 @@ test("profile memory load repairs malformed observation redaction boundaries", a
         }
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
     const observationById = new Map(
@@ -2445,7 +2504,7 @@ test("profile memory load repairs malformed event lifecycle boundaries", async (
         ...emptyState.graph,
         updatedAt: "2026-04-04T16:20:00.000Z",
         events: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+          createGraphEventEnvelope({
             eventId: "event_profile_graph_store_lifecycle_active_stray",
             stableRefId: null,
             family: "episode.candidate",
@@ -2467,7 +2526,7 @@ test("profile memory load repairs malformed event lifecycle boundaries", async (
             projectionSourceIds: ["episode_profile_graph_store_event_lifecycle_active_stray"],
             entityRefIds: ["entity_owen"]
           }),
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+          createGraphEventEnvelope({
             eventId: "event_profile_graph_store_lifecycle_redacted_active",
             stableRefId: "stable_episode_owen",
             family: "episode.candidate",
@@ -2489,7 +2548,7 @@ test("profile memory load repairs malformed event lifecycle boundaries", async (
             projectionSourceIds: ["episode_profile_graph_store_event_lifecycle_redacted_active"],
             entityRefIds: ["entity_owen"]
           }),
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+          createGraphEventEnvelope({
             eventId: "event_profile_graph_store_lifecycle_redacted_resolved",
             stableRefId: null,
             family: "episode.candidate",
@@ -2519,7 +2578,7 @@ test("profile memory load repairs malformed event lifecycle boundaries", async (
         }
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
     const eventById = new Map(
@@ -2582,7 +2641,7 @@ test("profile memory load trims padded graph semantic identity, clears blank opt
         ...emptyState.graph,
         updatedAt: "2026-04-04T16:20:30.000Z",
         observations: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+          createGraphObservationEnvelope({
             observationId: "observation_profile_graph_store_metadata_blank",
             stableRefId: "   ",
             family: " identity.preferred_name ",
@@ -2602,7 +2661,7 @@ test("profile memory load trims padded graph semantic identity, clears blank opt
           })
         ],
         claims: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+          createGraphClaimEnvelope({
             claimId: "claim_profile_graph_store_metadata_blank",
             stableRefId: " stable_avery ",
             family: " identity.preferred_name ",
@@ -2626,7 +2685,7 @@ test("profile memory load trims padded graph semantic identity, clears blank opt
             entityRefIds: [],
             active: false
           }),
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+          createGraphClaimEnvelope({
             claimId: "claim_profile_graph_store_metadata_blank_successor",
             stableRefId: null,
             family: "identity.preferred_name",
@@ -2652,7 +2711,7 @@ test("profile memory load trims padded graph semantic identity, clears blank opt
           })
         ],
         events: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+          createGraphEventEnvelope({
             eventId: "event_profile_graph_store_metadata_blank",
             stableRefId: "   ",
             family: " episode.candidate ",
@@ -2707,7 +2766,7 @@ test("profile memory load trims padded graph semantic identity, clears blank opt
         }
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
     const observation = loaded.graph.observations.find(
@@ -2843,7 +2902,7 @@ test("profile memory load recovers retained journal entries when journalEntryId 
       }
     };
 
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
     const recoveredJournalEntryId =
@@ -2920,7 +2979,7 @@ test("profile memory load keeps retained journal entries when optional metadata 
         }
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
 
@@ -2997,7 +3056,7 @@ test("profile memory load keeps retained journal entries when optional metadata 
       }
     };
 
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
     assert.equal(loaded.graph.mutationJournal.entries.length, 1);
@@ -3073,7 +3132,7 @@ test("profile memory load keeps retained journal entries when redactionState is 
       }
     };
 
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
     assert.equal(loaded.graph.mutationJournal.entries.length, 1);
@@ -3131,7 +3190,7 @@ test("profile memory load drops retained journal entries when redactionState is 
         }
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
 
@@ -3195,7 +3254,7 @@ test("profile memory load keeps retained journal entries when empty ref arrays a
       }
     };
 
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
     assert.equal(loaded.graph.mutationJournal.entries.length, 1);
@@ -3305,7 +3364,7 @@ test("profile memory load keeps retained journal entries when ref arrays contain
       }
     };
 
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
     assert.equal(loaded.graph.mutationJournal.entries.length, 1);
@@ -3385,7 +3444,7 @@ test("profile memory load keeps retained journal entries when ref array containe
       }
     };
 
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
     assert.equal(loaded.graph.mutationJournal.entries.length, 1);
@@ -3463,7 +3522,7 @@ test("profile memory load keeps retained journal entries when watermark is malfo
       }
     };
 
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
     assert.equal(loaded.graph.mutationJournal.entries.length, 1);
@@ -3549,7 +3608,7 @@ test("profile memory load keeps retained journal entries when watermark is omitt
       }
     };
 
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
     assert.equal(loaded.graph.mutationJournal.entries.length, 1);
@@ -3674,7 +3733,7 @@ test("profile memory load recovers omitted journal watermarks without collapsing
       }
     };
 
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
     assert.deepEqual(
@@ -3760,7 +3819,7 @@ test("profile memory load recovers same-timestamp omitted journal watermarks abo
         ...emptyState.graph,
         updatedAt: "2026-04-04T17:22:00.000Z",
         observations: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+          createGraphObservationEnvelope({
             observationId: explicitObservationId,
             stableRefId: null,
             family: "contact.context",
@@ -3778,7 +3837,7 @@ test("profile memory load recovers same-timestamp omitted journal watermarks abo
             timeSource: "user_stated",
             entityRefIds: []
           }),
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+          createGraphObservationEnvelope({
             observationId: recoveredObservationId,
             stableRefId: null,
             family: "contact.context",
@@ -3832,7 +3891,7 @@ test("profile memory load recovers same-timestamp omitted journal watermarks abo
         }
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
 
@@ -3917,7 +3976,7 @@ test("profile memory load treats zero journal watermarks like recovered replay o
         ...emptyState.graph,
         updatedAt: "2026-04-04T17:26:00.000Z",
         observations: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+          createGraphObservationEnvelope({
             observationId: explicitObservationId,
             stableRefId: null,
             family: "contact.context",
@@ -3935,7 +3994,7 @@ test("profile memory load treats zero journal watermarks like recovered replay o
             timeSource: "user_stated",
             entityRefIds: []
           }),
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+          createGraphObservationEnvelope({
             observationId: recoveredObservationId,
             stableRefId: null,
             family: "contact.context",
@@ -3990,7 +4049,7 @@ test("profile memory load treats zero journal watermarks like recovered replay o
         }
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
 
@@ -4075,7 +4134,7 @@ test("profile memory load treats negative journal watermarks like recovered repl
         ...emptyState.graph,
         updatedAt: "2026-04-08T15:28:00.000Z",
         observations: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+          createGraphObservationEnvelope({
             observationId: explicitObservationId,
             stableRefId: null,
             family: "contact.context",
@@ -4093,7 +4152,7 @@ test("profile memory load treats negative journal watermarks like recovered repl
             timeSource: "user_stated",
             entityRefIds: []
           }),
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+          createGraphObservationEnvelope({
             observationId: recoveredObservationId,
             stableRefId: null,
             family: "contact.context",
@@ -4148,7 +4207,7 @@ test("profile memory load treats negative journal watermarks like recovered repl
         }
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
 
@@ -4226,7 +4285,7 @@ test("profile memory load keeps retained journal nextWatermark canonical when it
       }
     };
 
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
     assert.equal(loaded.graph.mutationJournal.entries.length, 1);
@@ -4303,7 +4362,7 @@ test("profile memory load keeps retained journal nextWatermark canonical when it
       }
     };
 
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
     assert.equal(loaded.graph.mutationJournal.entries.length, 1);
@@ -4419,7 +4478,7 @@ test("profile memory load keeps retained journal nextWatermark canonical when it
       }
     };
 
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
     assert.equal(loaded.graph.mutationJournal.entries.length, 2);
@@ -4527,7 +4586,7 @@ test("profile memory load recovers omitted journal watermarks by replay order in
       }
     };
 
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
     assert.deepEqual(
@@ -4665,7 +4724,7 @@ test("profile memory load recovers same-timestamp omitted journal watermarks by 
       }
     };
 
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
     assert.deepEqual(
@@ -4814,7 +4873,7 @@ test("profile memory load breaks same-timestamp explicit journal watermark ties 
       }
     };
 
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
     assert.deepEqual(
@@ -5016,7 +5075,7 @@ test("profile memory load trims padded graph record ids and retained graph refs"
         }
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
     const observations = loaded.graph.observations.filter(
@@ -5088,7 +5147,7 @@ test("profile memory load trims padded non-redacted event text and repairs blank
         ...emptyState.graph,
         updatedAt: "2026-04-04T16:22:30.000Z",
         events: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+          createGraphEventEnvelope({
             eventId: "event_profile_graph_store_event_text_trimmed",
             stableRefId: null,
             family: "episode.candidate",
@@ -5110,7 +5169,7 @@ test("profile memory load trims padded non-redacted event text and repairs blank
             projectionSourceIds: [],
             entityRefIds: []
           }),
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+          createGraphEventEnvelope({
             eventId: "event_profile_graph_store_event_text_blank",
             stableRefId: null,
             family: "episode.candidate",
@@ -5135,7 +5194,7 @@ test("profile memory load trims padded non-redacted event text and repairs blank
         ]
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
     const trimmedEvent = loaded.graph.events.find(
@@ -5231,7 +5290,7 @@ test("profile memory load trims padded enum-like graph metadata before payload s
         ]
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
     const observation = loaded.graph.observations.find(
@@ -5317,7 +5376,7 @@ test("profile memory load trims padded mutation-journal redaction state", async 
         }
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
     assert.equal(loaded.graph.mutationJournal.entries.length, 1);
@@ -5397,7 +5456,7 @@ test("profile memory load normalizes retained mutation-journal recordedAt", asyn
         }
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
     assert.deepEqual(
@@ -5479,7 +5538,7 @@ test("profile memory load repairs omitted and non-string retained mutation-journ
         }
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
     assert.deepEqual(
@@ -5514,7 +5573,7 @@ test("profile memory load normalizes graph compaction lastCompactedAt", async ()
         }
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
     assert.equal(
@@ -5535,7 +5594,7 @@ test("profile memory load normalizes retained graph updatedAt", async () => {
         updatedAt: " 2026-04-04T11:25:30-05:00 "
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
     assert.equal(loaded.graph.updatedAt, "2026-04-04T16:25:30.000Z");
@@ -5588,7 +5647,7 @@ test("profile memory load normalizes retained graph envelope createdAt", async (
         ]
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
     assert.deepEqual(
@@ -5616,7 +5675,7 @@ test("profile memory load compacts observations against repaired redacted event 
         ...emptyState.graph,
         updatedAt: "2026-04-04T16:21:00.000Z",
         observations: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+          createGraphObservationEnvelope({
             observationId: "observation_profile_graph_store_redacted_event_lineage_old",
             stableRefId: null,
             family: "contact.context",
@@ -5632,7 +5691,7 @@ test("profile memory load compacts observations against repaired redacted event 
             timeSource: "user_stated",
             entityRefIds: ["entity_owen"]
           }),
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+          createGraphObservationEnvelope({
             observationId: "observation_profile_graph_store_redacted_event_lineage_new",
             stableRefId: null,
             family: "contact.context",
@@ -5651,7 +5710,7 @@ test("profile memory load compacts observations against repaired redacted event 
         ],
         claims: [],
         events: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+          createGraphEventEnvelope({
             eventId: "event_profile_graph_store_redacted_event_lineage",
             stableRefId: null,
             family: "episode.candidate",
@@ -5690,7 +5749,7 @@ test("profile memory load compacts observations against repaired redacted event 
         }
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
     assert.deepEqual(
@@ -5750,7 +5809,7 @@ test("profile memory load prunes duplicate and dangling projection-source refs w
         ...emptyState.graph,
         updatedAt: "2026-04-04T16:17:00.000Z",
         claims: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+          createGraphClaimEnvelope({
             claimId: "claim_profile_graph_store_projection_duplicate",
             stableRefId: null,
             family: "identity.preferred_name",
@@ -5781,7 +5840,7 @@ test("profile memory load prunes duplicate and dangling projection-source refs w
           })
         ],
         events: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+          createGraphEventEnvelope({
             eventId: "event_profile_graph_store_projection_duplicate",
             stableRefId: null,
             family: "episode.candidate",
@@ -5816,7 +5875,7 @@ test("profile memory load prunes duplicate and dangling projection-source refs w
         }
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
     assert.deepEqual(
@@ -5840,7 +5899,7 @@ test("profile memory load prunes duplicate entity refs from retained graph paylo
         ...emptyState.graph,
         updatedAt: "2026-04-04T16:20:00.000Z",
         observations: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+          createGraphObservationEnvelope({
             observationId: "observation_profile_graph_store_entity_ref_payload_duplicate",
             stableRefId: null,
             family: "contact.context",
@@ -5861,7 +5920,7 @@ test("profile memory load prunes duplicate entity refs from retained graph paylo
           })
         ],
         claims: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+          createGraphClaimEnvelope({
             claimId: "claim_profile_graph_store_entity_ref_payload_duplicate",
             stableRefId: null,
             family: "employment.current",
@@ -5887,7 +5946,7 @@ test("profile memory load prunes duplicate entity refs from retained graph paylo
           })
         ],
         events: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+          createGraphEventEnvelope({
             eventId: "event_profile_graph_store_entity_ref_payload_duplicate",
             stableRefId: null,
             family: "episode.candidate",
@@ -5917,7 +5976,7 @@ test("profile memory load prunes duplicate entity refs from retained graph paylo
         }
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
     const seededObservation = loaded.graph.observations.find(
@@ -5953,7 +6012,7 @@ test("profile memory load prunes dangling journal refs to missing graph records"
         ...emptyGraphState,
         updatedAt: "2026-04-04T15:00:00.000Z",
         observations: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+          createGraphObservationEnvelope({
             observationId: "observation_profile_graph_store_journal_ref_valid",
             stableRefId: null,
             family: "identity.preferred_name",
@@ -5973,7 +6032,7 @@ test("profile memory load prunes dangling journal refs to missing graph records"
           })
         ],
         claims: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+          createGraphClaimEnvelope({
             claimId: "claim_profile_graph_store_journal_ref_valid",
             stableRefId: null,
             family: "identity.preferred_name",
@@ -6038,15 +6097,10 @@ test("profile memory load prunes dangling journal refs to missing graph records"
               redactionState: "not_requested"
             }
           ]
-        },
-        compaction: {
-          ...emptyState.graph.compaction,
-          snapshotWatermark: 1,
-          lastCompactedAt: "2026-04-03T20:00:00.000Z"
         }
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
     const canonicalJournalEntryId =
@@ -6097,7 +6151,7 @@ test("profile memory load collapses pruned journal entries that converge on one 
         ...emptyState.graph,
         updatedAt: "2026-04-04T15:10:00.000Z",
         observations: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+          createGraphObservationEnvelope({
             observationId: "observation_profile_graph_store_journal_ref_collapse_valid",
             stableRefId: null,
             family: "contact.context",
@@ -6117,14 +6171,12 @@ test("profile memory load collapses pruned journal entries that converge on one 
           })
         ],
         claims: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+          createGraphClaimEnvelope({
             claimId: "claim_profile_graph_store_journal_ref_collapse_valid",
             stableRefId: null,
             family: "contact.context",
             normalizedKey: "contact.owen.context.help",
-            normalizedValue: "Owen still needs help",
-            status: "candidate",
-            redactionState: "not_requested",
+            normalizedValue: "Owen still needs help",            redactionState: "not_requested",
             redactedAt: null,
             sensitive: false,
             sourceTaskId: "task_profile_graph_store_journal_ref_collapse",
@@ -6185,7 +6237,7 @@ test("profile memory load collapses pruned journal entries that converge on one 
         }
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
 
@@ -6244,7 +6296,7 @@ test("profile memory load collapses semantic-duplicate active claims to one cano
         ...emptyState.graph,
         updatedAt: "2026-04-04T14:10:00.000Z",
         claims: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+          createGraphClaimEnvelope({
             claimId: "claim_profile_graph_store_duplicate_active_1",
             stableRefId: "stable_avery",
             family: "identity.preferred_name",
@@ -6268,7 +6320,7 @@ test("profile memory load collapses semantic-duplicate active claims to one cano
             entityRefIds: ["entity_avery"],
             active: true
           }, "2026-04-04T13:00:00.000Z"),
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+          createGraphClaimEnvelope({
             claimId: "claim_profile_graph_store_duplicate_active_2",
             stableRefId: null,
             family: "identity.preferred_name",
@@ -6325,7 +6377,7 @@ test("profile memory load collapses semantic-duplicate active claims to one cano
         }
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
     assert.equal(loaded.graph.claims.length, 3);
@@ -6416,7 +6468,7 @@ test("profile memory load keeps semantic-duplicate retained current claims from 
         ...emptyState.graph,
         updatedAt: "2026-04-06T16:10:00.000Z",
         observations: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+          createGraphObservationEnvelope({
             observationId: "observation_profile_graph_store_duplicate_loser_lineage_old",
             stableRefId: null,
             family: "identity.preferred_name",
@@ -6434,7 +6486,7 @@ test("profile memory load keeps semantic-duplicate retained current claims from 
             timeSource: "user_stated",
             entityRefIds: []
           }, "2026-04-06T13:00:00.000Z"),
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+          createGraphObservationEnvelope({
             observationId: "observation_profile_graph_store_duplicate_loser_lineage_current",
             stableRefId: null,
             family: "identity.preferred_name",
@@ -6454,7 +6506,7 @@ test("profile memory load keeps semantic-duplicate retained current claims from 
           }, "2026-04-06T13:05:00.000Z")
         ],
         claims: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+          createGraphClaimEnvelope({
             claimId: "claim_profile_graph_store_duplicate_loser_lineage_old",
             stableRefId: "stable_avery_old",
             family: "identity.preferred_name",
@@ -6478,7 +6530,7 @@ test("profile memory load keeps semantic-duplicate retained current claims from 
             entityRefIds: ["entity_avery_stray"],
             active: true
           }, "2026-04-06T13:00:00.000Z"),
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+          createGraphClaimEnvelope({
             claimId: "claim_profile_graph_store_duplicate_loser_lineage_current",
             stableRefId: null,
             family: "identity.preferred_name",
@@ -6505,7 +6557,7 @@ test("profile memory load keeps semantic-duplicate retained current claims from 
         ]
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
     assert.equal(loaded.graph.claims.length, 2);
@@ -6562,7 +6614,7 @@ test("profile memory load keeps current-surface-ineligible semantic duplicates f
         ...emptyState.graph,
         updatedAt: "2026-04-06T03:10:00.000Z",
         observations: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+          createGraphObservationEnvelope({
             observationId: "observation_profile_graph_store_duplicate_invalid_explicit",
             stableRefId: null,
             family: "identity.preferred_name",
@@ -6580,7 +6632,7 @@ test("profile memory load keeps current-surface-ineligible semantic duplicates f
             timeSource: "user_stated",
             entityRefIds: []
           }),
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+          createGraphObservationEnvelope({
             observationId: "observation_profile_graph_store_duplicate_invalid_assistant",
             stableRefId: null,
             family: "identity.preferred_name",
@@ -6600,7 +6652,7 @@ test("profile memory load keeps current-surface-ineligible semantic duplicates f
           })
         ],
         claims: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+          createGraphClaimEnvelope({
             claimId: "claim_profile_graph_store_duplicate_invalid_explicit",
             stableRefId: "stable_avery_explicit",
             family: "identity.preferred_name",
@@ -6624,7 +6676,7 @@ test("profile memory load keeps current-surface-ineligible semantic duplicates f
             entityRefIds: ["entity_avery"],
             active: true
           }, "2026-04-06T02:00:00.000Z"),
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+          createGraphClaimEnvelope({
             claimId: "claim_profile_graph_store_duplicate_invalid_assistant",
             stableRefId: null,
             family: "identity.preferred_name",
@@ -6681,7 +6733,7 @@ test("profile memory load keeps current-surface-ineligible semantic duplicates f
         }
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
 
@@ -6725,7 +6777,7 @@ test("profile memory load dedupes duplicate journal entries and repairs replay w
         ...emptyState.graph,
         updatedAt: "2026-04-03T21:15:00.000Z",
         observations: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+          createGraphObservationEnvelope({
             observationId: "observation_store_1",
             stableRefId: null,
             family: "contact.context",
@@ -6745,7 +6797,7 @@ test("profile memory load dedupes duplicate journal entries and repairs replay w
           })
         ],
         claims: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+          createGraphClaimEnvelope({
             claimId: "claim_store_1",
             stableRefId: null,
             family: "identity.preferred_name",
@@ -6819,7 +6871,7 @@ test("profile memory load dedupes duplicate journal entries and repairs replay w
         }
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
 
@@ -6894,7 +6946,7 @@ test("profile memory load breaks same-id same-watermark journal freshness ties b
         ...emptyState.graph,
         updatedAt: "2026-04-03T21:05:00.000Z",
         observations: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+          createGraphObservationEnvelope({
             observationId: sharedObservationId,
             stableRefId: null,
             family: "contact.context",
@@ -6945,7 +6997,7 @@ test("profile memory load breaks same-id same-watermark journal freshness ties b
         }
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
 
@@ -6986,7 +7038,7 @@ test("profile memory load dedupes retained journal entries that share one canoni
         ...emptyState.graph,
         updatedAt: "2026-04-03T21:05:00.000Z",
         observations: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+          createGraphObservationEnvelope({
             observationId: "observation_store_payload_1",
             stableRefId: null,
             family: "contact.context",
@@ -7037,7 +7089,7 @@ test("profile memory load dedupes retained journal entries that share one canoni
         }
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
 
@@ -7089,7 +7141,7 @@ test("profile memory load backfills missing graph events and replay markers from
         }
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
 
@@ -7107,7 +7159,7 @@ test("profile memory load backfills missing graph events and replay markers from
     );
     assert.equal(loaded.graph.mutationJournal.entries[0]?.sourceTaskId, null);
     assert.equal(
-      loaded.graph.mutationJournal.entries[0]?.sourceFingerprint.startsWith("graph_event_replay_backfill_"),
+      loaded.graph.mutationJournal.entries[0]?.sourceFingerprint?.startsWith("graph_event_replay_backfill_"),
       true
     );
     assert.equal(loaded.graph.mutationJournal.nextWatermark, 2);
@@ -7145,7 +7197,7 @@ test("profile memory load repairs current-surface-ineligible retained unresolved
         ...emptyState.graph,
         updatedAt: "2026-04-07T15:00:00.000Z",
         events: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+          createGraphEventEnvelope({
             eventId: expectedEventId,
             stableRefId: null,
             family: "episode.candidate",
@@ -7175,7 +7227,7 @@ test("profile memory load repairs current-surface-ineligible retained unresolved
         }
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
 
@@ -7189,7 +7241,7 @@ test("profile memory load repairs current-surface-ineligible retained unresolved
       [canonicalEpisodeId]
     );
     assert.equal(
-      loaded.graph.events[0]?.payload.sourceFingerprint.startsWith("graph_event_backfill_"),
+      loaded.graph.events[0]?.payload.sourceFingerprint?.startsWith("graph_event_backfill_"),
       true
     );
     assert.equal(loaded.graph.mutationJournal.entries.length, 1);
@@ -7231,7 +7283,7 @@ test("profile memory load repairs retained unresolved events missing the survivi
         ...emptyState.graph,
         updatedAt: "2026-04-07T15:10:00.000Z",
         events: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+          createGraphEventEnvelope({
             eventId: expectedEventId,
             stableRefId: null,
             family: "episode.candidate",
@@ -7261,7 +7313,7 @@ test("profile memory load repairs retained unresolved events missing the survivi
         }
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
 
@@ -7274,7 +7326,7 @@ test("profile memory load repairs retained unresolved events missing the survivi
       [canonicalEpisodeId]
     );
     assert.equal(
-      loaded.graph.events[0]?.payload.sourceFingerprint.startsWith("graph_event_backfill_"),
+      loaded.graph.events[0]?.payload.sourceFingerprint?.startsWith("graph_event_backfill_"),
       true
     );
     assert.equal(loaded.graph.mutationJournal.entries.length, 1);
@@ -7317,7 +7369,7 @@ test("profile memory load repairs retained unresolved events whose same-id paylo
         ...emptyState.graph,
         updatedAt: "2026-04-07T15:20:00.000Z",
         events: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+          createGraphEventEnvelope({
             eventId: expectedEventId,
             stableRefId: null,
             family: "episode.candidate",
@@ -7347,7 +7399,7 @@ test("profile memory load repairs retained unresolved events whose same-id paylo
         }
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
 
@@ -7375,7 +7427,7 @@ test("profile memory load repairs retained unresolved events whose same-id paylo
       ["entity_owen", "entity_tax_form"]
     );
     assert.equal(
-      loaded.graph.events[0]?.payload.sourceFingerprint.startsWith("graph_event_backfill_"),
+      loaded.graph.events[0]?.payload.sourceFingerprint?.startsWith("graph_event_backfill_"),
       true
     );
     assert.equal(loaded.graph.mutationJournal.entries.length, 1);
@@ -7411,7 +7463,7 @@ test("applyProfileMemoryGraphMutations stays no-op when a touched same-id event 
     }),
     id: canonicalEpisodeId
   };
-  const existingEvent = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+  const existingEvent = createGraphEventEnvelope({
     eventId: expectedEventId,
     stableRefId: null,
     family: "episode.candidate",
@@ -7444,7 +7496,7 @@ test("applyProfileMemoryGraphMutations stays no-op when a touched same-id event 
   };
 
   const result = applyProfileMemoryGraphMutations({
-    state: seededState,
+    state: asProfileMemoryState(seededState),
     factDecisions: [],
     touchedEpisodes: [seededEpisode],
     sourceFingerprint,
@@ -7490,7 +7542,7 @@ test("applyProfileMemoryGraphMutations stays no-op when a touched same-id observ
     observedAt,
     sourceFingerprint
   }).slice(0, 24)}`;
-  const existingObservation = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+  const existingObservation = createGraphObservationEnvelope({
     observationId: existingObservationId,
     stableRefId: null,
     family: factDecision.decision.family,
@@ -7518,7 +7570,7 @@ test("applyProfileMemoryGraphMutations stays no-op when a touched same-id observ
   };
 
   const result = applyProfileMemoryGraphMutations({
-    state: seededState,
+    state: asProfileMemoryState(seededState),
     factDecisions: [factDecision],
     touchedEpisodes: [],
     sourceFingerprint,
@@ -7950,7 +8002,7 @@ test("applyProfileMemoryGraphMutations stays a true no-op when a same-id retaine
     observedAt,
     sourceFingerprint
   }).slice(0, 24)}`;
-  const existingObservation = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+  const existingObservation = createGraphObservationEnvelope({
     observationId,
     stableRefId: null,
     family: factDecision.decision.family,
@@ -8008,7 +8060,7 @@ test("applyProfileMemoryGraphMutations stays a true no-op when a same-id retaine
   };
 
   const result = applyProfileMemoryGraphMutations({
-    state: seededState,
+    state: asProfileMemoryState(seededState),
     factDecisions: [factDecision],
     touchedEpisodes: [],
     sourceFingerprint,
@@ -8058,7 +8110,7 @@ test("applyProfileMemoryGraphMutations clamps stale snapshot watermark without r
     observedAt,
     sourceFingerprint
   }).slice(0, 24)}`;
-  const existingObservation = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+  const existingObservation = createGraphObservationEnvelope({
     observationId,
     stableRefId: null,
     family: factDecision.decision.family,
@@ -8116,7 +8168,7 @@ test("applyProfileMemoryGraphMutations clamps stale snapshot watermark without r
   };
 
   const result = applyProfileMemoryGraphMutations({
-    state: seededState,
+    state: asProfileMemoryState(seededState),
     factDecisions: [factDecision],
     touchedEpisodes: [],
     sourceFingerprint,
@@ -8166,7 +8218,7 @@ test("applyProfileMemoryGraphMutations clamps stale snapshot watermark from next
     observedAt,
     sourceFingerprint
   }).slice(0, 24)}`;
-  const existingObservation = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+  const existingObservation = createGraphObservationEnvelope({
     observationId,
     stableRefId: null,
     family: factDecision.decision.family,
@@ -8209,7 +8261,7 @@ test("applyProfileMemoryGraphMutations clamps stale snapshot watermark from next
   };
 
   const result = applyProfileMemoryGraphMutations({
-    state: seededState,
+    state: asProfileMemoryState(seededState),
     factDecisions: [factDecision],
     touchedEpisodes: [],
     sourceFingerprint,
@@ -8251,7 +8303,7 @@ test("applyProfileMemoryGraphMutations compacts the oldest replay entry when a n
       reason: "contact_context_is_support_only" as const
     }
   };
-  const retainedObservation = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+  const retainedObservation = createGraphObservationEnvelope({
     observationId: "observation_profile_graph_store_observation_compaction_public_retained",
     stableRefId: null,
     family: "contact.context",
@@ -8271,7 +8323,7 @@ test("applyProfileMemoryGraphMutations compacts the oldest replay entry when a n
   }, "2026-04-08T18:10:00.000Z");
   const recentObservedAt = "2026-04-08T18:20:00.000Z";
   const recentObservationId = "observation_profile_graph_store_observation_compaction_public_recent";
-  const recentObservation = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+  const recentObservation = createGraphObservationEnvelope({
     observationId: recentObservationId,
     stableRefId: null,
     family: "contact.context",
@@ -8354,7 +8406,7 @@ test("applyProfileMemoryGraphMutations compacts the oldest replay entry when a n
   };
 
   const result = applyProfileMemoryGraphMutations({
-    state: seededState,
+    state: asProfileMemoryState(seededState),
     factDecisions: [factDecision],
     touchedEpisodes: [],
     sourceFingerprint,
@@ -8446,7 +8498,7 @@ test("applyProfileMemoryGraphMutations stays no-op when a same-id retained curre
     supersededAt: null,
     lastUpdatedAt: observedAt
   };
-  const existingObservation = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+  const existingObservation = createGraphObservationEnvelope({
     observationId,
     stableRefId: null,
     family: factDecision.decision.family,
@@ -8464,7 +8516,7 @@ test("applyProfileMemoryGraphMutations stays no-op when a same-id retained curre
     timeSource: "user_stated",
     entityRefIds: []
   }, retainedCreatedAt);
-  const existingClaim = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+  const existingClaim = createGraphClaimEnvelope({
     claimId,
     stableRefId: null,
     family: factDecision.decision.family,
@@ -8500,7 +8552,7 @@ test("applyProfileMemoryGraphMutations stays no-op when a same-id retained curre
   };
 
   const result = applyProfileMemoryGraphMutations({
-    state: seededState,
+    state: asProfileMemoryState(seededState),
     factDecisions: [factDecision],
     touchedEpisodes: [],
     sourceFingerprint,
@@ -8571,7 +8623,7 @@ test("applyProfileMemoryGraphMutations stays a true no-op when a same-id retaine
     supersededAt: null,
     lastUpdatedAt: observedAt
   };
-  const existingObservation = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+  const existingObservation = createGraphObservationEnvelope({
     observationId,
     stableRefId: null,
     family: factDecision.decision.family,
@@ -8589,7 +8641,7 @@ test("applyProfileMemoryGraphMutations stays a true no-op when a same-id retaine
     timeSource: "user_stated",
     entityRefIds: []
   }, retainedCreatedAt);
-  const existingClaim = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+  const existingClaim = createGraphClaimEnvelope({
     claimId,
     stableRefId: null,
     family: factDecision.decision.family,
@@ -8655,7 +8707,7 @@ test("applyProfileMemoryGraphMutations stays a true no-op when a same-id retaine
   };
 
   const result = applyProfileMemoryGraphMutations({
-    state: seededState,
+    state: asProfileMemoryState(seededState),
     factDecisions: [factDecision],
     touchedEpisodes: [],
     sourceFingerprint,
@@ -8726,7 +8778,7 @@ test("applyProfileMemoryGraphMutations clamps stale snapshot watermark without r
     supersededAt: null,
     lastUpdatedAt: observedAt
   };
-  const existingObservation = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+  const existingObservation = createGraphObservationEnvelope({
     observationId,
     stableRefId: null,
     family: factDecision.decision.family,
@@ -8744,7 +8796,7 @@ test("applyProfileMemoryGraphMutations clamps stale snapshot watermark without r
     timeSource: "user_stated",
     entityRefIds: []
   }, retainedCreatedAt);
-  const existingClaim = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+  const existingClaim = createGraphClaimEnvelope({
     claimId,
     stableRefId: null,
     family: factDecision.decision.family,
@@ -8810,7 +8862,7 @@ test("applyProfileMemoryGraphMutations clamps stale snapshot watermark without r
   };
 
   const result = applyProfileMemoryGraphMutations({
-    state: seededState,
+    state: asProfileMemoryState(seededState),
     factDecisions: [factDecision],
     touchedEpisodes: [],
     sourceFingerprint,
@@ -8885,7 +8937,7 @@ test("applyProfileMemoryGraphMutations clamps stale snapshot watermark from next
     supersededAt: null,
     lastUpdatedAt: observedAt
   };
-  const existingObservation = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+  const existingObservation = createGraphObservationEnvelope({
     observationId,
     stableRefId: null,
     family: factDecision.decision.family,
@@ -8903,7 +8955,7 @@ test("applyProfileMemoryGraphMutations clamps stale snapshot watermark from next
     timeSource: "user_stated",
     entityRefIds: []
   }, retainedCreatedAt);
-  const existingClaim = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+  const existingClaim = createGraphClaimEnvelope({
     claimId,
     stableRefId: null,
     family: factDecision.decision.family,
@@ -8954,7 +9006,7 @@ test("applyProfileMemoryGraphMutations clamps stale snapshot watermark from next
   };
 
   const result = applyProfileMemoryGraphMutations({
-    state: seededState,
+    state: asProfileMemoryState(seededState),
     factDecisions: [factDecision],
     touchedEpisodes: [],
     sourceFingerprint,
@@ -9028,7 +9080,7 @@ test("applyProfileMemoryGraphMutations repairs semantically mismatched fact-side
     supersededAt: null,
     lastUpdatedAt: observedAt
   };
-  const existingWrongObservation = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+  const existingWrongObservation = createGraphObservationEnvelope({
     observationId: wrongObservationId,
     stableRefId: null,
     family: factDecision.decision.family,
@@ -9046,7 +9098,7 @@ test("applyProfileMemoryGraphMutations repairs semantically mismatched fact-side
     timeSource: "user_stated",
     entityRefIds: []
   }, "2026-04-08T19:10:00.000Z");
-  const existingClaim = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+  const existingClaim = createGraphClaimEnvelope({
     claimId,
     stableRefId: null,
     family: factDecision.decision.family,
@@ -9150,7 +9202,7 @@ test("profile memory load keeps already-canonical retained current-claim lanes i
       eventIds: [],
       redactionState: "not_requested" as const
     };
-    const existingObservation = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+    const existingObservation = createGraphObservationEnvelope({
       observationId,
       stableRefId: "stable_self_profile_owner",
       family: "identity.preferred_name",
@@ -9168,7 +9220,7 @@ test("profile memory load keeps already-canonical retained current-claim lanes i
       timeSource: "user_stated",
       entityRefIds: []
     }, retainedCreatedAt);
-    const existingClaim = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+    const existingClaim = createGraphClaimEnvelope({
       claimId,
       stableRefId: "stable_self_profile_owner",
       family: "identity.preferred_name",
@@ -9258,7 +9310,7 @@ test("profile memory load keeps already-canonical retained current-claim lanes i
         }
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
 
@@ -9300,7 +9352,7 @@ test("applyProfileMemoryGraphMutations stays no-op when a redacted same-id event
     }),
     id: canonicalEpisodeId
   };
-  const existingEvent = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+  const existingEvent = createGraphEventEnvelope({
     eventId: expectedEventId,
     stableRefId: null,
     family: "episode.candidate",
@@ -9333,7 +9385,7 @@ test("applyProfileMemoryGraphMutations stays no-op when a redacted same-id event
   };
 
   const result = applyProfileMemoryGraphMutations({
-    state: seededState,
+    state: asProfileMemoryState(seededState),
     factDecisions: [],
     touchedEpisodes: [],
     redactedEpisodes: [seededEpisode],
@@ -9356,7 +9408,7 @@ test("applyProfileMemoryGraphMutations appends a canonical replay entry when a r
   const observedAt = "2026-04-07T14:45:00.000Z";
   const sourceTaskId = "task_profile_graph_store_fact_redaction_spoofed_journal";
   const sourceFingerprint = "fingerprint_profile_graph_store_fact_redaction_spoofed_journal";
-  const existingObservation = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+  const existingObservation = createGraphObservationEnvelope({
     observationId: "observation_profile_graph_store_fact_redaction_spoofed_journal",
     stableRefId: null,
     family: "identity.preferred_name",
@@ -9374,7 +9426,7 @@ test("applyProfileMemoryGraphMutations appends a canonical replay entry when a r
     timeSource: "user_stated",
     entityRefIds: ["entity_avery"]
   }, "2026-04-07T14:12:00.000Z");
-  const existingClaim = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+  const existingClaim = createGraphClaimEnvelope({
     claimId: "claim_profile_graph_store_fact_redaction_spoofed_journal",
     stableRefId: null,
     family: "identity.preferred_name",
@@ -9386,11 +9438,10 @@ test("applyProfileMemoryGraphMutations appends a canonical replay entry when a r
     sourceTaskId: "task_profile_graph_store_fact_redaction_spoofed_seed",
     sourceFingerprint: "fingerprint_profile_graph_store_fact_redaction_spoofed_seed",
     sourceTier: "explicit_user_statement",
-    assertedAt: observedAt,
-    observedAt,
-    validFrom: observedAt,
+    assertedAt: observedAt,    validFrom: observedAt,
     validTo: null,
     endedAt: null,
+    endedByClaimId: null,
     timePrecision: "instant",
     timeSource: "user_stated",
     active: true,
@@ -9451,7 +9502,7 @@ test("applyProfileMemoryGraphMutations appends a canonical replay entry when a r
   };
 
   const result = applyProfileMemoryGraphMutations({
-    state: seededState,
+    state: asProfileMemoryState(seededState),
     factDecisions: [],
     touchedEpisodes: [],
     redactedFacts: [redactedFact],
@@ -9871,7 +9922,7 @@ test("applyProfileMemoryGraphMutations compacts the oldest replay entry when a n
     supersededAt: null,
     lastUpdatedAt: observedAt
   };
-  const retainedObservationOne = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+  const retainedObservationOne = createGraphObservationEnvelope({
     observationId: "observation_profile_graph_store_append_canonical_compaction_1",
     stableRefId: null,
     family: "contact.owen.context.passport",
@@ -9889,7 +9940,7 @@ test("applyProfileMemoryGraphMutations compacts the oldest replay entry when a n
     timeSource: "user_stated",
     entityRefIds: ["entity_owen"]
   }, "2026-04-08T15:20:00.000Z");
-  const retainedClaimOne = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+  const retainedClaimOne = createGraphClaimEnvelope({
     claimId: "claim_profile_graph_store_append_canonical_compaction_1",
     stableRefId: null,
     family: "contact.owen.context.passport",
@@ -9901,9 +9952,7 @@ test("applyProfileMemoryGraphMutations compacts the oldest replay entry when a n
     sourceTaskId: "task_profile_graph_store_append_canonical_compaction_1",
     sourceFingerprint: "fingerprint_profile_graph_store_append_canonical_compaction_1",
     sourceTier: "explicit_user_statement",
-    assertedAt: "2026-04-08T15:20:00.000Z",
-    observedAt: "2026-04-08T15:20:00.000Z",
-    validFrom: "2026-04-08T15:20:00.000Z",
+    assertedAt: "2026-04-08T15:20:00.000Z",    validFrom: "2026-04-08T15:20:00.000Z",
     validTo: null,
     endedAt: null,
     endedByClaimId: null,
@@ -9914,7 +9963,7 @@ test("applyProfileMemoryGraphMutations compacts the oldest replay entry when a n
     projectionSourceIds: ["fact_profile_graph_store_append_canonical_compaction_1"],
     entityRefIds: ["entity_owen"]
   }, "2026-04-08T15:20:00.000Z");
-  const retainedObservationTwo = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+  const retainedObservationTwo = createGraphObservationEnvelope({
     observationId: "observation_profile_graph_store_append_canonical_compaction_2",
     stableRefId: null,
     family: "contact.owen.context.visa",
@@ -9932,7 +9981,7 @@ test("applyProfileMemoryGraphMutations compacts the oldest replay entry when a n
     timeSource: "user_stated",
     entityRefIds: ["entity_owen"]
   }, "2026-04-08T15:25:00.000Z");
-  const retainedClaimTwo = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+  const retainedClaimTwo = createGraphClaimEnvelope({
     claimId: "claim_profile_graph_store_append_canonical_compaction_2",
     stableRefId: null,
     family: "contact.owen.context.visa",
@@ -9944,9 +9993,7 @@ test("applyProfileMemoryGraphMutations compacts the oldest replay entry when a n
     sourceTaskId: "task_profile_graph_store_append_canonical_compaction_2",
     sourceFingerprint: "fingerprint_profile_graph_store_append_canonical_compaction_2",
     sourceTier: "explicit_user_statement",
-    assertedAt: "2026-04-08T15:25:00.000Z",
-    observedAt: "2026-04-08T15:25:00.000Z",
-    validFrom: "2026-04-08T15:25:00.000Z",
+    assertedAt: "2026-04-08T15:25:00.000Z",    validFrom: "2026-04-08T15:25:00.000Z",
     validTo: null,
     endedAt: null,
     endedByClaimId: null,
@@ -10740,7 +10787,7 @@ test("applyProfileMemoryGraphMutations compacts the oldest replay entry when a n
     `event_${sha256HexFromCanonicalJson({ episodeId: seededEpisodeTwo.id }).slice(0, 24)}`;
   const expectedEventThreeId =
     `event_${sha256HexFromCanonicalJson({ episodeId: seededEpisodeThree.id }).slice(0, 24)}`;
-  const existingEventOne = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+  const existingEventOne = createGraphEventEnvelope({
     eventId: existingEventOneId,
     stableRefId: null,
     family: "episode.candidate",
@@ -10762,7 +10809,7 @@ test("applyProfileMemoryGraphMutations compacts the oldest replay entry when a n
     projectionSourceIds: [seededEpisodeOne.id],
     entityRefIds: ["entity_owen", "entity_passport_scan"]
   }, "2026-04-08T17:00:00.000Z");
-  const existingEventTwo = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+  const existingEventTwo = createGraphEventEnvelope({
     eventId: existingEventTwoId,
     stableRefId: null,
     family: "episode.candidate",
@@ -10928,7 +10975,7 @@ test("applyProfileMemoryGraphMutations compacts the oldest replay entry when a n
     `event_${sha256HexFromCanonicalJson({ episodeId: seededEpisodeTwo.id }).slice(0, 24)}`;
   const expectedRedactedEventThreeId =
     `event_${sha256HexFromCanonicalJson({ episodeId: seededEpisodeThree.id }).slice(0, 24)}`;
-  const existingEventOne = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+  const existingEventOne = createGraphEventEnvelope({
     eventId: existingEventOneId,
     stableRefId: null,
     family: "episode.candidate",
@@ -10950,7 +10997,7 @@ test("applyProfileMemoryGraphMutations compacts the oldest replay entry when a n
     projectionSourceIds: [seededEpisodeOne.id],
     entityRefIds: ["entity_owen", "entity_passport_scan"]
   }, "2026-04-08T17:00:00.000Z");
-  const existingEventTwo = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+  const existingEventTwo = createGraphEventEnvelope({
     eventId: existingEventTwoId,
     stableRefId: null,
     family: "episode.candidate",
@@ -11118,7 +11165,7 @@ test("applyProfileMemoryGraphMutations clamps stale snapshot watermark without r
     `event_${sha256HexFromCanonicalJson({ episodeId: retainedEpisodeId }).slice(0, 24)}`;
   const touchedEventId =
     `event_${sha256HexFromCanonicalJson({ episodeId: touchedEpisodeId }).slice(0, 24)}`;
-  const retainedEvent = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+  const retainedEvent = createGraphEventEnvelope({
     eventId: retainedEventId,
     stableRefId: null,
     family: "episode.candidate",
@@ -11140,7 +11187,7 @@ test("applyProfileMemoryGraphMutations clamps stale snapshot watermark without r
     projectionSourceIds: [retainedEpisodeId],
     entityRefIds: ["entity_owen", "entity_passport_scan"]
   }, "2026-04-08T17:20:00.000Z");
-  const touchedEvent = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+  const touchedEvent = createGraphEventEnvelope({
     eventId: touchedEventId,
     stableRefId: null,
     family: "episode.candidate",
@@ -11208,7 +11255,7 @@ test("applyProfileMemoryGraphMutations clamps stale snapshot watermark without r
   };
 
   const result = applyProfileMemoryGraphMutations({
-    state: seededState,
+    state: asProfileMemoryState(seededState),
     factDecisions: [],
     touchedEpisodes: [touchedEpisode],
     sourceFingerprint,
@@ -11268,7 +11315,7 @@ test("applyProfileMemoryGraphMutations clamps stale snapshot watermark from next
     }),
     id: canonicalEpisodeId
   };
-  const existingEvent = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+  const existingEvent = createGraphEventEnvelope({
     eventId: expectedEventId,
     stableRefId: null,
     family: "episode.candidate",
@@ -11312,7 +11359,7 @@ test("applyProfileMemoryGraphMutations clamps stale snapshot watermark from next
   };
 
   const result = applyProfileMemoryGraphMutations({
-    state: seededState,
+    state: asProfileMemoryState(seededState),
     factDecisions: [],
     touchedEpisodes: [seededEpisode],
     sourceFingerprint,
@@ -11375,7 +11422,7 @@ test("applyProfileMemoryGraphMutations stays a true no-op when retained replay r
     `event_${sha256HexFromCanonicalJson({ episodeId: retainedEpisodeId }).slice(0, 24)}`;
   const touchedEventId =
     `event_${sha256HexFromCanonicalJson({ episodeId: touchedEpisodeId }).slice(0, 24)}`;
-  const retainedEvent = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+  const retainedEvent = createGraphEventEnvelope({
     eventId: retainedEventId,
     stableRefId: null,
     family: "episode.candidate",
@@ -11397,7 +11444,7 @@ test("applyProfileMemoryGraphMutations stays a true no-op when retained replay r
     projectionSourceIds: [retainedEpisodeId],
     entityRefIds: ["entity_owen", "entity_passport_scan"]
   }, "2026-04-08T17:40:00.000Z");
-  const touchedEvent = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+  const touchedEvent = createGraphEventEnvelope({
     eventId: touchedEventId,
     stableRefId: null,
     family: "episode.candidate",
@@ -11465,7 +11512,7 @@ test("applyProfileMemoryGraphMutations stays a true no-op when retained replay r
   };
 
   const result = applyProfileMemoryGraphMutations({
-    state: seededState,
+    state: asProfileMemoryState(seededState),
     factDecisions: [],
     touchedEpisodes: [touchedEpisode],
     sourceFingerprint: touchedSourceFingerprint,
@@ -11525,7 +11572,7 @@ test("applyProfileMemoryGraphMutations keeps redacted same-id events as a true n
     `event_${sha256HexFromCanonicalJson({ episodeId: retainedEpisodeId }).slice(0, 24)}`;
   const redactedEventId =
     `event_${sha256HexFromCanonicalJson({ episodeId: redactedEpisodeId }).slice(0, 24)}`;
-  const retainedEvent = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+  const retainedEvent = createGraphEventEnvelope({
     eventId: retainedEventId,
     stableRefId: null,
     family: "episode.candidate",
@@ -11547,7 +11594,7 @@ test("applyProfileMemoryGraphMutations keeps redacted same-id events as a true n
     projectionSourceIds: [retainedEpisodeId],
     entityRefIds: ["entity_owen", "entity_passport_scan"]
   }, "2026-04-08T18:00:00.000Z");
-  const redactedEvent = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+  const redactedEvent = createGraphEventEnvelope({
     eventId: redactedEventId,
     stableRefId: null,
     family: "episode.candidate",
@@ -11615,7 +11662,7 @@ test("applyProfileMemoryGraphMutations keeps redacted same-id events as a true n
   };
 
   const result = applyProfileMemoryGraphMutations({
-    state: seededState,
+    state: asProfileMemoryState(seededState),
     factDecisions: [],
     touchedEpisodes: [],
     redactedEpisodes: [redactedEpisode],
@@ -11678,7 +11725,7 @@ test("applyProfileMemoryGraphMutations clamps stale snapshot watermark without r
     `event_${sha256HexFromCanonicalJson({ episodeId: retainedEpisodeId }).slice(0, 24)}`;
   const redactedEventId =
     `event_${sha256HexFromCanonicalJson({ episodeId: redactedEpisodeId }).slice(0, 24)}`;
-  const retainedEvent = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+  const retainedEvent = createGraphEventEnvelope({
     eventId: retainedEventId,
     stableRefId: null,
     family: "episode.candidate",
@@ -11700,7 +11747,7 @@ test("applyProfileMemoryGraphMutations clamps stale snapshot watermark without r
     projectionSourceIds: [retainedEpisodeId],
     entityRefIds: ["entity_owen", "entity_passport_scan"]
   }, "2026-04-08T18:20:00.000Z");
-  const redactedEvent = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+  const redactedEvent = createGraphEventEnvelope({
     eventId: redactedEventId,
     stableRefId: null,
     family: "episode.candidate",
@@ -11768,7 +11815,7 @@ test("applyProfileMemoryGraphMutations clamps stale snapshot watermark without r
   };
 
   const result = applyProfileMemoryGraphMutations({
-    state: seededState,
+    state: asProfileMemoryState(seededState),
     factDecisions: [],
     touchedEpisodes: [],
     redactedEpisodes: [redactedEpisode],
@@ -11814,7 +11861,7 @@ test("applyProfileMemoryGraphMutations clamps stale snapshot watermark from next
     }),
     id: redactedEpisodeId
   };
-  const existingRedactedEvent = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+  const existingRedactedEvent = createGraphEventEnvelope({
     eventId: expectedEventId,
     stableRefId: null,
     family: "episode.candidate",
@@ -11858,7 +11905,7 @@ test("applyProfileMemoryGraphMutations clamps stale snapshot watermark from next
   };
 
   const result = applyProfileMemoryGraphMutations({
-    state: seededState,
+    state: asProfileMemoryState(seededState),
     factDecisions: [],
     touchedEpisodes: [],
     redactedEpisodes: [redactedEpisode],
@@ -11889,7 +11936,7 @@ test("applyProfileMemoryGraphMutations appends a canonical replay entry for fact
   const observationId = "observation_profile_graph_store_fact_redaction_append_canonical";
   const claimId = "claim_profile_graph_store_fact_redaction_append_canonical";
   const redactedFactId = "fact_profile_graph_store_fact_redaction_append_canonical";
-  const existingObservation = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+  const existingObservation = createGraphObservationEnvelope({
     observationId,
     stableRefId: null,
     family: "identity.preferred_name",
@@ -11907,7 +11954,7 @@ test("applyProfileMemoryGraphMutations appends a canonical replay entry for fact
     timeSource: "user_stated",
     entityRefIds: ["entity_avery"]
   }, "2026-04-07T14:12:00.000Z");
-  const existingClaim = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+  const existingClaim = createGraphClaimEnvelope({
     claimId,
     stableRefId: null,
     family: "identity.preferred_name",
@@ -11919,9 +11966,7 @@ test("applyProfileMemoryGraphMutations appends a canonical replay entry for fact
     sourceTaskId: "task_profile_graph_store_fact_redaction_append_seed",
     sourceFingerprint: "fingerprint_profile_graph_store_fact_redaction_append_seed",
     sourceTier: "explicit_user_statement",
-    assertedAt: observedAt,
-    observedAt,
-    validFrom: observedAt,
+    assertedAt: observedAt,    validFrom: observedAt,
     validTo: null,
     endedAt: null,
     endedByClaimId: null,
@@ -12008,7 +12053,7 @@ test("applyProfileMemoryGraphMutations reuses a retained legacy replay entry whe
   const observationId = "observation_profile_graph_store_fact_redaction_duplicate_payload";
   const claimId = "claim_profile_graph_store_fact_redaction_duplicate_payload";
   const redactedFactId = "fact_profile_graph_store_fact_redaction_duplicate_payload";
-  const existingObservation = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+  const existingObservation = createGraphObservationEnvelope({
     observationId,
     stableRefId: null,
     family: "identity.preferred_name",
@@ -12026,7 +12071,7 @@ test("applyProfileMemoryGraphMutations reuses a retained legacy replay entry whe
     timeSource: "user_stated",
     entityRefIds: ["entity_avery"]
   }, "2026-04-07T14:12:00.000Z");
-  const existingClaim = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+  const existingClaim = createGraphClaimEnvelope({
     claimId,
     stableRefId: null,
     family: "identity.preferred_name",
@@ -12038,9 +12083,7 @@ test("applyProfileMemoryGraphMutations reuses a retained legacy replay entry whe
     sourceTaskId: "task_profile_graph_store_fact_redaction_duplicate_seed",
     sourceFingerprint: "fingerprint_profile_graph_store_fact_redaction_duplicate_seed",
     sourceTier: "explicit_user_statement",
-    assertedAt: observedAt,
-    observedAt,
-    validFrom: observedAt,
+    assertedAt: observedAt,    validFrom: observedAt,
     validTo: null,
     endedAt: null,
     endedByClaimId: null,
@@ -12154,7 +12197,7 @@ test("applyProfileMemoryGraphMutations reuses an already-canonical retained repl
   const observationId = "observation_profile_graph_store_fact_redaction_duplicate_payload_canonical";
   const claimId = "claim_profile_graph_store_fact_redaction_duplicate_payload_canonical";
   const redactedFactId = "fact_profile_graph_store_fact_redaction_duplicate_payload_canonical";
-  const existingObservation = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+  const existingObservation = createGraphObservationEnvelope({
     observationId,
     stableRefId: null,
     family: "identity.preferred_name",
@@ -12172,7 +12215,7 @@ test("applyProfileMemoryGraphMutations reuses an already-canonical retained repl
     timeSource: "user_stated",
     entityRefIds: ["entity_avery"]
   }, "2026-04-07T14:12:00.000Z");
-  const existingClaim = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+  const existingClaim = createGraphClaimEnvelope({
     claimId,
     stableRefId: null,
     family: "identity.preferred_name",
@@ -12184,9 +12227,7 @@ test("applyProfileMemoryGraphMutations reuses an already-canonical retained repl
     sourceTaskId: "task_profile_graph_store_fact_redaction_duplicate_canonical_seed",
     sourceFingerprint: "fingerprint_profile_graph_store_fact_redaction_duplicate_canonical_seed",
     sourceTier: "explicit_user_statement",
-    assertedAt: observedAt,
-    observedAt,
-    validFrom: observedAt,
+    assertedAt: observedAt,    validFrom: observedAt,
     validTo: null,
     endedAt: null,
     endedByClaimId: null,
@@ -12294,7 +12335,7 @@ test("applyProfileMemoryGraphMutations compacts the oldest replay entry when a n
   const sourceFingerprint = "fingerprint_profile_graph_store_fact_redaction_compaction_public";
   const targetObservedAt = "2026-04-07T14:45:00.000Z";
   const redactedFactSourceTaskId = "task_profile_graph_store_fact_redaction_compaction_public_3";
-  const retainedObservationOne = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+  const retainedObservationOne = createGraphObservationEnvelope({
     observationId: "observation_profile_graph_store_fact_redaction_compaction_public_1",
     stableRefId: null,
     family: "contact.owen.context.passport",
@@ -12312,7 +12353,7 @@ test("applyProfileMemoryGraphMutations compacts the oldest replay entry when a n
     timeSource: "user_stated",
     entityRefIds: ["entity_owen"]
   }, "2026-04-07T14:00:00.000Z");
-  const retainedClaimOne = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+  const retainedClaimOne = createGraphClaimEnvelope({
     claimId: "claim_profile_graph_store_fact_redaction_compaction_public_1",
     stableRefId: null,
     family: "contact.owen.context.passport",
@@ -12324,9 +12365,7 @@ test("applyProfileMemoryGraphMutations compacts the oldest replay entry when a n
     sourceTaskId: "task_profile_graph_store_fact_redaction_compaction_public_1",
     sourceFingerprint: "fingerprint_profile_graph_store_fact_redaction_compaction_public_1",
     sourceTier: "explicit_user_statement",
-    assertedAt: "2026-04-07T14:00:00.000Z",
-    observedAt: "2026-04-07T14:00:00.000Z",
-    validFrom: "2026-04-07T14:00:00.000Z",
+    assertedAt: "2026-04-07T14:00:00.000Z",    validFrom: "2026-04-07T14:00:00.000Z",
     validTo: null,
     endedAt: null,
     endedByClaimId: null,
@@ -12337,7 +12376,7 @@ test("applyProfileMemoryGraphMutations compacts the oldest replay entry when a n
     projectionSourceIds: ["fact_profile_graph_store_fact_redaction_compaction_public_1"],
     entityRefIds: ["entity_owen"]
   }, "2026-04-07T14:00:00.000Z");
-  const retainedObservationTwo = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+  const retainedObservationTwo = createGraphObservationEnvelope({
     observationId: "observation_profile_graph_store_fact_redaction_compaction_public_2",
     stableRefId: null,
     family: "contact.owen.context.visa",
@@ -12355,7 +12394,7 @@ test("applyProfileMemoryGraphMutations compacts the oldest replay entry when a n
     timeSource: "user_stated",
     entityRefIds: ["entity_owen"]
   }, "2026-04-07T14:05:00.000Z");
-  const retainedClaimTwo = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+  const retainedClaimTwo = createGraphClaimEnvelope({
     claimId: "claim_profile_graph_store_fact_redaction_compaction_public_2",
     stableRefId: null,
     family: "contact.owen.context.visa",
@@ -12367,9 +12406,7 @@ test("applyProfileMemoryGraphMutations compacts the oldest replay entry when a n
     sourceTaskId: "task_profile_graph_store_fact_redaction_compaction_public_2",
     sourceFingerprint: "fingerprint_profile_graph_store_fact_redaction_compaction_public_2",
     sourceTier: "explicit_user_statement",
-    assertedAt: "2026-04-07T14:05:00.000Z",
-    observedAt: "2026-04-07T14:05:00.000Z",
-    validFrom: "2026-04-07T14:05:00.000Z",
+    assertedAt: "2026-04-07T14:05:00.000Z",    validFrom: "2026-04-07T14:05:00.000Z",
     validTo: null,
     endedAt: null,
     endedByClaimId: null,
@@ -12380,7 +12417,7 @@ test("applyProfileMemoryGraphMutations compacts the oldest replay entry when a n
     projectionSourceIds: ["fact_profile_graph_store_fact_redaction_compaction_public_2"],
     entityRefIds: ["entity_owen"]
   }, "2026-04-07T14:05:00.000Z");
-  const targetObservation = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+  const targetObservation = createGraphObservationEnvelope({
     observationId: "observation_profile_graph_store_fact_redaction_compaction_public_3",
     stableRefId: null,
     family: "identity.preferred_name",
@@ -12398,7 +12435,7 @@ test("applyProfileMemoryGraphMutations compacts the oldest replay entry when a n
     timeSource: "user_stated",
     entityRefIds: ["entity_avery"]
   }, "2026-04-07T14:12:00.000Z");
-  const targetClaim = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+  const targetClaim = createGraphClaimEnvelope({
     claimId: "claim_profile_graph_store_fact_redaction_compaction_public_3",
     stableRefId: null,
     family: "identity.preferred_name",
@@ -12410,9 +12447,7 @@ test("applyProfileMemoryGraphMutations compacts the oldest replay entry when a n
     sourceTaskId: "task_profile_graph_store_fact_redaction_compaction_seed",
     sourceFingerprint: "fingerprint_profile_graph_store_fact_redaction_compaction_seed",
     sourceTier: "explicit_user_statement",
-    assertedAt: targetObservedAt,
-    observedAt: targetObservedAt,
-    validFrom: targetObservedAt,
+    assertedAt: targetObservedAt,    validFrom: targetObservedAt,
     validTo: null,
     endedAt: null,
     endedByClaimId: null,
@@ -12529,7 +12564,7 @@ test("applyProfileMemoryGraphMutations preserves retained observation and claim 
   const observedAt = "2026-04-07T14:45:00.000Z";
   const sourceTaskId = "task_profile_graph_store_fact_redaction_created_at";
   const sourceFingerprint = "fingerprint_profile_graph_store_fact_redaction_created_at";
-  const existingObservation = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+  const existingObservation = createGraphObservationEnvelope({
     observationId: "observation_profile_graph_store_fact_redaction_created_at",
     stableRefId: null,
     family: "identity.preferred_name",
@@ -12547,7 +12582,7 @@ test("applyProfileMemoryGraphMutations preserves retained observation and claim 
     timeSource: "user_stated",
     entityRefIds: ["entity_avery"]
   }, "2026-04-07T14:12:00.000Z");
-  const existingClaim = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+  const existingClaim = createGraphClaimEnvelope({
     claimId: "claim_profile_graph_store_fact_redaction_created_at",
     stableRefId: null,
     family: "identity.preferred_name",
@@ -12559,11 +12594,10 @@ test("applyProfileMemoryGraphMutations preserves retained observation and claim 
     sourceTaskId: "task_profile_graph_store_fact_redaction_seed",
     sourceFingerprint: "fingerprint_profile_graph_store_fact_redaction_seed",
     sourceTier: "explicit_user_statement",
-    assertedAt: observedAt,
-    observedAt,
-    validFrom: observedAt,
+    assertedAt: observedAt,    validFrom: observedAt,
     validTo: null,
     endedAt: null,
+    endedByClaimId: null,
     timePrecision: "instant",
     timeSource: "user_stated",
     active: true,
@@ -12596,7 +12630,7 @@ test("applyProfileMemoryGraphMutations preserves retained observation and claim 
   };
 
   const result = applyProfileMemoryGraphMutations({
-    state: seededState,
+    state: asProfileMemoryState(seededState),
     factDecisions: [],
     touchedEpisodes: [],
     redactedFacts: [redactedFact],
@@ -12643,7 +12677,7 @@ test("applyProfileMemoryGraphMutations repairs already-redacted observation and 
   const sourceTaskId = "task_profile_graph_store_fact_redaction_repeat";
   const sourceFingerprint = "fingerprint_profile_graph_store_fact_redaction_repeat";
   const redactedFactId = "fact_profile_graph_store_fact_redaction_repeat";
-  const existingObservation = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+  const existingObservation = createGraphObservationEnvelope({
     observationId: "observation_profile_graph_store_fact_redaction_repeat",
     stableRefId: "stable_ref_profile_graph_store_fact_redaction_repeat_observation",
     family: "identity.preferred_name",
@@ -12661,7 +12695,7 @@ test("applyProfileMemoryGraphMutations repairs already-redacted observation and 
     timeSource: "user_stated",
     entityRefIds: ["entity_avery"]
   }, "2026-04-07T14:12:00.000Z");
-  const existingClaim = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+  const existingClaim = createGraphClaimEnvelope({
     claimId: "claim_profile_graph_store_fact_redaction_repeat",
     stableRefId: "stable_ref_profile_graph_store_fact_redaction_repeat_claim",
     family: "identity.preferred_name",
@@ -12673,11 +12707,10 @@ test("applyProfileMemoryGraphMutations repairs already-redacted observation and 
     sourceTaskId: "task_profile_graph_store_fact_redaction_old",
     sourceFingerprint: "fingerprint_profile_graph_store_fact_redaction_old",
     sourceTier: "explicit_user_statement",
-    assertedAt: observedAt,
-    observedAt,
-    validFrom: observedAt,
+    assertedAt: observedAt,    validFrom: observedAt,
     validTo: priorRedactedAt,
     endedAt: priorRedactedAt,
+    endedByClaimId: null,
     timePrecision: "instant",
     timeSource: "user_stated",
     active: true,
@@ -12710,7 +12743,7 @@ test("applyProfileMemoryGraphMutations repairs already-redacted observation and 
   };
 
   const result = applyProfileMemoryGraphMutations({
-    state: seededState,
+    state: asProfileMemoryState(seededState),
     factDecisions: [],
     touchedEpisodes: [],
     redactedFacts: [redactedFact],
@@ -12758,7 +12791,7 @@ test("applyProfileMemoryGraphMutations fail-closes stale unrelated retained clai
   const sourceTaskId = "task_profile_graph_store_fact_redaction_repeat_stale_lineage";
   const sourceFingerprint = "fingerprint_profile_graph_store_fact_redaction_repeat_stale_lineage";
   const redactedFactId = "fact_profile_graph_store_fact_redaction_repeat_stale_lineage";
-  const targetedObservation = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+  const targetedObservation = createGraphObservationEnvelope({
     observationId: "observation_profile_graph_store_fact_redaction_repeat_stale_lineage_target",
     stableRefId: "stable_ref_profile_graph_store_fact_redaction_repeat_stale_lineage_target",
     family: "identity.preferred_name",
@@ -12776,7 +12809,7 @@ test("applyProfileMemoryGraphMutations fail-closes stale unrelated retained clai
     timeSource: "user_stated",
     entityRefIds: ["entity_avery"]
   }, "2026-04-07T14:12:00.000Z");
-  const unrelatedObservation = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+  const unrelatedObservation = createGraphObservationEnvelope({
     observationId: "observation_profile_graph_store_fact_redaction_repeat_stale_lineage_unrelated",
     stableRefId: "stable_ref_profile_graph_store_fact_redaction_repeat_stale_lineage_unrelated",
     family: "contact.context",
@@ -12794,7 +12827,7 @@ test("applyProfileMemoryGraphMutations fail-closes stale unrelated retained clai
     timeSource: "user_stated",
     entityRefIds: ["entity_avery"]
   }, "2026-04-07T14:14:00.000Z");
-  const existingClaim = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+  const existingClaim = createGraphClaimEnvelope({
     claimId: "claim_profile_graph_store_fact_redaction_repeat_stale_lineage",
     stableRefId: "stable_ref_profile_graph_store_fact_redaction_repeat_stale_lineage_claim",
     family: "identity.preferred_name",
@@ -12806,9 +12839,7 @@ test("applyProfileMemoryGraphMutations fail-closes stale unrelated retained clai
     sourceTaskId: "task_profile_graph_store_fact_redaction_repeat_old",
     sourceFingerprint: "fingerprint_profile_graph_store_fact_redaction_repeat_old",
     sourceTier: "explicit_user_statement",
-    assertedAt: observedAt,
-    observedAt,
-    validFrom: observedAt,
+    assertedAt: observedAt,    validFrom: observedAt,
     validTo: priorRedactedAt,
     endedAt: priorRedactedAt,
     endedByClaimId: null,
@@ -12847,7 +12878,7 @@ test("applyProfileMemoryGraphMutations fail-closes stale unrelated retained clai
   };
 
   const result = applyProfileMemoryGraphMutations({
-    state: seededState,
+    state: asProfileMemoryState(seededState),
     factDecisions: [],
     touchedEpisodes: [],
     redactedFacts: [redactedFact],
@@ -12888,7 +12919,7 @@ test("applyProfileMemoryGraphMutations stays no-op when retained redacted observ
   const sourceTaskId = "task_profile_graph_store_fact_redaction_repeat_noop";
   const sourceFingerprint = "fingerprint_profile_graph_store_fact_redaction_repeat_noop";
   const redactedFactId = "fact_profile_graph_store_fact_redaction_repeat_noop";
-  const existingObservation = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+  const existingObservation = createGraphObservationEnvelope({
     observationId: "observation_profile_graph_store_fact_redaction_repeat_noop",
     stableRefId: null,
     family: "identity.preferred_name",
@@ -12906,7 +12937,7 @@ test("applyProfileMemoryGraphMutations stays no-op when retained redacted observ
     timeSource: "user_stated",
     entityRefIds: []
   }, "2026-04-07T14:12:00.000Z");
-  const existingClaim = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+  const existingClaim = createGraphClaimEnvelope({
     claimId: "claim_profile_graph_store_fact_redaction_repeat_noop",
     stableRefId: null,
     family: "identity.preferred_name",
@@ -12918,9 +12949,7 @@ test("applyProfileMemoryGraphMutations stays no-op when retained redacted observ
     sourceTaskId,
     sourceFingerprint,
     sourceTier: "explicit_user_statement",
-    assertedAt: "2026-04-07T14:45:00.000Z",
-    observedAt: "2026-04-07T14:45:00.000Z",
-    validFrom: "2026-04-07T14:45:00.000Z",
+    assertedAt: "2026-04-07T14:45:00.000Z",    validFrom: "2026-04-07T14:45:00.000Z",
     validTo: recordedAt,
     endedAt: recordedAt,
     endedByClaimId: null,
@@ -12956,7 +12985,7 @@ test("applyProfileMemoryGraphMutations stays no-op when retained redacted observ
   };
 
   const result = applyProfileMemoryGraphMutations({
-    state: seededState,
+    state: asProfileMemoryState(seededState),
     factDecisions: [],
     touchedEpisodes: [],
     redactedFacts: [redactedFact],
@@ -12979,7 +13008,7 @@ test("applyProfileMemoryGraphMutations clamps stale snapshot watermark without r
   const redactedFactId = "fact_profile_graph_store_fact_redaction_repeat_noop_clamp";
   const observationId = "observation_profile_graph_store_fact_redaction_repeat_noop_clamp";
   const claimId = "claim_profile_graph_store_fact_redaction_repeat_noop_clamp";
-  const existingObservation = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+  const existingObservation = createGraphObservationEnvelope({
     observationId,
     stableRefId: null,
     family: "identity.preferred_name",
@@ -12997,7 +13026,7 @@ test("applyProfileMemoryGraphMutations clamps stale snapshot watermark without r
     timeSource: "user_stated",
     entityRefIds: []
   }, "2026-04-08T18:11:00.000Z");
-  const existingClaim = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+  const existingClaim = createGraphClaimEnvelope({
     claimId,
     stableRefId: null,
     family: "identity.preferred_name",
@@ -13009,9 +13038,7 @@ test("applyProfileMemoryGraphMutations clamps stale snapshot watermark without r
     sourceTaskId,
     sourceFingerprint,
     sourceTier: "explicit_user_statement",
-    assertedAt: "2026-04-08T18:10:00.000Z",
-    observedAt: "2026-04-08T18:10:00.000Z",
-    validFrom: "2026-04-08T18:10:00.000Z",
+    assertedAt: "2026-04-08T18:10:00.000Z",    validFrom: "2026-04-08T18:10:00.000Z",
     validTo: recordedAt,
     endedAt: recordedAt,
     endedByClaimId: null,
@@ -13073,7 +13100,7 @@ test("applyProfileMemoryGraphMutations clamps stale snapshot watermark without r
   };
 
   const result = applyProfileMemoryGraphMutations({
-    state: seededState,
+    state: asProfileMemoryState(seededState),
     factDecisions: [],
     touchedEpisodes: [],
     redactedFacts: [redactedFact],
@@ -13112,7 +13139,7 @@ test("applyProfileMemoryGraphMutations clamps stale snapshot watermark from next
   const claimId = "claim_profile_graph_store_fact_redaction_repeat_noop_empty_clamp";
   const retainedObservationCreatedAt = "2026-04-08T18:21:00.000Z";
   const retainedClaimCreatedAt = "2026-04-08T18:22:00.000Z";
-  const existingObservation = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+  const existingObservation = createGraphObservationEnvelope({
     observationId,
     stableRefId: null,
     family: "identity.preferred_name",
@@ -13130,7 +13157,7 @@ test("applyProfileMemoryGraphMutations clamps stale snapshot watermark from next
     timeSource: "user_stated",
     entityRefIds: []
   }, retainedObservationCreatedAt);
-  const existingClaim = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+  const existingClaim = createGraphClaimEnvelope({
     claimId,
     stableRefId: null,
     family: "identity.preferred_name",
@@ -13142,9 +13169,7 @@ test("applyProfileMemoryGraphMutations clamps stale snapshot watermark from next
     sourceTaskId,
     sourceFingerprint,
     sourceTier: "explicit_user_statement",
-    assertedAt: "2026-04-08T18:20:00.000Z",
-    observedAt: "2026-04-08T18:20:00.000Z",
-    validFrom: "2026-04-08T18:20:00.000Z",
+    assertedAt: "2026-04-08T18:20:00.000Z",    validFrom: "2026-04-08T18:20:00.000Z",
     validTo: recordedAt,
     endedAt: recordedAt,
     endedByClaimId: null,
@@ -13191,7 +13216,7 @@ test("applyProfileMemoryGraphMutations clamps stale snapshot watermark from next
   };
 
   const result = applyProfileMemoryGraphMutations({
-    state: seededState,
+    state: asProfileMemoryState(seededState),
     factDecisions: [],
     touchedEpisodes: [],
     redactedFacts: [redactedFact],
@@ -13230,7 +13255,7 @@ test("applyProfileMemoryGraphMutations stays a true no-op when explicit fact-for
   const claimId = "claim_profile_graph_store_fact_redaction_repeat_noop_replay_safe";
   const retainedObservationCreatedAt = "2026-04-08T19:01:00.000Z";
   const retainedClaimCreatedAt = "2026-04-08T19:02:00.000Z";
-  const existingObservation = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+  const existingObservation = createGraphObservationEnvelope({
     observationId,
     stableRefId: null,
     family: "identity.preferred_name",
@@ -13248,7 +13273,7 @@ test("applyProfileMemoryGraphMutations stays a true no-op when explicit fact-for
     timeSource: "user_stated",
     entityRefIds: []
   }, retainedObservationCreatedAt);
-  const existingClaim = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+  const existingClaim = createGraphClaimEnvelope({
     claimId,
     stableRefId: null,
     family: "identity.preferred_name",
@@ -13260,9 +13285,7 @@ test("applyProfileMemoryGraphMutations stays a true no-op when explicit fact-for
     sourceTaskId,
     sourceFingerprint,
     sourceTier: "explicit_user_statement",
-    assertedAt: "2026-04-08T18:55:00.000Z",
-    observedAt: "2026-04-08T18:55:00.000Z",
-    validFrom: "2026-04-08T18:55:00.000Z",
+    assertedAt: "2026-04-08T18:55:00.000Z",    validFrom: "2026-04-08T18:55:00.000Z",
     validTo: recordedAt,
     endedAt: recordedAt,
     endedByClaimId: null,
@@ -13328,7 +13351,7 @@ test("applyProfileMemoryGraphMutations stays a true no-op when explicit fact-for
   };
 
   const result = applyProfileMemoryGraphMutations({
-    state: seededState,
+    state: asProfileMemoryState(seededState),
     factDecisions: [],
     touchedEpisodes: [],
     redactedFacts: [redactedFact],
@@ -13353,7 +13376,7 @@ test("profile memory load preserves deleted fact projection lineage on redacted 
     const emptyState = createEmptyProfileMemoryState();
     const redactedFactId = "fact_profile_graph_store_redacted_claim_projection_lineage";
     const survivingFactId = "fact_profile_graph_store_redacted_claim_projection_lineage_surviving";
-    const existingObservation = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+    const existingObservation = createGraphObservationEnvelope({
       observationId: "observation_profile_graph_store_redacted_claim_projection_lineage",
       stableRefId: null,
       family: "identity.preferred_name",
@@ -13371,7 +13394,7 @@ test("profile memory load preserves deleted fact projection lineage on redacted 
       timeSource: "user_stated",
       entityRefIds: []
     });
-    const unrelatedLiveObservation = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+    const unrelatedLiveObservation = createGraphObservationEnvelope({
       observationId: "observation_profile_graph_store_redacted_claim_projection_lineage_live_unrelated",
       stableRefId: null,
       family: "contact.context",
@@ -13390,7 +13413,7 @@ test("profile memory load preserves deleted fact projection lineage on redacted 
       timeSource: "user_stated",
       entityRefIds: []
     });
-    const existingClaim = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+    const existingClaim = createGraphClaimEnvelope({
       claimId: "claim_profile_graph_store_redacted_claim_projection_lineage",
       stableRefId: null,
       family: "identity.preferred_name",
@@ -13402,9 +13425,7 @@ test("profile memory load preserves deleted fact projection lineage on redacted 
       sourceTaskId: "task_profile_graph_store_redacted_claim_projection_lineage",
       sourceFingerprint: "fingerprint_profile_graph_store_redacted_claim_projection_lineage",
       sourceTier: "explicit_user_statement",
-      assertedAt: "2026-04-07T14:45:00.000Z",
-      observedAt: "2026-04-07T14:45:00.000Z",
-      validFrom: "2026-04-07T14:45:00.000Z",
+      assertedAt: "2026-04-07T14:45:00.000Z",      validFrom: "2026-04-07T14:45:00.000Z",
       validTo: "2026-04-07T15:20:00.000Z",
       endedAt: "2026-04-07T15:20:00.000Z",
       endedByClaimId: null,
@@ -13443,7 +13464,7 @@ test("profile memory load preserves deleted fact projection lineage on redacted 
         claims: [existingClaim]
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
 
@@ -13466,7 +13487,7 @@ test("profile memory load preserves deleted episode projection lineage on redact
     const survivingEpisodeId = "episode_profile_graph_store_redacted_event_projection_lineage_surviving";
     const unrelatedDeletedEpisodeId =
       "episode_profile_graph_store_redacted_event_projection_lineage_other";
-    const existingEvent = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+    const existingEvent = createGraphEventEnvelope({
       eventId: `event_${sha256HexFromCanonicalJson({ episodeId: redactedEpisodeId }).slice(0, 24)}`,
       stableRefId: null,
       family: "episode.candidate",
@@ -13521,7 +13542,7 @@ test("profile memory load preserves deleted episode projection lineage on redact
         events: [existingEvent]
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
 
@@ -13568,7 +13589,7 @@ test("profile memory load repairs retained resolved events whose same-id payload
         ...emptyState.graph,
         updatedAt: "2026-04-07T15:30:00.000Z",
         events: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+          createGraphEventEnvelope({
             eventId: expectedEventId,
             stableRefId: null,
             family: "episode.candidate",
@@ -13598,7 +13619,7 @@ test("profile memory load repairs retained resolved events whose same-id payload
         }
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
 
@@ -13624,7 +13645,7 @@ test("profile memory load repairs retained resolved events whose same-id payload
       ["entity_owen", "entity_tax_form"]
     );
     assert.equal(
-      loaded.graph.events[0]?.payload.sourceFingerprint.startsWith("graph_event_backfill_"),
+      loaded.graph.events[0]?.payload.sourceFingerprint?.startsWith("graph_event_backfill_"),
       true
     );
     assert.equal(loaded.graph.mutationJournal.entries.length, 0);
@@ -13643,7 +13664,7 @@ test("profile memory load adds replay markers for active legacy graph events wit
         ...emptyState.graph,
         updatedAt: "2026-04-03T21:18:00.000Z",
         events: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+          createGraphEventEnvelope({
             eventId: "event_profile_graph_store_replay_backfill_1",
             stableRefId: null,
             family: "episode.candidate",
@@ -13673,7 +13694,7 @@ test("profile memory load adds replay markers for active legacy graph events wit
         }
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
 
@@ -13685,7 +13706,7 @@ test("profile memory load adds replay markers for active legacy graph events wit
     );
     assert.equal(loaded.graph.mutationJournal.entries[0]?.sourceTaskId, null);
     assert.equal(
-      loaded.graph.mutationJournal.entries[0]?.sourceFingerprint.startsWith(
+      loaded.graph.mutationJournal.entries[0]?.sourceFingerprint?.startsWith(
         "graph_event_replay_backfill_"
       ),
       true
@@ -13705,7 +13726,7 @@ test("profile memory load adds replay markers for active legacy graph claims wit
         ...emptyState.graph,
         updatedAt: "2026-04-03T21:19:00.000Z",
         claims: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+          createGraphClaimEnvelope({
             claimId: "claim_profile_graph_store_replay_backfill_1",
             stableRefId: null,
             family: "identity.preferred_name",
@@ -13737,7 +13758,7 @@ test("profile memory load adds replay markers for active legacy graph claims wit
         }
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
 
@@ -13753,7 +13774,7 @@ test("profile memory load adds replay markers for active legacy graph claims wit
       [loaded.graph.observations[0]!.payload.observationId]
     );
     assert.equal(
-      loaded.graph.mutationJournal.entries[0]?.sourceFingerprint.startsWith(
+      loaded.graph.mutationJournal.entries[0]?.sourceFingerprint?.startsWith(
         "graph_observation_replay_backfill_"
       ),
       true
@@ -13764,7 +13785,7 @@ test("profile memory load adds replay markers for active legacy graph claims wit
     );
     assert.equal(loaded.graph.mutationJournal.entries[1]?.sourceTaskId, null);
     assert.equal(
-      loaded.graph.mutationJournal.entries[1]?.sourceFingerprint.startsWith(
+      loaded.graph.mutationJournal.entries[1]?.sourceFingerprint?.startsWith(
         "graph_claim_replay_backfill_"
       ),
       true
@@ -13788,7 +13809,7 @@ test("profile memory load adds replay markers for legacy graph observations with
         ...emptyState.graph,
         updatedAt: "2026-04-03T21:18:00.000Z",
         observations: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+          createGraphObservationEnvelope({
             observationId: "observation_profile_graph_store_replay_backfill_1",
             stableRefId: null,
             family: "contact.context",
@@ -13816,7 +13837,7 @@ test("profile memory load adds replay markers for legacy graph observations with
         }
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
 
@@ -13829,7 +13850,7 @@ test("profile memory load adds replay markers for legacy graph observations with
       ["observation_profile_graph_store_replay_backfill_1"]
     );
     assert.equal(
-      loaded.graph.mutationJournal.entries[0]?.sourceFingerprint.startsWith(
+      loaded.graph.mutationJournal.entries[0]?.sourceFingerprint?.startsWith(
         "graph_observation_replay_backfill_"
       ),
       true
@@ -13849,7 +13870,7 @@ test("profile memory load clamps malformed retained snapshot watermarks before o
         ...emptyState.graph,
         updatedAt: "2026-04-03T21:18:05.000Z",
         observations: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+          createGraphObservationEnvelope({
             observationId: "observation_profile_graph_store_replay_backfill_snapshot_clamp_1",
             stableRefId: null,
             family: "contact.context",
@@ -13886,7 +13907,7 @@ test("profile memory load clamps malformed retained snapshot watermarks before o
         }
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
 
@@ -13911,7 +13932,7 @@ test("profile memory load clamps malformed retained nextWatermark before observa
         ...emptyState.graph,
         updatedAt: "2026-04-03T21:18:06.000Z",
         observations: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+          createGraphObservationEnvelope({
             observationId: "observation_profile_graph_store_replay_backfill_next_watermark_clamp_1",
             stableRefId: null,
             family: "contact.context",
@@ -13948,7 +13969,7 @@ test("profile memory load clamps malformed retained nextWatermark before observa
         }
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
 
@@ -13970,7 +13991,7 @@ test("profile memory load repairs missing replay coverage for uncompacted partia
         ...emptyState.graph,
         updatedAt: "2026-04-03T21:18:30.000Z",
         observations: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+          createGraphObservationEnvelope({
             observationId: "observation_profile_graph_store_partial_replay_existing",
             stableRefId: null,
             family: "contact.context",
@@ -13988,7 +14009,7 @@ test("profile memory load repairs missing replay coverage for uncompacted partia
             timeSource: "user_stated",
             entityRefIds: ["entity_owen"]
           }),
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+          createGraphObservationEnvelope({
             observationId: "observation_profile_graph_store_partial_replay_1",
             stableRefId: null,
             family: "contact.context",
@@ -14008,7 +14029,7 @@ test("profile memory load repairs missing replay coverage for uncompacted partia
           })
         ],
         claims: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+          createGraphClaimEnvelope({
             claimId: "claim_profile_graph_store_partial_replay_1",
             stableRefId: null,
             family: "contact.relationship",
@@ -14034,7 +14055,7 @@ test("profile memory load repairs missing replay coverage for uncompacted partia
           })
         ],
         events: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+          createGraphEventEnvelope({
             eventId: "event_profile_graph_store_partial_replay_1",
             stableRefId: null,
             family: "episode.candidate",
@@ -14081,7 +14102,7 @@ test("profile memory load repairs missing replay coverage for uncompacted partia
         }
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
 
@@ -14095,7 +14116,7 @@ test("profile memory load repairs missing replay coverage for uncompacted partia
       ["event_profile_graph_store_partial_replay_1"]
     );
     assert.equal(
-      loaded.graph.mutationJournal.entries[1]?.sourceFingerprint.startsWith(
+      loaded.graph.mutationJournal.entries[1]?.sourceFingerprint?.startsWith(
         "graph_event_replay_backfill_"
       ),
       true
@@ -14105,7 +14126,7 @@ test("profile memory load repairs missing replay coverage for uncompacted partia
       ["observation_profile_graph_store_partial_replay_1"]
     );
     assert.equal(
-      loaded.graph.mutationJournal.entries[2]?.sourceFingerprint.startsWith(
+      loaded.graph.mutationJournal.entries[2]?.sourceFingerprint?.startsWith(
         "graph_observation_replay_backfill_"
       ),
       true
@@ -14115,7 +14136,7 @@ test("profile memory load repairs missing replay coverage for uncompacted partia
       ["claim_profile_graph_store_partial_replay_1"]
     );
     assert.equal(
-      loaded.graph.mutationJournal.entries[3]?.sourceFingerprint.startsWith(
+      loaded.graph.mutationJournal.entries[3]?.sourceFingerprint?.startsWith(
         "graph_claim_replay_backfill_"
       ),
       true
@@ -14138,7 +14159,7 @@ test("profile memory load repairs detached claim lineage inside a partially popu
         ...emptyState.graph,
         updatedAt: "2026-04-03T21:18:45.000Z",
         observations: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+          createGraphObservationEnvelope({
             observationId: "observation_profile_graph_store_claim_lineage_unrelated",
             stableRefId: null,
             family: "contact.context",
@@ -14158,7 +14179,7 @@ test("profile memory load repairs detached claim lineage inside a partially popu
           })
         ],
         claims: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+          createGraphClaimEnvelope({
             claimId: "claim_profile_graph_store_claim_lineage_detached",
             stableRefId: null,
             family: "identity.preferred_name",
@@ -14195,7 +14216,7 @@ test("profile memory load repairs detached claim lineage inside a partially popu
         }
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
     const synthesizedObservation = loaded.graph.observations.find(
@@ -14236,7 +14257,7 @@ test("profile memory load repairs stale claim lineage ids by reusing matching su
         ...emptyState.graph,
         updatedAt: "2026-04-03T21:18:46.000Z",
         observations: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+          createGraphObservationEnvelope({
             observationId: "observation_profile_graph_store_claim_lineage_stale_existing",
             stableRefId: null,
             family: "identity.preferred_name",
@@ -14254,7 +14275,7 @@ test("profile memory load repairs stale claim lineage ids by reusing matching su
             timeSource: "user_stated",
             entityRefIds: []
           }),
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+          createGraphObservationEnvelope({
             observationId: "observation_profile_graph_store_claim_lineage_stale_unrelated",
             stableRefId: null,
             family: "contact.context",
@@ -14274,7 +14295,7 @@ test("profile memory load repairs stale claim lineage ids by reusing matching su
           })
         ],
         claims: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+          createGraphClaimEnvelope({
             claimId: "claim_profile_graph_store_claim_lineage_stale_existing",
             stableRefId: null,
             family: "identity.preferred_name",
@@ -14311,7 +14332,7 @@ test("profile memory load repairs stale claim lineage ids by reusing matching su
         }
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
 
@@ -14354,7 +14375,7 @@ test("profile memory load repairs surviving but semantically mismatched claim li
         ...emptyState.graph,
         updatedAt: "2026-04-03T21:18:47.000Z",
         observations: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+          createGraphObservationEnvelope({
             observationId: "observation_profile_graph_store_claim_lineage_mismatch_wrong",
             stableRefId: null,
             family: "identity.preferred_name",
@@ -14374,7 +14395,7 @@ test("profile memory load repairs surviving but semantically mismatched claim li
           })
         ],
         claims: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+          createGraphClaimEnvelope({
             claimId: "claim_profile_graph_store_claim_lineage_mismatch_existing",
             stableRefId: null,
             family: "identity.preferred_name",
@@ -14411,7 +14432,7 @@ test("profile memory load repairs surviving but semantically mismatched claim li
         }
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
 
@@ -14489,7 +14510,7 @@ test("profile memory load backfills graph observations and current claims from l
         }
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
 
@@ -14508,7 +14529,7 @@ test("profile memory load backfills graph observations and current claims from l
         .sort((left, right) => left.localeCompare(right))
     );
     assert.equal(
-      loaded.graph.mutationJournal.entries[0]?.sourceFingerprint.startsWith(
+      loaded.graph.mutationJournal.entries[0]?.sourceFingerprint?.startsWith(
         "graph_observation_replay_backfill_"
       ),
       true
@@ -14518,7 +14539,7 @@ test("profile memory load backfills graph observations and current claims from l
       [loaded.graph.claims[0]!.payload.claimId]
     );
     assert.equal(
-      loaded.graph.mutationJournal.entries[1]?.sourceFingerprint.startsWith(
+      loaded.graph.mutationJournal.entries[1]?.sourceFingerprint?.startsWith(
         "graph_claim_replay_backfill_"
       ),
       true
@@ -14557,7 +14578,7 @@ test("profile memory load reuses existing graph observations when retained fact 
         ...emptyState.graph,
         updatedAt: "2026-04-03T21:18:30.500Z",
         observations: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+          createGraphObservationEnvelope({
             observationId: "observation_profile_graph_store_legacy_source_task_padding_existing",
             stableRefId: null,
             family: "employment.current",
@@ -14585,7 +14606,7 @@ test("profile memory load reuses existing graph observations when retained fact 
         }
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
     const matchingObservations = loaded.graph.observations.filter(
@@ -14653,7 +14674,7 @@ test("profile memory load canonicalizes retained fact sources before legacy obse
         }
       ]
     });
-    await saveProfileMemoryState(filePath, encryptionKey, {
+    await saveSeededProfileMemoryState(filePath, encryptionKey, {
       ...baseState,
       facts: [
         {
@@ -14724,7 +14745,7 @@ test("profile memory load canonicalizes retained fact keys and values before leg
         }
       ]
     });
-    await saveProfileMemoryState(filePath, encryptionKey, {
+    await saveSeededProfileMemoryState(filePath, encryptionKey, {
       ...baseState,
       facts: [
         {
@@ -14796,7 +14817,7 @@ test("profile memory load canonicalizes retained fact observedAt before legacy b
         }
       ]
     });
-    await saveProfileMemoryState(filePath, encryptionKey, {
+    await saveSeededProfileMemoryState(filePath, encryptionKey, {
       ...baseState,
       facts: [
         {
@@ -14877,7 +14898,7 @@ test("profile memory load canonicalizes retained fact ids before legacy winner t
         }
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
     const activeClaims = loaded.graph.claims.filter((claim) => claim.payload.active);
@@ -14930,7 +14951,7 @@ test("profile memory load treats whitespace-only retained fact supersededAt as a
         }
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
 
@@ -14984,7 +15005,7 @@ test("profile memory load backfills current claims from legacy active facts when
         ...emptyState.graph,
         updatedAt: "2026-04-03T21:18:31.000Z",
         observations: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+          createGraphObservationEnvelope({
             observationId: "observation_profile_graph_store_legacy_partial_backfill_existing",
             stableRefId: null,
             family: "employment.current",
@@ -15002,7 +15023,7 @@ test("profile memory load backfills current claims from legacy active facts when
             timeSource: "user_stated",
             entityRefIds: []
           }),
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+          createGraphObservationEnvelope({
             observationId: "observation_profile_graph_store_legacy_partial_backfill_unrelated",
             stableRefId: null,
             family: "contact.context",
@@ -15029,7 +15050,7 @@ test("profile memory load backfills current claims from legacy active facts when
         }
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
     const lanternObservations = loaded.graph.observations.filter(
@@ -15120,7 +15141,7 @@ test("profile memory load backfills current claims when only inactive legacy cla
         updatedAt: "2026-04-03T21:18:32.000Z",
         observations: [],
         claims: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+          createGraphClaimEnvelope({
             claimId: "claim_profile_graph_store_legacy_inactive_backfill_closed",
             stableRefId: null,
             family: "employment.current",
@@ -15152,7 +15173,7 @@ test("profile memory load backfills current claims when only inactive legacy cla
         }
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
     const activeClaims = loaded.graph.claims.filter((claim) => claim.payload.active);
@@ -15224,7 +15245,7 @@ test("profile memory load repairs stale active legacy claims when canonical curr
         ...emptyState.graph,
         updatedAt: "2026-04-03T21:18:33.000Z",
         observations: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+          createGraphObservationEnvelope({
             observationId: "observation_profile_graph_store_legacy_stale_active_backfill_existing",
             stableRefId: null,
             family: "employment.current",
@@ -15244,7 +15265,7 @@ test("profile memory load repairs stale active legacy claims when canonical curr
           })
         ],
         claims: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+          createGraphClaimEnvelope({
             claimId: "claim_profile_graph_store_legacy_stale_active_backfill_oldco",
             stableRefId: null,
             family: "employment.current",
@@ -15276,7 +15297,7 @@ test("profile memory load repairs stale active legacy claims when canonical curr
         }
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
     const activeClaims = loaded.graph.claims.filter((claim) => claim.payload.active);
@@ -15344,7 +15365,7 @@ test("profile memory load repairs legacy current claims when matching observatio
         ...emptyState.graph,
         updatedAt: "2026-04-06T03:40:00.000Z",
         observations: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+          createGraphObservationEnvelope({
             observationId: "observation_profile_graph_store_invalid_source_claim_existing",
             stableRefId: null,
             family: "identity.preferred_name",
@@ -15364,7 +15385,7 @@ test("profile memory load repairs legacy current claims when matching observatio
           })
         ],
         claims: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+          createGraphClaimEnvelope({
             claimId: "claim_profile_graph_store_invalid_source_claim_old",
             stableRefId: null,
             family: "identity.preferred_name",
@@ -15398,7 +15419,7 @@ test("profile memory load repairs legacy current claims when matching observatio
         }
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
     const activeClaims = loaded.graph.claims.filter((claim) => claim.payload.active);
@@ -15488,7 +15509,7 @@ test("profile memory load repairs semantically aligned legacy current claims wit
         ...emptyState.graph,
         updatedAt: "2026-04-06T03:50:00.000Z",
         observations: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+          createGraphObservationEnvelope({
             observationId: "observation_profile_graph_store_stale_same_id_claim_existing",
             stableRefId: null,
             family: "identity.preferred_name",
@@ -15508,7 +15529,7 @@ test("profile memory load repairs semantically aligned legacy current claims wit
           })
         ],
         claims: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+          createGraphClaimEnvelope({
             claimId: expectedClaimId,
             stableRefId: null,
             family: "identity.preferred_name",
@@ -15540,7 +15561,7 @@ test("profile memory load repairs semantically aligned legacy current claims wit
         }
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
 
@@ -15615,7 +15636,7 @@ test("profile memory load repairs stale active legacy claims when effective sens
         ...emptyState.graph,
         updatedAt: "2026-04-03T21:18:33.100Z",
         observations: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+          createGraphObservationEnvelope({
             observationId: "observation_profile_graph_store_sensitive_floor_claim_existing",
             stableRefId: null,
             family: "residence.current",
@@ -15635,7 +15656,7 @@ test("profile memory load repairs stale active legacy claims when effective sens
           })
         ],
         claims: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+          createGraphClaimEnvelope({
             claimId: "claim_profile_graph_store_sensitive_floor_claim_existing",
             stableRefId: null,
             family: "residence.current",
@@ -15669,7 +15690,7 @@ test("profile memory load repairs stale active legacy claims when effective sens
         }
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
     const activeClaims = loaded.graph.claims.filter((claim) => claim.payload.active);
@@ -15736,7 +15757,7 @@ test("profile memory load repairs stale supporting observations when aligned leg
         ...emptyState.graph,
         updatedAt: "2026-04-03T21:18:33.150Z",
         observations: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+          createGraphObservationEnvelope({
             observationId,
             stableRefId: null,
             family: "residence.current",
@@ -15756,7 +15777,7 @@ test("profile memory load repairs stale supporting observations when aligned leg
           })
         ],
         claims: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+          createGraphClaimEnvelope({
             claimId: "claim_profile_graph_store_sensitive_floor_observation_existing",
             stableRefId: null,
             family: "residence.current",
@@ -15788,7 +15809,7 @@ test("profile memory load repairs stale supporting observations when aligned leg
         }
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
     const activeClaims = loaded.graph.claims.filter((claim) => claim.payload.active);
@@ -15833,7 +15854,7 @@ test("profile memory load reuses canonical graph event ids when retained episode
         ...emptyState.graph,
         updatedAt: "2026-04-03T21:25:30.000Z",
         events: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+          createGraphEventEnvelope({
             eventId: canonicalEventId,
             stableRefId: null,
             family: "episode.candidate",
@@ -15863,7 +15884,7 @@ test("profile memory load reuses canonical graph event ids when retained episode
         }
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
 
@@ -15916,7 +15937,7 @@ test("profile memory load fail-closes malformed retained fact confidence during 
         ...emptyState.graph,
         updatedAt: "2026-04-03T21:49:30.000Z",
         observations: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+          createGraphObservationEnvelope({
             observationId: "observation_profile_graph_store_invalid_confidence_backfill_existing",
             stableRefId: null,
             family: "employment.current",
@@ -15937,7 +15958,7 @@ test("profile memory load fail-closes malformed retained fact confidence during 
           })
         ],
         claims: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+          createGraphClaimEnvelope({
             claimId: "claim_profile_graph_store_invalid_confidence_backfill_oldco",
             stableRefId: null,
             family: "employment.current",
@@ -15970,7 +15991,7 @@ test("profile memory load fail-closes malformed retained fact confidence during 
         }
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
     const activeClaims = loaded.graph.claims.filter((claim) => claim.payload.active);
@@ -16274,7 +16295,7 @@ test("profile memory store does not project historical self employment or reside
     });
 
     assert.deepEqual(ingestResult, {
-      appliedFacts: 2,
+      appliedFacts: 0,
       supersededFacts: 0
     });
     assert.equal(
@@ -18454,7 +18475,7 @@ test("profile memory store keeps third-person contact continuity available for c
   await withProfileStore(async (store) => {
     const ingestResult = await store.ingestFromTaskInput(
       "task_profile_contact_billy_continuity",
-      "Billy used to be at Flare. He's at Northstar now. He drives a gray Accord.",
+      "Billy used to be at Beacon. He's at Northstar now. He drives a gray Accord.",
       "2026-04-09T11:00:00.000Z"
     );
     const readableFacts = await store.readFacts({
@@ -18467,7 +18488,7 @@ test("profile memory store keeps third-person contact continuity available for c
       createEmptyEntityGraphV1("2026-04-09T11:00:00.000Z"),
       createEmptyConversationStackV1("2026-04-09T11:00:00.000Z"),
       {
-        entityHints: ["Billy", "Flare", "Northstar", "Accord"],
+        entityHints: ["Billy", "Beacon", "Northstar", "Accord"],
         semanticMode: "relationship_inventory",
         relevanceScope: "conversation_local",
         maxFacts: 10
@@ -18495,7 +18516,7 @@ test("profile memory store keeps third-person contact continuity available for c
       readableFacts.some(
         (fact) =>
           fact.key === "contact.billy.work_association" &&
-          fact.value === "Flare"
+          fact.value === "Beacon"
       ),
       false
     );
@@ -18511,7 +18532,7 @@ test("profile memory store keeps third-person contact continuity available for c
       continuityFacts.some(
         (fact) =>
           /^contact\.billy\.context\.[a-f0-9]{8}$/.test(fact.key) &&
-          fact.value === "Billy used to be at Flare"
+          fact.value === "Billy used to be at Beacon"
       ),
       true
     );
@@ -18520,6 +18541,104 @@ test("profile memory store keeps third-person contact continuity available for c
         (fact) =>
           /^contact\.billy\.context\.[a-f0-9]{8}$/.test(fact.key) &&
           fact.value === "Billy drives a gray Accord"
+      ),
+      true
+    );
+  });
+});
+
+test("profile memory store ingests long-form third-person work updates without flattening current and historical organization state", async () => {
+  await withProfileStore(async (store) => {
+    const ingestResult = await store.ingestFromTaskInput(
+      "task_profile_contact_longform_continuity",
+      [
+        "Billy used to work at Sample Web Studio as a front-end contractor, but by late February he had started interviewing elsewhere.",
+        "Billy is no longer at Sample Web Studio.",
+        "Billy has already started at Crimson Analytics, and Garrett still owns Harbor Signal Studio.",
+        "Garrett prefers short direct updates.",
+        "Billy is still in Ferndale for now, and Garrett is still splitting time between Detroit and Ann Arbor."
+      ].join(" "),
+      "2026-04-12T18:05:00.000Z"
+    );
+    const readableFacts = await store.readFacts({
+      purpose: "operator_view",
+      includeSensitive: false,
+      explicitHumanApproval: false,
+      maxFacts: 50
+    });
+    const continuityFacts = await store.queryFactsForContinuity(
+      createEmptyEntityGraphV1("2026-04-12T18:05:00.000Z"),
+      createEmptyConversationStackV1("2026-04-12T18:05:00.000Z"),
+      {
+        entityHints: ["Billy", "Garrett", "Sample Web Studio", "Crimson Analytics"],
+        semanticMode: "relationship_inventory",
+        relevanceScope: "conversation_local",
+        maxFacts: 20
+      }
+    );
+
+    assert.equal(ingestResult.appliedFacts > 0, true);
+    assert.equal(
+      readableFacts.some(
+        (fact) =>
+          fact.key === "contact.billy.work_association" &&
+          fact.value === "Crimson Analytics"
+      ),
+      true
+    );
+    assert.equal(
+      readableFacts.some(
+        (fact) =>
+          fact.key === "contact.billy.work_association" &&
+          fact.value === "Sample Web Studio"
+      ),
+      false
+    );
+    assert.equal(
+      continuityFacts.some(
+        (fact) =>
+          fact.key === "contact.billy.work_association" &&
+          fact.value === "Crimson Analytics"
+      ),
+      true
+    );
+    assert.equal(
+      readableFacts.some(
+        (fact) =>
+          /^contact\.garrett\.context\.[a-f0-9]{8}$/.test(fact.key) &&
+          fact.value === "Garrett still owns Harbor Signal Studio"
+      ),
+      true
+    );
+    assert.equal(
+      readableFacts.some(
+        (fact) =>
+          /^contact\.garrett\.context\.[a-f0-9]{8}$/.test(fact.key) &&
+          fact.value === "Garrett still owns Harbor Signal Studio"
+      ),
+      true
+    );
+    assert.equal(
+      readableFacts.some(
+        (fact) =>
+          /^contact\.garrett\.context\.[a-f0-9]{8}$/.test(fact.key) &&
+          fact.value === "Garrett prefers short direct updates"
+      ),
+      true
+    );
+    assert.equal(
+      readableFacts.some(
+        (fact) =>
+          /^contact\.billy\.context\.[a-f0-9]{8}$/.test(fact.key) &&
+          fact.value === "Billy is still in Ferndale for now"
+      ),
+      true
+    );
+    assert.equal(
+      readableFacts.some(
+        (fact) =>
+          /^contact\.garrett\.context\.[a-f0-9]{8}$/.test(fact.key) &&
+          fact.value === "Garrett is still splitting time between Detroit and Ann Arbor"
       ),
       true
     );
@@ -18750,7 +18869,7 @@ test("queryEpisodesForContinuity returns linked unresolved episodes for re-menti
       ]
     };
 
-    await saveProfileMemoryState(filePath, Buffer.alloc(32, 7), seededState);
+    await saveSeededProfileMemoryState(filePath, Buffer.alloc(32, 7), seededState);
 
     const graph = applyEntityExtractionToGraph(
       createEmptyEntityGraphV1(observedAt),
@@ -18811,7 +18930,7 @@ test("profile memory store load preserves persisted episodic-memory state", asyn
       ]
     };
 
-    await saveProfileMemoryState(filePath, Buffer.alloc(32, 7), seededState);
+    await saveSeededProfileMemoryState(filePath, Buffer.alloc(32, 7), seededState);
 
     const loaded = await store.load();
     assert.equal(loaded.episodes.length, 1);
@@ -18852,7 +18971,7 @@ test("profile memory store load consolidates duplicate episodic-memory records",
       ]
     };
 
-    await saveProfileMemoryState(filePath, Buffer.alloc(32, 7), seededState);
+    await saveSeededProfileMemoryState(filePath, Buffer.alloc(32, 7), seededState);
 
     const loaded = await store.load();
     assert.equal(loaded.episodes.length, 1);
@@ -18879,7 +18998,7 @@ test("ingestFromTaskInput extracts and later resolves bounded episodic-memory si
     assert.equal(state.graph.events[0]?.payload.title, "Owen fell down");
     assert.equal(state.graph.events[0]?.payload.validTo, null);
     assert.equal(
-      state.graph.mutationJournal.entries.at(-1)?.eventIds.includes(eventId),
+      lastItem(state.graph.mutationJournal.entries)?.eventIds.includes(eventId),
       true
     );
 
@@ -18897,9 +19016,45 @@ test("ingestFromTaskInput extracts and later resolves bounded episodic-memory si
     assert.equal(state.episodes[0]?.resolvedAt, "2026-03-08T12:00:00.000Z");
     assert.equal(state.graph.events[0]?.payload.validTo, "2026-03-08T12:00:00.000Z");
     assert.equal(
-      state.graph.mutationJournal.entries.at(-1)?.eventIds.includes(eventId),
+      lastItem(state.graph.mutationJournal.entries)?.eventIds.includes(eventId),
       true
     );
+  });
+});
+
+test("ingestFromTaskInput persists pending and tentative timeline items as episodic memory", async () => {
+  await withProfileStore(async (store) => {
+    const result = await store.ingestFromTaskInput(
+      "task_profile_store_episode_timeline_ingest_1",
+      [
+        "The March 27 Docklight launch review is still pending.",
+        "Crimson Analytics is considering a case-study page, but that is still tentative and not scheduled.",
+        "Billy says he may revisit moving in summer."
+      ].join(" "),
+      "2026-04-13T08:30:38.000Z"
+    );
+
+    assert.equal(result.appliedFacts, 3);
+
+    const state = await store.load();
+    assert.equal(state.episodes.length, 3);
+    assert.equal(state.graph.events.length, 3);
+
+    const launchReview = state.episodes.find((episode) => episode.title === "Docklight launch review");
+    const caseStudy = state.episodes.find((episode) => episode.title === "Crimson Analytics case-study page");
+    const move = state.episodes.find((episode) => episode.title === "Billy possible move");
+
+    assert.ok(launchReview);
+    assert.equal(launchReview?.status, "unresolved");
+    assert.deepEqual(launchReview?.tags, ["followup", "milestone", "pending", "review"]);
+
+    assert.ok(caseStudy);
+    assert.equal(caseStudy?.status, "outcome_unknown");
+    assert.deepEqual(caseStudy?.entityRefs, ["Crimson Analytics"]);
+
+    assert.ok(move);
+    assert.equal(move?.status, "outcome_unknown");
+    assert.deepEqual(move?.entityRefs, ["contact.billy"]);
   });
 });
 
@@ -19007,7 +19162,7 @@ test("evaluateAgentPulse allows stale-fact revalidation when stale facts exist",
       observedAt: "2025-01-10T00:00:00.000Z",
       confidence: 0.95
     }).nextState;
-    await saveProfileMemoryState(filePath, Buffer.alloc(32, 7), seededState);
+    await saveSeededProfileMemoryState(filePath, Buffer.alloc(32, 7), seededState);
 
     const evaluation = await store.evaluateAgentPulse(
       {
@@ -19108,6 +19263,108 @@ test("ingestFromTaskInput dual-writes validated candidates into compatibility fa
   });
 });
 
+test("ingestFromTaskInput emits current-surface org and place claims for continuity synchronization", async () => {
+  let latestResolvedClaims: readonly ProfileMemoryGraphClaimRecord[] | null = null;
+
+  await withProfileStore(
+    async (store) => {
+      await store.ingestFromTaskInput(
+        "task_profile_store_continuity_sync_contact_associations",
+        [
+          "Billy used to work at Sample Web Studio as a front-end contractor, but he is no longer there.",
+          "Billy has already started at Crimson Analytics.",
+          "Billy is still in Ferndale for now.",
+          "Garrett still owns Harbor Signal Studio.",
+          "Garrett is still splitting time between Detroit and Ann Arbor."
+        ].join(" "),
+        "2026-04-12T21:30:00.000Z"
+      );
+
+      const state = await store.load();
+      assert.equal(
+        state.graph.claims.some(
+          (claim) =>
+            claim.payload.normalizedKey === "contact.garrett.organization_association" &&
+            claim.payload.normalizedValue === "Harbor Signal Studio"
+        ),
+        true
+      );
+      assert.equal(
+        state.graph.claims.some(
+          (claim) =>
+            claim.payload.normalizedKey === "contact.billy.location_association" &&
+            claim.payload.normalizedValue === "Ferndale"
+        ),
+        true
+      );
+      assert.equal(
+        state.graph.claims.some(
+          (claim) =>
+            claim.payload.normalizedKey === "contact.garrett.primary_location_association" &&
+            claim.payload.normalizedValue === "Detroit"
+        ),
+        true
+      );
+      assert.equal(
+        state.graph.claims.some(
+          (claim) =>
+            claim.payload.normalizedKey === "contact.garrett.secondary_location_association" &&
+            claim.payload.normalizedValue === "Ann Arbor"
+        ),
+        true
+      );
+    },
+    {
+      onCurrentSurfaceGraphClaimsChanged: async (claims) => {
+        latestResolvedClaims = claims;
+      }
+    }
+  );
+
+  assert.ok(latestResolvedClaims);
+  const resolvedClaims = latestResolvedClaims as unknown as readonly ProfileMemoryGraphClaimRecord[];
+  assert.equal(
+    resolvedClaims.some(
+      (claim) =>
+        claim.payload.normalizedKey === "contact.billy.work_association" &&
+        claim.payload.normalizedValue === "Crimson Analytics"
+    ),
+    true
+  );
+  assert.equal(
+    resolvedClaims.some(
+      (claim) =>
+        claim.payload.normalizedKey === "contact.garrett.organization_association" &&
+        claim.payload.normalizedValue === "Harbor Signal Studio"
+    ),
+    true
+  );
+  assert.equal(
+    resolvedClaims.some(
+      (claim) =>
+        claim.payload.normalizedKey === "contact.billy.location_association" &&
+        claim.payload.normalizedValue === "Ferndale"
+    ),
+    true
+  );
+  assert.equal(
+    resolvedClaims.some(
+      (claim) =>
+        claim.payload.normalizedKey === "contact.garrett.primary_location_association" &&
+        claim.payload.normalizedValue === "Detroit"
+    ),
+    true
+  );
+  assert.equal(
+    resolvedClaims.some(
+      (claim) =>
+        claim.payload.normalizedKey === "contact.garrett.secondary_location_association" &&
+        claim.payload.normalizedValue === "Ann Arbor"
+    ),
+    true
+  );
+});
+
 test("ingestFromTaskInput persists stable refs and keeps provisional contact truth out of resolved_current outputs", async () => {
   await withProfileStore(async (store) => {
     await store.ingestFromTaskInput(
@@ -19194,7 +19451,7 @@ test("queryResolvedCurrentGraphClaims excludes quarantined stable refs after enc
         ...createEmptyProfileMemoryState().graph,
         observations: [],
         claims: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+          createGraphClaimEnvelope({
             claimId: "claim_profile_store_stable_ref_self",
             stableRefId: "stable_self_profile_owner",
             family: "identity.preferred_name",
@@ -19218,7 +19475,7 @@ test("queryResolvedCurrentGraphClaims excludes quarantined stable refs after enc
             entityRefIds: [],
             active: true
           }),
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+          createGraphClaimEnvelope({
             claimId: "claim_profile_store_stable_ref_quarantine",
             stableRefId: "stable_quarantine_contact_owen",
             family: "contact.relationship.current",
@@ -19244,7 +19501,7 @@ test("queryResolvedCurrentGraphClaims excludes quarantined stable refs after enc
           })
         ],
         events: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+          createGraphEventEnvelope({
             eventId: "event_profile_store_stable_ref_quarantine",
             stableRefId: "stable_quarantine_contact_owen",
             family: "episode.candidate",
@@ -19270,7 +19527,7 @@ test("queryResolvedCurrentGraphClaims excludes quarantined stable refs after enc
       }
     };
 
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const groups = await store.queryGraphStableRefGroups();
     const quarantinedGroup = groups.find(
@@ -19296,7 +19553,7 @@ test("queryAlignedGraphStableRefGroups attaches bounded Stage 6.86 entity keys w
       graph: {
         ...createEmptyProfileMemoryState().graph,
         claims: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+          createGraphClaimEnvelope({
             claimId: "claim_profile_store_aligned_stable_ref",
             stableRefId: "stable_contact_owen",
             family: "contact.relationship.current",
@@ -19332,6 +19589,7 @@ test("queryAlignedGraphStableRefGroups attaches bounded Stage 6.86 entity keys w
           canonicalName: "William Bena",
           entityType: "person" as const,
           disambiguator: null,
+          domainHint: null,
           aliases: ["Owen"],
           firstSeenAt: "2026-04-09T16:15:00.000Z",
           lastSeenAt: "2026-04-09T16:15:00.000Z",
@@ -19341,7 +19599,7 @@ test("queryAlignedGraphStableRefGroups attaches bounded Stage 6.86 entity keys w
       ]
     };
 
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const groups = await store.queryAlignedGraphStableRefGroups(entityGraph);
     const alignedGroup = groups.find((group) => group.stableRefId === "stable_contact_owen");
@@ -19365,7 +19623,7 @@ test("queryAlignedGraphStableRefGroups keeps quarantined stable refs available f
       graph: {
         ...createEmptyProfileMemoryState().graph,
         claims: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+          createGraphClaimEnvelope({
             claimId: "claim_profile_store_aligned_quarantine",
             stableRefId: "stable_quarantine_contact_owen",
             family: "contact.relationship.current",
@@ -19391,7 +19649,7 @@ test("queryAlignedGraphStableRefGroups keeps quarantined stable refs available f
           })
         ],
         events: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+          createGraphEventEnvelope({
             eventId: "event_profile_store_aligned_quarantine",
             stableRefId: "stable_quarantine_contact_owen",
             family: "episode.candidate",
@@ -19409,6 +19667,7 @@ test("queryAlignedGraphStableRefGroups keeps quarantined stable refs available f
             validTo: null,
             timePrecision: "instant",
             timeSource: "user_stated",
+            derivedFromObservationIds: [],
             projectionSourceIds: ["episode_profile_store_aligned_quarantine"],
             entityRefIds: ["contact.owen"]
           })
@@ -19424,6 +19683,7 @@ test("queryAlignedGraphStableRefGroups keeps quarantined stable refs available f
           canonicalName: "Owen",
           entityType: "person" as const,
           disambiguator: null,
+          domainHint: null,
           aliases: ["Owen"],
           firstSeenAt: "2026-04-09T16:20:00.000Z",
           lastSeenAt: "2026-04-09T16:20:00.000Z",
@@ -19433,7 +19693,7 @@ test("queryAlignedGraphStableRefGroups keeps quarantined stable refs available f
       ]
     };
 
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const groups = await store.queryAlignedGraphStableRefGroups(entityGraph);
     const quarantinedGroup = groups.find(
@@ -19462,7 +19722,7 @@ test("rekeyGraphStableRef deterministically rewrites one provisional stable-ref 
       graph: {
         ...createEmptyProfileMemoryState().graph,
         observations: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+          createGraphObservationEnvelope({
             observationId: "observation_profile_store_stable_ref_rekey",
             stableRefId: "stable_contact_owen",
             family: "contact.name",
@@ -19482,7 +19742,7 @@ test("rekeyGraphStableRef deterministically rewrites one provisional stable-ref 
           })
         ],
         claims: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+          createGraphClaimEnvelope({
             claimId: "claim_profile_store_stable_ref_self_for_rekey",
             stableRefId: "stable_self_profile_owner",
             family: "identity.preferred_name",
@@ -19506,7 +19766,7 @@ test("rekeyGraphStableRef deterministically rewrites one provisional stable-ref 
             entityRefIds: [],
             active: true
           }),
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+          createGraphClaimEnvelope({
             claimId: "claim_profile_store_stable_ref_rekey",
             stableRefId: "stable_contact_owen",
             family: "contact.relationship.current",
@@ -19532,7 +19792,7 @@ test("rekeyGraphStableRef deterministically rewrites one provisional stable-ref 
           })
         ],
         events: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+          createGraphEventEnvelope({
             eventId: "event_profile_store_stable_ref_rekey",
             stableRefId: "stable_contact_owen",
             family: "episode.candidate",
@@ -19558,7 +19818,7 @@ test("rekeyGraphStableRef deterministically rewrites one provisional stable-ref 
       }
     };
 
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const result = await store.rekeyGraphStableRef(
       "stable_contact_owen",
@@ -19628,9 +19888,9 @@ test("rekeyGraphStableRef deterministically rewrites one provisional stable-ref 
       state.graph.decisionRecords?.[0]?.eventIds,
       ["event_profile_store_stable_ref_rekey"]
     );
-    assert.equal(state.graph.mutationJournal.entries.at(-1)?.sourceTaskId, "task_profile_store_stable_ref_rekey_apply");
+    assert.equal(lastItem(state.graph.mutationJournal.entries)?.sourceTaskId, "task_profile_store_stable_ref_rekey_apply");
     assert.equal(
-      state.graph.mutationJournal.entries.at(-1)?.mutationEnvelopeHash,
+      lastItem(state.graph.mutationJournal.entries)?.mutationEnvelopeHash,
       sha256HexFromCanonicalJson(result.mutationEnvelope)
     );
   });
@@ -19741,7 +20001,7 @@ test("evaluateAgentPulse suppresses stale-fact revalidation for workflow-dominan
       observedAt: "2025-01-10T00:00:00.000Z",
       confidence: 0.95
     }).nextState;
-    await saveProfileMemoryState(filePath, Buffer.alloc(32, 7), seededState);
+    await saveSeededProfileMemoryState(filePath, Buffer.alloc(32, 7), seededState);
 
     const evaluation = await store.evaluateAgentPulse(
       {
@@ -19800,7 +20060,7 @@ test("evaluateAgentPulse exposes bounded fresh unresolved situations for pulse g
       ]
     };
 
-    await saveProfileMemoryState(filePath, Buffer.alloc(32, 7), seededState);
+    await saveSeededProfileMemoryState(filePath, Buffer.alloc(32, 7), seededState);
 
     const evaluation = await store.evaluateAgentPulse(
       {
@@ -20258,11 +20518,11 @@ test("reviewEpisodesForUser and explicit user episode updates remain bounded and
       []
     );
     assert.equal(
-      graphState.graph.mutationJournal.entries.at(-1)?.redactionState,
+      lastItem(graphState.graph.mutationJournal.entries)?.redactionState,
       "redacted"
     );
     assert.deepEqual(
-      graphState.graph.mutationJournal.entries.at(-1)?.eventIds,
+      lastItem(graphState.graph.mutationJournal.entries)?.eventIds,
       [graphState.graph.events[0]!.payload.eventId]
     );
 
@@ -20307,7 +20567,7 @@ test("forgetEpisodeFromUser redacts active graph events and closes their validit
       []
     );
     assert.equal(
-      graphState.graph.mutationJournal.entries.at(-1)?.redactionState,
+      lastItem(graphState.graph.mutationJournal.entries)?.redactionState,
       "redacted"
     );
   });
@@ -20326,7 +20586,7 @@ test("graph mutation journal compacts to configured retention caps under the sto
         }
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     await store.ingestFromTaskInput(
       "task_profile_graph_compaction_store_1",
@@ -20359,7 +20619,7 @@ test("graph mutation journal clamps stale snapshot watermark without restamping 
   await withProfileStore(async (store, filePath) => {
     const encryptionKey = Buffer.alloc(32, 7);
     const emptyState = createEmptyProfileMemoryState();
-    const observationThree = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+    const observationThree = createGraphObservationEnvelope({
       observationId: "observation_profile_graph_store_compaction_snapshot_clamp_3",
       stableRefId: null,
       family: "contact.context",
@@ -20377,7 +20637,7 @@ test("graph mutation journal clamps stale snapshot watermark without restamping 
       timeSource: "user_stated",
       entityRefIds: []
     }, "2026-04-08T15:59:30.000Z");
-    const observationFour = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+    const observationFour = createGraphObservationEnvelope({
       observationId: "observation_profile_graph_store_compaction_snapshot_clamp_4",
       stableRefId: null,
       family: "contact.context",
@@ -20439,7 +20699,7 @@ test("graph mutation journal clamps stale snapshot watermark without restamping 
         }
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
 
@@ -20482,7 +20742,7 @@ test("graph mutation journal clamps stale snapshot watermark from nextWatermark 
         }
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
 
@@ -20497,7 +20757,7 @@ test("graph mutation journal stays a true no-op when journal and compaction are 
   await withProfileStore(async (store, filePath) => {
     const encryptionKey = Buffer.alloc(32, 7);
     const emptyState = createEmptyProfileMemoryState();
-    const observationThree = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+    const observationThree = createGraphObservationEnvelope({
       observationId: "observation_profile_graph_store_compaction_no_op_3",
       stableRefId: null,
       family: "contact.context",
@@ -20515,7 +20775,7 @@ test("graph mutation journal stays a true no-op when journal and compaction are 
       timeSource: "user_stated",
       entityRefIds: []
     }, "2026-04-08T16:20:00.000Z");
-    const observationFour = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+    const observationFour = createGraphObservationEnvelope({
       observationId: "observation_profile_graph_store_compaction_no_op_4",
       stableRefId: null,
       family: "contact.context",
@@ -20577,7 +20837,7 @@ test("graph mutation journal stays a true no-op when journal and compaction are 
         }
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
 
@@ -20614,7 +20874,7 @@ test("graph observation retention compacts hint-only observations after the reta
         }
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     await store.ingestFromTaskInput(
       "task_profile_graph_observation_retention_1",
@@ -20687,7 +20947,7 @@ test("graph observation retention compacts redacted observations after the retai
         ...emptyState.graph,
         updatedAt: "2026-04-08T04:05:00.000Z",
         observations: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+          createGraphObservationEnvelope({
             observationId: "observation_profile_graph_store_redacted_observation_compaction_drop",
             stableRefId: null,
             family: "identity.preferred_name",
@@ -20705,7 +20965,7 @@ test("graph observation retention compacts redacted observations after the retai
             timeSource: "user_stated",
             entityRefIds: []
           }),
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+          createGraphObservationEnvelope({
             observationId: "observation_profile_graph_store_redacted_observation_compaction_keep",
             stableRefId: null,
             family: "contact.context",
@@ -20764,7 +21024,7 @@ test("graph observation retention compacts redacted observations after the retai
         }
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const graphState = await store.load();
     assert.deepEqual(
@@ -20790,7 +21050,7 @@ test("graph observation retention does not let live claims or events pin redacte
         ...emptyState.graph,
         updatedAt: "2026-04-08T04:30:00.000Z",
         observations: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+          createGraphObservationEnvelope({
             observationId: "observation_profile_graph_store_redacted_lineage_claim_drop",
             stableRefId: null,
             family: "identity.preferred_name",
@@ -20808,7 +21068,7 @@ test("graph observation retention does not let live claims or events pin redacte
             timeSource: "user_stated",
             entityRefIds: []
           }),
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+          createGraphObservationEnvelope({
             observationId: "observation_profile_graph_store_redacted_lineage_claim_keep",
             stableRefId: null,
             family: "identity.preferred_name",
@@ -20826,7 +21086,7 @@ test("graph observation retention does not let live claims or events pin redacte
             timeSource: "user_stated",
             entityRefIds: []
           }),
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+          createGraphObservationEnvelope({
             observationId: "observation_profile_graph_store_redacted_lineage_event_drop",
             stableRefId: null,
             family: "contact.context",
@@ -20844,7 +21104,7 @@ test("graph observation retention does not let live claims or events pin redacte
             timeSource: "user_stated",
             entityRefIds: []
           }),
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+          createGraphObservationEnvelope({
             observationId: "observation_profile_graph_store_redacted_lineage_event_keep",
             stableRefId: null,
             family: "contact.context",
@@ -20864,7 +21124,7 @@ test("graph observation retention does not let live claims or events pin redacte
           })
         ],
         claims: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+          createGraphClaimEnvelope({
             claimId: "claim_profile_graph_store_redacted_lineage_keep",
             stableRefId: null,
             family: "identity.preferred_name",
@@ -20893,7 +21153,7 @@ test("graph observation retention does not let live claims or events pin redacte
           })
         ],
         events: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+          createGraphEventEnvelope({
             eventId: "event_profile_graph_store_redacted_lineage_keep",
             stableRefId: null,
             family: "episode.candidate",
@@ -20980,7 +21240,7 @@ test("graph observation retention does not let live claims or events pin redacte
         }
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const graphState = await store.load();
     assert.deepEqual(
@@ -21017,7 +21277,7 @@ test("graph observation retention does not let redacted claims pin stale observa
         ...emptyState.graph,
         updatedAt: "2026-04-03T22:05:00.000Z",
         observations: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+          createGraphObservationEnvelope({
             observationId: "observation_profile_graph_store_redacted_claim_retention_old",
             stableRefId: null,
             family: "identity.preferred_name",
@@ -21035,7 +21295,7 @@ test("graph observation retention does not let redacted claims pin stale observa
             timeSource: "user_stated",
             entityRefIds: []
           }),
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+          createGraphObservationEnvelope({
             observationId: "observation_profile_graph_store_redacted_claim_retention_new",
             stableRefId: null,
             family: "contact.context",
@@ -21055,7 +21315,7 @@ test("graph observation retention does not let redacted claims pin stale observa
           })
         ],
         claims: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+          createGraphClaimEnvelope({
             claimId: "claim_profile_graph_store_redacted_claim_retention_old",
             stableRefId: null,
             family: "identity.preferred_name",
@@ -21117,7 +21377,7 @@ test("graph observation retention does not let redacted claims pin stale observa
         }
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const graphState = await store.load();
     assert.deepEqual(
@@ -21141,7 +21401,7 @@ test("graph observation retention preserves event-derived observations during st
         ...emptyState.graph,
         updatedAt: "2026-04-03T22:10:00.000Z",
         observations: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+          createGraphObservationEnvelope({
             observationId: "observation_profile_graph_store_event_lineage_1",
             stableRefId: null,
             family: "contact.context",
@@ -21157,7 +21417,7 @@ test("graph observation retention preserves event-derived observations during st
             timeSource: "user_stated",
             entityRefIds: ["entity_owen"]
           }),
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+          createGraphObservationEnvelope({
             observationId: "observation_profile_graph_store_event_lineage_2",
             stableRefId: null,
             family: "contact.context",
@@ -21173,7 +21433,7 @@ test("graph observation retention preserves event-derived observations during st
             timeSource: "user_stated",
             entityRefIds: ["entity_jordan"]
           }),
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+          createGraphObservationEnvelope({
             observationId: "observation_profile_graph_store_event_lineage_3",
             stableRefId: null,
             family: "contact.context",
@@ -21191,7 +21451,7 @@ test("graph observation retention preserves event-derived observations during st
           })
         ],
         events: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+          createGraphEventEnvelope({
             eventId: "event_profile_graph_store_event_lineage_1",
             stableRefId: null,
             family: "episode.candidate",
@@ -21263,7 +21523,7 @@ test("graph observation retention preserves event-derived observations during st
         }
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const graphState = await store.load();
 
@@ -21299,7 +21559,7 @@ test("graph claim retention compacts inactive claims after the retained journal 
         }
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     await store.ingestFromTaskInput(
       "task_profile_graph_claim_retention_1",
@@ -21360,7 +21620,7 @@ test("graph claim retention compacts redacted claims after the retained journal 
         updatedAt: "2026-04-08T03:15:00.000Z",
         observations: [],
         claims: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+          createGraphClaimEnvelope({
             claimId: "claim_profile_graph_store_redacted_claim_compaction_drop",
             stableRefId: null,
             family: "identity.preferred_name",
@@ -21384,7 +21644,7 @@ test("graph claim retention compacts redacted claims after the retained journal 
             entityRefIds: [],
             active: false
           }),
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+          createGraphClaimEnvelope({
             claimId: "claim_profile_graph_store_redacted_claim_compaction_keep",
             stableRefId: null,
             family: "identity.preferred_name",
@@ -21447,7 +21707,7 @@ test("graph claim retention compacts redacted claims after the retained journal 
         }
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const graphState = await store.load();
     assert.deepEqual(
@@ -21473,7 +21733,7 @@ test("graph retention does not let source-tier-invalid retained claims pin obser
         ...emptyState.graph,
         updatedAt: "2026-04-06T02:20:00.000Z",
         observations: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+          createGraphObservationEnvelope({
             observationId: "observation_profile_graph_store_invalid_source_retention_old",
             stableRefId: null,
             family: "identity.preferred_name",
@@ -21491,7 +21751,7 @@ test("graph retention does not let source-tier-invalid retained claims pin obser
             timeSource: "inferred",
             entityRefIds: []
           }),
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+          createGraphObservationEnvelope({
             observationId: "observation_profile_graph_store_invalid_source_retention_new",
             stableRefId: null,
             family: "identity.preferred_name",
@@ -21511,7 +21771,7 @@ test("graph retention does not let source-tier-invalid retained claims pin obser
           })
         ],
         claims: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+          createGraphClaimEnvelope({
             claimId: "claim_profile_graph_store_invalid_source_retention_old",
             stableRefId: null,
             family: "identity.preferred_name",
@@ -21535,7 +21795,7 @@ test("graph retention does not let source-tier-invalid retained claims pin obser
             entityRefIds: [],
             active: true
           }),
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+          createGraphClaimEnvelope({
             claimId: "claim_profile_graph_store_invalid_source_retention_new",
             stableRefId: null,
             family: "identity.preferred_name",
@@ -21598,7 +21858,7 @@ test("graph retention does not let source-tier-invalid retained claims pin obser
         }
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const graphState = await store.load();
 
@@ -21682,7 +21942,7 @@ test("graph event retention compacts terminal events after the retained journal 
         }
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     await store.updateEpisodeFromUser(
       seededEpisodes[0]!.id,
@@ -21732,8 +21992,8 @@ test("graph retention does not let orphaned retained active events mint replay m
   await withProfileStore(async (store, filePath) => {
     const encryptionKey = Buffer.alloc(32, 7);
     const emptyState = createEmptyProfileMemoryState();
-    const validEpisode = createProfileEpisodeRecord({
-      id: "episode_profile_graph_store_event_surface_valid",
+    const validEpisode = {
+      ...createProfileEpisodeRecord({
       title: "Owen fall situation",
       summary: "Owen fell down and the outcome stayed unresolved.",
       sourceTaskId: "task_profile_graph_store_event_surface_valid_episode",
@@ -21743,7 +22003,9 @@ test("graph retention does not let orphaned retained active events mint replay m
       sensitive: false,
       confidence: 0.9,
       entityRefs: ["entity_owen"]
-    });
+      }),
+      id: "episode_profile_graph_store_event_surface_valid"
+    };
     const validEventId =
       `event_${sha256HexFromCanonicalJson({ episodeId: validEpisode.id }).slice(0, 24)}`;
     const seededState = {
@@ -21753,7 +22015,7 @@ test("graph retention does not let orphaned retained active events mint replay m
         ...emptyState.graph,
         updatedAt: "2026-04-07T02:20:00.000Z",
         observations: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+          createGraphObservationEnvelope({
             observationId: "observation_profile_graph_store_event_surface_orphaned",
             stableRefId: null,
             family: "contact.context",
@@ -21771,7 +22033,7 @@ test("graph retention does not let orphaned retained active events mint replay m
             timeSource: "user_stated",
             entityRefIds: ["entity_owen"]
           }),
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+          createGraphObservationEnvelope({
             observationId: "observation_profile_graph_store_event_surface_valid",
             stableRefId: null,
             family: "contact.context",
@@ -21791,7 +22053,7 @@ test("graph retention does not let orphaned retained active events mint replay m
           })
         ],
         events: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+          createGraphEventEnvelope({
             eventId: "event_profile_graph_store_event_surface_orphaned",
             stableRefId: null,
             family: "episode.candidate",
@@ -21813,7 +22075,7 @@ test("graph retention does not let orphaned retained active events mint replay m
             projectionSourceIds: ["episode_profile_graph_store_event_surface_missing"],
             entityRefIds: ["entity_owen"]
             }),
-            createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+            createGraphEventEnvelope({
               eventId: validEventId,
               stableRefId: null,
             family: "episode.candidate",
@@ -21844,7 +22106,7 @@ test("graph retention does not let orphaned retained active events mint replay m
         }
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const graphState = await store.load();
 
@@ -21861,7 +22123,7 @@ test("graph retention does not let orphaned retained active events mint replay m
         [validEventId]
       );
     assert.equal(
-      graphState.graph.mutationJournal.entries[0]?.sourceFingerprint.startsWith(
+      graphState.graph.mutationJournal.entries[0]?.sourceFingerprint?.startsWith(
         "graph_event_replay_backfill_"
       ),
       true
@@ -21871,7 +22133,7 @@ test("graph retention does not let orphaned retained active events mint replay m
       ["observation_profile_graph_store_event_surface_valid"]
     );
     assert.equal(
-      graphState.graph.mutationJournal.entries[1]?.sourceFingerprint.startsWith(
+      graphState.graph.mutationJournal.entries[1]?.sourceFingerprint?.startsWith(
         "graph_observation_replay_backfill_"
       ),
       true
@@ -21905,7 +22167,7 @@ test("graph retention compacts redacted events after journal retention trims the
         observations: [],
         claims: [],
         events: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+          createGraphEventEnvelope({
             eventId: "event_profile_graph_store_redacted_event_compaction_drop",
             stableRefId: null,
             family: "episode.candidate",
@@ -21927,7 +22189,7 @@ test("graph retention compacts redacted events after journal retention trims the
             projectionSourceIds: ["episode_profile_graph_store_redacted_event_compaction_drop"],
             entityRefIds: []
           }),
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+          createGraphEventEnvelope({
             eventId: "event_profile_graph_store_redacted_event_compaction_keep",
             stableRefId: null,
             family: "episode.candidate",
@@ -21987,7 +22249,7 @@ test("graph retention compacts redacted events after journal retention trims the
         }
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
     assert.deepEqual(
@@ -22013,7 +22275,7 @@ test("graph retention does not let source-tier-invalid retained active events mi
         ...emptyState.graph,
         updatedAt: "2026-04-07T03:20:00.000Z",
         observations: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+          createGraphObservationEnvelope({
             observationId: "observation_profile_graph_store_event_source_tier_invalid",
             stableRefId: null,
             family: "contact.context",
@@ -22031,7 +22293,7 @@ test("graph retention does not let source-tier-invalid retained active events mi
             timeSource: "asserted_at",
             entityRefIds: ["entity_owen"]
           }),
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+          createGraphObservationEnvelope({
             observationId: "observation_profile_graph_store_event_source_tier_valid",
             stableRefId: null,
             family: "contact.context",
@@ -22051,7 +22313,7 @@ test("graph retention does not let source-tier-invalid retained active events mi
           })
         ],
         events: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+          createGraphEventEnvelope({
             eventId: "event_profile_graph_store_event_source_tier_invalid",
             stableRefId: null,
             family: "episode.candidate",
@@ -22073,7 +22335,7 @@ test("graph retention does not let source-tier-invalid retained active events mi
             projectionSourceIds: [],
             entityRefIds: ["entity_owen"]
           }),
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+          createGraphEventEnvelope({
             eventId: "event_profile_graph_store_event_source_tier_valid",
             stableRefId: null,
             family: "episode.candidate",
@@ -22104,7 +22366,7 @@ test("graph retention does not let source-tier-invalid retained active events mi
         }
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const graphState = await store.load();
 
@@ -22121,7 +22383,7 @@ test("graph retention does not let source-tier-invalid retained active events mi
       ["event_profile_graph_store_event_source_tier_valid"]
     );
     assert.equal(
-      graphState.graph.mutationJournal.entries[0]?.sourceFingerprint.startsWith(
+      graphState.graph.mutationJournal.entries[0]?.sourceFingerprint?.startsWith(
         "graph_event_replay_backfill_"
       ),
       true
@@ -22131,7 +22393,7 @@ test("graph retention does not let source-tier-invalid retained active events mi
       ["observation_profile_graph_store_event_source_tier_valid"]
     );
     assert.equal(
-      graphState.graph.mutationJournal.entries[1]?.sourceFingerprint.startsWith(
+      graphState.graph.mutationJournal.entries[1]?.sourceFingerprint?.startsWith(
         "graph_observation_replay_backfill_"
       ),
       true
@@ -22206,7 +22468,7 @@ test("profile memory store exposes bounded planning inspection with selected fac
       observedAt: "2026-04-03T00:01:00.000Z",
       confidence: 0.7
     }).nextState;
-    await saveProfileMemoryState(filePath, Buffer.alloc(32, 7), seededState);
+    await saveSeededProfileMemoryState(filePath, Buffer.alloc(32, 7), seededState);
 
     const inspection = await store.inspectFactsForPlanningContext(
       "who is Owen?",
@@ -22255,7 +22517,7 @@ test("store review keeps legacy generic sensitive-key facts behind approval and 
       observedAt: "2026-04-03T18:21:00.000Z",
       confidence: 0.95
     }).nextState;
-    await saveProfileMemoryState(filePath, Buffer.alloc(32, 7), seededState);
+    await saveSeededProfileMemoryState(filePath, Buffer.alloc(32, 7), seededState);
 
     const hidden = await store.readFacts({
       purpose: "operator_view",
@@ -22633,7 +22895,7 @@ test("profile memory load canonicalizes retained flat-fact timestamps and repair
         }
       ]
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
     const activeFact = loaded.facts.find(
@@ -22678,7 +22940,7 @@ test("profile memory load canonicalizes retained flat-fact semantic and provenan
         }
       ]
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
     const fact = loaded.facts[0];
@@ -22729,7 +22991,7 @@ test("profile memory load canonicalizes retained flat-fact ids and drops blank i
         }
       ]
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
 
@@ -22776,7 +23038,7 @@ test("profile memory load dedupes retained flat facts by canonical fact id", asy
         }
       ]
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
 
@@ -22838,7 +23100,7 @@ test("profile memory load repairs semantic-duplicate retained active facts with 
         }
       ]
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
     const activeFacts = loaded.facts.filter(
@@ -22902,7 +23164,7 @@ test("profile memory load repairs replace-family retained active fact conflicts 
         }
       ]
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
     const activeFacts = loaded.facts.filter(
@@ -22961,7 +23223,7 @@ test("profile memory load repairs preserve-prior retained active fact conflicts 
         }
       ]
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
     const activeFacts = loaded.facts.filter(
@@ -23039,7 +23301,7 @@ test("profile memory load repairs mixed-policy retained active fact conflicts in
         }
       ]
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
     const activeFacts = loaded.facts.filter(
@@ -23109,7 +23371,7 @@ test("profile memory load suppresses preserve-prior graph current claims when on
         updatedAt: "2026-04-05T00:39:00.000Z",
         observations: [],
         claims: [
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+          createGraphClaimEnvelope({
             claimId: "claim_profile_store_preserve_no_winner_stale",
             stableRefId: null,
             family: "employment.current",
@@ -23141,7 +23403,7 @@ test("profile memory load suppresses preserve-prior graph current claims when on
         }
       }
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
     const activeClaims = loaded.graph.claims.filter((claim) => claim.payload.active);
@@ -23212,7 +23474,7 @@ test("profile memory load drops retained flat facts whose normalized key or valu
         }
       ]
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
 
@@ -23275,7 +23537,7 @@ test("profile memory load drops retained flat facts whose required provenance no
         }
       ]
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
 
@@ -23341,7 +23603,7 @@ test("profile memory load drops retained flat facts whose source authority is qu
         }
       ]
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
 
@@ -23398,7 +23660,7 @@ test("profile memory load applies family sensitivity floors to retained flat fac
         }
       ]
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
     const residenceFact = loaded.facts.find(
@@ -23469,7 +23731,7 @@ test("profile memory load clears retained mutation audit metadata when rule ids 
         }
       ]
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
     const keptFact = loaded.facts.find(
@@ -23523,7 +23785,7 @@ test("profile memory load canonicalizes retained mutation audit enums before kee
         }
       ]
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
     const fact = loaded.facts[0];
@@ -23586,7 +23848,7 @@ test("profile memory load canonicalizes retained flat-fact status strings and dr
         }
       ]
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
     const confirmedFact = loaded.facts.find(
@@ -23632,7 +23894,7 @@ test("profile memory load fail-closes malformed retained flat-fact confidence on
         }
       ]
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
     const fact = loaded.facts[0];
@@ -23663,7 +23925,7 @@ test("profile memory load canonicalizes retained ingest receipts for reload-safe
         }
       ]
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
 
@@ -23717,7 +23979,7 @@ test("profile memory load dedupes and caps retained ingest receipts after canoni
         }
       ]
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
 
@@ -23726,9 +23988,9 @@ test("profile memory load dedupes and caps retained ingest receipts after canoni
       loaded.ingestReceipts.some((receipt) => receipt.turnId === "turn_profile_store_receipt_cap_0"),
       false
     );
-    assert.equal(loaded.ingestReceipts.at(-1)?.receiptKey, duplicateReceiptKey);
+    assert.equal(lastItem(loaded.ingestReceipts)?.receiptKey, duplicateReceiptKey);
     assert.equal(
-      loaded.ingestReceipts.at(-1)?.sourceTaskId,
+      lastItem(loaded.ingestReceipts)?.sourceTaskId,
       "task_profile_store_receipt_cap_duplicate_latest"
     );
     assert.equal(
@@ -23759,7 +24021,7 @@ test("profile memory load recovers retained ingest receipts when only stored rec
         }
       ]
     };
-    await saveProfileMemoryState(
+    await saveSeededProfileMemoryState(
       filePath,
       encryptionKey,
       seededState as unknown as typeof emptyState
@@ -23802,7 +24064,7 @@ test("profile memory load recovers retained ingest receipts when only stored rec
         }
       ]
     };
-    await saveProfileMemoryState(
+    await saveSeededProfileMemoryState(
       filePath,
       encryptionKey,
       seededState as unknown as typeof emptyState
@@ -23857,7 +24119,7 @@ test("profile memory load keeps the newest retained duplicate receipt by canonic
         }
       ]
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
 
@@ -23893,7 +24155,7 @@ test("profile memory load recovers retained ingest receipts when only stored sou
         }
       ]
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
 
@@ -23929,7 +24191,7 @@ test("profile memory load recovers retained ingest receipts when only stored tur
         }
       ]
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
     const reloaded = await store.load();
@@ -23985,7 +24247,7 @@ test("profile memory load prefers explicit retained turn and fingerprint provena
         }
       ]
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
 
@@ -24033,7 +24295,7 @@ test("profile memory load prefers stronger retained duplicate receipt provenance
         }
       ]
     };
-    await saveProfileMemoryState(filePath, encryptionKey, seededState);
+    await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const loaded = await store.load();
 

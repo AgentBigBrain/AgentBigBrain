@@ -52,10 +52,12 @@ export function resolveUserOwnedPathHints(
 
   const desktopPath = pickPreferredPath([
     oneDriveDirectory ? path.join(oneDriveDirectory, "Desktop") : "",
+    path.join(homeDirectory, "OneDrive", "Desktop"),
     path.join(homeDirectory, "Desktop")
   ]);
   const documentsPath = pickPreferredPath([
     oneDriveDirectory ? path.join(oneDriveDirectory, "Documents") : "",
+    path.join(homeDirectory, "OneDrive", "Documents"),
     path.join(homeDirectory, "Documents")
   ]);
   const downloadsPath = pickPreferredPath([

@@ -4,6 +4,7 @@
 import { estimateActionCostUsd } from "../../core/actionCostPolicy";
 import { makeId } from "../../core/ids";
 import { PlannedAction } from "../../core/types";
+import { inferRequiredActionType } from "./explicitActionIntent";
 import { PlannerExecutionEnvironmentContext } from "./executionStyleContracts";
 import { extractRequestedFrameworkWorkspaceRootPath } from "./frameworkRequestPathParsing";
 import {
@@ -13,6 +14,7 @@ import {
   extractTrackedPreviewProcessLeaseId,
   extractTrackedPreviewUrl,
   extractTrackedWorkspaceRoot,
+  hasFrameworkBuildLaneMarker,
   hasFrameworkBuildArtifacts,
   isFrameworkBrowserOpenFollowUp,
   isFrameworkPreviewFollowUp,
@@ -25,6 +27,7 @@ import { resolveTrackedFrameworkWorkspaceContext } from "./frameworkRuntimeActio
 import { getPathModuleForPathValue } from "./frameworkPathSupport";
 import { buildDeterministicFrameworkTrackedEditFallbackActions, extractTrackedBrowserSessionId } from "./frameworkRuntimeActionFallbackEditSupport";
 import { resolveFrameworkFallbackRequestContext } from "./frameworkRuntimeActionFallbackGoalSupport";
+import { buildFrameworkLiveLifecycleActions } from "./frameworkRuntimeActionFallbackLifecycleSupport";
 import { buildFrameworkLandingPageWriteActions } from "./frameworkRuntimeActionFallbackWriteSupport";
 import {
   isDeterministicFrameworkBuildLaneRequest,
@@ -33,6 +36,7 @@ import {
   requiresFrameworkAppScaffoldAction,
   isFrameworkWorkspacePreparationRequest,
   requiresPersistentBrowserOpenBuildRequest,
+  isStaticHtmlExecutionStyleRequest,
   suppressesLiveRunWork
 } from "./liveVerificationPolicy";
 const SUPPORTED_FRAMEWORK_FALLBACK_SHELL_KINDS = new Set([
@@ -64,6 +68,13 @@ export function buildDeterministicFrameworkBuildFallbackActions(
     trackedWorkspaceRoot
   );
   const activeRequest = requestResolution.activeRequest;
+  const prefersStaticHtmlLane =
+    isStaticHtmlExecutionStyleRequest(activeRequest) ||
+    isStaticHtmlExecutionStyleRequest(requestContext);
+  const requiredActionType = inferRequiredActionType(activeRequest, requestContext);
+  if (requiredActionType === "close_browser" || requiredActionType === "stop_process") {
+    return [];
+  }
   const explicitWorkspaceRoot = extractRequestedFrameworkWorkspaceRootPath(activeRequest);
   const requestedFolderName = requestResolution.requestedFolderName;
   const trackedWorkspaceContext = resolveTrackedFrameworkWorkspaceContext(
@@ -93,9 +104,6 @@ export function buildDeterministicFrameworkBuildFallbackActions(
   if (directOpenBrowserFollowUpActions.length > 0) {
     return directOpenBrowserFollowUpActions;
   }
-  if (!isDeterministicFrameworkBuildLaneRequest(activeRequest)) {
-    return [];
-  }
   if (!requestedFolderName) {
     return [];
   }
@@ -116,12 +124,30 @@ export function buildDeterministicFrameworkBuildFallbackActions(
     targetPathModule.basename(effectiveTrackedWorkspaceRoot) === requestedFolderName
       ? effectiveTrackedWorkspaceRoot
       : requestedFinalFolderPath);
+  const themeRequestContext = requestResolution.themeRequestContext;
   const kind = resolveFrameworkFallbackKind(
     requestContext,
     effectiveTrackedWorkspaceRoot,
     finalFolderPath
   );
-  const themeRequestContext = requestResolution.themeRequestContext;
+  const hasTrackedFrameworkWorkspaceContext =
+    trackedWorkspaceContextAccepted && kind !== null;
+  if (
+    prefersStaticHtmlLane &&
+    !hasTrackedFrameworkWorkspaceContext &&
+    !hasFrameworkBuildLaneMarker(requestContext) &&
+    !isDeterministicFrameworkBuildLaneRequest(activeRequest)
+  ) {
+    return [];
+  }
+  if (
+    !hasFrameworkBuildLaneMarker(requestContext) &&
+    !isDeterministicFrameworkBuildLaneRequest(activeRequest) &&
+    !hasTrackedFrameworkWorkspaceContext &&
+    kind === null
+  ) {
+    return [];
+  }
   if (!kind) {
     return [];
   }
@@ -290,82 +316,23 @@ export function buildDeterministicFrameworkBuildFallbackActions(
     return [scaffoldAction, ...writeActions, installAction, buildAction, buildProofAction];
   }
 
-  const startAction: PlannedAction = {
-    id: makeId("action"),
-    type: "start_process",
-    description: "Start the framework app locally on loopback so it can be reviewed in the browser.",
-    params: {
-      command: startCommand,
-      cwd: finalFolderPath,
-      workdir: finalFolderPath,
-      requestedShellKind,
-      timeoutMs: 120_000
-    },
-    estimatedCostUsd: estimateActionCostUsd({
-      type: "start_process",
-      params: { command: startCommand, cwd: finalFolderPath }
-    })
-  };
-
-  const probeAction: PlannedAction = {
-    id: makeId("action"),
-    type: "probe_http",
-    description: "Wait for the local framework app to answer on its loopback URL.",
-    params: { url: liveUrl, expectedStatus: 200, timeoutMs: 30_000 },
-    estimatedCostUsd: estimateActionCostUsd({
-      type: "probe_http",
-      params: { url: liveUrl, expectedStatus: 200 }
-    })
-  };
-
-  const verifyAction: PlannedAction | null = browserVerificationRequested
-    ? {
-        id: makeId("action"),
-        type: "verify_browser",
-        description: "Verify the landing page browser view on the loopback app.",
-        params: {
-          url: liveUrl,
-          expectedTitle: requestedFolderName,
-          expectedText: requestedFolderName,
-          timeoutMs: 30_000
-        },
-        estimatedCostUsd: estimateActionCostUsd({
-          type: "verify_browser",
-          params: {
-            url: liveUrl,
-            expectedTitle: requestedFolderName,
-            expectedText: requestedFolderName
-          }
-        })
-      }
-    : null;
-
-  const openBrowserAction: PlannedAction | null =
-    persistentBrowserOpenRequested || browserOpenFollowUpRequested
-    ? {
-        id: makeId("action"),
-        type: "open_browser",
-        description: "Open the live landing page in a visible browser window and leave it open.",
-        params: {
-          url: liveUrl,
-          rootPath: finalFolderPath,
-          ...(canReuseTrackedLivePreview && trackedPreviewProcessLeaseId
-            ? { previewProcessLeaseId: trackedPreviewProcessLeaseId }
-            : {}),
-          timeoutMs: 30_000
-        },
-        estimatedCostUsd: estimateActionCostUsd({
-          type: "open_browser",
-          params: {
-            url: liveUrl,
-            rootPath: finalFolderPath,
-            ...(canReuseTrackedLivePreview && trackedPreviewProcessLeaseId
-              ? { previewProcessLeaseId: trackedPreviewProcessLeaseId }
-              : {})
-          }
-        })
-      }
-    : null;
+  const {
+    startAction,
+    probeAction,
+    verifyAction,
+    openBrowserAction
+  } = buildFrameworkLiveLifecycleActions({
+    requestedFolderName,
+    liveUrl,
+    finalFolderPath,
+    startCommand,
+    requestedShellKind,
+    browserVerificationRequested,
+    persistentBrowserOpenRequested,
+    browserOpenFollowUpRequested,
+    canReuseTrackedLivePreview,
+    trackedPreviewProcessLeaseId
+  });
 
   if (canReuseTrackedLivePreview) {
     return [

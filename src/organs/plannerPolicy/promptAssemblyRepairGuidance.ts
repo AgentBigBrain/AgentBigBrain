@@ -10,6 +10,15 @@
  */
 export function buildPlannerRepairReasonGuidance(repairReason: string): string {
   if (
+    repairReason.startsWith("invalid_execution_style_build_plan:STATIC_ARTIFACT_OPEN_BROWSER_ONLY_REQUIRED")
+  ) {
+    return (
+      " The prior plan failed because this turn is only asking to open an already-built local static artifact. " +
+      "Repair by returning exactly one open_browser action for the preferred local file target from the current request context. " +
+      "Do not scaffold, rewrite files, install dependencies, start a dev server, probe localhost, or verify a live browser UI for this turn."
+    );
+  }
+  if (
     repairReason.startsWith("invalid_execution_style_build_plan:FRAMEWORK_APP_SCAFFOLD_ACTION_REQUIRED")
   ) {
     return (

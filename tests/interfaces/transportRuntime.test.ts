@@ -41,7 +41,9 @@ import {
 import { shouldNotifyRejectedInvocation } from "../../src/interfaces/transportRuntime/rateLimitPolicy";
 import {
   createTelegramConversationNotifier,
-  sendTelegramDraftUpdate
+  editTelegramReply,
+  sendTelegramDraftUpdate,
+  sendTelegramReply
 } from "../../src/interfaces/transportRuntime/telegramTransport";
 import {
   prepareTelegramUpdate,
@@ -675,6 +677,78 @@ test("sendTelegramGatewayReply applies invocation hints before transport deliver
   assert.match(capturedBody, /bigbrain \/status/);
 });
 
+test("sendTelegramReply splits long outbound text into multiple Telegram-safe sends", async () => {
+  const requestBodies: Array<{ chat_id?: number | string; text?: string }> = [];
+  const longText = `${"A".repeat(3990)}\n\n${"B".repeat(320)}`;
+
+  await withMockFetch(
+    (async (_input, init) => {
+      requestBodies.push(
+        JSON.parse(String(init?.body ?? "{}")) as { chat_id?: number | string; text?: string }
+      );
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          ok: true,
+          result: {
+            message_id: requestBodies.length
+          }
+        })
+      } as Response;
+    }) as typeof fetch,
+    async () => {
+      const result = await sendTelegramReply({
+        apiBaseUrl: "https://api.telegram.org",
+        botToken: "telegram-token",
+        chatId: "12345",
+        text: longText
+      });
+      assert.deepEqual(result, {
+        ok: true,
+        messageId: "2",
+        errorCode: null
+      });
+    }
+  );
+
+  assert.equal(requestBodies.length, 2);
+  assert.equal(requestBodies[0]?.chat_id, 12345);
+  assert.equal(requestBodies[0]?.text?.length, 3992);
+  assert.equal(requestBodies[1]?.text, "B".repeat(320));
+});
+
+test("editTelegramReply fails closed with provider detail when the text exceeds Telegram edit limits", async () => {
+  const result = await editTelegramReply({
+    apiBaseUrl: "https://api.telegram.org",
+    botToken: "telegram-token",
+    chatId: "12345",
+    messageId: "77",
+    text: "x".repeat(4001)
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.errorCode, "TELEGRAM_EDIT_TOO_LONG");
+  assert.match(result.errorDetail ?? "", /4000 characters/i);
+});
+
+test("deliverPreparedTransportResponse includes transport detail when delivery fails", async () => {
+  await assert.rejects(
+    () =>
+      deliverPreparedTransportResponse(
+        "hello",
+        async () => ({
+          ok: false,
+          messageId: null,
+          errorCode: "TELEGRAM_SEND_HTTP_400",
+          errorDetail: "Bad Request: message is too long"
+        }),
+        "TELEGRAM_SEND_FAILED"
+      ),
+    /TELEGRAM_SEND_HTTP_400: Bad Request: message is too long/
+  );
+});
+
 test("sendObservedTelegramGatewayReply records direct-reply trace metadata", async () => {
   const observed: Array<{
     kind: string;
@@ -1068,6 +1142,108 @@ test("enrichAcceptedTelegramUpdateWithMedia rejects media-only untranscribed voi
     responseText:
       "I received your voice note, but I couldn't transcribe it in this environment. Please resend it as text or try again where voice transcription is available."
   });
+});
+
+test("enrichAcceptedTelegramUpdateWithMedia preserves raw routing text while enriching canonical entity input", async () => {
+  const prepared = prepareTelegramUpdate({
+    update: {
+      update_id: 49,
+      message: {
+        chat: {
+          id: 100,
+          type: "private"
+        },
+        from: {
+          id: 200,
+          username: "tester"
+        },
+        caption: "Please review the attached PDF and list the business names.",
+        document: {
+          file_id: "doc-1",
+          file_unique_id: "doc-uniq-1",
+          file_name: "filing.pdf",
+          mime_type: "application/pdf",
+          file_size: 4096
+        },
+        date: 1_700_000_000
+      }
+    },
+    sharedSecret: "shared-secret",
+    invocationPolicy: {
+      requireNameCall: true,
+      aliases: ["bigbrain"]
+    },
+    mediaConfig: {
+      enabled: true,
+      maxAttachments: 4,
+      maxAttachmentBytes: 12000000,
+      maxDownloadBytes: 20000000,
+      maxVoiceSeconds: 180,
+      maxVideoSeconds: 90,
+      allowImages: true,
+      allowVoiceNotes: true,
+      allowVideos: true,
+      allowDocuments: true
+    },
+    validateMessage: () => ({
+      accepted: true,
+      code: "ACCEPTED",
+      message: "ok"
+    }),
+    abortControllers: new Map<string, AbortController>()
+  });
+
+  assert.equal(prepared.kind, "accepted");
+  if (prepared.kind !== "accepted") {
+    return;
+  }
+
+  const enriched = await enrichAcceptedTelegramUpdateWithMedia({
+    prepared: {
+      ...prepared,
+      inbound: {
+        ...prepared.inbound,
+        media: {
+          attachments: [
+            {
+              ...prepared.inbound.media!.attachments[0]!,
+              interpretation: {
+                summary: "business filing.",
+                transcript: null,
+                ocrText:
+                  "Signed before a notary public in Wayne County. Present entity ACME SAMPLE DESIGN, LLC.",
+                confidence: 0.92,
+                provenance: "document extraction",
+                source: "fixture_catalog",
+                entityHints: ["ACME SAMPLE DESIGN, LLC", "Wayne County"]
+              }
+            }
+          ]
+        }
+      },
+      entityGraphEvent: {
+        ...prepared.entityGraphEvent,
+        text: prepared.inbound.text
+      }
+    },
+    config: buildTelegramInterfaceConfigFixture()
+  });
+
+  assert.equal(enriched.kind, "accepted");
+  if (enriched.kind !== "accepted") {
+    return;
+  }
+  assert.equal(
+    enriched.inbound.text,
+    "Please review the attached PDF and list the business names."
+  );
+  assert.equal(
+    enriched.inbound.commandRoutingText,
+    "Please review the attached PDF and list the business names."
+  );
+  assert.match(enriched.entityGraphEvent.text, /Attached media context:/);
+  assert.match(enriched.entityGraphEvent.text, /notary public/i);
+  assert.match(enriched.entityGraphEvent.text, /ACME SAMPLE DESIGN, LLC/);
 });
 
 test("prepareTelegramUpdate surfaces transport-facing rejections and wrapped draft ids", () => {

@@ -8,6 +8,7 @@ import type { DatabaseSync } from "node:sqlite";
 
 import { LedgerBackend } from "./config";
 import { withFileLock, writeFileAtomic } from "./fileLock";
+import { buildProjectionChangeSet } from "./projections/service";
 import { sha256HexFromCanonicalJson } from "./normalizers/canonicalizationRules";
 import { withSqliteDatabase } from "./sqliteStore";
 import {
@@ -19,22 +20,43 @@ import {
 import {
   applyEntityAliasCandidateToGraph,
   applyEntityExtractionToGraph,
+  buildEntityKey,
   createEmptyEntityGraphV1,
   extractEntityCandidates,
+  queryEntityGraphNodesByCanonicalOrAlias,
   Stage686EntityAliasCandidateInput,
   Stage686EntityAliasMutationResult,
   Stage686EntityExtractionInput,
   Stage686EntityGraphMutationOptions,
   Stage686EntityGraphMutationResult
 } from "./stage6_86EntityGraph";
+import type { ProfileMemoryGraphClaimRecord } from "./profileMemoryRuntime/profileMemoryGraphContracts";
 
 const SQLITE_ENTITY_GRAPH_STATE_TABLE = "entity_graph_state";
 const MAX_ENTITY_GRAPH_DECISION_RECORDS = 128;
+const PROFILE_MEMORY_CONTINUITY_EVIDENCE_PREFIX = "profile_memory_claim:";
+const PROFILE_MEMORY_CONTINUITY_DOMAIN_HINT = "relationship";
+
+type ContinuityAssociationEntityType = "org" | "place";
+
+interface ParsedContactClaimKey {
+  contactToken: string;
+  field: string;
+}
+
+interface ContinuityAssociationClaim {
+  contactToken: string;
+  contactName: string;
+  targetName: string;
+  targetType: ContinuityAssociationEntityType;
+  claimId: string;
+}
 
 interface EntityGraphStoreOptions {
   backend?: LedgerBackend;
   sqlitePath?: string;
   exportJsonOnWrite?: boolean;
+  onChange?: (changeSet: import("./projections/contracts").ProjectionChangeSet) => Promise<void> | void;
 }
 
 export interface RecordEntityGraphAlignmentDecisionInput {
@@ -47,6 +69,13 @@ export interface RecordEntityGraphAlignmentDecisionInput {
   evidenceRefs?: readonly string[];
 }
 
+export interface SyncCurrentSurfaceProfileClaimsResult {
+  graph: EntityGraphV1;
+  changed: boolean;
+  syncedEntityKeys: readonly string[];
+  syncedEdgeKeys: readonly string[];
+}
+
 /**
  * Implements a deterministic entity graph store with JSON/SQLite parity.
  */
@@ -57,6 +86,7 @@ export class EntityGraphStore {
   private readonly backend: LedgerBackend;
   private readonly sqlitePath: string;
   private readonly exportJsonOnWrite: boolean;
+  private readonly onChange?: EntityGraphStoreOptions["onChange"];
 
   /**
    * Initializes `EntityGraphStore` with deterministic runtime dependencies.
@@ -77,6 +107,7 @@ export class EntityGraphStore {
     this.backend = options.backend ?? "json";
     this.sqlitePath = options.sqlitePath ?? path.resolve(process.cwd(), "runtime/ledgers.sqlite");
     this.exportJsonOnWrite = options.exportJsonOnWrite ?? true;
+    this.onChange = options.onChange;
   }
 
   /**
@@ -193,6 +224,26 @@ export class EntityGraphStore {
   }
 
   /**
+ * Reconciles current-surface contact/org/place profile-memory claims into the shared continuity
+ * graph without duplicating salience on repeated syncs.
+   */
+  async syncCurrentSurfaceProfileClaims(
+    claims: readonly ProfileMemoryGraphClaimRecord[],
+    observedAt: string
+  ): Promise<SyncCurrentSurfaceProfileClaimsResult> {
+    const currentGraph = await this.getGraph();
+    const synced = applyResolvedCurrentProfileClaimsToEntityGraph(
+      currentGraph,
+      claims,
+      observedAt
+    );
+    if (synced.changed) {
+      await this.persistGraph(synced.graph);
+    }
+    return synced;
+  }
+
+  /**
    * Persists graph with deterministic state semantics.
    *
    * **Why it exists:**
@@ -220,6 +271,7 @@ export class EntityGraphStore {
           await writeFileAtomic(this.filePath, `${JSON.stringify(normalized, null, 2)}\n`);
         });
       }
+      await this.notifyProjectionChange(normalized.updatedAt);
       return;
     }
 
@@ -227,6 +279,33 @@ export class EntityGraphStore {
       this.graph = normalized;
       await writeFileAtomic(this.filePath, `${JSON.stringify(normalized, null, 2)}\n`);
     });
+    await this.notifyProjectionChange(normalized.updatedAt);
+  }
+
+  /**
+   * Emits one normalized projection change after entity-graph persistence.
+   *
+   * **Why it exists:**
+   * Stage 6.86 continuity spans runtime state and entity graph separately, so graph persistence
+   * needs its own projection callback instead of assuming runtime-state writes cover everything.
+   *
+   * **What it talks to:**
+   * - Uses `buildProjectionChangeSet(...)` from `./projections/service`.
+   *
+   * @param updatedAt - Graph update timestamp.
+   * @returns Promise resolving after the optional projection callback completes.
+   */
+  private async notifyProjectionChange(updatedAt: string): Promise<void> {
+    if (!this.onChange) {
+      return;
+    }
+    await this.onChange(buildProjectionChangeSet(
+      ["entity_graph_changed", "continuity_changed"],
+      ["entity_graph:persist"],
+      {
+        updatedAt
+      }
+    ));
   }
 
   /**
@@ -552,6 +631,464 @@ function normalizeStringArray(values: readonly string[]): string[] {
   return [...new Set(values.map((value) => value.trim()).filter(Boolean))].sort((left, right) =>
     left.localeCompare(right)
   );
+}
+
+/**
+ * Reconciles resolved-current contact association claims into durable continuity entities and
+ * confirmed edges so Stage 6.86 better reflects canonical profile memory.
+ */
+function applyResolvedCurrentProfileClaimsToEntityGraph(
+  graph: EntityGraphV1,
+  claims: readonly ProfileMemoryGraphClaimRecord[],
+  observedAt: string
+): SyncCurrentSurfaceProfileClaimsResult {
+  const entities = new Map(graph.entities.map((entity) => [entity.entityKey, { ...entity }]));
+  const edges = new Map(graph.edges.map((edge) => [edge.edgeKey, { ...edge }]));
+  const syncedEntityKeys = new Set<string>();
+  const syncedEdgeKeys = new Set<string>();
+  let changed = false;
+
+  const contactNamesByToken = buildContactNameLookup(claims);
+  const associationClaims = collectContinuityAssociationClaims(claims, contactNamesByToken);
+
+  for (const association of associationClaims) {
+    const evidenceRef = `${PROFILE_MEMORY_CONTINUITY_EVIDENCE_PREFIX}${association.claimId}`;
+    const personNode = upsertContinuityEntityNode({
+      graph,
+      entities,
+      canonicalName: association.contactName,
+      desiredType: "person",
+      observedAt,
+      evidenceRef
+    });
+    const targetNode = upsertContinuityEntityNode({
+      graph,
+      entities,
+      canonicalName: association.targetName,
+      desiredType: association.targetType,
+      observedAt,
+      evidenceRef
+    });
+    const edgeResult = upsertContinuityAssociationEdge(
+      edges,
+      personNode.entityKey,
+      targetNode.entityKey,
+      evidenceRef,
+      observedAt
+    );
+
+    syncedEntityKeys.add(personNode.entityKey);
+    syncedEntityKeys.add(targetNode.entityKey);
+    syncedEdgeKeys.add(edgeResult.edgeKey);
+    changed = changed || personNode.changed || targetNode.changed || edgeResult.changed;
+  }
+
+  if (!changed) {
+    return {
+      graph,
+      changed: false,
+      syncedEntityKeys: [...syncedEntityKeys].sort((left, right) => left.localeCompare(right)),
+      syncedEdgeKeys: [...syncedEdgeKeys].sort((left, right) => left.localeCompare(right))
+    };
+  }
+
+  return {
+    graph: {
+      ...graph,
+      updatedAt: observedAt,
+      entities: [...entities.values()].sort((left, right) => left.entityKey.localeCompare(right.entityKey)),
+      edges: [...edges.values()].sort((left, right) => left.edgeKey.localeCompare(right.edgeKey))
+    },
+    changed: true,
+    syncedEntityKeys: [...syncedEntityKeys].sort((left, right) => left.localeCompare(right)),
+    syncedEdgeKeys: [...syncedEdgeKeys].sort((left, right) => left.localeCompare(right))
+  };
+}
+
+/**
+ * Builds contact name lookup.
+ *
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses `ProfileMemoryGraphClaimRecord` (import `ProfileMemoryGraphClaimRecord`) from `./profileMemoryRuntime/profileMemoryGraphContracts`.
+ * @param claims - Input consumed by this helper.
+ * @returns Result produced by this helper.
+ */
+function buildContactNameLookup(
+  claims: readonly ProfileMemoryGraphClaimRecord[]
+): ReadonlyMap<string, string> {
+  const names = new Map<string, string>();
+  for (const claim of claims) {
+    const parsedKey = parseContactClaimKey(claim.payload.normalizedKey);
+    if (!parsedKey || parsedKey.field !== "name") {
+      continue;
+    }
+    const normalizedName = normalizeContinuityLabel(claim.payload.normalizedValue);
+    if (!normalizedName || names.has(parsedKey.contactToken)) {
+      continue;
+    }
+    names.set(parsedKey.contactToken, normalizedName);
+  }
+  return names;
+}
+
+/**
+ * Collects continuity association claims.
+ *
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses `ProfileMemoryGraphClaimRecord` (import `ProfileMemoryGraphClaimRecord`) from `./profileMemoryRuntime/profileMemoryGraphContracts`.
+ * @param claims - Input consumed by this helper.
+ * @param contactNamesByToken - Input consumed by this helper.
+ * @returns Result produced by this helper.
+ */
+function collectContinuityAssociationClaims(
+  claims: readonly ProfileMemoryGraphClaimRecord[],
+  contactNamesByToken: ReadonlyMap<string, string>
+): readonly ContinuityAssociationClaim[] {
+  const collected = new Map<string, ContinuityAssociationClaim>();
+  for (const claim of claims) {
+    const parsedKey = parseContactClaimKey(claim.payload.normalizedKey);
+    if (!parsedKey) {
+      continue;
+    }
+    const targetType = resolveContinuityAssociationEntityType(parsedKey.field);
+    const targetName = normalizeContinuityLabel(claim.payload.normalizedValue);
+    if (!targetType || !targetName) {
+      continue;
+    }
+    const contactName =
+      contactNamesByToken.get(parsedKey.contactToken) ??
+      humanizeContactToken(parsedKey.contactToken);
+    const associationKey = [
+      parsedKey.contactToken,
+      parsedKey.field,
+      targetType,
+      targetName
+    ].join(":");
+    if (collected.has(associationKey)) {
+      continue;
+    }
+    collected.set(associationKey, {
+      contactToken: parsedKey.contactToken,
+      contactName,
+      targetName,
+      targetType,
+      claimId: claim.payload.claimId
+    });
+  }
+  return [...collected.values()];
+}
+
+/**
+ * Parses contact claim key.
+ *
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses local constants/helpers within this module.
+ * @param value - Input consumed by this helper.
+ * @returns Result produced by this helper.
+ */
+function parseContactClaimKey(value: string | null | undefined): ParsedContactClaimKey | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const segments = value.trim().split(".");
+  if (segments.length < 3 || segments[0] !== "contact") {
+    return null;
+  }
+  const contactToken = segments[1]?.trim().toLowerCase();
+  const field = segments.slice(2).join(".").trim().toLowerCase();
+  return contactToken && field
+    ? {
+        contactToken,
+        field
+      }
+    : null;
+}
+
+/**
+ * Resolves continuity association entity type.
+ *
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses local constants/helpers within this module.
+ * @param field - Input consumed by this helper.
+ * @returns Result produced by this helper.
+ */
+function resolveContinuityAssociationEntityType(
+  field: string
+): ContinuityAssociationEntityType | null {
+  if (field === "work_association" || field === "organization_association") {
+    return "org";
+  }
+  if (
+    field === "location_association" ||
+    field === "primary_location_association" ||
+    field === "secondary_location_association"
+  ) {
+    return "place";
+  }
+  return null;
+}
+
+/**
+ * Normalizes continuity label.
+ *
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses local constants/helpers within this module.
+ * @param value - Input consumed by this helper.
+ * @returns Result produced by this helper.
+ */
+function normalizeContinuityLabel(value: string | null | undefined): string | null {
+  return typeof value === "string" && value.trim()
+    ? value.trim().replace(/\s+/g, " ")
+    : null;
+}
+
+/**
+ * Humanizes contact token.
+ *
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses local constants/helpers within this module.
+ * @param token - Input consumed by this helper.
+ * @returns Result produced by this helper.
+ */
+function humanizeContactToken(token: string): string {
+  return token
+    .split("_")
+    .filter(Boolean)
+    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+    .join(" ");
+}
+
+/**
+ * Selects continuity entity match.
+ *
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses `queryEntityGraphNodesByCanonicalOrAlias` (import `queryEntityGraphNodesByCanonicalOrAlias`) from `./stage6_86EntityGraph`.
+ * - Uses `EntityGraphV1` (import `EntityGraphV1`) from `./types`.
+ * @param graph - Input consumed by this helper.
+ * @param entities - Input consumed by this helper.
+ * @param canonicalName - Input consumed by this helper.
+ * @param desiredType - Input consumed by this helper.
+ * @returns Result produced by this helper.
+ */
+function selectContinuityEntityMatch(
+  graph: EntityGraphV1,
+  entities: Map<string, EntityGraphV1["entities"][number]>,
+  canonicalName: string,
+  desiredType: "person" | ContinuityAssociationEntityType
+): EntityGraphV1["entities"][number] | null {
+  const matches = queryEntityGraphNodesByCanonicalOrAlias(
+    {
+      ...graph,
+      entities: [...entities.values()]
+    },
+    canonicalName
+  );
+  const exactTypeMatch = matches.find((entity) => entity.entityType === desiredType);
+  if (exactTypeMatch) {
+    return entities.get(exactTypeMatch.entityKey) ?? exactTypeMatch;
+  }
+  if (
+    matches.length === 1 &&
+    (matches[0]?.entityType === "thing" || matches[0]?.entityType === "concept")
+  ) {
+    return entities.get(matches[0].entityKey) ?? matches[0];
+  }
+  return null;
+}
+
+/**
+ * Upserts continuity entity node.
+ *
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses `buildEntityKey` (import `buildEntityKey`) from `./stage6_86EntityGraph`.
+ * - Uses `EntityGraphV1` (import `EntityGraphV1`) from `./types`.
+ * @param input - Input consumed by this helper.
+ * @returns Result produced by this helper.
+ */
+function upsertContinuityEntityNode(input: {
+  graph: EntityGraphV1;
+  entities: Map<string, EntityGraphV1["entities"][number]>;
+  canonicalName: string;
+  desiredType: "person" | ContinuityAssociationEntityType;
+  observedAt: string;
+  evidenceRef: string;
+}): { entityKey: string; changed: boolean } {
+  const existing =
+    selectContinuityEntityMatch(
+      input.graph,
+      input.entities,
+      input.canonicalName,
+      input.desiredType
+    ) ?? null;
+  const entityKey =
+    existing?.entityKey ?? buildEntityKey(input.canonicalName, input.desiredType, null);
+  const nextEvidenceRefs = normalizeStringArray([...(existing?.evidenceRefs ?? []), input.evidenceRef]);
+  const nextAliases = normalizeStringArray([...(existing?.aliases ?? []), input.canonicalName]);
+  const nextEntityType =
+    existing && existing.entityType !== input.desiredType
+      ? upgradeContinuityEntityType(existing.entityType, input.desiredType)
+      : input.desiredType;
+  const alreadyTracked = existing?.evidenceRefs.includes(input.evidenceRef) ?? false;
+  const nextEntity = {
+    entityKey,
+    canonicalName: existing?.canonicalName ?? input.canonicalName,
+    entityType: nextEntityType,
+    disambiguator: existing?.disambiguator ?? null,
+    domainHint: mergeContinuityDomainHint(existing?.domainHint ?? null),
+    aliases: nextAliases,
+    firstSeenAt: existing?.firstSeenAt ?? input.observedAt,
+    lastSeenAt: input.observedAt,
+    salience:
+      existing
+        ? alreadyTracked
+          ? existing.salience
+          : Number((existing.salience + 1).toFixed(4))
+        : 1,
+    evidenceRefs: nextEvidenceRefs
+  } satisfies EntityGraphV1["entities"][number];
+  input.entities.set(entityKey, nextEntity);
+  return {
+    entityKey,
+    changed: !existing || JSON.stringify(existing) !== JSON.stringify(nextEntity)
+  };
+}
+
+/**
+ * Upgrades continuity entity type.
+ *
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses `EntityGraphV1` (import `EntityGraphV1`) from `./types`.
+ * @param existingType - Input consumed by this helper.
+ * @param desiredType - Input consumed by this helper.
+ * @returns Result produced by this helper.
+ */
+function upgradeContinuityEntityType(
+  existingType: EntityGraphV1["entities"][number]["entityType"],
+  desiredType: "person" | ContinuityAssociationEntityType
+): EntityGraphV1["entities"][number]["entityType"] {
+  return existingType === "thing" || existingType === "concept"
+    ? desiredType
+    : existingType;
+}
+
+/**
+ * Merges continuity domain hint.
+ *
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses `EntityGraphV1` (import `EntityGraphV1`) from `./types`.
+ * @param existingDomainHint - Input consumed by this helper.
+ * @returns Result produced by this helper.
+ */
+function mergeContinuityDomainHint(
+  existingDomainHint: EntityGraphV1["entities"][number]["domainHint"]
+): EntityGraphV1["entities"][number]["domainHint"] {
+  if (!existingDomainHint) {
+    return PROFILE_MEMORY_CONTINUITY_DOMAIN_HINT;
+  }
+  return existingDomainHint === PROFILE_MEMORY_CONTINUITY_DOMAIN_HINT
+    ? existingDomainHint
+    : null;
+}
+
+/**
+ * Upserts continuity association edge.
+ *
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses `EntityGraphV1` (import `EntityGraphV1`) from `./types`.
+ * @param edges - Input consumed by this helper.
+ * @param sourceEntityKey - Input consumed by this helper.
+ * @param targetEntityKey - Input consumed by this helper.
+ * @param evidenceRef - Input consumed by this helper.
+ * @param observedAt - Input consumed by this helper.
+ * @returns Result produced by this helper.
+ */
+function upsertContinuityAssociationEdge(
+  edges: Map<string, EntityGraphV1["edges"][number]>,
+  sourceEntityKey: string,
+  targetEntityKey: string,
+  evidenceRef: string,
+  observedAt: string
+): { edgeKey: string; changed: boolean } {
+  const edgeKey = buildContinuityAssociationEdgeKey(sourceEntityKey, targetEntityKey);
+  const existing = edges.get(edgeKey) ?? null;
+  const alreadyTracked = existing?.evidenceRefs.includes(evidenceRef) ?? false;
+  const nextEdge = {
+    edgeKey,
+    sourceEntityKey,
+    targetEntityKey,
+    relationType: "other",
+    status: "confirmed",
+    coMentionCount: Math.max(1, existing?.coMentionCount ?? 1),
+    strength: Math.max(1, existing?.strength ?? 1),
+    firstObservedAt: existing?.firstObservedAt ?? observedAt,
+    lastObservedAt: observedAt,
+    evidenceRefs: normalizeStringArray([...(existing?.evidenceRefs ?? []), evidenceRef])
+  } satisfies EntityGraphV1["edges"][number];
+  if (existing && alreadyTracked && JSON.stringify(existing) === JSON.stringify(nextEdge)) {
+    return { edgeKey, changed: false };
+  }
+  edges.set(edgeKey, nextEdge);
+  return {
+    edgeKey,
+    changed: !existing || JSON.stringify(existing) !== JSON.stringify(nextEdge)
+  };
+}
+
+/**
+ * Builds continuity association edge key.
+ *
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses `sha256HexFromCanonicalJson` (import `sha256HexFromCanonicalJson`) from `./normalizers/canonicalizationRules`.
+ * @param sourceEntityKey - Input consumed by this helper.
+ * @param targetEntityKey - Input consumed by this helper.
+ * @returns Result produced by this helper.
+ */
+function buildContinuityAssociationEdgeKey(
+  sourceEntityKey: string,
+  targetEntityKey: string
+): string {
+  const ordered =
+    sourceEntityKey.localeCompare(targetEntityKey) <= 0
+      ? [sourceEntityKey, targetEntityKey]
+      : [targetEntityKey, sourceEntityKey];
+  const fingerprint = sha256HexFromCanonicalJson({ ordered });
+  return `edge_${fingerprint.slice(0, 20)}`;
 }
 
 /**

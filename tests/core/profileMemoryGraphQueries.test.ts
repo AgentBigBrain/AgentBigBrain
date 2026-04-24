@@ -19,6 +19,7 @@ import {
   queryProfileMemoryGraphResolvedCurrentClaims,
   queryProfileMemoryGraphStableRefGroups
 } from "../../src/core/profileMemoryRuntime/profileMemoryGraphQueries";
+import type { ProfileMemoryGraphState } from "../../src/core/profileMemoryRuntime/profileMemoryGraphContracts";
 
 test("attachProfileMemoryGraphStableRefs derives self and contact stable refs on canonical graph records", () => {
   const observedAt = "2026-04-09T14:00:00.000Z";
@@ -190,7 +191,7 @@ test("queryProfileMemoryGraphStableRefGroups groups multi-participant events und
     ]
   };
 
-  const groups = queryProfileMemoryGraphStableRefGroups(graph);
+  const groups = queryProfileMemoryGraphStableRefGroups(graph as ProfileMemoryGraphState);
   const selfGroup = groups.find(
     (group) => group.stableRefId === getProfileMemorySelfStableRefId()
   );
@@ -262,7 +263,7 @@ test("queryProfileMemoryGraphStableRefGroups marks explicit quarantine refs as q
     ]
   };
 
-  const groups = queryProfileMemoryGraphStableRefGroups(graph);
+  const groups = queryProfileMemoryGraphStableRefGroups(graph as ProfileMemoryGraphState);
   const quarantinedGroup = groups.find(
     (group) => group.stableRefId === "stable_quarantine_contact_owen"
   );
@@ -351,6 +352,6 @@ test("queryProfileMemoryGraphResolvedCurrentClaims excludes provisional stable r
     ]
   };
 
-  const claims = queryProfileMemoryGraphResolvedCurrentClaims(graph);
+  const claims = queryProfileMemoryGraphResolvedCurrentClaims(graph as ProfileMemoryGraphState);
   assert.deepEqual(claims.map((claim) => claim.payload.claimId), ["claim_self"]);
 });

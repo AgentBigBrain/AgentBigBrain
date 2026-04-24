@@ -109,6 +109,26 @@ test("resolveCommandAwareShellEnvironment preserves launcher variables for embed
   );
 });
 
+test("resolveCommandAwareShellEnvironment preserves Windows executable resolution variables for generic PowerShell commands", () => {
+  const profile = buildWindowsPowerShellProfile();
+
+  const resolution = resolveCommandAwareShellEnvironment(profile, "python -m http.server 4173", {
+    PATH: "C:\\Python314;C:\\Windows\\System32\\WindowsPowerShell\\v1.0",
+    SYSTEMROOT: "C:\\Windows",
+    ComSpec: "C:\\Windows\\System32\\cmd.exe",
+    PATHEXT: ".COM;.EXE;.BAT;.CMD",
+    WINDIR: "C:\\Windows"
+  });
+
+  assert.equal(resolution.env.ComSpec, "C:\\Windows\\System32\\cmd.exe");
+  assert.equal(resolution.env.PATHEXT, ".COM;.EXE;.BAT;.CMD");
+  assert.equal(resolution.env.WINDIR, "C:\\Windows");
+  assert.deepEqual(
+    resolution.envKeyNames,
+    ["ComSpec", "PATH", "PATHEXT", "SYSTEMROOT", "WINDIR"]
+  );
+});
+
 test("resolveShellSuccessWorkspaceRoot returns scaffold target for PowerShell Vite bootstrap commands", async () => {
   const workspaceRoot = await resolveShellSuccessWorkspaceRoot(
     "$project = 'Drone Preview App'; Set-Location 'C:\\Users\\testuser\\OneDrive\\Desktop'; npm.cmd create vite@latest $project -- --template react",

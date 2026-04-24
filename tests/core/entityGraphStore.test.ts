@@ -9,6 +9,8 @@ import path from "node:path";
 import { test } from "node:test";
 
 import { EntityGraphStore } from "../../src/core/entityGraphStore";
+import { createSchemaEnvelopeV1 } from "../../src/core/schemaEnvelope";
+import type { ProfileMemoryGraphClaimRecord } from "../../src/core/profileMemoryRuntime/profileMemoryGraphContracts";
 import type { EntityGraphV1 } from "../../src/core/types";
 
 /**
@@ -420,6 +422,168 @@ async function relationshipExtractionDropsClauseBoundaryAndLeadingStopwordCandid
   });
 }
 
+function buildResolvedCurrentClaim(input: {
+  claimId: string;
+  normalizedKey: string;
+  normalizedValue: string | null;
+  assertedAt?: string;
+  entityRefIds?: readonly string[];
+}): ProfileMemoryGraphClaimRecord {
+  const createdAt = input.assertedAt ?? "2026-04-12T21:00:00.000Z";
+  return createSchemaEnvelopeV1(
+    "ProfileMemoryGraphClaimV1",
+    {
+      claimId: input.claimId,
+      stableRefId: "stable_contact_test",
+      family: "contact.context",
+      normalizedKey: input.normalizedKey,
+      normalizedValue: input.normalizedValue,
+      sensitive: false,
+      sourceTaskId: "task_test",
+      sourceFingerprint: `fingerprint:${input.claimId}`,
+      sourceTier: "explicit_user_statement",
+      assertedAt: createdAt,
+      validFrom: createdAt,
+      validTo: null,
+      endedAt: null,
+      endedByClaimId: null,
+      timePrecision: "instant",
+      timeSource: "observed_at",
+      derivedFromObservationIds: [],
+      projectionSourceIds: [],
+      entityRefIds: [...(input.entityRefIds ?? [])],
+      active: true
+    },
+    createdAt
+  ) as ProfileMemoryGraphClaimRecord;
+}
+
+async function syncCurrentSurfaceProfileClaimsPromotesOrgAndPlaceContinuity(): Promise<void> {
+  await withTempDir(async (tempDir) => {
+    const graphPath = path.join(tempDir, "entity_graph.json");
+    const store = new EntityGraphStore(graphPath, { backend: "json" });
+
+    const result = await store.syncCurrentSurfaceProfileClaims(
+      [
+        buildResolvedCurrentClaim({
+          claimId: "claim_billy_name",
+          normalizedKey: "contact.billy.name",
+          normalizedValue: "Billy"
+        }),
+        buildResolvedCurrentClaim({
+          claimId: "claim_billy_work",
+          normalizedKey: "contact.billy.work_association",
+          normalizedValue: "Crimson Analytics"
+        }),
+        buildResolvedCurrentClaim({
+          claimId: "claim_billy_location",
+          normalizedKey: "contact.billy.location_association",
+          normalizedValue: "Ferndale"
+        }),
+        buildResolvedCurrentClaim({
+          claimId: "claim_garrett_name",
+          normalizedKey: "contact.garrett.name",
+          normalizedValue: "Garrett"
+        }),
+        buildResolvedCurrentClaim({
+          claimId: "claim_garrett_org",
+          normalizedKey: "contact.garrett.organization_association",
+          normalizedValue: "Harbor Signal Studio"
+        }),
+        buildResolvedCurrentClaim({
+          claimId: "claim_garrett_primary_location",
+          normalizedKey: "contact.garrett.primary_location_association",
+          normalizedValue: "Detroit"
+        }),
+        buildResolvedCurrentClaim({
+          claimId: "claim_garrett_secondary_location",
+          normalizedKey: "contact.garrett.secondary_location_association",
+          normalizedValue: "Ann Arbor"
+        })
+      ],
+      "2026-04-12T21:05:00.000Z"
+    );
+
+    assert.equal(result.changed, true);
+    const graph = await store.getGraph();
+    const billy = graph.entities.find((entity) => entity.canonicalName === "Billy");
+    const crimson = graph.entities.find((entity) => entity.canonicalName === "Crimson Analytics");
+    const ferndale = graph.entities.find((entity) => entity.canonicalName === "Ferndale");
+    const harbor = graph.entities.find((entity) => entity.canonicalName === "Harbor Signal Studio");
+    const detroit = graph.entities.find((entity) => entity.canonicalName === "Detroit");
+    const annArbor = graph.entities.find((entity) => entity.canonicalName === "Ann Arbor");
+
+    assert.equal(billy?.entityType, "person");
+    assert.equal(crimson?.entityType, "org");
+    assert.equal(ferndale?.entityType, "place");
+    assert.equal(harbor?.entityType, "org");
+    assert.equal(detroit?.entityType, "place");
+    assert.equal(annArbor?.entityType, "place");
+    assert.ok(
+      graph.edges.some((edge) =>
+        edge.sourceEntityKey === billy?.entityKey &&
+        edge.targetEntityKey === crimson?.entityKey &&
+        edge.relationType === "other" &&
+        edge.status === "confirmed"
+      )
+    );
+    assert.ok(
+      graph.edges.some((edge) =>
+        edge.sourceEntityKey === billy?.entityKey &&
+        edge.targetEntityKey === ferndale?.entityKey &&
+        edge.relationType === "other" &&
+        edge.status === "confirmed"
+      )
+    );
+  });
+}
+
+async function syncCurrentSurfaceProfileClaimsIsIdempotentForRepeatedClaims(): Promise<void> {
+  await withTempDir(async (tempDir) => {
+    const graphPath = path.join(tempDir, "entity_graph.json");
+    const store = new EntityGraphStore(graphPath, { backend: "json" });
+    const claims = [
+      buildResolvedCurrentClaim({
+        claimId: "claim_billy_name",
+        normalizedKey: "contact.billy.name",
+        normalizedValue: "Billy"
+      }),
+      buildResolvedCurrentClaim({
+        claimId: "claim_billy_work",
+        normalizedKey: "contact.billy.work_association",
+        normalizedValue: "Crimson Analytics"
+      })
+    ] as const;
+
+    const firstResult = await store.syncCurrentSurfaceProfileClaims(
+      claims,
+      "2026-04-12T21:10:00.000Z"
+    );
+    const secondResult = await store.syncCurrentSurfaceProfileClaims(
+      claims,
+      "2026-04-12T21:11:00.000Z"
+    );
+
+    assert.equal(firstResult.changed, true);
+    assert.equal(secondResult.changed, true);
+    const graph = await store.getGraph();
+    const billy = graph.entities.find((entity) => entity.canonicalName === "Billy");
+    const crimson = graph.entities.find((entity) => entity.canonicalName === "Crimson Analytics");
+    const billyCrimsonEdges = graph.edges.filter((edge) =>
+      edge.sourceEntityKey === billy?.entityKey &&
+      edge.targetEntityKey === crimson?.entityKey
+    );
+
+    assert.equal(billy?.salience, 1);
+    assert.equal(crimson?.salience, 1);
+    assert.equal(billyCrimsonEdges.length, 1);
+    assert.deepEqual(
+      billyCrimsonEdges[0]?.evidenceRefs,
+      ["profile_memory_claim:claim_billy_work"]
+    );
+  });
+}
+
 test(
   "stage 6.86 entity graph store persists deterministic extraction mutations in JSON backend",
   jsonBackendPersistsUpsertedEntityGraph
@@ -459,4 +623,12 @@ test(
 test(
   "stage 6.86 entity graph store drops clause-boundary and leading-stopword relationship candidates",
   relationshipExtractionDropsClauseBoundaryAndLeadingStopwordCandidates
+);
+test(
+  "stage 6.86 entity graph store syncs current-surface profile claims into org and place continuity entities",
+  syncCurrentSurfaceProfileClaimsPromotesOrgAndPlaceContinuity
+);
+test(
+  "stage 6.86 entity graph store keeps current-surface profile-claim sync idempotent across repeated runs",
+  syncCurrentSurfaceProfileClaimsIsIdempotentForRepeatedClaims
 );

@@ -116,6 +116,10 @@ full `profileMemoryStore.ts` implementation.
 - canonical episodic-memory state helpers in `profileMemoryEpisodeState.ts`
 - canonical episodic-memory normalization helpers in `profileMemoryEpisodeNormalization.ts`
 - deterministic episodic-memory extraction in `profileMemoryEpisodeExtraction.ts`
+- shared scenario-pattern orchestration helpers for deterministic episodic-memory extraction in
+  `profileMemoryEpisodeScenarioSupport.ts`
+- shared scenario-candidate primitives for deterministic episodic-memory extraction in
+  `profileMemoryEpisodeScenarioPrimitives.ts`
 - deterministic episodic-memory continuity linkage in `profileMemoryEpisodeLinking.ts`
 - canonical episodic-memory upsert/merge helpers in `profileMemoryEpisodeMutations.ts`
 - canonical episodic-memory upsert/merge helpers in `profileMemoryEpisodeMutations.ts`, including
@@ -171,6 +175,8 @@ full `profileMemoryStore.ts` implementation.
 - contact-focused named-entity and relationship extraction in `profileMemoryContactExtraction.ts`
 - shared bounded wrapper-cleanup and association-trimming helpers for deterministic contact
   extraction in `profileMemoryContactExtractionSupport.ts`
+- shared bounded contact-context and third-person continuity extraction helpers in
+  `profileMemoryContactContinuitySupport.ts`
 - deterministic suppression rules for generic fallback facts that would otherwise duplicate
   governed named-contact relationship facts in `profileMemoryGenericFactSuppression.ts`
 - canonical encryption envelope and key parsing helpers in `profileMemoryEncryption.ts`

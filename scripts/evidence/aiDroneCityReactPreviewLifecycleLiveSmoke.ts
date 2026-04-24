@@ -973,7 +973,7 @@ Promise<AiDroneCityPreviewLifecycleArtifact> {
       "Turn 5 unexpectedly left work running."
     );
     assert.equal(
-      turn5FreshJobs.some((job) => job.executionInput.startsWith("[AUTONOMOUS_LOOP_GOAL]")),
+      turn5FreshJobs.some((job) => job.executionInput?.startsWith("[AUTONOMOUS_LOOP_GOAL]") === true),
       false,
       "Turn 5 unexpectedly restarted autonomous execution."
     );
@@ -1115,7 +1115,10 @@ Promise<AiDroneCityPreviewLifecycleArtifact> {
         conversationStayedConversational: false,
         browserRemainedOpenDuringConversation: false,
         previewProcessStillRunningDuringConversation: false,
-        browserClosed: latestSession?.browserSessions.every((entry) => entry.status === "closed") ?? false,
+        browserClosed:
+          (latestSession as ConversationSession | null)?.browserSessions.every(
+            (entry) => entry.status === "closed"
+          ) ?? false,
         previewStopped: false
       },
       targetFolderPath,

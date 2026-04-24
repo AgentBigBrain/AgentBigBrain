@@ -380,6 +380,10 @@ function scoreFactForPlanningQuery(
       normalizedKey.endsWith(".name") ||
       normalizedKey.endsWith(".relationship") ||
       normalizedKey.endsWith(".work_association") ||
+      normalizedKey.endsWith(".organization_association") ||
+      normalizedKey.endsWith(".location_association") ||
+      normalizedKey.endsWith(".primary_location_association") ||
+      normalizedKey.endsWith(".secondary_location_association") ||
       normalizedKey.endsWith(".school_association")
     )
   ) {

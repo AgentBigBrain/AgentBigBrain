@@ -46,6 +46,7 @@ import {
   isFrameworkWorkspacePreparationRequest,
   isLocalWorkspaceOrganizationRequest,
   isLiveVerificationBuildRequest,
+  isStaticHtmlExecutionStyleRequest,
   requiresBrowserVerificationBuildRequest,
   requiresFrameworkAppScaffoldAction,
   requiresPersistentBrowserOpenBuildRequest
@@ -67,6 +68,10 @@ import {
   buildDeterministicDesktopRuntimeProcessSweepFallbackActions,
   isDesktopFolderRuntimeProcessSweepRequest
 } from "../../src/organs/plannerPolicy/desktopRuntimeProcessSweepFallback";
+import {
+  buildDeterministicStaticHtmlBuildFallbackActions,
+  hasStaticHtmlBuildLaneMarker
+} from "../../src/organs/plannerPolicy/staticHtmlRuntimeActionFallback";
 import { buildDeterministicWorkspaceRecoveryFallbackActions } from "../../src/organs/plannerPolicy/workspaceRecoveryFallback";
 import { buildWorkspaceRecoverySignalFixture } from "../helpers/conversationFixtures";
 
@@ -267,6 +272,93 @@ test("preparePlannerActions appends exact shutdown steps for every tracked previ
   assert.deepEqual(stopProcessLeaseIds, ["proc_preview_1", "proc_preview_2"]);
 });
 
+test("preparePlannerActions strips placeholder stop_process cleanup when a static file browser follow-up has no linked preview lease", () => {
+  const fullExecutionInput = [
+    "Current tracked workspace in this chat:",
+    "- Label: Current project workspace",
+    "- Root path: C:\\Users\\testuser\\Desktop\\Foundry Echo",
+    "- Preview URL: file:///C:/Users/testuser/Desktop/Foundry%20Echo/index.html",
+    "",
+    "Tracked browser sessions:",
+    "- Browser window: sessionId=browser_session:foundry-echo; url=file:///C:/Users/testuser/Desktop/Foundry%20Echo/index.html; status=open; visibility=visible; controller=os_default; control=available; linkedPreviewLease=none; linkedPreviewCwd=C:\\Users\\testuser\\Desktop\\Foundry Echo",
+    "",
+    "Natural browser-session follow-up:",
+    "- Preferred browser session: Browser window; sessionId=browser_session:foundry-echo; url=file:///C:/Users/testuser/Desktop/Foundry%20Echo/index.html; status=open; control=available",
+    "- Remembered browser workspace root: C:\\Users\\testuser\\Desktop\\Foundry Echo",
+    "- If the user wants that visible page closed now, prefer close_browser with params.sessionId=browser_session:foundry-echo over unrelated file, shell, or process actions.",
+    "",
+    "Current user request:",
+    "Close the Foundry Echo browser window for the exact local static file preview end to end. Do not start or rely on any local preview server for this scenario."
+  ].join("\n");
+  const preparation = preparePlannerActions(
+    {
+      plannerNotes: "close the tracked static file preview",
+      actions: [
+        {
+          type: "close_browser",
+          description: "Close the tracked Foundry Echo local static file preview.",
+          params: {
+            sessionId: "browser_session:foundry-echo"
+          }
+        },
+        {
+          type: "stop_process",
+          description: "Stop the tracked preview process linked to the browser session being closed.",
+          params: {
+            leaseId: "none"
+          }
+        }
+      ]
+    },
+    "Close the Foundry Echo browser window for the exact local static file preview end to end. Do not start or rely on any local preview server for this scenario.",
+    "close_browser",
+    fullExecutionInput
+  );
+
+  assert.deepEqual(
+    preparation.actions.map((action) => action.type),
+    ["close_browser"]
+  );
+});
+
+test("preparePlannerActions strips redundant respond actions from explicit close-browser plans", () => {
+  const preparation = preparePlannerActions(
+    {
+      plannerNotes: "close the tracked preview and mention completion",
+      actions: [
+        {
+          type: "close_browser",
+          description: "Close the tracked browser window.",
+          params: {
+            sessionId: "browser_session:foundry-echo"
+          }
+        },
+        {
+          type: "respond",
+          description: "Tell the user the browser is closed.",
+          params: {
+            message: "Closed it."
+          }
+        }
+      ]
+    },
+    "Close the Foundry Echo browser window for me.",
+    "close_browser",
+    [
+      "Tracked browser sessions:",
+      "- Browser window: sessionId=browser_session:foundry-echo; url=file:///C:/Users/testuser/Desktop/Foundry%20Echo/index.html; status=open; visibility=visible; controller=os_default; control=available; linkedPreviewLease=none; linkedPreviewCwd=C:\\Users\\testuser\\Desktop\\Foundry Echo",
+      "",
+      "Current user request:",
+      "Close the Foundry Echo browser window for me."
+    ].join("\n")
+  );
+
+  assert.deepEqual(
+    preparation.actions.map((action) => action.type),
+    ["close_browser"]
+  );
+});
+
 test("preparePlannerActions backfills open-browser workspace context from tracked preview metadata", () => {
   const fullExecutionInput = [
     "Current tracked workspace in this chat:",
@@ -302,6 +394,45 @@ test("preparePlannerActions backfills open-browser workspace context from tracke
   assert.ok(openBrowserAction);
   assert.equal(openBrowserAction.params.previewProcessLeaseId, "proc_preview_1");
   assert.equal(openBrowserAction.params.rootPath, "C:\\Users\\testuser\\Desktop\\drone-company");
+});
+
+test("preparePlannerActions rewrites static file browser ownership from the exact file url instead of stale tracked workspace context", () => {
+  const fullExecutionInput = [
+    "Current tracked workspace in this chat:",
+    "- Label: Current project workspace",
+    "- Root path: C:\\Users\\testuser\\Desktop\\Foundry Echo",
+    "- Preview URL: file:///C:/Users/testuser/Desktop/Foundry%20Echo/index.html",
+    "",
+    "Tracked browser sessions:",
+    "- Browser window: sessionId=browser_session:foundry-echo; url=file:///C:/Users/testuser/Desktop/Foundry%20Echo/index.html; status=closed; visibility=visible; controller=os_default; control=unavailable; linkedPreviewLease=none; linkedPreviewCwd=C:\\Users\\testuser\\Desktop\\Foundry Echo",
+    "",
+    "Current user request:",
+    'Create another lightweight single-file HTML landing page in the exact folder "C:\\Users\\testuser\\Desktop\\River Glass" on my Desktop and open that exact local index.html file directly in the browser.'
+  ].join("\n");
+  const preparation = preparePlannerActions(
+    {
+      plannerNotes: "open the new static preview",
+      actions: [
+        {
+          type: "open_browser",
+          description: "Open the exact local static file preview in the browser.",
+          params: {
+            url: "file:///C:/Users/testuser/Desktop/River%20Glass/index.html",
+            rootPath: "C:\\Users\\testuser\\Desktop\\Foundry Echo",
+            previewProcessLeaseId: "none"
+          }
+        }
+      ]
+    },
+    'Create another lightweight single-file HTML landing page in the exact folder "C:\\Users\\testuser\\Desktop\\River Glass" on my Desktop and open that exact local index.html file directly in the browser.',
+    "open_browser",
+    fullExecutionInput
+  );
+
+  const openBrowserAction = preparation.actions.find((action) => action.type === "open_browser");
+  assert.ok(openBrowserAction);
+  assert.equal(openBrowserAction.params.rootPath, "C:\\Users\\testuser\\Desktop\\River Glass");
+  assert.equal("previewProcessLeaseId" in openBrowserAction.params, false);
 });
 
 test("preparePlannerActions appends tracked preview refresh after artifact edits when a visible preview already exists", () => {
@@ -592,6 +723,14 @@ test("framework workspace-preparation detection matches natural scaffold-only tu
   assert.equal(isFrameworkWorkspacePreparationRequest(existingRunRequest), false);
 });
 
+test("framework workspace-preparation requests suppress live preview and browser-open follow-up requirements", () => {
+  const workspacePrepRequest =
+    "Can you get a new Next.js landing-page workspace started on my desktop and call it Downtown Detroit Drones? Just get the workspace ready for edits with the dependencies installed. Do not run it or open anything yet.";
+
+  assert.equal(isLiveVerificationBuildRequest(workspacePrepRequest), false);
+  assert.equal(requiresPersistentBrowserOpenBuildRequest(workspacePrepRequest), false);
+});
+
 test("deterministic framework build-lane detection covers tracked build, preview, and edit turns but excludes close turns", () => {
   const buildTurnRequest =
     "Great. Now turn that Downtown Detroit Drones workspace into the real landing page. Keep it calm and modern, avoid blue, put a small flying drone in the hero, use four main sections, add a clear call to action and a footer menu, then build it. Stop once the source and build proof are there, but do not run it or open anything yet.";
@@ -685,6 +824,294 @@ test("scaffold-only framework-app turns stay non-live when preview/dev server wo
   assert.equal(isLiveVerificationBuildRequest(currentUserRequest), false);
   assert.equal(requiresBrowserVerificationBuildRequest(currentUserRequest), false);
   assert.equal(requiresPersistentBrowserOpenBuildRequest(currentUserRequest), false);
+});
+
+test("explicit static html requests do not enter the framework scaffold lane when framework names are only negated", () => {
+  const currentUserRequest =
+    'Create a lightweight single-file HTML landing page in the exact folder "C:\\Users\\testuser\\Desktop\\Foundry Echo" on my Desktop. ' +
+    "For this test, do not scaffold Next.js, React, or Vite. I want a static single-page site with an `index.html` entry file in that exact folder. " +
+    "Run a simple local preview server and leave it open in the browser when finished.";
+
+  assert.equal(isExecutionStyleBuildRequest(currentUserRequest), true);
+  assert.equal(requiresFrameworkAppScaffoldAction(currentUserRequest), false);
+  assert.equal(isDeterministicFrameworkBuildLaneRequest(currentUserRequest), false);
+  assert.deepEqual(
+    buildDeterministicFrameworkBuildFallbackActions(
+      currentUserRequest,
+      buildWindowsExecutionEnvironment(),
+      currentUserRequest
+    ),
+    []
+  );
+});
+
+test("static-html clarification context does not re-enter the framework scaffold lane just because the question mentioned Next.js or React", () => {
+  const currentUserRequest = [
+    'Build me a landing page in the exact folder "C:\\Users\\testuser\\Desktop\\Solar Energy Landing Page" on my Desktop.',
+    "",
+    "[Clarification resolved: Would you like that built as plain HTML, or as a framework app like Next.js or React?]",
+    "User selected: Plain HTML.",
+    "Build format resolved: create a plain static HTML deliverable.",
+    "Execution lane: static_html_build.",
+    "Do not scaffold a framework app, package manager project, or preview server unless the user later asks for that explicitly."
+  ].join("\n");
+
+  assert.equal(isExecutionStyleBuildRequest(currentUserRequest), true);
+  assert.equal(isStaticHtmlExecutionStyleRequest(currentUserRequest), true);
+  assert.equal(requiresFrameworkAppScaffoldAction(currentUserRequest), false);
+  assert.equal(isDeterministicFrameworkBuildLaneRequest(currentUserRequest), false);
+});
+
+test("resolved semantic route drives the static-html lane without re-reading lexical HTML wording", () => {
+  const currentUserRequest = [
+    "Resolved semantic route:",
+    "- routeId: static_html_build",
+    "",
+    "Current user request:",
+    'Build me a landing page in the exact folder "C:\\Users\\testuser\\Desktop\\Solar Energy Landing Page" on my Desktop.'
+  ].join("\n");
+
+  assert.equal(isExecutionStyleBuildRequest(currentUserRequest), true);
+  assert.equal(isStaticHtmlExecutionStyleRequest(currentUserRequest), true);
+  assert.equal(requiresFrameworkAppScaffoldAction(currentUserRequest), false);
+  assert.equal(isDeterministicFrameworkBuildLaneRequest(currentUserRequest), false);
+});
+
+test("resolved semantic route drives the framework lane without re-reading framework keywords", () => {
+  const currentUserRequest = [
+    "Resolved semantic route:",
+    "- routeId: framework_app_build",
+    "",
+    "Current user request:",
+    'Build me a landing page in the exact folder "C:\\Users\\testuser\\Desktop\\Solar Energy Landing Page" on my Desktop.'
+  ].join("\n");
+
+  assert.equal(isExecutionStyleBuildRequest(currentUserRequest), true);
+  assert.equal(isStaticHtmlExecutionStyleRequest(currentUserRequest), false);
+  assert.equal(requiresFrameworkAppScaffoldAction(currentUserRequest), true);
+  assert.equal(isDeterministicFrameworkBuildLaneRequest(currentUserRequest), true);
+});
+
+test("explicit static html requests that defer browser open stay non-live until a later open turn", () => {
+  const currentUserRequest =
+    'Create a lightweight single-file HTML landing page in the exact folder "C:\\Users\\testuser\\Desktop\\Solar Energy Landing Page" on my Desktop. ' +
+    "Do not scaffold Next.js, React, or Vite. Write a single self-contained index.html file there. " +
+    "Do not open it in the browser yet. Just write the plain HTML file and stop once the file is written.";
+
+  assert.equal(isExecutionStyleBuildRequest(currentUserRequest), true);
+  assert.equal(isStaticHtmlExecutionStyleRequest(currentUserRequest), true);
+  assert.equal(isLiveVerificationBuildRequest(currentUserRequest), false);
+  assert.equal(requiresBrowserVerificationBuildRequest(currentUserRequest), false);
+  assert.equal(requiresPersistentBrowserOpenBuildRequest(currentUserRequest), false);
+});
+
+test("clarified static html requests that defer browser open do not require verify_browser just because the page should end ready for review", () => {
+  const currentUserRequest = [
+    'Build me a landing page in the exact folder "C:\\Users\\testuser\\Desktop\\Solar Energy Landing Page" on my Desktop and keep going until the page is ready for review.',
+    "",
+    "[Clarification resolved: Would you like that built as plain HTML, or as a framework app like Next.js or React?]",
+    "User selected: Plain HTML.",
+    "Build format resolved: create a plain static HTML deliverable.",
+    "Execution lane: static_html_build.",
+    "Do not scaffold a framework app, package manager project, or preview server unless the user later asks for that explicitly.",
+    "Do not open it in the browser yet."
+  ].join("\n");
+
+  assert.equal(isExecutionStyleBuildRequest(currentUserRequest), true);
+  assert.equal(isStaticHtmlExecutionStyleRequest(currentUserRequest), true);
+  assert.equal(requiresBrowserVerificationBuildRequest(currentUserRequest), false);
+  assert.equal(requiresPersistentBrowserOpenBuildRequest(currentUserRequest), false);
+});
+
+test("buildDeterministicStaticHtmlBuildFallbackActions honors clarified static-html lane markers and local-file open requests", () => {
+  const currentUserRequest = [
+    "Current tracked workspace in this chat:",
+    "- Root path: C:\\Users\\testuser\\Desktop\\Solar Energy Landing Page",
+    "",
+    "Current user request:",
+    "Build the landing page, open that exact local file in the browser, and leave it open for me to review.",
+    "",
+    "Execution lane: static_html_build."
+  ].join("\n");
+
+  const actions = buildDeterministicStaticHtmlBuildFallbackActions(
+    currentUserRequest,
+    buildWindowsExecutionEnvironment()
+  );
+
+  assert.equal(hasStaticHtmlBuildLaneMarker(currentUserRequest), true);
+  assert.deepEqual(
+    actions.map((action) => action.type),
+    ["write_file", "list_directory", "open_browser"]
+  );
+  assert.match(String(actions[0]?.params.path), /Solar Energy Landing Page[\\/]+index\.html$/i);
+  assert.match(String(actions[2]?.params.url), /^file:\/\/\//i);
+});
+
+test("buildDeterministicStaticHtmlBuildFallbackActions respects explicit do-not-open constraints on clarified static-html requests", () => {
+  const currentUserRequest = [
+    'Build me a landing page in the exact folder "C:\\Users\\testuser\\Desktop\\Solar Energy Landing Page" on my Desktop.',
+    "",
+    "[Clarification resolved: Would you like that built as plain HTML, or as a framework app like Next.js or React?]",
+    "User selected: Plain HTML.",
+    "Build format resolved: create a plain static HTML deliverable.",
+    "Execution lane: static_html_build.",
+    "Do not scaffold a framework app, package manager project, or preview server unless the user later asks for that explicitly.",
+    "Do not open it in the browser yet. Just write the plain HTML file and stop once the file is written."
+  ].join("\n");
+
+  const actions = buildDeterministicStaticHtmlBuildFallbackActions(
+    currentUserRequest,
+    buildWindowsExecutionEnvironment()
+  );
+
+  assert.deepEqual(
+    actions.map((action) => action.type),
+    ["write_file", "list_directory"]
+  );
+});
+
+test("buildDeterministicStaticHtmlBuildFallbackActions stays fail-closed for non-static framework requests", () => {
+  const actions = buildDeterministicStaticHtmlBuildFallbackActions(
+    "Build me a Next.js landing page on my Desktop and leave it open for review.",
+    buildWindowsExecutionEnvironment()
+  );
+
+  assert.deepEqual(actions, []);
+});
+
+test("preparePlannerActions rewrites oversized inline static preview listeners into a bounded local python server", () => {
+  const currentUserRequest =
+    'Create a lightweight single-file HTML landing page in the exact folder "C:\\Users\\testuser\\Desktop\\Foundry Echo" on my Desktop. ' +
+    "For this test, do not scaffold Next.js, React, or Vite. I want a static single-page site with an `index.html` entry file in that exact folder. " +
+    "Run a simple local preview server and leave it open in the browser when finished.";
+  const workspaceRoot = "C:\\Users\\testuser\\Desktop\\Foundry Echo";
+  const preparation = preparePlannerActions(
+    {
+      plannerNotes: "static HTML preview server",
+      actions: [
+        {
+          type: "write_file",
+          description: "write the static landing page",
+          params: {
+            path: `${workspaceRoot}\\index.html`,
+            content: "<!doctype html><title>Foundry Echo</title>"
+          }
+        },
+        {
+          type: "start_process",
+          description:
+            "Start the static preview with an embedded PowerShell HTTP listener.",
+          params: {
+            command:
+              `powershell -NoProfile -Command "$root='${workspaceRoot}'; Add-Type -AssemblyName System.Web; ` +
+              "$listener=[System.Net.HttpListener]::new(); $listener.Prefixes.Add('http://127.0.0.1:4173/'); " +
+              "$listener.Start(); while($listener.IsListening){ try { $ctx=$listener.GetContext(); " +
+              "$reqPath=[System.Web.HttpUtility]::UrlDecode($ctx.Request.Url.AbsolutePath.TrimStart('/')); " +
+              "if([string]::IsNullOrWhiteSpace($reqPath)){ $reqPath='index.html' } " +
+              "$full=[System.IO.Path]::GetFullPath((Join-Path $root $reqPath)); " +
+              "if(-not $full.StartsWith([System.IO.Path]::GetFullPath($root)) -or -not (Test-Path -LiteralPath $full -PathType Leaf)){ " +
+              "$ctx.Response.StatusCode=404; $bytes=[System.Text.Encoding]::UTF8.GetBytes('Not Found'); " +
+              "$ctx.Response.OutputStream.Write($bytes,0,$bytes.Length); $ctx.Response.Close(); continue } " +
+              "$bytes=[System.IO.File]::ReadAllBytes($full); if($full.EndsWith('.html')){ $ctx.Response.ContentType='text/html; charset=utf-8' } " +
+              "elseif($full.EndsWith('.css')){ $ctx.Response.ContentType='text/css; charset=utf-8' } " +
+              "elseif($full.EndsWith('.js')){ $ctx.Response.ContentType='application/javascript; charset=utf-8' } " +
+              "$ctx.Response.ContentLength64=$bytes.Length; $ctx.Response.OutputStream.Write($bytes,0,$bytes.Length); $ctx.Response.Close() } catch { } }\"",
+            cwd: workspaceRoot,
+            workdir: workspaceRoot,
+            requestedShellKind: "powershell",
+            timeoutMs: 15000
+          }
+        },
+        {
+          type: "probe_http",
+          description: "prove localhost readiness",
+          params: {
+            url: "http://127.0.0.1:4173/",
+            expectedStatus: 200,
+            timeoutMs: 20000
+          }
+        },
+        {
+          type: "open_browser",
+          description: "leave the preview open",
+          params: {
+            url: "http://127.0.0.1:4173/"
+          }
+        }
+      ]
+    },
+    currentUserRequest,
+    null,
+    currentUserRequest,
+    buildWindowsExecutionEnvironment()
+  );
+
+  assert.deepEqual(
+    preparation.actions.map((action) => action.type),
+    ["write_file", "start_process", "probe_http", "open_browser"]
+  );
+  assert.equal(
+    preparation.actions[1]?.params.command,
+    "python -m http.server 4173 --bind 127.0.0.1"
+  );
+  assert.equal(preparation.actions[1]?.params.cwd, workspaceRoot);
+  assert.equal(preparation.actions[1]?.params.workdir, workspaceRoot);
+  assert.doesNotMatch(String(preparation.actions[1]?.params.command), /HttpListener/i);
+});
+
+test("preparePlannerActions strips redundant static HTML folder-creation shell steps when index.html already proves the workspace", () => {
+  const currentUserRequest =
+    'Create a lightweight single-file HTML landing page in the exact folder "C:\\Users\\testuser\\Desktop\\Foundry Echo" on my Desktop. ' +
+    "For this test, do not scaffold Next.js, React, or Vite. I want a static single-page site with an `index.html` entry file in that exact folder. " +
+    "Run a simple local preview server and leave it open in the browser when finished.";
+  const workspaceRoot = "C:\\Users\\testuser\\Desktop\\Foundry Echo";
+  const preparation = preparePlannerActions(
+    {
+      plannerNotes: "static HTML folder ensure",
+      actions: [
+        {
+          type: "shell_command",
+          description: "ensure the exact folder exists",
+          params: {
+            command: `New-Item -ItemType Directory -Force -Path "${workspaceRoot}" | Out-Null`,
+            cwd: workspaceRoot,
+            workdir: workspaceRoot,
+            requestedShellKind: "powershell",
+            timeoutMs: 120000
+          }
+        },
+        {
+          type: "write_file",
+          description: "write the static landing page",
+          params: {
+            path: `${workspaceRoot}\\index.html`,
+            content: "<!doctype html><title>Foundry Echo</title>"
+          }
+        },
+        {
+          type: "start_process",
+          description: "start the local preview",
+          params: {
+            command: "python -m http.server 4173",
+            cwd: workspaceRoot,
+            workdir: workspaceRoot,
+            requestedShellKind: "powershell",
+            timeoutMs: 120000
+          }
+        }
+      ]
+    },
+    currentUserRequest,
+    null,
+    currentUserRequest,
+    buildWindowsExecutionEnvironment()
+  );
+
+  assert.deepEqual(
+    preparation.actions.map((action) => action.type),
+    ["write_file", "start_process"]
+  );
 });
 
 test("natural start-locally and open-in-browser phrasing still classifies as a live persistent framework request", () => {
@@ -795,6 +1222,7 @@ test("fresh framework-app requests accept package-safe temp-slug scaffolds that 
         id: "action_framework_safe_slug_merge",
         type: "shell_command",
         description: "Scaffold through a safe slug and merge into the exact folder.",
+        estimatedCostUsd: 0,
         params: {
           command: [
             `$desktop = '${buildWindowsExecutionEnvironment().desktopPath}'`,
@@ -2391,6 +2819,123 @@ test("evaluatePlannerActionValidation allows tracked artifact-edit previews when
   assert.equal(validation.needsRepair, false);
   assert.equal(validation.invalidExecutionStyleBuildPlan, false);
   assert.equal(validation.buildPlanAssessment.issueCode, null);
+});
+
+test("evaluatePlannerActionValidation fails closed when a static-artifact open follow-up tries to rebuild instead of only opening the exact file", () => {
+  const fullExecutionInput = [
+    "You are in an ongoing conversation with the same user.",
+    "Existing local static-artifact open follow-up:",
+    "- The user is asking to open an already-built local artifact, not to rebuild, scaffold, or rewrite the project.",
+    "- Preferred artifact path: C:\\Users\\testuser\\Desktop\\Solar Energy Landing Page\\index.html",
+    "- Preferred browser target: file:///C:/Users/testuser/Desktop/Solar%20Energy%20Landing%20Page/index.html",
+    "- Preferred root path for browser ownership: C:\\Users\\testuser\\Desktop\\Solar Energy Landing Page",
+    "",
+    "Current user request:",
+    "Open the exact local static file directly in the browser and do not start a dev server."
+  ].join("\n");
+
+  const validation = evaluatePlannerActionValidation(
+    "Open the exact local static file directly in the browser and do not start a dev server.",
+    "open_browser",
+    [
+      {
+        id: "action_write_file_app",
+        type: "write_file",
+        description: "Rewrite framework files before opening.",
+        params: {
+          path: "C:\\Users\\testuser\\Desktop\\Solar Energy Landing Page\\app\\page.js",
+          content: "export default function Page() { return null; }\n"
+        },
+        estimatedCostUsd: 0.08
+      },
+      {
+        id: "action_open_browser_file",
+        type: "open_browser",
+        description: "Open the file preview.",
+        params: {
+          url: "file:///C:/Users/testuser/Desktop/Solar%20Energy%20Landing%20Page/index.html",
+          rootPath: "C:\\Users\\testuser\\Desktop\\Solar Energy Landing Page"
+        },
+        estimatedCostUsd: 0.03
+      }
+    ],
+    fullExecutionInput
+  );
+
+  assert.equal(validation.needsRepair, true);
+  assert.equal(
+    validation.buildPlanAssessment.issueCode,
+    "STATIC_ARTIFACT_OPEN_BROWSER_ONLY_REQUIRED"
+  );
+});
+
+test("evaluatePlannerActionValidation allows an exact static-artifact open follow-up that only opens the preferred local file target", () => {
+  const fullExecutionInput = [
+    "You are in an ongoing conversation with the same user.",
+    "Existing local static-artifact open follow-up:",
+    "- The user is asking to open an already-built local artifact, not to rebuild, scaffold, or rewrite the project.",
+    "- Preferred artifact path: C:\\Users\\testuser\\Desktop\\Solar Energy Landing Page\\index.html",
+    "- Preferred browser target: file:///C:/Users/testuser/Desktop/Solar%20Energy%20Landing%20Page/index.html",
+    "- Preferred root path for browser ownership: C:\\Users\\testuser\\Desktop\\Solar Energy Landing Page",
+    "",
+    "Current user request:",
+    "Open the exact local static file directly in the browser and do not start a dev server."
+  ].join("\n");
+
+  const validation = evaluatePlannerActionValidation(
+    "Open the exact local static file directly in the browser and do not start a dev server.",
+    "open_browser",
+    [
+      {
+        id: "action_open_browser_file",
+        type: "open_browser",
+        description: "Open the exact local file preview.",
+        params: {
+          url: "file:///C:/Users/testuser/Desktop/Solar%20Energy%20Landing%20Page/index.html",
+          rootPath: "C:\\Users\\testuser\\Desktop\\Solar Energy Landing Page"
+        },
+        estimatedCostUsd: 0.03
+      }
+    ],
+    fullExecutionInput
+  );
+
+  assert.equal(validation.needsRepair, false);
+  assert.equal(validation.invalidExecutionStyleBuildPlan, false);
+  assert.equal(validation.buildPlanAssessment.issueCode, null);
+});
+
+test("buildDeterministicExplicitRuntimeActionFallbackActions reopens the preferred local static artifact directly from conversation context", () => {
+  const fullExecutionInput = [
+    "You are in an ongoing conversation with the same user.",
+    "Existing local static-artifact open follow-up:",
+    "- The user is asking to open an already-built local artifact, not to rebuild, scaffold, or rewrite the project.",
+    "- Preferred artifact path: C:\\Users\\testuser\\Desktop\\Solar Energy Landing Page\\index.html",
+    "- Preferred browser target: file:///C:/Users/testuser/Desktop/Solar%20Energy%20Landing%20Page/index.html",
+    "- Preferred root path for browser ownership: C:\\Users\\testuser\\Desktop\\Solar Energy Landing Page",
+    "",
+    "Current user request:",
+    "Open the exact local static file directly in the browser and do not start a dev server."
+  ].join("\n");
+
+  const actions = buildDeterministicExplicitRuntimeActionFallbackActions(
+    "Open the exact local static file directly in the browser and do not start a dev server.",
+    "open_browser",
+    fullExecutionInput
+  );
+
+  assert.deepEqual(
+    actions.map((action) => action.type),
+    ["open_browser"]
+  );
+  assert.equal(
+    actions[0]?.params.url,
+    "file:///C:/Users/testuser/Desktop/Solar%20Energy%20Landing%20Page/index.html"
+  );
+  assert.equal(
+    actions[0]?.params.rootPath,
+    "C:\\Users\\testuser\\Desktop\\Solar Energy Landing Page"
+  );
 });
 
 test("evaluatePlannerActionValidation does not require folder-move steps for wrapped artifact-edit follow-ups", () => {

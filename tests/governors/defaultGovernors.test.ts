@@ -719,8 +719,8 @@ test("security governor ignores advisory vetoes for bounded desktop organization
           `New-Item -ItemType Directory -Force -Path "${HOST_TEST_DESKTOP_DIR}${HOST_TEST_PATH_SEPARATOR}Testing-Auto"; ` +
           `Move-Item -Path "${HOST_TEST_DESKTOP_DIR}${HOST_TEST_PATH_SEPARATOR}Drone*" ` +
           `-Destination "${HOST_TEST_DESKTOP_DIR}${HOST_TEST_PATH_SEPARATOR}Testing-Auto"`,
-        cwd: "C:\\Users\\benac\\AppData\\Local\\Temp",
-        workdir: "C:\\Users\\benac\\AppData\\Local\\Temp",
+        cwd: "C:\\Users\\testuser\\AppData\\Local\\Temp",
+        workdir: "C:\\Users\\testuser\\AppData\\Local\\Temp",
         requestedShellKind: "powershell",
         timeoutMs: 120000
       }

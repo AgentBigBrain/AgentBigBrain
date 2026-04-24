@@ -158,7 +158,7 @@ const BROWSER_SNAPSHOT_PATH = path.join(LIVE_RUN_RUNTIME_PATH, "browser_sessions
 const MANAGED_PROCESS_SNAPSHOT_PATH = path.join(LIVE_RUN_RUNTIME_PATH, "managed_processes.json");
 const CONVERSATION_ID = "autonomous-runtime-restart-smoke";
 const USER_ID = "autonomous-restart-smoke-user";
-const USERNAME = "anthonybenny";
+const USERNAME = "fixtureuser";
 const PROVIDER_BLOCK_PATTERN =
   /(?:429|exceeded your current quota|usage limit|purchase more credits|try again at|rate limit|fetch failed|request timed out|timed out waiting for turn_|stream disconnected before completion|an error occurred while processing your request)/i;
 const UNKNOWN_PREVIEW_URL = "http://127.0.0.1:59999/index.html";

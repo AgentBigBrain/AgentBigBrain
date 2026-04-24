@@ -132,7 +132,7 @@ test("query and planning surfaces follow graph-backed compatibility authority ov
             observedAt: updatedAt,
             timePrecision: "instant",
             timeSource: "user_stated",
-            entityRefIds: [buildEntityKey("contact", "owen")]
+            entityRefIds: [buildEntityKey("Owen", "person", null)]
           })
         ],
         claims: [
@@ -155,7 +155,7 @@ test("query and planning surfaces follow graph-backed compatibility authority ov
             timeSource: "user_stated",
             derivedFromObservationIds: ["observation_authoritative_owen_work"],
             projectionSourceIds: ["fact_authoritative_owen_work"],
-            entityRefIds: [buildEntityKey("contact", "owen")],
+            entityRefIds: [buildEntityKey("Owen", "person", null)],
             active: true
           })
         ],
@@ -419,13 +419,14 @@ test("queryProfileFactsForContinuity expands continuity hints through the shared
       {
         entityKey: buildEntityKey("William Bena", "person", null),
         canonicalName: "William Bena",
+        entityType: "person" as const,
+        disambiguator: null,
+        domainHint: "relationship" as const,
         aliases: ["Owen"],
-        entityType: "person",
-        memoryStatus: "active",
-        domainHint: "relationship",
+        firstSeenAt: "2026-04-09T10:02:00.000Z",
+        lastSeenAt: "2026-04-09T10:02:00.000Z",
+        salience: 1,
         evidenceRefs: [],
-        createdAt: "2026-04-09T10:02:00.000Z",
-        updatedAt: "2026-04-09T10:02:00.000Z"
       }
     ]
   };
@@ -437,7 +438,7 @@ test("queryProfileFactsForContinuity expands continuity hints through the shared
         threadKey: "thread_owen",
         topicKey: "topic_owen",
         topicLabel: "Owen follow-up",
-        state: "active",
+        state: "active" as const,
         resumeHint: "Need to remember who Owen is and how we know him.",
         openLoops: [],
         lastTouchedAt: "2026-04-09T10:03:00.000Z"

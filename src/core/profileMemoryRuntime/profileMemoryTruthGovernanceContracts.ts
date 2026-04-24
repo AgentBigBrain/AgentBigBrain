@@ -28,6 +28,8 @@ export const PROFILE_MEMORY_GOVERNANCE_FAMILIES = [
   "contact.name",
   "contact.relationship",
   "contact.work_association",
+  "contact.organization_association",
+  "contact.location_association",
   "contact.school_association",
   "contact.context",
   "contact.entity_hint",

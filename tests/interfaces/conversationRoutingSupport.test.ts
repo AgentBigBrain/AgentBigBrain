@@ -65,3 +65,41 @@ test("buildLocalIntentSessionHints surfaces recent assistant identity answers fo
   assert.equal(hints?.hasRecentAssistantIdentityAnswer, true);
   assert.equal(hints?.recentIdentityConversationActive, false);
 });
+
+test("buildLocalIntentSessionHints marks recent informational answer threads so workflow continuity cannot hijack vague follow-ups", () => {
+  const session = buildSessionSeed({
+    provider: "telegram",
+    conversationId: "chat-1",
+    userId: "user-1",
+    username: "avery_brooks",
+    conversationVisibility: "private",
+    receivedAt: "2026-04-12T20:28:00.000Z"
+  });
+  session.modeContinuity = {
+    activeMode: "build",
+    source: "natural_intent",
+    confidence: "HIGH",
+    lastAffirmedAt: "2026-04-12T20:00:00.000Z",
+    lastUserInput: "Build the landing page now."
+  };
+  session.conversationTurns = [
+    {
+      id: "turn-user-1",
+      role: "user",
+      text: "What is Sample Web Studio?",
+      at: "2026-04-12T20:29:00.000Z"
+    },
+    {
+      id: "turn-assistant-1",
+      role: "assistant",
+      text: "From the context, Sample Web Studio appears to be a web design company where Billy worked as a front-end contractor.",
+      at: "2026-04-12T20:29:05.000Z"
+    }
+  ];
+
+  const hints = buildLocalIntentSessionHints(session);
+
+  assert.ok(hints);
+  assert.equal(hints?.recentAssistantTurnKind, "informational_answer");
+  assert.equal(hints?.recentAssistantAnswerThreadActive, true);
+});

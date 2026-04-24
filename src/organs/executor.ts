@@ -217,7 +217,8 @@ export class ToolExecutorOrgan {
   async executeWithOutcome(
     action: PlannedAction,
     signal?: AbortSignal,
-    taskId?: string
+    taskId?: string,
+    executionContext?: { userInput?: string | null }
   ): Promise<ExecutorExecutionOutcome> {
     throwIfAborted(signal);
     const basicActionOutcome = await executeFileMutationAction(action);
@@ -277,7 +278,8 @@ export class ToolExecutorOrgan {
           action.id,
           action.params,
           signal,
-          taskId
+          taskId,
+          executionContext
         );
 
       case "check_process":

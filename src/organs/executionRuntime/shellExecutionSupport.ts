@@ -23,9 +23,7 @@ const WINDOWS_POWERSHELL_EMBEDDED_NODE_PACKAGE_MANAGER_PATTERN =
   /(^|[;{\r\n]\s*)(npm|npx)(?=\s)/gim;
 const WINDOWS_POWERSHELL_PACKAGE_MANAGER_SEGMENT_PATTERN =
   /(^|[;{\r\n]\s*)((?:npm|npx)(?:\.cmd)?\b[^\r\n;}]*)/gim;
-const WINDOWS_PACKAGE_MANAGER_COMMAND_PATTERN =
-  /^\s*(?:npm|npx|pnpm|yarn|bun)(?:\.cmd)?\b/i;
-const WINDOWS_PACKAGE_MANAGER_LAUNCHER_ENV_KEYS = [
+const WINDOWS_EXECUTABLE_RESOLUTION_ENV_KEYS = [
   "ComSpec",
   "PATHEXT",
   "WINDIR"
@@ -46,21 +44,6 @@ const SHELL_VERSION_INCOMPATIBLE_PATTERNS: readonly RegExp[] = [
   /\bconflicting peer dependency\b/i,
   /\bcould not resolve dependency\b/i
 ] as const;
-
-/**
- * Returns whether the command contains a Windows package-manager invocation, either as the first
- * shell segment or later in a multi-statement PowerShell script.
- *
- * @param command - Raw shell command requested by the planner/runtime.
- * @returns `true` when the command includes an npm/npx/pnpm/yarn/bun launcher segment.
- */
-function containsWindowsPackageManagerCommand(command: string): boolean {
-  WINDOWS_POWERSHELL_PACKAGE_MANAGER_SEGMENT_PATTERN.lastIndex = 0;
-  return (
-    WINDOWS_PACKAGE_MANAGER_COMMAND_PATTERN.test(command) ||
-    WINDOWS_POWERSHELL_PACKAGE_MANAGER_SEGMENT_PATTERN.test(command)
-  );
-}
 
 export interface ShellRecoveryFailureClassification {
   recoveryClass: "DEPENDENCY_MISSING" | "VERSION_INCOMPATIBLE";
@@ -211,8 +194,8 @@ export function normalizeWindowsPowerShellPackageManagerCommand(
 }
 
 /**
- * Resolves shell environment and augments Windows package-manager launches with the small set of
- * launcher variables needed for reliable child-process startup under allowlist mode.
+ * Resolves shell environment and augments Windows allowlist launches with the small set of
+ * executable-resolution variables needed for reliable child-process startup.
  *
  * @param profile - Effective shell profile selected for execution.
  * @param command - Raw shell command requested by the planner/runtime.
@@ -227,15 +210,14 @@ export function resolveCommandAwareShellEnvironment(
   const resolution = resolveShellEnvironment(profile, sourceEnv);
   if (
     profile.platform !== "win32" ||
-    profile.envPolicy.mode !== "allowlist" ||
-    !containsWindowsPackageManagerCommand(command)
+    profile.envPolicy.mode !== "allowlist"
   ) {
     return resolution;
   }
 
   const env = { ...resolution.env };
   const envKeyNames = new Set<string>(resolution.envKeyNames);
-  for (const key of WINDOWS_PACKAGE_MANAGER_LAUNCHER_ENV_KEYS) {
+  for (const key of WINDOWS_EXECUTABLE_RESOLUTION_ENV_KEYS) {
     const value = sourceEnv[key];
     if (typeof value !== "string" || value.length === 0) {
       continue;

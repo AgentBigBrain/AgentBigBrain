@@ -22,6 +22,7 @@ deterministic fail-closed runtime model.
 - env-backed local intent-model bootstrap in `localIntentModelRuntime.ts`
 - fail-closed local intent-model routing in `localIntentModelRouter.ts`
 - Ollama-backed local intent-model provider in `ollamaLocalIntentModel.ts`
+- shared Ollama local-intent prompt contract in `ollamaLocalIntentPrompt.ts`
 - Ollama-backed identity-interpretation task in `ollamaIdentityInterpretation.ts`
 - Ollama-backed proposal-reply-interpretation task in `ollamaProposalReplyInterpretation.ts`
 - Ollama-backed continuation-interpretation task in `ollamaContinuationInterpretation.ts`

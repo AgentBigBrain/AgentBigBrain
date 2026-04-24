@@ -7,50 +7,174 @@ import {
   extractExecutionPreferences,
   isNaturalAutonomousExecutionRequest
 } from "./executionPreferenceExtraction";
+import {
+  hasAnyToken,
+  hasAnyTokenSequence,
+  tokenizeExecutionPreferenceInput
+} from "./executionPreferenceCommon";
 
 export interface ExecutionIntentClarificationResolution {
   question: string | null;
-  mode: "plan_or_build" | "explain_or_execute" | null;
+  mode: "plan_or_build" | "explain_or_execute" | "build_format" | null;
   matchedRuleId: string | null;
 }
 
-const AMBIGUOUS_BUILD_PATTERNS: readonly RegExp[] = [
-  /\b(create|build|make|generate|implement|add|scaffold|set up|setup|spin up)\b/i,
-  /\b(app|application|project|feature|dashboard|site|website|frontend|backend|api|cli|repo|repository|page)\b/i
-] as const;
+const BUILD_VERB_TOKENS = new Set([
+  "build",
+  "create",
+  "generate",
+  "implement",
+  "make",
+  "scaffold",
+  "setup"
+]);
+const BUILD_ARTIFACT_TOKENS = new Set([
+  "app",
+  "application",
+  "api",
+  "backend",
+  "cli",
+  "dashboard",
+  "feature",
+  "frontend",
+  "page",
+  "project",
+  "repo",
+  "repository",
+  "site",
+  "website"
+]);
+const EXECUTION_CONTEXT_TOKENS = new Set([
+  "bug",
+  "broken",
+  "error",
+  "failing",
+  "failure",
+  "issue",
+  "problem",
+  "regression",
+  "screenshot",
+  "test",
+  "tests",
+  "wrong"
+]);
+const EXECUTION_VERB_TOKENS = new Set([
+  "change",
+  "correct",
+  "debug",
+  "fix",
+  "refactor",
+  "repair",
+  "resolve",
+  "update"
+]);
+const EXECUTION_MEDIA_EVIDENCE_TOKENS = new Set([
+  "audio",
+  "clip",
+  "image",
+  "photo",
+  "screenshot",
+  "video"
+]);
 
-const AMBIGUOUS_EXECUTION_PATTERNS: readonly RegExp[] = [
-  /\b(bug|issue|problem|regression|failure|failing|broken|wrong|test|tests|screenshot|error)\b/i
+const BUILD_REQUEST_LEAD_SEQUENCES: readonly (readonly string[])[] = [
+  ["please", "build"],
+  ["please", "create"],
+  ["please", "generate"],
+  ["please", "implement"],
+  ["please", "make"],
+  ["please", "scaffold"],
+  ["can", "you", "build"],
+  ["can", "you", "create"],
+  ["can", "you", "generate"],
+  ["can", "you", "implement"],
+  ["can", "you", "make"],
+  ["could", "you", "build"],
+  ["could", "you", "create"],
+  ["would", "you", "build"],
+  ["would", "you", "create"],
+  ["will", "you", "build"],
+  ["will", "you", "create"],
+  ["i", "need", "you", "to", "build"],
+  ["i", "need", "you", "to", "create"],
+  ["help", "me", "build"],
+  ["help", "me", "create"],
+  ["let's", "build"],
+  ["lets", "build"]
 ] as const;
-
-const AMBIGUOUS_EXECUTION_VERB_PATTERNS: readonly RegExp[] = [
-  /\b(fix|repair|debug|resolve|clean up|correct|change|update|refactor)\b/i
+const SET_UP_BUILD_SEQUENCES: readonly (readonly string[])[] = [
+  ["set", "up"],
+  ["spin", "up"]
 ] as const;
-
-const AMBIGUOUS_EXECUTION_MEDIA_EVIDENCE_PATTERNS: readonly RegExp[] = [
-  /\b(screenshot|screen shot|image|photo|clip|video|voice note|voice memo|audio)\b/i
+const EXECUTION_MEDIA_EVIDENCE_SEQUENCES: readonly (readonly string[])[] = [
+  ["screen", "shot"],
+  ["voice", "memo"],
+  ["voice", "note"]
+] as const;
+const EXECUTION_VERB_SEQUENCES: readonly (readonly string[])[] = [
+  ["clean", "up"]
 ] as const;
 
 /**
- * Returns `true` when any clarification pattern matches the current user input.
+ * Evaluates whether build request lead.
  *
- * @param text - Current user input.
- * @param patterns - Candidate regex patterns for one intent bucket.
- * @returns Whether at least one pattern matched.
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses `hasAnyToken` (import `hasAnyToken`) from `./executionPreferenceCommon`.
+ * - Uses `hasAnyTokenSequence` (import `hasAnyTokenSequence`) from `./executionPreferenceCommon`.
+ * @param tokens - Input consumed by this helper.
+ * @returns Result produced by this helper.
  */
-function matchesAny(text: string, patterns: readonly RegExp[]): boolean {
-  return patterns.some((pattern) => pattern.test(text));
+function hasBuildRequestLead(tokens: readonly string[]): boolean {
+  return (
+    hasAnyTokenSequence(tokens, BUILD_REQUEST_LEAD_SEQUENCES)
+    || (tokens.length > 0 && BUILD_VERB_TOKENS.has(tokens[0]!))
+    || (hasAnyTokenSequence(tokens, SET_UP_BUILD_SEQUENCES)
+      && hasAnyToken(tokens, BUILD_ARTIFACT_TOKENS))
+  );
 }
 
 /**
- * Returns `true` when all clarification patterns match the current user input.
+ * Evaluates whether ambiguous build shape.
  *
- * @param text - Current user input.
- * @param patterns - Candidate regex patterns for one intent bucket.
- * @returns Whether every pattern matched.
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses `hasAnyToken` (import `hasAnyToken`) from `./executionPreferenceCommon`.
+ * - Uses `hasAnyTokenSequence` (import `hasAnyTokenSequence`) from `./executionPreferenceCommon`.
+ * @param tokens - Input consumed by this helper.
+ * @returns Result produced by this helper.
  */
-function matchesAll(text: string, patterns: readonly RegExp[]): boolean {
-  return patterns.every((pattern) => pattern.test(text));
+function hasAmbiguousBuildShape(tokens: readonly string[]): boolean {
+  const hasBuildVerb =
+    hasAnyToken(tokens, BUILD_VERB_TOKENS) || hasAnyTokenSequence(tokens, SET_UP_BUILD_SEQUENCES);
+  return hasBuildVerb && hasAnyToken(tokens, BUILD_ARTIFACT_TOKENS) && hasBuildRequestLead(tokens);
+}
+
+/**
+ * Evaluates whether ambiguous execution shape.
+ *
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses `hasAnyToken` (import `hasAnyToken`) from `./executionPreferenceCommon`.
+ * - Uses `hasAnyTokenSequence` (import `hasAnyTokenSequence`) from `./executionPreferenceCommon`.
+ * @param tokens - Input consumed by this helper.
+ * @returns Result produced by this helper.
+ */
+function hasAmbiguousExecutionShape(tokens: readonly string[]): boolean {
+  const hasExecutionContext = hasAnyToken(tokens, EXECUTION_CONTEXT_TOKENS);
+  const hasExecutionVerb =
+    hasAnyToken(tokens, EXECUTION_VERB_TOKENS)
+    || hasAnyTokenSequence(tokens, EXECUTION_VERB_SEQUENCES);
+  const hasExecutionMediaEvidence =
+    hasAnyToken(tokens, EXECUTION_MEDIA_EVIDENCE_TOKENS)
+    || hasAnyTokenSequence(tokens, EXECUTION_MEDIA_EVIDENCE_SEQUENCES);
+  return hasExecutionContext && (hasExecutionVerb || hasExecutionMediaEvidence);
 }
 
 /**
@@ -64,7 +188,7 @@ export function resolveExecutionIntentClarification(
   userInput: string,
   routingClassification: RoutingMapClassificationV1 | null = null
 ): ExecutionIntentClarificationResolution {
-  const normalized = userInput.trim();
+  const { normalized, tokens } = tokenizeExecutionPreferenceInput(userInput);
   if (!normalized) {
     return {
       question: null,
@@ -75,12 +199,15 @@ export function resolveExecutionIntentClarification(
 
   const preferences = extractExecutionPreferences(normalized);
   if (
-    preferences.planOnly ||
-    preferences.executeNow ||
-    preferences.statusOrRecall ||
-    preferences.naturalSkillDiscovery ||
-    preferences.reusePriorApproach ||
-    isNaturalAutonomousExecutionRequest(normalized)
+    preferences.planOnly
+    || preferences.executeNow
+    || preferences.statusOrRecall
+    || preferences.naturalSkillDiscovery
+    || preferences.reusePriorApproach
+    || preferences.presentation.keepVisible
+    || preferences.presentation.leaveOpen
+    || preferences.presentation.runLocally
+    || isNaturalAutonomousExecutionRequest(normalized)
   ) {
     return {
       question: null,
@@ -89,7 +216,10 @@ export function resolveExecutionIntentClarification(
     };
   }
 
-  if (routingClassification?.category === "BUILD_SCAFFOLD" || matchesAll(normalized, AMBIGUOUS_BUILD_PATTERNS)) {
+  if (
+    routingClassification?.category === "BUILD_SCAFFOLD"
+    || hasAmbiguousBuildShape(tokens)
+  ) {
     return {
       question: "Do you want me to plan it first or build it now?",
       mode: "plan_or_build",
@@ -99,14 +229,7 @@ export function resolveExecutionIntentClarification(
     };
   }
 
-  const hasExecutionContext = matchesAny(normalized, AMBIGUOUS_EXECUTION_PATTERNS);
-  const hasExecutionVerb = matchesAny(normalized, AMBIGUOUS_EXECUTION_VERB_PATTERNS);
-  const hasExecutionMediaEvidence = matchesAny(
-    normalized,
-    AMBIGUOUS_EXECUTION_MEDIA_EVIDENCE_PATTERNS
-  );
-
-  if (hasExecutionContext && (hasExecutionVerb || hasExecutionMediaEvidence)) {
+  if (hasAmbiguousExecutionShape(tokens)) {
     return {
       question: "Do you want me to explain the issue first or fix it now?",
       mode: "explain_or_execute",

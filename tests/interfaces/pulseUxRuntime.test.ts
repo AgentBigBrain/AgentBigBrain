@@ -156,7 +156,7 @@ function suppressesBlockedStage686PulseSummaries(): void {
 function keepsNaturalStage686PulseSummariesVisible(): void {
   const shouldSuppress = shouldSuppressPulseUserFacingDeliveryV1(
     "Agent Pulse proactive check-in request.\nReason code: stale_fact_revalidation",
-    "Quick check-in: are you still working with Billy at Flare Web Design?"
+    "Quick check-in: are you still working with Billy at Sample Web Studio?"
   );
 
   assert.equal(shouldSuppress, false);

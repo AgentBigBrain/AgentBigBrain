@@ -46,11 +46,30 @@ interface MutableStableRefGroup {
   families: Set<string>;
 }
 
-/** Returns the canonical stable ref id for the profile owner. */
+/**
+ * Gets profile memory self stable ref id.
+ *
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses local constants/helpers within this module.
+ * @returns Result produced by this helper.
+ */
 export function getProfileMemorySelfStableRefId(): string {
   return PROFILE_MEMORY_SELF_STABLE_REF_ID;
 }
-/** Builds a provisional stable ref id for a normalized contact token. */
+/**
+ * Builds profile memory contact stable ref id.
+ *
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses local constants/helpers within this module.
+ * @param contactToken - Input consumed by this helper.
+ * @returns Result produced by this helper.
+ */
 export function buildProfileMemoryContactStableRefId(
   contactToken: string
 ): string | null {
@@ -59,7 +78,19 @@ export function buildProfileMemoryContactStableRefId(
     ? null
     : `${PROFILE_MEMORY_CONTACT_STABLE_REF_PREFIX}${normalizedContactToken}`;
 }
-/** Reattaches stable refs across touched graph records after canonical normalization. */
+/**
+ * Attaches profile memory graph stable refs.
+ *
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses `ProfileMemoryGraphClaimRecord` (import `ProfileMemoryGraphClaimRecord`) from `./profileMemoryGraphContracts`.
+ * - Uses `ProfileMemoryGraphEventRecord` (import `ProfileMemoryGraphEventRecord`) from `./profileMemoryGraphContracts`.
+ * - Uses `ProfileMemoryGraphObservationRecord` (import `ProfileMemoryGraphObservationRecord`) from `./profileMemoryGraphContracts`.
+ * @param input - Input consumed by this helper.
+ * @returns Result produced by this helper.
+ */
 export function attachProfileMemoryGraphStableRefs(input: {
   observations: readonly ProfileMemoryGraphObservationRecord[];
   claims: readonly ProfileMemoryGraphClaimRecord[];
@@ -96,7 +127,17 @@ export function attachProfileMemoryGraphStableRefs(input: {
       eventResult.changed
   };
 }
-/** Resolves the canonical stable ref id for an observation record. */
+/**
+ * Resolves profile memory graph observation stable ref id.
+ *
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses `ProfileMemoryGraphObservationRecord` (import `ProfileMemoryGraphObservationRecord`) from `./profileMemoryGraphContracts`.
+ * @param observation - Input consumed by this helper.
+ * @returns Result produced by this helper.
+ */
 export function resolveProfileMemoryGraphObservationStableRefId(
   observation: ProfileMemoryGraphObservationRecord
 ): string | null {
@@ -108,7 +149,17 @@ export function resolveProfileMemoryGraphObservationStableRefId(
     deriveStableRefIdFromNormalizedKey(observation.payload.normalizedKey)
   );
 }
-/** Resolves the canonical stable ref id for a claim record. */
+/**
+ * Resolves profile memory graph claim stable ref id.
+ *
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses `ProfileMemoryGraphClaimRecord` (import `ProfileMemoryGraphClaimRecord`) from `./profileMemoryGraphContracts`.
+ * @param claim - Input consumed by this helper.
+ * @returns Result produced by this helper.
+ */
 export function resolveProfileMemoryGraphClaimStableRefId(
   claim: ProfileMemoryGraphClaimRecord
 ): string | null {
@@ -120,14 +171,34 @@ export function resolveProfileMemoryGraphClaimStableRefId(
     deriveStableRefIdFromNormalizedKey(claim.payload.normalizedKey)
   );
 }
-/** Resolves a single event stable ref id when the event maps to one identity. */
+/**
+ * Resolves profile memory graph event stable ref id.
+ *
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses `ProfileMemoryGraphEventRecord` (import `ProfileMemoryGraphEventRecord`) from `./profileMemoryGraphContracts`.
+ * @param event - Input consumed by this helper.
+ * @returns Result produced by this helper.
+ */
 export function resolveProfileMemoryGraphEventStableRefId(
   event: ProfileMemoryGraphEventRecord
 ): string | null {
   const stableRefIds = resolveProfileMemoryGraphEventStableRefIds(event);
   return stableRefIds.length === 1 ? stableRefIds[0] : null;
 }
-/** Resolves the full stable-ref set for an event record. */
+/**
+ * Resolves profile memory graph event stable ref ids.
+ *
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses `ProfileMemoryGraphEventRecord` (import `ProfileMemoryGraphEventRecord`) from `./profileMemoryGraphContracts`.
+ * @param event - Input consumed by this helper.
+ * @returns Result produced by this helper.
+ */
 export function resolveProfileMemoryGraphEventStableRefIds(
   event: ProfileMemoryGraphEventRecord
 ): readonly string[] {
@@ -150,7 +221,17 @@ export function resolveProfileMemoryGraphEventStableRefIds(
     ? [PROFILE_MEMORY_SELF_STABLE_REF_ID]
     : [];
 }
-/** Groups graph records by their resolved stable ref ids. */
+/**
+ * Queries profile memory graph stable ref groups.
+ *
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses `ProfileMemoryGraphState` (import `ProfileMemoryGraphState`) from `./profileMemoryGraphContracts`.
+ * @param graph - Input consumed by this helper.
+ * @returns Result produced by this helper.
+ */
 export function queryProfileMemoryGraphStableRefGroups(
   graph: ProfileMemoryGraphState
 ): readonly ProfileMemoryGraphStableRefGroup[] {
@@ -205,8 +286,20 @@ export function queryProfileMemoryGraphStableRefGroups(
     }))
     .sort((left, right) => left.stableRefId.localeCompare(right.stableRefId));
 }
-/** Returns active current-surface claims anchored to resolved stable refs. */
-export function queryProfileMemoryGraphResolvedCurrentClaims(
+/**
+ * Queries profile memory graph current surface claims.
+ *
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses `isProfileMemoryGraphClaimCurrentSurfaceEligible` (import `isProfileMemoryGraphClaimCurrentSurfaceEligible`) from `./profileMemoryGraphClaimSurfaceEligibilitySupport`.
+ * - Uses `ProfileMemoryGraphClaimRecord` (import `ProfileMemoryGraphClaimRecord`) from `./profileMemoryGraphContracts`.
+ * - Uses `ProfileMemoryGraphState` (import `ProfileMemoryGraphState`) from `./profileMemoryGraphContracts`.
+ * @param graph - Input consumed by this helper.
+ * @returns Result produced by this helper.
+ */
+export function queryProfileMemoryGraphCurrentSurfaceClaims(
   graph: ProfileMemoryGraphState
 ): readonly ProfileMemoryGraphClaimRecord[] {
   return graph.claims.filter((claim) => {
@@ -219,11 +312,48 @@ export function queryProfileMemoryGraphResolvedCurrentClaims(
     const stableRefId = resolveProfileMemoryGraphClaimStableRefId(claim);
     return (
       stableRefId !== null &&
+      classifyProfileMemoryGraphStableRefResolution(stableRefId) !== "quarantined"
+    );
+  });
+}
+/**
+ * Queries profile memory graph resolved current claims.
+ *
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses `ProfileMemoryGraphClaimRecord` (import `ProfileMemoryGraphClaimRecord`) from `./profileMemoryGraphContracts`.
+ * - Uses `ProfileMemoryGraphState` (import `ProfileMemoryGraphState`) from `./profileMemoryGraphContracts`.
+ * @param graph - Input consumed by this helper.
+ * @returns Result produced by this helper.
+ */
+export function queryProfileMemoryGraphResolvedCurrentClaims(
+  graph: ProfileMemoryGraphState
+): readonly ProfileMemoryGraphClaimRecord[] {
+  return queryProfileMemoryGraphCurrentSurfaceClaims(graph).filter((claim) => {
+    const stableRefId = resolveProfileMemoryGraphClaimStableRefId(claim);
+    return (
+      stableRefId !== null &&
       classifyProfileMemoryGraphStableRefResolution(stableRefId) === "resolved_current"
     );
   });
 }
-/** Rewrites touched observations with their canonical stable refs. */
+/**
+ * Attaches observation stable refs.
+ *
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses `PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME` (import `PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME`) from `./profileMemoryGraphContracts`.
+ * - Uses `ProfileMemoryGraphObservationRecord` (import `ProfileMemoryGraphObservationRecord`) from `./profileMemoryGraphContracts`.
+ * - Uses `rebuildProfileMemoryGraphEnvelope` (import `rebuildProfileMemoryGraphEnvelope`) from `./profileMemoryGraphStateSupport`.
+ * @param observations - Input consumed by this helper.
+ * @param touchedObservationIds - Input consumed by this helper.
+ * @param recordedAt - Input consumed by this helper.
+ * @returns Result produced by this helper.
+ */
 function attachObservationStableRefs(
   observations: readonly ProfileMemoryGraphObservationRecord[],
   touchedObservationIds: ReadonlySet<string>,
@@ -254,7 +384,24 @@ function attachObservationStableRefs(
   });
   return { nextRecords, changed };
 }
-/** Rewrites touched or observation-linked claims with canonical stable refs. */
+/**
+ * Attaches claim stable refs.
+ *
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses `PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME` (import `PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME`) from `./profileMemoryGraphContracts`.
+ * - Uses `ProfileMemoryGraphClaimRecord` (import `ProfileMemoryGraphClaimRecord`) from `./profileMemoryGraphContracts`.
+ * - Uses `ProfileMemoryGraphObservationRecord` (import `ProfileMemoryGraphObservationRecord`) from `./profileMemoryGraphContracts`.
+ * - Uses `rebuildProfileMemoryGraphEnvelope` (import `rebuildProfileMemoryGraphEnvelope`) from `./profileMemoryGraphStateSupport`.
+ * @param claims - Input consumed by this helper.
+ * @param observations - Input consumed by this helper.
+ * @param touchedClaimIds - Input consumed by this helper.
+ * @param touchedObservationIds - Input consumed by this helper.
+ * @param recordedAt - Input consumed by this helper.
+ * @returns Result produced by this helper.
+ */
 function attachClaimStableRefs(
   claims: readonly ProfileMemoryGraphClaimRecord[],
   observations: readonly ProfileMemoryGraphObservationRecord[],
@@ -301,7 +448,21 @@ function attachClaimStableRefs(
   });
   return { nextRecords, changed };
 }
-/** Rewrites touched events with their canonical stable ref assignments. */
+/**
+ * Attaches event stable refs.
+ *
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses `PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME` (import `PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME`) from `./profileMemoryGraphContracts`.
+ * - Uses `ProfileMemoryGraphEventRecord` (import `ProfileMemoryGraphEventRecord`) from `./profileMemoryGraphContracts`.
+ * - Uses `rebuildProfileMemoryGraphEnvelope` (import `rebuildProfileMemoryGraphEnvelope`) from `./profileMemoryGraphStateSupport`.
+ * @param events - Input consumed by this helper.
+ * @param touchedEventIds - Input consumed by this helper.
+ * @param recordedAt - Input consumed by this helper.
+ * @returns Result produced by this helper.
+ */
 function attachEventStableRefs(
   events: readonly ProfileMemoryGraphEventRecord[],
   touchedEventIds: ReadonlySet<string>,
@@ -332,7 +493,18 @@ function attachEventStableRefs(
   });
   return { nextRecords, changed };
 }
-/** Returns the mutable aggregation bucket for a stable ref id. */
+/**
+ * Gets or create stable ref group.
+ *
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses local constants/helpers within this module.
+ * @param groups - Input consumed by this helper.
+ * @param stableRefId - Input consumed by this helper.
+ * @returns Result produced by this helper.
+ */
 function getOrCreateStableRefGroup(
   groups: Map<string, MutableStableRefGroup>,
   stableRefId: string
@@ -352,8 +524,17 @@ function getOrCreateStableRefGroup(
   groups.set(stableRefId, created);
   return created;
 }
-
-/** Classifies whether a stable ref is resolved current or provisional. */
+/**
+ * Classifies profile memory graph stable ref resolution.
+ *
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses `ProfileMemoryGraphStableRefResolution` (import `ProfileMemoryGraphStableRefResolution`) from `./profileMemoryGraphContracts`.
+ * @param stableRefId - Input consumed by this helper.
+ * @returns Result produced by this helper.
+ */
 function classifyProfileMemoryGraphStableRefResolution(
   stableRefId: string
 ): ProfileMemoryGraphStableRefResolution {
@@ -362,8 +543,17 @@ function classifyProfileMemoryGraphStableRefResolution(
     : stableRefId.startsWith(PROFILE_MEMORY_QUARANTINE_STABLE_REF_PREFIX) ? "quarantined"
     : "provisional";
 }
-
-/** Derives a stable ref id from a canonical normalized key when possible. */
+/**
+ * Derives stable ref id from normalized key.
+ *
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses local constants/helpers within this module.
+ * @param normalizedKey - Input consumed by this helper.
+ * @returns Result produced by this helper.
+ */
 function deriveStableRefIdFromNormalizedKey(normalizedKey: string | null): string | null {
   const normalized = normalizeGraphKey(normalizedKey);
   if (normalized === null) {
@@ -375,8 +565,17 @@ function deriveStableRefIdFromNormalizedKey(normalizedKey: string | null): strin
   }
   return PROFILE_MEMORY_SELF_STABLE_REF_ID;
 }
-
-/** Derives a stable ref id from a normalized entity ref string. */
+/**
+ * Derives stable ref id from entity ref.
+ *
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses local constants/helpers within this module.
+ * @param entityRefId - Input consumed by this helper.
+ * @returns Result produced by this helper.
+ */
 function deriveStableRefIdFromEntityRef(entityRefId: string): string | null {
   const normalizedEntityRefId = normalizeGraphKey(entityRefId);
   if (normalizedEntityRefId === null) {
@@ -394,8 +593,17 @@ function deriveStableRefIdFromEntityRef(entityRefId: string): string | null {
     ? null
     : buildProfileMemoryContactStableRefId(contactToken);
 }
-
-/** Extracts a contact token from a canonical graph key. */
+/**
+ * Extracts contact token from graph key.
+ *
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses local constants/helpers within this module.
+ * @param normalizedKey - Input consumed by this helper.
+ * @returns Result produced by this helper.
+ */
 function extractContactTokenFromGraphKey(normalizedKey: string): string | null {
   if (!normalizedKey.startsWith("contact.")) {
     return null;
@@ -403,8 +611,17 @@ function extractContactTokenFromGraphKey(normalizedKey: string): string | null {
   const [, rawContactToken] = normalizedKey.split(".", 3);
   return normalizeContactToken(rawContactToken ?? null);
 }
-
-/** Canonicalizes a contact token for stable-ref issuance. */
+/**
+ * Normalizes contact token.
+ *
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses local constants/helpers within this module.
+ * @param value - Input consumed by this helper.
+ * @returns Result produced by this helper.
+ */
 function normalizeContactToken(value: string | null | undefined): string | null {
   if (typeof value !== "string") {
     return null;
@@ -412,8 +629,17 @@ function normalizeContactToken(value: string | null | undefined): string | null 
   const trimmed = value.trim().toLowerCase();
   return trimmed.length > 0 ? trimmed : null;
 }
-
-/** Canonicalizes graph keys before stable-ref derivation. */
+/**
+ * Normalizes graph key.
+ *
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses local constants/helpers within this module.
+ * @param value - Input consumed by this helper.
+ * @returns Result produced by this helper.
+ */
 function normalizeGraphKey(value: string | null | undefined): string | null {
   if (typeof value !== "string") {
     return null;
@@ -421,8 +647,17 @@ function normalizeGraphKey(value: string | null | undefined): string | null {
   const trimmed = value.trim().toLowerCase();
   return trimmed.length > 0 ? trimmed : null;
 }
-
-/** Canonicalizes a persisted stable ref id or returns null. */
+/**
+ * Normalizes stable ref id.
+ *
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses local constants/helpers within this module.
+ * @param value - Input consumed by this helper.
+ * @returns Result produced by this helper.
+ */
 function normalizeStableRefId(value: string | null | undefined): string | null {
   if (typeof value !== "string") {
     return null;
@@ -430,8 +665,18 @@ function normalizeStableRefId(value: string | null | undefined): string | null {
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
 }
-
-/** Adds a trimmed non-empty string to a grouping bucket. */
+/**
+ * Adds maybe string.
+ *
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses local constants/helpers within this module.
+ * @param bucket - Input consumed by this helper.
+ * @param value - Input consumed by this helper.
+ * @returns Result produced by this helper.
+ */
 function addMaybeString(bucket: Set<string>, value: string | null | undefined): void {
   if (typeof value !== "string") {
     return;
@@ -442,8 +687,17 @@ function addMaybeString(bucket: Set<string>, value: string | null | undefined): 
   }
   bucket.add(trimmed);
 }
-
-/** Returns a stable lexical ordering for a string set. */
+/**
+ * Sorts set.
+ *
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses local constants/helpers within this module.
+ * @param values - Input consumed by this helper.
+ * @returns Result produced by this helper.
+ */
 function sortSet(values: ReadonlySet<string>): string[] {
   return [...values].sort((left, right) => left.localeCompare(right));
 }

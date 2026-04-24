@@ -13,12 +13,18 @@ belongs here.
 - `buildExecutionPolicy.ts`
 - `buildExecutionPlanMessaging.ts`
 - `buildExecutionActionHeuristics.ts`
+- `staticArtifactOpenSupport.ts`
+- `staticHtmlPreviewActionNormalization.ts`
+- `staticHtmlRuntimeActionFallback.ts`
+- `staticHtmlRuntimeActionFallbackSupport.ts`
+- `staticHtmlRuntimeActionFallbackContent.ts`
 - `frameworkBuildActionHeuristics.ts`
 - `frameworkRequestPathParsing.ts`
 - `frameworkActionRepairSupport.ts`
 - `frameworkPathSupport.ts`
 - `buildExecutionRecoveryPolicy.ts`
 - `liveVerificationPolicy.ts`
+- `liveVerificationSemanticRouteSupport.ts`
 - `userOwnedPathHints.ts`
 - `actionNormalization.ts`
 - `explicitActionIntent.ts`
@@ -31,6 +37,7 @@ belongs here.
 - `explicitRuntimeActionFallback.ts`
 - `desktopRuntimeProcessSweepFallback.ts`
 - `frameworkRuntimeActionFallback.ts`
+- `frameworkRuntimeActionFallbackLifecycleSupport.ts`
 - `frameworkRuntimeActionFallbackCityThemeVariants.ts`
 - `frameworkRuntimeActionFallbackGoalSupport.ts`
 - `frameworkRuntimeActionFallbackLayoutSupport.ts`
@@ -69,6 +76,16 @@ belongs here.
 - shared build/organization action-shape heuristics used by execution-style build assessment,
   including real move-command detection, Windows shell validation, open-browser target checks, and
   tracked artifact-edit preview allowance
+- deterministic already-built local static-artifact reopen helpers so `open this exact file`
+  follow-ups stay on a single-file browser-open lane instead of drifting into rebuild or dev-server
+  behavior
+- deterministic static HTML preview normalization so execution-style browser-open steps stay aligned
+  with no-framework single-page requests
+- deterministic static HTML build fallback synthesis so clarified `static_html_build` lanes can
+  write one bounded `index.html`, prove it exists, and optionally open the exact local file
+  without drifting into framework scaffolding
+- deterministic static HTML workspace-resolution, browser-open gating, and content-building helper
+  modules so the bounded static lane stays reviewable without rebloating the main fallback file
 - framework-app specific scaffold/preview heuristics used to require native preview commands,
   reject directory-only reuse guards, and keep oversized shell/start commands fail-closed
 - framework-app repair normalization that rewrites unsafe scaffold commands and keeps Next.js route
@@ -78,6 +95,8 @@ belongs here.
 - deterministic framework landing-page fallback content, write-target resolution, and runtime
   action synthesis split into focused helper files so planner fallback stays reviewable and under
   the subsystem size budget
+- deterministic framework live-lifecycle action assembly so start/probe/verify/open action shapes
+  stay centralized without regrowing the main framework fallback entrypoint
 - deterministic framework city-theme, layout, goal, named-workspace launch, tracked-context, and
   browser-open helper modules so fallback synthesis can vary safely without rebloating the main
   policy entrypoints

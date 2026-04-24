@@ -269,26 +269,26 @@ class CountingContinuityProfileStore extends ProfileMemoryStore {
 
   async openReadSession() {
     const readSession = await super.openReadSession();
-    return {
-      ...readSession,
-      queryFactsForContinuity: (
-        graph: Parameters<typeof readSession.queryFactsForContinuity>[0],
-        stack: Parameters<typeof readSession.queryFactsForContinuity>[1],
-        request: Parameters<typeof readSession.queryFactsForContinuity>[2]
-      ) => {
-        this.lastFactContinuityRequest = request;
-        return readSession.queryFactsForContinuity(graph, stack, request);
-      },
-      queryEpisodesForContinuity: (
-        graph: Parameters<typeof readSession.queryEpisodesForContinuity>[0],
-        stack: Parameters<typeof readSession.queryEpisodesForContinuity>[1],
-        request: Parameters<typeof readSession.queryEpisodesForContinuity>[2],
-        nowIso?: Parameters<typeof readSession.queryEpisodesForContinuity>[3]
-      ) => {
-        this.lastEpisodeContinuityRequest = request;
-        return readSession.queryEpisodesForContinuity(graph, stack, request, nowIso);
-      }
+    const queryFactsForContinuity = readSession.queryFactsForContinuity.bind(readSession);
+    const queryEpisodesForContinuity = readSession.queryEpisodesForContinuity.bind(readSession);
+    readSession.queryFactsForContinuity = (
+      graph: Parameters<typeof readSession.queryFactsForContinuity>[0],
+      stack: Parameters<typeof readSession.queryFactsForContinuity>[1],
+      request: Parameters<typeof readSession.queryFactsForContinuity>[2]
+    ) => {
+      this.lastFactContinuityRequest = request;
+      return queryFactsForContinuity(graph, stack, request);
     };
+    readSession.queryEpisodesForContinuity = (
+      graph: Parameters<typeof readSession.queryEpisodesForContinuity>[0],
+      stack: Parameters<typeof readSession.queryEpisodesForContinuity>[1],
+      request: Parameters<typeof readSession.queryEpisodesForContinuity>[2],
+      nowIso?: Parameters<typeof readSession.queryEpisodesForContinuity>[3]
+    ) => {
+      this.lastEpisodeContinuityRequest = request;
+      return queryEpisodesForContinuity(graph, stack, request, nowIso);
+    };
+    return readSession;
   }
 
   async queryFactsForContinuity(

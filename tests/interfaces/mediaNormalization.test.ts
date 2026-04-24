@@ -5,7 +5,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { buildConversationInboundUserInput } from "../../src/interfaces/mediaRuntime/mediaNormalization";
+import {
+  buildConversationCommandRoutingInput,
+  buildConversationInboundUserInput
+} from "../../src/interfaces/mediaRuntime/mediaNormalization";
 
 test("buildConversationInboundUserInput promotes explicit voice command transcripts into slash commands", () => {
   const input = buildConversationInboundUserInput("", {
@@ -231,4 +234,72 @@ test("buildConversationInboundUserInput only promotes voice commands near the st
     input,
     "Voice note transcript: Please listen first and then command auto fix the planner test now."
   );
+});
+
+test("buildConversationCommandRoutingInput ignores OCR and document text for command routing", () => {
+  const input = buildConversationCommandRoutingInput(
+    "Please review the attached PDF and tell me what it contains.",
+    {
+      attachments: [
+        {
+          kind: "document",
+          provider: "telegram",
+          fileId: "doc-1",
+          fileUniqueId: "doc-1-uniq",
+          mimeType: "application/pdf",
+          fileName: "filing.pdf",
+          sizeBytes: 2048,
+          caption: null,
+          durationSeconds: null,
+          width: null,
+          height: null,
+          interpretation: {
+            summary: "Certificate filing.",
+            transcript: null,
+            ocrText: "Signed before a notary public in Wayne County.",
+            confidence: 0.91,
+            provenance: "document extraction",
+            source: "fixture_catalog",
+            entityHints: ["Wayne County"]
+          }
+        }
+      ]
+    }
+  );
+
+  assert.equal(
+    input,
+    "Please review the attached PDF and tell me what it contains."
+  );
+});
+
+test("buildConversationCommandRoutingInput still promotes explicit voice commands for media-only turns", () => {
+  const input = buildConversationCommandRoutingInput("", {
+    attachments: [
+      {
+        kind: "voice",
+        provider: "telegram",
+        fileId: "voice-cmd-1",
+        fileUniqueId: "voice-cmd-1-uniq",
+        mimeType: "audio/ogg",
+        fileName: null,
+        sizeBytes: 1024,
+        caption: null,
+        durationSeconds: 5,
+        width: null,
+        height: null,
+        interpretation: {
+          summary: "Voice note asking for pulse status.",
+          transcript: "command status",
+          ocrText: null,
+          confidence: 0.93,
+          provenance: "transcription",
+          source: "fixture_catalog",
+          entityHints: []
+        }
+      }
+    ]
+  });
+
+  assert.equal(input, "/status");
 });

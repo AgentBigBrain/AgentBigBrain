@@ -346,3 +346,73 @@ test("deliverFinalMessage streams native draft preview before persistent final s
     await rm(tempDir, { recursive: true, force: true });
   }
 });
+
+test("deliverFinalMessage keeps completed work completed when final Telegram delivery fails", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-cm-delivery-final-fail-"));
+  const sessionPath = path.join(tempDir, "sessions.json");
+  const store = new InterfaceSessionStore(sessionPath);
+  const nowIso = "2026-03-03T00:00:00.000Z";
+  const sessionKey = "telegram:chat-delivery:user-4";
+  const session = buildSessionSeed({
+    provider: "telegram",
+    conversationId: "chat-delivery",
+    userId: "user-4",
+    username: "owner",
+    conversationVisibility: "private",
+    receivedAt: nowIso
+  });
+  session.recentJobs = [
+    {
+      ...buildRunningJob(nowIso),
+      id: "job-4",
+      status: "completed",
+      completedAt: nowIso,
+      resultSummary: "The landing page is ready to review.",
+      ackLifecycleState: "SENT",
+      ackMessageId: "ack-edit-4",
+      ackSentAt: nowIso
+    }
+  ];
+  await store.setSession(session);
+
+  const notify: ConversationNotifierTransport = {
+    capabilities: { supportsEdit: true, supportsNativeStreaming: false },
+    send: async () => ({
+      ok: false,
+      messageId: null,
+      errorCode: "TELEGRAM_SEND_HTTP_400",
+      errorDetail: "Bad Request: message is too long"
+    }),
+    edit: async () => ({
+      ok: false,
+      messageId: null,
+      errorCode: "TELEGRAM_EDIT_TOO_LONG",
+      errorDetail: "Outbound text length 5000 exceeds the Telegram edit limit."
+    })
+  };
+
+  try {
+    await deliverFinalMessage({
+      sessionKey,
+      jobId: "job-4",
+      finalMessage: "x".repeat(5000),
+      notify,
+      store,
+      maxRecentJobs: 20,
+      canUseAckTimerForSession: () => true,
+      setAckLifecycleState: applyAckLifecycleState
+    });
+
+    const updated = await store.getSession(sessionKey);
+    assert.ok(updated);
+    const updatedJob = updated!.recentJobs.find((job) => job.id === "job-4");
+    assert.ok(updatedJob);
+    assert.equal(updatedJob!.status, "completed");
+    assert.equal(updatedJob!.resultSummary, "The landing page is ready to review.");
+    assert.equal(updatedJob!.finalDeliveryOutcome, "failed");
+    assert.equal(updatedJob!.finalDeliveryLastErrorCode, "TELEGRAM_SEND_HTTP_400");
+    assert.equal(updatedJob!.errorMessage, null);
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});

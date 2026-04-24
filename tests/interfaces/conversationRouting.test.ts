@@ -18,6 +18,7 @@ import {
   routeConversationMessageInput,
   type ConversationRoutingDependencies
 } from "../../src/interfaces/conversationRuntime/conversationRouting";
+import { buildConversationInboundUserInput } from "../../src/interfaces/mediaRuntime/mediaNormalization";
 import { parseAutonomousExecutionInput } from "../../src/interfaces/conversationRuntime/managerContracts";
 import type { ConversationJob, ConversationSession } from "../../src/interfaces/sessionStore";
 import type { SkillInventoryEntry } from "../../src/organs/skillRegistry/contracts";
@@ -410,14 +411,16 @@ test("routeConversationMessageInput applies a precomputed topic-key resume signa
   assert.equal(session.conversationStack?.activeThreadKey, pausedThread.threadKey);
 });
 
-test("routeConversationMessageInput persists execution-mode clarification and resolves the next turn against it", async () => {
+test("routeConversationMessageInput persists build-format clarification and resolves the next turn against it", async () => {
   const session = buildSession();
   let capturedInput = "";
   let capturedExecutionInput = "";
+  const sourceInput =
+    'Create me that landing page with a hero and call to action in the exact folder "C:\\Users\\testuser\\Desktop\\Solar Energy Landing Page".';
 
   const firstResult = await routeConversationMessageInput(
     session,
-    "Create me that landing page with a hero and call to action.",
+    sourceInput,
     "2026-03-11T18:05:05.000Z",
     buildDependencies((currentSession, input, _receivedAt, executionInput) => {
       capturedInput = input;
@@ -430,19 +433,23 @@ test("routeConversationMessageInput persists execution-mode clarification and re
     })
   );
 
-  assert.equal(firstResult.reply, "Do you want me to plan it first or build it now?");
+  assert.equal(
+    firstResult.reply,
+    "Would you like that built as plain HTML, or as a framework app like Next.js or React?"
+  );
   assert.equal(firstResult.shouldStartWorker, false);
   assert.ok(session.activeClarification);
+  assert.equal(session.activeClarification?.kind, "build_format");
   assert.deepEqual(session.progressState, {
     status: "waiting_for_user",
-    message: "Do you want me to plan it first or build it now?",
+    message: "Would you like that built as plain HTML, or as a framework app like Next.js or React?",
     jobId: null,
     updatedAt: "2026-03-11T18:05:05.000Z"
   });
 
   const secondResult = await routeConversationMessageInput(
     session,
-    "Build it now.",
+    "Plain HTML.",
     "2026-03-11T18:05:10.000Z",
     buildDependencies((currentSession, input, _receivedAt, executionInput) => {
       capturedInput = input;
@@ -458,10 +465,491 @@ test("routeConversationMessageInput persists execution-mode clarification and re
   assert.equal(secondResult.shouldStartWorker, true);
   assert.equal(session.activeClarification, null);
   assert.equal(session.progressState, null);
-  assert.equal(capturedInput, "Create me that landing page with a hero and call to action.");
-  assert.ok(capturedExecutionInput.includes("User selected: Build it now."));
-  assert.equal(session.modeContinuity?.activeMode, "build");
+  assert.equal(capturedInput, sourceInput);
+  assert.ok(capturedExecutionInput.includes("User selected: Plain HTML."));
+  assert.ok(capturedExecutionInput.includes("Execution lane: static_html_build."));
+  assert.equal(session.modeContinuity?.activeMode, "static_html_build");
   assert.equal(session.modeContinuity?.source, "clarification_answer");
+});
+
+test("routeConversationMessageInput can render build-format clarification wording naturally while keeping deterministic options", async () => {
+  const session = buildSession();
+  const sourceInput =
+    'Build me a landing page for this company in the exact folder "C:\\Users\\testuser\\Desktop\\Solar Energy Landing Page".';
+
+  const result = await routeConversationMessageInput(
+    session,
+    sourceInput,
+    "2026-03-11T18:07:00.000Z",
+    buildDependencies(
+      () => {
+        throw new Error("enqueueJob should not run while the build format is still ambiguous");
+      },
+      {
+        runDirectConversationTurn: async () => ({
+          summary: "Do you want that as plain HTML, or do you want me to build it in Next.js or React?"
+        })
+      }
+    )
+  );
+
+  assert.equal(
+    result.reply,
+    "Do you want that as plain HTML, or do you want me to build it in Next.js or React?"
+  );
+  assert.equal(session.activeClarification?.kind, "build_format");
+  assert.deepEqual(
+    session.activeClarification?.options.map((option) => option.id),
+    ["static_html", "nextjs", "react"]
+  );
+});
+
+test("routeConversationMessageInput can render plan-versus-build clarification wording naturally while keeping deterministic state", async () => {
+  const session = buildSession();
+  const sourceInput =
+    "BigBrain I recorded a short clip so you can see what the UI is doing. The wrong panel slides in right after the menu opens and the dashboard feels off. Please build the dashboard change using this clip.";
+
+  const result = await routeConversationMessageInput(
+    session,
+    sourceInput,
+    "2026-03-11T18:07:30.000Z",
+    buildDependencies(
+      () => {
+        throw new Error("enqueueJob should not run while execution mode is still ambiguous");
+      },
+      {
+        runDirectConversationTurn: async () => ({
+          summary: "Should I plan this out first, or jump straight into building it?"
+        })
+      }
+    )
+  );
+
+  assert.equal(
+    result.reply,
+    "Should I plan this out first, or jump straight into building it?"
+  );
+  assert.equal(session.activeClarification?.kind, "execution_mode");
+  assert.equal(session.activeClarification?.renderingIntent, "plan_or_build");
+  assert.deepEqual(
+    session.activeClarification?.options.map((option) => option.id),
+    ["plan", "build"]
+  );
+});
+
+test("routeConversationMessageInput clears stale execution-mode clarification before routing a fresh chat turn", async () => {
+  const session = buildSession({
+    activeClarification: {
+      id: "clarification_2026-04-11T16:48:51.000Z",
+      kind: "execution_mode",
+      sourceInput:
+        "Billy moved from Sample Web Studio to Crimson Analytics in February, and Garrett still owns Harbor Signal Studio.",
+      question: "Do you want me to plan it first or build it now?",
+      requestedAt: "2026-04-11T16:48:51.000Z",
+      matchedRuleId: "execution_intent_build_generic",
+      renderingIntent: "plan_or_build",
+      options: [
+        {
+          id: "plan",
+          label: "Plan it first"
+        },
+        {
+          id: "build",
+          label: "Build it now"
+        }
+      ]
+    },
+    progressState: {
+      status: "waiting_for_user",
+      message: "Do you want me to plan it first or build it now?",
+      jobId: null,
+      updatedAt: "2026-04-11T16:48:51.000Z"
+    }
+  });
+  let capturedInput = "";
+
+  const result = await routeConversationMessageInput(
+    session,
+    "What is Sample Web Studio?",
+    "2026-04-12T00:13:00.000Z",
+    buildDependencies(
+      () => {
+        throw new Error("enqueueJob should not run for a fresh chat question after a stale clarification");
+      },
+      {
+        runDirectConversationTurn: async (input) => {
+          capturedInput = input;
+          return {
+            summary: "Sample Web Studio is a web-design business tied to the relationship context you mentioned earlier."
+          };
+        }
+      }
+    )
+  );
+
+  assert.equal(
+    result.reply,
+    "Sample Web Studio is a web-design business tied to the relationship context you mentioned earlier."
+  );
+  assert.equal(result.shouldStartWorker, false);
+  assert.equal(session.activeClarification, null);
+  assert.equal(session.progressState, null);
+  assert.equal(capturedInput, "What is Sample Web Studio?");
+});
+
+test("routeConversationMessageInput keeps vague conversational follow-ups attached to the latest informational answer instead of an older clarification", async () => {
+  const session = buildWorkflowHeavySession({
+    conversationTurns: [
+      {
+        role: "assistant",
+        text: "Do you want me to plan it first or build it now?",
+        at: "2026-04-12T00:12:00.000Z"
+      },
+      {
+        role: "user",
+        text: "What is Sample Web Studio?",
+        at: "2026-04-12T00:13:00.000Z"
+      },
+      {
+        role: "assistant",
+        text: "From the context, Sample Web Studio appears to be a web design company that Billy worked with as a front-end contractor.",
+        at: "2026-04-12T00:13:05.000Z"
+      }
+    ]
+  });
+  let directConversationInput = "";
+
+  const result = await routeConversationMessageInput(
+    session,
+    "Okay, what else?",
+    "2026-04-12T00:13:20.000Z",
+    buildDependencies(
+      () => {
+        throw new Error("enqueueJob should not run for vague conversational follow-ups after an informational answer");
+      },
+      {
+        runDirectConversationTurn: async (input) => {
+          directConversationInput = input;
+          return {
+            summary: "From the context, Billy later moved from Sample Web Studio to Crimson Analytics."
+          };
+        }
+      }
+    )
+  );
+
+  assert.equal(result.shouldStartWorker, false);
+  assert.equal(
+    result.reply,
+    "From the context, Billy later moved from Sample Web Studio to Crimson Analytics."
+  );
+  assert.equal(session.queuedJobs.length, 0);
+  assert.match(directConversationInput, /Current user request:\nOkay, what else\?/);
+  assert.doesNotMatch(
+    directConversationInput,
+    /Follow-up user response to prior assistant clarification\./
+  );
+});
+
+test("routeConversationMessageInput renders mixed durable-memory and browser-status recap prompts from continuity facts and tracked browser state", async () => {
+  const session = buildWorkflowHeavySession({
+    browserSessions: [
+      buildConversationBrowserSessionFixture({
+        id: "browser-foundry",
+        label: "Foundry Echo preview",
+        url: "file:///C:/Users/testuser/Desktop/Foundry%20Echo/index.html",
+        sourceJobId: "job-foundry",
+        openedAt: "2026-04-13T10:19:15.165Z",
+        status: "closed",
+        controllerKind: "os_default",
+        controlAvailable: false,
+        workspaceRootPath: "C:\\Users\\testuser\\Desktop\\Foundry Echo"
+      }),
+      buildConversationBrowserSessionFixture({
+        id: "browser-river",
+        label: "River Glass preview",
+        url: "file:///C:/Users/testuser/Desktop/River%20Glass/index.html",
+        sourceJobId: "job-river",
+        openedAt: "2026-04-13T10:24:15.165Z",
+        status: "closed",
+        controllerKind: "os_default",
+        controlAvailable: false,
+        workspaceRootPath: "C:\\Users\\testuser\\Desktop\\River Glass"
+      }),
+      buildConversationBrowserSessionFixture({
+        id: "browser-marquee",
+        label: "Marquee Thread preview",
+        url: "file:///C:/Users/testuser/Desktop/Marquee%20Thread/index.html",
+        sourceJobId: "job-marquee",
+        openedAt: "2026-04-13T10:29:15.165Z",
+        status: "closed",
+        controllerKind: "os_default",
+        controlAvailable: false,
+        workspaceRootPath: "C:\\Users\\testuser\\Desktop\\Marquee Thread"
+      })
+    ]
+  });
+  const mixedRecallPrompt =
+    "Switch gears back to memory and status tracking. Tell me which employment facts are current versus historical, " +
+    "which date is the active pending review date, who currently handles the billing cleanup, and whether the Foundry Echo, River Glass, and Marquee Thread browser pages are still open or fully closed. " +
+    "Keep the personal facts and the desktop project status separate in your answer.";
+
+  const result = await routeConversationMessageInput(
+    session,
+    mixedRecallPrompt,
+    "2026-04-13T15:20:00.000Z",
+    buildDependencies(
+      () => {
+        throw new Error("enqueueJob should not run for mixed memory-plus-status recap questions");
+      },
+      {
+        queryContinuityFacts: async () => {
+          const supportingFacts = [
+            {
+              factId: "fact_billy_current_role",
+              key: "contact.billy.work_association",
+              value: "Crimson Analytics",
+              status: "confirmed" as const,
+              observedAt: "2026-04-13T11:49:01.000Z",
+              lastUpdatedAt: "2026-04-13T11:49:01.000Z",
+              confidence: 0.95
+            },
+            {
+              factId: "fact_sam_billing_cleanup",
+              key: "contact.sam.context.billing_cleanup",
+              value: "Sam is handling the billing cleanup after March 21",
+              status: "confirmed" as const,
+              observedAt: "2026-04-13T11:49:01.000Z",
+              lastUpdatedAt: "2026-04-13T11:49:01.000Z",
+              confidence: 0.95
+            },
+            {
+              factId: "fact_billy_historical_role",
+              key: "contact.billy.context.previous_employment",
+              value: "Billy is no longer at Sample Web Studio",
+              status: "confirmed" as const,
+              observedAt: "2026-04-13T11:49:01.000Z",
+              lastUpdatedAt: "2026-04-13T11:49:01.000Z",
+              confidence: 0.95
+            },
+            {
+              factId: "fact_pending_review_date",
+              key: "contact.sam.context.pending_review",
+              value: "Sam finally delivered it on March 24, which means the March 27 review is the current pending milestone",
+              status: "confirmed" as const,
+              observedAt: "2026-04-13T11:49:01.000Z",
+              lastUpdatedAt: "2026-04-13T11:49:01.000Z",
+              confidence: 0.95
+            }
+          ] as const;
+          const compatibility = buildLegacyCompatibleTemporalSynthesis([], supportingFacts);
+          assert.ok(compatibility);
+          return Object.assign([...supportingFacts], {
+            semanticMode: "relationship_inventory" as const,
+            relevanceScope: "conversation_local" as const,
+            scopedThreadKeys: ["thread_memory_status_recap"],
+            temporalSynthesis: compatibility.temporalSynthesis,
+            laneBoundaries: compatibility.laneBoundaries
+          });
+        },
+        queryContinuityEpisodes: async () => [
+          {
+            episodeId: "episode_docklight_review",
+            title: "Docklight launch review",
+            summary: "The March 27 review is still pending.",
+            status: "unresolved" as const,
+            lastMentionedAt: "2026-04-13T11:49:01.000Z",
+            entityRefs: ["Docklight"],
+            entityLinks: [],
+            openLoopLinks: []
+          }
+        ],
+        runDirectConversationTurn: async () => {
+          throw new Error("runDirectConversationTurn should not run for mixed memory-plus-status recap questions");
+        }
+      }
+    )
+  );
+
+  assert.equal(result.shouldStartWorker, false);
+  assert.match(result.reply, /Personal facts:/);
+  assert.match(result.reply, /Current employment: Billy: Crimson Analytics\./);
+  assert.match(result.reply, /Historical employment: Billy: Sample Web Studio\./);
+  assert.match(result.reply, /Active pending review date: March 27\./);
+  assert.match(result.reply, /Billing cleanup: Sam currently handles the billing cleanup\./);
+  assert.match(result.reply, /Desktop project status:/);
+  assert.match(result.reply, /Foundry Echo: closed\./);
+  assert.match(result.reply, /River Glass: closed\./);
+  assert.match(result.reply, /Marquee Thread: closed\./);
+  assert.equal(session.queuedJobs.length, 0);
+});
+
+test("routeConversationMessageInput keeps attachment-analysis turns on the direct conversational path even when OCR contains repair vocabulary", async () => {
+  const session = buildWorkflowHeavySession();
+  let directConversationInput = "";
+  const media = {
+    attachments: [
+      {
+        kind: "image" as const,
+        fileId: "file-image-1",
+        fileUniqueId: "unique-file-image-1",
+        provider: "telegram" as const,
+        mimeType: "image/png",
+        fileName: "approval-diagram.png",
+        sizeBytes: 1024,
+        caption: null,
+        durationSeconds: null,
+        width: null,
+        height: null,
+        interpretation: {
+          source: "fixture_catalog" as const,
+          confidence: 0.91,
+          provenance: "diagram_ocr",
+          summary:
+            "The diagram appears to describe an approval flow for AgentBigBrain safety decisions.",
+          transcript: null,
+          ocrText:
+            "If action breaks a rule, it is blocked. Expert council review decides whether to execute or fix the issue.",
+          entityHints: ["AgentBigBrain", "Expert council"]
+        }
+      }
+    ]
+  };
+  const canonicalInput = buildConversationInboundUserInput(
+    "Please review the attached diagram image and summarize what process it seems to describe.",
+    media
+  );
+
+  const result = await routeConversationMessageInput(
+    session,
+    canonicalInput,
+    "2026-04-13T15:22:00.000Z",
+    buildDependencies(
+      () => {
+        throw new Error("enqueueJob should not run for grounded media-analysis requests");
+      },
+      {
+        runDirectConversationTurn: async (input) => {
+          directConversationInput = input;
+          return {
+            summary:
+              "It describes a gated approval flow where safety checks and council review happen before execution."
+          };
+        }
+      }
+    ),
+    media
+  );
+
+  assert.equal(result.shouldStartWorker, false);
+  assert.equal(
+    result.reply,
+    "It describes a gated approval flow where safety checks and council review happen before execution."
+  );
+  assert.equal(session.queuedJobs.length, 0);
+  assert.match(
+    directConversationInput,
+    /Current user request:\nPlease review the attached diagram image and summarize what process it seems to describe\./
+  );
+  assert.doesNotMatch(directConversationInput, /Do you want me to explain the issue first or fix it now\?/);
+});
+
+test("routeConversationMessageInput does not raise a plan-or-build clarification for an explicit exact-folder scaffold request during workflow continuity", async () => {
+  const session = buildWorkflowHeavySession({
+    activeWorkspace: {
+      id: "workspace:foundry-echo",
+      label: "Foundry Echo workspace",
+      rootPath: "C:\\Users\\testuser\\Desktop\\Foundry Echo",
+      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\Foundry Echo\\index.html",
+      previewUrl: "file:///C:/Users/testuser/Desktop/Foundry%20Echo/index.html",
+      browserSessionId: "browser-foundry",
+      browserSessionIds: ["browser-foundry"],
+      browserSessionStatus: "closed",
+      browserProcessPid: 62476,
+      previewProcessLeaseId: null,
+      previewProcessLeaseIds: [],
+      previewProcessCwd: "C:\\Users\\testuser\\Desktop\\Foundry Echo",
+      lastKnownPreviewProcessPid: null,
+      stillControllable: false,
+      ownershipState: "stale",
+      previewStackState: "detached",
+      lastChangedPaths: ["C:\\Users\\testuser\\Desktop\\Foundry Echo\\index.html"],
+      sourceJobId: "job-foundry",
+      updatedAt: "2026-04-13T10:19:43.635Z"
+    },
+    browserSessions: [
+      buildConversationBrowserSessionFixture({
+        id: "browser-foundry",
+        label: "Foundry Echo browser window",
+        url: "file:///C:/Users/testuser/Desktop/Foundry%20Echo/index.html",
+        sourceJobId: "job-foundry",
+        openedAt: "2026-04-13T10:19:15.165Z",
+        status: "closed",
+        controllerKind: "os_default",
+        controlAvailable: false,
+        workspaceRootPath: "C:\\Users\\testuser\\Desktop\\Foundry Echo"
+      })
+    ]
+  });
+  let capturedInput = "";
+  let capturedExecutionInput = "";
+  const userInput =
+    'Create another lightweight single-file HTML landing page in the exact folder "C:\\Users\\testuser\\Desktop\\River Glass" on my Desktop.\n\n' +
+    "Call this one River Glass. Keep it as a static single-page site with an `index.html` entry file in that exact folder. " +
+    "Do not start a local preview server for this scenario. Open that exact local `index.html` file directly in the browser with an absolute `file://` URL and leave it open when you are done.";
+
+  const result = await routeConversationMessageInput(
+    session,
+    userInput,
+    "2026-04-13T10:20:04.000Z",
+    buildDependencies((currentSession, input, _receivedAt, executionInput) => {
+      capturedInput = input;
+      capturedExecutionInput = executionInput ?? "";
+      currentSession.queuedJobs.push(buildQueuedJob(input, executionInput ?? input));
+      return {
+        reply: "queued",
+        shouldStartWorker: true
+      };
+    })
+  );
+
+  assert.equal(result.shouldStartWorker, true);
+  assert.equal(result.reply, "queued");
+  assert.equal(capturedInput, userInput);
+  assert.equal(session.activeClarification, null);
+  assert.equal(session.progressState, null);
+  assert.match(capturedExecutionInput, /Current tracked workspace in this chat:/);
+  assert.match(capturedExecutionInput, /Current user request:\nCreate another lightweight single-file HTML landing page/i);
+});
+
+test("routeConversationMessageInput carries explicit do-not-run and do-not-open constraints into build execution input", async () => {
+  const session = buildSession();
+  let capturedExecutionInput = "";
+
+  const result = await routeConversationMessageInput(
+    session,
+    "Can you get a new Next.js landing-page workspace started on my desktop and call it Downtown Detroit Drones? Just get the workspace ready for edits with the dependencies installed. Do not run it or open anything yet.",
+    "2026-04-13T10:25:00.000Z",
+    buildDependencies((currentSession, input, _receivedAt, executionInput) => {
+      capturedExecutionInput = executionInput ?? "";
+      currentSession.queuedJobs.push(buildQueuedJob(input, executionInput ?? input));
+      return {
+        reply: "queued",
+        shouldStartWorker: true
+      };
+    })
+  );
+
+  assert.equal(result.shouldStartWorker, true);
+  assert.match(capturedExecutionInput, /Explicit execution constraints for this run:/);
+  assert.match(
+    capturedExecutionInput,
+    /Do not start preview\/dev servers or other long-running project runtime processes in this run\./
+  );
+  assert.match(
+    capturedExecutionInput,
+    /Do not open a browser window or page in this run unless a later user turn removes that restriction\./
+  );
 });
 
 test("routeConversationMessageInput links ambiguous modeled follow-up answers to the prior assistant clarification", async () => {
@@ -530,6 +1018,7 @@ test("routeConversationMessageInput retries a recovery clarification when the us
         "I couldn't move those folders yet because one or more are still open in a local preview process. I can inspect the matching holders, shut down only exact tracked ones, and retry the move. Do you want me to do that?",
       requestedAt: "2026-03-13T14:05:00.000Z",
       matchedRuleId: "post_execution_locked_folder_recovery",
+      renderingIntent: "task_recovery",
       recoveryInstruction:
         "Recovery instruction: stop only these exact tracked preview-process lease ids if they are still active: leaseId=\"proc_preview_1\".",
       options: [
@@ -588,6 +1077,7 @@ test("routeConversationMessageInput continues inspection-first recovery when the
         "I couldn't move those folders yet because likely local preview holders may still be using them. I can inspect those holders more closely first. Do you want me to continue that recovery?",
       requestedAt: "2026-03-13T14:06:00.000Z",
       matchedRuleId: "post_execution_untracked_holder_recovery_clarification",
+      renderingIntent: "task_recovery",
       recoveryInstruction:
         "Recovery instruction: inspect the likely untracked holder processes more closely. Do not stop them automatically.",
       options: [
@@ -636,6 +1126,7 @@ test("routeConversationMessageInput lets the user decline a recovery clarificati
         "I couldn't move those folders yet because one or more are still open in a local preview process. I can inspect the matching holders, shut down only exact tracked ones, and retry the move. Do you want me to do that?",
       requestedAt: "2026-03-13T14:05:00.000Z",
       matchedRuleId: "post_execution_locked_folder_recovery",
+      renderingIntent: "task_recovery",
       options: [
         {
           id: "retry_with_shutdown",
@@ -1093,13 +1584,14 @@ test("routeConversationMessageInput keeps self-identity declarations direct and 
 
   assert.equal(result.shouldStartWorker, false);
   assert.equal(result.reply, "Okay, I'll remember that you're Avery.");
-  assert.equal(rememberedInput?.userInput, "My name is Avery, yes.");
-  assert.equal(rememberedInput?.provenance?.conversationId, session.conversationId);
-  assert.equal(rememberedInput?.provenance?.dominantLaneAtWrite, "workflow");
-  assert.equal(rememberedInput?.provenance?.threadKey, null);
-  assert.equal(rememberedInput?.provenance?.sourceSurface, "conversation_profile_input");
-  assert.match(rememberedInput?.provenance?.turnId ?? "", /^turn_[a-f0-9]{24}$/);
-  assert.match(rememberedInput?.provenance?.sourceFingerprint ?? "", /^[a-f0-9]{32}$/);
+  const rememberedProfileInput = rememberedInput as ProfileMemoryIngestRequest | null;
+  assert.equal(rememberedProfileInput?.userInput, "My name is Avery, yes.");
+  assert.equal(rememberedProfileInput?.provenance?.conversationId, session.conversationId);
+  assert.equal(rememberedProfileInput?.provenance?.dominantLaneAtWrite, "workflow");
+  assert.equal(rememberedProfileInput?.provenance?.threadKey, null);
+  assert.equal(rememberedProfileInput?.provenance?.sourceSurface, "conversation_profile_input");
+  assert.match(rememberedProfileInput?.provenance?.turnId ?? "", /^turn_[a-f0-9]{24}$/);
+  assert.match(rememberedProfileInput?.provenance?.sourceFingerprint ?? "", /^[a-f0-9]{32}$/);
   assert.equal(localResolverCalls, 0);
 });
 
@@ -1339,7 +1831,7 @@ test("routeConversationMessageInput keeps continuity-shaped relationship recall 
 
   const result = await routeConversationMessageInput(
     session,
-    "What's going on with Billy and Flare?",
+    "What's going on with Billy and Beacon?",
     "2026-03-26T15:40:20.000Z",
     buildDependencies(
       () => {
@@ -1350,7 +1842,7 @@ test("routeConversationMessageInput keeps continuity-shaped relationship recall 
           directConversationInput = input;
           assert.doesNotMatch(input, /Current working mode from earlier in this chat:/i);
           return {
-            summary: "Billy is someone you worked with at Flare."
+            summary: "Billy is someone you worked with at Beacon."
           };
         }
       }
@@ -1358,8 +1850,8 @@ test("routeConversationMessageInput keeps continuity-shaped relationship recall 
   );
 
   assert.equal(result.shouldStartWorker, false);
-  assert.equal(result.reply, "Billy is someone you worked with at Flare.");
-  assert.equal(directConversationInput, "What's going on with Billy and Flare?");
+  assert.equal(result.reply, "Billy is someone you worked with at Beacon.");
+  assert.equal(directConversationInput, "What's going on with Billy and Beacon?");
   assert.equal(session.queuedJobs.length, 0);
   assert.equal(session.runningJobId, null);
 });
@@ -1369,12 +1861,12 @@ test("routeConversationMessageInput keeps typo-bearing Billy history follow-up o
     conversationTurns: [
       {
         role: "user",
-        text: "Billy used to be at Flare. He's at Northstar now. He drives a gray Accord.",
+        text: "Billy used to be at Beacon. He's at Northstar now. He drives a gray Accord.",
         at: "2026-03-27T16:09:00.000Z"
       },
       {
         role: "assistant",
-        text: "Got it - Billy's at Northstar now, and Flare was the earlier connection.",
+        text: "Got it - Billy's at Northstar now, and Beacon was the earlier connection.",
         at: "2026-03-27T16:09:05.000Z"
       },
       {
@@ -1393,7 +1885,7 @@ test("routeConversationMessageInput keeps typo-bearing Billy history follow-up o
 
   const result = await routeConversationMessageInput(
     session,
-    "waht about billy and flare?",
+    "waht about billy and beacon?",
     "2026-03-27T16:10:20.000Z",
     buildDependencies(
       () => {
@@ -1404,7 +1896,7 @@ test("routeConversationMessageInput keeps typo-bearing Billy history follow-up o
           directConversationInput = input;
           assert.doesNotMatch(input, /Current working mode from earlier in this chat:/i);
           return {
-            summary: "Billy's at Northstar now. Flare was the earlier connection."
+            summary: "Billy's at Northstar now. Beacon was the earlier connection."
           };
         }
       }
@@ -1412,8 +1904,8 @@ test("routeConversationMessageInput keeps typo-bearing Billy history follow-up o
   );
 
   assert.equal(result.shouldStartWorker, false);
-  assert.equal(result.reply, "Billy's at Northstar now. Flare was the earlier connection.");
-  assert.match(directConversationInput, /Current user request:\nwaht about billy and flare\?/i);
+  assert.equal(result.reply, "Billy's at Northstar now. Beacon was the earlier connection.");
+  assert.match(directConversationInput, /Current user request:\nwaht about billy and beacon\?/i);
   assert.doesNotMatch(directConversationInput, /Current working mode from earlier in this chat:/i);
   assert.equal(session.queuedJobs.length, 0);
   assert.equal(session.runningJobId, null);
@@ -1424,22 +1916,22 @@ test("routeConversationMessageInput keeps short object relationship follow-up on
     conversationTurns: [
       {
         role: "user",
-        text: "Billy used to be at Flare. He's at Northstar now. He drives a gray Accord.",
+        text: "Billy used to be at Beacon. He's at Northstar now. He drives a gray Accord.",
         at: "2026-03-27T16:09:00.000Z"
       },
       {
         role: "assistant",
-        text: "Got it - Billy's at Northstar now, and Flare was the earlier connection.",
+        text: "Got it - Billy's at Northstar now, and Beacon was the earlier connection.",
         at: "2026-03-27T16:09:05.000Z"
       },
       {
         role: "user",
-        text: "waht about billy and flare?",
+        text: "waht about billy and beacon?",
         at: "2026-03-27T16:10:20.000Z"
       },
       {
         role: "assistant",
-        text: "Billy's at Northstar now. Flare was the earlier connection.",
+        text: "Billy's at Northstar now. Beacon was the earlier connection.",
         at: "2026-03-27T16:10:25.000Z"
       },
       {
@@ -2163,6 +2655,41 @@ test("routeConversationMessageInput keeps multi-paragraph conversational turns o
     capturedInput,
     "I've had a long day and I'm still deciding what I want to work on.\n\nCan we just talk it through for a minute before you start anything?"
   );
+});
+
+test("routeConversationMessageInput keeps long narrative memory updates off the execution clarification path", async () => {
+  const session = buildSession();
+  let capturedInput = "";
+
+  const result = await routeConversationMessageInput(
+    session,
+    [
+      "Billy moved from Sample Web Studio to Crimson in February, and the Harbor project timeline shifted a week after that.",
+      "Garrett is still handling the website handoff, and I am going to add corrections and date changes after we talk through it.",
+      "",
+      "Mara is flying in on April 20, Billy said the old office keys are still in the blue folder, and the review call is supposed to happen before the March invoices get closed."
+    ].join("\n\n"),
+    "2026-03-11T18:05:11.000Z",
+    buildDependencies(
+      () => {
+        throw new Error("enqueueJob should not run for long narrative memory updates");
+      },
+      {
+        runDirectConversationTurn: async (input) => {
+          capturedInput = input;
+          return {
+            summary: "I have those relationship and timeline details in view, and I'm ready for the corrections when you want to add them."
+          };
+        }
+      }
+    )
+  );
+
+  assert.equal(result.shouldStartWorker, false);
+  assert.match(result.reply, /relationship and timeline details/i);
+  assert.equal(session.activeClarification, null);
+  assert.match(capturedInput, /Billy moved from Sample Web Studio to Crimson in February/i);
+  assert.match(capturedInput, /Harbor project timeline shifted a week/i);
 });
 
 test("routeConversationMessageInput keeps before-action multi-paragraph conversation direct during active browser workflow continuity", async () => {

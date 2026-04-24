@@ -40,6 +40,16 @@ export function inferGovernanceFamilyForNormalizedKey(
   if (/^contact\.[^.]+\.work_association$/.test(normalizedKey)) {
     return "contact.work_association";
   }
+  if (/^contact\.[^.]+\.organization_association$/.test(normalizedKey)) {
+    return "contact.organization_association";
+  }
+  if (
+    /^contact\.[^.]+\.(location_association|primary_location_association|secondary_location_association)$/.test(
+      normalizedKey
+    )
+  ) {
+    return "contact.location_association";
+  }
   if (/^contact\.[^.]+\.school_association$/.test(normalizedKey)) {
     return "contact.school_association";
   }

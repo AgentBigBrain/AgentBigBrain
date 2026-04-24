@@ -4,8 +4,7 @@
  */
 
 import {
-  DistilledPacketV1,
-  PlannerLearningHintSummaryV1
+  DistilledPacketV1
 } from "../core/types";
 import type { SemanticLesson } from "../core/semanticMemory";
 import {

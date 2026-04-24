@@ -74,6 +74,8 @@ That file splits runtime construction into two layers:
    - browser session registry
    - governors
    - memory surfaces
+   - media artifact persistence
+   - projection service and sink state
    - shared persistence
 
 2. `buildBrainRuntimeFromEnvironment()` adds backend-specific layers on top of that shared core:
@@ -110,6 +112,8 @@ flowchart TB
     Execute --> Evidence["Governance memory and execution receipts"]
 
     Orchestrator --> Memory["Memory and continuity"]
+    Memory --> Projection["Projection service"]
+    Projection --> Mirrors["Obsidian / JSON sinks"]
     Evidence --> Reflection["Reflection and workflow learning"]
     Reflection --> Memory
 ```
@@ -334,7 +338,10 @@ true, and what is still unresolved or conflicting.
 
 Stage 6.86 continuity is the live runtime layer for the active conversation. It owns the
 conversation stack, entity graph, open loops, pulse state, and runtime-action continuity. It can
-query profile memory for bounded recall, but it is a separate system with a different job.
+query profile memory for bounded recall, but it is a separate system with a different job. Its
+entity graph is deterministic-first, trims low-signal conversational residue before durable
+persistence, and can run a bounded cleanup pass over older graph noise when operators need to
+repair an already-polluted continuity snapshot.
 
 Stable fact and episode review surfaces still exist for operators and user-facing review, but they
 are bounded reads over the encrypted store rather than the internal truth owner.
@@ -358,6 +365,36 @@ The broker also supports:
 - remembered-situation review
 - fact review
 - correction and forgetting paths
+
+## External projection model
+
+Main surfaces:
+
+- `src/core/projections/`
+- `src/core/mediaArtifactStore.ts`
+- `src/tools/exportObsidianProjection.ts`
+- `src/tools/applyObsidianReviewActions.ts`
+- `src/tools/openObsidianProjection.ts`
+
+The projection layer is downstream of the canonical stores. It is not a second memory system and it
+is not a truth owner.
+
+Current responsibilities:
+
+- build full snapshots from profile memory, Stage 6.86 runtime state, the entity graph,
+  governance memory, execution receipts, workflow learning, and media artifacts
+- fan out those snapshots or incremental change sets to external sinks
+- keep a read-only first Obsidian vault mirror with stable note paths, `.base` files, and optional
+  asset copies
+- preserve a generic sink seam so non-Obsidian targets can stay possible
+
+Projected entity notes are continuity surfaces, not automatic truth records. The durable truth
+surface is the graph-backed profile-memory claim layer. That is why an entity note can show
+continuity evidence and uncertain co-mentions while still showing no current temporal claims.
+
+Guarded write-back exists, but it stays narrow. Obsidian review-action notes can request fact
+correction, fact forgetting, episode resolve or forget, and follow-up-loop creation. Those actions
+still route through the canonical profile-memory and Stage 6.86 mutation seams.
 
 ## Reflection and learning plane
 
@@ -388,6 +425,7 @@ Main surfaces:
 - `src/interfaces/mediaRuntime/`
 - `src/organs/mediaUnderstanding/`
 - `src/organs/memoryContext/`
+- `src/core/mediaArtifactStore.ts`
 
 The runtime stays text-first internally. Media is interpreted once, then reduced to structured
 context with explicit limits.
@@ -400,6 +438,11 @@ Current model:
    notes, and entity hints
 4. memory brokerage decides whether any of that belongs in continuity or remembered situations
 5. the rest of the runtime sees structured context, not raw media blobs
+
+Raw uploads now also have a runtime-owned artifact lane. The transport and download path can persist
+stable artifact identity, checksum, owned asset path, provider metadata, and derived meaning before
+that information is reduced into profile memory or continuity. That gives operators a durable
+inspection surface for the original upload and the runtime's interpretation of it.
 
 Current capability shape:
 

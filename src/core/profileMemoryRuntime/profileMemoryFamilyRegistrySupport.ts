@@ -22,6 +22,8 @@ export const PROFILE_MEMORY_CONTACT_COMPATIBILITY_PROJECTION_TABLE: Readonly<
   "contact.name": "corroboration_hidden",
   "contact.relationship": "ordinary_current_truth",
   "contact.work_association": "ordinary_current_truth",
+  "contact.organization_association": "ordinary_current_truth",
+  "contact.location_association": "ordinary_current_truth",
   "contact.school_association": "support_only_hidden",
   "contact.context": "support_only_visible",
   "contact.entity_hint": "corroboration_hidden"

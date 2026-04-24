@@ -1,4 +1,4 @@
-﻿/**
+/**
  * @fileoverview Runs Stage 6.86 checkpoint 6.86.H UX-rendering checks and emits deterministic evidence.
  */
 
@@ -61,7 +61,7 @@ function buildConversationStackFixture(): ConversationStackV1 {
           {
             loopId: "loop_budget_1",
             threadKey: "thread_budget",
-            entityRefs: ["entity_flare_labs"],
+            entityRefs: ["entity_beacon_labs"],
             createdAt: "2026-03-01T00:00:00.000Z",
             lastMentionedAt: "2026-03-01T00:00:00.000Z",
             priority: 0.62,
@@ -117,7 +117,7 @@ function buildPulseCandidateFixture(): PulseCandidateV1 {
     },
     lastTouchedAt: "2026-03-01T00:00:00.000Z",
     threadKey: "thread_budget",
-    entityRefs: ["entity_flare_labs"],
+    entityRefs: ["entity_beacon_labs"],
     evidenceRefs: ["trace:pulse_candidate_ux"],
     stableHash: "hash_pulse_candidate_ux"
   };

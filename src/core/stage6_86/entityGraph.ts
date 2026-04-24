@@ -12,50 +12,30 @@ import {
   RelationEdgeV1,
   RelationTypeV1
 } from "../types";
-import { sha256HexFromCanonicalJson } from "../normalizers/canonicalizationRules";
+import {
+  assertValidIsoTimestamp,
+  buildEntityDomainHintMap,
+  buildEntityKey,
+  buildEntityTypeHintMap,
+  buildEdgeKey,
+  collectEntityCandidateSpans,
+  computeCoMentionIncrement,
+  deriveEntityType,
+  isLowSignalCanonicalEntityLabel,
+  mergeEntityDomainHint,
+  mergeStringList,
+  normalizeAliasKey,
+  normalizeEntityCandidate,
+  normalizeEntityDomainHint,
+  normalizeWhitespace,
+  sortEntityNodes,
+  sortRelationEdges,
+  toCanonicalName
+} from "./entityGraphSupport";
 
-const ENTITY_PATTERN = /\b[A-Z][A-Za-z0-9'._-]*(?:\s+[A-Z][A-Za-z0-9'._-]*){0,3}\b/g;
-const ENTITY_STOP_WORDS = new Set([
-  "The",
-  "A",
-  "An",
-  "And",
-  "Can",
-  "Could",
-  "Do",
-  "Does",
-  "Did",
-  "Explain",
-  "How",
-  "Or",
-  "But",
-  "If",
-  "So",
-  "Then",
-  "When",
-  "Who",
-  "What",
-  "Where",
-  "Why",
-  "These",
-  "This",
-  "Those",
-  "Relationships",
-  "Relationship",
-  "While",
-  "Today",
-  "Tomorrow",
-  "Yesterday",
-  "BigBrain",
-  "AgentBigBrain"
-]);
-const ORG_HINT_PATTERN = /\b(?:inc|llc|ltd|corp|company|studio|labs|systems|group|school|university)\b/i;
-const EVENT_HINT_PATTERN = /\b(?:meeting|review|launch|summit|conference|checkpoint|deadline)\b/i;
 const MAX_ENTITY_MAX_ALIASES = 64;
 const MAX_GRAPH_EDGES_PER_ENTITY_DEFAULT = 200;
 const ENTITY_MAX_ALIASES_DEFAULT = 8;
-const CO_MENTION_RECENCY_HALFLIFE_DAYS = 30;
-const ENTITY_DOMAIN_HINTS = ["profile", "relationship", "workflow", "system_policy"] as const;
 
 export interface Stage686EntityExtractionInput {
   text: string;
@@ -100,6 +80,12 @@ export interface Stage686EntityGraphMutationResult {
   evictedEdgeKeys: readonly string[];
 }
 
+export interface Stage686EntityGraphPruneResult {
+  graph: EntityGraphV1;
+  removedEntityKeys: readonly string[];
+  removedEdgeKeys: readonly string[];
+}
+
 export interface Stage686RelationPromotionInput {
   sourceEntityKey: string;
   targetEntityKey: string;
@@ -115,483 +101,118 @@ export interface Stage686RelationPromotionResult {
   deniedConflictCode: BridgeConflictCodeV1 | null;
   edgeKey: string | null;
 }
+export {
+  buildEntityKey,
+  computeCoMentionIncrement,
+  createEmptyEntityGraphV1,
+  getEntityLookupTerms,
+  queryEntityGraphNodesByCanonicalOrAlias
+} from "./entityGraphSupport";
 
 /**
- * Builds deterministic lookup terms for one entity graph node.
+ * Returns whether one persisted entity node should be pruned as low-signal conversational residue.
  *
- * @param entity - Entity node to normalize.
- * @returns Stable lookup terms for continuity linkage.
- */
-export function getEntityLookupTerms(
-  entity: Pick<EntityNodeV1, "canonicalName" | "aliases">
-): readonly string[] {
-  const normalized = new Set<string>();
-  for (const value of [entity.canonicalName, ...entity.aliases]) {
-    for (const term of normalizeAliasKey(value).split(" ")) {
-      if (term.trim().length >= 3) {
-        normalized.add(term.trim());
-      }
-    }
-  }
-  return [...normalized].sort((left, right) => left.localeCompare(right));
-}
-
-/**
- * Returns entity nodes whose canonical name or accepted alias exactly matches one candidate label.
+ * **Why it exists:**
+ * Older graph snapshots can contain sentence-openers and phrase fragments that predate stronger
+ * ingress filtering, so the store needs one deterministic cleanup rule instead of ad hoc manual
+ * JSON edits.
  *
- * @param graph - Shared Stage 6.86 entity graph snapshot.
- * @param candidateName - Bounded visible-name candidate to resolve.
- * @returns Stable ordered entity matches, or an empty array when no exact match exists.
+ * **What it talks to:**
+ * - Uses `EntityGraphV1` (import `EntityGraphV1`) from `../types`.
+ * - Uses `EntityNodeV1` (import `EntityNodeV1`) from `../types`.
+ * - Uses `isLowSignalCanonicalEntityLabel(...)` within this module.
+ *
+ * @param graph - Current entity graph snapshot.
+ * @param entity - Persisted entity node under review.
+ * @returns `true` when the entity is safe to prune.
  */
-export function queryEntityGraphNodesByCanonicalOrAlias(
+function shouldPruneLowSignalEntityNode(
   graph: EntityGraphV1,
-  candidateName: string
-): readonly EntityNodeV1[] {
-  const normalizedCandidate = normalizeAliasKey(candidateName);
-  if (!normalizedCandidate) {
-    return [];
-  }
-  return sortEntityNodes(
-    graph.entities.filter((entity) =>
-      normalizeAliasKey(entity.canonicalName) === normalizedCandidate ||
-      entity.aliases.some((alias) => normalizeAliasKey(alias) === normalizedCandidate)
-    )
+  entity: EntityNodeV1
+): boolean {
+  const normalizedCandidate = normalizeEntityCandidate(entity.canonicalName);
+  const canonicalKey = normalizeAliasKey(entity.canonicalName);
+  const normalizedKey = normalizeAliasKey(normalizedCandidate);
+  const relatedEdges = graph.edges.filter((edge) =>
+    edge.sourceEntityKey === entity.entityKey || edge.targetEntityKey === entity.entityKey
   );
+  const hasAnchoredRelationship = relatedEdges.some((edge) =>
+    edge.relationType !== "co_mentioned" || edge.status !== "uncertain"
+  );
+  if (hasAnchoredRelationship) {
+    return false;
+  }
+  if (!normalizedCandidate || isLowSignalCanonicalEntityLabel(entity.canonicalName)) {
+    return true;
+  }
+  if (canonicalKey !== normalizedKey) {
+    return true;
+  }
+  if (entity.evidenceRefs.length >= 3 || entity.salience >= 3) {
+    return false;
+  }
+  return false;
 }
 
 /**
- * Applies deterministic validity checks for valid iso timestamp.
+ * Prunes low-signal conversational residue from an existing entity graph snapshot.
  *
  * **Why it exists:**
- * Fails fast when valid iso timestamp is invalid so later control flow stays safe and predictable.
+ * Once stronger ingress filtering lands, operators still need a deterministic way to clean older
+ * graph noise without wiping the whole Stage 6.86 memory surface.
  *
  * **What it talks to:**
- * - Uses local constants/helpers within this module.
+ * - Uses `EntityGraphV1` (import `EntityGraphV1`) from `../types`.
+ * - Uses `sortEntityNodes(...)` and `sortRelationEdges(...)` within this module.
+ * - Uses `shouldPruneLowSignalEntityNode(...)` within this module.
  *
- * @param value - Primary value processed by this function.
- * @param fieldName - Value for field name.
+ * @param graph - Current entity graph snapshot.
+ * @param observedAt - Timestamp applied to the pruned graph snapshot.
+ * @returns Pruned graph plus removed entity and edge keys.
  */
-function assertValidIsoTimestamp(value: string, fieldName: string): void {
-  if (!Number.isFinite(Date.parse(value))) {
-    throw new Error(`Invalid ISO timestamp for ${fieldName}: ${value}`);
-  }
-}
-
-/**
- * Normalizes whitespace into a stable shape for `stage6_86EntityGraph` logic.
- *
- * **Why it exists:**
- * Centralizes normalization rules for whitespace so call sites stay aligned.
- *
- * **What it talks to:**
- * - Uses local constants/helpers within this module.
- *
- * @param value - Primary value processed by this function.
- * @returns Resulting string value.
- */
-function normalizeWhitespace(value: string): string {
-  return value.replace(/\s+/g, " ").trim();
-}
-
-/**
- * Normalizes alias key into a stable shape for `stage6_86EntityGraph` logic.
- *
- * **Why it exists:**
- * Centralizes normalization rules for alias key so call sites stay aligned.
- *
- * **What it talks to:**
- * - Uses local constants/helpers within this module.
- *
- * @param value - Primary value processed by this function.
- * @returns Resulting string value.
- */
-function normalizeAliasKey(value: string): string {
-  return value
-    .normalize("NFKC")
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-/**
- * Normalizes a candidate session-domain hint into the supported entity-domain subset.
- *
- * **Why it exists:**
- * Keeps ingress-carried domain hints bounded to the shared lane contract so entity persistence
- * does not accumulate arbitrary free-form tags.
- *
- * **What it talks to:**
- * - Uses local allowed-value constants in this module.
- *
- * @param value - Candidate domain hint from interface/runtime context.
- * @returns Normalized domain hint or `null` when absent/unsupported.
- */
-function normalizeEntityDomainHint(
-  value: unknown
-): EntityNodeV1["domainHint"] {
-  return typeof value === "string" &&
-    (ENTITY_DOMAIN_HINTS as readonly string[]).includes(value)
-    ? (value as EntityNodeV1["domainHint"])
-    : null;
-}
-
-/**
- * Merges a persisted and incoming entity-domain hint without creating hard partitions.
- *
- * **Why it exists:**
- * Entity ingress can observe the same entity across personal and workflow sessions. When that
- * evidence conflicts, the safer deterministic shape is to degrade the hint to `null`.
- *
- * **What it talks to:**
- * - Uses normalized domain-hint labels only.
- *
- * @param existing - Previously persisted domain hint.
- * @param incoming - Newly observed domain hint.
- * @returns The reconciled domain hint for the entity node.
- */
-function mergeEntityDomainHint(
-  existing: Stage686EntityExtractionInput["domainHint"],
-  incoming: Stage686EntityExtractionInput["domainHint"]
-): EntityNodeV1["domainHint"] {
-  const normalizedExisting = normalizeEntityDomainHint(existing);
-  const normalizedIncoming = normalizeEntityDomainHint(incoming);
-  if (!normalizedExisting) {
-    return normalizedIncoming;
-  }
-  if (!normalizedIncoming) {
-    return normalizedExisting;
-  }
-  return normalizedExisting === normalizedIncoming ? normalizedExisting : null;
-}
-
-/**
- * Converts values into canonical name form for consistent downstream use.
- *
- * **Why it exists:**
- * Keeps conversion rules for canonical name deterministic so callers do not duplicate mapping logic.
- *
- * **What it talks to:**
- * - Uses local constants/helpers within this module.
- *
- * @param raw - Value for raw.
- * @returns Resulting string value.
- */
-function toCanonicalName(raw: string): string {
-  const normalized = normalizeEntityCandidate(raw);
-  if (!normalized) {
-    return "";
-  }
-  return normalized
-    .split(" ")
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
-    .join(" ");
-}
-
-/**
- * Derives entity type from available runtime inputs.
- *
- * **Why it exists:**
- * Keeps derivation logic for entity type in one place so downstream policy uses the same signal.
- *
- * **What it talks to:**
- * - Uses `EntityTypeV1` (import `EntityTypeV1`) from `./types`.
- *
- * @param raw - Value for raw.
- * @returns Computed `EntityTypeV1` result.
- */
-function deriveEntityType(raw: string): EntityTypeV1 {
-  if (ORG_HINT_PATTERN.test(raw)) {
-    return "org";
-  }
-  if (EVENT_HINT_PATTERN.test(raw)) {
-    return "event";
-  }
-
-  if (raw.split(" ").length >= 2) {
-    return "person";
-  }
-
-  return "thing";
-}
-
-/**
- * Normalizes one raw regex entity match into a bounded candidate name, dropping clause-boundary
- * fragments and leading conversational glue so the graph does not persist junk entities.
- *
- * @param raw - Raw regex entity match candidate.
- * @returns Bounded canonicalizable entity text, or an empty string when the match is not safe.
- */
-function normalizeEntityCandidate(raw: string): string {
-  const normalized = normalizeWhitespace(raw);
-  if (!normalized) {
-    return "";
-  }
-  if (/[.!?]\s+[A-Z]/.test(normalized)) {
-    return "";
-  }
-  const cleanedTokens = normalized
-    .split(" ")
-    .map((token) => token.replace(/^[^A-Za-z0-9']+|[^A-Za-z0-9']+$/g, ""))
-    .filter(Boolean);
-  while (cleanedTokens.length > 0 && ENTITY_STOP_WORDS.has(cleanedTokens[0])) {
-    cleanedTokens.shift();
-  }
-  while (
-    cleanedTokens.length > 0 &&
-    ENTITY_STOP_WORDS.has(cleanedTokens[cleanedTokens.length - 1])
-  ) {
-    cleanedTokens.pop();
-  }
-  return normalizeWhitespace(cleanedTokens.join(" "));
-}
-
-/**
- * Builds a bounded lookup map for validated interpreted entity-type hints.
- *
- * **Why it exists:**
- * Shared conversational interpretation may supply higher-precision type hints for deterministic
- * request-local candidates. This helper keeps that input bounded and normalized before extraction.
- *
- * **What it talks to:**
- * - Uses local normalization helpers and `EntityTypeV1`.
- *
- * @param value - Optional validated entity-type hints carried with one extraction request.
- * @returns Normalized candidate-name -> entity-type map.
- */
-function buildEntityTypeHintMap(
-  value: readonly Stage686EntityTypeHint[] | null | undefined
-): ReadonlyMap<string, EntityTypeV1> {
-  const mapped = new Map<string, EntityTypeV1>();
-  for (const hint of value ?? []) {
-    if (!hint || typeof hint !== "object") {
-      continue;
-    }
-    const candidateName = toCanonicalName(String(hint.candidateName ?? ""));
-    const normalizedKey = normalizeAliasKey(candidateName);
-    if (!normalizedKey) {
-      continue;
-    }
-    if (![
-      "person",
-      "place",
-      "org",
-      "event",
-      "thing",
-      "concept"
-    ].includes(String(hint.entityType ?? ""))) {
-      continue;
-    }
-    if (!mapped.has(normalizedKey)) {
-      mapped.set(normalizedKey, hint.entityType);
-    }
-  }
-  return mapped;
-}
-
-/**
- * Builds a bounded lookup map for validated interpreted entity-domain hints.
- *
- * **Why it exists:**
- * Shared conversational interpretation may supply higher-precision per-observation domain hints
- * for deterministic request-local candidates. This helper keeps that input bounded and normalized
- * before extraction.
- *
- * **What it talks to:**
- * - Uses local normalization helpers and entity-domain allowed values.
- *
- * @param value - Optional validated entity-domain hints carried with one extraction request.
- * @returns Normalized candidate-name -> domain-hint map.
- */
-function buildEntityDomainHintMap(
-  value: readonly Stage686EntityDomainHint[] | null | undefined
-): ReadonlyMap<string, Extract<EntityNodeV1["domainHint"], "profile" | "relationship" | "workflow">> {
-  const mapped = new Map<
-    string,
-    Extract<EntityNodeV1["domainHint"], "profile" | "relationship" | "workflow">
-  >();
-  for (const hint of value ?? []) {
-    if (!hint || typeof hint !== "object") {
-      continue;
-    }
-    const candidateName = toCanonicalName(String(hint.candidateName ?? ""));
-    const normalizedKey = normalizeAliasKey(candidateName);
-    const domainHint = normalizeEntityDomainHint(hint.domainHint);
-    if (!normalizedKey || !domainHint || domainHint === "system_policy") {
-      continue;
-    }
-    if (!mapped.has(normalizedKey)) {
-      mapped.set(normalizedKey, domainHint);
-    }
-  }
-  return mapped;
-}
-
-/**
- * Builds entity key for this module's runtime flow.
- *
- * **Why it exists:**
- * Keeps construction of entity key consistent across call sites.
- *
- * **What it talks to:**
- * - Uses `sha256HexFromCanonicalJson` (import `sha256HexFromCanonicalJson`) from `./normalizers/canonicalizationRules`.
- * - Uses `EntityTypeV1` (import `EntityTypeV1`) from `./types`.
- *
- * @param canonicalName - Boolean gate controlling this branch.
- * @param entityType - Value for entity type.
- * @param disambiguator - Value for disambiguator.
- * @returns Resulting string value.
- */
-export function buildEntityKey(
-  canonicalName: string,
-  entityType: EntityTypeV1,
-  disambiguator: string | null = null
-): string {
-  const fingerprint = sha256HexFromCanonicalJson({
-    canonicalName: normalizeAliasKey(canonicalName),
-    entityType,
-    disambiguator: disambiguator ?? ""
-  });
-  return `entity_${fingerprint.slice(0, 20)}`;
-}
-
-/**
- * Builds edge key for this module's runtime flow.
- *
- * **Why it exists:**
- * Keeps construction of edge key consistent across call sites.
- *
- * **What it talks to:**
- * - Uses `sha256HexFromCanonicalJson` (import `sha256HexFromCanonicalJson`) from `./normalizers/canonicalizationRules`.
- *
- * @param sourceEntityKey - Lookup key or map field identifier.
- * @param targetEntityKey - Lookup key or map field identifier.
- * @returns Resulting string value.
- */
-function buildEdgeKey(sourceEntityKey: string, targetEntityKey: string): string {
-  const ordered =
-    sourceEntityKey.localeCompare(targetEntityKey) <= 0
-      ? [sourceEntityKey, targetEntityKey]
-      : [targetEntityKey, sourceEntityKey];
-  const fingerprint = sha256HexFromCanonicalJson({ ordered });
-  return `edge_${fingerprint.slice(0, 20)}`;
-}
-
-/**
- * Derives co mention increment from available runtime inputs.
- *
- * **Why it exists:**
- * Keeps derivation logic for co mention increment in one place so downstream policy uses the same signal.
- *
- * **What it talks to:**
- * - Uses local constants/helpers within this module.
- *
- * @param lastObservedAt - Timestamp used for ordering, timeout, or recency decisions.
- * @param observedAt - Timestamp used for ordering, timeout, or recency decisions.
- * @returns Computed numeric value.
- */
-export function computeCoMentionIncrement(lastObservedAt: string, observedAt: string): number {
-  assertValidIsoTimestamp(lastObservedAt, "lastObservedAt");
+export function pruneLowSignalEntitiesFromGraph(
+  graph: EntityGraphV1,
+  observedAt: string
+): Stage686EntityGraphPruneResult {
   assertValidIsoTimestamp(observedAt, "observedAt");
-  const lastObservedAtMs = Date.parse(lastObservedAt);
-  const observedAtMs = Date.parse(observedAt);
-  const deltaDays = Math.max(0, (observedAtMs - lastObservedAtMs) / (24 * 60 * 60 * 1_000));
-  const decayFactor = Math.pow(0.5, deltaDays / CO_MENTION_RECENCY_HALFLIFE_DAYS);
-  return Number(Math.max(0.05, decayFactor).toFixed(4));
-}
-
-/**
- * Normalizes ordering and duplication for string list.
- *
- * **Why it exists:**
- * Maintains stable ordering and deduplication rules for string list in one place.
- *
- * **What it talks to:**
- * - Uses local constants/helpers within this module.
- *
- * @param left - Value for left.
- * @param right - Value for right.
- * @param limit - Numeric bound, counter, or index used by this logic.
- * @returns Ordered collection produced by this step.
- */
-function mergeStringList(
-  left: readonly string[],
-  right: readonly string[],
-  limit: number
-): readonly string[] {
-  const boundedLimit = Math.max(1, Math.min(MAX_ENTITY_MAX_ALIASES, Math.floor(limit)));
-  const merged = new Map<string, string>();
-  for (const entry of [...left, ...right]) {
-    const normalized = normalizeWhitespace(entry);
-    if (!normalized) {
-      continue;
-    }
-    const key = normalizeAliasKey(normalized);
-    if (!key) {
-      continue;
-    }
-    if (!merged.has(key)) {
-      merged.set(key, normalized);
-    }
+  const removedEntityKeys = graph.entities
+    .filter((entity) => shouldPruneLowSignalEntityNode(graph, entity))
+    .map((entity) => entity.entityKey)
+    .sort((left, right) => left.localeCompare(right));
+  if (removedEntityKeys.length === 0) {
+    return {
+      graph: {
+        ...graph,
+        updatedAt: observedAt
+      },
+      removedEntityKeys: [],
+      removedEdgeKeys: []
+    };
   }
-
-  return [...merged.values()]
-    .sort((a, b) => a.localeCompare(b))
-    .slice(0, boundedLimit);
-}
-
-/**
- * Normalizes ordering and duplication for entity nodes.
- *
- * **Why it exists:**
- * Maintains stable ordering and deduplication rules for entity nodes in one place.
- *
- * **What it talks to:**
- * - Uses `EntityNodeV1` (import `EntityNodeV1`) from `./types`.
- *
- * @param nodes - Value for nodes.
- * @returns Ordered collection produced by this step.
- */
-function sortEntityNodes(nodes: readonly EntityNodeV1[]): readonly EntityNodeV1[] {
-  return [...nodes].sort((left, right) => left.entityKey.localeCompare(right.entityKey));
-}
-
-/**
- * Normalizes ordering and duplication for relation edges.
- *
- * **Why it exists:**
- * Maintains stable ordering and deduplication rules for relation edges in one place.
- *
- * **What it talks to:**
- * - Uses `RelationEdgeV1` (import `RelationEdgeV1`) from `./types`.
- *
- * @param edges - Value for edges.
- * @returns Ordered collection produced by this step.
- */
-function sortRelationEdges(edges: readonly RelationEdgeV1[]): readonly RelationEdgeV1[] {
-  return [...edges].sort((left, right) => left.edgeKey.localeCompare(right.edgeKey));
-}
-
-/**
- * Builds empty entity graph v1 for this module's runtime flow.
- *
- * **Why it exists:**
- * Keeps construction of empty entity graph v1 consistent across call sites.
- *
- * **What it talks to:**
- * - Uses `EntityGraphV1` (import `EntityGraphV1`) from `./types`.
- *
- * @param updatedAt - Timestamp used for ordering, timeout, or recency decisions.
- * @returns Computed `EntityGraphV1` result.
- */
-export function createEmptyEntityGraphV1(updatedAt: string): EntityGraphV1 {
-  assertValidIsoTimestamp(updatedAt, "updatedAt");
+  const removedEntityKeySet = new Set(removedEntityKeys);
+  const removedEdgeKeys = graph.edges
+    .filter((edge) =>
+      removedEntityKeySet.has(edge.sourceEntityKey) || removedEntityKeySet.has(edge.targetEntityKey)
+    )
+    .map((edge) => edge.edgeKey)
+    .sort((left, right) => left.localeCompare(right));
   return {
-    schemaVersion: "v1",
-    updatedAt,
-    entities: [],
-    edges: [],
-    decisionRecords: []
+    graph: {
+      ...graph,
+      updatedAt: observedAt,
+      entities: sortEntityNodes(
+        graph.entities.filter((entity) => !removedEntityKeySet.has(entity.entityKey))
+      ),
+      edges: sortRelationEdges(
+        graph.edges.filter((edge) => !removedEdgeKeys.includes(edge.edgeKey))
+      ),
+      decisionRecords: (graph.decisionRecords ?? []).filter((record) =>
+        !removedEntityKeySet.has(record.entityKey)
+        && !(record.targetEntityKey && removedEntityKeySet.has(record.targetEntityKey))
+      )
+    },
+    removedEntityKeys,
+    removedEdgeKeys
   };
 }
 
@@ -623,10 +244,10 @@ export function extractEntityCandidates(
   const normalizedDomainHint = normalizeEntityDomainHint(input.domainHint);
   const entityTypeHintMap = buildEntityTypeHintMap(input.entityTypeHints);
   const entityDomainHintMap = buildEntityDomainHintMap(input.entityDomainHints);
-  const matches = text.match(ENTITY_PATTERN) ?? [];
+  const matches = collectEntityCandidateSpans(text);
   for (const match of matches) {
     const canonicalName = toCanonicalName(match);
-    if (!canonicalName || ENTITY_STOP_WORDS.has(canonicalName)) {
+    if (!canonicalName) {
       continue;
     }
 

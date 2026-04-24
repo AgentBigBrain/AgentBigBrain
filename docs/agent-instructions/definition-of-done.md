@@ -13,6 +13,6 @@
    from the plan appear in the target files, the phase is not done regardless of build/test status.
 8. For plan-phase completion claims, include the raw `git diff --stat` output showing which files
    were modified. If zero target files show changes, the phase is not done.
-9. Plan status may only be changed to `Completed` by `benac` or reviewer after independent verification.
+9. Plan status may only be changed to `Completed` by the repository owner or reviewer after independent verification.
    Agents may mark individual phases as `Done` but must not change overall plan status beyond
    `In progress`.

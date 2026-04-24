@@ -22,11 +22,17 @@ import {
 function detectsDeterministicOpenLoopTriggers(): void {
   const first = detectOpenLoopTriggerV1("Remind me later to finalize the launch checklist.");
   const second = detectOpenLoopTriggerV1("Remind me later to finalize the launch checklist.");
+  const parked = detectOpenLoopTriggerV1("Park this until the next release review.");
+  const undecided = detectOpenLoopTriggerV1("The final rollback owner is still tbd.");
   const nonTrigger = detectOpenLoopTriggerV1("Please finalize the launch checklist now.");
 
   assert.deepEqual(first, second);
   assert.equal(first.triggered, true);
   assert.equal(first.triggerCode, "DEFERRED_QUESTION");
+  assert.equal(parked.triggered, true);
+  assert.equal(parked.triggerCode, "DEFERRED_QUESTION");
+  assert.equal(undecided.triggered, true);
+  assert.equal(undecided.triggerCode, "UNRESOLVED_DECISION");
   assert.equal(nonTrigger.triggered, false);
 }
 

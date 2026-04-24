@@ -53,21 +53,23 @@ function createFixtureStores(): Stage686MemoryStoresV1 {
       updatedAt: "2026-03-01T00:00:00.000Z",
       entities: [
         {
-          entityKey: "entity_flare_labs",
-          canonicalName: "Flare Labs",
+          entityKey: "entity_beacon_labs",
+          canonicalName: "Beacon Labs",
           entityType: "org",
           disambiguator: null,
-          aliases: ["Flare Labs"],
+          domainHint: null,
+          aliases: ["Beacon Labs"],
           firstSeenAt: "2025-10-01T00:00:00.000Z",
           lastSeenAt: "2026-03-01T00:00:00.000Z",
           salience: 6,
-          evidenceRefs: ["trace:entity_flare_labs"]
+          evidenceRefs: ["trace:entity_beacon_labs"]
         },
         {
           entityKey: "entity_aurora",
           canonicalName: "Aurora",
           entityType: "concept",
           disambiguator: null,
+          domainHint: null,
           aliases: ["Aurora"],
           firstSeenAt: "2025-10-01T00:00:00.000Z",
           lastSeenAt: "2026-03-01T00:00:00.000Z",
@@ -92,7 +94,7 @@ function createFixtureStores(): Stage686MemoryStoresV1 {
             {
               loopId: "loop_budget_1",
               threadKey: "thread_budget",
-              entityRefs: ["entity_flare_labs"],
+              entityRefs: ["entity_beacon_labs"],
               createdAt: "2026-03-01T00:00:00.000Z",
               lastMentionedAt: "2026-03-01T00:00:00.000Z",
               priority: 0.61,
@@ -152,7 +154,7 @@ export async function runStage686CheckpointG(): Promise<Stage686CheckpointGArtif
       operation: "merge",
       mutationPath: ["entities", "0"],
       payload: {
-        entityKey: "entity_flare_labs",
+        entityKey: "entity_beacon_labs",
         aliases: ["Aurora"]
       },
       evidenceRefs: ["evidence:alias_collision"]

@@ -79,6 +79,42 @@ const EVENT_PARTICIPANT_RECALL_TERMS = new Set([
   "happened"
 ]);
 
+const DURABLE_MEMORY_RECALL_TERMS = new Set([
+  "active",
+  "billing",
+  "cleanup",
+  "current",
+  "currently",
+  "date",
+  "dates",
+  "employment",
+  "fact",
+  "facts",
+  "handles",
+  "handling",
+  "historical",
+  "milestone",
+  "pending",
+  "review",
+  "tentative"
+]);
+
+const RUNTIME_STATUS_REFERENCE_TERMS = new Set([
+  "browser",
+  "browsers",
+  "closed",
+  "desktop",
+  "open",
+  "page",
+  "pages",
+  "project",
+  "projects",
+  "tab",
+  "tabs",
+  "window",
+  "windows"
+]);
+
 /**
  * Returns whether the current wording carries a concrete person/topic token beyond generic recall
  * filler so short status-like relationship questions can stay on the conversational memory path.
@@ -174,6 +210,31 @@ function isEventMemoryRecallShape(
 }
 
 /**
+ * Counts cue matches.
+ *
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses local constants/helpers within this module.
+ * @param rawTokens - Input consumed by this helper.
+ * @param cues - Input consumed by this helper.
+ * @returns Result produced by this helper.
+ */
+function countCueMatches(
+  rawTokens: readonly string[],
+  cues: ReadonlySet<string>
+): number {
+  let matches = 0;
+  for (const token of rawTokens) {
+    if (cues.has(token)) {
+      matches += 1;
+    }
+  }
+  return matches;
+}
+
+/**
  * Returns whether the turn is a bounded relationship-summary or relationship-reference question
  * that should stay on the conversational path instead of inheriting stale workflow continuity.
  *
@@ -219,6 +280,17 @@ export function isRelationshipConversationRecallTurn(userInput: string): boolean
     return true;
   }
   if (isRelationshipInventoryRecallShape(rawTokens, signals.questionLike)) {
+    return true;
+  }
+  if (
+    signals.questionLike &&
+    rawTokens.includes("do") &&
+    rawTokens.includes("you") &&
+    rawTokens.includes("know") &&
+    !signals.referencesSelf &&
+    !signals.containsNameConcept &&
+    hasSpecificRelationshipSubjectToken(rawTokens)
+  ) {
     return true;
   }
   if (
@@ -280,4 +352,48 @@ export function isRelationshipConversationRecallTurn(userInput: string): boolean
     }
   }
   return signals.containsRelationshipCue && signals.containsStatusCue && rawTokens.includes("who");
+}
+
+/**
+ * Returns whether the user is asking for a combined durable-memory recap plus runtime/browser
+ * status update that should stay on the conversational answer path instead of collapsing to the
+ * thin inline status renderer.
+ *
+ * @param userInput - Raw current user wording.
+ * @returns `true` when the wording mixes memory recall with browser/runtime status.
+ */
+export function isMixedConversationMemoryStatusRecallTurn(
+  userInput: string
+): boolean {
+  const normalized = normalizeConversationChatTurnWhitespace(userInput);
+  if (!normalized) {
+    return false;
+  }
+  const rawTokens = collectConversationChatTurnRawTokens(normalized);
+  const signals = analyzeConversationChatTurnSignals(normalized);
+  if (!signals.questionLike && !rawTokens.includes("tell")) {
+    return false;
+  }
+  const durableMemoryCueCount = countCueMatches(rawTokens, DURABLE_MEMORY_RECALL_TERMS);
+  const runtimeStatusCueCount = countCueMatches(rawTokens, RUNTIME_STATUS_REFERENCE_TERMS);
+  const asksForDurableMemoryRecall =
+    signals.containsRelationshipCue ||
+    durableMemoryCueCount >= 2 ||
+    (
+      rawTokens.includes("current") &&
+      (
+        rawTokens.includes("historical") ||
+        rawTokens.includes("pending") ||
+        rawTokens.includes("tentative")
+      )
+    );
+  const asksForRuntimeStatus =
+    signals.containsStatusCue &&
+    (
+      signals.referencesArtifact ||
+      runtimeStatusCueCount >= 2 ||
+      rawTokens.includes("open") ||
+      rawTokens.includes("closed")
+    );
+  return asksForDurableMemoryRecall && asksForRuntimeStatus;
 }

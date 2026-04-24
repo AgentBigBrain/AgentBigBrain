@@ -25,6 +25,8 @@ export function describeExecutionStyleBuildPlanIssue(
   switch (issueCode) {
     case "INSPECTION_ONLY_BUILD_PLAN":
       return "Planner model returned inspection-only actions for execution-style build request.";
+    case "STATIC_ARTIFACT_OPEN_BROWSER_ONLY_REQUIRED":
+      return "Planner model treated an exact local static-artifact browser-open follow-up like a rebuild or live-run request. Return only open_browser for the preferred local file target and do not rewrite files, scaffold, or start a server.";
     case "FRAMEWORK_APP_SCAFFOLD_ACTION_REQUIRED":
       return "Planner model treated a fresh framework-app request like an already-ready workspace. Include a real scaffold or bootstrap step that can materialize package.json in the exact workspace, such as create-next-app/create-vite or an explicit package.json bootstrap or temp-slug merge. Generic install/build/start commands alone are not enough.";
     case "FRAMEWORK_APP_ARTIFACT_CHECK_REQUIRED":

@@ -27,6 +27,7 @@ import {
   buildModeContinuityInterpretationResolution,
   shouldAttemptModeContinuityInterpretation
 } from "./modeContinuity";
+import { buildRecentAssistantTurnContext } from "./recentAssistantTurnContext";
 import {
   buildReturnHandoffContinuationInterpretationResolution,
   shouldAttemptReturnHandoffContinuationInterpretation
@@ -67,6 +68,7 @@ export function buildLocalIntentSessionHints(
   const lastAssistantTurn = [...session.conversationTurns]
     .reverse()
     .find((turn) => turn.role === "assistant");
+  const recentAssistantTurnContext = buildRecentAssistantTurnContext(session);
   const recentTurns = session.conversationTurns.slice(-4);
   const recentIdentityContext = buildRecentIdentityInterpretationContext(recentTurns);
   const hasRecentAssistantIdentityPrompt =
@@ -96,6 +98,9 @@ export function buildLocalIntentSessionHints(
       isLikelyAssistantClarificationPrompt(lastAssistantTurn.text),
     hasRecentAssistantIdentityPrompt,
     hasRecentAssistantIdentityAnswer,
+    recentAssistantTurnKind: recentAssistantTurnContext.recentAssistantTurnKind,
+    recentAssistantAnswerThreadActive:
+      recentAssistantTurnContext.recentAssistantAnswerThreadActive,
     recentIdentityConversationActive,
     returnHandoffStatus: session.returnHandoff?.status ?? null,
     returnHandoffPreviewAvailable: session.returnHandoff?.previewUrl !== null,
