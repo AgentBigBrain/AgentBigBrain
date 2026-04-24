@@ -31,6 +31,8 @@ files.
   `taskRunnerNetworkPreflight.ts`
 - task-runner governance preflight and council evaluation in `taskRunnerGovernance.ts`
 - task-runner approved-action execution normalization in `taskRunnerExecution.ts`
+- task-runner live-run override extraction and request-scoped browser/process guard helpers in
+  `taskRunnerLiveRunOverrides.ts`
 - deterministic framework-lifecycle planning caps and evidence gates in
   `deterministicFrameworkLifecyclePolicy.ts`
 - task-runner live-run approval guards and browser/process follow-up gating in

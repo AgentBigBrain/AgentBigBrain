@@ -230,7 +230,7 @@ function main(): void {
  * - Uses local filesystem helpers within this module.
  *
  * @param rootDir - Repository root used to resolve the `src/` directory.
- * @returns Relative file records with normalized paths and line counts.
+ * @returns Relative file records with normalized paths and effective source line counts.
  */
 function collectTypeScriptFileRecords(rootDir: string): Array<{ path: string; lineCount: number }> {
   const srcRoot = path.join(rootDir, "src");
@@ -269,20 +269,77 @@ function walkDirectory(directoryPath: string): string[] {
 }
 
 /**
- * Counts lines in a UTF-8 source file.
+ * Counts effective source lines in a UTF-8 source file.
  *
  * **Why it exists:**
- * Keeps line-count semantics consistent across all module-size checks.
+ * Module-size gates should track implementation weight while the docs gate separately enforces
+ * mandatory comments, so comment-only and blank lines are excluded here.
  *
  * **What it talks to:**
  * - Uses `readFileSync` from `node:fs`.
  *
  * @param filePath - Absolute file path to count.
- * @returns Line count using normalized newline splitting.
+ * @returns Effective line count excluding blank and comment-only lines.
  */
 function countFileLines(filePath: string): number {
   const contents = readFileSync(filePath, "utf8");
-  return contents.length === 0 ? 0 : contents.split(/\r?\n/).length;
+  return countEffectiveSourceLines(contents);
+}
+
+/**
+ * Counts source lines that contain executable or declarative TypeScript content.
+ *
+ * **Why it exists:**
+ * The repository requires function-level documentation, and that documentation should not force
+ * unrelated module decomposition when the implementation body remains within budget.
+ *
+ * **What it talks to:**
+ * - Uses local string scanning only.
+ *
+ * @param contents - UTF-8 TypeScript source contents.
+ * @returns Effective source line count for module-size diagnostics.
+ */
+function countEffectiveSourceLines(contents: string): number {
+  let count = 0;
+  let insideBlockComment = false;
+  for (const line of contents.split(/\r?\n/)) {
+    let index = 0;
+    let hasSource = false;
+    while (index < line.length) {
+      if (insideBlockComment) {
+        const blockEnd = line.indexOf("*/", index);
+        if (blockEnd < 0) {
+          index = line.length;
+          break;
+        }
+        insideBlockComment = false;
+        index = blockEnd + 2;
+        continue;
+      }
+
+      const remaining = line.slice(index);
+      if (remaining.trim().length === 0 || /^\s*\/\//.test(remaining)) {
+        break;
+      }
+      if (/^\s*\/\*/.test(remaining)) {
+        const blockStart = line.indexOf("/*", index);
+        const blockEnd = line.indexOf("*/", blockStart + 2);
+        if (blockEnd < 0) {
+          insideBlockComment = true;
+          break;
+        }
+        index = blockEnd + 2;
+        continue;
+      }
+
+      hasSource = true;
+      break;
+    }
+    if (hasSource) {
+      count += 1;
+    }
+  }
+  return count;
 }
 
 /**

@@ -64,8 +64,8 @@ env-parsing helpers while `config.ts` remains the stable config entrypoint.
   `src/core/constraintRuntime/skillConstraints.ts`.
 - Autonomy foundations, planning context, and prompt classification:
   `advancedAutonomyFoundation.ts`, `advancedAutonomyRuntime.ts`, `autonomyFoundation.ts`,
-  `commitmentSignalClassifier.ts`, `currentRequestExtraction.ts`, `plannerActionSchema.ts`,
-  `runtimeTargetReference.ts`,
+  `commitmentSignalClassifier.ts`, `currentRequestExtraction.ts`,
+  `explicitExecutionConstraints.ts`, `plannerActionSchema.ts`, `runtimeTargetReference.ts`,
   `plannerFailureStore.ts`, `verificationPromptClassifier.ts`, `workflowLearningStore.ts`.
 - Extracted workflow-learning runtime subsystem: `src/core/workflowLearningRuntime/contracts.ts`,
   `src/core/workflowLearningRuntime/observationExtraction.ts`,
@@ -98,9 +98,18 @@ env-parsing helpers while `config.ts` remains the stable config entrypoint.
   `hardConstraintShellPolicy.ts`, `immutableTargetPolicy.ts`, `retrievalQuarantine.ts`.
 - Shared data, memory, and model-routing primitives: `embeddingProvider.ts`, `entityGraphStore.ts`,
   `evidenceStore.ts`, `governanceMemory.ts`, `judgmentPatterns.ts`, `memoryAccessAudit.ts`,
-  `modelRouting.ts`, `onnxEmbeddingProvider.ts`, `profileMemory.ts`, `profileMemoryCrypto.ts`,
-  `profileMemoryPlanningContext.ts`, `profileMemoryStore.ts`, `semanticMemory.ts`,
-  `vectorStore.ts`, `workflowLearningStore.ts`.
+  `mediaArtifacts.ts`, `mediaArtifactStore.ts`, `modelRouting.ts`, `onnxEmbeddingProvider.ts`,
+  `profileMemory.ts`, `profileMemoryCrypto.ts`, `profileMemoryPlanningContext.ts`,
+  `profileMemoryStore.ts`, `semanticMemory.ts`, `vectorStore.ts`, `workflowLearningStore.ts`.
+- External projection subsystem: `src/core/projections/contracts.ts`,
+  `src/core/projections/config.ts`, `src/core/projections/policy.ts`,
+  `src/core/projections/projectionStateStore.ts`, `src/core/projections/service.ts`,
+  `src/core/projections/noopSink.ts`, `src/core/projections/reviewActions.ts`,
+  `src/core/projections/reviewActionIngestion.ts`,
+  `src/core/projections/targets/obsidianVaultSink.ts`,
+  `src/core/projections/targets/obsidianOpenHelpers.ts`,
+  `src/core/projections/targets/jsonMirrorSink.ts`, and the Obsidian renderers under
+  `src/core/projections/renderers/`.
 - `profileMemory.ts` remains the stable public entrypoint for temporal profile-memory helpers and
   now also re-exports the Phase 2.5 family-registry, proof, mutation-envelope, and retraction
   contracts so bounded callers do not have to depend on deep runtime subpaths for live policy
@@ -178,6 +187,8 @@ env-parsing helpers while `config.ts` remains the stable config entrypoint.
 - canonical runtime types and deterministic policy decisions
 - governed orchestration flow, task execution sequencing, and autonomy entrypoints
 - persisted receipts, memory state, profile state, and stage-policy state
+- projection snapshots, sink sync state, and runtime-owned media artifact records for external
+  inspection
 - shared runtime helpers consumed by `src/governors/`, `src/interfaces/`, `src/models/`, and
   `src/organs/`, including bounded episodic-memory queries and freshness-ranked unresolved
   situations for active-conversation recall, private remembered-situation review/update, bounded
@@ -214,6 +225,10 @@ env-parsing helpers while `config.ts` remains the stable config entrypoint.
 - Interpreted media should enter durable memory only through bounded profile-memory and continuity
   helpers here; raw image, voice, or video payloads do not belong in the six governed memory
   systems.
+- Runtime-owned media artifact persistence belongs here so external mirrors and review tools can
+  inspect uploads without scraping transient transport payloads.
+- External mirror sinks belong under `src/core/projections/` and must remain downstream of the
+  canonical stores. They do not become the truth owner.
 - Explicit user review/correction of remembered situations should still route through stable brokered
   or interface entrypoints, not direct encrypted-store access from transport layers.
 - Explicit user review/correction of bounded remembered facts should follow the same rule: stable
@@ -300,6 +315,11 @@ env-parsing helpers while `config.ts` remains the stable config entrypoint.
 - `tests/core/liveRunRecovery.test.ts`
 - `tests/core/loopCleanupPolicy.test.ts`
 - `tests/core/sessionContext.test.ts`
+- `tests/core/projectionService.test.ts`
+- `tests/core/mediaArtifactStore.test.ts`
+- `tests/core/obsidianVaultSink.test.ts`
+- `tests/core/projectionReviewActions.test.ts`
+- `tests/core/jsonMirrorSink.test.ts`
 
 ## When to Update This README
 Update this README when:
@@ -310,3 +330,5 @@ Update this README when:
 - a stable core entrypoint changes or the related-test expectations move materially
 - hard-constraint ownership moves between `hardConstraints.ts`, `constraintRuntime/`, or the older
   `hardConstraint*Policy.ts` helpers
+- a new projection sink, renderer family, or media artifact persistence seam is added, removed, or
+  renamed

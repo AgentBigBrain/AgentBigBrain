@@ -13,10 +13,14 @@ intent-runtime, bounded media-understanding, and skill registry/inspection suppo
 top-level files here keep the stable orchestration entrypoints and remaining single-surface organs.
 `plannerSupport.ts` now holds shared planner timeout, environment, and lesson-distillation helpers
 so `planner.ts` stays under the entrypoint size budget.
+`plannerEagerFallbackSupport.ts` and `plannerDeterministicFallbackSupport.ts` now hold the shared
+eager deterministic fallback selection and fallback-plan finalization helpers so `planner.ts` can
+stay focused on the orchestration contract instead of repeating fallback validation boilerplate.
 
 ## Primary Files
 - Stable orchestration entrypoints: `executor.ts`, `planner.ts`.
-- Planner entrypoint support: `plannerSupport.ts`.
+- Planner entrypoint support: `plannerSupport.ts`, `plannerEagerFallbackSupport.ts`,
+  `plannerDeterministicFallbackSupport.ts`.
 - Non-live-run execution subsystem: `executionRuntime/contracts.ts`,
   `executionRuntime/fileMutationExecution.ts`, `executionRuntime/skillRuntime.ts`,
   `executionRuntime/shellExecution.ts`.
