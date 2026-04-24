@@ -2,7 +2,6 @@
  * @fileoverview Defines canonical media-artifact contracts and path helpers for runtime-owned upload persistence.
  */
 
-import path from "node:path";
 import { createHash } from "node:crypto";
 
 import type {
@@ -76,8 +75,7 @@ export function computeMediaArtifactChecksum(buffer: Buffer): string {
  * and desktop tooling remain readable without trusting arbitrary user-supplied file names.
  *
  * **What it talks to:**
- * - Uses `path.extname` (import `default`) from `node:path`.
- * - Uses local attachment-kind fallback rules within this module.
+ * - Uses MIME and attachment-kind allowlist rules within this module.
  *
  * @param attachment - Canonical inbound attachment metadata.
  * @returns Lowercase extension including the leading dot.
@@ -85,13 +83,6 @@ export function computeMediaArtifactChecksum(buffer: Buffer): string {
 export function resolveMediaArtifactExtension(
   attachment: ConversationInboundMediaAttachment
 ): string {
-  const fileNameExtension = attachment.fileName
-    ? path.extname(attachment.fileName).trim().toLowerCase()
-    : "";
-  if (fileNameExtension.length > 1 && fileNameExtension.length <= 12) {
-    return fileNameExtension;
-  }
-
   const mimeExtension = resolveMimeExtension(attachment.mimeType);
   if (mimeExtension) {
     return mimeExtension;

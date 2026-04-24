@@ -8,11 +8,7 @@ import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 
-import {
-  createEmptyProfileMemoryState,
-  createProfileEpisodeRecord,
-  upsertTemporalProfileFact
-} from "../../src/core/profileMemory";
+import { createProfileEpisodeRecord } from "../../src/core/profileMemory";
 import { ProfileMemoryStore } from "../../src/core/profileMemoryStore";
 import { saveProfileMemoryState } from "../../src/core/profileMemoryRuntime/profileMemoryPersistence";
 import { Stage686RuntimeStateStore } from "../../src/core/stage6_86/runtimeState";

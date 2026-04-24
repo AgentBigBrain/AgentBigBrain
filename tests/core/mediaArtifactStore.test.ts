@@ -97,3 +97,41 @@ test("MediaArtifactStore persists one owned asset, emits projection change, and 
     await rm(tempDir, { recursive: true, force: true });
   }
 });
+
+test("MediaArtifactStore writes untrusted upload names into runtime-owned bounded asset paths", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "abb-media-artifacts-bounded-"));
+  try {
+    const assetDirectory = path.join(tempDir, "assets");
+    const store = new MediaArtifactStore(path.join(tempDir, "media_artifacts.json"), {
+      assetDirectory
+    });
+
+    const record = await store.recordArtifact({
+      attachment: {
+        kind: "document",
+        provider: "telegram",
+        fileId: "file_untrusted_name",
+        fileUniqueId: "unique_untrusted_name",
+        mimeType: null,
+        fileName: "..\\outside.exe",
+        sizeBytes: 7,
+        caption: null,
+        durationSeconds: null,
+        width: null,
+        height: null,
+        interpretation: null
+      },
+      buffer: Buffer.from("payload"),
+      sourceSurface: "telegram_interface",
+      sourceConversationKey: "telegram:chat:user",
+      sourceUserId: "user_123",
+      recordedAt: "2026-04-12T12:02:00.000Z"
+    });
+
+    assert.equal(path.dirname(record.ownedAssetPath), path.resolve(assetDirectory));
+    assert.match(record.assetFileName, /^media_artifact_[a-z0-9_]+\.bin$/);
+    await access(record.ownedAssetPath);
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});

@@ -309,7 +309,6 @@ function countEffectiveSourceLines(contents: string): number {
       if (insideBlockComment) {
         const blockEnd = line.indexOf("*/", index);
         if (blockEnd < 0) {
-          index = line.length;
           break;
         }
         insideBlockComment = false;

@@ -71,7 +71,7 @@ const EPISODE_NAMED_LAUNCH_REVIEW_PATTERN =
 const EPISODE_CONSIDERING_PATTERN =
   /\b([A-Z][A-Za-z0-9'&/-]+(?:[ -][A-Z][A-Za-z0-9'&/-]+){0,4})\s+(?:is|was)\s+(?:still\s+)?considering\s+(?:a|an|the)\s+([a-z0-9'/-]+(?:[ -][a-z0-9'/-]+){0,5})\b/i;
 const EPISODE_MAY_REVISIT_PATTERN =
-  /\b([A-Z][A-Za-z']+(?:[ -][A-Z][A-Za-z']+){0,2})\s+(?:may|might)\s+revisit\s+([a-z0-9' -]+)\b/i;
+  /\b([A-Z][A-Za-z']+(?:[ -][A-Z][A-Za-z']+){0,2})\s+(?:may|might)\s+revisit\s+([a-z0-9'/-]+(?:[ -][a-z0-9'/-]+){0,8})\b/i;
 const EPISODE_MAY_MOVE_PATTERN =
   /\b([A-Z][A-Za-z']+(?:[ -][A-Z][A-Za-z']+){0,2})\s+(?:may|might)\s+(?:move|relocate)\b/i;
 

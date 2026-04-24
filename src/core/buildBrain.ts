@@ -250,7 +250,7 @@ function createProjectionSnapshotProvider(
       executionReceiptStore.load(),
       workflowLearningStore.load(),
       mediaArtifactStore.load(),
-      profileMemoryStore?.load() ?? Promise.resolve(null)
+      profileMemoryStore ? profileMemoryStore.load() : Promise.resolve(null)
     ]);
 
     return {

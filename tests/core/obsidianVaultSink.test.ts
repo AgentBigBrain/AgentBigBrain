@@ -219,7 +219,6 @@ test("ObsidianVaultSink keeps duplicate canonical entities distinct and explains
       "Billy (thing, relationship, 654321).md"
     );
 
-    await access(personPath);
     await access(thingPath);
 
     const personNote = await readFile(personPath, "utf8");

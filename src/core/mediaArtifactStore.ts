@@ -22,6 +22,7 @@ import type {
 } from "./projections/contracts";
 
 const SQLITE_MEDIA_ARTIFACT_STATE_TABLE = "media_artifact_state";
+const MAX_MEDIA_ARTIFACT_BYTES = 50 * 1024 * 1024;
 
 interface MediaArtifactDocument {
   schemaVersion: "v1";
@@ -214,6 +215,59 @@ function findExistingMediaArtifact(
 }
 
 /**
+ * Fails closed on media payloads that are unsafe to persist as runtime-owned assets.
+ *
+ * @param input - Incoming media artifact write request.
+ */
+function assertSafeMediaArtifactInput(input: RecordMediaArtifactInput): void {
+  if (!Buffer.isBuffer(input.buffer)) {
+    throw new Error("Media artifact payload must be a Buffer.");
+  }
+  if (input.buffer.length > MAX_MEDIA_ARTIFACT_BYTES) {
+    throw new Error("Media artifact payload exceeds the runtime-owned asset size limit.");
+  }
+}
+
+/**
+ * Resolves an owned media asset path and rejects traversal before any untrusted bytes are written.
+ *
+ * @param assetDirectory - Runtime-owned asset directory.
+ * @param assetFileName - Sanitized artifact filename.
+ * @returns Absolute asset path inside the configured directory.
+ */
+function resolveOwnedMediaAssetPath(assetDirectory: string, assetFileName: string): string {
+  if (
+    assetFileName !== path.basename(assetFileName) ||
+    assetFileName !== path.posix.basename(assetFileName) ||
+    assetFileName !== path.win32.basename(assetFileName)
+  ) {
+    throw new Error("Media artifact filename must not contain path separators.");
+  }
+
+  const assetDirectoryPath = path.resolve(assetDirectory);
+  const ownedAssetPath = path.resolve(assetDirectoryPath, assetFileName);
+  const relativeAssetPath = path.relative(assetDirectoryPath, ownedAssetPath);
+  if (
+    relativeAssetPath.length === 0 ||
+    relativeAssetPath.startsWith("..") ||
+    path.isAbsolute(relativeAssetPath)
+  ) {
+    throw new Error("Media artifact asset path must stay inside the runtime-owned directory.");
+  }
+  return ownedAssetPath;
+}
+
+/**
+ * Writes already-validated media bytes into a runtime-owned asset path.
+ *
+ * @param ownedAssetPath - Absolute path resolved by `resolveOwnedMediaAssetPath`.
+ * @param buffer - Bounded uploaded media bytes.
+ */
+async function writeOwnedMediaAsset(ownedAssetPath: string, buffer: Buffer): Promise<void> {
+  await writeFile(ownedAssetPath, Buffer.from(buffer));
+}
+
+/**
  * Builds one projection change-set describing a media-artifact mutation.
  *
  * **Why it exists:**
@@ -324,6 +378,7 @@ export class MediaArtifactStore {
    * @returns Canonical artifact record.
    */
   async recordArtifact(input: RecordMediaArtifactInput): Promise<MediaArtifactRecord> {
+    assertSafeMediaArtifactInput(input);
     const recordedAt = input.recordedAt ?? new Date().toISOString();
     const checksumSha256 = computeMediaArtifactChecksum(input.buffer);
 
@@ -374,8 +429,8 @@ export class MediaArtifactStore {
     await mkdir(this.assetDirectory, { recursive: true });
     const artifactId = makeId("media_artifact");
     const assetFileName = buildMediaArtifactFileName(artifactId, input.attachment);
-    const ownedAssetPath = path.join(this.assetDirectory, assetFileName);
-    await writeFile(ownedAssetPath, input.buffer);
+    const ownedAssetPath = resolveOwnedMediaAssetPath(this.assetDirectory, assetFileName);
+    await writeOwnedMediaAsset(ownedAssetPath, input.buffer);
 
     const artifact = buildMediaArtifactRecord(input, recordedAt, checksumSha256, artifactId, assetFileName, ownedAssetPath);
     const nextDocument: MediaArtifactDocument = {
@@ -423,8 +478,8 @@ export class MediaArtifactStore {
 
       const artifactId = makeId("media_artifact");
       const assetFileName = buildMediaArtifactFileName(artifactId, input.attachment);
-      const ownedAssetPath = path.join(this.assetDirectory, assetFileName);
-      await writeFile(ownedAssetPath, input.buffer);
+      const ownedAssetPath = resolveOwnedMediaAssetPath(this.assetDirectory, assetFileName);
+      await writeOwnedMediaAsset(ownedAssetPath, input.buffer);
       const artifact = buildMediaArtifactRecord(input, recordedAt, checksumSha256, artifactId, assetFileName, ownedAssetPath);
       const nextDocument: MediaArtifactDocument = {
         schemaVersion: "v1",
