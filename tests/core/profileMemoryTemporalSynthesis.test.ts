@@ -10,18 +10,24 @@ import {
   PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME,
   PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME,
   PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME,
-  createEmptyProfileMemoryState
+  createEmptyProfileMemoryState,
+  type ProfileMemoryState
 } from "../../src/core/profileMemory";
 import { createEmptyProfileMemoryGraphState } from "../../src/core/profileMemoryRuntime/profileMemoryGraphState";
 import type { ProfileMemoryTemporalClaimFamilySlice } from "../../src/core/profileMemoryRuntime/profileMemoryTemporalQueryContracts";
 import { queryProfileMemoryTemporalEvidence } from "../../src/core/profileMemoryRuntime/profileMemoryTemporalQueries";
 import { synthesizeProfileMemoryTemporalEvidence } from "../../src/core/profileMemoryRuntime/profileMemoryTemporalSynthesis";
+import type {
+  ProfileMemoryGraphClaimRecord,
+  ProfileMemoryGraphEventRecord,
+  ProfileMemoryGraphObservationRecord
+} from "../../src/core/profileMemoryRuntime/profileMemoryGraphContracts";
 
 function buildState(input: {
-  observations?: ReturnType<typeof createSchemaEnvelopeV1>[];
-  claims?: ReturnType<typeof createSchemaEnvelopeV1>[];
-  events?: ReturnType<typeof createSchemaEnvelopeV1>[];
-}) {
+  observations?: ProfileMemoryGraphObservationRecord[];
+  claims?: ProfileMemoryGraphClaimRecord[];
+  events?: ProfileMemoryGraphEventRecord[];
+}): ProfileMemoryState {
   const updatedAt = "2026-04-09T16:00:00.000Z";
   return {
     ...createEmptyProfileMemoryState(),
@@ -42,7 +48,7 @@ function buildObservation(
   normalizedKey: string,
   normalizedValue: string,
   observedAt: string
-) {
+): ProfileMemoryGraphObservationRecord {
   return createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
     observationId,
     stableRefId,
@@ -60,7 +66,7 @@ function buildObservation(
     timePrecision: "instant",
     timeSource: "user_stated",
     entityRefIds: stableRefId?.startsWith("stable_contact_") ? [`contact.${stableRefId.replace("stable_contact_", "")}`] : []
-  });
+  }) as ProfileMemoryGraphObservationRecord;
 }
 
 function buildClaim(input: {
@@ -76,7 +82,7 @@ function buildClaim(input: {
   validTo?: string | null;
   endedAt?: string | null;
   active?: boolean;
-}) {
+}): ProfileMemoryGraphClaimRecord {
   return createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
     claimId: input.claimId,
     stableRefId: input.stableRefId,
@@ -102,7 +108,7 @@ function buildClaim(input: {
       ? [`contact.${input.stableRefId.replace("stable_contact_", "")}`]
       : [],
     active: input.active ?? true
-  });
+  }) as ProfileMemoryGraphClaimRecord;
 }
 
 function buildEvent(input: {
@@ -113,7 +119,7 @@ function buildEvent(input: {
   observedAt: string;
   derivedFromObservationIds?: readonly string[];
   validTo?: string | null;
-}) {
+}): ProfileMemoryGraphEventRecord {
   return createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
     eventId: input.eventId,
     stableRefId: input.stableRefId,
@@ -137,7 +143,7 @@ function buildEvent(input: {
     entityRefIds: input.stableRefId.startsWith("stable_contact_")
       ? [`contact.${input.stableRefId.replace("stable_contact_", "")}`]
       : []
-  });
+  }) as ProfileMemoryGraphEventRecord;
 }
 
 test("queryProfileMemoryTemporalEvidence returns bounded slices without deriving a winner", () => {

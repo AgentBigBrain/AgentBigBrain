@@ -9,6 +9,7 @@ export {
   createEmptyEntityGraphV1,
   extractEntityCandidates,
   getEntityLookupTerms,
+  pruneLowSignalEntitiesFromGraph,
   queryEntityGraphNodesByCanonicalOrAlias,
   promoteRelationEdgeWithConfirmation,
   type Stage686AliasConflict,
@@ -17,6 +18,7 @@ export {
   type Stage686EntityDomainHint,
   type Stage686EntityGraphMutationOptions,
   type Stage686EntityGraphMutationResult,
+  type Stage686EntityGraphPruneResult,
   type Stage686EntityTypeHint,
   type Stage686RelationPromotionInput,
   type Stage686RelationPromotionResult

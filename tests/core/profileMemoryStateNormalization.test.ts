@@ -39,6 +39,14 @@ import {
   redactProfileMemoryGraphEvents,
   upsertProfileMemoryGraphEvents
 } from "../../src/core/profileMemoryRuntime/profileMemoryGraphEventSupport";
+import type {
+  ProfileMemoryGraphClaimPayloadV1,
+  ProfileMemoryGraphClaimRecord,
+  ProfileMemoryGraphEventPayloadV1,
+  ProfileMemoryGraphEventRecord,
+  ProfileMemoryGraphObservationPayloadV1,
+  ProfileMemoryGraphObservationRecord
+} from "../../src/core/profileMemoryRuntime/profileMemoryGraphContracts";
 
 function createPersistedGraphEnvelope<TPayload>(
   schemaName: string,
@@ -52,6 +60,43 @@ function createPersistedGraphEnvelope<TPayload>(
     hash: sha256HexFromCanonicalJson(payload),
     payload
   };
+}
+
+function lastItem<TItem>(items: readonly TItem[]): TItem | undefined {
+  return items[items.length - 1];
+}
+
+function createGraphObservationEnvelope(
+  payload: ProfileMemoryGraphObservationPayloadV1,
+  createdAt?: string
+): ProfileMemoryGraphObservationRecord {
+  return createSchemaEnvelopeV1(
+    PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME,
+    payload,
+    createdAt
+  ) as ProfileMemoryGraphObservationRecord;
+}
+
+function createGraphClaimEnvelope(
+  payload: ProfileMemoryGraphClaimPayloadV1,
+  createdAt?: string
+): ProfileMemoryGraphClaimRecord {
+  return createSchemaEnvelopeV1(
+    PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME,
+    payload,
+    createdAt
+  ) as ProfileMemoryGraphClaimRecord;
+}
+
+function createGraphEventEnvelope(
+  payload: ProfileMemoryGraphEventPayloadV1,
+  createdAt?: string
+): ProfileMemoryGraphEventRecord {
+  return createSchemaEnvelopeV1(
+    PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME,
+    payload,
+    createdAt
+  ) as ProfileMemoryGraphEventRecord;
 }
 
 test("safeIsoOrNow falls back to a valid ISO timestamp for invalid input", () => {
@@ -133,7 +178,7 @@ test("normalizeProfileMemoryState rebuilds additive graph indexes and drops malf
     graph: {
       updatedAt: "2026-04-03T20:00:00.000Z",
       observations: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+        createGraphObservationEnvelope({
           observationId: "observation_profile_graph_1",
           stableRefId: "stable_owen",
           family: "contact.relationship",
@@ -151,7 +196,7 @@ test("normalizeProfileMemoryState rebuilds additive graph indexes and drops malf
         })
       ],
       claims: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+        createGraphClaimEnvelope({
           claimId: "claim_profile_graph_1",
           stableRefId: "stable_owen",
           family: "contact.relationship",
@@ -184,7 +229,7 @@ test("normalizeProfileMemoryState rebuilds additive graph indexes and drops malf
         }
       ],
       events: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+        createGraphEventEnvelope({
           eventId: "event_profile_graph_1",
           stableRefId: null,
           family: "episode.candidate",
@@ -310,7 +355,7 @@ test("normalizeProfileMemoryState keeps the existing graph current winner and pr
     graph: {
       updatedAt,
       observations: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+        createGraphObservationEnvelope({
           observationId: "observation_authoritative_owen_work",
           stableRefId: "stable_contact_owen",
           family: "contact.work_association",
@@ -328,7 +373,7 @@ test("normalizeProfileMemoryState keeps the existing graph current winner and pr
         })
       ],
       claims: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+        createGraphClaimEnvelope({
           claimId: "claim_authoritative_owen_work",
           stableRefId: "stable_contact_owen",
           family: "contact.work_association",
@@ -373,7 +418,7 @@ test("normalizeProfileMemoryState keeps the freshest valid envelope for duplicat
     graph: {
       updatedAt: "2026-04-03T20:30:00.000Z",
       observations: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+        createGraphObservationEnvelope({
           observationId: "observation_profile_graph_duplicate",
           stableRefId: null,
           family: "contact.context",
@@ -389,7 +434,7 @@ test("normalizeProfileMemoryState keeps the freshest valid envelope for duplicat
           timeSource: "user_stated",
           entityRefIds: ["entity_owen"]
         }, "2026-04-03T20:01:00.000Z"),
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+        createGraphObservationEnvelope({
           observationId: "observation_profile_graph_duplicate",
           stableRefId: null,
           family: "contact.context",
@@ -407,7 +452,7 @@ test("normalizeProfileMemoryState keeps the freshest valid envelope for duplicat
         }, "2026-04-03T20:05:00.000Z")
       ],
       claims: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+        createGraphClaimEnvelope({
           claimId: "claim_profile_graph_duplicate",
           stableRefId: null,
           family: "identity.preferred_name",
@@ -429,7 +474,7 @@ test("normalizeProfileMemoryState keeps the freshest valid envelope for duplicat
           entityRefIds: [],
           active: true
         }, "2026-04-03T20:02:00.000Z"),
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+        createGraphClaimEnvelope({
           claimId: "claim_profile_graph_duplicate",
           stableRefId: null,
           family: "identity.preferred_name",
@@ -453,7 +498,7 @@ test("normalizeProfileMemoryState keeps the freshest valid envelope for duplicat
         }, "2026-04-03T20:06:00.000Z")
       ],
       events: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+        createGraphEventEnvelope({
           eventId: "event_profile_graph_duplicate",
           stableRefId: null,
           family: "episode.candidate",
@@ -475,7 +520,7 @@ test("normalizeProfileMemoryState keeps the freshest valid envelope for duplicat
           projectionSourceIds: ["episode_profile_graph_duplicate_1"],
           entityRefIds: ["entity_owen"]
         }, "2026-04-03T20:03:00.000Z"),
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+        createGraphEventEnvelope({
           eventId: "event_profile_graph_duplicate",
           stableRefId: null,
           family: "episode.candidate",
@@ -545,7 +590,7 @@ test("normalizeProfileMemoryState repairs authoritative active claims with same-
       updatedAt: "2026-04-04T14:00:00.000Z",
       observations: [],
       claims: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+        createGraphClaimEnvelope({
           claimId: "claim_profile_graph_conflict_1",
           stableRefId: null,
           family: "identity.preferred_name",
@@ -569,7 +614,7 @@ test("normalizeProfileMemoryState repairs authoritative active claims with same-
           entityRefIds: [],
           active: true
         }),
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+        createGraphClaimEnvelope({
           claimId: "claim_profile_graph_conflict_2",
           stableRefId: null,
           family: "identity.preferred_name",
@@ -654,7 +699,7 @@ test("normalizeProfileMemoryState repairs mixed-policy followup active claim con
       updatedAt: "2026-04-05T01:00:00.000Z",
       observations: [],
       claims: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+        createGraphClaimEnvelope({
           claimId: "claim_profile_graph_followup_pending",
           stableRefId: null,
           family: "generic.profile_fact",
@@ -678,7 +723,7 @@ test("normalizeProfileMemoryState repairs mixed-policy followup active claim con
           entityRefIds: [],
           active: true
         }),
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+        createGraphClaimEnvelope({
           claimId: "claim_profile_graph_followup_resolved",
           stableRefId: null,
           family: "followup.resolution",
@@ -702,7 +747,7 @@ test("normalizeProfileMemoryState repairs mixed-policy followup active claim con
           entityRefIds: [],
           active: true
         }),
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+        createGraphClaimEnvelope({
           claimId: "claim_profile_graph_followup_waiting",
           stableRefId: null,
           family: "generic.profile_fact",
@@ -800,7 +845,7 @@ test("normalizeProfileMemoryState ignores blank-family or blank-key claims in de
       updatedAt: "2026-04-04T16:00:00.000Z",
       observations: [],
       claims: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+        createGraphClaimEnvelope({
           claimId: "claim_profile_graph_blank_guard_valid",
           stableRefId: null,
           family: "identity.preferred_name",
@@ -824,7 +869,7 @@ test("normalizeProfileMemoryState ignores blank-family or blank-key claims in de
           entityRefIds: [],
           active: true
         }),
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+        createGraphClaimEnvelope({
           claimId: "claim_profile_graph_blank_guard_family",
           stableRefId: null,
           family: "   ",
@@ -848,7 +893,7 @@ test("normalizeProfileMemoryState ignores blank-family or blank-key claims in de
           entityRefIds: [],
           active: true
         }),
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+        createGraphClaimEnvelope({
           claimId: "claim_profile_graph_blank_guard_key",
           stableRefId: null,
           family: "identity.preferred_name",
@@ -874,7 +919,7 @@ test("normalizeProfileMemoryState ignores blank-family or blank-key claims in de
         })
       ],
       events: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+        createGraphEventEnvelope({
           eventId: "event_profile_graph_blank_guard_family",
           stableRefId: null,
           family: "   ",
@@ -951,7 +996,7 @@ test("normalizeProfileMemoryState does not backfill observations or replay marke
       updatedAt: "2026-04-04T16:05:00.000Z",
       observations: [],
       claims: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+        createGraphClaimEnvelope({
           claimId: "claim_profile_graph_blank_replay_family",
           stableRefId: null,
           family: "   ",
@@ -975,7 +1020,7 @@ test("normalizeProfileMemoryState does not backfill observations or replay marke
           entityRefIds: [],
           active: true
         }),
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+        createGraphClaimEnvelope({
           claimId: "claim_profile_graph_blank_replay_key",
           stableRefId: null,
           family: "identity.preferred_name",
@@ -1042,7 +1087,7 @@ test("normalizeProfileMemoryState does not backfill replay or current-state surf
       updatedAt: "2026-04-04T16:06:00.000Z",
       observations: [],
       claims: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+        createGraphClaimEnvelope({
           claimId: "claim_profile_graph_null_value_replay_null",
           stableRefId: null,
           family: "identity.preferred_name",
@@ -1066,7 +1111,7 @@ test("normalizeProfileMemoryState does not backfill replay or current-state surf
           entityRefIds: [],
           active: true
         }),
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+        createGraphClaimEnvelope({
           claimId: "claim_profile_graph_null_value_replay_blank",
           stableRefId: null,
           family: "identity.preferred_name",
@@ -1134,7 +1179,7 @@ test("normalizeProfileMemoryState keeps preserve-prior graph claim ambiguity vis
       updatedAt: "2026-04-06T00:00:00.000Z",
       observations: [],
       claims: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+        createGraphClaimEnvelope({
           claimId: "claim_profile_graph_preserve_conflict_1",
           stableRefId: null,
           family: "employment.current",
@@ -1158,7 +1203,7 @@ test("normalizeProfileMemoryState keeps preserve-prior graph claim ambiguity vis
           entityRefIds: [],
           active: true
         }),
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+        createGraphClaimEnvelope({
           claimId: "claim_profile_graph_preserve_conflict_2",
           stableRefId: null,
           family: "employment.current",
@@ -1255,7 +1300,7 @@ test("normalizeProfileMemoryState keeps support-only retained graph claims canon
       updatedAt: "2026-04-06T00:30:00.000Z",
       observations: [],
       claims: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+        createGraphClaimEnvelope({
           claimId: "claim_profile_graph_support_only_context_1",
           stableRefId: null,
           family: "contact.context",
@@ -1279,7 +1324,7 @@ test("normalizeProfileMemoryState keeps support-only retained graph claims canon
           entityRefIds: ["entity_owen"],
           active: true
         }),
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+        createGraphClaimEnvelope({
           claimId: "claim_profile_graph_followup_resolution_1",
           stableRefId: null,
           family: "followup.resolution",
@@ -1382,7 +1427,7 @@ test("normalizeProfileMemoryState keeps family-mismatched retained graph claims 
       updatedAt: "2026-04-06T00:40:00.000Z",
       observations: [],
       claims: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+        createGraphClaimEnvelope({
           claimId: "claim_profile_graph_family_mismatch_1",
           stableRefId: null,
           family: "contact.context",
@@ -1406,7 +1451,7 @@ test("normalizeProfileMemoryState keeps family-mismatched retained graph claims 
           entityRefIds: [],
           active: true
         }),
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+        createGraphClaimEnvelope({
           claimId: "claim_profile_graph_family_mismatch_followup_1",
           stableRefId: null,
           family: "followup.resolution",
@@ -1501,7 +1546,7 @@ test("normalizeProfileMemoryState keeps family-mismatched retained graph claims 
       updatedAt: "2026-04-06T00:50:00.000Z",
       observations: [],
       claims: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+        createGraphClaimEnvelope({
           claimId: "claim_profile_graph_mismatch_authoritative",
           stableRefId: null,
           family: "contact.context",
@@ -1525,7 +1570,7 @@ test("normalizeProfileMemoryState keeps family-mismatched retained graph claims 
           entityRefIds: [],
           active: true
         }),
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+        createGraphClaimEnvelope({
           claimId: "claim_profile_graph_aligned_authoritative",
           stableRefId: null,
           family: "identity.preferred_name",
@@ -1549,7 +1594,7 @@ test("normalizeProfileMemoryState keeps family-mismatched retained graph claims 
           entityRefIds: [],
           active: true
         }),
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+        createGraphClaimEnvelope({
           claimId: "claim_profile_graph_mismatch_preserve",
           stableRefId: null,
           family: "identity.preferred_name",
@@ -1573,7 +1618,7 @@ test("normalizeProfileMemoryState keeps family-mismatched retained graph claims 
           entityRefIds: [],
           active: true
         }),
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+        createGraphClaimEnvelope({
           claimId: "claim_profile_graph_aligned_preserve",
           stableRefId: null,
           family: "employment.current",
@@ -1677,7 +1722,7 @@ test("normalizeProfileMemoryState keeps source-tier-invalid retained graph claim
       updatedAt: "2026-04-06T02:10:00.000Z",
       observations: [],
       claims: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+        createGraphClaimEnvelope({
           claimId: "claim_profile_graph_invalid_source_authoritative",
           stableRefId: null,
           family: "identity.preferred_name",
@@ -1701,7 +1746,7 @@ test("normalizeProfileMemoryState keeps source-tier-invalid retained graph claim
           entityRefIds: [],
           active: true
         }),
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+        createGraphClaimEnvelope({
           claimId: "claim_profile_graph_valid_source_authoritative",
           stableRefId: null,
           family: "identity.preferred_name",
@@ -1725,7 +1770,7 @@ test("normalizeProfileMemoryState keeps source-tier-invalid retained graph claim
           entityRefIds: [],
           active: true
         }),
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+        createGraphClaimEnvelope({
           claimId: "claim_profile_graph_invalid_source_preserve",
           stableRefId: null,
           family: "employment.current",
@@ -1749,7 +1794,7 @@ test("normalizeProfileMemoryState keeps source-tier-invalid retained graph claim
           entityRefIds: [],
           active: true
         }),
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+        createGraphClaimEnvelope({
           claimId: "claim_profile_graph_valid_source_preserve",
           stableRefId: null,
           family: "employment.current",
@@ -1853,7 +1898,7 @@ test("normalizeProfileMemoryState dedupes duplicate entity refs inside one retai
       updatedAt: "2026-04-04T16:00:00.000Z",
       observations: [],
       claims: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+        createGraphClaimEnvelope({
           claimId: "claim_profile_graph_entity_ref_duplicate",
           stableRefId: null,
           family: "employment.current",
@@ -1879,7 +1924,7 @@ test("normalizeProfileMemoryState dedupes duplicate entity refs inside one retai
         })
       ],
       events: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+        createGraphEventEnvelope({
           eventId: "event_profile_graph_entity_ref_duplicate",
           stableRefId: null,
           family: "episode.candidate",
@@ -1945,7 +1990,7 @@ test("normalizeProfileMemoryState prunes duplicate and dangling observation line
     graph: {
       updatedAt: "2026-04-04T16:10:00.000Z",
       observations: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+        createGraphObservationEnvelope({
           observationId: "observation_profile_graph_lineage_valid",
           stableRefId: null,
           family: "contact.context",
@@ -1965,7 +2010,7 @@ test("normalizeProfileMemoryState prunes duplicate and dangling observation line
         })
       ],
       claims: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+        createGraphClaimEnvelope({
           claimId: "claim_profile_graph_lineage_duplicate",
           stableRefId: null,
           family: "employment.current",
@@ -1995,7 +2040,7 @@ test("normalizeProfileMemoryState prunes duplicate and dangling observation line
         })
       ],
       events: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+        createGraphEventEnvelope({
           eventId: "event_profile_graph_lineage_duplicate",
           stableRefId: null,
           family: "episode.candidate",
@@ -2067,7 +2112,7 @@ test("normalizeProfileMemoryState prunes conflicting same-lane claim lineage ref
     graph: {
       updatedAt: "2026-04-04T16:12:00.000Z",
       observations: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+        createGraphObservationEnvelope({
           observationId: "observation_profile_graph_lineage_supporting_context",
           stableRefId: null,
           family: "contact.context",
@@ -2085,7 +2130,7 @@ test("normalizeProfileMemoryState prunes conflicting same-lane claim lineage ref
           timeSource: "user_stated",
           entityRefIds: ["entity_owen"]
         }),
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+        createGraphObservationEnvelope({
           observationId: "observation_profile_graph_lineage_conflicting_same_lane",
           stableRefId: null,
           family: "identity.preferred_name",
@@ -2105,7 +2150,7 @@ test("normalizeProfileMemoryState prunes conflicting same-lane claim lineage ref
         })
       ],
       claims: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+        createGraphClaimEnvelope({
           claimId: "claim_profile_graph_lineage_supporting_context_only",
           stableRefId: null,
           family: "identity.preferred_name",
@@ -2181,7 +2226,7 @@ test("normalizeProfileMemoryState prunes conflicting same-lane claim lineage ref
       .sort((left, right) => left.localeCompare(right))
   );
   assert.equal(
-    normalized.graph.mutationJournal.entries[0]?.sourceFingerprint.startsWith(
+    normalized.graph.mutationJournal.entries[0]?.sourceFingerprint?.startsWith(
       "graph_observation_replay_backfill_"
     ),
     true
@@ -2191,7 +2236,7 @@ test("normalizeProfileMemoryState prunes conflicting same-lane claim lineage ref
     ["claim_profile_graph_lineage_supporting_context_only"]
   );
   assert.equal(
-    normalized.graph.mutationJournal.entries[1]?.sourceFingerprint.startsWith(
+    normalized.graph.mutationJournal.entries[1]?.sourceFingerprint?.startsWith(
       "graph_claim_replay_backfill_"
     ),
     true
@@ -2217,7 +2262,7 @@ test("normalizeProfileMemoryState prunes malformed claim successor refs", () => 
       updatedAt: "2026-04-04T16:15:00.000Z",
       observations: [],
       claims: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+        createGraphClaimEnvelope({
           claimId: "claim_profile_graph_successor_dangling",
           stableRefId: null,
           family: "employment.current",
@@ -2241,7 +2286,7 @@ test("normalizeProfileMemoryState prunes malformed claim successor refs", () => 
           entityRefIds: [],
           active: false
         }),
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+        createGraphClaimEnvelope({
           claimId: "claim_profile_graph_successor_active_stray",
           stableRefId: null,
           family: "employment.current",
@@ -2265,7 +2310,7 @@ test("normalizeProfileMemoryState prunes malformed claim successor refs", () => 
           entityRefIds: [],
           active: true
         }),
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+        createGraphClaimEnvelope({
           claimId: "claim_profile_graph_successor_closed_valid",
           stableRefId: null,
           family: "identity.preferred_name",
@@ -2289,7 +2334,7 @@ test("normalizeProfileMemoryState prunes malformed claim successor refs", () => 
           entityRefIds: [],
           active: false
         }),
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+        createGraphClaimEnvelope({
           claimId: "claim_profile_graph_successor_valid",
           stableRefId: null,
           family: "identity.preferred_name",
@@ -2313,7 +2358,7 @@ test("normalizeProfileMemoryState prunes malformed claim successor refs", () => 
           entityRefIds: [],
           active: true
         }),
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+        createGraphClaimEnvelope({
           claimId: "claim_profile_graph_successor_wrong_key",
           stableRefId: null,
           family: "contact.owen.relationship",
@@ -2396,7 +2441,7 @@ test("normalizeProfileMemoryState repairs malformed claim lifecycle boundaries",
       updatedAt: "2026-04-04T16:16:00.000Z",
       observations: [],
       claims: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+        createGraphClaimEnvelope({
           claimId: "claim_profile_graph_lifecycle_active_stray",
           stableRefId: null,
           family: "employment.current",
@@ -2420,7 +2465,7 @@ test("normalizeProfileMemoryState repairs malformed claim lifecycle boundaries",
           entityRefIds: [],
           active: true
         }),
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+        createGraphClaimEnvelope({
           claimId: "claim_profile_graph_lifecycle_inactive_mismatch",
           stableRefId: null,
           family: "identity.preferred_name",
@@ -2444,7 +2489,7 @@ test("normalizeProfileMemoryState repairs malformed claim lifecycle boundaries",
           entityRefIds: [],
           active: false
         }),
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+        createGraphClaimEnvelope({
           claimId: "claim_profile_graph_lifecycle_redacted_active",
           stableRefId: "stable_owen",
           family: "contact.owen.relationship",
@@ -2558,7 +2603,7 @@ test("normalizeProfileMemoryState repairs malformed graph timestamps before life
     graph: {
       updatedAt: "2026-04-04T16:17:00.000Z",
       observations: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+        createGraphObservationEnvelope({
           observationId: "observation_profile_graph_time_redacted_invalid",
           stableRefId: null,
           family: "identity.preferred_name",
@@ -2578,7 +2623,7 @@ test("normalizeProfileMemoryState repairs malformed graph timestamps before life
         })
       ],
       claims: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+        createGraphClaimEnvelope({
           claimId: "claim_profile_graph_time_redacted_invalid",
           stableRefId: null,
           family: "employment.current",
@@ -2604,7 +2649,7 @@ test("normalizeProfileMemoryState repairs malformed graph timestamps before life
         })
       ],
       events: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+        createGraphEventEnvelope({
           eventId: "event_profile_graph_time_redacted_invalid",
           stableRefId: null,
           family: "episode.candidate",
@@ -2671,7 +2716,7 @@ test("normalizeProfileMemoryState trims padded graph payload timestamps before l
     graph: {
       updatedAt: "2026-04-04T16:20:00.000Z",
       observations: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+        createGraphObservationEnvelope({
           observationId: "observation_profile_graph_time_trimmed",
           stableRefId: null,
           family: "identity.preferred_name",
@@ -2691,7 +2736,7 @@ test("normalizeProfileMemoryState trims padded graph payload timestamps before l
         })
       ],
       claims: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+        createGraphClaimEnvelope({
           claimId: "claim_profile_graph_time_trimmed",
           stableRefId: null,
           family: "employment.current",
@@ -2717,7 +2762,7 @@ test("normalizeProfileMemoryState trims padded graph payload timestamps before l
         })
       ],
       events: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+        createGraphEventEnvelope({
           eventId: "event_profile_graph_time_trimmed",
           stableRefId: null,
           family: "episode.candidate",
@@ -2780,7 +2825,7 @@ test("normalizeProfileMemoryState trims padded graph semantic identity, clears b
     graph: {
       updatedAt: "2026-04-04T16:17:30.000Z",
       observations: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+        createGraphObservationEnvelope({
           observationId: "observation_profile_graph_metadata_blank",
           stableRefId: "   ",
           family: " identity.preferred_name ",
@@ -2800,7 +2845,7 @@ test("normalizeProfileMemoryState trims padded graph semantic identity, clears b
         })
       ],
       claims: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+        createGraphClaimEnvelope({
           claimId: "claim_profile_graph_metadata_blank",
           stableRefId: " stable_avery ",
           family: " identity.preferred_name ",
@@ -2824,7 +2869,7 @@ test("normalizeProfileMemoryState trims padded graph semantic identity, clears b
           entityRefIds: [],
           active: false
         }),
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+        createGraphClaimEnvelope({
           claimId: "claim_profile_graph_metadata_blank_successor",
           stableRefId: null,
           family: "identity.preferred_name",
@@ -2850,7 +2895,7 @@ test("normalizeProfileMemoryState trims padded graph semantic identity, clears b
         })
       ],
       events: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+        createGraphEventEnvelope({
           eventId: "event_profile_graph_metadata_blank",
           stableRefId: "   ",
           family: " episode.candidate ",
@@ -5257,7 +5302,7 @@ test("normalizeProfileMemoryState trims padded non-redacted event text and repai
     graph: {
       updatedAt: "2026-04-04T16:22:30.000Z",
       events: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+        createGraphEventEnvelope({
           eventId: "event_profile_graph_event_text_trimmed",
           stableRefId: null,
           family: "episode.candidate",
@@ -5279,7 +5324,7 @@ test("normalizeProfileMemoryState trims padded non-redacted event text and repai
           projectionSourceIds: [],
           entityRefIds: []
         }),
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+        createGraphEventEnvelope({
           eventId: "event_profile_graph_event_text_blank",
           stableRefId: null,
           family: "episode.candidate",
@@ -5749,7 +5794,7 @@ test("normalizeProfileMemoryState repairs malformed observation redaction bounda
     graph: {
       updatedAt: "2026-04-04T16:18:00.000Z",
       observations: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+        createGraphObservationEnvelope({
           observationId: "observation_profile_graph_lifecycle_active_stray",
           stableRefId: null,
           family: "employment.current",
@@ -5767,7 +5812,7 @@ test("normalizeProfileMemoryState repairs malformed observation redaction bounda
           timeSource: "user_stated",
           entityRefIds: []
         }),
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+        createGraphObservationEnvelope({
           observationId: "observation_profile_graph_lifecycle_redacted_raw",
           stableRefId: "stable_avery",
           family: "identity.preferred_name",
@@ -5858,7 +5903,7 @@ test("normalizeProfileMemoryState repairs malformed event lifecycle boundaries",
       observations: [],
       claims: [],
       events: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+        createGraphEventEnvelope({
           eventId: "event_profile_graph_lifecycle_active_stray",
           stableRefId: null,
           family: "episode.candidate",
@@ -5880,7 +5925,7 @@ test("normalizeProfileMemoryState repairs malformed event lifecycle boundaries",
           projectionSourceIds: ["episode_profile_graph_event_lifecycle_active_stray"],
           entityRefIds: ["entity_owen"]
         }),
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+        createGraphEventEnvelope({
           eventId: "event_profile_graph_lifecycle_redacted_active",
           stableRefId: "stable_episode_owen",
           family: "episode.candidate",
@@ -5902,7 +5947,7 @@ test("normalizeProfileMemoryState repairs malformed event lifecycle boundaries",
           projectionSourceIds: ["episode_profile_graph_event_lifecycle_redacted_active"],
           entityRefIds: ["entity_owen"]
         }),
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+        createGraphEventEnvelope({
           eventId: "event_profile_graph_lifecycle_redacted_resolved",
           stableRefId: null,
           family: "episode.candidate",
@@ -6009,7 +6054,7 @@ test("normalizeProfileMemoryState compacts observations against repaired redacte
     graph: {
       updatedAt: "2026-04-04T16:21:00.000Z",
       observations: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+        createGraphObservationEnvelope({
           observationId: "observation_profile_graph_redacted_event_lineage_old",
           stableRefId: null,
           family: "contact.context",
@@ -6025,7 +6070,7 @@ test("normalizeProfileMemoryState compacts observations against repaired redacte
           timeSource: "user_stated",
           entityRefIds: ["entity_owen"]
         }),
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+        createGraphObservationEnvelope({
           observationId: "observation_profile_graph_redacted_event_lineage_new",
           stableRefId: null,
           family: "contact.context",
@@ -6044,7 +6089,7 @@ test("normalizeProfileMemoryState compacts observations against repaired redacte
       ],
       claims: [],
       events: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+        createGraphEventEnvelope({
           eventId: "event_profile_graph_redacted_event_lineage",
           stableRefId: null,
           family: "episode.candidate",
@@ -6158,7 +6203,7 @@ test("normalizeProfileMemoryState prunes duplicate and dangling projection-sourc
       updatedAt: "2026-04-04T16:17:00.000Z",
       observations: [],
       claims: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+        createGraphClaimEnvelope({
           claimId: "claim_profile_graph_projection_duplicate",
           stableRefId: null,
           family: "identity.preferred_name",
@@ -6189,7 +6234,7 @@ test("normalizeProfileMemoryState prunes duplicate and dangling projection-sourc
         })
       ],
       events: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+        createGraphEventEnvelope({
           eventId: "event_profile_graph_projection_duplicate",
           stableRefId: null,
           family: "episode.candidate",
@@ -6262,7 +6307,7 @@ test("normalizeProfileMemoryState prunes duplicate entity refs from retained gra
     graph: {
       updatedAt: "2026-04-04T16:20:00.000Z",
       observations: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+        createGraphObservationEnvelope({
           observationId: "observation_profile_graph_entity_ref_payload_duplicate",
           stableRefId: null,
           family: "contact.context",
@@ -6282,7 +6327,7 @@ test("normalizeProfileMemoryState prunes duplicate entity refs from retained gra
         })
       ],
       claims: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+        createGraphClaimEnvelope({
           claimId: "claim_profile_graph_entity_ref_payload_duplicate",
           stableRefId: null,
           family: "employment.current",
@@ -6308,7 +6353,7 @@ test("normalizeProfileMemoryState prunes duplicate entity refs from retained gra
         })
       ],
       events: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+        createGraphEventEnvelope({
           eventId: "event_profile_graph_entity_ref_payload_duplicate",
           stableRefId: null,
           family: "episode.candidate",
@@ -6385,7 +6430,7 @@ test("normalizeProfileMemoryState prunes dangling journal refs to missing graph 
     graph: {
       updatedAt: "2026-04-04T15:00:00.000Z",
       observations: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+        createGraphObservationEnvelope({
           observationId: "observation_profile_graph_journal_ref_valid",
           stableRefId: null,
           family: "identity.preferred_name",
@@ -6405,7 +6450,7 @@ test("normalizeProfileMemoryState prunes dangling journal refs to missing graph 
         })
       ],
       claims: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+        createGraphClaimEnvelope({
           claimId: "claim_profile_graph_journal_ref_valid",
           stableRefId: null,
           family: "identity.preferred_name",
@@ -6543,7 +6588,7 @@ test("normalizeProfileMemoryState collapses pruned journal entries that converge
     graph: {
       updatedAt: "2026-04-04T15:10:00.000Z",
       observations: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+        createGraphObservationEnvelope({
           observationId: "observation_profile_graph_journal_ref_collapse_valid",
           stableRefId: null,
           family: "contact.context",
@@ -6563,14 +6608,12 @@ test("normalizeProfileMemoryState collapses pruned journal entries that converge
         })
       ],
       claims: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+        createGraphClaimEnvelope({
           claimId: "claim_profile_graph_journal_ref_collapse_valid",
           stableRefId: null,
           family: "contact.context",
           normalizedKey: "contact.owen.context.help",
-          normalizedValue: "Owen still needs help",
-          status: "candidate",
-          redactionState: "not_requested",
+          normalizedValue: "Owen still needs help",          redactionState: "not_requested",
           redactedAt: null,
           sensitive: false,
           sourceTaskId: "task_profile_graph_journal_ref_collapse",
@@ -6708,7 +6751,7 @@ test("normalizeProfileMemoryState collapses semantic-duplicate active claims to 
       updatedAt: "2026-04-04T14:10:00.000Z",
       observations: [],
       claims: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+        createGraphClaimEnvelope({
           claimId: "claim_profile_graph_duplicate_active_1",
           stableRefId: "stable_avery",
           family: "identity.preferred_name",
@@ -6732,7 +6775,7 @@ test("normalizeProfileMemoryState collapses semantic-duplicate active claims to 
           entityRefIds: ["entity_avery"],
           active: true
         }, "2026-04-04T13:00:00.000Z"),
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+        createGraphClaimEnvelope({
           claimId: "claim_profile_graph_duplicate_active_2",
           stableRefId: null,
           family: "identity.preferred_name",
@@ -6899,7 +6942,7 @@ test("normalizeProfileMemoryState keeps semantic-duplicate retained current clai
       ...emptyState.graph,
       updatedAt: "2026-04-06T16:10:00.000Z",
       observations: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+        createGraphObservationEnvelope({
           observationId: "observation_profile_graph_duplicate_loser_lineage_old",
           stableRefId: null,
           family: "identity.preferred_name",
@@ -6917,7 +6960,7 @@ test("normalizeProfileMemoryState keeps semantic-duplicate retained current clai
           timeSource: "user_stated",
           entityRefIds: []
         }, "2026-04-06T13:00:00.000Z"),
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+        createGraphObservationEnvelope({
           observationId: "observation_profile_graph_duplicate_loser_lineage_current",
           stableRefId: null,
           family: "identity.preferred_name",
@@ -6937,7 +6980,7 @@ test("normalizeProfileMemoryState keeps semantic-duplicate retained current clai
         }, "2026-04-06T13:05:00.000Z")
       ],
       claims: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+        createGraphClaimEnvelope({
           claimId: "claim_profile_graph_duplicate_loser_lineage_old",
           stableRefId: "stable_avery_old",
           family: "identity.preferred_name",
@@ -6961,7 +7004,7 @@ test("normalizeProfileMemoryState keeps semantic-duplicate retained current clai
           entityRefIds: ["entity_avery_stray"],
           active: true
         }, "2026-04-06T13:00:00.000Z"),
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+        createGraphClaimEnvelope({
           claimId: "claim_profile_graph_duplicate_loser_lineage_current",
           stableRefId: null,
           family: "identity.preferred_name",
@@ -7038,7 +7081,7 @@ test("normalizeProfileMemoryState keeps current-surface-ineligible semantic dupl
     graph: {
       updatedAt: "2026-04-06T03:10:00.000Z",
       observations: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+        createGraphObservationEnvelope({
           observationId: "observation_profile_graph_duplicate_invalid_explicit",
           stableRefId: null,
           family: "identity.preferred_name",
@@ -7056,7 +7099,7 @@ test("normalizeProfileMemoryState keeps current-surface-ineligible semantic dupl
           timeSource: "user_stated",
           entityRefIds: []
         }),
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+        createGraphObservationEnvelope({
           observationId: "observation_profile_graph_duplicate_invalid_assistant",
           stableRefId: null,
           family: "identity.preferred_name",
@@ -7076,7 +7119,7 @@ test("normalizeProfileMemoryState keeps current-surface-ineligible semantic dupl
         })
       ],
       claims: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+        createGraphClaimEnvelope({
           claimId: "claim_profile_graph_duplicate_invalid_explicit",
           stableRefId: "stable_avery_explicit",
           family: "identity.preferred_name",
@@ -7100,7 +7143,7 @@ test("normalizeProfileMemoryState keeps current-surface-ineligible semantic dupl
           entityRefIds: ["entity_avery"],
           active: true
         }, "2026-04-06T02:00:00.000Z"),
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+        createGraphClaimEnvelope({
           claimId: "claim_profile_graph_duplicate_invalid_assistant",
           stableRefId: null,
           family: "identity.preferred_name",
@@ -7224,7 +7267,7 @@ test("normalizeProfileMemoryState dedupes malformed duplicate journal entries an
     graph: {
       updatedAt: "2026-04-03T20:40:00.000Z",
       observations: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+        createGraphObservationEnvelope({
           observationId: "observation_1",
           stableRefId: null,
           family: "contact.context",
@@ -7244,7 +7287,7 @@ test("normalizeProfileMemoryState dedupes malformed duplicate journal entries an
         })
       ],
       claims: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+        createGraphClaimEnvelope({
           claimId: "claim_1",
           stableRefId: null,
           family: "identity.preferred_name",
@@ -7405,7 +7448,7 @@ test("normalizeProfileMemoryState breaks same-id same-watermark journal freshnes
     graph: {
       updatedAt: "2026-04-03T20:05:00.000Z",
       observations: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+        createGraphObservationEnvelope({
           observationId: sharedObservationId,
           stableRefId: null,
           family: "contact.context",
@@ -7523,7 +7566,7 @@ test("normalizeProfileMemoryState dedupes retained journal entries that share on
     graph: {
       updatedAt: "2026-04-03T20:05:00.000Z",
       observations: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+        createGraphObservationEnvelope({
           observationId: "observation_payload_1",
           stableRefId: null,
           family: "contact.context",
@@ -8123,7 +8166,7 @@ test("normalizeProfileMemoryState backfills missing graph events and a replay ma
   );
   assert.equal(normalized.graph.mutationJournal.entries[0]?.sourceTaskId, null);
   assert.equal(
-    normalized.graph.mutationJournal.entries[0]?.sourceFingerprint.startsWith("graph_event_replay_backfill_"),
+    normalized.graph.mutationJournal.entries[0]?.sourceFingerprint?.startsWith("graph_event_replay_backfill_"),
     true
   );
   assert.equal(normalized.graph.readModel.watermark, 1);
@@ -8163,7 +8206,7 @@ test("normalizeProfileMemoryState repairs current-surface-ineligible retained un
       observations: [],
       claims: [],
       events: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+        createGraphEventEnvelope({
           eventId: expectedEventId,
           stableRefId: null,
           family: "episode.candidate",
@@ -8227,7 +8270,7 @@ test("normalizeProfileMemoryState repairs current-surface-ineligible retained un
     [canonicalEpisodeId]
   );
   assert.equal(
-    normalized.graph.events[0]?.payload.sourceFingerprint.startsWith("graph_event_backfill_"),
+    normalized.graph.events[0]?.payload.sourceFingerprint?.startsWith("graph_event_backfill_"),
     true
   );
   assert.equal(normalized.graph.mutationJournal.entries.length, 1);
@@ -8271,7 +8314,7 @@ test("normalizeProfileMemoryState repairs retained unresolved events missing the
       observations: [],
       claims: [],
       events: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+        createGraphEventEnvelope({
           eventId: expectedEventId,
           stableRefId: null,
           family: "episode.candidate",
@@ -8334,7 +8377,7 @@ test("normalizeProfileMemoryState repairs retained unresolved events missing the
     [canonicalEpisodeId]
   );
   assert.equal(
-    normalized.graph.events[0]?.payload.sourceFingerprint.startsWith("graph_event_backfill_"),
+    normalized.graph.events[0]?.payload.sourceFingerprint?.startsWith("graph_event_backfill_"),
     true
   );
   assert.equal(normalized.graph.mutationJournal.entries.length, 1);
@@ -8376,7 +8419,7 @@ test("normalizeProfileMemoryState repairs retained unresolved events whose same-
       observations: [],
       claims: [],
       events: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+        createGraphEventEnvelope({
           eventId: expectedEventId,
           stableRefId: null,
           family: "episode.candidate",
@@ -8451,7 +8494,7 @@ test("normalizeProfileMemoryState repairs retained unresolved events whose same-
     ["entity_owen", "entity_tax_form"]
   );
   assert.equal(
-    normalized.graph.events[0]?.payload.sourceFingerprint.startsWith("graph_event_backfill_"),
+    normalized.graph.events[0]?.payload.sourceFingerprint?.startsWith("graph_event_backfill_"),
     true
   );
   assert.equal(normalized.graph.mutationJournal.entries.length, 1);
@@ -8486,7 +8529,7 @@ test("upsertProfileMemoryGraphEvents keeps same-id retained events as a no-op wh
     openLoopRefs: ["open_loop_owen_tax"],
     tags: ["followup"]
   };
-  const existingEvent = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+  const existingEvent = createGraphEventEnvelope({
     eventId: expectedEventId,
     stableRefId: null,
     family: "episode.candidate",
@@ -8549,7 +8592,7 @@ test("upsertProfileMemoryGraphObservations keeps same-id retained observations a
     observedAt,
     sourceFingerprint
   }).slice(0, 24)}`;
-  const existingObservation = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+  const existingObservation = createGraphObservationEnvelope({
     observationId,
     stableRefId: null,
     family: decision.family,
@@ -8618,7 +8661,7 @@ test("reconcileProfileMemoryCurrentClaims keeps same-id retained current claims 
   };
   const claimId = `claim_${sha256HexFromCanonicalJson(claimIdentity).slice(0, 24)}`;
   const claimSourceFingerprint = sha256HexFromCanonicalJson(claimIdentity).slice(0, 32);
-  const existingObservation = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+  const existingObservation = createGraphObservationEnvelope({
     observationId,
     stableRefId: null,
     family: factDecision.decision.family,
@@ -8636,7 +8679,7 @@ test("reconcileProfileMemoryCurrentClaims keeps same-id retained current claims 
     timeSource: "user_stated",
     entityRefIds: []
   }, retainedCreatedAt);
-  const existingClaim = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+  const existingClaim = createGraphClaimEnvelope({
     claimId,
     stableRefId: null,
     family: factDecision.decision.family,
@@ -8709,7 +8752,7 @@ test("backfillProfileMemoryGraphFromLegacyFacts keeps already-canonical retained
   };
   const claimId = `claim_${sha256HexFromCanonicalJson(claimIdentity).slice(0, 24)}`;
   const claimSourceFingerprint = sha256HexFromCanonicalJson(claimIdentity).slice(0, 32);
-  const existingObservation = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+  const existingObservation = createGraphObservationEnvelope({
     observationId,
     stableRefId: null,
     family: "identity.preferred_name",
@@ -8727,7 +8770,7 @@ test("backfillProfileMemoryGraphFromLegacyFacts keeps already-canonical retained
     timeSource: "user_stated",
     entityRefIds: []
   }, retainedCreatedAt);
-  const existingClaim = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+  const existingClaim = createGraphClaimEnvelope({
     claimId,
     stableRefId: null,
     family: "identity.preferred_name",
@@ -8806,7 +8849,7 @@ test("redactProfileMemoryGraphEvents keeps same-id retained redacted events as a
     openLoopRefs: ["open_loop_owen_tax"],
     tags: ["followup"]
   };
-  const existingEvent = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+  const existingEvent = createGraphEventEnvelope({
     eventId: expectedEventId,
     stableRefId: null,
     family: "episode.candidate",
@@ -8848,7 +8891,7 @@ test("redactProfileMemoryGraphFacts preserves same-id retained observation and c
   const observedAt = "2026-04-07T14:45:00.000Z";
   const sourceTaskId = "task_profile_graph_fact_redaction_created_at";
   const sourceFingerprint = "fingerprint_profile_graph_fact_redaction_created_at";
-  const existingObservation = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+  const existingObservation = createGraphObservationEnvelope({
     observationId: "observation_profile_graph_fact_redaction_created_at",
     stableRefId: null,
     family: "identity.preferred_name",
@@ -8866,7 +8909,7 @@ test("redactProfileMemoryGraphFacts preserves same-id retained observation and c
     timeSource: "user_stated",
     entityRefIds: ["entity_avery"]
   }, "2026-04-07T14:12:00.000Z");
-  const existingClaim = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+  const existingClaim = createGraphClaimEnvelope({
     claimId: "claim_profile_graph_fact_redaction_created_at",
     stableRefId: null,
     family: "identity.preferred_name",
@@ -8878,11 +8921,10 @@ test("redactProfileMemoryGraphFacts preserves same-id retained observation and c
     sourceTaskId: "task_profile_graph_fact_redaction_seed",
     sourceFingerprint: "fingerprint_profile_graph_fact_redaction_seed",
     sourceTier: "explicit_user_statement",
-    assertedAt: observedAt,
-    observedAt,
-    validFrom: observedAt,
+    assertedAt: observedAt,    validFrom: observedAt,
     validTo: null,
     endedAt: null,
+    endedByClaimId: null,
     timePrecision: "instant",
     timeSource: "user_stated",
     active: true,
@@ -8943,7 +8985,7 @@ test("redactProfileMemoryGraphFacts repairs already-redacted observation and cla
   const sourceTaskId = "task_profile_graph_fact_redaction_repeat";
   const sourceFingerprint = "fingerprint_profile_graph_fact_redaction_repeat";
   const redactedFactId = "fact_profile_graph_fact_redaction_repeat";
-  const existingObservation = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+  const existingObservation = createGraphObservationEnvelope({
     observationId: "observation_profile_graph_fact_redaction_repeat",
     stableRefId: "stable_ref_profile_graph_fact_redaction_repeat_observation",
     family: "identity.preferred_name",
@@ -8961,7 +9003,7 @@ test("redactProfileMemoryGraphFacts repairs already-redacted observation and cla
     timeSource: "user_stated",
     entityRefIds: ["entity_avery"]
   }, "2026-04-07T14:12:00.000Z");
-  const existingClaim = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+  const existingClaim = createGraphClaimEnvelope({
     claimId: "claim_profile_graph_fact_redaction_repeat",
     stableRefId: "stable_ref_profile_graph_fact_redaction_repeat_claim",
     family: "identity.preferred_name",
@@ -8973,11 +9015,10 @@ test("redactProfileMemoryGraphFacts repairs already-redacted observation and cla
     sourceTaskId: "task_profile_graph_fact_redaction_old",
     sourceFingerprint: "fingerprint_profile_graph_fact_redaction_old",
     sourceTier: "explicit_user_statement",
-    assertedAt: observedAt,
-    observedAt,
-    validFrom: observedAt,
+    assertedAt: observedAt,    validFrom: observedAt,
     validTo: priorRedactedAt,
     endedAt: priorRedactedAt,
+    endedByClaimId: null,
     timePrecision: "instant",
     timeSource: "user_stated",
     active: true,
@@ -9039,7 +9080,7 @@ test("redactProfileMemoryGraphFacts fail-closes stale unrelated retained claim l
   const sourceTaskId = "task_profile_graph_fact_redaction_repeat_stale_lineage";
   const sourceFingerprint = "fingerprint_profile_graph_fact_redaction_repeat_stale_lineage";
   const redactedFactId = "fact_profile_graph_fact_redaction_repeat_stale_lineage";
-  const targetedObservation = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+  const targetedObservation = createGraphObservationEnvelope({
     observationId: "observation_profile_graph_fact_redaction_repeat_stale_lineage_target",
     stableRefId: "stable_ref_profile_graph_fact_redaction_repeat_stale_lineage_target",
     family: "identity.preferred_name",
@@ -9057,7 +9098,7 @@ test("redactProfileMemoryGraphFacts fail-closes stale unrelated retained claim l
     timeSource: "user_stated",
     entityRefIds: ["entity_avery"]
   }, "2026-04-07T14:12:00.000Z");
-  const unrelatedObservation = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+  const unrelatedObservation = createGraphObservationEnvelope({
     observationId: "observation_profile_graph_fact_redaction_repeat_stale_lineage_unrelated",
     stableRefId: "stable_ref_profile_graph_fact_redaction_repeat_stale_lineage_unrelated",
     family: "contact.context",
@@ -9075,7 +9116,7 @@ test("redactProfileMemoryGraphFacts fail-closes stale unrelated retained claim l
     timeSource: "user_stated",
     entityRefIds: ["entity_avery"]
   }, "2026-04-07T14:14:00.000Z");
-  const existingClaim = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+  const existingClaim = createGraphClaimEnvelope({
     claimId: "claim_profile_graph_fact_redaction_repeat_stale_lineage",
     stableRefId: "stable_ref_profile_graph_fact_redaction_repeat_stale_lineage_claim",
     family: "identity.preferred_name",
@@ -9087,9 +9128,7 @@ test("redactProfileMemoryGraphFacts fail-closes stale unrelated retained claim l
     sourceTaskId: "task_profile_graph_fact_redaction_repeat_old",
     sourceFingerprint: "fingerprint_profile_graph_fact_redaction_repeat_old",
     sourceTier: "explicit_user_statement",
-    assertedAt: observedAt,
-    observedAt,
-    validFrom: observedAt,
+    assertedAt: observedAt,    validFrom: observedAt,
     validTo: priorRedactedAt,
     endedAt: priorRedactedAt,
     endedByClaimId: null,
@@ -9153,7 +9192,7 @@ test("redactProfileMemoryGraphFacts fail-closes stale unrelated retained claim l
 test("redactProfileMemoryGraphFacts stays no-op when retained redacted observation and claim already match canonical repeat-forget state", () => {
   const recordedAt = "2026-04-07T15:40:00.000Z";
   const redactedFactId = "fact_profile_graph_fact_redaction_repeat_noop";
-  const existingObservation = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+  const existingObservation = createGraphObservationEnvelope({
     observationId: "observation_profile_graph_fact_redaction_repeat_noop",
     stableRefId: null,
     family: "identity.preferred_name",
@@ -9171,7 +9210,7 @@ test("redactProfileMemoryGraphFacts stays no-op when retained redacted observati
     timeSource: "user_stated",
     entityRefIds: []
   }, "2026-04-07T14:12:00.000Z");
-  const existingClaim = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+  const existingClaim = createGraphClaimEnvelope({
     claimId: "claim_profile_graph_fact_redaction_repeat_noop",
     stableRefId: null,
     family: "identity.preferred_name",
@@ -9183,9 +9222,7 @@ test("redactProfileMemoryGraphFacts stays no-op when retained redacted observati
     sourceTaskId: "task_profile_graph_fact_redaction_repeat_noop",
     sourceFingerprint: "fingerprint_profile_graph_fact_redaction_repeat_noop",
     sourceTier: "explicit_user_statement",
-    assertedAt: "2026-04-07T14:45:00.000Z",
-    observedAt: "2026-04-07T14:45:00.000Z",
-    validFrom: "2026-04-07T14:45:00.000Z",
+    assertedAt: "2026-04-07T14:45:00.000Z",    validFrom: "2026-04-07T14:45:00.000Z",
     validTo: recordedAt,
     endedAt: recordedAt,
     endedByClaimId: null,
@@ -9230,7 +9267,7 @@ test("redactProfileMemoryGraphFacts stays no-op when retained redacted observati
 test("normalizeProfileMemoryState preserves deleted fact projection lineage on redacted claims after projection-source pruning", () => {
   const redactedFactId = "fact_profile_graph_redacted_claim_projection_lineage";
   const survivingFactId = "fact_profile_graph_redacted_claim_projection_lineage_surviving";
-  const existingObservation = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+  const existingObservation = createGraphObservationEnvelope({
     observationId: "observation_profile_graph_redacted_claim_projection_lineage",
     stableRefId: null,
     family: "identity.preferred_name",
@@ -9248,7 +9285,7 @@ test("normalizeProfileMemoryState preserves deleted fact projection lineage on r
     timeSource: "user_stated",
     entityRefIds: []
   });
-  const unrelatedLiveObservation = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+  const unrelatedLiveObservation = createGraphObservationEnvelope({
     observationId: "observation_profile_graph_redacted_claim_projection_lineage_live_unrelated",
     stableRefId: null,
     family: "contact.context",
@@ -9266,7 +9303,7 @@ test("normalizeProfileMemoryState preserves deleted fact projection lineage on r
     timeSource: "user_stated",
     entityRefIds: []
   });
-  const existingClaim = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+  const existingClaim = createGraphClaimEnvelope({
     claimId: "claim_profile_graph_redacted_claim_projection_lineage",
     stableRefId: null,
     family: "identity.preferred_name",
@@ -9278,9 +9315,7 @@ test("normalizeProfileMemoryState preserves deleted fact projection lineage on r
     sourceTaskId: "task_profile_graph_redacted_claim_projection_lineage",
     sourceFingerprint: "fingerprint_profile_graph_redacted_claim_projection_lineage",
     sourceTier: "explicit_user_statement",
-    assertedAt: "2026-04-07T14:45:00.000Z",
-    observedAt: "2026-04-07T14:45:00.000Z",
-    validFrom: "2026-04-07T14:45:00.000Z",
+    assertedAt: "2026-04-07T14:45:00.000Z",    validFrom: "2026-04-07T14:45:00.000Z",
     validTo: "2026-04-07T15:20:00.000Z",
     endedAt: "2026-04-07T15:20:00.000Z",
     endedByClaimId: null,
@@ -9335,7 +9370,7 @@ test("normalizeProfileMemoryState preserves deleted episode projection lineage o
   const redactedEpisodeId = "episode_profile_graph_redacted_event_projection_lineage";
   const survivingEpisodeId = "episode_profile_graph_redacted_event_projection_lineage_surviving";
   const unrelatedDeletedEpisodeId = "episode_profile_graph_redacted_event_projection_lineage_other";
-  const existingEvent = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+  const existingEvent = createGraphEventEnvelope({
     eventId: `event_${sha256HexFromCanonicalJson({ episodeId: redactedEpisodeId }).slice(0, 24)}`,
     stableRefId: null,
     family: "episode.candidate",
@@ -9432,7 +9467,7 @@ test("normalizeProfileMemoryState repairs retained resolved events whose same-id
       observations: [],
       claims: [],
       events: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+        createGraphEventEnvelope({
           eventId: expectedEventId,
           stableRefId: null,
           family: "episode.candidate",
@@ -9505,7 +9540,7 @@ test("normalizeProfileMemoryState repairs retained resolved events whose same-id
     ["entity_owen", "entity_tax_form"]
   );
   assert.equal(
-    normalized.graph.events[0]?.payload.sourceFingerprint.startsWith("graph_event_backfill_"),
+    normalized.graph.events[0]?.payload.sourceFingerprint?.startsWith("graph_event_backfill_"),
     true
   );
   assert.equal(normalized.graph.mutationJournal.entries.length, 0);
@@ -9543,7 +9578,7 @@ test("normalizeProfileMemoryState reuses canonical graph event ids when retained
       observations: [],
       claims: [],
       events: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+        createGraphEventEnvelope({
           eventId: canonicalEventId,
           stableRefId: null,
           family: "episode.candidate",
@@ -9604,7 +9639,7 @@ test("normalizeProfileMemoryState reuses canonical graph event ids when retained
 });
 
 test("normalizeProfileMemoryState adds a replay marker for active legacy graph events missing journal coverage", () => {
-  const activeEvent = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+  const activeEvent = createGraphEventEnvelope({
     eventId: "event_profile_graph_replay_backfill_1",
     stableRefId: null,
     family: "episode.candidate",
@@ -9669,7 +9704,7 @@ test("normalizeProfileMemoryState adds a replay marker for active legacy graph e
   );
   assert.equal(normalized.graph.mutationJournal.entries[0]?.sourceTaskId, null);
   assert.equal(
-    normalized.graph.mutationJournal.entries[0]?.sourceFingerprint.startsWith(
+    normalized.graph.mutationJournal.entries[0]?.sourceFingerprint?.startsWith(
       "graph_event_replay_backfill_"
     ),
     true
@@ -9678,7 +9713,7 @@ test("normalizeProfileMemoryState adds a replay marker for active legacy graph e
 });
 
 test("normalizeProfileMemoryState adds replay markers for active legacy graph claims alongside legacy events", () => {
-  const activeClaim = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+  const activeClaim = createGraphClaimEnvelope({
     claimId: "claim_profile_graph_replay_backfill_1",
     stableRefId: null,
     family: "identity.preferred_name",
@@ -9702,7 +9737,7 @@ test("normalizeProfileMemoryState adds replay markers for active legacy graph cl
     entityRefIds: [],
     active: true
   });
-  const activeEvent = createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+  const activeEvent = createGraphEventEnvelope({
     eventId: "event_profile_graph_claim_replay_backfill_1",
     stableRefId: null,
     family: "episode.candidate",
@@ -9772,7 +9807,7 @@ test("normalizeProfileMemoryState adds replay markers for active legacy graph cl
     ["event_profile_graph_claim_replay_backfill_1"]
   );
   assert.equal(
-    normalized.graph.mutationJournal.entries[0]?.sourceFingerprint.startsWith(
+    normalized.graph.mutationJournal.entries[0]?.sourceFingerprint?.startsWith(
       "graph_event_replay_backfill_"
     ),
     true
@@ -9782,7 +9817,7 @@ test("normalizeProfileMemoryState adds replay markers for active legacy graph cl
     [normalized.graph.observations[0]!.payload.observationId]
   );
   assert.equal(
-    normalized.graph.mutationJournal.entries[1]?.sourceFingerprint.startsWith(
+    normalized.graph.mutationJournal.entries[1]?.sourceFingerprint?.startsWith(
       "graph_observation_replay_backfill_"
     ),
     true
@@ -9792,7 +9827,7 @@ test("normalizeProfileMemoryState adds replay markers for active legacy graph cl
     ["claim_profile_graph_replay_backfill_1"]
   );
   assert.equal(
-    normalized.graph.mutationJournal.entries[2]?.sourceFingerprint.startsWith(
+    normalized.graph.mutationJournal.entries[2]?.sourceFingerprint?.startsWith(
       "graph_claim_replay_backfill_"
     ),
     true
@@ -9810,7 +9845,7 @@ test("normalizeProfileMemoryState adds a replay marker for legacy graph observat
     graph: {
       updatedAt: "2026-04-03T20:47:00.000Z",
       observations: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+        createGraphObservationEnvelope({
           observationId: "observation_profile_graph_replay_backfill_1",
           stableRefId: null,
           family: "contact.context",
@@ -9868,7 +9903,7 @@ test("normalizeProfileMemoryState adds a replay marker for legacy graph observat
     ["observation_profile_graph_replay_backfill_1"]
   );
   assert.equal(
-    normalized.graph.mutationJournal.entries[0]?.sourceFingerprint.startsWith(
+    normalized.graph.mutationJournal.entries[0]?.sourceFingerprint?.startsWith(
       "graph_observation_replay_backfill_"
     ),
     true
@@ -9882,7 +9917,7 @@ test("normalizeProfileMemoryState clamps malformed retained snapshot watermarks 
     graph: {
       updatedAt: "2026-04-03T20:47:05.000Z",
       observations: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+        createGraphObservationEnvelope({
           observationId: "observation_profile_graph_replay_backfill_snapshot_clamp_1",
           stableRefId: null,
           family: "contact.context",
@@ -9935,7 +9970,7 @@ test("normalizeProfileMemoryState clamps malformed retained nextWatermark before
     graph: {
       updatedAt: "2026-04-03T20:47:06.000Z",
       observations: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+        createGraphObservationEnvelope({
           observationId: "observation_profile_graph_replay_backfill_next_watermark_clamp_1",
           stableRefId: null,
           family: "contact.context",
@@ -9986,7 +10021,7 @@ test("normalizeProfileMemoryState repairs missing replay coverage for uncompacte
     graph: {
       updatedAt: "2026-04-03T20:47:30.000Z",
       observations: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+        createGraphObservationEnvelope({
           observationId: "observation_profile_graph_partial_replay_existing",
           stableRefId: null,
           family: "contact.context",
@@ -10004,7 +10039,7 @@ test("normalizeProfileMemoryState repairs missing replay coverage for uncompacte
           timeSource: "user_stated",
           entityRefIds: ["entity_owen"]
         }),
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+        createGraphObservationEnvelope({
           observationId: "observation_profile_graph_partial_replay_1",
           stableRefId: null,
           family: "contact.context",
@@ -10024,7 +10059,7 @@ test("normalizeProfileMemoryState repairs missing replay coverage for uncompacte
         })
       ],
       claims: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+        createGraphClaimEnvelope({
           claimId: "claim_profile_graph_partial_replay_1",
           stableRefId: null,
           family: "contact.relationship",
@@ -10050,7 +10085,7 @@ test("normalizeProfileMemoryState repairs missing replay coverage for uncompacte
         })
       ],
       events: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+        createGraphEventEnvelope({
           eventId: "event_profile_graph_partial_replay_1",
           stableRefId: null,
           family: "episode.candidate",
@@ -10133,7 +10168,7 @@ test("normalizeProfileMemoryState repairs missing replay coverage for uncompacte
     ["event_profile_graph_partial_replay_1"]
   );
   assert.equal(
-    normalized.graph.mutationJournal.entries[1]?.sourceFingerprint.startsWith(
+    normalized.graph.mutationJournal.entries[1]?.sourceFingerprint?.startsWith(
       "graph_event_replay_backfill_"
     ),
     true
@@ -10143,7 +10178,7 @@ test("normalizeProfileMemoryState repairs missing replay coverage for uncompacte
     ["observation_profile_graph_partial_replay_1"]
   );
   assert.equal(
-    normalized.graph.mutationJournal.entries[2]?.sourceFingerprint.startsWith(
+    normalized.graph.mutationJournal.entries[2]?.sourceFingerprint?.startsWith(
       "graph_observation_replay_backfill_"
     ),
     true
@@ -10153,7 +10188,7 @@ test("normalizeProfileMemoryState repairs missing replay coverage for uncompacte
     ["claim_profile_graph_partial_replay_1"]
   );
   assert.equal(
-    normalized.graph.mutationJournal.entries[3]?.sourceFingerprint.startsWith(
+    normalized.graph.mutationJournal.entries[3]?.sourceFingerprint?.startsWith(
       "graph_claim_replay_backfill_"
     ),
     true
@@ -10171,7 +10206,7 @@ test("normalizeProfileMemoryState reuses matching observations when repairing de
     graph: {
       updatedAt: "2026-04-03T20:47:45.000Z",
       observations: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+        createGraphObservationEnvelope({
           observationId: "observation_profile_graph_claim_lineage_existing",
           stableRefId: null,
           family: "identity.preferred_name",
@@ -10191,7 +10226,7 @@ test("normalizeProfileMemoryState reuses matching observations when repairing de
         })
       ],
       claims: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+        createGraphClaimEnvelope({
           claimId: "claim_profile_graph_claim_lineage_existing",
           stableRefId: null,
           family: "identity.preferred_name",
@@ -10276,7 +10311,7 @@ test("normalizeProfileMemoryState repairs stale claim lineage ids by reusing mat
     graph: {
       updatedAt: "2026-04-03T20:47:46.000Z",
       observations: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+        createGraphObservationEnvelope({
           observationId: "observation_profile_graph_claim_lineage_stale_existing",
           stableRefId: null,
           family: "identity.preferred_name",
@@ -10294,7 +10329,7 @@ test("normalizeProfileMemoryState repairs stale claim lineage ids by reusing mat
           timeSource: "user_stated",
           entityRefIds: []
         }),
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+        createGraphObservationEnvelope({
           observationId: "observation_profile_graph_claim_lineage_stale_unrelated",
           stableRefId: null,
           family: "contact.context",
@@ -10314,7 +10349,7 @@ test("normalizeProfileMemoryState repairs stale claim lineage ids by reusing mat
         })
       ],
       claims: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+        createGraphClaimEnvelope({
           claimId: "claim_profile_graph_claim_lineage_stale_existing",
           stableRefId: null,
           family: "identity.preferred_name",
@@ -10411,7 +10446,7 @@ test("normalizeProfileMemoryState repairs surviving but semantically mismatched 
     graph: {
       updatedAt: "2026-04-03T20:47:47.000Z",
       observations: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+        createGraphObservationEnvelope({
           observationId: "observation_profile_graph_claim_lineage_mismatch_wrong",
           stableRefId: null,
           family: "identity.preferred_name",
@@ -10431,7 +10466,7 @@ test("normalizeProfileMemoryState repairs surviving but semantically mismatched 
         })
       ],
       claims: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+        createGraphClaimEnvelope({
           claimId: "claim_profile_graph_claim_lineage_mismatch_existing",
           stableRefId: null,
           family: "identity.preferred_name",
@@ -10588,7 +10623,7 @@ test("normalizeProfileMemoryState backfills graph observations and current claim
   assert.equal(normalized.graph.observations.length, 2);
   assert.equal(
     normalized.graph.observations.every((observation) =>
-      observation.payload.sourceFingerprint.startsWith("graph_fact_backfill_")
+      observation.payload.sourceFingerprint?.startsWith("graph_fact_backfill_")
     ),
     true
   );
@@ -10610,7 +10645,7 @@ test("normalizeProfileMemoryState backfills graph observations and current claim
       .sort((left, right) => left.localeCompare(right))
   );
   assert.equal(
-    normalized.graph.mutationJournal.entries[0]?.sourceFingerprint.startsWith(
+    normalized.graph.mutationJournal.entries[0]?.sourceFingerprint?.startsWith(
       "graph_observation_replay_backfill_"
     ),
     true
@@ -10620,7 +10655,7 @@ test("normalizeProfileMemoryState backfills graph observations and current claim
     [normalized.graph.claims[0]!.payload.claimId]
   );
   assert.equal(
-    normalized.graph.mutationJournal.entries[1]?.sourceFingerprint.startsWith(
+    normalized.graph.mutationJournal.entries[1]?.sourceFingerprint?.startsWith(
       "graph_claim_replay_backfill_"
     ),
     true
@@ -10668,7 +10703,7 @@ test("normalizeProfileMemoryState backfills current claims from legacy active fa
     graph: {
       updatedAt: "2026-04-03T20:48:10.000Z",
       observations: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+        createGraphObservationEnvelope({
           observationId: "observation_profile_graph_legacy_partial_backfill_existing",
           stableRefId: null,
           family: "employment.current",
@@ -10686,7 +10721,7 @@ test("normalizeProfileMemoryState backfills current claims from legacy active fa
           timeSource: "user_stated",
           entityRefIds: []
         }),
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+        createGraphObservationEnvelope({
           observationId: "observation_profile_graph_legacy_partial_backfill_unrelated",
           stableRefId: null,
           family: "contact.context",
@@ -10803,7 +10838,7 @@ test("normalizeProfileMemoryState reuses existing graph observations when retain
     graph: {
       updatedAt: "2026-04-03T20:48:05.000Z",
       observations: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+        createGraphObservationEnvelope({
           observationId: "observation_profile_graph_legacy_source_task_padding_existing",
           stableRefId: null,
           family: "employment.current",
@@ -11313,7 +11348,7 @@ test("normalizeProfileMemoryState backfills current claims when only inactive le
       updatedAt: "2026-04-03T20:48:20.000Z",
       observations: [],
       claims: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+        createGraphClaimEnvelope({
           claimId: "claim_profile_graph_legacy_inactive_backfill_closed",
           stableRefId: null,
           family: "employment.current",
@@ -11431,7 +11466,7 @@ test("normalizeProfileMemoryState repairs stale active legacy claims when canoni
     graph: {
       updatedAt: "2026-04-03T20:48:30.000Z",
       observations: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+        createGraphObservationEnvelope({
           observationId: "observation_profile_graph_legacy_stale_active_backfill_existing",
           stableRefId: null,
           family: "employment.current",
@@ -11451,7 +11486,7 @@ test("normalizeProfileMemoryState repairs stale active legacy claims when canoni
         })
       ],
       claims: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+        createGraphClaimEnvelope({
           claimId: "claim_profile_graph_legacy_stale_active_backfill_oldco",
           stableRefId: null,
           family: "employment.current",
@@ -11565,7 +11600,7 @@ test("normalizeProfileMemoryState repairs legacy current claims when matching ob
     graph: {
       updatedAt: "2026-04-06T03:40:00.000Z",
       observations: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+        createGraphObservationEnvelope({
           observationId: "observation_profile_graph_legacy_invalid_source_claim_existing",
           stableRefId: null,
           family: "identity.preferred_name",
@@ -11585,7 +11620,7 @@ test("normalizeProfileMemoryState repairs legacy current claims when matching ob
         })
       ],
       claims: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+        createGraphClaimEnvelope({
           claimId: "claim_profile_graph_legacy_invalid_source_claim_old",
           stableRefId: null,
           family: "identity.preferred_name",
@@ -11724,7 +11759,7 @@ test("normalizeProfileMemoryState repairs semantically aligned legacy current cl
     graph: {
       updatedAt: "2026-04-06T03:50:00.000Z",
       observations: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+        createGraphObservationEnvelope({
           observationId: "observation_profile_graph_legacy_stale_same_id_claim_existing",
           stableRefId: null,
           family: "identity.preferred_name",
@@ -11744,7 +11779,7 @@ test("normalizeProfileMemoryState repairs semantically aligned legacy current cl
         })
       ],
       claims: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+        createGraphClaimEnvelope({
           claimId: expectedClaimId,
           stableRefId: null,
           family: "identity.preferred_name",
@@ -11865,7 +11900,7 @@ test("normalizeProfileMemoryState repairs stale active legacy claims when effect
     graph: {
       updatedAt: "2026-04-03T20:48:30.500Z",
       observations: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+        createGraphObservationEnvelope({
           observationId: "observation_profile_graph_legacy_sensitive_floor_claim_existing",
           stableRefId: null,
           family: "residence.current",
@@ -11885,7 +11920,7 @@ test("normalizeProfileMemoryState repairs stale active legacy claims when effect
         })
       ],
       claims: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+        createGraphClaimEnvelope({
           claimId: "claim_profile_graph_legacy_sensitive_floor_claim_existing",
           stableRefId: null,
           family: "residence.current",
@@ -12000,7 +12035,7 @@ test("normalizeProfileMemoryState repairs stale supporting observations when ali
     graph: {
       updatedAt: "2026-04-03T20:48:30.750Z",
       observations: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+        createGraphObservationEnvelope({
           observationId,
           stableRefId: null,
           family: "residence.current",
@@ -12020,7 +12055,7 @@ test("normalizeProfileMemoryState repairs stale supporting observations when ali
         })
       ],
       claims: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+        createGraphClaimEnvelope({
           claimId: "claim_profile_graph_legacy_sensitive_floor_observation_existing",
           stableRefId: null,
           family: "residence.current",
@@ -12120,7 +12155,7 @@ test("normalizeProfileMemoryState fail-closes malformed retained fact confidence
     graph: {
       updatedAt: "2026-04-03T20:49:30.000Z",
       observations: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+        createGraphObservationEnvelope({
           observationId: "observation_profile_graph_legacy_invalid_confidence_backfill_existing",
           stableRefId: null,
           family: "employment.current",
@@ -12141,7 +12176,7 @@ test("normalizeProfileMemoryState fail-closes malformed retained fact confidence
         })
       ],
       claims: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+        createGraphClaimEnvelope({
           claimId: "claim_profile_graph_legacy_invalid_confidence_backfill_oldco",
           stableRefId: null,
           family: "employment.current",
@@ -12236,7 +12271,7 @@ test("normalizeProfileMemoryState compacts oversized graph mutation journals and
     graph: {
       updatedAt: "2026-04-03T21:00:00.000Z",
       observations: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+        createGraphObservationEnvelope({
           observationId: "observation_profile_graph_compaction_1",
           stableRefId: null,
           family: "contact.context",
@@ -12254,7 +12289,7 @@ test("normalizeProfileMemoryState compacts oversized graph mutation journals and
           timeSource: "user_stated",
           entityRefIds: []
         }),
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+        createGraphObservationEnvelope({
           observationId: "observation_profile_graph_compaction_2",
           stableRefId: null,
           family: "contact.context",
@@ -12272,7 +12307,7 @@ test("normalizeProfileMemoryState compacts oversized graph mutation journals and
           timeSource: "user_stated",
           entityRefIds: []
         }),
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+        createGraphObservationEnvelope({
           observationId: "observation_profile_graph_compaction_3",
           stableRefId: null,
           family: "contact.context",
@@ -12382,7 +12417,7 @@ test("normalizeProfileMemoryState compacts unreferenced observations after journ
     graph: {
       updatedAt: "2026-04-03T22:00:00.000Z",
       observations: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+        createGraphObservationEnvelope({
           observationId: "observation_profile_graph_compaction_1",
           stableRefId: null,
           family: "contact.context",
@@ -12398,7 +12433,7 @@ test("normalizeProfileMemoryState compacts unreferenced observations after journ
           timeSource: "user_stated",
           entityRefIds: []
         }),
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+        createGraphObservationEnvelope({
           observationId: "observation_profile_graph_compaction_2",
           stableRefId: null,
           family: "contact.context",
@@ -12414,7 +12449,7 @@ test("normalizeProfileMemoryState compacts unreferenced observations after journ
           timeSource: "user_stated",
           entityRefIds: []
         }),
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+        createGraphObservationEnvelope({
           observationId: "observation_profile_graph_compaction_3",
           stableRefId: null,
           family: "contact.context",
@@ -12525,7 +12560,7 @@ test("normalizeProfileMemoryState compacts redacted observations after journal r
     graph: {
       updatedAt: "2026-04-08T04:05:00.000Z",
       observations: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+        createGraphObservationEnvelope({
           observationId: "observation_profile_graph_redacted_observation_compaction_drop",
           stableRefId: null,
           family: "identity.preferred_name",
@@ -12543,7 +12578,7 @@ test("normalizeProfileMemoryState compacts redacted observations after journal r
           timeSource: "user_stated",
           entityRefIds: []
         }),
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+        createGraphObservationEnvelope({
           observationId: "observation_profile_graph_redacted_observation_compaction_keep",
           stableRefId: null,
           family: "contact.context",
@@ -12644,7 +12679,7 @@ test("normalizeProfileMemoryState does not let live claims or events pin redacte
     graph: {
       updatedAt: "2026-04-08T04:30:00.000Z",
       observations: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+        createGraphObservationEnvelope({
           observationId: "observation_profile_graph_redacted_lineage_claim_drop",
           stableRefId: null,
           family: "identity.preferred_name",
@@ -12662,7 +12697,7 @@ test("normalizeProfileMemoryState does not let live claims or events pin redacte
           timeSource: "user_stated",
           entityRefIds: []
         }),
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+        createGraphObservationEnvelope({
           observationId: "observation_profile_graph_redacted_lineage_claim_keep",
           stableRefId: null,
           family: "identity.preferred_name",
@@ -12680,7 +12715,7 @@ test("normalizeProfileMemoryState does not let live claims or events pin redacte
           timeSource: "user_stated",
           entityRefIds: []
         }),
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+        createGraphObservationEnvelope({
           observationId: "observation_profile_graph_redacted_lineage_event_drop",
           stableRefId: null,
           family: "contact.context",
@@ -12698,7 +12733,7 @@ test("normalizeProfileMemoryState does not let live claims or events pin redacte
           timeSource: "user_stated",
           entityRefIds: []
         }),
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+        createGraphObservationEnvelope({
           observationId: "observation_profile_graph_redacted_lineage_event_keep",
           stableRefId: null,
           family: "contact.context",
@@ -12718,7 +12753,7 @@ test("normalizeProfileMemoryState does not let live claims or events pin redacte
         })
       ],
       claims: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+        createGraphClaimEnvelope({
           claimId: "claim_profile_graph_redacted_lineage_keep",
           stableRefId: null,
           family: "identity.preferred_name",
@@ -12747,7 +12782,7 @@ test("normalizeProfileMemoryState does not let live claims or events pin redacte
         })
       ],
       events: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+        createGraphEventEnvelope({
           eventId: "event_profile_graph_redacted_lineage_keep",
           stableRefId: null,
           family: "episode.candidate",
@@ -12888,7 +12923,7 @@ test("normalizeProfileMemoryState does not let redacted claims pin stale observa
     graph: {
       updatedAt: "2026-04-03T22:05:00.000Z",
       observations: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+        createGraphObservationEnvelope({
           observationId: "observation_profile_graph_redacted_claim_retention_old",
           stableRefId: null,
           family: "identity.preferred_name",
@@ -12906,7 +12941,7 @@ test("normalizeProfileMemoryState does not let redacted claims pin stale observa
           timeSource: "user_stated",
           entityRefIds: []
         }),
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+        createGraphObservationEnvelope({
           observationId: "observation_profile_graph_redacted_claim_retention_new",
           stableRefId: null,
           family: "contact.context",
@@ -12926,7 +12961,7 @@ test("normalizeProfileMemoryState does not let redacted claims pin stale observa
         })
       ],
       claims: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+        createGraphClaimEnvelope({
           claimId: "claim_profile_graph_redacted_claim_retention_old",
           stableRefId: null,
           family: "identity.preferred_name",
@@ -13030,7 +13065,7 @@ test("normalizeProfileMemoryState preserves event-derived observations during ob
     graph: {
       updatedAt: "2026-04-03T22:10:00.000Z",
       observations: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+        createGraphObservationEnvelope({
           observationId: "observation_profile_graph_event_lineage_1",
           stableRefId: null,
           family: "contact.context",
@@ -13046,7 +13081,7 @@ test("normalizeProfileMemoryState preserves event-derived observations during ob
           timeSource: "user_stated",
           entityRefIds: ["entity_owen"]
         }),
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+        createGraphObservationEnvelope({
           observationId: "observation_profile_graph_event_lineage_2",
           stableRefId: null,
           family: "contact.context",
@@ -13062,7 +13097,7 @@ test("normalizeProfileMemoryState preserves event-derived observations during ob
           timeSource: "user_stated",
           entityRefIds: ["entity_jordan"]
         }),
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+        createGraphObservationEnvelope({
           observationId: "observation_profile_graph_event_lineage_3",
           stableRefId: null,
           family: "contact.context",
@@ -13081,7 +13116,7 @@ test("normalizeProfileMemoryState preserves event-derived observations during ob
       ],
       claims: [],
       events: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+        createGraphEventEnvelope({
           eventId: "event_profile_graph_event_lineage_1",
           stableRefId: null,
           family: "episode.candidate",
@@ -13201,7 +13236,7 @@ test("normalizeProfileMemoryState compacts inactive claims after journal retenti
       updatedAt: "2026-04-03T22:15:00.000Z",
       observations: [],
       claims: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+        createGraphClaimEnvelope({
           claimId: "claim_profile_graph_claim_compaction_1",
           stableRefId: null,
           family: "identity.preferred_name",
@@ -13223,7 +13258,7 @@ test("normalizeProfileMemoryState compacts inactive claims after journal retenti
           entityRefIds: [],
           active: false
         }),
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+        createGraphClaimEnvelope({
           claimId: "claim_profile_graph_claim_compaction_2",
           stableRefId: null,
           family: "identity.preferred_name",
@@ -13245,7 +13280,7 @@ test("normalizeProfileMemoryState compacts inactive claims after journal retenti
           entityRefIds: [],
           active: false
         }),
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+        createGraphClaimEnvelope({
           claimId: "claim_profile_graph_claim_compaction_3",
           stableRefId: null,
           family: "identity.preferred_name",
@@ -13371,7 +13406,7 @@ test("normalizeProfileMemoryState compacts redacted claims after journal retenti
       updatedAt: "2026-04-08T03:15:00.000Z",
       observations: [],
       claims: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+        createGraphClaimEnvelope({
           claimId: "claim_profile_graph_redacted_claim_compaction_drop",
           stableRefId: null,
           family: "identity.preferred_name",
@@ -13395,7 +13430,7 @@ test("normalizeProfileMemoryState compacts redacted claims after journal retenti
           entityRefIds: [],
           active: false
         }),
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+        createGraphClaimEnvelope({
           claimId: "claim_profile_graph_redacted_claim_compaction_keep",
           stableRefId: null,
           family: "identity.preferred_name",
@@ -13481,7 +13516,7 @@ test("normalizeProfileMemoryState does not let source-tier-invalid retained clai
     graph: {
       updatedAt: "2026-04-06T02:20:00.000Z",
       observations: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+        createGraphObservationEnvelope({
           observationId: "observation_profile_graph_invalid_source_retention_old",
           stableRefId: null,
           family: "identity.preferred_name",
@@ -13499,7 +13534,7 @@ test("normalizeProfileMemoryState does not let source-tier-invalid retained clai
           timeSource: "inferred",
           entityRefIds: []
         }),
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+        createGraphObservationEnvelope({
           observationId: "observation_profile_graph_invalid_source_retention_new",
           stableRefId: null,
           family: "identity.preferred_name",
@@ -13519,7 +13554,7 @@ test("normalizeProfileMemoryState does not let source-tier-invalid retained clai
         })
       ],
       claims: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+        createGraphClaimEnvelope({
           claimId: "claim_profile_graph_invalid_source_retention_old",
           stableRefId: null,
           family: "identity.preferred_name",
@@ -13543,7 +13578,7 @@ test("normalizeProfileMemoryState does not let source-tier-invalid retained clai
           entityRefIds: [],
           active: true
         }),
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+        createGraphClaimEnvelope({
           claimId: "claim_profile_graph_invalid_source_retention_new",
           stableRefId: null,
           family: "identity.preferred_name",
@@ -13667,7 +13702,7 @@ test("normalizeProfileMemoryState compacts terminal events after journal retenti
       observations: [],
       claims: [],
       events: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+        createGraphEventEnvelope({
           eventId: "event_profile_graph_compaction_1",
           stableRefId: null,
           family: "episode.candidate",
@@ -13689,7 +13724,7 @@ test("normalizeProfileMemoryState compacts terminal events after journal retenti
           projectionSourceIds: ["episode_profile_graph_compaction_1"],
           entityRefIds: ["entity_owen"]
         }),
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+        createGraphEventEnvelope({
           eventId: "event_profile_graph_compaction_2",
           stableRefId: null,
           family: "episode.candidate",
@@ -13711,7 +13746,7 @@ test("normalizeProfileMemoryState compacts terminal events after journal retenti
           projectionSourceIds: ["episode_profile_graph_compaction_2"],
           entityRefIds: ["entity_jordan"]
         }),
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+        createGraphEventEnvelope({
           eventId: "event_profile_graph_compaction_3",
           stableRefId: null,
           family: "episode.candidate",
@@ -13828,7 +13863,7 @@ test("normalizeProfileMemoryState compacts redacted events after journal retenti
       observations: [],
       claims: [],
       events: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+        createGraphEventEnvelope({
           eventId: "event_profile_graph_redacted_event_compaction_drop",
           stableRefId: null,
           family: "episode.candidate",
@@ -13850,7 +13885,7 @@ test("normalizeProfileMemoryState compacts redacted events after journal retenti
           projectionSourceIds: ["episode_profile_graph_redacted_event_compaction_drop"],
           entityRefIds: []
         }),
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+        createGraphEventEnvelope({
           eventId: "event_profile_graph_redacted_event_compaction_keep",
           stableRefId: null,
           family: "episode.candidate",
@@ -13955,7 +13990,7 @@ test("normalizeProfileMemoryState does not let orphaned retained active events m
     graph: {
       updatedAt: "2026-04-07T02:20:00.000Z",
       observations: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+        createGraphObservationEnvelope({
           observationId: "observation_profile_graph_event_surface_orphaned",
           stableRefId: null,
           family: "contact.context",
@@ -13973,7 +14008,7 @@ test("normalizeProfileMemoryState does not let orphaned retained active events m
           timeSource: "user_stated",
           entityRefIds: ["entity_owen"]
         }),
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+        createGraphObservationEnvelope({
           observationId: "observation_profile_graph_event_surface_valid",
           stableRefId: null,
           family: "contact.context",
@@ -13994,7 +14029,7 @@ test("normalizeProfileMemoryState does not let orphaned retained active events m
       ],
       claims: [],
       events: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+        createGraphEventEnvelope({
           eventId: "event_profile_graph_event_surface_orphaned",
           stableRefId: null,
           family: "episode.candidate",
@@ -14016,7 +14051,7 @@ test("normalizeProfileMemoryState does not let orphaned retained active events m
           projectionSourceIds: ["episode_profile_graph_event_surface_missing"],
           entityRefIds: ["entity_owen"]
           }),
-          createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+          createGraphEventEnvelope({
             eventId: validEventId,
             stableRefId: null,
           family: "episode.candidate",
@@ -14069,7 +14104,7 @@ test("normalizeProfileMemoryState does not let orphaned retained active events m
     [validEventId]
   );
   assert.equal(
-    normalized.graph.mutationJournal.entries[0]?.sourceFingerprint.startsWith(
+    normalized.graph.mutationJournal.entries[0]?.sourceFingerprint?.startsWith(
       "graph_event_replay_backfill_"
     ),
     true
@@ -14079,7 +14114,7 @@ test("normalizeProfileMemoryState does not let orphaned retained active events m
     ["observation_profile_graph_event_surface_valid"]
   );
   assert.equal(
-    normalized.graph.mutationJournal.entries[1]?.sourceFingerprint.startsWith(
+    normalized.graph.mutationJournal.entries[1]?.sourceFingerprint?.startsWith(
       "graph_observation_replay_backfill_"
     ),
     true
@@ -14106,7 +14141,7 @@ test("normalizeProfileMemoryState does not let source-tier-invalid retained acti
     graph: {
       updatedAt: "2026-04-07T03:20:00.000Z",
       observations: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+        createGraphObservationEnvelope({
           observationId: "observation_profile_graph_event_source_tier_invalid",
           stableRefId: null,
           family: "contact.context",
@@ -14124,7 +14159,7 @@ test("normalizeProfileMemoryState does not let source-tier-invalid retained acti
           timeSource: "asserted_at",
           entityRefIds: ["entity_owen"]
         }),
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
+        createGraphObservationEnvelope({
           observationId: "observation_profile_graph_event_source_tier_valid",
           stableRefId: null,
           family: "contact.context",
@@ -14145,7 +14180,7 @@ test("normalizeProfileMemoryState does not let source-tier-invalid retained acti
       ],
       claims: [],
       events: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+        createGraphEventEnvelope({
           eventId: "event_profile_graph_event_source_tier_invalid",
           stableRefId: null,
           family: "episode.candidate",
@@ -14167,7 +14202,7 @@ test("normalizeProfileMemoryState does not let source-tier-invalid retained acti
           projectionSourceIds: [],
           entityRefIds: ["entity_owen"]
         }),
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
+        createGraphEventEnvelope({
           eventId: "event_profile_graph_event_source_tier_valid",
           stableRefId: null,
           family: "episode.candidate",
@@ -14220,7 +14255,7 @@ test("normalizeProfileMemoryState does not let source-tier-invalid retained acti
     ["event_profile_graph_event_source_tier_valid"]
   );
   assert.equal(
-    normalized.graph.mutationJournal.entries[0]?.sourceFingerprint.startsWith(
+    normalized.graph.mutationJournal.entries[0]?.sourceFingerprint?.startsWith(
       "graph_event_replay_backfill_"
     ),
     true
@@ -14230,7 +14265,7 @@ test("normalizeProfileMemoryState does not let source-tier-invalid retained acti
     ["observation_profile_graph_event_source_tier_valid"]
   );
   assert.equal(
-    normalized.graph.mutationJournal.entries[1]?.sourceFingerprint.startsWith(
+    normalized.graph.mutationJournal.entries[1]?.sourceFingerprint?.startsWith(
       "graph_observation_replay_backfill_"
     ),
     true
@@ -14703,7 +14738,7 @@ test("normalizeProfileMemoryState suppresses preserve-prior graph current claims
       updatedAt: "2026-04-05T00:39:00.000Z",
       observations: [],
       claims: [
-        createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+        createGraphClaimEnvelope({
           claimId: "claim_profile_state_preserve_no_winner_stale",
           stableRefId: null,
           family: "employment.current",
@@ -15262,9 +15297,9 @@ test("normalizeProfileMemoryState dedupes and caps retained ingest receipts afte
     normalized.ingestReceipts.some((receipt) => receipt.turnId === "turn_profile_state_receipt_cap_0"),
     false
   );
-  assert.equal(normalized.ingestReceipts.at(-1)?.receiptKey, duplicateReceiptKey);
+  assert.equal(lastItem(normalized.ingestReceipts)?.receiptKey, duplicateReceiptKey);
   assert.equal(
-    normalized.ingestReceipts.at(-1)?.sourceTaskId,
+    lastItem(normalized.ingestReceipts)?.sourceTaskId,
     "task_profile_state_receipt_cap_duplicate_latest"
   );
   assert.equal(

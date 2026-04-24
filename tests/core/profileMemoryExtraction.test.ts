@@ -2398,7 +2398,7 @@ test("named-contact narrative keeps used-to-work-with-me association historical"
 
 test("third-person contact continuity extraction keeps current organization, historical organization, and resolved vehicle context bounded", () => {
   const extractedCandidates = extractProfileFactCandidatesFromUserInput(
-    "Billy used to be at Flare. He's at Northstar now. He drives a gray Accord.",
+    "Billy used to be at Beacon. He's at Northstar now. He drives a gray Accord.",
     "task_profile_governed_third_person_contact_continuity_extract",
     "2026-04-09T12:00:00.000Z"
   );
@@ -2421,7 +2421,7 @@ test("third-person contact continuity extraction keeps current organization, his
     extractedCandidates.some(
       (candidate) =>
         candidate.key === "contact.billy.work_association" &&
-        candidate.value === "Flare" &&
+        candidate.value === "Beacon" &&
         candidate.source === "user_input_pattern.work_association_historical"
     ),
     true
@@ -2456,7 +2456,7 @@ test("third-person contact continuity extraction keeps current organization, his
     governanceResult.allowedSupportOnlyFactCandidates.some(
       (candidate) =>
         candidate.key === "contact.billy.work_association" &&
-        candidate.value === "Flare"
+        candidate.value === "Beacon"
     ),
     true
   );
@@ -2465,6 +2465,170 @@ test("third-person contact continuity extraction keeps current organization, his
       (candidate) =>
         /^contact\.billy\.context\.[a-f0-9]{8}$/.test(candidate.key) &&
         candidate.value === "Billy drives a gray Accord"
+    ),
+    true
+  );
+});
+
+test("long-form third-person relationship updates keep realistic clause-heavy work history bounded", () => {
+  const userInput = [
+    "Billy used to work at Sample Web Studio as a front-end contractor, but by late February he had started interviewing elsewhere.",
+    "Billy is no longer at Sample Web Studio.",
+    "Billy has already started at Crimson Analytics, and Garrett still owns Harbor Signal Studio.",
+    "Garrett prefers short direct updates.",
+    "Billy is still in Ferndale for now, and Garrett is still splitting time between Detroit and Ann Arbor."
+  ].join(" ");
+  const extractedCandidates = extractProfileFactCandidatesFromUserInput(
+    userInput,
+    "task_profile_governed_longform_contact_continuity_extract",
+    "2026-04-12T18:00:00.000Z"
+  );
+  const governanceResult = governProfileMemoryCandidates({
+    factCandidates: extractedCandidates,
+    episodeCandidates: [],
+    episodeResolutionCandidates: []
+  });
+
+  assert.equal(hasConversationalProfileUpdateSignal(userInput), true);
+  assert.equal(
+    extractedCandidates.some(
+      (candidate) =>
+        candidate.key === "contact.billy.work_association" &&
+        candidate.value === "Sample Web Studio" &&
+        candidate.source === "user_input_pattern.work_association_historical"
+    ),
+    true
+  );
+  assert.equal(
+    extractedCandidates.some(
+      (candidate) =>
+        candidate.key === "contact.billy.work_association" &&
+        candidate.value === "Crimson Analytics" &&
+        candidate.source === "user_input_pattern.work_association"
+    ),
+    true
+  );
+  assert.equal(
+    extractedCandidates.some(
+      (candidate) =>
+        candidate.key === "contact.garrett.organization_association" &&
+        candidate.value === "Harbor Signal Studio" &&
+        candidate.source === "user_input_pattern.organization_association"
+    ),
+    true
+  );
+  assert.equal(
+    extractedCandidates.some(
+      (candidate) =>
+        candidate.key === "contact.billy.location_association" &&
+        candidate.value === "Ferndale" &&
+        candidate.source === "user_input_pattern.location_association"
+    ),
+    true
+  );
+  assert.equal(
+    extractedCandidates.some(
+      (candidate) =>
+        candidate.key === "contact.garrett.primary_location_association" &&
+        candidate.value === "Detroit" &&
+        candidate.source === "user_input_pattern.location_association"
+    ),
+    true
+  );
+  assert.equal(
+    extractedCandidates.some(
+      (candidate) =>
+        candidate.key === "contact.garrett.secondary_location_association" &&
+        candidate.value === "Ann Arbor" &&
+        candidate.source === "user_input_pattern.location_association"
+    ),
+    true
+  );
+  assert.equal(
+    extractedCandidates.some(
+      (candidate) =>
+        /^contact\.garrett\.context\.[a-f0-9]{8}$/.test(candidate.key) &&
+        candidate.value === "Garrett still owns Harbor Signal Studio"
+    ),
+    true
+  );
+  assert.equal(
+    extractedCandidates.some(
+      (candidate) =>
+        /^contact\.garrett\.context\.[a-f0-9]{8}$/.test(candidate.key) &&
+        candidate.value === "Garrett prefers short direct updates"
+    ),
+    true
+  );
+  assert.equal(
+    extractedCandidates.some(
+      (candidate) =>
+        /^contact\.billy\.context\.[a-f0-9]{8}$/.test(candidate.key) &&
+        candidate.value === "Billy is still in Ferndale for now"
+    ),
+    true
+  );
+  assert.equal(
+    extractedCandidates.some(
+      (candidate) =>
+        /^contact\.garrett\.context\.[a-f0-9]{8}$/.test(candidate.key) &&
+        candidate.value === "Garrett is still splitting time between Detroit and Ann Arbor"
+    ),
+    true
+  );
+  assert.equal(
+    governanceResult.allowedCurrentStateFactCandidates.some(
+      (candidate) =>
+        candidate.key === "contact.billy.work_association" &&
+        candidate.value === "Crimson Analytics"
+    ),
+    true
+  );
+  assert.equal(
+    governanceResult.allowedCurrentStateFactCandidates.some(
+      (candidate) =>
+        candidate.key === "contact.garrett.organization_association" &&
+        candidate.value === "Harbor Signal Studio"
+    ),
+    true
+  );
+  assert.equal(
+    governanceResult.allowedCurrentStateFactCandidates.some(
+      (candidate) =>
+        candidate.key === "contact.billy.location_association" &&
+        candidate.value === "Ferndale"
+    ),
+    true
+  );
+  assert.equal(
+    governanceResult.allowedCurrentStateFactCandidates.some(
+      (candidate) =>
+        candidate.key === "contact.garrett.primary_location_association" &&
+        candidate.value === "Detroit"
+    ),
+    true
+  );
+  assert.equal(
+    governanceResult.allowedCurrentStateFactCandidates.some(
+      (candidate) =>
+        candidate.key === "contact.garrett.secondary_location_association" &&
+        candidate.value === "Ann Arbor"
+    ),
+    true
+  );
+  assert.equal(
+    governanceResult.allowedSupportOnlyFactCandidates.some(
+      (candidate) =>
+        candidate.key === "contact.billy.work_association" &&
+        candidate.value === "Sample Web Studio"
+    ),
+    true
+  );
+  assert.equal(
+    governanceResult.allowedSupportOnlyFactCandidates.some(
+      (candidate) =>
+        /^contact\.billy\.context\.[a-f0-9]{8}$/.test(candidate.key) &&
+        candidate.value === "Billy is still in Ferndale for now"
     ),
     true
   );

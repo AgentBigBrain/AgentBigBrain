@@ -13,14 +13,16 @@ import {
 import {
   buildDisplayNameContactToken,
   buildQualifiedContactToken,
-  extractContactContextFacts,
   extractContextInferredContactTokens,
-  extractThirdPersonContactAssociationAndContextFacts,
-  matchWorkWithMeAssociationPrefix,
   sanitizeCapturedContactDisplayName,
   toSentenceConfidence,
   trimAssociationValue
 } from "./profileMemoryContactExtractionSupport";
+import {
+  extractContactContextFacts,
+  extractThirdPersonContactAssociationAndContextFacts,
+  matchWorkWithMeAssociationPrefix
+} from "./profileMemoryContactContinuitySupport";
 
 const DIRECT_RELATIONSHIP_DESCRIPTORS = new Set([
   "friend",

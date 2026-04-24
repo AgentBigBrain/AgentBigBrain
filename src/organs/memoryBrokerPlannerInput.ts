@@ -44,7 +44,6 @@ import type {
   DomainBoundaryAssessment,
   MemoryBrokerBuildInputOptions,
   MemoryBrokerInputResult,
-  MemoryBrokerOptions,
   ProbingSignalSnapshot
 } from "./memoryContext/contracts";
 import {

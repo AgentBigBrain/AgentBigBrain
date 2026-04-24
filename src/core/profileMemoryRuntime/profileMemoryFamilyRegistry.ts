@@ -5,11 +5,8 @@ import {
   withAdjacentDomainOverrides
 } from "./profileMemoryFamilyRegistrySupport";
 import { isSensitiveKey } from "./profileMemoryNormalization";
-
 export { PROFILE_MEMORY_CONTACT_COMPATIBILITY_PROJECTION_TABLE } from "./profileMemoryFamilyRegistrySupport";
-
 export const PROFILE_MEMORY_FAMILY_REGISTRY_VERSION = 1 as const;
-
 export const PROFILE_MEMORY_FAMILY_REGISTRY: Readonly<
   Record<ProfileMemoryGovernanceFamily, ProfileMemoryFamilyRegistryEntry>
 > = {
@@ -137,6 +134,40 @@ export const PROFILE_MEMORY_FAMILY_REGISTRY: Readonly<
     compatibilityProjection: PROFILE_MEMORY_CONTACT_COMPATIBILITY_PROJECTION_TABLE["contact.work_association"],
     adjacentDomainPolicy: withAdjacentDomainOverrides({})
   },
+  "contact.organization_association": {
+    family: "contact.organization_association",
+    cardinality: "singular",
+    currentStateEligible: true,
+    currentStateAdmissionPolicy: "explicit_live_source_only",
+    episodeSupportEligible: false,
+    endStatePolicy: "none",
+    displacementPolicy: "preserve_prior_on_conflict",
+    supportOnlyLegacyBehavior: "disallowed",
+    corroborationMode: "not_required",
+    answerModeFallback: "report_ambiguous_contested",
+    minimumSensitivityFloor: "inherit",
+    inventoryPolicy: "single_current_winner",
+    sourceAuthorityMode: "exact_source_only",
+    compatibilityProjection: PROFILE_MEMORY_CONTACT_COMPATIBILITY_PROJECTION_TABLE["contact.organization_association"],
+    adjacentDomainPolicy: withAdjacentDomainOverrides({})
+  },
+  "contact.location_association": {
+    family: "contact.location_association",
+    cardinality: "multi",
+    currentStateEligible: true,
+    currentStateAdmissionPolicy: "explicit_live_source_only",
+    episodeSupportEligible: false,
+    endStatePolicy: "none",
+    displacementPolicy: "append_multi_value",
+    supportOnlyLegacyBehavior: "disallowed",
+    corroborationMode: "not_required",
+    answerModeFallback: "report_ambiguous_contested",
+    minimumSensitivityFloor: "force_sensitive",
+    inventoryPolicy: "bounded_multi_value",
+    sourceAuthorityMode: "exact_source_only",
+    compatibilityProjection: PROFILE_MEMORY_CONTACT_COMPATIBILITY_PROJECTION_TABLE["contact.location_association"],
+    adjacentDomainPolicy: withAdjacentDomainOverrides({})
+  },
   "contact.school_association": {
     family: "contact.school_association",
     cardinality: "singular",
@@ -245,20 +276,42 @@ export const PROFILE_MEMORY_FAMILY_REGISTRY: Readonly<
   }
 } as const;
 
-/** Returns the code-owned registry entry for one canonical profile-memory governance family. */
+/**
+ * Gets profile memory family registry entry.
+ *
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses `ProfileMemoryFamilyRegistryEntry` (import `ProfileMemoryFamilyRegistryEntry`) from `./profileMemoryTruthGovernanceContracts`.
+ * - Uses `ProfileMemoryGovernanceFamily` (import `ProfileMemoryGovernanceFamily`) from `./profileMemoryTruthGovernanceContracts`.
+ * @param family - Input consumed by this helper.
+ * @returns Result produced by this helper.
+ */
 export function getProfileMemoryFamilyRegistryEntry(
   family: ProfileMemoryGovernanceFamily
 ): ProfileMemoryFamilyRegistryEntry {
   return PROFILE_MEMORY_FAMILY_REGISTRY[family];
 }
 
-/** Infers one adjacent runtime domain from the bounded governed source/evidence pair. */
+/**
+ * Infers profile memory adjacent domain.
+ *
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses `ProfileMemoryAdjacentDomain` (import `ProfileMemoryAdjacentDomain`) from `./profileMemoryTruthGovernanceContracts`.
+ * - Uses `ProfileMemoryEvidenceClass` (import `ProfileMemoryEvidenceClass`) from `./profileMemoryTruthGovernanceContracts`.
+ * @param source - Input consumed by this helper.
+ * @param evidenceClass - Input consumed by this helper.
+ * @returns Result produced by this helper.
+ */
 export function inferProfileMemoryAdjacentDomain(
   source: string,
   evidenceClass: ProfileMemoryEvidenceClass
 ): ProfileMemoryAdjacentDomain | null {
   const normalizedSource = source.trim().toLowerCase();
-
   if (normalizedSource.startsWith("conversation.")) {
     return "structured_conversation";
   }
@@ -293,7 +346,17 @@ export function inferProfileMemoryAdjacentDomain(
   return null;
 }
 
-/** Fails closed when one governance decision violates the code-owned family registry. */
+/**
+ * Asserts profile memory governance decision allowed.
+ *
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses `ProfileMemoryGovernanceDecision` (import `ProfileMemoryGovernanceDecision`) from `./profileMemoryTruthGovernanceContracts`.
+ * @param decision - Input consumed by this helper.
+ * @returns Result produced by this helper.
+ */
 export function assertProfileMemoryGovernanceDecisionAllowed(
   decision: ProfileMemoryGovernanceDecision
 ): void {
@@ -364,7 +427,18 @@ export function assertProfileMemoryGovernanceDecisionAllowed(
   }
 }
 
-/** Fails closed when one adjacent runtime domain attempts an unauthorized governance action. */
+/**
+ * Asserts profile memory adjacent domain access allowed.
+ *
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses `ProfileMemoryGovernanceDecision` (import `ProfileMemoryGovernanceDecision`) from `./profileMemoryTruthGovernanceContracts`.
+ * @param source - Input consumed by this helper.
+ * @param decision - Input consumed by this helper.
+ * @returns Result produced by this helper.
+ */
 export function assertProfileMemoryAdjacentDomainAccessAllowed(
   source: string,
   decision: ProfileMemoryGovernanceDecision
@@ -372,7 +446,6 @@ export function assertProfileMemoryAdjacentDomainAccessAllowed(
   if (decision.action === "quarantine") {
     return;
   }
-
   const adjacentDomain = inferProfileMemoryAdjacentDomain(
     source,
     decision.evidenceClass
@@ -380,10 +453,8 @@ export function assertProfileMemoryAdjacentDomainAccessAllowed(
   if (!adjacentDomain) {
     return;
   }
-
   const familyEntry = getProfileMemoryFamilyRegistryEntry(decision.family);
   const access = familyEntry.adjacentDomainPolicy[adjacentDomain];
-
   if (decision.action === "support_only_legacy") {
     if (access === "truth_authoritative" || access === "support_only") {
       return;
@@ -392,7 +463,6 @@ export function assertProfileMemoryAdjacentDomainAccessAllowed(
       `Family ${decision.family} does not allow ${adjacentDomain} to create support-only legacy evidence in the profile-memory family registry.`
     );
   }
-
   if (access !== "truth_authoritative") {
     throw new Error(
       `Family ${decision.family} does not allow ${adjacentDomain} to create authoritative truth decisions in the profile-memory family registry.`
@@ -400,14 +470,38 @@ export function assertProfileMemoryAdjacentDomainAccessAllowed(
   }
 }
 
-/** Returns the effective minimum sensitivity floor for one canonical profile-memory family. */
+/**
+ * Gets profile memory minimum sensitivity floor.
+ *
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses `ProfileMemoryGovernanceFamily` (import `ProfileMemoryGovernanceFamily`) from `./profileMemoryTruthGovernanceContracts`.
+ * - Uses `ProfileMemoryMinimumSensitivityFloor` (import `ProfileMemoryMinimumSensitivityFloor`) from `./profileMemoryTruthGovernanceContracts`.
+ * @param family - Input consumed by this helper.
+ * @returns Result produced by this helper.
+ */
 export function getProfileMemoryMinimumSensitivityFloor(
   family: ProfileMemoryGovernanceFamily
 ): ProfileMemoryMinimumSensitivityFloor {
   return getProfileMemoryFamilyRegistryEntry(family).minimumSensitivityFloor;
 }
 
-/** Applies the family-owned minimum sensitivity floor to one fact-like candidate or projection. */
+/**
+ * Applies profile memory minimum sensitivity floor.
+ *
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses `isSensitiveKey` (import `isSensitiveKey`) from `./profileMemoryNormalization`.
+ * - Uses `ProfileMemoryGovernanceFamily` (import `ProfileMemoryGovernanceFamily`) from `./profileMemoryTruthGovernanceContracts`.
+ * @param family - Input consumed by this helper.
+ * @param sensitive - Input consumed by this helper.
+ * @param key - Input consumed by this helper.
+ * @returns Result produced by this helper.
+ */
 export function applyProfileMemoryMinimumSensitivityFloor(
   family: ProfileMemoryGovernanceFamily,
   sensitive: boolean,

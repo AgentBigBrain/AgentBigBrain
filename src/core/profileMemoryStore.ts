@@ -3,6 +3,7 @@
  */
 
 import { sha256HexFromCanonicalJson } from "./normalizers/canonicalizationRules";
+import { buildProjectionChangeSet } from "./projections/service";
 import {
   type ProfileFactUpsertInput,
   DEFAULT_PROFILE_STALE_AFTER_DAYS,
@@ -81,7 +82,6 @@ import {
   type ProfileAccessRequest,
   type ProfileFactReviewMutationRequest,
   type ProfileFactReviewMutationResult,
-  type ProfileFactReviewRequest,
   type ProfileFactReviewResult,
   type ProfileEpisodeReviewMutationResult,
   type ProfileIngestResult,
@@ -94,7 +94,10 @@ import {
 import {
   type ProfileEpisodeContinuityQueryRequest
 } from "./profileMemoryRuntime/profileMemoryEpisodeQueries";
-import type { ProfileFactContinuityQueryRequest } from "./profileMemoryRuntime/profileMemoryQueryContracts";
+import type {
+  ProfileFactContinuityQueryRequest,
+  ProfileFactContinuityResult
+} from "./profileMemoryRuntime/profileMemoryQueryContracts";
 import { readProfileFacts } from "./profileMemoryRuntime/profileMemoryQueries";
 import { consolidateProfileEpisodes } from "./profileMemoryRuntime/profileMemoryEpisodeConsolidation";
 import type { ProfileEpisodeResolutionStatus } from "./profileMemoryRuntime/profileMemoryEpisodeContracts";
@@ -110,6 +113,7 @@ import {
   type ProfileMemoryGraphAlignedStableRefGroup
 } from "./profileMemoryRuntime/profileMemoryGraphAlignmentSupport";
 import {
+  queryProfileMemoryGraphCurrentSurfaceClaims,
   queryProfileMemoryGraphResolvedCurrentClaims,
   queryProfileMemoryGraphStableRefGroups,
   type ProfileMemoryGraphStableRefGroup
@@ -147,7 +151,19 @@ export interface ProfileMemoryIngestOptions {
   requestTelemetry?: ProfileMemoryRequestTelemetry;
 }
 
+interface ProfileMemoryStoreOptions {
+  onChange?: (changeSet: import("./projections/contracts").ProjectionChangeSet) => Promise<void> | void;
+  onCurrentSurfaceGraphClaimsChanged?: (
+    claims: readonly ProfileMemoryGraphClaimRecord[],
+    updatedAt: string
+  ) => Promise<void> | void;
+}
+
 export class ProfileMemoryStore {
+  private readonly onChange?: ProfileMemoryStoreOptions["onChange"];
+  private readonly onCurrentSurfaceGraphClaimsChanged?:
+    ProfileMemoryStoreOptions["onCurrentSurfaceGraphClaimsChanged"];
+
   /**
    * Creates the encrypted profile-memory persistence service.
    *
@@ -161,9 +177,12 @@ export class ProfileMemoryStore {
   constructor(
     private readonly filePath: string,
     private readonly encryptionKey: Buffer,
-    private readonly staleAfterDays: number = DEFAULT_PROFILE_STALE_AFTER_DAYS
+    private readonly staleAfterDays: number = DEFAULT_PROFILE_STALE_AFTER_DAYS,
+    options: ProfileMemoryStoreOptions = {}
   ) {
     assertProfileMemoryKeyLength(encryptionKey);
+    this.onChange = options.onChange;
+    this.onCurrentSurfaceGraphClaimsChanged = options.onCurrentSurfaceGraphClaimsChanged;
   }
 
   /**
@@ -225,7 +244,10 @@ export class ProfileMemoryStore {
    * @param env - Environment source (defaults to process env).
    * @returns Configured store instance, or `undefined` when profile memory is disabled.
    */
-  static fromEnv(env: NodeJS.ProcessEnv = process.env): ProfileMemoryStore | undefined {
+  static fromEnv(
+    env: NodeJS.ProcessEnv = process.env,
+    options: ProfileMemoryStoreOptions = {}
+  ): ProfileMemoryStore | undefined {
     const persistenceConfig = createProfileMemoryPersistenceConfigFromEnv(env);
     if (!persistenceConfig) {
       return undefined;
@@ -234,7 +256,8 @@ export class ProfileMemoryStore {
     return new ProfileMemoryStore(
       persistenceConfig.filePath,
       persistenceConfig.encryptionKey,
-      persistenceConfig.staleAfterDays
+      persistenceConfig.staleAfterDays,
+      options
     );
   }
 
@@ -799,7 +822,7 @@ export class ProfileMemoryStore {
     graph: EntityGraphV1,
     stack: ConversationStackV1,
     request: ProfileFactContinuityQueryRequest
-  ): Promise<readonly ProfileReadableFact[]> {
+  ): Promise<ProfileFactContinuityResult> {
     return (await this.openReadSession()).queryFactsForContinuity(graph, stack, request);
   }
 
@@ -1043,6 +1066,24 @@ export class ProfileMemoryStore {
   }
 
   /**
+   * Returns current-surface-eligible graph claims, including provisional contact truth.
+   *
+   * **Why it exists:**
+   * Projection and continuity surfaces need the broader current-surface lane so operators can see
+   * current person/org/place relationships before stable-ref resolution fully graduates them into
+   * the narrower resolved-current slice.
+   *
+   * **What it talks to:**
+   * - Uses `queryProfileMemoryGraphCurrentSurfaceClaims` from
+   *   `./profileMemoryRuntime/profileMemoryGraphQueries`.
+   *
+   * @returns Current-surface graph claim records.
+   */
+  async queryCurrentSurfaceGraphClaims(): Promise<readonly ProfileMemoryGraphClaimRecord[]> {
+    return queryProfileMemoryGraphCurrentSurfaceClaims((await this.load()).graph);
+  }
+
+  /**
    * Rekeys one explicit personal-memory stable-ref lane without invoking Stage 6.86 merge logic.
    *
    * **Why it exists:**
@@ -1137,6 +1178,51 @@ export class ProfileMemoryStore {
    */
   private async save(state: ProfileMemoryState): Promise<void> {
     await saveProfileMemoryState(this.filePath, this.encryptionKey, state);
+    await this.notifyProjectionChange(state.updatedAt);
+    await this.notifyCurrentSurfaceGraphClaimsChange(state.graph, state.updatedAt);
+  }
+
+  /**
+   * Emits one normalized projection change after a profile-memory write.
+   *
+   * **Why it exists:**
+   * Profile memory has several mutation entrypoints, and centralizing the projection callback in
+   * the shared save path avoids missing writes from ingest, correction, forget, or episode updates.
+   *
+   * **What it talks to:**
+   * - Uses `buildProjectionChangeSet(...)` from `./projections/service`.
+   *
+   * @param updatedAt - Timestamp from the persisted profile-memory state.
+   * @returns Promise resolving after the optional projection callback completes.
+   */
+  private async notifyProjectionChange(updatedAt: string): Promise<void> {
+    if (!this.onChange) {
+      return;
+    }
+    await this.onChange(buildProjectionChangeSet(
+      ["profile_memory_changed"],
+      ["profile_memory:save"],
+      {
+        updatedAt
+      }
+    ));
+  }
+
+  /**
+   * Emits current-surface graph claims after a canonical save so continuity can mirror canonical
+   * profile memory without reading stale snapshots from disk.
+   */
+  private async notifyCurrentSurfaceGraphClaimsChange(
+    graph: ProfileMemoryState["graph"],
+    updatedAt: string
+  ): Promise<void> {
+    if (!this.onCurrentSurfaceGraphClaimsChanged) {
+      return;
+    }
+    await this.onCurrentSurfaceGraphClaimsChanged(
+      queryProfileMemoryGraphCurrentSurfaceClaims(graph),
+      updatedAt
+    );
   }
 
   /**

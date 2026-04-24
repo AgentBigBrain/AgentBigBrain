@@ -22,10 +22,8 @@ import {
 } from "./profileMemoryExtractionSupport";
 import { shouldSkipGenericMyFactForNamedContact } from "./profileMemoryGenericFactSuppression";
 import {
-  buildValidatedProfileFactCandidates,
   looksLikeCommandStylePreferredName,
-  trimPreferredNameValue,
-  validatePreferredNameCandidateValue
+  trimPreferredNameValue
 } from "./profileMemoryPreferredNameValidation";
 import { extractHistoricalProfileFactCandidates } from "./profileMemoryHistoricalExtraction";
 import { extractSeveredNamedContactFacts } from "./profileMemoryContactEndStateExtraction";

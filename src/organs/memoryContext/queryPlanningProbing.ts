@@ -9,7 +9,7 @@ import type {
   ProbingRegistrationResult,
   ProbingSignalSnapshot
 } from "./contracts";
-import { extractActiveRequestSegment } from "../../core/currentRequestExtraction";
+import { extractSemanticRequestSegment } from "../../core/currentRequestExtraction";
 
 const CURRENT_USER_REQUEST_MARKER = "Current user request:";
 const STRUCTURED_PROMPT_SCAFFOLD_HINTS = [
@@ -135,7 +135,7 @@ export function extractCurrentUserRequest(userInput: string): string {
   }
   const markerIndex = normalized.toLowerCase().lastIndexOf(CURRENT_USER_REQUEST_MARKER.toLowerCase());
   if (markerIndex < 0) {
-    const extractedActiveRequest = extractActiveRequestSegment(normalized);
+    const extractedActiveRequest = extractSemanticRequestSegment(normalized);
     if (extractedActiveRequest !== normalized) {
       return extractedActiveRequest;
     }
@@ -146,7 +146,7 @@ export function extractCurrentUserRequest(userInput: string): string {
     return normalized;
   }
 
-  return extractActiveRequestSegment(normalized) || normalized;
+  return extractSemanticRequestSegment(normalized) || normalized;
 }
 
 /**

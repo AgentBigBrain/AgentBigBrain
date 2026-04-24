@@ -27,6 +27,11 @@ export const ALLOWED_EXPLICIT_CURRENT_CONTACT_WORK_ASSOCIATION_SOURCES = new Set
   "user_input_pattern.work_association"
 ]);
 
+export const ALLOWED_EXPLICIT_CURRENT_CONTACT_GENERIC_ASSOCIATION_SOURCES = new Set([
+  "user_input_pattern.organization_association",
+  "user_input_pattern.location_association"
+]);
+
 export const ALLOWED_EXPLICIT_CONTACT_CONTEXT_SOURCES = new Set([
   "user_input_pattern.contact_context"
 ]);

@@ -4,7 +4,6 @@
  */
 
 import type { ProfileFactRecord, ProfileMemoryState } from "../profileMemory";
-import { isCompatibilityVisibleFactLike } from "./profileMemoryCompatibilityVisibility";
 import { isStoredProfileFactEffectivelySensitive } from "./profileMemoryFactSensitivity";
 import type { ProfileAccessRequest, ProfileReadableFact } from "./contracts";
 import type { ProfileMemoryQueryDecisionRecord } from "./profileMemoryDecisionRecordContracts";

@@ -13,6 +13,8 @@ import {
 } from "../../src/core/profileMemory";
 import { createEmptyProfileMemoryGraphState } from "../../src/core/profileMemoryRuntime/profileMemoryGraphState";
 import { queryProfileMemoryGraphAlignedStableRefGroups } from "../../src/core/profileMemoryRuntime/profileMemoryGraphAlignmentSupport";
+import type { EntityGraphV1 } from "../../src/core/types";
+import type { ProfileMemoryGraphState } from "../../src/core/profileMemoryRuntime/profileMemoryGraphContracts";
 
 test("queryProfileMemoryGraphAlignedStableRefGroups attaches one exact Stage 6.86 entity key onto a provisional stable ref", () => {
   const observedAt = "2026-04-09T18:00:00.000Z";
@@ -53,6 +55,7 @@ test("queryProfileMemoryGraphAlignedStableRefGroups attaches one exact Stage 6.8
         canonicalName: "William Bena",
         entityType: "person",
         disambiguator: null,
+        domainHint: null,
         aliases: ["Owen"],
         firstSeenAt: observedAt,
         lastSeenAt: observedAt,
@@ -63,8 +66,8 @@ test("queryProfileMemoryGraphAlignedStableRefGroups attaches one exact Stage 6.8
   };
 
   const groups = queryProfileMemoryGraphAlignedStableRefGroups({
-    graph,
-    entityGraph
+    graph: graph as ProfileMemoryGraphState,
+    entityGraph: entityGraph as EntityGraphV1
   });
   const alignedGroup = groups.find((group) => group.stableRefId === "stable_contact_owen");
 
@@ -112,6 +115,7 @@ test("queryProfileMemoryGraphAlignedStableRefGroups fails closed to quarantine w
         canonicalName: "William Bena",
         entityType: "person",
         disambiguator: null,
+        domainHint: null,
         aliases: ["Owen"],
         firstSeenAt: observedAt,
         lastSeenAt: observedAt,
@@ -123,6 +127,7 @@ test("queryProfileMemoryGraphAlignedStableRefGroups fails closed to quarantine w
         canonicalName: "Owen Lee",
         entityType: "person",
         disambiguator: null,
+        domainHint: null,
         aliases: ["Owen"],
         firstSeenAt: observedAt,
         lastSeenAt: observedAt,
@@ -133,8 +138,8 @@ test("queryProfileMemoryGraphAlignedStableRefGroups fails closed to quarantine w
   };
 
   const groups = queryProfileMemoryGraphAlignedStableRefGroups({
-    graph,
-    entityGraph
+    graph: graph as ProfileMemoryGraphState,
+    entityGraph: entityGraph as EntityGraphV1
   });
   const alignedGroup = groups.find((group) => group.stableRefId === "stable_contact_owen");
 
@@ -180,6 +185,7 @@ test("queryProfileMemoryGraphAlignedStableRefGroups preserves observed-only alig
         canonicalName: "William Bena",
         entityType: "person",
         disambiguator: null,
+        domainHint: null,
         aliases: ["Owen"],
         firstSeenAt: observedAt,
         lastSeenAt: observedAt,
@@ -190,8 +196,8 @@ test("queryProfileMemoryGraphAlignedStableRefGroups preserves observed-only alig
   };
 
   const groups = queryProfileMemoryGraphAlignedStableRefGroups({
-    graph,
-    entityGraph
+    graph: graph as ProfileMemoryGraphState,
+    entityGraph: entityGraph as EntityGraphV1
   });
   const alignedGroup = groups.find(
     (group) => group.stableRefId === "stable_quarantine_contact_owen"
