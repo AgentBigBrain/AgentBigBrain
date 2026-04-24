@@ -3,6 +3,7 @@
  */
 
 import { type BrainConfig } from "../config";
+import { evaluateExplicitExecutionConstraintViolation } from "../explicitExecutionConstraints";
 import { evaluateHardConstraints } from "../hardConstraints";
 import { evaluateStage685RuntimeGuard } from "../stage6_85RuntimeGuards";
 import type { ModelBillingMode } from "../../models/types";
@@ -63,6 +64,27 @@ export function evaluateTaskRunnerPreflight(
   const runtimeLimitBlock = evaluateRuntimeLimitBlock(input);
   if (runtimeLimitBlock) {
     return { blockedOutcome: runtimeLimitBlock };
+  }
+
+  const explicitExecutionConstraintViolation = evaluateExplicitExecutionConstraintViolation(
+    input.action,
+    input.task.userInput
+  );
+  if (explicitExecutionConstraintViolation) {
+    return {
+      blockedOutcome: {
+        actionResult: buildBlockedActionResult({
+          action: input.action,
+          mode: input.mode,
+          blockedBy: [explicitExecutionConstraintViolation.code],
+          violations: [explicitExecutionConstraintViolation]
+        }),
+        traceDetails: {
+          blockCode: explicitExecutionConstraintViolation.code,
+          blockCategory: "constraints"
+        }
+      }
+    };
   }
 
   const proposal = buildProposal(input.task, input.action, input.config);

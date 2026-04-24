@@ -43,24 +43,6 @@ function escapePowerShellSingleQuoted(value: string): string {
 }
 
 /**
- * Normalizes one filesystem path into a stable comparison form.
- *
- * @param value - Candidate filesystem path.
- * @returns Normalized path, or `null` when absent.
- */
-function normalizeComparablePath(value: string | null): string | null {
-  if (!value) {
-    return null;
-  }
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return null;
-  }
-  const normalized = path.normalize(trimmed).replace(/[\\/]+$/, "");
-  return process.platform === "win32" ? normalized.toLowerCase() : normalized;
-}
-
-/**
  * Validates and normalizes selector mode from planner params.
  *
  * @param value - Raw selector mode.

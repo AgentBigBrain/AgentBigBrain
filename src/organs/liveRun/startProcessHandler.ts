@@ -31,6 +31,10 @@ import type { UntrackedHolderCandidate } from "./untrackedPreviewCandidateInspec
 
 const MANAGED_PROCESS_WRAPPER_PROMOTION_GRACE_MS = 400;
 
+interface StartProcessExecutionContext {
+  userInput?: string | null;
+}
+
 /** Normalizes a filesystem-ish path for same-workspace preview-holder comparisons. */
 function normalizeComparablePath(value: string | null): string | null {
   if (!value) {
@@ -47,6 +51,73 @@ function normalizeComparablePath(value: string | null): string | null {
 /** Rebuilds a canonical loopback URL for a recovered or promoted preview holder. */
 function buildLoopbackRequestedUrl(host: string, port: number): string {
   return `http://${host === "::1" ? "[::1]" : host}:${port}`;
+}
+
+/** Detects whether the original user request explicitly pinned one loopback port. */
+function userExplicitlyRequiresLoopbackPort(
+  userInput: string | null | undefined,
+  port: number
+): boolean {
+  if (typeof userInput !== "string" || userInput.trim().length === 0) {
+    return false;
+  }
+  const normalized = userInput.trim().toLowerCase();
+  return (
+    new RegExp(`(?:localhost|127\\.0\\.0\\.1|::1)\\s*:\\s*${port}\\b`, "i").test(normalized) ||
+    new RegExp(`\\bport\\s+${port}\\b`, "i").test(normalized)
+  );
+}
+
+/** Detects when the active user request explicitly allows the runtime to choose another free port. */
+function userAllowsAlternateLoopbackPort(userInput: string | null | undefined): boolean {
+  if (typeof userInput !== "string" || userInput.trim().length === 0) {
+    return false;
+  }
+  const normalized = userInput.trim().toLowerCase();
+  return (
+    /\bfree\s+(?:localhost|loopback)\s+port\b/i.test(normalized) ||
+    /\bavailable\s+(?:localhost|loopback)\s+port\b/i.test(normalized) ||
+    /\bdifferent\s+free\s+(?:localhost|loopback)\s+port\b/i.test(normalized) ||
+    /\bon\s+a\s+free\s+(?:localhost|loopback)\s+port\b/i.test(normalized)
+  );
+}
+
+/** Rewrites one supported local preview command onto a different loopback port. */
+function rewriteLoopbackCommandPort(
+  command: string,
+  fromPort: number,
+  toPort: number
+): string | null {
+  const replacementPatterns: readonly [RegExp, string][] = [
+    [new RegExp(`(\\bhttp\\.server\\s+)${fromPort}\\b`, "i"), `$1${toPort}`],
+    [new RegExp(`(\\b--port\\s+)${fromPort}\\b`, "i"), `$1${toPort}`],
+    [new RegExp(`(\\b--port=)${fromPort}\\b`, "i"), `$1${toPort}`],
+    [new RegExp(`(\\b-p\\s+)${fromPort}\\b`, "i"), `$1${toPort}`],
+    [new RegExp(`(localhost:)${fromPort}\\b`, "i"), `$1${toPort}`],
+    [new RegExp(`(127\\.0\\.0\\.1:)${fromPort}\\b`, "i"), `$1${toPort}`],
+    [new RegExp(`(\\[::1\\]:)${fromPort}\\b`, "i"), `$1${toPort}`]
+  ];
+  for (const [pattern, replacement] of replacementPatterns) {
+    if (!pattern.test(command)) {
+      continue;
+    }
+    return command.replace(pattern, replacement);
+  }
+  return null;
+}
+
+/** Adds deterministic metadata describing one successful loopback port auto-rebind. */
+function withLoopbackPortAutoRebindMetadata(
+  metadata: Record<string, string | number | boolean | null>,
+  originalTarget: { host: string; port: number; url: string }
+): Record<string, string | number | boolean | null> {
+  return {
+    ...metadata,
+    processLoopbackPortAutoRebound: true,
+    processOriginalRequestedHost: originalTarget.host,
+    processOriginalRequestedPort: originalTarget.port,
+    processOriginalRequestedUrl: originalTarget.url
+  };
 }
 
 /** Evaluates whether an inspected untracked holder serves the requested workspace preview. */
@@ -253,7 +324,8 @@ export async function executeStartProcess(
   actionId: string,
   params: StartProcessActionParams,
   signal?: AbortSignal,
-  taskId?: string
+  taskId?: string,
+  executionContext?: StartProcessExecutionContext
 ): Promise<ExecutorExecutionOutcome> {
   throwIfAborted(signal);
   if (!context.config.permissions.allowRealShellExecution) {
@@ -282,29 +354,34 @@ export async function executeStartProcess(
     );
   }
 
-  const effectiveShellProfile = resolveEffectiveShellProfile(
-    context.config.shellRuntime.profile,
-    command
+  let commandToExecute = command;
+  let originalLoopbackTargetForMetadata: { host: string; port: number; url: string } | null = null;
+  let resolvedLoopbackTarget = await resolveManagedProcessLoopbackTarget(
+    commandToExecute,
+    resolvedCwd
   );
-  const shellEnvironment = resolveCommandAwareShellEnvironment(
-    effectiveShellProfile,
-    command,
-    process.env
-  );
-  const commandFingerprint = hashSha256(command);
-  const spawnSpec = buildShellSpawnSpec({
-    profile: effectiveShellProfile,
-    command,
-    cwd: resolvedCwd,
-    timeoutMs: effectiveShellProfile.timeoutMsDefault,
-    envKeyNames: shellEnvironment.envKeyNames
-  });
-  const loopbackTarget = await resolveManagedProcessLoopbackTarget(command, resolvedCwd);
 
-  if (loopbackTarget) {
+  if (resolvedLoopbackTarget) {
+    const originalShellProfile = resolveEffectiveShellProfile(
+      context.config.shellRuntime.profile,
+      commandToExecute
+    );
+    const originalShellEnvironment = resolveCommandAwareShellEnvironment(
+      originalShellProfile,
+      commandToExecute,
+      process.env
+    );
+    const originalCommandFingerprint = hashSha256(commandToExecute);
+    const originalSpawnSpec = buildShellSpawnSpec({
+      profile: originalShellProfile,
+      command: commandToExecute,
+      cwd: resolvedCwd,
+      timeoutMs: originalShellProfile.timeoutMsDefault,
+      envKeyNames: originalShellEnvironment.envKeyNames
+    });
     const portAlreadyOccupied = await performLocalPortProbe(
-      loopbackTarget.host,
-      loopbackTarget.port,
+      resolvedLoopbackTarget.host,
+      resolvedLoopbackTarget.port,
       MANAGED_PROCESS_PORT_PRECHECK_TIMEOUT_MS,
       signal
     );
@@ -312,36 +389,102 @@ export async function executeStartProcess(
       const recoveredOutcome = await tryAdoptExistingWorkspacePreviewHolder({
         context,
         actionId,
-        commandFingerprint,
-        cwd: spawnSpec.cwd,
-        shellExecutable: spawnSpec.executable,
-        shellKind: effectiveShellProfile.shellKind,
-        loopbackTarget,
+        commandFingerprint: originalCommandFingerprint,
+        cwd: originalSpawnSpec.cwd,
+        shellExecutable: originalSpawnSpec.executable,
+        shellKind: originalShellProfile.shellKind,
+        loopbackTarget: resolvedLoopbackTarget,
         taskId
       });
       if (recoveredOutcome) {
         return recoveredOutcome;
       }
       const suggestedPort = await findAvailableLoopbackPort(signal);
-      return buildExecutionOutcome(
-        "failed",
-        `Process start failed: ${loopbackTarget.url} was already occupied before startup.` +
-          `${suggestedPort !== null ? ` Try a different free loopback port such as ${suggestedPort}.` : ""}`,
-        "PROCESS_START_FAILED",
-        buildManagedProcessStartFailureExecutionMetadata({
-          commandFingerprint,
-          cwd: spawnSpec.cwd,
-          shellExecutable: spawnSpec.executable,
-          shellKind: effectiveShellProfile.shellKind,
-          failureKind: "PORT_IN_USE",
-          requestedHost: loopbackTarget.host,
-          requestedPort: loopbackTarget.port,
-          requestedUrl: loopbackTarget.url,
+      const canAutoRebind =
+        suggestedPort !== null &&
+        (
+          isLikelyFrameworkDevCommand(commandToExecute) ||
+          userAllowsAlternateLoopbackPort(executionContext?.userInput)
+        ) &&
+        !userExplicitlyRequiresLoopbackPort(
+          executionContext?.userInput,
+          resolvedLoopbackTarget.port
+        );
+      if (canAutoRebind) {
+        const rewrittenCommand = rewriteLoopbackCommandPort(
+          commandToExecute,
+          resolvedLoopbackTarget.port,
           suggestedPort
-        })
-      );
+        );
+        if (rewrittenCommand) {
+          originalLoopbackTargetForMetadata = resolvedLoopbackTarget;
+          commandToExecute = rewrittenCommand;
+          resolvedLoopbackTarget = {
+            host: resolvedLoopbackTarget.host,
+            port: suggestedPort,
+            url: buildLoopbackRequestedUrl(
+              resolvedLoopbackTarget.host,
+              suggestedPort
+            )
+          };
+        } else {
+          return buildExecutionOutcome(
+            "failed",
+            `Process start failed: ${resolvedLoopbackTarget.url} was already occupied before startup.` +
+              `${suggestedPort !== null ? ` Try a different free loopback port such as ${suggestedPort}.` : ""}`,
+            "PROCESS_START_FAILED",
+            buildManagedProcessStartFailureExecutionMetadata({
+              commandFingerprint: originalCommandFingerprint,
+              cwd: originalSpawnSpec.cwd,
+              shellExecutable: originalSpawnSpec.executable,
+              shellKind: originalShellProfile.shellKind,
+              failureKind: "PORT_IN_USE",
+              requestedHost: resolvedLoopbackTarget.host,
+              requestedPort: resolvedLoopbackTarget.port,
+              requestedUrl: resolvedLoopbackTarget.url,
+              suggestedPort
+            })
+          );
+        }
+      } else {
+        return buildExecutionOutcome(
+          "failed",
+          `Process start failed: ${resolvedLoopbackTarget.url} was already occupied before startup.` +
+            `${suggestedPort !== null ? ` Try a different free loopback port such as ${suggestedPort}.` : ""}`,
+          "PROCESS_START_FAILED",
+          buildManagedProcessStartFailureExecutionMetadata({
+            commandFingerprint: originalCommandFingerprint,
+            cwd: originalSpawnSpec.cwd,
+            shellExecutable: originalSpawnSpec.executable,
+            shellKind: originalShellProfile.shellKind,
+            failureKind: "PORT_IN_USE",
+            requestedHost: resolvedLoopbackTarget.host,
+            requestedPort: resolvedLoopbackTarget.port,
+            requestedUrl: resolvedLoopbackTarget.url,
+            suggestedPort
+          })
+        );
+      }
     }
   }
+
+  const effectiveShellProfile = resolveEffectiveShellProfile(
+    context.config.shellRuntime.profile,
+    commandToExecute
+  );
+  const shellEnvironment = resolveCommandAwareShellEnvironment(
+    effectiveShellProfile,
+    commandToExecute,
+    process.env
+  );
+  const commandFingerprint = hashSha256(commandToExecute);
+  const spawnSpec = buildShellSpawnSpec({
+    profile: effectiveShellProfile,
+    command: commandToExecute,
+    cwd: resolvedCwd,
+    timeoutMs: effectiveShellProfile.timeoutMsDefault,
+    envKeyNames: shellEnvironment.envKeyNames
+  });
 
   try {
     const child = context.shellSpawn(spawnSpec.executable, [...spawnSpec.args], {
@@ -366,38 +509,55 @@ export async function executeStartProcess(
       cwd: spawnSpec.cwd,
       shellExecutable: spawnSpec.executable,
       shellKind: effectiveShellProfile.shellKind,
-      requestedHost: loopbackTarget?.host ?? null,
-      requestedPort: loopbackTarget?.port ?? null,
-      requestedUrl: loopbackTarget?.url ?? null,
+      requestedHost: resolvedLoopbackTarget?.host ?? null,
+      requestedPort: resolvedLoopbackTarget?.port ?? null,
+      requestedUrl: resolvedLoopbackTarget?.url ?? null,
       taskId
     });
     bindAbortCleanupForManagedProcess(context, snapshot.leaseId, child, signal);
     const promotedOutcome =
-      loopbackTarget
+      resolvedLoopbackTarget
         ? await tryPromoteStartedWorkspacePreviewHolder({
             context,
             leaseId: snapshot.leaseId,
             cwd: spawnSpec.cwd,
-            loopbackTarget,
-            command,
+            loopbackTarget: resolvedLoopbackTarget,
+            command: commandToExecute,
             signal
           })
         : null;
     if (promotedOutcome) {
-      return promotedOutcome;
+      if (!originalLoopbackTargetForMetadata || !promotedOutcome.executionMetadata) {
+        return promotedOutcome;
+      }
+      return buildExecutionOutcome(
+        promotedOutcome.status,
+        promotedOutcome.output,
+        promotedOutcome.failureCode,
+        withLoopbackPortAutoRebindMetadata(
+          promotedOutcome.executionMetadata,
+          originalLoopbackTargetForMetadata
+        )
+      );
     }
+    const successMetadata = buildManagedProcessExecutionMetadata(snapshot, "PROCESS_STARTED");
     return buildExecutionOutcome(
       "success",
       `Process started: lease ${snapshot.leaseId} (pid ${snapshot.pid ?? "unknown"}).`,
       undefined,
-      buildManagedProcessExecutionMetadata(snapshot, "PROCESS_STARTED")
+      originalLoopbackTargetForMetadata
+        ? withLoopbackPortAutoRebindMetadata(
+          successMetadata,
+          originalLoopbackTargetForMetadata
+        )
+        : successMetadata
     );
   } catch (error) {
     if (isAbortError(error)) {
       throw error;
     }
     const runtimeError = error as NodeJS.ErrnoException;
-    const recoveryMetadata =
+    const baseRecoveryMetadata =
       runtimeError.code === "ENOENT"
         ? withRecoveryFailureMetadata(
           {
@@ -407,9 +567,9 @@ export async function executeStartProcess(
             processCwd: spawnSpec.cwd,
             processShellExecutable: spawnSpec.executable,
             processShellKind: effectiveShellProfile.shellKind,
-            processRequestedHost: loopbackTarget?.host ?? null,
-            processRequestedPort: loopbackTarget?.port ?? null,
-            processRequestedUrl: loopbackTarget?.url ?? null
+            processRequestedHost: resolvedLoopbackTarget?.host ?? null,
+            processRequestedPort: resolvedLoopbackTarget?.port ?? null,
+            processRequestedUrl: resolvedLoopbackTarget?.url ?? null
           },
           "EXECUTABLE_NOT_FOUND",
           "executor_mechanical"
@@ -423,14 +583,21 @@ export async function executeStartProcess(
               processCwd: spawnSpec.cwd,
               processShellExecutable: spawnSpec.executable,
               processShellKind: effectiveShellProfile.shellKind,
-              processRequestedHost: loopbackTarget?.host ?? null,
-              processRequestedPort: loopbackTarget?.port ?? null,
-              processRequestedUrl: loopbackTarget?.url ?? null
+              processRequestedHost: resolvedLoopbackTarget?.host ?? null,
+              processRequestedPort: resolvedLoopbackTarget?.port ?? null,
+              processRequestedUrl: resolvedLoopbackTarget?.url ?? null
             },
             "COMMAND_TOO_LONG",
             "executor_mechanical"
           )
           : undefined;
+    const recoveryMetadata =
+      originalLoopbackTargetForMetadata && baseRecoveryMetadata
+        ? withLoopbackPortAutoRebindMetadata(
+          baseRecoveryMetadata,
+          originalLoopbackTargetForMetadata
+        )
+        : baseRecoveryMetadata;
     return buildExecutionOutcome(
       "failed",
       `Process start failed: ${runtimeError.message}`,

@@ -315,6 +315,41 @@ function createManagedProcessShellSpawn(): {
   };
 }
 
+function createDetachedBrowserLaunchShellSpawn(
+  launchedBrowserPid = 61234
+): {
+  calls: MockShellSpawnCall[];
+  spawn: typeof import("node:child_process").spawn;
+} {
+  const calls: MockShellSpawnCall[] = [];
+  const spawn = ((executable: string, argsOrOptions?: unknown, maybeOptions?: unknown) => {
+    const args = Array.isArray(argsOrOptions) ? argsOrOptions : [];
+    const options = (
+      Array.isArray(argsOrOptions) ? maybeOptions : argsOrOptions
+    ) as Record<string, unknown> | undefined;
+    calls.push({
+      executable,
+      args,
+      options: options ?? {}
+    });
+
+    const child = createManagedProcessChild(launchedBrowserPid);
+    queueMicrotask(() => {
+      child.emit("spawn");
+      if (process.platform === "win32") {
+        child.stdout.emit("data", `${launchedBrowserPid}\n`);
+      }
+      child.emit("close", 0);
+    });
+    return child;
+  }) as unknown as typeof import("node:child_process").spawn;
+
+  return {
+    calls,
+    spawn
+  };
+}
+
 function buildLiveRunContext(
   overrides: Partial<LiveRunExecutorContext> = {}
 ): LiveRunExecutorContext {
@@ -548,7 +583,74 @@ test("executeStartProcess routes simple Windows npm preview commands through Pow
   }
 });
 
-test("executeStartProcess fails early when the requested loopback port is already occupied", async () => {
+test("executeStartProcess preserves Windows executable resolution env keys for generic preview commands", async () => {
+  const { calls, spawn } = createManagedProcessShellSpawn();
+  const registry = new ManagedProcessRegistry();
+  const port = await reserveUnusedTcpPort();
+  const originalComSpec = process.env.ComSpec;
+  const originalPathExt = process.env.PATHEXT;
+  const originalWindir = process.env.WINDIR;
+  process.env.ComSpec = originalComSpec ?? "C:\\Windows\\System32\\cmd.exe";
+  process.env.PATHEXT = originalPathExt ?? ".COM;.EXE;.BAT;.CMD";
+  process.env.WINDIR = originalWindir ?? "C:\\Windows";
+
+  try {
+    const baseShellConfig = buildShellEnabledConfig();
+    const context = buildLiveRunContext({
+      config: buildShellEnabledConfig({
+        shellRuntime: {
+          timeoutBoundsMs: baseShellConfig.shellRuntime.timeoutBoundsMs,
+          commandMaxCharsBounds: baseShellConfig.shellRuntime.commandMaxCharsBounds,
+          profile: {
+            ...baseShellConfig.shellRuntime.profile,
+            platform: "win32",
+            shellKind: "powershell",
+            executable: "powershell.exe",
+            wrapperArgs: ["-NoProfile", "-NonInteractive", "-Command"],
+            envPolicy: {
+              mode: "allowlist",
+              allowlist: ["PATH", "HOME", "USERPROFILE", "TEMP", "SYSTEMROOT"],
+              denylist: ["TOKEN", "SECRET", "PASSWORD", "AUTH", "COOKIE"]
+            }
+          }
+        }
+      }),
+      shellSpawn: spawn,
+      managedProcessRegistry: registry
+    });
+
+    const outcome = await executeStartProcess(context, "action_start_windows_python_preview", {
+      command: `python -m http.server ${port}`,
+      cwd: process.cwd()
+    });
+
+    assert.equal(outcome.status, "success");
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0]?.executable, "powershell.exe");
+    const spawnedEnv = (calls[0]?.options.env ?? {}) as NodeJS.ProcessEnv;
+    assert.equal(spawnedEnv.ComSpec, process.env.ComSpec);
+    assert.equal(spawnedEnv.PATHEXT, process.env.PATHEXT);
+    assert.equal(spawnedEnv.WINDIR, process.env.WINDIR);
+  } finally {
+    if (originalComSpec === undefined) {
+      delete process.env.ComSpec;
+    } else {
+      process.env.ComSpec = originalComSpec;
+    }
+    if (originalPathExt === undefined) {
+      delete process.env.PATHEXT;
+    } else {
+      process.env.PATHEXT = originalPathExt;
+    }
+    if (originalWindir === undefined) {
+      delete process.env.WINDIR;
+    } else {
+      process.env.WINDIR = originalWindir;
+    }
+  }
+});
+
+test("executeStartProcess fails early when the user explicitly pinned an occupied loopback port", async () => {
   const server = net.createServer();
   await new Promise<void>((resolve) => {
     server.listen(0, "127.0.0.1", () => resolve());
@@ -568,6 +670,8 @@ test("executeStartProcess fails early when the requested loopback port is alread
     const outcome = await executeStartProcess(context, "action_conflict_live_run", {
       command: `python -m http.server ${address.port}`,
       cwd: process.cwd()
+    }, undefined, undefined, {
+      userInput: `Start the local preview on port ${address.port} and leave it running.`
     });
 
     assert.equal(outcome.status, "failed");
@@ -575,6 +679,49 @@ test("executeStartProcess fails early when the requested loopback port is alread
     assert.equal(outcome.executionMetadata?.processStartupFailureKind, "PORT_IN_USE");
     assert.equal(outcome.executionMetadata?.processRequestedPort, address.port);
     assert.equal(spawnCalls, 0);
+  } finally {
+    await new Promise<void>((resolve, reject) => {
+      server.close((error) => (error ? reject(error) : resolve()));
+    });
+  }
+});
+
+test("executeStartProcess auto-rebinds an occupied loopback port when the user did not pin it", async () => {
+  const server = net.createServer();
+  await new Promise<void>((resolve) => {
+    server.listen(0, "127.0.0.1", () => resolve());
+  });
+
+  try {
+    const address = server.address();
+    assert.ok(address && typeof address !== "string");
+    const { calls, spawn } = createManagedProcessShellSpawn();
+    const registry = new ManagedProcessRegistry();
+    const context = buildLiveRunContext({
+      shellSpawn: spawn,
+      managedProcessRegistry: registry
+    });
+
+    const outcome = await executeStartProcess(context, "action_auto_rebind_live_run", {
+      command: `python -m http.server ${address.port}`,
+      cwd: process.cwd()
+    }, undefined, undefined, {
+      userInput: "Start the local preview on a free loopback port and leave it open."
+    });
+
+    assert.equal(outcome.status, "success");
+    assert.equal(calls.length, 1);
+    assert.equal(outcome.executionMetadata?.processLoopbackPortAutoRebound, true);
+    assert.equal(outcome.executionMetadata?.processOriginalRequestedPort, address.port);
+    const actualPort = outcome.executionMetadata?.processRequestedPort;
+    assert.equal(typeof actualPort, "number");
+    assert.notEqual(actualPort, address.port);
+    assert.equal(outcome.executionMetadata?.processRequestedUrl, `http://localhost:${actualPort}`);
+    const spawnedCommand = `${calls[0]?.executable ?? ""} ${(calls[0]?.args ?? []).join(" ")}`;
+    assert.match(spawnedCommand, new RegExp(`\\b${String(actualPort)}\\b`));
+    assert.doesNotMatch(spawnedCommand, new RegExp(`\\b${String(address.port)}\\b`));
+    const leaseId = String(outcome.executionMetadata?.processLeaseId ?? "");
+    assert.equal(registry.getSnapshot(leaseId)?.requestedPort, actualPort);
   } finally {
     await new Promise<void>((resolve, reject) => {
       server.close((error) => (error ? reject(error) : resolve()));
@@ -602,6 +749,8 @@ test("executeStartProcess fails early for occupied Next.js hostname ports too", 
     const outcome = await executeStartProcess(context, "action_conflict_next_start", {
       command: `npm run start -- --hostname 127.0.0.1 --port ${address.port}`,
       cwd: process.cwd()
+    }, undefined, undefined, {
+      userInput: `Restart the site on 127.0.0.1:${address.port} and keep that exact port.`
     });
 
     assert.equal(outcome.status, "failed");
@@ -1401,7 +1550,7 @@ test("executeBrowserVerification maps runtime-unavailable verifier results to ty
 });
 
 test("executeOpenBrowser launches a visible browser session and records session metadata", async () => {
-  const { calls, spawn } = createManagedProcessShellSpawn();
+  const { calls, spawn } = createDetachedBrowserLaunchShellSpawn(61234);
   const server = http.createServer((_request, response) => {
     response.writeHead(200, { "Content-Type": "text/plain" });
     response.end("ok");
@@ -1433,6 +1582,10 @@ test("executeOpenBrowser launches a visible browser session and records session 
     );
     assert.equal(outcome.executionMetadata?.browserSessionId, "browser_session:action_open_browser");
     assert.equal(outcome.executionMetadata?.browserSessionControlAvailable, false);
+    assert.equal(
+      outcome.executionMetadata?.browserSessionBrowserProcessPid ?? null,
+      process.platform === "win32" ? 61234 : null
+    );
     assert.equal(outcome.executionMetadata?.processLifecycleStatus, "PROCESS_READY");
     assert.equal(calls.length, 1);
   } finally {
@@ -1538,7 +1691,7 @@ test("executeOpenBrowser does not reuse an existing managed browser session when
 });
 
 test("executeOpenBrowser allows local file preview urls without localhost readiness", async () => {
-  const { calls, spawn } = createManagedProcessShellSpawn();
+  const { calls, spawn } = createDetachedBrowserLaunchShellSpawn(61235);
   const tempDir = mkdtempSync(path.join(os.tmpdir(), "abb-live-run-file-preview-"));
   const indexPath = path.join(tempDir, "index.html");
   writeFileSync(indexPath, "<!doctype html><title>Drone Company</title>", "utf8");
@@ -1560,6 +1713,13 @@ test("executeOpenBrowser allows local file preview urls without localhost readin
     assert.equal(outcome.executionMetadata?.browserSessionStatus, "open");
     assert.match(String(outcome.executionMetadata?.browserSessionUrl ?? ""), /^file:\/\//i);
     assert.equal(outcome.executionMetadata?.processLifecycleStatus ?? null, null);
+    assert.equal(outcome.executionMetadata?.browserSessionWorkspaceRootPath, tempDir);
+    assert.equal(outcome.executionMetadata?.browserSessionLinkedProcessLeaseId ?? null, null);
+    assert.equal(outcome.executionMetadata?.browserSessionLinkedProcessCwd ?? null, null);
+    assert.equal(
+      outcome.executionMetadata?.browserSessionBrowserProcessPid ?? null,
+      process.platform === "win32" ? 61235 : null
+    );
     assert.equal(calls.length, 1);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
@@ -1567,7 +1727,7 @@ test("executeOpenBrowser allows local file preview urls without localhost readin
 });
 
 test("executeOpenBrowser persists workspace ownership metadata for later preview follow-ups", async () => {
-  const { calls, spawn } = createManagedProcessShellSpawn();
+  const { calls, spawn } = createDetachedBrowserLaunchShellSpawn(61236);
   const tempDir = mkdtempSync(path.join(os.tmpdir(), "abb-live-run-owned-preview-"));
   const indexPath = path.join(tempDir, "index.html");
   writeFileSync(indexPath, "<!doctype html><title>Drone Company</title>", "utf8");
@@ -1602,12 +1762,97 @@ test("executeOpenBrowser persists workspace ownership metadata for later preview
     assert.equal(outcome.executionMetadata?.browserSessionLinkedProcessCwd, tempDir);
     assert.equal(outcome.executionMetadata?.browserSessionLinkedProcessPid, 6123);
     assert.equal(outcome.executionMetadata?.browserSessionWorkspaceRootPath, tempDir);
+    assert.equal(
+      outcome.executionMetadata?.browserSessionBrowserProcessPid ?? null,
+      process.platform === "win32" ? 61236 : null
+    );
     const snapshot = context.browserSessionRegistry.getSnapshot("browser_session:action_open_owned_preview");
     assert.equal(snapshot?.linkedProcessLeaseId, processSnapshot.leaseId);
     assert.equal(snapshot?.linkedProcessCwd, tempDir);
     assert.equal(snapshot?.linkedProcessPid, 6123);
     assert.equal(snapshot?.workspaceRootPath, tempDir);
+    assert.equal(
+      snapshot?.browserProcessPid ?? null,
+      process.platform === "win32" ? 61236 : null
+    );
     assert.equal(calls.length, 1);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("executeOpenBrowser treats previewProcessLeaseId none as no linked process for local file previews", async () => {
+  const { spawn } = createDetachedBrowserLaunchShellSpawn(61238);
+  const tempDir = mkdtempSync(path.join(os.tmpdir(), "abb-live-run-file-preview-none-"));
+  const indexPath = path.join(tempDir, "index.html");
+  writeFileSync(indexPath, "<!doctype html><title>Drone Company</title>", "utf8");
+  const managedProcessRegistry = new ManagedProcessRegistry();
+  managedProcessRegistry.registerStarted({
+    actionId: "action_preview_process_should_not_attach",
+    child: createManagedProcessChild(8123),
+    commandFingerprint: "preview-fingerprint-should-not-attach",
+    cwd: tempDir,
+    shellExecutable: "python",
+    shellKind: "powershell"
+  });
+
+  try {
+    const outcome = await executeOpenBrowser(
+      buildLiveRunContext({
+        shellSpawn: spawn,
+        playwrightChromiumLoader: async () => null,
+        managedProcessRegistry
+      }),
+      "action_open_browser_file_preview_none",
+      {
+        url: `file:///${indexPath.replace(/\\/g, "/")}`,
+        rootPath: "C:\\Users\\testuser\\Desktop\\stale-workspace",
+        previewProcessLeaseId: "none"
+      }
+    );
+
+    assert.equal(outcome.status, "success");
+    assert.equal(outcome.executionMetadata?.browserSessionWorkspaceRootPath, tempDir);
+    assert.equal(outcome.executionMetadata?.browserSessionLinkedProcessLeaseId ?? null, null);
+    assert.equal(outcome.executionMetadata?.browserSessionLinkedProcessCwd ?? null, null);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("executeOpenBrowser can infer one unique linked preview lease from the workspace root even without a task id", async () => {
+  const { spawn } = createDetachedBrowserLaunchShellSpawn(61237);
+  const tempDir = mkdtempSync(path.join(os.tmpdir(), "abb-live-run-owned-preview-inferred-"));
+  const indexPath = path.join(tempDir, "index.html");
+  writeFileSync(indexPath, "<!doctype html><title>Drone Company</title>", "utf8");
+  const managedProcessRegistry = new ManagedProcessRegistry();
+  const processSnapshot = managedProcessRegistry.registerStarted({
+    actionId: "action_owned_preview_process_inferred",
+    child: createManagedProcessChild(7123),
+    commandFingerprint: "owned-preview-inferred-fingerprint",
+    cwd: tempDir,
+    shellExecutable: "python",
+    shellKind: "powershell"
+  });
+
+  try {
+    const context = buildLiveRunContext({
+      shellSpawn: spawn,
+      playwrightChromiumLoader: async () => null,
+      managedProcessRegistry
+    });
+    const outcome = await executeOpenBrowser(
+      context,
+      "action_open_owned_preview_inferred",
+      {
+        url: `file:///${indexPath.replace(/\\/g, "/")}`,
+        rootPath: tempDir
+      }
+    );
+
+    assert.equal(outcome.status, "success");
+    assert.equal(outcome.executionMetadata?.browserSessionLinkedProcessLeaseId, processSnapshot.leaseId);
+    assert.equal(outcome.executionMetadata?.browserSessionLinkedProcessPid, 7123);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
@@ -1839,6 +2084,39 @@ test("executeCloseBrowser recovers a persisted managed browser session by pid af
   }
 });
 
+test("executeCloseBrowser does not close a tracked detached browser session by launcher pid", async () => {
+  const browserSessionRegistry = new BrowserSessionRegistry({
+    isProcessAlive: (pid) => pid === 81234
+  });
+  browserSessionRegistry.registerDetachedSession({
+    sessionId: "browser_session:detached_pid_close",
+    url: "http://127.0.0.1:4177/",
+    visibility: "visible",
+    openedAt: new Date().toISOString(),
+    browserProcessPid: 81234
+  });
+  let terminatedPid: number | null = null;
+  const context = buildLiveRunContext({
+    browserSessionRegistry,
+    terminateProcessTreeByPid: async (pid) => {
+      terminatedPid = pid;
+      return true;
+    }
+  });
+
+  const outcome = await executeCloseBrowser(context, {
+    sessionId: "browser_session:detached_pid_close"
+  });
+
+  assert.equal(outcome.status, "blocked");
+  assert.equal(outcome.failureCode, "BROWSER_SESSION_CONTROL_UNAVAILABLE");
+  assert.equal(terminatedPid, null);
+  assert.equal(
+    browserSessionRegistry.getSnapshot("browser_session:detached_pid_close")?.status,
+    "open"
+  );
+});
+
 test("executeCloseBrowser marks a restart-orphaned managed browser session closed after its linked preview stops", async () => {
   const tempDir = mkdtempSync(path.join(os.tmpdir(), "abb-live-run-browser-restart-close-"));
   try {
@@ -1904,6 +2182,77 @@ test("executeCloseBrowser marks a restart-orphaned managed browser session close
     );
     const closedSnapshot = browserSessionRegistry.getSnapshot(
       "browser_session:restart_orphaned_preview"
+    );
+    assert.equal(closedSnapshot?.status, "closed");
+    assert.equal(closedSnapshot?.controlAvailable, false);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("executeCloseBrowser warns when a detached OS-default browser session lost exact control after the linked preview stopped", async () => {
+  const tempDir = mkdtempSync(path.join(os.tmpdir(), "abb-live-run-browser-detached-manual-close-"));
+  try {
+    const browserSnapshotPath = path.join(tempDir, "browser_sessions.json");
+    const managedSnapshotPath = path.join(tempDir, "managed_processes.json");
+    const managedProcessRegistry = new ManagedProcessRegistry({ snapshotPath: managedSnapshotPath });
+    const processSnapshot = managedProcessRegistry.registerStarted({
+      actionId: "action_detached_manual_close_preview",
+      child: createManagedProcessChild(9666),
+      commandFingerprint: "detached-manual-close-preview",
+      cwd: tempDir,
+      shellExecutable: "python",
+      shellKind: "powershell"
+    });
+    managedProcessRegistry.markRecoveredStopped(processSnapshot.leaseId, 0, "SIGTERM");
+
+    writeFileSync(
+      browserSnapshotPath,
+      `${JSON.stringify(
+        {
+          version: 1,
+          sessions: [
+            {
+              sessionId: "browser_session:detached_manual_close",
+              url: "file:///C:/Users/testuser/Desktop/Foundry%20Echo/index.html",
+              status: "open",
+              openedAt: "2026-03-15T12:00:00.000Z",
+              closedAt: null,
+              visibility: "visible",
+              controllerKind: "os_default",
+              controlAvailable: false,
+              browserProcessPid: null,
+              workspaceRootPath: tempDir,
+              linkedProcessLeaseId: processSnapshot.leaseId,
+              linkedProcessCwd: tempDir,
+              linkedProcessPid: processSnapshot.pid
+            }
+          ]
+        },
+        null,
+        2
+      )}\n`,
+      "utf8"
+    );
+
+    const browserSessionRegistry = new BrowserSessionRegistry({
+      snapshotPath: browserSnapshotPath
+    });
+    const context = buildLiveRunContext({
+      managedProcessRegistry,
+      browserSessionRegistry,
+      isProcessRunning: () => false
+    });
+
+    const outcome = await executeCloseBrowser(context, {
+      sessionId: "browser_session:detached_manual_close"
+    });
+
+    assert.equal(outcome.status, "success");
+    assert.match(outcome.output, /runtime no longer has exact control/i);
+    assert.match(outcome.output, /close it manually/i);
+    const closedSnapshot = browserSessionRegistry.getSnapshot(
+      "browser_session:detached_manual_close"
     );
     assert.equal(closedSnapshot?.status, "closed");
     assert.equal(closedSnapshot?.controlAvailable, false);

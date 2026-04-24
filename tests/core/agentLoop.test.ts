@@ -7,6 +7,7 @@ import { test } from "node:test";
 
 import { DEFAULT_BRAIN_CONFIG } from "../../src/core/config";
 import { AutonomousLoop } from "../../src/core/agentLoop";
+import { evaluateAutonomousNextStepPolicy } from "../../src/core/autonomy/agentLoopRuntimeSupport";
 import { BrainOrchestrator } from "../../src/core/orchestrator";
 import { createAbortError } from "../../src/core/runtimeAbort";
 import { ActionRunResult, TaskRequest, TaskRunResult } from "../../src/core/types";
@@ -380,9 +381,9 @@ function buildApprovedStartProcessResult(
       processLeaseId: leaseId,
       processLifecycleStatus: "PROCESS_STARTED",
       processPid: 4242,
-      processRequestedHost: loopbackTarget?.host,
-      processRequestedPort: loopbackTarget?.port,
-      processRequestedUrl: loopbackTarget?.url
+      processRequestedHost: loopbackTarget?.host ?? null,
+      processRequestedPort: loopbackTarget?.port ?? null,
+      processRequestedUrl: loopbackTarget?.url ?? null
     },
     blockedBy: [],
     violations: [],
@@ -728,14 +729,14 @@ function buildBlockedMissingDependencyShellResult(actionId: string): ActionRunRe
       description: "build the current app",
       params: {
         command: "npm run build",
-        cwd: "C:\\Users\\benac\\OneDrive\\Desktop\\Calm Drone"
+        cwd: "C:\\Users\\testuser\\OneDrive\\Desktop\\Calm Drone"
       },
       estimatedCostUsd: 0.08
     },
     mode: "escalation_path",
     approved: false,
     output:
-      "Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@vitejs/plugin-react' imported from C:\\Users\\benac\\OneDrive\\Desktop\\Calm Drone\\vite.config.js",
+      "Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@vitejs/plugin-react' imported from C:\\Users\\testuser\\OneDrive\\Desktop\\Calm Drone\\vite.config.js",
     executionStatus: "failed",
     executionFailureCode: "ACTION_EXECUTION_FAILED",
     executionMetadata: {
@@ -1830,16 +1831,12 @@ test("AutonomousLoop credits bounded cleanup stop-proof when the iteration cap i
 });
 
 test("AutonomousLoop deterministically emits stop_process when cleanup is the only missing requirement", async () => {
-  const loop = new AutonomousLoop(
-    new StubOrchestrator() as unknown as BrainOrchestrator,
-    {
-      backend: "mock",
-      async completeJson(): Promise<never> {
-        throw new Error("evaluateNextStep should not call the model when only stop proof is missing.");
-      }
-    },
-    { ...DEFAULT_BRAIN_CONFIG, runtime: { ...DEFAULT_BRAIN_CONFIG.runtime, isDaemonMode: false } }
-  );
+  const modelClient: ModelClient = {
+    backend: "mock",
+    async completeJson(): Promise<never> {
+      throw new Error("evaluateAutonomousNextStepPolicy should not call the model when only stop proof is missing.");
+    }
+  };
 
   const lastResult: TaskRunResult = {
     task: {
@@ -1860,23 +1857,9 @@ test("AutonomousLoop deterministically emits stop_process when cleanup is the on
     completedAt: new Date().toISOString()
   };
 
-  const nextStep = await (loop as unknown as {
-    evaluateNextStep(
-      overarchingGoal: string,
-      lastResult: TaskRunResult,
-      missionEvidence: {
-        realSideEffects: number;
-        targetPathTouches: number;
-        artifactMutations: number;
-        readinessProofs: number;
-        browserProofs: number;
-        browserOpenProofs: number;
-        processStopProofs: number;
-      },
-      trackedManagedProcessLeaseId: string | null,
-      trackedLoopbackTarget: { url: string | null; host: string | null; port: number | null } | null
-    ): Promise<AutonomousNextStepModelOutput>;
-  }).evaluateNextStep(
+  const nextStep = await evaluateAutonomousNextStepPolicy(
+    modelClient,
+    { ...DEFAULT_BRAIN_CONFIG, runtime: { ...DEFAULT_BRAIN_CONFIG.runtime, isDaemonMode: false } },
     lastResult.task.goal,
     lastResult,
     {
@@ -1889,6 +1872,7 @@ test("AutonomousLoop deterministically emits stop_process when cleanup is the on
       processStopProofs: 0
     },
     "proc_stop_needed_1",
+    null,
     {
       url: "http://localhost:8123",
       host: "localhost",

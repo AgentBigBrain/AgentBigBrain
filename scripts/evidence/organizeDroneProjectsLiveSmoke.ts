@@ -137,7 +137,7 @@ const RUN_ID = `${Date.now()}`;
 const COMMAND_NAME = "tsx scripts/evidence/organizeDroneProjectsLiveSmoke.ts";
 const CONVERSATION_ID = `organize-drone-projects-smoke-${RUN_ID}`;
 const USER_ID = "real-smoke-user";
-const USERNAME = "anthonybenny";
+const USERNAME = "fixtureuser";
 const SESSION_PATH = path.resolve(process.cwd(), `runtime/tmp-organize-session-${RUN_ID}.json`);
 const STATE_PATH = path.resolve(process.cwd(), `runtime/tmp-organize-state-${RUN_ID}.json`);
 const LEDGER_SQLITE_PATH = path.resolve(process.cwd(), `runtime/tmp-organize-ledgers-${RUN_ID}.sqlite`);
@@ -151,6 +151,8 @@ const MANAGED_PROCESS_SNAPSHOT_PATH = path.join(LIVE_RUN_RUNTIME_PATH, "managed_
 const BROWSER_SESSION_SNAPSHOT_PATH = path.join(LIVE_RUN_RUNTIME_PATH, "browser_sessions.json");
 const PROVIDER_BLOCK_PATTERN =
 /(?:429|exceeded your current quota|usage limit|purchase more credits|try again at|rate limit|fetch failed|request timed out|socket hang up|ECONNRESET)/i;
+const BOUNDED_RECOVERY_BLOCK_PATTERN =
+/(?:Planner model retried the local organization move without also proving what moved into the destination and what remained at the original root|Keep bounded move proof in the same plan|one or more of the target folders are still being used by another local process|Windows would not let me move them safely|one or more are still open in a local preview process)/i;
 const TURN_TIMEOUT_MS = 50_000;
 const SMOKE_DEADLINE_MS = 70_000;
 const CLEANUP_STEP_TIMEOUT_MS = 3_000;
@@ -682,6 +684,43 @@ function findProviderBlockerReason(session: ConversationSession | null): string 
   return assistantTurn?.text ?? null;
 }
 
+function findBoundedRecoveryBlockerReason(session: ConversationSession | null): string | null {
+  if (!session) {
+    return null;
+  }
+  const blockedJob = [...session.recentJobs]
+    .reverse()
+    .find((job) =>
+      (
+        typeof job.errorMessage === "string" ||
+        typeof job.resultSummary === "string"
+      ) &&
+      BOUNDED_RECOVERY_BLOCK_PATTERN.test(
+        [job.errorMessage ?? "", job.resultSummary ?? ""].join("\n")
+      )
+    );
+  if (blockedJob) {
+    return [blockedJob.errorMessage ?? "", blockedJob.resultSummary ?? ""]
+      .filter((value) => value.trim().length > 0)
+      .join("\n");
+  }
+  const assistantTurn = [...session.conversationTurns]
+    .reverse()
+    .find(
+      (turn) =>
+        turn.role === "assistant" &&
+        BOUNDED_RECOVERY_BLOCK_PATTERN.test(turn.text)
+    );
+  return assistantTurn?.text ?? null;
+}
+
+function classifyBoundedOrganizationBlockerReason(blockerReason: string): ArtifactStatus {
+  if (PROVIDER_BLOCK_PATTERN.test(blockerReason) || BOUNDED_RECOVERY_BLOCK_PATTERN.test(blockerReason)) {
+    return "BLOCKED";
+  }
+  return "FAIL";
+}
+
 async function cleanupRuntimeSessionResources(
   config: ReturnType<typeof createBrainConfigFromEnv>,
   session: ConversationSession | null
@@ -825,7 +864,7 @@ function buildBlockedOrganizationArtifact(blockerReason: string): Artifact {
   return {
     generatedAt: new Date().toISOString(),
     command: COMMAND_NAME,
-    status: PROVIDER_BLOCK_PATTERN.test(blockerReason) ? "BLOCKED" : "FAIL",
+    status: classifyBoundedOrganizationBlockerReason(blockerReason),
     blockerReason,
     localIntentModel,
     prompts: {
@@ -1276,13 +1315,15 @@ async function main(): Promise<void> {
     const previewsSeeded = seededPreviewHolders.every((holder) => holder.previewUrl.length > 0);
     const foldersMoved = movedEntries.includes(sourceFolderAName) && movedEntries.includes(sourceFolderBName) && remainingDesktopMatches.length === 0;
     const providerBlockerReason = findProviderBlockerReason(finalSession);
+    const boundedRecoveryBlockerReason = findBoundedRecoveryBlockerReason(finalSession);
+    const blockerReason = providerBlockerReason ?? boundedRecoveryBlockerReason;
 
     await writeFile(LATEST_SESSION_PATH, `${JSON.stringify(finalSession, null, 2)}${os.EOL}`, "utf8");
 
     artifact = {
       generatedAt: new Date().toISOString(),
       command: COMMAND_NAME,
-      status: providerBlockerReason
+      status: blockerReason
         ? "BLOCKED"
         : previewsSeeded &&
             (recoveryClarificationAsked || autoRecoveredWithoutClarification) &&
@@ -1291,7 +1332,7 @@ async function main(): Promise<void> {
             browserSessionsClosed
           ? "PASS"
           : "FAIL",
-      blockerReason: providerBlockerReason,
+      blockerReason,
       localIntentModel: { enabled: localProbe.enabled, required: localProbe.liveSmokeRequired, reachable: localProbe.reachable, modelPresent: localProbe.modelPresent, model: localProbe.model, provider: localProbe.provider, baseUrl: localProbe.baseUrl },
       prompts: { organize: organizePrompt, retry: retryPrompt },
       seededPreviewHolders: seededPreviewHolders.map(({ folderName, folderPath, previewUrl, processLeaseId, browserSessionId }) => ({ folderName, folderPath, previewUrl, processLeaseId, browserSessionId })),

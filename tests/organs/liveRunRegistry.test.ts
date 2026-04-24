@@ -138,6 +138,50 @@ test("BrowserSessionRegistry keeps detached sessions orphaned when it cannot pro
   }
 });
 
+test("BrowserSessionRegistry keeps detached sessions uncontrollable when a launcher pid is tracked", () => {
+  const tempDir = mkdtempSync(path.join(os.tmpdir(), "abb-browser-registry-detached-pid-"));
+  try {
+    const snapshotPath = path.join(tempDir, "browser_sessions.json");
+    writeFileSync(
+      snapshotPath,
+      `${JSON.stringify(
+        {
+          version: 1,
+          sessions: [
+            {
+              sessionId: "browser_session:detached_pid_preview",
+              url: "http://127.0.0.1:4179/index.html",
+              status: "open",
+              openedAt: "2026-03-14T12:00:00.000Z",
+              closedAt: null,
+              visibility: "visible",
+              controllerKind: "os_default",
+              controlAvailable: false,
+              browserProcessPid: 81234
+            }
+          ]
+        },
+        null,
+        2
+      )}\n`,
+      "utf8"
+    );
+
+    const registry = new BrowserSessionRegistry({
+      snapshotPath,
+      isProcessAlive: () => true
+    });
+    const snapshot = registry.getSnapshot("browser_session:detached_pid_preview");
+
+    assert.ok(snapshot);
+    assert.equal(snapshot?.status, "open");
+    assert.equal(snapshot?.controlAvailable, false);
+    assert.equal(snapshot?.browserProcessPid, 81234);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test("BrowserSessionRegistry closes orphaned managed sessions when their linked preview pid is dead", () => {
   const tempDir = mkdtempSync(path.join(os.tmpdir(), "abb-browser-registry-linked-dead-"));
   try {

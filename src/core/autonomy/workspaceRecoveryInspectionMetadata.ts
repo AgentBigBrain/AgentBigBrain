@@ -10,7 +10,10 @@ import type { TaskRunResult } from "../types";
 export interface RuntimeOwnershipInspectionMetadata {
   recommendedNextAction: string | null;
   ownershipClassification: string | null;
+  browserSessionIds: readonly string[];
   previewProcessLeaseIds: readonly string[];
+  staleBrowserSessionIds: readonly string[];
+  orphanedBrowserSessionIds: readonly string[];
   recoveredExactPreviewHolderPids: readonly number[];
   recoveredExactPreviewHolderLeaseIds: readonly string[];
   untrackedCandidatePids: readonly number[];
@@ -215,7 +218,10 @@ function parseUntrackedCandidateMetadata(
 export function readRuntimeOwnershipInspectionMetadata(
   taskRunResult: TaskRunResult
 ): RuntimeOwnershipInspectionMetadata | null {
+  const browserSessionIds = new Set<string>();
   const previewLeaseIds = new Set<string>();
+  const staleBrowserSessionIds = new Set<string>();
+  const orphanedBrowserSessionIds = new Set<string>();
   const recoveredExactPreviewHolderPids = new Set<number>();
   const recoveredExactPreviewHolderLeaseIds = new Set<string>();
   const untrackedCandidatePids = new Set<number>();
@@ -252,8 +258,17 @@ export function readRuntimeOwnershipInspectionMetadata(
         ? metadata.inspectionOwnershipClassification
         : null
     );
+    for (const sessionId of parseCsvStrings(metadata.inspectionBrowserSessionIds)) {
+      browserSessionIds.add(sessionId);
+    }
     for (const leaseId of parseCsvStrings(metadata.inspectionPreviewProcessLeaseIds)) {
       previewLeaseIds.add(leaseId);
+    }
+    for (const sessionId of parseCsvStrings(metadata.inspectionStaleBrowserSessionIds)) {
+      staleBrowserSessionIds.add(sessionId);
+    }
+    for (const sessionId of parseCsvStrings(metadata.inspectionOrphanedBrowserSessionIds)) {
+      orphanedBrowserSessionIds.add(sessionId);
     }
     for (const leaseId of parseCsvStrings(metadata.inspectionRecoveredExactPreviewHolderLeaseIds)) {
       recoveredExactPreviewHolderLeaseIds.add(leaseId);
@@ -280,7 +295,10 @@ export function readRuntimeOwnershipInspectionMetadata(
   return {
     recommendedNextAction,
     ownershipClassification,
+    browserSessionIds: Array.from(browserSessionIds),
     previewProcessLeaseIds: Array.from(previewLeaseIds),
+    staleBrowserSessionIds: Array.from(staleBrowserSessionIds),
+    orphanedBrowserSessionIds: Array.from(orphanedBrowserSessionIds),
     recoveredExactPreviewHolderPids: Array.from(recoveredExactPreviewHolderPids),
     recoveredExactPreviewHolderLeaseIds: Array.from(recoveredExactPreviewHolderLeaseIds),
     untrackedCandidatePids: Array.from(untrackedCandidatePids),

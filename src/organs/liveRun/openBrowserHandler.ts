@@ -3,8 +3,13 @@
  */
 
 import { access } from "node:fs/promises";
+import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import {
+  dirnameCrossPlatformPath,
+  localFileUrlToAbsolutePath
+} from "../../core/crossPlatformPath";
 import { OpenBrowserActionParams, ExecutorExecutionOutcome } from "../../core/types";
 import { isAllowedBrowserSessionControlUrl } from "../../core/constraintRuntime/browserConstraints";
 import { createAbortError, isAbortError, throwIfAborted } from "../../core/runtimeAbort";
@@ -34,14 +39,87 @@ interface BrowserOpenLaunchSpec {
   executable: string;
   args: readonly string[];
   openMethod: string;
+  captureBrowserPid?: boolean;
+  useChildPid?: boolean;
+  env?: NodeJS.ProcessEnv;
   windowsVerbatimArguments?: boolean;
 }
 
+const BROWSER_PID_CAPTURE_TIMEOUT_MS = 1_500;
+
 /**
- * Normalizes one local path into a stable comparable value.
+ * Checks path exists.
  *
- * @param value - Candidate local path.
- * @returns Comparable path, or `null` when the input is blank.
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses `access` (import `access`) from `node:fs/promises`.
+ * @param candidatePath - Input consumed by this helper.
+ * @returns Result produced by this helper.
+ */
+async function pathExists(candidatePath: string | null | undefined): Promise<boolean> {
+  if (!candidatePath || candidatePath.trim().length === 0) {
+    return false;
+  }
+  try {
+    await access(candidatePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Finds windows direct browser executable.
+ *
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses `path` (import `path`) from `node:path`.
+ * @returns Result produced by this helper.
+ */
+async function findWindowsDirectBrowserExecutable(): Promise<string | null> {
+  const explicitOverride = process.env.ABB_BROWSER_EXECUTABLE?.trim() ?? "";
+  if (explicitOverride.length > 0 && (await pathExists(explicitOverride))) {
+    return explicitOverride;
+  }
+
+  const programFiles = process.env.ProgramFiles?.trim() ?? "";
+  const programFilesX86 = process.env["ProgramFiles(x86)"]?.trim() ?? "";
+  const localAppData = process.env.LOCALAPPDATA?.trim() ?? "";
+  const candidates = [
+    programFiles ? path.join(programFiles, "Google", "Chrome", "Application", "chrome.exe") : null,
+    programFilesX86
+      ? path.join(programFilesX86, "Google", "Chrome", "Application", "chrome.exe")
+      : null,
+    localAppData ? path.join(localAppData, "Google", "Chrome", "Application", "chrome.exe") : null,
+    programFiles
+      ? path.join(programFiles, "Microsoft", "Edge", "Application", "msedge.exe")
+      : null,
+    programFilesX86
+      ? path.join(programFilesX86, "Microsoft", "Edge", "Application", "msedge.exe")
+      : null
+  ];
+  for (const candidate of candidates) {
+    if (await pathExists(candidate)) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
+/**
+ * Normalizes comparable path.
+ *
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses local constants/helpers within this module.
+ * @param value - Input consumed by this helper.
+ * @returns Result produced by this helper.
  */
 function normalizeComparablePath(value: string | null): string | null {
   if (!value) {
@@ -55,14 +133,61 @@ function normalizeComparablePath(value: string | null): string | null {
 }
 
 /**
- * Returns whether one tracked browser session still belongs to the same runtime ownership envelope
- * requested by the current browser-open action.
+ * Evaluates whether missing preview process lease id.
  *
- * @param session - Existing reusable browser session candidate.
- * @param workspaceRootPath - Requested workspace root for the current open action.
- * @param linkedProcessLeaseId - Requested linked preview-process lease id.
- * @param linkedProcessCwd - Requested linked preview-process cwd.
- * @returns `true` when the existing session is ownership-compatible with the current request.
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses local constants/helpers within this module.
+ * @param value - Input consumed by this helper.
+ * @returns Result produced by this helper.
+ */
+function isMissingPreviewProcessLeaseId(value: string | null): boolean {
+  if (!value) {
+    return true;
+  }
+  const normalized = value.trim().toLowerCase();
+  return normalized.length === 0 || normalized === "none" || normalized === "null";
+}
+
+/**
+ * Derives local file workspace root path.
+ *
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses `dirnameCrossPlatformPath` (import `dirnameCrossPlatformPath`) from `../../core/crossPlatformPath`.
+ * - Uses `localFileUrlToAbsolutePath` (import `localFileUrlToAbsolutePath`) from `../../core/crossPlatformPath`.
+ * @param urlValue - Input consumed by this helper.
+ * @returns Result produced by this helper.
+ */
+function deriveLocalFileWorkspaceRootPath(urlValue: string): string | null {
+  if (!urlValue.startsWith("file://")) {
+    return null;
+  }
+  try {
+    const localPath = localFileUrlToAbsolutePath(urlValue);
+    return localPath ? dirnameCrossPlatformPath(localPath) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Evaluates whether reuse browser session for ownership.
+ *
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses `BrowserSessionSnapshot` (import `BrowserSessionSnapshot`) from `./browserSessionRegistry`.
+ * @param session - Input consumed by this helper.
+ * @param workspaceRootPath - Input consumed by this helper.
+ * @param linkedProcessLeaseId - Input consumed by this helper.
+ * @param linkedProcessCwd - Input consumed by this helper.
+ * @returns Result produced by this helper.
  */
 function canReuseBrowserSessionForOwnership(
   session: BrowserSessionSnapshot,
@@ -105,30 +230,37 @@ function canReuseBrowserSessionForOwnership(
 }
 
 /**
- * Chooses the most relevant managed preview-process snapshot to link to a browser-open action when
- * the planner omitted `previewProcessLeaseId` but the runtime can still prove the active preview
- * from current task/workspace context.
+ * Infers linked preview process snapshot.
  *
- * @param context - Shared executor dependencies for live-run capability handlers.
- * @param workspaceRootPath - Current workspace root when known.
- * @param taskId - Owning task id for the browser-open action.
- * @returns Inferred managed-process snapshot, or `null` when the runtime cannot prove one.
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses `LiveRunExecutorContext` (import `LiveRunExecutorContext`) from `./contracts`.
+ * - Uses `ManagedProcessSnapshot` (import `ManagedProcessSnapshot`) from `./managedProcessRegistry`.
+ * @param context - Input consumed by this helper.
+ * @param workspaceRootPath - Input consumed by this helper.
+ * @param taskId - Input consumed by this helper.
+ * @returns Result produced by this helper.
  */
 function inferLinkedPreviewProcessSnapshot(
   context: LiveRunExecutorContext,
   workspaceRootPath: string | null,
   taskId?: string
 ): ManagedProcessSnapshot | null {
-  if (!taskId) {
+  const allActiveSnapshots = context.managedProcessRegistry
+    .listSnapshots()
+    .filter(
+      (snapshot) => snapshot.statusCode !== "PROCESS_STOPPED"
+    )
+    .sort((left, right) => right.startedAt.localeCompare(left.startedAt));
+  if (allActiveSnapshots.length === 0) {
     return null;
   }
 
-  const activeSnapshots = context.managedProcessRegistry
-    .listSnapshots()
-    .filter(
-      (snapshot) => snapshot.taskId === taskId && snapshot.statusCode !== "PROCESS_STOPPED"
-    )
-    .sort((left, right) => right.startedAt.localeCompare(left.startedAt));
+  const activeSnapshots = taskId
+    ? allActiveSnapshots.filter((snapshot) => snapshot.taskId === taskId)
+    : allActiveSnapshots;
   if (activeSnapshots.length === 0) {
     return null;
   }
@@ -173,15 +305,36 @@ function inferLinkedPreviewProcessSnapshot(
  * @param url - Local preview URL to open in the user's browser.
  * @returns Platform-specific launch specification.
  */
-function buildBrowserOpenLaunchSpec(url: string): BrowserOpenLaunchSpec {
+async function buildBrowserOpenLaunchSpec(url: string): Promise<BrowserOpenLaunchSpec> {
   switch (process.platform) {
-    case "win32":
+    case "win32": {
+      const directBrowserExecutable = await findWindowsDirectBrowserExecutable();
+      if (directBrowserExecutable) {
+        return {
+          executable: directBrowserExecutable,
+          args: ["--new-window", url],
+          openMethod: "direct_browser_executable",
+          useChildPid: true
+        };
+      }
       return {
-        executable: "cmd.exe",
-        args: ["/d", "/c", "start", "", url],
-        openMethod: "cmd_start",
-        windowsVerbatimArguments: true
+        executable: "powershell.exe",
+        args: [
+          "-NoProfile",
+          "-NonInteractive",
+          "-ExecutionPolicy",
+          "Bypass",
+          "-Command",
+          "$ErrorActionPreference='Stop'; $p = Start-Process -FilePath $env:ABB_BROWSER_URL -PassThru; if ($null -ne $p -and $null -ne $p.Id) { [Console]::Out.WriteLine($p.Id) }"
+        ],
+        openMethod: "powershell_start_process",
+        captureBrowserPid: true,
+        env: {
+          ...process.env,
+          ABB_BROWSER_URL: url
+        }
       };
+    }
     case "darwin":
       return {
         executable: "open",
@@ -211,6 +364,15 @@ async function waitForBrowserOpenLaunch(
   throwIfAborted(signal);
   await new Promise<void>((resolve, reject) => {
     let settled = false;
+    const handleAbort = (): void => {
+      finalize(() => reject(createAbortError()));
+    };
+    const handleSpawn = (): void => {
+      finalize(() => resolve());
+    };
+    const handleError = (error: Error): void => {
+      finalize(() => reject(error));
+    };
     const finalize = (callback: () => void): void => {
       if (settled) {
         return;
@@ -219,26 +381,86 @@ async function waitForBrowserOpenLaunch(
       if (signal) {
         signal.removeEventListener("abort", handleAbort);
       }
-      child.removeAllListeners("spawn");
-      child.removeAllListeners("error");
+      child.removeListener("spawn", handleSpawn);
+      child.removeListener("error", handleError);
       callback();
-    };
-
-    const handleAbort = (): void => {
-      finalize(() => reject(createAbortError()));
     };
 
     if (signal) {
       signal.addEventListener("abort", handleAbort, { once: true });
     }
 
-    child.once("spawn", () => {
-      finalize(() => resolve());
-    });
-    child.once("error", (error) => {
-      finalize(() => reject(error));
-    });
+    child.once("spawn", handleSpawn);
+    child.once("error", handleError);
   });
+}
+
+/**
+ * Reads an exact browser pid from a short-lived launcher child when the platform-specific launch
+ * method can surface one deterministically.
+ *
+ * @param child - Spawned launcher child.
+ * @param signal - Optional abort signal propagated from the runtime.
+ * @returns Browser pid, or `null` when none could be recovered.
+ */
+async function captureLaunchedBrowserPid(
+  child: ReturnType<LiveRunExecutorContext["shellSpawn"]>,
+  signal?: AbortSignal
+): Promise<number | null> {
+  if (!child.stdout) {
+    return null;
+  }
+  const chunks: string[] = [];
+  child.stdout.setEncoding?.("utf8");
+  const handleData = (chunk: unknown): void => {
+    chunks.push(String(chunk));
+  };
+  child.stdout.on("data", handleData);
+  await new Promise<void>((resolve, reject) => {
+    let settled = false;
+    let timeout: ReturnType<typeof setTimeout> | null = setTimeout(() => {
+      finalize(resolve);
+    }, BROWSER_PID_CAPTURE_TIMEOUT_MS);
+    const handleAbort = (): void => {
+      finalize(() => reject(createAbortError()));
+    };
+    const handleDone = (): void => {
+      finalize(resolve);
+    };
+    const handleError = (error: Error): void => {
+      finalize(() => reject(error));
+    };
+    const finalize = (callback: () => void): void => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      if (timeout) {
+        clearTimeout(timeout);
+        timeout = null;
+      }
+      if (signal) {
+        signal.removeEventListener("abort", handleAbort);
+      }
+      child.stdout?.removeListener("data", handleData);
+      child.removeListener("close", handleDone);
+      child.removeListener("exit", handleDone);
+      child.removeListener("error", handleError);
+      callback();
+    };
+    if (signal) {
+      signal.addEventListener("abort", handleAbort, { once: true });
+    }
+    child.once("close", handleDone);
+    child.once("exit", handleDone);
+    child.once("error", handleError);
+  });
+  const match = chunks.join("").match(/\b(\d{2,10})\b/);
+  if (!match) {
+    return null;
+  }
+  const parsed = Number.parseInt(match[1] ?? "", 10);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
 /**
@@ -305,10 +527,19 @@ export async function executeOpenBrowser(
 
   const normalizedUrl = parsedUrl.toString();
   const sessionId = `browser_session:${actionId}`;
-  const workspaceRootPath = normalizeOptionalString(params.rootPath);
-  const explicitLinkedPreviewProcessLeaseId = normalizeOptionalString(params.previewProcessLeaseId);
+  const requestedWorkspaceRootPath = normalizeOptionalString(params.rootPath);
+  const derivedLocalFileWorkspaceRootPath = isLocalFileUrl
+    ? deriveLocalFileWorkspaceRootPath(normalizedUrl)
+    : null;
+  const workspaceRootPath = derivedLocalFileWorkspaceRootPath ?? requestedWorkspaceRootPath;
+  const rawExplicitLinkedPreviewProcessLeaseId = normalizeOptionalString(params.previewProcessLeaseId);
+  const explicitLinkedPreviewProcessLeaseId = isMissingPreviewProcessLeaseId(
+    rawExplicitLinkedPreviewProcessLeaseId
+  )
+    ? null
+    : rawExplicitLinkedPreviewProcessLeaseId;
   const inferredLinkedPreviewProcessSnapshot =
-    explicitLinkedPreviewProcessLeaseId === null
+    rawExplicitLinkedPreviewProcessLeaseId === null
       ? inferLinkedPreviewProcessSnapshot(context, workspaceRootPath, taskId)
       : null;
   const linkedPreviewProcessLeaseId =
@@ -317,7 +548,9 @@ export async function executeOpenBrowser(
     ? context.managedProcessRegistry.getSnapshot(linkedPreviewProcessLeaseId)
     : inferredLinkedPreviewProcessSnapshot;
   const linkedProcessLeaseId = linkedPreviewProcessSnapshot?.leaseId ?? linkedPreviewProcessLeaseId;
-  const linkedProcessCwd = linkedPreviewProcessSnapshot?.cwd ?? workspaceRootPath;
+  const linkedProcessCwd = linkedProcessLeaseId
+    ? (linkedPreviewProcessSnapshot?.cwd ?? workspaceRootPath)
+    : null;
   const linkedProcessPid = linkedPreviewProcessSnapshot?.pid ?? null;
   const lifecycleCode = isLoopbackHttpUrl ? "PROCESS_READY" : null;
   const timeoutMs = resolveReadinessProbeTimeoutMs(
@@ -477,17 +710,28 @@ export async function executeOpenBrowser(
       }
     }
 
-    const launchSpec = buildBrowserOpenLaunchSpec(normalizedUrl);
+    const launchSpec = await buildBrowserOpenLaunchSpec(normalizedUrl);
     const child = context.shellSpawn(
       launchSpec.executable,
       launchSpec.args,
       {
         detached: true,
-        stdio: "ignore",
+        stdio: launchSpec.captureBrowserPid ? ["ignore", "pipe", "ignore"] : "ignore",
+        env: launchSpec.env,
+        windowsHide: true,
         windowsVerbatimArguments: launchSpec.windowsVerbatimArguments ?? false
       }
     );
+    const browserPidCapturePromise = launchSpec.captureBrowserPid
+      ? captureLaunchedBrowserPid(child, signal)
+      : Promise.resolve<number | null>(null);
     await waitForBrowserOpenLaunch(child, signal);
+    const capturedBrowserPid = await browserPidCapturePromise;
+    const browserProcessPid =
+      capturedBrowserPid ??
+      (launchSpec.useChildPid && typeof child.pid === "number" && Number.isInteger(child.pid)
+        ? child.pid
+        : null);
     if (typeof child.unref === "function") {
       child.unref();
     }
@@ -500,11 +744,14 @@ export async function executeOpenBrowser(
       workspaceRootPath,
       linkedProcessLeaseId,
       linkedProcessCwd,
-      linkedProcessPid
+      linkedProcessPid,
+      browserProcessPid
     });
     return buildExecutionOutcome(
       "success",
-      `Opened ${normalizedUrl} in your visible browser and left it open. This window may need to be closed manually later because runtime control is unavailable here.`,
+      snapshot.controlAvailable
+        ? `Opened ${normalizedUrl} in your visible browser and left it open for you.`
+        : `Opened ${normalizedUrl} in your visible browser and left it open. This window may need to be closed manually later because runtime control is unavailable here.`,
       undefined,
       buildBrowserSessionExecutionMetadata({
         sessionId: snapshot.sessionId,

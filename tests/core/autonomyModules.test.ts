@@ -336,14 +336,14 @@ function buildBlockedMissingDependencyShellResult(actionId: string): ActionRunRe
       description: "build the current app",
       params: {
         command: "npm run build",
-        cwd: "C:\\Users\\benac\\OneDrive\\Desktop\\Calm Drone"
+        cwd: "C:\\Users\\testuser\\OneDrive\\Desktop\\Calm Drone"
       },
       estimatedCostUsd: 0.08
     },
     mode: "escalation_path",
     approved: false,
     output:
-      "Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@vitejs/plugin-react' imported from C:\\Users\\benac\\OneDrive\\Desktop\\Calm Drone\\vite.config.js",
+      "Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@vitejs/plugin-react' imported from C:\\Users\\testuser\\OneDrive\\Desktop\\Calm Drone\\vite.config.js",
     executionStatus: "failed",
     executionFailureCode: "ACTION_EXECUTION_FAILED",
     executionMetadata: {
@@ -373,7 +373,7 @@ function buildBlockedStartProcessPortInUseResult(
       description: "start the local server",
       params: {
         command: `npm run dev -- --hostname 127.0.0.1 --port ${requestedPort}`,
-        cwd: "C:\\Users\\benac\\OneDrive\\Desktop\\Detroit City Two"
+        cwd: "C:\\Users\\testuser\\OneDrive\\Desktop\\Detroit City Two"
       },
       estimatedCostUsd: 0.28
     },
@@ -391,7 +391,7 @@ function buildBlockedStartProcessPortInUseResult(
       processRequestedUrl: `http://127.0.0.1:${requestedPort}`,
       processSuggestedPort: suggestedPort,
       processSuggestedUrl: `http://127.0.0.1:${suggestedPort}`,
-      processCwd: "C:\\Users\\benac\\OneDrive\\Desktop\\Detroit City Two"
+      processCwd: "C:\\Users\\testuser\\OneDrive\\Desktop\\Detroit City Two"
     },
     blockedBy: ["PROCESS_START_FAILED"],
     violations: [],
@@ -936,7 +936,12 @@ test("buildStructuredRecoveryExecutionPlan uses the approved start_process conte
       recoveryClass: "TARGET_NOT_RUNNING",
       optionId: "restart_target_then_reverify",
       allowedRung: "bounded_repair_iteration",
-      fingerprint: "restart_target_then_reverify:detroit_city"
+      fingerprint: "restart_target_then_reverify:detroit_city",
+      attemptsUsed: 0,
+      maxAttempts: 2,
+      cooldownIterations: 0,
+      builderPending: false,
+      reason: "test fixture permits one bounded restart"
     },
     trackedManagedProcessLeaseId: "proc_restart_context_1",
     trackedManagedProcessStartContext: null,
@@ -991,7 +996,12 @@ test("buildStructuredRecoveryExecutionPlan reuses tracked start context across l
       recoveryClass: "TARGET_NOT_RUNNING",
       optionId: "restart_target_then_reverify",
       allowedRung: "bounded_repair_iteration",
-      fingerprint: "restart_target_then_reverify:detroit_city_cross_iteration"
+      fingerprint: "restart_target_then_reverify:detroit_city_cross_iteration",
+      attemptsUsed: 0,
+      maxAttempts: 2,
+      cooldownIterations: 0,
+      builderPending: false,
+      reason: "test fixture permits one bounded restart"
     },
     trackedManagedProcessLeaseId: "proc_restart_context_2",
     trackedManagedProcessStartContext: {
@@ -1028,7 +1038,7 @@ test("resolveStructuredRecoveryRuntimeDecision does not relaunch localhost for s
       goal,
       userInput: [
         "Current tracked workspace in this chat:",
-        "- Root path: C:\\Users\\benac\\OneDrive\\Desktop\\Detroit City Two",
+        "- Root path: C:\\Users\\testuser\\OneDrive\\Desktop\\Detroit City Two",
         "- Preview process lease: proc_detroit_city_two",
         "",
         "Current user request:",
@@ -1056,7 +1066,7 @@ test("resolveStructuredRecoveryRuntimeDecision does not relaunch localhost for s
     trackedManagedProcessStartContext: {
       leaseId: "proc_detroit_city_two",
       command: "npm run dev -- --hostname 127.0.0.1 --port 3000",
-      cwd: "C:\\Users\\benac\\OneDrive\\Desktop\\Detroit City Two"
+      cwd: "C:\\Users\\testuser\\OneDrive\\Desktop\\Detroit City Two"
     },
     trackedLoopbackTarget: {
       url: "http://127.0.0.1:3000",
@@ -1180,7 +1190,7 @@ test("evaluateAutonomousNextStep enriches generic framework restart continuation
         type: "write_file",
         description: "write the Detroit City Two page",
         params: {
-          path: "C:\\Users\\benac\\OneDrive\\Desktop\\Detroit City Two\\app\\page.js",
+          path: "C:\\Users\\testuser\\OneDrive\\Desktop\\Detroit City Two\\app\\page.js",
           content: "export default function Page() { return null; }"
         },
         estimatedCostUsd: 0.02
@@ -1220,7 +1230,7 @@ test("evaluateAutonomousNextStep enriches generic framework restart continuation
     {
       leaseId: "proc_detroit_city_two",
       command: "npm run dev -- --hostname 127.0.0.1 --port 55773",
-      cwd: "C:\\Users\\benac\\OneDrive\\Desktop\\Detroit City Two"
+      cwd: "C:\\Users\\testuser\\OneDrive\\Desktop\\Detroit City Two"
     },
     {
       url: "http://127.0.0.1:55773",
@@ -1232,7 +1242,7 @@ test("evaluateAutonomousNextStep enriches generic framework restart continuation
   assert.equal(nextStep.isGoalMet, false);
   assert.match(
     nextStep.nextUserInput,
-    /Reuse the existing project at `C:\\Users\\benac\\OneDrive\\Desktop\\Detroit City Two`/i
+    /Reuse the existing project at `C:\\Users\\testuser\\OneDrive\\Desktop\\Detroit City Two`/i
   );
   assert.match(
     nextStep.nextUserInput,
@@ -1288,7 +1298,7 @@ test("evaluateAutonomousNextStep enriches runtime shutdown verification continua
     {
       leaseId: "proc_detroit_city_two",
       command: "npm run dev -- --hostname 127.0.0.1 --port 59025",
-      cwd: "C:\\Users\\benac\\OneDrive\\Desktop\\Detroit City Two"
+      cwd: "C:\\Users\\testuser\\OneDrive\\Desktop\\Detroit City Two"
     },
     {
       url: "http://127.0.0.1:59025",
@@ -1300,7 +1310,11 @@ test("evaluateAutonomousNextStep enriches runtime shutdown verification continua
   assert.equal(nextStep.isGoalMet, false);
   assert.match(
     nextStep.nextUserInput,
-    /Treat `C:\\Users\\benac\\OneDrive\\Desktop\\Detroit City Two` as the exact runtime target/i
+    /AUTONOMOUS_RUNTIME_INSPECTION_TARGET \{\"rootPath\":\"C:\\\\Users\\\\testuser\\\\OneDrive\\\\Desktop\\\\Detroit City Two\",\"previewUrl\":\"http:\/\/127\.0\.0\.1:59025\",\"previewProcessLeaseId\":\"proc_detroit_city_two\"\}/i
+  );
+  assert.match(
+    nextStep.nextUserInput,
+    /Treat `C:\\Users\\testuser\\OneDrive\\Desktop\\Detroit City Two` as the exact runtime target/i
   );
   assert.match(nextStep.nextUserInput, /Use inspect_workspace_resources first/i);
   assert.match(
@@ -1383,6 +1397,60 @@ test("evaluateAutonomousNextStep completes shutdown verification from one inspec
   assert.equal(nextStep.nextUserInput, "");
   assert.match(nextStep.reasoning, /does not appear to still be running/i);
   assert.match(nextStep.reasoning, /powershell\.exe \(pid 58260\)/i);
+});
+
+test("evaluateAutonomousNextStep keeps shutdown verification open when a current browser session still exists", async () => {
+  const goal =
+    'did you make sure you shut down "Detroit City Two" so that the server is no longer running? Please do this end to end - check and make sure. If it\'s complete then you succeeded.';
+  const result = buildTaskResult([
+    buildApprovedInspectWorkspaceResourcesResult(
+      "inspect_workspace_shutdown_browser_open",
+      {
+        inspectionOwnershipClassification: "current_tracked",
+        inspectionRecommendedNextAction: "stop_exact_tracked_holders",
+        inspectionBrowserSessionIds: "browser_session:detroit_two",
+        inspectionPreviewProcessLeaseIds: "",
+        inspectionStaleBrowserSessionIds: "",
+        inspectionOrphanedBrowserSessionIds: ""
+      }
+    )
+  ]);
+
+  const nextStep = await evaluateAutonomousNextStep(
+    {
+      completeJson: async () => ({
+        isGoalMet: false,
+        reasoning: "need to finish shutdown verification",
+        nextUserInput: "Inspect the tracked runtime again and close anything still open."
+      })
+    } as never,
+    DEFAULT_BRAIN_CONFIG,
+    goal,
+    result,
+    {
+      realSideEffects: 0,
+      targetPathTouches: 0,
+      artifactMutations: 0,
+      readinessProofs: 0,
+      browserProofs: 0,
+      browserOpenProofs: 0,
+      processStopProofs: 0
+    },
+    "proc_detroit_two",
+    {
+      leaseId: "proc_detroit_two",
+      command: "npm run dev -- --hostname 127.0.0.1 --port 3000",
+      cwd: "C:\\Users\\testuser\\Desktop\\Detroit City Two"
+    },
+    {
+      url: "http://127.0.0.1:3000",
+      host: "127.0.0.1",
+      port: 3000
+    }
+  );
+
+  assert.equal(nextStep.isGoalMet, false);
+  assert.match(nextStep.nextUserInput, /Inspect the tracked runtime again and close anything still open\./i);
 });
 
 test("evaluateAutonomousNextStep requires open_browser when the goal says to leave the preview open", async () => {
