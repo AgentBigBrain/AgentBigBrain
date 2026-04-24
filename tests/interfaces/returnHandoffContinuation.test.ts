@@ -90,3 +90,45 @@ test("resolveReturnHandoffContinuationIntent fails closed when no workflow-compa
     null
   );
 });
+
+test("resolveReturnHandoffContinuationIntent keeps lexical resume wording pinned to the saved handoff mode", () => {
+  const session = buildSession();
+  session.modeContinuity = {
+    activeMode: "build",
+    source: "natural_intent",
+    confidence: "HIGH",
+    lastAffirmedAt: "2026-03-20T11:58:00.000Z",
+    lastUserInput: "Build the landing page and leave it open."
+  };
+  session.returnHandoff = {
+    id: "handoff:job-2",
+    status: "completed",
+    goal: "Finish the landing page",
+    summary: "Ready for review.",
+    nextSuggestedStep: null,
+    workspaceRootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
+    primaryArtifactPath: null,
+    previewUrl: null,
+    changedPaths: [],
+    sourceJobId: "job-2",
+    domainSnapshotLane: "workflow",
+    domainSnapshotRecordedAt: "2026-03-20T11:57:00.000Z",
+    updatedAt: "2026-03-20T11:58:30.000Z"
+  };
+
+  const resolved = resolveReturnHandoffContinuationIntent(
+    session,
+    "Pick that back up and keep going from where you left off.",
+    {
+      mode: "autonomous",
+      confidence: "high",
+      matchedRuleId: "intent_mode_autonomous_execution",
+      explanation: "Explicit keep-going wording promoted autonomy before handoff continuation applied.",
+      clarification: null,
+      semanticHint: null
+    }
+  );
+
+  assert.equal(resolved?.mode, "build");
+  assert.equal(resolved?.semanticHint, "resume_handoff");
+});

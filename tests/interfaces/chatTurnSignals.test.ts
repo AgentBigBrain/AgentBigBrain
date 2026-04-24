@@ -5,6 +5,7 @@ import {
   analyzeConversationChatTurnSignals,
   assessIdentityInterpretationEligibility,
   buildDeterministicDirectChatFallbackReply,
+  isMixedConversationMemoryStatusRecallTurn,
   isRelationshipConversationRecallTurn,
   shouldPreserveDeterministicDirectChatTurn,
   shouldAllowImplicitReturnHandoffStatusFallback
@@ -107,6 +108,32 @@ test("assessIdentityInterpretationEligibility keeps relationship recall out of t
     }),
     true
   );
+});
+
+test("assessIdentityInterpretationEligibility keeps short do-you-know relationship recall out of the identity follow-up path after a name exchange", () => {
+  const eligibility = assessIdentityInterpretationEligibility("Do you know Billy?", {
+    recentIdentityConversationActive: true,
+    recentAssistantIdentityPrompt: true
+  });
+  assert.equal(eligibility.eligible, false);
+  assert.equal(eligibility.reason, null);
+  assert.equal(isRelationshipConversationRecallTurn("Do you know Billy?"), true);
+  assert.equal(
+    shouldPreserveDeterministicDirectChatTurn("Do you know Billy?", {
+      recentIdentityConversationActive: true,
+      recentAssistantIdentityPrompt: true
+    }),
+    true
+  );
+});
+
+test("assessIdentityInterpretationEligibility keeps short objections out of the identity follow-up path after a name exchange", () => {
+  const eligibility = assessIdentityInterpretationEligibility("I didn't ask that.", {
+    recentIdentityConversationActive: true,
+    recentAssistantIdentityPrompt: true
+  });
+  assert.equal(eligibility.eligible, false);
+  assert.equal(eligibility.reason, null);
 });
 
 test("assessIdentityInterpretationEligibility keeps long approval-prefixed relationship updates out of the identity follow-up path", () => {
@@ -269,7 +296,7 @@ test("isRelationshipConversationRecallTurn recognizes status-shaped and shorthan
   assert.equal(isRelationshipConversationRecallTurn("What's the status with Billy?"), true);
   assert.equal(isRelationshipConversationRecallTurn("Do you remember Billy?"), true);
   assert.equal(isRelationshipConversationRecallTurn("What's Billy's situation again?"), true);
-  assert.equal(isRelationshipConversationRecallTurn("What's going on with Billy and Flare?"), true);
+  assert.equal(isRelationshipConversationRecallTurn("What's going on with Billy and Beacon?"), true);
   assert.equal(isRelationshipConversationRecallTurn("Who sold Jordan the gray Accord?"), true);
   assert.equal(isRelationshipConversationRecallTurn("Who bought the gray Accord?"), true);
   assert.equal(isRelationshipConversationRecallTurn("What happened with the gray Accord?"), true);
@@ -284,6 +311,21 @@ test("isRelationshipConversationRecallTurn recognizes status-shaped and shorthan
   );
   assert.equal(isRelationshipConversationRecallTurn("What's the status on the deploy?"), false);
   assert.equal(isRelationshipConversationRecallTurn("What happened with the deploy?"), false);
+});
+
+test("isMixedConversationMemoryStatusRecallTurn recognizes combined durable-memory and browser-status recap wording", () => {
+  const mixedRecallPrompt =
+    "Switch gears back to memory and status tracking. Tell me which employment facts are current versus historical, " +
+    "which date is the active pending review date, who currently handles the billing cleanup, and whether the Foundry Echo, River Glass, and Marquee Thread browser pages are still open or fully closed. " +
+    "Keep the personal facts and the desktop project status separate in your answer.";
+
+  assert.equal(isMixedConversationMemoryStatusRecallTurn(mixedRecallPrompt), true);
+  assert.equal(
+    isMixedConversationMemoryStatusRecallTurn(
+      "What's the status on the deploy and which browser window is still open?"
+    ),
+    false
+  );
 });
 
 test("shouldAllowImplicitReturnHandoffStatusFallback only permits explicit status-like fallback", () => {

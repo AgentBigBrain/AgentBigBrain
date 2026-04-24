@@ -8,6 +8,7 @@ import {
   resolveNaturalPulseCommandClassification
 } from "../conversationManagerHelpers";
 import {
+  resolveConversationCommandRoutingInput,
   resolveConversationInboundUserInput,
   type ConversationInboundMessage,
   type ExecuteConversationTask
@@ -63,13 +64,14 @@ export async function resolveConversationInvocation(
   deps: ConversationIngressDependencies
 ): Promise<ConversationInvocationResolution> {
   const trimmed = resolveConversationInboundUserInput(message).trim();
+  const commandRoutingText = resolveConversationCommandRoutingInput(message).trim();
   const naturalPulseClassification = resolveNaturalPulseCommandClassification(
-    trimmed,
+    commandRoutingText,
     deps.pulseLexicalRuleContext
   );
   recordPulseLexicalClassifierEvent(
     session,
-    trimmed,
+    commandRoutingText,
     message.receivedAt,
     naturalPulseClassification
   );
@@ -78,7 +80,7 @@ export async function resolveConversationInvocation(
     naturalPulseClassification.commandIntent === "status" &&
     !naturalPulseClassification.conflict &&
     hasActiveOrQueuedWork(session) &&
-    !EXPLICIT_PULSE_STATUS_HINT_PATTERN.test(trimmed);
+    !EXPLICIT_PULSE_STATUS_HINT_PATTERN.test(commandRoutingText);
   if (
     !shouldPreferWorkStatusOverPulseStatus &&
     naturalPulseClassification.category === "COMMAND" &&
@@ -97,7 +99,7 @@ export async function resolveConversationInvocation(
 
   if (!naturalPulseClassification.conflict && !shouldPreferWorkStatusOverPulseStatus) {
     const interpretedPulse = await resolveInterpretedPulseCommandArgument(
-      trimmed,
+      commandRoutingText,
       session,
       deps
     );
@@ -105,7 +107,7 @@ export async function resolveConversationInvocation(
       if (interpretedPulse.lexicalClassification) {
         recordPulseLexicalClassifierEvent(
           session,
-          trimmed,
+          commandRoutingText,
           message.receivedAt,
           interpretedPulse.lexicalClassification
         );

@@ -7,8 +7,25 @@ const USER_FOLLOW_UP_ANSWER_MARKER = "User follow-up answer:";
 const USER_QUESTION_MARKER = "User question:";
 const AGENT_PULSE_REQUEST_MARKER = "Agent Pulse request:";
 const RECENT_CONVERSATION_CONTEXT_MARKER = "Recent conversation context (oldest to newest):";
+const RESOLVED_SEMANTIC_ROUTE_MARKER = "Resolved semantic route:";
 const TRAILING_AGENTFRIEND_SECTION_PATTERN = /^\[AgentFriend[A-Za-z]+\]/;
 const AUTONOMOUS_EXECUTION_PREFIX = "[AUTONOMOUS_LOOP_GOAL]";
+const CLARIFICATION_METADATA_LINE_PATTERN = /^\[Clarification resolved:/i;
+const RESOLVED_SEMANTIC_ROUTE_LINE_PATTERN = /^- routeId:\s*([a-z_]+)\s*$/im;
+const SUPPORTED_RESOLVED_SEMANTIC_ROUTE_IDS = new Set([
+  "chat_answer",
+  "relationship_recall",
+  "status_recall",
+  "plan_request",
+  "build_request",
+  "static_html_build",
+  "framework_app_build",
+  "clarify_build_format",
+  "clarify_execution_mode",
+  "autonomous_execution",
+  "review_feedback",
+  "capability_discovery"
+]);
 
 /**
  * Extracts the trailing section after the last occurrence of a marker.
@@ -87,6 +104,27 @@ function boundRequestBeforeAgentFriendSections(value: string): string {
     boundedLines.push(line);
   }
   return boundedLines.join("\n").trim();
+}
+
+/**
+ * Removes deterministic clarification-display lines that describe the runtime's own question rather
+ * than the user's semantic request.
+ *
+ * **Why it exists:**
+ * Clarification questions can mention alternate routes such as Next.js or React. Downstream
+ * semantic planners should not treat that runtime-authored wording as if the user asked for it.
+ *
+ * **What it talks to:**
+ * - Local line-oriented filtering only.
+ *
+ * @param value - Extracted active request segment that may contain clarification-display metadata.
+ * @returns Request text without clarification-display lines.
+ */
+function stripClarificationDisplayMetadata(value: string): string {
+  const filteredLines = value
+    .split(/\r?\n/)
+    .filter((line) => !CLARIFICATION_METADATA_LINE_PATTERN.test(line.trim()));
+  return filteredLines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 
 /**
@@ -211,4 +249,49 @@ export function extractActiveRequestSegment(userInput: string): string {
   }
 
   return normalized;
+}
+
+/**
+ * Extracts the active request segment while removing clarification-display metadata that should not
+ * influence semantic route selection.
+ *
+ * **Why it exists:**
+ * Planner-policy routing and memory brokerage need the user's request plus deterministic lane
+ * markers, but not the natural-language clarification question the runtime asked on its own.
+ *
+ * **What it talks to:**
+ * - Uses `extractActiveRequestSegment` from this module.
+ *
+ * @param userInput - Wrapped user input that can include clarification-display metadata.
+ * @returns Semantically relevant request text for downstream routing and planner policy.
+ */
+export function extractSemanticRequestSegment(userInput: string): string {
+  return stripClarificationDisplayMetadata(extractActiveRequestSegment(userInput));
+}
+
+/**
+ * Extracts the deterministic semantic route chosen by the conversation front door when execution
+ * input carries that metadata.
+ *
+ * **Why it exists:**
+ * Planner-policy and runtime helpers should consume the already-resolved semantic route instead of
+ * re-inferring HTML/framework/build meaning from natural-language wording.
+ *
+ * **What it talks to:**
+ * - Uses `extractExecutionContextPayload` from this module.
+ *
+ * @param userInput - Wrapped execution input that may include resolved semantic route metadata.
+ * @returns Supported semantic route id, or `null` when none is present.
+ */
+export function extractResolvedSemanticRouteId(userInput: string): string | null {
+  const normalized = extractExecutionContextPayload(userInput);
+  if (!normalized || !normalized.includes(RESOLVED_SEMANTIC_ROUTE_MARKER)) {
+    return null;
+  }
+  const match = normalized.match(RESOLVED_SEMANTIC_ROUTE_LINE_PATTERN);
+  const candidate = match?.[1]?.trim() ?? "";
+  if (!candidate || !SUPPORTED_RESOLVED_SEMANTIC_ROUTE_IDS.has(candidate)) {
+    return null;
+  }
+  return candidate;
 }

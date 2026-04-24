@@ -522,7 +522,6 @@ function renderLatestChangeSummary(session: ConversationSession): string | null 
   );
 
   const lines: string[] = [];
-  let recoveryLineAdded = false;
   if (fileActions.length > 0) {
     const fileNames = fileActions
       .map((action) => action.location)

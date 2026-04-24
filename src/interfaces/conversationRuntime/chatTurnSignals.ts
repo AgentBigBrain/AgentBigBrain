@@ -9,7 +9,10 @@ import {
   type ConversationTurnActionability,
   type ConversationTurnKind
 } from "./chatTurnSignalAnalysis";
-import { isRelationshipConversationRecallTurn } from "./chatTurnRelationshipRecall";
+import {
+  isMixedConversationMemoryStatusRecallTurn,
+  isRelationshipConversationRecallTurn
+} from "./chatTurnRelationshipRecall";
 import {
   assessIdentityInterpretationEligibility,
   buildRecentIdentityInterpretationContext,
@@ -26,6 +29,7 @@ export {
   analyzeConversationChatTurnSignals,
   assessIdentityInterpretationEligibility,
   buildRecentIdentityInterpretationContext,
+  isMixedConversationMemoryStatusRecallTurn,
   isRelationshipConversationRecallTurn,
   isLikelyAssistantIdentityAnswer,
   isLikelyAssistantIdentityPrompt,

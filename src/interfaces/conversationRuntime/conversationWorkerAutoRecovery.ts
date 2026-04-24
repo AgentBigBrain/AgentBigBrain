@@ -79,6 +79,8 @@ function hasWorkflowCompatibleRecoveryContext(session: ConversationSession): boo
   return (
     session.modeContinuity?.activeMode === "plan" ||
     session.modeContinuity?.activeMode === "build" ||
+    session.modeContinuity?.activeMode === "static_html_build" ||
+    session.modeContinuity?.activeMode === "framework_app_build" ||
     session.modeContinuity?.activeMode === "autonomous" ||
     session.modeContinuity?.activeMode === "review"
   ) || session.domainContext.dominantLane === "unknown";

@@ -8,6 +8,10 @@ import {
   buildRecentIdentityInterpretationContext,
   shouldPreserveDeterministicDirectChatTurn
 } from "./chatTurnSignals";
+import {
+  buildRecentAssistantTurnContext,
+  isRecentAssistantAnswerThreadContinuationCandidate
+} from "./recentAssistantTurnContext";
 import type { ResolvedConversationIntentMode } from "./intentModeContracts";
 import type { ConversationIntentMode, ConversationSession } from "../sessionStore";
 
@@ -37,6 +41,8 @@ const WORK_PRODUCT_CONTINUATION_PATTERNS: readonly RegExp[] = [
 const CONTINUABLE_MODES = new Set<ConversationIntentMode>([
   "plan",
   "build",
+  "static_html_build",
+  "framework_app_build",
   "autonomous",
   "review"
 ]);
@@ -106,6 +112,14 @@ export function shouldAttemptModeContinuityInterpretation(
   ) {
     return false;
   }
+  if (
+    isRecentAssistantAnswerThreadContinuationCandidate(
+      normalized,
+      buildRecentAssistantTurnContext(session)
+    )
+  ) {
+    return false;
+  }
   return resolveModeContinuityIntent(session, userInput, resolvedIntentMode) === null;
 }
 
@@ -166,6 +180,14 @@ export function resolveModeContinuityIntent(
   if (isDirectConversationOnlyRequest(normalized)) {
     return null;
   }
+  if (
+    isRecentAssistantAnswerThreadContinuationCandidate(
+      normalized,
+      buildRecentAssistantTurnContext(session)
+    )
+  ) {
+    return null;
+  }
 
   const preferences = extractExecutionPreferences(normalized);
   const hasContinuationCue = CONTINUE_WORK_PATTERNS.some((pattern) => pattern.test(normalized));
@@ -190,6 +212,8 @@ export function resolveModeContinuityIntent(
 
   if (
     continuity.activeMode === "build" ||
+    continuity.activeMode === "static_html_build" ||
+    continuity.activeMode === "framework_app_build" ||
     continuity.activeMode === "autonomous" ||
     continuity.activeMode === "review" ||
     continuity.activeMode === "plan"

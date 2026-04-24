@@ -127,6 +127,23 @@ export function buildTerminalPersistentStatusUpdate(
       message: session.progressState.message
     };
   }
+  if (
+    job.status === "completed" &&
+    (job.finalDeliveryOutcome === "failed" || job.finalDeliveryOutcome === "rate_limited")
+  ) {
+    const failureCode = job.finalDeliveryLastErrorCode ?? (
+      job.finalDeliveryOutcome === "rate_limited"
+        ? "TELEGRAM_RATE_LIMITED"
+        : "FINAL_DELIVERY_FAILED"
+    );
+    return {
+      status: "completed",
+      message:
+        job.finalDeliveryOutcome === "rate_limited"
+          ? `The work finished, but Telegram rate-limited the full final reply (${failureCode}). Ask me to summarize it again here if you need the full result.`
+          : `The work finished, but sending the full final reply here failed (${failureCode}). Ask me to summarize it again or open the result directly.`
+    };
+  }
   if (job.status === "completed" && !hasBlockedTerminalSummary(job)) {
     return {
       status: "completed",

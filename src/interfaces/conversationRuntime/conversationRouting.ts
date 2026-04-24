@@ -2,7 +2,7 @@
 import { recordClassifierEvent } from "../conversationClassifierEvents";
 import { buildConversationAwareExecutionInput, resolveFollowUpInput } from "../conversationExecutionInputPolicy";
 import type { FollowUpRuleContext } from "../conversationManagerHelpers";
-import { setModeContinuity, clearActiveClarification, recordAssistantTurn, recordUserTurn } from "../conversationSessionMutations";
+import { setModeContinuity, clearActiveClarification, recordAssistantTurn } from "../conversationSessionMutations";
 import { buildRoutingExecutionHintV1, classifyRoutingIntentV1 } from "../routingMap";
 import type { ConversationSession } from "../sessionStore";
 import type { ConversationInboundMediaEnvelope } from "../mediaRuntime/contracts";
@@ -10,10 +10,18 @@ import type { AutonomyBoundaryInterpretationResolver, ContinuationInterpretation
 import type { TopicKeyInterpretationSignalV1 } from "../../core/stage6_86ConversationStack";
 import type { GetConversationEntityGraph, ListBrowserSessionSnapshots, DescribeRuntimeCapabilities, ListManagedProcessSnapshots, ListAvailableSkills, OpenConversationContinuityReadSession, QueryConversationContinuityEpisodes, QueryConversationContinuityFacts, RememberConversationProfileInput, RunDirectConversationTurn } from "./managerContracts";
 import { buildAutonomousExecutionInput } from "./managerContracts";
-import { buildClarifiedExecutionInput, resolveClarificationAnswer } from "./clarificationBroker";
+import {
+  buildClarifiedExecutionInput,
+  isClarificationExpired,
+  resolveClarifiedIntentMode,
+  resolveClarificationAnswer
+} from "./clarificationBroker";
 import { resolveModeContinuityIntent } from "./modeContinuity";
 import { resolveConversationIntentMode } from "./intentModeResolution";
-import type { ResolvedConversationIntentMode } from "./intentModeContracts";
+import {
+  inferSemanticRouteIdFromIntentMode,
+  type ResolvedConversationIntentMode
+} from "./intentModeContracts";
 import { applyActiveAutonomousPauseRequest, applyReturnHandoffPauseRequest, applyValidatedActiveAutonomousPause, applyValidatedReturnHandoffPause } from "./returnHandoffControl";
 import { buildHandoffControlInterpretationResolution, resolveInterpretedHandoffControlSignal } from "./returnHandoffControlInterpretationSupport";
 import { resolveReturnHandoffContinuationIntent } from "./returnHandoffContinuation";
@@ -24,6 +32,8 @@ import { applyConversationDomainSignalWindowForTurn } from "./sessionDomainRouti
 import { maybeResolveConversationRoutingInlineReply } from "./conversationRoutingInlineReplies";
 import { buildDeterministicDirectChatFallbackReply, buildRecentIdentityInterpretationContext, shouldPreserveDeterministicDirectChatTurn } from "./chatTurnSignals";
 import { resolveConversationTopicKeyInterpretationSignal } from "./conversationTopicKeyInterpretation";
+import { isMediaAnalysisConversationTurn } from "./mediaAnalysisIntent";
+import { recordTopicAwareUserTurn } from "./conversationRoutingTurnSupport";
 export interface ConversationEnqueueResult { reply: string; shouldStartWorker: boolean; }
 export interface ConversationRoutingDependencies {
   followUpRuleContext: FollowUpRuleContext;
@@ -62,19 +72,58 @@ export interface ConversationRoutingDependencies {
     isSystemJob?: boolean
   ): ConversationEnqueueResult;
 }
-/** Records one user turn while attaching any precomputed topic-key interpretation signal. */
-function recordTopicAwareUserTurn(
-  session: ConversationSession,
-  input: string,
-  receivedAt: string,
-  maxConversationTurns: number,
-  topicKeyInterpretation: TopicKeyInterpretationSignalV1 | null
-): void {
-  recordUserTurn(session, input, receivedAt, maxConversationTurns, {
-    topicKeyInterpretation
-  });
-}
-/** Resolves one canonical front-door routing decision for a user turn. */
+/**
+ * Resolves canonical conversation routing.
+ *
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses `TopicKeyInterpretationSignalV1` (import `TopicKeyInterpretationSignalV1`) from `../../core/stage6_86ConversationStack`.
+ * - Uses `buildConversationAwareExecutionInput` (import `buildConversationAwareExecutionInput`) from `../conversationExecutionInputPolicy`.
+ * - Uses `clearActiveClarification` (import `clearActiveClarification`) from `../conversationSessionMutations`.
+ * - Uses `recordAssistantTurn` (import `recordAssistantTurn`) from `../conversationSessionMutations`.
+ * - Uses `setModeContinuity` (import `setModeContinuity`) from `../conversationSessionMutations`.
+ * - Uses `ConversationInboundMediaEnvelope` (import `ConversationInboundMediaEnvelope`) from `../mediaRuntime/contracts`.
+ * - Uses `buildRoutingExecutionHintV1` (import `buildRoutingExecutionHintV1`) from `../routingMap`.
+ * - Uses `classifyRoutingIntentV1` (import `classifyRoutingIntentV1`) from `../routingMap`.
+ * - Uses `ConversationSession` (import `ConversationSession`) from `../sessionStore`.
+ * - Uses `buildDeterministicDirectChatFallbackReply` (import `buildDeterministicDirectChatFallbackReply`) from `./chatTurnSignals`.
+ * - Uses `buildRecentIdentityInterpretationContext` (import `buildRecentIdentityInterpretationContext`) from `./chatTurnSignals`.
+ * - Uses `shouldPreserveDeterministicDirectChatTurn` (import `shouldPreserveDeterministicDirectChatTurn`) from `./chatTurnSignals`.
+ * - Uses `buildClarifiedExecutionInput` (import `buildClarifiedExecutionInput`) from `./clarificationBroker`.
+ * - Uses `isClarificationExpired` (import `isClarificationExpired`) from `./clarificationBroker`.
+ * - Uses `resolveClarificationAnswer` (import `resolveClarificationAnswer`) from `./clarificationBroker`.
+ * - Uses `resolveClarifiedIntentMode` (import `resolveClarifiedIntentMode`) from `./clarificationBroker`.
+ * - Uses `isReturnHandoffResumeIntent` (import `isReturnHandoffResumeIntent`) from `./conversationRoutingDirectReplies`.
+ * - Uses `maybeResolveConversationRoutingInlineReply` (import `maybeResolveConversationRoutingInlineReply`) from `./conversationRoutingInlineReplies`.
+ * - Uses `buildAutonomousInitialExecutionInput` (import `buildAutonomousInitialExecutionInput`) from `./conversationRoutingSupport`.
+ * - Uses `buildLocalIntentSessionHints` (import `buildLocalIntentSessionHints`) from `./conversationRoutingSupport`.
+ * - Uses `resolveConversationContinuationInterpretationIntent` (import `resolveConversationContinuationInterpretationIntent`) from `./conversationRoutingSupport`.
+ * - Uses `toContinuityConfidence` (import `toContinuityConfidence`) from `./conversationRoutingSupport`.
+ * - Uses `recordTopicAwareUserTurn` (import `recordTopicAwareUserTurn`) from `./conversationRoutingTurnSupport`.
+ * - Uses `inferSemanticRouteIdFromIntentMode` (import `inferSemanticRouteIdFromIntentMode`) from `./intentModeContracts`.
+ * - Uses `ResolvedConversationIntentMode` (import `ResolvedConversationIntentMode`) from `./intentModeContracts`.
+ * - Uses `resolveConversationIntentMode` (import `resolveConversationIntentMode`) from `./intentModeResolution`.
+ * - Uses `buildAutonomousExecutionInput` (import `buildAutonomousExecutionInput`) from `./managerContracts`.
+ * - Uses `resolveModeContinuityIntent` (import `resolveModeContinuityIntent`) from `./modeContinuity`.
+ * - Uses `resolveReturnHandoffContinuationIntent` (import `resolveReturnHandoffContinuationIntent`) from `./returnHandoffContinuation`.
+ * - Uses `applyActiveAutonomousPauseRequest` (import `applyActiveAutonomousPauseRequest`) from `./returnHandoffControl`.
+ * - Uses `applyReturnHandoffPauseRequest` (import `applyReturnHandoffPauseRequest`) from `./returnHandoffControl`.
+ * - Uses `applyValidatedActiveAutonomousPause` (import `applyValidatedActiveAutonomousPause`) from `./returnHandoffControl`.
+ * - Uses `applyValidatedReturnHandoffPause` (import `applyValidatedReturnHandoffPause`) from `./returnHandoffControl`.
+ * - Uses `buildHandoffControlInterpretationResolution` (import `buildHandoffControlInterpretationResolution`) from `./returnHandoffControlInterpretationSupport`.
+ * - Uses `resolveInterpretedHandoffControlSignal` (import `resolveInterpretedHandoffControlSignal`) from `./returnHandoffControlInterpretationSupport`.
+ * - Uses `applyConversationDomainSignalWindowForTurn` (import `applyConversationDomainSignalWindowForTurn`) from `./sessionDomainRouting`.
+ * @param session - Input consumed by this helper.
+ * @param input - Input consumed by this helper.
+ * @param receivedAt - Input consumed by this helper.
+ * @param deps - Input consumed by this helper.
+ * @param media - Input consumed by this helper.
+ * @param preResolvedIntentMode - Input consumed by this helper.
+ * @param topicKeyInterpretation - Input consumed by this helper.
+ * @returns Result produced by this helper.
+ */
 async function resolveCanonicalConversationRouting(
   session: ConversationSession,
   input: string,
@@ -91,7 +140,6 @@ async function resolveCanonicalConversationRouting(
   const browserSessionSnapshots = deps.listBrowserSessionSnapshots
     ? await deps.listBrowserSessionSnapshots()
     : undefined;
-
   if (session.activeClarification) {
     const clarificationAnswer = resolveClarificationAnswer(
       session.activeClarification,
@@ -118,12 +166,13 @@ async function resolveCanonicalConversationRouting(
           shouldStartWorker: false
         };
       }
+      const clarifiedIntentMode = resolveClarifiedIntentMode(
+        activeClarification.sourceInput,
+        activeClarification,
+        clarificationAnswer.selectedOptionId
+      );
       setModeContinuity(session, {
-        activeMode:
-          activeClarification.kind === "execution_mode" &&
-          clarificationAnswer.selectedOptionId === "plan"
-            ? "plan"
-            : "build",
+        activeMode: clarifiedIntentMode,
         source: "clarification_answer",
         confidence: "HIGH",
         lastAffirmedAt: receivedAt,
@@ -135,10 +184,7 @@ async function resolveCanonicalConversationRouting(
         input,
         receivedAt,
         classifyRoutingIntentV1(activeClarification.sourceInput),
-        activeClarification.kind === "execution_mode" &&
-          clarificationAnswer.selectedOptionId === "plan"
-          ? "plan"
-          : "build"
+        clarifiedIntentMode
       );
       const enqueueResult = deps.enqueueJob(
         session,
@@ -163,23 +209,29 @@ async function resolveCanonicalConversationRouting(
           deps.contextualReferenceInterpretationResolver,
           deps.getEntityGraph,
           deps.entityReferenceInterpretationResolver,
-          deps.openContinuityReadSession
+          deps.openContinuityReadSession,
+          undefined,
+          inferSemanticRouteIdFromIntentMode(clarifiedIntentMode)
         )
       );
       recordTopicAwareUserTurn(session, input, receivedAt, deps.config.maxConversationTurns, topicKeyInterpretation);
       return enqueueResult;
     }
-    recordTopicAwareUserTurn(session, input, receivedAt, deps.config.maxConversationTurns, topicKeyInterpretation);
-    recordAssistantTurn(
-      session,
-      session.activeClarification.question,
-      receivedAt,
-      deps.config.maxConversationTurns
-    );
-    return {
-      reply: session.activeClarification.question,
-      shouldStartWorker: false
-    };
+    if (isClarificationExpired(session.activeClarification, receivedAt)) {
+      clearActiveClarification(session);
+    } else {
+      recordTopicAwareUserTurn(session, input, receivedAt, deps.config.maxConversationTurns, topicKeyInterpretation);
+      recordAssistantTurn(
+        session,
+        session.activeClarification.question,
+        receivedAt,
+        deps.config.maxConversationTurns
+      );
+      return {
+        reply: session.activeClarification.question,
+        shouldStartWorker: false
+      };
+    }
   }
   const activePauseReply = applyActiveAutonomousPauseRequest(
     session,
@@ -321,7 +373,9 @@ async function resolveCanonicalConversationRouting(
         deps.contextualReferenceInterpretationResolver,
         deps.getEntityGraph,
         deps.entityReferenceInterpretationResolver,
-        deps.openContinuityReadSession
+        deps.openContinuityReadSession,
+        undefined,
+        effectiveIntentMode.semanticRouteId ?? null
       ),
       routingClassification
         ? buildRoutingExecutionHintV1(routingClassification)
@@ -377,7 +431,9 @@ async function resolveCanonicalConversationRouting(
       deps.contextualReferenceInterpretationResolver,
       deps.getEntityGraph,
       deps.entityReferenceInterpretationResolver,
-      deps.openContinuityReadSession
+      deps.openContinuityReadSession,
+      undefined,
+      effectiveIntentMode.semanticRouteId ?? null
     )
   );
   recordTopicAwareUserTurn(session, input, receivedAt, deps.config.maxConversationTurns, topicKeyInterpretation);
@@ -405,13 +461,22 @@ async function resolveCanonicalConversationRouting(
     : enqueueResult;
 }
 /**
- * Routes explicit `/chat` requests through follow-up classification, routing-map hinting, and queue insertion.
+ * Routes conversation chat input.
  *
- * @param session - Mutable conversation session receiving queued work.
- * @param normalizedInput - Canonicalized `/chat` payload.
- * @param receivedAt - Message timestamp used for persisted turn metadata.
- * @param deps - Routing dependencies exposed by the stable ingress coordinator.
- * @returns Queue insertion result for the stable ingress coordinator.
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses `recordClassifierEvent` (import `recordClassifierEvent`) from `../conversationClassifierEvents`.
+ * - Uses `resolveFollowUpInput` (import `resolveFollowUpInput`) from `../conversationExecutionInputPolicy`.
+ * - Uses `classifyRoutingIntentV1` (import `classifyRoutingIntentV1`) from `../routingMap`.
+ * - Uses `ConversationSession` (import `ConversationSession`) from `../sessionStore`.
+ * - Uses `enqueueFollowUpLinkedToPriorAssistantPrompt` (import `enqueueFollowUpLinkedToPriorAssistantPrompt`) from `./conversationRoutingQueueSupport`.
+ * @param session - Input consumed by this helper.
+ * @param normalizedInput - Input consumed by this helper.
+ * @param receivedAt - Input consumed by this helper.
+ * @param deps - Input consumed by this helper.
+ * @returns Result produced by this helper.
  */
 export async function routeConversationChatInput(
   session: ConversationSession,
@@ -444,9 +509,7 @@ export async function routeConversationChatInput(
     receivedAt,
     followUpResolution.classification
   );
-
-  const followUpLinkedToPriorAssistantPrompt =
-    followUpResolution.linkedToPriorAssistantPrompt;
+  const followUpLinkedToPriorAssistantPrompt = followUpResolution.linkedToPriorAssistantPrompt;
   if (followUpLinkedToPriorAssistantPrompt) {
     return enqueueFollowUpLinkedToPriorAssistantPrompt(
       session,
@@ -468,7 +531,32 @@ export async function routeConversationChatInput(
     }
   );
 }
-/** Routes plain inbound conversation text through follow-up classification and queue insertion. */
+/**
+ * Routes conversation message input.
+ *
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses `recordClassifierEvent` (import `recordClassifierEvent`) from `../conversationClassifierEvents`.
+ * - Uses `resolveFollowUpInput` (import `resolveFollowUpInput`) from `../conversationExecutionInputPolicy`.
+ * - Uses `ConversationInboundMediaEnvelope` (import `ConversationInboundMediaEnvelope`) from `../mediaRuntime/contracts`.
+ * - Uses `classifyRoutingIntentV1` (import `classifyRoutingIntentV1`) from `../routingMap`.
+ * - Uses `ConversationSession` (import `ConversationSession`) from `../sessionStore`.
+ * - Uses `buildRecentIdentityInterpretationContext` (import `buildRecentIdentityInterpretationContext`) from `./chatTurnSignals`.
+ * - Uses `shouldPreserveDeterministicDirectChatTurn` (import `shouldPreserveDeterministicDirectChatTurn`) from `./chatTurnSignals`.
+ * - Uses `enqueueFollowUpLinkedToPriorAssistantPrompt` (import `enqueueFollowUpLinkedToPriorAssistantPrompt`) from `./conversationRoutingQueueSupport`.
+ * - Uses `buildLocalIntentSessionHints` (import `buildLocalIntentSessionHints`) from `./conversationRoutingSupport`.
+ * - Uses `resolveConversationTopicKeyInterpretationSignal` (import `resolveConversationTopicKeyInterpretationSignal`) from `./conversationTopicKeyInterpretation`.
+ * - Uses `resolveConversationIntentMode` (import `resolveConversationIntentMode`) from `./intentModeResolution`.
+ * - Uses `isMediaAnalysisConversationTurn` (import `isMediaAnalysisConversationTurn`) from `./mediaAnalysisIntent`.
+ * @param session - Input consumed by this helper.
+ * @param input - Input consumed by this helper.
+ * @param receivedAt - Input consumed by this helper.
+ * @param deps - Input consumed by this helper.
+ * @param media - Input consumed by this helper.
+ * @returns Result produced by this helper.
+ */
 export async function routeConversationMessageInput(
   session: ConversationSession,
   input: string,
@@ -488,19 +576,27 @@ export async function routeConversationMessageInput(
     deps.continuationInterpretationResolver,
     routingClassification
   );
-  const preResolvedIntentMode = await resolveConversationIntentMode(
-    input,
-    routingClassification,
-    deps.localIntentModelResolver,
-    buildLocalIntentSessionHints(session),
-    deps.contextualFollowupInterpretationResolver,
-    deps.autonomyBoundaryInterpretationResolver,
-    deps.statusRecallBoundaryInterpretationResolver
-  );
+  const preResolvedIntentMode = isMediaAnalysisConversationTurn(input, media)
+    ? {
+        mode: "chat" as const,
+        confidence: "high" as const,
+        matchedRuleId: "intent_mode_media_analysis_chat",
+        explanation:
+          "The turn asks for grounded understanding of an attached media artifact, so it should stay on the conversational analysis path instead of entering workflow execution.",
+        clarification: null
+      }
+    : await resolveConversationIntentMode(
+        input,
+        routingClassification,
+        deps.localIntentModelResolver,
+        buildLocalIntentSessionHints(session),
+        deps.contextualFollowupInterpretationResolver,
+        deps.autonomyBoundaryInterpretationResolver,
+        deps.statusRecallBoundaryInterpretationResolver
+      );
   const topicKeyInterpretation = await resolveConversationTopicKeyInterpretationSignal(session, input, receivedAt, routingClassification, preResolvedIntentMode, deps.topicKeyInterpretationResolver);
   recordClassifierEvent(session, input, receivedAt, followUpResolution.classification);
-  const followUpLinkedToPriorAssistantPrompt =
-    followUpResolution.linkedToPriorAssistantPrompt;
+  const followUpLinkedToPriorAssistantPrompt = followUpResolution.linkedToPriorAssistantPrompt;
   const recentIdentityContext = buildRecentIdentityInterpretationContext(session.conversationTurns.slice(-4));
   const preserveDirectConversationChatTurn =
     preResolvedIntentMode.mode === "chat" &&

@@ -30,10 +30,65 @@ import type {
   RunDirectConversationTurn
 } from "./managerContracts";
 import { createActiveClarificationState } from "./clarificationBroker";
+import {
+  analyzeConversationChatTurnSignals,
+  isMixedConversationMemoryStatusRecallTurn
+} from "./chatTurnSignals";
+import {
+  renderClarificationQuestionText,
+  toClarificationPromptDescriptor
+} from "./clarificationPrompting";
 import { toContinuityConfidence } from "./conversationRoutingSupport";
 import type { ResolvedConversationIntentMode } from "./intentModeContracts";
+import { renderMixedConversationMemoryStatusRecall } from "./mixedMemoryStatusRecall";
 import { renderConversationStatusOrRecall } from "./recentActionLedger";
 import { applyConversationDomainSignalWindowForTurn } from "./sessionDomainRouting";
+import {
+  extractExecutionPreferences,
+  isNaturalAutonomousExecutionRequest
+} from "./executionPreferenceExtraction";
+
+/**
+ * Renders natural clarification question.
+ *
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses `analyzeConversationChatTurnSignals` (import `analyzeConversationChatTurnSignals`) from `./chatTurnSignals`.
+ * - Uses `renderClarificationQuestionText` (import `renderClarificationQuestionText`) from `./clarificationPrompting`.
+ * - Uses `toClarificationPromptDescriptor` (import `toClarificationPromptDescriptor`) from `./clarificationPrompting`.
+ * - Uses `extractExecutionPreferences` (import `extractExecutionPreferences`) from `./executionPreferenceExtraction`.
+ * - Uses `isNaturalAutonomousExecutionRequest` (import `isNaturalAutonomousExecutionRequest`) from `./executionPreferenceExtraction`.
+ * @param input - Input consumed by this helper.
+ * @returns Result produced by this helper.
+ */
+async function renderNaturalClarificationQuestion(
+  input: ConversationRoutingInlineReplyInput
+): Promise<string | null> {
+  const clarification = input.effectiveIntentMode.clarification;
+  if (
+    !clarification ||
+    typeof input.deps.runDirectConversationTurn !== "function"
+  ) {
+    return null;
+  }
+  const executionPreferences = extractExecutionPreferences(input.userInput);
+  const chatSignals = analyzeConversationChatTurnSignals(input.userInput);
+  if (
+    executionPreferences.executeNow ||
+    executionPreferences.autonomousExecution ||
+    isNaturalAutonomousExecutionRequest(input.userInput) ||
+    (chatSignals.containsWorkflowCue && chatSignals.containsRelationshipCue)
+  ) {
+    return null;
+  }
+  return renderClarificationQuestionText(
+    toClarificationPromptDescriptor(input.userInput, clarification),
+    input.receivedAt,
+    input.deps.runDirectConversationTurn
+  );
+}
 
 export interface ConversationRoutingInlineReplyDependencies {
   config: {
@@ -126,6 +181,78 @@ export async function maybeResolveConversationRoutingInlineReply(
   }
 
   if (input.effectiveIntentMode.mode === "status_or_recall") {
+    if (isMixedConversationMemoryStatusRecallTurn(input.userInput)) {
+      const deterministicMixedRecallReply = await renderMixedConversationMemoryStatusRecall({
+        session: input.session,
+        userInput: input.userInput,
+        queryContinuityFacts: input.deps.queryContinuityFacts,
+        queryContinuityEpisodes: input.deps.queryContinuityEpisodes
+      });
+      if (deterministicMixedRecallReply) {
+        applyConversationDomainSignalWindowForTurn(
+          input.session,
+          input.userInput,
+          input.receivedAt,
+          input.routingClassification,
+          input.effectiveIntentMode.mode
+        );
+        return buildRecordedReply({
+          session: input.session,
+          userInput: input.userInput,
+          reply: deterministicMixedRecallReply,
+          receivedAt: input.receivedAt,
+          maxConversationTurns: input.deps.config.maxConversationTurns,
+          activeMode: "status_or_recall",
+          confidence: toContinuityConfidence(input.effectiveIntentMode.confidence)
+        });
+      }
+    }
+    const directConversationRunner = input.deps.runDirectConversationTurn;
+    const shouldDirectMixedStatusRecallConversation =
+      input.deps.directCasualChatEnabled !== false &&
+      typeof directConversationRunner === "function" &&
+      isMixedConversationMemoryStatusRecallTurn(input.userInput);
+    if (shouldDirectMixedStatusRecallConversation) {
+      const reply = await buildDirectCasualConversationReply({
+        session: input.session,
+        input: input.userInput,
+        media: input.media ?? null,
+        receivedAt: input.receivedAt,
+        maxContextTurnsForExecution: input.deps.config.maxContextTurnsForExecution,
+        routingClassification: input.routingClassification,
+        queryContinuityEpisodes: input.deps.queryContinuityEpisodes,
+        queryContinuityFacts: input.deps.queryContinuityFacts,
+        openContinuityReadSession: input.deps.openContinuityReadSession,
+        rememberConversationProfileInput: input.deps.rememberConversationProfileInput,
+        identityInterpretationResolver: input.deps.identityInterpretationResolver,
+        contextualReferenceInterpretationResolver:
+          input.deps.contextualReferenceInterpretationResolver,
+        entityReferenceInterpretationResolver:
+          input.deps.entityReferenceInterpretationResolver,
+        getEntityGraph: input.deps.getEntityGraph,
+        memoryAccessAuditStore: input.deps.memoryAccessAuditStore,
+        managedProcessSnapshots: input.managedProcessSnapshots,
+        semanticHint: input.effectiveIntentMode.semanticHint ?? null,
+        browserSessionSnapshots: input.browserSessionSnapshots,
+        runDirectConversationTurn: directConversationRunner
+      });
+      applyConversationDomainSignalWindowForTurn(
+        input.session,
+        input.userInput,
+        input.receivedAt,
+        input.routingClassification,
+        input.effectiveIntentMode.mode
+      );
+      return buildRecordedReply({
+        session: input.session,
+        userInput: input.userInput,
+        reply,
+        receivedAt: input.receivedAt,
+        maxConversationTurns: input.deps.config.maxConversationTurns,
+        activeMode: "status_or_recall",
+        confidence: toContinuityConfidence(input.effectiveIntentMode.confidence)
+      });
+    }
     const reply = renderConversationStatusOrRecall(
       input.session,
       input.userInput,
@@ -150,10 +277,17 @@ export async function maybeResolveConversationRoutingInlineReply(
   }
 
   if (input.effectiveIntentMode.clarification) {
+    const renderedClarificationQuestion =
+      await renderNaturalClarificationQuestion(input);
     const clarificationState = createActiveClarificationState(
       input.userInput,
       input.receivedAt,
-      input.effectiveIntentMode.clarification
+      {
+        ...input.effectiveIntentMode.clarification,
+        question:
+          renderedClarificationQuestion ??
+          input.effectiveIntentMode.clarification.question
+      }
     );
     setActiveClarification(input.session, clarificationState);
     setProgressState(input.session, {

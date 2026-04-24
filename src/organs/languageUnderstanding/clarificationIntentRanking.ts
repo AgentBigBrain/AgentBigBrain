@@ -15,6 +15,12 @@ const EXPLAIN_OR_EXECUTE_OPTIONS: readonly ActiveClarificationOption[] = [
   { id: "fix_now", label: "Fix it now" }
 ] as const;
 
+const BUILD_FORMAT_OPTIONS: readonly ActiveClarificationOption[] = [
+  { id: "static_html", label: "Plain HTML" },
+  { id: "nextjs", label: "Next.js" },
+  { id: "react", label: "React" }
+] as const;
+
 /**
  * Returns the canonical user-facing clarification options for one execution-intent ambiguity mode.
  *
@@ -29,6 +35,8 @@ export function resolveClarificationOptions(
       return PLAN_OR_BUILD_OPTIONS;
     case "explain_or_execute":
       return EXPLAIN_OR_EXECUTE_OPTIONS;
+    case "build_format":
+      return BUILD_FORMAT_OPTIONS;
     default:
       return [];
   }

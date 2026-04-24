@@ -125,6 +125,7 @@ export interface AgentPulseContextualLexicalEvidence {
 }
 
 export interface ConversationTurn {
+  id?: string;
   role: ConversationTurnRole;
   text: string;
   at: string;
@@ -157,6 +158,9 @@ export interface PendingProposal {
 export type ClarificationOptionId =
   | "plan"
   | "build"
+  | "static_html"
+  | "nextjs"
+  | "react"
   | "explain"
   | "fix_now"
   | "skills"
@@ -169,13 +173,20 @@ export interface ActiveClarificationOption {
   label: string;
 }
 
+export type ClarificationRenderingIntent =
+  | "build_format"
+  | "plan_or_build"
+  | "fix_or_explain"
+  | "task_recovery";
+
 export interface ActiveClarificationState {
   id: string;
-  kind: "execution_mode" | "task_recovery";
+  kind: "execution_mode" | "build_format" | "task_recovery";
   sourceInput: string;
   question: string;
   requestedAt: string;
   matchedRuleId: string;
+  renderingIntent: ClarificationRenderingIntent;
   recoveryInstruction?: string | null;
   options: readonly ActiveClarificationOption[];
 }
@@ -266,6 +277,7 @@ export interface ConversationPathDestinationRecord {
   resolvedPath: string;
   sourceJobId: string | null;
   updatedAt: string;
+  at?: string;
 }
 
 export interface ConversationActiveWorkspaceRecord {

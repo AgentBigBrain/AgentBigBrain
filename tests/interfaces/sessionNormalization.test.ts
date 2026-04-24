@@ -116,3 +116,50 @@ test("normalizeSession preserves the session-domain pulse suppression decision c
 
   assert.equal(normalized?.agentPulse.lastDecisionCode, "SESSION_DOMAIN_SUPPRESSED");
 });
+
+test("normalizeSession preserves persisted build-format clarifications and options", () => {
+  const now = "2026-04-18T20:00:00.000Z";
+  const normalized = normalizeSession({
+    ...buildConversationSessionFixture(
+      {
+        updatedAt: now,
+        activeClarification: {
+          id: "clarification_build_format_1",
+          kind: "build_format",
+          sourceInput:
+            'Build me a landing page in the exact folder "C:\\Users\\testuser\\Desktop\\Solar Energy Landing Page".',
+          question:
+            "Would you like that built as plain HTML, or as a framework app like Next.js or React?",
+          requestedAt: now,
+          matchedRuleId: "clarify_build_format",
+          renderingIntent: "build_format",
+          recoveryInstruction: null,
+          options: [
+            {
+              id: "static_html",
+              label: "Plain HTML"
+            },
+            {
+              id: "nextjs",
+              label: "Next.js"
+            },
+            {
+              id: "react",
+              label: "React"
+            }
+          ]
+        }
+      },
+      {
+        conversationId: "telegram:chat-build-format:user-1",
+        receivedAt: now
+      }
+    )
+  });
+
+  assert.equal(normalized?.activeClarification?.kind, "build_format");
+  assert.deepEqual(
+    normalized?.activeClarification?.options.map((option) => option.id),
+    ["static_html", "nextjs", "react"]
+  );
+});

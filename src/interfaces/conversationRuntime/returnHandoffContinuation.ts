@@ -12,23 +12,84 @@ import {
   buildRecentIdentityInterpretationContext,
   shouldPreserveDeterministicDirectChatTurn
 } from "./chatTurnSignals";
+import {
+  buildRecentAssistantTurnContext,
+  isRecentAssistantAnswerThreadContinuationCandidate
+} from "./recentAssistantTurnContext";
+import { collectConversationChatTurnRawTokens } from "./chatTurnSignalAnalysis";
 
-const RETURN_HANDOFF_CONTINUATION_PATTERNS: readonly RegExp[] = [
-  /\bpick (?:that|it|this) back up\b/i,
-  /\bresume (?:that|it|this)\b/i,
-  /\bcontinue from (?:there|where you left off|the last checkpoint)\b/i,
-  /\bcontinue (?:that|it|this) from where you left off\b/i,
-  /\bgo back to (?:that|it|this)\b/i,
-  /\bkeep working on (?:that|it|this)\b/i,
-  /\bfinish (?:that|it|this) from where you left off\b/i
+const RETURN_HANDOFF_CONTINUATION_SEQUENCES: readonly (readonly string[])[] = [
+  ["pick", "that", "back", "up"],
+  ["pick", "it", "back", "up"],
+  ["pick", "this", "back", "up"],
+  ["resume", "that"],
+  ["resume", "it"],
+  ["resume", "this"],
+  ["continue", "from", "there"],
+  ["continue", "from", "where", "you", "left", "off"],
+  ["continue", "from", "the", "last", "checkpoint"],
+  ["continue", "that", "from", "where", "you", "left", "off"],
+  ["continue", "it", "from", "where", "you", "left", "off"],
+  ["continue", "this", "from", "where", "you", "left", "off"],
+  ["go", "back", "to", "that"],
+  ["go", "back", "to", "it"],
+  ["go", "back", "to", "this"],
+  ["finish", "that", "from", "where", "you", "left", "off"],
+  ["finish", "it", "from", "where", "you", "left", "off"],
+  ["finish", "this", "from", "where", "you", "left", "off"]
 ] as const;
 
 const CONTINUABLE_HANDOFF_MODES = new Set<ConversationIntentMode>([
   "build",
+  "static_html_build",
+  "framework_app_build",
   "autonomous",
   "review"
 ]);
 const RETURN_HANDOFF_INTERPRETATION_MAX_CHARS = 160;
+
+/**
+ * Returns whether one bounded token sequence appears contiguously inside the current token list.
+ *
+ * @param tokens - Normalized raw token sequence for the current user turn.
+ * @param sequence - Candidate ordered token sequence.
+ * @returns `true` when every token appears contiguously in order.
+ */
+function hasTokenSequence(
+  tokens: readonly string[],
+  sequence: readonly string[]
+): boolean {
+  if (sequence.length === 0 || sequence.length > tokens.length) {
+    return false;
+  }
+  for (let index = 0; index <= tokens.length - sequence.length; index += 1) {
+    let matched = true;
+    for (let offset = 0; offset < sequence.length; offset += 1) {
+      if (tokens[index + offset] !== sequence[offset]) {
+        matched = false;
+        break;
+      }
+    }
+    if (matched) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Returns whether any candidate continuation sequence appears in the current token list.
+ *
+ * @param tokens - Normalized raw token sequence for the current user turn.
+ * @param sequences - Candidate ordered continuation sequences.
+ * @returns `true` when at least one continuation sequence matches.
+ */
+function hasAnyTokenSequence(
+  tokens: readonly string[],
+  sequences: readonly (readonly string[])[]
+): boolean {
+  return sequences.some((sequence) => hasTokenSequence(tokens, sequence));
+}
 
 /**
  * Returns whether the session still carries workflow-compatible evidence for durable handoff resume.
@@ -102,6 +163,14 @@ export function shouldAttemptReturnHandoffContinuationInterpretation(
   if (shouldPreserveDeterministicDirectChatTurn(normalized, recentIdentityContext)) {
     return false;
   }
+  if (
+    isRecentAssistantAnswerThreadContinuationCandidate(
+      normalized,
+      buildRecentAssistantTurnContext(session)
+    )
+  ) {
+    return false;
+  }
   return resolveReturnHandoffContinuationIntent(session, userInput, resolvedIntentMode) === null;
 }
 
@@ -116,7 +185,10 @@ export function isReturnHandoffContinuationRequest(userInput: string): boolean {
   if (!normalized) {
     return false;
   }
-  return RETURN_HANDOFF_CONTINUATION_PATTERNS.some((pattern) => pattern.test(normalized));
+  return hasAnyTokenSequence(
+    collectConversationChatTurnRawTokens(normalized),
+    RETURN_HANDOFF_CONTINUATION_SEQUENCES
+  );
 }
 
 /**
@@ -159,6 +231,7 @@ export function resolveReturnHandoffContinuationIntent(
   const fallbackResumedMode = preferredMode && CONTINUABLE_HANDOFF_MODES.has(preferredMode)
     ? preferredMode
     : "build";
+  const resumeRequested = isReturnHandoffContinuationRequest(userInput);
   if (isReturnHandoffContinuationSemanticHint(resolvedIntentMode.semanticHint)) {
     const resumedMode =
       CONTINUABLE_HANDOFF_MODES.has(resolvedIntentMode.mode)
@@ -174,10 +247,18 @@ export function resolveReturnHandoffContinuationIntent(
       semanticHint: "resume_handoff"
     };
   }
-  if (resolvedIntentMode.mode !== "chat" && resolvedIntentMode.mode !== "unclear") {
+  if (
+    isRecentAssistantAnswerThreadContinuationCandidate(
+      userInput,
+      buildRecentAssistantTurnContext(session)
+    )
+  ) {
     return null;
   }
-  if (!isReturnHandoffContinuationRequest(userInput)) {
+  if (!resumeRequested) {
+    if (resolvedIntentMode.mode !== "chat" && resolvedIntentMode.mode !== "unclear") {
+      return null;
+    }
     return null;
   }
 

@@ -307,7 +307,8 @@ function stage6MemoryCorrelationTracePrioritizesQueryOverlapConcepts(): void {
       createdAt: now,
       concepts: ["prevent", "process", "consistency"],
       relatedLessonIds: ["lesson_trace_2"],
-      memoryType: "experience"
+      memoryType: "experience",
+      domainTag: null
     },
     {
       id: "lesson_trace_2",
@@ -317,7 +318,8 @@ function stage6MemoryCorrelationTracePrioritizesQueryOverlapConcepts(): void {
       createdAt: now,
       concepts: ["process", "quality", "prevent", "requests"],
       relatedLessonIds: ["lesson_trace_1"],
-      memoryType: "experience"
+      memoryType: "experience",
+      domainTag: null
     },
     {
       id: "lesson_trace_3",
@@ -327,7 +329,8 @@ function stage6MemoryCorrelationTracePrioritizesQueryOverlapConcepts(): void {
       createdAt: now,
       concepts: ["unsafe", "workflow", "guardrails"],
       relatedLessonIds: [],
-      memoryType: "experience"
+      memoryType: "experience",
+      domainTag: null
     }
   ];
 

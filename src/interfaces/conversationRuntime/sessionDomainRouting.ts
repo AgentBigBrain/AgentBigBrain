@@ -50,6 +50,9 @@ const SYSTEM_POLICY_LANE_PATTERNS: readonly RegExp[] = [
 const WORKFLOW_ROUTING_MODES = new Set<ConversationDomainRoutingMode>([
   "plan",
   "build",
+  "static_html_build",
+  "framework_app_build",
+  "clarify_build_format",
   "autonomous",
   "review"
 ]);
@@ -57,6 +60,8 @@ const WORKFLOW_ROUTING_MODES = new Set<ConversationDomainRoutingMode>([
 const WORKFLOW_CONTINUITY_MODES = new Set<ConversationIntentMode>([
   "plan",
   "build",
+  "static_html_build",
+  "framework_app_build",
   "autonomous",
   "review"
 ]);

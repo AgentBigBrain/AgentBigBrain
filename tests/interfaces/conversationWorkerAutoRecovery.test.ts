@@ -118,6 +118,7 @@ test("enqueueAutomaticTrackedWorkspaceRecoveryRetry queues one post-shutdown org
     question: "Do you want me to continue?",
     requestedAt: nowIso,
     matchedRuleId: "post_execution_locked_folder_recovery",
+    renderingIntent: "task_recovery",
     recoveryInstruction: "inspect first",
     options: [
       {
@@ -453,6 +454,7 @@ test("enqueueAutomaticTrackedWorkspaceRecoveryRetry does not queue inspect-first
       "I couldn't move those folders yet because one or more are still open in a local preview process. I can inspect the matching holders, shut down only exact tracked ones, and retry the move. Do you want me to do that?",
     requestedAt: completedAt,
     matchedRuleId: "post_execution_locked_folder_recovery",
+    renderingIntent: "task_recovery",
     recoveryInstruction:
       "Recovery instruction: inspect the relevant workspace resources or path holders first.",
     options: [
@@ -778,6 +780,7 @@ test("enqueueAutomaticTrackedWorkspaceRecoveryRetry promotes live tracked worksp
       "I couldn't move those folders yet because one or more are still open in a local preview process. I can inspect the matching holders, shut down only exact tracked ones, and retry the move. Do you want me to do that?",
     requestedAt: completedAt,
     matchedRuleId: "post_execution_locked_folder_recovery",
+    renderingIntent: "task_recovery",
     recoveryInstruction:
       "Recovery instruction: inspect the relevant workspace resources or path holders first.",
     options: [

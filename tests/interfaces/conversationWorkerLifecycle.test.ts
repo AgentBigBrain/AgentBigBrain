@@ -8,6 +8,10 @@ import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 
+function lastItem<TItem>(items: readonly TItem[]): TItem | undefined {
+  return items[items.length - 1];
+}
+
 import type { TaskRunResult } from "../../src/core/types";
 import { buildSessionSeed } from "../../src/interfaces/conversationManagerHelpers";
 import {
@@ -128,6 +132,7 @@ test("executeRunningJob marks completed state and runs cleanup callback", async 
   };
 
   await executeRunningJob({
+    sessionKey: "session-test",
     job,
     executeTask: async () => ({ summary: "Completed successfully." }),
     notify,
@@ -141,6 +146,7 @@ test("executeRunningJob marks completed state and runs cleanup callback", async 
   assert.equal(
     (
       await executeRunningJob({
+    sessionKey: "session-test",
         job: {
           ...job,
           id: "job-2",
@@ -172,6 +178,7 @@ test("executeRunningJob marks failed state when execution throws", async () => {
   job.startedAt = nowIso;
 
   const result = await executeRunningJob({
+    sessionKey: "session-test",
     job,
     executeTask: async () => {
       throw new Error("boom");
@@ -201,6 +208,7 @@ test("executeRunningJob uses native streaming heartbeat path when supported", as
   let sendCalls = 0;
   let streamCalls = 0;
   await executeRunningJob({
+    sessionKey: "session-test",
     job,
     executeTask: async () => {
       await new Promise((resolve) => setTimeout(resolve, 20));
@@ -235,6 +243,7 @@ test("executeRunningJob forwards structured progress updates from the execution 
 
   const progressUpdates: Array<{ status: string; message: string }> = [];
   await executeRunningJob({
+    sessionKey: "session-test",
     job,
     executeTask: async (_input, _receivedAt, onProgressUpdate) => {
       await onProgressUpdate?.({
@@ -344,8 +353,8 @@ test("persistExecutedJobOutcome turns a paused autonomous run into a waiting che
   assert.equal(session.domainContext.dominantLane, "workflow");
   assert.equal(session.domainContext.continuitySignals.activeWorkspace, true);
   assert.equal(session.domainContext.continuitySignals.returnHandoff, true);
-  assert.equal(session.domainContext.recentLaneHistory.at(-1)?.lane, "workflow");
-  assert.equal(session.domainContext.recentLaneHistory.at(-1)?.source, "continuity_state");
+  assert.equal(lastItem(session.domainContext.recentLaneHistory)?.lane, "workflow");
+  assert.equal(lastItem(session.domainContext.recentLaneHistory)?.source, "continuity_state");
 });
 
 test("shouldSuppressWorkerHeartbeat suppresses autonomous and system jobs", () => {
@@ -977,6 +986,7 @@ test("persistExecutedJobOutcome discovers a stable primary artifact from the rel
         label: "Process working folder",
         resolvedPath: detroitTwoRoot,
         sourceJobId: runningJob.id,
+        updatedAt: completedAt,
         at: completedAt
       }
     ];
@@ -1473,6 +1483,172 @@ test("persistExecutedJobOutcome lets a new React workspace replace stale single-
       "C:\\Users\\testuser\\Desktop\\React Landing Page\\src\\index.css"
     ].sort()
   );
+});
+
+test("persistExecutedJobOutcome reanchors static file preview continuity from current artifact paths when browser metadata keeps the old workspace root", () => {
+  const nowIso = "2026-04-13T10:38:15.000Z";
+  const completedAt = "2026-04-13T10:38:21.000Z";
+  const session = buildSessionSeed({
+    provider: "telegram",
+    conversationId: "chat-static-file-reanchor",
+    userId: "user-1",
+    username: "owner",
+    conversationVisibility: "private",
+    receivedAt: nowIso
+  });
+  session.runningJobId = "job-static-file-reanchor";
+  session.recentJobs = [
+    {
+      ...buildQueuedJob(nowIso),
+      id: "job-static-file-reanchor",
+      input: "Create River Glass and open the exact local static file preview.",
+      executionInput: "Create River Glass and open the exact local static file preview.",
+      status: "running",
+      startedAt: nowIso
+    }
+  ];
+  session.activeWorkspace = {
+    id: "workspace:foundry-echo",
+    label: "Current project workspace",
+    rootPath: "C:\\Users\\testuser\\Desktop\\Foundry Echo",
+    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\Foundry Echo\\index.html",
+    previewUrl: "file:///C:/Users/testuser/Desktop/Foundry%20Echo/index.html",
+    browserSessionId: "browser_session:foundry-echo",
+    browserSessionIds: ["browser_session:foundry-echo"],
+    browserSessionStatus: "closed",
+    browserProcessPid: 42057,
+    previewProcessLeaseId: null,
+    previewProcessLeaseIds: [],
+    previewProcessCwd: null,
+    lastKnownPreviewProcessPid: null,
+    stillControllable: false,
+    ownershipState: "stale",
+    previewStackState: "detached",
+    lastChangedPaths: ["C:\\Users\\testuser\\Desktop\\Foundry Echo\\index.html"],
+    sourceJobId: "job-foundry-echo",
+    updatedAt: "2026-04-13T10:36:34.000Z"
+  };
+
+  persistExecutedJobOutcome({
+    session,
+    executedJob: {
+      ...session.recentJobs[0]!,
+      status: "completed",
+      completedAt,
+      resultSummary: "Opened the River Glass local file preview and left it open.",
+      errorMessage: null
+    },
+    executionResult: {
+      summary: "Opened the River Glass local file preview and left it open.",
+      taskRunResult: {
+        task: {
+          id: "task-static-file-reanchor",
+          goal: "Create River Glass and open the exact local static file preview.",
+          userInput: "Create River Glass and open the exact local static file preview.",
+          createdAt: nowIso
+        },
+        plan: {
+          taskId: "task-static-file-reanchor",
+          plannerNotes: "Write the new static page and open the exact file preview.",
+          actions: [
+            {
+              id: "action-write-river-glass",
+              type: "write_file",
+              description: "Write River Glass index.html.",
+              params: {},
+              estimatedCostUsd: 0.03
+            },
+            {
+              id: "action-open-river-glass",
+              type: "open_browser",
+              description: "Open the exact River Glass local file preview.",
+              params: {
+                url: "file:///C:/Users/testuser/Desktop/River%20Glass/index.html",
+                rootPath: "C:\\Users\\testuser\\Desktop\\Foundry Echo"
+              },
+              estimatedCostUsd: 0.03
+            }
+          ]
+        },
+        actionResults: [
+          {
+            action: {
+              id: "action-write-river-glass",
+              type: "write_file",
+              description: "Write River Glass index.html.",
+              params: {},
+              estimatedCostUsd: 0.03
+            },
+            mode: "escalation_path",
+            approved: true,
+            output: "Wrote River Glass index.html.",
+            executionStatus: "success",
+            executionMetadata: {
+              filePath: "C:\\Users\\testuser\\Desktop\\River Glass\\index.html"
+            },
+            blockedBy: [],
+            violations: [],
+            votes: []
+          },
+          {
+            action: {
+              id: "action-open-river-glass",
+              type: "open_browser",
+              description: "Open the exact River Glass local file preview.",
+              params: {
+                url: "file:///C:/Users/testuser/Desktop/River%20Glass/index.html",
+                rootPath: "C:\\Users\\testuser\\Desktop\\Foundry Echo"
+              },
+              estimatedCostUsd: 0.03
+            },
+            mode: "escalation_path",
+            approved: true,
+            output: "Opened the River Glass local file preview and left it open.",
+            executionStatus: "success",
+            executionMetadata: {
+              browserSession: true,
+              browserSessionId: "browser_session:river-glass",
+              browserSessionUrl: "file:///C:/Users/testuser/Desktop/River%20Glass/index.html",
+              browserSessionStatus: "open",
+              browserSessionVisibility: "visible",
+              browserSessionControllerKind: "os_default",
+              browserSessionControlAvailable: false,
+              browserSessionBrowserProcessPid: 51234,
+              browserSessionWorkspaceRootPath: "C:\\Users\\testuser\\Desktop\\Foundry Echo",
+              browserSessionLinkedProcessLeaseId: null,
+              browserSessionLinkedProcessCwd: "C:\\Users\\testuser\\Desktop\\Foundry Echo",
+              browserSessionLinkedProcessPid: null
+            },
+            blockedBy: [],
+            violations: [],
+            votes: []
+          }
+        ],
+        summary: "Opened the River Glass local file preview and left it open.",
+        startedAt: nowIso,
+        completedAt
+      }
+    },
+    maxRecentJobs: 20,
+    maxRecentActions: 12,
+    maxBrowserSessions: 6,
+    maxPathDestinations: 8,
+    maxConversationTurns: 40
+  });
+
+  assert.equal(session.activeWorkspace?.rootPath, "C:\\Users\\testuser\\Desktop\\River Glass");
+  assert.equal(
+    session.activeWorkspace?.primaryArtifactPath,
+    "C:\\Users\\testuser\\Desktop\\River Glass\\index.html"
+  );
+  assert.equal(
+    session.activeWorkspace?.previewUrl,
+    "file:///C:/Users/testuser/Desktop/River%20Glass/index.html"
+  );
+  assert.equal(session.activeWorkspace?.browserSessionId, "browser_session:river-glass");
+  assert.deepEqual(session.activeWorkspace?.lastChangedPaths, [
+    "C:\\Users\\testuser\\Desktop\\River Glass\\index.html"
+  ]);
 });
 
 test("persistExecutedJobOutcome preserves autonomous-loop ledgers from the aggregated task result", () => {
@@ -5134,7 +5310,10 @@ test("persistExecutedJobOutcome reconciles persisted workspace control against l
         cwd: "C:\\Users\\testuser\\Desktop\\drone-company",
         shellExecutable: "python",
         shellKind: "process",
-        startedAt: "2026-03-15T18:09:00.000Z",
+    requestedHost: null,
+    requestedPort: null,
+    requestedUrl: null,
+    startedAt: "2026-03-15T18:09:00.000Z",
         statusCode: "PROCESS_STOPPED",
         exitCode: 0,
         signal: null,
@@ -5285,7 +5464,10 @@ test("persistExecutedJobOutcome does not promote closed-preview success copy whe
         cwd: "C:\\Users\\testuser\\Desktop\\drone-company",
         shellExecutable: "python",
         shellKind: "process",
-        startedAt: "2026-03-15T18:09:00.000Z",
+    requestedHost: null,
+    requestedPort: null,
+    requestedUrl: null,
+    startedAt: "2026-03-15T18:09:00.000Z",
         statusCode: "PROCESS_STOPPED",
         exitCode: 0,
         signal: null,

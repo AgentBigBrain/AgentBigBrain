@@ -114,6 +114,7 @@ test("resolveInterpretedEntityReferenceHints returns bounded entity hints for on
     {
       directTerms: [],
       resolvedHints: ["sarah", "connor"],
+      evidence: [],
       hasRecallCue: true,
       usedFallbackContext: true
     },
@@ -125,6 +126,7 @@ test("resolveInterpretedEntityReferenceHints returns bounded entity hints for on
         source: "local_intent_model",
         kind: "entity_scoped_reference",
         selectedEntityKeys: ["entity_sarah"],
+        aliasCandidate: null,
         confidence: "medium",
         explanation: "The user is asking about Sarah Connor specifically."
       };

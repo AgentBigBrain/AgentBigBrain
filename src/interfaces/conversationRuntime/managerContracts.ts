@@ -14,18 +14,10 @@ import type {
   FollowUpRuleContext,
   PulseLexicalRuleContext
 } from "../conversationManagerHelpers";
-import type { EntityGraphV1 } from "../../core/types";
 import type {
   ProfileMemoryIngestRequest
 } from "../../core/profileMemory";
 import type {
-  ConversationMemoryFactReviewRecord,
-  ConversationMemoryFactReviewRequest,
-  ConversationMemoryFactReviewResult,
-  ConversationMemoryFactMutationRequest,
-  ConversationMemoryMutationRequest,
-  ConversationMemoryReviewRecord,
-  ConversationMemoryReviewRequest,
   CorrectConversationMemoryFact,
   ForgetConversationMemoryEpisode,
   ForgetConversationMemoryFact,
@@ -55,14 +47,11 @@ import type { ProposalReplyInterpretationResolver } from "../../organs/languageU
 import type { ManagedProcessSnapshot } from "../../organs/liveRun/managedProcessRegistry";
 import type { BrowserSessionSnapshot } from "../../organs/liveRun/browserSessionRegistry";
 import type { TaskRunResult } from "../../core/types";
-import { buildConversationInboundUserInput } from "../mediaRuntime/mediaNormalization";
+import {
+  buildConversationCommandRoutingInput,
+  buildConversationInboundUserInput
+} from "../mediaRuntime/mediaNormalization";
 import type {
-  ConversationContinuityEpisodeQueryRequest,
-  ConversationContinuityEpisodeRecord,
-  ConversationContinuityFactQueryRequest,
-  ConversationContinuityFactRecord,
-  ConversationContinuityFactResult,
-  ConversationContinuityReadSession,
   GetConversationEntityGraph,
   OpenConversationContinuityReadSession,
   QueryConversationContinuityEpisodes,
@@ -91,6 +80,7 @@ export interface ConversationInboundMessage {
   transportIdentity?: ConversationTransportIdentityRecord | null;
   conversationVisibility: ConversationVisibility;
   text: string;
+  commandRoutingText?: string;
   media?: ConversationInboundMediaEnvelope | null;
   receivedAt: string;
 }
@@ -152,6 +142,7 @@ export interface ConversationDeliveryResult {
   ok: boolean;
   messageId: string | null;
   errorCode: string | null;
+  errorDetail?: string | null;
 }
 export type ConversationOutboundDeliverySource =
   | "transport_response"
@@ -395,5 +386,20 @@ export function resolveConversationInboundUserInput(
   message: ConversationInboundMessage
 ): string {
   return buildConversationInboundUserInput(message.text, message.media);
+}
+
+/**
+ * Resolves the bounded command-routing text used for slash-command and pulse-control classification.
+ *
+ * @param message - Inbound provider message.
+ * @returns User-authored routing text, excluding OCR/document payloads.
+ */
+export function resolveConversationCommandRoutingInput(
+  message: ConversationInboundMessage
+): string {
+  if (typeof message.commandRoutingText === "string") {
+    return message.commandRoutingText.trim();
+  }
+  return buildConversationCommandRoutingInput(message.text, message.media);
 }
 

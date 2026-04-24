@@ -239,7 +239,7 @@ function buildDefaultPulseLexicalRuleContext(): PulseLexicalRuleContext {
     disabledIntents: new Set<PulseControlMode>(),
     requirePulseKeywordForOnOff: true,
     requirePulseKeywordForVisibility: false,
-    requirePulseKeywordForStatus: false,
+    requirePulseKeywordForStatus: true,
     overrideFingerprint: null,
     overrideSourcePath: null
   };

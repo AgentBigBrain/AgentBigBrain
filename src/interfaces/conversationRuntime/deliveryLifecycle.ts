@@ -24,6 +24,24 @@ import type {
 } from "../sessionStore";
 
 /**
+ * Formats one failed delivery result into a stable job-facing diagnostic string.
+ *
+ * @param errorCode - Stable transport failure code.
+ * @param errorDetail - Optional provider detail.
+ * @param fallback - Fallback code when no explicit failure code exists.
+ * @returns Human-readable diagnostic string.
+ */
+function formatDeliveryFailureDetail(
+  errorCode: string | null | undefined,
+  errorDetail: string | null | undefined,
+  fallback: string
+): string {
+  const code = errorCode ?? fallback;
+  const detail = typeof errorDetail === "string" ? errorDetail.trim() : "";
+  return detail ? `${code}: ${detail}` : code;
+}
+
+/**
  * Builds stable outbound-trace metadata for worker-owned delivery operations.
  *
  * @param source - Delivery phase being emitted.
@@ -315,12 +333,23 @@ export async function deliverFinalMessage(input: DeliverFinalMessageInput): Prom
   runningOrRecentJob.finalDeliveryOutcome = isRateLimitedErrorCode(sendResult.errorCode)
     ? "rate_limited"
     : "failed";
+  const fallbackFailureCode = editAttempted
+    ? "FINAL_SEND_FAILED_AFTER_EDIT_ATTEMPT"
+    : "FINAL_SEND_FAILED";
   runningOrRecentJob.finalDeliveryLastErrorCode =
-    sendResult.errorCode ??
-    (editAttempted ? "FINAL_SEND_FAILED_AFTER_EDIT_ATTEMPT" : "FINAL_SEND_FAILED");
-  runningOrRecentJob.errorMessage =
-    `Final response delivery failed (${runningOrRecentJob.finalDeliveryLastErrorCode}).`;
-  runningOrRecentJob.status = "failed";
+    sendResult.errorCode ?? fallbackFailureCode;
+  const deliveryFailureDetail = formatDeliveryFailureDetail(
+    sendResult.errorCode,
+    sendResult.errorDetail,
+    fallbackFailureCode
+  );
+  if (runningOrRecentJob.status === "completed") {
+    runningOrRecentJob.errorMessage = null;
+  } else {
+    runningOrRecentJob.errorMessage =
+      `Final response delivery failed (${deliveryFailureDetail}).`;
+    runningOrRecentJob.status = "failed";
+  }
   setAckLifecycleState(
     runningOrRecentJob,
     "CANCELLED",

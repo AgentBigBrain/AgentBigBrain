@@ -63,6 +63,8 @@ export type {
 const WORKFLOW_CONTINUITY_MODES = new Set([
   "plan",
   "build",
+  "static_html_build",
+  "framework_app_build",
   "autonomous",
   "review"
 ] as const);
@@ -75,10 +77,12 @@ const WORKFLOW_CONTINUITY_MODES = new Set([
  */
 function isWorkflowContinuityMode(
   mode: NonNullable<ConversationSession["modeContinuity"]>["activeMode"] | null | undefined
-): mode is "plan" | "build" | "autonomous" | "review" {
+): mode is "plan" | "build" | "static_html_build" | "framework_app_build" | "autonomous" | "review" {
   return (
     mode === "plan" ||
     mode === "build" ||
+    mode === "static_html_build" ||
+    mode === "framework_app_build" ||
     mode === "autonomous" ||
     mode === "review"
   );
@@ -405,6 +409,52 @@ function deriveCurrentJobWorkspaceRootFromPaths(
 }
 
 /**
+ * Browsers session matches current job workspace.
+ *
+ * **Why it exists:**
+ * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
+ *
+ * **What it talks to:**
+ * - Uses `ConversationSession` (import `ConversationSession`) from `./sessionStore`.
+ * @param browserSession - Input consumed by this helper.
+ * @param derivedCurrentJobRootPath - Input consumed by this helper.
+ * @param primaryArtifactPath - Input consumed by this helper.
+ * @returns Result produced by this helper.
+ */
+function browserSessionMatchesCurrentJobWorkspace(
+  browserSession: ConversationSession["browserSessions"][number] | null,
+  derivedCurrentJobRootPath: string | null,
+  primaryArtifactPath: string | null
+): boolean {
+  if (!browserSession) {
+    return false;
+  }
+  const comparableBrowserRoots = [
+    browserSession.workspaceRootPath,
+    browserSession.linkedProcessCwd
+  ]
+    .map((value) => toComparablePath(value))
+    .filter((value): value is string => value !== null);
+  if (comparableBrowserRoots.length === 0) {
+    return false;
+  }
+  const comparableDerivedRoot = toComparablePath(derivedCurrentJobRootPath);
+  if (
+    comparableDerivedRoot &&
+    comparableBrowserRoots.some((candidatePath) => candidatePath === comparableDerivedRoot)
+  ) {
+    return true;
+  }
+  const comparablePrimaryArtifactPath = toComparablePath(primaryArtifactPath);
+  if (!comparablePrimaryArtifactPath) {
+    return false;
+  }
+  return comparableBrowserRoots.some((candidateRoot) =>
+    isSameOrNestedComparablePath(comparablePrimaryArtifactPath, candidateRoot)
+  );
+}
+
+/**
  * Returns whether a remembered workspace root is specific enough to anchor continuity matching.
  *
  * @param workspace - Previously tracked workspace.
@@ -667,6 +717,10 @@ function resolveWorkspaceRootPath(
   primaryArtifactPath: string | null,
   previousWorkspace: ConversationActiveWorkspaceRecord | null
 ): string | null {
+  const derivedCurrentJobRootPath = deriveCurrentJobWorkspaceRootFromPaths(
+    changedPaths,
+    primaryArtifactPath
+  );
   const processDestination =
     session.pathDestinations.find(
       (destination) =>
@@ -685,16 +739,26 @@ function resolveWorkspaceRootPath(
   if (folderDestination) {
     return folderDestination.resolvedPath;
   }
-  if (currentJobBrowserSession?.workspaceRootPath) {
+  if (
+    currentJobBrowserSession?.workspaceRootPath &&
+    browserSessionMatchesCurrentJobWorkspace(
+      currentJobBrowserSession,
+      derivedCurrentJobRootPath,
+      primaryArtifactPath
+    )
+  ) {
     return currentJobBrowserSession.workspaceRootPath;
   }
-  if (currentJobBrowserSession?.linkedProcessCwd) {
+  if (
+    currentJobBrowserSession?.linkedProcessCwd &&
+    browserSessionMatchesCurrentJobWorkspace(
+      currentJobBrowserSession,
+      derivedCurrentJobRootPath,
+      primaryArtifactPath
+    )
+  ) {
     return currentJobBrowserSession.linkedProcessCwd;
   }
-  const derivedCurrentJobRootPath = deriveCurrentJobWorkspaceRootFromPaths(
-    changedPaths,
-    primaryArtifactPath
-  );
   if (derivedCurrentJobRootPath) {
     return derivedCurrentJobRootPath;
   }
@@ -773,7 +837,7 @@ function deriveActiveWorkspaceFromSession(
     rootPath,
     5
   );
-  const previewUrl =
+  const previewUrlCandidate =
     currentJobBrowserSession?.url ??
     session.recentActions.find(
       (action) =>
@@ -856,6 +920,10 @@ function deriveActiveWorkspaceFromSession(
     livePreviewProcessLeaseIds[0] ??
     previewProcessLeaseIds[0] ??
     null;
+  const previewUrl =
+    hasOpenAttributableBrowserSession || hasPreviewProcess
+      ? previewUrlCandidate
+      : null;
 
   if (
     !rootPath &&

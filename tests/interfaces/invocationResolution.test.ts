@@ -271,3 +271,86 @@ test("resolveConversationInvocation keeps explicit pulse status requests on the 
   assert.match(resolution.reply, /Agent Pulse: off/);
   assert.equal(resolution.shouldStartWorker, false);
 });
+
+test("resolveConversationInvocation does not treat mixed status-tracking recap requests as pulse status", async () => {
+  const session = buildSession();
+
+  const resolution = await resolveConversationInvocation(
+    session,
+    buildMessage(
+      "Switch gears back to memory and status tracking. Tell me which employment facts are current versus historical and whether the Foundry Echo browser page is still open."
+    ),
+    noopExecuteTask,
+    buildDependencies(() => {
+      throw new Error("enqueueJob should not run when the status/recall path can answer inline");
+    })
+  );
+
+  assert.match(resolution.reply, /tracked browser windows left open right now/i);
+  assert.doesNotMatch(resolution.reply, /Agent Pulse:/i);
+  assert.equal(resolution.shouldStartWorker, false);
+  assert.equal(session.queuedJobs.length, 0);
+});
+
+test("resolveConversationInvocation does not treat OCR text as a pulse command", async () => {
+  const session = buildSession();
+  let directConversationCalls = 0;
+
+  const resolution = await resolveConversationInvocation(
+    session,
+    {
+      ...buildMessage("Please review the attached PDF and tell me what concrete names it contains."),
+      commandRoutingText:
+        "Please review the attached PDF and tell me what concrete names it contains.",
+      media: {
+        attachments: [
+          {
+            kind: "document",
+            provider: "telegram",
+            fileId: "doc-1",
+            fileUniqueId: "doc-1-uniq",
+            mimeType: "application/pdf",
+            fileName: "filing.pdf",
+            sizeBytes: 4096,
+            caption: null,
+            durationSeconds: null,
+            width: null,
+            height: null,
+            interpretation: {
+              summary: "business filing.",
+              transcript: null,
+              ocrText:
+                "Signed before a notary public in Wayne County. Present entity ACME SAMPLE DESIGN, LLC.",
+              confidence: 0.92,
+              provenance: "document extraction",
+              source: "fixture_catalog",
+              entityHints: ["ACME SAMPLE DESIGN, LLC", "Wayne County"]
+            }
+          }
+        ]
+      }
+    },
+    noopExecuteTask,
+    buildDependencies(
+      () => {
+        throw new Error("enqueueJob should not run for ordinary document review chat");
+      },
+      {
+        runDirectConversationTurn: async (input) => {
+          directConversationCalls += 1;
+          assert.match(input, /Please review the attached PDF/);
+          assert.match(input, /notary public/i);
+          assert.match(input, /ACME SAMPLE DESIGN, LLC/);
+          return {
+            summary: "The filing names ACME SAMPLE DESIGN, LLC."
+          };
+        }
+      }
+    )
+  );
+
+  assert.equal(resolution.reply, "The filing names ACME SAMPLE DESIGN, LLC.");
+  assert.equal(resolution.shouldStartWorker, false);
+  assert.equal(directConversationCalls, 1);
+  assert.equal(session.agentPulse.optIn, false);
+});

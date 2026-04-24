@@ -142,7 +142,8 @@ function isIdentityFollowUpCandidate(
   if (
     signals.referencesArtifact ||
     signals.containsWorkflowCue ||
-    signals.containsStatusCue
+    signals.containsStatusCue ||
+    signals.questionLike
   ) {
     return false;
   }
@@ -152,7 +153,12 @@ function isIdentityFollowUpCandidate(
       signals.rawTokenCount > 0 &&
       signals.rawTokenCount <= 4
     ) ||
-    (signals.primaryKind === "plain_chat" && signals.rawTokenCount > 0 && signals.rawTokenCount <= 4)
+    (
+      signals.primaryKind === "plain_chat" &&
+      signals.rawTokenCount > 0 &&
+      signals.rawTokenCount <= 4 &&
+      signals.containsNameConcept
+    )
   );
 }
 

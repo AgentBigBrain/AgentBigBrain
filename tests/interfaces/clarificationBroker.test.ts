@@ -9,6 +9,8 @@ import {
   buildClarifiedExecutionInput,
   createActiveClarificationState,
   createTaskRecoveryClarificationState,
+  isClarificationExpired,
+  resolveClarifiedIntentMode,
   resolveClarificationAnswer
 } from "../../src/interfaces/conversationRuntime/clarificationBroker";
 import type { IntentClarificationCandidate } from "../../src/interfaces/conversationRuntime/intentModeContracts";
@@ -16,10 +18,23 @@ import type { IntentClarificationCandidate } from "../../src/interfaces/conversa
 const EXECUTION_MODE_CANDIDATE: IntentClarificationCandidate = {
   kind: "execution_mode",
   matchedRuleId: "execution_intent_build_generic",
+  renderingIntent: "plan_or_build",
   question: "Do you want me to plan it first or build it now?",
   options: [
     { id: "plan", label: "Plan it first" },
     { id: "build", label: "Build it now" }
+  ]
+};
+
+const BUILD_FORMAT_CANDIDATE: IntentClarificationCandidate = {
+  kind: "build_format",
+  matchedRuleId: "intent_mode_build_format_clarify_execution_style",
+  renderingIntent: "build_format",
+  question: "Would you like that built as plain HTML, or as a framework app like Next.js or React?",
+  options: [
+    { id: "static_html", label: "Plain HTML" },
+    { id: "nextjs", label: "Next.js" },
+    { id: "react", label: "React" }
   ]
 };
 
@@ -31,6 +46,7 @@ test("createActiveClarificationState preserves original source input and option 
   );
 
   assert.equal(clarification.sourceInput, "Create me that landing page with a hero and CTA.");
+  assert.equal(clarification.renderingIntent, "plan_or_build");
   assert.equal(clarification.options[0]?.label, "Plan it first");
 });
 
@@ -71,6 +87,72 @@ test("resolveClarificationAnswer stays unresolved when the reply remains ambiguo
   assert.equal(resolution, null);
 });
 
+test("build-format clarification resolves static HTML and framework answers deterministically", () => {
+  const clarification = createActiveClarificationState(
+    "Build me a landing page and put it on my desktop.",
+    "2026-03-11T18:00:00.000Z",
+    BUILD_FORMAT_CANDIDATE
+  );
+
+  const htmlResolution = resolveClarificationAnswer(
+    clarification,
+    "Plain HTML please."
+  );
+  const nextResolution = resolveClarificationAnswer(
+    clarification,
+    "Next.js."
+  );
+
+  assert.equal(htmlResolution?.selectedOptionId, "static_html");
+  assert.equal(nextResolution?.selectedOptionId, "nextjs");
+  assert.equal(
+    resolveClarifiedIntentMode(
+      clarification.sourceInput,
+      clarification,
+      htmlResolution?.selectedOptionId ?? "static_html"
+    ),
+    "static_html_build"
+  );
+  assert.equal(
+    resolveClarifiedIntentMode(
+      clarification.sourceInput,
+      clarification,
+      nextResolution?.selectedOptionId ?? "nextjs"
+    ),
+    "framework_app_build"
+  );
+  assert.match(
+    buildClarifiedExecutionInput(
+      clarification.sourceInput,
+      clarification,
+      nextResolution?.selectedOptionId ?? "nextjs"
+    ),
+    /Preferred framework: nextjs\./i
+  );
+});
+
+test("build-format clarification expires on the bounded execution-style window", () => {
+  const clarification = createActiveClarificationState(
+    "Build me a landing page and put it on my desktop.",
+    "2026-03-11T18:00:00.000Z",
+    BUILD_FORMAT_CANDIDATE
+  );
+
+  assert.equal(isClarificationExpired(clarification, "2026-03-11T21:59:59.000Z"), false);
+  assert.equal(isClarificationExpired(clarification, "2026-03-11T22:00:01.000Z"), true);
+});
+
+test("isClarificationExpired expires stale execution-mode clarification after the bounded window", () => {
+  const clarification = createActiveClarificationState(
+    "Create me that landing page with a hero and CTA.",
+    "2026-03-11T18:00:00.000Z",
+    EXECUTION_MODE_CANDIDATE
+  );
+
+  assert.equal(isClarificationExpired(clarification, "2026-03-11T21:59:59.000Z"), false);
+  assert.equal(isClarificationExpired(clarification, "2026-03-11T22:00:01.000Z"), true);
+});
+
 test("task recovery clarification resolves yes/no answers and adds a recovery instruction", () => {
   const clarification = createTaskRecoveryClarificationState(
     "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
@@ -98,6 +180,36 @@ test("task recovery clarification resolves yes/no answers and adds a recovery in
       yesResolution?.selectedOptionId ?? "retry_with_shutdown"
     ),
     /leaseId="proc_preview_1"/i
+  );
+});
+
+test("task recovery clarification accepts a plain yes when only one recovery option is available", () => {
+  const shutdownClarification = createTaskRecoveryClarificationState(
+    "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+    "2026-03-13T14:00:00.000Z",
+    "I can stop only the exact tracked holder and retry the move. Do you want me to do that?",
+    "post_execution_locked_folder_recovery",
+    "Recovery instruction: stop only this exact tracked preview-process lease id: leaseId=\"proc_preview_1\"."
+  );
+  const inspectionClarification = createTaskRecoveryClarificationState(
+    "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+    "2026-03-13T14:05:00.000Z",
+    "I can inspect the likely holders more closely before taking action. Do you want me to continue that recovery?",
+    "post_execution_untracked_holder_recovery_clarification",
+    "Recovery instruction: inspect the likely untracked holders more closely. Do not stop them automatically.",
+    [
+      { id: "continue_recovery", label: "Yes, inspect and continue" },
+      { id: "cancel", label: "No, leave them alone" }
+    ]
+  );
+
+  assert.equal(
+    resolveClarificationAnswer(shutdownClarification, "Yes.")?.selectedOptionId,
+    "retry_with_shutdown"
+  );
+  assert.equal(
+    resolveClarificationAnswer(inspectionClarification, "Yes.")?.selectedOptionId,
+    "continue_recovery"
   );
 });
 

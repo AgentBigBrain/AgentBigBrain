@@ -18,7 +18,6 @@ import {
 } from "./memoryReviewRendering";
 
 type MemoryReviewEpisodeMutationAction = "resolve" | "wrong" | "forget";
-type MemoryReviewFactMutationAction = "correct" | "forget";
 type MemoryReviewAction =
   | "list"
   | "help"

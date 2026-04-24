@@ -109,6 +109,9 @@ export function normalizeClarificationOption(
   if (
     (option.id !== "plan" &&
       option.id !== "build" &&
+      option.id !== "static_html" &&
+      option.id !== "nextjs" &&
+      option.id !== "react" &&
       option.id !== "explain" &&
       option.id !== "fix_now" &&
       option.id !== "skills" &&
@@ -136,7 +139,11 @@ export function normalizeActiveClarification(
   if (
     !candidate ||
     typeof candidate.id !== "string" ||
-    (candidate.kind !== "execution_mode" && candidate.kind !== "task_recovery") ||
+    (
+      candidate.kind !== "execution_mode" &&
+      candidate.kind !== "build_format" &&
+      candidate.kind !== "task_recovery"
+    ) ||
     typeof candidate.sourceInput !== "string" ||
     typeof candidate.question !== "string" ||
     typeof candidate.requestedAt !== "string" ||
@@ -152,6 +159,17 @@ export function normalizeActiveClarification(
     question: candidate.question,
     requestedAt: candidate.requestedAt,
     matchedRuleId: candidate.matchedRuleId,
+    renderingIntent:
+      candidate.renderingIntent === "build_format" ||
+      candidate.renderingIntent === "plan_or_build" ||
+      candidate.renderingIntent === "fix_or_explain" ||
+      candidate.renderingIntent === "task_recovery"
+        ? candidate.renderingIntent
+        : candidate.kind === "build_format"
+          ? "build_format"
+          : candidate.kind === "task_recovery"
+            ? "task_recovery"
+            : "plan_or_build",
     recoveryInstruction:
       typeof candidate.recoveryInstruction === "string"
         ? candidate.recoveryInstruction

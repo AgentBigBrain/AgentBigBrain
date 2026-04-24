@@ -99,6 +99,12 @@ The latest slices moved queue/ack, worker-loop, and pulse-state ownership here s
 - `conversationRoutingSupport.ts` owns small extracted confidence and autonomous-brief helpers so
   the stable conversation-routing entrypoint can stay within its size budget while still surfacing
   bounded identity-context hints to the optional local intent-model seam
+- `conversationRoutingTurnSupport.ts` owns the tiny topic-aware turn-recording helper reused by the
+  stable routing entrypoint so that file can stay under the module-size budget without changing
+  user-turn persistence semantics
+- `recentAssistantTurnContext.ts` owns bounded recent-assistant-turn summarization used by routing
+  and local intent hints so informational answer threads stay attached without leaking whole
+  transcripts into the front door
 - `conversationRoutingQueueSupport.ts` owns the extracted follow-up-linked queue enqueue helper so
   the stable conversation-routing entrypoint can stay within its size budget without duplicating
   continuity-aware enqueue logic
@@ -169,6 +175,9 @@ The latest slices moved queue/ack, worker-loop, and pulse-state ownership here s
   `conversationIngressLifecycle.ts`
 - `executionIntentClarification.ts` owns canonical plan/build/execute-now clarification rules below
   `conversationRouting.ts`
+- `clarificationPrompting.ts` owns natural-language rendering for structured clarification state so
+  the runtime can keep option sets and safety deterministic without freezing user-facing
+  clarification wording into one canned sentence
 - `followUpResolution.ts` owns canonical proposal approval, proposal-reply interpretation, and
   model-assisted follow-up resolution below `conversationIngressLifecycle.ts`
 - `mediaContextRendering.ts` owns canonical bounded execution-input rendering for interpreted media
@@ -178,6 +187,11 @@ The latest slices moved queue/ack, worker-loop, and pulse-state ownership here s
 - `relationshipContinuityContext.ts` owns bounded relationship-memory continuity prompt assembly for
   short ordinary-chat follow-ups and bounded event-memory callbacks that need graph-aware
   continuity without reviving workflow blocks
+- `mixedMemoryStatusRecall.ts` owns bounded cross-lane memory recap helpers so direct questions can
+  combine profile-memory facts, continuity context, and desktop-status recall without inventing a
+  second truth surface
+- `mediaAnalysisIntent.ts` owns bounded media-analysis turn detection so artifact understanding
+  stays on the conversational path instead of drifting into workflow execution
 - `contextualRecallContinuitySupport.ts` owns the extracted structured continuity-result narrowing,
   fact projection, and hint-dedupe helpers reused by bounded contextual recall so the stable
   contextual-recall entrypoint stays under the module-size gate
@@ -211,8 +225,26 @@ The latest slices moved queue/ack, worker-loop, and pulse-state ownership here s
   execution, capability discovery, and clarification results
 - `intentModeResolution.ts` owns canonical deterministic intent-mode routing plus the optional
   local intent-model seam used when deterministic confidence stays weak
+- `intentModeResolutionSupport.ts` owns the extracted default-chat and build-format-clarification
+  helper builders reused by the stable intent-mode resolver so the main front-door entrypoint can
+  stay under the subsystem size budget without changing the semantic route contract
+- `intentModeBuildFormatSupport.ts` owns bounded review-shape plus build-format clarification
+  helpers reused by the stable intent-mode resolver so the front-door route contract can stay
+  under the module-size gate without reintroducing phrase-pack routing
 - `executionPreferenceExtraction.ts` owns canonical extraction of plan/build-now, natural skill
   discovery, and presentation preferences like `leave it open`
+- `executionPreferenceCommon.ts` owns the shared tokenization, contiguous token-sequence matching,
+  and bounded request-lead helpers reused by deterministic execution-preference extraction so the
+  stable extraction entrypoint can stay under the module-size gate without reintroducing regex
+  routing packs
+- `executionPreferenceExecutionSignals.ts` owns the extracted execute-now, browser-control, and
+  autonomous-ownership signal families reused by the stable execution-preference entrypoint so
+  visible execution cues stay centralized without bloating the front door again
+- `executionPreferenceIntentSignals.ts` owns the extracted capability-discovery, plan-only,
+  status/recall, and reuse-prior-approach signal families reused by the stable
+  execution-preference entrypoint so bounded token cues can stay reviewable below the main module
+- `executionPreferenceTypes.ts` owns the shared execution-preference contracts reused across the
+  extracted support modules so the stable entrypoint can remain thin without type duplication
 - `capabilityIntrospection.ts` owns canonical truthful capability summaries for natural questions
   like `what can you do here?` or `why can't you do that?`
 - `capabilityIntrospectionRendering.ts` owns canonical user-facing capability and skill-discovery
@@ -241,6 +273,9 @@ The latest slices moved queue/ack, worker-loop, and pulse-state ownership here s
   fallback
 - `clarificationBroker.ts` owns canonical persisted clarification state creation, one-turn answer
   resolution, and clarified execution-input rebuilding
+- `clarificationOptionMatching.ts` owns bounded clarification-reply tokenization plus explicit
+  option matching so clarification answer resolution stays deterministic without turning the broker
+  into a second semantic router
 - `clarificationState.ts` owns canonical active-clarification state guards used by routing helpers
 - `taskRecoveryClarification.ts` owns canonical post-execution recovery clarifications for
   recoverable blocked runs such as locked local folder-organization requests
@@ -713,3 +748,27 @@ Update this README when:
 - remembered-situation review or mutation command responsibilities change materially
 - remembered-situation rendering or privacy rules change materially
 - related test coverage changes because the conversation-runtime surface moved
+
+## Front-Door Routing Policy
+
+Deterministic front-door routing is still required here, but deterministic does not mean
+regex-shaped understanding.
+
+Current policy:
+- Regex or parser-style detection is allowed for exact commands, strict validation, and
+  safety/authorization boundaries.
+- Mixed natural-language routing should prefer bounded token/context signals plus the shared local
+  intent interpreters.
+- Generic phrase packs should not be the primary mechanism for deciding:
+  - chat vs workflow
+  - answer-thread continuation vs stale workflow continuity
+  - saved-work resume vs new work
+  - relationship recall vs identity follow-up
+- When a deterministic route remains, it should be narrow, explicit, and fail closed.
+
+The main front-door files aligned to this policy are:
+- `executionPreferenceExtraction.ts`
+- `clarificationBroker.ts`
+- `returnHandoffContinuation.ts`
+- `recentAssistantTurnContext.ts`
+- `intentModeResolution.ts`
