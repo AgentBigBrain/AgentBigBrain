@@ -1,5 +1,6 @@
 # AgentBigBrain
 
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/AgentBigBrain/AgentBigBrain)
 [![CI](https://github.com/AgentBigBrain/AgentBigBrain/actions/workflows/ci.yml/badge.svg)](https://github.com/AgentBigBrain/AgentBigBrain/actions/workflows/ci.yml)
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-blue)](./LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-blue)](./tsconfig.json)
