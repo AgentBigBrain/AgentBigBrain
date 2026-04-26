@@ -3,7 +3,7 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -13,6 +13,7 @@ function lastItem<TItem>(items: readonly TItem[]): TItem | undefined {
 }
 
 import { SemanticMemoryStore } from "../../src/core/semanticMemory";
+import { DEFAULT_BRAIN_CONFIG } from "../../src/core/config";
 import { SqlitePlannerFailureStore } from "../../src/core/plannerFailureStore";
 import { Stage685PlaybookPlanningContext } from "../../src/core/stage6_85PlaybookRuntime";
 import { JudgmentPattern } from "../../src/core/judgmentPatterns";
@@ -24,12 +25,14 @@ import {
   StructuredCompletionRequest
 } from "../../src/models/types";
 import { buildAutonomousExecutionInput } from "../../src/interfaces/conversationRuntime/managerContracts";
+import { ToolExecutorOrgan } from "../../src/organs/executor";
 import { PlannerOrgan } from "../../src/organs/planner";
+import { SkillRegistryStore } from "../../src/organs/skillRegistry/skillRegistryStore";
 import {
   HOST_TEST_DESKTOP_DIR,
   HOST_TEST_PLAYWRIGHT_PROOF_SMOKE_DIR,
   HOST_TEST_PLAYWRIGHT_PROOF_SMOKE_INDEX_HTML,
-  HOST_TEST_ROBINHOOD_MOCK_DIR
+  HOST_TEST_PORTFOLIO_DEMO_DIR
 } from "../support/windowsPathFixtures";
 
 class PlannerFailureModelClient implements ModelClient {
@@ -217,6 +220,146 @@ class PlaybookContextAwareModelClient implements ModelClient {
         }
       ]
     } as T;
+  }
+}
+
+class MarkdownGuidedStaticSiteModelClient implements ModelClient {
+  readonly backend = "mock" as const;
+  private plannerRequest: StructuredCompletionRequest | null = null;
+
+  /**
+ * Initializes class MarkdownGuidedStaticSiteModelClient dependencies and runtime state.
+ * Interacts with local collaborators through imported modules and typed inputs/outputs.
+ */
+  constructor(
+    private readonly outputPath: string,
+    private readonly expectedGuidanceSnippet: string
+  ) {}
+
+  /**
+ * Implements `getPlannerRequest` behavior within class MarkdownGuidedStaticSiteModelClient.
+ * Interacts with local collaborators through imported modules and typed inputs/outputs.
+ */
+  getPlannerRequest(): StructuredCompletionRequest | null {
+    return this.plannerRequest;
+  }
+
+  /**
+ * Implements `completeJson` behavior within class MarkdownGuidedStaticSiteModelClient.
+ * Interacts with local collaborators through imported modules and typed inputs/outputs.
+ */
+  async completeJson<T>(request: StructuredCompletionRequest): Promise<T> {
+    if (request.schemaName !== "planner_v1") {
+      throw new Error(`Unexpected schema: ${request.schemaName}`);
+    }
+
+    this.plannerRequest = request;
+    assert.match(request.systemPrompt, /Markdown Skill Guidance/i);
+    assert.match(request.systemPrompt, /static-site-generation/i);
+    assert.match(request.systemPrompt, /single self-contained `index\.html`/i);
+    assert.match(request.systemPrompt, new RegExp(this.expectedGuidanceSnippet, "i"));
+    assert.match(request.systemPrompt, /use the Markdown body for procedure/i);
+
+    const output: PlannerModelOutput = {
+      plannerNotes: "Used Markdown Skill Guidance: static-site-generation.",
+      actions: [
+        {
+          type: "write_file",
+          description: "Create a self-contained static HTML page from Markdown guidance.",
+          params: {
+            path: this.outputPath,
+            content: [
+              "<!doctype html>",
+              "<html lang=\"en\">",
+              "<head>",
+              "  <meta charset=\"utf-8\">",
+              "  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">",
+              "  <title>Markdown Guided Static Site</title>",
+              "  <style>body{font-family:Arial,sans-serif;margin:2rem;line-height:1.5}</style>",
+              "</head>",
+              "<body data-build-path=\"markdown-skill-guided\">",
+              "  <main>",
+              "    <h1>Markdown Guided Static Site</h1>",
+              "    <p>This page was planned from reusable Markdown skill guidance.</p>",
+              "  </main>",
+              "</body>",
+              "</html>"
+            ].join("\n")
+          }
+        }
+      ]
+    };
+    return output as T;
+  }
+}
+
+class MarkdownGuidedFrameworkModelClient implements ModelClient {
+  readonly backend = "mock" as const;
+  private plannerRequest: StructuredCompletionRequest | null = null;
+
+  /**
+ * Initializes class MarkdownGuidedFrameworkModelClient dependencies and runtime state.
+ * Interacts with local collaborators through imported modules and typed inputs/outputs.
+ */
+  constructor(
+    private readonly packageJsonPath: string,
+    private readonly expectedFrameworkGuidanceSnippet: string,
+    private readonly expectedNextGuidanceSnippet: string
+  ) {}
+
+  /**
+ * Implements `getPlannerRequest` behavior within class MarkdownGuidedFrameworkModelClient.
+ * Interacts with local collaborators through imported modules and typed inputs/outputs.
+ */
+  getPlannerRequest(): StructuredCompletionRequest | null {
+    return this.plannerRequest;
+  }
+
+  /**
+ * Implements `completeJson` behavior within class MarkdownGuidedFrameworkModelClient.
+ * Interacts with local collaborators through imported modules and typed inputs/outputs.
+ */
+  async completeJson<T>(request: StructuredCompletionRequest): Promise<T> {
+    if (request.schemaName !== "planner_v1") {
+      throw new Error(`Unexpected schema: ${request.schemaName}`);
+    }
+
+    this.plannerRequest = request;
+    assert.match(request.systemPrompt, /Markdown Skill Guidance/i);
+    assert.match(request.systemPrompt, /framework-generation/i);
+    assert.match(request.systemPrompt, /nextjs-generation/i);
+    assert.match(request.systemPrompt, new RegExp(this.expectedFrameworkGuidanceSnippet, "i"));
+    assert.match(request.systemPrompt, new RegExp(this.expectedNextGuidanceSnippet, "i"));
+    assert.match(request.systemPrompt, /use the Markdown body for procedure/i);
+
+    const output: PlannerModelOutput = {
+      plannerNotes: "Used Markdown Skill Guidance: framework-generation and nextjs-generation.",
+      actions: [
+        {
+          type: "write_file",
+          description: "Create framework package metadata from Markdown guidance.",
+          params: {
+            path: this.packageJsonPath,
+            content: JSON.stringify(
+              {
+                scripts: {
+                  build: "next build",
+                  dev: "next dev"
+                },
+                dependencies: {
+                  next: "latest",
+                  react: "latest",
+                  "react-dom": "latest"
+                }
+              },
+              null,
+              2
+            )
+          }
+        }
+      ]
+    };
+    return output as T;
   }
 }
 
@@ -447,7 +590,7 @@ class PlaybookContextAwareExecutableModelClient implements ModelClient {
             type: "shell_command",
             description: "Scaffold the requested React app.",
             params: {
-              command: "npm create vite@latest robinhood-mock -- --template react",
+              command: "npm create vite@latest portfolio-demo -- --template react",
               cwd: HOST_TEST_DESKTOP_DIR
             }
           },
@@ -456,7 +599,7 @@ class PlaybookContextAwareExecutableModelClient implements ModelClient {
             description: "Start the local dev server for live verification.",
             params: {
               command: "npm run dev",
-              cwd: HOST_TEST_ROBINHOOD_MOCK_DIR
+              cwd: HOST_TEST_PORTFOLIO_DEMO_DIR
             }
           },
           {
@@ -473,7 +616,7 @@ class PlaybookContextAwareExecutableModelClient implements ModelClient {
             description: "Verify the homepage in a browser.",
             params: {
               url: "http://127.0.0.1:4173",
-              expectedTitle: "Robinhood Mock",
+              expectedTitle: "Portfolio Demo",
               expectedText: "Managed process ready",
               timeoutMs: 5000
             }
@@ -490,7 +633,7 @@ class PlaybookContextAwareExecutableModelClient implements ModelClient {
             type: "shell_command",
             description: "Scaffold the requested React app.",
             params: {
-              command: "npm create vite@latest robinhood-mock -- --template react",
+              command: "npm create vite@latest portfolio-demo -- --template react",
               cwd: HOST_TEST_DESKTOP_DIR
             }
           },
@@ -499,7 +642,7 @@ class PlaybookContextAwareExecutableModelClient implements ModelClient {
             description: "Start the local dev server for live verification.",
             params: {
               command: "npm run dev",
-              cwd: HOST_TEST_ROBINHOOD_MOCK_DIR
+              cwd: HOST_TEST_PORTFOLIO_DEMO_DIR
             }
           },
           {
@@ -515,21 +658,21 @@ class PlaybookContextAwareExecutableModelClient implements ModelClient {
       } as T;
     }
 
-    if (/organize the drone-company project folders/i.test(currentUserRequest)) {
+    if (/organize the sample-company project folders/i.test(currentUserRequest)) {
       return {
         plannerNotes: "planner output with finite local organization shell move",
         actions: [
           {
             type: "shell_command",
-            description: "Create the destination, move matching drone-company folders, and prove the result.",
+            description: "Create the destination, move matching sample-company folders, and prove the result.",
             params: {
               command: [
-                "$destination = Join-Path 'C:\\Users\\testuser\\OneDrive\\Desktop' 'drone-web-projects'",
+                "$destination = Join-Path 'C:\\Users\\testuser\\OneDrive\\Desktop' 'sample-web-projects'",
                 "New-Item -ItemType Directory -Path $destination -Force | Out-Null",
-                "$moved = Get-ChildItem -Path 'C:\\Users\\testuser\\OneDrive\\Desktop' -Directory -Filter 'drone-company*' | Where-Object { $_.Name -ne 'drone-web-projects' }",
+                "$moved = Get-ChildItem -Path 'C:\\Users\\testuser\\OneDrive\\Desktop' -Directory -Filter 'sample-company*' | Where-Object { $_.Name -ne 'sample-web-projects' }",
                 "$moved | Move-Item -Destination $destination -Force",
                 "$destContents = Get-ChildItem -Path $destination -Directory | Select-Object -ExpandProperty Name",
-                "$rootRemaining = Get-ChildItem -Path 'C:\\Users\\testuser\\OneDrive\\Desktop' -Directory -Filter 'drone-company*' | Where-Object { $_.Name -ne 'drone-web-projects' } | Select-Object -ExpandProperty Name",
+                "$rootRemaining = Get-ChildItem -Path 'C:\\Users\\testuser\\OneDrive\\Desktop' -Directory -Filter 'sample-company*' | Where-Object { $_.Name -ne 'sample-web-projects' } | Select-Object -ExpandProperty Name",
                 "Write-Output ('MOVED_TO_DEST=' + (($moved | Select-Object -ExpandProperty Name) -join ','))",
                 "Write-Output ('DEST_CONTENTS=' + ($destContents -join ','))",
                 "Write-Output ('ROOT_REMAINING_MATCHES=' + ($rootRemaining -join ','))"
@@ -547,7 +690,7 @@ class PlaybookContextAwareExecutableModelClient implements ModelClient {
           type: "shell_command",
           description: "Scaffold the requested workspace.",
           params: {
-            command: "npm create vite@latest robinhood-mock -- --template react",
+            command: "npm create vite@latest portfolio-demo -- --template react",
             cwd: HOST_TEST_DESKTOP_DIR
           }
         }
@@ -589,28 +732,12 @@ class ExecutionStyleBuildRepairModelClient implements ModelClient {
           type: "shell_command",
           description: "Scaffold the requested React app.",
           params: {
-            command: "npm create vite@latest robinhood-mock -- --template react",
+            command: "npm create vite@latest portfolio-demo -- --template react",
             cwd: HOST_TEST_DESKTOP_DIR
           }
         }
       ]
     } as T;
-  }
-}
-
-class FailingIfCalledLocalOrganizationModelClient implements ModelClient {
-  readonly backend = "mock" as const;
-  private plannerCallCount = 0;
-
-  getPlannerCallCount(): number {
-    return this.plannerCallCount;
-  }
-
-  async completeJson<T>(request: StructuredCompletionRequest): Promise<T> {
-    if (request.schemaName === "planner_v1") {
-      this.plannerCallCount += 1;
-    }
-    throw new Error("Planner model should not be called for eager deterministic local organization fallback.");
   }
 }
 
@@ -666,7 +793,7 @@ class InspectionOnlyBuildRepairModelClient implements ModelClient {
           type: "shell_command",
           description: "Scaffold the requested React app.",
           params: {
-            command: "npm create vite@latest robinhood-mock -- --template react",
+            command: "npm create vite@latest portfolio-demo -- --template react",
             cwd: HOST_TEST_DESKTOP_DIR
           }
         }
@@ -726,7 +853,7 @@ class LiveVerificationRepairModelClient implements ModelClient {
             type: "shell_command",
             description: "Scaffold the requested React app.",
             params: {
-              command: "npm create vite@latest robinhood-mock -- --template react",
+              command: "npm create vite@latest portfolio-demo -- --template react",
               cwd: HOST_TEST_DESKTOP_DIR
             }
           }
@@ -741,7 +868,7 @@ class LiveVerificationRepairModelClient implements ModelClient {
           type: "shell_command",
           description: "Scaffold the requested React app.",
           params: {
-            command: "npm create vite@latest robinhood-mock -- --template react",
+            command: "npm create vite@latest portfolio-demo -- --template react",
             cwd: HOST_TEST_DESKTOP_DIR
           }
         },
@@ -750,7 +877,7 @@ class LiveVerificationRepairModelClient implements ModelClient {
           description: "Start the local dev server.",
           params: {
             command: "npm run dev",
-            cwd: HOST_TEST_ROBINHOOD_MOCK_DIR
+            cwd: HOST_TEST_PORTFOLIO_DEMO_DIR
           }
         },
         {
@@ -782,7 +909,7 @@ class BrowserVerificationFailureModelClient implements ModelClient {
           type: "shell_command",
           description: "Scaffold the requested React app.",
           params: {
-            command: "npm create vite@latest robinhood-mock -- --template react",
+            command: "npm create vite@latest portfolio-demo -- --template react",
             cwd: HOST_TEST_DESKTOP_DIR
           }
         },
@@ -791,7 +918,7 @@ class BrowserVerificationFailureModelClient implements ModelClient {
           description: "Start the local dev server.",
           params: {
             command: "npm run dev",
-            cwd: HOST_TEST_ROBINHOOD_MOCK_DIR
+            cwd: HOST_TEST_PORTFOLIO_DEMO_DIR
           }
         },
         {
@@ -1061,8 +1188,8 @@ class MissingFrameworkScaffoldThenRepairModelClient implements ModelClient {
             type: "write_file",
             description: "Write the React source entry file.",
             params: {
-              path: path.join(HOST_TEST_ROBINHOOD_MOCK_DIR, "src", "App.jsx"),
-              content: "export default function App() { return <main>AI Drone City</main>; }"
+              path: path.join(HOST_TEST_PORTFOLIO_DEMO_DIR, "src", "App.jsx"),
+              content: "export default function App() { return <main>Sample City</main>; }"
             }
           }
         ]
@@ -1076,7 +1203,7 @@ class MissingFrameworkScaffoldThenRepairModelClient implements ModelClient {
           type: "shell_command",
           description: "Scaffold the requested React app.",
           params: {
-            command: "npm create vite@latest robinhood-mock -- --template react",
+            command: "npm create vite@latest portfolio-demo -- --template react",
             cwd: HOST_TEST_DESKTOP_DIR
           }
         }
@@ -1109,10 +1236,10 @@ class NonInPlaceFrameworkScaffoldThenRepairModelClient implements ModelClient {
             params: {
               command: [
                 `$desktop = '${HOST_TEST_DESKTOP_DIR}'`,
-                "$app = Join-Path $desktop 'AI Drone City'",
+                "$app = Join-Path $desktop 'Sample City'",
                 "if (!(Test-Path (Join-Path $app 'package.json'))) {",
                 "  Set-Location $desktop",
-                "  npm create vite@latest 'AI Drone City' -- --template react",
+                "  npm create vite@latest 'Sample City' -- --template react",
                 "}",
                 "Set-Location $app",
                 "npm install"
@@ -1131,7 +1258,7 @@ class NonInPlaceFrameworkScaffoldThenRepairModelClient implements ModelClient {
           description: "Scaffold or repair the React app in place.",
           params: {
             command: [
-              `$app = '${HOST_TEST_ROBINHOOD_MOCK_DIR}'`,
+              `$app = '${HOST_TEST_PORTFOLIO_DEMO_DIR}'`,
               "if (!(Test-Path (Join-Path $app 'package.json'))) {",
               "  Set-Location $app",
               "  npm create vite@latest . -- --template react",
@@ -1167,7 +1294,7 @@ class TrackedArtifactEditPreviewModelClient implements ModelClient {
           type: "write_file",
           description: "Update the tracked landing page artifact.",
           params: {
-            path: "C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
+            path: "C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
             content: "<section class=\"hero-slider\">updated</section>"
           }
         },
@@ -1175,7 +1302,7 @@ class TrackedArtifactEditPreviewModelClient implements ModelClient {
           type: "open_browser",
           description: "Reopen the same local file preview after the edit.",
           params: {
-            url: "file:///C:/Users/testuser/Desktop/drone-company/index.html"
+            url: "file:///C:/Users/testuser/Desktop/sample-company/index.html"
           }
         }
       ]
@@ -1443,7 +1570,148 @@ test("planner throws when planner model fails", async () => {
   });
 });
 
-test("planner uses deterministic framework build fallback before model planning for named live Next.js requests", async () => {
+test("planner builds a static site through Markdown skill guidance without deterministic static HTML fallback", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-planner-md-static-site-"));
+  try {
+    const outputPath = path.join(tempDir, "index.html");
+    const memoryStore = new SemanticMemoryStore(path.join(tempDir, "semantic_memory.json"));
+    const expectedGuidanceSnippet = "Keep generated assets inspectable";
+    const skillRegistry = new SkillRegistryStore(path.join(tempDir, "runtime-skills"));
+    const staticSiteGuidance = await skillRegistry.listApplicableGuidance(
+      "Build a simple static html site without a framework or local server.",
+      3
+    );
+    const staticSiteGuidanceEntry = staticSiteGuidance.find(
+      (entry) => entry.name === "static-site-generation"
+    );
+    assert.ok(staticSiteGuidanceEntry);
+    assert.equal(staticSiteGuidanceEntry.origin, "builtin");
+    assert.match(staticSiteGuidanceEntry.guidance, new RegExp(expectedGuidanceSnippet, "i"));
+
+    const modelClient = new MarkdownGuidedStaticSiteModelClient(
+      outputPath,
+      expectedGuidanceSnippet
+    );
+    const planner = new PlannerOrgan(
+      modelClient,
+      memoryStore,
+      undefined,
+      {
+        platform: "win32",
+        shellKind: "powershell",
+        invocationMode: "inline_command",
+        commandMaxChars: 4000,
+        desktopPath: "C:\\Users\\testuser\\Desktop",
+        documentsPath: "C:\\Users\\testuser\\Documents",
+        downloadsPath: "C:\\Users\\testuser\\Downloads"
+      }
+    );
+
+    const plan = await planner.plan(
+      buildTask(
+        "static_html_build: Build a simple static HTML landing page in " +
+          "C:\\Users\\testuser\\Desktop\\Markdown Skill Site as a single self-contained " +
+          "index.html. Do not use a framework, dependency install, local server, or browser."
+      ),
+      "mock-planner",
+      "mock-planner",
+      {
+        skillGuidance: staticSiteGuidance
+      }
+    );
+
+    assert.ok(modelClient.getPlannerRequest());
+    assert.match(plan.plannerNotes ?? "", /Markdown Skill Guidance: static-site-generation/i);
+    assert.doesNotMatch(plan.plannerNotes ?? "", /deterministic_static_html_build_fallback/i);
+
+    const writeAction = plan.actions.find((action) => action.type === "write_file");
+    assert.ok(writeAction);
+    const executor = new ToolExecutorOrgan(DEFAULT_BRAIN_CONFIG);
+    const outcome = await executor.executeWithOutcome(writeAction);
+    assert.equal(outcome.status, "success");
+
+    const html = await readFile(outputPath, "utf8");
+    assert.match(html, /data-build-path="markdown-skill-guided"/);
+    assert.match(html, /planned from reusable Markdown skill guidance/i);
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("planner fails closed for static HTML requests without model-planned governed actions", async () => {
+  await withPlannerClient(new InvalidPlannerActionsModelClient(), async (planner) => {
+    await assert.rejects(
+      planner.plan(
+        buildTask(
+          "static_html_build: Build a simple static HTML landing page on my Desktop as " +
+            "a single self-contained index.html. Do not use a framework, dependency install, " +
+            "local server, or browser."
+        ),
+        "mock-planner"
+      ),
+      /Planner model returned no valid actions/i
+    );
+  });
+});
+
+test("planner builds a Next.js app through Markdown skill guidance without framework fallback", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-planner-md-framework-"));
+  try {
+    const packageJsonPath = path.join(tempDir, "package.json");
+    const memoryStore = new SemanticMemoryStore(path.join(tempDir, "semantic_memory.json"));
+    const expectedFrameworkGuidanceSnippet = "Inspect First";
+    const expectedNextGuidanceSnippet = "App Router, Pages Router";
+    const skillRegistry = new SkillRegistryStore(path.join(tempDir, "runtime-skills"));
+    const frameworkGuidance = await skillRegistry.listApplicableGuidance(
+      "Build a Next.js framework landing page and prove it with the normal build script.",
+      5
+    );
+    assert.ok(frameworkGuidance.some((entry) => entry.name === "framework-generation"));
+    assert.ok(frameworkGuidance.some((entry) => entry.name === "nextjs-generation"));
+
+    const modelClient = new MarkdownGuidedFrameworkModelClient(
+      packageJsonPath,
+      expectedFrameworkGuidanceSnippet,
+      expectedNextGuidanceSnippet
+    );
+    const planner = new PlannerOrgan(
+      modelClient,
+      memoryStore,
+      undefined,
+      {
+        platform: "win32",
+        shellKind: "powershell",
+        invocationMode: "inline_command",
+        commandMaxChars: 4000,
+        desktopPath: "C:\\Users\\testuser\\Desktop",
+        documentsPath: "C:\\Users\\testuser\\Documents",
+        downloadsPath: "C:\\Users\\testuser\\Downloads"
+      }
+    );
+
+    const plan = await planner.plan(
+      buildTask(
+        "framework_app_build: Build a Next.js landing page called Markdown Skill Framework " +
+          "on my Desktop. Use Next.js conventions, run build proof, and do not open a browser."
+      ),
+      "mock-planner",
+      "mock-planner",
+      {
+        skillGuidance: frameworkGuidance
+      }
+    );
+
+    assert.ok(modelClient.getPlannerRequest());
+    assert.match(plan.plannerNotes ?? "", /Markdown Skill Guidance: framework-generation and nextjs-generation/i);
+    assert.doesNotMatch(plan.plannerNotes ?? "", /deterministic_framework_build_fallback/i);
+    assert.equal(plan.actions[0]?.type, "write_file");
+    assert.equal(plan.actions[0]?.params.path, packageJsonPath);
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("planner fails closed instead of generating framework page content when model planning fails", async () => {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-planner-timeout-fallback-"));
   try {
     const memoryStore = new SemanticMemoryStore(path.join(tempDir, "semantic_memory.json"));
@@ -1462,26 +1730,21 @@ test("planner uses deterministic framework build fallback before model planning 
       }
     );
 
-    const plan = await planner.plan(
-      buildTask(
-        "Please create a Next.js landing page called Drone City on my Desktop. It should have a flying drone in the hero, feel polished and modern, and work as a single-page landing page. After you finish, start it locally, open it in my browser, and leave it up for me to view."
+    await assert.rejects(
+      planner.plan(
+        buildTask(
+          "Please create a Next.js landing page called Sample City on my Desktop. It should have a flying sample in the hero, feel polished and modern, and work as a single-page landing page. After you finish, start it locally, open it in my browser, and leave it up for me to view."
+        ),
+        "mock-planner"
       ),
-      "mock-planner"
+      /forced planner failure/i
     );
-
-    assert.match(
-      plan.plannerNotes ?? "",
-      /deterministic_framework_build_fallback=shell_command/i
-    );
-    assert.ok(plan.actions.length >= 8);
-    assert.equal(plan.actions[0]?.type, "shell_command");
-    assert.equal(lastItem(plan.actions)?.type, "open_browser");
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }
 });
 
-test("planner uses deterministic framework workspace-preparation fallback before model planning for scaffold-only turns", async () => {
+test("planner fails closed instead of generating framework scaffold actions when model planning fails", async () => {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-planner-workspace-prep-"));
   try {
     const memoryStore = new SemanticMemoryStore(path.join(tempDir, "semantic_memory.json"));
@@ -1500,32 +1763,21 @@ test("planner uses deterministic framework workspace-preparation fallback before
       }
     );
 
-    const plan = await planner.plan(
-      buildTask(
-        "Can you get a new Next.js landing-page workspace started on my desktop and call it Downtown Detroit Drones? Just get the workspace ready for edits with the dependencies installed. Do not run it or open anything yet."
+    await assert.rejects(
+      planner.plan(
+        buildTask(
+          "Can you get a new Next.js landing-page workspace started on my desktop and call it Sample City Showcase? Just get the workspace ready for edits with the dependencies installed. Do not run it or open anything yet."
+        ),
+        "mock-planner"
       ),
-      "mock-planner"
-    );
-
-    assert.match(
-      plan.plannerNotes ?? "",
-      /deterministic_framework_workspace_preparation_fallback=shell_command/i
-    );
-    assert.equal(plan.actions.length, 3);
-    assert.equal(plan.actions[0]?.type, "shell_command");
-    assert.equal(plan.actions[1]?.type, "shell_command");
-    assert.equal(plan.actions[2]?.type, "shell_command");
-    assert.match(String(plan.actions[0]?.params.command), /create-next-app@latest/i);
-    assert.equal(
-      plan.actions[1]?.params.cwd,
-      "C:\\Users\\testuser\\Desktop\\Downtown Detroit Drones"
+      /forced planner failure/i
     );
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }
 });
 
-test("planner uses deterministic framework build fallback before model planning for tracked workspace build continuations", async () => {
+test("planner fails closed for tracked framework content continuations when model planning fails", async () => {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-planner-framework-continuation-"));
   try {
     const memoryStore = new SemanticMemoryStore(path.join(tempDir, "semantic_memory.json"));
@@ -1547,35 +1799,26 @@ test("planner uses deterministic framework build fallback before model planning 
     const wrappedInput = [
       "You are in an ongoing conversation with the same user.",
       "Recent conversation context (oldest to newest):",
-      "- user: Can you get a new Next.js landing-page workspace started on my desktop and call it Downtown Detroit Drones? Just get the workspace ready for edits with the dependencies installed. Do not run it or open anything yet.",
+      "- user: Can you get a new Next.js landing-page workspace started on my desktop and call it Sample City Showcase? Just get the workspace ready for edits with the dependencies installed. Do not run it or open anything yet.",
       "- assistant: I ran the command successfully.",
       "",
       "Current tracked workspace in this chat:",
-      "- Root path: C:\\Users\\testuser\\Desktop\\Downtown Detroit Drones",
+      "- Root path: C:\\Users\\testuser\\Desktop\\Sample City Showcase",
       "",
       "Current user request:",
-      "Great. Now turn that Downtown Detroit Drones workspace into the real landing page. Keep it calm and modern, avoid blue, put a small flying drone in the hero, use four main sections, add a clear call to action and a footer menu, then build it. Stop once the source and build proof are there, but do not run it or open anything yet."
+      "Great. Now turn that Sample City Showcase workspace into the real landing page. Keep it calm and modern, avoid blue, put a small flying sample in the hero, use four main sections, add a clear call to action and a footer menu, then build it. Stop once the source and build proof are there, but do not run it or open anything yet."
     ].join("\n");
 
-    const plan = await planner.plan(buildTask(wrappedInput), "mock-planner");
-
-    assert.match(
-      plan.plannerNotes ?? "",
-      /deterministic_framework_build_fallback=shell_command/i
+    await assert.rejects(
+      planner.plan(buildTask(wrappedInput), "mock-planner"),
+      /forced planner failure/i
     );
-    assert.equal(plan.actions[0]?.type, "shell_command");
-    assert.equal(plan.actions[1]?.type, "write_file");
-    assert.equal(plan.actions[4]?.type, "shell_command");
-    assert.equal(plan.actions[5]?.type, "shell_command");
-    assert.equal(plan.actions[6]?.type, "shell_command");
-    assert.match(String(plan.actions[5]?.params.command), /\bnpm run build\b/i);
-    assert.match(String(plan.actions[6]?.params.command), /\.next\\BUILD_ID/i);
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }
 });
 
-test("planner keeps eager deterministic framework fallback for fresh autonomous Next.js requests even when stale workspace context is present", async () => {
+test("planner does not use stale workspace context to generate a fresh autonomous framework page fallback", async () => {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-planner-framework-autonomous-fresh-"));
   try {
     const memoryStore = new SemanticMemoryStore(path.join(tempDir, "semantic_memory.json"));
@@ -1601,14 +1844,10 @@ test("planner keeps eager deterministic framework fallback for fresh autonomous 
       "}"
     ].join("");
 
-    const plan = await planner.plan(buildTask(wrappedInput), "mock-planner");
-
-    assert.match(
-      plan.plannerNotes ?? "",
-      /deterministic_framework_build_fallback=shell_command/i
+    await assert.rejects(
+      planner.plan(buildTask(wrappedInput), "mock-planner"),
+      /forced planner failure/i
     );
-    assert.equal(plan.actions[0]?.type, "shell_command");
-    assert.equal(lastItem(plan.actions)?.type, "open_browser");
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }
@@ -1746,7 +1985,7 @@ test("planner organization prompts allow finite shell planning without explicit 
   await withPlannerClient(modelClient, async (planner) => {
     const plan = await planner.plan(
       buildTask(
-        "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects."
+        "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects."
       ),
       "mock-planner"
     );
@@ -1768,93 +2007,7 @@ test("planner organization prompts allow finite shell planning without explicit 
   );
 });
 
-test("planner uses deterministic local-organization fallback before model planning for explicit desktop organization requests", async () => {
-  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-planner-local-organization-eager-"));
-  try {
-    const memoryStore = new SemanticMemoryStore(path.join(tempDir, "semantic_memory.json"));
-    const modelClient = new FailingIfCalledLocalOrganizationModelClient();
-    const planner = new PlannerOrgan(
-      modelClient,
-      memoryStore,
-      undefined,
-      {
-        platform: "win32",
-        shellKind: "powershell",
-        invocationMode: "inline_command",
-        commandMaxChars: 4000,
-        desktopPath: "C:\\Users\\testuser\\Desktop",
-        documentsPath: "C:\\Users\\testuser\\Documents",
-        downloadsPath: "C:\\Users\\testuser\\Downloads"
-      }
-    );
-
-    const plan = await planner.plan(
-      buildTask(
-        'Every folder with the name beginning in drone should go in "drone-folder" on my desktop.'
-      ),
-      "mock-planner"
-    );
-
-    assert.equal(modelClient.getPlannerCallCount(), 0);
-    assert.equal(plan.actions.length, 1);
-    assert.equal(plan.actions[0]?.type, "shell_command");
-    assert.match(
-      plan.plannerNotes ?? "",
-      /deterministic_local_organization_fallback=shell_command/i
-    );
-    assert.match(String(plan.actions[0]?.params.command), /ROOT_REMAINING_MATCHES:/i);
-    assert.match(String(plan.actions[0]?.params.command), /DEST_CONTENTS:/i);
-  } finally {
-    await rm(tempDir, { recursive: true, force: true });
-  }
-});
-
-test("planner uses deterministic local-organization fallback before model planning for earlier-project-folder wording", async () => {
-  const tempDir = await mkdtemp(
-    path.join(os.tmpdir(), "agentbigbrain-planner-local-organization-earlier-")
-  );
-  try {
-    const memoryStore = new SemanticMemoryStore(path.join(tempDir, "semantic_memory.json"));
-    const modelClient = new FailingIfCalledLocalOrganizationModelClient();
-    const planner = new PlannerOrgan(
-      modelClient,
-      memoryStore,
-      undefined,
-      {
-        platform: "win32",
-        shellKind: "powershell",
-        invocationMode: "inline_command",
-        commandMaxChars: 4000,
-        desktopPath: "C:\\Users\\testuser\\Desktop",
-        documentsPath: "C:\\Users\\testuser\\Documents",
-        downloadsPath: "C:\\Users\\testuser\\Downloads"
-      }
-    );
-
-    const plan = await planner.plan(
-      buildTask(
-        'Please take this from start to finish: move the earlier drone-company-organize-smoke project folders into a folder called "drone-web-projects" on my desktop.'
-      ),
-      "mock-planner"
-    );
-
-    assert.equal(modelClient.getPlannerCallCount(), 0);
-    assert.equal(plan.actions.length, 1);
-    assert.equal(plan.actions[0]?.type, "shell_command");
-    assert.match(
-      plan.plannerNotes ?? "",
-      /deterministic_local_organization_fallback=shell_command/i
-    );
-    assert.match(String(plan.actions[0]?.params.command), /drone-company-organize-smoke/i);
-    assert.doesNotMatch(String(plan.actions[0]?.params.command), /on my desktop/i);
-    assert.match(String(plan.actions[0]?.params.command), /ROOT_REMAINING_MATCHES:/i);
-    assert.match(String(plan.actions[0]?.params.command), /DEST_CONTENTS:/i);
-  } finally {
-    await rm(tempDir, { recursive: true, force: true });
-  }
-});
-
-test("planner uses deterministic desktop runtime process sweep fallback before model planning for explicit Desktop drone-folder server shutdown requests", async () => {
+test("planner uses deterministic desktop runtime process sweep fallback before model planning for explicit Desktop sample-folder server shutdown requests", async () => {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-planner-runtime-sweep-eager-"));
   try {
     const memoryStore = new SemanticMemoryStore(path.join(tempDir, "semantic_memory.json"));
@@ -1876,7 +2029,7 @@ test("planner uses deterministic desktop runtime process sweep fallback before m
 
     const plan = await planner.plan(
       buildTask(
-        "Look at all the folders on the desktop that start with drone and Drone, stop the servers that are running in the folders do this end to end"
+        "Look at all the folders on the desktop that start with sample and Sample, stop the servers that are running in the folders do this end to end"
       ),
       "mock-planner"
     );
@@ -1890,7 +2043,7 @@ test("planner uses deterministic desktop runtime process sweep fallback before m
     );
     assert.equal(plan.actions[0]?.params.rootPath, "C:\\Users\\testuser\\Desktop");
     assert.equal(plan.actions[0]?.params.selectorMode, "starts_with");
-    assert.equal(plan.actions[0]?.params.selectorTerm, "drone");
+    assert.equal(plan.actions[0]?.params.selectorTerm, "sample");
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }
@@ -1919,7 +2072,7 @@ test("planner live-verification build prompts can allow managed process planning
   assert.match(plannerRequest.systemPrompt, /prefer finite proof steps before any live session/i);
   assert.match(
     plannerRequest.systemPrompt,
-    /do not use long-running dev-server commands .*npm start.*npm run dev/i
+    /do not use long-running dev-server or watch commands/i
   );
   assert.match(
     plannerRequest.systemPrompt,
@@ -2245,13 +2398,13 @@ test("planner synthesizes deterministic workspace-recovery inspection when repai
     "[WORKSPACE_RECOVERY_INSPECT_FIRST]",
     "A folder move was blocked because the target folders are still in use.",
     "Use inspect_workspace_resources or inspect_path_holders as the main non-respond action for this step; list_directory alone is not enough.",
-    "Blocked folder paths: C:\\Users\\testuser\\Desktop\\drone-company-live-smoke-1",
+    "Blocked folder paths: C:\\Users\\testuser\\Desktop\\sample-company-live-smoke-1",
     "",
     "Workspace recovery context for this chat:",
-    "- Preferred workspace root: C:\\Users\\testuser\\Desktop\\drone-company",
+    "- Preferred workspace root: C:\\Users\\testuser\\Desktop\\sample-company",
     "- Preferred preview URL: http://127.0.0.1:4173/",
-    "- Exact tracked browser session ids: browser_session:drone-page",
-    "- Exact tracked preview lease ids: proc_preview_drone"
+    "- Exact tracked browser session ids: browser_session:sample-page",
+    "- Exact tracked preview lease ids: proc_preview_sample"
   ].join("\n");
 
   await withPlannerClient(modelClient, async (planner) => {
@@ -2261,7 +2414,7 @@ test("planner synthesizes deterministic workspace-recovery inspection when repai
     assert.equal(plan.actions[0]?.type, "inspect_path_holders");
     assert.equal(
       plan.actions[0]?.params.path,
-      "C:\\Users\\testuser\\Desktop\\drone-company-live-smoke-1"
+      "C:\\Users\\testuser\\Desktop\\sample-company-live-smoke-1"
     );
     assert.match(plan.plannerNotes ?? "", /deterministic_workspace_recovery_fallback=inspect_path_holders/i);
   });
@@ -2270,7 +2423,7 @@ test("planner synthesizes deterministic workspace-recovery inspection when repai
 test("planner synthesizes deterministic explicit inspect_path_holders actions when repair still returns no valid actions", async () => {
   const modelClient = new DeterministicInvalidPlannerModelClient();
   const taskInput =
-    "Execute inspect_path_holders on `C:\\Users\\testuser\\Desktop\\drone-company-live-smoke-1` and `C:\\Users\\testuser\\Desktop\\drone-company-live-smoke-2` now, then report the holders.";
+    "Execute inspect_path_holders on `C:\\Users\\testuser\\Desktop\\sample-company-live-smoke-1` and `C:\\Users\\testuser\\Desktop\\sample-company-live-smoke-2` now, then report the holders.";
 
   await withPlannerClient(modelClient, async (planner) => {
     const plan = await planner.plan(buildTask(taskInput), "mock-planner");
@@ -2283,11 +2436,11 @@ test("planner synthesizes deterministic explicit inspect_path_holders actions wh
       [
         {
           type: "inspect_path_holders",
-          path: "C:\\Users\\testuser\\Desktop\\drone-company-live-smoke-1"
+          path: "C:\\Users\\testuser\\Desktop\\sample-company-live-smoke-1"
         },
         {
           type: "inspect_path_holders",
-          path: "C:\\Users\\testuser\\Desktop\\drone-company-live-smoke-2"
+          path: "C:\\Users\\testuser\\Desktop\\sample-company-live-smoke-2"
         }
       ]
     );
@@ -2298,7 +2451,7 @@ test("planner synthesizes deterministic explicit inspect_path_holders actions wh
 test("planner keeps exact blocked paths when explicit workspace-recovery inspection requests mention multiple Windows paths", async () => {
   const modelClient = new DeterministicInvalidPlannerModelClient();
   const taskInput =
-    "Continue workspace-recovery for the same goal. First run inspect_path_holders (or inspect_workspace_resources) on the remaining blocked paths: 1) C:\\Users\\testuser\\Desktop\\drone-company-live-smoke-1773407921176 and 2) C:\\Users\\testuser\\Desktop\\drone-company-live-smoke-1773414171194. If exact tracked preview/runtime holders are found, stop only those exact tracked holders, then retry the organization task: move every Desktop folder whose name begins with \"drone\" into C:\\Users\\testuser\\Desktop\\drone-folder. If inspection finds only likely untracked holders, stop and report that user confirmation is required before shutting them down. Do not stop unrelated apps by name.";
+    "Continue workspace-recovery for the same goal. First run inspect_path_holders (or inspect_workspace_resources) on the remaining blocked paths: 1) C:\\Users\\testuser\\Desktop\\sample-company-live-smoke-1773407921176 and 2) C:\\Users\\testuser\\Desktop\\sample-company-live-smoke-1773414171194. If exact tracked preview/runtime holders are found, stop only those exact tracked holders, then retry the organization task: move every Desktop folder whose name begins with \"sample\" into C:\\Users\\testuser\\Desktop\\sample-folder. If inspection finds only likely untracked holders, stop and report that user confirmation is required before shutting them down. Do not stop unrelated apps by name.";
 
   await withPlannerClient(modelClient, async (planner) => {
     const plan = await planner.plan(buildTask(taskInput), "mock-planner");
@@ -2311,11 +2464,11 @@ test("planner keeps exact blocked paths when explicit workspace-recovery inspect
       [
         {
           type: "inspect_path_holders",
-          path: "C:\\Users\\testuser\\Desktop\\drone-company-live-smoke-1773407921176"
+          path: "C:\\Users\\testuser\\Desktop\\sample-company-live-smoke-1773407921176"
         },
         {
           type: "inspect_path_holders",
-          path: "C:\\Users\\testuser\\Desktop\\drone-company-live-smoke-1773414171194"
+          path: "C:\\Users\\testuser\\Desktop\\sample-company-live-smoke-1773414171194"
         }
       ]
     );
@@ -2568,9 +2721,9 @@ test("planner accepts tracked artifact-edit follow-ups that reopen the same loca
   const wrappedInput = [
     "You are in an ongoing conversation with the same user.",
     "Tracked artifact-edit follow-up:",
-    "- Preferred workspace root: C:\\Users\\testuser\\Desktop\\drone-company",
-    "- Preferred primary artifact: C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
-    "- Preferred preview target: file:///C:/Users/testuser/Desktop/drone-company/index.html",
+    "- Preferred workspace root: C:\\Users\\testuser\\Desktop\\sample-company",
+    "- Preferred primary artifact: C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
+    "- Preferred preview target: file:///C:/Users/testuser/Desktop/sample-company/index.html",
     "",
     "Current user request:",
     "Change the hero image to a slider instead of the landing page."
@@ -2584,7 +2737,7 @@ test("planner accepts tracked artifact-edit follow-ups that reopen the same loca
     assert.equal(plan.actions[1].type, "open_browser");
     assert.equal(
       plan.actions[1].params.url,
-      "file:///C:/Users/testuser/Desktop/drone-company/index.html"
+      "file:///C:/Users/testuser/Desktop/sample-company/index.html"
     );
   });
 });
@@ -2657,24 +2810,18 @@ test("planner repairs fresh framework-app requests when first plan only writes s
   });
 });
 
-test("planner normalizes named framework-app scaffolds that would recreate the folder from its parent", async () => {
+test("planner fails closed for named framework-app scaffolds that use unsafe package identifiers", async () => {
   const modelClient = new NonInPlaceFrameworkScaffoldThenRepairModelClient();
 
   await withPlannerClient(modelClient, async (planner) => {
-    const plan = await planner.plan(
-      buildTask("Create a React app on my Desktop in a folder called AI Drone City and execute now."),
-      "mock-planner"
+    await assert.rejects(
+      planner.plan(
+        buildTask("Create a React app on my Desktop in a folder called Sample City and execute now."),
+        "mock-planner"
+      ),
+      /not package-safe/i
     );
-
-    assert.equal(modelClient.getPlannerCallCount(), 0);
-    assert.ok(plan.actions.length >= 3);
-    assert.equal(plan.actions[0].type, "shell_command");
-    assert.match(
-      String(plan.actions[0].params.command),
-      /create-vite@latest --template react-ts --no-interactive 'ai-drone-city'/i
-    );
-    assert.match(String(plan.actions[0].params.command), /AI Drone City/i);
-    assert.match(plan.plannerNotes ?? "", /deterministic_framework_build_fallback=shell_command/i);
+    assert.equal(modelClient.getPlannerCallCount(), 2);
   });
 });
 
@@ -2761,7 +2908,7 @@ test("planner maps top-level create_skill name/code fields into params", async (
   });
 });
 
-test("planner deterministically backfills missing create_skill params from explicit request", async () => {
+test("planner backfills missing create_skill name without synthesizing executable code", async () => {
   const modelClient = new MissingCreateSkillParamsModelClient();
   const wrappedInput = [
     "You are in an ongoing conversation with the same user.",
@@ -2777,18 +2924,7 @@ test("planner deterministically backfills missing create_skill params from expli
     assert.equal(plan.actions.length, 1);
     assert.equal(plan.actions[0].type, "create_skill");
     assert.equal(plan.actions[0].params.name, "stage6_live_gate");
-    assert.match(
-      String(plan.actions[0].params.code),
-      /@fileoverview Auto-generated skill scaffold/
-    );
-    assert.match(
-      String(plan.actions[0].params.code),
-      /normalizedInput/
-    );
-    assert.match(
-      String(plan.actions[0].params.code),
-      /ok:\s*boolean/
-    );
+    assert.equal(plan.actions[0].params.code, undefined);
   });
 });
 
@@ -2809,14 +2945,11 @@ test("planner derives non-placeholder create_skill name from natural-language in
     assert.equal(plan.actions[0].type, "create_skill");
     assert.equal(plan.actions[0].params.name, "agentic_ai");
     assert.notEqual(plan.actions[0].params.name, "to");
-    assert.match(
-      String(plan.actions[0].params.code),
-      /agentic_ai/
-    );
+    assert.equal(plan.actions[0].params.code, undefined);
   });
 });
 
-test("planner replaces placeholder create_skill code with executable scaffold", async () => {
+test("planner removes placeholder create_skill code instead of replacing it", async () => {
   const modelClient = new CommentOnlyCreateSkillCodeModelClient();
   const wrappedInput = [
     "You are in an ongoing conversation with the same user.",
@@ -2832,13 +2965,6 @@ test("planner replaces placeholder create_skill code with executable scaffold", 
     assert.equal(plan.actions.length, 1);
     assert.equal(plan.actions[0].type, "create_skill");
     assert.equal(plan.actions[0].params.name, "agentic_ai");
-    assert.match(
-      String(plan.actions[0].params.code),
-      /@fileoverview Auto-generated skill scaffold/
-    );
-    assert.match(
-      String(plan.actions[0].params.code),
-      /export function agentic_ai/
-    );
+    assert.equal(plan.actions[0].params.code, undefined);
   });
 });

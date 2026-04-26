@@ -33,6 +33,7 @@ export interface ShellExecutionTelemetry {
 
 export interface SkillArtifactPaths {
   skillsRoot: string;
+  instructionPath: string;
   primaryPath: string;
   compatibilityPath: string;
   manifestPath: string;

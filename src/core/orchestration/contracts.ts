@@ -22,6 +22,7 @@ import {
 } from "../types";
 import { type JudgmentPattern } from "../judgmentPatterns";
 import { type WorkflowSkillBridgeSummary } from "../../organs/skillRegistry/workflowSkillBridge";
+import type { PlannerSkillGuidanceEntry } from "../../organs/skillRegistry/contracts";
 
 export type Stage685PlaybookPlanningContextResolver = (input: {
   userInput: string;
@@ -41,6 +42,7 @@ export interface PlannerLearningContext {
   workflowHints: readonly WorkflowPattern[];
   judgmentHints: readonly JudgmentPattern[];
   workflowBridge: WorkflowSkillBridgeSummary | null;
+  skillGuidance: readonly PlannerSkillGuidanceEntry[];
 }
 
 export interface RunTaskOptions {

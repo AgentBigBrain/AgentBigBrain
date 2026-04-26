@@ -96,9 +96,9 @@ test("markQueuedJobRunning seeds human-first progress text instead of echoing th
   });
   const job: ConversationJob = {
     ...buildQueuedJob(nowIso),
-    input: "Every folder with the name beginning in drone-company should go in drone-folder on my desktop.",
+    input: "Every folder with the name beginning in sample-company should go in sample-folder on my desktop.",
     executionInput:
-      "[AUTONOMOUS_LOOP_GOAL] Every folder with the name beginning in drone-company should go in drone-folder on my desktop."
+      "[AUTONOMOUS_LOOP_GOAL] Every folder with the name beginning in sample-company should go in sample-folder on my desktop."
   };
 
   markQueuedJobRunning({
@@ -297,10 +297,10 @@ test("persistExecutedJobOutcome turns a paused autonomous run into a waiting che
     updatedAt: "2026-03-03T00:00:01.000Z"
   };
   session.activeWorkspace = {
-    id: "workspace:drone-company",
+    id: "workspace:sample-company",
     label: "Current project workspace",
-    rootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
-    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
+    rootPath: "C:\\Users\\testuser\\Desktop\\sample-company",
+    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
     previewUrl: "http://127.0.0.1:4177/index.html",
     browserSessionId: "browser-1",
     browserSessionIds: ["browser-1"],
@@ -308,12 +308,12 @@ test("persistExecutedJobOutcome turns a paused autonomous run into a waiting che
     browserProcessPid: 999,
     previewProcessLeaseId: "lease-1",
     previewProcessLeaseIds: ["lease-1"],
-    previewProcessCwd: "C:\\Users\\testuser\\Desktop\\drone-company",
+    previewProcessCwd: "C:\\Users\\testuser\\Desktop\\sample-company",
     lastKnownPreviewProcessPid: 1234,
     stillControllable: true,
     ownershipState: "tracked",
     previewStackState: "browser_and_preview",
-    lastChangedPaths: ["C:\\Users\\testuser\\Desktop\\drone-company\\index.html"],
+    lastChangedPaths: ["C:\\Users\\testuser\\Desktop\\sample-company\\index.html"],
     sourceJobId: "job-1",
     updatedAt: "2026-03-03T00:00:01.000Z"
   };
@@ -349,7 +349,7 @@ test("persistExecutedJobOutcome turns a paused autonomous run into a waiting che
     session.returnHandoff?.nextSuggestedStep,
     "pick this back up when you're ready, and I'll continue from the saved checkpoint"
   );
-  assert.equal(session.returnHandoff?.workspaceRootPath, "C:\\Users\\testuser\\Desktop\\drone-company");
+  assert.equal(session.returnHandoff?.workspaceRootPath, "C:\\Users\\testuser\\Desktop\\sample-company");
   assert.equal(session.domainContext.dominantLane, "workflow");
   assert.equal(session.domainContext.continuitySignals.activeWorkspace, true);
   assert.equal(session.domainContext.continuitySignals.returnHandoff, true);
@@ -617,7 +617,7 @@ test("persistExecutedJobOutcome promotes scaffold shell workspace roots into act
               type: "shell_command",
               description: "Scaffold the workspace.",
               params: {
-                command: "npm create vite@latest Drone Preview App -- --template react",
+                command: "npm create vite@latest Sample Preview App -- --template react",
                 cwd: "C:\\Users\\testuser\\Desktop"
               },
               estimatedCostUsd: 0.2
@@ -628,7 +628,7 @@ test("persistExecutedJobOutcome promotes scaffold shell workspace roots into act
               description: "Install dependencies.",
               params: {
                 command: "npm install",
-                cwd: "C:\\Users\\testuser\\Desktop\\Drone Preview App"
+                cwd: "C:\\Users\\testuser\\Desktop\\Sample Preview App"
               },
               estimatedCostUsd: 0.2
             }
@@ -641,7 +641,7 @@ test("persistExecutedJobOutcome promotes scaffold shell workspace roots into act
               type: "shell_command",
               description: "Scaffold the workspace.",
               params: {
-                command: "npm create vite@latest Drone Preview App -- --template react",
+                command: "npm create vite@latest Sample Preview App -- --template react",
                 cwd: "C:\\Users\\testuser\\Desktop"
               },
               estimatedCostUsd: 0.2
@@ -654,7 +654,7 @@ test("persistExecutedJobOutcome promotes scaffold shell workspace roots into act
             violations: [],
             votes: [],
             executionMetadata: {
-              directoryPath: "C:\\Users\\testuser\\Desktop\\Drone Preview App"
+              directoryPath: "C:\\Users\\testuser\\Desktop\\Sample Preview App"
             }
           },
           {
@@ -664,7 +664,7 @@ test("persistExecutedJobOutcome promotes scaffold shell workspace roots into act
               description: "Install dependencies.",
               params: {
                 command: "npm install",
-                cwd: "C:\\Users\\testuser\\Desktop\\Drone Preview App"
+                cwd: "C:\\Users\\testuser\\Desktop\\Sample Preview App"
               },
               estimatedCostUsd: 0.2
             },
@@ -676,7 +676,7 @@ test("persistExecutedJobOutcome promotes scaffold shell workspace roots into act
             violations: [],
             votes: [],
             executionMetadata: {
-              directoryPath: "C:\\Users\\testuser\\Desktop\\Drone Preview App"
+              directoryPath: "C:\\Users\\testuser\\Desktop\\Sample Preview App"
             }
           }
         ],
@@ -693,17 +693,17 @@ test("persistExecutedJobOutcome promotes scaffold shell workspace roots into act
     maxConversationTurns: 40
   });
 
-  assert.equal(session.activeWorkspace?.rootPath, "C:\\Users\\testuser\\Desktop\\Drone Preview App");
+  assert.equal(session.activeWorkspace?.rootPath, "C:\\Users\\testuser\\Desktop\\Sample Preview App");
   assert.equal(session.activeWorkspace?.primaryArtifactPath, null);
   assert.equal(session.activeWorkspace?.previewUrl, null);
   assert.equal(session.activeWorkspace?.ownershipState, "stale");
   assert.ok(
     session.pathDestinations.some(
       (destination) =>
-        destination.resolvedPath === "C:\\Users\\testuser\\Desktop\\Drone Preview App"
+        destination.resolvedPath === "C:\\Users\\testuser\\Desktop\\Sample Preview App"
     )
   );
-  assert.equal(session.returnHandoff?.workspaceRootPath, "C:\\Users\\testuser\\Desktop\\Drone Preview App");
+  assert.equal(session.returnHandoff?.workspaceRootPath, "C:\\Users\\testuser\\Desktop\\Sample Preview App");
 });
 
 test("persistExecutedJobOutcome reanchors primary artifact and changed paths when a no-write relaunch switches to an older workspace", () => {
@@ -1143,8 +1143,8 @@ test("persistExecutedJobOutcome retains every live preview lease for the current
   const job: ConversationJob = {
     ...buildQueuedJob(nowIso),
     id: "job-open-preview",
-    input: "Reuse AI Drone City, open the preview, and leave it open.",
-    executionInput: "Reuse AI Drone City, open the preview, and leave it open.",
+    input: "Reuse Sample City, open the preview, and leave it open.",
+    executionInput: "Reuse Sample City, open the preview, and leave it open.",
     startedAt: nowIso,
     status: "running",
     ackEligibleAt: nowIso
@@ -1156,16 +1156,16 @@ test("persistExecutedJobOutcome retains every live preview lease for the current
       ...job,
       status: "completed",
       completedAt,
-      resultSummary: "Opened the AI Drone City preview and left it open.",
+      resultSummary: "Opened the Sample City preview and left it open.",
       errorMessage: null
     },
     executionResult: {
-      summary: "Opened the AI Drone City preview and left it open.",
+      summary: "Opened the Sample City preview and left it open.",
       taskRunResult: {
         task: {
           id: "task-open-preview",
-          goal: "Open the AI Drone City preview and leave it open.",
-          userInput: "Reuse AI Drone City, open the preview, and leave it open.",
+          goal: "Open the Sample City preview and leave it open.",
+          userInput: "Reuse Sample City, open the preview, and leave it open.",
           createdAt: nowIso
         },
         plan: {
@@ -1178,7 +1178,7 @@ test("persistExecutedJobOutcome retains every live preview lease for the current
               description: "Start the earlier preview attempt.",
               params: {
                 command: "npm run preview -- --host 127.0.0.1 --port 4173",
-                cwd: "C:\\Users\\testuser\\Desktop\\AI Drone City"
+                cwd: "C:\\Users\\testuser\\Desktop\\Sample City"
               },
               estimatedCostUsd: 0.08
             },
@@ -1188,7 +1188,7 @@ test("persistExecutedJobOutcome retains every live preview lease for the current
               description: "Restart the preview with the repaired workspace.",
               params: {
                 command: "npm run preview -- --host 127.0.0.1 --port 4173",
-                cwd: "C:\\Users\\testuser\\Desktop\\AI Drone City"
+                cwd: "C:\\Users\\testuser\\Desktop\\Sample City"
               },
               estimatedCostUsd: 0.08
             },
@@ -1198,7 +1198,7 @@ test("persistExecutedJobOutcome retains every live preview lease for the current
               description: "Open the running preview in a browser window.",
               params: {
                 url: "http://127.0.0.1:4173/",
-                rootPath: "C:\\Users\\testuser\\Desktop\\AI Drone City"
+                rootPath: "C:\\Users\\testuser\\Desktop\\Sample City"
               },
               estimatedCostUsd: 0.03
             }
@@ -1212,7 +1212,7 @@ test("persistExecutedJobOutcome retains every live preview lease for the current
               description: "Start the earlier preview attempt.",
               params: {
                 command: "npm run preview -- --host 127.0.0.1 --port 4173",
-                cwd: "C:\\Users\\testuser\\Desktop\\AI Drone City"
+                cwd: "C:\\Users\\testuser\\Desktop\\Sample City"
               },
               estimatedCostUsd: 0.08
             },
@@ -1223,7 +1223,7 @@ test("persistExecutedJobOutcome retains every live preview lease for the current
             executionMetadata: {
               processLeaseId: "proc_preview_1",
               processLifecycleStatus: "PROCESS_STARTED",
-              processCwd: "C:\\Users\\testuser\\Desktop\\AI Drone City",
+              processCwd: "C:\\Users\\testuser\\Desktop\\Sample City",
               processPid: 43125
             },
             blockedBy: [],
@@ -1237,7 +1237,7 @@ test("persistExecutedJobOutcome retains every live preview lease for the current
               description: "Restart the preview with the repaired workspace.",
               params: {
                 command: "npm run preview -- --host 127.0.0.1 --port 4173",
-                cwd: "C:\\Users\\testuser\\Desktop\\AI Drone City"
+                cwd: "C:\\Users\\testuser\\Desktop\\Sample City"
               },
               estimatedCostUsd: 0.08
             },
@@ -1248,7 +1248,7 @@ test("persistExecutedJobOutcome retains every live preview lease for the current
             executionMetadata: {
               processLeaseId: "proc_preview_2",
               processLifecycleStatus: "PROCESS_STARTED",
-              processCwd: "C:\\Users\\testuser\\Desktop\\AI Drone City",
+              processCwd: "C:\\Users\\testuser\\Desktop\\Sample City",
               processPid: 43126
             },
             blockedBy: [],
@@ -1262,7 +1262,7 @@ test("persistExecutedJobOutcome retains every live preview lease for the current
               description: "Open the running preview in a browser window.",
               params: {
                 url: "http://127.0.0.1:4173/",
-                rootPath: "C:\\Users\\testuser\\Desktop\\AI Drone City"
+                rootPath: "C:\\Users\\testuser\\Desktop\\Sample City"
               },
               estimatedCostUsd: 0.03
             },
@@ -1272,16 +1272,16 @@ test("persistExecutedJobOutcome retains every live preview lease for the current
             executionStatus: "success",
             executionMetadata: {
               browserSession: true,
-              browserSessionId: "browser_session:ai-drone-city",
+              browserSessionId: "browser_session:ai-sample-city",
               browserSessionUrl: "http://127.0.0.1:4173/",
               browserSessionStatus: "open",
               browserSessionVisibility: "visible",
               browserSessionControllerKind: "playwright_managed",
               browserSessionControlAvailable: true,
               browserSessionBrowserProcessPid: 42057,
-              browserSessionWorkspaceRootPath: "C:\\Users\\testuser\\Desktop\\AI Drone City",
+              browserSessionWorkspaceRootPath: "C:\\Users\\testuser\\Desktop\\Sample City",
               browserSessionLinkedProcessLeaseId: "proc_preview_2",
-              browserSessionLinkedProcessCwd: "C:\\Users\\testuser\\Desktop\\AI Drone City",
+              browserSessionLinkedProcessCwd: "C:\\Users\\testuser\\Desktop\\Sample City",
               browserSessionLinkedProcessPid: 43126
             },
             blockedBy: [],
@@ -1289,7 +1289,7 @@ test("persistExecutedJobOutcome retains every live preview lease for the current
             votes: []
           }
         ],
-        summary: "Opened the AI Drone City preview and left it open.",
+        summary: "Opened the Sample City preview and left it open.",
         startedAt: nowIso,
         completedAt
       }
@@ -1335,7 +1335,7 @@ test("persistExecutedJobOutcome lets a new React workspace replace stale single-
     {
       id: "browser_session:old-static-preview",
       label: "Old landing page preview",
-      url: "file:///C:/Users/testuser/Desktop/drone-company-landing.html",
+      url: "file:///C:/Users/testuser/Desktop/sample-company-landing.html",
       status: "closed",
       openedAt: "2026-03-17T23:40:00.000Z",
       closedAt: "2026-03-17T23:41:00.000Z",
@@ -1354,8 +1354,8 @@ test("persistExecutedJobOutcome lets a new React workspace replace stale single-
     id: "workspace:old-static-preview",
     label: "Current project workspace",
     rootPath: "C:\\Users\\testuser\\Desktop",
-    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\drone-company-landing.html",
-    previewUrl: "file:///C:/Users/testuser/Desktop/drone-company-landing.html",
+    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\sample-company-landing.html",
+    previewUrl: "file:///C:/Users/testuser/Desktop/sample-company-landing.html",
     browserSessionId: "browser_session:old-static-preview",
     browserSessionIds: ["browser_session:old-static-preview"],
     browserSessionStatus: "closed",
@@ -1367,7 +1367,7 @@ test("persistExecutedJobOutcome lets a new React workspace replace stale single-
     stillControllable: false,
     ownershipState: "stale",
     previewStackState: "detached",
-    lastChangedPaths: ["C:\\Users\\testuser\\Desktop\\drone-company-landing.html"],
+    lastChangedPaths: ["C:\\Users\\testuser\\Desktop\\sample-company-landing.html"],
     sourceJobId: "job-old-static-preview",
     updatedAt: "2026-03-17T23:41:00.000Z"
   };
@@ -1732,17 +1732,17 @@ test("persistExecutedJobOutcome preserves autonomous-loop ledgers from the aggre
           type: "write_file",
           description: "Write the landing page file.",
           params: {
-            path: "C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
-            content: "<!doctype html><title>Drone Company</title>"
+            path: "C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
+            content: "<!doctype html><title>Sample Company</title>"
           },
           estimatedCostUsd: 0.05
         },
         mode: "escalation_path",
         approved: true,
-        output: "Write success: C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
+        output: "Write success: C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
         executionStatus: "success",
         executionMetadata: {
-          filePath: "C:\\Users\\testuser\\Desktop\\drone-company\\index.html"
+          filePath: "C:\\Users\\testuser\\Desktop\\sample-company\\index.html"
         },
         blockedBy: [],
         violations: [],
@@ -1769,7 +1769,7 @@ test("persistExecutedJobOutcome preserves autonomous-loop ledgers from the aggre
   assert.ok(
     session.recentActions.some((action) =>
       action.kind === "file" &&
-      action.location === "C:\\Users\\testuser\\Desktop\\drone-company\\index.html"
+      action.location === "C:\\Users\\testuser\\Desktop\\sample-company\\index.html"
     )
   );
   assert.ok(
@@ -1780,12 +1780,12 @@ test("persistExecutedJobOutcome preserves autonomous-loop ledgers from the aggre
   );
   assert.ok(
     session.pathDestinations.some((destination) =>
-      destination.resolvedPath === "C:\\Users\\testuser\\Desktop\\drone-company\\index.html"
+      destination.resolvedPath === "C:\\Users\\testuser\\Desktop\\sample-company\\index.html"
     )
   );
   assert.equal(
     session.activeWorkspace?.rootPath,
-    "C:\\Users\\testuser\\Desktop\\drone-company"
+    "C:\\Users\\testuser\\Desktop\\sample-company"
   );
   assert.equal(
     session.activeWorkspace?.previewUrl,
@@ -1839,29 +1839,29 @@ test("persistExecutedJobOutcome downgrades remembered preview control to stale w
       controllerKind: "playwright_managed",
       controlAvailable: true,
       browserProcessPid: 42055,
-      linkedProcessLeaseId: "proc_preview_drone",
-      linkedProcessCwd: "C:\\Users\\testuser\\Desktop\\drone-company",
+      linkedProcessLeaseId: "proc_preview_sample",
+      linkedProcessCwd: "C:\\Users\\testuser\\Desktop\\sample-company",
       linkedProcessPid: 43125
     }
   ];
   session.activeWorkspace = {
-    id: "workspace:drone-company",
+    id: "workspace:sample-company",
     label: "Current project workspace",
-    rootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
-    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
+    rootPath: "C:\\Users\\testuser\\Desktop\\sample-company",
+    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
     previewUrl: "http://127.0.0.1:4177/index.html",
     browserSessionId: "browser_session:landing-page",
     browserSessionIds: ["browser_session:landing-page"],
     browserSessionStatus: "open",
     browserProcessPid: 42055,
-    previewProcessLeaseId: "proc_preview_drone",
-    previewProcessLeaseIds: ["proc_preview_drone"],
-    previewProcessCwd: "C:\\Users\\testuser\\Desktop\\drone-company",
+    previewProcessLeaseId: "proc_preview_sample",
+    previewProcessLeaseIds: ["proc_preview_sample"],
+    previewProcessCwd: "C:\\Users\\testuser\\Desktop\\sample-company",
     lastKnownPreviewProcessPid: 43125,
     stillControllable: true,
     ownershipState: "tracked",
     previewStackState: "browser_and_preview",
-    lastChangedPaths: ["C:\\Users\\testuser\\Desktop\\drone-company\\index.html"],
+    lastChangedPaths: ["C:\\Users\\testuser\\Desktop\\sample-company\\index.html"],
     sourceJobId: "job-open-preview",
     updatedAt: "2026-03-14T20:55:00.000Z"
   };
@@ -1904,7 +1904,7 @@ test("persistExecutedJobOutcome downgrades remembered preview control to stale w
               type: "stop_process",
               description: "Stop the linked preview process.",
               params: {
-                leaseId: "proc_preview_drone"
+                leaseId: "proc_preview_sample"
               },
               estimatedCostUsd: 0.08
             }
@@ -1934,8 +1934,8 @@ test("persistExecutedJobOutcome downgrades remembered preview control to stale w
               browserSessionControllerKind: "playwright_managed",
               browserSessionControlAvailable: false,
               browserSessionBrowserProcessPid: 42055,
-              browserSessionLinkedProcessLeaseId: "proc_preview_drone",
-              browserSessionLinkedProcessCwd: "C:\\Users\\testuser\\Desktop\\drone-company",
+              browserSessionLinkedProcessLeaseId: "proc_preview_sample",
+              browserSessionLinkedProcessCwd: "C:\\Users\\testuser\\Desktop\\sample-company",
               browserSessionLinkedProcessPid: 43125
             },
             blockedBy: [],
@@ -1948,18 +1948,18 @@ test("persistExecutedJobOutcome downgrades remembered preview control to stale w
               type: "stop_process",
               description: "Stop the linked preview process.",
               params: {
-                leaseId: "proc_preview_drone"
+                leaseId: "proc_preview_sample"
               },
               estimatedCostUsd: 0.08
             },
             mode: "escalation_path",
             approved: true,
-            output: "Process stopped: lease proc_preview_drone.",
+            output: "Process stopped: lease proc_preview_sample.",
             executionStatus: "success",
             executionMetadata: {
-              processLeaseId: "proc_preview_drone",
+              processLeaseId: "proc_preview_sample",
               processLifecycleStatus: "PROCESS_STOPPED",
-              processCwd: "C:\\Users\\testuser\\Desktop\\drone-company",
+              processCwd: "C:\\Users\\testuser\\Desktop\\sample-company",
               processPid: 43125
             },
             blockedBy: [],
@@ -1979,13 +1979,13 @@ test("persistExecutedJobOutcome downgrades remembered preview control to stale w
     maxConversationTurns: 40
   });
 
-  assert.equal(session.activeWorkspace?.rootPath, "C:\\Users\\testuser\\Desktop\\drone-company");
+  assert.equal(session.activeWorkspace?.rootPath, "C:\\Users\\testuser\\Desktop\\sample-company");
   assert.equal(session.activeWorkspace?.stillControllable, false);
   assert.equal(session.activeWorkspace?.ownershipState, "stale");
   assert.equal(session.activeWorkspace?.previewStackState, "detached");
   assert.equal(session.activeWorkspace?.browserSessionStatus, "closed");
-  assert.equal(session.activeWorkspace?.previewProcessLeaseId, "proc_preview_drone");
-  assert.deepEqual(session.activeWorkspace?.previewProcessLeaseIds, ["proc_preview_drone"]);
+  assert.equal(session.activeWorkspace?.previewProcessLeaseId, "proc_preview_sample");
+  assert.deepEqual(session.activeWorkspace?.previewProcessLeaseIds, ["proc_preview_sample"]);
 });
 
 test("persistExecutedJobOutcome converts locked folder organization failures into a recovery clarification", () => {
@@ -2004,9 +2004,9 @@ test("persistExecutedJobOutcome converts locked folder organization failures int
     {
       ...buildQueuedJob(nowIso),
       input:
-        "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+        "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
       executionInput:
-        "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+        "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
       status: "running",
       startedAt: nowIso
     }
@@ -2030,7 +2030,7 @@ test("persistExecutedJobOutcome converts locked folder organization failures int
           id: "task-recovery-1",
           goal: "Organize folders",
           userInput:
-            "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+            "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
           createdAt: nowIso
         },
         plan: {
@@ -2040,7 +2040,7 @@ test("persistExecutedJobOutcome converts locked folder organization failures int
             {
               id: "action-move-1",
               type: "shell_command",
-              description: "Move matching drone-company folders into the new root.",
+              description: "Move matching sample-company folders into the new root.",
               params: {},
               estimatedCostUsd: 0.08
             }
@@ -2051,7 +2051,7 @@ test("persistExecutedJobOutcome converts locked folder organization failures int
             action: {
               id: "action-move-1",
               type: "shell_command",
-              description: "Move matching drone-company folders into the new root.",
+              description: "Move matching sample-company folders into the new root.",
               params: {},
               estimatedCostUsd: 0.08
             },
@@ -2120,11 +2120,11 @@ test("persistExecutedJobOutcome does not turn wrapped artifact-edit follow-ups i
       executionInput: [
         "You are in an ongoing conversation with the same user.",
         "Recent conversation context (oldest to newest):",
-        "- user: Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+        "- user: Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
         "- assistant: I moved most of them already.",
         "",
         "Current tracked workspace in this chat:",
-        "- Root path: C:\\Users\\testuser\\Desktop\\drone-company",
+        "- Root path: C:\\Users\\testuser\\Desktop\\sample-company",
         "",
         "Current user request:",
         "change the hero image to a slider instead of the landing page"
@@ -2185,7 +2185,7 @@ test("persistExecutedJobOutcome does not turn wrapped artifact-edit follow-ups i
             },
             mode: "escalation_path",
             approved: true,
-            output: "Write success: C:\\Users\\testuser\\Desktop\\drone-company\\index.html (3049 chars)",
+            output: "Write success: C:\\Users\\testuser\\Desktop\\sample-company\\index.html (3049 chars)",
             blockedBy: [],
             violations: [],
             votes: []
@@ -2250,9 +2250,9 @@ test("persistExecutedJobOutcome keeps shutdown-and-retry clarification only for 
       ...buildQueuedJob(nowIso),
       id: "job-2",
       input:
-        "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+        "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
       executionInput:
-        "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+        "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
       status: "running",
       startedAt: nowIso
     }
@@ -2276,7 +2276,7 @@ test("persistExecutedJobOutcome keeps shutdown-and-retry clarification only for 
           id: "task-recovery-2",
           goal: "Organize folders",
           userInput:
-            "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+            "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
           createdAt: nowIso
         },
         plan: {
@@ -2286,7 +2286,7 @@ test("persistExecutedJobOutcome keeps shutdown-and-retry clarification only for 
             {
               id: "action-move-2",
               type: "shell_command",
-              description: "Move matching drone-company folders into the new root.",
+              description: "Move matching sample-company folders into the new root.",
               params: {},
               estimatedCostUsd: 0.08
             },
@@ -2304,7 +2304,7 @@ test("persistExecutedJobOutcome keeps shutdown-and-retry clarification only for 
             action: {
               id: "action-move-2",
               type: "shell_command",
-              description: "Move matching drone-company folders into the new root.",
+              description: "Move matching sample-company folders into the new root.",
               params: {},
               estimatedCostUsd: 0.08
             },
@@ -2375,9 +2375,9 @@ test("persistExecutedJobOutcome reports stale-only recovery findings with a boun
       ...buildQueuedJob(nowIso),
       id: "job-3",
       input:
-        "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+        "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
       executionInput:
-        "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+        "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
       status: "running",
       startedAt: nowIso
     }
@@ -2401,7 +2401,7 @@ test("persistExecutedJobOutcome reports stale-only recovery findings with a boun
           id: "task-recovery-3",
           goal: "Organize folders",
           userInput:
-            "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+            "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
           createdAt: nowIso
         },
         plan: {
@@ -2411,7 +2411,7 @@ test("persistExecutedJobOutcome reports stale-only recovery findings with a boun
             {
               id: "action-move-3",
               type: "shell_command",
-              description: "Move matching drone-company folders into the new root.",
+              description: "Move matching sample-company folders into the new root.",
               params: {},
               estimatedCostUsd: 0.08
             },
@@ -2429,7 +2429,7 @@ test("persistExecutedJobOutcome reports stale-only recovery findings with a boun
             action: {
               id: "action-move-3",
               type: "shell_command",
-              description: "Move matching drone-company folders into the new root.",
+              description: "Move matching sample-company folders into the new root.",
               params: {},
               estimatedCostUsd: 0.08
             },
@@ -2519,9 +2519,9 @@ test("persistCompletedJobState explains orphaned assistant browser cleanup requi
       ...buildQueuedJob(nowIso),
       id: "job-worker-orphaned-browser",
       input:
-        "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+        "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
       executionInput:
-        "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+        "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
       status: "running",
       startedAt: nowIso
     }
@@ -2545,7 +2545,7 @@ test("persistCompletedJobState explains orphaned assistant browser cleanup requi
         id: "task-worker-orphaned-browser",
         goal: "Organize folders",
         userInput:
-          "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+          "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
         createdAt: nowIso
       },
       plan: {
@@ -2555,7 +2555,7 @@ test("persistCompletedJobState explains orphaned assistant browser cleanup requi
           {
             id: "action-move-orphaned",
             type: "shell_command",
-            description: "Move matching drone-company folders into the new root.",
+            description: "Move matching sample-company folders into the new root.",
             params: {},
             estimatedCostUsd: 0.08
           },
@@ -2573,7 +2573,7 @@ test("persistCompletedJobState explains orphaned assistant browser cleanup requi
           action: {
             id: "action-move-orphaned",
             type: "shell_command",
-            description: "Move matching drone-company folders into the new root.",
+            description: "Move matching sample-company folders into the new root.",
             params: {},
             estimatedCostUsd: 0.08
           },
@@ -2651,9 +2651,9 @@ test("persistCompletedJobState turns one high-confidence non-preview holder into
       ...buildQueuedJob(nowIso),
       id: "job-worker-exact-non-preview-holder",
       input:
-        "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+        "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
       executionInput:
-        "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+        "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
       status: "running",
       startedAt: nowIso
     }
@@ -2677,7 +2677,7 @@ test("persistCompletedJobState turns one high-confidence non-preview holder into
           id: "task-worker-exact-non-preview-holder",
           goal: "Organize folders",
           userInput:
-            "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+            "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
           createdAt: nowIso
         },
         plan: {
@@ -2687,7 +2687,7 @@ test("persistCompletedJobState turns one high-confidence non-preview holder into
             {
               id: "action-move-exact-non-preview",
               type: "shell_command",
-              description: "Move matching drone-company folders into the new root.",
+              description: "Move matching sample-company folders into the new root.",
               params: {},
               estimatedCostUsd: 0.08
             },
@@ -2705,7 +2705,7 @@ test("persistCompletedJobState turns one high-confidence non-preview holder into
             action: {
               id: "action-move-exact-non-preview",
               type: "shell_command",
-              description: "Move matching drone-company folders into the new root.",
+              description: "Move matching sample-company folders into the new root.",
               params: {},
               estimatedCostUsd: 0.08
             },
@@ -2805,9 +2805,9 @@ test("persistCompletedJobState turns one high-confidence sync holder into a targ
       ...buildQueuedJob(nowIso),
       id: "job-worker-sync-exact-holder",
       input:
-        "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+        "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
       executionInput:
-        "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+        "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
       status: "running",
       startedAt: nowIso
     }
@@ -2831,7 +2831,7 @@ test("persistCompletedJobState turns one high-confidence sync holder into a targ
           id: "task-worker-sync-exact-holder",
           goal: "Organize folders",
           userInput:
-            "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+            "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
           createdAt: nowIso
         },
         plan: {
@@ -2841,7 +2841,7 @@ test("persistCompletedJobState turns one high-confidence sync holder into a targ
             {
               id: "action-move-sync-exact-holder",
               type: "shell_command",
-              description: "Move matching drone-company folders into the new root.",
+              description: "Move matching sample-company folders into the new root.",
               params: {},
               estimatedCostUsd: 0.08
             },
@@ -2859,7 +2859,7 @@ test("persistCompletedJobState turns one high-confidence sync holder into a targ
             action: {
               id: "action-move-sync-exact-holder",
               type: "shell_command",
-              description: "Move matching drone-company folders into the new root.",
+              description: "Move matching sample-company folders into the new root.",
               params: {},
               estimatedCostUsd: 0.08
             },
@@ -2951,9 +2951,9 @@ test("persistCompletedJobState turns a small likely editor and shell holder set 
       ...buildQueuedJob(nowIso),
       id: "job-worker-likely-non-preview",
       input:
-        "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+        "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
       executionInput:
-        "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+        "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
       status: "running",
       startedAt: nowIso
     }
@@ -2977,7 +2977,7 @@ test("persistCompletedJobState turns a small likely editor and shell holder set 
           id: "task-worker-likely-non-preview",
           goal: "Organize folders",
           userInput:
-            "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+            "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
           createdAt: nowIso
         },
         plan: {
@@ -2987,7 +2987,7 @@ test("persistCompletedJobState turns a small likely editor and shell holder set 
             {
               id: "action-move-likely-non-preview",
               type: "shell_command",
-              description: "Move matching drone-company folders into the new root.",
+              description: "Move matching sample-company folders into the new root.",
               params: {},
               estimatedCostUsd: 0.08
             },
@@ -3005,7 +3005,7 @@ test("persistCompletedJobState turns a small likely editor and shell holder set 
             action: {
               id: "action-move-likely-non-preview",
               type: "shell_command",
-              description: "Move matching drone-company folders into the new root.",
+              description: "Move matching sample-company folders into the new root.",
               params: {},
               estimatedCostUsd: 0.08
             },
@@ -3104,9 +3104,9 @@ test("persistCompletedJobState explains non-preview holder cleanup requirements 
       ...buildQueuedJob(nowIso),
       id: "job-worker-non-preview-holder",
       input:
-        "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+        "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
       executionInput:
-        "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+        "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
       status: "running",
       startedAt: nowIso
     }
@@ -3130,7 +3130,7 @@ test("persistCompletedJobState explains non-preview holder cleanup requirements 
           id: "task-worker-non-preview-holder",
           goal: "Organize folders",
           userInput:
-            "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+            "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
           createdAt: nowIso
         },
         plan: {
@@ -3140,7 +3140,7 @@ test("persistCompletedJobState explains non-preview holder cleanup requirements 
             {
               id: "action-move-non-preview",
               type: "shell_command",
-              description: "Move matching drone-company folders into the new root.",
+              description: "Move matching sample-company folders into the new root.",
               params: {},
               estimatedCostUsd: 0.08
             },
@@ -3158,7 +3158,7 @@ test("persistCompletedJobState explains non-preview holder cleanup requirements 
             action: {
               id: "action-move-non-preview",
               type: "shell_command",
-              description: "Move matching drone-company folders into the new root.",
+              description: "Move matching sample-company folders into the new root.",
               params: {},
               estimatedCostUsd: 0.08
             },
@@ -3238,9 +3238,9 @@ test("persistCompletedJobState keeps a bounded mixed editor shell and sync holde
       ...buildQueuedJob(nowIso),
       id: "job-worker-mixed-likely-holder",
       input:
-        "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+        "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
       executionInput:
-        "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+        "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
       status: "running",
       startedAt: nowIso
     }
@@ -3264,7 +3264,7 @@ test("persistCompletedJobState keeps a bounded mixed editor shell and sync holde
           id: "task-worker-mixed-likely-holder",
           goal: "Organize folders",
           userInput:
-            "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+            "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
           createdAt: nowIso
         },
         plan: {
@@ -3274,7 +3274,7 @@ test("persistCompletedJobState keeps a bounded mixed editor shell and sync holde
             {
               id: "action-move-mixed-likely-holder",
               type: "shell_command",
-              description: "Move matching drone-company folders into the new root.",
+              description: "Move matching sample-company folders into the new root.",
               params: {},
               estimatedCostUsd: 0.08
             },
@@ -3292,7 +3292,7 @@ test("persistCompletedJobState keeps a bounded mixed editor shell and sync holde
             action: {
               id: "action-move-mixed-likely-holder",
               type: "shell_command",
-              description: "Move matching drone-company folders into the new root.",
+              description: "Move matching sample-company folders into the new root.",
               params: {},
               estimatedCostUsd: 0.08
             },
@@ -3388,9 +3388,9 @@ test("persistCompletedJobState explains sync-holder cleanup requirements with a 
       ...buildQueuedJob(nowIso),
       id: "job-worker-sync-holder",
       input:
-        "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+        "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
       executionInput:
-        "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+        "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
       status: "running",
       startedAt: nowIso
     }
@@ -3414,7 +3414,7 @@ test("persistCompletedJobState explains sync-holder cleanup requirements with a 
           id: "task-worker-sync-holder",
           goal: "Organize folders",
           userInput:
-            "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+            "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
           createdAt: nowIso
         },
         plan: {
@@ -3424,7 +3424,7 @@ test("persistCompletedJobState explains sync-holder cleanup requirements with a 
             {
               id: "action-move-sync-holder",
               type: "shell_command",
-              description: "Move matching drone-company folders into the new root.",
+              description: "Move matching sample-company folders into the new root.",
               params: {},
               estimatedCostUsd: 0.08
             },
@@ -3442,7 +3442,7 @@ test("persistCompletedJobState explains sync-holder cleanup requirements with a 
             action: {
               id: "action-move-sync-holder",
               type: "shell_command",
-              description: "Move matching drone-company folders into the new root.",
+              description: "Move matching sample-company folders into the new root.",
               params: {},
               estimatedCostUsd: 0.08
             },
@@ -3518,9 +3518,9 @@ test("persistCompletedJobState keeps a bounded nearby-process holder set on clar
       ...buildQueuedJob(nowIso),
       id: "job-worker-nearby-holder",
       input:
-        "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+        "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
       executionInput:
-        "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+        "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
       status: "running",
       startedAt: nowIso
     }
@@ -3544,7 +3544,7 @@ test("persistCompletedJobState keeps a bounded nearby-process holder set on clar
           id: "task-worker-nearby-holder",
           goal: "Organize folders",
           userInput:
-            "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+            "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
           createdAt: nowIso
         },
         plan: {
@@ -3554,7 +3554,7 @@ test("persistCompletedJobState keeps a bounded nearby-process holder set on clar
             {
               id: "action-move-nearby-holder",
               type: "shell_command",
-              description: "Move matching drone-company folders into the new root.",
+              description: "Move matching sample-company folders into the new root.",
               params: {},
               estimatedCostUsd: 0.08
             },
@@ -3572,7 +3572,7 @@ test("persistCompletedJobState keeps a bounded nearby-process holder set on clar
             action: {
               id: "action-move-nearby-holder",
               type: "shell_command",
-              description: "Move matching drone-company folders into the new root.",
+              description: "Move matching sample-company folders into the new root.",
               params: {},
               estimatedCostUsd: 0.08
             },
@@ -3669,9 +3669,9 @@ test("persistCompletedJobState keeps a broader nearby-process holder set on clar
       ...buildQueuedJob(nowIso),
       id: "job-worker-broader-nearby-holder",
       input:
-        "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+        "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
       executionInput:
-        "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+        "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
       status: "running",
       startedAt: nowIso
     }
@@ -3695,7 +3695,7 @@ test("persistCompletedJobState keeps a broader nearby-process holder set on clar
           id: "task-worker-broader-nearby-holder",
           goal: "Organize folders",
           userInput:
-            "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+            "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
           createdAt: nowIso
         },
         plan: {
@@ -3705,7 +3705,7 @@ test("persistCompletedJobState keeps a broader nearby-process holder set on clar
             {
               id: "action-move-broader-nearby-holder",
               type: "shell_command",
-              description: "Move matching drone-company folders into the new root.",
+              description: "Move matching sample-company folders into the new root.",
               params: {},
               estimatedCostUsd: 0.08
             },
@@ -3723,7 +3723,7 @@ test("persistCompletedJobState keeps a broader nearby-process holder set on clar
             action: {
               id: "action-move-broader-nearby-holder",
               type: "shell_command",
-              description: "Move matching drone-company folders into the new root.",
+              description: "Move matching sample-company folders into the new root.",
               params: {},
               estimatedCostUsd: 0.08
             },
@@ -3820,9 +3820,9 @@ test("persistCompletedJobState keeps a broader sync-plus-nearby holder set on cl
       ...buildQueuedJob(nowIso),
       id: "job_completed_broader_sync_nearby_holder",
       input:
-        "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+        "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
       executionInput:
-        "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+        "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
       status: "running",
       startedAt: nowIso
     }
@@ -3846,7 +3846,7 @@ test("persistCompletedJobState keeps a broader sync-plus-nearby holder set on cl
           id: "task-worker-broader-sync-nearby-holder",
           goal: "Organize folders",
           userInput:
-            "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+            "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
           createdAt: nowIso
         },
         plan: {
@@ -3856,7 +3856,7 @@ test("persistCompletedJobState keeps a broader sync-plus-nearby holder set on cl
             {
               id: "action-move-broader-sync-nearby-holder",
               type: "shell_command",
-              description: "Move matching drone-company folders into the new root.",
+              description: "Move matching sample-company folders into the new root.",
               params: {},
               estimatedCostUsd: 0.08
             },
@@ -3874,7 +3874,7 @@ test("persistCompletedJobState keeps a broader sync-plus-nearby holder set on cl
             action: {
               id: "action-move-broader-sync-nearby-holder",
               type: "shell_command",
-              description: "Move matching drone-company folders into the new root.",
+              description: "Move matching sample-company folders into the new root.",
               params: {},
               estimatedCostUsd: 0.08
             },
@@ -3972,9 +3972,9 @@ test("persistCompletedJobState keeps a broader seven-holder sync-plus-nearby set
       ...buildQueuedJob(nowIso),
       id: "job_completed_broader_seven_sync_nearby_holder",
       input:
-        "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+        "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
       executionInput:
-        "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+        "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
       status: "running",
       startedAt: nowIso
     }
@@ -3998,7 +3998,7 @@ test("persistCompletedJobState keeps a broader seven-holder sync-plus-nearby set
           id: "task-worker-broader-seven-sync-nearby-holder",
           goal: "Organize folders",
           userInput:
-            "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+            "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
           createdAt: nowIso
         },
         plan: {
@@ -4008,7 +4008,7 @@ test("persistCompletedJobState keeps a broader seven-holder sync-plus-nearby set
             {
               id: "action-move-broader-seven-sync-nearby-holder",
               type: "shell_command",
-              description: "Move matching drone-company folders into the new root.",
+              description: "Move matching sample-company folders into the new root.",
               params: {},
               estimatedCostUsd: 0.08
             },
@@ -4026,7 +4026,7 @@ test("persistCompletedJobState keeps a broader seven-holder sync-plus-nearby set
             action: {
               id: "action-move-broader-seven-sync-nearby-holder",
               type: "shell_command",
-              description: "Move matching drone-company folders into the new root.",
+              description: "Move matching sample-company folders into the new root.",
               params: {},
               estimatedCostUsd: 0.08
             },
@@ -4124,9 +4124,9 @@ test("persistCompletedJobState keeps a broader eight-holder sync-plus-nearby set
       ...buildQueuedJob(nowIso),
       id: "job_completed_broader_eight_sync_nearby_holder",
       input:
-        "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+        "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
       executionInput:
-        "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+        "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
       status: "running",
       startedAt: nowIso
     }
@@ -4150,7 +4150,7 @@ test("persistCompletedJobState keeps a broader eight-holder sync-plus-nearby set
           id: "task-worker-broader-eight-sync-nearby-holder",
           goal: "Organize folders",
           userInput:
-            "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+            "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
           createdAt: nowIso
         },
         plan: {
@@ -4160,7 +4160,7 @@ test("persistCompletedJobState keeps a broader eight-holder sync-plus-nearby set
             {
               id: "action-move-broader-eight-sync-nearby-holder",
               type: "shell_command",
-              description: "Move matching drone-company folders into the new root.",
+              description: "Move matching sample-company folders into the new root.",
               params: {},
               estimatedCostUsd: 0.08
             },
@@ -4178,7 +4178,7 @@ test("persistCompletedJobState keeps a broader eight-holder sync-plus-nearby set
             action: {
               id: "action-move-broader-eight-sync-nearby-holder",
               type: "shell_command",
-              description: "Move matching drone-company folders into the new root.",
+              description: "Move matching sample-company folders into the new root.",
               params: {},
               estimatedCostUsd: 0.08
             },
@@ -4276,9 +4276,9 @@ test("persistCompletedJobState keeps a broader nine-holder local family on conte
       ...buildQueuedJob(nowIso),
       id: "job-worker-contextual-manual-cleanup",
       input:
-        "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+        "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
       executionInput:
-        "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+        "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
       status: "running",
       startedAt: nowIso
     }
@@ -4302,7 +4302,7 @@ test("persistCompletedJobState keeps a broader nine-holder local family on conte
           id: "task-worker-contextual-manual-cleanup",
           goal: "Organize folders",
           userInput:
-            "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+            "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
           createdAt: nowIso
         },
         plan: {
@@ -4312,7 +4312,7 @@ test("persistCompletedJobState keeps a broader nine-holder local family on conte
             {
               id: "action-move-contextual-manual-cleanup",
               type: "shell_command",
-              description: "Move matching drone-company folders into the new root.",
+              description: "Move matching sample-company folders into the new root.",
               params: {},
               estimatedCostUsd: 0.08
             },
@@ -4330,7 +4330,7 @@ test("persistCompletedJobState keeps a broader nine-holder local family on conte
             action: {
               id: "action-move-contextual-manual-cleanup",
               type: "shell_command",
-              description: "Move matching drone-company folders into the new root.",
+              description: "Move matching sample-company folders into the new root.",
               params: {},
               estimatedCostUsd: 0.08
             },
@@ -4418,9 +4418,9 @@ test("persistCompletedJobState keeps a grouped thirteen-holder local family on c
       ...buildQueuedJob(nowIso),
       id: "job-worker-contextual-manual-cleanup-grouped",
       input:
-        "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+        "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
       executionInput:
-        "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+        "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
       status: "running",
       startedAt: nowIso
     }
@@ -4444,7 +4444,7 @@ test("persistCompletedJobState keeps a grouped thirteen-holder local family on c
           id: "task-worker-contextual-manual-cleanup-grouped",
           goal: "Organize folders",
           userInput:
-            "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+            "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
           createdAt: nowIso
         },
         plan: {
@@ -4454,7 +4454,7 @@ test("persistCompletedJobState keeps a grouped thirteen-holder local family on c
             {
               id: "action-move-contextual-manual-cleanup-grouped",
               type: "shell_command",
-              description: "Move matching drone-company folders into the new root.",
+              description: "Move matching sample-company folders into the new root.",
               params: {},
               estimatedCostUsd: 0.08
             },
@@ -4472,7 +4472,7 @@ test("persistCompletedJobState keeps a grouped thirteen-holder local family on c
             action: {
               id: "action-move-contextual-manual-cleanup-grouped",
               type: "shell_command",
-              description: "Move matching drone-company folders into the new root.",
+              description: "Move matching sample-company folders into the new root.",
               params: {},
               estimatedCostUsd: 0.08
             },
@@ -4560,9 +4560,9 @@ test("persistCompletedJobState keeps a grouped fifteen-holder local family with 
       ...buildQueuedJob(nowIso),
       id: "job-worker-contextual-manual-cleanup-grouped-two-nearby",
       input:
-        "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+        "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
       executionInput:
-        "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+        "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
       status: "running",
       startedAt: nowIso
     }
@@ -4586,7 +4586,7 @@ test("persistCompletedJobState keeps a grouped fifteen-holder local family with 
           id: "task-worker-contextual-manual-cleanup-grouped-two-nearby",
           goal: "Organize folders",
           userInput:
-            "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+            "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
           createdAt: nowIso
         },
         plan: {
@@ -4596,7 +4596,7 @@ test("persistCompletedJobState keeps a grouped fifteen-holder local family with 
             {
               id: "action-move-contextual-manual-cleanup-grouped-two-nearby",
               type: "shell_command",
-              description: "Move matching drone-company folders into the new root.",
+              description: "Move matching sample-company folders into the new root.",
               params: {},
               estimatedCostUsd: 0.08
             },
@@ -4614,7 +4614,7 @@ test("persistCompletedJobState keeps a grouped fifteen-holder local family with 
             action: {
               id: "action-move-contextual-manual-cleanup-grouped-two-nearby",
               type: "shell_command",
-              description: "Move matching drone-company folders into the new root.",
+              description: "Move matching sample-company folders into the new root.",
               params: {},
               estimatedCostUsd: 0.08
             },
@@ -4702,9 +4702,9 @@ test("persistCompletedJobState keeps a grouped eighteen-holder mixed local famil
       ...buildQueuedJob(nowIso),
       id: "job-worker-contextual-manual-cleanup-grouped-eighteen",
       input:
-        "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+        "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
       executionInput:
-        "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+        "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
       status: "running",
       startedAt: nowIso
     }
@@ -4728,7 +4728,7 @@ test("persistCompletedJobState keeps a grouped eighteen-holder mixed local famil
           id: "task-worker-contextual-manual-cleanup-grouped-eighteen",
           goal: "Organize folders",
           userInput:
-            "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+            "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
           createdAt: nowIso
         },
         plan: {
@@ -4738,7 +4738,7 @@ test("persistCompletedJobState keeps a grouped eighteen-holder mixed local famil
             {
               id: "action-move-contextual-manual-cleanup-grouped-eighteen",
               type: "shell_command",
-              description: "Move matching drone-company folders into the new root.",
+              description: "Move matching sample-company folders into the new root.",
               params: {},
               estimatedCostUsd: 0.08
             },
@@ -4756,7 +4756,7 @@ test("persistCompletedJobState keeps a grouped eighteen-holder mixed local famil
             action: {
               id: "action-move-contextual-manual-cleanup-grouped-eighteen",
               type: "shell_command",
-              description: "Move matching drone-company folders into the new root.",
+              description: "Move matching sample-company folders into the new root.",
               params: {},
               estimatedCostUsd: 0.08
             },
@@ -4844,9 +4844,9 @@ test("persistCompletedJobState keeps a repeated-family twenty-four-holder mixed 
       ...buildQueuedJob(nowIso),
       id: "job-worker-contextual-manual-cleanup-grouped-twenty-four",
       input:
-        "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+        "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
       executionInput:
-        "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+        "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
       status: "running",
       startedAt: nowIso
     }
@@ -4870,7 +4870,7 @@ test("persistCompletedJobState keeps a repeated-family twenty-four-holder mixed 
           id: "task-worker-contextual-manual-cleanup-grouped-twenty-four",
           goal: "Organize folders",
           userInput:
-            "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+            "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
           createdAt: nowIso
         },
         plan: {
@@ -4880,7 +4880,7 @@ test("persistCompletedJobState keeps a repeated-family twenty-four-holder mixed 
             {
               id: "action-move-contextual-manual-cleanup-grouped-twenty-four",
               type: "shell_command",
-              description: "Move matching drone-company folders into the new root.",
+              description: "Move matching sample-company folders into the new root.",
               params: {},
               estimatedCostUsd: 0.08
             },
@@ -4898,7 +4898,7 @@ test("persistCompletedJobState keeps a repeated-family twenty-four-holder mixed 
             action: {
               id: "action-move-contextual-manual-cleanup-grouped-twenty-four",
               type: "shell_command",
-              description: "Move matching drone-company folders into the new root.",
+              description: "Move matching sample-company folders into the new root.",
               params: {},
               estimatedCostUsd: 0.08
             },
@@ -5062,8 +5062,8 @@ test("persistExecutedJobOutcome downgrades the active workspace when stop_proces
     {
       ...buildQueuedJob(nowIso),
       id: "job-stop-linked-cleanup",
-      input: "Organize the drone folders and shut down the linked preview first.",
-      executionInput: "Organize the drone folders and shut down the linked preview first.",
+      input: "Organize the sample folders and shut down the linked preview first.",
+      executionInput: "Organize the sample folders and shut down the linked preview first.",
       status: "running",
       startedAt: nowIso
     }
@@ -5072,7 +5072,7 @@ test("persistExecutedJobOutcome downgrades the active workspace when stop_proces
     {
       id: "browser_session:action_open_browser_preview",
       label: "Browser window",
-      url: "file:///C:/Users/testuser/Desktop/drone-company/index.html",
+      url: "file:///C:/Users/testuser/Desktop/sample-company/index.html",
       status: "open",
       openedAt: "2026-03-14T20:59:00.000Z",
       closedAt: null,
@@ -5082,28 +5082,28 @@ test("persistExecutedJobOutcome downgrades the active workspace when stop_proces
       controlAvailable: true,
       browserProcessPid: 42057,
       linkedProcessLeaseId: "proc_preview_3",
-      linkedProcessCwd: "C:\\Users\\testuser\\Desktop\\drone-company",
+      linkedProcessCwd: "C:\\Users\\testuser\\Desktop\\sample-company",
       linkedProcessPid: 43127
     }
   ];
   session.activeWorkspace = {
-    id: "workspace:drone-company",
+    id: "workspace:sample-company",
     label: "Current project workspace",
-    rootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
-    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
-    previewUrl: "file:///C:/Users/testuser/Desktop/drone-company/index.html",
+    rootPath: "C:\\Users\\testuser\\Desktop\\sample-company",
+    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
+    previewUrl: "file:///C:/Users/testuser/Desktop/sample-company/index.html",
     browserSessionId: "browser_session:action_open_browser_preview",
     browserSessionIds: ["browser_session:action_open_browser_preview"],
     browserSessionStatus: "open",
     browserProcessPid: 42057,
     previewProcessLeaseId: "proc_preview_3",
     previewProcessLeaseIds: ["proc_preview_3"],
-    previewProcessCwd: "C:\\Users\\testuser\\Desktop\\drone-company",
+    previewProcessCwd: "C:\\Users\\testuser\\Desktop\\sample-company",
     lastKnownPreviewProcessPid: 43127,
     stillControllable: true,
     ownershipState: "tracked",
     previewStackState: "browser_and_preview",
-    lastChangedPaths: ["C:\\Users\\testuser\\Desktop\\drone-company\\index.html"],
+    lastChangedPaths: ["C:\\Users\\testuser\\Desktop\\sample-company\\index.html"],
     sourceJobId: "job-open-preview",
     updatedAt: "2026-03-14T20:59:00.000Z"
   };
@@ -5125,7 +5125,7 @@ test("persistExecutedJobOutcome downgrades the active workspace when stop_proces
         task: {
           id: "task-stop-linked-cleanup",
           goal: "Stop the linked preview holder and close its browser window.",
-          userInput: "Organize the drone folders and shut down the linked preview first.",
+          userInput: "Organize the sample folders and shut down the linked preview first.",
           createdAt: nowIso
         },
         plan: {
@@ -5162,21 +5162,21 @@ test("persistExecutedJobOutcome downgrades the active workspace when stop_proces
             executionMetadata: {
               processLeaseId: "proc_preview_3",
               processLifecycleStatus: "PROCESS_STOPPED",
-              processCwd: "C:\\Users\\testuser\\Desktop\\drone-company",
+              processCwd: "C:\\Users\\testuser\\Desktop\\sample-company",
               processPid: 43127,
               linkedBrowserSessionCleanupCount: 1,
               linkedBrowserSessionCleanupRecordsJson: JSON.stringify([
                 {
                   sessionId: "browser_session:action_open_browser_preview",
-                  url: "file:///C:/Users/testuser/Desktop/drone-company/index.html",
+                  url: "file:///C:/Users/testuser/Desktop/sample-company/index.html",
                   status: "closed",
                   visibility: "visible",
                   controllerKind: "playwright_managed",
                   controlAvailable: false,
                   browserProcessPid: 42057,
-                  workspaceRootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
+                  workspaceRootPath: "C:\\Users\\testuser\\Desktop\\sample-company",
                   linkedProcessLeaseId: "proc_preview_3",
-                  linkedProcessCwd: "C:\\Users\\testuser\\Desktop\\drone-company",
+                  linkedProcessCwd: "C:\\Users\\testuser\\Desktop\\sample-company",
                   linkedProcessPid: 43127
                 }
               ])
@@ -5241,17 +5241,17 @@ test("persistExecutedJobOutcome reconciles persisted workspace control against l
       controllerKind: "playwright_managed",
       controlAvailable: false,
       browserProcessPid: 55001,
-      workspaceRootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
+      workspaceRootPath: "C:\\Users\\testuser\\Desktop\\sample-company",
       linkedProcessLeaseId: "proc_preview_reload",
-      linkedProcessCwd: "C:\\Users\\testuser\\Desktop\\drone-company",
+      linkedProcessCwd: "C:\\Users\\testuser\\Desktop\\sample-company",
       linkedProcessPid: 55002
     }
   ];
   session.activeWorkspace = {
-    id: "workspace:drone-company",
+    id: "workspace:sample-company",
     label: "Current project workspace",
-    rootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
-    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
+    rootPath: "C:\\Users\\testuser\\Desktop\\sample-company",
+    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
     previewUrl: "http://127.0.0.1:55225/index.html",
     browserSessionId: "browser_session:reloaded_preview",
     browserSessionIds: ["browser_session:reloaded_preview"],
@@ -5259,12 +5259,12 @@ test("persistExecutedJobOutcome reconciles persisted workspace control against l
     browserProcessPid: 55001,
     previewProcessLeaseId: "proc_preview_reload",
     previewProcessLeaseIds: ["proc_preview_reload"],
-    previewProcessCwd: "C:\\Users\\testuser\\Desktop\\drone-company",
+    previewProcessCwd: "C:\\Users\\testuser\\Desktop\\sample-company",
     lastKnownPreviewProcessPid: 55002,
     stillControllable: false,
     ownershipState: "orphaned",
     previewStackState: "browser_only",
-    lastChangedPaths: ["C:\\Users\\testuser\\Desktop\\drone-company\\index.html"],
+    lastChangedPaths: ["C:\\Users\\testuser\\Desktop\\sample-company\\index.html"],
     sourceJobId: "job-open-preview",
     updatedAt: "2026-03-15T18:09:00.000Z"
   };
@@ -5294,9 +5294,9 @@ test("persistExecutedJobOutcome reconciles persisted workspace control against l
         controllerKind: "playwright_managed",
         controlAvailable: false,
         browserProcessPid: 55001,
-        workspaceRootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
+        workspaceRootPath: "C:\\Users\\testuser\\Desktop\\sample-company",
         linkedProcessLeaseId: "proc_preview_reload",
-        linkedProcessCwd: "C:\\Users\\testuser\\Desktop\\drone-company",
+        linkedProcessCwd: "C:\\Users\\testuser\\Desktop\\sample-company",
         linkedProcessPid: 55002
       }
     ],
@@ -5307,7 +5307,7 @@ test("persistExecutedJobOutcome reconciles persisted workspace control against l
         actionId: "action_stop_preview_reload",
         pid: 55002,
         commandFingerprint: "python -m http.server 55225",
-        cwd: "C:\\Users\\testuser\\Desktop\\drone-company",
+        cwd: "C:\\Users\\testuser\\Desktop\\sample-company",
         shellExecutable: "python",
         shellKind: "process",
     requestedHost: null,
@@ -5395,17 +5395,17 @@ test("persistExecutedJobOutcome does not promote closed-preview success copy whe
       controllerKind: "playwright_managed",
       controlAvailable: false,
       browserProcessPid: 55001,
-      workspaceRootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
+      workspaceRootPath: "C:\\Users\\testuser\\Desktop\\sample-company",
       linkedProcessLeaseId: "proc_preview_reload",
-      linkedProcessCwd: "C:\\Users\\testuser\\Desktop\\drone-company",
+      linkedProcessCwd: "C:\\Users\\testuser\\Desktop\\sample-company",
       linkedProcessPid: 55002
     }
   ];
   session.activeWorkspace = {
-    id: "workspace:drone-company",
+    id: "workspace:sample-company",
     label: "Current project workspace",
-    rootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
-    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
+    rootPath: "C:\\Users\\testuser\\Desktop\\sample-company",
+    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
     previewUrl: "http://127.0.0.1:55225/index.html",
     browserSessionId: "browser_session:reloaded_preview",
     browserSessionIds: ["browser_session:reloaded_preview"],
@@ -5413,12 +5413,12 @@ test("persistExecutedJobOutcome does not promote closed-preview success copy whe
     browserProcessPid: 55001,
     previewProcessLeaseId: "proc_preview_reload",
     previewProcessLeaseIds: ["proc_preview_reload"],
-    previewProcessCwd: "C:\\Users\\testuser\\Desktop\\drone-company",
+    previewProcessCwd: "C:\\Users\\testuser\\Desktop\\sample-company",
     lastKnownPreviewProcessPid: 55002,
     stillControllable: false,
     ownershipState: "stale",
     previewStackState: "detached",
-    lastChangedPaths: ["C:\\Users\\testuser\\Desktop\\drone-company\\index.html"],
+    lastChangedPaths: ["C:\\Users\\testuser\\Desktop\\sample-company\\index.html"],
     sourceJobId: "job-open-preview",
     updatedAt: "2026-03-15T18:09:00.000Z"
   };
@@ -5448,9 +5448,9 @@ test("persistExecutedJobOutcome does not promote closed-preview success copy whe
         controllerKind: "playwright_managed",
         controlAvailable: false,
         browserProcessPid: 55001,
-        workspaceRootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
+        workspaceRootPath: "C:\\Users\\testuser\\Desktop\\sample-company",
         linkedProcessLeaseId: "proc_preview_reload",
-        linkedProcessCwd: "C:\\Users\\testuser\\Desktop\\drone-company",
+        linkedProcessCwd: "C:\\Users\\testuser\\Desktop\\sample-company",
         linkedProcessPid: 55002
       }
     ],
@@ -5461,7 +5461,7 @@ test("persistExecutedJobOutcome does not promote closed-preview success copy whe
         actionId: "action_stop_preview_reload",
         pid: 55002,
         commandFingerprint: "python -m http.server 55225",
-        cwd: "C:\\Users\\testuser\\Desktop\\drone-company",
+        cwd: "C:\\Users\\testuser\\Desktop\\sample-company",
         shellExecutable: "python",
         shellKind: "process",
     requestedHost: null,

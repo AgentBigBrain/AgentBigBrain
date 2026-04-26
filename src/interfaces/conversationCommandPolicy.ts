@@ -74,7 +74,7 @@ export function renderConversationCommandHelpText(): string {
     "/chat create skill repo_status that reads package.json and runtime/state.json and returns a repo summary",
     "/chat run skill repo_status on this repo",
     "/skills",
-    "/auto create a React app at C:\\Users\\<you>\\Desktop\\finance-dashboard. Execute now using PowerShell. Create files directly; if blocked, stop and tell me exactly why.",
+    "/auto create a static HTML site at C:\\Users\\<you>\\Desktop\\sample-site for a sample service company with placeholder images. Execute now using PowerShell. Create files directly; if blocked, stop and tell me exactly why.",
     "Voice command tip: in a voice note, say \"command skills\" for /skills or \"command auto ...\" for /auto.",
     "/pulse on",
     "/memory",

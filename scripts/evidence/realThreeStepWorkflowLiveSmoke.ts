@@ -775,9 +775,9 @@ async function main(): Promise<void> {
     }
     smokeModelSnapshot = applyEnvOverrides(buildSmokeModelEnvOverrides(localProbe).envOverrides);
 
-    const targetFolderName = `drone-company-live-smoke-${Date.now()}`;
+    const targetFolderName = `sample-company-live-smoke-${Date.now()}`;
     const turn1Input =
-      `Please build a small drone landing page in a folder called ${targetFolderName} ` +
+      `Please build a small sample landing page in a folder called ${targetFolderName} ` +
       `on my desktop, then open it in a browser and leave it open for me.`;
     const turn2Input = "Change the hero section to a slider instead of a single static image.";
     const turn3Input = "Okay tell me about your changes so I know what you changed";

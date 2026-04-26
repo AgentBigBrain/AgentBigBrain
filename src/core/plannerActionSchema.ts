@@ -203,7 +203,7 @@ export function defaultPlannerActionDescription(type: ActionType): string {
     case "list_directory":
       return "List files in a target directory.";
     case "create_skill":
-      return "Create a sandboxed auto-skill file.";
+      return "Create a governed runtime skill or Markdown instruction skill.";
     case "run_skill":
       return "Run a previously created skill for the current request.";
     case "network_write":
@@ -300,7 +300,10 @@ export function normalizePlannerActionParams(
     "message",
     "text",
     "name",
+    "kind",
     "code",
+    "instructions",
+    "markdownContent",
     "content",
     "path",
     "command",

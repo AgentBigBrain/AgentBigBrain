@@ -373,7 +373,7 @@ Promise<AutonomousRuntimeAffordancesDirectAutoArtifact> {
   const localProbe = await probeLocalIntentModelFromEnv();
   const smokeBackend = resolveRequiredRealSmokeBackend(localProbe);
   const runId = `${Date.now()}`;
-  const targetPrefix = `drone-autonomy-direct-auto-${runId}`;
+  const targetPrefix = `sample-autonomy-direct-auto-${runId}`;
   const destinationFolderName = `${targetPrefix}-folder`;
   const destinationFolderPath = path.join(desktopPath, destinationFolderName);
   const tempLedgerPath = path.resolve(

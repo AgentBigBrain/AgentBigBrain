@@ -39,6 +39,8 @@ What the runtime enforces:
 - durable governance records and execution receipts
 - bounded, privacy-aware memory and continuity
 - governed local live runs instead of ad hoc shell behavior
+- skill-guided generation, where reusable Markdown instructions guide the model but do not grant
+  permission or replace governance
 
 ## Runtime modes
 
@@ -152,6 +154,23 @@ The runtime path is ordered on purpose:
    receipts for approved external writes.
 
 That order is part of the runtime contract.
+
+## Skill-guided generation
+
+AgentBigBrain treats site, app, browser-recovery, and document-reading know-how as guidance, not as
+hard-coded generators. Built-in Markdown skills live in
+`src/organs/skillRegistry/builtinMarkdownSkills/`, and user-created skills live under
+`runtime/skills`.
+
+Markdown instruction skills are advisory planner context. They can tell the model how to approach a
+static HTML page, a Next.js app, browser recovery, or generic document interpretation, but they do
+not authorize side effects and they are not executable `run_skill` targets. The resulting actions
+still pass through typed planning, hard constraints, governors, proof gates, and receipts.
+
+This keeps generated work flexible without moving safety into prompts. Deterministic runtime code
+may validate paths, normalize action shape, reopen exact artifacts, manage owned previews, and
+verify proof. It should not synthesize creative site templates or framework source as a hidden
+fallback.
 
 ## Interface runtime
 

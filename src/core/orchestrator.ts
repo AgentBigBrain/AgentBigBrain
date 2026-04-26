@@ -156,7 +156,10 @@ export class BrainOrchestrator {
       createFederatedOutboundRuntimeConfigFromEnv,
     private readonly workflowLearningStore?: WorkflowLearningStore,
     private readonly judgmentPatternStore?: JudgmentPatternStore,
-    private readonly skillRegistryStore?: Pick<SkillRegistryStore, "listAvailableSkills">,
+    private readonly skillRegistryStore?: Pick<
+      SkillRegistryStore,
+      "listAvailableSkills" | "listApplicableGuidance"
+    >,
     private readonly bridgeQuestionTimingInterpretationResolver: BridgeQuestionTimingInterpretationResolver | undefined =
       createBridgeQuestionTimingInterpretationResolverFromEnv(),
     private readonly stage686RuntimeActionEngine?: Stage686RuntimeActionEngine
@@ -557,7 +560,9 @@ export class BrainOrchestrator {
       {
         workflowLearningStore: this.workflowLearningStore,
         judgmentPatternStore: this.judgmentPatternStore,
-        listAvailableSkills: this.skillRegistryStore?.listAvailableSkills.bind(this.skillRegistryStore)
+        listAvailableSkills: this.skillRegistryStore?.listAvailableSkills.bind(this.skillRegistryStore),
+        listApplicableGuidance:
+          this.skillRegistryStore?.listApplicableGuidance.bind(this.skillRegistryStore)
       },
       profileAwareUserInput,
       {

@@ -17,7 +17,7 @@ function buildSnapshot(
     commandLine:
       "C:\\Users\\testuser\\AppData\\Local\\ms-playwright\\chromium-1208\\chrome-win64\\chrome.exe --user-data-dir=C:\\Users\\testuser\\AppData\\Local\\Temp\\playwright_chromiumdev_profile-demo --no-startup-window",
     creationDate: "20260315215841.000000-240",
-    mainWindowTitle: "Drone Smoke - Google Chrome for Testing",
+    mainWindowTitle: "Sample Smoke - Google Chrome for Testing",
     ...overrides
   };
 }

@@ -1,18 +1,16 @@
 /** @fileoverview Owns canonical queue-routing and execution-input assembly below the stable ingress coordinator. */
 import { recordClassifierEvent } from "../conversationClassifierEvents";
 import { buildConversationAwareExecutionInput, resolveFollowUpInput } from "../conversationExecutionInputPolicy";
-import type { FollowUpRuleContext } from "../conversationManagerHelpers";
 import { setModeContinuity, clearActiveClarification, recordAssistantTurn } from "../conversationSessionMutations";
 import { buildRoutingExecutionHintV1, classifyRoutingIntentV1 } from "../routingMap";
 import type { ConversationSession } from "../sessionStore";
 import type { ConversationInboundMediaEnvelope } from "../mediaRuntime/contracts";
-import type { AutonomyBoundaryInterpretationResolver, ContinuationInterpretationResolver, ContextualFollowupInterpretationResolver, ContextualReferenceInterpretationResolver, EntityReferenceInterpretationResolver, HandoffControlInterpretationResolver, IdentityInterpretationResolver, LocalIntentModelResolver, StatusRecallBoundaryInterpretationResolver, TopicKeyInterpretationResolver } from "../../organs/languageUnderstanding/localIntentModelContracts";
 import type { TopicKeyInterpretationSignalV1 } from "../../core/stage6_86ConversationStack";
-import type { GetConversationEntityGraph, ListBrowserSessionSnapshots, DescribeRuntimeCapabilities, ListManagedProcessSnapshots, ListAvailableSkills, OpenConversationContinuityReadSession, QueryConversationContinuityEpisodes, QueryConversationContinuityFacts, RememberConversationProfileInput, RunDirectConversationTurn } from "./managerContracts";
 import { buildAutonomousExecutionInput } from "./managerContracts";
 import {
   buildClarifiedExecutionInput,
   isClarificationExpired,
+  resolveClarifiedBuildFormatMetadata,
   resolveClarifiedIntentMode,
   resolveClarificationAnswer
 } from "./clarificationBroker";
@@ -34,44 +32,8 @@ import { buildDeterministicDirectChatFallbackReply, buildRecentIdentityInterpret
 import { resolveConversationTopicKeyInterpretationSignal } from "./conversationTopicKeyInterpretation";
 import { isMediaAnalysisConversationTurn } from "./mediaAnalysisIntent";
 import { recordTopicAwareUserTurn } from "./conversationRoutingTurnSupport";
-export interface ConversationEnqueueResult { reply: string; shouldStartWorker: boolean; }
-export interface ConversationRoutingDependencies {
-  followUpRuleContext: FollowUpRuleContext;
-  queryContinuityEpisodes?: QueryConversationContinuityEpisodes;
-  queryContinuityFacts?: QueryConversationContinuityFacts;
-  openContinuityReadSession?: OpenConversationContinuityReadSession;
-  rememberConversationProfileInput?: RememberConversationProfileInput;
-  listAvailableSkills?: ListAvailableSkills;
-  describeRuntimeCapabilities?: DescribeRuntimeCapabilities;
-  listManagedProcessSnapshots?: ListManagedProcessSnapshots;
-  listBrowserSessionSnapshots?: ListBrowserSessionSnapshots;
-  localIntentModelResolver?: LocalIntentModelResolver;
-  autonomyBoundaryInterpretationResolver?: AutonomyBoundaryInterpretationResolver;
-  statusRecallBoundaryInterpretationResolver?: StatusRecallBoundaryInterpretationResolver;
-  continuationInterpretationResolver?: ContinuationInterpretationResolver;
-  contextualFollowupInterpretationResolver?: ContextualFollowupInterpretationResolver;
-  contextualReferenceInterpretationResolver?: ContextualReferenceInterpretationResolver;
-  entityReferenceInterpretationResolver?: EntityReferenceInterpretationResolver;
-  handoffControlInterpretationResolver?: HandoffControlInterpretationResolver;
-  identityInterpretationResolver?: IdentityInterpretationResolver;
-  topicKeyInterpretationResolver?: TopicKeyInterpretationResolver;
-  getEntityGraph?: GetConversationEntityGraph;
-  abortActiveAutonomousRun?(): boolean;
-  config: {
-    allowAutonomousViaInterface: boolean;
-    maxContextTurnsForExecution: number;
-    maxConversationTurns: number;
-  };
-  directCasualChatEnabled?: boolean;
-  runDirectConversationTurn?: RunDirectConversationTurn;
-  enqueueJob(
-    session: ConversationSession,
-    input: string,
-    receivedAt: string,
-    executionInput?: string,
-    isSystemJob?: boolean
-  ): ConversationEnqueueResult;
-}
+import type { ConversationEnqueueResult, ConversationRoutingDependencies } from "./conversationRoutingContracts";
+export type { ConversationEnqueueResult, ConversationRoutingDependencies } from "./conversationRoutingContracts";
 /**
  * Resolves canonical conversation routing.
  *
@@ -171,6 +133,10 @@ async function resolveCanonicalConversationRouting(
         activeClarification,
         clarificationAnswer.selectedOptionId
       );
+      const clarifiedBuildFormat = resolveClarifiedBuildFormatMetadata(
+        activeClarification,
+        clarificationAnswer.selectedOptionId
+      );
       setModeContinuity(session, {
         activeMode: clarifiedIntentMode,
         source: "clarification_answer",
@@ -211,7 +177,8 @@ async function resolveCanonicalConversationRouting(
           deps.entityReferenceInterpretationResolver,
           deps.openContinuityReadSession,
           undefined,
-          inferSemanticRouteIdFromIntentMode(clarifiedIntentMode)
+          inferSemanticRouteIdFromIntentMode(clarifiedIntentMode),
+          clarifiedBuildFormat
         )
       );
       recordTopicAwareUserTurn(session, input, receivedAt, deps.config.maxConversationTurns, topicKeyInterpretation);
@@ -375,7 +342,8 @@ async function resolveCanonicalConversationRouting(
         deps.entityReferenceInterpretationResolver,
         deps.openContinuityReadSession,
         undefined,
-        effectiveIntentMode.semanticRouteId ?? null
+        effectiveIntentMode.semanticRouteId ?? null,
+        effectiveIntentMode.buildFormat ?? null
       ),
       routingClassification
         ? buildRoutingExecutionHintV1(routingClassification)
@@ -433,7 +401,8 @@ async function resolveCanonicalConversationRouting(
       deps.entityReferenceInterpretationResolver,
       deps.openContinuityReadSession,
       undefined,
-      effectiveIntentMode.semanticRouteId ?? null
+      effectiveIntentMode.semanticRouteId ?? null,
+      effectiveIntentMode.buildFormat ?? null
     )
   );
   recordTopicAwareUserTurn(session, input, receivedAt, deps.config.maxConversationTurns, topicKeyInterpretation);

@@ -326,9 +326,9 @@ test("mergeConversationSession preserves linked preview-process context when a n
         controllerKind: "playwright_managed",
         controlAvailable: true,
         browserProcessPid: 42001,
-        workspaceRootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
+        workspaceRootPath: "C:\\Users\\testuser\\Desktop\\sample-company",
         linkedProcessLeaseId: "proc_preview_1",
-        linkedProcessCwd: "C:\\Users\\testuser\\Desktop\\drone-company",
+        linkedProcessCwd: "C:\\Users\\testuser\\Desktop\\sample-company",
         linkedProcessPid: 43125
       }
     ]
@@ -360,12 +360,12 @@ test("mergeConversationSession preserves linked preview-process context when a n
   assert.equal(merged.browserSessions[0]?.browserProcessPid, 42001);
   assert.equal(
     merged.browserSessions[0]?.workspaceRootPath,
-    "C:\\Users\\testuser\\Desktop\\drone-company"
+    "C:\\Users\\testuser\\Desktop\\sample-company"
   );
   assert.equal(merged.browserSessions[0]?.linkedProcessLeaseId, "proc_preview_1");
   assert.equal(
     merged.browserSessions[0]?.linkedProcessCwd,
-    "C:\\Users\\testuser\\Desktop\\drone-company"
+    "C:\\Users\\testuser\\Desktop\\sample-company"
   );
   assert.equal(merged.browserSessions[0]?.linkedProcessPid, 43125);
 });
@@ -373,10 +373,10 @@ test("mergeConversationSession preserves linked preview-process context when a n
 test("mergeConversationSession preserves the newer active workspace while backfilling missing continuity fields", () => {
   const existing = buildSession({
     activeWorkspace: {
-      id: "workspace:drone-company",
+      id: "workspace:sample-company",
       label: "Current project workspace",
-      rootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
-      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
+      rootPath: "C:\\Users\\testuser\\Desktop\\sample-company",
+      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
       previewUrl: "http://127.0.0.1:4177/index.html",
       browserSessionId: "browser_session:landing-page",
       browserSessionIds: ["browser_session:landing-page"],
@@ -384,12 +384,12 @@ test("mergeConversationSession preserves the newer active workspace while backfi
       browserProcessPid: 42001,
       previewProcessLeaseId: "proc_preview_1",
       previewProcessLeaseIds: ["proc_preview_1"],
-      previewProcessCwd: "C:\\Users\\testuser\\Desktop\\drone-company",
+      previewProcessCwd: "C:\\Users\\testuser\\Desktop\\sample-company",
       lastKnownPreviewProcessPid: 43125,
       stillControllable: true,
       ownershipState: "tracked",
       previewStackState: "browser_and_preview",
-      lastChangedPaths: ["C:\\Users\\testuser\\Desktop\\drone-company\\index.html"],
+      lastChangedPaths: ["C:\\Users\\testuser\\Desktop\\sample-company\\index.html"],
       sourceJobId: "job-1",
       updatedAt: "2026-03-13T12:00:00.000Z"
     }
@@ -397,9 +397,9 @@ test("mergeConversationSession preserves the newer active workspace while backfi
   const incoming = buildSession({
     updatedAt: "2026-03-13T12:05:00.000Z",
     activeWorkspace: {
-      id: "workspace:drone-company",
+      id: "workspace:sample-company",
       label: "Current project workspace",
-      rootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
+      rootPath: "C:\\Users\\testuser\\Desktop\\sample-company",
       primaryArtifactPath: null,
       previewUrl: "http://127.0.0.1:4177/index.html",
       browserSessionId: "browser_session:landing-page",
@@ -423,7 +423,7 @@ test("mergeConversationSession preserves the newer active workspace while backfi
   assert.equal(merged.activeWorkspace?.browserSessionStatus, "closed");
   assert.equal(
     merged.activeWorkspace?.primaryArtifactPath,
-    "C:\\Users\\testuser\\Desktop\\drone-company\\index.html"
+    "C:\\Users\\testuser\\Desktop\\sample-company\\index.html"
   );
   assert.equal(merged.activeWorkspace?.previewProcessLeaseId, "proc_preview_1");
   assert.deepEqual(merged.activeWorkspace?.browserSessionIds, [
@@ -436,17 +436,17 @@ test("mergeConversationSession preserves the newer active workspace while backfi
   assert.equal(merged.activeWorkspace?.ownershipState, "stale");
   assert.equal(merged.activeWorkspace?.previewStackState, "detached");
   assert.deepEqual(merged.activeWorkspace?.lastChangedPaths, [
-    "C:\\Users\\testuser\\Desktop\\drone-company\\index.html"
+    "C:\\Users\\testuser\\Desktop\\sample-company\\index.html"
   ]);
 });
 
 test("mergeConversationSession backfills active-workspace and handoff domain snapshots from the older matching record", () => {
   const existing = buildSession({
     activeWorkspace: {
-      id: "workspace:drone-company",
+      id: "workspace:sample-company",
       label: "Current project workspace",
-      rootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
-      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
+      rootPath: "C:\\Users\\testuser\\Desktop\\sample-company",
+      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
       previewUrl: null,
       browserSessionId: null,
       browserSessionIds: [],
@@ -459,7 +459,7 @@ test("mergeConversationSession backfills active-workspace and handoff domain sna
       stillControllable: false,
       ownershipState: "stale",
       previewStackState: "detached",
-      lastChangedPaths: ["C:\\Users\\testuser\\Desktop\\drone-company\\index.html"],
+      lastChangedPaths: ["C:\\Users\\testuser\\Desktop\\sample-company\\index.html"],
       sourceJobId: "job-1",
       domainSnapshotLane: "workflow",
       domainSnapshotRecordedAt: "2026-03-13T12:00:00.000Z",
@@ -471,7 +471,7 @@ test("mergeConversationSession backfills active-workspace and handoff domain sna
       goal: "Finish the landing page",
       summary: "Ready for review.",
       nextSuggestedStep: null,
-      workspaceRootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
+      workspaceRootPath: "C:\\Users\\testuser\\Desktop\\sample-company",
       primaryArtifactPath: null,
       previewUrl: null,
       changedPaths: [],
@@ -484,9 +484,9 @@ test("mergeConversationSession backfills active-workspace and handoff domain sna
   const incoming = buildSession({
     updatedAt: "2026-03-13T12:05:00.000Z",
     activeWorkspace: {
-      id: "workspace:drone-company",
+      id: "workspace:sample-company",
       label: "Current project workspace",
-      rootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
+      rootPath: "C:\\Users\\testuser\\Desktop\\sample-company",
       primaryArtifactPath: null,
       previewUrl: null,
       browserSessionId: null,
@@ -510,7 +510,7 @@ test("mergeConversationSession backfills active-workspace and handoff domain sna
       goal: "Finish the landing page",
       summary: "Ready for review.",
       nextSuggestedStep: null,
-      workspaceRootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
+      workspaceRootPath: "C:\\Users\\testuser\\Desktop\\sample-company",
       primaryArtifactPath: null,
       previewUrl: null,
       changedPaths: [],
@@ -535,11 +535,11 @@ test("mergeConversationSession backfills active-workspace and handoff domain sna
 test("mergeConversationSession trusts the newer workspace ownership state once control truth changes", () => {
   const existing = buildSession({
     activeWorkspace: {
-      id: "workspace:drone-company",
+      id: "workspace:sample-company",
       label: "Current project workspace",
-      rootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
-      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
-      previewUrl: "file:///C:/Users/testuser/Desktop/drone-company/index.html",
+      rootPath: "C:\\Users\\testuser\\Desktop\\sample-company",
+      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
+      previewUrl: "file:///C:/Users/testuser/Desktop/sample-company/index.html",
       browserSessionId: "browser_session:detached-preview",
       browserSessionIds: ["browser_session:detached-preview"],
       browserSessionStatus: "open",
@@ -551,7 +551,7 @@ test("mergeConversationSession trusts the newer workspace ownership state once c
       stillControllable: false,
       ownershipState: "orphaned",
       previewStackState: "browser_only",
-      lastChangedPaths: ["C:\\Users\\testuser\\Desktop\\drone-company\\index.html"],
+      lastChangedPaths: ["C:\\Users\\testuser\\Desktop\\sample-company\\index.html"],
       sourceJobId: "job-1",
       updatedAt: "2026-03-13T12:00:00.000Z"
     }
@@ -559,9 +559,9 @@ test("mergeConversationSession trusts the newer workspace ownership state once c
   const incoming = buildSession({
     updatedAt: "2026-03-13T12:05:00.000Z",
     activeWorkspace: {
-      id: "workspace:drone-company",
+      id: "workspace:sample-company",
       label: "Current project workspace",
-      rootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
+      rootPath: "C:\\Users\\testuser\\Desktop\\sample-company",
       primaryArtifactPath: null,
       previewUrl: null,
       browserSessionId: null,
@@ -586,7 +586,7 @@ test("mergeConversationSession trusts the newer workspace ownership state once c
   assert.equal(merged.activeWorkspace?.previewStackState, "detached");
   assert.equal(
     merged.activeWorkspace?.rootPath,
-    "C:\\Users\\testuser\\Desktop\\drone-company"
+    "C:\\Users\\testuser\\Desktop\\sample-company"
   );
 });
 
@@ -596,8 +596,8 @@ test("mergeConversationSession does not backfill stale preview continuity into a
       id: "workspace:old-static-preview",
       label: "Current project workspace",
       rootPath: "C:\\Users\\testuser\\Desktop",
-      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\drone-company-landing.html",
-      previewUrl: "file:///C:/Users/testuser/Desktop/drone-company-landing.html",
+      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\sample-company-landing.html",
+      previewUrl: "file:///C:/Users/testuser/Desktop/sample-company-landing.html",
       browserSessionId: "browser_session:old-static-preview",
       browserSessionIds: ["browser_session:old-static-preview"],
       browserSessionStatus: "closed",
@@ -609,7 +609,7 @@ test("mergeConversationSession does not backfill stale preview continuity into a
       stillControllable: false,
       ownershipState: "stale",
       previewStackState: "detached",
-      lastChangedPaths: ["C:\\Users\\testuser\\Desktop\\drone-company-landing.html"],
+      lastChangedPaths: ["C:\\Users\\testuser\\Desktop\\sample-company-landing.html"],
       sourceJobId: "job-old-static-preview",
       updatedAt: "2026-03-17T23:40:00.000Z"
     }

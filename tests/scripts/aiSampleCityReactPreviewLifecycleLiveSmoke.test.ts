@@ -4,21 +4,30 @@ import path from "node:path";
 import test from "node:test";
 
 import {
-  runAiDroneCityReactPreviewLifecycleLiveSmoke
-} from "../../scripts/evidence/aiDroneCityReactPreviewLifecycleLiveSmoke";
+  runAiSampleCityReactPreviewLifecycleLiveSmoke
+} from "../../scripts/evidence/aiSampleCityReactPreviewLifecycleLiveSmoke";
+
+function parseBoolean(value: string | undefined): boolean {
+  const normalized = (value ?? "").trim().toLowerCase();
+  return normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on";
+}
 
 test("fresh React preview lifecycle smoke proves browser-open conversation and cleanup", async (t) => {
+  if (!parseBoolean(process.env.BRAIN_LEGACY_FRAMEWORK_LIVE_SMOKE_CONFIRM)) {
+    t.skip("Legacy framework-specific preview lifecycle smoke requires explicit live confirmation.");
+    return;
+  }
   if (process.platform !== "win32") {
     t.skip("Desktop browser lifecycle smoke is currently validated on Windows hosts only.");
     return;
   }
   const artifactPath = path.resolve(
     process.cwd(),
-    "runtime/evidence/ai_drone_city_react_preview_lifecycle_live_smoke_report.json"
+    "runtime/evidence/ai_sample_city_react_preview_lifecycle_live_smoke_report.json"
   );
-  let artifact: Awaited<ReturnType<typeof runAiDroneCityReactPreviewLifecycleLiveSmoke>> | null = null;
+  let artifact: Awaited<ReturnType<typeof runAiSampleCityReactPreviewLifecycleLiveSmoke>> | null = null;
   try {
-    artifact = await runAiDroneCityReactPreviewLifecycleLiveSmoke();
+    artifact = await runAiSampleCityReactPreviewLifecycleLiveSmoke();
   } catch {
     artifact = null;
   }

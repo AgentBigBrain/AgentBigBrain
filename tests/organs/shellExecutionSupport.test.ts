@@ -90,7 +90,7 @@ test("resolveCommandAwareShellEnvironment preserves launcher variables for embed
 
   const resolution = resolveCommandAwareShellEnvironment(
     profile,
-    "$project = 'C:\\Users\\testuser\\Desktop\\Drone App'; Set-Location $project; npm.cmd create vite@latest . -- --template react",
+    "$project = 'C:\\Users\\testuser\\Desktop\\Sample App'; Set-Location $project; npm.cmd create vite@latest . -- --template react",
     {
       PATH: "C:\\Windows\\System32\\WindowsPowerShell\\v1.0",
       SYSTEMROOT: "C:\\Windows",
@@ -131,25 +131,25 @@ test("resolveCommandAwareShellEnvironment preserves Windows executable resolutio
 
 test("resolveShellSuccessWorkspaceRoot returns scaffold target for PowerShell Vite bootstrap commands", async () => {
   const workspaceRoot = await resolveShellSuccessWorkspaceRoot(
-    "$project = 'Drone Preview App'; Set-Location 'C:\\Users\\testuser\\OneDrive\\Desktop'; npm.cmd create vite@latest $project -- --template react",
+    "$project = 'Sample Preview App'; Set-Location 'C:\\Users\\testuser\\OneDrive\\Desktop'; npm.cmd create vite@latest $project -- --template react",
     "C:\\Users\\testuser\\OneDrive\\Desktop"
   );
 
   assert.equal(
     workspaceRoot,
-    "C:\\Users\\testuser\\OneDrive\\Desktop\\Drone Preview App"
+    "C:\\Users\\testuser\\OneDrive\\Desktop\\Sample Preview App"
   );
 });
 
 test("resolveShellSuccessWorkspaceRoot returns scaffold target for option-first Vite bootstrap commands", async () => {
   const workspaceRoot = await resolveShellSuccessWorkspaceRoot(
-    "Set-Location 'C:\\Users\\testuser\\OneDrive\\Desktop'; npx.cmd create-vite@latest --template react-ts --no-interactive 'Drone Preview App'",
+    "Set-Location 'C:\\Users\\testuser\\OneDrive\\Desktop'; npx.cmd create-vite@latest --template react-ts --no-interactive 'Sample Preview App'",
     "C:\\Users\\testuser\\OneDrive\\Desktop"
   );
 
   assert.equal(
     workspaceRoot,
-    "C:\\Users\\testuser\\OneDrive\\Desktop\\Drone Preview App"
+    "C:\\Users\\testuser\\OneDrive\\Desktop\\Sample Preview App"
   );
 });
 
@@ -159,7 +159,7 @@ test("resolveShellSuccessWorkspaceRoot returns cwd for successful install inside
     await writeFile(
       path.join(workspaceRoot, "package.json"),
       JSON.stringify({
-        name: "drone-preview-app",
+        name: "sample-preview-app",
         private: true,
         scripts: {
           dev: "vite",
@@ -182,13 +182,13 @@ test("resolveShellSuccessWorkspaceRoot returns cwd for successful install inside
 
 test("resolveShellSuccessWorkspaceRoot returns final Desktop folder for bounded Next.js scaffold commands", async () => {
   const workspaceRoot = await resolveShellSuccessWorkspaceRoot(
-    "$final = 'C:\\Users\\testuser\\OneDrive\\Desktop\\Downtown Detroit Drones'; $tempRoot = Join-Path $env:TEMP 'agentbigbrain-framework-scaffold'; $temp = Join-Path $tempRoot 'downtown-detroit-drones'; Set-Location $tempRoot; npx.cmd create-next-app@latest 'downtown-detroit-drones' --js --eslint --app --use-npm --yes --skip-install --no-tailwind --no-src-dir --disable-git --no-react-compiler; Get-ChildItem -Force $temp | ForEach-Object { Move-Item $_.FullName -Destination $final -Force }; Remove-Item $temp -Recurse -Force; Set-Location $final",
+    "$final = 'C:\\Users\\testuser\\OneDrive\\Desktop\\Sample City Showcase'; $tempRoot = Join-Path $env:TEMP 'framework-build-temp'; $temp = Join-Path $tempRoot 'sample-city-showcase'; Set-Location $tempRoot; npx.cmd create-next-app@latest 'sample-city-showcase' --yes; Get-ChildItem -Force $temp | ForEach-Object { Move-Item $_.FullName -Destination $final -Force }; Remove-Item $temp -Recurse -Force; Set-Location $final",
     "C:\\Users\\testuser\\OneDrive\\Desktop"
   );
 
   assert.equal(
     workspaceRoot,
-    "C:\\Users\\testuser\\OneDrive\\Desktop\\Downtown Detroit Drones"
+    "C:\\Users\\testuser\\OneDrive\\Desktop\\Sample City Showcase"
   );
 });
 
@@ -198,7 +198,7 @@ test("resolveShellSuccessWorkspaceRoot returns cwd for successful install inside
     await writeFile(
       path.join(workspaceRoot, "package.json"),
       JSON.stringify({
-        name: "downtown-detroit-drones",
+        name: "sample-city-showcase",
         private: true,
         scripts: {
           dev: "next dev",
@@ -227,7 +227,7 @@ test("resolveShellPostconditionFailure validates Next.js build output", async ()
     await writeFile(
       path.join(workspaceRoot, "package.json"),
       JSON.stringify({
-        name: "downtown-detroit-drones",
+        name: "sample-city-showcase",
         private: true,
         scripts: {
           build: "next build"
@@ -260,10 +260,10 @@ test("resolveShellPostconditionFailure validates Next.js build output", async ()
 
 test("resolveShellPostconditionFailure validates option-first Vite scaffold target instead of template flags", async () => {
   const failure = await resolveShellPostconditionFailure(
-    "Set-Location 'C:\\Users\\testuser\\OneDrive\\Desktop'; npx.cmd create-vite@latest --template react-ts --no-interactive 'Drone Preview App'",
+    "Set-Location 'C:\\Users\\testuser\\OneDrive\\Desktop'; npx.cmd create-vite@latest --template react-ts --no-interactive 'Sample Preview App'",
     "C:\\Users\\testuser\\OneDrive\\Desktop"
   );
 
-  assert.match(failure?.message ?? "", /Drone Preview App[\\/]+package\.json/i);
+  assert.match(failure?.message ?? "", /Sample Preview App[\\/]+package\.json/i);
   assert.doesNotMatch(failure?.message ?? "", /--template[\\/]+package\.json/i);
 });

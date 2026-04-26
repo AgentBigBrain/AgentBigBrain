@@ -82,7 +82,7 @@ test("extractCurrentUserRequest strips clarification-display question lines whil
   const wrapped = [
     "You are in an ongoing conversation with the same user.",
     "Current user request:",
-    'Build me a landing page in the exact folder "C:\\Users\\testuser\\Desktop\\Solar Energy Landing Page".',
+    'Build me a landing page in the exact folder "C:\\Users\\testuser\\Desktop\\Sample Service Landing Page".',
     "",
     "[Clarification resolved: Would you like that built as plain HTML, or as a framework app like Next.js or React?]",
     "User selected: Plain HTML.",
@@ -93,7 +93,7 @@ test("extractCurrentUserRequest strips clarification-display question lines whil
   assert.equal(
     extractCurrentUserRequest(wrapped),
     [
-      'Build me a landing page in the exact folder "C:\\Users\\testuser\\Desktop\\Solar Energy Landing Page".',
+      'Build me a landing page in the exact folder "C:\\Users\\testuser\\Desktop\\Sample Service Landing Page".',
       "",
       "User selected: Plain HTML.",
       "Build format resolved: create a plain static HTML deliverable.",

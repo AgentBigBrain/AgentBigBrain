@@ -128,7 +128,8 @@ async function stage65GovernedFederatedDelegationRoutesThroughOrchestratorPath()
       quoteId: "quote_001",
       quotedCostUsd: 0.22,
       goal: "Create a delegated skill under normal governance path.",
-      userInput: "Create skill stage6_5_federated_gate for delegation proof.",
+      userInput:
+        "Create markdown skill stage6_5_federated_gate with instructions: Record delegation proof steps.",
       requestedAt: "2026-02-26T00:00:00.000Z"
       },
       "partner-agent-alpha",

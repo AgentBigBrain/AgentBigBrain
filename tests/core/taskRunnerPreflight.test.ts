@@ -102,7 +102,7 @@ test("evaluateTaskRunnerPreflight blocks preview start and browser-open actions 
     description: "start the local preview",
     params: {
       command: "npm run dev -- --hostname 127.0.0.1 --port 3000",
-      cwd: "C:\\Users\\testuser\\Desktop\\Downtown Detroit Drones Smoke 1776091215107"
+      cwd: "C:\\Users\\testuser\\Desktop\\Sample City Showcase Smoke 1776091215107"
     },
     estimatedCostUsd: 0.05
   };
@@ -160,7 +160,7 @@ test("evaluateTaskRunnerPreflight only applies explicit execution constraints fr
     description: "start the local preview",
     params: {
       command: "npm run dev -- --hostname 127.0.0.1 --port 61884",
-      cwd: "C:\\Users\\testuser\\Desktop\\Downtown Detroit Drones Smoke 1776091215107"
+      cwd: "C:\\Users\\testuser\\Desktop\\Sample City Showcase Smoke 1776091215107"
     },
     estimatedCostUsd: 0.05
   };

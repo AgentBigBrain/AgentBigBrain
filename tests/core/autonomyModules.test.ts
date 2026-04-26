@@ -336,14 +336,14 @@ function buildBlockedMissingDependencyShellResult(actionId: string): ActionRunRe
       description: "build the current app",
       params: {
         command: "npm run build",
-        cwd: "C:\\Users\\testuser\\OneDrive\\Desktop\\Calm Drone"
+        cwd: "C:\\Users\\testuser\\OneDrive\\Desktop\\Calm Sample"
       },
       estimatedCostUsd: 0.08
     },
     mode: "escalation_path",
     approved: false,
     output:
-      "Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@vitejs/plugin-react' imported from C:\\Users\\testuser\\OneDrive\\Desktop\\Calm Drone\\vite.config.js",
+      "Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@vitejs/plugin-react' imported from C:\\Users\\testuser\\OneDrive\\Desktop\\Calm Sample\\vite.config.js",
     executionStatus: "failed",
     executionFailureCode: "ACTION_EXECUTION_FAILED",
     executionMetadata: {
@@ -461,7 +461,7 @@ test("buildMissionCompletionContract treats Playwright verification language as 
 
 test("buildMissionCompletionContract does not force localhost readiness for a static browser preview request", () => {
   const contract = buildMissionCompletionContract(
-    "Build a tech landing page on my desktop, create a folder called drone-company, and leave it open in a browser for me."
+    "Build a tech landing page on my desktop, create a folder called sample-company, and leave it open in a browser for me."
   );
 
   assert.equal(contract.executionStyle, true);
@@ -1578,7 +1578,7 @@ test("humanizeAutonomousStopReason keeps provider pressure and timeout failures 
 test("agentLoopProgress renders human-first working, verification, and narrow recovery messages", () => {
   const working = buildWorkingStateMessage(
     2,
-    "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects and keep going until the move is actually verified."
+    "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects and keep going until the move is actually verified."
   );
   const verification = buildVerificationStateMessage([MISSION_REQUIREMENT_PROCESS_STOP]);
   const recovery = buildWorkspaceRecoveryStateMessage(buildWorkspaceRecoverySignalFixture({
@@ -1589,7 +1589,7 @@ test("agentLoopProgress renders human-first working, verification, and narrow re
     recoveryInstruction: "Stop only the exact tracked preview holders, then retry the move.",
     trackedPreviewProcessLeaseIds: ["proc_preview_1"],
     recoveredExactHolderPids: [4242],
-    blockedFolderPaths: ["C:\\Users\\testuser\\Desktop\\drone-company"],
+    blockedFolderPaths: ["C:\\Users\\testuser\\Desktop\\sample-company"],
     exactNonPreviewHolders: []
   }));
 
@@ -1637,11 +1637,11 @@ test("agentLoopProgress keeps edit and generic autonomous work calmer than raw p
 test("agentLoopProgress turns low-signal retry reasons into calmer continuation text", () => {
   const organizeRetry = buildRetryingStateMessage(
     "keep executing",
-    "Every folder with the name beginning in drone-company should go in drone-folder on my desktop."
+    "Every folder with the name beginning in sample-company should go in sample-folder on my desktop."
   );
   const verifyRetry = buildRetryingStateMessage(
     "Summarize what was built and verify expected files.",
-    "Please create a drone landing page and leave it open for me."
+    "Please create a sample landing page and leave it open for me."
   );
 
   assert.equal(
@@ -1662,7 +1662,7 @@ test("agentLoopProgress and stopReasonText keep bounded clarification and stalle
     question: "Do you want me to stop just those likely holders and retry the move?",
     recoveryInstruction: "Ask before stopping the likely inspected holder set.",
     untrackedCandidatePids: [8810, 8811],
-    blockedFolderPaths: ["C:\\Users\\testuser\\Desktop\\drone-company"],
+    blockedFolderPaths: ["C:\\Users\\testuser\\Desktop\\sample-company"],
     exactNonPreviewHolders: []
   }));
   const stalled = humanizeAutonomousStopReason(

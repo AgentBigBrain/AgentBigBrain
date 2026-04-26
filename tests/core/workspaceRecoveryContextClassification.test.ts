@@ -30,7 +30,7 @@ function buildTaskRunResult(task: {
 test("isLocalOrganizationRecoveryContext keys workspace recovery off the original goal", () => {
   const result = buildTaskRunResult({
     goal:
-      "Move every drone-company project folder into a folder called drone-web-projects on my desktop.",
+      "Move every sample-company project folder into a folder called sample-web-projects on my desktop.",
     userInput:
       "Inspect the exact workspace resources first, then stop only the exact holders and retry the move."
   });

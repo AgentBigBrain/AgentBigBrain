@@ -14,7 +14,6 @@ import {
   type MissionStopLimitsV1
 } from "../stage6_75MissionStateMachine";
 import { appendExecutionReceipt, appendGovernanceEvent } from "./taskRunnerPersistence";
-import { resolveDeterministicFrameworkLifecycleActionLimit } from "./deterministicFrameworkLifecyclePolicy";
 
 type TraceDetails = Record<string, string | number | boolean | null>;
 
@@ -57,13 +56,7 @@ export function buildTaskRunnerMissionStopLimits(
   plan: TaskRunResult["plan"]
 ): MissionStopLimitsV1 {
   return {
-    maxActions: Math.max(
-      1,
-      resolveDeterministicFrameworkLifecycleActionLimit(
-        plan,
-        config.limits.maxActionsPerTask
-      )
-    ),
+    maxActions: Math.max(1, config.limits.maxActionsPerTask),
     maxDenies: Math.max(1, config.limits.maxPlanAttemptsPerTask * 2),
     maxBytes: 1_048_576
   };

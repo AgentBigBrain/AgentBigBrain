@@ -429,9 +429,9 @@ test("processConversationQueue automatically retries exact tracked folder recove
       buildSession(conversationKey, {
         queuedJobs: [
           buildQueuedJob({
-            input: 'Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.',
+            input: 'Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.',
             executionInput:
-              'Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.'
+              'Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.'
           })
         ]
       })
@@ -449,9 +449,9 @@ test("processConversationQueue automatically retries exact tracked folder recove
               task: {
                 id: "task-recovery-1",
                 agentId: "main-agent",
-                goal: 'Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.',
+                goal: 'Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.',
                 userInput:
-                  'Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.',
+                  'Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.',
                 createdAt: "2026-03-13T20:00:00.000Z"
               },
               plan: {
@@ -472,7 +472,7 @@ test("processConversationQueue automatically retries exact tracked folder recove
                     type: "inspect_workspace_resources",
                     description: "Inspect matching workspace resources.",
                     params: {
-                      rootPath: "C:\\Users\\test\\Desktop\\drone-company"
+                      rootPath: "C:\\Users\\test\\Desktop\\sample-company"
                     },
                     estimatedCostUsd: 0.04
                   }
@@ -505,13 +505,13 @@ test("processConversationQueue automatically retries exact tracked folder recove
                     type: "inspect_workspace_resources",
                     description: "Inspect matching workspace resources.",
                     params: {
-                      rootPath: "C:\\Users\\test\\Desktop\\drone-company"
+                      rootPath: "C:\\Users\\test\\Desktop\\sample-company"
                     },
                     estimatedCostUsd: 0.04
                   },
                   mode: "escalation_path",
                   approved: true,
-                  output: "Inspection results for C:\\Users\\test\\Desktop\\drone-company.",
+                  output: "Inspection results for C:\\Users\\test\\Desktop\\sample-company.",
                   executionStatus: "success",
                   executionMetadata: {
                     runtimeOwnershipInspection: true,

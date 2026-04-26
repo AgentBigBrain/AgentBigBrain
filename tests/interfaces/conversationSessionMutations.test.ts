@@ -258,9 +258,9 @@ test("setActiveWorkspace stamps the current session-domain snapshot when one is 
 
   setActiveWorkspace(session, {
     id: "workspace-1",
-    label: "Drone Company",
-    rootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
-    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\drone-company\\src\\App.jsx",
+    label: "Sample Company",
+    rootPath: "C:\\Users\\testuser\\Desktop\\sample-company",
+    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\sample-company\\src\\App.jsx",
     previewUrl: "http://127.0.0.1:4173/",
     browserSessionId: null,
     browserSessionIds: [],
@@ -289,8 +289,8 @@ test("setReturnHandoff inherits the active workspace domain snapshot when presen
   const session = buildSession();
   session.activeWorkspace = {
     id: "workspace-1",
-    label: "Drone Company",
-    rootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
+    label: "Sample Company",
+    rootPath: "C:\\Users\\testuser\\Desktop\\sample-company",
     primaryArtifactPath: null,
     previewUrl: null,
     browserSessionId: null,

@@ -1,8 +1,8 @@
 /**
- * @fileoverview Runs a real conversation-manager smoke for a fresh Desktop Next.js landing-page
- * workflow: build the app on Desktop, warm a localhost preview, open it in the browser, edit a
- * section while it stays live, have an unrelated human conversation, then close both the browser
- * and linked preview process.
+ * @fileoverview Runs a legacy framework-specific conversation-manager smoke for a fresh Desktop
+ * Next.js landing-page workflow: build the app on Desktop, warm a localhost preview, open it in
+ * the browser, edit a section while it stays live, have an unrelated human conversation, then close
+ * both the browser and linked preview process.
  */
 
 import assert from "node:assert/strict";
@@ -127,17 +127,17 @@ const LIVE_RUN_RUNTIME_PATH = path.resolve(
 const CONVERSATION_ID = `next-js-desktop-conversation-lifecycle-smoke-${RUN_ID}`;
 const USER_ID = "next-js-desktop-conversation-smoke-user";
 const USERNAME = "averybrooks11";
-const PROJECT_LABEL = "Downtown Detroit Drones";
+const PROJECT_LABEL = "Sample City Showcase";
 const FOLDER_NAME = `${PROJECT_LABEL} Smoke ${RUN_ID}`;
-const TURN_TIMEOUT_MS = Number.isFinite(Number(process.env.AI_DRONE_CITY_PREVIEW_SMOKE_TURN_TIMEOUT_MS))
-  ? Math.max(60_000, Number(process.env.AI_DRONE_CITY_PREVIEW_SMOKE_TURN_TIMEOUT_MS))
+const TURN_TIMEOUT_MS = Number.isFinite(Number(process.env.SAMPLE_CITY_PREVIEW_SMOKE_TURN_TIMEOUT_MS))
+  ? Math.max(60_000, Number(process.env.SAMPLE_CITY_PREVIEW_SMOKE_TURN_TIMEOUT_MS))
   : 300_000;
 const CONVERSATION_TIMEOUT_MS = 30_000;
 const SMOKE_DEADLINE_MS = 420_000;
 const CLEANUP_STEP_TIMEOUT_MS = 3_000;
 const DIRECT_REPLY_SETTLE_MS = 2_000;
 const KEEP_TEMP_ARTIFACTS =
-  process.env.AI_DRONE_CITY_PREVIEW_SMOKE_KEEP_TMP?.trim().toLowerCase() === "true";
+  process.env.SAMPLE_CITY_PREVIEW_SMOKE_KEEP_TMP?.trim().toLowerCase() === "true";
 const PROVIDER_BLOCK_PATTERN =
   /(?:429|exceeded your current quota|usage limit|purchase more credits|try again at|rate limit|fetch failed|request timed out|socket hang up|ECONNRESET|effective backend is mock|missing OPENAI_API_KEY|provider or runtime step timed out)/i;
 const BOUNDED_RUNTIME_BLOCK_PATTERN =
@@ -693,7 +693,7 @@ Promise<NextJsDesktopConversationLifecycleArtifact> {
       "Just get the workspace ready for edits with the dependencies installed. Do not run it or open anything yet.";
     const buildTurnInput =
       `Great. Now turn that ${FOLDER_NAME} workspace into the real landing page. ` +
-      "Keep it calm and modern, avoid blue, put a small flying drone in the hero, use four main sections, " +
+      "Keep it calm and modern, avoid blue, put a small flying sample in the hero, use four main sections, " +
       "add a clear call to action and a footer menu, then build it. Stop once the source and build proof are there, but do not run it or open anything yet.";
     const previewTurnInput =
       `Nice. Pull up the ${FOLDER_NAME} landing page you just built so it is ready to view, but do not pop the browser open yet. ` +

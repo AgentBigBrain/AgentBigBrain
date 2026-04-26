@@ -104,9 +104,9 @@ test("resolveConversationTopicKeyInterpretationSignal skips the model when deter
 
   const signal = await resolveConversationTopicKeyInterpretationSignal(
     session,
-    "Update the drone company landing page hero section and pricing CTA.",
+    "Update the sample company landing page hero section and pricing CTA.",
     "2026-03-22T10:00:05.000Z",
-    classifyRoutingIntentV1("Update the drone company landing page hero section and pricing CTA."),
+    classifyRoutingIntentV1("Update the sample company landing page hero section and pricing CTA."),
     buildIntentMode("build"),
     async () => {
       resolverCalled = true;

@@ -192,12 +192,39 @@ It also handles:
 - planner failure fingerprints and cooldowns
 - retrieval of relevant lessons
 - workflow and judgment hints
-- deterministic fallback paths for known lanes
+- skill registry guidance from relevant Markdown instruction skills
+- narrow deterministic recovery paths for exact owned resources
 - repair of malformed or incomplete planner output
-- response fallback when the planner misses an explicit run skill
+- response fallback when fail-closed repair still cannot produce executable work
 
 The planner is flexible, but it is still not trusted. All plans are downstream inputs to stricter
 runtime gates.
+
+### Skill-guided generation model
+
+Reusable generation know-how lives in the skill registry instead of hard-coded page or framework
+generators. Built-in Markdown skills are source-controlled under
+`src/organs/skillRegistry/builtinMarkdownSkills/`; user-created runtime skills live under
+`runtime/skills`.
+
+There are two distinct skill kinds:
+
+- `markdown_instruction`: advisory planner guidance selected by request relevance. These skills can
+  describe how to build a static page, a framework app, a Next.js route, a browser-recovery flow, or
+  a document-reading pass. They are not executable and do not grant authorization.
+- `executable_module`: governed runtime artifacts that can be invoked with `run_skill` after normal
+  constraints and governance.
+
+For generation work, the intended path is:
+
+1. route the request into a typed build or recovery lane
+2. attach build-format metadata and relevant Markdown guidance
+3. let the model produce normal governed actions
+4. validate, govern, execute, and verify those actions through the runtime
+
+Deterministic policy may still validate package safety, normalize exact artifact paths, manage
+owned processes, and require proof. It must not silently synthesize creative site templates,
+framework scaffolds, generated source, or browser-open chains as a fallback.
 
 ### Deterministic safety plane
 

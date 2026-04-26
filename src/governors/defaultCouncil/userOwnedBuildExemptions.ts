@@ -27,21 +27,6 @@ const SHELL_WORKSPACE_READINESS_PROOF_PATTERN =
   /\b(?:test-path|get-item|resolve-path)\b[\s\S]{0,220}\b(?:package\.json|node_modules|\.next|build_id|dist(?:\\|\/|$)|app(?:\\|\/|$)|src(?:\\|\/)app(?:\\|\/|$))\b/i;
 const SHELL_FILE_ORGANIZATION_PATTERN =
   /\b(?:mkdir|md|move-item|rename-item|copy-item|get-childitem|new-item|mv|cp|ls|dir|ren)\b/i;
-const FRAMEWORK_TEMP_SCAFFOLD_ROOT_PATTERN = /agentbigbrain-framework-scaffold/i;
-
-/**
- * Evaluates whether one normalized path belongs to the bounded temp scaffold root used by
- * framework-app fallback creation.
- *
- * @param candidate - Normalized filesystem path candidate.
- * @returns `true` when the path belongs to the temp scaffold workspace root.
- */
-function isFrameworkTempScaffoldPath(candidate: string): boolean {
-  return (
-    candidate.includes("/agentbigbrain-framework-scaffold/") ||
-    candidate.endsWith("/agentbigbrain-framework-scaffold")
-  );
-}
 
 /**
  * Evaluates whether a proposal is a bounded user-owned workspace setup/edit action for an explicit
@@ -86,25 +71,6 @@ export function isExplicitUserOwnedBuildWorkspaceAction(
 
   if (proposal.action.type === "shell_command") {
     const command = getParamString(proposal.action.params, "command");
-    const candidateBuckets = collectProposalFilesystemCandidateBuckets(proposal);
-    const scopedPathCandidates = candidateBuckets.scopedPathCandidates
-      .map((candidate) => normalizeFilesystemText(candidate))
-      .filter((candidate) => candidate.length > 0);
-    const executionContextCandidates = candidateBuckets.executionContextCandidates
-      .map((candidate) => normalizeFilesystemText(candidate))
-      .filter((candidate) => candidate.length > 0);
-    const filesystemCandidates = [...scopedPathCandidates, ...executionContextCandidates];
-    const matchesFrameworkScaffoldFinalizePattern =
-      buildScopedRequest &&
-      Boolean(
-        command &&
-        FRAMEWORK_TEMP_SCAFFOLD_ROOT_PATTERN.test(command) &&
-        SHELL_FILE_ORGANIZATION_PATTERN.test(command) &&
-        scopedPathCandidates.some((candidate) => isFrameworkTempScaffoldPath(candidate)) &&
-        filesystemCandidates.some((candidate) =>
-          isRequestedUserOwnedKnownFolderPath(candidate, requestedKinds)
-        )
-      );
     const matchesBuildShellPattern =
       buildScopedRequest &&
       Boolean(
@@ -113,8 +79,7 @@ export function isExplicitUserOwnedBuildWorkspaceAction(
           SHELL_FOLDER_CREATE_PATTERN.test(command) ||
           SHELL_BUILD_TOOLCHAIN_PATTERN.test(command) ||
           SHELL_FRAMEWORK_CLI_PATTERN.test(command) ||
-          SHELL_WORKSPACE_READINESS_PROOF_PATTERN.test(command) ||
-          matchesFrameworkScaffoldFinalizePattern
+          SHELL_WORKSPACE_READINESS_PROOF_PATTERN.test(command)
         )
       );
     const matchesOrganizationShellPattern =

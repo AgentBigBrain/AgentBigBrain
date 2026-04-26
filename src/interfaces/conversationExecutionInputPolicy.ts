@@ -9,6 +9,7 @@ import type { ProfileMemoryRequestTelemetry } from "../core/profileMemoryRuntime
 import { recordProfileMemoryPromptSurfaceMetrics } from "../core/profileMemoryRuntime/profileMemoryRequestTelemetry";
 import type { ConversationSession } from "./sessionStore";
 import type {
+  ConversationBuildFormatMetadata,
   ConversationIntentSemanticHint,
   ConversationSemanticRouteId
 } from "./conversationRuntime/intentModeContracts";
@@ -938,6 +939,33 @@ function buildResolvedSemanticRouteBlock(
 }
 
 /**
+ * Builds a typed build-format block for planner handoff.
+ *
+ * **Why it exists:**
+ * Keeps static HTML, framework, and Next.js output-format cues visible to planning even when the
+ * top-level conversation mode remains autonomous.
+ *
+ * **What it talks to:**
+ * - Uses `ConversationBuildFormatMetadata` (import `ConversationBuildFormatMetadata`) from `./conversationRuntime/intentModeContracts`.
+ * @param buildFormat - Build-format metadata resolved by the conversation front door.
+ * @returns Structured build-format block, or `null` when no explicit format was resolved.
+ */
+function buildResolvedBuildFormatBlock(
+  buildFormat: ConversationBuildFormatMetadata | null
+): string | null {
+  if (!buildFormat) {
+    return null;
+  }
+  return [
+    "Resolved build format:",
+    `- format: ${buildFormat.format}`,
+    `- source: ${buildFormat.source}`,
+    `- confidence: ${buildFormat.confidence}`,
+    "- This metadata preserves requested output format for planning. It is not authorization for side effects."
+  ].join("\n");
+}
+
+/**
  * Absolutes path to local file url.
  *
  * **Why it exists:**
@@ -1425,7 +1453,7 @@ function extractSimpleDesktopDestinationName(userInput: string): string | null {
 }
 
 /**
- * Extracts the requested folder-name prefix from wording like `starts with drone-company`.
+ * Extracts the requested folder-name prefix from wording like `starts with sample-company`.
  *
  * @param userInput - Raw current user wording.
  * @returns Requested folder-name prefix, or `null` when none is named.
@@ -1637,7 +1665,8 @@ export async function buildConversationAwareExecutionInput(
   entityReferenceInterpretationResolver?: EntityReferenceInterpretationResolver,
   openContinuityReadSession?: OpenConversationContinuityReadSession,
   requestTelemetry?: ProfileMemoryRequestTelemetry,
-  semanticRouteId: ConversationSemanticRouteId | null = null
+  semanticRouteId: ConversationSemanticRouteId | null = null,
+  buildFormat: ConversationBuildFormatMetadata | null = null
 ): Promise<string> {
   const runtimeReconciledSession = reconcileConversationExecutionRuntimeSession(
     session,
@@ -1698,6 +1727,7 @@ export async function buildConversationAwareExecutionInput(
   const explicitExecutionConstraintBlock =
     buildExplicitExecutionConstraintContextBlock(rawUserInput);
   const semanticRouteBlock = buildResolvedSemanticRouteBlock(semanticRouteId);
+  const buildFormatBlock = buildResolvedBuildFormatBlock(buildFormat);
   const desktopOrganizationContextBlock = buildDesktopOrganizationExecutionContextBlock(
     runtimeReconciledSession,
     rawUserInput
@@ -1806,6 +1836,7 @@ export async function buildConversationAwareExecutionInput(
     !runtimeProcessManagementContextBlock &&
     !explicitExecutionConstraintBlock &&
     !semanticRouteBlock &&
+    !buildFormatBlock &&
     !existingStaticArtifactOpenBlock &&
     !modeContinuityBlock &&
     !progressStateBlock &&
@@ -1868,6 +1899,9 @@ export async function buildConversationAwareExecutionInput(
   }
   if (semanticRouteBlock) {
     lines.push("", semanticRouteBlock);
+  }
+  if (buildFormatBlock) {
+    lines.push("", buildFormatBlock);
   }
   if (existingStaticArtifactOpenBlock) {
     lines.push("", existingStaticArtifactOpenBlock);

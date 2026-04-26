@@ -23,8 +23,8 @@ export function buildPlannerRepairReasonGuidance(repairReason: string): string {
   ) {
     return (
       " The prior plan failed because it treated a fresh framework-app request like an already-ready workspace. " +
-      "Repair by including at least one real scaffold or bootstrap step that can materialize package.json in the exact workspace, such as create-next-app/create-vite, a bounded temp-slug scaffold merge, or an explicit package.json bootstrap or repair step in the target folder. " +
-      "Generic npm install, npm run build, npm run dev, or npm run start commands do not satisfy this by themselves when package.json is not already proven present."
+      "Repair by including at least one real materializing step that can prove package metadata exists in the exact workspace before lifecycle commands run. " +
+      "Generic lifecycle commands do not satisfy this by themselves when package metadata is not already proven present."
     );
   }
   if (
@@ -41,9 +41,8 @@ export function buildPlannerRepairReasonGuidance(repairReason: string): string {
   ) {
     return (
       " The prior plan failed because it checked the exact folder for package.json but still tried to recreate that folder from the parent directory. " +
-      "Repair by scaffolding or repairing in place inside the exact requested folder when package.json is missing, for example by setting the cwd to that folder and using '.' as the scaffold target. " +
-      "If that exact folder already contains Vite-like source files such as index.html, src/main.jsx, src/App.jsx, or src/index.css, prefer repairing the workspace in place by writing the missing package.json and any standard Vite metadata before install/build instead of rerunning create-vite. " +
-      "Do not rerun create-vite or similar against the folder name from outside that folder."
+      "Repair by making the exact requested folder the workspace under proof instead of recreating the folder name from outside it. " +
+      "If the exact folder already contains project source files but lacks package metadata, add or repair the missing metadata in that workspace before lifecycle commands run."
     );
   }
   if (
@@ -52,10 +51,9 @@ export function buildPlannerRepairReasonGuidance(repairReason: string): string {
     )
   ) {
     return (
-      " The prior plan failed because it fed the exact requested human-facing folder name into a create-style scaffold even though that name is not a safe npm package name. " +
-      "Repair by preserving the exact requested folder for the final workspace, but scaffold through a package-safe lowercase slug instead, then move the generated contents into the exact requested folder. " +
-      "Continue install/build/run from the exact requested folder after the move. " +
-      "Do not run create-next-app, create-vite, or similar directly against the unsafe exact folder name, and do not rely on '.' inside that unsafe exact folder."
+      " The prior plan failed because it used the exact requested human-facing folder name as a package identifier even though that name is not package-safe. " +
+      "Repair by preserving the exact requested folder as the final user-facing workspace while using only package-safe identifiers where package tooling requires them. " +
+      "Continue later proof and runtime actions from the exact requested workspace."
     );
   }
   if (
@@ -63,7 +61,7 @@ export function buildPlannerRepairReasonGuidance(repairReason: string): string {
   ) {
     return (
       " The prior plan failed because it used an ad-hoc preview server for a framework-app live-run request. " +
-      "Repair by starting the app with the workspace-native preview/runtime command instead, such as npm run preview, npm run dev, vite preview, or vite dev from the exact project folder. " +
+      "Repair by starting the app through the workspace's declared preview or runtime entrypoint from the exact project folder. " +
       "Keep the later readiness probe and open_browser actions pointed at that same loopback URL so the runtime can leave the correct app open and later stop it cleanly."
     );
   }
@@ -72,7 +70,7 @@ export function buildPlannerRepairReasonGuidance(repairReason: string): string {
   ) {
     return (
       " The prior plan failed because one shell or start-process command exceeded the runtime's command-length budget. " +
-      "Repair by splitting large inline file creation into separate write_file actions and keeping shell/toolchain steps short and bounded, such as separate npm install, npm run build, and npm run preview commands instead of one giant script."
+      "Repair by splitting large inline file creation into separate write_file actions and keeping shell or toolchain steps short and bounded instead of one giant script."
     );
   }
   if (repairReason.startsWith("invalid_execution_style_build_plan:LIVE_VERIFICATION_ACTION_REQUIRED")) {

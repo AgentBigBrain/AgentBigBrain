@@ -54,18 +54,23 @@ export function buildMediaContinuityHints(
   const evidence = new Set<string>();
 
   for (const attachment of attachments) {
-    for (const hint of attachment.interpretation?.entityHints ?? []) {
-      for (const term of extractContextualRecallTerms(hint)) {
-        weightedTerms.set(term, (weightedTerms.get(term) ?? 0) + 6);
-        evidence.add("entity_hints");
+    const interpretationEligibleForContinuity = attachment.kind !== "document";
+    if (interpretationEligibleForContinuity) {
+      for (const hint of attachment.interpretation?.entityHints ?? []) {
+        for (const term of extractContextualRecallTerms(hint)) {
+          weightedTerms.set(term, (weightedTerms.get(term) ?? 0) + 6);
+          evidence.add("entity_hints");
+        }
       }
+    } else if (attachment.interpretation) {
+      evidence.add("document_interpretation_candidate_only");
     }
 
     if (attachment.caption) {
       addBoundedTerms(weightedTerms, attachment.caption, 3);
       evidence.add("caption");
     }
-    if (attachment.interpretation?.summary) {
+    if (interpretationEligibleForContinuity && attachment.interpretation?.summary) {
       addBoundedTerms(weightedTerms, attachment.interpretation.summary, 4);
       evidence.add("summary");
     }
@@ -73,7 +78,7 @@ export function buildMediaContinuityHints(
       addBoundedTerms(weightedTerms, attachment.interpretation.transcript, 5);
       evidence.add("transcript");
     }
-    if (attachment.interpretation?.ocrText) {
+    if (interpretationEligibleForContinuity && attachment.interpretation?.ocrText) {
       addBoundedTerms(weightedTerms, attachment.interpretation.ocrText, 4);
       evidence.add("ocr");
     }

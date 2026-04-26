@@ -522,7 +522,7 @@ async function seedRestartWorkspaceSession(
   const openedAt = new Date().toISOString();
   const seedJobId = "job_seed_restart_smoke";
   const previousUserRequest =
-    "Please build a calm air-drone landing page on my desktop, run it from a local preview server, and leave it open for me.";
+    "Please build a calm air-sample landing page on my desktop, run it from a local preview server, and leave it open for me.";
   const primaryArtifactPath = path.join(targetFolderPath, "index.html");
   const serverScriptPath = path.join(targetFolderPath, "restart-smoke-server.cjs");
   const previewPort = await allocateLoopbackPort();
@@ -550,7 +550,7 @@ async function seedRestartWorkspaceSession(
       "  <main>",
       "    <section>",
       "      <h1>Quiet Skies</h1>",
-      "      <p>A calm drone landing page left open for restart-safe preview control.</p>",
+      "      <p>A calm sample landing page left open for restart-safe preview control.</p>",
       "    </section>",
       "  </main>",
       "</body>",
@@ -1119,7 +1119,7 @@ Promise<AutonomousRuntimeAffordancesRestartArtifact> {
   if (!desktopPath) {
     throw new Error("Unable to resolve a desktop path for the restart smoke.");
   }
-  const targetFolderName = `drone-company-restart-smoke-${Date.now()}`;
+  const targetFolderName = `sample-company-restart-smoke-${Date.now()}`;
   const targetFolderPath = path.join(desktopPath, targetFolderName);
   const sessionPath = path.resolve(
     SESSION_DIRECTORY,

@@ -15,9 +15,6 @@ belongs here.
 - `buildExecutionActionHeuristics.ts`
 - `staticArtifactOpenSupport.ts`
 - `staticHtmlPreviewActionNormalization.ts`
-- `staticHtmlRuntimeActionFallback.ts`
-- `staticHtmlRuntimeActionFallbackSupport.ts`
-- `staticHtmlRuntimeActionFallbackContent.ts`
 - `frameworkBuildActionHeuristics.ts`
 - `frameworkRequestPathParsing.ts`
 - `frameworkActionRepairSupport.ts`
@@ -25,6 +22,7 @@ belongs here.
 - `buildExecutionRecoveryPolicy.ts`
 - `liveVerificationPolicy.ts`
 - `liveVerificationSemanticRouteSupport.ts`
+- `liveVerificationStaticHtmlSupport.ts`
 - `userOwnedPathHints.ts`
 - `actionNormalization.ts`
 - `explicitActionIntent.ts`
@@ -36,20 +34,6 @@ belongs here.
 - `explicitActionRepair.ts`
 - `explicitRuntimeActionFallback.ts`
 - `desktopRuntimeProcessSweepFallback.ts`
-- `frameworkRuntimeActionFallback.ts`
-- `frameworkRuntimeActionFallbackLifecycleSupport.ts`
-- `frameworkRuntimeActionFallbackCityThemeVariants.ts`
-- `frameworkRuntimeActionFallbackGoalSupport.ts`
-- `frameworkRuntimeActionFallbackLayoutSupport.ts`
-- `frameworkRuntimeActionFallbackOpenBrowserSupport.ts`
-- `localOrganizationRuntimeActionFallback.ts`
-- `frameworkRuntimeActionFallbackSupport.ts`
-- `frameworkRuntimeActionFallbackContent.ts`
-- `frameworkRuntimeActionFallbackEditSupport.ts`
-- `frameworkRuntimeActionFallbackThemeSupport.ts`
-- `frameworkRuntimeActionFallbackThemeVariants.ts`
-- `frameworkRuntimeActionFallbackTrackedContextSupport.ts`
-- `frameworkRuntimeActionFallbackWriteSupport.ts`
 - `namedWorkspaceLaunchSupport.ts`
 - `promptAssembly.ts`
 - `promptAssemblyRepairGuidance.ts`
@@ -64,7 +48,8 @@ belongs here.
 - planner model output and repair output
 - routing and live-build prompt classification
 - planner action schema requirements
-- explicit-action intent and skill scaffolding rules
+- explicit-action intent, skill action normalization, and Markdown instruction guidance rules
+- bounded Markdown skill guidance selected by the skill registry
 
 ## Outputs
 - execution-style classification decisions
@@ -81,29 +66,21 @@ belongs here.
   behavior
 - deterministic static HTML preview normalization so execution-style browser-open steps stay aligned
   with no-framework single-page requests
-- deterministic static HTML build fallback synthesis so clarified `static_html_build` lanes can
-  write one bounded `index.html`, prove it exists, and optionally open the exact local file
-  without drifting into framework scaffolding
-- deterministic static HTML workspace-resolution, browser-open gating, and content-building helper
-  modules so the bounded static lane stays reviewable without rebloating the main fallback file
+- static HTML live-verification proof helpers so plain file previews are not upgraded into server
+  verification unless the user asks for server, visual, or browser proof
+- static HTML action validation and normalization so model-planned or Markdown-guided single-file
+  builds stay on exact `index.html` artifact paths without reintroducing deterministic page
+  templates
 - framework-app specific scaffold/preview heuristics used to require native preview commands,
   reject directory-only reuse guards, and keep oversized shell/start commands fail-closed
-- framework-app repair normalization that rewrites unsafe scaffold commands and keeps Next.js route
-  writes pinned to the active `app/` tree instead of drifting into stale `src/app/` duplicates
-- path-style-aware framework helpers so Windows workspace roots, route rewrites, and fallback write
-  targets stay stable even when tests or recovery run on non-Windows hosts
-- deterministic framework landing-page fallback content, write-target resolution, and runtime
-  action synthesis split into focused helper files so planner fallback stays reviewable and under
-  the subsystem size budget
-- deterministic framework live-lifecycle action assembly so start/probe/verify/open action shapes
-  stay centralized without regrowing the main framework fallback entrypoint
-- deterministic framework city-theme, layout, goal, named-workspace launch, tracked-context, and
-  browser-open helper modules so fallback synthesis can vary safely without rebloating the main
-  policy entrypoints
+- framework-app route normalization that keeps Next.js route writes pinned to the active `app/`
+  tree instead of drifting into stale `src/app/` duplicates
+- path-style-aware framework helpers so Windows workspace roots, route rewrites, and live-preview
+  recovery stay stable even when tests or recovery run on non-Windows hosts
 - deterministic Desktop-folder runtime process sweep fallback for bounded requests like `Desktop
-  folders starting with drone -> stop only exact listening servers tied to those folders`, emitted
+  folders starting with sample -> stop only exact listening servers tied to those folders`, emitted
   as the native `stop_folder_runtime_processes` action so broad process-management turns stay out
-  of scaffold/build lanes
+  of unrelated build-generation lanes
 - user-owned path and destination hints for safer continuity-aware local execution
 - planner action normalization and alias cleanup
 - explicit-action intent classification and filtering
@@ -111,26 +88,25 @@ belongs here.
 - skill-name extraction and create/run-skill param normalization
 - workflow-learning preferred-skill and repeated-workflow suggestion guidance injected into planner
   prompt assembly and repair notes
+- Markdown instruction skill guidance injected into planner prompt assembly as advisory procedure,
+  not authorization or executable skill selection
 - first-principles trigger and rubric helpers extracted from the planner entrypoint so high-risk
   planning policy stays deterministic without regrowing the main planner module
 - explicit-action repair decisions
 - explicit runtime fallback precedence so tracked runtime inspect or shutdown turns stay on their
-  bounded runtime lane instead of drifting into framework-build fallback
+  bounded runtime lane instead of drifting into build-generation behavior
 - planner system prompts and repair prompts
 - deterministic repair-guidance snippets reused by prompt assembly
 - deterministic workspace-recovery grounding snippets reused by planner prompt assembly so exact
   tracked workspace ids, browser session ids, preview URLs, and lease ids are reused instead of
   being replaced with broad recovery guesses
-- deterministic local-organization fallback synthesis for explicit user-owned folder-move requests
-  that remain invalid after repair, keeping the move scoped and proving destination/root state in
-  the same command
 - synthesized fallback respond messages when fail-closed repair still cannot produce executable work
 
 ## Invariants
 - Explicit browser/UI verification requests must require `verify_browser`.
 - Tracked browser-control follow-ups should stay distinct from build/live-verification repair rules.
-- Explicit tracked runtime inspection or shutdown turns should outrank framework-build fallback when
-  planner repair fails.
+- Explicit tracked runtime inspection or shutdown turns should outrank build-generation behavior
+  when planner repair fails.
 - Explicit Desktop folder runtime sweeps must stay on deterministic bounded process-management
   fallback instead of drifting into unrelated scaffold/build work.
 - Execution-style build requests must not silently pass with inspection-only plans.
@@ -145,10 +121,19 @@ belongs here.
 - Framework-app scaffold and preview heuristics should stay isolated enough that shell-budget or
   native-preview fixes do not force unrelated organization-policy edits.
 - Planner repair must fail closed when required executable actions never appear.
-- Action normalization, explicit-action intent inference, and skill fallback scaffolding must stay
-  owned here rather than drifting back into `src/organs/`.
+- Action normalization, explicit-action intent inference, and Markdown skill guidance injection
+  must stay owned here rather than drifting back into `src/organs/`.
 - Workflow-learning preferred-skill guidance should stay explicit and inspectable here rather than
   becoming hidden model-only behavior.
+- Markdown instruction guidance must never cause `run_skill`; it can only shape normal governed
+  actions.
+- Static-site generation content should come from selected Markdown guidance and model-planned
+  governed actions; deterministic policy may validate, normalize, and reopen exact artifacts, but
+  must not synthesize creative static page templates.
+- Framework and Next.js page content should come from selected Markdown guidance and model-planned
+  governed actions. Deterministic policy may validate package safety and enforce exact ownership
+  checks, but must not synthesize or rewrite framework scaffold, live-run, browser-open,
+  page-template, or generated-source fallback actions.
 - Prompt assembly rules should stay centralized here rather than drifting back into
   `src/organs/planner.ts`.
 

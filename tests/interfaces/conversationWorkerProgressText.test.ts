@@ -9,9 +9,9 @@ import { buildConversationWorkerProgressMessage } from "../../src/interfaces/con
 
 test("buildConversationWorkerProgressMessage narrates autonomous page-building work in human terms", () => {
   const message = buildConversationWorkerProgressMessage({
-    input: "Please create a drone landing page and leave it open for me.",
+    input: "Please create a sample landing page and leave it open for me.",
     executionInput:
-      "[AUTONOMOUS_LOOP_GOAL] Please create a drone landing page and leave it open for me."
+      "[AUTONOMOUS_LOOP_GOAL] Please create a sample landing page and leave it open for me."
   });
 
   assert.equal(message, "I'm building the page and setting up the preview.");
@@ -26,9 +26,9 @@ test("buildConversationWorkerProgressMessage narrates preview edits and organiza
   const organizeMessage = buildConversationWorkerProgressMessage(
     {
       input:
-        "Every folder with the name beginning in drone-company should go in drone-folder on my desktop.",
+        "Every folder with the name beginning in sample-company should go in sample-folder on my desktop.",
       executionInput:
-        "[AUTONOMOUS_LOOP_GOAL] Every folder with the name beginning in drone-company should go in drone-folder on my desktop."
+        "[AUTONOMOUS_LOOP_GOAL] Every folder with the name beginning in sample-company should go in sample-folder on my desktop."
     },
     34
   );

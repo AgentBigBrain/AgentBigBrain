@@ -39,6 +39,7 @@ import { Stage686RuntimeActionEngine } from "./stage6_86/runtimeActions";
 import { createProjectionRuntimeConfigFromEnv } from "./projections/config";
 import { ProjectionService } from "./projections/service";
 import { ProjectionStateStore } from "./projections/projectionStateStore";
+import { buildSkillProjectionEntries } from "./projections/skillProjectionPolicy";
 import { ObsidianVaultSink } from "./projections/targets/obsidianVaultSink";
 import { JsonMirrorSink } from "./projections/targets/jsonMirrorSink";
 import { resolveUserOwnedPathHints } from "../organs/plannerPolicy/userOwnedPathHints";
@@ -221,6 +222,7 @@ function createProjectionSinks(env: NodeJS.ProcessEnv = process.env): readonly P
  * @param executionReceiptStore - Execution receipt store.
  * @param workflowLearningStore - Workflow learning store.
  * @param mediaArtifactStore - Media artifact store.
+ * @param skillRegistryStore - Skill registry store.
  * @param profileMemoryStore - Optional profile-memory store.
  * @returns Snapshot provider closure.
  */
@@ -232,6 +234,7 @@ function createProjectionSnapshotProvider(
   executionReceiptStore: ExecutionReceiptStore,
   workflowLearningStore: WorkflowLearningStore,
   mediaArtifactStore: MediaArtifactStore,
+  skillRegistryStore: SkillRegistryStore,
   profileMemoryStore?: ProfileMemoryStore
 ): () => Promise<ProjectionSnapshot> {
   return async () => {
@@ -242,6 +245,7 @@ function createProjectionSnapshotProvider(
       executionReceiptDocument,
       workflowDocument,
       mediaArtifactDocument,
+      skillManifests,
       profileMemory
     ] = await Promise.all([
       entityGraphStore.getGraph(),
@@ -250,8 +254,10 @@ function createProjectionSnapshotProvider(
       executionReceiptStore.load(),
       workflowLearningStore.load(),
       mediaArtifactStore.load(),
+      skillRegistryStore.listActiveManifests(),
       profileMemoryStore ? profileMemoryStore.load() : Promise.resolve(null)
     ]);
+    const skillProjectionEntries = await buildSkillProjectionEntries(mode, skillManifests);
 
     return {
       generatedAt: new Date().toISOString(),
@@ -268,7 +274,8 @@ function createProjectionSnapshotProvider(
       governanceReadView,
       executionReceipts: executionReceiptDocument.receipts,
       workflowPatterns: workflowDocument.patterns,
-      mediaArtifacts: mediaArtifactDocument.artifacts
+      mediaArtifacts: mediaArtifactDocument.artifacts,
+      skillProjectionEntries
     };
   };
 }
@@ -449,6 +456,7 @@ export function createSharedBrainRuntimeDependencies(
       executionReceiptStore,
       workflowLearningStore,
       mediaArtifactStore,
+      skillRegistryStore,
       profileMemoryStore
     ),
     sinks: createProjectionSinks(env),

@@ -9,7 +9,7 @@ import { buildMissionCompletionContract } from "../../src/core/autonomy/missionC
 
 test("buildMissionCompletionContract does not require browser verification just to open a localhost preview and leave it open", () => {
   const contract = buildMissionCompletionContract(
-    "Handle this end to end: reuse the existing AI Drone City React workspace on my desktop. " +
+    "Handle this end to end: reuse the existing Sample City React workspace on my desktop. " +
     "Start its local preview server on http://127.0.0.1:4173/, open that running localhost preview in the browser for me, and leave it open."
   );
 
@@ -44,11 +44,11 @@ test("buildMissionCompletionContract still requires browser verification for exp
 
 test("buildMissionCompletionContract captures quoted and unquoted explicit target paths", () => {
   const contract = buildMissionCompletionContract(
-    `Create the app in "C:\\Users\\example\\Desktop\\Drone City" and also verify /home/example/tmp/demo-preview before you finish.`
+    `Create the app in "C:\\Users\\example\\Desktop\\Sample City" and also verify /home/example/tmp/demo-preview before you finish.`
   );
 
   assert.deepEqual(contract.targetPathHints, [
-    "c:\\users\\example\\desktop\\drone city",
+    "c:\\users\\example\\desktop\\sample city",
     "\\home\\example\\tmp\\demo-preview"
   ]);
 });

@@ -48,6 +48,9 @@ The extracted subsystems now own:
   `schemaValidation.ts` are intentionally guarded by the module-size check so the top-level model
   layer stays limited to stable entrypoints and backend selection.
 - Mock behavior should remain explicit and deterministic for repo tests.
+- Mock planner behavior should exercise action schemas and policy boundaries, not synthesize
+  framework/static app scaffolds, page templates, live-preview chains, or other generated project
+  workflows. Tests that need build-action shapes should use focused planner fixtures.
 
 ## Related Tests
 - `tests/models/createModelClient.test.ts`

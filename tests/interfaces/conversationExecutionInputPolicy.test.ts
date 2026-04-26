@@ -229,10 +229,10 @@ test("buildConversationAwareExecutionInput emits a resolved semantic-route block
   const session = buildSession();
   const executionInput = await buildConversationAwareExecutionInput(
     session,
-    'Build me a landing page in the exact folder "C:\\Users\\testuser\\Desktop\\Solar Energy Landing Page" on my Desktop.',
+    'Build me a landing page in the exact folder "C:\\Users\\testuser\\Desktop\\Sample Service Landing Page" on my Desktop.',
     10,
     null,
-    'Build me a landing page in the exact folder "C:\\Users\\testuser\\Desktop\\Solar Energy Landing Page" on my Desktop.',
+    'Build me a landing page in the exact folder "C:\\Users\\testuser\\Desktop\\Sample Service Landing Page" on my Desktop.',
     undefined,
     undefined,
     null,
@@ -253,6 +253,39 @@ test("buildConversationAwareExecutionInput emits a resolved semantic-route block
     executionInput,
     /Planner-policy must consume it before any lexical fallback\./
   );
+});
+
+test("buildConversationAwareExecutionInput emits typed build-format metadata for planner handoff", async () => {
+  const session = buildSession();
+  const executionInput = await buildConversationAwareExecutionInput(
+    session,
+    "Use auto mode to build a static single-file HTML site and close the browser afterward.",
+    10,
+    null,
+    "Use auto mode to build a static single-file HTML site and close the browser afterward.",
+    undefined,
+    undefined,
+    null,
+    undefined,
+    null,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    "autonomous_execution",
+    {
+      format: "static_html",
+      source: "explicit_user_request",
+      confidence: "high"
+    }
+  );
+
+  assert.match(executionInput, /Resolved build format:/);
+  assert.match(executionInput, /- format: static_html/);
+  assert.match(executionInput, /- source: explicit_user_request/);
+  assert.match(executionInput, /not authorization for side effects/);
 });
 
 test("buildConversationAwareExecutionInput adds bounded self-identity facts for direct recall turns", async () => {
@@ -504,13 +537,13 @@ test("buildConversationAwareExecutionInput adds a durable continuation block for
   session.returnHandoff = {
     id: "handoff:job-7",
     status: "completed",
-    goal: "Build the drone landing page and leave the preview ready.",
+    goal: "Build the sample landing page and leave the preview ready.",
     summary: "I finished the draft and left the preview ready for review.",
     nextSuggestedStep: "Tell me which section you want refined next.",
-    workspaceRootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
-    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
+    workspaceRootPath: "C:\\Users\\testuser\\Desktop\\sample-company",
+    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
     previewUrl: "http://127.0.0.1:4177/index.html",
-    changedPaths: ["C:\\Users\\testuser\\Desktop\\drone-company\\index.html"],
+    changedPaths: ["C:\\Users\\testuser\\Desktop\\sample-company\\index.html"],
     sourceJobId: "job-7",
     updatedAt: "2026-03-03T00:00:40.000Z"
   };
@@ -523,7 +556,7 @@ test("buildConversationAwareExecutionInput adds a durable continuation block for
 
   assert.match(executionInput, /Durable return-handoff continuation:/);
   assert.match(executionInput, /Resume request: Pick that back up and keep going from where you left off\./);
-  assert.match(executionInput, /Prior goal: Build the drone landing page and leave the preview ready\./);
+  assert.match(executionInput, /Prior goal: Build the sample landing page and leave the preview ready\./);
   assert.match(executionInput, /Suggested next step: Tell me which section you want refined next\./);
   assert.match(executionInput, /Do not rebuild or restart from scratch unless the tracked workspace or artifact no longer fits/i);
 });
@@ -533,13 +566,13 @@ test("buildConversationAwareExecutionInput adds the durable continuation block w
   session.returnHandoff = {
     id: "handoff:job-7b",
     status: "waiting_for_user",
-    goal: "Keep refining the drone landing page draft.",
+    goal: "Keep refining the sample landing page draft.",
     summary: "I paused with a reviewable draft ready.",
     nextSuggestedStep: "Keep refining the hero and CTA when the user is ready.",
-    workspaceRootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
-    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
+    workspaceRootPath: "C:\\Users\\testuser\\Desktop\\sample-company",
+    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
     previewUrl: "http://127.0.0.1:4177/index.html",
-    changedPaths: ["C:\\Users\\testuser\\Desktop\\drone-company\\index.html"],
+    changedPaths: ["C:\\Users\\testuser\\Desktop\\sample-company\\index.html"],
     sourceJobId: "job-7b",
     updatedAt: "2026-03-03T00:00:41.000Z"
   };
@@ -559,7 +592,7 @@ test("buildConversationAwareExecutionInput adds the durable continuation block w
 
   assert.match(executionInput, /Durable return-handoff continuation:/);
   assert.match(executionInput, /Resume request: When you get a chance, keep refining that draft from where you left off\./);
-  assert.match(executionInput, /Prior goal: Keep refining the drone landing page draft\./);
+  assert.match(executionInput, /Prior goal: Keep refining the sample landing page draft\./);
 });
 
 test("buildConversationAwareExecutionInput suppresses workflow continuity blocks for profile detours", async () => {
@@ -1028,7 +1061,7 @@ test("buildConversationAwareExecutionInput suppresses stale tracked workflow con
   };
 
   const userInput =
-    "Look at all the folders on the desktop that start with drone and Drone, stop the servers that are running in the folders do this end to end";
+    "Look at all the folders on the desktop that start with sample and Sample, stop the servers that are running in the folders do this end to end";
   const executionInput = await buildConversationAwareExecutionInput(
     session,
     userInput,
@@ -1416,7 +1449,7 @@ test("buildConversationAwareExecutionInput highlights natural artifact-edit foll
     id: "action-landing-file",
     kind: "file",
     label: "Landing page file",
-    location: "C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
+    location: "C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
     status: "created",
     sourceJobId: "job-landing",
     at: "2026-03-03T00:00:24.000Z",
@@ -1424,8 +1457,8 @@ test("buildConversationAwareExecutionInput highlights natural artifact-edit foll
   });
   session.pathDestinations.push({
     id: "dest-landing-folder",
-    label: "Drone company folder",
-    resolvedPath: "C:\\Users\\testuser\\Desktop\\drone-company",
+    label: "Sample company folder",
+    resolvedPath: "C:\\Users\\testuser\\Desktop\\sample-company",
     sourceJobId: "job-landing",
     updatedAt: "2026-03-03T00:00:24.000Z"
   });
@@ -1445,8 +1478,8 @@ test("buildConversationAwareExecutionInput highlights natural artifact-edit foll
 
   assert.match(executionInput, /Natural artifact-edit follow-up:/);
   assert.match(executionInput, /editing the artifact already created in this chat rather than asking for a brand-new project/i);
-  assert.match(executionInput, /Most recent concrete artifact: Landing page file at C:\\Users\\testuser\\Desktop\\drone-company\\index\.html/);
-  assert.match(executionInput, /Preferred edit destination: C:\\Users\\testuser\\Desktop\\drone-company/);
+  assert.match(executionInput, /Most recent concrete artifact: Landing page file at C:\\Users\\testuser\\Desktop\\sample-company\\index\.html/);
+  assert.match(executionInput, /Preferred edit destination: C:\\Users\\testuser\\Desktop\\sample-company/);
   assert.match(executionInput, /Visible preview already exists: http:\/\/127\.0\.0\.1:4173\/; keep the preview aligned/i);
   assert.match(executionInput, /This run must include a real file mutation under the tracked workspace/i);
   assert.match(executionInput, /Do not satisfy this request by only reopening, focusing, or closing the preview/i);
@@ -1468,7 +1501,7 @@ test("buildConversationAwareExecutionInput prioritizes tracked file actions ahea
     id: "action-script",
     kind: "file",
     label: "File script.js",
-    location: "C:\\Users\\testuser\\Desktop\\drone-company\\script.js",
+    location: "C:\\Users\\testuser\\Desktop\\sample-company\\script.js",
     status: "updated",
     sourceJobId: "job-landing",
     at: "2026-03-03T00:00:29.000Z",
@@ -1478,7 +1511,7 @@ test("buildConversationAwareExecutionInput prioritizes tracked file actions ahea
     id: "action-styles",
     kind: "file",
     label: "File styles.css",
-    location: "C:\\Users\\testuser\\Desktop\\drone-company\\styles.css",
+    location: "C:\\Users\\testuser\\Desktop\\sample-company\\styles.css",
     status: "updated",
     sourceJobId: "job-landing",
     at: "2026-03-03T00:00:28.000Z",
@@ -1488,7 +1521,7 @@ test("buildConversationAwareExecutionInput prioritizes tracked file actions ahea
     id: "action-index",
     kind: "file",
     label: "File index.html",
-    location: "C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
+    location: "C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
     status: "updated",
     sourceJobId: "job-landing",
     at: "2026-03-03T00:00:27.000Z",
@@ -1496,8 +1529,8 @@ test("buildConversationAwareExecutionInput prioritizes tracked file actions ahea
   });
   session.pathDestinations.push({
     id: "dest-script",
-    label: "Drone company script",
-    resolvedPath: "C:\\Users\\testuser\\Desktop\\drone-company\\script.js",
+    label: "Sample company script",
+    resolvedPath: "C:\\Users\\testuser\\Desktop\\sample-company\\script.js",
     sourceJobId: "job-landing",
     updatedAt: "2026-03-03T00:00:29.000Z"
   });
@@ -1515,8 +1548,8 @@ test("buildConversationAwareExecutionInput prioritizes tracked file actions ahea
     10
   );
 
-  assert.match(executionInput, /Recent user-visible actions in this chat:\n- File script\.js: C:\\Users\\testuser\\Desktop\\drone-company\\script\.js \(updated\)\n- File styles\.css: C:\\Users\\testuser\\Desktop\\drone-company\\styles\.css \(updated\)\n- File index\.html: C:\\Users\\testuser\\Desktop\\drone-company\\index\.html \(updated\)/);
-  assert.match(executionInput, /Most recent concrete artifact: File script\.js at C:\\Users\\testuser\\Desktop\\drone-company\\script\.js/);
+  assert.match(executionInput, /Recent user-visible actions in this chat:\n- File script\.js: C:\\Users\\testuser\\Desktop\\sample-company\\script\.js \(updated\)\n- File styles\.css: C:\\Users\\testuser\\Desktop\\sample-company\\styles\.css \(updated\)\n- File index\.html: C:\\Users\\testuser\\Desktop\\sample-company\\index\.html \(updated\)/);
+  assert.match(executionInput, /Most recent concrete artifact: File script\.js at C:\\Users\\testuser\\Desktop\\sample-company\\script\.js/);
 });
 
 test("buildConversationAwareExecutionInput highlights natural browser close follow-ups against tracked sessions", async () => {
@@ -1528,7 +1561,7 @@ test("buildConversationAwareExecutionInput highlights natural browser close foll
     sourceJobId: "job-landing",
     openedAt: "2026-03-03T00:00:24.000Z",
     linkedProcessLeaseId: "proc_preview_1",
-    linkedProcessCwd: "C:\\Users\\testuser\\Desktop\\drone-company"
+    linkedProcessCwd: "C:\\Users\\testuser\\Desktop\\sample-company"
   }));
 
   const executionInput = await buildConversationAwareExecutionInput(
@@ -1539,95 +1572,95 @@ test("buildConversationAwareExecutionInput highlights natural browser close foll
 
   assert.match(executionInput, /Natural browser-session follow-up:/);
   assert.match(executionInput, /Preferred browser session: Landing page preview; sessionId=browser_session:landing-page; url=http:\/\/127\.0\.0\.1:4173\/; status=open; control=available/);
-  assert.match(executionInput, /Linked preview process: leaseId=proc_preview_1; cwd=C:\\Users\\testuser\\Desktop\\drone-company/);
+  assert.match(executionInput, /Linked preview process: leaseId=proc_preview_1; cwd=C:\\Users\\testuser\\Desktop\\sample-company/);
   assert.match(executionInput, /prefer close_browser with params\.sessionId=browser_session:landing-page and then stop_process with params\.leaseId=proc_preview_1/i);
 });
 
 test("buildConversationAwareExecutionInput instructs close follow-ups to stop every exact tracked preview lease for the workspace", async () => {
   const session = buildSession();
   session.browserSessions.push(buildConversationBrowserSessionFixture({
-    id: "browser_session:ai-drone-city",
-    label: "AI Drone City preview",
+    id: "browser_session:ai-sample-city",
+    label: "Sample City preview",
     url: "http://127.0.0.1:4173/",
-    sourceJobId: "job-ai-drone-city",
+    sourceJobId: "job-ai-sample-city",
     openedAt: "2026-03-03T00:00:24.000Z",
-    workspaceRootPath: "C:\\Users\\testuser\\Desktop\\AI Drone City",
+    workspaceRootPath: "C:\\Users\\testuser\\Desktop\\Sample City",
     linkedProcessLeaseId: "proc_preview_2",
-    linkedProcessCwd: "C:\\Users\\testuser\\Desktop\\AI Drone City"
+    linkedProcessCwd: "C:\\Users\\testuser\\Desktop\\Sample City"
   }));
   session.activeWorkspace = {
-    id: "workspace:ai-drone-city",
+    id: "workspace:ai-sample-city",
     label: "Current project workspace",
-    rootPath: "C:\\Users\\testuser\\Desktop\\AI Drone City",
-    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\AI Drone City\\package.json",
+    rootPath: "C:\\Users\\testuser\\Desktop\\Sample City",
+    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\Sample City\\package.json",
     previewUrl: "http://127.0.0.1:4173/",
-    browserSessionId: "browser_session:ai-drone-city",
-    browserSessionIds: ["browser_session:ai-drone-city"],
+    browserSessionId: "browser_session:ai-sample-city",
+    browserSessionIds: ["browser_session:ai-sample-city"],
     browserSessionStatus: "open",
     browserProcessPid: 41001,
     previewProcessLeaseId: "proc_preview_2",
     previewProcessLeaseIds: ["proc_preview_2", "proc_preview_1"],
-    previewProcessCwd: "C:\\Users\\testuser\\Desktop\\AI Drone City",
+    previewProcessCwd: "C:\\Users\\testuser\\Desktop\\Sample City",
     lastKnownPreviewProcessPid: 4002,
     stillControllable: true,
     ownershipState: "tracked",
     previewStackState: "browser_and_preview",
-    lastChangedPaths: ["C:\\Users\\testuser\\Desktop\\AI Drone City\\package.json"],
-    sourceJobId: "job-ai-drone-city",
+    lastChangedPaths: ["C:\\Users\\testuser\\Desktop\\Sample City\\package.json"],
+    sourceJobId: "job-ai-sample-city",
     updatedAt: "2026-03-03T00:00:24.000Z"
   };
 
   const executionInput = await buildConversationAwareExecutionInput(
     session,
-    "Thanks. Please close AI Drone City and anything it needs so we can move on.",
+    "Thanks. Please close Sample City and anything it needs so we can move on.",
     10
   );
 
   assert.match(executionInput, /Exact tracked preview process leases for this workspace: proc_preview_2, proc_preview_1/);
-  assert.match(executionInput, /prefer close_browser with params\.sessionId=browser_session:ai-drone-city and then stop each exact tracked preview lease for this workspace: stop_process with params\.leaseId=proc_preview_2, then stop_process with params\.leaseId=proc_preview_1/i);
+  assert.match(executionInput, /prefer close_browser with params\.sessionId=browser_session:ai-sample-city and then stop each exact tracked preview lease for this workspace: stop_process with params\.leaseId=proc_preview_2, then stop_process with params\.leaseId=proc_preview_1/i);
 });
 
 test("buildConversationAwareExecutionInput treats closing a named tracked workspace as a browser close follow-up", async () => {
   const session = buildSession();
   session.browserSessions.push(buildConversationBrowserSessionFixture({
-    id: "browser_session:ai-drone-city",
-    label: "AI Drone City preview",
-    url: "file:///C:/Users/testuser/Desktop/AI%20Drone%20City/dist/index.html",
-    sourceJobId: "job-ai-drone-city",
+    id: "browser_session:ai-sample-city",
+    label: "Sample City preview",
+    url: "file:///C:/Users/testuser/Desktop/AI%20Sample%20City/dist/index.html",
+    sourceJobId: "job-ai-sample-city",
     openedAt: "2026-03-03T00:00:24.000Z",
-    workspaceRootPath: "C:\\Users\\testuser\\Desktop\\AI Drone City\\dist"
+    workspaceRootPath: "C:\\Users\\testuser\\Desktop\\Sample City\\dist"
   }));
   session.activeWorkspace = {
-    id: "workspace:ai-drone-city",
+    id: "workspace:ai-sample-city",
     label: "Current project workspace",
-    rootPath: "C:\\Users\\testuser\\Desktop\\AI Drone City\\dist",
-    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\AI Drone City\\dist\\index.html",
-    previewUrl: "file:///C:/Users/testuser/Desktop/AI%20Drone%20City/dist/index.html",
-    browserSessionId: "browser_session:ai-drone-city",
-    browserSessionIds: ["browser_session:ai-drone-city"],
+    rootPath: "C:\\Users\\testuser\\Desktop\\Sample City\\dist",
+    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\Sample City\\dist\\index.html",
+    previewUrl: "file:///C:/Users/testuser/Desktop/AI%20Sample%20City/dist/index.html",
+    browserSessionId: "browser_session:ai-sample-city",
+    browserSessionIds: ["browser_session:ai-sample-city"],
     browserSessionStatus: "open",
     browserProcessPid: 41001,
     previewProcessLeaseId: null,
     previewProcessLeaseIds: [],
-    previewProcessCwd: "C:\\Users\\testuser\\Desktop\\AI Drone City\\dist",
+    previewProcessCwd: "C:\\Users\\testuser\\Desktop\\Sample City\\dist",
     lastKnownPreviewProcessPid: null,
     stillControllable: true,
     ownershipState: "tracked",
     previewStackState: "browser_only",
     lastChangedPaths: [],
-    sourceJobId: "job-ai-drone-city",
+    sourceJobId: "job-ai-sample-city",
     updatedAt: "2026-03-03T00:00:24.000Z"
   };
 
   const executionInput = await buildConversationAwareExecutionInput(
     session,
-    "Thanks. Please close AI Drone City and anything it needs so we can move on.",
+    "Thanks. Please close Sample City and anything it needs so we can move on.",
     10
   );
 
   assert.match(executionInput, /Natural browser-session follow-up:/);
-  assert.match(executionInput, /Preferred browser session: AI Drone City preview; sessionId=browser_session:ai-drone-city/i);
-  assert.match(executionInput, /prefer close_browser with params\.sessionId=browser_session:ai-drone-city/i);
+  assert.match(executionInput, /Preferred browser session: Sample City preview; sessionId=browser_session:ai-sample-city/i);
+  assert.match(executionInput, /prefer close_browser with params\.sessionId=browser_session:ai-sample-city/i);
 });
 
 test("buildConversationAwareExecutionInput frames exact local static artifact reopen turns as browser-open follow-ups instead of build continuity", async () => {
@@ -1638,28 +1671,28 @@ test("buildConversationAwareExecutionInput frames exact local static artifact re
     confidence: "HIGH",
     lastAffirmedAt: "2026-04-14T01:31:30.000Z",
     lastUserInput:
-      'Create the landing page in "C:\\Users\\testuser\\Desktop\\Solar Energy Landing Page" and do not open it yet.'
+      'Create the landing page in "C:\\Users\\testuser\\Desktop\\Sample Service Landing Page" and do not open it yet.'
   };
   session.returnHandoff = {
-    id: "handoff:solar-static-build",
+    id: "handoff:sample-static-build",
     status: "completed",
     goal:
-      'Create the landing page in "C:\\Users\\testuser\\Desktop\\Solar Energy Landing Page" and do not open it yet.',
+      'Create the landing page in "C:\\Users\\testuser\\Desktop\\Sample Service Landing Page" and do not open it yet.',
     summary:
-      "I created or updated C:\\Users\\testuser\\Desktop\\Solar Energy Landing Page\\index.html.",
+      "I created or updated C:\\Users\\testuser\\Desktop\\Sample Service Landing Page\\index.html.",
     nextSuggestedStep: "Open the exact local file when the user asks.",
-    workspaceRootPath: "C:\\Users\\testuser\\Desktop\\Solar Energy Landing Page",
-    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\Solar Energy Landing Page\\index.html",
+    workspaceRootPath: "C:\\Users\\testuser\\Desktop\\Sample Service Landing Page",
+    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\Sample Service Landing Page\\index.html",
     previewUrl: null,
-    changedPaths: ["C:\\Users\\testuser\\Desktop\\Solar Energy Landing Page\\index.html"],
-    sourceJobId: "job-solar-static-build",
+    changedPaths: ["C:\\Users\\testuser\\Desktop\\Sample Service Landing Page\\index.html"],
+    sourceJobId: "job-sample-static-build",
     updatedAt: "2026-04-14T01:33:57.677Z"
   };
   session.activeWorkspace = {
-    id: "workspace:solar-static",
+    id: "workspace:sample-static",
     label: "Current project workspace",
-    rootPath: "C:\\Users\\testuser\\Desktop\\Solar Energy Landing Page",
-    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\Solar Energy Landing Page\\index.html",
+    rootPath: "C:\\Users\\testuser\\Desktop\\Sample Service Landing Page",
+    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\Sample Service Landing Page\\index.html",
     previewUrl: null,
     browserSessionId: null,
     browserSessionIds: [],
@@ -1672,39 +1705,39 @@ test("buildConversationAwareExecutionInput frames exact local static artifact re
     stillControllable: false,
     ownershipState: "stale",
     previewStackState: "detached",
-    lastChangedPaths: ["C:\\Users\\testuser\\Desktop\\Solar Energy Landing Page\\index.html"],
-    sourceJobId: "job-solar-static-build",
+    lastChangedPaths: ["C:\\Users\\testuser\\Desktop\\Sample Service Landing Page\\index.html"],
+    sourceJobId: "job-sample-static-build",
     updatedAt: "2026-04-14T01:33:57.677Z"
   };
   session.recentActions.push({
-    id: "action-solar-static-index",
+    id: "action-sample-static-index",
     kind: "file",
     label: "File index.html",
-    location: "C:\\Users\\testuser\\Desktop\\Solar Energy Landing Page\\index.html",
+    location: "C:\\Users\\testuser\\Desktop\\Sample Service Landing Page\\index.html",
     status: "updated",
-    sourceJobId: "job-solar-static-build",
+    sourceJobId: "job-sample-static-build",
     at: "2026-04-14T01:33:57.677Z",
     summary: "Wrote the static landing page."
   });
 
   const executionInput = await buildConversationAwareExecutionInput(
     session,
-    "Once you're done with the landing page, open it in the browser so I can see it. Use the exact local file at \"C:\\Users\\testuser\\Desktop\\Solar Energy Landing Page\\index.html\". Do not start a dev server. Open the local static file directly with a file URL and leave that exact page open.",
+    "Once you're done with the landing page, open it in the browser so I can see it. Use the exact local file at \"C:\\Users\\testuser\\Desktop\\Sample Service Landing Page\\index.html\". Do not start a dev server. Open the local static file directly with a file URL and leave that exact page open.",
     10
   );
 
   assert.match(executionInput, /Existing local static-artifact open follow-up:/);
   assert.match(
     executionInput,
-    /Preferred artifact path: C:\\Users\\testuser\\Desktop\\Solar Energy Landing Page\\index\.html/
+    /Preferred artifact path: C:\\Users\\testuser\\Desktop\\Sample Service Landing Page\\index\.html/
   );
   assert.match(
     executionInput,
-    /Preferred browser target: file:\/\/\/C:\/Users\/testuser\/Desktop\/Solar%20Energy%20Landing%20Page\/index\.html/
+    /Preferred browser target: file:\/\/\/C:\/Users\/testuser\/Desktop\/Sample%20Service%20Landing%20Page\/index\.html/
   );
   assert.match(
     executionInput,
-    /Prefer open_browser with params\.url=file:\/\/\/C:\/Users\/testuser\/Desktop\/Solar%20Energy%20Landing%20Page\/index\.html and params\.rootPath=C:\\Users\\testuser\\Desktop\\Solar Energy Landing Page\./
+    /Prefer open_browser with params\.url=file:\/\/\/C:\/Users\/testuser\/Desktop\/Sample%20Service%20Landing%20Page\/index\.html and params\.rootPath=C:\\Users\\testuser\\Desktop\\Sample Service Landing Page\./
   );
   assert.match(
     executionInput,
@@ -1723,41 +1756,41 @@ test("buildConversationAwareExecutionInput frames exact local static artifact re
 test("buildConversationAwareExecutionInput does not treat keep the page open as a reopen request during normal conversation", async () => {
   const session = buildSession();
   session.browserSessions.push(buildConversationBrowserSessionFixture({
-    id: "browser_session:ai-drone-city",
-    label: "AI Drone City preview",
-    url: "file:///C:/Users/testuser/Desktop/AI%20Drone%20City/dist/index.html",
-    sourceJobId: "job-ai-drone-city",
+    id: "browser_session:ai-sample-city",
+    label: "Sample City preview",
+    url: "file:///C:/Users/testuser/Desktop/AI%20Sample%20City/dist/index.html",
+    sourceJobId: "job-ai-sample-city",
     openedAt: "2026-03-03T00:00:24.000Z",
-    workspaceRootPath: "C:\\Users\\testuser\\Desktop\\AI Drone City"
+    workspaceRootPath: "C:\\Users\\testuser\\Desktop\\Sample City"
   }));
   session.activeWorkspace = {
-    id: "workspace:ai-drone-city",
+    id: "workspace:ai-sample-city",
     label: "Current project workspace",
-    rootPath: "C:\\Users\\testuser\\Desktop\\AI Drone City",
-    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\AI Drone City\\package.json",
-    previewUrl: "file:///C:/Users/testuser/Desktop/AI%20Drone%20City/dist/index.html",
-    browserSessionId: "browser_session:ai-drone-city",
-    browserSessionIds: ["browser_session:ai-drone-city"],
+    rootPath: "C:\\Users\\testuser\\Desktop\\Sample City",
+    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\Sample City\\package.json",
+    previewUrl: "file:///C:/Users/testuser/Desktop/AI%20Sample%20City/dist/index.html",
+    browserSessionId: "browser_session:ai-sample-city",
+    browserSessionIds: ["browser_session:ai-sample-city"],
     browserSessionStatus: "open",
     browserProcessPid: 41001,
     previewProcessLeaseId: null,
     previewProcessLeaseIds: [],
-    previewProcessCwd: "C:\\Users\\testuser\\Desktop\\AI Drone City",
+    previewProcessCwd: "C:\\Users\\testuser\\Desktop\\Sample City",
     lastKnownPreviewProcessPid: null,
     stillControllable: true,
     ownershipState: "tracked",
     previewStackState: "browser_only",
     lastChangedPaths: [
-      "C:\\Users\\testuser\\Desktop\\AI Drone City\\package.json",
-      "C:\\Users\\testuser\\Desktop\\AI Drone City"
+      "C:\\Users\\testuser\\Desktop\\Sample City\\package.json",
+      "C:\\Users\\testuser\\Desktop\\Sample City"
     ],
-    sourceJobId: "job-ai-drone-city",
+    sourceJobId: "job-ai-sample-city",
     updatedAt: "2026-03-03T00:00:24.000Z"
   };
 
   const executionInput = await buildConversationAwareExecutionInput(
     session,
-    "Looks good. Before changing anything, just talk with me for a minute about what makes AI Drone City feel playful. Reply in two short paragraphs and keep the page open.",
+    "Looks good. Before changing anything, just talk with me for a minute about what makes Sample City feel playful. Reply in two short paragraphs and keep the page open.",
     10
   );
 
@@ -1778,16 +1811,16 @@ test("buildConversationAwareExecutionInput prefers stop_process first when live 
     controllerKind: "playwright_managed",
     controlAvailable: true,
     browserProcessPid: 41001,
-    workspaceRootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
+    workspaceRootPath: "C:\\Users\\testuser\\Desktop\\sample-company",
     linkedProcessLeaseId: "proc_preview_1",
-    linkedProcessCwd: "C:\\Users\\testuser\\Desktop\\drone-company",
+    linkedProcessCwd: "C:\\Users\\testuser\\Desktop\\sample-company",
     linkedProcessPid: 4001
   });
   session.activeWorkspace = {
     id: "workspace:landing-page",
     label: "Landing page workspace",
-    rootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
-    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
+    rootPath: "C:\\Users\\testuser\\Desktop\\sample-company",
+    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
     previewUrl: "http://127.0.0.1:4173/",
     browserSessionId: "browser_session:landing-page",
     browserSessionIds: ["browser_session:landing-page"],
@@ -1795,12 +1828,12 @@ test("buildConversationAwareExecutionInput prefers stop_process first when live 
     browserProcessPid: 41001,
     previewProcessLeaseId: "proc_preview_1",
     previewProcessLeaseIds: ["proc_preview_1"],
-    previewProcessCwd: "C:\\Users\\testuser\\Desktop\\drone-company",
+    previewProcessCwd: "C:\\Users\\testuser\\Desktop\\sample-company",
     lastKnownPreviewProcessPid: 4001,
     stillControllable: true,
     ownershipState: "tracked",
     previewStackState: "browser_and_preview",
-    lastChangedPaths: ["C:\\Users\\testuser\\Desktop\\drone-company\\index.html"],
+    lastChangedPaths: ["C:\\Users\\testuser\\Desktop\\sample-company\\index.html"],
     sourceJobId: "job-landing",
     updatedAt: "2026-03-03T00:00:24.000Z"
   };
@@ -1821,7 +1854,7 @@ test("buildConversationAwareExecutionInput prefers stop_process first when live 
         actionId: "action-preview",
         pid: 4001,
         commandFingerprint: "python-http-server",
-        cwd: "C:\\Users\\testuser\\Desktop\\drone-company",
+        cwd: "C:\\Users\\testuser\\Desktop\\sample-company",
         shellExecutable: "powershell.exe",
         shellKind: "powershell",
     requestedHost: null,
@@ -1846,9 +1879,9 @@ test("buildConversationAwareExecutionInput prefers stop_process first when live 
         controllerKind: "playwright_managed",
         controlAvailable: false,
         browserProcessPid: null,
-        workspaceRootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
+        workspaceRootPath: "C:\\Users\\testuser\\Desktop\\sample-company",
         linkedProcessLeaseId: "proc_preview_1",
-        linkedProcessCwd: "C:\\Users\\testuser\\Desktop\\drone-company",
+        linkedProcessCwd: "C:\\Users\\testuser\\Desktop\\sample-company",
         linkedProcessPid: 4001
       }
     ]
@@ -1876,16 +1909,16 @@ test("buildConversationAwareExecutionInput does not inject tracked browser follo
     controllerKind: "playwright_managed",
     controlAvailable: false,
     browserProcessPid: 41001,
-    workspaceRootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
+    workspaceRootPath: "C:\\Users\\testuser\\Desktop\\sample-company",
     linkedProcessLeaseId: "proc_preview_1",
-    linkedProcessCwd: "C:\\Users\\testuser\\Desktop\\drone-company",
+    linkedProcessCwd: "C:\\Users\\testuser\\Desktop\\sample-company",
     linkedProcessPid: 4001
   });
   session.activeWorkspace = {
-    id: "workspace:drone-company",
+    id: "workspace:sample-company",
     label: "Current project workspace",
-    rootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
-    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
+    rootPath: "C:\\Users\\testuser\\Desktop\\sample-company",
+    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
     previewUrl: "http://127.0.0.1:4173/",
     browserSessionId: "browser_session:landing-page",
     browserSessionIds: ["browser_session:landing-page"],
@@ -1893,12 +1926,12 @@ test("buildConversationAwareExecutionInput does not inject tracked browser follo
     browserProcessPid: 41001,
     previewProcessLeaseId: "proc_preview_1",
     previewProcessLeaseIds: ["proc_preview_1"],
-    previewProcessCwd: "C:\\Users\\testuser\\Desktop\\drone-company",
+    previewProcessCwd: "C:\\Users\\testuser\\Desktop\\sample-company",
     lastKnownPreviewProcessPid: 4001,
     stillControllable: false,
     ownershipState: "stale",
     previewStackState: "detached",
-    lastChangedPaths: ["C:\\Users\\testuser\\Desktop\\drone-company\\index.html"],
+    lastChangedPaths: ["C:\\Users\\testuser\\Desktop\\sample-company\\index.html"],
     sourceJobId: "job-landing",
     updatedAt: "2026-03-03T00:01:10.000Z"
   };
@@ -1917,7 +1950,7 @@ test("buildConversationAwareExecutionInput does not treat a stale detached close
   session.browserSessions.push({
     id: "browser_session:old-static-preview",
     label: "Older static landing page",
-    url: "file:///C:/Users/testuser/Desktop/drone-company-landing.html",
+    url: "file:///C:/Users/testuser/Desktop/sample-company-landing.html",
     visibility: "visible",
     status: "closed",
     sourceJobId: "job-old-static-preview",
@@ -1967,46 +2000,46 @@ test("buildConversationAwareExecutionInput does not treat a stale detached close
   assert.doesNotMatch(executionInput, /Natural browser-session follow-up:/);
   assert.doesNotMatch(
     executionInput,
-    /prefer open_browser with params\.url=file:\/\/\/C:\/Users\/testuser\/Desktop\/drone-company-landing\.html/i
+    /prefer open_browser with params\.url=file:\/\/\/C:\/Users\/testuser\/Desktop\/sample-company-landing\.html/i
   );
 });
 
 test("buildConversationAwareExecutionInput surfaces exact tracked workspace recovery affordances for local organization requests", async () => {
   const session = buildSession();
   session.browserSessions.push(buildConversationBrowserSessionFixture({
-    id: "browser_session:drone-preview",
-    label: "Drone preview",
+    id: "browser_session:sample-preview",
+    label: "Sample preview",
     url: "http://127.0.0.1:4173/",
-    sourceJobId: "job-drone",
+    sourceJobId: "job-sample",
     openedAt: "2026-03-03T00:00:24.000Z",
-    linkedProcessLeaseId: "proc_preview_drone",
-    linkedProcessCwd: "C:\\Users\\testuser\\Desktop\\drone-company-live-smoke-1"
+    linkedProcessLeaseId: "proc_preview_sample",
+    linkedProcessCwd: "C:\\Users\\testuser\\Desktop\\sample-company-live-smoke-1"
   }));
   session.activeWorkspace = {
-    id: "workspace:drone-company",
-    label: "Drone company project",
-    rootPath: "C:\\Users\\testuser\\Desktop\\drone-company-live-smoke-1",
-    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\drone-company-live-smoke-1\\index.html",
+    id: "workspace:sample-company",
+    label: "Sample company project",
+    rootPath: "C:\\Users\\testuser\\Desktop\\sample-company-live-smoke-1",
+    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\sample-company-live-smoke-1\\index.html",
     previewUrl: "http://127.0.0.1:4173/",
-    browserSessionId: "browser_session:drone-preview",
-    browserSessionIds: ["browser_session:drone-preview"],
+    browserSessionId: "browser_session:sample-preview",
+    browserSessionIds: ["browser_session:sample-preview"],
     browserSessionStatus: "open",
     browserProcessPid: 41001,
-    previewProcessLeaseId: "proc_preview_drone",
-    previewProcessLeaseIds: ["proc_preview_drone"],
-    previewProcessCwd: "C:\\Users\\testuser\\Desktop\\drone-company-live-smoke-1",
+    previewProcessLeaseId: "proc_preview_sample",
+    previewProcessLeaseIds: ["proc_preview_sample"],
+    previewProcessCwd: "C:\\Users\\testuser\\Desktop\\sample-company-live-smoke-1",
     lastKnownPreviewProcessPid: 4001,
     stillControllable: true,
     ownershipState: "tracked",
     previewStackState: "browser_and_preview",
-    lastChangedPaths: ["C:\\Users\\testuser\\Desktop\\drone-company-live-smoke-1\\index.html"],
-    sourceJobId: "job-drone",
+    lastChangedPaths: ["C:\\Users\\testuser\\Desktop\\sample-company-live-smoke-1\\index.html"],
+    sourceJobId: "job-sample",
     updatedAt: "2026-03-03T00:00:24.000Z"
   };
 
   const executionInput = await buildConversationAwareExecutionInput(
     session,
-    "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+    "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
     10,
     null,
     null,
@@ -2015,12 +2048,12 @@ test("buildConversationAwareExecutionInput surfaces exact tracked workspace reco
     null,
     [
       {
-        leaseId: "proc_preview_drone",
+        leaseId: "proc_preview_sample",
         taskId: "task-1",
         actionId: "action-1",
         pid: 4001,
         commandFingerprint: "python-http-server",
-        cwd: "C:\\Users\\testuser\\Desktop\\drone-company-live-smoke-1",
+        cwd: "C:\\Users\\testuser\\Desktop\\sample-company-live-smoke-1",
         shellExecutable: "powershell.exe",
         shellKind: "powershell",
     requestedHost: null,
@@ -2036,10 +2069,10 @@ test("buildConversationAwareExecutionInput surfaces exact tracked workspace reco
   );
 
   assert.match(executionInput, /Workspace recovery context for this chat:/);
-  assert.match(executionInput, /Preferred workspace root: C:\\Users\\testuser\\Desktop\\drone-company-live-smoke-1/);
-  assert.match(executionInput, /Exact tracked browser session ids: browser_session:drone-preview/);
-  assert.match(executionInput, /Exact tracked preview lease ids: proc_preview_drone/);
-  assert.match(executionInput, /leaseId=proc_preview_drone; cwd=C:\\Users\\testuser\\Desktop\\drone-company-live-smoke-1; status=PROCESS_STILL_RUNNING; stopRequested=no/);
+  assert.match(executionInput, /Preferred workspace root: C:\\Users\\testuser\\Desktop\\sample-company-live-smoke-1/);
+  assert.match(executionInput, /Exact tracked browser session ids: browser_session:sample-preview/);
+  assert.match(executionInput, /Exact tracked preview lease ids: proc_preview_sample/);
+  assert.match(executionInput, /leaseId=proc_preview_sample; cwd=C:\\Users\\testuser\\Desktop\\sample-company-live-smoke-1; status=PROCESS_STILL_RUNNING; stopRequested=no/);
   assert.match(executionInput, /inspect_workspace_resources first with the preferred workspace root/i);
   assert.match(executionInput, /stop only those exact lease ids with stop_process/i);
 });
@@ -2047,30 +2080,30 @@ test("buildConversationAwareExecutionInput surfaces exact tracked workspace reco
 test("buildConversationAwareExecutionInput distinguishes remembered preview lease ids from live tracked ones when the workspace is stale", async () => {
   const session = buildSession();
   session.activeWorkspace = {
-    id: "workspace:drone-company-stale",
-    label: "Drone company project",
-    rootPath: "C:\\Users\\testuser\\Desktop\\drone-company-live-smoke-1",
-    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\drone-company-live-smoke-1\\index.html",
+    id: "workspace:sample-company-stale",
+    label: "Sample company project",
+    rootPath: "C:\\Users\\testuser\\Desktop\\sample-company-live-smoke-1",
+    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\sample-company-live-smoke-1\\index.html",
     previewUrl: "http://127.0.0.1:4173/",
-    browserSessionId: "browser_session:drone-preview",
-    browserSessionIds: ["browser_session:drone-preview"],
+    browserSessionId: "browser_session:sample-preview",
+    browserSessionIds: ["browser_session:sample-preview"],
     browserSessionStatus: "closed",
     browserProcessPid: 41001,
-    previewProcessLeaseId: "proc_preview_drone_old",
-    previewProcessLeaseIds: ["proc_preview_drone_old"],
-    previewProcessCwd: "C:\\Users\\testuser\\Desktop\\drone-company-live-smoke-1",
+    previewProcessLeaseId: "proc_preview_sample_old",
+    previewProcessLeaseIds: ["proc_preview_sample_old"],
+    previewProcessCwd: "C:\\Users\\testuser\\Desktop\\sample-company-live-smoke-1",
     lastKnownPreviewProcessPid: 4001,
     stillControllable: false,
     ownershipState: "stale",
     previewStackState: "detached",
-    lastChangedPaths: ["C:\\Users\\testuser\\Desktop\\drone-company-live-smoke-1\\index.html"],
-    sourceJobId: "job-drone-old",
+    lastChangedPaths: ["C:\\Users\\testuser\\Desktop\\sample-company-live-smoke-1\\index.html"],
+    sourceJobId: "job-sample-old",
     updatedAt: "2026-03-03T00:00:24.000Z"
   };
 
   const executionInput = await buildConversationAwareExecutionInput(
     session,
-    "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+    "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
     10,
     null,
     null,
@@ -2079,12 +2112,12 @@ test("buildConversationAwareExecutionInput distinguishes remembered preview leas
     null,
     [
       {
-        leaseId: "proc_preview_drone_old",
-        taskId: "task-old-drone",
-        actionId: "action-old-drone",
+        leaseId: "proc_preview_sample_old",
+        taskId: "task-old-sample",
+        actionId: "action-old-sample",
         pid: 4001,
         commandFingerprint: "python-http-server",
-        cwd: "C:\\Users\\testuser\\Desktop\\drone-company-live-smoke-1",
+        cwd: "C:\\Users\\testuser\\Desktop\\sample-company-live-smoke-1",
         shellExecutable: "powershell.exe",
         shellKind: "powershell",
     requestedHost: null,
@@ -2102,13 +2135,13 @@ test("buildConversationAwareExecutionInput distinguishes remembered preview leas
   assert.match(executionInput, /Workspace recovery context for this chat:/);
   assert.match(
     executionInput,
-    /Remembered preview lease ids from earlier assistant work: proc_preview_drone_old/
+    /Remembered preview lease ids from earlier assistant work: proc_preview_sample_old/
   );
   assert.match(
     executionInput,
-    /Remembered preview lease status from earlier assistant work:\n- leaseId=proc_preview_drone_old; cwd=C:\\Users\\testuser\\Desktop\\drone-company-live-smoke-1; status=PROCESS_STOPPED; stopRequested=yes/
+    /Remembered preview lease status from earlier assistant work:\n- leaseId=proc_preview_sample_old; cwd=C:\\Users\\testuser\\Desktop\\sample-company-live-smoke-1; status=PROCESS_STOPPED; stopRequested=yes/
   );
-  assert.doesNotMatch(executionInput, /Exact tracked preview lease ids: proc_preview_drone_old/);
+  assert.doesNotMatch(executionInput, /Exact tracked preview lease ids: proc_preview_sample_old/);
   assert.match(
     executionInput,
     /If no exact tracked holder is proven, inspect first and then clarify before touching untracked local processes\./
@@ -2120,7 +2153,7 @@ test("buildConversationAwareExecutionInput surfaces matching runtime preview lea
 
   const executionInput = await buildConversationAwareExecutionInput(
     session,
-    "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+    "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
     10,
     null,
     null,
@@ -2129,12 +2162,12 @@ test("buildConversationAwareExecutionInput surfaces matching runtime preview lea
     null,
     [
       {
-        leaseId: "proc_drone_1",
+        leaseId: "proc_sample_1",
         taskId: "task-1",
         actionId: "action-1",
         pid: 4001,
         commandFingerprint: "python-http-server",
-        cwd: "C:\\Users\\testuser\\Desktop\\drone-company-live-smoke-1",
+        cwd: "C:\\Users\\testuser\\Desktop\\sample-company-live-smoke-1",
         shellExecutable: "powershell.exe",
         shellKind: "powershell",
     requestedHost: null,
@@ -2169,7 +2202,7 @@ test("buildConversationAwareExecutionInput surfaces matching runtime preview lea
 
   assert.match(executionInput, /Workspace recovery context for this chat:/);
   assert.match(executionInput, /No exact tracked workspace holder is currently known for this request\./);
-  assert.match(executionInput, /Candidate runtime-managed preview lease: leaseId=proc_drone_1; cwd=C:\\Users\\testuser\\Desktop\\drone-company-live-smoke-1; status=PROCESS_STILL_RUNNING; stopRequested=no/);
+  assert.match(executionInput, /Candidate runtime-managed preview lease: leaseId=proc_sample_1; cwd=C:\\Users\\testuser\\Desktop\\sample-company-live-smoke-1; status=PROCESS_STILL_RUNNING; stopRequested=no/);
   assert.doesNotMatch(executionInput, /proc_other_1/);
   assert.match(executionInput, /Prefer inspect_workspace_resources or inspect_path_holders before any shutdown/i);
   assert.match(executionInput, /Do not stop those candidate preview leases directly from this hint block alone/i);
@@ -2179,40 +2212,40 @@ test("buildConversationAwareExecutionInput surfaces attributable remembered root
   const session = buildSession();
   session.pathDestinations.push(
     {
-      id: "dest-drone-folder",
-      label: "Drone company folder",
-      resolvedPath: "C:\\Users\\testuser\\Desktop\\drone-company-live-smoke-1",
-      sourceJobId: "job-drone-1",
+      id: "dest-sample-folder",
+      label: "Sample company folder",
+      resolvedPath: "C:\\Users\\testuser\\Desktop\\sample-company-live-smoke-1",
+      sourceJobId: "job-sample-1",
       updatedAt: "2026-03-03T00:00:20.000Z"
     },
     {
-      id: "dest-drone-file",
-      label: "Drone company index",
-      resolvedPath: "C:\\Users\\testuser\\Desktop\\drone-company-live-smoke-2\\index.html",
-      sourceJobId: "job-drone-2",
+      id: "dest-sample-file",
+      label: "Sample company index",
+      resolvedPath: "C:\\Users\\testuser\\Desktop\\sample-company-live-smoke-2\\index.html",
+      sourceJobId: "job-sample-2",
       updatedAt: "2026-03-03T00:00:21.000Z"
     }
   );
   session.browserSessions.push({
-    id: "browser_session:drone-old",
-    label: "Older drone preview",
+    id: "browser_session:sample-old",
+    label: "Older sample preview",
     url: "http://127.0.0.1:4175/",
     visibility: "visible",
     status: "closed",
-    sourceJobId: "job-drone-1",
+    sourceJobId: "job-sample-1",
     openedAt: "2026-03-03T00:00:10.000Z",
     closedAt: "2026-03-03T00:00:30.000Z",
     controllerKind: "playwright_managed",
     controlAvailable: false,
     browserProcessPid: null,
-    linkedProcessLeaseId: "proc_drone_old",
-    linkedProcessCwd: "C:\\Users\\testuser\\Desktop\\drone-company-live-smoke-1",
+    linkedProcessLeaseId: "proc_sample_old",
+    linkedProcessCwd: "C:\\Users\\testuser\\Desktop\\sample-company-live-smoke-1",
     linkedProcessPid: 4001
   });
 
   const executionInput = await buildConversationAwareExecutionInput(
     session,
-    "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+    "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
     10,
     null,
     null,
@@ -2221,12 +2254,12 @@ test("buildConversationAwareExecutionInput surfaces attributable remembered root
     null,
     [
       {
-        leaseId: "proc_drone_old",
-        taskId: "task-old-drone",
-        actionId: "action-old-drone",
+        leaseId: "proc_sample_old",
+        taskId: "task-old-sample",
+        actionId: "action-old-sample",
         pid: 4001,
         commandFingerprint: "python-http-server",
-        cwd: "C:\\Users\\testuser\\Desktop\\drone-company-live-smoke-1",
+        cwd: "C:\\Users\\testuser\\Desktop\\sample-company-live-smoke-1",
         shellExecutable: "powershell.exe",
         shellKind: "powershell",
     requestedHost: null,
@@ -2244,42 +2277,42 @@ test("buildConversationAwareExecutionInput surfaces attributable remembered root
   assert.match(executionInput, /Workspace recovery context for this chat:/);
   assert.match(executionInput, /No exact tracked workspace holder is currently known for this request\./);
   assert.match(executionInput, /Attributable workspace roots already remembered in this chat:/);
-  assert.match(executionInput, /root=C:\\Users\\testuser\\Desktop\\drone-company-live-smoke-1; reason=remembered destination/);
-  assert.match(executionInput, /root=C:\\Users\\testuser\\Desktop\\drone-company-live-smoke-2; reason=remembered destination/);
-  assert.match(executionInput, /Attributable remembered preview lease: leaseId=proc_drone_old; cwd=C:\\Users\\testuser\\Desktop\\drone-company-live-smoke-1; status=PROCESS_STOPPED; stopRequested=yes/);
+  assert.match(executionInput, /root=C:\\Users\\testuser\\Desktop\\sample-company-live-smoke-1; reason=remembered destination/);
+  assert.match(executionInput, /root=C:\\Users\\testuser\\Desktop\\sample-company-live-smoke-2; reason=remembered destination/);
+  assert.match(executionInput, /Attributable remembered preview lease: leaseId=proc_sample_old; cwd=C:\\Users\\testuser\\Desktop\\sample-company-live-smoke-1; status=PROCESS_STOPPED; stopRequested=yes/);
   assert.match(executionInput, /inspect_path_holders or inspect_workspace_resources against these exact remembered roots first/i);
 });
 
 test("buildConversationAwareExecutionInput surfaces durable handoff and remembered browser workspace roots for older organization follow-ups", async () => {
   const session = buildSession();
   session.returnHandoff = {
-    id: "handoff:drone-older-work",
+    id: "handoff:sample-older-work",
     status: "completed",
-    goal: "Finish the older drone-company draft and leave it ready for review.",
-    summary: "I finished the older drone-company draft and saved the review checkpoint.",
+    goal: "Finish the older sample-company draft and leave it ready for review.",
+    summary: "I finished the older sample-company draft and saved the review checkpoint.",
     nextSuggestedStep: "Tell me what section to refine next.",
-    workspaceRootPath: "C:\\Users\\testuser\\Desktop\\drone-company-older-1",
-    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\drone-company-older-1\\index.html",
-    previewUrl: "file:///C:/Users/testuser/Desktop/drone-company-older-1/index.html",
+    workspaceRootPath: "C:\\Users\\testuser\\Desktop\\sample-company-older-1",
+    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\sample-company-older-1\\index.html",
+    previewUrl: "file:///C:/Users/testuser/Desktop/sample-company-older-1/index.html",
     changedPaths: [
-      "C:\\Users\\testuser\\Desktop\\drone-company-older-2\\styles.css"
+      "C:\\Users\\testuser\\Desktop\\sample-company-older-2\\styles.css"
     ],
-    sourceJobId: "job-drone-older",
+    sourceJobId: "job-sample-older",
     updatedAt: "2026-03-03T00:00:22.000Z"
   };
   session.browserSessions.push({
-    id: "browser_session:drone-older-detached",
-    label: "Older detached drone preview",
-    url: "file:///C:/Users/testuser/Desktop/drone-company-older-3/index.html",
+    id: "browser_session:sample-older-detached",
+    label: "Older detached sample preview",
+    url: "file:///C:/Users/testuser/Desktop/sample-company-older-3/index.html",
     visibility: "visible",
     status: "open",
-    sourceJobId: "job-drone-older",
+    sourceJobId: "job-sample-older",
     openedAt: "2026-03-03T00:00:21.000Z",
     closedAt: null,
     controllerKind: "os_default",
     controlAvailable: false,
     browserProcessPid: null,
-    workspaceRootPath: "C:\\Users\\testuser\\Desktop\\drone-company-older-3",
+    workspaceRootPath: "C:\\Users\\testuser\\Desktop\\sample-company-older-3",
     linkedProcessLeaseId: null,
     linkedProcessCwd: null,
     linkedProcessPid: null
@@ -2287,7 +2320,7 @@ test("buildConversationAwareExecutionInput surfaces durable handoff and remember
 
   const executionInput = await buildConversationAwareExecutionInput(
     session,
-    "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+    "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
     10
   );
 
@@ -2295,15 +2328,15 @@ test("buildConversationAwareExecutionInput surfaces durable handoff and remember
   assert.match(executionInput, /No exact tracked workspace holder is currently known for this request\./);
   assert.match(
     executionInput,
-    /root=C:\\Users\\testuser\\Desktop\\drone-company-older-1; reason=durable handoff workspace/
+    /root=C:\\Users\\testuser\\Desktop\\sample-company-older-1; reason=durable handoff workspace/
   );
   assert.match(
     executionInput,
-    /root=C:\\Users\\testuser\\Desktop\\drone-company-older-2; reason=durable handoff changed file/
+    /root=C:\\Users\\testuser\\Desktop\\sample-company-older-2; reason=durable handoff changed file/
   );
   assert.match(
     executionInput,
-    /root=C:\\Users\\testuser\\Desktop\\drone-company-older-3; reason=remembered browser workspace/
+    /root=C:\\Users\\testuser\\Desktop\\sample-company-older-3; reason=remembered browser workspace/
   );
   assert.match(executionInput, /inspect_path_holders or inspect_workspace_resources against these exact remembered roots first/i);
 });
@@ -2333,17 +2366,17 @@ test("buildConversationAwareExecutionInput explains when the remembered workspac
   const session = buildSession();
   session.pathDestinations.push({
     id: "dest-4",
-    label: "Desktop drone folder",
-    resolvedPath: "C:\\Users\\testuser\\Desktop\\drone-folder",
+    label: "Desktop sample folder",
+    resolvedPath: "C:\\Users\\testuser\\Desktop\\sample-folder",
     sourceJobId: "job-4",
     updatedAt: "2026-03-03T00:00:25.000Z"
   });
   session.activeWorkspace = {
-    id: "workspace:drone-folder",
+    id: "workspace:sample-folder",
     label: "Current project workspace",
-    rootPath: "C:\\Users\\testuser\\Desktop\\drone-folder",
+    rootPath: "C:\\Users\\testuser\\Desktop\\sample-folder",
     primaryArtifactPath: null,
-    previewUrl: "file:///C:/Users/testuser/Desktop/drone-folder/index.html",
+    previewUrl: "file:///C:/Users/testuser/Desktop/sample-folder/index.html",
     browserSessionId: "browser-detached-1",
     browserSessionIds: ["browser-detached-1"],
     browserSessionStatus: "open",
@@ -2355,7 +2388,7 @@ test("buildConversationAwareExecutionInput explains when the remembered workspac
     stillControllable: false,
     ownershipState: "orphaned",
     previewStackState: "browser_only",
-    lastChangedPaths: ["C:\\Users\\testuser\\Desktop\\drone-folder\\index.html"],
+    lastChangedPaths: ["C:\\Users\\testuser\\Desktop\\sample-folder\\index.html"],
     sourceJobId: "job-4",
     updatedAt: "2026-03-03T00:00:25.000Z"
   };
@@ -2367,18 +2400,18 @@ test("buildConversationAwareExecutionInput explains when the remembered workspac
   );
 
   assert.match(executionInput, /Remembered save\/open locations from this chat:/);
-  assert.match(executionInput, /The most recent workspace in this chat is orphaned at C:\\Users\\testuser\\Desktop\\drone-folder/i);
+  assert.match(executionInput, /The most recent workspace in this chat is orphaned at C:\\Users\\testuser\\Desktop\\sample-folder/i);
   assert.match(executionInput, /require fresh inspection before assuming preview or process control still exists/i);
 });
 
 test("buildConversationAwareExecutionInput grounds the Telegram desktop cleanup wording as a real move", async () => {
   const session = buildSession();
   session.activeWorkspace = {
-    id: "workspace:drone-company-live-smoke-9",
+    id: "workspace:sample-company-live-smoke-9",
     label: "Current project workspace",
-    rootPath: "C:\\Users\\testuser\\Desktop\\drone-company-live-smoke-9",
-    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\drone-company-live-smoke-9\\index.html",
-    previewUrl: "file:///C:/Users/testuser/Desktop/drone-company-live-smoke-9/index.html",
+    rootPath: "C:\\Users\\testuser\\Desktop\\sample-company-live-smoke-9",
+    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\sample-company-live-smoke-9\\index.html",
+    previewUrl: "file:///C:/Users/testuser/Desktop/sample-company-live-smoke-9/index.html",
     browserSessionId: "browser-detached-cleanup-1",
     browserSessionIds: ["browser-detached-cleanup-1"],
     browserSessionStatus: "closed",
@@ -2391,7 +2424,7 @@ test("buildConversationAwareExecutionInput grounds the Telegram desktop cleanup 
     ownershipState: "stale",
     previewStackState: "detached",
     lastChangedPaths: [
-      "C:\\Users\\testuser\\Desktop\\drone-company-live-smoke-9\\index.html"
+      "C:\\Users\\testuser\\Desktop\\sample-company-live-smoke-9\\index.html"
     ],
     sourceJobId: "job-cleanup-1",
     updatedAt: "2026-03-03T00:00:25.000Z"
@@ -2399,18 +2432,18 @@ test("buildConversationAwareExecutionInput grounds the Telegram desktop cleanup 
 
   const executionInput = await buildConversationAwareExecutionInput(
     session,
-    "One last real-world thing: please go ahead and clean up my desktop now by moving every folder there that starts with drone-company into drone-folder. I do mean all of them, so you do not need to ask again before doing it.",
+    "One last real-world thing: please go ahead and clean up my desktop now by moving every folder there that starts with sample-company into sample-folder. I do mean all of them, so you do not need to ask again before doing it.",
     10
   );
 
   assert.match(executionInput, /Natural desktop-organization follow-up:/);
   assert.match(executionInput, /real Desktop folder move, not just an inspection or summary/i);
   assert.match(executionInput, /Strongest remembered Desktop root in this chat: C:\\Users\\testuser\\Desktop/i);
-  assert.match(executionInput, /Treat the named destination as C:\\Users\\testuser\\Desktop\\drone-folder/i);
-  assert.match(executionInput, /Match Desktop folders whose names start with drone-company\./i);
+  assert.match(executionInput, /Treat the named destination as C:\\Users\\testuser\\Desktop\\sample-folder/i);
+  assert.match(executionInput, /Match Desktop folders whose names start with sample-company\./i);
   assert.match(
     executionInput,
-    /The current tracked workspace folder drone-company-live-smoke-9 also matches that requested prefix; include it in the move unless the user explicitly excluded it\./i
+    /The current tracked workspace folder sample-company-live-smoke-9 also matches that requested prefix; include it in the move unless the user explicitly excluded it\./i
   );
   assert.match(executionInput, /The user explicitly authorized moving all matching folders now; do not ask again before executing the move unless a new blocker appears\./i);
   assert.match(executionInput, /This run must include a real folder move side effect\./i);
@@ -2423,28 +2456,28 @@ test("buildConversationAwareExecutionInput grounds broad Desktop cleanup for mat
     source: "natural_intent",
     confidence: "HIGH",
     lastAffirmedAt: "2026-03-03T00:00:24.000Z",
-    lastUserInput: "Build the drone React app and leave it open in the browser."
+    lastUserInput: "Build the sample React app and leave it open in the browser."
   };
   session.returnHandoff = {
-    id: "handoff:drone-react-live-smoke-2",
+    id: "handoff:sample-react-live-smoke-2",
     status: "completed",
-    goal: "Build the drone React app and leave it open in the browser.",
+    goal: "Build the sample React app and leave it open in the browser.",
     summary: "I built the app and left the preview open.",
     nextSuggestedStep: "Tell me what to change next.",
-    workspaceRootPath: "C:\\Users\\testuser\\Desktop\\drone-react-live-smoke-2",
-    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\drone-react-live-smoke-2\\package.json",
+    workspaceRootPath: "C:\\Users\\testuser\\Desktop\\sample-react-live-smoke-2",
+    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\sample-react-live-smoke-2\\package.json",
     previewUrl: "http://127.0.0.1:4173/",
     changedPaths: [
-      "C:\\Users\\testuser\\Desktop\\drone-react-live-smoke-2\\package.json"
+      "C:\\Users\\testuser\\Desktop\\sample-react-live-smoke-2\\package.json"
     ],
     sourceJobId: "job-cleanup-2",
     updatedAt: "2026-03-03T00:00:25.000Z"
   };
   session.activeWorkspace = {
-    id: "workspace:drone-react-live-smoke-2",
-    label: "Drone React workspace",
-    rootPath: "C:\\Users\\testuser\\Desktop\\drone-react-live-smoke-2",
-    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\drone-react-live-smoke-2\\package.json",
+    id: "workspace:sample-react-live-smoke-2",
+    label: "Sample React workspace",
+    rootPath: "C:\\Users\\testuser\\Desktop\\sample-react-live-smoke-2",
+    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\sample-react-live-smoke-2\\package.json",
     previewUrl: "http://127.0.0.1:4173/",
     browserSessionId: "browser-detached-cleanup-2",
     browserSessionIds: ["browser-detached-cleanup-2"],
@@ -2458,7 +2491,7 @@ test("buildConversationAwareExecutionInput grounds broad Desktop cleanup for mat
     ownershipState: "stale",
     previewStackState: "detached",
     lastChangedPaths: [
-      "C:\\Users\\testuser\\Desktop\\drone-react-live-smoke-2\\package.json"
+      "C:\\Users\\testuser\\Desktop\\sample-react-live-smoke-2\\package.json"
     ],
     sourceJobId: "job-cleanup-2",
     updatedAt: "2026-03-03T00:00:25.000Z"
@@ -2466,18 +2499,18 @@ test("buildConversationAwareExecutionInput grounds broad Desktop cleanup for mat
 
   const executionInput = await buildConversationAwareExecutionInput(
     session,
-    'Please put every file and folder on my desktop with the word "drone" into a folder called drone-dump.',
+    'Please put every file and folder on my desktop with the word "sample" into a folder called sample-dump.',
     10
   );
 
   assert.match(executionInput, /Natural desktop-organization follow-up:/);
   assert.match(executionInput, /real Desktop file-and-folder move, not just an inspection or summary/i);
   assert.match(executionInput, /Strongest remembered Desktop root in this chat: C:\\Users\\testuser\\Desktop/i);
-  assert.match(executionInput, /Treat the named destination as C:\\Users\\testuser\\Desktop\\drone-dump/i);
-  assert.match(executionInput, /Match Desktop files and folders whose names contain the word drone\./i);
+  assert.match(executionInput, /Treat the named destination as C:\\Users\\testuser\\Desktop\\sample-dump/i);
+  assert.match(executionInput, /Match Desktop files and folders whose names contain the word sample\./i);
   assert.match(
     executionInput,
-    /The current tracked workspace folder drone-react-live-smoke-2 also matches that requested word rule; include it in the move unless the user explicitly excluded it\./i
+    /The current tracked workspace folder sample-react-live-smoke-2 also matches that requested word rule; include it in the move unless the user explicitly excluded it\./i
   );
   assert.match(
     executionInput,
@@ -2496,28 +2529,28 @@ test("buildConversationAwareExecutionInput does not misread start-to-finish phra
     source: "natural_intent",
     confidence: "HIGH",
     lastAffirmedAt: "2026-03-03T00:00:24.000Z",
-    lastUserInput: "Please build a small drone project in a folder called drone-company-organize-smoke-a."
+    lastUserInput: "Please build a small sample project in a folder called sample-company-organize-smoke-a."
   };
   session.returnHandoff = {
-    id: "handoff:drone-company-organize-smoke-b",
+    id: "handoff:sample-company-organize-smoke-b",
     status: "completed",
-    goal: "Please build a small drone project in a folder called drone-company-organize-smoke-b.",
-    summary: "Created the second drone-company-organize-smoke workspace.",
+    goal: "Please build a small sample project in a folder called sample-company-organize-smoke-b.",
+    summary: "Created the second sample-company-organize-smoke workspace.",
     nextSuggestedStep: "Tell me what to do next.",
-    workspaceRootPath: "C:\\Users\\testuser\\Desktop\\drone-company-organize-smoke-b",
-    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\drone-company-organize-smoke-b\\index.html",
+    workspaceRootPath: "C:\\Users\\testuser\\Desktop\\sample-company-organize-smoke-b",
+    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\sample-company-organize-smoke-b\\index.html",
     previewUrl: null,
     changedPaths: [
-      "C:\\Users\\testuser\\Desktop\\drone-company-organize-smoke-b\\index.html"
+      "C:\\Users\\testuser\\Desktop\\sample-company-organize-smoke-b\\index.html"
     ],
     sourceJobId: "job-cleanup-3",
     updatedAt: "2026-03-03T00:00:25.000Z"
   };
   session.activeWorkspace = {
-    id: "workspace:drone-company-organize-smoke-b",
-    label: "Drone organize workspace",
-    rootPath: "C:\\Users\\testuser\\Desktop\\drone-company-organize-smoke-b",
-    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\drone-company-organize-smoke-b\\index.html",
+    id: "workspace:sample-company-organize-smoke-b",
+    label: "Sample organize workspace",
+    rootPath: "C:\\Users\\testuser\\Desktop\\sample-company-organize-smoke-b",
+    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\sample-company-organize-smoke-b\\index.html",
     previewUrl: null,
     browserSessionId: null,
     browserSessionIds: [],
@@ -2531,7 +2564,7 @@ test("buildConversationAwareExecutionInput does not misread start-to-finish phra
     ownershipState: "stale",
     previewStackState: "detached",
     lastChangedPaths: [
-      "C:\\Users\\testuser\\Desktop\\drone-company-organize-smoke-b\\index.html"
+      "C:\\Users\\testuser\\Desktop\\sample-company-organize-smoke-b\\index.html"
     ],
     sourceJobId: "job-cleanup-3",
     updatedAt: "2026-03-03T00:00:25.000Z"
@@ -2539,14 +2572,14 @@ test("buildConversationAwareExecutionInput does not misread start-to-finish phra
 
   const executionInput = await buildConversationAwareExecutionInput(
     session,
-    "Please take this from start to finish: move the earlier drone-company-organize-smoke project folders into a folder called drone-web-projects on my desktop.",
+    "Please take this from start to finish: move the earlier sample-company-organize-smoke project folders into a folder called sample-web-projects on my desktop.",
     10
   );
 
   assert.match(executionInput, /Natural desktop-organization follow-up:/);
   assert.match(
     executionInput,
-    /Treat the named destination as C:\\Users\\testuser\\Desktop\\drone-web-projects/i
+    /Treat the named destination as C:\\Users\\testuser\\Desktop\\sample-web-projects/i
   );
   assert.doesNotMatch(executionInput, /Desktop\\finish/i);
 });
@@ -2554,7 +2587,7 @@ test("buildConversationAwareExecutionInput does not misread start-to-finish phra
 test("buildConversationAwareExecutionInput does not misread build destinations as Desktop cleanup work", async () => {
   const executionInput = await buildConversationAwareExecutionInput(
     buildSession(),
-    "Hey, build me a tech landing page for air drones, go until you finish, put it on my desktop, create a folder called drone-company, and leave it open for me.",
+    "Hey, build me a tech landing page for sample products, go until you finish, put it on my desktop, create a folder called sample-company, and leave it open for me.",
     10
   );
 
@@ -2566,7 +2599,7 @@ test("buildConversationAwareExecutionInput derives workspace root and artifact f
   session.browserSessions.push({
     id: "browser-file-1",
     label: "Landing page preview",
-    url: "file:///C:/Users/testuser/Desktop/drone-company/index.html",
+    url: "file:///C:/Users/testuser/Desktop/sample-company/index.html",
     visibility: "visible",
     status: "open",
     sourceJobId: "job-file-1",
@@ -2585,7 +2618,7 @@ test("buildConversationAwareExecutionInput derives workspace root and artifact f
     label: "Current project workspace",
     rootPath: null,
     primaryArtifactPath: null,
-    previewUrl: "file:///C:/Users/testuser/Desktop/drone-company/index.html",
+    previewUrl: "file:///C:/Users/testuser/Desktop/sample-company/index.html",
     browserSessionId: "browser-file-1",
     browserSessionIds: ["browser-file-1"],
     browserSessionStatus: "open",
@@ -2616,7 +2649,7 @@ test("buildConversationAwareExecutionInput derives workspace root and artifact f
     [
       {
         sessionId: "browser-file-1",
-        url: "file:///C:/Users/testuser/Desktop/drone-company/index.html",
+        url: "file:///C:/Users/testuser/Desktop/sample-company/index.html",
         status: "open",
         openedAt: "2026-03-03T00:00:20.000Z",
         closedAt: null,
@@ -2632,9 +2665,9 @@ test("buildConversationAwareExecutionInput derives workspace root and artifact f
     ]
   );
 
-  assert.match(executionInput, /Root path: C:\\Users\\testuser\\Desktop\\drone-company/);
-  assert.match(executionInput, /Primary artifact: C:\\Users\\testuser\\Desktop\\drone-company\\index.html/);
-  assert.match(executionInput, /Preview URL: file:\/\/\/C:\/Users\/testuser\/Desktop\/drone-company\/index\.html/);
+  assert.match(executionInput, /Root path: C:\\Users\\testuser\\Desktop\\sample-company/);
+  assert.match(executionInput, /Primary artifact: C:\\Users\\testuser\\Desktop\\sample-company\\index.html/);
+  assert.match(executionInput, /Preview URL: file:\/\/\/C:\/Users\/testuser\/Desktop\/sample-company\/index\.html/);
 });
 
 test("buildConversationAwareExecutionInput adds an ownership guard for explicit untracked localhost URLs", async () => {
@@ -2652,15 +2685,15 @@ test("buildConversationAwareExecutionInput adds an ownership guard for explicit 
     controlAvailable: true,
     browserProcessPid: 42001,
     linkedProcessLeaseId: "proc-owned-1",
-    linkedProcessCwd: "C:\\Users\\testuser\\Desktop\\drone-company",
+    linkedProcessCwd: "C:\\Users\\testuser\\Desktop\\sample-company",
     linkedProcessPid: 42002,
-    workspaceRootPath: "C:\\Users\\testuser\\Desktop\\drone-company"
+    workspaceRootPath: "C:\\Users\\testuser\\Desktop\\sample-company"
   });
   session.activeWorkspace = {
-    id: "workspace:drone-company",
+    id: "workspace:sample-company",
     label: "Current project workspace",
-    rootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
-    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
+    rootPath: "C:\\Users\\testuser\\Desktop\\sample-company",
+    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
     previewUrl: "http://127.0.0.1:4173/index.html",
     browserSessionId: "browser-owned-1",
     browserSessionIds: ["browser-owned-1"],
@@ -2668,12 +2701,12 @@ test("buildConversationAwareExecutionInput adds an ownership guard for explicit 
     browserProcessPid: 42001,
     previewProcessLeaseId: "proc-owned-1",
     previewProcessLeaseIds: ["proc-owned-1"],
-    previewProcessCwd: "C:\\Users\\testuser\\Desktop\\drone-company",
+    previewProcessCwd: "C:\\Users\\testuser\\Desktop\\sample-company",
     lastKnownPreviewProcessPid: 42002,
     stillControllable: true,
     ownershipState: "tracked",
     previewStackState: "browser_and_preview",
-    lastChangedPaths: ["C:\\Users\\testuser\\Desktop\\drone-company\\index.html"],
+    lastChangedPaths: ["C:\\Users\\testuser\\Desktop\\sample-company\\index.html"],
     sourceJobId: "job-owned-1",
     updatedAt: "2026-03-03T00:00:25.000Z"
   };
@@ -2715,10 +2748,10 @@ test("buildConversationAwareExecutionInput keeps the ownership guard authoritati
     goal: "Please close the landing page we left open earlier so we can move on.",
     summary: "I closed the tracked landing page window from earlier and shut down its linked local preview process.",
     nextSuggestedStep: null,
-    workspaceRootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
-    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
+    workspaceRootPath: "C:\\Users\\testuser\\Desktop\\sample-company",
+    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
     previewUrl: "http://127.0.0.1:4173/index.html",
-    changedPaths: ["C:\\Users\\testuser\\Desktop\\drone-company\\index.html"],
+    changedPaths: ["C:\\Users\\testuser\\Desktop\\sample-company\\index.html"],
     sourceJobId: "job-owned-stale",
     updatedAt: "2026-03-03T00:00:25.000Z"
   };
@@ -2735,15 +2768,15 @@ test("buildConversationAwareExecutionInput keeps the ownership guard authoritati
     controlAvailable: false,
     browserProcessPid: 42001,
     linkedProcessLeaseId: "proc-owned-stale",
-    linkedProcessCwd: "C:\\Users\\testuser\\Desktop\\drone-company",
+    linkedProcessCwd: "C:\\Users\\testuser\\Desktop\\sample-company",
     linkedProcessPid: 42002,
-    workspaceRootPath: "C:\\Users\\testuser\\Desktop\\drone-company"
+    workspaceRootPath: "C:\\Users\\testuser\\Desktop\\sample-company"
   });
   session.activeWorkspace = {
-    id: "workspace:drone-company",
+    id: "workspace:sample-company",
     label: "Current project workspace",
-    rootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
-    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
+    rootPath: "C:\\Users\\testuser\\Desktop\\sample-company",
+    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
     previewUrl: "http://127.0.0.1:4173/index.html",
     browserSessionId: "browser-owned-stale",
     browserSessionIds: ["browser-owned-stale"],
@@ -2751,12 +2784,12 @@ test("buildConversationAwareExecutionInput keeps the ownership guard authoritati
     browserProcessPid: 42001,
     previewProcessLeaseId: "proc-owned-stale",
     previewProcessLeaseIds: ["proc-owned-stale"],
-    previewProcessCwd: "C:\\Users\\testuser\\Desktop\\drone-company",
+    previewProcessCwd: "C:\\Users\\testuser\\Desktop\\sample-company",
     lastKnownPreviewProcessPid: 42002,
     stillControllable: false,
     ownershipState: "stale",
     previewStackState: "detached",
-    lastChangedPaths: ["C:\\Users\\testuser\\Desktop\\drone-company\\index.html"],
+    lastChangedPaths: ["C:\\Users\\testuser\\Desktop\\sample-company\\index.html"],
     sourceJobId: "job-owned-stale",
     updatedAt: "2026-03-03T00:00:25.000Z"
   };

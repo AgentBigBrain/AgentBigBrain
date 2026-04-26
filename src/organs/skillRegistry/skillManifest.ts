@@ -5,112 +5,42 @@
 import type { CreateSkillActionParams } from "../../core/types";
 import type { SkillArtifactPaths } from "../executionRuntime/contracts";
 import type {
-  SkillAllowedSideEffect,
   SkillInventoryEntry,
-  SkillLifecycleStatus,
+  SkillKind,
   SkillManifest,
-  SkillRiskLevel,
   SkillVerificationConfig,
-  SkillVerificationStatus
 } from "./contracts";
-
-const DEFAULT_SKILL_VERSION = "1.0.0";
-const ALLOWED_SIDE_EFFECT_VALUES = new Set<SkillAllowedSideEffect>([
-  "filesystem_read",
-  "filesystem_write",
-  "shell",
-  "process",
-  "network",
-  "memory"
-]);
-const RISK_LEVEL_VALUES = new Set<SkillRiskLevel>(["low", "moderate", "high"]);
-const LIFECYCLE_STATUS_VALUES = new Set<SkillLifecycleStatus>(["active", "deprecated"]);
-const VERIFICATION_STATUS_VALUES = new Set<SkillVerificationStatus>([
-  "unverified",
-  "verified",
-  "failed"
-]);
+import {
+  normalizeAllowedSideEffects,
+  normalizeLifecycleStatus,
+  normalizeMemoryPolicy,
+  normalizeProjectionPolicy,
+  normalizeRiskLevel,
+  normalizeSkillKind,
+  normalizeSkillOrigin,
+  normalizeStringArray,
+  normalizeVerificationStatus,
+  parseVersion,
+  trimToNonEmptyString
+} from "./skillManifestNormalization";
 
 /**
- * Normalizes unknown input into a trimmed non-empty string.
+ * Resolves create-skill kind from explicit params and available content.
  *
- * @param value - Candidate manifest field value.
- * @returns Trimmed string or `null`.
+ * @param params - Create-skill params supplied by the planner/runtime.
+ * @returns Canonical skill kind.
  */
-function trimToNonEmptyString(value: unknown): string | null {
-  if (typeof value !== "string") {
-    return null;
+function resolveCreateSkillKind(params: CreateSkillActionParams): SkillKind {
+  const explicitKind = normalizeSkillKind(params.kind);
+  if (params.kind !== undefined) {
+    return explicitKind;
   }
-
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
-}
-
-/**
- * Normalizes an unknown input into a deduplicated string array.
- *
- * @param value - Candidate manifest field value.
- * @returns Deduplicated trimmed strings.
- */
-function normalizeStringArray(value: unknown): string[] {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-
-  return [...new Set(value.map((entry) => trimToNonEmptyString(entry)).filter(Boolean) as string[])];
-}
-
-/**
- * Filters unknown side-effect input down to the canonical skill side-effect enum values.
- *
- * @param value - Candidate manifest field value.
- * @returns Allowed side-effect values.
- */
-function normalizeAllowedSideEffects(value: unknown): SkillAllowedSideEffect[] {
-  return normalizeStringArray(value)
-    .map((entry) => entry.toLowerCase())
-    .filter((entry): entry is SkillAllowedSideEffect =>
-      ALLOWED_SIDE_EFFECT_VALUES.has(entry as SkillAllowedSideEffect)
-    );
-}
-
-/**
- * Resolves the canonical risk level for a skill manifest.
- *
- * @param value - Candidate manifest field value.
- * @returns Canonical risk level.
- */
-function normalizeRiskLevel(value: unknown): SkillRiskLevel {
-  const normalized = trimToNonEmptyString(value)?.toLowerCase();
-  return normalized && RISK_LEVEL_VALUES.has(normalized as SkillRiskLevel)
-    ? (normalized as SkillRiskLevel)
-    : "low";
-}
-
-/**
- * Resolves the canonical lifecycle status for a skill manifest.
- *
- * @param value - Candidate manifest field value.
- * @returns Canonical lifecycle status.
- */
-function normalizeLifecycleStatus(value: unknown): SkillLifecycleStatus {
-  const normalized = trimToNonEmptyString(value)?.toLowerCase();
-  return normalized && LIFECYCLE_STATUS_VALUES.has(normalized as SkillLifecycleStatus)
-    ? (normalized as SkillLifecycleStatus)
-    : "active";
-}
-
-/**
- * Resolves the canonical verification status for a skill manifest.
- *
- * @param value - Candidate manifest field value.
- * @returns Canonical verification status.
- */
-function normalizeVerificationStatus(value: unknown): SkillVerificationStatus {
-  const normalized = trimToNonEmptyString(value)?.toLowerCase();
-  return normalized && VERIFICATION_STATUS_VALUES.has(normalized as SkillVerificationStatus)
-    ? (normalized as SkillVerificationStatus)
-    : "unverified";
+  const hasCode = trimToNonEmptyString(params.code) !== null;
+  const hasMarkdownInstructions =
+    trimToNonEmptyString(params.instructions) !== null ||
+    trimToNonEmptyString(params.markdownContent) !== null ||
+    trimToNonEmptyString(params.content) !== null;
+  return !hasCode && hasMarkdownInstructions ? "markdown_instruction" : "executable_module";
 }
 
 /**
@@ -144,13 +74,13 @@ function buildDefaultInvocationHint(skillName: string): string {
 }
 
 /**
- * Resolves the manifest version string, falling back to the default version when omitted.
+ * Builds the fallback invocation hint for Markdown guidance skills.
  *
- * @param value - Candidate manifest field value.
- * @returns Canonical version string.
+ * @param skillName - Canonical skill name.
+ * @returns Human-readable invocation hint.
  */
-function parseVersion(value: unknown): string {
-  return trimToNonEmptyString(value) ?? DEFAULT_SKILL_VERSION;
+function buildDefaultMarkdownInvocationHint(skillName: string): string {
+  return `Ask me to use guidance skill ${skillName}.`;
 }
 
 /**
@@ -183,6 +113,7 @@ export function buildSkillManifest(
   artifactPaths: SkillArtifactPaths,
   nowIso: string
 ): SkillManifest {
+  const kind = resolveCreateSkillKind(params);
   const verification = extractSkillVerificationConfig(params);
   const description = trimToNonEmptyString(params.description) ?? buildDefaultDescription(skillName);
   const purpose = trimToNonEmptyString(params.purpose) ?? description;
@@ -196,6 +127,8 @@ export function buildSkillManifest(
 
   return {
     name: skillName,
+    kind,
+    origin: normalizeSkillOrigin(params.origin),
     description,
     purpose,
     inputSummary,
@@ -214,10 +147,23 @@ export function buildSkillManifest(
     verificationExpectedOutputContains: verification.expectedOutputContains,
     userSummary: trimToNonEmptyString(params.userSummary) ?? buildDefaultUserSummary(skillName),
     invocationHints:
-      invocationHints.length > 0 ? invocationHints : [buildDefaultInvocationHint(skillName)],
+      invocationHints.length > 0
+        ? invocationHints
+        : [
+            kind === "markdown_instruction"
+              ? buildDefaultMarkdownInvocationHint(skillName)
+              : buildDefaultInvocationHint(skillName)
+          ],
     lifecycleStatus: "active",
-    primaryPath: artifactPaths.primaryPath,
-    compatibilityPath: artifactPaths.compatibilityPath
+    instructionPath: kind === "markdown_instruction" ? artifactPaths.instructionPath : null,
+    primaryPath:
+      kind === "markdown_instruction" ? artifactPaths.instructionPath : artifactPaths.primaryPath,
+    compatibilityPath:
+      kind === "markdown_instruction"
+        ? artifactPaths.instructionPath
+        : artifactPaths.compatibilityPath,
+    memoryPolicy: normalizeMemoryPolicy(params.memoryPolicy, kind),
+    projectionPolicy: normalizeProjectionPolicy(params.projectionPolicy, kind)
   };
 }
 
@@ -275,6 +221,7 @@ export function parseSkillManifest(input: unknown): SkillManifest | null {
 
   const candidate = input as Partial<SkillManifest>;
   const name = trimToNonEmptyString(candidate.name);
+  const kind = normalizeSkillKind(candidate.kind);
   const createdAt = trimToNonEmptyString(candidate.createdAt);
   const updatedAt = trimToNonEmptyString(candidate.updatedAt);
   const description = trimToNonEmptyString(candidate.description);
@@ -282,8 +229,13 @@ export function parseSkillManifest(input: unknown): SkillManifest | null {
   const inputSummary = trimToNonEmptyString(candidate.inputSummary);
   const outputSummary = trimToNonEmptyString(candidate.outputSummary);
   const userSummary = trimToNonEmptyString(candidate.userSummary);
-  const primaryPath = trimToNonEmptyString(candidate.primaryPath);
-  const compatibilityPath = trimToNonEmptyString(candidate.compatibilityPath);
+  const instructionPath = trimToNonEmptyString(candidate.instructionPath);
+  const primaryPath =
+    trimToNonEmptyString(candidate.primaryPath) ??
+    (kind === "markdown_instruction" ? instructionPath : null);
+  const compatibilityPath =
+    trimToNonEmptyString(candidate.compatibilityPath) ??
+    (kind === "markdown_instruction" ? primaryPath : null);
 
   if (
     !name ||
@@ -295,13 +247,16 @@ export function parseSkillManifest(input: unknown): SkillManifest | null {
     !outputSummary ||
     !userSummary ||
     !primaryPath ||
-    !compatibilityPath
+    !compatibilityPath ||
+    (kind === "markdown_instruction" && !instructionPath)
   ) {
     return null;
   }
 
   return {
     name,
+    kind,
+    origin: normalizeSkillOrigin(candidate.origin),
     description,
     purpose,
     inputSummary,
@@ -323,8 +278,11 @@ export function parseSkillManifest(input: unknown): SkillManifest | null {
     userSummary,
     invocationHints: normalizeStringArray(candidate.invocationHints),
     lifecycleStatus: normalizeLifecycleStatus(candidate.lifecycleStatus),
+    instructionPath,
     primaryPath,
-    compatibilityPath
+    compatibilityPath,
+    memoryPolicy: normalizeMemoryPolicy(candidate.memoryPolicy, kind),
+    projectionPolicy: normalizeProjectionPolicy(candidate.projectionPolicy, kind)
   };
 }
 
@@ -337,6 +295,8 @@ export function parseSkillManifest(input: unknown): SkillManifest | null {
 export function toSkillInventoryEntry(manifest: SkillManifest): SkillInventoryEntry {
   return {
     name: manifest.name,
+    kind: manifest.kind,
+    origin: manifest.origin,
     description: manifest.description,
     userSummary: manifest.userSummary,
     verificationStatus: manifest.verificationStatus,
@@ -344,6 +304,8 @@ export function toSkillInventoryEntry(manifest: SkillManifest): SkillInventoryEn
     tags: manifest.tags,
     invocationHints: manifest.invocationHints,
     lifecycleStatus: manifest.lifecycleStatus,
-    updatedAt: manifest.updatedAt
+    updatedAt: manifest.updatedAt,
+    memoryPolicy: manifest.memoryPolicy,
+    projectionPolicy: manifest.projectionPolicy
   };
 }

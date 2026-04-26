@@ -82,7 +82,7 @@ const SCENARIOS: readonly Scenario[] = [
   {
     id: "task_switch",
     prompt:
-      "Please plan a calm air-drone landing page in three concise steps. Do not build anything yet.",
+      "Please plan a calm air-sample landing page in three concise steps. Do not build anything yet.",
     expectWorkerActivity: true,
     requireReplyAfterWorker: true,
     forbiddenAny: [/Request failed:/i]

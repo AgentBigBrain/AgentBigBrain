@@ -182,7 +182,9 @@ async function stage6SandboxedValidationCycleRunsInIsolatedModeBeforePromotion()
 async function stage6GovernedPromotionControlUsesOrchestratorVotes(): Promise<void> {
   await withAutonomyTestBrain(async (brain) => {
     const result = await brain.runTask(
-      buildTask("Create skill stage6_promoted_skill for stage 6 promotion evidence.")
+      buildTask(
+        "Create skill stage6_promoted_skill with code: export function run(input: string): string { return input.trim(); }"
+      )
     );
     const decision = evaluateGovernedPromotionCandidate(result);
     assert.equal(decision.approved, true);
@@ -194,7 +196,7 @@ async function stage6GovernedPromotionControlUsesOrchestratorVotes(): Promise<vo
       "runtime/skills/stage6_promoted_skill.js"
     );
     const createdContent = await readFile(createdSkillPath, "utf8");
-    assert.ok(createdContent.includes("generatedSkill"));
+    assert.ok(createdContent.includes("function run"));
   });
 }
 
@@ -397,7 +399,9 @@ function stage6DelegationSafetyHarnessEnforcesLimitsAndThresholds(): void {
 async function stage6LearnedSkillConversationalReuseDemonstratesCreationToLaterInvocationTrace(): Promise<void> {
   await withAutonomyTestBrain(async (brain) => {
     const createRun = await brain.runTask(
-      buildTask("Create skill stage6_reuse_skill for conversational reuse evidence.")
+      buildTask(
+        "Create skill stage6_reuse_skill with code: export function run(input: string): string { return input.trim(); }"
+      )
     );
     const promotionDecision = evaluateGovernedPromotionCandidate(createRun);
     assert.equal(promotionDecision.approved, true);

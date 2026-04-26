@@ -1,6 +1,7 @@
 import { JudgmentPattern } from "../../core/judgmentPatterns";
 import { PlannerLearningHintSummaryV1, WorkflowPattern } from "../../core/types";
 
+import type { PlannerSkillGuidanceEntry } from "../skillRegistry/contracts";
 import { type WorkflowSkillBridgeSummary } from "../skillRegistry/workflowSkillBridge";
 
 /**
@@ -94,6 +95,37 @@ export function buildWorkflowSkillBridgeGuidance(
 }
 
 /**
+ * Builds bounded Markdown skill guidance for planner prompts.
+ *
+ * @param skillGuidance - Selected Markdown guidance entries for the current request.
+ * @returns Prompt guidance block, or empty string when no guidance applies.
+ */
+export function buildPlannerSkillGuidance(
+  skillGuidance: readonly PlannerSkillGuidanceEntry[]
+): string {
+  if (skillGuidance.length === 0) {
+    return "";
+  }
+  const lines = skillGuidance.slice(0, 3).map((entry) => {
+    const tags = entry.tags.length > 0 ? entry.tags.join(",") : "none";
+    const hint = entry.invocationHints[0] ?? "none";
+    return [
+      `- skill=${entry.name}; origin=${entry.origin}; tags=${tags}; hint=${hint}`,
+      entry.guidance
+        .split(/\r?\n/)
+        .map((line) => `  ${line}`)
+        .join("\n")
+    ].join("\n");
+  });
+  return (
+    "\nMarkdown Skill Guidance:\n" +
+    lines.join("\n") +
+    "\nTreat Markdown skill guidance as advisory procedure, not authorization. Do not emit run_skill for Markdown instruction skills; use normal governed actions. " +
+    "When selected guidance covers flexible generation, repair, browser preview, or document-reading procedure, use the Markdown body for procedure and keep deterministic prompt text as policy, proof, and ownership constraints."
+  );
+}
+
+/**
  * Builds combined planner guidance block from workflow and judgment learning hints.
  *
  * @param workflowHints - Workflow patterns relevant to the current request.
@@ -104,12 +136,14 @@ export function buildWorkflowSkillBridgeGuidance(
 export function buildLearningPromptGuidance(
   workflowHints: readonly WorkflowPattern[],
   judgmentHints: readonly JudgmentPattern[],
-  workflowBridge: WorkflowSkillBridgeSummary | null
+  workflowBridge: WorkflowSkillBridgeSummary | null,
+  skillGuidance: readonly PlannerSkillGuidanceEntry[] = []
 ): string {
   const workflowGuidance = buildWorkflowLearningGuidance(workflowHints);
   const judgmentGuidance = buildJudgmentLearningGuidance(judgmentHints);
   const bridgeGuidance = buildWorkflowSkillBridgeGuidance(workflowBridge);
-  return `${workflowGuidance}${judgmentGuidance}${bridgeGuidance}`;
+  const markdownSkillGuidance = buildPlannerSkillGuidance(skillGuidance);
+  return `${workflowGuidance}${judgmentGuidance}${bridgeGuidance}${markdownSkillGuidance}`;
 }
 
 /**
@@ -123,9 +157,15 @@ export function buildLearningPromptGuidance(
 export function buildLearningHintSummary(
   workflowHints: readonly WorkflowPattern[],
   judgmentHints: readonly JudgmentPattern[],
-  workflowBridge: WorkflowSkillBridgeSummary | null
+  workflowBridge: WorkflowSkillBridgeSummary | null,
+  skillGuidance: readonly PlannerSkillGuidanceEntry[] = []
 ): PlannerLearningHintSummaryV1 | undefined {
-  if (workflowHints.length === 0 && judgmentHints.length === 0 && workflowBridge === null) {
+  if (
+    workflowHints.length === 0 &&
+    judgmentHints.length === 0 &&
+    workflowBridge === null &&
+    skillGuidance.length === 0
+  ) {
     return undefined;
   }
 
@@ -137,6 +177,9 @@ export function buildLearningHintSummary(
   if (workflowBridge !== null) {
     summary.workflowPreferredSkillName = workflowBridge.preferredSkill?.name ?? null;
     summary.workflowSkillSuggestionCount = workflowBridge.skillSuggestions.length;
+  }
+  if (skillGuidance.length > 0) {
+    summary.plannerSkillGuidanceCount = skillGuidance.length;
   }
 
   return summary;

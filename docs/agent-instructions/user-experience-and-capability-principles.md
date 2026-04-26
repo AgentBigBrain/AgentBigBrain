@@ -67,7 +67,7 @@
      - If the user says `close the landing page` and the runtime has the exact tracked browser
        session plus linked preview lease, close that exact session and stop that exact linked
        preview.
-     - If the user says `organize those drone folders` and one exact tracked preview lease is the
+     - If the user says `organize those sample folders` and one exact tracked preview lease is the
        blocker, stop that exact tracked holder and retry the move.
      - If the user says `pick that older landing page back up` and the runtime can tie that request
        to one stale but attributable workspace, continue with that exact workspace instead of
@@ -85,3 +85,11 @@
      forks.
    - Natural requests like `put it on my desktop`, `open the page`, or `close that app` should map
      to the correct platform resource without making the user supply shell-specific wording.
+10. Prefer Markdown instruction skills for reusable generation know-how.
+   - Site, app, framework, browser-recovery, and document-reading guidance should live in Markdown
+     skills when it is reusable procedure rather than a hard safety rule.
+   - Runtime code may select, validate, normalize, govern, and verify actions, but it should not
+     carry creative page templates, framework source templates, or document-specific interpretation
+     schemas as hidden deterministic fallbacks.
+   - Markdown guidance is not permission. The model may use it to plan, but side effects still need
+     the normal hard constraints, governors, ownership checks, and proof gates.

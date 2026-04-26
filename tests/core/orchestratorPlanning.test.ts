@@ -72,7 +72,8 @@ test("loadPlannerLearningContext returns empty hints for blank current request",
   assert.deepEqual(result, {
     workflowHints: [],
     judgmentHints: [],
-    workflowBridge: null
+    workflowBridge: null,
+    skillGuidance: []
   });
 });
 
@@ -113,9 +114,36 @@ test("loadPlannerLearningContext passes the session lane into workflow hint retr
   assert.deepEqual(result, {
     workflowHints: [],
     judgmentHints: [],
-    workflowBridge: null
+    workflowBridge: null,
+    skillGuidance: []
   });
 });
+
+test("loadPlannerLearningContext includes bounded Markdown skill guidance", async () => {
+  const result = await loadPlannerLearningContext(
+    {
+      listApplicableGuidance: async (query, limit) => {
+        assert.match(query, /static site/i);
+        assert.equal(limit, 3);
+        return [
+          {
+            name: "static-site-generation",
+            origin: "builtin",
+            description: "Static site guidance.",
+            tags: ["static", "site"],
+            invocationHints: ["Ask me to use guidance skill static-site-generation."],
+            guidance: "Prefer a single index.html when no framework is required."
+          }
+        ];
+      }
+    },
+    "Current user request:\nBuild a static site."
+  );
+
+  assert.equal(result.skillGuidance.length, 1);
+  assert.equal(result.skillGuidance[0]?.name, "static-site-generation");
+});
+
 
 test("planOrchestratorAttempt caps actions and annotates planner notes", async () => {
   const traceEvents: Array<Record<string, unknown>> = [];
@@ -170,7 +198,8 @@ test("planOrchestratorAttempt caps actions and annotates planner notes", async (
         preferredReason: null,
         discouragedWorkflowKeys: [],
         skillSuggestions: []
-      }
+      },
+      skillGuidance: []
     },
     plannerModel: "planner-model",
     resolvePlaybookPlanningContext: async (): Promise<Stage685PlaybookPlanningContext> => ({
@@ -222,9 +251,13 @@ test("planOrchestratorAttempt caps actions and annotates planner notes", async (
     (capturedPlannerOptions as Record<string, unknown> | null)?.workflowBridge !== undefined,
     true
   );
+  assert.equal(
+    (capturedPlannerOptions as Record<string, unknown> | null)?.skillGuidance !== undefined,
+    true
+  );
 });
 
-test("planOrchestratorAttempt preserves deterministic framework live lifecycle actions past the generic cap", async () => {
+test("planOrchestratorAttempt applies the generic cap to stale deterministic framework lifecycle notes", async () => {
   const plan = await planOrchestratorAttempt({
     appendTraceEvent: async () => {},
     maxActionsPerTask: 8,
@@ -318,7 +351,8 @@ test("planOrchestratorAttempt preserves deterministic framework live lifecycle a
     plannerLearningContext: {
       workflowHints: [],
       judgmentHints: [],
-      workflowBridge: null
+      workflowBridge: null,
+      skillGuidance: []
     },
     plannerModel: "planner-model",
     resolvePlaybookPlanningContext: async (): Promise<Stage685PlaybookPlanningContext> => ({
@@ -342,8 +376,8 @@ test("planOrchestratorAttempt preserves deterministic framework live lifecycle a
     userInput: "build and leave open"
   });
 
-  assert.equal(plan.actions.length, 11);
-  assert.equal(plan.actions[8]?.type, "start_process");
-  assert.equal(plan.actions[9]?.type, "probe_http");
-  assert.equal(plan.actions[10]?.type, "open_browser");
+  assert.equal(plan.actions.length, 8);
+  assert.equal(plan.actions.some((action) => action.type === "start_process"), false);
+  assert.equal(plan.actions.some((action) => action.type === "probe_http"), false);
+  assert.equal(plan.actions.some((action) => action.type === "open_browser"), false);
 });

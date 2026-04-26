@@ -24,6 +24,10 @@
      - `clarify_build_format`
      - `clarify_execution_mode`
    - Route ids should describe execution shape, not just wording cues.
+   - Build routes should carry explicit build-format metadata, such as static single-file output,
+     framework app output, or ambiguous format requiring clarification. That metadata can select
+     relevant Markdown instruction skills, but it should not trigger hidden deterministic content
+     generation.
 3. Deterministic preprocessing should remain narrow.
    - Before intent resolution, deterministic logic may still detect:
      - explicit slash commands
@@ -83,7 +87,7 @@
      evolve.
 9. The intent engine should keep simple routes simple.
    - Narrow requests such as a single self-contained static page should prefer a bounded route with
-     a small execution contract.
+     a small execution contract and static-site Markdown guidance.
    - Open-ended multi-step work may still escalate into planner or autonomous execution when the
      route contract requires it.
    - A route is not simple if it only appears stable under one wording. Simple routes should remain

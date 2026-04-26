@@ -20,8 +20,10 @@ export function renderSkillInventory(skills: readonly SkillInventoryEntry[]): st
     const firstHint = skill.invocationHints[0];
     const suffix = firstHint ? ` Hint: ${firstHint}` : "";
     const summary = skill.userSummary.replace(/[.?!]+$/u, "");
+    const kind = skill.kind === "markdown_instruction" ? "markdown guidance" : "executable";
+    const origin = skill.origin ? `, ${skill.origin}` : "";
     lines.push(
-      `- ${skill.name} (${skill.verificationStatus}, ${skill.riskLevel} risk): ${summary}.${suffix}`
+      `- ${skill.name} (${kind}${origin}, ${skill.verificationStatus}, ${skill.riskLevel} risk): ${summary}.${suffix}`
     );
   }
   return lines.join("\n");

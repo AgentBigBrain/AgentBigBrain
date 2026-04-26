@@ -159,11 +159,11 @@ function collectBlockedFolderPathsFromUnknown(
       normalizedKey !== "remainingondesktop" &&
       normalizedKey !== "remainingblockedpaths" &&
       normalizedKey !== "sourceremaining" &&
-      normalizedKey !== "remainingdronefoldersondesktop" &&
-      normalizedKey !== "remainingdroneondesktop" &&
-      normalizedKey !== "remainingdronefolders" &&
+      normalizedKey !== "remainingsamplefoldersondesktop" &&
+      normalizedKey !== "remainingsampleondesktop" &&
+      normalizedKey !== "remainingsamplefolders" &&
       normalizedKey !== "remaininginsource" &&
-      normalizedKey !== "remainingdronedirsondesktop"
+      normalizedKey !== "remainingsampledirsondesktop"
     ) {
       continue;
     }

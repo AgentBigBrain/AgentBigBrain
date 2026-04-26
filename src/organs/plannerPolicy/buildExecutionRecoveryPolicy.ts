@@ -277,8 +277,8 @@ export function hasCandidateOnlyHolderShutdownAction(
 
 /**
  * Evaluates whether a local organization move command would also select the named destination
- * folder itself without explicitly excluding it, which risks self-nesting like `drone-folder`
- * moving into `drone-folder`.
+ * folder itself without explicitly excluding it, which risks self-nesting like `sample-folder`
+ * moving into `sample-folder`.
  *
  * @param currentUserRequest - Active planner-facing request text.
  * @param actions - Planned actions produced by the model.

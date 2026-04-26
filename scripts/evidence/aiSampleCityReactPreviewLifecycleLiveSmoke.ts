@@ -1,15 +1,15 @@
 /**
- * @fileoverview Runs a real conversation-manager smoke for the reusable Desktop React app
- * workflow: create or reuse `AI Drone City`, open it in the browser, keep it open through a
- * normal chat turn, then close it and prove the lifecycle truthfully.
+ * @fileoverview Runs a legacy framework-specific conversation-manager smoke for a fresh Desktop
+ * React preview workflow: create a new React landing-page workspace, start a localhost preview
+ * server, open it in the browser, keep it open through a normal chat turn, then close both the
+ * browser and linked preview process.
  */
 
 import assert from "node:assert/strict";
 import { mkdir, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { createServer } from "node:net";
 import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
-
 import { buildDefaultBrain } from "../../src/core/buildBrain";
 import { createBrainConfigFromEnv } from "../../src/core/config";
 import { ensureEnvLoaded } from "../../src/core/envLoader";
@@ -65,7 +65,7 @@ interface LocalIntentProof {
   baseUrl: string;
 }
 
-interface AiDroneCityLifecycleArtifact {
+interface AiSampleCityPreviewLifecycleArtifact {
   generatedAt: string;
   command: string;
   status: "PASS" | "FAIL" | "BLOCKED";
@@ -74,17 +74,24 @@ interface AiDroneCityLifecycleArtifact {
   checks: {
     targetFolderPresent: boolean;
     packageJsonPresent: boolean;
+    nodeModulesPresent: boolean;
+    distIndexPresent: boolean;
     browserOpened: boolean;
+    localhostPreviewUrl: boolean;
     previewReadyAfterOpen: boolean;
+    previewLeaseTracked: boolean;
+    previewProcessRunningAfterOpen: boolean;
     duplicateFolderCountStable: boolean;
     conversationStayedConversational: boolean;
     browserRemainedOpenDuringConversation: boolean;
+    previewProcessStillRunningDuringConversation: boolean;
     browserClosed: boolean;
-    previewStoppedIfNeeded: boolean;
+    previewStopped: boolean;
   };
   targetFolderPath: string;
   previewUrl: string | null;
   browserSessionId: string | null;
+  previewProcessLeaseId: string | null;
   existingVariantNamesBefore: readonly string[];
   existingVariantNamesAfterOpen: readonly string[];
   reusedExistingWorkspace: boolean;
@@ -92,38 +99,44 @@ interface AiDroneCityLifecycleArtifact {
 }
 
 const RUN_ID = `${Date.now()}`;
-const COMMAND_NAME = "tsx scripts/evidence/aiDroneCityReactLifecycleLiveSmoke.ts";
+const COMMAND_NAME = "tsx scripts/evidence/aiSampleCityReactPreviewLifecycleLiveSmoke.ts";
 const ARTIFACT_PATH = path.resolve(
   process.cwd(),
-  "runtime/evidence/ai_drone_city_react_lifecycle_live_smoke_report.json"
+  "runtime/evidence/ai_sample_city_react_preview_lifecycle_live_smoke_report.json"
 );
 const SESSION_PATH = path.resolve(
   process.cwd(),
-  `runtime/ai-drone-city-react-lifecycle-smoke-sessions-${RUN_ID}.json`
+  `runtime/ai-sample-city-react-preview-lifecycle-smoke-sessions-${RUN_ID}.json`
 );
 const STATE_PATH = path.resolve(
   process.cwd(),
-  `runtime/tmp-ai-drone-city-react-lifecycle-state-${RUN_ID}.json`
+  `runtime/tmp-ai-sample-city-react-preview-lifecycle-state-${RUN_ID}.json`
 );
 const LEDGER_SQLITE_PATH = path.resolve(
   process.cwd(),
-  `runtime/tmp-ai-drone-city-react-lifecycle-ledgers-${RUN_ID}.sqlite`
+  `runtime/tmp-ai-sample-city-react-preview-lifecycle-ledgers-${RUN_ID}.sqlite`
 );
 const LIVE_RUN_RUNTIME_PATH = path.resolve(
   process.cwd(),
-  `runtime/tmp-ai-drone-city-react-lifecycle-live-run-${RUN_ID}`
+  `runtime/tmp-ai-sample-city-react-preview-lifecycle-live-run-${RUN_ID}`
 );
-const CONVERSATION_ID = `ai-drone-city-react-lifecycle-smoke-${RUN_ID}`;
-const USER_ID = "ai-drone-city-smoke-user";
-const USERNAME = "fixtureuser";
-const FOLDER_NAME = "AI Drone City";
-const TURN_TIMEOUT_MS = 180_000;
+const CONVERSATION_ID = `ai-sample-city-react-preview-lifecycle-smoke-${RUN_ID}`;
+const USER_ID = "ai-sample-city-preview-smoke-user";
+const USERNAME = "averybrooks11";
+const FOLDER_NAME = `Sample React Preview Smoke ${RUN_ID}`;
+const TURN_TIMEOUT_MS = Number.isFinite(Number(process.env.SAMPLE_CITY_PREVIEW_SMOKE_TURN_TIMEOUT_MS))
+  ? Math.max(60_000, Number(process.env.SAMPLE_CITY_PREVIEW_SMOKE_TURN_TIMEOUT_MS))
+  : 300_000;
 const CONVERSATION_TIMEOUT_MS = 30_000;
-const SMOKE_DEADLINE_MS = 360_000;
+const SMOKE_DEADLINE_MS = 420_000;
 const CLEANUP_STEP_TIMEOUT_MS = 3_000;
 const DIRECT_REPLY_SETTLE_MS = 2_000;
+const KEEP_TEMP_ARTIFACTS =
+  process.env.SAMPLE_CITY_PREVIEW_SMOKE_KEEP_TMP?.trim().toLowerCase() === "true";
 const PROVIDER_BLOCK_PATTERN =
-/(?:429|exceeded your current quota|usage limit|purchase more credits|try again at|rate limit|fetch failed|request timed out|socket hang up|ECONNRESET|effective backend is mock|missing OPENAI_API_KEY)/i;
+  /(?:429|exceeded your current quota|usage limit|purchase more credits|try again at|rate limit|fetch failed|request timed out|socket hang up|ECONNRESET|effective backend is mock|missing OPENAI_API_KEY|provider or runtime step timed out)/i;
+const BOUNDED_RUNTIME_BLOCK_PATTERN =
+  /(?:\bEXECUTABLE_NOT_FOUND\b|\bCOMMAND_TOO_LONG\b|\bDEPENDENCY_MISSING\b|\bVERSION_INCOMPATIBLE\b|\bPROCESS_NOT_READY\b|\bTARGET_NOT_RUNNING\b|unable to resolve pwsh or powershell executable|Deterministic recovery stopped for (?:EXECUTABLE_NOT_FOUND|COMMAND_TOO_LONG|DEPENDENCY_MISSING|VERSION_INCOMPATIBLE|PROCESS_NOT_READY|TARGET_NOT_RUNNING)|Timed out waiting for turn_\d+ to complete|(?:Turn \d+ )?React preview smoke dist\/index\.html is missing|Landing page build proof missing: dist\/index\.html)/i;
 
 const CAPABILITY_SUMMARY_FIXTURE: ConversationCapabilitySummary = {
   provider: "telegram",
@@ -190,6 +203,28 @@ function restoreEnv(snapshot: EnvSnapshot): void {
     }
     process.env[key] = value;
   }
+}
+
+async function reserveLoopbackPort(): Promise<number> {
+  return await new Promise<number>((resolve, reject) => {
+    const server = createServer();
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const address = server.address();
+      if (!address || typeof address === "string") {
+        server.close(() => reject(new Error("Failed to reserve a numeric loopback port.")));
+        return;
+      }
+      const port = address.port;
+      server.close((error) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve(port);
+      });
+    });
+  });
 }
 
 function getRemainingSmokeBudget(deadlineAtMs: number, capMs: number, label: string): number {
@@ -350,6 +385,21 @@ function extractPreviewUrl(session: ConversationSession | null): string | null {
   return null;
 }
 
+function isLoopbackHttpPreviewUrl(url: string | null): boolean {
+  if (!url) {
+    return false;
+  }
+  try {
+    const parsedUrl = new URL(url);
+    return (
+      (parsedUrl.protocol === "http:" || parsedUrl.protocol === "https:") &&
+      (parsedUrl.hostname === "127.0.0.1" || parsedUrl.hostname === "localhost" || parsedUrl.hostname === "::1")
+    );
+  } catch {
+    return false;
+  }
+}
+
 function normalizeTargetFolderCandidate(candidatePath: string): string {
   const trimmedPath = candidatePath.trim();
   if (trimmedPath.length === 0) {
@@ -378,14 +428,6 @@ function extractTargetFolder(session: ConversationSession | null): string | null
   if (browserWorkspacePath) {
     return normalizeTargetFolderCandidate(browserWorkspacePath);
   }
-  const previewUrl = extractPreviewUrl(session);
-  if (previewUrl?.startsWith("file://")) {
-    try {
-      return normalizeTargetFolderCandidate(path.dirname(fileURLToPath(previewUrl)));
-    } catch {
-      return null;
-    }
-  }
   return null;
 }
 
@@ -400,6 +442,21 @@ function extractTrackedBrowserSessionId(session: ConversationSession | null): st
   return session.activeWorkspace?.browserSessionId ?? null;
 }
 
+function extractPreviewProcessLeaseId(session: ConversationSession | null): string | null {
+  if (!session) {
+    return null;
+  }
+  const openBrowserSession = session.browserSessions.find(
+    (entry) =>
+      typeof entry.linkedProcessLeaseId === "string" &&
+      entry.linkedProcessLeaseId.trim().length > 0
+  );
+  if (openBrowserSession?.linkedProcessLeaseId) {
+    return openBrowserSession.linkedProcessLeaseId;
+  }
+  return session.activeWorkspace?.previewProcessLeaseId ?? null;
+}
+
 function extractLatestUserVisibleReply(notifications: readonly CapturedNotification[]): string | null {
   for (const notification of [...notifications].reverse()) {
     const text = notification.text.trim();
@@ -412,29 +469,54 @@ function extractLatestUserVisibleReply(notifications: readonly CapturedNotificat
 }
 
 async function isPreviewReady(url: string | null): Promise<boolean> {
-  if (!url) {
+  if (!isLoopbackHttpPreviewUrl(url)) {
     return false;
   }
-  if (url.startsWith("file://")) {
-    try {
-      return await pathExists(fileURLToPath(url));
-    } catch {
-      return false;
-    }
-  }
   try {
-    const response = await fetchWithTimeout(url, 5_000);
+    const response = await fetchWithTimeout(url!, 5_000);
     return response.ok;
   } catch {
     return false;
   }
 }
 
-async function isPreviewStoppedIfNeeded(url: string | null): Promise<boolean> {
-  if (!url || url.startsWith("file://")) {
-    return true;
+async function isPreviewProcessRunning(
+  adapter: TelegramAdapter,
+  leaseId: string | null
+): Promise<boolean> {
+  if (!leaseId) {
+    return false;
   }
-  return !(await isPreviewReady(url));
+  const snapshots = await adapter.listManagedProcessSnapshots();
+  const snapshot = snapshots.find((entry) => entry.leaseId === leaseId) ?? null;
+  return snapshot !== null && snapshot.statusCode !== "PROCESS_STOPPED";
+}
+
+async function isPreviewProcessStopped(
+  adapter: TelegramAdapter,
+  leaseId: string | null
+): Promise<boolean> {
+  if (!leaseId) {
+    return false;
+  }
+  const snapshots = await adapter.listManagedProcessSnapshots();
+  const snapshot = snapshots.find((entry) => entry.leaseId === leaseId) ?? null;
+  return snapshot !== null && snapshot.statusCode === "PROCESS_STOPPED";
+}
+
+async function countRunningWorkspacePreviewProcesses(
+  adapter: TelegramAdapter,
+  workspaceRootPath: string
+): Promise<number> {
+  const normalizedWorkspaceRoot = path.normalize(workspaceRootPath).toLowerCase();
+  const snapshots = await adapter.listManagedProcessSnapshots();
+  return snapshots.filter((snapshot) => {
+    const normalizedCwd = path.normalize(snapshot.cwd).toLowerCase();
+    return (
+      normalizedCwd === normalizedWorkspaceRoot &&
+      snapshot.statusCode !== "PROCESS_STOPPED"
+    );
+  }).length;
 }
 
 function findProviderBlockerReason(
@@ -473,9 +555,46 @@ function findProviderBlockerReason(
   return assistantTurn?.text ?? null;
 }
 
+function findBoundedRuntimeBlockerReason(
+  session: ConversationSession | null,
+  createdAtFloor?: string
+): string | null {
+  if (!session) {
+    return null;
+  }
+  const blockedJob = [...session.recentJobs]
+    .reverse()
+    .find(
+      (job) =>
+        (!createdAtFloor || job.createdAt >= createdAtFloor) &&
+        (
+          (job.status === "failed" && typeof job.errorMessage === "string") ||
+          typeof job.resultSummary === "string"
+        ) &&
+        BOUNDED_RUNTIME_BLOCK_PATTERN.test(
+          [job.errorMessage ?? "", job.resultSummary ?? ""].join("\n")
+        )
+    );
+  if (blockedJob) {
+    return [blockedJob.errorMessage ?? "", blockedJob.resultSummary ?? ""]
+      .filter((value) => value.trim().length > 0)
+      .join("\n");
+  }
+  const assistantTurn = [...session.conversationTurns]
+    .reverse()
+    .find(
+      (turn) =>
+        turn.role === "assistant" &&
+        (!createdAtFloor || turn.at >= createdAtFloor) &&
+        BOUNDED_RUNTIME_BLOCK_PATTERN.test(turn.text)
+    );
+  return assistantTurn?.text ?? null;
+}
+
 async function cleanupTrackedSmokeResources(session: ConversationSession | null): Promise<void> {
   const browserSessionId = extractTrackedBrowserSessionId(session);
-  if (!browserSessionId) {
+  const previewProcessLeaseId = extractPreviewProcessLeaseId(session);
+  if (!browserSessionId && !previewProcessLeaseId) {
     return;
   }
   const config = createBrainConfigFromEnv();
@@ -488,18 +607,32 @@ async function cleanupTrackedSmokeResources(session: ConversationSession | null)
     undefined,
     browserSessionRegistry
   );
-  await awaitCleanup(cleanupExecutor.executeWithOutcome({
-    id: `cleanup:${browserSessionId}:close_browser`,
-    type: "close_browser",
-    description: `Close lingering AI Drone City smoke browser session ${browserSessionId}.`,
-    params: {
-      sessionId: browserSessionId
-    },
-    estimatedCostUsd: 0.01
-  }));
+  if (browserSessionId) {
+    await awaitCleanup(cleanupExecutor.executeWithOutcome({
+      id: `cleanup:${browserSessionId}:close_browser`,
+      type: "close_browser",
+      description: `Close lingering React preview browser session ${browserSessionId}.`,
+      params: {
+        sessionId: browserSessionId
+      },
+      estimatedCostUsd: 0.01
+    }));
+  }
+  if (previewProcessLeaseId) {
+    await awaitCleanup(cleanupExecutor.executeWithOutcome({
+      id: `cleanup:${previewProcessLeaseId}:stop_process`,
+      type: "stop_process",
+      description: `Stop lingering React preview process ${previewProcessLeaseId}.`,
+      params: {
+        leaseId: previewProcessLeaseId
+      },
+      estimatedCostUsd: 0.01
+    }));
+  }
 }
 
-async function main(): Promise<void> {
+export async function runAiSampleCityReactPreviewLifecycleLiveSmoke():
+Promise<AiSampleCityPreviewLifecycleArtifact> {
   ensureEnvLoaded();
   await mkdir(path.dirname(ARTIFACT_PATH), { recursive: true });
   await cleanupLingeringPlaywrightAutomationBrowsers().catch(() => undefined);
@@ -508,12 +641,14 @@ async function main(): Promise<void> {
 
   const desktopPath = await resolveDesktopPath();
   const targetFolderPath = path.join(desktopPath, FOLDER_NAME);
+  await rm(targetFolderPath, { recursive: true, force: true }).catch(() => undefined);
   const variantNamesBefore = await listTargetVariantNames(desktopPath, FOLDER_NAME);
   const packageJsonPath = path.join(targetFolderPath, "package.json");
   const distIndexPath = path.join(targetFolderPath, "dist", "index.html");
+  const nodeModulesPath = path.join(targetFolderPath, "node_modules");
   const existingWorkspacePresent = await pathExists(packageJsonPath);
-  const existingWorkspaceReady =
-    existingWorkspacePresent && (await pathExists(distIndexPath));
+  const previewPort = await reserveLoopbackPort();
+  const expectedPreviewBaseUrl = `http://127.0.0.1:${previewPort}`;
   const envSnapshot = applyEnvOverrides({
     BRAIN_LIVE_RUN_RUNTIME_PATH: LIVE_RUN_RUNTIME_PATH,
     BRAIN_STATE_JSON_PATH: STATE_PATH,
@@ -539,19 +674,27 @@ async function main(): Promise<void> {
     }
     smokeModelSnapshot = applyEnvOverrides(buildSmokeModelEnvOverrides(localProbe).envOverrides);
 
-    const openTurnGoal = existingWorkspaceReady
-      ? `Handle this end to end: reuse the existing ${FOLDER_NAME} React workspace on my desktop and open the built app in the browser for me. ` +
-        `Do not recreate or reinstall the project if ${FOLDER_NAME}\\package.json and ${FOLDER_NAME}\\dist\\index.html are already present. ` +
-        "Only repair what is missing, then leave the app open for me."
-      : `Handle this end to end: build a small React landing page in a folder called ${FOLDER_NAME} on my desktop, ` +
-        `open it in the browser, and leave it open for me. Reuse the existing ${FOLDER_NAME} workspace ` +
-        "if it is already there instead of recreating it.";
-    const openTurnInput = openTurnGoal;
+    const scaffoldTurnInput =
+      `Handle this first step only: create a new React single page app in a folder called ${FOLDER_NAME} on my desktop. ` +
+      "Use a real scaffold-capable toolchain step, then install dependencies so package.json and node_modules exist. " +
+      "For this turn, stop after the workspace is ready for edits. Do not start a preview server, do not verify localhost, and do not open a browser yet.";
+    const buildTurnInput =
+      `Reuse the existing ${FOLDER_NAME} workspace on my desktop. ` +
+      "Turn it into a calm sample-themed landing page with one homepage hero and four additional sections. " +
+      "Write the real page implementation, then run the build so dist/index.html exists. " +
+      "For this turn, stop after the source edits and build proof exist. Do not start a preview server, do not verify localhost, and do not open a browser yet.";
+    const previewTurnInput =
+      `Reuse the existing ${FOLDER_NAME} workspace on my desktop. ` +
+      `Start its localhost preview server using host 127.0.0.1 and port ${previewPort}, leave that preview running, and do not open a browser yet. ` +
+      "Do not open dist/index.html directly when a real localhost preview server can be started.";
+    const openBrowserTurnInput =
+      `Open the running localhost preview for ${FOLDER_NAME} in the browser and leave it open for me. ` +
+      `Use the tracked preview that is already running on host 127.0.0.1 port ${previewPort}.`;
     const conversationTurnInput =
-      `Looks good. Before changing anything, just talk with me for a minute about what makes ${FOLDER_NAME} feel playful. ` +
+      `Looks good. Before changing anything, just talk with me for a minute about whether ${FOLDER_NAME} feels calm enough. ` +
       "Reply in two short paragraphs and keep the page open.";
     const closeTurnInput =
-      `Thanks. Please close ${FOLDER_NAME} and anything it needs so we can move on.`;
+      `Thanks. Please close ${FOLDER_NAME}, the browser window, and the localhost preview server so we can move on.`;
 
     const brain = buildDefaultBrain();
     const adapter = new TelegramAdapter(brain, {
@@ -585,6 +728,8 @@ async function main(): Promise<void> {
       {
         interpretConversationIntent: async (input, recentTurns, pulseRuleContext) =>
           adapter.interpretConversationIntent(input, recentTurns, pulseRuleContext),
+        runDirectConversationTurn: async (input, receivedAt, session) =>
+          adapter.runDirectConversationTurn(input, receivedAt, session),
         listManagedProcessSnapshots: async () => adapter.listManagedProcessSnapshots(),
         listBrowserSessionSnapshots: async () => adapter.listBrowserSessionSnapshots(),
         localIntentModelResolver,
@@ -681,87 +826,199 @@ async function main(): Promise<void> {
     };
 
     const turn1At = new Date().toISOString();
-    const sessionAfterTurn1 = await runTurn(1, openTurnInput, turn1At);
+    const sessionAfterTurn1 = await runTurn(1, scaffoldTurnInput, turn1At);
     const turn1ProviderBlocker = findProviderBlockerReason(sessionAfterTurn1, turn1At);
     if (turn1ProviderBlocker) {
       throw new Error(turn1ProviderBlocker);
     }
-    const previewUrl = extractPreviewUrl(sessionAfterTurn1);
-    const browserSessionId = extractTrackedBrowserSessionId(sessionAfterTurn1);
-    const variantNamesAfterOpen = await listTargetVariantNames(desktopPath, FOLDER_NAME);
-    const openBrowserSession =
-      sessionAfterTurn1.browserSessions.find((entry) => entry.status === "open") ?? null;
-    const previewReadyAfterOpen = await isPreviewReady(previewUrl);
+    const turn1RuntimeBlocker = findBoundedRuntimeBlockerReason(sessionAfterTurn1, turn1At);
+    if (turn1RuntimeBlocker) {
+      throw new Error(turn1RuntimeBlocker);
+    }
     assert.equal(extractTargetFolder(sessionAfterTurn1), targetFolderPath);
-    assert.ok(await isDirectory(targetFolderPath), "AI Drone City target folder is missing.");
+    assert.ok(await isDirectory(targetFolderPath), "React preview smoke target folder is missing.");
     assert.ok(
       await pathExists(packageJsonPath),
-      "AI Drone City package.json is missing."
+      "React preview smoke package.json is missing."
     );
-    assert.ok(previewUrl, "Turn 1 did not record a preview URL.");
-    assert.ok(browserSessionId, "Turn 1 did not leave a tracked browser session open.");
-    assert.ok(openBrowserSession, "Turn 1 did not leave an open browser session.");
-    assert.ok(previewReadyAfterOpen, "Turn 1 preview is not ready.");
-    assert.ok(
-      variantNamesAfterOpen.length <= Math.max(variantNamesBefore.length, 1),
-      `AI Drone City created duplicate Desktop folders: before=${variantNamesBefore.join(",")} after=${variantNamesAfterOpen.join(",")}`
+    assert.ok(await isDirectory(nodeModulesPath), "React preview smoke node_modules is missing.");
+    assert.equal(
+      sessionAfterTurn1.browserSessions.some((entry) => entry.status === "open"),
+      false,
+      "Turn 1 unexpectedly opened a browser before the preview-open step."
+    );
+    assert.equal(
+      Boolean(extractPreviewProcessLeaseId(sessionAfterTurn1)),
+      false,
+      "Turn 1 unexpectedly started a preview process before the preview-start step."
     );
 
     const turn2At = new Date(Date.now() + 5_000).toISOString();
-    const sessionAfterTurn2 = await runTurn(2, conversationTurnInput, turn2At, true);
-    const turn2Capture = allTurns[allTurns.length - 1];
-    const latestAssistantTurn = [...sessionAfterTurn2.conversationTurns]
-      .reverse()
-      .find((turn) => turn.role === "assistant");
-    const conversationReply =
-      extractLatestUserVisibleReply(turn2Capture?.notifications ?? []) ??
-      latestAssistantTurn?.text ??
-      "";
-    const browserDuringConversation =
-      sessionAfterTurn2.browserSessions.find((entry) => entry.id === browserSessionId) ??
-      sessionAfterTurn2.browserSessions.find((entry) => entry.status === "open") ??
-      null;
-    const turn2FreshJobs = sessionAfterTurn2.recentJobs.filter(
-      (job) => job.createdAt >= turn2At
-    );
-    assert.match(conversationReply, /\n\n/, "Turn 2 did not stay conversational.");
+    const sessionAfterTurn2 = await runTurn(2, buildTurnInput, turn2At);
+    const turn2ProviderBlocker = findProviderBlockerReason(sessionAfterTurn2, turn2At);
+    if (turn2ProviderBlocker) {
+      throw new Error(turn2ProviderBlocker);
+    }
+    const turn2RuntimeBlocker = findBoundedRuntimeBlockerReason(sessionAfterTurn2, turn2At);
+    if (turn2RuntimeBlocker) {
+      throw new Error(turn2RuntimeBlocker);
+    }
+    assert.equal(extractTargetFolder(sessionAfterTurn2), targetFolderPath);
+    assert.ok(await pathExists(distIndexPath), "Turn 2 React preview smoke dist/index.html is missing.");
     assert.equal(
-      sessionAfterTurn2.queuedJobs.length,
-      0,
-      "Turn 2 unexpectedly left queued work behind."
-    );
-    assert.equal(
-      sessionAfterTurn2.runningJobId,
-      null,
-      "Turn 2 unexpectedly left work running."
-    );
-    assert.equal(
-      turn2FreshJobs.some((job) => job.executionInput.startsWith("[AUTONOMOUS_LOOP_GOAL]")),
+      sessionAfterTurn2.browserSessions.some((entry) => entry.status === "open"),
       false,
-      "Turn 2 unexpectedly restarted autonomous execution."
+      "Turn 2 unexpectedly opened a browser before the browser-open step."
     );
     assert.equal(
-      browserDuringConversation?.status,
-      "open",
-      "AI Drone City browser did not remain open during conversation."
+      Boolean(extractPreviewProcessLeaseId(sessionAfterTurn2)),
+      false,
+      "Turn 2 unexpectedly started a preview process before the preview-start step."
     );
 
     const turn3At = new Date(Date.now() + 10_000).toISOString();
-    const sessionAfterTurn3 = await runTurn(3, closeTurnInput, turn3At);
+    const sessionAfterTurn3 = await runTurn(3, previewTurnInput, turn3At);
     const turn3ProviderBlocker = findProviderBlockerReason(sessionAfterTurn3, turn3At);
     if (turn3ProviderBlocker) {
       throw new Error(turn3ProviderBlocker);
     }
-    const trackedBrowserAfterClose =
-      sessionAfterTurn3.browserSessions.find((entry) => entry.id === browserSessionId) ??
-      sessionAfterTurn3.browserSessions[0] ??
+    const turn3RuntimeBlocker = findBoundedRuntimeBlockerReason(sessionAfterTurn3, turn3At);
+    if (turn3RuntimeBlocker) {
+      throw new Error(turn3RuntimeBlocker);
+    }
+    const previewUrl = extractPreviewUrl(sessionAfterTurn3);
+    const previewProcessLeaseId = extractPreviewProcessLeaseId(sessionAfterTurn3);
+    const runningWorkspacePreviewProcessCountAfterStart =
+      await countRunningWorkspacePreviewProcesses(adapter, targetFolderPath);
+    assert.ok(isLoopbackHttpPreviewUrl(previewUrl), "Turn 3 did not record a localhost preview URL.");
+    assert.ok(
+      previewUrl?.startsWith(expectedPreviewBaseUrl),
+      `Turn 3 did not use the requested preview URL ${expectedPreviewBaseUrl}/.`
+    );
+    assert.ok(previewProcessLeaseId, "Turn 3 did not leave a linked preview-process lease.");
+    assert.equal(
+      sessionAfterTurn3.browserSessions.some((entry) => entry.status === "open"),
+      false,
+      "Turn 3 unexpectedly opened a browser before the browser-open step."
+    );
+    const previewReadyAfterOpen = await isPreviewReady(previewUrl);
+    const previewProcessRunningAfterOpen = await isPreviewProcessRunning(
+      adapter,
+      previewProcessLeaseId
+    );
+    assert.ok(previewReadyAfterOpen, "Turn 3 preview is not ready.");
+    assert.ok(previewProcessRunningAfterOpen, "Turn 3 preview process is not still running.");
+    assert.ok(
+      runningWorkspacePreviewProcessCountAfterStart >= 1,
+      "Turn 3 did not leave any React preview process running."
+    );
+
+    const turn4At = new Date(Date.now() + 15_000).toISOString();
+    const sessionAfterTurn4 = await runTurn(4, openBrowserTurnInput, turn4At);
+    const turn4ProviderBlocker = findProviderBlockerReason(sessionAfterTurn4, turn4At);
+    if (turn4ProviderBlocker) {
+      throw new Error(turn4ProviderBlocker);
+    }
+    const turn4RuntimeBlocker = findBoundedRuntimeBlockerReason(sessionAfterTurn4, turn4At);
+    if (turn4RuntimeBlocker) {
+      throw new Error(turn4RuntimeBlocker);
+    }
+    const browserSessionId = extractTrackedBrowserSessionId(sessionAfterTurn4);
+    const variantNamesAfterOpen = await listTargetVariantNames(desktopPath, FOLDER_NAME);
+    const openBrowserSession =
+      sessionAfterTurn4.browserSessions.find((entry) => entry.status === "open") ?? null;
+    const runningWorkspacePreviewProcessCountAfterOpen =
+      await countRunningWorkspacePreviewProcesses(adapter, targetFolderPath);
+    assert.ok(browserSessionId, "Turn 4 did not leave a tracked browser session open.");
+    assert.ok(openBrowserSession, "Turn 4 did not leave an open browser session.");
+    assert.ok(
+      runningWorkspacePreviewProcessCountAfterOpen >= 1,
+      "Turn 4 did not keep the React preview process running after opening the browser."
+    );
+    assert.ok(
+      variantNamesAfterOpen.length <= Math.max(variantNamesBefore.length, 1),
+      `React preview smoke created duplicate Desktop folders: before=${variantNamesBefore.join(",")} after=${variantNamesAfterOpen.join(",")}`
+    );
+
+    const turn5At = new Date(Date.now() + 20_000).toISOString();
+    const sessionAfterTurn5 = await runTurn(5, conversationTurnInput, turn5At, true);
+    const turn5Capture = allTurns[allTurns.length - 1];
+    const latestAssistantTurn = [...sessionAfterTurn5.conversationTurns]
+      .reverse()
+      .find((turn) => turn.role === "assistant");
+    const conversationReply =
+      extractLatestUserVisibleReply(turn5Capture?.notifications ?? []) ??
+      latestAssistantTurn?.text ??
+      "";
+    const browserDuringConversation =
+      sessionAfterTurn5.browserSessions.find((entry) => entry.id === browserSessionId) ??
+      sessionAfterTurn5.browserSessions.find((entry) => entry.status === "open") ??
       null;
-    const artifact: AiDroneCityLifecycleArtifact = {
+    const turn5FreshJobs = sessionAfterTurn5.recentJobs.filter(
+      (job) => job.createdAt >= turn5At
+    );
+    const previewProcessStillRunningDuringConversation = await isPreviewProcessRunning(
+      adapter,
+      previewProcessLeaseId
+    );
+    assert.match(conversationReply, /\n\n/, "Turn 5 did not stay conversational.");
+    assert.equal(
+      sessionAfterTurn5.queuedJobs.length,
+      0,
+      "Turn 5 unexpectedly left queued work behind."
+    );
+    assert.equal(
+      sessionAfterTurn5.runningJobId,
+      null,
+      "Turn 5 unexpectedly left work running."
+    );
+    assert.equal(
+      turn5FreshJobs.some((job) => job.executionInput?.startsWith("[AUTONOMOUS_LOOP_GOAL]") === true),
+      false,
+      "Turn 5 unexpectedly restarted autonomous execution."
+    );
+    assert.equal(
+      browserDuringConversation?.status,
+      "open",
+      "React preview browser did not remain open during conversation."
+    );
+    assert.equal(
+      previewProcessStillRunningDuringConversation,
+      true,
+      "React preview process did not remain running during conversation."
+    );
+    assert.equal(
+      await isPreviewReady(previewUrl),
+      true,
+      "React localhost preview stopped responding during conversation."
+    );
+
+    const turn6At = new Date(Date.now() + 25_000).toISOString();
+    const sessionAfterTurn6 = await runTurn(6, closeTurnInput, turn6At);
+    const turn6ProviderBlocker = findProviderBlockerReason(sessionAfterTurn6, turn6At);
+    if (turn6ProviderBlocker) {
+      throw new Error(turn6ProviderBlocker);
+    }
+    const turn6RuntimeBlocker = findBoundedRuntimeBlockerReason(sessionAfterTurn6, turn6At);
+    if (turn6RuntimeBlocker) {
+      throw new Error(turn6RuntimeBlocker);
+    }
+    const trackedBrowserAfterClose =
+      sessionAfterTurn6.browserSessions.find((entry) => entry.id === browserSessionId) ??
+      sessionAfterTurn6.browserSessions[0] ??
+      null;
+    const previewStopped = !(await isPreviewReady(previewUrl));
+    const previewProcessStopped = await isPreviewProcessStopped(adapter, previewProcessLeaseId);
+    const runningWorkspacePreviewProcessCountAfterClose =
+      await countRunningWorkspacePreviewProcesses(adapter, targetFolderPath);
+    const artifact: AiSampleCityPreviewLifecycleArtifact = {
       generatedAt: new Date().toISOString(),
       command: COMMAND_NAME,
       status:
         trackedBrowserAfterClose?.status === "closed" &&
-        (await isPreviewStoppedIfNeeded(previewUrl))
+        previewStopped &&
+        previewProcessStopped &&
+        runningWorkspacePreviewProcessCountAfterClose === 0
           ? "PASS"
           : "FAIL",
       blockerReason: null,
@@ -777,17 +1034,27 @@ async function main(): Promise<void> {
       checks: {
         targetFolderPresent: await isDirectory(targetFolderPath),
         packageJsonPresent: await pathExists(path.join(targetFolderPath, "package.json")),
+        nodeModulesPresent: await isDirectory(nodeModulesPath),
+        distIndexPresent: await pathExists(distIndexPath),
         browserOpened: Boolean(browserSessionId),
+        localhostPreviewUrl: isLoopbackHttpPreviewUrl(previewUrl),
         previewReadyAfterOpen,
+        previewLeaseTracked: Boolean(previewProcessLeaseId),
+        previewProcessRunningAfterOpen,
         duplicateFolderCountStable: variantNamesAfterOpen.length <= Math.max(variantNamesBefore.length, 1),
         conversationStayedConversational: /\n\n/.test(conversationReply),
         browserRemainedOpenDuringConversation: browserDuringConversation?.status === "open",
+        previewProcessStillRunningDuringConversation,
         browserClosed: trackedBrowserAfterClose?.status === "closed",
-        previewStoppedIfNeeded: await isPreviewStoppedIfNeeded(previewUrl)
+        previewStopped:
+          previewStopped &&
+          previewProcessStopped &&
+          runningWorkspacePreviewProcessCountAfterClose === 0
       },
       targetFolderPath,
       previewUrl,
       browserSessionId,
+      previewProcessLeaseId,
       existingVariantNamesBefore: variantNamesBefore,
       existingVariantNamesAfterOpen: variantNamesAfterOpen,
       reusedExistingWorkspace: existingWorkspacePresent,
@@ -800,10 +1067,11 @@ async function main(): Promise<void> {
 
     if (artifact.status !== "PASS") {
       throw new Error(
-        "AI Drone City React lifecycle smoke failed. " +
+        "React preview lifecycle smoke failed. " +
         JSON.stringify(artifact.checks)
       );
     }
+    return artifact;
   } catch (error) {
     const localProbe = await probeLocalIntentModelFromEnv().catch(() => ({
       enabled: false,
@@ -815,10 +1083,14 @@ async function main(): Promise<void> {
       baseUrl: "unknown"
     }));
     const variantNamesAfterOpen = await listTargetVariantNames(desktopPath, FOLDER_NAME).catch(() => []);
-    const artifact: AiDroneCityLifecycleArtifact = {
+    const artifact: AiSampleCityPreviewLifecycleArtifact = {
       generatedAt: new Date().toISOString(),
       command: COMMAND_NAME,
-      status: PROVIDER_BLOCK_PATTERN.test(String(error)) ? "BLOCKED" : "FAIL",
+      status:
+        PROVIDER_BLOCK_PATTERN.test(String(error)) ||
+        BOUNDED_RUNTIME_BLOCK_PATTERN.test(String(error))
+          ? "BLOCKED"
+          : "FAIL",
       blockerReason: error instanceof Error ? error.message : String(error),
       localIntentModel: {
         enabled: localProbe.enabled,
@@ -832,17 +1104,27 @@ async function main(): Promise<void> {
       checks: {
         targetFolderPresent: await isDirectory(targetFolderPath),
         packageJsonPresent: await pathExists(path.join(targetFolderPath, "package.json")),
+        nodeModulesPresent: await isDirectory(nodeModulesPath),
+        distIndexPresent: await pathExists(distIndexPath),
         browserOpened: Boolean(extractTrackedBrowserSessionId(latestSession)),
+        localhostPreviewUrl: isLoopbackHttpPreviewUrl(extractPreviewUrl(latestSession)),
         previewReadyAfterOpen: await isPreviewReady(extractPreviewUrl(latestSession)),
+        previewLeaseTracked: Boolean(extractPreviewProcessLeaseId(latestSession)),
+        previewProcessRunningAfterOpen: false,
         duplicateFolderCountStable: variantNamesAfterOpen.length <= Math.max(variantNamesBefore.length, 1),
         conversationStayedConversational: false,
         browserRemainedOpenDuringConversation: false,
-        browserClosed: latestSession?.browserSessions.every((entry) => entry.status === "closed") ?? false,
-        previewStoppedIfNeeded: await isPreviewStoppedIfNeeded(extractPreviewUrl(latestSession))
+        previewProcessStillRunningDuringConversation: false,
+        browserClosed:
+          (latestSession as ConversationSession | null)?.browserSessions.every(
+            (entry) => entry.status === "closed"
+          ) ?? false,
+        previewStopped: false
       },
       targetFolderPath,
       previewUrl: extractPreviewUrl(latestSession),
       browserSessionId: extractTrackedBrowserSessionId(latestSession),
+      previewProcessLeaseId: extractPreviewProcessLeaseId(latestSession),
       existingVariantNamesBefore: variantNamesBefore,
       existingVariantNamesAfterOpen: variantNamesAfterOpen,
       reusedExistingWorkspace: existingWorkspacePresent,
@@ -851,17 +1133,25 @@ async function main(): Promise<void> {
     await writeFile(ARTIFACT_PATH, JSON.stringify(artifact, null, 2) + os.EOL, "utf8");
     throw error;
   } finally {
+    await cleanupTrackedSmokeResources(latestSession).catch(() => undefined);
+    await cleanupLingeringPlaywrightAutomationBrowsers().catch(() => undefined);
     if (smokeModelSnapshot) {
       restoreEnv(smokeModelSnapshot);
     }
-    await rm(LIVE_RUN_RUNTIME_PATH, { recursive: true, force: true }).catch(() => undefined);
-    await rm(STATE_PATH, { force: true }).catch(() => undefined);
-    await rm(`${STATE_PATH}.lock`, { force: true }).catch(() => undefined);
-    await rm(LEDGER_SQLITE_PATH, { force: true }).catch(() => undefined);
-    await rm(`${LEDGER_SQLITE_PATH}-shm`, { force: true }).catch(() => undefined);
-    await rm(`${LEDGER_SQLITE_PATH}-wal`, { force: true }).catch(() => undefined);
+    if (!KEEP_TEMP_ARTIFACTS) {
+      await rm(LIVE_RUN_RUNTIME_PATH, { recursive: true, force: true }).catch(() => undefined);
+      await rm(STATE_PATH, { force: true }).catch(() => undefined);
+      await rm(`${STATE_PATH}.lock`, { force: true }).catch(() => undefined);
+      await rm(LEDGER_SQLITE_PATH, { force: true }).catch(() => undefined);
+      await rm(`${LEDGER_SQLITE_PATH}-shm`, { force: true }).catch(() => undefined);
+      await rm(`${LEDGER_SQLITE_PATH}-wal`, { force: true }).catch(() => undefined);
+    }
     restoreEnv(envSnapshot);
   }
+}
+
+async function main(): Promise<void> {
+  await runAiSampleCityReactPreviewLifecycleLiveSmoke();
 }
 
 if (require.main === module) {

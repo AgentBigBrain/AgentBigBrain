@@ -40,12 +40,12 @@ test("telegram desktop workflow live smoke blends conversation with real Desktop
   assert.ok(
     artifact.results.some(
       (result) =>
-        result.id === "cleanup_desktop_drone_folders" &&
+        result.id === "cleanup_desktop_sample_folders" &&
         result.pass &&
         result.latestRecentJobStatus === "completed" &&
         /^I moved .+ into /i.test(result.latestRecentJobSummary ?? result.reply ?? "")
     )
   );
-  assert.equal(artifact.finalRootFolders.length, 0);
-  assert.ok(artifact.cleanupBaselineRootFolders.length > 0);
+  assert.ok(artifact.cleanupBaselineRootFolders.includes(artifact.targetFolderName));
+  assert.equal(artifact.finalRootFolders.includes(artifact.targetFolderName), false);
 });

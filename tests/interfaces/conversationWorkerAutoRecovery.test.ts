@@ -52,7 +52,7 @@ test("enqueueAutomaticTrackedWorkspaceRecoveryRetry fails closed when the tracke
   session.activeWorkspace = {
     id: "workspace-1",
     label: "Current project workspace",
-    rootPath: "C:\\Users\\testuser\\OneDrive\\Desktop\\drone-company-a",
+    rootPath: "C:\\Users\\testuser\\OneDrive\\Desktop\\sample-company-a",
     primaryArtifactPath: null,
     previewUrl: null,
     browserSessionId: null,
@@ -102,7 +102,7 @@ test("enqueueAutomaticTrackedWorkspaceRecoveryRetry queues one post-shutdown org
   const nowIso = "2026-03-14T22:10:00.000Z";
   const completedAt = "2026-03-14T22:10:05.000Z";
   const sourceInput =
-    "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.";
+    "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.";
   const session = buildSessionSeed({
     provider: "telegram",
     conversationId: "chat-auto-recovery-1",
@@ -254,7 +254,7 @@ test("enqueueAutomaticTrackedWorkspaceRecoveryRetry queues one post-shutdown org
         },
         mode: "fast_path",
         approved: true,
-        output: "Directory contents:\ndrone-company-a\ndrone-company-b\ndrone-web-projects",
+        output: "Directory contents:\nsample-company-a\nsample-company-b\nsample-web-projects",
         blockedBy: [],
         violations: [],
         votes: []
@@ -299,7 +299,7 @@ test("enqueueAutomaticTrackedWorkspaceRecoveryRetry queues a marker-bearing exac
   const nowIso = "2026-03-14T22:30:00.000Z";
   const completedAt = "2026-03-14T22:30:05.000Z";
   const sourceInput =
-    "Please organize every drone-* project folder into drone-folder on my desktop.";
+    "Please organize every sample-* project folder into sample-folder on my desktop.";
   const session = buildSessionSeed({
     provider: "telegram",
     conversationId: "chat-auto-recovery-3",
@@ -347,9 +347,9 @@ test("enqueueAutomaticTrackedWorkspaceRecoveryRetry queues a marker-bearing exac
         {
           id: "action-inspect",
           type: "inspect_workspace_resources",
-          description: "Inspect the blocked drone workspace resources.",
+          description: "Inspect the blocked sample workspace resources.",
           params: {
-            workspaceRoot: "C:\\Users\\testuser\\OneDrive\\Desktop\\drone-company-a"
+            workspaceRoot: "C:\\Users\\testuser\\OneDrive\\Desktop\\sample-company-a"
           },
           estimatedCostUsd: 0.05
         }
@@ -384,9 +384,9 @@ test("enqueueAutomaticTrackedWorkspaceRecoveryRetry queues a marker-bearing exac
         action: {
           id: "action-inspect",
           type: "inspect_workspace_resources",
-          description: "Inspect the blocked drone workspace resources.",
+          description: "Inspect the blocked sample workspace resources.",
           params: {
-            workspaceRoot: "C:\\Users\\testuser\\OneDrive\\Desktop\\drone-company-a"
+            workspaceRoot: "C:\\Users\\testuser\\OneDrive\\Desktop\\sample-company-a"
           },
           estimatedCostUsd: 0.05
         },
@@ -437,7 +437,7 @@ test("enqueueAutomaticTrackedWorkspaceRecoveryRetry does not queue inspect-first
   const nowIso = "2026-03-15T19:00:00.000Z";
   const completedAt = "2026-03-15T19:00:05.000Z";
   const sourceInput =
-    "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.";
+    "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.";
   const session = buildSessionSeed({
     provider: "telegram",
     conversationId: "chat-auto-recovery-inspect-first",
@@ -515,7 +515,7 @@ test("enqueueAutomaticTrackedWorkspaceRecoveryRetry does not queue inspect-first
         {
           id: "action-move",
           type: "shell_command",
-          description: "Move matching drone folders.",
+          description: "Move matching sample folders.",
           params: {
             command: "Move-Item ..."
           },
@@ -528,7 +528,7 @@ test("enqueueAutomaticTrackedWorkspaceRecoveryRetry does not queue inspect-first
         action: {
           id: "action-move",
           type: "shell_command",
-          description: "Move matching drone folders.",
+          description: "Move matching sample folders.",
           params: {
             command: "Move-Item ..."
           },
@@ -573,7 +573,7 @@ test("enqueueAutomaticTrackedWorkspaceRecoveryRetry does not queue behind newer 
   const nowIso = "2026-03-20T14:00:00.000Z";
   const completedAt = "2026-03-20T14:00:05.000Z";
   const sourceInput =
-    "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.";
+    "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.";
   const session = buildSessionSeed({
     provider: "telegram",
     conversationId: "chat-auto-recovery-newer-queued-work",
@@ -628,9 +628,9 @@ test("enqueueAutomaticTrackedWorkspaceRecoveryRetry does not queue behind newer 
         {
           id: "action-inspect",
           type: "inspect_workspace_resources",
-          description: "Inspect the blocked drone workspace resources.",
+          description: "Inspect the blocked sample workspace resources.",
           params: {
-            workspaceRoot: "C:\\Users\\testuser\\OneDrive\\Desktop\\drone-company-a"
+            workspaceRoot: "C:\\Users\\testuser\\OneDrive\\Desktop\\sample-company-a"
           },
           estimatedCostUsd: 0.05
         }
@@ -665,9 +665,9 @@ test("enqueueAutomaticTrackedWorkspaceRecoveryRetry does not queue behind newer 
         action: {
           id: "action-inspect",
           type: "inspect_workspace_resources",
-          description: "Inspect the blocked drone workspace resources.",
+          description: "Inspect the blocked sample workspace resources.",
           params: {
-            workspaceRoot: "C:\\Users\\testuser\\OneDrive\\Desktop\\drone-company-a"
+            workspaceRoot: "C:\\Users\\testuser\\OneDrive\\Desktop\\sample-company-a"
           },
           estimatedCostUsd: 0.05
         },
@@ -704,9 +704,9 @@ test("enqueueAutomaticTrackedWorkspaceRecoveryRetry promotes live tracked worksp
   const nowIso = "2026-03-15T19:10:00.000Z";
   const completedAt = "2026-03-15T19:10:05.000Z";
   const sourceInput =
-    "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.";
-  const workspaceRootA = "C:\\Users\\testuser\\OneDrive\\Desktop\\drone-company-a";
-  const workspaceRootB = "C:\\Users\\testuser\\OneDrive\\Desktop\\drone-company-b";
+    "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.";
+  const workspaceRootA = "C:\\Users\\testuser\\OneDrive\\Desktop\\sample-company-a";
+  const workspaceRootB = "C:\\Users\\testuser\\OneDrive\\Desktop\\sample-company-b";
   const session = buildSessionSeed({
     provider: "telegram",
     conversationId: "chat-auto-recovery-exact-from-session",
@@ -841,7 +841,7 @@ test("enqueueAutomaticTrackedWorkspaceRecoveryRetry promotes live tracked worksp
         {
           id: "action-move",
           type: "shell_command",
-          description: "Move matching drone folders.",
+          description: "Move matching sample folders.",
           params: {
             command: "Move-Item ..."
           },
@@ -854,7 +854,7 @@ test("enqueueAutomaticTrackedWorkspaceRecoveryRetry promotes live tracked worksp
         action: {
           id: "action-move",
           type: "shell_command",
-          description: "Move matching drone folders.",
+          description: "Move matching sample folders.",
           params: {
             command: "Move-Item ..."
           },
@@ -914,14 +914,14 @@ test("enqueueAutomaticTrackedWorkspaceRecoveryRetry promotes live tracked worksp
 
 test("deriveWorkspaceRecoverySignal recovers blocked desktop folder paths from PowerShell move errors", async () => {
   const sourceInput =
-    "Every folder with the name beginning in drone should go in drone-folder on my desktop.";
+    "Every folder with the name beginning in sample should go in sample-folder on my desktop.";
   const originalOneDrive = process.env.OneDrive;
   const originalUserProfile = process.env.USERPROFILE;
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-workspace-recovery-"));
   const oneDriveRoot = path.join(tempRoot, "OneDrive");
   const desktopRoot = path.join(oneDriveRoot, "Desktop");
-  await mkdir(path.join(desktopRoot, "drone-company"), { recursive: true });
-  await mkdir(path.join(desktopRoot, "drone-company-live-smoke-1773407921176"), {
+  await mkdir(path.join(desktopRoot, "sample-company"), { recursive: true });
+  await mkdir(path.join(desktopRoot, "sample-company-live-smoke-1773407921176"), {
     recursive: true
   });
   process.env.OneDrive = oneDriveRoot;
@@ -935,12 +935,12 @@ test("deriveWorkspaceRecoverySignal recovers blocked desktop folder paths from P
     },
     plan: {
       taskId: "task-auto-recovery-paths",
-      plannerNotes: "Move matching drone folders.",
+      plannerNotes: "Move matching sample folders.",
       actions: [
         {
           id: "action-shell",
           type: "shell_command",
-          description: "Move matching drone folders.",
+          description: "Move matching sample folders.",
           params: {
             command: "Move-Item ..."
           },
@@ -953,7 +953,7 @@ test("deriveWorkspaceRecoverySignal recovers blocked desktop folder paths from P
         action: {
           id: "action-shell",
           type: "shell_command",
-          description: "Move matching drone folders.",
+          description: "Move matching sample folders.",
           params: {
             command: "Move-Item ..."
           },
@@ -964,7 +964,7 @@ test("deriveWorkspaceRecoverySignal recovers blocked desktop folder paths from P
         output: [
           "Shell failed:",
           "Move-Item : The process cannot access the file because it is being used by another process.",
-          "    + CategoryInfo          : WriteError: (C:\\Users\\testuser\\...p\\drone-company:DirectoryInfo) [Move-Item], IOException",
+          "    + CategoryInfo          : WriteError: (C:\\Users\\testuser\\...p\\sample-company:DirectoryInfo) [Move-Item], IOException",
           "    + CategoryInfo          : WriteError: (C:\\Users\\testuser\\...e-1773407921176:DirectoryInfo) [Move-Item], IOException"
         ].join("\n"),
         blockedBy: [],
@@ -988,13 +988,13 @@ test("deriveWorkspaceRecoverySignal recovers blocked desktop folder paths from P
 
     assert.ok(signal);
     assert.deepEqual(signal.blockedFolderPaths, [
-      path.join(desktopRoot, "drone-company"),
-      path.join(desktopRoot, "drone-company-live-smoke-1773407921176")
+      path.join(desktopRoot, "sample-company"),
+      path.join(desktopRoot, "sample-company-live-smoke-1773407921176")
     ]);
     assert.match(
       buildWorkspaceRecoveryNextUserInput(sourceInput, signal),
       new RegExp(
-        `Blocked folder paths:\\s*- ${path.join(desktopRoot, "drone-company").replace(/\\/g, "\\\\")}\\s*- ${path.join(desktopRoot, "drone-company-live-smoke-1773407921176").replace(/\\/g, "\\\\")}`,
+        `Blocked folder paths:\\s*- ${path.join(desktopRoot, "sample-company").replace(/\\/g, "\\\\")}\\s*- ${path.join(desktopRoot, "sample-company-live-smoke-1773407921176").replace(/\\/g, "\\\\")}`,
         "i"
       )
     );
@@ -1007,14 +1007,14 @@ test("deriveWorkspaceRecoverySignal recovers blocked desktop folder paths from P
 
 test("deriveWorkspaceRecoverySignal recovers blocked desktop folder paths from remainingOnDesktop JSON output", async () => {
   const sourceInput =
-    "Every folder with the name beginning in drone should go in drone-folder on my desktop.";
+    "Every folder with the name beginning in sample should go in sample-folder on my desktop.";
   const originalOneDrive = process.env.OneDrive;
   const originalUserProfile = process.env.USERPROFILE;
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-workspace-recovery-json-"));
   const oneDriveRoot = path.join(tempRoot, "OneDrive");
   const desktopRoot = path.join(oneDriveRoot, "Desktop");
-  await mkdir(path.join(desktopRoot, "drone-company"), { recursive: true });
-  await mkdir(path.join(desktopRoot, "drone-company-live-smoke-1773407921176"), {
+  await mkdir(path.join(desktopRoot, "sample-company"), { recursive: true });
+  await mkdir(path.join(desktopRoot, "sample-company-live-smoke-1773407921176"), {
     recursive: true
   });
   process.env.OneDrive = oneDriveRoot;
@@ -1029,12 +1029,12 @@ test("deriveWorkspaceRecoverySignal recovers blocked desktop folder paths from r
     },
     plan: {
       taskId: "task-auto-recovery-json-paths",
-      plannerNotes: "Move matching drone folders.",
+      plannerNotes: "Move matching sample folders.",
       actions: [
         {
           id: "action-shell",
           type: "shell_command",
-          description: "Move matching drone folders.",
+          description: "Move matching sample folders.",
           params: {
             command: "Move-Item ..."
           },
@@ -1047,7 +1047,7 @@ test("deriveWorkspaceRecoverySignal recovers blocked desktop folder paths from r
         action: {
           id: "action-shell",
           type: "shell_command",
-          description: "Move matching drone folders.",
+          description: "Move matching sample folders.",
           params: {
             command: "Move-Item ..."
           },
@@ -1058,8 +1058,8 @@ test("deriveWorkspaceRecoverySignal recovers blocked desktop folder paths from r
         output: [
           "Shell success:",
           JSON.stringify({
-            destination: `${desktopRoot}\\drone-folder`,
-            matchedBefore: ["drone-company", "drone-company-live-smoke-1773407921176"],
+            destination: `${desktopRoot}\\sample-folder`,
+            matchedBefore: ["sample-company", "sample-company-live-smoke-1773407921176"],
             moved: [],
             failed: [
               {
@@ -1067,7 +1067,7 @@ test("deriveWorkspaceRecoverySignal recovers blocked desktop folder paths from r
                 error: "The process cannot access the file because it is being used by another process."
               }
             ],
-            remainingOnDesktop: ["drone-company", "drone-company-live-smoke-1773407921176"]
+            remainingOnDesktop: ["sample-company", "sample-company-live-smoke-1773407921176"]
           })
         ].join("\n"),
         blockedBy: [],
@@ -1085,8 +1085,8 @@ test("deriveWorkspaceRecoverySignal recovers blocked desktop folder paths from r
 
     assert.ok(signal);
     assert.deepEqual(signal.blockedFolderPaths, [
-      path.join(desktopRoot, "drone-company"),
-      path.join(desktopRoot, "drone-company-live-smoke-1773407921176")
+      path.join(desktopRoot, "sample-company"),
+      path.join(desktopRoot, "sample-company-live-smoke-1773407921176")
     ]);
   } finally {
     process.env.OneDrive = originalOneDrive;
@@ -1097,14 +1097,14 @@ test("deriveWorkspaceRecoverySignal recovers blocked desktop folder paths from r
 
 test("deriveWorkspaceRecoverySignal recovers blocked desktop folder paths from capitalized shell JSON output", async () => {
   const sourceInput =
-    "Every folder with the name beginning in drone should go in drone-folder on my desktop.";
+    "Every folder with the name beginning in sample should go in sample-folder on my desktop.";
   const originalOneDrive = process.env.OneDrive;
   const originalUserProfile = process.env.USERPROFILE;
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-workspace-recovery-json-caps-"));
   const oneDriveRoot = path.join(tempRoot, "OneDrive");
   const desktopRoot = path.join(oneDriveRoot, "Desktop");
-  await mkdir(path.join(desktopRoot, "drone-company"), { recursive: true });
-  await mkdir(path.join(desktopRoot, "drone-company-live-smoke-1773407921176"), {
+  await mkdir(path.join(desktopRoot, "sample-company"), { recursive: true });
+  await mkdir(path.join(desktopRoot, "sample-company-live-smoke-1773407921176"), {
     recursive: true
   });
   process.env.OneDrive = oneDriveRoot;
@@ -1119,12 +1119,12 @@ test("deriveWorkspaceRecoverySignal recovers blocked desktop folder paths from c
     },
     plan: {
       taskId: "task-auto-recovery-json-caps-paths",
-      plannerNotes: "Move matching drone folders.",
+      plannerNotes: "Move matching sample folders.",
       actions: [
         {
           id: "action-shell",
           type: "shell_command",
-          description: "Move matching drone folders.",
+          description: "Move matching sample folders.",
           params: {
             command: "Move-Item ..."
           },
@@ -1137,7 +1137,7 @@ test("deriveWorkspaceRecoverySignal recovers blocked desktop folder paths from c
         action: {
           id: "action-shell",
           type: "shell_command",
-          description: "Move matching drone folders.",
+          description: "Move matching sample folders.",
           params: {
             command: "Move-Item ..."
           },
@@ -1149,11 +1149,11 @@ test("deriveWorkspaceRecoverySignal recovers blocked desktop folder paths from c
           "Shell success:",
           JSON.stringify({
             Source: `${desktopRoot}`,
-            Destination: `${desktopRoot}\\drone-folder`,
+            Destination: `${desktopRoot}\\sample-folder`,
             Failed: [
-              "drone-company: The process cannot access the file because it is being used by another process."
+              "sample-company: The process cannot access the file because it is being used by another process."
             ],
-            RemainingInSource: ["drone-company", "drone-company-live-smoke-1773407921176"]
+            RemainingInSource: ["sample-company", "sample-company-live-smoke-1773407921176"]
           })
         ].join("\n"),
         blockedBy: [],
@@ -1171,8 +1171,8 @@ test("deriveWorkspaceRecoverySignal recovers blocked desktop folder paths from c
 
     assert.ok(signal);
     assert.deepEqual(signal.blockedFolderPaths, [
-      path.join(desktopRoot, "drone-company"),
-      path.join(desktopRoot, "drone-company-live-smoke-1773407921176")
+      path.join(desktopRoot, "sample-company"),
+      path.join(desktopRoot, "sample-company-live-smoke-1773407921176")
     ]);
   } finally {
     process.env.OneDrive = originalOneDrive;
@@ -1181,19 +1181,19 @@ test("deriveWorkspaceRecoverySignal recovers blocked desktop folder paths from c
   }
 });
 
-test("deriveWorkspaceRecoverySignal recovers blocked desktop folder paths from item plus remainingDroneDirsOnDesktop JSON output", async () => {
+test("deriveWorkspaceRecoverySignal recovers blocked desktop folder paths from item plus remainingSampleDirsOnDesktop JSON output", async () => {
   const sourceInput =
-    "Every folder with the name beginning in drone should go in drone-folder on my desktop.";
+    "Every folder with the name beginning in sample should go in sample-folder on my desktop.";
   const originalOneDrive = process.env.OneDrive;
   const originalUserProfile = process.env.USERPROFILE;
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-workspace-recovery-json-item-"));
   const oneDriveRoot = path.join(tempRoot, "OneDrive");
   const desktopRoot = path.join(oneDriveRoot, "Desktop");
-  await mkdir(path.join(desktopRoot, "drone-company"), { recursive: true });
-  await mkdir(path.join(desktopRoot, "drone-company-live-smoke-1773407921176"), {
+  await mkdir(path.join(desktopRoot, "sample-company"), { recursive: true });
+  await mkdir(path.join(desktopRoot, "sample-company-live-smoke-1773407921176"), {
     recursive: true
   });
-  await mkdir(path.join(desktopRoot, "drone-company-live-smoke-1773414171194"), {
+  await mkdir(path.join(desktopRoot, "sample-company-live-smoke-1773414171194"), {
     recursive: true
   });
   process.env.OneDrive = oneDriveRoot;
@@ -1208,12 +1208,12 @@ test("deriveWorkspaceRecoverySignal recovers blocked desktop folder paths from i
     },
     plan: {
       taskId: "task-auto-recovery-json-item-paths",
-      plannerNotes: "Move matching drone folders.",
+      plannerNotes: "Move matching sample folders.",
       actions: [
         {
           id: "action-shell",
           type: "shell_command",
-          description: "Move matching drone folders.",
+          description: "Move matching sample folders.",
           params: {
             command: "Move-Item ..."
           },
@@ -1226,7 +1226,7 @@ test("deriveWorkspaceRecoverySignal recovers blocked desktop folder paths from i
         action: {
           id: "action-shell",
           type: "shell_command",
-          description: "Move matching drone folders.",
+          description: "Move matching sample folders.",
           params: {
             command: "Move-Item ..."
           },
@@ -1238,21 +1238,21 @@ test("deriveWorkspaceRecoverySignal recovers blocked desktop folder paths from i
           "Shell success:",
           JSON.stringify({
             desktop: `${desktopRoot}`,
-            destination: `${desktopRoot}\\drone-folder`,
+            destination: `${desktopRoot}\\sample-folder`,
             failed: [
               {
-                item: `${desktopRoot}\\drone-company`,
+                item: `${desktopRoot}\\sample-company`,
                 error: "The process cannot access the file because it is being used by another process."
               },
               {
-                item: `${desktopRoot}\\drone-company-live-smoke-1773407921176`,
+                item: `${desktopRoot}\\sample-company-live-smoke-1773407921176`,
                 error: "The process cannot access the file because it is being used by another process."
               }
             ],
-            remainingDroneDirsOnDesktop: [
-              "drone-company",
-              "drone-company-live-smoke-1773407921176",
-              "drone-company-live-smoke-1773414171194"
+            remainingSampleDirsOnDesktop: [
+              "sample-company",
+              "sample-company-live-smoke-1773407921176",
+              "sample-company-live-smoke-1773414171194"
             ]
           })
         ].join("\n"),
@@ -1271,9 +1271,9 @@ test("deriveWorkspaceRecoverySignal recovers blocked desktop folder paths from i
 
     assert.ok(signal);
     assert.deepEqual(signal.blockedFolderPaths, [
-      path.join(desktopRoot, "drone-company"),
-      path.join(desktopRoot, "drone-company-live-smoke-1773407921176"),
-      path.join(desktopRoot, "drone-company-live-smoke-1773414171194")
+      path.join(desktopRoot, "sample-company"),
+      path.join(desktopRoot, "sample-company-live-smoke-1773407921176"),
+      path.join(desktopRoot, "sample-company-live-smoke-1773414171194")
     ]);
   } finally {
     process.env.OneDrive = originalOneDrive;
@@ -1284,7 +1284,7 @@ test("deriveWorkspaceRecoverySignal recovers blocked desktop folder paths from i
 
 test("deriveWorkspaceRecoverySignal aggregates inspection metadata across multiple blocked paths", () => {
   const sourceInput =
-    "Every folder with the name beginning in drone should go in drone-folder on my desktop.";
+    "Every folder with the name beginning in sample should go in sample-folder on my desktop.";
 
   const signal = deriveWorkspaceRecoverySignal({
     task: {
@@ -1303,7 +1303,7 @@ test("deriveWorkspaceRecoverySignal aggregates inspection metadata across multip
         action: {
           id: "action-shell",
           type: "shell_command",
-          description: "Move matching drone folders.",
+          description: "Move matching sample folders.",
           params: {
             command: "Move-Item ..."
           },
@@ -1313,14 +1313,14 @@ test("deriveWorkspaceRecoverySignal aggregates inspection metadata across multip
         approved: true,
         output: JSON.stringify({
           desktop: "C:\\Users\\testuser\\OneDrive\\Desktop",
-          destination: "C:\\Users\\testuser\\OneDrive\\Desktop\\drone-folder",
+          destination: "C:\\Users\\testuser\\OneDrive\\Desktop\\sample-folder",
           failed: [
             {
-              item: "C:\\Users\\testuser\\OneDrive\\Desktop\\drone-company",
+              item: "C:\\Users\\testuser\\OneDrive\\Desktop\\sample-company",
               error: "The process cannot access the file because it is being used by another process."
             }
           ],
-          remainingDroneDirsOnDesktop: ["drone-company", "drone-company-live-smoke-1773407921176"]
+          remainingSampleDirsOnDesktop: ["sample-company", "sample-company-live-smoke-1773407921176"]
         }),
         blockedBy: [],
         violations: [],
@@ -1332,7 +1332,7 @@ test("deriveWorkspaceRecoverySignal aggregates inspection metadata across multip
           type: "inspect_path_holders",
           description: "Inspect first blocked path.",
           params: {
-            path: "C:\\Users\\testuser\\OneDrive\\Desktop\\drone-company"
+            path: "C:\\Users\\testuser\\OneDrive\\Desktop\\sample-company"
           },
           estimatedCostUsd: 0.05
         },
@@ -1356,7 +1356,7 @@ test("deriveWorkspaceRecoverySignal aggregates inspection metadata across multip
           type: "inspect_path_holders",
           description: "Inspect second blocked path.",
           params: {
-            path: "C:\\Users\\testuser\\OneDrive\\Desktop\\drone-company-live-smoke-1773407921176"
+            path: "C:\\Users\\testuser\\OneDrive\\Desktop\\sample-company-live-smoke-1773407921176"
           },
           estimatedCostUsd: 0.05
         },
@@ -1386,14 +1386,14 @@ test("deriveWorkspaceRecoverySignal aggregates inspection metadata across multip
 });
 
 test("deriveWorkspaceRecoverySignal promotes exact tracked holder shutdown directly from recovery context", () => {
-  const blockedFolderPath = "C:\\Users\\testuser\\Desktop\\drone-company-organize-smoke-a";
+  const blockedFolderPath = "C:\\Users\\testuser\\Desktop\\sample-company-organize-smoke-a";
   const userInput = [
     "Workspace recovery context for this chat:",
     `- Preferred workspace root: ${blockedFolderPath}`,
     "- Exact tracked preview lease ids: proc_preview_a",
     "",
     "Current user request:",
-    'Please take this from start to finish: move the earlier drone-company-organize-smoke project folders into a folder called drone-web-projects on my desktop.'
+    'Please take this from start to finish: move the earlier sample-company-organize-smoke project folders into a folder called sample-web-projects on my desktop.'
   ].join("\n");
   const signal = deriveWorkspaceRecoverySignal({
     task: {
@@ -1404,12 +1404,12 @@ test("deriveWorkspaceRecoverySignal promotes exact tracked holder shutdown direc
     },
     plan: {
       taskId: "task-auto-recovery-context-promotion",
-      plannerNotes: "Move matching drone folders.",
+      plannerNotes: "Move matching sample folders.",
       actions: [
         {
           id: "action-shell",
           type: "shell_command",
-          description: "Move matching drone folders.",
+          description: "Move matching sample folders.",
           params: {
             command: "Move-Item ..."
           },
@@ -1422,7 +1422,7 @@ test("deriveWorkspaceRecoverySignal promotes exact tracked holder shutdown direc
         action: {
           id: "action-shell",
           type: "shell_command",
-          description: "Move matching drone folders.",
+          description: "Move matching sample folders.",
           params: {
             command: "Move-Item ..."
           },
@@ -1461,7 +1461,7 @@ test("enqueueAutomaticTrackedWorkspaceRecoveryRetry does not queue a post-shutdo
   const nowIso = "2026-03-14T22:20:00.000Z";
   const completedAt = "2026-03-14T22:20:05.000Z";
   const sourceInput =
-    "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.";
+    "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.";
   const session = buildSessionSeed({
     provider: "telegram",
     conversationId: "chat-auto-recovery-2",
@@ -1479,7 +1479,7 @@ test("enqueueAutomaticTrackedWorkspaceRecoveryRetry does not queue a post-shutdo
     startedAt: nowIso,
     completedAt,
     resultSummary:
-      "I moved the matching folders into C:\\Users\\testuser\\OneDrive\\Desktop\\drone-web-projects.",
+      "I moved the matching folders into C:\\Users\\testuser\\OneDrive\\Desktop\\sample-web-projects.",
     errorMessage: null
   };
 
@@ -1506,7 +1506,7 @@ test("enqueueAutomaticTrackedWorkspaceRecoveryRetry does not queue a post-shutdo
         {
           id: "action-move",
           type: "shell_command",
-          description: "Move matching drone folders.",
+          description: "Move matching sample folders.",
           params: {
             command: "Move-Item ..."
           },
@@ -1517,7 +1517,7 @@ test("enqueueAutomaticTrackedWorkspaceRecoveryRetry does not queue a post-shutdo
           type: "list_directory",
           description: "Inspect destination folder.",
           params: {
-            path: "C:\\Users\\testuser\\OneDrive\\Desktop\\drone-web-projects"
+            path: "C:\\Users\\testuser\\OneDrive\\Desktop\\sample-web-projects"
           },
           estimatedCostUsd: 0.05
         }
@@ -1545,7 +1545,7 @@ test("enqueueAutomaticTrackedWorkspaceRecoveryRetry does not queue a post-shutdo
         action: {
           id: "action-move",
           type: "shell_command",
-          description: "Move matching drone folders.",
+          description: "Move matching sample folders.",
           params: {
             command: "Move-Item ..."
           },
@@ -1553,7 +1553,7 @@ test("enqueueAutomaticTrackedWorkspaceRecoveryRetry does not queue a post-shutdo
         },
         mode: "escalation_path",
         approved: true,
-        output: "Shell success: moved matching drone-company folders.",
+        output: "Shell success: moved matching sample-company folders.",
         blockedBy: [],
         violations: [],
         votes: []
@@ -1564,20 +1564,20 @@ test("enqueueAutomaticTrackedWorkspaceRecoveryRetry does not queue a post-shutdo
           type: "list_directory",
           description: "Inspect destination folder.",
           params: {
-            path: "C:\\Users\\testuser\\OneDrive\\Desktop\\drone-web-projects"
+            path: "C:\\Users\\testuser\\OneDrive\\Desktop\\sample-web-projects"
           },
           estimatedCostUsd: 0.05
         },
         mode: "fast_path",
         approved: true,
-        output: "Directory contents:\ndrone-company-a\ndrone-company-b",
+        output: "Directory contents:\nsample-company-a\nsample-company-b",
         blockedBy: [],
         violations: [],
         votes: []
       }
     ],
     summary:
-      "I moved the matching folders into C:\\Users\\testuser\\OneDrive\\Desktop\\drone-web-projects.",
+      "I moved the matching folders into C:\\Users\\testuser\\OneDrive\\Desktop\\sample-web-projects.",
     startedAt: nowIso,
     completedAt
   });
@@ -1586,6 +1586,6 @@ test("enqueueAutomaticTrackedWorkspaceRecoveryRetry does not queue a post-shutdo
   assert.equal(session.queuedJobs.length, 0);
   assert.equal(
     completedJob.resultSummary,
-    "I moved the matching folders into C:\\Users\\testuser\\OneDrive\\Desktop\\drone-web-projects."
+    "I moved the matching folders into C:\\Users\\testuser\\OneDrive\\Desktop\\sample-web-projects."
   );
 });

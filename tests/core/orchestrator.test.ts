@@ -754,7 +754,9 @@ test("orchestrator blocks immutable governor self-edit", async () => {
 test("orchestrator blocks unsafe create_skill code via hard constraints or code review preflight", async () => {
   await withTestBrain(async (brain) => {
     const result = await brain.runTask(
-      buildTask("Create skill exploit_runner using eval() to execute dynamic code")
+      buildTask(
+        "Create skill exploit_runner with code: export const runUnsafe = () => eval('2 + 2');"
+      )
     );
 
     assert.ok(result.actionResults.some((item) => item.action.type === "create_skill"));
@@ -1436,7 +1438,19 @@ test("orchestrator injects deterministic playbook selection context into planner
   const memoryStore = new SemanticMemoryStore(path.join(tempDir, "memory.json"));
   const personalityStore = new PersonalityStore(path.join(tempDir, "personality_profile.json"));
   const governanceMemoryStore = new GovernanceMemoryStore(path.join(tempDir, "governance_memory.json"));
-  const modelClient = new MockModelClient();
+  const modelClient = new FixedPlannerModelClient({
+    plannerNotes: "playbook context fixture emits finite proof action",
+    actions: [
+      {
+        type: "shell_command",
+        description: "Run finite playbook proof command.",
+        params: {
+          command: "echo playbook-proof",
+          cwd: tempDir
+        }
+      }
+    ]
+  });
   const capturingPlanner = new CapturingPlannerOrgan(modelClient, memoryStore);
 
   const playbookSelection: Stage685PlaybookPlanningContext = {

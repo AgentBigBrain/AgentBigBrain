@@ -188,10 +188,10 @@ test("renderConversationStatusOrRecall returns a review-oriented durable handoff
       goal: "Build the landing page and leave a preview open.",
       summary: "I finished the landing page and left the preview ready for review.",
       nextSuggestedStep: "Tell me what section you want changed next.",
-      workspaceRootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
-      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
+      workspaceRootPath: "C:\\Users\\testuser\\Desktop\\sample-company",
+      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
       previewUrl: "http://127.0.0.1:4177/index.html",
-      changedPaths: ["C:\\Users\\testuser\\Desktop\\drone-company\\index.html"],
+      changedPaths: ["C:\\Users\\testuser\\Desktop\\sample-company\\index.html"],
       sourceJobId: "job-4",
       updatedAt: "2026-03-12T00:00:08.000Z"
     }
@@ -204,7 +204,7 @@ test("renderConversationStatusOrRecall returns a review-oriented durable handoff
 
   assert.match(reply, /Here is what is ready to review: I finished the landing page and left the preview ready for review\./);
   assert.match(reply, /Status: Finished and ready for your review\./);
-  assert.match(reply, /Workspace: C:\\Users\\testuser\\Desktop\\drone-company/);
+  assert.match(reply, /Workspace: C:\\Users\\testuser\\Desktop\\sample-company/);
   assert.match(reply, /Preview: http:\/\/127\.0\.0\.1:4177\/index\.html/);
   assert.match(reply, /Next step: Tell me what section you want changed next\./);
 });
@@ -220,7 +220,7 @@ test("renderConversationStatusOrRecall does not fall back to stale handoff revie
       nextSuggestedStep: "Ask for the exact block code and approval diff.",
       workspaceRootPath: "C:\\Users\\testuser\\Desktop\\Sample World",
       primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\Sample World\\src\\index.css",
-      previewUrl: "file:///C:/Users/testuser/Desktop/drone-company-landing.html",
+      previewUrl: "file:///C:/Users/testuser/Desktop/sample-company-landing.html",
       changedPaths: [
         "C:\\Users\\testuser\\Desktop\\Sample World\\src\\index.css",
         "C:\\Users\\testuser\\Desktop\\Sample World\\src\\App.jsx"
@@ -248,7 +248,7 @@ test("renderConversationStatusOrRecall ignores semantic handoff hints for assist
       nextSuggestedStep: "Ask for the exact block code and approval diff.",
       workspaceRootPath: "C:\\Users\\testuser\\Desktop\\Sample World",
       primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\Sample World\\src\\index.css",
-      previewUrl: "file:///C:/Users/testuser/Desktop/drone-company-landing.html",
+      previewUrl: "file:///C:/Users/testuser/Desktop/sample-company-landing.html",
       changedPaths: [
         "C:\\Users\\testuser\\Desktop\\Sample World\\src\\index.css",
         "C:\\Users\\testuser\\Desktop\\Sample World\\src\\App.jsx"
@@ -277,10 +277,10 @@ test("renderConversationStatusOrRecall still falls back to durable handoff outpu
       goal: "Finish the landing page and pause for review.",
       summary: "I finished the draft and paused at the review checkpoint.",
       nextSuggestedStep: "Tell me what section you want me to refine next.",
-      workspaceRootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
-      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
+      workspaceRootPath: "C:\\Users\\testuser\\Desktop\\sample-company",
+      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
       previewUrl: "http://127.0.0.1:4177/index.html",
-      changedPaths: ["C:\\Users\\testuser\\Desktop\\drone-company\\index.html"],
+      changedPaths: ["C:\\Users\\testuser\\Desktop\\sample-company\\index.html"],
       sourceJobId: "job-status-fallback",
       updatedAt: "2026-03-20T19:43:30.000Z"
     }
@@ -300,10 +300,10 @@ test("renderConversationStatusOrRecall treats rough-draft review prompts as paus
       goal: "Build the landing page and leave the preview open for review.",
       summary: "I finished the first draft and paused at the review checkpoint.",
       nextSuggestedStep: "Tell me what section you want me to refine next.",
-      workspaceRootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
-      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
+      workspaceRootPath: "C:\\Users\\testuser\\Desktop\\sample-company",
+      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
       previewUrl: "http://127.0.0.1:4177/index.html",
-      changedPaths: ["C:\\Users\\testuser\\Desktop\\drone-company\\index.html"],
+      changedPaths: ["C:\\Users\\testuser\\Desktop\\sample-company\\index.html"],
       sourceJobId: "job-4b",
       updatedAt: "2026-03-12T00:00:08.500Z"
     }
@@ -316,7 +316,7 @@ test("renderConversationStatusOrRecall treats rough-draft review prompts as paus
 
   assert.match(reply, /Here is what is ready to review: I finished the first draft and paused at the review checkpoint\./);
   assert.match(reply, /Status: Paused here with a saved checkpoint ready for your review or next change request\./);
-  assert.match(reply, /Primary artifact: C:\\Users\\testuser\\Desktop\\drone-company\\index\.html/);
+  assert.match(reply, /Primary artifact: C:\\Users\\testuser\\Desktop\\sample-company\\index\.html/);
   assert.match(reply, /Next step: Tell me what section you want me to refine next\./);
 });
 
@@ -328,10 +328,10 @@ test("renderConversationStatusOrRecall uses the durable handoff for while-you-we
       goal: "Build the landing page and leave the preview open.",
       summary: "I finished the landing page draft and left the preview ready for review.",
       nextSuggestedStep: "Tell me which section you want me to refine next.",
-      workspaceRootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
-      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
+      workspaceRootPath: "C:\\Users\\testuser\\Desktop\\sample-company",
+      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
       previewUrl: "http://127.0.0.1:4177/index.html",
-      changedPaths: ["C:\\Users\\testuser\\Desktop\\drone-company\\index.html"],
+      changedPaths: ["C:\\Users\\testuser\\Desktop\\sample-company\\index.html"],
       sourceJobId: "job-5",
       updatedAt: "2026-03-12T00:00:09.000Z"
     }
@@ -344,8 +344,8 @@ test("renderConversationStatusOrRecall uses the durable handoff for while-you-we
 
   assert.match(reply, /While you were away, I finished the landing page draft and left the preview ready for review\./);
   assert.match(reply, /Best first look: open the preview at http:\/\/127\.0\.0\.1:4177\/index\.html\./);
-  assert.match(reply, /Workspace: C:\\Users\\testuser\\Desktop\\drone-company/);
-  assert.match(reply, /Then review: review C:\\Users\\testuser\\Desktop\\drone-company\\index\.html\./);
+  assert.match(reply, /Workspace: C:\\Users\\testuser\\Desktop\\sample-company/);
+  assert.match(reply, /Then review: review C:\\Users\\testuser\\Desktop\\sample-company\\index\.html\./);
   assert.match(reply, /After you review it: Tell me which section you want me to refine next\./);
 });
 
@@ -357,10 +357,10 @@ test("renderConversationStatusOrRecall honors semantic handoff hints for ambiguo
       goal: "Finish the landing page and leave it ready for review.",
       summary: "I finished the landing page draft and left the preview ready for review.",
       nextSuggestedStep: "Tell me which section you want me to refine next.",
-      workspaceRootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
-      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
+      workspaceRootPath: "C:\\Users\\testuser\\Desktop\\sample-company",
+      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
       previewUrl: "http://127.0.0.1:4177/index.html",
-      changedPaths: ["C:\\Users\\testuser\\Desktop\\drone-company\\index.html"],
+      changedPaths: ["C:\\Users\\testuser\\Desktop\\sample-company\\index.html"],
       sourceJobId: "job-semantic-review-ready",
       updatedAt: "2026-03-12T00:00:09.100Z"
     }
@@ -385,12 +385,12 @@ test("renderConversationStatusOrRecall guides the user to the first review surfa
       goal: "Build the landing page and wait at the review checkpoint.",
       summary: "I finished the landing page draft and paused at the review checkpoint.",
       nextSuggestedStep: "Tell me what section you want me to refine first.",
-      workspaceRootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
-      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
+      workspaceRootPath: "C:\\Users\\testuser\\Desktop\\sample-company",
+      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
       previewUrl: "http://127.0.0.1:4177/index.html",
       changedPaths: [
-        "C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
-        "C:\\Users\\testuser\\Desktop\\drone-company\\styles.css"
+        "C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
+        "C:\\Users\\testuser\\Desktop\\sample-company\\styles.css"
       ],
       sourceJobId: "job-5b",
       updatedAt: "2026-03-12T00:00:09.500Z"
@@ -403,11 +403,11 @@ test("renderConversationStatusOrRecall guides the user to the first review surfa
   );
 
   assert.match(reply, /Start here: open the preview at http:\/\/127\.0\.0\.1:4177\/index\.html\./);
-  assert.match(reply, /After that: review C:\\Users\\testuser\\Desktop\\drone-company\\index\.html and C:\\Users\\testuser\\Desktop\\drone-company\\styles\.css\./);
+  assert.match(reply, /After that: review C:\\Users\\testuser\\Desktop\\sample-company\\index\.html and C:\\Users\\testuser\\Desktop\\sample-company\\styles\.css\./);
   assert.match(reply, /Review order:/);
   assert.match(reply, /1\. Preview the page at http:\/\/127\.0\.0\.1:4177\/index\.html\./);
-  assert.match(reply, /2\. Check the primary artifact at C:\\Users\\testuser\\Desktop\\drone-company\\index\.html\./);
-  assert.match(reply, /3\. Review the changed file at C:\\Users\\testuser\\Desktop\\drone-company\\styles\.css\./);
+  assert.match(reply, /2\. Check the primary artifact at C:\\Users\\testuser\\Desktop\\sample-company\\index\.html\./);
+  assert.match(reply, /3\. Review the changed file at C:\\Users\\testuser\\Desktop\\sample-company\\styles\.css\./);
   assert.match(reply, /After your review: Tell me what section you want me to refine first\./);
 });
 
@@ -419,12 +419,12 @@ test("renderConversationStatusOrRecall can use semantic handoff hints for nuance
       goal: "Build the landing page and wait at the review checkpoint.",
       summary: "I finished the landing page draft and paused at the review checkpoint.",
       nextSuggestedStep: "Tell me what section you want me to refine first.",
-      workspaceRootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
-      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
+      workspaceRootPath: "C:\\Users\\testuser\\Desktop\\sample-company",
+      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
       previewUrl: "http://127.0.0.1:4177/index.html",
       changedPaths: [
-        "C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
-        "C:\\Users\\testuser\\Desktop\\drone-company\\styles.css"
+        "C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
+        "C:\\Users\\testuser\\Desktop\\sample-company\\styles.css"
       ],
       sourceJobId: "job-5d",
       updatedAt: "2026-03-12T00:00:09.900Z"
@@ -450,13 +450,13 @@ test("renderConversationStatusOrRecall can use semantic handoff hints for softer
       goal: "Build the landing page and pause at the review checkpoint.",
       summary: "I finished the landing page draft and paused at the review checkpoint.",
       nextSuggestedStep: "Tell me what section you want me to refine first.",
-      workspaceRootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
-      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
+      workspaceRootPath: "C:\\Users\\testuser\\Desktop\\sample-company",
+      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
       previewUrl: "http://127.0.0.1:4177/index.html",
       changedPaths: [
-        "C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
-        "C:\\Users\\testuser\\Desktop\\drone-company\\styles.css",
-        "C:\\Users\\testuser\\Desktop\\drone-company\\app.js"
+        "C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
+        "C:\\Users\\testuser\\Desktop\\sample-company\\styles.css",
+        "C:\\Users\\testuser\\Desktop\\sample-company\\app.js"
       ],
       sourceJobId: "job-5f",
       updatedAt: "2026-03-12T00:00:10.000Z"
@@ -470,8 +470,8 @@ test("renderConversationStatusOrRecall can use semantic handoff hints for softer
   );
 
   assert.match(reply, /Here is the next thing I would review from the saved work:/);
-  assert.match(reply, /Next review step: Check the primary artifact at C:\\Users\\testuser\\Desktop\\drone-company\\index\.html\./);
-  assert.match(reply, /After that: Review the changed file at C:\\Users\\testuser\\Desktop\\drone-company\\styles\.css\. and Review the changed file at C:\\Users\\testuser\\Desktop\\drone-company\\app\.js\./);
+  assert.match(reply, /Next review step: Check the primary artifact at C:\\Users\\testuser\\Desktop\\sample-company\\index\.html\./);
+  assert.match(reply, /After that: Review the changed file at C:\\Users\\testuser\\Desktop\\sample-company\\styles\.css\. and Review the changed file at C:\\Users\\testuser\\Desktop\\sample-company\\app\.js\./);
   assert.match(reply, /Status: Paused here with a saved checkpoint ready for your review or next change request\./);
 });
 
@@ -483,12 +483,12 @@ test("renderConversationStatusOrRecall can use semantic handoff hints for wrap-u
       goal: "Finish the landing page draft and save the review checkpoint.",
       summary: "I finished the landing page draft and saved the review checkpoint for you.",
       nextSuggestedStep: "Tell me which section you want me to refine next.",
-      workspaceRootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
-      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
+      workspaceRootPath: "C:\\Users\\testuser\\Desktop\\sample-company",
+      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
       previewUrl: "http://127.0.0.1:4177/index.html",
       changedPaths: [
-        "C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
-        "C:\\Users\\testuser\\Desktop\\drone-company\\styles.css"
+        "C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
+        "C:\\Users\\testuser\\Desktop\\sample-company\\styles.css"
       ],
       sourceJobId: "job-5g",
       updatedAt: "2026-03-12T00:00:10.300Z"
@@ -502,7 +502,7 @@ test("renderConversationStatusOrRecall can use semantic handoff hints for wrap-u
   );
 
   assert.match(reply, /Here is what I wrapped up for you: I finished the landing page draft and saved the review checkpoint for you\./);
-  assert.match(reply, /What I wrapped up: C:\\Users\\testuser\\Desktop\\drone-company\\index\.html and C:\\Users\\testuser\\Desktop\\drone-company\\styles\.css\./);
+  assert.match(reply, /What I wrapped up: C:\\Users\\testuser\\Desktop\\sample-company\\index\.html and C:\\Users\\testuser\\Desktop\\sample-company\\styles\.css\./);
   assert.match(reply, /Status: Finished and ready for your review\./);
   assert.match(reply, /Next step: Tell me which section you want me to refine next\./);
 });
@@ -515,10 +515,10 @@ test("renderConversationStatusOrRecall recognizes finished-while-gone handoff pr
       goal: "Build the landing page while the user is away.",
       summary: "I finished the landing page draft and left the preview ready for review.",
       nextSuggestedStep: "Tell me what section you want me to change next.",
-      workspaceRootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
-      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
+      workspaceRootPath: "C:\\Users\\testuser\\Desktop\\sample-company",
+      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
       previewUrl: "http://127.0.0.1:4177/index.html",
-      changedPaths: ["C:\\Users\\testuser\\Desktop\\drone-company\\index.html"],
+      changedPaths: ["C:\\Users\\testuser\\Desktop\\sample-company\\index.html"],
       sourceJobId: "job-5c",
       updatedAt: "2026-03-12T00:00:09.750Z"
     }
@@ -543,12 +543,12 @@ test("renderConversationStatusOrRecall can use semantic handoff hints for nuance
       goal: "Finish the landing page draft and save the review checkpoint.",
       summary: "I finished the landing page draft and saved the review checkpoint for you.",
       nextSuggestedStep: "Tell me which section you want me to refine next.",
-      workspaceRootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
-      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
+      workspaceRootPath: "C:\\Users\\testuser\\Desktop\\sample-company",
+      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
       previewUrl: "http://127.0.0.1:4177/index.html",
       changedPaths: [
-        "C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
-        "C:\\Users\\testuser\\Desktop\\drone-company\\styles.css"
+        "C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
+        "C:\\Users\\testuser\\Desktop\\sample-company\\styles.css"
       ],
       sourceJobId: "job-5e",
       updatedAt: "2026-03-12T00:00:10.100Z"
@@ -563,7 +563,7 @@ test("renderConversationStatusOrRecall can use semantic handoff hints for nuance
 
   assert.match(reply, /Here is what I changed in the saved work: I finished the landing page draft and saved the review checkpoint for you\./);
   assert.match(reply, /Status: Finished and ready for your review\./);
-  assert.match(reply, /What I changed: C:\\Users\\testuser\\Desktop\\drone-company\\index\.html and C:\\Users\\testuser\\Desktop\\drone-company\\styles\.css\./);
+  assert.match(reply, /What I changed: C:\\Users\\testuser\\Desktop\\sample-company\\index\.html and C:\\Users\\testuser\\Desktop\\sample-company\\styles\.css\./);
   assert.match(reply, /Preview: http:\/\/127\.0\.0\.1:4177\/index\.html/);
   assert.match(reply, /Next step: Tell me which section you want me to refine next\./);
 });
@@ -671,10 +671,10 @@ test("renderConversationStatusOrRecall honors the status_return_handoff semantic
       goal: "Finish the landing page draft and leave it ready for review.",
       summary: "I finished the landing page draft and left the preview ready for review.",
       nextSuggestedStep: "Tell me which section you want me to refine next.",
-      workspaceRootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
-      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
+      workspaceRootPath: "C:\\Users\\testuser\\Desktop\\sample-company",
+      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
       previewUrl: "http://127.0.0.1:4177/index.html",
-      changedPaths: ["C:\\Users\\testuser\\Desktop\\drone-company\\index.html"],
+      changedPaths: ["C:\\Users\\testuser\\Desktop\\sample-company\\index.html"],
       sourceJobId: "job-semantic-status-return",
       updatedAt: "2026-03-12T00:00:09.100Z"
     }
@@ -687,7 +687,7 @@ test("renderConversationStatusOrRecall honors the status_return_handoff semantic
   );
 
   assert.match(reply, /Last completed work: I finished the landing page draft and left the preview ready for review\./);
-  assert.match(reply, /Workspace: C:\\Users\\testuser\\Desktop\\drone-company/);
+  assert.match(reply, /Workspace: C:\\Users\\testuser\\Desktop\\sample-company/);
 });
 
 test("renderConversationStatusOrRecall honors the status_location semantic hint even for generic wording", () => {
@@ -850,11 +850,11 @@ test("renderConversationStatusOrRecall surfaces recovered runtime repairs in gen
 test("renderConversationStatusOrRecall describes orphaned workspaces as attributable instead of current", () => {
   const session = buildSession({
     activeWorkspace: {
-      id: "workspace:desktop-drone-company",
+      id: "workspace:desktop-sample-company",
       label: "Current project workspace",
-      rootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
-      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
-      previewUrl: "file:///C:/Users/testuser/Desktop/drone-company/index.html",
+      rootPath: "C:\\Users\\testuser\\Desktop\\sample-company",
+      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
+      previewUrl: "file:///C:/Users/testuser/Desktop/sample-company/index.html",
       browserSessionId: "browser-session-detached",
       browserSessionIds: ["browser-session-detached"],
       browserSessionStatus: "open",
@@ -866,7 +866,7 @@ test("renderConversationStatusOrRecall describes orphaned workspaces as attribut
       stillControllable: false,
       ownershipState: "orphaned",
       previewStackState: "browser_only",
-      lastChangedPaths: ["C:\\Users\\testuser\\Desktop\\drone-company\\index.html"],
+      lastChangedPaths: ["C:\\Users\\testuser\\Desktop\\sample-company\\index.html"],
       sourceJobId: "job-2",
       updatedAt: "2026-03-12T00:00:05.000Z"
     }
@@ -882,7 +882,7 @@ test("renderConversationStatusOrRecall describes orphaned workspaces as attribut
   );
 
   assert.match(locationReply, /Most recent attributable workspace:/);
-  assert.match(locationReply, /Last attributable workspace: C:\\Users\\testuser\\Desktop\\drone-company/);
+  assert.match(locationReply, /Last attributable workspace: C:\\Users\\testuser\\Desktop\\sample-company/);
   assert.match(browserReply, /Last attributable workspace preview:/);
 });
 
@@ -1104,7 +1104,7 @@ test("deriveConversationLedgersFromTaskRunResult links an open browser session t
           description: "Start the earlier preview attempt.",
           params: {
             command: "npm run preview -- --host 127.0.0.1 --port 4173",
-            cwd: "C:\\Users\\testuser\\Desktop\\AI Drone City"
+            cwd: "C:\\Users\\testuser\\Desktop\\Sample City"
           },
           estimatedCostUsd: 0.08
         },
@@ -1114,7 +1114,7 @@ test("deriveConversationLedgersFromTaskRunResult links an open browser session t
           description: "Restart the preview with the repaired workspace state.",
           params: {
             command: "npm run preview -- --host 127.0.0.1 --port 4173",
-            cwd: "C:\\Users\\testuser\\Desktop\\AI Drone City"
+            cwd: "C:\\Users\\testuser\\Desktop\\Sample City"
           },
           estimatedCostUsd: 0.08
         },
@@ -1124,7 +1124,7 @@ test("deriveConversationLedgersFromTaskRunResult links an open browser session t
           description: "Open the repaired preview in a visible browser window.",
           params: {
             url: "http://127.0.0.1:4173/",
-            rootPath: "C:\\Users\\testuser\\Desktop\\AI Drone City"
+            rootPath: "C:\\Users\\testuser\\Desktop\\Sample City"
           },
           estimatedCostUsd: 0.03
         }
@@ -1138,7 +1138,7 @@ test("deriveConversationLedgersFromTaskRunResult links an open browser session t
           description: "Start the earlier preview attempt.",
           params: {
             command: "npm run preview -- --host 127.0.0.1 --port 4173",
-            cwd: "C:\\Users\\testuser\\Desktop\\AI Drone City"
+            cwd: "C:\\Users\\testuser\\Desktop\\Sample City"
           },
           estimatedCostUsd: 0.08
         },
@@ -1149,7 +1149,7 @@ test("deriveConversationLedgersFromTaskRunResult links an open browser session t
         executionMetadata: {
           processLeaseId: "proc_preview_old",
           processLifecycleStatus: "PROCESS_STARTED",
-          processCwd: "C:\\Users\\testuser\\Desktop\\AI Drone City",
+          processCwd: "C:\\Users\\testuser\\Desktop\\Sample City",
           processPid: 43125
         },
         blockedBy: [],
@@ -1163,7 +1163,7 @@ test("deriveConversationLedgersFromTaskRunResult links an open browser session t
           description: "Restart the preview with the repaired workspace state.",
           params: {
             command: "npm run preview -- --host 127.0.0.1 --port 4173",
-            cwd: "C:\\Users\\testuser\\Desktop\\AI Drone City"
+            cwd: "C:\\Users\\testuser\\Desktop\\Sample City"
           },
           estimatedCostUsd: 0.08
         },
@@ -1174,7 +1174,7 @@ test("deriveConversationLedgersFromTaskRunResult links an open browser session t
         executionMetadata: {
           processLeaseId: "proc_preview_new",
           processLifecycleStatus: "PROCESS_STARTED",
-          processCwd: "C:\\Users\\testuser\\Desktop\\AI Drone City",
+          processCwd: "C:\\Users\\testuser\\Desktop\\Sample City",
           processPid: 43126
         },
         blockedBy: [],
@@ -1188,7 +1188,7 @@ test("deriveConversationLedgersFromTaskRunResult links an open browser session t
           description: "Open the repaired preview in a visible browser window.",
           params: {
             url: "http://127.0.0.1:4173/",
-            rootPath: "C:\\Users\\testuser\\Desktop\\AI Drone City"
+            rootPath: "C:\\Users\\testuser\\Desktop\\Sample City"
           },
           estimatedCostUsd: 0.03
         },
@@ -1232,7 +1232,7 @@ test("deriveConversationLedgersFromTaskRunResult links an open browser session t
   assert.equal(ledgers.browserSessions[0]?.linkedProcessLeaseId, "proc_preview_new");
   assert.equal(
     ledgers.browserSessions[0]?.linkedProcessCwd,
-    "C:\\Users\\testuser\\Desktop\\AI Drone City"
+    "C:\\Users\\testuser\\Desktop\\Sample City"
   );
   assert.equal(ledgers.browserSessions[0]?.linkedProcessPid, 43126);
 });
@@ -1312,7 +1312,7 @@ test("deriveConversationLedgersFromTaskRunResult marks a stopped managed preview
         executionMetadata: {
           processLeaseId: "proc_preview_1",
           processLifecycleStatus: "PROCESS_STOPPED",
-          processCwd: "C:\\Users\\testuser\\Desktop\\drone-company"
+          processCwd: "C:\\Users\\testuser\\Desktop\\sample-company"
         },
         blockedBy: [],
         violations: [],
@@ -1338,7 +1338,7 @@ test("deriveConversationLedgersFromTaskRunResult marks a stopped managed preview
     "2026-03-12T00:00:02.000Z"
   );
   const closedProcess = ledgers.recentActions.find(
-    (action) => action.kind === "process" && action.location === "C:\\Users\\testuser\\Desktop\\drone-company"
+    (action) => action.kind === "process" && action.location === "C:\\Users\\testuser\\Desktop\\sample-company"
   );
 
   assert.ok(closedProcess);
@@ -1350,7 +1350,7 @@ test("deriveConversationLedgersFromTaskRunResult records linked browser cleanup 
     task: {
       id: "task-stop-preview-cleanup",
       goal: "Stop the linked preview and close its browser window.",
-      userInput: "Organize the drone folders and shut down the old preview holders first.",
+      userInput: "Organize the sample folders and shut down the old preview holders first.",
       createdAt: "2026-03-14T00:00:00.000Z"
     },
     plan: {
@@ -1387,21 +1387,21 @@ test("deriveConversationLedgersFromTaskRunResult records linked browser cleanup 
         executionMetadata: {
           processLeaseId: "proc_preview_3",
           processLifecycleStatus: "PROCESS_STOPPED",
-          processCwd: "C:\\Users\\testuser\\Desktop\\drone-company",
+          processCwd: "C:\\Users\\testuser\\Desktop\\sample-company",
           processPid: 43127,
           linkedBrowserSessionCleanupCount: 1,
           linkedBrowserSessionCleanupRecordsJson: JSON.stringify([
             {
               sessionId: "browser_session:action_open_browser_preview",
-              url: "file:///C:/Users/testuser/Desktop/drone-company/index.html",
+              url: "file:///C:/Users/testuser/Desktop/sample-company/index.html",
               status: "closed",
               visibility: "visible",
               controllerKind: "playwright_managed",
               controlAvailable: false,
               browserProcessPid: 42057,
-              workspaceRootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
+              workspaceRootPath: "C:\\Users\\testuser\\Desktop\\sample-company",
               linkedProcessLeaseId: "proc_preview_3",
-              linkedProcessCwd: "C:\\Users\\testuser\\Desktop\\drone-company",
+              linkedProcessCwd: "C:\\Users\\testuser\\Desktop\\sample-company",
               linkedProcessPid: 43127
             }
           ])
@@ -1436,7 +1436,7 @@ test("deriveConversationLedgersFromTaskRunResult records linked browser cleanup 
   assert.equal(ledgers.browserSessions[0]?.controlAvailable, false);
   assert.equal(
     ledgers.browserSessions[0]?.workspaceRootPath,
-    "C:\\Users\\testuser\\Desktop\\drone-company"
+    "C:\\Users\\testuser\\Desktop\\sample-company"
   );
   assert.equal(ledgers.browserSessions[0]?.linkedProcessLeaseId, "proc_preview_3");
   assert.equal(
@@ -1444,7 +1444,7 @@ test("deriveConversationLedgersFromTaskRunResult records linked browser cleanup 
       (action) =>
         action.kind === "browser_session" &&
         action.status === "closed" &&
-        action.location === "file:///C:/Users/testuser/Desktop/drone-company/index.html"
+        action.location === "file:///C:/Users/testuser/Desktop/sample-company/index.html"
     ),
     true
   );

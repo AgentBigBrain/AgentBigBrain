@@ -241,7 +241,7 @@ test("utility governor ignores advisory vetoes for local file open_browser previ
       type: "open_browser",
       description: "Open the built local landing-page file in a visible browser window",
       params: {
-        url: "file:///C:/Users/testuser/Desktop/drone-company/index.html"
+        url: "file:///C:/Users/testuser/Desktop/sample-company/index.html"
       }
     }),
     buildContext("utility")
@@ -275,7 +275,7 @@ test("security governor ignores advisory vetoes for tracked artifact follow-up r
       type: "read_file",
       description: "Read the tracked landing page script before updating it.",
       params: {
-        path: "C:\\Users\\testuser\\Desktop\\drone-company\\script.js"
+        path: "C:\\Users\\testuser\\Desktop\\sample-company\\script.js"
       }
     }),
     buildContext(
@@ -284,14 +284,14 @@ test("security governor ignores advisory vetoes for tracked artifact follow-up r
         "You are in an ongoing conversation with the same user.",
         "",
         "Recent user-visible actions in this chat:",
-        "- File script.js: C:\\Users\\testuser\\Desktop\\drone-company\\script.js (updated)",
-        "- File styles.css: C:\\Users\\testuser\\Desktop\\drone-company\\styles.css (updated)",
-        "- File index.html: C:\\Users\\testuser\\Desktop\\drone-company\\index.html (updated)",
+        "- File script.js: C:\\Users\\testuser\\Desktop\\sample-company\\script.js (updated)",
+        "- File styles.css: C:\\Users\\testuser\\Desktop\\sample-company\\styles.css (updated)",
+        "- File index.html: C:\\Users\\testuser\\Desktop\\sample-company\\index.html (updated)",
         "",
         "Natural artifact-edit follow-up:",
         "- The user appears to be editing the artifact already created in this chat rather than asking for a brand-new project.",
-        "- Most recent concrete artifact: File script.js at C:\\Users\\testuser\\Desktop\\drone-company\\script.js",
-        "- Preferred edit destination: C:\\Users\\testuser\\Desktop\\drone-company\\script.js",
+        "- Most recent concrete artifact: File script.js at C:\\Users\\testuser\\Desktop\\sample-company\\script.js",
+        "- Preferred edit destination: C:\\Users\\testuser\\Desktop\\sample-company\\script.js",
         "",
         "Current user request:",
         "Change the hero image to a slider instead of the landing page."
@@ -331,14 +331,14 @@ test("security governor ignores advisory vetoes for exact path-holder inspection
   const vote = await securityGovernor.evaluate(
     buildProposal({
       type: "inspect_path_holders",
-      description: "Inspect runtime holders for the exact Desktop drone folder before targeted shutdown.",
+      description: "Inspect runtime holders for the exact Desktop sample folder before targeted shutdown.",
       params: {
-        path: "C:\\Users\\testuser\\Desktop\\DroneLand"
+        path: "C:\\Users\\testuser\\Desktop\\SampleLand"
       }
     }),
     buildContext(
       "security",
-      "Look at all the folders on the desktop that start with drone and Drone, stop the servers that are running in the folders do this end to end"
+      "Look at all the folders on the desktop that start with sample and Sample, stop the servers that are running in the folders do this end to end"
     )
   );
 
@@ -354,14 +354,14 @@ test("security governor ignores advisory vetoes for explicit my-desktop write_fi
       description: "Write the initial landing page into the requested Desktop project folder.",
       params: {
         path:
-          `${HOST_TEST_DESKTOP_DIR}${HOST_TEST_PATH_SEPARATOR}drone-company` +
+          `${HOST_TEST_DESKTOP_DIR}${HOST_TEST_PATH_SEPARATOR}sample-company` +
           `${HOST_TEST_PATH_SEPARATOR}index.html`,
-        content: "<!doctype html><title>Drone Company</title>"
+        content: "<!doctype html><title>Sample Company</title>"
       }
     }),
     buildContext(
       "security",
-      "Build a simple landing page on my desktop in a folder called drone-company and run it in a browser."
+      "Build a simple landing page on my desktop in a folder called sample-company and run it in a browser."
     )
   );
 
@@ -377,8 +377,8 @@ test("security governor ignores advisory vetoes for explicit my-desktop mkdir sh
       description: "Create the requested Desktop project folder before writing files.",
       params: {
         command:
-          `if not exist "${HOST_TEST_DESKTOP_DIR}${HOST_TEST_PATH_SEPARATOR}drone-company" ` +
-          `mkdir "${HOST_TEST_DESKTOP_DIR}${HOST_TEST_PATH_SEPARATOR}drone-company"`,
+          `if not exist "${HOST_TEST_DESKTOP_DIR}${HOST_TEST_PATH_SEPARATOR}sample-company" ` +
+          `mkdir "${HOST_TEST_DESKTOP_DIR}${HOST_TEST_PATH_SEPARATOR}sample-company"`,
         cwd: HOST_TEST_DESKTOP_DIR,
         workdir: HOST_TEST_DESKTOP_DIR,
         requestedShellKind: "cmd",
@@ -387,7 +387,7 @@ test("security governor ignores advisory vetoes for explicit my-desktop mkdir sh
     }),
     buildContext(
       "security",
-      "Build a simple landing page on my desktop in a folder called drone-company and run it in a browser."
+      "Build a simple landing page on my desktop in a folder called sample-company and run it in a browser."
     )
   );
 
@@ -398,7 +398,7 @@ test("security governor ignores advisory vetoes for explicit my-desktop mkdir sh
 test("security governor ignores advisory vetoes for explicit my-desktop React scaffold shell actions", async () => {
   const securityGovernor = getGovernorById("security");
   const targetFolder =
-    `${HOST_TEST_DESKTOP_DIR}${HOST_TEST_PATH_SEPARATOR}AI Drone City`;
+    `${HOST_TEST_DESKTOP_DIR}${HOST_TEST_PATH_SEPARATOR}Sample City`;
   const vote = await securityGovernor.evaluate(
     buildProposal({
       type: "shell_command",
@@ -407,7 +407,7 @@ test("security governor ignores advisory vetoes for explicit my-desktop React sc
         command:
           `if (Test-Path "${targetFolder}${HOST_TEST_PATH_SEPARATOR}package.json") { ` +
           `Set-Location "${targetFolder}"; npm install } else { ` +
-          `Set-Location "${HOST_TEST_DESKTOP_DIR}"; npm create vite@latest "AI Drone City" -- --template react }`,
+          `Set-Location "${HOST_TEST_DESKTOP_DIR}"; npm create vite@latest "Sample City" -- --template react }`,
         cwd: HOST_TEST_DESKTOP_DIR,
         workdir: HOST_TEST_DESKTOP_DIR,
         requestedShellKind: "powershell",
@@ -416,7 +416,7 @@ test("security governor ignores advisory vetoes for explicit my-desktop React sc
     }),
     buildContext(
       "security",
-      "Please build a small React landing page in a folder called AI Drone City on my desktop and open it in the browser."
+      "Please build a small React landing page in a folder called Sample City on my desktop and open it in the browser."
     )
   );
 
@@ -427,7 +427,7 @@ test("security governor ignores advisory vetoes for explicit my-desktop React sc
 test("security governor ignores advisory vetoes for explicit my-desktop PowerShell New-Item folder creation", async () => {
   const securityGovernor = getGovernorById("security");
   const targetFolder =
-    `${HOST_TEST_DESKTOP_DIR}${HOST_TEST_PATH_SEPARATOR}AI Drone City`;
+    `${HOST_TEST_DESKTOP_DIR}${HOST_TEST_PATH_SEPARATOR}Sample City`;
   const vote = await securityGovernor.evaluate(
     buildProposal({
       type: "shell_command",
@@ -444,7 +444,7 @@ test("security governor ignores advisory vetoes for explicit my-desktop PowerShe
     }),
     buildContext(
       "security",
-      "Please build a small React landing page in a folder called AI Drone City on my desktop and open it in the browser."
+      "Please build a small React landing page in a folder called Sample City on my desktop and open it in the browser."
     )
   );
 
@@ -455,7 +455,7 @@ test("security governor ignores advisory vetoes for explicit my-desktop PowerShe
 test("resource governor ignores advisory vetoes for explicit my-desktop React install and build shell actions", async () => {
   const resourceGovernor = getGovernorById("resource");
   const targetFolder =
-    `${HOST_TEST_DESKTOP_DIR}${HOST_TEST_PATH_SEPARATOR}AI Drone City`;
+    `${HOST_TEST_DESKTOP_DIR}${HOST_TEST_PATH_SEPARATOR}Sample City`;
   const vote = await resourceGovernor.evaluate(
     buildProposal({
       type: "shell_command",
@@ -470,7 +470,7 @@ test("resource governor ignores advisory vetoes for explicit my-desktop React in
     }),
     buildContext(
       "resource",
-      "Please build a small React landing page in a folder called AI Drone City on my desktop and leave it open in the browser for me."
+      "Please build a small React landing page in a folder called Sample City on my desktop and leave it open in the browser for me."
     )
   );
 
@@ -481,7 +481,7 @@ test("resource governor ignores advisory vetoes for explicit my-desktop React in
 test("security governor ignores advisory vetoes for bounded desktop readiness proof shell actions", async () => {
   const securityGovernor = getGovernorById("security");
   const targetFolder =
-    `${HOST_TEST_DESKTOP_DIR}${HOST_TEST_PATH_SEPARATOR}downtown Detroit drones`;
+    `${HOST_TEST_DESKTOP_DIR}${HOST_TEST_PATH_SEPARATOR}sample city showcase`;
   const vote = await securityGovernor.evaluate(
     buildProposal({
       type: "shell_command",
@@ -501,7 +501,7 @@ test("security governor ignores advisory vetoes for bounded desktop readiness pr
     }),
     buildContext(
       "security",
-      "Please make a Next.js landing page on my desktop called downtown Detroit drones, build it fully, and stop once it is ready without opening anything yet."
+      "Please make a Next.js landing page on my desktop called sample city showcase, build it fully, and stop once it is ready without opening anything yet."
     )
   );
 
@@ -512,7 +512,7 @@ test("security governor ignores advisory vetoes for bounded desktop readiness pr
 test("security governor ignores advisory vetoes for tracked framework edit rebuild shell actions without restating the desktop path", async () => {
   const securityGovernor = getGovernorById("security");
   const targetFolder =
-    `${HOST_TEST_DESKTOP_DIR}${HOST_TEST_PATH_SEPARATOR}downtown Detroit drones`;
+    `${HOST_TEST_DESKTOP_DIR}${HOST_TEST_PATH_SEPARATOR}sample city showcase`;
   const vote = await securityGovernor.evaluate(
     buildProposal({
       type: "shell_command",
@@ -542,7 +542,7 @@ test("security governor ignores advisory vetoes for tracked framework edit rebui
 test("security governor ignores advisory vetoes for explicit absolute Desktop-path list_directory build actions", async () => {
   const securityGovernor = getGovernorById("security");
   const targetFolder =
-    `${HOST_TEST_DESKTOP_DIR}${HOST_TEST_PATH_SEPARATOR}AI Drone City`;
+    `${HOST_TEST_DESKTOP_DIR}${HOST_TEST_PATH_SEPARATOR}Sample City`;
   const vote = await securityGovernor.evaluate(
     buildProposal({
       type: "list_directory",
@@ -564,7 +564,7 @@ test("security governor ignores advisory vetoes for explicit absolute Desktop-pa
 test("resource governor ignores advisory vetoes for explicit absolute Desktop-path React repair shell actions", async () => {
   const resourceGovernor = getGovernorById("resource");
   const targetFolder =
-    `${HOST_TEST_DESKTOP_DIR}${HOST_TEST_PATH_SEPARATOR}AI Drone City`;
+    `${HOST_TEST_DESKTOP_DIR}${HOST_TEST_PATH_SEPARATOR}Sample City`;
   const vote = await resourceGovernor.evaluate(
     buildProposal({
       type: "shell_command",
@@ -592,7 +592,7 @@ test("resource governor ignores advisory vetoes for explicit absolute Desktop-pa
 test('security governor ignores advisory vetoes for explicit Desktop-path React repair requests phrased as in the "..." folder', async () => {
   const securityGovernor = getGovernorById("security");
   const targetFolder =
-    `${HOST_TEST_DESKTOP_DIR}${HOST_TEST_PATH_SEPARATOR}AI Drone City`;
+    `${HOST_TEST_DESKTOP_DIR}${HOST_TEST_PATH_SEPARATOR}Sample City`;
   const vote = await securityGovernor.evaluate(
     buildProposal({
       type: "list_directory",
@@ -616,12 +616,12 @@ test("security governor ignores advisory vetoes for bounded desktop organization
   const vote = await securityGovernor.evaluate(
     buildProposal({
       type: "shell_command",
-      description: "Create the destination folder and move matching drone-company folders into it.",
+      description: "Create the destination folder and move matching sample-company folders into it.",
       params: {
         command:
-          `New-Item -ItemType Directory -Force -Path "${HOST_TEST_DESKTOP_DIR}${HOST_TEST_PATH_SEPARATOR}drone-web-projects"; ` +
-          `Move-Item -Path "${HOST_TEST_DESKTOP_DIR}${HOST_TEST_PATH_SEPARATOR}drone-company*" ` +
-          `-Destination "${HOST_TEST_DESKTOP_DIR}${HOST_TEST_PATH_SEPARATOR}drone-web-projects"`,
+          `New-Item -ItemType Directory -Force -Path "${HOST_TEST_DESKTOP_DIR}${HOST_TEST_PATH_SEPARATOR}sample-web-projects"; ` +
+          `Move-Item -Path "${HOST_TEST_DESKTOP_DIR}${HOST_TEST_PATH_SEPARATOR}sample-company*" ` +
+          `-Destination "${HOST_TEST_DESKTOP_DIR}${HOST_TEST_PATH_SEPARATOR}sample-web-projects"`,
         cwd: HOST_TEST_DESKTOP_DIR,
         workdir: HOST_TEST_DESKTOP_DIR,
         requestedShellKind: "powershell",
@@ -630,7 +630,7 @@ test("security governor ignores advisory vetoes for bounded desktop organization
     }),
     buildContext(
       "security",
-      "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects."
+      "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects."
     )
   );
 
@@ -638,10 +638,10 @@ test("security governor ignores advisory vetoes for bounded desktop organization
   assert.equal(vote.rejectCategory, undefined);
 });
 
-test("security governor ignores advisory vetoes for temp-scaffold finalize shell actions in follow-up build turns", async () => {
+test("security governor allows explicit temporary framework create actions when final path is user-owned", async () => {
   const securityGovernor = getGovernorById("security");
   const targetFolder =
-    `${HOST_TEST_DESKTOP_DIR}${HOST_TEST_PATH_SEPARATOR}downtown-detroit-drones`;
+    `${HOST_TEST_DESKTOP_DIR}${HOST_TEST_PATH_SEPARATOR}sample-city-showcase`;
   const vote = await securityGovernor.evaluate(
     buildProposal({
       type: "shell_command",
@@ -649,8 +649,8 @@ test("security governor ignores advisory vetoes for temp-scaffold finalize shell
       params: {
         command:
           `$final='${targetFolder}'; ` +
-          "$tempRoot=Join-Path $env:TEMP 'agentbigbrain-framework-scaffold'; " +
-          "$temp=Join-Path $tempRoot 'downtown-detroit-drones'; " +
+          "$tempRoot=Join-Path $env:TEMP 'external-framework-build'; " +
+          "$temp=Join-Path $tempRoot 'sample-city-showcase'; " +
           "if (Test-Path (Join-Path $final 'package.json')) { Set-Location $final; exit 0 }; " +
           "if (!(Test-Path $temp)) { throw ('Framework scaffold temp workspace missing: ' + $temp) }; " +
           "if (!(Test-Path $final)) { New-Item -ItemType Directory -Path $final -Force | Out-Null }; " +
@@ -667,9 +667,9 @@ test("security governor ignores advisory vetoes for temp-scaffold finalize shell
       "security",
       [
         "Finish the project end to end.",
-        "Use the scaffolded Next.js app at `C:\\Users\\testuser\\AppData\\Local\\Temp\\agentbigbrain-framework-scaffold\\downtown-detroit-drones`,",
-        "move or copy it to the desktop as a folder named `downtown-detroit-drones`,",
-        "implement the landing page for Downtown Detroit Drones,",
+        "Use the scaffolded Next.js app from a temporary workspace,",
+        "move or copy it to the desktop as a folder named `sample-city-showcase`,",
+        "implement the landing page for Sample City Showcase,",
         "then install/run it, verify it works, and open it in the browser from the desktop location."
       ].join(" ")
     )
@@ -682,23 +682,23 @@ test("security governor ignores advisory vetoes for temp-scaffold finalize shell
 test("security governor ignores advisory vetoes for finish-the-project desktop page writes", async () => {
   const securityGovernor = getGovernorById("security");
   const targetFolder =
-    `${HOST_TEST_DESKTOP_DIR}${HOST_TEST_PATH_SEPARATOR}downtown-detroit-drones`;
+    `${HOST_TEST_DESKTOP_DIR}${HOST_TEST_PATH_SEPARATOR}sample-city-showcase`;
   const vote = await securityGovernor.evaluate(
     buildProposal({
       type: "write_file",
       description: "Write the Next.js landing page into the exact requested Desktop workspace.",
       params: {
         path: `${targetFolder}${HOST_TEST_PATH_SEPARATOR}app${HOST_TEST_PATH_SEPARATOR}page.tsx`,
-        content: "export default function Page() { return <main>Downtown Detroit Drones</main>; }"
+        content: "export default function Page() { return <main>Sample City Showcase</main>; }"
       }
     }),
     buildContext(
       "security",
       [
         "Finish the project end to end.",
-        "Use the scaffolded Next.js app at `C:\\Users\\testuser\\AppData\\Local\\Temp\\agentbigbrain-framework-scaffold\\downtown-detroit-drones`,",
-        "move or copy it to the desktop as a folder named `downtown-detroit-drones`,",
-        "implement the landing page for Downtown Detroit Drones,",
+        "Use the scaffolded Next.js app from the current workspace,",
+        "move or copy it to the desktop as a folder named `sample-city-showcase`,",
+        "implement the landing page for Sample City Showcase,",
         "then install/run it, verify it works, and open it in the browser from the desktop location."
       ].join(" ")
     )
@@ -713,11 +713,11 @@ test("security governor ignores advisory vetoes for bounded desktop organization
   const vote = await securityGovernor.evaluate(
     buildProposal({
       type: "shell_command",
-      description: "Create the destination folder and move matching Drone folders into it from a temp execution context.",
+      description: "Create the destination folder and move matching Sample folders into it from a temp execution context.",
       params: {
         command:
           `New-Item -ItemType Directory -Force -Path "${HOST_TEST_DESKTOP_DIR}${HOST_TEST_PATH_SEPARATOR}Testing-Auto"; ` +
-          `Move-Item -Path "${HOST_TEST_DESKTOP_DIR}${HOST_TEST_PATH_SEPARATOR}Drone*" ` +
+          `Move-Item -Path "${HOST_TEST_DESKTOP_DIR}${HOST_TEST_PATH_SEPARATOR}Sample*" ` +
           `-Destination "${HOST_TEST_DESKTOP_DIR}${HOST_TEST_PATH_SEPARATOR}Testing-Auto"`,
         cwd: "C:\\Users\\testuser\\AppData\\Local\\Temp",
         workdir: "C:\\Users\\testuser\\AppData\\Local\\Temp",
@@ -727,7 +727,7 @@ test("security governor ignores advisory vetoes for bounded desktop organization
     }),
     buildContext(
       "security",
-      "Please gather every folder on my desktop whose name begins with Drone into a single desktop folder called Testing-Auto."
+      "Please gather every folder on my desktop whose name begins with Sample into a single desktop folder called Testing-Auto."
     )
   );
 
@@ -742,13 +742,13 @@ test("security governor still blocks advisory vetoes for shared public desktop w
       type: "write_file",
       description: "Write a landing page into the Public Desktop.",
       params: {
-        path: "C:\\Users\\Public\\Desktop\\drone-company\\index.html",
-        content: "<!doctype html><title>Drone Company</title>"
+        path: "C:\\Users\\Public\\Desktop\\sample-company\\index.html",
+        content: "<!doctype html><title>Sample Company</title>"
       }
     }),
     buildContext(
       "security",
-      "Build a simple landing page on my desktop in a folder called drone-company and run it in a browser."
+      "Build a simple landing page on my desktop in a folder called sample-company and run it in a browser."
     )
   );
 
@@ -903,12 +903,12 @@ test("security governor ignores advisory vetoes for npm run preview localhost st
       description: "Start the local Vite preview server for the React landing page.",
       params: {
         command: "npm run preview -- --host 127.0.0.1 --port 4173",
-        cwd: `${HOST_TEST_DESKTOP_DIR}${HOST_TEST_PATH_SEPARATOR}AI Drone City`
+        cwd: `${HOST_TEST_DESKTOP_DIR}${HOST_TEST_PATH_SEPARATOR}Sample City`
       }
     }),
     buildContext(
       "security",
-      "In C:\\Users\\testuser\\Desktop\\AI Drone City, start the React app, wait for the local URL, and open it in the browser."
+      "In C:\\Users\\testuser\\Desktop\\Sample City, start the React app, wait for the local URL, and open it in the browser."
     )
   );
 
