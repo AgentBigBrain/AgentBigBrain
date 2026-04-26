@@ -157,6 +157,32 @@ const PLANNER_PARAMS_SCHEMA = {
       additionalProperties: false,
       properties: {
         name: STRING_SCHEMA,
+        kind: {
+          type: "string",
+          enum: ["executable_module"]
+        },
+        code: STRING_SCHEMA
+      },
+      required: ["name", "kind", "code"]
+    },
+    {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        name: STRING_SCHEMA,
+        kind: {
+          type: "string",
+          enum: ["markdown_instruction"]
+        },
+        instructions: STRING_SCHEMA
+      },
+      required: ["name", "kind", "instructions"]
+    },
+    {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        name: STRING_SCHEMA,
         input: STRING_SCHEMA
       },
       required: ["name", "input"]

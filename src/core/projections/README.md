@@ -13,10 +13,12 @@ such as the JSON mirror used to prove the seam stays generic.
   graph, governance memory, execution receipts, workflow learning, and media artifacts
 - canonical projection change sets emitted by runtime-owned write seams
 - projection runtime config from `config.ts`
+- policy-filtered skill projection entries from `skillProjectionPolicy.ts`
 - guarded review-action notes for the write-back lane
 
 ## Outputs
 - deterministic projected notes, `.base` files, and mirrored asset copies for Obsidian
+- policy-filtered skill review notes that never become runtime authority
 - projection sync state for rebuild and incremental fanout
 - review-action mutation routing through canonical profile-memory and Stage 6.86 seams
 - optional non-Obsidian mirror artifacts such as the JSON sink output
@@ -29,6 +31,9 @@ such as the JSON mirror used to prove the seam stays generic.
   actions and canonical mutation seams.
 - Raw media assets are mirrored as artifacts plus companion notes. They are not treated as current
   truth by themselves.
+- Skill projection policy is explicit on manifests: `review_safe` may expose metadata and redacted
+  excerpts only, `operator_full` may expose full Markdown guidance only when the manifest policy
+  permits it, and projected skill notes never become runtime authority.
 - Rebuild and incremental sync must preserve deterministic note paths, stable metadata, and
   operator-authored review-action notes.
 - The sink interface must stay generic enough for non-Obsidian targets.
@@ -37,6 +42,7 @@ such as the JSON mirror used to prove the seam stays generic.
 - `tests/core/projectionService.test.ts`
 - `tests/core/mediaArtifactStore.test.ts`
 - `tests/core/obsidianVaultSink.test.ts`
+- `tests/core/skillProjectionPolicy.test.ts`
 - `tests/core/projectionReviewActions.test.ts`
 - `tests/core/jsonMirrorSink.test.ts`
 - `tests/tools/obsidianProjectionTools.test.ts`

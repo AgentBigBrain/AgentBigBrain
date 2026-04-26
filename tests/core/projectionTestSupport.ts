@@ -279,6 +279,7 @@ export function buildProjectionSnapshotFixture(
     executionReceipts: [],
     workflowPatterns: [],
     mediaArtifacts: [],
+    skillProjectionEntries: [],
     ...overrides
   };
 }

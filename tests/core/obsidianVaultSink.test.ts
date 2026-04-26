@@ -149,6 +149,49 @@ test("ObsidianVaultSink sync rewrites affected collections and preserves untouch
   }
 });
 
+test("ObsidianVaultSink mirrors skill notes as review-only projection artifacts", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "abb-obsidian-sink-skills-"));
+  try {
+    const vaultPath = path.join(tempDir, "vault");
+    const sink = new ObsidianVaultSink({
+      vaultPath,
+      rootDirectoryName: "AgentBigBrain",
+      mirrorAssets: false
+    });
+
+    await sink.rebuild(buildProjectionSnapshotFixture({
+      skillProjectionEntries: [
+        {
+          name: "document-reading",
+          kind: "markdown_instruction",
+          origin: "builtin",
+          description: "Read documents generically.",
+          userSummary: "Document reading guidance.",
+          tags: ["document"],
+          invocationHints: ["Use document reading guidance."],
+          verificationStatus: "unverified",
+          lifecycleStatus: "active",
+          memoryPolicy: "candidate_only",
+          projectionPolicy: "review_safe_excerpt",
+          contentMode: "review_safe_excerpt",
+          projectedContent: "Use source labels and avoid assuming one document shape."
+        }
+      ]
+    }));
+
+    const note = await readFile(
+      path.join(vaultPath, "AgentBigBrain", "32 Skills", "document-reading.md"),
+      "utf8"
+    );
+    assert.match(note, /Projection lane: governed skill review mirror/);
+    assert.match(note, /review_safe_excerpt/);
+    assert.match(note, /Use source labels/);
+    assert.match(note, /never runtime authority/);
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
 test("ObsidianVaultSink keeps duplicate canonical entities distinct and explains continuity-only notes", async () => {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "abb-obsidian-sink-entities-"));
   try {

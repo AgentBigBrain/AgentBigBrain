@@ -8,6 +8,20 @@ export type SkillVerificationStatus = "unverified" | "verified" | "failed";
 
 export type SkillLifecycleStatus = "active" | "deprecated";
 
+export type SkillKind = "executable_module" | "markdown_instruction";
+
+export type SkillOrigin = "builtin" | "runtime_user";
+
+export type SkillMemoryPolicy =
+  | "none"
+  | "candidate_only"
+  | "operator_approved";
+
+export type SkillProjectionPolicy =
+  | "metadata_only"
+  | "review_safe_excerpt"
+  | "operator_full_content";
+
 export type SkillAllowedSideEffect =
   | "filesystem_read"
   | "filesystem_write"
@@ -23,6 +37,8 @@ export interface SkillVerificationConfig {
 
 export interface SkillManifest {
   name: string;
+  kind: SkillKind;
+  origin: SkillOrigin;
   description: string;
   purpose: string;
   inputSummary: string;
@@ -42,12 +58,17 @@ export interface SkillManifest {
   userSummary: string;
   invocationHints: readonly string[];
   lifecycleStatus: SkillLifecycleStatus;
+  instructionPath: string | null;
   primaryPath: string;
   compatibilityPath: string;
+  memoryPolicy: SkillMemoryPolicy;
+  projectionPolicy: SkillProjectionPolicy;
 }
 
 export interface SkillInventoryEntry {
   name: string;
+  kind?: SkillKind;
+  origin?: SkillOrigin;
   description: string;
   userSummary: string;
   verificationStatus: SkillVerificationStatus;
@@ -56,4 +77,36 @@ export interface SkillInventoryEntry {
   invocationHints: readonly string[];
   lifecycleStatus: SkillLifecycleStatus;
   updatedAt: string;
+  memoryPolicy?: SkillMemoryPolicy;
+  projectionPolicy?: SkillProjectionPolicy;
+}
+
+export interface PlannerSkillGuidanceEntry {
+  name: string;
+  origin: SkillOrigin;
+  description: string;
+  tags: readonly string[];
+  invocationHints: readonly string[];
+  guidance: string;
+}
+
+export type SkillProjectionContentMode =
+  | "metadata_only"
+  | "review_safe_excerpt"
+  | "operator_full_content";
+
+export interface SkillProjectionEntry {
+  name: string;
+  kind: SkillKind;
+  origin: SkillOrigin;
+  description: string;
+  userSummary: string;
+  tags: readonly string[];
+  invocationHints: readonly string[];
+  verificationStatus: SkillVerificationStatus;
+  lifecycleStatus: SkillLifecycleStatus;
+  memoryPolicy: SkillMemoryPolicy;
+  projectionPolicy: SkillProjectionPolicy;
+  contentMode: SkillProjectionContentMode;
+  projectedContent: string | null;
 }

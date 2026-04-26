@@ -4,6 +4,12 @@ import path from "node:path";
 import { BrainConfig } from "../config";
 import { getStringParam } from "../hardConstraintParamUtils";
 import { ConstraintViolation } from "../types";
+import {
+  containsUnsafeMarkdownSkillInstructions,
+  extractMarkdownSkillInstructions,
+  MAX_MARKDOWN_SKILL_INSTRUCTIONS_LENGTH,
+  resolveCreateSkillRuntimeKind
+} from "./skillMarkdownPolicy";
 
 const SKILL_NAME_PATTERN = /^[a-zA-Z0-9_-]{1,64}$/;
 const MAX_SKILL_CODE_LENGTH = 20_000;
@@ -126,6 +132,30 @@ export function evaluateCreateSkillConstraints(
       code: "CREATE_SKILL_INVALID_NAME",
       message: "Skill name must match [a-zA-Z0-9_-] and be <= 64 chars."
     });
+  }
+
+  const kind = resolveCreateSkillRuntimeKind(params);
+  if (kind === "markdown_instruction") {
+    const instructions = extractMarkdownSkillInstructions(params);
+    if (!instructions) {
+      violations.push({
+        code: "CREATE_SKILL_MISSING_CODE",
+        message: "Create Markdown skill action requires instruction content."
+      });
+    } else if (instructions.length > MAX_MARKDOWN_SKILL_INSTRUCTIONS_LENGTH) {
+      violations.push({
+        code: "CREATE_SKILL_CODE_TOO_LARGE",
+        message:
+          `Markdown skill instruction length ${instructions.length} exceeds max ` +
+          `${MAX_MARKDOWN_SKILL_INSTRUCTIONS_LENGTH}.`
+      });
+    } else if (containsUnsafeMarkdownSkillInstructions(instructions)) {
+      violations.push({
+        code: "CREATE_SKILL_UNSAFE_CODE",
+        message: "Markdown skill instructions contain disallowed policy-bypass or secret patterns."
+      });
+    }
+    return violations;
   }
 
   const code = getStringParam(params, "code");

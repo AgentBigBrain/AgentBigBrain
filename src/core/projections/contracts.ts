@@ -8,6 +8,7 @@ import type { MediaArtifactRecord } from "../mediaArtifacts";
 import type { ProfileMemoryState, ProfileMemoryGraphClaimRecord } from "../profileMemory";
 import type { Stage686RuntimeStateSnapshot } from "../stage6_86/runtimeState";
 import type { EntityGraphV1, WorkflowPattern } from "../types";
+import type { SkillProjectionEntry } from "../../organs/skillRegistry/contracts";
 
 export type ProjectionMode = "review_safe" | "operator_full";
 
@@ -19,6 +20,7 @@ export type ProjectionChangeKind =
   | "execution_receipts_changed"
   | "workflow_learning_changed"
   | "media_artifact_changed"
+  | "skill_registry_changed"
   | "review_actions_applied"
   | "manual_rebuild";
 
@@ -42,6 +44,7 @@ export interface ProjectionSnapshot {
   executionReceipts: readonly ExecutionReceipt[];
   workflowPatterns: readonly WorkflowPattern[];
   mediaArtifacts: readonly MediaArtifactRecord[];
+  skillProjectionEntries: readonly SkillProjectionEntry[];
 }
 
 export interface ProjectionHealth {

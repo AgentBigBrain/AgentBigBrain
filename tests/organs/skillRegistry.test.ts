@@ -3,7 +3,7 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -12,7 +12,8 @@ import { applySkillVerificationResult } from "../../src/organs/skillRegistry/ski
 import { renderSkillInventory } from "../../src/organs/skillRegistry/skillInspection";
 import {
   buildSkillManifest,
-  extractSkillVerificationConfig
+  extractSkillVerificationConfig,
+  parseSkillManifest
 } from "../../src/organs/skillRegistry/skillManifest";
 import { SkillRegistryStore } from "../../src/organs/skillRegistry/skillRegistryStore";
 import { evaluateSkillVerificationResult } from "../../src/organs/skillRegistry/skillVerification";
@@ -45,6 +46,7 @@ test("skill registry persists manifests and renders trusted inventory entries", 
     const nowIso = "2026-03-10T12:00:00.000Z";
     const artifactPaths = {
       skillsRoot: tempDir,
+      instructionPath: path.join(tempDir, "triage_planner_failure.md"),
       primaryPath: path.join(tempDir, "triage_planner_failure.js"),
       compatibilityPath: path.join(tempDir, "triage_planner_failure.ts"),
       manifestPath: path.join(tempDir, "triage_planner_failure.manifest.json")
@@ -55,7 +57,7 @@ test("skill registry persists manifests and renders trusted inventory entries", 
       artifactPaths,
       nowIso
     );
-    const store = new SkillRegistryStore(tempDir);
+    const store = new SkillRegistryStore(tempDir, path.join(tempDir, "no-builtins"));
     await store.saveManifest(manifest);
 
     const verification = evaluateSkillVerificationResult(
@@ -75,6 +77,10 @@ test("skill registry persists manifests and renders trusted inventory entries", 
     const renderedInventory = renderSkillInventory(inventory);
 
     assert.ok(loadedManifest);
+    assert.equal(loadedManifest?.kind, "executable_module");
+    assert.equal(loadedManifest?.origin, "runtime_user");
+    assert.equal(loadedManifest?.memoryPolicy, "none");
+    assert.equal(loadedManifest?.projectionPolicy, "metadata_only");
     assert.equal(loadedManifest?.verificationStatus, "verified");
     assert.equal(loadedManifest?.verificationVerifiedAt, "2026-03-10T12:05:00.000Z");
     assert.equal(inventory.length, 1);
@@ -90,15 +96,17 @@ test("skill registry hides deprecated manifests and keeps failed verification ex
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-skill-registry-"));
   try {
     const nowIso = "2026-03-10T13:00:00.000Z";
-    const store = new SkillRegistryStore(tempDir);
+    const store = new SkillRegistryStore(tempDir, path.join(tempDir, "no-builtins"));
     const activeArtifactPaths = {
       skillsRoot: tempDir,
+      instructionPath: path.join(tempDir, "active.md"),
       primaryPath: path.join(tempDir, "active.js"),
       compatibilityPath: path.join(tempDir, "active.ts"),
       manifestPath: path.join(tempDir, "active.manifest.json")
     };
     const deprecatedArtifactPaths = {
       skillsRoot: tempDir,
+      instructionPath: path.join(tempDir, "deprecated.md"),
       primaryPath: path.join(tempDir, "deprecated.js"),
       compatibilityPath: path.join(tempDir, "deprecated.ts"),
       manifestPath: path.join(tempDir, "deprecated.manifest.json")
@@ -161,4 +169,111 @@ test("extractSkillVerificationConfig keeps verification settings bounded and exp
 
   assert.equal(config.testInput, "planner branch mismatch");
   assert.equal(config.expectedOutputContains, "normalized branch mismatch");
+});
+
+test("parseSkillManifest normalizes legacy executable manifests", () => {
+  const parsed = parseSkillManifest({
+    name: "legacy_skill",
+    description: "Legacy executable skill.",
+    purpose: "Keep old manifests compatible.",
+    inputSummary: "String input.",
+    outputSummary: "String output.",
+    riskLevel: "low",
+    allowedSideEffects: [],
+    tags: [],
+    capabilities: [],
+    version: "1.0.0",
+    createdAt: "2026-03-10T12:00:00.000Z",
+    updatedAt: "2026-03-10T12:00:00.000Z",
+    verificationStatus: "verified",
+    verificationVerifiedAt: "2026-03-10T12:01:00.000Z",
+    verificationFailureReason: null,
+    verificationTestInput: null,
+    verificationExpectedOutputContains: null,
+    userSummary: "Legacy skill.",
+    invocationHints: [],
+    lifecycleStatus: "active",
+    primaryPath: "/tmp/legacy_skill.js",
+    compatibilityPath: "/tmp/legacy_skill.ts"
+  });
+
+  assert.ok(parsed);
+  assert.equal(parsed?.kind, "executable_module");
+  assert.equal(parsed?.origin, "runtime_user");
+  assert.equal(parsed?.instructionPath, null);
+  assert.equal(parsed?.memoryPolicy, "none");
+  assert.equal(parsed?.projectionPolicy, "metadata_only");
+});
+
+test("skill registry merges built-in Markdown guidance and runtime overrides", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-skill-registry-"));
+  const builtInDir = path.join(tempDir, "builtins");
+  const runtimeDir = path.join(tempDir, "runtime");
+  try {
+    await mkdir(builtInDir, { recursive: true });
+    await writeFile(
+      path.join(builtInDir, "static-site-generation.md"),
+      [
+        "---",
+        "kind: markdown_instruction",
+        "name: static-site-generation",
+        "description: Built-in static site guidance.",
+        "tags: static, site, html, browser",
+        "memoryPolicy: candidate_only",
+        "projectionPolicy: review_safe_excerpt",
+        "---",
+        "# Static Site",
+        "",
+        "Prefer a self-contained index.html when no framework is needed."
+      ].join("\n"),
+      "utf8"
+    );
+
+    const store = new SkillRegistryStore(runtimeDir, builtInDir);
+    const inventory = await store.listAvailableSkills();
+    const guidance = await store.listApplicableGuidance("build a static html site", 3);
+    const manifest = await store.loadManifest("static-site-generation");
+
+    assert.equal(inventory.length, 1);
+    assert.equal(inventory[0]?.kind, "markdown_instruction");
+    assert.equal(inventory[0]?.origin, "builtin");
+    assert.equal(manifest?.memoryPolicy, "candidate_only");
+    assert.equal(guidance.length, 1);
+    assert.equal(guidance[0]?.name, "static-site-generation");
+    assert.match(guidance[0]?.guidance ?? "", /self-contained index\.html/i);
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("skill registry selects built-in browser and document Markdown guidance", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-skill-registry-builtins-"));
+  try {
+    const store = new SkillRegistryStore(path.join(tempDir, "runtime"));
+    const browserGuidance = await store.listApplicableGuidance(
+      "Reopen the tracked browser preview, close the exact browser session, and stop the linked process lease.",
+      5
+    );
+    const documentGuidance = await store.listApplicableGuidance(
+      "Read the uploaded PDF document, extract requested fields, keep source labels, and avoid memory persistence.",
+      5
+    );
+    const staticGuidance = await store.listApplicableGuidance(
+      "Build a plain static HTML page on my Desktop and open it in a browser.",
+      5
+    );
+
+    const browserRecovery = browserGuidance.find((entry) => entry.name === "browser-recovery");
+    const documentReading = documentGuidance.find((entry) => entry.name === "document-reading");
+    const staticSite = staticGuidance.find((entry) => entry.name === "static-site-generation");
+    assert.ok(browserRecovery);
+    assert.ok(documentReading);
+    assert.ok(staticSite);
+    assert.match(browserRecovery.guidance, /tracked browser session ids/i);
+    assert.match(documentReading.guidance, /candidate-only/i);
+    assert.match(staticSite.guidance, /governed `open_browser` action/i);
+    assert.match(staticSite.guidance, /do\s+not use `verify_browser` for local file previews/i);
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
 });

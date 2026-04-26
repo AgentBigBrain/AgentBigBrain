@@ -12,6 +12,7 @@ Primary files:
 - `decisionHelpers.ts`
 - `pathConstraints.ts`
 - `skillConstraints.ts`
+- `skillMarkdownPolicy.ts`
 - `processConstraints.ts`
 - `loopbackConstraints.ts`
 - `browserConstraints.ts`

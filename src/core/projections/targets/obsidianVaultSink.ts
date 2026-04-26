@@ -21,6 +21,7 @@ import { renderObsidianGovernanceNotes } from "../renderers/obsidianGovernanceRe
 import { renderObsidianLoopNotes } from "../renderers/obsidianLoopRenderer";
 import { renderObsidianMediaArtifactNotes } from "../renderers/obsidianMediaArtifactRenderer";
 import { renderObsidianReceiptNotes } from "../renderers/obsidianReceiptRenderer";
+import { renderObsidianSkillNotes } from "../renderers/obsidianSkillRenderer";
 import { renderObsidianWorkflowLearningNotes } from "../renderers/obsidianWorkflowLearningRenderer";
 import { renderObsidianBasesFiles } from "../renderers/obsidianBasesRenderer";
 import { shouldMirrorMediaAsset } from "../policy";
@@ -50,6 +51,7 @@ type ObsidianCollectionId =
   | "media_artifacts"
   | "bases"
   | "workflow_learning"
+  | "skills"
   | "review_actions_guide"
   | "assets";
 
@@ -241,6 +243,11 @@ function buildProjectedCollections(
       notes: renderObsidianWorkflowLearningNotes(snapshot)
     },
     {
+      id: "skills",
+      clearTargets: ["32 Skills"],
+      notes: renderObsidianSkillNotes(snapshot)
+    },
+    {
       id: "review_actions_guide",
       clearTargets: [],
       preserveExistingFiles: true,
@@ -311,6 +318,10 @@ function selectCollectionIdsForChangeSet(
         selected.add("concepts");
         selected.add("assets");
         break;
+      case "skill_registry_changed":
+        selected.add("dashboard");
+        selected.add("skills");
+        break;
       case "review_actions_applied":
         selected.add("dashboard");
         selected.add("entities");
@@ -336,6 +347,7 @@ function selectCollectionIdsForChangeSet(
           "media_artifacts",
           "bases",
           "workflow_learning",
+          "skills",
           "review_actions_guide",
           "assets"
         ];

@@ -1,7 +1,12 @@
 import { access, mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { PlannedAction } from "../../core/types";
+import {
+  containsUnsafeMarkdownSkillInstructions,
+  extractMarkdownSkillInstructions,
+  resolveCreateSkillRuntimeKind
+} from "../../core/constraintRuntime/skillMarkdownPolicy";
+import { CreateSkillActionParams, PlannedAction } from "../../core/types";
 import { buildExecutionOutcome, normalizeOptionalString } from "../liveRun/contracts";
 import { applySkillVerificationResult } from "../skillRegistry/skillLifecycle";
 import { buildSkillManifest, extractSkillVerificationConfig } from "../skillRegistry/skillManifest";
@@ -19,6 +24,7 @@ import {
 const SKILL_NAME_PATTERN = /^[a-zA-Z0-9_-]{1,64}$/;
 const PRIMARY_SKILL_EXTENSION = ".js";
 const COMPATIBILITY_SKILL_EXTENSION = ".ts";
+const INSTRUCTION_SKILL_EXTENSION = ".md";
 
 /**
  * Checks whether a skill name fits the bounded runtime artifact naming rules.
@@ -40,6 +46,9 @@ function resolveSkillArtifactPaths(skillName: string): SkillArtifactPaths {
   const skillsRoot = path.resolve(resolveWorkspacePath("runtime/skills"));
   return {
     skillsRoot,
+    instructionPath: path.resolve(
+      path.join(skillsRoot, `${skillName}${INSTRUCTION_SKILL_EXTENSION}`)
+    ),
     primaryPath: path.resolve(path.join(skillsRoot, `${skillName}${PRIMARY_SKILL_EXTENSION}`)),
     compatibilityPath: path.resolve(
       path.join(skillsRoot, `${skillName}${COMPATIBILITY_SKILL_EXTENSION}`)
@@ -146,8 +155,11 @@ async function verifyCreatedSkillArtifact(
  * @returns Execution outcome for the create-skill action.
  */
 export async function executeCreateSkillAction(action: PlannedAction) {
-  const skillName = normalizeOptionalString(action.params.name);
-  const code = normalizeOptionalString(action.params.code);
+  const params = action.params as CreateSkillActionParams;
+  const skillName = normalizeOptionalString(params.name);
+  const code = normalizeOptionalString(params.code);
+  const kind = resolveCreateSkillRuntimeKind(params);
+  const markdownInstructions = extractMarkdownSkillInstructions(params);
   if (!skillName) {
     return buildExecutionOutcome(
       "blocked",
@@ -155,11 +167,29 @@ export async function executeCreateSkillAction(action: PlannedAction) {
       "CREATE_SKILL_MISSING_NAME"
     );
   }
-  if (!code) {
+  if (kind === "markdown_instruction" && !markdownInstructions) {
+    return buildExecutionOutcome(
+      "blocked",
+      "Create Markdown skill blocked: missing instruction content.",
+      "CREATE_SKILL_MISSING_CODE"
+    );
+  }
+  if (kind === "executable_module" && !code) {
     return buildExecutionOutcome(
       "blocked",
       "Create skill blocked: missing code.",
       "CREATE_SKILL_MISSING_CODE"
+    );
+  }
+  if (
+    kind === "markdown_instruction" &&
+    markdownInstructions &&
+    containsUnsafeMarkdownSkillInstructions(markdownInstructions)
+  ) {
+    return buildExecutionOutcome(
+      "blocked",
+      "Create Markdown skill blocked: unsafe instruction content.",
+      "CREATE_SKILL_UNSAFE_CODE"
     );
   }
   if (!isSafeSkillName(skillName)) {
@@ -175,6 +205,7 @@ export async function executeCreateSkillAction(action: PlannedAction) {
     if (
       !isSkillArtifactPathWithinRoot(artifactPaths.primaryPath, artifactPaths.skillsRoot) ||
       !isSkillArtifactPathWithinRoot(artifactPaths.compatibilityPath, artifactPaths.skillsRoot) ||
+      !isSkillArtifactPathWithinRoot(artifactPaths.instructionPath, artifactPaths.skillsRoot) ||
       !isSkillArtifactPathWithinRoot(artifactPaths.manifestPath, artifactPaths.skillsRoot)
     ) {
       return buildExecutionOutcome(
@@ -183,14 +214,40 @@ export async function executeCreateSkillAction(action: PlannedAction) {
         "ACTION_EXECUTION_FAILED"
       );
     }
+    if (kind === "markdown_instruction" && markdownInstructions) {
+      await writeFile(artifactPaths.instructionPath, markdownInstructions, "utf8");
+      const nowIso = new Date().toISOString();
+      const skillRegistryStore = new SkillRegistryStore(artifactPaths.skillsRoot);
+      const manifest = buildSkillManifest(params, skillName, artifactPaths, nowIso);
+      await skillRegistryStore.saveManifest(manifest);
+      return buildExecutionOutcome(
+        "success",
+        `Markdown skill created successfully: ${skillName}.md. Guidance saved for bounded planner reuse.`,
+        undefined,
+        {
+          skillName,
+          skillKind: manifest.kind,
+          skillVerificationStatus: manifest.verificationStatus,
+          skillTrustedForReuse: false,
+          skillManifestPath: artifactPaths.manifestPath
+        }
+      );
+    }
+    if (!code) {
+      return buildExecutionOutcome(
+        "blocked",
+        "Create skill blocked: missing code.",
+        "CREATE_SKILL_MISSING_CODE"
+      );
+    }
     const javascriptCode = await compileSkillSourceToJavaScript(code);
     await writeFile(artifactPaths.primaryPath, javascriptCode, "utf8");
     await writeFile(artifactPaths.compatibilityPath, code, "utf8");
     const nowIso = new Date().toISOString();
     const skillRegistryStore = new SkillRegistryStore(artifactPaths.skillsRoot);
-    let manifest = buildSkillManifest(action.params, skillName, artifactPaths, nowIso);
+    let manifest = buildSkillManifest(params, skillName, artifactPaths, nowIso);
     await skillRegistryStore.saveManifest(manifest);
-    const verificationConfig = extractSkillVerificationConfig(action.params);
+    const verificationConfig = extractSkillVerificationConfig(params);
     const verificationResult = await verifyCreatedSkillArtifact(
       {
         path: artifactPaths.primaryPath,
@@ -259,12 +316,23 @@ export async function executeRunSkillAction(action: PlannedAction) {
   const artifactPaths = resolveSkillArtifactPaths(skillName);
   if (
     !isSkillArtifactPathWithinRoot(artifactPaths.primaryPath, artifactPaths.skillsRoot) ||
-    !isSkillArtifactPathWithinRoot(artifactPaths.compatibilityPath, artifactPaths.skillsRoot)
+    !isSkillArtifactPathWithinRoot(artifactPaths.compatibilityPath, artifactPaths.skillsRoot) ||
+    !isSkillArtifactPathWithinRoot(artifactPaths.instructionPath, artifactPaths.skillsRoot)
   ) {
     return buildExecutionOutcome(
       "blocked",
       "Run skill blocked: skill path escaped skills directory.",
       "ACTION_EXECUTION_FAILED"
+    );
+  }
+
+  const skillRegistryStore = new SkillRegistryStore(artifactPaths.skillsRoot);
+  const manifest = await skillRegistryStore.loadManifest(skillName);
+  if (manifest?.kind === "markdown_instruction") {
+    return buildExecutionOutcome(
+      "blocked",
+      `Run skill blocked: ${skillName} is a Markdown instruction skill and cannot execute code.`,
+      "RUN_SKILL_ARTIFACT_MISSING"
     );
   }
 
@@ -278,8 +346,6 @@ export async function executeRunSkillAction(action: PlannedAction) {
   }
 
   try {
-    const skillRegistryStore = new SkillRegistryStore(artifactPaths.skillsRoot);
-    const manifest = await skillRegistryStore.loadManifest(skillName);
     const moduleNamespace = await loadSkillModuleNamespace(resolvedArtifact);
     const callable = pickCallableSkillExport(moduleNamespace, exportName);
     if (!callable) {
