@@ -78,13 +78,13 @@ test("extractActiveRequestSegment unwraps autonomous JSON envelopes and returns 
       "You are in an ongoing conversation with the same user.",
       "",
       "Current user request:",
-      "Create a React app called Calm Drone on my desktop. Stop after the workspace is ready for edits. Do not start a preview server yet."
+      "Create a React app called Calm Sample on my desktop. Stop after the workspace is ready for edits. Do not start a preview server yet."
     ].join("\n")
   })}`;
 
   assert.equal(
     extractActiveRequestSegment(input),
-    "Create a React app called Calm Drone on my desktop. Stop after the workspace is ready for edits. Do not start a preview server yet."
+    "Create a React app called Calm Sample on my desktop. Stop after the workspace is ready for edits. Do not start a preview server yet."
   );
 });
 

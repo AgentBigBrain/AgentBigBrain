@@ -18,7 +18,7 @@ import {
   StructuredCompletionRequest
 } from "../../src/models/types";
 import {
-  WINDOWS_TEST_ROBINHOOD_MOCK_DIR,
+  WINDOWS_TEST_PORTFOLIO_DEMO_DIR,
   WINDOWS_TEST_WRONG_APP_DIR
 } from "../support/windowsPathFixtures";
 
@@ -211,9 +211,9 @@ function buildApprovedSimulatedShellResult(actionId: string): ActionRunResult {
     action: {
       id: actionId,
       type: "shell_command",
-      description: "run shell scaffolding command",
+      description: "run shell proof command",
       params: {
-        command: "npm create vite@latest finance-dashboard"
+        command: "npm run build"
       },
       estimatedCostUsd: 0.03
     },
@@ -729,14 +729,14 @@ function buildBlockedMissingDependencyShellResult(actionId: string): ActionRunRe
       description: "build the current app",
       params: {
         command: "npm run build",
-        cwd: "C:\\Users\\testuser\\OneDrive\\Desktop\\Calm Drone"
+        cwd: "C:\\Users\\testuser\\OneDrive\\Desktop\\Calm Sample"
       },
       estimatedCostUsd: 0.08
     },
     mode: "escalation_path",
     approved: false,
     output:
-      "Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@vitejs/plugin-react' imported from C:\\Users\\testuser\\OneDrive\\Desktop\\Calm Drone\\vite.config.js",
+      "Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@vitejs/plugin-react' imported from C:\\Users\\testuser\\OneDrive\\Desktop\\Calm Sample\\vite.config.js",
     executionStatus: "failed",
     executionFailureCode: "ACTION_EXECUTION_FAILED",
     executionMetadata: {
@@ -768,13 +768,13 @@ function buildApprovedInspectWorkspaceResourcesResult(
       type: "inspect_workspace_resources",
       description: "inspect workspace resources",
       params: {
-        rootPath: "C:\\Users\\test\\Desktop\\drone-company"
+        rootPath: "C:\\Users\\test\\Desktop\\sample-company"
       },
       estimatedCostUsd: 0.04
     },
     mode: "escalation_path",
     approved: true,
-    output: "Inspection results for C:\\Users\\test\\Desktop\\drone-company.",
+    output: "Inspection results for C:\\Users\\test\\Desktop\\sample-company.",
     executionStatus: "success",
     executionMetadata: metadata,
     blockedBy: [],
@@ -797,13 +797,13 @@ function buildApprovedInspectPathHoldersResult(
       type: "inspect_path_holders",
       description: "inspect path holders",
       params: {
-        path: "C:\\Users\\test\\Desktop\\drone-company"
+        path: "C:\\Users\\test\\Desktop\\sample-company"
       },
       estimatedCostUsd: 0.04
     },
     mode: "escalation_path",
     approved: true,
-    output: "Inspection results for C:\\Users\\test\\Desktop\\drone-company.",
+    output: "Inspection results for C:\\Users\\test\\Desktop\\sample-company.",
     executionStatus: "success",
     executionMetadata: metadata,
     blockedBy: [],
@@ -1275,7 +1275,7 @@ test("AutonomousLoop aborts cleanly when the next safe step requires a human rep
 
   let abortedReason = "";
   await loop.run(
-    "Every folder with the name beginning in drone should go in drone-folder on my desktop.",
+    "Every folder with the name beginning in sample should go in sample-folder on my desktop.",
     {
       onGoalAborted: async (reason) => {
         abortedReason = reason;
@@ -1310,7 +1310,7 @@ test("AutonomousLoop does not mark explicit-path missions complete when side eff
   let goalMetCalled = false;
   let abortedReason = "";
   await loop.run(
-    `Create a React app at ${WINDOWS_TEST_ROBINHOOD_MOCK_DIR} and execute now.`,
+    `Create a React app at ${WINDOWS_TEST_PORTFOLIO_DEMO_DIR} and execute now.`,
     {
       onGoalMet: async () => {
         goalMetCalled = true;
@@ -1329,9 +1329,9 @@ test("AutonomousLoop does not mark explicit-path missions complete when side eff
 
 test("AutonomousLoop requires artifact mutation evidence for customization-heavy execution goals", async () => {
   const orchestrator = new ScriptedOrchestrator([
-    [buildApprovedShellResult("shell_scaffold_1", `npx create-react-app ${WINDOWS_TEST_ROBINHOOD_MOCK_DIR}`)],
-    [buildApprovedShellResult("shell_scaffold_2", `npx create-react-app ${WINDOWS_TEST_ROBINHOOD_MOCK_DIR}`)],
-    [buildApprovedShellResult("shell_scaffold_3", `npx create-react-app ${WINDOWS_TEST_ROBINHOOD_MOCK_DIR}`)]
+    [buildApprovedShellResult("shell_scaffold_1", `npx create-react-app ${WINDOWS_TEST_PORTFOLIO_DEMO_DIR}`)],
+    [buildApprovedShellResult("shell_scaffold_2", `npx create-react-app ${WINDOWS_TEST_PORTFOLIO_DEMO_DIR}`)],
+    [buildApprovedShellResult("shell_scaffold_3", `npx create-react-app ${WINDOWS_TEST_PORTFOLIO_DEMO_DIR}`)]
   ]);
   const modelClient = new StubLoopModelClient([
     {
@@ -1349,7 +1349,7 @@ test("AutonomousLoop requires artifact mutation evidence for customization-heavy
   let goalMetCalled = false;
   let abortedReason = "";
   await loop.run(
-    `Create a React app at ${WINDOWS_TEST_ROBINHOOD_MOCK_DIR} with a modern dark theme, Robinhood-style UI, and stock components. Execute now.`,
+    `Create a React app at ${WINDOWS_TEST_PORTFOLIO_DEMO_DIR} with a modern dark theme, portfolio dashboard UI, and stock components. Execute now.`,
     {
       onGoalMet: async () => {
         goalMetCalled = true;
@@ -1368,7 +1368,7 @@ test("AutonomousLoop requires artifact mutation evidence for customization-heavy
 
 test("AutonomousLoop allows customization-heavy execution completion after real mutation evidence", async () => {
   const orchestrator = new ScriptedOrchestrator([
-    [buildApprovedShellResult("shell_scaffold_1", `npx create-react-app ${WINDOWS_TEST_ROBINHOOD_MOCK_DIR}`)],
+    [buildApprovedShellResult("shell_scaffold_1", `npx create-react-app ${WINDOWS_TEST_PORTFOLIO_DEMO_DIR}`)],
     [buildApprovedWriteFileResult("write_1")]
   ]);
   const modelClient = new StubLoopModelClient([
@@ -1391,7 +1391,7 @@ test("AutonomousLoop allows customization-heavy execution completion after real 
 
   let goalMetReasoning = "";
   await loop.run(
-    "Create a React app on my Desktop with modern dark Robinhood-style UI components and execute now.",
+    "Create a React app on my Desktop with modern dark portfolio dashboard UI components and execute now.",
     {
       onGoalMet: async (reasoning) => {
         goalMetReasoning = reasoning;
@@ -2005,7 +2005,7 @@ test("AutonomousLoop inspects workspace holders before retrying a locked organiz
     { ...DEFAULT_BRAIN_CONFIG, runtime: { ...DEFAULT_BRAIN_CONFIG.runtime, isDaemonMode: false } }
   );
 
-  await loop.run('Every folder with the name beginning in drone should go in "drone-folder" on my desktop.');
+  await loop.run('Every folder with the name beginning in sample should go in "sample-folder" on my desktop.');
 
   assert.equal(orchestrator.receivedInputs.length, 2);
   assert.match(
@@ -2054,7 +2054,7 @@ test("AutonomousLoop stops only exact tracked holders after inspected workspace 
     { ...DEFAULT_BRAIN_CONFIG, runtime: { ...DEFAULT_BRAIN_CONFIG.runtime, isDaemonMode: false } }
   );
 
-  await loop.run('Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.');
+  await loop.run('Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.');
 
   assert.equal(orchestrator.receivedInputs.length, 2);
   assert.match(orchestrator.receivedInputs[1] ?? "", /leaseId="proc_preview_1"/i);
@@ -2073,7 +2073,7 @@ test("AutonomousLoop retries the original move after an exact tracked holder shu
       })
     ],
     [buildApprovedStopProcessResult("stop_process_retry_1", "proc_preview_retry_1")],
-    [buildApprovedShellResult("shell_move_retry_1", "Move-Item -LiteralPath drone-company -Destination drone-folder")]
+    [buildApprovedShellResult("shell_move_retry_1", "Move-Item -LiteralPath sample-company -Destination sample-folder")]
   ]);
   let nextStepCalls = 0;
   const modelClient: ModelClient = {
@@ -2102,7 +2102,7 @@ test("AutonomousLoop retries the original move after an exact tracked holder shu
     { ...DEFAULT_BRAIN_CONFIG, runtime: { ...DEFAULT_BRAIN_CONFIG.runtime, isDaemonMode: false } }
   );
 
-  await loop.run('Every folder with the name beginning in drone should go in "drone-folder" on my desktop.');
+  await loop.run('Every folder with the name beginning in sample should go in "sample-folder" on my desktop.');
 
   assert.equal(orchestrator.receivedInputs.length, 3);
   assert.match(orchestrator.receivedInputs[1] ?? "", /leaseId="proc_preview_retry_1"/i);
@@ -2122,7 +2122,7 @@ test("AutonomousLoop retries the original move once after a clean inspection-onl
         inspectionOwnershipClassification: "unknown"
       })
     ],
-    [buildApprovedShellResult("shell_move_after_inspection_1", "Move-Item -LiteralPath drone-company -Destination drone-folder")]
+    [buildApprovedShellResult("shell_move_after_inspection_1", "Move-Item -LiteralPath sample-company -Destination sample-folder")]
   ]);
   let nextStepCalls = 0;
   const modelClient: ModelClient = {
@@ -2152,11 +2152,11 @@ test("AutonomousLoop retries the original move once after a clean inspection-onl
   );
 
   await loop.run(
-    'Every folder with the name beginning in drone should go in "drone-folder" on my desktop.',
+    'Every folder with the name beginning in sample should go in "sample-folder" on my desktop.',
     undefined,
     undefined,
     undefined,
-    "Continue workspace-recovery for the same goal. First run inspect_path_holders on the remaining blocked paths: 1) C:\\Users\\testuser\\Desktop\\drone-company-a and 2) C:\\Users\\testuser\\Desktop\\drone-company-b."
+    "Continue workspace-recovery for the same goal. First run inspect_path_holders on the remaining blocked paths: 1) C:\\Users\\testuser\\Desktop\\sample-company-a and 2) C:\\Users\\testuser\\Desktop\\sample-company-b."
   );
 
   assert.equal(orchestrator.receivedInputs.length, 2);
@@ -2188,7 +2188,7 @@ test("AutonomousLoop aborts cleanly when the move is still blocked after a post-
 
   let abortedReason = "";
   await loop.run(
-    'Every folder with the name beginning in drone should go in "drone-folder" on my desktop.',
+    'Every folder with the name beginning in sample should go in "sample-folder" on my desktop.',
     {
       onGoalAborted: async (reason) => {
         abortedReason = reason;
@@ -2196,7 +2196,7 @@ test("AutonomousLoop aborts cleanly when the move is still blocked after a post-
     },
     undefined,
     undefined,
-    "Continue workspace-recovery for the same goal. First run inspect_path_holders on the remaining blocked paths: 1) C:\\Users\\testuser\\Desktop\\drone-company-a and 2) C:\\Users\\testuser\\Desktop\\drone-company-b."
+    "Continue workspace-recovery for the same goal. First run inspect_path_holders on the remaining blocked paths: 1) C:\\Users\\testuser\\Desktop\\sample-company-a and 2) C:\\Users\\testuser\\Desktop\\sample-company-b."
   );
 
   assert.equal(orchestrator.receivedInputs.length, 2);
@@ -2243,7 +2243,7 @@ test("AutonomousLoop emits retrying state updates for exact tracked workspace re
   const states: string[] = [];
 
   await loop.run(
-    'Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.',
+    'Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.',
     {
       onStateChange: async (update) => {
         states.push(`${update.state}:${update.message}`);
@@ -2287,7 +2287,7 @@ test("AutonomousLoop aborts when only untracked holder candidates remain for a l
 
   let abortedReason = "";
   await loop.run(
-    'Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.',
+    'Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.',
     {
       onGoalAborted: async (reason) => {
         abortedReason = reason;
@@ -2330,7 +2330,7 @@ test("AutonomousLoop aborts cleanly when inspection finds a small likely non-pre
 
   let abortedReason = "";
   await loop.run(
-    'Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.',
+    'Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.',
     {
       onGoalAborted: async (reason) => {
         abortedReason = reason;
@@ -2355,7 +2355,7 @@ test("AutonomousLoop retries the move once when inspection finds only stale trac
         inspectionStaleBrowserSessionIds: "browser_session:old_preview"
       })
     ],
-    [buildApprovedShellResult("shell_move_after_stale_inspection_1", "Move-Item -LiteralPath drone-company -Destination drone-folder")]
+    [buildApprovedShellResult("shell_move_after_stale_inspection_1", "Move-Item -LiteralPath sample-company -Destination sample-folder")]
   ]);
   let nextStepCalls = 0;
   const loop = new AutonomousLoop(
@@ -2384,7 +2384,7 @@ test("AutonomousLoop retries the move once when inspection finds only stale trac
   );
 
   await loop.run(
-    'Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.',
+    'Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.',
     undefined
   );
 
@@ -2418,7 +2418,7 @@ test("AutonomousLoop aborts cleanly when inspection finds only orphaned assistan
 
   let abortedReason = "";
   await loop.run(
-    'Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.',
+    'Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.',
     {
       onGoalAborted: async (reason) => {
         abortedReason = reason;
@@ -2458,7 +2458,7 @@ test("AutonomousLoop aborts cleanly when inspection finds only non-preview local
 
   let abortedReason = "";
   await loop.run(
-    'Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.',
+    'Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.',
     {
       onGoalAborted: async (reason) => {
         abortedReason = reason;
@@ -2500,7 +2500,7 @@ test("AutonomousLoop aborts cleanly with a targeted confirmation need for one hi
 
   let abortedReason = "";
   await loop.run(
-    'Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.',
+    'Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.',
     {
       onGoalAborted: async (reason) => {
         abortedReason = reason;
@@ -2542,7 +2542,7 @@ test("AutonomousLoop aborts cleanly with a targeted confirmation need for one hi
 
   let abortedReason = "";
   await loop.run(
-    'Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.',
+    'Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.',
     {
       onGoalAborted: async (reason) => {
         abortedReason = reason;
@@ -2587,7 +2587,7 @@ test("AutonomousLoop aborts cleanly with a contextual confirmation need for a st
 
   let abortedReason = "";
   await loop.run(
-    'Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.',
+    'Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.',
     {
       onGoalAborted: async (reason) => {
         abortedReason = reason;
@@ -2632,7 +2632,7 @@ test("AutonomousLoop aborts cleanly with a contextual confirmation need for a br
 
   let abortedReason = "";
   await loop.run(
-    'Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.',
+    'Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.',
     {
       onGoalAborted: async (reason) => {
         abortedReason = reason;
@@ -2677,7 +2677,7 @@ test("AutonomousLoop aborts cleanly with a contextual confirmation need for a br
 
   let abortedReason = "";
   await loop.run(
-    'Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.',
+    'Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.',
     {
       onGoalAborted: async (reason) => {
         abortedReason = reason;
@@ -2722,7 +2722,7 @@ test("AutonomousLoop aborts cleanly with a contextual confirmation need for a bo
 
   let abortedReason = "";
   await loop.run(
-    'Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.',
+    'Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.',
     {
       onGoalAborted: async (reason) => {
         abortedReason = reason;
@@ -2767,7 +2767,7 @@ test("AutonomousLoop aborts cleanly with a contextual confirmation need for a bo
 
   let abortedReason = "";
   await loop.run(
-    'Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.',
+    'Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.',
     {
       onGoalAborted: async (reason) => {
         abortedReason = reason;
@@ -2815,7 +2815,7 @@ test("AutonomousLoop aborts cleanly with a contextual confirmation need for a br
 
   let abortedReason = "";
   await loop.run(
-    'Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.',
+    'Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.',
     {
       onGoalAborted: async (reason) => {
         abortedReason = reason;
@@ -2863,7 +2863,7 @@ test("AutonomousLoop aborts cleanly with a contextual confirmation need for a br
 
   let abortedReason = "";
   await loop.run(
-    'Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.',
+    'Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.',
     {
       onGoalAborted: async (reason) => {
         abortedReason = reason;
@@ -2911,7 +2911,7 @@ test("AutonomousLoop aborts cleanly with a contextual confirmation need for a br
 
   let abortedReason = "";
   await loop.run(
-    'Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.',
+    'Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.',
     {
       onGoalAborted: async (reason) => {
         abortedReason = reason;
@@ -2959,7 +2959,7 @@ test("AutonomousLoop aborts cleanly with a contextual confirmation need for a br
 
   let abortedReason = "";
   await loop.run(
-    'Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.',
+    'Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.',
     {
       onGoalAborted: async (reason) => {
         abortedReason = reason;
@@ -3005,7 +3005,7 @@ test("AutonomousLoop aborts cleanly with a targeted confirmation need for multip
 
   let abortedReason = "";
   await loop.run(
-    'Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.',
+    'Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.',
     {
       onGoalAborted: async (reason) => {
         abortedReason = reason;
@@ -3052,7 +3052,7 @@ test("AutonomousLoop aborts cleanly with contextual manual cleanup wording for a
 
   let abortedReason = "";
   await loop.run(
-    'Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.',
+    'Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.',
     {
       onGoalAborted: async (reason) => {
         abortedReason = reason;
@@ -3108,7 +3108,7 @@ test("AutonomousLoop aborts cleanly with contextual manual cleanup wording for a
 
   let abortedReason = "";
   await loop.run(
-    'Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.',
+    'Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.',
     {
       onGoalAborted: async (reason) => {
         abortedReason = reason;
@@ -3167,7 +3167,7 @@ test("AutonomousLoop aborts cleanly with contextual manual cleanup wording for a
 
   let abortedReason = "";
   await loop.run(
-    'Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.',
+    'Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.',
     {
       onGoalAborted: async (reason) => {
         abortedReason = reason;
@@ -3226,7 +3226,7 @@ test("AutonomousLoop aborts cleanly with contextual manual cleanup wording for a
 
   let abortedReason = "";
   await loop.run(
-    'Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.',
+    'Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.',
     {
       onGoalAborted: async (reason) => {
         abortedReason = reason;
@@ -3286,7 +3286,7 @@ test("AutonomousLoop aborts cleanly with contextual manual cleanup wording for a
 
   let abortedReason = "";
   await loop.run(
-    'Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.',
+    'Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.',
     {
       onGoalAborted: async (reason) => {
         abortedReason = reason;

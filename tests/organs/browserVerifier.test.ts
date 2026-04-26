@@ -164,9 +164,9 @@ test("PlaywrightBrowserVerifier treats slug titles as matching human-spaced expe
       newContext: async () => ({
         newPage: async () => ({
           goto: async () => undefined,
-          title: async () => "downtown-detroit-drones",
+          title: async () => "sample-city-showcase",
           textContent: async () =>
-            "downtown-detroit-dronesStoryFlowTrustLaunchSingle-page landing experience",
+            "sample-city-showcaseStoryFlowTrustLaunchSingle-page landing experience",
           close: async () => undefined
         }),
         close: async () => undefined
@@ -183,8 +183,8 @@ test("PlaywrightBrowserVerifier treats slug titles as matching human-spaced expe
 
   const result = await verifier.verify({
     url: "http://127.0.0.1:3000/",
-    expectedTitle: "Downtown Detroit Drones",
-    expectedText: "Downtown Detroit Drones",
+    expectedTitle: "Sample City Showcase",
+    expectedText: "Sample City Showcase",
     timeoutMs: 2000
   });
 

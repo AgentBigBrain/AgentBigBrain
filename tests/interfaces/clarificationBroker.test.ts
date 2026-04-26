@@ -10,6 +10,7 @@ import {
   createActiveClarificationState,
   createTaskRecoveryClarificationState,
   isClarificationExpired,
+  resolveClarifiedBuildFormatMetadata,
   resolveClarifiedIntentMode,
   resolveClarificationAnswer
 } from "../../src/interfaces/conversationRuntime/clarificationBroker";
@@ -121,6 +122,28 @@ test("build-format clarification resolves static HTML and framework answers dete
     ),
     "framework_app_build"
   );
+  assert.deepEqual(
+    resolveClarifiedBuildFormatMetadata(
+      clarification,
+      htmlResolution?.selectedOptionId ?? "static_html"
+    ),
+    {
+      format: "static_html",
+      source: "clarification",
+      confidence: "high"
+    }
+  );
+  assert.deepEqual(
+    resolveClarifiedBuildFormatMetadata(
+      clarification,
+      nextResolution?.selectedOptionId ?? "nextjs"
+    ),
+    {
+      format: "nextjs",
+      source: "clarification",
+      confidence: "high"
+    }
+  );
   assert.match(
     buildClarifiedExecutionInput(
       clarification.sourceInput,
@@ -155,7 +178,7 @@ test("isClarificationExpired expires stale execution-mode clarification after th
 
 test("task recovery clarification resolves yes/no answers and adds a recovery instruction", () => {
   const clarification = createTaskRecoveryClarificationState(
-    "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+    "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
     "2026-03-13T14:00:00.000Z",
     "I couldn't move those folders yet because one or more are still open in a local preview process. I can inspect the matching holders, shut down only exact tracked ones, and retry the move. Do you want me to do that?",
     "post_execution_locked_folder_recovery",
@@ -185,14 +208,14 @@ test("task recovery clarification resolves yes/no answers and adds a recovery in
 
 test("task recovery clarification accepts a plain yes when only one recovery option is available", () => {
   const shutdownClarification = createTaskRecoveryClarificationState(
-    "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+    "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
     "2026-03-13T14:00:00.000Z",
     "I can stop only the exact tracked holder and retry the move. Do you want me to do that?",
     "post_execution_locked_folder_recovery",
     "Recovery instruction: stop only this exact tracked preview-process lease id: leaseId=\"proc_preview_1\"."
   );
   const inspectionClarification = createTaskRecoveryClarificationState(
-    "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+    "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
     "2026-03-13T14:05:00.000Z",
     "I can inspect the likely holders more closely before taking action. Do you want me to continue that recovery?",
     "post_execution_untracked_holder_recovery_clarification",
@@ -215,7 +238,7 @@ test("task recovery clarification accepts a plain yes when only one recovery opt
 
 test("task recovery clarification can continue recovery without pretending shutdown is already proven", () => {
   const clarification = createTaskRecoveryClarificationState(
-    "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+    "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
     "2026-03-13T14:00:00.000Z",
     "I couldn't move those folders yet because likely local preview holders may still be using them. I can inspect those holders more closely first. Do you want me to continue that recovery?",
     "post_execution_untracked_holder_recovery_clarification",
@@ -250,14 +273,14 @@ test("task recovery clarification can continue recovery without pretending shutd
 
 test("task recovery clarification preserves exact non-preview shutdown markers after confirmation", () => {
   const clarification = createTaskRecoveryClarificationState(
-    "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+    "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
     "2026-03-14T20:15:00.000Z",
     "I found one high-confidence local holder still tied to those folders: Code (pid 8840). It still looks like an editor or IDE process is holding them. If you want, I can stop just that process and retry the move. Do you want me to do that?",
     "post_execution_exact_non_preview_holder_recovery_clarification",
     [
       "[WORKSPACE_RECOVERY_STOP_EXACT]",
       "A folder move was blocked because one high-confidence local holder still owns the target folders. Stop only this exact confirmed local holder if it is still active: pid=8840 (Code (pid 8840)).",
-      "Verify it stopped, then retry this original folder-organization goal: \"Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.\"."
+      "Verify it stopped, then retry this original folder-organization goal: \"Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.\"."
     ].join("\n")
   );
 

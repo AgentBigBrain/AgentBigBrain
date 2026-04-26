@@ -31,10 +31,7 @@ import {
   normalizeTrackedArtifactPreviewRefreshActions,
   stripExecutionStyleRespondActions
 } from "./explicitActionRepairSupport";
-import {
-  normalizeNextJsRouteWriteActions,
-  normalizeUnsafeFrameworkScaffoldActions
-} from "./frameworkActionRepairSupport";
+import { normalizeNextJsRouteWriteActions } from "./frameworkActionRepairSupport";
 import { normalizeStaticHtmlPreviewActions } from "./staticHtmlPreviewActionNormalization";
 import {
   PlannerActionPreparationResult,
@@ -65,11 +62,6 @@ export function preparePlannerActions(
       requiredActionType
   );
   actions = stripExecutionStyleRespondActions(actions, currentUserRequest, requiredActionType);
-  actions = normalizeUnsafeFrameworkScaffoldActions(
-    actions,
-    currentUserRequest,
-    executionEnvironment
-  );
   actions = normalizeNextJsRouteWriteActions(
     actions,
     currentUserRequest,

@@ -2147,13 +2147,13 @@ test("conversation manager keeps greetings and identity turns direct under saved
       returnHandoff: {
         id: "handoff:blocked-job",
         status: "completed",
-        goal: "Finish the drone-company landing page and leave it ready for review.",
+        goal: "Finish the sample-company landing page and leave it ready for review.",
         summary:
           "I couldn't execute that request in this run. What happened: one or more governed actions were blocked before execution. Why it didn't execute: a safety, governance, or runtime policy denied the requested side effect. What to do next: ask for the exact block code and approval diff, then retry with a narrower allowed action.",
         nextSuggestedStep: "Ask for the exact block code and approval diff, then retry with a narrower allowed action.",
         workspaceRootPath: "C:\\Users\\testuser\\OneDrive\\Desktop\\Sample World",
         primaryArtifactPath: "C:\\Users\\testuser\\OneDrive\\Desktop\\Sample World\\src\\index.css",
-        previewUrl: "file:///C:/Users/testuser/OneDrive/Desktop/drone-company-landing.html",
+        previewUrl: "file:///C:/Users/testuser/OneDrive/Desktop/sample-company-landing.html",
         changedPaths: [
           "C:\\Users\\testuser\\OneDrive\\Desktop\\Sample World\\src\\index.css",
           "C:\\Users\\testuser\\OneDrive\\Desktop\\Sample World\\src\\App.jsx"
@@ -2738,46 +2738,46 @@ test("conversation manager keeps relationship recap and entity follow-up chat di
         source: "natural_intent",
         confidence: "HIGH",
         lastAffirmedAt: "2026-03-26T10:51:00.000Z",
-        lastUserInput: "Build the Sky Drone Max landing page and leave it open in the browser."
+        lastUserInput: "Build the Sky Sample Max landing page and leave it open in the browser."
       },
       returnHandoff: {
-        id: "handoff:sky-drone-max",
+        id: "handoff:sky-sample-max",
         status: "stopped",
-        goal: "Finish the Sky Drone Max landing page and leave it running in the browser.",
+        goal: "Finish the Sky Sample Max landing page and leave it running in the browser.",
         summary:
           "I couldn't execute that request in this run. What happened: governance blocked the requested action. Why it didn't execute: Security governor rejected this request.",
         nextSuggestedStep: "Retry with a safer and narrower request.",
-        workspaceRootPath: "C:\\Users\\testuser\\OneDrive\\Desktop\\Sky Drone Max",
-        primaryArtifactPath: "C:\\Users\\testuser\\OneDrive\\Desktop\\Sky Drone Max\\src\\index.css",
+        workspaceRootPath: "C:\\Users\\testuser\\OneDrive\\Desktop\\Sky Sample Max",
+        primaryArtifactPath: "C:\\Users\\testuser\\OneDrive\\Desktop\\Sky Sample Max\\src\\index.css",
         previewUrl: null,
         changedPaths: [
-          "C:\\Users\\testuser\\OneDrive\\Desktop\\Sky Drone Max\\src\\index.css",
-          "C:\\Users\\testuser\\OneDrive\\Desktop\\Sky Drone Max\\src\\App.jsx"
+          "C:\\Users\\testuser\\OneDrive\\Desktop\\Sky Sample Max\\src\\index.css",
+          "C:\\Users\\testuser\\OneDrive\\Desktop\\Sky Sample Max\\src\\App.jsx"
         ],
-        sourceJobId: "job-sky-drone-max",
+        sourceJobId: "job-sky-sample-max",
         updatedAt: "2026-03-26T10:55:00.000Z"
       },
       recentActions: [
         {
-          id: "recent_task_summary_sky_drone_max",
+          id: "recent_task_summary_sky_sample_max",
           kind: "task_summary",
-          label: "Sky Drone Max task summary",
+          label: "Sky Sample Max task summary",
           location: null,
           status: "failed",
-          sourceJobId: "job-sky-drone-max",
+          sourceJobId: "job-sky-sample-max",
           at: "2026-03-26T10:55:00.000Z",
           summary:
             "Latest completed task: Completed task with 0 approved action(s) and 2 blocked action(s) across 2 plan attempt(s). Recovery postmortem: MISSION_STOP_LIMIT_REACHED."
         },
         {
-          id: "recent_file_index_css_sky_drone_max",
+          id: "recent_file_index_css_sky_sample_max",
           kind: "file",
           label: "index.css",
-          location: "C:\\Users\\testuser\\OneDrive\\Desktop\\Sky Drone Max\\src\\index.css",
+          location: "C:\\Users\\testuser\\OneDrive\\Desktop\\Sky Sample Max\\src\\index.css",
           status: "updated",
-          sourceJobId: "job-sky-drone-max",
+          sourceJobId: "job-sky-sample-max",
           at: "2026-03-26T10:54:50.000Z",
-          summary: "Updated index.css for Sky Drone Max."
+          summary: "Updated index.css for Sky Sample Max."
         }
       ]
     })
@@ -3781,21 +3781,21 @@ test("conversation manager remembers relationship updates through the direct cha
           source: "natural_intent",
           confidence: "HIGH",
           lastAffirmedAt: "2026-03-26T15:38:00.000Z",
-          lastUserInput: "Build the Sky Drone Max landing page and leave it open in the browser."
+          lastUserInput: "Build the Sky Sample Max landing page and leave it open in the browser."
         },
         returnHandoff: {
-          id: "handoff:sky-drone-max",
+          id: "handoff:sky-sample-max",
           status: "stopped",
-          goal: "Finish the Sky Drone Max landing page and leave it running in the browser.",
+          goal: "Finish the Sky Sample Max landing page and leave it running in the browser.",
           summary: "The run stopped before it finished.",
           nextSuggestedStep: "Retry with a narrower request.",
-          workspaceRootPath: "C:\\Users\\testuser\\OneDrive\\Desktop\\Sky Drone Max",
-          primaryArtifactPath: "C:\\Users\\testuser\\OneDrive\\Desktop\\Sky Drone Max\\src\\App.jsx",
+          workspaceRootPath: "C:\\Users\\testuser\\OneDrive\\Desktop\\Sky Sample Max",
+          primaryArtifactPath: "C:\\Users\\testuser\\OneDrive\\Desktop\\Sky Sample Max\\src\\App.jsx",
           previewUrl: null,
           changedPaths: [
-            "C:\\Users\\testuser\\OneDrive\\Desktop\\Sky Drone Max\\src\\App.jsx"
+            "C:\\Users\\testuser\\OneDrive\\Desktop\\Sky Sample Max\\src\\App.jsx"
           ],
-          sourceJobId: "job-sky-drone-max",
+          sourceJobId: "job-sky-sample-max",
           updatedAt: "2026-03-26T15:38:00.000Z"
         }
       })
@@ -6181,16 +6181,16 @@ test("conversation manager preserves browser workflow continuity through build, 
   });
   const notifications: string[] = [];
   const executedInputs: string[] = [];
-  const workspaceRootPath = "C:\\Users\\testuser\\Desktop\\drone-company";
+  const workspaceRootPath = "C:\\Users\\testuser\\Desktop\\sample-company";
   const artifactPath = `${workspaceRootPath}\\index.html`;
   const previewUrl = "http://127.0.0.1:4173/index.html";
-  const browserSessionId = "browser_session:drone-company";
-  const previewLeaseId = "proc_preview_drone_company";
+  const browserSessionId = "browser_session:sample-company";
+  const previewLeaseId = "proc_preview_sample_company";
 
   try {
     const buildReply = await manager.handleMessage(
       buildMessageAt(
-        "Execute now and build a Next.js landing page for air drones, save it in drone-company on my desktop, and leave it open for me.",
+        "Execute now and build a Next.js landing page for sample products, save it in sample-company on my desktop, and leave it open for me.",
         "2026-03-20T17:47:00.000Z"
       ),
       async (input) => {
@@ -6344,17 +6344,17 @@ test("conversation manager preserves browser workflow continuity through multi-p
   });
   const notifications: string[] = [];
   const executedInputs: string[] = [];
-  const workspaceRootPath = "C:\\Users\\testuser\\Desktop\\drone-company";
+  const workspaceRootPath = "C:\\Users\\testuser\\Desktop\\sample-company";
   const artifactPath = `${workspaceRootPath}\\index.html`;
-  const cleanupManifestPath = "C:\\Users\\testuser\\Desktop\\drone-reference-cleanup\\manifest.txt";
+  const cleanupManifestPath = "C:\\Users\\testuser\\Desktop\\sample-reference-cleanup\\manifest.txt";
   const previewUrl = "http://127.0.0.1:4173/index.html";
-  const browserSessionId = "browser_session:drone-company";
-  const previewLeaseId = "proc_preview_drone_company";
+  const browserSessionId = "browser_session:sample-company";
+  const previewLeaseId = "proc_preview_sample_company";
 
   try {
     const buildReply = await manager.handleMessage(
       buildMessageAt(
-        "Execute now and build a Next.js landing page for air drones, save it in drone-company on my desktop, and leave it open for me.",
+        "Execute now and build a Next.js landing page for sample products, save it in sample-company on my desktop, and leave it open for me.",
         "2026-03-25T23:47:00.000Z"
       ),
       async (input) => {
@@ -6427,14 +6427,14 @@ test("conversation manager preserves browser workflow continuity through multi-p
 
     const organizeReply = await manager.handleMessage(
       buildMessageAt(
-        "While that's open, organize the loose drone reference notes on my Desktop into a folder called drone-reference-cleanup.",
+        "While that's open, organize the loose sample reference notes on my Desktop into a folder called sample-reference-cleanup.",
         "2026-03-25T23:47:30.000Z"
       ),
       async (input) => {
         executedInputs.push(input);
         return {
-          summary: "I organized the loose drone reference notes into drone-reference-cleanup on your Desktop.",
-          taskRunResult: buildTaskRunResult(input, "I organized the loose drone reference notes into drone-reference-cleanup on your Desktop.", [
+          summary: "I organized the loose sample reference notes into sample-reference-cleanup on your Desktop.",
+          taskRunResult: buildTaskRunResult(input, "I organized the loose sample reference notes into sample-reference-cleanup on your Desktop.", [
             buildApprovedWriteFileActionResult("action_write_file_desktop_cleanup_manifest", cleanupManifestPath)
           ])
         };
@@ -6445,10 +6445,10 @@ test("conversation manager preserves browser workflow continuity through multi-p
     );
     assert.match(organizeReply, /On it\./i);
     await waitFor(
-      () => notifications.some((message) => /organized the loose drone reference notes/i.test(message)),
+      () => notifications.some((message) => /organized the loose sample reference notes/i.test(message)),
       120_000
     );
-    assert.match(executedInputs[2] ?? "", /drone-reference-cleanup/i);
+    assert.match(executedInputs[2] ?? "", /sample-reference-cleanup/i);
 
     const executedBeforeSecondChat = executedInputs.length;
     const secondChatReply = await manager.handleMessage(
@@ -6500,7 +6500,7 @@ test("conversation manager preserves browser workflow continuity through multi-p
       const session = await store.getSession("telegram:chat-1:user-1");
       return session?.browserSessions.find((browserSession) => browserSession.id === browserSessionId)?.status === "closed";
     }, 120_000);
-    assert.match(executedInputs[3] ?? "", /browser_session:drone-company|Close the landing page browser now/i);
+    assert.match(executedInputs[3] ?? "", /browser_session:sample-company|Close the landing page browser now/i);
 
     const afterClose = await store.getSession("telegram:chat-1:user-1");
     assert.ok(afterClose);
@@ -6526,18 +6526,18 @@ test("conversation manager persists bounded recovery attribution for a Python wo
     maxContextTurnsForExecution: 10
   });
   const notifications: string[] = [];
-  const workspaceRootPath = "C:\\Users\\testuser\\Desktop\\calm-drone-python";
+  const workspaceRootPath = "C:\\Users\\testuser\\Desktop\\calm-sample-python";
   const artifactPath = `${workspaceRootPath}\\app.py`;
   const previewUrl = "http://127.0.0.1:5050/";
-  const browserSessionId = "browser_session:calm-drone-python";
-  const previewLeaseId = "proc_preview_calm_drone_python";
+  const browserSessionId = "browser_session:calm-sample-python";
+  const previewLeaseId = "proc_preview_calm_sample_python";
   const recoverySummary =
     "Recovered automatically after one bounded missing-dependency repair and retried the Python start step.";
 
   try {
     const reply = await manager.handleMessage(
       buildMessageAt(
-        "Build now: create a small Calm Drone Python app on my Desktop and leave it running in the browser. Use Python, not HTML or a web framework.",
+        "Build now: create a small Calm Sample Python app on my Desktop and leave it running in the browser. Use Python, not HTML or a web framework.",
         "2026-03-26T13:00:00.000Z"
       ),
       async (input, _receivedAt, onProgressUpdate) => {
@@ -6552,7 +6552,7 @@ test("conversation manager persists bounded recovery attribution for a Python wo
               "I found a missing dependency. I'm doing one bounded repair and then retrying the original step.",
             updatedAt: "2026-03-26T13:00:01.000Z",
             recoveryClass: "DEPENDENCY_MISSING",
-            fingerprint: "dep-missing-calm-drone-python"
+            fingerprint: "dep-missing-calm-sample-python"
           }
         });
         await onProgressUpdate?.({
@@ -6564,14 +6564,14 @@ test("conversation manager persists bounded recovery attribution for a Python wo
             summary: recoverySummary,
             updatedAt: "2026-03-26T13:00:02.000Z",
             recoveryClass: "DEPENDENCY_MISSING",
-            fingerprint: "dep-missing-calm-drone-python"
+            fingerprint: "dep-missing-calm-sample-python"
           }
         });
         return {
-          summary: "I started the Calm Drone Python app and left it open in the browser.",
+          summary: "I started the Calm Sample Python app and left it open in the browser.",
           taskRunResult: buildTaskRunResult(
             input,
-            "I started the Calm Drone Python app and left it open in the browser.",
+            "I started the Calm Sample Python app and left it open in the browser.",
             [
               buildApprovedWriteFileActionResult("action_write_python_app", artifactPath),
               buildApprovedRunningShellActionResult(
@@ -6598,7 +6598,7 @@ test("conversation manager persists bounded recovery attribution for a Python wo
     assert.match(reply, /On it\./i);
 
     await waitFor(
-      () => notifications.some((message) => /Calm Drone Python app/i.test(message)),
+      () => notifications.some((message) => /Calm Sample Python app/i.test(message)),
       120_000
     );
 

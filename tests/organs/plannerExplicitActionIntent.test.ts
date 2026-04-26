@@ -58,19 +58,19 @@ test("inferRequiredActionType promotes natural browser follow-ups when tracked s
 test("inferRequiredActionType does not require open_browser when a tracked preview warm-up explicitly says not to open the browser yet", () => {
   const trackedBrowserExecutionInput = [
     "Current tracked workspace in this chat:",
-    "- Root path: C:\\Users\\testuser\\Desktop\\Downtown Detroit Drones Smoke 1775919630732",
+    "- Root path: C:\\Users\\testuser\\Desktop\\Sample City Showcase Smoke 1775919630732",
     "- Preview URL: none",
     "",
     "Tracked browser sessions:",
     "- none",
     "",
     "Current user request:",
-    "Nice. Pull up the Downtown Detroit Drones Smoke 1775919630732 landing page you just built so it is ready to view, but do not pop the browser open yet. Use a real localhost run on host 127.0.0.1 and port 49249, and keep that preview server running."
+    "Nice. Pull up the Sample City Showcase Smoke 1775919630732 landing page you just built so it is ready to view, but do not pop the browser open yet. Use a real localhost run on host 127.0.0.1 and port 49249, and keep that preview server running."
   ].join("\n");
 
   assert.equal(
     inferRequiredActionType(
-      "Nice. Pull up the Downtown Detroit Drones Smoke 1775919630732 landing page you just built so it is ready to view, but do not pop the browser open yet. Use a real localhost run on host 127.0.0.1 and port 49249, and keep that preview server running.",
+      "Nice. Pull up the Sample City Showcase Smoke 1775919630732 landing page you just built so it is ready to view, but do not pop the browser open yet. Use a real localhost run on host 127.0.0.1 and port 49249, and keep that preview server running.",
       trackedBrowserExecutionInput
     ),
     null
@@ -80,20 +80,20 @@ test("inferRequiredActionType does not require open_browser when a tracked previ
 test("inferRequiredActionType treats closing a named tracked workspace as close_browser", () => {
   const trackedBrowserExecutionInput = [
     "Current tracked workspace in this chat:",
-    "- Root path: C:\\Users\\testuser\\Desktop\\AI Drone City\\dist",
-    "- Primary artifact: C:\\Users\\testuser\\Desktop\\AI Drone City\\dist\\index.html",
-    "- Preview URL: file:///C:/Users/testuser/Desktop/AI%20Drone%20City/dist/index.html",
+    "- Root path: C:\\Users\\testuser\\Desktop\\Sample City\\dist",
+    "- Primary artifact: C:\\Users\\testuser\\Desktop\\Sample City\\dist\\index.html",
+    "- Preview URL: file:///C:/Users/testuser/Desktop/AI%20Sample%20City/dist/index.html",
     "",
     "Tracked browser sessions:",
-    "- AI Drone City preview: sessionId=browser_session:ai-drone-city; url=file:///C:/Users/testuser/Desktop/AI%20Drone%20City/dist/index.html; status=open; visibility=visible; controller=playwright_managed; control=available; workspaceRoot=C:\\Users\\testuser\\Desktop\\AI Drone City\\dist",
+    "- Sample City preview: sessionId=browser_session:ai-sample-city; url=file:///C:/Users/testuser/Desktop/AI%20Sample%20City/dist/index.html; status=open; visibility=visible; controller=playwright_managed; control=available; workspaceRoot=C:\\Users\\testuser\\Desktop\\Sample City\\dist",
     "",
     "Current user request:",
-    "Thanks. Please close AI Drone City and anything it needs so we can move on."
+    "Thanks. Please close Sample City and anything it needs so we can move on."
   ].join("\n");
 
   assert.equal(
     inferRequiredActionType(
-      "Thanks. Please close AI Drone City and anything it needs so we can move on.",
+      "Thanks. Please close Sample City and anything it needs so we can move on.",
       trackedBrowserExecutionInput
     ),
     "close_browser"
@@ -104,8 +104,8 @@ test("inferRequiredActionType promotes tracked artifact-edit follow-ups to write
   const trackedArtifactExecutionInput = [
     "Natural artifact-edit follow-up:",
     "- The user appears to be editing the artifact already created in this chat rather than asking for a brand-new project.",
-    "- Preferred edit destination: C:\\Users\\testuser\\Desktop\\drone-company",
-    "- Preferred primary artifact: C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
+    "- Preferred edit destination: C:\\Users\\testuser\\Desktop\\sample-company",
+    "- Preferred primary artifact: C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
     "- Visible preview already exists: http://127.0.0.1:4173/; keep the preview aligned with the edited artifact when practical.",
     "- This run must include a real file mutation under the tracked workspace. Do not satisfy this request by only reopening, focusing, or closing the preview.",
     "",
@@ -129,8 +129,8 @@ test("inferRequiredActionType does not promote artifact edits when the resolved 
     "",
     "Natural artifact-edit follow-up:",
     "- The user appears to be editing the artifact already created in this chat rather than asking for a brand-new project.",
-    "- Preferred edit destination: C:\\Users\\testuser\\Desktop\\drone-company",
-    "- Preferred primary artifact: C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
+    "- Preferred edit destination: C:\\Users\\testuser\\Desktop\\sample-company",
+    "- Preferred primary artifact: C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
     "",
     "Current user request:",
     "Change the hero image to a slider instead of the landing page."

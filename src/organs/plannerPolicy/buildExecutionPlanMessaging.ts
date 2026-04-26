@@ -5,8 +5,7 @@
 import { ExecutionStyleBuildPlanIssueCode } from "./executionStyleContracts";
 import {
   extractRequestedFrameworkFolderName,
-  isFrameworkPackageSafeFolderName,
-  toFrameworkPackageSafeSlug
+  isFrameworkPackageSafeFolderName
 } from "./frameworkBuildActionHeuristics";
 import {
   isLiveVerificationBuildRequest,
@@ -28,15 +27,15 @@ export function describeExecutionStyleBuildPlanIssue(
     case "STATIC_ARTIFACT_OPEN_BROWSER_ONLY_REQUIRED":
       return "Planner model treated an exact local static-artifact browser-open follow-up like a rebuild or live-run request. Return only open_browser for the preferred local file target and do not rewrite files, scaffold, or start a server.";
     case "FRAMEWORK_APP_SCAFFOLD_ACTION_REQUIRED":
-      return "Planner model treated a fresh framework-app request like an already-ready workspace. Include a real scaffold or bootstrap step that can materialize package.json in the exact workspace, such as create-next-app/create-vite or an explicit package.json bootstrap or temp-slug merge. Generic install/build/start commands alone are not enough.";
+      return "Planner model treated a fresh framework-app request like an already-ready workspace. Include a real materializing step that can prove package metadata exists in the exact workspace before lifecycle commands run.";
     case "FRAMEWORK_APP_ARTIFACT_CHECK_REQUIRED":
       return "Planner model treated directory existence alone as proof a framework app already exists. Reuse or skip scaffold only after checking for real app artifacts such as package.json; otherwise repair or scaffold in place.";
     case "FRAMEWORK_APP_IN_PLACE_SCAFFOLD_REQUIRED":
       return "Planner model checked for package.json but still tried to recreate the named framework-app folder from its parent directory. When package.json is missing, scaffold or repair inside the exact requested folder instead of recreating the folder name from outside it.";
     case "FRAMEWORK_APP_PACKAGE_SAFE_SCAFFOLD_REQUIRED":
-      return "Planner model fed the exact requested folder name into a create-style framework scaffold even though that human-facing folder name is not a safe npm package name. Preserve the requested folder for the workspace, but scaffold through a package-safe slug and move the generated contents into the exact requested folder.";
+      return "Planner model used the exact requested human-facing folder name as a package identifier even though that name is not package-safe. Preserve the requested folder as the user-facing workspace and use only package-safe identifiers where package tooling requires them.";
     case "FRAMEWORK_APP_NATIVE_PREVIEW_REQUIRED":
-      return "Planner model chose an ad-hoc preview server for a framework-app live-run request. Use the workspace-native preview/runtime command such as npm run preview, npm run dev, or vite preview/dev so the runtime can prove and later stop the same app cleanly.";
+      return "Planner model chose an ad-hoc preview server for a framework-app live-run request. Use the app's own declared preview or runtime entrypoint so the runtime can prove and later stop the same app cleanly.";
     case "SHELL_COMMAND_MAX_CHARS_EXCEEDED":
       return "Planner model emitted a shell or start-process command longer than the configured runtime command budget. Split large inline file writes into write_file actions and keep shell/toolchain steps short enough for the current shell runtime.";
     case "LIVE_VERIFICATION_ACTION_REQUIRED":
@@ -103,13 +102,13 @@ export function buildExecutionStyleRequiredActionHint(
     : "";
   const frameworkScaffoldClause =
     /\b(?:react|vite|next\.?js|nextjs|vue|svelte|angular)\b/i.test(currentUserRequest)
-      ? " For a fresh framework-app request, raw source-file writes alone do not satisfy the build. Include at least one real scaffold/build-capable action such as npm/npx/pnpm/yarn/bun create, install, build, dev, start, or preview. If you may reuse an existing folder, key that decision off real scaffold artifacts like package.json instead of only checking whether the directory exists. When package.json is missing for the exact requested folder, scaffold or repair in place inside that folder instead of recreating the folder name from its parent directory. If that exact folder already contains Vite-like source files such as index.html or src/main.jsx but still lacks package.json, prefer repairing it in place by writing the missing package.json and standard Vite metadata before install/build. Once the exact project folder is known, set cwd/workdir to that folder and run npm install / npm run build / npm run preview there instead of chaining multi-step --prefix commands from the parent directory."
+      ? " For a fresh framework-app request, raw source-file writes alone do not satisfy the build. Include at least one real materializing or build-capable action that can prove package metadata exists in the exact workspace before lifecycle commands run. If you may reuse an existing folder, key that decision off real project artifacts instead of only checking whether the directory exists. Once the exact project folder is known, run later toolchain steps from that folder instead of targeting a nearby parent by convenience."
       : "";
   const requestedFrameworkFolderName = extractRequestedFrameworkFolderName(currentUserRequest);
   const frameworkPackageSafeClause =
     requestedFrameworkFolderName &&
     !isFrameworkPackageSafeFolderName(requestedFrameworkFolderName)
-      ? ` The exact requested folder name "${requestedFrameworkFolderName}" is not a safe npm package name. Preserve that exact folder for the user-facing workspace, but do not feed it directly into create-style scaffolds such as create-next-app or create-vite. Use a package-safe slug such as "${toFrameworkPackageSafeSlug(requestedFrameworkFolderName)}" for the scaffold step, then move the generated contents into the exact requested folder and continue install/build/run from that exact folder.`
+      ? ` The exact requested folder name "${requestedFrameworkFolderName}" is not a safe package identifier. Preserve that folder for the user-facing workspace and use only package-safe identifiers where package tooling requires them.`
       : "";
   const liveVerificationClause = isLiveVerificationBuildRequest(currentUserRequest)
     ? " For live verification goals, keep finite proof steps first and include at least one live verification action such as start_process, probe_port, probe_http, or verify_browser."
@@ -117,7 +116,7 @@ export function buildExecutionStyleRequiredActionHint(
   const frameworkLivePreviewClause =
     /\b(?:react|vite|next\.?js|nextjs|vue|svelte|angular)\b/i.test(currentUserRequest) &&
     isLiveVerificationBuildRequest(currentUserRequest)
-      ? " For framework-app live runs, prefer the workspace-native preview/runtime command such as npm run preview, npm run dev, vite preview, or vite dev instead of inventing an ad-hoc npx serve server."
+      ? " For framework-app live runs, prefer the workspace's declared preview or runtime entrypoint instead of inventing an ad-hoc static server."
       : "";
   const commandBudgetClause =
     /\b(?:react|vite|next\.?js|nextjs|vue|svelte|angular)\b/i.test(currentUserRequest)

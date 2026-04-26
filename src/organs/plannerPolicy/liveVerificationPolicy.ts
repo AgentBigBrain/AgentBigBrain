@@ -12,6 +12,7 @@ import {
   isResolvedFrameworkBuildRoute,
   isResolvedStaticHtmlBuildRoute
 } from "./liveVerificationSemanticRouteSupport";
+import { requestsStaticHtmlServerOrBrowserProof } from "./liveVerificationStaticHtmlSupport";
 const BUILD_EXECUTION_VERB_PATTERN =
   /\b(create|build|make|generate|scaffold|setup|set up|spin up|run|start|launch|fix|repair|finish|complete|implement|continue)\b/i;
 const BUILD_EXECUTION_TARGET_PATTERN =
@@ -51,7 +52,7 @@ const FRAMEWORK_APP_BOOTSTRAP_CUE_PATTERN =
 const FRAMEWORK_APP_NAMED_WORKSPACE_CUE_PATTERN =
   /\b(?:called|named|folder\s+called|project\s+called|workspace\s+called)\b/i;
 const FRAMEWORK_APP_SCAFFOLD_CONTINUATION_PATTERN =
-  /\bscaffold(?:ed|ing)\b|agentbigbrain-framework-scaffold/i;
+  /\bscaffold(?:ed|ing)\b/i;
 const FRAMEWORK_WORKSPACE_PREPARATION_PATTERN =
   /\b(?:workspace|ready\s+for\s+edits|dependencies\s+installed|stop\s+after\s+the\s+workspace\s+is\s+ready|do\s+not\s+run\b|do\s+not\s+open\b|don't\s+run\b|don't\s+open\b)\b/i;
 const FRAMEWORK_BUILD_LIFECYCLE_BUILD_PATTERN =
@@ -241,10 +242,7 @@ export function isRuntimeProcessManagementRequest(
 export function suppressesLiveRunWork(currentUserRequest: string): boolean {
   const activeRequest = normalizeActiveRequest(currentUserRequest);
   const explicitConstraints = parseExplicitExecutionConstraints(activeRequest);
-  return (
-    explicitConstraints.disallowPreviewStart ||
-    NEGATED_LIVE_RUN_PATTERN.test(activeRequest)
-  );
+  return explicitConstraints.disallowPreviewStart || NEGATED_LIVE_RUN_PATTERN.test(activeRequest);
 }
 /**
  * Evaluates whether browser verification.
@@ -260,10 +258,7 @@ export function suppressesLiveRunWork(currentUserRequest: string): boolean {
 function suppressesBrowserVerification(currentUserRequest: string): boolean {
   const activeRequest = normalizeActiveRequest(currentUserRequest);
   const explicitConstraints = parseExplicitExecutionConstraints(activeRequest);
-  return (
-    explicitConstraints.disallowVisibleBrowserOpen ||
-    NEGATED_BROWSER_VERIFICATION_PATTERN.test(activeRequest)
-  );
+  return explicitConstraints.disallowVisibleBrowserOpen || NEGATED_BROWSER_VERIFICATION_PATTERN.test(activeRequest);
 }
 /**
  * Evaluates whether browser open.
@@ -526,6 +521,15 @@ export function isLiveVerificationBuildRequest(currentUserRequest: string): bool
     return false;
   }
   const browserOpenSuppressed = suppressesBrowserOpen(activeRequest);
+  if (
+    !browserOpenSuppressed &&
+    isStaticHtmlExecutionStyleRequest(activeRequest) &&
+    requiresPersistentBrowserOpenBuildRequest(activeRequest) &&
+    !requiresBrowserVerificationBuildRequest(activeRequest) &&
+    !requestsStaticHtmlServerOrBrowserProof(activeRequest)
+  ) {
+    return false;
+  }
   if (!browserOpenSuppressed && hasNamedWorkspaceLaunchOpenIntent(activeRequest)) {
     return true;
   }

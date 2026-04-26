@@ -8,7 +8,7 @@ import { test } from "node:test";
 import { TaskRunResult } from "../../src/core/types";
 import { selectUserFacingSummary } from "../../src/interfaces/userFacingResult";
 import {
-  HOST_TEST_FINANCE_DASHBOARD_DIR,
+  HOST_TEST_SAMPLE_SITE_DIR,
   HOST_TEST_TOP_SECRET_FILE_PATH
 } from "../support/windowsPathFixtures";
 
@@ -456,14 +456,14 @@ test("selectUserFacingSummary prefers truthful partial-success wording over gene
         type: "write_file",
         description: "write index file",
         params: {
-          path: "C:\\temp\\drone-company\\index.html",
+          path: "C:\\temp\\sample-company\\index.html",
           content: "<html></html>"
         },
         estimatedCostUsd: 0.08
       },
       mode: "escalation_path",
       approved: true,
-      output: "Write success: C:\\temp\\drone-company\\index.html",
+      output: "Write success: C:\\temp\\sample-company\\index.html",
       blockedBy: [],
       violations: [],
       votes: []
@@ -525,14 +525,14 @@ test("selectUserFacingSummary prefers a proven file update over later inspection
         type: "write_file",
         description: "update landing page",
         params: {
-          path: "C:\\temp\\drone-company\\index.html",
+          path: "C:\\temp\\sample-company\\index.html",
           content: "<html><body>edited</body></html>"
         },
         estimatedCostUsd: 0.08
       },
       mode: "escalation_path",
       approved: true,
-      output: "Write success: C:\\temp\\drone-company\\index.html",
+      output: "Write success: C:\\temp\\sample-company\\index.html",
       blockedBy: [],
       violations: [],
       votes: []
@@ -543,7 +543,7 @@ test("selectUserFacingSummary prefers a proven file update over later inspection
         type: "list_directory",
         description: "inspect workspace",
         params: {
-          path: "C:\\temp\\drone-company"
+          path: "C:\\temp\\sample-company"
         },
         estimatedCostUsd: 0.04
       },
@@ -581,9 +581,9 @@ test("selectUserFacingSummary prefers a proven file update over later inspection
   });
 
   const selected = selectUserFacingSummary(runResult);
-  assert.match(selected, /I created or updated C:\\temp\\drone-company\\index\.html\./i);
+  assert.match(selected, /I created or updated C:\\temp\\sample-company\\index\.html\./i);
   assert.match(selected, /One later runtime step failed \(ACTION_EXECUTION_FAILED\): Browser verification failed\./i);
-  assert.doesNotMatch(selected, /I checked C:\\temp\\drone-company\./i);
+  assert.doesNotMatch(selected, /I checked C:\\temp\\sample-company\./i);
 });
 
 test("selectUserFacingSummary carries exact runtime failure detail through partial-success summaries", () => {
@@ -594,14 +594,14 @@ test("selectUserFacingSummary carries exact runtime failure detail through parti
         type: "write_file",
         description: "update landing page",
         params: {
-          path: "C:\\temp\\sky-drone-max\\src\\index.css",
+          path: "C:\\temp\\sky-sample-max\\src\\index.css",
           content: "body { color: #123456; }"
         },
         estimatedCostUsd: 0.08
       },
       mode: "escalation_path",
       approved: true,
-      output: "Write success: C:\\temp\\sky-drone-max\\src\\index.css",
+      output: "Write success: C:\\temp\\sky-sample-max\\src\\index.css",
       blockedBy: [],
       violations: [],
       votes: []
@@ -633,7 +633,7 @@ test("selectUserFacingSummary carries exact runtime failure detail through parti
   });
 
   const selected = selectUserFacingSummary(runResult);
-  assert.match(selected, /I created or updated C:\\temp\\sky-drone-max\\src\\index\.css\./i);
+  assert.match(selected, /I created or updated C:\\temp\\sky-sample-max\\src\\index\.css\./i);
   assert.match(selected, /One later runtime step failed \(ACTION_EXECUTION_FAILED\): Shell failed \(exit code 1\):/i);
   assert.match(selected, /Missing script: dev/i);
 });
@@ -665,14 +665,14 @@ test("selectUserFacingSummary prefers proven build edits over respond no-op narr
         type: "write_file",
         description: "update React app",
         params: {
-          path: "C:\\temp\\drone-react-preview\\src\\App.jsx",
+          path: "C:\\temp\\sample-react-preview\\src\\App.jsx",
           content: "export default function App() { return null; }"
         },
         estimatedCostUsd: 0.08
       },
       mode: "escalation_path",
       approved: true,
-      output: "Write success: C:\\temp\\drone-react-preview\\src\\App.jsx",
+      output: "Write success: C:\\temp\\sample-react-preview\\src\\App.jsx",
       blockedBy: [],
       violations: [],
       votes: []
@@ -690,20 +690,20 @@ test("selectUserFacingSummary prefers proven build edits over respond no-op narr
       mode: "escalation_path",
       approved: true,
       output:
-        "Shell success:\n> drone-react-preview@0.0.0 build\n> vite build\n\nbuilt in 200ms",
+        "Shell success:\n> sample-react-preview@0.0.0 build\n> vite build\n\nbuilt in 200ms",
       blockedBy: [],
       violations: [],
       votes: []
     }
   ], {
     userInput:
-      "Reuse the existing drone React workspace on my desktop, turn it into a calm drone-themed landing page, and run the build so dist/index.html exists."
+      "Reuse the existing sample React workspace on my desktop, turn it into a calm sample-themed landing page, and run the build so dist/index.html exists."
   });
 
   const selected = selectUserFacingSummary(runResult, {
     showTechnicalSummary: false
   });
-  assert.match(selected, /I created or updated C:\\temp\\drone-react-preview\\src\\App\.jsx\./i);
+  assert.match(selected, /I created or updated C:\\temp\\sample-react-preview\\src\\App\.jsx\./i);
   assert.doesNotMatch(selected, /I didn't complete the requested live app run in this run\./i);
   assert.doesNotMatch(selected, /BUILD_NO_SIDE_EFFECT_EXECUTED/i);
 });
@@ -716,14 +716,14 @@ test("selectUserFacingSummary prefers proof-backed partial success over a generi
         type: "write_file",
         description: "update landing page",
         params: {
-          path: "C:\\temp\\drone-company\\index.html",
+          path: "C:\\temp\\sample-company\\index.html",
           content: "<html><body>edited</body></html>"
         },
         estimatedCostUsd: 0.08
       },
       mode: "escalation_path",
       approved: true,
-      output: "Write success: C:\\temp\\drone-company\\index.html",
+      output: "Write success: C:\\temp\\sample-company\\index.html",
       blockedBy: [],
       violations: [],
       votes: []
@@ -774,7 +774,7 @@ test("selectUserFacingSummary prefers proof-backed partial success over a generi
   });
 
   const selected = selectUserFacingSummary(runResult);
-  assert.match(selected, /I created or updated C:\\temp\\drone-company\\index\.html\./i);
+  assert.match(selected, /I created or updated C:\\temp\\sample-company\\index\.html\./i);
   assert.match(selected, /One later runtime step failed \(ACTION_EXECUTION_FAILED\): Browser verification failed\./i);
   assert.doesNotMatch(selected, /^I couldn't execute that request in this run\./i);
 });
@@ -810,7 +810,7 @@ test("selectUserFacingSummary prefers the open page over later browser-verificat
       },
       mode: "escalation_path",
       approved: true,
-      output: "Browser verification passed: observed title \"Drone Landing\"; expected text matched.",
+      output: "Browser verification passed: observed title \"Sample Landing\"; expected text matched.",
       blockedBy: [],
       violations: [],
       votes: []
@@ -848,7 +848,7 @@ test("selectUserFacingSummary prefers the open page over later browser-verificat
 });
 
 test("selectUserFacingSummary surfaces an approved browser-open execution failure instead of a later generic blocked reply", () => {
-  const targetUrl = "file:///C:/Users/testuser/Desktop/drone-company-landing.html";
+  const targetUrl = "file:///C:/Users/testuser/Desktop/sample-company-landing.html";
   const runResult = buildRunResult("technical summary", [
     {
       action: {
@@ -929,7 +929,7 @@ test("selectUserFacingSummary surfaces an approved browser-open execution failur
   const selected = selectUserFacingSummary(runResult);
   assert.match(
     selected,
-    /I tried to open file:\/\/\/C:\/Users\/testuser\/Desktop\/drone-company-landing\.html in your browser, but it failed: net::ERR_FILE_NOT_FOUND at file:\/\/\/C:\/Users\/testuser\/Desktop\/drone-company-landing\.html\./i
+    /I tried to open file:\/\/\/C:\/Users\/testuser\/Desktop\/sample-company-landing\.html in your browser, but it failed: net::ERR_FILE_NOT_FOUND at file:\/\/\/C:\/Users\/testuser\/Desktop\/sample-company-landing\.html\./i
   );
   assert.doesNotMatch(selected, /^I couldn't execute that request in this run\./i);
   assert.doesNotMatch(selected, /governance blocked the requested action/i);
@@ -1039,7 +1039,7 @@ test("selectUserFacingSummary explains local folder lock failures in plain langu
         },
         mode: "fast_path",
         approved: true,
-        output: "Directory contents:\ndrone-company",
+        output: "Directory contents:\nsample-company",
         blockedBy: [],
         violations: [],
         votes: []
@@ -1071,7 +1071,7 @@ test("selectUserFacingSummary explains local folder lock failures in plain langu
     ],
     {
       userInput:
-        "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects."
+        "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects."
     }
   );
 
@@ -1121,16 +1121,16 @@ test("selectUserFacingSummary tells the truth when some organized folders moved 
           "Shell success:",
           JSON.stringify({
             desktop: "C:\\Users\\testuser\\OneDrive\\Desktop",
-            destination: "C:\\Users\\testuser\\OneDrive\\Desktop\\drone-web-projects",
-            moved: ["drone-company-a"],
+            destination: "C:\\Users\\testuser\\OneDrive\\Desktop\\sample-web-projects",
+            moved: ["sample-company-a"],
             failed: [
               {
-                item: "C:\\Users\\testuser\\OneDrive\\Desktop\\drone-company-b",
+                item: "C:\\Users\\testuser\\OneDrive\\Desktop\\sample-company-b",
                 error:
                   "The process cannot access the file because it is being used by another process."
               }
             ],
-            remainingOnDesktop: ["drone-company-b"]
+            remainingOnDesktop: ["sample-company-b"]
           })
         ].join("\n"),
         blockedBy: [],
@@ -1143,13 +1143,13 @@ test("selectUserFacingSummary tells the truth when some organized folders moved 
           type: "list_directory",
           description: "inspect destination folder",
           params: {
-            path: "C:\\Users\\testuser\\OneDrive\\Desktop\\drone-web-projects"
+            path: "C:\\Users\\testuser\\OneDrive\\Desktop\\sample-web-projects"
           },
           estimatedCostUsd: 0.05
         },
         mode: "fast_path",
         approved: true,
-        output: "Directory contents:\ndrone-company-a",
+        output: "Directory contents:\nsample-company-a",
         blockedBy: [],
         violations: [],
         votes: []
@@ -1161,13 +1161,13 @@ test("selectUserFacingSummary tells the truth when some organized folders moved 
           description: "reply",
           params: {
             message:
-              "I checked C:\\Users\\testuser\\OneDrive\\Desktop\\drone-web-projects."
+              "I checked C:\\Users\\testuser\\OneDrive\\Desktop\\sample-web-projects."
           },
           estimatedCostUsd: 0.02
         },
         mode: "fast_path",
         approved: true,
-        output: "I checked C:\\Users\\testuser\\OneDrive\\Desktop\\drone-web-projects.",
+        output: "I checked C:\\Users\\testuser\\OneDrive\\Desktop\\sample-web-projects.",
         blockedBy: [],
         violations: [],
         votes: []
@@ -1175,7 +1175,7 @@ test("selectUserFacingSummary tells the truth when some organized folders moved 
     ],
     {
       userInput:
-        "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects."
+        "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects."
     }
   );
 
@@ -1185,14 +1185,14 @@ test("selectUserFacingSummary tells the truth when some organized folders moved 
 
   assert.match(
     selected,
-    /The destination now contains drone-company-a in C:\\Users\\testuser\\OneDrive\\Desktop\\drone-web-projects\./i
+    /The destination now contains sample-company-a in C:\\Users\\testuser\\OneDrive\\Desktop\\sample-web-projects\./i
   );
-  assert.match(selected, /These still stayed outside it: drone-company-b\./i);
+  assert.match(selected, /These still stayed outside it: sample-company-b\./i);
   assert.match(selected, /I had already shut down 1 exact tracked preview holder first/i);
   assert.match(selected, /Ask me to inspect the remaining holder and retry the move/i);
   assert.doesNotMatch(
     selected,
-    /^I moved the matching folders into C:\\Users\\testuser\\OneDrive\\Desktop\\drone-web-projects\./i
+    /^I moved the matching folders into C:\\Users\\testuser\\OneDrive\\Desktop\\sample-web-projects\./i
   );
 });
 
@@ -1233,16 +1233,16 @@ test("selectUserFacingSummary does not append a generic blocked suffix to self-c
           "Shell success:",
           JSON.stringify({
             desktop: "C:\\Users\\testuser\\OneDrive\\Desktop",
-            destination: "C:\\Users\\testuser\\OneDrive\\Desktop\\drone-web-projects",
-            moved: ["drone-company-a"],
+            destination: "C:\\Users\\testuser\\OneDrive\\Desktop\\sample-web-projects",
+            moved: ["sample-company-a"],
             failed: [
               {
-                item: "C:\\Users\\testuser\\OneDrive\\Desktop\\drone-company-b",
+                item: "C:\\Users\\testuser\\OneDrive\\Desktop\\sample-company-b",
                 error:
                   "The process cannot access the file because it is being used by another process."
               }
             ],
-            remainingOnDesktop: ["drone-company-b"]
+            remainingOnDesktop: ["sample-company-b"]
           })
         ].join("\n"),
         blockedBy: [],
@@ -1255,13 +1255,13 @@ test("selectUserFacingSummary does not append a generic blocked suffix to self-c
           type: "list_directory",
           description: "inspect destination folder",
           params: {
-            path: "C:\\Users\\testuser\\OneDrive\\Desktop\\drone-web-projects"
+            path: "C:\\Users\\testuser\\OneDrive\\Desktop\\sample-web-projects"
           },
           estimatedCostUsd: 0.05
         },
         mode: "fast_path",
         approved: true,
-        output: "Directory contents:\ndrone-company-a",
+        output: "Directory contents:\nsample-company-a",
         blockedBy: [],
         violations: [],
         votes: []
@@ -1291,7 +1291,7 @@ test("selectUserFacingSummary does not append a generic blocked suffix to self-c
     ],
     {
       userInput:
-        "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects."
+        "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects."
     }
   );
 
@@ -1299,7 +1299,7 @@ test("selectUserFacingSummary does not append a generic blocked suffix to self-c
     showTechnicalSummary: false
   });
 
-  assert.match(selected, /These still stayed outside it: drone-company-b\./i);
+  assert.match(selected, /These still stayed outside it: sample-company-b\./i);
   assert.doesNotMatch(selected, /One later step was blocked/i);
 });
 
@@ -1314,13 +1314,13 @@ test("selectUserFacingSummary prefers the completed organization move over a wea
           description: "reply",
           params: {
             message:
-              "I checked C:\\Users\\testuser\\OneDrive\\Desktop\\drone-web-projects."
+              "I checked C:\\Users\\testuser\\OneDrive\\Desktop\\sample-web-projects."
           },
           estimatedCostUsd: 0.02
         },
         mode: "fast_path",
         approved: true,
-        output: "I checked C:\\Users\\testuser\\OneDrive\\Desktop\\drone-web-projects.",
+        output: "I checked C:\\Users\\testuser\\OneDrive\\Desktop\\sample-web-projects.",
         blockedBy: [],
         violations: [],
         votes: []
@@ -1371,7 +1371,7 @@ test("selectUserFacingSummary prefers the completed organization move over a wea
         },
         mode: "escalation_path",
         approved: true,
-        output: "Shell success: moved matching drone-company folders.",
+        output: "Shell success: moved matching sample-company folders.",
         blockedBy: [],
         violations: [],
         votes: []
@@ -1382,13 +1382,13 @@ test("selectUserFacingSummary prefers the completed organization move over a wea
           type: "list_directory",
           description: "inspect destination folder",
           params: {
-            path: "C:\\Users\\testuser\\OneDrive\\Desktop\\drone-web-projects"
+            path: "C:\\Users\\testuser\\OneDrive\\Desktop\\sample-web-projects"
           },
           estimatedCostUsd: 0.05
         },
         mode: "fast_path",
         approved: true,
-        output: "Directory contents:\ndrone-company-a\ndrone-company-b",
+        output: "Directory contents:\nsample-company-a\nsample-company-b",
         blockedBy: [],
         violations: [],
         votes: []
@@ -1396,7 +1396,7 @@ test("selectUserFacingSummary prefers the completed organization move over a wea
     ],
     {
       userInput:
-        "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects."
+        "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects."
     }
   );
 
@@ -1406,7 +1406,7 @@ test("selectUserFacingSummary prefers the completed organization move over a wea
 
   assert.equal(
     selected,
-    "I moved the matching folders into C:\\Users\\testuser\\OneDrive\\Desktop\\drone-web-projects. I shut down 2 exact tracked preview holders first so the move could finish."
+    "I moved the matching folders into C:\\Users\\testuser\\OneDrive\\Desktop\\sample-web-projects. I shut down 2 exact tracked preview holders first so the move could finish."
   );
 });
 
@@ -1421,14 +1421,14 @@ test("selectUserFacingSummary prefers the recovered organization move summary af
           description: "reply",
           params: {
             message:
-              "I ran the command successfully. Command output: moved|drone-company-a moved|drone-company-b"
+              "I ran the command successfully. Command output: moved|sample-company-a moved|sample-company-b"
           },
           estimatedCostUsd: 0.02
         },
         mode: "fast_path",
         approved: true,
         output:
-          "I ran the command successfully. Command output: moved|drone-company-a moved|drone-company-b",
+          "I ran the command successfully. Command output: moved|sample-company-a moved|sample-company-b",
         blockedBy: [],
         violations: [],
         votes: []
@@ -1479,7 +1479,7 @@ test("selectUserFacingSummary prefers the recovered organization move summary af
         },
         mode: "escalation_path",
         approved: true,
-        output: "Shell success: moved matching drone-company folders.",
+        output: "Shell success: moved matching sample-company folders.",
         blockedBy: [],
         violations: [],
         votes: []
@@ -1524,13 +1524,13 @@ test("selectUserFacingSummary prefers the recovered organization move summary af
           type: "list_directory",
           description: "inspect destination folder",
           params: {
-            path: "C:\\Users\\testuser\\OneDrive\\Desktop\\drone-web-projects"
+            path: "C:\\Users\\testuser\\OneDrive\\Desktop\\sample-web-projects"
           },
           estimatedCostUsd: 0.05
         },
         mode: "fast_path",
         approved: true,
-        output: "Directory contents:\ndrone-company-a\ndrone-company-b",
+        output: "Directory contents:\nsample-company-a\nsample-company-b",
         blockedBy: [],
         violations: [],
         votes: []
@@ -1547,7 +1547,7 @@ test("selectUserFacingSummary prefers the recovered organization move summary af
 
   assert.equal(
     selected,
-    "I moved the matching folders into C:\\Users\\testuser\\OneDrive\\Desktop\\drone-web-projects. I shut down 2 exact tracked preview holders first so the move could finish."
+    "I moved the matching folders into C:\\Users\\testuser\\OneDrive\\Desktop\\sample-web-projects. I shut down 2 exact tracked preview holders first so the move could finish."
   );
 });
 
@@ -1556,11 +1556,11 @@ test("selectUserFacingSummary uses the active request segment for wrapped organi
     "You are in an ongoing conversation with the same user.",
     "",
     "Recent conversation context (oldest to newest):",
-    "- user: Please build a small drone project in a folder called drone-company-organize-smoke-a and leave the preview open for me.",
+    "- user: Please build a small sample project in a folder called sample-company-organize-smoke-a and leave the preview open for me.",
     "- assistant: Opened http://localhost:4173/index.html in a visible browser window and left it open for you.",
     "",
     "Current user request:",
-    "Please organize the drone-company-organize-smoke project folders you made earlier into a folder called drone-web-projects."
+    "Please organize the sample-company-organize-smoke project folders you made earlier into a folder called sample-web-projects."
   ].join("\n");
 
   const runResult = buildRunResult(
@@ -1573,13 +1573,13 @@ test("selectUserFacingSummary uses the active request segment for wrapped organi
           description: "reply",
           params: {
             message:
-              "I checked C:\\Users\\testuser\\OneDrive\\Desktop\\drone-web-projects."
+              "I checked C:\\Users\\testuser\\OneDrive\\Desktop\\sample-web-projects."
           },
           estimatedCostUsd: 0.02
         },
         mode: "fast_path",
         approved: true,
-        output: "I checked C:\\Users\\testuser\\OneDrive\\Desktop\\drone-web-projects.",
+        output: "I checked C:\\Users\\testuser\\OneDrive\\Desktop\\sample-web-projects.",
         blockedBy: [],
         violations: [],
         votes: []
@@ -1613,7 +1613,7 @@ test("selectUserFacingSummary uses the active request segment for wrapped organi
         },
         mode: "escalation_path",
         approved: true,
-        output: "Shell success: moved matching drone-company folders.",
+        output: "Shell success: moved matching sample-company folders.",
         blockedBy: [],
         violations: [],
         votes: []
@@ -1624,13 +1624,13 @@ test("selectUserFacingSummary uses the active request segment for wrapped organi
           type: "list_directory",
           description: "inspect destination folder",
           params: {
-            path: "C:\\Users\\testuser\\OneDrive\\Desktop\\drone-web-projects"
+            path: "C:\\Users\\testuser\\OneDrive\\Desktop\\sample-web-projects"
           },
           estimatedCostUsd: 0.05
         },
         mode: "fast_path",
         approved: true,
-        output: "Directory contents:\ndrone-company-organize-smoke-a\ndrone-company-organize-smoke-b",
+        output: "Directory contents:\nsample-company-organize-smoke-a\nsample-company-organize-smoke-b",
         blockedBy: [],
         violations: [],
         votes: []
@@ -1647,7 +1647,7 @@ test("selectUserFacingSummary uses the active request segment for wrapped organi
 
   assert.equal(
     selected,
-    "I moved the matching folders into C:\\Users\\testuser\\OneDrive\\Desktop\\drone-web-projects. I shut down 1 exact tracked preview holder first so the move could finish."
+    "I moved the matching folders into C:\\Users\\testuser\\OneDrive\\Desktop\\sample-web-projects. I shut down 1 exact tracked preview holder first so the move could finish."
   );
 });
 
@@ -1662,14 +1662,14 @@ test("selectUserFacingSummary does not trust organization move claims when the r
           description: "reply",
           params: {
             message:
-              "I moved the matching folders into drone-company-organize-smoke-a and left the preview open for you."
+              "I moved the matching folders into sample-company-organize-smoke-a and left the preview open for you."
           },
           estimatedCostUsd: 0.02
         },
         mode: "fast_path",
         approved: true,
         output:
-          "I moved the matching folders into drone-company-organize-smoke-a and left the preview open for you.",
+          "I moved the matching folders into sample-company-organize-smoke-a and left the preview open for you.",
         blockedBy: [],
         violations: [],
         votes: []
@@ -1681,7 +1681,7 @@ test("selectUserFacingSummary does not trust organization move claims when the r
           description: "create destination folder only",
           params: {
             command:
-              "New-Item -ItemType Directory -Path 'C:\\Users\\testuser\\OneDrive\\Desktop\\drone-web-projects' -Force | Out-Null"
+              "New-Item -ItemType Directory -Path 'C:\\Users\\testuser\\OneDrive\\Desktop\\sample-web-projects' -Force | Out-Null"
           },
           estimatedCostUsd: 0.08
         },
@@ -1704,7 +1704,7 @@ test("selectUserFacingSummary does not trust organization move claims when the r
         },
         mode: "fast_path",
         approved: true,
-        output: "Directory contents:\ndrone-company-organize-smoke-a\ndrone-company-organize-smoke-b\ndrone-web-projects",
+        output: "Directory contents:\nsample-company-organize-smoke-a\nsample-company-organize-smoke-b\nsample-web-projects",
         blockedBy: [],
         violations: [],
         votes: []
@@ -1715,7 +1715,7 @@ test("selectUserFacingSummary does not trust organization move claims when the r
           type: "list_directory",
           description: "inspect destination folder",
           params: {
-            path: "C:\\Users\\testuser\\OneDrive\\Desktop\\drone-web-projects"
+            path: "C:\\Users\\testuser\\OneDrive\\Desktop\\sample-web-projects"
           },
           estimatedCostUsd: 0.05
         },
@@ -1729,7 +1729,7 @@ test("selectUserFacingSummary does not trust organization move claims when the r
     ],
     {
       userInput:
-        "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects."
+        "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects."
     }
   );
 
@@ -1776,7 +1776,7 @@ test("selectUserFacingSummary surfaces a human-first organization summary withou
         },
         mode: "escalation_path",
         approved: true,
-        output: "Shell success: moved matching drone-company folders.",
+        output: "Shell success: moved matching sample-company folders.",
         blockedBy: [],
         violations: [],
         votes: []
@@ -1787,13 +1787,13 @@ test("selectUserFacingSummary surfaces a human-first organization summary withou
           type: "list_directory",
           description: "inspect destination folder",
           params: {
-            path: "C:\\Users\\testuser\\OneDrive\\Desktop\\drone-web-projects"
+            path: "C:\\Users\\testuser\\OneDrive\\Desktop\\sample-web-projects"
           },
           estimatedCostUsd: 0.05
         },
         mode: "fast_path",
         approved: true,
-        output: "Directory contents:\ndrone-company-a",
+        output: "Directory contents:\nsample-company-a",
         blockedBy: [],
         violations: [],
         votes: []
@@ -1801,7 +1801,7 @@ test("selectUserFacingSummary surfaces a human-first organization summary withou
     ],
     {
       userInput:
-        "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects."
+        "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects."
     }
   );
 
@@ -1809,7 +1809,7 @@ test("selectUserFacingSummary surfaces a human-first organization summary withou
 
   assert.equal(
     selected,
-    "I moved the matching folders into C:\\Users\\testuser\\OneDrive\\Desktop\\drone-web-projects. I shut down 1 exact tracked preview holder first so the move could finish."
+    "I moved the matching folders into C:\\Users\\testuser\\OneDrive\\Desktop\\sample-web-projects. I shut down 1 exact tracked preview holder first so the move could finish."
   );
 });
 
@@ -1819,9 +1819,9 @@ test("selectUserFacingSummary trusts JSON move-proof output for desktop cleanup 
     [
       {
         action: {
-          id: "action_move_desktop_drone_folders_json",
+          id: "action_move_desktop_sample_folders_json",
           type: "shell_command",
-          description: "move all drone-company desktop folders into drone-folder",
+          description: "move all sample-company desktop folders into sample-folder",
           params: {
             command: "Move-Item ..."
           },
@@ -1830,14 +1830,14 @@ test("selectUserFacingSummary trusts JSON move-proof output for desktop cleanup 
         mode: "escalation_path",
         approved: true,
         output:
-          "Shell success:\n{\"destination\":\"C:\\\\Users\\\\testuser\\\\OneDrive\\\\Desktop\\\\drone-folder\",\"moved\":[\"drone-company-a\",\"drone-company-b\"],\"failed\":[]}",
+          "Shell success:\n{\"destination\":\"C:\\\\Users\\\\testuser\\\\OneDrive\\\\Desktop\\\\sample-folder\",\"moved\":[\"sample-company-a\",\"sample-company-b\"],\"failed\":[]}",
         blockedBy: [],
         violations: [],
         votes: []
       },
       {
         action: {
-          id: "action_ack_desktop_drone_cleanup",
+          id: "action_ack_desktop_sample_cleanup",
           type: "respond",
           description: "acknowledge cleanup",
           params: {
@@ -1855,7 +1855,7 @@ test("selectUserFacingSummary trusts JSON move-proof output for desktop cleanup 
     ],
     {
       userInput:
-        "Please clean up the drone-company folders on my desktop and put them into drone-folder."
+        "Please clean up the sample-company folders on my desktop and put them into sample-folder."
     }
   );
 
@@ -1865,7 +1865,7 @@ test("selectUserFacingSummary trusts JSON move-proof output for desktop cleanup 
 
   assert.equal(
     selected,
-    "I moved drone-company-a and drone-company-b into C:\\Users\\testuser\\OneDrive\\Desktop\\drone-folder."
+    "I moved sample-company-a and sample-company-b into C:\\Users\\testuser\\OneDrive\\Desktop\\sample-folder."
   );
 });
 
@@ -1879,13 +1879,13 @@ test("selectUserFacingSummary renders the completed organization move after a re
           type: "respond",
           description: "reply",
           params: {
-            message: "I checked C:\\Users\\testuser\\OneDrive\\Desktop\\drone-web-projects."
+            message: "I checked C:\\Users\\testuser\\OneDrive\\Desktop\\sample-web-projects."
           },
           estimatedCostUsd: 0.02
         },
         mode: "fast_path",
         approved: true,
-        output: "I checked C:\\Users\\testuser\\OneDrive\\Desktop\\drone-web-projects.",
+        output: "I checked C:\\Users\\testuser\\OneDrive\\Desktop\\sample-web-projects.",
         blockedBy: [],
         violations: [],
         votes: []
@@ -1936,7 +1936,7 @@ test("selectUserFacingSummary renders the completed organization move after a re
         },
         mode: "escalation_path",
         approved: true,
-        output: "Shell success: moved matching drone-company folders.",
+        output: "Shell success: moved matching sample-company folders.",
         blockedBy: [],
         violations: [],
         votes: []
@@ -1947,13 +1947,13 @@ test("selectUserFacingSummary renders the completed organization move after a re
           type: "list_directory",
           description: "inspect the destination folder after recovery",
           params: {
-            path: "C:\\Users\\testuser\\OneDrive\\Desktop\\drone-web-projects"
+            path: "C:\\Users\\testuser\\OneDrive\\Desktop\\sample-web-projects"
           },
           estimatedCostUsd: 0.05
         },
         mode: "fast_path",
         approved: true,
-        output: "Directory contents:\ndrone-company-a\ndrone-company-b",
+        output: "Directory contents:\nsample-company-a\nsample-company-b",
         blockedBy: [],
         violations: [],
         votes: []
@@ -1970,7 +1970,7 @@ test("selectUserFacingSummary renders the completed organization move after a re
 
   assert.equal(
     selected,
-    "I moved the matching folders into C:\\Users\\testuser\\OneDrive\\Desktop\\drone-web-projects. I shut down 2 exact tracked preview holders first so the move could finish."
+    "I moved the matching folders into C:\\Users\\testuser\\OneDrive\\Desktop\\sample-web-projects. I shut down 2 exact tracked preview holders first so the move could finish."
   );
 });
 
@@ -1985,14 +1985,14 @@ test("selectUserFacingSummary renders the completed organization move from bound
           description: "reply",
           params: {
             message:
-              "I ran the command successfully. Command output: MOVED_TO_DEST drone-company-a drone-company-b REMAINING_AT_DESKTOP"
+              "I ran the command successfully. Command output: MOVED_TO_DEST sample-company-a sample-company-b REMAINING_AT_DESKTOP"
           },
           estimatedCostUsd: 0.02
         },
         mode: "fast_path",
         approved: true,
         output:
-          "I ran the command successfully.\nCommand output:\nMOVED_TO_DEST\ndrone-company-a\ndrone-company-b\nREMAINING_AT_DESKTOP",
+          "I ran the command successfully.\nCommand output:\nMOVED_TO_DEST\nsample-company-a\nsample-company-b\nREMAINING_AT_DESKTOP",
         blockedBy: [],
         violations: [],
         votes: []
@@ -2044,7 +2044,7 @@ test("selectUserFacingSummary renders the completed organization move from bound
         mode: "escalation_path",
         approved: true,
         output:
-          "MOVED_TO_DEST\ndrone-company-a\ndrone-company-b\nREMAINING_AT_DESKTOP",
+          "MOVED_TO_DEST\nsample-company-a\nsample-company-b\nREMAINING_AT_DESKTOP",
         blockedBy: [],
         violations: [],
         votes: []
@@ -2061,7 +2061,7 @@ test("selectUserFacingSummary renders the completed organization move from bound
 
   assert.equal(
     selected,
-    "I moved drone-company-a and drone-company-b into the requested folder. I shut down 2 exact tracked preview holders first so the move could finish."
+    "I moved sample-company-a and sample-company-b into the requested folder. I shut down 2 exact tracked preview holders first so the move could finish."
   );
 });
 
@@ -2127,7 +2127,7 @@ test("selectUserFacingSummary renders the completed organization move from desti
           description: "move the matching folders after recovery",
           params: {
             command: [
-              "$destination = 'C:\\Users\\testuser\\OneDrive\\Desktop\\drone-web-projects'",
+              "$destination = 'C:\\Users\\testuser\\OneDrive\\Desktop\\sample-web-projects'",
               "Move-Item ...",
               "Write-Output 'DEST_CONTENTS:'",
               "Write-Output 'ROOT_REMAINING_MATCHES:'"
@@ -2138,7 +2138,7 @@ test("selectUserFacingSummary renders the completed organization move from desti
         mode: "escalation_path",
         approved: true,
         output:
-          "Shell success:\nDEST_CONTENTS:\r\ndrone-company-a\r\ndrone-company-b\r\nROOT_REMAINING_MATCHES:",
+          "Shell success:\nDEST_CONTENTS:\r\nsample-company-a\r\nsample-company-b\r\nROOT_REMAINING_MATCHES:",
         blockedBy: [],
         violations: [],
         votes: []
@@ -2155,7 +2155,7 @@ test("selectUserFacingSummary renders the completed organization move from desti
 
   assert.equal(
     selected,
-    "I moved drone-company-a and drone-company-b into the requested folder. I shut down 2 exact tracked preview holders first so the move could finish."
+    "I moved sample-company-a and sample-company-b into the requested folder. I shut down 2 exact tracked preview holders first so the move could finish."
   );
 });
 
@@ -2170,14 +2170,14 @@ test("selectUserFacingSummary renders the completed organization move from inlin
           description: "reply",
           params: {
             message:
-              "I ran the command successfully. Command output: MOVED_TO_DEST=drone-company-a,drone-company-b DEST_CONTENTS=drone-company-a,drone-company-b ROOT_REMAINING_MATCHES="
+              "I ran the command successfully. Command output: MOVED_TO_DEST=sample-company-a,sample-company-b DEST_CONTENTS=sample-company-a,sample-company-b ROOT_REMAINING_MATCHES="
           },
           estimatedCostUsd: 0.02
         },
         mode: "fast_path",
         approved: true,
         output:
-          "I ran the command successfully.\nCommand output:\nMOVED_TO_DEST=drone-company-a,drone-company-b\nDEST_CONTENTS=drone-company-a,drone-company-b\nROOT_REMAINING_MATCHES=",
+          "I ran the command successfully.\nCommand output:\nMOVED_TO_DEST=sample-company-a,sample-company-b\nDEST_CONTENTS=sample-company-a,sample-company-b\nROOT_REMAINING_MATCHES=",
         blockedBy: [],
         violations: [],
         votes: []
@@ -2223,10 +2223,10 @@ test("selectUserFacingSummary renders the completed organization move from inlin
           description: "move the matching folders after recovery",
           params: {
             command: [
-              "$destination = 'C:\\Users\\testuser\\OneDrive\\Desktop\\drone-web-projects'",
+              "$destination = 'C:\\Users\\testuser\\OneDrive\\Desktop\\sample-web-projects'",
               "Move-Item ...",
-              "Write-Output 'MOVED_TO_DEST=drone-company-a,drone-company-b'",
-              "Write-Output 'DEST_CONTENTS=drone-company-a,drone-company-b'",
+              "Write-Output 'MOVED_TO_DEST=sample-company-a,sample-company-b'",
+              "Write-Output 'DEST_CONTENTS=sample-company-a,sample-company-b'",
               "Write-Output 'ROOT_REMAINING_MATCHES='"
             ].join("\n")
           },
@@ -2235,7 +2235,7 @@ test("selectUserFacingSummary renders the completed organization move from inlin
         mode: "escalation_path",
         approved: true,
         output:
-          "Shell success:\nMOVED_TO_DEST=drone-company-a,drone-company-b\r\nDEST_CONTENTS=drone-company-a,drone-company-b\r\nROOT_REMAINING_MATCHES=",
+          "Shell success:\nMOVED_TO_DEST=sample-company-a,sample-company-b\r\nDEST_CONTENTS=sample-company-a,sample-company-b\r\nROOT_REMAINING_MATCHES=",
         blockedBy: [],
         violations: [],
         votes: []
@@ -2252,7 +2252,7 @@ test("selectUserFacingSummary renders the completed organization move from inlin
 
   assert.equal(
     selected,
-    "I moved drone-company-a and drone-company-b into the requested folder. I shut down 2 exact tracked preview holders first so the move could finish."
+    "I moved sample-company-a and sample-company-b into the requested folder. I shut down 2 exact tracked preview holders first so the move could finish."
   );
 });
 
@@ -2805,21 +2805,21 @@ test("selectUserFacingSummary surfaces browser verification output when no respo
           description: "verify browser page",
           params: {
             url: "http://127.0.0.1:3000/",
-            expectedTitle: "Robinhood"
+            expectedTitle: "Portfolio"
           },
           estimatedCostUsd: 0.09
         },
         mode: "escalation_path",
         approved: true,
-        output: "Browser verification passed: observed title \"Robinhood Mock\"; expected title matched.",
+        output: "Browser verification passed: observed title \"Portfolio Demo\"; expected title matched.",
         executionStatus: "success",
         executionMetadata: {
           browserVerification: true,
           browserVerifyPassed: true,
           browserVerifyUrl: "http://127.0.0.1:3000/",
-          browserVerifyObservedTitle: "Robinhood Mock",
+          browserVerifyObservedTitle: "Portfolio Demo",
           browserVerifyMatchedTitle: true,
-          browserVerifyExpectedTitle: "Robinhood",
+          browserVerifyExpectedTitle: "Portfolio",
           processLifecycleStatus: "PROCESS_READY"
         },
         blockedBy: [],
@@ -2831,7 +2831,7 @@ test("selectUserFacingSummary surfaces browser verification output when no respo
 
   const selected = selectUserFacingSummary(runResult);
   assert.match(selected, /^Browser verification passed:/i);
-  assert.match(selected, /Robinhood Mock/i);
+  assert.match(selected, /Portfolio Demo/i);
 });
 
 test("selectUserFacingSummary appends browser verification status when respond output exists and technical summary is enabled", () => {
@@ -2868,13 +2868,13 @@ test("selectUserFacingSummary appends browser verification status when respond o
         },
         mode: "escalation_path",
         approved: true,
-        output: "Browser verification passed: observed title \"Robinhood Mock\"; expected text matched.",
+        output: "Browser verification passed: observed title \"Portfolio Demo\"; expected text matched.",
         executionStatus: "success",
         executionMetadata: {
           browserVerification: true,
           browserVerifyPassed: true,
           browserVerifyUrl: "http://127.0.0.1:3000/",
-          browserVerifyObservedTitle: "Robinhood Mock",
+          browserVerifyObservedTitle: "Portfolio Demo",
           browserVerifyMatchedText: true,
           browserVerifyExpectedText: "Portfolio",
           processLifecycleStatus: "PROCESS_READY"
@@ -4001,9 +4001,9 @@ test("selectUserFacingSummary humanizes live build policy blocks when process st
         action: {
           id: "action_shell_command_live_build_simulated",
           type: "shell_command",
-          description: "run finite scaffold step",
+          description: "run finite build proof step",
           params: {
-            command: "npm create vite@latest finance-dashboard -- --template react"
+            command: "npm run build"
           },
           estimatedCostUsd: 0.3
         },
@@ -4131,7 +4131,7 @@ test("selectUserFacingSummary prefers build no-op fallback over raw probe output
     ],
     {
       userInput:
-        `Create a React app at ${HOST_TEST_FINANCE_DASHBOARD_DIR} with a dark theme and charts. Create files directly and execute now.`
+        `Create a static HTML site at ${HOST_TEST_SAMPLE_SITE_DIR} for a sample service company with placeholder images. Create files directly and execute now.`
     }
   );
 

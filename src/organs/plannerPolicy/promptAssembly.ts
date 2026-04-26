@@ -79,7 +79,7 @@ export function buildExecutionStyleBuildStrategyGuidance(currentUserRequest: str
 
   const frameworkNativePreviewClause =
     /\b(?:react|vite|next\.?js|nextjs|vue|svelte|angular)\b/i.test(currentUserRequest)
-      ? " For framework apps that already have package scripts, prefer the workspace-native command from the exact project folder, such as npm run preview, npm run dev, npm run start, vite preview, or vite dev. Avoid ad-hoc preview servers like npx serve when the framework already provides a native preview/runtime path. Once the exact project folder is known, use cwd/workdir or Set-Location into that folder instead of relying on multi-step npm --prefix chaining from the parent directory."
+      ? " For framework apps that already have package scripts, prefer the workspace's declared command from the exact project folder. Avoid ad-hoc preview servers when the framework already provides a runtime path. Once the exact project folder is known, run toolchain steps from that folder instead of targeting a nearby parent by convenience."
       : "";
   const staticPreviewClause = requiresPersistentBrowserOpenBuildRequest(currentUserRequest)
     ? " If the request only needs a visible local preview and does not explicitly ask for localhost readiness, browser verification, screenshots, or Playwright proof, prefer opening a static artifact directly with an absolute file:// URL instead of inventing a local server."
@@ -91,7 +91,7 @@ export function buildExecutionStyleBuildStrategyGuidance(currentUserRequest: str
     ? " The request also asks to leave the page open afterward, so include open_browser as the final visible-browser step using the same verified loopback URL or the same local file URL you just built."
     : "";
   const liveVerificationClause = isLiveVerificationBuildRequest(currentUserRequest)
-    ? " Live-run verification intent detected: only choose a long-running run/observe step after finite proof steps succeed. When localhost readiness proof is required, pair start_process with probe_port or probe_http. The same plan must contain the local proof chain needed to finish truthfully: start_process (when a local server is required), then probe_port or probe_http for loopback readiness, then verify_browser when UI verification was requested. Do not stop at helper-file creation or partial setup when live proof is still missing. Do not claim browser or UI verification from probes alone. For framework-app live verification, prefer the workspace-native preview/runtime command such as npm run preview, npm run dev, vite preview, or vite dev from the exact project folder instead of inventing an ad-hoc npx serve server." +
+    ? " Live-run verification intent detected: only choose a long-running run/observe step after finite proof steps succeed. When localhost readiness proof is required, pair start_process with probe_port or probe_http. The same plan must contain the local proof chain needed to finish truthfully: start_process when a local server is required, then probe_port or probe_http for loopback readiness, then verify_browser when UI verification was requested. Do not stop at helper-file creation or partial setup when live proof is still missing. Do not claim browser or UI verification from probes alone. For framework-app live verification, prefer the workspace's declared preview or runtime entrypoint from the exact project folder instead of inventing an ad-hoc static server." +
       browserVerificationClause +
       persistentBrowserOpenClause +
       " Do not use file:// URLs for open_browser when live verification or browser proof is required. If the built artifact is a static local site but the user explicitly asked for localhost proof, serve that folder on localhost first and then open the resulting loopback http URL." +
@@ -100,10 +100,10 @@ export function buildExecutionStyleBuildStrategyGuidance(currentUserRequest: str
 
   return (
     "\nDeterministic build-task strategy: prefer finite proof steps before any live session. " +
-    "Use the smallest executable sequence that can prove progress, usually scaffold -> edit -> install -> build -> finite verification. " +
+    "Use the smallest executable sequence that can prove progress through materialized files, project metadata, finite build checks, and requested verification. " +
     "Keep shell and start-process commands within the configured commandMaxChars budget; when file contents are large, emit write_file actions instead of one oversized shell script. " +
     "Read_file, list_directory, check_process, or stop_process can support the plan, but they do not satisfy an execution-style build request by themselves. " +
-    "Do not use long-running dev-server commands (for example npm start, npm run dev, next dev, vite dev, or watch mode) as the default proof step when a finite build/test verification step exists. " +
+    "Do not use long-running dev-server or watch commands as the default proof step when a finite build or test verification step exists. " +
     "Only use managed-process actions (start_process/check_process/stop_process) when live verification is explicitly required and policy allows it. " +
     "Use probe_port or probe_http only for loopback-local readiness checks." +
     frameworkNativePreviewClause +
@@ -344,6 +344,7 @@ export function buildPlannerSystemPrompt(input: PlannerPromptBuildInput): string
     "If you emit a respond action, include params.message with the exact user-facing text. " +
     RESPONSE_IDENTITY_GUARDRAIL +
     RESPONSE_STYLE_GUARDRAIL +
+    "If you emit a create_skill action for executable code, include params.name and params.code. If you emit a create_skill action for reusable Markdown guidance, include params.name, params.kind=\"markdown_instruction\", and params.instructions. Markdown skills are advisory only and must not be treated as executable run_skill targets. " +
     "If you emit a write_file action, include params.path and params.content with the full file content to write. " +
     "If you emit a read_file action, include params.path. " +
     "If you emit a shell_command action, include params.command with the exact command string. " +
@@ -396,6 +397,7 @@ export function buildPlannerRepairSystemPrompt(input: PlannerRepairPromptBuildIn
     "Always produce at least one valid action. For conversational requests, emit respond with params.message. " +
     RESPONSE_IDENTITY_GUARDRAIL +
     RESPONSE_STYLE_GUARDRAIL +
+    "For create_skill, include params.name plus either executable params.code or Markdown params.kind=\"markdown_instruction\" and params.instructions. Markdown skills are advisory only and must not be run with run_skill. " +
     "For write_file, include params.path and params.content (the full file content). " +
     "For read_file, include params.path. For shell_command, include params.command. " +
     "For start_process, include params.command and any needed cwd/workdir fields. " +

@@ -89,7 +89,7 @@ function buildContextualFollowupInterpretationPrompt(
     "Keep candidateTokens empty when no safe topic anchor exists.",
     "Examples:",
     '- "check in on the Sarah situation later" => {"kind":"status_followup","candidateTokens":["sarah","situation"],"confidence":"medium"}',
-    '- "remind me later about the drone draft" => {"kind":"reminder_followup","candidateTokens":["drone","draft"],"confidence":"medium"}',
+    '- "remind me later about the sample draft" => {"kind":"reminder_followup","candidateTokens":["sample","draft"],"confidence":"medium"}',
     '- "close the browser and update the hero" => {"kind":"non_contextual_followup","candidateTokens":[],"confidence":"high"}',
     "",
     "User request:",

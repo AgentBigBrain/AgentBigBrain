@@ -460,7 +460,7 @@ test("executeStartProcess resolves a trusted Vite loopback target for generic np
     path.join(workspaceDir, "package.json"),
     JSON.stringify(
       {
-        name: "calm-drone",
+        name: "calm-sample",
         private: true,
         scripts: {
           dev: "vite"
@@ -1089,7 +1089,7 @@ test("executeStopProcess can stop an exact recovered holder by pid when no live 
 test("executeStopProcess closes linked tracked browser sessions for the same preview lease", async () => {
   const tempDir = mkdtempSync(path.join(os.tmpdir(), "abb-live-run-stop-linked-browser-"));
   const indexPath = path.join(tempDir, "index.html");
-  writeFileSync(indexPath, "<!doctype html><title>Drone Company</title>", "utf8");
+  writeFileSync(indexPath, "<!doctype html><title>Sample Company</title>", "utf8");
   const managedProcessRegistry = new ManagedProcessRegistry();
   const processSnapshot = managedProcessRegistry.registerStarted({
     actionId: "action_stop_process_linked_preview",
@@ -1225,21 +1225,21 @@ test("executeStopFolderRuntimeProcesses stops only exact listening server proces
   }
 
   const desktopRoot = mkdtempSync(path.join(os.tmpdir(), "abb-live-run-folder-sweep-"));
-  const droneAlphaPath = path.join(desktopRoot, "drone-alpha");
-  const droneBetaPath = path.join(desktopRoot, "Drone-beta");
+  const sampleAlphaPath = path.join(desktopRoot, "sample-alpha");
+  const sampleBetaPath = path.join(desktopRoot, "Sample-beta");
   const calmCityPath = path.join(desktopRoot, "calm-city");
-  mkdirSync(droneAlphaPath, { recursive: true });
-  mkdirSync(droneBetaPath, { recursive: true });
+  mkdirSync(sampleAlphaPath, { recursive: true });
+  mkdirSync(sampleBetaPath, { recursive: true });
   mkdirSync(calmCityPath, { recursive: true });
 
-  const droneAlphaPort = await reserveUnusedTcpPort();
-  const droneBetaPort = await reserveUnusedTcpPort();
+  const sampleAlphaPort = await reserveUnusedTcpPort();
+  const sampleBetaPort = await reserveUnusedTcpPort();
   const calmCityPort = await reserveUnusedTcpPort();
   const children: ChildProcess[] = [];
 
   try {
-    children.push(await spawnNamedFolderServer(droneAlphaPath, droneAlphaPort, "drone-alpha"));
-    children.push(await spawnNamedFolderServer(droneBetaPath, droneBetaPort, "drone-beta"));
+    children.push(await spawnNamedFolderServer(sampleAlphaPath, sampleAlphaPort, "sample-alpha"));
+    children.push(await spawnNamedFolderServer(sampleBetaPath, sampleBetaPort, "sample-beta"));
     children.push(await spawnNamedFolderServer(calmCityPath, calmCityPort, "calm-city"));
 
     const context = buildLiveRunContext({
@@ -1249,7 +1249,7 @@ test("executeStopFolderRuntimeProcesses stops only exact listening server proces
     const outcome = await executeStopFolderRuntimeProcesses(context, {
       rootPath: desktopRoot,
       selectorMode: "starts_with",
-      selectorTerm: "drone"
+      selectorTerm: "sample"
     });
 
     assert.equal(outcome.status, "success");
@@ -1260,10 +1260,10 @@ test("executeStopFolderRuntimeProcesses stops only exact listening server proces
     assert.equal(outcome.executionMetadata?.folderRuntimeProcessSweepRemainingCount, 0);
     assert.equal(outcome.executionMetadata?.folderRuntimeProcessSweepVerifiedClear, true);
     assert.match(outcome.output, /Stopped 2 exact server processes/i);
-    assert.match(String(outcome.executionMetadata?.folderRuntimeProcessSweepMatchedFolders ?? ""), /drone-alpha/i);
-    assert.match(String(outcome.executionMetadata?.folderRuntimeProcessSweepMatchedFolders ?? ""), /Drone-beta/i);
-    assert.equal(await performLocalHttpProbe(new URL(`http://127.0.0.1:${droneAlphaPort}/`), 1_000), null);
-    assert.equal(await performLocalHttpProbe(new URL(`http://127.0.0.1:${droneBetaPort}/`), 1_000), null);
+    assert.match(String(outcome.executionMetadata?.folderRuntimeProcessSweepMatchedFolders ?? ""), /sample-alpha/i);
+    assert.match(String(outcome.executionMetadata?.folderRuntimeProcessSweepMatchedFolders ?? ""), /Sample-beta/i);
+    assert.equal(await performLocalHttpProbe(new URL(`http://127.0.0.1:${sampleAlphaPort}/`), 1_000), null);
+    assert.equal(await performLocalHttpProbe(new URL(`http://127.0.0.1:${sampleBetaPort}/`), 1_000), null);
     assert.equal(await performLocalHttpProbe(new URL(`http://127.0.0.1:${calmCityPort}/`), 1_000), 200);
   } finally {
     for (const child of children) {
@@ -1694,7 +1694,7 @@ test("executeOpenBrowser allows local file preview urls without localhost readin
   const { calls, spawn } = createDetachedBrowserLaunchShellSpawn(61235);
   const tempDir = mkdtempSync(path.join(os.tmpdir(), "abb-live-run-file-preview-"));
   const indexPath = path.join(tempDir, "index.html");
-  writeFileSync(indexPath, "<!doctype html><title>Drone Company</title>", "utf8");
+  writeFileSync(indexPath, "<!doctype html><title>Sample Company</title>", "utf8");
 
   try {
     const outcome = await executeOpenBrowser(
@@ -1730,7 +1730,7 @@ test("executeOpenBrowser persists workspace ownership metadata for later preview
   const { calls, spawn } = createDetachedBrowserLaunchShellSpawn(61236);
   const tempDir = mkdtempSync(path.join(os.tmpdir(), "abb-live-run-owned-preview-"));
   const indexPath = path.join(tempDir, "index.html");
-  writeFileSync(indexPath, "<!doctype html><title>Drone Company</title>", "utf8");
+  writeFileSync(indexPath, "<!doctype html><title>Sample Company</title>", "utf8");
   const managedProcessRegistry = new ManagedProcessRegistry();
   const processSnapshot = managedProcessRegistry.registerStarted({
     actionId: "action_owned_preview_process",
@@ -1785,7 +1785,7 @@ test("executeOpenBrowser treats previewProcessLeaseId none as no linked process 
   const { spawn } = createDetachedBrowserLaunchShellSpawn(61238);
   const tempDir = mkdtempSync(path.join(os.tmpdir(), "abb-live-run-file-preview-none-"));
   const indexPath = path.join(tempDir, "index.html");
-  writeFileSync(indexPath, "<!doctype html><title>Drone Company</title>", "utf8");
+  writeFileSync(indexPath, "<!doctype html><title>Sample Company</title>", "utf8");
   const managedProcessRegistry = new ManagedProcessRegistry();
   managedProcessRegistry.registerStarted({
     actionId: "action_preview_process_should_not_attach",
@@ -1824,7 +1824,7 @@ test("executeOpenBrowser can infer one unique linked preview lease from the work
   const { spawn } = createDetachedBrowserLaunchShellSpawn(61237);
   const tempDir = mkdtempSync(path.join(os.tmpdir(), "abb-live-run-owned-preview-inferred-"));
   const indexPath = path.join(tempDir, "index.html");
-  writeFileSync(indexPath, "<!doctype html><title>Drone Company</title>", "utf8");
+  writeFileSync(indexPath, "<!doctype html><title>Sample Company</title>", "utf8");
   const managedProcessRegistry = new ManagedProcessRegistry();
   const processSnapshot = managedProcessRegistry.registerStarted({
     actionId: "action_owned_preview_process_inferred",
@@ -1861,7 +1861,7 @@ test("executeOpenBrowser can infer one unique linked preview lease from the work
 test("executeOpenBrowser reuses an existing managed browser session and infers the latest linked preview lease from the same task workspace", async () => {
   const tempDir = mkdtempSync(path.join(os.tmpdir(), "abb-live-run-reused-owned-preview-"));
   const indexPath = path.join(tempDir, "index.html");
-  writeFileSync(indexPath, "<!doctype html><title>Drone Company</title>", "utf8");
+  writeFileSync(indexPath, "<!doctype html><title>Sample Company</title>", "utf8");
   const stubRuntime = createStubPlaywrightRuntime();
   const managedProcessRegistry = new ManagedProcessRegistry({
     entropySource: {
@@ -1982,7 +1982,7 @@ test("executeCloseBrowser closes a tracked managed browser session by session id
 test("executeCloseBrowser resolves a tracked local file preview by url", async () => {
   const tempDir = mkdtempSync(path.join(os.tmpdir(), "abb-live-run-file-close-"));
   const indexPath = path.join(tempDir, "index.html");
-  writeFileSync(indexPath, "<!doctype html><title>Drone Company</title>", "utf8");
+  writeFileSync(indexPath, "<!doctype html><title>Sample Company</title>", "utf8");
   const stubRuntime = createStubPlaywrightRuntime();
   const fileUrl = `file:///${indexPath.replace(/\\/g, "/")}`;
 
@@ -2521,7 +2521,7 @@ test("executeInspectPathHolders promotes exact content-matched preview holders i
   try {
     writeFileSync(
       path.join(workspaceDir, "index.html"),
-      "<!doctype html><title>Drone</title><main>same content</main>",
+      "<!doctype html><title>Sample</title><main>same content</main>",
       "utf8"
     );
     const context = buildLiveRunContext({
@@ -2558,7 +2558,7 @@ test("executeInspectWorkspaceResources keeps weaker editor holder matches in the
       pid: 8810,
       port: null,
       processName: "Code.exe",
-      commandLine: "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" C:\\Users\\testuser\\Desktop\\drone-company",
+      commandLine: "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" C:\\Users\\testuser\\Desktop\\sample-company",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "editor_workspace"
@@ -2569,7 +2569,7 @@ test("executeInspectWorkspaceResources keeps weaker editor holder matches in the
   });
 
   const outcome = await executeInspectWorkspaceResources(context, {
-    rootPath: "C:\\Users\\testuser\\Desktop\\drone-company"
+    rootPath: "C:\\Users\\testuser\\Desktop\\sample-company"
   });
 
   assert.equal(outcome.status, "success");
@@ -2592,7 +2592,7 @@ test("executeInspectWorkspaceResources asks for confirmation on a small likely e
       port: null,
       processName: "Code.exe",
       commandLine:
-        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" --reuse-window drone-company",
+        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" --reuse-window sample-company",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "editor_workspace"
@@ -2601,7 +2601,7 @@ test("executeInspectWorkspaceResources asks for confirmation on a small likely e
       pid: 8811,
       port: null,
       processName: "explorer.exe",
-      commandLine: "explorer.exe /select,C:\\Users\\testuser\\Desktop\\drone-company",
+      commandLine: "explorer.exe /select,C:\\Users\\testuser\\Desktop\\sample-company",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "shell_workspace"
@@ -2612,7 +2612,7 @@ test("executeInspectWorkspaceResources asks for confirmation on a small likely e
   });
 
   const outcome = await executeInspectWorkspaceResources(context, {
-    rootPath: "C:\\Users\\testuser\\Desktop\\drone-company"
+    rootPath: "C:\\Users\\testuser\\Desktop\\sample-company"
   });
 
   assert.equal(outcome.status, "success");
@@ -2635,7 +2635,7 @@ test("executeInspectWorkspaceResources keeps contextual clarification for a stil
       port: null,
       processName: "Code.exe",
       commandLine:
-        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" --reuse-window drone-company",
+        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" --reuse-window sample-company",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "editor_workspace"
@@ -2644,7 +2644,7 @@ test("executeInspectWorkspaceResources keeps contextual clarification for a stil
       pid: 8811,
       port: null,
       processName: "explorer.exe",
-      commandLine: "explorer.exe /select,C:\\Users\\testuser\\Desktop\\drone-company",
+      commandLine: "explorer.exe /select,C:\\Users\\testuser\\Desktop\\sample-company",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "shell_workspace"
@@ -2654,7 +2654,7 @@ test("executeInspectWorkspaceResources keeps contextual clarification for a stil
       port: null,
       processName: "powershell.exe",
       commandLine:
-        "powershell.exe -NoProfile -Command Set-Location C:\\Users\\testuser\\Desktop; Get-ChildItem drone-company*",
+        "powershell.exe -NoProfile -Command Set-Location C:\\Users\\testuser\\Desktop; Get-ChildItem sample-company*",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "shell_workspace"
@@ -2664,7 +2664,7 @@ test("executeInspectWorkspaceResources keeps contextual clarification for a stil
       port: null,
       processName: "Code.exe",
       commandLine:
-        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" --folder-uri file:///C:/Users/testuser/Desktop/drone-company",
+        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" --folder-uri file:///C:/Users/testuser/Desktop/sample-company",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "editor_workspace"
@@ -2675,7 +2675,7 @@ test("executeInspectWorkspaceResources keeps contextual clarification for a stil
   });
 
   const outcome = await executeInspectWorkspaceResources(context, {
-    rootPath: "C:\\Users\\testuser\\Desktop\\drone-company"
+    rootPath: "C:\\Users\\testuser\\Desktop\\sample-company"
   });
 
   assert.equal(outcome.status, "success");
@@ -2698,7 +2698,7 @@ test("executeInspectWorkspaceResources keeps contextual clarification for a broa
       port: null,
       processName: "Code.exe",
       commandLine:
-        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" --reuse-window drone-company",
+        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" --reuse-window sample-company",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "editor_workspace"
@@ -2707,7 +2707,7 @@ test("executeInspectWorkspaceResources keeps contextual clarification for a broa
       pid: 8821,
       port: null,
       processName: "explorer.exe",
-      commandLine: "explorer.exe /select,C:\\Users\\testuser\\Desktop\\drone-company",
+      commandLine: "explorer.exe /select,C:\\Users\\testuser\\Desktop\\sample-company",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "shell_workspace"
@@ -2717,7 +2717,7 @@ test("executeInspectWorkspaceResources keeps contextual clarification for a broa
       port: null,
       processName: "powershell.exe",
       commandLine:
-        "powershell.exe -NoProfile -Command Set-Location C:\\Users\\testuser\\Desktop; Get-ChildItem drone-company*",
+        "powershell.exe -NoProfile -Command Set-Location C:\\Users\\testuser\\Desktop; Get-ChildItem sample-company*",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "shell_workspace"
@@ -2727,7 +2727,7 @@ test("executeInspectWorkspaceResources keeps contextual clarification for a broa
       port: null,
       processName: "Code.exe",
       commandLine:
-        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" --folder-uri file:///C:/Users/testuser/Desktop/drone-company",
+        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" --folder-uri file:///C:/Users/testuser/Desktop/sample-company",
       confidence: "low",
       reason: "command_line_mentions_target_name",
       holderKind: "editor_workspace"
@@ -2736,7 +2736,7 @@ test("executeInspectWorkspaceResources keeps contextual clarification for a broa
       pid: 8824,
       port: null,
       processName: "explorer.exe",
-      commandLine: "explorer.exe C:\\Users\\testuser\\Desktop\\drone-company",
+      commandLine: "explorer.exe C:\\Users\\testuser\\Desktop\\sample-company",
       confidence: "low",
       reason: "command_line_mentions_target_name",
       holderKind: "shell_workspace"
@@ -2747,7 +2747,7 @@ test("executeInspectWorkspaceResources keeps contextual clarification for a broa
   });
 
   const outcome = await executeInspectWorkspaceResources(context, {
-    rootPath: "C:\\Users\\testuser\\Desktop\\drone-company"
+    rootPath: "C:\\Users\\testuser\\Desktop\\sample-company"
   });
 
   assert.equal(outcome.status, "success");
@@ -2773,7 +2773,7 @@ test("executeInspectWorkspaceResources keeps contextual clarification for a broa
       port: null,
       processName: "Code.exe",
       commandLine:
-        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" --reuse-window drone-company",
+        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" --reuse-window sample-company",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "editor_workspace"
@@ -2782,7 +2782,7 @@ test("executeInspectWorkspaceResources keeps contextual clarification for a broa
       pid: 8821,
       port: null,
       processName: "explorer.exe",
-      commandLine: "explorer.exe /select,C:\\Users\\testuser\\Desktop\\drone-company",
+      commandLine: "explorer.exe /select,C:\\Users\\testuser\\Desktop\\sample-company",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "shell_workspace"
@@ -2792,7 +2792,7 @@ test("executeInspectWorkspaceResources keeps contextual clarification for a broa
       port: null,
       processName: "powershell.exe",
       commandLine:
-        "powershell.exe -NoProfile -Command Set-Location C:\\Users\\testuser\\Desktop; Get-ChildItem drone-company*",
+        "powershell.exe -NoProfile -Command Set-Location C:\\Users\\testuser\\Desktop; Get-ChildItem sample-company*",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "shell_workspace"
@@ -2802,7 +2802,7 @@ test("executeInspectWorkspaceResources keeps contextual clarification for a broa
       port: null,
       processName: "Code.exe",
       commandLine:
-        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" --folder-uri file:///C:/Users/testuser/Desktop/drone-company",
+        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" --folder-uri file:///C:/Users/testuser/Desktop/sample-company",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "editor_workspace"
@@ -2811,7 +2811,7 @@ test("executeInspectWorkspaceResources keeps contextual clarification for a broa
       pid: 8824,
       port: null,
       processName: "explorer.exe",
-      commandLine: "explorer.exe C:\\Users\\testuser\\Desktop\\drone-company",
+      commandLine: "explorer.exe C:\\Users\\testuser\\Desktop\\sample-company",
       confidence: "low",
       reason: "command_line_mentions_target_name",
       holderKind: "shell_workspace"
@@ -2821,7 +2821,7 @@ test("executeInspectWorkspaceResources keeps contextual clarification for a broa
       port: null,
       processName: "powershell.exe",
       commandLine:
-        "powershell.exe -NoProfile -Command Get-Item C:\\Users\\testuser\\Desktop\\drone-company",
+        "powershell.exe -NoProfile -Command Get-Item C:\\Users\\testuser\\Desktop\\sample-company",
       confidence: "low",
       reason: "command_line_mentions_target_name",
       holderKind: "shell_workspace"
@@ -2831,7 +2831,7 @@ test("executeInspectWorkspaceResources keeps contextual clarification for a broa
       port: null,
       processName: "Code.exe",
       commandLine:
-        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" --reuse-window --goto drone-company\\index.html",
+        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" --reuse-window --goto sample-company\\index.html",
       confidence: "low",
       reason: "command_line_mentions_target_name",
       holderKind: "editor_workspace"
@@ -2842,7 +2842,7 @@ test("executeInspectWorkspaceResources keeps contextual clarification for a broa
   });
 
   const outcome = await executeInspectWorkspaceResources(context, {
-    rootPath: "C:\\Users\\testuser\\Desktop\\drone-company"
+    rootPath: "C:\\Users\\testuser\\Desktop\\sample-company"
   });
 
   assert.equal(outcome.status, "success");
@@ -2868,7 +2868,7 @@ test("executeInspectWorkspaceResources keeps contextual clarification for a boun
       port: null,
       processName: "Code.exe",
       commandLine:
-        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" --reuse-window drone-company",
+        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" --reuse-window sample-company",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "editor_workspace"
@@ -2877,7 +2877,7 @@ test("executeInspectWorkspaceResources keeps contextual clarification for a boun
       pid: 8831,
       port: null,
       processName: "explorer.exe",
-      commandLine: "explorer.exe /select,C:\\Users\\testuser\\Desktop\\drone-company",
+      commandLine: "explorer.exe /select,C:\\Users\\testuser\\Desktop\\sample-company",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "shell_workspace"
@@ -2887,7 +2887,7 @@ test("executeInspectWorkspaceResources keeps contextual clarification for a boun
       port: null,
       processName: "OneDrive.exe",
       commandLine:
-        "\"C:\\Program Files\\Microsoft OneDrive\\OneDrive.exe\" /background drone-company",
+        "\"C:\\Program Files\\Microsoft OneDrive\\OneDrive.exe\" /background sample-company",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "sync_client"
@@ -2898,7 +2898,7 @@ test("executeInspectWorkspaceResources keeps contextual clarification for a boun
   });
 
   const outcome = await executeInspectWorkspaceResources(context, {
-    rootPath: "C:\\Users\\testuser\\Desktop\\drone-company"
+    rootPath: "C:\\Users\\testuser\\Desktop\\sample-company"
   });
 
   assert.equal(outcome.status, "success");
@@ -2923,7 +2923,7 @@ test("executeInspectWorkspaceResources keeps contextual clarification for a boun
       port: null,
       processName: "Code.exe",
       commandLine:
-        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" --reuse-window drone-company",
+        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" --reuse-window sample-company",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "editor_workspace"
@@ -2932,7 +2932,7 @@ test("executeInspectWorkspaceResources keeps contextual clarification for a boun
       pid: 8831,
       port: null,
       processName: "explorer.exe",
-      commandLine: "explorer.exe /select,C:\\Users\\testuser\\Desktop\\drone-company",
+      commandLine: "explorer.exe /select,C:\\Users\\testuser\\Desktop\\sample-company",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "shell_workspace"
@@ -2942,7 +2942,7 @@ test("executeInspectWorkspaceResources keeps contextual clarification for a boun
       port: null,
       processName: "AcmeDesktopHelper.exe",
       commandLine:
-        "\"C:\\Program Files\\Acme\\AcmeDesktopHelper.exe\" --watch C:\\Users\\testuser\\Desktop\\drone-company",
+        "\"C:\\Program Files\\Acme\\AcmeDesktopHelper.exe\" --watch C:\\Users\\testuser\\Desktop\\sample-company",
       confidence: "medium",
       reason: "command_line_matches_target_path",
       holderKind: "unknown_local_process"
@@ -2953,7 +2953,7 @@ test("executeInspectWorkspaceResources keeps contextual clarification for a boun
   });
 
   const outcome = await executeInspectWorkspaceResources(context, {
-    rootPath: "C:\\Users\\testuser\\Desktop\\drone-company"
+    rootPath: "C:\\Users\\testuser\\Desktop\\sample-company"
   });
 
   assert.equal(outcome.status, "success");
@@ -2978,7 +2978,7 @@ test("executeInspectWorkspaceResources keeps contextual clarification for a broa
       port: null,
       processName: "Code.exe",
       commandLine:
-        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" --reuse-window drone-company",
+        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" --reuse-window sample-company",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "editor_workspace"
@@ -2987,7 +2987,7 @@ test("executeInspectWorkspaceResources keeps contextual clarification for a broa
       pid: 8841,
       port: null,
       processName: "explorer.exe",
-      commandLine: "explorer.exe /select,C:\\Users\\testuser\\Desktop\\drone-company",
+      commandLine: "explorer.exe /select,C:\\Users\\testuser\\Desktop\\sample-company",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "shell_workspace"
@@ -2997,7 +2997,7 @@ test("executeInspectWorkspaceResources keeps contextual clarification for a broa
       port: null,
       processName: "powershell.exe",
       commandLine:
-        "powershell.exe -NoProfile -Command Set-Location C:\\Users\\testuser\\Desktop; Get-ChildItem drone-company*",
+        "powershell.exe -NoProfile -Command Set-Location C:\\Users\\testuser\\Desktop; Get-ChildItem sample-company*",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "shell_workspace"
@@ -3007,7 +3007,7 @@ test("executeInspectWorkspaceResources keeps contextual clarification for a broa
       port: null,
       processName: "Code.exe",
       commandLine:
-        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" --folder-uri file:///C:/Users/testuser/Desktop/drone-company",
+        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" --folder-uri file:///C:/Users/testuser/Desktop/sample-company",
       confidence: "low",
       reason: "command_line_mentions_target_name",
       holderKind: "editor_workspace"
@@ -3017,7 +3017,7 @@ test("executeInspectWorkspaceResources keeps contextual clarification for a broa
       port: null,
       processName: "AcmeDesktopHelper.exe",
       commandLine:
-        "\"C:\\Program Files\\Acme\\AcmeDesktopHelper.exe\" --watch C:\\Users\\testuser\\Desktop\\drone-company",
+        "\"C:\\Program Files\\Acme\\AcmeDesktopHelper.exe\" --watch C:\\Users\\testuser\\Desktop\\sample-company",
       confidence: "medium",
       reason: "command_line_matches_target_path",
       holderKind: "unknown_local_process"
@@ -3028,7 +3028,7 @@ test("executeInspectWorkspaceResources keeps contextual clarification for a broa
   });
 
   const outcome = await executeInspectWorkspaceResources(context, {
-    rootPath: "C:\\Users\\testuser\\Desktop\\drone-company"
+    rootPath: "C:\\Users\\testuser\\Desktop\\sample-company"
   });
 
   assert.equal(outcome.status, "success");
@@ -3053,7 +3053,7 @@ test("executeInspectWorkspaceResources keeps contextual clarification for a broa
       port: null,
       processName: "Code.exe",
       commandLine:
-        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" --reuse-window drone-company",
+        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" --reuse-window sample-company",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "editor_workspace"
@@ -3062,7 +3062,7 @@ test("executeInspectWorkspaceResources keeps contextual clarification for a broa
       pid: 8851,
       port: null,
       processName: "explorer.exe",
-      commandLine: "explorer.exe /select,C:\\Users\\testuser\\Desktop\\drone-company",
+      commandLine: "explorer.exe /select,C:\\Users\\testuser\\Desktop\\sample-company",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "shell_workspace"
@@ -3072,7 +3072,7 @@ test("executeInspectWorkspaceResources keeps contextual clarification for a broa
       port: null,
       processName: "powershell.exe",
       commandLine:
-        "powershell.exe -NoProfile -Command Set-Location C:\\Users\\testuser\\Desktop; Get-ChildItem drone-company*",
+        "powershell.exe -NoProfile -Command Set-Location C:\\Users\\testuser\\Desktop; Get-ChildItem sample-company*",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "shell_workspace"
@@ -3082,7 +3082,7 @@ test("executeInspectWorkspaceResources keeps contextual clarification for a broa
       port: null,
       processName: "Code.exe",
       commandLine:
-        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" --folder-uri file:///C:/Users/testuser/Desktop/drone-company",
+        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" --folder-uri file:///C:/Users/testuser/Desktop/sample-company",
       confidence: "low",
       reason: "command_line_mentions_target_name",
       holderKind: "editor_workspace"
@@ -3092,7 +3092,7 @@ test("executeInspectWorkspaceResources keeps contextual clarification for a broa
       port: null,
       processName: "OneDrive.exe",
       commandLine:
-        "\"C:\\Program Files\\Microsoft OneDrive\\OneDrive.exe\" /background drone-company",
+        "\"C:\\Program Files\\Microsoft OneDrive\\OneDrive.exe\" /background sample-company",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "sync_client"
@@ -3102,7 +3102,7 @@ test("executeInspectWorkspaceResources keeps contextual clarification for a broa
       port: null,
       processName: "AcmeDesktopHelper.exe",
       commandLine:
-        "\"C:\\Program Files\\Acme\\AcmeDesktopHelper.exe\" --watch C:\\Users\\testuser\\Desktop\\drone-company",
+        "\"C:\\Program Files\\Acme\\AcmeDesktopHelper.exe\" --watch C:\\Users\\testuser\\Desktop\\sample-company",
       confidence: "medium",
       reason: "command_line_matches_target_path",
       holderKind: "unknown_local_process"
@@ -3113,7 +3113,7 @@ test("executeInspectWorkspaceResources keeps contextual clarification for a broa
   });
 
   const outcome = await executeInspectWorkspaceResources(context, {
-    rootPath: "C:\\Users\\testuser\\Desktop\\drone-company"
+    rootPath: "C:\\Users\\testuser\\Desktop\\sample-company"
   });
 
   assert.equal(outcome.status, "success");
@@ -3138,7 +3138,7 @@ test("executeInspectWorkspaceResources keeps contextual clarification for a broa
       port: null,
       processName: "Code.exe",
       commandLine:
-        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" --reuse-window drone-company",
+        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" --reuse-window sample-company",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "editor_workspace"
@@ -3147,7 +3147,7 @@ test("executeInspectWorkspaceResources keeps contextual clarification for a broa
       pid: 8861,
       port: null,
       processName: "explorer.exe",
-      commandLine: "explorer.exe /select,C:\\Users\\testuser\\Desktop\\drone-company",
+      commandLine: "explorer.exe /select,C:\\Users\\testuser\\Desktop\\sample-company",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "shell_workspace"
@@ -3157,7 +3157,7 @@ test("executeInspectWorkspaceResources keeps contextual clarification for a broa
       port: null,
       processName: "powershell.exe",
       commandLine:
-        "powershell.exe -NoProfile -Command Set-Location C:\\Users\\testuser\\Desktop; Get-ChildItem drone-company*",
+        "powershell.exe -NoProfile -Command Set-Location C:\\Users\\testuser\\Desktop; Get-ChildItem sample-company*",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "shell_workspace"
@@ -3167,7 +3167,7 @@ test("executeInspectWorkspaceResources keeps contextual clarification for a broa
       port: null,
       processName: "Code.exe",
       commandLine:
-        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" --folder-uri file:///C:/Users/testuser/Desktop/drone-company",
+        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" --folder-uri file:///C:/Users/testuser/Desktop/sample-company",
       confidence: "low",
       reason: "command_line_mentions_target_name",
       holderKind: "editor_workspace"
@@ -3177,7 +3177,7 @@ test("executeInspectWorkspaceResources keeps contextual clarification for a broa
       port: null,
       processName: "OneDrive.exe",
       commandLine:
-        "\"C:\\Program Files\\Microsoft OneDrive\\OneDrive.exe\" /background drone-company",
+        "\"C:\\Program Files\\Microsoft OneDrive\\OneDrive.exe\" /background sample-company",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "sync_client"
@@ -3186,7 +3186,7 @@ test("executeInspectWorkspaceResources keeps contextual clarification for a broa
       pid: 8865,
       port: null,
       processName: "cmd.exe",
-      commandLine: "cmd.exe /c dir C:\\Users\\testuser\\Desktop\\drone-company",
+      commandLine: "cmd.exe /c dir C:\\Users\\testuser\\Desktop\\sample-company",
       confidence: "low",
       reason: "command_line_mentions_target_name",
       holderKind: "shell_workspace"
@@ -3196,7 +3196,7 @@ test("executeInspectWorkspaceResources keeps contextual clarification for a broa
       port: null,
       processName: "AcmeDesktopHelper.exe",
       commandLine:
-        "\"C:\\Program Files\\Acme\\AcmeDesktopHelper.exe\" --watch C:\\Users\\testuser\\Desktop\\drone-company",
+        "\"C:\\Program Files\\Acme\\AcmeDesktopHelper.exe\" --watch C:\\Users\\testuser\\Desktop\\sample-company",
       confidence: "medium",
       reason: "command_line_matches_target_path",
       holderKind: "unknown_local_process"
@@ -3207,7 +3207,7 @@ test("executeInspectWorkspaceResources keeps contextual clarification for a broa
   });
 
   const outcome = await executeInspectWorkspaceResources(context, {
-    rootPath: "C:\\Users\\testuser\\Desktop\\drone-company"
+    rootPath: "C:\\Users\\testuser\\Desktop\\sample-company"
   });
 
   assert.equal(outcome.status, "success");
@@ -3232,7 +3232,7 @@ test("executeInspectWorkspaceResources keeps contextual clarification for a broa
       port: null,
       processName: "Code.exe",
       commandLine:
-        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" --reuse-window drone-company",
+        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" --reuse-window sample-company",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "editor_workspace"
@@ -3241,7 +3241,7 @@ test("executeInspectWorkspaceResources keeps contextual clarification for a broa
       pid: 8871,
       port: null,
       processName: "explorer.exe",
-      commandLine: "explorer.exe /select,C:\\Users\\testuser\\Desktop\\drone-company",
+      commandLine: "explorer.exe /select,C:\\Users\\testuser\\Desktop\\sample-company",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "shell_workspace"
@@ -3251,7 +3251,7 @@ test("executeInspectWorkspaceResources keeps contextual clarification for a broa
       port: null,
       processName: "powershell.exe",
       commandLine:
-        "powershell.exe -NoProfile -Command Set-Location C:\\Users\\testuser\\Desktop; Get-ChildItem drone-company*",
+        "powershell.exe -NoProfile -Command Set-Location C:\\Users\\testuser\\Desktop; Get-ChildItem sample-company*",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "shell_workspace"
@@ -3261,7 +3261,7 @@ test("executeInspectWorkspaceResources keeps contextual clarification for a broa
       port: null,
       processName: "Code.exe",
       commandLine:
-        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" --folder-uri file:///C:/Users/testuser/Desktop/drone-company",
+        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" --folder-uri file:///C:/Users/testuser/Desktop/sample-company",
       confidence: "low",
       reason: "command_line_mentions_target_name",
       holderKind: "editor_workspace"
@@ -3271,7 +3271,7 @@ test("executeInspectWorkspaceResources keeps contextual clarification for a broa
       port: null,
       processName: "OneDrive.exe",
       commandLine:
-        "\"C:\\Program Files\\Microsoft OneDrive\\OneDrive.exe\" /background drone-company",
+        "\"C:\\Program Files\\Microsoft OneDrive\\OneDrive.exe\" /background sample-company",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "sync_client"
@@ -3280,7 +3280,7 @@ test("executeInspectWorkspaceResources keeps contextual clarification for a broa
       pid: 8875,
       port: null,
       processName: "cmd.exe",
-      commandLine: "cmd.exe /c dir C:\\Users\\testuser\\Desktop\\drone-company",
+      commandLine: "cmd.exe /c dir C:\\Users\\testuser\\Desktop\\sample-company",
       confidence: "low",
       reason: "command_line_mentions_target_name",
       holderKind: "shell_workspace"
@@ -3290,7 +3290,7 @@ test("executeInspectWorkspaceResources keeps contextual clarification for a broa
       port: null,
       processName: "Code.exe",
       commandLine:
-        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" --goto C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
+        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" --goto C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "editor_workspace"
@@ -3300,7 +3300,7 @@ test("executeInspectWorkspaceResources keeps contextual clarification for a broa
       port: null,
       processName: "AcmeDesktopHelper.exe",
       commandLine:
-        "\"C:\\Program Files\\Acme\\AcmeDesktopHelper.exe\" --watch C:\\Users\\testuser\\Desktop\\drone-company",
+        "\"C:\\Program Files\\Acme\\AcmeDesktopHelper.exe\" --watch C:\\Users\\testuser\\Desktop\\sample-company",
       confidence: "medium",
       reason: "command_line_matches_target_path",
       holderKind: "unknown_local_process"
@@ -3311,7 +3311,7 @@ test("executeInspectWorkspaceResources keeps contextual clarification for a broa
   });
 
   const outcome = await executeInspectWorkspaceResources(context, {
-    rootPath: "C:\\Users\\testuser\\Desktop\\drone-company"
+    rootPath: "C:\\Users\\testuser\\Desktop\\sample-company"
   });
 
   assert.equal(outcome.status, "success");
@@ -3336,7 +3336,7 @@ test("executeInspectWorkspaceResources keeps broader noisy local holder groups i
       port: null,
       processName: "Code.exe",
       commandLine:
-        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" --reuse-window drone-company",
+        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" --reuse-window sample-company",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "editor_workspace"
@@ -3345,7 +3345,7 @@ test("executeInspectWorkspaceResources keeps broader noisy local holder groups i
       pid: 8831,
       port: null,
       processName: "explorer.exe",
-      commandLine: "explorer.exe /select,C:\\Users\\testuser\\Desktop\\drone-company",
+      commandLine: "explorer.exe /select,C:\\Users\\testuser\\Desktop\\sample-company",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "shell_workspace"
@@ -3355,7 +3355,7 @@ test("executeInspectWorkspaceResources keeps broader noisy local holder groups i
       port: null,
       processName: "powershell.exe",
       commandLine:
-        "powershell.exe -NoProfile -Command Set-Location C:\\Users\\testuser\\Desktop; Get-ChildItem drone-company*",
+        "powershell.exe -NoProfile -Command Set-Location C:\\Users\\testuser\\Desktop; Get-ChildItem sample-company*",
       confidence: "low",
       reason: "command_line_mentions_target_name",
       holderKind: "shell_workspace"
@@ -3365,7 +3365,7 @@ test("executeInspectWorkspaceResources keeps broader noisy local holder groups i
       port: null,
       processName: "Code.exe",
       commandLine:
-        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" --folder-uri file:///C:/Users/testuser/Desktop/drone-company",
+        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" --folder-uri file:///C:/Users/testuser/Desktop/sample-company",
       confidence: "low",
       reason: "command_line_mentions_target_name",
       holderKind: "editor_workspace"
@@ -3374,7 +3374,7 @@ test("executeInspectWorkspaceResources keeps broader noisy local holder groups i
       pid: 8834,
       port: null,
       processName: "explorer.exe",
-      commandLine: "explorer.exe C:\\Users\\testuser\\Desktop\\drone-company",
+      commandLine: "explorer.exe C:\\Users\\testuser\\Desktop\\sample-company",
       confidence: "low",
       reason: "command_line_mentions_target_name",
       holderKind: "shell_workspace"
@@ -3385,7 +3385,7 @@ test("executeInspectWorkspaceResources keeps broader noisy local holder groups i
   });
 
   const outcome = await executeInspectWorkspaceResources(context, {
-    rootPath: "C:\\Users\\testuser\\Desktop\\drone-company"
+    rootPath: "C:\\Users\\testuser\\Desktop\\sample-company"
   });
 
   assert.equal(outcome.status, "success");
@@ -3402,7 +3402,7 @@ test("executeInspectWorkspaceResources keeps broader still-local holder families
       pid: 8880,
       port: null,
       processName: "explorer.exe",
-      commandLine: "explorer.exe C:\\Users\\testuser\\Desktop\\drone-company",
+      commandLine: "explorer.exe C:\\Users\\testuser\\Desktop\\sample-company",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "shell_workspace"
@@ -3412,7 +3412,7 @@ test("executeInspectWorkspaceResources keeps broader still-local holder families
       port: null,
       processName: "powershell.exe",
       commandLine:
-        "powershell.exe -NoProfile -Command Set-Location C:\\Users\\testuser\\Desktop; Get-ChildItem drone-company*",
+        "powershell.exe -NoProfile -Command Set-Location C:\\Users\\testuser\\Desktop; Get-ChildItem sample-company*",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "shell_workspace"
@@ -3421,7 +3421,7 @@ test("executeInspectWorkspaceResources keeps broader still-local holder families
       pid: 8882,
       port: null,
       processName: "explorer.exe",
-      commandLine: "explorer.exe /select,C:\\Users\\testuser\\Desktop\\drone-company",
+      commandLine: "explorer.exe /select,C:\\Users\\testuser\\Desktop\\sample-company",
       confidence: "low",
       reason: "command_line_mentions_target_name",
       holderKind: "shell_workspace"
@@ -3431,7 +3431,7 @@ test("executeInspectWorkspaceResources keeps broader still-local holder families
       port: null,
       processName: "powershell.exe",
       commandLine:
-        "powershell.exe -NoProfile -Command Set-Location C:\\Users\\testuser\\Desktop; Get-Item C:\\Users\\testuser\\Desktop\\drone-company",
+        "powershell.exe -NoProfile -Command Set-Location C:\\Users\\testuser\\Desktop; Get-Item C:\\Users\\testuser\\Desktop\\sample-company",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "shell_workspace"
@@ -3440,7 +3440,7 @@ test("executeInspectWorkspaceResources keeps broader still-local holder families
       pid: 8884,
       port: null,
       processName: "explorer.exe",
-      commandLine: "explorer.exe C:\\Users\\testuser\\Desktop\\drone-company\\assets",
+      commandLine: "explorer.exe C:\\Users\\testuser\\Desktop\\sample-company\\assets",
       confidence: "low",
       reason: "command_line_mentions_target_name",
       holderKind: "shell_workspace"
@@ -3450,7 +3450,7 @@ test("executeInspectWorkspaceResources keeps broader still-local holder families
       port: null,
       processName: "powershell.exe",
       commandLine:
-        "powershell.exe -NoProfile -Command Set-Location C:\\Users\\testuser\\Desktop\\drone-company; Get-ChildItem",
+        "powershell.exe -NoProfile -Command Set-Location C:\\Users\\testuser\\Desktop\\sample-company; Get-ChildItem",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "shell_workspace"
@@ -3459,7 +3459,7 @@ test("executeInspectWorkspaceResources keeps broader still-local holder families
       pid: 8886,
       port: null,
       processName: "explorer.exe",
-      commandLine: "explorer.exe /select,C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
+      commandLine: "explorer.exe /select,C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
       confidence: "low",
       reason: "command_line_mentions_target_name",
       holderKind: "shell_workspace"
@@ -3469,7 +3469,7 @@ test("executeInspectWorkspaceResources keeps broader still-local holder families
       port: null,
       processName: "powershell.exe",
       commandLine:
-        "powershell.exe -NoProfile -Command Set-Location C:\\Users\\testuser\\Desktop; Get-ChildItem drone-company\\*",
+        "powershell.exe -NoProfile -Command Set-Location C:\\Users\\testuser\\Desktop; Get-ChildItem sample-company\\*",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "shell_workspace"
@@ -3479,7 +3479,7 @@ test("executeInspectWorkspaceResources keeps broader still-local holder families
       port: null,
       processName: "AcmeDesktopHelper.exe",
       commandLine:
-        "\"C:\\Program Files\\Acme\\AcmeDesktopHelper.exe\" --watch C:\\Users\\testuser\\Desktop\\drone-company",
+        "\"C:\\Program Files\\Acme\\AcmeDesktopHelper.exe\" --watch C:\\Users\\testuser\\Desktop\\sample-company",
       confidence: "medium",
       reason: "command_line_matches_target_path",
       holderKind: "unknown_local_process"
@@ -3490,7 +3490,7 @@ test("executeInspectWorkspaceResources keeps broader still-local holder families
   });
 
   const outcome = await executeInspectWorkspaceResources(context, {
-    rootPath: "C:\\Users\\testuser\\Desktop\\drone-company"
+    rootPath: "C:\\Users\\testuser\\Desktop\\sample-company"
   });
 
   assert.equal(outcome.status, "success");
@@ -3512,7 +3512,7 @@ test("executeInspectWorkspaceResources keeps grouped thirteen-holder local famil
       port: null,
       processName: "Code.exe",
       commandLine:
-        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" --folder-uri file:///C:/Users/testuser/Desktop/drone-company",
+        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" --folder-uri file:///C:/Users/testuser/Desktop/sample-company",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "editor_workspace"
@@ -3521,7 +3521,7 @@ test("executeInspectWorkspaceResources keeps grouped thirteen-holder local famil
       pid: 8891,
       port: null,
       processName: "explorer.exe",
-      commandLine: "explorer.exe C:\\Users\\testuser\\Desktop\\drone-company",
+      commandLine: "explorer.exe C:\\Users\\testuser\\Desktop\\sample-company",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "shell_workspace"
@@ -3531,7 +3531,7 @@ test("executeInspectWorkspaceResources keeps grouped thirteen-holder local famil
       port: null,
       processName: "powershell.exe",
       commandLine:
-        "powershell.exe -NoProfile -Command Set-Location C:\\Users\\testuser\\Desktop; Get-ChildItem drone-company*",
+        "powershell.exe -NoProfile -Command Set-Location C:\\Users\\testuser\\Desktop; Get-ChildItem sample-company*",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "shell_workspace"
@@ -3541,7 +3541,7 @@ test("executeInspectWorkspaceResources keeps grouped thirteen-holder local famil
       port: null,
       processName: "Code.exe",
       commandLine:
-        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" C:\\Users\\testuser\\Desktop\\drone-company",
+        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" C:\\Users\\testuser\\Desktop\\sample-company",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "editor_workspace"
@@ -3550,7 +3550,7 @@ test("executeInspectWorkspaceResources keeps grouped thirteen-holder local famil
       pid: 8894,
       port: null,
       processName: "explorer.exe",
-      commandLine: "explorer.exe /select,C:\\Users\\testuser\\Desktop\\drone-company",
+      commandLine: "explorer.exe /select,C:\\Users\\testuser\\Desktop\\sample-company",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "shell_workspace"
@@ -3560,7 +3560,7 @@ test("executeInspectWorkspaceResources keeps grouped thirteen-holder local famil
       port: null,
       processName: "powershell.exe",
       commandLine:
-        "powershell.exe -NoProfile -Command Set-Location C:\\Users\\testuser\\Desktop\\drone-company; Get-ChildItem",
+        "powershell.exe -NoProfile -Command Set-Location C:\\Users\\testuser\\Desktop\\sample-company; Get-ChildItem",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "shell_workspace"
@@ -3570,7 +3570,7 @@ test("executeInspectWorkspaceResources keeps grouped thirteen-holder local famil
       port: null,
       processName: "Code.exe",
       commandLine:
-        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" --reuse-window drone-company",
+        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" --reuse-window sample-company",
       confidence: "low",
       reason: "command_line_mentions_target_name",
       holderKind: "editor_workspace"
@@ -3579,7 +3579,7 @@ test("executeInspectWorkspaceResources keeps grouped thirteen-holder local famil
       pid: 8897,
       port: null,
       processName: "explorer.exe",
-      commandLine: "explorer.exe C:\\Users\\testuser\\Desktop\\drone-company\\assets",
+      commandLine: "explorer.exe C:\\Users\\testuser\\Desktop\\sample-company\\assets",
       confidence: "low",
       reason: "command_line_mentions_target_name",
       holderKind: "shell_workspace"
@@ -3589,7 +3589,7 @@ test("executeInspectWorkspaceResources keeps grouped thirteen-holder local famil
       port: null,
       processName: "powershell.exe",
       commandLine:
-        "powershell.exe -NoProfile -Command Set-Location C:\\Users\\testuser\\Desktop; Get-Item C:\\Users\\testuser\\Desktop\\drone-company",
+        "powershell.exe -NoProfile -Command Set-Location C:\\Users\\testuser\\Desktop; Get-Item C:\\Users\\testuser\\Desktop\\sample-company",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "shell_workspace"
@@ -3599,7 +3599,7 @@ test("executeInspectWorkspaceResources keeps grouped thirteen-holder local famil
       port: null,
       processName: "Code.exe",
       commandLine:
-        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" --diff drone-company",
+        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" --diff sample-company",
       confidence: "low",
       reason: "command_line_mentions_target_name",
       holderKind: "editor_workspace"
@@ -3608,7 +3608,7 @@ test("executeInspectWorkspaceResources keeps grouped thirteen-holder local famil
       pid: 8900,
       port: null,
       processName: "explorer.exe",
-      commandLine: "explorer.exe /select,C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
+      commandLine: "explorer.exe /select,C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
       confidence: "low",
       reason: "command_line_mentions_target_name",
       holderKind: "shell_workspace"
@@ -3618,7 +3618,7 @@ test("executeInspectWorkspaceResources keeps grouped thirteen-holder local famil
       port: null,
       processName: "powershell.exe",
       commandLine:
-        "powershell.exe -NoProfile -Command Set-Location C:\\Users\\testuser\\Desktop; Get-ChildItem drone-company\\*",
+        "powershell.exe -NoProfile -Command Set-Location C:\\Users\\testuser\\Desktop; Get-ChildItem sample-company\\*",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "shell_workspace"
@@ -3628,7 +3628,7 @@ test("executeInspectWorkspaceResources keeps grouped thirteen-holder local famil
       port: null,
       processName: "AcmeDesktopHelper.exe",
       commandLine:
-        "\"C:\\Program Files\\Acme\\AcmeDesktopHelper.exe\" --watch C:\\Users\\testuser\\Desktop\\drone-company",
+        "\"C:\\Program Files\\Acme\\AcmeDesktopHelper.exe\" --watch C:\\Users\\testuser\\Desktop\\sample-company",
       confidence: "medium",
       reason: "command_line_matches_target_path",
       holderKind: "unknown_local_process"
@@ -3639,7 +3639,7 @@ test("executeInspectWorkspaceResources keeps grouped thirteen-holder local famil
   });
 
   const outcome = await executeInspectWorkspaceResources(context, {
-    rootPath: "C:\\Users\\testuser\\Desktop\\drone-company"
+    rootPath: "C:\\Users\\testuser\\Desktop\\sample-company"
   });
 
   assert.equal(outcome.status, "success");
@@ -3661,7 +3661,7 @@ test("executeInspectWorkspaceResources keeps grouped fifteen-holder local famili
       port: null,
       processName: "Code.exe",
       commandLine:
-        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" --folder-uri file:///C:/Users/testuser/Desktop/drone-company",
+        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" --folder-uri file:///C:/Users/testuser/Desktop/sample-company",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "editor_workspace"
@@ -3670,7 +3670,7 @@ test("executeInspectWorkspaceResources keeps grouped fifteen-holder local famili
       pid: 8911,
       port: null,
       processName: "explorer.exe",
-      commandLine: "explorer.exe C:\\Users\\testuser\\Desktop\\drone-company",
+      commandLine: "explorer.exe C:\\Users\\testuser\\Desktop\\sample-company",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "shell_workspace"
@@ -3680,7 +3680,7 @@ test("executeInspectWorkspaceResources keeps grouped fifteen-holder local famili
       port: null,
       processName: "powershell.exe",
       commandLine:
-        "powershell.exe -NoProfile -Command Set-Location C:\\Users\\testuser\\Desktop; Get-ChildItem drone-company*",
+        "powershell.exe -NoProfile -Command Set-Location C:\\Users\\testuser\\Desktop; Get-ChildItem sample-company*",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "shell_workspace"
@@ -3690,7 +3690,7 @@ test("executeInspectWorkspaceResources keeps grouped fifteen-holder local famili
       port: null,
       processName: "Code.exe",
       commandLine:
-        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" C:\\Users\\testuser\\Desktop\\drone-company",
+        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" C:\\Users\\testuser\\Desktop\\sample-company",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "editor_workspace"
@@ -3699,7 +3699,7 @@ test("executeInspectWorkspaceResources keeps grouped fifteen-holder local famili
       pid: 8914,
       port: null,
       processName: "explorer.exe",
-      commandLine: "explorer.exe /select,C:\\Users\\testuser\\Desktop\\drone-company",
+      commandLine: "explorer.exe /select,C:\\Users\\testuser\\Desktop\\sample-company",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "shell_workspace"
@@ -3709,7 +3709,7 @@ test("executeInspectWorkspaceResources keeps grouped fifteen-holder local famili
       port: null,
       processName: "powershell.exe",
       commandLine:
-        "powershell.exe -NoProfile -Command Set-Location C:\\Users\\testuser\\Desktop\\drone-company; Get-ChildItem",
+        "powershell.exe -NoProfile -Command Set-Location C:\\Users\\testuser\\Desktop\\sample-company; Get-ChildItem",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "shell_workspace"
@@ -3719,7 +3719,7 @@ test("executeInspectWorkspaceResources keeps grouped fifteen-holder local famili
       port: null,
       processName: "Code.exe",
       commandLine:
-        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" --reuse-window drone-company",
+        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" --reuse-window sample-company",
       confidence: "low",
       reason: "command_line_mentions_target_name",
       holderKind: "editor_workspace"
@@ -3728,7 +3728,7 @@ test("executeInspectWorkspaceResources keeps grouped fifteen-holder local famili
       pid: 8917,
       port: null,
       processName: "explorer.exe",
-      commandLine: "explorer.exe C:\\Users\\testuser\\Desktop\\drone-company\\assets",
+      commandLine: "explorer.exe C:\\Users\\testuser\\Desktop\\sample-company\\assets",
       confidence: "low",
       reason: "command_line_mentions_target_name",
       holderKind: "shell_workspace"
@@ -3738,7 +3738,7 @@ test("executeInspectWorkspaceResources keeps grouped fifteen-holder local famili
       port: null,
       processName: "powershell.exe",
       commandLine:
-        "powershell.exe -NoProfile -Command Set-Location C:\\Users\\testuser\\Desktop; Get-Item C:\\Users\\testuser\\Desktop\\drone-company",
+        "powershell.exe -NoProfile -Command Set-Location C:\\Users\\testuser\\Desktop; Get-Item C:\\Users\\testuser\\Desktop\\sample-company",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "shell_workspace"
@@ -3748,7 +3748,7 @@ test("executeInspectWorkspaceResources keeps grouped fifteen-holder local famili
       port: null,
       processName: "Code.exe",
       commandLine:
-        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" --diff drone-company",
+        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" --diff sample-company",
       confidence: "low",
       reason: "command_line_mentions_target_name",
       holderKind: "editor_workspace"
@@ -3757,7 +3757,7 @@ test("executeInspectWorkspaceResources keeps grouped fifteen-holder local famili
       pid: 8920,
       port: null,
       processName: "explorer.exe",
-      commandLine: "explorer.exe /select,C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
+      commandLine: "explorer.exe /select,C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
       confidence: "low",
       reason: "command_line_mentions_target_name",
       holderKind: "shell_workspace"
@@ -3767,7 +3767,7 @@ test("executeInspectWorkspaceResources keeps grouped fifteen-holder local famili
       port: null,
       processName: "powershell.exe",
       commandLine:
-        "powershell.exe -NoProfile -Command Set-Location C:\\Users\\testuser\\Desktop; Get-ChildItem drone-company\\*",
+        "powershell.exe -NoProfile -Command Set-Location C:\\Users\\testuser\\Desktop; Get-ChildItem sample-company\\*",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "shell_workspace"
@@ -3777,7 +3777,7 @@ test("executeInspectWorkspaceResources keeps grouped fifteen-holder local famili
       port: null,
       processName: "Code.exe",
       commandLine:
-        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" --file-write C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
+        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" --file-write C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "editor_workspace"
@@ -3787,7 +3787,7 @@ test("executeInspectWorkspaceResources keeps grouped fifteen-holder local famili
       port: null,
       processName: "AcmeDesktopHelper.exe",
       commandLine:
-        "\"C:\\Program Files\\Acme\\AcmeDesktopHelper.exe\" --watch C:\\Users\\testuser\\Desktop\\drone-company",
+        "\"C:\\Program Files\\Acme\\AcmeDesktopHelper.exe\" --watch C:\\Users\\testuser\\Desktop\\sample-company",
       confidence: "medium",
       reason: "command_line_matches_target_path",
       holderKind: "unknown_local_process"
@@ -3797,7 +3797,7 @@ test("executeInspectWorkspaceResources keeps grouped fifteen-holder local famili
       port: null,
       processName: "WatchBridgeService.exe",
       commandLine:
-        "\"C:\\Program Files\\WatchBridge\\WatchBridgeService.exe\" --workspace C:\\Users\\testuser\\Desktop\\drone-company",
+        "\"C:\\Program Files\\WatchBridge\\WatchBridgeService.exe\" --workspace C:\\Users\\testuser\\Desktop\\sample-company",
       confidence: "medium",
       reason: "command_line_matches_target_path",
       holderKind: "unknown_local_process"
@@ -3808,7 +3808,7 @@ test("executeInspectWorkspaceResources keeps grouped fifteen-holder local famili
   });
 
   const outcome = await executeInspectWorkspaceResources(context, {
-    rootPath: "C:\\Users\\testuser\\Desktop\\drone-company"
+    rootPath: "C:\\Users\\testuser\\Desktop\\sample-company"
   });
 
   assert.equal(outcome.status, "success");
@@ -3830,7 +3830,7 @@ test("executeInspectWorkspaceResources keeps grouped eighteen-holder mixed local
       port: null,
       processName: "Code.exe",
       commandLine:
-        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" --folder-uri file:///C:/Users/testuser/Desktop/drone-company",
+        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" --folder-uri file:///C:/Users/testuser/Desktop/sample-company",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "editor_workspace"
@@ -3839,7 +3839,7 @@ test("executeInspectWorkspaceResources keeps grouped eighteen-holder mixed local
       pid: 8931,
       port: null,
       processName: "explorer.exe",
-      commandLine: "explorer.exe C:\\Users\\testuser\\Desktop\\drone-company",
+      commandLine: "explorer.exe C:\\Users\\testuser\\Desktop\\sample-company",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "shell_workspace"
@@ -3849,7 +3849,7 @@ test("executeInspectWorkspaceResources keeps grouped eighteen-holder mixed local
       port: null,
       processName: "powershell.exe",
       commandLine:
-        "powershell.exe -NoProfile -Command Set-Location C:\\Users\\testuser\\Desktop; Get-ChildItem drone-company*",
+        "powershell.exe -NoProfile -Command Set-Location C:\\Users\\testuser\\Desktop; Get-ChildItem sample-company*",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "shell_workspace"
@@ -3859,7 +3859,7 @@ test("executeInspectWorkspaceResources keeps grouped eighteen-holder mixed local
       port: null,
       processName: "Code.exe",
       commandLine:
-        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" C:\\Users\\testuser\\Desktop\\drone-company",
+        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" C:\\Users\\testuser\\Desktop\\sample-company",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "editor_workspace"
@@ -3868,7 +3868,7 @@ test("executeInspectWorkspaceResources keeps grouped eighteen-holder mixed local
       pid: 8934,
       port: null,
       processName: "explorer.exe",
-      commandLine: "explorer.exe /select,C:\\Users\\testuser\\Desktop\\drone-company",
+      commandLine: "explorer.exe /select,C:\\Users\\testuser\\Desktop\\sample-company",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "shell_workspace"
@@ -3878,7 +3878,7 @@ test("executeInspectWorkspaceResources keeps grouped eighteen-holder mixed local
       port: null,
       processName: "powershell.exe",
       commandLine:
-        "powershell.exe -NoProfile -Command Set-Location C:\\Users\\testuser\\Desktop\\drone-company; Get-ChildItem",
+        "powershell.exe -NoProfile -Command Set-Location C:\\Users\\testuser\\Desktop\\sample-company; Get-ChildItem",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "shell_workspace"
@@ -3888,7 +3888,7 @@ test("executeInspectWorkspaceResources keeps grouped eighteen-holder mixed local
       port: null,
       processName: "Code.exe",
       commandLine:
-        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" --reuse-window drone-company",
+        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" --reuse-window sample-company",
       confidence: "low",
       reason: "command_line_mentions_target_name",
       holderKind: "editor_workspace"
@@ -3897,7 +3897,7 @@ test("executeInspectWorkspaceResources keeps grouped eighteen-holder mixed local
       pid: 8937,
       port: null,
       processName: "explorer.exe",
-      commandLine: "explorer.exe C:\\Users\\testuser\\Desktop\\drone-company\\assets",
+      commandLine: "explorer.exe C:\\Users\\testuser\\Desktop\\sample-company\\assets",
       confidence: "low",
       reason: "command_line_mentions_target_name",
       holderKind: "shell_workspace"
@@ -3907,7 +3907,7 @@ test("executeInspectWorkspaceResources keeps grouped eighteen-holder mixed local
       port: null,
       processName: "powershell.exe",
       commandLine:
-        "powershell.exe -NoProfile -Command Set-Location C:\\Users\\testuser\\Desktop; Get-Item C:\\Users\\testuser\\Desktop\\drone-company",
+        "powershell.exe -NoProfile -Command Set-Location C:\\Users\\testuser\\Desktop; Get-Item C:\\Users\\testuser\\Desktop\\sample-company",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "shell_workspace"
@@ -3917,7 +3917,7 @@ test("executeInspectWorkspaceResources keeps grouped eighteen-holder mixed local
       port: null,
       processName: "Code.exe",
       commandLine:
-        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" --diff drone-company",
+        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" --diff sample-company",
       confidence: "low",
       reason: "command_line_mentions_target_name",
       holderKind: "editor_workspace"
@@ -3926,7 +3926,7 @@ test("executeInspectWorkspaceResources keeps grouped eighteen-holder mixed local
       pid: 8940,
       port: null,
       processName: "explorer.exe",
-      commandLine: "explorer.exe /select,C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
+      commandLine: "explorer.exe /select,C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
       confidence: "low",
       reason: "command_line_mentions_target_name",
       holderKind: "shell_workspace"
@@ -3936,7 +3936,7 @@ test("executeInspectWorkspaceResources keeps grouped eighteen-holder mixed local
       port: null,
       processName: "powershell.exe",
       commandLine:
-        "powershell.exe -NoProfile -Command Set-Location C:\\Users\\testuser\\Desktop; Get-ChildItem drone-company\\*",
+        "powershell.exe -NoProfile -Command Set-Location C:\\Users\\testuser\\Desktop; Get-ChildItem sample-company\\*",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "shell_workspace"
@@ -3946,7 +3946,7 @@ test("executeInspectWorkspaceResources keeps grouped eighteen-holder mixed local
       port: null,
       processName: "Code.exe",
       commandLine:
-        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" --file-write C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
+        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" --file-write C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "editor_workspace"
@@ -3956,7 +3956,7 @@ test("executeInspectWorkspaceResources keeps grouped eighteen-holder mixed local
       port: null,
       processName: "AcmeDesktopHelper.exe",
       commandLine:
-        "\"C:\\Program Files\\Acme\\AcmeDesktopHelper.exe\" --watch C:\\Users\\testuser\\Desktop\\drone-company",
+        "\"C:\\Program Files\\Acme\\AcmeDesktopHelper.exe\" --watch C:\\Users\\testuser\\Desktop\\sample-company",
       confidence: "medium",
       reason: "command_line_matches_target_path",
       holderKind: "unknown_local_process"
@@ -3966,7 +3966,7 @@ test("executeInspectWorkspaceResources keeps grouped eighteen-holder mixed local
       port: null,
       processName: "WatchBridgeService.exe",
       commandLine:
-        "\"C:\\Program Files\\WatchBridge\\WatchBridgeService.exe\" --workspace C:\\Users\\testuser\\Desktop\\drone-company",
+        "\"C:\\Program Files\\WatchBridge\\WatchBridgeService.exe\" --workspace C:\\Users\\testuser\\Desktop\\sample-company",
       confidence: "medium",
       reason: "command_line_matches_target_path",
       holderKind: "unknown_local_process"
@@ -3976,7 +3976,7 @@ test("executeInspectWorkspaceResources keeps grouped eighteen-holder mixed local
       port: null,
       processName: "OneDrive.exe",
       commandLine:
-        "\"C:\\Program Files\\Microsoft OneDrive\\OneDrive.exe\" /background C:\\Users\\testuser\\Desktop\\drone-company",
+        "\"C:\\Program Files\\Microsoft OneDrive\\OneDrive.exe\" /background C:\\Users\\testuser\\Desktop\\sample-company",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "sync_client"
@@ -3986,7 +3986,7 @@ test("executeInspectWorkspaceResources keeps grouped eighteen-holder mixed local
       port: null,
       processName: "OneDrive.exe",
       commandLine:
-        "\"C:\\Program Files\\Microsoft OneDrive\\OneDrive.exe\" /background /monitor drone-company",
+        "\"C:\\Program Files\\Microsoft OneDrive\\OneDrive.exe\" /background /monitor sample-company",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "sync_client"
@@ -3996,7 +3996,7 @@ test("executeInspectWorkspaceResources keeps grouped eighteen-holder mixed local
       port: null,
       processName: "OneDrive.exe",
       commandLine:
-        "\"C:\\Program Files\\Microsoft OneDrive\\OneDrive.exe\" /background /touch C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
+        "\"C:\\Program Files\\Microsoft OneDrive\\OneDrive.exe\" /background /touch C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "sync_client"
@@ -4007,7 +4007,7 @@ test("executeInspectWorkspaceResources keeps grouped eighteen-holder mixed local
   });
 
   const outcome = await executeInspectWorkspaceResources(context, {
-    rootPath: "C:\\Users\\testuser\\Desktop\\drone-company"
+    rootPath: "C:\\Users\\testuser\\Desktop\\sample-company"
   });
 
   assert.equal(outcome.status, "success");
@@ -4033,7 +4033,7 @@ test("executeInspectWorkspaceResources keeps repeated-family twenty-four-holder 
       port: null,
       processName: "Code.exe",
       commandLine:
-        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" --folder-uri file:///C:/Users/testuser/Desktop/drone-company",
+        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" --folder-uri file:///C:/Users/testuser/Desktop/sample-company",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "editor_workspace"
@@ -4042,7 +4042,7 @@ test("executeInspectWorkspaceResources keeps repeated-family twenty-four-holder 
       pid: 8951,
       port: null,
       processName: "explorer.exe",
-      commandLine: "explorer.exe C:\\Users\\testuser\\Desktop\\drone-company",
+      commandLine: "explorer.exe C:\\Users\\testuser\\Desktop\\sample-company",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "shell_workspace"
@@ -4052,7 +4052,7 @@ test("executeInspectWorkspaceResources keeps repeated-family twenty-four-holder 
       port: null,
       processName: "powershell.exe",
       commandLine:
-        "powershell.exe -NoProfile -Command Set-Location C:\\Users\\testuser\\Desktop; Get-ChildItem drone-company*",
+        "powershell.exe -NoProfile -Command Set-Location C:\\Users\\testuser\\Desktop; Get-ChildItem sample-company*",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "shell_workspace"
@@ -4062,7 +4062,7 @@ test("executeInspectWorkspaceResources keeps repeated-family twenty-four-holder 
       port: null,
       processName: "Code.exe",
       commandLine:
-        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" C:\\Users\\testuser\\Desktop\\drone-company",
+        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" C:\\Users\\testuser\\Desktop\\sample-company",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "editor_workspace"
@@ -4071,7 +4071,7 @@ test("executeInspectWorkspaceResources keeps repeated-family twenty-four-holder 
       pid: 8954,
       port: null,
       processName: "explorer.exe",
-      commandLine: "explorer.exe /select,C:\\Users\\testuser\\Desktop\\drone-company",
+      commandLine: "explorer.exe /select,C:\\Users\\testuser\\Desktop\\sample-company",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "shell_workspace"
@@ -4081,7 +4081,7 @@ test("executeInspectWorkspaceResources keeps repeated-family twenty-four-holder 
       port: null,
       processName: "powershell.exe",
       commandLine:
-        "powershell.exe -NoProfile -Command Set-Location C:\\Users\\testuser\\Desktop\\drone-company; Get-ChildItem",
+        "powershell.exe -NoProfile -Command Set-Location C:\\Users\\testuser\\Desktop\\sample-company; Get-ChildItem",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "shell_workspace"
@@ -4091,7 +4091,7 @@ test("executeInspectWorkspaceResources keeps repeated-family twenty-four-holder 
       port: null,
       processName: "Code.exe",
       commandLine:
-        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" --reuse-window drone-company",
+        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" --reuse-window sample-company",
       confidence: "low",
       reason: "command_line_mentions_target_name",
       holderKind: "editor_workspace"
@@ -4100,7 +4100,7 @@ test("executeInspectWorkspaceResources keeps repeated-family twenty-four-holder 
       pid: 8957,
       port: null,
       processName: "explorer.exe",
-      commandLine: "explorer.exe C:\\Users\\testuser\\Desktop\\drone-company\\assets",
+      commandLine: "explorer.exe C:\\Users\\testuser\\Desktop\\sample-company\\assets",
       confidence: "low",
       reason: "command_line_mentions_target_name",
       holderKind: "shell_workspace"
@@ -4110,7 +4110,7 @@ test("executeInspectWorkspaceResources keeps repeated-family twenty-four-holder 
       port: null,
       processName: "powershell.exe",
       commandLine:
-        "powershell.exe -NoProfile -Command Set-Location C:\\Users\\testuser\\Desktop; Get-Item C:\\Users\\testuser\\Desktop\\drone-company",
+        "powershell.exe -NoProfile -Command Set-Location C:\\Users\\testuser\\Desktop; Get-Item C:\\Users\\testuser\\Desktop\\sample-company",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "shell_workspace"
@@ -4120,7 +4120,7 @@ test("executeInspectWorkspaceResources keeps repeated-family twenty-four-holder 
       port: null,
       processName: "Code.exe",
       commandLine:
-        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" --diff drone-company",
+        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" --diff sample-company",
       confidence: "low",
       reason: "command_line_mentions_target_name",
       holderKind: "editor_workspace"
@@ -4129,7 +4129,7 @@ test("executeInspectWorkspaceResources keeps repeated-family twenty-four-holder 
       pid: 8960,
       port: null,
       processName: "explorer.exe",
-      commandLine: "explorer.exe /select,C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
+      commandLine: "explorer.exe /select,C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
       confidence: "low",
       reason: "command_line_mentions_target_name",
       holderKind: "shell_workspace"
@@ -4139,7 +4139,7 @@ test("executeInspectWorkspaceResources keeps repeated-family twenty-four-holder 
       port: null,
       processName: "powershell.exe",
       commandLine:
-        "powershell.exe -NoProfile -Command Set-Location C:\\Users\\testuser\\Desktop; Get-ChildItem drone-company\\*",
+        "powershell.exe -NoProfile -Command Set-Location C:\\Users\\testuser\\Desktop; Get-ChildItem sample-company\\*",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "shell_workspace"
@@ -4149,7 +4149,7 @@ test("executeInspectWorkspaceResources keeps repeated-family twenty-four-holder 
       port: null,
       processName: "Code.exe",
       commandLine:
-        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" --file-write C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
+        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" --file-write C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "editor_workspace"
@@ -4159,7 +4159,7 @@ test("executeInspectWorkspaceResources keeps repeated-family twenty-four-holder 
       port: null,
       processName: "AcmeDesktopHelper.exe",
       commandLine:
-        "\"C:\\Program Files\\Acme\\AcmeDesktopHelper.exe\" --watch C:\\Users\\testuser\\Desktop\\drone-company",
+        "\"C:\\Program Files\\Acme\\AcmeDesktopHelper.exe\" --watch C:\\Users\\testuser\\Desktop\\sample-company",
       confidence: "medium",
       reason: "command_line_matches_target_path",
       holderKind: "unknown_local_process"
@@ -4169,7 +4169,7 @@ test("executeInspectWorkspaceResources keeps repeated-family twenty-four-holder 
       port: null,
       processName: "WatchBridgeService.exe",
       commandLine:
-        "\"C:\\Program Files\\WatchBridge\\WatchBridgeService.exe\" --workspace C:\\Users\\testuser\\Desktop\\drone-company",
+        "\"C:\\Program Files\\WatchBridge\\WatchBridgeService.exe\" --workspace C:\\Users\\testuser\\Desktop\\sample-company",
       confidence: "medium",
       reason: "command_line_matches_target_path",
       holderKind: "unknown_local_process"
@@ -4179,7 +4179,7 @@ test("executeInspectWorkspaceResources keeps repeated-family twenty-four-holder 
       port: null,
       processName: "OneDrive.exe",
       commandLine:
-        "\"C:\\Program Files\\Microsoft OneDrive\\OneDrive.exe\" /background C:\\Users\\testuser\\Desktop\\drone-company",
+        "\"C:\\Program Files\\Microsoft OneDrive\\OneDrive.exe\" /background C:\\Users\\testuser\\Desktop\\sample-company",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "sync_client"
@@ -4189,7 +4189,7 @@ test("executeInspectWorkspaceResources keeps repeated-family twenty-four-holder 
       port: null,
       processName: "OneDrive.exe",
       commandLine:
-        "\"C:\\Program Files\\Microsoft OneDrive\\OneDrive.exe\" /background /monitor drone-company",
+        "\"C:\\Program Files\\Microsoft OneDrive\\OneDrive.exe\" /background /monitor sample-company",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "sync_client"
@@ -4199,7 +4199,7 @@ test("executeInspectWorkspaceResources keeps repeated-family twenty-four-holder 
       port: null,
       processName: "OneDrive.exe",
       commandLine:
-        "\"C:\\Program Files\\Microsoft OneDrive\\OneDrive.exe\" /background /touch C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
+        "\"C:\\Program Files\\Microsoft OneDrive\\OneDrive.exe\" /background /touch C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "sync_client"
@@ -4209,7 +4209,7 @@ test("executeInspectWorkspaceResources keeps repeated-family twenty-four-holder 
       port: null,
       processName: "Code.exe",
       commandLine:
-        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" --goto C:\\Users\\testuser\\Desktop\\drone-company\\README.md",
+        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" --goto C:\\Users\\testuser\\Desktop\\sample-company\\README.md",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "editor_workspace"
@@ -4218,7 +4218,7 @@ test("executeInspectWorkspaceResources keeps repeated-family twenty-four-holder 
       pid: 8969,
       port: null,
       processName: "explorer.exe",
-      commandLine: "explorer.exe C:\\Users\\testuser\\Desktop\\drone-company\\docs",
+      commandLine: "explorer.exe C:\\Users\\testuser\\Desktop\\sample-company\\docs",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "shell_workspace"
@@ -4228,7 +4228,7 @@ test("executeInspectWorkspaceResources keeps repeated-family twenty-four-holder 
       port: null,
       processName: "powershell.exe",
       commandLine:
-        "powershell.exe -NoProfile -Command Get-Content C:\\Users\\testuser\\Desktop\\drone-company\\README.md",
+        "powershell.exe -NoProfile -Command Get-Content C:\\Users\\testuser\\Desktop\\sample-company\\README.md",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "shell_workspace"
@@ -4238,7 +4238,7 @@ test("executeInspectWorkspaceResources keeps repeated-family twenty-four-holder 
       port: null,
       processName: "Code.exe",
       commandLine:
-        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" --wait C:\\Users\\testuser\\Desktop\\drone-company\\README.md",
+        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" --wait C:\\Users\\testuser\\Desktop\\sample-company\\README.md",
       confidence: "low",
       reason: "command_line_mentions_target_name",
       holderKind: "editor_workspace"
@@ -4247,7 +4247,7 @@ test("executeInspectWorkspaceResources keeps repeated-family twenty-four-holder 
       pid: 8972,
       port: null,
       processName: "explorer.exe",
-      commandLine: "explorer.exe /select,C:\\Users\\testuser\\Desktop\\drone-company\\README.md",
+      commandLine: "explorer.exe /select,C:\\Users\\testuser\\Desktop\\sample-company\\README.md",
       confidence: "low",
       reason: "command_line_mentions_target_name",
       holderKind: "shell_workspace"
@@ -4257,7 +4257,7 @@ test("executeInspectWorkspaceResources keeps repeated-family twenty-four-holder 
       port: null,
       processName: "powershell.exe",
       commandLine:
-        "powershell.exe -NoProfile -Command Set-Location C:\\Users\\testuser\\Desktop\\drone-company\\docs; Get-ChildItem",
+        "powershell.exe -NoProfile -Command Set-Location C:\\Users\\testuser\\Desktop\\sample-company\\docs; Get-ChildItem",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "shell_workspace"
@@ -4268,7 +4268,7 @@ test("executeInspectWorkspaceResources keeps repeated-family twenty-four-holder 
   });
 
   const outcome = await executeInspectWorkspaceResources(context, {
-    rootPath: "C:\\Users\\testuser\\Desktop\\drone-company"
+    rootPath: "C:\\Users\\testuser\\Desktop\\sample-company"
   });
 
   assert.equal(outcome.status, "success");
@@ -4293,7 +4293,7 @@ test("executeInspectWorkspaceResources upgrades one exact-path editor holder int
       pid: 8810,
       port: null,
       processName: "Code.exe",
-      commandLine: "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" C:\\Users\\testuser\\Desktop\\drone-company",
+      commandLine: "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" C:\\Users\\testuser\\Desktop\\sample-company",
       confidence: "medium",
       reason: "command_line_matches_target_path",
       holderKind: "editor_workspace"
@@ -4304,7 +4304,7 @@ test("executeInspectWorkspaceResources upgrades one exact-path editor holder int
   });
 
   const outcome = await executeInspectWorkspaceResources(context, {
-    rootPath: "C:\\Users\\testuser\\Desktop\\drone-company"
+    rootPath: "C:\\Users\\testuser\\Desktop\\sample-company"
   });
 
   assert.equal(outcome.status, "success");
@@ -4323,7 +4323,7 @@ test("executeInspectWorkspaceResources upgrades one exact-path shell holder into
       pid: 8820,
       port: null,
       processName: "explorer.exe",
-      commandLine: "explorer.exe C:\\Users\\testuser\\Desktop\\drone-company",
+      commandLine: "explorer.exe C:\\Users\\testuser\\Desktop\\sample-company",
       confidence: "medium",
       reason: "command_line_matches_target_path",
       holderKind: "shell_workspace"
@@ -4334,7 +4334,7 @@ test("executeInspectWorkspaceResources upgrades one exact-path shell holder into
   });
 
   const outcome = await executeInspectWorkspaceResources(context, {
-    rootPath: "C:\\Users\\testuser\\Desktop\\drone-company"
+    rootPath: "C:\\Users\\testuser\\Desktop\\sample-company"
   });
 
   assert.equal(outcome.status, "success");
@@ -4383,7 +4383,7 @@ test("executeInspectWorkspaceResources upgrades one exact-path sync holder into 
       port: null,
       processName: "OneDrive.exe",
       commandLine:
-        "\"C:\\Program Files\\Microsoft OneDrive\\OneDrive.exe\" /background C:\\Users\\testuser\\Desktop\\drone-company",
+        "\"C:\\Program Files\\Microsoft OneDrive\\OneDrive.exe\" /background C:\\Users\\testuser\\Desktop\\sample-company",
       confidence: "medium",
       reason: "command_line_matches_target_path",
       holderKind: "sync_client"
@@ -4394,7 +4394,7 @@ test("executeInspectWorkspaceResources upgrades one exact-path sync holder into 
   });
 
   const outcome = await executeInspectWorkspaceResources(context, {
-    rootPath: "C:\\Users\\testuser\\Desktop\\drone-company"
+    rootPath: "C:\\Users\\testuser\\Desktop\\sample-company"
   });
 
   assert.equal(outcome.status, "success");
@@ -4414,7 +4414,7 @@ test("executeInspectWorkspaceResources asks for targeted confirmation on one hig
       port: null,
       processName: "Code.exe",
       commandLine:
-        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" C:\\Users\\testuser\\Desktop\\drone-company",
+        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" C:\\Users\\testuser\\Desktop\\sample-company",
       confidence: "high",
       reason: "command_line_matches_target_path",
       holderKind: "editor_workspace"
@@ -4425,7 +4425,7 @@ test("executeInspectWorkspaceResources asks for targeted confirmation on one hig
   });
 
   const outcome = await executeInspectWorkspaceResources(context, {
-    rootPath: "C:\\Users\\testuser\\Desktop\\drone-company"
+    rootPath: "C:\\Users\\testuser\\Desktop\\sample-company"
   });
 
   assert.equal(outcome.status, "success");
@@ -4446,7 +4446,7 @@ test("executeInspectWorkspaceResources keeps targeted confirmation when one exac
       port: null,
       processName: "Code.exe",
       commandLine:
-        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" C:\\Users\\testuser\\Desktop\\drone-company",
+        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" C:\\Users\\testuser\\Desktop\\sample-company",
       confidence: "high",
       reason: "command_line_matches_target_path",
       holderKind: "editor_workspace"
@@ -4456,7 +4456,7 @@ test("executeInspectWorkspaceResources keeps targeted confirmation when one exac
       port: null,
       processName: "powershell.exe",
       commandLine:
-        "powershell.exe -NoProfile -Command Set-Location C:\\Users\\testuser\\Desktop; Get-ChildItem drone-company*",
+        "powershell.exe -NoProfile -Command Set-Location C:\\Users\\testuser\\Desktop; Get-ChildItem sample-company*",
       confidence: "low",
       reason: "command_line_mentions_target_name",
       holderKind: "shell_workspace"
@@ -4467,7 +4467,7 @@ test("executeInspectWorkspaceResources keeps targeted confirmation when one exac
   });
 
   const outcome = await executeInspectWorkspaceResources(context, {
-    rootPath: "C:\\Users\\testuser\\Desktop\\drone-company"
+    rootPath: "C:\\Users\\testuser\\Desktop\\sample-company"
   });
 
   assert.equal(outcome.status, "success");
@@ -4490,7 +4490,7 @@ test("executeInspectWorkspaceResources keeps targeted confirmation when two exac
       port: null,
       processName: "Code.exe",
       commandLine:
-        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" C:\\Users\\testuser\\Desktop\\drone-company",
+        "\"C:\\Users\\testuser\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" C:\\Users\\testuser\\Desktop\\sample-company",
       confidence: "high",
       reason: "command_line_matches_target_path",
       holderKind: "editor_workspace"
@@ -4499,7 +4499,7 @@ test("executeInspectWorkspaceResources keeps targeted confirmation when two exac
       pid: 8841,
       port: null,
       processName: "explorer.exe",
-      commandLine: "explorer.exe C:\\Users\\testuser\\Desktop\\drone-company",
+      commandLine: "explorer.exe C:\\Users\\testuser\\Desktop\\sample-company",
       confidence: "high",
       reason: "command_line_matches_target_path",
       holderKind: "shell_workspace"
@@ -4509,7 +4509,7 @@ test("executeInspectWorkspaceResources keeps targeted confirmation when two exac
       port: null,
       processName: "powershell.exe",
       commandLine:
-        "powershell.exe -NoProfile -Command Set-Location C:\\Users\\testuser\\Desktop; Get-ChildItem drone-company*",
+        "powershell.exe -NoProfile -Command Set-Location C:\\Users\\testuser\\Desktop; Get-ChildItem sample-company*",
       confidence: "low",
       reason: "command_line_mentions_target_name",
       holderKind: "shell_workspace"
@@ -4520,7 +4520,7 @@ test("executeInspectWorkspaceResources keeps targeted confirmation when two exac
   });
 
   const outcome = await executeInspectWorkspaceResources(context, {
-    rootPath: "C:\\Users\\testuser\\Desktop\\drone-company"
+    rootPath: "C:\\Users\\testuser\\Desktop\\sample-company"
   });
 
   assert.equal(outcome.status, "success");
@@ -4547,7 +4547,7 @@ test("executeInspectWorkspaceResources gives sync-specific manual cleanup guidan
       port: null,
       processName: "OneDrive.exe",
       commandLine:
-        "\"C:\\Program Files\\Microsoft OneDrive\\OneDrive.exe\" /background drone-company",
+        "\"C:\\Program Files\\Microsoft OneDrive\\OneDrive.exe\" /background sample-company",
       confidence: "medium",
       reason: "command_line_mentions_target_name",
       holderKind: "sync_client"
@@ -4558,7 +4558,7 @@ test("executeInspectWorkspaceResources gives sync-specific manual cleanup guidan
   });
 
   const outcome = await executeInspectWorkspaceResources(context, {
-    rootPath: "C:\\Users\\testuser\\Desktop\\drone-company"
+    rootPath: "C:\\Users\\testuser\\Desktop\\sample-company"
   });
 
   assert.equal(outcome.status, "success");

@@ -14,8 +14,8 @@ top-level files here keep the stable orchestration entrypoints and remaining sin
 `plannerSupport.ts` now holds shared planner timeout, environment, and lesson-distillation helpers
 so `planner.ts` stays under the entrypoint size budget.
 `plannerEagerFallbackSupport.ts` and `plannerDeterministicFallbackSupport.ts` now hold the shared
-eager deterministic fallback selection and fallback-plan finalization helpers so `planner.ts` can
-stay focused on the orchestration contract instead of repeating fallback validation boilerplate.
+exact-resource fallback selection and fallback-plan finalization helpers so `planner.ts` can stay
+focused on the orchestration contract instead of repeating fallback validation boilerplate.
 
 ## Primary Files
 - Stable orchestration entrypoints: `executor.ts`, `planner.ts`.
@@ -51,7 +51,7 @@ stay focused on the orchestration contract instead of repeating fallback validat
 - typed action definitions and planner schema contracts from `src/core/`
 
 ## Outputs
-- executable action plans and fallback responses
+- executable action plans and fail-closed fallback responses
 - action execution dispatch and live-run capability routing
 - memory context packets, bounded remembered-situation review and mutation brokerage, bounded media
   interpretations, reflection lessons, and pulse-intent classification
@@ -72,7 +72,8 @@ stay focused on the orchestration contract instead of repeating fallback validat
 - `executor.ts` is intentionally guarded by the module-size check as a stable top-level execution
   coordinator.
 - Planner action normalization, explicit-action intent inference, planner failure cooldown policy,
-  and skill fallback scaffolding belong in `plannerPolicy/`, not in new top-level helper files.
+  and Markdown skill guidance injection belong in `plannerPolicy/`, not in new top-level helper
+  files.
 - `memoryBroker.ts` remains the stable broker entrypoint; detailed query planning, context
   injection, audit helpers, and planner-input assembly belong in `memoryContext/` and
   `memoryBrokerPlannerInput.ts`.

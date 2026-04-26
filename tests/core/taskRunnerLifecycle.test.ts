@@ -95,7 +95,7 @@ test("buildTaskRunnerMissionStopLimits derives deterministic limits from config"
   });
 });
 
-test("buildTaskRunnerMissionStopLimits preserves deterministic framework live lifecycle action budget", () => {
+test("buildTaskRunnerMissionStopLimits keeps the configured action cap for stale deterministic framework lifecycle notes", () => {
   const limits = buildTaskRunnerMissionStopLimits({
     limits: {
       maxActionsPerTask: 8,
@@ -195,7 +195,7 @@ test("buildTaskRunnerMissionStopLimits preserves deterministic framework live li
   } as never);
 
   assert.deepEqual(limits, {
-    maxActions: 12,
+    maxActions: 8,
     maxDenies: 4,
     maxBytes: 1_048_576
   });

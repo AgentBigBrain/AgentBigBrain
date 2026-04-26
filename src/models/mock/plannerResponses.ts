@@ -16,137 +16,63 @@ const HIGH_RISK_SELF_EDIT_HINTS = [
   "override"
 ] as const;
 
-const MOCK_BUILD_EXECUTION_VERB_PATTERN =
-  /\b(create|build|make|generate|scaffold|setup|set up|spin up)\b/i;
-const MOCK_BUILD_EXECUTION_TARGET_PATTERN =
-  /\b(app|application|project|dashboard|site|website|frontend|backend|api|cli|repo|repository|react|next\.?js|vue|svelte|angular|vite)\b/i;
-const MOCK_BUILD_EXECUTION_DESTINATION_PATTERN =
-  /\bon\s+my\s+(desktop|documents|downloads)\b|\bin\s+['"]?[a-z]:\\|\bin\s+['"]?\/(?:users|home|tmp|var|opt)\//i;
-const MOCK_ROUTED_BUILD_PATTERNS: readonly RegExp[] = [
-  /\bbuild\b.*\btypescript\b.*\bcli\b/i,
-  /\bdeterministic\s+typescript\s+cli\s+scaffold\b/i,
-  /\bscaffold\b/i,
-  /\brunbook\b/i
-] as const;
-const MOCK_BUILD_EXPLANATION_ONLY_PATTERN =
-  /^\s*(how\s+do\s+i|how\s+to|explain|show\s+me\s+how|tutorial|guide\s+me|what\s+is)\b|\b(without\s+executing|do\s+not\s+execute|don't\s+execute|guidance\s+only|instructions?\s+only)\b/i;
 const MOCK_NATURAL_CLOSE_BROWSER_FOLLOW_UP_PATTERN =
   /\b(?:close|shut|dismiss|hide)\b[\s\S]{0,50}\b(?:browser|tab|window|preview|page|landing page|homepage)\b/i;
+const LOOPBACK_URL_PATTERN =
+  /\bhttps?:\/\/(?:localhost|127\.0\.0\.1|\[::1\])(?::\d{1,5})?(?:\/[^\s"'`;),]*)?/i;
+const PORT_PATTERN = /\b(?:port\s+|localhost:|127\.0\.0\.1:)(\d{1,5})\b/i;
 
 /**
- * Evaluates generic build-execution request and returns a deterministic policy signal.
+ * Extracts the first explicit loopback HTTP URL from active prompt text.
  *
  * **Why it exists:**
- * Keeps mock planner behavior aligned with real planner policy so CI and local dry runs exercise
- * execution-style build flows with non-respond actions instead of collapsing back to guidance-only
- * output.
+ * The mock planner should exercise explicit routing and validation contracts without inventing a
+ * preview URL that the model did not receive.
  *
  * **What it talks to:**
- * - Uses local deterministic lexical patterns within this module.
+ * - Uses local constants/helpers within this module.
  *
- * @param userInput - Raw user input text passed to the mock planner.
- * @returns `true` when the request looks like an execution-style build goal.
+ * @param primaryText - Active user request text.
+ * @param fallbackText - Full prompt/context text searched only when the active request has no URL.
+ * @returns Explicit loopback URL, or `null` when absent.
  */
-function isMockExecutionStyleBuildRequest(userInput: string): boolean {
-  if (MOCK_BUILD_EXPLANATION_ONLY_PATTERN.test(userInput)) {
-    return false;
-  }
-  if (MOCK_ROUTED_BUILD_PATTERNS.some((pattern) => pattern.test(userInput))) {
-    return true;
-  }
-  if (!MOCK_BUILD_EXECUTION_VERB_PATTERN.test(userInput)) {
-    return false;
-  }
-  if (!MOCK_BUILD_EXECUTION_TARGET_PATTERN.test(userInput)) {
-    return false;
-  }
-  return (
-    MOCK_BUILD_EXECUTION_DESTINATION_PATTERN.test(userInput) ||
-    /\bexecute\s+now\b/i.test(userInput) ||
-    /\brun\s+(?:it|commands?)\b/i.test(userInput)
-  );
+function extractExplicitLoopbackUrl(primaryText: string, fallbackText: string): string | null {
+  return primaryText.match(LOOPBACK_URL_PATTERN)?.[0] ?? fallbackText.match(LOOPBACK_URL_PATTERN)?.[0] ?? null;
 }
 
 /**
- * Evaluates whether a build request explicitly asks for live-run verification.
+ * Extracts an explicit local port from active prompt text.
  *
  * **Why it exists:**
- * Lets the mock planner exercise managed-process plus readiness-probe planning paths when tests or
- * local runs ask to start and verify an app instead of only scaffolding it.
+ * Keeps mock probe-port actions grounded in user or context data instead of defaulting to a magic
+ * development port.
  *
  * **What it talks to:**
- * - Uses `isMockExecutionStyleBuildRequest` from this module.
- * - Uses local deterministic lexical patterns within this module.
+ * - Uses local constants/helpers within this module.
  *
- * @param userInput - Raw user input text passed to the mock planner.
- * @returns `true` when live verification is explicitly requested.
+ * @param primaryText - Active user request text.
+ * @param fallbackText - Full prompt/context text searched only when the active request has no port.
+ * @returns Explicit TCP port, or `null` when absent or out of range.
  */
-function isMockLiveVerificationBuildRequest(userInput: string): boolean {
-  if (!isMockExecutionStyleBuildRequest(userInput)) {
-    return false;
+function extractExplicitLocalPort(primaryText: string, fallbackText: string): number | null {
+  const urlText = extractExplicitLoopbackUrl(primaryText, fallbackText);
+  if (urlText) {
+    try {
+      const parsedUrl = new URL(urlText);
+      const parsedPort = Number(parsedUrl.port);
+      if (Number.isInteger(parsedPort) && parsedPort > 0 && parsedPort <= 65_535) {
+        return parsedPort;
+      }
+    } catch {
+      return null;
+    }
   }
-  return (
-    /\bnpm\s+start\b/i.test(userInput) ||
-    /\bnpm\s+run\s+dev\b/i.test(userInput) ||
-    /\b(?:pnpm|yarn)\s+(?:start|dev)\b/i.test(userInput) ||
-    /\b(?:next|vite)\s+dev\b/i.test(userInput) ||
-    /\bdev\s+server\b/i.test(userInput) ||
-    /\b(run|start|launch|open)\b[\s\S]{0,80}\b(app|site|server|project|frontend)\b/i.test(
-      userInput
-    ) ||
-    /\bverify\b[\s\S]{0,80}\b(ui|homepage|browser|render|renders|rendering)\b/i.test(
-      userInput
-    ) ||
-    /\bopen\b[\s\S]{0,80}\bbrowser\b/i.test(userInput)
-  );
-}
 
-/**
- * Evaluates whether a build request explicitly asks for browser or UI proof.
- *
- * **Why it exists:**
- * Lets the mock planner exercise the browser-verification action path so CI covers stronger live
- * app verification instead of stopping at port readiness.
- *
- * **What it talks to:**
- * - Uses `isMockLiveVerificationBuildRequest` from this module.
- * - Uses local deterministic lexical patterns within this module.
- *
- * @param userInput - Raw user input text passed to the mock planner.
- * @returns `true` when browser/UI proof is explicitly requested.
- */
-function isMockBrowserVerificationBuildRequest(userInput: string): boolean {
-  if (!isMockLiveVerificationBuildRequest(userInput)) {
-    return false;
-  }
-  return /\bverify\b[\s\S]{0,80}\b(ui|homepage|browser|render|renders|rendering)\b/i.test(
-    userInput
-  );
-}
-
-/**
- * Evaluates whether a build request explicitly asks for a visible browser window to remain open.
- *
- * **Why it exists:**
- * Keeps mock live-run behavior aligned with the real planner policy so leave-it-open requests test
- * a separate persistent browser-launch step instead of stopping at verification.
- *
- * **What it talks to:**
- * - Uses `isMockLiveVerificationBuildRequest` from this module.
- * - Uses local deterministic lexical patterns within this module.
- *
- * @param userInput - Raw user input text passed to the mock planner.
- * @returns `true` when the request explicitly asks for a browser window to stay open.
- */
-function requiresMockPersistentBrowserOpenBuildRequest(userInput: string): boolean {
-  if (!isMockLiveVerificationBuildRequest(userInput)) {
-    return false;
-  }
-  return (
-    /\bleave\b[\s\S]{0,40}\b(browser|page|site|it)\b[\s\S]{0,20}\bopen\b/i.test(userInput) ||
-    /\bkeep\b[\s\S]{0,40}\b(browser|page|site|it)\b[\s\S]{0,20}\bopen\b/i.test(userInput) ||
-    /\blet me (?:see|view)\b/i.test(userInput)
-  );
+  const portText = primaryText.match(PORT_PATTERN)?.[1] ?? fallbackText.match(PORT_PATTERN)?.[1];
+  const parsedPort = portText ? Number(portText) : Number.NaN;
+  return Number.isInteger(parsedPort) && parsedPort > 0 && parsedPort <= 65_535
+    ? parsedPort
+    : null;
 }
 
 /**
@@ -170,6 +96,10 @@ export function buildPlannerOutput(userPrompt: string): PlannerModelOutput {
   const userInput = resolveActiveMockUserInput(input, userPrompt);
   const text = userInput.toLowerCase();
   const promptText = userPrompt.toLowerCase();
+  const explicitLoopbackUrl = extractExplicitLoopbackUrl(userInput, userPrompt);
+  const explicitLocalPort = extractExplicitLocalPort(userInput, userPrompt);
+  const linkedSessionMatch = userPrompt.match(/sessionId=([^\s;]+)/i);
+  const linkedPreviewLeaseMatch = userPrompt.match(/linked preview process:\s*leaseId=([^\s;]+)/i);
   const actions: PlannerModelOutput["actions"] = [];
 
   const pushAction = (
@@ -197,17 +127,21 @@ export function buildPlannerOutput(userPrompt: string): PlannerModelOutput {
       userInput.match(/(?:write\s+file|save\s+(?:this\s+)?file)\s+([^\s"'`]+)/i) ??
       userInput.match(/(?:to|at)\s+([^\s"'`]+)/i);
     const quotedContentMatch = userInput.match(
-      /(?:with\s+content|content\s*[:=])\s*(['"`])([\s\S]*?)\1/i
+      /(?:with\s+content\s*[:=]?|content\s*[:=])\s*(['"`])([\s\S]*?)\1/i
     );
-    const inlineContentMatch = userInput.match(/(?:with\s+content|content\s*[:=])\s*(.+)$/i);
+    const inlineContentMatch = userInput.match(
+      /(?:with\s+content\s*[:=]?|content\s*[:=])\s*(.+)$/i
+    );
     const derivedContent =
       quotedContentMatch?.[2]?.trim() ??
       inlineContentMatch?.[1]?.trim() ??
-      "Generated by mock planner.";
-    pushAction("write_file", "Write generated content to a file.", {
-      path: pathMatch?.[1] ?? "runtime/sandbox/generated_note.txt",
-      content: derivedContent.length > 0 ? derivedContent : "Generated by mock planner."
-    });
+      "";
+    if (derivedContent.length > 0) {
+      pushAction("write_file", "Write explicit content to a file.", {
+        path: pathMatch?.[1] ?? "runtime/sandbox/generated_note.txt",
+        content: derivedContent
+      });
+    }
   }
 
   if (
@@ -222,15 +156,46 @@ export function buildPlannerOutput(userPrompt: string): PlannerModelOutput {
     });
   }
 
-  if (text.includes("create skill") || text.includes("generate skill")) {
+  if (/\b(?:create|generate)\b[\s\S]{0,40}\bskill\b/i.test(userInput)) {
     const skillNameMatch = userInput.match(/skill\s+([a-zA-Z0-9_-]+)/i);
-    const generatedCode = text.includes("eval(")
-      ? "export const generatedSkill = () => eval('2 + 2');"
-      : "export function generatedSkill(input: string): string { return input.trim(); }";
-    pushAction("create_skill", "Create a sandboxed auto-skill file.", {
-      name: skillNameMatch?.[1] ?? "mock_generated_skill",
-      code: generatedCode
-    });
+    const quotedInstructionsMatch = userInput.match(
+      /(?:with\s+(?:markdown\s+)?(?:instructions|guidance)\s*[:=]?|(?:instructions|guidance)\s*[:=])\s*(['"`])([\s\S]*?)\1/i
+    );
+    const inlineInstructionsMatch = userInput.match(
+      /(?:with\s+(?:markdown\s+)?(?:instructions|guidance)\s*[:=]?|(?:instructions|guidance)\s*[:=])\s*(.+)$/i
+    );
+    const explicitInstructions =
+      quotedInstructionsMatch?.[2]?.trim() ??
+      inlineInstructionsMatch?.[1]?.trim() ??
+      "";
+    const quotedCodeMatch = userInput.match(
+      /(?:with\s+code\s*[:=]?|code\s*[:=])\s*(['"`])([\s\S]*?)\1/i
+    );
+    const inlineCodeMatch = userInput.match(
+      /(?:with\s+code\s*[:=]?|code\s*[:=])\s*(.+)$/i
+    );
+    const explicitCode =
+      quotedCodeMatch?.[2]?.trim() ??
+      inlineCodeMatch?.[1]?.trim() ??
+      "";
+    if (explicitInstructions.length > 0) {
+      pushAction("create_skill", "Create a governed Markdown instruction skill.", {
+        name: skillNameMatch?.[1] ?? "mock_guidance_skill",
+        kind: "markdown_instruction",
+        instructions: explicitInstructions
+      });
+      return {
+        plannerNotes: "Mock planner completed structured action proposal.",
+        actions
+      };
+    }
+    if (explicitCode.length > 0) {
+      pushAction("create_skill", "Create a sandboxed executable skill file.", {
+        name: skillNameMatch?.[1] ?? "mock_generated_skill",
+        kind: "executable_module",
+        code: explicitCode
+      });
+    }
   }
 
   if (text.includes("use skill") || text.includes("run skill") || text.includes("invoke skill")) {
@@ -244,7 +209,11 @@ export function buildPlannerOutput(userPrompt: string): PlannerModelOutput {
     });
   }
 
-  if (text.includes("http") || text.includes("api") || text.includes("webhook")) {
+  if (
+    text.includes("api") ||
+    text.includes("webhook") ||
+    (text.includes("http") && !explicitLoopbackUrl && /\bhttps?:\/\//i.test(userInput))
+  ) {
     pushAction("network_write", "Call an external API endpoint.", {
       endpoint: "https://example.invalid/endpoint"
     });
@@ -275,17 +244,21 @@ export function buildPlannerOutput(userPrompt: string): PlannerModelOutput {
   }
 
   if (text.includes("probe port") || text.includes("check port")) {
-    pushAction("probe_port", "Probe a local TCP port for readiness.", {
-      host: "127.0.0.1",
-      port: 3000
-    });
+    if (explicitLocalPort !== null) {
+      pushAction("probe_port", "Probe an explicit local TCP port for readiness.", {
+        host: "127.0.0.1",
+        port: explicitLocalPort
+      });
+    }
   }
 
   if (text.includes("probe http") || text.includes("check url") || text.includes("check endpoint")) {
-    pushAction("probe_http", "Probe a local HTTP endpoint for readiness.", {
-      url: "http://127.0.0.1:3000/",
-      expectedStatus: 200
-    });
+    if (explicitLoopbackUrl) {
+      pushAction("probe_http", "Probe an explicit local HTTP endpoint for readiness.", {
+        url: explicitLoopbackUrl,
+        expectedStatus: 200
+      });
+    }
   }
 
   if (
@@ -293,34 +266,48 @@ export function buildPlannerOutput(userPrompt: string): PlannerModelOutput {
     text.includes("verify ui") ||
     text.includes("verify homepage")
   ) {
-    pushAction("verify_browser", "Verify a loopback page through browser automation.", {
-      url: "http://127.0.0.1:3000/",
-      expectedText: text.includes("robinhood") ? "Robinhood" : "App"
-    });
+    if (explicitLoopbackUrl) {
+      pushAction("verify_browser", "Verify an explicit loopback page through browser automation.", {
+        url: explicitLoopbackUrl,
+        expectedText: text.includes("portfolio") ? "Portfolio" : "App"
+      });
+    }
   }
 
   if (text.includes("open browser") || text.includes("leave it open")) {
-    pushAction("open_browser", "Open the verified page in a visible browser window.", {
-      url: "http://127.0.0.1:3000/"
-    });
+    if (explicitLoopbackUrl) {
+      pushAction("open_browser", "Open the explicit verified page in a visible browser window.", {
+        url: explicitLoopbackUrl
+      });
+    }
   }
 
   if (text.includes("close browser") || text.includes("close the browser")) {
-    pushAction("close_browser", "Close the tracked browser window for the local page.", {
-      url: "http://127.0.0.1:3000/"
-    });
+    if (linkedSessionMatch?.[1]) {
+      pushAction("close_browser", "Close the tracked browser window for the local page.", {
+        sessionId: linkedSessionMatch[1]
+      });
+    } else if (explicitLoopbackUrl) {
+      pushAction("close_browser", "Close the tracked browser window for the local page.", {
+        url: explicitLoopbackUrl
+      });
+    }
   }
 
-  const linkedSessionMatch = userPrompt.match(/sessionId=([^\s;]+)/i);
-  const linkedPreviewLeaseMatch = userPrompt.match(/linked preview process:\s*leaseId=([^\s;]+)/i);
   if (
     actions.length === 0 &&
     MOCK_NATURAL_CLOSE_BROWSER_FOLLOW_UP_PATTERN.test(userInput) &&
     promptText.includes("tracked browser sessions:")
   ) {
-    pushAction("close_browser", "Close the tracked browser window for the local page.", {
-      ...(linkedSessionMatch?.[1] ? { sessionId: linkedSessionMatch[1] } : { url: "http://127.0.0.1:3000/" })
-    });
+    if (linkedSessionMatch?.[1]) {
+      pushAction("close_browser", "Close the tracked browser window for the local page.", {
+        sessionId: linkedSessionMatch[1]
+      });
+    } else if (explicitLoopbackUrl) {
+      pushAction("close_browser", "Close the tracked browser window for the local page.", {
+        url: explicitLoopbackUrl
+      });
+    }
     if (linkedPreviewLeaseMatch?.[1]) {
       pushAction("stop_process", "Stop the linked local preview process after closing the browser.", {
         leaseId: linkedPreviewLeaseMatch[1]
@@ -345,33 +332,6 @@ export function buildPlannerOutput(userPrompt: string): PlannerModelOutput {
       patch: "Adjust threshold for escalation trigger.",
       touchesImmutable
     });
-  }
-
-  if (actions.length === 0 && isMockExecutionStyleBuildRequest(userInput)) {
-    pushAction("shell_command", "Run a finite scaffold/build step for the requested app.", {
-      command: "npm create vite@latest finance-dashboard -- --template react"
-    });
-
-    if (isMockLiveVerificationBuildRequest(userInput)) {
-      pushAction("start_process", "Start a managed development server for live verification.", {
-        command: "npm start"
-      });
-      pushAction("probe_port", "Probe the local dev-server port for readiness.", {
-        host: "127.0.0.1",
-        port: 3000
-      });
-      if (isMockBrowserVerificationBuildRequest(userInput)) {
-        pushAction("verify_browser", "Verify the live app in a loopback browser session.", {
-          url: "http://127.0.0.1:3000/",
-          expectedText: text.includes("robinhood") ? "Robinhood" : "App"
-        });
-      }
-      if (requiresMockPersistentBrowserOpenBuildRequest(userInput)) {
-        pushAction("open_browser", "Open the live app in a visible browser window and leave it open.", {
-          url: "http://127.0.0.1:3000/"
-        });
-      }
-    }
   }
 
   if (actions.length === 0) {

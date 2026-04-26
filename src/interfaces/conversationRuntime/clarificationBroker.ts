@@ -8,7 +8,10 @@ import type {
   ClarificationOptionId,
   ConversationIntentMode
 } from "../sessionStore";
-import type { IntentClarificationCandidate } from "./intentModeContracts";
+import type {
+  ConversationBuildFormatMetadata,
+  IntentClarificationCandidate
+} from "./intentModeContracts";
 import {
   isDeterministicFrameworkBuildLaneRequest,
   isStaticHtmlExecutionStyleRequest
@@ -63,6 +66,52 @@ export function resolveClarifiedIntentMode(
   }
 
   return "build";
+}
+
+/**
+ * Resolves build-format metadata from a persisted clarification answer.
+ *
+ * **Why it exists:**
+ * Lets the planner receive the selected output format as typed metadata instead of relying only on
+ * the clarified prose block appended to the execution input.
+ *
+ * **What it talks to:**
+ * - Uses `ActiveClarificationState` (import `ActiveClarificationState`) from `../sessionStore`.
+ * - Uses `ClarificationOptionId` (import `ClarificationOptionId`) from `../sessionStore`.
+ * - Uses `ConversationBuildFormatMetadata` (import `ConversationBuildFormatMetadata`) from `./intentModeContracts`.
+ * @param clarification - Active clarification state being resolved.
+ * @param selectedOptionId - Canonical option chosen by the user.
+ * @returns Build-format metadata, or `null` for non-build-format clarification answers.
+ */
+export function resolveClarifiedBuildFormatMetadata(
+  clarification: ActiveClarificationState,
+  selectedOptionId: ClarificationOptionId
+): ConversationBuildFormatMetadata | null {
+  if (clarification.kind !== "build_format") {
+    return null;
+  }
+  switch (selectedOptionId) {
+    case "static_html":
+      return {
+        format: "static_html",
+        source: "clarification",
+        confidence: "high"
+      };
+    case "nextjs":
+      return {
+        format: "nextjs",
+        source: "clarification",
+        confidence: "high"
+      };
+    case "react":
+      return {
+        format: "react",
+        source: "clarification",
+        confidence: "high"
+      };
+    default:
+      return null;
+  }
 }
 
 /**

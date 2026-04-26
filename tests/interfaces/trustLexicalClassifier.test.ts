@@ -143,14 +143,14 @@ test("isSimulatedOutput does not treat real workspace or package names containin
 
   assert.equal(
     isSimulatedOutput(
-      "Write success: C:\\temp\\drone-react-preview\\src\\App.jsx",
+      "Write success: C:\\temp\\sample-react-preview\\src\\App.jsx",
       context
     ),
     false
   );
   assert.equal(
     isSimulatedOutput(
-      "Shell success:\n> drone-react-preview@0.0.0 build\n> vite build",
+      "Shell success:\n> sample-react-preview@0.0.0 build\n> vite build",
       context
     ),
     false

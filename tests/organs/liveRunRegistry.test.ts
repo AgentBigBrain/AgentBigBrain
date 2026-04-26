@@ -26,7 +26,7 @@ test("ManagedProcessRegistry reconciles persisted dead started leases to stopped
               actionId: "action_dead_preview",
               pid: 999999,
               commandFingerprint: "fingerprint",
-              cwd: "C:\\workspace\\drone-company",
+              cwd: "C:\\workspace\\sample-company",
               shellExecutable: "python",
               shellKind: "powershell",
               startedAt: "2026-03-14T12:00:00.000Z",
@@ -238,7 +238,7 @@ test("BrowserSessionRegistry closes stale uncontrollable managed sessions with n
           sessions: [
             {
               sessionId: "browser_session:stale_managed",
-              url: "file:///C:/Users/testuser/Desktop/drone-company/index.html",
+              url: "file:///C:/Users/testuser/Desktop/sample-company/index.html",
               status: "open",
               openedAt: "2026-03-14T12:00:00.000Z",
               closedAt: null,
@@ -286,9 +286,9 @@ test("BrowserSessionRegistry can downgrade one linked managed session to stale a
               controllerKind: "playwright_managed",
               controlAvailable: false,
               browserProcessPid: null,
-              workspaceRootPath: "C:\\workspace\\drone-company",
+              workspaceRootPath: "C:\\workspace\\sample-company",
               linkedProcessLeaseId: "proc_preview_shutdown",
-              linkedProcessCwd: "C:\\workspace\\drone-company",
+              linkedProcessCwd: "C:\\workspace\\sample-company",
               linkedProcessPid: 45678
             }
           ]

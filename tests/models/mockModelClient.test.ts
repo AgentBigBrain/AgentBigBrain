@@ -59,7 +59,7 @@ test("MockModelClient can produce create_skill actions for planner schema", asyn
     schemaName: "planner_v1",
     systemPrompt: "planner",
     userPrompt: JSON.stringify({
-      userInput: "Create skill parser_tool for this workflow"
+      userInput: "Create markdown skill parser_tool with instructions: Parse workflow notes."
     })
   });
 
@@ -80,7 +80,42 @@ test("MockModelClient can produce run_skill actions for planner schema", async (
   assert.ok(output.actions.some((action) => action.type === "run_skill"));
 });
 
-test("MockModelClient emits executable build actions for execution-style app prompts", async () => {
+test("MockModelClient does not invent skill source when create-skill content is missing", async () => {
+  const client = new MockModelClient();
+  const output = await client.completeJson<PlannerModelOutput>({
+    model: "mock-planner",
+    schemaName: "planner_v1",
+    systemPrompt: "planner",
+    userPrompt: JSON.stringify({
+      userInput: "Create skill parser_tool for this workflow"
+    })
+  });
+
+  assert.equal(output.actions.length, 1);
+  assert.equal(output.actions[0].type, "respond");
+});
+
+test("MockModelClient uses explicit executable skill source when provided", async () => {
+  const client = new MockModelClient();
+  const output = await client.completeJson<PlannerModelOutput>({
+    model: "mock-planner",
+    schemaName: "planner_v1",
+    systemPrompt: "planner",
+    userPrompt: JSON.stringify({
+      userInput:
+        "Create skill parser_tool with code: export function parserTool(input: string): string { return input.trim(); }"
+    })
+  });
+
+  const createSkillAction = output.actions.find((action) => action.type === "create_skill");
+  assert.ok(createSkillAction);
+  const createSkillParams = createSkillAction.params;
+  assert.ok(createSkillParams);
+  assert.equal(createSkillParams.kind, "executable_module");
+  assert.match(String(createSkillParams.code), /parserTool/);
+});
+
+test("MockModelClient does not synthesize app build workflows for generation prompts", async () => {
   const client = new MockModelClient();
   const output = await client.completeJson<PlannerModelOutput>({
     model: "mock-planner",
@@ -91,11 +126,11 @@ test("MockModelClient emits executable build actions for execution-style app pro
     })
   });
 
-  assert.ok(output.actions.some((action) => action.type === "shell_command"));
-  assert.equal(output.actions.some((action) => action.type === "respond"), false);
+  assert.equal(output.actions.length, 1);
+  assert.equal(output.actions[0].type, "respond");
 });
 
-test("MockModelClient emits managed-process readiness actions for live verification build prompts", async () => {
+test("MockModelClient keeps live verification build prompts out of canned workflow synthesis", async () => {
   const client = new MockModelClient();
   const output = await client.completeJson<PlannerModelOutput>({
     model: "mock-planner",
@@ -106,10 +141,8 @@ test("MockModelClient emits managed-process readiness actions for live verificat
     })
   });
 
-  assert.ok(output.actions.some((action) => action.type === "shell_command"));
-  assert.ok(output.actions.some((action) => action.type === "start_process"));
-  assert.ok(output.actions.some((action) => action.type === "probe_port"));
-  assert.ok(output.actions.some((action) => action.type === "verify_browser"));
+  assert.equal(output.actions.length, 1);
+  assert.equal(output.actions[0].type, "respond");
 });
 
 test("MockModelClient planner prefers the current user request over wrapped conversation context", async () => {
@@ -135,7 +168,7 @@ test("MockModelClient planner prefers the current user request over wrapped conv
   assert.equal(output.actions.some((action) => action.type === "shell_command"), false);
 });
 
-test("MockModelClient aligns routed scaffold prompts with executable build actions", async () => {
+test("MockModelClient does not turn routed scaffold wording into canned build actions", async () => {
   const client = new MockModelClient();
   const output = await client.completeJson<PlannerModelOutput>({
     model: "mock-planner",
@@ -146,7 +179,8 @@ test("MockModelClient aligns routed scaffold prompts with executable build actio
     })
   });
 
-  assert.ok(output.actions.some((action) => action.type === "shell_command"));
+  assert.equal(output.actions.length, 1);
+  assert.equal(output.actions[0].type, "respond");
 });
 
 test("MockModelClient response synthesis uses the active request from wrapped conversation input", async () => {

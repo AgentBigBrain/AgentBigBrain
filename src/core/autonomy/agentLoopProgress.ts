@@ -108,9 +108,9 @@ function detectAutonomousWorkingKind(input: string): AutonomousWorkingKind {
       "folder",
       "folders",
       "desktop",
-      "drone-folder",
-      "drone-web-projects",
-      "drone-company"
+      "sample-folder",
+      "sample-web-projects",
+      "sample-company"
     ])
   ) {
     return "organize_folders";

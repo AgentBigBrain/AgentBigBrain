@@ -27,12 +27,6 @@ import {
   buildPlannerSystemPrompt
 } from "../../src/organs/plannerPolicy/promptAssembly";
 import {
-  buildFrameworkLandingPageContent,
-  buildFrameworkLandingPageStyles,
-  buildNextLayoutContent,
-  buildNextTypeScriptLayoutContent
-} from "../../src/organs/plannerPolicy/frameworkRuntimeActionFallbackContent";
-import {
   assessExecutionStyleBuildPlan,
   requiresExecutableBuildPlan
 } from "../../src/organs/plannerPolicy/buildExecutionPolicy";
@@ -57,8 +51,7 @@ import {
   ensureRespondMessages
 } from "../../src/organs/plannerPolicy/responseSynthesisFallback";
 import {
-  buildDeterministicExplicitRuntimeActionFallbackActions,
-  buildDeterministicFrameworkBuildFallbackActions
+  buildDeterministicExplicitRuntimeActionFallbackActions
 } from "../../src/organs/plannerPolicy/explicitRuntimeActionFallback";
 import {
   extractRequestedFrameworkPathFolderName,
@@ -68,10 +61,6 @@ import {
   buildDeterministicDesktopRuntimeProcessSweepFallbackActions,
   isDesktopFolderRuntimeProcessSweepRequest
 } from "../../src/organs/plannerPolicy/desktopRuntimeProcessSweepFallback";
-import {
-  buildDeterministicStaticHtmlBuildFallbackActions,
-  hasStaticHtmlBuildLaneMarker
-} from "../../src/organs/plannerPolicy/staticHtmlRuntimeActionFallback";
 import { buildDeterministicWorkspaceRecoveryFallbackActions } from "../../src/organs/plannerPolicy/workspaceRecoveryFallback";
 import { buildWorkspaceRecoverySignalFixture } from "../helpers/conversationFixtures";
 
@@ -173,7 +162,7 @@ test("preparePlannerActions strips respond actions from execution-style build pl
           type: "write_file",
           description: "write the landing page",
           params: {
-            path: "/home/testuser/Desktop/drone-company/index.html",
+            path: "/home/testuser/Desktop/sample-company/index.html",
             content: "<html></html>"
           }
         },
@@ -197,10 +186,10 @@ test("preparePlannerActions strips respond actions from execution-style build pl
 test("preparePlannerActions appends linked preview shutdown when a natural close-browser follow-up targets a tracked preview stack", () => {
   const fullExecutionInput = [
     "Tracked browser sessions:",
-    "- Browser window: sessionId=browser_session:landing-page; url=http://127.0.0.1:8125/; status=open; visibility=visible; controller=playwright_managed; control=available; linkedPreviewLease=proc_preview_1; linkedPreviewCwd=C:\\Users\\testuser\\Desktop\\drone-company",
+    "- Browser window: sessionId=browser_session:landing-page; url=http://127.0.0.1:8125/; status=open; visibility=visible; controller=playwright_managed; control=available; linkedPreviewLease=proc_preview_1; linkedPreviewCwd=C:\\Users\\testuser\\Desktop\\sample-company",
     "",
     "Natural browser-session follow-up:",
-    "- Linked preview process: leaseId=proc_preview_1; cwd=C:\\Users\\testuser\\Desktop\\drone-company",
+    "- Linked preview process: leaseId=proc_preview_1; cwd=C:\\Users\\testuser\\Desktop\\sample-company",
     "- If the user wants that visible page closed now, prefer close_browser with params.sessionId=browser_session:landing-page and then stop_process with params.leaseId=proc_preview_1 so the linked local preview stack shuts down fully. Do not stop unrelated processes.",
     "",
     "Current user request:",
@@ -238,14 +227,14 @@ test("preparePlannerActions appends exact shutdown steps for every tracked previ
   const fullExecutionInput = [
     "Current tracked workspace in this chat:",
     "- Label: Current project workspace",
-    "- Root path: C:\\Users\\testuser\\Desktop\\AI Drone City",
+    "- Root path: C:\\Users\\testuser\\Desktop\\Sample City",
     "- Preview process leases: proc_preview_1, proc_preview_2",
     "",
     "Tracked browser sessions:",
-    "- Browser window: sessionId=browser_session:ai-drone-city; url=http://127.0.0.1:4173/; status=open; visibility=visible; controller=playwright_managed; control=available; linkedPreviewLease=proc_preview_2; linkedPreviewCwd=C:\\Users\\testuser\\Desktop\\AI Drone City",
+    "- Browser window: sessionId=browser_session:ai-sample-city; url=http://127.0.0.1:4173/; status=open; visibility=visible; controller=playwright_managed; control=available; linkedPreviewLease=proc_preview_2; linkedPreviewCwd=C:\\Users\\testuser\\Desktop\\Sample City",
     "",
     "Current user request:",
-    "Close AI Drone City and anything it needs so we can move on."
+    "Close Sample City and anything it needs so we can move on."
   ].join("\n");
   const preparation = preparePlannerActions(
     {
@@ -253,14 +242,14 @@ test("preparePlannerActions appends exact shutdown steps for every tracked previ
       actions: [
         {
           type: "close_browser",
-          description: "Close the tracked AI Drone City preview.",
+          description: "Close the tracked Sample City preview.",
           params: {
-            sessionId: "browser_session:ai-drone-city"
+            sessionId: "browser_session:ai-sample-city"
           }
         }
       ]
     },
-    "Close AI Drone City and anything it needs so we can move on.",
+    "Close Sample City and anything it needs so we can move on.",
     "close_browser",
     fullExecutionInput
   );
@@ -363,11 +352,11 @@ test("preparePlannerActions backfills open-browser workspace context from tracke
   const fullExecutionInput = [
     "Current tracked workspace in this chat:",
     "- Label: Current project workspace",
-    "- Root path: C:\\Users\\testuser\\Desktop\\drone-company",
+    "- Root path: C:\\Users\\testuser\\Desktop\\sample-company",
     "- Preview URL: http://127.0.0.1:8125/",
     "",
     "Tracked browser sessions:",
-    "- Browser window: sessionId=browser_session:landing-page; url=http://127.0.0.1:8125/; status=open; visibility=visible; controller=playwright_managed; control=available; linkedPreviewLease=proc_preview_1; linkedPreviewCwd=C:\\Users\\testuser\\Desktop\\drone-company",
+    "- Browser window: sessionId=browser_session:landing-page; url=http://127.0.0.1:8125/; status=open; visibility=visible; controller=playwright_managed; control=available; linkedPreviewLease=proc_preview_1; linkedPreviewCwd=C:\\Users\\testuser\\Desktop\\sample-company",
     "",
     "Current user request:",
     "Reopen the landing page preview for me."
@@ -393,7 +382,7 @@ test("preparePlannerActions backfills open-browser workspace context from tracke
   const openBrowserAction = preparation.actions.find((action) => action.type === "open_browser");
   assert.ok(openBrowserAction);
   assert.equal(openBrowserAction.params.previewProcessLeaseId, "proc_preview_1");
-  assert.equal(openBrowserAction.params.rootPath, "C:\\Users\\testuser\\Desktop\\drone-company");
+  assert.equal(openBrowserAction.params.rootPath, "C:\\Users\\testuser\\Desktop\\sample-company");
 });
 
 test("preparePlannerActions rewrites static file browser ownership from the exact file url instead of stale tracked workspace context", () => {
@@ -439,12 +428,12 @@ test("preparePlannerActions appends tracked preview refresh after artifact edits
   const fullExecutionInput = [
     "Current tracked workspace in this chat:",
     "- Label: Current project workspace",
-    "- Root path: C:\\Users\\testuser\\Desktop\\drone-company",
-    "- Preview URL: file:///C:/Users/testuser/Desktop/drone-company/index.html",
+    "- Root path: C:\\Users\\testuser\\Desktop\\sample-company",
+    "- Preview URL: file:///C:/Users/testuser/Desktop/sample-company/index.html",
     "",
     "Natural artifact-edit follow-up:",
-    "- Preferred primary artifact: C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
-    "- Visible preview already exists: file:///C:/Users/testuser/Desktop/drone-company/index.html; keep the preview aligned with the edited artifact when practical.",
+    "- Preferred primary artifact: C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
+    "- Visible preview already exists: file:///C:/Users/testuser/Desktop/sample-company/index.html; keep the preview aligned with the edited artifact when practical.",
     "",
     "Current user request:",
     "Change the hero image to a slider instead of the landing page."
@@ -458,7 +447,7 @@ test("preparePlannerActions appends tracked preview refresh after artifact edits
           type: "write_file",
           description: "Update the tracked landing page artifact.",
           params: {
-            path: "C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
+            path: "C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
             content: "<section class=\"hero-slider\">updated</section>"
           }
         }
@@ -473,14 +462,14 @@ test("preparePlannerActions appends tracked preview refresh after artifact edits
   assert.ok(openBrowserAction);
   assert.equal(
     openBrowserAction.params.url,
-    "file:///C:/Users/testuser/Desktop/drone-company/index.html"
+    "file:///C:/Users/testuser/Desktop/sample-company/index.html"
   );
-  assert.equal(openBrowserAction.params.rootPath, "C:\\Users\\testuser\\Desktop\\drone-company");
+  assert.equal(openBrowserAction.params.rootPath, "C:\\Users\\testuser\\Desktop\\sample-company");
 });
 
 test("evaluatePlannerActionValidation and assertPlannerActionValidation fail closed for missing browser proof", () => {
   const currentUserRequest =
-    "Run the existing React app in the \"C:\\Users\\testuser\\Desktop\\drone-company\" folder and verify the homepage UI. Execute now.";
+    "Run the existing React app in the \"C:\\Users\\testuser\\Desktop\\sample-company\" folder and verify the homepage UI. Execute now.";
   const validation = evaluatePlannerActionValidation(currentUserRequest, null, [
     {
       id: "action_shell_build",
@@ -521,7 +510,7 @@ test("evaluatePlannerActionValidation and assertPlannerActionValidation fail clo
 
 test("evaluatePlannerActionValidation and assertPlannerActionValidation fail closed for missing persistent browser open step", () => {
   const currentUserRequest =
-    "Run the existing React app in the \"C:\\Users\\testuser\\Desktop\\drone-company\" folder, verify the homepage UI, and leave it open for me when you're done. Execute now.";
+    "Run the existing React app in the \"C:\\Users\\testuser\\Desktop\\sample-company\" folder, verify the homepage UI, and leave it open for me when you're done. Execute now.";
   const validation = evaluatePlannerActionValidation(currentUserRequest, null, [
     {
       id: "action_shell_build",
@@ -579,7 +568,7 @@ test("evaluatePlannerActionValidation allows file-open previews for static leave
       type: "write_file",
       description: "write the landing page",
       params: {
-        path: "/home/testuser/Desktop/drone-company/index.html",
+        path: "/home/testuser/Desktop/sample-company/index.html",
         content: "<html></html>"
       },
       estimatedCostUsd: 0.08
@@ -589,7 +578,7 @@ test("evaluatePlannerActionValidation allows file-open previews for static leave
       type: "open_browser",
       description: "open the static file in the browser",
       params: {
-        url: "file:///home/testuser/Desktop/drone-company/index.html"
+        url: "file:///home/testuser/Desktop/sample-company/index.html"
       },
       estimatedCostUsd: 0.03
     }
@@ -601,14 +590,14 @@ test("evaluatePlannerActionValidation allows file-open previews for static leave
 
 test("evaluatePlannerActionValidation does not treat a plain open-browser preview request as browser verification", () => {
   const currentUserRequest =
-    "Build a small drone landing page on my Desktop, then open it in a browser and leave it open for me.";
+    "Build a small sample landing page on my Desktop, then open it in a browser and leave it open for me.";
   const validation = evaluatePlannerActionValidation(currentUserRequest, null, [
     {
       id: "action_write_file",
       type: "write_file",
       description: "write the landing page",
       params: {
-        path: "/home/testuser/Desktop/drone-company/index.html",
+        path: "/home/testuser/Desktop/sample-company/index.html",
         content: "<html></html>"
       },
       estimatedCostUsd: 0.08
@@ -618,7 +607,7 @@ test("evaluatePlannerActionValidation does not treat a plain open-browser previe
       type: "open_browser",
       description: "open the static file in the browser",
       params: {
-        url: "file:///home/testuser/Desktop/drone-company/index.html"
+        url: "file:///home/testuser/Desktop/sample-company/index.html"
       },
       estimatedCostUsd: 0.03
     }
@@ -637,8 +626,8 @@ test("fresh framework-app requests require a real scaffold-capable action instea
       type: "write_file",
       description: "write the React app source file",
       params: {
-        path: "/home/testuser/Desktop/ai-drone-city/src/App.jsx",
-        content: "export default function App() { return <main>AI Drone City</main>; }"
+        path: "/home/testuser/Desktop/ai-sample-city/src/App.jsx",
+        content: "export default function App() { return <main>Sample City</main>; }"
       },
       estimatedCostUsd: 0.08
     },
@@ -647,7 +636,7 @@ test("fresh framework-app requests require a real scaffold-capable action instea
       type: "open_browser",
       description: "open the preview",
       params: {
-        url: "file:///home/testuser/Desktop/ai-drone-city/dist/index.html"
+        url: "file:///home/testuser/Desktop/ai-sample-city/dist/index.html"
       },
       estimatedCostUsd: 0.03
     }
@@ -674,7 +663,7 @@ test("framework-app requests accept real toolchain actions for scaffold/build fl
       type: "shell_command",
       description: "scaffold the React app",
       params: {
-        command: "npm create vite@latest ai-drone-city -- --template react"
+        command: "npm create vite@latest ai-sample-city -- --template react"
       },
       estimatedCostUsd: 0.12
     },
@@ -692,7 +681,7 @@ test("framework-app requests accept real toolchain actions for scaffold/build fl
       type: "open_browser",
       description: "open the built preview",
       params: {
-        url: "file:///home/testuser/Desktop/ai-drone-city/dist/index.html"
+        url: "file:///home/testuser/Desktop/ai-sample-city/dist/index.html"
       },
       estimatedCostUsd: 0.03
     }
@@ -704,7 +693,7 @@ test("framework-app requests accept real toolchain actions for scaffold/build fl
 
 test("execution-style build detection accepts natural finish-the-project framework follow-ups", () => {
   const currentUserRequest =
-    "Finish the project end to end. Use the scaffolded Next.js app at `C:\\Users\\testuser\\AppData\\Local\\Temp\\agentbigbrain-framework-scaffold\\downtown-detroit-drones`, move or copy it to the desktop as a folder named `downtown-detroit-drones`, implement the landing page for Downtown Detroit Drones, then install/run it, verify it works, and open it in the browser from the desktop location.";
+    "Finish the project end to end. Use the scaffolded Next.js workspace named `sample-city-showcase` on my desktop, implement the landing page for Sample City Showcase, then install/run it, verify it works, and open it in the browser from the desktop location.";
 
   assert.equal(isExecutionStyleBuildRequest(currentUserRequest), true);
   assert.equal(requiresFrameworkAppScaffoldAction(currentUserRequest), true);
@@ -713,7 +702,7 @@ test("execution-style build detection accepts natural finish-the-project framewo
 
 test("framework workspace-preparation detection matches natural scaffold-only turns and excludes existing-app runs", () => {
   const workspacePrepRequest =
-    "Can you get a new Next.js landing-page workspace started on my desktop and call it Downtown Detroit Drones? Just get the workspace ready for edits with the dependencies installed. Do not run it or open anything yet.";
+    "Can you get a new Next.js landing-page workspace started on my desktop and call it Sample City Showcase? Just get the workspace ready for edits with the dependencies installed. Do not run it or open anything yet.";
   const existingRunRequest =
     "Please run my existing Next.js app on my Desktop and open it in the browser for me.";
 
@@ -725,7 +714,7 @@ test("framework workspace-preparation detection matches natural scaffold-only tu
 
 test("framework workspace-preparation requests suppress live preview and browser-open follow-up requirements", () => {
   const workspacePrepRequest =
-    "Can you get a new Next.js landing-page workspace started on my desktop and call it Downtown Detroit Drones? Just get the workspace ready for edits with the dependencies installed. Do not run it or open anything yet.";
+    "Can you get a new Next.js landing-page workspace started on my desktop and call it Sample City Showcase? Just get the workspace ready for edits with the dependencies installed. Do not run it or open anything yet.";
 
   assert.equal(isLiveVerificationBuildRequest(workspacePrepRequest), false);
   assert.equal(requiresPersistentBrowserOpenBuildRequest(workspacePrepRequest), false);
@@ -733,13 +722,13 @@ test("framework workspace-preparation requests suppress live preview and browser
 
 test("deterministic framework build-lane detection covers tracked build, preview, and edit turns but excludes close turns", () => {
   const buildTurnRequest =
-    "Great. Now turn that Downtown Detroit Drones workspace into the real landing page. Keep it calm and modern, avoid blue, put a small flying drone in the hero, use four main sections, add a clear call to action and a footer menu, then build it. Stop once the source and build proof are there, but do not run it or open anything yet.";
+    "Great. Now turn that Sample City Showcase workspace into the real landing page. Keep it calm and modern, avoid blue, put a small flying sample in the hero, use four main sections, add a clear call to action and a footer menu, then build it. Stop once the source and build proof are there, but do not run it or open anything yet.";
   const previewTurnRequest =
-    "Nice. Pull up the Downtown Detroit Drones landing page you just built so it is ready to view, but do not pop the browser open yet. Use a real localhost run on host 127.0.0.1 and port 54928, and keep that preview server running.";
+    "Nice. Pull up the Sample City Showcase landing page you just built so it is ready to view, but do not pop the browser open yet. Use a real localhost run on host 127.0.0.1 and port 54928, and keep that preview server running.";
   const editTurnRequest =
     'One tweak while it stays open: change the second section heading to "Steady local rollout" and make that section mention "Built for neighborhood teams." Keep the page running and refresh whatever needs to refresh so the live page shows the update.';
   const closeTurnRequest =
-    "Thanks. Please close the Downtown Detroit Drones landing page now, including the browser window and the linked localhost server.";
+    "Thanks. Please close the Sample City Showcase landing page now, including the browser window and the linked localhost server.";
 
   assert.equal(isDeterministicFrameworkBuildLaneRequest(buildTurnRequest), true);
   assert.equal(isDeterministicFrameworkBuildLaneRequest(previewTurnRequest), true);
@@ -747,23 +736,25 @@ test("deterministic framework build-lane detection covers tracked build, preview
   assert.equal(isDeterministicFrameworkBuildLaneRequest(closeTurnRequest), false);
 });
 
-test("preparePlannerActions rewrites temp-scaffold finalize commands into the bounded merge form", () => {
+test("preparePlannerActions leaves framework scaffold procedure selection to model-planned actions", () => {
+  const command = [
+    "$desktop = 'C:\\Users\\testuser\\Desktop'",
+    "Set-Location $desktop",
+    "npm create vite@latest 'sample-city' -- --template react",
+    "Set-Location (Join-Path $desktop 'Sample City')",
+    "npm install"
+  ].join("; ");
   const currentUserRequest =
-    "Finish the project end to end. Use the scaffolded Next.js app at `C:\\Users\\testuser\\AppData\\Local\\Temp\\agentbigbrain-framework-scaffold\\downtown-detroit-drones`, move or copy it to the desktop as a folder named `downtown-detroit-drones`, implement the landing page for Downtown Detroit Drones, then install/run it, verify it works, and open it in the browser from the desktop location.";
+    "Create a React landing page app on my Desktop in a folder called Sample City, open it in a browser, and leave it open for me.";
   const preparation = preparePlannerActions(
     {
-      plannerNotes: "finalize the scaffold and continue the run",
+      plannerNotes: "scaffold through model-selected shell actions",
       actions: [
         {
           type: "shell_command",
-          description: "Copy the scaffolded app to the desktop folder.",
+          description: "Scaffold the React app from the desktop root.",
           params: {
-            command:
-              "$src='C:\\Users\\testuser\\AppData\\Local\\Temp\\agentbigbrain-framework-scaffold\\downtown-detroit-drones'; " +
-              "$dst='C:\\Users\\testuser\\Desktop\\downtown-detroit-drones'; " +
-              "if (Test-Path $dst) { Remove-Item -Recurse -Force $dst }; " +
-              "New-Item -ItemType Directory -Path $dst -Force | Out-Null; " +
-              "Get-ChildItem -Force $src | ForEach-Object { Move-Item $_.FullName -Destination $dst -Force }"
+            command
           }
         }
       ]
@@ -776,18 +767,14 @@ test("preparePlannerActions rewrites temp-scaffold finalize commands into the bo
 
   assert.equal(preparation.actions.length, 1);
   assert.equal(preparation.actions[0]?.type, "shell_command");
-  assert.match(String(preparation.actions[0]?.params.command), /agentbigbrain-framework-scaffold/i);
-  assert.doesNotMatch(
-    String(preparation.actions[0]?.params.command),
-    /Remove-Item\s+-Recurse\s+-Force\s+\$dst/i
-  );
-  assert.match(String(preparation.actions[0]?.params.command), /Get-ChildItem -Force \$temp/i);
-  assert.equal(preparation.actions[0]?.params.cwd, "C:\\Users\\testuser\\Desktop");
+  assert.equal(preparation.actions[0]?.params.command, command);
+  assert.doesNotMatch(String(preparation.actions[0]?.params.command), /Move-Item/i);
+  assert.doesNotMatch(String(preparation.actions[0]?.params.command), /package\.json/i);
 });
 
 test('execution-style build detection accepts explicit Desktop paths phrased as in the "..." folder', () => {
   const currentUserRequest =
-    'Fix the React/Vite project in the "C:\\Users\\testuser\\OneDrive\\Desktop\\AI Drone City" folder, install dependencies if needed, build it, and open it in the browser.';
+    'Fix the React/Vite project in the "C:\\Users\\testuser\\OneDrive\\Desktop\\Sample City" folder, install dependencies if needed, build it, and open it in the browser.';
 
   assert.equal(isExecutionStyleBuildRequest(currentUserRequest), true);
   assert.equal(requiresFrameworkAppScaffoldAction(currentUserRequest), false);
@@ -835,19 +822,11 @@ test("explicit static html requests do not enter the framework scaffold lane whe
   assert.equal(isExecutionStyleBuildRequest(currentUserRequest), true);
   assert.equal(requiresFrameworkAppScaffoldAction(currentUserRequest), false);
   assert.equal(isDeterministicFrameworkBuildLaneRequest(currentUserRequest), false);
-  assert.deepEqual(
-    buildDeterministicFrameworkBuildFallbackActions(
-      currentUserRequest,
-      buildWindowsExecutionEnvironment(),
-      currentUserRequest
-    ),
-    []
-  );
 });
 
 test("static-html clarification context does not re-enter the framework scaffold lane just because the question mentioned Next.js or React", () => {
   const currentUserRequest = [
-    'Build me a landing page in the exact folder "C:\\Users\\testuser\\Desktop\\Solar Energy Landing Page" on my Desktop.',
+    'Build me a landing page in the exact folder "C:\\Users\\testuser\\Desktop\\Sample Service Landing Page" on my Desktop.',
     "",
     "[Clarification resolved: Would you like that built as plain HTML, or as a framework app like Next.js or React?]",
     "User selected: Plain HTML.",
@@ -868,7 +847,7 @@ test("resolved semantic route drives the static-html lane without re-reading lex
     "- routeId: static_html_build",
     "",
     "Current user request:",
-    'Build me a landing page in the exact folder "C:\\Users\\testuser\\Desktop\\Solar Energy Landing Page" on my Desktop.'
+    'Build me a landing page in the exact folder "C:\\Users\\testuser\\Desktop\\Sample Service Landing Page" on my Desktop.'
   ].join("\n");
 
   assert.equal(isExecutionStyleBuildRequest(currentUserRequest), true);
@@ -883,7 +862,7 @@ test("resolved semantic route drives the framework lane without re-reading frame
     "- routeId: framework_app_build",
     "",
     "Current user request:",
-    'Build me a landing page in the exact folder "C:\\Users\\testuser\\Desktop\\Solar Energy Landing Page" on my Desktop.'
+    'Build me a landing page in the exact folder "C:\\Users\\testuser\\Desktop\\Sample Service Landing Page" on my Desktop.'
   ].join("\n");
 
   assert.equal(isExecutionStyleBuildRequest(currentUserRequest), true);
@@ -894,7 +873,7 @@ test("resolved semantic route drives the framework lane without re-reading frame
 
 test("explicit static html requests that defer browser open stay non-live until a later open turn", () => {
   const currentUserRequest =
-    'Create a lightweight single-file HTML landing page in the exact folder "C:\\Users\\testuser\\Desktop\\Solar Energy Landing Page" on my Desktop. ' +
+    'Create a lightweight single-file HTML landing page in the exact folder "C:\\Users\\testuser\\Desktop\\Sample Service Landing Page" on my Desktop. ' +
     "Do not scaffold Next.js, React, or Vite. Write a single self-contained index.html file there. " +
     "Do not open it in the browser yet. Just write the plain HTML file and stop once the file is written.";
 
@@ -907,7 +886,7 @@ test("explicit static html requests that defer browser open stay non-live until 
 
 test("clarified static html requests that defer browser open do not require verify_browser just because the page should end ready for review", () => {
   const currentUserRequest = [
-    'Build me a landing page in the exact folder "C:\\Users\\testuser\\Desktop\\Solar Energy Landing Page" on my Desktop and keep going until the page is ready for review.',
+    'Build me a landing page in the exact folder "C:\\Users\\testuser\\Desktop\\Sample Service Landing Page" on my Desktop and keep going until the page is ready for review.',
     "",
     "[Clarification resolved: Would you like that built as plain HTML, or as a framework app like Next.js or React?]",
     "User selected: Plain HTML.",
@@ -921,63 +900,6 @@ test("clarified static html requests that defer browser open do not require veri
   assert.equal(isStaticHtmlExecutionStyleRequest(currentUserRequest), true);
   assert.equal(requiresBrowserVerificationBuildRequest(currentUserRequest), false);
   assert.equal(requiresPersistentBrowserOpenBuildRequest(currentUserRequest), false);
-});
-
-test("buildDeterministicStaticHtmlBuildFallbackActions honors clarified static-html lane markers and local-file open requests", () => {
-  const currentUserRequest = [
-    "Current tracked workspace in this chat:",
-    "- Root path: C:\\Users\\testuser\\Desktop\\Solar Energy Landing Page",
-    "",
-    "Current user request:",
-    "Build the landing page, open that exact local file in the browser, and leave it open for me to review.",
-    "",
-    "Execution lane: static_html_build."
-  ].join("\n");
-
-  const actions = buildDeterministicStaticHtmlBuildFallbackActions(
-    currentUserRequest,
-    buildWindowsExecutionEnvironment()
-  );
-
-  assert.equal(hasStaticHtmlBuildLaneMarker(currentUserRequest), true);
-  assert.deepEqual(
-    actions.map((action) => action.type),
-    ["write_file", "list_directory", "open_browser"]
-  );
-  assert.match(String(actions[0]?.params.path), /Solar Energy Landing Page[\\/]+index\.html$/i);
-  assert.match(String(actions[2]?.params.url), /^file:\/\/\//i);
-});
-
-test("buildDeterministicStaticHtmlBuildFallbackActions respects explicit do-not-open constraints on clarified static-html requests", () => {
-  const currentUserRequest = [
-    'Build me a landing page in the exact folder "C:\\Users\\testuser\\Desktop\\Solar Energy Landing Page" on my Desktop.',
-    "",
-    "[Clarification resolved: Would you like that built as plain HTML, or as a framework app like Next.js or React?]",
-    "User selected: Plain HTML.",
-    "Build format resolved: create a plain static HTML deliverable.",
-    "Execution lane: static_html_build.",
-    "Do not scaffold a framework app, package manager project, or preview server unless the user later asks for that explicitly.",
-    "Do not open it in the browser yet. Just write the plain HTML file and stop once the file is written."
-  ].join("\n");
-
-  const actions = buildDeterministicStaticHtmlBuildFallbackActions(
-    currentUserRequest,
-    buildWindowsExecutionEnvironment()
-  );
-
-  assert.deepEqual(
-    actions.map((action) => action.type),
-    ["write_file", "list_directory"]
-  );
-});
-
-test("buildDeterministicStaticHtmlBuildFallbackActions stays fail-closed for non-static framework requests", () => {
-  const actions = buildDeterministicStaticHtmlBuildFallbackActions(
-    "Build me a Next.js landing page on my Desktop and leave it open for review.",
-    buildWindowsExecutionEnvironment()
-  );
-
-  assert.deepEqual(actions, []);
 });
 
 test("preparePlannerActions rewrites oversized inline static preview listeners into a bounded local python server", () => {
@@ -1116,7 +1038,7 @@ test("preparePlannerActions strips redundant static HTML folder-creation shell s
 
 test("natural start-locally and open-in-browser phrasing still classifies as a live persistent framework request", () => {
   const currentUserRequest =
-    "Please create a Next.js landing page called Drone City on my Desktop. After you finish, start it locally, open it in my browser, and leave it up for me to view.";
+    "Please create a Next.js landing page called Sample City on my Desktop. After you finish, start it locally, open it in my browser, and leave it up for me to view.";
 
   assert.equal(isExecutionStyleBuildRequest(currentUserRequest), true);
   assert.equal(requiresFrameworkAppScaffoldAction(currentUserRequest), true);
@@ -1135,7 +1057,7 @@ test("fresh framework-app requests fail closed when scaffold logic keys reuse on
       description: "scaffold only when the directory is missing",
       params: {
         command:
-          "$desktop = 'C:\\Users\\testuser\\Desktop'; $project = Join-Path $desktop 'AI Drone City'; if (-not (Test-Path $project)) { npm create vite@latest \"$project\" -- --template react }"
+          "$desktop = 'C:\\Users\\testuser\\Desktop'; $project = Join-Path $desktop 'Sample City'; if (-not (Test-Path $project)) { npm create vite@latest \"$project\" -- --template react }"
       },
       estimatedCostUsd: 0.12
     },
@@ -1153,7 +1075,7 @@ test("fresh framework-app requests fail closed when scaffold logic keys reuse on
       type: "open_browser",
       description: "open the built preview",
       params: {
-        url: "file:///home/testuser/Desktop/ai-drone-city/dist/index.html"
+        url: "file:///home/testuser/Desktop/ai-sample-city/dist/index.html"
       },
       estimatedCostUsd: 0.03
     }
@@ -1172,7 +1094,7 @@ test("fresh framework-app requests fail closed when scaffold logic keys reuse on
 
 test("fresh framework-app requests fail closed when package.json-guarded scaffold recreates the named folder from its parent", () => {
   const currentUserRequest =
-    "Create a React landing page app on my Desktop in a folder called drone-city, open it in a browser, and leave it open for me.";
+    "Create a React landing page app on my Desktop in a folder called sample-city, open it in a browser, and leave it open for me.";
   const validation = evaluatePlannerActionValidation(currentUserRequest, null, [
     {
       id: "action_scaffold_named_folder_from_parent",
@@ -1181,10 +1103,10 @@ test("fresh framework-app requests fail closed when package.json-guarded scaffol
       params: {
         command: [
           "$desktop = 'C:\\Users\\testuser\\Desktop'",
-          "$app = Join-Path $desktop 'drone-city'",
+          "$app = Join-Path $desktop 'sample-city'",
           "if (!(Test-Path (Join-Path $app 'package.json'))) {",
           "  Set-Location $desktop",
-          "  npm create vite@latest 'drone-city' -- --template react",
+          "  npm create vite@latest 'sample-city' -- --template react",
           "}",
           "Set-Location $app",
           "npm install"
@@ -1197,7 +1119,7 @@ test("fresh framework-app requests fail closed when package.json-guarded scaffol
       type: "open_browser",
       description: "open the built preview",
       params: {
-        url: "file:///home/testuser/Desktop/ai-drone-city/dist/index.html"
+        url: "file:///home/testuser/Desktop/ai-sample-city/dist/index.html"
       },
       estimatedCostUsd: 0.03
     }
@@ -1216,7 +1138,7 @@ test("fresh framework-app requests fail closed when package.json-guarded scaffol
 
 test("fresh framework-app requests accept package-safe temp-slug scaffolds that merge into the exact named folder", () => {
   const assessment = assessExecutionStyleBuildPlan(
-    "Create a React app on my Desktop in a folder called AI Drone City and execute now.",
+    "Create a React app on my Desktop in a folder called Sample City and execute now.",
     [
       {
         id: "action_framework_safe_slug_merge",
@@ -1226,8 +1148,8 @@ test("fresh framework-app requests accept package-safe temp-slug scaffolds that 
         params: {
           command: [
             `$desktop = '${buildWindowsExecutionEnvironment().desktopPath}'`,
-            "$target = 'AI Drone City'",
-            "$slug = 'ai-drone-city'",
+            "$target = 'Sample City'",
+            "$slug = 'ai-sample-city'",
             "$targetPath = Join-Path $desktop $target",
             "$slugPath = Join-Path $desktop $slug",
             "if (!(Test-Path (Join-Path $targetPath 'package.json'))) {",
@@ -1257,7 +1179,7 @@ test("fresh framework-app requests accept package-safe temp-slug scaffolds that 
 
 test("fresh Next.js framework-app requests fail closed when create-next-app targets an unsafe exact folder name", () => {
   const currentUserRequest =
-    "Please create a Next.js landing page called Drone City on my Desktop, start it locally, open it in my browser, and leave it up for me to view.";
+    "Please create a Next.js landing page called Sample City on my Desktop, start it locally, open it in my browser, and leave it up for me to view.";
   const validation = evaluatePlannerActionValidation(currentUserRequest, null, [
     {
       id: "action_scaffold_named_folder_from_parent",
@@ -1266,7 +1188,7 @@ test("fresh Next.js framework-app requests fail closed when create-next-app targ
       params: {
         command: [
           "$desktop = 'C:\\Users\\testuser\\Desktop'",
-          "$project = Join-Path $desktop 'Drone City'",
+          "$project = Join-Path $desktop 'Sample City'",
           "if (!(Test-Path (Join-Path $project 'package.json'))) {",
           "  Set-Location $desktop",
           "  npx create-next-app@latest $project --ts --eslint --app --src-dir --use-npm --skip-install --yes",
@@ -1283,7 +1205,7 @@ test("fresh Next.js framework-app requests fail closed when create-next-app targ
       description: "Start the Next.js app.",
       params: {
         command: "npm run start -- --hostname 127.0.0.1 --port 3000",
-        cwd: "C:\\Users\\testuser\\Desktop\\Drone City"
+        cwd: "C:\\Users\\testuser\\Desktop\\Sample City"
       },
       estimatedCostUsd: 0.15
     },
@@ -1315,13 +1237,13 @@ test("fresh Next.js framework-app requests fail closed when create-next-app targ
   );
   assert.throws(
     () => assertPlannerActionValidation(validation, null),
-    /not a safe npm package name/i
+    /not package-safe/i
   );
 });
 
 test("fresh framework workspace-prep requests fail closed when the plan only creates an empty folder and then builds", () => {
   const currentUserRequest =
-    "Can you get a new Next.js landing-page workspace started on my desktop and call it Downtown Detroit Drones? Just get the workspace ready for edits with the dependencies installed. Do not run it or open anything yet.";
+    "Can you get a new Next.js landing-page workspace started on my desktop and call it Sample City Showcase? Just get the workspace ready for edits with the dependencies installed. Do not run it or open anything yet.";
   const validation = evaluatePlannerActionValidation(currentUserRequest, null, [
     {
       id: "action_create_empty_folder",
@@ -1330,7 +1252,7 @@ test("fresh framework workspace-prep requests fail closed when the plan only cre
       params: {
         command: [
           "$desktop = 'C:\\Users\\testuser\\Desktop'",
-          "$project = Join-Path $desktop 'Downtown Detroit Drones'",
+          "$project = Join-Path $desktop 'Sample City Showcase'",
           "if (!(Test-Path $project)) { New-Item -ItemType Directory -Path $project -Force | Out-Null }",
           "Set-Location $project"
         ].join("; ")
@@ -1359,13 +1281,20 @@ test("fresh framework workspace-prep requests fail closed when the plan only cre
   );
   assert.throws(
     () => assertPlannerActionValidation(validation, null),
-    /materialize package\.json/i
+    /prove package metadata/i
   );
 });
 
-test("preparePlannerActions rewrites named framework-app scaffolds that still build from a parent safe slug", () => {
+test("preparePlannerActions preserves named framework-app scaffolds without deterministic rewrite", () => {
+  const command = [
+    "$desktop = 'C:\\Users\\testuser\\Desktop'",
+    "Set-Location $desktop",
+    "npm create vite@latest 'sample-city' -- --template react",
+    "Set-Location (Join-Path $desktop 'Sample City')",
+    "npm install"
+  ].join("; ");
   const currentUserRequest =
-    "Create a React landing page app on my Desktop in a folder called Drone City, open it in a browser, and leave it open for me.";
+    "Create a React landing page app on my Desktop in a folder called Sample City, open it in a browser, and leave it open for me.";
   const preparation = preparePlannerActions(
     {
       plannerNotes: "scaffold through a safe slug from the desktop root",
@@ -1374,13 +1303,7 @@ test("preparePlannerActions rewrites named framework-app scaffolds that still bu
           type: "shell_command",
           description: "Scaffold the React app from the desktop root.",
           params: {
-            command: [
-              "$desktop = 'C:\\Users\\testuser\\Desktop'",
-              "Set-Location $desktop",
-              "npm create vite@latest 'drone-city' -- --template react",
-              "Set-Location (Join-Path $desktop 'Drone City')",
-              "npm install"
-            ].join("; ")
+            command
           }
         }
       ]
@@ -1400,15 +1323,25 @@ test("preparePlannerActions rewrites named framework-app scaffolds that still bu
   );
 
   assert.equal(preparation.actions.length, 1);
-  assert.match(String(preparation.actions[0].params.command), /Move-Item/i);
-  assert.match(String(preparation.actions[0].params.command), /Drone City/i);
-  assert.match(String(preparation.actions[0].params.command), /drone-city/i);
-  assert.match(String(preparation.actions[0].params.command), /package\.json/i);
+  assert.equal(preparation.actions[0].params.command, command);
+  assert.doesNotMatch(String(preparation.actions[0].params.command), /Move-Item/i);
+  assert.doesNotMatch(String(preparation.actions[0].params.command), /package\.json/i);
 });
 
-test("preparePlannerActions rewrites temp-slug framework merges that would collide with an existing exact folder", () => {
+test("preparePlannerActions preserves model-planned framework merge commands", () => {
+  const command = [
+    "$final = 'C:\\Users\\testuser\\Desktop\\Sample City'",
+    "$temp = Join-Path $env:TEMP 'sample-city'",
+    "Set-Location (Split-Path -Parent $temp)",
+    "npx create-next-app@latest 'sample-city' --ts --eslint --app --use-npm --yes --skip-install --no-tailwind",
+    "if (!(Test-Path $final)) { New-Item -ItemType Directory -Path $final -Force | Out-Null }",
+    "Get-ChildItem -Force $temp | ForEach-Object { Move-Item $_.FullName -Destination $final -Force }",
+    "Remove-Item $temp -Recurse -Force",
+    "Set-Location $final",
+    "npm install"
+  ].join("; ");
   const currentUserRequest =
-    "Please create a Next.js landing page called Drone City on my Desktop, start it locally, open it in my browser, and leave it up for me to view.";
+    "Please create a Next.js landing page called Sample City on my Desktop, start it locally, open it in my browser, and leave it up for me to view.";
   const preparation = preparePlannerActions(
     {
       plannerNotes: "scaffold through a temp slug and merge into the existing exact folder",
@@ -1417,18 +1350,7 @@ test("preparePlannerActions rewrites temp-slug framework merges that would colli
           type: "shell_command",
           description: "Scaffold the Next.js app through a temp slug and merge into the final folder.",
           params: {
-            command: [
-              "$final = 'C:\\Users\\testuser\\Desktop\\Drone City'",
-              "$temp = Join-Path (Join-Path $env:TEMP 'agentbigbrain-framework-scaffold') 'drone-city'",
-              "$tempRoot = Split-Path -Parent $temp",
-              "Set-Location $tempRoot",
-              "npx create-next-app@latest 'drone-city' --ts --eslint --app --use-npm --yes --skip-install --no-tailwind",
-              "if (!(Test-Path $final)) { New-Item -ItemType Directory -Path $final -Force | Out-Null }",
-              "Get-ChildItem -Force $temp | ForEach-Object { Move-Item $_.FullName -Destination $final -Force }",
-              "Remove-Item $temp -Recurse -Force",
-              "Set-Location $final",
-              "npm install"
-            ].join("; ")
+            command
           }
         }
       ]
@@ -1440,13 +1362,16 @@ test("preparePlannerActions rewrites temp-slug framework merges that would colli
   );
 
   assert.equal(preparation.actions.length, 1);
-  assert.match(String(preparation.actions[0].params.command), /package\.json/i);
-  assert.match(String(preparation.actions[0].params.command), /if \(Test-Path \(Join-Path \$final 'package\.json'\)\)/i);
+  assert.equal(preparation.actions[0].params.command, command);
+  assert.doesNotMatch(
+    String(preparation.actions[0].params.command),
+    /if \(Test-Path \(Join-Path \$final 'package\.json'\)\)/i
+  );
 });
 
 test("framework-app live-run requests fail closed when they use an ad-hoc preview server", () => {
   const currentUserRequest =
-    "Run the existing React landing page app in the \"C:\\Users\\testuser\\Desktop\\AI Drone City\" folder locally on localhost, open it in a browser, and leave it open for me.";
+    "Run the existing React landing page app in the \"C:\\Users\\testuser\\Desktop\\Sample City\" folder locally on localhost, open it in a browser, and leave it open for me.";
   const validation = evaluatePlannerActionValidation(currentUserRequest, null, [
     {
       id: "action_repair_workspace",
@@ -1463,7 +1388,7 @@ test("framework-app live-run requests fail closed when they use an ad-hoc previe
       description: "Serve the built dist folder.",
       params: {
         command:
-          "powershell -NoProfile -Command \"$ErrorActionPreference='Stop'; Set-Location 'C:\\Users\\testuser\\Desktop\\AI Drone City'; npx --yes serve -s dist -l 4173\""
+          "powershell -NoProfile -Command \"$ErrorActionPreference='Stop'; Set-Location 'C:\\Users\\testuser\\Desktop\\Sample City'; npx --yes serve -s dist -l 4173\""
       },
       estimatedCostUsd: 0.28
     },
@@ -1542,7 +1467,7 @@ test("execution-style build requests fail closed when shell commands exceed the 
 
 test("framework-app start_process plans fail closed when they use an ad-hoc preview server even without explicit localhost wording", () => {
   const currentUserRequest =
-    "Run the existing React landing page app in the \"C:\\Users\\testuser\\Desktop\\AI Drone City\" folder and leave it open for me in the browser.";
+    "Run the existing React landing page app in the \"C:\\Users\\testuser\\Desktop\\Sample City\" folder and leave it open for me in the browser.";
   const validation = evaluatePlannerActionValidation(currentUserRequest, null, [
     {
       id: "action_repair_workspace",
@@ -1550,7 +1475,7 @@ test("framework-app start_process plans fail closed when they use an ad-hoc prev
       description: "Repair the React workspace in place.",
       params: {
         command:
-          "Set-Location 'C:\\Users\\testuser\\Desktop\\AI Drone City'; npm install; npm run build"
+          "Set-Location 'C:\\Users\\testuser\\Desktop\\Sample City'; npm install; npm run build"
       },
       estimatedCostUsd: 0.18
     },
@@ -1560,7 +1485,7 @@ test("framework-app start_process plans fail closed when they use an ad-hoc prev
       description: "Serve the built dist folder.",
       params: {
         command:
-          "powershell -NoProfile -Command \"$ErrorActionPreference='Stop'; Set-Location 'C:\\Users\\testuser\\Desktop\\AI Drone City'; npx --yes serve -s dist -l 4173\""
+          "powershell -NoProfile -Command \"$ErrorActionPreference='Stop'; Set-Location 'C:\\Users\\testuser\\Desktop\\Sample City'; npx --yes serve -s dist -l 4173\""
       },
       estimatedCostUsd: 0.28
     },
@@ -1601,7 +1526,7 @@ test("evaluatePlannerActionValidation fails closed when live verification uses a
       type: "write_file",
       description: "write the landing page",
       params: {
-        path: "/home/testuser/Desktop/drone-company/index.html",
+        path: "/home/testuser/Desktop/sample-company/index.html",
         content: "<html></html>"
       },
       estimatedCostUsd: 0.08
@@ -1612,7 +1537,7 @@ test("evaluatePlannerActionValidation fails closed when live verification uses a
       description: "verify the homepage UI",
       params: {
         url: "http://localhost:8000",
-        expectedText: "Drone Company"
+        expectedText: "Sample Company"
       },
       estimatedCostUsd: 0.09
     },
@@ -1621,7 +1546,7 @@ test("evaluatePlannerActionValidation fails closed when live verification uses a
       type: "open_browser",
       description: "open the static file in the browser",
       params: {
-        url: "file:///home/testuser/Desktop/drone-company/index.html"
+        url: "file:///home/testuser/Desktop/sample-company/index.html"
       },
       estimatedCostUsd: 0.03
     }
@@ -1640,7 +1565,7 @@ test("evaluatePlannerActionValidation fails closed when my desktop request uses 
       type: "write_file",
       description: "write the landing page",
       params: {
-        path: "C:\\Users\\Public\\Desktop\\drone-company\\index.html",
+        path: "C:\\Users\\Public\\Desktop\\sample-company\\index.html",
         content: "<html></html>"
       },
       estimatedCostUsd: 0.08
@@ -1651,7 +1576,7 @@ test("evaluatePlannerActionValidation fails closed when my desktop request uses 
       description: "serve the landing page locally",
       params: {
         command: "python -m http.server 8000",
-        cwd: "C:\\Users\\Public\\Desktop\\drone-company"
+        cwd: "C:\\Users\\Public\\Desktop\\sample-company"
       },
       estimatedCostUsd: 0.08
     },
@@ -1709,9 +1634,23 @@ test("buildPlannerSystemPrompt includes static preview guidance for non-verifica
   assert.doesNotMatch(prompt, /Live-run verification intent detected/i);
 });
 
+test("static HTML browser-open requests stay on the local file preview path", () => {
+  const currentUserRequest =
+    "Build a plain static HTML landing page on my Desktop in a folder called sample-company-demo, open that static page in a browser, and leave it there for me.";
+
+  assert.equal(isStaticHtmlExecutionStyleRequest(currentUserRequest), true);
+  assert.equal(requiresPersistentBrowserOpenBuildRequest(currentUserRequest), true);
+  assert.equal(requiresBrowserVerificationBuildRequest(currentUserRequest), false);
+  assert.equal(isLiveVerificationBuildRequest(currentUserRequest), false);
+
+  const prompt = buildPlannerSystemPrompt(buildPromptInput(currentUserRequest));
+  assert.match(prompt, /prefer opening a static artifact directly with an absolute file:\/\/ URL/i);
+  assert.doesNotMatch(prompt, /Live-run verification intent detected/i);
+});
+
 test("local workspace organization requests are classified as executable local work", () => {
   const currentUserRequest =
-    "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.";
+    "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.";
 
   assert.equal(isExecutionStyleBuildRequest(currentUserRequest), false);
   assert.equal(isLocalWorkspaceOrganizationRequest(currentUserRequest), true);
@@ -1719,7 +1658,7 @@ test("local workspace organization requests are classified as executable local w
 
 test("implicit go-into phrasing still classifies as executable local organization work", () => {
   const currentUserRequest =
-    "Every folder with the name beginning in drone should go in drone-folder on my desktop.";
+    "Every folder with the name beginning in sample should go in sample-folder on my desktop.";
 
   assert.equal(isExecutionStyleBuildRequest(currentUserRequest), false);
   assert.equal(isLocalWorkspaceOrganizationRequest(currentUserRequest), true);
@@ -1727,7 +1666,7 @@ test("implicit go-into phrasing still classifies as executable local organizatio
 
 test("clean-up phrasing over my desktop still classifies as executable local organization work", () => {
   const currentUserRequest =
-    "One last real-world thing: please go ahead and clean up my desktop now by moving every folder there that starts with drone-company into drone-folder. I do mean all of them, so you do not need to ask again before doing it.";
+    "One last real-world thing: please go ahead and clean up my desktop now by moving every folder there that starts with sample-company into sample-folder. I do mean all of them, so you do not need to ask again before doing it.";
 
   assert.equal(isExecutionStyleBuildRequest(currentUserRequest), false);
   assert.equal(isLocalWorkspaceOrganizationRequest(currentUserRequest), true);
@@ -1736,21 +1675,21 @@ test("clean-up phrasing over my desktop still classifies as executable local org
 
 test("starting an existing React app from an explicit Desktop path still classifies as execution-style build work", () => {
   const currentUserRequest =
-    "In C:\\Users\\testuser\\Desktop\\AI Drone City, start the React app, wait for the local URL, and open it in the browser.";
+    "In C:\\Users\\testuser\\Desktop\\Sample City, start the React app, wait for the local URL, and open it in the browser.";
 
   assert.equal(isExecutionStyleBuildRequest(currentUserRequest), true);
 });
 
 test("repairing an existing React app in an explicit Desktop path still classifies as execution-style build work", () => {
   const currentUserRequest =
-    "Fix the React/Vite project so it runs correctly in C:\\Users\\testuser\\Desktop\\AI Drone City, then open it in the browser.";
+    "Fix the React/Vite project so it runs correctly in C:\\Users\\testuser\\Desktop\\Sample City, then open it in the browser.";
 
   assert.equal(isExecutionStyleBuildRequest(currentUserRequest), true);
 });
 
 test("repairing an existing React app via an explicit POSIX Desktop path still classifies as execution-style build work", () => {
   const currentUserRequest =
-    "Go to /home/testuser/Desktop/AI Drone City, inspect whether node_modules and dist exist, then run the missing setup steps: install dependencies with npm install, build with npm run build, and open the app in the browser.";
+    "Go to /home/testuser/Desktop/Sample City, inspect whether node_modules and dist exist, then run the missing setup steps: install dependencies with npm install, build with npm run build, and open the app in the browser.";
 
   assert.equal(isExecutionStyleBuildRequest(currentUserRequest), true);
 });
@@ -1759,7 +1698,7 @@ test("local workspace organization classification uses the active request from w
   const wrappedRequest = [
     "You are in an ongoing conversation with the same user.",
     "Recent conversation context (oldest to newest):",
-    "- user: Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+    "- user: Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
     "- assistant: I moved most of them already.",
     "",
     "Current user request:",
@@ -1774,7 +1713,7 @@ test("local workspace organization classification ignores trailing AgentFriend b
   const wrappedRequest = [
     "You are in an ongoing conversation with the same user.",
     "Recent conversation context (oldest to newest):",
-    "- user: Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+    "- user: Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
     "- assistant: I moved most of them already.",
     "",
     "Current user request:",
@@ -1796,7 +1735,7 @@ test("local workspace organization classification ignores trailing AgentFriend b
 test("buildPlannerSystemPrompt includes organization guidance for earlier project folders", () => {
   const prompt = buildPlannerSystemPrompt(
     buildPromptInput(
-      "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects."
+      "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects."
     )
   );
 
@@ -1816,13 +1755,13 @@ test("buildPlannerSystemPrompt reuses exact workspace-recovery ids from current 
     buildPromptInput(
       [
         "Workspace recovery context for this chat:",
-        "- Preferred workspace root: C:\\Users\\testuser\\Desktop\\drone-company",
+        "- Preferred workspace root: C:\\Users\\testuser\\Desktop\\sample-company",
         "- Preferred preview URL: http://127.0.0.1:4173/",
         "- Exact tracked browser session ids: browser_session:landing-page",
         "- Exact tracked preview lease ids: proc_preview_1",
         "",
         "Current user request:",
-        "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects."
+        "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects."
       ].join("\n"),
       {
         platform: "win32",
@@ -1837,7 +1776,7 @@ test("buildPlannerSystemPrompt reuses exact workspace-recovery ids from current 
   );
 
   assert.match(prompt, /workspace-recovery facts from the runtime/i);
-  assert.match(prompt, /Prefer the tracked workspace root C:\\Users\\testuser\\Desktop\\drone-company/i);
+  assert.match(prompt, /Prefer the tracked workspace root C:\\Users\\testuser\\Desktop\\sample-company/i);
   assert.match(prompt, /Prefer the tracked preview URL http:\/\/127\.0\.0\.1:4173\//i);
   assert.match(prompt, /prefer these exact tracked browser session ids: browser_session:landing-page/i);
   assert.match(prompt, /prefer these exact tracked preview lease ids: proc_preview_1/i);
@@ -1850,10 +1789,10 @@ test("buildPlannerSystemPrompt treats candidate-only workspace-recovery hints as
       [
         "Workspace recovery context for this chat:",
         "- No exact tracked workspace holder is currently known for this request.",
-        "- Candidate runtime-managed preview lease: leaseId=proc_preview_candidate; cwd=C:\\Users\\testuser\\Desktop\\drone-company; status=PROCESS_STILL_RUNNING; stopRequested=no",
+        "- Candidate runtime-managed preview lease: leaseId=proc_preview_candidate; cwd=C:\\Users\\testuser\\Desktop\\sample-company; status=PROCESS_STILL_RUNNING; stopRequested=no",
         "",
         "Current user request:",
-        "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects."
+        "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects."
       ].join("\n"),
       {
         platform: "win32",
@@ -1875,7 +1814,7 @@ test("buildPlannerSystemPrompt treats candidate-only workspace-recovery hints as
 test("buildPlannerSystemPrompt adds Windows PowerShell organization guidance for real move commands and source verification", () => {
   const prompt = buildPlannerSystemPrompt(
     buildPromptInput(
-      "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+      "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
       {
         platform: "win32",
         shellKind: "powershell",
@@ -1898,7 +1837,7 @@ test("buildPlannerSystemPrompt adds Windows PowerShell organization guidance for
 
 test("evaluatePlannerActionValidation repairs inspection-only organization plans into concrete execution", () => {
   const validation = evaluatePlannerActionValidation(
-    "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+    "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
     null,
     [
       {
@@ -1920,7 +1859,7 @@ test("evaluatePlannerActionValidation repairs inspection-only organization plans
 
 test("evaluatePlannerActionValidation fails closed when organization plan only creates the destination folder", () => {
   const currentUserRequest =
-    "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.";
+    "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.";
   const validation = evaluatePlannerActionValidation(
     currentUserRequest,
     null,
@@ -1931,7 +1870,7 @@ test("evaluatePlannerActionValidation fails closed when organization plan only c
         description: "Create the destination folder only.",
         params: {
           command:
-            "New-Item -ItemType Directory -Path 'C:\\Users\\testuser\\OneDrive\\Desktop\\drone-web-projects' -Force | Out-Null",
+            "New-Item -ItemType Directory -Path 'C:\\Users\\testuser\\OneDrive\\Desktop\\sample-web-projects' -Force | Out-Null",
           requestedShellKind: "powershell"
         },
         estimatedCostUsd: 0.08
@@ -1941,7 +1880,7 @@ test("evaluatePlannerActionValidation fails closed when organization plan only c
         type: "list_directory",
         description: "Inspect the destination folder.",
         params: {
-          path: "C:\\Users\\testuser\\OneDrive\\Desktop\\drone-web-projects"
+          path: "C:\\Users\\testuser\\OneDrive\\Desktop\\sample-web-projects"
         },
         estimatedCostUsd: 0.04
       }
@@ -1972,23 +1911,23 @@ test("evaluatePlannerActionValidation fails closed when organization plan only c
 
 test("evaluatePlannerActionValidation fails closed when the move selector also matches the named destination", () => {
   const currentUserRequest =
-    'Every folder with the name beginning in drone should go in "drone-folder" on my desktop.';
+    'Every folder with the name beginning in sample should go in "sample-folder" on my desktop.';
   const validation = evaluatePlannerActionValidation(
     currentUserRequest,
     null,
     [
       {
-        id: "action_move_drone_folders_without_exclusion",
+        id: "action_move_sample_folders_without_exclusion",
         type: "shell_command",
-        description: "Move every matching drone folder into the destination.",
+        description: "Move every matching sample folder into the destination.",
         params: {
           command: [
-            "$destination = 'C:\\Users\\testuser\\OneDrive\\Desktop\\drone-folder'",
+            "$destination = 'C:\\Users\\testuser\\OneDrive\\Desktop\\sample-folder'",
             "if (-not (Test-Path -LiteralPath $destination)) {",
             "  New-Item -ItemType Directory -Path $destination -Force | Out-Null",
             "}",
             "Get-ChildItem -Path 'C:\\Users\\testuser\\OneDrive\\Desktop' -Directory |",
-            "  Where-Object { $_.Name -like 'drone*' } |",
+            "  Where-Object { $_.Name -like 'sample*' } |",
             "  ForEach-Object {",
             "    Move-Item -LiteralPath $_.FullName -Destination $destination -Force -ErrorAction Stop",
             "  }"
@@ -2024,24 +1963,24 @@ test("evaluatePlannerActionValidation fails closed when the move selector also m
 
 test("evaluatePlannerActionValidation allows organization moves that explicitly exclude the destination", () => {
   const currentUserRequest =
-    'Every folder with the name beginning in drone should go in "drone-folder" on my desktop.';
+    'Every folder with the name beginning in sample should go in "sample-folder" on my desktop.';
   const validation = evaluatePlannerActionValidation(
     currentUserRequest,
     null,
     [
       {
-        id: "action_move_drone_folders_with_exclusion",
+        id: "action_move_sample_folders_with_exclusion",
         type: "shell_command",
-        description: "Move matching drone folders while excluding the destination itself.",
+        description: "Move matching sample folders while excluding the destination itself.",
         params: {
           command: [
-            "$destination = 'C:\\Users\\testuser\\OneDrive\\Desktop\\drone-folder'",
-            "$destinationName = 'drone-folder'",
+            "$destination = 'C:\\Users\\testuser\\OneDrive\\Desktop\\sample-folder'",
+            "$destinationName = 'sample-folder'",
             "if (-not (Test-Path -LiteralPath $destination)) {",
             "  New-Item -ItemType Directory -Path $destination -Force | Out-Null",
             "}",
             "Get-ChildItem -Path 'C:\\Users\\testuser\\OneDrive\\Desktop' -Directory |",
-            "  Where-Object { $_.Name -like 'drone*' -and $_.Name -ne $destinationName } |",
+            "  Where-Object { $_.Name -like 'sample*' -and $_.Name -ne $destinationName } |",
             "  ForEach-Object {",
             "    Move-Item -LiteralPath $_.FullName -Destination $destination -Force -ErrorAction Stop",
             "  }",
@@ -2049,7 +1988,7 @@ test("evaluatePlannerActionValidation allows organization moves that explicitly 
             "Get-ChildItem -LiteralPath $destination -Directory | Select-Object -ExpandProperty Name",
             "Write-Output 'ROOT_REMAINING_MATCHES:'",
             "Get-ChildItem -Path 'C:\\Users\\testuser\\OneDrive\\Desktop' -Directory |",
-            "  Where-Object { $_.Name -like 'drone*' -and $_.Name -ne $destinationName } |",
+            "  Where-Object { $_.Name -like 'sample*' -and $_.Name -ne $destinationName } |",
             "  Select-Object -ExpandProperty Name"
             ].join("\n"),
           requestedShellKind: "powershell"
@@ -2076,24 +2015,24 @@ test("evaluatePlannerActionValidation allows organization moves that explicitly 
 
 test("evaluatePlannerActionValidation fails closed when an organization move has no bounded proof", () => {
   const currentUserRequest =
-    'Every folder with the name beginning in drone should go in "drone-folder" on my desktop.';
+    'Every folder with the name beginning in sample should go in "sample-folder" on my desktop.';
   const validation = evaluatePlannerActionValidation(
     currentUserRequest,
     null,
     [
       {
-        id: "action_move_drone_folders_without_proof",
+        id: "action_move_sample_folders_without_proof",
         type: "shell_command",
-        description: "Move matching drone folders while excluding the destination itself.",
+        description: "Move matching sample folders while excluding the destination itself.",
         params: {
           command: [
-            "$destination = 'C:\\Users\\testuser\\OneDrive\\Desktop\\drone-folder'",
-            "$destinationName = 'drone-folder'",
+            "$destination = 'C:\\Users\\testuser\\OneDrive\\Desktop\\sample-folder'",
+            "$destinationName = 'sample-folder'",
             "if (-not (Test-Path -LiteralPath $destination)) {",
             "  New-Item -ItemType Directory -Path $destination -Force | Out-Null",
             "}",
             "Get-ChildItem -Path 'C:\\Users\\testuser\\OneDrive\\Desktop' -Directory |",
-            "  Where-Object { $_.Name -like 'drone*' -and $_.Name -ne $destinationName } |",
+            "  Where-Object { $_.Name -like 'sample*' -and $_.Name -ne $destinationName } |",
             "  ForEach-Object {",
             "    Move-Item -LiteralPath $_.FullName -Destination $destination -Force -ErrorAction Stop",
             "  }"
@@ -2125,7 +2064,7 @@ test("evaluatePlannerActionValidation fails closed when an organization move has
 
 test("evaluatePlannerActionValidation fails closed when post-shutdown retry still targets the destination itself", () => {
   const currentUserRequest = buildWorkspaceRecoveryPostShutdownRetryInput(
-    'Every folder with the name beginning in drone should go in "drone-folder" on my desktop.'
+    'Every folder with the name beginning in sample should go in "sample-folder" on my desktop.'
   );
   const validation = evaluatePlannerActionValidation(
     currentUserRequest,
@@ -2137,9 +2076,9 @@ test("evaluatePlannerActionValidation fails closed when post-shutdown retry stil
         description: "Retry the move without excluding the destination.",
         params: {
           command: [
-            "$destination = 'C:\\Users\\testuser\\OneDrive\\Desktop\\drone-folder'",
+            "$destination = 'C:\\Users\\testuser\\OneDrive\\Desktop\\sample-folder'",
             "Get-ChildItem -Path 'C:\\Users\\testuser\\OneDrive\\Desktop' -Directory |",
-            "  Where-Object { $_.Name -like 'drone*' } |",
+            "  Where-Object { $_.Name -like 'sample*' } |",
             "  ForEach-Object {",
             "    Move-Item -LiteralPath $_.FullName -Destination $destination -Force -ErrorAction Stop",
             "  }"
@@ -2171,7 +2110,7 @@ test("evaluatePlannerActionValidation fails closed when post-shutdown retry stil
 
 test("evaluatePlannerActionValidation fails closed when a Windows organization plan uses cmd shell moves", () => {
   const currentUserRequest =
-    "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.";
+    "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.";
   const validation = evaluatePlannerActionValidation(
     currentUserRequest,
     null,
@@ -2191,7 +2130,7 @@ test("evaluatePlannerActionValidation fails closed when a Windows organization p
         description: "Move matching folders with cmd syntax.",
         params: {
           command:
-            "if not exist \"C:\\Users\\testuser\\OneDrive\\Desktop\\drone-web-projects\" mkdir \"C:\\Users\\testuser\\OneDrive\\Desktop\\drone-web-projects\" && for /d %D in (\"C:\\Users\\testuser\\OneDrive\\Desktop\\drone-company*\") do move \"%D\" \"C:\\Users\\testuser\\OneDrive\\Desktop\\drone-web-projects\\\"",
+            "if not exist \"C:\\Users\\testuser\\OneDrive\\Desktop\\sample-web-projects\" mkdir \"C:\\Users\\testuser\\OneDrive\\Desktop\\sample-web-projects\" && for /d %D in (\"C:\\Users\\testuser\\OneDrive\\Desktop\\sample-company*\") do move \"%D\" \"C:\\Users\\testuser\\OneDrive\\Desktop\\sample-web-projects\\\"",
           cwd: "C:\\Users\\testuser\\OneDrive\\Desktop",
           workdir: "C:\\Users\\testuser\\OneDrive\\Desktop",
           requestedShellKind: "cmd"
@@ -2225,7 +2164,7 @@ test("evaluatePlannerActionValidation fails closed when a Windows organization p
 
 test("evaluatePlannerActionValidation fails closed when a Windows organization plan uses invalid PowerShell interpolation", () => {
   const currentUserRequest =
-    "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.";
+    "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.";
   const validation = evaluatePlannerActionValidation(
     currentUserRequest,
     null,
@@ -2245,7 +2184,7 @@ test("evaluatePlannerActionValidation fails closed when a Windows organization p
         description: "Move matching folders and record failures.",
         params: {
           command:
-            "$destination = 'C:\\Users\\testuser\\OneDrive\\Desktop\\drone-web-projects';\n$results = @();\nGet-ChildItem -Path 'C:\\Users\\testuser\\OneDrive\\Desktop' -Directory | Where-Object { $_.Name -like 'drone-company*' } | ForEach-Object {\n  $name = $_.Name;\n  try {\n    Move-Item -LiteralPath $_.FullName -Destination $destination -Force -ErrorAction Stop;\n    $results += \"moved:$name\";\n  } catch {\n    $results += \"failed:$name:$($_.Exception.Message)\";\n  }\n}\n$results -join \"`n\"",
+            "$destination = 'C:\\Users\\testuser\\OneDrive\\Desktop\\sample-web-projects';\n$results = @();\nGet-ChildItem -Path 'C:\\Users\\testuser\\OneDrive\\Desktop' -Directory | Where-Object { $_.Name -like 'sample-company*' } | ForEach-Object {\n  $name = $_.Name;\n  try {\n    Move-Item -LiteralPath $_.FullName -Destination $destination -Force -ErrorAction Stop;\n    $results += \"moved:$name\";\n  } catch {\n    $results += \"failed:$name:$($_.Exception.Message)\";\n  }\n}\n$results -join \"`n\"",
           cwd: "C:\\Users\\testuser\\OneDrive\\Desktop",
           workdir: "C:\\Users\\testuser\\OneDrive\\Desktop",
           requestedShellKind: "powershell"
@@ -2279,7 +2218,7 @@ test("evaluatePlannerActionValidation fails closed when a Windows organization p
 
 test("evaluatePlannerActionValidation fails closed when organization recovery omits the actual move step", () => {
   const currentUserRequest =
-    "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.";
+    "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.";
   const validation = evaluatePlannerActionValidation(
     currentUserRequest,
     null,
@@ -2289,7 +2228,7 @@ test("evaluatePlannerActionValidation fails closed when organization recovery om
         type: "inspect_workspace_resources",
         description: "Inspect the tracked workspace holders first.",
         params: {
-          rootPath: "C:\\Users\\testuser\\OneDrive\\Desktop\\drone-company"
+          rootPath: "C:\\Users\\testuser\\OneDrive\\Desktop\\sample-company"
         },
         estimatedCostUsd: 0.03
       },
@@ -2338,7 +2277,7 @@ test("evaluatePlannerActionValidation fails closed when organization recovery om
 
 test("evaluatePlannerActionValidation fails closed when a plan uses broad process-name shutdown for recovery", () => {
   const currentUserRequest =
-    "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.";
+    "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.";
   const validation = evaluatePlannerActionValidation(
     currentUserRequest,
     null,
@@ -2357,7 +2296,7 @@ test("evaluatePlannerActionValidation fails closed when a plan uses broad proces
         type: "shell_command",
         description: "Move the matching folders afterward.",
         params: {
-          command: "Move-Item \"C:\\Users\\testuser\\OneDrive\\Desktop\\drone-company*\" \"C:\\Users\\testuser\\OneDrive\\Desktop\\drone-web-projects\\\""
+          command: "Move-Item \"C:\\Users\\testuser\\OneDrive\\Desktop\\sample-company*\" \"C:\\Users\\testuser\\OneDrive\\Desktop\\sample-web-projects\\\""
         },
         estimatedCostUsd: 0.12
       }
@@ -2390,10 +2329,10 @@ test("evaluatePlannerActionValidation fails closed when candidate-only organizat
   const currentUserRequest = [
     "Workspace recovery context for this chat:",
     "- No exact tracked workspace holder is currently known for this request.",
-    "- Candidate runtime-managed preview lease: leaseId=proc_preview_candidate; cwd=C:\\Users\\testuser\\Desktop\\drone-company; status=PROCESS_STILL_RUNNING; stopRequested=no",
+    "- Candidate runtime-managed preview lease: leaseId=proc_preview_candidate; cwd=C:\\Users\\testuser\\Desktop\\sample-company; status=PROCESS_STILL_RUNNING; stopRequested=no",
     "",
     "Current user request:",
-    "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects."
+    "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects."
   ].join("\n");
 
   const validation = evaluatePlannerActionValidation(
@@ -2431,7 +2370,7 @@ test("evaluatePlannerActionValidation allows exact pid shutdown after targeted r
     "",
     "[WORKSPACE_RECOVERY_STOP_EXACT]",
     "A folder move was blocked because one high-confidence local holder still owns the target folders. Stop only this exact confirmed local holder if it is still active: pid=8840 (Code (pid 8840)).",
-    "Verify it stopped, then retry this original folder-organization goal: \"Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.\"."
+    "Verify it stopped, then retry this original folder-organization goal: \"Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.\"."
   ].join("\n");
 
   const validation = evaluatePlannerActionValidation(
@@ -2453,9 +2392,9 @@ test("evaluatePlannerActionValidation allows exact pid shutdown after targeted r
         description: "Retry the scoped folder move.",
         params: {
           command:
-            "$destination = 'C:\\Users\\testuser\\Desktop\\drone-web-projects'; " +
+            "$destination = 'C:\\Users\\testuser\\Desktop\\sample-web-projects'; " +
             "Get-ChildItem -Path 'C:\\Users\\testuser\\Desktop' -Directory | " +
-            "Where-Object { $_.Name -like 'drone-company*' -and $_.Name -ne 'drone-web-projects' } | " +
+            "Where-Object { $_.Name -like 'sample-company*' -and $_.Name -ne 'sample-web-projects' } | " +
             "Move-Item -Destination $destination -Force"
         },
         estimatedCostUsd: 0.08
@@ -2469,7 +2408,7 @@ test("evaluatePlannerActionValidation allows exact pid shutdown after targeted r
 
 test("evaluatePlannerActionValidation allows inspect-only runtime inspection for autonomous workspace recovery", () => {
   const currentUserRequest = buildWorkspaceRecoveryNextUserInput(
-    'Every folder with the name beginning in drone should go in "drone-folder" on my desktop.',
+    'Every folder with the name beginning in sample should go in "sample-folder" on my desktop.',
     buildWorkspaceRecoverySignalFixture({
       recommendedAction: "inspect_first",
       matchedRuleId: "post_execution_locked_folder_recovery",
@@ -2488,7 +2427,7 @@ test("evaluatePlannerActionValidation allows inspect-only runtime inspection for
         type: "inspect_workspace_resources",
         description: "Inspect runtime-owned workspace resources first.",
         params: {
-          rootPath: "C:\\Users\\testuser\\Desktop\\drone-company"
+          rootPath: "C:\\Users\\testuser\\Desktop\\sample-company"
         },
         estimatedCostUsd: 0.04
       }
@@ -2502,7 +2441,7 @@ test("evaluatePlannerActionValidation allows inspect-only runtime inspection for
 
 test("evaluatePlannerActionValidation fails closed when autonomous workspace recovery uses handle/openfiles shell inspection", () => {
   const currentUserRequest = buildWorkspaceRecoveryNextUserInput(
-    'Every folder with the name beginning in drone should go in "drone-folder" on my desktop.',
+    'Every folder with the name beginning in sample should go in "sample-folder" on my desktop.',
     buildWorkspaceRecoverySignalFixture({
       recommendedAction: "inspect_first",
       matchedRuleId: "post_execution_locked_folder_recovery",
@@ -2522,7 +2461,7 @@ test("evaluatePlannerActionValidation fails closed when autonomous workspace rec
         description: "Use handle.exe and openfiles to inspect locks.",
         params: {
           command:
-            "$handleCmd=(Get-Command handle64.exe,handle.exe -ErrorAction SilentlyContinue | Select-Object -First 1); if($handleCmd){ & $handleCmd.Source 'C:\\Users\\testuser\\Desktop\\drone-company' } else { openfiles /query /fo csv /v }"
+            "$handleCmd=(Get-Command handle64.exe,handle.exe -ErrorAction SilentlyContinue | Select-Object -First 1); if($handleCmd){ & $handleCmd.Source 'C:\\Users\\testuser\\Desktop\\sample-company' } else { openfiles /query /fo csv /v }"
         },
         estimatedCostUsd: 0.08
       }
@@ -2543,7 +2482,7 @@ test("evaluatePlannerActionValidation fails closed when autonomous workspace rec
 
 test("evaluatePlannerActionValidation allows exact-holder recovery to stop the tracked holder before retrying the move", () => {
   const currentUserRequest = buildWorkspaceRecoveryNextUserInput(
-    'Every folder with the name beginning in drone should go in "drone-folder" on my desktop.',
+    'Every folder with the name beginning in sample should go in "sample-folder" on my desktop.',
     buildWorkspaceRecoverySignalFixture({
       recommendedAction: "stop_exact_tracked_holders",
       matchedRuleId: "post_execution_exact_holder_folder_recovery",
@@ -2577,7 +2516,7 @@ test("evaluatePlannerActionValidation allows exact-holder recovery to stop the t
 
 test("evaluatePlannerActionValidation fails closed when post-shutdown workspace recovery omits the move retry", () => {
   const currentUserRequest = buildWorkspaceRecoveryPostShutdownRetryInput(
-    'Every folder with the name beginning in drone should go in "drone-folder" on my desktop.'
+    'Every folder with the name beginning in sample should go in "sample-folder" on my desktop.'
   );
   const validation = evaluatePlannerActionValidation(
     currentUserRequest,
@@ -2605,7 +2544,7 @@ test("evaluatePlannerActionValidation fails closed when post-shutdown workspace 
 
 test("evaluatePlannerActionValidation fails closed when post-shutdown workspace recovery omits bounded move proof", () => {
   const currentUserRequest = buildWorkspaceRecoveryPostShutdownRetryInput(
-    'Every folder with the name beginning in drone should go in "drone-folder" on my desktop.'
+    'Every folder with the name beginning in sample should go in "sample-folder" on my desktop.'
   );
   const validation = evaluatePlannerActionValidation(
     currentUserRequest,
@@ -2617,13 +2556,13 @@ test("evaluatePlannerActionValidation fails closed when post-shutdown workspace 
         description: "Retry the move after shutdown without verifying the result.",
         params: {
           command: [
-            "$destination = 'C:\\Users\\testuser\\OneDrive\\Desktop\\drone-folder'",
-            "$destinationName = 'drone-folder'",
+            "$destination = 'C:\\Users\\testuser\\OneDrive\\Desktop\\sample-folder'",
+            "$destinationName = 'sample-folder'",
             "if (-not (Test-Path -LiteralPath $destination)) {",
             "  New-Item -ItemType Directory -Path $destination -Force | Out-Null",
             "}",
             "Get-ChildItem -Path 'C:\\Users\\testuser\\OneDrive\\Desktop' -Directory |",
-            "  Where-Object { $_.Name -like 'drone*' -and $_.Name -ne $destinationName } |",
+            "  Where-Object { $_.Name -like 'sample*' -and $_.Name -ne $destinationName } |",
             "  ForEach-Object {",
             "    Move-Item -LiteralPath $_.FullName -Destination $destination -Force -ErrorAction Stop",
             "  }"
@@ -2693,10 +2632,10 @@ test("evaluatePlannerActionValidation fails closed when a linked preview stack i
   const currentUserRequest = "Close the landing page so we can work on something else.";
   const fullExecutionInput = [
     "Tracked browser sessions:",
-    "- Browser window: sessionId=browser_session:landing-page; url=http://127.0.0.1:8125/; status=open; visibility=visible; controller=playwright_managed; control=available; linkedPreviewLease=proc_preview_1; linkedPreviewCwd=C:\\Users\\testuser\\Desktop\\drone-company",
+    "- Browser window: sessionId=browser_session:landing-page; url=http://127.0.0.1:8125/; status=open; visibility=visible; controller=playwright_managed; control=available; linkedPreviewLease=proc_preview_1; linkedPreviewCwd=C:\\Users\\testuser\\Desktop\\sample-company",
     "",
     "Natural browser-session follow-up:",
-    "- Linked preview process: leaseId=proc_preview_1; cwd=C:\\Users\\testuser\\Desktop\\drone-company",
+    "- Linked preview process: leaseId=proc_preview_1; cwd=C:\\Users\\testuser\\Desktop\\sample-company",
     "",
     "Current user request:",
     currentUserRequest
@@ -2782,8 +2721,8 @@ test("evaluatePlannerActionValidation allows tracked artifact-edit previews when
   const fullExecutionInput = [
     "You are in an ongoing conversation with the same user.",
     "Natural artifact-edit follow-up:",
-    "- Preferred primary artifact: C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
-    "- Visible preview already exists: file:///C:/Users/testuser/Desktop/drone-company/index.html; keep the preview aligned with the edited artifact when practical.",
+    "- Preferred primary artifact: C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
+    "- Visible preview already exists: file:///C:/Users/testuser/Desktop/sample-company/index.html; keep the preview aligned with the edited artifact when practical.",
     "",
     "Current user request:",
     "Change the hero image to a slider instead of the landing page."
@@ -2798,7 +2737,7 @@ test("evaluatePlannerActionValidation allows tracked artifact-edit previews when
         type: "write_file",
         description: "Update the tracked landing page artifact.",
         params: {
-          path: "C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
+          path: "C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
           content: "<section class=\"hero-slider\">updated</section>"
         },
         estimatedCostUsd: 0.08
@@ -2808,7 +2747,7 @@ test("evaluatePlannerActionValidation allows tracked artifact-edit previews when
         type: "open_browser",
         description: "Reopen the same local preview.",
         params: {
-          url: "file:///C:/Users/testuser/Desktop/drone-company/index.html"
+          url: "file:///C:/Users/testuser/Desktop/sample-company/index.html"
         },
         estimatedCostUsd: 0.03
       }
@@ -2826,9 +2765,9 @@ test("evaluatePlannerActionValidation fails closed when a static-artifact open f
     "You are in an ongoing conversation with the same user.",
     "Existing local static-artifact open follow-up:",
     "- The user is asking to open an already-built local artifact, not to rebuild, scaffold, or rewrite the project.",
-    "- Preferred artifact path: C:\\Users\\testuser\\Desktop\\Solar Energy Landing Page\\index.html",
+    "- Preferred artifact path: C:\\Users\\testuser\\Desktop\\Sample Service Landing Page\\index.html",
     "- Preferred browser target: file:///C:/Users/testuser/Desktop/Solar%20Energy%20Landing%20Page/index.html",
-    "- Preferred root path for browser ownership: C:\\Users\\testuser\\Desktop\\Solar Energy Landing Page",
+    "- Preferred root path for browser ownership: C:\\Users\\testuser\\Desktop\\Sample Service Landing Page",
     "",
     "Current user request:",
     "Open the exact local static file directly in the browser and do not start a dev server."
@@ -2843,7 +2782,7 @@ test("evaluatePlannerActionValidation fails closed when a static-artifact open f
         type: "write_file",
         description: "Rewrite framework files before opening.",
         params: {
-          path: "C:\\Users\\testuser\\Desktop\\Solar Energy Landing Page\\app\\page.js",
+          path: "C:\\Users\\testuser\\Desktop\\Sample Service Landing Page\\app\\page.js",
           content: "export default function Page() { return null; }\n"
         },
         estimatedCostUsd: 0.08
@@ -2854,7 +2793,7 @@ test("evaluatePlannerActionValidation fails closed when a static-artifact open f
         description: "Open the file preview.",
         params: {
           url: "file:///C:/Users/testuser/Desktop/Solar%20Energy%20Landing%20Page/index.html",
-          rootPath: "C:\\Users\\testuser\\Desktop\\Solar Energy Landing Page"
+          rootPath: "C:\\Users\\testuser\\Desktop\\Sample Service Landing Page"
         },
         estimatedCostUsd: 0.03
       }
@@ -2874,9 +2813,9 @@ test("evaluatePlannerActionValidation allows an exact static-artifact open follo
     "You are in an ongoing conversation with the same user.",
     "Existing local static-artifact open follow-up:",
     "- The user is asking to open an already-built local artifact, not to rebuild, scaffold, or rewrite the project.",
-    "- Preferred artifact path: C:\\Users\\testuser\\Desktop\\Solar Energy Landing Page\\index.html",
+    "- Preferred artifact path: C:\\Users\\testuser\\Desktop\\Sample Service Landing Page\\index.html",
     "- Preferred browser target: file:///C:/Users/testuser/Desktop/Solar%20Energy%20Landing%20Page/index.html",
-    "- Preferred root path for browser ownership: C:\\Users\\testuser\\Desktop\\Solar Energy Landing Page",
+    "- Preferred root path for browser ownership: C:\\Users\\testuser\\Desktop\\Sample Service Landing Page",
     "",
     "Current user request:",
     "Open the exact local static file directly in the browser and do not start a dev server."
@@ -2892,7 +2831,7 @@ test("evaluatePlannerActionValidation allows an exact static-artifact open follo
         description: "Open the exact local file preview.",
         params: {
           url: "file:///C:/Users/testuser/Desktop/Solar%20Energy%20Landing%20Page/index.html",
-          rootPath: "C:\\Users\\testuser\\Desktop\\Solar Energy Landing Page"
+          rootPath: "C:\\Users\\testuser\\Desktop\\Sample Service Landing Page"
         },
         estimatedCostUsd: 0.03
       }
@@ -2910,9 +2849,9 @@ test("buildDeterministicExplicitRuntimeActionFallbackActions reopens the preferr
     "You are in an ongoing conversation with the same user.",
     "Existing local static-artifact open follow-up:",
     "- The user is asking to open an already-built local artifact, not to rebuild, scaffold, or rewrite the project.",
-    "- Preferred artifact path: C:\\Users\\testuser\\Desktop\\Solar Energy Landing Page\\index.html",
+    "- Preferred artifact path: C:\\Users\\testuser\\Desktop\\Sample Service Landing Page\\index.html",
     "- Preferred browser target: file:///C:/Users/testuser/Desktop/Solar%20Energy%20Landing%20Page/index.html",
-    "- Preferred root path for browser ownership: C:\\Users\\testuser\\Desktop\\Solar Energy Landing Page",
+    "- Preferred root path for browser ownership: C:\\Users\\testuser\\Desktop\\Sample Service Landing Page",
     "",
     "Current user request:",
     "Open the exact local static file directly in the browser and do not start a dev server."
@@ -2934,7 +2873,7 @@ test("buildDeterministicExplicitRuntimeActionFallbackActions reopens the preferr
   );
   assert.equal(
     actions[0]?.params.rootPath,
-    "C:\\Users\\testuser\\Desktop\\Solar Energy Landing Page"
+    "C:\\Users\\testuser\\Desktop\\Sample Service Landing Page"
   );
 });
 
@@ -2942,11 +2881,11 @@ test("evaluatePlannerActionValidation does not require folder-move steps for wra
   const wrappedRequest = [
     "You are in an ongoing conversation with the same user.",
     "Recent conversation context (oldest to newest):",
-    "- user: Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+    "- user: Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
     "- assistant: I moved most of them already.",
     "",
     "Natural artifact-edit follow-up:",
-    "- Preferred primary artifact: C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
+    "- Preferred primary artifact: C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
     "",
     "Current user request:",
     "Change the hero image to a slider instead of the landing page."
@@ -2961,7 +2900,7 @@ test("evaluatePlannerActionValidation does not require folder-move steps for wra
         type: "write_file",
         description: "Update the tracked landing page artifact.",
         params: {
-          path: "C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
+          path: "C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
           content: "<section class=\"hero-slider\">updated</section>"
         },
         estimatedCostUsd: 0.08
@@ -2993,7 +2932,7 @@ test("buildPlannerRepairSystemPrompt explains linked preview shutdown repairs", 
 test("buildPlannerRepairSystemPrompt explains Windows organization shell repairs", () => {
   const prompt = buildPlannerRepairSystemPrompt({
     ...buildPromptInput(
-      "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+      "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
       {
         platform: "win32",
         shellKind: "powershell",
@@ -3019,7 +2958,7 @@ test("buildPlannerRepairSystemPrompt explains Windows organization shell repairs
 test("buildPlannerRepairSystemPrompt explains missing organization move repairs", () => {
   const prompt = buildPlannerRepairSystemPrompt({
     ...buildPromptInput(
-      "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+      "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
       {
         platform: "win32",
         shellKind: "powershell",
@@ -3045,7 +2984,7 @@ test("buildPlannerRepairSystemPrompt explains missing organization move repairs"
 test("buildPlannerRepairSystemPrompt explains destination self-match organization repairs", () => {
   const prompt = buildPlannerRepairSystemPrompt({
     ...buildPromptInput(
-      'Every folder with the name beginning in drone should go in "drone-folder" on my desktop.',
+      'Every folder with the name beginning in sample should go in "sample-folder" on my desktop.',
       {
         platform: "win32",
         shellKind: "powershell",
@@ -3057,7 +2996,7 @@ test("buildPlannerRepairSystemPrompt explains destination self-match organizatio
       }
     ),
     previousOutput: {
-      plannerNotes: "move every drone* folder into drone-folder",
+      plannerNotes: "move every sample* folder into sample-folder",
       actions: []
     },
     repairReason:
@@ -3072,7 +3011,7 @@ test("buildPlannerRepairSystemPrompt explains destination self-match organizatio
 test("buildPlannerRepairSystemPrompt explains bounded proof repairs for organization retries", () => {
   const prompt = buildPlannerRepairSystemPrompt({
     ...buildPromptInput(
-      'Every folder with the name beginning in drone should go in "drone-folder" on my desktop.',
+      'Every folder with the name beginning in sample should go in "sample-folder" on my desktop.',
       {
         platform: "win32",
         shellKind: "powershell",
@@ -3098,7 +3037,7 @@ test("buildPlannerRepairSystemPrompt explains bounded proof repairs for organiza
 test("buildPlannerRepairSystemPrompt explains Windows organization interpolation repairs", () => {
   const prompt = buildPlannerRepairSystemPrompt({
     ...buildPromptInput(
-      "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+      "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
       {
         platform: "win32",
         shellKind: "powershell",
@@ -3125,7 +3064,7 @@ test("buildPlannerRepairSystemPrompt explains Windows organization interpolation
 test("buildPlannerRepairSystemPrompt explains broad shutdown repairs", () => {
   const prompt = buildPlannerRepairSystemPrompt({
     ...buildPromptInput(
-      "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+      "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
       {
         platform: "win32",
         shellKind: "powershell",
@@ -3162,8 +3101,8 @@ test("buildPlannerRepairSystemPrompt explains framework app scaffold repairs", (
   });
 
   assert.match(prompt, /fresh framework-app request like an already-ready workspace/i);
-  assert.match(prompt, /real scaffold or bootstrap step that can materialize package\.json/i);
-  assert.match(prompt, /Generic npm install, npm run build, npm run dev, or npm run start commands do not satisfy this/i);
+  assert.match(prompt, /real materializing step that can prove package metadata exists/i);
+  assert.match(prompt, /Generic lifecycle commands do not satisfy this/i);
 });
 
 test("buildPlannerRepairSystemPrompt explains framework app artifact-check repairs", () => {
@@ -3187,7 +3126,7 @@ test("buildPlannerRepairSystemPrompt explains framework app artifact-check repai
 test("buildPlannerRepairSystemPrompt explains framework app in-place scaffold repairs", () => {
   const prompt = buildPlannerRepairSystemPrompt({
     ...buildPromptInput(
-      "Create a React landing page app on my Desktop in a folder called AI Drone City, open it in a browser, and leave it open for me."
+      "Create a React landing page app on my Desktop in a folder called Sample City, open it in a browser, and leave it open for me."
     ),
     previousOutput: {
       plannerNotes: "recreate named folder from parent",
@@ -3198,8 +3137,8 @@ test("buildPlannerRepairSystemPrompt explains framework app in-place scaffold re
   });
 
   assert.match(prompt, /checked the exact folder for package\.json/i);
-  assert.match(prompt, /scaffolding or repairing in place inside the exact requested folder/i);
-  assert.match(prompt, /using '\.' as the scaffold target|using '.' as the scaffold target/i);
+  assert.match(prompt, /exact requested folder the workspace under proof/i);
+  assert.match(prompt, /add or repair the missing metadata in that workspace/i);
 });
 
 test("buildPlannerRepairSystemPrompt explains framework app native preview repairs", () => {
@@ -3216,8 +3155,8 @@ test("buildPlannerRepairSystemPrompt explains framework app native preview repai
   });
 
   assert.match(prompt, /used an ad-hoc preview server/i);
-  assert.match(prompt, /workspace-native preview\/runtime command/i);
-  assert.match(prompt, /npm run preview, npm run dev, vite preview, or vite dev/i);
+  assert.match(prompt, /workspace's declared preview or runtime entrypoint/i);
+  assert.doesNotMatch(prompt, /npm run preview, npm run dev, vite preview, or vite dev/i);
 });
 
 test("buildPlannerRepairSystemPrompt explains shell command budget repairs", () => {
@@ -3235,7 +3174,7 @@ test("buildPlannerRepairSystemPrompt explains shell command budget repairs", () 
 
   assert.match(prompt, /exceeded the runtime's command-length budget/i);
   assert.match(prompt, /splitting large inline file creation into separate write_file actions/i);
-  assert.match(prompt, /separate npm install, npm run build, and npm run preview commands/i);
+  assert.match(prompt, /keeping shell or toolchain steps short and bounded/i);
 });
 
 test("buildPlannerRepairSystemPrompt keeps exact workspace-recovery ids visible during repair", () => {
@@ -3243,11 +3182,11 @@ test("buildPlannerRepairSystemPrompt keeps exact workspace-recovery ids visible 
     ...buildPromptInput(
       [
         "Workspace recovery context for this chat:",
-        "- Preferred workspace root: C:\\Users\\testuser\\Desktop\\drone-company",
+        "- Preferred workspace root: C:\\Users\\testuser\\Desktop\\sample-company",
         "- Exact tracked preview lease ids: proc_preview_1",
         "",
         "Current user request:",
-        "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects."
+        "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects."
       ].join("\n"),
       {
         platform: "win32",
@@ -3267,7 +3206,7 @@ test("buildPlannerRepairSystemPrompt keeps exact workspace-recovery ids visible 
   });
 
   assert.match(prompt, /workspace-recovery facts from the runtime/i);
-  assert.match(prompt, /Prefer the tracked workspace root C:\\Users\\testuser\\Desktop\\drone-company/i);
+  assert.match(prompt, /Prefer the tracked workspace root C:\\Users\\testuser\\Desktop\\sample-company/i);
   assert.match(prompt, /prefer these exact tracked preview lease ids: proc_preview_1/i);
 });
 
@@ -3277,10 +3216,10 @@ test("buildPlannerRepairSystemPrompt explains candidate-only holder repairs", ()
       [
         "Workspace recovery context for this chat:",
         "- No exact tracked workspace holder is currently known for this request.",
-        "- Candidate runtime-managed preview lease: leaseId=proc_preview_candidate; cwd=C:\\Users\\testuser\\Desktop\\drone-company; status=PROCESS_STILL_RUNNING; stopRequested=no",
+        "- Candidate runtime-managed preview lease: leaseId=proc_preview_candidate; cwd=C:\\Users\\testuser\\Desktop\\sample-company; status=PROCESS_STILL_RUNNING; stopRequested=no",
         "",
         "Current user request:",
-        "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects."
+        "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects."
       ].join("\n"),
       {
         platform: "win32",
@@ -3308,7 +3247,7 @@ test("buildPlannerRepairSystemPrompt explains runtime inspection repairs for aut
   const prompt = buildPlannerRepairSystemPrompt({
     ...buildPromptInput(
       buildWorkspaceRecoveryNextUserInput(
-        'Every folder with the name beginning in drone should go in "drone-folder" on my desktop.',
+        'Every folder with the name beginning in sample should go in "sample-folder" on my desktop.',
         buildWorkspaceRecoverySignalFixture({
           recommendedAction: "inspect_first",
           matchedRuleId: "post_execution_locked_folder_recovery",
@@ -3388,7 +3327,7 @@ test("ensureRespondMessages backfills missing respond text and run-skill post-po
 
 test("workspace-recovery marker requests fail closed instead of collapsing to run-skill fallback", async () => {
   const currentUserRequest = buildWorkspaceRecoveryNextUserInput(
-    "Every folder with the name beginning in drone should go in drone-folder on my desktop.",
+    "Every folder with the name beginning in sample should go in sample-folder on my desktop.",
     buildWorkspaceRecoverySignalFixture({
       recommendedAction: "inspect_first",
       matchedRuleId: "post_execution_locked_folder_recovery",
@@ -3441,7 +3380,7 @@ test("workspace-recovery marker requests fail closed instead of collapsing to ru
 
 test("assessExecutionStyleBuildPlan enforces inspect-first recovery markers from wrapped execution input", () => {
   const currentUserRequest =
-    'Every folder with the name beginning in drone should go in "drone-folder" on my desktop.';
+    'Every folder with the name beginning in sample should go in "sample-folder" on my desktop.';
   const fullExecutionInput = buildWorkspaceRecoveryNextUserInput(
     currentUserRequest,
     buildWorkspaceRecoverySignalFixture({
@@ -3452,7 +3391,7 @@ test("assessExecutionStyleBuildPlan enforces inspect-first recovery markers from
       recoveryInstruction:
         "Inspect the relevant workspace resources or path holders first.",
       blockedFolderPaths: [
-        "C:\\Users\\testuser\\Desktop\\drone-company-a"
+        "C:\\Users\\testuser\\Desktop\\sample-company-a"
       ]
     })
   );
@@ -3466,7 +3405,7 @@ test("assessExecutionStyleBuildPlan enforces inspect-first recovery markers from
         description: "Retry the move immediately.",
         params: {
           command:
-            "Move-Item -LiteralPath 'C:\\Users\\testuser\\Desktop\\drone-company-a' -Destination 'C:\\Users\\testuser\\Desktop\\drone-folder' -Force"
+            "Move-Item -LiteralPath 'C:\\Users\\testuser\\Desktop\\sample-company-a' -Destination 'C:\\Users\\testuser\\Desktop\\sample-folder' -Force"
         },
         estimatedCostUsd: 0.08
       }
@@ -3494,14 +3433,14 @@ test("buildDeterministicWorkspaceRecoveryFallbackActions prefers blocked path in
   const currentUserRequest = [
     "[WORKSPACE_RECOVERY_INSPECT_FIRST]",
     "A folder move was blocked because the target folders are still in use.",
-    "Blocked folder paths: C:\\Users\\testuser\\Desktop\\drone-company-live-smoke-1."
+    "Blocked folder paths: C:\\Users\\testuser\\Desktop\\sample-company-live-smoke-1."
   ].join("\n");
   const fullExecutionInput = [
     "Workspace recovery context for this chat:",
-    "- Preferred workspace root: C:\\Users\\testuser\\Desktop\\drone-company",
+    "- Preferred workspace root: C:\\Users\\testuser\\Desktop\\sample-company",
     "- Preferred preview URL: http://127.0.0.1:4173/",
-    "- Exact tracked browser session ids: browser_session:drone-page",
-    "- Exact tracked preview lease ids: proc_preview_drone"
+    "- Exact tracked browser session ids: browser_session:sample-page",
+    "- Exact tracked preview lease ids: proc_preview_sample"
   ].join("\n");
 
   const actions = buildDeterministicWorkspaceRecoveryFallbackActions(
@@ -3513,7 +3452,7 @@ test("buildDeterministicWorkspaceRecoveryFallbackActions prefers blocked path in
   assert.equal(actions[0]?.type, "inspect_path_holders");
   assert.equal(
     actions[0]?.params.path,
-    "C:\\Users\\testuser\\Desktop\\drone-company-live-smoke-1."
+    "C:\\Users\\testuser\\Desktop\\sample-company-live-smoke-1."
   );
 });
 
@@ -3521,7 +3460,7 @@ test("buildDeterministicWorkspaceRecoveryFallbackActions inspects each blocked p
   const currentUserRequest = [
     "[WORKSPACE_RECOVERY_INSPECT_FIRST]",
     "A folder move was blocked because the target folders are still in use.",
-    "Blocked folder paths: C:\\Users\\testuser\\Desktop\\drone-company, C:\\Users\\testuser\\Desktop\\drone-company-live-smoke-1."
+    "Blocked folder paths: C:\\Users\\testuser\\Desktop\\sample-company, C:\\Users\\testuser\\Desktop\\sample-company-live-smoke-1."
   ].join("\n");
 
   const actions = buildDeterministicWorkspaceRecoveryFallbackActions(
@@ -3537,11 +3476,11 @@ test("buildDeterministicWorkspaceRecoveryFallbackActions inspects each blocked p
     [
       {
         type: "inspect_path_holders",
-        path: "C:\\Users\\testuser\\Desktop\\drone-company"
+        path: "C:\\Users\\testuser\\Desktop\\sample-company"
       },
       {
         type: "inspect_path_holders",
-        path: "C:\\Users\\testuser\\Desktop\\drone-company-live-smoke-1."
+        path: "C:\\Users\\testuser\\Desktop\\sample-company-live-smoke-1."
       }
     ]
   );
@@ -3554,10 +3493,10 @@ test("buildDeterministicWorkspaceRecoveryFallbackActions reuses exact workspace 
   ].join("\n");
   const fullExecutionInput = [
     "Workspace recovery context for this chat:",
-    "- Preferred workspace root: C:\\Users\\testuser\\Desktop\\drone-company",
+    "- Preferred workspace root: C:\\Users\\testuser\\Desktop\\sample-company",
     "- Preferred preview URL: http://127.0.0.1:4173/",
-    "- Exact tracked browser session ids: browser_session:drone-page",
-    "- Exact tracked preview lease ids: proc_preview_drone"
+    "- Exact tracked browser session ids: browser_session:sample-page",
+    "- Exact tracked preview lease ids: proc_preview_sample"
   ].join("\n");
 
   const actions = buildDeterministicWorkspaceRecoveryFallbackActions(
@@ -3567,10 +3506,10 @@ test("buildDeterministicWorkspaceRecoveryFallbackActions reuses exact workspace 
 
   assert.equal(actions.length, 1);
   assert.equal(actions[0]?.type, "inspect_workspace_resources");
-  assert.equal(actions[0]?.params.rootPath, "C:\\Users\\testuser\\Desktop\\drone-company");
+  assert.equal(actions[0]?.params.rootPath, "C:\\Users\\testuser\\Desktop\\sample-company");
   assert.equal(actions[0]?.params.previewUrl, "http://127.0.0.1:4173/");
-  assert.equal(actions[0]?.params.browserSessionId, "browser_session:drone-page");
-  assert.equal(actions[0]?.params.previewProcessLeaseId, "proc_preview_drone");
+  assert.equal(actions[0]?.params.browserSessionId, "browser_session:sample-page");
+  assert.equal(actions[0]?.params.previewProcessLeaseId, "proc_preview_sample");
 });
 
 test("buildDeterministicWorkspaceRecoveryFallbackActions emits exact stop_process actions for stop-exact recovery", () => {
@@ -3633,7 +3572,7 @@ test("buildDeterministicWorkspaceRecoveryFallbackActions emits exact stop_proces
 
 test("buildDeterministicExplicitRuntimeActionFallbackActions synthesizes inspect_path_holders actions from explicit tool requests", () => {
   const actions = buildDeterministicExplicitRuntimeActionFallbackActions(
-    "Execute inspect_path_holders on `C:\\Users\\testuser\\Desktop\\drone-company-a` and `C:\\Users\\testuser\\Desktop\\drone-company-b` now.",
+    "Execute inspect_path_holders on `C:\\Users\\testuser\\Desktop\\sample-company-a` and `C:\\Users\\testuser\\Desktop\\sample-company-b` now.",
     "inspect_path_holders"
   );
 
@@ -3645,11 +3584,11 @@ test("buildDeterministicExplicitRuntimeActionFallbackActions synthesizes inspect
     [
       {
         type: "inspect_path_holders",
-        path: "C:\\Users\\testuser\\Desktop\\drone-company-a"
+        path: "C:\\Users\\testuser\\Desktop\\sample-company-a"
       },
       {
         type: "inspect_path_holders",
-        path: "C:\\Users\\testuser\\Desktop\\drone-company-b"
+        path: "C:\\Users\\testuser\\Desktop\\sample-company-b"
       }
     ]
   );
@@ -3657,7 +3596,7 @@ test("buildDeterministicExplicitRuntimeActionFallbackActions synthesizes inspect
 
 test("buildDeterministicExplicitRuntimeActionFallbackActions keeps exact blocked paths from verbose workspace recovery inspect requests", () => {
   const actions = buildDeterministicExplicitRuntimeActionFallbackActions(
-    "Continue workspace-recovery for the same goal. First run inspect_path_holders (or inspect_workspace_resources) on the remaining blocked paths: 1) C:\\Users\\testuser\\Desktop\\drone-company-live-smoke-1773407921176 and 2) C:\\Users\\testuser\\Desktop\\drone-company-live-smoke-1773414171194. If exact tracked preview/runtime holders are found, stop only those exact tracked holders, then retry the organization task: move every Desktop folder whose name begins with \"drone\" into C:\\Users\\testuser\\Desktop\\drone-folder. If inspection finds only likely untracked holders, stop and report that user confirmation is required before shutting them down. Do not stop unrelated apps by name.",
+    "Continue workspace-recovery for the same goal. First run inspect_path_holders (or inspect_workspace_resources) on the remaining blocked paths: 1) C:\\Users\\testuser\\Desktop\\sample-company-live-smoke-1773407921176 and 2) C:\\Users\\testuser\\Desktop\\sample-company-live-smoke-1773414171194. If exact tracked preview/runtime holders are found, stop only those exact tracked holders, then retry the organization task: move every Desktop folder whose name begins with \"sample\" into C:\\Users\\testuser\\Desktop\\sample-folder. If inspection finds only likely untracked holders, stop and report that user confirmation is required before shutting them down. Do not stop unrelated apps by name.",
     "inspect_path_holders"
   );
 
@@ -3669,11 +3608,11 @@ test("buildDeterministicExplicitRuntimeActionFallbackActions keeps exact blocked
     [
       {
         type: "inspect_path_holders",
-        path: "C:\\Users\\testuser\\Desktop\\drone-company-live-smoke-1773407921176"
+        path: "C:\\Users\\testuser\\Desktop\\sample-company-live-smoke-1773407921176"
       },
       {
         type: "inspect_path_holders",
-        path: "C:\\Users\\testuser\\Desktop\\drone-company-live-smoke-1773414171194"
+        path: "C:\\Users\\testuser\\Desktop\\sample-company-live-smoke-1773414171194"
       }
     ]
   );
@@ -3681,13 +3620,13 @@ test("buildDeterministicExplicitRuntimeActionFallbackActions keeps exact blocked
 
 test("buildDeterministicExplicitRuntimeActionFallbackActions synthesizes inspect_workspace_resources from explicit tool requests", () => {
   const actions = buildDeterministicExplicitRuntimeActionFallbackActions(
-    "Run inspect_workspace_resources on `C:\\Users\\testuser\\Desktop\\drone-company-a` and report the holders.",
+    "Run inspect_workspace_resources on `C:\\Users\\testuser\\Desktop\\sample-company-a` and report the holders.",
     "inspect_workspace_resources"
   );
 
   assert.equal(actions.length, 1);
   assert.equal(actions[0]?.type, "inspect_workspace_resources");
-  assert.equal(actions[0]?.params.rootPath, "C:\\Users\\testuser\\Desktop\\drone-company-a");
+  assert.equal(actions[0]?.params.rootPath, "C:\\Users\\testuser\\Desktop\\sample-company-a");
 });
 
 test("buildDeterministicExplicitRuntimeActionFallbackActions synthesizes tracked inspect_workspace_resources from tracked runtime context", () => {
@@ -3801,14 +3740,14 @@ test("buildDeterministicExplicitRuntimeActionFallbackActions synthesizes exact t
 
 test("buildDeterministicExplicitRuntimeActionFallbackActions synthesizes tracked close-browser cleanup from browser follow-up context", () => {
   const currentUserRequest =
-    "Thanks. Please close Drone React Preview Smoke 1774659110753, the browser window, and the localhost preview server so we can move on.";
+    "Thanks. Please close Sample React Preview Smoke 1774659110753, the browser window, and the localhost preview server so we can move on.";
   const fullExecutionInput = [
     "Tracked browser sessions:",
-    "- Browser window: sessionId=browser_session:action_demo; url=http://127.0.0.1:60048/; status=open; visibility=visible; controller=playwright_managed; control=available; linkedPreviewLease=proc_preview_demo; linkedPreviewPid=55584; linkedPreviewCwd=C:\\Users\\testuser\\Desktop\\Drone React Preview Smoke 1774659110753",
+    "- Browser window: sessionId=browser_session:action_demo; url=http://127.0.0.1:60048/; status=open; visibility=visible; controller=playwright_managed; control=available; linkedPreviewLease=proc_preview_demo; linkedPreviewPid=55584; linkedPreviewCwd=C:\\Users\\testuser\\Desktop\\Sample React Preview Smoke 1774659110753",
     "",
     "Natural browser-session follow-up:",
     "- Preferred browser session: Browser window; sessionId=browser_session:action_demo; url=http://127.0.0.1:60048/; status=open; control=available",
-    "- Linked preview process: leaseId=proc_preview_demo; cwd=C:\\Users\\testuser\\Desktop\\Drone React Preview Smoke 1774659110753",
+    "- Linked preview process: leaseId=proc_preview_demo; cwd=C:\\Users\\testuser\\Desktop\\Sample React Preview Smoke 1774659110753",
     "- If the user wants that visible page closed now, prefer close_browser with params.sessionId=browser_session:action_demo and then stop_process with params.leaseId=proc_preview_demo so the linked local preview stack shuts down fully. Do not stop unrelated processes.",
     "",
     "Current user request:",
@@ -3829,394 +3768,13 @@ test("buildDeterministicExplicitRuntimeActionFallbackActions synthesizes tracked
   assert.equal(actions[1]?.params.leaseId, "proc_preview_demo");
 });
 
-test("buildDeterministicFrameworkBuildFallbackActions does not hijack tracked close-browser follow-ups", () => {
-  const currentUserRequest = [
-    "Current tracked workspace in this chat:",
-    "- Root path: C:\\Users\\testuser\\Desktop\\Drone React Preview Smoke 1774659110753",
-    "- Preview URL: http://127.0.0.1:60048/",
-    "- Browser session id: browser_session:action_demo",
-    "- Preview process lease: proc_preview_demo",
-    "",
-    "Tracked browser sessions:",
-    "- Browser window: sessionId=browser_session:action_demo; url=http://127.0.0.1:60048/; status=open; visibility=visible; controller=playwright_managed; control=available; linkedPreviewLease=proc_preview_demo; linkedPreviewCwd=C:\\Users\\testuser\\Desktop\\Drone React Preview Smoke 1774659110753",
-    "",
-    "Current user request:",
-    "Thanks. Please close Drone React Preview Smoke 1774659110753, the browser window, and the localhost preview server so we can move on."
-  ].join("\n");
-
-  const actions = buildDeterministicFrameworkBuildFallbackActions(
-    currentUserRequest,
-    buildWindowsExecutionEnvironment()
-  );
-
-  assert.deepEqual(actions, []);
-});
-
 test("deterministic framework build-lane detection treats polite close phrasing as a close turn", () => {
   assert.equal(
     isDeterministicFrameworkBuildLaneRequest(
-      "Thanks. Please close Drone React Preview Smoke 1774659110753, the browser window, and the localhost preview server so we can move on."
+      "Thanks. Please close Sample React Preview Smoke 1774659110753, the browser window, and the localhost preview server so we can move on."
     ),
     false
   );
-});
-
-test("buildDeterministicFrameworkBuildFallbackActions synthesizes safe-slug scaffold/install/proof actions for named React folders on Windows", () => {
-  const actions = buildDeterministicFrameworkBuildFallbackActions(
-    "Handle this first step only: create a new React single page app in a folder called Drone React Preview Smoke 1774618922998 on my desktop. Use a real scaffold-capable toolchain step, then install dependencies so package.json and node_modules exist. For this turn, stop after the workspace is ready for edits.",
-    buildWindowsExecutionEnvironment()
-  );
-
-  assert.equal(actions.length, 3);
-  assert.equal(actions[0]?.type, "shell_command");
-  assert.equal(actions[1]?.type, "shell_command");
-  assert.equal(actions[2]?.type, "shell_command");
-  assert.match(String(actions[0]?.params.command), /agentbigbrain-framework-scaffold/i);
-  assert.match(String(actions[0]?.params.command), /create-vite@latest/i);
-  assert.match(String(actions[0]?.params.command), /--template react-ts/i);
-  assert.match(String(actions[0]?.params.command), /--no-interactive/i);
-  assert.match(String(actions[0]?.params.command), /drone-react-preview-smoke-1774618922998/i);
-  assert.match(String(actions[0]?.params.command), /Drone React Preview Smoke 1774618922998/i);
-  assert.equal(
-    actions[1]?.params.cwd,
-    "C:\\Users\\testuser\\Desktop\\Drone React Preview Smoke 1774618922998"
-  );
-});
-
-test("buildDeterministicFrameworkBuildFallbackActions keeps autonomous scaffold-only React turns on workspace-ready proof instead of live preview actions", () => {
-  const wrappedAutonomousInput = `[AUTONOMOUS_LOOP_GOAL] ${JSON.stringify({
-    goal: "Handle this first step only.",
-    initialExecutionInput: [
-      "You are in an ongoing conversation with the same user.",
-      "Deterministic routing hint:",
-      "Intent surface: build_scaffold. Prefer governed finite proof steps first (for example scaffold, edit, install, build, finite verification) with explicit approval-diff rendering before write actions. Only use managed process plus probe actions when the user clearly asks to run or verify a live app/session.",
-      "",
-      "Current user request:",
-      "Handle this first step only: create a new React single page app in a folder called Drone React Preview Smoke 1774661430563 on my desktop. Use a real scaffold-capable toolchain step, then install dependencies so package.json and node_modules exist. For this turn, stop after the workspace is ready for edits. Do not start a preview server, do not verify localhost, and do not open a browser yet."
-    ].join("\n")
-  })}`;
-
-  const actions = buildDeterministicFrameworkBuildFallbackActions(
-    wrappedAutonomousInput,
-    buildWindowsExecutionEnvironment()
-  );
-
-  assert.deepEqual(
-    actions.map((action) => action.type),
-    ["shell_command", "shell_command", "shell_command"]
-  );
-  assert.equal(actions.some((action) => action.type === "start_process"), false);
-  assert.equal(actions.some((action) => action.type === "probe_http"), false);
-  assert.equal(actions.some((action) => action.type === "open_browser"), false);
-  assert.match(String(actions[2]?.params.command), /Workspace not ready/i);
-});
-
-test("buildDeterministicFrameworkBuildFallbackActions prefers the exact Desktop path over repair-turn prose when resolving React folder names", () => {
-  const currentUserRequest = [
-    "You are in an ongoing conversation with the same user.",
-    "Current user request:",
-    "Inspect `C:\\Users\\testuser\\Desktop\\Drone React Preview Smoke 1774663596997` and verify whether the exact folder itself, not a nested subfolder, is already a valid React single-page app scaffold created by a real scaffold-capable toolchain. Use finite file inspection only: check `package.json` plus expected scaffold files such as `index.html`, `src`, and React/Vite scripts. If the scaffold is valid, report success with concrete evidence and stop. If it is not valid, recreate the React app directly in that exact folder using a real scaffold toolchain, install dependencies so `package.json` and `node_modules` exist there, and stop once the workspace is ready for edits. Do not start a preview server, do not verify localhost, and do not open a browser."
-  ].join("\n");
-
-  const actions = buildDeterministicFrameworkBuildFallbackActions(
-    currentUserRequest,
-    buildWindowsExecutionEnvironment()
-  );
-
-  assert.equal(actions.length, 3);
-  assert.match(
-    String(actions[0]?.params.command),
-    /Drone React Preview Smoke 1774663596997/i
-  );
-  assert.match(
-    String(actions[0]?.params.command),
-    /drone-react-preview-smoke-1774663596997/i
-  );
-  assert.doesNotMatch(
-    String(actions[0]?.params.command),
-    /exact folder itself|nested subfolder/i
-  );
-  assert.equal(
-    actions[1]?.params.cwd,
-    "C:\\Users\\testuser\\Desktop\\Drone React Preview Smoke 1774663596997"
-  );
-});
-
-test("buildDeterministicFrameworkBuildFallbackActions prefers the tracked workspace basename for natural existing-workspace React follow-ups", () => {
-  const currentUserRequest = [
-    "Current tracked workspace in this chat:",
-    "- Root path: C:\\Users\\testuser\\Desktop\\Drone React Preview Smoke 1774664217532",
-    "",
-    "Current user request:",
-    "Reuse the existing Drone React Preview Smoke 1774664217532 workspace on my desktop. Turn it into a calm drone-themed landing page with one homepage hero and four additional sections. Write the real page implementation, then run the build so dist/index.html exists. For this turn, stop after the source edits and build proof exist. Do not start a preview server, do not verify localhost, and do not open a browser yet."
-  ].join("\n");
-
-  const actions = buildDeterministicFrameworkBuildFallbackActions(
-    currentUserRequest,
-    buildWindowsExecutionEnvironment()
-  );
-
-  assert.equal(actions.length >= 5, true);
-  assert.match(
-    String(actions[0]?.params.command),
-    /Drone React Preview Smoke 1774664217532/i
-  );
-  assert.doesNotMatch(
-    String(actions[0]?.params.command),
-    /existing Drone React Preview Smoke 1774664217532/i
-  );
-  assert.equal(
-    actions[1]?.params.path,
-    "C:\\Users\\testuser\\Desktop\\Drone React Preview Smoke 1774664217532\\src\\App.jsx"
-  );
-});
-
-test("buildDeterministicFrameworkBuildFallbackActions keeps non-live Next.js build turns on source-plus-build proof instead of workspace-only proof", () => {
-  const currentUserRequest = [
-    "Recent conversation context (oldest to newest):",
-    "- user: Can you get a new Next.js landing-page workspace started on my desktop and call it Downtown Detroit Drones? Just get the workspace ready for edits with the dependencies installed. Do not run it or open anything yet.",
-    "- assistant: I ran the command successfully.",
-    "",
-    "Current tracked workspace in this chat:",
-    "- Root path: C:\\Users\\testuser\\Desktop\\Downtown Detroit Drones",
-    "",
-    "Current user request:",
-    "Great. Now turn that Downtown Detroit Drones workspace into the real landing page. Keep it calm and modern, avoid blue, put a small flying drone in the hero, use four main sections, add a clear call to action and a footer menu, then build it. Stop once the source and build proof are there, but do not run it or open anything yet."
-  ].join("\n");
-  const actions = buildDeterministicFrameworkBuildFallbackActions(
-    currentUserRequest,
-    buildWindowsExecutionEnvironment()
-  );
-
-  assert.equal(actions[0]?.type, "shell_command");
-  assert.equal(actions[1]?.type, "write_file");
-  assert.equal(actions[2]?.type, "write_file");
-  assert.equal(actions[3]?.type, "write_file");
-  assert.equal(actions[4]?.type, "shell_command");
-  assert.equal(actions[5]?.type, "shell_command");
-  assert.equal(actions[6]?.type, "shell_command");
-  assert.match(String(actions[5]?.params.command), /\bnpm run build\b/i);
-  assert.match(String(actions[6]?.params.command), /\.next\\BUILD_ID/i);
-  assert.doesNotMatch(String(actions[6]?.params.command), /Workspace not ready/i);
-  assert.equal(actions.some((action) => action.type === "start_process"), false);
-  assert.equal(actions.some((action) => action.type === "open_browser"), false);
-});
-
-test("buildDeterministicFrameworkBuildFallbackActions reuses an already-built tracked Next.js workspace for preview start follow-ups", () => {
-  const tempRoot = mkdtempSync(path.join(os.tmpdir(), "planner-policy-next-preview-followup-"));
-  const projectPath = path.join(tempRoot, "Downtown Detroit Drones");
-  try {
-    mkdirSync(path.join(projectPath, "app"), { recursive: true });
-    mkdirSync(path.join(projectPath, ".next"), { recursive: true });
-    mkdirSync(path.join(projectPath, "node_modules"), { recursive: true });
-    writeFileSync(path.join(projectPath, "package.json"), "{\n  \"name\": \"downtown-detroit-drones\"\n}\n", "utf8");
-    writeFileSync(path.join(projectPath, "next-env.d.ts"), "/// <reference types=\"next\" />\n", "utf8");
-    writeFileSync(path.join(projectPath, ".next", "BUILD_ID"), "smoke-build\n", "utf8");
-
-    const currentUserRequest = [
-      "Current tracked workspace in this chat:",
-      `- Root path: ${projectPath}`,
-      "",
-      "Current user request:",
-      "Nice. Pull up the Downtown Detroit Drones landing page you just built so it is ready to view, but do not pop the browser open yet. Use a real localhost run on host 127.0.0.1 and port 54928, and keep that preview server running."
-    ].join("\n");
-
-    const actions = buildDeterministicFrameworkBuildFallbackActions(
-      currentUserRequest,
-      {
-        ...buildWindowsExecutionEnvironment(),
-        desktopPath: tempRoot
-      }
-    );
-
-    assert.deepEqual(
-      actions.map((action) => action.type),
-      ["start_process", "probe_http"]
-    );
-    assert.match(String(actions[0]?.params.command), /--hostname 127\.0\.0\.1 --port 54928/i);
-    assert.equal(actions[1]?.params.url, "http://127.0.0.1:54928");
-  } finally {
-    rmSync(tempRoot, { recursive: true, force: true });
-  }
-});
-
-test("buildDeterministicFrameworkBuildFallbackActions reuses an already-built tracked Next.js workspace for browser-open follow-ups", () => {
-  const tempRoot = mkdtempSync(path.join(os.tmpdir(), "planner-policy-next-open-followup-"));
-  const projectPath = path.join(tempRoot, "Downtown Detroit Drones");
-  const previewProcessLeaseId = "proc_preview_downtown";
-  try {
-    mkdirSync(path.join(projectPath, "app"), { recursive: true });
-    mkdirSync(path.join(projectPath, ".next"), { recursive: true });
-    mkdirSync(path.join(projectPath, "node_modules"), { recursive: true });
-    writeFileSync(path.join(projectPath, "package.json"), "{\n  \"name\": \"downtown-detroit-drones\"\n}\n", "utf8");
-    writeFileSync(path.join(projectPath, "next-env.d.ts"), "/// <reference types=\"next\" />\n", "utf8");
-    writeFileSync(path.join(projectPath, ".next", "BUILD_ID"), "smoke-build\n", "utf8");
-
-    const currentUserRequest = [
-      "Current tracked workspace in this chat:",
-      `- Root path: ${projectPath}`,
-      "- Preview URL: http://127.0.0.1:54928",
-      `- Preview process lease: ${previewProcessLeaseId}`,
-      "",
-      "Current user request:",
-      "Alright, open that Downtown Detroit Drones landing page in my browser and leave it up for me. Use the same tracked localhost run that is already live on port 54928."
-    ].join("\n");
-
-    const actions = buildDeterministicFrameworkBuildFallbackActions(
-      currentUserRequest,
-      {
-        ...buildWindowsExecutionEnvironment(),
-        desktopPath: tempRoot
-      }
-    );
-
-    assert.deepEqual(
-      actions.map((action) => action.type),
-      ["probe_http", "open_browser"]
-    );
-    assert.equal(actions[0]?.params.url, "http://127.0.0.1:54928/");
-    assert.equal(actions[1]?.params.url, "http://127.0.0.1:54928/");
-    assert.equal(actions[1]?.params.rootPath, projectPath);
-    assert.equal(actions[1]?.params.previewProcessLeaseId, previewProcessLeaseId);
-  } finally {
-    rmSync(tempRoot, { recursive: true, force: true });
-  }
-});
-
-test("buildDeterministicFrameworkBuildFallbackActions synthesizes tracked Next.js live-edit actions while the preview stays open", () => {
-  const tempRoot = mkdtempSync(path.join(os.tmpdir(), "planner-policy-next-edit-followup-"));
-  const projectPath = path.join(tempRoot, "Downtown Detroit Drones");
-  const previewProcessLeaseId = "proc_preview_downtown";
-  const browserSessionId = "browser_session:downtown";
-  try {
-    mkdirSync(path.join(projectPath, "app"), { recursive: true });
-    mkdirSync(path.join(projectPath, ".next"), { recursive: true });
-    mkdirSync(path.join(projectPath, "node_modules"), { recursive: true });
-    writeFileSync(path.join(projectPath, "package.json"), "{\n  \"name\": \"downtown-detroit-drones\"\n}\n", "utf8");
-    writeFileSync(path.join(projectPath, "next-env.d.ts"), "/// <reference types=\"next\" />\n", "utf8");
-    writeFileSync(path.join(projectPath, ".next", "BUILD_ID"), "smoke-build\n", "utf8");
-    writeFileSync(
-      path.join(projectPath, "app", "page.js"),
-      [
-        "const sections = [",
-        "  { title: 'Guided setup', text: 'A calm structure that explains the product without rushing the reader.' },",
-        "  { title: 'Quiet confidence', text: 'Soft visual rhythm, clear copy, and a hero that feels stable instead of noisy.' },",
-        "  { title: 'Flight planning', text: 'A simple feature story that makes the path from interest to action feel obvious.' }",
-        "];",
-        "",
-        "export default function Home() {",
-        "  return <main>{sections.map((section) => <section key={section.title}><h3>{section.title}</h3><p>{section.text}</p></section>)}</main>;",
-        "}",
-        ""
-      ].join("\n"),
-      "utf8"
-    );
-
-    const currentUserRequest = [
-      "Current tracked workspace in this chat:",
-      `- Root path: ${projectPath}`,
-      "- Preview URL: http://127.0.0.1:54928",
-      `- Browser session id: ${browserSessionId}`,
-      `- Preview process lease: ${previewProcessLeaseId}`,
-      "",
-      "Current user request:",
-      'One tweak while it stays open: change the second section heading to "Steady local rollout" and make that section mention "Built for neighborhood teams." Keep the page running and refresh whatever needs to refresh so the live page shows the update.'
-    ].join("\n");
-
-    const actions = buildDeterministicFrameworkBuildFallbackActions(
-      currentUserRequest,
-      {
-        ...buildWindowsExecutionEnvironment(),
-        desktopPath: tempRoot
-      }
-    );
-
-    assert.deepEqual(
-      actions.map((action) => action.type),
-      ["write_file", "probe_http", "open_browser"]
-    );
-    assert.match(String(actions[0]?.params.content), /Steady local rollout/);
-    assert.match(String(actions[0]?.params.content), /Built for neighborhood teams/);
-    assert.equal(actions[1]?.params.url, "http://127.0.0.1:54928/");
-    assert.equal(actions[2]?.params.url, "http://127.0.0.1:54928/");
-    assert.equal(actions[2]?.params.rootPath, projectPath);
-    assert.equal("previewProcessLeaseId" in (actions[2]?.params ?? {}), false);
-  } finally {
-    rmSync(tempRoot, { recursive: true, force: true });
-  }
-});
-
-test("buildDeterministicFrameworkBuildFallbackActions synthesizes a full live Next.js landing-page lifecycle for timeout recovery", () => {
-  const currentUserRequest =
-    "Please create a Next.js landing page called Drone City on my Desktop. It should have a flying drone in the hero, feel polished and modern, and work as a single-page landing page. After you finish, start it locally, open it in my browser, and leave it up for me to view.";
-  const actions = buildDeterministicFrameworkBuildFallbackActions(
-    currentUserRequest,
-    buildWindowsExecutionEnvironment()
-  );
-
-  assert.ok(actions.length >= 8);
-  assert.equal(actions[0]?.type, "shell_command");
-  assert.match(String(actions[0]?.params.command), /create-next-app@latest/i);
-  assert.match(String(actions[0]?.params.command), /--app\b/i);
-  assert.match(String(actions[0]?.params.command), /--skip-install\b/i);
-  assert.match(String(actions[0]?.params.command), /--no-tailwind\b/i);
-  assert.match(String(actions[0]?.params.command), /--no-src-dir\b/i);
-  assert.match(String(actions[0]?.params.command), /--disable-git\b/i);
-  assert.match(String(actions[0]?.params.command), /--no-react-compiler\b/i);
-  assert.equal(actions[1]?.type, "write_file");
-  assert.equal(actions[2]?.type, "write_file");
-  assert.equal(actions[3]?.type, "write_file");
-  assert.equal(actions[4]?.type, "shell_command");
-  assert.equal(actions[5]?.type, "shell_command");
-  assert.equal(actions[6]?.type, "shell_command");
-  assert.equal(actions[7]?.type, "shell_command");
-  assert.equal(actions[4]?.params.timeoutMs, 120000);
-  assert.match(String(actions[4]?.params.command), /\bnpm install --no-audit --no-fund\b/i);
-  assert.match(String(actions[5]?.params.command), /Workspace not ready/i);
-  assert.match(String(actions[6]?.params.command), /\bnpm run build\b/i);
-  assert.match(String(actions[7]?.params.command), /\.next\\BUILD_ID/i);
-  assert.equal(actions[8]?.type, "start_process");
-  assert.match(String(actions[8]?.params.command), /npm run dev -- --hostname 127\.0\.0\.1 --port 3000/i);
-  assert.equal(actions[9]?.type, "probe_http");
-  assert.equal(actions[9]?.params.url, "http://127.0.0.1:3000");
-  assert.equal(actions[10]?.type, "open_browser");
-  assert.equal(actions[10]?.params.url, "http://127.0.0.1:3000");
-  assert.equal(actions[10]?.params.rootPath, "C:\\Users\\testuser\\Desktop\\Drone City");
-  assert.match(String(actions[2]?.params.content), /flying drone hero/i);
-});
-
-test("buildDeterministicFrameworkBuildFallbackActions reuses an explicit built Next.js workspace path for launch follow-ups", () => {
-  const tempRoot = mkdtempSync(path.join(os.tmpdir(), "planner-policy-next-launch-"));
-  const projectPath = path.join(tempRoot, "Detroit City");
-  const appPath = path.join(projectPath, "app");
-  const nextBuildPath = path.join(projectPath, ".next");
-  try {
-    mkdirSync(appPath, { recursive: true });
-    mkdirSync(nextBuildPath, { recursive: true });
-    writeFileSync(path.join(projectPath, "package.json"), "{\n  \"name\": \"detroit-city\"\n}\n", "utf8");
-    writeFileSync(path.join(projectPath, "next-env.d.ts"), "/// <reference types=\"next\" />\n", "utf8");
-    writeFileSync(path.join(appPath, "page.js"), "export default function Page() { return null; }\n", "utf8");
-    writeFileSync(path.join(nextBuildPath, "BUILD_ID"), "detroit-city-build\n", "utf8");
-
-    const actions = buildDeterministicFrameworkBuildFallbackActions(
-      `From \`${projectPath}\`, launch the Next.js app in a persistent process and keep it running. Wait until the server logs the actual local URL it chose, verify that exact URL responds successfully over HTTP, open that exact URL in the default browser, and leave both the browser window and the server process running for review.`,
-      {
-        ...buildWindowsExecutionEnvironment(),
-        desktopPath: tempRoot
-      }
-    );
-
-    assert.deepEqual(
-      actions.map((action) => action.type),
-      ["start_process", "probe_http", "open_browser"]
-    );
-    assert.equal(actions[0]?.params.cwd, projectPath);
-    assert.equal(actions[1]?.params.url, "http://127.0.0.1:3000");
-    assert.equal(actions[2]?.params.url, "http://127.0.0.1:3000");
-    assert.equal(actions[2]?.params.rootPath, projectPath);
-  } finally {
-    rmSync(tempRoot, { recursive: true, force: true });
-  }
 });
 
 test("framework request path parsing supports explicit POSIX workspace paths", () => {
@@ -4228,402 +3786,15 @@ test("framework request path parsing supports explicit POSIX workspace paths", (
   assert.equal(extractRequestedFrameworkPathFolderName(request), "Detroit City");
 });
 
-test("framework landing-page fallback content stays generic when the request is not drone-specific", () => {
-  const currentUserRequest =
-    "Please create a polished modern landing page called Big Beans on my Desktop and leave it open for review when finished.";
-  const pageContent = buildFrameworkLandingPageContent(
-    "next_js",
-    "Big Beans",
-    currentUserRequest
-  );
-  const styleContent = buildFrameworkLandingPageStyles(currentUserRequest);
-
-  assert.doesNotMatch(pageContent, /\bflying drone hero\b/i);
-  assert.doesNotMatch(pageContent, /\bdrone-stage\b/i);
-  assert.match(pageContent, /Featured flow/);
-  assert.match(pageContent, /polished first impression/i);
-  assert.match(styleContent, /\.hero-orb-stage/);
-  assert.doesNotMatch(styleContent, /\.drone-stage/);
-});
-
-test("framework landing-page fallback content matches gritty Detroit requests instead of the calm generic theme", () => {
-  const currentUserRequest =
-    'I want you to create a nextjs landing page, with 4 sections called "Detroit City" and there should be a footer and header, a gritty feeling design, and you need to do this end to end and put it on my desktop, then leave it open in the browser so i can review it.';
-  const pageContent = buildFrameworkLandingPageContent(
-    "next_js",
-    "Detroit City",
-    currentUserRequest
-  );
-  const styleContent = buildFrameworkLandingPageStyles(currentUserRequest);
-  const sectionCount = pageContent.match(/\{\s*title:\s*'/g)?.length ?? 0;
-
-  assert.match(pageContent, /\bgritty\b/i);
-  assert.match(pageContent, /city-stage/);
-  assert.doesNotMatch(pageContent, /\bflying drone hero\b/i);
-  assert.doesNotMatch(pageContent, /Featured flow/);
-  assert.equal(sectionCount, 4);
-  assert.match(styleContent, /\.city-stage/);
-  assert.doesNotMatch(styleContent, /\.hero-orb-stage/);
-  assert.doesNotMatch(styleContent, /\.drone-stage/);
-});
-
-test("buildDeterministicFrameworkBuildFallbackActions uses the active Detroit request instead of stale calm-drone recall when generating landing-page writes", () => {
-  const wrappedExecutionInput = [
-    "Recent conversation context (oldest to newest):",
-    '- user: build a calm air-drone landing page on my desktop and leave it open in a browser',
-    "",
-    "Current user request:",
-    'I want you to create a nextjs landing page, with 4 sections called "Detroit City" and there should be a footer and header, a gritty feeling design, and you need to do this end to end and put it on my desktop, then leave it open in the browser so i can review it.'
-  ].join("\n");
-
-  const actions = buildDeterministicFrameworkBuildFallbackActions(
-    wrappedExecutionInput,
-    buildWindowsExecutionEnvironment()
-  );
-
-  const pageWriteAction = actions.find(
-    (action) =>
-      action.type === "write_file" &&
-      /app[\\/]+page\.(?:js|tsx)$/i.test(String(action.params.path))
-  );
-  const styleWriteAction = actions.find(
-    (action) =>
-      action.type === "write_file" &&
-      /app[\\/]+globals\.css$/i.test(String(action.params.path))
-  );
-
-  assert.ok(pageWriteAction);
-  assert.ok(styleWriteAction);
-  assert.match(String(pageWriteAction.params.content), /city-stage/);
-  assert.doesNotMatch(String(pageWriteAction.params.content), /drone-stage/);
-  assert.match(String(styleWriteAction.params.content), /\.city-stage/);
-  assert.doesNotMatch(String(styleWriteAction.params.content), /\.drone-stage/);
-});
-
-test("buildDeterministicFrameworkBuildFallbackActions reuses goal workspace and Detroit theme for generic restart follow-ups", () => {
-  const continuationRequest =
-    "The app is not running, so restart the Next.js landing page from the project on the Desktop, fix any startup error if needed, wait until the local URL is actually ready, then open it in a browser and leave that browser window open for review. After that, report the Desktop project path and the live URL.";
-  const goalRequest =
-    'I want you to create a nextjs landing page, with 4 sections called "Detroit City Two" and there should be a footer and header, a gritty feeling design, and you need to do this end to end and put it on my desktop, then leave it open in the browser so i can review it.';
-
-  const actions = buildDeterministicFrameworkBuildFallbackActions(
-    continuationRequest,
-    buildWindowsExecutionEnvironment(),
-    goalRequest
-  );
-
-  const scaffoldAction = actions.find((action) => action.type === "shell_command");
-  const pageWriteAction = actions.find(
-    (action) =>
-      action.type === "write_file" &&
-      /Detroit City Two[\\/]app[\\/]+page\.(?:js|tsx)$/i.test(String(action.params.path))
-  );
-  const styleWriteAction = actions.find(
-    (action) =>
-      action.type === "write_file" &&
-      /Detroit City Two[\\/]app[\\/]globals\.css$/i.test(String(action.params.path))
-  );
-
-  assert.ok(scaffoldAction);
-  assert.match(String(scaffoldAction.params.command), /Detroit City Two/i);
-  assert.match(String(scaffoldAction.params.command), /detroit-city-two/i);
-  assert.ok(pageWriteAction);
-  assert.ok(styleWriteAction);
-  assert.match(String(pageWriteAction.params.content), /city-stage/);
-  assert.doesNotMatch(String(pageWriteAction.params.content), /drone-stage/);
-  assert.match(String(styleWriteAction.params.content), /\.city-stage/);
-  assert.doesNotMatch(String(styleWriteAction.params.content), /\.drone-stage/);
-});
-
-test("buildDeterministicFrameworkBuildFallbackActions keeps the Detroit theme on repair turns that conditionally mention recreating the app", () => {
-  const tempRoot = mkdtempSync(path.join(os.tmpdir(), "planner-policy-detroit-repair-"));
-  const projectPath = path.join(tempRoot, "Detroit City Two");
-  try {
-    mkdirSync(projectPath, { recursive: true });
-    const normalizeComparablePath = (value: unknown): string =>
-      String(value ?? "").replace(/\\/g, "/").toLowerCase();
-    const continuationRequest = [
-      "Current tracked workspace in this chat:",
-      `- Root path: ${projectPath}`,
-      "",
-      "Current user request:",
-      "If the app or project was never fully created on the Desktop, finish creating it there first. Then restart the Next.js landing page, wait until the local URL is ready, open it in the browser, and leave it open for review."
-    ].join("\n");
-    const goalRequest =
-      'I want you to create a nextjs landing page, with 4 sections called "Detroit City Two" and there should be a footer and header, a gritty feeling design, and you need to do this end to end and put it on my desktop, then leave it open in the browser so i can review it.';
-
-    const actions = buildDeterministicFrameworkBuildFallbackActions(
-      continuationRequest,
-      {
-        ...buildWindowsExecutionEnvironment(),
-        desktopPath: tempRoot
-      },
-      goalRequest
-    );
-
-    const pageWriteAction = actions.find(
-      (action) =>
-        action.type === "write_file" &&
-        (
-          normalizeComparablePath(action.params.path) ===
-            normalizeComparablePath(path.join(projectPath, "app", "page.js")) ||
-          normalizeComparablePath(action.params.path) ===
-            normalizeComparablePath(path.join(projectPath, "app", "page.tsx"))
-        )
-    );
-    const styleWriteAction = actions.find(
-      (action) =>
-        action.type === "write_file" &&
-        normalizeComparablePath(action.params.path) ===
-          normalizeComparablePath(path.join(projectPath, "app", "globals.css"))
-    );
-
-    assert.ok(pageWriteAction);
-    assert.ok(styleWriteAction);
-    assert.match(String(pageWriteAction.params.content), /city-stage/);
-    assert.doesNotMatch(String(pageWriteAction.params.content), /drone-stage/);
-    assert.doesNotMatch(String(pageWriteAction.params.content), /Featured flow/);
-    assert.match(String(styleWriteAction.params.content), /\.city-stage/);
-    assert.doesNotMatch(String(styleWriteAction.params.content), /\.drone-stage/);
-    assert.doesNotMatch(String(styleWriteAction.params.content), /\.hero-orb-stage/);
-  } finally {
-    rmSync(tempRoot, { recursive: true, force: true });
-  }
-});
-
-test("black-and-yellow Detroit requests produce a distinct foundry fallback instead of reusing the generic Detroit template", () => {
-  const detroitTwoRequest =
-    'I want you to create a nextjs landing page, with 4 sections called "Detroit City Two" and there should be a footer and header, a gritty feeling design, and you need to do this end to end and put it on my desktop, then leave it open in the browser so i can review it.';
-  const detroitThreeRequest =
-    'I want you to create a nextjs landing page, with 4 sections called "Detroit City Three" and there should be a footer and header, a gritty feeling design (black and yellow), sections should feel spaced out and well thought out and you need to do this end to end and put it on my desktop, then leave it open in the browser so i can review it.';
-
-  const detroitTwoPage = buildFrameworkLandingPageContent(
-    "next_js",
-    "Detroit City Two",
-    detroitTwoRequest
-  );
-  const detroitThreePage = buildFrameworkLandingPageContent(
-    "next_js",
-    "Detroit City Three",
-    detroitThreeRequest
-  );
-  const detroitTwoStyles = buildFrameworkLandingPageStyles(
-    detroitTwoRequest,
-    "Detroit City Two"
-  );
-  const detroitThreeStyles = buildFrameworkLandingPageStyles(
-    detroitThreeRequest,
-    "Detroit City Three"
-  );
-
-  assert.notEqual(detroitTwoPage, detroitThreePage);
-  assert.match(detroitThreePage, /foundry-stage/);
-  assert.doesNotMatch(detroitTwoPage, /foundry-stage/);
-  assert.match(detroitThreeStyles, /--accent:\s*#f6d94a;/i);
-  assert.match(detroitThreeStyles, /Impact, Haettenschweiler/i);
-  assert.doesNotMatch(detroitTwoStyles, /--accent:\s*#f6d94a;/i);
-});
-
-test("generic Detroit requests can land in materially different safe layout families instead of reusing the same page skeleton", () => {
-  const detroitFourRequest =
-    'I want you to create a nextjs landing page, with 4 sections called "Detroit City Four" and there should be a footer and header, a gritty feeling design, and you need to do this end to end and put it on my desktop, then leave it open in the browser so i can review it.';
-  const detroitFiveRequest =
-    'I want you to create a nextjs landing page, with 4 sections called "Detroit City Five" and there should be a footer and header, a gritty feeling design, and you need to do this end to end and put it on my desktop, then leave it open in the browser so i can review it.';
-
-  const detroitFourPage = buildFrameworkLandingPageContent(
-    "next_js",
-    "Detroit City Four",
-    detroitFourRequest
-  );
-  const detroitFivePage = buildFrameworkLandingPageContent(
-    "next_js",
-    "Detroit City Five",
-    detroitFiveRequest
-  );
-  const detroitFourStyles = buildFrameworkLandingPageStyles(
-    detroitFourRequest,
-    "Detroit City Four"
-  );
-  const detroitFiveStyles = buildFrameworkLandingPageStyles(
-    detroitFiveRequest,
-    "Detroit City Five"
-  );
-
-  assert.notEqual(detroitFourPage, detroitFivePage);
-  assert.notEqual(detroitFourStyles, detroitFiveStyles);
-  assert.match(detroitFourPage, /story-bands/);
-  assert.match(detroitFourStyles, /\.story-band/);
-  assert.match(detroitFourPage, /Riverfront entry/);
-  assert.match(detroitFivePage, /story-grid/);
-  assert.match(detroitFiveStyles, /\.story-grid/);
-  assert.match(detroitFiveStyles, /\.city-stage-marquee/);
-  assert.match(detroitFivePage, /Marquee arrival/);
-  assert.doesNotMatch(detroitFourPage, /Marquee arrival/);
-  assert.doesNotMatch(detroitFivePage, /Riverfront entry/);
-});
-
-test("buildDeterministicFrameworkBuildFallbackActions keeps fresh Detroit create requests on the scaffold lane even when the named folder already has build artifacts", () => {
-  const tempRoot = mkdtempSync(path.join(os.tmpdir(), "planner-policy-detroit-fresh-existing-"));
-  const detroitThreePath = path.join(tempRoot, "Detroit City Three");
-  const detroitThreeAppPath = path.join(detroitThreePath, "app");
-  const detroitThreeBuildPath = path.join(detroitThreePath, ".next");
-  try {
-    mkdirSync(detroitThreeAppPath, { recursive: true });
-    mkdirSync(detroitThreeBuildPath, { recursive: true });
-    writeFileSync(
-      path.join(detroitThreePath, "package.json"),
-      "{\n  \"name\": \"detroit-city-three\",\n  \"dependencies\": { \"next\": \"15.0.0\" }\n}\n",
-      "utf8"
-    );
-    writeFileSync(
-      path.join(detroitThreePath, "next-env.d.ts"),
-      "/// <reference types=\"next\" />\n",
-      "utf8"
-    );
-    writeFileSync(path.join(detroitThreeBuildPath, "BUILD_ID"), "detroit-three-build\n", "utf8");
-    writeFileSync(
-      path.join(detroitThreeAppPath, "page.js"),
-      "export default function Page() { return <main>stale detroit three</main>; }\n",
-      "utf8"
-    );
-
-    const currentUserRequest =
-      'I want you to create a nextjs landing page, with 4 sections called "Detroit City Three" and there should be a footer and header, a gritty feeling design (black and yellow), sections should feel spaced out and well thought out and you need to do this end to end and put it on my desktop, then leave it open in the browser so i can review it. This means you have to run it and leave it open.';
-    const wrappedExecutionInput = buildAutonomousExecutionInput(
-      currentUserRequest,
-      [
-        "You are in an ongoing conversation with the same user.",
-        "",
-        "Recent conversation context (oldest to newest):",
-        "- user: Look at all the folders on the desktop that start with drone and Drone, stop the servers that are running in the folders do this end to end",
-        "- assistant: I started this, but the run stopped before it finished after 11 iteration(s). Stopped because you cancelled the run. Next step: restart the run when you are ready to continue. Approved 53, blocked 14.",
-        "",
-        "Current user request:",
-        currentUserRequest
-      ].join("\n")
-    );
-
-    const actions = buildDeterministicFrameworkBuildFallbackActions(
-      wrappedExecutionInput,
-      {
-        ...buildWindowsExecutionEnvironment(),
-        desktopPath: tempRoot
-      },
-      currentUserRequest
-    );
-
-    assert.equal(actions[0]?.type, "shell_command");
-    assert.ok(actions.some((action) => action.type === "write_file"));
-    assert.ok(actions.some((action) => action.type === "start_process"));
-    assert.ok(actions.some((action) => action.type === "open_browser"));
-    assert.notDeepEqual(
-      actions.map((action) => action.type),
-      ["start_process", "probe_http", "open_browser"]
-    );
-  } finally {
-    rmSync(tempRoot, { recursive: true, force: true });
-  }
-});
-
-test("buildDeterministicFrameworkBuildFallbackActions relaunches the explicitly named Detroit project without reusing stale preview ownership from another workspace", () => {
-  const tempRoot = mkdtempSync(path.join(os.tmpdir(), "planner-policy-detroit-switch-"));
-  const detroitTwoPath = path.join(tempRoot, "Detroit City Two");
-  const detroitTwoAppPath = path.join(detroitTwoPath, "app");
-  const detroitTwoBuildPath = path.join(detroitTwoPath, ".next");
-  try {
-    mkdirSync(detroitTwoAppPath, { recursive: true });
-    mkdirSync(detroitTwoBuildPath, { recursive: true });
-    writeFileSync(
-      path.join(detroitTwoPath, "package.json"),
-      "{\n  \"name\": \"detroit-city-two\",\n  \"dependencies\": { \"next\": \"15.0.0\" }\n}\n",
-      "utf8"
-    );
-    writeFileSync(path.join(detroitTwoPath, "next-env.d.ts"), "/// <reference types=\"next\" />\n", "utf8");
-    writeFileSync(path.join(detroitTwoBuildPath, "BUILD_ID"), "detroit-two-build\n", "utf8");
-    writeFileSync(path.join(detroitTwoAppPath, "page.js"), "export default function Page() { return <main>Detroit City Two</main>; }\n", "utf8");
-
-    const wrappedExecutionInput = [
-      "Current tracked workspace in this chat:",
-      "- Root path: C:\\Users\\testuser\\Desktop\\Detroit City Three",
-      "- Preview URL: http://127.0.0.1:56895/",
-      "- Preview process lease: proc_detroit_three",
-      "",
-      "Current user request:",
-      'Start up "Detroit City Two" on the desktop, locate it, and start it, put it up on the browser for me do this end to end'
-    ].join("\n");
-
-    const actions = buildDeterministicFrameworkBuildFallbackActions(
-      wrappedExecutionInput,
-      {
-        ...buildWindowsExecutionEnvironment(),
-        desktopPath: tempRoot
-      }
-    );
-
-    assert.deepEqual(
-      actions.map((action) => action.type),
-      ["start_process", "probe_http", "open_browser"]
-    );
-    assert.equal(actions[0]?.params.cwd, detroitTwoPath);
-    assert.equal(actions[1]?.params.url, "http://127.0.0.1:3000");
-    assert.equal(actions[2]?.params.rootPath, detroitTwoPath);
-    assert.equal("previewProcessLeaseId" in (actions[2]?.params ?? {}), false);
-  } finally {
-    rmSync(tempRoot, { recursive: true, force: true });
-  }
-});
-
-test("Next.js fallback layouts import globals.css so generated landing pages do not render unstyled", () => {
-  const javaScriptLayout = buildNextLayoutContent("Drone City");
-  const typeScriptLayout = buildNextTypeScriptLayoutContent("Drone City");
-
-  assert.match(javaScriptLayout, /import "\.\/globals\.css";/);
-  assert.match(typeScriptLayout, /import "\.\/globals\.css";/);
-});
-
-test("buildDeterministicFrameworkBuildFallbackActions rewrites existing Next.js tsx route files instead of shadow js files", () => {
-  const tempRoot = mkdtempSync(path.join(os.tmpdir(), "planner-policy-next-fallback-"));
-  const projectPath = path.join(tempRoot, "Drone City");
-  const appPath = path.join(projectPath, "app");
-  try {
-    mkdirSync(appPath, { recursive: true });
-    writeFileSync(path.join(projectPath, "package.json"), "{\n  \"name\": \"drone-city\"\n}\n", "utf8");
-    writeFileSync(path.join(projectPath, "tsconfig.json"), "{\n  \"compilerOptions\": {}\n}\n", "utf8");
-    writeFileSync(path.join(projectPath, "next-env.d.ts"), "/// <reference types=\"next\" />\n", "utf8");
-    writeFileSync(path.join(appPath, "layout.tsx"), "export default function Layout({ children }: any) { return children; }\n", "utf8");
-    writeFileSync(path.join(appPath, "page.tsx"), "export default function Page() { return null; }\n", "utf8");
-    writeFileSync(path.join(appPath, "layout.js"), "export default function Layout({ children }) { return children; }\n", "utf8");
-    writeFileSync(path.join(appPath, "page.js"), "export default function Page() { return null; }\n", "utf8");
-
-    const actions = buildDeterministicFrameworkBuildFallbackActions(
-      "Please create a Next.js landing page called Drone City on my Desktop. It should have a flying drone in the hero, feel polished and modern, and work as a single-page landing page. After you finish, start it locally, open it in my browser, and leave it up for me to view.",
-      {
-        ...buildWindowsExecutionEnvironment(),
-        desktopPath: tempRoot
-      }
-    );
-
-    const writePaths = actions
-      .filter((action) => action.type === "write_file")
-      .map((action) => String((action.params as Record<string, unknown>).path));
-    assert.ok(writePaths.includes(path.join(projectPath, "app", "layout.tsx")));
-    assert.ok(writePaths.includes(path.join(projectPath, "app", "page.tsx")));
-    assert.ok(writePaths.includes(path.join(projectPath, "app", "layout.js")));
-    assert.ok(writePaths.includes(path.join(projectPath, "app", "page.js")));
-  } finally {
-    rmSync(tempRoot, { recursive: true, force: true });
-  }
-});
-
 test("preparePlannerActions rewrites Next.js src/app writes into the active root app tree", () => {
   const tempRoot = mkdtempSync(path.join(os.tmpdir(), "planner-policy-next-route-root-"));
-  const projectPath = path.join(tempRoot, "Drone City");
+  const projectPath = path.join(tempRoot, "Sample City");
   const rootAppPath = path.join(projectPath, "app");
   const srcAppPath = path.join(projectPath, "src", "app");
   try {
     mkdirSync(rootAppPath, { recursive: true });
     mkdirSync(srcAppPath, { recursive: true });
-    writeFileSync(path.join(projectPath, "package.json"), "{\n  \"name\": \"drone-city\"\n}\n", "utf8");
+    writeFileSync(path.join(projectPath, "package.json"), "{\n  \"name\": \"sample-city\"\n}\n", "utf8");
     writeFileSync(path.join(projectPath, "next-env.d.ts"), "/// <reference types=\"next\" />\n", "utf8");
     writeFileSync(path.join(rootAppPath, "layout.tsx"), "export default function Layout({ children }: any) { return children; }\n", "utf8");
     writeFileSync(path.join(rootAppPath, "page.tsx"), "export default function Page() { return null; }\n", "utf8");
@@ -4637,7 +3808,7 @@ test("preparePlannerActions rewrites Next.js src/app writes into the active root
             description: "write the page",
             params: {
               path: path.join(projectPath, "src", "app", "page.tsx"),
-              content: "export default function Page() { return <main className=\"pageShell\">Drone City</main>; }\n"
+              content: "export default function Page() { return <main className=\"pageShell\">Sample City</main>; }\n"
             }
           },
           {
@@ -4658,7 +3829,7 @@ test("preparePlannerActions rewrites Next.js src/app writes into the active root
           }
         ]
       },
-      "Please create a Next.js landing page called Drone City on my Desktop. It should have a flying drone in the hero, feel polished and modern, and work as a single-page landing page. After you finish, start it locally, open it in my browser, and leave it up for me to view.",
+      "Please create a Next.js landing page called Sample City on my Desktop. It should have a flying sample in the hero, feel polished and modern, and work as a single-page landing page. After you finish, start it locally, open it in my browser, and leave it up for me to view.",
       null,
       undefined,
       {
@@ -4683,7 +3854,7 @@ test("preparePlannerActions rewrites Next.js src/app writes into the active root
 test("inferRequiredActionType recognizes later-in-sentence inspect tool requests", () => {
   assert.equal(
     inferRequiredActionType(
-      "Continue workspace recovery before retrying moves. Use inspect_path_holders on C:\\Users\\testuser\\Desktop\\drone-company-a now."
+      "Continue workspace recovery before retrying moves. Use inspect_path_holders on C:\\Users\\testuser\\Desktop\\sample-company-a now."
     ),
     "inspect_path_holders"
   );
@@ -4787,64 +3958,20 @@ test("runtime inspection requests do not classify as execution-style framework b
 
   assert.equal(isExecutionStyleBuildRequest(currentUserRequest), false);
   assert.equal(isDeterministicFrameworkBuildLaneRequest(currentUserRequest), false);
-  assert.equal(
-    buildDeterministicFrameworkBuildFallbackActions(
-      [
-        "Current tracked workspace in this chat:",
-        "- Root path: C:\\Users\\testuser\\Desktop\\Detroit City Two",
-        "- Preview URL: http://127.0.0.1:3000/",
-        "- Preview process lease: proc_detroit_two",
-        "",
-        "Current user request:",
-        currentUserRequest
-      ].join("\n"),
-      buildWindowsExecutionEnvironment()
-    ).length,
-    0
-  );
 });
 
-test("runtime shutdown verification continuations do not fall through to deterministic framework build fallback", () => {
+test("runtime shutdown verification continuations do not classify as framework build work", () => {
   const currentUserRequest =
     'Check whether the "Detroit City Two" server is currently running, stop the exact matching process if it is, and verify end to end that no server process remains listening. Use execution evidence only from this run. Report the matched process details, the stop action taken, and the verification result. If you cannot perform or verify the shutdown in this run, state that explicitly and do not claim success.';
 
   assert.equal(isExecutionStyleBuildRequest(currentUserRequest), false);
   assert.equal(isDeterministicFrameworkBuildLaneRequest(currentUserRequest), false);
-  assert.equal(
-    buildDeterministicFrameworkBuildFallbackActions(
-      currentUserRequest,
-      buildWindowsExecutionEnvironment(),
-      'did you make sure you shut down "Detroit City Two" so that the server is no longer running? Please do this end to end - check and make sure. If it\'s complete then you succeeded.'
-    ).length,
-    0
-  );
-});
-
-test("direct open_browser follow-ups reuse the tracked live preview instead of rebuilding the framework workspace", () => {
-  const currentUserRequest =
-    'open_browser url="http://127.0.0.1:57793" rootPath="C:\\Users\\testuser\\Desktop\\Detroit City Two" previewProcessLeaseId="proc_detroit_two". Local readiness is already proven. Open the exact live preview in a visible browser window and leave it open for review. Do not substitute verify_browser for this step, and do not switch to a different workspace or URL.';
-  const actions = buildDeterministicFrameworkBuildFallbackActions(
-    currentUserRequest,
-    buildWindowsExecutionEnvironment(),
-    'I want you to create a nextjs landing page, with 4 sections called "Detroit City Two" and there should be a footer and header, a gritty feeling design, and you need to do this end to end and put it on my desktop, then leave it open in the browser so i can review it. This means you have to run it and leave it open.'
-  );
-
-  assert.deepEqual(
-    actions.map((action) => action.type),
-    ["open_browser"]
-  );
-  assert.equal(actions[0]?.params.url, "http://127.0.0.1:57793");
-  assert.equal(
-    actions[0]?.params.rootPath,
-    "C:\\Users\\testuser\\Desktop\\Detroit City Two"
-  );
-  assert.equal(actions[0]?.params.previewProcessLeaseId, "proc_detroit_two");
 });
 
 test("isDesktopFolderRuntimeProcessSweepRequest recognizes bounded Desktop folder server-stop sweeps", () => {
   assert.equal(
     isDesktopFolderRuntimeProcessSweepRequest(
-      "Look at all the folders on the desktop that start with drone and Drone, stop the servers that are running in the folders do this end to end"
+      "Look at all the folders on the desktop that start with sample and Sample, stop the servers that are running in the folders do this end to end"
     ),
     true
   );
@@ -4856,9 +3983,9 @@ test("isDesktopFolderRuntimeProcessSweepRequest recognizes bounded Desktop folde
   );
 });
 
-test("buildDeterministicDesktopRuntimeProcessSweepFallbackActions emits one bounded native sweep action for Desktop drone-folder shutdown requests", () => {
+test("buildDeterministicDesktopRuntimeProcessSweepFallbackActions emits one bounded native sweep action for Desktop sample-folder shutdown requests", () => {
   const actions = buildDeterministicDesktopRuntimeProcessSweepFallbackActions(
-    "Look at all the folders on the desktop that start with drone and Drone, stop the servers that are running in the folders do this end to end",
+    "Look at all the folders on the desktop that start with sample and Sample, stop the servers that are running in the folders do this end to end",
     buildWindowsExecutionEnvironment()
   );
 
@@ -4866,5 +3993,5 @@ test("buildDeterministicDesktopRuntimeProcessSweepFallbackActions emits one boun
   assert.equal(actions[0]?.type, "stop_folder_runtime_processes");
   assert.equal(actions[0]?.params.rootPath, "C:\\Users\\testuser\\Desktop");
   assert.equal(actions[0]?.params.selectorMode, "starts_with");
-  assert.equal(actions[0]?.params.selectorTerm, "drone");
+  assert.equal(actions[0]?.params.selectorTerm, "sample");
 });

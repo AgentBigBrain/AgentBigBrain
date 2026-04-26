@@ -55,7 +55,12 @@ export interface ListDirectoryActionParams extends Record<string, unknown> {
 
 export interface CreateSkillActionParams extends Record<string, unknown> {
   name?: string;
+  kind?: "executable_module" | "markdown_instruction";
+  origin?: "runtime_user";
   code?: string;
+  instructions?: string;
+  markdownContent?: string;
+  content?: string;
   description?: string;
   purpose?: string;
   inputSummary?: string;
@@ -64,6 +69,9 @@ export interface CreateSkillActionParams extends Record<string, unknown> {
   allowedSideEffects?: readonly string[];
   tags?: readonly string[];
   capabilities?: readonly string[];
+  applicability?: readonly string[];
+  memoryPolicy?: "none" | "candidate_only" | "operator_approved";
+  projectionPolicy?: "metadata_only" | "review_safe_excerpt" | "operator_full_content";
   version?: string;
   userSummary?: string;
   invocationHints?: readonly string[];
@@ -312,6 +320,7 @@ export interface PlannerLearningHintSummaryV1 {
   judgmentHintCount: number;
   workflowPreferredSkillName?: string | null;
   workflowSkillSuggestionCount?: number;
+  plannerSkillGuidanceCount?: number;
 }
 
 export interface Plan {

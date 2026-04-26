@@ -17,7 +17,7 @@ test("extractExecutionPreferences keeps natural build wording ambiguous enough f
 
 test("extractExecutionPreferences treats polite edit imperatives as execute-now work", () => {
   const preferences = extractExecutionPreferences(
-    "Please change the hero section so the headline says calmer drone operations start here."
+    "Please change the hero section so the headline says calmer sample operations start here."
   );
 
   assert.equal(preferences.executeNow, true);

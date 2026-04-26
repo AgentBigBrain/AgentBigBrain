@@ -108,10 +108,10 @@ function buildWorkflowHeavySession(
       lastUserInput: "Build the landing page and leave it open."
     },
     activeWorkspace: {
-      id: "workspace:drone-company",
+      id: "workspace:sample-company",
       label: "Tracked preview workspace",
-      rootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
-      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
+      rootPath: "C:\\Users\\testuser\\Desktop\\sample-company",
+      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
       previewUrl: "http://127.0.0.1:4177/index.html",
       browserSessionId: "browser-1",
       browserSessionIds: ["browser-1"],
@@ -119,12 +119,12 @@ function buildWorkflowHeavySession(
       browserProcessPid: 999,
       previewProcessLeaseId: "lease-1",
       previewProcessLeaseIds: ["lease-1"],
-      previewProcessCwd: "C:\\Users\\testuser\\Desktop\\drone-company",
+      previewProcessCwd: "C:\\Users\\testuser\\Desktop\\sample-company",
       lastKnownPreviewProcessPid: 1234,
       stillControllable: true,
       ownershipState: "tracked",
       previewStackState: "browser_and_preview",
-      lastChangedPaths: ["C:\\Users\\testuser\\Desktop\\drone-company\\index.html"],
+      lastChangedPaths: ["C:\\Users\\testuser\\Desktop\\sample-company\\index.html"],
       sourceJobId: "job-1",
       updatedAt: "2026-03-11T18:05:00.000Z"
     },
@@ -134,10 +134,10 @@ function buildWorkflowHeavySession(
       goal: "Finish the landing page draft and leave it ready for review.",
       summary: "The landing page draft is ready and the preview is still open.",
       nextSuggestedStep: "Tell me which section to refine next.",
-      workspaceRootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
-      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
+      workspaceRootPath: "C:\\Users\\testuser\\Desktop\\sample-company",
+      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
       previewUrl: "http://127.0.0.1:4177/index.html",
-      changedPaths: ["C:\\Users\\testuser\\Desktop\\drone-company\\index.html"],
+      changedPaths: ["C:\\Users\\testuser\\Desktop\\sample-company\\index.html"],
       sourceJobId: "job-1",
       updatedAt: "2026-03-11T18:05:00.000Z"
     },
@@ -246,7 +246,7 @@ test("routeConversationMessageInput promotes strong end-to-end wording into auto
 
   const result = await routeConversationMessageInput(
     session,
-    "Hey, build me a tech landing page for air drones, go until you finish, put it on my desktop, create a folder called drone-company, and leave it open for me.",
+    "Hey, build me a tech landing page for sample products, go until you finish, put it on my desktop, create a folder called sample-company, and leave it open for me.",
     "2026-03-11T18:05:05.000Z",
     buildDependencies((currentSession, input, _receivedAt, executionInput) => {
       capturedExecutionInput = executionInput ?? "";
@@ -268,7 +268,7 @@ test("routeConversationMessageInput promotes strong end-to-end wording into auto
   assert.ok(autonomousPayload);
   assert.equal(
     autonomousPayload?.goal,
-    "Hey, build me a tech landing page for air drones, go until you finish, put it on my desktop, create a folder called drone-company, and leave it open for me."
+    "Hey, build me a tech landing page for sample products, go until you finish, put it on my desktop, create a folder called sample-company, and leave it open for me."
   );
   assert.match(
     autonomousPayload?.initialExecutionInput ?? "",
@@ -416,7 +416,7 @@ test("routeConversationMessageInput persists build-format clarification and reso
   let capturedInput = "";
   let capturedExecutionInput = "";
   const sourceInput =
-    'Create me that landing page with a hero and call to action in the exact folder "C:\\Users\\testuser\\Desktop\\Solar Energy Landing Page".';
+    'Create me that landing page with a hero and call to action in the exact folder "C:\\Users\\testuser\\Desktop\\Sample Service Landing Page".';
 
   const firstResult = await routeConversationMessageInput(
     session,
@@ -475,7 +475,7 @@ test("routeConversationMessageInput persists build-format clarification and reso
 test("routeConversationMessageInput can render build-format clarification wording naturally while keeping deterministic options", async () => {
   const session = buildSession();
   const sourceInput =
-    'Build me a landing page for this company in the exact folder "C:\\Users\\testuser\\Desktop\\Solar Energy Landing Page".';
+    'Build me a landing page for this company in the exact folder "C:\\Users\\testuser\\Desktop\\Sample Service Landing Page".';
 
   const result = await routeConversationMessageInput(
     session,
@@ -928,7 +928,7 @@ test("routeConversationMessageInput carries explicit do-not-run and do-not-open 
 
   const result = await routeConversationMessageInput(
     session,
-    "Can you get a new Next.js landing-page workspace started on my desktop and call it Downtown Detroit Drones? Just get the workspace ready for edits with the dependencies installed. Do not run it or open anything yet.",
+    "Can you get a new Next.js landing-page workspace started on my desktop and call it Sample City Showcase? Just get the workspace ready for edits with the dependencies installed. Do not run it or open anything yet.",
     "2026-04-13T10:25:00.000Z",
     buildDependencies((currentSession, input, _receivedAt, executionInput) => {
       capturedExecutionInput = executionInput ?? "";
@@ -1013,7 +1013,7 @@ test("routeConversationMessageInput retries a recovery clarification when the us
       id: "clarification_1",
       kind: "task_recovery",
       sourceInput:
-        "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+        "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
       question:
         "I couldn't move those folders yet because one or more are still open in a local preview process. I can inspect the matching holders, shut down only exact tracked ones, and retry the move. Do you want me to do that?",
       requestedAt: "2026-03-13T14:05:00.000Z",
@@ -1054,7 +1054,7 @@ test("routeConversationMessageInput retries a recovery clarification when the us
   assert.equal(result.shouldStartWorker, true);
   assert.equal(
     capturedInput,
-    "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects."
+    "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects."
   );
   assert.match(capturedExecutionInput, /leaseId="proc_preview_1"/);
   assert.equal(session.activeClarification, null);
@@ -1072,7 +1072,7 @@ test("routeConversationMessageInput continues inspection-first recovery when the
       id: "clarification_2",
       kind: "task_recovery",
       sourceInput:
-        "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+        "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
       question:
         "I couldn't move those folders yet because likely local preview holders may still be using them. I can inspect those holders more closely first. Do you want me to continue that recovery?",
       requestedAt: "2026-03-13T14:06:00.000Z",
@@ -1121,7 +1121,7 @@ test("routeConversationMessageInput lets the user decline a recovery clarificati
       id: "clarification_1",
       kind: "task_recovery",
       sourceInput:
-        "Please organize the drone-company project folders you made earlier into a folder called drone-web-projects.",
+        "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
       question:
         "I couldn't move those folders yet because one or more are still open in a local preview process. I can inspect the matching holders, shut down only exact tracked ones, and retry the move. Do you want me to do that?",
       requestedAt: "2026-03-13T14:05:00.000Z",
@@ -1410,13 +1410,13 @@ test("routeConversationMessageInput keeps greetings and identity recall direct u
     returnHandoff: {
       id: "handoff:blocked-job",
       status: "completed",
-      goal: "Finish the drone-company landing page and leave it ready for review.",
+      goal: "Finish the sample-company landing page and leave it ready for review.",
       summary:
         "I couldn't execute that request in this run. What happened: one or more governed actions were blocked before execution. Why it didn't execute: a safety, governance, or runtime policy denied the requested side effect. What to do next: ask for the exact block code and approval diff, then retry with a narrower allowed action.",
       nextSuggestedStep: "Ask for the exact block code and approval diff, then retry with a narrower allowed action.",
       workspaceRootPath: "C:\\Users\\testuser\\Desktop\\Sample World",
       primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\Sample World\\src\\index.css",
-      previewUrl: "file:///C:/Users/testuser/Desktop/drone-company-landing.html",
+      previewUrl: "file:///C:/Users/testuser/Desktop/sample-company-landing.html",
       changedPaths: [
         "C:\\Users\\testuser\\Desktop\\Sample World\\src\\index.css",
         "C:\\Users\\testuser\\Desktop\\Sample World\\src\\App.jsx"
@@ -2374,7 +2374,7 @@ test("routeConversationMessageInput uses a no-worker fallback for chat when dire
       nextSuggestedStep: "Ask for the exact block code and approval diff.",
       workspaceRootPath: "C:\\Users\\testuser\\Desktop\\Sample World",
       primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\Sample World\\src\\index.css",
-      previewUrl: "file:///C:/Users/testuser/Desktop/drone-company-landing.html",
+      previewUrl: "file:///C:/Users/testuser/Desktop/sample-company-landing.html",
       changedPaths: [
         "C:\\Users\\testuser\\Desktop\\Sample World\\src\\index.css",
         "C:\\Users\\testuser\\Desktop\\Sample World\\src\\App.jsx"
@@ -2450,45 +2450,45 @@ test("routeConversationMessageInput keeps explicit conversational interludes dir
       source: "natural_intent",
       confidence: "HIGH",
       lastAffirmedAt: "2026-03-11T18:05:00.000Z",
-      lastUserInput: "Handle this end to end and leave AI Drone City open."
+      lastUserInput: "Handle this end to end and leave Sample City open."
     },
     activeWorkspace: {
-      id: "workspace:ai-drone-city",
-      label: "AI Drone City",
-      rootPath: "C:\\Users\\testuser\\Desktop\\AI Drone City",
-      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\AI Drone City\\dist\\index.html",
+      id: "workspace:ai-sample-city",
+      label: "Sample City",
+      rootPath: "C:\\Users\\testuser\\Desktop\\Sample City",
+      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\Sample City\\dist\\index.html",
       previewUrl: "http://127.0.0.1:49263/",
-      browserSessionId: "browser_session:ai-drone-city",
-      browserSessionIds: ["browser_session:ai-drone-city"],
+      browserSessionId: "browser_session:ai-sample-city",
+      browserSessionIds: ["browser_session:ai-sample-city"],
       browserSessionStatus: "open",
       browserProcessPid: 52056,
-      previewProcessLeaseId: "proc_ai_drone_city",
-      previewProcessLeaseIds: ["proc_ai_drone_city"],
-      previewProcessCwd: "C:\\Users\\testuser\\Desktop\\AI Drone City",
+      previewProcessLeaseId: "proc_ai_sample_city",
+      previewProcessLeaseIds: ["proc_ai_sample_city"],
+      previewProcessCwd: "C:\\Users\\testuser\\Desktop\\Sample City",
       lastKnownPreviewProcessPid: 49236,
       stillControllable: true,
       ownershipState: "tracked",
       previewStackState: "browser_and_preview",
-      lastChangedPaths: ["C:\\Users\\testuser\\Desktop\\AI Drone City"],
+      lastChangedPaths: ["C:\\Users\\testuser\\Desktop\\Sample City"],
       sourceJobId: "job-1",
       updatedAt: "2026-03-11T18:05:10.000Z"
     },
     browserSessions: [
       buildConversationBrowserSessionFixture({
-        id: "browser_session:ai-drone-city",
-        label: "AI Drone City preview",
+        id: "browser_session:ai-sample-city",
+        label: "Sample City preview",
         url: "http://127.0.0.1:49263/",
         sourceJobId: "job-1",
         openedAt: "2026-03-11T18:05:10.000Z",
-        linkedProcessLeaseId: "proc_ai_drone_city",
-        linkedProcessCwd: "C:\\Users\\testuser\\Desktop\\AI Drone City"
+        linkedProcessLeaseId: "proc_ai_sample_city",
+        linkedProcessCwd: "C:\\Users\\testuser\\Desktop\\Sample City"
       })
     ]
   });
 
   const result = await routeConversationMessageInput(
     session,
-    "Before changing anything, just talk with me for a minute about what makes AI Drone City feel playful. Reply in two short paragraphs and keep the page open.",
+    "Before changing anything, just talk with me for a minute about what makes Sample City feel playful. Reply in two short paragraphs and keep the page open.",
     "2026-03-11T18:06:00.000Z",
     buildDependencies(
       () => {
@@ -2496,7 +2496,7 @@ test("routeConversationMessageInput keeps explicit conversational interludes dir
       },
       {
         runDirectConversationTurn: async () => ({
-          summary: "AI Drone City feels playful because the pacing is light and the motion stays inviting instead of noisy.\n\nThe colors and airy spacing give it room to feel curious, so the page can stay open as a playful preview while we talk."
+          summary: "Sample City feels playful because the pacing is light and the motion stays inviting instead of noisy.\n\nThe colors and airy spacing give it room to feel curious, so the page can stay open as a playful preview while we talk."
         })
       }
     )
@@ -2695,35 +2695,35 @@ test("routeConversationMessageInput keeps long narrative memory updates off the 
 test("routeConversationMessageInput keeps before-action multi-paragraph conversation direct during active browser workflow continuity", async () => {
   const session = buildWorkflowHeavySession({
     activeWorkspace: {
-      id: "workspace:ai-drone-city",
-      label: "AI Drone City workspace",
-      rootPath: "C:\\Users\\testuser\\Desktop\\AI Drone City",
-      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\AI Drone City\\index.html",
+      id: "workspace:ai-sample-city",
+      label: "Sample City workspace",
+      rootPath: "C:\\Users\\testuser\\Desktop\\Sample City",
+      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\Sample City\\index.html",
       previewUrl: "http://127.0.0.1:49263/",
-      browserSessionId: "browser_session:ai-drone-city",
-      browserSessionIds: ["browser_session:ai-drone-city"],
+      browserSessionId: "browser_session:ai-sample-city",
+      browserSessionIds: ["browser_session:ai-sample-city"],
       browserSessionStatus: "open",
       browserProcessPid: 777,
-      previewProcessLeaseId: "proc_ai_drone_city",
-      previewProcessLeaseIds: ["proc_ai_drone_city"],
-      previewProcessCwd: "C:\\Users\\testuser\\Desktop\\AI Drone City",
+      previewProcessLeaseId: "proc_ai_sample_city",
+      previewProcessLeaseIds: ["proc_ai_sample_city"],
+      previewProcessCwd: "C:\\Users\\testuser\\Desktop\\Sample City",
       lastKnownPreviewProcessPid: 778,
       stillControllable: true,
       ownershipState: "tracked",
       previewStackState: "browser_and_preview",
-      lastChangedPaths: ["C:\\Users\\testuser\\Desktop\\AI Drone City\\index.html"],
+      lastChangedPaths: ["C:\\Users\\testuser\\Desktop\\Sample City\\index.html"],
       sourceJobId: "job-1",
       updatedAt: "2026-03-11T18:05:10.000Z"
     },
     browserSessions: [
       buildConversationBrowserSessionFixture({
-        id: "browser_session:ai-drone-city",
-        label: "AI Drone City preview",
+        id: "browser_session:ai-sample-city",
+        label: "Sample City preview",
         url: "http://127.0.0.1:49263/",
         sourceJobId: "job-1",
         openedAt: "2026-03-11T18:05:10.000Z",
-        linkedProcessLeaseId: "proc_ai_drone_city",
-        linkedProcessCwd: "C:\\Users\\testuser\\Desktop\\AI Drone City"
+        linkedProcessLeaseId: "proc_ai_sample_city",
+        linkedProcessCwd: "C:\\Users\\testuser\\Desktop\\Sample City"
       })
     ]
   });
@@ -2864,7 +2864,7 @@ test("routeConversationMessageInput keeps explicit status and recall off the wor
   assert.equal(result.shouldStartWorker, false);
   assert.match(result.reply, /I'm working on/i);
   assert.match(result.reply, /Current workspace:/);
-  assert.match(result.reply, /C:\\Users\\testuser\\Desktop\\drone-company/);
+  assert.match(result.reply, /C:\\Users\\testuser\\Desktop\\sample-company/);
   assert.equal(session.modeContinuity?.activeMode, "status_or_recall");
 });
 
@@ -2931,10 +2931,10 @@ test("routeConversationMessageInput answers review-ready handoff prompts without
       goal: "Build the landing page and leave a preview open for review.",
       summary: "I finished the first draft and paused at the review checkpoint.",
       nextSuggestedStep: "Tell me what section you want changed next.",
-      workspaceRootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
-      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
+      workspaceRootPath: "C:\\Users\\testuser\\Desktop\\sample-company",
+      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
       previewUrl: "http://127.0.0.1:4177/index.html",
-      changedPaths: ["C:\\Users\\testuser\\Desktop\\drone-company\\index.html"],
+      changedPaths: ["C:\\Users\\testuser\\Desktop\\sample-company\\index.html"],
       sourceJobId: "job-review",
       updatedAt: "2026-03-11T18:05:11.000Z"
     }
@@ -2972,12 +2972,12 @@ test("routeConversationMessageInput answers guided review prompts from the durab
       goal: "Build the landing page and pause at the review checkpoint.",
       summary: "I finished the first draft and paused at the review checkpoint.",
       nextSuggestedStep: "Tell me what section you want changed next.",
-      workspaceRootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
-      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
+      workspaceRootPath: "C:\\Users\\testuser\\Desktop\\sample-company",
+      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
       previewUrl: "http://127.0.0.1:4177/index.html",
       changedPaths: [
-        "C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
-        "C:\\Users\\testuser\\Desktop\\drone-company\\styles.css"
+        "C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
+        "C:\\Users\\testuser\\Desktop\\sample-company\\styles.css"
       ],
       sourceJobId: "job-review-guided",
       updatedAt: "2026-03-11T18:05:11.500Z"
@@ -3011,12 +3011,12 @@ test("routeConversationMessageInput can use the local intent model for nuanced r
       goal: "Build the landing page and pause at the review checkpoint.",
       summary: "I finished the first draft and paused at the review checkpoint.",
       nextSuggestedStep: "Tell me what section you want changed next.",
-      workspaceRootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
-      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
+      workspaceRootPath: "C:\\Users\\testuser\\Desktop\\sample-company",
+      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
       previewUrl: "http://127.0.0.1:4177/index.html",
       changedPaths: [
-        "C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
-        "C:\\Users\\testuser\\Desktop\\drone-company\\styles.css"
+        "C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
+        "C:\\Users\\testuser\\Desktop\\sample-company\\styles.css"
       ],
       sourceJobId: "job-review-guided-model",
       updatedAt: "2026-03-11T18:05:11.500Z"
@@ -3069,12 +3069,12 @@ test("routeConversationMessageInput can use the local intent model for softer re
       goal: "Finish the landing page draft and save it for review.",
       summary: "I finished the landing page draft and left the preview ready for review.",
       nextSuggestedStep: "Tell me what section you want me to refine next.",
-      workspaceRootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
-      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
+      workspaceRootPath: "C:\\Users\\testuser\\Desktop\\sample-company",
+      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
       previewUrl: "http://127.0.0.1:4177/index.html",
       changedPaths: [
-        "C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
-        "C:\\Users\\testuser\\Desktop\\drone-company\\styles.css"
+        "C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
+        "C:\\Users\\testuser\\Desktop\\sample-company\\styles.css"
       ],
       sourceJobId: "job-review-ready-model",
       updatedAt: "2026-03-11T18:05:11.750Z"
@@ -3126,12 +3126,12 @@ test("routeConversationMessageInput can use the local intent model for softer an
       goal: "Finish the landing page draft and save it for review.",
       summary: "I finished the landing page draft and saved the review checkpoint for you.",
       nextSuggestedStep: "Tell me which section you want me to refine next.",
-      workspaceRootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
-      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
+      workspaceRootPath: "C:\\Users\\testuser\\Desktop\\sample-company",
+      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
       previewUrl: "http://127.0.0.1:4177/index.html",
       changedPaths: [
-        "C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
-        "C:\\Users\\testuser\\Desktop\\drone-company\\styles.css"
+        "C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
+        "C:\\Users\\testuser\\Desktop\\sample-company\\styles.css"
       ],
       sourceJobId: "job-review-ready-more-model",
       updatedAt: "2026-03-11T18:05:11.825Z"
@@ -3183,12 +3183,12 @@ test("routeConversationMessageInput can use the local intent model for nuanced r
       goal: "Finish the landing page draft and pause for review.",
       summary: "I finished the landing page draft and paused at the review checkpoint.",
       nextSuggestedStep: "Tell me what section you want me to refine first.",
-      workspaceRootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
-      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
+      workspaceRootPath: "C:\\Users\\testuser\\Desktop\\sample-company",
+      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
       previewUrl: "http://127.0.0.1:4177/index.html",
       changedPaths: [
-        "C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
-        "C:\\Users\\testuser\\Desktop\\drone-company\\styles.css"
+        "C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
+        "C:\\Users\\testuser\\Desktop\\sample-company\\styles.css"
       ],
       sourceJobId: "job-review-next-model",
       updatedAt: "2026-03-11T18:05:11.900Z"
@@ -3229,7 +3229,7 @@ test("routeConversationMessageInput can use the local intent model for nuanced r
   );
 
   assert.equal(result.shouldStartWorker, false);
-  assert.match(result.reply, /Next review step: Check the primary artifact at C:\\Users\\testuser\\Desktop\\drone-company\\index\.html\./);
+  assert.match(result.reply, /Next review step: Check the primary artifact at C:\\Users\\testuser\\Desktop\\sample-company\\index\.html\./);
   assert.equal(session.modeContinuity?.activeMode, "status_or_recall");
 });
 
@@ -3241,12 +3241,12 @@ test("routeConversationMessageInput can use the local intent model for after-tha
       goal: "Finish the landing page draft and pause for review.",
       summary: "I finished the landing page draft and paused at the review checkpoint.",
       nextSuggestedStep: "Tell me what section you want me to refine first.",
-      workspaceRootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
-      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
+      workspaceRootPath: "C:\\Users\\testuser\\Desktop\\sample-company",
+      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
       previewUrl: "http://127.0.0.1:4177/index.html",
       changedPaths: [
-        "C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
-        "C:\\Users\\testuser\\Desktop\\drone-company\\styles.css"
+        "C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
+        "C:\\Users\\testuser\\Desktop\\sample-company\\styles.css"
       ],
       sourceJobId: "job-review-after-that-model",
       updatedAt: "2026-03-11T18:05:11.950Z"
@@ -3286,7 +3286,7 @@ test("routeConversationMessageInput can use the local intent model for after-tha
   );
 
   assert.equal(result.shouldStartWorker, false);
-  assert.match(result.reply, /Next review step: Check the primary artifact at C:\\Users\\testuser\\Desktop\\drone-company\\index\.html\./);
+  assert.match(result.reply, /Next review step: Check the primary artifact at C:\\Users\\testuser\\Desktop\\sample-company\\index\.html\./);
   assert.equal(session.modeContinuity?.activeMode, "status_or_recall");
 });
 
@@ -3298,12 +3298,12 @@ test("routeConversationMessageInput can use the local intent model for wrap-up s
       goal: "Finish the landing page draft and save it for review.",
       summary: "I finished the landing page draft and saved the review checkpoint for you.",
       nextSuggestedStep: "Tell me which section you want me to refine next.",
-      workspaceRootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
-      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
+      workspaceRootPath: "C:\\Users\\testuser\\Desktop\\sample-company",
+      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
       previewUrl: "http://127.0.0.1:4177/index.html",
       changedPaths: [
-        "C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
-        "C:\\Users\\testuser\\Desktop\\drone-company\\styles.css"
+        "C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
+        "C:\\Users\\testuser\\Desktop\\sample-company\\styles.css"
       ],
       sourceJobId: "job-wrap-up-model",
       updatedAt: "2026-03-11T18:05:12.050Z"
@@ -3344,7 +3344,7 @@ test("routeConversationMessageInput can use the local intent model for wrap-up s
 
   assert.equal(result.shouldStartWorker, false);
   assert.match(result.reply, /Here is what I wrapped up for you:/);
-  assert.match(result.reply, /What I wrapped up: C:\\Users\\testuser\\Desktop\\drone-company\\index\.html and C:\\Users\\testuser\\Desktop\\drone-company\\styles\.css\./);
+  assert.match(result.reply, /What I wrapped up: C:\\Users\\testuser\\Desktop\\sample-company\\index\.html and C:\\Users\\testuser\\Desktop\\sample-company\\styles\.css\./);
   assert.equal(session.modeContinuity?.activeMode, "status_or_recall");
 });
 
@@ -3363,10 +3363,10 @@ test("routeConversationMessageInput resumes prior build work from the durable ha
       goal: "Build the landing page and leave the preview ready.",
       summary: "I finished the landing page draft and left the preview ready for review.",
       nextSuggestedStep: "Tell me what section you want changed next.",
-      workspaceRootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
-      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
+      workspaceRootPath: "C:\\Users\\testuser\\Desktop\\sample-company",
+      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
       previewUrl: "http://127.0.0.1:4177/index.html",
-      changedPaths: ["C:\\Users\\testuser\\Desktop\\drone-company\\index.html"],
+      changedPaths: ["C:\\Users\\testuser\\Desktop\\sample-company\\index.html"],
       sourceJobId: "job-3",
       updatedAt: "2026-03-11T18:05:10.000Z"
     }
@@ -3392,7 +3392,7 @@ test("routeConversationMessageInput resumes prior build work from the durable ha
   assert.equal(session.modeContinuity?.activeMode, "build");
   assert.match(capturedExecutionInput, /Latest durable work handoff in this chat:/);
   assert.match(capturedExecutionInput, /Durable return-handoff continuation:/);
-  assert.match(capturedExecutionInput, /Resume workspace root: C:\\Users\\testuser\\Desktop\\drone-company/);
+  assert.match(capturedExecutionInput, /Resume workspace root: C:\\Users\\testuser\\Desktop\\sample-company/);
 });
 
 test("routeConversationMessageInput can use the local intent model for nuanced return-handoff resume wording", async () => {
@@ -3410,10 +3410,10 @@ test("routeConversationMessageInput can use the local intent model for nuanced r
       goal: "Keep refining the landing page draft from the saved checkpoint.",
       summary: "I paused with the landing page draft ready for refinement.",
       nextSuggestedStep: "Keep refining the hero and CTA from the saved draft.",
-      workspaceRootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
-      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
+      workspaceRootPath: "C:\\Users\\testuser\\Desktop\\sample-company",
+      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
       previewUrl: "http://127.0.0.1:4177/index.html",
-      changedPaths: ["C:\\Users\\testuser\\Desktop\\drone-company\\index.html"],
+      changedPaths: ["C:\\Users\\testuser\\Desktop\\sample-company\\index.html"],
       sourceJobId: "job-3b",
       updatedAt: "2026-03-11T18:05:10.500Z"
     }
@@ -3453,7 +3453,7 @@ test("routeConversationMessageInput can use the local intent model for nuanced r
   assert.equal(result.shouldStartWorker, true);
   assert.equal(result.reply, "I'm picking that back up from the last checkpoint now.");
   assert.match(capturedExecutionInput, /Durable return-handoff continuation:/);
-  assert.match(capturedExecutionInput, /Resume workspace root: C:\\Users\\testuser\\Desktop\\drone-company/);
+  assert.match(capturedExecutionInput, /Resume workspace root: C:\\Users\\testuser\\Desktop\\sample-company/);
 });
 
 test("routeConversationMessageInput can use the local intent model for nuanced return-handoff explain wording", async () => {
@@ -3464,12 +3464,12 @@ test("routeConversationMessageInput can use the local intent model for nuanced r
       goal: "Finish the landing page draft and save it for review.",
       summary: "I finished the landing page draft and saved the review checkpoint for you.",
       nextSuggestedStep: "Tell me which section you want me to refine next.",
-      workspaceRootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
-      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
+      workspaceRootPath: "C:\\Users\\testuser\\Desktop\\sample-company",
+      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
       previewUrl: "http://127.0.0.1:4177/index.html",
       changedPaths: [
-        "C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
-        "C:\\Users\\testuser\\Desktop\\drone-company\\styles.css"
+        "C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
+        "C:\\Users\\testuser\\Desktop\\sample-company\\styles.css"
       ],
       sourceJobId: "job-explain-model",
       updatedAt: "2026-03-11T18:05:12.000Z"
@@ -3511,7 +3511,7 @@ test("routeConversationMessageInput can use the local intent model for nuanced r
 
   assert.equal(result.shouldStartWorker, false);
   assert.match(result.reply, /Here is what I changed in the saved work:/);
-  assert.match(result.reply, /What I changed: C:\\Users\\testuser\\Desktop\\drone-company\\index\.html and C:\\Users\\testuser\\Desktop\\drone-company\\styles\.css\./);
+  assert.match(result.reply, /What I changed: C:\\Users\\testuser\\Desktop\\sample-company\\index\.html and C:\\Users\\testuser\\Desktop\\sample-company\\styles\.css\./);
   assert.equal(session.modeContinuity?.activeMode, "status_or_recall");
 });
 
@@ -3530,10 +3530,10 @@ test("routeConversationMessageInput resumes prior autonomous work from the durab
       goal: "Build the landing page, leave it open, and wait for refinement feedback.",
       summary: "I finished the first draft and paused at the review checkpoint.",
       nextSuggestedStep: "Keep iterating on the landing page after the user gives the next section to change.",
-      workspaceRootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
-      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
+      workspaceRootPath: "C:\\Users\\testuser\\Desktop\\sample-company",
+      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
       previewUrl: "http://127.0.0.1:4177/index.html",
-      changedPaths: ["C:\\Users\\testuser\\Desktop\\drone-company\\index.html"],
+      changedPaths: ["C:\\Users\\testuser\\Desktop\\sample-company\\index.html"],
       sourceJobId: "job-8",
       updatedAt: "2026-03-11T18:06:10.000Z"
     }
@@ -3584,10 +3584,10 @@ test("routeConversationMessageInput can use continuation interpretation for nuan
       goal: "Finish the landing page draft and leave the preview open.",
       summary: "The page draft exists and the preview can be resumed from the last checkpoint.",
       nextSuggestedStep: "Refine the hero copy and confirm the final CTA.",
-      workspaceRootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
-      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
+      workspaceRootPath: "C:\\Users\\testuser\\Desktop\\sample-company",
+      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
       previewUrl: "http://127.0.0.1:4177/index.html",
-      changedPaths: ["C:\\Users\\testuser\\Desktop\\drone-company\\index.html"],
+      changedPaths: ["C:\\Users\\testuser\\Desktop\\sample-company\\index.html"],
       sourceJobId: "job-resume-model",
       updatedAt: "2026-03-11T18:05:25.000Z"
     }
@@ -3624,7 +3624,7 @@ test("routeConversationMessageInput can use continuation interpretation for nuan
   assert.equal(result.shouldStartWorker, true);
   assert.equal(result.reply, "I'm picking that back up from the last checkpoint now.");
   assert.match(capturedExecutionInput, /Durable return-handoff continuation:/);
-  assert.match(capturedExecutionInput, /Resume workspace root: C:\\Users\\testuser\\Desktop\\drone-company/);
+  assert.match(capturedExecutionInput, /Resume workspace root: C:\\Users\\testuser\\Desktop\\sample-company/);
 });
 
 test("routeConversationMessageInput lets the user leave the rest for later without queueing more work", async () => {
@@ -3642,10 +3642,10 @@ test("routeConversationMessageInput lets the user leave the rest for later witho
       goal: "Build the landing page and leave the preview ready.",
       summary: "I finished the landing page draft and left the preview ready for review.",
       nextSuggestedStep: "Tell me what section you want changed next.",
-      workspaceRootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
-      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
+      workspaceRootPath: "C:\\Users\\testuser\\Desktop\\sample-company",
+      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
       previewUrl: "http://127.0.0.1:4177/index.html",
-      changedPaths: ["C:\\Users\\testuser\\Desktop\\drone-company\\index.html"],
+      changedPaths: ["C:\\Users\\testuser\\Desktop\\sample-company\\index.html"],
       sourceJobId: "job-9",
       updatedAt: "2026-03-11T18:05:20.000Z"
     }
@@ -3662,7 +3662,7 @@ test("routeConversationMessageInput lets the user leave the rest for later witho
 
   assert.equal(result.shouldStartWorker, false);
   assert.match(result.reply, /I'll leave the rest for later and keep this checkpoint ready for you\./i);
-  assert.match(result.reply, /Workspace: C:\\Users\\testuser\\Desktop\\drone-company/);
+  assert.match(result.reply, /Workspace: C:\\Users\\testuser\\Desktop\\sample-company/);
   assert.equal(session.returnHandoff?.status, "waiting_for_user");
   assert.equal(
     session.returnHandoff?.nextSuggestedStep,
@@ -3694,10 +3694,10 @@ test("routeConversationMessageInput pauses an active autonomous run without queu
       }
     ],
     activeWorkspace: {
-      id: "workspace:drone-company",
+      id: "workspace:sample-company",
       label: "Current project workspace",
-      rootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
-      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
+      rootPath: "C:\\Users\\testuser\\Desktop\\sample-company",
+      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
       previewUrl: "http://127.0.0.1:4177/index.html",
       browserSessionId: "browser-1",
       browserSessionIds: ["browser-1"],
@@ -3705,12 +3705,12 @@ test("routeConversationMessageInput pauses an active autonomous run without queu
       browserProcessPid: 999,
       previewProcessLeaseId: "lease-1",
       previewProcessLeaseIds: ["lease-1"],
-      previewProcessCwd: "C:\\Users\\testuser\\Desktop\\drone-company",
+      previewProcessCwd: "C:\\Users\\testuser\\Desktop\\sample-company",
       lastKnownPreviewProcessPid: 1234,
       stillControllable: true,
       ownershipState: "tracked",
       previewStackState: "browser_and_preview",
-      lastChangedPaths: ["C:\\Users\\testuser\\Desktop\\drone-company\\index.html"],
+      lastChangedPaths: ["C:\\Users\\testuser\\Desktop\\sample-company\\index.html"],
       sourceJobId: "job-live",
       updatedAt: "2026-03-11T18:05:05.000Z"
     }
@@ -3737,7 +3737,7 @@ test("routeConversationMessageInput pauses an active autonomous run without queu
   assert.equal(result.shouldStartWorker, false);
   assert.equal(abortCalls, 1);
   assert.match(result.reply, /I'm stopping here and keeping the latest checkpoint ready for you\./i);
-  assert.match(result.reply, /Workspace: C:\\Users\\testuser\\Desktop\\drone-company/);
+  assert.match(result.reply, /Workspace: C:\\Users\\testuser\\Desktop\\sample-company/);
   assert.equal(session.recentJobs[0]?.pauseRequestedAt, "2026-03-11T18:05:30.000Z");
   assert.equal(session.returnHandoff?.status, "waiting_for_user");
   assert.equal(session.returnHandoff?.sourceJobId, "job-live");
@@ -3817,7 +3817,7 @@ test("routeConversationMessageInput carries open-browser and artifact context in
         id: "action-1",
         kind: "file",
         label: "Landing page file",
-        location: "C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
+        location: "C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
         status: "created",
         sourceJobId: "job-1",
         at: "2026-03-11T18:05:00.000Z",
@@ -3827,8 +3827,8 @@ test("routeConversationMessageInput carries open-browser and artifact context in
     pathDestinations: [
       {
         id: "dest-1",
-        label: "Drone company folder",
-        resolvedPath: "C:\\Users\\testuser\\Desktop\\drone-company",
+        label: "Sample company folder",
+        resolvedPath: "C:\\Users\\testuser\\Desktop\\sample-company",
         sourceJobId: "job-1",
         updatedAt: "2026-03-11T18:05:00.000Z"
       }
@@ -3864,7 +3864,7 @@ test("routeConversationMessageInput carries open-browser and artifact context in
   assert.match(capturedExecutionInput, /Landing page file/);
   assert.match(capturedExecutionInput, /Landing page preview: sessionId=browser_session:landing-page;/);
   assert.match(capturedExecutionInput, /Natural artifact-edit follow-up:/);
-  assert.match(capturedExecutionInput, /Preferred edit destination: C:\\Users\\testuser\\Desktop\\drone-company/);
+  assert.match(capturedExecutionInput, /Preferred edit destination: C:\\Users\\testuser\\Desktop\\sample-company/);
 });
 
 test("routeConversationMessageInput keeps workflow continuation turns on the work path after conversational interludes", async () => {
@@ -3874,13 +3874,13 @@ test("routeConversationMessageInput keeps workflow continuation turns on the wor
       source: "natural_intent",
       confidence: "HIGH",
       lastAffirmedAt: "2026-03-11T18:05:00.000Z",
-      lastUserInput: "Please plan a calm air-drone landing page in three concise steps."
+      lastUserInput: "Please plan a calm air-sample landing page in three concise steps."
     },
     recentJobs: [
       {
         ...buildQueuedJob(
-          "Please plan a calm air-drone landing page in three concise steps.",
-          "Please plan a calm air-drone landing page in three concise steps."
+          "Please plan a calm air-sample landing page in three concise steps.",
+          "Please plan a calm air-sample landing page in three concise steps."
         ),
         id: "job-plan-1",
         status: "completed",
@@ -3919,13 +3919,13 @@ test("routeConversationMessageInput can use continuation interpretation for nuan
       source: "natural_intent",
       confidence: "HIGH",
       lastAffirmedAt: "2026-03-11T18:05:00.000Z",
-      lastUserInput: "Build the landing page and save it in the drone-company folder."
+      lastUserInput: "Build the landing page and save it in the sample-company folder."
     },
     pathDestinations: [
       {
         id: "dest-1",
-        label: "Drone company folder",
-        resolvedPath: "C:\\Users\\testuser\\Desktop\\drone-company",
+        label: "Sample company folder",
+        resolvedPath: "C:\\Users\\testuser\\Desktop\\sample-company",
         sourceJobId: "job-1",
         updatedAt: "2026-03-11T18:05:00.000Z"
       }
@@ -3983,7 +3983,7 @@ test("routeConversationMessageInput routes natural close-browser follow-ups thro
         sourceJobId: "job-1",
         openedAt: "2026-03-11T18:05:10.000Z",
         linkedProcessLeaseId: "proc_preview_1",
-        linkedProcessCwd: "C:\\Users\\testuser\\Desktop\\drone-company"
+        linkedProcessCwd: "C:\\Users\\testuser\\Desktop\\sample-company"
       })
     ]
   });
@@ -4008,7 +4008,7 @@ test("routeConversationMessageInput routes natural close-browser follow-ups thro
   assert.match(capturedExecutionInput, /Tracked browser sessions:/);
   assert.match(
     capturedExecutionInput,
-    /control=available; .*linkedPreviewLease=proc_preview_1; .*linkedPreviewCwd=C:\\Users\\testuser\\Desktop\\drone-company/
+    /control=available; .*linkedPreviewLease=proc_preview_1; .*linkedPreviewCwd=C:\\Users\\testuser\\Desktop\\sample-company/
   );
   assert.match(capturedExecutionInput, /Natural browser-session follow-up:/);
   assert.match(capturedExecutionInput, /prefer close_browser with params\.sessionId=browser_session:landing-page and then stop_process with params\.leaseId=proc_preview_1/i);
@@ -4029,10 +4029,10 @@ test("routeConversationMessageInput resolves explicit foreign browser URLs inlin
       goal: "Please close the landing page we left open earlier so we can move on.",
       summary: "I closed the tracked landing page window from earlier and shut down its linked local preview process.",
       nextSuggestedStep: null,
-      workspaceRootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
-      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
+      workspaceRootPath: "C:\\Users\\testuser\\Desktop\\sample-company",
+      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
       previewUrl: "http://127.0.0.1:4177/index.html",
-      changedPaths: ["C:\\Users\\testuser\\Desktop\\drone-company\\index.html"],
+      changedPaths: ["C:\\Users\\testuser\\Desktop\\sample-company\\index.html"],
       sourceJobId: "job-owned-stale",
       updatedAt: "2026-03-11T18:05:25.000Z"
     },
@@ -4047,14 +4047,14 @@ test("routeConversationMessageInput resolves explicit foreign browser URLs inlin
         closedAt: "2026-03-11T18:05:24.000Z",
         controlAvailable: false,
         linkedProcessLeaseId: "proc-owned-stale",
-        linkedProcessCwd: "C:\\Users\\testuser\\Desktop\\drone-company"
+        linkedProcessCwd: "C:\\Users\\testuser\\Desktop\\sample-company"
       })
     ],
     activeWorkspace: {
-      id: "workspace:drone-company",
+      id: "workspace:sample-company",
       label: "Tracked preview workspace",
-      rootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
-      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
+      rootPath: "C:\\Users\\testuser\\Desktop\\sample-company",
+      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
       previewUrl: "http://127.0.0.1:4177/index.html",
       browserSessionId: "browser-owned-stale",
       browserSessionIds: ["browser-owned-stale"],
@@ -4062,12 +4062,12 @@ test("routeConversationMessageInput resolves explicit foreign browser URLs inlin
       browserProcessPid: 999,
       previewProcessLeaseId: "lease-1",
       previewProcessLeaseIds: ["lease-1"],
-      previewProcessCwd: "C:\\Users\\testuser\\Desktop\\drone-company",
+      previewProcessCwd: "C:\\Users\\testuser\\Desktop\\sample-company",
       lastKnownPreviewProcessPid: 1234,
       stillControllable: false,
       ownershipState: "stale",
       previewStackState: "detached",
-      lastChangedPaths: ["C:\\Users\\testuser\\Desktop\\drone-company\\index.html"],
+      lastChangedPaths: ["C:\\Users\\testuser\\Desktop\\sample-company\\index.html"],
       sourceJobId: "job-owned-stale",
       updatedAt: "2026-03-11T18:05:25.000Z"
     }
@@ -4097,10 +4097,10 @@ test("routeConversationMessageInput can use handoff-control interpretation for n
       goal: "Finish the calm landing page and leave it ready for review.",
       summary: "I finished the draft and left the checkpoint ready for your next step.",
       nextSuggestedStep: "Tell me what section you want me to refine next.",
-      workspaceRootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
-      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
+      workspaceRootPath: "C:\\Users\\testuser\\Desktop\\sample-company",
+      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
       previewUrl: "http://127.0.0.1:4177/index.html",
-      changedPaths: ["C:\\Users\\testuser\\Desktop\\drone-company\\index.html"],
+      changedPaths: ["C:\\Users\\testuser\\Desktop\\sample-company\\index.html"],
       sourceJobId: "job-pause-1",
       updatedAt: "2026-03-12T00:00:09.000Z"
     },
@@ -4145,10 +4145,10 @@ test("routeConversationMessageInput can use handoff-control interpretation for a
       goal: "Finish the calm landing page and leave it ready for review.",
       summary: "I finished the draft and left the preview ready for review.",
       nextSuggestedStep: "Tell me what section you want me to refine next.",
-      workspaceRootPath: "C:\\Users\\testuser\\Desktop\\drone-company",
-      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
+      workspaceRootPath: "C:\\Users\\testuser\\Desktop\\sample-company",
+      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
       previewUrl: "http://127.0.0.1:4177/index.html",
-      changedPaths: ["C:\\Users\\testuser\\Desktop\\drone-company\\index.html"],
+      changedPaths: ["C:\\Users\\testuser\\Desktop\\sample-company\\index.html"],
       sourceJobId: "job-review-1",
       updatedAt: "2026-03-12T00:00:09.000Z"
     }

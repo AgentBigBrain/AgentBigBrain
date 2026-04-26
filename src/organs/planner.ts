@@ -10,6 +10,7 @@ import {
   TaskRequest,
   WorkflowPattern
 } from "../core/types";
+import type { PlannerSkillGuidanceEntry } from "./skillRegistry/contracts";
 import type { SemanticMemoryStore } from "../core/semanticMemory";
 import {
   buildDefaultRetrievalQuarantinePolicy
@@ -47,13 +48,8 @@ import {
   synthesizeRespondMessage
 } from "./plannerPolicy/responseSynthesisFallback";
 import {
-  buildDeterministicExplicitRuntimeActionFallbackActions,
-  buildDeterministicFrameworkBuildFallbackActions
+  buildDeterministicExplicitRuntimeActionFallbackActions
 } from "./plannerPolicy/explicitRuntimeActionFallback";
-import {
-  buildDeterministicStaticHtmlBuildFallbackActions
-} from "./plannerPolicy/staticHtmlRuntimeActionFallback";
-import { buildDeterministicLocalOrganizationFallbackActions } from "./plannerPolicy/localOrganizationRuntimeActionFallback";
 import { buildDeterministicWorkspaceRecoveryFallbackActions } from "./plannerPolicy/workspaceRecoveryFallback";
 import {
   buildLearningHintSummary,
@@ -67,33 +63,17 @@ import {
 import { type WorkflowSkillBridgeSummary } from "./skillRegistry/workflowSkillBridge";
 import {
   distillPlannerLessons,
-  isPlannerTimeoutFailure,
   resolveDefaultExecutionEnvironmentContext
 } from "./plannerSupport";
 import { maybeFinalizeDeterministicPlannerFallbackPlan } from "./plannerDeterministicFallbackSupport";
 import { resolveEagerDeterministicPlannerFallbackPlan } from "./plannerEagerFallbackSupport";
-
-const LOCAL_ORGANIZATION_FALLBACK_ERROR_PATTERN =
-  /Planner model (?:did not include a real folder-move step for this local organization request|retried the local organization move without also proving what moved into the destination and what remained at the original root|selected the named destination folder as part of the same move set, which risks nesting the destination inside itself|used cmd-style shell moves for a Windows PowerShell organization request|used invalid PowerShell variable interpolation for a Windows organization move command)/i;
-
-/**
- * Evaluates whether a planner failure should trigger the bounded local-organization fallback path.
- *
- * @param error - Unknown planner failure.
- * @returns `true` when the failure is one of the known local-organization validation misses.
- */
-function isLocalOrganizationFallbackEligibleError(error: unknown): boolean {
-  return (
-    error instanceof Error &&
-    LOCAL_ORGANIZATION_FALLBACK_ERROR_PATTERN.test(error.message)
-  );
-}
 
 export interface PlannerPlanOptions {
   playbookSelection?: Stage685PlaybookPlanningContext | null;
   workflowHints?: readonly WorkflowPattern[];
   judgmentHints?: readonly JudgmentPattern[];
   workflowBridge?: WorkflowSkillBridgeSummary | null;
+  skillGuidance?: readonly PlannerSkillGuidanceEntry[];
   conversationDomainContext?: ConversationDomainContext | null;
 }
 
@@ -308,15 +288,18 @@ export class PlannerOrgan {
     const workflowHints = (options.workflowHints ?? []).slice(0, 3);
     const judgmentHints = (options.judgmentHints ?? []).slice(0, 3);
     const workflowBridge = options.workflowBridge ?? null;
+    const skillGuidance = (options.skillGuidance ?? []).slice(0, 3);
     const learningGuidance = buildLearningPromptGuidance(
       workflowHints,
       judgmentHints,
-      workflowBridge
+      workflowBridge,
+      skillGuidance
     );
     const learningHints: PlannerLearningHintSummaryV1 | undefined = buildLearningHintSummary(
       workflowHints,
       judgmentHints,
-      workflowBridge
+      workflowBridge,
+      skillGuidance
     );
     const requiredActionType = inferRequiredActionType(currentUserRequest, task.userInput);
     const playbookSelection = options.playbookSelection ?? null;
@@ -442,86 +425,6 @@ export class PlannerOrgan {
         if (explicitRuntimePlan) {
           return explicitRuntimePlan;
         }
-        const deterministicLocalOrganizationFallbackActions =
-          repairedPreparation.actions.length === 0 || repairedValidation.needsRepair
-            ? buildDeterministicLocalOrganizationFallbackActions(
-                task.userInput,
-                this.executionEnvironment
-              )
-            : [];
-        const localOrganizationPlan = await maybeFinalizeDeterministicPlannerFallbackPlan({
-          taskId: task.id,
-          plannerNotes:
-            `${repairedOutput.plannerNotes || output.plannerNotes || "Model planner output"} ` +
-            `(backend=${this.modelClient.backend}, model=${plannerModel}, repair=true, ` +
-            `deterministic_local_organization_fallback=${deterministicLocalOrganizationFallbackActions[0]?.type ?? "unknown"})`,
-          actions: deterministicLocalOrganizationFallbackActions,
-          currentUserRequest,
-          requiredActionType,
-          userInput: task.userInput,
-          executionEnvironment: this.executionEnvironment,
-          firstPrinciples: firstPrinciplesPacket,
-          learningHints,
-          failureFingerprint,
-          clearFailureFingerprint: this.clearFailureFingerprint.bind(this)
-        });
-        if (localOrganizationPlan) {
-          return localOrganizationPlan;
-        }
-        const deterministicFrameworkBuildFallbackActions =
-          repairedPreparation.actions.length === 0 || repairedValidation.needsRepair
-            ? buildDeterministicFrameworkBuildFallbackActions(
-                task.userInput,
-                this.executionEnvironment,
-                task.goal
-              )
-            : [];
-        const deterministicStaticHtmlBuildFallbackActions =
-          repairedPreparation.actions.length === 0 || repairedValidation.needsRepair
-            ? buildDeterministicStaticHtmlBuildFallbackActions(
-                task.userInput,
-                this.executionEnvironment,
-                task.goal
-              )
-            : [];
-        const staticHtmlRepairPlan = await maybeFinalizeDeterministicPlannerFallbackPlan({
-          taskId: task.id,
-          plannerNotes:
-            `${repairedOutput.plannerNotes || output.plannerNotes || "Model planner output"} ` +
-            `(backend=${this.modelClient.backend}, model=${plannerModel}, repair=true, ` +
-            `deterministic_static_html_build_fallback=${deterministicStaticHtmlBuildFallbackActions[0]?.type ?? "unknown"})`,
-          actions: deterministicStaticHtmlBuildFallbackActions,
-          currentUserRequest,
-          requiredActionType,
-          userInput: task.userInput,
-          executionEnvironment: this.executionEnvironment,
-          firstPrinciples: firstPrinciplesPacket,
-          learningHints,
-          failureFingerprint,
-          clearFailureFingerprint: this.clearFailureFingerprint.bind(this)
-        });
-        if (staticHtmlRepairPlan) {
-          return staticHtmlRepairPlan;
-        }
-        const frameworkRepairPlan = await maybeFinalizeDeterministicPlannerFallbackPlan({
-          taskId: task.id,
-          plannerNotes:
-            `${repairedOutput.plannerNotes || output.plannerNotes || "Model planner output"} ` +
-            `(backend=${this.modelClient.backend}, model=${plannerModel}, repair=true, ` +
-            `deterministic_framework_build_fallback=${deterministicFrameworkBuildFallbackActions[0]?.type ?? "unknown"})`,
-          actions: deterministicFrameworkBuildFallbackActions,
-          currentUserRequest,
-          requiredActionType,
-          userInput: task.userInput,
-          executionEnvironment: this.executionEnvironment,
-          firstPrinciples: firstPrinciplesPacket,
-          learningHints,
-          failureFingerprint,
-          clearFailureFingerprint: this.clearFailureFingerprint.bind(this)
-        });
-        if (frameworkRepairPlan) {
-          return frameworkRepairPlan;
-        }
         if (repairedPreparation.actions.length === 0) {
           if (
             shouldUseNonExplicitRunSkillFallback(
@@ -631,90 +534,6 @@ export class PlannerOrgan {
       });
       if (explicitCatchPlan) {
         return explicitCatchPlan;
-      }
-      const deterministicLocalOrganizationFallbackActions =
-        isPlannerTimeoutFailure(error) ||
-        isLocalOrganizationFallbackEligibleError(error)
-          ? buildDeterministicLocalOrganizationFallbackActions(
-              task.userInput,
-              this.executionEnvironment
-            )
-          : [];
-      const localOrganizationCatchPlan = await maybeFinalizeDeterministicPlannerFallbackPlan({
-        taskId: task.id,
-        plannerNotes: isPlannerTimeoutFailure(error)
-          ? `Planner timed out before model planning completed ` +
-            `(backend=${this.modelClient.backend}, model=${plannerModel}, ` +
-            `deterministic_local_organization_timeout_fallback=${deterministicLocalOrganizationFallbackActions[0]?.type ?? "unknown"})`
-          : `${error instanceof Error ? error.message : "Planner local organization validation failed"} ` +
-            `(backend=${this.modelClient.backend}, model=${plannerModel}, ` +
-            `deterministic_local_organization_validation_fallback=${deterministicLocalOrganizationFallbackActions[0]?.type ?? "unknown"})`,
-        actions: deterministicLocalOrganizationFallbackActions,
-        currentUserRequest,
-        requiredActionType,
-        userInput: task.userInput,
-        executionEnvironment: this.executionEnvironment,
-        firstPrinciples: firstPrinciplesPacket,
-        learningHints,
-        failureFingerprint,
-        clearFailureFingerprint: this.clearFailureFingerprint.bind(this)
-      });
-      if (localOrganizationCatchPlan) {
-        return localOrganizationCatchPlan;
-      }
-      const deterministicFrameworkBuildFallbackActions =
-        isPlannerTimeoutFailure(error)
-          ? buildDeterministicFrameworkBuildFallbackActions(
-              task.userInput,
-              this.executionEnvironment,
-              task.goal
-            )
-          : [];
-      const deterministicStaticHtmlBuildFallbackActions =
-        isPlannerTimeoutFailure(error)
-          ? buildDeterministicStaticHtmlBuildFallbackActions(
-              task.userInput,
-              this.executionEnvironment,
-              task.goal
-            )
-          : [];
-      const staticHtmlCatchPlan = await maybeFinalizeDeterministicPlannerFallbackPlan({
-        taskId: task.id,
-        plannerNotes:
-          `Planner timed out before model planning completed ` +
-          `(backend=${this.modelClient.backend}, model=${plannerModel}, ` +
-          `deterministic_static_html_build_timeout_fallback=${deterministicStaticHtmlBuildFallbackActions[0]?.type ?? "unknown"})`,
-        actions: deterministicStaticHtmlBuildFallbackActions,
-        currentUserRequest,
-        requiredActionType,
-        userInput: task.userInput,
-        executionEnvironment: this.executionEnvironment,
-        firstPrinciples: firstPrinciplesPacket,
-        learningHints,
-        failureFingerprint,
-        clearFailureFingerprint: this.clearFailureFingerprint.bind(this)
-      });
-      if (staticHtmlCatchPlan) {
-        return staticHtmlCatchPlan;
-      }
-      const frameworkCatchPlan = await maybeFinalizeDeterministicPlannerFallbackPlan({
-        taskId: task.id,
-        plannerNotes:
-          `Planner timed out before model planning completed ` +
-          `(backend=${this.modelClient.backend}, model=${plannerModel}, ` +
-          `deterministic_framework_build_timeout_fallback=${deterministicFrameworkBuildFallbackActions[0]?.type ?? "unknown"})`,
-        actions: deterministicFrameworkBuildFallbackActions,
-        currentUserRequest,
-        requiredActionType,
-        userInput: task.userInput,
-        executionEnvironment: this.executionEnvironment,
-        firstPrinciples: firstPrinciplesPacket,
-        learningHints,
-        failureFingerprint,
-        clearFailureFingerprint: this.clearFailureFingerprint.bind(this)
-      });
-      if (frameworkCatchPlan) {
-        return frameworkCatchPlan;
       }
       await this.recordFailureFingerprint(failureFingerprint, Date.now());
       throw error;

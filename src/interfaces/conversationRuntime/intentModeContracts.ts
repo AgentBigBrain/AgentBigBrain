@@ -36,6 +36,22 @@ export type ConversationIntentSemanticHint =
   | "status_browser"
   | "status_progress"
   | "status_waiting";
+export type ConversationBuildFormatId =
+  | "static_html"
+  | "framework_app"
+  | "nextjs"
+  | "react"
+  | "vite";
+export type ConversationBuildFormatSource =
+  | "explicit_user_request"
+  | "clarification"
+  | "semantic_route";
+
+export interface ConversationBuildFormatMetadata {
+  format: ConversationBuildFormatId;
+  source: ConversationBuildFormatSource;
+  confidence: IntentModeConfidence;
+}
 
 export interface IntentClarificationCandidate {
   kind: "execution_mode" | "build_format";
@@ -56,6 +72,7 @@ export interface ResolvedConversationIntentMode {
   clarification: IntentClarificationCandidate | null;
   semanticRouteId?: ConversationSemanticRouteId | null;
   semanticHint?: ConversationIntentSemanticHint | null;
+  buildFormat?: ConversationBuildFormatMetadata | null;
 }
 
 /**

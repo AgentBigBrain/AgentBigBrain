@@ -67,17 +67,17 @@ test("buildAutonomousConversationExecutionResult preserves aggregated action his
         type: "write_file",
         description: "Write index.html into the Desktop workspace.",
         params: {
-          path: "C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
-          content: "<!doctype html><title>Drone Company</title>"
+          path: "C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
+          content: "<!doctype html><title>Sample Company</title>"
         },
         estimatedCostUsd: 0.08
       },
       mode: "escalation_path",
       approved: true,
-      output: "Write success: C:\\Users\\testuser\\Desktop\\drone-company\\index.html",
+      output: "Write success: C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
       executionStatus: "success",
       executionMetadata: {
-        filePath: "C:\\Users\\testuser\\Desktop\\drone-company\\index.html"
+        filePath: "C:\\Users\\testuser\\Desktop\\sample-company\\index.html"
       },
       blockedBy: [],
       violations: [],
@@ -146,18 +146,18 @@ test("buildAutonomousConversationExecutionResult falls back to concise approved 
         action: {
           id: "action_stop_folder_runtime_processes",
           type: "stop_folder_runtime_processes",
-          description: "Stop exact listening server processes for matching Desktop drone folders.",
+          description: "Stop exact listening server processes for matching Desktop sample folders.",
           params: {
             rootPath: "C:\\Users\\testuser\\Desktop",
             selectorMode: "starts_with",
-            selectorTerm: "drone"
+            selectorTerm: "sample"
           },
           estimatedCostUsd: 0.14
         },
         mode: "escalation_path",
         approved: true,
         output:
-          "Checked 2 matching folders under C:\\Users\\testuser\\Desktop. Stopped 2 exact server processes: pid 4552 port 4173 folder C:\\Users\\testuser\\Desktop\\drone-alpha; pid 4556 port 4174 folder C:\\Users\\testuser\\Desktop\\Drone-beta. Verified that no matching local server processes remain listening.",
+          "Checked 2 matching folders under C:\\Users\\testuser\\Desktop. Stopped 2 exact server processes: pid 4552 port 4173 folder C:\\Users\\testuser\\Desktop\\sample-alpha; pid 4556 port 4174 folder C:\\Users\\testuser\\Desktop\\Sample-beta. Verified that no matching local server processes remain listening.",
         executionStatus: "success",
         executionMetadata: {
           folderRuntimeProcessSweep: true

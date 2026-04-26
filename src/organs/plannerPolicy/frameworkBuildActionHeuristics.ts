@@ -16,10 +16,8 @@ const FRAMEWORK_APP_CREATE_COMMAND_PATTERN =
   /\b(?:create-vite(?:@latest)?|create\s+vite@latest|create-next-app(?:@latest)?|create\s+next-app(?:@latest)?|npm\s+create|npx\s+create-vite|npx\s+create-next-app|pnpm\s+create|yarn\s+create|bun\s+create)\b/i;
 const FRAMEWORK_APP_BOOTSTRAP_PACKAGE_JSON_PATTERN =
   /(?:package\.json[\s\S]{0,160}\b(?:set-content|out-file|add-content|copy-item|move-item|rename-item|new-item)\b|\b(?:set-content|out-file|add-content|copy-item|move-item|rename-item|new-item)\b[\s\S]{0,160}package\.json)/i;
-const FRAMEWORK_APP_TEMP_SCAFFOLD_MERGE_PATTERN =
-  /agentbigbrain-framework-scaffold[\s\S]{0,240}\b(?:move-item|copy-item|rename-item|get-childitem)\b/i;
 const FRAMEWORK_APP_DIRECTORY_GUARD_PATTERN =
-  /\btest-path\b[\s\S]{0,80}\$(?:project|root|folder)\b|\btest-path\b[\s\S]{0,160}(?:AI Drone City|Desktop)|\[\s*-d\s+.+?\]/i;
+  /\btest-path\b[\s\S]{0,120}(?:\$(?:project|root|folder|app|target|workspace)\b|join-path\b|['"](?:[a-z]:[\\/]|\/(?:users|home|tmp|var|opt)\/)[^'"]+['"])|\[\s*-d\s+.+?\]/i;
 const FRAMEWORK_APP_IN_PLACE_SCAFFOLD_PATTERN =
   /(?:create-vite(?:@latest)?|create\s+vite(?:@latest)?|create-next-app(?:@latest)?|create\s+next-app(?:@latest)?|npm(?:\.cmd)?\s+create|npx(?:\.cmd)?\s+create-vite|npx(?:\.cmd)?\s+create-next-app|pnpm(?:\.cmd)?\s+create|yarn(?:\.cmd)?\s+create|bun\s+create)\s+(?:"\."|'\.'|\.)(?:\s|$)/i;
 const FRAMEWORK_APP_NATIVE_PREVIEW_COMMAND_PATTERN =
@@ -174,7 +172,6 @@ export function hasFrameworkAppScaffoldAction(
           command.length > 0 &&
           (
             FRAMEWORK_APP_CREATE_COMMAND_PATTERN.test(command) ||
-            FRAMEWORK_APP_TEMP_SCAFFOLD_MERGE_PATTERN.test(command) ||
             FRAMEWORK_APP_BOOTSTRAP_PACKAGE_JSON_PATTERN.test(command)
           )
         );

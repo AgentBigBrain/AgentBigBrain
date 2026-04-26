@@ -55,7 +55,7 @@ function resolveRequestedRuntimeSweepRootPath(
  * Extracts the bounded folder selector for one runtime-sweep request.
  *
  * **Why it exists:**
- * The user can ask for a family of folders like `starts with drone`, and the fallback needs that
+ * The user can ask for a family of folders like `starts with sample`, and the fallback needs that
  * selector in typed form so later PowerShell generation stays deterministic instead of reparsing
  * free text multiple times.
  *

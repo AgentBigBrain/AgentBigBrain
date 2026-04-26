@@ -127,7 +127,7 @@ test("normalizeSession preserves persisted build-format clarifications and optio
           id: "clarification_build_format_1",
           kind: "build_format",
           sourceInput:
-            'Build me a landing page in the exact folder "C:\\Users\\testuser\\Desktop\\Solar Energy Landing Page".',
+            'Build me a landing page in the exact folder "C:\\Users\\testuser\\Desktop\\Sample Service Landing Page".',
           question:
             "Would you like that built as plain HTML, or as a framework app like Next.js or React?",
           requestedAt: now,

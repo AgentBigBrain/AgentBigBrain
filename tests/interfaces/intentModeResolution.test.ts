@@ -170,7 +170,7 @@ test("resolveConversationIntentMode keeps capability discovery authoritative dur
 
 test("resolveConversationIntentMode keeps explicit conversational interludes off the work path even when the preview should stay open", async () => {
   const resolution = await resolveConversationIntentMode(
-    "Before changing anything, just talk with me for a minute about what makes AI Drone City feel playful. Reply in two short paragraphs and keep the page open."
+    "Before changing anything, just talk with me for a minute about what makes Sample City feel playful. Reply in two short paragraphs and keep the page open."
   );
 
   assert.equal(resolution.mode, "chat");
@@ -407,7 +407,7 @@ test("resolveConversationIntentMode keeps first-person status facts off the cont
 
 test("resolveConversationIntentMode returns a persisted build-format clarification candidate for ambiguous exact-destination build requests", async () => {
   const resolution = await resolveConversationIntentMode(
-    'Please create me that landing page we talked about yesterday with a hero and a strong call to action in the exact folder "C:\\Users\\testuser\\Desktop\\Solar Energy Landing Page".'
+    'Please create me that landing page we talked about yesterday with a hero and a strong call to action in the exact folder "C:\\Users\\testuser\\Desktop\\Sample Service Landing Page".'
   );
 
   assert.equal(resolution.mode, "clarify_build_format");
@@ -470,13 +470,45 @@ test("resolveConversationIntentMode keeps long narrative memory updates off the 
 
 test("resolveConversationIntentMode promotes strong end-to-end wording into autonomous mode", async () => {
   const resolution = await resolveConversationIntentMode(
-    "Hey, build me a tech landing page for air drones, go until you finish, put it on my desktop, and leave it open for me when you're done."
+    "Hey, build me a tech landing page for sample products, go until you finish, put it on my desktop, and leave it open for me when you're done."
   );
 
   assert.equal(resolution.mode, "autonomous");
   assert.equal(resolution.confidence, "high");
   assert.equal(resolution.clarification, null);
   assert.equal(resolution.matchedRuleId, "intent_mode_autonomous_execution");
+});
+
+test("resolveConversationIntentMode preserves static HTML as metadata for autonomous requests", async () => {
+  const resolution = await resolveConversationIntentMode(
+    "Use auto mode and build a static single-file HTML landing page for a sample service company on my Desktop. Open it, close the browser, and keep going until finished."
+  );
+
+  assert.equal(resolution.mode, "autonomous");
+  assert.equal(resolution.confidence, "high");
+  assert.equal(resolution.clarification, null);
+  assert.equal(resolution.matchedRuleId, "intent_mode_autonomous_execution");
+  assert.deepEqual(resolution.buildFormat, {
+    format: "static_html",
+    source: "explicit_user_request",
+    confidence: "high"
+  });
+});
+
+test("resolveConversationIntentMode preserves Next.js as metadata for autonomous requests", async () => {
+  const resolution = await resolveConversationIntentMode(
+    "Please build a Next.js landing page end to end, run the build proof, and do not stop until it is done."
+  );
+
+  assert.equal(resolution.mode, "autonomous");
+  assert.equal(resolution.confidence, "high");
+  assert.equal(resolution.clarification, null);
+  assert.equal(resolution.matchedRuleId, "intent_mode_autonomous_execution");
+  assert.deepEqual(resolution.buildFormat, {
+    format: "nextjs",
+    source: "explicit_user_request",
+    confidence: "high"
+  });
 });
 
 test("resolveConversationIntentMode keeps ambiguous end-to-end wording off autonomous mode in a profile session without workflow continuity", async () => {
@@ -897,7 +929,7 @@ test("resolveConversationIntentMode keeps vague conversational follow-ups on the
 
 test("resolveConversationIntentMode does not let the local intent model downgrade explicit autonomous wording", async () => {
   const resolution = await resolveConversationIntentMode(
-    "Hey, build me a tech landing page for air drones, go until you finish, put it on my desktop, and leave it open for me when you're done.",
+    "Hey, build me a tech landing page for sample products, go until you finish, put it on my desktop, and leave it open for me when you're done.",
     null,
     async () => ({
       source: "local_intent_model",
@@ -918,7 +950,7 @@ test("resolveConversationIntentMode asks for build format instead of guessing on
   let localResolverCalled = false;
 
   const resolution = await resolveConversationIntentMode(
-    'Okay, build me a simple landing page end to end for a solar company. Put it in the exact folder "C:\\Users\\testuser\\Desktop\\Solar Energy Landing Page" on my Desktop and do not open it yet.',
+    'Okay, build me a simple landing page end to end for a sample service company. Put it in the exact folder "C:\\Users\\testuser\\Desktop\\Sample Service Landing Page" on my Desktop and do not open it yet.',
     null,
     async () => {
       localResolverCalled = true;
@@ -980,22 +1012,32 @@ test("resolveConversationIntentMode sends explicit single-file HTML scaffold req
   assert.equal(resolution.confidence, "high");
   assert.equal(resolution.matchedRuleId, "intent_mode_static_html_build");
   assert.equal(resolution.clarification, null);
+  assert.deepEqual(resolution.buildFormat, {
+    format: "static_html",
+    source: "explicit_user_request",
+    confidence: "high"
+  });
 });
 
 test("resolveConversationIntentMode sends explicit Next.js build requests to the framework app lane", async () => {
   const resolution = await resolveConversationIntentMode(
-    "Build me a Next.js landing page for a solar company and put it on my desktop."
+    "Build me a Next.js landing page for a sample service company and put it on my desktop."
   );
 
   assert.equal(resolution.mode, "framework_app_build");
   assert.equal(resolution.confidence, "high");
   assert.equal(resolution.matchedRuleId, "intent_mode_framework_app_build");
   assert.equal(resolution.clarification, null);
+  assert.deepEqual(resolution.buildFormat, {
+    format: "nextjs",
+    source: "explicit_user_request",
+    confidence: "high"
+  });
 });
 
 test("resolveConversationIntentMode treats polite edit imperatives as execute-now work", async () => {
   const resolution = await resolveConversationIntentMode(
-    "Please change the hero section so the headline says calmer drone operations start here."
+    "Please change the hero section so the headline says calmer sample operations start here."
   );
 
   assert.equal(resolution.mode, "build");
@@ -1005,7 +1047,7 @@ test("resolveConversationIntentMode treats polite edit imperatives as execute-no
 
 test("resolveConversationIntentMode treats natural desktop cleanup imperatives as execute-now work", async () => {
   const resolution = await resolveConversationIntentMode(
-    "Can you clean up the drone-company folders on my desktop and put them into drone-folder for me?"
+    "Can you clean up the sample-company folders on my desktop and put them into sample-folder for me?"
   );
 
   assert.equal(resolution.mode, "build");
@@ -1015,7 +1057,7 @@ test("resolveConversationIntentMode treats natural desktop cleanup imperatives a
 
 test("resolveConversationIntentMode keeps the Telegram live-smoke edit wording on the build path", async () => {
   const resolution = await resolveConversationIntentMode(
-    "That helps. Please change the hero section so the headline literally says 'Calmer drone operations start here', and add a short trust bar that literally says 'Trusted by local teams'. Leave the updated page in the same place when you're done."
+    "That helps. Please change the hero section so the headline literally says 'Calmer sample operations start here', and add a short trust bar that literally says 'Trusted by local teams'. Leave the updated page in the same place when you're done."
   );
 
   assert.equal(resolution.mode, "build");
@@ -1025,7 +1067,7 @@ test("resolveConversationIntentMode keeps the Telegram live-smoke edit wording o
 
 test("resolveConversationIntentMode keeps natural browser-open follow-ups on the build path during tracked workflow continuity", async () => {
   const resolution = await resolveConversationIntentMode(
-    "Alright, open that Downtown Detroit Drones landing page in my browser and leave it up for me. Use the same tracked localhost run that is already live on port 57860.",
+    "Alright, open that Sample City Showcase landing page in my browser and leave it up for me. Use the same tracked localhost run that is already live on port 57860.",
     null,
     undefined,
     buildSessionHints({
@@ -1048,9 +1090,34 @@ test("resolveConversationIntentMode keeps natural browser-open follow-ups on the
   assert.equal(resolution.matchedRuleId, "intent_mode_execute_now");
 });
 
+test("resolveConversationIntentMode keeps tracked browser-close follow-ups on the build path", async () => {
+  const resolution = await resolveConversationIntentMode(
+    "Nice. Please close the tracked browser window that is showing that landing page now so we can move on.",
+    null,
+    undefined,
+    buildSessionHints({
+      hasActiveWorkspace: true,
+      hasReturnHandoff: true,
+      returnHandoffStatus: "completed",
+      returnHandoffPreviewAvailable: true,
+      returnHandoffPrimaryArtifactAvailable: true,
+      returnHandoffChangedPathCount: 2,
+      modeContinuity: "build",
+      domainDominantLane: "workflow",
+      domainContinuityActive: true,
+      workflowContinuityActive: true
+    })
+  );
+
+  assert.equal(resolution.mode, "build");
+  assert.equal(resolution.confidence, "high");
+  assert.equal(resolution.clarification, null);
+  assert.equal(resolution.matchedRuleId, "intent_mode_execute_now");
+});
+
 test("resolveConversationIntentMode keeps the Telegram live-smoke cleanup wording on the build path", async () => {
   const resolution = await resolveConversationIntentMode(
-    "One last real-world thing: please go ahead and clean up my desktop now by moving every folder there that starts with drone-company into drone-folder. I do mean all of them, so you do not need to ask again before doing it."
+    "One last real-world thing: please go ahead and clean up my desktop now by moving every folder there that starts with sample-company into sample-folder. I do mean all of them, so you do not need to ask again before doing it."
   );
 
   assert.equal(resolution.mode, "build");

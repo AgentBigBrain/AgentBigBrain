@@ -22,6 +22,7 @@ import {
   type ResolvedConversationIntentMode,
   withSemanticRouteId
 } from "./intentModeContracts";
+import { resolveExplicitBuildFormatMetadata } from "./buildFormatMetadata";
 import {
   resolveConversationAutonomyBoundaryInterpretationIntent,
   resolveConversationStatusRecallBoundaryInterpretationIntent
@@ -141,6 +142,11 @@ export async function resolveConversationIntentMode(
   const explicitFrameworkBuildRequested =
     explicitFrameworkMention &&
     isDeterministicFrameworkBuildLaneRequest(normalized);
+  const explicitBuildFormat = resolveExplicitBuildFormatMetadata(
+    normalized,
+    explicitStaticHtmlBuildRequested,
+    explicitFrameworkBuildRequested
+  );
   const relationshipConversationRecall =
     isRelationshipConversationRecallTurn(normalized);
   const shouldDeterministicallyPromoteAmbiguousAutonomy =
@@ -252,6 +258,24 @@ export async function resolveConversationIntentMode(
     ));
   }
 
+  if (autonomousExecutionDetected) {
+    return finalizeResolution(await resolveExecutionUnderstanding(
+      {
+        mode: "autonomous",
+        confidence: "high",
+        matchedRuleId: "intent_mode_autonomous_execution",
+        explanation:
+          "User explicitly asked the assistant to own the task end to end until it is finished.",
+        clarification: null,
+        semanticRouteId: "autonomous_execution",
+        buildFormat: explicitBuildFormat
+      },
+      {
+        suppressGenericLocalIntentModel
+      }
+    ));
+  }
+
   if (explicitStaticHtmlBuildRequested) {
     return finalizeResolution(await resolveExecutionUnderstanding(
       {
@@ -261,7 +285,8 @@ export async function resolveConversationIntentMode(
         explanation:
           "The request explicitly asks for a plain static HTML deliverable, so it should use the bounded static HTML build lane.",
         clarification: null,
-        semanticRouteId: "static_html_build"
+        semanticRouteId: "static_html_build",
+        buildFormat: explicitBuildFormat
       },
       {
         suppressGenericLocalIntentModel: true
@@ -278,27 +303,11 @@ export async function resolveConversationIntentMode(
         explanation:
           "The request explicitly asks for a framework app build, so it should stay on the framework-app build lane.",
         clarification: null,
-        semanticRouteId: "framework_app_build"
+        semanticRouteId: "framework_app_build",
+        buildFormat: explicitBuildFormat
       },
       {
         suppressGenericLocalIntentModel: true
-      }
-    ));
-  }
-
-  if (autonomousExecutionDetected) {
-    return finalizeResolution(await resolveExecutionUnderstanding(
-      {
-        mode: "autonomous",
-        confidence: "high",
-        matchedRuleId: "intent_mode_autonomous_execution",
-        explanation:
-          "User explicitly asked the assistant to own the task end to end until it is finished.",
-        clarification: null,
-        semanticRouteId: "autonomous_execution"
-      },
-      {
-        suppressGenericLocalIntentModel
       }
     ));
   }

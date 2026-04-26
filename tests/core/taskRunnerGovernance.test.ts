@@ -60,8 +60,11 @@ function createGovernanceInput(): {
 test("evaluateTaskRunnerGovernance stops at create-skill code-review rejection", async () => {
   const { input, traceEvents } = createGovernanceInput();
   input.action = {
-    ...input.action,
-    type: "create_skill"
+    id: input.action.id,
+    type: "create_skill",
+    description: input.action.description,
+    params: {},
+    estimatedCostUsd: input.action.estimatedCostUsd
   };
   input.proposal = {
     ...input.proposal,
@@ -139,8 +142,11 @@ test("evaluateTaskRunnerGovernance fails closed when council vote returns no dec
 test("evaluateTaskRunnerGovernance returns combined votes and decision on approval", async () => {
   const { input, traceEvents } = createGovernanceInput();
   input.action = {
-    ...input.action,
-    type: "create_skill"
+    id: input.action.id,
+    type: "create_skill",
+    description: input.action.description,
+    params: {},
+    estimatedCostUsd: input.action.estimatedCostUsd
   };
   input.proposal = {
     ...input.proposal,

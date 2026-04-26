@@ -96,6 +96,9 @@ The latest slices moved queue/ack, worker-loop, and pulse-state ownership here s
 - `pulseState.ts` owns canonical Agent Pulse session-state mutation
 - `conversationRouting.ts` owns canonical `/chat` and free-form queue routing plus execution-input
   assembly below `conversationIngressLifecycle.ts`
+- `conversationRoutingContracts.ts` owns the shared routing dependency and enqueue-result contracts
+  so the stable routing entrypoint stays below the module-size budget without widening ingress
+  behavior
 - `conversationRoutingSupport.ts` owns small extracted confidence and autonomous-brief helpers so
   the stable conversation-routing entrypoint can stay within its size budget while still surfacing
   bounded identity-context hints to the optional local intent-model seam
@@ -222,7 +225,11 @@ The latest slices moved queue/ack, worker-loop, and pulse-state ownership here s
   remembered-fact review/mutation responses, including explicit resolve, wrong, forget, fact
   correction, and fact forget outcomes
 - `intentModeContracts.ts` owns the canonical front-door intent-mode contracts for natural
-  execution, capability discovery, and clarification results
+  execution, capability discovery, clarification results, and build-format metadata that preserves
+  requested static HTML, framework, or Next.js output format without overriding top-level
+  autonomous mode
+- `buildFormatMetadata.ts` owns explicit build-format metadata resolution so static HTML, React,
+  Vite, and Next.js cues travel as planner metadata rather than overriding top-level intent mode
 - `intentModeResolution.ts` owns canonical deterministic intent-mode routing plus the optional
   local intent-model seam used when deterministic confidence stays weak
 - `intentModeResolutionSupport.ts` owns the extracted default-chat and build-format-clarification

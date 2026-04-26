@@ -147,49 +147,6 @@ export function extractCreateSkillNameFromRequest(currentUserRequest: string): s
 }
 
 /**
- * Converts a skill name into a safe TypeScript function identifier.
- */
-export function toFunctionIdentifier(skillName: string): string {
-  const normalized = skillName.replace(/[^a-zA-Z0-9_$]/g, "_");
-  if (/^[a-zA-Z_$]/.test(normalized)) {
-    return normalized;
-  }
-  return `skill_${normalized}`;
-}
-
-/**
- * Builds deterministic fallback scaffold code for create-skill actions.
- */
-export function buildCreateSkillFallbackCode(skillName: string): string {
-  const functionName = toFunctionIdentifier(skillName);
-  return [
-    "/**",
-    " * @fileoverview Auto-generated skill scaffold from planner fallback.",
-    " */",
-    "",
-    `export interface ${functionName}Result {`,
-    "  ok: boolean;",
-    "  summary: string;",
-    "  normalizedInput: string;",
-    "}",
-    "",
-    "/**",
-    ` * Implements \`${functionName}\` behavior within generated skill scope.`,
-    " */",
-    `export function ${functionName}(input: string): ${functionName}Result {`,
-    "  const normalizedInput = input.trim();",
-    "  const ok = normalizedInput.length > 0;",
-    `  const summary = ok ? "${skillName} executed with normalized input." : "${skillName} received empty input.";`,
-    "  return {",
-    "    ok,",
-    "    summary,",
-    "    normalizedInput",
-    "  };",
-    "}"
-  ].join("\n");
-}
-
-/**
  * Strips comments and whitespace for placeholder detection.
  */
 export function stripCommentsAndWhitespace(code: string): string {
@@ -223,7 +180,7 @@ export function isPlaceholderSkillCode(code: string): boolean {
 }
 
 /**
- * Normalizes create-skill params using explicit request intent and scaffold fallbacks.
+ * Normalizes create-skill params using explicit request intent without synthesizing executable code.
  */
 export function normalizeRequiredCreateSkillParams(
   actions: PlannedAction[],
@@ -252,11 +209,21 @@ export function normalizeRequiredCreateSkillParams(
       params.name = resolvedSkillName;
     }
 
+    const existingKind = trimToNonEmptyString(params.kind)?.toLowerCase();
+    const existingMarkdownInstructions =
+      trimToNonEmptyString(params.instructions) ??
+      trimToNonEmptyString(params.markdownContent) ??
+      trimToNonEmptyString(params.content);
+    if (existingKind === "markdown_instruction" && existingMarkdownInstructions) {
+      return {
+        ...action,
+        params
+      };
+    }
+
     const existingCode = trimToNonEmptyString(params.code);
-    const needsFallbackCode =
-      (!existingCode || isPlaceholderSkillCode(existingCode)) && Boolean(resolvedSkillName);
-    if (needsFallbackCode && resolvedSkillName) {
-      params.code = buildCreateSkillFallbackCode(resolvedSkillName);
+    if (existingCode && isPlaceholderSkillCode(existingCode)) {
+      delete params.code;
     }
 
     return {

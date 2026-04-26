@@ -9,8 +9,6 @@ import { PlannedAction } from "../../core/types";
 import { RequiredActionType } from "./executionStyleContracts";
 import { buildDeterministicStaticArtifactOpenBrowserFallbackActions } from "./staticArtifactOpenSupport";
 
-export { buildDeterministicFrameworkBuildFallbackActions } from "./frameworkRuntimeActionFallback";
-
 const WINDOWS_PATH_START_PATTERN = /[A-Za-z]:\\/g;
 const BLOCKED_PATHS_SECTION_PATTERNS = [
   /\b(?:remaining\s+)?blocked paths?:\s*([\s\S]+?)(?=(?:\.\s+(?:If|Do not|Then|Report|Explain|Retry|Stop)\b)|$)/i,

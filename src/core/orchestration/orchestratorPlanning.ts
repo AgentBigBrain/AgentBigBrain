@@ -4,7 +4,10 @@
 
 import { type PlannerOrgan } from "../../organs/planner";
 import { type MemoryBrokerOrgan } from "../../organs/memoryBroker";
-import { type SkillInventoryEntry } from "../../organs/skillRegistry/contracts";
+import {
+  type PlannerSkillGuidanceEntry,
+  type SkillInventoryEntry
+} from "../../organs/skillRegistry/contracts";
 import { buildWorkflowSkillBridgeSummary } from "../../organs/skillRegistry/workflowSkillBridge";
 import { extractActiveRequestSegment } from "../currentRequestExtraction";
 import { type AppendRuntimeTraceEventInput } from "../runtimeTraceLogger";
@@ -21,9 +24,6 @@ import {
   type ProfileAwareInput,
   type Stage685PlaybookPlanningContextResolver
 } from "./contracts";
-import {
-  shouldPreserveDeterministicFrameworkLifecycleActions
-} from "./deterministicFrameworkLifecyclePolicy";
 
 export interface BuildProfileAwareInputDependencies {
   memoryBroker: Pick<MemoryBrokerOrgan, "buildPlannerInput">;
@@ -37,6 +37,10 @@ export interface LoadPlannerLearningContextDependencies {
   workflowLearningStore?: Pick<WorkflowLearningStore, "getRelevantPatterns">;
   judgmentPatternStore?: Pick<JudgmentPatternStore, "getRelevantPatterns">;
   listAvailableSkills?: () => Promise<readonly SkillInventoryEntry[]>;
+  listApplicableGuidance?: (
+    query: string,
+    limit?: number
+  ) => Promise<readonly PlannerSkillGuidanceEntry[]>;
 }
 
 export interface LoadPlannerLearningContextOptions {
@@ -91,7 +95,8 @@ export async function loadPlannerLearningContext(
     return {
       workflowHints: [],
       judgmentHints: [],
-      workflowBridge: null
+      workflowBridge: null,
+      skillGuidance: []
     };
   }
 
@@ -132,13 +137,25 @@ export async function loadPlannerLearningContext(
     }
   }
 
+  let skillGuidance: readonly PlannerSkillGuidanceEntry[] = [];
+  if (deps.listApplicableGuidance) {
+    try {
+      skillGuidance = await deps.listApplicableGuidance(contextQuery, 3);
+    } catch (error) {
+      console.error(
+        `[SkillRegistry] non-fatal skill guidance retrieval failure: ${(error as Error).message}`
+      );
+    }
+  }
+
   return {
     workflowHints,
     judgmentHints,
     workflowBridge: buildWorkflowSkillBridgeSummary({
       workflowHints,
       availableSkills
-    })
+    }),
+    skillGuidance
   };
 }
 
@@ -169,15 +186,11 @@ export async function planOrchestratorAttempt(
       workflowHints: input.plannerLearningContext.workflowHints,
       judgmentHints: input.plannerLearningContext.judgmentHints,
       workflowBridge: input.plannerLearningContext.workflowBridge,
+      skillGuidance: input.plannerLearningContext.skillGuidance,
       conversationDomainContext: input.conversationDomainContext ?? null
     }
   );
-  const cappedActions = shouldPreserveDeterministicFrameworkLifecycleActions(
-    rawPlan,
-    input.maxActionsPerTask
-  )
-    ? rawPlan.actions
-    : rawPlan.actions.slice(0, input.maxActionsPerTask);
+  const cappedActions = rawPlan.actions.slice(0, input.maxActionsPerTask);
   const playbookSuffix = playbookPlanningContext.selectedPlaybookId
     ? ` [playbook=${playbookPlanningContext.selectedPlaybookId}]`
     : " [playbook=fallback]";
@@ -202,6 +215,7 @@ export async function planOrchestratorAttempt(
         judgmentHintCount: plan.learningHints?.judgmentHintCount ?? 0,
         workflowPreferredSkillName: plan.learningHints?.workflowPreferredSkillName ?? null,
         workflowSkillSuggestionCount: plan.learningHints?.workflowSkillSuggestionCount ?? 0,
+        plannerSkillGuidanceCount: plan.learningHints?.plannerSkillGuidanceCount ?? 0,
         playbookSelectedId: playbookPlanningContext.selectedPlaybookId,
         playbookFallback: playbookPlanningContext.fallbackToPlanner
       }

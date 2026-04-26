@@ -81,7 +81,7 @@ test("completeCodexJsonRequest streams structured Codex prompts over stdin inste
     aliasModel: null,
     providerModel: "gpt-5.4"
   };
-  const veryLongUserPrompt = `Voice note transcript: ${"build a calm drone landing page. ".repeat(4000)}`;
+  const veryLongUserPrompt = `Voice note transcript: ${"build a calm sample landing page. ".repeat(4000)}`;
 
   const result = await completeCodexJsonRequest<{ message: string }>(
     {
