@@ -23,6 +23,7 @@ export interface ProfileMediaIngestInput {
   transcriptFragments: readonly string[];
   summaryFragments: readonly string[];
   ocrFragments: readonly string[];
+  candidateOnlyFragments: readonly string[];
   allNarrativeFragments: readonly string[];
 }
 
@@ -50,6 +51,7 @@ export function parseProfileMediaIngestInput(userInput: string): ProfileMediaIng
       transcriptFragments: [],
       summaryFragments: [],
       ocrFragments: [],
+      candidateOnlyFragments: [],
       allNarrativeFragments: directUserText ? [directUserText] : []
     };
   }
@@ -57,6 +59,10 @@ export function parseProfileMediaIngestInput(userInput: string): ProfileMediaIng
   const transcriptFragments: string[] = [];
   const summaryFragments: string[] = [];
   const ocrFragments: string[] = [];
+  const memoryEligibleSummaryFragments: string[] = [];
+  const memoryEligibleOcrFragments: string[] = [];
+  const candidateOnlyFragments: string[] = [];
+  let previousLineWasDocumentDerived = false;
 
   for (const line of mediaLines) {
     const normalizedLine = normalizeProfileValue(stripBulletPrefix(line));
@@ -71,9 +77,13 @@ export function parseProfileMediaIngestInput(userInput: string): ProfileMediaIng
       if (transcript) {
         transcriptFragments.push(transcript);
       }
+      previousLineWasDocumentDerived = false;
       continue;
     }
 
+    const isDocumentDerivedLine =
+      /^document summary:\s*/i.test(normalizedLine) ||
+      (normalizedLine.startsWith(OCR_TEXT_PREFIX) && previousLineWasDocumentDerived);
     const ocrIndex = normalizedLine.indexOf(` ${OCR_TEXT_PREFIX}`);
     if (SUMMARY_PREFIX_PATTERN.test(normalizedLine)) {
       const summarySection = ocrIndex >= 0
@@ -84,6 +94,11 @@ export function parseProfileMediaIngestInput(userInput: string): ProfileMediaIng
       );
       if (summary) {
         summaryFragments.push(summary);
+        if (isDocumentDerivedLine) {
+          candidateOnlyFragments.push(summary);
+        } else {
+          memoryEligibleSummaryFragments.push(summary);
+        }
       }
     }
 
@@ -95,14 +110,20 @@ export function parseProfileMediaIngestInput(userInput: string): ProfileMediaIng
     const ocr = normalizeProfileValue(rawOcr);
     if (ocr) {
       ocrFragments.push(ocr);
+      if (isDocumentDerivedLine) {
+        candidateOnlyFragments.push(ocr);
+      } else {
+        memoryEligibleOcrFragments.push(ocr);
+      }
     }
+    previousLineWasDocumentDerived = /^document summary:\s*/i.test(normalizedLine);
   }
 
   const allNarrativeFragments = dedupeProfileMediaNarrativeFragments([
     directUserText,
     ...transcriptFragments,
-    ...summaryFragments,
-    ...ocrFragments
+    ...memoryEligibleSummaryFragments,
+    ...memoryEligibleOcrFragments
   ]);
 
   return {
@@ -110,6 +131,7 @@ export function parseProfileMediaIngestInput(userInput: string): ProfileMediaIng
     transcriptFragments,
     summaryFragments,
     ocrFragments,
+    candidateOnlyFragments: dedupeProfileMediaNarrativeFragments(candidateOnlyFragments),
     allNarrativeFragments
   };
 }
@@ -125,6 +147,7 @@ function emptyProfileMediaIngestInput(): ProfileMediaIngestInput {
     transcriptFragments: [],
     summaryFragments: [],
     ocrFragments: [],
+    candidateOnlyFragments: [],
     allNarrativeFragments: []
   };
 }

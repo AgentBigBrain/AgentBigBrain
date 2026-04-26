@@ -130,7 +130,9 @@ full `profileMemoryStore.ts` implementation.
 - bounded episodic-memory resolution inference in `profileMemoryEpisodeResolution.ts`
 - episodic-memory consolidation plus freshness/lifecycle ranking in
   `profileMemoryEpisodeConsolidation.ts`
-- bounded interpreted media-ingest normalization in `profileMemoryMediaIngest.ts`
+- bounded interpreted media-ingest normalization in `profileMemoryMediaIngest.ts`, including
+  candidate-only gating for document-derived summary/OCR/model meaning before durable episode
+  extraction
 - canonical fact upsert lifecycle helpers in `profileMemoryFactLifecycle.ts`
 - bounded support-only transition repair for stale compatibility winners in
   `profileMemorySupportOnlyTransitionLifecycle.ts`

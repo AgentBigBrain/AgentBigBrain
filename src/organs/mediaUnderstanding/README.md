@@ -19,6 +19,9 @@ transport parsing but before conversation execution and memory brokerage.
 - This subsystem must fail closed to deterministic fallback when provider calls fail.
 - It must not expose raw binary payloads outside the transport/media boundary.
 - It should improve user-context quality without becoming a generic multimodal planner.
+- Document interpretation is extracted text plus bounded generic hints. Document-derived summary,
+  OCR, and entity hints are supporting context and must stay candidate-only for durable memory until
+  separately governed.
 - Fixture catalogs are allowed for tests and live smoke, not as a production-only code path.
 
 ## Current Provider Coverage

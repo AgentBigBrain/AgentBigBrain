@@ -26,6 +26,7 @@ test("parseProfileMediaIngestInput strips attached media context from direct tex
   assert.deepEqual(parsed.ocrFragments, [
     "Owen fell down near the stairs"
   ]);
+  assert.deepEqual(parsed.candidateOnlyFragments, []);
   assert.deepEqual(parsed.allNarrativeFragments, [
     "Please fix this before lunch.",
     "My name is Benny and Owen fell down last week.",
@@ -39,6 +40,7 @@ test("parseProfileMediaIngestInput suppresses generic media-only prompts and sti
     "Please review the attached image and respond based on what it shows."
   );
   assert.equal(suppressed.directUserText, "");
+  assert.deepEqual(suppressed.candidateOnlyFragments, []);
   assert.deepEqual(suppressed.allNarrativeFragments, []);
 
   const transcriptOnly = parseProfileMediaIngestInput(
@@ -50,5 +52,27 @@ test("parseProfileMediaIngestInput suppresses generic media-only prompts and sti
   ]);
   assert.deepEqual(transcriptOnly.allNarrativeFragments, [
     "My favorite editor is Helix and my name is Benny."
+  ]);
+});
+
+test("parseProfileMediaIngestInput gates document-derived meaning as candidate-only", () => {
+  const parsed = parseProfileMediaIngestInput([
+    "Please review this carefully.",
+    "",
+    "Attached media context:",
+    "- document summary: The document mentions Orion Lab and a pending filing. OCR text: Orion Lab pending filing"
+  ].join("\n"));
+
+  assert.equal(parsed.directUserText, "Please review this carefully.");
+  assert.deepEqual(parsed.summaryFragments, [
+    "The document mentions Orion Lab and a pending filing."
+  ]);
+  assert.deepEqual(parsed.ocrFragments, ["Orion Lab pending filing"]);
+  assert.deepEqual(parsed.candidateOnlyFragments, [
+    "The document mentions Orion Lab and a pending filing.",
+    "Orion Lab pending filing"
+  ]);
+  assert.deepEqual(parsed.allNarrativeFragments, [
+    "Please review this carefully."
   ]);
 });

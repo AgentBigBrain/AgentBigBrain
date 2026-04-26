@@ -40,15 +40,10 @@ export async function interpretDocumentAttachment(
 
     const boundedText = buildBoundedTextExcerpt(extractedText);
     const summary = buildDeterministicDocumentSummary(extractedText, attachment);
-    const fields = extractEntitySpecificFields(extractedText);
-    const directFieldHints = [fields.presentName, fields.tradeName, fields.identifier]
-      .filter((value): value is string => typeof value === "string" && value.trim().length > 0);
-    const entityHints = directFieldHints.length > 0
-      ? collectEntityHintsFromTexts(directFieldHints)
-      : collectEntityHintsFromTexts([
-          attachment.fileName,
-          boundedText
-        ]);
+    const entityHints = collectEntityHintsFromTexts([
+      attachment.fileName,
+      boundedText
+    ]);
 
     return {
       summary,
@@ -145,25 +140,7 @@ function buildDeterministicDocumentSummary(
   attachment: ConversationInboundMediaAttachment
 ): string {
   const normalizedText = extractedText.replace(/\s+/g, " ").trim();
-  const fields = extractEntitySpecificFields(normalizedText);
   const fileName = attachment.fileName?.trim();
-
-  if (fields.presentName || fields.tradeName || fields.identifier) {
-    const parts: string[] = [];
-    const documentLabel = normalizedText.toLowerCase().includes("sample business filing")
-      ? "business filing"
-      : "document";
-    if (fields.presentName) {
-      parts.push(`present entity ${fields.presentName}`);
-    }
-    if (fields.tradeName) {
-      parts.push(`trade name ${fields.tradeName}`);
-    }
-    if (fields.identifier) {
-      parts.push(`identifier ${fields.identifier}`);
-    }
-    return `Extracted text from the ${documentLabel} references ${parts.join(", ")}.`;
-  }
 
   const identifiers = [...new Set(normalizedText.match(IDENTIFIER_PATTERN) ?? [])].slice(0, 3);
   const entityHints = collectEntityHintsFromTexts([fileName, normalizedText]).slice(0, 4);
@@ -180,54 +157,4 @@ function buildDeterministicDocumentSummary(
     summaryParts.push(`and identifiers such as ${identifiers.join(", ")}`);
   }
   return `${summaryParts.join(" ")}.`;
-}
-
-/**
- * Extracts entity specific fields.
- *
- * **Why it exists:**
- * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
- *
- * **What it talks to:**
- * - Uses local constants/helpers within this module.
- * @param text - Input consumed by this helper.
- * @returns Result produced by this helper.
- */
-function extractEntitySpecificFields(text: string): {
-  presentName: string | null;
-  tradeName: string | null;
-  identifier: string | null;
-} {
-  return {
-    presentName: extractLabeledField(
-      text,
-      /Legal entity name:\s+(.+?)\s+Registration identifier:/i
-    ),
-    tradeName: extractLabeledField(
-      text,
-      /Proposed Trade Name\s+(.+?)\s+Filing Effective Date/i
-    ),
-    identifier: extractLabeledField(
-      text,
-      /Registration identifier:\s+([0-9]{6,})/i
-    )
-  };
-}
-
-/**
- * Extracts labeled field.
- *
- * **Why it exists:**
- * Keeps this module's deterministic runtime behavior behind a named, reviewable boundary.
- *
- * **What it talks to:**
- * - Uses local constants/helpers within this module.
- * @param text - Input consumed by this helper.
- * @param pattern - Input consumed by this helper.
- * @returns Result produced by this helper.
- */
-function extractLabeledField(text: string, pattern: RegExp): string | null {
-  const match = text.match(pattern);
-  const value = match?.[1]?.replace(/\s+/g, " ").trim();
-  return value && value.length > 0 ? value : null;
 }
