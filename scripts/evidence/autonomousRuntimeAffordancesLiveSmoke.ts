@@ -129,7 +129,7 @@ const REAL_THREE_STEP_ARTIFACT_PATH = path.resolve(
 );
 const ORGANIZE_ARTIFACT_PATH = path.resolve(
   process.cwd(),
-  "runtime/evidence/organize_drone_projects_live_smoke_report.json"
+  "runtime/evidence/organize_sample_projects_live_smoke_report.json"
 );
 const PROVIDER_BLOCK_PATTERN =
 /(?:429|exceeded your current quota|usage limit|purchase more credits|try again at|rate limit|fetch failed|request timed out|socket hang up|ECONNRESET|Browser open failed|browserContext\.newPage: Target page, context or browser has been closed)/i;
@@ -853,7 +853,7 @@ async function runExactHolderRecoveryScenario(
       turns: Array<Record<string, unknown>>;
       checks: Record<string, boolean>;
     }>(
-      "scripts/evidence/organizeDroneProjectsLiveSmoke.ts",
+      "scripts/evidence/organizeSampleProjectsLiveSmoke.ts",
       ORGANIZE_ARTIFACT_PATH,
       (currentArtifact, currentChildResult) =>
         detectProviderBlockerReason(currentArtifact?.blockerReason ?? "") ??
@@ -865,7 +865,7 @@ async function runExactHolderRecoveryScenario(
     if (!artifact) {
       const timeoutBlockerReason = childResult.timedOut
         ? buildChildScenarioTimeoutBlockerReason(
-            "scripts/evidence/organizeDroneProjectsLiveSmoke.ts",
+            "scripts/evidence/organizeSampleProjectsLiveSmoke.ts",
             CHILD_SCENARIO_TIMEOUT_MS
           )
         : null;
@@ -888,7 +888,7 @@ async function runExactHolderRecoveryScenario(
         : null;
     const timeoutBlockerReason = childResult.timedOut
       ? buildChildScenarioTimeoutBlockerReason(
-          "scripts/evidence/organizeDroneProjectsLiveSmoke.ts",
+          "scripts/evidence/organizeSampleProjectsLiveSmoke.ts",
           CHILD_SCENARIO_TIMEOUT_MS
         )
       : null;
@@ -944,8 +944,8 @@ async function runAmbiguousClarificationScenario(
 ): Promise<AmbiguousClarificationScenario> {
   const runId = `${Date.now()}`;
   const { desktopPath } = resolveUserOwnedPathHints();
-  const sourceFolderName = `drone-company-clarify-smoke-${runId}`;
-  const targetRootName = `drone-web-projects-clarify-smoke-${runId}`;
+  const sourceFolderName = `sample-company-clarify-smoke-${runId}`;
+  const targetRootName = `sample-web-projects-clarify-smoke-${runId}`;
   const sourceFolderPath = path.join(desktopPath, sourceFolderName);
   const targetRootPath = path.join(desktopPath, targetRootName);
   const sessionPath = path.resolve(

@@ -105,7 +105,7 @@ const SCENARIOS: readonly Scenario[] = [
     id: "workflow_plan",
     kind: "workflow",
     prompt:
-      "Please plan a calm air-drone landing page in three concise steps. Do not build anything yet.",
+      "Please plan a calm air-sample landing page in three concise steps. Do not build anything yet.",
     forbiddenAny: [/Request failed:/i, ...THIRD_PERSON_SELF_REFERENCE_PATTERNS]
   },
   {

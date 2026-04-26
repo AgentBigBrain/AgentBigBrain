@@ -1,5 +1,5 @@
 /**
- * @fileoverview Runs one real Telegram live smoke for the exact Calm Drone voice-note workflow.
+ * @fileoverview Runs one real Telegram live smoke for the exact Calm Sample static-site voice-note workflow.
  */
 
 import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
@@ -95,7 +95,7 @@ const LIVE_RUN_RUNTIME_PATH = path.resolve(
 const FIXTURE_DOWNLOAD_PATH = "fixtures/fix_request.ogg";
 const TIMEOUT_MS = 14 * 60 * 1000;
 const TRANSCRIPT =
-  "I would like you to build a landing page called Calm Drone as a React single page application and put it on my desktop. There should be a little flying drone in the hero and it should be a five section landing page with a footer and a navigation. It should feel calm. Also this should be done end to end and I would like you to leave it open and running in the browser so I can take a look at it.";
+  "I would like you to build a landing page called Calm Sample as a static HTML website and put it on my desktop. There should be a little flying sample in the hero and it should be a five section landing page with a footer and a navigation. It should feel calm. Also this should be done end to end and I would like you to leave it open in the browser so I can take a look at it.";
 
 function parseBoolean(value: string | undefined): boolean {
   const normalized = (value ?? "").trim().toLowerCase();
@@ -240,21 +240,21 @@ async function waitForWorkflowCompletion(
 
 function buildScenario(): MediaIngestExecutionIntentScenario {
   return {
-    id: "calm_drone_voice_live_smoke",
-    title: "Exact Calm Drone voice note",
+    id: "calm_sample_voice_live_smoke",
+    title: "Exact Calm Sample voice note",
     summary:
-      "Voice note asks for a Calm Drone React landing page on the Desktop with a calm hero drone, five sections, navigation, footer, and the browser left open.",
+      "Voice note asks for a Calm Sample static HTML landing page on the Desktop with a calm hero sample, five sections, navigation, footer, and the browser left open.",
     mediaKind: "voice",
     fixtureFile: "fix_request.ogg",
     userText: "",
     expectedInterpretation: {
       summary:
-        "Voice note asks for a Calm Drone React landing page on the Desktop with a calm hero drone, five sections, navigation, footer, and the browser left open.",
+        "Voice note asks for a Calm Sample static HTML landing page on the Desktop with a calm hero sample, five sections, navigation, footer, and the browser left open.",
       transcript: TRANSCRIPT,
       ocrText: null,
       confidence: 0.99,
-      provenance: "exact user-provided Calm Drone voice note transcript",
-      entityHints: ["Calm Drone", "React", "landing page", "Desktop", "browser preview"]
+      provenance: "exact user-provided Calm Sample voice note transcript",
+      entityHints: ["Calm Sample", "static HTML", "landing page", "Desktop", "browser preview"]
     },
     expectedBehavior: [
       "direct_execute",
@@ -357,7 +357,7 @@ export async function runTelegramVoiceDesktopWorkflowLiveSmoke(): Promise<VoiceD
           JSON.stringify({
             ok: true,
             result: {
-              file_id: "fixture_calm_drone_voice_live_smoke",
+              file_id: "fixture_calm_sample_voice_live_smoke",
               file_path: FIXTURE_DOWNLOAD_PATH,
               file_size: fixtureBuffer.length
             }
@@ -428,7 +428,7 @@ export async function runTelegramVoiceDesktopWorkflowLiveSmoke(): Promise<VoiceD
         .slice(-1)[0]?.text ?? null;
 
     const desktopPath = await resolveDesktopPath();
-    const targetFolderPath = path.join(desktopPath, "Calm Drone");
+    const targetFolderPath = path.join(desktopPath, "Calm Sample");
     const workspaceRoot = extractWorkspaceRoot(finalSession);
     const previewUrl = extractPreviewUrl(finalSession);
     const previewReachable = await isPreviewReachable(previewUrl);

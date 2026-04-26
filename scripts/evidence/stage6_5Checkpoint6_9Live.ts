@@ -230,7 +230,9 @@ export async function runCheckpoint69LiveCheck(): Promise<Stage65Checkpoint69Art
       quoteId,
       quotedCostUsd: 0.22,
       goal: "Create a delegated skill under governance.",
-      userInput: "Create skill stage6_5_federated_gate for delegation proof.",
+      userInput:
+        "Create skill stage6_5_federated_gate with markdown instructions: " +
+        "\"Record that federated delegation reached the governed acceptance path.\"",
       requestedAt: "2026-02-26T00:00:00.000Z"
     };
     const invalidAuthDecision = gateway.routeInboundRequest(
@@ -243,7 +245,9 @@ export async function runCheckpoint69LiveCheck(): Promise<Stage65Checkpoint69Art
       quoteId: `${quoteId}_over`,
       quotedCostUsd: 1.25,
       goal: "Create a delegated skill under governance.",
-      userInput: "Create skill stage6_5_federated_gate for delegation proof.",
+      userInput:
+        "Create skill stage6_5_federated_gate with markdown instructions: " +
+        "\"Record that federated delegation reached the governed acceptance path.\"",
       requestedAt: "2026-02-26T00:00:05.000Z"
     };
     const overQuoteDecision = gateway.routeInboundRequest(
@@ -256,7 +260,9 @@ export async function runCheckpoint69LiveCheck(): Promise<Stage65Checkpoint69Art
       quoteId,
       quotedCostUsd: 0.22,
       goal: "Create a delegated skill under governance.",
-      userInput: "Create skill stage6_5_federated_gate for delegation proof.",
+      userInput:
+        "Create skill stage6_5_federated_gate with markdown instructions: " +
+        "\"Record that federated delegation reached the governed acceptance path.\"",
       requestedAt: "2026-02-26T00:00:10.000Z"
     };
     const validDecision = gateway.routeInboundRequest(

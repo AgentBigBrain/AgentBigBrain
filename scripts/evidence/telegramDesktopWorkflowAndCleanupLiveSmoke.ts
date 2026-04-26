@@ -1,7 +1,7 @@
 /**
  * @fileoverview Runs one real Telegram conversation that blends casual chat with a real Desktop
- * landing-page workflow and then asks the agent to move every `drone-company*` folder on the
- * actual Desktop into `drone-folder`.
+ * landing-page workflow and then asks the agent to move the current smoke-owned folder on the
+ * actual Desktop into `sample-folder`.
  */
 
 import { mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
@@ -85,7 +85,7 @@ interface SmokeArtifact {
   provider: "telegram";
   blockerReason: string | null;
   desktopPath: string | null;
-  droneFolderPath: string | null;
+  sampleFolderPath: string | null;
   targetFolderName: string;
   targetFolderPath: string | null;
   previewUrl: string | null;
@@ -99,7 +99,7 @@ interface SmokeArtifact {
     editApplied: boolean;
     browserClosed: boolean;
     conversationAfterWorkflowStayedConversational: boolean;
-    desktopCleanupMovedAllDroneCompanyFolders: boolean;
+    desktopCleanupMovedTargetFolder: boolean;
   };
   localIntentModel: LocalIntentProof;
   results: readonly StepResult[];
@@ -134,6 +134,7 @@ const CONVERSATION_TIMEOUT_MS = 45_000;
 const WORKFLOW_TIMEOUT_MS = 150_000;
 const CLEANUP_TIMEOUT_MS = 180_000;
 const SMOKE_DEADLINE_MS = 480_000;
+const SMOKE_TARGET_FOLDER_PREFIX = "agentbigbrain-static-html-smoke-";
 const POLL_INTERVAL_MS = 250;
 const PROVIDER_BLOCK_PATTERN =
 /(?:429|exceeded your current quota|usage limit|purchase more credits|try again at|rate limit|fetch failed|request timed out|socket hang up|ECONNRESET|effective backend is mock|missing OPENAI_API_KEY)/i;
@@ -150,6 +151,8 @@ const THIRD_PERSON_SELF_REFERENCE_PATTERNS: readonly RegExp[] = [
 const LOCAL_ORGANIZATION_NO_PROOF_PATTERN =
   /I checked the requested folders, but this run did not prove that the matching folders were moved into the requested destination yet\./i;
 const LOCAL_ORGANIZATION_MOVE_PROOF_PATTERN = /^I moved .+ into /i;
+const LOCAL_BROWSER_CLOSE_PROOF_PATTERN =
+  /\b(?:closed|shut)\b.{0,120}\bbrowser\b|\bbrowser\b.{0,120}\b(?:closed|shut)\b/i;
 
 function parseBoolean(value: string | undefined): boolean {
   const normalized = (value ?? "").trim().toLowerCase();
@@ -346,10 +349,10 @@ async function resolveDesktopPath(): Promise<string> {
   return path.join(os.homedir(), "Desktop");
 }
 
-async function listDroneCompanyFolders(rootPath: string): Promise<string[]> {
+async function listSampleCompanyFolders(rootPath: string): Promise<string[]> {
   const entries = await readdir(rootPath, { withFileTypes: true }).catch(() => []);
   return entries
-    .filter((entry) => entry.isDirectory() && entry.name.startsWith("drone-company"))
+    .filter((entry) => entry.isDirectory() && entry.name.startsWith(SMOKE_TARGET_FOLDER_PREFIX))
     .map((entry) => entry.name)
     .sort((left, right) => left.localeCompare(right));
 }
@@ -557,6 +560,26 @@ function hasMoveProofLanguage(observation: StepObservation): boolean {
   );
 }
 
+function hasBrowserCloseProofLanguage(
+  observation: StepObservation,
+  previewUrl: string | null
+): boolean {
+  const normalizedPreviewUrl = previewUrl?.trim().toLowerCase() ?? "";
+  return collectTextPool(observation).some((text) => {
+    const normalizedText = text.replace(/\s+/g, " ").trim();
+    if (!LOCAL_BROWSER_CLOSE_PROOF_PATTERN.test(normalizedText)) {
+      return false;
+    }
+    if (!normalizedPreviewUrl) {
+      return true;
+    }
+    return (
+      normalizedText.toLowerCase().includes(normalizedPreviewUrl) ||
+      /\b(?:tracked|that|the)\b.{0,80}\bbrowser\b/i.test(normalizedText)
+    );
+  });
+}
+
 function detectForbiddenPatterns(
   patterns: readonly RegExp[],
   observation: StepObservation
@@ -630,8 +653,8 @@ export async function runTelegramDesktopWorkflowAndCleanupLiveSmoke(): Promise<S
   };
 
   const desktopPath = await resolveDesktopPath();
-  const droneFolderPath = path.join(desktopPath, "drone-folder");
-  const targetFolderName = `drone-company-telegram-live-smoke-${RUN_ID}`;
+  const sampleFolderPath = path.join(desktopPath, "sample-folder");
+  const targetFolderName = `${SMOKE_TARGET_FOLDER_PREFIX}${RUN_ID}`;
   const targetFolderPath = path.join(desktopPath, targetFolderName);
   const results: StepResult[] = [];
   let blockerReason: string | null = realBackend.blockerReason;
@@ -649,7 +672,7 @@ export async function runTelegramDesktopWorkflowAndCleanupLiveSmoke(): Promise<S
         provider: "telegram",
         blockerReason: realBackend.blockerReason,
         desktopPath,
-        droneFolderPath,
+        sampleFolderPath,
         targetFolderName,
         targetFolderPath: null,
         previewUrl: null,
@@ -663,7 +686,7 @@ export async function runTelegramDesktopWorkflowAndCleanupLiveSmoke(): Promise<S
           editApplied: false,
           browserClosed: false,
           conversationAfterWorkflowStayedConversational: false,
-          desktopCleanupMovedAllDroneCompanyFolders: false
+          desktopCleanupMovedTargetFolder: false
         },
         localIntentModel,
         results
@@ -741,7 +764,7 @@ export async function runTelegramDesktopWorkflowAndCleanupLiveSmoke(): Promise<S
       id: "build_landing_page",
       kind: "workflow",
       prompt:
-        `Alright, let's do something real. Please build a calm air-drone landing page on my desktop in a folder called ${targetFolderName}, open it in a browser, and leave it there for me when it's ready.`,
+        `Alright, let's do something real. Please build a calm air-sample landing page as a plain static HTML site on my desktop in a folder called ${targetFolderName}. Use an index.html file with placeholder images, open that static page in a browser, and leave it there for me when it's ready.`,
       forbiddenAny: [...PLACEHOLDER_PATTERNS, ...THIRD_PERSON_SELF_REFERENCE_PATTERNS]
     };
     const conversationDuring: StepDefinition = {
@@ -756,14 +779,14 @@ export async function runTelegramDesktopWorkflowAndCleanupLiveSmoke(): Promise<S
       id: "edit_landing_page",
       kind: "workflow",
       prompt:
-        "That helps. Please change the hero section so the headline literally says 'Calmer drone operations start here', and add a short trust bar that literally says 'Trusted by local teams'. Leave the updated page in the same place when you're done.",
+        "That helps. Please change the hero section so the headline literally says 'Calmer sample operations start here', and add a short trust bar that literally says 'Trusted by local teams'. Leave the updated page in the same place when you're done.",
       forbiddenAny: [...PLACEHOLDER_PATTERNS, ...THIRD_PERSON_SELF_REFERENCE_PATTERNS]
     };
     const closeStep: StepDefinition = {
       id: "close_preview",
       kind: "workflow",
       prompt:
-        "Nice. Please close that landing page and anything it needs so we can move on.",
+        "Nice. Please close the tracked browser window that is showing that landing page now so we can move on.",
       forbiddenAny: [...PLACEHOLDER_PATTERNS, ...THIRD_PERSON_SELF_REFERENCE_PATTERNS]
     };
     const conversationAfter: StepDefinition = {
@@ -775,10 +798,10 @@ export async function runTelegramDesktopWorkflowAndCleanupLiveSmoke(): Promise<S
       forbiddenAny: [...PLACEHOLDER_PATTERNS, ...THIRD_PERSON_SELF_REFERENCE_PATTERNS]
     };
     const cleanupStep: StepDefinition = {
-      id: "cleanup_desktop_drone_folders",
+      id: "cleanup_desktop_sample_folders",
       kind: "workflow",
       prompt:
-        "One last real-world thing: please go ahead and clean up my desktop now by moving every folder there that starts with drone-company into drone-folder. I do mean all of them, so you do not need to ask again before doing it.",
+        `One last real-world thing: please go ahead and clean up my desktop now by moving only the folder named ${targetFolderName} into sample-folder. Do not move any other desktop folders, and you do not need to ask again before doing it.`,
       forbiddenAny: [...PLACEHOLDER_PATTERNS, ...THIRD_PERSON_SELF_REFERENCE_PATTERNS]
     };
 
@@ -971,7 +994,7 @@ export async function runTelegramDesktopWorkflowAndCleanupLiveSmoke(): Promise<S
         return (
           html.length > 0 &&
           html !== indexHtmlBeforeEdit &&
-          /Calmer drone operations start here/i.test(html) &&
+          /Calmer sample operations start here/i.test(html) &&
           /Trusted by local teams/i.test(html)
         );
       }
@@ -991,7 +1014,7 @@ export async function runTelegramDesktopWorkflowAndCleanupLiveSmoke(): Promise<S
     if (indexHtmlAfterEdit === indexHtmlBeforeEdit) {
       editFailures.push("edit_did_not_change_index_html");
     }
-    if (!/Calmer drone operations start here/i.test(indexHtmlAfterEdit)) {
+    if (!/Calmer sample operations start here/i.test(indexHtmlAfterEdit)) {
       editFailures.push("missing_updated_headline");
     }
     if (!/Trusted by local teams/i.test(indexHtmlAfterEdit)) {
@@ -1021,12 +1044,17 @@ export async function runTelegramDesktopWorkflowAndCleanupLiveSmoke(): Promise<S
         const trackedSession = observation.session?.browserSessions.find(
           (entry) => entry.id === browserSessionId
         );
-        return trackedSession?.status === "closed" && !(await isPreviewReachable(previewUrl));
+        const closeProofObserved = hasBrowserCloseProofLanguage(observation, previewUrl);
+        return (
+          (trackedSession?.status === "closed" || closeProofObserved) &&
+          !(await isPreviewReachable(previewUrl))
+        );
       }
     );
     const trackedBrowserAfterClose = closeObservation.session?.browserSessions.find(
       (entry) => entry.id === browserSessionId
     );
+    const closeProofObserved = hasBrowserCloseProofLanguage(closeObservation, previewUrl);
     const closeFailures = [
       ...(closeObservation.observedWorkerActivity ? [] : ["missing_worker_activity"]),
       ...(closeObservation.newRecentJobs > 0 ? [] : ["missing_new_recent_job"]),
@@ -1035,7 +1063,7 @@ export async function runTelegramDesktopWorkflowAndCleanupLiveSmoke(): Promise<S
         : [`workflow_step_not_completed:${closeObservation.latestRecentJobStatus ?? "unknown"}`]),
       ...detectForbiddenPatterns(closeStep.forbiddenAny ?? [], closeObservation)
     ];
-    if (trackedBrowserAfterClose?.status !== "closed") {
+    if (trackedBrowserAfterClose?.status !== "closed" && !closeProofObserved) {
       closeFailures.push("browser_session_not_closed");
     }
     if (await isPreviewReachable(previewUrl)) {
@@ -1093,29 +1121,36 @@ export async function runTelegramDesktopWorkflowAndCleanupLiveSmoke(): Promise<S
       failures: conversationAfterFailures
     });
 
-    cleanupBaselineRootFolders = await listDroneCompanyFolders(desktopPath);
+    cleanupBaselineRootFolders = await listSampleCompanyFolders(desktopPath);
+    const cleanupTargetFolders = [targetFolderName];
+    const nonTargetBaselineRootFolders = cleanupBaselineRootFolders.filter(
+      (name) => name !== targetFolderName
+    );
     const cleanupObservation = await processStep(
       cleanupStep,
       CLEANUP_TIMEOUT_MS,
       async () => {
-        const remainingAtRoot = await listDroneCompanyFolders(desktopPath);
-        if (remainingAtRoot.length > 0) {
+        const remainingAtRoot = await listSampleCompanyFolders(desktopPath);
+        if (remainingAtRoot.includes(targetFolderName)) {
+          return false;
+        }
+        if (!nonTargetBaselineRootFolders.every((name) => remainingAtRoot.includes(name))) {
           return false;
         }
         return (
           await Promise.all(
-            cleanupBaselineRootFolders.map((name) =>
-              isDirectory(path.join(droneFolderPath, name))
+            cleanupTargetFolders.map((name) =>
+              isDirectory(path.join(sampleFolderPath, name))
             )
           )
         ).every(Boolean);
       }
     );
-    finalRootFolders = await listDroneCompanyFolders(desktopPath);
+    finalRootFolders = await listSampleCompanyFolders(desktopPath);
     const movedFolders = await Promise.all(
-      cleanupBaselineRootFolders.map(async (name) => ({
+      cleanupTargetFolders.map(async (name) => ({
         name,
-        present: await isDirectory(path.join(droneFolderPath, name))
+        present: await isDirectory(path.join(sampleFolderPath, name))
       }))
     );
     const cleanupFailures = [
@@ -1126,14 +1161,20 @@ export async function runTelegramDesktopWorkflowAndCleanupLiveSmoke(): Promise<S
         : [`workflow_step_not_completed:${cleanupObservation.latestRecentJobStatus ?? "unknown"}`]),
       ...detectForbiddenPatterns(cleanupStep.forbiddenAny ?? [], cleanupObservation)
     ];
-    if (finalRootFolders.length > 0) {
-      cleanupFailures.push(`remaining_root_folders:${finalRootFolders.join(",")}`);
+    if (finalRootFolders.includes(targetFolderName)) {
+      cleanupFailures.push("target_folder_still_at_root");
     }
-    const missingFromDroneFolder = movedFolders
+    const movedNonTargetFolders = nonTargetBaselineRootFolders.filter(
+      (name) => !finalRootFolders.includes(name)
+    );
+    if (movedNonTargetFolders.length > 0) {
+      cleanupFailures.push(`non_target_folder_moved:${movedNonTargetFolders.join(",")}`);
+    }
+    const missingFromSampleFolder = movedFolders
       .filter((entry) => entry.present === false)
       .map((entry) => entry.name);
-    if (missingFromDroneFolder.length > 0) {
-      cleanupFailures.push(`missing_from_drone_folder:${missingFromDroneFolder.join(",")}`);
+    if (missingFromSampleFolder.length > 0) {
+      cleanupFailures.push(`missing_from_sample_folder:${missingFromSampleFolder.join(",")}`);
     }
     if (!hasMoveProofLanguage(cleanupObservation)) {
       cleanupFailures.push("cleanup_reply_missing_move_proof");
@@ -1191,8 +1232,8 @@ export async function runTelegramDesktopWorkflowAndCleanupLiveSmoke(): Promise<S
       results.find((result) => result.id === "close_preview")?.pass ?? false,
     conversationAfterWorkflowStayedConversational:
       results.find((result) => result.id === "conversation_after_workflow")?.pass ?? false,
-    desktopCleanupMovedAllDroneCompanyFolders:
-      results.find((result) => result.id === "cleanup_desktop_drone_folders")?.pass ?? false
+    desktopCleanupMovedTargetFolder:
+      results.find((result) => result.id === "cleanup_desktop_sample_folders")?.pass ?? false
   };
 
   const status =
@@ -1209,7 +1250,7 @@ export async function runTelegramDesktopWorkflowAndCleanupLiveSmoke(): Promise<S
     provider: "telegram",
     blockerReason,
     desktopPath,
-    droneFolderPath,
+    sampleFolderPath,
     targetFolderName,
     targetFolderPath: results.some((result) => result.id === "build_landing_page")
       ? targetFolderPath

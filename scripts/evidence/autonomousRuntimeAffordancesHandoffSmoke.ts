@@ -486,10 +486,10 @@ Promise<AutonomousRuntimeAffordancesHandoffArtifact> {
     BRAIN_ENABLE_DYNAMIC_PULSE: "false"
   });
 
-  const targetFolderName = `drone-company-handoff-smoke-${Date.now()}`;
+  const targetFolderName = `sample-company-handoff-smoke-${Date.now()}`;
   const targetFolderPath = path.join(desktopPath, targetFolderName);
   const turn1Input =
-    `hey I'd like to build a calm air-drone landing page, be creative, and go until you finish, ` +
+    `hey I'd like to build a calm air-sample landing page, be creative, and go until you finish, ` +
     `do it on my desktop, create a folder called ${targetFolderName}, when you're done run it on a browser and leave it open for me`;
   const turn2Input = "When I get back later, what should I inspect first from the draft you left me?";
   const turn3Input = "Okay, leave the rest for later.";

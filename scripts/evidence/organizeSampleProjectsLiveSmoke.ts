@@ -134,15 +134,15 @@ interface EnvSnapshot {
 }
 
 const RUN_ID = `${Date.now()}`;
-const COMMAND_NAME = "tsx scripts/evidence/organizeDroneProjectsLiveSmoke.ts";
-const CONVERSATION_ID = `organize-drone-projects-smoke-${RUN_ID}`;
+const COMMAND_NAME = "tsx scripts/evidence/organizeSampleProjectsLiveSmoke.ts";
+const CONVERSATION_ID = `organize-sample-projects-smoke-${RUN_ID}`;
 const USER_ID = "real-smoke-user";
 const USERNAME = "fixtureuser";
 const SESSION_PATH = path.resolve(process.cwd(), `runtime/tmp-organize-session-${RUN_ID}.json`);
 const STATE_PATH = path.resolve(process.cwd(), `runtime/tmp-organize-state-${RUN_ID}.json`);
 const LEDGER_SQLITE_PATH = path.resolve(process.cwd(), `runtime/tmp-organize-ledgers-${RUN_ID}.sqlite`);
-const LATEST_SESSION_PATH = path.resolve(process.cwd(), "runtime/organize_drone_projects_smoke_sessions.json");
-const ARTIFACT_PATH = path.resolve(process.cwd(), "runtime/evidence/organize_drone_projects_live_smoke_report.json");
+const LATEST_SESSION_PATH = path.resolve(process.cwd(), "runtime/organize_sample_projects_smoke_sessions.json");
+const ARTIFACT_PATH = path.resolve(process.cwd(), "runtime/evidence/organize_sample_projects_live_smoke_report.json");
 const LIVE_RUN_RUNTIME_PATH = path.resolve(
   process.cwd(),
   `runtime/tmp-organize-live-run-${RUN_ID}`
@@ -443,7 +443,7 @@ async function seedPreviewHolder(
   const previewUrl = `http://localhost:${port}/index.html`;
   const createdAt = new Date().toISOString();
   const taskId = `seed_preview_${folderName}`;
-  const prompt = `Please build a small drone project in a folder called ${folderName} and leave the preview open for me.`;
+  const prompt = `Please build a small sample project in a folder called ${folderName} and leave the preview open for me.`;
   const command = `python -m http.server ${port} --bind 127.0.0.1`;
   const child = spawn("python", ["-m", "http.server", String(port), "--bind", "127.0.0.1"], {
     cwd: folderPath,
@@ -553,7 +553,7 @@ async function seedPlainProjectFolder(
   const html = buildFixtureHtml(title, heading);
   await writeFile(indexPath, html, "utf8");
   const createdAt = new Date().toISOString();
-  const prompt = `Please build a small drone project in a folder called ${folderName}.`;
+  const prompt = `Please build a small sample project in a folder called ${folderName}.`;
   const taskId = `seed_project_${folderName}`;
   const completedAt = new Date().toISOString();
   return {
@@ -860,7 +860,7 @@ function buildBlockedOrganizationArtifact(blockerReason: string): Artifact {
     baseUrl: ""
   };
   const desktopPath = path.join(os.homedir(), "OneDrive", "Desktop");
-  const targetRootName = `drone-web-projects-organize-smoke-${RUN_ID}`;
+  const targetRootName = `sample-web-projects-organize-smoke-${RUN_ID}`;
   return {
     generatedAt: new Date().toISOString(),
     command: COMMAND_NAME,
@@ -868,7 +868,7 @@ function buildBlockedOrganizationArtifact(blockerReason: string): Artifact {
     blockerReason,
     localIntentModel,
     prompts: {
-    organize: `Please take this from start to finish: move the earlier drone-company-organize-smoke project folders into a folder called ${targetRootName} on my desktop.`,
+    organize: `Please take this from start to finish: move the earlier sample-company-organize-smoke project folders into a folder called ${targetRootName} on my desktop.`,
       retry: "Yes, shut them down and retry the move."
     },
     seededPreviewHolders: [],
@@ -938,7 +938,7 @@ async function handleFatalOrganizeSmokeError(error: unknown): Promise<void> {
   }
   if (fatalDesktopPath) {
     await removeSmokeFoldersByPrefix(fatalDesktopPath, [
-      "drone-company-organize-smoke-"
+      "sample-company-organize-smoke-"
     ]).catch(() => undefined);
   }
   await rm(LIVE_RUN_RUNTIME_PATH, { recursive: true, force: true }).catch(() => undefined);
@@ -1212,17 +1212,17 @@ async function main(): Promise<void> {
       "tmp-organize-ledgers-"
     ]);
     await removeSmokeFoldersByPrefix(desktopPath, [
-      "drone-company-organize-smoke-",
-      "drone-web-projects-organize-smoke-"
+      "sample-company-organize-smoke-",
+      "sample-web-projects-organize-smoke-"
     ]);
-    const sourceFolderAName = `drone-company-organize-smoke-${RUN_ID}-a`;
-    const sourceFolderBName = `drone-company-organize-smoke-${RUN_ID}-b`;
+    const sourceFolderAName = `sample-company-organize-smoke-${RUN_ID}-a`;
+    const sourceFolderBName = `sample-company-organize-smoke-${RUN_ID}-b`;
     const sourceFolderAPath = path.join(desktopPath, sourceFolderAName);
     const sourceFolderBPath = path.join(desktopPath, sourceFolderBName);
-    const targetRootName = `drone-web-projects-organize-smoke-${RUN_ID}`;
+    const targetRootName = `sample-web-projects-organize-smoke-${RUN_ID}`;
     targetRootPath = path.join(desktopPath, targetRootName);
     fatalTargetRootPath = targetRootPath;
-    const organizePrompt = `Please take this from start to finish: move the earlier drone-company-organize-smoke project folders into a folder called ${targetRootName} on my desktop.`;
+    const organizePrompt = `Please take this from start to finish: move the earlier sample-company-organize-smoke project folders into a folder called ${targetRootName} on my desktop.`;
     const retryPrompt = "Yes, shut them down and retry the move.";
 
     const managedProcessRegistry = new ManagedProcessRegistry({ snapshotPath: MANAGED_PROCESS_SNAPSHOT_PATH });
@@ -1235,14 +1235,14 @@ async function main(): Promise<void> {
       managedProcessRegistry,
       sourceFolderAName,
       sourceFolderAPath,
-      "Drone Company Preview A",
-      "Drone Project Alpha"
+      "Sample Company Preview A",
+      "Sample Project Alpha"
     );
     const plainProjectFolder = await seedPlainProjectFolder(
       sourceFolderBName,
       sourceFolderBPath,
-      "Drone Company Project B",
-      "Drone Project Beta"
+      "Sample Company Project B",
+      "Sample Project Beta"
     );
     seededPreviewHolders.push(previewHolder);
     seededProjectFolders.push(previewHolder, plainProjectFolder);
@@ -1291,7 +1291,7 @@ async function main(): Promise<void> {
       : sessionAfterTurn1;
     latestSession = finalSession;
     fatalLatestSession = latestSession;
-    const movedEntries = (await readdir(targetRootPath).catch(() => [])).filter((name) => name.startsWith("drone-company-organize-smoke-"));
+    const movedEntries = (await readdir(targetRootPath).catch(() => [])).filter((name) => name.startsWith("sample-company-organize-smoke-"));
     const remainingDesktopMatches = (await Promise.all([sourceFolderAPath, sourceFolderBPath].map(async (candidatePath) => (await stat(candidatePath).catch(() => null))?.isDirectory() ? path.basename(candidatePath) : null))).filter((value): value is string => value !== null);
     const liveManagedProcesses = (await adapter.listManagedProcessSnapshots()).filter((snapshot) => snapshot.statusCode !== "PROCESS_STOPPED").filter((snapshot) => seededPreviewHolders.some((holder) => snapshot.cwd === holder.folderPath));
     const liveBrowserSessions = await adapter.listBrowserSessionSnapshots();
@@ -1398,7 +1398,7 @@ async function main(): Promise<void> {
     }
     if (desktopPath) {
       await removeSmokeFoldersByPrefix(desktopPath, [
-        "drone-company-organize-smoke-"
+        "sample-company-organize-smoke-"
       ]).catch(() => undefined);
     }
     await rm(LIVE_RUN_RUNTIME_PATH, { recursive: true, force: true }).catch(() => undefined);

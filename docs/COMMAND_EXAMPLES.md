@@ -46,6 +46,8 @@ Voice command note:
 - If shell selection matters, name it directly: `PowerShell`, `cmd`, `bash`, `zsh`, `terminal`, or
   `command line`.
 - For build/scaffold requests, you do not need shell keywords just to unlock executable planning.
+- For site, app, browser-recovery, and document-reading work, reusable Markdown instruction skills
+  are the default guidance path. They shape the plan but do not authorize side effects.
 - If you want draft-first behavior, use `/propose`.
 - If a real saved checkpoint already exists, natural prompts like `show me the rough draft`, `pick
   that back up`, or `leave the rest for later` can work without a slash command.
@@ -97,7 +99,7 @@ Examples:
 Examples:
 
 ```text
-/propose create a React app at C:\Users\<you>\Desktop\finance-dashboard. Show the exact approval diff before any write or shell command.
+/propose create a static HTML site at C:\Users\<you>\Desktop\sample-site for a sample service company with placeholder images. Show the exact approval diff before any write or shell command.
 /draft
 /adjust keep the first pass small and add a watchlist panel
 /approve
@@ -112,14 +114,14 @@ Examples:
 Examples:
 
 ```text
-/auto create a React app at C:\Users\<you>\Desktop\finance-dashboard. Execute now using PowerShell. Create files directly; if blocked, stop and tell me exactly why.
+/auto create a static HTML site at C:\Users\<you>\Desktop\sample-site for a sample service company with placeholder images. Execute now using PowerShell. Create files directly; if blocked, stop and tell me exactly why.
 /auto guidance only: outline a release checklist for this repo without executing anything
 ```
 
 Natural front-door equivalents can also work when the intent is already clear:
 
 ```text
-BigBrain, build me a landing page for a drone company, keep going until it's done, put it on my Desktop in a folder called drone-company, and leave the preview open for me.
+BigBrain, build me a landing page for a sample company, keep going until it's done, put it on my Desktop in a folder called sample-company, and leave the preview open for me.
 Keep refining that saved draft from where you left off.
 ```
 
@@ -216,13 +218,26 @@ Why it works:
 ### Natural autonomous start
 
 ```text
-BigBrain, build a small local landing page for a drone company, keep going until it's done, put it on my Desktop in a folder called drone-company, and leave the preview open for review.
+BigBrain, build a small local landing page for a sample company, keep going until it's done, put it on my Desktop in a folder called sample-company, and leave the preview open for review.
 ```
 
 Why it works:
 - it gives a real end-to-end goal instead of a tiny one-step request
 - it makes the autonomous expectation explicit with `keep going until it's done`
 - it gives the runtime a concrete destination and review handoff
+- the runtime should use the relevant Markdown generation guidance, then execute normal governed
+  file, preview, and verification actions
+
+### Skill-guided static site creation
+
+```text
+/auto create a static HTML site at C:\Users\<you>\Desktop\sample-site for a sample service company with placeholder images. Execute now using PowerShell. Use the static-site Markdown guidance instead of a hard-coded template.
+```
+
+Why it works:
+- it names the target format and destination
+- it keeps content generation in the model-guided path
+- it still requires normal write, open, and verification actions to pass runtime checks
 
 ### Natural clarification answer
 
@@ -418,13 +433,13 @@ npm run dev -- "guidance only: show me how to create a React app without executi
 ### Approval-first planning
 
 ```bash
-npm run dev -- "create a React app at C:\Users\<you>\Desktop\finance-dashboard. Show the exact approval diff before any write or shell command."
+npm run dev -- "create a static HTML site at C:\Users\<you>\Desktop\sample-site for a sample service company with placeholder images. Show the exact approval diff before any write or shell command."
 ```
 
 ### Autonomous build
 
 ```bash
-npm run dev -- --autonomous "create a React app at C:\Users\<you>\Desktop\finance-dashboard. Execute now using PowerShell. Create files directly; if blocked, stop and tell me exactly why."
+npm run dev -- --autonomous "create a static HTML site at C:\Users\<you>\Desktop\sample-site for a sample service company with placeholder images. Execute now using PowerShell. Create files directly; if blocked, stop and tell me exactly why."
 ```
 
 ### Skill workflow from CLI
@@ -437,7 +452,7 @@ npm run dev -- "run skill repo_status on this repo"
 ### Natural autonomous start from CLI
 
 ```bash
-npm run dev -- --autonomous "build a small drone-company landing page on my Desktop, keep going until it is done, and leave the preview open for review"
+npm run dev -- --autonomous "build a small sample-company landing page on my Desktop, keep going until it is done, and leave the preview open for review"
 ```
 
 ### Natural return-handoff phrasing in chat
@@ -492,7 +507,7 @@ Problem:
 ### Better
 
 ```text
-/auto create a React app at C:\Users\<you>\Desktop\finance-dashboard. Execute now using PowerShell. Create files directly; if blocked, stop and tell me exactly why.
+/auto create a static HTML site at C:\Users\<you>\Desktop\sample-site for a sample service company with placeholder images. Execute now using PowerShell. Create files directly; if blocked, stop and tell me exactly why.
 ```
 
 Why it is better:

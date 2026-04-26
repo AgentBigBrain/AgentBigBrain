@@ -18,12 +18,12 @@ export const HOST_TEST_DESKTOP_DIR = IS_WINDOWS
   ? `${HOST_TEST_HOME_DIR}\\Desktop`
   : `${HOST_TEST_HOME_DIR}/Desktop`;
 export const HOST_TEST_DESKTOP_DIR_FORWARD = HOST_TEST_DESKTOP_DIR.replace(/\\/g, "/");
-export const HOST_TEST_FINANCE_DASHBOARD_DIR = IS_WINDOWS
-  ? `${HOST_TEST_DESKTOP_DIR}\\finance-dashboard`
-  : `${HOST_TEST_DESKTOP_DIR}/finance-dashboard`;
-export const HOST_TEST_ROBINHOOD_MOCK_DIR = IS_WINDOWS
-  ? `${HOST_TEST_DESKTOP_DIR}\\robinhood-mock`
-  : `${HOST_TEST_DESKTOP_DIR}/robinhood-mock`;
+export const HOST_TEST_SAMPLE_SITE_DIR = IS_WINDOWS
+  ? `${HOST_TEST_DESKTOP_DIR}\\sample-site`
+  : `${HOST_TEST_DESKTOP_DIR}/sample-site`;
+export const HOST_TEST_PORTFOLIO_DEMO_DIR = IS_WINDOWS
+  ? `${HOST_TEST_DESKTOP_DIR}\\portfolio-demo`
+  : `${HOST_TEST_DESKTOP_DIR}/portfolio-demo`;
 export const HOST_TEST_PLAYWRIGHT_PROOF_SMOKE_DIR = IS_WINDOWS
   ? `${HOST_TEST_DESKTOP_DIR}\\playwright-proof-smoke`
   : `${HOST_TEST_DESKTOP_DIR}/playwright-proof-smoke`;
@@ -74,7 +74,7 @@ export const WINDOWS_TEST_PLAYWRIGHT_PROOF_SMOKE_2_DIR =
   `${WINDOWS_TEST_DESKTOP_DIR}\\playwright-proof-smoke-test-2`;
 export const WINDOWS_TEST_PLAYWRIGHT_PROOF_SMOKE_TEST_DIR =
   `${WINDOWS_TEST_DESKTOP_DIR}\\playwright-proof-smoke-test`;
-export const WINDOWS_TEST_ROBINHOOD_MOCK_DIR = `${WINDOWS_TEST_DESKTOP_DIR}\\robinhood-mock`;
+export const WINDOWS_TEST_PORTFOLIO_DEMO_DIR = `${WINDOWS_TEST_DESKTOP_DIR}\\portfolio-demo`;
 export const WINDOWS_TEST_WRONG_APP_DIR = `${WINDOWS_TEST_DESKTOP_DIR}\\wrong-app`;
 
 export const WINDOWS_TEST_PLAYWRIGHT_PROOF_SMOKE_INDEX_HTML =
