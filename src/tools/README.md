@@ -5,8 +5,8 @@ This folder owns repository-facing maintenance checks, smoke harnesses, and one-
 scripts that are intentionally kept outside the main runtime path.
 
 ## Primary Files
-- Maintainability and contract checks: `checkFunctionDocs.ts`, `checkModuleSize.ts`,
-  `checkReasonCodeUniqueness.ts`, `checkSubsystemReadmeSync.ts`,
+- Maintainability and contract checks: `checkFunctionDocs.ts`, `checkLexicalRoutingBoundary.ts`,
+  `checkModuleSize.ts`, `checkReasonCodeUniqueness.ts`, `checkSubsystemReadmeSync.ts`,
   `checkTemporalMemoryRegistry.ts`, `checkVersioning.ts`,
   `checkUserFacingStopPhraseDuplication.ts`.
 - Projection and operator helpers: `exportObsidianProjection.ts`,
@@ -38,6 +38,8 @@ scripts that are intentionally kept outside the main runtime path.
 - `checkModuleSize.ts` and `checkSubsystemReadmeSync.ts` are the canonical contract gates for the
   intentionally kept thin entrypoints and folder-level README discovery surface after the cleanup
   plans.
+- `checkLexicalRoutingBoundary.ts` is the advisory guardrail for frozen route-owner files so broad
+  regex, token-set, or phrase-array growth stays visible during semantic-routing cleanup.
 - `checkTemporalMemoryRegistry.ts` is the canonical CI gate for code-owned profile-memory family
   registry coverage and policy-coherence checks once Phase 2.5 starts promoting truth-governance
   policy out of plan prose. That includes family coverage, inventory/cardinality coherence,
@@ -46,6 +48,7 @@ scripts that are intentionally kept outside the main runtime path.
 
 ## Related Tests
 - `tests/tools/checkModuleSize.test.ts`
+- `tests/tools/checkLexicalRoutingBoundary.test.ts`
 - `tests/tools/checkReasonCodeUniqueness.test.ts`
 - `tests/tools/checkSubsystemReadmeSync.test.ts`
 - `tests/tools/checkTemporalMemoryRegistry.test.ts`
