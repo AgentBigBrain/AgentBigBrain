@@ -28,6 +28,7 @@ import {
   buildProfileMemorySourceFingerprint
 } from "../../src/core/profileMemoryRuntime/profileMemoryIngestProvenance";
 import { MockModelClient } from "../../src/models/mockModelClient";
+import type { LanguageUnderstandingEpisodeExtractionRequest } from "../../src/organs/languageUnderstanding/contracts";
 import { LanguageUnderstandingOrgan } from "../../src/organs/languageUnderstanding/episodeExtraction";
 import { extractCurrentUserRequest, MemoryBrokerOrgan } from "../../src/organs/memoryBroker";
 import { assessBrokerPromptCutoverGate } from "../../src/organs/memoryBrokerPlannerInput";
@@ -1049,6 +1050,48 @@ test("memory broker skips model-assisted episode extraction when workflow contin
     );
 
     assert.equal(extractionCallCount, 0);
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("memory broker keeps document-derived media fragments out of model-assisted episode extraction", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-memory-broker-document-source-gate-"));
+  const profilePath = path.join(tempDir, "profile_memory.secure.json");
+  const key = Buffer.alloc(32, 62);
+  const store = new ProfileMemoryStore(profilePath, key, 90);
+  const capturedTexts: string[] = [];
+  const broker = new MemoryBrokerOrgan(
+    store,
+    undefined,
+    undefined,
+    {
+      extractEpisodeCandidates: async (request: LanguageUnderstandingEpisodeExtractionRequest) => {
+        capturedTexts.push(request.text);
+        return [];
+      }
+    } as unknown as LanguageUnderstandingOrgan
+  );
+
+  try {
+    await broker.buildPlannerInput(
+      buildTask(
+        "task_memory_document_source_gate",
+        [
+          "Please review this carefully.",
+          "",
+          "Attached media context:",
+          "- document summary: The document says Mira moved offices. OCR text: Mira moved offices",
+          "- Voice note transcript: My coworker Owen moved offices last week."
+        ].join("\n")
+      )
+    );
+
+    assert.deepEqual(capturedTexts, [
+      "Please review this carefully.",
+      "My coworker Owen moved offices last week."
+    ]);
+    assert.equal(capturedTexts.some((text) => text.includes("Mira moved offices")), false);
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }
