@@ -5,6 +5,7 @@
 import { PlannedAction } from "../../core/types";
 import {
   extractExecutionContextPayload,
+  extractResolvedRuntimeControlIntent,
   extractResolvedSemanticRouteId
 } from "../../core/currentRequestExtraction";
 import {
@@ -99,12 +100,6 @@ const EXPLICIT_RUNTIME_ACTION_REQUEST_PATTERNS: readonly {
   }
 ] as const;
 
-const SEMANTIC_ROUTE_RUNTIME_FOLLOW_UP_IDS = new Set([
-  "build_request",
-  "static_html_build",
-  "framework_app_build",
-  "status_recall"
-]);
 const SEMANTIC_ROUTE_ARTIFACT_EDIT_IDS = new Set([
   "build_request",
   "static_html_build",
@@ -112,6 +107,38 @@ const SEMANTIC_ROUTE_ARTIFACT_EDIT_IDS = new Set([
 ]);
 
 export type { RequiredActionType } from "./executionStyleContracts";
+
+/**
+ * Converts route-approved runtime-control metadata to a required planner action.
+ *
+ * **Why it exists:**
+ * Browser/process follow-up requirements should come from typed route metadata before natural
+ * wording compatibility checks are considered.
+ *
+ * **What it talks to:**
+ * - Uses `RequiredActionType` (import `RequiredActionType`) from `./executionStyleContracts`.
+ *
+ * @param runtimeControlIntent - Runtime-control intent extracted from the resolved route block.
+ * @returns Required action type, or `null` when the route carries no action requirement.
+ */
+function toRequiredActionTypeFromRuntimeControlIntent(
+  runtimeControlIntent: string | null
+): RequiredActionType {
+  switch (runtimeControlIntent) {
+    case "open_browser":
+      return "open_browser";
+    case "close_browser":
+      return "close_browser";
+    case "verify_browser":
+      return "verify_browser";
+    case "inspect_runtime":
+      return "inspect_workspace_resources";
+    case "stop_runtime":
+      return "stop_process";
+    default:
+      return null;
+  }
+}
 
 /**
  * Extracts stable workspace/app names from tracked browser path context embedded in execution input.
@@ -235,6 +262,12 @@ export function inferRequiredActionType(
   fullExecutionInput = ""
 ): RequiredActionType {
   const resolvedSemanticRouteId = extractResolvedSemanticRouteId(fullExecutionInput);
+  const routeRuntimeAction = toRequiredActionTypeFromRuntimeControlIntent(
+    extractResolvedRuntimeControlIntent(fullExecutionInput)
+  );
+  if (routeRuntimeAction) {
+    return routeRuntimeAction;
+  }
   if (CREATE_SKILL_INTENT_PATTERN.test(currentUserRequest)) {
     return "create_skill";
   }
@@ -249,10 +282,7 @@ export function inferRequiredActionType(
   const hasTrackedRuntime = hasTrackedRuntimeContext(fullExecutionInput);
   if (
     hasTrackedRuntime &&
-    (
-      resolvedSemanticRouteId === null ||
-      SEMANTIC_ROUTE_RUNTIME_FOLLOW_UP_IDS.has(resolvedSemanticRouteId)
-    )
+    resolvedSemanticRouteId === null
   ) {
     const suppressesNaturalBrowserOpen =
       NEGATED_NATURAL_OPEN_BROWSER_PATTERN.test(currentUserRequest);

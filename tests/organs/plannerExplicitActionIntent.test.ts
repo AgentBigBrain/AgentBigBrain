@@ -145,6 +145,41 @@ test("inferRequiredActionType does not promote artifact edits when the resolved 
   );
 });
 
+test("inferRequiredActionType consumes route-approved runtime-control intent before natural fallback", () => {
+  const executionInput = [
+    "Resolved semantic route:",
+    "- routeId: build_request",
+    "- runtimeControlIntent: close_browser",
+    "",
+    "Current user request:",
+    "Please handle the tracked runtime target."
+  ].join("\n");
+
+  assert.equal(
+    inferRequiredActionType("Please handle the tracked runtime target.", executionInput),
+    "close_browser"
+  );
+});
+
+test("inferRequiredActionType does not let natural browser wording override resolved route metadata", () => {
+  const executionInput = [
+    "Resolved semantic route:",
+    "- routeId: status_recall",
+    "- runtimeControlIntent: none",
+    "",
+    "Tracked browser sessions:",
+    "- url=http://localhost:3000; workspaceRoot=C:\\Users\\testuser\\Desktop\\Sample City",
+    "",
+    "Current user request:",
+    "Close the browser for the landing page."
+  ].join("\n");
+
+  assert.equal(
+    inferRequiredActionType("Close the browser for the landing page.", executionInput),
+    null
+  );
+});
+
 test("filterNonExplicitRunSkillActions removes run_skill work unless the request explicitly asks for it", () => {
   const actions = [
     {

@@ -2,7 +2,13 @@
  * @fileoverview Deterministic normalization for static HTML preview-server planner actions.
  */
 
+import { pathToFileURL } from "node:url";
+
 import { estimateActionCostUsd } from "../../core/actionCostPolicy";
+import {
+  localFileUrlToAbsolutePath,
+  normalizeCrossPlatformPath
+} from "../../core/crossPlatformPath";
 import type { PlannedAction } from "../../core/types";
 import { inferManagedProcessLoopbackTarget } from "../liveRun/contracts";
 import type { PlannerExecutionEnvironmentContext } from "./executionStyleContracts";
@@ -21,6 +27,8 @@ const MKDIR_DIRECTORY_PATH_PATTERN =
   /(?:^|[\s;(])(?:mkdir|md)\s+["']([^"']+)["']/i;
 const STATIC_HTML_REDUNDANT_SHELL_COMMAND_FORBIDDEN_PATTERN =
   /\b(?:python|node|npm|npx|pnpm|yarn|serve|http\.server|start-process|set-content|add-content|out-file|copy-item|move-item|remove-item|git)\b/i;
+const WINDOWS_ABSOLUTE_PATH_PATTERN = /^[A-Za-z]:\\/;
+const WINDOWS_UNC_PATH_PATTERN = /^\\\\[^\\]+\\[^\\]+/;
 
 /**
  * Reads one planned action workspace root when present.
@@ -37,6 +45,101 @@ function readActionWorkspaceRoot(action: PlannedAction): string | null {
   const workdir =
     typeof action.params.workdir === "string" ? action.params.workdir.trim() : "";
   return workdir.length > 0 ? workdir : null;
+}
+
+/**
+ * Converts an absolute local path into a browser-safe `file://` URL without depending on the
+ * current host platform for Windows-style paths.
+ *
+ * @param candidatePath - Absolute local file path.
+ * @returns Local file URL, or `null` when the path is not absolute.
+ */
+function absolutePathToLocalFileUrl(candidatePath: string): string | null {
+  const normalized = normalizeCrossPlatformPath(candidatePath);
+  if (!normalized) {
+    return null;
+  }
+  if (WINDOWS_ABSOLUTE_PATH_PATTERN.test(normalized)) {
+    return `file:///${encodeURI(normalized.replace(/\\/g, "/"))}`;
+  }
+  if (WINDOWS_UNC_PATH_PATTERN.test(normalized)) {
+    const rawSegments = normalized.replace(/^\\\\/, "").split("\\").filter((segment) => segment.length > 0);
+    if (rawSegments.length < 2) {
+      return null;
+    }
+    const [host, ...pathSegments] = rawSegments;
+    return `file://${host}/${encodeURI(pathSegments.join("/"))}`;
+  }
+  if (normalized.startsWith("/")) {
+    return pathToFileURL(normalized).href;
+  }
+  return null;
+}
+
+/**
+ * Builds the exact `index.html` file URL for one static HTML workspace root.
+ *
+ * @param workspaceRoot - Static HTML workspace root.
+ * @returns Absolute local file URL for `index.html`.
+ */
+function buildStaticHtmlEntryFileUrl(workspaceRoot: string): string | null {
+  const pathModule = getPathModuleForPathValue(workspaceRoot);
+  return absolutePathToLocalFileUrl(pathModule.join(workspaceRoot, "index.html"));
+}
+
+/**
+ * Detects model-generated local browser targets that need exact static-file normalization.
+ *
+ * @param rawUrl - Browser URL emitted by the planner.
+ * @returns `true` when the URL is missing, relative, or an invalid local `file://` target.
+ */
+function shouldNormalizeStaticHtmlBrowserTarget(rawUrl: unknown): boolean {
+  if (typeof rawUrl !== "string" || rawUrl.trim().length === 0) {
+    return true;
+  }
+  const trimmed = rawUrl.trim();
+  if (/^https?:\/\//i.test(trimmed)) {
+    return false;
+  }
+  if (/^file:\/\//i.test(trimmed)) {
+    return localFileUrlToAbsolutePath(trimmed) === null;
+  }
+  return /\.html?(?:[#?].*)?$/i.test(trimmed);
+}
+
+/**
+ * Normalizes one local static `open_browser` action to the exact written `index.html` file.
+ *
+ * @param action - Planned action under normalization.
+ * @param staticHtmlRoots - Static HTML roots proven by write-file actions.
+ * @returns Action with an absolute file URL when normalization is safe.
+ */
+function normalizeStaticHtmlOpenBrowserAction(
+  action: PlannedAction,
+  staticHtmlRoots: readonly string[]
+): PlannedAction {
+  if (action.type !== "open_browser" || staticHtmlRoots.length !== 1) {
+    return action;
+  }
+  if (!shouldNormalizeStaticHtmlBrowserTarget(action.params.url)) {
+    return action;
+  }
+  const workspaceRoot = staticHtmlRoots[0];
+  const fileUrl = workspaceRoot ? buildStaticHtmlEntryFileUrl(workspaceRoot) : null;
+  if (!fileUrl) {
+    return action;
+  }
+  return {
+    ...action,
+    params: {
+      ...action.params,
+      url: fileUrl,
+      rootPath:
+        typeof action.params.rootPath === "string" && action.params.rootPath.trim().length > 0
+          ? action.params.rootPath
+          : workspaceRoot
+    }
+  };
 }
 
 /**
@@ -176,6 +279,10 @@ export function normalizeStaticHtmlPreviewActions(
 
   return actions.reduce<PlannedAction[]>((normalized, action) => {
     if (isRedundantStaticHtmlEnsureDirectoryAction(action, staticHtmlRoots)) {
+      return normalized;
+    }
+    if (action.type === "open_browser") {
+      normalized.push(normalizeStaticHtmlOpenBrowserAction(action, staticHtmlRoots));
       return normalized;
     }
     if (action.type !== "start_process") {

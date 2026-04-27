@@ -8,6 +8,10 @@ import { makeId } from "../../core/ids";
 import { PlannedAction } from "../../core/types";
 import { PlannerExecutionEnvironmentContext } from "./executionStyleContracts";
 import { isRuntimeProcessManagementRequest } from "./liveVerificationPolicy";
+import {
+  hasPlannerResolvedRouteMetadata,
+  hasResolvedRuntimeControlIntent
+} from "./liveVerificationSemanticRouteSupport";
 
 const DESKTOP_LOCATION_PATTERN = /\b(?:my|the)\s+desktop\b/i;
 const DOCUMENTS_LOCATION_PATTERN = /\b(?:my|the)\s+documents\b/i;
@@ -107,6 +111,13 @@ export function isDesktopFolderRuntimeProcessSweepRequest(
 ): boolean {
   const activeRequest = extractActiveRequestSegment(currentUserRequest).trim();
   if (!activeRequest) return false;
+  if (
+    hasPlannerResolvedRouteMetadata(currentUserRequest) &&
+    !hasResolvedRuntimeControlIntent(currentUserRequest, "stop_runtime") &&
+    !hasResolvedRuntimeControlIntent(currentUserRequest, "inspect_runtime")
+  ) {
+    return false;
+  }
   return (
     isRuntimeProcessManagementRequest(activeRequest) &&
     FOLDER_TARGET_PATTERN.test(activeRequest) &&
