@@ -583,7 +583,11 @@ function resolveProgressPlaceholderFallbackCategory(
   if (/\bordered\s+mission\s+timeline\b|\bredacted\s+evidence\s+bundle\b/.test(normalized)) {
     return "observability";
   }
-  if (/\b(build|scaffold|typescript\s+cli|runbook|tests?)\b/.test(normalized)) {
+  if (
+    /\b(build|scaffold|create|generate|write|static\s+html|react|next\.?js|vite|app|site|website|webpage|landing\s+page|homepage|page|typescript\s+cli|runbook|tests?)\b/.test(
+      normalized
+    )
+  ) {
     return "build";
   }
   if (/\b(research|findings|sources?)\b/.test(normalized)) {

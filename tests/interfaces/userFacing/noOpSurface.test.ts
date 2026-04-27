@@ -13,17 +13,15 @@ import {
 } from "../../../src/interfaces/userFacing/noOpSurface";
 import { WINDOWS_TEST_DEMO_APP_DIR } from "../../support/windowsPathFixtures";
 
-test("resolveExecutionSurfaceFallbackFromRouting returns build fallback for build-scaffold prompts", () => {
+test("resolveExecutionSurfaceFallbackFromRouting does not treat generic builds as routing-map-owned", () => {
   const userInput =
     `Create a React app at ${WINDOWS_TEST_DEMO_APP_DIR} and execute now.`;
   const classification = classifyRoutingIntentV1(userInput);
 
   const fallback = resolveExecutionSurfaceFallbackFromRouting(classification, userInput);
 
-  assert.equal(classification.category, "BUILD_SCAFFOLD");
-  assert.ok(fallback);
-  assert.match(fallback!, /BUILD_NO_SIDE_EFFECT_EXECUTED/i);
-  assert.match(fallback!, /No governed build side-effect action was approved and executed in this run/i);
+  assert.equal(classification.category, "NONE");
+  assert.equal(fallback, null);
 });
 
 test("resolveHighRiskDeleteNoOpFallback explains protected-path deletes", () => {

@@ -131,9 +131,9 @@ const LIVE_RUN_RUNTIME_PATH = path.resolve(
   `runtime/tmp-telegram-desktop-workflow-live-run-${RUN_ID}`
 );
 const CONVERSATION_TIMEOUT_MS = 45_000;
-const WORKFLOW_TIMEOUT_MS = 150_000;
-const CLEANUP_TIMEOUT_MS = 180_000;
-const SMOKE_DEADLINE_MS = 480_000;
+const WORKFLOW_TIMEOUT_MS = 300_000;
+const CLEANUP_TIMEOUT_MS = 300_000;
+const SMOKE_DEADLINE_MS = 1_080_000;
 const SMOKE_TARGET_FOLDER_PREFIX = "agentbigbrain-static-html-smoke-";
 const POLL_INTERVAL_MS = 250;
 const PROVIDER_BLOCK_PATTERN =

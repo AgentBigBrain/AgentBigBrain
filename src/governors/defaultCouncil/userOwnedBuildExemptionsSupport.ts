@@ -72,7 +72,7 @@ export function normalizeFilesystemText(value: string): string {
 }
 
 /** Reads filesystem-like path fragments from one command or free-form request. */
-function extractFilesystemCandidatesFromCommand(command: string): readonly string[] {
+export function extractFilesystemCandidatesFromCommand(command: string): readonly string[] {
   const candidates = new Set<string>();
   for (const match of command.matchAll(/([a-z]:\\[^"'`\r\n]+|\/(?:Users|users|home)\/[^"'`\r\n]+)/ig)) {
     const candidate = match[1]?.trim();
@@ -80,6 +80,28 @@ function extractFilesystemCandidatesFromCommand(command: string): readonly strin
       candidates.add(candidate);
     }
   }
+  return [...candidates];
+}
+
+/** Reads user-owned known-folder paths from execution context embedded in the task prompt. */
+export function collectTaskFilesystemContextCandidates(taskUserInput: string): readonly string[] {
+  const candidates = new Set<string>();
+  const addCandidate = (candidate: string | null | undefined): void => {
+    if (!candidate?.trim()) {
+      return;
+    }
+    candidates.add(candidate.trim().replace(/[.,;:]+$/, ""));
+  };
+
+  for (const candidate of extractFilesystemCandidatesFromCommand(taskUserInput)) {
+    addCandidate(candidate);
+  }
+  for (const match of taskUserInput.matchAll(
+    /^\s*-\s*(?:Strongest remembered Desktop root in this chat:|Treat the named destination as)\s*(.+)$/gim
+  )) {
+    addCandidate(match[1]);
+  }
+
   return [...candidates];
 }
 

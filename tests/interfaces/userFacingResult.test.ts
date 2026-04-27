@@ -2256,6 +2256,49 @@ test("selectUserFacingSummary renders the completed organization move from inlin
   );
 });
 
+test("selectUserFacingSummary does not render boolean proof tokens as moved folder names", () => {
+  const runResult = buildRunResult(
+    "Completed task with 1 approved action(s) and 0 blocked action(s).",
+    [
+      {
+        action: {
+          id: "action_move_exact_boolean_marker",
+          type: "shell_command",
+          description: "move the exact requested folder",
+          params: {
+            command: [
+              "$source = 'sample-project-a'",
+              "$destination = 'sample-folder'",
+              "Move-Item -LiteralPath $source -Destination $destination -Force",
+              "Write-Output 'MOVED_TO_DEST=True'",
+              "Write-Output 'DEST_CONTENTS=True'",
+              "Write-Output 'ROOT_REMAINING_MATCHES='"
+            ].join("\n")
+          },
+          estimatedCostUsd: 0.18
+        },
+        mode: "escalation_path",
+        approved: true,
+        output:
+          "Shell success:\nMOVED_TO_DEST=True\r\nDEST_CONTENTS=True\r\nROOT_REMAINING_MATCHES=",
+        blockedBy: [],
+        violations: [],
+        votes: []
+      }
+    ],
+    {
+      userInput:
+        "Please clean up my desktop now by moving only the folder named sample-project-a into sample-folder. Do not move any other desktop folders."
+    }
+  );
+
+  const selected = selectUserFacingSummary(runResult, {
+    showTechnicalSummary: false
+  });
+
+  assert.equal(selected, "I moved sample-project-a into the requested folder.");
+});
+
 test("selectUserFacingSummary surfaces a human-first read_file summary when no respond output exists", () => {
   const runResult = buildRunResult("fallback summary", [
     {

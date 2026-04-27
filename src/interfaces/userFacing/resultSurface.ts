@@ -261,6 +261,51 @@ export function selectUserFacingSummary(
     }
   }
 
+  if (!approvedRealNonRespondExecution) {
+    const highRiskDeleteFallback = resolveHighRiskDeleteNoOpFallback(
+      runResult.task.userInput
+    );
+    if (highRiskDeleteFallback) {
+      return render(appendMissionDiagnosticsIfRequested(
+        runResult,
+        highRiskDeleteFallback,
+        normalizedOptions
+      ));
+    }
+  }
+
+  if (
+    !approvedRealNonRespondExecution &&
+    isExecutionStyleRequestPrompt(runResult.task.userInput) &&
+    (!primaryExecutionOutcomeLine || outcomes.directExecutionOutcomeLine === null)
+  ) {
+    return render(appendMissionDiagnosticsIfRequested(
+      runResult,
+      resolveProgressPlaceholderFallback(runResult, false, false),
+      normalizedOptions
+    ));
+  }
+
+  if (
+    routingClassification.category === "LATENCY_BUDGETS" &&
+    !/\b(no-op outcome:|technical reason code:\s*LATENCY_NO_SIDE_EFFECT_EXECUTED)\b/i.test(
+      primaryExecutionOutcomeLine ?? runResult.summary
+    )
+  ) {
+    const forcedLatencyFallback =
+      resolveExecutionSurfaceFallbackFromRouting(
+        routingClassification,
+        runResult.task.userInput
+      );
+    if (forcedLatencyFallback) {
+      return render(appendMissionDiagnosticsIfRequested(
+        runResult,
+        forcedLatencyFallback,
+        normalizedOptions
+      ));
+    }
+  }
+
   if (primaryExecutionOutcomeLine) {
     const primaryExecutionSummary =
       blockedMessage && approvedRealNonRespondExecution
@@ -450,6 +495,12 @@ function resolveRespondSurfaceSummary(
       if (routeFallback) {
         trustedOutputForRender = routeFallback;
       }
+    } else if (executionStylePrompt && !hasTechnicalOutcomeLine) {
+      trustedOutputForRender = resolveProgressPlaceholderFallback(
+        runResult,
+        false,
+        false
+      );
     }
   }
 
@@ -480,7 +531,6 @@ function resolveRespondSurfaceSummary(
 
   if (
     routingClassification.category === "LATENCY_BUDGETS" &&
-    !hasTechnicalOutcomeLine &&
     !/\b(no-op outcome:|technical reason code:\s*LATENCY_NO_SIDE_EFFECT_EXECUTED)\b/i.test(
       trustedOutputForRender
     ) &&
@@ -517,7 +567,7 @@ function resolveRespondSurfaceSummary(
   if (
     approvedRealNonRespondExecution &&
     primaryExecutionOutcomeLine &&
-    routingClassification.category === "BUILD_SCAFFOLD" &&
+    routingClassification.category !== "LATENCY_BUDGETS" &&
     (isExecutionNoOpResponse(trustedOutputForRender) ||
       isExecutionCapabilityLimitationResponse(trustedOutputForRender) ||
       isExecutionPolicyRefusalResponse(trustedOutputForRender))
@@ -608,6 +658,7 @@ function hasAnyTechnicalOutcomeLine(outcomes: UserFacingTechnicalOutcomeLines): 
     outcomes.managedProcessOutcomeLine !== null ||
     outcomes.probeOutcomeLine !== null ||
     outcomes.browserVerificationOutcomeLine !== null ||
+    outcomes.directExecutionOutcomeLine !== null ||
     outcomes.directExecutionFailureOutcomeLine !== null
   );
 }

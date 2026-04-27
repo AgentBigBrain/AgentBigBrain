@@ -16,6 +16,9 @@ const LOCAL_ORGANIZATION_TARGET_PATTERN =
 const LOCAL_ORGANIZATION_DESTINATION_PATTERN =
   /\bfolder\s+called\s+["']?([^"'.,!?`\r\n]+(?:\s+[^"'.,!?`\r\n]+)*)["']?/i;
 const LOCAL_ORGANIZATION_MOVE_COMMAND_PATTERN = /\b(?:move-item|mv|move)\b/i;
+const LOCAL_ORGANIZATION_EXACT_SOURCE_PATTERN =
+  /\b(?:move|moving|put|placing)\b[\s\S]{0,48}\bonly\s+(?:the\s+)?(?:folder|directory|project|workspace)\s+(?:named|called)\s+["'`]?([a-z0-9][a-z0-9._ -]{1,120}?)(?=["'`]?(?:\s+(?:in|into|to|under)\b|[.?!,]|$))/i;
+const NON_ENTRY_PROOF_TOKEN_PATTERN = /^(?:true|false|null|undefined)$/i;
 
 interface OrganizationMoveOutputEvidence {
   destinationPath: string | null;
@@ -84,6 +87,20 @@ function isLocalOrganizationRequest(userInput: string): boolean {
 function extractOrganizationDestinationName(userInput: string): string | null {
   const match = normalizeWhitespace(userInput).match(LOCAL_ORGANIZATION_DESTINATION_PATTERN);
   return match?.[1]?.trim() ?? null;
+}
+
+/** Extracts an exact source folder name from bounded `move only the folder named ...` wording. */
+function extractExactOrganizationSourceName(userInput: string): string | null {
+  const match = normalizeWhitespace(userInput).match(LOCAL_ORGANIZATION_EXACT_SOURCE_PATTERN);
+  return match?.[1]?.trim() ?? null;
+}
+
+/** Removes proof booleans/placeholders that are not human-facing moved entry names. */
+function sanitizeOrganizationMoveOutputEntries(entries: readonly string[]): readonly string[] {
+  return entries
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0 && entry !== "<none>")
+    .filter((entry) => !NON_ENTRY_PROOF_TOKEN_PATTERN.test(entry));
 }
 
 /**
@@ -224,7 +241,7 @@ function parseInlineOrganizationOutputSectionAssignment(
     .filter((entry) => entry.length > 0 && entry !== "<none>");
   return {
     section,
-    entries
+    entries: sanitizeOrganizationMoveOutputEntries(entries)
   };
 }
 
@@ -269,7 +286,7 @@ function parseOrganizationOutputSections(
     if (!currentSection || line === "<none>") {
       continue;
     }
-    sections[currentSection].push(line);
+    sections[currentSection].push(...sanitizeOrganizationMoveOutputEntries([line]));
   }
 
   return sawMarker ? sections : null;
@@ -297,26 +314,30 @@ function parseOrganizationMoveOutputEvidence(
         failed?: unknown;
       };
       const movedEntries = Array.isArray(parsed.moved)
-        ? parsed.moved
-          .map((entry) => (typeof entry === "string" ? entry.trim() : ""))
-          .filter((entry) => entry.length > 0)
+        ? sanitizeOrganizationMoveOutputEntries(
+            parsed.moved
+              .map((entry) => (typeof entry === "string" ? entry.trim() : ""))
+              .filter((entry) => entry.length > 0)
+          )
         : [];
       const remainingEntries = Array.isArray(parsed.failed)
-        ? parsed.failed
-          .map((entry) => {
-            if (typeof entry !== "string") {
-              return "";
-            }
-            const [name] = entry.split(":");
-            return name?.trim() ?? "";
-          })
-          .filter((entry) => entry.length > 0)
+        ? sanitizeOrganizationMoveOutputEntries(
+            parsed.failed
+              .map((entry) => {
+                if (typeof entry !== "string") {
+                  return "";
+                }
+                const [name] = entry.split(":");
+                return name?.trim() ?? "";
+              })
+              .filter((entry) => entry.length > 0)
+          )
         : [];
       const destinationPath =
         typeof parsed.destination === "string" && parsed.destination.trim().length > 0
           ? parsed.destination.trim()
           : null;
-      if (movedEntries.length > 0 || remainingEntries.length > 0) {
+      if (Array.isArray(parsed.moved) || Array.isArray(parsed.failed)) {
         return {
           destinationPath,
           movedEntries,
@@ -337,9 +358,6 @@ function parseOrganizationMoveOutputEvidence(
   const remainingEntries = parsedSections.remaining.length > 0
     ? parsedSections.remaining
     : parsedSections.failed;
-  if (movedEntries.length === 0 && remainingEntries.length === 0) {
-    return null;
-  }
   return {
     destinationPath: null,
     movedEntries,
@@ -468,18 +486,27 @@ export function resolveLocalOrganizationOutcomeLine(
   const destinationEntries = hasVerifiedOrganizationDestinationContents(runResult, destinationPath)
     ? resolveOrganizationDestinationEntries(runResult, destinationPath)
     : [];
+  const exactSourceName = extractExactOrganizationSourceName(activeRequest);
   const movedEntries =
     destinationEntries.length > 0 ? destinationEntries : moveOutputEvidence?.movedEntries ?? [];
-  if (movedEntries.length === 0) {
+  const effectiveMovedEntries =
+    movedEntries.length > 0
+      ? movedEntries
+      : moveOutputEvidence && exactSourceName
+        ? [exactSourceName]
+        : [];
+  if (effectiveMovedEntries.length === 0) {
     return null;
   }
   const stoppedPreviewHolderCount = runResult.actionResults.filter(
     (result) => result.approved && result.action.type === "stop_process"
   ).length;
   const useExplicitMovedEntryPhrase =
-    destinationEntries.length === 0 && movedEntries.length > 0 && movedEntries.length <= 4;
+    destinationEntries.length === 0 &&
+    effectiveMovedEntries.length > 0 &&
+    effectiveMovedEntries.length <= 4;
   const entryPhrase = useExplicitMovedEntryPhrase
-    ? `${joinNaturalList(movedEntries)} into `
+    ? `${joinNaturalList(effectiveMovedEntries)} into `
     : "the matching folders into ";
   const moveSummary = destinationPath
     ? `I moved ${entryPhrase}${destinationPath}.`

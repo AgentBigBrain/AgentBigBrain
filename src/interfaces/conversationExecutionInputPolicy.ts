@@ -6,11 +6,14 @@
 import { pathToFileURL } from "node:url";
 
 import type { ProfileMemoryRequestTelemetry } from "../core/profileMemoryRuntime/contracts";
+import { hasConversationalProfileUpdateSignal } from "../core/profileMemoryRuntime/profileMemoryConversationalSignals";
 import { recordProfileMemoryPromptSurfaceMetrics } from "../core/profileMemoryRuntime/profileMemoryRequestTelemetry";
 import type { ConversationSession } from "./sessionStore";
 import type {
   ConversationBuildFormatMetadata,
   ConversationIntentSemanticHint,
+  ConversationRouteMemoryIntent,
+  ConversationSemanticRouteMetadata,
   ConversationSemanticRouteId
 } from "./conversationRuntime/intentModeContracts";
 import type { ConversationInboundMediaEnvelope } from "./mediaRuntime/contracts";
@@ -105,6 +108,8 @@ const ORGANIZATION_PREFIX_PATTERN =
   /\bstarts?\s+with\s+["'`]?([a-z0-9._-]{2,80})["'`]?/i;
 const ORGANIZATION_CONTAINS_WORD_PATTERN =
   /\b(?:with|containing?|contain(?:s|ing)?)\s+(?:the\s+word\s+)?["'`]?([a-z0-9._-]{2,80})["'`]?/i;
+const ORGANIZATION_EXACT_FOLDER_NAME_PATTERN =
+  /\b(?:move|moving|put|placing)\b[\s\S]{0,48}\bonly\s+(?:the\s+)?(?:folder|directory|project|workspace)\s+(?:named|called)\s+["'`]?([a-z0-9][a-z0-9._ -]{1,120}?)(?=["'`]?(?:\s+(?:in|into|to|under)\b|[.?!,]|$))/i;
 const EXPLICIT_ALL_MATCHING_FOLDERS_PATTERN =
   /\b(?:all of them|every folder|every file|all matching folders|all matching files|every file and folder|every folder and file)\b/i;
 const LOCAL_ORGANIZATION_FILE_AND_FOLDER_PATTERN =
@@ -770,7 +775,8 @@ function shouldSuppressWorkflowContinuityBlocks(
   session: ConversationSession,
   userInput: string,
   routingClassification: RoutingMapClassificationV1 | null,
-  semanticRouteId: ConversationSemanticRouteId | null = null
+  semanticRouteId: ConversationSemanticRouteId | null = null,
+  memoryIntent: ConversationRouteMemoryIntent | null = null
 ): boolean {
   const normalizedInput = normalizeWhitespace(userInput);
   if (!normalizedInput) {
@@ -797,8 +803,17 @@ function shouldSuppressWorkflowContinuityBlocks(
   if (!workflowContinuityActive) {
     return false;
   }
+  if (hasConversationalProfileUpdateSignal(normalizedInput)) {
+    return true;
+  }
+  if (isRelationshipConversationRecallTurn(normalizedInput)) {
+    return true;
+  }
+  if (shouldSuppressWorkflowContinuityForShortMemoryDetour(session, normalizedInput)) {
+    return true;
+  }
   if (
-    shouldUseRelationshipContinuityContext(session, normalizedInput) &&
+    shouldUseRelationshipContinuityContext(session, normalizedInput, memoryIntent) &&
     !isMixedConversationMemoryStatusRecallTurn(normalizedInput)
   ) {
     return true;
@@ -834,6 +849,34 @@ function shouldSuppressWorkflowContinuityBlocks(
     return false;
   }
   return PROFILE_DETOUR_PATTERN.test(normalizedInput) || RELATIONSHIP_DETOUR_PATTERN.test(normalizedInput);
+}
+
+/**
+ * Returns whether a short plain-chat question should avoid stale workflow context because recent
+ * turns contain explicit profile-memory updates.
+ *
+ * @param session - Current conversation session carrying recent turns.
+ * @param userInput - Normalized current user wording.
+ * @returns `true` when the turn is a short memory detour instead of workflow continuation.
+ */
+function shouldSuppressWorkflowContinuityForShortMemoryDetour(
+  session: ConversationSession,
+  userInput: string
+): boolean {
+  const signals = analyzeConversationChatTurnSignals(userInput);
+  if (
+    !signals.questionLike ||
+    signals.rawTokenCount > 6 ||
+    signals.referencesArtifact ||
+    signals.containsWorkflowCue ||
+    signals.containsWorkflowCallbackCue ||
+    signals.containsApprovalCue
+  ) {
+    return false;
+  }
+  return session.conversationTurns
+    .slice(-6)
+    .some((turn) => hasConversationalProfileUpdateSignal(turn.text));
 }
 
 /**
@@ -921,21 +964,42 @@ function buildRecentActionBlock(session: ConversationSession): string | null {
  * @returns Structured route block, or `null` when no semantic route was provided.
  */
 function buildResolvedSemanticRouteBlock(
-  semanticRouteId: ConversationSemanticRouteId | null
+  semanticRouteId: ConversationSemanticRouteId | null,
+  semanticRoute: ConversationSemanticRouteMetadata | null = null
 ): string | null {
+  const routeId = semanticRoute?.routeId ?? semanticRouteId;
   if (
-    semanticRouteId !== "build_request" &&
-    semanticRouteId !== "static_html_build" &&
-    semanticRouteId !== "framework_app_build" &&
-    semanticRouteId !== "clarify_build_format"
+    routeId !== "relationship_recall" &&
+    routeId !== "status_recall" &&
+    routeId !== "plan_request" &&
+    routeId !== "build_request" &&
+    routeId !== "static_html_build" &&
+    routeId !== "framework_app_build" &&
+    routeId !== "clarify_build_format" &&
+    routeId !== "autonomous_execution" &&
+    routeId !== "review_feedback"
   ) {
     return null;
   }
-  return [
+  const lines = [
     "Resolved semantic route:",
-    `- routeId: ${semanticRouteId}`,
+    `- routeId: ${routeId}`,
     "- This route was chosen by the conversation intent layer. Planner-policy must consume it before any lexical fallback."
-  ].join("\n");
+  ];
+  if (semanticRoute) {
+    lines.push(
+      `- source: ${semanticRoute.source}`,
+      `- confidence: ${semanticRoute.confidence}`,
+      `- executionMode: ${semanticRoute.executionMode}`,
+      `- continuationKind: ${semanticRoute.continuationKind}`,
+      `- memoryIntent: ${semanticRoute.memoryIntent}`,
+      `- runtimeControlIntent: ${semanticRoute.runtimeControlIntent}`,
+      `- disallowBrowserOpen: ${semanticRoute.explicitConstraints.disallowBrowserOpen ? "true" : "false"}`,
+      `- disallowServerStart: ${semanticRoute.explicitConstraints.disallowServerStart ? "true" : "false"}`,
+      `- requiresUserOwnedLocation: ${semanticRoute.explicitConstraints.requiresUserOwnedLocation ? "true" : "false"}`
+    );
+  }
+  return lines.join("\n");
 }
 
 /**
@@ -1434,6 +1498,7 @@ function isLocalOrganizationRequest(userInput: string): boolean {
     WEAK_LOCAL_ORGANIZATION_VERB_PATTERN.test(userInput) &&
     (
       LOCAL_ORGANIZATION_COLLECTION_PATTERN.test(userInput) ||
+      ORGANIZATION_EXACT_FOLDER_NAME_PATTERN.test(userInput) ||
       ORGANIZATION_PREFIX_PATTERN.test(userInput) ||
       ORGANIZATION_CONTAINS_WORD_PATTERN.test(userInput) ||
       EXPLICIT_ALL_MATCHING_FOLDERS_PATTERN.test(userInput)
@@ -1470,7 +1535,14 @@ function extractOrganizationFolderPrefix(userInput: string): string | null {
  */
 function extractOrganizationMatchDescriptor(
   userInput: string
-): { mode: "starts_with" | "contains_word"; term: string } | null {
+): { mode: "exact_name" | "starts_with" | "contains_word"; term: string } | null {
+  const exactName = userInput.match(ORGANIZATION_EXACT_FOLDER_NAME_PATTERN)?.[1]?.trim() ?? null;
+  if (exactName) {
+    return {
+      mode: "exact_name",
+      term: exactName
+    };
+  }
   const prefix = extractOrganizationFolderPrefix(userInput);
   if (prefix) {
     return {
@@ -1576,7 +1648,11 @@ function buildDesktopOrganizationExecutionContextBlock(
     (
       requestedMatchDescriptor!.mode === "starts_with"
         ? activeWorkspaceFolderName!.toLowerCase().startsWith(requestedMatchDescriptor!.term.toLowerCase())
-        : activeWorkspaceFolderName!.toLowerCase().includes(requestedMatchDescriptor!.term.toLowerCase())
+        : requestedMatchDescriptor!.mode === "contains_word"
+          ? activeWorkspaceFolderName!.toLowerCase().includes(requestedMatchDescriptor!.term.toLowerCase())
+          : activeWorkspaceFolderName!.localeCompare(requestedMatchDescriptor!.term, undefined, {
+              sensitivity: "accent"
+            }) === 0
     );
 
   const lines = [
@@ -1597,6 +1673,11 @@ function buildDesktopOrganizationExecutionContextBlock(
   if (requestedMatchDescriptor?.mode === "starts_with") {
     lines.push(`- Match Desktop folders whose names start with ${requestedMatchDescriptor.term}.`);
   }
+  if (requestedMatchDescriptor?.mode === "exact_name") {
+    lines.push(
+      `- Move exactly the Desktop folder named ${requestedMatchDescriptor.term}; do not move sibling folders that merely share a prefix or contain similar words.`
+    );
+  }
   if (requestedMatchDescriptor?.mode === "contains_word") {
     lines.push(
       includeFilesAndFolders
@@ -1606,7 +1687,9 @@ function buildDesktopOrganizationExecutionContextBlock(
   }
   if (activeWorkspaceMatchesRequestedSelector && activeWorkspaceFolderName) {
     lines.push(
-      requestedMatchDescriptor?.mode === "contains_word"
+      requestedMatchDescriptor?.mode === "exact_name"
+        ? `- The current tracked workspace folder ${activeWorkspaceFolderName} exactly matches the requested folder name; include that exact folder in the move unless the user explicitly excluded it.`
+        : requestedMatchDescriptor?.mode === "contains_word"
         ? `- The current tracked workspace folder ${activeWorkspaceFolderName} also matches that requested word rule; include it in the move unless the user explicitly excluded it.`
         : `- The current tracked workspace folder ${activeWorkspaceFolderName} also matches that requested prefix; include it in the move unless the user explicitly excluded it.`
     );
@@ -1646,6 +1729,7 @@ export function buildTurnLocalStatusUpdateBlock(userInput: string): string | nul
  * @param userInput - Current request payload to send to execution.
  * @param maxContextTurnsForExecution - Maximum number of recent turns to include.
  * @param routingClassification - Optional routing-map classification for deterministic hinting.
+ * @param includeSemanticRouteBlock - Whether to render route metadata into the prompt body.
  * @returns Execution payload passed to the task runner.
  */
 export async function buildConversationAwareExecutionInput(
@@ -1666,20 +1750,28 @@ export async function buildConversationAwareExecutionInput(
   openContinuityReadSession?: OpenConversationContinuityReadSession,
   requestTelemetry?: ProfileMemoryRequestTelemetry,
   semanticRouteId: ConversationSemanticRouteId | null = null,
-  buildFormat: ConversationBuildFormatMetadata | null = null
+  buildFormat: ConversationBuildFormatMetadata | null = null,
+  semanticRoute: ConversationSemanticRouteMetadata | null = null,
+  includeSemanticRouteBlock = true
 ): Promise<string> {
   const runtimeReconciledSession = reconcileConversationExecutionRuntimeSession(
     session,
     browserSessionSnapshots,
     managedProcessSnapshots
   );
+  const hasResolvedSemanticRoute =
+    semanticRoute !== null ||
+    semanticRouteId !== null;
+  const routeMemoryIntent =
+    semanticRoute?.memoryIntent ?? (hasResolvedSemanticRoute ? "none" : null);
   const recentTurns = session.conversationTurns.slice(-maxContextTurnsForExecution);
   const rawUserInput = sourceUserInput ?? executionInput;
   const suppressWorkflowContinuityBlocks = shouldSuppressWorkflowContinuityBlocks(
     runtimeReconciledSession,
     rawUserInput,
     routingClassification,
-    semanticRouteId
+    semanticRouteId,
+    routeMemoryIntent
   );
   let sharedContinuityReadSessionPromise: Promise<ConversationContinuityReadSession | null> | null = null;
   const resolveTurnContinuityReadSession = openContinuityReadSession
@@ -1704,7 +1796,8 @@ export async function buildConversationAwareExecutionInput(
     runtimeReconciledSession,
     rawUserInput,
     continuityQueries.queryContinuityFacts,
-    requestTelemetry
+    requestTelemetry,
+    routeMemoryIntent
   );
   const statusUpdateBlock = buildTurnLocalStatusUpdateBlock(rawUserInput);
   const contextualRecallBlock = await buildContextualRecallBlock(
@@ -1716,7 +1809,8 @@ export async function buildConversationAwareExecutionInput(
     contextualReferenceInterpretationResolver,
     getEntityGraph,
     entityReferenceInterpretationResolver,
-    requestTelemetry
+    requestTelemetry,
+    routeMemoryIntent
   );
   const mediaContextBlock = buildConversationMediaContextBlock(media);
   const runtimeProcessManagementContextBlock =
@@ -1726,7 +1820,12 @@ export async function buildConversationAwareExecutionInput(
     );
   const explicitExecutionConstraintBlock =
     buildExplicitExecutionConstraintContextBlock(rawUserInput);
-  const semanticRouteBlock = buildResolvedSemanticRouteBlock(semanticRouteId);
+  const semanticRouteBlock = includeSemanticRouteBlock
+    ? buildResolvedSemanticRouteBlock(
+      semanticRouteId,
+      semanticRoute
+    )
+    : null;
   const buildFormatBlock = buildResolvedBuildFormatBlock(buildFormat);
   const desktopOrganizationContextBlock = buildDesktopOrganizationExecutionContextBlock(
     runtimeReconciledSession,
@@ -1813,7 +1912,9 @@ export async function buildConversationAwareExecutionInput(
       runtimeReconciledSession,
       rawUserInput
     );
-  const routingHint = routingClassification
+  const routingHint = semanticRoute
+    ? null
+    : routingClassification
     ? buildRoutingExecutionHintV1(routingClassification)
     : null;
   const memoryPromptSurfaceCount = [

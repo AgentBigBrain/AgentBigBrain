@@ -32,12 +32,15 @@ Key files:
 - Deterministic localhost live-run exemption decisions for bounded proof actions.
 - Deterministic tracked-artifact and user-owned build exemptions for safe follow-up edits or
   browser-control flows.
+- Deterministic exact-name organization exemptions for bounded user-owned Desktop cleanup moves.
 
 ## Invariants
 - Model-advisory drift must not re-ban bounded localhost `start_process`, `check_process`,
   `stop_process`, `probe_http`, `probe_port`, or `verify_browser` flows.
 - Tracked artifact or clearly user-owned build follow-ups may soften advisory vetoes, but they must
   stay scoped to the active workspace or tracked runtime resource.
+- Exact-name organization follow-ups may soften advisory vetoes only when the user request,
+  execution context, and command all agree on the exact source and destination names.
 - Each governor file owns one dominant policy concern.
 - `src/governors/defaultGovernors.ts` stays a composition entrypoint, not the main policy home.
 - Deterministic checks remain authoritative when model-advisory calls fail.
