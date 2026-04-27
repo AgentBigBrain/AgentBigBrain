@@ -78,6 +78,12 @@ export function buildLocalIntentPrompt(
     "Allowed routeId values: chat_answer, relationship_recall, status_recall, plan_request, build_request, static_html_build, framework_app_build, clarify_build_format, clarify_execution_mode, autonomous_execution, review_feedback, capability_discovery.",
     "Allowed confidence values: low, medium, high.",
     "Optional semanticHint values: review_ready, guided_review, next_review_step, while_away_review, wrap_up_summary, explain_handoff, resume_handoff.",
+    "Optional buildFormat values: static_html, framework_app, nextjs, react, vite. Only include buildFormat when the route is build_request, static_html_build, framework_app_build, clarify_build_format, or autonomous_execution with a clear requested format.",
+    "Optional executionMode values: chat, plan, build, autonomous, status_or_recall, review, capability_discovery, unclear.",
+    "Optional continuationKind values: none, answer_thread, workflow_resume, return_handoff, contextual_followup, relationship_memory.",
+    "Optional memoryIntent values: none, relationship_recall, profile_update, contextual_recall, document_derived_recall.",
+    "Optional runtimeControlIntent values: none, open_browser, close_browser, verify_browser, inspect_runtime, stop_runtime.",
+    "Optional explicitConstraints is an object with boolean keys disallowBrowserOpen, disallowServerStart, and requiresUserOwnedLocation. These are constraints, not permission to perform side effects.",
     "The runtime will derive legacy execution mode from routeId. Do not return a mode field.",
     "Use semanticHint only when the session hints show durable return-handoff context.",
     "If session hints show recentAssistantTurnKind=\"informational_answer\" and recentAssistantAnswerThreadActive=true, keep short ambiguous follow-ups like 'okay, what else?', 'tell me more', or 'and?' on the chat path unless the user explicitly re-anchors to saved work, a draft, a page, a browser window, or another concrete artifact.",
@@ -147,6 +153,6 @@ export function buildLocalIntentPrompt(
     "Session hints:",
     JSON.stringify(sessionHints),
     "",
-    'Reply as one JSON object with keys: routeId, confidence, matchedRuleId, explanation, semanticHint.'
+    'Reply as one JSON object with keys: routeId, confidence, matchedRuleId, explanation, semanticHint, buildFormat, executionMode, continuationKind, memoryIntent, runtimeControlIntent, explicitConstraints.'
   ].join("\n");
 }

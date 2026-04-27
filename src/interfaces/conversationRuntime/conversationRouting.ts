@@ -17,8 +17,10 @@ import {
 import { resolveModeContinuityIntent } from "./modeContinuity";
 import { resolveConversationIntentMode } from "./intentModeResolution";
 import {
+  buildConversationSemanticRouteMetadata,
   inferSemanticRouteIdFromIntentMode,
-  type ResolvedConversationIntentMode
+  type ResolvedConversationIntentMode,
+  withSemanticRouteId
 } from "./intentModeContracts";
 import { applyActiveAutonomousPauseRequest, applyReturnHandoffPauseRequest, applyValidatedActiveAutonomousPause, applyValidatedReturnHandoffPause } from "./returnHandoffControl";
 import { buildHandoffControlInterpretationResolution, resolveInterpretedHandoffControlSignal } from "./returnHandoffControlInterpretationSupport";
@@ -137,6 +139,22 @@ async function resolveCanonicalConversationRouting(
         activeClarification,
         clarificationAnswer.selectedOptionId
       );
+      const clarifiedSemanticRouteId = inferSemanticRouteIdFromIntentMode(clarifiedIntentMode);
+      const clarifiedSemanticRoute = buildConversationSemanticRouteMetadata(
+        {
+          mode: clarifiedIntentMode,
+          confidence: "high",
+          matchedRuleId: "conversation_clarification_answer",
+          explanation: "The user answered an active clarification prompt.",
+          clarification: null,
+          semanticRouteId: clarifiedSemanticRouteId,
+          buildFormat: clarifiedBuildFormat
+        },
+        {
+          source: "clarification",
+          buildFormat: clarifiedBuildFormat
+        }
+      );
       setModeContinuity(session, {
         activeMode: clarifiedIntentMode,
         source: "clarification_answer",
@@ -150,7 +168,8 @@ async function resolveCanonicalConversationRouting(
         input,
         receivedAt,
         classifyRoutingIntentV1(activeClarification.sourceInput),
-        clarifiedIntentMode
+        clarifiedIntentMode,
+        clarifiedSemanticRoute
       );
       const enqueueResult = deps.enqueueJob(
         session,
@@ -177,8 +196,9 @@ async function resolveCanonicalConversationRouting(
           deps.entityReferenceInterpretationResolver,
           deps.openContinuityReadSession,
           undefined,
-          inferSemanticRouteIdFromIntentMode(clarifiedIntentMode),
-          clarifiedBuildFormat
+          clarifiedSemanticRouteId,
+          clarifiedBuildFormat,
+          clarifiedSemanticRoute
         )
       );
       recordTopicAwareUserTurn(session, input, receivedAt, deps.config.maxConversationTurns, topicKeyInterpretation);
@@ -253,7 +273,7 @@ async function resolveCanonicalConversationRouting(
       return { reply: interpretedPauseReply, shouldStartWorker: false };
     }
   }
-  const effectiveIntentMode =
+  const effectiveIntentMode = withSemanticRouteId(
     buildHandoffControlInterpretationResolution(interpretedHandoffControl) ??
     resolveReturnHandoffContinuationIntent(session, input, resolvedIntentMode) ??
     resolveModeContinuityIntent(session, input, resolvedIntentMode) ??
@@ -264,7 +284,8 @@ async function resolveCanonicalConversationRouting(
       deps.continuationInterpretationResolver,
       routingClassification
     ) ??
-    resolvedIntentMode;
+    resolvedIntentMode
+  );
   const shouldResumeReturnHandoff = isReturnHandoffResumeIntent(effectiveIntentMode);
   const inlineReply = await maybeResolveConversationRoutingInlineReply({
     session,
@@ -295,7 +316,8 @@ async function resolveCanonicalConversationRouting(
         input,
         receivedAt,
         routingClassification,
-        effectiveIntentMode.mode
+        effectiveIntentMode.mode,
+        effectiveIntentMode.semanticRoute ?? null
       );
       return { reply, shouldStartWorker: false };
     }
@@ -316,7 +338,8 @@ async function resolveCanonicalConversationRouting(
         input,
         receivedAt,
         routingClassification,
-        effectiveIntentMode.mode
+        effectiveIntentMode.mode,
+        effectiveIntentMode.semanticRoute ?? null
       );
       return {
         reply,
@@ -343,7 +366,8 @@ async function resolveCanonicalConversationRouting(
         deps.openContinuityReadSession,
         undefined,
         effectiveIntentMode.semanticRouteId ?? null,
-        effectiveIntentMode.buildFormat ?? null
+        effectiveIntentMode.buildFormat ?? null,
+        effectiveIntentMode.semanticRoute ?? null
       ),
       routingClassification
         ? buildRoutingExecutionHintV1(routingClassification)
@@ -368,7 +392,8 @@ async function resolveCanonicalConversationRouting(
       input,
       receivedAt,
       routingClassification,
-      effectiveIntentMode.mode
+      effectiveIntentMode.mode,
+      effectiveIntentMode.semanticRoute ?? null
     );
     return {
       reply:
@@ -402,7 +427,8 @@ async function resolveCanonicalConversationRouting(
       deps.openContinuityReadSession,
       undefined,
       effectiveIntentMode.semanticRouteId ?? null,
-      effectiveIntentMode.buildFormat ?? null
+      effectiveIntentMode.buildFormat ?? null,
+      effectiveIntentMode.semanticRoute ?? null
     )
   );
   recordTopicAwareUserTurn(session, input, receivedAt, deps.config.maxConversationTurns, topicKeyInterpretation);
@@ -420,7 +446,8 @@ async function resolveCanonicalConversationRouting(
     input,
     receivedAt,
     routingClassification,
-    effectiveIntentMode.mode
+    effectiveIntentMode.mode,
+    effectiveIntentMode.semanticRoute ?? null
   );
   return shouldResumeReturnHandoff
     ? {

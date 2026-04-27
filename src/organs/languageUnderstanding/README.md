@@ -54,6 +54,10 @@ deterministic fail-closed runtime model.
   model so saved-draft review, softer review-ready questions, anything-else-to-review prompts,
   review-next questions, wrap-up summaries, explain requests, and resume requests can be
   understood by meaning instead of only phrase rules
+- optional typed semantic-route metadata in the local intent model payload so model-led route
+  resolution can preserve execution mode, continuation kind, memory intent, runtime-control intent,
+  explicit constraints, and build-format metadata instead of forcing downstream files to
+  reconstruct that meaning from wording
 - bounded identity-context session hints plus structural identity-eligibility preservation so
   ambiguous declarations and short identity follow-ups can stay off the execution-intent model
   path when recent conversation state already shows the turn is identity-focused
@@ -76,6 +80,9 @@ deterministic fail-closed runtime model.
   asked for the user's name, what the current dominant domain lane is, or whether workflow
   continuity is active, but they must not leak raw authorization decisions or become a hidden
   safety layer.
+- Optional semantic-route metadata emitted here is an interpretation contract only. It may guide
+  downstream planning and memory gates, but it must not authorize side effects, bypass exact
+  ownership checks, or write memory directly.
 
 ## Related Tests
 - `tests/organs/languageUnderstandingEpisodeExtraction.test.ts`
@@ -103,6 +110,8 @@ Update this README when:
 - the bounded extraction contract or failure behavior changes
 - the local intent-model seam or clarification-option ownership changes
 - the bounded session-domain hints surfaced to the optional local intent model change materially
+- the semantic-route metadata payload accepted from the optional local intent model changes
+  materially
 - the bounded identity-context hints surfaced to the optional local intent model change materially
 - profile-memory ingestion ownership moves between this subsystem and `profileMemoryStore.ts`
 - front-door intent-routing ownership moves between this subsystem and `src/interfaces/`

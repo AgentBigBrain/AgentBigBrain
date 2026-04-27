@@ -276,7 +276,11 @@ test("routeConversationMessageInput promotes strong end-to-end wording into auto
   );
   assert.match(
     autonomousPayload?.initialExecutionInput ?? "",
-    /Autonomous execution request\./
+    /Resolved semantic route:/
+  );
+  assert.match(
+    autonomousPayload?.initialExecutionInput ?? "",
+    /- routeId: autonomous_execution/
   );
   assert.equal(session.domainContext.dominantLane, "workflow");
   assert.equal(

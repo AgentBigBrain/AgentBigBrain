@@ -170,7 +170,8 @@ test("handleConversationCommand routes /chat through canonical queue routing", a
 
   assert.equal(reply, "queued chat job");
   assert.equal(session.queuedJobs.length, 1);
-  assert.ok(capturedExecutionInput.includes("Deterministic routing hint:"));
+  assert.ok(capturedExecutionInput.includes("Resolved semantic route:"));
+  assert.ok(capturedExecutionInput.includes("- routeId: framework_app_build"));
 });
 
 test("handleConversationCommand keeps /auto policy and turn recording behavior", async () => {

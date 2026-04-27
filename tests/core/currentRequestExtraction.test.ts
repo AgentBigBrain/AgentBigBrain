@@ -6,7 +6,14 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   containsAgentPulseRequestMarker,
-  extractActiveRequestSegment
+  extractActiveRequestSegment,
+  extractResolvedBuildFormat,
+  extractResolvedRouteConstraints,
+  extractResolvedRouteContinuationKind,
+  extractResolvedRouteExecutionMode,
+  extractResolvedRouteMemoryIntent,
+  extractResolvedRuntimeControlIntent,
+  hasResolvedSemanticRouteMetadata
 } from "../../src/core/currentRequestExtraction";
 
 test("extractActiveRequestSegment prefers the current user request marker", () => {
@@ -97,4 +104,57 @@ test("containsAgentPulseRequestMarker detects pulse marker presence", () => {
     containsAgentPulseRequestMarker("No pulse marker here"),
     false
   );
+});
+
+test("resolved route metadata extractors read typed memory and runtime-control intent", () => {
+  const input = [
+    "Resolved semantic route:",
+    "- routeId: relationship_recall",
+    "- executionMode: chat",
+    "- continuationKind: relationship_memory",
+    "- memoryIntent: relationship_recall",
+    "- runtimeControlIntent: close_browser",
+    "- disallowBrowserOpen: false",
+    "- disallowServerStart: true",
+    "- requiresUserOwnedLocation: false",
+    "",
+    "Current user request:",
+    "Who is fictional Jordan?"
+  ].join("\n");
+
+  assert.equal(extractResolvedRouteExecutionMode(input), "chat");
+  assert.equal(extractResolvedRouteContinuationKind(input), "relationship_memory");
+  assert.equal(extractResolvedRouteMemoryIntent(input), "relationship_recall");
+  assert.equal(extractResolvedRuntimeControlIntent(input), "close_browser");
+  assert.deepEqual(extractResolvedRouteConstraints(input), {
+    disallowBrowserOpen: false,
+    disallowServerStart: true,
+    requiresUserOwnedLocation: false
+  });
+});
+
+test("resolved route metadata extractors detect route presence and build format", () => {
+  const input = [
+    "Resolved semantic route:",
+    "- routeId: build_request",
+    "- executionMode: build",
+    "- continuationKind: none",
+    "- memoryIntent: none",
+    "- runtimeControlIntent: none",
+    "- disallowBrowserOpen: false",
+    "- disallowServerStart: false",
+    "- requiresUserOwnedLocation: true",
+    "",
+    "Resolved build format:",
+    "- format: static_html",
+    "- source: semantic_route",
+    "- confidence: high",
+    "",
+    "Current user request:",
+    "Create the selected format."
+  ].join("\n");
+
+  assert.equal(hasResolvedSemanticRouteMetadata(input), true);
+  assert.equal(extractResolvedBuildFormat(input), "static_html");
+  assert.equal(extractResolvedBuildFormat("Current user request: no metadata"), null);
 });

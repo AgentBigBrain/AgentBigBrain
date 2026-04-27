@@ -39,15 +39,15 @@ test("classifyRoutingIntentV1 classifies clone block-reason prompts as policy ex
   assert.equal(classification.actionFamily, "clone_workflow");
 });
 
-test("classifyRoutingIntentV1 classifies generic app-creation prompts as build execution surface", () => {
+test("classifyRoutingIntentV1 does not own generic app-creation semantic routing", () => {
   const classification = classifyRoutingIntentV1(
     "Create a React app on my Desktop and execute now."
   );
-  assert.equal(classification.category, "BUILD_SCAFFOLD");
-  assert.equal(classification.routeType, "execution_surface");
-  assert.equal(classification.actionFamily, "build");
-  assert.equal(classification.fallbackReasonCode, "BUILD_NO_SIDE_EFFECT_EXECUTED");
-  assert.equal(classification.matchedRuleId, "routing_v1_build_scaffold_generic");
+  assert.equal(classification.category, "NONE");
+  assert.equal(classification.routeType, "none");
+  assert.equal(classification.actionFamily, null);
+  assert.equal(classification.fallbackReasonCode, null);
+  assert.equal(classification.matchedRuleId, "routing_v1_none");
 });
 
 test("classifyRoutingIntentV1 does not over-classify explanation-only build prompts as execution surface", () => {
@@ -58,14 +58,11 @@ test("classifyRoutingIntentV1 does not over-classify explanation-only build prom
   assert.equal(classification.routeType, "none");
 });
 
-test("buildRoutingExecutionHintV1 returns deterministic hints for build and workflow replay surfaces and no hint for NONE", () => {
+test("buildRoutingExecutionHintV1 returns deterministic hints for workflow replay surfaces and no hint for generic builds or NONE", () => {
   const buildHint = buildRoutingExecutionHintV1(
     classifyRoutingIntentV1("Create a React app on my Desktop and execute now.")
   );
-  assert.ok(buildHint);
-  assert.match(buildHint ?? "", /Prefer governed finite proof steps first/i);
-  assert.match(buildHint ?? "", /Only use managed process plus probe actions/i);
-  assert.match(buildHint ?? "", /BUILD_NO_SIDE_EFFECT_EXECUTED/i);
+  assert.equal(buildHint, null);
 
   const workflowHint = buildRoutingExecutionHintV1(
     classifyRoutingIntentV1("Capture this flow, compile replay script, and block on selector mismatch.")

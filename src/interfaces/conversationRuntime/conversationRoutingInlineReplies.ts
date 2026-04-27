@@ -141,7 +141,8 @@ export async function maybeResolveConversationRoutingInlineReply(
       input.userInput,
       input.receivedAt,
       input.routingClassification,
-      input.effectiveIntentMode.mode
+      input.effectiveIntentMode.mode,
+      input.effectiveIntentMode.semanticRoute ?? null
     );
     return buildRecordedReply({
       session: input.session,
@@ -167,7 +168,8 @@ export async function maybeResolveConversationRoutingInlineReply(
       input.userInput,
       input.receivedAt,
       input.routingClassification,
-      input.effectiveIntentMode.mode
+      input.effectiveIntentMode.mode,
+      input.effectiveIntentMode.semanticRoute ?? null
     );
     return buildRecordedReply({
       session: input.session,
@@ -193,8 +195,9 @@ export async function maybeResolveConversationRoutingInlineReply(
           input.session,
           input.userInput,
           input.receivedAt,
-          input.routingClassification,
-          input.effectiveIntentMode.mode
+            input.routingClassification,
+            input.effectiveIntentMode.mode,
+            input.effectiveIntentMode.semanticRoute ?? null
         );
         return buildRecordedReply({
           session: input.session,
@@ -241,7 +244,8 @@ export async function maybeResolveConversationRoutingInlineReply(
         input.userInput,
         input.receivedAt,
         input.routingClassification,
-        input.effectiveIntentMode.mode
+        input.effectiveIntentMode.mode,
+        input.effectiveIntentMode.semanticRoute ?? null
       );
       return buildRecordedReply({
         session: input.session,
@@ -263,7 +267,8 @@ export async function maybeResolveConversationRoutingInlineReply(
       input.userInput,
       input.receivedAt,
       input.routingClassification,
-      input.effectiveIntentMode.mode
+      input.effectiveIntentMode.mode,
+      input.effectiveIntentMode.semanticRoute ?? null
     );
     return buildRecordedReply({
       session: input.session,
@@ -313,7 +318,8 @@ export async function maybeResolveConversationRoutingInlineReply(
       input.userInput,
       input.receivedAt,
       input.routingClassification,
-      input.effectiveIntentMode.mode
+      input.effectiveIntentMode.mode,
+      input.effectiveIntentMode.semanticRoute ?? null
     );
     return {
       reply: clarificationState.question,
@@ -347,6 +353,8 @@ export async function maybeResolveConversationRoutingInlineReply(
     memoryAccessAuditStore: input.deps.memoryAccessAuditStore,
     managedProcessSnapshots: input.managedProcessSnapshots,
     semanticHint: input.effectiveIntentMode.semanticHint ?? null,
+    semanticRouteId: input.effectiveIntentMode.semanticRouteId ?? null,
+    semanticRoute: input.effectiveIntentMode.semanticRoute ?? null,
     browserSessionSnapshots: input.browserSessionSnapshots,
     runDirectConversationTurn: input.deps.runDirectConversationTurn!
   });
@@ -373,7 +381,8 @@ export async function maybeResolveConversationRoutingInlineReply(
     input.userInput,
     input.receivedAt,
     input.routingClassification,
-    input.effectiveIntentMode.mode
+    input.effectiveIntentMode.mode,
+    input.effectiveIntentMode.semanticRoute ?? null
   );
   return {
     reply,

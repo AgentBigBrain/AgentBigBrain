@@ -4,7 +4,14 @@
 
 import type { LocalIntentModelResolver, LocalIntentModelSignal } from "./localIntentModelContracts";
 import {
+  buildConversationSemanticRouteMetadata,
+  type ConversationBuildFormatId,
+  type ConversationBuildFormatMetadata,
+  type ConversationRouteContinuationKind,
+  type ConversationRouteExecutionMode,
+  type ConversationRouteMemoryIntent,
   type ConversationIntentSemanticHint,
+  type ConversationRuntimeControlIntent,
   type ConversationSemanticRouteId,
   semanticRouteIdToIntentMode
 } from "../../interfaces/conversationRuntime/intentModeContracts";
@@ -65,6 +72,19 @@ interface ParsedLocalIntentModelPayload {
   matchedRuleId?: string;
   explanation?: string;
   semanticHint?: string;
+  buildFormat?: string | {
+    format?: string;
+    confidence?: string;
+  } | null;
+  executionMode?: string;
+  continuationKind?: string;
+  memoryIntent?: string;
+  runtimeControlIntent?: string;
+  explicitConstraints?: {
+    disallowBrowserOpen?: unknown;
+    disallowServerStart?: unknown;
+    requiresUserOwnedLocation?: unknown;
+  } | null;
 }
 /**
  * Normalizes base url.
@@ -185,6 +205,106 @@ function normalizeSemanticRouteId(
   return SUPPORTED_ROUTE_IDS.has(normalized) ? normalized : null;
 }
 
+const SUPPORTED_BUILD_FORMATS = new Set<ConversationBuildFormatId>([
+  "static_html",
+  "framework_app",
+  "nextjs",
+  "react",
+  "vite"
+]);
+const SUPPORTED_EXECUTION_MODES = new Set<ConversationRouteExecutionMode>([
+  "chat",
+  "plan",
+  "build",
+  "autonomous",
+  "status_or_recall",
+  "review",
+  "capability_discovery",
+  "unclear"
+]);
+const SUPPORTED_CONTINUATION_KINDS = new Set<ConversationRouteContinuationKind>([
+  "none",
+  "answer_thread",
+  "workflow_resume",
+  "return_handoff",
+  "contextual_followup",
+  "relationship_memory"
+]);
+const SUPPORTED_MEMORY_INTENTS = new Set<ConversationRouteMemoryIntent>([
+  "none",
+  "relationship_recall",
+  "profile_update",
+  "contextual_recall",
+  "document_derived_recall"
+]);
+const SUPPORTED_RUNTIME_CONTROL_INTENTS = new Set<ConversationRuntimeControlIntent>([
+  "none",
+  "open_browser",
+  "close_browser",
+  "verify_browser",
+  "inspect_runtime",
+  "stop_runtime"
+]);
+
+/**
+ * Normalizes optional model-emitted build-format metadata.
+ *
+ * **Why it exists:**
+ * Lets the local intent model preserve static/framework output shape without making downstream
+ * planner policy re-infer it from natural wording.
+ *
+ * **What it talks to:**
+ * - Uses `ConversationBuildFormatMetadata` from `../../interfaces/conversationRuntime/intentModeContracts`.
+ * @param value - Parsed JSON build-format field from the model payload.
+ * @returns Typed build-format metadata, or `null` when the model payload is unsupported.
+ */
+function normalizeBuildFormatMetadata(
+  value: ParsedLocalIntentModelPayload["buildFormat"]
+): ConversationBuildFormatMetadata | null {
+  const rawFormat =
+    typeof value === "string"
+      ? value
+      : typeof value?.format === "string"
+        ? value.format
+        : "";
+  const format = rawFormat.trim().toLowerCase() as ConversationBuildFormatId;
+  if (!SUPPORTED_BUILD_FORMATS.has(format)) {
+    return null;
+  }
+  const rawConfidence =
+    typeof value === "object" && value !== null && typeof value.confidence === "string"
+      ? value.confidence.trim().toLowerCase()
+      : "medium";
+  const confidence = SUPPORTED_CONFIDENCE.has(rawConfidence as LocalIntentModelSignal["confidence"])
+    ? rawConfidence as LocalIntentModelSignal["confidence"]
+    : "medium";
+  return {
+    format,
+    source: "semantic_route",
+    confidence
+  };
+}
+
+/**
+ * Normalizes one optional string against an allowed literal set.
+ *
+ * **Why it exists:**
+ * Keeps model payload widening fail-closed when the provider returns unsupported route metadata.
+ *
+ * **What it talks to:**
+ * - Uses caller-provided literal sets from this module.
+ * @param value - Raw model-emitted string value.
+ * @param supported - Supported literal values for the target route metadata field.
+ * @returns The normalized supported value, or `null` when unsupported.
+ */
+function normalizeSupportedValue<T extends string>(
+  value: string | undefined,
+  supported: ReadonlySet<T>
+): T | null {
+  const normalized = (value ?? "").trim().toLowerCase() as T;
+  return supported.has(normalized) ? normalized : null;
+}
+
 /**
  * Infers semantic route id from mode value.
  *
@@ -285,7 +405,7 @@ function coerceSignal(payload: ParsedLocalIntentModelPayload): LocalIntentModelS
           ? rawSemanticHint
           : null)
       : (mode === "status_or_recall" ? rawSemanticHint : null);
-  return {
+  const signal: LocalIntentModelSignal = {
     source: "local_intent_model",
     semanticRouteId: routeId,
     mode,
@@ -294,6 +414,38 @@ function coerceSignal(payload: ParsedLocalIntentModelPayload): LocalIntentModelS
     explanation: normalizeExplanation(payload.explanation, mode),
     clarification: null,
     semanticHint
+  };
+  const hasTypedRouteMetadata =
+    payload.buildFormat !== undefined ||
+    payload.executionMode !== undefined ||
+    payload.continuationKind !== undefined ||
+    payload.memoryIntent !== undefined ||
+    payload.runtimeControlIntent !== undefined ||
+    payload.explicitConstraints !== undefined;
+  if (!hasTypedRouteMetadata) {
+    return signal;
+  }
+  return {
+    ...signal,
+    semanticRoute: buildConversationSemanticRouteMetadata(signal, {
+      source: "model",
+      buildFormat: normalizeBuildFormatMetadata(payload.buildFormat),
+      executionMode:
+        normalizeSupportedValue(payload.executionMode, SUPPORTED_EXECUTION_MODES) ?? undefined,
+      continuationKind:
+        normalizeSupportedValue(payload.continuationKind, SUPPORTED_CONTINUATION_KINDS) ??
+        undefined,
+      memoryIntent:
+        normalizeSupportedValue(payload.memoryIntent, SUPPORTED_MEMORY_INTENTS) ?? undefined,
+      runtimeControlIntent:
+        normalizeSupportedValue(payload.runtimeControlIntent, SUPPORTED_RUNTIME_CONTROL_INTENTS) ??
+        undefined,
+      explicitConstraints: {
+        disallowBrowserOpen: payload.explicitConstraints?.disallowBrowserOpen === true,
+        disallowServerStart: payload.explicitConstraints?.disallowServerStart === true,
+        requiresUserOwnedLocation: payload.explicitConstraints?.requiresUserOwnedLocation === true
+      }
+    })
   };
 }
 

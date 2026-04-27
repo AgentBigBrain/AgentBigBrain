@@ -108,66 +108,6 @@ function buildContextualFollowupIntentMode(
 }
 
 /**
- * Resolves one deterministic contextual follow-up fast path from lexical evidence alone.
- *
- * @param userInput - Raw current user wording.
- * @returns Canonical intent-mode result when lexical evidence is already sufficient, otherwise `null`.
- */
-export function resolveDeterministicContextualFollowupIntent(
-  userInput: string
-): ResolvedConversationIntentMode | null {
-  if (hasTurnLocalFirstPersonStatusUpdate(userInput)) {
-    return null;
-  }
-  const lexicalClassification = classifyContextualFollowupLexicalCue(userInput);
-  if (!lexicalClassification.cueDetected || lexicalClassification.conflict) {
-    return null;
-  }
-
-  const normalized = userInput.trim();
-  if (!normalized) {
-    return null;
-  }
-  const turnSignals = analyzeConversationChatTurnSignals(normalized);
-  const rawTokens = collectConversationChatTurnRawTokens(normalized);
-  const hasMeaningCue =
-    rawTokens.some((token) => CONTEXTUAL_MEANING_TERMS.has(token)) ||
-    turnSignals.meaningfulTerms.some((term) => CONTEXTUAL_MEANING_TERMS.has(term));
-  if (
-    turnSignals.primaryKind === "approval_or_control" ||
-    turnSignals.primaryKind === "self_identity_query" ||
-    turnSignals.primaryKind === "self_identity_statement" ||
-    turnSignals.primaryKind === "assistant_identity_query"
-  ) {
-    return null;
-  }
-
-  if (/\bremind me\b/i.test(normalized) && lexicalClassification.candidateTokens.length > 0) {
-    return buildContextualFollowupIntentMode(
-      "reminder_followup",
-      lexicalClassification.confidenceTier === "HIGH" ? "high" : "medium",
-      "The user explicitly asked for a later reminder about an existing topic.",
-      "intent_mode_contextual_followup_reminder_lexical"
-    );
-  }
-
-  if (
-    hasMeaningCue &&
-    lexicalClassification.confidenceTier === "HIGH" &&
-    lexicalClassification.candidateTokens.length > 0
-  ) {
-    return buildContextualFollowupIntentMode(
-      "status_followup",
-      "medium",
-      "The user explicitly asked for a later status or check-in about an existing topic.",
-      "intent_mode_contextual_followup_status_lexical"
-    );
-  }
-
-  return null;
-}
-
-/**
  * Returns whether a chat-mode turn is eligible for bounded contextual follow-up interpretation.
  *
  * @param userInput - Raw current user wording.
@@ -205,19 +145,20 @@ function isEligibleForContextualFollowupInterpretation(
     return false;
   }
 
+  const lexicalClassification = classifyContextualFollowupLexicalCue(normalized);
   const turnSignals = analyzeConversationChatTurnSignals(normalized);
   const rawTokens = collectConversationChatTurnRawTokens(normalized);
   if (
     turnSignals.primaryKind === "self_identity_query" ||
     turnSignals.primaryKind === "self_identity_statement" ||
     turnSignals.primaryKind === "assistant_identity_query" ||
-    turnSignals.primaryKind === "approval_or_control" ||
-    turnSignals.containsWorkflowCue
+    turnSignals.primaryKind === "approval_or_control"
   ) {
     return false;
   }
-
-  const lexicalClassification = classifyContextualFollowupLexicalCue(normalized);
+  if (turnSignals.containsWorkflowCue && !lexicalClassification.cueDetected) {
+    return false;
+  }
   if (lexicalClassification.cueDetected) {
     return true;
   }
@@ -250,10 +191,10 @@ function buildContextualFollowupCandidateTokens(
  * Resolves one bounded contextual follow-up intent classification ahead of the generic local
  * intent-model tie-breaker.
  *
- * Deterministic lexical fast paths win first. Ambiguous contextual follow-up leftovers may then
- * use the dedicated shared interpreter. When that interpreter is unavailable or low-confidence,
- * the caller should preserve the deterministic result instead of falling through to generic
- * execution reinterpretation.
+ * Bounded lexical cues may make the dedicated shared interpreter eligible, but they do not choose
+ * the final route. When that interpreter is unavailable or low-confidence, the caller should
+ * preserve the deterministic result instead of falling through to generic execution
+ * reinterpretation.
  */
 export async function resolveContextualFollowupIntentResolution(
   userInput: string,
@@ -262,14 +203,6 @@ export async function resolveContextualFollowupIntentResolution(
   sessionHints: LocalIntentModelSessionHints | null,
   contextualFollowupInterpretationResolver?: ContextualFollowupInterpretationResolver
 ): Promise<ContextualFollowupIntentResolution> {
-  const deterministicIntent = resolveDeterministicContextualFollowupIntent(userInput);
-  if (deterministicIntent) {
-    return {
-      resolvedIntentMode: deterministicIntent,
-      preserveDeterministic: false
-    };
-  }
-
   if (
     !isEligibleForContextualFollowupInterpretation(
       userInput,

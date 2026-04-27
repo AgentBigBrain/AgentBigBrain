@@ -55,6 +55,8 @@
 5. Preferred decision stack for user-facing routing:
    - narrow deterministic preprocessing for exact signals
    - model-led semantic route selection
+   - typed route metadata for execution mode, continuation kind, memory intent, runtime-control
+     intent, explicit constraints, and build format
    - deterministic clarification state when ambiguity materially changes behavior
    - model-rendered natural clarification wording
    - deterministic post-intent safety and execution enforcement
@@ -86,6 +88,8 @@
    - Lexical extraction is acceptable for narrow, explicit, well-defined fact families.
    - Lexical extraction is not an acceptable long-term substitute for rich relationship meaning,
      temporal life events, or broad entity interpretation from natural conversation.
+   - Conversation context, continuity hints, and document-derived summaries can only expand memory
+     surfaces after a typed memory intent allows the relevant lane.
    - If the meaning changes materially with paraphrase or narrative context, prefer typed
      extraction design or bounded model assistance.
 10. The implementation goal is a smoother surface, not a different lexical implementation.

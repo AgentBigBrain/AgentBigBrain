@@ -57,6 +57,7 @@ test("resolveReturnHandoffContinuationIntent resumes workflow handoff when the h
 
   assert.equal(resolved?.mode, "build");
   assert.equal(resolved?.semanticHint, "resume_handoff");
+  assert.equal(resolved?.semanticRoute?.continuationKind, "return_handoff");
 });
 
 test("resolveReturnHandoffContinuationIntent fails closed when no workflow-compatible domain context exists", () => {
@@ -131,4 +132,5 @@ test("resolveReturnHandoffContinuationIntent keeps lexical resume wording pinned
 
   assert.equal(resolved?.mode, "build");
   assert.equal(resolved?.semanticHint, "resume_handoff");
+  assert.equal(resolved?.semanticRoute?.continuationKind, "return_handoff");
 });

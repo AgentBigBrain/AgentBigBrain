@@ -12,6 +12,7 @@ import {
 import { buildRecallSynthesis, renderRecallSynthesisSupportLines } from "../../organs/memorySynthesis/recallSynthesis";
 import { normalizeWhitespace } from "../conversationManagerHelpers";
 import type { ConversationSession } from "../sessionStore";
+import type { ConversationRouteMemoryIntent } from "./intentModeContracts";
 import {
   analyzeConversationChatTurnSignals,
   isMixedConversationMemoryStatusRecallTurn,
@@ -332,12 +333,21 @@ function buildRelationshipFollowUpCueLines(
  *
  * @param session - Conversation session containing recent turns.
  * @param userInput - Raw current user wording.
+ * @param memoryIntent - Optional route-approved memory intent for this turn.
  * @returns `true` when bounded relationship continuity should be queried.
  */
 export function shouldUseRelationshipContinuityContext(
   session: ConversationSession,
-  userInput: string
+  userInput: string,
+  memoryIntent: ConversationRouteMemoryIntent | null = null
 ): boolean {
+  if (memoryIntent !== null) {
+    return (
+      memoryIntent === "relationship_recall" ||
+      memoryIntent === "profile_update" ||
+      memoryIntent === "contextual_recall"
+    );
+  }
   const normalizedInput = normalizeWhitespace(userInput);
   if (!normalizedInput) {
     return false;
@@ -357,17 +367,19 @@ export function shouldUseRelationshipContinuityContext(
  * @param userInput - Raw current user wording.
  * @param queryContinuityFacts - Optional bounded continuity fact query capability.
  * @param requestTelemetry - Optional request-scoped telemetry collector.
+ * @param memoryIntent - Optional route-approved memory intent for this turn.
  * @returns Prompt block, or `null` when no relationship continuity should be attached.
  */
 export async function buildRelationshipContinuityContextBlock(
   session: ConversationSession,
   userInput: string,
   queryContinuityFacts?: QueryConversationContinuityFacts,
-  requestTelemetry?: ProfileMemoryRequestTelemetry
+  requestTelemetry?: ProfileMemoryRequestTelemetry,
+  memoryIntent: ConversationRouteMemoryIntent | null = null
 ): Promise<string | null> {
   if (
     typeof queryContinuityFacts !== "function" ||
-    !shouldUseRelationshipContinuityContext(session, userInput)
+    !shouldUseRelationshipContinuityContext(session, userInput, memoryIntent)
   ) {
     return null;
   }

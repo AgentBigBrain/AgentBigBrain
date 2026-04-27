@@ -731,7 +731,8 @@ async function evaluateContextualRecallScenario(
   const resolvedReference = resolveContextualReferenceHints({
     userInput,
     recentTurns: session.conversationTurns,
-    threads: stack.threads
+    threads: stack.threads,
+    memoryIntent: "contextual_recall"
   });
   const candidate = await resolveContextualRecallCandidate(
     session,
