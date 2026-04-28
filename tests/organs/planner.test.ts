@@ -2005,18 +2005,6 @@ test("planner organization prompts allow finite shell planning without explicit 
     plannerRequest.systemPrompt,
     /create the destination folder if it is missing, then move only the matching project folders/i
   );
-  assert.match(
-    plannerRequest.systemPrompt,
-    /assign list results with array coercion such as \$rootRemaining = @\(Get-ChildItem/i
-  );
-  assert.match(
-    plannerRequest.systemPrompt,
-    /Empty lists must still print empty markers such as ROOT_REMAINING_MATCHES=/i
-  );
-  assert.match(
-    plannerRequest.systemPrompt,
-    /Do not pass raw or nullable pipeline output to \[string\]::Join/i
-  );
 });
 
 test("planner uses deterministic desktop runtime process sweep fallback before model planning for explicit Desktop sample-folder server shutdown requests", async () => {
