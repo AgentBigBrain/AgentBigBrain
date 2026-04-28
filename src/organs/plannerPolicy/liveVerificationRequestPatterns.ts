@@ -31,7 +31,7 @@ export const STATIC_HTML_BUILD_LANE_PATTERN =
 export const STATIC_HTML_BUILD_FORMAT_RESOLVED_PATTERN =
   /(?:^|\n)Build format resolved:\s*create a plain static HTML deliverable\b/i;
 export const EXPLICIT_STATIC_HTML_REQUEST_PATTERN =
-  /\b(?:static\s+single[- ]page|single[- ]file\s+html|single[- ]page\s+site|single[- ]page\s+html|plain\s+html|static\s+html)\b/i;
+  /\b(?:static\s+single[- ]page|single[- ]file\s+html|single[- ]page\s+site|single[- ]page\s+html|plain\s+html|static\s+html|static\s+(?:site|website))\b/i;
 export const EXPLICIT_INDEX_HTML_ENTRY_PATTERN =
   /\bindex\.html\b/i;
 export const NEGATED_FRAMEWORK_SCAFFOLD_PATTERN =
