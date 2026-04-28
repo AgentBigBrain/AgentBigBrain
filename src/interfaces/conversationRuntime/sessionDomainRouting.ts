@@ -11,6 +11,7 @@ import { applyDomainSignalWindow, isConversationDomainContextMeaningful } from "
 import type { LocalIntentModelSessionHints } from "../../organs/languageUnderstanding/localIntentModelContracts";
 import type { RoutingMapClassificationV1 } from "../routingMap";
 import type { ConversationIntentMode, ConversationSession } from "../sessionStore";
+import type { ConversationSemanticRouteMetadata } from "./intentModeContracts";
 import { isRelationshipConversationRecallTurn } from "./chatTurnSignals";
 
 const PROFILE_LANE_PATTERNS: readonly RegExp[] = [
@@ -68,7 +69,7 @@ const WORKFLOW_CONTINUITY_MODES = new Set<ConversationIntentMode>([
 
 interface ConversationDomainLaneSignalCandidate {
   lane: ConversationDomainLane;
-  source: "keyword" | "routing_mode" | "continuity_state";
+  source: "keyword" | "routing_mode" | "continuity_state" | "semantic_route";
   weight: number;
 }
 
@@ -166,12 +167,15 @@ export function buildConversationDomainSignalWindowForTurn(
   userInput: string,
   receivedAt: string,
   routingClassification: RoutingMapClassificationV1 | null,
-  routingMode: ConversationDomainRoutingMode | null
+  routingMode: ConversationDomainRoutingMode | null,
+  semanticRoute: ConversationSemanticRouteMetadata | null = null
 ): ConversationDomainSignalWindowUpdate {
   const workflowContinuityActive = hasWorkflowContinuity(session);
   const laneSignals = toLaneSignals(
     dedupeLaneSignalCandidates([
-      ...inferKeywordLaneSignals(userInput, workflowContinuityActive),
+      ...(semanticRoute
+        ? inferSemanticRouteLaneSignals(semanticRoute)
+        : inferKeywordLaneSignals(userInput, workflowContinuityActive)),
       ...inferRoutingLaneSignals(
         session,
         userInput,
@@ -217,7 +221,8 @@ export function applyConversationDomainSignalWindowForTurn(
   userInput: string,
   receivedAt: string,
   routingClassification: RoutingMapClassificationV1 | null,
-  routingMode: ConversationDomainRoutingMode | null
+  routingMode: ConversationDomainRoutingMode | null,
+  semanticRoute: ConversationSemanticRouteMetadata | null = null
 ): void {
   session.domainContext = applyDomainSignalWindow(
     session.domainContext,
@@ -226,7 +231,8 @@ export function applyConversationDomainSignalWindowForTurn(
       userInput,
       receivedAt,
       routingClassification,
-      routingMode
+      routingMode,
+      semanticRoute
     )
   );
 }
@@ -350,6 +356,45 @@ function inferKeywordLaneSignals(
     });
   }
   return laneCandidates;
+}
+
+/** Infers lane candidates from the resolved semantic route instead of current-turn vocabulary. */
+function inferSemanticRouteLaneSignals(
+  semanticRoute: ConversationSemanticRouteMetadata
+): ConversationDomainLaneSignalCandidate[] {
+  if (semanticRoute.routeId === "relationship_recall") {
+    return [
+      {
+        lane: "relationship",
+        source: "semantic_route",
+        weight: 3
+      }
+    ];
+  }
+  if (semanticRoute.memoryIntent === "profile_update") {
+    return [
+      {
+        lane: "profile",
+        source: "semantic_route",
+        weight: 3
+      }
+    ];
+  }
+  if (
+    semanticRoute.executionMode === "build" ||
+    semanticRoute.executionMode === "autonomous" ||
+    semanticRoute.executionMode === "review" ||
+    semanticRoute.runtimeControlIntent !== "none"
+  ) {
+    return [
+      {
+        lane: "workflow",
+        source: "semantic_route",
+        weight: semanticRoute.executionMode === "autonomous" ? 3 : 2
+      }
+    ];
+  }
+  return [];
 }
 
 /** Infers routing-origin or continuity-origin lane candidates from the final routing outcome. */

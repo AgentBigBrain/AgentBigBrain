@@ -17,7 +17,8 @@ import type {
 } from "./profileMemoryTruthGovernanceContracts";
 import {
   ALLOWED_ASSISTANT_INFERENCE_EPISODE_SOURCES,
-  ALLOWED_EXPLICIT_EPISODE_SOURCES
+  ALLOWED_EXPLICIT_EPISODE_SOURCES,
+  isDocumentOrMediaDerivedProfileMemorySource
 } from "./profileMemoryTruthGovernanceSources";
 
 /**
@@ -70,6 +71,9 @@ export function buildEpisodeGovernanceDecision(
   }
   if (normalizedSource.startsWith("profile_state_reconciliation.")) {
     return buildDecision("episode.candidate", "reconciliation_or_projection", "quarantine", "unsupported_source");
+  }
+  if (isDocumentOrMediaDerivedProfileMemorySource(normalizedSource)) {
+    return buildDecision("episode.candidate", "assistant_inference", "quarantine", "unsupported_source");
   }
   if (candidate.sourceKind === "explicit_user_statement") {
     if (ALLOWED_EXPLICIT_EPISODE_SOURCES.has(normalizedSource)) {

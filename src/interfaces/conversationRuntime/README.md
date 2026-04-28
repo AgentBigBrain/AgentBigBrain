@@ -168,9 +168,9 @@ The latest slices moved queue/ack, worker-loop, and pulse-state ownership here s
   tail chopping
 - `sessionDomainRouting.ts` owns bounded session-domain hint derivation and turn-level domain
   signal updates so intent routing, memory brokerage, and lifecycle continuity can share one
-  persisted per-conversation domain picture without re-implementing lane heuristics, including the
-  bounded relationship-lane vocabulary reused by memory-aware chat detours, including multiword
-  manager, employee, and work-peer families already grounded in governed extraction
+  persisted per-conversation domain picture without re-implementing lane heuristics. When typed
+  semantic-route metadata is present, it is the preferred lane source; legacy vocabulary stays a
+  compatibility hint rather than the route owner.
 - `invocationResolution.ts` owns canonical non-command invocation branching across pulse control,
   proposal follow-up, and queue routing below `conversationIngressLifecycle.ts`
 - `commandDispatch.ts` owns canonical slash-command dispatch below `conversationIngressLifecycle.ts`
@@ -225,9 +225,12 @@ The latest slices moved queue/ack, worker-loop, and pulse-state ownership here s
   remembered-fact review/mutation responses, including explicit resolve, wrong, forget, fact
   correction, and fact forget outcomes
 - `intentModeContracts.ts` owns the canonical front-door intent-mode contracts for natural
-  execution, capability discovery, clarification results, and build-format metadata that preserves
-  requested static HTML, framework, or Next.js output format without overriding top-level
-  autonomous mode
+  execution, capability discovery, clarification results, and semantic-route metadata that carries
+  route id, execution mode, continuation kind, memory intent, runtime-control intent, explicit
+  constraints, and build-format metadata without turning meaning into safety authorization
+- `intentModeRouteMetadata.ts` owns exact-command and explicit-constraint route metadata seeding
+  so rigid browser/runtime controls can populate the typed route contract without reopening broad
+  lexical route ownership
 - `buildFormatMetadata.ts` owns explicit build-format metadata resolution so static HTML, React,
   Vite, and Next.js cues travel as planner metadata rather than overriding top-level intent mode
 - `intentModeResolution.ts` owns canonical deterministic intent-mode routing plus the optional

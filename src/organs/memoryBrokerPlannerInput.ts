@@ -5,6 +5,7 @@
 import { ProfileMemoryStore } from "../core/profileMemoryStore";
 import { MemoryAccessAuditStore } from "../core/memoryAccessAudit";
 import { LanguageUnderstandingOrgan } from "./languageUnderstanding/episodeExtraction";
+import { parseProfileMediaIngestInput } from "../core/profileMemory";
 import type {
   ProfileFactPlanningInspectionResult,
   ProfileReadableEpisode,
@@ -90,6 +91,30 @@ interface BrokerProfileMemoryReadSession {
     queryInput?: string,
     nowIso?: string
   ): Promise<readonly ProfileReadableEpisode[]> | readonly ProfileReadableEpisode[];
+}
+
+/**
+ * Deduplicates bounded texts before model-assisted memory extraction.
+ *
+ * @param values - Candidate narrative fragments.
+ * @returns Ordered unique non-empty fragments.
+ */
+function dedupeMemoryBrokerNarrativeFragments(values: readonly string[]): readonly string[] {
+  const seen = new Set<string>();
+  const ordered: string[] = [];
+  for (const value of values) {
+    const normalized = value.trim();
+    if (!normalized) {
+      continue;
+    }
+    const signature = normalized.toLowerCase();
+    if (seen.has(signature)) {
+      continue;
+    }
+    seen.add(signature);
+    ordered.push(normalized);
+  }
+  return ordered;
 }
 
 export interface BrokerPromptCutoverGateResult {
@@ -237,12 +262,20 @@ export async function buildBrokeredPlannerInput(
     const requestTelemetry = createProfileMemoryRequestTelemetry();
     const sourceFingerprint = buildProfileMemorySourceFingerprint(currentUserRequest);
     const conversationId = options.sessionDomainContext?.conversationId;
+    const mediaIngest = parseProfileMediaIngestInput(currentUserRequest);
+    const modelEpisodeExtractionTexts = dedupeMemoryBrokerNarrativeFragments(
+      mediaIngest.allNarrativeFragments
+    );
     const additionalEpisodeCandidates = !shouldSkipProfileIngest && deps.languageUnderstandingOrgan
-      ? await deps.languageUnderstandingOrgan.extractEpisodeCandidates({
-          text: currentUserRequest,
-          sourceTaskId: task.id,
-          observedAt: task.createdAt
-        })
+      ? (await Promise.all(
+          modelEpisodeExtractionTexts.map((text) =>
+            deps.languageUnderstandingOrgan!.extractEpisodeCandidates({
+              text,
+              sourceTaskId: task.id,
+              observedAt: task.createdAt
+            })
+          )
+        )).flat()
       : [];
     if (!shouldSkipProfileIngest) {
       await deps.profileMemoryStore.ingestFromTaskInput(

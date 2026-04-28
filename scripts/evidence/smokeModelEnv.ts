@@ -16,6 +16,9 @@ export interface RequiredRealSmokeBackendResolution extends SmokeModelBackendSel
   blockerReason: string | null;
 }
 
+const DEFAULT_LOCAL_SMOKE_OLLAMA_TIMEOUT_MS = "180000";
+const DEFAULT_LOCAL_SMOKE_INTENT_TIMEOUT_MS = "90000";
+
 function normalizeBackend(value: string | undefined): string {
   return (value ?? "mock").trim().toLowerCase() || "mock";
 }
@@ -66,7 +69,15 @@ export function buildSmokeModelEnvOverrides(
         OLLAMA_MODEL_SMALL_POLICY: probe.model,
         OLLAMA_MODEL_MEDIUM_GENERAL: probe.model,
         OLLAMA_MODEL_MEDIUM_POLICY: probe.model,
-        OLLAMA_MODEL_LARGE_REASONING: probe.model
+        OLLAMA_MODEL_LARGE_REASONING: probe.model,
+        OLLAMA_TIMEOUT_MS:
+          process.env.BRAIN_LIVE_SMOKE_OLLAMA_TIMEOUT_MS ??
+          process.env.OLLAMA_TIMEOUT_MS ??
+          DEFAULT_LOCAL_SMOKE_OLLAMA_TIMEOUT_MS,
+        BRAIN_LOCAL_INTENT_MODEL_TIMEOUT_MS:
+          process.env.BRAIN_LIVE_SMOKE_LOCAL_INTENT_TIMEOUT_MS ??
+          process.env.BRAIN_LOCAL_INTENT_MODEL_TIMEOUT_MS ??
+          DEFAULT_LOCAL_SMOKE_INTENT_TIMEOUT_MS
       }
     };
   }

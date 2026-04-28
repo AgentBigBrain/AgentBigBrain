@@ -23,6 +23,10 @@ import {
   requiresBrowserVerificationBuildRequest,
   requiresPersistentBrowserOpenBuildRequest
 } from "./liveVerificationPolicy";
+import {
+  hasPlannerResolvedRouteMetadata,
+  hasResolvedRuntimeControlIntent
+} from "./liveVerificationSemanticRouteSupport";
 
 const SHELL_EXPLICIT_REQUEST_PATTERN =
   /\b(shell|terminal|powershell|bash|zsh|cmd(?:\.exe)?|command line|run (?:a )?command|execute (?:a )?command)\b/i;
@@ -184,6 +188,9 @@ function buildLocalCapabilityGuidance(
       parts.push(
         "When you build status strings in PowerShell, do not write invalid fragments like \"$name:\" inside double-quoted strings. Use ${name}, $($name), or concatenation instead."
       );
+      parts.push(
+        "When proof output joins PowerShell collections, first assign list results with array coercion such as $rootRemaining = @(Get-ChildItem ... | Select-Object -ExpandProperty Name), then emit markers with ($rootRemaining -join ','). Empty lists must still print empty markers such as ROOT_REMAINING_MATCHES=. Do not pass raw or nullable pipeline output to [string]::Join."
+      );
     }
   }
   if (wantsPersistentBrowserOpen) {
@@ -235,6 +242,15 @@ export function buildPlaybookGuidance(
  */
 export function buildHighRiskActionGuardrails(currentUserRequest: string): string {
   const disallowedActionTypes: string[] = [];
+  const browserControlFallbackAllowed =
+    !hasPlannerResolvedRouteMetadata(currentUserRequest) &&
+    BROWSER_CONTROL_REQUEST_PATTERN.test(currentUserRequest);
+  const allowsOpenBrowser =
+    hasResolvedRuntimeControlIntent(currentUserRequest, "open_browser") ||
+    browserControlFallbackAllowed;
+  const allowsCloseBrowser =
+    hasResolvedRuntimeControlIntent(currentUserRequest, "close_browser") ||
+    browserControlFallbackAllowed;
   const allowImplicitFiniteShell =
     allowsImplicitFiniteShellForBuildRequest(currentUserRequest);
   const allowImplicitManagedProcess =
@@ -256,11 +272,11 @@ export function buildHighRiskActionGuardrails(currentUserRequest: string): strin
   }
   if (
     !requiresPersistentBrowserOpenBuildRequest(currentUserRequest) &&
-    !BROWSER_CONTROL_REQUEST_PATTERN.test(currentUserRequest)
+    !allowsOpenBrowser
   ) {
     disallowedActionTypes.push("open_browser");
   }
-  if (!BROWSER_CONTROL_REQUEST_PATTERN.test(currentUserRequest)) {
+  if (!allowsCloseBrowser) {
     disallowedActionTypes.push("close_browser");
   }
   if (!SELF_MODIFY_EXPLICIT_REQUEST_PATTERN.test(currentUserRequest)) {
@@ -277,7 +293,7 @@ export function buildHighRiskActionGuardrails(currentUserRequest: string): strin
   return (
     "\nDeterministic high-risk action guardrail: " +
     `for this request, do not emit ${disallowedActionTypes.join(" or ")} actions unless the user explicitly requests them. ` +
-    "Prefer request-relevant action types such as respond, run_skill, or scoped file actions." +
+    "Prefer request-relevant action types such as respond or scoped file actions. Use run_skill only when the user explicitly asks to run an executable skill by name." +
     buildExecutionBias
   );
 }

@@ -56,34 +56,6 @@ const SCHEDULE_PATTERNS: readonly RegExp[] = [
   /\bfocus\s+blocks?\b/i
 ] as const;
 
-const BUILD_PATTERNS: readonly RegExp[] = [
-  /\bbuild\b.*\btypescript\b.*\bcli\b/i,
-  /\bdeterministic\s+typescript\s+cli\s+scaffold\b/i,
-  /\bscaffold\b/i,
-  /\brunbook\b/i
-] as const;
-
-const BUILD_EXECUTION_VERB_PATTERNS: readonly RegExp[] = [
-  /\b(create|build|make|generate|scaffold|setup|set up|spin up)\b/i
-] as const;
-
-const BUILD_EXECUTION_ARTIFACT_PATTERNS: readonly RegExp[] = [
-  /\b(app|application|project|dashboard|site|website|frontend|backend|api|cli|repo|repository)\b/i,
-  /\b(react|next\.?js|vue|svelte|angular|vite)\b/i
-] as const;
-
-const BUILD_EXECUTION_DESTINATION_PATTERNS: readonly RegExp[] = [
-  /\bon\s+my\s+(desktop|documents|downloads)\b/i,
-  /\bin\s+['"]?[a-z]:\\/i,
-  /\bin\s+['"]?\/(?:users|home|tmp|var|opt)\//i,
-  /\b[a-z]:\\(?:users|temp|tmp|dev|work|projects|repos)\\/i
-] as const;
-
-const BUILD_EXPLANATION_ONLY_PATTERNS: readonly RegExp[] = [
-  /^\s*(how\s+do\s+i|how\s+to|explain|show\s+me\s+how|tutorial|guide\s+me|what\s+is)\b/i,
-  /\b(without\s+executing|do\s+not\s+execute|don't\s+execute|guidance\s+only|instructions?\s+only)\b/i
-] as const;
-
 const CLONE_VARIANT_PATTERNS: readonly RegExp[] = [
   /\bclone-assisted\b/i,
   /\bclone\s+plan\s+variants?\b/i,
@@ -119,17 +91,6 @@ const OBSERVABILITY_EXPORT_PATTERNS: readonly RegExp[] = [
   /\bexport\b.*\bredacted\s+evidence\s+bundle\b/i,
   /\bevidence\s+bundle\b/i
 ] as const;
-const EXECUTION_NOW_SEQUENCE_TOKENS = [
-  ["build", "now"],
-  ["create", "now"],
-  ["make", "now"],
-  ["generate", "now"],
-  ["scaffold", "now"],
-  ["set up", "now"],
-  ["setup", "now"],
-  ["spin up", "now"]
-] as const;
-
 /**
  * Derives current user request for routing from available runtime inputs.
  *
@@ -191,59 +152,6 @@ function matchesAll(text: string, patterns: readonly RegExp[]): boolean {
  */
 function matchesAny(text: string, patterns: readonly RegExp[]): boolean {
   return patterns.some((pattern) => pattern.test(text));
-}
-
-/**
- * Evaluates whether ordered phrase tokens appear in sequence within one text.
- *
- * @param text - Lower-level message content under evaluation.
- * @param orderedTokens - Ordered phrases that must appear in sequence.
- * @returns `true` when every phrase appears in order.
- */
-function containsOrderedPhrases(text: string, orderedTokens: readonly string[]): boolean {
-  let searchIndex = 0;
-  for (const token of orderedTokens) {
-    const tokenIndex = text.indexOf(token, searchIndex);
-    if (tokenIndex < 0) {
-      return false;
-    }
-    searchIndex = tokenIndex + token.length;
-  }
-  return true;
-}
-
-/**
- * Evaluates build execution intent and returns a deterministic policy signal.
- *
- * **Why it exists:**
- * Keeps build execution-intent classification explicit so generic app/project creation prompts
- * route to governed execution surfaces while explanation-only prompts avoid over-classification.
- *
- * **What it talks to:**
- * - Uses local deterministic regex rulepacks in this module.
- *
- * @param text - Message/text content processed by this function.
- * @returns `true` when this check passes.
- */
-function isGenericBuildExecutionIntent(text: string): boolean {
-  if (matchesAny(text, BUILD_EXPLANATION_ONLY_PATTERNS)) {
-    return false;
-  }
-  if (!matchesAny(text, BUILD_EXECUTION_VERB_PATTERNS)) {
-    return false;
-  }
-  if (!matchesAny(text, BUILD_EXECUTION_ARTIFACT_PATTERNS)) {
-    return false;
-  }
-  if (
-    matchesAny(text, BUILD_EXECUTION_DESTINATION_PATTERNS) ||
-    /\bexecute\s+now\b/i.test(text) ||
-    EXECUTION_NOW_SEQUENCE_TOKENS.some((tokens) => containsOrderedPhrases(text, tokens)) ||
-    /\brun\s+(?:it|commands?)\b/i.test(text)
-  ) {
-    return true;
-  }
-  return false;
 }
 
 /**
@@ -325,21 +233,6 @@ export function classifyRoutingIntentV1(input: string): RoutingMapClassification
       commandIntent: "schedule_focus_blocks",
       confidenceTier: "HIGH",
       matchedRuleId: "routing_v1_schedule_focus_blocks"
-    });
-  }
-
-  if (matchesAny(normalized, BUILD_PATTERNS) || isGenericBuildExecutionIntent(normalized)) {
-    return createClassification({
-      category: "BUILD_SCAFFOLD",
-      routeType: "execution_surface",
-      actionFamily: "build",
-      fallbackReasonCode: "BUILD_NO_SIDE_EFFECT_EXECUTED",
-      requiresApprovalDiff: true,
-      commandIntent: "build_scaffold",
-      confidenceTier: "HIGH",
-      matchedRuleId: matchesAny(normalized, BUILD_PATTERNS)
-        ? "routing_v1_build_scaffold"
-        : "routing_v1_build_scaffold_generic"
     });
   }
 

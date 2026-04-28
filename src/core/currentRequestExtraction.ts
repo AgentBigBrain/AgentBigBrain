@@ -8,10 +8,24 @@ const USER_QUESTION_MARKER = "User question:";
 const AGENT_PULSE_REQUEST_MARKER = "Agent Pulse request:";
 const RECENT_CONVERSATION_CONTEXT_MARKER = "Recent conversation context (oldest to newest):";
 const RESOLVED_SEMANTIC_ROUTE_MARKER = "Resolved semantic route:";
+const RESOLVED_BUILD_FORMAT_MARKER = "Resolved build format:";
 const TRAILING_AGENTFRIEND_SECTION_PATTERN = /^\[AgentFriend[A-Za-z]+\]/;
 const AUTONOMOUS_EXECUTION_PREFIX = "[AUTONOMOUS_LOOP_GOAL]";
 const CLARIFICATION_METADATA_LINE_PATTERN = /^\[Clarification resolved:/i;
 const RESOLVED_SEMANTIC_ROUTE_LINE_PATTERN = /^- routeId:\s*([a-z_]+)\s*$/im;
+const RESOLVED_ROUTE_MEMORY_INTENT_LINE_PATTERN = /^- memoryIntent:\s*([a-z_]+)\s*$/im;
+const RESOLVED_ROUTE_RUNTIME_CONTROL_INTENT_LINE_PATTERN =
+  /^- runtimeControlIntent:\s*([a-z_]+)\s*$/im;
+const RESOLVED_ROUTE_EXECUTION_MODE_LINE_PATTERN =
+  /^- executionMode:\s*([a-z_]+)\s*$/im;
+const RESOLVED_ROUTE_CONTINUATION_KIND_LINE_PATTERN =
+  /^- continuationKind:\s*([a-z_]+)\s*$/im;
+const RESOLVED_BUILD_FORMAT_LINE_PATTERN = /^- format:\s*([a-z_]+)\s*$/im;
+const RESOLVED_ROUTE_BOOLEAN_LINE_PATTERNS = {
+  disallowBrowserOpen: /^- disallowBrowserOpen:\s*(true|false)\s*$/im,
+  disallowServerStart: /^- disallowServerStart:\s*(true|false)\s*$/im,
+  requiresUserOwnedLocation: /^- requiresUserOwnedLocation:\s*(true|false)\s*$/im
+} as const;
 const SUPPORTED_RESOLVED_SEMANTIC_ROUTE_IDS = new Set([
   "chat_answer",
   "relationship_recall",
@@ -26,6 +40,52 @@ const SUPPORTED_RESOLVED_SEMANTIC_ROUTE_IDS = new Set([
   "review_feedback",
   "capability_discovery"
 ]);
+const SUPPORTED_RESOLVED_MEMORY_INTENTS = new Set([
+  "none",
+  "relationship_recall",
+  "profile_update",
+  "contextual_recall",
+  "document_derived_recall"
+]);
+const SUPPORTED_RESOLVED_RUNTIME_CONTROL_INTENTS = new Set([
+  "none",
+  "open_browser",
+  "close_browser",
+  "verify_browser",
+  "inspect_runtime",
+  "stop_runtime"
+]);
+const SUPPORTED_RESOLVED_EXECUTION_MODES = new Set([
+  "chat",
+  "plan",
+  "build",
+  "autonomous",
+  "status_or_recall",
+  "review",
+  "capability_discovery",
+  "unclear"
+]);
+const SUPPORTED_RESOLVED_CONTINUATION_KINDS = new Set([
+  "none",
+  "answer_thread",
+  "workflow_resume",
+  "return_handoff",
+  "contextual_followup",
+  "relationship_memory"
+]);
+const SUPPORTED_RESOLVED_BUILD_FORMATS = new Set([
+  "static_html",
+  "framework_app",
+  "nextjs",
+  "react",
+  "vite"
+]);
+
+export interface ExtractedResolvedRouteConstraints {
+  disallowBrowserOpen: boolean;
+  disallowServerStart: boolean;
+  requiresUserOwnedLocation: boolean;
+}
 
 /**
  * Extracts the trailing section after the last occurrence of a marker.
@@ -294,4 +354,187 @@ export function extractResolvedSemanticRouteId(userInput: string): string | null
     return null;
   }
   return candidate;
+}
+
+/**
+ * Returns whether wrapped execution input carries front-door route metadata.
+ *
+ * **Why it exists:**
+ * Planner policy can use this as a hard boundary: when route metadata exists, compatibility
+ * natural-language fallbacks should not re-own semantic route decisions.
+ *
+ * **What it talks to:**
+ * - Uses `extractExecutionContextPayload` from this module.
+ *
+ * @param userInput - Wrapped execution input that may include resolved semantic route metadata.
+ * @returns `true` when the resolved semantic route marker is present.
+ */
+export function hasResolvedSemanticRouteMetadata(userInput: string): boolean {
+  return extractExecutionContextPayload(userInput).includes(RESOLVED_SEMANTIC_ROUTE_MARKER);
+}
+
+/**
+ * Extracts the resolved build format selected by the conversation front door.
+ *
+ * **Why it exists:**
+ * Planner framework/static policy should consume the typed build-format block rather than
+ * re-classifying framework names or static HTML wording from the request text.
+ *
+ * **What it talks to:**
+ * - Uses `extractExecutionContextPayload` from this module.
+ *
+ * @param userInput - Wrapped execution input that may include resolved build-format metadata.
+ * @returns Supported build format id, or `null` when none is present.
+ */
+export function extractResolvedBuildFormat(userInput: string): string | null {
+  const normalized = extractExecutionContextPayload(userInput);
+  if (!normalized || !normalized.includes(RESOLVED_BUILD_FORMAT_MARKER)) {
+    return null;
+  }
+  const match = normalized.match(RESOLVED_BUILD_FORMAT_LINE_PATTERN);
+  const candidate = match?.[1]?.trim() ?? "";
+  if (!candidate || !SUPPORTED_RESOLVED_BUILD_FORMATS.has(candidate)) {
+    return null;
+  }
+  return candidate;
+}
+
+/**
+ * Extracts the route-approved memory intent from a wrapped execution input.
+ *
+ * **Why it exists:**
+ * Memory helpers should use front-door route metadata as their access gate instead of re-reading
+ * broad relationship or recall wording downstream.
+ *
+ * **What it talks to:**
+ * - Uses `extractExecutionContextPayload` from this module.
+ *
+ * @param userInput - Wrapped execution input that may include resolved semantic route metadata.
+ * @returns Supported memory intent, or `null` when none is present.
+ */
+export function extractResolvedRouteMemoryIntent(userInput: string): string | null {
+  const normalized = extractExecutionContextPayload(userInput);
+  if (!normalized || !normalized.includes(RESOLVED_SEMANTIC_ROUTE_MARKER)) {
+    return null;
+  }
+  const match = normalized.match(RESOLVED_ROUTE_MEMORY_INTENT_LINE_PATTERN);
+  const candidate = match?.[1]?.trim() ?? "";
+  if (!candidate || !SUPPORTED_RESOLVED_MEMORY_INTENTS.has(candidate)) {
+    return null;
+  }
+  return candidate;
+}
+
+/**
+ * Extracts the route-approved runtime-control intent from a wrapped execution input.
+ *
+ * **Why it exists:**
+ * Planner explicit-action policy should consume typed runtime-control metadata before considering
+ * compatibility natural-language follow-up matching.
+ *
+ * **What it talks to:**
+ * - Uses `extractExecutionContextPayload` from this module.
+ *
+ * @param userInput - Wrapped execution input that may include resolved semantic route metadata.
+ * @returns Supported runtime-control intent, or `null` when none is present.
+ */
+export function extractResolvedRuntimeControlIntent(userInput: string): string | null {
+  const normalized = extractExecutionContextPayload(userInput);
+  if (!normalized || !normalized.includes(RESOLVED_SEMANTIC_ROUTE_MARKER)) {
+    return null;
+  }
+  const match = normalized.match(RESOLVED_ROUTE_RUNTIME_CONTROL_INTENT_LINE_PATTERN);
+  const candidate = match?.[1]?.trim() ?? "";
+  if (!candidate || !SUPPORTED_RESOLVED_RUNTIME_CONTROL_INTENTS.has(candidate)) {
+    return null;
+  }
+  return candidate;
+}
+
+/**
+ * Extracts the route-approved execution mode from a wrapped execution input.
+ *
+ * **Why it exists:**
+ * Planner policy should treat the front-door execution mode as the route contract and avoid
+ * re-inferring build, chat, status, or autonomous behavior from broad wording.
+ *
+ * **What it talks to:**
+ * - Uses `extractExecutionContextPayload` from this module.
+ *
+ * @param userInput - Wrapped execution input that may include resolved semantic route metadata.
+ * @returns Supported execution mode, or `null` when none is present.
+ */
+export function extractResolvedRouteExecutionMode(userInput: string): string | null {
+  const normalized = extractExecutionContextPayload(userInput);
+  if (!normalized || !normalized.includes(RESOLVED_SEMANTIC_ROUTE_MARKER)) {
+    return null;
+  }
+  const match = normalized.match(RESOLVED_ROUTE_EXECUTION_MODE_LINE_PATTERN);
+  const candidate = match?.[1]?.trim() ?? "";
+  if (!candidate || !SUPPORTED_RESOLVED_EXECUTION_MODES.has(candidate)) {
+    return null;
+  }
+  return candidate;
+}
+
+/**
+ * Extracts the route-approved continuation kind from a wrapped execution input.
+ *
+ * @param userInput - Wrapped execution input that may include resolved semantic route metadata.
+ * @returns Supported continuation kind, or `null` when none is present.
+ */
+export function extractResolvedRouteContinuationKind(userInput: string): string | null {
+  const normalized = extractExecutionContextPayload(userInput);
+  if (!normalized || !normalized.includes(RESOLVED_SEMANTIC_ROUTE_MARKER)) {
+    return null;
+  }
+  const match = normalized.match(RESOLVED_ROUTE_CONTINUATION_KIND_LINE_PATTERN);
+  const candidate = match?.[1]?.trim() ?? "";
+  if (!candidate || !SUPPORTED_RESOLVED_CONTINUATION_KINDS.has(candidate)) {
+    return null;
+  }
+  return candidate;
+}
+
+/**
+ * Extracts route-approved explicit constraints from wrapped execution input.
+ *
+ * @param userInput - Wrapped execution input that may include resolved semantic route metadata.
+ * @returns Constraint object, or `null` when route metadata is absent or incomplete.
+ */
+export function extractResolvedRouteConstraints(
+  userInput: string
+): ExtractedResolvedRouteConstraints | null {
+  const normalized = extractExecutionContextPayload(userInput);
+  if (!normalized || !normalized.includes(RESOLVED_SEMANTIC_ROUTE_MARKER)) {
+    return null;
+  }
+  const readBoolean = (
+    key: keyof typeof RESOLVED_ROUTE_BOOLEAN_LINE_PATTERNS
+  ): boolean | null => {
+    const match = normalized.match(RESOLVED_ROUTE_BOOLEAN_LINE_PATTERNS[key]);
+    const value = match?.[1]?.trim().toLowerCase();
+    if (value === "true") {
+      return true;
+    }
+    if (value === "false") {
+      return false;
+    }
+    return null;
+  };
+  const disallowBrowserOpen = readBoolean("disallowBrowserOpen");
+  const disallowServerStart = readBoolean("disallowServerStart");
+  const requiresUserOwnedLocation = readBoolean("requiresUserOwnedLocation");
+  if (
+    disallowBrowserOpen === null ||
+    disallowServerStart === null ||
+    requiresUserOwnedLocation === null
+  ) {
+    return null;
+  }
+  return {
+    disallowBrowserOpen,
+    disallowServerStart,
+    requiresUserOwnedLocation
+  };
 }

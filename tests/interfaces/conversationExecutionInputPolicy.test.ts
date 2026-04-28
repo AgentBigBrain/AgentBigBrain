@@ -16,6 +16,7 @@ import {
   buildSessionSeed,
   createFollowUpRuleContext
 } from "../../src/interfaces/conversationManagerHelpers";
+import type { ConversationSemanticRouteMetadata } from "../../src/interfaces/conversationRuntime/intentModeContracts";
 import { classifyRoutingIntentV1 } from "../../src/interfaces/routingMap";
 import {
   type ConversationSession
@@ -38,6 +39,34 @@ function buildSession(overrides: Partial<ConversationSession> = {}): Conversatio
       receivedAt: "2026-03-03T00:00:00.000Z"
     }),
     ...overrides
+  };
+}
+
+/**
+ * Builds a compact semantic-route fixture for execution-input tests.
+ *
+ * @param overrides - Typed route metadata overrides for the scenario under test.
+ * @returns Complete semantic route metadata.
+ */
+function buildSemanticRouteFixture(
+  overrides: Partial<Omit<ConversationSemanticRouteMetadata, "explicitConstraints">> & {
+    explicitConstraints?: Partial<ConversationSemanticRouteMetadata["explicitConstraints"]>;
+  } = {}
+): ConversationSemanticRouteMetadata {
+  return {
+    routeId: overrides.routeId ?? "chat_answer",
+    confidence: overrides.confidence ?? "high",
+    source: overrides.source ?? "model",
+    buildFormat: overrides.buildFormat ?? null,
+    executionMode: overrides.executionMode ?? "chat",
+    continuationKind: overrides.continuationKind ?? "none",
+    memoryIntent: overrides.memoryIntent ?? "none",
+    runtimeControlIntent: overrides.runtimeControlIntent ?? "none",
+    explicitConstraints: {
+      disallowBrowserOpen: overrides.explicitConstraints?.disallowBrowserOpen ?? false,
+      disallowServerStart: overrides.explicitConstraints?.disallowServerStart ?? false,
+      requiresUserOwnedLocation: overrides.explicitConstraints?.requiresUserOwnedLocation ?? false
+    }
   };
 }
 
@@ -253,6 +282,51 @@ test("buildConversationAwareExecutionInput emits a resolved semantic-route block
     executionInput,
     /Planner-policy must consume it before any lexical fallback\./
   );
+});
+
+test("buildConversationAwareExecutionInput emits expanded semantic-route metadata when provided", async () => {
+  const session = buildSession();
+  const executionInput = await buildConversationAwareExecutionInput(
+    session,
+    "open_browser url=file:///C:/Users/testuser/Desktop/northstar/index.html",
+    10,
+    null,
+    "open_browser url=file:///C:/Users/testuser/Desktop/northstar/index.html",
+    undefined,
+    undefined,
+    null,
+    undefined,
+    null,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    "build_request",
+    null,
+    {
+      routeId: "build_request",
+      confidence: "high",
+      source: "exact_command",
+      buildFormat: null,
+      executionMode: "build",
+      continuationKind: "none",
+      memoryIntent: "none",
+      runtimeControlIntent: "open_browser",
+      explicitConstraints: {
+        disallowBrowserOpen: false,
+        disallowServerStart: false,
+        requiresUserOwnedLocation: true
+      }
+    }
+  );
+
+  assert.match(executionInput, /- source: exact_command/);
+  assert.match(executionInput, /- executionMode: build/);
+  assert.match(executionInput, /- memoryIntent: none/);
+  assert.match(executionInput, /- runtimeControlIntent: open_browser/);
+  assert.match(executionInput, /- requiresUserOwnedLocation: true/);
 });
 
 test("buildConversationAwareExecutionInput emits typed build-format metadata for planner handoff", async () => {
@@ -845,17 +919,50 @@ test("buildConversationAwareExecutionInput suppresses stale workflow continuity 
 
   const userInput =
     'I want you to create a nextjs landing page, with 4 sections called "Detroit City" and there should be a footer and header, a gritty feeling design, and you need to do this end to end and put it on my desktop, then leave it open in the browser so i can review it. This means you have to run it and leave it open.';
+  const semanticRoute = buildSemanticRouteFixture({
+    routeId: "framework_app_build",
+    source: "model",
+    buildFormat: {
+      format: "nextjs",
+      source: "explicit_user_request",
+      confidence: "high"
+    },
+    executionMode: "build",
+    runtimeControlIntent: "open_browser",
+    explicitConstraints: {
+      requiresUserOwnedLocation: true
+    }
+  });
   const executionInput = await buildConversationAwareExecutionInput(
     session,
     userInput,
     10,
-    classifyRoutingIntentV1(userInput)
+    classifyRoutingIntentV1(userInput),
+    userInput,
+    undefined,
+    undefined,
+    null,
+    undefined,
+    null,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    semanticRoute.routeId,
+    semanticRoute.buildFormat,
+    semanticRoute
   );
 
   assert.doesNotMatch(executionInput, /Current working mode from earlier in this chat:/);
   assert.doesNotMatch(executionInput, /Latest durable work handoff in this chat:/);
   assert.doesNotMatch(executionInput, /Current tracked workspace in this chat:/);
-  assert.match(executionInput, /Deterministic routing hint:/);
+  assert.match(executionInput, /Resolved semantic route:/);
+  assert.match(executionInput, /- routeId: framework_app_build/);
+  assert.match(executionInput, /Resolved build format:/);
+  assert.match(executionInput, /- format: nextjs/);
+  assert.doesNotMatch(executionInput, /Deterministic routing hint:/);
   assert.match(executionInput, /Current user request:/);
   assert.match(executionInput, /create a nextjs landing page/i);
 });
@@ -1147,7 +1254,7 @@ test("buildConversationAwareExecutionInput includes interpreted media context wh
   assert.match(executionInput, /Current user request:/);
 });
 
-test("buildConversationAwareExecutionInput includes build-scaffold routing hint for generic app creation prompts", async () => {
+test("buildConversationAwareExecutionInput does not add routing-map build hints for generic app creation prompts", async () => {
   const session = buildSession();
   const classification = classifyRoutingIntentV1(
     "Create a React app on my Desktop and execute now."
@@ -1159,11 +1266,7 @@ test("buildConversationAwareExecutionInput includes build-scaffold routing hint 
     classification
   );
 
-  assert.match(executionInput, /Deterministic routing hint:/);
-  assert.match(executionInput, /Intent surface: build_scaffold\./i);
-  assert.match(executionInput, /Prefer governed finite proof steps first/i);
-  assert.match(executionInput, /Only use managed process plus probe actions/i);
-  assert.match(executionInput, /BUILD_NO_SIDE_EFFECT_EXECUTED/i);
+  assert.equal(executionInput, "Create a React app on my Desktop and execute now.");
 });
 
 test("buildConversationAwareExecutionInput can inject episode-aware contextual recall from the raw user turn while preserving wrapped execution input", async () => {
@@ -1225,6 +1328,12 @@ test("buildConversationAwareExecutionInput can inject episode-aware contextual r
     ]
   };
 
+  const semanticRoute = buildSemanticRouteFixture({
+    routeId: "status_recall",
+    executionMode: "status_or_recall",
+    continuationKind: "contextual_followup",
+    memoryIntent: "contextual_recall"
+  });
   const executionInput = await buildConversationAwareExecutionInput(
     session,
     "Follow-up user response to prior assistant clarification.\nUser follow-up answer: Owen seems better now.",
@@ -1254,9 +1363,24 @@ test("buildConversationAwareExecutionInput can inject episode-aware contextual r
           }
         ]
       }
-    ]
+    ],
+    undefined,
+    null,
+    undefined,
+    null,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    semanticRoute.routeId,
+    semanticRoute.buildFormat,
+    semanticRoute
   );
 
+  assert.match(executionInput, /Resolved semantic route:/);
+  assert.match(executionInput, /- memoryIntent: contextual_recall/);
   assert.match(executionInput, /Contextual recall opportunity \(optional\):/);
   assert.match(executionInput, /older unresolved situation/i);
   assert.match(executionInput, /Relevant situation: Owen fell down/i);
@@ -1264,7 +1388,7 @@ test("buildConversationAwareExecutionInput can inject episode-aware contextual r
   assert.match(executionInput, /User follow-up answer: Owen seems better now\./);
 });
 
-test("buildConversationAwareExecutionInput reuses one continuity read session across relationship and contextual recall blocks", async () => {
+test("buildConversationAwareExecutionInput reuses one continuity read session for route-approved contextual recall", async () => {
   const session = buildSession();
   session.conversationTurns.push({
     role: "user",
@@ -1327,6 +1451,12 @@ test("buildConversationAwareExecutionInput reuses one continuity read session ac
   let continuityEpisodeQueries = 0;
   let continuityFactQueries = 0;
 
+  const semanticRoute = buildSemanticRouteFixture({
+    routeId: "status_recall",
+    executionMode: "status_or_recall",
+    continuationKind: "contextual_followup",
+    memoryIntent: "contextual_recall"
+  });
   const executionInput = await buildConversationAwareExecutionInput(
     session,
     "Follow-up user response to prior assistant clarification.\nUser follow-up answer: Owen seems better now.",
@@ -1391,16 +1521,20 @@ test("buildConversationAwareExecutionInput reuses one continuity read session ac
           ];
         }
       };
-    }
+    },
+    undefined,
+    semanticRoute.routeId,
+    semanticRoute.buildFormat,
+    semanticRoute
   );
 
   assert.equal(openedSessions, 1);
-  assert.equal(continuityEpisodeQueries, 2);
-  assert.equal(continuityFactQueries, 2);
+  assert.ok(continuityEpisodeQueries > 0);
+  assert.ok(continuityFactQueries > 0);
+  assert.match(executionInput, /- memoryIntent: contextual_recall/);
   assert.match(executionInput, /Contextual recall opportunity \(optional\):/);
   assert.match(executionInput, /Relevant situation: Owen fell down/i);
-  assert.match(executionInput, /Current State:/);
-  assert.match(executionInput, /Historical Context:/);
+  assert.doesNotMatch(executionInput, /Relationship continuity context:/);
 });
 
 test("buildConversationAwareExecutionInput includes natural reuse preference guidance when the user asks to use the same approach", async () => {
@@ -2449,6 +2583,51 @@ test("buildConversationAwareExecutionInput grounds the Telegram desktop cleanup 
   assert.match(executionInput, /This run must include a real folder move side effect\./i);
 });
 
+test("buildConversationAwareExecutionInput grounds exact-name Desktop cleanup follow-ups", async () => {
+  const session = buildSession();
+  session.activeWorkspace = {
+    id: "workspace:agentbigbrain-static-html-smoke-1234",
+    label: "Current project workspace",
+    rootPath: "C:\\Users\\testuser\\Desktop\\agentbigbrain-static-html-smoke-1234",
+    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\agentbigbrain-static-html-smoke-1234\\index.html",
+    previewUrl: "file:///C:/Users/testuser/Desktop/agentbigbrain-static-html-smoke-1234/index.html",
+    browserSessionId: "browser-exact-cleanup-1",
+    browserSessionIds: ["browser-exact-cleanup-1"],
+    browserSessionStatus: "closed",
+    browserProcessPid: null,
+    previewProcessLeaseId: null,
+    previewProcessLeaseIds: [],
+    previewProcessCwd: null,
+    lastKnownPreviewProcessPid: null,
+    stillControllable: false,
+    ownershipState: "stale",
+    previewStackState: "detached",
+    lastChangedPaths: [
+      "C:\\Users\\testuser\\Desktop\\agentbigbrain-static-html-smoke-1234\\index.html"
+    ],
+    sourceJobId: "job-cleanup-exact",
+    updatedAt: "2026-03-03T00:00:25.000Z"
+  };
+
+  const executionInput = await buildConversationAwareExecutionInput(
+    session,
+    "One last real-world thing: please go ahead and clean up my desktop now by moving only the folder named agentbigbrain-static-html-smoke-1234 into sample-folder. Do not move any other desktop folders, and you do not need to ask again before doing it.",
+    10
+  );
+
+  assert.match(executionInput, /Natural desktop-organization follow-up:/);
+  assert.match(executionInput, /Treat the named destination as C:\\Users\\testuser\\Desktop\\sample-folder/i);
+  assert.match(
+    executionInput,
+    /Move exactly the Desktop folder named agentbigbrain-static-html-smoke-1234; do not move sibling folders/i
+  );
+  assert.match(
+    executionInput,
+    /current tracked workspace folder agentbigbrain-static-html-smoke-1234 exactly matches the requested folder name/i
+  );
+  assert.match(executionInput, /This run must include a real folder move side effect\./i);
+});
+
 test("buildConversationAwareExecutionInput grounds broad Desktop cleanup for matching files and folders", async () => {
   const session = buildSession();
   session.modeContinuity = {
@@ -2592,6 +2771,18 @@ test("buildConversationAwareExecutionInput does not misread build destinations a
   );
 
   assert.doesNotMatch(executionInput, /Natural desktop-organization follow-up:/);
+});
+
+test("buildConversationAwareExecutionInput does not treat multi-page static site builds as Desktop cleanup", async () => {
+  const executionInput = await buildConversationAwareExecutionInput(
+    buildSession(),
+    "I would like you to build a modern creative agency static site with multiple pages end to end, put it in a folder on my desktop, and open it in the browser when you are done",
+    10
+  );
+
+  assert.doesNotMatch(executionInput, /Natural desktop-organization follow-up:/);
+  assert.doesNotMatch(executionInput, /Match Desktop folders whose names contain the word multiple\./);
+  assert.doesNotMatch(executionInput, /real folder move side effect/i);
 });
 
 test("buildConversationAwareExecutionInput derives workspace root and artifact from a tracked file preview", async () => {

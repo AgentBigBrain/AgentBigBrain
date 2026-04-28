@@ -388,7 +388,7 @@ export function isExecutionStyleInput(input: string): boolean {
   }
 
   const sideEffectTarget =
-    /\b(app|application|project|dashboard|site|website|frontend|backend|api|file|folder|directory|repo|repository|script|command|powershell|terminal|bash|zsh|cmd)\b/;
+    /\b(app|application|project|dashboard|site|website|landing\s+page|homepage|page|frontend|backend|api|file|folder|directory|repo|repository|script|command|powershell|terminal|bash|zsh|cmd)\b/;
   const explicitPath = /([a-z]:\\|\/|\\)/i;
   return sideEffectTarget.test(normalized) || explicitPath.test(normalized);
 }

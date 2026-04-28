@@ -4,7 +4,8 @@
 
 import { normalizeWhitespace } from "../conversationManagerHelpers";
 import type { ConversationIntentMode, ConversationSession } from "../sessionStore";
-import type {
+import {
+  buildConversationSemanticRouteMetadata,
   ConversationIntentSemanticHint,
   ResolvedConversationIntentMode
 } from "./intentModeContracts";
@@ -47,6 +48,26 @@ const CONTINUABLE_HANDOFF_MODES = new Set<ConversationIntentMode>([
   "review"
 ]);
 const RETURN_HANDOFF_INTERPRETATION_MAX_CHARS = 160;
+
+/**
+ * Attaches explicit return-handoff route metadata before downstream prompt assembly consumes this
+ * as workflow context.
+ *
+ * @param resolution - Resume intent selected by handoff continuity policy.
+ * @returns The same intent with typed continuation metadata attached.
+ */
+function withReturnHandoffRouteMetadata(
+  resolution: ResolvedConversationIntentMode
+): ResolvedConversationIntentMode {
+  const semanticRoute = buildConversationSemanticRouteMetadata(resolution, {
+    continuationKind: "return_handoff"
+  });
+  return {
+    ...resolution,
+    semanticRouteId: semanticRoute.routeId,
+    semanticRoute
+  };
+}
 
 /**
  * Returns whether one bounded token sequence appears contiguously inside the current token list.
@@ -237,7 +258,7 @@ export function resolveReturnHandoffContinuationIntent(
       CONTINUABLE_HANDOFF_MODES.has(resolvedIntentMode.mode)
         ? resolvedIntentMode.mode
         : fallbackResumedMode;
-    return {
+    return withReturnHandoffRouteMetadata({
       ...resolvedIntentMode,
       mode: resumedMode,
       matchedRuleId: "intent_mode_return_handoff_resume_semantic",
@@ -245,7 +266,7 @@ export function resolveReturnHandoffContinuationIntent(
         "The intent layer recognized that the user wants to continue from the saved checkpoint instead of starting over.",
       clarification: null,
       semanticHint: "resume_handoff"
-    };
+    });
   }
   if (
     isRecentAssistantAnswerThreadContinuationCandidate(
@@ -262,7 +283,7 @@ export function resolveReturnHandoffContinuationIntent(
     return null;
   }
 
-  return {
+  return withReturnHandoffRouteMetadata({
     mode: fallbackResumedMode,
     confidence: "high",
     matchedRuleId: "intent_mode_return_handoff_resume",
@@ -270,7 +291,7 @@ export function resolveReturnHandoffContinuationIntent(
       "The user asked to continue prior work, and the session has a durable handoff checkpoint that can resume from the last completed or blocked state.",
     clarification: null,
     semanticHint: "resume_handoff"
-  };
+  });
 }
 
 /**
@@ -290,14 +311,14 @@ export function buildReturnHandoffContinuationInterpretationResolution(
   const preferredMode = session.modeContinuity?.activeMode;
   const fallbackResumedMode =
     preferredMode && CONTINUABLE_HANDOFF_MODES.has(preferredMode) ? preferredMode : "build";
-  return {
+  return withReturnHandoffRouteMetadata({
     mode: fallbackResumedMode,
     confidence: confidence === "high" ? "high" : "medium",
     matchedRuleId: "intent_mode_return_handoff_resume_local_interpretation",
     explanation,
     clarification: null,
     semanticHint: "resume_handoff"
-  };
+  });
 }
 
 /**

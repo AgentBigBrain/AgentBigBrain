@@ -66,6 +66,8 @@ test("resolveConversationIntentMode detects natural status and artifact recall r
   assert.equal(resolution.mode, "status_or_recall");
   assert.equal(resolution.confidence, "high");
   assert.equal(resolution.clarification, null);
+  assert.equal(resolution.semanticRoute?.routeId, "status_recall");
+  assert.equal(resolution.semanticRoute?.executionMode, "status_or_recall");
 });
 
 test("resolveConversationIntentMode keeps explicit status wording authoritative during workflow continuity", async () => {
@@ -106,6 +108,8 @@ test("resolveConversationIntentMode keeps status-shaped relationship recall on t
   assert.equal(resolution.confidence, "medium");
   assert.equal(resolution.clarification, null);
   assert.equal(resolution.matchedRuleId, "intent_mode_relationship_recall_chat");
+  assert.equal(resolution.semanticRoute?.routeId, "relationship_recall");
+  assert.equal(resolution.semanticRoute?.memoryIntent, "relationship_recall");
 });
 
 test("resolveConversationIntentMode keeps continuity-shaped relationship recall on the chat path during workflow continuity", async () => {
@@ -245,7 +249,7 @@ test("resolveConversationIntentMode treats guided review and while-away completi
   assert.equal(whileGoneResolution.clarification, null);
 });
 
-test("resolveConversationIntentMode keeps explicit contextual status follow-ups off the work path without the generic local model", async () => {
+test("resolveConversationIntentMode fails closed for explicit contextual status follow-ups without the dedicated interpreter", async () => {
   let localResolverCalled = false;
 
   const resolution = await resolveConversationIntentMode(
@@ -269,12 +273,13 @@ test("resolveConversationIntentMode keeps explicit contextual status follow-ups 
   );
 
   assert.equal(localResolverCalled, false);
-  assert.equal(resolution.mode, "status_or_recall");
-  assert.equal(resolution.matchedRuleId, "intent_mode_contextual_followup_status_lexical");
+  assert.equal(resolution.mode, "chat");
+  assert.equal(resolution.matchedRuleId, "intent_mode_default_chat");
 });
 
-test("resolveConversationIntentMode keeps explicit reminder follow-ups on the chat path without invoking the generic local model", async () => {
+test("resolveConversationIntentMode routes explicit reminder follow-ups through the dedicated interpreter", async () => {
   let localResolverCalled = false;
+  let capturedCandidateTokens: readonly string[] | undefined;
 
   const resolution = await resolveConversationIntentMode(
     "Remind me later about the Sarah draft.",
@@ -289,12 +294,24 @@ test("resolveConversationIntentMode keeps explicit reminder follow-ups on the ch
         explanation: "The generic local model should not reinterpret explicit reminder follow-ups as work.",
         clarification: null
       };
+    },
+    null,
+    async (request) => {
+      capturedCandidateTokens = request.deterministicCandidateTokens;
+      return {
+        source: "local_intent_model",
+        kind: "reminder_followup",
+        candidateTokens: ["sarah", "draft"],
+        confidence: "medium",
+        explanation: "The user wants a reminder about the Sarah draft thread."
+      };
     }
   );
 
   assert.equal(localResolverCalled, false);
+  assert.deepEqual(capturedCandidateTokens, ["sarah", "draft"]);
   assert.equal(resolution.mode, "chat");
-  assert.equal(resolution.matchedRuleId, "intent_mode_contextual_followup_reminder_lexical");
+  assert.equal(resolution.matchedRuleId, "intent_mode_contextual_followup_reminder_followup_model");
 });
 
 test("resolveConversationIntentMode can use the contextual follow-up interpreter for ambiguous later-update wording", async () => {
@@ -1088,6 +1105,7 @@ test("resolveConversationIntentMode keeps natural browser-open follow-ups on the
   assert.equal(resolution.confidence, "high");
   assert.equal(resolution.clarification, null);
   assert.equal(resolution.matchedRuleId, "intent_mode_execute_now");
+  assert.equal(resolution.semanticRoute?.runtimeControlIntent, "open_browser");
 });
 
 test("resolveConversationIntentMode keeps tracked browser-close follow-ups on the build path", async () => {
@@ -1113,11 +1131,22 @@ test("resolveConversationIntentMode keeps tracked browser-close follow-ups on th
   assert.equal(resolution.confidence, "high");
   assert.equal(resolution.clarification, null);
   assert.equal(resolution.matchedRuleId, "intent_mode_execute_now");
+  assert.equal(resolution.semanticRoute?.runtimeControlIntent, "close_browser");
 });
 
 test("resolveConversationIntentMode keeps the Telegram live-smoke cleanup wording on the build path", async () => {
   const resolution = await resolveConversationIntentMode(
     "One last real-world thing: please go ahead and clean up my desktop now by moving every folder there that starts with sample-company into sample-folder. I do mean all of them, so you do not need to ask again before doing it."
+  );
+
+  assert.equal(resolution.mode, "build");
+  assert.equal(resolution.confidence, "high");
+  assert.equal(resolution.clarification, null);
+});
+
+test("resolveConversationIntentMode keeps exact-name Desktop cleanup wording on the build path", async () => {
+  const resolution = await resolveConversationIntentMode(
+    "One last real-world thing: please go ahead and clean up my desktop now by moving only the folder named agentbigbrain-static-html-smoke-1234 into sample-folder. Do not move any other desktop folders, and you do not need to ask again before doing it."
   );
 
   assert.equal(resolution.mode, "build");

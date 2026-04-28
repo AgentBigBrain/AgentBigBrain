@@ -17,6 +17,7 @@ import type {
   QueryConversationContinuityEpisodes,
   QueryConversationContinuityFacts
 } from "./managerContracts";
+import type { ConversationRouteMemoryIntent } from "./intentModeContracts";
 import { resolveContextualReferenceHints } from "../../organs/languageUnderstanding/contextualReferenceResolution";
 import {
   buildRecallSynthesis,
@@ -76,14 +77,16 @@ async function resolveContextualRecallSignals(
   media: ConversationInboundMediaEnvelope | null,
   contextualReferenceInterpretationResolver?: ContextualReferenceInterpretationResolver,
   getEntityGraph?: GetConversationEntityGraph,
-  entityReferenceInterpretationResolver?: EntityReferenceInterpretationResolver
+  entityReferenceInterpretationResolver?: EntityReferenceInterpretationResolver,
+  memoryIntent: ConversationRouteMemoryIntent | null = null
 ): Promise<ContextualRecallSignals> {
   const normalizedInput = normalizeWhitespace(userInput);
   const stack = resolveConversationStack(session);
   const resolvedReference = resolveContextualReferenceHints({
     userInput: normalizedInput,
     recentTurns: session.conversationTurns,
-    threads: stack.threads
+    threads: stack.threads,
+    memoryIntent: memoryIntent ?? "contextual_recall"
   });
   const mediaHints = buildMediaContinuityHints(media);
   const interpretedHints = await resolveInterpretedContextualReferenceHints(
@@ -189,6 +192,10 @@ async function resolveContextualRecallCandidateFromSignals(
  * @param userInput - Current raw user message before execution wrapping.
  * @param queryContinuityEpisodes - Optional bounded episodic-memory query capability.
  * @param media - Optional interpreted media envelope that may provide continuity cues.
+ * @param contextualReferenceInterpretationResolver - Optional bounded contextual-reference interpreter.
+ * @param getEntityGraph - Optional entity graph accessor for entity-aware recall hints.
+ * @param entityReferenceInterpretationResolver - Optional bounded entity-reference interpreter.
+ * @param memoryIntent - Optional route-approved memory intent for this turn.
  * @returns One grounded recall candidate, or `null` when no bounded recall should be offered.
  */
 export async function resolveContextualRecallCandidate(
@@ -198,10 +205,18 @@ export async function resolveContextualRecallCandidate(
   media?: ConversationInboundMediaEnvelope | null,
   contextualReferenceInterpretationResolver?: ContextualReferenceInterpretationResolver,
   getEntityGraph?: GetConversationEntityGraph,
-  entityReferenceInterpretationResolver?: EntityReferenceInterpretationResolver
+  entityReferenceInterpretationResolver?: EntityReferenceInterpretationResolver,
+  memoryIntent: ConversationRouteMemoryIntent | null = null
 ): Promise<ContextualRecallCandidate | null> {
   const normalizedInput = normalizeWhitespace(userInput);
   if (!normalizedInput) {
+    return null;
+  }
+  if (
+    memoryIntent !== null &&
+    memoryIntent !== "contextual_recall" &&
+    memoryIntent !== "relationship_recall"
+  ) {
     return null;
   }
 
@@ -211,7 +226,8 @@ export async function resolveContextualRecallCandidate(
     media ?? null,
     contextualReferenceInterpretationResolver,
     getEntityGraph,
-    entityReferenceInterpretationResolver
+    entityReferenceInterpretationResolver,
+    memoryIntent
   );
   return resolveContextualRecallCandidateFromSignals(
     session,
@@ -228,6 +244,11 @@ export async function resolveContextualRecallCandidate(
  * @param queryContinuityEpisodes - Optional bounded episodic-memory query capability.
  * @param queryContinuityFacts - Optional bounded continuity fact query capability.
  * @param media - Optional interpreted media envelope that may provide continuity cues.
+ * @param contextualReferenceInterpretationResolver - Optional bounded contextual-reference interpreter.
+ * @param getEntityGraph - Optional entity graph accessor for entity-aware recall hints.
+ * @param entityReferenceInterpretationResolver - Optional bounded entity-reference interpreter.
+ * @param requestTelemetry - Optional request-scoped telemetry collector.
+ * @param memoryIntent - Optional route-approved memory intent for this turn.
  * @returns Instruction block appended to execution input, or `null` when no recall applies.
  */
 export async function buildContextualRecallBlock(
@@ -239,8 +260,16 @@ export async function buildContextualRecallBlock(
   contextualReferenceInterpretationResolver?: ContextualReferenceInterpretationResolver,
   getEntityGraph?: GetConversationEntityGraph,
   entityReferenceInterpretationResolver?: EntityReferenceInterpretationResolver,
-  requestTelemetry?: ProfileMemoryRequestTelemetry
+  requestTelemetry?: ProfileMemoryRequestTelemetry,
+  memoryIntent: ConversationRouteMemoryIntent | null = null
 ): Promise<string | null> {
+  if (
+    memoryIntent !== null &&
+    memoryIntent !== "contextual_recall" &&
+    memoryIntent !== "relationship_recall"
+  ) {
+    return null;
+  }
   const normalizedInput = normalizeWhitespace(userInput);
   const signals = await resolveContextualRecallSignals(
     session,
@@ -248,7 +277,8 @@ export async function buildContextualRecallBlock(
     media ?? null,
     contextualReferenceInterpretationResolver,
     getEntityGraph,
-    entityReferenceInterpretationResolver
+    entityReferenceInterpretationResolver,
+    memoryIntent
   );
   const {
     stack,

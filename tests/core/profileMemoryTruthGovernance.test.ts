@@ -1265,6 +1265,36 @@ test("truth governance only allows the live episode candidate sources", () => {
   assert.equal(result.quarantinedEpisodeCandidates.length, 2);
 });
 
+test("truth governance quarantines document-derived episode sources", () => {
+  const result = governProfileMemoryCandidates({
+    factCandidates: [],
+    episodeCandidates: [
+      {
+        title: "Mira moved offices",
+        summary: "A document interpretation says Mira moved offices.",
+        sourceTaskId: "task_truth_governance_document_episode",
+        source: "language_understanding.document.episode_extraction",
+        sourceKind: "assistant_inference",
+        sensitive: false,
+        observedAt: "2026-04-26T12:00:00.000Z",
+        confidence: 0.82,
+        entityRefs: ["contact.mira"],
+        tags: ["document"]
+      }
+    ],
+    episodeResolutionCandidates: []
+  });
+
+  assert.deepEqual(result.episodeDecisions[0]?.decision, {
+    family: "episode.candidate",
+    evidenceClass: "assistant_inference",
+    action: "quarantine",
+    reason: "unsupported_source"
+  });
+  assert.equal(result.allowedEpisodeCandidates.length, 0);
+  assert.equal(result.quarantinedEpisodeCandidates.length, 1);
+});
+
 test("truth governance classifies unsupported structured and projection episode candidates by source prefix", () => {
   const result = governProfileMemoryCandidates({
     factCandidates: [],

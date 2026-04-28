@@ -139,6 +139,71 @@ test("createOllamaLocalIntentModelResolver accepts explicit clarification route 
   });
 });
 
+test("createOllamaLocalIntentModelResolver preserves typed semantic-route metadata when provided", async () => {
+  const resolver = createOllamaLocalIntentModelResolver(
+    {
+      baseUrl: "http://127.0.0.1:11434",
+      model: "phi4-mini:latest",
+      timeoutMs: 1000
+    },
+    {
+      fetchImpl: async () =>
+        new Response(
+          JSON.stringify({
+            response: JSON.stringify({
+              routeId: "static_html_build",
+              confidence: "high",
+              matchedRuleId: "static_html_desktop_build",
+              explanation: "The user asked for a plain HTML artifact.",
+              buildFormat: {
+                format: "static_html",
+                confidence: "high"
+              },
+              executionMode: "build",
+              continuationKind: "none",
+              memoryIntent: "none",
+              runtimeControlIntent: "open_browser",
+              explicitConstraints: {
+                disallowBrowserOpen: false,
+                disallowServerStart: true,
+                requiresUserOwnedLocation: true
+              }
+            })
+          }),
+          {
+            status: 200,
+            headers: {
+              "Content-Type": "application/json"
+            }
+          }
+        )
+    }
+  );
+
+  const signal = await resolver({
+    userInput: "Build a static HTML page on my Desktop and open it.",
+    routingClassification: null,
+    sessionHints: {
+      hasReturnHandoff: false,
+      modeContinuity: null
+    }
+  });
+
+  assert.equal(signal?.semanticRoute?.routeId, "static_html_build");
+  assert.deepEqual(signal?.semanticRoute?.buildFormat, {
+    format: "static_html",
+    source: "semantic_route",
+    confidence: "high"
+  });
+  assert.equal(signal?.semanticRoute?.executionMode, "build");
+  assert.equal(signal?.semanticRoute?.runtimeControlIntent, "open_browser");
+  assert.deepEqual(signal?.semanticRoute?.explicitConstraints, {
+    disallowBrowserOpen: false,
+    disallowServerStart: true,
+    requiresUserOwnedLocation: true
+  });
+});
+
 test("createOllamaLocalIntentModelResolver keeps supported semantic handoff hints from the model", async () => {
   const resolver = createOllamaLocalIntentModelResolver(
     {

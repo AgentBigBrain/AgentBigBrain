@@ -24,10 +24,15 @@
      - `clarify_build_format`
      - `clarify_execution_mode`
    - Route ids should describe execution shape, not just wording cues.
+   - Route results should carry a typed metadata payload, not only a route id. The payload should
+     include execution mode, continuation kind, memory intent, runtime-control intent, explicit
+     constraints, and optional build-format metadata.
    - Build routes should carry explicit build-format metadata, such as static single-file output,
      framework app output, or ambiguous format requiring clarification. That metadata can select
      relevant Markdown instruction skills, but it should not trigger hidden deterministic content
      generation.
+   - Memory routes should carry explicit memory intent. Relationship, contextual, profile-update,
+     and document-derived memory surfaces must not expand from lexical cues alone.
 3. Deterministic preprocessing should remain narrow.
    - Before intent resolution, deterministic logic may still detect:
      - explicit slash commands

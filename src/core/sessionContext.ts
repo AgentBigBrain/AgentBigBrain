@@ -29,6 +29,7 @@ const CONVERSATION_DOMAIN_ROUTING_MODES = [
 ] as const;
 const CONVERSATION_DOMAIN_LANE_SIGNAL_SOURCES = [
   "keyword",
+  "semantic_route",
   "routing_mode",
   "continuity_state",
   "manual",

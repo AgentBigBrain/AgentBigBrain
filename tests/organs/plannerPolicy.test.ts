@@ -89,6 +89,41 @@ function buildTask(userInput: string): TaskRequest {
   };
 }
 
+function wrapResolvedRouteRequest(
+  routeId: string,
+  userRequest: string,
+  options: {
+    buildFormat?: string | null;
+    executionMode?: string;
+    runtimeControlIntent?: string;
+  } = {}
+): string {
+  const lines = [
+    "Resolved semantic route:",
+    `- routeId: ${routeId}`,
+    "- source: model",
+    "- confidence: high",
+    `- executionMode: ${options.executionMode ?? "chat"}`,
+    "- continuationKind: none",
+    "- memoryIntent: none",
+    `- runtimeControlIntent: ${options.runtimeControlIntent ?? "none"}`,
+    "- disallowBrowserOpen: false",
+    "- disallowServerStart: false",
+    "- requiresUserOwnedLocation: false"
+  ];
+  if (options.buildFormat) {
+    lines.push(
+      "",
+      "Resolved build format:",
+      `- format: ${options.buildFormat}`,
+      "- source: semantic_route",
+      "- confidence: high"
+    );
+  }
+  lines.push("", "Current user request:", userRequest);
+  return lines.join("\n");
+}
+
 function buildExecutionEnvironment(): PlannerExecutionEnvironmentContext {
   return {
     platform: "linux",
@@ -871,6 +906,59 @@ test("resolved semantic route drives the framework lane without re-reading frame
   assert.equal(isDeterministicFrameworkBuildLaneRequest(currentUserRequest), true);
 });
 
+test("resolved non-build route blocks planner lexical build and browser fallbacks", () => {
+  const currentUserRequest = wrapResolvedRouteRequest(
+    "chat_answer",
+    "Could you explain whether we should build this as a Next.js app and open the browser later?"
+  );
+
+  assert.equal(isExecutionStyleBuildRequest(currentUserRequest), false);
+  assert.equal(isStaticHtmlExecutionStyleRequest(currentUserRequest), false);
+  assert.equal(requiresFrameworkAppScaffoldAction(currentUserRequest), false);
+  assert.equal(isLiveVerificationBuildRequest(currentUserRequest), false);
+  assert.equal(requiresBrowserVerificationBuildRequest(currentUserRequest), false);
+  assert.equal(requiresPersistentBrowserOpenBuildRequest(currentUserRequest), false);
+});
+
+test("resolved build format blocks framework lexical fallback when route selected static HTML", () => {
+  const currentUserRequest = wrapResolvedRouteRequest(
+    "build_request",
+    "Create the small agency landing page. The old examples mention React and Next.js, but use the chosen format.",
+    {
+      buildFormat: "static_html",
+      executionMode: "build"
+    }
+  );
+
+  assert.equal(isExecutionStyleBuildRequest(currentUserRequest), true);
+  assert.equal(isStaticHtmlExecutionStyleRequest(currentUserRequest), true);
+  assert.equal(requiresFrameworkAppScaffoldAction(currentUserRequest), false);
+  assert.equal(isDeterministicFrameworkBuildLaneRequest(currentUserRequest), false);
+});
+
+test("resolved runtime-control metadata is required before planner browser fallbacks can win", () => {
+  const noBrowserRoute = wrapResolvedRouteRequest(
+    "build_request",
+    "Create the static page and maybe open a browser when someone reviews this later.",
+    {
+      buildFormat: "static_html",
+      executionMode: "build"
+    }
+  );
+  const openBrowserRoute = wrapResolvedRouteRequest(
+    "build_request",
+    "Create the static page and open the browser when it is ready.",
+    {
+      buildFormat: "static_html",
+      executionMode: "build",
+      runtimeControlIntent: "open_browser"
+    }
+  );
+
+  assert.equal(requiresPersistentBrowserOpenBuildRequest(noBrowserRoute), false);
+  assert.equal(requiresPersistentBrowserOpenBuildRequest(openBrowserRoute), true);
+});
+
 test("explicit static html requests that defer browser open stay non-live until a later open turn", () => {
   const currentUserRequest =
     'Create a lightweight single-file HTML landing page in the exact folder "C:\\Users\\testuser\\Desktop\\Sample Service Landing Page" on my Desktop. ' +
@@ -1034,6 +1122,46 @@ test("preparePlannerActions strips redundant static HTML folder-creation shell s
     preparation.actions.map((action) => action.type),
     ["write_file", "start_process"]
   );
+});
+
+test("preparePlannerActions normalizes relative static HTML browser targets to the written index file", () => {
+  const currentUserRequest =
+    "Build a plain static HTML landing page on my Desktop in a folder called sample-company-demo, open that static page in a browser, and leave it there for me.";
+  const workspaceRoot = "C:\\Users\\testuser\\Desktop\\sample-company-demo";
+  const preparation = preparePlannerActions(
+    {
+      plannerNotes: "static HTML file preview",
+      actions: [
+        {
+          type: "write_file",
+          description: "write the static landing page",
+          params: {
+            path: `${workspaceRoot}\\index.html`,
+            content: "<!doctype html><title>Sample Company</title>"
+          }
+        },
+        {
+          type: "open_browser",
+          description: "open the generated local page",
+          params: {
+            url: "file://index.html"
+          }
+        }
+      ]
+    },
+    currentUserRequest,
+    null,
+    currentUserRequest,
+    buildWindowsExecutionEnvironment()
+  );
+
+  const openBrowserAction = preparation.actions.find((action) => action.type === "open_browser");
+  assert.ok(openBrowserAction);
+  assert.equal(
+    openBrowserAction.params.url,
+    "file:///C:/Users/testuser/Desktop/sample-company-demo/index.html"
+  );
+  assert.equal(openBrowserAction.params.rootPath, workspaceRoot);
 });
 
 test("natural start-locally and open-in-browser phrasing still classifies as a live persistent framework request", () => {
@@ -1833,6 +1961,35 @@ test("buildPlannerSystemPrompt adds Windows PowerShell organization guidance for
   assert.match(prompt, /Do not emit cmd\.exe batch syntax such as if not exist, %D, %~fD, or chained && loops/i);
   assert.match(prompt, /do not write invalid fragments like "\$name:" inside double-quoted strings/i);
   assert.match(prompt, /Use \$\{name\}, \$\(\$name\), or concatenation instead/i);
+  assert.match(prompt, /assign list results with array coercion such as \$rootRemaining = @\(Get-ChildItem/i);
+  assert.match(prompt, /emit markers with \(\$rootRemaining -join ','\)/i);
+  assert.match(prompt, /Empty lists must still print empty markers such as ROOT_REMAINING_MATCHES=/i);
+  assert.match(prompt, /Do not pass raw or nullable pipeline output to \[string\]::Join/i);
+});
+
+test("buildPlannerSystemPrompt adds null-safe PowerShell proof guidance for workspace recovery retries", () => {
+  const prompt = buildPlannerSystemPrompt(
+    buildPromptInput(
+      buildWorkspaceRecoveryPostShutdownRetryInput(
+        'Please clean up my desktop by moving only the folder named sample-company into "sample-folder".'
+      ),
+      {
+        platform: "win32",
+        shellKind: "powershell",
+        invocationMode: "inline_command",
+        commandMaxChars: 4096,
+        desktopPath: "C:\\Users\\testuser\\OneDrive\\Desktop",
+        documentsPath: "C:\\Users\\testuser\\OneDrive\\Documents",
+        downloadsPath: "C:\\Users\\testuser\\OneDrive\\Downloads"
+      }
+    )
+  );
+
+  assert.match(prompt, /post-shutdown workspace-recovery retry step/i);
+  assert.match(prompt, /assign destination\/root proof lists with @\(\.\.\.\)/i);
+  assert.match(prompt, /join them with -join/i);
+  assert.match(prompt, /print empty markers when a list is empty/i);
+  assert.match(prompt, /instead of calling \[string\]::Join on nullable pipeline output/i);
 });
 
 test("evaluatePlannerActionValidation repairs inspection-only organization plans into concrete execution", () => {
@@ -1958,6 +2115,59 @@ test("evaluatePlannerActionValidation fails closed when the move selector also m
   assert.throws(
     () => assertPlannerActionValidation(validation, null),
     /destination folder as part of the same move set/i
+  );
+});
+
+test("evaluatePlannerActionValidation detects destination self-match for exact named folder cleanup wording", () => {
+  const currentUserRequest =
+    "Move only the folder named sample-project-a into sample-folder on my desktop.";
+  const validation = evaluatePlannerActionValidation(
+    currentUserRequest,
+    null,
+    [
+      {
+        id: "action_move_exact_named_folder_with_broad_selector",
+        type: "shell_command",
+        description: "Move the requested folder into the destination.",
+        params: {
+          command: [
+            "$destination = 'C:\\Users\\testuser\\OneDrive\\Desktop\\sample-folder'",
+            "if (-not (Test-Path -LiteralPath $destination)) {",
+            "  New-Item -ItemType Directory -Path $destination -Force | Out-Null",
+            "}",
+            "Get-ChildItem -Path 'C:\\Users\\testuser\\OneDrive\\Desktop' -Directory |",
+            "  Where-Object { $_.Name -like 'sample*' } |",
+            "  ForEach-Object {",
+            "    Move-Item -LiteralPath $_.FullName -Destination $destination -Force -ErrorAction Stop",
+            "  }",
+            "Write-Output 'DEST_CONTENTS:'",
+            "Get-ChildItem -LiteralPath $destination -Directory | Select-Object -ExpandProperty Name",
+            "Write-Output 'ROOT_REMAINING_MATCHES:'",
+            "Get-ChildItem -Path 'C:\\Users\\testuser\\OneDrive\\Desktop' -Directory |",
+            "  Where-Object { $_.Name -like 'sample*' } |",
+            "  Select-Object -ExpandProperty Name"
+          ].join("\n"),
+          requestedShellKind: "powershell"
+        },
+        estimatedCostUsd: 0.21
+      }
+    ],
+    currentUserRequest,
+    {
+      platform: "win32",
+      shellKind: "powershell",
+      invocationMode: "inline_command",
+      commandMaxChars: 4096,
+      desktopPath: "C:\\Users\\testuser\\OneDrive\\Desktop",
+      documentsPath: "C:\\Users\\testuser\\OneDrive\\Documents",
+      downloadsPath: "C:\\Users\\testuser\\OneDrive\\Downloads"
+    }
+  );
+
+  assert.equal(validation.needsRepair, true);
+  assert.equal(
+    validation.buildPlanAssessment.issueCode,
+    "LOCAL_ORGANIZATION_DESTINATION_SELF_MATCH_DISALLOWED"
   );
 });
 
@@ -2213,6 +2423,60 @@ test("evaluatePlannerActionValidation fails closed when a Windows organization p
   assert.throws(
     () => assertPlannerActionValidation(validation, null),
     /invalid PowerShell variable interpolation/i
+  );
+});
+
+test("evaluatePlannerActionValidation fails closed when Windows organization proof uses nullable static string join", () => {
+  const currentUserRequest =
+    "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.";
+  const validation = evaluatePlannerActionValidation(
+    currentUserRequest,
+    null,
+    [
+      {
+        id: "action_move_with_nullable_join_proof",
+        type: "shell_command",
+        description: "Move matching folders and prove the result with nullable joins.",
+        params: {
+          command: [
+            "$destination = 'C:\\Users\\testuser\\OneDrive\\Desktop\\sample-web-projects'",
+            "$root = 'C:\\Users\\testuser\\OneDrive\\Desktop'",
+            "$moved = Get-ChildItem -Path $root -Directory -Filter 'sample-company*'",
+            "$moved | Move-Item -Destination $destination -Force",
+            "$destContents = Get-ChildItem -Path $destination -Directory | Select-Object -ExpandProperty Name",
+            "$rootRemaining = Get-ChildItem -Path $root -Directory -Filter 'sample-company*' | Select-Object -ExpandProperty Name",
+            "Write-Output ('MOVED_TO_DEST=' + [string]::Join(',', $moved.Name))",
+            "Write-Output ('DEST_CONTENTS=' + [string]::Join(',', $destContents))",
+            "Write-Output ('ROOT_REMAINING_MATCHES=' + [string]::Join(',', $rootRemaining))"
+          ].join("; "),
+          cwd: "C:\\Users\\testuser\\OneDrive\\Desktop",
+          workdir: "C:\\Users\\testuser\\OneDrive\\Desktop",
+          requestedShellKind: "powershell"
+        },
+        estimatedCostUsd: 0.25
+      }
+    ],
+    currentUserRequest,
+    {
+      platform: "win32",
+      shellKind: "powershell",
+      invocationMode: "inline_command",
+      commandMaxChars: 4096,
+      desktopPath: "C:\\Users\\testuser\\OneDrive\\Desktop",
+      documentsPath: "C:\\Users\\testuser\\OneDrive\\Documents",
+      downloadsPath: "C:\\Users\\testuser\\OneDrive\\Downloads"
+    }
+  );
+
+  assert.equal(validation.needsRepair, true);
+  assert.equal(validation.invalidExecutionStyleBuildPlan, true);
+  assert.equal(
+    validation.buildPlanAssessment.issueCode,
+    "WINDOWS_ORGANIZATION_NULLABLE_PROOF_JOIN_DISALLOWED"
+  );
+  assert.throws(
+    () => assertPlannerActionValidation(validation, null),
+    /\[string\]::Join in a Windows PowerShell organization proof/i
   );
 });
 
@@ -3032,6 +3296,36 @@ test("buildPlannerRepairSystemPrompt explains bounded proof repairs for organiza
   assert.match(prompt, /retried the folder move without bounded proof/i);
   assert.match(prompt, /destination and original root/i);
   assert.match(prompt, /MOVED_TO_DEST \/ REMAINING_AT_DESKTOP/i);
+  assert.match(prompt, /coerce proof lists with @\(\.\.\.\)/i);
+  assert.match(prompt, /emit empty markers instead of calling \[string\]::Join on nullable pipeline output/i);
+});
+
+test("buildPlannerRepairSystemPrompt explains Windows nullable proof join repairs", () => {
+  const prompt = buildPlannerRepairSystemPrompt({
+    ...buildPromptInput(
+      "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
+      {
+        platform: "win32",
+        shellKind: "powershell",
+        invocationMode: "inline_command",
+        commandMaxChars: 4096,
+        desktopPath: "C:\\Users\\testuser\\OneDrive\\Desktop",
+        documentsPath: "C:\\Users\\testuser\\OneDrive\\Documents",
+        downloadsPath: "C:\\Users\\testuser\\OneDrive\\Downloads"
+      }
+    ),
+    previousOutput: {
+      plannerNotes: "powershell move plan with nullable proof joins",
+      actions: []
+    },
+    repairReason:
+      "invalid_execution_style_build_plan:WINDOWS_ORGANIZATION_NULLABLE_PROOF_JOIN_DISALLOWED"
+  });
+
+  assert.match(prompt, /used \[string\]::Join in a Windows PowerShell organization proof/i);
+  assert.match(prompt, /assigning every destination\/root proof list with array coercion/i);
+  assert.match(prompt, /emit markers with \(\$items -join ','\)/i);
+  assert.match(prompt, /ROOT_REMAINING_MATCHES=/i);
 });
 
 test("buildPlannerRepairSystemPrompt explains Windows organization interpolation repairs", () => {
@@ -3981,6 +4275,24 @@ test("isDesktopFolderRuntimeProcessSweepRequest recognizes bounded Desktop folde
     ),
     false
   );
+});
+
+test("desktop runtime process sweep fallback requires route-approved runtime control when metadata is present", () => {
+  const chatRoute = wrapResolvedRouteRequest(
+    "chat_answer",
+    "Look at all the folders on the desktop that start with sample and stop the servers running in those folders."
+  );
+  const stopRuntimeRoute = wrapResolvedRouteRequest(
+    "build_request",
+    "Look at all the folders on the desktop that start with sample and stop the servers running in those folders.",
+    {
+      executionMode: "build",
+      runtimeControlIntent: "stop_runtime"
+    }
+  );
+
+  assert.equal(isDesktopFolderRuntimeProcessSweepRequest(chatRoute), false);
+  assert.equal(isDesktopFolderRuntimeProcessSweepRequest(stopRuntimeRoute), true);
 });
 
 test("buildDeterministicDesktopRuntimeProcessSweepFallbackActions emits one bounded native sweep action for Desktop sample-folder shutdown requests", () => {

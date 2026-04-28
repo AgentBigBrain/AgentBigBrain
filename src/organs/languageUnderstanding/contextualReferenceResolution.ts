@@ -46,6 +46,7 @@ export interface ContextualReferenceResolutionRequest {
   threads: readonly ContextualReferenceThread[];
   profileId?: LanguageProfileId;
   maxHints?: number;
+  memoryIntent?: "none" | "relationship_recall" | "profile_update" | "contextual_recall" | "document_derived_recall";
 }
 
 export interface ContextualReferenceResolution {
@@ -75,9 +76,22 @@ export function resolveContextualReferenceHints(
   request: ContextualReferenceResolutionRequest
 ): ContextualReferenceResolution {
   const directTerms = extractContextualRecallTerms(request.userInput, request.profileId);
-  const hasRecallCue = DIRECT_RECALL_CUE_PATTERNS.some((pattern) => pattern.test(request.userInput))
-    || VAGUE_CALLBACK_PATTERNS.some((pattern) => pattern.test(request.userInput))
-    || CONTEXTUAL_RESUME_CUE_PATTERNS.some((pattern) => pattern.test(request.userInput));
+  const routeAllowsRecallExpansion =
+    request.memoryIntent === "relationship_recall" ||
+    request.memoryIntent === "contextual_recall";
+  const hasRecallCue = routeAllowsRecallExpansion &&
+    (DIRECT_RECALL_CUE_PATTERNS.some((pattern) => pattern.test(request.userInput))
+      || VAGUE_CALLBACK_PATTERNS.some((pattern) => pattern.test(request.userInput))
+      || CONTEXTUAL_RESUME_CUE_PATTERNS.some((pattern) => pattern.test(request.userInput)));
+  if (!routeAllowsRecallExpansion) {
+    return {
+      directTerms,
+      resolvedHints: directTerms.slice(0, request.maxHints ?? MAX_RESOLVED_HINTS),
+      evidence: directTerms.length > 0 ? ["direct_terms"] : [],
+      usedFallbackContext: false,
+      hasRecallCue: false
+    };
+  }
   const shouldExpandContext =
     directTerms.length < 2 || hasRecallCue;
   if (!shouldExpandContext) {

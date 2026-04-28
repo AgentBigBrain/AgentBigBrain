@@ -12,7 +12,10 @@ import {
   buildRecentAssistantTurnContext,
   isRecentAssistantAnswerThreadContinuationCandidate
 } from "./recentAssistantTurnContext";
-import type { ResolvedConversationIntentMode } from "./intentModeContracts";
+import {
+  buildConversationSemanticRouteMetadata,
+  type ResolvedConversationIntentMode
+} from "./intentModeContracts";
 import type { ConversationIntentMode, ConversationSession } from "../sessionStore";
 
 const CONTINUE_WORK_PATTERNS: readonly RegExp[] = [
@@ -63,12 +66,20 @@ function buildContinuityResolution(
   explanation: string,
   confidence: ResolvedConversationIntentMode["confidence"] = "medium"
 ): ResolvedConversationIntentMode {
-  return {
+  const resolution: ResolvedConversationIntentMode = {
     mode: session.modeContinuity?.activeMode ?? "chat",
     confidence,
     matchedRuleId,
     explanation,
     clarification: null
+  };
+  const semanticRoute = buildConversationSemanticRouteMetadata(resolution, {
+    continuationKind: "workflow_resume"
+  });
+  return {
+    ...resolution,
+    semanticRouteId: semanticRoute.routeId,
+    semanticRoute
   };
 }
 

@@ -10,6 +10,7 @@ import {
 } from "./executionStyleContracts";
 import {
   hasInvalidWindowsOrganizationPowerShellInterpolation,
+  hasUnsafeWindowsOrganizationPowerShellProofJoin,
   hasOrganizationMoveAction,
   hasUnsupportedWorkspaceRecoveryInspectionShellAction,
   hasUnsupportedOpenBrowserTarget,
@@ -130,6 +131,19 @@ export function assessExecutionStyleBuildPlan(
     return {
       valid: false,
       issueCode: "WINDOWS_ORGANIZATION_INVALID_POWERSHELL_INTERPOLATION"
+    };
+  }
+
+  if (
+    hasUnsafeWindowsOrganizationPowerShellProofJoin(
+      currentUserRequest,
+      actions,
+      executionEnvironment
+    )
+  ) {
+    return {
+      valid: false,
+      issueCode: "WINDOWS_ORGANIZATION_NULLABLE_PROOF_JOIN_DISALLOWED"
     };
   }
 

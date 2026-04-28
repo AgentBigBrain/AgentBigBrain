@@ -216,16 +216,12 @@ export function resolveExecutionIntentClarification(
     };
   }
 
-  if (
-    routingClassification?.category === "BUILD_SCAFFOLD"
-    || hasAmbiguousBuildShape(tokens)
-  ) {
+  void routingClassification;
+  if (hasAmbiguousBuildShape(tokens)) {
     return {
       question: "Do you want me to plan it first or build it now?",
       mode: "plan_or_build",
-      matchedRuleId: routingClassification?.category === "BUILD_SCAFFOLD"
-        ? "execution_intent_build_scaffold"
-        : "execution_intent_build_generic"
+      matchedRuleId: "execution_intent_build_generic"
     };
   }
 

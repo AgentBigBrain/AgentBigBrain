@@ -10,6 +10,7 @@ import {
   isManagedProcessLiveRunAction,
   isRuntimeOwnershipInspectionAction
 } from "../../src/governors/defaultCouncil/liveRunExemptions";
+import { isExplicitUserOwnedBuildWorkspaceAction } from "../../src/governors/defaultCouncil/userOwnedBuildExemptions";
 
 test("isManagedProcessLiveRunAction accepts bounded localhost server starts", () => {
   assert.equal(
@@ -149,6 +150,85 @@ test("isRuntimeOwnershipInspectionAction rejects unrelated inspections outside r
         }
       },
       "summarize the design ideas we discussed"
+    ),
+    false
+  );
+});
+
+test("isExplicitUserOwnedBuildWorkspaceAction accepts exact relative Desktop organization moves", () => {
+  const taskUserInput = [
+    "You are in an ongoing conversation with the same user.",
+    "",
+    "Natural desktop-organization follow-up:",
+    "- The user is asking for a real Desktop folder move, not just an inspection or summary.",
+    "- Strongest remembered Desktop root in this chat: C:\\Users\\testuser\\OneDrive\\Desktop",
+    "- Treat the named destination as C:\\Users\\testuser\\OneDrive\\Desktop\\sample-folder unless fresher path evidence in this chat proves a different location.",
+    "- Move exactly the Desktop folder named agentbigbrain-static-html-smoke-123; do not move sibling folders that merely share a prefix or contain similar words.",
+    "",
+    "Current user request:",
+    "Please clean up my desktop now by moving only the folder named agentbigbrain-static-html-smoke-123 into sample-folder. Do not move any other desktop folders."
+  ].join("\n");
+
+  assert.equal(
+    isExplicitUserOwnedBuildWorkspaceAction(
+      {
+        id: "proposal_7",
+        taskId: "task_7",
+        requestedBy: "planner",
+        rationale: "Move the exact requested Desktop folder into the exact requested destination.",
+        touchesImmutable: false,
+        action: {
+          id: "action_7",
+          type: "shell_command",
+          description: "Move the exact requested Desktop folder and print bounded proof",
+          estimatedCostUsd: 0.04,
+          params: {
+            cwd: "C:\\Users\\testuser\\OneDrive\\Desktop",
+            command: [
+              "$source = 'agentbigbrain-static-html-smoke-123'",
+              "$destination = 'sample-folder'",
+              "if (-not (Test-Path -LiteralPath $destination)) { New-Item -ItemType Directory -Path $destination -Force | Out-Null }",
+              "Move-Item -LiteralPath $source -Destination $destination -Force -ErrorAction Stop",
+              "Write-Output \"MOVED_TO_DEST=$destination/$source\""
+            ].join("; ")
+          }
+        }
+      },
+      taskUserInput
+    ),
+    true
+  );
+});
+
+test("isExplicitUserOwnedBuildWorkspaceAction rejects relative organization moves without exact names", () => {
+  const taskUserInput = [
+    "Natural desktop-organization follow-up:",
+    "- Strongest remembered Desktop root in this chat: C:\\Users\\testuser\\OneDrive\\Desktop",
+    "",
+    "Current user request:",
+    "Please clean up my desktop."
+  ].join("\n");
+
+  assert.equal(
+    isExplicitUserOwnedBuildWorkspaceAction(
+      {
+        id: "proposal_8",
+        taskId: "task_8",
+        requestedBy: "planner",
+        rationale: "Move some Desktop folders.",
+        touchesImmutable: false,
+        action: {
+          id: "action_8",
+          type: "shell_command",
+          description: "Move Desktop folders",
+          estimatedCostUsd: 0.04,
+          params: {
+            cwd: "C:\\Users\\testuser\\OneDrive\\Desktop",
+            command: "Move-Item -LiteralPath * -Destination sample-folder -Force"
+          }
+        }
+      },
+      taskUserInput
     ),
     false
   );

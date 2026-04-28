@@ -21,6 +21,7 @@ belongs here.
 - `frameworkPathSupport.ts`
 - `buildExecutionRecoveryPolicy.ts`
 - `liveVerificationPolicy.ts`
+- `liveVerificationRequestPatterns.ts`
 - `liveVerificationSemanticRouteSupport.ts`
 - `liveVerificationStaticHtmlSupport.ts`
 - `userOwnedPathHints.ts`
@@ -90,6 +91,9 @@ belongs here.
   prompt assembly and repair notes
 - Markdown instruction skill guidance injected into planner prompt assembly as advisory procedure,
   not authorization or executable skill selection
+- typed semantic-route metadata consumed ahead of compatibility lexical fallbacks so planner policy
+  can honor resolved execution mode, build format, memory intent, runtime-control intent, and
+  explicit browser/server constraints without re-inferring broad intent from raw prose
 - first-principles trigger and rubric helpers extracted from the planner entrypoint so high-risk
   planning policy stays deterministic without regrowing the main planner module
 - explicit-action repair decisions
@@ -134,6 +138,9 @@ belongs here.
   governed actions. Deterministic policy may validate package safety and enforce exact ownership
   checks, but must not synthesize or rewrite framework scaffold, live-run, browser-open,
   page-template, or generated-source fallback actions.
+- Resolved semantic-route metadata must be consumed before compatibility lexical fallbacks. Broad
+  natural-language build, browser, runtime, review, or recall wording should not become a second
+  planner-owned semantic router.
 - Prompt assembly rules should stay centralized here rather than drifting back into
   `src/organs/planner.ts`.
 

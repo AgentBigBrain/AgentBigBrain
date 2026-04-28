@@ -16,7 +16,15 @@
  */
 
 import { resolveOllamaModel } from "./ollama/modelResolution";
+import { isKnownModelSchemaName } from "./schema/contracts";
+import { buildJsonSchemaForKnownModelSchema } from "./schema/jsonSchemas";
+import {
+    normalizeStructuredModelOutput,
+    validateStructuredModelOutput
+} from "./schemaValidation";
 import { ModelClient, ModelUsageSnapshot, StructuredCompletionRequest } from "./types";
+
+const STRUCTURED_JSON_ATTEMPT_COUNT = 2;
 
 interface OllamaModelClientOptions {
     baseUrl: string;
@@ -29,6 +37,76 @@ interface OllamaChatResponse {
     };
     eval_count?: number;
     prompt_eval_count?: number;
+}
+
+/**
+ * Reduces provider parse/validation failures to a prompt-safe diagnostic string.
+ *
+ * @param error - Error thrown while parsing or validating structured output.
+ * @returns Short diagnostic for a bounded retry prompt.
+ */
+function formatStructuredJsonFailure(error: unknown): string {
+    if (error instanceof Error && error.message.trim().length > 0) {
+        return error.message.trim().slice(0, 240);
+    }
+    return "Structured JSON output was invalid.";
+}
+
+/**
+ * Builds a retry prompt that asks the local model for fresh structured JSON.
+ *
+ * @param request - Original structured completion request.
+ * @param previousError - Previous parse or schema validation failure.
+ * @returns Prompt pair for the retry attempt.
+ */
+function buildStructuredJsonRetryPrompt(
+    request: StructuredCompletionRequest,
+    previousError: unknown
+): { systemPrompt: string; userPrompt: string } {
+    return {
+        systemPrompt:
+            `${request.systemPrompt}\n\n` +
+            "The previous response was rejected before execution because it was not valid " +
+            `${request.schemaName} JSON. Return exactly one JSON object. Do not include Markdown, ` +
+            "comments, prose before the object, prose after the object, or trailing commas.",
+        userPrompt: JSON.stringify({
+            retryInstruction:
+                "Produce a fresh valid JSON object for the original request and schema.",
+            schemaName: request.schemaName,
+            previousError: formatStructuredJsonFailure(previousError),
+            originalUserPrompt: request.userPrompt
+        })
+    };
+}
+
+/**
+ * Parses and validates one provider JSON payload at the model boundary.
+ *
+ * @param request - Original structured request.
+ * @param content - Provider response content.
+ * @returns Normalized structured payload.
+ */
+function parseStructuredJsonContent<T>(
+    request: StructuredCompletionRequest,
+    content: string
+): T {
+    const parsed = JSON.parse(content) as unknown;
+    const normalized = normalizeStructuredModelOutput(request.schemaName, parsed);
+    validateStructuredModelOutput(request.schemaName, normalized);
+    return normalized as T;
+}
+
+/**
+ * Resolves the strongest JSON format contract Ollama can accept for a structured request.
+ *
+ * @param schemaName - Requested model-output schema name.
+ * @returns JSON schema object for known schemas, or JSON mode for compatibility.
+ */
+function resolveOllamaStructuredFormat(schemaName: string): unknown {
+    if (isKnownModelSchemaName(schemaName)) {
+        return buildJsonSchemaForKnownModelSchema(schemaName);
+    }
+    return "json";
 }
 
 /**
@@ -74,20 +152,30 @@ export class OllamaModelClient implements ModelClient {
      */
     async completeJson<T>(request: StructuredCompletionRequest): Promise<T> {
         const resolvedModel = resolveOllamaModel(request.model);
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), this.options.requestTimeoutMs);
+        let lastStructuredJsonError: unknown = null;
 
-        try {
+        for (let attemptIndex = 0; attemptIndex < STRUCTURED_JSON_ATTEMPT_COUNT; attemptIndex += 1) {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), this.options.requestTimeoutMs);
+            const prompt =
+                attemptIndex === 0
+                    ? {
+                        systemPrompt: request.systemPrompt,
+                        userPrompt: request.userPrompt
+                    }
+                    : buildStructuredJsonRetryPrompt(request, lastStructuredJsonError);
+
+            try {
             const response = await fetch(`${this.options.baseUrl}/api/chat`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     model: resolvedModel.providerModel,
                     messages: [
-                        { role: "system", content: request.systemPrompt },
-                        { role: "user", content: request.userPrompt }
+                        { role: "system", content: prompt.systemPrompt },
+                        { role: "user", content: prompt.userPrompt }
                     ],
-                    format: "json",
+                        format: resolveOllamaStructuredFormat(request.schemaName),
                     stream: false,
                     options: {
                         temperature: request.temperature ?? 0.7
@@ -119,10 +207,27 @@ export class OllamaModelClient implements ModelClient {
                 throw new Error("Ollama returned empty or missing message content.");
             }
 
-            return JSON.parse(content) as T;
-        } finally {
-            clearTimeout(timeoutId);
+                try {
+                    return parseStructuredJsonContent<T>(request, content);
+                } catch (error) {
+                    lastStructuredJsonError = error;
+                    if (attemptIndex < STRUCTURED_JSON_ATTEMPT_COUNT - 1) {
+                        continue;
+                    }
+                    throw new Error(
+                        `Ollama returned invalid structured JSON for ${request.schemaName} after ` +
+                        `${STRUCTURED_JSON_ATTEMPT_COUNT} attempt(s): ${formatStructuredJsonFailure(error)}`
+                    );
+                }
+            } finally {
+                clearTimeout(timeoutId);
+            }
         }
+
+        throw new Error(
+            `Ollama returned invalid structured JSON for ${request.schemaName}: ` +
+            formatStructuredJsonFailure(lastStructuredJsonError)
+        );
     }
 
     /**

@@ -20,6 +20,8 @@ const DESTINATION_FOLDER_CALLED_PATTERN =
   /\bfolder called\s+["']?([A-Za-z0-9][A-Za-z0-9._ -]*?)(?=["']?(?:\s+(?:on|in|under)\b|[.?!,]|$))/i;
 const DESTINATION_IMPLICIT_NAME_PATTERN =
   /\b(?:go|belongs?)\b[\s\S]{0,40}\b(?:in|into|under)\s+["']?([A-Za-z0-9][A-Za-z0-9._-]*)["']?(?=\s+(?:on|in|under)\b|[.?!,]|$)/i;
+const DESTINATION_MOVE_INTO_NAME_PATTERN =
+  /\b(?:move|moving|put|placing)\b[\s\S]{0,160}\b(?:in|into|under|to)\s+["']?([A-Za-z0-9][A-Za-z0-9._-]*)["']?(?=\s+(?:on|in|under)\b|[.?!,]|$)/i;
 const POWERSHELL_NAME_LIKE_PATTERN = /\$_\.Name\s*-like\s*['"]([^'"]+)['"]/gi;
 const POWERSHELL_NAME_MATCH_PATTERN =
   /\$_\.Name\s*-(?:c|i)?match\s*['"]([^'"]+)['"]/gi;
@@ -72,6 +74,10 @@ function extractRequestedDestinationFolderName(
   const implicitMatch = activeRequest.match(DESTINATION_IMPLICIT_NAME_PATTERN);
   if (implicitMatch?.[1]) {
     return normalizeDestinationFolderName(implicitMatch[1]);
+  }
+  const moveIntoMatch = activeRequest.match(DESTINATION_MOVE_INTO_NAME_PATTERN);
+  if (moveIntoMatch?.[1]) {
+    return normalizeDestinationFolderName(moveIntoMatch[1]);
   }
   return null;
 }

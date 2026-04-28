@@ -37,6 +37,8 @@ import type {
   RunDirectConversationTurn
 } from "./managerContracts";
 import type {
+  ConversationSemanticRouteMetadata,
+  ConversationSemanticRouteId,
   ConversationIntentSemanticHint,
   ResolvedConversationIntentMode
 } from "./intentModeContracts";
@@ -77,6 +79,8 @@ export interface DirectCasualConversationReplyInput {
   media: ConversationInboundMediaEnvelope | null;
   managedProcessSnapshots?: readonly ManagedProcessSnapshot[];
   semanticHint?: ConversationIntentSemanticHint | null;
+  semanticRouteId?: ConversationSemanticRouteId | null;
+  semanticRoute?: ConversationSemanticRouteMetadata | null;
   browserSessionSnapshots?: readonly BrowserSessionSnapshot[];
   runDirectConversationTurn: RunDirectConversationTurn;
 }
@@ -274,6 +278,23 @@ export async function buildDirectCasualConversationReply(
     input.receivedAt,
     input.rememberConversationProfileInput
   );
+  const profileUpdateSignal =
+    hasConversationalProfileUpdateSignal(input.input) &&
+    !/[?]/.test(input.input);
+  const baseSemanticRoute = input.semanticRoute ?? null;
+  const semanticRouteForMemory =
+    profileUpdateSignal && baseSemanticRoute
+      ? {
+        ...baseSemanticRoute,
+        memoryIntent: "profile_update" as const,
+        continuationKind: "relationship_memory" as const
+      }
+      : baseSemanticRoute?.memoryIntent === "none"
+        ? null
+        : baseSemanticRoute;
+  const semanticRouteIdForMemory =
+    semanticRouteForMemory?.routeId ??
+    (baseSemanticRoute ? null : input.semanticRouteId ?? null);
   const conversationAwareInput = await buildConversationAwareExecutionInput(
     input.session,
     input.input,
@@ -290,7 +311,11 @@ export async function buildDirectCasualConversationReply(
     input.getEntityGraph,
     input.entityReferenceInterpretationResolver,
     input.openContinuityReadSession,
-    requestTelemetry
+    requestTelemetry,
+    semanticRouteIdForMemory,
+    null,
+    semanticRouteForMemory,
+    profileUpdateSignal
   );
   await recordDirectPromptMemoryAuditIfNeeded(input, requestTelemetry);
   const directConversationInput = buildDirectConversationReplyInput(

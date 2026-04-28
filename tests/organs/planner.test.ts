@@ -1929,8 +1929,8 @@ test("planner forwards deterministic stage 6.85 playbook selection context into 
   assert.ok(plannerRequest);
   assert.match(plannerRequest.systemPrompt, /deterministic stage 6\.85 playbook match is available/i);
   assert.match(plannerRequest.systemPrompt, /deterministic high-risk action guardrail/i);
-  assert.doesNotMatch(plannerRequest.systemPrompt, /do not emit shell_command/i);
-  assert.match(plannerRequest.systemPrompt, /do not emit start_process/i);
+  assert.match(plannerRequest.systemPrompt, /do not emit shell_command/i);
+  assert.match(plannerRequest.systemPrompt, /do not emit .*start_process/i);
   assert.match(plannerRequest.systemPrompt, /do not emit .*verify_browser/i);
   assert.match(plannerRequest.systemPrompt, /do not emit .*self_modify/i);
 

@@ -19,9 +19,11 @@ import { resolveExecutionIntentClarification } from "./executionIntentClarificat
 import { extractExecutionPreferences } from "./executionPreferenceExtraction";
 import { isDirectConversationOnlyRequest } from "./directConversationIntent";
 import {
+  type ConversationSemanticRouteMetadataOverrides,
   type ResolvedConversationIntentMode,
   withSemanticRouteId
 } from "./intentModeContracts";
+import { buildRouteMetadataOverridesFromInput } from "./intentModeRouteMetadata";
 import { resolveExplicitBuildFormatMetadata } from "./buildFormatMetadata";
 import {
   resolveConversationAutonomyBoundaryInterpretationIntent,
@@ -39,8 +41,7 @@ import {
 } from "./chatTurnSignals";
 import { isRecentAssistantAnswerThreadContinuationCandidate } from "./recentAssistantTurnContext";
 import {
-  resolveContextualFollowupIntentResolution,
-  resolveDeterministicContextualFollowupIntent
+  resolveContextualFollowupIntentResolution
 } from "./contextualFollowupInterpretationSupport";
 import {
   shouldAttemptAutonomyBoundaryInterpretation,
@@ -54,6 +55,7 @@ import {
   buildDefaultChatIntentMode,
   shouldClarifyBuildFormatRequest
 } from "./intentModeResolutionSupport";
+
 
 /**
  * Resolves one user utterance into a canonical intent mode plus optional clarification candidate.
@@ -74,8 +76,17 @@ export async function resolveConversationIntentMode(
 ): Promise<ResolvedConversationIntentMode> {
   const normalized = userInput.trim();
   const finalizeResolution = (
-    resolution: ResolvedConversationIntentMode
-  ): ResolvedConversationIntentMode => withSemanticRouteId(resolution);
+    resolution: ResolvedConversationIntentMode,
+    overrides: ConversationSemanticRouteMetadataOverrides = {}
+  ): ResolvedConversationIntentMode =>
+    withSemanticRouteId(resolution, {
+      ...buildRouteMetadataOverridesFromInput(normalized),
+      ...overrides,
+      explicitConstraints: {
+        ...buildRouteMetadataOverridesFromInput(normalized).explicitConstraints,
+        ...(overrides.explicitConstraints ?? {})
+      }
+    });
   const effectiveRoutingClassification =
     routingClassification ?? classifyRoutingIntentV1(normalized);
   const resolveExecutionUnderstanding = async (
@@ -238,13 +249,6 @@ export async function resolveConversationIntentMode(
     ));
   }
 
-  const deterministicContextualFollowupIntent = resolveDeterministicContextualFollowupIntent(
-    normalized
-  );
-  if (deterministicContextualFollowupIntent) {
-    return finalizeResolution(deterministicContextualFollowupIntent);
-  }
-
   if (shouldClarifyBuildFormatRequest({
     normalized,
     planOnly: preferences.planOnly,
@@ -351,26 +355,6 @@ export async function resolveConversationIntentMode(
       },
       {
         suppressGenericLocalIntentModel: true
-      }
-    ));
-  }
-
-  if (
-    effectiveRoutingClassification?.category === "BUILD_SCAFFOLD" &&
-    effectiveRoutingClassification.confidenceTier === "HIGH"
-  ) {
-    return finalizeResolution(await resolveExecutionUnderstanding(
-      {
-        mode: "build",
-        confidence: "high",
-        matchedRuleId: "intent_mode_routing_map_build_scaffold",
-        explanation:
-          "The deterministic routing map already classifies this as a high-confidence scaffold/build request with concrete execution context, so it should go straight to the build path instead of asking for another plan-or-build clarification.",
-        clarification: null,
-        semanticRouteId: "build_request"
-      },
-      {
-        suppressGenericLocalIntentModel
       }
     ));
   }

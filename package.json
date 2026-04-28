@@ -118,6 +118,8 @@
     "check:no_unused_locals": "npm run check:no-unused-locals",
     "check:module-size": "tsx src/tools/checkModuleSize.ts",
     "check:module_size": "npm run check:module-size",
+    "check:lexical-routing-boundary": "tsx src/tools/checkLexicalRoutingBoundary.ts",
+    "check:lexical_routing_boundary": "npm run check:lexical-routing-boundary",
     "check:temporal-memory-registry": "tsx src/tools/checkTemporalMemoryRegistry.ts",
     "check:temporal_memory_registry": "npm run check:temporal-memory-registry",
     "check:reason-codes": "tsx src/tools/checkReasonCodeUniqueness.ts",
