@@ -1961,6 +1961,35 @@ test("buildPlannerSystemPrompt adds Windows PowerShell organization guidance for
   assert.match(prompt, /Do not emit cmd\.exe batch syntax such as if not exist, %D, %~fD, or chained && loops/i);
   assert.match(prompt, /do not write invalid fragments like "\$name:" inside double-quoted strings/i);
   assert.match(prompt, /Use \$\{name\}, \$\(\$name\), or concatenation instead/i);
+  assert.match(prompt, /assign list results with array coercion such as \$rootRemaining = @\(Get-ChildItem/i);
+  assert.match(prompt, /emit markers with \(\$rootRemaining -join ','\)/i);
+  assert.match(prompt, /Empty lists must still print empty markers such as ROOT_REMAINING_MATCHES=/i);
+  assert.match(prompt, /Do not pass raw or nullable pipeline output to \[string\]::Join/i);
+});
+
+test("buildPlannerSystemPrompt adds null-safe PowerShell proof guidance for workspace recovery retries", () => {
+  const prompt = buildPlannerSystemPrompt(
+    buildPromptInput(
+      buildWorkspaceRecoveryPostShutdownRetryInput(
+        'Please clean up my desktop by moving only the folder named sample-company into "sample-folder".'
+      ),
+      {
+        platform: "win32",
+        shellKind: "powershell",
+        invocationMode: "inline_command",
+        commandMaxChars: 4096,
+        desktopPath: "C:\\Users\\testuser\\OneDrive\\Desktop",
+        documentsPath: "C:\\Users\\testuser\\OneDrive\\Documents",
+        downloadsPath: "C:\\Users\\testuser\\OneDrive\\Downloads"
+      }
+    )
+  );
+
+  assert.match(prompt, /post-shutdown workspace-recovery retry step/i);
+  assert.match(prompt, /assign destination\/root proof lists with @\(\.\.\.\)/i);
+  assert.match(prompt, /join them with -join/i);
+  assert.match(prompt, /print empty markers when a list is empty/i);
+  assert.match(prompt, /instead of calling \[string\]::Join on nullable pipeline output/i);
 });
 
 test("evaluatePlannerActionValidation repairs inspection-only organization plans into concrete execution", () => {
@@ -2394,6 +2423,60 @@ test("evaluatePlannerActionValidation fails closed when a Windows organization p
   assert.throws(
     () => assertPlannerActionValidation(validation, null),
     /invalid PowerShell variable interpolation/i
+  );
+});
+
+test("evaluatePlannerActionValidation fails closed when Windows organization proof uses nullable static string join", () => {
+  const currentUserRequest =
+    "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.";
+  const validation = evaluatePlannerActionValidation(
+    currentUserRequest,
+    null,
+    [
+      {
+        id: "action_move_with_nullable_join_proof",
+        type: "shell_command",
+        description: "Move matching folders and prove the result with nullable joins.",
+        params: {
+          command: [
+            "$destination = 'C:\\Users\\testuser\\OneDrive\\Desktop\\sample-web-projects'",
+            "$root = 'C:\\Users\\testuser\\OneDrive\\Desktop'",
+            "$moved = Get-ChildItem -Path $root -Directory -Filter 'sample-company*'",
+            "$moved | Move-Item -Destination $destination -Force",
+            "$destContents = Get-ChildItem -Path $destination -Directory | Select-Object -ExpandProperty Name",
+            "$rootRemaining = Get-ChildItem -Path $root -Directory -Filter 'sample-company*' | Select-Object -ExpandProperty Name",
+            "Write-Output ('MOVED_TO_DEST=' + [string]::Join(',', $moved.Name))",
+            "Write-Output ('DEST_CONTENTS=' + [string]::Join(',', $destContents))",
+            "Write-Output ('ROOT_REMAINING_MATCHES=' + [string]::Join(',', $rootRemaining))"
+          ].join("; "),
+          cwd: "C:\\Users\\testuser\\OneDrive\\Desktop",
+          workdir: "C:\\Users\\testuser\\OneDrive\\Desktop",
+          requestedShellKind: "powershell"
+        },
+        estimatedCostUsd: 0.25
+      }
+    ],
+    currentUserRequest,
+    {
+      platform: "win32",
+      shellKind: "powershell",
+      invocationMode: "inline_command",
+      commandMaxChars: 4096,
+      desktopPath: "C:\\Users\\testuser\\OneDrive\\Desktop",
+      documentsPath: "C:\\Users\\testuser\\OneDrive\\Documents",
+      downloadsPath: "C:\\Users\\testuser\\OneDrive\\Downloads"
+    }
+  );
+
+  assert.equal(validation.needsRepair, true);
+  assert.equal(validation.invalidExecutionStyleBuildPlan, true);
+  assert.equal(
+    validation.buildPlanAssessment.issueCode,
+    "WINDOWS_ORGANIZATION_NULLABLE_PROOF_JOIN_DISALLOWED"
+  );
+  assert.throws(
+    () => assertPlannerActionValidation(validation, null),
+    /\[string\]::Join in a Windows PowerShell organization proof/i
   );
 });
 
@@ -3213,6 +3296,36 @@ test("buildPlannerRepairSystemPrompt explains bounded proof repairs for organiza
   assert.match(prompt, /retried the folder move without bounded proof/i);
   assert.match(prompt, /destination and original root/i);
   assert.match(prompt, /MOVED_TO_DEST \/ REMAINING_AT_DESKTOP/i);
+  assert.match(prompt, /coerce proof lists with @\(\.\.\.\)/i);
+  assert.match(prompt, /emit empty markers instead of calling \[string\]::Join on nullable pipeline output/i);
+});
+
+test("buildPlannerRepairSystemPrompt explains Windows nullable proof join repairs", () => {
+  const prompt = buildPlannerRepairSystemPrompt({
+    ...buildPromptInput(
+      "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
+      {
+        platform: "win32",
+        shellKind: "powershell",
+        invocationMode: "inline_command",
+        commandMaxChars: 4096,
+        desktopPath: "C:\\Users\\testuser\\OneDrive\\Desktop",
+        documentsPath: "C:\\Users\\testuser\\OneDrive\\Documents",
+        downloadsPath: "C:\\Users\\testuser\\OneDrive\\Downloads"
+      }
+    ),
+    previousOutput: {
+      plannerNotes: "powershell move plan with nullable proof joins",
+      actions: []
+    },
+    repairReason:
+      "invalid_execution_style_build_plan:WINDOWS_ORGANIZATION_NULLABLE_PROOF_JOIN_DISALLOWED"
+  });
+
+  assert.match(prompt, /used \[string\]::Join in a Windows PowerShell organization proof/i);
+  assert.match(prompt, /assigning every destination\/root proof list with array coercion/i);
+  assert.match(prompt, /emit markers with \(\$items -join ','\)/i);
+  assert.match(prompt, /ROOT_REMAINING_MATCHES=/i);
 });
 
 test("buildPlannerRepairSystemPrompt explains Windows organization interpolation repairs", () => {

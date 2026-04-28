@@ -52,6 +52,7 @@ const WINDOWS_POWERSHELL_SCOPED_VARIABLE_PREFIXES = new Set([
   "function"
 ]);
 const WINDOWS_POWERSHELL_INVALID_INTERPOLATION_PATTERN = /\$([A-Za-z_][A-Za-z0-9_]*):/g;
+const WINDOWS_POWERSHELL_STATIC_STRING_JOIN_PATTERN = /\[string\]::Join\s*\(/i;
 const ORGANIZATION_MOVE_COMMAND_PATTERN =
   /\b(?:move-item|mv|move)\b/i;
 const ORGANIZATION_MOVE_PROOF_COMMAND_PATTERN =
@@ -324,6 +325,39 @@ export function hasInvalidWindowsOrganizationPowerShellInterpolation(
       return true;
     }
     return false;
+  });
+}
+
+/**
+ * Evaluates whether a Windows PowerShell organization proof command uses static string joining.
+ * `[string]::Join(...)` can throw when a proof collection is empty or null, so bounded move proof
+ * should coerce lists with `@(...)` and use `-join` instead.
+ */
+export function hasUnsafeWindowsOrganizationPowerShellProofJoin(
+  currentUserRequest: string,
+  actions: readonly PlannedAction[],
+  executionEnvironment: PlannerExecutionEnvironmentContext | null
+): boolean {
+  const activeRequest = extractActiveRequestSegment(currentUserRequest).trim();
+  if (
+    !/\b(?:organize|move|group|gather|sort|clean up|put|collect|tidy)\b/i.test(activeRequest) ||
+    executionEnvironment?.platform !== "win32" ||
+    executionEnvironment.shellKind !== "powershell"
+  ) {
+    return false;
+  }
+
+  return actions.some((action) => {
+    if (action.type !== "shell_command") {
+      return false;
+    }
+    const command =
+      typeof action.params.command === "string" ? action.params.command.trim() : "";
+    return (
+      ORGANIZATION_MOVE_COMMAND_PATTERN.test(command) &&
+      ORGANIZATION_MOVE_PROOF_COMMAND_PATTERN.test(command) &&
+      WINDOWS_POWERSHELL_STATIC_STRING_JOIN_PATTERN.test(command)
+    );
   });
 }
 

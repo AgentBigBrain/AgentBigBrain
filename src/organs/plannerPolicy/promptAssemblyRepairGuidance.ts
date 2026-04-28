@@ -127,7 +127,8 @@ export function buildPlannerRepairReasonGuidance(repairReason: string): string {
   ) {
     return (
       " The prior plan failed because it retried the folder move without bounded proof of what actually moved. " +
-      "Repair by keeping the scoped move and also proving the outcome in the same plan, either by adding explicit list_directory verification for the destination and original root or by emitting governed shell output markers such as MOVED_TO_DEST / REMAINING_AT_DESKTOP or DEST_CONTENTS / ROOT_REMAINING_MATCHES."
+      "Repair by keeping the scoped move and also proving the outcome in the same plan, either by adding explicit list_directory verification for the destination and original root or by emitting governed shell output markers such as MOVED_TO_DEST / REMAINING_AT_DESKTOP or DEST_CONTENTS / ROOT_REMAINING_MATCHES. " +
+      "For PowerShell marker output, coerce proof lists with @(...), use -join on those arrays, and emit empty markers instead of calling [string]::Join on nullable pipeline output."
     );
   }
   if (
@@ -157,6 +158,17 @@ export function buildPlannerRepairReasonGuidance(repairReason: string): string {
       " The prior plan failed because it used invalid PowerShell string interpolation in a Windows organization command. " +
       "Repair by avoiding raw variable fragments like \"$name:\" inside double-quoted strings. " +
       "Use ${name}, subexpressions like $($name), or string concatenation instead."
+    );
+  }
+  if (
+    repairReason.startsWith(
+      "invalid_execution_style_build_plan:WINDOWS_ORGANIZATION_NULLABLE_PROOF_JOIN_DISALLOWED"
+    )
+  ) {
+    return (
+      " The prior plan failed because it used [string]::Join in a Windows PowerShell organization proof. " +
+      "Repair by assigning every destination/root proof list with array coercion such as $items = @(Get-ChildItem ... | Select-Object -ExpandProperty Name), then emit markers with ($items -join ','). " +
+      "If a proof list is empty, still print the marker with an empty value, for example ROOT_REMAINING_MATCHES=."
     );
   }
   if (

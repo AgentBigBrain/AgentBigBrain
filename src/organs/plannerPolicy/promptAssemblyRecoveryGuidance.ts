@@ -98,6 +98,9 @@ export function buildWorkspaceRecoveryActionPolicyGuidance(
     parts.push(
       "This is the post-shutdown workspace-recovery retry step. Keep the move scoped, and prove the result in the same plan with destination/root verification or bounded shell output markers such as MOVED_TO_DEST=..., DEST_CONTENTS=..., and ROOT_REMAINING_MATCHES=...."
     );
+    parts.push(
+      "For PowerShell proof markers, assign destination/root proof lists with @(...), join them with -join, and print empty markers when a list is empty instead of calling [string]::Join on nullable pipeline output."
+    );
   }
   if (blockedFolderPaths && blockedFolderPaths !== "none") {
     parts.push(

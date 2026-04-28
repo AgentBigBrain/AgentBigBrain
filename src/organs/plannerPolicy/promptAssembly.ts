@@ -188,6 +188,9 @@ function buildLocalCapabilityGuidance(
       parts.push(
         "When you build status strings in PowerShell, do not write invalid fragments like \"$name:\" inside double-quoted strings. Use ${name}, $($name), or concatenation instead."
       );
+      parts.push(
+        "When proof output joins PowerShell collections, first assign list results with array coercion such as $rootRemaining = @(Get-ChildItem ... | Select-Object -ExpandProperty Name), then emit markers with ($rootRemaining -join ','). Empty lists must still print empty markers such as ROOT_REMAINING_MATCHES=. Do not pass raw or nullable pipeline output to [string]::Join."
+      );
     }
   }
   if (wantsPersistentBrowserOpen) {

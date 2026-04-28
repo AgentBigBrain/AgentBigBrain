@@ -60,6 +60,8 @@ export function describeExecutionStyleBuildPlanIssue(
       return "Planner model used cmd-style shell moves for a Windows PowerShell organization request. Use PowerShell-native move commands instead.";
     case "WINDOWS_ORGANIZATION_INVALID_POWERSHELL_INTERPOLATION":
       return "Planner model used invalid PowerShell variable interpolation for a Windows organization move command. Use ${name} or string concatenation instead of raw $name: fragments.";
+    case "WINDOWS_ORGANIZATION_NULLABLE_PROOF_JOIN_DISALLOWED":
+      return "Planner model used [string]::Join in a Windows PowerShell organization proof, which can throw on empty proof collections. Coerce lists with @(...), use -join, and still emit empty proof markers when nothing remains.";
     case "BROAD_PROCESS_SHUTDOWN_DISALLOWED":
       return "Planner model attempted broad process-name shutdown as a recovery step. Use exact tracked stop_process actions, holder inspection, or clarification instead.";
     case "CANDIDATE_HOLDER_SHUTDOWN_REQUIRES_INSPECTION":
