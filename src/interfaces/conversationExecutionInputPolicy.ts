@@ -107,7 +107,7 @@ const SIMPLE_DESKTOP_DESTINATION_PATTERN =
 const ORGANIZATION_PREFIX_PATTERN =
   /\bstarts?\s+with\s+["'`]?([a-z0-9._-]{2,80})["'`]?/i;
 const ORGANIZATION_CONTAINS_WORD_PATTERN =
-  /\b(?:with|containing?|contain(?:s|ing)?)\s+(?:the\s+word\s+)?["'`]?([a-z0-9._-]{2,80})["'`]?/i;
+  /\b(?:file|files|folder|folders|directory|directories|item|items|workspace|workspaces|project|projects)(?:\s+and\s+(?:file|files|folder|folders|directory|directories|item|items|workspace|workspaces|project|projects))?[\s\S]{0,80}\b(?:with|containing?|contain(?:s|ing)?)\s+(?:the\s+word\s+)?["'`]?([a-z0-9._-]{2,80})["'`]?/i;
 const ORGANIZATION_EXACT_FOLDER_NAME_PATTERN =
   /\b(?:move|moving|put|placing)\b[\s\S]{0,48}\bonly\s+(?:the\s+)?(?:folder|directory|project|workspace)\s+(?:named|called)\s+["'`]?([a-z0-9][a-z0-9._ -]{1,120}?)(?=["'`]?(?:\s+(?:in|into|to|under)\b|[.?!,]|$))/i;
 const EXPLICIT_ALL_MATCHING_FOLDERS_PATTERN =

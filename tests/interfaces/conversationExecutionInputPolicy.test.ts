@@ -2773,6 +2773,18 @@ test("buildConversationAwareExecutionInput does not misread build destinations a
   assert.doesNotMatch(executionInput, /Natural desktop-organization follow-up:/);
 });
 
+test("buildConversationAwareExecutionInput does not treat multi-page static site builds as Desktop cleanup", async () => {
+  const executionInput = await buildConversationAwareExecutionInput(
+    buildSession(),
+    "I would like you to build a modern creative agency static site with multiple pages end to end, put it in a folder on my desktop, and open it in the browser when you are done",
+    10
+  );
+
+  assert.doesNotMatch(executionInput, /Natural desktop-organization follow-up:/);
+  assert.doesNotMatch(executionInput, /Match Desktop folders whose names contain the word multiple\./);
+  assert.doesNotMatch(executionInput, /real folder move side effect/i);
+});
+
 test("buildConversationAwareExecutionInput derives workspace root and artifact from a tracked file preview", async () => {
   const session = buildSession();
   session.browserSessions.push({
