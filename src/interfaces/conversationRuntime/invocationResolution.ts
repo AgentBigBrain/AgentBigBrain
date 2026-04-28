@@ -20,6 +20,7 @@ import {
   resolveInterpretedPulseCommandArgument
 } from "./followUpResolution";
 import { routeConversationMessageInput } from "./conversationRouting";
+import { isMixedConversationMemoryStatusRecallTurn } from "./chatTurnSignals";
 
 export interface ConversationInvocationResolution {
   reply: string;
@@ -75,14 +76,23 @@ export async function resolveConversationInvocation(
     message.receivedAt,
     naturalPulseClassification
   );
+  const mixedMemoryStatusRecall =
+    isMixedConversationMemoryStatusRecallTurn(commandRoutingText);
   const shouldPreferWorkStatusOverPulseStatus =
     naturalPulseClassification.category === "COMMAND" &&
     naturalPulseClassification.commandIntent === "status" &&
     !naturalPulseClassification.conflict &&
     hasActiveOrQueuedWork(session) &&
     !EXPLICIT_PULSE_STATUS_HINT_PATTERN.test(commandRoutingText);
+  const shouldPreferConversationRecallOverPulseStatus =
+    naturalPulseClassification.category === "COMMAND" &&
+    naturalPulseClassification.commandIntent === "status" &&
+    !naturalPulseClassification.conflict &&
+    mixedMemoryStatusRecall &&
+    !EXPLICIT_PULSE_STATUS_HINT_PATTERN.test(commandRoutingText);
   if (
     !shouldPreferWorkStatusOverPulseStatus &&
+    !shouldPreferConversationRecallOverPulseStatus &&
     naturalPulseClassification.category === "COMMAND" &&
     !naturalPulseClassification.conflict &&
     naturalPulseClassification.commandIntent
@@ -97,7 +107,11 @@ export async function resolveConversationInvocation(
     };
   }
 
-  if (!naturalPulseClassification.conflict && !shouldPreferWorkStatusOverPulseStatus) {
+  if (
+    !naturalPulseClassification.conflict &&
+    !shouldPreferWorkStatusOverPulseStatus &&
+    !shouldPreferConversationRecallOverPulseStatus
+  ) {
     const interpretedPulse = await resolveInterpretedPulseCommandArgument(
       commandRoutingText,
       session,

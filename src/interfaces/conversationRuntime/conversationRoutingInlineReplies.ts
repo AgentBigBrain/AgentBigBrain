@@ -182,34 +182,59 @@ export async function maybeResolveConversationRoutingInlineReply(
     });
   }
 
-  if (input.effectiveIntentMode.mode === "status_or_recall") {
-    if (isMixedConversationMemoryStatusRecallTurn(input.userInput)) {
-      const deterministicMixedRecallReply = await renderMixedConversationMemoryStatusRecall({
+  if (isMixedConversationMemoryStatusRecallTurn(input.userInput)) {
+    const deterministicMixedRecallReply = await renderMixedConversationMemoryStatusRecall({
+      session: input.session,
+      userInput: input.userInput,
+      queryContinuityFacts: input.deps.queryContinuityFacts,
+      queryContinuityEpisodes: input.deps.queryContinuityEpisodes
+    });
+    if (deterministicMixedRecallReply) {
+      applyConversationDomainSignalWindowForTurn(
+        input.session,
+        input.userInput,
+        input.receivedAt,
+        input.routingClassification,
+        "status_or_recall",
+        input.effectiveIntentMode.semanticRoute ?? null
+      );
+      return buildRecordedReply({
         session: input.session,
         userInput: input.userInput,
-        queryContinuityFacts: input.deps.queryContinuityFacts,
-        queryContinuityEpisodes: input.deps.queryContinuityEpisodes
+        reply: deterministicMixedRecallReply,
+        receivedAt: input.receivedAt,
+        maxConversationTurns: input.deps.config.maxConversationTurns,
+        activeMode: "status_or_recall",
+        confidence: toContinuityConfidence(input.effectiveIntentMode.confidence)
       });
-      if (deterministicMixedRecallReply) {
-        applyConversationDomainSignalWindowForTurn(
-          input.session,
-          input.userInput,
-          input.receivedAt,
-            input.routingClassification,
-            input.effectiveIntentMode.mode,
-            input.effectiveIntentMode.semanticRoute ?? null
-        );
-        return buildRecordedReply({
-          session: input.session,
-          userInput: input.userInput,
-          reply: deterministicMixedRecallReply,
-          receivedAt: input.receivedAt,
-          maxConversationTurns: input.deps.config.maxConversationTurns,
-          activeMode: "status_or_recall",
-          confidence: toContinuityConfidence(input.effectiveIntentMode.confidence)
-        });
-      }
     }
+    if (typeof input.deps.runDirectConversationTurn !== "function") {
+      const reply = renderConversationStatusOrRecall(
+        input.session,
+        input.userInput,
+        input.effectiveIntentMode.semanticHint ?? null
+      );
+      applyConversationDomainSignalWindowForTurn(
+        input.session,
+        input.userInput,
+        input.receivedAt,
+        input.routingClassification,
+        "status_or_recall",
+        input.effectiveIntentMode.semanticRoute ?? null
+      );
+      return buildRecordedReply({
+        session: input.session,
+        userInput: input.userInput,
+        reply,
+        receivedAt: input.receivedAt,
+        maxConversationTurns: input.deps.config.maxConversationTurns,
+        activeMode: "status_or_recall",
+        confidence: toContinuityConfidence(input.effectiveIntentMode.confidence)
+      });
+    }
+  }
+
+  if (input.effectiveIntentMode.mode === "status_or_recall") {
     const directConversationRunner = input.deps.runDirectConversationTurn;
     const shouldDirectMixedStatusRecallConversation =
       input.deps.directCasualChatEnabled !== false &&
