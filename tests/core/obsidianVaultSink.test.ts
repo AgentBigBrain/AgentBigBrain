@@ -3,12 +3,12 @@
  */
 
 import assert from "node:assert/strict";
-import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 
-import { createEmptyProfileMemoryState } from "../../src/core/profileMemory";
+import { createEmptyProfileMemoryState, createProfileEpisodeRecord } from "../../src/core/profileMemory";
 import { createSchemaEnvelopeV1 } from "../../src/core/schemaEnvelope";
 import { ObsidianVaultSink } from "../../src/core/projections/targets/obsidianVaultSink";
 import { buildProjectionChangeSet } from "../../src/core/projections/service";
@@ -81,6 +81,81 @@ test("ObsidianVaultSink rebuild mirrors notes and assets without deleting operat
   }
 });
 
+test("ObsidianVaultSink review-safe projection redacts local path tokens from notes and filenames", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "abb-obsidian-sink-redaction-"));
+  const previousUsername = process.env.USERNAME;
+  process.env.USERNAME = "projectionuser";
+  try {
+    const vaultPath = path.join(tempDir, "vault");
+    const sink = new ObsidianVaultSink({
+      vaultPath,
+      rootDirectoryName: "AgentBigBrain",
+      mirrorAssets: false
+    });
+    const state = createEmptyProfileMemoryState();
+    const localPathText =
+      "Review C:\\Users\\projectionuser\\OneDrive\\Desktop\\AgentBigBrain-public\\private.txt";
+
+    await sink.rebuild(buildProjectionSnapshotFixture({
+      mode: "review_safe",
+      profileMemory: {
+        ...state,
+        episodes: [
+          createProfileEpisodeRecord({
+            title: localPathText,
+            summary: localPathText,
+            sourceTaskId: "task_projection_local_path",
+            source: "test.seed",
+            sourceKind: "explicit_user_statement",
+            sensitive: false,
+            confidence: 0.85,
+            observedAt: "2026-04-12T12:00:00.000Z",
+            entityRefs: [],
+            openLoopRefs: [],
+            tags: ["redaction"]
+          })
+        ]
+      },
+      workflowPatterns: [
+        {
+          id: "workflow_local_path",
+          workflowKey: `${localPathText} open_users_projectionuser_desktop_solar`,
+          status: "active",
+          confidence: 0.8,
+          firstSeenAt: "2026-04-12T12:00:00.000Z",
+          lastSeenAt: "2026-04-12T12:00:00.000Z",
+          supersededAt: null,
+          domainLane: "workflow",
+          successCount: 1,
+          failureCount: 0,
+          suppressedCount: 0,
+          contextTags: []
+        }
+      ]
+    }));
+
+    const rootPath = path.join(vaultPath, "AgentBigBrain");
+    const relativePaths = await collectRelativeFilePaths(rootPath);
+    const contents = await Promise.all(
+      relativePaths.map((relativePath) => readFile(path.join(rootPath, relativePath), "utf8"))
+    );
+    const combined = [...relativePaths, ...contents].join("\n");
+
+    assert.doesNotMatch(combined, /C:\\/);
+    assert.doesNotMatch(combined, /\bprojectionuser\b/i);
+    assert.doesNotMatch(combined, /\bOneDrive\b/i);
+    assert.doesNotMatch(combined, /\bAgentBigBrain-public\b/);
+    assert.match(combined, /\[redacted local path\]/);
+  } finally {
+    if (previousUsername === undefined) {
+      delete process.env.USERNAME;
+    } else {
+      process.env.USERNAME = previousUsername;
+    }
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
 test("ObsidianVaultSink sync rewrites affected collections and preserves untouched review-action notes", async () => {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "abb-obsidian-sink-sync-"));
   try {
@@ -144,6 +219,59 @@ test("ObsidianVaultSink sync rewrites affected collections and preserves untouch
     await assert.rejects(() =>
       access(path.join(vaultPath, "AgentBigBrain", "10 Entities", "Detroit.md"))
     );
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("ObsidianVaultSink serializes overlapping writes to the same vault root", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "abb-obsidian-sink-serialized-"));
+  try {
+    const vaultPath = path.join(tempDir, "vault");
+    const firstSink = new ObsidianVaultSink({
+      vaultPath,
+      rootDirectoryName: "AgentBigBrain",
+      mirrorAssets: false
+    });
+    const secondSink = new ObsidianVaultSink({
+      vaultPath,
+      rootDirectoryName: "AgentBigBrain",
+      mirrorAssets: false
+    });
+    const entityChangeSet = buildProjectionChangeSet(
+      ["entity_graph_changed"],
+      ["entity_graph:test"]
+    );
+
+    await Promise.all([
+      firstSink.rebuild(buildProjectionSnapshotFixture()),
+      secondSink.sync(entityChangeSet, buildProjectionSnapshotFixture()),
+      firstSink.sync(entityChangeSet, buildProjectionSnapshotFixture()),
+      secondSink.rebuild(buildProjectionSnapshotFixture())
+    ]);
+
+    const rootPath = path.join(vaultPath, "AgentBigBrain");
+    const relativePaths = await collectRelativeFilePaths(rootPath);
+
+    await access(path.join(rootPath, "00 Dashboard.md"));
+    assert.equal(relativePaths.some((relativePath) => relativePath.includes(".tmp-")), false);
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("ObsidianVaultSink does not swallow active vault filesystem failures", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "abb-obsidian-sink-write-failure-"));
+  try {
+    const vaultPath = path.join(tempDir, "vault-file");
+    await writeFile(vaultPath, "not a directory", "utf8");
+    const sink = new ObsidianVaultSink({
+      vaultPath,
+      rootDirectoryName: "AgentBigBrain",
+      mirrorAssets: false
+    });
+
+    await assert.rejects(() => sink.rebuild(buildProjectionSnapshotFixture()));
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }
@@ -273,6 +401,23 @@ test("ObsidianVaultSink keeps duplicate canonical entities distinct and explains
     await rm(tempDir, { recursive: true, force: true });
   }
 });
+
+async function collectRelativeFilePaths(rootPath: string): Promise<string[]> {
+  const entries = await readdir(rootPath, { withFileTypes: true });
+  const results: string[] = [];
+  for (const entry of entries) {
+    const absolutePath = path.join(rootPath, entry.name);
+    if (entry.isDirectory()) {
+      const childPaths = await collectRelativeFilePaths(absolutePath);
+      results.push(...childPaths.map((childPath) => path.join(entry.name, childPath)));
+      continue;
+    }
+    if (entry.isFile()) {
+      results.push(entry.name);
+    }
+  }
+  return results.sort((left, right) => left.localeCompare(right));
+}
 
 test("ObsidianVaultSink aligns current-surface contact claims onto continuity person and org notes", async () => {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "abb-obsidian-sink-current-surface-"));

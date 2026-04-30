@@ -24,13 +24,17 @@ import { renderObsidianReceiptNotes } from "../renderers/obsidianReceiptRenderer
 import { renderObsidianSkillNotes } from "../renderers/obsidianSkillRenderer";
 import { renderObsidianWorkflowLearningNotes } from "../renderers/obsidianWorkflowLearningRenderer";
 import { renderObsidianBasesFiles } from "../renderers/obsidianBasesRenderer";
-import { shouldMirrorMediaAsset } from "../policy";
+import { redactReviewSafeProjectionText, shouldMirrorMediaAsset } from "../policy";
 import type {
   ProjectionChangeSet,
   ProjectionHealth,
   ProjectionSink,
   ProjectionSnapshot
 } from "../contracts";
+
+const projectionWriteQueues = new Map<string, Promise<void>>();
+const PROJECTION_CLEAR_RETRY_COUNT = 3;
+const PROJECTION_CLEAR_RETRY_DELAY_MS = 25;
 
 export interface ObsidianVaultSinkOptions {
   vaultPath: string;
@@ -105,18 +109,25 @@ export class ObsidianVaultSink implements ProjectionSink {
     }
 
     const rootPath = path.resolve(this.options.vaultPath, this.options.rootDirectoryName);
-    await mkdir(rootPath, { recursive: true });
+    await runSerializedProjectionWrite(rootPath, async () => {
+      await mkdir(rootPath, { recursive: true });
 
-    const selectedCollectionIds = new Set<ObsidianCollectionId>([
-      ...selectCollectionIdsForChangeSet(changeSet),
-      "review_actions_guide"
-    ]);
-    for (const collection of buildProjectedCollections(snapshot)) {
-      if (!selectedCollectionIds.has(collection.id)) {
-        continue;
+      const selectedCollectionIds = new Set<ObsidianCollectionId>([
+        ...selectCollectionIdsForChangeSet(changeSet),
+        "review_actions_guide"
+      ]);
+      for (const collection of buildProjectedCollections(snapshot)) {
+        if (!selectedCollectionIds.has(collection.id)) {
+          continue;
+        }
+        await writeProjectedCollection(
+          rootPath,
+          collection,
+          this.options.mirrorAssets,
+          snapshot.mode
+        );
       }
-      await writeProjectedCollection(rootPath, collection, this.options.mirrorAssets, snapshot.mode);
-    }
+    });
   }
 
   /**
@@ -136,10 +147,17 @@ export class ObsidianVaultSink implements ProjectionSink {
    */
   async rebuild(snapshot: ProjectionSnapshot): Promise<void> {
     const rootPath = path.resolve(this.options.vaultPath, this.options.rootDirectoryName);
-    await mkdir(rootPath, { recursive: true });
-    for (const collection of buildProjectedCollections(snapshot)) {
-      await writeProjectedCollection(rootPath, collection, this.options.mirrorAssets, snapshot.mode);
-    }
+    await runSerializedProjectionWrite(rootPath, async () => {
+      await mkdir(rootPath, { recursive: true });
+      for (const collection of buildProjectedCollections(snapshot)) {
+        await writeProjectedCollection(
+          rootPath,
+          collection,
+          this.options.mirrorAssets,
+          snapshot.mode
+        );
+      }
+    });
   }
 
   /**
@@ -162,6 +180,38 @@ export class ObsidianVaultSink implements ProjectionSink {
       healthy: true,
       detail: `Obsidian vault mirror ready at ${rootPath}.`
     };
+  }
+}
+
+/**
+ * Serializes projection writes that target the same vault root inside this process.
+ *
+ * **Why it exists:**
+ * Live projection can receive overlapping change events; serializing by root prevents one rebuild
+ * from clearing a collection while another write is committing notes into that same subtree.
+ *
+ * **What it talks to:**
+ * - Uses `projectionWriteQueues` in this module.
+ *
+ * @param rootPath - Absolute projection root path.
+ * @param operation - Filesystem operation to run after prior writes settle.
+ * @returns Result returned by `operation`.
+ */
+async function runSerializedProjectionWrite<T>(
+  rootPath: string,
+  operation: () => Promise<T>
+): Promise<T> {
+  const queueKey = path.resolve(rootPath);
+  const previous = projectionWriteQueues.get(queueKey) ?? Promise.resolve();
+  const current = previous.catch(() => undefined).then(operation);
+  const currentSettled = current.then(() => undefined, () => undefined);
+  projectionWriteQueues.set(queueKey, currentSettled);
+  try {
+    return await current;
+  } finally {
+    if (projectionWriteQueues.get(queueKey) === currentSettled) {
+      projectionWriteQueues.delete(queueKey);
+    }
   }
 }
 
@@ -382,14 +432,15 @@ async function writeProjectedCollection(
 ): Promise<void> {
   if (!collection.preserveExistingFiles) {
     for (const clearTarget of collection.clearTargets) {
-      await rm(path.join(rootPath, clearTarget), { recursive: true, force: true });
+      await removeProjectionClearTarget(path.join(rootPath, clearTarget));
     }
   }
 
   for (const note of collection.notes) {
-    const absoluteNotePath = path.join(rootPath, note.relativePath);
+    const projectedNote = redactProjectedNoteForMode(note, mode);
+    const absoluteNotePath = path.join(rootPath, projectedNote.relativePath);
     await mkdir(path.dirname(absoluteNotePath), { recursive: true });
-    await writeFileAtomic(absoluteNotePath, `${note.content.trimEnd()}\n`);
+    await writeFileAtomic(absoluteNotePath, `${projectedNote.content.trimEnd()}\n`);
   }
 
   if (!collection.assets) {
@@ -407,6 +458,94 @@ async function writeProjectedCollection(
     const bytes = await readFile(artifact.ownedAssetPath);
     await writeFile(assetDestinationPath, bytes);
   }
+}
+
+/**
+ * Removes one projected collection target using bounded retry and explicit cleanup-race policy.
+ *
+ * **Why it exists:**
+ * Obsidian and host sync tools can transiently hold or recreate directories during mirror cleanup;
+ * cleanup races should not look like failed note writes.
+ *
+ * **What it talks to:**
+ * - Uses `rm` (import `rm`) from `node:fs/promises`.
+ *
+ * @param targetPath - File or directory path owned by the projection mirror.
+ * @returns Promise resolving after cleanup succeeds or an expected cleanup race is tolerated.
+ */
+async function removeProjectionClearTarget(targetPath: string): Promise<void> {
+  try {
+    await rm(targetPath, {
+      recursive: true,
+      force: true,
+      maxRetries: PROJECTION_CLEAR_RETRY_COUNT,
+      retryDelay: PROJECTION_CLEAR_RETRY_DELAY_MS
+    });
+  } catch (error) {
+    if (isExpectedProjectionCleanupRace(error)) {
+      return;
+    }
+    throw error;
+  }
+}
+
+/**
+ * Returns whether a filesystem error is safe to tolerate during projection cleanup only.
+ *
+ * **Why it exists:**
+ * The sink must distinguish stale cleanup races from active write or rename failures.
+ *
+ * **What it talks to:**
+ * - Uses `isNodeErrno(...)` in this module.
+ *
+ * @param error - Unknown thrown value from cleanup.
+ * @returns `true` when cleanup may continue without failing the projection pass.
+ */
+function isExpectedProjectionCleanupRace(error: unknown): boolean {
+  return isNodeErrno(error) && (error.code === "ENOENT" || error.code === "ENOTEMPTY");
+}
+
+/**
+ * Narrows unknown thrown values to Node errno-shaped filesystem errors.
+ *
+ * **Why it exists:**
+ * Projection cleanup policy should branch on explicit Node error codes only.
+ *
+ * **What it talks to:**
+ * - Uses local type checks only.
+ *
+ * @param error - Unknown thrown value.
+ * @returns `true` when the value carries a Node-style `code`.
+ */
+function isNodeErrno(error: unknown): error is NodeJS.ErrnoException {
+  return typeof error === "object" && error !== null && "code" in error;
+}
+
+/**
+ * Applies review-safe redaction to an Obsidian note before path or content writes.
+ *
+ * **Why it exists:**
+ * Redaction must happen before filesystem writes so local path fragments cannot appear in note
+ * filenames or Markdown content in review-safe mode.
+ *
+ * **What it talks to:**
+ * - Uses `redactReviewSafeProjectionText(...)` (import) from `../policy`.
+ *
+ * @param note - Projected note from a renderer.
+ * @param mode - Active projection mode.
+ * @returns Original or redacted note depending on projection mode.
+ */
+function redactProjectedNoteForMode(
+  note: ObsidianProjectedNote,
+  mode: ProjectionSnapshot["mode"]
+): ObsidianProjectedNote {
+  if (mode === "operator_full") {
+    return note;
+  }
+  return {
+    relativePath: redactReviewSafeProjectionText(mode, note.relativePath),
+    content: redactReviewSafeProjectionText(mode, note.content)
+  };
 }
 
 /**
