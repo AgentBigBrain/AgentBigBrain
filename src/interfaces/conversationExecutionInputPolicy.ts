@@ -818,14 +818,10 @@ function shouldSuppressWorkflowContinuityBlocks(
   ) {
     return true;
   }
-  if (
-    semanticRouteId === "framework_app_build" ||
-    semanticRouteId === "clarify_build_format" ||
-    (
-      semanticRouteId === null &&
-      requiresFrameworkAppScaffoldAction(normalizedInput)
-    )
-  ) {
+  if (semanticRouteSuppressesStaleWorkflowContinuity(semanticRouteId)) {
+    return true;
+  }
+  if (semanticRouteId === null && requiresFrameworkAppScaffoldAction(normalizedInput)) {
     return true;
   }
   if (
@@ -849,6 +845,30 @@ function shouldSuppressWorkflowContinuityBlocks(
     return false;
   }
   return PROFILE_DETOUR_PATTERN.test(normalizedInput) || RELATIONSHIP_DETOUR_PATTERN.test(normalizedInput);
+}
+
+/**
+ * Returns whether a typed semantic route should block stale workflow-continuity prompt blocks.
+ *
+ * **Why it exists:**
+ * Plan and fresh build-format routes should not inherit old workspace handoff context through
+ * broad lexical follow-up helpers.
+ *
+ * **What it talks to:**
+ * - Uses `ConversationSemanticRouteId` (import) from `./conversationRuntime/intentModeContracts`.
+ *
+ * @param semanticRouteId - Resolved semantic route id for the current turn.
+ * @returns `true` when stale workflow context should be suppressed.
+ */
+function semanticRouteSuppressesStaleWorkflowContinuity(
+  semanticRouteId: ConversationSemanticRouteId | null
+): boolean {
+  return (
+    semanticRouteId === "plan_request" ||
+    semanticRouteId === "static_html_build" ||
+    semanticRouteId === "framework_app_build" ||
+    semanticRouteId === "clarify_build_format"
+  );
 }
 
 /**
