@@ -50,6 +50,9 @@ const ARTIFACT_PATH = path.resolve(
   "runtime/evidence/telegram_human_conversation_live_smoke_report.json"
 );
 const CONFIRM_ENV = "BRAIN_TELEGRAM_HUMAN_LIVE_SMOKE_CONFIRM";
+const POLL_INTERVAL_MS = 250;
+const CONVERSATION_TIMEOUT_MS = 45_000;
+const WORKFLOW_TIMEOUT_MS = 300_000;
 const PLACEHOLDER_PATTERNS: readonly RegExp[] = [
   /I'?m starting on that now/i,
   /Working on your request now/i,
@@ -85,7 +88,17 @@ const SCENARIOS: readonly Scenario[] = [
       "Please plan a calm air-sample landing page in three concise steps. Do not build anything yet.",
     expectWorkerActivity: true,
     requireReplyAfterWorker: true,
-    forbiddenAny: [/Request failed:/i]
+    requiredAny: [
+      /(?:^|\s)(?:1\.|step\s*1\b)[\s\S]*(?:^|\s)(?:2\.|step\s*2\b)[\s\S]*(?:^|\s)(?:3\.|step\s*3\b)/i
+    ],
+    forbiddenAny: [
+      /Request failed:/i,
+      /governance blocked/i,
+      /couldn'?t execute/i,
+      /security governor/i,
+      /MISSION_STOP_LIMIT/i,
+      /objective_not_met/i
+    ]
   }
 ] as const;
 
@@ -110,7 +123,12 @@ async function waitForAssistantTurn(
   latestRecentJobSummary: string | null;
 }> {
   let sawWorkerActivity = false;
-  for (let index = 0; index < 80; index += 1) {
+  const timeoutMs =
+    expectWorkerActivity && requireReplyAfterWorker
+      ? WORKFLOW_TIMEOUT_MS
+      : CONVERSATION_TIMEOUT_MS;
+  const deadlineAt = Date.now() + timeoutMs;
+  while (Date.now() < deadlineAt) {
     const session = await store.getSession(sessionKey);
     const assistantTurns =
       session?.conversationTurns.filter((turn) => turn.role === "assistant") ?? [];
@@ -126,10 +144,7 @@ async function waitForAssistantTurn(
     const reply = hasNewAssistantTurn
       ? assistantTurns.slice(-1)[0]?.text ?? null
       : null;
-    if (
-      hasNewAssistantTurn &&
-      (!expectWorkerActivity || !requireReplyAfterWorker || sawWorkerActivity || observedWorkerActivity)
-    ) {
+    if (latestRecentJob?.completedAt) {
       return {
         reply,
         runningJobId: session?.runningJobId ?? null,
@@ -140,23 +155,7 @@ async function waitForAssistantTurn(
         latestRecentJobSummary: latestRecentJob?.resultSummary ?? null
       };
     }
-    if (
-      expectWorkerActivity &&
-      requireReplyAfterWorker &&
-      latestRecentJob &&
-      latestRecentJob.completedAt
-    ) {
-      return {
-        reply,
-        runningJobId: session?.runningJobId ?? null,
-        queuedJobs: session?.queuedJobs.length ?? 0,
-        recentJobs: session?.recentJobs.length ?? 0,
-        observedWorkerActivity: sawWorkerActivity || observedWorkerActivity,
-        latestRecentJobStatus: latestRecentJob.status,
-        latestRecentJobSummary: latestRecentJob.resultSummary
-      };
-    }
-    if (!expectWorkerActivity && hasNewAssistantTurn) {
+    if (hasNewAssistantTurn && (!expectWorkerActivity || !requireReplyAfterWorker)) {
       return {
         reply,
         runningJobId: session?.runningJobId ?? null,
@@ -167,7 +166,7 @@ async function waitForAssistantTurn(
         latestRecentJobSummary: latestRecentJob?.resultSummary ?? null
       };
     }
-    await new Promise((resolve) => setTimeout(resolve, 250));
+    await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
   }
 
   const session = await store.getSession(sessionKey);
@@ -298,16 +297,17 @@ async function runSmoke(): Promise<SmokeArtifact> {
       if (!scenario.expectWorkerActivity && observed.recentJobs > 0) {
         failures.push(`unexpected_recent_jobs:${observed.recentJobs}`);
       }
+      const validationText = [observed.reply, observed.latestRecentJobSummary]
+        .filter((value): value is string => typeof value === "string" && value.length > 0)
+        .join("\n");
       if ((scenario.requiredAny?.length ?? 0) > 0) {
-        const hasAny = scenario.requiredAny!.some((pattern) =>
-          pattern.test(observed.reply ?? "")
-        );
+        const hasAny = scenario.requiredAny!.some((pattern) => pattern.test(validationText));
         if (!hasAny) {
           failures.push("missing_required_reply_shape");
         }
       }
       for (const pattern of scenario.forbiddenAny ?? []) {
-        if (pattern.test(observed.reply ?? "")) {
+        if (pattern.test(validationText)) {
           failures.push(`forbidden_reply_shape:${pattern.source}`);
         }
       }
