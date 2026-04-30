@@ -30,6 +30,8 @@ stay aligned with `package.json`.
 - Expanded the README, architecture reference, setup guide, command examples, and the Obsidian
   projection plan to document the new projection layer, media artifact mirror model, review-action
   write-back lane, and operator commands.
+- Tightened profile-memory writes so explicit source-lane policy is applied before broad extraction,
+  while direct identity and relationship memory remains available.
 
 ### Fixed
 - Shared runtime wiring now owns the entity graph, Stage 6.86 runtime-state adapter, and
@@ -42,6 +44,8 @@ stay aligned with `package.json`.
   evidence separately from durable current temporal claims.
 - Stage 6.86 entity extraction now strips more conversational glue before durable graph writes, and
   operators can run a bounded low-signal cleanup pass against older entity-graph residue.
+- Memory review corrections now validate replacement values by family before creating successor
+  truth, and preferred-name validation no longer carries mojibake in its token pattern.
 
 ### Security
 
