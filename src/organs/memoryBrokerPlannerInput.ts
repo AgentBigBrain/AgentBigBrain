@@ -8,6 +8,7 @@ import { LanguageUnderstandingOrgan } from "./languageUnderstanding/episodeExtra
 import { parseProfileMediaIngestInput } from "../core/profileMemory";
 import type {
   ProfileFactPlanningInspectionResult,
+  ProfileMemoryIngestMemoryIntent,
   ProfileReadableEpisode,
   ProfileReadableFact
 } from "../core/profileMemoryRuntime/contracts";
@@ -17,6 +18,9 @@ import {
   buildProfileMemorySourceFingerprint
 } from "../core/profileMemoryRuntime/profileMemoryIngestProvenance";
 import {
+  buildProfileMemoryIngestPolicy
+} from "../core/profileMemoryRuntime/profileMemoryIngestPolicy";
+import {
   createProfileMemoryRequestTelemetry,
   recordProfileMemoryIngestOperation,
   recordProfileMemoryPromptSurfaceMetrics,
@@ -25,6 +29,7 @@ import {
   recordProfileMemorySynthesisOperation
 } from "../core/profileMemoryRuntime/profileMemoryRequestTelemetry";
 import type { TaskRequest } from "../core/types";
+import { extractResolvedRouteMemoryIntent } from "../core/currentRequestExtraction";
 import { buildPlannerContextSynthesisBlock } from "./memorySynthesis/plannerContextSynthesis";
 import type { MemorySynthesisEpisodeRecord, MemorySynthesisFactRecord } from "./memorySynthesis/contracts";
 import {
@@ -257,6 +262,8 @@ export async function buildBrokeredPlannerInput(
     currentUserRequest,
     options.sessionDomainContext
   );
+  const resolvedRouteMemoryIntent =
+    extractResolvedRouteMemoryIntent(task.userInput) as ProfileMemoryIngestMemoryIntent | null;
 
   try {
     const requestTelemetry = createProfileMemoryRequestTelemetry();
@@ -297,6 +304,10 @@ export async function buildBrokeredPlannerInput(
             sourceSurface: "broker_task_ingest",
             sourceFingerprint
           },
+          ingestPolicy: buildProfileMemoryIngestPolicy({
+            memoryIntent: resolvedRouteMemoryIntent ?? "profile_update",
+            sourceSurface: "broker_task_ingest"
+          }),
           requestTelemetry
         }
       );

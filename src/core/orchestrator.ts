@@ -329,7 +329,8 @@ export class BrainOrchestrator {
       receivedAt,
       {
         validatedFactCandidates: request.validatedFactCandidates,
-        provenance: request.provenance
+        provenance: request.provenance,
+        ingestPolicy: request.ingestPolicy
       }
     );
     return result.appliedFacts > 0;

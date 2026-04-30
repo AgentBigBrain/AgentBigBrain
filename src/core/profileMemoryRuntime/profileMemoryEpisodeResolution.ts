@@ -154,7 +154,7 @@ function selectEpisodesForResolution(
   text: string
 ): readonly ProfileEpisodeRecord[] {
   if (episodes.length <= 1) {
-    return episodes;
+    return episodes.filter((episode) => episodeHasKeywordOverlap(episode, text));
   }
 
   const overlapped = episodes.filter((episode) => episodeHasKeywordOverlap(episode, text));

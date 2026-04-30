@@ -147,6 +147,7 @@ export async function buildModelAssistedSelfIdentityReply(
           buildConversationProfileMemoryWriteRequest({
             session,
             receivedAt,
+            memoryIntent: "profile_update",
             validatedFactCandidates: [
               {
                 key: "identity.preferred_name",
@@ -322,7 +323,8 @@ export async function buildDeterministicSelfIdentityDeclarationReply(
             ? buildConversationProfileMemoryWriteRequest({
                 session,
                 userInput,
-                receivedAt
+                receivedAt,
+                memoryIntent: "profile_update"
               })
             : userInput,
           receivedAt

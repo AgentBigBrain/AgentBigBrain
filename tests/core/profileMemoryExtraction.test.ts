@@ -111,7 +111,7 @@ test("canonical extraction helper still captures short preferred-name call-me ph
   );
 });
 
-test("conversational profile update signal recognizes direct relationship, work, and episode facts", () => {
+test("conversational profile update signal recognizes bounded relationship, event, and self facts", () => {
   assert.equal(
     hasConversationalProfileUpdateSignal(
       "I work with a guy named Milo at Northstar Creative."

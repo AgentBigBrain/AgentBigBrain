@@ -10,7 +10,7 @@ import {
   trimTrailingClausePunctuation
 } from "./profileMemoryNormalization";
 
-const PREFERRED_NAME_TOKEN_PATTERN = /^[\p{L}]+(?:['â€™-][\p{L}]+)*$/u;
+const PREFERRED_NAME_TOKEN_PATTERN = /^[\p{L}]+(?:['\u2019-][\p{L}]+)*$/u;
 const PREFERRED_NAME_CONNECTOR_TOKENS = new Set([
   "al", "bin", "da", "de", "del", "di", "dos", "du", "el", "la", "le", "van", "von"
 ]);

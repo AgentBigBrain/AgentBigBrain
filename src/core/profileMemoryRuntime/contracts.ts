@@ -145,11 +145,58 @@ export interface ProfileValidatedFactCandidateInput {
   confidence?: number;
 }
 
+export type ProfileMemoryIngestMemoryIntent =
+  | "none"
+  | "relationship_recall"
+  | "profile_update"
+  | "contextual_recall"
+  | "document_derived_recall";
+
+export type ProfileMemoryIngestSourceLane =
+  | "direct_user_text"
+  | "voice_transcript"
+  | "image_ocr"
+  | "image_summary"
+  | "document_text"
+  | "document_summary"
+  | "validated_model_candidate";
+
+export type ProfileMemoryIngestFragmentPolicy =
+  | "current_truth_allowed"
+  | "support_only"
+  | "candidate_only"
+  | "quarantine"
+  | "ignore";
+
+export type ProfileMemoryIngestPolicySource =
+  | "semantic_route"
+  | "exact_command"
+  | "structured_candidate"
+  | "legacy_compatibility";
+
+export type ProfileMemoryReviewMutationSource =
+  | "memory_review_command"
+  | "projection_review_action";
+
 export type ProfileMemorySourceSurface =
   | "conversation_profile_input"
   | "broker_task_ingest"
   | "memory_review_episode"
   | "memory_review_fact";
+
+export interface ProfileMemoryIngestPolicy {
+  memoryIntent: ProfileMemoryIngestMemoryIntent;
+  sourceLane: ProfileMemoryIngestSourceLane;
+  sourceSurface: ProfileMemorySourceSurface;
+  allowExactSelfFactExtraction: boolean;
+  allowDirectRelationshipExtraction: boolean;
+  allowGenericProfileFactExtraction: boolean;
+  allowCommitmentExtraction: boolean;
+  allowEpisodeSupportExtraction: boolean;
+  allowInferredResolution: boolean;
+  fragmentPolicy: ProfileMemoryIngestFragmentPolicy;
+  policySource: ProfileMemoryIngestPolicySource;
+}
 
 export interface ProfileMemoryWriteProvenance {
   conversationId?: string;
@@ -164,6 +211,7 @@ export interface ProfileMemoryIngestRequest {
   userInput?: string;
   validatedFactCandidates?: readonly ProfileValidatedFactCandidateInput[];
   provenance?: ProfileMemoryWriteProvenance;
+  ingestPolicy?: ProfileMemoryIngestPolicy;
 }
 
 export interface AgentPulseEvaluationRequest {

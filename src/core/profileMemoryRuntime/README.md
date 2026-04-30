@@ -19,6 +19,8 @@ full `profileMemoryStore.ts` implementation.
   live fact-review mutation request or result shapes
 - deterministic ingest provenance helpers and replay-safe synthetic source-task ids in
   `profileMemoryIngestProvenance.ts`
+- source-lane ingest policy normalization and pre-extraction stage selection in
+  `profileMemoryIngestPolicy.ts`
 - bounded turn-local ingest receipt helpers in `profileMemoryIngestIdempotency.ts`
 - deterministic retained ingest-receipt recovery and ordering helpers in
   `profileMemoryIngestReceiptNormalizationSupport.ts`
@@ -149,6 +151,8 @@ full `profileMemoryStore.ts` implementation.
   `profileMemoryRetainedFactGovernanceSupport.ts`
 - canonical persisted state normalization helpers in `profileMemoryStateNormalization.ts`
 - deterministic user-input candidate extraction in `profileMemoryExtraction.ts`
+- family-specific explicit review correction validation in
+  `profileMemoryReviewMutationValidation.ts`
 - shared bounded parsing, clause trimming, and follow-up resolution helpers for deterministic
   user-input extraction in `profileMemoryExtractionSupport.ts`
 - deterministic historical self-fact extraction in `profileMemoryHistoricalExtraction.ts`
