@@ -19,6 +19,29 @@ import {
 import { isTrackedArtifactContinuityAction } from "./trackedArtifactExemptions";
 import { isExplicitUserOwnedBuildWorkspaceAction } from "./userOwnedBuildExemptions";
 
+const MODEL_ADVISORY_TIMEOUT_MS = 500;
+
+/**
+ * Runs model advisory with a bounded soft timeout.
+ *
+ * @param promise - Model advisory promise.
+ * @returns Model output, or `null` when advisory is unavailable before the soft deadline.
+ */
+async function awaitModelAdvisoryWithSoftTimeout<T>(promise: Promise<T>): Promise<T | null> {
+  return new Promise<T | null>((resolve) => {
+    const timeout = setTimeout(() => resolve(null), MODEL_ADVISORY_TIMEOUT_MS);
+    promise
+      .then((value) => {
+        clearTimeout(timeout);
+        resolve(value);
+      })
+      .catch(() => {
+        clearTimeout(timeout);
+        resolve(null);
+      });
+  });
+}
+
 /**
  * Reads model advisory rejection needed for this execution step.
  *
@@ -53,22 +76,27 @@ export async function getModelAdvisoryRejection(
   }
 
   try {
-    const output = await context.modelClient.completeJson<GovernorModelOutput>({
-      model: context.model,
-      schemaName: "governor_v1",
-      temperature: 0,
-      systemPrompt:
-        "You are a strict policy evaluator. Return JSON with approve:boolean, reason:string, confidence:number.",
-      userPrompt: JSON.stringify({
-        governorId,
-        goal: context.task.goal,
-        actionType: proposal.action.type,
-        actionDescription: proposal.action.description,
-        rationale: proposal.rationale,
-        path: getParamString(proposal.action.params, "path") ?? "",
-        target: getParamString(proposal.action.params, "target") ?? ""
+    const output = await awaitModelAdvisoryWithSoftTimeout(
+      context.modelClient.completeJson<GovernorModelOutput>({
+        model: context.model,
+        schemaName: "governor_v1",
+        temperature: 0,
+        systemPrompt:
+          "You are a strict policy evaluator. Return JSON with approve:boolean, reason:string, confidence:number.",
+        userPrompt: JSON.stringify({
+          governorId,
+          goal: context.task.goal,
+          actionType: proposal.action.type,
+          actionDescription: proposal.action.description,
+          rationale: proposal.rationale,
+          path: getParamString(proposal.action.params, "path") ?? "",
+          target: getParamString(proposal.action.params, "target") ?? ""
+        })
       })
-    });
+    );
+    if (!output) {
+      return null;
+    }
 
     if (output.approve === false) {
       return rejectWithCategory(

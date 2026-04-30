@@ -5,12 +5,95 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import { DEFAULT_BRAIN_CONFIG } from "../../src/core/config";
+import type { BrainState, GovernanceProposal, TaskRequest } from "../../src/core/types";
+import type { ModelClient, StructuredCompletionRequest } from "../../src/models/types";
 import {
   isLoopbackProofAction,
   isManagedProcessLiveRunAction,
   isRuntimeOwnershipInspectionAction
 } from "../../src/governors/defaultCouncil/liveRunExemptions";
+import { securityGovernor } from "../../src/governors/defaultCouncil/securityGovernor";
 import { isExplicitUserOwnedBuildWorkspaceAction } from "../../src/governors/defaultCouncil/userOwnedBuildExemptions";
+
+class HangingModelClient implements ModelClient {
+  readonly backend = "mock";
+
+  async completeJson<T>(_request: StructuredCompletionRequest): Promise<T> {
+    return new Promise<T>(() => {
+      // Intentionally unresolved so model advisory must fall back to deterministic policy.
+    });
+  }
+}
+
+function buildGovernorTask(): TaskRequest {
+  return {
+    id: "task_default_council",
+    goal: "Provide planning guidance.",
+    userInput: "Please plan a landing page in three steps. Do not build anything yet.",
+    createdAt: "2026-04-30T00:00:00.000Z"
+  };
+}
+
+function buildGovernorState(): BrainState {
+  return {
+    createdAt: "2026-04-30T00:00:00.000Z",
+    runs: [],
+    metrics: {
+      totalTasks: 0,
+      totalActions: 0,
+      approvedActions: 0,
+      blockedActions: 0,
+      fastPathActions: 0,
+      escalationActions: 0
+    }
+  };
+}
+
+function buildRespondProposal(): GovernanceProposal {
+  return {
+    id: "proposal_default_council",
+    taskId: "task_default_council",
+    requestedBy: "planner",
+    rationale: "The user asked for planning only, so a direct non-executing response is sufficient.",
+    touchesImmutable: false,
+    action: {
+      id: "action_default_council",
+      type: "respond",
+      description: "Provide a three-step planning-only response.",
+      estimatedCostUsd: 0.02,
+      params: {
+        message:
+          "1. Define the message.\n2. Outline the page sections.\n3. Choose the style rules before building."
+      }
+    }
+  };
+}
+
+test("security governor treats stalled model advisory as optional for safe respond actions", async () => {
+  const vote = await securityGovernor.evaluate(buildRespondProposal(), {
+    task: buildGovernorTask(),
+    state: buildGovernorState(),
+    governanceMemory: {
+      generatedAt: "2026-04-30T00:00:00.000Z",
+      totalEvents: 0,
+      recentEvents: [],
+      recentBlockCounts: {
+        constraints: 0,
+        governance: 0,
+        runtime: 0
+      },
+      recentGovernorRejectCounts: {}
+    },
+    config: DEFAULT_BRAIN_CONFIG,
+    model: "stalled-model",
+    modelClient: new HangingModelClient()
+  });
+
+  assert.equal(vote.governorId, "security");
+  assert.equal(vote.approve, true);
+  assert.match(vote.reason, /no direct security violations/i);
+});
 
 test("isManagedProcessLiveRunAction accepts bounded localhost server starts", () => {
   assert.equal(
