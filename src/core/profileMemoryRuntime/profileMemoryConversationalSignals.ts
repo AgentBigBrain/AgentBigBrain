@@ -2,15 +2,14 @@
  * @fileoverview Shared bounded conversational signal helpers for profile-memory Phase 1 routing.
  */
 
-import { extractProfileFactCandidatesFromUserInput } from "./profileMemoryExtraction";
-import { extractProfileEpisodeCandidatesFromUserInput } from "./profileMemoryEpisodeExtraction";
+import { extractPreferredNameValuesFromUserInput } from "./profileMemoryExtraction";
+import {
+  extractResolvedFollowupFacts,
+  extractSegmentValueAfterContainedPrefix,
+  extractWrappedProfileMemoryClauses,
+  splitExplicitProfileSegments
+} from "./profileMemoryExtractionSupport";
 
-const CONVERSATIONAL_PROFILE_UPDATE_FACT_PREFIXES = [
-  "identity.",
-  "contact.",
-  "employment.",
-  "residence."
-] as const;
 const SIGNAL_ASSESSMENT_SOURCE_TASK_ID = "profile_signal_assessment";
 const SIGNAL_ASSESSMENT_OBSERVED_AT = "1970-01-01T00:00:00.000Z";
 const QUESTION_LEAD_TOKENS = new Set([
@@ -277,11 +276,134 @@ function hasRelationshipNarrativeUpdateSignal(userInput: string): boolean {
   }
   const hasRelationshipUpdateMarker =
     hasAnyToken(tokens, RELATIONSHIP_UPDATE_MARKER_TOKENS) ||
-    hasAnyTokenSequence(tokens, RELATIONSHIP_UPDATE_MARKER_SEQUENCES);
+    hasAnyTokenSequence(tokens, RELATIONSHIP_UPDATE_MARKER_SEQUENCES) ||
+    /\b[A-Z][A-Za-z'.-]{0,30}(?:\s+[A-Z][A-Za-z'.-]{0,30}){0,2}\s+is\s+my\s+[A-Za-z][A-Za-z_-]{1,30}\b/.test(normalized);
   if (!hasRelationshipUpdateMarker) {
     return false;
   }
   return containsCapitalizedNameLikeSpan(normalized);
+}
+
+/**
+ * Returns whether segmented relationship update wording should count as conversational profile
+ * memory. Workflow words in a different segment must not suppress a later explicit relationship
+ * clause from the same user turn.
+ *
+ * @param userInput - Raw user utterance under analysis.
+ * @returns `true` when one bounded segment carries relationship-update wording.
+ */
+function hasSegmentedRelationshipNarrativeUpdateSignal(userInput: string): boolean {
+  const candidateClauses = [
+    userInput,
+    ...splitExplicitProfileSegments(userInput),
+    ...extractWrappedProfileMemoryClauses(userInput).flatMap((clause) =>
+      splitExplicitProfileSegments(clause)
+    )
+  ];
+  for (const clause of candidateClauses) {
+    const { normalized, tokens } = tokenizeConversationalSignalInput(clause);
+    if (!normalized) {
+      continue;
+    }
+    if (normalized.includes("?") || normalized.includes("\u00bf")) {
+      continue;
+    }
+    if (tokens.length > 0 && QUESTION_LEAD_TOKENS.has(tokens[0]!)) {
+      continue;
+    }
+    if (hasAnyToken(tokens, WORKFLOW_OR_STATUS_CUE_TOKENS)) {
+      continue;
+    }
+    const hasRelationshipUpdateMarker =
+      hasAnyToken(tokens, RELATIONSHIP_UPDATE_MARKER_TOKENS) ||
+      hasAnyTokenSequence(tokens, RELATIONSHIP_UPDATE_MARKER_SEQUENCES) ||
+      /\b[A-Z][A-Za-z'.-]{0,30}(?:\s+[A-Z][A-Za-z'.-]{0,30}){0,2}\s+is\s+my\s+[A-Za-z][A-Za-z_-]{1,30}\b/.test(normalized) ||
+      /\bmy\s+(?:friend|partner|spouse|wife|husband|girlfriend|boyfriend|acquaintance|boss|coworker|colleague|work\s+peer|peer|manager|supervisor|lead|team\s+lead|employee|direct\s+report|neighbor|neighbour|roommate|relative|distant\s+relative|family\s+member|cousin|aunt|uncle|mom|mother|dad|father|son|daughter|parent|child|sibling|sister|brother|teammate|classmate)\s+is\s+[A-Z][A-Za-z'.-]{0,30}\b/i.test(normalized) ||
+      /\bi(?:\s+also)?\s+(?:know|met)\s+(?:another|a\s+different)\s+[A-Z][A-Za-z'.-]{0,30}\s+(?:at|from)\s+[A-Z][A-Za-z0-9'&.-]*/i.test(normalized) ||
+      /\bthe\s+[A-Z][A-Za-z'.-]{0,30}\s+from\s+[A-Z][A-Za-z0-9'&.-]*(?:\s+[A-Z][A-Za-z0-9'&.-]*)*\s+sometimes\s+goes\s+by\s+[A-Z][A-Za-z'.-]{0,20}\b/.test(normalized) ||
+      /\b[A-Z][A-Za-z'.-]{0,30}(?:\s+[A-Z][A-Za-z'.-]{0,30}){0,2}\s+(?:sold|bought)\s+[A-Z][A-Za-z'.-]{0,30}(?:\s+[A-Z][A-Za-z'.-]{0,30}){0,2}\b/.test(normalized);
+    if (hasRelationshipUpdateMarker && containsCapitalizedNameLikeSpan(normalized)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Returns profile-memory clauses that can be checked without running full extraction.
+ *
+ * **Why it exists:**
+ * Conversational write gating should inspect only narrow profile declaration shapes, not broad
+ * fact and episode extractors that would expand memory authority before policy runs.
+ *
+ * **What it talks to:**
+ * - Uses `extractWrappedProfileMemoryClauses` (import) from `./profileMemoryExtractionSupport`.
+ *
+ * @param userInput - Raw user utterance under analysis.
+ * @returns Direct and wrapped profile-memory clauses.
+ */
+function buildConversationalSignalClauses(userInput: string): readonly string[] {
+  const text = userInput.trim();
+  if (!text) {
+    return [];
+  }
+  return [text, ...extractWrappedProfileMemoryClauses(text)];
+}
+
+/**
+ * Returns whether one turn contains a narrow first-person profile declaration.
+ *
+ * **Why it exists:**
+ * Direct identity, employment, and residence declarations should still write memory even after
+ * broad extraction stops owning the conversation write gate.
+ *
+ * **What it talks to:**
+ * - Uses `extractPreferredNameValuesFromUserInput` (import) from `./profileMemoryExtraction`.
+ * - Uses profile extraction support helpers from `./profileMemoryExtractionSupport`.
+ *
+ * @param userInput - Raw user utterance under analysis.
+ * @returns `true` when exact self-profile declaration wording is present.
+ */
+function hasExactSelfProfileDeclarationSignal(userInput: string): boolean {
+  for (const clause of buildConversationalSignalClauses(userInput)) {
+    if (extractPreferredNameValuesFromUserInput(clause).length > 0) {
+      return true;
+    }
+    for (const segment of splitExplicitProfileSegments(clause)) {
+      if (
+        extractSegmentValueAfterContainedPrefix(segment, ["i work at ", "i work for "]) ||
+        extractSegmentValueAfterContainedPrefix(segment, ["my job is ", "my new job is "]) ||
+        extractSegmentValueAfterContainedPrefix(segment, ["i live in ", "i moved to "])
+      ) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+/**
+ * Returns whether one turn contains explicit follow-up resolution wording.
+ *
+ * **Why it exists:**
+ * Follow-up resolution is a bounded commitment lane and should not depend on unrelated broad
+ * profile extractors to open the write path.
+ *
+ * **What it talks to:**
+ * - Uses `extractResolvedFollowupFacts` (import) from `./profileMemoryExtractionSupport`.
+ *
+ * @param userInput - Raw user utterance under analysis.
+ * @returns `true` when explicit follow-up resolution facts can be extracted.
+ */
+function hasExplicitFollowupResolutionSignal(userInput: string): boolean {
+  return buildConversationalSignalClauses(userInput).some(
+    (clause) =>
+      extractResolvedFollowupFacts(
+        clause,
+        SIGNAL_ASSESSMENT_SOURCE_TASK_ID,
+        SIGNAL_ASSESSMENT_OBSERVED_AT
+      ).length > 0
+  );
 }
 
 /**
@@ -292,23 +414,14 @@ function hasRelationshipNarrativeUpdateSignal(userInput: string): boolean {
  * @returns `true` when bounded identity/contact/employment/residence facts are extractable.
  */
 export function hasConversationalProfileUpdateSignal(userInput: string): boolean {
-  const factSignal = extractProfileFactCandidatesFromUserInput(
-    userInput,
-    SIGNAL_ASSESSMENT_SOURCE_TASK_ID,
-    SIGNAL_ASSESSMENT_OBSERVED_AT
-  ).some((candidate) =>
-    CONVERSATIONAL_PROFILE_UPDATE_FACT_PREFIXES.some((prefix) => candidate.key.startsWith(prefix))
+  if (hasExactSelfProfileDeclarationSignal(userInput)) {
+    return true;
+  }
+  if (hasExplicitFollowupResolutionSignal(userInput)) {
+    return true;
+  }
+  return (
+    hasSegmentedRelationshipNarrativeUpdateSignal(userInput) ||
+    hasRelationshipNarrativeUpdateSignal(userInput)
   );
-  if (factSignal) {
-    return true;
-  }
-  const episodeSignal = extractProfileEpisodeCandidatesFromUserInput(
-    userInput,
-    SIGNAL_ASSESSMENT_SOURCE_TASK_ID,
-    SIGNAL_ASSESSMENT_OBSERVED_AT
-  ).length > 0;
-  if (episodeSignal) {
-    return true;
-  }
-  return hasRelationshipNarrativeUpdateSignal(userInput);
 }

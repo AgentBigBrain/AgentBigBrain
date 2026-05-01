@@ -84,7 +84,14 @@ export function extractCurrentRequestForPlaybookIntent(userInput: string): strin
  * @returns `true` when build-oriented intent is present.
  */
 function isBuildIntent(normalizedInput: string): boolean {
-  return /\b(build|scaffold|typescript\s+cli|runbook|tests?)\b/.test(normalizedInput);
+  const mentionsCliContract =
+    /\b(?:typescript|javascript|node)?\s*cli\b/.test(normalizedInput) ||
+    /\bcommand[- ]line\b/.test(normalizedInput);
+  const asksToCreate =
+    /\b(?:build|create|generate|scaffold|implement)\b/.test(normalizedInput);
+  const asksForVerification =
+    /\b(?:test|tests|verify|verification|runbook|readme)\b/.test(normalizedInput);
+  return mentionsCliContract && asksToCreate && asksForVerification;
 }
 
 /**
@@ -95,8 +102,11 @@ function isBuildIntent(normalizedInput: string): boolean {
  */
 function isResearchIntent(normalizedInput: string): boolean {
   return (
-    /\b(research|findings|proof\s+refs?|sources?)\b/.test(normalizedInput) ||
-    /\bsandboxing\s+controls?\b/.test(normalizedInput)
+    /\bresearch\b/.test(normalizedInput) &&
+    (
+      /\b(?:findings|proof\s+refs?|sources?|citations?)\b/.test(normalizedInput) ||
+      /\bsandboxing\s+controls?\b/.test(normalizedInput)
+    )
   );
 }
 
@@ -107,7 +117,25 @@ function isResearchIntent(normalizedInput: string): boolean {
  * @returns `true` when workflow-oriented intent is present.
  */
 function isWorkflowIntent(normalizedInput: string): boolean {
-  return /\b(workflow|replay|selector\s+drift|browser\s+workflow|capture)\b/.test(normalizedInput);
+  return (
+    /\b(?:workflow|browser\s+workflow)\b/.test(normalizedInput) &&
+    /\b(?:replay|selector\s+drift|capture|record|recording)\b/.test(normalizedInput)
+  );
+}
+
+/**
+ * Detects explicit planning-only constraints that must keep playbooks out of execution mode.
+ *
+ * @param normalizedInput - Lowercased normalized request text.
+ * @returns `true` when the user asks for planning or guidance without side effects.
+ */
+function isPlanningOnlyIntent(normalizedInput: string): boolean {
+  return (
+    /\b(?:plan|outline|steps?|strategy|guidance)\b/.test(normalizedInput) &&
+    /\b(?:do\s+not|don't|without)\s+(?:build|execute|run|start|create|make|generate|scaffold)\b/.test(
+      normalizedInput
+    )
+  );
 }
 
 /**
@@ -120,6 +148,12 @@ export function deriveRequestedPlaybookIntent(userInput: string): RequestedPlayb
   const currentRequest = extractCurrentRequestForPlaybookIntent(userInput);
   const normalizedInput = normalizeInputForPlaybookMatching(currentRequest);
   const requestedTags = new Set<string>();
+  if (isPlanningOnlyIntent(normalizedInput)) {
+    return {
+      requestedTags: [],
+      requiredInputSchema: "unknown_input_schema"
+    };
+  }
   const buildIntent = isBuildIntent(normalizedInput);
   const researchIntent = isResearchIntent(normalizedInput);
   const workflowIntent = isWorkflowIntent(normalizedInput);

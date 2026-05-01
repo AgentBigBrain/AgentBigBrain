@@ -504,7 +504,7 @@ function isPronounLikeContactSubject(subject: string): boolean {
  * @returns Result produced by this helper.
  */
 function looksLikeWorkAssociationLabel(value: string): boolean {
-  return value.length > 0;
+  return looksLikeBoundedAssociationLabel(value, 5);
 }
 
 /**
@@ -519,5 +519,37 @@ function looksLikeWorkAssociationLabel(value: string): boolean {
  * @returns Result produced by this helper.
  */
 function looksLikeAssociationLabel(value: string): boolean {
-  return value.length > 0;
+  return looksLikeBoundedAssociationLabel(value, 4);
+}
+
+/**
+ * Evaluates whether a captured association value is a compact label rather than a narrative tail.
+ *
+ * **Why it exists:**
+ * Third-person continuity extraction should not promote long clauses, commands, URLs, or path-like
+ * fragments into durable relationship truth just because a broad pattern matched.
+ *
+ * **What it talks to:**
+ * - Uses local constants/helpers within this module.
+ *
+ * @param value - Captured association label after leading-label trimming.
+ * @param maxTokens - Maximum compact-token count accepted for this label family.
+ * @returns `true` when the value is safe to use as an association label.
+ */
+function looksLikeBoundedAssociationLabel(value: string, maxTokens: number): boolean {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length > 80) {
+    return false;
+  }
+  if (
+    /(?:https?:\/\/|file:\/\/|[\\/]|[`$=<>{}\[\]()])/i.test(trimmed) ||
+    /\b(?:and|but|because|while|although|though|then)\b/i.test(trimmed)
+  ) {
+    return false;
+  }
+  const tokens = trimmed.split(/\s+/).filter(Boolean);
+  if (tokens.length === 0 || tokens.length > maxTokens) {
+    return false;
+  }
+  return tokens.every((token) => /^[A-Za-z0-9][A-Za-z0-9'&.-]*$/.test(token));
 }

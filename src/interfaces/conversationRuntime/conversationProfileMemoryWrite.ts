@@ -8,15 +8,20 @@ import type {
   ProfileValidatedFactCandidateInput
 } from "../../core/profileMemoryRuntime/contracts";
 import {
+  buildProfileMemoryIngestPolicy
+} from "../../core/profileMemoryRuntime/profileMemoryIngestPolicy";
+import {
   buildConversationProfileMemoryTurnId,
   buildProfileMemorySourceFingerprint
 } from "../../core/profileMemoryRuntime/profileMemoryIngestProvenance";
+import type { ConversationRouteMemoryIntent } from "./intentModeContracts";
 
 export interface ConversationProfileMemoryWriteRequestInput {
   session: ConversationSession;
   receivedAt: string;
   userInput?: string;
   validatedFactCandidates?: readonly ProfileValidatedFactCandidateInput[];
+  memoryIntent?: ConversationRouteMemoryIntent | null;
 }
 
 /**
@@ -34,6 +39,7 @@ export function buildConversationProfileMemoryWriteRequest(
     input.userInput,
     validatedFactCandidates
   );
+  const sourceSurface = "conversation_profile_input";
   return {
     ...(typeof input.userInput === "string" && input.userInput.trim().length > 0
       ? { userInput: input.userInput }
@@ -41,6 +47,11 @@ export function buildConversationProfileMemoryWriteRequest(
     ...(validatedFactCandidates.length > 0
       ? { validatedFactCandidates }
       : {}),
+    ingestPolicy: buildProfileMemoryIngestPolicy({
+      memoryIntent: input.memoryIntent ?? null,
+      sourceSurface,
+      hasValidatedFactCandidates: validatedFactCandidates.length > 0
+    }),
     provenance: {
       conversationId: input.session.conversationId,
       turnId: buildConversationProfileMemoryTurnId(
@@ -50,7 +61,7 @@ export function buildConversationProfileMemoryWriteRequest(
       ),
       dominantLaneAtWrite: input.session.domainContext.dominantLane,
       threadKey: input.session.conversationStack?.activeThreadKey ?? null,
-      sourceSurface: "conversation_profile_input",
+      sourceSurface,
       sourceFingerprint
     }
   };

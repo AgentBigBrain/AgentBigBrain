@@ -922,7 +922,11 @@ test("routeConversationMessageInput does not raise a plan-or-build clarification
   assert.equal(capturedInput, userInput);
   assert.equal(session.activeClarification, null);
   assert.equal(session.progressState, null);
-  assert.match(capturedExecutionInput, /Current tracked workspace in this chat:/);
+  assert.doesNotMatch(capturedExecutionInput, /Current tracked workspace in this chat:/);
+  assert.match(capturedExecutionInput, /Resolved semantic route:/);
+  assert.match(capturedExecutionInput, /- routeId: static_html_build/);
+  assert.match(capturedExecutionInput, /Resolved build format:/);
+  assert.match(capturedExecutionInput, /- format: static_html/);
   assert.match(capturedExecutionInput, /Current user request:\nCreate another lightweight single-file HTML landing page/i);
 });
 

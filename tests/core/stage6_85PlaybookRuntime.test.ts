@@ -68,6 +68,23 @@ test("stage 6.85 playbook runtime selects deterministic build playbook for build
   });
 });
 
+test("stage 6.85 playbook runtime leaves planning-only site requests on planner fallback", async () => {
+  await withTempRegistryPath(buildRegistryEnvelopeJson(), async (registryPath) => {
+    const context = await resolveStage685PlaybookPlanningContext({
+      userInput:
+        "Please plan a calm air-sample landing page in three concise steps. Do not build anything yet.",
+      nowIso: "2026-02-28T00:00:00.000Z",
+      registryPath
+    });
+
+    assert.equal(context.selectedPlaybookId, null);
+    assert.equal(context.fallbackToPlanner, true);
+    assert.equal(context.registryValidated, false);
+    assert.deepEqual(context.requestedTags, []);
+    assert.equal(context.requiredInputSchema, "unknown_input_schema");
+  });
+});
+
 test("stage 6.85 playbook runtime selects deterministic research playbook for research requests", async () => {
   await withTempRegistryPath(buildRegistryEnvelopeJson(), async (registryPath) => {
     const context = await resolveStage685PlaybookPlanningContext({

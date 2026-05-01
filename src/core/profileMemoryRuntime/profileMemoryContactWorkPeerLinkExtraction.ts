@@ -15,18 +15,24 @@ import {
 } from "./profileMemoryContactExtractionSupport";
 
 const CURRENT_WORK_PEER_LINK_PATTERNS = [
-  /^(?<name>[A-Za-z][A-Za-z' -]{1,40}) works with me(?: (?<prep>at|for) (?<company>.+))?$/i
+  /^(?<name>[A-Za-z][A-Za-z' -]{1,40}) works with me(?: (?<prep>at|for) (?<company>.+))?$/i,
+  /^i work with (?<name>[A-Za-z][A-Za-z' -]{1,40})(?: (?<prep>at|for) (?<company>.+))?$/i
 ] as const;
 
 const HISTORICAL_WORK_PEER_LINK_PATTERNS = [
   /^(?<name>[A-Za-z][A-Za-z' -]{1,40}) worked with me(?: (?<prep>at|for) (?<company>.+))?$/i,
-  /^(?<name>[A-Za-z][A-Za-z' -]{1,40}) used to work with me(?: (?<prep>at|for) (?<company>.+))?$/i
+  /^(?<name>[A-Za-z][A-Za-z' -]{1,40}) used to work with me(?: (?<prep>at|for) (?<company>.+))?$/i,
+  /^i worked with (?<name>[A-Za-z][A-Za-z' -]{1,40})(?: (?<prep>at|for) (?<company>.+))?$/i,
+  /^i used to work with (?<name>[A-Za-z][A-Za-z' -]{1,40})(?: (?<prep>at|for) (?<company>.+))?$/i
 ] as const;
 
 const SEVERED_WORK_PEER_LINK_PATTERNS = [
   /^(?<name>[A-Za-z][A-Za-z' -]{1,40}) no longer works with me(?: (?<prep>at|for) (?<company>.+))?(?: anymore)?$/i,
   /^(?<name>[A-Za-z][A-Za-z' -]{1,40}) does not work with me(?: (?<prep>at|for) (?<company>.+))?(?: anymore)?$/i,
-  /^(?<name>[A-Za-z][A-Za-z' -]{1,40}) doesn't work with me(?: (?<prep>at|for) (?<company>.+))?(?: anymore)?$/i
+  /^(?<name>[A-Za-z][A-Za-z' -]{1,40}) doesn't work with me(?: (?<prep>at|for) (?<company>.+))?(?: anymore)?$/i,
+  /^i no longer work with (?<name>[A-Za-z][A-Za-z' -]{1,40})(?: (?<prep>at|for) (?<company>.+))?(?: anymore)?$/i,
+  /^i do not work with (?<name>[A-Za-z][A-Za-z' -]{1,40})(?: (?<prep>at|for) (?<company>.+))?(?: anymore)?$/i,
+  /^i don't work with (?<name>[A-Za-z][A-Za-z' -]{1,40})(?: (?<prep>at|for) (?<company>.+))?(?: anymore)?$/i
 ] as const;
 
 /**

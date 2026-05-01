@@ -36,6 +36,12 @@ const LOW_SIGNAL_ENTITY_EXTRA_STOP_WORDS = new Set([
   "well"
 ]);
 
+const WINDOWS_LOCAL_PATH_PATTERN =
+  /\b[A-Za-z]:\\(?:Users\\[^\\\r\n]+|[^ \t\r\n]+)/g;
+const POSIX_HOME_PATH_PATTERN = /\/home\/[^/\s]+\/[^\r\n\s]*/g;
+const ONEDRIVE_PATH_TOKEN_PATTERN = /\bOneDrive\b/gi;
+const REPO_WORKSPACE_TOKEN_PATTERN = /\bAgentBigBrain-public\b/g;
+
 /**
  * Returns whether one raw media asset may be mirrored in the current projection mode.
  *
@@ -58,6 +64,43 @@ export function shouldMirrorMediaAsset(
     return true;
   }
   return artifact.kind === "document" ? false : false;
+}
+
+/**
+ * Redacts local filesystem details from text rendered into review-safe projection mirrors.
+ *
+ * **Why it exists:**
+ * Obsidian review mirrors can leave the encrypted/local runtime boundary, so review-safe mode must
+ * not expose host-specific paths, workspace names, or the current OS username even when old memory
+ * episodes or workflow patterns contain them.
+ *
+ * **What it talks to:**
+ * - Uses local path redaction patterns in this module.
+ *
+ * @param mode - Active projection mode.
+ * @param text - Projected Markdown or note-path text.
+ * @returns Redacted text in review-safe mode, or original text in operator-full mode.
+ */
+export function redactReviewSafeProjectionText(mode: ProjectionMode, text: string): string {
+  if (mode === "operator_full" || text.length === 0) {
+    return text;
+  }
+
+  let redacted = text
+    .replace(WINDOWS_LOCAL_PATH_PATTERN, "[redacted local path]")
+    .replace(POSIX_HOME_PATH_PATTERN, "[redacted local path]")
+    .replace(ONEDRIVE_PATH_TOKEN_PATTERN, "[redacted storage root]")
+    .replace(REPO_WORKSPACE_TOKEN_PATTERN, "[redacted workspace]");
+
+  const username = (process.env.USERNAME ?? process.env.USER ?? "").trim();
+  if (username.length >= 3) {
+    redacted = redacted.replace(
+      new RegExp(`(^|[^A-Za-z0-9])${escapeRegExp(username)}(?=$|[^A-Za-z0-9])`, "gi"),
+      "$1[redacted user]"
+    );
+  }
+
+  return redacted;
 }
 
 /**
@@ -103,6 +146,23 @@ export function renderProjectedClaimValue(
     return claim.payload.normalizedValue ?? "(no value)";
   }
   return "[redacted in review_safe mode]";
+}
+
+/**
+ * Escapes a literal string for use inside a dynamically constructed regular expression.
+ *
+ * **Why it exists:**
+ * Review-safe redaction includes the current OS username when present, and usernames must be
+ * treated as literal text instead of regex syntax.
+ *
+ * **What it talks to:**
+ * - Uses local string replacement only.
+ *
+ * @param value - Literal string to escape.
+ * @returns Regex-safe literal string.
+ */
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 /**

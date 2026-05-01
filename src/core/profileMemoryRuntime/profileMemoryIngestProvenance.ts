@@ -9,6 +9,7 @@ import type {
   ProfileMemoryWriteProvenance,
   ProfileValidatedFactCandidateInput
 } from "./contracts";
+import { normalizeProfileMemoryIngestPolicy } from "./profileMemoryIngestPolicy";
 
 /**
  * Normalizes freeform source text into the bounded whitespace-stable form used by source
@@ -86,6 +87,14 @@ export function normalizeProfileMemoryIngestRequest(
   }
   return {
     ...request,
+    ...(request.ingestPolicy
+      ? {
+        ingestPolicy: normalizeProfileMemoryIngestPolicy(
+          request.ingestPolicy,
+          request.provenance.sourceSurface
+        )
+      }
+      : {}),
     provenance: {
       ...request.provenance,
       sourceFingerprint:

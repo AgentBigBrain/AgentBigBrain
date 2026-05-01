@@ -85,12 +85,17 @@ import {
   type ProfileFactReviewResult,
   type ProfileEpisodeReviewMutationResult,
   type ProfileIngestResult,
+  type ProfileMemoryIngestPolicy,
   type ProfileMemoryRequestTelemetry,
   type ProfileMemoryWriteProvenance,
   type ProfileValidatedFactCandidateInput,
   type ProfileReadableEpisode,
   type ProfileReadableFact
 } from "./profileMemoryRuntime/contracts";
+import {
+  normalizeProfileMemoryIngestPolicy,
+  selectProfileMemoryExtractionStages
+} from "./profileMemoryRuntime/profileMemoryIngestPolicy";
 import {
   type ProfileEpisodeContinuityQueryRequest
 } from "./profileMemoryRuntime/profileMemoryEpisodeQueries";
@@ -104,6 +109,9 @@ import type { ProfileEpisodeResolutionStatus } from "./profileMemoryRuntime/prof
 import {
   getProfileMemoryFamilyRegistryEntry
 } from "./profileMemoryRuntime/profileMemoryFamilyRegistry";
+import {
+  validateProfileFactReviewReplacementValue
+} from "./profileMemoryRuntime/profileMemoryReviewMutationValidation";
 import {
   applyProfileMemoryGraphMutations,
   applyProfileMemoryGraphStableRefRekey
@@ -122,7 +130,6 @@ import {
   resolveProfileMemoryEffectiveSensitivity
 } from "./profileMemoryRuntime/profileMemoryFactSensitivity";
 import { inferGovernanceFamilyForNormalizedKey } from "./profileMemoryRuntime/profileMemoryGovernanceFamilyInference";
-import { normalizeProfileValue } from "./profileMemoryRuntime/profileMemoryNormalization";
 import { MEMORY_REVIEW_FACT_CORRECTION_SOURCE } from "./profileMemoryRuntime/profileMemoryTruthGovernanceSources";
 import type { CreateProfileEpisodeRecordInput } from "./profileMemory";
 import type { ProfileMemoryGraphClaimRecord } from "./profileMemoryRuntime/profileMemoryGraphContracts";
@@ -148,6 +155,7 @@ export interface ProfileMemoryIngestOptions {
   additionalEpisodeCandidates?: readonly CreateProfileEpisodeRecordInput[];
   validatedFactCandidates?: readonly ProfileValidatedFactCandidateInput[];
   provenance?: ProfileMemoryWriteProvenance;
+  ingestPolicy?: ProfileMemoryIngestPolicy;
   requestTelemetry?: ProfileMemoryRequestTelemetry;
 }
 
@@ -358,32 +366,59 @@ export class ProfileMemoryStore {
         options.validatedFactCandidates ?? []
       );
     const mediaIngest = parseProfileMediaIngestInput(userInput);
+    const ingestPolicy = normalizeProfileMemoryIngestPolicy(
+      options.ingestPolicy,
+      options.provenance?.sourceSurface
+    );
+    const extractionStages = selectProfileMemoryExtractionStages(ingestPolicy);
     const factSourceTexts = dedupeProfileIngestTexts([
-      mediaIngest.directUserText,
-      ...mediaIngest.transcriptFragments
+      ingestPolicy.policySource === "legacy_compatibility" ||
+      ingestPolicy.sourceLane === "direct_user_text"
+        ? mediaIngest.directUserText
+        : "",
+      ...(
+        ingestPolicy.policySource === "legacy_compatibility" ||
+        (
+          ingestPolicy.sourceLane === "voice_transcript" &&
+          ingestPolicy.fragmentPolicy === "current_truth_allowed"
+        )
+        ? mediaIngest.transcriptFragments
+        : []
+      )
     ]);
     const extractedCandidates = factSourceTexts.flatMap((text) =>
-      extractProfileFactCandidatesFromUserInput(text, taskId, observedAt)
+      extractProfileFactCandidatesFromUserInput(text, taskId, observedAt, {
+        exactSelfFacts: extractionStages.exactSelfFacts,
+        directRelationshipFacts: extractionStages.directRelationshipFacts,
+        genericProfileFacts: extractionStages.genericProfileFacts,
+        commitments: extractionStages.commitments
+      })
     );
-    const validatedCandidates = buildValidatedProfileFactCandidates(
-      options.validatedFactCandidates ?? [],
-      taskId,
-      observedAt
-    );
-    const inferredResolutionCandidates = factSourceTexts.flatMap((text) =>
-      buildInferredCommitmentResolutionCandidates(state, text, taskId, observedAt)
-    );
+    const validatedCandidates = extractionStages.validatedCandidates
+      ? buildValidatedProfileFactCandidates(
+          options.validatedFactCandidates ?? [],
+          taskId,
+          observedAt
+        )
+      : [];
+    const inferredResolutionCandidates = extractionStages.commitments
+      ? factSourceTexts.flatMap((text) =>
+          buildInferredCommitmentResolutionCandidates(state, text, taskId, observedAt)
+        )
+      : [];
     const candidates = [
       ...extractedCandidates,
       ...validatedCandidates,
       ...inferredResolutionCandidates
     ];
-    const extractedEpisodeCandidates = mediaIngest.allNarrativeFragments.flatMap((text) =>
-      extractProfileEpisodeCandidatesFromUserInput(text, taskId, observedAt)
-    );
+    const extractedEpisodeCandidates = extractionStages.episodeSupport
+      ? mediaIngest.allNarrativeFragments.flatMap((text) =>
+          extractProfileEpisodeCandidatesFromUserInput(text, taskId, observedAt)
+        )
+      : [];
     const mergedEpisodeCandidates = [
       ...extractedEpisodeCandidates,
-      ...(options.additionalEpisodeCandidates ?? [])
+      ...(extractionStages.episodeSupport ? options.additionalEpisodeCandidates ?? [] : [])
     ];
     const preResolutionGovernance = governProfileMemoryCandidates({
       factCandidates: candidates,
@@ -400,14 +435,16 @@ export class ProfileMemoryStore {
         preResolutionGovernance.allowedSupportOnlyFactCandidates
       )
     ]);
-    const inferredEpisodeResolutionCandidates = factSourceTexts.flatMap((text) =>
-      buildInferredProfileEpisodeResolutionCandidates(
-        applyResult.nextState,
-        text,
-        taskId,
-        observedAt
-      )
-    );
+    const inferredEpisodeResolutionCandidates = extractionStages.inferredEpisodeResolution
+      ? factSourceTexts.flatMap((text) =>
+          buildInferredProfileEpisodeResolutionCandidates(
+            applyResult.nextState,
+            text,
+            taskId,
+            observedAt
+          )
+        )
+      : [];
     const resolutionGovernance = governProfileMemoryCandidates({
       factCandidates: [],
       episodeCandidates: [],
@@ -723,15 +760,16 @@ export class ProfileMemoryStore {
     );
 
     if (request.action === "correct") {
-      const replacementValue = normalizeProfileValue(request.replacementValue ?? "");
-      if (!replacementValue) {
-        throw new Error("Fact correction requires a non-empty replacement value.");
-      }
       if (!isCurrentStateEligibleFamily(family)) {
         throw new Error(
           `Fact family ${family} does not support correction override through bounded fact review.`
         );
       }
+      const replacementValue = validateProfileFactReviewReplacementValue(
+        family,
+        targetFact.key,
+        request.replacementValue ?? ""
+      );
 
       const applyResult = upsertTemporalProfileFact(state, {
         key: targetFact.key,

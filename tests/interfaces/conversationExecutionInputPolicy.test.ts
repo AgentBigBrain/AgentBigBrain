@@ -967,6 +967,103 @@ test("buildConversationAwareExecutionInput suppresses stale workflow continuity 
   assert.match(executionInput, /create a nextjs landing page/i);
 });
 
+test("buildConversationAwareExecutionInput lets plan route metadata beat stale workflow continuity", async () => {
+  const session = buildSession();
+  session.modeContinuity = {
+    activeMode: "build",
+    source: "natural_intent",
+    confidence: "HIGH",
+    lastAffirmedAt: "2026-04-10T17:56:52.000Z",
+    lastUserInput: "Build the prior sample site."
+  };
+  session.returnHandoff = {
+    id: "handoff:prior-sample-site",
+    status: "completed",
+    goal: "Build the prior sample site.",
+    summary: "The prior sample site was created.",
+    nextSuggestedStep: "Edit the prior site if asked.",
+    workspaceRootPath: "C:\\Users\\testuser\\Desktop\\prior-sample-site",
+    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\prior-sample-site\\index.html",
+    previewUrl: "file:///C:/Users/testuser/Desktop/prior-sample-site/index.html",
+    changedPaths: ["C:\\Users\\testuser\\Desktop\\prior-sample-site\\index.html"],
+    sourceJobId: "job-prior",
+    updatedAt: "2026-04-10T17:57:16.000Z"
+  };
+  session.activeWorkspace = {
+    id: "workspace:prior-sample-site",
+    label: "Prior sample workspace",
+    rootPath: "C:\\Users\\testuser\\Desktop\\prior-sample-site",
+    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\prior-sample-site\\index.html",
+    previewUrl: "file:///C:/Users/testuser/Desktop/prior-sample-site/index.html",
+    browserSessionId: "browser-prior",
+    browserSessionIds: ["browser-prior"],
+    browserSessionStatus: "closed",
+    browserProcessPid: null,
+    previewProcessLeaseId: null,
+    previewProcessLeaseIds: [],
+    previewProcessCwd: null,
+    lastKnownPreviewProcessPid: null,
+    stillControllable: false,
+    ownershipState: "stale",
+    previewStackState: "detached",
+    lastChangedPaths: ["C:\\Users\\testuser\\Desktop\\prior-sample-site\\index.html"],
+    sourceJobId: "job-prior",
+    updatedAt: "2026-04-10T17:57:16.000Z"
+  };
+  session.domainContext.dominantLane = "workflow";
+  session.domainContext.continuitySignals = {
+    activeWorkspace: true,
+    returnHandoff: true,
+    modeContinuity: true
+  };
+  const userInput =
+    "Before building anything, outline a static HTML creative agency site with a few page ideas.";
+  const semanticRoute = buildSemanticRouteFixture({
+    routeId: "plan_request",
+    executionMode: "plan",
+    buildFormat: {
+      format: "static_html",
+      source: "explicit_user_request",
+      confidence: "high"
+    },
+    explicitConstraints: {
+      disallowBrowserOpen: true,
+      disallowServerStart: true
+    }
+  });
+
+  const executionInput = await buildConversationAwareExecutionInput(
+    session,
+    userInput,
+    10,
+    classifyRoutingIntentV1(userInput),
+    userInput,
+    undefined,
+    undefined,
+    null,
+    undefined,
+    null,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    semanticRoute.routeId,
+    semanticRoute.buildFormat,
+    semanticRoute
+  );
+
+  assert.match(executionInput, /Resolved semantic route:/);
+  assert.match(executionInput, /- routeId: plan_request/);
+  assert.match(executionInput, /Resolved build format:/);
+  assert.match(executionInput, /- format: static_html/);
+  assert.doesNotMatch(executionInput, /Current working mode from earlier in this chat:/);
+  assert.doesNotMatch(executionInput, /Latest durable work handoff in this chat:/);
+  assert.doesNotMatch(executionInput, /Current tracked workspace in this chat:/);
+  assert.doesNotMatch(executionInput, /Natural artifact-edit follow-up:/);
+});
+
 test("buildConversationAwareExecutionInput grounds tracked runtime inspection against the tracked workspace instead of build/scaffold work", async () => {
   const session = buildSession();
   session.modeContinuity = {

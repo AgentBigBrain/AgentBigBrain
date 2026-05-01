@@ -457,7 +457,7 @@ test("memory broker suppresses profile context for workflow-dominant requests", 
   const store = new ProfileMemoryStore(profilePath, key, 90);
   const broker = new MemoryBrokerOrgan(store);
 
-  const profileTask = buildTask("task_memory_broker_profile", "My favorite editor is Helix.");
+  const profileTask = buildTask("task_memory_broker_profile", "My name is Avery.");
   const workflowTask = buildTask(
     "task_memory_broker_workflow",
     "Deploy the workspace repo and run build verification."

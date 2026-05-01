@@ -284,6 +284,14 @@ export function isRelationshipConversationRecallTurn(userInput: string): boolean
   }
   if (
     signals.questionLike &&
+    rawTokens.includes("who") &&
+    rawTokens.includes("know") &&
+    rawTokens.includes("work")
+  ) {
+    return true;
+  }
+  if (
+    signals.questionLike &&
     rawTokens.includes("do") &&
     rawTokens.includes("you") &&
     rawTokens.includes("know") &&

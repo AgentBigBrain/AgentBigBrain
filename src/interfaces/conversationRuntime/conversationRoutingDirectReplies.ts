@@ -40,6 +40,7 @@ import type {
   ConversationSemanticRouteMetadata,
   ConversationSemanticRouteId,
   ConversationIntentSemanticHint,
+  ConversationRouteMemoryIntent,
   ResolvedConversationIntentMode
 } from "./intentModeContracts";
 import {
@@ -117,6 +118,7 @@ async function rememberDirectConversationProfileInputIfNeeded(
   session: ConversationSession,
   userInput: string,
   receivedAt: string,
+  memoryIntent: ConversationRouteMemoryIntent | null,
   rememberConversationProfileInput?: RememberConversationProfileInput
 ): Promise<void> {
   if (
@@ -129,7 +131,8 @@ async function rememberDirectConversationProfileInputIfNeeded(
     buildConversationProfileMemoryWriteRequest({
       session,
       userInput,
-      receivedAt
+      receivedAt,
+      memoryIntent: memoryIntent === "none" ? null : memoryIntent ?? "profile_update"
     }),
     receivedAt
   ).catch(() => false);
@@ -276,6 +279,7 @@ export async function buildDirectCasualConversationReply(
     input.session,
     input.input,
     input.receivedAt,
+    input.semanticRoute?.memoryIntent ?? null,
     input.rememberConversationProfileInput
   );
   const profileUpdateSignal =

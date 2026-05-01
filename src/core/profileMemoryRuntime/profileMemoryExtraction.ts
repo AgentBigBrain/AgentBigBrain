@@ -46,6 +46,20 @@ export {
   validatePreferredNameCandidateValue
 } from "./profileMemoryPreferredNameValidation";
 
+export interface ProfileFactExtractionOptions {
+  exactSelfFacts?: boolean;
+  directRelationshipFacts?: boolean;
+  genericProfileFacts?: boolean;
+  commitments?: boolean;
+}
+
+const DEFAULT_PROFILE_FACT_EXTRACTION_OPTIONS: Required<ProfileFactExtractionOptions> = {
+  exactSelfFacts: true,
+  directRelationshipFacts: true,
+  genericProfileFacts: true,
+  commitments: true
+};
+
 /**
  * Extracts canonical preferred-name values from raw user wording.
  *
@@ -103,7 +117,8 @@ export function extractPreferredNameValuesFromUserInput(
 export function extractProfileFactCandidatesFromUserInput(
   userInput: string,
   sourceTaskId: string,
-  observedAt: string
+  observedAt: string,
+  options: ProfileFactExtractionOptions = {}
 ): ProfileFactUpsertInput[] {
   const candidates: ProfileFactUpsertInput[] = [];
   const seen = new Set<string>();
@@ -111,6 +126,10 @@ export function extractProfileFactCandidatesFromUserInput(
   if (!text) {
     return candidates;
   }
+  const extractionOptions = {
+    ...DEFAULT_PROFILE_FACT_EXTRACTION_OPTIONS,
+    ...options
+  };
   const extractionTexts = [text, ...extractWrappedProfileMemoryClauses(text)];
 
   const maybeAddCandidate = (candidate: ProfileFactUpsertInput): void => {
@@ -132,132 +151,140 @@ export function extractProfileFactCandidatesFromUserInput(
     });
   };
 
-  for (const extractionText of extractionTexts) {
-    for (const contactFactGroup of [
-      extractSeveredNamedContactFacts(extractionText, sourceTaskId, observedAt),
-      extractHistoricalDirectContactRelationshipFacts(extractionText, sourceTaskId, observedAt),
-      extractNamedContactEmployeeLinkFacts(extractionText, sourceTaskId, observedAt),
-      extractNamedContactWorkPeerLinkFacts(extractionText, sourceTaskId, observedAt),
-      extractCurrentDirectContactRelationshipFacts(extractionText, sourceTaskId, observedAt),
-      extractNamedContactFacts(extractionText, sourceTaskId, observedAt)
-    ]) {
-      for (const contactFact of contactFactGroup) {
-        maybeAddCandidate(contactFact);
+  if (extractionOptions.directRelationshipFacts) {
+    for (const extractionText of extractionTexts) {
+      for (const contactFactGroup of [
+        extractSeveredNamedContactFacts(extractionText, sourceTaskId, observedAt),
+        extractHistoricalDirectContactRelationshipFacts(extractionText, sourceTaskId, observedAt),
+        extractNamedContactEmployeeLinkFacts(extractionText, sourceTaskId, observedAt),
+        extractNamedContactWorkPeerLinkFacts(extractionText, sourceTaskId, observedAt),
+        extractCurrentDirectContactRelationshipFacts(extractionText, sourceTaskId, observedAt),
+        extractNamedContactFacts(extractionText, sourceTaskId, observedAt)
+      ]) {
+        for (const contactFact of contactFactGroup) {
+          maybeAddCandidate(contactFact);
+        }
       }
     }
   }
 
-  for (const extractionText of extractionTexts) {
-    const resolvedFollowupFacts = extractResolvedFollowupFacts(
-      extractionText,
-      sourceTaskId,
-      observedAt
-    );
-    for (const resolvedFollowupFact of resolvedFollowupFacts) {
-      maybeAddCandidate(resolvedFollowupFact);
-    }
-  }
-
-  const preferredNameValues = extractionTexts.flatMap((extractionText) =>
-    extractPreferredNameValuesFromUserInput(extractionText)
-  );
-  if (preferredNameValues.length > 0) {
-    maybeAddCandidate({
-      key: "identity.preferred_name",
-      value: preferredNameValues[0]!,
-      sensitive: false,
-      sourceTaskId,
-      source: "user_input_pattern.name_phrase",
-      observedAt,
-      confidence: 0.95
-    });
-  }
-
-  for (const extractionText of extractionTexts) {
-    for (const match of extractMyFactMatches(extractionText)) {
-      const rawKey = match.key;
-      const value = match.value;
-      if (shouldSkipGenericMyFactForNamedContact(rawKey, value, seen)) {
-        continue;
-      }
-      const key = normalizeProfileKey(rawKey);
-      if (canonicalizeProfileKey(key) === "identity.preferred_name") {
-        continue;
-      }
-      maybeAddCandidate({
-        key,
-        value,
-        sensitive: isSensitiveKey(key),
+  if (extractionOptions.commitments) {
+    for (const extractionText of extractionTexts) {
+      const resolvedFollowupFacts = extractResolvedFollowupFacts(
+        extractionText,
         sourceTaskId,
-        source: "user_input_pattern.my_is",
+        observedAt
+      );
+      for (const resolvedFollowupFact of resolvedFollowupFacts) {
+        maybeAddCandidate(resolvedFollowupFact);
+      }
+    }
+  }
+
+  if (extractionOptions.exactSelfFacts) {
+    const preferredNameValues = extractionTexts.flatMap((extractionText) =>
+      extractPreferredNameValuesFromUserInput(extractionText)
+    );
+    if (preferredNameValues.length > 0) {
+      maybeAddCandidate({
+        key: "identity.preferred_name",
+        value: preferredNameValues[0]!,
+        sensitive: false,
+        sourceTaskId,
+        source: "user_input_pattern.name_phrase",
         observedAt,
-        confidence: toSentenceConfidence(match.sourceText)
+        confidence: 0.95
       });
     }
+
+    const workValue = extractionTexts
+      .flatMap((extractionText) => splitExplicitProfileSegments(extractionText))
+      .map((segment) =>
+        extractSegmentValueAfterContainedPrefix(segment, ["i work at ", "i work for "])
+      )
+      .find((value) => Boolean(value));
+    if (workValue) {
+      maybeAddCandidate({
+        key: "employment.current",
+        value: trimAtContinuationMarker(workValue, [" and "]),
+        sensitive: false,
+        sourceTaskId,
+        source: "user_input_pattern.work_at",
+        observedAt,
+        confidence: toSentenceConfidence(workValue)
+      });
+    }
+
+    const jobValue = extractionTexts
+      .flatMap((extractionText) => splitExplicitProfileSegments(extractionText))
+      .map((segment) =>
+        extractSegmentValueAfterContainedPrefix(segment, ["my job is ", "my new job is "])
+      )
+      .find((value) => Boolean(value));
+    if (jobValue) {
+      maybeAddCandidate({
+        key: "employment.current",
+        value: trimAtContinuationMarker(jobValue, [" and "]),
+        sensitive: false,
+        sourceTaskId,
+        source: "user_input_pattern.job_is",
+        observedAt,
+        confidence: toSentenceConfidence(jobValue)
+      });
+    }
+
+    const residenceValue = extractionTexts
+      .flatMap((extractionText) => splitExplicitProfileSegments(extractionText))
+      .map((segment) =>
+        extractSegmentValueAfterContainedPrefix(segment, ["i live in ", "i moved to "])
+      )
+      .find((value) => Boolean(value));
+    if (residenceValue) {
+      maybeAddCandidate({
+        key: "residence.current",
+        value: trimAtContinuationMarker(residenceValue, [" and "]),
+        sensitive: true,
+        sourceTaskId,
+        source: "user_input_pattern.residence",
+        observedAt,
+        confidence: toSentenceConfidence(residenceValue)
+      });
+    }
+
+    for (const extractionText of extractionTexts) {
+      const historicalFactCandidates = extractHistoricalProfileFactCandidates(
+        extractionText,
+        sourceTaskId,
+        observedAt
+      );
+      for (const historicalFactCandidate of historicalFactCandidates) {
+        maybeAddCandidate(historicalFactCandidate);
+      }
+    }
   }
 
-  const workValue = extractionTexts
-    .flatMap((extractionText) => splitExplicitProfileSegments(extractionText))
-    .map((segment) =>
-      extractSegmentValueAfterContainedPrefix(segment, ["i work at ", "i work for "])
-    )
-    .find((value) => Boolean(value));
-  if (workValue) {
-    maybeAddCandidate({
-      key: "employment.current",
-      value: trimAtContinuationMarker(workValue, [" and "]),
-      sensitive: false,
-      sourceTaskId,
-      source: "user_input_pattern.work_at",
-      observedAt,
-      confidence: toSentenceConfidence(workValue)
-    });
-  }
-
-  const jobValue = extractionTexts
-    .flatMap((extractionText) => splitExplicitProfileSegments(extractionText))
-    .map((segment) =>
-      extractSegmentValueAfterContainedPrefix(segment, ["my job is ", "my new job is "])
-    )
-    .find((value) => Boolean(value));
-  if (jobValue) {
-    maybeAddCandidate({
-      key: "employment.current",
-      value: trimAtContinuationMarker(jobValue, [" and "]),
-      sensitive: false,
-      sourceTaskId,
-      source: "user_input_pattern.job_is",
-      observedAt,
-      confidence: toSentenceConfidence(jobValue)
-    });
-  }
-
-  const residenceValue = extractionTexts
-    .flatMap((extractionText) => splitExplicitProfileSegments(extractionText))
-    .map((segment) =>
-      extractSegmentValueAfterContainedPrefix(segment, ["i live in ", "i moved to "])
-    )
-    .find((value) => Boolean(value));
-  if (residenceValue) {
-    maybeAddCandidate({
-      key: "residence.current",
-      value: trimAtContinuationMarker(residenceValue, [" and "]),
-      sensitive: true,
-      sourceTaskId,
-      source: "user_input_pattern.residence",
-      observedAt,
-      confidence: toSentenceConfidence(residenceValue)
-    });
-  }
-
-  for (const extractionText of extractionTexts) {
-    const historicalFactCandidates = extractHistoricalProfileFactCandidates(
-      extractionText,
-      sourceTaskId,
-      observedAt
-    );
-    for (const historicalFactCandidate of historicalFactCandidates) {
-      maybeAddCandidate(historicalFactCandidate);
+  if (extractionOptions.genericProfileFacts) {
+    for (const extractionText of extractionTexts) {
+      for (const match of extractMyFactMatches(extractionText)) {
+        const rawKey = match.key;
+        const value = match.value;
+        if (shouldSkipGenericMyFactForNamedContact(rawKey, value, seen)) {
+          continue;
+        }
+        const key = normalizeProfileKey(rawKey);
+        if (canonicalizeProfileKey(key) === "identity.preferred_name") {
+          continue;
+        }
+        maybeAddCandidate({
+          key,
+          value,
+          sensitive: isSensitiveKey(key),
+          sourceTaskId,
+          source: "user_input_pattern.my_is",
+          observedAt,
+          confidence: toSentenceConfidence(match.sourceText)
+        });
+      }
     }
   }
 

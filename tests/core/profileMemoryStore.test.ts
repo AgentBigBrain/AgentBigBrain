@@ -27,6 +27,9 @@ import {
 import { ProfileMemoryStore } from "../../src/core/profileMemoryStore";
 import { buildProfileMemorySourceFingerprint } from "../../src/core/profileMemoryRuntime/profileMemoryIngestProvenance";
 import {
+  buildProfileMemoryIngestPolicy
+} from "../../src/core/profileMemoryRuntime/profileMemoryIngestPolicy";
+import {
   loadPersistedProfileMemoryState,
   saveProfileMemoryState
 } from "../../src/core/profileMemoryRuntime/profileMemoryPersistence";
@@ -19220,6 +19223,78 @@ test("ingestFromTaskInput accepts validated identity candidates without requirin
   });
 });
 
+test("ingestFromTaskInput obeys explicit none policy before broad extraction", async () => {
+  await withProfileStore(async (store) => {
+    const result = await store.ingestFromTaskInput(
+      "task_profile_store_policy_none",
+      "My name is Avery and I work at Lantern Studio.",
+      "2026-04-20T12:00:00.000Z",
+      {
+        ingestPolicy: buildProfileMemoryIngestPolicy({
+          memoryIntent: "none",
+          sourceSurface: "broker_task_ingest"
+        })
+      }
+    );
+
+    const loaded = await store.load();
+
+    assert.equal(result.appliedFacts, 0);
+    assert.equal(loaded.facts.length, 0);
+    assert.equal(loaded.graph.observations.length, 0);
+    assert.equal(loaded.graph.claims.length, 0);
+    assert.equal(loaded.graph.events.length, 0);
+    assert.deepEqual(loaded.graph.readModel.currentClaimIdsByKey, {});
+  });
+});
+
+test("ingestFromTaskInput keeps arbitrary generic profile facts closed under explicit profile policy", async () => {
+  await withProfileStore(async (store) => {
+    const result = await store.ingestFromTaskInput(
+      "task_profile_store_policy_generic_closed",
+      "My favorite editor is Helix.",
+      "2026-04-20T12:05:00.000Z",
+      {
+        ingestPolicy: buildProfileMemoryIngestPolicy({
+          memoryIntent: "profile_update",
+          sourceSurface: "broker_task_ingest"
+        })
+      }
+    );
+
+    assert.equal(result.appliedFacts, 0);
+    assert.equal((await store.load()).facts.length, 0);
+  });
+});
+
+test("ingestFromTaskInput treats voice transcripts as support-only unless policy promotes them", async () => {
+  await withProfileStore(async (store) => {
+    const result = await store.ingestFromTaskInput(
+      "task_profile_store_policy_voice_support_only",
+      "The user sent media with the following interpreted context:\n- Voice note transcript: My name is Avery.",
+      "2026-04-20T12:10:00.000Z",
+      {
+        ingestPolicy: {
+          memoryIntent: "profile_update",
+          sourceLane: "voice_transcript",
+          sourceSurface: "broker_task_ingest",
+          allowExactSelfFactExtraction: true,
+          allowDirectRelationshipExtraction: true,
+          allowGenericProfileFactExtraction: false,
+          allowCommitmentExtraction: true,
+          allowEpisodeSupportExtraction: false,
+          allowInferredResolution: false,
+          fragmentPolicy: "support_only",
+          policySource: "semantic_route"
+        }
+      }
+    );
+
+    assert.equal(result.appliedFacts, 0);
+    assert.equal((await store.load()).facts.length, 0);
+  });
+});
+
 test("ingestFromTaskInput dual-writes validated candidates into compatibility facts and graph-backed claim truth", async () => {
   await withProfileStore(async (store) => {
     await store.ingestFromTaskInput(
@@ -24308,4 +24383,3 @@ test("profile memory load prefers stronger retained duplicate receipt provenance
     assert.equal(loaded.ingestReceipts[0]?.recordedAt, "2026-04-05T01:29:00.000Z");
   });
 });
-
