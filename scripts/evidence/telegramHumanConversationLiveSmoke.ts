@@ -89,7 +89,7 @@ const SCENARIOS: readonly Scenario[] = [
     expectWorkerActivity: true,
     requireReplyAfterWorker: true,
     requiredAny: [
-      /(?:^|\s)(?:1\.|step\s*1\b)[\s\S]*(?:^|\s)(?:2\.|step\s*2\b)[\s\S]*(?:^|\s)(?:3\.|step\s*3\b)/i
+      /(?:^|\s)(?:1\.|step\s*1\b)[\s\S]*\s(?:2\.|step\s*2\b)[\s\S]*\s(?:3\.|step\s*3\b)/i
     ],
     forbiddenAny: [
       /Request failed:/i,

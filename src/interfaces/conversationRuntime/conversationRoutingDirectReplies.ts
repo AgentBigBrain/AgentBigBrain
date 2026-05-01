@@ -286,9 +286,16 @@ export async function buildDirectCasualConversationReply(
     hasConversationalProfileUpdateSignal(input.input) &&
     !/[?]/.test(input.input);
   const baseSemanticRoute = input.semanticRoute ?? null;
-  const semanticRouteForMemory = baseSemanticRoute?.memoryIntent === "none"
-    ? null
-    : baseSemanticRoute;
+  const semanticRouteForMemory =
+    profileUpdateSignal && baseSemanticRoute
+      ? {
+        ...baseSemanticRoute,
+        memoryIntent: "profile_update" as const,
+        continuationKind: "relationship_memory" as const
+      }
+      : baseSemanticRoute?.memoryIntent === "none"
+        ? null
+        : baseSemanticRoute;
   const semanticRouteIdForMemory =
     semanticRouteForMemory?.routeId ??
     (baseSemanticRoute ? null : input.semanticRouteId ?? null);
