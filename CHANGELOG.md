@@ -8,6 +8,16 @@ stay aligned with `package.json`.
 ## [Unreleased]
 
 ### Added
+
+### Changed
+
+### Fixed
+
+### Security
+
+## [0.2.0] - 2026-05-01
+
+### Added
 - Added a projection subsystem under `src/core/projections/` with a generic sink boundary, an
   Obsidian vault sink, and a JSON mirror sink for external memory inspection.
 - Added canonical runtime-owned media artifact persistence so Telegram uploads can be mirrored as
