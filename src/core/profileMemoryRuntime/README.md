@@ -20,7 +20,9 @@ full `profileMemoryStore.ts` implementation.
 - deterministic ingest provenance helpers and replay-safe synthetic source-task ids in
   `profileMemoryIngestProvenance.ts`
 - source-lane ingest policy normalization and pre-extraction stage selection in
-  `profileMemoryIngestPolicy.ts`
+  `profileMemoryIngestPolicy.ts`, including default authority mapping for direct user text, voice
+  transcripts, document text, document/model summaries, media summaries, and validated candidates
+  before broad extractors are allowed to run
 - bounded turn-local ingest receipt helpers in `profileMemoryIngestIdempotency.ts`
 - deterministic retained ingest-receipt recovery and ordering helpers in
   `profileMemoryIngestReceiptNormalizationSupport.ts`
@@ -215,7 +217,10 @@ full `profileMemoryStore.ts` implementation.
 - family-level plus heuristic-backed sensitivity-floor helpers for governed fact candidates and
   legacy fact visibility in `profileMemoryFactSensitivity.ts`
 - exact-source allowlists for deterministic truth-governance seams in
-  `profileMemoryTruthGovernanceSources.ts`
+  `profileMemoryTruthGovernanceSources.ts`, plus the canonical source-family matrix that keeps
+  document text, document/model summaries, media summaries, lexical relationship patterns, and
+  lexical episode patterns candidate-only by default unless a family-specific review/governance
+  rule explicitly allows a narrower outcome
 - initial mutation-time decision-record contracts in `profileMemoryDecisionRecordContracts.ts`
 - initial retraction and redaction contracts in `profileMemoryRetractionContracts.ts`
 - minimum mutation-envelope contracts in `profileMemoryMutationEnvelopeContracts.ts`
@@ -1258,6 +1263,14 @@ full `profileMemoryStore.ts` implementation.
 - Ambiguous bare relationship labels that are not yet backed by governed extraction should fail
   closed in downstream pulse or routing interpretation; today that means bare `report` is not
   treated as an `employee` alias until a bounded extraction/governance path exists for it.
+
+## Memory Authority Boundary
+
+Profile memory treats source family as a first-class governance input. Direct user text can still
+produce narrow durable facts when the fact family and exact source allow it, but document/media
+interpretation, model summaries, and broad relationship or episode phrase packs start as
+candidate/support evidence. Durable truth queries should only see those candidates after explicit
+family policy or a review action promotes them.
 
 ## Related Tests
 - `tests/core/profileMemoryQueries.test.ts`

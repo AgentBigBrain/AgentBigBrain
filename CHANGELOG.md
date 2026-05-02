@@ -12,15 +12,30 @@ stay aligned with `package.json`.
   Telegram completion matrix smoke that writes review-safe PASS/FAIL/BLOCKED evidence.
 - Added governed skill lifecycle actions for updating, approving, rejecting, and deprecating
   runtime skills.
+- Added touched-file lexical-boundary reporting and plan-specific lexical cleanup evidence for the
+  remaining route, planner, memory, pulse, and trust surfaces.
+- Added profile-memory source-family and ingest-lane policy tests so document/media summaries,
+  broad relationship patterns, and broad episode patterns start candidate/support-only by default.
 
 ### Changed
 - Media memory ingest now prefers structured layer authority over rendered prompt text, keeping raw
   document and model-derived meaning candidate-only for durable profile memory.
 - Agent-suggested skills now default to a reviewable pending state until operator approval.
+- Conversation follow-up routing now requires typed session context or an explicit reminder shape
+  before contextual cue words can influence status, memory, or workflow continuation.
+- Conversation profile-memory writes now route media-only turns through source lanes instead of
+  inheriting direct user-text extraction authority.
 
 ### Fixed
+- Runtime skill manifests now fail closed when a same-name runtime override is malformed instead
+  of silently re-enabling the built-in skill.
+- PDF document extraction now applies page and text budgets during extraction and releases parser
+  resources after each parse.
+- Mission diagnostics now classify skill lifecycle actions as tier-three side effects.
 - Obsidian media projection now surfaces interpretation-layer authority and redacts review-safe
   extracted text consistently.
+- Unanchored contextual cue wording now preserves ordinary chat instead of falling through to the
+  generic local intent model and accidentally becoming execution work.
 
 ### Security
 - Review evidence for the Telegram completion matrix rejects unredacted local paths and

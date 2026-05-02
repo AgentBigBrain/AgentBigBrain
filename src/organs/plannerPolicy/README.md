@@ -140,7 +140,9 @@ belongs here.
   page-template, or generated-source fallback actions.
 - Resolved semantic-route metadata must be consumed before compatibility lexical fallbacks. Broad
   natural-language build, browser, runtime, review, or recall wording should not become a second
-  planner-owned semantic router.
+  planner-owned semantic router. When route metadata is present and says browser/runtime control is
+  absent, natural browser or server wording in the raw request must not re-enable those side
+  effects.
 - Prompt assembly rules should stay centralized here rather than drifting back into
   `src/organs/planner.ts`.
 
