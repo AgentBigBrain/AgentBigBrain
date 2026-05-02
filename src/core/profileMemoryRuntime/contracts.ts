@@ -5,6 +5,7 @@
 import { type AgentPulseDecision, type AgentPulseReason } from "../agentPulse";
 import { type ProfileFactRecord, type ProfileMutationAuditMetadataV1 } from "../profileMemory";
 import type { ConversationDomainLane } from "../sessionContext";
+import type { SourceAuthority } from "../sourceAuthority";
 import type { ProfileEpisodeRecord } from "./profileMemoryEpisodeContracts";
 import type { ProfileMemoryMutationEnvelope } from "./profileMemoryMutationEnvelopeContracts";
 import type {
@@ -174,6 +175,8 @@ export type ProfileMemoryIngestPolicySource =
   | "structured_candidate"
   | "legacy_compatibility";
 
+export type ProfileMemorySourceAuthority = SourceAuthority;
+
 export type ProfileMemoryReviewMutationSource =
   | "memory_review_command"
   | "projection_review_action";
@@ -196,6 +199,7 @@ export interface ProfileMemoryIngestPolicy {
   allowInferredResolution: boolean;
   fragmentPolicy: ProfileMemoryIngestFragmentPolicy;
   policySource: ProfileMemoryIngestPolicySource;
+  sourceAuthority: ProfileMemorySourceAuthority;
 }
 
 export interface ProfileMemoryWriteProvenance {

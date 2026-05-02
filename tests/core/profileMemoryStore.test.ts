@@ -19285,7 +19285,8 @@ test("ingestFromTaskInput treats voice transcripts as support-only unless policy
           allowEpisodeSupportExtraction: false,
           allowInferredResolution: false,
           fragmentPolicy: "support_only",
-          policySource: "semantic_route"
+          policySource: "semantic_route",
+          sourceAuthority: "media_transcript"
         }
       }
     );
