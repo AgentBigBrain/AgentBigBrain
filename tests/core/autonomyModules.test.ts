@@ -25,6 +25,7 @@ import {
   buildMissionEvidenceRetryInput,
   countApprovedBrowserOpenProofActions,
   countApprovedReadinessProofActions,
+  countApprovedTargetPathTouchActions,
   mapRequirementToReasonCode,
   resolveMissingMissionRequirements
 } from "../../src/core/autonomy/missionEvidence";
@@ -504,6 +505,56 @@ test("countApprovedBrowserOpenProofActions counts visible open_browser success s
   const result = buildTaskResult([buildApprovedOpenBrowserReadyResult("open_browser_visible_1")]);
 
   assert.equal(countApprovedBrowserOpenProofActions(result), 1);
+});
+
+test("countApprovedTargetPathTouchActions ignores shell command text as path proof", () => {
+  const targetPathHints = ["c:\\workspace\\sample-site"];
+  const commandOnlyResult = buildTaskResult([
+    {
+      action: {
+        id: "shell_command_text_mentions_path",
+        type: "shell_command",
+        description: "echo a path without targeting it structurally",
+        params: {
+          command: "echo wrote C:\\workspace\\sample-site\\index.html"
+        },
+        estimatedCostUsd: 0.02
+      },
+      mode: "escalation_path",
+      approved: true,
+      output: "Command output mentioned C:\\workspace\\sample-site\\index.html.",
+      executionStatus: "success",
+      executionMetadata: {},
+      blockedBy: [],
+      violations: [],
+      votes: []
+    }
+  ]);
+  const structuredPathResult = buildTaskResult([
+    {
+      action: {
+        id: "shell_command_structured_cwd_path",
+        type: "shell_command",
+        description: "run a command in the target workspace",
+        params: {
+          command: "npm run build",
+          cwd: "C:\\workspace\\sample-site"
+        },
+        estimatedCostUsd: 0.02
+      },
+      mode: "escalation_path",
+      approved: true,
+      output: "Build completed.",
+      executionStatus: "success",
+      executionMetadata: {},
+      blockedBy: [],
+      violations: [],
+      votes: []
+    }
+  ]);
+
+  assert.equal(countApprovedTargetPathTouchActions(commandOnlyResult, targetPathHints), 0);
+  assert.equal(countApprovedTargetPathTouchActions(structuredPathResult, targetPathHints), 1);
 });
 
 test("mission evidence helpers resolve missing requirements and build deterministic retry guidance", () => {
