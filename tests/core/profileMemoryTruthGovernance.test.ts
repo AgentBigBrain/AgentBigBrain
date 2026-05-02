@@ -10,6 +10,42 @@ import {
   assertProfileMemoryAdjacentDomainAccessAllowed,
   assertProfileMemoryGovernanceDecisionAllowed
 } from "../../src/core/profileMemoryRuntime/profileMemoryFamilyRegistry";
+import {
+  classifyProfileMemorySourceFamily,
+  getProfileMemorySourceDefaultAuthority,
+  isDocumentOrMediaDerivedProfileMemorySource
+} from "../../src/core/profileMemoryRuntime/profileMemoryTruthGovernanceSources";
+
+test("source-family policy classifies lexical and media-derived memory authority before governance", () => {
+  assert.equal(
+    classifyProfileMemorySourceFamily("user_input_pattern.direct_contact_relationship"),
+    "lexical_relationship_pattern"
+  );
+  assert.equal(
+    getProfileMemorySourceDefaultAuthority("user_input_pattern.direct_contact_relationship"),
+    "candidate_only"
+  );
+  assert.equal(
+    classifyProfileMemorySourceFamily("user_input_pattern.episode_candidate"),
+    "lexical_episode_pattern"
+  );
+  assert.equal(
+    classifyProfileMemorySourceFamily("document.text.embedded_pdf"),
+    "document_text_extraction"
+  );
+  assert.equal(
+    classifyProfileMemorySourceFamily("language_understanding.document.episode_extraction"),
+    "document_model_summary"
+  );
+  assert.equal(
+    classifyProfileMemorySourceFamily("media.summary.image"),
+    "media_model_summary"
+  );
+  assert.equal(
+    isDocumentOrMediaDerivedProfileMemorySource("language_understanding.document.episode_extraction"),
+    true
+  );
+});
 
 test("truth governance allows validated preferred-name candidates as current-state facts", () => {
   const result = governProfileMemoryCandidates({

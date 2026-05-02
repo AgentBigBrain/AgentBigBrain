@@ -6,6 +6,8 @@ import type { ConversationSession } from "../sessionStore";
 import type { ConversationInboundMediaEnvelope } from "../mediaRuntime/contracts";
 import type {
   ProfileMemoryIngestRequest,
+  ProfileMemoryIngestSourceLane,
+  ProfileMediaIngestInput,
   ProfileValidatedFactCandidateInput
 } from "../../core/profileMemoryRuntime/contracts";
 import {
@@ -27,6 +29,34 @@ export interface ConversationProfileMemoryWriteRequestInput {
   media?: ConversationInboundMediaEnvelope | null;
   validatedFactCandidates?: readonly ProfileValidatedFactCandidateInput[];
   memoryIntent?: ConversationRouteMemoryIntent | null;
+}
+
+/**
+ * Resolves the dominant profile-memory source lane for one conversation write.
+ *
+ * **Why it exists:**
+ * Direct user text can still use narrow durable extraction, but media-only turns should enter the
+ * profile-memory store through candidate/support lanes instead of inheriting direct-text authority.
+ *
+ * @param mediaIngest - Structured media ingest split by authority.
+ * @returns Source lane used by the ingest policy.
+ */
+function resolveConversationProfileMemorySourceLane(
+  mediaIngest: ProfileMediaIngestInput
+): ProfileMemoryIngestSourceLane {
+  if (mediaIngest.directUserText) {
+    return "direct_user_text";
+  }
+  if (mediaIngest.transcriptFragments.length > 0) {
+    return "voice_transcript";
+  }
+  if (mediaIngest.ocrFragments.length > 0) {
+    return "image_ocr";
+  }
+  if (mediaIngest.summaryFragments.length > 0) {
+    return "image_summary";
+  }
+  return "direct_user_text";
 }
 
 /**
@@ -60,6 +90,7 @@ export function buildConversationProfileMemoryWriteRequest(
     ingestPolicy: buildProfileMemoryIngestPolicy({
       memoryIntent: input.memoryIntent ?? null,
       sourceSurface,
+      sourceLane: resolveConversationProfileMemorySourceLane(mediaIngest),
       hasValidatedFactCandidates: validatedFactCandidates.length > 0
     }),
     provenance: {
