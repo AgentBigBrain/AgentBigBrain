@@ -76,6 +76,8 @@ test("ObsidianVaultSink rebuild mirrors notes and assets without deleting operat
       "utf8"
     );
     assert.match(mediaNote, /Detroit plan PDF/);
+    assert.match(mediaNote, /Projection lane: media artifact review mirror/);
+    assert.match(mediaNote, /Derived meaning is projection-only evidence/);
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }
