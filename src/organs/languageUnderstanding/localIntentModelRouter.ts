@@ -49,6 +49,96 @@ import type {
   ProposalReplyInterpretationSignal
 } from "./localIntentModelProposalReplyContracts";
 
+export type LocalModelRouteDiagnosticStatus =
+  | "ok"
+  | "disabled"
+  | "no_signal"
+  | "timeout"
+  | "malformed_response"
+  | "unavailable"
+  | "low_confidence";
+
+export interface LocalModelRouteDiagnostic {
+  status: LocalModelRouteDiagnosticStatus;
+}
+
+export interface LocalModelRouteResult<TResult> {
+  result: TResult | null;
+  diagnostic: LocalModelRouteDiagnostic;
+}
+
+/**
+ * Returns whether one local model result carries low confidence.
+ *
+ * @param result - Local model result to inspect.
+ * @returns `true` when the result explicitly reports low confidence.
+ */
+function isLowConfidenceLocalModelResult(result: unknown): boolean {
+  return (
+    typeof result === "object" &&
+    result !== null &&
+    "confidence" in result &&
+    (result as { confidence?: unknown }).confidence === "low"
+  );
+}
+
+/**
+ * Classifies local model execution failures without exposing prompt or response content.
+ *
+ * @param error - Failure thrown by a local model resolver.
+ * @returns Stable diagnostic status for the failure.
+ */
+function classifyLocalModelError(error: unknown): LocalModelRouteDiagnosticStatus {
+  if (error instanceof SyntaxError) {
+    return "malformed_response";
+  }
+  const message = error instanceof Error ? error.message.toLowerCase() : "";
+  if (message.includes("timeout") || message.includes("timed out")) {
+    return "timeout";
+  }
+  return "unavailable";
+}
+
+/**
+ * Executes one bounded local-model task with typed fail-closed diagnostics.
+ *
+ * @param request - Canonical task request.
+ * @param resolver - Optional task resolver.
+ * @returns Task result plus a prompt-safe diagnostic.
+ */
+async function routeOptionalLocalModelTaskWithDiagnostics<TRequest, TResult>(
+  request: TRequest,
+  resolver?: (request: TRequest) => Promise<TResult | null>
+): Promise<LocalModelRouteResult<TResult>> {
+  if (!resolver) {
+    return {
+      result: null,
+      diagnostic: { status: "disabled" }
+    };
+  }
+
+  try {
+    const result = await resolver(request);
+    if (!result) {
+      return {
+        result: null,
+        diagnostic: { status: "no_signal" }
+      };
+    }
+    return {
+      result,
+      diagnostic: {
+        status: isLowConfidenceLocalModelResult(result) ? "low_confidence" : "ok"
+      }
+    };
+  } catch (error) {
+    return {
+      result: null,
+      diagnostic: { status: classifyLocalModelError(error) }
+    };
+  }
+}
+
 /**
  * Executes one bounded local-model task and fails closed on missing resolvers or thrown errors.
  *
@@ -60,16 +150,8 @@ async function routeOptionalLocalModelTask<TRequest, TResult>(
   request: TRequest,
   resolver?: (request: TRequest) => Promise<TResult | null>
 ): Promise<TResult | null> {
-  if (!resolver) {
-    return null;
-  }
-
-  try {
-    const result = await resolver(request);
-    return result ?? null;
-  } catch {
-    return null;
-  }
+  const routed = await routeOptionalLocalModelTaskWithDiagnostics(request, resolver);
+  return routed.result;
 }
 
 /**
@@ -84,6 +166,20 @@ export async function routeLocalIntentModel(
   resolver?: LocalIntentModelResolver
 ): Promise<LocalIntentModelSignal | null> {
   return routeOptionalLocalModelTask(request, resolver);
+}
+
+/**
+ * Executes the optional local intent-model path with typed diagnostics.
+ *
+ * @param request - Canonical local intent-model request.
+ * @param resolver - Optional local model resolver.
+ * @returns Local model signal plus a prompt-safe diagnostic.
+ */
+export async function routeLocalIntentModelWithDiagnostics(
+  request: LocalIntentModelRequest,
+  resolver?: LocalIntentModelResolver
+): Promise<LocalModelRouteResult<LocalIntentModelSignal>> {
+  return routeOptionalLocalModelTaskWithDiagnostics(request, resolver);
 }
 
 /**

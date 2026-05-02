@@ -2,7 +2,7 @@
  * @fileoverview Canonical combination logic between deterministic front-door intent routing and the optional local intent-model path.
  */
 
-import { routeLocalIntentModel } from "./localIntentModelRouter";
+import { routeLocalIntentModelWithDiagnostics } from "./localIntentModelRouter";
 import type {
   ContextualFollowupInterpretationResolver,
   LocalIntentModelSessionHints,
@@ -133,7 +133,7 @@ export async function resolveExecutionIntentUnderstanding(
     return deterministicResolution;
   }
 
-  const localSignal = await routeLocalIntentModel(
+  const localRoute = await routeLocalIntentModelWithDiagnostics(
     {
       userInput,
       routingClassification,
@@ -141,8 +141,12 @@ export async function resolveExecutionIntentUnderstanding(
     },
     localIntentModelResolver
   );
+  const localSignal = localRoute.result;
 
   if (!localSignal) {
+    return deterministicResolution;
+  }
+  if (localRoute.diagnostic.status === "low_confidence") {
     return deterministicResolution;
   }
 
