@@ -115,7 +115,10 @@ async function withProfileStore(
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-profile-"));
   const filePath = path.join(tempDir, "profile_memory.secure.json");
   const keyBase64 = Buffer.alloc(32, 7).toString("base64");
-  const store = new ProfileMemoryStore(filePath, Buffer.from(keyBase64, "base64"), 90, options);
+  const store = new ProfileMemoryStore(filePath, Buffer.from(keyBase64, "base64"), 90, {
+    allowLegacyCompatibilityIngestDefault: true,
+    ...options
+  });
 
   try {
     await callback(store, filePath);
@@ -152,6 +155,30 @@ test("profile memory persists encrypted content and omits plaintext values at re
     assert.equal(raw.includes("123 Main Street"), false);
     assert.equal(raw.includes("employment.current"), false);
   });
+});
+
+test("profile memory store defaults missing ingest policy to no-op in strict runtime mode", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-profile-strict-"));
+  const filePath = path.join(tempDir, "profile_memory.secure.json");
+  const store = new ProfileMemoryStore(filePath, Buffer.alloc(32, 8), 90);
+
+  try {
+    const result = await store.ingestFromTaskInput(
+      "task_profile_strict_default",
+      "I work with Milo at Northstar Creative.",
+      "2026-05-02T12:00:00.000Z"
+    );
+    const facts = await store.readFacts({
+      purpose: "operator_view",
+      includeSensitive: false,
+      explicitHumanApproval: false
+    });
+
+    assert.equal(result.appliedFacts, 0);
+    assert.equal(facts.length, 0);
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
 });
 
 test("profile memory load returns reconciled stale snapshots without rewriting encrypted storage", async () => {

@@ -425,3 +425,19 @@ export function hasConversationalProfileUpdateSignal(userInput: string): boolean
     hasRelationshipNarrativeUpdateSignal(userInput)
   );
 }
+
+/**
+ * Returns whether a conversational turn carries a narrow write-authority signal by itself.
+ *
+ * Relationship narrative wording remains useful as candidate evidence and workflow-suppression
+ * signal, but it must not open durable memory write authority without semantic confirmation.
+ *
+ * @param userInput - Raw user utterance under analysis.
+ * @returns `true` when exact self/follow-up facts may use the direct write path.
+ */
+export function hasExactConversationalProfileWriteSignal(userInput: string): boolean {
+  return (
+    hasExactSelfProfileDeclarationSignal(userInput) ||
+    hasExplicitFollowupResolutionSignal(userInput)
+  );
+}

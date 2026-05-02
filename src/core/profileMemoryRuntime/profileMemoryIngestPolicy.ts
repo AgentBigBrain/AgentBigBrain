@@ -33,6 +33,10 @@ interface BuildProfileMemoryIngestPolicyInput {
   hasValidatedFactCandidates?: boolean;
 }
 
+interface NormalizeProfileMemoryIngestPolicyOptions {
+  allowLegacyCompatibility?: boolean;
+}
+
 const INACTIVE_STAGE_SELECTION: ProfileMemoryExtractionStageSelection = {
   exactSelfFacts: false,
   directRelationshipFacts: false,
@@ -176,6 +180,31 @@ export function buildLegacyProfileMemoryIngestPolicy(
 }
 
 /**
+ * Builds the closed default used when no caller supplied an explicit memory-write policy.
+ *
+ * @param sourceSurface - Source surface attached to the attempted write.
+ * @returns No-op ingest policy that leaves extraction disabled.
+ */
+export function buildClosedProfileMemoryIngestPolicy(
+  sourceSurface: ProfileMemorySourceSurface = "broker_task_ingest"
+): ProfileMemoryIngestPolicy {
+  return {
+    memoryIntent: "none",
+    sourceLane: "direct_user_text",
+    sourceSurface,
+    allowExactSelfFactExtraction: false,
+    allowDirectRelationshipExtraction: false,
+    allowGenericProfileFactExtraction: false,
+    allowCommitmentExtraction: false,
+    allowEpisodeSupportExtraction: false,
+    allowInferredResolution: false,
+    fragmentPolicy: "ignore",
+    policySource: "semantic_route",
+    sourceAuthority: "unknown"
+  };
+}
+
+/**
  * Builds the explicit write policy for conversation and broker profile-memory ingest.
  *
  * **Why it exists:**
@@ -291,9 +320,15 @@ export function buildProfileMemoryIngestPolicy(
  */
 export function normalizeProfileMemoryIngestPolicy(
   policy: ProfileMemoryIngestPolicy | null | undefined,
-  fallbackSourceSurface: ProfileMemorySourceSurface = "broker_task_ingest"
+  fallbackSourceSurface: ProfileMemorySourceSurface = "broker_task_ingest",
+  options: NormalizeProfileMemoryIngestPolicyOptions = {}
 ): ProfileMemoryIngestPolicy {
-  return policy ?? buildLegacyProfileMemoryIngestPolicy(fallbackSourceSurface);
+  if (policy) {
+    return policy;
+  }
+  return options.allowLegacyCompatibility
+    ? buildLegacyProfileMemoryIngestPolicy(fallbackSourceSurface)
+    : buildClosedProfileMemoryIngestPolicy(fallbackSourceSurface);
 }
 
 /**

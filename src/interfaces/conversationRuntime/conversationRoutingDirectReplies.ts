@@ -2,7 +2,10 @@
  * @fileoverview Shared direct-reply helpers for ordinary conversation and capability discovery.
  */
 
-import { hasConversationalProfileUpdateSignal } from "../../core/profileMemoryRuntime/profileMemoryConversationalSignals";
+import {
+  hasConversationalProfileUpdateSignal,
+  hasExactConversationalProfileWriteSignal
+} from "../../core/profileMemoryRuntime/profileMemoryConversationalSignals";
 import type { MemoryAccessAuditStore } from "../../core/memoryAccessAudit";
 import type { ProfileMemoryRequestTelemetry } from "../../core/profileMemoryRuntime/contracts";
 import {
@@ -123,9 +126,13 @@ async function rememberDirectConversationProfileInputIfNeeded(
   rememberConversationProfileInput?: RememberConversationProfileInput
 ): Promise<void> {
   if (
-    typeof rememberConversationProfileInput !== "function" ||
-    !hasConversationalProfileUpdateSignal(userInput)
+    typeof rememberConversationProfileInput !== "function"
   ) {
+    return;
+  }
+  const hasExplicitWriteSignal = hasExactConversationalProfileWriteSignal(userInput);
+  const routeAllowsProfileWrite = memoryIntent === "profile_update";
+  if (!hasExplicitWriteSignal && !routeAllowsProfileWrite) {
     return;
   }
   await rememberConversationProfileInput(
@@ -134,7 +141,12 @@ async function rememberDirectConversationProfileInputIfNeeded(
       userInput,
       media,
       receivedAt,
-      memoryIntent: memoryIntent === "none" ? null : memoryIntent ?? "profile_update"
+      memoryIntent:
+        memoryIntent === "none"
+          ? null
+          : routeAllowsProfileWrite
+            ? memoryIntent
+            : "profile_update"
     }),
     receivedAt
   ).catch(() => false);
@@ -290,13 +302,7 @@ export async function buildDirectCasualConversationReply(
     !/[?]/.test(input.input);
   const baseSemanticRoute = input.semanticRoute ?? null;
   const semanticRouteForMemory =
-    profileUpdateSignal && baseSemanticRoute
-      ? {
-        ...baseSemanticRoute,
-        memoryIntent: "profile_update" as const,
-        continuationKind: "relationship_memory" as const
-      }
-      : baseSemanticRoute?.memoryIntent === "none"
+    baseSemanticRoute?.memoryIntent === "none"
         ? null
         : baseSemanticRoute;
   const semanticRouteIdForMemory =

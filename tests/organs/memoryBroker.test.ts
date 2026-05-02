@@ -18,6 +18,7 @@ import { ProfileMemoryStore } from "../../src/core/profileMemoryStore";
 import { TaskRequest } from "../../src/core/types";
 import type {
   ProfileFactPlanningInspectionResult,
+  ProfileMemoryIngestPolicy,
   ProfileMemoryRequestTelemetry,
   ProfileMemoryWriteProvenance,
   ProfileReadableFact
@@ -83,16 +84,21 @@ class CapturingBrokerIngestProfileStore {
   lastTaskId = "";
   lastUserInput = "";
   lastProvenance: ProfileMemoryWriteProvenance | null = null;
+  lastIngestPolicy: ProfileMemoryIngestPolicy | null = null;
 
   async ingestFromTaskInput(
     taskId: string,
     userInput: string,
     _observedAt: string,
-    options?: { provenance?: ProfileMemoryWriteProvenance }
+    options?: {
+      provenance?: ProfileMemoryWriteProvenance;
+      ingestPolicy?: ProfileMemoryIngestPolicy;
+    }
   ): Promise<{ appliedFacts: number; supersededFacts: number }> {
     this.lastTaskId = taskId;
     this.lastUserInput = userInput;
     this.lastProvenance = options?.provenance ?? null;
+    this.lastIngestPolicy = options?.ingestPolicy ?? null;
     return {
       appliedFacts: 0,
       supersededFacts: 0
@@ -1097,7 +1103,7 @@ test("memory broker keeps document-derived media fragments out of model-assisted
   }
 });
 
-test("memory broker preserves relationship ingest under workflow continuity when the request itself is profile-worthy", async () => {
+test("memory broker does not durable-write lexical relationship updates without route memory intent", async () => {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-memory-broker-workflow-relationship-"));
   const profilePath = path.join(tempDir, "profile_memory.secure.json");
   const key = Buffer.alloc(32, 77);
@@ -1121,28 +1127,13 @@ test("memory broker preserves relationship ingest under workflow continuity when
       explicitHumanApproval: false
     });
 
-    assert.equal(
-      storedFacts.some(
-        (fact) =>
-          fact.key === "contact.owen.work_association" &&
-          fact.value === "Lantern Studio"
-      ),
-      true
-    );
-    assert.equal(
-      storedFacts.some(
-        (fact) =>
-          fact.key === "contact.owen.relationship" &&
-          fact.value === "work_peer"
-      ),
-      true
-    );
+    assert.equal(storedFacts.length, 0);
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }
 });
 
-test("memory broker preserves relationship ingest for mixed workflow requests when the utterance carries a direct conversational update", async () => {
+test("memory broker keeps mixed workflow relationship wording candidate-only without route memory intent", async () => {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-memory-broker-workflow-mixed-relationship-"));
   const profilePath = path.join(tempDir, "profile_memory.secure.json");
   const key = Buffer.alloc(32, 78);
@@ -1166,28 +1157,13 @@ test("memory broker preserves relationship ingest for mixed workflow requests wh
       explicitHumanApproval: false
     });
 
-    assert.equal(
-      storedFacts.some(
-        (fact) =>
-          fact.key === "contact.owen.work_association" &&
-          fact.value === "Lantern Studio"
-      ),
-      true
-    );
-    assert.equal(
-      storedFacts.some(
-        (fact) =>
-          fact.key === "contact.owen.relationship" &&
-          fact.value === "work_peer"
-      ),
-      true
-    );
+    assert.equal(storedFacts.length, 0);
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }
 });
 
-test("memory broker preserves reminder-style coworker ingest for mixed workflow requests", async () => {
+test("memory broker keeps reminder-style coworker wording off durable memory without route intent", async () => {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-memory-broker-workflow-reminder-relationship-"));
   const profilePath = path.join(tempDir, "profile_memory.secure.json");
   const key = Buffer.alloc(32, 118);
@@ -1211,22 +1187,7 @@ test("memory broker preserves reminder-style coworker ingest for mixed workflow 
       explicitHumanApproval: false
     });
 
-    assert.equal(
-      storedFacts.some(
-        (fact) =>
-          fact.key === "contact.priya.work_association" &&
-          fact.value === "Northstar"
-      ),
-      true
-    );
-    assert.equal(
-      storedFacts.some(
-        (fact) =>
-          fact.key === "contact.priya.relationship" &&
-          fact.value === "work_peer"
-      ),
-      true
-    );
+    assert.equal(storedFacts.length, 0);
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }
@@ -1259,6 +1220,8 @@ test("memory broker forwards bounded stream-local provenance on broker-side prof
   assert.equal(store.lastProvenance?.dominantLaneAtWrite, "workflow");
   assert.equal(store.lastProvenance?.sourceSurface, "broker_task_ingest");
   assert.match(store.lastProvenance?.sourceFingerprint ?? "", /^[a-f0-9]{32}$/);
+  assert.equal(store.lastIngestPolicy?.memoryIntent, "none");
+  assert.equal(store.lastIngestPolicy?.fragmentPolicy, "ignore");
 });
 
 test("memory broker reuses one reconciled read snapshot during planner assembly", async () => {

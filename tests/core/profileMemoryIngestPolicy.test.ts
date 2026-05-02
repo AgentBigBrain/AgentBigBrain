@@ -6,10 +6,12 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
+  buildClosedProfileMemoryIngestPolicy,
   buildProfileMemoryIngestPolicy,
   buildLegacyProfileMemoryIngestPolicy,
   classifyProfileMemoryIngestSourceFamily,
   getProfileMemoryIngestSourceDefaultAuthority,
+  normalizeProfileMemoryIngestPolicy,
   normalizeProfileMemorySourceAuthority,
   profileMemoryIngestSourceLaneToAuthority,
   selectProfileMemoryExtractionStages
@@ -73,4 +75,24 @@ test("legacy ingest policies expose compatibility authority explicitly", () => {
 
   assert.equal(policy.policySource, "legacy_compatibility");
   assert.equal(policy.sourceAuthority, "legacy_compatibility");
+});
+
+test("missing ingest policy defaults closed unless compatibility is explicit", () => {
+  const closedPolicy = normalizeProfileMemoryIngestPolicy(undefined);
+  const closedStages = selectProfileMemoryExtractionStages(closedPolicy);
+  const explicitClosedPolicy = buildClosedProfileMemoryIngestPolicy();
+
+  assert.equal(closedPolicy.memoryIntent, "none");
+  assert.equal(closedPolicy.fragmentPolicy, "ignore");
+  assert.equal(closedPolicy.sourceAuthority, "unknown");
+  assert.equal(explicitClosedPolicy.memoryIntent, "none");
+  assert.equal(closedStages.exactSelfFacts, false);
+  assert.equal(closedStages.directRelationshipFacts, false);
+  assert.equal(closedStages.genericProfileFacts, false);
+  assert.equal(
+    normalizeProfileMemoryIngestPolicy(undefined, "broker_task_ingest", {
+      allowLegacyCompatibility: true
+    }).policySource,
+    "legacy_compatibility"
+  );
 });

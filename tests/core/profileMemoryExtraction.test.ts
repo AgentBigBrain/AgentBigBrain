@@ -324,7 +324,7 @@ test("buildValidatedProfileFactCandidates converts validated identity candidates
   );
 });
 
-test("extraction plus truth governance keeps contact context support-only while preserving relationship facts", () => {
+test("truth governance demotes lexical relationship facts before semantic confirmation", () => {
   const extractedCandidates = extractProfileFactCandidatesFromUserInput(
     "I work with Owen at Lantern Studio. Owen said the launch slipped.",
     "task_profile_governed_extract",
@@ -342,13 +342,21 @@ test("extraction plus truth governance keeps contact context support-only while 
         candidate.key === "contact.owen.relationship" &&
         candidate.value === "work_peer"
     ),
-    true
+    false
   );
   assert.equal(
     governanceResult.allowedCurrentStateFactCandidates.some(
       (candidate) =>
         candidate.key === "contact.owen.work_association" &&
         candidate.value === "Lantern Studio"
+    ),
+    false
+  );
+  assert.equal(
+    governanceResult.quarantinedFactCandidates.some(
+      (entry) =>
+        entry.candidate.key === "contact.owen.relationship" &&
+        entry.candidate.value === "work_peer"
     ),
     true
   );
@@ -360,7 +368,7 @@ test("extraction plus truth governance keeps contact context support-only while 
   );
 });
 
-test("direct contact relationship extraction normalizes boss phrasing into manager current-state facts", () => {
+test("direct contact relationship extraction emits candidates without current-state authority", () => {
   const extractedCandidates = extractProfileFactCandidatesFromUserInput(
     "Milo is my boss at Northstar Creative.",
     "task_profile_governed_boss_extract",
@@ -402,6 +410,14 @@ test("direct contact relationship extraction normalizes boss phrasing into manag
       (candidate) =>
         candidate.key === "contact.milo.relationship" &&
         candidate.value === "manager"
+    ),
+    false
+  );
+  assert.equal(
+    governanceResult.quarantinedFactCandidates.some(
+      (entry) =>
+        entry.candidate.key === "contact.milo.relationship" &&
+        entry.candidate.value === "manager"
     ),
     true
   );

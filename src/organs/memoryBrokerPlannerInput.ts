@@ -305,7 +305,7 @@ export async function buildBrokeredPlannerInput(
             sourceFingerprint
           },
           ingestPolicy: buildProfileMemoryIngestPolicy({
-            memoryIntent: resolvedRouteMemoryIntent ?? "profile_update",
+            memoryIntent: resolvedRouteMemoryIntent ?? "none",
             sourceSurface: "broker_task_ingest"
           }),
           requestTelemetry

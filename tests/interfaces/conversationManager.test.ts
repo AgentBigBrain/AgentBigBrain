@@ -3106,14 +3106,14 @@ test("conversation manager uses model-assisted identity interpretation for ambig
   }
 });
 
-test("conversation manager forwards bounded conversational provenance on direct relationship updates", async () => {
+test("conversation manager keeps direct lexical relationship updates off durable memory writes", async () => {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-conversation-relationship-provenance-"));
   const store = new InterfaceSessionStore(path.join(tempDir, "sessions.json"));
   const rememberedInputs: ProfileMemoryIngestRequest[] = [];
   const manager = new ConversationManager(store, {}, {
     rememberConversationProfileInput: async (input) => {
       if (typeof input === "string") {
-        throw new Error("direct relationship update should use the bounded request contract");
+        throw new Error("direct relationship update should not use the raw string write contract");
       }
       rememberedInputs.push(input);
       return true;
@@ -3136,14 +3136,7 @@ test("conversation manager forwards bounded conversational provenance on direct 
     );
 
     assert.equal(reply, "Noted.");
-    assert.equal(rememberedInputs.length, 1);
-    assert.equal(rememberedInputs[0]?.userInput, "I work with Milo at Northstar Creative.");
-    assert.equal(rememberedInputs[0]?.provenance?.conversationId, "telegram:chat-1:user-1");
-    assert.equal(rememberedInputs[0]?.provenance?.dominantLaneAtWrite, "unknown");
-    assert.equal(rememberedInputs[0]?.provenance?.threadKey, null);
-    assert.equal(rememberedInputs[0]?.provenance?.sourceSurface, "conversation_profile_input");
-    assert.match(rememberedInputs[0]?.provenance?.turnId ?? "", /^turn_[a-f0-9]{24}$/);
-    assert.match(rememberedInputs[0]?.provenance?.sourceFingerprint ?? "", /^[a-f0-9]{32}$/);
+    assert.equal(rememberedInputs.length, 0);
   } finally {
     await removeTempDirWithRetry(tempDir);
   }
