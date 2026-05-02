@@ -29,8 +29,10 @@ test("createMediaUnderstandingConfigFromEnv falls back to bounded defaults", () 
     BRAIN_MEDIA_BACKEND: process.env.BRAIN_MEDIA_BACKEND,
     BRAIN_MEDIA_VISION_BACKEND: process.env.BRAIN_MEDIA_VISION_BACKEND,
     BRAIN_MEDIA_TRANSCRIPTION_BACKEND: process.env.BRAIN_MEDIA_TRANSCRIPTION_BACKEND,
+    BRAIN_MEDIA_DOCUMENT_MEANING_BACKEND: process.env.BRAIN_MEDIA_DOCUMENT_MEANING_BACKEND,
     BRAIN_MEDIA_VISION_MODEL: process.env.BRAIN_MEDIA_VISION_MODEL,
     BRAIN_MEDIA_TRANSCRIPTION_MODEL: process.env.BRAIN_MEDIA_TRANSCRIPTION_MODEL,
+    BRAIN_MEDIA_DOCUMENT_MEANING_MODEL: process.env.BRAIN_MEDIA_DOCUMENT_MEANING_MODEL,
     BRAIN_MEDIA_REQUEST_TIMEOUT_MS: process.env.BRAIN_MEDIA_REQUEST_TIMEOUT_MS
   };
 
@@ -42,8 +44,10 @@ test("createMediaUnderstandingConfigFromEnv falls back to bounded defaults", () 
   delete process.env.BRAIN_MEDIA_BACKEND;
   delete process.env.BRAIN_MEDIA_VISION_BACKEND;
   delete process.env.BRAIN_MEDIA_TRANSCRIPTION_BACKEND;
+  delete process.env.BRAIN_MEDIA_DOCUMENT_MEANING_BACKEND;
   delete process.env.BRAIN_MEDIA_VISION_MODEL;
   delete process.env.BRAIN_MEDIA_TRANSCRIPTION_MODEL;
+  delete process.env.BRAIN_MEDIA_DOCUMENT_MEANING_MODEL;
   delete process.env.BRAIN_MEDIA_REQUEST_TIMEOUT_MS;
 
   try {
@@ -54,6 +58,8 @@ test("createMediaUnderstandingConfigFromEnv falls back to bounded defaults", () 
     assert.equal(config.resolvedVisionBackend, "mock");
     assert.equal(config.requestedTranscriptionBackend, "inherit_text_backend");
     assert.equal(config.resolvedTranscriptionBackend, "mock");
+    assert.equal(config.requestedDocumentMeaningBackend, "disabled");
+    assert.equal(config.resolvedDocumentMeaningBackend, "disabled");
     assert.equal(config.openAIApiKey, null);
     assert.equal(config.openAIBaseUrl, "https://api.openai.com/v1");
     assert.ok(config.requestTimeoutMs >= 1_000);
@@ -675,7 +681,7 @@ test("interpretImageAttachment parses structured OCR and filters low-signal enti
   }
 });
 
-test("interpretDocumentAttachment extracts readable text and identifiers from a synthetic PDF", async () => {
+test("interpretDocumentAttachment extracts readable text into candidate-only document layers", async () => {
   const pdfBuffer = buildTextPdfBuffer([
     "Sample Business Filing",
     "Legal entity name: ACME SAMPLE DESIGN, LLC",
@@ -693,6 +699,8 @@ test("interpretDocumentAttachment extracts readable text and identifiers from a 
       resolvedVisionFallbackBackend: "disabled",
       requestedTranscriptionBackend: "inherit_text_backend",
       resolvedTranscriptionBackend: "mock",
+      requestedDocumentMeaningBackend: "mock",
+      resolvedDocumentMeaningBackend: "mock",
       openAIApiKey: null,
       openAIBaseUrl: "https://api.openai.com/v1",
       ollamaApiKey: null,
@@ -700,6 +708,8 @@ test("interpretDocumentAttachment extracts readable text and identifiers from a 
       visionModel: "gpt-4.1-mini",
       visionFallbackModel: null,
       transcriptionModel: "whisper-1",
+      documentMeaningModel: "mock-document-meaning",
+      documentMeaningTimeoutMs: 45_000,
       requestTimeoutMs: 45_000
     },
     {
@@ -719,12 +729,26 @@ test("interpretDocumentAttachment extracts readable text and identifiers from a 
   );
 
   assert.match(interpretation.summary, /readable extracted text/i);
-  assert.match(interpretation.summary, /123456789/);
+  assert.doesNotMatch(interpretation.summary, /123456789/);
   assert.match(interpretation.ocrText ?? "", /ACME SAMPLE DESIGN, LLC/i);
   assert.match(interpretation.ocrText ?? "", /SAMPLE TRADE NAME/i);
   assert.match(interpretation.ocrText ?? "", /123456789/);
   assert.ok(interpretation.entityHints.some((hint) => /ACME SAMPLE DESIGN/i.test(hint)));
   assert.equal(interpretation.source, "document_text_extraction");
+  assert.ok(
+    interpretation.layers?.some((layer) =>
+      layer.kind === "raw_text_extraction" &&
+      layer.memoryAuthority === "candidate_only" &&
+      /123456789/.test(layer.text)
+    )
+  );
+  assert.ok(
+    interpretation.layers?.some((layer) =>
+      layer.kind === "model_summary" &&
+      layer.source === "document_model_summary" &&
+      layer.memoryAuthority === "candidate_only"
+    )
+  );
 });
 
 /**

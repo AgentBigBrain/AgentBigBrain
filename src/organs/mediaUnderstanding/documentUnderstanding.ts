@@ -4,16 +4,34 @@
 
 import type {
   ConversationInboundMediaAttachment,
-  ConversationInboundMediaInterpretation
+  ConversationInboundMediaInterpretation,
+  ConversationInboundMediaInterpretationLayer
 } from "../../interfaces/mediaRuntime/contracts";
 import type { MediaUnderstandingConfig } from "./contracts";
+import {
+  describeMediaAuthorizationSource,
+  resolveMediaAuthorizationHeaders
+} from "./auth";
 import { buildFallbackMediaInterpretation } from "./mediaModelFallback";
 import {
   buildBoundedTextExcerpt,
-  collectEntityHintsFromTexts
+  collectEntityHintsFromTexts,
+  parseStructuredMediaOutput,
+  sanitizeEntityHints
 } from "./interpretationSupport";
+import { buildMediaInterpretationLayer } from "./interpretationLayers";
+import {
+  extractOllamaChatOutputText,
+  extractResponsesOutputText
+} from "./providerSupport";
 
-const IDENTIFIER_PATTERN = /\b\d{6,}\b/g;
+const DOCUMENT_MEANING_PROMPT = [
+  "Return JSON only with keys summary and entity_hints.",
+  "Summarize the attached extracted document text in one sentence.",
+  "Do not include private identifiers, account numbers, registration numbers, or filing numbers.",
+  "Use entity_hints only for high-level names needed to connect related notes.",
+  "Do not add markdown fences."
+].join(" ");
 
 /**
  * Attempts bounded interpretation for one document attachment.
@@ -24,7 +42,7 @@ const IDENTIFIER_PATTERN = /\b\d{6,}\b/g;
  * @returns Extracted-text interpretation, or deterministic fallback when unavailable.
  */
 export async function interpretDocumentAttachment(
-  _config: MediaUnderstandingConfig,
+  config: MediaUnderstandingConfig,
   attachment: ConversationInboundMediaAttachment,
   buffer: Buffer | null
 ): Promise<ConversationInboundMediaInterpretation> {
@@ -44,6 +62,25 @@ export async function interpretDocumentAttachment(
       attachment.fileName,
       boundedText
     ]);
+    const layers = [
+      buildMediaInterpretationLayer({
+        kind: "raw_text_extraction",
+        source: "document_text_extraction",
+        text: boundedText,
+        confidence: 0.72,
+        provenance: "deterministic document text extraction",
+        memoryAuthority: "candidate_only"
+      }),
+      buildMediaInterpretationLayer({
+        kind: "deterministic_metadata",
+        source: "document_text_extraction",
+        text: summary,
+        confidence: 0.72,
+        provenance: "deterministic document text extraction",
+        memoryAuthority: "not_memory_authority"
+      }),
+      await maybeBuildDocumentMeaningLayer(config, attachment, boundedText)
+    ].filter((layer): layer is ConversationInboundMediaInterpretationLayer => Boolean(layer));
 
     return {
       summary,
@@ -52,7 +89,8 @@ export async function interpretDocumentAttachment(
       confidence: 0.72,
       provenance: "deterministic document text extraction",
       source: "document_text_extraction",
-      entityHints
+      entityHints,
+      layers
     };
   } catch {
     return buildFallbackMediaInterpretation(attachment);
@@ -142,19 +180,158 @@ function buildDeterministicDocumentSummary(
   const normalizedText = extractedText.replace(/\s+/g, " ").trim();
   const fileName = attachment.fileName?.trim();
 
-  const identifiers = [...new Set(normalizedText.match(IDENTIFIER_PATTERN) ?? [])].slice(0, 3);
-  const entityHints = collectEntityHintsFromTexts([fileName, normalizedText]).slice(0, 4);
   const summaryParts: string[] = [];
   if (fileName) {
     summaryParts.push(`The document ${fileName} contains readable extracted text`);
   } else {
     summaryParts.push("The document contains readable extracted text");
   }
-  if (entityHints.length > 0) {
-    summaryParts.push(`with references to ${entityHints.join(", ")}`);
-  }
-  if (identifiers.length > 0) {
-    summaryParts.push(`and identifiers such as ${identifiers.join(", ")}`);
+  if (normalizedText.length > 0) {
+    summaryParts.push("that can be used as candidate supporting context");
   }
   return `${summaryParts.join(" ")}.`;
+}
+
+/**
+ * Builds optional model-assisted document meaning when explicitly enabled.
+ *
+ * @param config - Media-understanding runtime config.
+ * @param attachment - Document attachment metadata.
+ * @param boundedText - Bounded extracted document text.
+ * @returns Candidate-only model summary layer, or `null` when unavailable/disabled.
+ */
+async function maybeBuildDocumentMeaningLayer(
+  config: MediaUnderstandingConfig,
+  attachment: ConversationInboundMediaAttachment,
+  boundedText: string
+): Promise<ConversationInboundMediaInterpretationLayer | null> {
+  const resolvedDocumentMeaningBackend = config.resolvedDocumentMeaningBackend ?? "disabled";
+  if (resolvedDocumentMeaningBackend === "disabled") {
+    return null;
+  }
+  const documentMeaningModel = config.documentMeaningModel ?? "gpt-4.1-mini";
+  if (resolvedDocumentMeaningBackend === "mock") {
+    return buildMediaInterpretationLayer({
+      kind: "model_summary",
+      source: "document_model_summary",
+      text: "The document appears to contain structured business or administrative text.",
+      confidence: 0.61,
+      provenance: "mock document meaning model",
+      memoryAuthority: "candidate_only"
+    });
+  }
+
+  const authorizationHeaders = await resolveMediaAuthorizationHeaders(config, "document_meaning");
+  if (!authorizationHeaders) {
+    return null;
+  }
+  const abortController = new AbortController();
+  const timeout = setTimeout(
+    () => abortController.abort(),
+    config.documentMeaningTimeoutMs ?? config.requestTimeoutMs
+  );
+  try {
+    const prompt = [
+      DOCUMENT_MEANING_PROMPT,
+      "",
+      `File name: ${attachment.fileName ?? "unknown"}`,
+      "Extracted document text:",
+      boundedText
+    ].join("\n");
+    const response = resolvedDocumentMeaningBackend === "ollama"
+      ? await fetchOllamaDocumentMeaning(config, prompt, authorizationHeaders, abortController.signal)
+      : await fetchOpenAIDocumentMeaning(config, prompt, authorizationHeaders, abortController.signal);
+    if (!response.ok) {
+      return null;
+    }
+    const payload = await response.json();
+    const rawOutput = resolvedDocumentMeaningBackend === "ollama"
+      ? extractOllamaChatOutputText(payload)
+      : extractResponsesOutputText(payload);
+    if (!rawOutput) {
+      return null;
+    }
+    const structured = parseStructuredMediaOutput(rawOutput);
+    const summary = structured?.summary ?? rawOutput;
+    const entityHints = sanitizeEntityHints(structured?.entityHints ?? []);
+    const text = entityHints.length > 0
+      ? `${summary} Entity hints: ${entityHints.join(", ")}.`
+      : summary;
+    return buildMediaInterpretationLayer({
+      kind: "model_summary",
+      source: "document_model_summary",
+      text,
+      confidence: 0.66,
+      provenance: `${describeMediaAuthorizationSource(config, "document_meaning")} document meaning model ${documentMeaningModel}`,
+      memoryAuthority: "candidate_only"
+    });
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+/**
+ * Calls an OpenAI-compatible document meaning endpoint.
+ *
+ * @param config - Media-understanding runtime config.
+ * @param prompt - Bounded model prompt.
+ * @param authorizationHeaders - Provider auth headers.
+ * @param signal - Request abort signal.
+ * @returns Provider response.
+ */
+function fetchOpenAIDocumentMeaning(
+  config: MediaUnderstandingConfig,
+  prompt: string,
+  authorizationHeaders: Record<string, string>,
+  signal: AbortSignal
+): Promise<Response> {
+  return fetch(`${config.openAIBaseUrl}/responses`, {
+    method: "POST",
+    headers: {
+      ...authorizationHeaders,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      model: config.documentMeaningModel ?? "gpt-4.1-mini",
+      input: prompt
+    }),
+    signal
+  });
+}
+
+/**
+ * Calls an Ollama document meaning endpoint.
+ *
+ * @param config - Media-understanding runtime config.
+ * @param prompt - Bounded model prompt.
+ * @param authorizationHeaders - Provider auth headers.
+ * @param signal - Request abort signal.
+ * @returns Provider response.
+ */
+function fetchOllamaDocumentMeaning(
+  config: MediaUnderstandingConfig,
+  prompt: string,
+  authorizationHeaders: Record<string, string>,
+  signal: AbortSignal
+): Promise<Response> {
+  return fetch(`${config.ollamaBaseUrl}/api/chat`, {
+    method: "POST",
+    headers: {
+      ...authorizationHeaders,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      model: config.documentMeaningModel ?? "gpt-4.1-mini",
+      messages: [
+        {
+          role: "user",
+          content: prompt
+        }
+      ],
+      stream: false
+    }),
+    signal
+  });
 }

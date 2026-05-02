@@ -20,9 +20,13 @@ function resolveMediaBackendForModality(
   config: MediaUnderstandingConfig,
   modality: MediaUnderstandingModality
 ): MediaUnderstandingConfig["resolvedBackend"] {
-  return modality === "vision"
-    ? config.resolvedVisionBackend
-    : config.resolvedTranscriptionBackend;
+  if (modality === "vision") {
+    return config.resolvedVisionBackend;
+  }
+  if (modality === "document_meaning") {
+    return config.resolvedDocumentMeaningBackend ?? "disabled";
+  }
+  return config.resolvedTranscriptionBackend;
 }
 
 /**

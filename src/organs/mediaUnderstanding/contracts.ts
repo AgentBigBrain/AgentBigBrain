@@ -17,9 +17,15 @@ export const DEFAULT_MEDIA_VISION_MODEL =
   || process.env.OLLAMA_MODEL_DEFAULT?.trim()
   || "gpt-4.1-mini";
 export const DEFAULT_MEDIA_TRANSCRIPTION_MODEL = process.env.BRAIN_MEDIA_TRANSCRIPTION_MODEL?.trim() || "whisper-1";
+export const DEFAULT_MEDIA_DOCUMENT_MEANING_MODEL =
+  process.env.BRAIN_MEDIA_DOCUMENT_MEANING_MODEL?.trim()
+  || process.env.OPENAI_MODEL_SMALL_FAST?.trim()
+  || process.env.OLLAMA_MODEL_SMALL_FAST?.trim()
+  || process.env.OLLAMA_MODEL_DEFAULT?.trim()
+  || "gpt-4.1-mini";
 export const DEFAULT_MEDIA_REQUEST_TIMEOUT_MS = 45_000;
 export type MediaUnderstandingBackend = ModelBackend | "inherit_text_backend" | "disabled";
-export type MediaUnderstandingModality = "vision" | "transcription";
+export type MediaUnderstandingModality = "vision" | "transcription" | "document_meaning";
 
 export interface MediaUnderstandingConfig {
   requestedBackend: MediaUnderstandingBackend;
@@ -30,6 +36,8 @@ export interface MediaUnderstandingConfig {
   resolvedVisionFallbackBackend: ModelBackend | "disabled";
   requestedTranscriptionBackend: MediaUnderstandingBackend;
   resolvedTranscriptionBackend: ModelBackend | "disabled";
+  requestedDocumentMeaningBackend?: MediaUnderstandingBackend;
+  resolvedDocumentMeaningBackend?: ModelBackend | "disabled";
   openAIApiKey: string | null;
   openAIBaseUrl: string;
   ollamaApiKey: string | null;
@@ -37,6 +45,8 @@ export interface MediaUnderstandingConfig {
   visionModel: string;
   visionFallbackModel: string | null;
   transcriptionModel: string;
+  documentMeaningModel?: string;
+  documentMeaningTimeoutMs?: number;
   requestTimeoutMs: number;
   env?: NodeJS.ProcessEnv;
 }
@@ -82,6 +92,12 @@ export function createMediaUnderstandingConfigFromEnv(): MediaUnderstandingConfi
   const resolvedTranscriptionBackend = requestedTranscriptionBackend === "inherit_text_backend"
     ? resolveModelBackendFromEnv(process.env)
     : requestedTranscriptionBackend;
+  const requestedDocumentMeaningBackend = resolveMediaUnderstandingBackend(
+    process.env.BRAIN_MEDIA_DOCUMENT_MEANING_BACKEND ?? "disabled"
+  );
+  const resolvedDocumentMeaningBackend = requestedDocumentMeaningBackend === "inherit_text_backend"
+    ? resolveModelBackendFromEnv(process.env)
+    : requestedDocumentMeaningBackend;
   return {
     requestedBackend,
     resolvedBackend,
@@ -91,10 +107,13 @@ export function createMediaUnderstandingConfigFromEnv(): MediaUnderstandingConfi
     resolvedVisionFallbackBackend,
     requestedTranscriptionBackend,
     resolvedTranscriptionBackend,
+    requestedDocumentMeaningBackend,
+    resolvedDocumentMeaningBackend,
     openAIApiKey:
       resolvedVisionBackend === "openai_api"
         || resolvedVisionFallbackBackend === "openai_api"
         || resolvedTranscriptionBackend === "openai_api"
+        || resolvedDocumentMeaningBackend === "openai_api"
         ? process.env.OPENAI_API_KEY?.trim() || null
         : null,
     openAIBaseUrl: (process.env.OPENAI_BASE_URL?.trim() || "https://api.openai.com/v1").replace(/\/+$/, ""),
@@ -102,6 +121,7 @@ export function createMediaUnderstandingConfigFromEnv(): MediaUnderstandingConfi
       resolvedVisionBackend === "ollama"
         || resolvedVisionFallbackBackend === "ollama"
         || resolvedTranscriptionBackend === "ollama"
+        || resolvedDocumentMeaningBackend === "ollama"
         ? process.env.OLLAMA_API_KEY?.trim() || null
         : null,
     ollamaBaseUrl: (process.env.OLLAMA_BASE_URL?.trim() || "http://localhost:11434").replace(/\/+$/, ""),
@@ -111,6 +131,11 @@ export function createMediaUnderstandingConfigFromEnv(): MediaUnderstandingConfi
       process.env
     ),
     transcriptionModel: process.env.BRAIN_MEDIA_TRANSCRIPTION_MODEL?.trim() || DEFAULT_MEDIA_TRANSCRIPTION_MODEL,
+    documentMeaningModel:
+      process.env.BRAIN_MEDIA_DOCUMENT_MEANING_MODEL?.trim() || DEFAULT_MEDIA_DOCUMENT_MEANING_MODEL,
+    documentMeaningTimeoutMs: Number.isFinite(Number(process.env.BRAIN_MEDIA_DOCUMENT_MEANING_TIMEOUT_MS))
+      ? Math.max(1_000, Number(process.env.BRAIN_MEDIA_DOCUMENT_MEANING_TIMEOUT_MS))
+      : DEFAULT_MEDIA_REQUEST_TIMEOUT_MS,
     requestTimeoutMs: Number.isFinite(Number(process.env.BRAIN_MEDIA_REQUEST_TIMEOUT_MS))
       ? Math.max(1_000, Number(process.env.BRAIN_MEDIA_REQUEST_TIMEOUT_MS))
       : DEFAULT_MEDIA_REQUEST_TIMEOUT_MS,
