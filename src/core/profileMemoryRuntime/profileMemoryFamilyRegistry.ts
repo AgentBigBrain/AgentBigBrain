@@ -87,7 +87,7 @@ export const PROFILE_MEMORY_FAMILY_REGISTRY: Readonly<
     family: "contact.name",
     cardinality: "singular",
     currentStateEligible: true,
-    currentStateAdmissionPolicy: "explicit_live_source_only",
+    currentStateAdmissionPolicy: "validated_or_explicit_live_source_only",
     episodeSupportEligible: false,
     endStatePolicy: "none",
     displacementPolicy: "preserve_prior_on_conflict",
@@ -98,13 +98,15 @@ export const PROFILE_MEMORY_FAMILY_REGISTRY: Readonly<
     inventoryPolicy: "single_current_winner",
     sourceAuthorityMode: "exact_source_only",
     compatibilityProjection: PROFILE_MEMORY_CONTACT_COMPATIBILITY_PROJECTION_TABLE["contact.name"],
-    adjacentDomainPolicy: withAdjacentDomainOverrides({})
+    adjacentDomainPolicy: withAdjacentDomainOverrides({
+      structured_conversation: "truth_authoritative"
+    })
   },
   "contact.relationship": {
     family: "contact.relationship",
     cardinality: "singular",
     currentStateEligible: true,
-    currentStateAdmissionPolicy: "explicit_live_source_only",
+    currentStateAdmissionPolicy: "validated_or_explicit_live_source_only",
     episodeSupportEligible: false,
     endStatePolicy: "support_only_transition",
     displacementPolicy: "preserve_prior_on_conflict",
@@ -115,13 +117,15 @@ export const PROFILE_MEMORY_FAMILY_REGISTRY: Readonly<
     inventoryPolicy: "single_current_winner",
     sourceAuthorityMode: "exact_source_only",
     compatibilityProjection: PROFILE_MEMORY_CONTACT_COMPATIBILITY_PROJECTION_TABLE["contact.relationship"],
-    adjacentDomainPolicy: withAdjacentDomainOverrides({})
+    adjacentDomainPolicy: withAdjacentDomainOverrides({
+      structured_conversation: "truth_authoritative"
+    })
   },
   "contact.work_association": {
     family: "contact.work_association",
     cardinality: "singular",
     currentStateEligible: true,
-    currentStateAdmissionPolicy: "explicit_live_source_only",
+    currentStateAdmissionPolicy: "validated_or_explicit_live_source_only",
     episodeSupportEligible: false,
     endStatePolicy: "support_only_transition",
     displacementPolicy: "preserve_prior_on_conflict",
@@ -132,7 +136,9 @@ export const PROFILE_MEMORY_FAMILY_REGISTRY: Readonly<
     inventoryPolicy: "single_current_winner",
     sourceAuthorityMode: "exact_source_only",
     compatibilityProjection: PROFILE_MEMORY_CONTACT_COMPATIBILITY_PROJECTION_TABLE["contact.work_association"],
-    adjacentDomainPolicy: withAdjacentDomainOverrides({})
+    adjacentDomainPolicy: withAdjacentDomainOverrides({
+      structured_conversation: "truth_authoritative"
+    })
   },
   "contact.organization_association": {
     family: "contact.organization_association",

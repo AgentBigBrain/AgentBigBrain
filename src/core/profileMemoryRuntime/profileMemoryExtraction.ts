@@ -46,6 +46,10 @@ export {
   validatePreferredNameCandidateValue
 } from "./profileMemoryPreferredNameValidation";
 
+export {
+  buildValidatedSemanticRelationshipFactCandidates
+} from "./profileMemorySemanticRelationshipCandidates";
+
 export interface ProfileFactExtractionOptions {
   exactSelfFacts?: boolean;
   directRelationshipFacts?: boolean;

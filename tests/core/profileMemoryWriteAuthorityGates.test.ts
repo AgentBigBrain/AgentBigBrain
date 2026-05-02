@@ -9,13 +9,18 @@ import path from "node:path";
 import { test } from "node:test";
 
 import { governProfileMemoryCandidates } from "../../src/core/profileMemoryRuntime/profileMemoryTruthGovernance";
-import { extractProfileFactCandidatesFromUserInput } from "../../src/core/profileMemoryRuntime/profileMemoryExtraction";
+import {
+  buildValidatedProfileFactCandidates,
+  buildValidatedSemanticRelationshipFactCandidates,
+  extractProfileFactCandidatesFromUserInput
+} from "../../src/core/profileMemoryRuntime/profileMemoryExtraction";
 import { ProfileMemoryStore } from "../../src/core/profileMemoryStore";
 import type {
   ProfileMemoryIngestPolicy,
   ProfileMemoryIngestRequest,
   ProfileMemoryWriteProvenance
 } from "../../src/core/profileMemoryRuntime/contracts";
+import { buildProfileMemoryIngestPolicy } from "../../src/core/profileMemoryRuntime/profileMemoryIngestPolicy";
 import { buildConversationSessionFixture } from "../helpers/conversationFixtures";
 import { buildDirectCasualConversationReply } from "../../src/interfaces/conversationRuntime/conversationRoutingDirectReplies";
 import { MemoryAccessAuditStore } from "../../src/core/memoryAccessAudit";
@@ -151,4 +156,163 @@ test("strict stores do not apply missing-policy relationship writes", async () =
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }
+});
+
+test("semantic relationship candidates require route-approved memory write authority", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-semantic-relationship-"));
+  const profilePath = path.join(tempDir, "profile_memory.secure.json");
+  const store = new ProfileMemoryStore(profilePath, Buffer.alloc(32, 7), 90);
+  const observedAt = "2026-05-02T12:30:00.000Z";
+  const validatedFactCandidates = buildValidatedSemanticRelationshipFactCandidates([
+    {
+      subject: "current_user",
+      objectDisplayName: "Milo",
+      relationLabel: "employee",
+      lifecycle: "current",
+      workAssociation: "Northstar Creative",
+      sourceFamily: "semantic_model",
+      ambiguity: "none",
+      evidenceSpan: {
+        text: "Milo helps me keep the studio operations moving at Northstar Creative.",
+        startOffset: 0,
+        endOffset: 68
+      },
+      confidence: 0.92
+    }
+  ]);
+
+  try {
+    const closedResult = await store.ingestFromTaskInput(
+      "task_semantic_relationship_closed",
+      "Milo helps me keep the studio operations moving at Northstar Creative.",
+      observedAt,
+      { validatedFactCandidates }
+    );
+    const closedFacts = await store.readFacts({
+      purpose: "operator_view",
+      includeSensitive: false,
+      explicitHumanApproval: false
+    });
+
+    assert.equal(closedResult.appliedFacts, 0);
+    assert.equal(closedFacts.length, 0);
+
+    const approvedResult = await store.ingestFromTaskInput(
+      "task_semantic_relationship_approved",
+      "Milo helps me keep the studio operations moving at Northstar Creative.",
+      observedAt,
+      {
+        validatedFactCandidates,
+        ingestPolicy: buildProfileMemoryIngestPolicy({
+          memoryIntent: "profile_update",
+          sourceSurface: "conversation_profile_input",
+          hasValidatedFactCandidates: validatedFactCandidates.length > 0
+        })
+      }
+    );
+    const approvedFacts = await store.readFacts({
+      purpose: "operator_view",
+      includeSensitive: false,
+      explicitHumanApproval: false
+    });
+
+    assert.equal(approvedResult.appliedFacts, 3);
+    assert.equal(
+      approvedFacts.find((fact) => fact.key === "contact.milo.name")?.value,
+      "Milo"
+    );
+    assert.equal(
+      approvedFacts.find((fact) => fact.key === "contact.milo.relationship")?.value,
+      "employee"
+    );
+    assert.equal(
+      approvedFacts.find((fact) => fact.key === "contact.milo.work_association")?.value,
+      "Northstar Creative"
+    );
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("semantic relationship lifecycle keeps historical and uncertain candidates out of current truth", () => {
+  const observedAt = "2026-05-02T12:45:00.000Z";
+  const historicalCandidates = buildValidatedProfileFactCandidates(
+    buildValidatedSemanticRelationshipFactCandidates([
+      {
+        subject: "current_user",
+        objectDisplayName: "Avery",
+        relationLabel: "work_peer",
+        lifecycle: "historical",
+        workAssociation: "Northstar Creative",
+        sourceFamily: "semantic_model",
+        ambiguity: "none",
+        evidenceSpan: {
+          text: "Avery was part of my old studio team at Northstar Creative.",
+          startOffset: 0,
+          endOffset: 60
+        },
+        confidence: 0.9
+      }
+    ]),
+    "task_semantic_relationship_historical",
+    observedAt
+  );
+  const uncertainCandidates = buildValidatedProfileFactCandidates(
+    buildValidatedSemanticRelationshipFactCandidates([
+      {
+        subject: "current_user",
+        objectDisplayName: "Jordan",
+        relationLabel: "colleague",
+        lifecycle: "uncertain",
+        sourceFamily: "semantic_model",
+        ambiguity: "ambiguous_relation",
+        evidenceSpan: {
+          text: "Jordan might be connected to my work somehow.",
+          startOffset: 0,
+          endOffset: 45
+        },
+        confidence: 0.72
+      }
+    ]),
+    "task_semantic_relationship_uncertain",
+    observedAt
+  );
+
+  const historicalGovernance = governProfileMemoryCandidates({
+    factCandidates: historicalCandidates,
+    episodeCandidates: [],
+    episodeResolutionCandidates: []
+  });
+  const uncertainGovernance = governProfileMemoryCandidates({
+    factCandidates: uncertainCandidates,
+    episodeCandidates: [],
+    episodeResolutionCandidates: []
+  });
+
+  assert.equal(
+    historicalGovernance.allowedCurrentStateFactCandidates.some((candidate) =>
+      candidate.key === "contact.avery.relationship" ||
+      candidate.key === "contact.avery.work_association"
+    ),
+    false
+  );
+  assert.equal(
+    historicalGovernance.allowedSupportOnlyFactCandidates.some((candidate) =>
+      candidate.key === "contact.avery.relationship" ||
+      candidate.key === "contact.avery.work_association"
+    ),
+    true
+  );
+  assert.equal(
+    uncertainGovernance.allowedCurrentStateFactCandidates.some((candidate) =>
+      candidate.key === "contact.jordan.relationship"
+    ),
+    false
+  );
+  assert.equal(
+    uncertainGovernance.quarantinedFactCandidates.some((entry) =>
+      entry.candidate.key === "contact.jordan.relationship"
+    ),
+    true
+  );
 });

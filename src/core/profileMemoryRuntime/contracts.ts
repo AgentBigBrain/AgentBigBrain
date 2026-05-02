@@ -144,6 +144,55 @@ export interface ProfileValidatedFactCandidateInput {
   sensitive?: boolean;
   source: string;
   confidence?: number;
+  relationshipCandidate?: ProfileValidatedRelationshipCandidateMetadata;
+}
+
+export type ProfileSemanticRelationshipSubject = "current_user";
+
+export type ProfileSemanticRelationshipLifecycle =
+  | "current"
+  | "historical"
+  | "severed"
+  | "uncertain";
+
+export type ProfileSemanticRelationshipAmbiguity =
+  | "none"
+  | "ambiguous_subject"
+  | "ambiguous_object"
+  | "ambiguous_relation"
+  | "ambiguous_lifecycle";
+
+export type ProfileSemanticRelationshipSourceFamily =
+  | "semantic_model"
+  | "approved_review_path";
+
+export interface ProfileSemanticRelationshipEvidenceSpan {
+  text: string;
+  startOffset?: number;
+  endOffset?: number;
+}
+
+export interface ProfileValidatedRelationshipCandidateMetadata {
+  subject: ProfileSemanticRelationshipSubject;
+  objectDisplayName: string;
+  relationLabel: string;
+  lifecycle: ProfileSemanticRelationshipLifecycle;
+  sourceFamily: ProfileSemanticRelationshipSourceFamily;
+  ambiguity: ProfileSemanticRelationshipAmbiguity;
+  evidenceSpan: ProfileSemanticRelationshipEvidenceSpan;
+}
+
+export interface ProfileSemanticRelationshipCandidateInput {
+  subject: ProfileSemanticRelationshipSubject;
+  objectDisplayName: string;
+  relationLabel: string;
+  lifecycle: ProfileSemanticRelationshipLifecycle;
+  workAssociation?: string;
+  sourceFamily: ProfileSemanticRelationshipSourceFamily;
+  ambiguity?: ProfileSemanticRelationshipAmbiguity;
+  evidenceSpan: ProfileSemanticRelationshipEvidenceSpan;
+  confidence?: number;
+  sensitive?: boolean;
 }
 
 export type ProfileMemoryIngestMemoryIntent =

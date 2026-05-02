@@ -9,6 +9,7 @@ import {
   normalizeProfileValue,
   trimTrailingClausePunctuation
 } from "./profileMemoryNormalization";
+import { isSemanticRelationshipCandidateSource } from "./profileMemoryTruthGovernanceSources";
 
 const PREFERRED_NAME_TOKEN_PATTERN = /^[\p{L}]+(?:['\u2019-][\p{L}]+)*$/u;
 const PREFERRED_NAME_CONNECTOR_TOKENS = new Set([
@@ -133,6 +134,57 @@ export function validatePreferredNameCandidateValue(candidateValue: string | nul
 }
 
 /**
+ * Validates a typed semantic relationship fact candidate before it enters the normal upsert seam.
+ *
+ * @param candidate - Candidate proposed through the semantic relationship adapter.
+ * @returns Canonical fact input when the relationship candidate is structurally safe.
+ */
+function validateSemanticRelationshipFactCandidate(
+  candidate: ProfileValidatedFactCandidateInput,
+  sourceTaskId: string,
+  observedAt: string
+): ProfileFactUpsertInput | null {
+  const normalizedKey = canonicalizeProfileKey(candidate.key);
+  if (
+    !candidate.relationshipCandidate ||
+    !/^contact\.[^.]+\.(name|relationship|work_association)$/.test(normalizedKey) ||
+    !isSemanticRelationshipCandidateSource(candidate.source)
+  ) {
+    return null;
+  }
+  const metadata = candidate.relationshipCandidate;
+  if (
+    metadata.subject !== "current_user" ||
+    !metadata.evidenceSpan.text.trim() ||
+    (
+      metadata.sourceFamily !== "semantic_model" &&
+      metadata.sourceFamily !== "approved_review_path"
+    )
+  ) {
+    return null;
+  }
+  const normalizedValue = normalizeProfileValue(candidate.candidateValue);
+  if (
+    !normalizedValue ||
+    normalizedValue.length > 160 ||
+    /\b(?:https?:\/\/|file:\/\/\/)/i.test(normalizedValue) ||
+    /[`$=<>{}\[\]()]/.test(normalizedValue)
+  ) {
+    return null;
+  }
+
+  return {
+    key: normalizedKey,
+    value: normalizedValue,
+    sensitive: candidate.sensitive === true,
+    sourceTaskId,
+    source: candidate.source,
+    observedAt,
+    confidence: candidate.confidence ?? 0.85
+  };
+}
+
+/**
  * Converts validated semantic-interpreter candidates into canonical profile-memory upsert inputs.
  *
  * @param validatedCandidates - Pre-validated semantic candidates proposed by higher-level runtime code.
@@ -147,6 +199,16 @@ export function buildValidatedProfileFactCandidates(
 ): readonly ProfileFactUpsertInput[] {
   const normalizedCandidates: ProfileFactUpsertInput[] = [];
   for (const candidate of validatedCandidates) {
+    const semanticRelationshipCandidate = validateSemanticRelationshipFactCandidate(
+      candidate,
+      sourceTaskId,
+      observedAt
+    );
+    if (semanticRelationshipCandidate) {
+      normalizedCandidates.push(semanticRelationshipCandidate);
+      continue;
+    }
+
     if (canonicalizeProfileKey(candidate.key) !== "identity.preferred_name") {
       continue;
     }

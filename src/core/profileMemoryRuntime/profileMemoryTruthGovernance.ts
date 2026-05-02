@@ -32,7 +32,12 @@ import {
   ALLOWED_EXPLICIT_CONTACT_NAME_SOURCES,
   ALLOWED_EXPLICIT_CURRENT_CONTACT_RELATIONSHIP_SOURCES,
   ALLOWED_EXPLICIT_CURRENT_CONTACT_WORK_ASSOCIATION_SOURCES,
-  MEMORY_REVIEW_FACT_CORRECTION_SOURCE
+  MEMORY_REVIEW_FACT_CORRECTION_SOURCE,
+  STRUCTURED_CURRENT_RELATIONSHIP_SOURCES,
+  STRUCTURED_HISTORICAL_RELATIONSHIP_SOURCES,
+  STRUCTURED_RELATIONSHIP_NAME_SOURCES,
+  STRUCTURED_SEVERED_RELATIONSHIP_SOURCES,
+  STRUCTURED_UNCERTAIN_RELATIONSHIP_SOURCES
 } from "./profileMemoryTruthGovernanceSources";
 /**
  * Classifies one fact candidate into a closed evidence class, family, action, and reason.
@@ -71,6 +76,16 @@ function buildFactGovernanceDecision(candidate: ProfileFactUpsertInput): Profile
     ALLOWED_EXPLICIT_CURRENT_CONTACT_RELATIONSHIP_SOURCES.has(normalizedSource);
   const isAllowedExplicitCurrentContactWorkAssociationSource =
     ALLOWED_EXPLICIT_CURRENT_CONTACT_WORK_ASSOCIATION_SOURCES.has(normalizedSource);
+  const isStructuredRelationshipNameSource =
+    STRUCTURED_RELATIONSHIP_NAME_SOURCES.has(normalizedSource);
+  const isStructuredCurrentRelationshipSource =
+    STRUCTURED_CURRENT_RELATIONSHIP_SOURCES.has(normalizedSource);
+  const isStructuredHistoricalRelationshipSource =
+    STRUCTURED_HISTORICAL_RELATIONSHIP_SOURCES.has(normalizedSource);
+  const isStructuredSeveredRelationshipSource =
+    STRUCTURED_SEVERED_RELATIONSHIP_SOURCES.has(normalizedSource);
+  const isStructuredUncertainRelationshipSource =
+    STRUCTURED_UNCERTAIN_RELATIONSHIP_SOURCES.has(normalizedSource);
   const isAllowedExplicitSchoolAssociationSource =
     normalizedSource === "user_input_pattern.school_association";
   const isAllowedExplicitFollowupSource =
@@ -193,6 +208,9 @@ function buildFactGovernanceDecision(candidate: ProfileFactUpsertInput): Profile
     return buildDecision("followup.resolution", "assistant_inference", "quarantine", "unsupported_source");
   }
   if (/^contact\.[^.]+\.name$/.test(normalizedKey)) {
+    if (isStructuredRelationshipNameSource) {
+      return buildDecision("contact.name", "validated_structured_candidate", "allow_current_state", "validated_semantic_candidate");
+    }
     if (isValidatedStructuredSource) {
       return buildDecision("contact.name", "validated_structured_candidate", "quarantine", "unsupported_source");
     }
@@ -208,6 +226,18 @@ function buildFactGovernanceDecision(candidate: ProfileFactUpsertInput): Profile
     return buildDecision("contact.name", "assistant_inference", "quarantine", "unsupported_source");
   }
   if (/^contact\.[^.]+\.relationship$/.test(normalizedKey)) {
+    if (isStructuredCurrentRelationshipSource) {
+      return buildDecision("contact.relationship", "validated_structured_candidate", "allow_current_state", "validated_semantic_candidate");
+    }
+    if (isStructuredHistoricalRelationshipSource) {
+      return buildDecision("contact.relationship", "validated_structured_candidate", "support_only_legacy", "historical_contact_relationship_support_only");
+    }
+    if (isStructuredSeveredRelationshipSource) {
+      return buildDecision("contact.relationship", "validated_structured_candidate", "support_only_legacy", "severed_contact_relationship_support_only");
+    }
+    if (isStructuredUncertainRelationshipSource) {
+      return buildDecision("contact.relationship", "validated_structured_candidate", "quarantine", "unsupported_source");
+    }
     if (normalizedSource === "user_input_pattern.direct_contact_relationship_severed") {
       return buildDecision("contact.relationship", "user_explicit_fact", "support_only_legacy", "severed_contact_relationship_support_only");
     }
@@ -240,6 +270,18 @@ function buildFactGovernanceDecision(candidate: ProfileFactUpsertInput): Profile
     return buildDecision("contact.relationship", "assistant_inference", "quarantine", "unsupported_source");
   }
   if (/^contact\.[^.]+\.work_association$/.test(normalizedKey)) {
+    if (isStructuredCurrentRelationshipSource) {
+      return buildDecision("contact.work_association", "validated_structured_candidate", "allow_current_state", "validated_semantic_candidate");
+    }
+    if (isStructuredHistoricalRelationshipSource) {
+      return buildDecision("contact.work_association", "validated_structured_candidate", "support_only_legacy", "historical_work_linkage_support_only");
+    }
+    if (isStructuredSeveredRelationshipSource) {
+      return buildDecision("contact.work_association", "validated_structured_candidate", "support_only_legacy", "severed_work_linkage_support_only");
+    }
+    if (isStructuredUncertainRelationshipSource) {
+      return buildDecision("contact.work_association", "validated_structured_candidate", "quarantine", "unsupported_source");
+    }
     if (normalizedSource === "user_input_pattern.direct_contact_relationship_severed") {
       return buildDecision("contact.work_association", "user_explicit_fact", "support_only_legacy", "severed_contact_relationship_support_only");
     }
