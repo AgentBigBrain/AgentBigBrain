@@ -22,7 +22,7 @@ Current ownership:
 - bounded media envelopes suitable for conversation/runtime contracts
 - natural fallback input text for media-only messages
 - explicit voice-only command promotion for transcripts like `command auto ...`
-- bounded execution-input media context blocks
+- bounded execution-input media context blocks with source-labeled interpretation layers
 - fail-closed media validation decisions
 - bounded Telegram file descriptors and in-memory file downloads
 
@@ -31,6 +31,9 @@ Current ownership:
 - Media parsing here must stay provider-bounded and fail closed on malformed payloads.
 - Telegram file downloads here must remain bounded by explicit size limits.
 - Media-only messages should become natural bounded requests, not silent drops.
+- Memory consumers should prefer structured interpretation layers over rendered media prompt text.
+  Layer authority decides whether a transcript is direct user text, document/media meaning is
+  candidate-only, or a fallback is support-only.
 - Voice-only command promotion must stay narrow: only real voice transcripts, only near the start
   of the transcript, and only for explicit `command <known-command>` phrasing.
 

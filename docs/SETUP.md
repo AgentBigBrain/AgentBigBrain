@@ -154,10 +154,10 @@ Optional overrides:
 - `CODEX_TIMEOUT_MS`: Codex request timeout override
 - `CODEX_MODEL_*`: backend-specific role mappings
 
-### Media understanding (images, voice notes, and short video)
+### Media understanding (images, voice notes, documents, and short video)
 
-The runtime can ingest Telegram screenshots, voice notes, and short videos, but the interpretation
-quality depends on the configured media path.
+The runtime can ingest Telegram screenshots, voice notes, documents, and short videos, but the
+interpretation quality depends on the configured media path.
 
 - Media no longer has to stay on a separate OpenAI-only path. By default it can inherit the main
   text backend, or you can split vision and transcription by modality.
@@ -165,6 +165,8 @@ quality depends on the configured media path.
   settings and model support.
 - Voice notes can use a dedicated transcription model such as `whisper-1`, or a multimodal
   audio-capable model path when the selected backend supports it.
+- Documents expose extracted text as source-labeled layers. Optional model-assisted document
+  meaning is disabled by default and remains candidate-only when enabled.
 - Video is accepted as input, but the runtime only produces simple metadata and caption summaries.
   It does not claim full video understanding.
 
@@ -179,6 +181,7 @@ Recommended media env block for inherited media routing:
 BRAIN_MEDIA_BACKEND=inherit_text_backend
 BRAIN_MEDIA_VISION_BACKEND=inherit_text_backend
 BRAIN_MEDIA_TRANSCRIPTION_BACKEND=inherit_text_backend
+BRAIN_MEDIA_DOCUMENT_MEANING_BACKEND=disabled
 BRAIN_MEDIA_VISION_MODEL=gpt-5.4-mini
 BRAIN_MEDIA_TRANSCRIPTION_MODEL=whisper-1
 BRAIN_MEDIA_REQUEST_TIMEOUT_MS=45000
@@ -190,6 +193,7 @@ Example split-modality block:
 BRAIN_MEDIA_BACKEND=inherit_text_backend
 BRAIN_MEDIA_VISION_BACKEND=codex_oauth
 BRAIN_MEDIA_TRANSCRIPTION_BACKEND=openai_api
+BRAIN_MEDIA_DOCUMENT_MEANING_BACKEND=disabled
 BRAIN_MEDIA_VISION_MODEL=gpt-5.4-mini
 BRAIN_MEDIA_TRANSCRIPTION_MODEL=whisper-1
 BRAIN_MEDIA_REQUEST_TIMEOUT_MS=45000
@@ -203,6 +207,11 @@ How each setting works:
   it falls back to `BRAIN_MEDIA_BACKEND`.
 - `BRAIN_MEDIA_TRANSCRIPTION_BACKEND`: optional override just for voice-note transcription. If
   unset, it falls back to `BRAIN_MEDIA_BACKEND`.
+- `BRAIN_MEDIA_DOCUMENT_MEANING_BACKEND`: optional override for model-assisted document meaning.
+  Default is `disabled`; keep it disabled unless you explicitly want candidate-only semantic
+  summaries for documents.
+- `BRAIN_MEDIA_DOCUMENT_MEANING_MODEL`: model used when document meaning is enabled.
+- `BRAIN_MEDIA_DOCUMENT_MEANING_TIMEOUT_MS`: timeout for model-assisted document meaning.
 - `BRAIN_MEDIA_VISION_MODEL`: vision-capable model for screenshots/images. If unset, the runtime falls back to `OPENAI_MODEL_SMALL_FAST`, then `OLLAMA_MODEL_SMALL_FAST` / `OLLAMA_MODEL_DEFAULT`, then `gpt-4.1-mini`.
 - `BRAIN_MEDIA_TRANSCRIPTION_MODEL`: transcription model for voice notes. If unset, the runtime defaults to `whisper-1`. Dedicated models such as `whisper-1` stay on `/audio/transcriptions`; non-whisper models such as Gemma 4 automatically use the multimodal audio-understanding path instead.
 - `BRAIN_MEDIA_REQUEST_TIMEOUT_MS`: timeout used by the image/transcription calls.
@@ -211,6 +220,8 @@ Operational notes:
 
 - screenshots can produce OCR/summary style context when the vision path is available
 - voice notes can produce transcript-backed context when the transcription path is available
+- document text/model meaning is passed as layered context with memory authority labels; raw
+  document/model-derived meaning stays candidate-only
 - `BRAIN_MEDIA_BACKEND=inherit_text_backend` means media follows the main text backend unless a
   modality override says otherwise
 - `BRAIN_MEDIA_BACKEND=disabled` skips provider-backed media understanding and falls back to simple
@@ -673,7 +684,10 @@ When running `npm run dev:interface`, use `/help` to view live command guidance.
 Current operator contract:
 
 - There is no separate `/skill` command.
-- Use `/chat` or `/propose` with `create skill ...` / `run skill ...`.
+- Use `/chat` or `/propose` with `create skill ...`, `update skill ...`, `approve skill ...`,
+  `reject skill ...`, `deprecate skill ...`, or `run skill ...`.
+- Agent-suggested skills are drafts until approved. Rejected or deprecated skills stay reviewable
+  but are excluded from active planner guidance and executable reuse.
 - `/memory` is available in private conversations for remembered-situation review and correction.
 - For real side effects, say `execute now` and name your shell (`PowerShell` / `cmd` / `Terminal` / `bash` / `zsh`).
 - If name-call mode is enabled, natural greeting forms like `Hi BigBrain` and `Hey BigBrain, ...`
@@ -811,6 +825,7 @@ npm run test:runtime:managed_process_live_smoke
 npm run test:interface:advanced_live_smoke
 npm run test:media_ingest_execution_intent:evidence
 npm run test:media_ingest_execution_intent:live_smoke
+npm run test:telegram_completion_matrix:live_smoke
 npm run test:human_language_generalization:evidence
 npm run test:human_language_generalization:live_smoke
 ```
@@ -852,7 +867,9 @@ The human-language pair has two different jobs:
 - `runtime/judgment_patterns.json` (judgment-pattern store in JSON mode)
 - `runtime/distiller_rejection_ledger.json` (distiller merge rejection ledger in JSON mode)
 - `runtime/stage6_86_runtime_state.json` (Stage 6.86 runtime state JSON mode)
-- `runtime/skills/` (created/promoted runtime skills; `.js` primary runtime artifact with `.ts` compatibility fallback during migration window)
+- `runtime/skills/` (created/promoted runtime skills; Markdown instruction skills use `.md`,
+  executable skills use a `.js` primary artifact with `.ts` compatibility fallback during the
+  migration window, and manifests record lifecycle/approval state)
 
 ## 18) Complete `.env.example` Reference
 
@@ -939,6 +956,11 @@ This section covers every key listed in `.env.example` and what to expect if you
   - `BRAIN_MEDIA_REQUEST_TIMEOUT_MS`: timeout for provider-backed media interpretation requests.
     - Raise it if image or transcription requests time out.
   - Lower it if you want quicker fail-closed fallback behavior.
+- `BRAIN_MEDIA_DOCUMENT_MEANING_BACKEND`: backend for optional model-assisted document meaning.
+  - Defaults to `disabled`.
+  - Enabled outputs are candidate-only and do not become durable profile memory by themselves.
+- `BRAIN_MEDIA_DOCUMENT_MEANING_MODEL`: model used for document meaning when the backend is enabled.
+- `BRAIN_MEDIA_DOCUMENT_MEANING_TIMEOUT_MS`: request timeout for document meaning.
 
 Video limitation:
 

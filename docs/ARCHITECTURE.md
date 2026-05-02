@@ -226,6 +226,12 @@ Deterministic policy may still validate package safety, normalize exact artifact
 owned processes, and require proof. It must not silently synthesize creative site templates,
 framework scaffolds, generated source, or browser-open chains as a fallback.
 
+Skill lifecycle is governed separately from skill creation. Explicit user-created skills can be
+active immediately. Agent-suggested skills default to `pending_approval`, remain visible for review,
+and do not enter planner guidance until `approve_skill` promotes them. `update_skill`,
+`reject_skill`, and `deprecate_skill` are typed lifecycle actions that pass through the same planner,
+hard-constraint, governor, and executor pipeline as other side-effecting runtime actions.
+
 ### Deterministic safety plane
 
 Main surfaces:
@@ -461,9 +467,9 @@ Current model:
 
 1. transport accepts the media attachment
 2. media runtime downloads and normalizes metadata
-3. media understanding produces summary text, optional OCR or transcript, confidence, source
-   notes, and entity hints
-4. memory brokerage decides whether any of that belongs in continuity or remembered situations
+3. media understanding produces source-labeled interpretation layers plus legacy summary,
+   transcript, OCR, confidence, and entity-hint fields for compatibility
+4. memory brokerage consumes structured layer authority before falling back to rendered text
 5. the rest of the runtime sees structured context, not raw media blobs
 
 Raw uploads now also have a runtime-owned artifact lane. The transport and download path can persist
@@ -471,10 +477,17 @@ stable artifact identity, checksum, owned asset path, provider metadata, and der
 that information is reduced into profile memory or continuity. That gives operators a durable
 inspection surface for the original upload and the runtime's interpretation of it.
 
+Interpretation layers carry a memory-authority label. Voice transcripts can represent direct user
+text when they come from a transcript source. Raw document text and model-derived document meaning
+are candidate-only. Metadata fallbacks are support-only and must not create durable profile memory
+by themselves. Optional document meaning is disabled by default and must stay candidate-only even
+when a model backend is explicitly enabled.
+
 Current capability shape:
 
 - images can use vision-capable model paths when configured
 - voice notes can use transcription when configured
+- documents can expose extracted text layers and optional policy-gated meaning layers
 - video stays on file metadata and caption context rather than full clip analysis
 
 That choice is deliberate. It keeps the system honest about what it actually understood.

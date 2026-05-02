@@ -167,6 +167,12 @@ static HTML page, a Next.js app, browser recovery, or generic document interpret
 not authorize side effects and they are not executable `run_skill` targets. The resulting actions
 still pass through typed planning, hard constraints, governors, proof gates, and receipts.
 
+User-created Markdown skills start as runtime files under `runtime/skills`. Explicit user-created
+skills can become active immediately, while agent-suggested skills are recorded as reviewable drafts
+until an operator approves them. Operators can update, approve, reject, or deprecate skills through
+the governed skill lifecycle actions; inactive skills stay out of planner guidance and executable
+skill runs.
+
 This keeps generated work flexible without moving safety into prompts. Deterministic runtime code
 may validate paths, normalize action shape, reopen exact artifacts, manage owned previews, and
 verify proof. It should not synthesize creative site templates or framework source as a hidden
@@ -188,6 +194,16 @@ Start it with:
 ```bash
 npm run dev:interface
 ```
+
+The primary end-to-end operator smoke for Telegram/Desktop behavior is:
+
+```bash
+npm run test:telegram_completion_matrix:live_smoke
+```
+
+Without `BRAIN_TELEGRAM_COMPLETION_MATRIX_LIVE_CONFIRM=true`, the command writes bounded
+`BLOCKED` evidence instead of sending messages or touching the Desktop. Use `-- --schema-only` when
+you only want to validate the matrix fixture and review-safe evidence contract.
 
 Common interface settings:
 

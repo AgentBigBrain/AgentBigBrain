@@ -12,16 +12,20 @@ transport parsing but before conversation execution and memory brokerage.
 
 ## Outputs
 - bounded per-attachment interpretations with summary, optional transcript/OCR, confidence,
-  provenance, and entity hints
+  provenance, entity hints, and source-labeled interpretation layers
 - enriched media envelopes ready for conversation execution and memory-safe brokerage
 
 ## Invariants
 - This subsystem must fail closed to deterministic fallback when provider calls fail.
 - It must not expose raw binary payloads outside the transport/media boundary.
 - It should improve user-context quality without becoming a generic multimodal planner.
-- Document interpretation is extracted text plus bounded generic hints. Document-derived summary,
-  OCR, and entity hints are supporting context and must stay candidate-only for durable memory until
-  separately governed.
+- Document interpretation is layered. Raw extracted document text and model-derived document
+  meaning stay `candidate_only` for durable memory. Deterministic metadata fallback layers are
+  support-only and must not become profile memory authority.
+- Optional model-assisted document meaning is disabled by default through
+  `BRAIN_MEDIA_DOCUMENT_MEANING_BACKEND=disabled`. When enabled, it is bounded by
+  `BRAIN_MEDIA_DOCUMENT_MEANING_MODEL` and `BRAIN_MEDIA_DOCUMENT_MEANING_TIMEOUT_MS` and remains
+  candidate-only.
 - Fixture catalogs are allowed for tests and live smoke, not as a production-only code path.
 
 ## Current Provider Coverage
@@ -45,6 +49,9 @@ transport parsing but before conversation execution and memory brokerage.
   as the default voice-note path.
 - `BRAIN_MEDIA_TRANSCRIPTION_BACKEND=openai_api` still supports other loopback OpenAI-compatible
   servers without an API key when `OPENAI_BASE_URL` points at localhost.
+- `BRAIN_MEDIA_DOCUMENT_MEANING_BACKEND` is a distinct opt-in backend for document semantic
+  summaries. The default is `disabled`; supported configured values follow the same bounded media
+  backend family.
 - Short video currently remains on bounded metadata/caption fallback. That is deliberate: the runtime does not yet have a clip-analysis path with strong enough cost, latency, and truthfulness controls to claim deeper understanding.
 
 ## Related Tests

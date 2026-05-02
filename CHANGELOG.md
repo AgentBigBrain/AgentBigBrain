@@ -8,12 +8,23 @@ stay aligned with `package.json`.
 ## [Unreleased]
 
 ### Added
+- Added source-labeled media interpretation layers, optional policy-gated document meaning, and a
+  Telegram completion matrix smoke that writes review-safe PASS/FAIL/BLOCKED evidence.
+- Added governed skill lifecycle actions for updating, approving, rejecting, and deprecating
+  runtime skills.
 
 ### Changed
+- Media memory ingest now prefers structured layer authority over rendered prompt text, keeping raw
+  document and model-derived meaning candidate-only for durable profile memory.
+- Agent-suggested skills now default to a reviewable pending state until operator approval.
 
 ### Fixed
+- Obsidian media projection now surfaces interpretation-layer authority and redacts review-safe
+  extracted text consistently.
 
 ### Security
+- Review evidence for the Telegram completion matrix rejects unredacted local paths and
+  identifier-shaped values before writing artifacts.
 
 ## [0.2.0] - 2026-05-01
 
