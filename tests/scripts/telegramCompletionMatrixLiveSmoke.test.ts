@@ -54,10 +54,21 @@ test("Telegram completion matrix schema-only mode writes a passing review-safe a
     summary: {
       scenarioCount: number;
       passedScenarios: number;
+      blockedScenarios: number;
     };
     results: Array<{
       id: string;
+      control: string;
       status: string;
+      evidenceMode: string;
+      observedRoute: string | null;
+      observedRouteSource: string;
+      routeObserved: boolean;
+      sideEffectObserved: boolean;
+      promptExecuted: boolean;
+      coveredByFamilyArtifact: boolean;
+      mockedProof: boolean;
+      schemaOnlyProof: boolean;
       selectedGuidanceProof: Record<string, unknown> | null;
       mediaProof: Record<string, unknown> | null;
     }>;
@@ -67,7 +78,22 @@ test("Telegram completion matrix schema-only mode writes a passing review-safe a
   assert.equal(persisted.status, "PASS");
   assert.equal(persisted.mode, "schema_only");
   assert.equal(persisted.redactionStatus, "review_safe");
-  assert.equal(persisted.summary.passedScenarios, persisted.summary.scenarioCount);
+  assert.equal(
+    persisted.summary.passedScenarios + persisted.summary.blockedScenarios,
+    persisted.summary.scenarioCount
+  );
+  for (const result of persisted.results) {
+    assert.equal(result.status, result.control === "negative" ? "BLOCKED" : "PASS");
+    assert.equal(result.evidenceMode, "schema_only");
+    assert.equal(result.observedRoute, null);
+    assert.equal(result.observedRouteSource, "schema_only");
+    assert.equal(result.routeObserved, false);
+    assert.equal(result.sideEffectObserved, false);
+    assert.equal(result.promptExecuted, false);
+    assert.equal(result.coveredByFamilyArtifact, false);
+    assert.equal(result.mockedProof, false);
+    assert.equal(result.schemaOnlyProof, true);
+  }
 });
 
 test("Telegram completion matrix produces bounded BLOCKED evidence without live confirmation", async () => {
@@ -119,6 +145,50 @@ test("Telegram completion matrix can represent provider-unavailable BLOCKED evid
   validateCompletionMatrixEvidence(artifact);
   assert.equal(artifact.status, "BLOCKED");
   assert.equal(artifact.summary.blockedScenarios, 2);
+  for (const result of artifact.results) {
+    assert.equal(result.evidenceMode, "blocked");
+    assert.equal(result.observedRoute, null);
+    assert.equal(result.observedRouteSource, "blocked");
+    assert.equal(result.routeObserved, false);
+  }
+});
+
+test("Telegram completion matrix rejects expected route copied into observed route", async () => {
+  const scenario = (await loadCompletionMatrixScenarios())[0];
+  assert.ok(scenario);
+  const artifact = buildCompletionMatrixEvidence("schema_only", [
+    buildCompletionMatrixScenarioResult(scenario, {
+      observedRoute: scenario.expectedRoute,
+      observedRouteSource: "schema_only",
+      status: "PASS"
+    })
+  ]);
+
+  assert.throws(
+    () => validateCompletionMatrixEvidence(artifact),
+    /observedRoute without routeObserved/i
+  );
+});
+
+test("Telegram completion matrix rejects synthesized passing negative controls", async () => {
+  const scenario = (await loadCompletionMatrixScenarios()).find(
+    (candidate) => candidate.control === "negative"
+  );
+  assert.ok(scenario);
+  const artifact = buildCompletionMatrixEvidence("mocked", [
+    buildCompletionMatrixScenarioResult(scenario, {
+      evidenceMode: "mocked",
+      observedRouteSource: "mocked_family_artifact",
+      mockedProof: true,
+      blockerReason: "synthetic negative pass",
+      status: "PASS"
+    })
+  ]);
+
+  assert.throws(
+    () => validateCompletionMatrixEvidence(artifact),
+    /Negative scenario .* cannot PASS without observed block or clarify route/i
+  );
 });
 
 test("package scripts expose Telegram completion matrix live-smoke commands", async () => {

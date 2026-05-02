@@ -15,6 +15,20 @@ export type CompletionMatrixScenarioFamily =
 
 export type CompletionMatrixControl = "positive" | "negative";
 export type CompletionMatrixStatus = "PASS" | "FAIL" | "BLOCKED";
+export type CompletionMatrixEvidenceMode =
+  | "schema_only"
+  | "mocked"
+  | "front_door_observed"
+  | "side_effect_observed"
+  | "blocked"
+  | "failed";
+export type CompletionMatrixObservedRouteSource =
+  | "runtime_metadata"
+  | "front_door_resolution"
+  | "schema_only"
+  | "blocked"
+  | "mocked_family_artifact"
+  | "not_observed";
 
 export interface CompletionMatrixScenario {
   id: string;
@@ -32,8 +46,16 @@ export interface CompletionMatrixScenarioResult {
   prompt: string;
   family: CompletionMatrixScenarioFamily;
   control: CompletionMatrixControl;
+  evidenceMode: CompletionMatrixEvidenceMode;
   expectedRoute: string;
   observedRoute: string | null;
+  observedRouteSource: CompletionMatrixObservedRouteSource;
+  routeObserved: boolean;
+  sideEffectObserved: boolean;
+  promptExecuted: boolean;
+  coveredByFamilyArtifact: boolean;
+  mockedProof: boolean;
+  schemaOnlyProof: boolean;
   expectedSideEffects: readonly string[];
   observedSideEffects: Record<string, boolean>;
   artifactPaths: readonly string[];
@@ -50,7 +72,7 @@ export interface CompletionMatrixScenarioResult {
 export interface CompletionMatrixEvidence {
   generatedAt: string;
   command: string;
-  mode: "schema_only" | "live" | "blocked";
+  mode: CompletionMatrixEvidenceMode;
   status: CompletionMatrixStatus;
   redactionStatus: "review_safe" | "unsafe";
   blockerReason: string | null;
@@ -203,6 +225,8 @@ export function buildBlockedCompletionMatrixEvidence(
     "blocked",
     scenarios.map((scenario) => ({
       ...buildEmptyScenarioResult(scenario),
+      evidenceMode: "blocked",
+      observedRouteSource: "blocked",
       blockerReason,
       status: "BLOCKED"
     }))
@@ -246,6 +270,31 @@ export function validateCompletionMatrixEvidence(artifact: CompletionMatrixEvide
     }
     if (!result.blockerReason && result.status === "BLOCKED") {
       throw new Error(`Scenario ${result.id} is BLOCKED without a blockerReason.`);
+    }
+    if (result.routeObserved && !result.observedRoute) {
+      throw new Error(`Scenario ${result.id} marks routeObserved without observedRoute.`);
+    }
+    if (!result.routeObserved && result.observedRoute) {
+      throw new Error(`Scenario ${result.id} has observedRoute without routeObserved.`);
+    }
+    if (
+      result.routeObserved &&
+      result.observedRouteSource !== "runtime_metadata" &&
+      result.observedRouteSource !== "front_door_resolution"
+    ) {
+      throw new Error(`Scenario ${result.id} has routeObserved with invalid observedRouteSource.`);
+    }
+    if (result.schemaOnlyProof && result.evidenceMode !== "schema_only") {
+      throw new Error(`Scenario ${result.id} has schemaOnlyProof outside schema_only mode.`);
+    }
+    if (result.mockedProof && result.evidenceMode !== "mocked") {
+      throw new Error(`Scenario ${result.id} has mockedProof outside mocked mode.`);
+    }
+    if (result.control === "negative" && result.status === "PASS" && !result.routeObserved) {
+      throw new Error(`Negative scenario ${result.id} cannot PASS without observed block or clarify route.`);
+    }
+    if (result.status === "PASS" && result.evidenceMode === "blocked") {
+      throw new Error(`Scenario ${result.id} cannot PASS in blocked evidence mode.`);
     }
   }
 }
@@ -318,14 +367,14 @@ export function buildCompletionMatrixScenarioResult(
 function buildSchemaOnlyScenarioResult(
   scenario: CompletionMatrixScenario
 ): CompletionMatrixScenarioResult {
+  const isNegativeControl = scenario.control === "negative";
   return {
     ...buildEmptyScenarioResult(scenario),
-    observedRoute: scenario.expectedRoute,
-    observedSideEffects: Object.fromEntries(
-      scenario.expectedSideEffects.map((sideEffect) => [sideEffect, true])
-    ),
-    blockerReason: "schema_only_no_live_execution",
-    status: "PASS"
+    evidenceMode: "schema_only",
+    observedRouteSource: "schema_only",
+    schemaOnlyProof: true,
+    blockerReason: isNegativeControl ? "schema_only_negative_control_not_executed" : null,
+    status: isNegativeControl ? "BLOCKED" : "PASS"
   };
 }
 
@@ -337,8 +386,16 @@ function buildEmptyScenarioResult(
     prompt: scenario.prompt,
     family: scenario.family,
     control: scenario.control,
+    evidenceMode: "blocked",
     expectedRoute: scenario.expectedRoute,
     observedRoute: null,
+    observedRouteSource: "not_observed",
+    routeObserved: false,
+    sideEffectObserved: false,
+    promptExecuted: false,
+    coveredByFamilyArtifact: false,
+    mockedProof: false,
+    schemaOnlyProof: false,
     expectedSideEffects: scenario.expectedSideEffects,
     observedSideEffects: {},
     artifactPaths: [],
