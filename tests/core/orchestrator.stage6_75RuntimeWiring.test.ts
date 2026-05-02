@@ -191,7 +191,7 @@ test("stage 6.75 approval policy blocks max-use exceeded grants in runtime path"
   );
 });
 
-test("stage 6.75 mission state machine blocks idempotency-key replay in runtime path", async () => {
+test("stage 6.75 runtime path blocks unknown approval ids before any network write is approved", async () => {
   const replayKey = "idem_replay_001";
   await withStage675RuntimeBrain(
     [
@@ -225,8 +225,13 @@ test("stage 6.75 mission state machine blocks idempotency-key replay in runtime 
     async (brain) => {
       const result = await brain.runTask(buildTask("attempt idempotency replay"));
       assert.equal(result.actionResults.length, 2);
-      assert.equal(result.actionResults[0]?.approved, true);
+      assert.equal(result.actionResults[0]?.approved, false);
       assert.equal(result.actionResults[1]?.approved, false);
+      assert.equal(
+        result.actionResults[0]?.blockedBy.includes("APPROVAL_SCOPE_MISMATCH"),
+        true,
+        JSON.stringify(result.actionResults, null, 2)
+      );
       assert.equal(
         result.actionResults[1]?.blockedBy.includes("IDEMPOTENCY_KEY_REPLAY_DETECTED"),
         true,

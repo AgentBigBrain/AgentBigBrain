@@ -9,7 +9,6 @@ import {
   validateStage675ConnectorOperation
 } from "../stage6_75ConnectorPolicy";
 import {
-  createApprovalGrantV1,
   createApprovalRequestV1,
   registerApprovalGrantUse,
   validateApprovalGrantUse
@@ -268,12 +267,6 @@ function evaluateApprovalGrant(
     input.action.params.approvalMaxUses > 0
       ? Math.floor(input.action.params.approvalMaxUses)
       : 1;
-  const approvalUses =
-    typeof input.action.params.approvalUses === "number" &&
-    Number.isFinite(input.action.params.approvalUses) &&
-    input.action.params.approvalUses >= 0
-      ? Math.floor(input.action.params.approvalUses)
-      : 0;
   const approvalRiskClass = input.action.params.riskClass === "tier_2" ? "tier_2" : "tier_3";
   const approvalActionIds = Array.isArray(input.action.params.approvalActionIds)
     ? input.action.params.approvalActionIds
@@ -301,20 +294,16 @@ function evaluateApprovalGrant(
     ...approvalRequest,
     approvalId
   };
-  let approvalGrant = input.approvalGrantById.get(approvalId);
+  const approvalGrant = input.approvalGrantById.get(approvalId);
   if (!approvalGrant) {
-    const initialGrant = createApprovalGrantV1({
-      request: scopedApprovalRequest,
-      approvedAt: input.nowIso,
-      approvedBy: normalizeOptionalString(input.action.params.approvedBy) ?? "human_operator"
-    });
-    approvalGrant =
-      approvalUses > 0
-        ? {
-            ...initialGrant,
-            uses: approvalUses
-          }
-        : initialGrant;
+    return {
+      blockedOutcome: buildConstraintBlockedOutcome(
+        input.action,
+        input.mode,
+        "APPROVAL_SCOPE_MISMATCH",
+        "Approval id was provided, but it is not externally registered for this action."
+      )
+    };
   }
   const approvalDecision = validateApprovalGrantUse(scopedApprovalRequest, approvalGrant, {
     missionId: input.task.id,

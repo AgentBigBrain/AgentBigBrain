@@ -6,8 +6,14 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { createBrainConfigFromEnv } from "../../src/core/config";
+import { canonicalJson } from "../../src/core/normalizers/canonicalizationRules";
 import { evaluateTaskRunnerPreflight } from "../../src/core/orchestration/taskRunnerPreflight";
 import type { EvaluateTaskRunnerPreflightInput } from "../../src/core/orchestration/taskRunnerPreflight";
+import {
+  createApprovalGrantV1,
+  createApprovalRequestV1
+} from "../../src/core/stage6_75ApprovalPolicy";
+import type { ApprovalGrantV1 } from "../../src/core/types";
 
 function createBaseInput(): EvaluateTaskRunnerPreflightInput {
   const baseConfig = createBrainConfigFromEnv({});
@@ -43,6 +49,36 @@ function createBaseInput(): EvaluateTaskRunnerPreflightInput {
       createdAt: "2026-03-07T12:00:00.000Z"
     }
   };
+}
+
+function registerExternalNetworkApprovalGrant(
+  input: EvaluateTaskRunnerPreflightInput,
+  approvalId: string
+): ApprovalGrantV1 {
+  const request = createApprovalRequestV1({
+    missionId: input.task.id,
+    actionIds: [input.action.id],
+    diff: canonicalJson({
+      endpoint: input.action.params.url ?? input.action.params.endpoint,
+      method: input.action.params.method ?? "POST",
+      payload: input.action.params.payload ?? null
+    }),
+    riskClass: "tier_3",
+    idempotencyKeys: [input.idempotencyKey],
+    expiresAt: "2026-03-07T12:05:00.000Z",
+    maxUses: 1
+  });
+  const scopedRequest = {
+    ...request,
+    approvalId
+  };
+  const grant = createApprovalGrantV1({
+    request: scopedRequest,
+    approvedAt: "2026-03-07T12:00:00.000Z",
+    approvedBy: "tester"
+  });
+  input.approvalGrantById = new Map([[approvalId, grant]]);
+  return grant;
 }
 
 test("evaluateTaskRunnerPreflight blocks deadline overflow before proposal creation", () => {
@@ -260,6 +296,7 @@ test("evaluateTaskRunnerPreflight registers approval use and connector receipt s
     estimatedCostUsd: 0.08
   };
   input.idempotencyKey = "task_task_runner_preflight_1:1:action_task_runner_preflight_network_success";
+  registerExternalNetworkApprovalGrant(input, "approval_task_runner_preflight_1");
 
   const outcome = evaluateTaskRunnerPreflight(input);
 
@@ -278,4 +315,38 @@ test("evaluateTaskRunnerPreflight registers approval use and connector receipt s
     },
     externalIds: ["thread_123"]
   });
+});
+
+test("evaluateTaskRunnerPreflight blocks unknown approval ids instead of minting grants from action params", () => {
+  const input = createBaseInput();
+  input.action = {
+    id: "action_task_runner_preflight_network_unknown_approval",
+    type: "network_write",
+    description: "write connector state",
+    params: {
+      url: "https://example.com/api",
+      approvalId: "approval_unknown_self_mint_attempt",
+      approvedBy: "human_operator",
+      approvalActionIds: ["action_task_runner_preflight_network_unknown_approval"],
+      idempotencyKeys: [
+        "task_task_runner_preflight_1:1:action_task_runner_preflight_network_unknown_approval"
+      ],
+      approvalExpiresAt: "2026-03-07T12:05:00.000Z",
+      payload: {
+        query: "inbox"
+      }
+    },
+    estimatedCostUsd: 0.08
+  };
+  input.idempotencyKey = "task_task_runner_preflight_1:1:action_task_runner_preflight_network_unknown_approval";
+
+  const outcome = evaluateTaskRunnerPreflight(input);
+
+  assert.equal(outcome.proposal?.taskId, "task_task_runner_preflight_1");
+  assert.deepEqual(outcome.blockedOutcome?.actionResult.blockedBy, ["APPROVAL_SCOPE_MISMATCH"]);
+  assert.match(
+    outcome.blockedOutcome?.actionResult.violations[0]?.message ?? "",
+    /not externally registered/i
+  );
+  assert.equal(outcome.approvalGrant, undefined);
 });
