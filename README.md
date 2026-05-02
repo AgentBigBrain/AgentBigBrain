@@ -6,16 +6,18 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-blue)](./tsconfig.json)
 [![Runtime deps](https://img.shields.io/badge/runtime_deps-2-brightgreen)](./package.json)
 
-Governance-first TypeScript runtime for AI assistants and autonomous agents.
+Governance-first TypeScript runtime for AI assistants, autonomous agents, memory, skills, and
+audited local execution.
 
-AgentBigBrain is built for teams that want an agent runtime where the model can plan, explain, and
-propose work, but the runtime still decides what is allowed to happen. It supports governed CLI
-runs, bounded autonomous loops, Telegram and Discord interfaces, HTTP federation, audited local
-execution, and multiple model backends under one control model.
+AgentBigBrain is an open-source AI agent runtime for people building assistants that need to do
+real work without handing every decision to a language model. The model can plan, explain, write,
+edit, and propose actions. The runtime decides what is allowed to happen, records why it was
+allowed, and verifies whether claimed side effects actually occurred.
 
-At the npm runtime package level, the project depends on `ws` and `onnxruntime-node`. In practice,
-the full runtime also depends on your chosen backend, auth state, and any optional services you
-enable, such as Telegram, Discord, or Ollama.
+It is designed for governed AI automation across CLI runs, bounded autonomous loops, Telegram and
+Discord assistant interfaces, HTTP federation, local browser and process work, durable memory,
+Markdown skill guidance, Obsidian-readable projections, and multiple model backends under one
+control model.
 
 Start here:
 
@@ -23,6 +25,29 @@ Start here:
 - [Architecture reference](./docs/ARCHITECTURE.md)
 - [Command examples](./docs/COMMAND_EXAMPLES.md)
 - [Runtime error and env map](./docs/ERROR_CODE_ENV_MAP.md)
+
+## What AgentBigBrain does
+
+AgentBigBrain is not a chatbot wrapper and it is not a loose shell around a model. It is a runtime
+for governed AI agents that can carry context across conversations, use reusable skills, work with
+files and browsers, and produce reviewable evidence for risky or important actions.
+
+Core capabilities:
+
+- AI assistant runtime for Telegram, Discord, CLI, and federated HTTP entrypoints
+- bounded autonomous execution with explicit iteration, rollover, and daemon safeguards
+- typed planner actions that pass through hard constraints, governors, and proof gates
+- local live-run support for managed processes, browser previews, and workspace verification
+- profile memory, episodic memory, semantic memory, workflow learning, and continuity tracking
+- Markdown instruction skills for site/app generation, browser recovery, document reading, and
+  operator-defined workflows
+- media and document understanding with source-labeled, review-safe memory policy
+- Obsidian projection for human-readable memory, governance, receipts, and workflow evidence
+- model adapters for mock, OpenAI API, Codex OAuth, Ollama, and OpenAI-compatible endpoints
+
+At the npm runtime package level, the project depends on `ws` and `onnxruntime-node`. In practice,
+the full runtime also depends on your chosen backend, auth state, and any optional services you
+enable, such as Telegram, Discord, or Ollama.
 
 ## Why this repository exists
 
