@@ -85,7 +85,6 @@ function oneOfParams(schemas: readonly JsonSchemaNode[]): JsonSchemaNode {
   };
 }
 
-const EMPTY_PARAMS = objectParams({});
 const TEXT_PARAMS = objectParams({
   message: STRING_SCHEMA,
   text: STRING_SCHEMA
