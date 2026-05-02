@@ -116,9 +116,10 @@ The latest slices moved queue/ack, worker-loop, and pulse-state ownership here s
   conversation-routing entrypoint can stay thin while those no-worker paths still share the same
   domain-signal persistence rules
 - `contextualFollowupInterpretationSupport.ts` owns bounded lexical fast paths plus fail-closed
-  promotion for the shared contextual-followup interpreter so softer `keep me posted` / `update me
-  later` wording can reuse the local conversational runtime without turning execution-mode
-  selection into a model-owned decision
+  preservation for the shared contextual-followup interpreter so softer `keep me posted` / `update
+  me later` wording requires typed session context or an explicit reminder shape before it can
+  influence status, memory, or workflow continuation. Unanchored cue words preserve ordinary chat
+  instead of falling through to broad generic intent interpretation.
 - `turnLocalStatusUpdate.ts` owns the shared bounded first-person status-update detector and
   canonical execution-input instruction block so execution input assembly and conversational
   follow-up guards can agree on when `my ... is pending` style turns should stay authoritative for
@@ -161,7 +162,9 @@ The latest slices moved queue/ack, worker-loop, and pulse-state ownership here s
   direct-chat identity behavior
 - `conversationProfileMemoryWrite.ts` owns the bounded conversational profile-memory write request
   builder so direct chat and self-identity paths share one canonical request shape plus minimum
-  stream-local provenance before the write reaches `rememberConversationProfileInput(...)`
+  stream-local provenance before the write reaches `rememberConversationProfileInput(...)`, and
+  now resolves media-only writes onto support/candidate source lanes instead of inheriting direct
+  user-text authority
 - `selfIdentityInterpretationSupport.ts` owns canonical deterministic validation plus recent-turn
   context helpers for model-assisted self-identity interpretation so ambiguous declarations can use
   the shared local interpreter without bypassing canonical memory writes or falling back to regex
@@ -218,6 +221,14 @@ The latest slices moved queue/ack, worker-loop, and pulse-state ownership here s
   episodic/paused-thread candidate assembly used by bounded contextual recall
 - `contextualRecallRanking.ts` owns canonical prioritization between generic paused-thread recall
   and concrete unresolved-situation recall backed by episodic memory
+
+## Route Authority Boundary
+
+After front-door resolution, `ConversationSemanticRouteMetadata` is the broad route authority for
+downstream systems. Lexical helpers in this subsystem may still parse exact commands, active
+clarification answers, safety/proof markers, and compatibility hints, but they should not override a
+resolved semantic route. When typed route metadata is missing and a turn is ambiguous, the runtime
+should clarify, preserve chat, or fail closed rather than recreating broad keyword routing.
 - `memoryReviewCommand.ts` owns the bounded private `/memory` review and mutation command surface
   below `commandDispatch.ts`, including the additive `/memory fact ...` review, correction, and
   forget path that stays brokered and private-only

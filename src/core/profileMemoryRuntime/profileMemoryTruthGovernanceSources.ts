@@ -45,22 +45,76 @@ export const ALLOWED_ASSISTANT_INFERENCE_EPISODE_SOURCES = new Set([
 ]);
 
 export type ProfileMemorySourceFamily =
-  | "explicit_user_pattern"
-  | "structured_conversation"
-  | "language_understanding"
-  | "document_or_media_derivation"
+  | "explicit_user_statement"
+  | "conversation_context"
+  | "document_text_extraction"
+  | "document_model_summary"
+  | "media_model_summary"
+  | "lexical_relationship_pattern"
+  | "lexical_episode_pattern"
   | "reconciliation_projection"
   | "memory_review"
   | "unknown";
 
-const DOCUMENT_OR_MEDIA_DERIVED_SOURCE_PREFIXES = [
-  "document.",
-  "media.document.",
+export type ProfileMemorySourceDefaultAuthority =
+  | "durable_narrow_fact"
+  | "support_only"
+  | "candidate_only"
+  | "review_override"
+  | "quarantine";
+
+export const PROFILE_MEMORY_SOURCE_FAMILY_DEFAULT_AUTHORITY: Record<
+  ProfileMemorySourceFamily,
+  ProfileMemorySourceDefaultAuthority
+> = {
+  explicit_user_statement: "durable_narrow_fact",
+  conversation_context: "support_only",
+  document_text_extraction: "candidate_only",
+  document_model_summary: "candidate_only",
+  media_model_summary: "candidate_only",
+  lexical_relationship_pattern: "candidate_only",
+  lexical_episode_pattern: "candidate_only",
+  reconciliation_projection: "quarantine",
+  memory_review: "review_override",
+  unknown: "quarantine"
+};
+
+const DOCUMENT_TEXT_EXTRACTION_SOURCE_PREFIXES = [
+  "document.text.",
+  "document.raw_text.",
+  "media.document.text.",
+  "media.document.raw_text."
+] as const;
+
+const DOCUMENT_MODEL_SUMMARY_SOURCE_PREFIXES = [
+  "document.summary.",
+  "document.model_summary.",
+  "media.document.summary.",
+  "language_understanding.document."
+] as const;
+
+const MEDIA_MODEL_SUMMARY_SOURCE_PREFIXES = [
   "media.ocr.",
   "media.summary.",
-  "language_understanding.document.",
   "language_understanding.media."
 ] as const;
+
+const LEXICAL_RELATIONSHIP_SOURCE_NAMES = new Set([
+  "user_input_pattern.named_contact",
+  "user_input_pattern.direct_contact_relationship",
+  "user_input_pattern.direct_contact_relationship_historical",
+  "user_input_pattern.direct_contact_relationship_severed",
+  "user_input_pattern.work_with_contact",
+  "user_input_pattern.work_with_contact_historical",
+  "user_input_pattern.work_with_contact_severed",
+  "user_input_pattern.work_association",
+  "user_input_pattern.work_association_historical",
+  "user_input_pattern.organization_association",
+  "user_input_pattern.location_association",
+  "user_input_pattern.school_association",
+  "user_input_pattern.contact_context",
+  "user_input_pattern.contact_entity_hint"
+]);
 
 /**
  * Classifies profile-memory candidate source strings into broad policy families.
@@ -76,22 +130,47 @@ export function classifyProfileMemorySourceFamily(source: string): ProfileMemory
   if (normalizedSource === MEMORY_REVIEW_FACT_CORRECTION_SOURCE) {
     return "memory_review";
   }
-  if (DOCUMENT_OR_MEDIA_DERIVED_SOURCE_PREFIXES.some((prefix) => normalizedSource.startsWith(prefix))) {
-    return "document_or_media_derivation";
+  if (DOCUMENT_TEXT_EXTRACTION_SOURCE_PREFIXES.some((prefix) => normalizedSource.startsWith(prefix))) {
+    return "document_text_extraction";
+  }
+  if (DOCUMENT_MODEL_SUMMARY_SOURCE_PREFIXES.some((prefix) => normalizedSource.startsWith(prefix))) {
+    return "document_model_summary";
+  }
+  if (MEDIA_MODEL_SUMMARY_SOURCE_PREFIXES.some((prefix) => normalizedSource.startsWith(prefix))) {
+    return "media_model_summary";
   }
   if (normalizedSource.startsWith("user_input_pattern.")) {
-    return "explicit_user_pattern";
+    if (normalizedSource.startsWith("user_input_pattern.episode")) {
+      return "lexical_episode_pattern";
+    }
+    if (LEXICAL_RELATIONSHIP_SOURCE_NAMES.has(normalizedSource)) {
+      return "lexical_relationship_pattern";
+    }
+    return "explicit_user_statement";
   }
   if (normalizedSource.startsWith("conversation.")) {
-    return "structured_conversation";
+    return "conversation_context";
   }
   if (normalizedSource.startsWith("profile_state_reconciliation.")) {
     return "reconciliation_projection";
   }
   if (normalizedSource.startsWith("language_understanding.")) {
-    return "language_understanding";
+    return "conversation_context";
   }
   return "unknown";
+}
+
+/**
+ * Returns the default authority attached to a profile-memory source family before family-specific
+ * governance rules decide whether a candidate can be persisted.
+ *
+ * @param source - Candidate source string.
+ * @returns Default authority for the source family.
+ */
+export function getProfileMemorySourceDefaultAuthority(
+  source: string
+): ProfileMemorySourceDefaultAuthority {
+  return PROFILE_MEMORY_SOURCE_FAMILY_DEFAULT_AUTHORITY[classifyProfileMemorySourceFamily(source)];
 }
 
 /**
@@ -102,5 +181,10 @@ export function classifyProfileMemorySourceFamily(source: string): ProfileMemory
  * @returns `true` when the source must remain candidate-only or quarantined.
  */
 export function isDocumentOrMediaDerivedProfileMemorySource(source: string): boolean {
-  return classifyProfileMemorySourceFamily(source) === "document_or_media_derivation";
+  const family = classifyProfileMemorySourceFamily(source);
+  return (
+    family === "document_text_extraction" ||
+    family === "document_model_summary" ||
+    family === "media_model_summary"
+  );
 }

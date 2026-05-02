@@ -354,6 +354,43 @@ test("resolveConversationIntentMode can use the contextual follow-up interpreter
   assert.equal(resolution.matchedRuleId, "intent_mode_contextual_followup_status_followup_model");
 });
 
+test("resolveConversationIntentMode does not let contextual cue words create follow-up authority without typed context", async () => {
+  let contextualResolverCalled = false;
+  let localResolverCalled = false;
+
+  const resolution = await resolveConversationIntentMode(
+    "Keep me posted on the Sarah draft.",
+    null,
+    async () => {
+      localResolverCalled = true;
+      return {
+        source: "local_intent_model",
+        mode: "build",
+        confidence: "high",
+        matchedRuleId: "local_intent_model_incorrect_unanchored_followup_build",
+        explanation: "The generic model should not reinterpret unanchored contextual cue words.",
+        clarification: null
+      };
+    },
+    buildSessionHints(),
+    async () => {
+      contextualResolverCalled = true;
+      return {
+        source: "local_intent_model",
+        kind: "status_followup",
+        candidateTokens: ["sarah", "draft"],
+        confidence: "high",
+        explanation: "Incorrect unanchored status follow-up interpretation."
+      };
+    }
+  );
+
+  assert.equal(contextualResolverCalled, false);
+  assert.equal(localResolverCalled, false);
+  assert.equal(resolution.mode, "chat");
+  assert.equal(resolution.matchedRuleId, "intent_mode_default_chat");
+});
+
 test("resolveConversationIntentMode fails closed for ambiguous contextual follow-up wording when the dedicated interpreter is unavailable", async () => {
   let localResolverCalled = false;
 

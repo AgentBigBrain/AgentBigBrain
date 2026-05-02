@@ -24,7 +24,11 @@ import {
   withSemanticRouteId
 } from "./intentModeContracts";
 import { buildRouteMetadataOverridesFromInput } from "./intentModeRouteMetadata";
-import { resolveExplicitBuildFormatMetadata } from "./buildFormatMetadata";
+import {
+  hasExplicitFrameworkBuildFormatRequest,
+  hasExplicitStaticHtmlBuildFormatRequest,
+  resolveExplicitBuildFormatMetadata
+} from "./buildFormatMetadata";
 import {
   resolveConversationAutonomyBoundaryInterpretationIntent,
   resolveConversationStatusRecallBoundaryInterpretationIntent
@@ -32,7 +36,8 @@ import {
 import {
   buildBuildFormatClarificationResolution,
   ensureStructuredBuildFormatClarification,
-  EXPLICIT_FRAMEWORK_MENTION_PATTERN,
+  hasAmbiguousBuildFormatRequestShape,
+  hasExplicitBuildFormatAmbiguityCue,
   hasReviewFeedbackShape
 } from "./intentModeBuildFormatSupport";
 import {
@@ -47,10 +52,6 @@ import {
   shouldAttemptAutonomyBoundaryInterpretation,
   shouldPromoteAmbiguousAutonomousExecution
 } from "./sessionDomainRouting";
-import {
-  isDeterministicFrameworkBuildLaneRequest,
-  isStaticHtmlExecutionStyleRequest
-} from "../../organs/plannerPolicy/liveVerificationPolicy";
 import {
   buildDefaultChatIntentMode,
   shouldClarifyBuildFormatRequest
@@ -148,11 +149,21 @@ export async function resolveConversationIntentMode(
   }
 
   const preferences = extractExecutionPreferences(normalized);
-  const explicitStaticHtmlBuildRequested = isStaticHtmlExecutionStyleRequest(normalized);
-  const explicitFrameworkMention = EXPLICIT_FRAMEWORK_MENTION_PATTERN.test(normalized);
+  const buildFormatMentionCanRoute =
+    preferences.executeNow ||
+    preferences.autonomousExecution ||
+    hasAmbiguousBuildFormatRequestShape(normalized);
+  const explicitBuildFormatAmbiguityCue =
+    hasExplicitBuildFormatAmbiguityCue(normalized);
+  const explicitStaticHtmlBuildRequested =
+    buildFormatMentionCanRoute &&
+    !explicitBuildFormatAmbiguityCue &&
+    hasExplicitStaticHtmlBuildFormatRequest(normalized);
   const explicitFrameworkBuildRequested =
-    explicitFrameworkMention &&
-    isDeterministicFrameworkBuildLaneRequest(normalized);
+    buildFormatMentionCanRoute &&
+    !explicitBuildFormatAmbiguityCue &&
+    hasExplicitFrameworkBuildFormatRequest(normalized) &&
+    !explicitStaticHtmlBuildRequested;
   const explicitBuildFormat = resolveExplicitBuildFormatMetadata(
     normalized,
     explicitStaticHtmlBuildRequested,

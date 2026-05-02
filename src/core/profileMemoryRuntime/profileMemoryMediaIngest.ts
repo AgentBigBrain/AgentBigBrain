@@ -163,7 +163,10 @@ export function buildProfileMediaIngestInputFromEnvelope(
   userInput: string,
   media: ProfileMediaIngestEnvelopeLike | null | undefined
 ): ProfileMediaIngestInput {
-  const directUserText = extractDirectUserText(userInput.trim());
+  const normalizedUserInput = userInput.trim();
+  const directUserText = GENERIC_MEDIA_ONLY_PROMPTS.has(normalizedUserInput)
+    ? ""
+    : extractDirectUserText(normalizedUserInput);
   const transcriptFragments: string[] = [];
   const summaryFragments: string[] = [];
   const ocrFragments: string[] = [];

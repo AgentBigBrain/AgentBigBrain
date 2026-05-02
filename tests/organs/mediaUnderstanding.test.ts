@@ -751,6 +751,55 @@ test("interpretDocumentAttachment extracts readable text into candidate-only doc
   );
 });
 
+test("interpretDocumentAttachment bounds PDF extraction before excerpting", async () => {
+  const pdfBuffer = buildPagedTextPdfBuffer(
+    Array.from({ length: 30 }, (_, index) => [`Page ${index + 1} synthetic marker`])
+  );
+
+  const interpretation = await interpretDocumentAttachment(
+    {
+      requestedBackend: "inherit_text_backend",
+      resolvedBackend: "mock",
+      requestedVisionBackend: "inherit_text_backend",
+      resolvedVisionBackend: "mock",
+      requestedVisionFallbackBackend: "disabled",
+      resolvedVisionFallbackBackend: "disabled",
+      requestedTranscriptionBackend: "inherit_text_backend",
+      resolvedTranscriptionBackend: "mock",
+      requestedDocumentMeaningBackend: "disabled",
+      resolvedDocumentMeaningBackend: "disabled",
+      openAIApiKey: null,
+      openAIBaseUrl: "https://api.openai.com/v1",
+      ollamaApiKey: null,
+      ollamaBaseUrl: "http://localhost:11434",
+      visionModel: "gpt-4.1-mini",
+      visionFallbackModel: null,
+      transcriptionModel: "whisper-1",
+      documentMeaningModel: "mock-document-meaning",
+      documentMeaningTimeoutMs: 45_000,
+      requestTimeoutMs: 45_000
+    },
+    {
+      kind: "document",
+      provider: "telegram",
+      fileId: "document-pdf-budget",
+      fileUniqueId: "document-pdf-budget",
+      mimeType: "application/pdf",
+      fileName: "many-pages.pdf",
+      sizeBytes: pdfBuffer.length,
+      caption: "Please review the attached PDF.",
+      durationSeconds: null,
+      width: null,
+      height: null
+    },
+    pdfBuffer
+  );
+
+  assert.match(interpretation.ocrText ?? "", /Page 1 synthetic marker/i);
+  assert.match(interpretation.ocrText ?? "", /Page 25 synthetic marker/i);
+  assert.doesNotMatch(interpretation.ocrText ?? "", /Page 26 synthetic marker/i);
+});
+
 /**
  * Builds a minimal single-page PDF fixture with deterministic text content.
  *
@@ -765,22 +814,46 @@ test("interpretDocumentAttachment extracts readable text into candidate-only doc
  * @returns PDF bytes suitable for pdfjs text extraction.
  */
 function buildTextPdfBuffer(lines: readonly string[]): Buffer {
-  const textCommands = lines
-    .map((line, index) => `${index === 0 ? "" : "T* "}/F1 12 Tf (${escapePdfText(line)}) Tj`)
-    .join("\n");
-  const stream = [
-    "BT",
-    "72 720 Td",
-    "14 TL",
-    textCommands,
-    "ET"
-  ].join("\n");
+  return buildPagedTextPdfBuffer([lines]);
+}
+
+/**
+ * Builds a minimal multi-page PDF fixture with deterministic text content.
+ *
+ * **Why it exists:**
+ * PDF extraction budgets must be tested across page boundaries without relying on local files.
+ *
+ * **What it talks to:**
+ * - Uses local string and buffer construction only.
+ *
+ * @param pages - Text lines grouped by PDF page.
+ * @returns PDF bytes suitable for pdfjs text extraction.
+ */
+function buildPagedTextPdfBuffer(pages: readonly (readonly string[])[]): Buffer {
+  const safePages = pages.length > 0 ? pages : [[]];
+  const pageObjectStart = 3;
+  const fontObjectId = pageObjectStart + safePages.length;
+  const contentObjectStart = fontObjectId + 1;
+  const pageRefs = safePages
+    .map((_, index) => `${pageObjectStart + index} 0 R`)
+    .join(" ");
+  const streams = safePages.map((pageLines) => buildPdfTextStream(pageLines));
   const objects = [
     "<< /Type /Catalog /Pages 2 0 R >>",
-    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+    `<< /Type /Pages /Kids [${pageRefs}] /Count ${safePages.length} >>`,
+    ...safePages.map((_, index) => {
+      const contentObjectId = contentObjectStart + index;
+      return [
+        "<< /Type /Page",
+        "/Parent 2 0 R",
+        "/MediaBox [0 0 612 792]",
+        `/Resources << /Font << /F1 ${fontObjectId} 0 R >> >>`,
+        `/Contents ${contentObjectId} 0 R`,
+        ">>"
+      ].join(" ");
+    }),
     "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
-    `<< /Length ${Buffer.byteLength(stream, "utf8")} >>\nstream\n${stream}\nendstream`
+    ...streams.map((stream) => `<< /Length ${Buffer.byteLength(stream, "utf8")} >>\nstream\n${stream}\nendstream`)
   ];
   const chunks = ["%PDF-1.4\n"];
   const offsets: number[] = [0];
@@ -807,6 +880,31 @@ function buildTextPdfBuffer(lines: readonly string[]): Buffer {
   ];
   chunks.push(`${xrefLines.join("\n")}\n`);
   return Buffer.from(chunks.join(""), "utf8");
+}
+
+/**
+ * Builds one PDF text stream from fixture lines.
+ *
+ * **Why it exists:**
+ * Multi-page PDF fixtures need repeatable stream construction for each generated page.
+ *
+ * **What it talks to:**
+ * - Calls `escapePdfText` for literal string escaping.
+ *
+ * @param lines - Text lines to draw into the PDF page.
+ * @returns PDF content stream text.
+ */
+function buildPdfTextStream(lines: readonly string[]): string {
+  const textCommands = lines
+    .map((line, index) => `${index === 0 ? "" : "T* "}/F1 12 Tf (${escapePdfText(line)}) Tj`)
+    .join("\n");
+  return [
+    "BT",
+    "72 720 Td",
+    "14 TL",
+    textCommands,
+    "ET"
+  ].join("\n");
 }
 
 /**

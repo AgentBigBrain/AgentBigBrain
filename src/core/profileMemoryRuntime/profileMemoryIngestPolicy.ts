@@ -5,8 +5,13 @@
 import type {
   ProfileMemoryIngestMemoryIntent,
   ProfileMemoryIngestPolicy,
+  ProfileMemoryIngestSourceLane,
   ProfileMemorySourceSurface
 } from "./contracts";
+import type {
+  ProfileMemorySourceDefaultAuthority,
+  ProfileMemorySourceFamily
+} from "./profileMemoryTruthGovernanceSources";
 
 export interface ProfileMemoryExtractionStageSelection {
   exactSelfFacts: boolean;
@@ -21,6 +26,7 @@ export interface ProfileMemoryExtractionStageSelection {
 interface BuildProfileMemoryIngestPolicyInput {
   memoryIntent: ProfileMemoryIngestMemoryIntent | null;
   sourceSurface: ProfileMemorySourceSurface;
+  sourceLane?: ProfileMemoryIngestSourceLane;
   hasValidatedFactCandidates?: boolean;
 }
 
@@ -33,6 +39,66 @@ const INACTIVE_STAGE_SELECTION: ProfileMemoryExtractionStageSelection = {
   inferredEpisodeResolution: false,
   validatedCandidates: false
 };
+
+/**
+ * Maps one ingest source lane onto the same source-family defaults used by truth governance.
+ *
+ * **Why it exists:**
+ * Ingest decides which extractors may run before candidates reach truth governance. Keeping source
+ * lanes aligned with source families prevents media/document fragments from gaining durable
+ * authority before governance sees them.
+ *
+ * @param sourceLane - Source lane attached to an ingest request.
+ * @returns Source-family bucket used for default authority decisions.
+ */
+export function classifyProfileMemoryIngestSourceFamily(
+  sourceLane: ProfileMemoryIngestSourceLane
+): ProfileMemorySourceFamily {
+  switch (sourceLane) {
+    case "direct_user_text":
+      return "explicit_user_statement";
+    case "voice_transcript":
+      return "conversation_context";
+    case "document_text":
+      return "document_text_extraction";
+    case "document_summary":
+      return "document_model_summary";
+    case "image_ocr":
+    case "image_summary":
+      return "media_model_summary";
+    case "validated_model_candidate":
+      return "conversation_context";
+  }
+}
+
+/**
+ * Returns the default authority for an ingest source lane before per-family extraction gates run.
+ *
+ * @param sourceLane - Source lane attached to an ingest request.
+ * @returns Default authority for the lane.
+ */
+export function getProfileMemoryIngestSourceDefaultAuthority(
+  sourceLane: ProfileMemoryIngestSourceLane
+): ProfileMemorySourceDefaultAuthority {
+  const family = classifyProfileMemoryIngestSourceFamily(sourceLane);
+  switch (family) {
+    case "explicit_user_statement":
+      return "durable_narrow_fact";
+    case "conversation_context":
+      return "support_only";
+    case "document_text_extraction":
+    case "document_model_summary":
+    case "media_model_summary":
+    case "lexical_relationship_pattern":
+    case "lexical_episode_pattern":
+      return "candidate_only";
+    case "memory_review":
+      return "review_override";
+    case "reconciliation_projection":
+    case "unknown":
+      return "quarantine";
+  }
+}
 
 /**
  * Builds the temporary compatibility policy used only while older callers are migrated.
@@ -81,6 +147,7 @@ export function buildLegacyProfileMemoryIngestPolicy(
 export function buildProfileMemoryIngestPolicy(
   input: BuildProfileMemoryIngestPolicyInput
 ): ProfileMemoryIngestPolicy {
+  const sourceLane = input.sourceLane ?? "direct_user_text";
   if (input.hasValidatedFactCandidates && input.memoryIntent !== "none") {
     return {
       memoryIntent: input.memoryIntent ?? "profile_update",
@@ -100,7 +167,7 @@ export function buildProfileMemoryIngestPolicy(
   if (input.memoryIntent === "none") {
     return {
       memoryIntent: "none",
-      sourceLane: "direct_user_text",
+      sourceLane,
       sourceSurface: input.sourceSurface,
       allowExactSelfFactExtraction: false,
       allowDirectRelationshipExtraction: false,
@@ -118,10 +185,32 @@ export function buildProfileMemoryIngestPolicy(
   const allowsContextualMemory =
     memoryIntent === "contextual_recall" ||
     memoryIntent === "relationship_recall";
+  const sourceAuthority = getProfileMemoryIngestSourceDefaultAuthority(sourceLane);
+
+  if (sourceLane !== "direct_user_text") {
+    return {
+      memoryIntent,
+      sourceLane,
+      sourceSurface: input.sourceSurface,
+      allowExactSelfFactExtraction: false,
+      allowDirectRelationshipExtraction: false,
+      allowGenericProfileFactExtraction: false,
+      allowCommitmentExtraction: false,
+      allowEpisodeSupportExtraction: sourceAuthority === "support_only" && allowsContextualMemory,
+      allowInferredResolution: false,
+      fragmentPolicy:
+        sourceAuthority === "support_only"
+          ? "support_only"
+          : sourceAuthority === "candidate_only"
+            ? "candidate_only"
+            : "quarantine",
+      policySource: input.memoryIntent ? "semantic_route" : "exact_command"
+    };
+  }
 
   return {
     memoryIntent,
-    sourceLane: "direct_user_text",
+    sourceLane,
     sourceSurface: input.sourceSurface,
     allowExactSelfFactExtraction: allowsProfileUpdate,
     allowDirectRelationshipExtraction: allowsProfileUpdate,
