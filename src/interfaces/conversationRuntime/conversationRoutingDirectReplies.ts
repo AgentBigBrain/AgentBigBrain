@@ -117,6 +117,7 @@ export interface RecordedReplyInput {
 async function rememberDirectConversationProfileInputIfNeeded(
   session: ConversationSession,
   userInput: string,
+  media: ConversationInboundMediaEnvelope | null,
   receivedAt: string,
   memoryIntent: ConversationRouteMemoryIntent | null,
   rememberConversationProfileInput?: RememberConversationProfileInput
@@ -131,6 +132,7 @@ async function rememberDirectConversationProfileInputIfNeeded(
     buildConversationProfileMemoryWriteRequest({
       session,
       userInput,
+      media,
       receivedAt,
       memoryIntent: memoryIntent === "none" ? null : memoryIntent ?? "profile_update"
     }),
@@ -278,6 +280,7 @@ export async function buildDirectCasualConversationReply(
   await rememberDirectConversationProfileInputIfNeeded(
     input.session,
     input.input,
+    input.media,
     input.receivedAt,
     input.semanticRoute?.memoryIntent ?? null,
     input.rememberConversationProfileInput

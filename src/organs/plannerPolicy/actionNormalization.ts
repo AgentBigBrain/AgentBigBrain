@@ -95,7 +95,7 @@ export function normalizeModelActions(actions: unknown): PlannedAction[] {
         type: normalizedType,
         params
       })
-    });
+    } as PlannedAction);
   }
 
   return normalized;

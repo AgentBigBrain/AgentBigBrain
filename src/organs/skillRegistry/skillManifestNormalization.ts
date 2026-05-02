@@ -4,6 +4,7 @@
 
 import type {
   SkillAllowedSideEffect,
+  SkillActivationSource,
   SkillKind,
   SkillLifecycleStatus,
   SkillMemoryPolicy,
@@ -23,7 +24,20 @@ const ALLOWED_SIDE_EFFECT_VALUES = new Set<SkillAllowedSideEffect>([
   "memory"
 ]);
 const RISK_LEVEL_VALUES = new Set<SkillRiskLevel>(["low", "moderate", "high"]);
-const LIFECYCLE_STATUS_VALUES = new Set<SkillLifecycleStatus>(["active", "deprecated"]);
+const LIFECYCLE_STATUS_VALUES = new Set<SkillLifecycleStatus>([
+  "active",
+  "draft",
+  "pending_approval",
+  "rejected",
+  "deprecated"
+]);
+const ACTIVATION_SOURCE_VALUES = new Set<SkillActivationSource>([
+  "builtin",
+  "legacy_migration",
+  "explicit_user_request",
+  "agent_suggestion",
+  "operator_approval"
+]);
 const VERIFICATION_STATUS_VALUES = new Set<SkillVerificationStatus>([
   "unverified",
   "verified",
@@ -109,6 +123,24 @@ export function normalizeLifecycleStatus(value: unknown): SkillLifecycleStatus {
   return normalized && LIFECYCLE_STATUS_VALUES.has(normalized as SkillLifecycleStatus)
     ? (normalized as SkillLifecycleStatus)
     : "active";
+}
+
+/**
+ * Resolves the canonical activation source for a skill manifest.
+ *
+ * @param value - Candidate manifest field value.
+ * @param origin - Skill origin used for defaulting.
+ * @returns Canonical activation source.
+ */
+export function normalizeActivationSource(
+  value: unknown,
+  origin: unknown
+): SkillActivationSource {
+  const normalized = trimToNonEmptyString(value)?.toLowerCase();
+  if (normalized && ACTIVATION_SOURCE_VALUES.has(normalized as SkillActivationSource)) {
+    return normalized as SkillActivationSource;
+  }
+  return normalizeSkillOrigin(origin) === "builtin" ? "builtin" : "legacy_migration";
 }
 
 /**

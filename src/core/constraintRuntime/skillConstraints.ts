@@ -82,11 +82,13 @@ function containsUnsafeSkillCode(code: string): boolean {
 function resolveRuntimeSkillArtifactPaths(skillName: string): {
   primaryPath: string;
   compatibilityPath: string;
+  manifestPath: string;
 } {
   const skillsRoot = path.resolve(process.cwd(), "runtime/skills");
   return {
     primaryPath: path.resolve(skillsRoot, `${skillName}.js`),
-    compatibilityPath: path.resolve(skillsRoot, `${skillName}.ts`)
+    compatibilityPath: path.resolve(skillsRoot, `${skillName}.ts`),
+    manifestPath: path.resolve(skillsRoot, `${skillName}.manifest.json`)
   };
 }
 
@@ -99,6 +101,17 @@ function resolveRuntimeSkillArtifactPaths(skillName: string): {
 function hasRuntimeSkillArtifact(skillName: string): boolean {
   const paths = resolveRuntimeSkillArtifactPaths(skillName);
   return existsSync(paths.primaryPath) || existsSync(paths.compatibilityPath);
+}
+
+/**
+ * Checks whether a runtime skill manifest or executable artifact exists.
+ *
+ * @param skillName - Safe skill name to look up.
+ * @returns `true` when lifecycle mutation can target a runtime skill.
+ */
+function hasRuntimeSkillLifecycleTarget(skillName: string): boolean {
+  const paths = resolveRuntimeSkillArtifactPaths(skillName);
+  return existsSync(paths.manifestPath) || hasRuntimeSkillArtifact(skillName);
 }
 
 /**
@@ -211,6 +224,61 @@ export function evaluateRunSkillConstraints(
       code: "RUN_SKILL_ARTIFACT_MISSING",
       message: `Run skill failed: no skill artifact found for ${skillName}.`
     });
+  }
+
+  return violations;
+}
+
+/**
+ * Validates skill lifecycle action requests against naming and bounded content rules.
+ *
+ * @param actionType - Skill lifecycle action type.
+ * @param params - Planned lifecycle action params.
+ * @returns Constraint violations for invalid lifecycle requests.
+ */
+export function evaluateSkillLifecycleActionConstraints(
+  actionType: "update_skill" | "deprecate_skill" | "approve_skill" | "reject_skill",
+  params: Record<string, unknown>
+): ConstraintViolation[] {
+  const violations: ConstraintViolation[] = [];
+  const skillName = getStringParam(params, "name");
+
+  if (!skillName) {
+    violations.push({
+      code: "SKILL_ACTION_MISSING_NAME",
+      message: `${actionType} requires a skill name.`
+    });
+    return violations;
+  }
+  if (!isValidSkillName(skillName)) {
+    violations.push({
+      code: "SKILL_ACTION_INVALID_NAME",
+      message: "Skill action name must match [a-zA-Z0-9_-] and be <= 64 chars."
+    });
+    return violations;
+  }
+  if (!hasRuntimeSkillLifecycleTarget(skillName)) {
+    violations.push({
+      code: "SKILL_ACTION_ARTIFACT_MISSING",
+      message: `Skill lifecycle action failed: no runtime skill artifact found for ${skillName}.`
+    });
+  }
+
+  if (actionType === "update_skill") {
+    const instructions = extractMarkdownSkillInstructions(params);
+    if (instructions && containsUnsafeMarkdownSkillInstructions(instructions)) {
+      violations.push({
+        code: "SKILL_ACTION_UNSAFE_CONTENT",
+        message: "Update skill instructions contain disallowed policy-bypass or secret patterns."
+      });
+    }
+    const code = getStringParam(params, "code");
+    if (code && containsUnsafeSkillCode(code)) {
+      violations.push({
+        code: "SKILL_ACTION_UNSAFE_CONTENT",
+        message: "Update skill code contains disallowed runtime-capability patterns."
+      });
+    }
   }
 
   return violations;

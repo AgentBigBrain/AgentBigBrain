@@ -4,15 +4,16 @@
 This subsystem owns the non-live-run execution helpers used by the stable `src/organs/executor.ts`
 entrypoint.
 
-It contains the direct file/basic action handlers, dynamic skill create/run runtime, shell
-execution helpers, and supporting contracts that should not live inline inside the top-level
-executor coordinator. Skill manifest lifecycle, inventory, workflow-bridge summaries, and
+It contains the direct file/basic action handlers, dynamic skill create/run/lifecycle runtime,
+shell execution helpers, and supporting contracts that should not live inline inside the top-level
+executor coordinator. Skill manifest structure, inventory, workflow-bridge summaries, and
 verification-state rendering stay owned by `src/organs/skillRegistry/`.
 
 ## Primary Files
 - `contracts.ts`
 - `pathRuntime.ts`
 - `fileMutationExecution.ts`
+- `skillLifecycleRuntime.ts`
 - `skillModuleLoader.ts`
 - `skillRuntime.ts`
 - `shellExecution.ts`
@@ -39,15 +40,16 @@ verification-state rendering stay owned by `src/organs/skillRegistry/`.
 - extracted scaffold/build postcondition helpers so `shellExecutionSupport.ts` can stay focused on
   command shaping and launcher policy
 - stable skill-artifact execution and bounded file-action responses
-- skill create/run execution metadata that can be handed off to the skill registry without the
-  executor re-reading manifests inline
+- skill create/run/lifecycle execution metadata that can be handed off to the skill registry
+  without the executor re-reading manifests inline
 
 ## Invariants
 - `src/organs/executor.ts` stays the stable top-level execution entrypoint.
 - Live-run actions stay owned by `src/organs/liveRun/`; this subsystem owns only the remaining
   direct execution families.
 - Shell helpers here must preserve existing fail-closed timeout, cwd, and process-tree semantics.
-- Skill runtime helpers must not bypass the existing executor-side name/path validation.
+- Skill runtime helpers must not bypass the existing executor-side name/path validation, lifecycle
+  policy, or Markdown-safety checks.
 - Manifest creation, verification updates, and inventory rendering must stay delegated to
   `src/organs/skillRegistry/`; this subsystem should not become a second registry surface.
 

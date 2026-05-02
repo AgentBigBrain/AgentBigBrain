@@ -7,12 +7,35 @@ export type ConversationInboundMediaInterpretationSource =
   | "openai_image"
   | "ollama_image"
   | "document_text_extraction"
+  | "document_model_summary"
   | "openai_transcription"
   | "multimodal_audio"
   | "fixture_catalog"
   | "caption_fallback"
   | "metadata_fallback"
   | "unavailable";
+
+export type ConversationInboundMediaInterpretationLayerKind =
+  | "raw_text_extraction"
+  | "model_summary"
+  | "deterministic_metadata"
+  | "fallback_note"
+  | "fixture_catalog";
+
+export type ConversationInboundMediaMemoryAuthority =
+  | "direct_user_text"
+  | "support_only"
+  | "candidate_only"
+  | "not_memory_authority";
+
+export interface ConversationInboundMediaInterpretationLayer {
+  kind: ConversationInboundMediaInterpretationLayerKind;
+  source: ConversationInboundMediaInterpretationSource;
+  text: string;
+  confidence: number | null;
+  provenance: string;
+  memoryAuthority: ConversationInboundMediaMemoryAuthority;
+}
 
 export interface ConversationInboundMediaInterpretation {
   summary: string;
@@ -22,6 +45,7 @@ export interface ConversationInboundMediaInterpretation {
   provenance: string;
   source: ConversationInboundMediaInterpretationSource;
   entityHints: readonly string[];
+  layers?: readonly ConversationInboundMediaInterpretationLayer[];
 }
 
 export interface ConversationInboundMediaAttachment {

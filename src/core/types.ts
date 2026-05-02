@@ -70,10 +70,12 @@ export type {
   ShellKindV1,
   ShellRuntimeProfileV1,
   ShellSpawnSpecV1,
+  SkillLifecycleActionParams,
   StartProcessActionParams,
   StopFolderRuntimeProcessesActionParams,
   StopProcessActionParams,
   TaskRequest,
+  UpdateSkillActionParams,
   VerifyBrowserActionParams,
   WriteFileActionParams
 } from "./runtimeTypes/taskPlanningTypes";

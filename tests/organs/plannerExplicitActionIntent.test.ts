@@ -28,6 +28,22 @@ test("inferRequiredActionType recognizes explicit runtime tools and create-skill
     inferRequiredActionType("Create a skill called workflow_helper that validates smoke state."),
     "create_skill"
   );
+  assert.equal(
+    inferRequiredActionType("Update skill agency_site_guidance with the revised Markdown notes."),
+    "update_skill"
+  );
+  assert.equal(
+    inferRequiredActionType("Approve skill agency_site_guidance so it can be reused."),
+    "approve_skill"
+  );
+  assert.equal(
+    inferRequiredActionType("Reject skill draft_skill_notes."),
+    "reject_skill"
+  );
+  assert.equal(
+    inferRequiredActionType("Deprecate skill legacy_text_helper."),
+    "deprecate_skill"
+  );
 });
 
 test("inferRequiredActionType promotes natural browser follow-ups when tracked session context exists", () => {

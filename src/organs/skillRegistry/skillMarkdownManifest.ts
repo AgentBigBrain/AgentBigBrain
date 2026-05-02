@@ -4,6 +4,7 @@
 
 import type { SkillManifest } from "./contracts";
 import {
+  normalizeActivationSource,
   normalizeAllowedSideEffects,
   normalizeLifecycleStatus,
   normalizeMemoryPolicy,
@@ -106,6 +107,7 @@ export function parseBuiltInMarkdownSkillManifest(
     invocationHints:
       invocationHints.length > 0 ? invocationHints : [buildDefaultMarkdownInvocationHint(name)],
     lifecycleStatus: normalizeLifecycleStatus(frontmatter.lifecycleStatus),
+    activationSource: normalizeActivationSource(frontmatter.activationSource, "builtin"),
     instructionPath,
     primaryPath: instructionPath,
     compatibilityPath: instructionPath,

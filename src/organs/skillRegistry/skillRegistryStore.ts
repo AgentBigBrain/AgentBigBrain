@@ -70,11 +70,27 @@ export class SkillRegistryStore {
    *
    * @returns Sorted inventory entries for active known skills.
    */
-  async listAvailableSkills(): Promise<readonly SkillInventoryEntry[]> {
-    const manifests = await this.listMergedActiveManifests();
+  async listAvailableSkills(
+    options: { includeInactive?: boolean } = {}
+  ): Promise<readonly SkillInventoryEntry[]> {
+    const manifests = options.includeInactive
+      ? await this.listMergedManifests()
+      : await this.listMergedActiveManifests();
     return [...manifests]
       .sort((left, right) => left.name.localeCompare(right.name))
       .map((manifest) => toSkillInventoryEntry(manifest));
+  }
+
+  /**
+   * Lists skill inventory entries, optionally including inactive lifecycle states.
+   *
+   * @param options - Inventory visibility options.
+   * @returns Sorted inventory entries.
+   */
+  async listSkillInventory(
+    options: { includeInactive?: boolean } = {}
+  ): Promise<readonly SkillInventoryEntry[]> {
+    return this.listAvailableSkills(options);
   }
 
   /**
@@ -152,16 +168,23 @@ export class SkillRegistryStore {
    * @returns Merged active manifests.
    */
   private async listMergedActiveManifests(): Promise<readonly SkillManifest[]> {
+    return (await this.listMergedManifests()).filter(
+      (manifest) => manifest.lifecycleStatus === "active"
+    );
+  }
+
+  /**
+   * Lists runtime and built-in manifests with runtime names taking precedence.
+   *
+   * @returns Merged manifests.
+   */
+  private async listMergedManifests(): Promise<readonly SkillManifest[]> {
     const merged = new Map<string, SkillManifest>();
     for (const manifest of await this.listBuiltInManifests()) {
-      if (manifest.lifecycleStatus === "active") {
-        merged.set(manifest.name, manifest);
-      }
+      merged.set(manifest.name, manifest);
     }
     for (const manifest of await this.listRuntimeManifests()) {
-      if (manifest.lifecycleStatus === "active") {
-        merged.set(manifest.name, manifest);
-      }
+      merged.set(manifest.name, manifest);
     }
     return [...merged.values()];
   }

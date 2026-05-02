@@ -9,7 +9,10 @@ import {
 import { CreateSkillActionParams, PlannedAction } from "../../core/types";
 import { buildExecutionOutcome, normalizeOptionalString } from "../liveRun/contracts";
 import { applySkillVerificationResult } from "../skillRegistry/skillLifecycle";
-import { buildSkillManifest, extractSkillVerificationConfig } from "../skillRegistry/skillManifest";
+import {
+  buildSkillManifest,
+  extractSkillVerificationConfig
+} from "../skillRegistry/skillManifest";
 import { SkillRegistryStore } from "../skillRegistry/skillRegistryStore";
 import { evaluateSkillVerificationResult } from "../skillRegistry/skillVerification";
 import { ResolvedSkillArtifact, SkillArtifactPaths } from "./contracts";
@@ -332,6 +335,13 @@ export async function executeRunSkillAction(action: PlannedAction) {
     return buildExecutionOutcome(
       "blocked",
       `Run skill blocked: ${skillName} is a Markdown instruction skill and cannot execute code.`,
+      "RUN_SKILL_ARTIFACT_MISSING"
+    );
+  }
+  if (manifest && manifest.lifecycleStatus !== "active") {
+    return buildExecutionOutcome(
+      "blocked",
+      `Run skill blocked: ${skillName} is ${manifest.lifecycleStatus}.`,
       "RUN_SKILL_ARTIFACT_MISSING"
     );
   }

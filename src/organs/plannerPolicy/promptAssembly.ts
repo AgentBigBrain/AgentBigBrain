@@ -307,6 +307,16 @@ function buildRequiredActionHint(requiredActionType: RequiredActionType, repairM
       ? "Repair must include at least one create_skill action because the explicit user request is to create a skill."
       : "Current user request explicitly asks to create a skill. Include at least one create_skill action and do not replace it with respond-only output.";
   }
+  if (
+    requiredActionType === "update_skill" ||
+    requiredActionType === "deprecate_skill" ||
+    requiredActionType === "approve_skill" ||
+    requiredActionType === "reject_skill"
+  ) {
+    return repairMode
+      ? `Repair must include at least one ${requiredActionType} action because the explicit user request is a skill lifecycle change.`
+      : `Current user request explicitly asks for a skill lifecycle change. Include at least one ${requiredActionType} action and do not replace it with respond-only output.`;
+  }
   if (requiredActionType === "run_skill") {
     return repairMode
       ? "Repair must include at least one run_skill action because the explicit user request is to run or use a skill."
@@ -360,7 +370,7 @@ export function buildPlannerSystemPrompt(input: PlannerPromptBuildInput): string
     "If you emit a respond action, include params.message with the exact user-facing text. " +
     RESPONSE_IDENTITY_GUARDRAIL +
     RESPONSE_STYLE_GUARDRAIL +
-    "If you emit a create_skill action for executable code, include params.name and params.code. If you emit a create_skill action for reusable Markdown guidance, include params.name, params.kind=\"markdown_instruction\", and params.instructions. Markdown skills are advisory only and must not be treated as executable run_skill targets. " +
+    "If you emit a create_skill action for executable code, include params.name and params.code. If you emit a create_skill action for reusable Markdown guidance, include params.name, params.kind=\"markdown_instruction\", and params.instructions. Markdown skills are advisory only and must not be treated as executable run_skill targets. Use update_skill, deprecate_skill, approve_skill, or reject_skill only for explicit skill lifecycle requests. " +
     "If you emit a write_file action, include params.path and params.content with the full file content to write. " +
     "If you emit a read_file action, include params.path. " +
     "If you emit a shell_command action, include params.command with the exact command string. " +
@@ -409,11 +419,11 @@ export function buildPlannerRepairSystemPrompt(input: PlannerRepairPromptBuildIn
   return (
     "You are repairing a planner JSON output that had no valid actions. " +
     "Return compact JSON with plannerNotes and actions[]. " +
-    "Actions must use only allowed types: respond, read_file, write_file, delete_file, list_directory, create_skill, run_skill, network_write, self_modify, shell_command, start_process, check_process, stop_process, probe_port, probe_http, verify_browser, open_browser, close_browser, stop_folder_runtime_processes, inspect_path_holders, inspect_workspace_resources. " +
+    "Actions must use only allowed types: respond, read_file, write_file, delete_file, list_directory, create_skill, update_skill, deprecate_skill, approve_skill, reject_skill, run_skill, network_write, self_modify, shell_command, start_process, check_process, stop_process, probe_port, probe_http, verify_browser, open_browser, close_browser, stop_folder_runtime_processes, inspect_path_holders, inspect_workspace_resources, memory_mutation, pulse_emit. " +
     "Always produce at least one valid action. For conversational requests, emit respond with params.message. " +
     RESPONSE_IDENTITY_GUARDRAIL +
     RESPONSE_STYLE_GUARDRAIL +
-    "For create_skill, include params.name plus either executable params.code or Markdown params.kind=\"markdown_instruction\" and params.instructions. Markdown skills are advisory only and must not be run with run_skill. " +
+    "For create_skill, include params.name plus either executable params.code or Markdown params.kind=\"markdown_instruction\" and params.instructions. For update_skill, deprecate_skill, approve_skill, and reject_skill, include params.name and only explicit requested metadata/content changes. Markdown skills are advisory only and must not be run with run_skill. " +
     "For write_file, include params.path and params.content (the full file content). " +
     "For read_file, include params.path. For shell_command, include params.command. " +
     "For start_process, include params.command and any needed cwd/workdir fields. " +

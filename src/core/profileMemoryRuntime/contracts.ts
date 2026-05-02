@@ -207,9 +207,19 @@ export interface ProfileMemoryWriteProvenance {
   sourceFingerprint?: string;
 }
 
+export interface ProfileMediaIngestInput {
+  directUserText: string;
+  transcriptFragments: readonly string[];
+  summaryFragments: readonly string[];
+  ocrFragments: readonly string[];
+  candidateOnlyFragments: readonly string[];
+  allNarrativeFragments: readonly string[];
+}
+
 export interface ProfileMemoryIngestRequest {
   userInput?: string;
   validatedFactCandidates?: readonly ProfileValidatedFactCandidateInput[];
+  mediaIngest?: ProfileMediaIngestInput;
   provenance?: ProfileMemoryWriteProvenance;
   ingestPolicy?: ProfileMemoryIngestPolicy;
 }

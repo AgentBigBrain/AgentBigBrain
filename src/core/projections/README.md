@@ -31,6 +31,8 @@ such as the JSON mirror used to prove the seam stays generic.
   actions and canonical mutation seams.
 - Raw media assets are mirrored as artifacts plus companion notes. They are not treated as current
   truth by themselves.
+- Media artifact notes expose interpretation layers with their source and memory-authority labels.
+  `review_safe` projection redacts extracted text and model meaning where policy requires it.
 - Skill projection policy is explicit on manifests: `review_safe` may expose metadata and redacted
   excerpts only, `operator_full` may expose full Markdown guidance only when the manifest policy
   permits it, and projected skill notes never become runtime authority.

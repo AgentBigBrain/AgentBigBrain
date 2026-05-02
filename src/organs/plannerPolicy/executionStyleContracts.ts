@@ -44,6 +44,10 @@ export interface ExecutionStyleBuildPlanAssessment {
 
 export type RequiredActionType =
   | "create_skill"
+  | "update_skill"
+  | "deprecate_skill"
+  | "approve_skill"
+  | "reject_skill"
   | "run_skill"
   | "write_file"
   | "inspect_path_holders"

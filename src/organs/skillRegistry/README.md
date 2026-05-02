@@ -39,6 +39,13 @@ contracts for governed runtime skills. It supports two skill kinds:
   runtime.
 - Runtime user skills take precedence over built-ins with the same name.
 - Inventory surfaces only show active skills.
+- Explicit user-created skills can be active immediately. Agent-suggested skills default to
+  `pending_approval` and require `approve_skill` before planner guidance can use them.
+- `update_skill`, `approve_skill`, `reject_skill`, and `deprecate_skill` are governed lifecycle
+  actions. They do not bypass planner action normalization, hard constraints, governors, or executor
+  path checks.
+- Rejected and deprecated skills stay reviewable in full inventory mode but are excluded from
+  active planner guidance and executable `run_skill` use.
 - Verification state is explicit and never implied from file presence alone.
 - Markdown instruction skills default to `candidate_only` memory policy and
   `review_safe_excerpt` projection policy.
@@ -50,6 +57,7 @@ contracts for governed runtime skills. It supports two skill kinds:
 - `tests/organs/skillRegistry.test.ts`
 - `tests/organs/skillWorkflowBridge.test.ts`
 - `tests/organs/executor.test.ts`
+- `tests/core/hardConstraints.test.ts`
 
 ## When to Update This README
 - Update this README when manifest fields, verification semantics, inventory behavior, or the stable

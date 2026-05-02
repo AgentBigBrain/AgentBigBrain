@@ -90,6 +90,8 @@
     "test:interface:advanced_live_smoke": "tsx scripts/evidence/interfaceAdvancedLiveSmoke.ts",
     "test:interface:real_provider_live_smoke": "tsx scripts/evidence/interfaceRealProviderLiveSmoke.ts",
     "test:telegram_human_conversation:live_smoke": "tsx scripts/evidence/telegramHumanConversationLiveSmoke.ts",
+    "test:telegram_desktop_workflow_cleanup:live_smoke": "tsx scripts/evidence/telegramDesktopWorkflowAndCleanupLiveSmoke.ts",
+    "test:telegram_completion_matrix:live_smoke": "tsx scripts/evidence/telegramCompletionMatrixLiveSmoke.ts",
     "test:telegram_workflow_conversation_blend:live_smoke": "tsx scripts/evidence/telegramWorkflowConversationBlendLiveSmoke.ts",
     "test:openai:multi_model_live_smoke": "tsx scripts/evidence/openaiMultiModelLiveSmoke.ts",
     "test:runtime:managed_process_live_smoke": "tsx scripts/evidence/managedProcessLiveSmoke.ts",

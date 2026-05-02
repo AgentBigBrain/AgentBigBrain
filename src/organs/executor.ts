@@ -20,7 +20,14 @@ import {
   terminateProcessTree,
   terminateProcessTreeByPid
 } from "./executionRuntime/shellExecution";
-import { executeCreateSkillAction, executeRunSkillAction } from "./executionRuntime/skillRuntime";
+import {
+  executeCreateSkillAction,
+  executeRunSkillAction
+} from "./executionRuntime/skillRuntime";
+import {
+  executeSkillLifecycleAction,
+  executeUpdateSkillAction
+} from "./executionRuntime/skillLifecycleRuntime";
 import { BrowserVerifier, PlaywrightBrowserVerifier } from "./liveRun/browserVerifier";
 import {
   buildExecutionOutcome,
@@ -229,6 +236,14 @@ export class ToolExecutorOrgan {
     switch (action.type) {
       case "create_skill":
         return executeCreateSkillAction(action);
+
+      case "update_skill":
+        return executeUpdateSkillAction(action);
+
+      case "deprecate_skill":
+      case "approve_skill":
+      case "reject_skill":
+        return executeSkillLifecycleAction(action);
 
       case "run_skill":
         return executeRunSkillAction(action);

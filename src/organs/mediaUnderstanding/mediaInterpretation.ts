@@ -16,6 +16,7 @@ import type {
 import { createMediaUnderstandingConfigFromEnv } from "./contracts";
 import { interpretDocumentAttachment } from "./documentUnderstanding";
 import { interpretImageAttachment } from "./imageUnderstanding";
+import { normalizeMediaInterpretationLayers } from "./interpretationLayers";
 import { buildFallbackMediaInterpretation } from "./mediaModelFallback";
 import { interpretVoiceAttachment } from "./speechToText";
 import { interpretVideoAttachment } from "./videoUnderstanding";
@@ -45,26 +46,26 @@ export async function interpretMediaAttachment(
 ): Promise<ConversationInboundMediaInterpretation> {
   const fixtureKey = input.buffer ? computeMediaFixtureKey(input.buffer) : null;
   if (fixtureKey && fixtureCatalog?.[fixtureKey]) {
-    return {
+    return normalizeMediaInterpretationLayers({
       ...fixtureCatalog[fixtureKey],
       provenance: `${fixtureCatalog[fixtureKey].provenance} (fixture ${fixtureKey.slice(0, 8)})`,
       source: "fixture_catalog"
-    };
+    }, input.attachment);
   }
 
+  let interpretation: ConversationInboundMediaInterpretation;
   if (input.attachment.kind === "voice") {
-    return interpretVoiceAttachment(config, input.attachment, input.buffer);
+    interpretation = await interpretVoiceAttachment(config, input.attachment, input.buffer);
+  } else if (input.attachment.kind === "image") {
+    interpretation = await interpretImageAttachment(config, input.attachment, input.buffer);
+  } else if (input.attachment.kind === "video") {
+    interpretation = await interpretVideoAttachment(input.attachment);
+  } else if (input.attachment.kind === "document") {
+    interpretation = await interpretDocumentAttachment(config, input.attachment, input.buffer);
+  } else {
+    interpretation = buildFallbackMediaInterpretation(input.attachment);
   }
-  if (input.attachment.kind === "image") {
-    return interpretImageAttachment(config, input.attachment, input.buffer);
-  }
-  if (input.attachment.kind === "video") {
-    return interpretVideoAttachment(input.attachment);
-  }
-  if (input.attachment.kind === "document") {
-    return interpretDocumentAttachment(config, input.attachment, input.buffer);
-  }
-  return buildFallbackMediaInterpretation(input.attachment);
+  return normalizeMediaInterpretationLayers(interpretation, input.attachment);
 }
 
 export class MediaUnderstandingOrgan {

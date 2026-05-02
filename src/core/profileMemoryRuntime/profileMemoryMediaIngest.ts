@@ -3,6 +3,9 @@
  */
 
 import { normalizeProfileValue } from "./profileMemoryNormalization";
+import type { ProfileMediaIngestInput } from "./contracts";
+
+export type { ProfileMediaIngestInput } from "./contracts";
 
 const ATTACHED_MEDIA_CONTEXT_HEADER = "Attached media context:";
 const INTERPRETED_MEDIA_CONTEXT_HEADER = "The user sent media with the following interpreted context:";
@@ -18,13 +21,26 @@ const VOICE_TRANSCRIPT_PREFIX = "Voice note transcript:";
 const OCR_TEXT_PREFIX = "OCR text:";
 const SUMMARY_PREFIX_PATTERN = /^(image|short video|video|document) summary:\s*/i;
 
-export interface ProfileMediaIngestInput {
-  directUserText: string;
-  transcriptFragments: readonly string[];
-  summaryFragments: readonly string[];
-  ocrFragments: readonly string[];
-  candidateOnlyFragments: readonly string[];
-  allNarrativeFragments: readonly string[];
+interface ProfileMediaIngestEnvelopeLike {
+  attachments?: readonly ProfileMediaIngestAttachmentLike[];
+}
+
+interface ProfileMediaIngestAttachmentLike {
+  kind?: string;
+  interpretation?: ProfileMediaIngestInterpretationLike | null;
+}
+
+interface ProfileMediaIngestInterpretationLike {
+  summary?: string | null;
+  transcript?: string | null;
+  ocrText?: string | null;
+  layers?: readonly ProfileMediaIngestLayerLike[] | null;
+}
+
+interface ProfileMediaIngestLayerLike {
+  kind?: string;
+  text?: string | null;
+  memoryAuthority?: string;
 }
 
 /**
@@ -134,6 +150,110 @@ export function parseProfileMediaIngestInput(userInput: string): ProfileMediaIng
     candidateOnlyFragments: dedupeProfileMediaNarrativeFragments(candidateOnlyFragments),
     allNarrativeFragments
   };
+}
+
+/**
+ * Builds profile-memory media ingest from the structured inbound media envelope.
+ *
+ * @param userInput - Direct user-authored text for the turn.
+ * @param media - Structured media envelope with canonical interpretation layers.
+ * @returns Direct text plus media fragments split by memory authority.
+ */
+export function buildProfileMediaIngestInputFromEnvelope(
+  userInput: string,
+  media: ProfileMediaIngestEnvelopeLike | null | undefined
+): ProfileMediaIngestInput {
+  const directUserText = extractDirectUserText(userInput.trim());
+  const transcriptFragments: string[] = [];
+  const summaryFragments: string[] = [];
+  const ocrFragments: string[] = [];
+  const candidateOnlyFragments: string[] = [];
+  const supportOnlyFragments: string[] = [];
+  const directMediaFragments: string[] = [];
+
+  for (const attachment of media?.attachments ?? []) {
+    const interpretation = attachment.interpretation;
+    if (!interpretation) {
+      continue;
+    }
+    const layers = interpretation.layers?.length
+      ? interpretation.layers
+      : buildLegacyMediaLayers(attachment);
+    for (const layer of layers) {
+      const text = normalizeProfileValue(layer.text ?? "");
+      if (!text) {
+        continue;
+      }
+      if (layer.kind === "raw_text_extraction" && attachment.kind === "voice") {
+        transcriptFragments.push(text);
+      } else if (layer.kind === "raw_text_extraction") {
+        ocrFragments.push(text);
+      } else {
+        summaryFragments.push(text);
+      }
+
+      if (layer.memoryAuthority === "direct_user_text") {
+        directMediaFragments.push(text);
+      } else if (layer.memoryAuthority === "support_only") {
+        supportOnlyFragments.push(text);
+      } else if (layer.memoryAuthority === "candidate_only") {
+        candidateOnlyFragments.push(text);
+      }
+    }
+  }
+
+  const allNarrativeFragments = dedupeProfileMediaNarrativeFragments([
+    directUserText,
+    ...directMediaFragments,
+    ...supportOnlyFragments
+  ]);
+
+  return {
+    directUserText,
+    transcriptFragments: dedupeProfileMediaNarrativeFragments(transcriptFragments),
+    summaryFragments: dedupeProfileMediaNarrativeFragments(summaryFragments),
+    ocrFragments: dedupeProfileMediaNarrativeFragments(ocrFragments),
+    candidateOnlyFragments: dedupeProfileMediaNarrativeFragments(candidateOnlyFragments),
+    allNarrativeFragments
+  };
+}
+
+/**
+ * Adapts legacy top-level media interpretation fields into structured ingest layers.
+ *
+ * @param attachment - Media attachment with legacy top-level interpretation fields.
+ * @returns Bounded layer-like fragments.
+ */
+function buildLegacyMediaLayers(
+  attachment: ProfileMediaIngestAttachmentLike
+): readonly ProfileMediaIngestLayerLike[] {
+  const interpretation = attachment.interpretation;
+  if (!interpretation) {
+    return [];
+  }
+  const layers: ProfileMediaIngestLayerLike[] = [];
+  if (interpretation.transcript) {
+    layers.push({
+      kind: "raw_text_extraction",
+      text: interpretation.transcript,
+      memoryAuthority: attachment.kind === "voice" ? "direct_user_text" : "candidate_only"
+    });
+  }
+  if (interpretation.ocrText) {
+    layers.push({
+      kind: "raw_text_extraction",
+      text: interpretation.ocrText,
+      memoryAuthority: "candidate_only"
+    });
+  }
+  if (interpretation.summary) {
+    layers.push({
+      kind: "deterministic_metadata",
+      text: interpretation.summary,
+      memoryAuthority: "not_memory_authority"
+    });
+  }
+  return layers;
 }
 
 /**

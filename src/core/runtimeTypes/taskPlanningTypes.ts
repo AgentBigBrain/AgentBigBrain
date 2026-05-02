@@ -57,6 +57,7 @@ export interface CreateSkillActionParams extends Record<string, unknown> {
   name?: string;
   kind?: "executable_module" | "markdown_instruction";
   origin?: "runtime_user";
+  activationSource?: "explicit_user_request" | "agent_suggestion" | "operator_approval";
   code?: string;
   instructions?: string;
   markdownContent?: string;
@@ -77,6 +78,32 @@ export interface CreateSkillActionParams extends Record<string, unknown> {
   invocationHints?: readonly string[];
   testInput?: string;
   expectedOutputContains?: string;
+}
+
+export interface UpdateSkillActionParams extends Record<string, unknown> {
+  name?: string;
+  code?: string;
+  instructions?: string;
+  markdownContent?: string;
+  content?: string;
+  description?: string;
+  purpose?: string;
+  inputSummary?: string;
+  outputSummary?: string;
+  riskLevel?: string;
+  allowedSideEffects?: readonly string[];
+  tags?: readonly string[];
+  capabilities?: readonly string[];
+  memoryPolicy?: "none" | "candidate_only" | "operator_approved";
+  projectionPolicy?: "metadata_only" | "review_safe_excerpt" | "operator_full_content";
+  version?: string;
+  userSummary?: string;
+  invocationHints?: readonly string[];
+}
+
+export interface SkillLifecycleActionParams extends Record<string, unknown> {
+  name?: string;
+  reason?: string;
 }
 
 export interface RunSkillActionParams extends Record<string, unknown> {
@@ -284,6 +311,10 @@ export type PlannedActionParamsByType = {
   delete_file: DeleteFileActionParams;
   list_directory: ListDirectoryActionParams;
   create_skill: CreateSkillActionParams;
+  update_skill: UpdateSkillActionParams;
+  deprecate_skill: SkillLifecycleActionParams;
+  approve_skill: SkillLifecycleActionParams;
+  reject_skill: SkillLifecycleActionParams;
   run_skill: RunSkillActionParams;
   network_write: NetworkWriteActionParams;
   self_modify: SelfModifyActionParams;

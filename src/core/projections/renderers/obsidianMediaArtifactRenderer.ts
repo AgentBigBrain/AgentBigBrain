@@ -13,7 +13,10 @@ import {
   renderObsidianFrontmatter,
   type ObsidianProjectedNote
 } from "./obsidianFrontmatter";
-import { shouldMirrorMediaAsset } from "../policy";
+import {
+  redactReviewSafeProjectionText,
+  shouldMirrorMediaAsset
+} from "../policy";
 import {
   buildMediaArtifactNoteRelativePath,
   buildProjectionLinkIndex,
@@ -100,14 +103,53 @@ export function renderObsidianMediaArtifactNotes(
         ]),
         "## Derived Meaning",
         renderMarkdownList([
-          artifact.derivedMeaning.summary ? `Summary: ${artifact.derivedMeaning.summary}` : "Summary: none",
-          artifact.derivedMeaning.transcript ? `Transcript: ${artifact.derivedMeaning.transcript}` : "Transcript: none",
-          artifact.derivedMeaning.ocrText ? `OCR: ${artifact.derivedMeaning.ocrText}` : "OCR: none"
+          artifact.derivedMeaning.summary
+            ? `Summary: ${redactReviewSafeProjectionText(snapshot.mode, artifact.derivedMeaning.summary)}`
+            : "Summary: none",
+          artifact.derivedMeaning.transcript
+            ? `Transcript: ${redactReviewSafeProjectionText(snapshot.mode, artifact.derivedMeaning.transcript)}`
+            : "Transcript: none",
+          artifact.derivedMeaning.ocrText
+            ? `OCR: ${redactReviewSafeProjectionText(snapshot.mode, artifact.derivedMeaning.ocrText)}`
+            : "OCR: none"
         ]),
+        "## Interpretation Layers",
+        renderMarkdownList(renderMediaArtifactLayerLines(snapshot, artifact)),
         "## Entity Hints",
         renderMarkdownList(entityLinks)
       ].join("\n")
     };
+  });
+}
+
+/**
+ * Renders bounded derived-meaning layer lines for one artifact note.
+ *
+ * @param snapshot - Current projection snapshot.
+ * @param artifact - Media artifact being projected.
+ * @returns Review-safe layer summary lines.
+ */
+function renderMediaArtifactLayerLines(
+  snapshot: ProjectionSnapshot,
+  artifact: ProjectionSnapshot["mediaArtifacts"][number]
+): readonly string[] {
+  const layers = artifact.derivedMeaning.layers ?? [];
+  if (layers.length === 0) {
+    return ["none"];
+  }
+  return layers.map((layer) => {
+    const confidence = layer.confidence === null ? "unknown" : layer.confidence.toFixed(2);
+    const text = redactReviewSafeProjectionText(
+      snapshot.mode,
+      layer.text.length > 1_000 ? `${layer.text.slice(0, 997).trimEnd()}...` : layer.text
+    );
+    return [
+      `${layer.kind}`,
+      `source: ${layer.source}`,
+      `authority: ${layer.memoryAuthority}`,
+      `confidence: ${confidence}`,
+      `text: ${text}`
+    ].join("; ");
   });
 }
 

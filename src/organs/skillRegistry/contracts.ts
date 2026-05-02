@@ -6,11 +6,23 @@ export type SkillRiskLevel = "low" | "moderate" | "high";
 
 export type SkillVerificationStatus = "unverified" | "verified" | "failed";
 
-export type SkillLifecycleStatus = "active" | "deprecated";
+export type SkillLifecycleStatus =
+  | "active"
+  | "draft"
+  | "pending_approval"
+  | "rejected"
+  | "deprecated";
 
 export type SkillKind = "executable_module" | "markdown_instruction";
 
 export type SkillOrigin = "builtin" | "runtime_user";
+
+export type SkillActivationSource =
+  | "builtin"
+  | "legacy_migration"
+  | "explicit_user_request"
+  | "agent_suggestion"
+  | "operator_approval";
 
 export type SkillMemoryPolicy =
   | "none"
@@ -58,6 +70,7 @@ export interface SkillManifest {
   userSummary: string;
   invocationHints: readonly string[];
   lifecycleStatus: SkillLifecycleStatus;
+  activationSource: SkillActivationSource;
   instructionPath: string | null;
   primaryPath: string;
   compatibilityPath: string;
@@ -76,6 +89,7 @@ export interface SkillInventoryEntry {
   tags: readonly string[];
   invocationHints: readonly string[];
   lifecycleStatus: SkillLifecycleStatus;
+  activationSource?: SkillActivationSource;
   updatedAt: string;
   memoryPolicy?: SkillMemoryPolicy;
   projectionPolicy?: SkillProjectionPolicy;

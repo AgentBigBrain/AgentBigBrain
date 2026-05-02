@@ -3,10 +3,14 @@
  */
 
 import type { ConversationSession } from "../sessionStore";
+import type { ConversationInboundMediaEnvelope } from "../mediaRuntime/contracts";
 import type {
   ProfileMemoryIngestRequest,
   ProfileValidatedFactCandidateInput
 } from "../../core/profileMemoryRuntime/contracts";
+import {
+  buildProfileMediaIngestInputFromEnvelope
+} from "../../core/profileMemory";
 import {
   buildProfileMemoryIngestPolicy
 } from "../../core/profileMemoryRuntime/profileMemoryIngestPolicy";
@@ -20,6 +24,7 @@ export interface ConversationProfileMemoryWriteRequestInput {
   session: ConversationSession;
   receivedAt: string;
   userInput?: string;
+  media?: ConversationInboundMediaEnvelope | null;
   validatedFactCandidates?: readonly ProfileValidatedFactCandidateInput[];
   memoryIntent?: ConversationRouteMemoryIntent | null;
 }
@@ -40,6 +45,10 @@ export function buildConversationProfileMemoryWriteRequest(
     validatedFactCandidates
   );
   const sourceSurface = "conversation_profile_input";
+  const mediaIngest = buildProfileMediaIngestInputFromEnvelope(
+    input.userInput ?? "",
+    input.media ?? null
+  );
   return {
     ...(typeof input.userInput === "string" && input.userInput.trim().length > 0
       ? { userInput: input.userInput }
@@ -47,6 +56,7 @@ export function buildConversationProfileMemoryWriteRequest(
     ...(validatedFactCandidates.length > 0
       ? { validatedFactCandidates }
       : {}),
+    mediaIngest,
     ingestPolicy: buildProfileMemoryIngestPolicy({
       memoryIntent: input.memoryIntent ?? null,
       sourceSurface,
