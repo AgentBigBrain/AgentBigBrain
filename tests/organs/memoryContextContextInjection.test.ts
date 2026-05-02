@@ -55,6 +55,10 @@ test("buildInjectedContextPacket includes broker metadata and context block", ()
   );
 
   assert.match(packet, /\[AgentFriendMemoryBroker\]/);
+  assert.match(packet, /retrievalMode=keyword_only/);
+  assert.match(packet, /sourceAuthority=unknown/);
+  assert.match(packet, /plannerAuthority=none/);
+  assert.match(packet, /currentTruthAuthority=false/);
   assert.match(packet, /domainBoundaryDecision=inject_profile_context/);
   assert.match(packet, /\[AgentFriendProfileContext\]/);
   assert.match(packet, /contact\.owen\.name: Owen/);
@@ -75,7 +79,38 @@ test("buildSuppressedContextPacket marks suppression and omits raw profile facts
   );
 
   assert.match(packet, /domainBoundaryDecision=suppress_profile_context/);
+  assert.match(packet, /plannerAuthority=none/);
+  assert.match(packet, /currentTruthAuthority=false/);
   assert.match(packet, /\[AgentFriendProfileContext\]\nsuppressed=true/);
+});
+
+test("buildInjectedContextPacket can expose route-approved semantic retrieval authority", () => {
+  const packet = buildInjectedContextPacket(
+    buildTask("who is Owen?"),
+    ["relationship"],
+    {
+      profile: 0,
+      relationship: 3,
+      workflow: 0,
+      system_policy: 0,
+      unknown: 0
+    },
+    "profile_context_relevant",
+    "Temporal memory context (bounded):\nCurrent State:\n- Owen is tied to Lantern Studio.",
+    "",
+    "",
+    {
+      retrievalMode: "semantic_entity_match",
+      sourceAuthority: "semantic_model",
+      plannerAuthority: "route_approved",
+      currentTruthAuthority: true
+    }
+  );
+
+  assert.match(packet, /retrievalMode=semantic_entity_match/);
+  assert.match(packet, /sourceAuthority=semantic_model/);
+  assert.match(packet, /plannerAuthority=route_approved/);
+  assert.match(packet, /currentTruthAuthority=true/);
 });
 
 test("countRetrievedProfileFacts ignores headers and counts fact lines only", () => {

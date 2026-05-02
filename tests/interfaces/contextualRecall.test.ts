@@ -1209,3 +1209,40 @@ test("buildContextualRecallBlock includes model-assisted entity evidence when en
   assert.match(block ?? "", /Model-assisted entity references: Sarah/);
   assert.match(block ?? "", /Model-assisted entity rationale: The vague pronoun most likely points back to Sarah\./);
 });
+
+test("buildContextualRecallBlock labels paused-thread token overlap as evidence-only retrieval", async () => {
+  const session = buildSession({
+    conversationTurns: [
+      {
+        role: "user",
+        text: "Owen fell down a few weeks ago.",
+        at: "2026-02-14T15:00:00.000Z"
+      },
+      {
+        role: "assistant",
+        text: "I hope Owen is okay.",
+        at: "2026-02-14T15:01:00.000Z"
+      }
+    ],
+    conversationStack: buildPausedOwenStack()
+  });
+
+  const block = await buildContextualRecallBlock(
+    session,
+    "How is Owen doing lately?",
+    undefined,
+    undefined,
+    null,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    "contextual_recall"
+  );
+
+  assert.match(block ?? "", /Contextual recall opportunity \(optional\):/);
+  assert.match(block ?? "", /Retrieval mode: compatibility_token_overlap/);
+  assert.match(block ?? "", /Source authority: lexical_fallback/);
+  assert.match(block ?? "", /Planner authority: evidence_only/);
+  assert.match(block ?? "", /Current truth authority: false/);
+});

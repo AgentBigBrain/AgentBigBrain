@@ -3,6 +3,11 @@
  */
 
 import type { ProfileEpisodeStatus } from "../../core/profileMemory";
+import type { SourceAuthority } from "../../core/sourceAuthority";
+import type {
+  MemoryPlannerAuthority,
+  MemoryRetrievalMode
+} from "../../organs/memoryContext/contracts";
 
 export interface ContextualRecallCandidate {
   kind: "thread" | "episode";
@@ -19,6 +24,10 @@ export interface ContextualRecallCandidate {
   episodeStatus?: ProfileEpisodeStatus;
   episodeSummary?: string;
   entityRefs?: readonly string[];
+  retrievalMode: MemoryRetrievalMode;
+  sourceAuthority: SourceAuthority;
+  plannerAuthority: MemoryPlannerAuthority;
+  currentTruthAuthority: boolean;
 }
 
 const EPISODE_STATUS_PRIORITY: Record<ProfileEpisodeStatus, number> = {

@@ -251,6 +251,10 @@ export function buildPausedThreadRecallCandidate(
     openLoopCount,
     lastTouchedAt: matchedThread.lastTouchedAt,
     matchSource: "thread_context",
+    retrievalMode: "compatibility_token_overlap",
+    sourceAuthority: "lexical_fallback",
+    plannerAuthority: "evidence_only",
+    currentTruthAuthority: false,
     relevanceScore: openLoopCount + countTokenOverlap(
       userTokens,
       [
@@ -295,7 +299,11 @@ export function buildOpenLoopResumeRecallCandidate(
     relevanceScore: (match.overlapCount * 4) + openLoopCount + match.priority,
     matchSource: "open_loop_resume",
     matchedOpenLoopId: match.loopId,
-    matchedHintTerms: match.matchedTerms
+    matchedHintTerms: match.matchedTerms,
+    retrievalMode: "compatibility_token_overlap",
+    sourceAuthority: "lexical_fallback",
+    plannerAuthority: "evidence_only",
+    currentTruthAuthority: false
   };
 }
 
@@ -345,7 +353,11 @@ export async function buildEpisodeRecallCandidates(
       episodeId: episode.episodeId,
       episodeStatus: episode.status,
       episodeSummary: episode.summary,
-      entityRefs: [...episode.entityRefs]
+      entityRefs: [...episode.entityRefs],
+      retrievalMode: "semantic_entity_match",
+      sourceAuthority: "semantic_model",
+      plannerAuthority: "evidence_only",
+      currentTruthAuthority: false
     };
   });
 }

@@ -48,6 +48,7 @@ import {
 } from "./memoryContext/episodeContextInjection";
 import type {
   DomainBoundaryAssessment,
+  MemoryContextAuthorityMetadata,
   MemoryBrokerBuildInputOptions,
   MemoryBrokerInputResult,
   ProbingSignalSnapshot
@@ -125,6 +126,55 @@ function dedupeMemoryBrokerNarrativeFragments(values: readonly string[]): readon
 export interface BrokerPromptCutoverGateResult {
   decision: "allow" | "block";
   reasons: readonly string[];
+}
+
+/**
+ * Returns whether one route-approved memory intent may surface retrieved memory context.
+ *
+ * @param memoryIntent - Route-approved memory intent from trusted metadata.
+ * @returns `true` when retrieval context may be surfaced.
+ */
+function allowsMemoryContextInjection(
+  memoryIntent: ProfileMemoryIngestMemoryIntent | null
+): boolean {
+  return memoryIntent === "relationship_recall" ||
+    memoryIntent === "contextual_recall" ||
+    memoryIntent === "document_derived_recall";
+}
+
+/**
+ * Resolves retrieval authority metadata for one brokered memory context packet.
+ *
+ * @param memoryIntent - Trusted route memory intent.
+ * @param hasTemporalSynthesis - Whether typed temporal synthesis is available.
+ * @returns Authority metadata plus whether the context can be injected.
+ */
+function resolveBrokerRetrievalAuthority(
+  memoryIntent: ProfileMemoryIngestMemoryIntent | null,
+  hasTemporalSynthesis: boolean
+): { metadata: MemoryContextAuthorityMetadata; allowInjection: boolean } {
+  const routeApproved = allowsMemoryContextInjection(memoryIntent);
+  if (hasTemporalSynthesis) {
+    return {
+      metadata: {
+        retrievalMode: "semantic_entity_match",
+        sourceAuthority: "semantic_model",
+        plannerAuthority: routeApproved ? "route_approved" : "none",
+        currentTruthAuthority: routeApproved
+      },
+      allowInjection: routeApproved
+    };
+  }
+
+  return {
+    metadata: {
+      retrievalMode: "compatibility_token_overlap",
+      sourceAuthority: "legacy_compatibility",
+      plannerAuthority: routeApproved ? "evidence_only" : "none",
+      currentTruthAuthority: false
+    },
+    allowInjection: routeApproved
+  };
 }
 
 /**
@@ -368,6 +418,10 @@ export async function buildBrokeredPlannerInput(
         )
       : null;
     const memorySynthesisContext = buildPlannerContextSynthesisBlock(plannerTemporalSynthesis);
+    const retrievalAuthority = resolveBrokerRetrievalAuthority(
+      resolvedRouteMemoryIntent,
+      plannerTemporalSynthesis !== null
+    );
 
     if (!profileContext && !episodeContext && !memorySynthesisContext) {
       const domainBoundary = assessDomainBoundary(
@@ -422,6 +476,12 @@ export async function buildBrokeredPlannerInput(
           decision: "suppress_profile_context",
           reason: "probing_detected"
         }
+      : !retrievalAuthority.allowInjection
+        ? {
+            ...assessedDomainBoundary,
+            decision: "suppress_profile_context",
+            reason: "memory_retrieval_authority_blocked"
+          }
       : assessedDomainBoundary;
     const retrievedCount = countRetrievedProfileFacts(profileContext);
     const retrievedEpisodeCount = countRetrievedEpisodeSummaries(episodeContext);
@@ -493,7 +553,8 @@ export async function buildBrokeredPlannerInput(
           domainBoundary.scores,
           promptCutoverGate.decision === "block"
             ? `prompt_cutover_gate_blocked:${promptCutoverGate.reasons.join(",")}`
-            : domainBoundary.reason
+            : domainBoundary.reason,
+          retrievalAuthority.metadata
         ),
         profileMemoryStatus: "available"
       };
@@ -505,7 +566,10 @@ export async function buildBrokeredPlannerInput(
         domainBoundary.lanes,
         domainBoundary.scores,
         domainBoundary.reason,
-        brokeredContext
+        brokeredContext,
+        "",
+        "",
+        retrievalAuthority.metadata
       ),
       profileMemoryStatus: "available"
     };
