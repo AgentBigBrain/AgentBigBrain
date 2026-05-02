@@ -4,135 +4,16 @@
 
 import { ActionType } from "./types";
 import { SHELL_TIMEOUT_MS_BOUNDS } from "./shellRuntimeProfile";
+import {
+  getPlannerActionAliasCompatibilityDiagnostic,
+  getPlannerActionDefinition,
+  isRegisteredPlannerActionType,
+  normalizePlannerActionAlias,
+  type PlannerActionAliasCompatibilityDiagnostic
+} from "./actionDefinitionRegistry";
 
-const PLANNER_ACTION_TYPES: readonly ActionType[] = [
-  "respond",
-  "read_file",
-  "write_file",
-  "delete_file",
-  "list_directory",
-  "create_skill",
-  "update_skill",
-  "deprecate_skill",
-  "approve_skill",
-  "reject_skill",
-  "run_skill",
-  "network_write",
-  "self_modify",
-  "shell_command",
-  "start_process",
-  "check_process",
-  "stop_process",
-  "probe_port",
-  "probe_http",
-  "verify_browser",
-  "open_browser",
-  "close_browser",
-  "stop_folder_runtime_processes",
-  "inspect_path_holders",
-  "inspect_workspace_resources",
-  "memory_mutation",
-  "pulse_emit"
-];
-
-const ACTION_TYPE_SET = new Set<ActionType>(PLANNER_ACTION_TYPES);
-
-const PLANNER_ACTION_TYPE_ALIASES: Record<string, ActionType> = {
-  respond: "respond",
-  response: "respond",
-  reply: "respond",
-  say: "respond",
-  message: "respond",
-  read_file: "read_file",
-  read: "read_file",
-  file_read: "read_file",
-  write_file: "write_file",
-  write: "write_file",
-  file_write: "write_file",
-  delete_file: "delete_file",
-  delete: "delete_file",
-  remove: "delete_file",
-  rm: "delete_file",
-  file_delete: "delete_file",
-  list_directory: "list_directory",
-  list: "list_directory",
-  ls: "list_directory",
-  dir: "list_directory",
-  list_files: "list_directory",
-  list_dir: "list_directory",
-  create_skill: "create_skill",
-  create_tool: "create_skill",
-  write_skill: "create_skill",
-  update_skill: "update_skill",
-  edit_skill: "update_skill",
-  revise_skill: "update_skill",
-  deprecate_skill: "deprecate_skill",
-  disable_skill: "deprecate_skill",
-  approve_skill: "approve_skill",
-  promote_skill: "approve_skill",
-  reject_skill: "reject_skill",
-  run_skill: "run_skill",
-  use_skill: "run_skill",
-  invoke_skill: "run_skill",
-  network_write: "network_write",
-  network: "network_write",
-  http_request: "network_write",
-  api_call: "network_write",
-  call_api: "network_write",
-  webhook: "network_write",
-  self_modify: "self_modify",
-  self_edit: "self_modify",
-  self_update: "self_modify",
-  modify_self: "self_modify",
-  shell_command: "shell_command",
-  shell: "shell_command",
-  command: "shell_command",
-  run_command: "shell_command",
-  terminal: "shell_command",
-  start_process: "start_process",
-  start_server: "start_process",
-  launch_process: "start_process",
-  check_process: "check_process",
-  process_status: "check_process",
-  stop_process: "stop_process",
-  terminate_process: "stop_process",
-  kill_process: "stop_process",
-  probe_port: "probe_port",
-  port_probe: "probe_port",
-  wait_for_port: "probe_port",
-  probe_http: "probe_http",
-  http_probe: "probe_http",
-  check_url: "probe_http",
-  verify_browser: "verify_browser",
-  browser_verify: "verify_browser",
-  browser_check: "verify_browser",
-  ui_verify: "verify_browser",
-  playwright_verify: "verify_browser",
-  open_browser: "open_browser",
-  browser_open: "open_browser",
-  launch_browser: "open_browser",
-  close_browser: "close_browser",
-  browser_close: "close_browser",
-  close_tab: "close_browser",
-  stop_folder_runtime_processes: "stop_folder_runtime_processes",
-  stop_runtime_folder_processes: "stop_folder_runtime_processes",
-  folder_runtime_process_sweep: "stop_folder_runtime_processes",
-  inspect_path_holders: "inspect_path_holders",
-  inspect_path_holder: "inspect_path_holders",
-  inspect_holders: "inspect_path_holders",
-  inspect_workspace_resources: "inspect_workspace_resources",
-  inspect_workspace: "inspect_workspace_resources",
-  inspect_workspace_resources_for_followup: "inspect_workspace_resources",
-  memory_mutation: "memory_mutation",
-  memory_update: "memory_mutation",
-  thread_update: "memory_mutation",
-  pulse_emit: "pulse_emit",
-  emit_pulse: "pulse_emit",
-  bridge_question: "pulse_emit",
-  run: "run_skill",
-  use: "run_skill",
-  invoke: "run_skill"
-};
+export { getPlannerActionAliasCompatibilityDiagnostic };
+export type { PlannerActionAliasCompatibilityDiagnostic };
 
 /**
  * Converts values into planner record form for consistent downstream use.
@@ -166,7 +47,7 @@ export function toPlannerRecord(value: unknown): Record<string, unknown> | null 
  * @returns Computed `value is ActionType` result.
  */
 export function isPlannerActionType(value: unknown): value is ActionType {
-  return typeof value === "string" && ACTION_TYPE_SET.has(value as ActionType);
+  return isRegisteredPlannerActionType(value);
 }
 
 /**
@@ -182,12 +63,7 @@ export function isPlannerActionType(value: unknown): value is ActionType {
  * @returns Computed `ActionType | null` result.
  */
 export function normalizePlannerActionTypeAlias(value: unknown): ActionType | null {
-  if (typeof value !== "string") {
-    return null;
-  }
-
-  const normalizedKey = value.trim().toLowerCase().replace(/[\s-]+/g, "_");
-  return PLANNER_ACTION_TYPE_ALIASES[normalizedKey] ?? null;
+  return normalizePlannerActionAlias(value);
 }
 
 /**
@@ -203,64 +79,7 @@ export function normalizePlannerActionTypeAlias(value: unknown): ActionType | nu
  * @returns Resulting string value.
  */
 export function defaultPlannerActionDescription(type: ActionType): string {
-  switch (type) {
-    case "respond":
-      return "Produce a direct response to the user.";
-    case "read_file":
-      return "Read file contents needed for the task.";
-    case "write_file":
-      return "Write generated output to a file.";
-    case "delete_file":
-      return "Delete a target file path requested by the task.";
-    case "list_directory":
-      return "List files in a target directory.";
-    case "create_skill":
-      return "Create a governed runtime skill or Markdown instruction skill.";
-    case "update_skill":
-      return "Update a governed runtime skill or Markdown instruction skill.";
-    case "deprecate_skill":
-      return "Deprecate a governed runtime skill.";
-    case "approve_skill":
-      return "Approve a pending governed runtime skill for active reuse.";
-    case "reject_skill":
-      return "Reject a pending governed runtime skill.";
-    case "run_skill":
-      return "Run a previously created skill for the current request.";
-    case "network_write":
-      return "Call an external API endpoint.";
-    case "self_modify":
-      return "Propose a governed self-modification.";
-    case "shell_command":
-      return "Run a shell command required by the task.";
-    case "start_process":
-      return "Start a managed long-running process required by the task.";
-    case "check_process":
-      return "Check the status of a managed long-running process.";
-    case "stop_process":
-      return "Stop a managed long-running process.";
-    case "probe_port":
-      return "Probe a local TCP port for readiness.";
-    case "probe_http":
-      return "Probe a local HTTP endpoint for readiness.";
-    case "verify_browser":
-      return "Verify a local browser-rendered page using governed UI checks.";
-    case "open_browser":
-      return "Open a local page in a visible browser window and leave it open.";
-    case "close_browser":
-      return "Close a tracked browser window that the runtime previously opened.";
-    case "stop_folder_runtime_processes":
-      return "Inspect matching user-owned folders and stop only exact local server processes tied to those folders.";
-    case "inspect_path_holders":
-      return "Inspect runtime-owned holders or preview resources that still match one local path.";
-    case "inspect_workspace_resources":
-      return "Inspect runtime-owned browser and preview resources for one tracked workspace.";
-    case "memory_mutation":
-      return "Apply a governed local memory mutation.";
-    case "pulse_emit":
-      return "Emit a governed continuity pulse candidate.";
-    default:
-      return "Execute planned action.";
-  }
+  return getPlannerActionDefinition(type).description;
 }
 
 /**

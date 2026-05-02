@@ -36,9 +36,15 @@ test("normalizeStructuredModelOutput canonicalizes planner action aliases in the
     notes: "plan",
     actions: [
       {
-        tool: "read",
+        tool: "file_read",
         params: {
           path: "README.md"
+        }
+      },
+      {
+        tool: "read",
+        params: {
+          path: "private-notes.md"
         }
       }
     ]
