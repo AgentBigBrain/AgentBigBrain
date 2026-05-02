@@ -356,6 +356,10 @@ Report vulnerabilities privately to [security@agentbigbrain.com](mailto:security
 or through [GitHub Security Advisories](https://github.com/AgentBigBrain/AgentBigBrain/security/advisories/new).
 Do not open public issues for security reports.
 
+## Maintainer
+
+Maintained by [Anthony J. Benacquisto](https://github.com/flarewebdesign).
+
 ## License
 
 Apache License 2.0. See [LICENSE](./LICENSE) and [NOTICE](./NOTICE).
