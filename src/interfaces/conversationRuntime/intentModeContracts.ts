@@ -366,20 +366,21 @@ function inferRouteSourceFromResolution(
  * @param source - Route metadata source.
  * @returns Canonical source authority for downstream gates.
  */
-function routeSourceToAuthority(
+export function routeSourceToAuthority(
   source: ConversationSemanticRouteSource
 ): ConversationRouteSourceAuthority {
   switch (source) {
     case "model":
       return "semantic_model";
     case "clarification":
-      return "explicit_user_statement";
+      return "active_clarification";
     case "exact_command":
     case "deterministic_safety":
-    case "deterministic_signal":
       return "exact_command";
+    case "deterministic_signal":
+      return "lexical_fallback";
     case "compatibility":
-      return "legacy_compatibility";
+      return "compatibility_repair";
   }
 }
 

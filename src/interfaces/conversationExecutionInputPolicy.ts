@@ -1009,6 +1009,7 @@ function buildResolvedSemanticRouteBlock(
   if (semanticRoute) {
     lines.push(
       `- source: ${semanticRoute.source}`,
+      `- sourceAuthority: ${semanticRoute.sourceAuthority}`,
       `- confidence: ${semanticRoute.confidence}`,
       `- executionMode: ${semanticRoute.executionMode}`,
       `- continuationKind: ${semanticRoute.continuationKind}`,

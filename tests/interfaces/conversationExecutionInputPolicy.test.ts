@@ -325,6 +325,7 @@ test("buildConversationAwareExecutionInput emits expanded semantic-route metadat
   );
 
   assert.match(executionInput, /- source: exact_command/);
+  assert.match(executionInput, /- sourceAuthority: exact_command/);
   assert.match(executionInput, /- executionMode: build/);
   assert.match(executionInput, /- memoryIntent: none/);
   assert.match(executionInput, /- runtimeControlIntent: open_browser/);

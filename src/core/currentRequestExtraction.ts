@@ -2,6 +2,8 @@
  * @fileoverview Shared helpers for extracting the active request segment from wrapped conversation input.
  */
 
+import { isSourceAuthority, type SourceAuthority } from "./sourceAuthority";
+
 const CURRENT_USER_REQUEST_MARKER = "Current user request:";
 const USER_FOLLOW_UP_ANSWER_MARKER = "User follow-up answer:";
 const USER_QUESTION_MARKER = "User question:";
@@ -14,6 +16,7 @@ const AUTONOMOUS_EXECUTION_PREFIX = "[AUTONOMOUS_LOOP_GOAL]";
 const CLARIFICATION_METADATA_LINE_PATTERN = /^\[Clarification resolved:/i;
 const RESOLVED_SEMANTIC_ROUTE_LINE_PATTERN = /^- routeId:\s*([a-z_]+)\s*$/im;
 const RESOLVED_ROUTE_MEMORY_INTENT_LINE_PATTERN = /^- memoryIntent:\s*([a-z_]+)\s*$/im;
+const RESOLVED_ROUTE_SOURCE_AUTHORITY_LINE_PATTERN = /^- sourceAuthority:\s*([a-z_]+)\s*$/im;
 const RESOLVED_ROUTE_RUNTIME_CONTROL_INTENT_LINE_PATTERN =
   /^- runtimeControlIntent:\s*([a-z_]+)\s*$/im;
 const RESOLVED_ROUTE_EXECUTION_MODE_LINE_PATTERN =
@@ -471,6 +474,25 @@ export function extractResolvedRouteMemoryIntent(userInput: string): string | nu
   const match = normalized.match(RESOLVED_ROUTE_MEMORY_INTENT_LINE_PATTERN);
   const candidate = match?.[1]?.trim() ?? "";
   if (!candidate || !SUPPORTED_RESOLVED_MEMORY_INTENTS.has(candidate)) {
+    return null;
+  }
+  return candidate;
+}
+
+/**
+ * Extracts the route source-authority class from trusted route metadata.
+ *
+ * @param userInput - Wrapped execution input that may include resolved semantic route metadata.
+ * @returns Source authority, or `null` when missing, untrusted, or unsupported.
+ */
+export function extractResolvedRouteSourceAuthority(userInput: string): SourceAuthority | null {
+  const normalized = extractTrustedMetadataPayload(userInput, RESOLVED_SEMANTIC_ROUTE_MARKER);
+  if (!normalized) {
+    return null;
+  }
+  const match = normalized.match(RESOLVED_ROUTE_SOURCE_AUTHORITY_LINE_PATTERN);
+  const candidate = match?.[1]?.trim() ?? "";
+  if (!isSourceAuthority(candidate)) {
     return null;
   }
   return candidate;

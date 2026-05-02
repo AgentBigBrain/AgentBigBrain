@@ -5,13 +5,18 @@
 export type SourceAuthority =
   | "exact_command"
   | "explicit_user_statement"
+  | "active_clarification"
   | "semantic_model"
   | "lexical_fallback"
   | "document_text"
   | "document_model_summary"
   | "media_transcript"
   | "media_model_summary"
+  | "stale_runtime_context"
+  | "workflow_learning"
   | "review_mutation"
+  | "compatibility_repair"
+  | "strict_schema"
   | "legacy_compatibility"
   | "unknown";
 
@@ -23,13 +28,18 @@ export interface NormalizeSourceAuthorityOptions {
 export const SOURCE_AUTHORITY_VALUES: readonly SourceAuthority[] = [
   "exact_command",
   "explicit_user_statement",
+  "active_clarification",
   "semantic_model",
   "lexical_fallback",
   "document_text",
   "document_model_summary",
   "media_transcript",
   "media_model_summary",
+  "stale_runtime_context",
+  "workflow_learning",
   "review_mutation",
+  "compatibility_repair",
+  "strict_schema",
   "legacy_compatibility",
   "unknown"
 ] as const;
