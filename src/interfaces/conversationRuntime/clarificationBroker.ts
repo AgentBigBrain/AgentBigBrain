@@ -8,6 +8,7 @@ import type {
   ClarificationOptionId,
   ConversationIntentMode
 } from "../sessionStore";
+import type { ClarificationRiskClass } from "./sessionStateContracts";
 import type {
   ConversationBuildFormatMetadata,
   IntentClarificationCandidate
@@ -17,6 +18,7 @@ import {
   isStaticHtmlExecutionStyleRequest
 } from "../../organs/plannerPolicy/liveVerificationPolicy";
 import {
+  AFFIRMATION_RESPONSE_TOKENS,
   matchesClarificationOption,
   tokenizeClarificationReply
 } from "./clarificationOptionMatching";
@@ -27,6 +29,98 @@ const TASK_RECOVERY_CLARIFICATION_MAX_AGE_MS = 12 * 60 * 60 * 1000;
 
 export interface ClarificationResolutionResult {
   selectedOptionId: ClarificationOptionId;
+  promptId: string;
+  promptFingerprint: string | null;
+  riskClass: ClarificationRiskClass;
+}
+
+const GENERIC_CONFIRMATION_TOKENS = new Set([
+  ...AFFIRMATION_RESPONSE_TOKENS,
+  "please",
+  "go",
+  "ahead",
+  "do",
+  "that",
+  "it"
+]);
+const HIGH_RISK_SIDE_EFFECT_OPTION_IDS = new Set<ClarificationOptionId>([
+  "retry_with_shutdown",
+  "continue_recovery",
+  "fix_now"
+]);
+
+/**
+ * Builds a deterministic fingerprint for one active clarification prompt.
+ *
+ * @param sourceInput - Original user request.
+ * @param requestedAt - Prompt timestamp.
+ * @param matchedRuleId - Rule that created the prompt.
+ * @param question - User-facing question.
+ * @param options - Valid answer options.
+ * @returns Stable prompt fingerprint for later answer binding.
+ */
+function buildClarificationPromptFingerprint(
+  sourceInput: string,
+  requestedAt: string,
+  matchedRuleId: string,
+  question: string,
+  options: readonly ActiveClarificationOption[]
+): string {
+  const payload = [
+    sourceInput.trim().toLowerCase(),
+    requestedAt,
+    matchedRuleId,
+    question.trim().toLowerCase(),
+    options.map((option) => `${option.id}:${option.label.toLowerCase()}`).join("|")
+  ].join("\n");
+  let hash = 2166136261;
+  for (let index = 0; index < payload.length; index += 1) {
+    hash ^= payload.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `clarification_prompt_${(hash >>> 0).toString(16)}`;
+}
+
+/**
+ * Returns the risk class for older persisted clarifications that predate explicit metadata.
+ *
+ * @param clarification - Active clarification state.
+ * @returns Effective risk class.
+ */
+function resolveClarificationRiskClass(
+  clarification: ActiveClarificationState
+): ClarificationRiskClass {
+  return clarification.riskClass ?? (
+    clarification.kind === "task_recovery" ? "high" : "medium"
+  );
+}
+
+/**
+ * Returns whether one high-risk answer is only a generic confirmation.
+ *
+ * @param tokens - Tokenized user answer.
+ * @returns `true` when the reply lacks a concrete recovery action.
+ */
+function isGenericConfirmationOnly(tokens: readonly string[]): boolean {
+  return tokens.length > 0 && tokens.every((token) => GENERIC_CONFIRMATION_TOKENS.has(token));
+}
+
+/**
+ * Blocks risky side-effect options when the user only gave a generic confirmation.
+ *
+ * @param clarification - Active clarification state.
+ * @param selectedOptionId - Matched option id.
+ * @param tokens - Tokenized user reply.
+ * @returns `true` when the match must be rejected.
+ */
+function shouldRejectGenericHighRiskConfirmation(
+  clarification: ActiveClarificationState,
+  selectedOptionId: ClarificationOptionId,
+  tokens: readonly string[]
+): boolean {
+  return resolveClarificationRiskClass(clarification) === "high" &&
+    HIGH_RISK_SIDE_EFFECT_OPTION_IDS.has(selectedOptionId) &&
+    isGenericConfirmationOnly(tokens);
 }
 
 /**
@@ -134,6 +228,10 @@ export function createActiveClarificationState(
   requestedAt: string,
   candidate: IntentClarificationCandidate
 ): ActiveClarificationState {
+  const options = candidate.options.map((option): ActiveClarificationOption => ({
+    id: option.id,
+    label: option.label
+  }));
   return {
     id: `clarification_${requestedAt}`,
     kind: candidate.kind,
@@ -142,10 +240,15 @@ export function createActiveClarificationState(
     requestedAt,
     matchedRuleId: candidate.matchedRuleId,
     renderingIntent: candidate.renderingIntent,
-    options: candidate.options.map((option): ActiveClarificationOption => ({
-      id: option.id,
-      label: option.label
-    }))
+    riskClass: "medium",
+    promptFingerprint: buildClarificationPromptFingerprint(
+      sourceInput,
+      requestedAt,
+      candidate.matchedRuleId,
+      candidate.question,
+      options
+    ),
+    options
   };
 }
 
@@ -174,6 +277,17 @@ export function createTaskRecoveryClarificationState(
   recoveryInstruction?: string | null,
   options?: readonly ActiveClarificationOption[]
 ): ActiveClarificationState {
+  const resolvedOptions =
+    options ?? [
+      {
+        id: "retry_with_shutdown",
+        label: "Yes, shut them down and retry"
+      },
+      {
+        id: "cancel",
+        label: "No, leave them alone"
+      }
+    ];
   return {
     id: `clarification_${requestedAt}`,
     kind: "task_recovery",
@@ -182,18 +296,16 @@ export function createTaskRecoveryClarificationState(
     requestedAt,
     matchedRuleId,
     renderingIntent: "task_recovery",
+    riskClass: "high",
+    promptFingerprint: buildClarificationPromptFingerprint(
+      sourceInput,
+      requestedAt,
+      matchedRuleId,
+      question,
+      resolvedOptions
+    ),
     recoveryInstruction: recoveryInstruction ?? null,
-    options:
-      options ?? [
-        {
-          id: "retry_with_shutdown",
-          label: "Yes, shut them down and retry"
-        },
-        {
-          id: "cancel",
-          label: "No, leave them alone"
-        }
-      ]
+    options: resolvedOptions
   };
 }
 
@@ -227,9 +339,16 @@ export function resolveClarificationAnswer(
   if (matchedOptionIds.length !== 1) {
     return null;
   }
+  const selectedOptionId = matchedOptionIds[0]!;
+  if (shouldRejectGenericHighRiskConfirmation(clarification, selectedOptionId, tokens)) {
+    return null;
+  }
 
   return {
-    selectedOptionId: matchedOptionIds[0]
+    selectedOptionId,
+    promptId: clarification.id,
+    promptFingerprint: clarification.promptFingerprint ?? null,
+    riskClass: resolveClarificationRiskClass(clarification)
   };
 }
 

@@ -1046,7 +1046,7 @@ test("routeConversationMessageInput retries a recovery clarification when the us
 
   const result = await routeConversationMessageInput(
     session,
-    "Yes, please do that.",
+    "Yes, shut them down and retry.",
     "2026-03-13T14:05:05.000Z",
     buildDependencies((currentSession, input, _receivedAt, executionInput) => {
       capturedInput = input;
@@ -1070,7 +1070,7 @@ test("routeConversationMessageInput retries a recovery clarification when the us
   assert.equal(session.modeContinuity?.source, "clarification_answer");
   assert.equal(
     session.conversationTurns[session.conversationTurns.length - 1]?.text,
-    "Yes, please do that."
+    "Yes, shut them down and retry."
   );
 });
 

@@ -179,6 +179,8 @@ export type ClarificationRenderingIntent =
   | "fix_or_explain"
   | "task_recovery";
 
+export type ClarificationRiskClass = "low" | "medium" | "high";
+
 export interface ActiveClarificationState {
   id: string;
   kind: "execution_mode" | "build_format" | "task_recovery";
@@ -187,6 +189,8 @@ export interface ActiveClarificationState {
   requestedAt: string;
   matchedRuleId: string;
   renderingIntent: ClarificationRenderingIntent;
+  riskClass?: ClarificationRiskClass;
+  promptFingerprint?: string;
   recoveryInstruction?: string | null;
   options: readonly ActiveClarificationOption[];
 }
