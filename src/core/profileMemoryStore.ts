@@ -88,6 +88,7 @@ import {
   type ProfileMemoryIngestPolicy,
   type ProfileMemoryRequestTelemetry,
   type ProfileMemoryWriteProvenance,
+  type ProfileMediaIngestInput,
   type ProfileValidatedFactCandidateInput,
   type ProfileReadableEpisode,
   type ProfileReadableFact
@@ -154,6 +155,7 @@ export type {
 export interface ProfileMemoryIngestOptions {
   additionalEpisodeCandidates?: readonly CreateProfileEpisodeRecordInput[];
   validatedFactCandidates?: readonly ProfileValidatedFactCandidateInput[];
+  mediaIngest?: ProfileMediaIngestInput;
   provenance?: ProfileMemoryWriteProvenance;
   ingestPolicy?: ProfileMemoryIngestPolicy;
   requestTelemetry?: ProfileMemoryRequestTelemetry;
@@ -365,7 +367,7 @@ export class ProfileMemoryStore {
         userInput,
         options.validatedFactCandidates ?? []
       );
-    const mediaIngest = parseProfileMediaIngestInput(userInput);
+    const mediaIngest = options.mediaIngest ?? parseProfileMediaIngestInput(userInput);
     const ingestPolicy = normalizeProfileMemoryIngestPolicy(
       options.ingestPolicy,
       options.provenance?.sourceSurface

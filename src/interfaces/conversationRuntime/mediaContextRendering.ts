@@ -67,6 +67,15 @@ function buildAttachmentContextLines(
       interpretation.entityHints.length > 0
         ? interpretation.entityHints.join(", ")
         : "none"
+    }`,
+    `  - interpretation.layers: ${
+      (interpretation.layers ?? []).length > 0
+        ? (interpretation.layers ?? [])
+            .map((layer) =>
+              `${layer.kind}/${layer.source}/${layer.memoryAuthority}: ${layer.text}`
+            )
+            .join(" | ")
+        : "none"
     }`
   );
   return lines;
@@ -89,7 +98,8 @@ export function buildConversationMediaContextBlock(
   const lines = [
     "Inbound media context (interpreted once, bounded, no raw bytes):",
     "- Use the interpreted media details as supporting context only.",
-    "- Do not claim details that are absent from the interpretation summary/transcript/OCR fields."
+    "- Treat candidate-only layers as unverified media-derived meaning, not durable user memory.",
+    "- Do not claim details that are absent from the interpretation summary/transcript/OCR/layer fields."
   ];
 
   for (const [index, attachment] of attachments.entries()) {

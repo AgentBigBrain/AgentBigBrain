@@ -11,6 +11,7 @@ import {
   buildMediaArtifactDerivedMeaning,
   buildMediaArtifactFileName,
   computeMediaArtifactChecksum,
+  type MediaArtifactDerivedMeaningLayer,
   type MediaArtifactRecord,
   type RecordMediaArtifactInput
 } from "./mediaArtifacts";
@@ -177,9 +178,46 @@ function parseMediaArtifactRecord(input: unknown): MediaArtifactRecord | null {
           : null,
       entityHints: Array.isArray(candidate.derivedMeaning.entityHints)
         ? candidate.derivedMeaning.entityHints.filter((hint): hint is string => typeof hint === "string")
+        : [],
+      layers: Array.isArray(candidate.derivedMeaning.layers)
+        ? candidate.derivedMeaning.layers
+            .map((layer) => parseMediaArtifactDerivedMeaningLayer(layer))
+            .filter((layer): layer is MediaArtifactDerivedMeaningLayer => layer !== null)
         : []
     }
   };
+}
+
+/**
+ * Parses one persisted derived-meaning layer.
+ *
+ * @param input - Unknown persisted layer payload.
+ * @returns Canonical layer, or `null` when malformed.
+ */
+function parseMediaArtifactDerivedMeaningLayer(
+  input: unknown
+): MediaArtifactDerivedMeaningLayer | null {
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    return null;
+  }
+  const candidate = input as Partial<MediaArtifactDerivedMeaningLayer>;
+  if (
+    typeof candidate.kind !== "string" ||
+    typeof candidate.source !== "string" ||
+    typeof candidate.text !== "string" ||
+    typeof candidate.provenance !== "string" ||
+    typeof candidate.memoryAuthority !== "string"
+  ) {
+    return null;
+  }
+  return {
+    kind: candidate.kind,
+    source: candidate.source,
+    text: candidate.text,
+    confidence: typeof candidate.confidence === "number" ? candidate.confidence : null,
+    provenance: candidate.provenance,
+    memoryAuthority: candidate.memoryAuthority
+  } as MediaArtifactDerivedMeaningLayer;
 }
 
 /**

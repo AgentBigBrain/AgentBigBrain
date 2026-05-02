@@ -5,7 +5,11 @@
 import { createHash } from "node:crypto";
 
 import type {
-  ConversationInboundMediaAttachment
+  ConversationInboundMediaAttachment,
+  ConversationInboundMediaInterpretationLayer,
+  ConversationInboundMediaInterpretationLayerKind,
+  ConversationInboundMediaInterpretationSource,
+  ConversationInboundMediaMemoryAuthority
 } from "../interfaces/mediaRuntime/contracts";
 
 export type MediaArtifactProvider = "telegram";
@@ -16,6 +20,16 @@ export interface MediaArtifactDerivedMeaning {
   transcript: string | null;
   ocrText: string | null;
   entityHints: readonly string[];
+  layers?: readonly MediaArtifactDerivedMeaningLayer[];
+}
+
+export interface MediaArtifactDerivedMeaningLayer {
+  kind: ConversationInboundMediaInterpretationLayerKind;
+  source: ConversationInboundMediaInterpretationSource;
+  text: string;
+  confidence: number | null;
+  provenance: string;
+  memoryAuthority: ConversationInboundMediaMemoryAuthority;
 }
 
 export interface MediaArtifactRecord {
@@ -139,6 +153,9 @@ export function buildMediaArtifactFileName(
 export function buildMediaArtifactDerivedMeaning(
   attachment: ConversationInboundMediaAttachment
 ): MediaArtifactDerivedMeaning {
+  const layers = (attachment.interpretation?.layers ?? [])
+    .map(normalizeMediaArtifactDerivedMeaningLayer)
+    .filter((layer): layer is MediaArtifactDerivedMeaningLayer => Boolean(layer));
   return {
     summary: attachment.interpretation?.summary?.trim() || null,
     transcript: attachment.interpretation?.transcript?.trim() || null,
@@ -147,7 +164,31 @@ export function buildMediaArtifactDerivedMeaning(
       (attachment.interpretation?.entityHints ?? [])
         .map((hint) => hint.trim())
         .filter((hint) => hint.length > 0)
-    )].sort((left, right) => left.localeCompare(right))
+    )].sort((left, right) => left.localeCompare(right)),
+    layers
+  };
+}
+
+/**
+ * Normalizes one derived meaning layer for artifact persistence.
+ *
+ * @param layer - Media interpretation layer attached to the inbound attachment.
+ * @returns Persistable layer, or `null` when empty.
+ */
+function normalizeMediaArtifactDerivedMeaningLayer(
+  layer: ConversationInboundMediaInterpretationLayer
+): MediaArtifactDerivedMeaningLayer | null {
+  const text = layer.text.trim();
+  if (!text) {
+    return null;
+  }
+  return {
+    kind: layer.kind,
+    source: layer.source,
+    text,
+    confidence: layer.confidence,
+    provenance: layer.provenance.trim(),
+    memoryAuthority: layer.memoryAuthority
   };
 }
 

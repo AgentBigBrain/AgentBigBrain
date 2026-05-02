@@ -70,6 +70,7 @@ export {
   extractProfileEpisodeCandidatesFromUserInput
 } from "./profileMemoryRuntime/profileMemoryEpisodeExtraction";
 export {
+  buildProfileMediaIngestInputFromEnvelope,
   parseProfileMediaIngestInput
 } from "./profileMemoryRuntime/profileMemoryMediaIngest";
 export type { ProfileMemoryIngestOptions } from "./profileMemoryStore";
@@ -98,6 +99,7 @@ export type {
   ProfileFactReviewRequest,
   ProfileFactReviewResult,
   ProfileIngestResult,
+  ProfileMediaIngestInput,
   ProfileMemoryIngestRequest,
   ProfileMemoryRequestTelemetry,
   ProfileMemorySourceSurface,

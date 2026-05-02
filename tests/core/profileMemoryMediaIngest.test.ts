@@ -5,7 +5,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { parseProfileMediaIngestInput } from "../../src/core/profileMemoryRuntime/profileMemoryMediaIngest";
+import {
+  buildProfileMediaIngestInputFromEnvelope,
+  parseProfileMediaIngestInput
+} from "../../src/core/profileMemoryRuntime/profileMemoryMediaIngest";
 
 test("parseProfileMediaIngestInput strips attached media context from direct text and captures fragments", () => {
   const parsed = parseProfileMediaIngestInput([
@@ -74,5 +77,70 @@ test("parseProfileMediaIngestInput gates document-derived meaning as candidate-o
   ]);
   assert.deepEqual(parsed.allNarrativeFragments, [
     "Please review this carefully."
+  ]);
+});
+
+test("buildProfileMediaIngestInputFromEnvelope honors layer memory authority", () => {
+  const parsed = buildProfileMediaIngestInputFromEnvelope(
+    [
+      "Please remember that my favorite editor is Helix.",
+      "",
+      "Attached media context:",
+      "- document summary: Orion Lab filing. OCR text: Orion Lab filing 123456789"
+    ].join("\n"),
+    {
+      attachments: [
+        {
+          kind: "voice",
+          interpretation: {
+            transcript: "My name is Benny.",
+            summary: "Voice note.",
+            ocrText: null,
+            layers: [
+              {
+                kind: "raw_text_extraction",
+                text: "My name is Benny.",
+                memoryAuthority: "direct_user_text"
+              }
+            ]
+          }
+        },
+        {
+          kind: "document",
+          interpretation: {
+            transcript: null,
+            summary: "The document contains readable extracted text.",
+            ocrText: "Orion Lab filing 123456789",
+            layers: [
+              {
+                kind: "raw_text_extraction",
+                text: "Orion Lab filing 123456789",
+                memoryAuthority: "candidate_only"
+              },
+              {
+                kind: "model_summary",
+                text: "The document describes an administrative filing.",
+                memoryAuthority: "candidate_only"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  );
+
+  assert.equal(parsed.directUserText, "Please remember that my favorite editor is Helix.");
+  assert.deepEqual(parsed.transcriptFragments, ["My name is Benny."]);
+  assert.deepEqual(parsed.ocrFragments, ["Orion Lab filing 123456789"]);
+  assert.deepEqual(parsed.summaryFragments, [
+    "The document describes an administrative filing."
+  ]);
+  assert.deepEqual(parsed.candidateOnlyFragments, [
+    "Orion Lab filing 123456789",
+    "The document describes an administrative filing."
+  ]);
+  assert.deepEqual(parsed.allNarrativeFragments, [
+    "Please remember that my favorite editor is Helix.",
+    "My name is Benny."
   ]);
 });
