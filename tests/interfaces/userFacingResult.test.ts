@@ -3767,6 +3767,43 @@ test("selectUserFacingSummary appends deterministic stable approval diff for dif
   assert.match(selected, /- Approval mode: approve_step/i);
 });
 
+test("selectUserFacingSummary maps skill lifecycle actions to tier three diagnostics", () => {
+  const runResult = buildRunResult(
+    "Completed task with 1 approved action(s) and 0 blocked action(s).",
+    [
+      {
+        action: {
+          id: "action_update_skill_diagnostics",
+          type: "update_skill",
+          description: "update skill guidance",
+          params: {
+            name: "browser_recovery_notes",
+            instructions: "Use tracked browser sessions and exact process leases."
+          },
+          estimatedCostUsd: 0.12
+        },
+        mode: "escalation_path",
+        approved: true,
+        output: "Updated skill guidance.",
+        blockedBy: [],
+        violations: [],
+        votes: []
+      }
+    ],
+    {
+      userInput: "Show exact approval diff and wait for step-level approval."
+    }
+  );
+
+  const selected = selectUserFacingSummary(runResult, {
+    showTechnicalSummary: true
+  });
+
+  assert.match(selected, /- What will run: update_skill/i);
+  assert.match(selected, /- Approval mode: approve_step \(Tier >= 3 step defaults/i);
+  assert.doesNotMatch(selected, /Tier derivation failed/i);
+});
+
 test("selectUserFacingSummary marks approval flow as not applicable for respond-only diff prompts", () => {
   const runResult = buildRunResult(
     "Completed task with 1 approved action(s) and 0 blocked action(s).",

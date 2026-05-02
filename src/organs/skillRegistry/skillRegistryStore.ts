@@ -20,6 +20,15 @@ const DEFAULT_BUILTIN_MARKDOWN_SKILLS_ROOT = path.resolve(
 );
 const MAX_PLANNER_GUIDANCE_CHARS = 4_000;
 
+interface RuntimeManifestEntry {
+  readonly skillName: string;
+  readonly manifest: SkillManifest | null;
+}
+
+type RuntimeManifestFileLoadResult =
+  | { readonly status: "missing" }
+  | { readonly status: "loaded"; readonly manifest: SkillManifest | null };
+
 /**
  * Reads and writes skill manifests stored alongside runtime skill artifacts.
  */
@@ -57,12 +66,11 @@ export class SkillRegistryStore {
    */
   async loadManifest(skillName: string): Promise<SkillManifest | null> {
     const manifestPath = path.resolve(path.join(this.skillsRoot, `${skillName}.manifest.json`));
-    try {
-      const raw = await readFile(manifestPath, "utf8");
-      return parseSkillManifest(JSON.parse(raw));
-    } catch {
+    const runtimeResult = await this.loadRuntimeManifestFile(manifestPath);
+    if (runtimeResult.status === "missing") {
       return this.loadBuiltInManifest(skillName);
     }
+    return runtimeResult.manifest;
   }
 
   /**
@@ -183,33 +191,69 @@ export class SkillRegistryStore {
     for (const manifest of await this.listBuiltInManifests()) {
       merged.set(manifest.name, manifest);
     }
-    for (const manifest of await this.listRuntimeManifests()) {
-      merged.set(manifest.name, manifest);
+    for (const entry of await this.listRuntimeManifestEntries()) {
+      if (entry.manifest) {
+        merged.set(entry.manifest.name, entry.manifest);
+      } else {
+        merged.delete(entry.skillName);
+      }
     }
     return [...merged.values()];
   }
 
   /**
-   * Lists manifests stored under the runtime skills directory.
+   * Lists manifest slots stored under the runtime skills directory.
    *
-   * @returns Parsed runtime manifests.
+   * Invalid runtime manifests are represented with a `null` manifest so their skill name still
+   * suppresses a same-name built-in skill.
+   *
+   * @returns Parsed runtime manifest entries.
    */
-  private async listRuntimeManifests(): Promise<readonly SkillManifest[]> {
+  private async listRuntimeManifestEntries(): Promise<readonly RuntimeManifestEntry[]> {
     try {
       const entries = await readdir(this.skillsRoot, { withFileTypes: true });
-      const manifests: SkillManifest[] = [];
+      const manifests: RuntimeManifestEntry[] = [];
       for (const entry of entries) {
         if (!entry.isFile() || !entry.name.endsWith(".manifest.json")) {
           continue;
         }
-        const manifest = await this.loadManifest(entry.name.replace(/\.manifest\.json$/i, ""));
-        if (manifest) {
-          manifests.push(manifest);
-        }
+        const skillName = entry.name.replace(/\.manifest\.json$/i, "");
+        const manifestPath = path.resolve(path.join(this.skillsRoot, entry.name));
+        const result = await this.loadRuntimeManifestFile(manifestPath);
+        manifests.push({
+          skillName,
+          manifest: result.status === "loaded" ? result.manifest : null
+        });
       }
       return manifests;
     } catch {
       return [];
+    }
+  }
+
+  /**
+   * Loads a runtime manifest file without falling back to built-in skill definitions.
+   *
+   * @param manifestPath - Absolute manifest path to read.
+   * @returns File load status and parsed manifest when valid.
+   */
+  private async loadRuntimeManifestFile(
+    manifestPath: string
+  ): Promise<RuntimeManifestFileLoadResult> {
+    try {
+      const raw = await readFile(manifestPath, "utf8");
+      return {
+        status: "loaded",
+        manifest: parseSkillManifest(JSON.parse(raw))
+      };
+    } catch (error) {
+      if (isMissingFileError(error)) {
+        return { status: "missing" };
+      }
+      return {
+        status: "loaded",
+        manifest: null
+      };
     }
   }
 
@@ -331,4 +375,19 @@ function stripMarkdownFrontmatter(markdown: string): string {
   }
   const bodyStart = normalized.indexOf("\n", endIndex + 4);
   return bodyStart >= 0 ? normalized.slice(bodyStart + 1) : "";
+}
+
+/**
+ * Detects missing-file errors from Node filesystem calls.
+ *
+ * @param error - Unknown error thrown by a filesystem operation.
+ * @returns `true` when the error represents a missing file.
+ */
+function isMissingFileError(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { readonly code?: unknown }).code === "ENOENT"
+  );
 }

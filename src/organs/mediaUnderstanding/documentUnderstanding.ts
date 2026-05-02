@@ -32,6 +32,18 @@ const DOCUMENT_MEANING_PROMPT = [
   "Use entity_hints only for high-level names needed to connect related notes.",
   "Do not add markdown fences."
 ].join(" ");
+const MAX_PDF_TEXT_PAGES = 25;
+const MAX_PDF_EXTRACTED_TEXT_CHARS = 4_000;
+
+interface PdfTextPage {
+  getTextContent(): Promise<{ readonly items: readonly unknown[] }>;
+}
+
+interface PdfTextDocument {
+  readonly numPages: number;
+  getPage(pageNumber: number): Promise<PdfTextPage>;
+  destroy(): Promise<void> | void;
+}
 
 /**
  * Attempts bounded interpretation for one document attachment.
@@ -143,21 +155,72 @@ async function extractPdfText(buffer: Buffer): Promise<string | null> {
     isEvalSupported: false,
     disableFontFace: true
   });
-  const document = await loadingTask.promise;
-  const pageTexts: string[] = [];
-  for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
-    const page = await document.getPage(pageNumber);
-    const content = await page.getTextContent();
-    const pageText = content.items
-      .map((item) => ("str" in item && typeof item.str === "string" ? item.str : ""))
-      .join(" ");
-    const normalizedPageText = pageText.replace(/\s+/g, " ").trim();
-    if (normalizedPageText) {
-      pageTexts.push(normalizedPageText);
+  let document: PdfTextDocument | null = null;
+  try {
+    document = await loadingTask.promise;
+    let extractedText = "";
+    const pageLimit = Math.min(document.numPages, MAX_PDF_TEXT_PAGES);
+    for (let pageNumber = 1; pageNumber <= pageLimit; pageNumber += 1) {
+      const page = await document.getPage(pageNumber);
+      const content = await page.getTextContent();
+      const pageText = content.items
+        .map((item) => getPdfTextItemString(item))
+        .join(" ");
+      const normalizedPageText = pageText.replace(/\s+/g, " ").trim();
+      if (!normalizedPageText) {
+        continue;
+      }
+      const separator = extractedText ? "\n\n" : "";
+      const remainingBudget =
+        MAX_PDF_EXTRACTED_TEXT_CHARS - extractedText.length - separator.length;
+      if (remainingBudget <= 0) {
+        break;
+      }
+      const boundedPageText =
+        normalizedPageText.length <= remainingBudget
+          ? normalizedPageText
+          : normalizedPageText.slice(0, remainingBudget).trimEnd();
+      if (boundedPageText) {
+        extractedText = `${extractedText}${separator}${boundedPageText}`;
+      }
+      if (extractedText.length >= MAX_PDF_EXTRACTED_TEXT_CHARS) {
+        break;
+      }
     }
+    const text = extractedText.trim();
+    return text || null;
+  } finally {
+    await destroyPdfTextDocument(document);
   }
-  const text = pageTexts.join("\n\n").trim();
-  return text || null;
+}
+
+/**
+ * Extracts a text item string from a pdfjs text-content item.
+ *
+ * @param item - Unknown pdfjs text item.
+ * @returns Text item string or an empty string.
+ */
+function getPdfTextItemString(item: unknown): string {
+  return (
+    typeof item === "object" &&
+    item !== null &&
+    "str" in item &&
+    typeof (item as { readonly str?: unknown }).str === "string"
+  )
+    ? (item as { readonly str: string }).str
+    : "";
+}
+
+/**
+ * Releases pdfjs document resources after bounded extraction.
+ *
+ * @param document - Loaded pdfjs document, when available.
+ */
+async function destroyPdfTextDocument(document: PdfTextDocument | null): Promise<void> {
+  if (!document) {
+    return;
+  }
+  await Promise.resolve(document.destroy()).catch(() => undefined);
 }
 
 /**

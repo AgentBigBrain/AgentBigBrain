@@ -246,6 +246,49 @@ test("skill registry merges built-in Markdown guidance and runtime overrides", a
   }
 });
 
+test("skill registry fail-closes invalid runtime overrides before built-in fallback", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-skill-registry-"));
+  const builtInDir = path.join(tempDir, "builtins");
+  const runtimeDir = path.join(tempDir, "runtime");
+  try {
+    await mkdir(builtInDir, { recursive: true });
+    await mkdir(runtimeDir, { recursive: true });
+    await writeFile(
+      path.join(builtInDir, "static-site-generation.md"),
+      [
+        "---",
+        "kind: markdown_instruction",
+        "name: static-site-generation",
+        "description: Built-in static site guidance.",
+        "tags: static, site, html, browser",
+        "memoryPolicy: candidate_only",
+        "projectionPolicy: review_safe_excerpt",
+        "---",
+        "# Static Site",
+        "",
+        "Prefer a self-contained index.html when no framework is needed."
+      ].join("\n"),
+      "utf8"
+    );
+    await writeFile(
+      path.join(runtimeDir, "static-site-generation.manifest.json"),
+      "{ invalid json",
+      "utf8"
+    );
+
+    const store = new SkillRegistryStore(runtimeDir, builtInDir);
+    const manifest = await store.loadManifest("static-site-generation");
+    const inventory = await store.listAvailableSkills();
+    const guidance = await store.listApplicableGuidance("build a static html site", 3);
+
+    assert.equal(manifest, null);
+    assert.equal(inventory.some((entry) => entry.name === "static-site-generation"), false);
+    assert.equal(guidance.some((entry) => entry.name === "static-site-generation"), false);
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
 test("skill registry selects built-in browser and document Markdown guidance", async () => {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-skill-registry-builtins-"));
   try {
