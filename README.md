@@ -195,15 +195,7 @@ Start it with:
 npm run dev:interface
 ```
 
-The primary end-to-end operator smoke for Telegram/Desktop behavior is:
-
-```bash
-npm run test:telegram_completion_matrix:live_smoke
-```
-
-Without `BRAIN_TELEGRAM_COMPLETION_MATRIX_LIVE_CONFIRM=true`, the command writes bounded
-`BLOCKED` evidence instead of sending messages or touching the Desktop. Use `-- --schema-only` when
-you only want to validate the matrix fixture and review-safe evidence contract.
+Telegram/Desktop live-smoke validation is documented in `docs/SETUP.md` for operator runs.
 
 Common interface settings:
 
