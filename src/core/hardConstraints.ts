@@ -18,7 +18,11 @@ import {
   evaluateShellLikeActionConstraints
 } from "./constraintRuntime/processConstraints";
 import { evaluateProbeActionConstraints } from "./constraintRuntime/loopbackConstraints";
-import { evaluateCreateSkillConstraints, evaluateRunSkillConstraints } from "./constraintRuntime/skillConstraints";
+import {
+  evaluateCreateSkillConstraints,
+  evaluateRunSkillConstraints,
+  evaluateSkillLifecycleActionConstraints
+} from "./constraintRuntime/skillConstraints";
 import { BrainConfig } from "./config";
 import {
   containsImpersonationSignal,
@@ -117,6 +121,15 @@ export function evaluateHardConstraints(
 
   if (action.type === "create_skill") {
     violations.push(...evaluateCreateSkillConstraints(action.params, config));
+  }
+
+  if (
+    action.type === "update_skill" ||
+    action.type === "deprecate_skill" ||
+    action.type === "approve_skill" ||
+    action.type === "reject_skill"
+  ) {
+    violations.push(...evaluateSkillLifecycleActionConstraints(action.type, action.params));
   }
 
   if (action.type === "run_skill") {

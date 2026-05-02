@@ -18,6 +18,14 @@ import { RequiredActionType } from "./executionStyleContracts";
 
 const CREATE_SKILL_INTENT_PATTERN =
   /\b(create|generate|make|build|write)\s+(?:a\s+)?skill\b/i;
+const UPDATE_SKILL_EXPLICIT_REQUEST_PATTERN =
+  /\b(update|edit|revise)\s+(?:a\s+)?skill\b|\bupdate[_\s-]?skill\b/i;
+const DEPRECATE_SKILL_EXPLICIT_REQUEST_PATTERN =
+  /\b(deprecate|disable)\s+(?:a\s+)?skill\b|\bdeprecate[_\s-]?skill\b/i;
+const APPROVE_SKILL_EXPLICIT_REQUEST_PATTERN =
+  /\b(approve|promote)\s+(?:a\s+)?skill\b|\bapprove[_\s-]?skill\b/i;
+const REJECT_SKILL_EXPLICIT_REQUEST_PATTERN =
+  /\breject\s+(?:a\s+)?skill\b|\breject[_\s-]?skill\b/i;
 const RUN_SKILL_EXPLICIT_REQUEST_PATTERN =
   /\b(run|execute|invoke|use)\s+(?:a\s+)?skill\b|\brun[_\s-]?skill\b/i;
 const WORKFLOW_RUN_SKILL_REQUEST_PATTERN =
@@ -270,6 +278,18 @@ export function inferRequiredActionType(
   }
   if (CREATE_SKILL_INTENT_PATTERN.test(currentUserRequest)) {
     return "create_skill";
+  }
+  if (UPDATE_SKILL_EXPLICIT_REQUEST_PATTERN.test(currentUserRequest)) {
+    return "update_skill";
+  }
+  if (DEPRECATE_SKILL_EXPLICIT_REQUEST_PATTERN.test(currentUserRequest)) {
+    return "deprecate_skill";
+  }
+  if (APPROVE_SKILL_EXPLICIT_REQUEST_PATTERN.test(currentUserRequest)) {
+    return "approve_skill";
+  }
+  if (REJECT_SKILL_EXPLICIT_REQUEST_PATTERN.test(currentUserRequest)) {
+    return "reject_skill";
   }
   if (RUN_SKILL_EXPLICIT_REQUEST_PATTERN.test(currentUserRequest)) {
     return "run_skill";

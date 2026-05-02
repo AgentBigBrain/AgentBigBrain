@@ -12,6 +12,10 @@ const PLANNER_ACTION_TYPES: readonly ActionType[] = [
   "delete_file",
   "list_directory",
   "create_skill",
+  "update_skill",
+  "deprecate_skill",
+  "approve_skill",
+  "reject_skill",
   "run_skill",
   "network_write",
   "self_modify",
@@ -59,6 +63,14 @@ const PLANNER_ACTION_TYPE_ALIASES: Record<string, ActionType> = {
   create_skill: "create_skill",
   create_tool: "create_skill",
   write_skill: "create_skill",
+  update_skill: "update_skill",
+  edit_skill: "update_skill",
+  revise_skill: "update_skill",
+  deprecate_skill: "deprecate_skill",
+  disable_skill: "deprecate_skill",
+  approve_skill: "approve_skill",
+  promote_skill: "approve_skill",
+  reject_skill: "reject_skill",
   run_skill: "run_skill",
   use_skill: "run_skill",
   invoke_skill: "run_skill",
@@ -204,6 +216,14 @@ export function defaultPlannerActionDescription(type: ActionType): string {
       return "List files in a target directory.";
     case "create_skill":
       return "Create a governed runtime skill or Markdown instruction skill.";
+    case "update_skill":
+      return "Update a governed runtime skill or Markdown instruction skill.";
+    case "deprecate_skill":
+      return "Deprecate a governed runtime skill.";
+    case "approve_skill":
+      return "Approve a pending governed runtime skill for active reuse.";
+    case "reject_skill":
+      return "Reject a pending governed runtime skill.";
     case "run_skill":
       return "Run a previously created skill for the current request.";
     case "network_write":
@@ -305,6 +325,7 @@ export function normalizePlannerActionParams(
     "instructions",
     "markdownContent",
     "content",
+    "reason",
     "path",
     "command",
     "cwd",

@@ -11,6 +11,7 @@ import type {
   SkillVerificationConfig,
 } from "./contracts";
 import {
+  normalizeActivationSource,
   normalizeAllowedSideEffects,
   normalizeLifecycleStatus,
   normalizeMemoryPolicy,
@@ -124,6 +125,10 @@ export function buildSkillManifest(
   const tags = normalizeStringArray(params.tags);
   const capabilities = normalizeStringArray(params.capabilities ?? params.tags);
   const invocationHints = normalizeStringArray(params.invocationHints);
+  const activationSource = normalizeActivationSource(
+    params.activationSource ?? "explicit_user_request",
+    params.origin
+  );
 
   return {
     name: skillName,
@@ -154,7 +159,8 @@ export function buildSkillManifest(
               ? buildDefaultMarkdownInvocationHint(skillName)
               : buildDefaultInvocationHint(skillName)
           ],
-    lifecycleStatus: "active",
+    lifecycleStatus: activationSource === "agent_suggestion" ? "pending_approval" : "active",
+    activationSource,
     instructionPath: kind === "markdown_instruction" ? artifactPaths.instructionPath : null,
     primaryPath:
       kind === "markdown_instruction" ? artifactPaths.instructionPath : artifactPaths.primaryPath,
@@ -183,6 +189,7 @@ export function applySkillManifestUpdate(
     | "verificationVerifiedAt"
     | "verificationFailureReason"
     | "lifecycleStatus"
+    | "activationSource"
     | "version"
     | "updatedAt"
   >>,
@@ -203,6 +210,10 @@ export function applySkillManifestUpdate(
       update.lifecycleStatus === undefined
         ? manifest.lifecycleStatus
         : normalizeLifecycleStatus(update.lifecycleStatus),
+    activationSource:
+      update.activationSource === undefined
+        ? manifest.activationSource
+        : normalizeActivationSource(update.activationSource, manifest.origin),
     version: update.version ?? manifest.version,
     updatedAt: update.updatedAt ?? nowIso
   };
@@ -278,6 +289,7 @@ export function parseSkillManifest(input: unknown): SkillManifest | null {
     userSummary,
     invocationHints: normalizeStringArray(candidate.invocationHints),
     lifecycleStatus: normalizeLifecycleStatus(candidate.lifecycleStatus),
+    activationSource: normalizeActivationSource(candidate.activationSource, candidate.origin),
     instructionPath,
     primaryPath,
     compatibilityPath,
@@ -304,6 +316,7 @@ export function toSkillInventoryEntry(manifest: SkillManifest): SkillInventoryEn
     tags: manifest.tags,
     invocationHints: manifest.invocationHints,
     lifecycleStatus: manifest.lifecycleStatus,
+    activationSource: manifest.activationSource,
     updatedAt: manifest.updatedAt,
     memoryPolicy: manifest.memoryPolicy,
     projectionPolicy: manifest.projectionPolicy

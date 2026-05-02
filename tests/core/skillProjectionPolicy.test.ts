@@ -37,6 +37,7 @@ function buildSkillManifestFixture(
     userSummary: "Document reading guidance.",
     invocationHints: ["Use document reading guidance."],
     lifecycleStatus: "active",
+    activationSource: "explicit_user_request",
     instructionPath: null,
     primaryPath: "document-reading.md",
     compatibilityPath: "document-reading.md",

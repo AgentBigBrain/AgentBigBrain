@@ -41,7 +41,7 @@ function buildTaskResult(actionResults: ActionRunResult[]): TaskRunResult {
   };
 }
 
-function buildApprovedResult(actionId: string, actionType: ActionRunResult["action"]["type"]): ActionRunResult {
+function buildApprovedResult(actionId: string, actionType: "respond"): ActionRunResult {
   return {
     action: {
       id: actionId,

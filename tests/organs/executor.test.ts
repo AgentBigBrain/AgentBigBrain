@@ -95,6 +95,24 @@ function buildRunSkillAction(name: string, input: string): PlannedAction {
 }
 
 /**
+ * Implements `buildSkillLifecycleAction` behavior within module scope.
+ * Interacts with local collaborators through imported modules and typed inputs/outputs.
+ */
+function buildSkillLifecycleAction(
+  type: "update_skill" | "deprecate_skill" | "approve_skill" | "reject_skill",
+  name: string,
+  overrides: Record<string, unknown> = {}
+): PlannedAction {
+  return {
+    id: `action_${type}`,
+    type,
+    description: `${type} ${name}`,
+    params: { name, ...overrides },
+    estimatedCostUsd: 0.1
+  };
+}
+
+/**
  * Implements `buildWriteFileAction` behavior within module scope.
  * Interacts with local collaborators through imported modules and typed inputs/outputs.
  */
@@ -1151,6 +1169,125 @@ test("ToolExecutorOrgan blocks unsafe Markdown instruction skill content", async
 
     assert.equal(outcome.status, "blocked");
     assert.equal(outcome.failureCode, "CREATE_SKILL_UNSAFE_CODE");
+  });
+});
+
+test("ToolExecutorOrgan approves agent-suggested Markdown skills through lifecycle actions", async () => {
+  await withTempCwd(async (tempDir) => {
+    const executor = new ToolExecutorOrgan(DEFAULT_BRAIN_CONFIG);
+    const createOutcome = await executor.executeWithOutcome(
+      buildCreateSkillAction("agency_site_guidance", "", {
+        kind: "markdown_instruction",
+        instructions: "# Agency Site Guidance\n\nPrefer authored static HTML for simple agency sites.",
+        activationSource: "agent_suggestion",
+        tags: ["static", "agency"]
+      })
+    );
+
+    assert.equal(createOutcome.status, "success");
+    const manifestPath = path.join(tempDir, "runtime", "skills", "agency_site_guidance.manifest.json");
+    const draftManifest = JSON.parse(await readFile(manifestPath, "utf8")) as Record<string, unknown>;
+    assert.equal(draftManifest.lifecycleStatus, "pending_approval");
+    assert.equal(draftManifest.activationSource, "agent_suggestion");
+
+    const approveOutcome = await executor.executeWithOutcome(
+      buildSkillLifecycleAction("approve_skill", "agency_site_guidance", {
+        reason: "Operator approved the reusable guidance."
+      })
+    );
+
+    assert.equal(approveOutcome.status, "success");
+    assert.equal(approveOutcome.executionMetadata?.skillLifecycleStatus, "active");
+    assert.equal(approveOutcome.executionMetadata?.skillActivationSource, "operator_approval");
+    const approvedManifest = JSON.parse(await readFile(manifestPath, "utf8")) as Record<string, unknown>;
+    assert.equal(approvedManifest.lifecycleStatus, "active");
+    assert.equal(approvedManifest.activationSource, "operator_approval");
+  });
+});
+
+test("ToolExecutorOrgan updates mutable Markdown skill content and metadata", async () => {
+  await withTempCwd(async (tempDir) => {
+    const executor = new ToolExecutorOrgan(DEFAULT_BRAIN_CONFIG);
+    await executor.executeWithOutcome(
+      buildCreateSkillAction("browser_recovery_notes", "", {
+        kind: "markdown_instruction",
+        instructions: "# Browser Recovery\n\nUse tracked sessions when available.",
+        userSummary: "Original browser recovery guidance.",
+        tags: ["browser"]
+      })
+    );
+
+    const updateOutcome = await executor.executeWithOutcome(
+      buildSkillLifecycleAction("update_skill", "browser_recovery_notes", {
+        instructions: "# Browser Recovery\n\nPrefer tracked sessions, then verify close evidence.",
+        userSummary: "Updated browser recovery guidance.",
+        tags: ["browser", "verification"],
+        version: "1.1.0"
+      })
+    );
+
+    assert.equal(updateOutcome.status, "success");
+    assert.equal(updateOutcome.executionMetadata?.skillLifecycleStatus, "active");
+    const markdownPath = path.join(tempDir, "runtime", "skills", "browser_recovery_notes.md");
+    const manifestPath = path.join(tempDir, "runtime", "skills", "browser_recovery_notes.manifest.json");
+    const markdown = await readFile(markdownPath, "utf8");
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as Record<string, unknown>;
+    assert.match(markdown, /verify close evidence/i);
+    assert.equal(manifest.userSummary, "Updated browser recovery guidance.");
+    assert.deepEqual(manifest.tags, ["browser", "verification"]);
+    assert.equal(manifest.version, "1.1.0");
+  });
+});
+
+test("ToolExecutorOrgan rejects suggested skills and keeps them inactive", async () => {
+  await withTempCwd(async (tempDir) => {
+    const executor = new ToolExecutorOrgan(DEFAULT_BRAIN_CONFIG);
+    await executor.executeWithOutcome(
+      buildCreateSkillAction("draft_skill_notes", "", {
+        kind: "markdown_instruction",
+        instructions: "# Draft Skill\n\nKeep this draft out of planner guidance.",
+        activationSource: "agent_suggestion"
+      })
+    );
+
+    const rejectOutcome = await executor.executeWithOutcome(
+      buildSkillLifecycleAction("reject_skill", "draft_skill_notes", {
+        reason: "Operator rejected this suggested guidance."
+      })
+    );
+
+    assert.equal(rejectOutcome.status, "success");
+    assert.equal(rejectOutcome.executionMetadata?.skillLifecycleStatus, "rejected");
+    const manifestPath = path.join(tempDir, "runtime", "skills", "draft_skill_notes.manifest.json");
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as Record<string, unknown>;
+    assert.equal(manifest.lifecycleStatus, "rejected");
+  });
+});
+
+test("ToolExecutorOrgan deprecates executable skills and blocks later runs", async () => {
+  await withTempCwd(async () => {
+    const executor = new ToolExecutorOrgan(DEFAULT_BRAIN_CONFIG);
+    await executor.executeWithOutcome(
+      buildCreateSkillAction(
+        "legacy_text_helper",
+        "export function legacyTextHelper(input: string): string { return input.trim().toUpperCase(); }"
+      )
+    );
+
+    const deprecateOutcome = await executor.executeWithOutcome(
+      buildSkillLifecycleAction("deprecate_skill", "legacy_text_helper", {
+        reason: "Replaced by Markdown guidance."
+      })
+    );
+    assert.equal(deprecateOutcome.status, "success");
+    assert.equal(deprecateOutcome.executionMetadata?.skillLifecycleStatus, "deprecated");
+
+    const runOutcome = await executor.executeWithOutcome(
+      buildRunSkillAction("legacy_text_helper", "hello")
+    );
+    assert.equal(runOutcome.status, "blocked");
+    assert.equal(runOutcome.failureCode, "RUN_SKILL_ARTIFACT_MISSING");
+    assert.match(runOutcome.output, /deprecated/i);
   });
 });
 

@@ -63,6 +63,10 @@ export const DEFAULT_BRAIN_CONFIG: BrainConfig = {
       "open_browser",
       "close_browser",
       "create_skill",
+      "update_skill",
+      "deprecate_skill",
+      "approve_skill",
+      "reject_skill",
       "memory_mutation",
       "pulse_emit"
     ]
