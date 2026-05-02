@@ -30,6 +30,24 @@ test("classifyTrustRenderDecision returns RENDER_APPROVED for non-claim text wit
   assert.equal(result.evidence.rulepackVersion, "TrustLexicalRulepackV1");
 });
 
+test("classifyTrustRenderDecision does not classify route-like wording as side-effect proof", () => {
+  const context = createTrustLexicalRuleContext(null);
+  const result = classifyTrustRenderDecision(
+    {
+      text: "The user is asking about memory recall, a website build, and status context.",
+      hasApprovedRealShellExecution: false,
+      hasApprovedRealNonRespondExecution: false,
+      hasBlockedUnmatchedAction: false,
+      hasApprovedSimulatedShellExecution: false,
+      hasApprovedSimulatedNonRespondExecution: false
+    },
+    context
+  );
+
+  assert.equal(result.decision, "RENDER_APPROVED");
+  assert.equal(result.evidence.matchedRuleId, "trust_lexical_v1_no_claim");
+});
+
 test("classifyTrustRenderDecision returns RENDER_UNCERTAIN for browser-execution claim without shell execution", () => {
   const context = createTrustLexicalRuleContext(null);
   const result = classifyTrustRenderDecision(

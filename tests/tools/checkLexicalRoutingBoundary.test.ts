@@ -46,6 +46,22 @@ test("computeLexicalRoutingBoundaryDiagnosticsFromRecords ignores exact-command 
   assert.deepEqual(diagnostics.findings, []);
 });
 
+test("computeLexicalRoutingBoundaryDiagnosticsFromRecords ignores safety boundary exceptions", () => {
+  const diagnostics = computeLexicalRoutingBoundaryDiagnosticsFromRecords(
+    [
+      {
+        path: "src/interfaces/trustLexicalClassifier.ts",
+        content:
+          "const BROWSER_CLAIM_PATTERNS = [/opened the browser/i]; // lexical-boundary: safety"
+      }
+    ],
+    ["src/interfaces/trustLexicalClassifier.ts"]
+  );
+
+  assert.equal(diagnostics.checkedFileCount, 1);
+  assert.deepEqual(diagnostics.findings, []);
+});
+
 test("computeLexicalRoutingBoundaryDiagnosticsFromRecords ignores non-frozen files", () => {
   const diagnostics = computeLexicalRoutingBoundaryDiagnosticsFromRecords(
     [

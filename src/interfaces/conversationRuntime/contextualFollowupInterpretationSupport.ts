@@ -18,7 +18,7 @@ import { hasTurnLocalFirstPersonStatusUpdate } from "./turnLocalStatusUpdate";
 
 const CONTEXTUAL_FOLLOWUP_MAX_INPUT_CHARS = 120;
 const CONTEXTUAL_FOLLOWUP_MAX_INPUT_TOKENS = 10;
-const SOFT_CONTEXTUAL_FOLLOWUP_TERMS = new Set([
+const SOFT_CONTEXTUAL_FOLLOWUP_TERMS = new Set([ // lexical-boundary: candidate-only
   "later",
   "posted",
   "update",
@@ -30,7 +30,7 @@ const SOFT_CONTEXTUAL_FOLLOWUP_TERMS = new Set([
   "resolve",
   "progress"
 ]);
-const CONTEXTUAL_MEANING_TERMS = new Set([
+const CONTEXTUAL_MEANING_TERMS = new Set([ // lexical-boundary: candidate-only
   "posted",
   "update",
   "status",
@@ -41,7 +41,7 @@ const CONTEXTUAL_MEANING_TERMS = new Set([
   "resolve",
   "progress"
 ]);
-const NON_ANCHOR_CONTEXTUAL_FOLLOWUP_TERMS = new Set([
+const NON_ANCHOR_CONTEXTUAL_FOLLOWUP_TERMS = new Set([ // lexical-boundary: candidate-only
   ...SOFT_CONTEXTUAL_FOLLOWUP_TERMS,
   "keep",
   "know",
@@ -53,6 +53,7 @@ const NON_ANCHOR_CONTEXTUAL_FOLLOWUP_TERMS = new Set([
   "the",
   "me"
 ]);
+const EXPLICIT_REMINDER_FOLLOWUP_TERMS = new Set(["remind", "reminder"]); // lexical-boundary: exact
 
 export interface ContextualFollowupIntentResolution {
   resolvedIntentMode: ResolvedConversationIntentMode | null;
@@ -71,6 +72,51 @@ function countWhitespaceTokens(value: string): number {
     return 0;
   }
   return normalized.split(" ").length;
+}
+
+/**
+ * Returns whether session state provides a typed continuation anchor for contextual follow-up.
+ *
+ * **Why it exists:**
+ * Cue words like "later" or "status" should not create workflow or memory continuation on their
+ * own. They need current conversation state unless the request is an explicit reminder command.
+ *
+ * **What it talks to:**
+ * - Uses `LocalIntentModelSessionHints` (import `LocalIntentModelSessionHints`) from
+ *   `../../organs/languageUnderstanding/localIntentModelContracts`.
+ *
+ * @param sessionHints - Current typed session hints from the conversation runtime.
+ * @returns `true` when follow-up interpretation has a live typed anchor.
+ */
+function hasTypedContextualFollowupAnchor(
+  sessionHints: LocalIntentModelSessionHints | null
+): boolean {
+  return (
+    sessionHints?.hasReturnHandoff === true ||
+    sessionHints?.workflowContinuityActive === true ||
+    sessionHints?.domainContinuityActive === true ||
+    sessionHints?.modeContinuity !== null && sessionHints?.modeContinuity !== undefined
+  );
+}
+
+/**
+ * Returns whether the current turn is an explicit reminder request.
+ *
+ * **Why it exists:**
+ * Reminder commands may be handled without existing workflow continuity, while softer status
+ * follow-up cues should require typed session context.
+ *
+ * **What it talks to:**
+ * - Uses local exact reminder terms within this module.
+ *
+ * @param rawTokens - Tokenized current user wording.
+ * @returns `true` when the turn explicitly asks for a reminder.
+ */
+function isExplicitReminderFollowup(rawTokens: readonly string[]): boolean {
+  return (
+    rawTokens.some((token) => EXPLICIT_REMINDER_FOLLOWUP_TERMS.has(token)) &&
+    rawTokens.includes("me")
+  );
 }
 
 /**
@@ -118,7 +164,8 @@ function buildContextualFollowupIntentMode(
 function isEligibleForContextualFollowupInterpretation(
   userInput: string,
   deterministicResolution: ResolvedConversationIntentMode,
-  routingClassification: RoutingMapClassificationV1 | null
+  routingClassification: RoutingMapClassificationV1 | null,
+  sessionHints: LocalIntentModelSessionHints | null
 ): boolean {
   if (deterministicResolution.mode !== "chat") {
     return false;
@@ -159,6 +206,12 @@ function isEligibleForContextualFollowupInterpretation(
   if (turnSignals.containsWorkflowCue && !lexicalClassification.cueDetected) {
     return false;
   }
+  if (
+    !hasTypedContextualFollowupAnchor(sessionHints) &&
+    !isExplicitReminderFollowup(rawTokens)
+  ) {
+    return false;
+  }
   if (lexicalClassification.cueDetected) {
     return true;
   }
@@ -188,6 +241,58 @@ function buildContextualFollowupCandidateTokens(
 }
 
 /**
+ * Returns whether a chat turn has contextual follow-up wording that should not fall through to
+ * generic execution interpretation.
+ *
+ * **Why it exists:**
+ * When a turn says things like "keep me posted" without typed session context, the safe default is
+ * ordinary chat. Letting the generic local intent model reinterpret that wording can recreate the
+ * broad lexical authority this cleanup is removing.
+ *
+ * @param userInput - Raw current user wording.
+ * @param routingClassification - Optional deterministic routing hint for the same turn.
+ * @returns `true` when deterministic chat should be preserved instead of calling generic intent.
+ */
+function hasUnanchoredContextualFollowupCueShape(
+  userInput: string,
+  routingClassification: RoutingMapClassificationV1 | null
+): boolean {
+  if (hasTurnLocalFirstPersonStatusUpdate(userInput)) {
+    return false;
+  }
+  if (
+    routingClassification?.routeType === "execution_surface" &&
+    routingClassification.commandIntent !== null
+  ) {
+    return false;
+  }
+
+  const normalized = userInput.trim();
+  if (!normalized || normalized.includes("\n")) {
+    return false;
+  }
+  if (normalized.length > CONTEXTUAL_FOLLOWUP_MAX_INPUT_CHARS) {
+    return false;
+  }
+  const tokenCount = countWhitespaceTokens(normalized);
+  if (tokenCount === 0 || tokenCount > CONTEXTUAL_FOLLOWUP_MAX_INPUT_TOKENS) {
+    return false;
+  }
+
+  const lexicalClassification = classifyContextualFollowupLexicalCue(normalized);
+  if (lexicalClassification.cueDetected) {
+    return true;
+  }
+
+  const turnSignals = analyzeConversationChatTurnSignals(normalized);
+  const rawTokens = collectConversationChatTurnRawTokens(normalized);
+  return (
+    rawTokens.some((token) => CONTEXTUAL_MEANING_TERMS.has(token)) ||
+    turnSignals.meaningfulTerms.some((term) => CONTEXTUAL_MEANING_TERMS.has(term))
+  );
+}
+
+/**
  * Resolves one bounded contextual follow-up intent classification ahead of the generic local
  * intent-model tie-breaker.
  *
@@ -207,12 +312,16 @@ export async function resolveContextualFollowupIntentResolution(
     !isEligibleForContextualFollowupInterpretation(
       userInput,
       deterministicResolution,
-      routingClassification
+      routingClassification,
+      sessionHints
     )
   ) {
     return {
       resolvedIntentMode: null,
-      preserveDeterministic: false
+      preserveDeterministic: hasUnanchoredContextualFollowupCueShape(
+        userInput,
+        routingClassification
+      )
     };
   }
 
