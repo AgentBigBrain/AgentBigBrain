@@ -59,6 +59,8 @@ The model stays flexible. The runtime stays strict.
 What the runtime enforces:
 
 - deterministic hard constraints before model judgment
+- typed authority boundaries so lexical cues, media summaries, workflow hints, and projected notes
+  can support a decision without becoming permission
 - layered governance for risky actions
 - proof gates for certain completion claims
 - durable governance records and execution receipts

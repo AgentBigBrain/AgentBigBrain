@@ -200,6 +200,32 @@ It also handles:
 The planner is flexible, but it is still not trusted. All plans are downstream inputs to stricter
 runtime gates.
 
+### Authority boundary model
+
+The runtime distinguishes evidence from authority. Natural-language signals, token overlap,
+relationship cues, media summaries, projected notes, assistant prose, workflow hints, and mock
+artifacts can support a decision, but they do not become permission by themselves.
+
+Authority is carried through typed contracts:
+
+- semantic route metadata carries execution mode, continuation kind, memory intent, runtime-control
+  intent, explicit constraints, and build-format metadata
+- the action authority registry owns canonical planner action ids, aliases, and side-effect tier
+  metadata
+- approval grants come from external review or operator approval stores, not from model-planned
+  action params
+- profile-memory ingest policies carry source lane, source authority, memory intent, and fragment
+  policy before extraction or durable writes can run
+- active prompts carry ids, fingerprints, expiry, option ids, and risk class before a short reply can
+  authorize anything risky
+- execution, browser, process, projection, and organization success claims are receipt-driven
+
+This is the main cleanup rule for semantic brittleness: lexical candidate evidence must not become
+authority. Regex, token matching, and phrase helpers are still valid for exact commands, artifact
+parsers, proof parsers, active prompt option matching, and safety gates. They should not own fuzzy
+human meaning such as relationship state, workflow continuation, current memory truth, skill
+lifecycle permission, or mission completion.
+
 ### Skill-guided generation model
 
 Reusable generation know-how lives in the skill registry instead of hard-coded page or framework
@@ -211,7 +237,8 @@ There are two distinct skill kinds:
 
 - `markdown_instruction`: advisory planner guidance selected by request relevance. These skills can
   describe how to build a static page, a framework app, a Next.js route, a browser-recovery flow, or
-  a document-reading pass. They are not executable and do not grant authorization.
+  a document-reading pass. They are selected by exact token relevance, carry selection provenance
+  and advisory authority in the planner prompt, are not executable, and do not grant authorization.
 - `executable_module`: governed runtime artifacts that can be invoked with `run_skill` after normal
   constraints and governance.
 
@@ -368,6 +395,12 @@ Profile memory is the long-lived personal-memory layer. Inside the encrypted sto
 keeps a graph-backed truth model for observations, claims, events, and entity references. That
 lets it reason about who a claim is about, when it was observed, what is true now, what used to be
 true, and what is still unresolved or conflicting.
+
+Memory writes are source-policy gated before extraction. Direct user text, validated semantic
+candidates, voice transcripts, document text, document/model summaries, media summaries, review
+mutations, and legacy compatibility paths carry different source authority. Lower-trust sources can
+remain useful as context or review evidence, but they stay candidate/support-only unless the memory
+intent, source lane, truth governance, and family policy allow a durable write.
 
 Stage 6.86 continuity is the live runtime layer for the active conversation. It owns the
 conversation stack, entity graph, open loops, pulse state, and runtime-action continuity. It can
