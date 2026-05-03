@@ -45,6 +45,7 @@ export class ConversationManager {
   private readonly contextualFollowupInterpretationResolver?: ConversationManagerDependencies["contextualFollowupInterpretationResolver"];
   private readonly contextualReferenceInterpretationResolver?: ConversationManagerDependencies["contextualReferenceInterpretationResolver"];
   private readonly entityReferenceInterpretationResolver?: ConversationManagerDependencies["entityReferenceInterpretationResolver"]; private readonly identityInterpretationResolver?: ConversationManagerDependencies["identityInterpretationResolver"];
+  private readonly relationshipInterpretationResolver?: ConversationManagerDependencies["relationshipInterpretationResolver"];
   private readonly proposalReplyInterpretationResolver?: ConversationManagerDependencies["proposalReplyInterpretationResolver"];
   private readonly handoffControlInterpretationResolver?: ConversationManagerDependencies["handoffControlInterpretationResolver"];
   private readonly topicKeyInterpretationResolver?: ConversationManagerDependencies["topicKeyInterpretationResolver"];
@@ -94,6 +95,7 @@ export class ConversationManager {
     this.contextualReferenceInterpretationResolver = dependencies.contextualReferenceInterpretationResolver;
     this.entityReferenceInterpretationResolver = dependencies.entityReferenceInterpretationResolver;
     this.identityInterpretationResolver = dependencies.identityInterpretationResolver;
+    this.relationshipInterpretationResolver = dependencies.relationshipInterpretationResolver;
     this.proposalReplyInterpretationResolver = dependencies.proposalReplyInterpretationResolver;
     this.handoffControlInterpretationResolver = dependencies.handoffControlInterpretationResolver;
     this.topicKeyInterpretationResolver = dependencies.topicKeyInterpretationResolver;
@@ -265,6 +267,7 @@ export class ConversationManager {
       entityReferenceInterpretationResolver: this.entityReferenceInterpretationResolver,
       handoffControlInterpretationResolver: this.handoffControlInterpretationResolver,
       identityInterpretationResolver: this.identityInterpretationResolver,
+      relationshipInterpretationResolver: this.relationshipInterpretationResolver,
       proposalReplyInterpretationResolver: this.proposalReplyInterpretationResolver,
       topicKeyInterpretationResolver: this.topicKeyInterpretationResolver,
       intentInterpreterConfidenceThreshold: this.intentInterpreterConfidenceThreshold,

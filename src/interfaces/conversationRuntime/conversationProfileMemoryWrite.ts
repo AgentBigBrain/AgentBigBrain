@@ -10,6 +10,9 @@ import type {
   ProfileMediaIngestInput,
   ProfileValidatedFactCandidateInput
 } from "../../core/profileMemoryRuntime/contracts";
+import type {
+  CreateProfileEpisodeRecordInput
+} from "../../core/profileMemoryRuntime/profileMemoryEpisodeContracts";
 import {
   buildProfileMediaIngestInputFromEnvelope
 } from "../../core/profileMemory";
@@ -28,6 +31,7 @@ export interface ConversationProfileMemoryWriteRequestInput {
   userInput?: string;
   media?: ConversationInboundMediaEnvelope | null;
   validatedFactCandidates?: readonly ProfileValidatedFactCandidateInput[];
+  additionalEpisodeCandidates?: readonly CreateProfileEpisodeRecordInput[];
   memoryIntent?: ConversationRouteMemoryIntent | null;
 }
 
@@ -86,12 +90,16 @@ export function buildConversationProfileMemoryWriteRequest(
     ...(validatedFactCandidates.length > 0
       ? { validatedFactCandidates }
       : {}),
+    ...((input.additionalEpisodeCandidates?.length ?? 0) > 0
+      ? { additionalEpisodeCandidates: input.additionalEpisodeCandidates }
+      : {}),
     mediaIngest,
     ingestPolicy: buildProfileMemoryIngestPolicy({
       memoryIntent: input.memoryIntent ?? null,
       sourceSurface,
       sourceLane: resolveConversationProfileMemorySourceLane(mediaIngest),
-      hasValidatedFactCandidates: validatedFactCandidates.length > 0
+      hasValidatedFactCandidates: validatedFactCandidates.length > 0,
+      hasStructuredEpisodeCandidates: (input.additionalEpisodeCandidates?.length ?? 0) > 0
     }),
     provenance: {
       conversationId: input.session.conversationId,

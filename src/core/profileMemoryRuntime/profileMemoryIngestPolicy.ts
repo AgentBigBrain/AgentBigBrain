@@ -31,6 +31,7 @@ interface BuildProfileMemoryIngestPolicyInput {
   sourceSurface: ProfileMemorySourceSurface;
   sourceLane?: ProfileMemoryIngestSourceLane;
   hasValidatedFactCandidates?: boolean;
+  hasStructuredEpisodeCandidates?: boolean;
 }
 
 interface NormalizeProfileMemoryIngestPolicyOptions {
@@ -221,7 +222,10 @@ export function buildProfileMemoryIngestPolicy(
   input: BuildProfileMemoryIngestPolicyInput
 ): ProfileMemoryIngestPolicy {
   const sourceLane = input.sourceLane ?? "direct_user_text";
-  if (input.hasValidatedFactCandidates && input.memoryIntent !== "none") {
+  if (
+    (input.hasValidatedFactCandidates || input.hasStructuredEpisodeCandidates) &&
+    input.memoryIntent !== "none"
+  ) {
     return {
       memoryIntent: input.memoryIntent ?? "profile_update",
       sourceLane: "validated_model_candidate",
@@ -230,7 +234,7 @@ export function buildProfileMemoryIngestPolicy(
       allowDirectRelationshipExtraction: false,
       allowGenericProfileFactExtraction: false,
       allowCommitmentExtraction: false,
-      allowEpisodeSupportExtraction: false,
+      allowEpisodeSupportExtraction: input.hasStructuredEpisodeCandidates === true,
       allowInferredResolution: false,
       fragmentPolicy: "current_truth_allowed",
       policySource: "structured_candidate",

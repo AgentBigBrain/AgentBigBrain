@@ -26,7 +26,8 @@ import type { BrowserSessionSnapshot } from "../../organs/liveRun/browserSession
 import type {
   ContextualReferenceInterpretationResolver,
   EntityReferenceInterpretationResolver,
-  IdentityInterpretationResolver
+  IdentityInterpretationResolver,
+  RelationshipInterpretationResolver
 } from "../../organs/languageUnderstanding/localIntentModelContracts";
 import { renderSkillInventory } from "../../organs/skillRegistry/skillInspection";
 import type {
@@ -64,6 +65,9 @@ import {
   buildModelAssistedSelfIdentityReply
 } from "./selfIdentityPrompting";
 import { buildConversationProfileMemoryWriteRequest } from "./conversationProfileMemoryWrite";
+import {
+  buildRelationshipValidatedFactCandidates
+} from "./relationshipMemoryInterpretationSupport";
 
 export interface DirectCasualConversationReplyInput {
   session: ConversationSession;
@@ -76,6 +80,7 @@ export interface DirectCasualConversationReplyInput {
   openContinuityReadSession?: OpenConversationContinuityReadSession;
   rememberConversationProfileInput?: RememberConversationProfileInput;
   identityInterpretationResolver?: IdentityInterpretationResolver;
+  relationshipInterpretationResolver?: RelationshipInterpretationResolver;
   contextualReferenceInterpretationResolver?: ContextualReferenceInterpretationResolver;
   entityReferenceInterpretationResolver?: EntityReferenceInterpretationResolver;
   getEntityGraph?: GetConversationEntityGraph;
@@ -123,6 +128,8 @@ async function rememberDirectConversationProfileInputIfNeeded(
   media: ConversationInboundMediaEnvelope | null,
   receivedAt: string,
   memoryIntent: ConversationRouteMemoryIntent | null,
+  routingClassification: RoutingMapClassificationV1 | null,
+  relationshipInterpretationResolver?: RelationshipInterpretationResolver,
   rememberConversationProfileInput?: RememberConversationProfileInput
 ): Promise<void> {
   if (
@@ -132,7 +139,27 @@ async function rememberDirectConversationProfileInputIfNeeded(
   }
   const hasExplicitWriteSignal = hasExactConversationalProfileWriteSignal(userInput);
   const routeAllowsProfileWrite = memoryIntent === "profile_update";
-  if (!hasExplicitWriteSignal && !routeAllowsProfileWrite) {
+  const shouldAskSemanticRelationshipInterpreter =
+    typeof relationshipInterpretationResolver === "function" &&
+    !/[?]/.test(userInput);
+  const relationshipCandidates = shouldAskSemanticRelationshipInterpreter
+    ? await buildRelationshipValidatedFactCandidates({
+      session,
+      userInput,
+      receivedAt,
+      routingClassification,
+      relationshipInterpretationResolver
+    })
+    : {
+      validatedFactCandidates: [],
+      additionalEpisodeCandidates: []
+    };
+  if (
+    !hasExplicitWriteSignal &&
+    !routeAllowsProfileWrite &&
+    relationshipCandidates.validatedFactCandidates.length === 0 &&
+    relationshipCandidates.additionalEpisodeCandidates.length === 0
+  ) {
     return;
   }
   await rememberConversationProfileInput(
@@ -141,6 +168,8 @@ async function rememberDirectConversationProfileInputIfNeeded(
       userInput,
       media,
       receivedAt,
+      validatedFactCandidates: relationshipCandidates.validatedFactCandidates,
+      additionalEpisodeCandidates: relationshipCandidates.additionalEpisodeCandidates,
       memoryIntent:
         memoryIntent === "none"
           ? null
@@ -295,6 +324,8 @@ export async function buildDirectCasualConversationReply(
     input.media,
     input.receivedAt,
     input.semanticRoute?.memoryIntent ?? null,
+    input.routingClassification,
+    input.relationshipInterpretationResolver,
     input.rememberConversationProfileInput
   );
   const profileUpdateSignal =

@@ -36,6 +36,9 @@ import type {
   LocalIntentModelRequest,
   LocalIntentModelResolver,
   LocalIntentModelSignal,
+  RelationshipInterpretationRequest,
+  RelationshipInterpretationResolver,
+  RelationshipInterpretationSignal,
   StatusRecallBoundaryInterpretationRequest,
   StatusRecallBoundaryInterpretationResolver,
   StatusRecallBoundaryInterpretationSignal,
@@ -194,6 +197,21 @@ export async function routeIdentityInterpretationModel(
   request: IdentityInterpretationRequest,
   resolver?: IdentityInterpretationResolver
 ): Promise<IdentityInterpretationSignal | null> {
+  return routeOptionalLocalModelTask(request, resolver);
+}
+
+/**
+ * Executes the optional local relationship-interpretation task and fails closed on missing
+ * resolvers or errors.
+ *
+ * @param request - Canonical relationship-interpretation request.
+ * @param resolver - Optional relationship interpreter.
+ * @returns Relationship interpretation when one was produced safely, otherwise `null`.
+ */
+export async function routeRelationshipInterpretationModel(
+  request: RelationshipInterpretationRequest,
+  resolver?: RelationshipInterpretationResolver
+): Promise<RelationshipInterpretationSignal | null> {
   return routeOptionalLocalModelTask(request, resolver);
 }
 

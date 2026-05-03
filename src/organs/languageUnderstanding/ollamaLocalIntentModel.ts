@@ -25,6 +25,7 @@ import {
 } from "./ollamaLocalIntentPrompt";
 
 export { createOllamaIdentityInterpretationResolver } from "./ollamaIdentityInterpretation";
+export { createOllamaRelationshipInterpretationResolver } from "./ollamaRelationshipInterpretation";
 export { createOllamaProposalReplyInterpretationResolver } from "./ollamaProposalReplyInterpretation";
 export { createOllamaContinuationInterpretationResolver } from "./ollamaContinuationInterpretation";
 export { createOllamaAutonomyBoundaryInterpretationResolver } from "./ollamaAutonomyBoundaryInterpretation";

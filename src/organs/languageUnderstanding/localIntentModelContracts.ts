@@ -9,6 +9,9 @@ import type {
 } from "../../interfaces/conversationRuntime/intentModeContracts";
 import type { EntityNodeV1 } from "../../core/runtimeTypes/interfaceTypes";
 import type {
+  ProfileSemanticRelationshipCandidateInput
+} from "../../core/profileMemoryRuntime/contracts";
+import type {
   ConversationDomainLane,
   ConversationIntentMode,
   ConversationReturnHandoffStatus
@@ -68,6 +71,37 @@ export interface IdentityInterpretationSignal {
   candidateValue: string | null;
   confidence: LocalIntentModelConfidence;
   shouldPersist: boolean;
+  explanation: string;
+}
+
+export type RelationshipInterpretationKind =
+  | "relationship_candidates"
+  | "non_relationship_memory"
+  | "uncertain";
+
+export interface RelationshipInterpretationRequest {
+  userInput: string;
+  routingClassification: RoutingMapClassificationV1 | null;
+  sessionHints?: LocalIntentModelSessionHints | null;
+  recentTurns?: readonly ContextualReferenceInterpretationTurn[];
+}
+
+export interface RelationshipInterpretationEpisodeCandidate {
+  title: string;
+  summary: string;
+  evidenceText: string;
+  entityRefs?: readonly string[];
+  tags?: readonly string[];
+  sensitive?: boolean;
+  confidence?: number;
+}
+
+export interface RelationshipInterpretationSignal {
+  source: "local_intent_model";
+  kind: RelationshipInterpretationKind;
+  candidates: readonly ProfileSemanticRelationshipCandidateInput[];
+  episodeCandidates?: readonly RelationshipInterpretationEpisodeCandidate[];
+  confidence: LocalIntentModelConfidence;
   explanation: string;
 }
 
@@ -421,6 +455,10 @@ export type ContextualReferenceInterpretationResolver = (
 export type TopicKeyInterpretationResolver = (
   request: TopicKeyInterpretationRequest
 ) => Promise<TopicKeyInterpretationSignal | null>;
+
+export type RelationshipInterpretationResolver = (
+  request: RelationshipInterpretationRequest
+) => Promise<RelationshipInterpretationSignal | null>;
 
 export type EntityReferenceInterpretationResolver = (
   request: EntityReferenceInterpretationRequest

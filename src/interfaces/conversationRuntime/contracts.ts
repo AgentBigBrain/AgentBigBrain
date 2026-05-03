@@ -35,6 +35,7 @@ import type {
   HandoffControlInterpretationResolver,
   IdentityInterpretationResolver,
   LocalIntentModelResolver,
+  RelationshipInterpretationResolver,
   StatusRecallBoundaryInterpretationResolver,
   TopicKeyInterpretationResolver
 } from "../../organs/languageUnderstanding/localIntentModelContracts";
@@ -102,6 +103,7 @@ export interface ConversationIngressDependencies extends ConversationIngressRule
   entityReferenceInterpretationResolver?: EntityReferenceInterpretationResolver;
   handoffControlInterpretationResolver?: HandoffControlInterpretationResolver;
   identityInterpretationResolver?: IdentityInterpretationResolver;
+  relationshipInterpretationResolver?: RelationshipInterpretationResolver;
   proposalReplyInterpretationResolver?: ProposalReplyInterpretationResolver;
   topicKeyInterpretationResolver?: TopicKeyInterpretationResolver;
   intentInterpreterConfidenceThreshold: number;

@@ -363,6 +363,13 @@ function buildFactGovernanceDecision(candidate: ProfileFactUpsertInput): Profile
     return buildDecision("contact.school_association", "assistant_inference", "quarantine", "unsupported_source");
   }
   if (/^contact\.[^.]+\.context\./.test(normalizedKey)) {
+    if (
+      isStructuredCurrentRelationshipSource ||
+      isStructuredHistoricalRelationshipSource ||
+      isStructuredSeveredRelationshipSource
+    ) {
+      return buildDecision("contact.context", "validated_structured_candidate", "support_only_legacy", "semantic_relationship_context_support_only");
+    }
     if (isValidatedStructuredSource) {
       return buildDecision("contact.context", "validated_structured_candidate", "quarantine", "unsupported_source");
     }

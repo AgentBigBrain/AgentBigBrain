@@ -6,10 +6,12 @@ import type { ProfileValidatedFactCandidateInput } from "./contracts";
 import type { ProfileSemanticRelationshipCandidateInput } from "./contracts";
 import {
   normalizeRelationshipDescriptor,
-  normalizeProfileValue
+  normalizeProfileValue,
+  stableContextHash
 } from "./profileMemoryNormalization";
 import {
   buildDisplayNameContactToken,
+  buildQualifiedContactToken,
   sanitizeCapturedContactDisplayName,
   trimAssociationValue
 } from "./profileMemoryContactExtractionSupport";
@@ -110,7 +112,10 @@ export function buildValidatedSemanticRelationshipFactCandidates(
       continue;
     }
     const displayName = sanitizeCapturedContactDisplayName(candidate.objectDisplayName);
-    const contactToken = buildDisplayNameContactToken(displayName);
+    const qualifier = normalizeProfileValue(candidate.objectQualifier ?? "");
+    const contactToken = qualifier
+      ? buildQualifiedContactToken(displayName, qualifier)
+      : buildDisplayNameContactToken(displayName);
     const relationLabel = normalizeRelationshipDescriptor(candidate.relationLabel);
     if (!contactToken || !relationLabel || !SEMANTIC_RELATIONSHIP_DESCRIPTORS.has(relationLabel)) {
       continue;
@@ -123,6 +128,7 @@ export function buildValidatedSemanticRelationshipFactCandidates(
     const metadata = {
       subject: candidate.subject,
       objectDisplayName: displayName,
+      ...(qualifier ? { objectQualifier: qualifier } : {}),
       relationLabel,
       lifecycle: candidate.lifecycle,
       sourceFamily: candidate.sourceFamily,
@@ -159,6 +165,17 @@ export function buildValidatedSemanticRelationshipFactCandidates(
       output.push({
         key: `contact.${contactToken}.work_association`,
         candidateValue: workAssociation,
+        sensitive: candidate.sensitive === true,
+        source,
+        confidence,
+        relationshipCandidate: metadata
+      });
+    }
+    const contextText = normalizeProfileValue(candidate.evidenceSpan.text);
+    if (contextText) {
+      output.push({
+        key: `contact.${contactToken}.context.${stableContextHash(contextText)}`,
+        candidateValue: contextText,
         sensitive: candidate.sensitive === true,
         source,
         confidence,

@@ -15,6 +15,7 @@ import type {
   HandoffControlInterpretationResolver,
   IdentityInterpretationResolver,
   LocalIntentModelResolver,
+  RelationshipInterpretationResolver,
   StatusRecallBoundaryInterpretationResolver,
   TopicKeyInterpretationResolver
 } from "./localIntentModelContracts";
@@ -32,6 +33,7 @@ import {
   createOllamaIdentityInterpretationResolver,
   createOllamaLocalIntentModelResolver,
   createOllamaProposalReplyInterpretationResolver,
+  createOllamaRelationshipInterpretationResolver,
   createOllamaStatusRecallBoundaryInterpretationResolver,
   createOllamaTopicKeyInterpretationResolver,
   probeOllamaLocalIntentModel,
@@ -164,6 +166,24 @@ export function createIdentityInterpretationResolverFromEnv(
     return undefined;
   }
   return createOllamaIdentityInterpretationResolver(config, deps);
+}
+
+/**
+ * Creates the optional relationship-memory interpretation resolver from env.
+ *
+ * @param env - Environment source used for configuration.
+ * @param deps - Optional dependency overrides for tests.
+ * @returns Configured relationship interpreter when enabled, otherwise `undefined`.
+ */
+export function createRelationshipInterpretationResolverFromEnv(
+  env: NodeJS.ProcessEnv = process.env,
+  deps: LocalIntentModelRuntimeDependencies = {}
+): RelationshipInterpretationResolver | undefined {
+  const config = createLocalIntentModelRuntimeConfigFromEnv(env);
+  if (!config.enabled) {
+    return undefined;
+  }
+  return createOllamaRelationshipInterpretationResolver(config, deps);
 }
 
 /**

@@ -9,6 +9,7 @@ import type {
   HandoffControlInterpretationResolver,
   IdentityInterpretationResolver,
   LocalIntentModelResolver,
+  RelationshipInterpretationResolver,
   StatusRecallBoundaryInterpretationResolver,
   TopicKeyInterpretationResolver
 } from "../../organs/languageUnderstanding/localIntentModelContracts";
@@ -51,6 +52,7 @@ export interface ConversationRoutingDependencies {
   entityReferenceInterpretationResolver?: EntityReferenceInterpretationResolver;
   handoffControlInterpretationResolver?: HandoffControlInterpretationResolver;
   identityInterpretationResolver?: IdentityInterpretationResolver;
+  relationshipInterpretationResolver?: RelationshipInterpretationResolver;
   topicKeyInterpretationResolver?: TopicKeyInterpretationResolver;
   getEntityGraph?: GetConversationEntityGraph;
   abortActiveAutonomousRun?(): boolean;

@@ -11,7 +11,8 @@ import type { BrowserSessionSnapshot } from "../../organs/liveRun/browserSession
 import type {
   ContextualReferenceInterpretationResolver,
   EntityReferenceInterpretationResolver,
-  IdentityInterpretationResolver
+  IdentityInterpretationResolver,
+  RelationshipInterpretationResolver
 } from "../../organs/languageUnderstanding/localIntentModelContracts";
 import { buildExplicitBrowserOwnershipNoOpReply } from "../conversationExecutionInputPolicy";
 import {
@@ -106,6 +107,7 @@ export interface ConversationRoutingInlineReplyDependencies {
   directCasualChatEnabled?: boolean;
   runDirectConversationTurn?: RunDirectConversationTurn;
   identityInterpretationResolver?: IdentityInterpretationResolver;
+  relationshipInterpretationResolver?: RelationshipInterpretationResolver;
   contextualReferenceInterpretationResolver?: ContextualReferenceInterpretationResolver;
   entityReferenceInterpretationResolver?: EntityReferenceInterpretationResolver;
 }
@@ -253,6 +255,7 @@ export async function maybeResolveConversationRoutingInlineReply(
         openContinuityReadSession: input.deps.openContinuityReadSession,
         rememberConversationProfileInput: input.deps.rememberConversationProfileInput,
         identityInterpretationResolver: input.deps.identityInterpretationResolver,
+        relationshipInterpretationResolver: input.deps.relationshipInterpretationResolver,
         contextualReferenceInterpretationResolver:
           input.deps.contextualReferenceInterpretationResolver,
         entityReferenceInterpretationResolver:
@@ -372,6 +375,7 @@ export async function maybeResolveConversationRoutingInlineReply(
     openContinuityReadSession: input.deps.openContinuityReadSession,
     rememberConversationProfileInput: input.deps.rememberConversationProfileInput,
     identityInterpretationResolver: input.deps.identityInterpretationResolver,
+    relationshipInterpretationResolver: input.deps.relationshipInterpretationResolver,
     contextualReferenceInterpretationResolver: input.deps.contextualReferenceInterpretationResolver,
     entityReferenceInterpretationResolver: input.deps.entityReferenceInterpretationResolver,
     getEntityGraph: input.deps.getEntityGraph,

@@ -206,7 +206,9 @@ export const PROFILE_MEMORY_FAMILY_REGISTRY: Readonly<
     inventoryPolicy: "bounded_multi_value",
     sourceAuthorityMode: "exact_source_only",
     compatibilityProjection: PROFILE_MEMORY_CONTACT_COMPATIBILITY_PROJECTION_TABLE["contact.context"],
-    adjacentDomainPolicy: withAdjacentDomainOverrides({})
+    adjacentDomainPolicy: withAdjacentDomainOverrides({
+      structured_conversation: "support_only"
+    })
   },
   "contact.entity_hint": {
     family: "contact.entity_hint",
@@ -258,7 +260,8 @@ export const PROFILE_MEMORY_FAMILY_REGISTRY: Readonly<
     sourceAuthorityMode: "exact_source_only",
     compatibilityProjection: "episode_only",
     adjacentDomainPolicy: withAdjacentDomainOverrides({
-      assistant_inference: "truth_authoritative"
+      assistant_inference: "truth_authoritative",
+      structured_conversation: "truth_authoritative"
     })
   },
   "episode.resolution": {

@@ -11,6 +11,7 @@ export const SEMANTIC_RELATIONSHIP_SEVERED_SOURCE =
   "conversation.relationship_interpretation_severed";
 export const SEMANTIC_RELATIONSHIP_UNCERTAIN_SOURCE =
   "conversation.relationship_interpretation_uncertain";
+export const SEMANTIC_EPISODE_CANDIDATE_SOURCE = "conversation.episode_interpretation";
 
 export const SEMANTIC_RELATIONSHIP_SOURCES = new Set([
   SEMANTIC_RELATIONSHIP_CURRENT_SOURCE,

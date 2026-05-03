@@ -147,7 +147,7 @@ function validateSemanticRelationshipFactCandidate(
   const normalizedKey = canonicalizeProfileKey(candidate.key);
   if (
     !candidate.relationshipCandidate ||
-    !/^contact\.[^.]+\.(name|relationship|work_association)$/.test(normalizedKey) ||
+    !/^contact\.[^.]+\.(?:name|relationship|work_association|context\.[a-f0-9]{8})$/.test(normalizedKey) ||
     !isSemanticRelationshipCandidateSource(candidate.source)
   ) {
     return null;

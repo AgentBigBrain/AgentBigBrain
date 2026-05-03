@@ -20,6 +20,7 @@ import {
   createIdentityInterpretationResolverFromEnv,
   createLocalIntentModelResolverFromEnv,
   createProposalReplyInterpretationResolverFromEnv,
+  createRelationshipInterpretationResolverFromEnv,
   createStatusRecallBoundaryInterpretationResolverFromEnv,
   createTopicKeyInterpretationResolverFromEnv,
   isLocalIntentModelRuntimeReady,
@@ -68,6 +69,7 @@ interface InterfaceRuntimeOptionalDependencies {
   entityTypeInterpretationResolver?: ReturnType<typeof createEntityTypeInterpretationResolverFromEnv>;
   handoffControlInterpretationResolver?: ReturnType<typeof createHandoffControlInterpretationResolverFromEnv>;
   identityInterpretationResolver?: ReturnType<typeof createIdentityInterpretationResolverFromEnv>;
+  relationshipInterpretationResolver?: ReturnType<typeof createRelationshipInterpretationResolverFromEnv>;
   proposalReplyInterpretationResolver?: ReturnType<typeof createProposalReplyInterpretationResolverFromEnv>;
   topicKeyInterpretationResolver?: ReturnType<typeof createTopicKeyInterpretationResolverFromEnv>;
 }
@@ -132,6 +134,7 @@ function createTelegramGatewayRuntime(
     entityTypeInterpretationResolver: optionalDependencies.entityTypeInterpretationResolver,
     handoffControlInterpretationResolver: optionalDependencies.handoffControlInterpretationResolver,
     identityInterpretationResolver: optionalDependencies.identityInterpretationResolver,
+    relationshipInterpretationResolver: optionalDependencies.relationshipInterpretationResolver,
     proposalReplyInterpretationResolver: optionalDependencies.proposalReplyInterpretationResolver,
     topicKeyInterpretationResolver: optionalDependencies.topicKeyInterpretationResolver
   });
@@ -192,6 +195,7 @@ function createDiscordGatewayRuntime(
     entityTypeInterpretationResolver: optionalDependencies.entityTypeInterpretationResolver,
     handoffControlInterpretationResolver: optionalDependencies.handoffControlInterpretationResolver,
     identityInterpretationResolver: optionalDependencies.identityInterpretationResolver,
+    relationshipInterpretationResolver: optionalDependencies.relationshipInterpretationResolver,
     proposalReplyInterpretationResolver: optionalDependencies.proposalReplyInterpretationResolver,
     topicKeyInterpretationResolver: optionalDependencies.topicKeyInterpretationResolver
   });
@@ -510,6 +514,7 @@ export async function runInterfaceRuntime(): Promise<void> {
   const entityTypeInterpretationResolver = createEntityTypeInterpretationResolverFromEnv();
   const handoffControlInterpretationResolver = createHandoffControlInterpretationResolverFromEnv();
   const identityInterpretationResolver = createIdentityInterpretationResolverFromEnv();
+  const relationshipInterpretationResolver = createRelationshipInterpretationResolverFromEnv();
   const proposalReplyInterpretationResolver = createProposalReplyInterpretationResolverFromEnv();
   const topicKeyInterpretationResolver = createTopicKeyInterpretationResolverFromEnv();
   logCrossPlatformProfileMemoryWarningIfNeeded(config);
@@ -539,6 +544,7 @@ export async function runInterfaceRuntime(): Promise<void> {
     entityTypeInterpretationResolver,
     handoffControlInterpretationResolver,
     identityInterpretationResolver,
+    relationshipInterpretationResolver,
     proposalReplyInterpretationResolver,
     topicKeyInterpretationResolver
   });

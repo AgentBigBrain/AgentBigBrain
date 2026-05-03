@@ -6,7 +6,10 @@ import { type AgentPulseDecision, type AgentPulseReason } from "../agentPulse";
 import { type ProfileFactRecord, type ProfileMutationAuditMetadataV1 } from "../profileMemory";
 import type { ConversationDomainLane } from "../sessionContext";
 import type { SourceAuthority } from "../sourceAuthority";
-import type { ProfileEpisodeRecord } from "./profileMemoryEpisodeContracts";
+import type {
+  CreateProfileEpisodeRecordInput,
+  ProfileEpisodeRecord
+} from "./profileMemoryEpisodeContracts";
 import type { ProfileMemoryMutationEnvelope } from "./profileMemoryMutationEnvelopeContracts";
 import type {
   ProfileMemoryAsOfContract,
@@ -175,6 +178,7 @@ export interface ProfileSemanticRelationshipEvidenceSpan {
 export interface ProfileValidatedRelationshipCandidateMetadata {
   subject: ProfileSemanticRelationshipSubject;
   objectDisplayName: string;
+  objectQualifier?: string;
   relationLabel: string;
   lifecycle: ProfileSemanticRelationshipLifecycle;
   sourceFamily: ProfileSemanticRelationshipSourceFamily;
@@ -185,6 +189,7 @@ export interface ProfileValidatedRelationshipCandidateMetadata {
 export interface ProfileSemanticRelationshipCandidateInput {
   subject: ProfileSemanticRelationshipSubject;
   objectDisplayName: string;
+  objectQualifier?: string;
   relationLabel: string;
   lifecycle: ProfileSemanticRelationshipLifecycle;
   workAssociation?: string;
@@ -272,6 +277,7 @@ export interface ProfileMediaIngestInput {
 export interface ProfileMemoryIngestRequest {
   userInput?: string;
   validatedFactCandidates?: readonly ProfileValidatedFactCandidateInput[];
+  additionalEpisodeCandidates?: readonly CreateProfileEpisodeRecordInput[];
   mediaIngest?: ProfileMediaIngestInput;
   provenance?: ProfileMemoryWriteProvenance;
   ingestPolicy?: ProfileMemoryIngestPolicy;
