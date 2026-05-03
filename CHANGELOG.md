@@ -8,6 +8,16 @@ stay aligned with `package.json`.
 ## [Unreleased]
 
 ### Added
+
+### Changed
+
+### Fixed
+
+### Security
+
+## [0.3.0] - 2026-05-03
+
+### Added
 - Added source-labeled media interpretation layers, optional policy-gated document meaning, and a
   Telegram completion matrix smoke that writes review-safe PASS/FAIL/BLOCKED evidence.
 - Added governed skill lifecycle actions for updating, approving, rejecting, and deprecating
