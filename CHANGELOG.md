@@ -10,6 +10,8 @@ stay aligned with `package.json`.
 ### Added
 
 ### Changed
+- Expanded the public README and docs map with clearer positioning, authority-boundary diagrams,
+  and concepts references for new readers.
 
 ### Fixed
 

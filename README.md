@@ -6,55 +6,100 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-blue)](./tsconfig.json)
 [![Runtime deps](https://img.shields.io/badge/runtime_deps-2-brightgreen)](./package.json)
 
-Governance-first TypeScript runtime for AI assistants, autonomous agents, memory, skills, and
-audited local execution.
+Governance-first TypeScript AI agent runtime for semantic routing, governed execution, durable
+memory, reusable skills, browser/process work, and receipt-backed automation.
 
-AgentBigBrain is an open-source AI agent runtime for people building assistants that need to do
-real work without handing every decision to a language model. The model can plan, explain, write,
-edit, and propose actions. The runtime decides what is allowed to happen, records why it was
-allowed, and verifies whether claimed side effects actually occurred.
+AgentBigBrain is an open-source AI agent runtime for builders who want assistants that can do real
+work without turning every decision into a prompt. Models interpret and propose. Typed contracts
+decide authority. Deterministic runtime policy enforces safety. Receipts prove what happened.
 
 It is designed for governed AI automation across CLI runs, bounded autonomous loops, Telegram and
-Discord assistant interfaces, HTTP federation, local browser and process work, durable memory,
-Markdown skill guidance, Obsidian-readable projections, and multiple model backends under one
-control model.
+Discord assistant interfaces, HTTP federation, local browser and process verification, durable
+memory, Markdown skill-guided generation, Obsidian-readable AI memory projection, and multiple model
+backends under one control model.
 
 Start here:
 
+- [Docs index](./docs/README.md)
 - [Setup and environment wiring](./docs/SETUP.md)
+- [Short architecture overview](./docs/ARCHITECTURE_OVERVIEW.md)
 - [Architecture reference](./docs/ARCHITECTURE.md)
+- [Concepts glossary](./docs/CONCEPTS.md)
 - [Command examples](./docs/COMMAND_EXAMPLES.md)
 - [Runtime error and env map](./docs/ERROR_CODE_ENV_MAP.md)
 
-## What AgentBigBrain does
-
-AgentBigBrain is not a chatbot wrapper and it is not a loose shell around a model. It is a runtime
-for governed AI agents that can carry context across conversations, use reusable skills, work with
-files and browsers, and produce reviewable evidence for risky or important actions.
-
-Core capabilities:
-
-- AI assistant runtime for Telegram, Discord, CLI, and federated HTTP entrypoints
-- bounded autonomous execution with explicit iteration, rollover, and daemon safeguards
-- typed planner actions that pass through hard constraints, governors, and proof gates
-- local live-run support for managed processes, browser previews, and workspace verification
-- profile memory, episodic memory, semantic memory, workflow learning, and continuity tracking
-- Markdown instruction skills for site/app generation, browser recovery, document reading, and
-  operator-defined workflows
-- media and document understanding with source-labeled, review-safe memory policy
-- Obsidian projection for human-readable memory, governance, receipts, and workflow evidence
-- model adapters for mock, OpenAI API, Codex OAuth, Ollama, and OpenAI-compatible endpoints
-
-At the npm runtime package level, the project depends on `ws` and `onnxruntime-node`. In practice,
-the full runtime also depends on your chosen backend, auth state, and any optional services you
-enable, such as Telegram, Discord, or Ollama.
-
-## Why this repository exists
+## Why AgentBigBrain exists
 
 Most agent systems are good at proposing work. Fewer are good at proving that the work was safe,
 allowed, and actually executed. AgentBigBrain is built around that gap.
 
 The model stays flexible. The runtime stays strict.
+
+AgentBigBrain is not a chatbot wrapper and it is not a loose shell around a model. It is a
+governed AI agent runtime that can carry context across conversations, use reusable skills, work
+with files and browsers, and produce reviewable evidence for risky or important actions.
+
+## What makes it different
+
+- **Semantic routing with typed authority**: fuzzy language becomes route metadata, memory
+  candidates, or clarification state; it does not become permission by itself.
+- **Governed tool execution**: file, shell, network, browser, process, skill, and memory actions
+  pass through deterministic constraints and governance.
+- **Receipt-backed truth**: final answers should be backed by execution receipts, browser/process
+  evidence, policy reason codes, or memory provenance.
+- **Durable memory with source policy**: profile memory, episodic memory, semantic memory, and
+  workflow learning are separated by authority and purpose.
+- **Skill-guided generation**: reusable Markdown skills guide the model without granting side
+  effects or replacing safety policy.
+- **Human-readable projection**: Obsidian and JSON mirrors expose memory, receipts, governance, and
+  workflow evidence as read models, not truth sources.
+- **Interface-ready runtime**: Telegram, Discord, CLI, and federation entrypoints share one governed
+  runtime core.
+
+## Architecture at a glance
+
+```mermaid
+flowchart LR
+  User["User / CLI / Telegram / Discord / Federation"] --> Intent["Semantic route + source authority"]
+  Intent --> Planner["Planner proposes typed actions"]
+  Planner --> Registry["Action authority registry"]
+  Registry --> Constraints["Hard constraints + preflight"]
+  Constraints --> Governance["Governors + approvals"]
+  Governance --> Executor["Executor / runtime actions"]
+  Executor --> Receipts["Execution receipts + evidence"]
+  Receipts --> Response["User-facing result"]
+
+  Intent --> MemoryGate["Memory ingest policy"]
+  MemoryGate --> Memory["Profile / episodic / semantic memory"]
+  Memory --> Projection["Obsidian / JSON projection"]
+```
+
+The important rule:
+
+> Lexical candidate evidence must not become authority.
+
+Regexes, token matching, and phrase helpers are still valid for exact commands, path/URL/id
+parsing, proof parsing, active prompt option matching, and safety gates. They should not own fuzzy
+human meaning such as relationship state, workflow continuation, durable memory truth, skill
+lifecycle permission, or mission completion.
+
+## What AgentBigBrain does today
+
+| Area | Capability |
+|---|---|
+| Agent runtime | Single task runs, bounded autonomous loops, guarded daemon mode |
+| Interfaces | CLI, Telegram, Discord, authenticated federation |
+| Planning | Model-planned typed actions with repair, constraints, and governance |
+| Local execution | Files, shell, managed processes, localhost readiness, browser verification |
+| Memory | Graph-backed profile memory, episodic memory, semantic memory, workflow learning |
+| Skills | Markdown instruction skills and governed executable skills |
+| Media | Images, voice notes, documents, and short video metadata/captions with source-labeled layers |
+| Projection | Obsidian vault mirror and JSON mirror for reviewable memory/evidence |
+| Backends | Mock, OpenAI API, Codex OAuth, Ollama, OpenAI-compatible endpoints |
+
+At the npm runtime package level, the project depends on `ws` and `onnxruntime-node`. In practice,
+the full runtime also depends on your chosen backend, auth state, and any optional services you
+enable, such as Telegram, Discord, or Ollama.
 
 What the runtime enforces:
 
@@ -343,6 +388,9 @@ conversation behavior, live-run proof, and interface flows.
 
 ## Documentation map
 
+- [Docs index](./docs/README.md)
+- [Architecture overview](./docs/ARCHITECTURE_OVERVIEW.md)
+- [Concepts glossary](./docs/CONCEPTS.md)
 - [Architecture reference](./docs/ARCHITECTURE.md)
 - [Setup and environment wiring](./docs/SETUP.md)
 - [Command examples](./docs/COMMAND_EXAMPLES.md)

@@ -8,6 +8,9 @@ runtime is assembled, where the main responsibilities live, and which invariants
 
 Operator references:
 
+- docs index: [README.md](./README.md)
+- short visual overview: [ARCHITECTURE_OVERVIEW.md](./ARCHITECTURE_OVERVIEW.md)
+- concepts glossary: [CONCEPTS.md](./CONCEPTS.md)
 - setup and environment wiring: [SETUP.md](./SETUP.md)
 - command and prompt examples: [COMMAND_EXAMPLES.md](./COMMAND_EXAMPLES.md)
 - runtime reason and block codes: [ERROR_CODE_ENV_MAP.md](./ERROR_CODE_ENV_MAP.md)
@@ -121,6 +124,30 @@ flowchart TB
 The important architectural point is that the orchestrator is not the whole runtime by itself. It
 sits on top of shared stores, registries, and ledgers, and it delegates planning, execution,
 memory brokerage, and reflection to focused subsystems.
+
+## Authority boundary
+
+AgentBigBrain separates meaning from authority. The model can help interpret messy language, but
+typed runtime contracts decide whether anything can be remembered, executed, projected, approved,
+or claimed as complete.
+
+```mermaid
+flowchart LR
+    Language["Messy human language"] --> Semantic["Semantic route / typed candidates"]
+    Semantic --> Authority["Action, memory, prompt, and source authority"]
+    Authority --> Policy["Deterministic policy and governance"]
+    Policy --> Execution["Executor or runtime action"]
+    Execution --> Receipts["Receipts and evidence"]
+    Receipts --> Claims["Truthful user-facing claims"]
+
+    Language -.-> Lexical["Lexical cues, regexes, token overlap"]
+    Lexical -. "candidate or diagnostic" .-> Semantic
+    Lexical -. "exact command / safety / proof parser" .-> Policy
+```
+
+Lexical evidence can support interpretation, parse exact controls, and enforce safety. It must not
+directly grant durable memory truth, side effects, approval, skill lifecycle permission, mission
+completion, graph-current truth, user-facing success, or proactive outreach.
 
 ## End-to-end task flow
 

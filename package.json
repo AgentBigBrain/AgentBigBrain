@@ -2,7 +2,7 @@
   "name": "agentbigbrain",
   "version": "0.3.0",
   "private": true,
-  "description": "Baseline multi-agent brain scaffold with governance and test harness",
+  "description": "Governance-first TypeScript AI agent runtime with semantic routing, governed tool execution, durable memory, Markdown skills, Obsidian projection, and receipt-backed local/browser automation",
   "scripts": {
     "dev": "tsx src/index.ts",
     "dev:interface": "tsx src/interfaces/interfaceRuntime.ts",
