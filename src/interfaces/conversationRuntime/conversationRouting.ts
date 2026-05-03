@@ -1,7 +1,7 @@
 /** @fileoverview Owns canonical queue-routing and execution-input assembly below the stable ingress coordinator. */
 import { recordClassifierEvent } from "../conversationClassifierEvents";
 import { buildConversationAwareExecutionInput, resolveFollowUpInput } from "../conversationExecutionInputPolicy";
-import { setModeContinuity, clearActiveClarification, recordAssistantTurn } from "../conversationSessionMutations";
+import { setModeContinuity, clearActiveClarification } from "../conversationSessionMutations";
 import { buildRoutingExecutionHintV1, classifyRoutingIntentV1 } from "../routingMap";
 import type { ConversationSession } from "../sessionStore";
 import type { ConversationInboundMediaEnvelope } from "../mediaRuntime/contracts";
@@ -34,6 +34,7 @@ import { buildDeterministicDirectChatFallbackReply, buildRecentIdentityInterpret
 import { resolveConversationTopicKeyInterpretationSignal } from "./conversationTopicKeyInterpretation";
 import { isMediaAnalysisConversationTurn } from "./mediaAnalysisIntent";
 import { recordTopicAwareUserTurn } from "./conversationRoutingTurnSupport";
+import { recordRoutingAssistantTurn } from "./conversationRoutingAssistantTurnSupport";
 import type { ConversationEnqueueResult, ConversationRoutingDependencies } from "./conversationRoutingContracts";
 export type { ConversationEnqueueResult, ConversationRoutingDependencies } from "./conversationRoutingContracts";
 /**
@@ -46,7 +47,7 @@ export type { ConversationEnqueueResult, ConversationRoutingDependencies } from 
  * - Uses `TopicKeyInterpretationSignalV1` (import `TopicKeyInterpretationSignalV1`) from `../../core/stage6_86ConversationStack`.
  * - Uses `buildConversationAwareExecutionInput` (import `buildConversationAwareExecutionInput`) from `../conversationExecutionInputPolicy`.
  * - Uses `clearActiveClarification` (import `clearActiveClarification`) from `../conversationSessionMutations`.
- * - Uses `recordAssistantTurn` (import `recordAssistantTurn`) from `../conversationSessionMutations`.
+ * - Uses `recordRoutingAssistantTurn` (import `recordRoutingAssistantTurn`) from `./conversationRoutingAssistantTurnSupport`.
  * - Uses `setModeContinuity` (import `setModeContinuity`) from `../conversationSessionMutations`.
  * - Uses `ConversationInboundMediaEnvelope` (import `ConversationInboundMediaEnvelope`) from `../mediaRuntime/contracts`.
  * - Uses `buildRoutingExecutionHintV1` (import `buildRoutingExecutionHintV1`) from `../routingMap`.
@@ -119,15 +120,7 @@ async function resolveCanonicalConversationRouting(
         const reply =
           "Okay. I will leave those folders and preview holders alone for now.";
         recordTopicAwareUserTurn(session, input, receivedAt, deps.config.maxConversationTurns, topicKeyInterpretation);
-        recordAssistantTurn(
-          session,
-          reply,
-          receivedAt,
-          deps.config.maxConversationTurns,
-          {
-            assistantTurnKind: "informational_answer"
-          }
-        );
+        recordRoutingAssistantTurn(session, reply, receivedAt, deps.config.maxConversationTurns, "informational_answer");
         return {
           reply,
           shouldStartWorker: false
@@ -211,15 +204,7 @@ async function resolveCanonicalConversationRouting(
       clearActiveClarification(session);
     } else {
       recordTopicAwareUserTurn(session, input, receivedAt, deps.config.maxConversationTurns, topicKeyInterpretation);
-      recordAssistantTurn(
-        session,
-        session.activeClarification.question,
-        receivedAt,
-        deps.config.maxConversationTurns,
-        {
-          assistantTurnKind: "clarification"
-        }
-      );
+      recordRoutingAssistantTurn(session, session.activeClarification.question, receivedAt, deps.config.maxConversationTurns, "clarification");
       return {
         reply: session.activeClarification.question,
         shouldStartWorker: false
@@ -234,17 +219,13 @@ async function resolveCanonicalConversationRouting(
   );
   if (activePauseReply) {
     recordTopicAwareUserTurn(session, input, receivedAt, deps.config.maxConversationTurns, topicKeyInterpretation);
-    recordAssistantTurn(session, activePauseReply, receivedAt, deps.config.maxConversationTurns, {
-      assistantTurnKind: "workflow_progress"
-    });
+    recordRoutingAssistantTurn(session, activePauseReply, receivedAt, deps.config.maxConversationTurns, "workflow_progress");
     return { reply: activePauseReply, shouldStartWorker: false };
   }
   const pauseReply = applyReturnHandoffPauseRequest(session, input, receivedAt);
   if (pauseReply) {
     recordTopicAwareUserTurn(session, input, receivedAt, deps.config.maxConversationTurns, topicKeyInterpretation);
-    recordAssistantTurn(session, pauseReply, receivedAt, deps.config.maxConversationTurns, {
-      assistantTurnKind: "workflow_progress"
-    });
+    recordRoutingAssistantTurn(session, pauseReply, receivedAt, deps.config.maxConversationTurns, "workflow_progress");
     return { reply: pauseReply, shouldStartWorker: false };
   }
   const resolvedIntentMode =
@@ -273,29 +254,13 @@ async function resolveCanonicalConversationRouting(
     );
     if (interpretedActivePauseReply) {
       recordTopicAwareUserTurn(session, input, receivedAt, deps.config.maxConversationTurns, topicKeyInterpretation);
-      recordAssistantTurn(
-        session,
-        interpretedActivePauseReply,
-        receivedAt,
-        deps.config.maxConversationTurns,
-        {
-          assistantTurnKind: "workflow_progress"
-        }
-      );
+      recordRoutingAssistantTurn(session, interpretedActivePauseReply, receivedAt, deps.config.maxConversationTurns, "workflow_progress");
       return { reply: interpretedActivePauseReply, shouldStartWorker: false };
     }
     const interpretedPauseReply = applyValidatedReturnHandoffPause(session, receivedAt);
     if (interpretedPauseReply) {
       recordTopicAwareUserTurn(session, input, receivedAt, deps.config.maxConversationTurns, topicKeyInterpretation);
-      recordAssistantTurn(
-        session,
-        interpretedPauseReply,
-        receivedAt,
-        deps.config.maxConversationTurns,
-        {
-          assistantTurnKind: "workflow_progress"
-        }
-      );
+      recordRoutingAssistantTurn(session, interpretedPauseReply, receivedAt, deps.config.maxConversationTurns, "workflow_progress");
       return { reply: interpretedPauseReply, shouldStartWorker: false };
     }
   }
@@ -336,9 +301,7 @@ async function resolveCanonicalConversationRouting(
     if (shouldPreserveDeterministicDirectChatTurn(input, recentIdentityContext)) {
       const reply = buildDeterministicDirectChatFallbackReply(input);
       recordTopicAwareUserTurn(session, input, receivedAt, deps.config.maxConversationTurns, topicKeyInterpretation);
-      recordAssistantTurn(session, reply, receivedAt, deps.config.maxConversationTurns, {
-        assistantTurnKind: "informational_answer"
-      });
+      recordRoutingAssistantTurn(session, reply, receivedAt, deps.config.maxConversationTurns, "informational_answer");
       applyConversationDomainSignalWindowForTurn(
         session,
         input,
@@ -355,15 +318,7 @@ async function resolveCanonicalConversationRouting(
       const reply =
         "End-to-end autonomous runs are turned off in this environment right now. If you want, tell me to build it now and I'll do a normal run.";
       recordTopicAwareUserTurn(session, input, receivedAt, deps.config.maxConversationTurns, topicKeyInterpretation);
-      recordAssistantTurn(
-        session,
-        reply,
-        receivedAt,
-        deps.config.maxConversationTurns,
-        {
-          assistantTurnKind: "workflow_progress"
-        }
-      );
+      recordRoutingAssistantTurn(session, reply, receivedAt, deps.config.maxConversationTurns, "workflow_progress");
       applyConversationDomainSignalWindowForTurn(
         session,
         input,

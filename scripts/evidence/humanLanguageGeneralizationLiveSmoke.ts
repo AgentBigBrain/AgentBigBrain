@@ -19,6 +19,7 @@ import type { EntityGraphV1 } from "../../src/core/types";
 import { ConversationManager } from "../../src/interfaces/conversationManager";
 import { AgentPulseScheduler } from "../../src/interfaces/agentPulseScheduler";
 import { buildSessionSeed } from "../../src/interfaces/conversationManagerHelpers";
+import { buildProfileMemoryIngestPolicy } from "../../src/core/profileMemoryRuntime/profileMemoryIngestPolicy";
 import type {
   ConversationContinuityEpisodeRecord,
   ConversationExecutionResult,
@@ -233,7 +234,14 @@ async function seedBillyEpisode(
     "live_smoke_seed_billy",
     narrative,
     observedAt,
-    { additionalEpisodeCandidates }
+    {
+      additionalEpisodeCandidates,
+      ingestPolicy: buildProfileMemoryIngestPolicy({
+        memoryIntent: "profile_update",
+        sourceSurface: "conversation_profile_input",
+        hasStructuredEpisodeCandidates: additionalEpisodeCandidates.length > 0
+      })
+    }
   );
   return additionalEpisodeCandidates;
 }

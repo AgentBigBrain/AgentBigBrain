@@ -105,6 +105,9 @@ The latest slices moved queue/ack, worker-loop, and pulse-state ownership here s
 - `conversationRoutingTurnSupport.ts` owns the tiny topic-aware turn-recording helper reused by the
   stable routing entrypoint so that file can stay under the module-size budget without changing
   user-turn persistence semantics
+- `conversationRoutingAssistantTurnSupport.ts` owns the tiny structured assistant-turn recording
+  helper reused by the stable routing entrypoint so assistant-turn metadata can stay receipt-like
+  without rebloating the main routing file
 - `recentAssistantTurnContext.ts` owns bounded recent-assistant-turn summarization used by routing
   and local intent hints so informational answer threads stay attached without leaking whole
   transcripts into the front door
@@ -193,6 +196,9 @@ The latest slices moved queue/ack, worker-loop, and pulse-state ownership here s
 - `relationshipContinuityContext.ts` owns bounded relationship-memory continuity prompt assembly for
   short ordinary-chat follow-ups and bounded event-memory callbacks that need graph-aware
   continuity without reviving workflow blocks
+- `relationshipMemoryInterpretationSupport.ts` owns bounded request shaping and validation for the
+  optional relationship-memory interpreter so semantic candidates can supplement conversation
+  memory without turning lexical contact cues into durable truth
 - `mixedMemoryStatusRecall.ts` owns bounded cross-lane memory recap helpers so direct questions can
   combine profile-memory facts, continuity context, and desktop-status recall without inventing a
   second truth surface
