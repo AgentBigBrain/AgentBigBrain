@@ -101,9 +101,10 @@ async function runLiveScenario(
 ): Promise<CompletionMatrixScenarioResult> {
   if (scenario.control === "negative") {
     return buildCompletionMatrixScenarioResult(scenario, {
-      observedRoute: scenario.expectedRoute,
-      blockerReason: "negative_control_expected_block_or_clarification",
-      status: "PASS",
+      evidenceMode: "blocked",
+      observedRouteSource: "blocked",
+      blockerReason: "negative_control_requires_front_door_block_or_clarification_evidence",
+      status: "BLOCKED",
       observedSideEffects: {},
       browserProof: scenario.family === "static_site" ? { opened: false, closed: false } : null,
       memoryProof:
@@ -135,7 +136,13 @@ function mapFamilyArtifactToScenarioResult(
   if (scenario.family === "static_site") {
     const checks = asRecord(record.checks);
     return buildCompletionMatrixScenarioResult(scenario, {
-      observedRoute: scenario.expectedRoute,
+      evidenceMode: "side_effect_observed",
+      observedRoute: null,
+      observedRouteSource: "not_observed",
+      routeObserved: false,
+      sideEffectObserved: passed,
+      promptExecuted: false,
+      coveredByFamilyArtifact: true,
       observedSideEffects: {
         desktop_folder_created: passed,
         html_file_created: passed,
@@ -161,7 +168,10 @@ function mapFamilyArtifactToScenarioResult(
   if (scenario.family === "followup_edit") {
     const checks = asRecord(record.checks);
     return buildCompletionMatrixScenarioResult(scenario, {
-      observedRoute: scenario.expectedRoute,
+      evidenceMode: "side_effect_observed",
+      observedRouteSource: "not_observed",
+      sideEffectObserved: Boolean(checks.editApplied),
+      coveredByFamilyArtifact: true,
       observedSideEffects: {
         existing_artifact_changed: Boolean(checks.editApplied)
       },
@@ -172,7 +182,10 @@ function mapFamilyArtifactToScenarioResult(
 
   if (scenario.family === "memory_recall") {
     return buildCompletionMatrixScenarioResult(scenario, {
-      observedRoute: scenario.expectedRoute,
+      evidenceMode: "mocked",
+      observedRouteSource: "mocked_family_artifact",
+      coveredByFamilyArtifact: true,
+      mockedProof: true,
       memoryProof: {
         conversationStayedInline: passed,
         workflowNotHijacked: passed
@@ -183,7 +196,10 @@ function mapFamilyArtifactToScenarioResult(
 
   if (scenario.family === "document_attachment") {
     return buildCompletionMatrixScenarioResult(scenario, {
-      observedRoute: scenario.expectedRoute,
+      evidenceMode: "mocked",
+      observedRouteSource: "mocked_family_artifact",
+      coveredByFamilyArtifact: true,
+      mockedProof: true,
       mediaProof: {
         rawExtractionLayer: passed,
         candidateOnlyMemory: passed,
@@ -199,7 +215,10 @@ function mapFamilyArtifactToScenarioResult(
 
   if (scenario.family === "skill_lifecycle") {
     return buildCompletionMatrixScenarioResult(scenario, {
-      observedRoute: scenario.expectedRoute,
+      evidenceMode: "mocked",
+      observedRouteSource: "mocked_family_artifact",
+      coveredByFamilyArtifact: true,
+      mockedProof: true,
       skillProof: {
         draftCreated: passed,
         operatorApprovalRequired: passed,
@@ -214,7 +233,10 @@ function mapFamilyArtifactToScenarioResult(
   }
 
   return buildCompletionMatrixScenarioResult(scenario, {
-    observedRoute: scenario.expectedRoute,
+    evidenceMode: "mocked",
+    observedRouteSource: "mocked_family_artifact",
+    coveredByFamilyArtifact: true,
+    mockedProof: true,
     blockerReason: "typed blocked-or-clarify control",
     status: passed ? "PASS" : "FAIL"
   });
@@ -265,7 +287,7 @@ export async function runTelegramCompletionMatrixLiveSmoke(
       );
     }
   }
-  const artifact = buildCompletionMatrixEvidence("live", results);
+  const artifact = buildCompletionMatrixEvidence("side_effect_observed", results);
   await writeCompletionMatrixEvidence(artifact);
   return artifact;
 }

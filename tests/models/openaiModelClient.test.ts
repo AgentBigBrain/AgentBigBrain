@@ -337,12 +337,15 @@ test("OpenAIModelClient planner schema marks every object property as required f
       );
 
       const plannerSchema = schema as Record<string, unknown>;
-      const paramsAnyOf =
-        ((((plannerSchema.properties as Record<string, unknown>).actions as Record<string, unknown>).items as Record<string, unknown>).properties as Record<string, unknown>).params as Record<string, unknown>;
-      const shellParamsBranch = (paramsAnyOf.anyOf as Array<Record<string, unknown>>).find((branch) => {
+      const actionBranches =
+        (((plannerSchema.properties as Record<string, unknown>).actions as Record<string, unknown>).items as Record<string, unknown>).anyOf as Array<Record<string, unknown>>;
+      const shellActionBranch = actionBranches.find((branch) => {
         const properties = branch.properties as Record<string, unknown> | undefined;
-        return Boolean(properties?.command) && Boolean(properties?.cwd);
+        const typeSchema = properties?.type as Record<string, unknown> | undefined;
+        return Array.isArray(typeSchema?.enum) && typeSchema.enum.includes("shell_command");
       });
+      const shellParamsBranch = (shellActionBranch?.properties as Record<string, unknown> | undefined)
+        ?.params as Record<string, unknown> | undefined;
 
       assert.ok(shellParamsBranch, "expected shell_command params branch to exist");
       const shellProperties = shellParamsBranch?.properties as Record<string, unknown>;

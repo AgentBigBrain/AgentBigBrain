@@ -5,6 +5,7 @@
 import type { TaskRequest } from "../../core/types";
 import type {
   DomainLaneScores,
+  MemoryContextAuthorityMetadata,
   MemoryDomainLane,
   ProfileContextSanitizationResult
 } from "./contracts";
@@ -21,6 +22,13 @@ const SENSITIVE_PROFILE_CONTEXT_PATTERNS = [
   /password|secret/i,
   /credit|debit|card|bank|routing/i
 ];
+
+const DEFAULT_MEMORY_CONTEXT_AUTHORITY: MemoryContextAuthorityMetadata = {
+  retrievalMode: "keyword_only",
+  sourceAuthority: "unknown",
+  plannerAuthority: "none",
+  currentTruthAuthority: false
+};
 
 /**
  * Checks whether one profile-context line matches a sensitive-field pattern.
@@ -46,6 +54,23 @@ function renderDomainLaneScores(scores: DomainLaneScores): string {
     `system_policy:${scores.system_policy}`,
     `unknown:${scores.unknown}`
   ].join(",");
+}
+
+/**
+ * Renders explicit retrieval and authority metadata for memory broker packets.
+ *
+ * @param metadata - Retrieval authority metadata for the packet.
+ * @returns Stable packet metadata lines.
+ */
+function renderMemoryContextAuthorityMetadata(
+  metadata: MemoryContextAuthorityMetadata = DEFAULT_MEMORY_CONTEXT_AUTHORITY
+): readonly string[] {
+  return [
+    `retrievalMode=${metadata.retrievalMode}`,
+    `sourceAuthority=${metadata.sourceAuthority}`,
+    `plannerAuthority=${metadata.plannerAuthority}`,
+    `currentTruthAuthority=${metadata.currentTruthAuthority ? "true" : "false"}`
+  ];
 }
 
 /**
@@ -94,13 +119,14 @@ export function buildSuppressedContextPacket(
   task: TaskRequest,
   lanes: readonly MemoryDomainLane[],
   scores: DomainLaneScores,
-  reason: string
+  reason: string,
+  metadata: MemoryContextAuthorityMetadata = DEFAULT_MEMORY_CONTEXT_AUTHORITY
 ): string {
   return [
     task.userInput,
     "",
     "[AgentFriendMemoryBroker]",
-    "retrievalMode=query_aware",
+    ...renderMemoryContextAuthorityMetadata(metadata),
     `domainLanes=${lanes.join(",")}`,
     `domainLaneScores=${renderDomainLaneScores(scores)}`,
     "domainBoundaryDecision=suppress_profile_context",
@@ -129,13 +155,14 @@ export function buildInjectedContextPacket(
   reason: string,
   context: string,
   episodeContext = "",
-  memorySynthesisContext = ""
+  memorySynthesisContext = "",
+  metadata: MemoryContextAuthorityMetadata = DEFAULT_MEMORY_CONTEXT_AUTHORITY
 ): string {
   const packet = [
     task.userInput,
     "",
     "[AgentFriendMemoryBroker]",
-    "retrievalMode=query_aware",
+    ...renderMemoryContextAuthorityMetadata(metadata),
     `domainLanes=${lanes.join(",")}`,
     `domainLaneScores=${renderDomainLaneScores(scores)}`,
     "domainBoundaryDecision=inject_profile_context",

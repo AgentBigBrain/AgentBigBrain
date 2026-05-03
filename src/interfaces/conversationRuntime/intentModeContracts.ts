@@ -7,6 +7,7 @@ import type {
   ClarificationOptionId,
   ConversationIntentMode
 } from "../sessionStore";
+import type { SourceAuthority } from "../../core/sourceAuthority";
 
 export type IntentModeConfidence = "high" | "medium" | "low";
 export type ConversationSemanticRouteId =
@@ -53,6 +54,7 @@ export type ConversationSemanticRouteSource =
   | "deterministic_safety"
   | "deterministic_signal"
   | "compatibility";
+export type ConversationRouteSourceAuthority = SourceAuthority;
 export type ConversationRouteExecutionMode =
   | "chat"
   | "plan"
@@ -99,6 +101,7 @@ export interface ConversationSemanticRouteMetadata {
   routeId: ConversationSemanticRouteId;
   confidence: IntentModeConfidence;
   source: ConversationSemanticRouteSource;
+  sourceAuthority: ConversationRouteSourceAuthority;
   buildFormat: ConversationBuildFormatMetadata | null;
   executionMode: ConversationRouteExecutionMode;
   continuationKind: ConversationRouteContinuationKind;
@@ -111,6 +114,7 @@ export interface ConversationSemanticRouteMetadataOverrides {
   routeId?: ConversationSemanticRouteId | null;
   confidence?: IntentModeConfidence;
   source?: ConversationSemanticRouteSource;
+  sourceAuthority?: ConversationRouteSourceAuthority;
   buildFormat?: ConversationBuildFormatMetadata | null;
   executionMode?: ConversationRouteExecutionMode;
   continuationKind?: ConversationRouteContinuationKind;
@@ -357,6 +361,30 @@ function inferRouteSourceFromResolution(
 }
 
 /**
+ * Maps route-source labels into the shared authority vocabulary.
+ *
+ * @param source - Route metadata source.
+ * @returns Canonical source authority for downstream gates.
+ */
+export function routeSourceToAuthority(
+  source: ConversationSemanticRouteSource
+): ConversationRouteSourceAuthority {
+  switch (source) {
+    case "model":
+      return "semantic_model";
+    case "clarification":
+      return "active_clarification";
+    case "exact_command":
+    case "deterministic_safety":
+      return "exact_command";
+    case "deterministic_signal":
+      return "lexical_fallback";
+    case "compatibility":
+      return "compatibility_repair";
+  }
+}
+
+/**
  * Builds one canonical semantic route metadata payload.
  *
  * **Why it exists:**
@@ -387,16 +415,21 @@ export function buildConversationSemanticRouteMetadata(
     resolution.buildFormat ??
     resolution.semanticRoute?.buildFormat ??
     null;
+  const source =
+    overrides.source ??
+    resolution.semanticRoute?.source ??
+    inferRouteSourceFromResolution(resolution);
   return {
     routeId,
     confidence:
       overrides.confidence ??
       resolution.semanticRoute?.confidence ??
       resolution.confidence,
-    source:
-      overrides.source ??
-      resolution.semanticRoute?.source ??
-      inferRouteSourceFromResolution(resolution),
+    source,
+    sourceAuthority:
+      overrides.sourceAuthority ??
+      resolution.semanticRoute?.sourceAuthority ??
+      routeSourceToAuthority(source),
     buildFormat,
     executionMode:
       overrides.executionMode ??

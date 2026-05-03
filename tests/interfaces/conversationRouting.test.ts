@@ -1046,7 +1046,7 @@ test("routeConversationMessageInput retries a recovery clarification when the us
 
   const result = await routeConversationMessageInput(
     session,
-    "Yes, please do that.",
+    "Yes, shut them down and retry.",
     "2026-03-13T14:05:05.000Z",
     buildDependencies((currentSession, input, _receivedAt, executionInput) => {
       capturedInput = input;
@@ -1070,7 +1070,7 @@ test("routeConversationMessageInput retries a recovery clarification when the us
   assert.equal(session.modeContinuity?.source, "clarification_answer");
   assert.equal(
     session.conversationTurns[session.conversationTurns.length - 1]?.text,
-    "Yes, please do that."
+    "Yes, shut them down and retry."
   );
 });
 
@@ -1598,6 +1598,16 @@ test("routeConversationMessageInput keeps self-identity declarations direct and 
   assert.equal(rememberedProfileInput?.provenance?.dominantLaneAtWrite, "workflow");
   assert.equal(rememberedProfileInput?.provenance?.threadKey, null);
   assert.equal(rememberedProfileInput?.provenance?.sourceSurface, "conversation_profile_input");
+  assert.deepEqual(rememberedProfileInput?.validatedFactCandidates, [
+    {
+      key: "identity.preferred_name",
+      candidateValue: "Avery",
+      source: "conversation.identity_interpretation",
+      confidence: 0.98
+    }
+  ]);
+  assert.equal(rememberedProfileInput?.ingestPolicy?.policySource, "structured_candidate");
+  assert.equal(rememberedProfileInput?.ingestPolicy?.sourceLane, "validated_model_candidate");
   assert.match(rememberedProfileInput?.provenance?.turnId ?? "", /^turn_[a-f0-9]{24}$/);
   assert.match(rememberedProfileInput?.provenance?.sourceFingerprint ?? "", /^[a-f0-9]{32}$/);
   assert.equal(localResolverCalls, 0);

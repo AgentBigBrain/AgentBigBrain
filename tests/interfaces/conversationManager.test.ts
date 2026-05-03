@@ -8,7 +8,10 @@ import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 
-import type { ProfileMemoryIngestRequest } from "../../src/core/profileMemoryRuntime/contracts";
+import type {
+  ProfileMemoryIngestRequest,
+  ProfileSemanticRelationshipCandidateInput
+} from "../../src/core/profileMemoryRuntime/contracts";
 import { MemoryAccessAuditStore } from "../../src/core/memoryAccessAudit";
 import { createEmptyConversationDomainContext } from "../../src/core/sessionContext";
 import { ProfileMemoryStore } from "../../src/core/profileMemoryStore";
@@ -26,11 +29,275 @@ import {
 } from "../../src/interfaces/conversationManager";
 import { buildConversationInboundUserInput } from "../../src/interfaces/mediaRuntime/mediaNormalization";
 import { InterfaceSessionStore as BaseInterfaceSessionStore } from "../../src/interfaces/sessionStore";
+import type { RelationshipInterpretationResolver } from "../../src/organs/languageUnderstanding/localIntentModelContracts";
 import {
   buildConversationJobFixture,
   buildConversationSessionFixture
 } from "../helpers/conversationFixtures";
 import type { ConversationMemoryFactReviewResult } from "../../src/interfaces/conversationRuntime/managerContracts";
+
+function normalizeSyntheticRelationshipText(value: string): string {
+  return value.toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+function syntheticRelationshipCandidate(input: {
+  objectDisplayName: string;
+  objectQualifier?: string;
+  relationLabel?: string;
+  lifecycle: ProfileSemanticRelationshipCandidateInput["lifecycle"];
+  workAssociation?: string;
+  evidenceText: string;
+  confidence?: number;
+}): ProfileSemanticRelationshipCandidateInput {
+  return {
+    subject: "current_user",
+    objectDisplayName: input.objectDisplayName,
+    ...(input.objectQualifier ? { objectQualifier: input.objectQualifier } : {}),
+    relationLabel: input.relationLabel ?? "work_peer",
+    lifecycle: input.lifecycle,
+    ...(input.workAssociation ? { workAssociation: input.workAssociation } : {}),
+    sourceFamily: "semantic_model",
+    ambiguity: "none",
+    evidenceSpan: {
+      text: input.evidenceText
+    },
+    confidence: input.confidence ?? 0.93
+  };
+}
+
+interface SyntheticRelationshipInterpretationCase {
+  candidates: readonly ProfileSemanticRelationshipCandidateInput[];
+  episodeCandidates?: readonly {
+    title: string;
+    summary: string;
+    evidenceText: string;
+    entityRefs?: readonly string[];
+    tags?: readonly string[];
+    confidence?: number;
+  }[];
+}
+
+function syntheticRelationshipCase(
+  candidates: readonly ProfileSemanticRelationshipCandidateInput[],
+  episodeCandidates: SyntheticRelationshipInterpretationCase["episodeCandidates"] = []
+): SyntheticRelationshipInterpretationCase {
+  return {
+    candidates,
+    episodeCandidates
+  };
+}
+
+const SYNTHETIC_RELATIONSHIP_CASES = new Map<string, SyntheticRelationshipInterpretationCase>([
+  [
+    normalizeSyntheticRelationshipText(
+      "Yeah, so Billy is someone I worked previously. He now works somewhere else."
+    ),
+    syntheticRelationshipCase([
+      syntheticRelationshipCandidate({
+        objectDisplayName: "Billy",
+        lifecycle: "historical",
+        evidenceText: "Billy is someone I worked previously"
+      })
+    ])
+  ],
+  [
+    normalizeSyntheticRelationshipText("After that, remind me that Priya is my coworker at Northstar."),
+    syntheticRelationshipCase([
+      syntheticRelationshipCandidate({
+        objectDisplayName: "Priya",
+        relationLabel: "coworker",
+        lifecycle: "current",
+        workAssociation: "Northstar",
+        evidenceText: "Priya is my coworker at Northstar"
+      })
+    ])
+  ],
+  [
+    normalizeSyntheticRelationshipText("I work with Milo at Northstar Creative."),
+    syntheticRelationshipCase([
+      syntheticRelationshipCandidate({
+        objectDisplayName: "Milo",
+        lifecycle: "current",
+        workAssociation: "Northstar Creative",
+        evidenceText: "I work with Milo at Northstar Creative"
+      })
+    ])
+  ],
+  [
+    normalizeSyntheticRelationshipText(
+      "I work with Jordan at Northstar. I used to work with Milo at Lumen Studio. Jordan's married, and Milo has a girlfriend."
+    ),
+    syntheticRelationshipCase([
+      syntheticRelationshipCandidate({
+        objectDisplayName: "Jordan",
+        lifecycle: "current",
+        workAssociation: "Northstar",
+        evidenceText: "I work with Jordan at Northstar"
+      }),
+      syntheticRelationshipCandidate({
+        objectDisplayName: "Milo",
+        lifecycle: "historical",
+        workAssociation: "Lumen Studio",
+        evidenceText: "I used to work with Milo at Lumen Studio"
+      })
+    ])
+  ],
+  [
+    normalizeSyntheticRelationshipText(
+      "I work with Jordan at Northstar. I used to work with Milo at Lumen Studio."
+    ),
+    syntheticRelationshipCase([
+      syntheticRelationshipCandidate({
+        objectDisplayName: "Jordan",
+        lifecycle: "current",
+        workAssociation: "Northstar",
+        evidenceText: "I work with Jordan at Northstar"
+      }),
+      syntheticRelationshipCandidate({
+        objectDisplayName: "Milo",
+        lifecycle: "historical",
+        workAssociation: "Lumen Studio",
+        evidenceText: "I used to work with Milo at Lumen Studio"
+      })
+    ])
+  ],
+  [
+    normalizeSyntheticRelationshipText(
+      "I don't work with Jordan anymore. I work with Priya at Northstar now."
+    ),
+    syntheticRelationshipCase([
+      syntheticRelationshipCandidate({
+        objectDisplayName: "Jordan",
+        lifecycle: "severed",
+        workAssociation: "Northstar",
+        evidenceText: "I don't work with Jordan anymore"
+      }),
+      syntheticRelationshipCandidate({
+        objectDisplayName: "Priya",
+        lifecycle: "current",
+        workAssociation: "Northstar",
+        evidenceText: "I work with Priya at Northstar now"
+      })
+    ])
+  ],
+  [
+    normalizeSyntheticRelationshipText("I work with Jordan at Northstar."),
+    syntheticRelationshipCase([
+      syntheticRelationshipCandidate({
+        objectDisplayName: "Jordan",
+        lifecycle: "current",
+        workAssociation: "Northstar",
+        evidenceText: "I work with Jordan at Northstar"
+      })
+    ])
+  ],
+  [
+    normalizeSyntheticRelationshipText(
+      "Billy used to be at Beacon. He's at Northstar now. He drives a gray Accord."
+    ),
+    syntheticRelationshipCase([
+      syntheticRelationshipCandidate({
+        objectDisplayName: "Billy",
+        lifecycle: "current",
+        workAssociation: "Northstar",
+        evidenceText: "Billy used to be at Beacon. He's at Northstar now. He drives a gray Accord."
+      }),
+      syntheticRelationshipCandidate({
+        objectDisplayName: "Billy",
+        lifecycle: "historical",
+        workAssociation: "Beacon",
+        evidenceText: "Billy used to be at Beacon"
+      })
+    ])
+  ],
+  [
+    normalizeSyntheticRelationshipText("Milo sold Jordan the gray Accord in late 2024."),
+    syntheticRelationshipCase(
+      [
+        syntheticRelationshipCandidate({
+          objectDisplayName: "Milo",
+          relationLabel: "acquaintance",
+          lifecycle: "current",
+          evidenceText: "Milo sold Jordan the gray Accord in late 2024."
+        }),
+        syntheticRelationshipCandidate({
+          objectDisplayName: "Jordan",
+          relationLabel: "acquaintance",
+          lifecycle: "current",
+          evidenceText: "Milo sold Jordan the gray Accord in late 2024."
+        })
+      ],
+      [
+        {
+          title: "Milo sold Jordan the gray Accord",
+          summary: "Milo sold Jordan the gray Accord in late 2024.",
+          evidenceText: "Milo sold Jordan the gray Accord in late 2024.",
+          entityRefs: ["Milo", "Jordan", "gray Accord"],
+          tags: ["transfer", "vehicle"],
+          confidence: 0.93
+        }
+      ]
+    )
+  ],
+  [
+    normalizeSyntheticRelationshipText(
+      "I also know another Jordan at Ember. That's a different Jordan from Northstar."
+    ),
+    syntheticRelationshipCase([
+      syntheticRelationshipCandidate({
+        objectDisplayName: "Jordan",
+        objectQualifier: "Ember",
+        relationLabel: "acquaintance",
+        lifecycle: "current",
+        workAssociation: "Ember",
+        evidenceText: "I also know another Jordan at Ember"
+      })
+    ])
+  ],
+  [
+    normalizeSyntheticRelationshipText("The Jordan from Northstar sometimes goes by J.R."),
+    syntheticRelationshipCase([
+      syntheticRelationshipCandidate({
+        objectDisplayName: "Jordan",
+        relationLabel: "work_peer",
+        lifecycle: "current",
+        workAssociation: "Northstar",
+        evidenceText: "The Jordan from Northstar sometimes goes by J.R."
+      })
+    ])
+  ],
+  [
+    normalizeSyntheticRelationshipText("I met a different J.R. from Harbor last month."),
+    syntheticRelationshipCase([
+      syntheticRelationshipCandidate({
+        objectDisplayName: "J.R.",
+        objectQualifier: "Harbor",
+        relationLabel: "acquaintance",
+        lifecycle: "current",
+        workAssociation: "Harbor",
+        evidenceText: "I met a different J.R. from Harbor last month."
+      })
+    ])
+  ]
+]);
+
+function createSyntheticRelationshipInterpretationResolver(): RelationshipInterpretationResolver {
+  return async (request) => {
+    const syntheticCase =
+      SYNTHETIC_RELATIONSHIP_CASES.get(normalizeSyntheticRelationshipText(request.userInput));
+    const candidates = syntheticCase?.candidates ?? [];
+    return {
+      source: "local_intent_model",
+      kind: candidates.length > 0 ? "relationship_candidates" : "non_relationship_memory",
+      candidates,
+      episodeCandidates: syntheticCase?.episodeCandidates ?? [],
+      confidence: "high",
+      explanation: candidates.length > 0
+        ? "Synthetic semantic relationship candidates for test-local direct conversation memory."
+        : "No relationship-memory candidates in this synthetic test turn."
+    };
+  };
+}
 
 /**
  * Uses the SQLite-backed test store so background worker persistence does not race JSON temp-file
@@ -54,7 +321,15 @@ class ConversationManager extends BaseConversationManager {
   private static readonly activeManagers = new Set<ConversationManager>();
 
   constructor(...args: ConstructorParameters<typeof BaseConversationManager>) {
-    super(...args);
+    const [store, config, dependencies] = args;
+    const safeDependencies = dependencies ?? {};
+    super(store, config, {
+      ...safeDependencies,
+      relationshipInterpretationResolver:
+        Object.prototype.hasOwnProperty.call(safeDependencies, "relationshipInterpretationResolver")
+          ? safeDependencies.relationshipInterpretationResolver
+          : createSyntheticRelationshipInterpretationResolver()
+    });
     ConversationManager.activeManagers.add(this);
   }
 
@@ -3106,14 +3381,15 @@ test("conversation manager uses model-assisted identity interpretation for ambig
   }
 });
 
-test("conversation manager forwards bounded conversational provenance on direct relationship updates", async () => {
+test("conversation manager keeps direct lexical relationship updates off durable memory writes", async () => {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-conversation-relationship-provenance-"));
   const store = new InterfaceSessionStore(path.join(tempDir, "sessions.json"));
   const rememberedInputs: ProfileMemoryIngestRequest[] = [];
   const manager = new ConversationManager(store, {}, {
+    relationshipInterpretationResolver: undefined,
     rememberConversationProfileInput: async (input) => {
       if (typeof input === "string") {
-        throw new Error("direct relationship update should use the bounded request contract");
+        throw new Error("direct relationship update should not use the raw string write contract");
       }
       rememberedInputs.push(input);
       return true;
@@ -3136,14 +3412,7 @@ test("conversation manager forwards bounded conversational provenance on direct 
     );
 
     assert.equal(reply, "Noted.");
-    assert.equal(rememberedInputs.length, 1);
-    assert.equal(rememberedInputs[0]?.userInput, "I work with Milo at Northstar Creative.");
-    assert.equal(rememberedInputs[0]?.provenance?.conversationId, "telegram:chat-1:user-1");
-    assert.equal(rememberedInputs[0]?.provenance?.dominantLaneAtWrite, "unknown");
-    assert.equal(rememberedInputs[0]?.provenance?.threadKey, null);
-    assert.equal(rememberedInputs[0]?.provenance?.sourceSurface, "conversation_profile_input");
-    assert.match(rememberedInputs[0]?.provenance?.turnId ?? "", /^turn_[a-f0-9]{24}$/);
-    assert.match(rememberedInputs[0]?.provenance?.sourceFingerprint ?? "", /^[a-f0-9]{32}$/);
+    assert.equal(rememberedInputs.length, 0);
   } finally {
     await removeTempDirWithRetry(tempDir);
   }
@@ -3238,7 +3507,9 @@ test("conversation manager keeps workflow-label clutter out of personal truth an
         request.userInput ?? "",
         receivedAt,
         {
-          validatedFactCandidates: request.validatedFactCandidates
+          validatedFactCandidates: request.validatedFactCandidates,
+          additionalEpisodeCandidates: request.additionalEpisodeCandidates,
+          ingestPolicy: request.ingestPolicy
         }
       );
       return result.appliedFacts > 0;
@@ -3723,7 +3994,9 @@ test("conversation manager remembers relationship updates through the direct cha
         request.userInput ?? "",
         receivedAt,
         {
-          validatedFactCandidates: request.validatedFactCandidates
+          validatedFactCandidates: request.validatedFactCandidates,
+          additionalEpisodeCandidates: request.additionalEpisodeCandidates,
+          ingestPolicy: request.ingestPolicy
         }
       );
       return result.appliedFacts > 0;
@@ -3891,7 +4164,9 @@ test("conversation manager keeps relationship inventory and current-vs-history r
         request.userInput ?? "",
         receivedAt,
         {
-          validatedFactCandidates: request.validatedFactCandidates
+          validatedFactCandidates: request.validatedFactCandidates,
+          additionalEpisodeCandidates: request.additionalEpisodeCandidates,
+          ingestPolicy: request.ingestPolicy
         }
       );
       return result.appliedFacts > 0;
@@ -4167,7 +4442,9 @@ test("conversation manager keeps interrupted third-person contact recall and obj
         request.userInput ?? "",
         receivedAt,
         {
-          validatedFactCandidates: request.validatedFactCandidates
+          validatedFactCandidates: request.validatedFactCandidates,
+          additionalEpisodeCandidates: request.additionalEpisodeCandidates,
+          ingestPolicy: request.ingestPolicy
         }
       );
       return result.appliedFacts > 0;
@@ -4468,7 +4745,9 @@ test("conversation manager keeps coworker successor updates and no-flap recall s
         request.userInput ?? "",
         receivedAt,
         {
-          validatedFactCandidates: request.validatedFactCandidates
+          validatedFactCandidates: request.validatedFactCandidates,
+          additionalEpisodeCandidates: request.additionalEpisodeCandidates,
+          ingestPolicy: request.ingestPolicy
         }
       );
       return result.appliedFacts > 0;
@@ -4759,7 +5038,9 @@ test("conversation manager keeps event participant-role recall and fail-closed a
         request.userInput ?? "",
         receivedAt,
         {
-          validatedFactCandidates: request.validatedFactCandidates
+          validatedFactCandidates: request.validatedFactCandidates,
+          additionalEpisodeCandidates: request.additionalEpisodeCandidates,
+          ingestPolicy: request.ingestPolicy
         }
       );
       return result.appliedFacts > 0;
@@ -5081,7 +5362,9 @@ test("conversation manager keeps same-name ambiguity and alias-collision recall 
         request.userInput ?? "",
         receivedAt,
         {
-          validatedFactCandidates: request.validatedFactCandidates
+          validatedFactCandidates: request.validatedFactCandidates,
+          additionalEpisodeCandidates: request.additionalEpisodeCandidates,
+          ingestPolicy: request.ingestPolicy
         }
       );
       return result.appliedFacts > 0;
@@ -5385,7 +5668,9 @@ test("conversation manager reuses global relationship truth across conversations
         request.userInput ?? "",
         receivedAt,
         {
-          validatedFactCandidates: request.validatedFactCandidates
+          validatedFactCandidates: request.validatedFactCandidates,
+          additionalEpisodeCandidates: request.additionalEpisodeCandidates,
+          ingestPolicy: request.ingestPolicy
         }
       );
       return result.appliedFacts > 0;
@@ -5558,7 +5843,9 @@ test("conversation manager keeps repeated read-only relationship recall stable w
         request.userInput ?? "",
         receivedAt,
         {
-          validatedFactCandidates: request.validatedFactCandidates
+          validatedFactCandidates: request.validatedFactCandidates,
+          additionalEpisodeCandidates: request.additionalEpisodeCandidates,
+          ingestPolicy: request.ingestPolicy
         }
       );
       return result.appliedFacts > 0;
@@ -5703,7 +5990,9 @@ test("conversation manager applies bounded fact review correction and forget thr
         request.userInput ?? "",
         receivedAt,
         {
-          validatedFactCandidates: request.validatedFactCandidates
+          validatedFactCandidates: request.validatedFactCandidates,
+          additionalEpisodeCandidates: request.additionalEpisodeCandidates,
+          ingestPolicy: request.ingestPolicy
         }
       );
       return result.appliedFacts > 0;

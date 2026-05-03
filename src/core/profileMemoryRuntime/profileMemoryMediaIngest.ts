@@ -9,6 +9,7 @@ export type { ProfileMediaIngestInput } from "./contracts";
 
 const ATTACHED_MEDIA_CONTEXT_HEADER = "Attached media context:";
 const INTERPRETED_MEDIA_CONTEXT_HEADER = "The user sent media with the following interpreted context:";
+const INBOUND_MEDIA_CONTEXT_HEADER = "Inbound media context (interpreted once, bounded, no raw bytes):";
 const GENERIC_MEDIA_ONLY_PROMPTS = new Set([
   "Please review the attached image and respond based on what it shows.",
   "Please transcribe the attached voice note and respond to its request.",
@@ -79,10 +80,82 @@ export function parseProfileMediaIngestInput(userInput: string): ProfileMediaIng
   const memoryEligibleOcrFragments: string[] = [];
   const candidateOnlyFragments: string[] = [];
   let previousLineWasDocumentDerived = false;
+  let currentAttachmentKind: string | null = null;
+  let currentLayerMemoryAuthority: string | null = null;
 
   for (const line of mediaLines) {
     const normalizedLine = normalizeProfileValue(stripBulletPrefix(line));
     if (!normalizedLine) {
+      continue;
+    }
+    const attachmentKind = extractRenderedAttachmentKind(normalizedLine);
+    if (attachmentKind) {
+      currentAttachmentKind = attachmentKind;
+      currentLayerMemoryAuthority = null;
+      continue;
+    }
+    const renderedKind = extractRenderedKindField(normalizedLine);
+    if (renderedKind) {
+      currentAttachmentKind = renderedKind;
+      continue;
+    }
+    const renderedLayerAuthority = extractRenderedLayerAuthority(normalizedLine);
+    if (renderedLayerAuthority) {
+      currentLayerMemoryAuthority = renderedLayerAuthority;
+      continue;
+    }
+
+    const renderedSummary = extractRenderedQuotedField(
+      normalizedLine,
+      "interpretation.summary"
+    );
+    if (renderedSummary) {
+      summaryFragments.push(renderedSummary);
+      if (currentAttachmentKind === "document") {
+        candidateOnlyFragments.push(renderedSummary);
+      } else {
+        memoryEligibleSummaryFragments.push(renderedSummary);
+      }
+      previousLineWasDocumentDerived = currentAttachmentKind === "document";
+      continue;
+    }
+
+    const renderedTranscript = extractRenderedQuotedField(
+      normalizedLine,
+      "interpretation.transcript"
+    );
+    if (renderedTranscript) {
+      transcriptFragments.push(renderedTranscript);
+      previousLineWasDocumentDerived = false;
+      continue;
+    }
+
+    const renderedOcr = extractRenderedQuotedField(
+      normalizedLine,
+      "interpretation.ocrText"
+    );
+    if (renderedOcr) {
+      ocrFragments.push(renderedOcr);
+      if (currentAttachmentKind === "document") {
+        candidateOnlyFragments.push(renderedOcr);
+      } else {
+        memoryEligibleOcrFragments.push(renderedOcr);
+      }
+      previousLineWasDocumentDerived = currentAttachmentKind === "document";
+      continue;
+    }
+
+    const renderedLayerText = extractRenderedQuotedField(normalizedLine, "text");
+    if (renderedLayerText) {
+      if (currentLayerMemoryAuthority === "direct_user_text") {
+        transcriptFragments.push(renderedLayerText);
+        memoryEligibleSummaryFragments.push(renderedLayerText);
+      } else if (currentLayerMemoryAuthority === "support_only") {
+        memoryEligibleSummaryFragments.push(renderedLayerText);
+      } else if (currentLayerMemoryAuthority === "candidate_only") {
+        candidateOnlyFragments.push(renderedLayerText);
+      }
+      previousLineWasDocumentDerived = currentAttachmentKind === "document";
       continue;
     }
 
@@ -286,7 +359,14 @@ function extractDirectUserText(userInput: string): string {
   if (attachedMediaIndex >= 0) {
     return normalizeProfileValue(userInput.slice(0, attachedMediaIndex));
   }
+  const inboundMediaIndex = userInput.indexOf(`\n\n${INBOUND_MEDIA_CONTEXT_HEADER}`);
+  if (inboundMediaIndex >= 0) {
+    return normalizeProfileValue(userInput.slice(0, inboundMediaIndex));
+  }
   if (userInput.startsWith(INTERPRETED_MEDIA_CONTEXT_HEADER)) {
+    return "";
+  }
+  if (userInput.startsWith(INBOUND_MEDIA_CONTEXT_HEADER)) {
     return "";
   }
   if (
@@ -312,9 +392,20 @@ function extractMediaContextLines(userInput: string): readonly string[] {
       userInput.slice(attachedMediaIndex + `\n\n${ATTACHED_MEDIA_CONTEXT_HEADER}`.length)
     );
   }
+  const inboundMediaIndex = userInput.indexOf(`\n\n${INBOUND_MEDIA_CONTEXT_HEADER}`);
+  if (inboundMediaIndex >= 0) {
+    return splitMediaLines(
+      userInput.slice(inboundMediaIndex + `\n\n${INBOUND_MEDIA_CONTEXT_HEADER}`.length)
+    );
+  }
   if (userInput.startsWith(INTERPRETED_MEDIA_CONTEXT_HEADER)) {
     return splitMediaLines(
       userInput.slice(INTERPRETED_MEDIA_CONTEXT_HEADER.length)
+    );
+  }
+  if (userInput.startsWith(INBOUND_MEDIA_CONTEXT_HEADER)) {
+    return splitMediaLines(
+      userInput.slice(INBOUND_MEDIA_CONTEXT_HEADER.length)
     );
   }
   if (
@@ -348,6 +439,84 @@ function splitMediaLines(input: string): readonly string[] {
  */
 function stripBulletPrefix(value: string): string {
   return value.replace(/^-\s*/, "").trim();
+}
+
+/**
+ * Extracts the current attachment kind from one rendered attachment header.
+ *
+ * @param line - Normalized rendered media context line.
+ * @returns Attachment kind label, or `null`.
+ */
+function extractRenderedAttachmentKind(line: string): string | null {
+  const match = line.match(/^Attachment\s+\d+:\s+(image|voice note|short video|document)$/i);
+  if (!match?.[1]) {
+    return null;
+  }
+  switch (match[1].toLowerCase()) {
+    case "voice note":
+      return "voice";
+    case "short video":
+      return "video";
+    default:
+      return match[1].toLowerCase();
+  }
+}
+
+/**
+ * Extracts the canonical kind field from rendered media context.
+ *
+ * @param line - Normalized rendered media context line.
+ * @returns Attachment kind, or `null`.
+ */
+function extractRenderedKindField(line: string): string | null {
+  const match = line.match(/^kind:\s+(image|voice|video|document)$/i);
+  return match?.[1]?.toLowerCase() ?? null;
+}
+
+/**
+ * Extracts one rendered layer memory authority.
+ *
+ * @param line - Normalized rendered media context line.
+ * @returns Layer authority, or `null`.
+ */
+function extractRenderedLayerAuthority(line: string): string | null {
+  const match = line.match(/(?:^|;\s*)authority=([a-z_]+)(?:;|$)/i);
+  return match?.[1]?.toLowerCase() ?? null;
+}
+
+/**
+ * Extracts and unquotes one rendered media data field.
+ *
+ * @param line - Normalized rendered media context line.
+ * @param fieldName - Rendered field name before `(quoted data)`.
+ * @returns Unquoted field text, or an empty string when absent or `none`.
+ */
+function extractRenderedQuotedField(line: string, fieldName: string): string {
+  const prefix = `${fieldName} (quoted data):`;
+  if (!line.startsWith(prefix)) {
+    return "";
+  }
+  const rawValue = line.slice(prefix.length).trim();
+  const parsed = parseRenderedQuotedScalar(rawValue);
+  return parsed === "none" ? "" : parsed;
+}
+
+/**
+ * Parses one JSON-quoted scalar emitted by media context rendering.
+ *
+ * @param value - Raw rendered value.
+ * @returns Parsed scalar when possible, otherwise an unwrapped fallback.
+ */
+function parseRenderedQuotedScalar(value: string): string {
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (typeof parsed === "string") {
+      return normalizeProfileValue(parsed);
+    }
+  } catch {
+    // Fall through to the bounded compatibility unwrapping below.
+  }
+  return normalizeProfileValue(value.replace(/^["']|["']$/g, ""));
 }
 
 /**

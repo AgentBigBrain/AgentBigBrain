@@ -8,6 +8,7 @@ import {
   buildDeterministicSelfIdentityDeclarationReply,
   buildModelAssistedSelfIdentityReply
 } from "../../src/interfaces/conversationRuntime/selfIdentityPrompting";
+import { hasSelfIdentityParity } from "../../src/interfaces/conversationRuntime/selfIdentityPromptingSupport";
 import { buildConversationSessionFixture } from "../helpers/conversationFixtures";
 
 test("buildDeterministicSelfIdentityDeclarationReply defers ambiguous discourse-heavy declarations to the shared interpreter path", async () => {
@@ -24,6 +25,47 @@ test("buildDeterministicSelfIdentityDeclarationReply defers ambiguous discourse-
 
   assert.equal(reply, null);
   assert.equal(rememberCalls, 0);
+});
+
+test("buildDeterministicSelfIdentityDeclarationReply persists through typed identity candidates", async () => {
+  const session = buildConversationSessionFixture(
+    {},
+    {
+      receivedAt: "2026-03-21T10:00:00.000Z"
+    }
+  );
+  const rememberedInputs: (string | ProfileMemoryIngestRequest)[] = [];
+
+  const reply = await buildDeterministicSelfIdentityDeclarationReply(
+    "My name is Avery, yes.",
+    "2026-03-21T10:00:30.000Z",
+    async (input) => {
+      rememberedInputs.push(input);
+      return true;
+    },
+    session
+  );
+
+  assert.equal(reply, "Okay, I'll remember that you're Avery.");
+  assert.equal(rememberedInputs.length, 1);
+  const rememberedRequest = rememberedInputs[0] as ProfileMemoryIngestRequest;
+  assert.equal(rememberedRequest.userInput, "My name is Avery, yes.");
+  assert.deepEqual(rememberedRequest.validatedFactCandidates, [
+    {
+      key: "identity.preferred_name",
+      candidateValue: "Avery",
+      source: "conversation.identity_interpretation",
+      confidence: 0.98
+    }
+  ]);
+  assert.equal(rememberedRequest.ingestPolicy?.policySource, "structured_candidate");
+  assert.equal(rememberedRequest.ingestPolicy?.sourceLane, "validated_model_candidate");
+});
+
+test("hasSelfIdentityParity does not treat substring collisions as identity parity", () => {
+  assert.equal(hasSelfIdentityParity("Avery", "Avery Stone"), true);
+  assert.equal(hasSelfIdentityParity("Ann", "Annette"), false);
+  assert.equal(hasSelfIdentityParity("Ben", "Benny"), false);
 });
 
 test("buildModelAssistedSelfIdentityReply persists canonical identity declarations after deterministic validation", async () => {

@@ -3,7 +3,9 @@
  */
 
 import type {
+  ConversationDomainContext,
   ConversationDomainLane,
+  ConversationDomainLaneSignalSource,
   ConversationDomainRoutingMode,
   ConversationDomainSignalWindowUpdate
 } from "../../core/sessionContext";
@@ -89,17 +91,55 @@ export function buildConversationDomainSessionHints(
   | "workflowContinuityActive"
 > {
   const workflowContinuityActive = hasWorkflowContinuity(session);
+  const authoritativeDominantLane = getAuthoritativeConversationDomainDominantLane(session);
   return {
     hasActiveWorkspace: session.activeWorkspace !== null,
-    domainDominantLane: session.domainContext.dominantLane,
+    domainDominantLane: authoritativeDominantLane ?? undefined,
     domainContinuityActive:
       workflowContinuityActive ||
       session.modeContinuity !== null ||
       session.domainContext.continuitySignals.activeWorkspace ||
       session.domainContext.continuitySignals.returnHandoff ||
-      session.domainContext.continuitySignals.modeContinuity,
+      session.domainContext.continuitySignals.modeContinuity ||
+      authoritativeDominantLane !== null,
     workflowContinuityActive
   };
+}
+
+/**
+ * Returns the current dominant lane only when it is backed by typed route, routing, manual, or
+ * live continuity authority.
+ *
+ * @param session - Current conversation session carrying domain context.
+ * @returns Authority-bearing dominant lane, or `null` for keyword-only/stale hints.
+ */
+export function getAuthoritativeConversationDomainDominantLane(
+  session: ConversationSession
+): ConversationDomainLane | null {
+  const lane = session.domainContext.dominantLane;
+  if (lane === "unknown") {
+    return null;
+  }
+  const source = getLatestDomainSignalSourceForLane(session.domainContext, lane);
+  if (!source) {
+    return null;
+  }
+  return isAuthorityBearingDomainSignalSource(source, session.domainContext) ? lane : null;
+}
+
+/**
+ * Returns whether a requested domain lane is currently backed by authority-bearing session state.
+ *
+ * @param session - Current conversation session carrying domain context.
+ * @param lane - Optional lane that must match the authoritative dominant lane.
+ * @returns `true` when the lane can steer later runtime behavior.
+ */
+export function hasAuthoritativeConversationDomainLane(
+  session: ConversationSession,
+  lane?: ConversationDomainLane
+): boolean {
+  const dominantLane = getAuthoritativeConversationDomainDominantLane(session);
+  return dominantLane !== null && (lane === undefined || dominantLane === lane);
 }
 
 /**
@@ -266,6 +306,38 @@ function hasWorkflowContinuity(session: ConversationSession): boolean {
       session.domainContext.continuitySignals.returnHandoff ||
       session.domainContext.continuitySignals.modeContinuity)
   );
+}
+
+/** Returns the newest recorded source for one lane in the bounded domain context. */
+function getLatestDomainSignalSourceForLane(
+  context: ConversationDomainContext,
+  lane: ConversationDomainLane
+): ConversationDomainLaneSignalSource | null {
+  for (let index = context.recentLaneHistory.length - 1; index >= 0; index -= 1) {
+    const signal = context.recentLaneHistory[index];
+    if (signal.lane === lane) {
+      return signal.source;
+    }
+  }
+  return null;
+}
+
+/** Returns whether a domain signal source can steer later runtime behavior. */
+function isAuthorityBearingDomainSignalSource(
+  source: ConversationDomainLaneSignalSource,
+  context: ConversationDomainContext
+): boolean {
+  if (source === "semantic_route" || source === "routing_mode" || source === "manual") {
+    return true;
+  }
+  if (source === "continuity_state") {
+    return (
+      context.continuitySignals.activeWorkspace ||
+      context.continuitySignals.returnHandoff ||
+      context.continuitySignals.modeContinuity
+    );
+  }
+  return false;
 }
 
 /** Returns whether the current user input carries direct workflow lexical evidence. */

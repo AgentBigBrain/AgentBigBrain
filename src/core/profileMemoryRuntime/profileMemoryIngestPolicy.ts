@@ -6,8 +6,11 @@ import type {
   ProfileMemoryIngestMemoryIntent,
   ProfileMemoryIngestPolicy,
   ProfileMemoryIngestSourceLane,
+  ProfileMemorySourceAuthority,
   ProfileMemorySourceSurface
 } from "./contracts";
+import { normalizeSourceAuthority } from "../sourceAuthority";
+import type { NormalizeSourceAuthorityOptions } from "../sourceAuthority";
 import type {
   ProfileMemorySourceDefaultAuthority,
   ProfileMemorySourceFamily
@@ -28,6 +31,11 @@ interface BuildProfileMemoryIngestPolicyInput {
   sourceSurface: ProfileMemorySourceSurface;
   sourceLane?: ProfileMemoryIngestSourceLane;
   hasValidatedFactCandidates?: boolean;
+  hasStructuredEpisodeCandidates?: boolean;
+}
+
+interface NormalizeProfileMemoryIngestPolicyOptions {
+  allowLegacyCompatibility?: boolean;
 }
 
 const INACTIVE_STAGE_SELECTION: ProfileMemoryExtractionStageSelection = {
@@ -101,6 +109,46 @@ export function getProfileMemoryIngestSourceDefaultAuthority(
 }
 
 /**
+ * Maps ingest source lanes onto the shared source-authority vocabulary.
+ *
+ * @param sourceLane - Source lane attached to an ingest request.
+ * @returns Canonical source authority for memory gates.
+ */
+export function profileMemoryIngestSourceLaneToAuthority(
+  sourceLane: ProfileMemoryIngestSourceLane
+): ProfileMemorySourceAuthority {
+  switch (sourceLane) {
+    case "direct_user_text":
+      return "explicit_user_statement";
+    case "voice_transcript":
+    case "image_ocr":
+      return "media_transcript";
+    case "image_summary":
+      return "media_model_summary";
+    case "document_text":
+      return "document_text";
+    case "document_summary":
+      return "document_model_summary";
+    case "validated_model_candidate":
+      return "semantic_model";
+  }
+}
+
+/**
+ * Normalizes memory source authority with legacy compatibility disabled by default.
+ *
+ * @param value - Candidate authority value.
+ * @param options - Compatibility controls for legacy-only values.
+ * @returns Canonical memory source authority or `unknown`.
+ */
+export function normalizeProfileMemorySourceAuthority(
+  value: unknown,
+  options: NormalizeSourceAuthorityOptions = {}
+): ProfileMemorySourceAuthority {
+  return normalizeSourceAuthority(value, options);
+}
+
+/**
  * Builds the temporary compatibility policy used only while older callers are migrated.
  *
  * **Why it exists:**
@@ -127,7 +175,33 @@ export function buildLegacyProfileMemoryIngestPolicy(
     allowEpisodeSupportExtraction: true,
     allowInferredResolution: true,
     fragmentPolicy: "current_truth_allowed",
-    policySource: "legacy_compatibility"
+    policySource: "legacy_compatibility",
+    sourceAuthority: "legacy_compatibility"
+  };
+}
+
+/**
+ * Builds the closed default used when no caller supplied an explicit memory-write policy.
+ *
+ * @param sourceSurface - Source surface attached to the attempted write.
+ * @returns No-op ingest policy that leaves extraction disabled.
+ */
+export function buildClosedProfileMemoryIngestPolicy(
+  sourceSurface: ProfileMemorySourceSurface = "broker_task_ingest"
+): ProfileMemoryIngestPolicy {
+  return {
+    memoryIntent: "none",
+    sourceLane: "direct_user_text",
+    sourceSurface,
+    allowExactSelfFactExtraction: false,
+    allowDirectRelationshipExtraction: false,
+    allowGenericProfileFactExtraction: false,
+    allowCommitmentExtraction: false,
+    allowEpisodeSupportExtraction: false,
+    allowInferredResolution: false,
+    fragmentPolicy: "ignore",
+    policySource: "semantic_route",
+    sourceAuthority: "unknown"
   };
 }
 
@@ -148,7 +222,10 @@ export function buildProfileMemoryIngestPolicy(
   input: BuildProfileMemoryIngestPolicyInput
 ): ProfileMemoryIngestPolicy {
   const sourceLane = input.sourceLane ?? "direct_user_text";
-  if (input.hasValidatedFactCandidates && input.memoryIntent !== "none") {
+  if (
+    (input.hasValidatedFactCandidates || input.hasStructuredEpisodeCandidates) &&
+    input.memoryIntent !== "none"
+  ) {
     return {
       memoryIntent: input.memoryIntent ?? "profile_update",
       sourceLane: "validated_model_candidate",
@@ -157,10 +234,11 @@ export function buildProfileMemoryIngestPolicy(
       allowDirectRelationshipExtraction: false,
       allowGenericProfileFactExtraction: false,
       allowCommitmentExtraction: false,
-      allowEpisodeSupportExtraction: false,
+      allowEpisodeSupportExtraction: input.hasStructuredEpisodeCandidates === true,
       allowInferredResolution: false,
       fragmentPolicy: "current_truth_allowed",
-      policySource: "structured_candidate"
+      policySource: "structured_candidate",
+      sourceAuthority: "semantic_model"
     };
   }
 
@@ -176,7 +254,8 @@ export function buildProfileMemoryIngestPolicy(
       allowEpisodeSupportExtraction: false,
       allowInferredResolution: false,
       fragmentPolicy: "ignore",
-      policySource: "semantic_route"
+      policySource: "semantic_route",
+      sourceAuthority: profileMemoryIngestSourceLaneToAuthority(sourceLane)
     };
   }
 
@@ -204,10 +283,12 @@ export function buildProfileMemoryIngestPolicy(
           : sourceAuthority === "candidate_only"
             ? "candidate_only"
             : "quarantine",
-      policySource: input.memoryIntent ? "semantic_route" : "exact_command"
+      policySource: input.memoryIntent ? "semantic_route" : "exact_command",
+      sourceAuthority: profileMemoryIngestSourceLaneToAuthority(sourceLane)
     };
   }
 
+  const policySource = input.memoryIntent ? "semantic_route" : "exact_command";
   return {
     memoryIntent,
     sourceLane,
@@ -219,7 +300,11 @@ export function buildProfileMemoryIngestPolicy(
     allowEpisodeSupportExtraction: allowsProfileUpdate || allowsContextualMemory,
     allowInferredResolution: false,
     fragmentPolicy: allowsProfileUpdate ? "current_truth_allowed" : "support_only",
-    policySource: input.memoryIntent ? "semantic_route" : "exact_command"
+    policySource,
+    sourceAuthority:
+      policySource === "exact_command"
+        ? "exact_command"
+        : profileMemoryIngestSourceLaneToAuthority(sourceLane)
   };
 }
 
@@ -239,9 +324,15 @@ export function buildProfileMemoryIngestPolicy(
  */
 export function normalizeProfileMemoryIngestPolicy(
   policy: ProfileMemoryIngestPolicy | null | undefined,
-  fallbackSourceSurface: ProfileMemorySourceSurface = "broker_task_ingest"
+  fallbackSourceSurface: ProfileMemorySourceSurface = "broker_task_ingest",
+  options: NormalizeProfileMemoryIngestPolicyOptions = {}
 ): ProfileMemoryIngestPolicy {
-  return policy ?? buildLegacyProfileMemoryIngestPolicy(fallbackSourceSurface);
+  if (policy) {
+    return policy;
+  }
+  return options.allowLegacyCompatibility
+    ? buildLegacyProfileMemoryIngestPolicy(fallbackSourceSurface)
+    : buildClosedProfileMemoryIngestPolicy(fallbackSourceSurface);
 }
 
 /**

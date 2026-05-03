@@ -8,6 +8,7 @@ import type {
   ProfileMemoryGraphClaimRecord,
   ProfileMemoryGraphEventRecord,
   ProfileMemoryGraphObservationRecord,
+  ProfileMemoryGraphSourceTier,
   ProfileMemoryGraphStableRefResolution,
   ProfileMemoryGraphState
 } from "./profileMemoryGraphContracts";
@@ -23,7 +24,13 @@ export interface ProfileMemoryGraphAlignedStableRefGroup
   extends ProfileMemoryGraphStableRefGroup {
   primaryEntityKey: string | null;
   observedEntityKey: string | null;
+  alignmentSourceTiers: readonly ProfileMemoryGraphSourceTier[];
+  alignmentConfidence: "high" | "low";
 }
+
+const LOW_CONFIDENCE_ALIGNMENT_SOURCE_TIERS = new Set<ProfileMemoryGraphSourceTier>([
+  "assistant_inference"
+]);
 
 /** Attaches bounded Stage 6.86 entity keys onto existing stable-ref groups. */
 export function queryProfileMemoryGraphAlignedStableRefGroups(input: {
@@ -32,14 +39,24 @@ export function queryProfileMemoryGraphAlignedStableRefGroups(input: {
 }): readonly ProfileMemoryGraphAlignedStableRefGroup[] {
   return queryProfileMemoryGraphStableRefGroups(input.graph).map((group) => {
     const matchedEntityKeys = collectMatchedEntityKeys(input.graph, input.entityGraph, group);
+    const alignmentSourceTiers = collectStableRefAlignmentSourceTiers(input.graph, group);
+    const alignmentConfidence = hasLowConfidenceAlignmentSource(alignmentSourceTiers)
+      ? "low"
+      : "high";
     const observedEntityKey = matchedEntityKeys.length === 1 ? matchedEntityKeys[0] : null;
-    const resolution = selectAlignedStableRefResolution(group.resolution, matchedEntityKeys);
+    const resolution = selectAlignedStableRefResolution(
+      group.resolution,
+      matchedEntityKeys,
+      alignmentConfidence
+    );
     return {
       ...group,
       resolution,
       primaryEntityKey:
         resolution === "quarantined" ? null : observedEntityKey,
-      observedEntityKey
+      observedEntityKey,
+      alignmentSourceTiers,
+      alignmentConfidence
     };
   });
 }
@@ -70,6 +87,39 @@ function collectStableRefAlignmentLabels(
   addClaimAlignmentLabels(labels, graph.claims, stableRefId);
   addEventAlignmentLabels(labels, graph.events, stableRefId);
   return [...labels].sort((left, right) => left.localeCompare(right));
+}
+
+/** Collects source tiers backing one stable-ref alignment candidate. */
+function collectStableRefAlignmentSourceTiers(
+  graph: ProfileMemoryGraphState,
+  group: ProfileMemoryGraphStableRefGroup
+): readonly ProfileMemoryGraphSourceTier[] {
+  const sourceTiers = new Set<ProfileMemoryGraphSourceTier>();
+  for (const observation of graph.observations) {
+    if (group.observationIds.includes(observation.payload.observationId)) {
+      sourceTiers.add(observation.payload.sourceTier);
+    }
+  }
+  for (const claim of graph.claims) {
+    if (group.claimIds.includes(claim.payload.claimId)) {
+      sourceTiers.add(claim.payload.sourceTier);
+    }
+  }
+  for (const event of graph.events) {
+    if (group.eventIds.includes(event.payload.eventId)) {
+      sourceTiers.add(event.payload.sourceTier);
+    }
+  }
+  return [...sourceTiers].sort((left, right) => left.localeCompare(right));
+}
+
+/** Returns whether any backing source tier is too weak to promote an exact graph alignment. */
+function hasLowConfidenceAlignmentSource(
+  sourceTiers: readonly ProfileMemoryGraphSourceTier[]
+): boolean {
+  return sourceTiers.some((sourceTier) =>
+    LOW_CONFIDENCE_ALIGNMENT_SOURCE_TIERS.has(sourceTier)
+  );
 }
 
 /** Adds observation-derived contact labels for one stable-ref lane. */
@@ -169,9 +219,12 @@ function addAlignmentLabel(bucket: Set<string>, value: string | null): void {
 /** Preserves base resolution unless multiple Stage 6.86 identities keep the lane ambiguous. */
 function selectAlignedStableRefResolution(
   baseResolution: ProfileMemoryGraphStableRefResolution,
-  matchedEntityKeys: readonly string[]
+  matchedEntityKeys: readonly string[],
+  alignmentConfidence: "high" | "low"
 ): ProfileMemoryGraphStableRefResolution {
-  return baseResolution === "quarantined" || matchedEntityKeys.length > 1
+  return baseResolution === "quarantined" ||
+    matchedEntityKeys.length > 1 ||
+    alignmentConfidence === "low"
     ? "quarantined"
     : baseResolution;
 }

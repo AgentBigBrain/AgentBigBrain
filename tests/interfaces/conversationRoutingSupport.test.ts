@@ -103,3 +103,45 @@ test("buildLocalIntentSessionHints marks recent informational answer threads so 
   assert.equal(hints?.recentAssistantTurnKind, "informational_answer");
   assert.equal(hints?.recentAssistantAnswerThreadActive, true);
 });
+
+test("buildLocalIntentSessionHints prefers runtime assistant-turn metadata over rendered prose cues", () => {
+  const session = buildSessionSeed({
+    provider: "telegram",
+    conversationId: "chat-1",
+    userId: "user-1",
+    username: "avery_brooks",
+    conversationVisibility: "private",
+    receivedAt: "2026-04-12T20:28:00.000Z"
+  });
+  session.modeContinuity = {
+    activeMode: "build",
+    source: "natural_intent",
+    confidence: "HIGH",
+    lastAffirmedAt: "2026-04-12T20:00:00.000Z",
+    lastUserInput: "Build the landing page now."
+  };
+  session.conversationTurns = [
+    {
+      id: "turn-user-1",
+      role: "user",
+      text: "What is Sample Web Studio?",
+      at: "2026-04-12T20:29:00.000Z"
+    },
+    {
+      id: "turn-assistant-1",
+      role: "assistant",
+      text: "Status: Sample Web Studio is a fictional creative studio in this test.",
+      at: "2026-04-12T20:29:05.000Z",
+      metadata: {
+        assistantTurnKind: "informational_answer",
+        assistantTurnKindSource: "runtime_metadata"
+      }
+    }
+  ];
+
+  const hints = buildLocalIntentSessionHints(session);
+
+  assert.ok(hints);
+  assert.equal(hints?.recentAssistantTurnKind, "informational_answer");
+  assert.equal(hints?.recentAssistantAnswerThreadActive, true);
+});

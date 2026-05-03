@@ -82,6 +82,10 @@ function buildBridgePulseCandidate(): PulseCandidateV1 {
     threadKey: "thread_budget",
     entityRefs: ["entity_lantern_labs", "entity_project_aurora"],
     evidenceRefs: ["trace:candidate_bridge_primary"],
+    sourceAuthority: "stale_runtime_context",
+    provenanceTier: "supporting",
+    sensitive: false,
+    activeMissionSuppressed: false,
     stableHash: "hash_bridge_primary"
   };
 }
@@ -106,6 +110,9 @@ function emitsNeutralBridgeQuestionWhenEvidenceThresholdAndGuardsPass(): void {
   assert.match(result.bridgeQuestion!.prompt, /How would you describe their relationship/i);
   assert.match(result.bridgeQuestion!.prompt, /coworker, friend, family, project_related, other, or not related/i);
   assert.equal(result.bridgeQuestion!.threadKey, "thread_budget");
+  assert.equal(result.bridgeCandidate?.sourceAuthority, "stale_runtime_context");
+  assert.equal(result.bridgeQuestion?.provenanceTier, "supporting");
+  assert.equal(result.pulseEmitParams?.activeMissionSuppressed, false);
 }
 
 /**

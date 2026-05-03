@@ -167,12 +167,14 @@ interface ProfileMemoryStoreOptions {
     claims: readonly ProfileMemoryGraphClaimRecord[],
     updatedAt: string
   ) => Promise<void> | void;
+  allowLegacyCompatibilityIngestDefault?: boolean;
 }
 
 export class ProfileMemoryStore {
   private readonly onChange?: ProfileMemoryStoreOptions["onChange"];
   private readonly onCurrentSurfaceGraphClaimsChanged?:
     ProfileMemoryStoreOptions["onCurrentSurfaceGraphClaimsChanged"];
+  private readonly allowLegacyCompatibilityIngestDefault: boolean;
 
   /**
    * Creates the encrypted profile-memory persistence service.
@@ -193,6 +195,8 @@ export class ProfileMemoryStore {
     assertProfileMemoryKeyLength(encryptionKey);
     this.onChange = options.onChange;
     this.onCurrentSurfaceGraphClaimsChanged = options.onCurrentSurfaceGraphClaimsChanged;
+    this.allowLegacyCompatibilityIngestDefault =
+      options.allowLegacyCompatibilityIngestDefault === true;
   }
 
   /**
@@ -370,7 +374,10 @@ export class ProfileMemoryStore {
     const mediaIngest = options.mediaIngest ?? parseProfileMediaIngestInput(userInput);
     const ingestPolicy = normalizeProfileMemoryIngestPolicy(
       options.ingestPolicy,
-      options.provenance?.sourceSurface
+      options.provenance?.sourceSurface,
+      {
+        allowLegacyCompatibility: this.allowLegacyCompatibilityIngestDefault
+      }
     );
     const extractionStages = selectProfileMemoryExtractionStages(ingestPolicy);
     const factSourceTexts = dedupeProfileIngestTexts([

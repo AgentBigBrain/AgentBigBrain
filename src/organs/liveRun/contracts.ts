@@ -795,12 +795,15 @@ export async function waitForLocalHttpReadiness(
       1,
       Math.min(remainingMs || timeoutMs, READINESS_PROBE_ATTEMPT_TIMEOUT_MS)
     );
-    observedStatus = await performLocalHttpProbe(parsedUrl, attemptTimeoutMs, signal);
-    if (observedStatus !== null && isReadyHttpStatus(observedStatus, expectedStatus)) {
+    const attemptObservedStatus = await performLocalHttpProbe(parsedUrl, attemptTimeoutMs, signal);
+    if (attemptObservedStatus !== null) {
+      observedStatus = attemptObservedStatus;
+    }
+    if (attemptObservedStatus !== null && isReadyHttpStatus(attemptObservedStatus, expectedStatus)) {
       return {
         ready: true,
         attempts,
-        observedStatus
+        observedStatus: attemptObservedStatus
       };
     }
     if (Date.now() - startedAt >= timeoutMs) {

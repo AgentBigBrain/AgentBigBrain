@@ -129,14 +129,16 @@ export class SkillRegistryStore {
     const guidanceCandidates: Array<{
       manifest: SkillManifest;
       score: number;
+      matchedTerms: readonly string[];
       guidance: string;
     }> = [];
+    const queryTokens = tokenizeGuidanceText(normalizedQuery);
     for (const manifest of manifests) {
       if (manifest.kind !== "markdown_instruction" || !manifest.instructionPath) {
         continue;
       }
-      const score = scoreGuidanceManifest(manifest, normalizedQuery);
-      if (score <= 0) {
+      const relevance = scoreGuidanceManifest(manifest, queryTokens);
+      if (relevance.score <= 0) {
         continue;
       }
       const guidance = await this.readGuidanceMarkdown(manifest.instructionPath);
@@ -145,7 +147,8 @@ export class SkillRegistryStore {
       }
       guidanceCandidates.push({
         manifest,
-        score,
+        score: relevance.score,
+        matchedTerms: relevance.matchedTerms,
         guidance
       });
     }
@@ -160,12 +163,18 @@ export class SkillRegistryStore {
         return left.manifest.name.localeCompare(right.manifest.name);
       })
       .slice(0, limit)
-      .map(({ manifest, guidance }) => ({
+      .map(({ manifest, guidance, matchedTerms }) => ({
         name: manifest.name,
         origin: manifest.origin,
         description: manifest.description,
         tags: manifest.tags,
         invocationHints: manifest.invocationHints,
+        selectionSource:
+          manifest.origin === "runtime_user"
+            ? "runtime_user_active_manifest"
+            : "source_controlled_builtin_manifest",
+        advisoryAuthority: "advisory_only",
+        matchedTerms,
         guidance
       }));
   }
@@ -329,13 +338,31 @@ function normalizeGuidanceText(value: string): string {
 }
 
 /**
- * Scores one guidance manifest against a normalized query.
+ * Tokenizes normalized guidance text into exact terms for matching.
+ *
+ * @param value - Normalized text to tokenize.
+ * @returns Exact searchable terms.
+ */
+function tokenizeGuidanceText(value: string): ReadonlySet<string> {
+  return new Set(
+    value
+      .split(/[^a-z0-9.]+/)
+      .map((term) => term.trim())
+      .filter((term) => term.length >= 3)
+  );
+}
+
+/**
+ * Scores one guidance manifest against exact request tokens.
  *
  * @param manifest - Candidate Markdown skill manifest.
- * @param normalizedQuery - Lowercase user request.
- * @returns Deterministic relevance score.
+ * @param queryTokens - Exact lowercase query terms.
+ * @returns Deterministic relevance score plus matched manifest terms.
  */
-function scoreGuidanceManifest(manifest: SkillManifest, normalizedQuery: string): number {
+function scoreGuidanceManifest(
+  manifest: SkillManifest,
+  queryTokens: ReadonlySet<string>
+): { score: number; matchedTerms: readonly string[] } {
   const fields = [
     manifest.name,
     manifest.description,
@@ -350,12 +377,17 @@ function scoreGuidanceManifest(manifest: SkillManifest, normalizedQuery: string)
     .split(/[^a-z0-9.]+/)
     .filter((term) => term.length >= 3);
   let score = 0;
+  const matchedTerms: string[] = [];
   for (const term of new Set(terms)) {
-    if (normalizedQuery.includes(term)) {
+    if (queryTokens.has(term)) {
       score += manifest.origin === "runtime_user" ? 3 : 2;
+      matchedTerms.push(term);
     }
   }
-  return score;
+  return {
+    score,
+    matchedTerms
+  };
 }
 
 /**

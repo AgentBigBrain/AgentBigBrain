@@ -36,6 +36,7 @@ function buildCreateSkillParams(overrides: Partial<CreateSkillActionParams> = {}
     invocationHints: ["Ask me to run skill triage_planner_failure."],
     testInput: "planner action mismatch",
     expectedOutputContains: "triaged",
+    activationSource: "explicit_user_request",
     ...overrides
   };
 }
@@ -240,10 +241,64 @@ test("skill registry merges built-in Markdown guidance and runtime overrides", a
     assert.equal(manifest?.memoryPolicy, "candidate_only");
     assert.equal(guidance.length, 1);
     assert.equal(guidance[0]?.name, "static-site-generation");
+    assert.equal(guidance[0]?.selectionSource, "source_controlled_builtin_manifest");
+    assert.equal(guidance[0]?.advisoryAuthority, "advisory_only");
+    assert.equal(guidance[0]?.matchedTerms.includes("static"), true);
     assert.match(guidance[0]?.guidance ?? "", /self-contained index\.html/i);
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }
+});
+
+test("skill registry guidance uses exact token matches instead of substring matches", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-skill-registry-"));
+  const builtInDir = path.join(tempDir, "builtins");
+  const runtimeDir = path.join(tempDir, "runtime");
+  try {
+    await mkdir(builtInDir, { recursive: true });
+    await writeFile(
+      path.join(builtInDir, "app-generation.md"),
+      [
+        "---",
+        "kind: markdown_instruction",
+        "name: app-generation",
+        "description: Application build guidance.",
+        "tags: app, build",
+        "---",
+        "# App",
+        "",
+        "Use this only for app build requests."
+      ].join("\n"),
+      "utf8"
+    );
+
+    const store = new SkillRegistryStore(runtimeDir, builtInDir);
+    const guidance = await store.listApplicableGuidance("What is happening next?", 3);
+
+    assert.equal(guidance.length, 0);
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("buildSkillManifest defaults omitted runtime activation source to pending approval", () => {
+  const manifest = buildSkillManifest(
+    buildCreateSkillParams({
+      activationSource: undefined
+    }),
+    "suggested_skill",
+    {
+      skillsRoot: "/tmp/skills",
+      instructionPath: "/tmp/skills/suggested_skill.md",
+      primaryPath: "/tmp/skills/suggested_skill.js",
+      compatibilityPath: "/tmp/skills/suggested_skill.ts",
+      manifestPath: "/tmp/skills/suggested_skill.manifest.json"
+    },
+    "2026-03-10T12:00:00.000Z"
+  );
+
+  assert.equal(manifest.activationSource, "agent_suggestion");
+  assert.equal(manifest.lifecycleStatus, "pending_approval");
 });
 
 test("skill registry fail-closes invalid runtime overrides before built-in fallback", async () => {

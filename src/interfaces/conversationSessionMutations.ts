@@ -13,6 +13,7 @@ import {
 } from "../core/stage6_86ConversationStack";
 import {
   ActiveClarificationState,
+  ConversationAssistantTurnKind,
   ConversationActiveWorkspaceRecord,
   ConversationBrowserSessionRecord,
   ConversationJob,
@@ -69,6 +70,14 @@ function resolveSessionDomainSnapshot(
       fallbackObservedAt ??
       session.updatedAt
   };
+}
+
+export interface RecordAssistantTurnOptions {
+  assistantTurnKind?: ConversationAssistantTurnKind | null;
+}
+
+interface PushConversationTurnOptions {
+  assistantTurnKind?: ConversationAssistantTurnKind | null;
 }
 
 /**
@@ -167,9 +176,17 @@ export function recordAssistantTurn(
   session: ConversationSession,
   text: string,
   at: string,
-  maxConversationTurns: number
+  maxConversationTurns: number,
+  options: RecordAssistantTurnOptions = {}
 ): void {
-  const recordedTurn = pushConversationTurn(session, "assistant", text, at, maxConversationTurns);
+  const recordedTurn = pushConversationTurn(
+    session,
+    "assistant",
+    text,
+    at,
+    maxConversationTurns,
+    options
+  );
   if (!recordedTurn) {
     return;
   }
@@ -197,7 +214,8 @@ export function pushConversationTurn(
   role: ConversationTurn["role"],
   text: string,
   at: string,
-  maxConversationTurns: number
+  maxConversationTurns: number,
+  options: PushConversationTurnOptions = {}
 ): ConversationTurn | null {
   const normalized = role === "assistant"
     ? normalizeAssistantTurnText(text)
@@ -206,7 +224,19 @@ export function pushConversationTurn(
     return null;
   }
 
-  const turn: ConversationTurn = { role, text: normalized, at };
+  const metadata =
+    role === "assistant" && options.assistantTurnKind
+      ? {
+          assistantTurnKind: options.assistantTurnKind,
+          assistantTurnKindSource: "runtime_metadata" as const
+        }
+      : undefined;
+  const turn: ConversationTurn = {
+    role,
+    text: normalized,
+    at,
+    ...(metadata ? { metadata } : {})
+  };
   session.conversationTurns = [...session.conversationTurns, turn].slice(
     -maxConversationTurns
   );

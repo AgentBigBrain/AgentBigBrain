@@ -66,7 +66,8 @@ env-parsing helpers while `config.ts` remains the stable config entrypoint.
   `advancedAutonomyFoundation.ts`, `advancedAutonomyRuntime.ts`, `autonomyFoundation.ts`,
   `commitmentSignalClassifier.ts`, `currentRequestExtraction.ts`,
   `explicitExecutionConstraints.ts`, `plannerActionSchema.ts`, `runtimeTargetReference.ts`,
-  `plannerFailureStore.ts`, `verificationPromptClassifier.ts`, `workflowLearningStore.ts`.
+  `plannerFailureStore.ts`, `sourceAuthority.ts`, `verificationPromptClassifier.ts`,
+  `workflowLearningStore.ts`.
 - Extracted workflow-learning runtime subsystem: `src/core/workflowLearningRuntime/contracts.ts`,
   `src/core/workflowLearningRuntime/observationExtraction.ts`,
   `src/core/workflowLearningRuntime/observationScoring.ts`,
@@ -92,7 +93,8 @@ env-parsing helpers while `config.ts` remains the stable config entrypoint.
 - Extracted config-runtime subsystem: `src/core/configRuntime/envContracts.ts`,
   `src/core/configRuntime/configParsing.ts`,
   `src/core/configRuntime/platformProfiles.ts`.
-- Deterministic safety, governance, and routing helpers: `delegationPolicy.ts`,
+- Deterministic safety, governance, and routing helpers: `actionDefinitionRegistry.ts`,
+  `delegationPolicy.ts`,
   `governorDriftAudit.ts`, `hardConstraintCommunicationPolicy.ts`,
   `hardConstraintParamUtils.ts`, `hardConstraintPathPolicy.ts`, `hardConstraints.ts`,
   `hardConstraintShellPolicy.ts`, `immutableTargetPolicy.ts`, `retrievalQuarantine.ts`.

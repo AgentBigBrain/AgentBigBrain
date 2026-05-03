@@ -3,15 +3,13 @@
  */
 
 import { validatePreferredNameCandidateValue } from "../../core/profileMemoryRuntime/profileMemoryExtraction";
+import type { ProfileValidatedFactCandidateInput } from "../../core/profileMemoryRuntime/contracts";
 import type { ConversationSession } from "../sessionStore";
 import { normalizeWhitespace } from "../conversationManagerHelpers";
 import {
   analyzeConversationChatTurnSignals,
   type IdentityInterpretationEligibilityReason
 } from "./chatTurnSignals";
-
-const CANONICAL_IDENTITY_DECLARATION_PREFIX = "My name is ";
-const CANONICAL_IDENTITY_DECLARATION_SUFFIX = ".";
 
 /**
  * Returns the latest assistant-authored conversational turn for bounded identity interpretation.
@@ -29,18 +27,6 @@ export function resolveRecentAssistantTurn(
 }
 
 /**
- * Builds a canonical direct identity declaration input from one validated preferred name.
- *
- * @param preferredName - Validated preferred-name value.
- * @returns Canonical declaration input suitable for the existing profile-memory seam.
- */
-export function buildCanonicalIdentityDeclarationInput(
-  preferredName: string
-): string {
-  return `${CANONICAL_IDENTITY_DECLARATION_PREFIX}${preferredName}${CANONICAL_IDENTITY_DECLARATION_SUFFIX}`;
-}
-
-/**
  * Validates a model-proposed preferred-name candidate using the deterministic extractor as the
  * final normalization and safety gate.
  *
@@ -51,6 +37,29 @@ export function validateInterpretedPreferredNameCandidate(
   candidateValue: string | null
 ): string | null {
   return validatePreferredNameCandidateValue(normalizeWhitespace(candidateValue ?? ""));
+}
+
+/**
+ * Builds the typed profile-memory fact candidate used for preferred-name persistence.
+ *
+ * @param preferredName - Validated preferred-name value.
+ * @param confidence - Candidate confidence assigned by the identity interpreter or fast path.
+ * @returns Canonical validated fact candidate, or `null` when the value is unsafe.
+ */
+export function buildPreferredNameValidatedFactCandidate(
+  preferredName: string,
+  confidence: number
+): ProfileValidatedFactCandidateInput | null {
+  const validatedPreferredName = validateInterpretedPreferredNameCandidate(preferredName);
+  if (!validatedPreferredName) {
+    return null;
+  }
+  return {
+    key: "identity.preferred_name",
+    candidateValue: validatedPreferredName,
+    source: "conversation.identity_interpretation",
+    confidence
+  };
 }
 
 /**

@@ -318,7 +318,7 @@ test("normalizeProfileMemoryState rebuilds additive graph indexes and drops malf
   assert.equal(normalized.graph.readModel.watermark, 3);
 });
 
-test("normalizeProfileMemoryState keeps the existing graph current winner and projection lineage when conflicting flat facts remain retained", () => {
+test("normalizeProfileMemoryState keeps the existing graph claim inactive when conflicting flat facts remain retained", () => {
   const updatedAt = "2026-04-10T13:30:00.000Z";
   const normalized = normalizeProfileMemoryState({
     updatedAt,
@@ -331,7 +331,7 @@ test("normalizeProfileMemoryState keeps the existing graph current winner and pr
         status: "confirmed",
         confidence: 0.92,
         sourceTaskId: "task_profile_graph_authoritative_work",
-        source: "user_input_pattern.work_with_contact",
+        source: "conversation.relationship_interpretation",
         observedAt: updatedAt,
         confirmedAt: updatedAt,
         supersededAt: null,
@@ -345,7 +345,7 @@ test("normalizeProfileMemoryState keeps the existing graph current winner and pr
         status: "confirmed",
         confidence: 0.95,
         sourceTaskId: "task_profile_graph_conflicting_work",
-        source: "user_input_pattern.work_with_contact",
+        source: "conversation.relationship_interpretation",
         observedAt: updatedAt,
         confirmedAt: updatedAt,
         supersededAt: null,
@@ -401,15 +401,15 @@ test("normalizeProfileMemoryState keeps the existing graph current winner and pr
   });
 
   assert.equal(normalized.facts.length, 2);
-  const currentClaimId =
-    normalized.graph.readModel.currentClaimIdsByKey["contact.owen.work_association"] ?? null;
-  const currentClaim =
-    normalized.graph.claims.find((claim) => claim.payload.claimId === currentClaimId) ?? null;
+  const retainedClaim =
+    normalized.graph.claims.find(
+      (claim) => claim.payload.claimId === "claim_authoritative_owen_work"
+    ) ?? null;
 
-  assert.notEqual(currentClaim, null);
-  assert.equal(currentClaim?.payload.normalizedKey, "contact.owen.work_association");
-  assert.equal(currentClaim?.payload.normalizedValue, "Lantern Studio");
-  assert.equal(currentClaim?.payload.active, true);
+  assert.notEqual(retainedClaim, null);
+  assert.equal(retainedClaim?.payload.normalizedKey, "contact.owen.work_association");
+  assert.equal(retainedClaim?.payload.normalizedValue, "Lantern Studio");
+  assert.equal(retainedClaim?.payload.active, false);
 });
 
 test("normalizeProfileMemoryState keeps the freshest valid envelope for duplicate graph record ids", () => {

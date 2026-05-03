@@ -103,6 +103,31 @@ function findNearestPriorUserTurn(
 }
 
 /**
+ * Resolves structured assistant-turn metadata when the runtime stored it with the turn.
+ *
+ * @param turn - Latest assistant-authored session turn.
+ * @returns Recent assistant-turn context, or `null` when no trusted metadata is present.
+ */
+function resolveAssistantTurnContextFromMetadata(
+  turn: ConversationSession["conversationTurns"][number]
+): RecentAssistantTurnContext | null {
+  const metadata = turn.metadata;
+  if (
+    turn.role !== "assistant" ||
+    !metadata ||
+    metadata.assistantTurnKindSource !== "runtime_metadata" ||
+    !metadata.assistantTurnKind
+  ) {
+    return null;
+  }
+  return {
+    recentAssistantTurnKind: metadata.assistantTurnKind,
+    recentAssistantAnswerThreadActive:
+      metadata.assistantTurnKind === "informational_answer"
+  };
+}
+
+/**
  * Returns whether one assistant turn is clearly workflow progress rather than an informational
  * answer.
  *
@@ -157,6 +182,10 @@ export function buildRecentAssistantTurnContext(
   }
 
   const assistantText = lastAssistant.turn.text;
+  const metadataContext = resolveAssistantTurnContextFromMetadata(lastAssistant.turn);
+  if (metadataContext) {
+    return metadataContext;
+  }
   if (isLikelyAssistantClarificationPrompt(assistantText)) {
     return {
       recentAssistantTurnKind: "clarification",

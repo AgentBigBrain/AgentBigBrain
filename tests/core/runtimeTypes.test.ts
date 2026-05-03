@@ -119,7 +119,11 @@ test("types.ts re-exports canonical interface-facing runtime contracts", () => {
     candidateId: "candidate_1",
     blockCode: null,
     blockDetailReason: null,
-    evidenceRefs: []
+    evidenceRefs: [],
+    sourceAuthority: "stale_runtime_context",
+    provenanceTier: "supporting",
+    sensitive: false,
+    activeMissionSuppressed: false
   };
   const question: BridgeQuestionV1 = {
     questionId: "bridge_1",
@@ -129,7 +133,11 @@ test("types.ts re-exports canonical interface-facing runtime contracts", () => {
     createdAt: "2026-03-08T00:00:00.000Z",
     cooldownUntil: "2026-03-09T00:00:00.000Z",
     threadKey: "thread_1",
-    evidenceRefs: []
+    evidenceRefs: [],
+    sourceAuthority: "stale_runtime_context",
+    provenanceTier: "supporting",
+    sensitive: false,
+    activeMissionSuppressed: false
   };
 
   const canonicalStack: CanonicalConversationStackV1 = stack;

@@ -355,6 +355,12 @@ export async function buildContextualRecallBlock(
     `- Model-assisted entity references: ${interpretedEntityHints.selectedEntityLabels.join(", ")}`,
     `- Model-assisted entity rationale: ${interpretedEntityHints.explanation}`
   ] : [];
+  const retrievalAuthorityLines = [
+    `- Retrieval mode: ${candidate.retrievalMode}`,
+    `- Source authority: ${candidate.sourceAuthority}`,
+    `- Planner authority: ${candidate.plannerAuthority}`,
+    `- Current truth authority: ${candidate.currentTruthAuthority ? "true" : "false"}`
+  ];
 
   if (candidate.kind === "episode") {
     recordProfileMemoryRenderOperation(requestTelemetry);
@@ -367,6 +373,7 @@ export async function buildContextualRecallBlock(
       `- Situation status: ${candidate.episodeStatus ?? "unresolved"}`,
       `- Related open loops: ${candidate.openLoopCount}`,
       `- Last mentioned: ${candidate.lastTouchedAt}`,
+      ...retrievalAuthorityLines,
       ...modelEvidenceLine,
       ...entityModelEvidenceLine,
       ...mediaCueLine,
@@ -394,6 +401,7 @@ export async function buildContextualRecallBlock(
       ? [`- Matched open-loop cues: ${candidate.matchedHintTerms.join(", ")}`]
       : []),
     `- Last touched: ${candidate.lastTouchedAt}`,
+    ...retrievalAuthorityLines,
     ...modelEvidenceLine,
     ...entityModelEvidenceLine,
     ...mediaCueLine,

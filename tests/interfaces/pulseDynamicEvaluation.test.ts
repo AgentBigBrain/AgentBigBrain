@@ -98,3 +98,28 @@ test("buildDomainBiasedPulseGraph falls back to the original graph for unknown s
 
   assert.equal(graph, original);
 });
+
+test("buildDomainBiasedPulseGraph does not widen to the full graph from weak lane evidence", () => {
+  const original = buildGraph();
+  const graph = buildDomainBiasedPulseGraph(original, "system_policy");
+
+  assert.deepEqual(
+    graph.entities.map((entity) => entity.entityKey),
+    ["entity_shared"]
+  );
+  assert.deepEqual(graph.edges, []);
+});
+
+test("buildDomainBiasedPulseGraph can widen only when authority permits fallback", () => {
+  const original = buildGraph();
+  const graphWithNoSharedEntities = {
+    ...original,
+    entities: original.entities.filter((entity) => entity.domainHint !== null),
+    edges: []
+  };
+  const graph = buildDomainBiasedPulseGraph(graphWithNoSharedEntities, "system_policy", {
+    allowFullGraphFallback: true
+  });
+
+  assert.equal(graph, graphWithNoSharedEntities);
+});

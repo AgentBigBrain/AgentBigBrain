@@ -39,6 +39,7 @@ export type {
   AgentPulseMode,
   AgentPulseRouteStrategy,
   AgentPulseSessionState,
+  ConversationAssistantTurnKind,
   ClarificationRenderingIntent,
   ClarificationOptionId,
   ConversationAckLifecycleState,

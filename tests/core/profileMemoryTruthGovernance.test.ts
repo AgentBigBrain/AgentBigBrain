@@ -533,38 +533,38 @@ test("truth governance only allows the live contact current-state sources", () =
       {
         family: "contact.relationship",
         evidenceClass: "user_explicit_fact",
-        action: "allow_current_state",
-        reason: "explicit_user_fact"
+        action: "quarantine",
+        reason: "unsupported_source"
       },
       {
         family: "contact.relationship",
         evidenceClass: "user_explicit_fact",
-        action: "allow_current_state",
-        reason: "explicit_user_fact"
+        action: "quarantine",
+        reason: "unsupported_source"
       },
       {
         family: "contact.relationship",
         evidenceClass: "user_explicit_fact",
-        action: "allow_current_state",
-        reason: "explicit_user_fact"
+        action: "quarantine",
+        reason: "unsupported_source"
       },
       {
         family: "contact.work_association",
         evidenceClass: "user_explicit_fact",
-        action: "allow_current_state",
-        reason: "explicit_user_fact"
+        action: "quarantine",
+        reason: "unsupported_source"
       },
       {
         family: "contact.work_association",
         evidenceClass: "user_explicit_fact",
-        action: "allow_current_state",
-        reason: "explicit_user_fact"
+        action: "quarantine",
+        reason: "unsupported_source"
       },
       {
         family: "contact.work_association",
         evidenceClass: "user_explicit_fact",
-        action: "allow_current_state",
-        reason: "explicit_user_fact"
+        action: "quarantine",
+        reason: "unsupported_source"
       },
       {
         family: "contact.name",
@@ -586,27 +586,17 @@ test("truth governance only allows the live contact current-state sources", () =
       }
     ]
   );
-  assert.equal(result.allowedCurrentStateFactCandidates.length, 8);
-  assert.equal(result.quarantinedFactCandidates.length, 3);
+  assert.equal(result.allowedCurrentStateFactCandidates.length, 2);
+  assert.equal(result.quarantinedFactCandidates.length, 9);
 });
 
-test("family registry keeps contact current-state promotion on explicit live sources only", () => {
-  assert.throws(
-    () =>
-      assertProfileMemoryGovernanceDecisionAllowed({
-        family: "contact.relationship",
-        evidenceClass: "validated_structured_candidate",
-        action: "allow_current_state",
-        reason: "validated_semantic_candidate"
-      }),
-    /live explicit-user sources/i
-  );
+test("family registry keeps contact current-state promotion on semantic candidates or narrow explicit sources", () => {
   assert.doesNotThrow(() =>
     assertProfileMemoryGovernanceDecisionAllowed({
-      family: "contact.work_association",
-      evidenceClass: "user_explicit_fact",
+      family: "contact.relationship",
+      evidenceClass: "validated_structured_candidate",
       action: "allow_current_state",
-      reason: "explicit_user_fact"
+      reason: "validated_semantic_candidate"
     })
   );
   assert.doesNotThrow(() =>
@@ -1549,19 +1539,17 @@ test("family registry rejects governance actions that violate family policy", ()
   );
 });
 
-test("family registry rejects adjacent-domain truth actions that the family policy disallows", () => {
-  assert.throws(
-    () =>
-      assertProfileMemoryAdjacentDomainAccessAllowed(
-        "conversation.relationship_interpretation",
-        {
-          family: "contact.relationship",
-          evidenceClass: "validated_structured_candidate",
-          action: "allow_current_state",
-          reason: "validated_semantic_candidate"
-        }
-      ),
-    /does not allow structured_conversation to create authoritative truth decisions/i
+test("family registry allows approved adjacent-domain semantic relationship truth actions", () => {
+  assert.doesNotThrow(() =>
+    assertProfileMemoryAdjacentDomainAccessAllowed(
+      "conversation.relationship_interpretation",
+      {
+        family: "contact.relationship",
+        evidenceClass: "validated_structured_candidate",
+        action: "allow_current_state",
+        reason: "validated_semantic_candidate"
+      }
+    )
   );
 
   assert.doesNotThrow(() =>
@@ -1624,7 +1612,7 @@ test("truth governance only allows the live generic explicit fact source", () =>
   assert.equal(result.quarantinedFactCandidates.length, 1);
 });
 
-test("truth governance quarantines unsupported structured current-state sources outside self identity", () => {
+test("truth governance only promotes supported structured current-state sources", () => {
   const result = governProfileMemoryCandidates({
     factCandidates: [
       {
@@ -1671,8 +1659,8 @@ test("truth governance quarantines unsupported structured current-state sources 
       {
         family: "contact.relationship",
         evidenceClass: "validated_structured_candidate",
-        action: "quarantine",
-        reason: "unsupported_source"
+        action: "allow_current_state",
+        reason: "validated_semantic_candidate"
       },
       {
         family: "generic.profile_fact",
@@ -1682,6 +1670,6 @@ test("truth governance quarantines unsupported structured current-state sources 
       }
     ]
   );
-  assert.equal(result.allowedCurrentStateFactCandidates.length, 0);
-  assert.equal(result.quarantinedFactCandidates.length, 3);
+  assert.equal(result.allowedCurrentStateFactCandidates.length, 1);
+  assert.equal(result.quarantinedFactCandidates.length, 2);
 });

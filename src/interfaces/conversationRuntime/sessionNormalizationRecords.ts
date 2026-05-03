@@ -6,6 +6,7 @@ import type {
   ActiveClarificationOption,
   ActiveClarificationState,
   ConversationAckLifecycleState,
+  ConversationAssistantTurnKind,
   ConversationFinalDeliveryOutcome,
   ConversationJob,
   ConversationJobStatus,
@@ -14,7 +15,9 @@ import type {
   ConversationRecoveryTrace,
   ConversationReturnHandoffRecord,
   ConversationRecentActionRecord,
-  ConversationTurn
+  ConversationTurn,
+  ConversationTurnMetadata,
+  ConversationTurnMetadataSource
 } from "./sessionStateContracts";
 import type { RecoveryFailureClass } from "../../core/autonomy/contracts";
 export {
@@ -256,6 +259,52 @@ export function normalizeConversationJob(job: Partial<ConversationJob>): Convers
 }
 
 /**
+ * Normalizes persisted assistant-turn kind metadata.
+ */
+function normalizeAssistantTurnKind(value: unknown): ConversationAssistantTurnKind | null {
+  return value === "clarification" ||
+    value === "informational_answer" ||
+    value === "workflow_progress" ||
+    value === "other"
+    ? value
+    : null;
+}
+
+/**
+ * Normalizes persisted turn-metadata source labels.
+ */
+function normalizeConversationTurnMetadataSource(
+  value: unknown
+): ConversationTurnMetadataSource | null {
+  return value === "runtime_metadata" || value === "legacy_text_inference"
+    ? value
+    : null;
+}
+
+/**
+ * Normalizes optional turn metadata without allowing malformed legacy payloads to poison turns.
+ */
+function normalizeConversationTurnMetadata(
+  turn: Partial<ConversationTurn>
+): ConversationTurnMetadata | undefined {
+  const metadata = turn.metadata;
+  if (!metadata || typeof metadata !== "object") {
+    return undefined;
+  }
+  const assistantTurnKind = normalizeAssistantTurnKind(metadata.assistantTurnKind);
+  const assistantTurnKindSource = normalizeConversationTurnMetadataSource(
+    metadata.assistantTurnKindSource
+  );
+  if (!assistantTurnKind || !assistantTurnKindSource) {
+    return undefined;
+  }
+  return {
+    assistantTurnKind,
+    assistantTurnKindSource
+  };
+}
+
+/**
  * Normalizes one persisted conversation turn into the stable runtime shape.
  */
 export function normalizeConversationTurn(turn: Partial<ConversationTurn>): ConversationTurn | null {
@@ -267,10 +316,12 @@ export function normalizeConversationTurn(turn: Partial<ConversationTurn>): Conv
     return null;
   }
 
+  const metadata = normalizeConversationTurnMetadata(turn);
   return {
     role: turn.role,
     text: turn.text,
-    at: turn.at
+    at: turn.at,
+    ...(metadata ? { metadata } : {})
   };
 }
 

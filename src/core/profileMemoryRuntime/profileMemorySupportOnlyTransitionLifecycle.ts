@@ -16,7 +16,9 @@ import { inferGovernanceFamilyForNormalizedKey } from "./profileMemoryGovernance
 const WORK_LINKAGE_TRANSITION_SOURCES = new Set([
   "user_input_pattern.work_with_contact_severed",
   "user_input_pattern.work_with_contact_historical",
-  "user_input_pattern.work_association_historical"
+  "user_input_pattern.work_association_historical",
+  "conversation.relationship_interpretation_historical",
+  "conversation.relationship_interpretation_severed"
 ]);
 
 interface SupportOnlyTransitionTarget {

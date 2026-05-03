@@ -9,6 +9,7 @@ import path from "node:path";
 import { test } from "node:test";
 
 import { ProfileMemoryStore } from "../../src/core/profileMemoryStore";
+import { buildProfileMemoryIngestPolicy } from "../../src/core/profileMemoryRuntime/profileMemoryIngestPolicy";
 
 class CountingProfileMemoryStore extends ProfileMemoryStore {
   loadCount = 0;
@@ -37,13 +38,25 @@ test("profile memory read session reuses one reconciled snapshot across planning
   await withCountingProfileStore(async (store) => {
     await store.ingestFromTaskInput(
       "task_profile_read_session_fact",
-      "I work with Owen at Lantern Studio.",
-      "2026-03-26T15:39:00.000Z"
+      "My work peer is Owen.",
+      "2026-03-26T15:39:00.000Z",
+      {
+        ingestPolicy: buildProfileMemoryIngestPolicy({
+          memoryIntent: "profile_update",
+          sourceSurface: "conversation_profile_input"
+        })
+      }
     );
     await store.ingestFromTaskInput(
       "task_profile_read_session_episode",
       "Owen fell down and I never told you how it ended.",
-      "2026-03-26T15:39:10.000Z"
+      "2026-03-26T15:39:10.000Z",
+      {
+        ingestPolicy: buildProfileMemoryIngestPolicy({
+          memoryIntent: "profile_update",
+          sourceSurface: "conversation_profile_input"
+        })
+      }
     );
 
     store.loadCount = 0;

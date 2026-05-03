@@ -3,6 +3,7 @@
  */
 
 import type { ConversationDomainContext, ProfileMemoryStatus } from "../../core/types";
+import type { SourceAuthority } from "../../core/sourceAuthority";
 import type {
   ProfileMemoryTemporalAnswerMode,
   ProfileMemoryTemporalLaneKind
@@ -14,6 +15,14 @@ import type {
 
 export type MemoryDomainLane = "profile" | "relationship" | "workflow" | "system_policy" | "unknown";
 export type DomainBoundaryDecision = "inject_profile_context" | "suppress_profile_context";
+export type MemoryRetrievalMode =
+  | "semantic_entity_match"
+  | "vector_hybrid"
+  | "keyword_only"
+  | "recent_fallback"
+  | "compatibility_token_overlap"
+  | "legacy_inventory";
+export type MemoryPlannerAuthority = "route_approved" | "evidence_only" | "none";
 
 export interface ProbingDetectorConfig {
   windowSize: number;
@@ -88,6 +97,13 @@ export interface DomainBoundaryAssessment {
 export interface ProfileContextSanitizationResult {
   sanitizedContext: string;
   redactedFieldCount: number;
+}
+
+export interface MemoryContextAuthorityMetadata {
+  retrievalMode: MemoryRetrievalMode;
+  sourceAuthority: SourceAuthority;
+  plannerAuthority: MemoryPlannerAuthority;
+  currentTruthAuthority: boolean;
 }
 
 export interface MemoryBrokerInputResult {

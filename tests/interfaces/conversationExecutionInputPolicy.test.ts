@@ -57,6 +57,7 @@ function buildSemanticRouteFixture(
     routeId: overrides.routeId ?? "chat_answer",
     confidence: overrides.confidence ?? "high",
     source: overrides.source ?? "model",
+    sourceAuthority: overrides.sourceAuthority ?? "semantic_model",
     buildFormat: overrides.buildFormat ?? null,
     executionMode: overrides.executionMode ?? "chat",
     continuationKind: overrides.continuationKind ?? "none",
@@ -309,6 +310,7 @@ test("buildConversationAwareExecutionInput emits expanded semantic-route metadat
       routeId: "build_request",
       confidence: "high",
       source: "exact_command",
+      sourceAuthority: "exact_command",
       buildFormat: null,
       executionMode: "build",
       continuationKind: "none",
@@ -323,6 +325,7 @@ test("buildConversationAwareExecutionInput emits expanded semantic-route metadat
   );
 
   assert.match(executionInput, /- source: exact_command/);
+  assert.match(executionInput, /- sourceAuthority: exact_command/);
   assert.match(executionInput, /- executionMode: build/);
   assert.match(executionInput, /- memoryIntent: none/);
   assert.match(executionInput, /- runtimeControlIntent: open_browser/);
@@ -1347,7 +1350,10 @@ test("buildConversationAwareExecutionInput includes interpreted media context wh
   );
 
   assert.match(executionInput, /Inbound media context \(interpreted once, bounded, no raw bytes\):/);
-  assert.match(executionInput, /interpretation\.transcript: Please fix the failing planner test now\./);
+  assert.match(
+    executionInput,
+    /interpretation\.transcript \(quoted data\): "Please fix the failing planner test now\."/
+  );
   assert.match(executionInput, /Current user request:/);
 });
 

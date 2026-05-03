@@ -27,7 +27,7 @@ interface OllamaGenerateResponse {
 }
 
 interface ParsedEntityDomainHintInterpretationSelection {
-  candidateName?: unknown;
+  candidateId?: unknown;
   domainHint?: unknown;
 }
 
@@ -56,7 +56,7 @@ const SUPPORTED_ENTITY_DOMAIN_HINTS = new Set<
 >(["profile", "relationship", "workflow"]);
 
 const MAX_DOMAIN_HINTED_CANDIDATES = 4;
-const MAX_CANDIDATE_NAME_CHARS = 80;
+const MAX_CANDIDATE_ID_CHARS = 120;
 
 /** Normalizes an Ollama base URL by trimming trailing slashes. */
 function normalizeBaseUrl(value: string): string {
@@ -81,6 +81,7 @@ function buildEntityDomainHintInterpretationPrompt(
   recentTurns: readonly { role: "user" | "assistant"; text: string }[] | undefined,
   candidateEntities:
     | readonly {
+        candidateId: string;
         candidateName: string;
         entityType: string;
         deterministicDomainHint: string | null;
@@ -95,18 +96,18 @@ function buildEntityDomainHintInterpretationPrompt(
     "Allowed kind values: domain_hinted_candidates, non_entity_domain_boundary, uncertain.",
     "Allowed domainHint values: profile, relationship, workflow.",
     "Allowed confidence values: low, medium, high.",
-    "You may only emit candidateName values that already appear in candidateEntities.",
+    "You may only emit candidateId values that already appear in candidateEntities.",
     "Use domain_hinted_candidates when conversational context provides a better per-observation memory domain than the session-level lane alone.",
     "Use relationship for people or entities framed through social/personal relationships.",
     "Use profile for self-descriptive personal preference, identity, or lifestyle context.",
     "Use workflow for task, project, organizational, planning, or work-execution context.",
     "Use non_entity_domain_boundary when the turn does not safely help with per-entity domain hinting.",
     "Use uncertain when domain hinting might matter but you cannot choose safely from the bounded context.",
-    "Do not invent candidate names, external facts, files, paths, or URLs.",
+    "Do not invent candidate ids, candidate names, external facts, files, paths, or URLs.",
     "Examples:",
-    '- "my friend Sarah is coming over tonight" with Sarah in candidateEntities => {"kind":"domain_hinted_candidates","domainHintedCandidates":[{"candidateName":"Sarah","domainHint":"relationship"}],"confidence":"high"}',
-    '- "Google needs the revised launch deck by tomorrow" with Google in candidateEntities => {"kind":"domain_hinted_candidates","domainHintedCandidates":[{"candidateName":"Google","domainHint":"workflow"}],"confidence":"high"}',
-    '- "I love this cafe called Roma" with Roma in candidateEntities => {"kind":"domain_hinted_candidates","domainHintedCandidates":[{"candidateName":"Roma","domainHint":"profile"}],"confidence":"medium"}',
+    '- "my friend Sarah is coming over tonight" with candidateId "entity_sarah" in candidateEntities => {"kind":"domain_hinted_candidates","domainHintedCandidates":[{"candidateId":"entity_sarah","domainHint":"relationship"}],"confidence":"high"}',
+    '- "Google needs the revised launch deck by tomorrow" with candidateId "entity_google" in candidateEntities => {"kind":"domain_hinted_candidates","domainHintedCandidates":[{"candidateId":"entity_google","domainHint":"workflow"}],"confidence":"high"}',
+    '- "I love this cafe called Roma" with candidateId "entity_roma" in candidateEntities => {"kind":"domain_hinted_candidates","domainHintedCandidates":[{"candidateId":"entity_roma","domainHint":"profile"}],"confidence":"medium"}',
     '- "close the browser and ship the fix" => {"kind":"non_entity_domain_boundary","domainHintedCandidates":[],"confidence":"high"}',
     "",
     "User request:",
@@ -169,16 +170,16 @@ function extractEntityDomainHintJsonObject(
   }
 }
 
-/** Normalizes one model-proposed candidate name into a bounded selectable value. */
-function normalizeCandidateName(value: unknown): string | null {
+/** Normalizes one model-proposed candidate id into a bounded selectable value. */
+function normalizeCandidateId(value: unknown): string | null {
   if (typeof value !== "string") {
     return null;
   }
-  const normalized = value.trim().replace(/\s+/g, " ");
-  if (!normalized || normalized.length > MAX_CANDIDATE_NAME_CHARS) {
+  const normalized = value.trim();
+  if (!normalized || normalized.length > MAX_CANDIDATE_ID_CHARS) {
     return null;
   }
-  if (!/^[\p{L}\p{N}][\p{L}\p{N}' .,&-]*$/u.test(normalized)) {
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9._:-]*$/.test(normalized)) {
     return null;
   }
   return normalized;
@@ -200,12 +201,12 @@ function normalizeEntityDomainHint(
  * Normalizes one model-proposed domain-hinted-candidate array into a stable bounded list.
  *
  * @param value - Raw domain-hinted-candidate array candidate from the model.
- * @param allowedCandidateNames - Deterministic candidate names allowed for this request.
+ * @param allowedCandidateIds - Deterministic candidate ids allowed for this request.
  * @returns Stable bounded domain-hinted-candidate list.
  */
 function normalizeDomainHintedCandidates(
   value: unknown,
-  allowedCandidateNames: ReadonlySet<string>
+  allowedCandidateIds: ReadonlySet<string>
 ): readonly EntityDomainHintInterpretationSelection[] {
   if (!Array.isArray(value)) {
     return [];
@@ -216,14 +217,14 @@ function normalizeDomainHintedCandidates(
       continue;
     }
     const selection = candidate as ParsedEntityDomainHintInterpretationSelection;
-    const candidateName = normalizeCandidateName(selection.candidateName);
+    const candidateId = normalizeCandidateId(selection.candidateId);
     const domainHint = normalizeEntityDomainHint(selection.domainHint);
-    if (!candidateName || !domainHint || !allowedCandidateNames.has(candidateName)) {
+    if (!candidateId || !domainHint || !allowedCandidateIds.has(candidateId)) {
       continue;
     }
-    if (!normalized.has(candidateName)) {
-      normalized.set(candidateName, {
-        candidateName,
+    if (!normalized.has(candidateId)) {
+      normalized.set(candidateId, {
+        candidateId,
         domainHint
       });
     }
@@ -238,12 +239,12 @@ function normalizeDomainHintedCandidates(
  * Converts a parsed entity-domain-hint payload into the stable task contract.
  *
  * @param payload - Parsed JSON payload from the model.
- * @param allowedCandidateNames - Deterministic candidate names allowed for this request.
+ * @param allowedCandidateIds - Deterministic candidate ids allowed for this request.
  * @returns Stable entity-domain-hint interpretation when supported, otherwise `null`.
  */
 function coerceEntityDomainHintInterpretationSignal(
   payload: ParsedEntityDomainHintInterpretationPayload,
-  allowedCandidateNames: ReadonlySet<string>
+  allowedCandidateIds: ReadonlySet<string>
 ): EntityDomainHintInterpretationSignal | null {
   const kind = (payload.kind ?? "").trim() as EntityDomainHintInterpretationKind;
   const confidence = (payload.confidence ?? "").trim().toLowerCase() as LocalIntentModelConfidence;
@@ -255,7 +256,7 @@ function coerceEntityDomainHintInterpretationSignal(
   }
   const domainHintedCandidates = normalizeDomainHintedCandidates(
     payload.domainHintedCandidates,
-    allowedCandidateNames
+    allowedCandidateIds
   );
   if (kind === "domain_hinted_candidates") {
     if (domainHintedCandidates.length === 0) {
@@ -302,8 +303,8 @@ export function createOllamaEntityDomainHintInterpretationResolver(
           }
         : null;
       const candidateEntities = request.candidateEntities ?? [];
-      const allowedCandidateNames = new Set(
-        candidateEntities.map((candidate) => candidate.candidateName)
+      const allowedCandidateIds = new Set(
+        candidateEntities.map((candidate) => candidate.candidateId)
       );
       const response = await fetchImpl(`${baseUrl}/api/generate`, {
         method: "POST",
@@ -337,7 +338,7 @@ export function createOllamaEntityDomainHintInterpretationResolver(
       }
       return coerceEntityDomainHintInterpretationSignal(
         extractEntityDomainHintJsonObject(payload.response) ?? {},
-        allowedCandidateNames
+        allowedCandidateIds
       );
     } catch {
       return null;

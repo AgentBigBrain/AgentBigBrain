@@ -42,6 +42,7 @@ import {
 } from "./intentModeBuildFormatSupport";
 import {
   analyzeConversationChatTurnSignals,
+  canConversationChatTurnPrimaryKindSteerRouting,
   isRelationshipConversationRecallTurn
 } from "./chatTurnSignals";
 import { isRecentAssistantAnswerThreadContinuationCandidate } from "./recentAssistantTurnContext";
@@ -404,6 +405,7 @@ export async function resolveConversationIntentMode(
 
   const structuralTurnSignals = analyzeConversationChatTurnSignals(normalized);
   if (
+    canConversationChatTurnPrimaryKindSteerRouting(structuralTurnSignals) &&
     structuralTurnSignals.primaryKind === "workflow_candidate" &&
     structuralTurnSignals.containsWorkflowCallbackCue
   ) {

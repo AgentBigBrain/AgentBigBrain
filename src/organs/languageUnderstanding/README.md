@@ -41,13 +41,14 @@ deterministic fail-closed runtime model.
 - Ollama-backed entity-domain-hint-interpretation task in
   `ollamaEntityDomainHintInterpretation.ts`
 - Ollama-backed entity-type-interpretation task in `ollamaEntityTypeInterpretation.ts`
+- Ollama-backed relationship-interpretation task in `ollamaRelationshipInterpretation.ts`
 - Ollama-backed handoff-control-interpretation task in `ollamaHandoffControlInterpretation.ts`
 - shared bounded conversation-task contracts for execution intent, identity interpretation,
   proposal-reply interpretation, continuation interpretation, autonomy-boundary interpretation, contextual-reference
   interpretation, contextual-followup interpretation, bridge-question-timing interpretation,
   status-recall-boundary interpretation, topic-key interpretation, entity-reference
-  interpretation, entity-domain-hint interpretation, and entity-type interpretation plus
-  handoff-control interpretation in `localIntentModelContracts.ts`
+  interpretation, entity-domain-hint interpretation, entity-type interpretation,
+  relationship interpretation, and handoff-control interpretation in `localIntentModelContracts.ts`
 - canonical front-door combination logic in `executionIntentUnderstanding.ts`
 - canonical clarification-option helpers in `clarificationIntentRanking.ts`
 - bounded return-handoff session hints and semantic handoff cues for the optional local intent

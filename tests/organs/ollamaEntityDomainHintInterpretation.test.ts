@@ -24,11 +24,11 @@ test("createOllamaEntityDomainHintInterpretationResolver parses a valid payload"
               kind: "domain_hinted_candidates",
               domainHintedCandidates: [
                 {
-                  candidateName: "Sarah",
+                  candidateId: "entity_sarah",
                   domainHint: "relationship"
                 },
                 {
-                  candidateName: "Google",
+                  candidateId: "entity_google",
                   domainHint: "workflow"
                 }
               ],
@@ -53,11 +53,13 @@ test("createOllamaEntityDomainHintInterpretationResolver parses a valid payload"
     routingClassification: null,
     candidateEntities: [
       {
+        candidateId: "entity_sarah",
         candidateName: "Sarah",
         entityType: "person",
         deterministicDomainHint: "workflow"
       },
       {
+        candidateId: "entity_google",
         candidateName: "Google",
         entityType: "org",
         deterministicDomainHint: "workflow"
@@ -71,11 +73,11 @@ test("createOllamaEntityDomainHintInterpretationResolver parses a valid payload"
     kind: "domain_hinted_candidates",
     domainHintedCandidates: [
       {
-        candidateName: "Sarah",
+        candidateId: "entity_sarah",
         domainHint: "relationship"
       },
       {
-        candidateName: "Google",
+        candidateId: "entity_google",
         domainHint: "workflow"
       }
     ],
@@ -84,6 +86,7 @@ test("createOllamaEntityDomainHintInterpretationResolver parses a valid payload"
   });
   const requestPayload = JSON.parse(capturedBody) as { prompt?: string };
   assert.match(requestPayload.prompt ?? "", /Task: entity_domain_hint_interpretation\./);
+  assert.match(requestPayload.prompt ?? "", /candidateId/);
 });
 
 test("createOllamaEntityDomainHintInterpretationResolver fails closed on unsupported domain hint output", async () => {
@@ -101,7 +104,7 @@ test("createOllamaEntityDomainHintInterpretationResolver fails closed on unsuppo
               kind: "domain_hinted_candidates",
               domainHintedCandidates: [
                 {
-                  candidateName: "Sarah",
+                  candidateId: "entity_sarah",
                   domainHint: "system_policy"
                 }
               ],
@@ -124,6 +127,56 @@ test("createOllamaEntityDomainHintInterpretationResolver fails closed on unsuppo
     routingClassification: null,
     candidateEntities: [
       {
+        candidateId: "entity_sarah",
+        candidateName: "Sarah",
+        entityType: "person",
+        deterministicDomainHint: null
+      }
+    ]
+  });
+
+  assert.equal(signal, null);
+});
+
+test("createOllamaEntityDomainHintInterpretationResolver rejects name-only model selections", async () => {
+  const resolver = createOllamaEntityDomainHintInterpretationResolver(
+    {
+      baseUrl: "http://127.0.0.1:11434",
+      model: "phi4-mini:latest",
+      timeoutMs: 1000
+    },
+    {
+      fetchImpl: async () =>
+        new Response(
+          JSON.stringify({
+            response: JSON.stringify({
+              kind: "domain_hinted_candidates",
+              domainHintedCandidates: [
+                {
+                  candidateName: "Sarah",
+                  domainHint: "relationship"
+                }
+              ],
+              confidence: "high",
+              explanation: "The model echoed the candidate name instead of selecting the id."
+            })
+          }),
+          {
+            status: 200,
+            headers: {
+              "Content-Type": "application/json"
+            }
+          }
+        )
+    }
+  );
+
+  const signal = await resolver({
+    userInput: "My friend Sarah is coming over later.",
+    routingClassification: null,
+    candidateEntities: [
+      {
+        candidateId: "entity_sarah",
         candidateName: "Sarah",
         entityType: "person",
         deterministicDomainHint: null
@@ -167,6 +220,7 @@ test("createOllamaEntityDomainHintInterpretationResolver allows non-boundary out
     routingClassification: null,
     candidateEntities: [
       {
+        candidateId: "entity_browser",
         candidateName: "Browser",
         entityType: "thing",
         deterministicDomainHint: "workflow"

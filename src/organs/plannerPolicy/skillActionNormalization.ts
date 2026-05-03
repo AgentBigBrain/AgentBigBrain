@@ -208,6 +208,9 @@ export function normalizeRequiredCreateSkillParams(
     if (!existingSkillName && resolvedSkillName) {
       params.name = resolvedSkillName;
     }
+    if (params.activationSource === undefined) {
+      params.activationSource = "explicit_user_request";
+    }
 
     const existingKind = trimToNonEmptyString(params.kind)?.toLowerCase();
     const existingMarkdownInstructions =

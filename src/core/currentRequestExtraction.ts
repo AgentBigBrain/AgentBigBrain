@@ -2,6 +2,8 @@
  * @fileoverview Shared helpers for extracting the active request segment from wrapped conversation input.
  */
 
+import { isSourceAuthority, type SourceAuthority } from "./sourceAuthority";
+
 const CURRENT_USER_REQUEST_MARKER = "Current user request:";
 const USER_FOLLOW_UP_ANSWER_MARKER = "User follow-up answer:";
 const USER_QUESTION_MARKER = "User question:";
@@ -14,6 +16,7 @@ const AUTONOMOUS_EXECUTION_PREFIX = "[AUTONOMOUS_LOOP_GOAL]";
 const CLARIFICATION_METADATA_LINE_PATTERN = /^\[Clarification resolved:/i;
 const RESOLVED_SEMANTIC_ROUTE_LINE_PATTERN = /^- routeId:\s*([a-z_]+)\s*$/im;
 const RESOLVED_ROUTE_MEMORY_INTENT_LINE_PATTERN = /^- memoryIntent:\s*([a-z_]+)\s*$/im;
+const RESOLVED_ROUTE_SOURCE_AUTHORITY_LINE_PATTERN = /^- sourceAuthority:\s*([a-z_]+)\s*$/im;
 const RESOLVED_ROUTE_RUNTIME_CONTROL_INTENT_LINE_PATTERN =
   /^- runtimeControlIntent:\s*([a-z_]+)\s*$/im;
 const RESOLVED_ROUTE_EXECUTION_MODE_LINE_PATTERN =
@@ -108,6 +111,57 @@ function extractSectionAfterMarker(value: string, marker: string): string | null
   }
   const extracted = value.slice(markerIndex + marker.length).trim();
   return extracted.length > 0 ? extracted : null;
+}
+
+/**
+ * Returns the prefix before the active user-request marker.
+ *
+ * **Why it exists:**
+ * Resolved route/build metadata is trusted only when it is machine-authored before the active user
+ * text. A user can paste marker-shaped text inside the current request, and that prose must not
+ * become route authority.
+ *
+ * @param value - Normalized execution-context payload.
+ * @returns Machine-authored prefix before active user text, or `null` when no active marker exists.
+ */
+function extractMachineAuthoredPrefixBeforeActiveRequest(value: string): string | null {
+  const lower = value.toLowerCase();
+  const markerIndexes = [
+    CURRENT_USER_REQUEST_MARKER,
+    USER_FOLLOW_UP_ANSWER_MARKER,
+    USER_QUESTION_MARKER,
+    AGENT_PULSE_REQUEST_MARKER
+  ]
+    .map((marker) => lower.indexOf(marker.toLowerCase()))
+    .filter((index) => index >= 0);
+  if (markerIndexes.length === 0) {
+    return null;
+  }
+  const activeRequestIndex = Math.min(...markerIndexes);
+  return value.slice(0, activeRequestIndex).trim();
+}
+
+/**
+ * Extracts trusted machine-authored metadata before active user text.
+ *
+ * @param userInput - Wrapped execution input.
+ * @param marker - Metadata marker to locate.
+ * @returns Trusted metadata payload beginning at the last marker occurrence, or `null`.
+ */
+function extractTrustedMetadataPayload(userInput: string, marker: string): string | null {
+  const normalized = extractExecutionContextPayload(userInput);
+  if (!normalized) {
+    return null;
+  }
+  const machinePrefix = extractMachineAuthoredPrefixBeforeActiveRequest(normalized);
+  if (!machinePrefix) {
+    return null;
+  }
+  const markerIndex = machinePrefix.toLowerCase().lastIndexOf(marker.toLowerCase());
+  if (markerIndex < 0) {
+    return null;
+  }
+  return machinePrefix.slice(markerIndex).trim();
 }
 
 /**
@@ -344,8 +398,8 @@ export function extractSemanticRequestSegment(userInput: string): string {
  * @returns Supported semantic route id, or `null` when none is present.
  */
 export function extractResolvedSemanticRouteId(userInput: string): string | null {
-  const normalized = extractExecutionContextPayload(userInput);
-  if (!normalized || !normalized.includes(RESOLVED_SEMANTIC_ROUTE_MARKER)) {
+  const normalized = extractTrustedMetadataPayload(userInput, RESOLVED_SEMANTIC_ROUTE_MARKER);
+  if (!normalized) {
     return null;
   }
   const match = normalized.match(RESOLVED_SEMANTIC_ROUTE_LINE_PATTERN);
@@ -370,7 +424,7 @@ export function extractResolvedSemanticRouteId(userInput: string): string | null
  * @returns `true` when the resolved semantic route marker is present.
  */
 export function hasResolvedSemanticRouteMetadata(userInput: string): boolean {
-  return extractExecutionContextPayload(userInput).includes(RESOLVED_SEMANTIC_ROUTE_MARKER);
+  return extractTrustedMetadataPayload(userInput, RESOLVED_SEMANTIC_ROUTE_MARKER) !== null;
 }
 
 /**
@@ -387,8 +441,8 @@ export function hasResolvedSemanticRouteMetadata(userInput: string): boolean {
  * @returns Supported build format id, or `null` when none is present.
  */
 export function extractResolvedBuildFormat(userInput: string): string | null {
-  const normalized = extractExecutionContextPayload(userInput);
-  if (!normalized || !normalized.includes(RESOLVED_BUILD_FORMAT_MARKER)) {
+  const normalized = extractTrustedMetadataPayload(userInput, RESOLVED_BUILD_FORMAT_MARKER);
+  if (!normalized) {
     return null;
   }
   const match = normalized.match(RESOLVED_BUILD_FORMAT_LINE_PATTERN);
@@ -413,13 +467,32 @@ export function extractResolvedBuildFormat(userInput: string): string | null {
  * @returns Supported memory intent, or `null` when none is present.
  */
 export function extractResolvedRouteMemoryIntent(userInput: string): string | null {
-  const normalized = extractExecutionContextPayload(userInput);
-  if (!normalized || !normalized.includes(RESOLVED_SEMANTIC_ROUTE_MARKER)) {
+  const normalized = extractTrustedMetadataPayload(userInput, RESOLVED_SEMANTIC_ROUTE_MARKER);
+  if (!normalized) {
     return null;
   }
   const match = normalized.match(RESOLVED_ROUTE_MEMORY_INTENT_LINE_PATTERN);
   const candidate = match?.[1]?.trim() ?? "";
   if (!candidate || !SUPPORTED_RESOLVED_MEMORY_INTENTS.has(candidate)) {
+    return null;
+  }
+  return candidate;
+}
+
+/**
+ * Extracts the route source-authority class from trusted route metadata.
+ *
+ * @param userInput - Wrapped execution input that may include resolved semantic route metadata.
+ * @returns Source authority, or `null` when missing, untrusted, or unsupported.
+ */
+export function extractResolvedRouteSourceAuthority(userInput: string): SourceAuthority | null {
+  const normalized = extractTrustedMetadataPayload(userInput, RESOLVED_SEMANTIC_ROUTE_MARKER);
+  if (!normalized) {
+    return null;
+  }
+  const match = normalized.match(RESOLVED_ROUTE_SOURCE_AUTHORITY_LINE_PATTERN);
+  const candidate = match?.[1]?.trim() ?? "";
+  if (!isSourceAuthority(candidate)) {
     return null;
   }
   return candidate;
@@ -439,8 +512,8 @@ export function extractResolvedRouteMemoryIntent(userInput: string): string | nu
  * @returns Supported runtime-control intent, or `null` when none is present.
  */
 export function extractResolvedRuntimeControlIntent(userInput: string): string | null {
-  const normalized = extractExecutionContextPayload(userInput);
-  if (!normalized || !normalized.includes(RESOLVED_SEMANTIC_ROUTE_MARKER)) {
+  const normalized = extractTrustedMetadataPayload(userInput, RESOLVED_SEMANTIC_ROUTE_MARKER);
+  if (!normalized) {
     return null;
   }
   const match = normalized.match(RESOLVED_ROUTE_RUNTIME_CONTROL_INTENT_LINE_PATTERN);
@@ -465,8 +538,8 @@ export function extractResolvedRuntimeControlIntent(userInput: string): string |
  * @returns Supported execution mode, or `null` when none is present.
  */
 export function extractResolvedRouteExecutionMode(userInput: string): string | null {
-  const normalized = extractExecutionContextPayload(userInput);
-  if (!normalized || !normalized.includes(RESOLVED_SEMANTIC_ROUTE_MARKER)) {
+  const normalized = extractTrustedMetadataPayload(userInput, RESOLVED_SEMANTIC_ROUTE_MARKER);
+  if (!normalized) {
     return null;
   }
   const match = normalized.match(RESOLVED_ROUTE_EXECUTION_MODE_LINE_PATTERN);
@@ -484,8 +557,8 @@ export function extractResolvedRouteExecutionMode(userInput: string): string | n
  * @returns Supported continuation kind, or `null` when none is present.
  */
 export function extractResolvedRouteContinuationKind(userInput: string): string | null {
-  const normalized = extractExecutionContextPayload(userInput);
-  if (!normalized || !normalized.includes(RESOLVED_SEMANTIC_ROUTE_MARKER)) {
+  const normalized = extractTrustedMetadataPayload(userInput, RESOLVED_SEMANTIC_ROUTE_MARKER);
+  if (!normalized) {
     return null;
   }
   const match = normalized.match(RESOLVED_ROUTE_CONTINUATION_KIND_LINE_PATTERN);
@@ -505,8 +578,8 @@ export function extractResolvedRouteContinuationKind(userInput: string): string 
 export function extractResolvedRouteConstraints(
   userInput: string
 ): ExtractedResolvedRouteConstraints | null {
-  const normalized = extractExecutionContextPayload(userInput);
-  if (!normalized || !normalized.includes(RESOLVED_SEMANTIC_ROUTE_MARKER)) {
+  const normalized = extractTrustedMetadataPayload(userInput, RESOLVED_SEMANTIC_ROUTE_MARKER);
+  if (!normalized) {
     return null;
   }
   const readBoolean = (

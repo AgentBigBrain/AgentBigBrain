@@ -329,6 +329,7 @@ export class BrainOrchestrator {
       receivedAt,
       {
         validatedFactCandidates: request.validatedFactCandidates,
+        additionalEpisodeCandidates: request.additionalEpisodeCandidates,
         mediaIngest: request.mediaIngest,
         provenance: request.provenance,
         ingestPolicy: request.ingestPolicy

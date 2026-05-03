@@ -4,28 +4,58 @@
 
 export const MEMORY_REVIEW_FACT_CORRECTION_SOURCE = "memory_review.fact_correction";
 
+export const SEMANTIC_RELATIONSHIP_CURRENT_SOURCE = "conversation.relationship_interpretation";
+export const SEMANTIC_RELATIONSHIP_HISTORICAL_SOURCE =
+  "conversation.relationship_interpretation_historical";
+export const SEMANTIC_RELATIONSHIP_SEVERED_SOURCE =
+  "conversation.relationship_interpretation_severed";
+export const SEMANTIC_RELATIONSHIP_UNCERTAIN_SOURCE =
+  "conversation.relationship_interpretation_uncertain";
+export const SEMANTIC_EPISODE_CANDIDATE_SOURCE = "conversation.episode_interpretation";
+
+export const SEMANTIC_RELATIONSHIP_SOURCES = new Set([
+  SEMANTIC_RELATIONSHIP_CURRENT_SOURCE,
+  SEMANTIC_RELATIONSHIP_HISTORICAL_SOURCE,
+  SEMANTIC_RELATIONSHIP_SEVERED_SOURCE,
+  SEMANTIC_RELATIONSHIP_UNCERTAIN_SOURCE
+]);
+
+export const STRUCTURED_RELATIONSHIP_NAME_SOURCES = new Set([
+  SEMANTIC_RELATIONSHIP_CURRENT_SOURCE,
+  SEMANTIC_RELATIONSHIP_HISTORICAL_SOURCE,
+  SEMANTIC_RELATIONSHIP_SEVERED_SOURCE,
+  SEMANTIC_RELATIONSHIP_UNCERTAIN_SOURCE
+]);
+
+export const STRUCTURED_CURRENT_RELATIONSHIP_SOURCES = new Set([
+  SEMANTIC_RELATIONSHIP_CURRENT_SOURCE
+]);
+
+export const STRUCTURED_HISTORICAL_RELATIONSHIP_SOURCES = new Set([
+  SEMANTIC_RELATIONSHIP_HISTORICAL_SOURCE
+]);
+
+export const STRUCTURED_SEVERED_RELATIONSHIP_SOURCES = new Set([
+  SEMANTIC_RELATIONSHIP_SEVERED_SOURCE
+]);
+
+export const STRUCTURED_UNCERTAIN_RELATIONSHIP_SOURCES = new Set([
+  SEMANTIC_RELATIONSHIP_UNCERTAIN_SOURCE
+]);
+
 export const ALLOWED_EXPLICIT_CONTACT_NAME_SOURCES = new Set([
   "user_input_pattern.named_contact",
-  "user_input_pattern.direct_contact_relationship",
   "user_input_pattern.direct_contact_relationship_historical",
   "user_input_pattern.direct_contact_relationship_severed",
-  "user_input_pattern.work_with_contact",
   "user_input_pattern.work_with_contact_historical",
   "user_input_pattern.work_with_contact_severed"
 ]);
 
 export const ALLOWED_EXPLICIT_CURRENT_CONTACT_RELATIONSHIP_SOURCES = new Set([
-  "user_input_pattern.named_contact",
-  "user_input_pattern.direct_contact_relationship",
-  "user_input_pattern.work_with_contact",
-  "user_input_pattern.work_association"
+  "user_input_pattern.named_contact"
 ]);
 
-export const ALLOWED_EXPLICIT_CURRENT_CONTACT_WORK_ASSOCIATION_SOURCES = new Set([
-  "user_input_pattern.direct_contact_relationship",
-  "user_input_pattern.work_with_contact",
-  "user_input_pattern.work_association"
-]);
+export const ALLOWED_EXPLICIT_CURRENT_CONTACT_WORK_ASSOCIATION_SOURCES = new Set<string>();
 
 export const ALLOWED_EXPLICIT_CURRENT_CONTACT_GENERIC_ASSOCIATION_SOURCES = new Set([
   "user_input_pattern.organization_association",
@@ -43,6 +73,16 @@ export const ALLOWED_EXPLICIT_EPISODE_SOURCES = new Set([
 export const ALLOWED_ASSISTANT_INFERENCE_EPISODE_SOURCES = new Set([
   "language_understanding.episode_extraction"
 ]);
+
+/**
+ * Returns whether a source belongs to the typed semantic relationship candidate lane.
+ *
+ * @param source - Candidate source string.
+ * @returns `true` when the source is one of the governed semantic relationship sources.
+ */
+export function isSemanticRelationshipCandidateSource(source: string): boolean {
+  return SEMANTIC_RELATIONSHIP_SOURCES.has(source.trim().toLowerCase());
+}
 
 export type ProfileMemorySourceFamily =
   | "explicit_user_statement"

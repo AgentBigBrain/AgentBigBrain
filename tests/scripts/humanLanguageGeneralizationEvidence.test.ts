@@ -19,7 +19,7 @@ test("human language scenario inventory passes for the current repo fixture", as
   const fixture = await loadHumanLanguageScenarioInventory();
   const diagnostics = computeHumanLanguageScenarioDiagnostics(fixture);
   assert.equal(diagnostics.errors.length, 0);
-  assert.ok(diagnostics.summary.scenarioCount >= 8);
+  assert.ok(diagnostics.summary.scenarioCount >= 20);
 });
 
 test("human language scenario inventory rejects user turns that are too short", async () => {
@@ -212,9 +212,19 @@ test("human language generalization evidence emits a scenario-driven report with
     process.cwd(),
     "runtime/evidence/human_language_generalization_report.json"
   );
+  const semanticBrittlenessArtifactPath = path.resolve(
+    process.cwd(),
+    "runtime/evidence/semantic_language_brittleness_cleanup/human_language_generalization_report.json"
+  );
   const persisted = JSON.parse(await readFile(artifactPath, "utf8")) as {
     status: string;
     requiredProofs: Record<string, boolean>;
+    schemaOnlyCoverage: {
+      requiredCategoriesCovered: boolean;
+      missingCategories: string[];
+      schemaOnlyScenarioCount: number;
+      runtimeObservedScenarioCount: number;
+    };
     summary: {
       scenarioCount: number;
       passedScenarios: number;
@@ -222,17 +232,42 @@ test("human language generalization evidence emits a scenario-driven report with
     };
     scenarioResults: Array<{
       scenarioId: string;
+      category: string;
+      evidenceMode: string;
+      runtimeProof: boolean;
       passed: boolean;
     }>;
   };
+  const persistedSemanticBrittlenessArtifact = JSON.parse(
+    await readFile(semanticBrittlenessArtifactPath, "utf8")
+  ) as { status: string; schemaOnlyCoverage: { requiredCategoriesCovered: boolean } };
 
   assert.equal(artifact.status, "PASS");
   assert.equal(persisted.status, "PASS");
+  assert.equal(persistedSemanticBrittlenessArtifact.status, "PASS");
+  assert.equal(
+    persistedSemanticBrittlenessArtifact.schemaOnlyCoverage.requiredCategoriesCovered,
+    true
+  );
   assert.equal(persisted.summary.failedScenarios, 0);
   assert.equal(persisted.summary.scenarioCount, persisted.summary.passedScenarios);
   assert.equal(
     Object.values(persisted.requiredProofs).every((value) => value === true),
     true
+  );
+  assert.equal(persisted.schemaOnlyCoverage.requiredCategoriesCovered, true);
+  assert.equal(persisted.schemaOnlyCoverage.missingCategories.length, 0);
+  assert.ok(persisted.schemaOnlyCoverage.schemaOnlyScenarioCount >= 10);
+  assert.ok(persisted.schemaOnlyCoverage.runtimeObservedScenarioCount >= 8);
+  assert.ok(
+    persisted.scenarioResults
+      .filter((scenario) => scenario.evidenceMode === "schema_only")
+      .every((scenario) => scenario.runtimeProof === false)
+  );
+  assert.ok(
+    persisted.scenarioResults
+      .filter((scenario) => scenario.evidenceMode === "runtime_observed")
+      .every((scenario) => scenario.runtimeProof === true)
   );
   assert.ok(
     persisted.scenarioResults.some(
@@ -245,6 +280,15 @@ test("human language generalization evidence emits a scenario-driven report with
     persisted.scenarioResults.some(
       (scenario) =>
         scenario.scenarioId === "proactive_followup_generic_ping_negative"
+        && scenario.passed
+    )
+  );
+  assert.ok(
+    persisted.scenarioResults.some(
+      (scenario) =>
+        scenario.scenarioId === "skill_lifecycle_agent_suggestion_negative"
+        && scenario.evidenceMode === "schema_only"
+        && scenario.runtimeProof === false
         && scenario.passed
     )
   );

@@ -10,6 +10,7 @@ import { test } from "node:test";
 
 import { createProfileEpisodeRecord } from "../../src/core/profileMemory";
 import { ProfileMemoryStore } from "../../src/core/profileMemoryStore";
+import { buildProfileMemoryIngestPolicy } from "../../src/core/profileMemoryRuntime/profileMemoryIngestPolicy";
 import { saveProfileMemoryState } from "../../src/core/profileMemoryRuntime/profileMemoryPersistence";
 import { Stage686RuntimeStateStore } from "../../src/core/stage6_86/runtimeState";
 import {
@@ -54,7 +55,13 @@ test("applyObsidianReviewActionsFromDirectory routes fact, episode, and follow-u
     await profileStore.ingestFromTaskInput(
       "task_seed_fact",
       "my name is Avery",
-      "2026-04-12T12:00:00.000Z"
+      "2026-04-12T12:00:00.000Z",
+      {
+        ingestPolicy: buildProfileMemoryIngestPolicy({
+          memoryIntent: "profile_update",
+          sourceSurface: "conversation_profile_input"
+        })
+      }
     );
     const ingestedState = await profileStore.load();
     const seededState = {

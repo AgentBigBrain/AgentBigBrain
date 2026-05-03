@@ -8,6 +8,16 @@ stay aligned with `package.json`.
 ## [Unreleased]
 
 ### Added
+
+### Changed
+
+### Fixed
+
+### Security
+
+## [0.3.0] - 2026-05-03
+
+### Added
 - Added source-labeled media interpretation layers, optional policy-gated document meaning, and a
   Telegram completion matrix smoke that writes review-safe PASS/FAIL/BLOCKED evidence.
 - Added governed skill lifecycle actions for updating, approving, rejecting, and deprecating
@@ -16,6 +26,9 @@ stay aligned with `package.json`.
   remaining route, planner, memory, pulse, and trust surfaces.
 - Added profile-memory source-family and ingest-lane policy tests so document/media summaries,
   broad relationship patterns, and broad episode patterns start candidate/support-only by default.
+- Added a semantic-language evidence matrix that separates runtime-observed proof from CI-safe
+  schema-only coverage for relationship, identity, media, build, skill, workflow, prompt, mission,
+  organization, bridge, model-fallback, and compatibility-boundary scenarios.
 
 ### Changed
 - Media memory ingest now prefers structured layer authority over rendered prompt text, keeping raw
@@ -25,6 +38,10 @@ stay aligned with `package.json`.
   before contextual cue words can influence status, memory, or workflow continuation.
 - Conversation profile-memory writes now route media-only turns through source lanes instead of
   inheriting direct user-text extraction authority.
+- Markdown skill guidance now carries selection provenance, advisory authority, and exact matched
+  terms before planner consumption.
+- Prompt, routing, memory, pulse, graph, and user-facing continuity paths now prefer typed authority
+  or receipts over lexical candidate evidence and rendered assistant prose.
 
 ### Fixed
 - Runtime skill manifests now fail closed when a same-name runtime override is malformed instead

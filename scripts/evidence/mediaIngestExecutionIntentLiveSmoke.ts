@@ -8,7 +8,9 @@ import os from "node:os";
 import path from "node:path";
 
 import { EntityGraphStore } from "../../src/core/entityGraphStore";
+import type { CreateProfileEpisodeRecordInput } from "../../src/core/profileMemory";
 import { ProfileMemoryStore } from "../../src/core/profileMemoryStore";
+import { buildProfileMemoryIngestPolicy } from "../../src/core/profileMemoryRuntime/profileMemoryIngestPolicy";
 import type {
   AgentPulseEvaluationRequest,
   AgentPulseEvaluationResult,
@@ -143,6 +145,22 @@ class MediaIngestLiveSmokeEpisodeModelClient implements ModelClient {
 
     return output as T;
   }
+}
+
+/**
+ * Builds explicit memory-write authority for live-smoke media episodes.
+ *
+ * @param candidates - Structured episode candidates extracted by the semantic memory interpreter.
+ * @returns Closed policy when no semantic episode candidate exists, or structured-candidate authority when one does.
+ */
+function buildMediaLiveSmokeEpisodeIngestPolicy(
+  candidates: readonly CreateProfileEpisodeRecordInput[]
+) {
+  return buildProfileMemoryIngestPolicy({
+    memoryIntent: candidates.length > 0 ? "profile_update" : "none",
+    sourceSurface: "conversation_profile_input",
+    hasStructuredEpisodeCandidates: candidates.length > 0
+  });
 }
 
 /**
@@ -565,7 +583,10 @@ function createTelegramAdapterHarness(harness: TelegramLiveSmokeHarness): Telegr
       `media_live_smoke_${harness.textTaskRuns.length}`,
       input,
       receivedAt,
-      { additionalEpisodeCandidates }
+      {
+        additionalEpisodeCandidates,
+        ingestPolicy: buildMediaLiveSmokeEpisodeIngestPolicy(additionalEpisodeCandidates)
+      }
     );
     return buildTaskRunResult(input, "Understood. I'll take it from here.");
   };
@@ -725,7 +746,10 @@ function createBrainRegistryHarness(harness: TelegramLiveSmokeHarness): unknown 
         `media_live_smoke_${harness.textTaskRuns.length}`,
         input,
         receivedAt,
-        { additionalEpisodeCandidates }
+        {
+          additionalEpisodeCandidates,
+          ingestPolicy: buildMediaLiveSmokeEpisodeIngestPolicy(additionalEpisodeCandidates)
+        }
       );
       const taskRunResult = buildTaskRunResult(input, "Understood. I'll take it from here.");
       return {
@@ -745,7 +769,10 @@ function createBrainRegistryHarness(harness: TelegramLiveSmokeHarness): unknown 
           `media_direct_live_smoke_${harness.directConversationRuns.length}`,
           input,
           receivedAt,
-          { additionalEpisodeCandidates }
+          {
+            additionalEpisodeCandidates,
+            ingestPolicy: buildMediaLiveSmokeEpisodeIngestPolicy(additionalEpisodeCandidates)
+          }
         );
       }
       return {

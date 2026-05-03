@@ -90,6 +90,10 @@ function buildPulseCandidateFixture(): PulseCandidateV1 {
     threadKey: "thread_budget",
     entityRefs: ["entity_lantern_labs"],
     evidenceRefs: ["trace:pulse_candidate_ux"],
+    sourceAuthority: "stale_runtime_context",
+    provenanceTier: "supporting",
+    sensitive: false,
+    activeMissionSuppressed: false,
     stableHash: "hash_pulse_candidate_ux"
   };
 }
@@ -141,14 +145,22 @@ function keepsSuppressedPulseDecisionsSilent(): void {
     candidateId: "pulse_candidate_ux",
     blockCode: "PULSE_BLOCKED",
     blockDetailReason: "PULSE_COOLDOWN_ACTIVE",
-    evidenceRefs: ["trace:pulse_suppressed"]
+    evidenceRefs: ["trace:pulse_suppressed"],
+    sourceAuthority: "stale_runtime_context",
+    provenanceTier: "supporting",
+    sensitive: false,
+    activeMissionSuppressed: false
   };
   const emittedDecision: PulseDecisionV1 = {
     decisionCode: "EMIT",
     candidateId: "pulse_candidate_ux",
     blockCode: null,
     blockDetailReason: null,
-    evidenceRefs: ["trace:pulse_emit"]
+    evidenceRefs: ["trace:pulse_emit"],
+    sourceAuthority: "stale_runtime_context",
+    provenanceTier: "supporting",
+    sensitive: false,
+    activeMissionSuppressed: false
   };
 
   assert.equal(shouldRenderPulseDecisionV1(suppressedDecision), false);

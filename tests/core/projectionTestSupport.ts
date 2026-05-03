@@ -115,7 +115,11 @@ export function buildBridgeQuestionFixtures(nowIso = DEFAULT_NOW_ISO): readonly 
       createdAt: nowIso,
       cooldownUntil: nowIso,
       threadKey: "thread_detroit",
-      evidenceRefs: ["trace:bridge_detroit_follow_up"]
+      evidenceRefs: ["trace:bridge_detroit_follow_up"],
+      sourceAuthority: "stale_runtime_context",
+      provenanceTier: "supporting",
+      sensitive: false,
+      activeMissionSuppressed: false
     }
   ];
 }

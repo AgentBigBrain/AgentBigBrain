@@ -85,10 +85,17 @@ export function renderObsidianMediaArtifactNotes(
           recorded_at: artifact.recordedAt,
           provider: artifact.provider,
           kind: artifact.kind,
+          projection_lane: "media_artifact_review_mirror",
           checksum_sha256: artifact.checksumSha256,
           mime_type: artifact.mimeType ?? null
         }),
         `# ${titleBase}`,
+        "",
+        "## Overview",
+        renderMarkdownList([
+          "Projection lane: media artifact review mirror",
+          "Derived meaning is projection-only evidence and never runtime authority by itself."
+        ]),
         "",
         "## Asset",
         assetLink,

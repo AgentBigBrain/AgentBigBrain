@@ -18,6 +18,7 @@ import type {
 import {
   ALLOWED_ASSISTANT_INFERENCE_EPISODE_SOURCES,
   ALLOWED_EXPLICIT_EPISODE_SOURCES,
+  SEMANTIC_EPISODE_CANDIDATE_SOURCE,
   isDocumentOrMediaDerivedProfileMemorySource
 } from "./profileMemoryTruthGovernanceSources";
 
@@ -66,6 +67,14 @@ export function buildEpisodeGovernanceDecision(
     reason: ProfileMemoryGovernanceDecision["reason"]
   ): ProfileMemoryGovernanceDecision =>
     buildCanonicalGovernanceDecision(normalizedSource, family, evidenceClass, action, reason);
+  if (normalizedSource === SEMANTIC_EPISODE_CANDIDATE_SOURCE) {
+    return buildDecision(
+      "episode.candidate",
+      "validated_structured_candidate",
+      "allow_episode_support",
+      "assistant_inference_episode"
+    );
+  }
   if (normalizedSource.startsWith("conversation.")) {
     return buildDecision("episode.candidate", "validated_structured_candidate", "quarantine", "unsupported_source");
   }

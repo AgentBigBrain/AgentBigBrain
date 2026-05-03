@@ -132,6 +132,9 @@ test("loadPlannerLearningContext includes bounded Markdown skill guidance", asyn
             description: "Static site guidance.",
             tags: ["static", "site"],
             invocationHints: ["Ask me to use guidance skill static-site-generation."],
+            selectionSource: "source_controlled_builtin_manifest",
+            advisoryAuthority: "advisory_only",
+            matchedTerms: ["static", "site"],
             guidance: "Prefer a single index.html when no framework is required."
           }
         ];

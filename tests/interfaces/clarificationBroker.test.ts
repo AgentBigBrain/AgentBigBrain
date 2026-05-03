@@ -48,6 +48,8 @@ test("createActiveClarificationState preserves original source input and option 
 
   assert.equal(clarification.sourceInput, "Create me that landing page with a hero and CTA.");
   assert.equal(clarification.renderingIntent, "plan_or_build");
+  assert.equal(clarification.riskClass, "medium");
+  assert.match(clarification.promptFingerprint ?? "", /^clarification_prompt_[a-f0-9]+$/);
   assert.equal(clarification.options[0]?.label, "Plan it first");
 });
 
@@ -64,6 +66,9 @@ test("resolveClarificationAnswer picks the single deterministic option from a hu
   );
 
   assert.equal(resolution?.selectedOptionId, "build");
+  assert.equal(resolution?.promptId, clarification.id);
+  assert.equal(resolution?.promptFingerprint, clarification.promptFingerprint);
+  assert.equal(resolution?.riskClass, "medium");
   assert.ok(
     buildClarifiedExecutionInput(
       clarification.sourceInput,
@@ -206,7 +211,7 @@ test("task recovery clarification resolves yes/no answers and adds a recovery in
   );
 });
 
-test("task recovery clarification accepts a plain yes when only one recovery option is available", () => {
+test("task recovery clarification rejects generic yes for high-risk recovery options", () => {
   const shutdownClarification = createTaskRecoveryClarificationState(
     "Please organize the sample-company project folders you made earlier into a folder called sample-web-projects.",
     "2026-03-13T14:00:00.000Z",
@@ -226,12 +231,16 @@ test("task recovery clarification accepts a plain yes when only one recovery opt
     ]
   );
 
+  assert.equal(shutdownClarification.riskClass, "high");
+  assert.equal(inspectionClarification.riskClass, "high");
+  assert.equal(resolveClarificationAnswer(shutdownClarification, "Yes."), null);
+  assert.equal(resolveClarificationAnswer(inspectionClarification, "Yes."), null);
   assert.equal(
-    resolveClarificationAnswer(shutdownClarification, "Yes.")?.selectedOptionId,
+    resolveClarificationAnswer(shutdownClarification, "Shut it down and retry.")?.selectedOptionId,
     "retry_with_shutdown"
   );
   assert.equal(
-    resolveClarificationAnswer(inspectionClarification, "Yes.")?.selectedOptionId,
+    resolveClarificationAnswer(inspectionClarification, "Inspect and continue.")?.selectedOptionId,
     "continue_recovery"
   );
 });

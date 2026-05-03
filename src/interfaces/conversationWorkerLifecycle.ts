@@ -1491,7 +1491,10 @@ export function persistExecutedJobOutcome(input: PersistJobOutcomeInput): Conver
       session,
       persistedRunningJob.resultSummary,
       persistedRunningJob.completedAt ?? session.updatedAt,
-      maxConversationTurns
+      maxConversationTurns,
+      {
+        assistantTurnKind: "workflow_progress"
+      }
     );
   }
 

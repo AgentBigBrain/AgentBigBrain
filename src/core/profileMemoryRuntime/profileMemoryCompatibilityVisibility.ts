@@ -7,6 +7,11 @@ import type { ProfileFactRecord, ProfileFactUpsertInput } from "../profileMemory
 import { getProfileMemoryFamilyRegistryEntry } from "./profileMemoryFamilyRegistry";
 import { inferGovernanceFamilyForNormalizedKey } from "./profileMemoryGovernanceFamilyInference";
 import type { ProfileMemoryGovernanceFamily } from "./profileMemoryTruthGovernanceContracts";
+import {
+  SEMANTIC_RELATIONSHIP_CURRENT_SOURCE,
+  SEMANTIC_RELATIONSHIP_HISTORICAL_SOURCE,
+  SEMANTIC_RELATIONSHIP_SEVERED_SOURCE
+} from "./profileMemoryTruthGovernanceSources";
 
 type CompatibilityFactLike = Pick<ProfileFactRecord, "key" | "source" | "value"> | Pick<ProfileFactUpsertInput, "key" | "source" | "value">;
 
@@ -15,7 +20,15 @@ const HISTORICAL_OR_SEVERED_CONTACT_SUPPORT_SOURCES = new Set([
   "user_input_pattern.work_association_historical",
   "user_input_pattern.work_with_contact_severed",
   "user_input_pattern.direct_contact_relationship_historical",
-  "user_input_pattern.direct_contact_relationship_severed"
+  "user_input_pattern.direct_contact_relationship_severed",
+  SEMANTIC_RELATIONSHIP_HISTORICAL_SOURCE,
+  SEMANTIC_RELATIONSHIP_SEVERED_SOURCE
+]);
+
+const SEMANTIC_RELATIONSHIP_CONTEXT_SUPPORT_SOURCES = new Set([
+  SEMANTIC_RELATIONSHIP_CURRENT_SOURCE,
+  SEMANTIC_RELATIONSHIP_HISTORICAL_SOURCE,
+  SEMANTIC_RELATIONSHIP_SEVERED_SOURCE
 ]);
 
 /**
@@ -127,6 +140,13 @@ export function isCompatibilityVisibleFactLike(fact: CompatibilityFactLike): boo
     return isSupportOnlyCompatibilityVisible(policyFamily, normalizedKey);
   }
 
+  if (
+    SEMANTIC_RELATIONSHIP_CONTEXT_SUPPORT_SOURCES.has(normalizedSource) &&
+    /^contact\.[^.]+\.context\.[^.]+$/.test(normalizedKey)
+  ) {
+    return isSupportOnlyCompatibilityVisible("contact.context", normalizedKey);
+  }
+
   if (HISTORICAL_OR_SEVERED_CONTACT_SUPPORT_SOURCES.has(normalizedSource)) {
     return isSupportOnlyCompatibilityVisible("contact.name", normalizedKey);
   }
@@ -140,6 +160,5 @@ export function isCompatibilityVisibleFactLike(fact: CompatibilityFactLike): boo
   ) {
     return isSupportOnlyCompatibilityVisible(policyFamily, normalizedKey);
   }
-
   return isOrdinaryCompatibilityVisible(policyFamily);
 }

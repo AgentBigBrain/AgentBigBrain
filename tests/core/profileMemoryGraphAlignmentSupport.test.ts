@@ -74,6 +74,69 @@ test("queryProfileMemoryGraphAlignedStableRefGroups attaches one exact Stage 6.8
   assert.equal(alignedGroup?.resolution, "provisional");
   assert.equal(alignedGroup?.primaryEntityKey, buildEntityKey("William Bena", "person", null));
   assert.equal(alignedGroup?.observedEntityKey, buildEntityKey("William Bena", "person", null));
+  assert.equal(alignedGroup?.alignmentConfidence, "high");
+});
+
+test("queryProfileMemoryGraphAlignedStableRefGroups quarantines low-confidence exact alias alignments", () => {
+  const observedAt = "2026-04-09T18:03:00.000Z";
+  const graph = {
+    ...createEmptyProfileMemoryGraphState(observedAt),
+    claims: [
+      createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
+        claimId: "claim_contact_owen_inferred",
+        stableRefId: "stable_contact_owen",
+        family: "contact.relationship.current",
+        normalizedKey: "contact.owen.relationship",
+        normalizedValue: "friend",
+        redactionState: "not_requested",
+        redactedAt: null,
+        sensitive: false,
+        sourceTaskId: "task_contact_owen_inferred",
+        sourceFingerprint: "fingerprint_contact_owen_inferred",
+        sourceTier: "assistant_inference",
+        assertedAt: observedAt,
+        validFrom: observedAt,
+        validTo: null,
+        endedAt: null,
+        endedByClaimId: null,
+        timePrecision: "instant",
+        timeSource: "inferred",
+        derivedFromObservationIds: [],
+        projectionSourceIds: ["fact_contact_owen_inferred"],
+        entityRefIds: ["contact.owen"],
+        active: true
+      })
+    ]
+  };
+  const entityGraph = {
+    ...createEmptyEntityGraphV1(observedAt),
+    entities: [
+      {
+        entityKey: buildEntityKey("William Bena", "person", null),
+        canonicalName: "William Bena",
+        entityType: "person",
+        disambiguator: null,
+        domainHint: null,
+        aliases: ["Owen"],
+        firstSeenAt: observedAt,
+        lastSeenAt: observedAt,
+        salience: 1,
+        evidenceRefs: ["trace:owen"]
+      }
+    ]
+  };
+
+  const groups = queryProfileMemoryGraphAlignedStableRefGroups({
+    graph: graph as ProfileMemoryGraphState,
+    entityGraph: entityGraph as EntityGraphV1
+  });
+  const alignedGroup = groups.find((group) => group.stableRefId === "stable_contact_owen");
+
+  assert.equal(alignedGroup?.resolution, "quarantined");
+  assert.equal(alignedGroup?.alignmentConfidence, "low");
+  assert.deepEqual(alignedGroup?.alignmentSourceTiers, ["assistant_inference"]);
+  assert.equal(alignedGroup?.primaryEntityKey, null);
+  assert.equal(alignedGroup?.observedEntityKey, buildEntityKey("William Bena", "person", null));
 });
 
 test("queryProfileMemoryGraphAlignedStableRefGroups fails closed to quarantine when multiple entity identities remain plausible", () => {

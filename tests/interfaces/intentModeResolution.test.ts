@@ -48,6 +48,37 @@ test("resolveConversationIntentMode treats what-can-you-help-me-with prompts as 
   assert.equal(resolution.clarification, null);
 });
 
+test("resolveConversationIntentMode ignores low-confidence local model side-effect upgrades", async () => {
+  let localResolverCalled = false;
+
+  const resolution = await resolveConversationIntentMode(
+    "Could you own this for me and keep it open for me later tonight?",
+    null,
+    async () => {
+      localResolverCalled = true;
+      return {
+        source: "local_intent_model",
+        mode: "build",
+        confidence: "low",
+        matchedRuleId: "local_intent_model_low_confidence_build",
+        explanation: "Weak local model guess that should not grant build authority.",
+        clarification: null,
+        semanticRouteId: "build_request"
+      };
+    },
+    buildSessionHints({
+      domainDominantLane: "workflow",
+      domainContinuityActive: true,
+      workflowContinuityActive: true
+    })
+  );
+
+  assert.equal(localResolverCalled, true);
+  assert.equal(resolution.mode, "chat");
+  assert.equal(resolution.matchedRuleId, "intent_mode_default_chat");
+  assert.equal(resolution.semanticRoute?.sourceAuthority, "lexical_fallback");
+});
+
 test("resolveConversationIntentMode treats natural capability-limit questions as capability discovery intent", async () => {
   const resolution = await resolveConversationIntentMode(
     "Why can't you do that here right now?"

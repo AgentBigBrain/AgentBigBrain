@@ -37,13 +37,13 @@ import { runCheckpoint675LiveReview } from "../core/stage6_75CheckpointLive";
 import { EntityGraphStore } from "../core/entityGraphStore";
 import { buildDiscordCapabilitySummary } from "./conversationRuntime/capabilityIntrospection";
 import { SkillRegistryStore } from "../organs/skillRegistry/skillRegistryStore";
-import type { AutonomyBoundaryInterpretationResolver, ContinuationInterpretationResolver, ContextualFollowupInterpretationResolver, ContextualReferenceInterpretationResolver, EntityDomainHintInterpretationResolver, EntityReferenceInterpretationResolver, EntityTypeInterpretationResolver, HandoffControlInterpretationResolver, IdentityInterpretationResolver, LocalIntentModelResolver, StatusRecallBoundaryInterpretationResolver, TopicKeyInterpretationResolver } from "../organs/languageUnderstanding/localIntentModelContracts";
+import type { AutonomyBoundaryInterpretationResolver, ContinuationInterpretationResolver, ContextualFollowupInterpretationResolver, ContextualReferenceInterpretationResolver, EntityDomainHintInterpretationResolver, EntityReferenceInterpretationResolver, EntityTypeInterpretationResolver, HandoffControlInterpretationResolver, IdentityInterpretationResolver, LocalIntentModelResolver, RelationshipInterpretationResolver, StatusRecallBoundaryInterpretationResolver, TopicKeyInterpretationResolver } from "../organs/languageUnderstanding/localIntentModelContracts";
 import type { ProposalReplyInterpretationResolver } from "../organs/languageUnderstanding/localIntentModelProposalReplyContracts";
 import { InterfaceBrainRegistry } from "./interfaceBrainRegistry";
 interface DiscordGatewayOptions {
   sessionStore?: InterfaceSessionStore;
   entityGraphStore?: EntityGraphStore;
-  localIntentModelResolver?: LocalIntentModelResolver; autonomyBoundaryInterpretationResolver?: AutonomyBoundaryInterpretationResolver; statusRecallBoundaryInterpretationResolver?: StatusRecallBoundaryInterpretationResolver; continuationInterpretationResolver?: ContinuationInterpretationResolver; contextualFollowupInterpretationResolver?: ContextualFollowupInterpretationResolver; contextualReferenceInterpretationResolver?: ContextualReferenceInterpretationResolver; entityDomainHintInterpretationResolver?: EntityDomainHintInterpretationResolver; entityReferenceInterpretationResolver?: EntityReferenceInterpretationResolver; entityTypeInterpretationResolver?: EntityTypeInterpretationResolver; handoffControlInterpretationResolver?: HandoffControlInterpretationResolver; identityInterpretationResolver?: IdentityInterpretationResolver; proposalReplyInterpretationResolver?: ProposalReplyInterpretationResolver; topicKeyInterpretationResolver?: TopicKeyInterpretationResolver; brainRegistry?: InterfaceBrainRegistry;
+  localIntentModelResolver?: LocalIntentModelResolver; autonomyBoundaryInterpretationResolver?: AutonomyBoundaryInterpretationResolver; statusRecallBoundaryInterpretationResolver?: StatusRecallBoundaryInterpretationResolver; continuationInterpretationResolver?: ContinuationInterpretationResolver; contextualFollowupInterpretationResolver?: ContextualFollowupInterpretationResolver; contextualReferenceInterpretationResolver?: ContextualReferenceInterpretationResolver; entityDomainHintInterpretationResolver?: EntityDomainHintInterpretationResolver; entityReferenceInterpretationResolver?: EntityReferenceInterpretationResolver; entityTypeInterpretationResolver?: EntityTypeInterpretationResolver; handoffControlInterpretationResolver?: HandoffControlInterpretationResolver; identityInterpretationResolver?: IdentityInterpretationResolver; relationshipInterpretationResolver?: RelationshipInterpretationResolver; proposalReplyInterpretationResolver?: ProposalReplyInterpretationResolver; topicKeyInterpretationResolver?: TopicKeyInterpretationResolver; brainRegistry?: InterfaceBrainRegistry;
 }
 export class DiscordGateway {
   private running = false;
@@ -151,6 +151,7 @@ export class DiscordGateway {
       entityReferenceInterpretationResolver: options.entityReferenceInterpretationResolver,
       handoffControlInterpretationResolver: options.handoffControlInterpretationResolver,
       identityInterpretationResolver: options.identityInterpretationResolver,
+      relationshipInterpretationResolver: options.relationshipInterpretationResolver,
       proposalReplyInterpretationResolver: options.proposalReplyInterpretationResolver,
       topicKeyInterpretationResolver: options.topicKeyInterpretationResolver,
       getEntityGraph: async () => this.entityGraphStore.getGraph(),

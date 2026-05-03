@@ -63,6 +63,7 @@ export const PROFILE_MEMORY_GOVERNANCE_REASONS = [
   "explicit_user_episode",
   "assistant_inference_episode",
   "contact_context_is_support_only",
+  "semantic_relationship_context_support_only",
   "contact_entity_hint_requires_corroboration",
   "historical_work_linkage_support_only",
   "severed_work_linkage_support_only",

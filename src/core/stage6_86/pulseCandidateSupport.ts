@@ -2,7 +2,14 @@
  * @fileoverview Shared contracts and normalization helpers for the canonical Stage 6.86 pulse-candidate subsystem.
  */
 
-import { ConversationStackV1, EntityNodeV1, PulseDecisionV1, PulseReasonCodeV1 } from "../types";
+import type { SourceAuthority } from "../sourceAuthority";
+import {
+  ConversationStackV1,
+  EntityNodeV1,
+  PulseDecisionV1,
+  PulseProvenanceTierV1,
+  PulseReasonCodeV1
+} from "../types";
 
 const MAX_REASONABLE_COUNT = 32;
 const MAX_REASONABLE_MINUTES = 24 * 60 * 7;
@@ -75,6 +82,9 @@ export interface PulseCandidateDraftV1 {
   threadKey: string | null;
   entityRefs: readonly string[];
   evidenceRefs: readonly string[];
+  sourceAuthority: SourceAuthority;
+  provenanceTier: PulseProvenanceTierV1;
+  sensitive: boolean;
   scoreBreakdown: {
     recency: number;
     frequency: number;

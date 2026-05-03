@@ -30,6 +30,12 @@ import {
   buildProfileMemoryIngestPolicy
 } from "../../src/core/profileMemoryRuntime/profileMemoryIngestPolicy";
 import {
+  buildValidatedSemanticRelationshipFactCandidates
+} from "../../src/core/profileMemoryRuntime/profileMemorySemanticRelationshipCandidates";
+import type {
+  ProfileSemanticRelationshipCandidateInput
+} from "../../src/core/profileMemoryRuntime/contracts";
+import {
   loadPersistedProfileMemoryState,
   saveProfileMemoryState
 } from "../../src/core/profileMemoryRuntime/profileMemoryPersistence";
@@ -56,6 +62,49 @@ import type {
   ProfileMemoryGraphObservationPayloadV1,
   ProfileMemoryGraphObservationRecord
 } from "../../src/core/profileMemoryRuntime/profileMemoryGraphContracts";
+
+function buildTestProfileUpdatePolicy(
+  sourceSurface: "conversation_profile_input" | "broker_task_ingest" = "conversation_profile_input",
+  options: {
+    hasValidatedFactCandidates?: boolean;
+    hasStructuredEpisodeCandidates?: boolean;
+  } = {}
+) {
+  return buildProfileMemoryIngestPolicy({
+    memoryIntent: "profile_update",
+    sourceSurface,
+    ...options
+  });
+}
+
+function buildTestSemanticRelationshipCandidate(input: {
+  objectDisplayName: string;
+  relationLabel: string;
+  lifecycle: ProfileSemanticRelationshipCandidateInput["lifecycle"];
+  workAssociation?: string;
+  evidenceText: string;
+  confidence?: number;
+}): ProfileSemanticRelationshipCandidateInput {
+  return {
+    subject: "current_user",
+    objectDisplayName: input.objectDisplayName,
+    relationLabel: input.relationLabel,
+    lifecycle: input.lifecycle,
+    ...(input.workAssociation ? { workAssociation: input.workAssociation } : {}),
+    sourceFamily: "semantic_model",
+    ambiguity: "none",
+    evidenceSpan: {
+      text: input.evidenceText
+    },
+    ...(typeof input.confidence === "number" ? { confidence: input.confidence } : {})
+  };
+}
+
+function buildTestSemanticRelationshipFacts(
+  candidates: readonly ProfileSemanticRelationshipCandidateInput[]
+) {
+  return buildValidatedSemanticRelationshipFactCandidates(candidates);
+}
 
 function createPersistedGraphEnvelope<TPayload>(
   schemaName: string,
@@ -115,7 +164,10 @@ async function withProfileStore(
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-profile-"));
   const filePath = path.join(tempDir, "profile_memory.secure.json");
   const keyBase64 = Buffer.alloc(32, 7).toString("base64");
-  const store = new ProfileMemoryStore(filePath, Buffer.from(keyBase64, "base64"), 90, options);
+  const store = new ProfileMemoryStore(filePath, Buffer.from(keyBase64, "base64"), 90, {
+    allowLegacyCompatibilityIngestDefault: true,
+    ...options
+  });
 
   try {
     await callback(store, filePath);
@@ -152,6 +204,30 @@ test("profile memory persists encrypted content and omits plaintext values at re
     assert.equal(raw.includes("123 Main Street"), false);
     assert.equal(raw.includes("employment.current"), false);
   });
+});
+
+test("profile memory store defaults missing ingest policy to no-op in strict runtime mode", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-profile-strict-"));
+  const filePath = path.join(tempDir, "profile_memory.secure.json");
+  const store = new ProfileMemoryStore(filePath, Buffer.alloc(32, 8), 90);
+
+  try {
+    const result = await store.ingestFromTaskInput(
+      "task_profile_strict_default",
+      "I work with Milo at Northstar Creative.",
+      "2026-05-02T12:00:00.000Z"
+    );
+    const facts = await store.readFacts({
+      purpose: "operator_view",
+      includeSensitive: false,
+      explicitHumanApproval: false
+    });
+
+    assert.equal(result.appliedFacts, 0);
+    assert.equal(facts.length, 0);
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
 });
 
 test("profile memory load returns reconciled stale snapshots without rewriting encrypted storage", async () => {
@@ -16122,7 +16198,7 @@ test("profile memory ingest persists corroboration-gated contact hints as graph 
 
 test("profile memory store skips duplicate same-turn ingest across conversational and broker seams", async () => {
   await withProfileStore(async (store) => {
-    const userInput = "I work with Owen at Lantern Studio.";
+    const userInput = "My name is Avery.";
     const observedAt = "2026-04-02T15:00:00.000Z";
     const sourceFingerprint = buildProfileMemorySourceFingerprint(userInput);
 
@@ -16131,6 +16207,7 @@ test("profile memory store skips duplicate same-turn ingest across conversationa
       userInput,
       observedAt,
       {
+        ingestPolicy: buildTestProfileUpdatePolicy("conversation_profile_input"),
         provenance: {
           conversationId: "conversation_profile_idempotency_1",
           turnId: "turn_profile_idempotency_1",
@@ -16145,6 +16222,7 @@ test("profile memory store skips duplicate same-turn ingest across conversationa
       userInput,
       observedAt,
       {
+        ingestPolicy: buildTestProfileUpdatePolicy("broker_task_ingest"),
         provenance: {
           conversationId: "conversation_profile_idempotency_1",
           turnId: "turn_profile_idempotency_1",
@@ -16170,24 +16248,16 @@ test("profile memory store skips duplicate same-turn ingest across conversationa
     assert.equal(
       facts.filter(
         (fact) =>
-          fact.key === "contact.owen.relationship" &&
-          fact.value === "work_peer"
-      ).length,
-      1
-    );
-    assert.equal(
-      facts.filter(
-        (fact) =>
-          fact.key === "contact.owen.work_association" &&
-          fact.value === "Lantern Studio"
+          fact.key === "identity.preferred_name" &&
+          fact.value === "Avery"
       ).length,
       1
     );
     assert.equal(state.ingestReceipts.length, 1);
     assert.equal(state.ingestReceipts[0]?.turnId, "turn_profile_idempotency_1");
     assert.equal(state.ingestReceipts[0]?.sourceFingerprint, sourceFingerprint);
-    assert.equal(state.graph.observations.length, 4);
-    assert.equal(state.graph.claims.length, 3);
+    assert.equal(state.graph.observations.length, 1);
+    assert.equal(state.graph.claims.length, 1);
     assert.equal(state.graph.mutationJournal.entries.length, 1);
   });
 });
@@ -16832,7 +16902,7 @@ test("profile memory store keeps historical and severed direct contact relations
 
     const currentBossResult = await store.ingestFromTaskInput(
       "task_profile_governance_direct_current_boss_contact",
-      "Milo is my boss at Northstar Creative.",
+      "My boss is Milo.",
       "2026-04-02T15:03:00.000Z"
     );
     const currentFacts = await store.readFacts({
@@ -16842,7 +16912,7 @@ test("profile memory store keeps historical and severed direct contact relations
     });
 
     assert.deepEqual(currentBossResult, {
-      appliedFacts: 4,
+      appliedFacts: 3,
       supersededFacts: 0
     });
     assert.equal(
@@ -16853,15 +16923,6 @@ test("profile memory store keeps historical and severed direct contact relations
       ),
       true
     );
-    assert.equal(
-      currentFacts.some(
-        (fact) =>
-          fact.key === "contact.milo.work_association" &&
-          fact.value === "Northstar Creative"
-      ),
-      true
-    );
-
     const currentSupervisorResult = await store.ingestFromTaskInput(
       "task_profile_governance_named_supervisor_contact",
       "My supervisor is Dana.",
@@ -17482,7 +17543,7 @@ test("profile memory store keeps historical and severed direct contact relations
     });
 
     assert.deepEqual(currentMarriedPartnerResult, {
-      appliedFacts: 3,
+      appliedFacts: 1,
       supersededFacts: 0
     });
     assert.equal(
@@ -17491,7 +17552,7 @@ test("profile memory store keeps historical and severed direct contact relations
           fact.key === "contact.jules.name" &&
           fact.value === "Jules"
       ),
-      true
+      false
     );
     assert.equal(
       marriedPartnerFacts.some(
@@ -17499,7 +17560,7 @@ test("profile memory store keeps historical and severed direct contact relations
           fact.key === "contact.jules.relationship" &&
           fact.value === "partner"
       ),
-      true
+      false
     );
 
     const currentDistantRelativeResult = await store.ingestFromTaskInput(
@@ -17554,7 +17615,7 @@ test("profile memory store keeps historical and severed direct contact relations
     });
 
     assert.deepEqual(currentFriendResult, {
-      appliedFacts: 2,
+      appliedFacts: 0,
       supersededFacts: 0
     });
     assert.equal(
@@ -17563,7 +17624,7 @@ test("profile memory store keeps historical and severed direct contact relations
           fact.key === "contact.quinn.name" &&
           fact.value === "Quinn"
       ),
-      true
+      false
     );
     assert.equal(
       currentFriendFacts.some(
@@ -17571,7 +17632,7 @@ test("profile memory store keeps historical and severed direct contact relations
           fact.key === "contact.quinn.relationship" &&
           fact.value === "friend"
       ),
-      true
+      false
     );
 
     const currentTeammateResult = await store.ingestFromTaskInput(
@@ -17586,7 +17647,7 @@ test("profile memory store keeps historical and severed direct contact relations
     });
 
     assert.deepEqual(currentTeammateResult, {
-      appliedFacts: 3,
+      appliedFacts: 1,
       supersededFacts: 0
     });
     assert.equal(
@@ -17595,7 +17656,7 @@ test("profile memory store keeps historical and severed direct contact relations
           fact.key === "contact.parker.name" &&
           fact.value === "Parker"
       ),
-      true
+      false
     );
     assert.equal(
       currentTeammateFacts.some(
@@ -17603,7 +17664,7 @@ test("profile memory store keeps historical and severed direct contact relations
           fact.key === "contact.parker.relationship" &&
           fact.value === "work_peer"
       ),
-      true
+      false
     );
 
     const currentDistantRelativeSymmetricResult = await store.ingestFromTaskInput(
@@ -17618,7 +17679,7 @@ test("profile memory store keeps historical and severed direct contact relations
     });
 
     assert.deepEqual(currentDistantRelativeSymmetricResult, {
-      appliedFacts: 3,
+      appliedFacts: 1,
       supersededFacts: 0
     });
     assert.equal(
@@ -17954,7 +18015,7 @@ test("profile memory store keeps wrapped named-contact work-with phrasing on one
           fact.key === "contact.milo.relationship" &&
           fact.value === "work_peer"
       ),
-      true
+      false
     );
     assert.equal(
       wrappedFacts.some(
@@ -17962,7 +18023,7 @@ test("profile memory store keeps wrapped named-contact work-with phrasing on one
           fact.key === "contact.milo.work_association" &&
           fact.value === "Northstar Creative"
       ),
-      true
+      false
     );
     assert.equal(
       wrappedFacts.some((fact) =>
@@ -17990,7 +18051,7 @@ test("profile memory store keeps wrapped named-contact work-with phrasing on one
           fact.key === "contact.milo.relationship" &&
           fact.value === "work_peer"
       ),
-      true
+      false
     );
   });
 });
@@ -18103,7 +18164,7 @@ test("profile memory store keeps current direct-report aliases current while his
   });
 });
 
-test("profile memory store keeps works-for-me employee-direction current while historical and severed variants fail closed", async () => {
+test("profile memory store keeps works-for-me employee-direction lexical candidates out of current facts", async () => {
   await withProfileStore(async (store) => {
     const currentEmployeeLinkResult = await store.ingestFromTaskInput(
       "task_profile_governance_current_employee_link_contact",
@@ -18117,7 +18178,7 @@ test("profile memory store keeps works-for-me employee-direction current while h
     });
 
     assert.deepEqual(currentEmployeeLinkResult, {
-      appliedFacts: 3,
+      appliedFacts: 0,
       supersededFacts: 0
     });
     assert.equal(
@@ -18126,7 +18187,7 @@ test("profile memory store keeps works-for-me employee-direction current while h
           fact.key === "contact.owen.name" &&
           fact.value === "Owen"
       ),
-      true
+      false
     );
     assert.equal(
       currentFacts.some(
@@ -18134,7 +18195,7 @@ test("profile memory store keeps works-for-me employee-direction current while h
           fact.key === "contact.owen.relationship" &&
           fact.value === "employee"
       ),
-      true
+      false
     );
     assert.equal(
       currentFacts.some(
@@ -18142,7 +18203,7 @@ test("profile memory store keeps works-for-me employee-direction current while h
           fact.key === "contact.owen.work_association" &&
           fact.value === "Lantern Studio"
       ),
-      true
+      false
     );
 
     const historicalEmployeeLinkResult = await store.ingestFromTaskInput(
@@ -18227,7 +18288,7 @@ test("profile memory store keeps works-for-me employee-direction current while h
   });
 });
 
-test("profile memory store closes works-with-me work-peer current winners when historical and severed variants arrive", async () => {
+test("profile memory store keeps works-with-me work-peer lexical candidates out of current facts", async () => {
   await withProfileStore(async (store) => {
     const currentResult = await store.ingestFromTaskInput(
       "task_profile_governance_current_work_peer_link",
@@ -18241,7 +18302,7 @@ test("profile memory store closes works-with-me work-peer current winners when h
     });
 
     assert.deepEqual(currentResult, {
-      appliedFacts: 3,
+      appliedFacts: 0,
       supersededFacts: 0
     });
     assert.equal(
@@ -18250,7 +18311,7 @@ test("profile memory store closes works-with-me work-peer current winners when h
           fact.key === "contact.owen.name" &&
           fact.value === "Owen"
       ),
-      true
+      false
     );
     assert.equal(
       currentFacts.some(
@@ -18258,7 +18319,7 @@ test("profile memory store closes works-with-me work-peer current winners when h
           fact.key === "contact.owen.relationship" &&
           fact.value === "work_peer"
       ),
-      true
+      false
     );
     assert.equal(
       currentFacts.some(
@@ -18266,7 +18327,7 @@ test("profile memory store closes works-with-me work-peer current winners when h
           fact.key === "contact.owen.work_association" &&
           fact.value === "Lantern Studio"
       ),
-      true
+      false
     );
 
     const historicalResult = await store.ingestFromTaskInput(
@@ -18282,7 +18343,7 @@ test("profile memory store closes works-with-me work-peer current winners when h
 
     assert.deepEqual(historicalResult, {
       appliedFacts: 1,
-      supersededFacts: 2
+      supersededFacts: 0
     });
     assert.equal(
       historicalFacts.some(
@@ -18356,12 +18417,54 @@ test("profile memory store closes prior current coworker winners and preserves h
     const initialResult = await store.ingestFromTaskInput(
       "task_profile_contact_successor_initial",
       "I work with Jordan at Northstar. I used to work with Milo at Lumen Studio.",
-      "2026-04-09T10:00:00.000Z"
+      "2026-04-09T10:00:00.000Z",
+      {
+        validatedFactCandidates: buildTestSemanticRelationshipFacts([
+          buildTestSemanticRelationshipCandidate({
+            objectDisplayName: "Jordan",
+            relationLabel: "work_peer",
+            lifecycle: "current",
+            workAssociation: "Northstar",
+            evidenceText: "I work with Jordan at Northstar."
+          }),
+          buildTestSemanticRelationshipCandidate({
+            objectDisplayName: "Milo",
+            relationLabel: "work_peer",
+            lifecycle: "historical",
+            workAssociation: "Lumen Studio",
+            evidenceText: "I used to work with Milo at Lumen Studio."
+          })
+        ]),
+        ingestPolicy: buildTestProfileUpdatePolicy("conversation_profile_input", {
+          hasValidatedFactCandidates: true
+        })
+      }
     );
     const updateResult = await store.ingestFromTaskInput(
       "task_profile_contact_successor_update",
       "I don't work with Jordan anymore. I work with Priya at Northstar now.",
-      "2026-04-09T10:05:00.000Z"
+      "2026-04-09T10:05:00.000Z",
+      {
+        validatedFactCandidates: buildTestSemanticRelationshipFacts([
+          buildTestSemanticRelationshipCandidate({
+            objectDisplayName: "Jordan",
+            relationLabel: "work_peer",
+            lifecycle: "severed",
+            workAssociation: "Northstar",
+            evidenceText: "I don't work with Jordan anymore."
+          }),
+          buildTestSemanticRelationshipCandidate({
+            objectDisplayName: "Priya",
+            relationLabel: "work_peer",
+            lifecycle: "current",
+            workAssociation: "Northstar",
+            evidenceText: "I work with Priya at Northstar now."
+          })
+        ]),
+        ingestPolicy: buildTestProfileUpdatePolicy("conversation_profile_input", {
+          hasValidatedFactCandidates: true
+        })
+      }
     );
     const factsAfterUpdate = await store.readFacts({
       purpose: "operator_view",
@@ -18385,7 +18488,7 @@ test("profile memory store closes prior current coworker winners and preserves h
       supersededFacts: 0
     });
     assert.deepEqual(updateResult, {
-      appliedFacts: 5,
+      appliedFacts: 6,
       supersededFacts: 2
     });
     assert.equal(
@@ -18474,7 +18577,7 @@ test("profile memory store closes prior current coworker winners and preserves h
   });
 });
 
-test("profile memory store keeps third-person contact continuity available for current organization plus historical and object follow-ups", async () => {
+test("profile memory store keeps third-person contact continuity available while broad work associations stay out of current facts", async () => {
   await withProfileStore(async (store) => {
     const ingestResult = await store.ingestFromTaskInput(
       "task_profile_contact_billy_continuity",
@@ -18513,7 +18616,7 @@ test("profile memory store keeps third-person contact continuity available for c
           fact.key === "contact.billy.work_association" &&
           fact.value === "Northstar"
       ),
-      true
+      false
     );
     assert.equal(
       readableFacts.some(
@@ -18529,7 +18632,7 @@ test("profile memory store keeps third-person contact continuity available for c
           fact.key === "contact.billy.work_association" &&
           fact.value === "Northstar"
       ),
-      true
+      false
     );
     assert.equal(
       continuityFacts.some(
@@ -18550,7 +18653,7 @@ test("profile memory store keeps third-person contact continuity available for c
   });
 });
 
-test("profile memory store ingests long-form third-person work updates without flattening current and historical organization state", async () => {
+test("profile memory store ingests long-form third-person work updates as continuity without broad current work-association truth", async () => {
   await withProfileStore(async (store) => {
     const ingestResult = await store.ingestFromTaskInput(
       "task_profile_contact_longform_continuity",
@@ -18587,7 +18690,7 @@ test("profile memory store ingests long-form third-person work updates without f
           fact.key === "contact.billy.work_association" &&
           fact.value === "Crimson Analytics"
       ),
-      true
+      false
     );
     assert.equal(
       readableFacts.some(
@@ -18603,7 +18706,7 @@ test("profile memory store ingests long-form third-person work updates without f
           fact.key === "contact.billy.work_association" &&
           fact.value === "Crimson Analytics"
       ),
-      true
+      false
     );
     assert.equal(
       readableFacts.some(
@@ -19285,7 +19388,8 @@ test("ingestFromTaskInput treats voice transcripts as support-only unless policy
           allowEpisodeSupportExtraction: false,
           allowInferredResolution: false,
           fragmentPolicy: "support_only",
-          policySource: "semantic_route"
+          policySource: "semantic_route",
+          sourceAuthority: "media_transcript"
         }
       }
     );
@@ -19404,7 +19508,7 @@ test("ingestFromTaskInput emits current-surface org and place claims for continu
         claim.payload.normalizedKey === "contact.billy.work_association" &&
         claim.payload.normalizedValue === "Crimson Analytics"
     ),
-    true
+    false
   );
   assert.equal(
     resolvedClaims.some(
@@ -19489,7 +19593,7 @@ test("ingestFromTaskInput persists stable refs and keeps provisional contact tru
     );
 
     assert.equal(selfClaim?.payload.stableRefId, "stable_self_profile_owner");
-    assert.equal(contactClaim?.payload.stableRefId, "stable_contact_owen");
+    assert.equal(contactClaim, undefined);
     assert.equal(contactEvent?.payload.stableRefId, "stable_contact_owen");
 
     const groups = await store.queryGraphStableRefGroups();
@@ -19502,10 +19606,7 @@ test("ingestFromTaskInput persists stable refs and keeps provisional contact tru
     const resolvedCurrentClaims = await store.queryResolvedCurrentGraphClaims();
 
     assert.equal(selfGroup?.claimIds.includes(selfClaim?.payload.claimId ?? ""), true);
-    assert.equal(
-      contactGroup?.claimIds.includes(contactClaim?.payload.claimId ?? ""),
-      true
-    );
+    assert.equal(contactGroup?.claimIds.length ?? 0, 0);
     assert.equal(
       contactGroup?.eventIds.includes(contactEvent?.payload.eventId ?? ""),
       true
@@ -22530,7 +22631,7 @@ test("profile memory store exposes bounded planning inspection with selected fac
   await withProfileStore(async (store, filePath) => {
     await store.ingestFromTaskInput(
       "task_profile_store_planning_inspection_1",
-      "I work with Owen at Lantern Studio.",
+      "My work peer is Owen.",
       "2026-04-03T00:00:00.000Z"
     );
     let seededState = await store.load();
@@ -22558,7 +22659,9 @@ test("profile memory store exposes bounded planning inspection with selected fac
     );
     assert.equal(
       inspection.entries.some(
-        (entry) => entry.fact.key === "contact.owen.work_association"
+        (entry) =>
+          entry.fact.key === "contact.owen.relationship" &&
+          entry.fact.value === "work_peer"
       ),
       true
     );

@@ -382,8 +382,8 @@ export function countApprovedManagedProcessStopActions(result: TaskRunResult): n
  * Collects path-evidence hints from an action for deterministic target-path checks.
  *
  * **Why it exists:**
- * Mission path proof depends on one stable extraction path for action params such as `path`,
- * `cwd`, `workdir`, or `command`.
+ * Mission path proof depends on one stable extraction path for structured action params such as
+ * `path`, `cwd`, or `workdir`.
  *
  * **What it talks to:**
  * - Uses local normalization helpers within this module.
@@ -413,7 +413,6 @@ function collectActionPathHints(action: ActionResultEntry["action"]): string[] {
   pushIfString(params.workdir);
   pushIfString(params.url);
   pushIfString(params.endpoint);
-  pushIfString(params.command);
   return hints;
 }
 

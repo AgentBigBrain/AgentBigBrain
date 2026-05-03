@@ -156,7 +156,11 @@ function toPulseCandidate(draft: PulseCandidateDraftV1): PulseCandidateV1 {
     lastTouchedAt: draft.lastTouchedAt,
     threadKey: draft.threadKey,
     entityRefs: draft.entityRefs,
-    evidenceRefs: draft.evidenceRefs
+    evidenceRefs: draft.evidenceRefs,
+    sourceAuthority: draft.sourceAuthority,
+    provenanceTier: draft.provenanceTier,
+    sensitive: draft.sensitive,
+    activeMissionSuppressed: false
   };
   const stableHash = sha256HexFromCanonicalJson(preHash);
   return {
@@ -227,6 +231,9 @@ function buildHighSalienceEntityDrafts(
         threadKey: null,
         entityRefs: [entity.entityKey],
         evidenceRefs: normalizeStringArray(entity.evidenceRefs),
+        sourceAuthority: "stale_runtime_context",
+        provenanceTier: privacySensitive ? "weak" : "supporting",
+        sensitive: privacySensitive,
         scoreBreakdown: {
           recency: computeRecencySignal(entity.lastSeenAt, observedAt),
           frequency: clampRatio(entity.salience / 10),
@@ -280,6 +287,9 @@ function buildBridgeCandidateDrafts(
         threadKey: null,
         entityRefs: normalizeStringArray([edge.sourceEntityKey, edge.targetEntityKey]),
         evidenceRefs: normalizeStringArray(edge.evidenceRefs),
+        sourceAuthority: "stale_runtime_context",
+        provenanceTier: privacySensitive ? "weak" : "supporting",
+        sensitive: privacySensitive,
         scoreBreakdown: {
           recency: computeRecencySignal(edge.lastObservedAt, observedAt),
           frequency: clampRatio(edge.coMentionCount / (coMentionThreshold + 2)),
@@ -330,6 +340,9 @@ function buildOpenLoopDrafts(
         threadKey: thread.threadKey,
         entityRefs: normalizeStringArray(loop.entityRefs),
         evidenceRefs: normalizeStringArray([`thread:${thread.threadKey}:loop:${loop.loopId}`]),
+        sourceAuthority: "stale_runtime_context",
+        provenanceTier: privacySensitive ? "weak" : "supporting",
+        sensitive: privacySensitive,
         scoreBreakdown: {
           recency: computeRecencySignal(loop.lastMentionedAt, observedAt),
           frequency: clampRatio(1 / (1 + staleSignal)),
@@ -350,6 +363,9 @@ function buildOpenLoopDrafts(
       threadKey: candidate.threadKey,
       entityRefs: candidate.entityRefs,
       evidenceRefs: candidate.evidenceRefs,
+      sourceAuthority: candidate.sourceAuthority,
+      provenanceTier: candidate.provenanceTier,
+      sensitive: candidate.sensitive,
       scoreBreakdown: {
         recency: candidate.scoreBreakdown.recency,
         frequency: candidate.scoreBreakdown.frequency,
@@ -391,6 +407,9 @@ function buildTopicDriftDrafts(
         threadKey: thread.threadKey,
         entityRefs: [],
         evidenceRefs: normalizeStringArray([`thread:${thread.threadKey}:topic:${thread.topicKey}`]),
+        sourceAuthority: "stale_runtime_context",
+        provenanceTier: containsPrivacyKeyword(thread.topicLabel) ? "weak" : "supporting",
+        sensitive: containsPrivacyKeyword(thread.topicLabel),
         scoreBreakdown: {
           recency: computeRecencySignal(thread.lastTouchedAt, observedAt),
           frequency: clampRatio(mentionCount / 8),
@@ -441,6 +460,9 @@ function buildStaleFactDrafts(
         threadKey: null,
         entityRefs: normalizeStringArray([edge.sourceEntityKey, edge.targetEntityKey]),
         evidenceRefs: normalizeStringArray(edge.evidenceRefs),
+        sourceAuthority: "stale_runtime_context",
+        provenanceTier: privacySensitive ? "weak" : "supporting",
+        sensitive: privacySensitive,
         scoreBreakdown: {
           recency: staleSignal,
           frequency: clampRatio(edge.coMentionCount / 10),
@@ -609,7 +631,11 @@ function buildSuppressDecision(
     candidateId: candidate.candidateId,
     blockCode: "PULSE_BLOCKED",
     blockDetailReason: reason,
-    evidenceRefs: candidate.evidenceRefs
+    evidenceRefs: candidate.evidenceRefs,
+    sourceAuthority: candidate.sourceAuthority,
+    provenanceTier: candidate.provenanceTier,
+    sensitive: candidate.sensitive,
+    activeMissionSuppressed: reason === "DERAILS_ACTIVE_MISSION"
   };
 }
 
@@ -761,7 +787,11 @@ export function evaluatePulseCandidatesV1(
       candidateId: candidate.candidateId,
       blockCode: null,
       blockDetailReason: null,
-      evidenceRefs: candidate.evidenceRefs
+      evidenceRefs: candidate.evidenceRefs,
+      sourceAuthority: candidate.sourceAuthority,
+      provenanceTier: candidate.provenanceTier,
+      sensitive: candidate.sensitive,
+      activeMissionSuppressed: false
     };
     emittedCandidate = candidate;
     decisions.push({

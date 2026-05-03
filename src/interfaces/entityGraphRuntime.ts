@@ -198,6 +198,7 @@ async function resolveInboundEntityTypeHints(
     domainHint: input.domainHint ?? null
   });
   const candidateEntities = extraction.nodes.map((node) => ({
+    candidateId: node.entityKey,
     candidateName: node.canonicalName,
     deterministicEntityType: node.entityType,
     domainHint: node.domainHint
@@ -239,10 +240,21 @@ async function resolveInboundEntityTypeHints(
   if (!interpretation || interpretation.kind !== "typed_candidates" || interpretation.confidence === "low") {
     return null;
   }
-  return interpretation.typedCandidates.map((candidate) => ({
-    candidateName: candidate.candidateName,
-    entityType: candidate.entityType
-  }));
+  const candidatesById = new Map(
+    candidateEntities.map((candidate) => [candidate.candidateId, candidate])
+  );
+  return interpretation.typedCandidates.flatMap((candidate) => {
+    const sourceCandidate = candidatesById.get(candidate.candidateId);
+    if (!sourceCandidate) {
+      return [];
+    }
+    return [
+      {
+        candidateName: sourceCandidate.candidateName,
+        entityType: candidate.entityType
+      }
+    ];
+  });
 }
 
 /**
@@ -282,6 +294,7 @@ async function resolveInboundEntityDomainHints(
     domainHint: input.domainHint ?? null
   });
   const candidateEntities = extraction.nodes.map((node) => ({
+    candidateId: node.entityKey,
     candidateName: node.canonicalName,
     entityType: node.entityType,
     deterministicDomainHint:
@@ -328,10 +341,21 @@ async function resolveInboundEntityDomainHints(
   ) {
     return null;
   }
-  return interpretation.domainHintedCandidates.map((candidate) => ({
-    candidateName: candidate.candidateName,
-    domainHint: candidate.domainHint
-  }));
+  const candidatesById = new Map(
+    candidateEntities.map((candidate) => [candidate.candidateId, candidate])
+  );
+  return interpretation.domainHintedCandidates.flatMap((candidate) => {
+    const sourceCandidate = candidatesById.get(candidate.candidateId);
+    if (!sourceCandidate) {
+      return [];
+    }
+    return [
+      {
+        candidateName: sourceCandidate.candidateName,
+        domainHint: candidate.domainHint
+      }
+    ];
+  });
 }
 
 /**

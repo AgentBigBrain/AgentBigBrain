@@ -4,6 +4,10 @@
 
 import { estimateActionCostUsd } from "./actionCostPolicy";
 import {
+  getPlannerActionDefinition,
+  type ActionDefinition
+} from "./actionDefinitionRegistry";
+import {
   evaluateCloseBrowserActionConstraints,
   evaluateBrowserVerifyActionConstraints,
   evaluateOpenBrowserActionConstraints
@@ -34,6 +38,16 @@ import { resolveSandboxPath as resolveSandboxPathFromPolicy } from "./hardConstr
 import { ConstraintViolation, GovernanceProposal } from "./types";
 
 export type { ConstraintEvaluationContext } from "./constraintRuntime/contracts";
+
+/**
+ * Exposes canonical action authority metadata at the hard-constraint boundary.
+ *
+ * @param actionType - Action type under deterministic constraint evaluation.
+ * @returns Registry metadata used by safety checks and diagnostics.
+ */
+export function getHardConstraintActionAuthority(actionType: GovernanceProposal["action"]["type"]): ActionDefinition {
+  return getPlannerActionDefinition(actionType);
+}
 
 /**
  * Detects whether a self-modification proposal targets immutable governance controls.

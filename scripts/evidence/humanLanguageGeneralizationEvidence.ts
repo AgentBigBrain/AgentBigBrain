@@ -31,9 +31,24 @@ type ScenarioCategory =
   | "episode_understanding"
   | "contextual_recall"
   | "cross_memory_synthesis"
-  | "proactive_utility";
+  | "proactive_utility"
+  | "relationship_memory"
+  | "identity_update"
+  | "media_document_reference"
+  | "site_generation_intent"
+  | "skill_lifecycle"
+  | "workflow_status_boundary"
+  | "stale_prompt_confirmation"
+  | "mission_proof_workspace_recovery"
+  | "organization_proof_target_path"
+  | "bridge_open_loop_commitment"
+  | "voice_media_transcript_promotion"
+  | "capability_trust_privacy"
+  | "model_unavailable_fallback"
+  | "strict_compatibility_boundary";
 
 type ScenarioPolarity = "positive" | "negative";
+type ScenarioEvidenceMode = "runtime_observed" | "schema_only";
 type TranscriptSpeaker = "user" | "assistant";
 
 interface ScenarioQualities {
@@ -92,6 +107,8 @@ interface HumanLanguageScenarioResult {
   category: ScenarioCategory;
   polarity: ScenarioPolarity;
   title: string;
+  evidenceMode: ScenarioEvidenceMode;
+  runtimeProof: boolean;
   passed: boolean;
   transcriptPreview: readonly string[];
   observed: readonly ScenarioBehaviorResult[];
@@ -111,6 +128,14 @@ interface HumanLanguageEvidenceArtifact {
     suppressedWeakSynthesis: boolean;
     suppressedGenericProactiveNudge: boolean;
     allowedUsefulProactiveNudge: boolean;
+  };
+  schemaOnlyCoverage: {
+    requiredCategoriesCovered: boolean;
+    requiredCategories: readonly ScenarioCategory[];
+    coveredCategories: readonly ScenarioCategory[];
+    missingCategories: readonly ScenarioCategory[];
+    schemaOnlyScenarioCount: number;
+    runtimeObservedScenarioCount: number;
   };
   errors: readonly ScenarioDiagnostic[];
   warnings: readonly ScenarioDiagnostic[];
@@ -137,13 +162,40 @@ const ARTIFACT_PATH = path.resolve(
   WORKSPACE_ROOT,
   "runtime/evidence/human_language_generalization_report.json"
 );
+const SEMANTIC_BRITTLENESS_ARTIFACT_PATH = path.resolve(
+  WORKSPACE_ROOT,
+  "runtime/evidence/semantic_language_brittleness_cleanup/human_language_generalization_report.json"
+);
 const COMMAND_NAME = "tsx scripts/evidence/humanLanguageGeneralizationEvidence.ts";
 const CATEGORY_ORDER: readonly ScenarioCategory[] = [
   "episode_understanding",
   "contextual_recall",
   "cross_memory_synthesis",
+  "proactive_utility",
+  "relationship_memory",
+  "identity_update",
+  "media_document_reference",
+  "site_generation_intent",
+  "skill_lifecycle",
+  "workflow_status_boundary",
+  "stale_prompt_confirmation",
+  "mission_proof_workspace_recovery",
+  "organization_proof_target_path",
+  "bridge_open_loop_commitment",
+  "voice_media_transcript_promotion",
+  "capability_trust_privacy",
+  "model_unavailable_fallback",
+  "strict_compatibility_boundary"
+];
+const RUNTIME_OBSERVED_CATEGORIES: readonly ScenarioCategory[] = [
+  "episode_understanding",
+  "contextual_recall",
+  "cross_memory_synthesis",
   "proactive_utility"
 ];
+const SCHEMA_ONLY_CATEGORIES: readonly ScenarioCategory[] = CATEGORY_ORDER.filter(
+  (category) => !RUNTIME_OBSERVED_CATEGORIES.includes(category)
+);
 const POLARITY_ORDER: readonly ScenarioPolarity[] = ["positive", "negative"];
 
 class ScenarioLanguageEpisodeModelClient implements ModelClient {
@@ -208,7 +260,21 @@ function createEmptyCategoryCounts(): Record<ScenarioCategory, number> {
     episode_understanding: 0,
     contextual_recall: 0,
     cross_memory_synthesis: 0,
-    proactive_utility: 0
+    proactive_utility: 0,
+    relationship_memory: 0,
+    identity_update: 0,
+    media_document_reference: 0,
+    site_generation_intent: 0,
+    skill_lifecycle: 0,
+    workflow_status_boundary: 0,
+    stale_prompt_confirmation: 0,
+    mission_proof_workspace_recovery: 0,
+    organization_proof_target_path: 0,
+    bridge_open_loop_commitment: 0,
+    voice_media_transcript_promotion: 0,
+    capability_trust_privacy: 0,
+    model_unavailable_fallback: 0,
+    strict_compatibility_boundary: 0
   };
 }
 
@@ -328,7 +394,7 @@ export function computeHumanLanguageScenarioDiagnostics(
     }
   }
 
-  for (const category of CATEGORY_ORDER) {
+  for (const category of RUNTIME_OBSERVED_CATEGORIES) {
     const positives = inventory.scenarios.filter(
       (scenario) => scenario.category === category && scenario.polarity === "positive"
     );
@@ -339,6 +405,15 @@ export function computeHumanLanguageScenarioDiagnostics(
       errors.push({
         scenarioId: category,
         message: "Each category must include at least one positive and one negative scenario."
+      });
+    }
+  }
+
+  for (const category of SCHEMA_ONLY_CATEGORIES) {
+    if (inventory.scenarios.every((scenario) => scenario.category !== category)) {
+      errors.push({
+        scenarioId: category,
+        message: "Each schema-only category must include at least one scenario."
       });
     }
   }
@@ -586,6 +661,10 @@ function buildRelationshipClarificationCandidate(): PulseCandidateV1 {
       cooldownPenalty: 0
     },
     lastTouchedAt: "2026-03-08T12:00:00.000Z",
+    sourceAuthority: "stale_runtime_context",
+    provenanceTier: "supporting",
+    sensitive: false,
+    activeMissionSuppressed: false,
     stableHash: "candidate_billy_followup_hash"
   };
 }
@@ -600,6 +679,12 @@ function getLastUserTurn(scenario: HumanLanguageScenario): string {
 
 function buildTranscriptPreview(scenario: HumanLanguageScenario): readonly string[] {
   return scenario.transcript.map((turn) => `${turn.speaker}: ${turn.text}`);
+}
+
+function getScenarioEvidenceMode(category: ScenarioCategory): ScenarioEvidenceMode {
+  return RUNTIME_OBSERVED_CATEGORIES.includes(category)
+    ? "runtime_observed"
+    : "schema_only";
 }
 
 function buildBillyContinuityEpisodeQuery(): QueryConversationContinuityEpisodes {
@@ -710,6 +795,8 @@ async function evaluateEpisodeUnderstandingScenario(
     category: scenario.category,
     polarity: scenario.polarity,
     title: scenario.title,
+    evidenceMode: "runtime_observed",
+    runtimeProof: true,
     passed: observed.every((entry) => entry.passed),
     transcriptPreview: buildTranscriptPreview(scenario),
     observed
@@ -771,6 +858,8 @@ async function evaluateContextualRecallScenario(
     category: scenario.category,
     polarity: scenario.polarity,
     title: scenario.title,
+    evidenceMode: "runtime_observed",
+    runtimeProof: true,
     passed: observed.every((entry) => entry.passed),
     transcriptPreview: buildTranscriptPreview(scenario),
     observed
@@ -865,6 +954,8 @@ function evaluateCrossMemorySynthesisScenario(
     category: scenario.category,
     polarity: scenario.polarity,
     title: scenario.title,
+    evidenceMode: "runtime_observed",
+    runtimeProof: true,
     passed: observed.every((entry) => entry.passed),
     transcriptPreview: buildTranscriptPreview(scenario),
     observed
@@ -912,9 +1003,37 @@ function evaluateProactiveUtilityScenario(
     category: scenario.category,
     polarity: scenario.polarity,
     title: scenario.title,
+    evidenceMode: "runtime_observed",
+    runtimeProof: true,
     passed: observed.every((entry) => entry.passed),
     transcriptPreview: buildTranscriptPreview(scenario),
     observed
+  };
+}
+
+function evaluateSchemaOnlyScenario(
+  scenario: HumanLanguageScenario
+): HumanLanguageScenarioResult {
+  const expectedBehavior = scenario.expectedBehavior.join(", ");
+  const mode = getScenarioEvidenceMode(scenario.category);
+  return {
+    scenarioId: scenario.id,
+    category: scenario.category,
+    polarity: scenario.polarity,
+    title: scenario.title,
+    evidenceMode: mode,
+    runtimeProof: false,
+    passed: mode === "schema_only",
+    transcriptPreview: buildTranscriptPreview(scenario),
+    observed: [
+      {
+        behavior: "schema_only_coverage",
+        passed: mode === "schema_only",
+        note:
+          `Covers ${scenario.category} expected behaviors (${expectedBehavior}) as inventory/schema evidence only; ` +
+          "no runtime route, memory write, side effect, or projection proof is claimed."
+      }
+    ]
   };
 }
 
@@ -930,6 +1049,21 @@ async function evaluateScenario(
       return evaluateCrossMemorySynthesisScenario(scenario);
     case "proactive_utility":
       return evaluateProactiveUtilityScenario(scenario);
+    case "relationship_memory":
+    case "identity_update":
+    case "media_document_reference":
+    case "site_generation_intent":
+    case "skill_lifecycle":
+    case "workflow_status_boundary":
+    case "stale_prompt_confirmation":
+    case "mission_proof_workspace_recovery":
+    case "organization_proof_target_path":
+    case "bridge_open_loop_commitment":
+    case "voice_media_transcript_promotion":
+    case "capability_trust_privacy":
+    case "model_unavailable_fallback":
+    case "strict_compatibility_boundary":
+      return evaluateSchemaOnlyScenario(scenario);
     default: {
       const neverCategory: never = scenario.category;
       throw new Error(`Unsupported scenario category: ${neverCategory}`);
@@ -982,6 +1116,30 @@ export async function runHumanLanguageGeneralizationEvidence(): Promise<HumanLan
         && scenario.passed
     )
   };
+  const coveredSchemaOnlyCategories = SCHEMA_ONLY_CATEGORIES.filter((category) =>
+    scenarioResults.some(
+      (scenario) =>
+        scenario.category === category &&
+        scenario.evidenceMode === "schema_only" &&
+        !scenario.runtimeProof &&
+        scenario.passed
+    )
+  );
+  const missingSchemaOnlyCategories = SCHEMA_ONLY_CATEGORIES.filter(
+    (category) => !coveredSchemaOnlyCategories.includes(category)
+  );
+  const schemaOnlyCoverage = {
+    requiredCategoriesCovered: missingSchemaOnlyCategories.length === 0,
+    requiredCategories: SCHEMA_ONLY_CATEGORIES,
+    coveredCategories: coveredSchemaOnlyCategories,
+    missingCategories: missingSchemaOnlyCategories,
+    schemaOnlyScenarioCount: scenarioResults.filter(
+      (scenario) => scenario.evidenceMode === "schema_only"
+    ).length,
+    runtimeObservedScenarioCount: scenarioResults.filter(
+      (scenario) => scenario.evidenceMode === "runtime_observed" && scenario.runtimeProof
+    ).length
+  };
 
   const artifact: HumanLanguageEvidenceArtifact = {
     generatedAt: new Date().toISOString(),
@@ -990,6 +1148,7 @@ export async function runHumanLanguageGeneralizationEvidence(): Promise<HumanLan
       diagnostics.errors.length === 0
       && scenarioErrors.length === 0
       && Object.values(requiredProofs).every(Boolean)
+      && schemaOnlyCoverage.requiredCategoriesCovered
         ? "PASS"
         : "FAIL",
     summary: {
@@ -998,6 +1157,7 @@ export async function runHumanLanguageGeneralizationEvidence(): Promise<HumanLan
       failedScenarios
     },
     requiredProofs,
+    schemaOnlyCoverage,
     errors: [...diagnostics.errors, ...scenarioErrors],
     warnings: diagnostics.warnings,
     scenarioResults
@@ -1005,6 +1165,12 @@ export async function runHumanLanguageGeneralizationEvidence(): Promise<HumanLan
 
   await mkdir(path.dirname(ARTIFACT_PATH), { recursive: true });
   await writeFile(ARTIFACT_PATH, `${JSON.stringify(artifact, null, 2)}\n`, "utf8");
+  await mkdir(path.dirname(SEMANTIC_BRITTLENESS_ARTIFACT_PATH), { recursive: true });
+  await writeFile(
+    SEMANTIC_BRITTLENESS_ARTIFACT_PATH,
+    `${JSON.stringify(artifact, null, 2)}\n`,
+    "utf8"
+  );
   return artifact;
 }
 

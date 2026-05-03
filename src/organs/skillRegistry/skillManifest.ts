@@ -6,6 +6,7 @@ import type { CreateSkillActionParams } from "../../core/types";
 import type { SkillArtifactPaths } from "../executionRuntime/contracts";
 import type {
   SkillInventoryEntry,
+  SkillActivationSource,
   SkillKind,
   SkillManifest,
   SkillVerificationConfig,
@@ -42,6 +43,21 @@ function resolveCreateSkillKind(params: CreateSkillActionParams): SkillKind {
     trimToNonEmptyString(params.markdownContent) !== null ||
     trimToNonEmptyString(params.content) !== null;
   return !hasCode && hasMarkdownInstructions ? "markdown_instruction" : "executable_module";
+}
+
+/**
+ * Resolves activation authority for newly created runtime skills.
+ *
+ * @param params - Create-skill params supplied by the planner/runtime.
+ * @returns Activation source for the initial manifest.
+ */
+function resolveCreateSkillActivationSource(
+  params: CreateSkillActionParams
+): SkillActivationSource {
+  if (params.activationSource !== undefined) {
+    return normalizeActivationSource(params.activationSource, params.origin);
+  }
+  return normalizeSkillOrigin(params.origin) === "builtin" ? "builtin" : "agent_suggestion";
 }
 
 /**
@@ -125,10 +141,7 @@ export function buildSkillManifest(
   const tags = normalizeStringArray(params.tags);
   const capabilities = normalizeStringArray(params.capabilities ?? params.tags);
   const invocationHints = normalizeStringArray(params.invocationHints);
-  const activationSource = normalizeActivationSource(
-    params.activationSource ?? "explicit_user_request",
-    params.origin
-  );
+  const activationSource = resolveCreateSkillActivationSource(params);
 
   return {
     name: skillName,

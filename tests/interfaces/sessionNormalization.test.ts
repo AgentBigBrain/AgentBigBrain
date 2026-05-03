@@ -96,6 +96,47 @@ test("normalizeState drops invalid conversation entries", () => {
   assert.deepEqual(Object.keys(normalized.conversations), ["valid"]);
 });
 
+test("normalizeSession preserves valid assistant-turn metadata and drops malformed metadata", () => {
+  const now = "2026-03-07T12:00:00.000Z";
+  const normalized = normalizeSession({
+    ...buildConversationSessionFixture(
+      {
+        updatedAt: now,
+        conversationTurns: [
+          {
+            role: "assistant",
+            text: "Status: I answered your question.",
+            at: now,
+            metadata: {
+              assistantTurnKind: "informational_answer",
+              assistantTurnKindSource: "runtime_metadata"
+            }
+          },
+          {
+            role: "assistant",
+            text: "Malformed metadata is ignored.",
+            at: now,
+            metadata: {
+              assistantTurnKind: "workflow_progress",
+              assistantTurnKindSource: "user_text" as never
+            }
+          }
+        ]
+      },
+      {
+        conversationId: "telegram:chat-turn-metadata:user-1",
+        receivedAt: now
+      }
+    )
+  });
+
+  assert.deepEqual(normalized?.conversationTurns[0]?.metadata, {
+    assistantTurnKind: "informational_answer",
+    assistantTurnKindSource: "runtime_metadata"
+  });
+  assert.equal(normalized?.conversationTurns[1]?.metadata, undefined);
+});
+
 test("normalizeSession preserves the session-domain pulse suppression decision code", () => {
   const now = "2026-03-07T12:00:00.000Z";
   const normalized = normalizeSession({

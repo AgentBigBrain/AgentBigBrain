@@ -2,7 +2,10 @@
  * @fileoverview Shared direct-reply helpers for ordinary conversation and capability discovery.
  */
 
-import { hasConversationalProfileUpdateSignal } from "../../core/profileMemoryRuntime/profileMemoryConversationalSignals";
+import {
+  hasConversationalProfileUpdateSignal,
+  hasExactConversationalProfileWriteSignal
+} from "../../core/profileMemoryRuntime/profileMemoryConversationalSignals";
 import type { MemoryAccessAuditStore } from "../../core/memoryAccessAudit";
 import type { ProfileMemoryRequestTelemetry } from "../../core/profileMemoryRuntime/contracts";
 import {
@@ -23,7 +26,8 @@ import type { BrowserSessionSnapshot } from "../../organs/liveRun/browserSession
 import type {
   ContextualReferenceInterpretationResolver,
   EntityReferenceInterpretationResolver,
-  IdentityInterpretationResolver
+  IdentityInterpretationResolver,
+  RelationshipInterpretationResolver
 } from "../../organs/languageUnderstanding/localIntentModelContracts";
 import { renderSkillInventory } from "../../organs/skillRegistry/skillInspection";
 import type {
@@ -61,6 +65,9 @@ import {
   buildModelAssistedSelfIdentityReply
 } from "./selfIdentityPrompting";
 import { buildConversationProfileMemoryWriteRequest } from "./conversationProfileMemoryWrite";
+import {
+  buildRelationshipValidatedFactCandidates
+} from "./relationshipMemoryInterpretationSupport";
 
 export interface DirectCasualConversationReplyInput {
   session: ConversationSession;
@@ -73,6 +80,7 @@ export interface DirectCasualConversationReplyInput {
   openContinuityReadSession?: OpenConversationContinuityReadSession;
   rememberConversationProfileInput?: RememberConversationProfileInput;
   identityInterpretationResolver?: IdentityInterpretationResolver;
+  relationshipInterpretationResolver?: RelationshipInterpretationResolver;
   contextualReferenceInterpretationResolver?: ContextualReferenceInterpretationResolver;
   entityReferenceInterpretationResolver?: EntityReferenceInterpretationResolver;
   getEntityGraph?: GetConversationEntityGraph;
@@ -100,6 +108,7 @@ export interface RecordedReplyInput {
   reply: string;
   receivedAt: string;
   maxConversationTurns: number;
+  assistantTurnKind?: "clarification" | "informational_answer" | "workflow_progress" | "other";
   activeMode?:
     | "discover_available_capabilities"
     | "status_or_recall";
@@ -120,11 +129,37 @@ async function rememberDirectConversationProfileInputIfNeeded(
   media: ConversationInboundMediaEnvelope | null,
   receivedAt: string,
   memoryIntent: ConversationRouteMemoryIntent | null,
+  routingClassification: RoutingMapClassificationV1 | null,
+  relationshipInterpretationResolver?: RelationshipInterpretationResolver,
   rememberConversationProfileInput?: RememberConversationProfileInput
 ): Promise<void> {
   if (
-    typeof rememberConversationProfileInput !== "function" ||
-    !hasConversationalProfileUpdateSignal(userInput)
+    typeof rememberConversationProfileInput !== "function"
+  ) {
+    return;
+  }
+  const hasExplicitWriteSignal = hasExactConversationalProfileWriteSignal(userInput);
+  const routeAllowsProfileWrite = memoryIntent === "profile_update";
+  const shouldAskSemanticRelationshipInterpreter =
+    typeof relationshipInterpretationResolver === "function" &&
+    !/[?]/.test(userInput);
+  const relationshipCandidates = shouldAskSemanticRelationshipInterpreter
+    ? await buildRelationshipValidatedFactCandidates({
+      session,
+      userInput,
+      receivedAt,
+      routingClassification,
+      relationshipInterpretationResolver
+    })
+    : {
+      validatedFactCandidates: [],
+      additionalEpisodeCandidates: []
+    };
+  if (
+    !hasExplicitWriteSignal &&
+    !routeAllowsProfileWrite &&
+    relationshipCandidates.validatedFactCandidates.length === 0 &&
+    relationshipCandidates.additionalEpisodeCandidates.length === 0
   ) {
     return;
   }
@@ -134,7 +169,14 @@ async function rememberDirectConversationProfileInputIfNeeded(
       userInput,
       media,
       receivedAt,
-      memoryIntent: memoryIntent === "none" ? null : memoryIntent ?? "profile_update"
+      validatedFactCandidates: relationshipCandidates.validatedFactCandidates,
+      additionalEpisodeCandidates: relationshipCandidates.additionalEpisodeCandidates,
+      memoryIntent:
+        memoryIntent === "none"
+          ? null
+          : routeAllowsProfileWrite
+            ? memoryIntent
+            : "profile_update"
     }),
     receivedAt
   ).catch(() => false);
@@ -283,6 +325,8 @@ export async function buildDirectCasualConversationReply(
     input.media,
     input.receivedAt,
     input.semanticRoute?.memoryIntent ?? null,
+    input.routingClassification,
+    input.relationshipInterpretationResolver,
     input.rememberConversationProfileInput
   );
   const profileUpdateSignal =
@@ -290,13 +334,7 @@ export async function buildDirectCasualConversationReply(
     !/[?]/.test(input.input);
   const baseSemanticRoute = input.semanticRoute ?? null;
   const semanticRouteForMemory =
-    profileUpdateSignal && baseSemanticRoute
-      ? {
-        ...baseSemanticRoute,
-        memoryIntent: "profile_update" as const,
-        continuationKind: "relationship_memory" as const
-      }
-      : baseSemanticRoute?.memoryIntent === "none"
+    baseSemanticRoute?.memoryIntent === "none"
         ? null
         : baseSemanticRoute;
   const semanticRouteIdForMemory =
@@ -411,7 +449,12 @@ export function buildRecordedReply(
     input.session,
     input.reply,
     input.receivedAt,
-    input.maxConversationTurns
+    input.maxConversationTurns,
+    {
+      assistantTurnKind:
+        input.assistantTurnKind ??
+        (input.activeMode ? "informational_answer" : null)
+    }
   );
   if (input.activeMode && input.confidence) {
     setModeContinuity(input.session, {
