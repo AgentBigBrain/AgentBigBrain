@@ -108,6 +108,7 @@ export interface RecordedReplyInput {
   reply: string;
   receivedAt: string;
   maxConversationTurns: number;
+  assistantTurnKind?: "clarification" | "informational_answer" | "workflow_progress" | "other";
   activeMode?:
     | "discover_available_capabilities"
     | "status_or_recall";
@@ -448,7 +449,12 @@ export function buildRecordedReply(
     input.session,
     input.reply,
     input.receivedAt,
-    input.maxConversationTurns
+    input.maxConversationTurns,
+    {
+      assistantTurnKind:
+        input.assistantTurnKind ??
+        (input.activeMode ? "informational_answer" : null)
+    }
   );
   if (input.activeMode && input.confidence) {
     setModeContinuity(input.session, {

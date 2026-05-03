@@ -5,6 +5,7 @@ import {
   analyzeConversationChatTurnSignals,
   assessIdentityInterpretationEligibility,
   buildDeterministicDirectChatFallbackReply,
+  canConversationChatTurnPrimaryKindSteerRouting,
   isMixedConversationMemoryStatusRecallTurn,
   isRelationshipConversationRecallTurn,
   shouldPreserveDeterministicDirectChatTurn,
@@ -16,18 +17,44 @@ test("analyzeConversationChatTurnSignals treats multilingual short greetings as 
   assert.equal(analyzeConversationChatTurnSignals("Hola").primaryKind, "plain_chat");
   assert.equal(analyzeConversationChatTurnSignals("Bonjour").primaryKind, "plain_chat");
   assert.equal(analyzeConversationChatTurnSignals("Bonjour").actionability, "none");
+  assert.equal(
+    analyzeConversationChatTurnSignals("Bonjour").primaryKindAuthority,
+    "diagnostic_only"
+  );
 });
 
 test("analyzeConversationChatTurnSignals distinguishes identity recall from workflow recall", () => {
   const identity = analyzeConversationChatTurnSignals("What's my name?");
   assert.equal(identity.primaryKind, "self_identity_query");
+  assert.equal(identity.primaryKindAuthority, "exact_shape");
+  assert.equal(canConversationChatTurnPrimaryKindSteerRouting(identity), true);
   assert.equal(identity.actionability, "none");
   assert.equal(identity.containsStatusCue, false);
 
   const workflow = analyzeConversationChatTurnSignals("What's the status?");
   assert.equal(workflow.primaryKind, "status_or_recall");
+  assert.equal(workflow.primaryKindAuthority, "semantic_cue_evidence");
+  assert.equal(canConversationChatTurnPrimaryKindSteerRouting(workflow), false);
   assert.equal(workflow.actionability, "recall_only");
   assert.equal(workflow.containsStatusCue, true);
+});
+
+test("analyzeConversationChatTurnSignals labels broad workflow and approval cues as evidence only", () => {
+  const workflow = analyzeConversationChatTurnSignals("Deploy.");
+  assert.equal(workflow.primaryKind, "workflow_candidate");
+  assert.equal(workflow.primaryKindAuthority, "semantic_cue_evidence");
+  assert.equal(canConversationChatTurnPrimaryKindSteerRouting(workflow), false);
+
+  const approval = analyzeConversationChatTurnSignals("I confirm.");
+  assert.equal(approval.primaryKind, "approval_or_control");
+  assert.equal(approval.primaryKindAuthority, "semantic_cue_evidence");
+  assert.equal(canConversationChatTurnPrimaryKindSteerRouting(approval), false);
+
+  const callback = analyzeConversationChatTurnSignals("Call me when the deploy is done.");
+  assert.equal(callback.primaryKind, "workflow_candidate");
+  assert.equal(callback.containsWorkflowCallbackCue, true);
+  assert.equal(callback.primaryKindAuthority, "exact_shape");
+  assert.equal(canConversationChatTurnPrimaryKindSteerRouting(callback), true);
 });
 
 test("analyzeConversationChatTurnSignals recognizes direct who-am-i wording without folding name meta-questions back into identity recall", () => {

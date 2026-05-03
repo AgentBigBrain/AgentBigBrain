@@ -367,7 +367,15 @@ export async function handleImplicitProposalFlow(
     buildProposalQuestionPrompt(active, normalizedInput),
     message.receivedAt
   );
-  recordAssistantTurn(session, answer.summary, message.receivedAt, deps.config.maxConversationTurns);
+  recordAssistantTurn(
+    session,
+    answer.summary,
+    message.receivedAt,
+    deps.config.maxConversationTurns,
+    {
+      assistantTurnKind: "informational_answer"
+    }
+  );
   return [
     answer.summary,
     "",

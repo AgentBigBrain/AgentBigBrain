@@ -38,12 +38,17 @@ export type ConversationTurnKind =
   | "workflow_candidate"
   | "approval_or_control";
 export type ConversationTurnActionability = "none" | "recall_only" | "workflow_candidate";
+export type ConversationTurnPrimaryKindAuthority =
+  | "exact_shape"
+  | "semantic_cue_evidence"
+  | "diagnostic_only";
 
 export interface ConversationChatTurnSignals {
   rawTokenCount: number;
   meaningfulTerms: readonly string[];
   questionLike: boolean;
   primaryKind: ConversationTurnKind;
+  primaryKindAuthority: ConversationTurnPrimaryKindAuthority;
   actionability: ConversationTurnActionability;
   lightweightConversation: boolean;
   interpersonalConversation: boolean;
@@ -152,6 +157,52 @@ function hasCue(
     rawTokens.some((token) => cues.has(token)) ||
     meaningfulTerms.some((term) => cues.has(term))
   );
+}
+
+/**
+ * Classifies whether the selected primary turn kind is authority-bearing or only cue evidence.
+ *
+ * **Why it exists:**
+ * The same signal packet exposes exact conversational shapes and broad cue evidence. Routing
+ * callers need a typed boundary so broad workflow/status/approval words cannot silently become
+ * semantic route authority.
+ *
+ * @param primaryKind - Selected primary turn kind.
+ * @param containsWorkflowCallbackCue - Whether the workflow kind came from an explicit callback shape.
+ * @returns Authority class for the selected primary kind.
+ */
+function resolvePrimaryKindAuthority(
+  primaryKind: ConversationTurnKind,
+  containsWorkflowCallbackCue: boolean
+): ConversationTurnPrimaryKindAuthority {
+  switch (primaryKind) {
+    case "self_identity_query":
+    case "self_identity_statement":
+    case "assistant_identity_query":
+      return "exact_shape";
+    case "workflow_candidate":
+      return containsWorkflowCallbackCue ? "exact_shape" : "semantic_cue_evidence";
+    case "status_or_recall":
+    case "approval_or_control":
+      return "semantic_cue_evidence";
+    default:
+      return "diagnostic_only";
+  }
+}
+
+/**
+ * Returns whether the selected primary kind may contribute to route authority.
+ *
+ * **Why it exists:**
+ * Consumers should call this instead of treating every non-plain primary kind as a route decision.
+ *
+ * @param signals - Chat-turn signal packet.
+ * @returns `true` only for exact-shape primary kinds.
+ */
+export function canConversationChatTurnPrimaryKindSteerRouting(
+  signals: Pick<ConversationChatTurnSignals, "primaryKindAuthority">
+): boolean {
+  return signals.primaryKindAuthority === "exact_shape";
 }
 
 /**
@@ -304,6 +355,10 @@ export function analyzeConversationChatTurnSignals(
   } else if (containsStatusCue) {
     primaryKind = "status_or_recall";
   }
+  const primaryKindAuthority = resolvePrimaryKindAuthority(
+    primaryKind,
+    containsWorkflowCallbackCue
+  );
 
   let actionability: ConversationTurnActionability = "none";
   if (primaryKind === "workflow_candidate" || primaryKind === "approval_or_control") {
@@ -327,6 +382,7 @@ export function analyzeConversationChatTurnSignals(
     meaningfulTerms,
     questionLike,
     primaryKind,
+    primaryKindAuthority,
     actionability,
     lightweightConversation,
     interpersonalConversation,

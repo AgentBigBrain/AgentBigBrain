@@ -123,7 +123,10 @@ async function resolveCanonicalConversationRouting(
           session,
           reply,
           receivedAt,
-          deps.config.maxConversationTurns
+          deps.config.maxConversationTurns,
+          {
+            assistantTurnKind: "informational_answer"
+          }
         );
         return {
           reply,
@@ -212,7 +215,10 @@ async function resolveCanonicalConversationRouting(
         session,
         session.activeClarification.question,
         receivedAt,
-        deps.config.maxConversationTurns
+        deps.config.maxConversationTurns,
+        {
+          assistantTurnKind: "clarification"
+        }
       );
       return {
         reply: session.activeClarification.question,
@@ -228,13 +234,17 @@ async function resolveCanonicalConversationRouting(
   );
   if (activePauseReply) {
     recordTopicAwareUserTurn(session, input, receivedAt, deps.config.maxConversationTurns, topicKeyInterpretation);
-    recordAssistantTurn(session, activePauseReply, receivedAt, deps.config.maxConversationTurns);
+    recordAssistantTurn(session, activePauseReply, receivedAt, deps.config.maxConversationTurns, {
+      assistantTurnKind: "workflow_progress"
+    });
     return { reply: activePauseReply, shouldStartWorker: false };
   }
   const pauseReply = applyReturnHandoffPauseRequest(session, input, receivedAt);
   if (pauseReply) {
     recordTopicAwareUserTurn(session, input, receivedAt, deps.config.maxConversationTurns, topicKeyInterpretation);
-    recordAssistantTurn(session, pauseReply, receivedAt, deps.config.maxConversationTurns);
+    recordAssistantTurn(session, pauseReply, receivedAt, deps.config.maxConversationTurns, {
+      assistantTurnKind: "workflow_progress"
+    });
     return { reply: pauseReply, shouldStartWorker: false };
   }
   const resolvedIntentMode =
@@ -263,13 +273,29 @@ async function resolveCanonicalConversationRouting(
     );
     if (interpretedActivePauseReply) {
       recordTopicAwareUserTurn(session, input, receivedAt, deps.config.maxConversationTurns, topicKeyInterpretation);
-      recordAssistantTurn(session, interpretedActivePauseReply, receivedAt, deps.config.maxConversationTurns);
+      recordAssistantTurn(
+        session,
+        interpretedActivePauseReply,
+        receivedAt,
+        deps.config.maxConversationTurns,
+        {
+          assistantTurnKind: "workflow_progress"
+        }
+      );
       return { reply: interpretedActivePauseReply, shouldStartWorker: false };
     }
     const interpretedPauseReply = applyValidatedReturnHandoffPause(session, receivedAt);
     if (interpretedPauseReply) {
       recordTopicAwareUserTurn(session, input, receivedAt, deps.config.maxConversationTurns, topicKeyInterpretation);
-      recordAssistantTurn(session, interpretedPauseReply, receivedAt, deps.config.maxConversationTurns);
+      recordAssistantTurn(
+        session,
+        interpretedPauseReply,
+        receivedAt,
+        deps.config.maxConversationTurns,
+        {
+          assistantTurnKind: "workflow_progress"
+        }
+      );
       return { reply: interpretedPauseReply, shouldStartWorker: false };
     }
   }
@@ -310,7 +336,9 @@ async function resolveCanonicalConversationRouting(
     if (shouldPreserveDeterministicDirectChatTurn(input, recentIdentityContext)) {
       const reply = buildDeterministicDirectChatFallbackReply(input);
       recordTopicAwareUserTurn(session, input, receivedAt, deps.config.maxConversationTurns, topicKeyInterpretation);
-      recordAssistantTurn(session, reply, receivedAt, deps.config.maxConversationTurns);
+      recordAssistantTurn(session, reply, receivedAt, deps.config.maxConversationTurns, {
+        assistantTurnKind: "informational_answer"
+      });
       applyConversationDomainSignalWindowForTurn(
         session,
         input,
@@ -331,7 +359,10 @@ async function resolveCanonicalConversationRouting(
         session,
         reply,
         receivedAt,
-        deps.config.maxConversationTurns
+        deps.config.maxConversationTurns,
+        {
+          assistantTurnKind: "workflow_progress"
+        }
       );
       applyConversationDomainSignalWindowForTurn(
         session,

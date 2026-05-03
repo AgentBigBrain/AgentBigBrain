@@ -339,7 +339,10 @@ export async function maybeResolveConversationRoutingInlineReply(
       input.session,
       clarificationState.question,
       input.receivedAt,
-      input.deps.config.maxConversationTurns
+      input.deps.config.maxConversationTurns,
+      {
+        assistantTurnKind: "clarification"
+      }
     );
     applyConversationDomainSignalWindowForTurn(
       input.session,
@@ -403,7 +406,10 @@ export async function maybeResolveConversationRoutingInlineReply(
     input.session,
     reply,
     input.receivedAt,
-    input.deps.config.maxConversationTurns
+    input.deps.config.maxConversationTurns,
+    {
+      assistantTurnKind: "informational_answer"
+    }
   );
   applyConversationDomainSignalWindowForTurn(
     input.session,

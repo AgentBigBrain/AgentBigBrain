@@ -123,6 +123,25 @@ test("recordUserTurn and recordAssistantTurn normalize text and cap turn history
   assert.equal(session.conversationStack?.activeThreadKey !== null, true);
 });
 
+test("recordAssistantTurn stores runtime assistant-turn metadata when supplied", () => {
+  const session = buildSession();
+
+  recordAssistantTurn(
+    session,
+    "Status: I answered your product question.",
+    "2026-03-03T00:00:03.000Z",
+    4,
+    {
+      assistantTurnKind: "informational_answer"
+    }
+  );
+
+  assert.deepEqual(session.conversationTurns[0]?.metadata, {
+    assistantTurnKind: "informational_answer",
+    assistantTurnKindSource: "runtime_metadata"
+  });
+});
+
 test("recordAssistantTurn preserves blank-line paragraph boundaries", () => {
   const session = buildSession();
   recordUserTurn(

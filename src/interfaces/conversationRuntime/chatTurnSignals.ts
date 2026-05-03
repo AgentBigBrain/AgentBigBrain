@@ -5,9 +5,11 @@
 import type { ConversationIntentSemanticHint } from "./intentModeContracts";
 import {
   analyzeConversationChatTurnSignals,
+  canConversationChatTurnPrimaryKindSteerRouting,
   type ConversationChatTurnSignals,
   type ConversationTurnActionability,
-  type ConversationTurnKind
+  type ConversationTurnKind,
+  type ConversationTurnPrimaryKindAuthority
 } from "./chatTurnSignalAnalysis";
 import {
   isMixedConversationMemoryStatusRecallTurn,
@@ -27,6 +29,7 @@ import {
 
 export {
   analyzeConversationChatTurnSignals,
+  canConversationChatTurnPrimaryKindSteerRouting,
   assessIdentityInterpretationEligibility,
   buildRecentIdentityInterpretationContext,
   isMixedConversationMemoryStatusRecallTurn,
@@ -38,6 +41,7 @@ export {
 export type {
   ConversationChatTurnSignals,
   ConversationTurnActionability,
+  ConversationTurnPrimaryKindAuthority,
   ConversationTurnKind,
   IdentityContextRecentTurn,
   IdentityInterpretationEligibility,

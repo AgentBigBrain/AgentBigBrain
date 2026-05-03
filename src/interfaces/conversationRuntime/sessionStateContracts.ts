@@ -27,6 +27,18 @@ export type ConversationFinalDeliveryOutcome =
   | "failed";
 export type ConversationTurnRole = "user" | "assistant";
 export type ConversationVisibility = "private" | "public" | "unknown";
+export type ConversationAssistantTurnKind =
+  | "clarification"
+  | "informational_answer"
+  | "workflow_progress"
+  | "other";
+export type ConversationTurnMetadataSource =
+  | "runtime_metadata"
+  | "legacy_text_inference";
+export interface ConversationTurnMetadata {
+  assistantTurnKind?: ConversationAssistantTurnKind;
+  assistantTurnKindSource?: ConversationTurnMetadataSource;
+}
 export type ConversationClassifierKind = "follow_up" | "proposal_reply" | "pulse_lexical";
 export type ConversationClassifierCategory =
   | "ACK"
@@ -129,6 +141,7 @@ export interface ConversationTurn {
   role: ConversationTurnRole;
   text: string;
   at: string;
+  metadata?: ConversationTurnMetadata;
 }
 
 export interface AgentPulseSessionState {
