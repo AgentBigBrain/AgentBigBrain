@@ -27,7 +27,7 @@ interface OllamaGenerateResponse {
 }
 
 interface ParsedEntityTypeInterpretationSelection {
-  candidateName?: unknown;
+  candidateId?: unknown;
   entityType?: unknown;
 }
 
@@ -55,7 +55,7 @@ const SUPPORTED_ENTITY_TYPES = new Set<
 >(["person", "place", "org", "event", "thing", "concept"]);
 
 const MAX_TYPED_CANDIDATES = 4;
-const MAX_CANDIDATE_NAME_CHARS = 80;
+const MAX_CANDIDATE_ID_CHARS = 120;
 
 /** Normalizes an Ollama base URL by trimming trailing slashes. */
 function normalizeBaseUrl(value: string): string {
@@ -80,6 +80,7 @@ function buildEntityTypeInterpretationPrompt(
   recentTurns: readonly { role: "user" | "assistant"; text: string }[] | undefined,
   candidateEntities:
     | readonly {
+        candidateId: string;
         candidateName: string;
         deterministicEntityType: string;
         domainHint: string | null;
@@ -94,15 +95,15 @@ function buildEntityTypeInterpretationPrompt(
     "Allowed kind values: typed_candidates, non_entity_type_boundary, uncertain.",
     "Allowed entityType values: person, place, org, event, thing, concept.",
     "Allowed confidence values: low, medium, high.",
-    "You may only type candidateName values that already appear in candidateEntities.",
+    "You may only type candidateId values that already appear in candidateEntities.",
     "Use typed_candidates when conversational context clarifies the entity type of one or more provided candidate entities.",
     "Use non_entity_type_boundary when the turn is not meaningfully helping with entity typing, such as plain chat, workflow execution, or status requests.",
     "Use uncertain when typing might be relevant but you cannot choose safely from the bounded context.",
-    "Do not invent candidate names, external facts, files, paths, or URLs.",
-    "Do not emit explanations inside candidateName.",
+    "Do not invent candidate ids, candidate names, external facts, files, paths, or URLs.",
+    "Do not emit explanations inside candidateId.",
     "Examples:",
-    '- "my friend Sarah is joining us later" with Sarah in candidateEntities => {"kind":"typed_candidates","typedCandidates":[{"candidateName":"Sarah","entityType":"person"}],"confidence":"high"}',
-    '- "the meeting with Google is tomorrow" with Google and meeting in candidateEntities => {"kind":"typed_candidates","typedCandidates":[{"candidateName":"Google","entityType":"org"},{"candidateName":"Meeting","entityType":"event"}],"confidence":"medium"}',
+    '- "my friend Sarah is joining us later" with candidateId "entity_sarah" in candidateEntities => {"kind":"typed_candidates","typedCandidates":[{"candidateId":"entity_sarah","entityType":"person"}],"confidence":"high"}',
+    '- "the meeting with Google is tomorrow" with candidateIds "entity_google" and "entity_meeting" in candidateEntities => {"kind":"typed_candidates","typedCandidates":[{"candidateId":"entity_google","entityType":"org"},{"candidateId":"entity_meeting","entityType":"event"}],"confidence":"medium"}',
     '- "close the browser and ship the css fix" => {"kind":"non_entity_type_boundary","typedCandidates":[],"confidence":"high"}',
     "",
     "User request:",
@@ -165,16 +166,16 @@ function extractEntityTypeJsonObject(
   }
 }
 
-/** Normalizes one model-proposed candidate name into a bounded selectable value. */
-function normalizeCandidateName(value: unknown): string | null {
+/** Normalizes one model-proposed candidate id into a bounded selectable value. */
+function normalizeCandidateId(value: unknown): string | null {
   if (typeof value !== "string") {
     return null;
   }
-  const normalized = value.trim().replace(/\s+/g, " ");
-  if (!normalized || normalized.length > MAX_CANDIDATE_NAME_CHARS) {
+  const normalized = value.trim();
+  if (!normalized || normalized.length > MAX_CANDIDATE_ID_CHARS) {
     return null;
   }
-  if (!/^[\p{L}\p{N}][\p{L}\p{N}' .,&-]*$/u.test(normalized)) {
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9._:-]*$/.test(normalized)) {
     return null;
   }
   return normalized;
@@ -195,12 +196,12 @@ function normalizeEntityType(
  * Normalizes one model-proposed typed-candidate array into a stable bounded list.
  *
  * @param value - Raw typed-candidate array candidate from the model.
- * @param allowedCandidateNames - Deterministic candidate names allowed for this request.
+ * @param allowedCandidateIds - Deterministic candidate ids allowed for this request.
  * @returns Stable bounded typed-candidate list.
  */
 function normalizeTypedCandidates(
   value: unknown,
-  allowedCandidateNames: ReadonlySet<string>
+  allowedCandidateIds: ReadonlySet<string>
 ): readonly EntityTypeInterpretationSelection[] {
   if (!Array.isArray(value)) {
     return [];
@@ -211,14 +212,14 @@ function normalizeTypedCandidates(
       continue;
     }
     const selection = candidate as ParsedEntityTypeInterpretationSelection;
-    const candidateName = normalizeCandidateName(selection.candidateName);
+    const candidateId = normalizeCandidateId(selection.candidateId);
     const entityType = normalizeEntityType(selection.entityType);
-    if (!candidateName || !entityType || !allowedCandidateNames.has(candidateName)) {
+    if (!candidateId || !entityType || !allowedCandidateIds.has(candidateId)) {
       continue;
     }
-    if (!normalized.has(candidateName)) {
-      normalized.set(candidateName, {
-        candidateName,
+    if (!normalized.has(candidateId)) {
+      normalized.set(candidateId, {
+        candidateId,
         entityType
       });
     }
@@ -233,12 +234,12 @@ function normalizeTypedCandidates(
  * Converts a parsed entity-type payload into the stable task contract.
  *
  * @param payload - Parsed JSON payload from the model.
- * @param allowedCandidateNames - Deterministic candidate names allowed for this request.
+ * @param allowedCandidateIds - Deterministic candidate ids allowed for this request.
  * @returns Stable entity-type interpretation when supported, otherwise `null`.
  */
 function coerceEntityTypeInterpretationSignal(
   payload: ParsedEntityTypeInterpretationPayload,
-  allowedCandidateNames: ReadonlySet<string>
+  allowedCandidateIds: ReadonlySet<string>
 ): EntityTypeInterpretationSignal | null {
   const kind = (payload.kind ?? "").trim() as EntityTypeInterpretationKind;
   const confidence = (payload.confidence ?? "").trim().toLowerCase() as LocalIntentModelConfidence;
@@ -250,7 +251,7 @@ function coerceEntityTypeInterpretationSignal(
   }
   const typedCandidates = normalizeTypedCandidates(
     payload.typedCandidates,
-    allowedCandidateNames
+    allowedCandidateIds
   );
   if (kind === "typed_candidates") {
     if (typedCandidates.length === 0) {
@@ -297,8 +298,8 @@ export function createOllamaEntityTypeInterpretationResolver(
           }
         : null;
       const candidateEntities = request.candidateEntities ?? [];
-      const allowedCandidateNames = new Set(
-        candidateEntities.map((candidate) => candidate.candidateName)
+      const allowedCandidateIds = new Set(
+        candidateEntities.map((candidate) => candidate.candidateId)
       );
       const response = await fetchImpl(`${baseUrl}/api/generate`, {
         method: "POST",
@@ -332,7 +333,7 @@ export function createOllamaEntityTypeInterpretationResolver(
       }
       return coerceEntityTypeInterpretationSignal(
         extractEntityTypeJsonObject(payload.response) ?? {},
-        allowedCandidateNames
+        allowedCandidateIds
       );
     } catch {
       return null;

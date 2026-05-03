@@ -16,9 +16,26 @@ import {
   maybeRecordInboundEntityGraphMutation
 } from "../../src/interfaces/entityGraphRuntime";
 import type {
+  EntityDomainHintInterpretationCandidate,
   EntityDomainHintInterpretationResolver,
+  EntityTypeInterpretationCandidate,
   EntityTypeInterpretationResolver
 } from "../../src/organs/languageUnderstanding/localIntentModelContracts";
+
+type EntityGraphInterpretationCandidate =
+  | EntityTypeInterpretationCandidate
+  | EntityDomainHintInterpretationCandidate;
+
+function indexCandidateIdsByName(
+  candidates: readonly EntityGraphInterpretationCandidate[] | undefined
+): Map<string, string> {
+  return new Map(
+    (candidates ?? []).map((candidate) => [
+      candidate.candidateName,
+      candidate.candidateId
+    ])
+  );
+}
 
 test("buildInboundEntityGraphEvidenceRef normalizes provider, conversation, and event ids", () => {
   const reference = buildInboundEntityGraphEvidenceRef("telegram", "chat:prod room", "event#42");
@@ -140,9 +157,15 @@ test("maybeRecordInboundEntityGraphMutation can apply validated entity-type inte
   const store = new EntityGraphStore(graphPath, { backend: "json" });
   const resolver: EntityTypeInterpretationResolver = async (request) => {
     assert.equal(request.candidateEntities?.length, 2);
+    const candidateIdByName = indexCandidateIdsByName(request.candidateEntities);
+    assert.deepEqual([...candidateIdByName.keys()].sort(), ["Google", "Sarah"]);
+    assert.match(candidateIdByName.get("Sarah") ?? "", /^entity_/);
     assert.deepEqual(
       request.candidateEntities
-        ?.map((candidate) => [candidate.candidateName, candidate.deterministicEntityType] as const)
+        ?.map((candidate) => [
+          candidate.candidateName,
+          candidate.deterministicEntityType
+        ] as const)
         .sort((left, right) => left[0].localeCompare(right[0])),
       [
         ["Google", "thing"],
@@ -154,11 +177,11 @@ test("maybeRecordInboundEntityGraphMutation can apply validated entity-type inte
       kind: "typed_candidates",
       typedCandidates: [
         {
-          candidateName: "Sarah",
+          candidateId: candidateIdByName.get("Sarah") ?? "missing",
           entityType: "person"
         },
         {
-          candidateName: "Google",
+          candidateId: candidateIdByName.get("Google") ?? "missing",
           entityType: "org"
         }
       ],
@@ -213,12 +236,13 @@ test("maybeRecordInboundEntityGraphMutation fails closed to deterministic typing
         domainHint: "relationship"
       },
       {
-        entityTypeInterpretationResolver: async () => ({
+        entityTypeInterpretationResolver: async (request) => ({
           source: "local_intent_model",
           kind: "typed_candidates",
           typedCandidates: [
             {
-              candidateName: "Sarah",
+              candidateId:
+                indexCandidateIdsByName(request.candidateEntities).get("Sarah") ?? "missing",
               entityType: "person"
             }
           ],
@@ -244,16 +268,18 @@ test("maybeRecordInboundEntityGraphMutation can apply validated entity-type hint
   let resolverCalls = 0;
   const resolver: EntityTypeInterpretationResolver = async (request) => {
     resolverCalls += 1;
+    const candidateIdByName = indexCandidateIdsByName(request.candidateEntities);
     assert.deepEqual(
       request.candidateEntities?.map((candidate) => candidate.candidateName),
       ["Rosa"]
     );
+    assert.match(candidateIdByName.get("Rosa") ?? "", /^entity_/);
     return {
       source: "local_intent_model",
       kind: "typed_candidates",
       typedCandidates: [
         {
-          candidateName: "Rosa",
+          candidateId: candidateIdByName.get("Rosa") ?? "missing",
           entityType: "person"
         }
       ],
@@ -295,6 +321,9 @@ test("maybeRecordInboundEntityGraphMutation can apply validated entity-domain hi
   const store = new EntityGraphStore(graphPath, { backend: "json" });
   const resolver: EntityDomainHintInterpretationResolver = async (request) => {
     assert.equal(request.candidateEntities?.length, 2);
+    const candidateIdByName = indexCandidateIdsByName(request.candidateEntities);
+    assert.deepEqual([...candidateIdByName.keys()].sort(), ["Google", "Sarah"]);
+    assert.match(candidateIdByName.get("Sarah") ?? "", /^entity_/);
     assert.deepEqual(
       request.candidateEntities
         ?.map((candidate) => [
@@ -313,11 +342,11 @@ test("maybeRecordInboundEntityGraphMutation can apply validated entity-domain hi
       kind: "domain_hinted_candidates",
       domainHintedCandidates: [
         {
-          candidateName: "Sarah",
+          candidateId: candidateIdByName.get("Sarah") ?? "missing",
           domainHint: "relationship"
         },
         {
-          candidateName: "Google",
+          candidateId: candidateIdByName.get("Google") ?? "missing",
           domainHint: "workflow"
         }
       ],
@@ -361,6 +390,7 @@ test("maybeRecordInboundEntityGraphMutation can apply validated entity-domain hi
   let resolverCalls = 0;
   const resolver: EntityDomainHintInterpretationResolver = async (request) => {
     resolverCalls += 1;
+    const candidateIdByName = indexCandidateIdsByName(request.candidateEntities);
     assert.deepEqual(
       request.candidateEntities?.map((candidate) => [
         candidate.candidateName,
@@ -369,12 +399,13 @@ test("maybeRecordInboundEntityGraphMutation can apply validated entity-domain hi
       ]),
       [["Sam", "thing", "workflow"]]
     );
+    assert.match(candidateIdByName.get("Sam") ?? "", /^entity_/);
     return {
       source: "local_intent_model",
       kind: "domain_hinted_candidates",
       domainHintedCandidates: [
         {
-          candidateName: "Sam",
+          candidateId: candidateIdByName.get("Sam") ?? "missing",
           domainHint: "relationship"
         }
       ],
@@ -428,12 +459,13 @@ test("maybeRecordInboundEntityGraphMutation fails closed to deterministic domain
         domainHint: "workflow"
       },
       {
-        entityDomainHintInterpretationResolver: async () => ({
+        entityDomainHintInterpretationResolver: async (request) => ({
           source: "local_intent_model",
           kind: "domain_hinted_candidates",
           domainHintedCandidates: [
             {
-              candidateName: "Sarah",
+              candidateId:
+                indexCandidateIdsByName(request.candidateEntities).get("Sarah") ?? "missing",
               domainHint: "relationship"
             }
           ],

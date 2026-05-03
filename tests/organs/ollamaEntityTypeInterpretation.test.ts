@@ -24,11 +24,11 @@ test("createOllamaEntityTypeInterpretationResolver parses a valid payload", asyn
               kind: "typed_candidates",
               typedCandidates: [
                 {
-                  candidateName: "Sarah",
+                  candidateId: "entity_sarah",
                   entityType: "person"
                 },
                 {
-                  candidateName: "Google",
+                  candidateId: "entity_google",
                   entityType: "org"
                 }
               ],
@@ -52,11 +52,13 @@ test("createOllamaEntityTypeInterpretationResolver parses a valid payload", asyn
     routingClassification: null,
     candidateEntities: [
       {
+        candidateId: "entity_sarah",
         candidateName: "Sarah",
         deterministicEntityType: "thing",
         domainHint: "relationship"
       },
       {
+        candidateId: "entity_google",
         candidateName: "Google",
         deterministicEntityType: "thing",
         domainHint: "workflow"
@@ -70,11 +72,11 @@ test("createOllamaEntityTypeInterpretationResolver parses a valid payload", asyn
     kind: "typed_candidates",
     typedCandidates: [
       {
-        candidateName: "Sarah",
+        candidateId: "entity_sarah",
         entityType: "person"
       },
       {
-        candidateName: "Google",
+        candidateId: "entity_google",
         entityType: "org"
       }
     ],
@@ -83,6 +85,7 @@ test("createOllamaEntityTypeInterpretationResolver parses a valid payload", asyn
   });
   const requestPayload = JSON.parse(capturedBody) as { prompt?: string };
   assert.match(requestPayload.prompt ?? "", /Deterministic hints already extracted:/);
+  assert.match(requestPayload.prompt ?? "", /candidateId/);
 });
 
 test("createOllamaEntityTypeInterpretationResolver fails closed on unsupported entity type output", async () => {
@@ -100,7 +103,7 @@ test("createOllamaEntityTypeInterpretationResolver fails closed on unsupported e
               kind: "typed_candidates",
               typedCandidates: [
                 {
-                  candidateName: "Sarah",
+                  candidateId: "entity_sarah",
                   entityType: "team"
                 }
               ],
@@ -123,6 +126,56 @@ test("createOllamaEntityTypeInterpretationResolver fails closed on unsupported e
     routingClassification: null,
     candidateEntities: [
       {
+        candidateId: "entity_sarah",
+        candidateName: "Sarah",
+        deterministicEntityType: "thing",
+        domainHint: "relationship"
+      }
+    ]
+  });
+
+  assert.equal(signal, null);
+});
+
+test("createOllamaEntityTypeInterpretationResolver rejects name-only model selections", async () => {
+  const resolver = createOllamaEntityTypeInterpretationResolver(
+    {
+      baseUrl: "http://127.0.0.1:11434",
+      model: "phi4-mini:latest",
+      timeoutMs: 1000
+    },
+    {
+      fetchImpl: async () =>
+        new Response(
+          JSON.stringify({
+            response: JSON.stringify({
+              kind: "typed_candidates",
+              typedCandidates: [
+                {
+                  candidateName: "Sarah",
+                  entityType: "person"
+                }
+              ],
+              confidence: "high",
+              explanation: "The model echoed the candidate name instead of selecting the id."
+            })
+          }),
+          {
+            status: 200,
+            headers: {
+              "Content-Type": "application/json"
+            }
+          }
+        )
+    }
+  );
+
+  const signal = await resolver({
+    userInput: "Sarah is joining us later.",
+    routingClassification: null,
+    candidateEntities: [
+      {
+        candidateId: "entity_sarah",
         candidateName: "Sarah",
         deterministicEntityType: "thing",
         domainHint: "relationship"
@@ -166,6 +219,7 @@ test("createOllamaEntityTypeInterpretationResolver allows non-boundary output wi
     routingClassification: null,
     candidateEntities: [
       {
+        candidateId: "entity_browser",
         candidateName: "Browser",
         deterministicEntityType: "thing",
         domainHint: "workflow"

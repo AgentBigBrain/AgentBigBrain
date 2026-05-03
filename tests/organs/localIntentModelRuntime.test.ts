@@ -928,7 +928,7 @@ test("createOllamaEntityTypeInterpretationResolver parses a valid payload via th
               kind: "typed_candidates",
               typedCandidates: [
                 {
-                  candidateName: "Google",
+                  candidateId: "entity_google",
                   entityType: "org"
                 }
               ],
@@ -952,11 +952,13 @@ test("createOllamaEntityTypeInterpretationResolver parses a valid payload via th
     routingClassification: null,
     candidateEntities: [
       {
+        candidateId: "entity_google",
         candidateName: "Google",
         deterministicEntityType: "thing",
         domainHint: "workflow"
       },
       {
+        candidateId: "entity_meeting",
         candidateName: "Meeting",
         deterministicEntityType: "thing",
         domainHint: "workflow"
@@ -969,7 +971,7 @@ test("createOllamaEntityTypeInterpretationResolver parses a valid payload via th
     kind: "typed_candidates",
     typedCandidates: [
       {
-        candidateName: "Google",
+        candidateId: "entity_google",
         entityType: "org"
       }
     ],

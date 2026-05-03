@@ -257,13 +257,14 @@ export type EntityTypeInterpretationKind =
   | "uncertain";
 
 export interface EntityTypeInterpretationCandidate {
+  candidateId: string;
   candidateName: string;
   deterministicEntityType: EntityNodeV1["entityType"];
   domainHint: EntityNodeV1["domainHint"];
 }
 
 export interface EntityTypeInterpretationSelection {
-  candidateName: string;
+  candidateId: string;
   entityType: EntityNodeV1["entityType"];
 }
 
@@ -289,12 +290,16 @@ export type EntityDomainHintInterpretationKind = "domain_hinted_candidates"
   | "uncertain";
 
 export interface EntityDomainHintInterpretationCandidate {
+  candidateId: string;
   candidateName: string;
   entityType: EntityNodeV1["entityType"];
   deterministicDomainHint: EntityNodeV1["domainHint"];
 }
 
-export interface EntityDomainHintInterpretationSelection { candidateName: string; domainHint: "profile" | "relationship" | "workflow"; }
+export interface EntityDomainHintInterpretationSelection {
+  candidateId: string;
+  domainHint: "profile" | "relationship" | "workflow";
+}
 
 export interface EntityDomainHintInterpretationRequest {
   userInput: string;
