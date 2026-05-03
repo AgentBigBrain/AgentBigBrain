@@ -24,7 +24,8 @@ import { executeCloseBrowser } from "../../src/organs/liveRun/closeBrowserHandle
 import {
   inferManagedProcessLoopbackTarget,
   LiveRunExecutorContext,
-  performLocalHttpProbe
+  performLocalHttpProbe,
+  waitForLocalHttpReadiness
 } from "../../src/organs/liveRun/contracts";
 import { executeBrowserVerification } from "../../src/organs/liveRun/browserVerificationHandler";
 import { executeCheckProcess } from "../../src/organs/liveRun/checkProcessHandler";
@@ -948,6 +949,40 @@ test("performLocalHttpProbe fails closed when a loopback socket resets mid-reque
   } finally {
     await new Promise<void>((resolve, reject) => {
       resetServer.close((error) => (error ? reject(error) : resolve()));
+    });
+  }
+});
+
+test("waitForLocalHttpReadiness preserves the last concrete non-ready HTTP status", async () => {
+  let requestCount = 0;
+  const server = http.createServer((request, response) => {
+    requestCount += 1;
+    if (requestCount === 1) {
+      response.statusCode = 503;
+      response.end("starting");
+      return;
+    }
+    request.socket.destroy();
+  });
+  await new Promise<void>((resolve) => {
+    server.listen(0, "127.0.0.1", () => resolve());
+  });
+
+  try {
+    const address = server.address();
+    assert.ok(address && typeof address !== "string");
+    const result = await waitForLocalHttpReadiness(
+      new URL(`http://127.0.0.1:${address.port}/index.html`),
+      500,
+      200
+    );
+
+    assert.equal(result.ready, false);
+    assert.equal(result.observedStatus, 503);
+    assert.ok(result.attempts > 1);
+  } finally {
+    await new Promise<void>((resolve, reject) => {
+      server.close((error) => (error ? reject(error) : resolve()));
     });
   }
 });

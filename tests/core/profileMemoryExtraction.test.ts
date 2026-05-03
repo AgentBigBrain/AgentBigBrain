@@ -14,6 +14,38 @@ import {
 import { hasConversationalProfileUpdateSignal } from "../../src/core/profileMemoryRuntime/profileMemoryConversationalSignals";
 import { governProfileMemoryCandidates } from "../../src/core/profileMemoryRuntime/profileMemoryTruthGovernance";
 
+type GovernedProfileMemoryCandidates = ReturnType<typeof governProfileMemoryCandidates>;
+
+function hasCurrentFact(
+  result: GovernedProfileMemoryCandidates,
+  key: string,
+  value?: string
+): boolean {
+  return result.allowedCurrentStateFactCandidates.some(
+    (candidate) => candidate.key === key && (value === undefined || candidate.value === value)
+  );
+}
+
+function hasSupportOnlyFact(
+  result: GovernedProfileMemoryCandidates,
+  key: string,
+  value?: string
+): boolean {
+  return result.allowedSupportOnlyFactCandidates.some(
+    (candidate) => candidate.key === key && (value === undefined || candidate.value === value)
+  );
+}
+
+function hasQuarantinedFact(
+  result: GovernedProfileMemoryCandidates,
+  key: string,
+  value?: string
+): boolean {
+  return result.quarantinedFactCandidates.some(
+    ({ candidate }) => candidate.key === key && (value === undefined || candidate.value === value)
+  );
+}
+
 test("canonical extraction helper captures preferred-name and employment facts", () => {
   const candidates = extractProfileFactCandidatesFromUserInput(
     "My name is Benny and I work at Lantern.",
@@ -988,11 +1020,7 @@ test("named-contact extraction trims wrapper and association continuation text o
     true
   );
   assert.equal(
-    governanceResult.allowedCurrentStateFactCandidates.some(
-      (candidate) =>
-        candidate.key === "contact.milo.relationship" &&
-        candidate.value === "work_peer"
-    ),
+    hasQuarantinedFact(governanceResult, "contact.milo.relationship", "work_peer"),
     true
   );
   assert.equal(
@@ -1024,11 +1052,7 @@ test("named-contact extraction keeps plain works-with-me continuations on one bo
     true
   );
   assert.equal(
-    governanceResult.allowedCurrentStateFactCandidates.some(
-      (candidate) =>
-        candidate.key === "contact.milo.relationship" &&
-        candidate.value === "work_peer"
-    ),
+    hasQuarantinedFact(governanceResult, "contact.milo.relationship", "work_peer"),
     true
   );
   assert.equal(
@@ -1143,11 +1167,7 @@ test("named-contact extraction normalizes aunt phrasing into relative current-st
     true
   );
   assert.equal(
-    governanceResult.allowedCurrentStateFactCandidates.some(
-      (candidate) =>
-        candidate.key === "contact.rosa.relationship" &&
-        candidate.value === "relative"
-    ),
+    hasCurrentFact(governanceResult, "contact.rosa.relationship", "relative"),
     true
   );
   assert.equal(
@@ -1287,11 +1307,7 @@ test("named-contact extraction normalizes mom phrasing into relative current-sta
     true
   );
   assert.equal(
-    governanceResult.allowedCurrentStateFactCandidates.some(
-      (candidate) =>
-        candidate.key === "contact.rosa.relationship" &&
-        candidate.value === "relative"
-    ),
+    hasCurrentFact(governanceResult, "contact.rosa.relationship", "relative"),
     true
   );
   assert.equal(
@@ -1335,11 +1351,7 @@ test("named-contact extraction normalizes family-member phrasing into relative c
     true
   );
   assert.equal(
-    governanceResult.allowedCurrentStateFactCandidates.some(
-      (candidate) =>
-        candidate.key === "contact.rosa.relationship" &&
-        candidate.value === "relative"
-    ),
+    hasCurrentFact(governanceResult, "contact.rosa.relationship", "relative"),
     true
   );
   assert.equal(
@@ -1431,11 +1443,7 @@ test("direct contact relationship extraction normalizes aunt phrasing into relat
     true
   );
   assert.equal(
-    governanceResult.allowedCurrentStateFactCandidates.some(
-      (candidate) =>
-        candidate.key === "contact.rosa.relationship" &&
-        candidate.value === "relative"
-    ),
+    hasQuarantinedFact(governanceResult, "contact.rosa.relationship", "relative"),
     true
   );
 });
@@ -1471,11 +1479,7 @@ test("direct contact relationship extraction normalizes sister phrasing into rel
     true
   );
   assert.equal(
-    governanceResult.allowedCurrentStateFactCandidates.some(
-      (candidate) =>
-        candidate.key === "contact.rosa.relationship" &&
-        candidate.value === "relative"
-    ),
+    hasQuarantinedFact(governanceResult, "contact.rosa.relationship", "relative"),
     true
   );
 });
@@ -1511,11 +1515,7 @@ test("direct contact relationship extraction keeps roommate phrasing on governed
     true
   );
   assert.equal(
-    governanceResult.allowedCurrentStateFactCandidates.some(
-      (candidate) =>
-        candidate.key === "contact.kai.relationship" &&
-        candidate.value === "roommate"
-    ),
+    hasQuarantinedFact(governanceResult, "contact.kai.relationship", "roommate"),
     true
   );
 });
@@ -1551,11 +1551,7 @@ test("direct contact relationship extraction normalizes family phrasing into rel
     true
   );
   assert.equal(
-    governanceResult.allowedCurrentStateFactCandidates.some(
-      (candidate) =>
-        candidate.key === "contact.rosa.relationship" &&
-        candidate.value === "relative"
-    ),
+    hasQuarantinedFact(governanceResult, "contact.rosa.relationship", "relative"),
     true
   );
 });
@@ -1591,11 +1587,7 @@ test("direct contact relationship extraction normalizes child phrasing into rela
     true
   );
   assert.equal(
-    governanceResult.allowedCurrentStateFactCandidates.some(
-      (candidate) =>
-        candidate.key === "contact.eli.relationship" &&
-        candidate.value === "relative"
-    ),
+    hasQuarantinedFact(governanceResult, "contact.eli.relationship", "relative"),
     true
   );
 });
@@ -1622,11 +1614,7 @@ test("symmetric partner current relationship phrasing maps named contacts onto c
     true
   );
   assert.equal(
-    governanceResult.allowedCurrentStateFactCandidates.some(
-      (candidate) =>
-        candidate.key === "contact.sam.relationship" &&
-        candidate.value === "partner"
-    ),
+    hasQuarantinedFact(governanceResult, "contact.sam.relationship", "partner"),
     true
   );
 });
@@ -1653,11 +1641,7 @@ test("symmetric married current relationship phrasing maps named contacts onto c
     true
   );
   assert.equal(
-    governanceResult.allowedCurrentStateFactCandidates.some(
-      (candidate) =>
-        candidate.key === "contact.sam.relationship" &&
-        candidate.value === "partner"
-    ),
+    hasQuarantinedFact(governanceResult, "contact.sam.relationship", "partner"),
     true
   );
 });
@@ -1684,11 +1668,7 @@ test("symmetric roommate current relationship phrasing maps named contacts onto 
     true
   );
   assert.equal(
-    governanceResult.allowedCurrentStateFactCandidates.some(
-      (candidate) =>
-        candidate.key === "contact.kai.relationship" &&
-        candidate.value === "roommate"
-    ),
+    hasQuarantinedFact(governanceResult, "contact.kai.relationship", "roommate"),
     true
   );
 });
@@ -1724,11 +1704,7 @@ test("symmetric family current relationship phrasing maps named contacts onto cu
     true
   );
   assert.equal(
-    governanceResult.allowedCurrentStateFactCandidates.some(
-      (candidate) =>
-        candidate.key === "contact.rosa.relationship" &&
-        candidate.value === "relative"
-    ),
+    hasQuarantinedFact(governanceResult, "contact.rosa.relationship", "relative"),
     true
   );
 });
@@ -1764,11 +1740,7 @@ test("symmetric sibling current relationship phrasing maps named contacts onto c
     true
   );
   assert.equal(
-    governanceResult.allowedCurrentStateFactCandidates.some(
-      (candidate) =>
-        candidate.key === "contact.rosa.relationship" &&
-        candidate.value === "relative"
-    ),
+    hasQuarantinedFact(governanceResult, "contact.rosa.relationship", "relative"),
     true
   );
 });
@@ -1804,11 +1776,7 @@ test("named-contact extraction normalizes distant-relative phrasing into relativ
     true
   );
   assert.equal(
-    governanceResult.allowedCurrentStateFactCandidates.some(
-      (candidate) =>
-        candidate.key === "contact.rosa.relationship" &&
-        candidate.value === "relative"
-    ),
+    hasCurrentFact(governanceResult, "contact.rosa.relationship", "relative"),
     true
   );
   assert.equal(
@@ -1843,11 +1811,7 @@ test("direct contact relationship extraction normalizes distant-relative phrasin
     true
   );
   assert.equal(
-    governanceResult.allowedCurrentStateFactCandidates.some(
-      (candidate) =>
-        candidate.key === "contact.rosa.relationship" &&
-        candidate.value === "relative"
-    ),
+    hasQuarantinedFact(governanceResult, "contact.rosa.relationship", "relative"),
     true
   );
 });
@@ -1883,11 +1847,7 @@ test("named-contact extraction normalizes distant-relative phrasing into relativ
     true
   );
   assert.equal(
-    governanceResult.allowedCurrentStateFactCandidates.some(
-      (candidate) =>
-        candidate.key === "contact.rosa.relationship" &&
-        candidate.value === "relative"
-    ),
+    hasCurrentFact(governanceResult, "contact.rosa.relationship", "relative"),
     true
   );
   assert.equal(
@@ -1922,11 +1882,7 @@ test("direct contact relationship extraction normalizes distant-relative phrasin
     true
   );
   assert.equal(
-    governanceResult.allowedCurrentStateFactCandidates.some(
-      (candidate) =>
-        candidate.key === "contact.rosa.relationship" &&
-        candidate.value === "relative"
-    ),
+    hasQuarantinedFact(governanceResult, "contact.rosa.relationship", "relative"),
     true
   );
 });
@@ -1962,17 +1918,11 @@ test("symmetric non-work current relationship phrasing maps named contacts onto 
     true
   );
   assert.equal(
-    governanceResult.allowedCurrentStateFactCandidates.some(
-      (candidate) =>
-        candidate.key === "contact.owen.relationship" &&
-        candidate.value === "friend"
-    ),
+    hasQuarantinedFact(governanceResult, "contact.owen.relationship", "friend"),
     true
   );
   assert.equal(
-    governanceResult.allowedSupportOnlyFactCandidates.some(
-      (candidate) => candidate.key === "contact.owen.relationship"
-    ),
+    hasSupportOnlyFact(governanceResult, "contact.owen.relationship"),
     false
   );
 });
@@ -1999,11 +1949,7 @@ test("symmetric distant-relative current relationship phrasing maps named contac
     true
   );
   assert.equal(
-    governanceResult.allowedCurrentStateFactCandidates.some(
-      (candidate) =>
-        candidate.key === "contact.rosa.relationship" &&
-        candidate.value === "relative"
-    ),
+    hasQuarantinedFact(governanceResult, "contact.rosa.relationship", "relative"),
     true
   );
 });
@@ -2030,11 +1976,7 @@ test("symmetric distant-relative current relationship phrasing maps named contac
     true
   );
   assert.equal(
-    governanceResult.allowedCurrentStateFactCandidates.some(
-      (candidate) =>
-        candidate.key === "contact.rosa.relationship" &&
-        candidate.value === "relative"
-    ),
+    hasQuarantinedFact(governanceResult, "contact.rosa.relationship", "relative"),
     true
   );
 });
@@ -2070,17 +2012,11 @@ test("symmetric work current relationship phrasing maps named contacts onto curr
     true
   );
   assert.equal(
-    governanceResult.allowedCurrentStateFactCandidates.some(
-      (candidate) =>
-        candidate.key === "contact.owen.relationship" &&
-        candidate.value === "work_peer"
-    ),
+    hasQuarantinedFact(governanceResult, "contact.owen.relationship", "work_peer"),
     true
   );
   assert.equal(
-    governanceResult.allowedSupportOnlyFactCandidates.some(
-      (candidate) => candidate.key === "contact.owen.relationship"
-    ),
+    hasSupportOnlyFact(governanceResult, "contact.owen.relationship"),
     false
   );
 });
@@ -2165,11 +2101,7 @@ test("employee-direction extraction normalizes works-for-me phrasing into employ
     true
   );
   assert.equal(
-    governanceResult.allowedCurrentStateFactCandidates.some(
-      (candidate) =>
-        candidate.key === "contact.owen.relationship" &&
-        candidate.value === "employee"
-    ),
+    hasQuarantinedFact(governanceResult, "contact.owen.relationship", "employee"),
     true
   );
 });
@@ -2214,11 +2146,7 @@ test("work-peer direction extraction normalizes works-with-me phrasing into curr
     true
   );
   assert.equal(
-    governanceResult.allowedCurrentStateFactCandidates.some(
-      (candidate) =>
-        candidate.key === "contact.owen.relationship" &&
-        candidate.value === "work_peer"
-    ),
+    hasQuarantinedFact(governanceResult, "contact.owen.relationship", "work_peer"),
     true
   );
 });
@@ -2461,11 +2389,7 @@ test("third-person contact continuity extraction keeps current organization, his
     true
   );
   assert.equal(
-    governanceResult.allowedCurrentStateFactCandidates.some(
-      (candidate) =>
-        candidate.key === "contact.billy.work_association" &&
-        candidate.value === "Northstar"
-    ),
+    hasQuarantinedFact(governanceResult, "contact.billy.work_association", "Northstar"),
     true
   );
   assert.equal(
@@ -2593,11 +2517,7 @@ test("long-form third-person relationship updates keep realistic clause-heavy wo
     true
   );
   assert.equal(
-    governanceResult.allowedCurrentStateFactCandidates.some(
-      (candidate) =>
-        candidate.key === "contact.billy.work_association" &&
-        candidate.value === "Crimson Analytics"
-    ),
+    hasQuarantinedFact(governanceResult, "contact.billy.work_association", "Crimson Analytics"),
     true
   );
   assert.equal(

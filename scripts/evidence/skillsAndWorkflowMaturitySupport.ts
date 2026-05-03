@@ -175,6 +175,7 @@ export function buildCreateSkillAction(): PlannedAction {
       inputSummary: "Short planner failure description.",
       outputSummary: "Short triage summary.",
       riskLevel: "low",
+      activationSource: "explicit_user_request",
       allowedSideEffects: ["filesystem_read"],
       tags: ["planner", "tests"],
       capabilities: ["triage", "planner"],

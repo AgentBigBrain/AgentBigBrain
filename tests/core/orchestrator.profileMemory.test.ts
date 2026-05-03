@@ -21,6 +21,12 @@ import type {
   ProfileReadableFact,
   ProfileMemoryWriteProvenance
 } from "../../src/core/profileMemory";
+import {
+  buildProfileMemoryIngestPolicy
+} from "../../src/core/profileMemoryRuntime/profileMemoryIngestPolicy";
+import type {
+  ProfileMemoryIngestMemoryIntent
+} from "../../src/core/profileMemoryRuntime/contracts";
 import { SemanticMemoryStore } from "../../src/core/semanticMemory";
 import { StateStore } from "../../src/core/stateStore";
 import { TaskRequest } from "../../src/core/types";
@@ -49,6 +55,33 @@ function buildTask(userInput: string): TaskRequest {
     userInput,
     createdAt: new Date().toISOString()
   };
+}
+
+function wrapResolvedMemoryRoute(
+  userInput: string,
+  memoryIntent: ProfileMemoryIngestMemoryIntent
+): string {
+  return [
+    "Resolved semantic route:",
+    "- routeId: memory_context",
+    "- source: test_route_metadata",
+    "- confidence: high",
+    `- memoryIntent: ${memoryIntent}`,
+    "",
+    "Current user request:",
+    userInput
+  ].join("\n");
+}
+
+function buildTestProfileUpdatePolicy(options: {
+  hasValidatedFactCandidates?: boolean;
+  hasStructuredEpisodeCandidates?: boolean;
+} = {}) {
+  return buildProfileMemoryIngestPolicy({
+    memoryIntent: "profile_update",
+    sourceSurface: "conversation_profile_input",
+    ...options
+  });
 }
 
 function buildWorkflowDomainContext() {
@@ -347,7 +380,20 @@ test("orchestrator enriches planner input with non-sensitive profile context fro
   );
 
   try {
-    await brain.runTask(buildTask("I work at Lantern. Give me a concise status update."));
+    await profileStore.ingestFromTaskInput(
+      "seed-lantern-employment",
+      "I work at Lantern.",
+      "2026-03-21T12:00:00.000Z",
+      {
+        ingestPolicy: buildTestProfileUpdatePolicy()
+      }
+    );
+    await brain.runTask(
+      buildTask(wrapResolvedMemoryRoute(
+        "Give me a concise status update about my work.",
+        "contextual_recall"
+      ))
+    );
 
     const plannerPayload = JSON.parse(modelClient.lastPlannerUserPrompt) as {
       userInput?: string;
@@ -377,7 +423,9 @@ test("orchestrator degrades gracefully when encrypted profile memory cannot be d
   const nowIso = new Date().toISOString();
 
   const seededProfileStore = new ProfileMemoryStore(encryptedProfilePath, seedProfileKey, 90);
-  await seededProfileStore.ingestFromTaskInput("seed-task", "I work at Lantern.", nowIso);
+  await seededProfileStore.ingestFromTaskInput("seed-task", "I work at Lantern.", nowIso, {
+    ingestPolicy: buildTestProfileUpdatePolicy()
+  });
 
   const modelClient = new CapturingPlannerModelClient();
   const memoryStore = new SemanticMemoryStore(semanticPath);
@@ -406,7 +454,9 @@ test("orchestrator degrades gracefully when encrypted profile memory cannot be d
   );
 
   try {
-    const result = await brain.runTask(buildTask("Give me a concise status update."));
+    const result = await brain.runTask(
+      buildTask(wrapResolvedMemoryRoute("Give me a concise status update.", "contextual_recall"))
+    );
     assert.equal(result.actionResults.length, 1);
     assert.equal(result.actionResults[0].approved, true);
     assert.match(result.summary, /Agent Friend context unavailable \(degraded_unavailable\)/);
@@ -570,7 +620,10 @@ test("orchestrator remembers validated identity candidates through the canonical
             source: "conversation.identity_interpretation",
             confidence: 0.95
           }
-        ]
+        ],
+        ingestPolicy: buildTestProfileUpdatePolicy({
+          hasValidatedFactCandidates: true
+        })
       },
       "2026-03-21T12:05:00.000Z"
     );
@@ -742,25 +795,12 @@ test("orchestrator recalls Owen contact context across conversation-wrapper turn
     profileStore
   );
 
-  const owenNarrativeInput = [
-    "You are in an ongoing conversation with the same user.",
-    "Recent conversation context (oldest to newest):",
-    "- user: what's my name?",
-    "- assistant: your name is Benny.",
-    "",
-    "Current user request:",
-    "I went to school with a guy named Owen, and he also used to work with me at Lantern Studio."
-  ].join("\n");
+  const owenNarrativeInput = wrapResolvedMemoryRoute(
+    "I went to school with a guy named Owen, and he also used to work with me at Lantern Studio.",
+    "profile_update"
+  );
 
-  const owenRecallInput = [
-    "You are in an ongoing conversation with the same user.",
-    "Recent conversation context (oldest to newest):",
-    "- user: I went to school with a guy named Owen, and he also used to work with me at Lantern Studio.",
-    "- assistant: Thanks for sharing that context.",
-    "",
-    "Current user request:",
-    "who is Owen?"
-  ].join("\n");
+  const owenRecallInput = wrapResolvedMemoryRoute("who is Owen?", "relationship_recall");
 
   try {
     await brain.runTask(buildTask(owenNarrativeInput));
@@ -953,8 +993,11 @@ test("orchestrator continuity read sessions reuse one profile-memory snapshot ac
   const profileStore = new CountingContinuityProfileStore(encryptedProfilePath, profileKey, 90);
   await profileStore.ingestFromTaskInput(
     "seed-owen",
-    "I work with Owen at Lantern Studio. Owen fell down a few weeks ago.",
-    nowIso
+    "My work peer is Owen. Owen fell down a few weeks ago.",
+    nowIso,
+    {
+      ingestPolicy: buildTestProfileUpdatePolicy()
+    }
   );
 
   const brain = new BrainOrchestrator(

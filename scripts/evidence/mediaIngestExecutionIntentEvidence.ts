@@ -6,7 +6,9 @@ import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
+import type { CreateProfileEpisodeRecordInput } from "../../src/core/profileMemory";
 import { ProfileMemoryStore } from "../../src/core/profileMemoryStore";
+import { buildProfileMemoryIngestPolicy } from "../../src/core/profileMemoryRuntime/profileMemoryIngestPolicy";
 import { buildSessionSeed, createFollowUpRuleContext } from "../../src/interfaces/conversationManagerHelpers";
 import { routeConversationMessageInput } from "../../src/interfaces/conversationRuntime/conversationRouting";
 import { buildConversationInboundUserInput } from "../../src/interfaces/mediaRuntime/mediaNormalization";
@@ -94,6 +96,22 @@ class MediaIngestEvidenceEpisodeModelClient implements ModelClient {
 
     return output as T;
   }
+}
+
+/**
+ * Builds explicit memory-write authority for media evidence episodes.
+ *
+ * @param candidates - Structured episode candidates extracted by the semantic memory interpreter.
+ * @returns Closed policy when no semantic episode candidate exists, or structured-candidate authority when one does.
+ */
+function buildMediaEvidenceEpisodeIngestPolicy(
+  candidates: readonly CreateProfileEpisodeRecordInput[]
+) {
+  return buildProfileMemoryIngestPolicy({
+    memoryIntent: candidates.length > 0 ? "profile_update" : "none",
+    sourceSurface: "conversation_profile_input",
+    hasStructuredEpisodeCandidates: candidates.length > 0
+  });
 }
 
 function buildTranscriptPreview(input: string): readonly string[] {
@@ -260,7 +278,10 @@ async function runScenario(
         `task_${scenario.id}`,
         canonicalInput,
         new Date("2026-03-10T15:10:00.000Z").toISOString(),
-        { additionalEpisodeCandidates }
+        {
+          additionalEpisodeCandidates,
+          ingestPolicy: buildMediaEvidenceEpisodeIngestPolicy(additionalEpisodeCandidates)
+        }
       );
       return store.reviewEpisodesForUser(5, new Date("2026-03-10T15:11:00.000Z").toISOString());
     });

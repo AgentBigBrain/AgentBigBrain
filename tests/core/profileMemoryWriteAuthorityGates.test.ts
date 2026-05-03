@@ -216,7 +216,7 @@ test("semantic relationship candidates require route-approved memory write autho
       explicitHumanApproval: false
     });
 
-    assert.equal(approvedResult.appliedFacts, 3);
+    assert.equal(approvedResult.appliedFacts, 4);
     assert.equal(
       approvedFacts.find((fact) => fact.key === "contact.milo.name")?.value,
       "Milo"

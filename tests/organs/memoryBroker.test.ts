@@ -18,6 +18,7 @@ import { ProfileMemoryStore } from "../../src/core/profileMemoryStore";
 import { TaskRequest } from "../../src/core/types";
 import type {
   ProfileFactPlanningInspectionResult,
+  ProfileMemoryIngestMemoryIntent,
   ProfileMemoryIngestPolicy,
   ProfileMemoryRequestTelemetry,
   ProfileMemoryWriteProvenance,
@@ -46,6 +47,30 @@ function buildTask(id: string, userInput: string): TaskRequest {
     userInput,
     createdAt: new Date().toISOString()
   };
+}
+
+function wrapResolvedMemoryRoute(
+  userInput: string,
+  memoryIntent: ProfileMemoryIngestMemoryIntent
+): string {
+  return [
+    "Resolved semantic route:",
+    "- routeId: memory_context",
+    "- source: test_route_metadata",
+    "- confidence: high",
+    `- memoryIntent: ${memoryIntent}`,
+    "",
+    "Current user request:",
+    userInput
+  ].join("\n");
+}
+
+function buildMemoryTask(
+  id: string,
+  userInput: string,
+  memoryIntent: ProfileMemoryIngestMemoryIntent
+): TaskRequest {
+  return buildTask(id, wrapResolvedMemoryRoute(userInput, memoryIntent));
 }
 
 function buildWorkflowDomainContext(): ConversationDomainContext {
@@ -278,7 +303,7 @@ test("memory broker prefers direct temporal planning synthesis over compatibilit
   );
 
   const enriched = await broker.buildPlannerInput(
-    buildTask("task_memory_broker_temporal_direct", "Who is Billy?")
+    buildMemoryTask("task_memory_broker_temporal_direct", "Who is Billy?", "relationship_recall")
   );
 
   assert.equal(enriched.profileMemoryStatus, "available");
@@ -295,11 +320,12 @@ test("memory broker injects query-aware profile context with domain metadata", a
   const store = new ProfileMemoryStore(profilePath, key, 90);
   const broker = new MemoryBrokerOrgan(store);
 
-  const narrativeTask = buildTask(
+  const narrativeTask = buildMemoryTask(
     "task_memory_broker_1",
-    "I used to work with Owen at Lantern Studio."
+    "I used to work with Owen at Lantern Studio.",
+    "profile_update"
   );
-  const recallTask = buildTask(
+  const recallTask = buildMemoryTask(
     "task_memory_broker_2",
     [
       "You are in an ongoing conversation with the same user.",
@@ -309,7 +335,8 @@ test("memory broker injects query-aware profile context with domain metadata", a
       "",
       "Current user request:",
       "who is Owen?"
-    ].join("\n")
+    ].join("\n"),
+    "relationship_recall"
   );
 
   try {
@@ -318,7 +345,7 @@ test("memory broker injects query-aware profile context with domain metadata", a
 
     assert.equal(enriched.profileMemoryStatus, "available");
     assert.match(enriched.userInput, /\[AgentFriendMemoryBroker\]/);
-    assert.match(enriched.userInput, /retrievalMode=query_aware/);
+    assert.match(enriched.userInput, /retrievalMode=semantic_entity_match/);
     assert.match(enriched.userInput, /domainLanes=.*relationship/i);
     assert.match(enriched.userInput, /domainBoundaryDecision=inject_profile_context/i);
     assert.match(enriched.userInput, /\[AgentFriendProfileContext\]/);
@@ -407,7 +434,7 @@ test("memory broker scores typed relationship lane metadata without depending on
   const broker = new MemoryBrokerOrgan(store);
 
   const enriched = await broker.buildPlannerInput(
-    buildTask("task_memory_broker_typed_lane", "who is Owen?")
+    buildMemoryTask("task_memory_broker_typed_lane", "who is Owen?", "relationship_recall")
   );
 
   assert.equal(enriched.profileMemoryStatus, "available");
@@ -425,11 +452,12 @@ test("memory broker keeps historical school association out of query-aware profi
   const store = new ProfileMemoryStore(profilePath, key, 90);
   const broker = new MemoryBrokerOrgan(store);
 
-  const narrativeTask = buildTask(
+  const narrativeTask = buildMemoryTask(
     "task_memory_broker_school_1",
-    "I went to school with a guy named Owen."
+    "I went to school with a guy named Owen.",
+    "profile_update"
   );
-  const recallTask = buildTask(
+  const recallTask = buildMemoryTask(
     "task_memory_broker_school_2",
     [
       "You are in an ongoing conversation with the same user.",
@@ -439,7 +467,8 @@ test("memory broker keeps historical school association out of query-aware profi
       "",
       "Current user request:",
       "who is Owen?"
-    ].join("\n")
+    ].join("\n"),
+    "relationship_recall"
   );
 
   try {
@@ -463,7 +492,7 @@ test("memory broker suppresses profile context for workflow-dominant requests", 
   const store = new ProfileMemoryStore(profilePath, key, 90);
   const broker = new MemoryBrokerOrgan(store);
 
-  const profileTask = buildTask("task_memory_broker_profile", "My name is Avery.");
+  const profileTask = buildMemoryTask("task_memory_broker_profile", "My name is Avery.", "profile_update");
   const workflowTask = buildTask(
     "task_memory_broker_workflow",
     "Deploy the workspace repo and run build verification."
@@ -478,7 +507,7 @@ test("memory broker suppresses profile context for workflow-dominant requests", 
     assert.match(enriched.userInput, /domainBoundaryDecision=suppress_profile_context/i);
     assert.match(
       enriched.userInput,
-      /domainBoundaryReason=(non_profile_dominant_request|no_profile_signal)/i
+      /domainBoundaryReason=(non_profile_dominant_request|no_profile_signal|memory_retrieval_authority_blocked)/i
     );
     assert.match(enriched.userInput, /\[AgentFriendProfileContext\]\nsuppressed=true/i);
     assert.doesNotMatch(enriched.userInput, /identity\./i);
@@ -497,11 +526,12 @@ test("memory broker appends memory-access audit events with required fields", as
   const auditStore = new MemoryAccessAuditStore(auditPath);
   const broker = new MemoryBrokerOrgan(store, auditStore);
 
-  const narrativeTask = buildTask(
+  const narrativeTask = buildMemoryTask(
     "task_memory_audit_1",
-    "I used to work with Owen at Lantern Studio."
+    "I used to work with Owen at Lantern Studio.",
+    "profile_update"
   );
-  const recallTask = buildTask("task_memory_audit_2", "who is Owen?");
+  const recallTask = buildMemoryTask("task_memory_audit_2", "who is Owen?", "relationship_recall");
 
   try {
     await broker.buildPlannerInput(narrativeTask);
@@ -567,16 +597,18 @@ test("memory broker injects bounded unresolved episode context for relevant foll
 
   try {
     await broker.buildPlannerInput(
-      buildTask(
+      buildMemoryTask(
         "task_memory_episode_seed_1",
-        "Owen fell down three weeks ago and I never told you how it ended."
+        "Owen fell down three weeks ago and I never told you how it ended.",
+        "profile_update"
       )
     );
 
     const enriched = await broker.buildPlannerInput(
-      buildTask(
+      buildMemoryTask(
         "task_memory_episode_seed_2",
-        "How is Owen doing after the fall?"
+        "How is Owen doing after the fall?",
+        "contextual_recall"
       )
     );
 
@@ -630,19 +662,21 @@ test("memory broker stores richer model-assisted situations that deterministic r
 
   try {
     await broker.buildPlannerInput(
-      buildTask(
+      buildMemoryTask(
         "task_memory_language_seed_1",
         [
           "Owen had this scare at the hospital a few weeks ago.",
           "We still do not know what the doctors found."
-        ].join(" ")
+        ].join(" "),
+        "profile_update"
       )
     );
 
     const enriched = await broker.buildPlannerInput(
-      buildTask(
+      buildMemoryTask(
         "task_memory_language_seed_2",
-        "How is Owen doing now?"
+        "How is Owen doing now?",
+        "contextual_recall"
       )
     );
 
@@ -665,22 +699,25 @@ test("memory broker injects one bounded planner synthesis block when facts and e
 
   try {
     await broker.buildPlannerInput(
-      buildTask(
+      buildMemoryTask(
         "task_memory_synthesis_seed_1",
-        "Owen is my coworker at Lantern Studio."
+        "Owen is my coworker at Lantern Studio.",
+        "profile_update"
       )
     );
     await broker.buildPlannerInput(
-      buildTask(
+      buildMemoryTask(
         "task_memory_synthesis_seed_2",
-        "Owen fell down a few weeks ago and I never heard how it ended."
+        "Owen fell down a few weeks ago and I never heard how it ended.",
+        "profile_update"
       )
     );
 
     const enriched = await broker.buildPlannerInput(
-      buildTask(
+      buildMemoryTask(
         "task_memory_synthesis_seed_3",
-        "How should I follow up with Owen now?"
+        "How should I follow up with Owen now?",
+        "relationship_recall"
       )
     );
 
@@ -706,9 +743,10 @@ test(
     const auditStore = new MemoryAccessAuditStore(auditPath);
     const broker = new MemoryBrokerOrgan(store, auditStore);
 
-    const seedTask = buildTask(
+    const seedTask = buildMemoryTask(
       "task_memory_probe_seed",
-      "I used to work with Owen at Lantern Studio."
+      "I used to work with Owen at Lantern Studio.",
+      "profile_update"
     );
 
     try {
@@ -726,7 +764,7 @@ test(
       let finalResponse = "";
       for (let index = 0; index < probingQueries.length; index += 1) {
         const result = await broker.buildPlannerInput(
-          buildTask(`task_memory_probe_${index}`, probingQueries[index]!)
+          buildMemoryTask(`task_memory_probe_${index}`, probingQueries[index]!, "relationship_recall")
         );
         finalResponse = result.userInput;
       }
@@ -771,9 +809,10 @@ test("memory broker supports bounded remembered-situation review and explicit us
 
   try {
     await broker.buildPlannerInput(
-      buildTask(
+      buildMemoryTask(
         "task_memory_review_seed",
-        "Owen fell down three weeks ago and I never told you how it ended."
+        "Owen fell down three weeks ago and I never told you how it ended.",
+        "profile_update"
       )
     );
 
@@ -856,9 +895,10 @@ test("memory broker supports bounded fact review and explicit fact updates", asy
 
   try {
     await broker.buildPlannerInput(
-      buildTask(
+      buildMemoryTask(
         "task_memory_fact_review_seed",
-        "My name is Avery."
+        "My name is Avery.",
+        "profile_update"
       )
     );
 
