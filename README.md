@@ -74,14 +74,8 @@ flowchart LR
   Memory --> Projection["Obsidian / JSON projection"]
 ```
 
-The important rule:
-
-> Lexical candidate evidence must not become authority.
-
-Regexes, token matching, and phrase helpers are still valid for exact commands, path/URL/id
-parsing, proof parsing, active prompt option matching, and safety gates. They should not own fuzzy
-human meaning such as relationship state, workflow continuation, durable memory truth, skill
-lifecycle permission, or mission completion.
+The short version: models can interpret broadly, while the runtime acts through narrow contracts
+and records proof for what happened.
 
 ## What AgentBigBrain does today
 
