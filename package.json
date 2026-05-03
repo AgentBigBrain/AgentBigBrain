@@ -139,7 +139,7 @@
     "entity-graph:prune-low-signal": "tsx src/tools/pruneLowSignalEntityGraph.ts"
   },
   "dependencies": {
-    "onnxruntime-node": "^1.24.2",
+    "onnxruntime-node": "^1.25.1",
     "pdfjs-dist": "^5.6.205",
     "ws": "^8.19.0"
   },
