@@ -5,6 +5,8 @@
 import type { ActionType } from "./actionTypes";
 import type { ConflictObjectV1 } from "./persistenceTypes";
 import type { FirstPrinciplesPacketV1 } from "./decisionSupportTypes";
+import type { PulseProvenanceTierV1 } from "./interfaceTypes";
+import type { SourceAuthority } from "../sourceAuthority";
 
 export interface TaskRequest {
   id: string;
@@ -302,6 +304,10 @@ export interface PulseEmitActionParams extends Record<string, unknown> {
   threadKey?: string;
   entityRefs?: readonly string[];
   evidenceRefs?: readonly string[];
+  sourceAuthority?: SourceAuthority;
+  provenanceTier?: PulseProvenanceTierV1;
+  sensitive?: boolean;
+  activeMissionSuppressed?: boolean;
 }
 
 export type PlannedActionParamsByType = {

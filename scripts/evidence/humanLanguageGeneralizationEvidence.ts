@@ -586,6 +586,10 @@ function buildRelationshipClarificationCandidate(): PulseCandidateV1 {
       cooldownPenalty: 0
     },
     lastTouchedAt: "2026-03-08T12:00:00.000Z",
+    sourceAuthority: "stale_runtime_context",
+    provenanceTier: "supporting",
+    sensitive: false,
+    activeMissionSuppressed: false,
     stableHash: "candidate_billy_followup_hash"
   };
 }

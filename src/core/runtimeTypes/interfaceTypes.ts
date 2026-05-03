@@ -2,6 +2,8 @@
  * @fileoverview Canonical interface-facing runtime contracts extracted from the shared runtime type surface.
  */
 
+import type { SourceAuthority } from "../sourceAuthority";
+
 export const STAGE_6_86_BLOCK_CODES = ["MEMORY_MUTATION_BLOCKED", "PULSE_BLOCKED"] as const;
 
 export type Stage686BlockCodeV1 = (typeof STAGE_6_86_BLOCK_CODES)[number];
@@ -187,6 +189,8 @@ export interface PulseScoreBreakdownV1 {
   cooldownPenalty: number;
 }
 
+export type PulseProvenanceTierV1 = "trusted" | "supporting" | "weak";
+
 export interface PulseCandidateV1 {
   candidateId: string;
   reasonCode: PulseReasonCodeV1;
@@ -196,6 +200,10 @@ export interface PulseCandidateV1 {
   threadKey: string | null;
   entityRefs: readonly string[];
   evidenceRefs: readonly string[];
+  sourceAuthority: SourceAuthority;
+  provenanceTier: PulseProvenanceTierV1;
+  sensitive: boolean;
+  activeMissionSuppressed: boolean;
   stableHash: string;
 }
 
@@ -205,6 +213,10 @@ export interface PulseDecisionV1 {
   blockCode: Extract<Stage686BlockCodeV1, "PULSE_BLOCKED"> | null;
   blockDetailReason: PulseBlockCodeV1 | BridgeBlockCodeV1 | null;
   evidenceRefs: readonly string[];
+  sourceAuthority: SourceAuthority;
+  provenanceTier: PulseProvenanceTierV1;
+  sensitive: boolean;
+  activeMissionSuppressed: boolean;
 }
 
 export interface BridgeCandidateV1 {
@@ -214,6 +226,10 @@ export interface BridgeCandidateV1 {
   coMentionCount: number;
   lastObservedAt: string;
   evidenceRefs: readonly string[];
+  sourceAuthority: SourceAuthority;
+  provenanceTier: PulseProvenanceTierV1;
+  sensitive: boolean;
+  activeMissionSuppressed: boolean;
 }
 
 export interface BridgeQuestionV1 {
@@ -225,4 +241,8 @@ export interface BridgeQuestionV1 {
   cooldownUntil: string;
   threadKey: string | null;
   evidenceRefs: readonly string[];
+  sourceAuthority: SourceAuthority;
+  provenanceTier: PulseProvenanceTierV1;
+  sensitive: boolean;
+  activeMissionSuppressed: boolean;
 }

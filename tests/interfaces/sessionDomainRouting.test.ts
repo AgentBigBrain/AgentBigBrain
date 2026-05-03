@@ -7,7 +7,11 @@ import { test } from "node:test";
 
 import { createEmptyConversationDomainContext } from "../../src/core/sessionContext";
 import { buildSessionSeed } from "../../src/interfaces/conversationManagerHelpers";
-import { buildConversationDomainSignalWindowForTurn } from "../../src/interfaces/conversationRuntime/sessionDomainRouting";
+import {
+  applyConversationDomainSignalWindowForTurn,
+  buildConversationDomainSessionHints,
+  buildConversationDomainSignalWindowForTurn
+} from "../../src/interfaces/conversationRuntime/sessionDomainRouting";
 import type { ConversationSession } from "../../src/interfaces/sessionStore";
 
 /**
@@ -54,4 +58,47 @@ test("buildConversationDomainSignalWindowForTurn keeps broader governed relation
     update.laneSignals?.some((signal) => signal.lane === "relationship"),
     true
   );
+});
+
+test("buildConversationDomainSessionHints does not expose keyword-only dominant lanes as authority", () => {
+  const session = buildSession();
+  applyConversationDomainSignalWindowForTurn(
+    session,
+    "Build the dashboard.",
+    "2026-03-03T00:00:30.000Z",
+    null,
+    null
+  );
+
+  assert.equal(session.domainContext.dominantLane, "workflow");
+  assert.equal(buildConversationDomainSessionHints(session).domainDominantLane, undefined);
+});
+
+test("buildConversationDomainSessionHints exposes semantic-route lanes as authority", () => {
+  const session = buildSession();
+  applyConversationDomainSignalWindowForTurn(
+    session,
+    "What do you remember about Jordan?",
+    "2026-03-03T00:00:30.000Z",
+    null,
+    "chat",
+    {
+      routeId: "relationship_recall",
+      source: "model",
+      sourceAuthority: "semantic_model",
+      confidence: "high",
+      executionMode: "chat",
+      continuationKind: "none",
+      memoryIntent: "relationship_recall",
+      runtimeControlIntent: "none",
+      buildFormat: null,
+      explicitConstraints: {
+        disallowBrowserOpen: true,
+        disallowServerStart: true,
+        requiresUserOwnedLocation: false
+      }
+    }
+  );
+
+  assert.equal(buildConversationDomainSessionHints(session).domainDominantLane, "relationship");
 });

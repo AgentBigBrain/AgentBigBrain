@@ -496,6 +496,10 @@ export class Stage686RuntimeActionEngine {
         threadKey,
         entityRefs: [refs[0]!, refs[1]!],
         evidenceRefs,
+        sourceAuthority: "strict_schema" as const,
+        provenanceTier: "trusted" as const,
+        sensitive: false,
+        activeMissionSuppressed: false,
         stableHash: `bridge:${refs[0]}:${refs[1]}`
       };
       const decision = evaluateBridgeQuestionEmissionV1(

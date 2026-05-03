@@ -9,10 +9,11 @@ import type { DatabaseSync } from "node:sqlite";
 import { LedgerBackend } from "../config";
 import { withFileLock, writeFileAtomic } from "../fileLock";
 import { buildProjectionChangeSet } from "../projections/service";
+import { normalizeSourceAuthority } from "../sourceAuthority";
 import { withSqliteDatabase } from "../sqliteStore";
 import { Stage686PulseStateV1 } from "./memoryGovernance";
 import { createEmptyConversationStackV1, isConversationStackV1 } from "./conversationStack";
-import { BridgeQuestionV1, ConversationStackV1 } from "../types";
+import { BridgeQuestionV1, ConversationStackV1, PulseProvenanceTierV1 } from "../types";
 import { type Stage686RuntimeStateSnapshot } from "./contracts";
 
 export type { Stage686RuntimeStateSnapshot } from "./contracts";
@@ -149,13 +150,26 @@ function normalizePendingBridgeQuestions(value: unknown): readonly BridgeQuestio
         candidate.threadKey === null || typeof candidate.threadKey === "string"
           ? candidate.threadKey
           : null,
-      evidenceRefs: [...new Set(evidenceRefs)].sort((left, right) => left.localeCompare(right))
+      evidenceRefs: [...new Set(evidenceRefs)].sort((left, right) => left.localeCompare(right)),
+      sourceAuthority: normalizeSourceAuthority(candidate.sourceAuthority, {
+        fallbackAuthority: "unknown"
+      }),
+      provenanceTier: normalizePulseProvenanceTier(candidate.provenanceTier),
+      sensitive: candidate.sensitive === true,
+      activeMissionSuppressed: candidate.activeMissionSuppressed === true
     });
   }
 
   return normalized
     .sort((left, right) => left.questionId.localeCompare(right.questionId))
     .slice(-MAX_PENDING_BRIDGE_QUESTIONS);
+}
+
+/** Normalizes a persisted pulse provenance tier with a fail-closed weak fallback. */
+function normalizePulseProvenanceTier(value: unknown): PulseProvenanceTierV1 {
+  return value === "trusted" || value === "supporting" || value === "weak"
+    ? value
+    : "weak";
 }
 
 /**

@@ -808,7 +808,11 @@ export function evaluateBridgeQuestionEmissionV1(
     threadKey: input.candidate.threadKey,
     evidenceRefs: [...new Set([...bridgeEdge.evidenceRefs, ...input.candidate.evidenceRefs])].sort((a, b) =>
       a.localeCompare(b)
-    )
+    ),
+    sourceAuthority: input.candidate.sourceAuthority,
+    provenanceTier: input.candidate.provenanceTier,
+    sensitive: input.candidate.sensitive,
+    activeMissionSuppressed: false
   };
   const bridgeCandidate: BridgeCandidateV1 = {
     candidateId: input.candidate.candidateId,
@@ -816,7 +820,11 @@ export function evaluateBridgeQuestionEmissionV1(
     targetEntityKey,
     coMentionCount: bridgeEdge.coMentionCount,
     lastObservedAt: bridgeEdge.lastObservedAt,
-    evidenceRefs: bridgeEdge.evidenceRefs
+    evidenceRefs: bridgeEdge.evidenceRefs,
+    sourceAuthority: input.candidate.sourceAuthority,
+    provenanceTier: input.candidate.provenanceTier,
+    sensitive: input.candidate.sensitive,
+    activeMissionSuppressed: false
   };
   const pulseEmitParams: PulseEmitActionParams = {
     kind: "bridge_question",
@@ -824,6 +832,10 @@ export function evaluateBridgeQuestionEmissionV1(
     threadKey: input.candidate.threadKey ?? undefined,
     entityRefs: [sourceEntityKey, targetEntityKey],
     evidenceRefs: question.evidenceRefs,
+    sourceAuthority: input.candidate.sourceAuthority,
+    provenanceTier: input.candidate.provenanceTier,
+    sensitive: input.candidate.sensitive,
+    activeMissionSuppressed: false,
     questionId,
     prompt: question.prompt,
     cooldownUntil,

@@ -141,6 +141,10 @@ test("buildDynamicPulsePrompt includes naturalness context sections when provide
     threadKey: "thread-1",
     entityRefs: ["entity-1"],
     evidenceRefs: ["evidence-1"],
+    sourceAuthority: "stale_runtime_context",
+    provenanceTier: "supporting",
+    sensitive: false,
+    activeMissionSuppressed: false,
     stableHash: "stable-hash"
   };
 
@@ -203,6 +207,10 @@ test("buildDynamicPulsePrompt hardens relationship clarification against generic
     threadKey: null,
     entityRefs: ["entity-1", "entity-2"],
     evidenceRefs: ["evidence-1"],
+    sourceAuthority: "stale_runtime_context",
+    provenanceTier: "supporting",
+    sensitive: false,
+    activeMissionSuppressed: false,
     stableHash: "stable-hash-relationship"
   };
 

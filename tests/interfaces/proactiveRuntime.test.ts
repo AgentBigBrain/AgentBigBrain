@@ -76,6 +76,10 @@ function buildPulseCandidate(): PulseCandidateV1 {
     score: 0.4,
     scoreBreakdown: buildPulseScoreBreakdownFixture(),
     lastTouchedAt: "2026-03-08T11:00:00.000Z",
+    sourceAuthority: "stale_runtime_context",
+    provenanceTier: "supporting",
+    sensitive: false,
+    activeMissionSuppressed: false,
     stableHash: "candidate_owen_hash"
   };
 }

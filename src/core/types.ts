@@ -139,6 +139,7 @@ export {
   type PulseCandidateV1,
   type PulseDecisionCodeV1,
   type PulseDecisionV1,
+  type PulseProvenanceTierV1,
   type PulseReasonCodeV1,
   type PulseScoreBreakdownV1,
   type RelationEdgeV1,

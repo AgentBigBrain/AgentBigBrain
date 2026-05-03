@@ -142,6 +142,15 @@ function generatesDeterministicPulseCandidatesFromAllPrimarySources(): void {
   assert.ok(reasonCodes.has("TOPIC_DRIFT_RESUME"));
   assert.ok(reasonCodes.has("STALE_FACT_REVALIDATION"));
   assert.ok(reasonCodes.has("USER_REQUESTED_FOLLOWUP"));
+  assert.ok(
+    first.orderedCandidates.every(
+      (candidate) =>
+        candidate.sourceAuthority === "stale_runtime_context" &&
+        (candidate.provenanceTier === "supporting" || candidate.provenanceTier === "weak") &&
+        typeof candidate.sensitive === "boolean" &&
+        candidate.activeMissionSuppressed === false
+    )
+  );
 }
 
 /**
@@ -162,7 +171,8 @@ function suppressesAllCandidatesWhenActiveMissionWorkExists(): void {
     result.decisions.every(
       (entry) =>
         entry.decision.decisionCode === "SUPPRESS" &&
-        entry.decision.blockDetailReason === "DERAILS_ACTIVE_MISSION"
+        entry.decision.blockDetailReason === "DERAILS_ACTIVE_MISSION" &&
+        entry.decision.activeMissionSuppressed === true
     )
   );
 }

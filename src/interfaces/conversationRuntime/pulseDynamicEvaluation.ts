@@ -27,6 +27,7 @@ import {
 } from "./pulsePrompting";
 import type { ConversationDomainLane, EntityGraphV1 } from "../../core/types";
 import { shouldSuppressPulseForSessionDomain } from "./pulseScheduling";
+import { hasAuthoritativeConversationDomainLane } from "./sessionDomainRouting";
 
 const RELATIONSHIP_CLARIFICATION_RECENT_TURN_WINDOW = 8;
 
@@ -37,6 +38,10 @@ export interface DynamicPulseEvaluationParams {
   nowIso: string;
   deps: Pick<AgentPulseSchedulerDeps, "getEntityGraph" | "enqueueSystemJob">;
   applyPulseStateToUserSessions: ApplyPulseStateToUserSessions;
+}
+
+interface DomainBiasedPulseGraphOptions {
+  allowFullGraphFallback?: boolean;
 }
 
 /**
@@ -56,7 +61,8 @@ export interface DynamicPulseEvaluationParams {
  */
 export function buildDomainBiasedPulseGraph(
   graph: EntityGraphV1,
-  dominantLane: ConversationDomainLane | null | undefined
+  dominantLane: ConversationDomainLane | null | undefined,
+  options: DomainBiasedPulseGraphOptions = {}
 ): EntityGraphV1 {
   if (!dominantLane || dominantLane === "unknown") {
     return graph;
@@ -65,8 +71,17 @@ export function buildDomainBiasedPulseGraph(
   const keptEntities = graph.entities.filter(
     (entity) => entity.domainHint === null || entity.domainHint === dominantLane
   );
-  if (keptEntities.length === 0 || keptEntities.length === graph.entities.length) {
+  if (keptEntities.length === graph.entities.length) {
     return graph;
+  }
+  if (keptEntities.length === 0) {
+    return options.allowFullGraphFallback === true
+      ? graph
+      : {
+          ...graph,
+          entities: [],
+          edges: []
+        };
   }
 
   const keptEntityKeys = new Set(keptEntities.map((entity) => entity.entityKey));
@@ -123,7 +138,13 @@ export async function evaluateDynamicPulse(
 
   const biasedGraph = buildDomainBiasedPulseGraph(
     graph,
-    params.targetSession.domainContext.dominantLane
+    params.targetSession.domainContext.dominantLane,
+    {
+      allowFullGraphFallback: hasAuthoritativeConversationDomainLane(
+        params.targetSession,
+        params.targetSession.domainContext.dominantLane
+      )
+    }
   );
   const biasedResult = evaluatePulseCandidatesV1({
     graph: biasedGraph,
@@ -132,7 +153,11 @@ export async function evaluateDynamicPulse(
     recentPulseHistory,
     activeMissionWorkExists
   });
-  const result = biasedResult.emittedCandidate
+  const canUseFullGraphFallback = hasAuthoritativeConversationDomainLane(
+    params.targetSession,
+    params.targetSession.domainContext.dominantLane
+  );
+  const result = biasedResult.emittedCandidate || !canUseFullGraphFallback
     ? biasedResult
     : evaluatePulseCandidatesV1({
         graph,
@@ -141,7 +166,9 @@ export async function evaluateDynamicPulse(
         recentPulseHistory,
         activeMissionWorkExists
       });
-  const effectiveGraph = biasedResult.emittedCandidate ? biasedGraph : graph;
+  const effectiveGraph = biasedResult.emittedCandidate || !canUseFullGraphFallback
+    ? biasedGraph
+    : graph;
 
   if (!result.emittedCandidate) {
     await params.applyPulseStateToUserSessions(params.userSessions, {
