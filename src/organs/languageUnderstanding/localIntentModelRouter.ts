@@ -77,12 +77,10 @@ export interface LocalModelRouteResult<TResult> {
  * @returns `true` when the result explicitly reports low confidence.
  */
 function isLowConfidenceLocalModelResult(result: unknown): boolean {
-  return (
-    typeof result === "object" &&
-    result !== null &&
-    "confidence" in result &&
-    (result as { confidence?: unknown }).confidence === "low"
-  );
+  if (result === null || typeof result !== "object") {
+    return false;
+  }
+  return "confidence" in result && (result as { confidence?: unknown }).confidence === "low";
 }
 
 /**
