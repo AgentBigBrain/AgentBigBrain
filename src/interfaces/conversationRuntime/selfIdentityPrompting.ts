@@ -3,7 +3,10 @@
  */
 
 import { extractPreferredNameValuesFromUserInput } from "../../core/profileMemoryRuntime/profileMemoryExtraction";
-import type { ProfileMemoryRequestTelemetry } from "../../core/profileMemoryRuntime/contracts";
+import type {
+  ProfileMemoryRequestTelemetry,
+  ProfileValidatedFactCandidateInput
+} from "../../core/profileMemoryRuntime/contracts";
 import {
   recordProfileMemoryIdentitySafetyDecision,
   recordProfileMemoryRenderOperation,
@@ -25,6 +28,7 @@ import { buildConversationProfileMemoryWriteRequest } from "./conversationProfil
 import { buildLocalIntentSessionHints } from "./conversationRoutingSupport";
 import {
   buildIdentityInterpretationFallbackReply,
+  buildPreferredNameValidatedFactCandidate,
   isSimpleDeterministicSelfIdentityDeclaration,
   resolveRecentAssistantTurn,
   validateInterpretedPreferredNameCandidate
@@ -149,13 +153,11 @@ export async function buildModelAssistedSelfIdentityReply(
             receivedAt,
             memoryIntent: "profile_update",
             validatedFactCandidates: [
-              {
-                key: "identity.preferred_name",
-                candidateValue: preferredName,
-                source: "conversation.identity_interpretation",
-                confidence: interpretedIdentity.confidence === "high" ? 0.98 : 0.95
-              }
-            ]
+              buildPreferredNameValidatedFactCandidate(
+                preferredName,
+                interpretedIdentity.confidence === "high" ? 0.98 : 0.95
+              )
+            ].filter((candidate): candidate is ProfileValidatedFactCandidateInput => Boolean(candidate))
           }),
           receivedAt
         ).catch(() => false)
@@ -324,7 +326,10 @@ export async function buildDeterministicSelfIdentityDeclarationReply(
                 session,
                 userInput,
                 receivedAt,
-                memoryIntent: "profile_update"
+                memoryIntent: "profile_update",
+                validatedFactCandidates: [
+                  buildPreferredNameValidatedFactCandidate(preferredName, 0.98)
+                ].filter((candidate): candidate is ProfileValidatedFactCandidateInput => Boolean(candidate))
               })
             : userInput,
           receivedAt

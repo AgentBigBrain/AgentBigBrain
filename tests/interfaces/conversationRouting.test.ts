@@ -1598,6 +1598,16 @@ test("routeConversationMessageInput keeps self-identity declarations direct and 
   assert.equal(rememberedProfileInput?.provenance?.dominantLaneAtWrite, "workflow");
   assert.equal(rememberedProfileInput?.provenance?.threadKey, null);
   assert.equal(rememberedProfileInput?.provenance?.sourceSurface, "conversation_profile_input");
+  assert.deepEqual(rememberedProfileInput?.validatedFactCandidates, [
+    {
+      key: "identity.preferred_name",
+      candidateValue: "Avery",
+      source: "conversation.identity_interpretation",
+      confidence: 0.98
+    }
+  ]);
+  assert.equal(rememberedProfileInput?.ingestPolicy?.policySource, "structured_candidate");
+  assert.equal(rememberedProfileInput?.ingestPolicy?.sourceLane, "validated_model_candidate");
   assert.match(rememberedProfileInput?.provenance?.turnId ?? "", /^turn_[a-f0-9]{24}$/);
   assert.match(rememberedProfileInput?.provenance?.sourceFingerprint ?? "", /^[a-f0-9]{32}$/);
   assert.equal(localResolverCalls, 0);

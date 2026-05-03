@@ -45,6 +45,38 @@ function normalizeSelfIdentityParityValue(value: string): string {
 }
 
 /**
+ * Splits a normalized identity value into stable comparison tokens.
+ *
+ * @param value - Normalized identity string.
+ * @returns Non-empty identity tokens.
+ */
+function splitSelfIdentityParityTokens(value: string): readonly string[] {
+  return value.split(/\s+/).filter((token) => token.length > 0);
+}
+
+/**
+ * Returns whether the shorter identity token sequence appears on token boundaries.
+ *
+ * @param shorter - Candidate shorter token sequence.
+ * @param longer - Candidate longer token sequence.
+ * @returns `true` when the sequence matches complete adjacent tokens.
+ */
+function isSelfIdentityTokenSubsequence(
+  shorter: readonly string[],
+  longer: readonly string[]
+): boolean {
+  if (shorter.length === 0 || shorter.length > longer.length) {
+    return false;
+  }
+  for (let index = 0; index <= longer.length - shorter.length; index += 1) {
+    if (shorter.every((token, offset) => longer[index + offset] === token)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
  * Returns whether two self-identity candidates remain meaningfully aligned for parity checks.
  *
  * @param primary - Primary deterministic identity candidate.
@@ -57,11 +89,14 @@ export function hasSelfIdentityParity(primary: string, shadow: string): boolean 
   if (!normalizedPrimary || !normalizedShadow) {
     return false;
   }
-  return (
-    normalizedPrimary === normalizedShadow ||
-    normalizedPrimary.includes(normalizedShadow) ||
-    normalizedShadow.includes(normalizedPrimary)
-  );
+  if (normalizedPrimary === normalizedShadow) {
+    return true;
+  }
+  const primaryTokens = splitSelfIdentityParityTokens(normalizedPrimary);
+  const shadowTokens = splitSelfIdentityParityTokens(normalizedShadow);
+  return primaryTokens.length <= shadowTokens.length
+    ? isSelfIdentityTokenSubsequence(primaryTokens, shadowTokens)
+    : isSelfIdentityTokenSubsequence(shadowTokens, primaryTokens);
 }
 
 /**
