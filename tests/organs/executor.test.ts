@@ -75,7 +75,7 @@ function buildCreateSkillAction(
     id: "action_create_skill",
     type: "create_skill",
     description: "create skill",
-    params: { name, code, ...overrides },
+    params: { name, code, activationSource: "explicit_user_request", ...overrides },
     estimatedCostUsd: 0.1
   };
 }
@@ -829,6 +829,45 @@ test("ToolExecutorOrgan records skill manifests and marks verified skills as tru
     assert.equal(runOutcome.status, "success");
     assert.equal(runOutcome.executionMetadata?.skillVerificationStatus, "verified");
     assert.equal(runOutcome.executionMetadata?.skillTrustedForReuse, true);
+  });
+});
+
+test("ToolExecutorOrgan keeps omitted activation-source skills pending approval even when verified", async () => {
+  await withTempCwd(async (tempDir) => {
+    const executor = new ToolExecutorOrgan(DEFAULT_BRAIN_CONFIG);
+    const outcome = await executor.executeWithOutcome(
+      buildCreateSkillAction(
+        "suggested_verified_skill",
+        "export function suggestedVerifiedSkill(input: string): string { return `Hello ${input.trim()}`; }",
+        {
+          activationSource: undefined,
+          testInput: "Benny",
+          expectedOutputContains: "Hello Benny"
+        }
+      )
+    );
+
+    assert.equal(outcome.status, "success");
+    assert.equal(outcome.executionMetadata?.skillVerificationStatus, "verified");
+    assert.equal(outcome.executionMetadata?.skillLifecycleStatus, "pending_approval");
+    assert.equal(outcome.executionMetadata?.skillActivationSource, "agent_suggestion");
+    assert.equal(outcome.executionMetadata?.skillTrustedForReuse, false);
+
+    const manifestPath = path.join(
+      tempDir,
+      "runtime",
+      "skills",
+      "suggested_verified_skill.manifest.json"
+    );
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as Record<string, unknown>;
+    assert.equal(manifest.activationSource, "agent_suggestion");
+    assert.equal(manifest.lifecycleStatus, "pending_approval");
+
+    const runOutcome = await executor.executeWithOutcome(
+      buildRunSkillAction("suggested_verified_skill", "Benny")
+    );
+    assert.equal(runOutcome.status, "blocked");
+    assert.match(runOutcome.output, /pending_approval/i);
   });
 });
 

@@ -101,6 +101,9 @@ export interface PlannerSkillGuidanceEntry {
   description: string;
   tags: readonly string[];
   invocationHints: readonly string[];
+  selectionSource: "source_controlled_builtin_manifest" | "runtime_user_active_manifest";
+  advisoryAuthority: "advisory_only";
+  matchedTerms: readonly string[];
   guidance: string;
 }
 

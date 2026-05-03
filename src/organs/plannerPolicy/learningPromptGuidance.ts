@@ -109,8 +109,11 @@ export function buildPlannerSkillGuidance(
   const lines = skillGuidance.slice(0, 3).map((entry) => {
     const tags = entry.tags.length > 0 ? entry.tags.join(",") : "none";
     const hint = entry.invocationHints[0] ?? "none";
+    const matchedTerms =
+      entry.matchedTerms.length > 0 ? entry.matchedTerms.join(",") : "none";
     return [
-      `- skill=${entry.name}; origin=${entry.origin}; tags=${tags}; hint=${hint}`,
+      `- skill=${entry.name}; origin=${entry.origin}; selectionSource=${entry.selectionSource}; ` +
+        `advisoryAuthority=${entry.advisoryAuthority}; matchedTerms=${matchedTerms}; tags=${tags}; hint=${hint}`,
       entry.guidance
         .split(/\r?\n/)
         .map((line) => `  ${line}`)

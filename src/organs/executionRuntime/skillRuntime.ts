@@ -226,14 +226,16 @@ export async function executeCreateSkillAction(action: PlannedAction) {
       return buildExecutionOutcome(
         "success",
         `Markdown skill created successfully: ${skillName}.md. Guidance saved for bounded planner reuse.`,
-        undefined,
-        {
-          skillName,
-          skillKind: manifest.kind,
-          skillVerificationStatus: manifest.verificationStatus,
-          skillTrustedForReuse: false,
-          skillManifestPath: artifactPaths.manifestPath
-        }
+      undefined,
+      {
+        skillName,
+        skillKind: manifest.kind,
+        skillVerificationStatus: manifest.verificationStatus,
+        skillLifecycleStatus: manifest.lifecycleStatus,
+        skillActivationSource: manifest.activationSource,
+        skillTrustedForReuse: false,
+        skillManifestPath: artifactPaths.manifestPath
+      }
       );
     }
     if (!code) {
@@ -263,8 +265,10 @@ export async function executeCreateSkillAction(action: PlannedAction) {
     manifest = applySkillVerificationResult(manifest, verificationResult, nowIso);
     await skillRegistryStore.saveManifest(manifest);
     const verificationSuffix =
-      manifest.verificationStatus === "verified"
+      manifest.verificationStatus === "verified" && manifest.lifecycleStatus === "active"
         ? " Verified and ready for reuse."
+        : manifest.verificationStatus === "verified"
+          ? " Verified, but pending approval before reuse."
         : manifest.verificationStatus === "failed"
           ? ` Verification failed: ${manifest.verificationFailureReason ?? "unknown reason"}.`
           : " Verification pending.";
@@ -275,7 +279,11 @@ export async function executeCreateSkillAction(action: PlannedAction) {
       {
         skillName,
         skillVerificationStatus: manifest.verificationStatus,
-        skillTrustedForReuse: manifest.verificationStatus === "verified",
+        skillLifecycleStatus: manifest.lifecycleStatus,
+        skillActivationSource: manifest.activationSource,
+        skillTrustedForReuse:
+          manifest.lifecycleStatus === "active" &&
+          manifest.verificationStatus === "verified",
         skillManifestPath: artifactPaths.manifestPath
       }
     );
