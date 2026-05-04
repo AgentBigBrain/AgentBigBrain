@@ -29,6 +29,7 @@ test("parseObsidianReviewActionMarkdown accepts follow-up loop actions with arra
     abb_follow_up_text: "Follow up with Owen about Detroit",
     abb_thread_key: "thread_detroit",
     abb_entity_refs: ["entity_owen", "entity_detroit"],
+    abb_source_recall_refs: ["source_recall:source_record_follow_up#chunk_follow_up"],
     abb_status: "pending"
   });
 
@@ -39,6 +40,7 @@ test("parseObsidianReviewActionMarkdown accepts follow-up loop actions with arra
   assert.equal(parsed.targetId, null);
   assert.equal(parsed.threadKey, "thread_detroit");
   assert.deepEqual(parsed.entityRefs, ["entity_owen", "entity_detroit"]);
+  assert.deepEqual(parsed.sourceRecallRefs, ["source_recall:source_record_follow_up#chunk_follow_up"]);
 });
 
 test("applyObsidianReviewActionsFromDirectory routes fact, episode, and follow-up actions through canonical stores", async () => {

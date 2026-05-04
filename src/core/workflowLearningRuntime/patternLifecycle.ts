@@ -15,6 +15,23 @@ function toNullableString(value: string | null | undefined): string | null {
 }
 
 /**
+ * Merges evidence refs without duplicating ids.
+ *
+ * @param existing - Existing evidence refs.
+ * @param next - Incoming evidence refs.
+ * @returns Deduplicated evidence refs.
+ */
+function mergeEvidenceRefs(
+  existing: readonly string[] | undefined,
+  next: readonly string[] | undefined
+): readonly string[] | undefined {
+  const refs = [...(existing ?? []), ...(next ?? [])]
+    .map((ref) => ref.trim())
+    .filter((ref) => ref.length > 0);
+  return refs.length > 0 ? [...new Set(refs)] : undefined;
+}
+
+/**
  * Applies richer observation metadata to a workflow pattern without changing its core counters.
  *
  * @param pattern - Existing or newly adapted workflow pattern.
@@ -47,6 +64,7 @@ export function applyWorkflowObservationMetadata(
         ? pattern.linkedSkillName
         : toNullableString(observation.linkedSkillName),
     linkedSkillVerificationStatus:
-      observation.linkedSkillVerificationStatus ?? pattern.linkedSkillVerificationStatus
+      observation.linkedSkillVerificationStatus ?? pattern.linkedSkillVerificationStatus,
+    evidenceRefs: mergeEvidenceRefs(pattern.evidenceRefs, observation.evidenceRefs)
   };
 }

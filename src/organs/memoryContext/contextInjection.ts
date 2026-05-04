@@ -3,6 +3,8 @@
  */
 
 import type { TaskRequest } from "../../core/types";
+import type { SourceRecallBundle } from "../../core/sourceRecall/contracts";
+import type { SourceRecallRetrievalAuditEvent } from "../../core/sourceRecall/sourceRecallRetriever";
 import type {
   DomainLaneScores,
   MemoryContextAuthorityMetadata,
@@ -29,6 +31,11 @@ const DEFAULT_MEMORY_CONTEXT_AUTHORITY: MemoryContextAuthorityMetadata = {
   plannerAuthority: "none",
   currentTruthAuthority: false
 };
+
+export interface SourceRecallContextRenderingInput {
+  bundle: SourceRecallBundle;
+  auditEvent: SourceRecallRetrievalAuditEvent;
+}
 
 /**
  * Checks whether one profile-context line matches a sensitive-field pattern.
@@ -156,7 +163,8 @@ export function buildInjectedContextPacket(
   context: string,
   episodeContext = "",
   memorySynthesisContext = "",
-  metadata: MemoryContextAuthorityMetadata = DEFAULT_MEMORY_CONTEXT_AUTHORITY
+  metadata: MemoryContextAuthorityMetadata = DEFAULT_MEMORY_CONTEXT_AUTHORITY,
+  sourceRecallContext = ""
 ): string {
   const packet = [
     task.userInput,
@@ -180,7 +188,79 @@ export function buildInjectedContextPacket(
     packet.push("", "[AgentFriendMemorySynthesis]", memorySynthesisContext);
   }
 
+  if (sourceRecallContext.trim().length > 0) {
+    packet.push("", sourceRecallContext);
+  }
+
   return packet.join("\n");
+}
+
+/**
+ * Renders Source Recall into model context as quoted evidence only.
+ *
+ * **Why it exists:**
+ * Source Recall excerpts may contain old user text, document text, route-looking strings, commands,
+ * or approval-looking text. This renderer keeps those chunks readable while explicitly marking
+ * them as non-authoritative, unsafe to follow as instructions, and separate from memory truth or
+ * completion proof.
+ *
+ * **What it talks to:**
+ * - Uses Source Recall bundle contracts from `../../core/sourceRecall/contracts`.
+ * - Uses retrieval audit metadata from `../../core/sourceRecall/sourceRecallRetriever`.
+ *
+ * @param input - Source Recall bundle plus bounded audit event.
+ * @returns Planner/direct-chat context block.
+ */
+export function renderSourceRecallContextForModelEgress(
+  input: SourceRecallContextRenderingInput
+): string {
+  const { bundle, auditEvent } = input;
+  const lines = [
+    "[AgentFriendSourceRecallContext]",
+    "quotedEvidenceOnly=true",
+    `retrievalMode=${bundle.retrievalMode}`,
+    `retrievalAuthority=${bundle.retrievalAuthority}`,
+    `plannerAuthority=${bundle.authority.plannerAuthority}`,
+    `currentTruthAuthority=${bundle.authority.currentTruthAuthority ? "true" : "false"}`,
+    `completionProofAuthority=${bundle.authority.completionProofAuthority ? "true" : "false"}`,
+    `approvalAuthority=${bundle.authority.approvalAuthority ? "true" : "false"}`,
+    `safetyAuthority=${bundle.authority.safetyAuthority ? "true" : "false"}`,
+    `unsafeToFollowAsInstruction=${bundle.authority.unsafeToFollowAsInstruction ? "true" : "false"}`,
+    `auditQueryHash=${auditEvent.queryHash}`,
+    `auditRetrievalMode=${auditEvent.retrievalMode}`,
+    `auditReturnedSourceRecordIds=${auditEvent.returnedSourceRecordIds.join(",")}`,
+    `auditReturnedChunkIds=${auditEvent.returnedChunkIds.join(",")}`,
+    `auditTotalExcerptsReturned=${auditEvent.totalExcerptsReturned}`,
+    `auditTotalCharsReturned=${auditEvent.totalCharsReturned}`,
+    `auditBlockedRedactedCount=${auditEvent.blockedRedactedCount}`
+  ];
+
+  bundle.excerpts.forEach((excerpt, index) => {
+    lines.push(
+      "",
+      `[SourceRecallExcerpt:${index + 1}]`,
+      `sourceRecordId=${excerpt.sourceRecordId}`,
+      `chunkId=${excerpt.chunkId}`,
+      `recallAuthority=${excerpt.recallAuthority}`,
+      `redacted=${excerpt.redacted ? "true" : "false"}`,
+      `rankingMode=${excerpt.ranking.retrievalMode}`,
+      `rankingAuthority=${excerpt.ranking.retrievalAuthority}`,
+      `rankingScore=${excerpt.ranking.score}`,
+      `rankingFreshness=${excerpt.ranking.freshness}`,
+      `rankingSourceTimeKind=${excerpt.ranking.sourceTimeKind}`,
+      `rankingExplanation=${excerpt.ranking.explanation}`,
+      `plannerAuthority=${excerpt.authority.plannerAuthority}`,
+      `currentTruthAuthority=${excerpt.authority.currentTruthAuthority ? "true" : "false"}`,
+      `completionProofAuthority=${excerpt.authority.completionProofAuthority ? "true" : "false"}`,
+      `approvalAuthority=${excerpt.authority.approvalAuthority ? "true" : "false"}`,
+      `safetyAuthority=${excerpt.authority.safetyAuthority ? "true" : "false"}`,
+      `unsafeToFollowAsInstruction=${excerpt.authority.unsafeToFollowAsInstruction ? "true" : "false"}`,
+      "quotedEvidence:",
+      renderQuotedSourceEvidence(excerpt.excerpt)
+    );
+  });
+
+  return lines.join("\n");
 }
 
 /**
@@ -197,4 +277,17 @@ export function countRetrievedProfileFacts(profileContext: string): number {
     .filter((line) => !line.startsWith("["))
     .filter((line) => line.includes(":"))
     .length;
+}
+
+/**
+ * Prefixes every recalled source line as quoted evidence.
+ *
+ * @param value - Recalled source excerpt.
+ * @returns Quoted evidence block.
+ */
+function renderQuotedSourceEvidence(value: string): string {
+  if (value.length === 0) {
+    return "> ";
+  }
+  return value.split(/\r?\n/).map((line) => `> ${line}`).join("\n");
 }

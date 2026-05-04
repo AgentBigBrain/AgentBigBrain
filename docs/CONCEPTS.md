@@ -52,6 +52,20 @@ candidate is allowed to write profile memory. Missing policy defaults closed for
 Remembered situations, outcomes, and follow-up context. Episodic memory is separate from current
 profile truth so unresolved situations can support recall without overwriting facts.
 
+## Source Recall Archive
+
+The quoted-evidence layer for original source material. It uses the AgentBigBrain-native shape
+`scope -> thread -> source record -> chunk` to preserve bounded excerpts of what was said or seen.
+Source Recall can remind the runtime about prior text, media, documents, task inputs, summaries,
+or receipt excerpts, but it cannot decide what is true, allowed, approved, completed, or safe to
+act on.
+
+Source Recall records carry source kind, source role, source authority, capture class, lifecycle,
+freshness, retrieval mode, retrieval authority, and non-authority flags. Retrieved chunks are
+rendered as quoted evidence only. They may support semantic candidates and review, but profile
+memory, semantic memory, approvals, execution receipts, and completion proof remain separate
+authority surfaces.
+
 ## Stage 6.86 continuity
 
 The live conversation-continuity layer for the active interaction. It owns the conversation stack,

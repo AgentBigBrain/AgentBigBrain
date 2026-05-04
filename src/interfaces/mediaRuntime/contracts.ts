@@ -2,6 +2,14 @@
  * @fileoverview Canonical media-ingest contracts shared by Telegram transport and conversation runtime helpers.
  */
 
+import type {
+  SourceRecallSourceKind,
+  SourceRecallSourceRole,
+  SourceRecallCaptureClass,
+  SourceRecallSourceTimeKind
+} from "../../core/sourceRecall/contracts";
+import type { SourceAuthority } from "../../core/sourceAuthority";
+
 export type ConversationInboundMediaKind = "image" | "voice" | "video" | "document";
 export type ConversationInboundMediaInterpretationSource =
   | "openai_image"
@@ -34,6 +42,22 @@ export interface ConversationInboundMediaInterpretationLayer {
   text: string;
   confidence: number | null;
   provenance: string;
+  memoryAuthority: ConversationInboundMediaMemoryAuthority;
+  sourceRecall?: ConversationInboundMediaSourceRecallRef;
+}
+
+export interface ConversationInboundMediaSourceRecallRef {
+  status: "captured" | "blocked" | "failed";
+  sourceRecordId?: string;
+  sourceKind: Extract<
+    SourceRecallSourceKind,
+    "media_transcript" | "ocr_text" | "media_model_summary" | "document_text" | "document_model_summary"
+  >;
+  sourceRole: Extract<SourceRecallSourceRole, "user" | "tool" | "runtime">;
+  captureClass: Extract<SourceRecallCaptureClass, "ordinary_source" | "external_output">;
+  sourceAuthority: SourceAuthority;
+  sourceTimeKind: SourceRecallSourceTimeKind;
+  sourceRefAvailable: boolean;
   memoryAuthority: ConversationInboundMediaMemoryAuthority;
 }
 

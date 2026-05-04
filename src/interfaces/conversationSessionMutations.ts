@@ -4,6 +4,14 @@
 
 import { applyDomainSignalWindow, type ConversationDomainSignalWindowUpdate } from "../core/sessionContext";
 import {
+  captureLiveUserTurnSourceRecall,
+  captureLowerAuthoritySourceRecall,
+  type LiveUserTurnSourceRecallCaptureResult,
+  type LowerAuthoritySourceRecallCaptureResult,
+  type SourceRecallRecordWriter
+} from "../core/sourceRecall/sourceRecallConversationCapture";
+import type { SourceRecallRetentionPolicy } from "../core/sourceRecall/sourceRecallRetention";
+import {
   applyAssistantTurnToConversationStackV1,
   applyUserTurnToConversationStackV1,
   buildConversationStackFromTurnsV1,
@@ -76,6 +84,33 @@ export interface RecordAssistantTurnOptions {
   assistantTurnKind?: ConversationAssistantTurnKind | null;
 }
 
+export interface RecordAssistantTurnWithSourceRecallOptions extends RecordAssistantTurnOptions {
+  sourceRecallCapture?: {
+    policy: SourceRecallRetentionPolicy;
+    writer: SourceRecallRecordWriter;
+    capturedAt?: string;
+  } | null;
+}
+
+export interface RecordAssistantTurnWithSourceRecallResult {
+  recordedTurn: ConversationTurn | null;
+  sourceRecallResult: LowerAuthoritySourceRecallCaptureResult | null;
+}
+
+export interface RecordUserTurnWithSourceRecallOptions {
+  topicKeyInterpretation?: TopicKeyInterpretationSignalV1 | null;
+  sourceRecallCapture?: {
+    policy: SourceRecallRetentionPolicy;
+    writer: SourceRecallRecordWriter;
+    capturedAt?: string;
+  } | null;
+}
+
+export interface RecordUserTurnWithSourceRecallResult {
+  recordedTurn: ConversationTurn | null;
+  sourceRecallResult: LiveUserTurnSourceRecallCaptureResult | null;
+}
+
 interface PushConversationTurnOptions {
   assistantTurnKind?: ConversationAssistantTurnKind | null;
 }
@@ -144,18 +179,96 @@ export function recordUserTurn(
   at: string,
   maxConversationTurns: number,
   options: {
-    topicKeyInterpretation?: TopicKeyInterpretationSignalV1 | null;
+  topicKeyInterpretation?: TopicKeyInterpretationSignalV1 | null;
   } = {}
-): void {
+): ConversationTurn | null {
   const recordedTurn = pushConversationTurn(session, "user", text, at, maxConversationTurns);
   if (!recordedTurn) {
-    return;
+    return null;
   }
   syncConversationStackWithRecordedTurn(
     session,
     recordedTurn,
     options.topicKeyInterpretation ?? null
   );
+  return recordedTurn;
+}
+
+/**
+ * Records one live user turn and optionally captures it as Source Recall quoted evidence.
+ *
+ * **Why it exists:**
+ * Session turn history is capped, while Source Recall should retain governed source records until
+ * retention policy says otherwise. This helper keeps normal conversation writes first and treats
+ * Source Recall capture as optional, bounded, and non-throwing.
+ *
+ * **What it talks to:**
+ * - Calls `recordUserTurn`.
+ * - Calls `captureLiveUserTurnSourceRecall` from `../core/sourceRecall/sourceRecallConversationCapture`.
+ *
+ * @param session - Session receiving the live user turn.
+ * @param text - Raw user text.
+ * @param at - Turn timestamp.
+ * @param maxConversationTurns - Maximum turns retained in session history.
+ * @param options - Topic-key and optional Source Recall capture dependencies.
+ * @returns Recorded turn plus Source Recall capture result when capture was attempted.
+ */
+export async function recordUserTurnWithSourceRecall(
+  session: ConversationSession,
+  text: string,
+  at: string,
+  maxConversationTurns: number,
+  options: RecordUserTurnWithSourceRecallOptions = {}
+): Promise<RecordUserTurnWithSourceRecallResult> {
+  const recordedTurn = recordUserTurn(session, text, at, maxConversationTurns, {
+    topicKeyInterpretation: options.topicKeyInterpretation ?? null
+  });
+  if (!recordedTurn || !options.sourceRecallCapture) {
+    return {
+      recordedTurn,
+      sourceRecallResult: null
+    };
+  }
+
+  const sourceRecallResult = await captureLiveUserTurnSourceRecall({
+    scopeId: `conversation:${session.conversationId}`,
+    threadId: `conversation:${session.conversationId}`,
+    conversationId: session.conversationId,
+    turn: {
+      ...recordedTurn,
+      role: "user"
+    },
+    policy: options.sourceRecallCapture.policy,
+    writer: options.sourceRecallCapture.writer,
+    capturedAt: options.sourceRecallCapture.capturedAt
+  });
+  recordedTurn.metadata = {
+    ...recordedTurn.metadata,
+    sourceRecall: {
+      status: sourceRecallResult.status,
+      sourceRecordId:
+        sourceRecallResult.status === "captured"
+          ? sourceRecallResult.sourceRecordId
+          : undefined,
+      sourceKind: "conversation_turn",
+      sourceRole: "user",
+      captureClass: "ordinary_source",
+      sourceTimeKind: "observed_event",
+      sourceRefAvailable: sourceRecallResult.status === "captured",
+      capturedAt:
+        sourceRecallResult.status === "captured"
+          ? sourceRecallResult.capturedAt
+          : undefined,
+      diagnosticErrorCode:
+        sourceRecallResult.status === "captured"
+          ? undefined
+          : sourceRecallResult.diagnostic.errorCode
+    }
+  };
+  return {
+    recordedTurn,
+    sourceRecallResult
+  };
 }
 
 /**
@@ -178,7 +291,7 @@ export function recordAssistantTurn(
   at: string,
   maxConversationTurns: number,
   options: RecordAssistantTurnOptions = {}
-): void {
+): ConversationTurn | null {
   const recordedTurn = pushConversationTurn(
     session,
     "assistant",
@@ -188,9 +301,93 @@ export function recordAssistantTurn(
     options
   );
   if (!recordedTurn) {
-    return;
+    return null;
   }
   syncConversationStackWithRecordedTurn(session, recordedTurn, null);
+  return recordedTurn;
+}
+
+/**
+ * Records one assistant turn and optionally captures it as lower-authority Source Recall evidence.
+ *
+ * **Why it exists:**
+ * Assistant output can answer "what did the assistant say?" but it must not masquerade as user
+ * truth, completion proof, approval, or safety authority.
+ *
+ * **What it talks to:**
+ * - Calls `recordAssistantTurn`.
+ * - Calls `captureLowerAuthoritySourceRecall` from
+ *   `../core/sourceRecall/sourceRecallConversationCapture`.
+ *
+ * @param session - Session receiving the assistant turn.
+ * @param text - Raw assistant text.
+ * @param at - Turn timestamp.
+ * @param maxConversationTurns - Maximum turns retained in session history.
+ * @param options - Assistant-turn kind and optional Source Recall capture dependencies.
+ * @returns Recorded turn plus Source Recall capture result when capture was attempted.
+ */
+export async function recordAssistantTurnWithSourceRecall(
+  session: ConversationSession,
+  text: string,
+  at: string,
+  maxConversationTurns: number,
+  options: RecordAssistantTurnWithSourceRecallOptions = {}
+): Promise<RecordAssistantTurnWithSourceRecallResult> {
+  const recordedTurn = recordAssistantTurn(session, text, at, maxConversationTurns, {
+    assistantTurnKind: options.assistantTurnKind ?? null
+  });
+  if (!recordedTurn || !options.sourceRecallCapture) {
+    return {
+      recordedTurn,
+      sourceRecallResult: null
+    };
+  }
+
+  const sourceRecallResult = await captureLowerAuthoritySourceRecall({
+    scopeId: `conversation:${session.conversationId}`,
+    threadId: `conversation:${session.conversationId}`,
+    text: recordedTurn.text,
+    observedAt: recordedTurn.at,
+    sourceKind: "assistant_turn",
+    sourceRole: "assistant",
+    captureClass: "assistant_output",
+    sourceAuthority: "semantic_model",
+    sourceTimeKind: "generated_summary",
+    freshness: "current_turn",
+    originSurface: "conversation_session",
+    originRefId: `${session.conversationId}:assistant:${recordedTurn.at}`,
+    originParentRefId: session.conversationId,
+    policy: options.sourceRecallCapture.policy,
+    writer: options.sourceRecallCapture.writer,
+    capturedAt: options.sourceRecallCapture.capturedAt
+  });
+  recordedTurn.metadata = {
+    ...recordedTurn.metadata,
+    sourceRecall: {
+      status: sourceRecallResult.status,
+      sourceRecordId:
+        sourceRecallResult.status === "captured"
+          ? sourceRecallResult.sourceRecordId
+          : undefined,
+      sourceKind: "assistant_turn",
+      sourceRole: "assistant",
+      captureClass: "assistant_output",
+      sourceTimeKind: "generated_summary",
+      sourceRefAvailable: sourceRecallResult.status === "captured",
+      capturedAt:
+        sourceRecallResult.status === "captured"
+          ? sourceRecallResult.capturedAt
+          : undefined,
+      diagnosticErrorCode:
+        sourceRecallResult.status === "captured"
+          ? undefined
+          : sourceRecallResult.diagnostic.errorCode
+    }
+  };
+  return {
+    recordedTurn,
+    sourceRecallResult
+  };
 }
 
 /**
@@ -279,7 +476,18 @@ export function backfillTurnsFromRecentJobsIfNeeded(
       recoveredTurns.push({
         role: "user",
         text: normalizedUser,
-        at: job.createdAt
+        at: job.createdAt,
+        metadata: {
+          sourceRecall: {
+            status: "blocked",
+            sourceKind: "task_input",
+            sourceRole: "runtime",
+            captureClass: "operational_output",
+            sourceTimeKind: "captured_record",
+            sourceRefAvailable: false,
+            diagnosticErrorCode: "source_recall_original_source_unavailable"
+          }
+        }
       });
     }
 
@@ -289,7 +497,18 @@ export function backfillTurnsFromRecentJobsIfNeeded(
         recoveredTurns.push({
           role: "assistant",
           text: normalizedAssistant,
-          at: job.completedAt ?? job.createdAt
+          at: job.completedAt ?? job.createdAt,
+          metadata: {
+            sourceRecall: {
+              status: "blocked",
+              sourceKind: "task_summary",
+              sourceRole: "runtime",
+              captureClass: "operational_output",
+              sourceTimeKind: "generated_summary",
+              sourceRefAvailable: false,
+              diagnosticErrorCode: "source_recall_original_source_unavailable"
+            }
+          }
         });
       }
     }

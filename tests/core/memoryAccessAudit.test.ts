@@ -3,7 +3,7 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -115,6 +115,39 @@ test("MemoryAccessAuditStore appends probing-detected events with typed window m
       "rapid_succession",
       "extraction_intent"
     ]);
+  });
+});
+
+test("MemoryAccessAuditStore stores Source Recall retrieval audit without raw source text", async () => {
+  await withAuditStore(async (store, auditPath) => {
+    await store.appendEvent({
+      taskId: "task_source_recall",
+      query: "raw source query text should not be stored",
+      retrievedCount: 1,
+      retrievedEpisodeCount: 0,
+      redactedCount: 0,
+      domainLanes: ["profile"],
+      sourceRecallQueryHash: "a".repeat(64),
+      sourceRecallRetrievalMode: "exact_quote",
+      sourceRecallSourceRecordIds: ["source_record_1", "source_record_1"],
+      sourceRecallChunkIds: ["source_chunk_1"],
+      sourceRecallTotalExcerptChars: 42,
+      sourceRecallBlockedRedactedCount: 2
+    });
+
+    const document = await store.load();
+    assert.equal(document.events.length, 1);
+    const [event] = document.events;
+    assert.equal(event.sourceRecallQueryHash, "a".repeat(64));
+    assert.equal(event.sourceRecallRetrievalMode, "exact_quote");
+    assert.deepEqual(event.sourceRecallSourceRecordIds, ["source_record_1"]);
+    assert.deepEqual(event.sourceRecallChunkIds, ["source_chunk_1"]);
+    assert.equal(event.sourceRecallTotalExcerptChars, 42);
+    assert.equal(event.sourceRecallBlockedRedactedCount, 2);
+
+    const persisted = await readFile(auditPath, "utf8");
+    assert.doesNotMatch(persisted, /raw source query text should not be stored/i);
+    assert.doesNotMatch(persisted, /raw source chunk text/i);
   });
 });
 

@@ -3,6 +3,7 @@
  */
 
 import type { ConversationDomainLane } from "../sessionContext";
+import type { SourceRecallSourceRef } from "../sourceRecall/contracts";
 import type { ProfileMemorySourceSurface } from "./contracts";
 import type { ProfileMemoryMutationDecisionRecord } from "./profileMemoryDecisionRecordContracts";
 import type {
@@ -17,6 +18,7 @@ export interface ProfileMemoryMutationRequestCorrelation {
   threadKey?: string | null;
   sourceSurface: ProfileMemorySourceSurface;
   sourceFingerprint?: string;
+  sourceRecallRefs?: readonly SourceRecallSourceRef[];
   normalizedInputIdentity?: string;
 }
 

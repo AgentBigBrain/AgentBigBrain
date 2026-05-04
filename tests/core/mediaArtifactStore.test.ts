@@ -50,7 +50,18 @@ test("MediaArtifactStore persists one owned asset, emits projection change, and 
               text: "Detroit plan contents",
               confidence: 0.96,
               provenance: "test.seed.raw",
-              memoryAuthority: "candidate_only"
+              memoryAuthority: "candidate_only",
+              sourceRecall: {
+                status: "captured",
+                sourceRecordId: "source_record_detroit_plan",
+                sourceKind: "document_text",
+                sourceRole: "tool",
+                captureClass: "external_output",
+                sourceAuthority: "document_text",
+                sourceTimeKind: "captured_record",
+                sourceRefAvailable: true,
+                memoryAuthority: "candidate_only"
+              }
             }
           ]
         }
@@ -115,7 +126,18 @@ test("MediaArtifactStore persists one owned asset, emits projection change, and 
         text: "Detroit plan contents",
         confidence: 0.96,
         provenance: "test.seed.raw",
-        memoryAuthority: "candidate_only"
+        memoryAuthority: "candidate_only",
+        sourceRecall: {
+          status: "captured",
+          sourceRecordId: "source_record_detroit_plan",
+          sourceKind: "document_text",
+          sourceRole: "tool",
+          captureClass: "external_output",
+          sourceAuthority: "document_text",
+          sourceTimeKind: "captured_record",
+          sourceRefAvailable: true,
+          memoryAuthority: "candidate_only"
+        }
       }
     ]);
     assert.equal(changeSets.length, 2);

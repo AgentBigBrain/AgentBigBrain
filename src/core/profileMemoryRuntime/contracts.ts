@@ -6,6 +6,7 @@ import { type AgentPulseDecision, type AgentPulseReason } from "../agentPulse";
 import { type ProfileFactRecord, type ProfileMutationAuditMetadataV1 } from "../profileMemory";
 import type { ConversationDomainLane } from "../sessionContext";
 import type { SourceAuthority } from "../sourceAuthority";
+import type { SourceRecallSourceRef } from "../sourceRecall/contracts";
 import type {
   CreateProfileEpisodeRecordInput,
   ProfileEpisodeRecord
@@ -263,6 +264,7 @@ export interface ProfileMemoryWriteProvenance {
   threadKey?: string | null;
   sourceSurface: ProfileMemorySourceSurface;
   sourceFingerprint?: string;
+  sourceRecallRefs?: readonly SourceRecallSourceRef[];
 }
 
 export interface ProfileMediaIngestInput {

@@ -8,7 +8,8 @@ import type {
   ConversationInboundMediaInterpretationLayer,
   ConversationInboundMediaInterpretationLayerKind,
   ConversationInboundMediaInterpretationSource,
-  ConversationInboundMediaMemoryAuthority
+  ConversationInboundMediaMemoryAuthority,
+  ConversationInboundMediaSourceRecallRef
 } from "../../interfaces/mediaRuntime/contracts";
 import { buildBoundedTextExcerpt } from "./interpretationSupport";
 
@@ -21,6 +22,7 @@ interface MediaInterpretationLayerInput {
   confidence: number | null;
   provenance: string;
   memoryAuthority: ConversationInboundMediaMemoryAuthority;
+  sourceRecall?: ConversationInboundMediaSourceRecallRef;
 }
 
 /**
@@ -42,7 +44,8 @@ export function buildMediaInterpretationLayer(
     text,
     confidence: input.confidence,
     provenance: input.provenance,
-    memoryAuthority: input.memoryAuthority
+    memoryAuthority: input.memoryAuthority,
+    ...(input.sourceRecall ? { sourceRecall: input.sourceRecall } : {})
   };
 }
 
@@ -65,7 +68,8 @@ export function normalizeMediaInterpretationLayers(
         text: layer.text,
         confidence: layer.confidence,
         provenance: layer.provenance,
-        memoryAuthority: layer.memoryAuthority
+        memoryAuthority: layer.memoryAuthority,
+        sourceRecall: layer.sourceRecall
       })
     )
     .filter((layer): layer is ConversationInboundMediaInterpretationLayer => Boolean(layer));
