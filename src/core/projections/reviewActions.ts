@@ -25,6 +25,7 @@ export interface ObsidianReviewAction {
   sourcePath: string;
   threadKey: string | null;
   entityRefs: readonly string[];
+  sourceRecallRefs: readonly string[];
 }
 
 /**
@@ -71,7 +72,8 @@ export function parseObsidianReviewActionMarkdown(
     noteBody: parsed.body,
     sourcePath,
     threadKey: normalizeText(parsed.properties.abb_thread_key),
-    entityRefs: normalizeTextArray(parsed.properties.abb_entity_refs)
+    entityRefs: normalizeTextArray(parsed.properties.abb_entity_refs),
+    sourceRecallRefs: normalizeTextArray(parsed.properties.abb_source_recall_refs)
   };
 }
 

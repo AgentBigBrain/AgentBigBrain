@@ -106,6 +106,7 @@
     "test:skill:compiled_live_smoke": "node scripts/evidence/skillCompiledRuntimeLiveSmoke.cjs",
     "test:reflection:signal_evidence": "tsx scripts/evidence/reflectionSignalEvidence.ts",
     "test:profile_memory_commitment_evidence": "tsx scripts/evidence/profileMemoryCommitmentEvidence.ts",
+    "test:source_recall:evidence": "tsx scripts/evidence/sourceRecallEvidenceMatrix.ts",
     "test:stage6_x:shell_profile_evidence": "tsx scripts/evidence/stage6_xShellProfileEvidence.ts",
     "audit:governors": "tsx scripts/evidence/governorDriftAudit.ts",
     "audit:claims": "tsx scripts/evidence/claimAudit.ts",

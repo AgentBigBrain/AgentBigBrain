@@ -136,7 +136,10 @@ function parseWorkflowPattern(input: unknown): WorkflowPattern | null {
       "unverified",
       "verified",
       "failed"
-    ] as const)
+    ] as const),
+    evidenceRefs: Array.isArray(candidate.evidenceRefs)
+      ? candidate.evidenceRefs.filter((entry): entry is string => typeof entry === "string")
+      : undefined
   };
 }
 

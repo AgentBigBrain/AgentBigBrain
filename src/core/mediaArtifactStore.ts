@@ -17,6 +17,7 @@ import {
 } from "./mediaArtifacts";
 import { withFileLock, writeFileAtomic } from "./fileLock";
 import { makeId } from "./ids";
+import { isSourceAuthority } from "./sourceAuthority";
 import { withSqliteDatabase } from "./sqliteStore";
 import type {
   ProjectionChangeSet
@@ -216,8 +217,68 @@ function parseMediaArtifactDerivedMeaningLayer(
     text: candidate.text,
     confidence: typeof candidate.confidence === "number" ? candidate.confidence : null,
     provenance: candidate.provenance,
-    memoryAuthority: candidate.memoryAuthority
+    memoryAuthority: candidate.memoryAuthority,
+    ...(() => {
+      const sourceRecall = parseMediaArtifactLayerSourceRecall(candidate.sourceRecall);
+      return sourceRecall ? { sourceRecall } : {};
+    })()
   } as MediaArtifactDerivedMeaningLayer;
+}
+
+/**
+ * Parses optional Source Recall metadata on a persisted media-artifact layer.
+ *
+ * @param input - Unknown Source Recall layer reference.
+ * @returns Valid Source Recall reference, or `null`.
+ */
+function parseMediaArtifactLayerSourceRecall(
+  input: unknown
+): MediaArtifactDerivedMeaningLayer["sourceRecall"] | null {
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    return null;
+  }
+  const candidate = input as Partial<NonNullable<MediaArtifactDerivedMeaningLayer["sourceRecall"]>>;
+  if (
+    (candidate.status !== "captured" &&
+      candidate.status !== "blocked" &&
+      candidate.status !== "failed") ||
+    (candidate.sourceKind !== "media_transcript" &&
+      candidate.sourceKind !== "ocr_text" &&
+      candidate.sourceKind !== "media_model_summary" &&
+      candidate.sourceKind !== "document_text" &&
+      candidate.sourceKind !== "document_model_summary") ||
+    (candidate.sourceRole !== "user" &&
+      candidate.sourceRole !== "tool" &&
+      candidate.sourceRole !== "runtime") ||
+    (candidate.captureClass !== "ordinary_source" &&
+      candidate.captureClass !== "external_output") ||
+    !isSourceAuthority(candidate.sourceAuthority) ||
+    (candidate.sourceTimeKind !== "observed_event" &&
+      candidate.sourceTimeKind !== "captured_record" &&
+      candidate.sourceTimeKind !== "generated_summary" &&
+      candidate.sourceTimeKind !== "unknown") ||
+    typeof candidate.sourceRefAvailable !== "boolean" ||
+    (candidate.memoryAuthority !== "direct_user_text" &&
+      candidate.memoryAuthority !== "support_only" &&
+      candidate.memoryAuthority !== "candidate_only" &&
+      candidate.memoryAuthority !== "not_memory_authority")
+  ) {
+    return null;
+  }
+  return {
+    status: candidate.status,
+    sourceRecordId:
+      typeof candidate.sourceRecordId === "string" && candidate.sourceRecordId.trim().length > 0
+        ? candidate.sourceRecordId.trim()
+        : undefined,
+    sourceKind: candidate.sourceKind,
+    sourceRole: candidate.sourceRole,
+    captureClass: candidate.captureClass,
+    sourceAuthority: candidate.sourceAuthority,
+    sourceTimeKind: candidate.sourceTimeKind,
+    sourceRefAvailable: candidate.sourceRefAvailable,
+    memoryAuthority: candidate.memoryAuthority
+  };
 }
 
 /**

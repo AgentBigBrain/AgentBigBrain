@@ -9,7 +9,8 @@ import type {
   ConversationInboundMediaInterpretationLayer,
   ConversationInboundMediaInterpretationLayerKind,
   ConversationInboundMediaInterpretationSource,
-  ConversationInboundMediaMemoryAuthority
+  ConversationInboundMediaMemoryAuthority,
+  ConversationInboundMediaSourceRecallRef
 } from "../interfaces/mediaRuntime/contracts";
 
 export type MediaArtifactProvider = "telegram";
@@ -30,6 +31,7 @@ export interface MediaArtifactDerivedMeaningLayer {
   confidence: number | null;
   provenance: string;
   memoryAuthority: ConversationInboundMediaMemoryAuthority;
+  sourceRecall?: ConversationInboundMediaSourceRecallRef;
 }
 
 export interface MediaArtifactRecord {
@@ -188,7 +190,8 @@ function normalizeMediaArtifactDerivedMeaningLayer(
     text,
     confidence: layer.confidence,
     provenance: layer.provenance.trim(),
-    memoryAuthority: layer.memoryAuthority
+    memoryAuthority: layer.memoryAuthority,
+    ...(layer.sourceRecall ? { sourceRecall: layer.sourceRecall } : {})
   };
 }
 

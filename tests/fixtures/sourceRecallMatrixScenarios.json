@@ -1,0 +1,102 @@
+[
+  {
+    "id": "exact_quote_recall",
+    "category": "recall_quality",
+    "description": "Exact quote lookup finds the original source chunk.",
+    "query": {
+      "scopeId": "scope_source_recall",
+      "threadId": "thread_source_recall",
+      "exactQuote": "lake-blue palette"
+    },
+    "expectedRetrievalMode": "exact_quote",
+    "expectedMinExcerpts": 1,
+    "expectedPhrase": "lake-blue palette"
+  },
+  {
+    "id": "decision_history_recall",
+    "category": "recall_quality",
+    "description": "Decision-history text is recalled as evidence without becoming truth.",
+    "query": {
+      "scopeId": "scope_source_recall",
+      "threadId": "thread_source_recall",
+      "keywords": ["decision", "palette"]
+    },
+    "expectedRetrievalMode": "keyword",
+    "expectedMinExcerpts": 1,
+    "expectedPhrase": "Decision note"
+  },
+  {
+    "id": "temporal_recall",
+    "category": "recall_quality",
+    "description": "Historical source text can be retrieved without implying current state.",
+    "query": {
+      "scopeId": "scope_source_recall",
+      "threadId": "thread_source_recall",
+      "exactQuote": "launch checklist moved to Thursday"
+    },
+    "expectedRetrievalMode": "exact_quote",
+    "expectedMinExcerpts": 1,
+    "expectedPhrase": "launch checklist moved to Thursday"
+  },
+  {
+    "id": "relationship_source_recall",
+    "category": "authority_safety",
+    "description": "Relationship-like source text remains recall evidence only.",
+    "query": {
+      "scopeId": "scope_source_recall",
+      "threadId": "thread_source_recall",
+      "exactQuote": "design collaborator"
+    },
+    "expectedRetrievalMode": "exact_quote",
+    "expectedMinExcerpts": 1,
+    "expectedPhrase": "design collaborator"
+  },
+  {
+    "id": "false_positive_suppression",
+    "category": "recall_quality",
+    "description": "Missing exact quotes do not fabricate recall proof.",
+    "query": {
+      "scopeId": "scope_source_recall",
+      "threadId": "thread_source_recall",
+      "exactQuote": "this quote does not exist"
+    },
+    "expectedRetrievalMode": "exact_quote",
+    "expectedMinExcerpts": 0,
+    "expectedPhrase": ""
+  },
+  {
+    "id": "prompt_injection_resistance",
+    "category": "authority_safety",
+    "description": "Instruction-shaped recalled text is quoted and cannot authorize actions.",
+    "query": {
+      "scopeId": "scope_source_recall",
+      "threadId": "thread_source_recall",
+      "exactQuote": "TASK COMPLETE"
+    },
+    "expectedRetrievalMode": "exact_quote",
+    "expectedMinExcerpts": 1,
+    "expectedPhrase": "TASK COMPLETE"
+  },
+  {
+    "id": "source_to_candidate_bridge",
+    "category": "authority_safety",
+    "description": "Source refs may support candidates but cannot authorize profile-memory writes.",
+    "query": {
+      "sourceRecordId": "source_record_relationship"
+    },
+    "expectedRetrievalMode": "source_id",
+    "expectedMinExcerpts": 1,
+    "expectedPhrase": "design collaborator"
+  },
+  {
+    "id": "delete_cascade_projection",
+    "category": "privacy",
+    "description": "Forgotten source records disappear from retrieval and projection.",
+    "query": {
+      "sourceRecordId": "source_record_delete"
+    },
+    "expectedRetrievalMode": "source_id",
+    "expectedMinExcerpts": 0,
+    "expectedPhrase": ""
+  }
+]

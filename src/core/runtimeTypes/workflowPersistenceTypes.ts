@@ -41,6 +41,7 @@ export interface WorkflowObservation {
   recoveryPath?: string | null;
   linkedSkillName?: string | null;
   linkedSkillVerificationStatus?: "unverified" | "verified" | "failed" | null;
+  evidenceRefs?: readonly string[];
 }
 
 export interface WorkflowPattern {
@@ -66,6 +67,7 @@ export interface WorkflowPattern {
   recoveryPath?: string | null;
   linkedSkillName?: string | null;
   linkedSkillVerificationStatus?: "unverified" | "verified" | "failed" | null;
+  evidenceRefs?: readonly string[];
 }
 
 export interface WorkflowAdaptationResult {

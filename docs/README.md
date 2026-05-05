@@ -24,6 +24,7 @@ AgentBigBrain is built around a small set of runtime ideas:
 - typed action authority
 - governed execution
 - profile memory and episodic memory
+- Source Recall Archive
 - Stage 6.86 continuity
 - Markdown instruction skills
 - Obsidian and JSON projection

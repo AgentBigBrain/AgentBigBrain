@@ -7,6 +7,10 @@ import { readFile } from "node:fs/promises";
 
 import { withFileLock, writeFileAtomic } from "./fileLock";
 import { makeId } from "./ids";
+import {
+  normalizeSourceRecallRetrievalMode,
+  type SourceRecallRetrievalMode
+} from "./sourceRecall/contracts";
 
 const MAX_AUDIT_EVENTS = 5_000;
 
@@ -48,6 +52,12 @@ export interface MemoryAccessAuditEvent {
   probeWindowSize?: number;
   probeMatchCount?: number;
   probeMatchRatio?: number;
+  sourceRecallQueryHash?: string;
+  sourceRecallRetrievalMode?: SourceRecallRetrievalMode;
+  sourceRecallSourceRecordIds?: string[];
+  sourceRecallChunkIds?: string[];
+  sourceRecallTotalExcerptChars?: number;
+  sourceRecallBlockedRedactedCount?: number;
 }
 
 interface MemoryAccessAuditDocument {
@@ -80,6 +90,12 @@ interface AppendMemoryAccessAuditInput {
   probeWindowSize?: number;
   probeMatchCount?: number;
   probeMatchRatio?: number;
+  sourceRecallQueryHash?: string;
+  sourceRecallRetrievalMode?: SourceRecallRetrievalMode;
+  sourceRecallSourceRecordIds?: readonly string[];
+  sourceRecallChunkIds?: readonly string[];
+  sourceRecallTotalExcerptChars?: number;
+  sourceRecallBlockedRedactedCount?: number;
 }
 
 /**
@@ -198,6 +214,44 @@ function normalizeProbeSignals(value: unknown): string[] {
 }
 
 /**
+ * Converts values into bounded string-id collections for audit-only Source Recall references.
+ *
+ * **Why it exists:**
+ * Source Recall retrieval audit may identify returned records/chunks, but it must never persist
+ * raw source text, prompt text, or excerpts in the memory access log.
+ *
+ * **What it talks to:**
+ * - Uses local string normalization only.
+ *
+ * @param value - Candidate id collection.
+ * @returns Unique, trimmed id strings.
+ */
+function normalizeAuditIdList(value: unknown): string[] {
+  return normalizeProbeSignals(value).slice(0, 100);
+}
+
+/**
+ * Normalizes optional SHA-256-like query hashes without accepting raw query text.
+ *
+ * **Why it exists:**
+ * Source Recall retrieval audit should record bounded query fingerprints only. Malformed values are
+ * dropped instead of repaired from raw text.
+ *
+ * **What it talks to:**
+ * - Uses local validation only.
+ *
+ * @param value - Candidate query hash.
+ * @returns Query hash when valid, otherwise undefined.
+ */
+function normalizeSourceRecallQueryHash(value: unknown): string | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  return /^[a-f0-9]{64}$/i.test(trimmed) ? trimmed.toLowerCase() : undefined;
+}
+
+/**
  * Converts values into normalized cutover-gate reasons form for consistent downstream use.
  *
  * **Why it exists:**
@@ -267,6 +321,13 @@ function coerceMemoryAccessAuditDocument(input: unknown): MemoryAccessAuditDocum
       const probeWindowSize = toNonNegativeInteger(raw.probeWindowSize);
       const probeMatchCount = toNonNegativeInteger(raw.probeMatchCount);
       const probeMatchRatio = toUnitIntervalNumber(raw.probeMatchRatio);
+      const sourceRecallQueryHash = normalizeSourceRecallQueryHash(raw.sourceRecallQueryHash);
+      const sourceRecallSourceRecordIds = normalizeAuditIdList(raw.sourceRecallSourceRecordIds);
+      const sourceRecallChunkIds = normalizeAuditIdList(raw.sourceRecallChunkIds);
+      const hasSourceRecallAudit =
+        Boolean(sourceRecallQueryHash) ||
+        sourceRecallSourceRecordIds.length > 0 ||
+        sourceRecallChunkIds.length > 0;
       return {
         id: typeof raw.id === "string" && raw.id.trim().length > 0 ? raw.id : makeId("memory_access"),
         recordedAt:
@@ -303,7 +364,21 @@ function coerceMemoryAccessAuditDocument(input: unknown): MemoryAccessAuditDocum
         probeSignals: probeSignals.length > 0 ? probeSignals : undefined,
         probeWindowSize: eventType === "PROBING_DETECTED" ? probeWindowSize : undefined,
         probeMatchCount: eventType === "PROBING_DETECTED" ? probeMatchCount : undefined,
-        probeMatchRatio: eventType === "PROBING_DETECTED" ? probeMatchRatio : undefined
+        probeMatchRatio: eventType === "PROBING_DETECTED" ? probeMatchRatio : undefined,
+        sourceRecallQueryHash,
+        sourceRecallRetrievalMode:
+          hasSourceRecallAudit
+            ? normalizeSourceRecallRetrievalMode(raw.sourceRecallRetrievalMode)
+            : undefined,
+        sourceRecallSourceRecordIds:
+          sourceRecallSourceRecordIds.length > 0 ? sourceRecallSourceRecordIds : undefined,
+        sourceRecallChunkIds: sourceRecallChunkIds.length > 0 ? sourceRecallChunkIds : undefined,
+        sourceRecallTotalExcerptChars: hasSourceRecallAudit
+          ? toNonNegativeInteger(raw.sourceRecallTotalExcerptChars)
+          : undefined,
+        sourceRecallBlockedRedactedCount: hasSourceRecallAudit
+          ? toNonNegativeInteger(raw.sourceRecallBlockedRedactedCount)
+          : undefined
       } satisfies MemoryAccessAuditEvent;
     });
 
@@ -366,6 +441,13 @@ export class MemoryAccessAuditStore {
         : "retrieval";
       const probeSignals = normalizeProbeSignals(input.probeSignals);
       const cutoverGateReasons = normalizeCutoverGateReasons(input.promptCutoverGateReasons);
+      const sourceRecallQueryHash = normalizeSourceRecallQueryHash(input.sourceRecallQueryHash);
+      const sourceRecallSourceRecordIds = normalizeAuditIdList(input.sourceRecallSourceRecordIds);
+      const sourceRecallChunkIds = normalizeAuditIdList(input.sourceRecallChunkIds);
+      const hasSourceRecallAudit =
+        Boolean(sourceRecallQueryHash) ||
+        sourceRecallSourceRecordIds.length > 0 ||
+        sourceRecallChunkIds.length > 0;
       const event: MemoryAccessAuditEvent = {
         id: makeId("memory_access"),
         recordedAt: new Date().toISOString(),
@@ -398,7 +480,21 @@ export class MemoryAccessAuditStore {
         probeMatchCount:
           eventType === "PROBING_DETECTED" ? toNonNegativeInteger(input.probeMatchCount) : undefined,
         probeMatchRatio:
-          eventType === "PROBING_DETECTED" ? toUnitIntervalNumber(input.probeMatchRatio) : undefined
+          eventType === "PROBING_DETECTED" ? toUnitIntervalNumber(input.probeMatchRatio) : undefined,
+        sourceRecallQueryHash,
+        sourceRecallRetrievalMode:
+          hasSourceRecallAudit
+            ? normalizeSourceRecallRetrievalMode(input.sourceRecallRetrievalMode)
+            : undefined,
+        sourceRecallSourceRecordIds:
+          sourceRecallSourceRecordIds.length > 0 ? sourceRecallSourceRecordIds : undefined,
+        sourceRecallChunkIds: sourceRecallChunkIds.length > 0 ? sourceRecallChunkIds : undefined,
+        sourceRecallTotalExcerptChars: hasSourceRecallAudit
+          ? toNonNegativeInteger(input.sourceRecallTotalExcerptChars)
+          : undefined,
+        sourceRecallBlockedRedactedCount: hasSourceRecallAudit
+          ? toNonNegativeInteger(input.sourceRecallBlockedRedactedCount)
+          : undefined
       };
 
       document.events.push(event);

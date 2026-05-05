@@ -413,6 +413,7 @@ Main surfaces:
 - `src/organs/memoryContext/`
 - `src/core/profileMemoryStore.ts`
 - `src/core/profileMemoryRuntime/`
+- `src/core/sourceRecall/`
 - `src/core/stage6_86/`
 - `src/core/memoryAccessAudit.ts`
 
@@ -428,6 +429,12 @@ candidates, voice transcripts, document text, document/model summaries, media su
 mutations, and legacy compatibility paths carry different source authority. Lower-trust sources can
 remain useful as context or review evidence, but they stay candidate/support-only unless the memory
 intent, source lane, truth governance, and family policy allow a durable write.
+
+Source Recall is the quoted-evidence layer for original source material. It stores source material
+as `scope -> thread -> source record -> chunk`, with lifecycle, freshness, source role, capture
+class, source authority, retrieval mode, retrieval authority, and explicit non-authority flags.
+Source Recall can remind the runtime what was said or seen. It cannot decide current truth, planner
+authority, approval, safety, completion proof, or memory-write authority.
 
 Stage 6.86 continuity is the live runtime layer for the active conversation. It owns the
 conversation stack, entity graph, open loops, pulse state, and runtime-action continuity. It can
@@ -445,6 +452,7 @@ The main memory surfaces are:
 |---|---|
 | Profile memory graph | durable personal facts, relationships, and time-aware history |
 | Episodic memory | remembered situations, outcomes, and follow-up state |
+| Source Recall Archive | quoted source evidence for what was said or seen, not truth or permission |
 | Stage 6.86 continuity | active conversation stack, entity graph, open loops, pulse state |
 | Governance memory | append-only governance outcomes |
 | Semantic memory | reusable lessons and concept-linked recall |

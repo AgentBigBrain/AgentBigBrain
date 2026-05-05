@@ -4,6 +4,12 @@
 
 import type { PulseEmissionRecordV1 } from "../../core/stage6_86PulseCandidates";
 import type {
+  SourceRecallCaptureClass,
+  SourceRecallSourceKind,
+  SourceRecallSourceRole,
+  SourceRecallSourceTimeKind
+} from "../../core/sourceRecall/contracts";
+import type {
   ConversationDomainContext,
   ConversationDomainLane,
   ConversationDomainRoutingMode
@@ -38,6 +44,19 @@ export type ConversationTurnMetadataSource =
 export interface ConversationTurnMetadata {
   assistantTurnKind?: ConversationAssistantTurnKind;
   assistantTurnKindSource?: ConversationTurnMetadataSource;
+  sourceRecall?: ConversationTurnSourceRecallMetadata;
+}
+
+export interface ConversationTurnSourceRecallMetadata {
+  status: "captured" | "blocked" | "failed";
+  sourceRecordId?: string;
+  sourceKind: Extract<SourceRecallSourceKind, "conversation_turn" | "assistant_turn" | "task_input" | "task_summary">;
+  sourceRole: Extract<SourceRecallSourceRole, "user" | "assistant" | "runtime">;
+  captureClass: Extract<SourceRecallCaptureClass, "ordinary_source" | "assistant_output" | "operational_output">;
+  sourceTimeKind: SourceRecallSourceTimeKind;
+  sourceRefAvailable: boolean;
+  capturedAt?: string;
+  diagnosticErrorCode?: string;
 }
 export type ConversationClassifierKind = "follow_up" | "proposal_reply" | "pulse_lexical";
 export type ConversationClassifierCategory =

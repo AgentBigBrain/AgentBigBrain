@@ -81,6 +81,9 @@ export function buildProfileMemoryIngestMutationEnvelope(
       threadKey: input.provenance.threadKey,
       sourceSurface: input.provenance.sourceSurface,
       sourceFingerprint: input.provenance.sourceFingerprint,
+      ...(input.provenance.sourceRecallRefs && input.provenance.sourceRecallRefs.length > 0
+        ? { sourceRecallRefs: input.provenance.sourceRecallRefs }
+        : {}),
       normalizedInputIdentity
     },
     candidateRefs,

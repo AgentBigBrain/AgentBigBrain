@@ -304,6 +304,7 @@ supports bounded cleanup of older graph noise.
 |---|---|
 | Profile memory graph | durable personal facts, relationships, and time-aware history |
 | Episodic memory | remembered situations, outcomes, and follow-up context |
+| Source Recall Archive | quoted evidence for what was said or seen, without truth or execution authority |
 | Stage 6.86 continuity | conversation stack, entity graph, open loops, pulse state |
 | Governance memory | reviewable governance outcomes |
 | Semantic memory | lessons and concept-linked recall |

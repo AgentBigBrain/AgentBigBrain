@@ -20,6 +20,7 @@ import type {
   ConversationTurnMetadataSource
 } from "./sessionStateContracts";
 import type { RecoveryFailureClass } from "../../core/autonomy/contracts";
+import { normalizeConversationTurnSourceRecallMetadata } from "./sessionNormalizationSourceRecallRecords";
 export {
   normalizeActiveWorkspaceRecord,
   normalizeBrowserSessionRecord,
@@ -295,12 +296,15 @@ function normalizeConversationTurnMetadata(
   const assistantTurnKindSource = normalizeConversationTurnMetadataSource(
     metadata.assistantTurnKindSource
   );
-  if (!assistantTurnKind || !assistantTurnKindSource) {
+  const sourceRecall = normalizeConversationTurnSourceRecallMetadata(metadata.sourceRecall);
+  if (!sourceRecall && (!assistantTurnKind || !assistantTurnKindSource)) {
     return undefined;
   }
   return {
-    assistantTurnKind,
-    assistantTurnKindSource
+    ...(assistantTurnKind && assistantTurnKindSource
+      ? { assistantTurnKind, assistantTurnKindSource }
+      : {}),
+    ...(sourceRecall ? { sourceRecall } : {})
   };
 }
 

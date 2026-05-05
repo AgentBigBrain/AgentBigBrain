@@ -29,6 +29,8 @@ contract and persistence entrypoint while:
 - `sessionNormalization.ts` owns canonical session and state normalization
 - `sessionNormalizationRecords.ts` owns the canonical record-level normalization helpers used by the
   stable session-normalization entrypoint
+- `sessionNormalizationSourceRecallRecords.ts` owns Source Recall turn-metadata normalization so
+  quoted-evidence metadata stays separate from the already-capped record-normalization surface
 - `sessionNormalizationOwnershipRecords.ts` owns the extracted browser, path, workspace, and
   classifier normalization helpers reused by the stable record-normalization entrypoint
 - `src/core/sessionContext.ts` owns the shared conversation-domain contract and reducers that the

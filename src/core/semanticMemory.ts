@@ -12,6 +12,8 @@ import { makeId } from "./ids";
 import { countLanguageTermOverlap } from "./languageRuntime/languageScoring";
 import { extractSemanticConceptTerms } from "./languageRuntime/queryIntentTerms";
 import type { ConversationDomainLane } from "./sessionContext";
+import type { SourceRecallSourceRef } from "./sourceRecall/contracts";
+import { normalizeSourceRecallSourceRefs } from "./sourceRecall/sourceRecallMemoryBridge";
 import { SqliteVectorStore } from "./vectorStore";
 
 const MAX_LESSONS = 300;
@@ -41,6 +43,7 @@ export interface SemanticLesson {
   memoryType: LessonMemoryType;
   domainTag: SemanticLessonDomainTag | null;
   signalMetadata?: LessonSignalMetadataV1;
+  sourceRecallRefs?: readonly SourceRecallSourceRef[];
 }
 
 export interface SemanticMemory {
@@ -173,8 +176,10 @@ function buildLesson(
   committedByAgentId: string,
   memoryType: LessonMemoryType = "experience",
   signalMetadata: LessonSignalMetadataV1 | null = null,
-  domainTag: SemanticLessonDomainTag | null = null
+  domainTag: SemanticLessonDomainTag | null = null,
+  sourceRecallRefs: readonly SourceRecallSourceRef[] = []
 ): SemanticLesson {
+  const normalizedSourceRecallRefs = normalizeSourceRecallSourceRefs(sourceRecallRefs);
   return {
     id: makeId("lesson"),
     text,
@@ -185,7 +190,10 @@ function buildLesson(
     relatedLessonIds: [],
     memoryType,
     domainTag: normalizeSemanticLessonDomainTag(domainTag),
-    signalMetadata: signalMetadata ?? undefined
+    signalMetadata: signalMetadata ?? undefined,
+    ...(normalizedSourceRecallRefs.length > 0
+      ? { sourceRecallRefs: normalizedSourceRecallRefs }
+      : {})
   };
 }
 
@@ -325,6 +333,7 @@ function coerceLegacyMemory(input: unknown): SemanticMemory {
             : "experience";
         const signalMetadata = normalizeLessonSignalMetadata(rawLesson.signalMetadata);
         const domainTag = normalizeSemanticLessonDomainTag(rawLesson.domainTag);
+        const sourceRecallRefs = normalizeSourceRecallSourceRefs(rawLesson.sourceRecallRefs);
         return {
           id:
             typeof rawLesson.id === "string" && rawLesson.id.trim()
@@ -345,7 +354,8 @@ function coerceLegacyMemory(input: unknown): SemanticMemory {
           relatedLessonIds,
           memoryType,
           domainTag,
-          signalMetadata: signalMetadata ?? undefined
+          signalMetadata: signalMetadata ?? undefined,
+          ...(sourceRecallRefs.length > 0 ? { sourceRecallRefs } : {})
         } satisfies SemanticLesson;
       })
       .filter((lesson) => lesson.text.trim().length > 0);
@@ -423,6 +433,8 @@ export class SemanticMemoryStore {
    * @param committedByAgentId - Stable identifier used to reference an entity or record.
    * @param memoryType - Value for memory type.
    * @param signalMetadata - Value for signal metadata.
+   * @param domainTag - Optional domain tag used by semantic retrieval.
+   * @param sourceRecallRefs - Optional evidence-only Source Recall refs.
    * @returns Promise resolving to void.
    */
   async appendLesson(
@@ -431,7 +443,8 @@ export class SemanticMemoryStore {
     committedByAgentId: string = MAIN_AGENT_ID,
     memoryType: LessonMemoryType = "experience",
     signalMetadata: LessonSignalMetadataV1 | null = null,
-    domainTag: SemanticLessonDomainTag | null = null
+    domainTag: SemanticLessonDomainTag | null = null,
+    sourceRecallRefs: readonly SourceRecallSourceRef[] = []
   ): Promise<void> {
     const normalized = lessonText.trim();
     if (!normalized) {
@@ -459,7 +472,8 @@ export class SemanticMemoryStore {
         normalizedAgentId,
         memoryType,
         signalMetadata,
-        domainTag
+        domainTag,
+        sourceRecallRefs
       );
       persistedLessonId = lesson.id;
       this.connectLesson(memory.lessons, lesson);
