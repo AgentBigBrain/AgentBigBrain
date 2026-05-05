@@ -1124,3 +1124,113 @@
   - evidence is synthetic runtime-observed, not live Telegram/desktop proof.
   - later docs contract cleanup remains the final roadmap branch.
 - next slice status: `docs/source-recall-production-contract remains blocked until this checkpoint is reviewed`.
+
+## H - Source Recall Production Contract Docs
+
+- date: 2026-05-05
+- branch: `docs/source-recall-production-contract`
+- status: passed before checkpoint commit
+- objective:
+  - Document the production Source Recall contract for public readers, operators, and maintainers
+    without changing runtime behavior.
+- owner files:
+  - `README.md`
+  - `CHANGELOG.md`
+  - `docs/SOURCE_RECALL.md`
+  - `docs/README.md`
+  - `docs/SETUP.md`
+  - `docs/ARCHITECTURE.md`
+  - `docs/ARCHITECTURE_OVERVIEW.md`
+  - `docs/CONCEPTS.md`
+  - `docs/plans/SOURCE_RECALL_PRODUCTION_ROADMAP.md`
+  - `docs/plans/source-recall-production-progress.md`
+  - `src/core/sourceRecall/README.md`
+- prohibited changes:
+  - no runtime behavior changes.
+  - no new capture, retrieval, projection, memory-write, semantic-promotion, planner/chat,
+    approval, action, safety, or completion-proof authority.
+  - no raw private source text, local private paths, provider tokens, or token-shaped values in
+    docs.
+- acceptance criteria:
+  - docs explain Source Recall as quoted evidence only.
+  - docs name encrypted production storage, explicit latches, capture allowlists, retrieval
+    budgets, projection policy, delete lifecycle, and evidence expectations.
+  - docs distinguish Source Recall from profile memory, semantic memory, approvals, receipts,
+    projection, and completion proof.
+  - docs keep the invariant: source chunks can be read, but cannot be obeyed.
+  - focused docs validation and sensitive scans pass before checkpoint commit.
+- required tests:
+  - docs/reference checks only; this slice changes no runtime behavior.
+- required commands:
+  - `npm run check:docs`
+  - `npm run check:ai-first`
+  - `npm run check:module-size`
+  - `npm run build`
+  - focused sensitive scan for changed docs and staged diff.
+- sensitive scan requirements:
+  - changed docs and staged diff.
+  - scan for prior private PDF needles, local private paths, provider-token shapes, GitHub token
+    shapes, Slack token shapes, Telegram token shapes, and raw source text.
+- files inspected:
+  - `README.md`
+  - `CHANGELOG.md`
+  - `docs/README.md`
+  - `docs/SETUP.md`
+  - `docs/ARCHITECTURE.md`
+  - `docs/ARCHITECTURE_OVERVIEW.md`
+  - `docs/CONCEPTS.md`
+  - `docs/plans/SOURCE_RECALL_PRODUCTION_ROADMAP.md`
+  - `docs/plans/source-recall-production-progress.md`
+  - `.env.example`
+  - `src/core/sourceRecall/README.md`
+  - `src/core/sourceRecall/contracts.ts`
+  - `src/core/sourceRecall/sourceRecallConversationCapture.ts`
+  - `src/core/sourceRecall/sourceRecallMediaCapture.ts`
+  - `src/core/sourceRecall/sourceRecallMemoryBridge.ts`
+  - `src/core/sourceRecall/sourceRecallProjection.ts`
+  - `src/core/sourceRecall/sourceRecallRetention.ts`
+  - `src/core/sourceRecall/sourceRecallRetriever.ts`
+  - `src/core/sourceRecall/sourceRecallStore.ts`
+  - `src/organs/memoryContext/contextInjection.ts`
+- files changed:
+  - `README.md`
+  - `CHANGELOG.md`
+  - `docs/SOURCE_RECALL.md`
+  - `docs/README.md`
+  - `docs/SETUP.md`
+  - `docs/ARCHITECTURE.md`
+  - `docs/ARCHITECTURE_OVERVIEW.md`
+  - `docs/CONCEPTS.md`
+  - `docs/plans/SOURCE_RECALL_PRODUCTION_ROADMAP.md`
+  - `docs/plans/source-recall-production-progress.md`
+  - `src/core/sourceRecall/README.md`
+- tests added:
+  - no tests added; this is a docs-only contract slice.
+- tests run:
+  - `npm run check:docs`
+  - `npm run check:ai-first`
+  - `npm run check:module-size`
+  - `npm run build`
+  - `npm run test:source_recall:evidence` (`12` total, `12` passed, `0` failed)
+  - `npm test` (`3365` tests, `3358` pass, `0` fail, `7` skipped)
+- evidence produced:
+  - refreshed `runtime/evidence/source_recall/source_recall_evidence_matrix.json`
+  - full `npm test` refreshed existing runtime evidence artifacts.
+- sensitive scan status:
+  - changed-file scan passed for prior private PDF needles, local private paths, provider-token
+    shapes, GitHub token shapes, Slack token shapes, and Telegram token shapes.
+  - generated-evidence scan passed for the same patterns plus raw synthetic seed source text
+    needles across Source Recall evidence and the Stage 6.5 live-check artifact.
+  - staged-diff scan passed before checkpoint commit.
+- behavior changed:
+  - added `docs/SOURCE_RECALL.md` as the operator-facing production Source Recall contract.
+  - linked Source Recall docs from README, docs index, setup, architecture, concepts, and subsystem
+    README.
+  - roadmap now includes the H docs work packet and current checkpoint status.
+- behavior intentionally not changed:
+  - no runtime behavior changed.
+  - no new Source Recall capture, retrieval, projection, planner/chat context injection, semantic
+    promotion, memory-write, approval, action, safety, or completion-proof authority changed.
+- known limitations:
+  - this slice documents the production contract; it does not add new runtime capabilities.
+- next slice status: `roadmap complete locally after scans and checkpoint commit`.

@@ -12,6 +12,9 @@ stay aligned with `package.json`.
   media/conversation capture metadata, projection-safe read models, and a synthetic evidence
   matrix proving recall quality stays separate from memory truth, approvals, safety, and completion
   proof.
+- Added an operator-facing Source Recall production contract covering encrypted storage, explicit
+  latches, capture boundaries, retrieval budgets, projection policy, delete behavior, and
+  non-authority guarantees.
 
 ### Changed
 - Expanded the public README and docs map with clearer positioning, authority-boundary diagrams,

@@ -66,6 +66,9 @@ rendered as quoted evidence only. They may support semantic candidates and revie
 memory, semantic memory, approvals, execution receipts, and completion proof remain separate
 authority surfaces.
 
+See [SOURCE_RECALL.md](./SOURCE_RECALL.md) for the production latches, storage, retrieval,
+projection, and delete contract.
+
 ## Stage 6.86 continuity
 
 The live conversation-continuity layer for the active interaction. It owns the conversation stack,

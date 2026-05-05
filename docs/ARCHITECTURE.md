@@ -434,7 +434,8 @@ Source Recall is the quoted-evidence layer for original source material. It stor
 as `scope -> thread -> source record -> chunk`, with lifecycle, freshness, source role, capture
 class, source authority, retrieval mode, retrieval authority, and explicit non-authority flags.
 Source Recall can remind the runtime what was said or seen. It cannot decide current truth, planner
-authority, approval, safety, completion proof, or memory-write authority.
+authority, approval, safety, completion proof, or memory-write authority. The operator-facing
+production contract is in [SOURCE_RECALL.md](./SOURCE_RECALL.md).
 
 Stage 6.86 continuity is the live runtime layer for the active conversation. It owns the
 conversation stack, entity graph, open loops, pulse state, and runtime-action continuity. It can

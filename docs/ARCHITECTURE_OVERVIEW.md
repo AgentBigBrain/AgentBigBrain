@@ -84,6 +84,8 @@ sequenceDiagram
 ```mermaid
 flowchart LR
   Input["User / media / document / review action"] --> Source["Source authority"]
+  Input --> Recall["Source Recall quoted evidence"]
+  Recall -. "quoted evidence only" .-> Candidate
   Source --> Policy["Ingest policy"]
   Policy --> Candidate["Semantic or exact candidate"]
   Candidate --> Governance["Truth governance"]
@@ -95,6 +97,9 @@ flowchart LR
   Support --> Read
   Quarantine --> Review["Review surfaces"]
 ```
+
+Source Recall can remind the runtime what was said or seen. It cannot decide memory truth,
+approval, side-effect permission, safety, or completion proof.
 
 ## Projection model
 

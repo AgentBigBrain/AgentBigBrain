@@ -6,6 +6,10 @@ Owns the Source Recall contract surface for source records, chunks, excerpts, an
 Source Recall can remind AgentBigBrain what was said or seen. It cannot decide what is true,
 allowed, approved, completed, or safe to act on.
 
+The operator-facing production contract lives in
+[docs/SOURCE_RECALL.md](../../../docs/SOURCE_RECALL.md). Keep this subsystem README focused on
+implementation ownership and invariants.
+
 ## Inputs
 
 - Source-kind labels such as `conversation_turn`, `assistant_turn`, `document_text`, and

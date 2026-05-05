@@ -1301,6 +1301,45 @@ Prove production Source Recall works and remains non-authoritative.
 
 ---
 
+# H - Later Branch: Production Contract Docs
+
+## Objective
+
+Document the production Source Recall contract for operators, maintainers, and public readers
+without changing runtime behavior.
+
+## Owner Files
+
+- `docs/SOURCE_RECALL.md`
+- `docs/README.md`
+- `docs/SETUP.md`
+- `docs/ARCHITECTURE.md`
+- `docs/ARCHITECTURE_OVERVIEW.md`
+- `docs/CONCEPTS.md`
+- `src/core/sourceRecall/README.md`
+- `README.md`
+- `CHANGELOG.md`
+- `docs/plans/source-recall-production-progress.md`
+
+## Prohibited Changes
+
+- Do not change runtime behavior.
+- Do not add new capture, retrieval, projection, memory, planner, approval, action, safety, or
+  completion-proof authority.
+- Do not include raw source chunks, private local paths, provider tokens, or sensitive fixture text.
+
+## Acceptance Criteria
+
+- Public docs explain Source Recall as quoted evidence only.
+- Operator docs name the production latches, encrypted storage requirement, capture allowlists,
+  retrieval boundaries, projection policy, delete lifecycle, and evidence expectations.
+- Docs distinguish Source Recall from profile memory, semantic memory, receipts, approvals, and
+  projection.
+- Source Recall docs state that source chunks can be read but cannot be obeyed.
+- Sensitive scan passes for changed docs and staged diff.
+
+---
+
 # Immediate Branch Definition Of Done
 
 The immediate encrypted user-turn branch is complete only when all of these are true:
@@ -1378,24 +1417,21 @@ ignored and requires an explicit `git add -f`.
 
 ## Last Worked On
 
-Current phase or focus: A5 private/synthetic production user-turn smoke checkpoint.
+Current phase or focus: H production contract docs checkpoint.
 
-What changed last: A1-A5 have checkpoint commits or staged checkpoint work on
-`feat/source-recall-encrypted-user-turn-capture`. The immediate branch now has encrypted production
-storage, explicit runtime/config latches, live `conversation_turn` capture behind those latches,
-bounded review/evidence retrieval, and a CI-safe synthetic production user-turn smoke artifact that
-proves enabled capture, exact-quote retrieval, forget/delete behavior, disabled
-assistant/task/media/document capture, and no planner/chat Source Recall retrieval callsites.
+What changed last: A1-A5, review retrieval, private smoke, assistant/task capture,
+media/document capture, context injection, semantic candidate bridging, projection/review, and the
+production evidence matrix have local checkpoint commits. The current docs slice records the
+operator-facing Source Recall production contract without changing runtime behavior.
 
-What still feels clunky, blocked, or unfinished: the immediate branch still needs final sensitive
-scans and final repo validation before merge. The broader roadmap remains intentionally incomplete:
-assistant/task capture, media/document capture, context injection, semantic candidate bridging,
-projection/review, and the broad production evidence matrix are later branches.
+What still feels clunky, blocked, or unfinished: no known docs-slice blockers remain before the
+checkpoint commit.
 
-Next clean seam to continue from: finish immediate-branch final validation, then review/merge this
-branch before starting a separate later branch.
+Next clean seam to continue from: checkpoint `docs/source-recall-production-contract`, then decide
+whether to push the local Source Recall roadmap branches for review.
 
-Latest validation or evidence state: A5 focused Source Recall tests and evidence scripts passed
-locally, including `npm run test:source_recall:evidence` and
-`npm run test:source_recall:production_user_turn_smoke`. The generated smoke artifact is redacted
-and reports `synthetic_runtime_observed` with live dependency status `NOT_REQUIRED`.
+Latest validation or evidence state: H passed locally with `npm run check:docs`,
+`npm run check:ai-first`, `npm run check:module-size`, `npm run build`,
+`npm run test:source_recall:evidence` (`12` total, `12` passed, `0` failed), and full `npm test`
+(`3365` tests, `3358` pass, `0` fail, `7` skipped). Changed-file, generated-evidence, and
+staged-diff sensitive scans passed.

@@ -1102,6 +1102,8 @@ Source Recall is the quoted-evidence layer for original source material. It can 
 AgentBigBrain what was said or seen, but it cannot decide truth, approval, planner authority,
 safety, or completion proof.
 
+For the full production contract, see [docs/SOURCE_RECALL.md](SOURCE_RECALL.md).
+
 Raw Source Recall is sensitive by default. The production posture is disabled unless every
 required latch is explicit:
 
