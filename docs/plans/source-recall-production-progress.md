@@ -736,3 +736,117 @@
   - Source Recall retrieval audit is currently represented by the retrieval bundle/audit event and
     rendered context metadata; broader access-audit integration remains a later roadmap concern.
 - next slice status: `semantic candidate bridge remains blocked until this checkpoint is reviewed`.
+
+## E - Source Recall To Semantic Candidate Bridge
+
+- date: 2026-05-05
+- branch: `feat/source-recall-semantic-candidate-bridge`
+- status: passed before checkpoint commit
+- objective:
+  - Let Source Recall source refs support semantic memory candidates as provenance while preserving
+    the rule that truth governance decides any durable memory promotion.
+- owner files:
+  - `src/core/sourceRecall/sourceRecallMemoryBridge.ts`
+  - `src/core/sourceRecall/README.md`
+  - `src/core/profileMemoryRuntime/contracts.ts`
+  - `src/core/profileMemoryRuntime/profileMemorySemanticRelationshipCandidates.ts`
+  - `src/core/profileMemoryRuntime/README.md`
+  - `src/interfaces/conversationRuntime/conversationProfileMemoryWrite.ts`
+  - `tests/core/sourceRecallMemoryBridge.test.ts`
+  - `tests/core/profileMemoryWriteAuthorityGates.test.ts`
+  - `tests/interfaces/conversationProfileMemoryWrite.test.ts`
+- prohibited changes:
+  - no Source Recall text may become a semantic candidate by itself.
+  - no source ref may grant profile-memory write authority, current truth, approval, action,
+    safety, or completion-proof authority.
+  - no new Source Recall retrieval, context injection, projection, or capture surface.
+  - no broad relationship phrase packs or lexical expansion.
+- acceptance criteria:
+  - semantic relationship candidates can carry normalized Source Recall refs as provenance.
+  - candidate refs are copied into the profile-memory provenance seam as source refs only.
+  - candidates with only Source Recall refs but without valid semantic evidence are rejected.
+  - missing route-approved memory write policy still blocks durable profile-memory writes.
+  - mutation envelopes may cite Source Recall refs without treating them as truth, approval, action,
+    safety, or completion proof.
+- required tests:
+  - source recall memory bridge tests for candidate-ref normalization and non-authority flags.
+  - profile-memory authority-gate tests proving refs do not bypass route-approved ingest policy.
+  - conversation profile-memory write tests proving candidate refs enter provenance only.
+- required commands:
+  - `npx tsx --test tests/core/sourceRecallMemoryBridge.test.ts tests/core/profileMemoryWriteAuthorityGates.test.ts tests/interfaces/conversationProfileMemoryWrite.test.ts`
+  - `npm run check:test-types`
+  - `npm run check:no-unused-locals`
+  - `npm run build`
+  - `npm run check:docs`
+  - `npm run check:module-size`
+  - `npm test` before checkpoint commit when focused validation is green.
+- sensitive scan requirements:
+  - changed files, staged diff, generated evidence if any, and token-shaped patterns.
+  - no raw private source chunks, local private paths, provider tokens, or private fixture text may
+    be added to docs/tests/evidence.
+- files inspected:
+  - `docs/plans/SOURCE_RECALL_PRODUCTION_ROADMAP.md`
+  - `docs/plans/source-recall-production-progress.md`
+  - `src/core/profileMemoryRuntime/README.md`
+  - `src/core/profileMemoryRuntime/contracts.ts`
+  - `src/core/profileMemoryRuntime/profileMemorySemanticRelationshipCandidates.ts`
+  - `src/core/profileMemoryRuntime/profileMemoryTruthGovernance.ts`
+  - `src/core/profileMemoryRuntime/profileMemoryTruthGovernanceSources.ts`
+  - `src/core/sourceRecall/README.md`
+  - `src/core/sourceRecall/contracts.ts`
+  - `src/core/sourceRecall/sourceRecallMemoryBridge.ts`
+  - `src/interfaces/conversationRuntime/conversationProfileMemoryWrite.ts`
+  - `tests/core/profileMemoryWriteAuthorityGates.test.ts`
+  - `tests/core/sourceRecallMemoryBridge.test.ts`
+  - `tests/interfaces/conversationProfileMemoryWrite.test.ts`
+- files changed:
+  - `docs/plans/source-recall-production-progress.md`
+  - `src/core/profileMemoryRuntime/README.md`
+  - `src/core/profileMemoryRuntime/contracts.ts`
+  - `src/core/profileMemoryRuntime/profileMemorySemanticRelationshipCandidates.ts`
+  - `src/core/sourceRecall/README.md`
+  - `src/core/sourceRecall/sourceRecallMemoryBridge.ts`
+  - `src/interfaces/conversationRuntime/conversationProfileMemoryWrite.ts`
+  - `tests/core/profileMemoryWriteAuthorityGates.test.ts`
+  - `tests/core/sourceRecallMemoryBridge.test.ts`
+  - `tests/interfaces/conversationProfileMemoryWrite.test.ts`
+- tests added:
+  - Source Recall bridge tests proving source refs can support semantic relationship candidates only
+    as provenance and cannot make invalid candidates usable.
+  - profile-memory authority-gate coverage proving source refs do not bypass route-approved memory
+    write policy.
+  - conversation profile-memory request coverage proving semantic candidate refs are copied into
+    provenance only, with all authority flags false.
+- tests run:
+  - `npx tsx --test tests/core/sourceRecallMemoryBridge.test.ts tests/core/profileMemoryWriteAuthorityGates.test.ts tests/interfaces/conversationProfileMemoryWrite.test.ts`
+  - `npm run check:test-types`
+  - `npm run check:no-unused-locals`
+  - `npm run build`
+  - `npm run check:docs`
+  - `npm run check:module-size`
+  - `npm test` (`3360` tests, `3353` pass, `0` fail, `7` skipped)
+- evidence produced:
+  - no new evidence artifact was required for this slice.
+- sensitive scan status:
+  - changed-file scan passed for prior private PDF needles, local private paths, provider-token
+    shapes, GitHub token shapes, Slack token shapes, and Telegram token shapes.
+  - no new generated Source Recall evidence artifact was produced by this slice.
+  - staged-diff scan passed before checkpoint commit.
+- behavior changed:
+  - semantic relationship candidate inputs and validated relationship metadata can now carry
+    normalized Source Recall refs.
+  - Source Recall bridge helpers can attach refs to semantic candidates and collect deduped refs
+    from validated fact candidates.
+  - conversation profile-memory write requests copy candidate source refs into bounded provenance
+    so mutation envelopes can cite them as source evidence.
+- behavior intentionally not changed:
+  - Source Recall refs do not create semantic candidates without typed semantic/review evidence.
+  - Source Recall refs do not authorize profile-memory writes or semantic lesson commits.
+  - Source Recall refs do not become current truth, approval authority, action authority, safety
+    authority, or completion-proof authority.
+  - no retrieval, capture, context-injection, projection, lexical expansion, or Obsidian behavior was
+    added.
+- known limitations:
+  - candidate refs currently flow through relationship semantic candidates and request provenance;
+    broader episode/source-ref attribution remains a later bridge concern if needed.
+- next slice status: `projection and review remains blocked until this checkpoint is reviewed`.

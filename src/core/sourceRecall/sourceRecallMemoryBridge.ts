@@ -3,6 +3,10 @@
  */
 
 import type { ProfileMemoryWriteProvenance } from "../profileMemoryRuntime/contracts";
+import type {
+  ProfileSemanticRelationshipCandidateInput,
+  ProfileValidatedFactCandidateInput
+} from "../profileMemoryRuntime/contracts";
 import {
   buildSourceRecallAuthorityFlags,
   type SourceRecallExcerpt,
@@ -108,6 +112,50 @@ export function attachSourceRecallRefsToProfileMemoryProvenance(
 }
 
 /**
+ * Attaches Source Recall refs to typed semantic relationship candidates as provenance only.
+ *
+ * @param candidates - Semantic candidates produced by a model or approved review path.
+ * @param refs - Evidence-only Source Recall refs that support the candidate text.
+ * @returns Candidates with normalized Source Recall refs attached when refs are valid.
+ */
+export function attachSourceRecallRefsToSemanticRelationshipCandidates(
+  candidates: readonly ProfileSemanticRelationshipCandidateInput[],
+  refs: readonly SourceRecallSourceRef[]
+): readonly ProfileSemanticRelationshipCandidateInput[] {
+  const sourceRecallRefs = normalizeSourceRecallSourceRefs(refs);
+  if (sourceRecallRefs.length === 0) {
+    return candidates;
+  }
+  return candidates.map((candidate) => ({
+    ...candidate,
+    sourceRecallRefs
+  }));
+}
+
+/**
+ * Collects normalized Source Recall refs from validated profile-memory candidate metadata.
+ *
+ * @param candidates - Validated fact candidates headed toward profile-memory ingest.
+ * @returns Deduplicated evidence-only refs from semantic relationship metadata.
+ */
+export function collectSourceRecallRefsFromProfileMemoryCandidates(
+  candidates: readonly ProfileValidatedFactCandidateInput[]
+): readonly SourceRecallSourceRef[] {
+  const refsByKey = new Map<string, SourceRecallSourceRef>();
+  for (const candidate of candidates) {
+    for (const ref of normalizeSourceRecallSourceRefs(
+      candidate.relationshipCandidate?.sourceRecallRefs ?? []
+    )) {
+      const key = `${ref.sourceRecordId}\n${ref.chunkId ?? ""}`;
+      if (!refsByKey.has(key)) {
+        refsByKey.set(key, ref);
+      }
+    }
+  }
+  return [...refsByKey.values()];
+}
+
+/**
  * Returns whether Source Recall can authorize profile-memory writes.
  *
  * @returns Always `false`; source refs are citation evidence only.
@@ -122,6 +170,15 @@ export function canSourceRecallRefAuthorizeProfileMemoryWrite(): false {
  * @returns Always `false`; source refs are citation evidence only.
  */
 export function canSourceRecallRefAuthorizeSemanticLessonCommit(): false {
+  return false;
+}
+
+/**
+ * Returns whether Source Recall can promote semantic candidates into durable memory.
+ *
+ * @returns Always `false`; truth governance and write policy remain the only promotion path.
+ */
+export function canSourceRecallRefAuthorizeSemanticCandidatePromotion(): false {
   return false;
 }
 

@@ -23,6 +23,8 @@ allowed, approved, completed, or safe to act on.
 - Optional conversation capture artifacts that preserve safe origin refs without tying source-record
   retention to bounded session turn history.
 - Bounded retrieval bundles and context-rendering metadata used by route-approved broker injection.
+- Evidence-only refs that semantic memory candidates may cite as provenance without gaining truth
+  or write authority.
 
 ## Invariants
 
@@ -52,6 +54,9 @@ allowed, approved, completed, or safe to act on.
   broader allowlists capture nothing.
 - Planner/model context injection requires the retrieval latch plus a route-approved memory intent
   and renders retrieved chunks only as quoted evidence.
+- Semantic relationship candidates may carry Source Recall refs only as provenance. The candidates
+  still require model/review evidence and route-approved profile-memory write policy before truth
+  governance can apply durable facts.
 
 ## Related Tests
 
@@ -60,6 +65,7 @@ allowed, approved, completed, or safe to act on.
 - `tests/core/sourceRecallRetention.test.ts`
 - `tests/core/sourceRecallStore.test.ts`
 - `tests/core/sourceRecallMediaCapture.test.ts`
+- `tests/core/sourceRecallMemoryBridge.test.ts`
 - `tests/interfaces/sourceRecallConversationCapture.test.ts`
 - `tests/organs/sourceRecallContextInjection.test.ts`
 

@@ -4,6 +4,7 @@
 
 import type { ProfileValidatedFactCandidateInput } from "./contracts";
 import type { ProfileSemanticRelationshipCandidateInput } from "./contracts";
+import { normalizeSourceRecallSourceRefs } from "../sourceRecall/sourceRecallMemoryBridge";
 import {
   normalizeRelationshipDescriptor,
   normalizeProfileValue,
@@ -125,6 +126,7 @@ export function buildValidatedSemanticRelationshipFactCandidates(
     const ambiguity = candidate.ambiguity ?? (
       candidate.lifecycle === "uncertain" ? "ambiguous_relation" : "none"
     );
+    const sourceRecallRefs = normalizeSourceRecallSourceRefs(candidate.sourceRecallRefs ?? []);
     const metadata = {
       subject: candidate.subject,
       objectDisplayName: displayName,
@@ -141,7 +143,8 @@ export function buildValidatedSemanticRelationshipFactCandidates(
         ...(typeof candidate.evidenceSpan.endOffset === "number"
           ? { endOffset: candidate.evidenceSpan.endOffset }
           : {})
-      }
+      },
+      ...(sourceRecallRefs.length > 0 ? { sourceRecallRefs } : {})
     } satisfies ProfileValidatedFactCandidateInput["relationshipCandidate"];
 
     output.push({

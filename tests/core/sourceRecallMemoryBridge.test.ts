@@ -10,17 +10,105 @@ import { test } from "node:test";
 
 import { ProfileMemoryStore } from "../../src/core/profileMemoryStore";
 import { buildProfileMemoryIngestPolicy } from "../../src/core/profileMemoryRuntime/profileMemoryIngestPolicy";
+import {
+  buildValidatedSemanticRelationshipFactCandidates
+} from "../../src/core/profileMemoryRuntime/profileMemorySemanticRelationshipCandidates";
 import { SemanticMemoryStore } from "../../src/core/semanticMemory";
 import {
   attachSourceRecallRefsToProfileMemoryProvenance,
+  attachSourceRecallRefsToSemanticRelationshipCandidates,
   buildSourceRecallSourceRef,
+  canSourceRecallRefAuthorizeSemanticCandidatePromotion,
   canSourceRecallRefAuthorizeProfileMemoryWrite,
-  canSourceRecallRefAuthorizeSemanticLessonCommit
+  canSourceRecallRefAuthorizeSemanticLessonCommit,
+  collectSourceRecallRefsFromProfileMemoryCandidates
 } from "../../src/core/sourceRecall/sourceRecallMemoryBridge";
 
 test("Source Recall refs cannot authorize profile or semantic memory writes", () => {
   assert.equal(canSourceRecallRefAuthorizeProfileMemoryWrite(), false);
   assert.equal(canSourceRecallRefAuthorizeSemanticLessonCommit(), false);
+  assert.equal(canSourceRecallRefAuthorizeSemanticCandidatePromotion(), false);
+});
+
+test("Source Recall refs can support semantic relationship candidates only as provenance", () => {
+  const sourceRef = buildSourceRecallSourceRef("source_record_candidate", "chunk_candidate");
+  const candidates = attachSourceRecallRefsToSemanticRelationshipCandidates(
+    [
+      {
+        subject: "current_user",
+        objectDisplayName: "Milo",
+        relationLabel: "employee",
+        lifecycle: "current",
+        workAssociation: "Northstar Creative",
+        sourceFamily: "semantic_model",
+        ambiguity: "none",
+        evidenceSpan: {
+          text: "Milo helps me run operations at Northstar Creative.",
+          startOffset: 0,
+          endOffset: 49
+        },
+        confidence: 0.92
+      }
+    ],
+    [sourceRef]
+  );
+
+  const validatedCandidates = buildValidatedSemanticRelationshipFactCandidates(candidates);
+  const collectedRefs = collectSourceRecallRefsFromProfileMemoryCandidates(validatedCandidates);
+
+  assert.equal(validatedCandidates.length, 4);
+  assert.equal(collectedRefs.length, 1);
+  assert.equal(collectedRefs[0]?.sourceRecordId, "source_record_candidate");
+  assert.equal(collectedRefs[0]?.chunkId, "chunk_candidate");
+  for (const candidate of validatedCandidates) {
+    const candidateRef = candidate.relationshipCandidate?.sourceRecallRefs?.[0];
+    assert.equal(candidateRef?.sourceRecordId, "source_record_candidate");
+    assert.equal(candidateRef?.authority.currentTruthAuthority, false);
+    assert.equal(candidateRef?.authority.approvalAuthority, false);
+    assert.equal(candidateRef?.authority.completionProofAuthority, false);
+    assert.equal(candidateRef?.authority.unsafeToFollowAsInstruction, true);
+  }
+});
+
+test("Source Recall refs do not make invalid semantic relationship candidates usable", () => {
+  const sourceRef = buildSourceRecallSourceRef("source_record_invalid", "chunk_invalid");
+  const noEvidenceCandidates = attachSourceRecallRefsToSemanticRelationshipCandidates(
+    [
+      {
+        subject: "current_user",
+        objectDisplayName: "Milo",
+        relationLabel: "employee",
+        lifecycle: "current",
+        sourceFamily: "semantic_model",
+        ambiguity: "none",
+        evidenceSpan: {
+          text: ""
+        },
+        confidence: 0.99
+      }
+    ],
+    [sourceRef]
+  );
+  const lowConfidenceCandidates = attachSourceRecallRefsToSemanticRelationshipCandidates(
+    [
+      {
+        subject: "current_user",
+        objectDisplayName: "Milo",
+        relationLabel: "employee",
+        lifecycle: "current",
+        sourceFamily: "semantic_model",
+        ambiguity: "none",
+        evidenceSpan: {
+          text: "Milo helps me run operations."
+        },
+        confidence: 0.2
+      }
+    ],
+    [sourceRef]
+  );
+
+  assert.equal(buildValidatedSemanticRelationshipFactCandidates(noEvidenceCandidates).length, 0);
+  assert.equal(buildValidatedSemanticRelationshipFactCandidates(lowConfidenceCandidates).length, 0);
 });
 
 test("profile-memory mutation envelopes can cite Source Recall refs without source refs creating facts", async () => {

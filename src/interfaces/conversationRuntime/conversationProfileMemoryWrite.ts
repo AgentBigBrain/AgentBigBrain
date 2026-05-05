@@ -23,6 +23,9 @@ import {
   buildConversationProfileMemoryTurnId,
   buildProfileMemorySourceFingerprint
 } from "../../core/profileMemoryRuntime/profileMemoryIngestProvenance";
+import {
+  collectSourceRecallRefsFromProfileMemoryCandidates
+} from "../../core/sourceRecall/sourceRecallMemoryBridge";
 import type { ConversationRouteMemoryIntent } from "./intentModeContracts";
 
 export interface ConversationProfileMemoryWriteRequestInput {
@@ -78,6 +81,9 @@ export function buildConversationProfileMemoryWriteRequest(
     input.userInput,
     validatedFactCandidates
   );
+  const sourceRecallRefs = collectSourceRecallRefsFromProfileMemoryCandidates(
+    validatedFactCandidates
+  );
   const sourceSurface = "conversation_profile_input";
   const mediaIngest = buildProfileMediaIngestInputFromEnvelope(
     input.userInput ?? "",
@@ -111,7 +117,8 @@ export function buildConversationProfileMemoryWriteRequest(
       dominantLaneAtWrite: input.session.domainContext.dominantLane,
       threadKey: input.session.conversationStack?.activeThreadKey ?? null,
       sourceSurface,
-      sourceFingerprint
+      sourceFingerprint,
+      ...(sourceRecallRefs.length > 0 ? { sourceRecallRefs } : {})
     }
   };
 }
