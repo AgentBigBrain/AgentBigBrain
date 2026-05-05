@@ -39,6 +39,11 @@ allowed, approved, completed, or safe to act on.
   routing input.
 - Source Recall does not create profile-memory truth, semantic-memory lessons, approvals, side
   effects, safety decisions, or receipt-backed proof.
+- Production Source Recall storage must use encrypted payloads derived from initialized key
+  material. The test-only plaintext SQLite path remains explicit and cannot be used as a production
+  runtime callsite.
+- Production encrypted storage currently encrypts the full Source Recall document payload, leaving
+  only row id, storage mode, and authenticated envelope fields visible in SQLite.
 
 ## Related Tests
 

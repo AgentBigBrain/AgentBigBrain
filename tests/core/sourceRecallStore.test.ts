@@ -14,11 +14,25 @@ import {
   type SourceRecallRecord
 } from "../../src/core/sourceRecall/contracts";
 import { SourceRecallStore } from "../../src/core/sourceRecall/sourceRecallStore";
+import { withSqliteDatabase } from "../../src/core/sqliteStore";
+
+const TEST_ENCRYPTION_KEY = Buffer.alloc(32, 17);
 
 test("SourceRecallStore requires the S1 test-only plaintext latch", () => {
   assert.throws(
     () => new SourceRecallStore({ sqlitePath: "runtime/source_recall.sqlite" }),
-    /test-only/
+    /encrypted production storage/
+  );
+});
+
+test("SourceRecallStore rejects mixed plaintext and encrypted modes", () => {
+  assert.throws(
+    () => new SourceRecallStore({
+      sqlitePath: "runtime/source_recall.sqlite",
+      testOnlyAllowPlaintextStorage: true,
+      encryptionKey: TEST_ENCRYPTION_KEY
+    }),
+    /cannot mix/
   );
 });
 
@@ -57,6 +71,67 @@ test("SourceRecallStore round-trips manually constructed records and chunks", as
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }
+});
+
+test("SourceRecallStore encrypts production records and chunks at rest", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-source-recall-encrypted-"));
+  const sqlitePath = path.join(tempDir, "source_recall.sqlite");
+  const store = new SourceRecallStore({
+    sqlitePath,
+    encryptionKey: TEST_ENCRYPTION_KEY
+  });
+  const record = buildRecord("source_record_encrypted", "scope_encrypted", "thread_encrypted");
+  const syntheticSourceText = "Synthetic encrypted user-turn text for Source Recall testing.";
+
+  try {
+    await store.upsertSourceRecord(record, [
+      buildChunk("chunk_encrypted_1", record.sourceRecordId, 0, syntheticSourceText)
+    ]);
+
+    const rawRow = await readRawSourceRecallRow(sqlitePath);
+    assert.equal(rawRow.storage_mode, "encrypted_v1");
+    assert.match(rawRow.document_json, /ciphertextBase64/);
+    assert.doesNotMatch(rawRow.document_json, /Synthetic encrypted user-turn text/);
+
+    const persistedRecord = await store.getSourceRecord(record.sourceRecordId);
+    const listedChunks = await store.listChunksForRecord(record.sourceRecordId);
+    assert.equal(persistedRecord?.sourceRecordId, record.sourceRecordId);
+    assert.equal(listedChunks[0]?.text, syntheticSourceText);
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("SourceRecallStore rejects plaintext rows in production mode", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-source-recall-plaintext-"));
+  const sqlitePath = path.join(tempDir, "source_recall.sqlite");
+  const plaintextStore = new SourceRecallStore({
+    sqlitePath,
+    testOnlyAllowPlaintextStorage: true
+  });
+  const record = buildRecord("source_record_plaintext", "scope_plaintext", "thread_plaintext");
+
+  try {
+    await plaintextStore.upsertSourceRecord(record, [
+      buildChunk("chunk_plaintext_1", record.sourceRecordId, 0, "Synthetic plaintext legacy text.")
+    ]);
+    const productionStore = new SourceRecallStore({
+      sqlitePath,
+      encryptionKey: TEST_ENCRYPTION_KEY
+    });
+
+    await assert.rejects(
+      () => productionStore.getSourceRecord(record.sourceRecordId),
+      /Plaintext Source Recall rows require explicit migration/
+    );
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("SourceRecallStore production callsites cannot use the test-only plaintext latch", async () => {
+  const sourceHits = await listSourceFilesWithTestOnlyPlaintextTrue();
+  assert.deepEqual(sourceHits, []);
 });
 
 test("SourceRecallStore hides forgotten records and chunks by default", async () => {
@@ -149,4 +224,63 @@ function buildChunk(
     recallAuthority: "quoted_evidence_only",
     authority: buildSourceRecallAuthorityFlags()
   };
+}
+
+/**
+ * Reads the raw persisted Source Recall state row from SQLite.
+ *
+ * @param sqlitePath - Test SQLite path.
+ * @returns Raw document JSON and storage mode fields.
+ */
+async function readRawSourceRecallRow(sqlitePath: string): Promise<{
+  document_json: string;
+  storage_mode: string;
+}> {
+  return withSqliteDatabase(sqlitePath, (db) =>
+    db.prepare(
+      `SELECT document_json, storage_mode
+         FROM source_recall_state
+        WHERE id = ?`
+    ).get("source_recall_document") as {
+      document_json: string;
+      storage_mode: string;
+    }
+  );
+}
+
+/**
+ * Lists production source files that pass the test-only plaintext latch.
+ *
+ * @returns Source file paths containing forbidden production plaintext test latch usage.
+ */
+async function listSourceFilesWithTestOnlyPlaintextTrue(): Promise<string[]> {
+  const root = path.resolve("src");
+  const matches: string[] = [];
+  await scanDirectory(root, matches);
+  return matches;
+}
+
+/**
+ * Recursively scans one directory for forbidden production latch usage.
+ *
+ * @param directory - Directory to scan.
+ * @param matches - Mutable match list.
+ */
+async function scanDirectory(directory: string, matches: string[]): Promise<void> {
+  const { readdir, readFile } = await import("node:fs/promises");
+  const entries = await readdir(directory, { withFileTypes: true });
+  for (const entry of entries) {
+    const fullPath = path.join(directory, entry.name);
+    if (entry.isDirectory()) {
+      await scanDirectory(fullPath, matches);
+      continue;
+    }
+    if (!entry.isFile() || !entry.name.endsWith(".ts")) {
+      continue;
+    }
+    const source = await readFile(fullPath, "utf8");
+    if (source.includes("testOnlyAllowPlaintextStorage: true")) {
+      matches.push(path.relative(process.cwd(), fullPath));
+    }
+  }
 }

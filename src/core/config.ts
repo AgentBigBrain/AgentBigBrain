@@ -118,6 +118,7 @@ export const DEFAULT_BRAIN_CONFIG: BrainConfig = {
       "runtime/governance_memory.json",
       "runtime/memory_access_log.json",
       "runtime/profile_memory.secure.json",
+      "runtime/source_recall.sqlite",
       "runtime/runtime_trace.jsonl",
       "runtime/ledgers.sqlite"
     ]

@@ -43,6 +43,10 @@ export interface SourceRecallCaptureFailureDiagnostic {
   sourceHashPrefix?: string;
 }
 
+export interface SourceRecallRetentionPolicyFromEnvOptions {
+  encryptedPayloadsAvailable?: boolean;
+}
+
 export const DEFAULT_SOURCE_RECALL_CAPTURE_SOURCE_KINDS: readonly SourceRecallSourceKind[] = [
   "conversation_turn",
   "assistant_turn",
@@ -111,10 +115,12 @@ export function createDefaultSourceRecallRetentionPolicy(): SourceRecallRetentio
  * - Uses `createDefaultSourceRecallRetentionPolicy` from this module.
  *
  * @param env - Environment source.
+ * @param options - Runtime-derived readiness values that must not come from boolean env flags.
  * @returns Source Recall retention policy.
  */
 export function createSourceRecallRetentionPolicyFromEnv(
-  env: NodeJS.ProcessEnv = process.env
+  env: NodeJS.ProcessEnv = process.env,
+  options: SourceRecallRetentionPolicyFromEnvOptions = {}
 ): SourceRecallRetentionPolicy {
   const defaults = createDefaultSourceRecallRetentionPolicy();
   return {
@@ -132,10 +138,7 @@ export function createSourceRecallRetentionPolicyFromEnv(
       env.BRAIN_SOURCE_RECALL_ENCRYPTED_PAYLOADS_REQUIRED,
       true
     ),
-    encryptedPayloadsAvailable: parseBooleanEnvFlag(
-      env.BRAIN_SOURCE_RECALL_ENCRYPTED_PAYLOADS_AVAILABLE,
-      false
-    )
+    encryptedPayloadsAvailable: options.encryptedPayloadsAvailable === true
   };
 }
 

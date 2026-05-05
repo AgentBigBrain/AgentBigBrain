@@ -41,13 +41,27 @@ test("Source Recall capture requires encryption readiness when production captur
   const blockedPolicy = createSourceRecallRetentionPolicyFromEnv({
     BRAIN_SOURCE_RECALL_CAPTURE_ENABLED: "true"
   });
-  const allowedPolicy = createSourceRecallRetentionPolicyFromEnv({
+  const spoofedEnvPolicy = createSourceRecallRetentionPolicyFromEnv({
     BRAIN_SOURCE_RECALL_CAPTURE_ENABLED: "true",
     BRAIN_SOURCE_RECALL_ENCRYPTED_PAYLOADS_AVAILABLE: "true"
   });
+  const allowedPolicy = createSourceRecallRetentionPolicyFromEnv(
+    {
+      BRAIN_SOURCE_RECALL_CAPTURE_ENABLED: "true"
+    },
+    { encryptedPayloadsAvailable: true }
+  );
 
   assert.deepEqual(
     decideSourceRecallCapture(blockedPolicy, {
+      sourceKind: "conversation_turn",
+      sourceRole: "user",
+      captureClass: "ordinary_source"
+    }).reasons,
+    ["source_recall_encryption_unavailable"]
+  );
+  assert.deepEqual(
+    decideSourceRecallCapture(spoofedEnvPolicy, {
       sourceKind: "conversation_turn",
       sourceRole: "user",
       captureClass: "ordinary_source"
@@ -66,14 +80,15 @@ test("Source Recall capture requires encryption readiness when production captur
 
 test("Source Recall production capture rejects test fixture source role and class", () => {
   const productionPolicy = createSourceRecallRetentionPolicyFromEnv({
-    BRAIN_SOURCE_RECALL_CAPTURE_ENABLED: "true",
-    BRAIN_SOURCE_RECALL_ENCRYPTED_PAYLOADS_AVAILABLE: "true"
-  });
-  const evidencePolicy = createSourceRecallRetentionPolicyFromEnv({
-    BRAIN_SOURCE_RECALL_CAPTURE_ENABLED: "true",
-    BRAIN_SOURCE_RECALL_ENCRYPTED_PAYLOADS_AVAILABLE: "true",
-    BRAIN_SOURCE_RECALL_EVIDENCE_MODE: "true"
-  });
+    BRAIN_SOURCE_RECALL_CAPTURE_ENABLED: "true"
+  }, { encryptedPayloadsAvailable: true });
+  const evidencePolicy = createSourceRecallRetentionPolicyFromEnv(
+    {
+      BRAIN_SOURCE_RECALL_CAPTURE_ENABLED: "true",
+      BRAIN_SOURCE_RECALL_EVIDENCE_MODE: "true"
+    },
+    { encryptedPayloadsAvailable: true }
+  );
 
   assert.deepEqual(
     decideSourceRecallCapture(productionPolicy, {
