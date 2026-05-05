@@ -330,3 +330,64 @@
   - A5 still needs private/synthetic evidence proving enabled capture plus exact-quote retrieval and
     forget/delete behavior with redacted artifacts.
 - next slice status: `unblocked` after A4 checkpoint commit.
+
+## A5 - Private/Synthetic Live Smoke
+
+- date: 2026-05-05
+- branch: `feat/source-recall-encrypted-user-turn-capture`
+- status: passed before checkpoint commit
+- files inspected:
+  - `docs/plans/SOURCE_RECALL_PRODUCTION_ROADMAP.md`
+  - `docs/plans/source-recall-production-progress.md`
+  - `scripts/evidence/sourceRecallEvidenceMatrix.ts`
+  - `scripts/evidence/sourceRecallProductionUserTurnSmoke.ts`
+  - `src/core/sourceRecall/sourceRecallRetriever.ts`
+  - `src/interfaces/conversationManager.ts`
+  - `tests/scripts/sourceRecallEvidenceMatrix.test.ts`
+  - `tests/scripts/sourceRecallProductionUserTurnSmoke.test.ts`
+- files changed:
+  - `package.json`
+  - `scripts/evidence/sourceRecallProductionUserTurnSmoke.ts`
+  - `tests/scripts/sourceRecallProductionUserTurnSmoke.test.ts`
+  - `docs/plans/source-recall-production-progress.md`
+- tests added:
+  - synthetic production user-turn smoke test proving encrypted storage, enabled live-user capture,
+    exact-quote retrieval, forget/delete behavior, disabled assistant/task/media/document capture,
+    no planner/chat Source Recall retrieval callsites, and redacted evidence output.
+- tests run:
+  - `npx tsx --test tests/scripts/sourceRecallProductionUserTurnSmoke.test.ts tests/scripts/sourceRecallEvidenceMatrix.test.ts tests/core/sourceRecallRetriever.test.ts tests/interfaces/sourceRecallConversationCapture.test.ts tests/core/sourceRecallStore.test.ts tests/core/sourceRecallRetention.test.ts`
+  - `npm run test:source_recall:evidence`
+  - `npm run test:source_recall:production_user_turn_smoke`
+  - `npm run check:test-types`
+  - `npm run check:no-unused-locals`
+  - `npm run build`
+  - `npm run check:docs`
+- evidence produced:
+  - `runtime/evidence/source_recall/source_recall_production_user_turn_smoke.json`
+  - evidence mode: `synthetic_runtime_observed`
+  - live dependency status: `NOT_REQUIRED`
+  - artifact status: `PASS`
+- sensitive scan status:
+  - focused changed-file, generated-evidence, and staged-diff scans still required immediately
+    before checkpoint commit.
+- behavior changed:
+  - added a CI-safe production user-turn smoke command for the enabled Source Recall path.
+  - the smoke uses encrypted production storage, explicit capture/retrieval latches, an exact quote
+    query, a forget/delete step, and redacted evidence.
+  - the smoke proves the encrypted SQLite row does not contain captured source text.
+- behavior intentionally not changed:
+  - no assistant/task capture was enabled.
+  - no media/document capture was enabled.
+  - no planner/chat production retrieval or context injection was wired.
+  - no semantic candidate promotion, Obsidian projection expansion, or operator-full projection was
+    added.
+- production defaults after slice:
+  - Source Recall remains disabled unless explicitly enabled by config.
+  - retrieval remains review/evidence-only and disabled by default.
+  - generated smoke evidence is redacted and does not include raw captured text.
+- known limitations:
+  - the smoke is synthetic runtime-observed proof, not a Telegram live smoke.
+  - later roadmap branches still need separately reviewed assistant/task capture, media/document
+    capture, context injection, semantic candidate bridging, projection review, and the broader
+    production evidence matrix.
+- next slice status: `immediate-branch final validation unblocked`.

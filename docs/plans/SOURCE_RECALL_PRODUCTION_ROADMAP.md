@@ -1378,23 +1378,24 @@ ignored and requires an explicit `git add -f`.
 
 ## Last Worked On
 
-Current phase or focus: A2 Source Recall config latch checkpoint.
+Current phase or focus: A5 private/synthetic production user-turn smoke checkpoint.
 
-What changed last: added Source Recall runtime config fields to `BrainConfig` and interface runtime
-config, with explicit latches for top-level enablement, capture, retrieval, projection,
-operator-full projection, indexing, and evidence mode. Production capture allowlists are now empty
-by default and the immediate branch accepts only `conversation_turn` plus `ordinary_source` when
-configured. Shared runtime construction creates a `SourceRecallStore` only when Source Recall is
-enabled and config status is `enabled`; default production runtime still constructs no Source Recall
-store.
+What changed last: A1-A5 have checkpoint commits or staged checkpoint work on
+`feat/source-recall-encrypted-user-turn-capture`. The immediate branch now has encrypted production
+storage, explicit runtime/config latches, live `conversation_turn` capture behind those latches,
+bounded review/evidence retrieval, and a CI-safe synthetic production user-turn smoke artifact that
+proves enabled capture, exact-quote retrieval, forget/delete behavior, disabled
+assistant/task/media/document capture, and no planner/chat Source Recall retrieval callsites.
 
-What still feels clunky, blocked, or unfinished: A3 live user-turn capture remains blocked until the
-A2 checkpoint commit exists. A4 still needs bounded review/evidence retrieval and non-raw audit
-events. The exact private/synthetic smoke command should be chosen after A1-A4 land.
+What still feels clunky, blocked, or unfinished: the immediate branch still needs final sensitive
+scans and final repo validation before merge. The broader roadmap remains intentionally incomplete:
+assistant/task capture, media/document capture, context injection, semantic candidate bridging,
+projection/review, and the broad production evidence matrix are later branches.
 
-Next clean seam to continue from: checkpoint A2, then begin `A3 - Live User-Turn Capture`.
+Next clean seam to continue from: finish immediate-branch final validation, then review/merge this
+branch before starting a separate later branch.
 
-Latest validation or evidence state: A2 focused config/runtime tests, source-recall store/retention
-tests, type checks, unused-local check, build, and docs check passed locally. The repo-level
-`npm test -- <file-name>` commands listed in the work packet are not supported by the local runner,
-so focused file tests were run directly with `npx tsx --test`.
+Latest validation or evidence state: A5 focused Source Recall tests and evidence scripts passed
+locally, including `npm run test:source_recall:evidence` and
+`npm run test:source_recall:production_user_turn_smoke`. The generated smoke artifact is redacted
+and reports `synthetic_runtime_observed` with live dependency status `NOT_REQUIRED`.
