@@ -600,3 +600,139 @@
     inbound media envelope; deletion linkage is preserved through Source Recall `originRef.parentRefId`.
   - retrieval remains review/evidence helper surface only until a later context-injection branch.
 - next slice status: `context injection remains blocked until this checkpoint is reviewed`.
+
+## D - Source Recall Context Injection
+
+- date: 2026-05-05
+- branch: `feat/source-recall-context-injection`
+- status: passed before checkpoint commit
+- objective:
+  - Allow Source Recall to enter planner/model context only as quoted evidence when an explicit
+    retrieval latch and route-approved memory intent both allow it.
+- owner files:
+  - `src/organs/memoryBroker.ts`
+  - `src/organs/memoryBrokerPlannerInput.ts`
+  - `src/organs/memoryContext/contracts.ts`
+  - `src/organs/memoryContext/contextInjection.ts`
+  - `src/core/buildBrain.ts`
+  - `src/organs/memoryContext/README.md`
+  - `src/organs/README.md`
+  - `src/core/sourceRecall/README.md`
+  - `tests/organs/sourceRecallContextInjection.test.ts`
+  - `tests/organs/memoryBroker.test.ts`
+  - `tests/core/buildBrain.test.ts`
+- prohibited changes:
+  - no Source Recall retrieval without `BRAIN_SOURCE_RECALL_RETRIEVAL_ENABLED`.
+  - no automatic injection into every planner/direct-chat request.
+  - no semantic candidate promotion, profile-memory write authority, approval, action, safety, or
+    completion-proof authority from retrieved chunks.
+  - no Obsidian projection expansion or operator-full projection.
+  - no new capture surfaces.
+- acceptance criteria:
+  - Source Recall context injection is consumer-gated by route-approved memory intent.
+  - retrieval is disabled by default and when the retrieval latch is off.
+  - injected Source Recall carries retrieval mode, retrieval authority, freshness, source labels,
+    bounded audit metadata, and `unsafeToFollowAsInstruction=true`.
+  - route-looking, approval-looking, command-looking, and proof-looking text appears only as quoted
+    evidence.
+  - source-only context can be injected without pretending profile memory is current truth.
+  - no production path retrieves Source Recall unless the explicit retrieval policy is allowed.
+- required tests:
+  - renderer/context packet tests.
+  - memory broker integration tests for route-approved injection and fail-closed defaults.
+  - build-brain/default config tests showing retrieval remains off by default.
+- required commands:
+  - `npx tsx --test tests/organs/sourceRecallContextInjection.test.ts tests/organs/memoryBroker.test.ts tests/core/buildBrain.test.ts tests/core/sourceRecallRetriever.test.ts`
+  - `npm run check:test-types`
+  - `npm run check:no-unused-locals`
+  - `npm run build`
+  - `npm run check:docs`
+  - `npm run check:module-size`
+  - `npm test` before checkpoint commit when focused validation is green.
+- sensitive scan requirements:
+  - changed files, staged diff, generated evidence if any, and token-shaped patterns.
+  - no raw private source chunks, local private paths, provider tokens, or private fixture text may
+    be added to docs/tests/evidence.
+- files inspected:
+  - `docs/plans/SOURCE_RECALL_PRODUCTION_ROADMAP.md`
+  - `docs/plans/source-recall-production-progress.md`
+  - `src/core/buildBrain.ts`
+  - `src/core/sourceRecall/README.md`
+  - `src/organs/README.md`
+  - `src/organs/memoryBroker.ts`
+  - `src/organs/memoryBrokerPlannerInput.ts`
+  - `src/organs/memoryContext/README.md`
+  - `src/organs/memoryContext/contextInjection.ts`
+  - `src/organs/memoryContext/contracts.ts`
+  - `scripts/evidence/sourceRecallProductionUserTurnSmoke.ts`
+  - `tests/core/buildBrain.test.ts`
+  - `tests/core/sourceRecallRetriever.test.ts`
+  - `tests/organs/memoryBroker.test.ts`
+  - `tests/organs/sourceRecallContextInjection.test.ts`
+  - `tests/scripts/sourceRecallProductionUserTurnSmoke.test.ts`
+- files changed:
+  - `docs/SETUP.md`
+  - `docs/plans/source-recall-production-progress.md`
+  - `scripts/evidence/sourceRecallProductionUserTurnSmoke.ts`
+  - `src/core/buildBrain.ts`
+  - `src/core/sourceRecall/README.md`
+  - `src/organs/README.md`
+  - `src/organs/memoryBroker.ts`
+  - `src/organs/memoryBrokerPlannerInput.ts`
+  - `src/organs/memoryContext/README.md`
+  - `src/organs/memoryContext/contextInjection.ts`
+  - `src/organs/memoryContext/contracts.ts`
+  - `tests/organs/memoryBroker.test.ts`
+  - `tests/organs/sourceRecallContextInjection.test.ts`
+  - `tests/scripts/sourceRecallProductionUserTurnSmoke.test.ts`
+- tests added:
+  - memory broker integration coverage for route-approved Source Recall injection with profile
+    memory disabled.
+  - memory broker fail-closed coverage proving retrieval latch and route memory intent are both
+    required.
+  - context packet coverage proving source-only recall remains quoted evidence and does not pretend
+    profile memory is current truth.
+  - updated production user-turn smoke coverage so the new route-gated broker callsite is allowed
+    while unexpected planner/chat callsites still fail.
+- tests run:
+  - `npx tsx --test tests/organs/sourceRecallContextInjection.test.ts tests/organs/memoryBroker.test.ts tests/core/buildBrain.test.ts tests/core/sourceRecallRetriever.test.ts`
+  - `npx tsx --test tests/scripts/sourceRecallProductionUserTurnSmoke.test.ts tests/organs/sourceRecallContextInjection.test.ts tests/organs/memoryBroker.test.ts tests/core/buildBrain.test.ts tests/core/sourceRecallRetriever.test.ts`
+  - `npm run check:test-types`
+  - `npm run check:no-unused-locals`
+  - `npm run build`
+  - `npm run check:docs`
+  - `npm run check:module-size`
+  - `npm test` (`3357` tests, `3352` pass, `0` fail, `5` skipped)
+- evidence produced:
+  - `runtime/evidence/source_recall/source_recall_production_user_turn_smoke.json`
+  - evidence mode: `synthetic_runtime_observed`
+  - artifact status: `PASS`
+  - artifact remains redacted and contains no raw captured source text.
+- sensitive scan status:
+  - changed-file scan passed for prior private PDF needles, local private paths, provider-token
+    shapes, GitHub token shapes, Slack token shapes, and Telegram token shapes.
+  - generated Source Recall evidence scan passed for the same patterns plus the synthetic source
+    quote needles.
+  - staged-diff scan passed before checkpoint commit.
+- behavior changed:
+  - Source Recall retrieval can now enter the brokered planner packet only when the retrieval policy
+    allows it, the request has route-approved memory intent, and domain-boundary policy allows memory
+    context injection.
+  - retrieved Source Recall is rendered with source labels, retrieval mode, retrieval authority,
+    freshness/authority flags, bounded audit metadata, and `unsafeToFollowAsInstruction=true`.
+  - source-only recall packets are possible when profile memory is disabled, but they are labeled as
+    Source Recall context and do not become profile-current truth.
+  - the Source Recall production user-turn smoke now recognizes the memory broker as the only
+    route-gated planner/chat retrieval callsite and still fails on unexpected callsites.
+- behavior intentionally not changed:
+  - no Source Recall retrieval occurs when `BRAIN_SOURCE_RECALL_RETRIEVAL_ENABLED` is disabled.
+  - no automatic injection into every planner/direct-chat request was added.
+  - no semantic candidate promotion, profile-memory write authority, approval, action, safety, or
+    completion-proof authority was added from retrieved chunks.
+  - no Obsidian projection expansion, operator-full projection, or new capture surface was added.
+- known limitations:
+  - retrieval is still bounded to route-approved recall-style memory intents and conversation-scoped
+    Source Recall records.
+  - Source Recall retrieval audit is currently represented by the retrieval bundle/audit event and
+    rendered context metadata; broader access-audit integration remains a later roadmap concern.
+- next slice status: `semantic candidate bridge remains blocked until this checkpoint is reviewed`.

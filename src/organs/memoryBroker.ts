@@ -17,7 +17,10 @@ import type {
 } from "./memoryContext/contracts";
 import { assessDomainBoundary, resolveProbingDetectorConfig } from "./memoryContext/queryPlanning";
 import { appendMemoryAccessAudit } from "./memoryContext/auditEvents";
-import { buildBrokeredPlannerInput } from "./memoryBrokerPlannerInput";
+import {
+  buildBrokeredPlannerInput,
+  type MemoryBrokerSourceRecallContextDependencies
+} from "./memoryBrokerPlannerInput";
 
 export { extractCurrentUserRequest } from "./memoryContext/queryPlanning";
 export type {
@@ -64,7 +67,8 @@ export class MemoryBrokerOrgan {
     private readonly profileMemoryStore?: ProfileMemoryStore,
     private readonly memoryAccessAuditStore = new MemoryAccessAuditStore(),
     options?: MemoryBrokerOptions,
-    private readonly languageUnderstandingOrgan?: LanguageUnderstandingOrgan
+    private readonly languageUnderstandingOrgan?: LanguageUnderstandingOrgan,
+    private readonly sourceRecallContext?: MemoryBrokerSourceRecallContextDependencies
   ) {
     this.probingDetectorConfig = resolveProbingDetectorConfig(options?.probingDetector);
   }
@@ -78,6 +82,7 @@ export class MemoryBrokerOrgan {
       profileMemoryStore: this.profileMemoryStore,
       memoryAccessAuditStore: this.memoryAccessAuditStore,
       languageUnderstandingOrgan: this.languageUnderstandingOrgan,
+      sourceRecallContext: this.sourceRecallContext,
       probingDetectorConfig: this.probingDetectorConfig,
       recentProbeSignals: this.recentProbeSignals
     });

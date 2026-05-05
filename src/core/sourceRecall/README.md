@@ -22,6 +22,7 @@ allowed, approved, completed, or safe to act on.
   completion proof.
 - Optional conversation capture artifacts that preserve safe origin refs without tying source-record
   retention to bounded session turn history.
+- Bounded retrieval bundles and context-rendering metadata used by route-approved broker injection.
 
 ## Invariants
 
@@ -49,6 +50,8 @@ allowed, approved, completed, or safe to act on.
 - Production capture allowlists currently support explicit conversation, assistant, task,
   media/document source kinds, and their matching capture classes. Missing, empty, unknown, or
   broader allowlists capture nothing.
+- Planner/model context injection requires the retrieval latch plus a route-approved memory intent
+  and renders retrieved chunks only as quoted evidence.
 
 ## Related Tests
 
@@ -58,6 +61,7 @@ allowed, approved, completed, or safe to act on.
 - `tests/core/sourceRecallStore.test.ts`
 - `tests/core/sourceRecallMediaCapture.test.ts`
 - `tests/interfaces/sourceRecallConversationCapture.test.ts`
+- `tests/organs/sourceRecallContextInjection.test.ts`
 
 ## When to Update This README
 

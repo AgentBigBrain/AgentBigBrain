@@ -54,7 +54,8 @@ focused on the orchestration contract instead of repeating fallback validation b
 - executable action plans and fail-closed fallback responses
 - action execution dispatch and live-run capability routing
 - memory context packets, bounded remembered-situation review and mutation brokerage, bounded media
-  interpretations, reflection lessons, and pulse-intent classification
+  interpretations, route-approved Source Recall quoted-evidence context, reflection lessons, and
+  pulse-intent classification
 - governed skill manifests, verification state, inventory summaries, and workflow-linked preferred
   skill suggestions
 - explicit remembered-situation and remembered-fact review/update brokerage so private interface
@@ -77,6 +78,9 @@ focused on the orchestration contract instead of repeating fallback validation b
 - `memoryBroker.ts` remains the stable broker entrypoint; detailed query planning, context
   injection, audit helpers, and planner-input assembly belong in `memoryContext/` and
   `memoryBrokerPlannerInput.ts`.
+- Source Recall retrieval for planner/model context must stay route-approved, config-latched, and
+  quoted-evidence only; memory broker wiring must not let source chunks become profile truth,
+  approvals, actions, safety decisions, route metadata, or completion proof.
 - Explicit user review/correction/forget flows for remembered situations and bounded remembered
   facts should stay brokered through `memoryBroker.ts`; transport layers must not reach directly
   into encrypted profile-memory storage.
@@ -115,6 +119,7 @@ focused on the orchestration contract instead of repeating fallback validation b
 - `tests/organs/memoryBroker.test.ts`
 - `tests/organs/memoryContextQueryPlanning.test.ts`
 - `tests/organs/memoryContextContextInjection.test.ts`
+- `tests/organs/sourceRecallContextInjection.test.ts`
 - `tests/organs/mediaUnderstanding.test.ts`
 - `tests/organs/reflection.test.ts`
 - `tests/organs/intentInterpreter.test.ts`
@@ -127,6 +132,7 @@ Update this README when:
 - a top-level organ file is added, removed, or renamed
 - ownership moves between this folder and `executionRuntime/`, `liveRun/`, `plannerPolicy/`, or
   `memoryContext/`
+- Source Recall context injection behavior changes at the broker boundary
 - ownership moves between this folder and `mediaUnderstanding/`
 - ownership moves between this folder and `skillRegistry/`
 - a remaining top-level organ is extracted into a new subsystem

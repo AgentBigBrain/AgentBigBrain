@@ -572,7 +572,13 @@ export function buildBrainRuntimeFromEnvironment(
     shared.profileMemoryStore,
     undefined,
     undefined,
-    new LanguageUnderstandingOrgan(modelClient)
+    new LanguageUnderstandingOrgan(modelClient),
+    shared.sourceRecallStore
+      ? {
+          store: shared.sourceRecallStore,
+          policy: config.sourceRecall.retentionPolicy
+        }
+      : undefined
   );
   const stage686RuntimeActionEngine = new Stage686RuntimeActionEngine({
     backend: config.persistence.ledgerBackend,

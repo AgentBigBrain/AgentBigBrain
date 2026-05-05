@@ -63,7 +63,8 @@ export interface SourceRecallProductionUserTurnSmokeEvidence {
     returnedChunkIds: readonly string[];
     excerptHashPrefixes: readonly string[];
     rawExcerptTextWrittenToArtifact: boolean;
-    plannerChatProductionCallsites: readonly string[];
+    plannerChatRouteGatedCallsites: readonly string[];
+    unexpectedPlannerChatCallsites: readonly string[];
   };
   deleteProof: {
     forgotten: boolean;
@@ -82,7 +83,7 @@ export interface SourceRecallProductionUserTurnSmokeEvidence {
   disabledSurfaceProof: {
     assistantTaskCaptureStillDisabled: boolean;
     mediaDocumentCaptureStillDisabled: boolean;
-    plannerChatRetrievalStillUnwired: boolean;
+    plannerChatRetrievalOnlyRouteGated: boolean;
   };
   artifactPrivacyProof: {
     rawSourceTextPresentInArtifact: boolean;
@@ -180,7 +181,7 @@ export async function runSourceRecallProductionUserTurnSmoke(
     const inactiveRecord = recordId
       ? await sourceRecallStore.getSourceRecord(recordId, true)
       : null;
-    const plannerChatProductionCallsites = await findPlannerChatSourceRecallCallsites();
+    const plannerChatCallsites = await findPlannerChatSourceRecallCallsites();
     const evidence = buildEvidence({
       records,
       rawRow,
@@ -188,7 +189,7 @@ export async function runSourceRecallProductionUserTurnSmoke(
       postForgetRetrieval,
       inactiveRecordLifecycle: inactiveRecord?.lifecycleState ?? null,
       activeRecordsAfterForget: (await sourceRecallStore.listSourceRecords()).length,
-      plannerChatProductionCallsites
+      plannerChatCallsites
     });
     const finalEvidence = attachFailureStatus(evidence);
     if (options.writeArtifact !== false) {
@@ -211,7 +212,7 @@ function buildEvidence(input: {
   postForgetRetrieval: Awaited<ReturnType<typeof retrieveSourceRecall>>;
   inactiveRecordLifecycle: string | null;
   activeRecordsAfterForget: number;
-  plannerChatProductionCallsites: readonly string[];
+  plannerChatCallsites: SourceRecallPlannerChatCallsites;
 }): SourceRecallProductionUserTurnSmokeEvidence {
   const sourceRecord = input.records[0] ?? null;
   const excerptHashes = input.retrieval.bundle.excerpts.map((excerpt) =>
@@ -277,7 +278,8 @@ function buildEvidence(input: {
       returnedChunkIds: input.retrieval.auditEvent.returnedChunkIds,
       excerptHashPrefixes: excerptHashes,
       rawExcerptTextWrittenToArtifact: false,
-      plannerChatProductionCallsites: input.plannerChatProductionCallsites
+      plannerChatRouteGatedCallsites: input.plannerChatCallsites.routeGatedCallsites,
+      unexpectedPlannerChatCallsites: input.plannerChatCallsites.unexpectedCallsites
     },
     deleteProof: {
       forgotten: input.inactiveRecordLifecycle === "forgotten",
@@ -289,7 +291,7 @@ function buildEvidence(input: {
     disabledSurfaceProof: {
       assistantTaskCaptureStillDisabled: true,
       mediaDocumentCaptureStillDisabled: true,
-      plannerChatRetrievalStillUnwired: input.plannerChatProductionCallsites.length === 0
+      plannerChatRetrievalOnlyRouteGated: input.plannerChatCallsites.unexpectedCallsites.length === 0
     },
     artifactPrivacyProof: artifactPrivacy
   };
@@ -323,8 +325,8 @@ function attachFailureStatus(
   if (!evidence.deleteProof.forgotten || evidence.deleteProof.postForgetExcerptsReturned !== 0) {
     failureReasons.push("forgotten source record remained retrievable");
   }
-  if (!evidence.disabledSurfaceProof.plannerChatRetrievalStillUnwired) {
-    failureReasons.push("planner/chat production callsite referenced Source Recall retrieval");
+  if (!evidence.disabledSurfaceProof.plannerChatRetrievalOnlyRouteGated) {
+    failureReasons.push("unexpected planner/chat callsite referenced Source Recall retrieval");
   }
   if (
     evidence.artifactPrivacyProof.rawSourceTextPresentInArtifact ||
@@ -371,14 +373,23 @@ async function readRawSourceRecallRow(sqlitePath: string): Promise<{
   return row ?? null;
 }
 
-async function findPlannerChatSourceRecallCallsites(): Promise<string[]> {
+interface SourceRecallPlannerChatCallsites {
+  routeGatedCallsites: readonly string[];
+  unexpectedCallsites: readonly string[];
+}
+
+async function findPlannerChatSourceRecallCallsites(): Promise<SourceRecallPlannerChatCallsites> {
   const srcRoot = path.resolve("src");
   const allowed = new Set([
     path.normalize("src/core/sourceRecall/sourceRecallRetriever.ts"),
     path.normalize("src/organs/memoryContext/contextInjection.ts")
   ]);
+  const routeGated = new Set([
+    path.normalize("src/organs/memoryBrokerPlannerInput.ts")
+  ]);
   const files = await listTypeScriptFiles(srcRoot);
-  const callsites: string[] = [];
+  const routeGatedCallsites: string[] = [];
+  const unexpectedCallsites: string[] = [];
   for (const file of files) {
     const relative = path.normalize(path.relative(process.cwd(), file));
     if (allowed.has(relative)) {
@@ -391,11 +402,15 @@ async function findPlannerChatSourceRecallCallsites(): Promise<string[]> {
         line.includes("retrieveSourceRecall(") ||
         line.includes("renderSourceRecallContextForModelEgress(")
       ) {
-        callsites.push(`${relative}:${index + 1}`);
+        if (routeGated.has(relative)) {
+          routeGatedCallsites.push(`${relative}:${index + 1}`);
+        } else {
+          unexpectedCallsites.push(`${relative}:${index + 1}`);
+        }
       }
     });
   }
-  return callsites;
+  return { routeGatedCallsites, unexpectedCallsites };
 }
 
 async function listTypeScriptFiles(root: string): Promise<string[]> {

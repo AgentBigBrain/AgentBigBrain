@@ -1113,6 +1113,9 @@ required latch is explicit:
 - `BRAIN_SOURCE_RECALL_RETRIEVAL_ENABLED`: permits review/evidence retrieval after the top-level
   latch is enabled.
   - `false`: planner/chat paths do not retrieve Source Recall by default.
+  - `true`: route-approved memory recall paths may render bounded Source Recall as quoted evidence
+    only; retrieved chunks still cannot authorize actions, approvals, memory truth, safety, or
+    completion proof.
 - `BRAIN_SOURCE_RECALL_PROJECTION_ENABLED`: permits projection of review-safe Source Recall
   metadata or excerpts when later projection slices wire that surface.
 - `BRAIN_SOURCE_RECALL_OPERATOR_FULL_PROJECTION_ENABLED`: separate latch for fuller operator

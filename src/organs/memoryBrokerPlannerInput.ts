@@ -5,6 +5,16 @@
 import { ProfileMemoryStore } from "../core/profileMemoryStore";
 import { MemoryAccessAuditStore } from "../core/memoryAccessAudit";
 import { LanguageUnderstandingOrgan } from "./languageUnderstanding/episodeExtraction";
+import type { SourceRecallOutputBudget } from "../core/sourceRecall/contracts";
+import {
+  DEFAULT_SOURCE_RECALL_OUTPUT_BUDGET,
+  retrieveSourceRecall
+} from "../core/sourceRecall/sourceRecallRetriever";
+import type { SourceRecallStore } from "../core/sourceRecall/sourceRecallStore";
+import {
+  decideSourceRecallRetrieval,
+  type SourceRecallRetentionPolicy
+} from "../core/sourceRecall/sourceRecallRetention";
 import { parseProfileMediaIngestInput } from "../core/profileMemory";
 import type {
   ProfileFactPlanningInspectionResult,
@@ -38,8 +48,10 @@ import {
 import { appendMemoryAccessAudit } from "./memoryContext/auditEvents";
 import {
   buildInjectedContextPacket,
+  buildSourceRecallOnlyContextPacket,
   buildSuppressedContextPacket,
   countRetrievedProfileFacts,
+  renderSourceRecallContextForModelEgress,
   sanitizeProfileContextForModelEgress
 } from "./memoryContext/contextInjection";
 import {
@@ -65,8 +77,15 @@ export interface MemoryBrokerPlannerInputDependencies {
   profileMemoryStore?: ProfileMemoryStore;
   memoryAccessAuditStore: MemoryAccessAuditStore;
   languageUnderstandingOrgan?: LanguageUnderstandingOrgan;
+  sourceRecallContext?: MemoryBrokerSourceRecallContextDependencies;
   probingDetectorConfig: ReturnType<typeof resolveProbingDetectorConfig>;
   recentProbeSignals: ProbingSignalSnapshot[];
+}
+
+export interface MemoryBrokerSourceRecallContextDependencies {
+  store: Pick<SourceRecallStore, "loadDocument">;
+  policy: SourceRecallRetentionPolicy;
+  outputBudget?: SourceRecallOutputBudget;
 }
 
 interface BrokerProfileMemoryReadSession {
@@ -140,6 +159,135 @@ function allowsMemoryContextInjection(
   return memoryIntent === "relationship_recall" ||
     memoryIntent === "contextual_recall" ||
     memoryIntent === "document_derived_recall";
+}
+
+/**
+ * Returns whether route metadata and domain state allow Source Recall evidence in planner context.
+ *
+ * @param memoryIntent - Trusted route memory intent.
+ * @param domainBoundary - Profile-memory domain boundary assessment.
+ * @returns `true` when Source Recall can be rendered as quoted evidence.
+ */
+function allowsSourceRecallContextInjection(
+  memoryIntent: ProfileMemoryIngestMemoryIntent | null,
+  domainBoundary: DomainBoundaryAssessment
+): boolean {
+  if (!allowsMemoryContextInjection(memoryIntent)) {
+    return false;
+  }
+  return (
+    domainBoundary.reason !== "non_profile_dominant_request" &&
+    domainBoundary.reason !== "workflow_session_continuity" &&
+    domainBoundary.reason !== "probing_detected"
+  );
+}
+
+/**
+ * Resolves a conversation-scoped Source Recall retrieval query.
+ *
+ * @param currentUserRequest - Active user request.
+ * @param options - Broker build options.
+ * @returns Retrieval query, or `null` when there is no bounded consumer scope.
+ */
+function buildSourceRecallContextQuery(
+  currentUserRequest: string,
+  options: MemoryBrokerBuildInputOptions
+): Parameters<typeof retrieveSourceRecall>[1] | null {
+  const conversationId = options.sessionDomainContext?.conversationId?.trim();
+  if (!conversationId) {
+    return null;
+  }
+  const scopeId = `conversation:${conversationId}`;
+  const keywords = extractBoundedSourceRecallKeywords(currentUserRequest);
+  return {
+    scopeId,
+    threadId: scopeId,
+    ...(keywords.length > 0 ? { keywords } : {})
+  };
+}
+
+/**
+ * Extracts bounded retrieval keywords for evidence ranking only.
+ *
+ * @param currentUserRequest - Active user request.
+ * @returns Lower-case keywords, or an empty list for scope-only recall.
+ */
+function extractBoundedSourceRecallKeywords(currentUserRequest: string): readonly string[] {
+  const stopWords = new Set([
+    "about",
+    "again",
+    "before",
+    "could",
+    "did",
+    "earlier",
+    "from",
+    "have",
+    "said",
+    "tell",
+    "that",
+    "the",
+    "this",
+    "what",
+    "when",
+    "where",
+    "with",
+    "would",
+    "you"
+  ]);
+  const words = currentUserRequest
+    .toLowerCase()
+    .match(/[a-z0-9][a-z0-9_-]{2,}/g) ?? [];
+  return [...new Set(words.filter((word) => !stopWords.has(word)))].slice(0, 8);
+}
+
+/**
+ * Builds a route-approved Source Recall context block, if policy and retrieval results allow it.
+ *
+ * @param input - Broker request, policy, and domain-boundary state.
+ * @returns Rendered Source Recall context block, or an empty string.
+ */
+async function buildRouteApprovedSourceRecallContext(input: {
+  deps: MemoryBrokerPlannerInputDependencies;
+  options: MemoryBrokerBuildInputOptions;
+  currentUserRequest: string;
+  resolvedRouteMemoryIntent: ProfileMemoryIngestMemoryIntent | null;
+  domainBoundary: DomainBoundaryAssessment;
+}): Promise<string> {
+  const sourceRecall = input.deps.sourceRecallContext;
+  if (!sourceRecall) {
+    return "";
+  }
+  if (!allowsSourceRecallContextInjection(input.resolvedRouteMemoryIntent, input.domainBoundary)) {
+    return "";
+  }
+  if (!decideSourceRecallRetrieval(sourceRecall.policy).allowed) {
+    return "";
+  }
+  const query = buildSourceRecallContextQuery(input.currentUserRequest, input.options);
+  if (!query) {
+    return "";
+  }
+  try {
+    const result = await retrieveSourceRecall(
+      sourceRecall.store,
+      query,
+      sourceRecall.outputBudget ?? {
+        ...DEFAULT_SOURCE_RECALL_OUTPUT_BUDGET,
+        maxRecords: 3,
+        maxChunks: 5,
+        maxTotalExcerptChars: 1800
+      }
+    );
+    if (result.bundle.excerpts.length === 0) {
+      return "";
+    }
+    return renderSourceRecallContextForModelEgress(result);
+  } catch (error) {
+    console.error(
+      `[MemoryBroker] non-fatal source-recall retrieval failure: ${(error as Error).message}`
+    );
+    return "";
+  }
 }
 
 /**
@@ -294,14 +442,40 @@ export async function buildBrokeredPlannerInput(
   options: MemoryBrokerBuildInputOptions,
   deps: MemoryBrokerPlannerInputDependencies
 ): Promise<MemoryBrokerInputResult> {
+  const currentUserRequest = extractCurrentUserRequest(task.userInput);
+  const resolvedRouteMemoryIntent =
+    extractResolvedRouteMemoryIntent(task.userInput) as ProfileMemoryIngestMemoryIntent | null;
   if (!deps.profileMemoryStore) {
+    const domainBoundary = assessDomainBoundary(
+      currentUserRequest,
+      [],
+      options.sessionDomainContext
+    );
+    const sourceRecallContext = await buildRouteApprovedSourceRecallContext({
+      deps,
+      options,
+      currentUserRequest,
+      resolvedRouteMemoryIntent,
+      domainBoundary
+    });
+    if (sourceRecallContext.trim().length > 0) {
+      return {
+        userInput: buildSourceRecallOnlyContextPacket(
+          task,
+          domainBoundary.lanes,
+          domainBoundary.scores,
+          "source_recall_context_relevant",
+          sourceRecallContext
+        ),
+        profileMemoryStatus: "disabled"
+      };
+    }
     return {
       userInput: task.userInput,
       profileMemoryStatus: "disabled"
     };
   }
 
-  const currentUserRequest = extractCurrentUserRequest(task.userInput);
   const probing = registerAndAssessProbing(
     currentUserRequest,
     deps.recentProbeSignals,
@@ -312,9 +486,6 @@ export async function buildBrokeredPlannerInput(
     currentUserRequest,
     options.sessionDomainContext
   );
-  const resolvedRouteMemoryIntent =
-    extractResolvedRouteMemoryIntent(task.userInput) as ProfileMemoryIngestMemoryIntent | null;
-
   try {
     const requestTelemetry = createProfileMemoryRequestTelemetry();
     const sourceFingerprint = buildProfileMemorySourceFingerprint(currentUserRequest);
@@ -424,11 +595,29 @@ export async function buildBrokeredPlannerInput(
     );
 
     if (!profileContext && !episodeContext && !memorySynthesisContext) {
-      const domainBoundary = assessDomainBoundary(
+      const assessedDomainBoundary = assessDomainBoundary(
         currentUserRequest,
         [],
         options.sessionDomainContext
       );
+      const domainBoundary: DomainBoundaryAssessment = probing.assessment.detected
+        ? {
+            ...assessedDomainBoundary,
+            decision: "suppress_profile_context",
+            reason: "probing_detected"
+          }
+        : assessedDomainBoundary;
+      const sourceRecallContext = await buildRouteApprovedSourceRecallContext({
+        deps,
+        options,
+        currentUserRequest,
+        resolvedRouteMemoryIntent,
+        domainBoundary
+      });
+      if (sourceRecallContext.trim().length > 0) {
+        recordProfileMemoryRenderOperation(requestTelemetry);
+        recordProfileMemoryPromptSurfaceMetrics(requestTelemetry, 1, 1);
+      }
       const promptCutoverGate = assessBrokerPromptCutoverGate(requestTelemetry);
       await recordAudit(
         deps.memoryAccessAuditStore,
@@ -456,6 +645,21 @@ export async function buildBrokeredPlannerInput(
           domainBoundary,
           probing.assessment
         );
+      }
+      if (
+        sourceRecallContext.trim().length > 0 &&
+        promptCutoverGate.decision !== "block"
+      ) {
+        return {
+          userInput: buildSourceRecallOnlyContextPacket(
+            task,
+            domainBoundary.lanes,
+            domainBoundary.scores,
+            "source_recall_context_relevant",
+            sourceRecallContext
+          ),
+          profileMemoryStatus: "available"
+        };
       }
       return {
         userInput: task.userInput,
@@ -502,8 +706,17 @@ export async function buildBrokeredPlannerInput(
                   .join("\n")
               : `${sanitizedProfileContext.sanitizedContext}${egressGuardFooter ? `\n${egressGuardFooter}` : ""}`;
           })();
-    const promptMemoryOwnerCount = brokeredContext.trim().length > 0 ? 1 : 0;
-    const promptMemorySurfaceCount = brokeredContext.trim().length > 0 ? 1 : 0;
+    const sourceRecallContext = await buildRouteApprovedSourceRecallContext({
+      deps,
+      options,
+      currentUserRequest,
+      resolvedRouteMemoryIntent,
+      domainBoundary
+    });
+    const hasPromptMemorySurface =
+      brokeredContext.trim().length > 0 || sourceRecallContext.trim().length > 0;
+    const promptMemoryOwnerCount = hasPromptMemorySurface ? 1 : 0;
+    const promptMemorySurfaceCount = hasPromptMemorySurface ? 1 : 0;
     if (promptMemorySurfaceCount > 0) {
       recordProfileMemoryRenderOperation(requestTelemetry);
     }
@@ -542,10 +755,7 @@ export async function buildBrokeredPlannerInput(
       );
     }
 
-    if (
-      domainBoundary.decision === "suppress_profile_context" ||
-      promptCutoverGate.decision === "block"
-    ) {
+    if (promptCutoverGate.decision === "block") {
       return {
         userInput: buildSuppressedContextPacket(
           task,
@@ -560,6 +770,44 @@ export async function buildBrokeredPlannerInput(
       };
     }
 
+    if (domainBoundary.decision === "suppress_profile_context") {
+      if (sourceRecallContext.trim().length > 0) {
+        return {
+          userInput: buildSourceRecallOnlyContextPacket(
+            task,
+            domainBoundary.lanes,
+            domainBoundary.scores,
+            "source_recall_context_relevant",
+            sourceRecallContext
+          ),
+          profileMemoryStatus: "available"
+        };
+      }
+      return {
+        userInput: buildSuppressedContextPacket(
+          task,
+          domainBoundary.lanes,
+          domainBoundary.scores,
+          domainBoundary.reason,
+          retrievalAuthority.metadata
+        ),
+        profileMemoryStatus: "available"
+      };
+    }
+
+    if (brokeredContext.trim().length === 0 && sourceRecallContext.trim().length > 0) {
+      return {
+        userInput: buildSourceRecallOnlyContextPacket(
+          task,
+          domainBoundary.lanes,
+          domainBoundary.scores,
+          "source_recall_context_relevant",
+          sourceRecallContext
+        ),
+        profileMemoryStatus: "available"
+      };
+    }
+
     return {
       userInput: buildInjectedContextPacket(
         task,
@@ -569,7 +817,8 @@ export async function buildBrokeredPlannerInput(
         brokeredContext,
         "",
         "",
-        retrievalAuthority.metadata
+        retrievalAuthority.metadata,
+        sourceRecallContext
       ),
       profileMemoryStatus: "available"
     };

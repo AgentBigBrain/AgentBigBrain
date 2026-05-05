@@ -32,6 +32,13 @@ const DEFAULT_MEMORY_CONTEXT_AUTHORITY: MemoryContextAuthorityMetadata = {
   currentTruthAuthority: false
 };
 
+const SOURCE_RECALL_CONTEXT_AUTHORITY: MemoryContextAuthorityMetadata = {
+  retrievalMode: "source_recall",
+  sourceAuthority: "unknown",
+  plannerAuthority: "evidence_only",
+  currentTruthAuthority: false
+};
+
 export interface SourceRecallContextRenderingInput {
   bundle: SourceRecallBundle;
   auditEvent: SourceRecallRetrievalAuditEvent;
@@ -193,6 +200,40 @@ export function buildInjectedContextPacket(
   }
 
   return packet.join("\n");
+}
+
+/**
+ * Builds a packet for route-approved Source Recall context when governed profile context is absent
+ * or intentionally suppressed.
+ *
+ * @param task - Original task request.
+ * @param lanes - Dominant domain lanes from boundary assessment.
+ * @param scores - Lane scores used to explain the boundary decision.
+ * @param reason - Stable source-recall injection reason.
+ * @param sourceRecallContext - Rendered quoted-evidence Source Recall block.
+ * @param metadata - Source Recall retrieval authority metadata.
+ * @returns Planner-input packet with Source Recall context only.
+ */
+export function buildSourceRecallOnlyContextPacket(
+  task: TaskRequest,
+  lanes: readonly MemoryDomainLane[],
+  scores: DomainLaneScores,
+  reason: string,
+  sourceRecallContext: string,
+  metadata: MemoryContextAuthorityMetadata = SOURCE_RECALL_CONTEXT_AUTHORITY
+): string {
+  return [
+    task.userInput,
+    "",
+    "[AgentFriendMemoryBroker]",
+    ...renderMemoryContextAuthorityMetadata(metadata),
+    `domainLanes=${lanes.join(",")}`,
+    `domainLaneScores=${renderDomainLaneScores(scores)}`,
+    "domainBoundaryDecision=inject_source_recall_context",
+    `domainBoundaryReason=${reason}`,
+    "",
+    sourceRecallContext
+  ].join("\n");
 }
 
 /**

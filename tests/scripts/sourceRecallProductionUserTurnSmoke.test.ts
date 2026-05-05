@@ -30,9 +30,15 @@ test("Source Recall production user-turn smoke proves capture retrieval and dele
     assert.equal(evidence.captureProof.mediaDocumentRecordsCaptured, 0);
     assert.equal(evidence.retrievalProof.retrievalMode, "exact_quote");
     assert.equal(evidence.retrievalProof.excerptsReturned, 1);
-    assert.equal(evidence.retrievalProof.plannerChatProductionCallsites.length, 0);
+    assert.ok(
+      evidence.retrievalProof.plannerChatRouteGatedCallsites.some((callsite) =>
+        callsite.includes("memoryBrokerPlannerInput.ts")
+      )
+    );
+    assert.equal(evidence.retrievalProof.unexpectedPlannerChatCallsites.length, 0);
     assert.equal(evidence.deleteProof.forgotten, true);
     assert.equal(evidence.deleteProof.postForgetExcerptsReturned, 0);
+    assert.equal(evidence.disabledSurfaceProof.plannerChatRetrievalOnlyRouteGated, true);
     assert.equal(evidence.artifactPrivacyProof.rawSourceTextPresentInArtifact, false);
     assert.equal(artifact.includes("basalt-grid approval"), false);
     assert.equal(artifact.includes("Synthetic Source Recall smoke quote"), false);

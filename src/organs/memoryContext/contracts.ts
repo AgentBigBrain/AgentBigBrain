@@ -21,7 +21,8 @@ export type MemoryRetrievalMode =
   | "keyword_only"
   | "recent_fallback"
   | "compatibility_token_overlap"
-  | "legacy_inventory";
+  | "legacy_inventory"
+  | "source_recall";
 export type MemoryPlannerAuthority = "route_approved" | "evidence_only" | "none";
 
 export interface ProbingDetectorConfig {
