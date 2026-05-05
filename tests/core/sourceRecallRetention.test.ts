@@ -204,6 +204,57 @@ test("Source Recall production allowlists accept explicit conversation assistant
   );
 });
 
+test("Source Recall production allowlists accept explicit media and document scope", () => {
+  const policy = createSourceRecallRetentionPolicyFromEnv({
+    BRAIN_SOURCE_RECALL_ENABLED: "true",
+    BRAIN_SOURCE_RECALL_CAPTURE_ENABLED: "true",
+    BRAIN_SOURCE_RECALL_CAPTURE_SOURCE_KINDS:
+      "document_text,document_model_summary,media_transcript,ocr_text,media_model_summary",
+    BRAIN_SOURCE_RECALL_CAPTURE_CLASSES: "ordinary_source,external_output"
+  }, { encryptedPayloadsAvailable: true });
+
+  assert.equal(
+    decideSourceRecallCapture(policy, {
+      sourceKind: "document_text",
+      sourceRole: "tool",
+      captureClass: "external_output"
+    }).allowed,
+    true
+  );
+  assert.equal(
+    decideSourceRecallCapture(policy, {
+      sourceKind: "document_model_summary",
+      sourceRole: "tool",
+      captureClass: "external_output"
+    }).allowed,
+    true
+  );
+  assert.equal(
+    decideSourceRecallCapture(policy, {
+      sourceKind: "media_transcript",
+      sourceRole: "user",
+      captureClass: "ordinary_source"
+    }).allowed,
+    true
+  );
+  assert.equal(
+    decideSourceRecallCapture(policy, {
+      sourceKind: "ocr_text",
+      sourceRole: "tool",
+      captureClass: "external_output"
+    }).allowed,
+    true
+  );
+  assert.equal(
+    decideSourceRecallCapture(policy, {
+      sourceKind: "media_model_summary",
+      sourceRole: "tool",
+      captureClass: "external_output"
+    }).allowed,
+    true
+  );
+});
+
 test("Source Recall production allowlists fail closed on missing empty or broader values", () => {
   const missing = createSourceRecallRetentionPolicyFromEnv({
     BRAIN_SOURCE_RECALL_ENABLED: "true",
@@ -218,14 +269,14 @@ test("Source Recall production allowlists fail closed on missing empty or broade
   const broaderSourceKind = createSourceRecallRetentionPolicyFromEnv({
     BRAIN_SOURCE_RECALL_ENABLED: "true",
     BRAIN_SOURCE_RECALL_CAPTURE_ENABLED: "true",
-    BRAIN_SOURCE_RECALL_CAPTURE_SOURCE_KINDS: "conversation_turn,document_text",
+    BRAIN_SOURCE_RECALL_CAPTURE_SOURCE_KINDS: "conversation_turn,review_note",
     BRAIN_SOURCE_RECALL_CAPTURE_CLASSES: "ordinary_source"
   }, { encryptedPayloadsAvailable: true });
   const broaderCaptureClass = createSourceRecallRetentionPolicyFromEnv({
     BRAIN_SOURCE_RECALL_ENABLED: "true",
     BRAIN_SOURCE_RECALL_CAPTURE_ENABLED: "true",
     BRAIN_SOURCE_RECALL_CAPTURE_SOURCE_KINDS: "conversation_turn",
-    BRAIN_SOURCE_RECALL_CAPTURE_CLASSES: "ordinary_source,external_output"
+    BRAIN_SOURCE_RECALL_CAPTURE_CLASSES: "ordinary_source,projection_metadata"
   }, { encryptedPayloadsAvailable: true });
 
   for (const policy of [missing, empty]) {
@@ -264,6 +315,7 @@ test("Source Recall non-capture firewall names production-rejected capture class
     assert.equal(isSourceRecallProductionRejectedCaptureClass(captureClass), true);
   }
   assert.equal(isSourceRecallProductionRejectedCaptureClass("ordinary_source"), false);
+  assert.equal(isSourceRecallProductionRejectedCaptureClass("external_output"), false);
 });
 
 test("Source Recall blocked capture diagnostics avoid raw source text", () => {

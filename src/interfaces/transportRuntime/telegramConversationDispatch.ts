@@ -16,8 +16,25 @@ import type {
   PreparedTelegramRejectedUpdate
 } from "./telegramGatewayRuntime";
 import type { MediaUnderstandingOrgan } from "../../organs/mediaUnderstanding/mediaInterpretation";
-import type { ConversationInboundMediaEnvelope } from "../mediaRuntime/contracts";
+import {
+  captureMediaInterpretationLayersSourceRecall,
+  type MediaLayerSourceRecallCaptureResult
+} from "../../core/sourceRecall/sourceRecallMediaCapture";
+import type {
+  ConversationInboundMediaAttachment,
+  ConversationInboundMediaEnvelope,
+  ConversationInboundMediaInterpretationLayer
+} from "../mediaRuntime/contracts";
 import type { MediaArtifactStore } from "../../core/mediaArtifactStore";
+import type { ConversationSourceRecallCaptureDependencies } from "../conversationRuntime/managerContracts";
+
+const SOURCE_RECALL_MEDIA_SOURCE_KINDS = new Set([
+  "media_transcript",
+  "ocr_text",
+  "document_text",
+  "document_model_summary",
+  "media_model_summary"
+]);
 
 /**
  * Derives one Telegram chat id from a canonical conversation key.
@@ -40,6 +57,7 @@ export interface EnrichAcceptedTelegramUpdateWithMediaInput {
   config: TelegramInterfaceConfig;
   mediaUnderstandingOrgan?: MediaUnderstandingOrgan;
   mediaArtifactStore?: MediaArtifactStore;
+  sourceRecallCapture?: ConversationSourceRecallCaptureDependencies;
 }
 
 /**
@@ -153,6 +171,25 @@ export async function enrichAcceptedTelegramUpdateWithMedia(
     };
   }
 
+  const sourceRecallCapture = input.sourceRecallCapture;
+  if (
+    sourceRecallCapture &&
+    shouldAttemptTelegramMediaSourceRecall(sourceRecallCapture) &&
+    interpretedMedia.attachments.length > 0
+  ) {
+    interpretedMedia = {
+      attachments: await Promise.all(
+        interpretedMedia.attachments.map((attachment) =>
+          attachTelegramMediaSourceRecallRefs({
+            attachment,
+            sourceRecallCapture,
+            prepared: input.prepared
+          })
+        )
+      )
+    };
+  }
+
   if (
     isUntranscribedMediaOnlyVoiceNote(
       input.prepared.inbound.text,
@@ -186,5 +223,87 @@ export async function enrichAcceptedTelegramUpdateWithMedia(
       ...input.prepared.entityGraphEvent,
       text: canonicalUserInput
     }
+  };
+}
+
+/**
+ * Returns whether the explicit Source Recall policy has a media/document allowlist.
+ *
+ * @param sourceRecallCapture - Active Source Recall capture dependencies.
+ * @returns `true` when media/document capture should be attempted.
+ */
+function shouldAttemptTelegramMediaSourceRecall(
+  sourceRecallCapture: ConversationSourceRecallCaptureDependencies
+): boolean {
+  return (
+    sourceRecallCapture.policy.sourceKindCaptureAllowlist.some((sourceKind) =>
+      SOURCE_RECALL_MEDIA_SOURCE_KINDS.has(sourceKind)
+    ) &&
+    (sourceRecallCapture.policy.captureClassAllowlist.includes("ordinary_source") ||
+      sourceRecallCapture.policy.captureClassAllowlist.includes("external_output"))
+  );
+}
+
+/**
+ * Captures one owned Telegram media attachment's interpretation layers as Source Recall evidence.
+ *
+ * @param input - Media attachment plus Source Recall and conversation metadata.
+ * @returns Attachment with per-layer Source Recall refs when capture was attempted.
+ */
+async function attachTelegramMediaSourceRecallRefs(input: {
+  attachment: ConversationInboundMediaAttachment;
+  sourceRecallCapture: ConversationSourceRecallCaptureDependencies;
+  prepared: PreparedTelegramAcceptedUpdate;
+}): Promise<ConversationInboundMediaAttachment> {
+  if (!input.attachment.artifactId || !input.attachment.interpretation?.layers?.length) {
+    return input.attachment;
+  }
+  try {
+    const results = await captureMediaInterpretationLayersSourceRecall({
+      scopeId: `conversation:${input.prepared.chatId}`,
+      threadId: `conversation:${input.prepared.chatId}`,
+      observedAt: input.prepared.inbound.receivedAt ?? new Date().toISOString(),
+      attachment: input.attachment,
+      policy: input.sourceRecallCapture.policy,
+      writer: input.sourceRecallCapture.writer,
+      capturedAt: input.sourceRecallCapture.capturedAt
+    });
+    if (results.length === 0) {
+      return input.attachment;
+    }
+    return attachSourceRecallRefsToLayers(input.attachment, results);
+  } catch {
+    return input.attachment;
+  }
+}
+
+/**
+ * Adds Source Recall refs to the matching interpretation layers without changing layer text.
+ *
+ * @param attachment - Media attachment whose layers were captured.
+ * @param results - Capture results indexed by media interpretation layer.
+ * @returns Attachment with source refs on captured layers.
+ */
+function attachSourceRecallRefsToLayers(
+  attachment: ConversationInboundMediaAttachment,
+  results: readonly MediaLayerSourceRecallCaptureResult[]
+): ConversationInboundMediaAttachment {
+  const refsByLayerIndex = new Map(
+    results.map((result) => [result.layerIndex, result.sourceRecallRef])
+  );
+  const layers = attachment.interpretation?.layers?.map(
+    (layer, index): ConversationInboundMediaInterpretationLayer => {
+      const sourceRecall = refsByLayerIndex.get(index);
+      return sourceRecall ? { ...layer, sourceRecall } : layer;
+    }
+  );
+  return {
+    ...attachment,
+    interpretation: attachment.interpretation
+      ? {
+          ...attachment.interpretation,
+          layers
+        }
+      : attachment.interpretation
   };
 }

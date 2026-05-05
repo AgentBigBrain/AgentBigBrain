@@ -43,6 +43,7 @@ export class TelegramGateway {
   private readonly autonomousAbortControllers = new Map<string, AbortController>();
   private readonly entityGraphStore: EntityGraphStore;
   private readonly mediaArtifactStore?: MediaArtifactStore; private readonly mediaUnderstandingOrgan?: MediaUnderstandingOrgan;
+  private readonly sourceRecallCapture?: ConversationSourceRecallCaptureDependencies;
   private readonly onOutboundDelivery?: TelegramOutboundDeliveryObserver;
   private readonly entityDomainHintInterpretationResolver?: EntityDomainHintInterpretationResolver;
   private readonly entityTypeInterpretationResolver?: EntityTypeInterpretationResolver;
@@ -86,6 +87,7 @@ export class TelegramGateway {
     this.entityGraphStore = options.entityGraphStore ?? new EntityGraphStore();
     this.mediaArtifactStore = options.mediaArtifactStore;
     this.mediaUnderstandingOrgan = options.mediaUnderstandingOrgan;
+    this.sourceRecallCapture = options.sourceRecallCapture;
     this.onOutboundDelivery = options.onOutboundDelivery;
     this.entityDomainHintInterpretationResolver = options.entityDomainHintInterpretationResolver;
     this.entityTypeInterpretationResolver = options.entityTypeInterpretationResolver;
@@ -296,7 +298,8 @@ export class TelegramGateway {
       prepared,
       config: this.config,
       mediaUnderstandingOrgan: this.mediaUnderstandingOrgan,
-      mediaArtifactStore: this.mediaArtifactStore
+      mediaArtifactStore: this.mediaArtifactStore,
+      sourceRecallCapture: this.sourceRecallCapture
     });
     if (enrichedPrepared.kind === "rejected") {
       await deliverPreparedTransportResponse(

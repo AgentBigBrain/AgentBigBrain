@@ -88,13 +88,19 @@ const PRODUCTION_SOURCE_RECALL_CAPTURE_SOURCE_KINDS: readonly SourceRecallSource
   "conversation_turn",
   "assistant_turn",
   "task_input",
-  "task_summary"
+  "task_summary",
+  "document_text",
+  "document_model_summary",
+  "media_transcript",
+  "ocr_text",
+  "media_model_summary"
 ] as const;
 
 const PRODUCTION_SOURCE_RECALL_CAPTURE_CLASSES: readonly SourceRecallCaptureClass[] = [
   "ordinary_source",
   "assistant_output",
-  "operational_output"
+  "operational_output",
+  "external_output"
 ] as const;
 
 export const SOURCE_RECALL_PRODUCTION_REJECTED_CAPTURE_CLASSES: readonly SourceRecallCaptureClass[] = [
@@ -103,8 +109,7 @@ export const SOURCE_RECALL_PRODUCTION_REJECTED_CAPTURE_CLASSES: readonly SourceR
   "policy_metadata",
   "runtime_control_metadata",
   "projection_metadata",
-  "repository_reference",
-  "external_output"
+  "repository_reference"
 ] as const;
 
 /**
@@ -499,7 +504,7 @@ function parseSourceRecallSqlitePath(value: string | undefined): string {
 }
 
 /**
- * Parses the production conversation/assistant/task source-kind allowlist.
+ * Parses the production conversation/assistant/task/media/document source-kind allowlist.
  *
  * @param value - Env CSV value.
  * @returns Allowlist, or empty when missing, empty, unknown, or broader than enabled scope.
@@ -522,7 +527,7 @@ function parseImmediateSourceKindAllowlist(
 }
 
 /**
- * Parses the production conversation/assistant/task capture-class allowlist.
+ * Parses the production conversation/assistant/task/media/document capture-class allowlist.
  *
  * @param value - Env CSV value.
  * @returns Allowlist, or empty when missing, empty, unknown, or broader than enabled scope.

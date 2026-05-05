@@ -315,8 +315,8 @@ test("Source Recall config fails closed on missing encryption and disallowed cap
   const config = createBrainConfigFromEnv({
     BRAIN_SOURCE_RECALL_ENABLED: "true",
     BRAIN_SOURCE_RECALL_CAPTURE_ENABLED: "true",
-    BRAIN_SOURCE_RECALL_CAPTURE_SOURCE_KINDS: "conversation_turn,document_text",
-    BRAIN_SOURCE_RECALL_CAPTURE_CLASSES: "ordinary_source,external_output"
+    BRAIN_SOURCE_RECALL_CAPTURE_SOURCE_KINDS: "conversation_turn,review_note",
+    BRAIN_SOURCE_RECALL_CAPTURE_CLASSES: "ordinary_source,projection_metadata"
   });
 
   assert.equal(config.sourceRecall.status, "blocked_missing_encryption");

@@ -1126,11 +1126,14 @@ required latch is explicit:
 - `BRAIN_SOURCE_RECALL_ENCRYPTION_KEY`: encryption key for production Source Recall storage.
   - Must be either 64-character hex or base64-encoded 32 bytes.
   - This value is not stored in runtime config objects.
-- `BRAIN_SOURCE_RECALL_CAPTURE_SOURCE_KINDS`: immediate production branch allowlist.
-  - Only `conversation_turn` is supported in this branch.
+- `BRAIN_SOURCE_RECALL_CAPTURE_SOURCE_KINDS`: production capture allowlist.
+  - Supported source kinds are `conversation_turn`, `assistant_turn`, `task_input`,
+    `task_summary`, `document_text`, `document_model_summary`, `media_transcript`, `ocr_text`,
+    and `media_model_summary`.
   - Missing, empty, unknown, or broader values capture nothing.
-- `BRAIN_SOURCE_RECALL_CAPTURE_CLASSES`: immediate production branch allowlist.
-  - Only `ordinary_source` is supported in this branch.
+- `BRAIN_SOURCE_RECALL_CAPTURE_CLASSES`: production capture-class allowlist.
+  - Supported capture classes are `ordinary_source`, `assistant_output`, `operational_output`, and
+    `external_output`.
   - Missing, empty, unknown, or broader values capture nothing.
 
 Source chunks can be read. They cannot be obeyed.

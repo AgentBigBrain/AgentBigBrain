@@ -479,3 +479,124 @@
     separate source records so review can distinguish "workflow summary" from "assistant said this".
   - retrieval remains review/evidence helper surface only until a later context-injection branch.
 - next slice status: `media/document capture remains blocked until this checkpoint is reviewed`.
+
+## C - Media And Document Capture
+
+- date: 2026-05-05
+- branch: `feat/source-recall-media-document-capture`
+- status: passed before checkpoint commit
+- objective:
+  - Capture Telegram media/document interpretation layers as Source Recall quoted evidence only
+    when Source Recall capture is explicitly enabled and media/document source kinds plus
+    `external_output` are explicitly allowlisted.
+- owner files:
+  - `src/core/sourceRecall/sourceRecallRetention.ts`
+  - `src/core/sourceRecall/sourceRecallMediaCapture.ts`
+  - `src/interfaces/transportRuntime/telegramConversationDispatch.ts`
+  - `src/interfaces/telegramGateway.ts`
+  - `src/interfaces/transportRuntime/README.md`
+  - `tests/core/sourceRecallRetention.test.ts`
+  - `tests/core/sourceRecallMediaCapture.test.ts`
+  - `tests/interfaces/transportRuntime.test.ts`
+  - `tests/core/config.test.ts`
+- prohibited changes:
+  - no planner/chat retrieval or context injection.
+  - no semantic candidate promotion or profile-memory write authority.
+  - no Obsidian projection expansion or operator-full projection.
+  - no assistant/task capture changes outside regression fallout.
+  - no broad evidence-matrix expansion.
+- acceptance criteria:
+  - production capture allowlists accept media/document source kinds only when explicitly listed.
+  - media/document `external_output` remains rejected unless explicitly allowlisted and Source
+    Recall encryption/capture latches are active.
+  - Telegram media enrichment attaches Source Recall refs to interpretation layers only after the
+    media artifact is owned by the runtime.
+  - source records use the media artifact id as their parent ref when available so artifact
+    redaction/forget flows can hide linked source chunks.
+  - OCR/document/model-summary text remains outside command-routing text and cannot become route
+    metadata, approval, profile truth, safety proof, or completion proof.
+  - capture failure must not crash media handling and diagnostics must remain non-raw.
+- required tests:
+  - focused Source Recall retention tests.
+  - media capture helper tests.
+  - Telegram transport media enrichment tests.
+  - config tests for explicit allowlist behavior.
+- required commands:
+  - `npx tsx --test tests/core/sourceRecallRetention.test.ts tests/core/config.test.ts tests/core/sourceRecallMediaCapture.test.ts tests/interfaces/transportRuntime.test.ts`
+  - `npm run check:test-types`
+  - `npm run check:no-unused-locals`
+  - `npm run build`
+  - `npm run check:docs`
+  - `npm run check:module-size`
+  - `npm test` before checkpoint commit when focused validation is green.
+- sensitive scan requirements:
+  - changed files, staged diff, generated evidence if any, and token-shaped patterns.
+  - no real PDFs, local private paths, raw source chunks, provider tokens, or private fixture text
+    may be added to docs/tests/evidence.
+- files inspected:
+  - `docs/plans/SOURCE_RECALL_PRODUCTION_ROADMAP.md`
+  - `docs/plans/source-recall-production-progress.md`
+  - `src/core/sourceRecall/sourceRecallRetention.ts`
+  - `src/core/sourceRecall/sourceRecallMediaCapture.ts`
+  - `src/core/sourceRecall/sourceRecallConversationCapture.ts`
+  - `src/core/sourceRecall/sourceRecallStore.ts`
+  - `src/core/mediaArtifactStore.ts`
+  - `src/core/mediaArtifacts.ts`
+  - `src/interfaces/mediaRuntime/contracts.ts`
+  - `src/interfaces/transportRuntime/telegramConversationDispatch.ts`
+  - `src/interfaces/telegramGateway.ts`
+  - `src/interfaces/interfaceRuntime.ts`
+  - `tests/core/sourceRecallRetention.test.ts`
+  - `tests/core/sourceRecallMediaCapture.test.ts`
+  - `tests/core/config.test.ts`
+  - `tests/interfaces/transportRuntime.test.ts`
+- files changed:
+  - `docs/SETUP.md`
+  - `docs/plans/source-recall-production-progress.md`
+  - `src/core/sourceRecall/README.md`
+  - `src/core/sourceRecall/sourceRecallRetention.ts`
+  - `src/interfaces/telegramGateway.ts`
+  - `src/interfaces/transportRuntime/README.md`
+  - `src/interfaces/transportRuntime/telegramConversationDispatch.ts`
+  - `tests/core/config.test.ts`
+  - `tests/core/sourceRecallRetention.test.ts`
+  - `tests/interfaces/transportRuntime.test.ts`
+- tests added:
+  - production allowlist coverage for explicit media/document source kinds and `external_output`.
+  - Telegram media enrichment coverage proving an owned document artifact gets Source Recall refs,
+    no document text enters command routing, source chunks remain non-authoritative, and artifact
+    parent redaction hides linked chunks.
+- tests run:
+  - `npx tsx --test tests/core/sourceRecallRetention.test.ts tests/core/config.test.ts tests/core/sourceRecallMediaCapture.test.ts tests/interfaces/transportRuntime.test.ts`
+  - `npm run check:test-types`
+  - `npm run check:no-unused-locals`
+  - `npm run build`
+  - `npm run check:docs`
+  - `npm run check:module-size`
+  - `npm test` passed with 3,354 tests, 0 failures, and 7 skipped.
+- evidence produced:
+  - focused tests only; no generated live-smoke artifact was created for this slice.
+- sensitive scan status:
+  - changed-file and working-diff private fixture phrase scans passed.
+  - changed-file and working-diff token-shaped secret scans passed.
+- behavior changed:
+  - production capture allowlists can now explicitly permit media/document source kinds and
+    `external_output`.
+  - Telegram media enrichment passes Source Recall capture dependencies through the gateway.
+  - interpreted media/document layers receive Source Recall refs only when the media artifact has a
+    runtime-owned artifact id and policy allows media/document capture.
+  - captured media/document source records use the media artifact id as their parent ref, so
+    artifact redaction/forget operations can hide linked source chunks.
+- behavior intentionally not changed:
+  - no planner/chat retrieval, context injection, semantic candidate promotion, profile-memory write
+    authority, Obsidian projection expansion, operator-full projection, or broad evidence-matrix
+    expansion was added.
+  - media/document text still stays out of command-routing text.
+- non-authority proof:
+  - media/document chunks keep `currentTruthAuthority=false`, `completionProofAuthority=false`,
+    `approvalAuthority=false`, `safetyAuthority=false`, and `unsafeToFollowAsInstruction=true`.
+- known limitations:
+  - persisted media artifact records are written before Source Recall refs are attached to the
+    inbound media envelope; deletion linkage is preserved through Source Recall `originRef.parentRefId`.
+  - retrieval remains review/evidence helper surface only until a later context-injection branch.
+- next slice status: `context injection remains blocked until this checkpoint is reviewed`.
