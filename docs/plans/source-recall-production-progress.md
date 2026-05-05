@@ -246,3 +246,87 @@
   - A5 still needs a private/synthetic smoke that proves capture, exact-quote retrieval, and
     forget/delete behavior with raw evidence redacted.
 - next slice status: `unblocked` after A3 checkpoint commit.
+
+## A4 - Review/Evidence Retrieval
+
+- date: 2026-05-05
+- branch: `feat/source-recall-encrypted-user-turn-capture`
+- status: passed before checkpoint commit
+- files inspected:
+  - `src/core/sourceRecall/contracts.ts`
+  - `src/core/sourceRecall/sourceRecallRetriever.ts`
+  - `src/organs/memoryContext/contextInjection.ts`
+  - `tests/core/sourceRecallRetriever.test.ts`
+  - `tests/organs/sourceRecallContextInjection.test.ts`
+  - `tests/security/sourceRecallPromptInjection.test.ts`
+- files changed:
+  - `src/core/sourceRecall/contracts.ts`
+  - `src/core/sourceRecall/sourceRecallRetriever.ts`
+  - `src/organs/memoryContext/contextInjection.ts`
+  - `tests/core/sourceRecallRetriever.test.ts`
+  - `tests/organs/sourceRecallContextInjection.test.ts`
+  - `tests/security/sourceRecallPromptInjection.test.ts`
+  - `docs/plans/source-recall-production-progress.md`
+- retrieval modes implemented:
+  - `source_id`
+  - `exact_quote`
+  - `scope_thread_filter`
+  - `semantic_vector`
+  - `hybrid`
+  - `keyword`
+  - `recent_fallback`
+- output budgets:
+  - maximum records
+  - maximum chunks
+  - maximum excerpt characters per chunk
+  - maximum total excerpt characters
+  - source-kind allowlist
+  - source-role allowlist
+  - sensitivity policy
+  - lifecycle visibility through record/chunk state
+- audit fields:
+  - query hash
+  - scope/thread filters
+  - retrieval mode
+  - returned source record ids
+  - returned chunk ids
+  - total excerpts returned
+  - total chars returned
+  - blocked/redacted count
+  - no raw query or raw excerpt text
+- tests added:
+  - source-role allowlist enforcement for review/evidence retrieval.
+  - richer excerpt provenance for source kind, source role, source authority, lifecycle, freshness,
+    and source time kind.
+  - forgotten and quarantined records are excluded alongside redacted records.
+- tests run:
+  - `npx tsx --test tests/core/sourceRecallRetriever.test.ts tests/organs/sourceRecallContextInjection.test.ts tests/security/sourceRecallPromptInjection.test.ts`
+  - `npm run check:test-types`
+- evidence produced:
+  - focused retrieval and quoted-rendering tests proving recall bundles remain non-authoritative and
+    prompt-spoofing payloads are quoted.
+- sensitive scan status:
+  - focused changed-file and staged-diff scans still required immediately before checkpoint commit.
+- behavior changed:
+  - review/evidence retrieval now enforces source-role allowlists in addition to source-kind
+    allowlists.
+  - recall excerpts now expose source kind, source role, source authority, lifecycle state,
+    freshness, and source time kind for review and rendering.
+  - rendered Source Recall context includes that provenance while still marking excerpts as quoted
+    evidence only.
+- behavior intentionally not changed:
+  - no planner/chat production callsite invokes `retrieveSourceRecall`.
+  - no normal conversation context injection was wired.
+  - no media/document, assistant/task, semantic candidate, or projection expansion was enabled.
+- inactive lifecycle exclusion proof:
+  - retriever tests exclude redacted, forgotten, and quarantined records/chunks from normal
+    retrieval.
+- non-authority proof:
+  - recall bundles and rendered excerpts keep `currentTruthAuthority=false`,
+    `completionProofAuthority=false`, `approvalAuthority=false`, `safetyAuthority=false`, and
+    `unsafeToFollowAsInstruction=true`.
+- known limitations:
+  - retrieval remains review/evidence helper surface only until a later context-injection branch.
+  - A5 still needs private/synthetic evidence proving enabled capture plus exact-quote retrieval and
+    forget/delete behavior with redacted artifacts.
+- next slice status: `unblocked` after A4 checkpoint commit.

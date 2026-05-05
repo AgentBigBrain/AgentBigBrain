@@ -98,6 +98,7 @@ export interface SourceRecallOutputBudget {
   maxExcerptCharsPerChunk: number;
   maxTotalExcerptChars: number;
   sourceKindAllowlist: readonly SourceRecallSourceKind[];
+  sourceRoleAllowlist: readonly SourceRecallSourceRole[];
   sensitivityRedactionPolicy: "redact_sensitive" | "exclude_sensitive";
 }
 
@@ -143,6 +144,12 @@ export interface SourceRecallChunk {
 export interface SourceRecallExcerpt {
   sourceRecordId: string;
   chunkId: string;
+  sourceKind: SourceRecallSourceKind;
+  sourceRole: SourceRecallSourceRole;
+  sourceAuthority: SourceAuthority;
+  lifecycleState: SourceRecallLifecycleState;
+  sourceTimeKind: SourceRecallSourceTimeKind;
+  freshness: SourceRecallFreshness;
   excerpt: string;
   redacted: boolean;
   recallAuthority: SourceRecallAuthority;

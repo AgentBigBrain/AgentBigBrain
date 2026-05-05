@@ -122,12 +122,19 @@ function buildBundle(excerpt: string): SourceRecallBundle {
       maxExcerptCharsPerChunk: 600,
       maxTotalExcerptChars: 3000,
       sourceKindAllowlist: ["conversation_turn"],
+      sourceRoleAllowlist: ["user"],
       sensitivityRedactionPolicy: "redact_sensitive"
     },
     excerpts: [
       {
         sourceRecordId: "source_record_context",
         chunkId: "chunk_context",
+        sourceKind: "conversation_turn",
+        sourceRole: "user",
+        sourceAuthority: "explicit_user_statement",
+        lifecycleState: "active",
+        sourceTimeKind: "observed_event",
+        freshness: "recent",
         excerpt,
         redacted: false,
         recallAuthority: "quoted_evidence_only",

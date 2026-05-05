@@ -6,6 +6,7 @@ import { hashSha256 } from "../cryptoUtils";
 import {
   buildSourceRecallAuthorityFlags,
   SOURCE_RECALL_SOURCE_KIND_VALUES,
+  SOURCE_RECALL_SOURCE_ROLE_VALUES,
   type SourceRecallBundle,
   type SourceRecallChunk,
   type SourceRecallExcerpt,
@@ -14,7 +15,8 @@ import {
   type SourceRecallRecord,
   type SourceRecallRetrievalAuthority,
   type SourceRecallRetrievalMode,
-  type SourceRecallSourceKind
+  type SourceRecallSourceKind,
+  type SourceRecallSourceRole
 } from "./contracts";
 import { isSourceRecallLifecycleVisible } from "./sourceRecallPersistence";
 import type { SourceRecallStore } from "./sourceRecallStore";
@@ -27,6 +29,9 @@ export const DEFAULT_SOURCE_RECALL_OUTPUT_BUDGET: SourceRecallOutputBudget = {
   sourceKindAllowlist: SOURCE_RECALL_SOURCE_KIND_VALUES.filter(
     (kind) => kind !== "unknown"
   ),
+  sourceRoleAllowlist: SOURCE_RECALL_SOURCE_ROLE_VALUES.filter(
+    (role) => role !== "unknown"
+  ),
   sensitivityRedactionPolicy: "redact_sensitive"
 };
 
@@ -37,6 +42,7 @@ export interface SourceRecallRetrievalQuery {
   chunkId?: string;
   exactQuote?: string;
   sourceKinds?: readonly SourceRecallSourceKind[];
+  sourceRoles?: readonly SourceRecallSourceRole[];
   keywords?: readonly string[];
   semanticVectorChunkIds?: readonly string[];
 }
@@ -200,6 +206,7 @@ export function normalizeSourceRecallOutputBudget(
     maxExcerptCharsPerChunk: Math.max(0, Math.floor(budget.maxExcerptCharsPerChunk)),
     maxTotalExcerptChars: Math.max(0, Math.floor(budget.maxTotalExcerptChars)),
     sourceKindAllowlist: budget.sourceKindAllowlist.filter((kind) => kind !== "unknown"),
+    sourceRoleAllowlist: budget.sourceRoleAllowlist.filter((role) => role !== "unknown"),
     sensitivityRedactionPolicy: budget.sensitivityRedactionPolicy
   };
 }
@@ -218,6 +225,7 @@ function buildSourceRecallQueryHash(query: SourceRecallRetrievalQuery): string {
     chunkId: query.chunkId ?? null,
     exactQuote: query.exactQuote ?? null,
     sourceKinds: query.sourceKinds ?? null,
+    sourceRoles: query.sourceRoles ?? null,
     keywords: query.keywords ?? null,
     semanticVectorChunkIds: query.semanticVectorChunkIds ?? null
   }));
@@ -311,7 +319,13 @@ function matchesRecordQuery(
   if (query.sourceKinds && !query.sourceKinds.includes(record.sourceKind)) {
     return false;
   }
-  return budget.sourceKindAllowlist.includes(record.sourceKind);
+  if (!budget.sourceKindAllowlist.includes(record.sourceKind)) {
+    return false;
+  }
+  if (query.sourceRoles && !query.sourceRoles.includes(record.sourceRole)) {
+    return false;
+  }
+  return budget.sourceRoleAllowlist.includes(record.sourceRole);
 }
 
 /**
@@ -331,6 +345,12 @@ function buildBudgetedExcerpt(
     return {
       sourceRecordId: candidate.record.sourceRecordId,
       chunkId: candidate.chunk.chunkId,
+      sourceKind: candidate.record.sourceKind,
+      sourceRole: candidate.record.sourceRole,
+      sourceAuthority: candidate.record.sourceAuthority,
+      lifecycleState: candidate.record.lifecycleState,
+      sourceTimeKind: candidate.record.sourceTimeKind,
+      freshness: candidate.record.freshness,
       excerpt: "[redacted sensitive source chunk]".slice(0, budget.maxExcerptCharsPerChunk),
       redacted: true,
       recallAuthority: "quoted_evidence_only",
@@ -372,6 +392,12 @@ function buildExcerpt(
   return {
     sourceRecordId: candidate.record.sourceRecordId,
     chunkId: candidate.chunk.chunkId,
+    sourceKind: candidate.record.sourceKind,
+    sourceRole: candidate.record.sourceRole,
+    sourceAuthority: candidate.record.sourceAuthority,
+    lifecycleState: candidate.record.lifecycleState,
+    sourceTimeKind: candidate.record.sourceTimeKind,
+    freshness: candidate.record.freshness,
     excerpt,
     redacted,
     recallAuthority: "quoted_evidence_only",

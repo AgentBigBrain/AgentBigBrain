@@ -64,11 +64,18 @@ function buildBundle(payloads: readonly string[]): SourceRecallBundle {
       maxExcerptCharsPerChunk: 600,
       maxTotalExcerptChars: 3600,
       sourceKindAllowlist: ["conversation_turn", "document_text"],
+      sourceRoleAllowlist: ["user"],
       sensitivityRedactionPolicy: "redact_sensitive"
     },
     excerpts: payloads.map((payload, index) => ({
       sourceRecordId: `source_record_spoof_${index}`,
       chunkId: `source_chunk_spoof_${index}`,
+      sourceKind: "conversation_turn",
+      sourceRole: "user",
+      sourceAuthority: "explicit_user_statement",
+      lifecycleState: "active",
+      sourceTimeKind: "observed_event",
+      freshness: "historical",
       excerpt: payload,
       redacted: false,
       recallAuthority: "quoted_evidence_only",
