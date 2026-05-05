@@ -84,6 +84,19 @@ export const DEFAULT_SOURCE_RECALL_CAPTURE_CLASSES: readonly SourceRecallCapture
   "assistant_output"
 ] as const;
 
+const PRODUCTION_SOURCE_RECALL_CAPTURE_SOURCE_KINDS: readonly SourceRecallSourceKind[] = [
+  "conversation_turn",
+  "assistant_turn",
+  "task_input",
+  "task_summary"
+] as const;
+
+const PRODUCTION_SOURCE_RECALL_CAPTURE_CLASSES: readonly SourceRecallCaptureClass[] = [
+  "ordinary_source",
+  "assistant_output",
+  "operational_output"
+] as const;
+
 export const SOURCE_RECALL_PRODUCTION_REJECTED_CAPTURE_CLASSES: readonly SourceRecallCaptureClass[] = [
   "excluded_by_default",
   "test_fixture",
@@ -91,7 +104,6 @@ export const SOURCE_RECALL_PRODUCTION_REJECTED_CAPTURE_CLASSES: readonly SourceR
   "runtime_control_metadata",
   "projection_metadata",
   "repository_reference",
-  "operational_output",
   "external_output"
 ] as const;
 
@@ -487,10 +499,10 @@ function parseSourceRecallSqlitePath(value: string | undefined): string {
 }
 
 /**
- * Parses the immediate-branch production source-kind allowlist.
+ * Parses the production conversation/assistant/task source-kind allowlist.
  *
  * @param value - Env CSV value.
- * @returns Allowlist, or empty when missing/empty/unknown/broader than immediate scope.
+ * @returns Allowlist, or empty when missing, empty, unknown, or broader than enabled scope.
  */
 function parseImmediateSourceKindAllowlist(
   value: string | undefined
@@ -499,17 +511,21 @@ function parseImmediateSourceKindAllowlist(
   if (entries.length === 0) {
     return [];
   }
-  if (entries.every((entry) => entry === "conversation_turn")) {
-    return ["conversation_turn"];
+  if (
+    entries.every((entry): entry is SourceRecallSourceKind =>
+      PRODUCTION_SOURCE_RECALL_CAPTURE_SOURCE_KINDS.includes(entry as SourceRecallSourceKind)
+    )
+  ) {
+    return [...new Set(entries)];
   }
   return [];
 }
 
 /**
- * Parses the immediate-branch production capture-class allowlist.
+ * Parses the production conversation/assistant/task capture-class allowlist.
  *
  * @param value - Env CSV value.
- * @returns Allowlist, or empty when missing/empty/unknown/broader than immediate scope.
+ * @returns Allowlist, or empty when missing, empty, unknown, or broader than enabled scope.
  */
 function parseImmediateCaptureClassAllowlist(
   value: string | undefined
@@ -518,8 +534,12 @@ function parseImmediateCaptureClassAllowlist(
   if (entries.length === 0) {
     return [];
   }
-  if (entries.every((entry) => entry === "ordinary_source")) {
-    return ["ordinary_source"];
+  if (
+    entries.every((entry): entry is SourceRecallCaptureClass =>
+      PRODUCTION_SOURCE_RECALL_CAPTURE_CLASSES.includes(entry as SourceRecallCaptureClass)
+    )
+  ) {
+    return [...new Set(entries)];
   }
   return [];
 }

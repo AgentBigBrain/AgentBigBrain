@@ -170,7 +170,41 @@ test("Source Recall runtime config defaults disabled and exposes concrete block 
   assert.equal(enabled.encryptionKeyConfigured, true);
 });
 
-test("Source Recall production allowlists fail closed on missing empty or broad values", () => {
+test("Source Recall production allowlists accept explicit conversation assistant and task scope", () => {
+  const policy = createSourceRecallRetentionPolicyFromEnv({
+    BRAIN_SOURCE_RECALL_ENABLED: "true",
+    BRAIN_SOURCE_RECALL_CAPTURE_ENABLED: "true",
+    BRAIN_SOURCE_RECALL_CAPTURE_SOURCE_KINDS: "conversation_turn,assistant_turn,task_input,task_summary",
+    BRAIN_SOURCE_RECALL_CAPTURE_CLASSES: "ordinary_source,assistant_output,operational_output"
+  }, { encryptedPayloadsAvailable: true });
+
+  assert.equal(
+    decideSourceRecallCapture(policy, {
+      sourceKind: "conversation_turn",
+      sourceRole: "user",
+      captureClass: "ordinary_source"
+    }).allowed,
+    true
+  );
+  assert.equal(
+    decideSourceRecallCapture(policy, {
+      sourceKind: "assistant_turn",
+      sourceRole: "assistant",
+      captureClass: "assistant_output"
+    }).allowed,
+    true
+  );
+  assert.equal(
+    decideSourceRecallCapture(policy, {
+      sourceKind: "task_summary",
+      sourceRole: "runtime",
+      captureClass: "operational_output"
+    }).allowed,
+    true
+  );
+});
+
+test("Source Recall production allowlists fail closed on missing empty or broader values", () => {
   const missing = createSourceRecallRetentionPolicyFromEnv({
     BRAIN_SOURCE_RECALL_ENABLED: "true",
     BRAIN_SOURCE_RECALL_CAPTURE_ENABLED: "true"
@@ -181,14 +215,20 @@ test("Source Recall production allowlists fail closed on missing empty or broad 
     BRAIN_SOURCE_RECALL_CAPTURE_SOURCE_KINDS: "",
     BRAIN_SOURCE_RECALL_CAPTURE_CLASSES: ""
   }, { encryptedPayloadsAvailable: true });
-  const broad = createSourceRecallRetentionPolicyFromEnv({
+  const broaderSourceKind = createSourceRecallRetentionPolicyFromEnv({
     BRAIN_SOURCE_RECALL_ENABLED: "true",
     BRAIN_SOURCE_RECALL_CAPTURE_ENABLED: "true",
-    BRAIN_SOURCE_RECALL_CAPTURE_SOURCE_KINDS: "conversation_turn,assistant_turn",
-    BRAIN_SOURCE_RECALL_CAPTURE_CLASSES: "ordinary_source,assistant_output"
+    BRAIN_SOURCE_RECALL_CAPTURE_SOURCE_KINDS: "conversation_turn,document_text",
+    BRAIN_SOURCE_RECALL_CAPTURE_CLASSES: "ordinary_source"
+  }, { encryptedPayloadsAvailable: true });
+  const broaderCaptureClass = createSourceRecallRetentionPolicyFromEnv({
+    BRAIN_SOURCE_RECALL_ENABLED: "true",
+    BRAIN_SOURCE_RECALL_CAPTURE_ENABLED: "true",
+    BRAIN_SOURCE_RECALL_CAPTURE_SOURCE_KINDS: "conversation_turn",
+    BRAIN_SOURCE_RECALL_CAPTURE_CLASSES: "ordinary_source,external_output"
   }, { encryptedPayloadsAvailable: true });
 
-  for (const policy of [missing, empty, broad]) {
+  for (const policy of [missing, empty]) {
     assert.deepEqual(
       decideSourceRecallCapture(policy, {
         sourceKind: "conversation_turn",
@@ -201,6 +241,22 @@ test("Source Recall production allowlists fail closed on missing empty or broad 
       ]
     );
   }
+  assert.deepEqual(
+    decideSourceRecallCapture(broaderSourceKind, {
+      sourceKind: "conversation_turn",
+      sourceRole: "user",
+      captureClass: "ordinary_source"
+    }).reasons,
+    ["source_recall_source_kind_not_allowed"]
+  );
+  assert.deepEqual(
+    decideSourceRecallCapture(broaderCaptureClass, {
+      sourceKind: "conversation_turn",
+      sourceRole: "user",
+      captureClass: "ordinary_source"
+    }).reasons,
+    ["source_recall_capture_class_not_allowed"]
+  );
 });
 
 test("Source Recall non-capture firewall names production-rejected capture classes", () => {

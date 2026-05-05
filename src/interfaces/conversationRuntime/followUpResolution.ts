@@ -22,7 +22,7 @@ import { buildLocalIntentSessionHints } from "./conversationRoutingSupport";
 import { routeProposalReplyInterpretationModel } from "../../organs/languageUnderstanding/localIntentModelRouter";
 import type { ProposalReplyInterpretationSignal } from "../../organs/languageUnderstanding/localIntentModelProposalReplyContracts";
 import {
-  recordAssistantTurn
+  recordAssistantTurnWithSourceRecall
 } from "../conversationSessionMutations";
 import {
   resolveConversationInboundUserInput,
@@ -388,13 +388,14 @@ export async function handleImplicitProposalFlow(
     buildProposalQuestionPrompt(active, normalizedInput),
     message.receivedAt
   );
-  recordAssistantTurn(
+  await recordAssistantTurnWithSourceRecall(
     session,
     answer.summary,
     message.receivedAt,
     deps.config.maxConversationTurns,
     {
-      assistantTurnKind: "informational_answer"
+      assistantTurnKind: "informational_answer",
+      sourceRecallCapture: deps.sourceRecallCapture ?? null
     }
   );
   return [

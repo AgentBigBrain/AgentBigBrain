@@ -73,6 +73,9 @@ The latest slices moved queue/ack, worker-loop, and pulse-state ownership here s
   distinguish between a genuinely live worker and a dead worker bit that was never cleared
 - `conversationWorkerOutcomePersistence.ts` owns the extracted durable worker-outcome writes that
   update workspace, handoff, and recent-action state after a run completes
+- `sourceRecallTaskCapture.ts` owns lower-authority Source Recall capture for persisted task input,
+  generated task summaries, and delivered final assistant summaries so worker evidence can be
+  recalled without becoming memory truth, approval, action authority, or completion proof
 - `conversationWorkerBinding.ts` owns the extracted worker binding helpers used by the stable
   worker runtime entrypoint
 - `conversationWorkerTerminalRecovery.ts` owns the extracted terminal stuck-state cleanup used

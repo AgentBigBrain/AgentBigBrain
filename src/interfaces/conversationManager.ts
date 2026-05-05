@@ -178,6 +178,7 @@ export class ConversationManager {
           store: this.store,
           listManagedProcessSnapshots: this.listManagedProcessSnapshots,
           listBrowserSessionSnapshots: this.listBrowserSessionSnapshots,
+          sourceRecallCapture: this.sourceRecallCapture,
           config: {
             ackDelayMs: this.config.ackDelayMs,
             heartbeatIntervalMs: this.config.heartbeatIntervalMs,
@@ -311,6 +312,7 @@ export class ConversationManager {
           store: this.store,
           listManagedProcessSnapshots: this.listManagedProcessSnapshots,
           listBrowserSessionSnapshots: this.listBrowserSessionSnapshots,
+          sourceRecallCapture: this.sourceRecallCapture,
           config: {
             ackDelayMs: this.config.ackDelayMs,
             heartbeatIntervalMs: this.config.heartbeatIntervalMs,

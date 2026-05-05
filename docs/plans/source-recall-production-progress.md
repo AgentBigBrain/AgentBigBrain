@@ -391,3 +391,91 @@
     capture, context injection, semantic candidate bridging, projection review, and the broader
     production evidence matrix.
 - next slice status: `immediate-branch final validation unblocked`.
+
+## B - Assistant And Task Summary Capture
+
+- date: 2026-05-05
+- branch: `feat/source-recall-assistant-task-capture`
+- status: passed before checkpoint commit
+- files inspected:
+  - `docs/plans/SOURCE_RECALL_PRODUCTION_ROADMAP.md`
+  - `docs/plans/source-recall-production-progress.md`
+  - `src/core/sourceRecall/sourceRecallConversationCapture.ts`
+  - `src/core/sourceRecall/sourceRecallRetention.ts`
+  - `src/interfaces/conversationManager.ts`
+  - `src/interfaces/conversationRuntime/conversationRouting.ts`
+  - `src/interfaces/conversationRuntime/conversationRoutingAssistantTurnSupport.ts`
+  - `src/interfaces/conversationRuntime/conversationRoutingDirectReplies.ts`
+  - `src/interfaces/conversationRuntime/conversationRoutingInlineReplies.ts`
+  - `src/interfaces/conversationRuntime/conversationWorkerOutcomePersistence.ts`
+  - `src/interfaces/conversationRuntime/conversationWorkerRuntime.ts`
+  - `src/interfaces/conversationRuntime/README.md`
+  - `src/interfaces/conversationRuntime/followUpResolution.ts`
+  - `src/interfaces/conversationSessionMutations.ts`
+  - `tests/core/config.test.ts`
+  - `tests/core/sourceRecallRetention.test.ts`
+  - `tests/interfaces/conversationWorkerRuntime.test.ts`
+  - `tests/interfaces/sourceRecallConversationCapture.test.ts`
+- files changed:
+  - `docs/plans/source-recall-production-progress.md`
+  - `src/core/sourceRecall/sourceRecallRetention.ts`
+  - `src/interfaces/conversationManager.ts`
+  - `src/interfaces/conversationRuntime/conversationRouting.ts`
+  - `src/interfaces/conversationRuntime/conversationRoutingAssistantTurnSupport.ts`
+  - `src/interfaces/conversationRuntime/conversationRoutingDirectReplies.ts`
+  - `src/interfaces/conversationRuntime/conversationRoutingInlineReplies.ts`
+  - `src/interfaces/conversationRuntime/conversationWorkerOutcomePersistence.ts`
+  - `src/interfaces/conversationRuntime/conversationWorkerRuntime.ts`
+  - `src/interfaces/conversationRuntime/README.md`
+  - `src/interfaces/conversationRuntime/followUpResolution.ts`
+  - `src/interfaces/conversationRuntime/sourceRecallTaskCapture.ts`
+  - `tests/core/config.test.ts`
+  - `tests/core/sourceRecallRetention.test.ts`
+  - `tests/interfaces/conversationWorkerRuntime.test.ts`
+  - `tests/interfaces/sourceRecallConversationCapture.test.ts`
+- tests added:
+  - production allowlist coverage for explicit `conversation_turn`, `assistant_turn`,
+    `task_input`, and `task_summary` capture.
+  - manager-level assistant reply capture when `assistant_output` is explicitly allowed.
+  - worker-level task input, task summary, and final assistant-summary capture as lower-authority
+    evidence.
+- tests run:
+  - `npx tsx --test tests/core/sourceRecallRetention.test.ts tests/interfaces/sourceRecallConversationCapture.test.ts tests/interfaces/conversationWorkerRuntime.test.ts`
+  - `npm run check:test-types`
+  - `npm run check:no-unused-locals`
+  - `npm run build`
+  - `npm run check:docs`
+  - `npm run check:module-size`
+  - `npm test` found stale config/subsystem README expectations; targeted fixes were applied before
+    final validation.
+  - `npm test` final rerun passed with 3,352 tests, 0 failures, and 6 skipped.
+- evidence produced:
+  - focused tests only; no generated live-smoke artifact was created for this slice.
+- sensitive scan status:
+  - changed-file fixture phrase scan passed.
+  - changed-file token-shaped secret scan passed.
+  - staged-diff fixture phrase scan passed.
+  - staged-diff token-shaped secret scan passed.
+- behavior changed:
+  - production capture allowlists can now explicitly permit assistant/task source kinds and
+    `operational_output` while media/document/external capture remains outside this branch.
+  - no-worker assistant replies now use `recordAssistantTurnWithSourceRecall`.
+  - worker persistence captures persisted job input, generated task summary, and delivered final
+    assistant summary as quoted evidence only when Source Recall capture is explicitly configured.
+  - task capture uses persisted job input and result summary, not expanded execution prompts or
+    planner/chat context.
+- behavior intentionally not changed:
+  - no media/document capture was enabled.
+  - no planner/chat production retrieval, context injection, semantic candidate promotion,
+    Obsidian projection expansion, operator-full projection, or broad evidence-matrix expansion was
+    added.
+  - recovered legacy summaries remain labeled as unavailable original source and do not invent
+    source refs.
+- non-authority proof:
+  - assistant/task chunks keep `currentTruthAuthority=false`, `completionProofAuthority=false`,
+    `approvalAuthority=false`, `safetyAuthority=false`, and `unsafeToFollowAsInstruction=true`.
+- known limitations:
+  - task summary and final assistant-summary capture currently reference the same generated text in
+    separate source records so review can distinguish "workflow summary" from "assistant said this".
+  - retrieval remains review/evidence helper surface only until a later context-injection branch.
+- next slice status: `media/document capture remains blocked until this checkpoint is reviewed`.

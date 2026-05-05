@@ -64,6 +64,7 @@ async function recordRoutingUserTurn(
   );
 }
 
+
 /**
  * Resolves canonical conversation routing.
  *
@@ -147,7 +148,7 @@ async function resolveCanonicalConversationRouting(
         const reply =
           "Okay. I will leave those folders and preview holders alone for now.";
         await recordRoutingUserTurn(session, input, receivedAt, deps, topicKeyInterpretation);
-        recordRoutingAssistantTurn(session, reply, receivedAt, deps.config.maxConversationTurns, "informational_answer");
+        await recordRoutingAssistantTurn(session, reply, receivedAt, deps.config.maxConversationTurns, "informational_answer", deps.sourceRecallCapture ?? null);
         return {
           reply,
           shouldStartWorker: false
@@ -231,7 +232,7 @@ async function resolveCanonicalConversationRouting(
       clearActiveClarification(session);
     } else {
       await recordRoutingUserTurn(session, input, receivedAt, deps, topicKeyInterpretation);
-      recordRoutingAssistantTurn(session, session.activeClarification.question, receivedAt, deps.config.maxConversationTurns, "clarification");
+      await recordRoutingAssistantTurn(session, session.activeClarification.question, receivedAt, deps.config.maxConversationTurns, "clarification", deps.sourceRecallCapture ?? null);
       return {
         reply: session.activeClarification.question,
         shouldStartWorker: false
@@ -246,13 +247,13 @@ async function resolveCanonicalConversationRouting(
   );
   if (activePauseReply) {
     await recordRoutingUserTurn(session, input, receivedAt, deps, topicKeyInterpretation);
-    recordRoutingAssistantTurn(session, activePauseReply, receivedAt, deps.config.maxConversationTurns, "workflow_progress");
+    await recordRoutingAssistantTurn(session, activePauseReply, receivedAt, deps.config.maxConversationTurns, "workflow_progress", deps.sourceRecallCapture ?? null);
     return { reply: activePauseReply, shouldStartWorker: false };
   }
   const pauseReply = applyReturnHandoffPauseRequest(session, input, receivedAt);
   if (pauseReply) {
     await recordRoutingUserTurn(session, input, receivedAt, deps, topicKeyInterpretation);
-    recordRoutingAssistantTurn(session, pauseReply, receivedAt, deps.config.maxConversationTurns, "workflow_progress");
+    await recordRoutingAssistantTurn(session, pauseReply, receivedAt, deps.config.maxConversationTurns, "workflow_progress", deps.sourceRecallCapture ?? null);
     return { reply: pauseReply, shouldStartWorker: false };
   }
   const resolvedIntentMode =
@@ -281,13 +282,13 @@ async function resolveCanonicalConversationRouting(
     );
     if (interpretedActivePauseReply) {
       await recordRoutingUserTurn(session, input, receivedAt, deps, topicKeyInterpretation);
-      recordRoutingAssistantTurn(session, interpretedActivePauseReply, receivedAt, deps.config.maxConversationTurns, "workflow_progress");
+      await recordRoutingAssistantTurn(session, interpretedActivePauseReply, receivedAt, deps.config.maxConversationTurns, "workflow_progress", deps.sourceRecallCapture ?? null);
       return { reply: interpretedActivePauseReply, shouldStartWorker: false };
     }
     const interpretedPauseReply = applyValidatedReturnHandoffPause(session, receivedAt);
     if (interpretedPauseReply) {
       await recordRoutingUserTurn(session, input, receivedAt, deps, topicKeyInterpretation);
-      recordRoutingAssistantTurn(session, interpretedPauseReply, receivedAt, deps.config.maxConversationTurns, "workflow_progress");
+      await recordRoutingAssistantTurn(session, interpretedPauseReply, receivedAt, deps.config.maxConversationTurns, "workflow_progress", deps.sourceRecallCapture ?? null);
       return { reply: interpretedPauseReply, shouldStartWorker: false };
     }
   }
@@ -328,7 +329,7 @@ async function resolveCanonicalConversationRouting(
     if (shouldPreserveDeterministicDirectChatTurn(input, recentIdentityContext)) {
       const reply = buildDeterministicDirectChatFallbackReply(input);
       await recordRoutingUserTurn(session, input, receivedAt, deps, topicKeyInterpretation);
-      recordRoutingAssistantTurn(session, reply, receivedAt, deps.config.maxConversationTurns, "informational_answer");
+      await recordRoutingAssistantTurn(session, reply, receivedAt, deps.config.maxConversationTurns, "informational_answer", deps.sourceRecallCapture ?? null);
       applyConversationDomainSignalWindowForTurn(
         session,
         input,
@@ -345,7 +346,7 @@ async function resolveCanonicalConversationRouting(
       const reply =
         "End-to-end autonomous runs are turned off in this environment right now. If you want, tell me to build it now and I'll do a normal run.";
       await recordRoutingUserTurn(session, input, receivedAt, deps, topicKeyInterpretation);
-      recordRoutingAssistantTurn(session, reply, receivedAt, deps.config.maxConversationTurns, "workflow_progress");
+      await recordRoutingAssistantTurn(session, reply, receivedAt, deps.config.maxConversationTurns, "workflow_progress", deps.sourceRecallCapture ?? null);
       applyConversationDomainSignalWindowForTurn(
         session,
         input,

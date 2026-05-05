@@ -8,6 +8,8 @@ import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 
+import { createDefaultSourceRecallRetentionPolicy } from "../../src/core/sourceRecall/sourceRecallRetention";
+import { SourceRecallStore } from "../../src/core/sourceRecall/sourceRecallStore";
 import type { ConversationNotifierTransport } from "../../src/interfaces/conversationRuntime/managerContracts";
 import {
   enqueueConversationSystemJob,
@@ -58,6 +60,20 @@ function buildQueuedJob(overrides: Partial<ConversationJob> = {}): ConversationJ
     executionInput: "run runtime test",
     ...overrides
   });
+}
+
+/**
+ * Builds the explicit production-scope policy for assistant/task Source Recall capture tests.
+ */
+function buildAssistantTaskCapturePolicy() {
+  return {
+    ...createDefaultSourceRecallRetentionPolicy(),
+    enabled: true,
+    captureEnabled: true,
+    encryptedPayloadsAvailable: true,
+    sourceKindCaptureAllowlist: ["assistant_turn", "task_input", "task_summary"] as const,
+    captureClassAllowlist: ["assistant_output", "operational_output"] as const
+  };
 }
 
 test("enqueueConversationSystemJob normalizes input, marks system jobs, and requests worker start", async () => {
@@ -156,6 +172,100 @@ test("processConversationQueue drains a queued job and persists the final delive
     assert.equal(session?.recentJobs[0]?.finalDeliveryOutcome, "sent");
     assert.ok(notifications.some((message) => message.includes("completed runtime slice")));
     assert.equal(ackTimers.size, 0);
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("processConversationQueue captures task input and summary as operational Source Recall evidence", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-conversation-process-source-recall-"));
+  const store = new InterfaceSessionStore(path.join(tempDir, "sessions.json"));
+  const sourceRecallStore = new SourceRecallStore({
+    sqlitePath: path.join(tempDir, "source_recall.sqlite"),
+    testOnlyAllowPlaintextStorage: true
+  });
+  const conversationKey = "telegram:chat-1:user-1";
+  const notifications: string[] = [];
+  const ackTimers = new Map<string, NodeJS.Timeout>();
+  const workerLastSeenAt = new Map<string, string>();
+  const workerBindings = new Map<string, SessionWorkerBinding>();
+  const notify: ConversationNotifierTransport = {
+    capabilities: {
+      supportsEdit: false,
+      supportsNativeStreaming: false
+    },
+    send: async (message) => {
+      notifications.push(message);
+      return {
+        ok: true,
+        messageId: `message-${notifications.length}`,
+        errorCode: null
+      };
+    }
+  };
+
+  try {
+    await store.setSession(
+      buildSession(conversationKey, {
+        queuedJobs: [
+          buildQueuedJob({
+            id: "job-source-recall-task",
+            input: "Run the synthetic source recall task.",
+            executionInput: "Expanded execution prompt must not be captured."
+          })
+        ]
+      })
+    );
+
+    await processConversationQueue({
+      sessionKey: conversationKey,
+      executeTask: async () => ({
+        summary: "Completed the synthetic source recall task."
+      }),
+      notify,
+      store,
+      sourceRecallCapture: {
+        policy: buildAssistantTaskCapturePolicy(),
+        writer: sourceRecallStore,
+        capturedAt: "2026-05-03T14:30:00.000Z"
+      },
+      config: buildConversationWorkerRuntimeConfig({
+        ackDelayMs: 5_000,
+        heartbeatIntervalMs: 10,
+        maxRecentJobs: 20,
+        maxConversationTurns: 20
+      }),
+      ackTimers,
+      workerLastSeenAt,
+      workerBindings,
+      autonomousExecutionPrefix: "[AUTONOMOUS_LOOP_GOAL]"
+    });
+
+    const records = await sourceRecallStore.listSourceRecords();
+    assert.deepEqual(
+      records
+        .map((record) => `${record.sourceKind}:${record.sourceRole}:${record.captureClass}`)
+        .sort(),
+      [
+        "assistant_turn:assistant:assistant_output",
+        "task_input:runtime:operational_output",
+        "task_summary:runtime:operational_output"
+      ]
+    );
+    const chunks = (
+      await Promise.all(
+        records.map((record) => sourceRecallStore.listChunksForRecord(record.sourceRecordId))
+      )
+    ).flat();
+    assert.equal(
+      chunks.some((chunk) => chunk.text.includes("Expanded execution prompt")),
+      false
+    );
+    assert.equal(chunks.some((chunk) => chunk.authority.currentTruthAuthority), false);
+    assert.equal(chunks.some((chunk) => chunk.authority.approvalAuthority), false);
+    assert.equal(chunks.some((chunk) => chunk.authority.completionProofAuthority), false);
+    assert.ok(chunks.some((chunk) => chunk.text === "Run the synthetic source recall task."));
+    assert.ok(chunks.some((chunk) => chunk.text === "Completed the synthetic source recall task."));
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }

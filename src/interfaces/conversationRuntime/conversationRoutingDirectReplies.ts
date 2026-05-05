@@ -14,7 +14,7 @@ import {
 import { appendMemoryAccessAudit } from "../../organs/memoryContext/auditEvents";
 import { buildConversationAwareExecutionInput } from "../conversationExecutionInputPolicy";
 import {
-  recordAssistantTurn,
+  recordAssistantTurnWithSourceRecall,
   setModeContinuity
 } from "../conversationSessionMutations";
 import type { ConversationSession } from "../sessionStore";
@@ -449,7 +449,7 @@ export async function buildRecordedReply(
     null,
     input.sourceRecallCapture ?? null
   );
-  recordAssistantTurn(
+  await recordAssistantTurnWithSourceRecall(
     input.session,
     input.reply,
     input.receivedAt,
@@ -457,7 +457,8 @@ export async function buildRecordedReply(
     {
       assistantTurnKind:
         input.assistantTurnKind ??
-        (input.activeMode ? "informational_answer" : null)
+        (input.activeMode ? "informational_answer" : null),
+      sourceRecallCapture: input.sourceRecallCapture ?? null
     }
   );
   if (input.activeMode && input.confidence) {

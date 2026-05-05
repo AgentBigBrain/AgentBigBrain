@@ -88,7 +88,7 @@ test("conversation manager captures exactly one enabled live user turn and not a
   });
   const manager = new ConversationManager(sessionStore, {}, {
     sourceRecallCapture: {
-      policy: buildEnabledCapturePolicy(),
+      policy: buildLiveUserOnlyCapturePolicy(),
       writer: sourceRecallStore,
       capturedAt: "2026-05-03T13:05:01.000Z"
     },
@@ -114,6 +114,61 @@ test("conversation manager captures exactly one enabled live user turn and not a
     assert.equal(chunks.length, 1);
     assert.equal(chunks[0]?.text, "Please retain this synthetic source sentence.");
     assert.equal(chunks[0]?.text.includes("Synthetic assistant reply"), false);
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("conversation manager captures assistant replies only when assistant capture is explicitly allowed", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-source-recall-manager-assistant-"));
+  const sourceRecallStore = new SourceRecallStore({
+    sqlitePath: path.join(tempDir, "source_recall.sqlite"),
+    testOnlyAllowPlaintextStorage: true
+  });
+  const sessionStore = new InterfaceSessionStore(path.join(tempDir, "sessions.json"), {
+    backend: "json"
+  });
+  const manager = new ConversationManager(sessionStore, {}, {
+    sourceRecallCapture: {
+      policy: buildEnabledCapturePolicy(),
+      writer: sourceRecallStore,
+      capturedAt: "2026-05-03T13:07:01.000Z"
+    },
+    runDirectConversationTurn: async () => ({
+      summary: "Synthetic assistant reply."
+    })
+  });
+
+  try {
+    await manager.handleMessage(
+      buildConversationMessage("/chat Please retain this synthetic assistant source sentence."),
+      async () => ({ summary: "Synthetic assistant reply." }),
+      async () => undefined
+    );
+    await manager.waitForIdle();
+
+    const records = await sourceRecallStore.listSourceRecords();
+    assert.deepEqual(
+      records
+        .map((record) => `${record.sourceKind}:${record.sourceRole}:${record.captureClass}`)
+        .sort(),
+      [
+        "assistant_turn:assistant:assistant_output",
+        "conversation_turn:user:ordinary_source"
+      ]
+    );
+    const assistantRecord = records.find((record) => record.sourceKind === "assistant_turn");
+    assert.ok(assistantRecord);
+    assert.equal(assistantRecord.sourceAuthority, "semantic_model");
+    assert.equal(assistantRecord.recallAuthority, "quoted_evidence_only");
+
+    const assistantChunks = await sourceRecallStore.listChunksForRecord(
+      assistantRecord.sourceRecordId
+    );
+    assert.equal(assistantChunks[0]?.text, "Synthetic assistant reply.");
+    assert.equal(assistantChunks[0]?.authority.currentTruthAuthority, false);
+    assert.equal(assistantChunks[0]?.authority.approvalAuthority, false);
+    assert.equal(assistantChunks[0]?.authority.completionProofAuthority, false);
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }
@@ -456,6 +511,19 @@ function buildEnabledCapturePolicy() {
       "ordinary_source",
       "assistant_output"
     ] as const
+  };
+}
+
+/**
+ * Builds the narrow S3A-era policy for manager tests that should capture only live user text.
+ *
+ * @returns Source Recall policy with only conversation-turn capture enabled.
+ */
+function buildLiveUserOnlyCapturePolicy() {
+  return {
+    ...buildEnabledCapturePolicy(),
+    sourceKindCaptureAllowlist: ["conversation_turn"] as const,
+    captureClassAllowlist: ["ordinary_source"] as const
   };
 }
 

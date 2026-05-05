@@ -311,12 +311,12 @@ test("supports Source Recall runtime latches without enabling capture by default
   );
 });
 
-test("Source Recall config fails closed on missing encryption and broad allowlists", () => {
+test("Source Recall config fails closed on missing encryption and disallowed capture scope", () => {
   const config = createBrainConfigFromEnv({
     BRAIN_SOURCE_RECALL_ENABLED: "true",
     BRAIN_SOURCE_RECALL_CAPTURE_ENABLED: "true",
-    BRAIN_SOURCE_RECALL_CAPTURE_SOURCE_KINDS: "conversation_turn,assistant_turn",
-    BRAIN_SOURCE_RECALL_CAPTURE_CLASSES: "ordinary_source,assistant_output"
+    BRAIN_SOURCE_RECALL_CAPTURE_SOURCE_KINDS: "conversation_turn,document_text",
+    BRAIN_SOURCE_RECALL_CAPTURE_CLASSES: "ordinary_source,external_output"
   });
 
   assert.equal(config.sourceRecall.status, "blocked_missing_encryption");
