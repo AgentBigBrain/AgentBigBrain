@@ -1001,3 +1001,126 @@
   - Source Recall projection is limited to snapshot/Obsidian/JSON review surfaces; broader evidence
     matrix proof remains a later roadmap slice.
 - next slice status: `production evidence matrix remains blocked until this checkpoint is reviewed`.
+
+## G - Source Recall Production Evidence Matrix
+
+- date: 2026-05-05
+- branch: `test/source-recall-production-evidence-matrix`
+- status: passed before checkpoint commit
+- objective:
+  - Prove production Source Recall works and remains non-authoritative across recall quality,
+    authority safety, privacy/delete, projection, and production-status evidence.
+- owner files:
+  - `docs/plans/source-recall-production-progress.md`
+  - `scripts/evidence/sourceRecallEvidenceMatrix.ts`
+  - `tests/fixtures/sourceRecallMatrixScenarios.json`
+  - `tests/scripts/sourceRecallEvidenceMatrix.test.ts`
+- prohibited changes:
+  - no new Source Recall capture, retrieval, projection, memory, planner, or interface runtime
+    behavior.
+  - no raw private source text, local paths, provider tokens, or token-shaped values in generated
+    artifacts.
+  - no expected-result copying into observed result fields.
+  - no mocked proof may be labeled as live proof.
+  - no evidence scenario may claim authority from Source Recall chunks, refs, projections, or recall
+    bundles.
+- acceptance criteria:
+  - matrix uses encrypted production Source Recall storage, not the test-only plaintext latch.
+  - evidence distinguishes `synthetic_runtime_observed` proof and `NOT_REQUIRED` live dependency
+    status.
+  - matrix proves exact quote, scope/thread, temporal, relationship-source, assistant/task, and
+    media/document recall quality for already-landed source kinds.
+  - matrix proves retrieved source cannot authorize memory writes, semantic lesson commits,
+    semantic candidate promotion, actions, approvals, route metadata, safety, completion proof, or
+    browser/process/file proof.
+  - prompt-injection proof covers completion-proof, approval-command, route-metadata, and
+    browser/process/file-proof spoofing as quoted evidence only.
+  - delete proof shows forgotten records are absent from retrieval, projection, and visible index
+    refs.
+  - projection proof shows review-safe redaction and operator-full latch behavior.
+  - top-level status proof distinguishes disabled, enabled, missing-encryption blocked, and
+    policy-blocked production states.
+  - artifact privacy proof shows no raw seed source text, local desktop path, or token-shaped secret
+    is written to the generated matrix artifact.
+- required tests:
+  - Source Recall matrix script tests for scenario pass/fail behavior and non-authority fields.
+  - retriever/index/projection tests for lower-level boundaries the matrix asserts.
+- required commands:
+  - `npx tsx --test tests/scripts/sourceRecallEvidenceMatrix.test.ts tests/core/sourceRecallRetriever.test.ts tests/core/sourceRecallIndex.test.ts tests/core/sourceRecallProjection.test.ts`
+  - `npm run test:source_recall:evidence`
+  - `npm run check:test-types`
+  - `npm run check:no-unused-locals`
+  - `npm run build`
+  - `npm run check:docs`
+  - `npm run check:module-size`
+  - `npm test` before checkpoint commit when focused validation is green.
+- sensitive scan requirements:
+  - changed files, staged diff, and generated matrix artifact.
+  - scan for prior private PDF needles, local private paths, provider-token shapes, GitHub token
+    shapes, Slack token shapes, Telegram token shapes, and raw synthetic seed source text in
+    generated artifacts.
+- files inspected:
+  - `docs/plans/SOURCE_RECALL_PRODUCTION_ROADMAP.md`
+  - `docs/plans/source-recall-production-progress.md`
+  - `package.json`
+  - `scripts/evidence/sourceRecallEvidenceMatrix.ts`
+  - `scripts/evidence/sourceRecallProductionUserTurnSmoke.ts`
+  - `src/core/sourceRecall/sourceRecallIndex.ts`
+  - `src/core/sourceRecall/sourceRecallMemoryBridge.ts`
+  - `src/core/sourceRecall/sourceRecallProjection.ts`
+  - `src/core/sourceRecall/sourceRecallRetriever.ts`
+  - `src/organs/memoryContext/contextInjection.ts`
+  - `tests/fixtures/sourceRecallMatrixScenarios.json`
+  - `tests/scripts/sourceRecallEvidenceMatrix.test.ts`
+- files changed:
+  - `docs/plans/source-recall-production-progress.md`
+  - `scripts/evidence/sourceRecallEvidenceMatrix.ts`
+  - `tests/fixtures/sourceRecallMatrixScenarios.json`
+  - `tests/scripts/sourceRecallEvidenceMatrix.test.ts`
+- tests added:
+  - matrix coverage for encrypted production-store proof and production status states.
+  - matrix scenarios for scope/thread, assistant/task, media/document, and projection review
+    boundaries.
+  - authority assertions for action, approval, route metadata, browser/process/file proof, memory
+    write, semantic lesson commit, and semantic candidate promotion.
+  - prompt-injection proof for completion-proof, approval-command, route-metadata, and
+    browser/process/file-proof spoofing.
+  - regression coverage proving wrong expected retrieval values fail instead of being copied into
+    observed fields.
+- tests run:
+  - `npx tsx --test tests/scripts/sourceRecallEvidenceMatrix.test.ts tests/core/sourceRecallRetriever.test.ts tests/core/sourceRecallIndex.test.ts tests/core/sourceRecallProjection.test.ts`
+  - `npm run test:source_recall:evidence`
+  - `npm run check:test-types`
+  - `npm run check:no-unused-locals`
+  - `npm run build`
+  - `npm run check:docs`
+  - `npm run check:module-size`
+  - `npm run check:ai-first`
+  - `npm test` (`3365` tests, `3358` pass, `0` fail, `7` skipped)
+- evidence produced:
+  - `runtime/evidence/source_recall/source_recall_evidence_matrix.json`
+  - evidence mode: `synthetic_runtime_observed`
+  - live dependency status: `NOT_REQUIRED`
+  - summary: `12` total, `12` passed, `0` failed
+  - top-level status: `PASS`
+- sensitive scan status:
+  - changed-file scan passed for prior private PDF needles, local private paths, provider-token
+    shapes, GitHub token shapes, Slack token shapes, and Telegram token shapes.
+  - generated-evidence scan passed for the same patterns plus raw synthetic seed source text needles.
+  - staged-diff scan passed before checkpoint commit.
+- behavior changed:
+  - Source Recall evidence matrix now uses encrypted production storage instead of the test-only
+    plaintext latch.
+  - matrix results expose observed retrieval mode, expected retrieval mode, retrieval authority, and
+    runtime-observed proof source.
+  - matrix artifact records production status, storage encryption, artifact privacy, projection,
+    delete/index, and expanded authority-safety proofs.
+- behavior intentionally not changed:
+  - no Source Recall runtime capture, retrieval, projection, planner/chat injection, semantic
+    promotion, memory-write, approval, action, safety, or completion-proof behavior changed.
+  - no live dependency is required for this matrix; live/private Telegram evidence remains separate.
+  - raw source excerpts are not written to the matrix artifact.
+- known limitations:
+  - evidence is synthetic runtime-observed, not live Telegram/desktop proof.
+  - later docs contract cleanup remains the final roadmap branch.
+- next slice status: `docs/source-recall-production-contract remains blocked until this checkpoint is reviewed`.
