@@ -30,6 +30,7 @@ import { createBrainConfigFromEnv } from "../core/config";
 import { EntityGraphStore } from "../core/entityGraphStore";
 import { ensureEnvLoaded } from "../core/envLoader";
 import { MediaArtifactStore } from "../core/mediaArtifactStore";
+import type { SourceRecallStore } from "../core/sourceRecall/sourceRecallStore";
 import { DiscordAdapter } from "./discordAdapter";
 import { DiscordGateway } from "./discordGateway";
 import { acquireInterfaceRuntimeLock } from "./interfaceRuntimeLock";
@@ -44,6 +45,7 @@ import { InterfaceSessionStore } from "./sessionStore";
 import { TelegramAdapter } from "./telegramAdapter";
 import { TelegramGateway } from "./telegramGateway";
 import { InterfaceBrainRegistry } from "./interfaceBrainRegistry";
+import type { ConversationSourceRecallCaptureDependencies } from "./conversationRuntime/managerContracts";
 
 interface GatewayRuntime {
   start(): Promise<void>;
@@ -54,6 +56,7 @@ interface GatewayRuntimePersistence {
   sessionStore: InterfaceSessionStore;
   entityGraphStore: EntityGraphStore;
   mediaArtifactStore: MediaArtifactStore;
+  sourceRecallStore?: SourceRecallStore;
   brainRegistry: InterfaceBrainRegistry;
 }
 
@@ -72,6 +75,35 @@ interface InterfaceRuntimeOptionalDependencies {
   relationshipInterpretationResolver?: ReturnType<typeof createRelationshipInterpretationResolverFromEnv>;
   proposalReplyInterpretationResolver?: ReturnType<typeof createProposalReplyInterpretationResolverFromEnv>;
   topicKeyInterpretationResolver?: ReturnType<typeof createTopicKeyInterpretationResolverFromEnv>;
+}
+
+/**
+ * Builds production Source Recall capture dependencies only when encrypted storage and capture
+ * latches are initialized for this process.
+ *
+ * @param config - Provider runtime config carrying Source Recall policy.
+ * @param sourceRecallStore - Shared encrypted Source Recall store, when runtime construction enabled it.
+ * @returns Capture dependencies, or `undefined` when production capture must remain disabled.
+ */
+function createConversationSourceRecallCaptureDependencies(
+  config: Pick<TelegramInterfaceConfig | DiscordInterfaceConfig, "sourceRecall">,
+  sourceRecallStore?: SourceRecallStore
+): ConversationSourceRecallCaptureDependencies | undefined {
+  if (
+    !config.sourceRecall.enabled ||
+    config.sourceRecall.status !== "enabled" ||
+    !config.sourceRecall.retentionPolicy.captureEnabled ||
+    !sourceRecallStore
+  ) {
+    return undefined;
+  }
+  return {
+    policy: {
+      ...config.sourceRecall.retentionPolicy,
+      encryptedPayloadsAvailable: true
+    },
+    writer: sourceRecallStore
+  };
 }
 
 /**
@@ -123,6 +155,10 @@ function createTelegramGatewayRuntime(
     mediaArtifactStore: persistence.mediaArtifactStore,
     brainRegistry: persistence.brainRegistry,
     mediaUnderstandingOrgan,
+    sourceRecallCapture: createConversationSourceRecallCaptureDependencies(
+      config,
+      persistence.sourceRecallStore
+    ),
     localIntentModelResolver: optionalDependencies.localIntentModelResolver,
     autonomyBoundaryInterpretationResolver: optionalDependencies.autonomyBoundaryInterpretationResolver,
     statusRecallBoundaryInterpretationResolver: optionalDependencies.statusRecallBoundaryInterpretationResolver,
@@ -184,6 +220,10 @@ function createDiscordGatewayRuntime(
     sessionStore: persistence.sessionStore,
     entityGraphStore: persistence.entityGraphStore,
     brainRegistry: persistence.brainRegistry,
+    sourceRecallCapture: createConversationSourceRecallCaptureDependencies(
+      config,
+      persistence.sourceRecallStore
+    ),
     localIntentModelResolver: optionalDependencies.localIntentModelResolver,
     autonomyBoundaryInterpretationResolver: optionalDependencies.autonomyBoundaryInterpretationResolver,
     statusRecallBoundaryInterpretationResolver: optionalDependencies.statusRecallBoundaryInterpretationResolver,
@@ -531,6 +571,7 @@ export async function runInterfaceRuntime(): Promise<void> {
     sessionStore,
     entityGraphStore: sharedBrainRuntime.entityGraphStore,
     mediaArtifactStore: sharedBrainRuntime.mediaArtifactStore,
+    sourceRecallStore: sharedBrainRuntime.sourceRecallStore,
     brainRegistry
   }, {
     localIntentModelResolver,

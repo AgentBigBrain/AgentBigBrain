@@ -12,6 +12,7 @@ import type {
   ListBrowserSessionSnapshots,
   ListManagedProcessSnapshots,
   ListAvailableSkills,
+  ConversationSourceRecallCaptureDependencies,
   QueryConversationContinuityFacts,
   RememberConversationProfileInput,
   ConversationIntentInterpreter,
@@ -126,6 +127,7 @@ export interface ConversationIngressDependencies extends ConversationIngressRule
   listManagedProcessSnapshots?: ListManagedProcessSnapshots;
   listBrowserSessionSnapshots?: ListBrowserSessionSnapshots;
   memoryAccessAuditStore?: MemoryAccessAuditStore;
+  sourceRecallCapture?: ConversationSourceRecallCaptureDependencies;
   abortActiveAutonomousRun?(conversationId: string): boolean;
   isWorkerActive(sessionKey: string): boolean;
   getWorkerLastSeenAt?(sessionKey: string): string | null;

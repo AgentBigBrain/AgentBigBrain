@@ -164,3 +164,85 @@
   - A3 still needs the central live-user-turn capture wrapper and rollback diagnostics.
   - A4 still needs review/evidence retrieval budgets and audit events.
 - next slice status: `unblocked` after A2 checkpoint commit.
+
+## A3 - Live User-Turn Capture
+
+- date: 2026-05-05
+- branch: `feat/source-recall-encrypted-user-turn-capture`
+- status: passed before checkpoint commit
+- files inspected:
+  - `src/interfaces/conversationSessionMutations.ts`
+  - `src/interfaces/conversationRuntime/conversationRouting.ts`
+  - `src/interfaces/conversationRuntime/conversationRoutingTurnSupport.ts`
+  - `src/interfaces/conversationRuntime/conversationRoutingDirectReplies.ts`
+  - `src/interfaces/conversationRuntime/conversationRoutingInlineReplies.ts`
+  - `src/interfaces/conversationRuntime/conversationRoutingQueueSupport.ts`
+  - `src/interfaces/conversationRuntime/commandDispatch.ts`
+  - `src/interfaces/conversationRuntime/followUpResolution.ts`
+  - `src/interfaces/conversationManager.ts`
+  - `src/interfaces/interfaceRuntime.ts`
+  - `src/interfaces/telegramGateway.ts`
+  - `src/interfaces/discordGateway.ts`
+  - `tests/interfaces/sourceRecallConversationCapture.test.ts`
+- files changed:
+  - `src/interfaces/conversationManager.ts`
+  - `src/interfaces/conversationRuntime/commandDispatch.ts`
+  - `src/interfaces/conversationRuntime/contracts.ts`
+  - `src/interfaces/conversationRuntime/conversationRouting.ts`
+  - `src/interfaces/conversationRuntime/conversationRoutingContracts.ts`
+  - `src/interfaces/conversationRuntime/conversationRoutingDirectReplies.ts`
+  - `src/interfaces/conversationRuntime/conversationRoutingInlineReplies.ts`
+  - `src/interfaces/conversationRuntime/conversationRoutingQueueSupport.ts`
+  - `src/interfaces/conversationRuntime/conversationRoutingTurnSupport.ts`
+  - `src/interfaces/conversationRuntime/followUpResolution.ts`
+  - `src/interfaces/discordGateway.ts`
+  - `src/interfaces/interfaceRuntime.ts`
+  - `src/interfaces/telegramGateway.ts`
+  - `tests/interfaces/sourceRecallConversationCapture.test.ts`
+- tests added:
+  - manager-level live user-turn capture writes exactly one `conversation_turn:user` Source Recall
+    record when encrypted production capture dependencies are present.
+  - manager-level disabled/default capture writes no Source Recall records.
+  - existing helper coverage was tightened so enabled policies include the top-level latch and
+    explicit source-kind/capture-class allowlists.
+- tests run:
+  - `npx tsx --test tests/interfaces/sourceRecallConversationCapture.test.ts`
+  - `npx tsx --test tests/core/sourceRecallStore.test.ts tests/core/sourceRecallRetention.test.ts tests/core/config.test.ts tests/interfaces/runtimeConfig.test.ts tests/core/buildBrain.test.ts tests/interfaces/sourceRecallConversationCapture.test.ts`
+  - `npm run check:test-types`
+  - `npm run check:no-unused-locals`
+  - `npm run build`
+  - `npm run check:docs`
+- evidence produced:
+  - focused manager-level capture tests.
+  - post-slice source scan showing production user-turn writes now route through
+    `recordTopicAwareUserTurn` and the only direct `recordUserTurn` production use is the canonical
+    `recordUserTurnWithSourceRecall` wrapper.
+  - post-slice Source Recall construction scan showing the only production `new SourceRecallStore(`
+    callsite remains shared-runtime construction.
+- sensitive scan status:
+  - focused changed-file and staged-diff scans still required immediately before checkpoint commit.
+- behavior changed:
+  - Conversation ingress can now receive central Source Recall capture dependencies from the
+    interface runtime.
+  - Telegram and Discord gateways pass capture dependencies into `ConversationManager` only when
+    the shared encrypted Source Recall store exists and provider config is enabled.
+  - Live user-turn recording paths now use the Source Recall-aware helper, preserving normal session
+    turn writes first and treating Source Recall capture as optional, bounded, and non-throwing.
+  - `/auto`, follow-up/proposal fallback, direct replies, inline replies, follow-up queueing, and
+    canonical routing paths all use the same live-user capture seam.
+- behavior intentionally not changed:
+  - assistant/task capture helpers remain unwired from production callsites.
+  - media/document capture remains unwired from production callsites.
+  - planner/chat retrieval and context injection remain disabled/unwired by default.
+  - Obsidian projection and semantic-candidate promotion remain unchanged.
+- production defaults after slice:
+  - no capture occurs unless Source Recall is enabled, status is `enabled`, capture is enabled, an
+    encrypted store exists, and the immediate allowlists permit `conversation_turn` plus
+    `ordinary_source`.
+  - capture failures do not crash conversation handling and only attach bounded non-raw diagnostic
+    codes to the recorded turn.
+- known limitations:
+  - A4 still needs bounded review/evidence retrieval and minimal retrieval audit events.
+  - A5 still needs a private/synthetic smoke that proves capture, exact-quote retrieval, and
+    forget/delete behavior with raw evidence redacted.
+- next slice status: `unblocked` after A3 checkpoint commit.

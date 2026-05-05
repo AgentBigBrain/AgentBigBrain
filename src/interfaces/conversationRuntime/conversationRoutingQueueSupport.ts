@@ -6,11 +6,12 @@ import type { TopicKeyInterpretationSignalV1 } from "../../core/stage6_86Convers
 import {
   buildConversationAwareExecutionInput
 } from "../conversationExecutionInputPolicy";
-import { applyConversationDomainSignalWindow, recordUserTurn } from "../conversationSessionMutations";
+import { applyConversationDomainSignalWindow } from "../conversationSessionMutations";
 import type { ConversationSession } from "../sessionStore";
 import type { ConversationInboundMediaEnvelope } from "../mediaRuntime/contracts";
 import type { ContextualReferenceInterpretationResolver, EntityReferenceInterpretationResolver } from "../../organs/languageUnderstanding/localIntentModelContracts";
 import type {
+  ConversationSourceRecallCaptureDependencies,
   GetConversationEntityGraph,
   ListBrowserSessionSnapshots,
   ListManagedProcessSnapshots,
@@ -19,6 +20,7 @@ import type {
   QueryConversationContinuityFacts
 } from "./managerContracts";
 import { buildConversationDomainSignalWindowForTurn } from "./sessionDomainRouting";
+import { recordTopicAwareUserTurn } from "./conversationRoutingTurnSupport";
 
 export interface ConversationRoutingQueueResult {
   reply: string;
@@ -38,6 +40,7 @@ export interface ConversationRoutingQueueDependencies {
   getEntityGraph?: GetConversationEntityGraph;
   listManagedProcessSnapshots?: ListManagedProcessSnapshots;
   listBrowserSessionSnapshots?: ListBrowserSessionSnapshots;
+  sourceRecallCapture?: ConversationSourceRecallCaptureDependencies;
   enqueueJob(
     session: ConversationSession,
     input: string,
@@ -98,9 +101,14 @@ export async function enqueueFollowUpLinkedToPriorAssistantPrompt(
       deps.openContinuityReadSession
     )
   );
-  recordUserTurn(session, input, receivedAt, deps.config.maxConversationTurns, {
-    topicKeyInterpretation
-  });
+  await recordTopicAwareUserTurn(
+    session,
+    input,
+    receivedAt,
+    deps.config.maxConversationTurns,
+    topicKeyInterpretation,
+    deps.sourceRecallCapture ?? null
+  );
   applyConversationDomainSignalWindow(
     session,
     buildConversationDomainSignalWindowForTurn(

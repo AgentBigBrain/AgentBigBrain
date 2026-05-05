@@ -9,6 +9,8 @@ import type {
   ConversationVisibility
 } from "../sessionStore";
 import type { MemoryAccessAuditStore } from "../../core/memoryAccessAudit";
+import type { SourceRecallRecordWriter } from "../../core/sourceRecall/sourceRecallConversationCapture";
+import type { SourceRecallRetentionPolicy } from "../../core/sourceRecall/sourceRecallRetention";
 import type { ConversationInboundMediaEnvelope } from "../mediaRuntime/contracts";
 import type {
   FollowUpRuleContext,
@@ -251,6 +253,12 @@ export type RememberConversationProfileInput = (
 export type ListManagedProcessSnapshots = () => Promise<readonly ManagedProcessSnapshot[]>;
 export type ListBrowserSessionSnapshots = () => Promise<readonly BrowserSessionSnapshot[]>;
 
+export interface ConversationSourceRecallCaptureDependencies {
+  policy: SourceRecallRetentionPolicy;
+  writer: SourceRecallRecordWriter;
+  capturedAt?: string;
+}
+
 export interface ConversationManagerConfig {
   maxProposalInputChars: number;
   heartbeatIntervalMs: number;
@@ -303,6 +311,7 @@ export interface ConversationManagerDependencies {
   listManagedProcessSnapshots?: ListManagedProcessSnapshots;
   listBrowserSessionSnapshots?: ListBrowserSessionSnapshots;
   memoryAccessAuditStore?: MemoryAccessAuditStore;
+  sourceRecallCapture?: ConversationSourceRecallCaptureDependencies;
   abortActiveAutonomousRun?(conversationId: string): boolean;
 }
 

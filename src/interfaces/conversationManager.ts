@@ -65,6 +65,7 @@ export class ConversationManager {
   private readonly listManagedProcessSnapshots?: ConversationManagerDependencies["listManagedProcessSnapshots"];
   private readonly listBrowserSessionSnapshots?: ConversationManagerDependencies["listBrowserSessionSnapshots"];
   private readonly memoryAccessAuditStore?: ConversationManagerDependencies["memoryAccessAuditStore"];
+  private readonly sourceRecallCapture?: ConversationManagerDependencies["sourceRecallCapture"];
   private readonly abortActiveAutonomousRun?: ConversationManagerDependencies["abortActiveAutonomousRun"];
   private readonly followUpRuleContext: FollowUpRuleContext;
   private readonly pulseLexicalRuleContext: PulseLexicalRuleContext;
@@ -123,6 +124,7 @@ export class ConversationManager {
     this.listManagedProcessSnapshots = dependencies.listManagedProcessSnapshots;
     this.listBrowserSessionSnapshots = dependencies.listBrowserSessionSnapshots;
     this.memoryAccessAuditStore = dependencies.memoryAccessAuditStore;
+    this.sourceRecallCapture = dependencies.sourceRecallCapture;
     this.abortActiveAutonomousRun = dependencies.abortActiveAutonomousRun;
     this.followUpRuleContext = createFollowUpRuleContext(this.config.followUpOverridePath);
     this.pulseLexicalRuleContext = createPulseLexicalRuleContext(this.config.pulseLexicalOverridePath);
@@ -290,6 +292,7 @@ export class ConversationManager {
       listManagedProcessSnapshots: this.listManagedProcessSnapshots,
       listBrowserSessionSnapshots: this.listBrowserSessionSnapshots,
       memoryAccessAuditStore: this.memoryAccessAuditStore,
+      sourceRecallCapture: this.sourceRecallCapture,
       abortActiveAutonomousRun: this.abortActiveAutonomousRun,
       isWorkerActive: (sessionKey) => this.activeWorkers.has(sessionKey),
       getWorkerLastSeenAt: (sessionKey) => this.workerLastSeenAt.get(sessionKey) ?? null,

@@ -1,8 +1,9 @@
 /** @fileoverview Small turn-recording helpers shared by the stable conversation-routing entrypoint. */
 
 import type { TopicKeyInterpretationSignalV1 } from "../../core/stage6_86ConversationStack";
-import { recordUserTurn } from "../conversationSessionMutations";
+import { recordUserTurnWithSourceRecall } from "../conversationSessionMutations";
 import type { ConversationSession } from "../sessionStore";
+import type { ConversationSourceRecallCaptureDependencies } from "./managerContracts";
 
 /**
  * Records a user turn while preserving topic-key interpretation metadata for later continuity use.
@@ -13,12 +14,16 @@ import type { ConversationSession } from "../sessionStore";
  * @param maxConversationTurns - Session turn-retention bound.
  * @param topicKeyInterpretation - Optional topic-key interpretation captured for this turn.
  */
-export function recordTopicAwareUserTurn(
+export async function recordTopicAwareUserTurn(
   session: ConversationSession,
   input: string,
   receivedAt: string,
   maxConversationTurns: number,
-  topicKeyInterpretation: TopicKeyInterpretationSignalV1 | null
-): void {
-  recordUserTurn(session, input, receivedAt, maxConversationTurns, { topicKeyInterpretation });
+  topicKeyInterpretation: TopicKeyInterpretationSignalV1 | null,
+  sourceRecallCapture: ConversationSourceRecallCaptureDependencies | null = null
+): Promise<void> {
+  await recordUserTurnWithSourceRecall(session, input, receivedAt, maxConversationTurns, {
+    topicKeyInterpretation,
+    sourceRecallCapture
+  });
 }
