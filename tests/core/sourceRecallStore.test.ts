@@ -13,6 +13,7 @@ import {
   type SourceRecallChunk,
   type SourceRecallRecord
 } from "../../src/core/sourceRecall/contracts";
+import type { ProjectionChangeSet } from "../../src/core/projections/contracts";
 import { SourceRecallStore } from "../../src/core/sourceRecall/sourceRecallStore";
 import { withSqliteDatabase } from "../../src/core/sqliteStore";
 
@@ -158,6 +159,36 @@ test("SourceRecallStore hides forgotten records and chunks by default", async ()
     });
     assert.equal(inactiveRecord?.lifecycleState, "forgotten");
     assert.equal(inactiveChunks[0]?.lifecycleState, "forgotten");
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("SourceRecallStore emits bounded source-recall projection changes after mutations", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-source-recall-change-"));
+  const sqlitePath = path.join(tempDir, "source_recall.sqlite");
+  const changes: ProjectionChangeSet[] = [];
+  const store = new SourceRecallStore({
+    sqlitePath,
+    testOnlyAllowPlaintextStorage: true,
+    onChange: (changeSet) => {
+      changes.push(changeSet);
+    }
+  });
+  const record = buildRecord("source_record_projection_change", "scope_change", "thread_change");
+
+  try {
+    await store.upsertSourceRecord(record, [
+      buildChunk("chunk_change_1", record.sourceRecordId, 0, "Synthetic projection refresh text.")
+    ]);
+    await store.markSourceRecordForgotten(record.sourceRecordId);
+
+    assert.equal(changes.length, 2);
+    assert.deepEqual(changes[0]?.kinds, ["source_recall_changed"]);
+    assert.deepEqual(changes[1]?.kinds, ["source_recall_changed"]);
+    assert.equal(changes[0]?.metadata?.sourceRecordId, record.sourceRecordId);
+    assert.equal(changes[1]?.metadata?.sourceRecordId, record.sourceRecordId);
+    assert.doesNotMatch(changes.map((change) => change.reasons.join("\n")).join("\n"), /Synthetic projection refresh text/);
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }

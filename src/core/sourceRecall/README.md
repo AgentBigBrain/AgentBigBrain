@@ -25,6 +25,7 @@ allowed, approved, completed, or safe to act on.
 - Bounded retrieval bundles and context-rendering metadata used by route-approved broker injection.
 - Evidence-only refs that semantic memory candidates may cite as provenance without gaining truth
   or write authority.
+- Projection-safe entries that Obsidian/JSON mirrors can display as bounded review evidence only.
 
 ## Invariants
 
@@ -57,6 +58,10 @@ allowed, approved, completed, or safe to act on.
 - Semantic relationship candidates may carry Source Recall refs only as provenance. The candidates
   still require model/review evidence and route-approved profile-memory write policy before truth
   governance can apply durable facts.
+- Projection requires the Source Recall projection latch. Operator-full mode requires the separate
+  operator-full Source Recall latch; otherwise Source Recall is omitted from operator-full mirrors.
+- Projected Source Recall notes cannot be re-captured as ordinary Source Recall input and cannot
+  authorize review actions by source ref alone.
 
 ## Related Tests
 
@@ -66,6 +71,7 @@ allowed, approved, completed, or safe to act on.
 - `tests/core/sourceRecallStore.test.ts`
 - `tests/core/sourceRecallMediaCapture.test.ts`
 - `tests/core/sourceRecallMemoryBridge.test.ts`
+- `tests/core/sourceRecallProjection.test.ts`
 - `tests/interfaces/sourceRecallConversationCapture.test.ts`
 - `tests/organs/sourceRecallContextInjection.test.ts`
 

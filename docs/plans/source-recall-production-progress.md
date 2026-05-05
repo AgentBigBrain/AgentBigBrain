@@ -850,3 +850,154 @@
   - candidate refs currently flow through relationship semantic candidates and request provenance;
     broader episode/source-ref attribution remains a later bridge concern if needed.
 - next slice status: `projection and review remains blocked until this checkpoint is reviewed`.
+
+## F - Source Recall Projection And Review
+
+- date: 2026-05-05
+- branch: `feat/source-recall-projection-review`
+- status: passed before checkpoint commit
+- objective:
+  - Show Source Recall safely in Obsidian/JSON projection and review flows while preserving the
+    rule that projection is review evidence only.
+- owner files:
+  - `src/core/buildBrain.ts`
+  - `src/core/sourceRecall/sourceRecallProjection.ts`
+  - `src/core/sourceRecall/sourceRecallStore.ts`
+  - `src/core/sourceRecall/README.md`
+  - `src/core/projections/README.md`
+  - `src/core/projections/contracts.ts`
+  - `src/core/projections/renderers/obsidianDashboardRenderer.ts`
+  - `src/core/projections/renderers/obsidianSourceRecallRenderer.ts`
+  - `src/core/projections/targets/obsidianVaultSink.ts`
+  - `src/core/projections/reviewActionIngestion.ts`
+  - `tests/core/buildBrain.test.ts`
+  - `tests/core/sourceRecallProjection.test.ts`
+  - `tests/core/sourceRecallStore.test.ts`
+  - `tests/core/obsidianVaultSink.test.ts`
+  - `tests/core/projectionReviewActions.test.ts`
+- prohibited changes:
+  - no new Source Recall capture surface.
+  - no new planner/chat retrieval or context injection.
+  - no semantic-candidate promotion changes.
+  - no operator-full Source Recall projection without the explicit Source Recall operator-full
+    projection latch.
+  - no projection output may be captured back as ordinary Source Recall input.
+  - no source ref may grant memory-write, approval, action, safety, or completion-proof authority.
+- acceptance criteria:
+  - projection snapshots include Source Recall entries only when Source Recall projection policy
+    allows them.
+  - review-safe Obsidian projection renders metadata and bounded/redacted quoted excerpts only.
+  - JSON mirror entries carry non-authority flags and the explicit `quoted_evidence_only` recall
+    authority.
+  - Source Recall store mutations can emit bounded `source_recall_changed` projection changes
+    without raw source text in reasons or metadata.
+  - Obsidian review-action ingestion skips Source Recall projection notes that lack a valid review
+    action schema.
+  - `abb_source_recall_refs` remain provenance links only and cannot authorize review actions by
+    themselves.
+- required tests:
+  - Source Recall projection read-model tests for metadata, latch, lifecycle, and authority flags.
+  - Obsidian sink tests for Source Recall notes, dashboard counts, and review-only rendering.
+  - build-brain JSON mirror test proving runtime snapshot wiring uses the projection latch.
+  - Source Recall store change-set tests proving bounded `source_recall_changed` notifications.
+  - review-action ingestion tests proving source-ref-only notes are skipped.
+- required commands:
+  - `npx tsx --test tests/core/sourceRecallProjection.test.ts tests/core/sourceRecallStore.test.ts tests/core/obsidianVaultSink.test.ts tests/core/projectionReviewActions.test.ts tests/core/buildBrain.test.ts`
+  - `npm run check:test-types`
+  - `npm run check:no-unused-locals`
+  - `npm run build`
+  - `npm run check:docs`
+  - `npm run check:module-size`
+  - `npm test` before checkpoint commit when focused validation is green.
+- sensitive scan requirements:
+  - changed files, staged diff, generated evidence if any, and token-shaped patterns.
+  - no raw private source chunks, local private paths, provider tokens, or private fixture text may
+    be added to docs/tests/evidence.
+- files inspected:
+  - `docs/plans/SOURCE_RECALL_PRODUCTION_ROADMAP.md`
+  - `docs/plans/source-recall-production-progress.md`
+  - `src/core/buildBrain.ts`
+  - `src/core/projections/README.md`
+  - `src/core/projections/contracts.ts`
+  - `src/core/projections/renderers/obsidianDashboardRenderer.ts`
+  - `src/core/projections/renderers/obsidianFrontmatter.ts`
+  - `src/core/projections/targets/obsidianVaultSink.ts`
+  - `src/core/projections/reviewActionIngestion.ts`
+  - `src/core/sourceRecall/README.md`
+  - `src/core/sourceRecall/contracts.ts`
+  - `src/core/sourceRecall/sourceRecallProjection.ts`
+  - `src/core/sourceRecall/sourceRecallRetention.ts`
+  - `src/core/sourceRecall/sourceRecallStore.ts`
+  - `tests/core/buildBrain.test.ts`
+  - `tests/core/obsidianVaultSink.test.ts`
+  - `tests/core/projectionReviewActions.test.ts`
+  - `tests/core/projectionService.test.ts`
+  - `tests/core/projectionTestSupport.ts`
+  - `tests/core/sourceRecallProjection.test.ts`
+  - `tests/core/sourceRecallReceipts.test.ts`
+  - `tests/core/sourceRecallStore.test.ts`
+- files changed:
+  - `docs/plans/source-recall-production-progress.md`
+  - `src/core/buildBrain.ts`
+  - `src/core/projections/README.md`
+  - `src/core/projections/renderers/obsidianDashboardRenderer.ts`
+  - `src/core/projections/renderers/obsidianSourceRecallRenderer.ts`
+  - `src/core/projections/targets/obsidianVaultSink.ts`
+  - `src/core/sourceRecall/README.md`
+  - `src/core/sourceRecall/sourceRecallProjection.ts`
+  - `src/core/sourceRecall/sourceRecallStore.ts`
+  - `tests/core/buildBrain.test.ts`
+  - `tests/core/obsidianVaultSink.test.ts`
+  - `tests/core/projectionReviewActions.test.ts`
+  - `tests/core/sourceRecallProjection.test.ts`
+  - `tests/core/sourceRecallStore.test.ts`
+- tests added:
+  - Source Recall projection read-model assertions for non-authority flags and projection-only
+    notices.
+  - Source Recall store change-set coverage proving mutation notifications are bounded and omit raw
+    source text.
+  - build-brain JSON mirror coverage proving Source Recall enters snapshots only through the
+    projection latch.
+  - Obsidian sink coverage proving Source Recall notes render as quoted review evidence with
+    dashboard counts.
+  - review-action ingestion coverage proving source-ref-only projection notes are skipped.
+- tests run:
+  - `npx tsx --test tests/core/sourceRecallProjection.test.ts tests/core/sourceRecallStore.test.ts tests/core/obsidianVaultSink.test.ts tests/core/projectionReviewActions.test.ts tests/core/buildBrain.test.ts`
+  - `npm run check:test-types`
+  - `npm run check:no-unused-locals`
+  - `npm run build`
+  - `npm run check:docs`
+  - `npm run check:module-size`
+  - `npm test` (`3364` tests, `3358` pass, `0` fail, `6` skipped)
+  - `npm run check:ai-first`
+- evidence produced:
+  - no new slice-specific evidence artifact was required.
+  - full `npm test` refreshed existing runtime evidence artifacts; generated-evidence sensitive
+    scan passed.
+- sensitive scan status:
+  - changed-file scan passed for prior private PDF needles, local private paths, provider-token
+    shapes, GitHub token shapes, Slack token shapes, and Telegram token shapes.
+  - generated-evidence scan passed for the same patterns across Source Recall evidence and the
+    Stage 6.5 live-check artifact.
+  - staged-diff scan passed before checkpoint commit.
+- behavior changed:
+  - Source Recall store mutations can publish bounded `source_recall_changed` projection changes.
+  - projection snapshots now include Source Recall projection entries only when Source Recall
+    projection policy allows the current mode.
+  - Obsidian projection now includes a `23 Source Recall` review mirror collection and dashboard
+    count.
+  - JSON mirror snapshots carry Source Recall projection entries with non-authority flags.
+  - review-action guide and ingestion make Source Recall refs provenance-only and skip source-ref-only
+    notes without valid action schema.
+- behavior intentionally not changed:
+  - no new Source Recall capture surface was added.
+  - no new planner/chat retrieval, context injection, semantic-candidate promotion, approval,
+    action, safety, completion-proof, or memory-write authority was added.
+  - operator-full Source Recall projection still requires the separate Source Recall operator-full
+    projection latch.
+  - Source Recall projection output remains projection metadata and is not captured as ordinary
+    Source Recall input.
+- known limitations:
+  - Source Recall projection is limited to snapshot/Obsidian/JSON review surfaces; broader evidence
+    matrix proof remains a later roadmap slice.
+- next slice status: `production evidence matrix remains blocked until this checkpoint is reviewed`.

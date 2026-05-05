@@ -10,7 +10,8 @@ such as the JSON mirror used to prove the seam stays generic.
 
 ## Inputs
 - canonical runtime snapshots built from profile memory, Stage 6.86 runtime state, the entity
-  graph, governance memory, execution receipts, workflow learning, and media artifacts
+  graph, governance memory, execution receipts, workflow learning, media artifacts, and
+  policy-latched Source Recall projection entries
 - canonical projection change sets emitted by runtime-owned write seams
 - projection runtime config from `config.ts`
 - policy-filtered skill projection entries from `skillProjectionPolicy.ts`
@@ -19,6 +20,7 @@ such as the JSON mirror used to prove the seam stays generic.
 ## Outputs
 - deterministic projected notes, `.base` files, and mirrored asset copies for Obsidian
 - policy-filtered skill review notes that never become runtime authority
+- policy-latched Source Recall review notes that render quoted evidence only
 - projection sync state for rebuild and incremental fanout
 - review-action mutation routing through canonical profile-memory and Stage 6.86 seams
 - optional non-Obsidian mirror artifacts such as the JSON sink output
@@ -36,6 +38,11 @@ such as the JSON mirror used to prove the seam stays generic.
 - Skill projection policy is explicit on manifests: `review_safe` may expose metadata and redacted
   excerpts only, `operator_full` may expose full Markdown guidance only when the manifest policy
   permits it, and projected skill notes never become runtime authority.
+- Source Recall projection requires the Source Recall projection latch. Review-safe mirrors show
+  metadata and redacted/bounded excerpts only; operator-full Source Recall excerpts require the
+  separate operator-full Source Recall latch.
+- Source Recall projection output is projection metadata. It must not be captured back as ordinary
+  Source Recall input and source refs alone cannot authorize Obsidian review actions.
 - Rebuild and incremental sync must preserve deterministic note paths, stable metadata, and
   operator-authored review-action notes.
 - The sink interface must stay generic enough for non-Obsidian targets.
@@ -45,6 +52,7 @@ such as the JSON mirror used to prove the seam stays generic.
 - `tests/core/mediaArtifactStore.test.ts`
 - `tests/core/obsidianVaultSink.test.ts`
 - `tests/core/skillProjectionPolicy.test.ts`
+- `tests/core/sourceRecallProjection.test.ts`
 - `tests/core/projectionReviewActions.test.ts`
 - `tests/core/jsonMirrorSink.test.ts`
 - `tests/tools/obsidianProjectionTools.test.ts`

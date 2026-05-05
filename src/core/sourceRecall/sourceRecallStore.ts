@@ -4,6 +4,7 @@
 
 import type { DatabaseSync } from "node:sqlite";
 
+import type { ProjectionChangeSet } from "../projections/contracts";
 import { withSqliteDatabase } from "../sqliteStore";
 import {
   decryptSourceRecallDocument,
@@ -35,6 +36,7 @@ export interface SourceRecallStoreOptions {
   sqlitePath: string;
   testOnlyAllowPlaintextStorage?: boolean;
   encryptionKey?: Buffer;
+  onChange?: (changeSet: ProjectionChangeSet) => Promise<void> | void;
 }
 
 export interface SourceRecallListOptions {
@@ -50,6 +52,7 @@ export class SourceRecallStore {
   private readonly sqlitePath: string;
   private readonly testOnlyAllowPlaintextStorage: boolean;
   private readonly encryptionKey: Buffer | null;
+  private readonly onChange?: SourceRecallStoreOptions["onChange"];
 
   /**
    * Creates a Source Recall store for test-only plaintext or encrypted production storage.
@@ -68,6 +71,7 @@ export class SourceRecallStore {
     this.sqlitePath = options.sqlitePath;
     this.testOnlyAllowPlaintextStorage = options.testOnlyAllowPlaintextStorage === true;
     this.encryptionKey = options.encryptionKey ?? null;
+    this.onChange = options.onChange;
     if (this.testOnlyAllowPlaintextStorage && this.encryptionKey) {
       throw new Error(
         "SourceRecallStore cannot mix test-only plaintext storage with encrypted production mode."
@@ -104,6 +108,9 @@ export class SourceRecallStore {
     await this.mutateDocument((document) =>
       upsertSourceRecallRecordInDocument(document, record, chunks)
     );
+    await this.notifyProjectionChange(`source_recall:${record.sourceRecordId}`, {
+      sourceRecordId: record.sourceRecordId
+    });
   }
 
   /**
@@ -207,6 +214,9 @@ export class SourceRecallStore {
     await this.mutateDocument((document) =>
       markSourceRecallRecordForgottenInDocument(document, sourceRecordId)
     );
+    await this.notifyProjectionChange(`source_recall:${sourceRecordId}`, {
+      sourceRecordId
+    });
   }
 
   /**
@@ -230,6 +240,10 @@ export class SourceRecallStore {
     await this.mutateDocument((document) =>
       markSourceRecallRecordsByOriginParentRefInDocument(document, parentRefId, lifecycleState)
     );
+    await this.notifyProjectionChange(`source_recall_origin_parent:${parentRefId}`, {
+      originParentRefId: parentRefId,
+      lifecycleState
+    });
   }
 
   /**
@@ -270,6 +284,37 @@ export class SourceRecallStore {
       ensureSourceRecallSchema(db);
       const current = this.readSourceRecallDocument(db);
       this.writeSourceRecallDocument(db, mutate(current));
+    });
+  }
+
+  /**
+   * Publishes a projection change after a Source Recall mutation.
+   *
+   * **Why it exists:**
+   * Obsidian and JSON mirrors should refresh Source Recall notes when source records are captured,
+   * forgotten, redacted, expired, or quarantined, but the projection remains a read-only review
+   * target and never becomes Source Recall input.
+   *
+   * **What it talks to:**
+   * - Uses optional `onChange` callback supplied by shared runtime construction.
+   *
+   * @param reason - Bounded non-raw mutation reason.
+   * @param metadata - Bounded non-raw mutation metadata.
+   * @returns Promise resolving after optional callback completes.
+   */
+  private async notifyProjectionChange(
+    reason: string,
+    metadata: ProjectionChangeSet["metadata"] = {}
+  ): Promise<void> {
+    if (!this.onChange) {
+      return;
+    }
+    await this.onChange({
+      changeId: `projection_source_recall_${sanitizeProjectionChangeId(reason)}`,
+      observedAt: new Date().toISOString(),
+      kinds: ["source_recall_changed"],
+      reasons: [reason],
+      metadata
     });
   }
 
@@ -402,4 +447,14 @@ function writeSourceRecallRow(
     `INSERT OR REPLACE INTO ${SOURCE_RECALL_STATE_TABLE}(id, document_json, storage_mode)
      VALUES (?, ?, ?)`
   ).run(SOURCE_RECALL_STATE_ROW_ID, documentJson, storageMode);
+}
+
+/**
+ * Sanitizes bounded projection change ids without using source text.
+ *
+ * @param value - Source record or origin reference reason.
+ * @returns Projection-safe change id segment.
+ */
+function sanitizeProjectionChangeId(value: string): string {
+  return value.replace(/[^A-Za-z0-9_.:-]+/g, "_").slice(0, 96) || "unknown";
 }

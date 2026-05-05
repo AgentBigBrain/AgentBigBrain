@@ -21,6 +21,7 @@ import { renderObsidianGovernanceNotes } from "../renderers/obsidianGovernanceRe
 import { renderObsidianLoopNotes } from "../renderers/obsidianLoopRenderer";
 import { renderObsidianMediaArtifactNotes } from "../renderers/obsidianMediaArtifactRenderer";
 import { renderObsidianReceiptNotes } from "../renderers/obsidianReceiptRenderer";
+import { renderObsidianSourceRecallNotes } from "../renderers/obsidianSourceRecallRenderer";
 import { renderObsidianSkillNotes } from "../renderers/obsidianSkillRenderer";
 import { renderObsidianWorkflowLearningNotes } from "../renderers/obsidianWorkflowLearningRenderer";
 import { renderObsidianBasesFiles } from "../renderers/obsidianBasesRenderer";
@@ -53,6 +54,7 @@ type ObsidianCollectionId =
   | "governance"
   | "receipts"
   | "media_artifacts"
+  | "source_recall"
   | "bases"
   | "workflow_learning"
   | "skills"
@@ -283,6 +285,11 @@ function buildProjectedCollections(
       notes: renderObsidianMediaArtifactNotes(snapshot)
     },
     {
+      id: "source_recall",
+      clearTargets: ["23 Source Recall"],
+      notes: renderObsidianSourceRecallNotes(snapshot)
+    },
+    {
       id: "bases",
       clearTargets: ["30 Bases"],
       notes: renderObsidianBasesFiles(snapshot)
@@ -368,6 +375,10 @@ function selectCollectionIdsForChangeSet(
         selected.add("concepts");
         selected.add("assets");
         break;
+      case "source_recall_changed":
+        selected.add("dashboard");
+        selected.add("source_recall");
+        break;
       case "skill_registry_changed":
         selected.add("dashboard");
         selected.add("skills");
@@ -395,6 +406,7 @@ function selectCollectionIdsForChangeSet(
           "governance",
           "receipts",
           "media_artifacts",
+          "source_recall",
           "bases",
           "workflow_learning",
           "skills",
@@ -624,9 +636,12 @@ function renderReviewActionGuideNote(): ObsidianProjectedNote {
         "abb_follow_up_text",
         "abb_thread_key",
         "abb_entity_refs",
+        "abb_source_recall_refs",
         "abb_status"
       ]),
-      "Supported action kinds are `resolve_episode`, `mark_episode_wrong`, `forget_episode`, `correct_fact`, `forget_fact`, and `create_follow_up_loop`."
+      "Supported action kinds are `resolve_episode`, `mark_episode_wrong`, `forget_episode`, `correct_fact`, `forget_fact`, and `create_follow_up_loop`.",
+      "",
+      "`abb_source_recall_refs` are provenance links only. They do not grant memory-write, approval, action, safety, or completion-proof authority."
     ].join("\n")
   };
 }

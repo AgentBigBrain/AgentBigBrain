@@ -36,6 +36,11 @@ import { EntityGraphStore } from "./entityGraphStore";
 import { MediaArtifactStore } from "./mediaArtifactStore";
 import { SourceRecallStore } from "./sourceRecall/sourceRecallStore";
 import { decodeSourceRecallEncryptionKey } from "./sourceRecall/sourceRecallEncryption";
+import {
+  decideSourceRecallProjection,
+  type SourceRecallRetentionPolicy
+} from "./sourceRecall/sourceRecallRetention";
+import { buildSourceRecallProjectionEntries } from "./sourceRecall/sourceRecallProjection";
 import { Stage686RuntimeStateStore } from "./stage6_86/runtimeState";
 import { Stage686RuntimeActionEngine } from "./stage6_86/runtimeActions";
 import { createProjectionRuntimeConfigFromEnv } from "./projections/config";
@@ -244,6 +249,8 @@ function createProjectionSinks(env: NodeJS.ProcessEnv = process.env): readonly P
  * @param workflowLearningStore - Workflow learning store.
  * @param mediaArtifactStore - Media artifact store.
  * @param skillRegistryStore - Skill registry store.
+ * @param sourceRecallStore - Optional Source Recall store.
+ * @param sourceRecallRetentionPolicy - Optional Source Recall projection policy.
  * @param profileMemoryStore - Optional profile-memory store.
  * @returns Snapshot provider closure.
  */
@@ -256,9 +263,15 @@ function createProjectionSnapshotProvider(
   workflowLearningStore: WorkflowLearningStore,
   mediaArtifactStore: MediaArtifactStore,
   skillRegistryStore: SkillRegistryStore,
+  sourceRecallStore?: SourceRecallStore,
+  sourceRecallRetentionPolicy?: SourceRecallRetentionPolicy,
   profileMemoryStore?: ProfileMemoryStore
 ): () => Promise<ProjectionSnapshot> {
   return async () => {
+    const sourceRecallProjectionDecision =
+      sourceRecallStore && sourceRecallRetentionPolicy
+        ? decideSourceRecallProjection(sourceRecallRetentionPolicy, mode)
+        : { allowed: false };
     const [
       entityGraph,
       runtimeState,
@@ -267,6 +280,7 @@ function createProjectionSnapshotProvider(
       workflowDocument,
       mediaArtifactDocument,
       skillManifests,
+      sourceRecallDocument,
       profileMemory
     ] = await Promise.all([
       entityGraphStore.getGraph(),
@@ -276,9 +290,19 @@ function createProjectionSnapshotProvider(
       workflowLearningStore.load(),
       mediaArtifactStore.load(),
       skillRegistryStore.listActiveManifests(),
+      sourceRecallProjectionDecision.allowed && sourceRecallStore
+        ? sourceRecallStore.loadDocument()
+        : Promise.resolve(null),
       profileMemoryStore ? profileMemoryStore.load() : Promise.resolve(null)
     ]);
     const skillProjectionEntries = await buildSkillProjectionEntries(mode, skillManifests);
+    const sourceRecallProjectionEntries = sourceRecallDocument
+      ? buildSourceRecallProjectionEntries(sourceRecallDocument, {
+        mode,
+        operatorFullSourceRecallProjectionEnabled:
+          sourceRecallRetentionPolicy?.operatorFullProjectionEnabled === true
+      })
+      : [];
 
     return {
       generatedAt: new Date().toISOString(),
@@ -296,6 +320,7 @@ function createProjectionSnapshotProvider(
       executionReceipts: executionReceiptDocument.receipts,
       workflowPatterns: workflowDocument.patterns,
       mediaArtifacts: mediaArtifactDocument.artifacts,
+      sourceRecallProjectionEntries,
       skillProjectionEntries
     };
   };
@@ -434,7 +459,8 @@ export function createSharedBrainRuntimeDependencies(
         runtimeStateRoot,
         baseConfig.sourceRecall.sqlitePath
       ),
-      encryptionKey: decodeSourceRecallEncryptionKey(env.BRAIN_SOURCE_RECALL_ENCRYPTION_KEY ?? "")
+      encryptionKey: decodeSourceRecallEncryptionKey(env.BRAIN_SOURCE_RECALL_ENCRYPTION_KEY ?? ""),
+      onChange: publishProjectionChange
     })
     : undefined;
   const skillRegistryStore = new SkillRegistryStore(
@@ -488,6 +514,8 @@ export function createSharedBrainRuntimeDependencies(
       workflowLearningStore,
       mediaArtifactStore,
       skillRegistryStore,
+      sourceRecallStore,
+      baseConfig.sourceRecall.retentionPolicy,
       profileMemoryStore
     ),
     sinks: createProjectionSinks(env),

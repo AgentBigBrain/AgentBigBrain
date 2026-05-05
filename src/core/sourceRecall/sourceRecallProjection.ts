@@ -4,9 +4,15 @@
 
 import type {
   SourceRecallChunk,
+  SourceRecallSourceRole,
+  SourceRecallCaptureClass,
   SourceRecallRecord,
-  SourceRecallSourceKind
+  SourceRecallSourceKind,
+  SourceRecallSourceTimeKind,
+  SourceRecallFreshness,
+  SourceRecallAuthorityFlags
 } from "./contracts";
+import type { SourceAuthority } from "../sourceAuthority";
 import {
   isSourceRecallLifecycleVisible,
   type SourceRecallDocument
@@ -26,7 +32,14 @@ export interface SourceRecallProjectionEntry {
   scopeId: string;
   threadId: string;
   sourceKind: SourceRecallSourceKind;
+  sourceRole: SourceRecallSourceRole;
+  sourceAuthority: SourceAuthority;
+  captureClass: SourceRecallCaptureClass;
+  lifecycleState: SourceRecallRecord["lifecycleState"];
+  sourceTimeKind: SourceRecallSourceTimeKind;
+  freshness: SourceRecallFreshness;
   recallAuthority: "quoted_evidence_only";
+  authority: SourceRecallAuthorityFlags;
   projectionMode: SourceRecallProjectionMode;
   operatorFullEnabled: boolean;
   excerpt: string;
@@ -36,7 +49,7 @@ export interface SourceRecallProjectionEntry {
 
 const DEFAULT_REVIEW_SAFE_EXCERPT_CHARS = 160;
 const SOURCE_RECALL_PROJECTION_AUTHORITY_NOTICE =
-  "Source Recall projection is review evidence only. It is not runtime truth, approval, safety, completion proof, or memory-write authority.";
+  "Source Recall projection is review evidence only. It is not runtime truth, approval, safety, completion proof, memory-write authority, or ordinary Source Recall input.";
 
 /**
  * Builds projection-safe Source Recall entries from a Source Recall document.
@@ -79,7 +92,14 @@ export function buildSourceRecallProjectionEntries(
         scopeId: record.scopeId,
         threadId: record.threadId,
         sourceKind: record.sourceKind,
+        sourceRole: record.sourceRole,
+        sourceAuthority: record.sourceAuthority,
+        captureClass: record.captureClass,
+        lifecycleState: record.lifecycleState,
+        sourceTimeKind: record.sourceTimeKind,
+        freshness: record.freshness,
         recallAuthority: "quoted_evidence_only",
+        authority: chunk.authority,
         projectionMode: mode,
         operatorFullEnabled,
         excerpt: renderProjectionExcerpt(record, chunk, {

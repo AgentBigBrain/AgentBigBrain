@@ -74,6 +74,7 @@ export function renderObsidianDashboardNote(
         `Receipts: ${snapshot.executionReceipts.length}`,
         `Workflow patterns: ${snapshot.workflowPatterns.length}`,
         `Media artifacts: ${snapshot.mediaArtifacts.length}`,
+        `Source recall entries: ${snapshot.sourceRecallProjectionEntries?.length ?? 0}`,
         `Sensitive compatibility facts: ${countSensitiveCompatibilityFacts(snapshot.profileMemory)}`
       ]),
       "## How To Read This Mirror",
@@ -83,7 +84,8 @@ export function renderObsidianDashboardNote(
         "Derived concept notes come from named organizations and places already present inside retained facts, context observations, or media-derived hints.",
         "Current Temporal Claims come from the graph-backed profile-memory truth surface.",
         "Evidence refs such as interface:telegram:... are provenance pointers to observed turns or artifacts, not raw chat logs acting as the truth database.",
-        "Media artifacts are stored in runtime-owned artifact storage and mirrored here; Telegram file ids are provenance, not the storage layer."
+        "Media artifacts are stored in runtime-owned artifact storage and mirrored here; Telegram file ids are provenance, not the storage layer.",
+        "Source Recall entries are quoted review evidence only; they are not runtime truth, approval, safety, completion proof, or memory-write authority."
       ]),
       "## Profile Subjects",
       renderMarkdownList(
