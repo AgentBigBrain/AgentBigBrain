@@ -3,6 +3,10 @@
  */
 
 import { ensureEnvLoaded } from "../core/envLoader";
+import {
+  createSourceRecallRuntimeConfigFromEnv,
+  type SourceRecallRuntimeConfig
+} from "../core/sourceRecall/sourceRecallRetention";
 
 export type InterfaceProvider = "telegram" | "discord";
 export type InterfaceProviderSelection = InterfaceProvider | "both";
@@ -46,6 +50,7 @@ export interface TelegramMediaInterfaceConfig {
 export interface TelegramInterfaceConfig {
   provider: "telegram";
   security: SharedInterfaceSecurityConfig;
+  sourceRecall: SourceRecallRuntimeConfig;
   botToken: string;
   apiBaseUrl: string;
   pollTimeoutSeconds: number;
@@ -59,6 +64,7 @@ export interface TelegramInterfaceConfig {
 export interface DiscordInterfaceConfig {
   provider: "discord";
   security: SharedInterfaceSecurityConfig;
+  sourceRecall: SourceRecallRuntimeConfig;
   botToken: string;
   apiBaseUrl: string;
   gatewayUrl: string;
@@ -69,6 +75,7 @@ export interface DiscordInterfaceConfig {
 export interface MultiProviderInterfaceConfig {
   provider: "both";
   security: SharedInterfaceSecurityConfig;
+  sourceRecall: SourceRecallRuntimeConfig;
   telegram: TelegramInterfaceConfig;
   discord: DiscordInterfaceConfig;
 }
@@ -344,7 +351,8 @@ function buildSharedSecurityConfig(env: NodeJS.ProcessEnv): SharedInterfaceSecur
  */
 function buildTelegramConfig(
   env: NodeJS.ProcessEnv,
-  security: SharedInterfaceSecurityConfig
+  security: SharedInterfaceSecurityConfig,
+  sourceRecall: SourceRecallRuntimeConfig
 ): TelegramInterfaceConfig {
   const botToken = (env.TELEGRAM_BOT_TOKEN ?? "").trim();
   if (!botToken) {
@@ -360,6 +368,7 @@ function buildTelegramConfig(
   return {
     provider: "telegram",
     security,
+    sourceRecall,
     botToken,
     apiBaseUrl: (env.TELEGRAM_API_BASE_URL ?? "https://api.telegram.org").trim(),
     pollTimeoutSeconds: parsePositiveInt(env.TELEGRAM_POLL_TIMEOUT_SECONDS, 25),
@@ -397,7 +406,8 @@ function buildTelegramConfig(
  */
 function buildDiscordConfig(
   env: NodeJS.ProcessEnv,
-  security: SharedInterfaceSecurityConfig
+  security: SharedInterfaceSecurityConfig,
+  sourceRecall: SourceRecallRuntimeConfig
 ): DiscordInterfaceConfig {
   const botToken = (env.DISCORD_BOT_TOKEN ?? "").trim();
   if (!botToken) {
@@ -407,6 +417,7 @@ function buildDiscordConfig(
   return {
     provider: "discord",
     security,
+    sourceRecall,
     botToken,
     apiBaseUrl: (env.DISCORD_API_BASE_URL ?? "https://discord.com/api/v10").trim(),
     gatewayUrl: (env.DISCORD_GATEWAY_URL ?? "https://discord.com/api/v10/gateway/bot").trim(),
@@ -436,20 +447,22 @@ export function createInterfaceRuntimeConfigFromEnv(
 
   const provider = parseProviderSelection(env.BRAIN_INTERFACE_PROVIDER);
   const security = buildSharedSecurityConfig(env);
+  const sourceRecall = createSourceRecallRuntimeConfigFromEnv(env);
 
   if (provider === "telegram") {
-    return buildTelegramConfig(env, security);
+    return buildTelegramConfig(env, security, sourceRecall);
   }
 
   if (provider === "discord") {
-    return buildDiscordConfig(env, security);
+    return buildDiscordConfig(env, security, sourceRecall);
   }
 
   return {
     provider: "both",
     security,
-    telegram: buildTelegramConfig(env, security),
-    discord: buildDiscordConfig(env, security),
+    sourceRecall,
+    telegram: buildTelegramConfig(env, security, sourceRecall),
+    discord: buildDiscordConfig(env, security, sourceRecall),
   };
 }
 

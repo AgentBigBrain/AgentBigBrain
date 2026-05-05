@@ -1378,23 +1378,23 @@ ignored and requires an explicit `git add -f`.
 
 ## Last Worked On
 
-Current phase or focus: A1 encrypted production Source Recall storage checkpoint.
+Current phase or focus: A2 Source Recall config latch checkpoint.
 
-What changed last: implemented encrypted production storage for `SourceRecallStore` using a new
-AES-GCM payload envelope. Production storage now requires initialized 32-byte key material, rejects
-test-only plaintext mode when a key is present, rejects existing plaintext rows in encrypted mode,
-and persists encrypted envelopes instead of the plaintext foundation `document_json` shape. The
-retention policy now derives encrypted payload availability from initialized storage/key material
-instead of trusting a standalone env flag, and the Source Recall SQLite path is included in protected
-path prefixes.
+What changed last: added Source Recall runtime config fields to `BrainConfig` and interface runtime
+config, with explicit latches for top-level enablement, capture, retrieval, projection,
+operator-full projection, indexing, and evidence mode. Production capture allowlists are now empty
+by default and the immediate branch accepts only `conversation_turn` plus `ordinary_source` when
+configured. Shared runtime construction creates a `SourceRecallStore` only when Source Recall is
+enabled and config status is `enabled`; default production runtime still constructs no Source Recall
+store.
 
-What still feels clunky, blocked, or unfinished: A2 must add the runtime config object and explicit
-enable/capture/retrieval/projection/index/evidence latches. A3 live user-turn capture remains
-blocked until A1 and A2 both have passing tests and checkpoint commits. The exact private/synthetic
-smoke command should be chosen after A1-A4 land.
+What still feels clunky, blocked, or unfinished: A3 live user-turn capture remains blocked until the
+A2 checkpoint commit exists. A4 still needs bounded review/evidence retrieval and non-raw audit
+events. The exact private/synthetic smoke command should be chosen after A1-A4 land.
 
-Next clean seam to continue from: checkpoint A1, then begin `A2 - Source Recall Config Latches`.
+Next clean seam to continue from: checkpoint A2, then begin `A3 - Live User-Turn Capture`.
 
-Latest validation or evidence state: A1 focused store/retention tests, type checks, unused-local
-check, build, and docs check passed locally. A focused changed-file sensitive scan is required before
-the A1 checkpoint commit.
+Latest validation or evidence state: A2 focused config/runtime tests, source-recall store/retention
+tests, type checks, unused-local check, build, and docs check passed locally. The repo-level
+`npm test -- <file-name>` commands listed in the work packet are not supported by the local runner,
+so focused file tests were run directly with `npx tsx --test`.

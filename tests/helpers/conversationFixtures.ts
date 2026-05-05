@@ -7,6 +7,7 @@ import type {
   ConversationSession
 } from "../../src/interfaces/sessionStore";
 import type { TelegramInterfaceConfig } from "../../src/interfaces/runtimeConfig";
+import { createDefaultSourceRecallRuntimeConfig } from "../../src/core/sourceRecall/sourceRecallRetention";
 import type { PulseScoreBreakdownV1 } from "../../src/core/types";
 import type { WorkspaceRecoverySignal } from "../../src/core/autonomy/workspaceRecoveryPolicy";
 
@@ -226,6 +227,7 @@ export function buildTelegramInterfaceConfigFixture(
         aliases: ["BigBrain"]
       }
     },
+    sourceRecall: createDefaultSourceRecallRuntimeConfig(),
     botToken: "telegram-token",
     apiBaseUrl: "https://api.telegram.org",
     pollTimeoutSeconds: 25,

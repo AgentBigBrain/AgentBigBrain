@@ -44,6 +44,10 @@ allowed, approved, completed, or safe to act on.
   runtime callsite.
 - Production encrypted storage currently encrypts the full Source Recall document payload, leaving
   only row id, storage mode, and authenticated envelope fields visible in SQLite.
+- Production runtime config is fail-closed: Source Recall, capture, retrieval, projection,
+  operator-full projection, indexing, and evidence mode each require explicit latches.
+- The immediate production allowlists support only `sourceKind=conversation_turn` and
+  `captureClass=ordinary_source`; missing, empty, unknown, or broader allowlists capture nothing.
 
 ## Related Tests
 

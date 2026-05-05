@@ -55,6 +55,7 @@ import {
 } from "../../src/interfaces/transportRuntime/telegramGatewayNotifier";
 import { sendObservedTelegramGatewayReply } from "../../src/interfaces/transportRuntime/telegramGatewayObservation";
 import type { ConversationInboundMessage } from "../../src/interfaces/conversationRuntime/managerContracts";
+import { createDefaultSourceRecallRuntimeConfig } from "../../src/core/sourceRecall/sourceRecallRetention";
 import { buildTelegramInterfaceConfigFixture } from "../helpers/conversationFixtures";
 
 interface TestGatewaySocket {
@@ -174,6 +175,7 @@ test("sendDiscordGatewayMessage applies invocation hints before transport delive
       const result = await sendDiscordGatewayMessage(
         {
           provider: "discord",
+          sourceRecall: createDefaultSourceRecallRuntimeConfig(),
           security: {
             sharedSecret: "secret",
             allowedUsernames: [],

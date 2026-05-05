@@ -9,8 +9,15 @@ import type {
 } from "./contracts";
 
 export type SourceRecallProjectionMode = "review_safe" | "operator_full";
+export type SourceRecallRuntimeStatus =
+  | "disabled"
+  | "enabled"
+  | "blocked_missing_encryption"
+  | "blocked_missing_storage"
+  | "blocked_by_policy";
 
 export interface SourceRecallRetentionPolicy {
+  enabled: boolean;
   captureEnabled: boolean;
   retrievalEnabled: boolean;
   projectionEnabled: boolean;
@@ -21,6 +28,15 @@ export interface SourceRecallRetentionPolicy {
   encryptedPayloadsAvailable: boolean;
   sourceKindCaptureAllowlist: readonly SourceRecallSourceKind[];
   captureClassAllowlist: readonly SourceRecallCaptureClass[];
+}
+
+export interface SourceRecallRuntimeConfig {
+  enabled: boolean;
+  status: SourceRecallRuntimeStatus;
+  blockedReasons: readonly string[];
+  sqlitePath: string;
+  encryptionKeyConfigured: boolean;
+  retentionPolicy: SourceRecallRetentionPolicy;
 }
 
 export interface SourceRecallPolicyDecision {
@@ -46,6 +62,8 @@ export interface SourceRecallCaptureFailureDiagnostic {
 export interface SourceRecallRetentionPolicyFromEnvOptions {
   encryptedPayloadsAvailable?: boolean;
 }
+
+export const DEFAULT_SOURCE_RECALL_SQLITE_PATH = "runtime/source_recall.sqlite";
 
 export const DEFAULT_SOURCE_RECALL_CAPTURE_SOURCE_KINDS: readonly SourceRecallSourceKind[] = [
   "conversation_turn",
@@ -91,6 +109,7 @@ export const SOURCE_RECALL_PRODUCTION_REJECTED_CAPTURE_CLASSES: readonly SourceR
  */
 export function createDefaultSourceRecallRetentionPolicy(): SourceRecallRetentionPolicy {
   return {
+    enabled: false,
     captureEnabled: false,
     retrievalEnabled: false,
     projectionEnabled: false,
@@ -99,8 +118,32 @@ export function createDefaultSourceRecallRetentionPolicy(): SourceRecallRetentio
     evidenceModeEnabled: false,
     encryptedPayloadsRequired: true,
     encryptedPayloadsAvailable: false,
-    sourceKindCaptureAllowlist: DEFAULT_SOURCE_RECALL_CAPTURE_SOURCE_KINDS,
-    captureClassAllowlist: DEFAULT_SOURCE_RECALL_CAPTURE_CLASSES
+    sourceKindCaptureAllowlist: [],
+    captureClassAllowlist: []
+  };
+}
+
+/**
+ * Builds the fail-closed runtime config for Source Recall.
+ *
+ * **Why it exists:**
+ * Brain and interface configs need one serializable status object that exposes latch state without
+ * storing raw encryption key material.
+ *
+ * **What it talks to:**
+ * - Uses `createDefaultSourceRecallRetentionPolicy` from this module.
+ *
+ * @returns Disabled Source Recall runtime config.
+ */
+export function createDefaultSourceRecallRuntimeConfig(): SourceRecallRuntimeConfig {
+  const retentionPolicy = createDefaultSourceRecallRetentionPolicy();
+  return {
+    enabled: false,
+    status: "disabled",
+    blockedReasons: [],
+    sqlitePath: DEFAULT_SOURCE_RECALL_SQLITE_PATH,
+    encryptionKeyConfigured: false,
+    retentionPolicy
   };
 }
 
@@ -125,6 +168,7 @@ export function createSourceRecallRetentionPolicyFromEnv(
   const defaults = createDefaultSourceRecallRetentionPolicy();
   return {
     ...defaults,
+    enabled: parseBooleanEnvFlag(env.BRAIN_SOURCE_RECALL_ENABLED, false),
     captureEnabled: parseBooleanEnvFlag(env.BRAIN_SOURCE_RECALL_CAPTURE_ENABLED, false),
     retrievalEnabled: parseBooleanEnvFlag(env.BRAIN_SOURCE_RECALL_RETRIEVAL_ENABLED, false),
     projectionEnabled: parseBooleanEnvFlag(env.BRAIN_SOURCE_RECALL_PROJECTION_ENABLED, false),
@@ -138,7 +182,49 @@ export function createSourceRecallRetentionPolicyFromEnv(
       env.BRAIN_SOURCE_RECALL_ENCRYPTED_PAYLOADS_REQUIRED,
       true
     ),
-    encryptedPayloadsAvailable: options.encryptedPayloadsAvailable === true
+    encryptedPayloadsAvailable: options.encryptedPayloadsAvailable === true,
+    sourceKindCaptureAllowlist: parseImmediateSourceKindAllowlist(
+      env.BRAIN_SOURCE_RECALL_CAPTURE_SOURCE_KINDS
+    ),
+    captureClassAllowlist: parseImmediateCaptureClassAllowlist(
+      env.BRAIN_SOURCE_RECALL_CAPTURE_CLASSES
+    )
+  };
+}
+
+/**
+ * Builds serializable Source Recall runtime config from env latches.
+ *
+ * **Why it exists:**
+ * Runtime assembly must expose exact enablement/block reasons while keeping encryption key values
+ * out of config objects and logs.
+ *
+ * **What it talks to:**
+ * - Uses `createSourceRecallRetentionPolicyFromEnv` from this module.
+ *
+ * @param env - Environment source.
+ * @param options - Runtime-derived readiness values that must not come from boolean env flags.
+ * @returns Source Recall runtime config with concrete status.
+ */
+export function createSourceRecallRuntimeConfigFromEnv(
+  env: NodeJS.ProcessEnv = process.env,
+  options: SourceRecallRetentionPolicyFromEnvOptions = {}
+): SourceRecallRuntimeConfig {
+  const retentionPolicy = createSourceRecallRetentionPolicyFromEnv(env, options);
+  const sqlitePath = parseSourceRecallSqlitePath(env.BRAIN_SOURCE_RECALL_SQLITE_PATH);
+  const encryptionKeyConfigured = (env.BRAIN_SOURCE_RECALL_ENCRYPTION_KEY ?? "").trim().length > 0;
+  const blockedReasons = buildSourceRecallRuntimeBlockedReasons({
+    retentionPolicy,
+    sqlitePath,
+    encryptionKeyConfigured
+  });
+  return {
+    enabled: retentionPolicy.enabled,
+    status: resolveSourceRecallRuntimeStatus(retentionPolicy.enabled, blockedReasons),
+    blockedReasons,
+    sqlitePath: sqlitePath || DEFAULT_SOURCE_RECALL_SQLITE_PATH,
+    encryptionKeyConfigured,
+    retentionPolicy
   };
 }
 
@@ -161,6 +247,9 @@ export function decideSourceRecallCapture(
   input: SourceRecallCaptureDecisionInput
 ): SourceRecallPolicyDecision {
   const reasons: string[] = [];
+  if (!policy.enabled) {
+    reasons.push("source_recall_disabled");
+  }
   if (!policy.captureEnabled) {
     reasons.push("source_recall_capture_disabled");
   }
@@ -253,6 +342,9 @@ export function isSourceRecallProductionRejectedCaptureClass(
 export function decideSourceRecallRetrieval(
   policy: SourceRecallRetentionPolicy
 ): SourceRecallPolicyDecision {
+  if (!policy.enabled) {
+    return { allowed: false, reasons: ["source_recall_disabled"] };
+  }
   return policy.retrievalEnabled
     ? { allowed: true, reasons: [] }
     : { allowed: false, reasons: ["source_recall_retrieval_disabled"] };
@@ -277,6 +369,9 @@ export function decideSourceRecallProjection(
   mode: SourceRecallProjectionMode
 ): SourceRecallPolicyDecision {
   const reasons: string[] = [];
+  if (!policy.enabled) {
+    reasons.push("source_recall_disabled");
+  }
   if (!policy.projectionEnabled) {
     reasons.push("source_recall_projection_disabled");
   }
@@ -305,9 +400,149 @@ export function decideSourceRecallProjection(
 export function decideSourceRecallIndexing(
   policy: SourceRecallRetentionPolicy
 ): SourceRecallPolicyDecision {
+  if (!policy.enabled) {
+    return { allowed: false, reasons: ["source_recall_disabled"] };
+  }
   return policy.indexEnabled
     ? { allowed: true, reasons: [] }
     : { allowed: false, reasons: ["source_recall_indexing_disabled"] };
+}
+
+/**
+ * Builds runtime block reasons without exposing raw key or source text.
+ *
+ * @param input - Runtime latch state.
+ * @returns Stable block reasons.
+ */
+function buildSourceRecallRuntimeBlockedReasons(input: {
+  retentionPolicy: SourceRecallRetentionPolicy;
+  sqlitePath: string;
+  encryptionKeyConfigured: boolean;
+}): string[] {
+  if (!input.retentionPolicy.enabled) {
+    return [];
+  }
+  const reasons: string[] = [];
+  if (!input.sqlitePath) {
+    reasons.push("source_recall_storage_missing");
+  }
+  if (input.retentionPolicy.encryptedPayloadsRequired && !input.encryptionKeyConfigured) {
+    reasons.push("source_recall_encryption_key_missing");
+  }
+  if (
+    input.retentionPolicy.captureEnabled &&
+    input.retentionPolicy.sourceKindCaptureAllowlist.length === 0
+  ) {
+    reasons.push("source_recall_capture_source_kind_allowlist_empty");
+  }
+  if (
+    input.retentionPolicy.captureEnabled &&
+    input.retentionPolicy.captureClassAllowlist.length === 0
+  ) {
+    reasons.push("source_recall_capture_class_allowlist_empty");
+  }
+  if (
+    input.retentionPolicy.operatorFullProjectionEnabled &&
+    !input.retentionPolicy.projectionEnabled
+  ) {
+    reasons.push("source_recall_operator_full_projection_without_projection");
+  }
+  return reasons;
+}
+
+/**
+ * Resolves runtime status from block reasons.
+ *
+ * @param enabled - Top-level Source Recall latch.
+ * @param blockedReasons - Stable block reasons.
+ * @returns Runtime status.
+ */
+function resolveSourceRecallRuntimeStatus(
+  enabled: boolean,
+  blockedReasons: readonly string[]
+): SourceRecallRuntimeStatus {
+  if (!enabled) {
+    return "disabled";
+  }
+  if (blockedReasons.includes("source_recall_storage_missing")) {
+    return "blocked_missing_storage";
+  }
+  if (blockedReasons.includes("source_recall_encryption_key_missing")) {
+    return "blocked_missing_encryption";
+  }
+  return blockedReasons.length > 0 ? "blocked_by_policy" : "enabled";
+}
+
+/**
+ * Parses Source Recall SQLite path without accepting empty explicit values.
+ *
+ * @param value - Optional env path.
+ * @returns Configured path, default path, or empty string when explicitly blank.
+ */
+function parseSourceRecallSqlitePath(value: string | undefined): string {
+  if (value === undefined) {
+    return DEFAULT_SOURCE_RECALL_SQLITE_PATH;
+  }
+  return value.trim();
+}
+
+/**
+ * Parses the immediate-branch production source-kind allowlist.
+ *
+ * @param value - Env CSV value.
+ * @returns Allowlist, or empty when missing/empty/unknown/broader than immediate scope.
+ */
+function parseImmediateSourceKindAllowlist(
+  value: string | undefined
+): readonly SourceRecallSourceKind[] {
+  const entries = parseCsvEnvList(value);
+  if (entries.length === 0) {
+    return [];
+  }
+  if (entries.every((entry) => entry === "conversation_turn")) {
+    return ["conversation_turn"];
+  }
+  return [];
+}
+
+/**
+ * Parses the immediate-branch production capture-class allowlist.
+ *
+ * @param value - Env CSV value.
+ * @returns Allowlist, or empty when missing/empty/unknown/broader than immediate scope.
+ */
+function parseImmediateCaptureClassAllowlist(
+  value: string | undefined
+): readonly SourceRecallCaptureClass[] {
+  const entries = parseCsvEnvList(value);
+  if (entries.length === 0) {
+    return [];
+  }
+  if (entries.every((entry) => entry === "ordinary_source")) {
+    return ["ordinary_source"];
+  }
+  return [];
+}
+
+/**
+ * Parses one CSV env list with fail-closed empty semantics.
+ *
+ * @param value - Env value.
+ * @returns Trimmed lower-case entries.
+ */
+function parseCsvEnvList(value: string | undefined): string[] {
+  if (value === undefined) {
+    return [];
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return [];
+  }
+  const entries = trimmed.split(",").map((entry) => entry.trim().toLowerCase());
+  if (entries.some((entry) => entry.length === 0)) {
+    return [];
+  }
+  return entries;
 }
 
 /**

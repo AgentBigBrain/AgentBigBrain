@@ -8,6 +8,7 @@ import { test } from "node:test";
 import {
   buildSourceRecallCaptureFailureDiagnostic,
   createDefaultSourceRecallRetentionPolicy,
+  createSourceRecallRuntimeConfigFromEnv,
   createSourceRecallRetentionPolicyFromEnv,
   decideSourceRecallCapture,
   decideSourceRecallIndexing,
@@ -32,21 +33,33 @@ test("Source Recall production defaults are disabled and fail closed", () => {
   });
   assert.equal(capture.allowed, false);
   assert.deepEqual(capture.reasons, [
+    "source_recall_disabled",
     "source_recall_capture_disabled",
-    "source_recall_encryption_unavailable"
+    "source_recall_encryption_unavailable",
+    "source_recall_source_kind_not_allowed",
+    "source_recall_capture_class_not_allowed"
   ]);
 });
 
 test("Source Recall capture requires encryption readiness when production capture is enabled", () => {
   const blockedPolicy = createSourceRecallRetentionPolicyFromEnv({
+    BRAIN_SOURCE_RECALL_ENABLED: "true",
+    BRAIN_SOURCE_RECALL_CAPTURE_SOURCE_KINDS: "conversation_turn",
+    BRAIN_SOURCE_RECALL_CAPTURE_CLASSES: "ordinary_source",
     BRAIN_SOURCE_RECALL_CAPTURE_ENABLED: "true"
   });
   const spoofedEnvPolicy = createSourceRecallRetentionPolicyFromEnv({
+    BRAIN_SOURCE_RECALL_ENABLED: "true",
     BRAIN_SOURCE_RECALL_CAPTURE_ENABLED: "true",
-    BRAIN_SOURCE_RECALL_ENCRYPTED_PAYLOADS_AVAILABLE: "true"
+    BRAIN_SOURCE_RECALL_ENCRYPTED_PAYLOADS_AVAILABLE: "true",
+    BRAIN_SOURCE_RECALL_CAPTURE_SOURCE_KINDS: "conversation_turn",
+    BRAIN_SOURCE_RECALL_CAPTURE_CLASSES: "ordinary_source"
   });
   const allowedPolicy = createSourceRecallRetentionPolicyFromEnv(
     {
+      BRAIN_SOURCE_RECALL_ENABLED: "true",
+      BRAIN_SOURCE_RECALL_CAPTURE_SOURCE_KINDS: "conversation_turn",
+      BRAIN_SOURCE_RECALL_CAPTURE_CLASSES: "ordinary_source",
       BRAIN_SOURCE_RECALL_CAPTURE_ENABLED: "true"
     },
     { encryptedPayloadsAvailable: true }
@@ -80,10 +93,16 @@ test("Source Recall capture requires encryption readiness when production captur
 
 test("Source Recall production capture rejects test fixture source role and class", () => {
   const productionPolicy = createSourceRecallRetentionPolicyFromEnv({
+    BRAIN_SOURCE_RECALL_ENABLED: "true",
+    BRAIN_SOURCE_RECALL_CAPTURE_SOURCE_KINDS: "conversation_turn",
+    BRAIN_SOURCE_RECALL_CAPTURE_CLASSES: "ordinary_source",
     BRAIN_SOURCE_RECALL_CAPTURE_ENABLED: "true"
   }, { encryptedPayloadsAvailable: true });
   const evidencePolicy = createSourceRecallRetentionPolicyFromEnv(
     {
+      BRAIN_SOURCE_RECALL_ENABLED: "true",
+      BRAIN_SOURCE_RECALL_CAPTURE_SOURCE_KINDS: "conversation_turn",
+      BRAIN_SOURCE_RECALL_CAPTURE_CLASSES: "ordinary_source",
       BRAIN_SOURCE_RECALL_CAPTURE_ENABLED: "true",
       BRAIN_SOURCE_RECALL_EVIDENCE_MODE: "true"
     },
@@ -113,9 +132,11 @@ test("Source Recall production capture rejects test fixture source role and clas
 
 test("Source Recall operator-full projection requires its own explicit latch", () => {
   const reviewSafePolicy = createSourceRecallRetentionPolicyFromEnv({
+    BRAIN_SOURCE_RECALL_ENABLED: "true",
     BRAIN_SOURCE_RECALL_PROJECTION_ENABLED: "true"
   });
   const operatorFullPolicy = createSourceRecallRetentionPolicyFromEnv({
+    BRAIN_SOURCE_RECALL_ENABLED: "true",
     BRAIN_SOURCE_RECALL_PROJECTION_ENABLED: "true",
     BRAIN_SOURCE_RECALL_OPERATOR_FULL_PROJECTION_ENABLED: "true"
   });
@@ -126,6 +147,60 @@ test("Source Recall operator-full projection requires its own explicit latch", (
     ["source_recall_operator_full_projection_disabled"]
   );
   assert.equal(decideSourceRecallProjection(operatorFullPolicy, "operator_full").allowed, true);
+});
+
+test("Source Recall runtime config defaults disabled and exposes concrete block reasons", () => {
+  const defaultConfig = createSourceRecallRuntimeConfigFromEnv({});
+  const missingEncryption = createSourceRecallRuntimeConfigFromEnv({
+    BRAIN_SOURCE_RECALL_ENABLED: "true",
+    BRAIN_SOURCE_RECALL_CAPTURE_ENABLED: "true",
+    BRAIN_SOURCE_RECALL_CAPTURE_SOURCE_KINDS: "conversation_turn",
+    BRAIN_SOURCE_RECALL_CAPTURE_CLASSES: "ordinary_source"
+  });
+  const enabled = createSourceRecallRuntimeConfigFromEnv({
+    BRAIN_SOURCE_RECALL_ENABLED: "true",
+    BRAIN_SOURCE_RECALL_ENCRYPTION_KEY: Buffer.alloc(32, 7).toString("base64")
+  });
+
+  assert.equal(defaultConfig.status, "disabled");
+  assert.deepEqual(defaultConfig.retentionPolicy.sourceKindCaptureAllowlist, []);
+  assert.equal(missingEncryption.status, "blocked_missing_encryption");
+  assert.deepEqual(missingEncryption.blockedReasons, ["source_recall_encryption_key_missing"]);
+  assert.equal(enabled.status, "enabled");
+  assert.equal(enabled.encryptionKeyConfigured, true);
+});
+
+test("Source Recall production allowlists fail closed on missing empty or broad values", () => {
+  const missing = createSourceRecallRetentionPolicyFromEnv({
+    BRAIN_SOURCE_RECALL_ENABLED: "true",
+    BRAIN_SOURCE_RECALL_CAPTURE_ENABLED: "true"
+  }, { encryptedPayloadsAvailable: true });
+  const empty = createSourceRecallRetentionPolicyFromEnv({
+    BRAIN_SOURCE_RECALL_ENABLED: "true",
+    BRAIN_SOURCE_RECALL_CAPTURE_ENABLED: "true",
+    BRAIN_SOURCE_RECALL_CAPTURE_SOURCE_KINDS: "",
+    BRAIN_SOURCE_RECALL_CAPTURE_CLASSES: ""
+  }, { encryptedPayloadsAvailable: true });
+  const broad = createSourceRecallRetentionPolicyFromEnv({
+    BRAIN_SOURCE_RECALL_ENABLED: "true",
+    BRAIN_SOURCE_RECALL_CAPTURE_ENABLED: "true",
+    BRAIN_SOURCE_RECALL_CAPTURE_SOURCE_KINDS: "conversation_turn,assistant_turn",
+    BRAIN_SOURCE_RECALL_CAPTURE_CLASSES: "ordinary_source,assistant_output"
+  }, { encryptedPayloadsAvailable: true });
+
+  for (const policy of [missing, empty, broad]) {
+    assert.deepEqual(
+      decideSourceRecallCapture(policy, {
+        sourceKind: "conversation_turn",
+        sourceRole: "user",
+        captureClass: "ordinary_source"
+      }).reasons,
+      [
+        "source_recall_source_kind_not_allowed",
+        "source_recall_capture_class_not_allowed"
+      ]
+    );
+  }
 });
 
 test("Source Recall non-capture firewall names production-rejected capture classes", () => {

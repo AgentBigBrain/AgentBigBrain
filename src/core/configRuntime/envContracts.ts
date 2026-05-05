@@ -3,6 +3,7 @@
  */
 
 import type { ActionType, GovernorId, ShellRuntimeProfileV1 } from "../types";
+import type { SourceRecallRuntimeConfig } from "../sourceRecall/sourceRecallRetention";
 
 export type OrganRole = "planner" | "executor" | "governor" | "memory" | "synthesizer";
 export type RuntimeMode = "isolated" | "full_access";
@@ -81,6 +82,7 @@ export interface BrainConfig {
     traceEnabled: boolean;
     traceLogPath: string;
   };
+  sourceRecall: SourceRecallRuntimeConfig;
   browserVerification: {
     headless: boolean;
   };

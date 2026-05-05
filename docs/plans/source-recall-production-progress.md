@@ -77,3 +77,90 @@
   - A2 still needs runtime config parsing and latches before production construction is wired.
   - A3 live user-turn capture remains blocked until A1 and A2 checkpoint commits exist.
 - next slice status: `unblocked` after A1 checkpoint commit.
+
+## A2 - Source Recall Config Latches
+
+- date: 2026-05-05
+- branch: `feat/source-recall-encrypted-user-turn-capture`
+- status: passed before checkpoint commit
+- files inspected:
+  - `src/core/config.ts`
+  - `src/core/configRuntime/configParsing.ts`
+  - `src/core/configRuntime/envContracts.ts`
+  - `src/interfaces/runtimeConfig.ts`
+  - `src/core/buildBrain.ts`
+  - `src/core/sourceRecall/sourceRecallRetention.ts`
+  - `.env.example`
+  - `docs/SETUP.md`
+  - `tests/core/config.test.ts`
+  - `tests/interfaces/runtimeConfig.test.ts`
+  - `tests/core/sourceRecallRetention.test.ts`
+  - `tests/core/buildBrain.test.ts`
+- files changed:
+  - `.env.example`
+  - `docs/SETUP.md`
+  - `scripts/evidence/mediaIngestExecutionIntentLiveSmoke.ts`
+  - `src/core/buildBrain.ts`
+  - `src/core/config.ts`
+  - `src/core/configRuntime/envContracts.ts`
+  - `src/core/sourceRecall/README.md`
+  - `src/core/sourceRecall/sourceRecallEncryption.ts`
+  - `src/core/sourceRecall/sourceRecallRetention.ts`
+  - `src/interfaces/runtimeConfig.ts`
+  - `tests/core/buildBrain.test.ts`
+  - `tests/core/config.test.ts`
+  - `tests/core/sourceRecallRetention.test.ts`
+  - `tests/helpers/conversationFixtures.ts`
+  - `tests/interfaces/discordGateway.test.ts`
+  - `tests/interfaces/runtimeConfig.test.ts`
+  - `tests/interfaces/transportRuntime.test.ts`
+- tests added:
+  - Brain config defaults keep Source Recall disabled with empty production capture allowlists.
+  - Brain config parses Source Recall latches without enabling capture by default.
+  - Malformed Source Recall encryption key values are rejected only when Source Recall is enabled.
+  - Runtime config exposes Source Recall latch status without raw key values.
+  - Retention policy rejects missing, empty, unknown, or broad production allowlists.
+  - Shared runtime construction does not build a Source Recall store when the top-level latch is
+    disabled.
+- tests run:
+  - `npx tsx --test tests/core/sourceRecallStore.test.ts tests/core/sourceRecallRetention.test.ts tests/core/config.test.ts tests/interfaces/runtimeConfig.test.ts tests/core/buildBrain.test.ts`
+  - `npm run check:test-types`
+  - `npm run check:no-unused-locals`
+  - `npm run build`
+  - `npm run check:docs`
+  - `npm test -- sourceRecallRetention` (blocked: repo runner has no file-name target)
+  - `npm test -- runtimeConfig` (blocked: repo runner has no file-name target)
+  - `npm test -- config` (blocked: repo runner has no file-name target)
+- evidence produced:
+  - focused test output in the local terminal.
+  - post-slice callsite/config scan showing the only production `new SourceRecallStore(` callsite is
+    the gated shared-runtime construction path.
+- sensitive scan status:
+  - focused changed-file and staged-diff scans passed for A2 before checkpoint commit.
+- behavior changed:
+  - `BrainConfig` and interface runtime config now carry Source Recall latch/status data without raw
+    encryption key values.
+  - Source Recall has an explicit top-level enabled latch.
+  - capture, retrieval, projection, operator-full projection, indexing, and evidence mode each
+    require their own explicit latches.
+  - production capture allowlists are empty by default and accept only `conversation_turn` plus
+    `ordinary_source` in the immediate branch.
+  - shared runtime construction creates no Source Recall store when the top-level latch is disabled.
+- behavior intentionally not changed:
+  - no production capture is enabled in A2.
+  - no planner/chat retrieval or context injection is enabled in A2.
+  - no media/document, assistant/task, projection, or semantic-candidate Source Recall wiring is
+    enabled in A2.
+- production defaults after slice:
+  - Source Recall disabled.
+  - capture disabled.
+  - retrieval disabled.
+  - projection disabled.
+  - operator-full projection disabled.
+  - index disabled.
+  - evidence mode disabled.
+  - capture allowlists empty unless explicitly configured.
+- known limitations:
+  - A3 still needs the central live-user-turn capture wrapper and rollback diagnostics.
+  - A4 still needs review/evidence retrieval budgets and audit events.
+- next slice status: `unblocked` after A2 checkpoint commit.

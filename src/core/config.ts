@@ -29,6 +29,11 @@ import {
   buildMutableConfigForRuntimeMode,
   resolveConfiguredShellRuntimeProfile
 } from "./configRuntime/platformProfiles";
+import {
+  createDefaultSourceRecallRuntimeConfig,
+  createSourceRecallRuntimeConfigFromEnv
+} from "./sourceRecall/sourceRecallRetention";
+import { decodeSourceRecallEncryptionKey } from "./sourceRecall/sourceRecallEncryption";
 import { resolveCodexAuthFilePath } from "../models/codex/authStore";
 
 export type {
@@ -164,6 +169,7 @@ export const DEFAULT_BRAIN_CONFIG: BrainConfig = {
     traceEnabled: false,
     traceLogPath: "runtime/runtime_trace.jsonl"
   },
+  sourceRecall: createDefaultSourceRecallRuntimeConfig(),
   browserVerification: {
     headless: true
   },
@@ -367,6 +373,14 @@ export function createBrainConfigFromEnv(env: NodeJS.ProcessEnv = process.env): 
     config.dna.protectedPathPrefixes,
     config.observability.traceLogPath
   );
+  config.sourceRecall = createSourceRecallRuntimeConfigFromEnv(env);
+  appendProtectedPathPrefix(
+    config.dna.protectedPathPrefixes,
+    config.sourceRecall.sqlitePath
+  );
+  if (config.sourceRecall.enabled && config.sourceRecall.encryptionKeyConfigured) {
+    decodeSourceRecallEncryptionKey(env.BRAIN_SOURCE_RECALL_ENCRYPTION_KEY ?? "");
+  }
 
   // Budget controls are owner-configurable only and treated as immutable by runtime actions.
   config.limits.maxEstimatedCostUsd = parsePositiveNumber(

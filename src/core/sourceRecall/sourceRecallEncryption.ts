@@ -75,7 +75,9 @@ function fromBase64(input: string): Buffer {
  */
 export function assertSourceRecallKeyLength(key: Buffer): void {
   if (key.byteLength !== SOURCE_RECALL_KEY_BYTES) {
-    throw new Error("Source Recall encryption key must be exactly 32 bytes.");
+    throw new Error(
+      "BRAIN_SOURCE_RECALL_ENCRYPTION_KEY must decode to exactly 32 bytes."
+    );
   }
 }
 

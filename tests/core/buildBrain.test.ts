@@ -15,6 +15,7 @@ test("createSharedBrainRuntimeDependencies keeps sqlite bootstrap imports inside
   const { createSharedBrainRuntimeDependencies } = buildBrainModule as {
     createSharedBrainRuntimeDependencies: (env: NodeJS.ProcessEnv) => {
       entityGraphStore: { getGraph(): Promise<{ entities: readonly unknown[]; edges: readonly unknown[] }> };
+      sourceRecallStore?: unknown;
     };
   };
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), "abb-buildbrain-"));
@@ -57,6 +58,7 @@ test("createSharedBrainRuntimeDependencies keeps sqlite bootstrap imports inside
       BRAIN_PROJECTION_SINKS: ""
     });
 
+    assert.equal(shared.sourceRecallStore, undefined);
     const graph = await shared.entityGraphStore.getGraph();
     assert.equal(graph.entities.length, 0);
     assert.equal(graph.edges.length, 0);

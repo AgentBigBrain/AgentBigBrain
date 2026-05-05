@@ -9,6 +9,7 @@ import type { ProfileMemoryQueryDecisionRecord } from "../../src/core/profileMem
 import { DiscordAdapter } from "../../src/interfaces/discordAdapter";
 import { DiscordGateway } from "../../src/interfaces/discordGateway";
 import { DiscordInterfaceConfig } from "../../src/interfaces/runtimeConfig";
+import { createDefaultSourceRecallRuntimeConfig } from "../../src/core/sourceRecall/sourceRecallRetention";
 
 interface DiscordGatewayTestHarness {
   createConversationNotifier(
@@ -30,6 +31,7 @@ interface DiscordGatewayTestHarness {
 function buildDiscordConfig(): DiscordInterfaceConfig {
   return {
     provider: "discord",
+    sourceRecall: createDefaultSourceRecallRuntimeConfig(),
     security: {
       sharedSecret: "secret",
       allowedUsernames: ["agentowner"],

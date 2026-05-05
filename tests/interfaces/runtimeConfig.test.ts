@@ -26,6 +26,7 @@ test("runtime config selects telegram provider when configured", () => {
   assert.equal(config.security.pulseLexicalOverridePath, null);
   assert.equal(config.security.invocation.requireNameCall, false);
   assert.equal(config.security.invocation.aliases[0], "BigBrain");
+  assert.equal(config.sourceRecall.status, "disabled");
   assert.equal(config.streamingTransportMode, "edit");
   assert.equal(config.nativeDraftStreaming, false);
 });
@@ -191,6 +192,31 @@ test("runtime config selects both providers when explicitly configured", () => {
   assert.equal(config.telegram.provider, "telegram");
   assert.equal(config.discord.provider, "discord");
   assert.equal(config.security.allowedUsernames[0], "agentowner");
+  assert.equal(config.sourceRecall.status, "disabled");
+  assert.equal(config.telegram.sourceRecall.status, "disabled");
+  assert.equal(config.discord.sourceRecall.status, "disabled");
+});
+
+test("runtime config exposes Source Recall latches without raw key values", () => {
+  const config = createInterfaceRuntimeConfigFromEnv({
+    BRAIN_INTERFACE_PROVIDER: "telegram",
+    BRAIN_INTERFACE_SHARED_SECRET: "secret",
+    BRAIN_INTERFACE_ALLOWED_USERNAMES: "agentowner",
+    TELEGRAM_BOT_TOKEN: "telegram-token",
+    BRAIN_SOURCE_RECALL_ENABLED: "true",
+    BRAIN_SOURCE_RECALL_CAPTURE_ENABLED: "true",
+    BRAIN_SOURCE_RECALL_ENCRYPTION_KEY: Buffer.alloc(32, 23).toString("base64"),
+    BRAIN_SOURCE_RECALL_CAPTURE_SOURCE_KINDS: "conversation_turn",
+    BRAIN_SOURCE_RECALL_CAPTURE_CLASSES: "ordinary_source"
+  });
+
+  assert.equal(config.provider, "telegram");
+  assert.equal(config.sourceRecall.status, "enabled");
+  assert.equal(config.sourceRecall.encryptionKeyConfigured, true);
+  assert.equal("encryptionKey" in config.sourceRecall, false);
+  assert.deepEqual(config.sourceRecall.retentionPolicy.sourceKindCaptureAllowlist, [
+    "conversation_turn"
+  ]);
 });
 
 test("runtime config supports comma-list provider selection for dual runtime", () => {

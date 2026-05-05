@@ -34,6 +34,8 @@ import { WorkflowLearningStore } from "./workflowLearningStore";
 import { BrainConfig } from "./config";
 import { EntityGraphStore } from "./entityGraphStore";
 import { MediaArtifactStore } from "./mediaArtifactStore";
+import { SourceRecallStore } from "./sourceRecall/sourceRecallStore";
+import { decodeSourceRecallEncryptionKey } from "./sourceRecall/sourceRecallEncryption";
 import { Stage686RuntimeStateStore } from "./stage6_86/runtimeState";
 import { Stage686RuntimeActionEngine } from "./stage6_86/runtimeActions";
 import { createProjectionRuntimeConfigFromEnv } from "./projections/config";
@@ -66,6 +68,7 @@ export interface SharedBrainRuntimeDependencies {
   readonly entityGraphStore: EntityGraphStore;
   readonly stage686RuntimeStateStore: Stage686RuntimeStateStore;
   readonly mediaArtifactStore: MediaArtifactStore;
+  readonly sourceRecallStore: SourceRecallStore | undefined;
   readonly projectionService: ProjectionService;
 }
 
@@ -170,6 +173,24 @@ function resolveSharedRuntimeStateRoot(
  */
 function resolveSharedRuntimeStorePath(runtimeRoot: string, relativePath: string): string {
   return path.join(runtimeRoot, relativePath);
+}
+
+/**
+ * Resolves Source Recall SQLite storage path from canonical config.
+ *
+ * @param runtimeRoot - Absolute runtime root directory.
+ * @param configuredPath - Configured Source Recall SQLite path.
+ * @returns Absolute SQLite path.
+ */
+function resolveSourceRecallSqlitePath(runtimeRoot: string, configuredPath: string): string {
+  if (path.isAbsolute(configuredPath)) {
+    return configuredPath;
+  }
+  const normalizedPath = configuredPath.replace(/\\/g, "/");
+  if (normalizedPath === "runtime/source_recall.sqlite") {
+    return resolveSharedRuntimeStorePath(runtimeRoot, "source_recall.sqlite");
+  }
+  return path.resolve(process.cwd(), configuredPath);
 }
 
 /**
@@ -406,6 +427,16 @@ export function createSharedBrainRuntimeDependencies(
       onChange: publishProjectionChange
     }
   );
+  const sourceRecallStore =
+    baseConfig.sourceRecall.enabled && baseConfig.sourceRecall.status === "enabled"
+    ? new SourceRecallStore({
+      sqlitePath: resolveSourceRecallSqlitePath(
+        runtimeStateRoot,
+        baseConfig.sourceRecall.sqlitePath
+      ),
+      encryptionKey: decodeSourceRecallEncryptionKey(env.BRAIN_SOURCE_RECALL_ENCRYPTION_KEY ?? "")
+    })
+    : undefined;
   const skillRegistryStore = new SkillRegistryStore(
     resolveSharedRuntimeStorePath(runtimeStateRoot, "skills")
   );
@@ -489,6 +520,7 @@ export function createSharedBrainRuntimeDependencies(
     entityGraphStore,
     stage686RuntimeStateStore,
     mediaArtifactStore,
+    sourceRecallStore,
     projectionService
   };
 }
