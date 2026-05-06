@@ -1234,3 +1234,99 @@
 - known limitations:
   - this slice documents the production contract; it does not add new runtime capabilities.
 - next slice status: `roadmap complete locally after scans and checkpoint commit`.
+
+## I - Source Recall Telegram/Desktop Live Proof
+
+- date: 2026-05-05
+- branch: `docs/source-recall-production-contract`
+- status: passed before checkpoint commit
+- objective:
+  - Prove the production Source Recall stack in the live Telegram/Desktop workflow with explicit
+    live confirmation, encrypted storage, real browser open/close, Desktop cleanup, exact-quote
+    retrieval, and redacted evidence.
+- owner files:
+  - `scripts/evidence/telegramDesktopWorkflowAndCleanupLiveSmoke.ts`
+  - `scripts/evidence/sourceRecallTelegramDesktopLiveSmoke.ts`
+  - `tests/scripts/sourceRecallTelegramDesktopLiveSmoke.test.ts`
+  - `package.json`
+  - `docs/SOURCE_RECALL.md`
+  - `CHANGELOG.md`
+  - `docs/plans/SOURCE_RECALL_PRODUCTION_ROADMAP.md`
+  - `docs/plans/source-recall-production-progress.md`
+- prohibited changes:
+  - no automatic Source Recall enablement outside the explicit live-smoke latches.
+  - no raw live Telegram text, Desktop path, provider token, or raw source chunk in committed docs,
+    tests, progress, or evidence.
+  - no Source Recall authority expansion for memory truth, approval, action, safety, or completion
+    proof.
+  - no media/document capture enablement in the live proof wrapper.
+- acceptance criteria:
+  - live run requires `BRAIN_TELEGRAM_HUMAN_LIVE_SMOKE_CONFIRM=true`.
+  - live wrapper provides an encrypted production Source Recall store and explicit capture/retrieval
+    latches only for the smoke process.
+  - live artifact proves browser open, browser close, and Desktop cleanup.
+  - live artifact proves exact-quote retrieval from encrypted Source Recall without raw quote/path
+    leakage.
+  - live artifact proves Source Recall excerpts remain quoted evidence only and non-authoritative.
+  - full `npm test` remains green after the live harness changes.
+- files inspected:
+  - `scripts/evidence/telegramDesktopWorkflowAndCleanupLiveSmoke.ts`
+  - `scripts/evidence/sourceRecallProductionUserTurnSmoke.ts`
+  - `scripts/evidence/sourceRecallEvidenceMatrix.ts`
+  - `tests/scripts/telegramDesktopWorkflowAndCleanupLiveSmoke.test.ts`
+  - `tests/scripts/sourceRecallProductionUserTurnSmoke.test.ts`
+  - `docs/SOURCE_RECALL.md`
+  - `CHANGELOG.md`
+  - `package.json`
+- files changed:
+  - `CHANGELOG.md`
+  - `docs/SOURCE_RECALL.md`
+  - `docs/plans/SOURCE_RECALL_PRODUCTION_ROADMAP.md`
+  - `docs/plans/source-recall-production-progress.md`
+  - `package.json`
+  - `scripts/evidence/sourceRecallTelegramDesktopLiveSmoke.ts`
+  - `scripts/evidence/telegramDesktopWorkflowAndCleanupLiveSmoke.ts`
+  - `tests/scripts/sourceRecallTelegramDesktopLiveSmoke.test.ts`
+- tests added:
+  - confirmation-gated Source Recall Telegram/Desktop live smoke test that validates the redacted
+    artifact shape, encrypted production storage, exact-quote retrieval, browser lifecycle proof,
+    Desktop cleanup proof, and non-authority flags.
+- tests run:
+  - `npx tsx --test tests/scripts/sourceRecallTelegramDesktopLiveSmoke.test.ts tests/scripts/telegramDesktopWorkflowAndCleanupLiveSmoke.test.ts tests/scripts/sourceRecallEvidenceMatrix.test.ts`
+  - `npm run check:ai-first`
+  - `npm run build`
+  - `npm run test:source_recall:evidence`
+  - `$env:BRAIN_TELEGRAM_HUMAN_LIVE_SMOKE_CONFIRM='true'; npm run test:source_recall:telegram_desktop_live_smoke`
+  - `npm test`
+- evidence produced:
+  - `runtime/evidence/source_recall/source_recall_telegram_desktop_live_smoke.json`
+  - evidence mode: `live_telegram_desktop_observed`
+  - live dependency status: `LIVE_SMOKE`
+  - top-level status: `PASS`
+  - source recall proof: encrypted production store, plaintext storage disallowed, exact quote
+    retrieved, raw row does not contain the target quote, and non-authority flags are false/quoted
+    as expected.
+  - desktop proof: browser opened, browser closed, and target Desktop folder cleanup completed.
+- sensitive scan status:
+  - changed-file scan passed for prior private PDF needles, local private paths, provider-token
+    shapes, GitHub token shapes, Slack token shapes, and Telegram token shapes.
+  - generated-evidence scan passed for the same patterns plus raw synthetic/live source needles
+    across Source Recall evidence and the Stage 6.5 live-check artifact.
+  - staged-diff scan passed before checkpoint commit.
+- behavior changed:
+  - the Telegram/Desktop live smoke can optionally receive Source Recall capture dependencies from
+    the shared runtime when explicit live-smoke Source Recall latches are set.
+  - added a dedicated Source Recall Telegram/Desktop live proof command that creates temporary
+    encrypted storage, runs the real live workflow, retrieves exact quoted evidence, writes a
+    redacted artifact, and deletes temporary storage.
+- behavior intentionally not changed:
+  - normal interface runtime defaults remain disabled unless Source Recall latches are configured.
+  - no planner/chat path gains Source Recall authority from the live proof.
+  - no media/document Source Recall capture is enabled by the live proof wrapper.
+  - the live artifact is runtime evidence and is not intended to be tracked.
+- known limitations:
+  - this live proof depends on Telegram/Desktop/browser live dependencies and remains
+    confirmation-gated.
+  - the artifact records ids, counts, hashes, and non-authority flags instead of raw live source
+    text by design.
+- next slice status: `push branch for PR/CI review after final scans and checkpoint commit`.

@@ -211,6 +211,9 @@ Required proof categories include:
 - prompt-spoof isolation
 - artifact privacy
 - production status reporting
+- optional live Telegram/Desktop proof through
+  `npm run test:source_recall:telegram_desktop_live_smoke` when live credentials and explicit
+  confirmation are available
 
 The evidence matrix must not pass by copying expected values into observed fields. It must not
 label schema-only or mocked output as live runtime proof.

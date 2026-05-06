@@ -18,10 +18,11 @@ That branch should implement encrypted production storage, explicit config latch
 `conversation_turn` capture only. It must not enable media/document capture, planner/chat retrieval,
 automatic context injection, semantic candidate promotion, or projection expansion.
 
-## Current Verified Foundation State
+## Historical Verified Foundation State
 
-This roadmap was re-checked against the current local repository before production planning.
-Do not treat older audit notes as automatically current.
+This roadmap was re-checked against the local repository before production planning began.
+Do not treat older audit notes as automatically current. The bullets below describe the foundation
+state that existed before the production Source Recall slices were implemented.
 
 Verified current state:
 
@@ -1399,39 +1400,44 @@ Read these first:
 - `src/core/sourceRecall/README.md`
 - `src/core/sourceRecall/contracts.ts`
 
-Do not restart the audit or foundation plan. The next clean seam is the immediate branch
-`feat/source-recall-encrypted-user-turn-capture`.
+Do not restart the audit, foundation plan, or production roadmap. The local branch stack now has
+checkpoint commits through A1-A5 and later roadmap slices for assistant/task capture,
+media/document capture, context injection, semantic candidate refs, projection/review, production
+evidence matrix, contract docs, and the live Telegram/Desktop Source Recall proof.
 
-Before editing, verify the current code again:
+Before editing, verify the current code again and preserve the production defaults:
 
-- `SourceRecallStore` should still reject production plaintext storage.
-- Source Recall config should still be absent or disabled in the runtime unless A1/A2 already
-  landed.
-- Production `recordUserTurn` callsites should still not use Source Recall by default.
-- Production planner/chat paths should still not call Source Recall retrieval or context rendering.
+- `SourceRecallStore` must still reject production plaintext storage.
+- Source Recall remains disabled unless explicit production latches and key material are provided.
+- Production capture remains source-kind and capture-class allowlisted.
+- Production planner/chat paths must not retrieve Source Recall unless the retrieval and context
+  latches allow that path.
+- Source Recall excerpts remain quoted evidence only and cannot authorize memory truth, approval,
+  action, safety, or completion proof.
 
-Start with `A1 - Encrypted Production Source Recall Storage`. Do not enable media/document capture,
-assistant/task capture, planner/chat retrieval, context injection, semantic candidate promotion, or
-projection expansion in that branch. If committing this roadmap, remember that `docs/plans/` is
-ignored and requires an explicit `git add -f`.
+The next clean seam is review/CI response after pushing `docs/source-recall-production-contract`.
+If a future follow-up starts from this roadmap, create a new narrow branch and do not collapse new
+capture surfaces into unrelated fixes.
 
 ## Last Worked On
 
-Current phase or focus: H production contract docs checkpoint.
+Current phase or focus: live Telegram/Desktop proof and push preparation.
 
-What changed last: A1-A5, review retrieval, private smoke, assistant/task capture,
-media/document capture, context injection, semantic candidate bridging, projection/review, and the
-production evidence matrix have local checkpoint commits. The current docs slice records the
-operator-facing Source Recall production contract without changing runtime behavior.
+What changed last: the Source Recall live Telegram/Desktop smoke now uses the shared encrypted
+Source Recall runtime, captures live Telegram workflow turns when the explicit live-smoke latches
+are set, retrieves the Desktop target folder name by exact quote as quoted evidence, proves browser
+open/close and Desktop cleanup, then writes a redacted live artifact.
 
-What still feels clunky, blocked, or unfinished: no known docs-slice blockers remain before the
-checkpoint commit.
+What still feels clunky, blocked, or unfinished: no known implementation blockers remain before
+pushing this branch stack for review. The live artifact is intentionally not tracked because it is
+runtime evidence.
 
-Next clean seam to continue from: checkpoint `docs/source-recall-production-contract`, then decide
-whether to push the local Source Recall roadmap branches for review.
+Next clean seam to continue from: push `docs/source-recall-production-contract` and use CI/PR
+review as the next gate.
 
-Latest validation or evidence state: H passed locally with `npm run check:docs`,
-`npm run check:ai-first`, `npm run check:module-size`, `npm run build`,
-`npm run test:source_recall:evidence` (`12` total, `12` passed, `0` failed), and full `npm test`
-(`3365` tests, `3358` pass, `0` fail, `7` skipped). Changed-file, generated-evidence, and
-staged-diff sensitive scans passed.
+Latest validation or evidence state: live Source Recall Telegram/Desktop smoke passed with
+`npm run test:source_recall:telegram_desktop_live_smoke` under explicit live confirmation and wrote
+`runtime/evidence/source_recall/source_recall_telegram_desktop_live_smoke.json`. Full `npm test`
+then passed (`3366` tests, `3358` pass, `0` fail, `8` skipped). Focused Source Recall evidence,
+build, docs, module-size, changed-file, generated-evidence, and staged-diff sensitive scans passed
+before the final checkpoint commit.

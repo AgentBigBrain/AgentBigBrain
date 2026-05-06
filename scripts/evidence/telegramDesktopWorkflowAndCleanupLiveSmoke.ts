@@ -8,15 +8,23 @@ import { mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises"
 import os from "node:os";
 import path from "node:path";
 
-import { buildDefaultBrain } from "../../src/core/buildBrain";
+import {
+  buildBrainRuntimeFromEnvironment,
+  createSharedBrainRuntimeDependencies
+} from "../../src/core/buildBrain";
 import { ensureEnvLoaded } from "../../src/core/envLoader";
+import type { SourceRecallStore } from "../../src/core/sourceRecall/sourceRecallStore";
 import type { ConversationSession } from "../../src/interfaces/conversationRuntime/sessionStateContracts";
+import type { ConversationSourceRecallCaptureDependencies } from "../../src/interfaces/conversationRuntime/managerContracts";
 import { TelegramAdapter } from "../../src/interfaces/telegramAdapter";
 import {
   TelegramGateway,
   type TelegramOutboundDeliveryObservation
 } from "../../src/interfaces/telegramGateway";
-import { createInterfaceRuntimeConfigFromEnv } from "../../src/interfaces/runtimeConfig";
+import {
+  createInterfaceRuntimeConfigFromEnv,
+  type TelegramInterfaceConfig
+} from "../../src/interfaces/runtimeConfig";
 import { InterfaceSessionStore } from "../../src/interfaces/sessionStore";
 import { probeLocalIntentModelFromEnv } from "../../src/organs/languageUnderstanding/localIntentModelRuntime";
 import {
@@ -153,6 +161,27 @@ const LOCAL_ORGANIZATION_NO_PROOF_PATTERN =
 const LOCAL_ORGANIZATION_MOVE_PROOF_PATTERN = /^I moved .+ into /i;
 const LOCAL_BROWSER_CLOSE_PROOF_PATTERN =
   /\b(?:closed|shut)\b.{0,120}\bbrowser\b|\bbrowser\b.{0,120}\b(?:closed|shut)\b/i;
+
+function createLiveSmokeSourceRecallCapture(
+  config: TelegramInterfaceConfig,
+  sourceRecallStore?: SourceRecallStore
+): ConversationSourceRecallCaptureDependencies | undefined {
+  if (
+    !config.sourceRecall.enabled ||
+    config.sourceRecall.status !== "enabled" ||
+    !config.sourceRecall.retentionPolicy.captureEnabled ||
+    !sourceRecallStore
+  ) {
+    return undefined;
+  }
+  return {
+    policy: {
+      ...config.sourceRecall.retentionPolicy,
+      encryptedPayloadsAvailable: true
+    },
+    writer: sourceRecallStore
+  };
+}
 
 function parseBoolean(value: string | undefined): boolean {
   const normalized = (value ?? "").trim().toLowerCase();
@@ -711,7 +740,8 @@ export async function runTelegramDesktopWorkflowAndCleanupLiveSmoke(): Promise<S
 
     const outboundDeliveries: TelegramOutboundDeliveryObservation[] = [];
     const sessionStore = new InterfaceSessionStore(SESSION_STATE_PATH, { backend: "json" });
-    const brain = buildDefaultBrain();
+    const sharedRuntime = createSharedBrainRuntimeDependencies(process.env);
+    const brain = buildBrainRuntimeFromEnvironment(sharedRuntime, process.env).brain;
     const gateway = new TelegramGateway(
       new TelegramAdapter(brain, {
         auth: {
@@ -733,6 +763,12 @@ export async function runTelegramDesktopWorkflowAndCleanupLiveSmoke(): Promise<S
       telegram,
       {
         sessionStore,
+        entityGraphStore: sharedRuntime.entityGraphStore,
+        mediaArtifactStore: sharedRuntime.mediaArtifactStore,
+        sourceRecallCapture: createLiveSmokeSourceRecallCapture(
+          telegram,
+          sharedRuntime.sourceRecallStore
+        ),
         onOutboundDelivery: (event) => {
           outboundDeliveries.push(event);
         }
