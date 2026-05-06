@@ -26,6 +26,9 @@ stay aligned with `package.json`.
   authority.
 
 ### Fixed
+- Direct conversation prompts now ground transport/profile name mentions as references to the
+  current user when appropriate, preventing the model from treating the current speaker's name as
+  an unrelated third party during ordinary memory recall.
 
 ### Security
 

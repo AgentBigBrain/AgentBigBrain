@@ -491,6 +491,76 @@ test("buildConversationAwareExecutionInput rejects generic usernames as identity
   assert.match(executionInput, /Response rule: say you do not know yet instead of inventing or inferring a name\./);
 });
 
+test("buildConversationAwareExecutionInput grounds transport-name references as the current user", async () => {
+  const session = buildSession({
+    transportIdentity: {
+      provider: "telegram",
+      username: "averybrooks",
+      displayName: "Avery Brooks",
+      givenName: "Avery",
+      familyName: "Brooks",
+      observedAt: "2026-03-20T20:48:00.000Z"
+    }
+  });
+  session.conversationTurns.push(
+    {
+      role: "user",
+      text: "I used to work with Jordan at Example Studio.",
+      at: "2026-03-20T20:49:00.000Z"
+    },
+    {
+      role: "assistant",
+      text: "That means Jordan is someone you used to work with at Example Studio.",
+      at: "2026-03-20T20:49:10.000Z"
+    },
+    {
+      role: "user",
+      text: "I mainly work at Northstar Labs now.",
+      at: "2026-03-20T20:50:00.000Z"
+    }
+  );
+
+  const executionInput = await buildConversationAwareExecutionInput(
+    session,
+    "Okay, so tell me about Avery.",
+    10,
+    null,
+    "Okay, so tell me about Avery."
+  );
+
+  assert.match(executionInput, /Current-user identity reference context:/);
+  assert.match(
+    executionInput,
+    /matches the current speaker's transport display name/i
+  );
+  assert.match(executionInput, /treat this name as the current user, not as a separate third party/i);
+  assert.match(executionInput, /First-person statements in recent conversation context/);
+  assert.match(executionInput, /I mainly work at Northstar Labs now\./);
+  assert.match(executionInput, /It does not make transport metadata durable profile truth/);
+});
+
+test("buildConversationAwareExecutionInput does not ground unrelated names to the current user", async () => {
+  const session = buildSession({
+    transportIdentity: {
+      provider: "telegram",
+      username: "averybrooks",
+      displayName: "Avery Brooks",
+      givenName: "Avery",
+      familyName: "Brooks",
+      observedAt: "2026-03-20T20:48:00.000Z"
+    }
+  });
+  const executionInput = await buildConversationAwareExecutionInput(
+    session,
+    "What do you know about Morgan?",
+    10,
+    null,
+    "What do you know about Morgan?"
+  );
+
+  assert.doesNotMatch(executionInput, /Current-user identity reference context:/);
+});
+
 test("buildConversationAwareExecutionInput includes conversation context, status guardrails, and routing hint", async () => {
   const session = buildSession();
   session.conversationTurns.push({

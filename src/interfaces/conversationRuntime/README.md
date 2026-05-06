@@ -162,6 +162,9 @@ The latest slices moved queue/ack, worker-loop, and pulse-state ownership here s
 - `transportIdentity.ts` owns canonical transport-identity normalization plus low-confidence
   name-hint selection so direct self-identity replies can reuse provider identity metadata without
   silently turning handles into stored profile memory
+- `currentUserIdentityReference.ts` owns bounded current-speaker name-reference grounding so direct
+  chat can resolve a transport/profile name mention back to the current user without treating the
+  transport hint as durable profile truth or action authority
 - `selfIdentityPrompting.ts` owns canonical bounded self-identity recall prompt assembly so direct
   conversation can prefer confirmed profile facts, fall back to typed transport hints, and still
   fail closed for generic handles

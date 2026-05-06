@@ -45,6 +45,7 @@ import {
 import { buildContextualRecallBlock } from "./conversationRuntime/contextualRecall";
 import { buildLocalIntentSessionHints } from "./conversationRuntime/conversationRoutingSupport";
 import { buildBoundConversationContinuityQueries } from "./conversationRuntime/continuityReadSession";
+import { buildCurrentUserIdentityReferenceBlock } from "./conversationRuntime/currentUserIdentityReference";
 import { buildSelfIdentityRecallBlock } from "./conversationRuntime/selfIdentityPrompting";
 import {
   buildRelationshipContinuityContextBlock,
@@ -1813,6 +1814,12 @@ export async function buildConversationAwareExecutionInput(
     continuityQueries.queryContinuityFacts,
     requestTelemetry
   );
+  const currentUserIdentityReferenceBlock = await buildCurrentUserIdentityReferenceBlock(
+    runtimeReconciledSession,
+    rawUserInput,
+    continuityQueries.queryContinuityFacts,
+    requestTelemetry
+  );
   const relationshipContinuityBlock = await buildRelationshipContinuityContextBlock(
     runtimeReconciledSession,
     rawUserInput,
@@ -1940,6 +1947,7 @@ export async function buildConversationAwareExecutionInput(
     : null;
   const memoryPromptSurfaceCount = [
     selfIdentityRecallBlock,
+    currentUserIdentityReferenceBlock,
     relationshipContinuityBlock,
     contextualRecallBlock
   ].filter((block): block is string => typeof block === "string" && block.length > 0).length;
@@ -1951,6 +1959,7 @@ export async function buildConversationAwareExecutionInput(
   if (
     recentTurns.length === 0 &&
     !selfIdentityRecallBlock &&
+    !currentUserIdentityReferenceBlock &&
     !relationshipContinuityBlock &&
     !statusUpdateBlock &&
     !contextualRecallBlock &&
@@ -2003,6 +2012,9 @@ export async function buildConversationAwareExecutionInput(
   }
   if (selfIdentityRecallBlock) {
     lines.push("", selfIdentityRecallBlock);
+  }
+  if (currentUserIdentityReferenceBlock) {
+    lines.push("", currentUserIdentityReferenceBlock);
   }
   if (relationshipContinuityBlock) {
     lines.push("", relationshipContinuityBlock);
