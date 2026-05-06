@@ -164,3 +164,40 @@ test("applyObsidianReviewActionsFromDirectory routes fact, episode, and follow-u
     await rm(tempDir, { recursive: true, force: true });
   }
 });
+
+test("applyObsidianReviewActionsFromDirectory skips source-recall-only projection notes", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "abb-review-actions-source-recall-"));
+  try {
+    const reviewDir = path.join(tempDir, "40 Review Actions");
+    const runtimeStatePath = path.join(tempDir, "stage6_86_runtime_state.json");
+    await mkdir(reviewDir, { recursive: true });
+    await writeFile(
+      path.join(reviewDir, "source-recall-note.md"),
+      [
+        "---",
+        "abb_source_recall_refs:",
+        "  - \"source_recall:source_record_review#chunk_review\"",
+        "abb_status: \"pending\"",
+        "---",
+        "",
+        "This projected source excerpt is review evidence only and is not a review action."
+      ].join("\n"),
+      "utf8"
+    );
+
+    const runtimeStateStore = new Stage686RuntimeStateStore(runtimeStatePath, {
+      backend: "json",
+      exportJsonOnWrite: false
+    });
+    const report = await applyObsidianReviewActionsFromDirectory(reviewDir, {
+      runtimeStateStore
+    });
+
+    assert.equal(report.appliedCount, 0);
+    assert.equal(report.failedCount, 0);
+    assert.equal(report.skippedCount, 1);
+    assert.match(report.outcomes[0]?.message ?? "", /without a valid Obsidian review-action schema/);
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});

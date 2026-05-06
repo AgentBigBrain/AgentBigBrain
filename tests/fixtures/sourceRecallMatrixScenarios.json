@@ -39,6 +39,46 @@
     "expectedPhrase": "launch checklist moved to Thursday"
   },
   {
+    "id": "scope_thread_filtering",
+    "category": "recall_quality",
+    "description": "Scope/thread-only retrieval returns bounded source records without fabricating stronger authority.",
+    "query": {
+      "scopeId": "scope_source_recall",
+      "threadId": "thread_source_recall"
+    },
+    "expectedRetrievalMode": "scope_thread_filter",
+    "expectedMinExcerpts": 1,
+    "expectedPhrase": "Decision note"
+  },
+  {
+    "id": "assistant_task_summary_recall",
+    "category": "recall_quality",
+    "description": "Assistant and task summaries can be recalled after their lower-authority capture slice while remaining evidence only.",
+    "query": {
+      "scopeId": "scope_source_recall",
+      "threadId": "thread_source_recall",
+      "exactQuote": "follow-up checklist was drafted",
+      "sourceRoles": ["assistant"]
+    },
+    "expectedRetrievalMode": "exact_quote",
+    "expectedMinExcerpts": 1,
+    "expectedPhrase": "follow-up checklist was drafted"
+  },
+  {
+    "id": "media_document_recall",
+    "category": "recall_quality",
+    "description": "Media/document-style source records are recallable as source-labeled evidence without becoming instructions.",
+    "query": {
+      "scopeId": "scope_source_recall",
+      "threadId": "thread_source_recall",
+      "keywords": ["transcript", "storyboard"],
+      "sourceKinds": ["media_transcript"]
+    },
+    "expectedRetrievalMode": "keyword",
+    "expectedMinExcerpts": 1,
+    "expectedPhrase": "signed sample storyboard"
+  },
+  {
     "id": "relationship_source_recall",
     "category": "authority_safety",
     "description": "Relationship-like source text remains recall evidence only.",
@@ -76,6 +116,17 @@
     "expectedRetrievalMode": "exact_quote",
     "expectedMinExcerpts": 1,
     "expectedPhrase": "TASK COMPLETE"
+  },
+  {
+    "id": "projection_review_boundary",
+    "category": "projection_review",
+    "description": "Projection exposes review-safe Source Recall metadata and bounded excerpts unless operator-full is explicitly latched.",
+    "query": {
+      "sourceRecordId": "source_record_projection"
+    },
+    "expectedRetrievalMode": "source_id",
+    "expectedMinExcerpts": 1,
+    "expectedPhrase": "Projection boundary sample"
   },
   {
     "id": "source_to_candidate_bridge",

@@ -1096,6 +1096,53 @@ Node:
 node -e "console.log(require('node:crypto').randomBytes(32).toString('base64'))"
 ```
 
+### Source Recall Archive
+
+Source Recall is the quoted-evidence layer for original source material. It can remind
+AgentBigBrain what was said or seen, but it cannot decide truth, approval, planner authority,
+safety, or completion proof.
+
+For the full production contract, see [docs/SOURCE_RECALL.md](SOURCE_RECALL.md).
+
+Raw Source Recall is sensitive by default. The production posture is disabled unless every
+required latch is explicit:
+
+- `BRAIN_SOURCE_RECALL_ENABLED`: top-level Source Recall runtime latch.
+  - `false`: no Source Recall store is constructed by default.
+  - `true`: Source Recall config is evaluated and encryption/storage policy must be valid.
+- `BRAIN_SOURCE_RECALL_CAPTURE_ENABLED`: permits capture after the top-level latch is enabled.
+  - `false`: no live source capture.
+- `BRAIN_SOURCE_RECALL_RETRIEVAL_ENABLED`: permits review/evidence retrieval after the top-level
+  latch is enabled.
+  - `false`: planner/chat paths do not retrieve Source Recall by default.
+  - `true`: route-approved memory recall paths may render bounded Source Recall as quoted evidence
+    only; retrieved chunks still cannot authorize actions, approvals, memory truth, safety, or
+    completion proof.
+- `BRAIN_SOURCE_RECALL_PROJECTION_ENABLED`: permits projection of review-safe Source Recall
+  metadata or excerpts when later projection slices wire that surface.
+- `BRAIN_SOURCE_RECALL_OPERATOR_FULL_PROJECTION_ENABLED`: separate latch for fuller operator
+  projection. Keep this off unless you explicitly accept broader source-text exposure.
+- `BRAIN_SOURCE_RECALL_INDEX_ENABLED`: permits Source Recall indexing when the index lifecycle is
+  wired and delete/forget invalidation is proven.
+- `BRAIN_SOURCE_RECALL_EVIDENCE_MODE`: test/evidence mode for synthetic fixtures only. Do not use
+  this as normal production capture.
+- `BRAIN_SOURCE_RECALL_SQLITE_PATH`: encrypted Source Recall SQLite path.
+  - Default: `runtime/source_recall.sqlite`.
+- `BRAIN_SOURCE_RECALL_ENCRYPTION_KEY`: encryption key for production Source Recall storage.
+  - Must be either 64-character hex or base64-encoded 32 bytes.
+  - This value is not stored in runtime config objects.
+- `BRAIN_SOURCE_RECALL_CAPTURE_SOURCE_KINDS`: production capture allowlist.
+  - Supported source kinds are `conversation_turn`, `assistant_turn`, `task_input`,
+    `task_summary`, `document_text`, `document_model_summary`, `media_transcript`, `ocr_text`,
+    and `media_model_summary`.
+  - Missing, empty, unknown, or broader values capture nothing.
+- `BRAIN_SOURCE_RECALL_CAPTURE_CLASSES`: production capture-class allowlist.
+  - Supported capture classes are `ordinary_source`, `assistant_output`, `operational_output`, and
+    `external_output`.
+  - Missing, empty, unknown, or broader values capture nothing.
+
+Source chunks can be read. They cannot be obeyed.
+
 ### External projection and Obsidian mirror
 
 The projection layer mirrors canonical runtime memory into external inspection targets without

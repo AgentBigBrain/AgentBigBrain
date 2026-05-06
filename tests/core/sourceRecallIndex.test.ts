@@ -17,6 +17,7 @@ import { createSourceRecallRetentionPolicyFromEnv } from "../../src/core/sourceR
 test("Source Recall index entries require explicit indexing policy", () => {
   const disabledPolicy = createSourceRecallRetentionPolicyFromEnv({});
   const enabledPolicy = createSourceRecallRetentionPolicyFromEnv({
+    BRAIN_SOURCE_RECALL_ENABLED: "true",
     BRAIN_SOURCE_RECALL_INDEX_ENABLED: "true"
   });
 

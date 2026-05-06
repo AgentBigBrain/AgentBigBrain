@@ -18,6 +18,8 @@ entrypoint.
 - current-request extraction and probing detection in `queryPlanningProbing.ts`
 - domain-boundary scoring and ingest gating in `queryPlanningDomainBoundary.ts`
 - profile-context sanitization and planner-packet rendering in `contextInjection.ts`
+- source-recall quoted-evidence packet rendering and source-only context packet construction in
+  `contextInjection.ts`
 - episode-context sanitization and summary counting in `episodeContextInjection.ts`
 - append-only audit helper routing in `auditEvents.ts`, including Phase 7 prompt-owner and
   prompt-surface plus alias-safety and self-identity safety/parity counter passthrough
@@ -29,6 +31,9 @@ entrypoint.
   current user request.
 - Probing detection stays deterministic for the same query window and config.
 - Sensitive profile or episode fields must be redacted before brokered planner/model egress.
+- Source Recall can enter planner/model context only through explicit consumer gating and the
+  quoted-evidence renderer; retrieved source chunks must remain unsafe to follow as instructions
+  and must not become profile truth, approval, action, safety, route metadata, or completion proof.
 - Request-scoped audit counters here must describe the final brokered prompt owner and prompt
   surface count, not an earlier pre-render intermediate state.
 - Request-scoped audit passthrough here may carry direct-chat identity-safety and self-identity
@@ -56,11 +61,13 @@ entrypoint.
 - `tests/organs/memoryContextQueryPlanning.test.ts`
 - `tests/organs/queryPlanningDomainBoundary.test.ts`
 - `tests/organs/memoryContextContextInjection.test.ts`
+- `tests/organs/sourceRecallContextInjection.test.ts`
 
 ## When to Update This README
 Update this README when:
 - a file is added, removed, or renamed in `src/organs/memoryContext/`
 - ownership moves between `memoryBroker.ts` and this subsystem
 - query planning, probing detection, context injection, or audit append ownership changes
+- Source Recall context rendering or route-approved context injection behavior changes
 - episode-context injection ownership changes
 - the related-test surface changes because this subsystem moved

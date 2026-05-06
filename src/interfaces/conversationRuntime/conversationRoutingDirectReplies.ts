@@ -14,8 +14,7 @@ import {
 import { appendMemoryAccessAudit } from "../../organs/memoryContext/auditEvents";
 import { buildConversationAwareExecutionInput } from "../conversationExecutionInputPolicy";
 import {
-  recordAssistantTurn,
-  recordUserTurn,
+  recordAssistantTurnWithSourceRecall,
   setModeContinuity
 } from "../conversationSessionMutations";
 import type { ConversationSession } from "../sessionStore";
@@ -32,6 +31,7 @@ import type {
 import { renderSkillInventory } from "../../organs/skillRegistry/skillInspection";
 import type {
   DescribeRuntimeCapabilities,
+  ConversationSourceRecallCaptureDependencies,
   GetConversationEntityGraph,
   ListAvailableSkills,
   OpenConversationContinuityReadSession,
@@ -68,6 +68,7 @@ import { buildConversationProfileMemoryWriteRequest } from "./conversationProfil
 import {
   buildRelationshipValidatedFactCandidates
 } from "./relationshipMemoryInterpretationSupport";
+import { recordTopicAwareUserTurn } from "./conversationRoutingTurnSupport";
 
 export interface DirectCasualConversationReplyInput {
   session: ConversationSession;
@@ -108,6 +109,7 @@ export interface RecordedReplyInput {
   reply: string;
   receivedAt: string;
   maxConversationTurns: number;
+  sourceRecallCapture?: ConversationSourceRecallCaptureDependencies | null;
   assistantTurnKind?: "clarification" | "informational_answer" | "workflow_progress" | "other";
   activeMode?:
     | "discover_available_capabilities"
@@ -436,16 +438,18 @@ export function isReturnHandoffResumeIntent(
  * @param input - Reply text plus session mutation metadata.
  * @returns Stable no-worker reply result for routing call sites.
  */
-export function buildRecordedReply(
+export async function buildRecordedReply(
   input: RecordedReplyInput
-): { reply: string; shouldStartWorker: false } {
-  recordUserTurn(
+): Promise<{ reply: string; shouldStartWorker: false }> {
+  await recordTopicAwareUserTurn(
     input.session,
     input.userInput,
     input.receivedAt,
-    input.maxConversationTurns
+    input.maxConversationTurns,
+    null,
+    input.sourceRecallCapture ?? null
   );
-  recordAssistantTurn(
+  await recordAssistantTurnWithSourceRecall(
     input.session,
     input.reply,
     input.receivedAt,
@@ -453,7 +457,8 @@ export function buildRecordedReply(
     {
       assistantTurnKind:
         input.assistantTurnKind ??
-        (input.activeMode ? "informational_answer" : null)
+        (input.activeMode ? "informational_answer" : null),
+      sourceRecallCapture: input.sourceRecallCapture ?? null
     }
   );
   if (input.activeMode && input.confidence) {

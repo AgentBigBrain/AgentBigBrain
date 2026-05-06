@@ -378,8 +378,16 @@ function buildDocumentAttachment(
 function buildMediaCapturePolicy() {
   return {
     ...createDefaultSourceRecallRetentionPolicy(),
+    enabled: true,
     captureEnabled: true,
     encryptedPayloadsAvailable: true,
+    sourceKindCaptureAllowlist: [
+      "document_text",
+      "document_model_summary",
+      "media_transcript",
+      "ocr_text",
+      "media_model_summary"
+    ] as const,
     captureClassAllowlist: ["ordinary_source", "assistant_output", "external_output"] as const
   };
 }

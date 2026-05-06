@@ -4,7 +4,14 @@
 
 import type { DatabaseSync } from "node:sqlite";
 
+import type { ProjectionChangeSet } from "../projections/contracts";
 import { withSqliteDatabase } from "../sqliteStore";
+import {
+  decryptSourceRecallDocument,
+  encryptSourceRecallDocument,
+  assertSourceRecallKeyLength,
+  type EncryptedSourceRecallEnvelopeV1
+} from "./sourceRecallEncryption";
 import {
   createEmptySourceRecallDocument,
   isSourceRecallLifecycleVisible,
@@ -22,10 +29,14 @@ import type {
 
 const SOURCE_RECALL_STATE_TABLE = "source_recall_state";
 const SOURCE_RECALL_STATE_ROW_ID = "source_recall_document";
+const SOURCE_RECALL_STORAGE_MODE_PLAINTEXT_TEST = "plaintext_test";
+const SOURCE_RECALL_STORAGE_MODE_ENCRYPTED_V1 = "encrypted_v1";
 
 export interface SourceRecallStoreOptions {
   sqlitePath: string;
   testOnlyAllowPlaintextStorage?: boolean;
+  encryptionKey?: Buffer;
+  onChange?: (changeSet: ProjectionChangeSet) => Promise<void> | void;
 }
 
 export interface SourceRecallListOptions {
@@ -40,27 +51,39 @@ export interface SourceRecallListOptions {
 export class SourceRecallStore {
   private readonly sqlitePath: string;
   private readonly testOnlyAllowPlaintextStorage: boolean;
+  private readonly encryptionKey: Buffer | null;
+  private readonly onChange?: SourceRecallStoreOptions["onChange"];
 
   /**
-   * Creates the S1 Source Recall store skeleton.
+   * Creates a Source Recall store for test-only plaintext or encrypted production storage.
    *
    * **Why it exists:**
-   * S1 needs the store seam and round-trip tests before production capture exists. The explicit
-   * plaintext latch prevents this skeleton from becoming a production raw-text sink before S2
-   * implements encryption and runtime enablement policy.
+   * Source Recall stores raw source evidence. Production storage must prove encryption readiness
+   * with key material, while focused tests can still use the explicit plaintext latch.
    *
    * **What it talks to:**
+   * - Uses `assertSourceRecallKeyLength` from `./sourceRecallEncryption`.
    * - Uses local constructor options within this module.
    *
-   * @param options - SQLite path and test-only plaintext latch.
+   * @param options - SQLite path plus either test-only plaintext latch or encryption key.
    */
   constructor(options: SourceRecallStoreOptions) {
     this.sqlitePath = options.sqlitePath;
     this.testOnlyAllowPlaintextStorage = options.testOnlyAllowPlaintextStorage === true;
-    if (!this.testOnlyAllowPlaintextStorage) {
+    this.encryptionKey = options.encryptionKey ?? null;
+    this.onChange = options.onChange;
+    if (this.testOnlyAllowPlaintextStorage && this.encryptionKey) {
       throw new Error(
-        "SourceRecallStore S1 skeleton is test-only until encryption and retention policy exist."
+        "SourceRecallStore cannot mix test-only plaintext storage with encrypted production mode."
       );
+    }
+    if (!this.testOnlyAllowPlaintextStorage && !this.encryptionKey) {
+      throw new Error(
+        "SourceRecallStore requires encrypted production storage or the explicit test-only plaintext latch."
+      );
+    }
+    if (this.encryptionKey) {
+      assertSourceRecallKeyLength(this.encryptionKey);
     }
   }
 
@@ -85,6 +108,9 @@ export class SourceRecallStore {
     await this.mutateDocument((document) =>
       upsertSourceRecallRecordInDocument(document, record, chunks)
     );
+    await this.notifyProjectionChange(`source_recall:${record.sourceRecordId}`, {
+      sourceRecordId: record.sourceRecordId
+    });
   }
 
   /**
@@ -188,6 +214,9 @@ export class SourceRecallStore {
     await this.mutateDocument((document) =>
       markSourceRecallRecordForgottenInDocument(document, sourceRecordId)
     );
+    await this.notifyProjectionChange(`source_recall:${sourceRecordId}`, {
+      sourceRecordId
+    });
   }
 
   /**
@@ -211,6 +240,10 @@ export class SourceRecallStore {
     await this.mutateDocument((document) =>
       markSourceRecallRecordsByOriginParentRefInDocument(document, parentRefId, lifecycleState)
     );
+    await this.notifyProjectionChange(`source_recall_origin_parent:${parentRefId}`, {
+      originParentRefId: parentRefId,
+      lifecycleState
+    });
   }
 
   /**
@@ -228,7 +261,7 @@ export class SourceRecallStore {
   async loadDocument(): Promise<SourceRecallDocument> {
     return withSqliteDatabase(this.sqlitePath, (db) => {
       ensureSourceRecallSchema(db);
-      return readSourceRecallDocument(db);
+      return this.readSourceRecallDocument(db);
     });
   }
 
@@ -249,9 +282,115 @@ export class SourceRecallStore {
   ): Promise<void> {
     await withSqliteDatabase(this.sqlitePath, (db) => {
       ensureSourceRecallSchema(db);
-      const current = readSourceRecallDocument(db);
-      writeSourceRecallDocument(db, mutate(current));
+      const current = this.readSourceRecallDocument(db);
+      this.writeSourceRecallDocument(db, mutate(current));
     });
+  }
+
+  /**
+   * Publishes a projection change after a Source Recall mutation.
+   *
+   * **Why it exists:**
+   * Obsidian and JSON mirrors should refresh Source Recall notes when source records are captured,
+   * forgotten, redacted, expired, or quarantined, but the projection remains a read-only review
+   * target and never becomes Source Recall input.
+   *
+   * **What it talks to:**
+   * - Uses optional `onChange` callback supplied by shared runtime construction.
+   *
+   * @param reason - Bounded non-raw mutation reason.
+   * @param metadata - Bounded non-raw mutation metadata.
+   * @returns Promise resolving after optional callback completes.
+   */
+  private async notifyProjectionChange(
+    reason: string,
+    metadata: ProjectionChangeSet["metadata"] = {}
+  ): Promise<void> {
+    if (!this.onChange) {
+      return;
+    }
+    await this.onChange({
+      changeId: `projection_source_recall_${sanitizeProjectionChangeId(reason)}`,
+      observedAt: new Date().toISOString(),
+      kinds: ["source_recall_changed"],
+      reasons: [reason],
+      metadata
+    });
+  }
+
+  /**
+   * Reads the persisted Source Recall document using this store's storage mode.
+   *
+   * **Why it exists:**
+   * Production storage must reject plaintext rows rather than silently parsing them, while test
+   * storage should keep the explicit plaintext fixture path available.
+   *
+   * **What it talks to:**
+   * - Uses `decryptSourceRecallDocument` from `./sourceRecallEncryption`.
+   * - Uses `parseSourceRecallDocument` from `./sourceRecallPersistence`.
+   *
+   * @param db - Open SQLite database handle.
+   * @returns Parsed Source Recall document.
+   */
+  private readSourceRecallDocument(db: DatabaseSync): SourceRecallDocument {
+    const row = db.prepare(
+      `SELECT document_json, storage_mode
+         FROM ${SOURCE_RECALL_STATE_TABLE}
+        WHERE id = ?`
+    ).get(SOURCE_RECALL_STATE_ROW_ID) as {
+      document_json?: unknown;
+      storage_mode?: unknown;
+    } | undefined;
+    if (typeof row?.document_json !== "string") {
+      return createEmptySourceRecallDocument();
+    }
+    const storageMode = typeof row.storage_mode === "string"
+      ? row.storage_mode
+      : SOURCE_RECALL_STORAGE_MODE_PLAINTEXT_TEST;
+    if (this.encryptionKey) {
+      if (storageMode !== SOURCE_RECALL_STORAGE_MODE_ENCRYPTED_V1) {
+        throw new Error(
+          "Plaintext Source Recall rows require explicit migration before production reads."
+        );
+      }
+      return decryptSourceRecallDocument(
+        JSON.parse(row.document_json) as EncryptedSourceRecallEnvelopeV1,
+        this.encryptionKey
+      );
+    }
+    if (storageMode === SOURCE_RECALL_STORAGE_MODE_ENCRYPTED_V1) {
+      throw new Error("Encrypted Source Recall rows require production encryption key material.");
+    }
+    return parseSourceRecallDocument(JSON.parse(row.document_json));
+  }
+
+  /**
+   * Writes one Source Recall document using this store's storage mode.
+   *
+   * **Why it exists:**
+   * Keeps the production encrypted row shape separate from the test-only plaintext row shape so raw
+   * source chunks are not written through the plaintext `document_json` payload in production.
+   *
+   * **What it talks to:**
+   * - Uses `encryptSourceRecallDocument` from `./sourceRecallEncryption`.
+   *
+   * @param db - Open SQLite database handle.
+   * @param document - Document to persist.
+   */
+  private writeSourceRecallDocument(db: DatabaseSync, document: SourceRecallDocument): void {
+    if (this.encryptionKey) {
+      writeSourceRecallRow(
+        db,
+        JSON.stringify(encryptSourceRecallDocument(document, this.encryptionKey), null, 2),
+        SOURCE_RECALL_STORAGE_MODE_ENCRYPTED_V1
+      );
+      return;
+    }
+    writeSourceRecallRow(
+      db,
+      JSON.stringify(document, null, 2),
+      SOURCE_RECALL_STORAGE_MODE_PLAINTEXT_TEST
+    );
   }
 }
 
@@ -270,51 +409,52 @@ function ensureSourceRecallSchema(db: DatabaseSync): void {
   db.exec(
     `CREATE TABLE IF NOT EXISTS ${SOURCE_RECALL_STATE_TABLE} (
       id TEXT PRIMARY KEY,
-      document_json TEXT NOT NULL
+      document_json TEXT NOT NULL,
+      storage_mode TEXT NOT NULL DEFAULT '${SOURCE_RECALL_STORAGE_MODE_PLAINTEXT_TEST}'
     );`
   );
-}
-
-/**
- * Reads the persisted Source Recall document from SQLite.
- *
- * **Why it exists:**
- * Keeps JSON parsing and document fallback behavior in one place for the SQLite-backed store.
- *
- * **What it talks to:**
- * - Uses `parseSourceRecallDocument` from `./sourceRecallPersistence`.
- *
- * @param db - Open SQLite database handle.
- * @returns Parsed Source Recall document.
- */
-function readSourceRecallDocument(db: DatabaseSync): SourceRecallDocument {
-  const row = db.prepare(
-    `SELECT document_json
-       FROM ${SOURCE_RECALL_STATE_TABLE}
-      WHERE id = ?`
-  ).get(SOURCE_RECALL_STATE_ROW_ID) as { document_json?: unknown } | undefined;
-  if (typeof row?.document_json !== "string") {
-    return createEmptySourceRecallDocument();
+  const columns = db.prepare(`PRAGMA table_info(${SOURCE_RECALL_STATE_TABLE});`).all() as {
+    name?: unknown;
+  }[];
+  if (!columns.some((column) => column.name === "storage_mode")) {
+    db.exec(
+      `ALTER TABLE ${SOURCE_RECALL_STATE_TABLE}
+       ADD COLUMN storage_mode TEXT NOT NULL DEFAULT '${SOURCE_RECALL_STORAGE_MODE_PLAINTEXT_TEST}';`
+    );
   }
-  return parseSourceRecallDocument(JSON.parse(row.document_json));
 }
 
 /**
- * Writes one Source Recall document to SQLite.
+ * Writes one Source Recall row to SQLite.
  *
  * **Why it exists:**
- * S1 keeps persistence in one row, giving later slices one place to add encryption and cascade
- * behavior.
+ * The storage-mode column lets encrypted production rows and test-only plaintext rows be
+ * distinguished before any document parsing or decryption happens.
  *
  * **What it talks to:**
  * - Uses `DatabaseSync` from `node:sqlite`.
  *
  * @param db - Open SQLite database handle.
- * @param document - Document to persist.
+ * @param documentJson - Serialized plaintext-test document or encrypted envelope.
+ * @param storageMode - Storage mode marker for the row.
  */
-function writeSourceRecallDocument(db: DatabaseSync, document: SourceRecallDocument): void {
+function writeSourceRecallRow(
+  db: DatabaseSync,
+  documentJson: string,
+  storageMode: string
+): void {
   db.prepare(
-    `INSERT OR REPLACE INTO ${SOURCE_RECALL_STATE_TABLE}(id, document_json)
-     VALUES (?, ?)`
-  ).run(SOURCE_RECALL_STATE_ROW_ID, JSON.stringify(document, null, 2));
+    `INSERT OR REPLACE INTO ${SOURCE_RECALL_STATE_TABLE}(id, document_json, storage_mode)
+     VALUES (?, ?, ?)`
+  ).run(SOURCE_RECALL_STATE_ROW_ID, documentJson, storageMode);
+}
+
+/**
+ * Sanitizes bounded projection change ids without using source text.
+ *
+ * @param value - Source record or origin reference reason.
+ * @returns Projection-safe change id segment.
+ */
+function sanitizeProjectionChangeId(value: string): string {
+  return value.replace(/[^A-Za-z0-9_.:-]+/g, "_").slice(0, 96) || "unknown";
 }

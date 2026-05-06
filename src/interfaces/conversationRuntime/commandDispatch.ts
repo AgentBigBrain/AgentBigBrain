@@ -24,13 +24,13 @@ import {
   type ConversationInboundMessage
 } from "./managerContracts";
 import type { ConversationSession } from "../sessionStore";
-import { recordUserTurn } from "../conversationSessionMutations";
 import type { ConversationIngressDependencies } from "./contracts";
 import { approveProposal } from "./followUpResolution";
 import { routeConversationChatInput } from "./conversationRouting";
 import { handleMemoryReviewCommand } from "./memoryReviewCommand";
 import { renderSkillInventory } from "../../organs/skillRegistry/skillInspection";
 import { normalizeModelBackend } from "../../models/backendConfig";
+import { recordTopicAwareUserTurn } from "./conversationRoutingTurnSupport";
 
 /**
  * Resolves `/status` command output with human-first default text and explicit debug fallback.
@@ -221,11 +221,13 @@ export async function handleConversationCommand(
       message.receivedAt,
       deps.buildAutonomousExecutionInput(normalizedGoal)
     );
-    recordUserTurn(
+    await recordTopicAwareUserTurn(
       session,
       `/auto ${normalizedGoal}`,
       message.receivedAt,
-      deps.config.maxConversationTurns
+      deps.config.maxConversationTurns,
+      null,
+      deps.sourceRecallCapture ?? null
     );
     return `Starting autonomous loop for: ${normalizedGoal}\n${enqueueResult.reply}`;
   }

@@ -19,7 +19,13 @@ import {
   shouldSuppressWorkerHeartbeat
 } from "../conversationWorkerLifecycle";
 import type { InterfaceSessionStore } from "../sessionStore";
-import type { ConversationNotifier, ExecuteConversationTask, ListBrowserSessionSnapshots, ListManagedProcessSnapshots } from "./managerContracts";
+import type {
+  ConversationNotifier,
+  ConversationSourceRecallCaptureDependencies,
+  ExecuteConversationTask,
+  ListBrowserSessionSnapshots,
+  ListManagedProcessSnapshots
+} from "./managerContracts";
 import { type SessionWorkerBinding, setConversationWorkerBinding } from "./conversationWorkerBinding";
 import { persistWorkerExecutionOutcome } from "./conversationWorkerOutcomePersistence";
 import { persistConversationExecutionProgress } from "./conversationWorkerProgressPersistence";
@@ -77,6 +83,7 @@ export interface ProcessConversationQueueInput {
   store: InterfaceSessionStore;
   listManagedProcessSnapshots?: ListManagedProcessSnapshots;
   listBrowserSessionSnapshots?: ListBrowserSessionSnapshots;
+  sourceRecallCapture?: ConversationSourceRecallCaptureDependencies;
   config: Pick<
     ConversationWorkerRuntimeConfig,
     | "ackDelayMs"
@@ -105,6 +112,7 @@ export interface StartConversationWorkerIfNeededInput {
   store: InterfaceSessionStore;
   listManagedProcessSnapshots?: ListManagedProcessSnapshots;
   listBrowserSessionSnapshots?: ListBrowserSessionSnapshots;
+  sourceRecallCapture?: ConversationSourceRecallCaptureDependencies;
   config: Pick<
     ConversationWorkerRuntimeConfig,
     | "ackDelayMs"
@@ -139,6 +147,7 @@ export async function startConversationWorkerIfNeeded(
     store,
     listManagedProcessSnapshots,
     listBrowserSessionSnapshots,
+    sourceRecallCapture,
     config,
     autonomousExecutionPrefix
   } = input;
@@ -165,6 +174,7 @@ export async function startConversationWorkerIfNeeded(
       store,
       listManagedProcessSnapshots,
       listBrowserSessionSnapshots,
+      sourceRecallCapture,
       config,
       ackTimers,
       workerLastSeenAt,
@@ -194,6 +204,7 @@ export async function startConversationWorkerIfNeeded(
         store,
         listManagedProcessSnapshots,
         listBrowserSessionSnapshots,
+        sourceRecallCapture,
         config,
         autonomousExecutionPrefix
       });
@@ -274,6 +285,7 @@ export async function processConversationQueue(
     store,
     listManagedProcessSnapshots,
     listBrowserSessionSnapshots,
+    sourceRecallCapture,
     config,
     ackTimers,
     workerLastSeenAt,
@@ -382,6 +394,7 @@ export async function processConversationQueue(
       executionResult,
       listManagedProcessSnapshots,
       listBrowserSessionSnapshots,
+      sourceRecallCapture,
       maxRecentJobs: config.maxRecentJobs,
       maxRecentActions: config.maxRecentActions,
       maxBrowserSessions: config.maxBrowserSessions,

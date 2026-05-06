@@ -33,6 +33,7 @@ import type {
 } from "../../src/interfaces/conversationRuntime/managerContracts";
 import { InterfaceSessionStore } from "../../src/interfaces/sessionStore";
 import type { TelegramInterfaceConfig } from "../../src/interfaces/runtimeConfig";
+import { createDefaultSourceRecallRuntimeConfig } from "../../src/core/sourceRecall/sourceRecallRetention";
 import type { EntityGraphV1, TaskRunResult } from "../../src/core/types";
 import type {
   LanguageEpisodeExtractionModelOutput,
@@ -278,6 +279,7 @@ function toConversationMemoryReviewRecords(
 function buildTelegramConfig(): TelegramInterfaceConfig {
   return {
     provider: "telegram",
+    sourceRecall: createDefaultSourceRecallRuntimeConfig(),
     botToken: "telegram-token",
     apiBaseUrl: "https://api.telegram.test",
     pollTimeoutSeconds: 30,

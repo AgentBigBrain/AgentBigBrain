@@ -15,6 +15,10 @@ import {
   extractProfileFactCandidatesFromUserInput
 } from "../../src/core/profileMemoryRuntime/profileMemoryExtraction";
 import { ProfileMemoryStore } from "../../src/core/profileMemoryStore";
+import {
+  attachSourceRecallRefsToSemanticRelationshipCandidates,
+  buildSourceRecallSourceRef
+} from "../../src/core/sourceRecall/sourceRecallMemoryBridge";
 import type {
   ProfileMemoryIngestPolicy,
   ProfileMemoryIngestRequest,
@@ -163,23 +167,28 @@ test("semantic relationship candidates require route-approved memory write autho
   const profilePath = path.join(tempDir, "profile_memory.secure.json");
   const store = new ProfileMemoryStore(profilePath, Buffer.alloc(32, 7), 90);
   const observedAt = "2026-05-02T12:30:00.000Z";
-  const validatedFactCandidates = buildValidatedSemanticRelationshipFactCandidates([
-    {
-      subject: "current_user",
-      objectDisplayName: "Milo",
-      relationLabel: "employee",
-      lifecycle: "current",
-      workAssociation: "Northstar Creative",
-      sourceFamily: "semantic_model",
-      ambiguity: "none",
-      evidenceSpan: {
-        text: "Milo helps me keep the studio operations moving at Northstar Creative.",
-        startOffset: 0,
-        endOffset: 68
-      },
-      confidence: 0.92
-    }
-  ]);
+  const validatedFactCandidates = buildValidatedSemanticRelationshipFactCandidates(
+    attachSourceRecallRefsToSemanticRelationshipCandidates(
+      [
+        {
+          subject: "current_user",
+          objectDisplayName: "Milo",
+          relationLabel: "employee",
+          lifecycle: "current",
+          workAssociation: "Northstar Creative",
+          sourceFamily: "semantic_model",
+          ambiguity: "none",
+          evidenceSpan: {
+            text: "Milo helps me keep the studio operations moving at Northstar Creative.",
+            startOffset: 0,
+            endOffset: 68
+          },
+          confidence: 0.92
+        }
+      ],
+      [buildSourceRecallSourceRef("source_record_relationship_gate", "chunk_relationship_gate")]
+    )
+  );
 
   try {
     const closedResult = await store.ingestFromTaskInput(

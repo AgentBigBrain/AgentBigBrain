@@ -1,7 +1,8 @@
 /** @fileoverview Small helpers for recording assistant turns inside conversation routing. */
 
-import { recordAssistantTurn } from "../conversationSessionMutations";
+import { recordAssistantTurnWithSourceRecall } from "../conversationSessionMutations";
 import type { ConversationSession, ConversationAssistantTurnKind } from "../sessionStore";
+import type { ConversationSourceRecallCaptureDependencies } from "./managerContracts";
 
 /**
  * Records a routing-owned assistant turn with structured turn-kind metadata.
@@ -11,22 +12,25 @@ import type { ConversationSession, ConversationAssistantTurnKind } from "../sess
  * mutation-call boilerplate across clarification, status, and informational branches.
  *
  * **What it talks to:**
- * - Uses `recordAssistantTurn` (import `recordAssistantTurn`) from `../conversationSessionMutations`.
+ * - Uses `recordAssistantTurnWithSourceRecall` from `../conversationSessionMutations`.
  *
  * @param session - Session receiving the assistant turn.
  * @param text - Assistant text to append.
  * @param receivedAt - Timestamp for the turn.
  * @param maxConversationTurns - Maximum retained turn count.
  * @param assistantTurnKind - Structured assistant-turn kind attached to metadata.
+ * @param sourceRecallCapture - Optional lower-authority Source Recall capture dependencies.
  */
-export function recordRoutingAssistantTurn(
+export async function recordRoutingAssistantTurn(
   session: ConversationSession,
   text: string,
   receivedAt: string,
   maxConversationTurns: number,
-  assistantTurnKind: ConversationAssistantTurnKind
-): void {
-  recordAssistantTurn(session, text, receivedAt, maxConversationTurns, {
-    assistantTurnKind
+  assistantTurnKind: ConversationAssistantTurnKind,
+  sourceRecallCapture: ConversationSourceRecallCaptureDependencies | null = null
+): Promise<void> {
+  await recordAssistantTurnWithSourceRecall(session, text, receivedAt, maxConversationTurns, {
+    assistantTurnKind,
+    sourceRecallCapture
   });
 }

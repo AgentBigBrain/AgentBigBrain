@@ -2,7 +2,11 @@
  * @fileoverview Owns inline reply handling for direct conversation, status, capability, and clarification turns.
  */
 
-import { recordAssistantTurn, recordUserTurn, setActiveClarification, setProgressState } from "../conversationSessionMutations";
+import {
+  recordAssistantTurnWithSourceRecall,
+  setActiveClarification,
+  setProgressState
+} from "../conversationSessionMutations";
 import type { ConversationSession } from "../sessionStore";
 import type { ConversationInboundMediaEnvelope } from "../mediaRuntime/contracts";
 import type { RoutingMapClassificationV1 } from "../routingMap";
@@ -22,6 +26,7 @@ import {
 } from "./conversationRoutingDirectReplies";
 import type {
   DescribeRuntimeCapabilities,
+  ConversationSourceRecallCaptureDependencies,
   GetConversationEntityGraph,
   ListAvailableSkills,
   OpenConversationContinuityReadSession,
@@ -48,6 +53,7 @@ import {
   extractExecutionPreferences,
   isNaturalAutonomousExecutionRequest
 } from "./executionPreferenceExtraction";
+import { recordTopicAwareUserTurn } from "./conversationRoutingTurnSupport";
 
 /**
  * Renders natural clarification question.
@@ -110,6 +116,7 @@ export interface ConversationRoutingInlineReplyDependencies {
   relationshipInterpretationResolver?: RelationshipInterpretationResolver;
   contextualReferenceInterpretationResolver?: ContextualReferenceInterpretationResolver;
   entityReferenceInterpretationResolver?: EntityReferenceInterpretationResolver;
+  sourceRecallCapture?: ConversationSourceRecallCaptureDependencies;
 }
 
 export interface ConversationRoutingInlineReplyInput {
@@ -152,6 +159,7 @@ export async function maybeResolveConversationRoutingInlineReply(
       reply: explicitBrowserOwnershipNoOpReply,
       receivedAt: input.receivedAt,
       maxConversationTurns: input.deps.config.maxConversationTurns,
+      sourceRecallCapture: input.deps.sourceRecallCapture ?? null,
       activeMode: "status_or_recall",
       confidence: toContinuityConfidence(input.effectiveIntentMode.confidence)
     });
@@ -179,6 +187,7 @@ export async function maybeResolveConversationRoutingInlineReply(
       reply,
       receivedAt: input.receivedAt,
       maxConversationTurns: input.deps.config.maxConversationTurns,
+      sourceRecallCapture: input.deps.sourceRecallCapture ?? null,
       activeMode: "discover_available_capabilities",
       confidence: toContinuityConfidence(input.effectiveIntentMode.confidence)
     });
@@ -206,6 +215,7 @@ export async function maybeResolveConversationRoutingInlineReply(
         reply: deterministicMixedRecallReply,
         receivedAt: input.receivedAt,
         maxConversationTurns: input.deps.config.maxConversationTurns,
+        sourceRecallCapture: input.deps.sourceRecallCapture ?? null,
         activeMode: "status_or_recall",
         confidence: toContinuityConfidence(input.effectiveIntentMode.confidence)
       });
@@ -230,6 +240,7 @@ export async function maybeResolveConversationRoutingInlineReply(
         reply,
         receivedAt: input.receivedAt,
         maxConversationTurns: input.deps.config.maxConversationTurns,
+        sourceRecallCapture: input.deps.sourceRecallCapture ?? null,
         activeMode: "status_or_recall",
         confidence: toContinuityConfidence(input.effectiveIntentMode.confidence)
       });
@@ -281,6 +292,7 @@ export async function maybeResolveConversationRoutingInlineReply(
         reply,
         receivedAt: input.receivedAt,
         maxConversationTurns: input.deps.config.maxConversationTurns,
+        sourceRecallCapture: input.deps.sourceRecallCapture ?? null,
         activeMode: "status_or_recall",
         confidence: toContinuityConfidence(input.effectiveIntentMode.confidence)
       });
@@ -304,6 +316,7 @@ export async function maybeResolveConversationRoutingInlineReply(
       reply,
       receivedAt: input.receivedAt,
       maxConversationTurns: input.deps.config.maxConversationTurns,
+      sourceRecallCapture: input.deps.sourceRecallCapture ?? null,
       activeMode: "status_or_recall",
       confidence: toContinuityConfidence(input.effectiveIntentMode.confidence)
     });
@@ -329,19 +342,22 @@ export async function maybeResolveConversationRoutingInlineReply(
       jobId: null,
       updatedAt: input.receivedAt
     });
-    recordUserTurn(
+    await recordTopicAwareUserTurn(
       input.session,
       input.userInput,
       input.receivedAt,
-      input.deps.config.maxConversationTurns
+      input.deps.config.maxConversationTurns,
+      null,
+      input.deps.sourceRecallCapture ?? null
     );
-    recordAssistantTurn(
+    await recordAssistantTurnWithSourceRecall(
       input.session,
       clarificationState.question,
       input.receivedAt,
       input.deps.config.maxConversationTurns,
       {
-        assistantTurnKind: "clarification"
+        assistantTurnKind: "clarification",
+        sourceRecallCapture: input.deps.sourceRecallCapture ?? null
       }
     );
     applyConversationDomainSignalWindowForTurn(
@@ -396,19 +412,22 @@ export async function maybeResolveConversationRoutingInlineReply(
       shouldStartWorker: false
     };
   }
-  recordUserTurn(
+  await recordTopicAwareUserTurn(
     input.session,
     input.userInput,
     input.receivedAt,
-    input.deps.config.maxConversationTurns
+    input.deps.config.maxConversationTurns,
+    null,
+    input.deps.sourceRecallCapture ?? null
   );
-  recordAssistantTurn(
+  await recordAssistantTurnWithSourceRecall(
     input.session,
     reply,
     input.receivedAt,
     input.deps.config.maxConversationTurns,
     {
-      assistantTurnKind: "informational_answer"
+      assistantTurnKind: "informational_answer",
+      sourceRecallCapture: input.deps.sourceRecallCapture ?? null
     }
   );
   applyConversationDomainSignalWindowForTurn(

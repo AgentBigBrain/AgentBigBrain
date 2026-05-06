@@ -189,7 +189,8 @@ full `profileMemoryStore.ts` implementation.
   governed named-contact relationship facts in `profileMemoryGenericFactSuppression.ts`
 - validated semantic relationship candidate normalization in
   `profileMemorySemanticRelationshipCandidates.ts`, keeping model-derived relationship meaning on
-  typed candidate rails before truth governance decides whether anything can become durable
+  typed candidate rails before truth governance decides whether anything can become durable; these
+  candidates may cite Source Recall refs as provenance only, never as write authority
 - canonical encryption envelope and key parsing helpers in `profileMemoryEncryption.ts`
 - pulse continuity helpers in `profileMemoryPulse.ts`
 - planner-context rendering and query-aware ranking in `profileMemoryPlanningContext.ts`

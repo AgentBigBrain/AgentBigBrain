@@ -13,9 +13,14 @@ import type {
   InterfaceSessionStore
 } from "../sessionStore";
 import { enqueueAutomaticTrackedWorkspaceRecoveryRetry } from "./conversationWorkerAutoRecovery";
-import { type ListBrowserSessionSnapshots, type ListManagedProcessSnapshots } from "./managerContracts";
+import {
+  type ConversationSourceRecallCaptureDependencies,
+  type ListBrowserSessionSnapshots,
+  type ListManagedProcessSnapshots
+} from "./managerContracts";
 import { collectWorkerRuntimeSnapshots } from "./conversationWorkerRuntimeSnapshots";
 import { recoverPostExecutionPersistenceFailure } from "./conversationWorkerTerminalRecovery";
+import { captureConversationJobSourceRecall } from "./sourceRecallTaskCapture";
 
 export interface PersistWorkerExecutionOutcomeInput {
   sessionKey: string;
@@ -30,6 +35,7 @@ export interface PersistWorkerExecutionOutcomeInput {
   maxBrowserSessions: number;
   maxPathDestinations: number;
   maxConversationTurns: number;
+  sourceRecallCapture?: ConversationSourceRecallCaptureDependencies | null;
 }
 
 export interface PersistedWorkerExecutionOutcome {
@@ -94,6 +100,11 @@ export async function persistWorkerExecutionOutcome(
     ) {
       upsertRecentJob(updatedSession, persistedRunningJob, maxRecentJobs);
     }
+    await captureConversationJobSourceRecall({
+      session: updatedSession,
+      job: persistedRunningJob,
+      sourceRecallCapture: input.sourceRecallCapture ?? null
+    });
     await store.setSession(updatedSession);
   } catch {
     const recoveredTerminalState = await recoverPostExecutionPersistenceFailure({

@@ -185,6 +185,7 @@ export interface ProfileValidatedRelationshipCandidateMetadata {
   sourceFamily: ProfileSemanticRelationshipSourceFamily;
   ambiguity: ProfileSemanticRelationshipAmbiguity;
   evidenceSpan: ProfileSemanticRelationshipEvidenceSpan;
+  sourceRecallRefs?: readonly SourceRecallSourceRef[];
 }
 
 export interface ProfileSemanticRelationshipCandidateInput {
@@ -197,6 +198,7 @@ export interface ProfileSemanticRelationshipCandidateInput {
   sourceFamily: ProfileSemanticRelationshipSourceFamily;
   ambiguity?: ProfileSemanticRelationshipAmbiguity;
   evidenceSpan: ProfileSemanticRelationshipEvidenceSpan;
+  sourceRecallRefs?: readonly SourceRecallSourceRef[];
   confidence?: number;
   sensitive?: boolean;
 }

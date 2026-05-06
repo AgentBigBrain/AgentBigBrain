@@ -52,6 +52,8 @@ here.
   worker sends, and observed transport order
 - canonical Telegram media-enrichment and conversation-key chat-id helpers used before shared
   conversation dispatch
+- canonical Telegram media/document Source Recall capture wiring that attaches quoted-evidence refs
+  to owned media interpretation layers when explicit Source Recall policy allows it
 - canonical accepted inbound conversation dispatch, autonomous/text task routing, and final reply
   delivery helpers shared by Discord and Telegram gateways
 - deterministic Discord send/edit delivery results
@@ -79,6 +81,8 @@ here.
 - Discord notifier wiring must preserve the existing edit callback surface used by autonomous
   progress consolidation.
 - Telegram notifier wiring must preserve existing native draft-stream fallback behavior.
+- Telegram media/document Source Recall refs are quoted evidence only; they must not change command
+  routing text, route metadata, approval, profile truth, safety proof, or completion proof.
 
 ## Related Tests
 - `tests/interfaces/discordGateway.test.ts`
@@ -105,6 +109,7 @@ Update this README when:
   subsystem
 - Telegram media-enrichment or conversation-key chat-id helper ownership moves between the gateway
   entrypoints and this subsystem
+- Telegram media/document Source Recall capture behavior or source-ref attachment changes
 - Discord or Telegram notifier capability behavior changes materially
 - outbound Discord or Telegram send/edit/draft behavior changes materially
 - related test coverage changes because the transport-runtime surface moved

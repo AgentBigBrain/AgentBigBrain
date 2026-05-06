@@ -34,6 +34,13 @@ import { WorkflowLearningStore } from "./workflowLearningStore";
 import { BrainConfig } from "./config";
 import { EntityGraphStore } from "./entityGraphStore";
 import { MediaArtifactStore } from "./mediaArtifactStore";
+import { SourceRecallStore } from "./sourceRecall/sourceRecallStore";
+import { decodeSourceRecallEncryptionKey } from "./sourceRecall/sourceRecallEncryption";
+import {
+  decideSourceRecallProjection,
+  type SourceRecallRetentionPolicy
+} from "./sourceRecall/sourceRecallRetention";
+import { buildSourceRecallProjectionEntries } from "./sourceRecall/sourceRecallProjection";
 import { Stage686RuntimeStateStore } from "./stage6_86/runtimeState";
 import { Stage686RuntimeActionEngine } from "./stage6_86/runtimeActions";
 import { createProjectionRuntimeConfigFromEnv } from "./projections/config";
@@ -66,6 +73,7 @@ export interface SharedBrainRuntimeDependencies {
   readonly entityGraphStore: EntityGraphStore;
   readonly stage686RuntimeStateStore: Stage686RuntimeStateStore;
   readonly mediaArtifactStore: MediaArtifactStore;
+  readonly sourceRecallStore: SourceRecallStore | undefined;
   readonly projectionService: ProjectionService;
 }
 
@@ -173,6 +181,24 @@ function resolveSharedRuntimeStorePath(runtimeRoot: string, relativePath: string
 }
 
 /**
+ * Resolves Source Recall SQLite storage path from canonical config.
+ *
+ * @param runtimeRoot - Absolute runtime root directory.
+ * @param configuredPath - Configured Source Recall SQLite path.
+ * @returns Absolute SQLite path.
+ */
+function resolveSourceRecallSqlitePath(runtimeRoot: string, configuredPath: string): string {
+  if (path.isAbsolute(configuredPath)) {
+    return configuredPath;
+  }
+  const normalizedPath = configuredPath.replace(/\\/g, "/");
+  if (normalizedPath === "runtime/source_recall.sqlite") {
+    return resolveSharedRuntimeStorePath(runtimeRoot, "source_recall.sqlite");
+  }
+  return path.resolve(process.cwd(), configuredPath);
+}
+
+/**
  * Builds the configured projection sinks for the current process.
  *
  * **Why it exists:**
@@ -223,6 +249,8 @@ function createProjectionSinks(env: NodeJS.ProcessEnv = process.env): readonly P
  * @param workflowLearningStore - Workflow learning store.
  * @param mediaArtifactStore - Media artifact store.
  * @param skillRegistryStore - Skill registry store.
+ * @param sourceRecallStore - Optional Source Recall store.
+ * @param sourceRecallRetentionPolicy - Optional Source Recall projection policy.
  * @param profileMemoryStore - Optional profile-memory store.
  * @returns Snapshot provider closure.
  */
@@ -235,9 +263,15 @@ function createProjectionSnapshotProvider(
   workflowLearningStore: WorkflowLearningStore,
   mediaArtifactStore: MediaArtifactStore,
   skillRegistryStore: SkillRegistryStore,
+  sourceRecallStore?: SourceRecallStore,
+  sourceRecallRetentionPolicy?: SourceRecallRetentionPolicy,
   profileMemoryStore?: ProfileMemoryStore
 ): () => Promise<ProjectionSnapshot> {
   return async () => {
+    const sourceRecallProjectionDecision =
+      sourceRecallStore && sourceRecallRetentionPolicy
+        ? decideSourceRecallProjection(sourceRecallRetentionPolicy, mode)
+        : { allowed: false };
     const [
       entityGraph,
       runtimeState,
@@ -246,6 +280,7 @@ function createProjectionSnapshotProvider(
       workflowDocument,
       mediaArtifactDocument,
       skillManifests,
+      sourceRecallDocument,
       profileMemory
     ] = await Promise.all([
       entityGraphStore.getGraph(),
@@ -255,9 +290,19 @@ function createProjectionSnapshotProvider(
       workflowLearningStore.load(),
       mediaArtifactStore.load(),
       skillRegistryStore.listActiveManifests(),
+      sourceRecallProjectionDecision.allowed && sourceRecallStore
+        ? sourceRecallStore.loadDocument()
+        : Promise.resolve(null),
       profileMemoryStore ? profileMemoryStore.load() : Promise.resolve(null)
     ]);
     const skillProjectionEntries = await buildSkillProjectionEntries(mode, skillManifests);
+    const sourceRecallProjectionEntries = sourceRecallDocument
+      ? buildSourceRecallProjectionEntries(sourceRecallDocument, {
+        mode,
+        operatorFullSourceRecallProjectionEnabled:
+          sourceRecallRetentionPolicy?.operatorFullProjectionEnabled === true
+      })
+      : [];
 
     return {
       generatedAt: new Date().toISOString(),
@@ -275,6 +320,7 @@ function createProjectionSnapshotProvider(
       executionReceipts: executionReceiptDocument.receipts,
       workflowPatterns: workflowDocument.patterns,
       mediaArtifacts: mediaArtifactDocument.artifacts,
+      sourceRecallProjectionEntries,
       skillProjectionEntries
     };
   };
@@ -406,6 +452,17 @@ export function createSharedBrainRuntimeDependencies(
       onChange: publishProjectionChange
     }
   );
+  const sourceRecallStore =
+    baseConfig.sourceRecall.enabled && baseConfig.sourceRecall.status === "enabled"
+    ? new SourceRecallStore({
+      sqlitePath: resolveSourceRecallSqlitePath(
+        runtimeStateRoot,
+        baseConfig.sourceRecall.sqlitePath
+      ),
+      encryptionKey: decodeSourceRecallEncryptionKey(env.BRAIN_SOURCE_RECALL_ENCRYPTION_KEY ?? ""),
+      onChange: publishProjectionChange
+    })
+    : undefined;
   const skillRegistryStore = new SkillRegistryStore(
     resolveSharedRuntimeStorePath(runtimeStateRoot, "skills")
   );
@@ -457,6 +514,8 @@ export function createSharedBrainRuntimeDependencies(
       workflowLearningStore,
       mediaArtifactStore,
       skillRegistryStore,
+      sourceRecallStore,
+      baseConfig.sourceRecall.retentionPolicy,
       profileMemoryStore
     ),
     sinks: createProjectionSinks(env),
@@ -489,6 +548,7 @@ export function createSharedBrainRuntimeDependencies(
     entityGraphStore,
     stage686RuntimeStateStore,
     mediaArtifactStore,
+    sourceRecallStore,
     projectionService
   };
 }
@@ -540,7 +600,13 @@ export function buildBrainRuntimeFromEnvironment(
     shared.profileMemoryStore,
     undefined,
     undefined,
-    new LanguageUnderstandingOrgan(modelClient)
+    new LanguageUnderstandingOrgan(modelClient),
+    shared.sourceRecallStore
+      ? {
+          store: shared.sourceRecallStore,
+          policy: config.sourceRecall.retentionPolicy
+        }
+      : undefined
   );
   const stage686RuntimeActionEngine = new Stage686RuntimeActionEngine({
     backend: config.persistence.ledgerBackend,

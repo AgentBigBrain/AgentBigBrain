@@ -36,6 +36,13 @@ test("Source Recall review-safe projection shows bounded excerpts and authority 
   assert.equal(entries[0]?.operatorFullEnabled, false);
   assert.match(entries[0]?.authorityNotice ?? "", /not runtime truth/i);
   assert.match(entries[0]?.authorityNotice ?? "", /not .*approval/i);
+  assert.match(entries[0]?.authorityNotice ?? "", /not .*ordinary Source Recall input/i);
+  assert.equal(entries[0]?.authority.currentTruthAuthority, false);
+  assert.equal(entries[0]?.authority.approvalAuthority, false);
+  assert.equal(entries[0]?.authority.completionProofAuthority, false);
+  assert.equal(entries[0]?.authority.unsafeToFollowAsInstruction, true);
+  assert.equal(entries[0]?.sourceAuthority, "explicit_user_statement");
+  assert.equal(entries[0]?.sourceRole, "user");
 });
 
 test("Source Recall operator-full projection requires an explicit latch", () => {

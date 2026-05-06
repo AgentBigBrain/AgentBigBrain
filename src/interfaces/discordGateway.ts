@@ -5,7 +5,7 @@ import path from "node:path";
 import { DiscordAdapter } from "./discordAdapter";
 import { AgentPulseScheduler } from "./agentPulseScheduler";
 import { ConversationManager } from "./conversationManager";
-import { type ConversationNotifierTransport } from "./conversationRuntime/managerContracts";
+import { type ConversationNotifierTransport, type ConversationSourceRecallCaptureDependencies } from "./conversationRuntime/managerContracts";
 import { DiscordInterfaceConfig } from "./runtimeConfig";
 import { InterfaceSessionStore } from "./sessionStore";
 import { deliverPreparedTransportResponse, handleAcceptedTransportConversation } from "./transportRuntime/inboundDispatch";
@@ -43,7 +43,7 @@ import { InterfaceBrainRegistry } from "./interfaceBrainRegistry";
 interface DiscordGatewayOptions {
   sessionStore?: InterfaceSessionStore;
   entityGraphStore?: EntityGraphStore;
-  localIntentModelResolver?: LocalIntentModelResolver; autonomyBoundaryInterpretationResolver?: AutonomyBoundaryInterpretationResolver; statusRecallBoundaryInterpretationResolver?: StatusRecallBoundaryInterpretationResolver; continuationInterpretationResolver?: ContinuationInterpretationResolver; contextualFollowupInterpretationResolver?: ContextualFollowupInterpretationResolver; contextualReferenceInterpretationResolver?: ContextualReferenceInterpretationResolver; entityDomainHintInterpretationResolver?: EntityDomainHintInterpretationResolver; entityReferenceInterpretationResolver?: EntityReferenceInterpretationResolver; entityTypeInterpretationResolver?: EntityTypeInterpretationResolver; handoffControlInterpretationResolver?: HandoffControlInterpretationResolver; identityInterpretationResolver?: IdentityInterpretationResolver; relationshipInterpretationResolver?: RelationshipInterpretationResolver; proposalReplyInterpretationResolver?: ProposalReplyInterpretationResolver; topicKeyInterpretationResolver?: TopicKeyInterpretationResolver; brainRegistry?: InterfaceBrainRegistry;
+  localIntentModelResolver?: LocalIntentModelResolver; autonomyBoundaryInterpretationResolver?: AutonomyBoundaryInterpretationResolver; statusRecallBoundaryInterpretationResolver?: StatusRecallBoundaryInterpretationResolver; continuationInterpretationResolver?: ContinuationInterpretationResolver; contextualFollowupInterpretationResolver?: ContextualFollowupInterpretationResolver; contextualReferenceInterpretationResolver?: ContextualReferenceInterpretationResolver; entityDomainHintInterpretationResolver?: EntityDomainHintInterpretationResolver; entityReferenceInterpretationResolver?: EntityReferenceInterpretationResolver; entityTypeInterpretationResolver?: EntityTypeInterpretationResolver; handoffControlInterpretationResolver?: HandoffControlInterpretationResolver; identityInterpretationResolver?: IdentityInterpretationResolver; relationshipInterpretationResolver?: RelationshipInterpretationResolver; proposalReplyInterpretationResolver?: ProposalReplyInterpretationResolver; topicKeyInterpretationResolver?: TopicKeyInterpretationResolver; sourceRecallCapture?: ConversationSourceRecallCaptureDependencies; brainRegistry?: InterfaceBrainRegistry;
 }
 export class DiscordGateway {
   private running = false;
@@ -154,6 +154,7 @@ export class DiscordGateway {
       relationshipInterpretationResolver: options.relationshipInterpretationResolver,
       proposalReplyInterpretationResolver: options.proposalReplyInterpretationResolver,
       topicKeyInterpretationResolver: options.topicKeyInterpretationResolver,
+      sourceRecallCapture: options.sourceRecallCapture,
       getEntityGraph: async () => this.entityGraphStore.getGraph(),
       reconcileEntityAliasCandidate: async (request) => { const result = await this.entityGraphStore.reconcileAliasCandidate(request); return { acceptedAlias: result.acceptedAlias, rejectionReason: result.rejectionReason }; },
       listAvailableSkills: async () => this.skillRegistryStore.listAvailableSkills(),

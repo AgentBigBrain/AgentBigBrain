@@ -47,6 +47,10 @@ test("retrieveSourceRecall returns exact quote recall as non-authoritative evide
     assert.equal(result.bundle.retrievalAuthority, "strong_recall_evidence");
     assert.equal(result.bundle.excerpts.length, 1);
     assert.match(result.bundle.excerpts[0]?.excerpt ?? "", /static HTML path/);
+    assert.equal(result.bundle.excerpts[0]?.sourceKind, "conversation_turn");
+    assert.equal(result.bundle.excerpts[0]?.sourceRole, "user");
+    assert.equal(result.bundle.excerpts[0]?.sourceAuthority, "explicit_user_statement");
+    assert.equal(result.bundle.excerpts[0]?.freshness, "recent");
     assert.deepEqual(result.bundle.authority, buildSourceRecallAuthorityFlags());
     assert.equal(result.bundle.excerpts[0]?.authority.currentTruthAuthority, false);
     assert.equal(result.bundle.excerpts[0]?.authority.approvalAuthority, false);
@@ -119,6 +123,7 @@ test("retrieveSourceRecall enforces output budgets and source-kind allowlists", 
         maxExcerptCharsPerChunk: 12,
         maxTotalExcerptChars: 12,
         sourceKindAllowlist: ["conversation_turn"],
+        sourceRoleAllowlist: ["user"],
         sensitivityRedactionPolicy: "redact_sensitive"
       }
     );
@@ -127,6 +132,52 @@ test("retrieveSourceRecall enforces output budgets and source-kind allowlists", 
     assert.equal(result.bundle.excerpts[0]?.excerpt.length, 12);
     assert.equal(result.bundle.excerpts[0]?.sourceRecordId, recordOne.sourceRecordId);
     assert.equal(result.auditEvent.totalCharsReturned, 12);
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("retrieveSourceRecall enforces source-role allowlists for review evidence", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-source-recall-role-budget-"));
+  const store = new SourceRecallStore({
+    sqlitePath: path.join(tempDir, "source_recall.sqlite"),
+    testOnlyAllowPlaintextStorage: true
+  });
+  const userRecord = buildRecord("source_record_role_user", "scope-a", "thread-a");
+  const assistantRecord = buildRecord("source_record_role_assistant", "scope-a", "thread-a", {
+    sourceKind: "assistant_turn",
+    sourceRole: "assistant",
+    captureClass: "assistant_output",
+    sourceAuthority: "semantic_model"
+  });
+
+  try {
+    await store.upsertSourceRecord(userRecord, [
+      buildChunk("chunk_role_user", userRecord.sourceRecordId, 0, "User source evidence.")
+    ]);
+    await store.upsertSourceRecord(assistantRecord, [
+      buildChunk("chunk_role_assistant", assistantRecord.sourceRecordId, 0, "Assistant source evidence.")
+    ]);
+
+    const result = await retrieveSourceRecall(
+      store,
+      {
+        scopeId: "scope-a",
+        threadId: "thread-a"
+      },
+      {
+        ...DEFAULT_SOURCE_RECALL_OUTPUT_BUDGET,
+        sourceKindAllowlist: ["conversation_turn", "assistant_turn"],
+        sourceRoleAllowlist: ["user"],
+        sensitivityRedactionPolicy: "redact_sensitive"
+      }
+    );
+
+    assert.deepEqual(
+      result.bundle.excerpts.map((excerpt) => `${excerpt.sourceKind}:${excerpt.sourceRole}`),
+      ["conversation_turn:user"]
+    );
+    assert.equal(result.auditEvent.returnedChunkIds.includes("chunk_role_assistant"), false);
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }
@@ -189,6 +240,62 @@ test("retrieveSourceRecall excludes redacted chunks", async () => {
 
     assert.deepEqual(result.bundle.excerpts, []);
     assert.equal(result.auditEvent.blockedRedactedCount, 1);
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("retrieveSourceRecall excludes forgotten and quarantined records", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-source-recall-inactive-"));
+  const store = new SourceRecallStore({
+    sqlitePath: path.join(tempDir, "source_recall.sqlite"),
+    testOnlyAllowPlaintextStorage: true
+  });
+  const activeRecord = buildRecord("source_record_active", "scope-a", "thread-a", {
+    originRef: {
+      surface: "test",
+      refId: "source_record_active_origin",
+      parentRefId: "origin-parent-active"
+    }
+  });
+  const forgottenRecord = buildRecord("source_record_forgotten", "scope-a", "thread-a", {
+    originRef: {
+      surface: "test",
+      refId: "source_record_forgotten_origin",
+      parentRefId: "origin-parent-forgotten"
+    }
+  });
+  const quarantinedRecord = buildRecord("source_record_quarantined", "scope-a", "thread-a", {
+    originRef: {
+      surface: "test",
+      refId: "source_record_quarantined_origin",
+      parentRefId: "origin-parent-quarantined"
+    }
+  });
+
+  try {
+    await store.upsertSourceRecord(activeRecord, [
+      buildChunk("chunk_active", activeRecord.sourceRecordId, 0, "Visible source evidence.")
+    ]);
+    await store.upsertSourceRecord(forgottenRecord, [
+      buildChunk("chunk_forgotten", forgottenRecord.sourceRecordId, 0, "Forgotten source evidence.")
+    ]);
+    await store.upsertSourceRecord(quarantinedRecord, [
+      buildChunk("chunk_quarantined", quarantinedRecord.sourceRecordId, 0, "Quarantined source evidence.")
+    ]);
+    await store.markSourceRecordsByOriginParentRef("origin-parent-forgotten", "forgotten");
+    await store.markSourceRecordsByOriginParentRef("origin-parent-quarantined", "quarantined");
+
+    const result = await retrieveSourceRecall(store, {
+      scopeId: "scope-a",
+      threadId: "thread-a"
+    });
+
+    assert.deepEqual(
+      result.bundle.excerpts.map((excerpt) => excerpt.chunkId),
+      ["chunk_active"]
+    );
+    assert.equal(result.auditEvent.blockedRedactedCount, 2);
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }

@@ -17,6 +17,7 @@ import type { FollowUpRuleContext } from "../conversationManagerHelpers";
 import type { ConversationSession } from "../sessionStore";
 import type {
   DescribeRuntimeCapabilities,
+  ConversationSourceRecallCaptureDependencies,
   GetConversationEntityGraph,
   ListAvailableSkills,
   ListBrowserSessionSnapshots,
@@ -61,6 +62,7 @@ export interface ConversationRoutingDependencies {
     maxContextTurnsForExecution: number;
     maxConversationTurns: number;
   };
+  sourceRecallCapture?: ConversationSourceRecallCaptureDependencies;
   directCasualChatEnabled?: boolean;
   runDirectConversationTurn?: RunDirectConversationTurn;
   enqueueJob(

@@ -22,8 +22,7 @@ import { buildLocalIntentSessionHints } from "./conversationRoutingSupport";
 import { routeProposalReplyInterpretationModel } from "../../organs/languageUnderstanding/localIntentModelRouter";
 import type { ProposalReplyInterpretationSignal } from "../../organs/languageUnderstanding/localIntentModelProposalReplyContracts";
 import {
-  recordAssistantTurn,
-  recordUserTurn
+  recordAssistantTurnWithSourceRecall
 } from "../conversationSessionMutations";
 import {
   resolveConversationInboundUserInput,
@@ -31,6 +30,7 @@ import {
   type ExecuteConversationTask
 } from "./managerContracts";
 import type { ConversationIngressDependencies } from "./contracts";
+import { recordTopicAwareUserTurn } from "./conversationRoutingTurnSupport";
 
 const MAX_INTENT_INTERPRETER_INPUT_CHARS = 320;
 const MAX_PROPOSAL_REPLY_INTERPRETATION_CHARS = 220;
@@ -347,7 +347,14 @@ export async function handleImplicitProposalFlow(
         deps.openContinuityReadSession
       )
     );
-    recordUserTurn(session, normalizedInput, message.receivedAt, deps.config.maxConversationTurns);
+    await recordTopicAwareUserTurn(
+      session,
+      normalizedInput,
+      message.receivedAt,
+      deps.config.maxConversationTurns,
+      null,
+      deps.sourceRecallCapture ?? null
+    );
     return enqueueResult.reply;
   }
 
@@ -358,22 +365,37 @@ export async function handleImplicitProposalFlow(
       message.receivedAt,
       buildProposalQuestionPrompt(active, normalizedInput)
     );
-    recordUserTurn(session, normalizedInput, message.receivedAt, deps.config.maxConversationTurns);
+    await recordTopicAwareUserTurn(
+      session,
+      normalizedInput,
+      message.receivedAt,
+      deps.config.maxConversationTurns,
+      null,
+      deps.sourceRecallCapture ?? null
+    );
     return enqueueResult.reply;
   }
 
-  recordUserTurn(session, normalizedInput, message.receivedAt, deps.config.maxConversationTurns);
+  await recordTopicAwareUserTurn(
+    session,
+    normalizedInput,
+    message.receivedAt,
+    deps.config.maxConversationTurns,
+    null,
+    deps.sourceRecallCapture ?? null
+  );
   const answer = await executeTask(
     buildProposalQuestionPrompt(active, normalizedInput),
     message.receivedAt
   );
-  recordAssistantTurn(
+  await recordAssistantTurnWithSourceRecall(
     session,
     answer.summary,
     message.receivedAt,
     deps.config.maxConversationTurns,
     {
-      assistantTurnKind: "informational_answer"
+      assistantTurnKind: "informational_answer",
+      sourceRecallCapture: deps.sourceRecallCapture ?? null
     }
   );
   return [

@@ -6,6 +6,10 @@ Owns the Source Recall contract surface for source records, chunks, excerpts, an
 Source Recall can remind AgentBigBrain what was said or seen. It cannot decide what is true,
 allowed, approved, completed, or safe to act on.
 
+The operator-facing production contract lives in
+[docs/SOURCE_RECALL.md](../../../docs/SOURCE_RECALL.md). Keep this subsystem README focused on
+implementation ownership and invariants.
+
 ## Inputs
 
 - Source-kind labels such as `conversation_turn`, `assistant_turn`, `document_text`, and
@@ -22,6 +26,10 @@ allowed, approved, completed, or safe to act on.
   completion proof.
 - Optional conversation capture artifacts that preserve safe origin refs without tying source-record
   retention to bounded session turn history.
+- Bounded retrieval bundles and context-rendering metadata used by route-approved broker injection.
+- Evidence-only refs that semantic memory candidates may cite as provenance without gaining truth
+  or write authority.
+- Projection-safe entries that Obsidian/JSON mirrors can display as bounded review evidence only.
 
 ## Invariants
 
@@ -39,6 +47,25 @@ allowed, approved, completed, or safe to act on.
   routing input.
 - Source Recall does not create profile-memory truth, semantic-memory lessons, approvals, side
   effects, safety decisions, or receipt-backed proof.
+- Production Source Recall storage must use encrypted payloads derived from initialized key
+  material. The test-only plaintext SQLite path remains explicit and cannot be used as a production
+  runtime callsite.
+- Production encrypted storage currently encrypts the full Source Recall document payload, leaving
+  only row id, storage mode, and authenticated envelope fields visible in SQLite.
+- Production runtime config is fail-closed: Source Recall, capture, retrieval, projection,
+  operator-full projection, indexing, and evidence mode each require explicit latches.
+- Production capture allowlists currently support explicit conversation, assistant, task,
+  media/document source kinds, and their matching capture classes. Missing, empty, unknown, or
+  broader allowlists capture nothing.
+- Planner/model context injection requires the retrieval latch plus a route-approved memory intent
+  and renders retrieved chunks only as quoted evidence.
+- Semantic relationship candidates may carry Source Recall refs only as provenance. The candidates
+  still require model/review evidence and route-approved profile-memory write policy before truth
+  governance can apply durable facts.
+- Projection requires the Source Recall projection latch. Operator-full mode requires the separate
+  operator-full Source Recall latch; otherwise Source Recall is omitted from operator-full mirrors.
+- Projected Source Recall notes cannot be re-captured as ordinary Source Recall input and cannot
+  authorize review actions by source ref alone.
 
 ## Related Tests
 
@@ -47,7 +74,10 @@ allowed, approved, completed, or safe to act on.
 - `tests/core/sourceRecallRetention.test.ts`
 - `tests/core/sourceRecallStore.test.ts`
 - `tests/core/sourceRecallMediaCapture.test.ts`
+- `tests/core/sourceRecallMemoryBridge.test.ts`
+- `tests/core/sourceRecallProjection.test.ts`
 - `tests/interfaces/sourceRecallConversationCapture.test.ts`
+- `tests/organs/sourceRecallContextInjection.test.ts`
 
 ## When to Update This README
 

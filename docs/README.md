@@ -12,6 +12,8 @@ shortest path from the product idea to the operator details.
 - [Full architecture reference](./ARCHITECTURE.md): detailed subsystem map and invariants.
 - [Setup](./SETUP.md): environment variables, model backends, media backends, Telegram, Discord,
   federation, and local runtime wiring.
+- [Source Recall](./SOURCE_RECALL.md): production contract for quoted source evidence, latches,
+  retrieval boundaries, projection, delete behavior, and non-authority invariants.
 - [Command examples](./COMMAND_EXAMPLES.md): practical CLI and interface examples.
 - [Runtime error and env map](./ERROR_CODE_ENV_MAP.md): reason codes, block codes, and related
   configuration.
@@ -38,6 +40,8 @@ the implementation detail matters.
 
 - Use [SETUP.md](./SETUP.md) when configuring local backends, interface providers, auth, or media
   understanding.
+- Use [SOURCE_RECALL.md](./SOURCE_RECALL.md) when enabling or reviewing Source Recall capture,
+  retrieval, projection, or evidence behavior.
 - Use [COMMAND_EXAMPLES.md](./COMMAND_EXAMPLES.md) when testing common tasks through CLI,
   Telegram, Discord, memory review, pulse, or Obsidian tooling.
 - Use [ERROR_CODE_ENV_MAP.md](./ERROR_CODE_ENV_MAP.md) when a run blocks, fails closed, or needs an

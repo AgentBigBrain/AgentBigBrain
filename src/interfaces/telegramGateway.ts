@@ -3,7 +3,7 @@ import path from "node:path";
 import { TelegramAdapter } from "./telegramAdapter";
 import { AgentPulseScheduler } from "./agentPulseScheduler";
 import { ConversationManager } from "./conversationManager";
-import { type ConversationNotifierTransport } from "./conversationRuntime/managerContracts";
+import { type ConversationNotifierTransport, type ConversationSourceRecallCaptureDependencies } from "./conversationRuntime/managerContracts";
 import { TelegramInterfaceConfig } from "./runtimeConfig";
 import { InterfaceSessionStore } from "./sessionStore";
 import type { TelegramNotifierOptions, TelegramOutboundDeliveryObserver } from "./transportRuntime/contracts";
@@ -34,7 +34,7 @@ import { MediaUnderstandingOrgan } from "../organs/mediaUnderstanding/mediaInter
 import { SkillRegistryStore } from "../organs/skillRegistry/skillRegistryStore";
 import type { AutonomyBoundaryInterpretationResolver, ContinuationInterpretationResolver, ContextualFollowupInterpretationResolver, ContextualReferenceInterpretationResolver, EntityDomainHintInterpretationResolver, EntityReferenceInterpretationResolver, EntityTypeInterpretationResolver, HandoffControlInterpretationResolver, IdentityInterpretationResolver, LocalIntentModelResolver, RelationshipInterpretationResolver, StatusRecallBoundaryInterpretationResolver, TopicKeyInterpretationResolver } from "../organs/languageUnderstanding/localIntentModelContracts";
 import type { ProposalReplyInterpretationResolver } from "../organs/languageUnderstanding/localIntentModelProposalReplyContracts";
-import { InterfaceBrainRegistry } from "./interfaceBrainRegistry"; export type { TelegramOutboundDeliveryObservation } from "./transportRuntime/contracts"; interface TelegramGatewayOptions { sessionStore?: InterfaceSessionStore; entityGraphStore?: EntityGraphStore; mediaArtifactStore?: MediaArtifactStore; mediaUnderstandingOrgan?: MediaUnderstandingOrgan; localIntentModelResolver?: LocalIntentModelResolver; autonomyBoundaryInterpretationResolver?: AutonomyBoundaryInterpretationResolver; statusRecallBoundaryInterpretationResolver?: StatusRecallBoundaryInterpretationResolver; continuationInterpretationResolver?: ContinuationInterpretationResolver; contextualFollowupInterpretationResolver?: ContextualFollowupInterpretationResolver; contextualReferenceInterpretationResolver?: ContextualReferenceInterpretationResolver; entityDomainHintInterpretationResolver?: EntityDomainHintInterpretationResolver; entityReferenceInterpretationResolver?: EntityReferenceInterpretationResolver; entityTypeInterpretationResolver?: EntityTypeInterpretationResolver; handoffControlInterpretationResolver?: HandoffControlInterpretationResolver; identityInterpretationResolver?: IdentityInterpretationResolver; relationshipInterpretationResolver?: RelationshipInterpretationResolver; proposalReplyInterpretationResolver?: ProposalReplyInterpretationResolver; topicKeyInterpretationResolver?: TopicKeyInterpretationResolver; brainRegistry?: InterfaceBrainRegistry; onOutboundDelivery?: TelegramOutboundDeliveryObserver; }
+import { InterfaceBrainRegistry } from "./interfaceBrainRegistry"; export type { TelegramOutboundDeliveryObservation } from "./transportRuntime/contracts"; interface TelegramGatewayOptions { sessionStore?: InterfaceSessionStore; entityGraphStore?: EntityGraphStore; mediaArtifactStore?: MediaArtifactStore; mediaUnderstandingOrgan?: MediaUnderstandingOrgan; localIntentModelResolver?: LocalIntentModelResolver; autonomyBoundaryInterpretationResolver?: AutonomyBoundaryInterpretationResolver; statusRecallBoundaryInterpretationResolver?: StatusRecallBoundaryInterpretationResolver; continuationInterpretationResolver?: ContinuationInterpretationResolver; contextualFollowupInterpretationResolver?: ContextualFollowupInterpretationResolver; contextualReferenceInterpretationResolver?: ContextualReferenceInterpretationResolver; entityDomainHintInterpretationResolver?: EntityDomainHintInterpretationResolver; entityReferenceInterpretationResolver?: EntityReferenceInterpretationResolver; entityTypeInterpretationResolver?: EntityTypeInterpretationResolver; handoffControlInterpretationResolver?: HandoffControlInterpretationResolver; identityInterpretationResolver?: IdentityInterpretationResolver; relationshipInterpretationResolver?: RelationshipInterpretationResolver; proposalReplyInterpretationResolver?: ProposalReplyInterpretationResolver; topicKeyInterpretationResolver?: TopicKeyInterpretationResolver; sourceRecallCapture?: ConversationSourceRecallCaptureDependencies; brainRegistry?: InterfaceBrainRegistry; onOutboundDelivery?: TelegramOutboundDeliveryObserver; }
 export class TelegramGateway {
   private running = false; private nextOffset = 0; private nextOutboundDeliverySequence = 1;
   private readonly sessionStore: InterfaceSessionStore;
@@ -43,6 +43,7 @@ export class TelegramGateway {
   private readonly autonomousAbortControllers = new Map<string, AbortController>();
   private readonly entityGraphStore: EntityGraphStore;
   private readonly mediaArtifactStore?: MediaArtifactStore; private readonly mediaUnderstandingOrgan?: MediaUnderstandingOrgan;
+  private readonly sourceRecallCapture?: ConversationSourceRecallCaptureDependencies;
   private readonly onOutboundDelivery?: TelegramOutboundDeliveryObserver;
   private readonly entityDomainHintInterpretationResolver?: EntityDomainHintInterpretationResolver;
   private readonly entityTypeInterpretationResolver?: EntityTypeInterpretationResolver;
@@ -86,6 +87,7 @@ export class TelegramGateway {
     this.entityGraphStore = options.entityGraphStore ?? new EntityGraphStore();
     this.mediaArtifactStore = options.mediaArtifactStore;
     this.mediaUnderstandingOrgan = options.mediaUnderstandingOrgan;
+    this.sourceRecallCapture = options.sourceRecallCapture;
     this.onOutboundDelivery = options.onOutboundDelivery;
     this.entityDomainHintInterpretationResolver = options.entityDomainHintInterpretationResolver;
     this.entityTypeInterpretationResolver = options.entityTypeInterpretationResolver;
@@ -145,6 +147,7 @@ export class TelegramGateway {
       relationshipInterpretationResolver: options.relationshipInterpretationResolver,
       proposalReplyInterpretationResolver: options.proposalReplyInterpretationResolver,
       topicKeyInterpretationResolver: options.topicKeyInterpretationResolver,
+      sourceRecallCapture: options.sourceRecallCapture,
       getEntityGraph: async () => this.entityGraphStore.getGraph(),
       reconcileEntityAliasCandidate: async (request) => { const result = await this.entityGraphStore.reconcileAliasCandidate(request); return { acceptedAlias: result.acceptedAlias, rejectionReason: result.rejectionReason }; },
       listAvailableSkills: async () => this.skillRegistryStore.listAvailableSkills(),
@@ -295,7 +298,8 @@ export class TelegramGateway {
       prepared,
       config: this.config,
       mediaUnderstandingOrgan: this.mediaUnderstandingOrgan,
-      mediaArtifactStore: this.mediaArtifactStore
+      mediaArtifactStore: this.mediaArtifactStore,
+      sourceRecallCapture: this.sourceRecallCapture
     });
     if (enrichedPrepared.kind === "rejected") {
       await deliverPreparedTransportResponse(

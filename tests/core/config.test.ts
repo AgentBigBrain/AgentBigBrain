@@ -22,6 +22,10 @@ test("defaults to isolated runtime mode", () => {
   assert.equal(config.persistence.exportJsonOnWrite, true);
   assert.equal(config.observability.traceEnabled, false);
   assert.equal(config.observability.traceLogPath, "runtime/runtime_trace.jsonl");
+  assert.equal(config.sourceRecall.status, "disabled");
+  assert.equal(config.sourceRecall.enabled, false);
+  assert.equal(config.sourceRecall.sqlitePath, "runtime/source_recall.sqlite");
+  assert.deepEqual(config.sourceRecall.retentionPolicy.sourceKindCaptureAllowlist, []);
   assert.equal(config.browserVerification.headless, true);
 });
 
@@ -134,6 +138,10 @@ test("protects default and configured profile-memory paths from runtime modifica
   );
   assert.equal(
     defaultConfig.dna.protectedPathPrefixes.includes("runtime/ledgers.sqlite"),
+    true
+  );
+  assert.equal(
+    defaultConfig.dna.protectedPathPrefixes.includes("runtime/source_recall.sqlite"),
     true
   );
 
@@ -273,6 +281,62 @@ test("supports structured trace logging env overrides", () => {
   assert.equal(
     config.dna.protectedPathPrefixes.includes("runtime/custom_trace.jsonl"),
     true
+  );
+});
+
+test("supports Source Recall runtime latches without enabling capture by default", () => {
+  const encryptionKey = Buffer.alloc(32, 19).toString("base64");
+  const config = createBrainConfigFromEnv({
+    BRAIN_SOURCE_RECALL_ENABLED: "true",
+    BRAIN_SOURCE_RECALL_SQLITE_PATH: "runtime/private/source_recall.sqlite",
+    BRAIN_SOURCE_RECALL_ENCRYPTION_KEY: encryptionKey,
+    BRAIN_SOURCE_RECALL_CAPTURE_SOURCE_KINDS: "conversation_turn",
+    BRAIN_SOURCE_RECALL_CAPTURE_CLASSES: "ordinary_source"
+  });
+
+  assert.equal(config.sourceRecall.enabled, true);
+  assert.equal(config.sourceRecall.status, "enabled");
+  assert.equal(config.sourceRecall.sqlitePath, "runtime/private/source_recall.sqlite");
+  assert.equal(config.sourceRecall.encryptionKeyConfigured, true);
+  assert.equal(config.sourceRecall.retentionPolicy.captureEnabled, false);
+  assert.deepEqual(config.sourceRecall.retentionPolicy.sourceKindCaptureAllowlist, [
+    "conversation_turn"
+  ]);
+  assert.deepEqual(config.sourceRecall.retentionPolicy.captureClassAllowlist, [
+    "ordinary_source"
+  ]);
+  assert.equal(
+    config.dna.protectedPathPrefixes.includes("runtime/private/source_recall.sqlite"),
+    true
+  );
+});
+
+test("Source Recall config fails closed on missing encryption and disallowed capture scope", () => {
+  const config = createBrainConfigFromEnv({
+    BRAIN_SOURCE_RECALL_ENABLED: "true",
+    BRAIN_SOURCE_RECALL_CAPTURE_ENABLED: "true",
+    BRAIN_SOURCE_RECALL_CAPTURE_SOURCE_KINDS: "conversation_turn,review_note",
+    BRAIN_SOURCE_RECALL_CAPTURE_CLASSES: "ordinary_source,projection_metadata"
+  });
+
+  assert.equal(config.sourceRecall.status, "blocked_missing_encryption");
+  assert.deepEqual(config.sourceRecall.retentionPolicy.sourceKindCaptureAllowlist, []);
+  assert.deepEqual(config.sourceRecall.retentionPolicy.captureClassAllowlist, []);
+});
+
+test("Source Recall config rejects malformed encryption keys only when enabled", () => {
+  const disabled = createBrainConfigFromEnv({
+    BRAIN_SOURCE_RECALL_ENCRYPTION_KEY: "not-a-key"
+  });
+  assert.equal(disabled.sourceRecall.status, "disabled");
+
+  assert.throws(
+    () =>
+      createBrainConfigFromEnv({
+        BRAIN_SOURCE_RECALL_ENABLED: "true",
+        BRAIN_SOURCE_RECALL_ENCRYPTION_KEY: "not-a-key"
+      }),
+    /BRAIN_SOURCE_RECALL_ENCRYPTION_KEY/
   );
 });
 

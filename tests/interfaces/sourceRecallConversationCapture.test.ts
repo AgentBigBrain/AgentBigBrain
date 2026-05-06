@@ -16,6 +16,7 @@ import {
 } from "../../src/core/sourceRecall/sourceRecallConversationCapture";
 import { createDefaultSourceRecallRetentionPolicy } from "../../src/core/sourceRecall/sourceRecallRetention";
 import { SourceRecallStore } from "../../src/core/sourceRecall/sourceRecallStore";
+import { ConversationManager } from "../../src/interfaces/conversationManager";
 import {
   backfillTurnsFromRecentJobsIfNeeded,
   recordAssistantTurn,
@@ -23,6 +24,7 @@ import {
   recordUserTurnWithSourceRecall
 } from "../../src/interfaces/conversationSessionMutations";
 import { buildSessionSeed } from "../../src/interfaces/conversationManagerHelpers";
+import { InterfaceSessionStore } from "../../src/interfaces/sessionStore";
 import type { ConversationJob, ConversationSession } from "../../src/interfaces/sessionStore";
 
 test("recordUserTurnWithSourceRecall captures live user turns as quoted evidence", async () => {
@@ -70,6 +72,132 @@ test("recordUserTurnWithSourceRecall captures live user turns as quoted evidence
     assert.equal(record?.freshness, "current_turn");
     assert.equal(chunks[0]?.text, "Please remember the project decision exactly as stated.");
     assert.deepEqual(chunks[0]?.authority, buildSourceRecallAuthorityFlags());
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("conversation manager captures exactly one enabled live user turn and not assistant output", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-source-recall-manager-"));
+  const sourceRecallStore = new SourceRecallStore({
+    sqlitePath: path.join(tempDir, "source_recall.sqlite"),
+    testOnlyAllowPlaintextStorage: true
+  });
+  const sessionStore = new InterfaceSessionStore(path.join(tempDir, "sessions.json"), {
+    backend: "json"
+  });
+  const manager = new ConversationManager(sessionStore, {}, {
+    sourceRecallCapture: {
+      policy: buildLiveUserOnlyCapturePolicy(),
+      writer: sourceRecallStore,
+      capturedAt: "2026-05-03T13:05:01.000Z"
+    },
+    runDirectConversationTurn: async () => ({
+      summary: "Synthetic assistant reply."
+    })
+  });
+
+  try {
+    await manager.handleMessage(
+      buildConversationMessage("/chat Please retain this synthetic source sentence."),
+      async () => ({ summary: "unused worker" }),
+      async () => undefined
+    );
+    await manager.waitForIdle();
+
+    const records = await sourceRecallStore.listSourceRecords();
+    assert.equal(records.length, 1);
+    assert.equal(records[0]?.sourceKind, "conversation_turn");
+    assert.equal(records[0]?.sourceRole, "user");
+
+    const chunks = await sourceRecallStore.listChunksForRecord(records[0]?.sourceRecordId ?? "");
+    assert.equal(chunks.length, 1);
+    assert.equal(chunks[0]?.text, "Please retain this synthetic source sentence.");
+    assert.equal(chunks[0]?.text.includes("Synthetic assistant reply"), false);
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("conversation manager captures assistant replies only when assistant capture is explicitly allowed", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-source-recall-manager-assistant-"));
+  const sourceRecallStore = new SourceRecallStore({
+    sqlitePath: path.join(tempDir, "source_recall.sqlite"),
+    testOnlyAllowPlaintextStorage: true
+  });
+  const sessionStore = new InterfaceSessionStore(path.join(tempDir, "sessions.json"), {
+    backend: "json"
+  });
+  const manager = new ConversationManager(sessionStore, {}, {
+    sourceRecallCapture: {
+      policy: buildEnabledCapturePolicy(),
+      writer: sourceRecallStore,
+      capturedAt: "2026-05-03T13:07:01.000Z"
+    },
+    runDirectConversationTurn: async () => ({
+      summary: "Synthetic assistant reply."
+    })
+  });
+
+  try {
+    await manager.handleMessage(
+      buildConversationMessage("/chat Please retain this synthetic assistant source sentence."),
+      async () => ({ summary: "Synthetic assistant reply." }),
+      async () => undefined
+    );
+    await manager.waitForIdle();
+
+    const records = await sourceRecallStore.listSourceRecords();
+    assert.deepEqual(
+      records
+        .map((record) => `${record.sourceKind}:${record.sourceRole}:${record.captureClass}`)
+        .sort(),
+      [
+        "assistant_turn:assistant:assistant_output",
+        "conversation_turn:user:ordinary_source"
+      ]
+    );
+    const assistantRecord = records.find((record) => record.sourceKind === "assistant_turn");
+    assert.ok(assistantRecord);
+    assert.equal(assistantRecord.sourceAuthority, "semantic_model");
+    assert.equal(assistantRecord.recallAuthority, "quoted_evidence_only");
+
+    const assistantChunks = await sourceRecallStore.listChunksForRecord(
+      assistantRecord.sourceRecordId
+    );
+    assert.equal(assistantChunks[0]?.text, "Synthetic assistant reply.");
+    assert.equal(assistantChunks[0]?.authority.currentTruthAuthority, false);
+    assert.equal(assistantChunks[0]?.authority.approvalAuthority, false);
+    assert.equal(assistantChunks[0]?.authority.completionProofAuthority, false);
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("conversation manager does not capture live turns when Source Recall capture is absent", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-source-recall-manager-disabled-"));
+  const sourceRecallStore = new SourceRecallStore({
+    sqlitePath: path.join(tempDir, "source_recall.sqlite"),
+    testOnlyAllowPlaintextStorage: true
+  });
+  const sessionStore = new InterfaceSessionStore(path.join(tempDir, "sessions.json"), {
+    backend: "json"
+  });
+  const manager = new ConversationManager(sessionStore, {}, {
+    runDirectConversationTurn: async () => ({
+      summary: "Synthetic assistant reply."
+    })
+  });
+
+  try {
+    await manager.handleMessage(
+      buildConversationMessage("/chat Please retain nothing here."),
+      async () => ({ summary: "unused worker" }),
+      async () => undefined
+    );
+    await manager.waitForIdle();
+
+    assert.deepEqual(await sourceRecallStore.listSourceRecords(), []);
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }
@@ -345,6 +473,24 @@ function buildSession(): ConversationSession {
 }
 
 /**
+ * Builds a deterministic inbound conversation message for manager-level Source Recall tests.
+ *
+ * @param text - Inbound user text.
+ * @returns Synthetic private Telegram message.
+ */
+function buildConversationMessage(text: string) {
+  return {
+    provider: "telegram" as const,
+    conversationId: "chat-1",
+    userId: "user-1",
+    username: "owner",
+    conversationVisibility: "private" as const,
+    text,
+    receivedAt: "2026-05-03T13:05:00.000Z"
+  };
+}
+
+/**
  * Builds the narrow enabled policy used by test-only live-turn capture.
  *
  * @returns Source Recall policy with capture enabled and encryption marked available.
@@ -352,8 +498,32 @@ function buildSession(): ConversationSession {
 function buildEnabledCapturePolicy() {
   return {
     ...createDefaultSourceRecallRetentionPolicy(),
+    enabled: true,
     captureEnabled: true,
-    encryptedPayloadsAvailable: true
+    encryptedPayloadsAvailable: true,
+    sourceKindCaptureAllowlist: [
+      "conversation_turn",
+      "assistant_turn",
+      "task_input",
+      "task_summary"
+    ] as const,
+    captureClassAllowlist: [
+      "ordinary_source",
+      "assistant_output"
+    ] as const
+  };
+}
+
+/**
+ * Builds the narrow S3A-era policy for manager tests that should capture only live user text.
+ *
+ * @returns Source Recall policy with only conversation-turn capture enabled.
+ */
+function buildLiveUserOnlyCapturePolicy() {
+  return {
+    ...buildEnabledCapturePolicy(),
+    sourceKindCaptureAllowlist: ["conversation_turn"] as const,
+    captureClassAllowlist: ["ordinary_source"] as const
   };
 }
 
