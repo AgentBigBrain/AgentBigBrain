@@ -18,6 +18,7 @@ const SOURCE_RECALL_CIPHER = "aes-256-gcm";
 const SOURCE_RECALL_IV_BYTES = 12;
 const SOURCE_RECALL_TAG_BYTES = 16;
 const SOURCE_RECALL_KEY_BYTES = 32;
+const SOURCE_RECALL_BASE64_KEY_MAX_CHARS = 44;
 
 export interface EncryptedSourceRecallEnvelopeV1 {
   version: 1;
@@ -59,6 +60,28 @@ function toBase64(input: Buffer): string {
  */
 function fromBase64(input: string): Buffer {
   return Buffer.from(input, "base64");
+}
+
+/**
+ * Removes canonical base64 padding without a regex over environment-controlled input.
+ *
+ * **Why it exists:**
+ * Source Recall accepts base64 key text from environment configuration. CodeQL treats trailing
+ * padding regexes over configuration input as a potential polynomial-time boundary, so this helper
+ * keeps the normalization explicitly linear and bounded by string length.
+ *
+ * **What it talks to:**
+ * - Uses local string indexing within this module.
+ *
+ * @param input - Base64 text that may include trailing padding.
+ * @returns Base64 text with trailing `=` padding removed.
+ */
+function removeTrailingBase64Padding(input: string): string {
+  let end = input.length;
+  while (end > 0 && input.charCodeAt(end - 1) === 61) {
+    end -= 1;
+  }
+  return input.slice(0, end);
 }
 
 /**
@@ -106,10 +129,16 @@ export function decodeSourceRecallEncryptionKey(raw: string): Buffer {
     return key;
   }
 
+  if (trimmed.length > SOURCE_RECALL_BASE64_KEY_MAX_CHARS) {
+    throw new Error(
+      "BRAIN_SOURCE_RECALL_ENCRYPTION_KEY base64 payload is invalid or non-canonical."
+    );
+  }
+
   const decoded = Buffer.from(trimmed, "base64");
   assertSourceRecallKeyLength(decoded);
-  const reEncoded = toBase64(decoded).replace(/=+$/g, "");
-  const normalizedInput = trimmed.replace(/=+$/g, "");
+  const reEncoded = removeTrailingBase64Padding(toBase64(decoded));
+  const normalizedInput = removeTrailingBase64Padding(trimmed);
   const reEncodedBuffer = Buffer.from(reEncoded);
   const inputBuffer = Buffer.from(normalizedInput);
   if (
