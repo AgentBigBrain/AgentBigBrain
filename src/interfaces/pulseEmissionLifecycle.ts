@@ -6,10 +6,17 @@ import {
   ConversationJob,
   ConversationSession
 } from "./sessionStore";
+import { hashSha256 } from "../core/cryptoUtils";
 
 const PULSE_RESPONSE_WINDOW_MS = 30 * 60 * 1000;
 const MAX_SNIPPET_LENGTH = 120;
+const MAX_DELIVERED_PREVIEW_LENGTH = 160;
+const TOKEN_SHAPED_TEXT_PATTERN = /\b[A-Za-z0-9_./+-]{32,}\b/g;
+const QUOTED_EVIDENCE_BLOCK_PATTERN = /```[\s\S]*?```/g;
 const DISMISSAL_KEYWORDS = /\b(stop|not now|don't ask|shut up|quit|enough|no more)\b/i;
+const MUTED_KEYWORDS = /\b(?:mute|turn off|disable)\b[\s\S]{0,40}\b(?:pulse|check-?ins?)\b/i;
+const NEGATIVE_KEYWORDS =
+  /\b(?:not useful|not helpful|useless|bad question|wrong time|irrelevant|annoying)\b/i;
 
 /**
  * Backfills response outcome on the latest pulse emission after a user reply.
@@ -28,7 +35,8 @@ const DISMISSAL_KEYWORDS = /\b(stop|not now|don't ask|shut up|quit|enough|no mor
 export function backfillPulseResponseOutcome(
   session: ConversationSession,
   userText: string,
-  nowMs: number
+  nowMs: number,
+  boundUserTurnId?: string
 ): void {
   const emissions = session.agentPulse.recentEmissions;
   if (!emissions || emissions.length === 0) return;
@@ -48,11 +56,34 @@ export function backfillPulseResponseOutcome(
     return;
   }
 
+  const replyBindingId = boundUserTurnId ?? buildPulseReplyBindingId(userText, nowMs);
+
+  if (MUTED_KEYWORDS.test(userText)) {
+    latest.responseOutcome = "muted";
+    if (latest.outcomeRecord) {
+      latest.outcomeRecord.responseOutcome = "muted";
+      latest.outcomeRecord.outcomeSource = "explicit_user_reply";
+      latest.outcomeRecord.boundUserTurnId = replyBindingId;
+    }
+    return;
+  }
+
   if (DISMISSAL_KEYWORDS.test(userText)) {
     latest.responseOutcome = "dismissed";
     if (latest.outcomeRecord) {
       latest.outcomeRecord.responseOutcome = "dismissed";
       latest.outcomeRecord.outcomeSource = "legacy_keyword";
+      latest.outcomeRecord.boundUserTurnId = replyBindingId;
+    }
+    return;
+  }
+
+  if (NEGATIVE_KEYWORDS.test(userText)) {
+    latest.responseOutcome = "negative";
+    if (latest.outcomeRecord) {
+      latest.outcomeRecord.responseOutcome = "negative";
+      latest.outcomeRecord.outcomeSource = "explicit_user_reply";
+      latest.outcomeRecord.boundUserTurnId = replyBindingId;
     }
     return;
   }
@@ -61,6 +92,7 @@ export function backfillPulseResponseOutcome(
   if (latest.outcomeRecord) {
     latest.outcomeRecord.responseOutcome = "engaged";
     latest.outcomeRecord.outcomeSource = "explicit_user_reply";
+    latest.outcomeRecord.boundUserTurnId = replyBindingId;
   }
 }
 
@@ -119,9 +151,53 @@ export function backfillPulseSnippet(
   if (!emissions || emissions.length === 0) return;
 
   const latest = emissions[emissions.length - 1];
-  if (latest.generatedSnippet && latest.generatedSnippet.length > 0) return;
 
   if (completedJob.resultSummary) {
-    latest.generatedSnippet = completedJob.resultSummary.slice(0, MAX_SNIPPET_LENGTH);
+    const deliveredPreview = buildPulseDeliveredTextPreview(completedJob.resultSummary);
+    latest.generatedSnippet = deliveredPreview.slice(0, MAX_SNIPPET_LENGTH);
+    if (latest.outcomeRecord) {
+      latest.outcomeRecord.deliveredTextHash ??= hashSha256(completedJob.resultSummary);
+      latest.outcomeRecord.deliveredTextPreviewRedacted ??= deliveredPreview;
+    }
   }
+}
+
+/**
+ * Builds a bounded redacted preview of delivered pulse text for outcome learning.
+ *
+ * **Why it exists:**
+ * Outcome records need enough signal to avoid repeating awkward wording, but they must not become a
+ * raw Source Recall or private-source storage lane.
+ *
+ * **What it talks to:**
+ * - Uses local redaction and whitespace normalization only.
+ *
+ * @param deliveredText - Final user-facing pulse text.
+ * @returns Bounded preview safe for pulse outcome metadata.
+ */
+export function buildPulseDeliveredTextPreview(deliveredText: string): string {
+  const redacted = deliveredText
+    .replace(QUOTED_EVIDENCE_BLOCK_PATTERN, "[quoted evidence redacted]")
+    .replace(TOKEN_SHAPED_TEXT_PATTERN, "[redacted]")
+    .replace(/\s+/g, " ")
+    .trim();
+  return redacted.slice(0, MAX_DELIVERED_PREVIEW_LENGTH);
+}
+
+/**
+ * Builds a stable non-raw reply binding id for pulse outcome records.
+ *
+ * **Why it exists:**
+ * Pulse outcome records need to bind a reply to a pulse without retaining the private reply text
+ * as durable metadata.
+ *
+ * **What it talks to:**
+ * - Uses `hashSha256` from `../core/cryptoUtils`.
+ *
+ * @param userText - Incoming user reply text used only for hashing.
+ * @param nowMs - Deterministic received timestamp in milliseconds.
+ * @returns Bounded synthetic reply binding id.
+ */
+function buildPulseReplyBindingId(userText: string, nowMs: number): string {
+  return `pulse_reply_${hashSha256(`${nowMs}:${userText}`).slice(0, 16)}`;
 }

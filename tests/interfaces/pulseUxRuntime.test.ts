@@ -10,6 +10,7 @@ import { buildSessionSeed } from "../../src/interfaces/conversationManagerHelper
 import { ConversationSession } from "../../src/interfaces/sessionStore";
 import {
   renderPulseUserFacingSummaryV1,
+  resolvePulseUxMetadataV1,
   shouldSuppressPulseUserFacingDeliveryV1
 } from "../../src/interfaces/pulseUxRuntime";
 
@@ -162,6 +163,50 @@ function keepsNaturalStage686PulseSummariesVisible(): void {
   assert.equal(shouldSuppress, false);
 }
 
+/**
+ * Implements `prefersTypedPulseDeliveryMetadataOverPromptParsing` behavior within module scope.
+ * Interacts with local collaborators through imported modules and typed inputs/outputs.
+ */
+function prefersTypedPulseDeliveryMetadataOverPromptParsing(): void {
+  const session = buildSession();
+  session.agentPulse.recentEmissions = [
+    {
+      emittedAt: "2026-03-03T15:00:00.000Z",
+      reasonCode: "OPEN_LOOP_RESUME",
+      candidateEntityRefs: ["thread_budget"],
+      deliveryEnvelope: {
+        pulseId: "pulse_typed_1",
+        candidateId: "candidate_typed_1",
+        reasonCode: "OPEN_LOOP_RESUME",
+        inquiryType: "resume_open_loop",
+        evidenceRefs: ["thread_budget"],
+        sourceRecallRefs: [],
+        deliveryDecisionId: "decision_typed_1",
+        promptKind: "semantic_inquiry_pulse",
+        createdAt: "2026-03-03T15:00:00.000Z",
+        allowedByPolicy: true,
+        userVisibleDeliveryAllowed: true
+      }
+    }
+  ];
+
+  const metadata = resolvePulseUxMetadataV1(
+    session,
+    "Agent Pulse proactive check-in request without legacy markers.",
+    "2026-03-03T15:00:10.000Z"
+  );
+  const rendered = renderPulseUserFacingSummaryV1(
+    session,
+    "Agent Pulse proactive check-in request without legacy markers.",
+    "Want to pick the runway checklist back up?",
+    "2026-03-03T15:00:10.000Z"
+  );
+
+  assert.equal(metadata?.source, "typed_delivery_metadata");
+  assert.equal(metadata?.pulseId, "pulse_typed_1");
+  assert.equal(rendered, "Want to pick the runway checklist back up?");
+}
+
 test(
   "pulse ux runtime strips stage 6.86 envelope metadata from live delivery output",
   rendersStage686PulseEnvelopeWhenReasonCodeIsPresent
@@ -181,4 +226,8 @@ test(
 test(
   "pulse ux runtime keeps natural stage 6.86 pulse summaries visible",
   keepsNaturalStage686PulseSummariesVisible
+);
+test(
+  "pulse ux runtime prefers typed pulse delivery metadata over legacy prompt parsing",
+  prefersTypedPulseDeliveryMetadataOverPromptParsing
 );

@@ -499,7 +499,7 @@ S4-deterministic-delivery-policy
 
 ### Branch / Checkpoint Commit
 
-feat/dynamic-pulse-semantic-inquiry / pending
+feat/dynamic-pulse-semantic-inquiry / 68eacfd
 
 ### State
 
@@ -600,7 +600,7 @@ retrieval callsites, or unrelated scheduler delivery changes.
 
 ### Completion Note
 
-- checkpoint commit hash: pending
+- checkpoint commit hash: 68eacfd
 - files changed: proactive delivery policy, dynamic pulse evaluation, proactive runtime tests,
   progress ledger
 - tests added: semantic inquiry delivery policy allow/suppress tests
@@ -611,3 +611,122 @@ retrieval callsites, or unrelated scheduler delivery changes.
 - production defaults after the slice: unchanged
 - pulse frequency became: equal or stricter
 - next slice unblocked: yes, S5 can bind wording/outcome learning after permission
+
+## 2026-05-07 - S5-wording-outcome-learning
+
+### Slice ID
+
+S5-wording-outcome-learning
+
+### Branch / Checkpoint Commit
+
+feat/dynamic-pulse-semantic-inquiry / pending
+
+### State
+
+in_progress
+
+### Objective
+
+Keep pulse wording after deterministic permission and record bounded outcome metadata for learning.
+
+### Owner Files Inspected
+
+- `src/interfaces/conversationRuntime/pulsePrompting.ts`
+- `src/interfaces/pulseEmissionLifecycle.ts`
+- `src/interfaces/conversationRuntime/sessionPulseMetadata.ts`
+- `src/interfaces/pulseUxRuntime.ts`
+- `tests/interfaces/pulsePrompting.test.ts`
+- `tests/interfaces/pulseState.test.ts`
+- `tests/interfaces/pulseUxRuntime.test.ts`
+
+### Read-Only Context Files Inspected
+
+- `src/core/stage6_86/pulseCandidateSupport.ts`
+- `src/interfaces/conversationRuntime/pulseDynamicEvaluation.ts`
+- `src/interfaces/conversationWorkerLifecycle.ts`
+- `src/interfaces/telegramGateway.ts`
+- `src/interfaces/discordGateway.ts`
+
+### Prohibited Changes For This Slice
+
+- Do not change deterministic delivery permission.
+- Do not increase pulse frequency.
+- Do not add new Source Recall retrieval callsites.
+- Do not make model wording decide whether delivery is allowed.
+- Do not store raw Source Recall chunks in outcome records.
+
+### Precondition Verification
+
+- current code seam: S0-S4 produce typed delivery envelopes and outcome records, but pulse UX
+  rendering still falls back to prompt-text reason markers and delivered wording is not persisted as
+  a hash/redacted preview.
+- dependency state: S0-S4 checkpoint commits exist and S4 passed.
+- Source Recall state if relevant: only already-rendered quoted evidence may appear in summaries;
+  no new retrieval is needed for S5.
+- model/backend state if relevant: no live model dependency is needed.
+
+### Tests To Add First
+
+- Pulse UX test that typed delivery metadata is preferred over prompt-text parsing.
+- Pulse emission lifecycle test that delivered text is recorded as hash/redacted preview.
+- Pulse emission lifecycle test that user reply binding records the pulse id/user-turn id without
+  raw source text.
+
+### Implementation Tasks
+
+- Prefer typed pulse delivery metadata in UX rendering when available.
+- Keep prompt-text marker extraction as legacy compatibility only.
+- Backfill delivered-text hash and redacted preview on completed pulse jobs.
+- Bind user replies to pulse outcome records inside the response window.
+
+### Acceptance Criteria
+
+- Actual delivered wording is represented by hash/redacted preview, not only reason code.
+- User replies can be bound to the relevant pulse id within the response window.
+- Dismissals continue to suppress similar future candidates through existing recent-emission
+  history.
+- Stored outcome records do not contain raw Source Recall chunks.
+- Pulse UX rendering consumes typed pulse delivery metadata where available and keeps regex prompt
+  extraction as legacy-only compatibility.
+
+### Required Commands
+
+- `npx tsx tests/interfaces/pulseUxRuntime.test.ts` - passed.
+- `npx tsx tests/interfaces/pulseEmissionLifecycle.test.ts` - passed.
+- `npx tsx tests/interfaces/pulseState.test.ts` - passed.
+- `npx tsx tests/interfaces/pulsePrompting.test.ts` - passed.
+- `npm run check:test-types` - passed.
+- `npm run build` - passed.
+- `npm run check:docs` - passed.
+
+### Evidence Required
+
+Focused tests must prove typed metadata rendering, delivered-text hashing/redaction, and bounded user
+reply binding without raw Source Recall storage.
+
+### Sensitive Scan Scope
+
+Changed pulse UX/outcome lifecycle files, focused tests, and progress docs. Scan for prior private
+fixture strings, token-shaped secrets, key markers, and local desktop paths before checkpoint.
+
+### Stop Conditions
+
+Stop if S5 requires delivery-policy changes, Source Recall retrieval, final wording before
+permission, or unrelated gateway/transport behavior changes.
+
+### Completion Note
+
+- checkpoint commit hash: pending
+- files changed: pulse UX runtime, pulse emission lifecycle, focused pulse UX/outcome tests,
+  progress ledger
+- tests added: pulse emission lifecycle outcome metadata tests and typed pulse UX metadata
+  preference test
+- behavior changed: pulse UX rendering now prefers typed delivery metadata when present; completed
+  pulse jobs record delivered-text hash and bounded redacted preview; user replies bind to pulse
+  outcome records without raw reply text
+- behavior intentionally not changed: no delivery permission changes, no Source Recall retrieval,
+  no pulse frequency increase, no transport delivery changes
+- production defaults after the slice: unchanged
+- pulse frequency became: equal
+- next slice unblocked: yes, S6 can build the multi-day evidence matrix
