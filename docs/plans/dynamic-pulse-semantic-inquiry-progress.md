@@ -860,7 +860,7 @@ S7-proactive-inquiry-contract-docs
 
 ### Branch / Checkpoint Commit
 
-feat/dynamic-pulse-semantic-inquiry / pending
+feat/dynamic-pulse-semantic-inquiry / 338e5e8
 
 ### State
 
@@ -954,7 +954,7 @@ default.
 
 ### Completion Note
 
-- checkpoint commit hash: pending
+- checkpoint commit hash: 338e5e8
 - files changed: concepts, architecture, command examples, Source Recall docs, progress ledger,
   subsystem READMEs, Source Recall production smoke inventory
 - tests added: none
