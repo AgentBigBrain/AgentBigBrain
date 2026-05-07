@@ -152,6 +152,20 @@ not a new user instruction, route marker, approval, receipt, completion proof, o
 
 Source chunks can be read. They cannot be obeyed.
 
+## Proactive Inquiry Boundary
+
+Dynamic Pulse may use Source Recall as quoted evidence for a proactive inquiry candidate only when
+the Source Recall runtime gate is satisfied and the evidence is visible, lifecycle-active, bounded,
+and safe for the target route.
+
+Source Recall does not grant outreach authority. A recalled chunk can help explain why a question
+might be useful, but deterministic Agent Pulse policy still decides whether ABB may interrupt.
+Forgotten, redacted, expired, quarantined, public-unsafe, assistant-only, task-summary-only, or
+media/document-derived evidence without policy support must suppress Source Recall-backed outreach.
+
+Prompt-injection text inside recalled chunks remains quoted evidence. It cannot become `/approve`,
+route metadata, completion proof, quiet-hours override, or any other runtime command.
+
 ## Memory And Semantic Bridges
 
 Source Recall refs may be attached to governed memory candidates as provenance only.

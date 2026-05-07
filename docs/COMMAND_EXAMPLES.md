@@ -145,6 +145,7 @@ Examples:
 
 - you want to opt in or out of proactive check-ins
 - you want to change whether those check-ins stay private or can use the current conversation
+- you want the runtime to ask fewer, better follow-up questions when it has useful evidence
 
 Examples:
 
@@ -155,6 +156,16 @@ Examples:
 /pulse status
 /pulse off
 ```
+
+Pulse behavior is conservative:
+
+- Agent Pulse and Dynamic Pulse are disabled unless explicitly enabled.
+- Exact `/pulse` commands are deterministic controls.
+- Natural preferences like `don't ask me about that again`, `only ask me privately`, or `that
+  follow-up was useful` are treated as preference evidence, not direct permission to interrupt.
+- Source Recall may support a candidate as quoted evidence, but it cannot authorize outreach.
+- Quiet hours, cooldowns, daily caps, active work, private/public routing, and deleted or redacted
+  source records still suppress delivery.
 
 ### Use `/status` when
 

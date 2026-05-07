@@ -739,7 +739,7 @@ S6-multiday-evidence-matrix
 
 ### Branch / Checkpoint Commit
 
-feat/dynamic-pulse-semantic-inquiry / pending
+feat/dynamic-pulse-semantic-inquiry / 04f0230
 
 ### State
 
@@ -842,7 +842,7 @@ retrieval wiring, or reclassifying mock/schema evidence as runtime proof.
 
 ### Completion Note
 
-- checkpoint commit hash: pending
+- checkpoint commit hash: 04f0230
 - files changed: dynamic pulse semantic inquiry matrix script, fixture, tests, progress ledger
 - tests added: multi-day matrix scenario coverage and authority/proof-mode tests
 - behavior changed: evidence coverage only; no runtime delivery path changed
@@ -851,3 +851,115 @@ retrieval wiring, or reclassifying mock/schema evidence as runtime proof.
 - production defaults after the slice: unchanged
 - pulse frequency became: equal in runtime; matrix shows 29 suppressions and 6 emissions
 - next slice unblocked: yes, S7 can document the operator contract
+
+## 2026-05-07 - S7-proactive-inquiry-contract-docs
+
+### Slice ID
+
+S7-proactive-inquiry-contract-docs
+
+### Branch / Checkpoint Commit
+
+feat/dynamic-pulse-semantic-inquiry / pending
+
+### State
+
+passed
+
+### Objective
+
+Document the proactive inquiry contract without implying Agent Pulse is always-on or
+model-authorized.
+
+### Owner Files Inspected
+
+- `docs/CONCEPTS.md`
+- `docs/ARCHITECTURE.md`
+- `docs/COMMAND_EXAMPLES.md`
+- `docs/SOURCE_RECALL.md`
+- `docs/plans/DYNAMIC_PULSE_SEMANTIC_INQUIRY_PLAN.md`
+
+### Read-Only Context Files Inspected
+
+- `docs/plans/dynamic-pulse-semantic-inquiry-progress.md`
+
+### Prohibited Changes For This Slice
+
+- Do not change runtime behavior.
+- Do not enable Agent Pulse or Dynamic Pulse by default.
+- Do not imply Source Recall authorizes outreach.
+- Do not imply model wording grants permission.
+- Do not add live-smoke claims that were not run.
+
+### Precondition Verification
+
+- current code seam: S0-S6 behavior and evidence slices are complete; docs did not yet describe the
+  full semantic inquiry authority model.
+- dependency state: S0-S6 checkpoint commits exist and S6 passed.
+- Source Recall state if relevant: docs must keep Source Recall evidence non-authoritative and
+  lifecycle-gated.
+- model/backend state if relevant: docs must explain model wording/proposal is separate from
+  deterministic delivery permission.
+
+### Tests To Add First
+
+- No new tests required; docs-only slice relies on `npm run check:docs` plus final full validation.
+
+### Implementation Tasks
+
+- Added Agent Pulse and proactive inquiry concepts.
+- Added architecture section for pulse authority layers.
+- Expanded command examples for `/pulse` and natural pulse preferences.
+- Added Source Recall proactive inquiry boundary.
+- Classified the dynamic-pulse Source Recall prompt renderer as a route-gated evidence callsite in
+  the Source Recall production user-turn smoke, so the smoke keeps proving no unexpected
+  planner/chat retrieval path exists after S2.
+
+### Acceptance Criteria
+
+- Docs explain proactive inquiry is opt-in.
+- Docs explain exact `/pulse` commands remain deterministic.
+- Docs explain natural pulse preferences are typed preference evidence, not immediate outreach
+  authority.
+- Docs explain Source Recall evidence remains non-authoritative and lifecycle-gated.
+- Docs explain deterministic policy remains the only interruption authority.
+
+### Required Commands
+
+- `npm run check:docs` - passed.
+- `npx tsx tests/scripts/sourceRecallProductionUserTurnSmoke.test.ts` - passed.
+- `npm run build` - passed.
+- `npm run check:ai-first` - passed.
+- `npm test` - passed; 3389 passing, 0 failing, 7 live-gated skipped.
+
+### Evidence Required
+
+Docs now describe controls, candidate generation, delivery policy, wording, outcome learning,
+Source Recall boundary, and default-disabled behavior.
+
+Final validation also proves the Source Recall production user-turn smoke treats the dynamic-pulse
+Source Recall renderer as a gated evidence callsite, not as default planner/chat retrieval.
+
+### Sensitive Scan Scope
+
+Changed public docs, progress ledger, subsystem READMEs, and the Source Recall smoke inventory.
+Focused scan found no private fixture strings, token-shaped secrets, key material, raw Source Recall
+chunks, or local desktop paths in docs/evidence; script matches are limited to redaction/detection
+regex constants.
+
+### Stop Conditions
+
+Stop if S7 requires runtime changes, broad README rewrite, live-smoke claims, or enabling pulse by
+default.
+
+### Completion Note
+
+- checkpoint commit hash: pending
+- files changed: concepts, architecture, command examples, Source Recall docs, progress ledger,
+  subsystem READMEs, Source Recall production smoke inventory
+- tests added: none
+- behavior changed: evidence inventory only; no runtime delivery behavior changed
+- behavior intentionally not changed: no runtime behavior, no defaults, no live delivery changes
+- production defaults after the slice: unchanged
+- pulse frequency became: equal
+- next slice unblocked: plan complete after S7 checkpoint commit

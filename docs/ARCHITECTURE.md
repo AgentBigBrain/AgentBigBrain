@@ -405,6 +405,29 @@ Important defaults:
 That design keeps the interface conversational without letting the front door silently become an
 unrestricted autonomy surface.
 
+### Agent Pulse and proactive inquiry
+
+Agent Pulse is opt-in and disabled by default. It is not a general background autonomy switch.
+
+The pulse path has four separate authority layers:
+
+1. Controls: exact `/pulse` commands and typed semantic pulse preferences.
+2. Candidate generation: graph, memory, Source Recall, and recent conversation may suggest useful
+   inquiry candidates.
+3. Delivery policy: deterministic gates decide whether ABB is allowed to interrupt.
+4. Outcome learning: bounded records track whether a prior pulse was useful, ignored, dismissed,
+   negative, or muted.
+
+No layer collapses into another. Candidate generation cannot deliver. Source Recall evidence cannot
+deliver. Model wording cannot deliver. Outcome learning cannot override opt-in, quiet hours,
+cooldowns, daily caps, active mission suppression, public/private routing, or Source Recall
+lifecycle rules.
+
+When Dynamic Pulse is enabled, semantic inquiry candidates carry user-value rationale, evidence
+refs, Source Recall status, privacy risk, novelty, expected user value, and false authority flags.
+The model only words a message after deterministic policy has allowed delivery. Recent ignored,
+dismissed, negative, or muted outcomes make future similar candidates stricter instead of noisier.
+
 ## Memory and continuity model
 
 Main surfaces:

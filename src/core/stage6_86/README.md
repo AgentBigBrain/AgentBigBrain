@@ -5,7 +5,7 @@ This subsystem owns the canonical clustered Stage 6.86 runtime helpers as they m
 legacy top-level `stage6_86*` files.
 
 The current extracted slice moves bridge-question, conversation-stack, entity-graph, media-continuity,
-pulse-candidate, runtime-action, and runtime-state ownership behind:
+pulse-candidate, proactive-inquiry, runtime-action, and runtime-state ownership behind:
 - `bridgeQuestions.ts`
 - `bridgeQuestionTimingSupport.ts`
 - `conversationStack.ts`
@@ -18,6 +18,7 @@ pulse-candidate, runtime-action, and runtime-state ownership behind:
 - `mediaContinuityLinking.ts`
 - `memoryGovernance.ts`
 - `openLoops.ts`
+- `proactiveInquiryCandidates.ts`
 - `pulseCandidates.ts`
 - `pulseCandidateSupport.ts`
 - `runtimeActions.ts`
@@ -53,6 +54,8 @@ Canonical behavior for those entrypoints now lives here.
 - deterministic interpreted-media continuity-linking hints for Stage 6.86 recall grounding
 - deterministic pulse-candidate generation, suppression, and emission-history normalization for
   Stage 6.86
+- deterministic proactive-inquiry candidate contracts that keep user-value rationale, evidence,
+  risk, novelty, and authority flags separate from delivery permission
 - deterministic runtime-action execution for Stage 6.86 `memory_mutation` and `pulse_emit` flows
 - deterministic memory-governance receipts, conflict checks, and rollback parity
 - deterministic bounded token-sequence open-loop trigger detection plus open-loop creation, resolution, and pulse-selection helpers
@@ -91,7 +94,8 @@ Canonical behavior for those entrypoints now lives here.
 Update this README when:
 - a file is added, removed, or renamed under `src/core/stage6_86/`
 - canonical Stage 6.86 bridge-question, conversation-stack, entity-graph, media-continuity,
-  memory-governance, open-loop, pulse-candidate, runtime-action, or runtime-state ownership moves
+  memory-governance, open-loop, pulse-candidate, proactive-inquiry, runtime-action, or
+  runtime-state ownership moves
 - any stable `stage6_86*.ts` compatibility entrypoint changes role
 - deterministic Stage 6.86 runtime behavior changes materially
 - the related-test surface changes because Stage 6.86 ownership moved
