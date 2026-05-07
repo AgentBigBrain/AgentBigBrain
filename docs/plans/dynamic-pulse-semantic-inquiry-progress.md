@@ -620,7 +620,7 @@ S5-wording-outcome-learning
 
 ### Branch / Checkpoint Commit
 
-feat/dynamic-pulse-semantic-inquiry / pending
+feat/dynamic-pulse-semantic-inquiry / 52f9fd7
 
 ### State
 
@@ -717,7 +717,7 @@ permission, or unrelated gateway/transport behavior changes.
 
 ### Completion Note
 
-- checkpoint commit hash: pending
+- checkpoint commit hash: 52f9fd7
 - files changed: pulse UX runtime, pulse emission lifecycle, focused pulse UX/outcome tests,
   progress ledger
 - tests added: pulse emission lifecycle outcome metadata tests and typed pulse UX metadata
@@ -730,3 +730,124 @@ permission, or unrelated gateway/transport behavior changes.
 - production defaults after the slice: unchanged
 - pulse frequency became: equal
 - next slice unblocked: yes, S6 can build the multi-day evidence matrix
+
+## 2026-05-07 - S6-multiday-evidence-matrix
+
+### Slice ID
+
+S6-multiday-evidence-matrix
+
+### Branch / Checkpoint Commit
+
+feat/dynamic-pulse-semantic-inquiry / pending
+
+### State
+
+passed
+
+### Objective
+
+Prove multi-day proactive inquiry behavior improves candidate quality without increasing default
+proactivity or weakening suppression.
+
+### Owner Files Inspected
+
+- `scripts/evidence/dynamicPulseSemanticInquiryMatrix.ts`
+- `tests/scripts/dynamicPulseSemanticInquiryMatrix.test.ts`
+- `tests/fixtures/dynamicPulseSemanticInquiryScenarios.json`
+- `scripts/evidence/sourceRecallEvidenceMatrix.ts`
+- `tests/scripts/sourceRecallEvidenceMatrix.test.ts`
+- `scripts/evidence/stage6_86PulseCandidates.ts`
+
+### Read-Only Context Files Inspected
+
+- `src/core/stage6_86/proactiveInquiryCandidates.ts`
+- `src/interfaces/proactiveRuntime/deliveryPolicy.ts`
+- `src/core/stage6_86/pulseCandidateSupport.ts`
+
+### Prohibited Changes For This Slice
+
+- Do not change runtime delivery behavior.
+- Do not enable pulse defaults.
+- Do not treat schema-only, mocked-provider, or blocked-dependency proof as live runtime proof.
+- Do not add live Telegram behavior.
+- Do not store private source chunks in evidence artifacts.
+
+### Precondition Verification
+
+- current code seam: S0-S5 implemented candidate, policy, wording, and outcome surfaces; no
+  multi-day evidence matrix existed for semantic inquiry behavior.
+- dependency state: S0-S5 checkpoint commits exist and S5 passed.
+- Source Recall state if relevant: matrix uses synthetic Source Recall status/ref metadata only and
+  validates lifecycle suppression; no production retrieval callsite is added.
+- model/backend state if relevant: model-unavailable and malformed/low-confidence model cases are
+  explicit blocked/schema-only scenarios.
+
+### Tests To Add First
+
+- Matrix test requiring all positive and negative scenarios.
+- Matrix test proving authority flags remain false and proof modes are distinct.
+- Matrix test proving Source Recall lifecycle and prompt-injection suppression.
+- Matrix test proving outcome learning without increased proactivity.
+
+### Implementation Tasks
+
+- Added `scripts/evidence/dynamicPulseSemanticInquiryMatrix.ts`.
+- Added 35 synthetic multi-day scenarios covering required positives and negative controls.
+- Added matrix tests for required scenario coverage, proof-mode separation, Source Recall lifecycle
+  suppression, prompt-injection suppression, and suppression/emission balance.
+- Generated review-safe artifact at
+  `runtime/evidence/dynamic_pulse/dynamic_pulse_semantic_inquiry_matrix.json`.
+
+### Acceptance Criteria
+
+- Matrix proves user-requested follow-up, stale fact revalidation, open-loop resume, useful
+  feedback adaptation, missing-constraint proposal, and private-safe Source Recall support.
+- Matrix includes required negative controls for disabled pulse, disabled dynamic pulse, opt-in,
+  quiet hours, cooldown, daily cap, active mission, public/private safety, Source Recall lifecycle,
+  assistant/task/media-document source limits, model unavailable, malformed/low-confidence model
+  candidate, low user value, repeated ignored/dismissed pulse, exact pulse off, and prompt
+  injection markers.
+- Matrix shows at least as many suppressions as emissions.
+- Schema-only and blocked-dependency cases cannot claim runtime delivery proof.
+- Source Recall evidence cannot authorize delivery.
+
+### Required Commands
+
+- `npx tsx tests/scripts/dynamicPulseSemanticInquiryMatrix.test.ts` - passed.
+- `npx tsx scripts/evidence/dynamicPulseSemanticInquiryMatrix.ts` - passed; generated matrix
+  summary total=35, passed=35, failed=0, emissions=6, suppressions=29.
+- `npm run check:test-types` - passed.
+- `npm run build` - passed.
+- `npm run check:docs` - passed.
+
+### Evidence Required
+
+The matrix artifact reports required output fields for each scenario: scenario id, evidence mode,
+candidate proposed, candidate type, Source Recall status, delivery decision, suppression reason,
+message emitted, authority flags, outcome-learning effect, proof category, and live dependency
+status.
+
+### Sensitive Scan Scope
+
+Changed matrix script, scenario fixture, matrix test, generated evidence artifact, and progress
+docs. Focused scan found only the script's synthetic scan-pattern constants; no private fixture
+strings, token-shaped secret values, key material, or local desktop paths were present in generated
+evidence or docs.
+
+### Stop Conditions
+
+Stop if S6 requires live delivery changes, default pulse enablement, production Source Recall
+retrieval wiring, or reclassifying mock/schema evidence as runtime proof.
+
+### Completion Note
+
+- checkpoint commit hash: pending
+- files changed: dynamic pulse semantic inquiry matrix script, fixture, tests, progress ledger
+- tests added: multi-day matrix scenario coverage and authority/proof-mode tests
+- behavior changed: evidence coverage only; no runtime delivery path changed
+- behavior intentionally not changed: no Agent Pulse default enablement, no delivery policy
+  relaxation, no Source Recall retrieval wiring, no live Telegram behavior
+- production defaults after the slice: unchanged
+- pulse frequency became: equal in runtime; matrix shows 29 suppressions and 6 emissions
+- next slice unblocked: yes, S7 can document the operator contract
