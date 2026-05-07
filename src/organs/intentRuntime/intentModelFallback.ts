@@ -7,7 +7,8 @@ import {
   IntentInterpreterContext,
   InterpretedConversationIntent,
   PulseControlMode,
-  PulseLexicalClassification
+  PulseLexicalClassification,
+  PulsePreferenceCandidate
 } from "./contracts";
 
 export const MAX_MODEL_INTERPRET_INPUT_CHARS = 320;
@@ -74,6 +75,35 @@ export function buildPulseIntent(
   return {
     intentType: "pulse_control",
     pulseMode,
+    confidence: clampConfidence(confidence),
+    rationale,
+    source,
+    lexicalClassification
+  };
+}
+
+/**
+ * Builds a typed pulse-preference candidate result. Preference candidates are evidence only; they
+ * never grant delivery permission or override deterministic pulse policy.
+ *
+ * @param candidate - Bounded preference candidate.
+ * @param confidence - Confidence score for the interpretation.
+ * @param rationale - Human-readable explanation.
+ * @param source - Decision source.
+ * @param lexicalClassification - Optional lexical classification payload.
+ * @returns Pulse-preference intent payload.
+ */
+export function buildPulsePreferenceIntent(
+  candidate: PulsePreferenceCandidate,
+  confidence: number,
+  rationale: string,
+  source: InterpretedConversationIntent["source"],
+  lexicalClassification: PulseLexicalClassification | null = null
+): InterpretedConversationIntent {
+  return {
+    intentType: "pulse_preference",
+    pulseMode: null,
+    pulsePreferenceCandidate: candidate,
     confidence: clampConfidence(confidence),
     rationale,
     source,

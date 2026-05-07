@@ -10,6 +10,7 @@ import { test } from "node:test";
 
 import {
   classifyPulseLexicalCommand,
+  classifyPulsePreferenceCandidate,
   createPulseLexicalRuleContext
 } from "../../src/organs/pulseLexicalClassifier";
 
@@ -66,6 +67,39 @@ test("classifyPulseLexicalCommand does not treat generic workspace start/open la
   assert.equal(result.commandIntent, null);
   assert.equal(result.conflict, false);
   assert.equal(result.matchedRuleId, "pulse_lexical_v1_no_pulse_signal");
+});
+
+test("classifyPulsePreferenceCandidate returns non-authoritative natural preference candidates", () => {
+  const ruleContext = createPulseLexicalRuleContext(null, noOpLog, noOpLog);
+  const commandResult = classifyPulseLexicalCommand("only ask me privately", ruleContext);
+  const preference = classifyPulsePreferenceCandidate("only ask me privately", ruleContext);
+
+  assert.equal(commandResult.category, "NON_COMMAND");
+  assert.equal(commandResult.commandIntent, null);
+  assert.equal(commandResult.matchedRuleId, "pulse_lexical_v1_preference_candidate_non_command");
+  assert.equal(preference?.preferenceIntent, "private_only");
+  assert.equal(preference?.authority.outreachAuthority, false);
+  assert.equal(preference?.authority.deliveryPermission, false);
+  assert.equal(preference?.authority.overridesPolicy, false);
+  assert.equal(preference?.blocked, false);
+});
+
+test("classifyPulsePreferenceCandidate fails closed when configured override loading failed", () => {
+  const failedOverrideContext = createPulseLexicalRuleContext(
+    path.join(os.tmpdir(), "missing-pulse-override.json"),
+    noOpLog,
+    noOpLog
+  );
+  const preference = classifyPulsePreferenceCandidate(
+    "don't ask about that anymore",
+    failedOverrideContext
+  );
+
+  assert.equal(failedOverrideContext.overrideLoadFailed, true);
+  assert.equal(preference?.preferenceIntent, "mute_topic");
+  assert.equal(preference?.blocked, true);
+  assert.equal(preference?.blockReason, "override_load_failed");
+  assert.equal(preference?.authority.deliveryPermission, false);
 });
 
 test("createPulseLexicalRuleContext loads tightening-only override and disables configured intents", async () => {

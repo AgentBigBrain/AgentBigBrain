@@ -10,7 +10,8 @@ import type { ConversationIngressDependencies } from "../../src/interfaces/conve
 import {
   approveProposal,
   handleImplicitProposalFlow,
-  resolveInterpretedPulseCommandArgument
+  resolveInterpretedPulseCommandArgument,
+  resolveInterpretedPulsePreferenceCandidate
 } from "../../src/interfaces/conversationRuntime/followUpResolution";
 import {
   createFollowUpRuleContext,
@@ -160,6 +161,91 @@ test("resolveInterpretedPulseCommandArgument ignores model-assisted pulse contro
         intentType: "pulse_control",
         pulseMode: "off",
         confidence: 0.99,
+        lexicalClassification: null
+      }) as never
+    })
+  );
+
+  assert.equal(interpreted, null);
+});
+
+test("resolveInterpretedPulsePreferenceCandidate returns typed non-authoritative preferences", async () => {
+  const session = buildSession({
+    activeProposal: null,
+    conversationTurns: [
+      {
+        role: "user",
+        text: "Agent Pulse is useful sometimes.",
+        at: "2026-03-07T15:00:00.000Z"
+      }
+    ]
+  });
+
+  const interpreted = await resolveInterpretedPulsePreferenceCandidate(
+    "only ask me privately",
+    session,
+    buildDeps({
+      interpretConversationIntent: async () => ({
+        intentType: "pulse_preference",
+        pulseMode: null,
+        pulsePreferenceCandidate: {
+          preferenceIntent: "private_only",
+          confidenceTier: "MED",
+          matchedRuleId: "pulse_preference_v1_private_only",
+          rulepackVersion: "PulseLexicalRulepackV1",
+          subjectHint: null,
+          scheduledHint: null,
+          source: "lexical_candidate",
+          authority: {
+            outreachAuthority: false,
+            deliveryPermission: false,
+            overridesPolicy: false
+          },
+          blocked: false,
+          blockReason: null
+        },
+        confidence: 0.9,
+        rationale: "Preference only.",
+        source: "deterministic",
+        lexicalClassification: null
+      }) as never
+    })
+  );
+
+  assert.equal(interpreted?.preferenceCandidate.preferenceIntent, "private_only");
+  assert.equal(interpreted?.preferenceCandidate.authority.outreachAuthority, false);
+  assert.equal(interpreted?.preferenceCandidate.authority.deliveryPermission, false);
+});
+
+test("resolveInterpretedPulsePreferenceCandidate fails closed on blocked preference candidates", async () => {
+  const session = buildSession({ activeProposal: null });
+
+  const interpreted = await resolveInterpretedPulsePreferenceCandidate(
+    "don't ask about that anymore",
+    session,
+    buildDeps({
+      interpretConversationIntent: async () => ({
+        intentType: "pulse_preference",
+        pulseMode: null,
+        pulsePreferenceCandidate: {
+          preferenceIntent: "mute_topic",
+          confidenceTier: "MED",
+          matchedRuleId: "pulse_preference_v1_mute_topic",
+          rulepackVersion: "PulseLexicalRulepackV1",
+          subjectHint: "that",
+          scheduledHint: null,
+          source: "lexical_candidate",
+          authority: {
+            outreachAuthority: false,
+            deliveryPermission: false,
+            overridesPolicy: false
+          },
+          blocked: true,
+          blockReason: "override_load_failed"
+        },
+        confidence: 0,
+        rationale: "Blocked.",
+        source: "deterministic",
         lexicalClassification: null
       }) as never
     })
