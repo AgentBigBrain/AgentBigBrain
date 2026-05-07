@@ -75,6 +75,26 @@ The live conversation-continuity layer for the active interaction. It owns the c
 entity graph, open loops, pulse state, and runtime-action continuity. It can read profile memory,
 but it is not the same thing as durable profile memory.
 
+## Agent Pulse
+
+The opt-in proactive check-in surface. Agent Pulse is split into controls, candidate generation,
+delivery policy, wording, and outcome learning. Exact `/pulse` commands remain deterministic.
+Natural pulse preferences can become typed preference candidates, but they do not immediately
+authorize outreach.
+
+Dynamic Pulse can propose proactive inquiry candidates from recent conversation, open loops,
+memory, graph signals, and Source Recall evidence. Deterministic policy decides whether ABB may
+interrupt. The model may word an approved check-in after permission, but it does not grant delivery
+authority.
+
+## Proactive inquiry candidate
+
+A typed proposal for a potentially useful question. It carries an inquiry type, user-value reason,
+question intent, evidence refs, Source Recall status, privacy risk, novelty, expected user value,
+and non-authority flags. A candidate can explain why a question might help; it cannot deliver a
+message, write memory, approve an action, mark work complete, or bypass quiet hours, cooldowns,
+caps, routing, or public/private safety.
+
 ## Markdown instruction skill
 
 A reusable Markdown guidance file selected by the skill registry. It can guide planning for site

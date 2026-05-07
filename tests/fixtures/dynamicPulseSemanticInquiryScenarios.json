@@ -1,0 +1,927 @@
+[
+  {
+    "id": "day1_user_requested_followup",
+    "day": 1,
+    "description": "User-requested follow-up becomes a private candidate.",
+    "evidenceMode": "runtime_observed",
+    "proofCategory": "candidate_generation",
+    "reasonCode": "USER_REQUESTED_FOLLOWUP",
+    "targetMode": "private",
+    "sourceRecallStatus": "not_used",
+    "expectedUserValue": 0.72,
+    "novelty": 0.88,
+    "privacyRisk": "none",
+    "publicSafe": true,
+    "activeMissionSafe": true,
+    "controls": {
+      "agentPulseEnabled": true,
+      "dynamicPulseEnabled": true,
+      "optedIn": true
+    },
+    "expected": {
+      "candidateProposed": true,
+      "messageEmitted": true,
+      "suppressionReason": null
+    }
+  },
+  {
+    "id": "stale_fact_revalidation_private",
+    "day": 4,
+    "description": "Stale fact revalidation becomes a private candidate.",
+    "evidenceMode": "runtime_observed",
+    "proofCategory": "candidate_generation",
+    "reasonCode": "STALE_FACT_REVALIDATION",
+    "targetMode": "private",
+    "sourceRecallStatus": "not_used",
+    "expectedUserValue": 0.66,
+    "novelty": 0.82,
+    "privacyRisk": "none",
+    "publicSafe": true,
+    "activeMissionSafe": true,
+    "controls": {
+      "agentPulseEnabled": true,
+      "dynamicPulseEnabled": true,
+      "optedIn": true
+    },
+    "expected": {
+      "candidateProposed": true,
+      "messageEmitted": true,
+      "suppressionReason": null
+    }
+  },
+  {
+    "id": "open_loop_resume_candidate",
+    "day": 1,
+    "description": "Open loop resume becomes a candidate.",
+    "evidenceMode": "runtime_observed",
+    "proofCategory": "candidate_generation",
+    "reasonCode": "OPEN_LOOP_RESUME",
+    "targetMode": "private",
+    "sourceRecallStatus": "not_used",
+    "expectedUserValue": 0.64,
+    "novelty": 0.76,
+    "privacyRisk": "none",
+    "publicSafe": true,
+    "activeMissionSafe": true,
+    "controls": {
+      "agentPulseEnabled": true,
+      "dynamicPulseEnabled": true,
+      "optedIn": true
+    },
+    "expected": {
+      "candidateProposed": true,
+      "messageEmitted": true,
+      "suppressionReason": null
+    }
+  },
+  {
+    "id": "useful_feedback_boosts_value",
+    "day": 6,
+    "description": "Useful feedback increases a future candidate's expected value.",
+    "evidenceMode": "runtime_observed",
+    "proofCategory": "outcome_learning",
+    "reasonCode": "USER_REQUESTED_FOLLOWUP",
+    "targetMode": "private",
+    "sourceRecallStatus": "not_used",
+    "expectedUserValue": 0.28,
+    "novelty": 0.7,
+    "privacyRisk": "none",
+    "publicSafe": true,
+    "activeMissionSafe": true,
+    "outcomeFeedback": "useful",
+    "controls": {
+      "agentPulseEnabled": true,
+      "dynamicPulseEnabled": true,
+      "optedIn": true
+    },
+    "expected": {
+      "candidateProposed": true,
+      "messageEmitted": true,
+      "suppressionReason": null
+    }
+  },
+  {
+    "id": "missing_constraint_question",
+    "day": 7,
+    "description": "Semantic inquiry can propose a missing-constraint question.",
+    "evidenceMode": "mocked_provider",
+    "proofCategory": "candidate_generation",
+    "reasonCode": "SAFETY_HOLD",
+    "targetMode": "private",
+    "sourceRecallStatus": "not_used",
+    "expectedUserValue": 0.61,
+    "novelty": 0.83,
+    "privacyRisk": "none",
+    "publicSafe": true,
+    "activeMissionSafe": true,
+    "controls": {
+      "agentPulseEnabled": true,
+      "dynamicPulseEnabled": true,
+      "optedIn": true
+    },
+    "expected": {
+      "candidateProposed": true,
+      "messageEmitted": true,
+      "suppressionReason": null
+    }
+  },
+  {
+    "id": "private_safe_source_recall_supports_candidate",
+    "day": 7,
+    "description": "Private-safe Source Recall evidence supports a candidate without authorizing delivery.",
+    "evidenceMode": "source_recall_retrieval",
+    "proofCategory": "source_recall_retrieval",
+    "reasonCode": "OPEN_LOOP_RESUME",
+    "targetMode": "private",
+    "sourceRecallStatus": "available",
+    "requiresSourceRecall": true,
+    "sourceRecallRefs": ["source_recall_private_safe_1"],
+    "expectedUserValue": 0.7,
+    "novelty": 0.82,
+    "privacyRisk": "none",
+    "publicSafe": false,
+    "activeMissionSafe": true,
+    "controls": {
+      "agentPulseEnabled": true,
+      "dynamicPulseEnabled": true,
+      "optedIn": true
+    },
+    "expected": {
+      "candidateProposed": true,
+      "messageEmitted": true,
+      "suppressionReason": null
+    }
+  },
+  {
+    "id": "agent_pulse_disabled",
+    "day": 2,
+    "description": "Agent Pulse disabled suppresses all inquiry behavior.",
+    "evidenceMode": "deterministic_suppression",
+    "proofCategory": "deterministic_suppression",
+    "reasonCode": "OPEN_LOOP_RESUME",
+    "targetMode": "private",
+    "sourceRecallStatus": "not_used",
+    "expectedUserValue": 0.8,
+    "novelty": 0.9,
+    "privacyRisk": "none",
+    "publicSafe": true,
+    "activeMissionSafe": true,
+    "controls": {
+      "agentPulseEnabled": false,
+      "dynamicPulseEnabled": true,
+      "optedIn": true
+    },
+    "expected": {
+      "candidateProposed": false,
+      "messageEmitted": false,
+      "suppressionReason": "agent_pulse_disabled"
+    }
+  },
+  {
+    "id": "dynamic_pulse_disabled",
+    "day": 2,
+    "description": "Dynamic Pulse disabled suppresses semantic inquiry.",
+    "evidenceMode": "deterministic_suppression",
+    "proofCategory": "deterministic_suppression",
+    "reasonCode": "OPEN_LOOP_RESUME",
+    "targetMode": "private",
+    "sourceRecallStatus": "not_used",
+    "expectedUserValue": 0.8,
+    "novelty": 0.9,
+    "privacyRisk": "none",
+    "publicSafe": true,
+    "activeMissionSafe": true,
+    "controls": {
+      "agentPulseEnabled": true,
+      "dynamicPulseEnabled": false,
+      "optedIn": true
+    },
+    "expected": {
+      "candidateProposed": false,
+      "messageEmitted": false,
+      "suppressionReason": "dynamic_pulse_disabled"
+    }
+  },
+  {
+    "id": "user_not_opted_in",
+    "day": 2,
+    "description": "User opt-in remains required.",
+    "evidenceMode": "deterministic_suppression",
+    "proofCategory": "deterministic_suppression",
+    "reasonCode": "USER_REQUESTED_FOLLOWUP",
+    "targetMode": "private",
+    "sourceRecallStatus": "not_used",
+    "expectedUserValue": 0.8,
+    "novelty": 0.9,
+    "privacyRisk": "none",
+    "publicSafe": true,
+    "activeMissionSafe": true,
+    "controls": {
+      "agentPulseEnabled": true,
+      "dynamicPulseEnabled": true,
+      "optedIn": false
+    },
+    "expected": {
+      "candidateProposed": false,
+      "messageEmitted": false,
+      "suppressionReason": "user_not_opted_in"
+    }
+  },
+  {
+    "id": "quiet_hours_active",
+    "day": 2,
+    "description": "Quiet hours suppress outreach.",
+    "evidenceMode": "deterministic_suppression",
+    "proofCategory": "deterministic_suppression",
+    "reasonCode": "OPEN_LOOP_RESUME",
+    "targetMode": "private",
+    "sourceRecallStatus": "not_used",
+    "expectedUserValue": 0.7,
+    "novelty": 0.9,
+    "privacyRisk": "none",
+    "publicSafe": true,
+    "activeMissionSafe": true,
+    "controls": {
+      "agentPulseEnabled": true,
+      "dynamicPulseEnabled": true,
+      "optedIn": true,
+      "quietHours": true
+    },
+    "expected": {
+      "candidateProposed": false,
+      "messageEmitted": false,
+      "suppressionReason": "quiet_hours"
+    }
+  },
+  {
+    "id": "cooldown_active",
+    "day": 2,
+    "description": "Cooldown suppresses otherwise eligible inquiry.",
+    "evidenceMode": "deterministic_suppression",
+    "proofCategory": "deterministic_suppression",
+    "reasonCode": "USER_REQUESTED_FOLLOWUP",
+    "targetMode": "private",
+    "sourceRecallStatus": "not_used",
+    "expectedUserValue": 0.7,
+    "novelty": 0.9,
+    "privacyRisk": "none",
+    "publicSafe": true,
+    "activeMissionSafe": true,
+    "controls": {
+      "agentPulseEnabled": true,
+      "dynamicPulseEnabled": true,
+      "optedIn": true,
+      "cooldown": true
+    },
+    "expected": {
+      "candidateProposed": false,
+      "messageEmitted": false,
+      "suppressionReason": "cooldown"
+    }
+  },
+  {
+    "id": "daily_cap_reached",
+    "day": 2,
+    "description": "Daily cap suppresses otherwise eligible inquiry.",
+    "evidenceMode": "deterministic_suppression",
+    "proofCategory": "deterministic_suppression",
+    "reasonCode": "OPEN_LOOP_RESUME",
+    "targetMode": "private",
+    "sourceRecallStatus": "not_used",
+    "expectedUserValue": 0.7,
+    "novelty": 0.9,
+    "privacyRisk": "none",
+    "publicSafe": true,
+    "activeMissionSafe": true,
+    "controls": {
+      "agentPulseEnabled": true,
+      "dynamicPulseEnabled": true,
+      "optedIn": true,
+      "dailyCap": true
+    },
+    "expected": {
+      "candidateProposed": false,
+      "messageEmitted": false,
+      "suppressionReason": "daily_cap"
+    }
+  },
+  {
+    "id": "active_mission_running",
+    "day": 5,
+    "description": "Active mission suppresses proactive outreach.",
+    "evidenceMode": "deterministic_suppression",
+    "proofCategory": "deterministic_suppression",
+    "reasonCode": "OPEN_LOOP_RESUME",
+    "targetMode": "private",
+    "sourceRecallStatus": "not_used",
+    "expectedUserValue": 0.8,
+    "novelty": 0.9,
+    "privacyRisk": "none",
+    "publicSafe": true,
+    "activeMissionSafe": false,
+    "controls": {
+      "agentPulseEnabled": true,
+      "dynamicPulseEnabled": true,
+      "optedIn": true
+    },
+    "expected": {
+      "candidateProposed": true,
+      "messageEmitted": false,
+      "suppressionReason": "active_mission_unsafe"
+    }
+  },
+  {
+    "id": "public_mode_private_evidence",
+    "day": 4,
+    "description": "Public route with private evidence suppresses outreach.",
+    "evidenceMode": "deterministic_suppression",
+    "proofCategory": "deterministic_suppression",
+    "reasonCode": "STALE_FACT_REVALIDATION",
+    "targetMode": "public",
+    "sourceRecallStatus": "not_used",
+    "expectedUserValue": 0.7,
+    "novelty": 0.8,
+    "privacyRisk": "private_only",
+    "publicSafe": false,
+    "activeMissionSafe": true,
+    "controls": {
+      "agentPulseEnabled": true,
+      "dynamicPulseEnabled": true,
+      "optedIn": true
+    },
+    "expected": {
+      "candidateProposed": true,
+      "messageEmitted": false,
+      "suppressionReason": "public_route_private_evidence"
+    }
+  },
+  {
+    "id": "source_recall_disabled",
+    "day": 3,
+    "description": "Required Source Recall evidence disabled suppresses candidate generation.",
+    "evidenceMode": "deterministic_suppression",
+    "proofCategory": "deterministic_suppression",
+    "reasonCode": "OPEN_LOOP_RESUME",
+    "targetMode": "private",
+    "sourceRecallStatus": "disabled",
+    "requiresSourceRecall": true,
+    "expectedUserValue": 0.75,
+    "novelty": 0.8,
+    "privacyRisk": "none",
+    "publicSafe": true,
+    "activeMissionSafe": true,
+    "controls": {
+      "agentPulseEnabled": true,
+      "dynamicPulseEnabled": true,
+      "optedIn": true
+    },
+    "expected": {
+      "candidateProposed": false,
+      "messageEmitted": false,
+      "suppressionReason": "source_recall_disabled"
+    }
+  },
+  {
+    "id": "source_recall_blocked",
+    "day": 3,
+    "description": "Blocked Source Recall dependency cannot be treated as evidence.",
+    "evidenceMode": "live_dependency_blocked",
+    "proofCategory": "blocked_dependency",
+    "reasonCode": "OPEN_LOOP_RESUME",
+    "targetMode": "private",
+    "sourceRecallStatus": "blocked",
+    "requiresSourceRecall": true,
+    "expectedUserValue": 0.75,
+    "novelty": 0.8,
+    "privacyRisk": "none",
+    "publicSafe": true,
+    "activeMissionSafe": true,
+    "controls": {
+      "agentPulseEnabled": true,
+      "dynamicPulseEnabled": true,
+      "optedIn": true
+    },
+    "expected": {
+      "candidateProposed": false,
+      "messageEmitted": false,
+      "suppressionReason": "source_recall_blocked"
+    }
+  },
+  {
+    "id": "source_recall_forgotten",
+    "day": 3,
+    "description": "Forgotten Source Recall records cannot support proactive outreach.",
+    "evidenceMode": "source_recall_retrieval",
+    "proofCategory": "source_recall_retrieval",
+    "reasonCode": "OPEN_LOOP_RESUME",
+    "targetMode": "private",
+    "sourceRecallStatus": "available",
+    "requiresSourceRecall": true,
+    "sourceRecallRefs": ["source_forgotten_1"],
+    "sourceRecallBlockReasons": ["forgotten"],
+    "expectedUserValue": 0.75,
+    "novelty": 0.8,
+    "privacyRisk": "none",
+    "publicSafe": true,
+    "activeMissionSafe": true,
+    "controls": {
+      "agentPulseEnabled": true,
+      "dynamicPulseEnabled": true,
+      "optedIn": true
+    },
+    "expected": {
+      "candidateProposed": true,
+      "messageEmitted": false,
+      "suppressionReason": "source_recall_unusable"
+    }
+  },
+  {
+    "id": "source_recall_redacted",
+    "day": 3,
+    "description": "Redacted Source Recall records cannot support proactive outreach.",
+    "evidenceMode": "source_recall_retrieval",
+    "proofCategory": "source_recall_retrieval",
+    "reasonCode": "OPEN_LOOP_RESUME",
+    "targetMode": "private",
+    "sourceRecallStatus": "available",
+    "requiresSourceRecall": true,
+    "sourceRecallRefs": ["source_redacted_1"],
+    "sourceRecallBlockReasons": ["redacted"],
+    "expectedUserValue": 0.75,
+    "novelty": 0.8,
+    "privacyRisk": "none",
+    "publicSafe": true,
+    "activeMissionSafe": true,
+    "controls": {
+      "agentPulseEnabled": true,
+      "dynamicPulseEnabled": true,
+      "optedIn": true
+    },
+    "expected": {
+      "candidateProposed": true,
+      "messageEmitted": false,
+      "suppressionReason": "source_recall_unusable"
+    }
+  },
+  {
+    "id": "source_recall_quarantined",
+    "day": 3,
+    "description": "Quarantined Source Recall records cannot support proactive outreach.",
+    "evidenceMode": "source_recall_retrieval",
+    "proofCategory": "source_recall_retrieval",
+    "reasonCode": "OPEN_LOOP_RESUME",
+    "targetMode": "private",
+    "sourceRecallStatus": "available",
+    "requiresSourceRecall": true,
+    "sourceRecallRefs": ["source_quarantined_1"],
+    "sourceRecallBlockReasons": ["quarantined"],
+    "expectedUserValue": 0.75,
+    "novelty": 0.8,
+    "privacyRisk": "none",
+    "publicSafe": true,
+    "activeMissionSafe": true,
+    "controls": {
+      "agentPulseEnabled": true,
+      "dynamicPulseEnabled": true,
+      "optedIn": true
+    },
+    "expected": {
+      "candidateProposed": true,
+      "messageEmitted": false,
+      "suppressionReason": "source_recall_unusable"
+    }
+  },
+  {
+    "id": "source_recall_expired",
+    "day": 3,
+    "description": "Expired Source Recall records cannot support proactive outreach.",
+    "evidenceMode": "source_recall_retrieval",
+    "proofCategory": "source_recall_retrieval",
+    "reasonCode": "OPEN_LOOP_RESUME",
+    "targetMode": "private",
+    "sourceRecallStatus": "available",
+    "requiresSourceRecall": true,
+    "sourceRecallRefs": ["source_expired_1"],
+    "sourceRecallBlockReasons": ["expired"],
+    "expectedUserValue": 0.75,
+    "novelty": 0.8,
+    "privacyRisk": "none",
+    "publicSafe": true,
+    "activeMissionSafe": true,
+    "controls": {
+      "agentPulseEnabled": true,
+      "dynamicPulseEnabled": true,
+      "optedIn": true
+    },
+    "expected": {
+      "candidateProposed": true,
+      "messageEmitted": false,
+      "suppressionReason": "source_recall_unusable"
+    }
+  },
+  {
+    "id": "source_recall_public_unsafe",
+    "day": 3,
+    "description": "Public-unsafe Source Recall records cannot support proactive outreach.",
+    "evidenceMode": "source_recall_retrieval",
+    "proofCategory": "source_recall_retrieval",
+    "reasonCode": "OPEN_LOOP_RESUME",
+    "targetMode": "private",
+    "sourceRecallStatus": "available",
+    "requiresSourceRecall": true,
+    "sourceRecallRefs": ["source_public_unsafe_1"],
+    "sourceRecallBlockReasons": ["public_unsafe"],
+    "expectedUserValue": 0.75,
+    "novelty": 0.8,
+    "privacyRisk": "none",
+    "publicSafe": true,
+    "activeMissionSafe": true,
+    "controls": {
+      "agentPulseEnabled": true,
+      "dynamicPulseEnabled": true,
+      "optedIn": true
+    },
+    "expected": {
+      "candidateProposed": true,
+      "messageEmitted": false,
+      "suppressionReason": "source_recall_unusable"
+    }
+  },
+  {
+    "id": "assistant_only_source",
+    "day": 3,
+    "description": "Assistant-only source evidence cannot support proactive outreach.",
+    "evidenceMode": "source_recall_retrieval",
+    "proofCategory": "source_recall_retrieval",
+    "reasonCode": "OPEN_LOOP_RESUME",
+    "targetMode": "private",
+    "sourceRecallStatus": "available",
+    "requiresSourceRecall": true,
+    "sourceRecallRefs": ["assistant_source_1"],
+    "sourceRecallBlockReasons": ["assistant_only"],
+    "expectedUserValue": 0.75,
+    "novelty": 0.8,
+    "privacyRisk": "none",
+    "publicSafe": true,
+    "activeMissionSafe": true,
+    "controls": {
+      "agentPulseEnabled": true,
+      "dynamicPulseEnabled": true,
+      "optedIn": true
+    },
+    "expected": {
+      "candidateProposed": true,
+      "messageEmitted": false,
+      "suppressionReason": "source_recall_unusable"
+    }
+  },
+  {
+    "id": "task_summary_only_source",
+    "day": 3,
+    "description": "Task-summary-only source evidence cannot support proactive outreach.",
+    "evidenceMode": "source_recall_retrieval",
+    "proofCategory": "source_recall_retrieval",
+    "reasonCode": "OPEN_LOOP_RESUME",
+    "targetMode": "private",
+    "sourceRecallStatus": "available",
+    "requiresSourceRecall": true,
+    "sourceRecallRefs": ["task_summary_source_1"],
+    "sourceRecallBlockReasons": ["task_summary_only"],
+    "expectedUserValue": 0.75,
+    "novelty": 0.8,
+    "privacyRisk": "none",
+    "publicSafe": true,
+    "activeMissionSafe": true,
+    "controls": {
+      "agentPulseEnabled": true,
+      "dynamicPulseEnabled": true,
+      "optedIn": true
+    },
+    "expected": {
+      "candidateProposed": true,
+      "messageEmitted": false,
+      "suppressionReason": "source_recall_unusable"
+    }
+  },
+  {
+    "id": "media_document_without_policy",
+    "day": 3,
+    "description": "Media/document evidence without policy cannot support outreach.",
+    "evidenceMode": "source_recall_retrieval",
+    "proofCategory": "source_recall_retrieval",
+    "reasonCode": "OPEN_LOOP_RESUME",
+    "targetMode": "private",
+    "sourceRecallStatus": "available",
+    "requiresSourceRecall": true,
+    "sourceRecallRefs": ["media_document_source_1"],
+    "sourceRecallBlockReasons": ["media_document_without_policy"],
+    "expectedUserValue": 0.75,
+    "novelty": 0.8,
+    "privacyRisk": "none",
+    "publicSafe": true,
+    "activeMissionSafe": true,
+    "controls": {
+      "agentPulseEnabled": true,
+      "dynamicPulseEnabled": true,
+      "optedIn": true
+    },
+    "expected": {
+      "candidateProposed": true,
+      "messageEmitted": false,
+      "suppressionReason": "source_recall_unusable"
+    }
+  },
+  {
+    "id": "model_unavailable",
+    "day": 7,
+    "description": "Unavailable model cannot fabricate semantic inquiry evidence.",
+    "evidenceMode": "live_dependency_blocked",
+    "proofCategory": "blocked_dependency",
+    "reasonCode": "OPEN_LOOP_RESUME",
+    "targetMode": "private",
+    "sourceRecallStatus": "not_used",
+    "expectedUserValue": 0.75,
+    "novelty": 0.8,
+    "privacyRisk": "none",
+    "publicSafe": true,
+    "activeMissionSafe": true,
+    "controls": {
+      "agentPulseEnabled": true,
+      "dynamicPulseEnabled": true,
+      "optedIn": true,
+      "modelUnavailable": true
+    },
+    "expected": {
+      "candidateProposed": false,
+      "messageEmitted": false,
+      "suppressionReason": "model_unavailable"
+    }
+  },
+  {
+    "id": "malformed_semantic_inquiry_candidate",
+    "day": 7,
+    "description": "Malformed model candidate fails closed.",
+    "evidenceMode": "schema_only",
+    "proofCategory": "schema_validation",
+    "reasonCode": "OPEN_LOOP_RESUME",
+    "targetMode": "private",
+    "sourceRecallStatus": "not_used",
+    "expectedUserValue": 0.75,
+    "novelty": 0.8,
+    "privacyRisk": "none",
+    "publicSafe": true,
+    "activeMissionSafe": true,
+    "controls": {
+      "agentPulseEnabled": true,
+      "dynamicPulseEnabled": true,
+      "optedIn": true,
+      "malformedModelCandidate": true
+    },
+    "expected": {
+      "candidateProposed": false,
+      "messageEmitted": false,
+      "suppressionReason": "malformed_model_candidate"
+    }
+  },
+  {
+    "id": "low_confidence_model_candidate",
+    "day": 7,
+    "description": "Low-confidence model candidate fails closed.",
+    "evidenceMode": "schema_only",
+    "proofCategory": "schema_validation",
+    "reasonCode": "OPEN_LOOP_RESUME",
+    "targetMode": "private",
+    "sourceRecallStatus": "not_used",
+    "expectedUserValue": 0.75,
+    "novelty": 0.8,
+    "privacyRisk": "none",
+    "publicSafe": true,
+    "activeMissionSafe": true,
+    "controls": {
+      "agentPulseEnabled": true,
+      "dynamicPulseEnabled": true,
+      "optedIn": true,
+      "lowConfidenceModelCandidate": true
+    },
+    "expected": {
+      "candidateProposed": false,
+      "messageEmitted": false,
+      "suppressionReason": "low_confidence_model_candidate"
+    }
+  },
+  {
+    "id": "low_expected_user_value",
+    "day": 2,
+    "description": "Low expected user value suppresses inquiry.",
+    "evidenceMode": "deterministic_suppression",
+    "proofCategory": "deterministic_suppression",
+    "reasonCode": "OPEN_LOOP_RESUME",
+    "targetMode": "private",
+    "sourceRecallStatus": "not_used",
+    "expectedUserValue": 0.22,
+    "novelty": 0.8,
+    "privacyRisk": "none",
+    "publicSafe": true,
+    "activeMissionSafe": true,
+    "controls": {
+      "agentPulseEnabled": true,
+      "dynamicPulseEnabled": true,
+      "optedIn": true
+    },
+    "expected": {
+      "candidateProposed": true,
+      "messageEmitted": false,
+      "suppressionReason": "low_expected_user_value"
+    }
+  },
+  {
+    "id": "repeated_ignored_pulse",
+    "day": 2,
+    "description": "Repeated ignored pulse suppresses similar future candidate.",
+    "evidenceMode": "deterministic_suppression",
+    "proofCategory": "outcome_learning",
+    "reasonCode": "OPEN_LOOP_RESUME",
+    "targetMode": "private",
+    "sourceRecallStatus": "not_used",
+    "expectedUserValue": 0.75,
+    "novelty": 0.8,
+    "privacyRisk": "none",
+    "publicSafe": true,
+    "activeMissionSafe": true,
+    "recentOutcomePattern": "ignored",
+    "controls": {
+      "agentPulseEnabled": true,
+      "dynamicPulseEnabled": true,
+      "optedIn": true
+    },
+    "expected": {
+      "candidateProposed": true,
+      "messageEmitted": false,
+      "suppressionReason": "repeated_negative_outcome"
+    }
+  },
+  {
+    "id": "repeated_dismissed_pulse",
+    "day": 2,
+    "description": "Repeated dismissed pulse suppresses similar future candidate.",
+    "evidenceMode": "deterministic_suppression",
+    "proofCategory": "outcome_learning",
+    "reasonCode": "OPEN_LOOP_RESUME",
+    "targetMode": "private",
+    "sourceRecallStatus": "not_used",
+    "expectedUserValue": 0.75,
+    "novelty": 0.8,
+    "privacyRisk": "none",
+    "publicSafe": true,
+    "activeMissionSafe": true,
+    "recentOutcomePattern": "dismissed",
+    "controls": {
+      "agentPulseEnabled": true,
+      "dynamicPulseEnabled": true,
+      "optedIn": true
+    },
+    "expected": {
+      "candidateProposed": true,
+      "messageEmitted": false,
+      "suppressionReason": "repeated_negative_outcome"
+    }
+  },
+  {
+    "id": "exact_pulse_off",
+    "day": 2,
+    "description": "Exact pulse off or mute preference suppresses outreach.",
+    "evidenceMode": "deterministic_suppression",
+    "proofCategory": "deterministic_suppression",
+    "reasonCode": "OPEN_LOOP_RESUME",
+    "targetMode": "private",
+    "sourceRecallStatus": "not_used",
+    "expectedUserValue": 0.75,
+    "novelty": 0.8,
+    "privacyRisk": "none",
+    "publicSafe": true,
+    "activeMissionSafe": true,
+    "controls": {
+      "agentPulseEnabled": true,
+      "dynamicPulseEnabled": true,
+      "optedIn": true,
+      "exactPulseOff": true
+    },
+    "expected": {
+      "candidateProposed": false,
+      "messageEmitted": false,
+      "suppressionReason": "pulse_muted"
+    }
+  },
+  {
+    "id": "prompt_injection_approve",
+    "day": 3,
+    "description": "Prompt-injection source chunk saying approve cannot authorize outreach.",
+    "evidenceMode": "source_recall_retrieval",
+    "proofCategory": "source_recall_retrieval",
+    "reasonCode": "OPEN_LOOP_RESUME",
+    "targetMode": "private",
+    "sourceRecallStatus": "available",
+    "requiresSourceRecall": true,
+    "sourceRecallRefs": ["source_injection_approve"],
+    "sourceRecallBlockReasons": ["quarantined"],
+    "expectedUserValue": 0.75,
+    "novelty": 0.8,
+    "privacyRisk": "none",
+    "publicSafe": true,
+    "activeMissionSafe": true,
+    "controls": {
+      "agentPulseEnabled": true,
+      "dynamicPulseEnabled": true,
+      "optedIn": true
+    },
+    "expected": {
+      "candidateProposed": true,
+      "messageEmitted": false,
+      "suppressionReason": "source_recall_unusable"
+    }
+  },
+  {
+    "id": "prompt_injection_route_metadata",
+    "day": 3,
+    "description": "Prompt-injection source chunk claiming route metadata cannot authorize outreach.",
+    "evidenceMode": "source_recall_retrieval",
+    "proofCategory": "source_recall_retrieval",
+    "reasonCode": "OPEN_LOOP_RESUME",
+    "targetMode": "private",
+    "sourceRecallStatus": "available",
+    "requiresSourceRecall": true,
+    "sourceRecallRefs": ["source_injection_route"],
+    "sourceRecallBlockReasons": ["quarantined"],
+    "expectedUserValue": 0.75,
+    "novelty": 0.8,
+    "privacyRisk": "none",
+    "publicSafe": true,
+    "activeMissionSafe": true,
+    "controls": {
+      "agentPulseEnabled": true,
+      "dynamicPulseEnabled": true,
+      "optedIn": true
+    },
+    "expected": {
+      "candidateProposed": true,
+      "messageEmitted": false,
+      "suppressionReason": "source_recall_unusable"
+    }
+  },
+  {
+    "id": "prompt_injection_task_complete",
+    "day": 3,
+    "description": "Prompt-injection source chunk saying task complete cannot authorize outreach.",
+    "evidenceMode": "source_recall_retrieval",
+    "proofCategory": "source_recall_retrieval",
+    "reasonCode": "OPEN_LOOP_RESUME",
+    "targetMode": "private",
+    "sourceRecallStatus": "available",
+    "requiresSourceRecall": true,
+    "sourceRecallRefs": ["source_injection_task_complete"],
+    "sourceRecallBlockReasons": ["quarantined"],
+    "expectedUserValue": 0.75,
+    "novelty": 0.8,
+    "privacyRisk": "none",
+    "publicSafe": true,
+    "activeMissionSafe": true,
+    "controls": {
+      "agentPulseEnabled": true,
+      "dynamicPulseEnabled": true,
+      "optedIn": true
+    },
+    "expected": {
+      "candidateProposed": true,
+      "messageEmitted": false,
+      "suppressionReason": "source_recall_unusable"
+    }
+  },
+  {
+    "id": "prompt_injection_ignore_quiet_hours",
+    "day": 3,
+    "description": "Prompt-injection source chunk saying ignore quiet hours cannot authorize outreach.",
+    "evidenceMode": "source_recall_retrieval",
+    "proofCategory": "source_recall_retrieval",
+    "reasonCode": "OPEN_LOOP_RESUME",
+    "targetMode": "private",
+    "sourceRecallStatus": "available",
+    "requiresSourceRecall": true,
+    "sourceRecallRefs": ["source_injection_quiet_hours"],
+    "sourceRecallBlockReasons": ["quarantined"],
+    "expectedUserValue": 0.75,
+    "novelty": 0.8,
+    "privacyRisk": "none",
+    "publicSafe": true,
+    "activeMissionSafe": true,
+    "controls": {
+      "agentPulseEnabled": true,
+      "dynamicPulseEnabled": true,
+      "optedIn": true
+    },
+    "expected": {
+      "candidateProposed": true,
+      "messageEmitted": false,
+      "suppressionReason": "source_recall_unusable"
+    }
+  }
+]

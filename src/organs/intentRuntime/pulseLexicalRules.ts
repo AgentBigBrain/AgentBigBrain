@@ -12,7 +12,9 @@ import {
   PulseLexicalClassification,
   PulseLexicalConfidenceTier,
   PulseLexicalOverrideV1,
-  PulseLexicalRuleContext
+  PulseLexicalRuleContext,
+  PulsePreferenceCandidate,
+  PulsePreferenceIntent
 } from "./contracts";
 
 interface NormalizedPulseLexicalOverrideV1 {
@@ -241,7 +243,8 @@ function buildDefaultPulseLexicalRuleContext(): PulseLexicalRuleContext {
     requirePulseKeywordForVisibility: false,
     requirePulseKeywordForStatus: true,
     overrideFingerprint: null,
-    overrideSourcePath: null
+    overrideSourcePath: null,
+    overrideLoadFailed: false
   };
 }
 
@@ -265,7 +268,11 @@ export function createPulseLexicalRuleContext(
 
   const loaded = loadPulseLexicalOverrideFromPath(overridePath, logInfo, logWarn);
   if (!loaded) {
-    return defaultContext;
+    return {
+      ...defaultContext,
+      overrideSourcePath: path.resolve(process.cwd(), overridePath),
+      overrideLoadFailed: true
+    };
   }
 
   return {
@@ -275,7 +282,8 @@ export function createPulseLexicalRuleContext(
     requirePulseKeywordForVisibility: loaded.override.requirePulseKeywordForVisibility,
     requirePulseKeywordForStatus: loaded.override.requirePulseKeywordForStatus,
     overrideFingerprint: loaded.fingerprint,
-    overrideSourcePath: loaded.sourcePath
+    overrideSourcePath: loaded.sourcePath,
+    overrideLoadFailed: false
   };
 }
 
@@ -350,6 +358,167 @@ function resolveDirectPhraseIntent(text: string): PulseControlMode | null {
     }
   }
   return null;
+}
+
+interface PulsePreferenceRuleMatch {
+  preferenceIntent: PulsePreferenceIntent;
+  confidenceTier: PulseLexicalConfidenceTier;
+  matchedRuleId: string;
+  subjectHint: string | null;
+  scheduledHint: string | null;
+}
+
+/**
+ * Builds a non-authoritative pulse preference candidate.
+ *
+ * @param match - Matched preference rule.
+ * @param ruleContext - Active pulse rule context.
+ * @param blocked - Whether the candidate is blocked by rule-context state.
+ * @param blockReason - Block reason when blocked.
+ * @returns Bounded preference candidate.
+ */
+function buildPreferenceCandidate(
+  match: PulsePreferenceRuleMatch,
+  ruleContext: PulseLexicalRuleContext,
+  blocked: boolean,
+  blockReason: PulsePreferenceCandidate["blockReason"]
+): PulsePreferenceCandidate {
+  return {
+    preferenceIntent: match.preferenceIntent,
+    confidenceTier: match.confidenceTier,
+    matchedRuleId: match.matchedRuleId,
+    rulepackVersion: ruleContext.rulepackVersion,
+    subjectHint: match.subjectHint,
+    scheduledHint: match.scheduledHint,
+    source: "lexical_candidate",
+    authority: {
+      outreachAuthority: false,
+      deliveryPermission: false,
+      overridesPolicy: false
+    },
+    blocked,
+    blockReason
+  };
+}
+
+/**
+ * Extracts a short quoted subject hint from a matched preference phrase.
+ *
+ * @param value - Candidate subject text.
+ * @returns Bounded subject hint or `null`.
+ */
+function normalizeSubjectHint(value: string | undefined): string | null {
+  if (!value) {
+    return null;
+  }
+  const normalized = normalizeWhitespace(value.replace(/[.!?]+$/g, ""));
+  if (!normalized) {
+    return null;
+  }
+  return normalized.length <= 80 ? normalized : `${normalized.slice(0, 77)}...`;
+}
+
+/**
+ * Resolves natural pulse-preference language into a non-authoritative rule match.
+ *
+ * @param normalizedText - Normalized input text.
+ * @returns Preference rule match or `null`.
+ */
+function resolvePulsePreferenceRuleMatch(normalizedText: string): PulsePreferenceRuleMatch | null {
+  const quietHoursMatch = normalizedText.match(
+    /\b(?:stop|don't|do not)\b.*\b(?:bring(?:ing)? up|ask(?:ing)? about|mention(?:ing)?|talk(?:ing)? about)\b\s+(?<subject>.+?)\s+\b(?:at night|after hours|late)\b/i
+  );
+  if (quietHoursMatch?.groups?.subject) {
+    return {
+      preferenceIntent: "quiet_hours_topic",
+      confidenceTier: "MED",
+      matchedRuleId: "pulse_preference_v1_quiet_hours_topic",
+      subjectHint: normalizeSubjectHint(quietHoursMatch.groups.subject),
+      scheduledHint: "night"
+    };
+  }
+
+  const muteTopicMatch = normalizedText.match(
+    /\b(?:don't|do not|stop)\b.*\b(?:ask(?:ing)? about|bring(?:ing)? up|mention(?:ing)?|talk(?:ing)? about)\b\s+(?<subject>.+?)(?:\s+\b(?:anymore|again)\b)?$/i
+  );
+  if (muteTopicMatch?.groups?.subject) {
+    return {
+      preferenceIntent: "mute_topic",
+      confidenceTier: "MED",
+      matchedRuleId: "pulse_preference_v1_mute_topic",
+      subjectHint: normalizeSubjectHint(muteTopicMatch.groups.subject),
+      scheduledHint: null
+    };
+  }
+
+  if (/\b(?:only|just)\b.*\b(?:ask|check|pulse|message|dm)\b.*\b(?:private|privately|dm)\b/i.test(normalizedText)) {
+    return {
+      preferenceIntent: "private_only",
+      confidenceTier: "MED",
+      matchedRuleId: "pulse_preference_v1_private_only",
+      subjectHint: null,
+      scheduledHint: null
+    };
+  }
+
+  const scheduledMatch = normalizedText.match(
+    /\b(?:ask|check|check in|pulse|remind|follow up)\b.*\b(?<scheduled>tomorrow|later|tonight|next week|this week|morning|afternoon|evening)\b/i
+  );
+  if (scheduledMatch?.groups?.scheduled) {
+    return {
+      preferenceIntent: "schedule_followup",
+      confidenceTier: "MED",
+      matchedRuleId: "pulse_preference_v1_schedule_followup",
+      subjectHint: null,
+      scheduledHint: scheduledMatch.groups.scheduled
+    };
+  }
+
+  if (/\b(?:that|this|the)\b.*\b(?:follow[- ]?up|pulse|check[- ]?in|question)\b.*\b(?:useful|helpful|good)\b/i.test(normalizedText)) {
+    return {
+      preferenceIntent: "feedback_useful",
+      confidenceTier: "MED",
+      matchedRuleId: "pulse_preference_v1_feedback_useful",
+      subjectHint: null,
+      scheduledHint: null
+    };
+  }
+
+  if (/\b(?:that|this|the)\b.*\b(?:follow[- ]?up|pulse|check[- ]?in|question)\b.*\b(?:not useful|not helpful|annoying|bad|unhelpful)\b/i.test(normalizedText)) {
+    return {
+      preferenceIntent: "feedback_not_useful",
+      confidenceTier: "MED",
+      matchedRuleId: "pulse_preference_v1_feedback_not_useful",
+      subjectHint: null,
+      scheduledHint: null
+    };
+  }
+
+  const checkInLaterMatch = normalizedText.match(
+    /\bcheck\s+in\b.*\b(?:about|on)\b\s+(?<subject>.+?)\s+\b(?<scheduled>later|tomorrow|next week|this week)\b/i
+  );
+  if (checkInLaterMatch?.groups) {
+    return {
+      preferenceIntent: "check_in_later",
+      confidenceTier: "MED",
+      matchedRuleId: "pulse_preference_v1_check_in_later",
+      subjectHint: normalizeSubjectHint(checkInLaterMatch.groups.subject),
+      scheduledHint: checkInLaterMatch.groups.scheduled ?? null
+    };
+  }
+
+  return null;
+}
+
+/**
+ * Returns whether text is a natural pulse preference and should not collapse into command
+ * authority.
+ *
+ * @param normalizedText - Normalized input text.
+ * @returns `true` when a preference candidate exists.
+ */
+function hasPulsePreferenceCandidate(normalizedText: string): boolean {
+  return resolvePulsePreferenceRuleMatch(normalizedText) !== null;
 }
 
 /**
@@ -514,7 +683,47 @@ export function classifyPulseLexicalCommand(
     );
   }
 
+  if (hasPulsePreferenceCandidate(normalizedText)) {
+    return toClassification(
+      "NON_COMMAND",
+      null,
+      "LOW",
+      "pulse_lexical_v1_preference_candidate_non_command",
+      ruleContext.rulepackVersion,
+      false
+    );
+  }
+
   return resolveSignalIntent(normalizedText, containsPulseHint(normalizedText), ruleContext);
+}
+
+/**
+ * Classifies natural pulse preference language into typed, non-authoritative candidates.
+ *
+ * @param text - User text to classify.
+ * @param ruleContext - Active pulse lexical rule context.
+ * @returns Preference candidate or `null` when no preference signal exists.
+ */
+export function classifyPulsePreferenceCandidate(
+  text: string,
+  ruleContext: PulseLexicalRuleContext = DEFAULT_PULSE_LEXICAL_RULE_CONTEXT
+): PulsePreferenceCandidate | null {
+  const normalizedText = normalizeClassifierText(text);
+  if (!normalizedText) {
+    return null;
+  }
+  if (resolveDirectPhraseIntent(normalizedText)) {
+    return null;
+  }
+
+  const match = resolvePulsePreferenceRuleMatch(normalizedText);
+  if (!match) {
+    return null;
+  }
+  if (ruleContext.overrideLoadFailed === true) {
+    return buildPreferenceCandidate(match, ruleContext, true, "override_load_failed");
+  }
+  return buildPreferenceCandidate(match, ruleContext, false, null);
 }
 
 /**

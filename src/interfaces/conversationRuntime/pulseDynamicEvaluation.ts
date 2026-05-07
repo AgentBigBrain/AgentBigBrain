@@ -19,6 +19,7 @@ import {
   evaluatePulseCandidatesV1,
   type PulseEmissionRecordV1
 } from "../../core/stage6_86PulseCandidates";
+import { buildProactiveInquiryCandidateFromPulseCandidate } from "../../core/stage6_86/proactiveInquiryCandidates";
 import { buildConversationStackFromTurnsV1 } from "../../core/stage6_86ConversationStack";
 import {
   buildDynamicPulsePrompt,
@@ -28,6 +29,7 @@ import {
 import type { ConversationDomainLane, EntityGraphV1 } from "../../core/types";
 import { shouldSuppressPulseForSessionDomain } from "./pulseScheduling";
 import { hasAuthoritativeConversationDomainLane } from "./sessionDomainRouting";
+import { evaluateProactiveInquiryDeliveryPolicy } from "../proactiveRuntime/deliveryPolicy";
 
 const RELATIONSHIP_CLARIFICATION_RECENT_TURN_WINDOW = 8;
 
@@ -233,6 +235,26 @@ export async function evaluateDynamicPulse(
     previousPulseOutcomes: params.targetSession.agentPulse.recentEmissions ?? [],
     userStyleFingerprint: computeUserStyleFingerprint(params.targetSession.conversationTurns)
   };
+  const proactiveInquiryCandidate = buildProactiveInquiryCandidateFromPulseCandidate(
+    result.emittedCandidate,
+    { sourceRecallStatus: "not_used" }
+  );
+  const proactiveInquiryDeliveryDecision = evaluateProactiveInquiryDeliveryPolicy({
+    candidate: proactiveInquiryCandidate,
+    targetMode: params.controllerSession.agentPulse.mode,
+    recentPulseHistory
+  });
+  if (!proactiveInquiryDeliveryDecision.allowed) {
+    await params.applyPulseStateToUserSessions(params.userSessions, {
+      lastDecisionCode: "DYNAMIC_SUPPRESSED",
+      lastEvaluatedAt: params.nowIso,
+      lastContextualLexicalEvidence: null,
+      lastPulseReason: null,
+      lastPulseTargetConversationId: params.targetSession.conversationId,
+      updatedAt: params.nowIso
+    });
+    return;
+  }
 
   const prompt = buildDynamicPulsePrompt(
     result.emittedCandidate,
@@ -251,11 +273,35 @@ export async function evaluateDynamicPulse(
   }
 
   const intentSummary =
-    `${result.emittedCandidate.reasonCode}: ${result.emittedCandidate.entityRefs.join(", ") || "(no entities)"}`;
+    `${proactiveInquiryCandidate.inquiryType}: ${proactiveInquiryCandidate.questionPlan.userFacingGoal}`;
+  const envelope = result.trace.emittedPulseEnvelope;
+  const deliveryEnvelope = envelope
+    ? {
+        ...envelope,
+        inquiryType: proactiveInquiryCandidate.inquiryType
+      }
+    : undefined;
   const emission: PulseEmissionRecordV1 = {
     emittedAt: params.nowIso,
     reasonCode: result.emittedCandidate.reasonCode,
     candidateEntityRefs: [...result.emittedCandidate.entityRefs],
+    pulseId: envelope?.pulseId,
+    candidateId: result.emittedCandidate.candidateId,
+    questionIntent: proactiveInquiryCandidate.questionPlan.userFacingGoal,
+    sourceRecallRefs: deliveryEnvelope?.sourceRecallRefs ?? [],
+    proactiveInquiryCandidate,
+    deliveryEnvelope,
+    outcomeRecord: deliveryEnvelope
+      ? {
+          pulseId: deliveryEnvelope.pulseId,
+          candidateId: deliveryEnvelope.candidateId,
+          emittedAt: params.nowIso,
+          deliveredTextHash: null,
+          deliveredTextPreviewRedacted: null,
+          responseOutcome: null,
+          outcomeSource: "timeout"
+        }
+      : undefined,
     responseOutcome: null,
     generatedSnippet: intentSummary.slice(0, 120)
   };

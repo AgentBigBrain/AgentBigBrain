@@ -153,6 +153,47 @@ function generatesDeterministicPulseCandidatesFromAllPrimarySources(): void {
   );
 }
 
+function recordsTypedPulseCandidateEvidenceAndDeliveryDecisions(): void {
+  const fixture = buildCheckpointFixture();
+  const result = evaluatePulseCandidatesV1({
+    graph: fixture.graph,
+    stack: fixture.stack,
+    observedAt: "2026-03-01T12:00:00.000Z"
+  });
+
+  assert.equal(result.trace.proofCategories.includes("candidate_generation"), true);
+  assert.equal(result.trace.proofCategories.includes("delivery_permission"), true);
+  assert.equal(
+    result.trace.candidateEvidenceRecords.length,
+    result.orderedCandidates.length
+  );
+  assert.equal(result.trace.decisionRecords.length, result.decisions.length);
+  assert.ok(
+    result.trace.candidateEvidenceRecords.every(
+      (record) =>
+        record.proofCategory === "candidate_generation" &&
+        typeof record.candidateId === "string" &&
+        record.candidateId.length > 0 &&
+        Array.isArray(record.evidenceRefs)
+    )
+  );
+  assert.ok(
+    result.trace.decisionRecords.every(
+      (record) =>
+        record.proofCategory === "delivery_permission" &&
+        typeof record.decisionId === "string" &&
+        record.decisionId.startsWith("pulse_decision_")
+    )
+  );
+  assert.ok(result.emittedCandidate);
+  assert.equal(result.trace.runtimeDeliveryDecision, "candidate_emitted");
+  assert.ok(result.trace.emittedPulseEnvelope);
+  assert.equal(result.trace.emittedPulseEnvelope?.candidateId, result.emittedCandidate?.candidateId);
+  assert.equal(result.trace.emittedPulseEnvelope?.allowedByPolicy, true);
+  assert.equal(result.trace.emittedPulseEnvelope?.userVisibleDeliveryAllowed, true);
+  assert.deepEqual(result.trace.emittedPulseEnvelope?.sourceRecallRefs, []);
+}
+
 /**
  * Implements `suppressesAllCandidatesWhenActiveMissionWorkExists` behavior within module scope.
  * Interacts with local collaborators through imported modules and typed inputs/outputs.
@@ -302,6 +343,10 @@ function suppressesBridgeCandidatesWhenBridgeCooldownActive(): void {
 test(
   "stage 6.86 pulse candidates generate deterministic source coverage across entity bridge open-loop topic and stale-fact signals",
   generatesDeterministicPulseCandidatesFromAllPrimarySources
+);
+test(
+  "stage 6.86 pulse candidates record typed evidence decisions and delivery envelopes",
+  recordsTypedPulseCandidateEvidenceAndDeliveryDecisions
 );
 test(
   "stage 6.86 pulse candidates suppress emissions while active mission work exists",

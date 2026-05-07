@@ -10,17 +10,24 @@ import type {
 import {
   buildNoneIntent,
   buildPulseIntent,
+  buildPulsePreferenceIntent,
   confidenceFromTier,
   interpretModelAssistedIntent,
   normalizeIntentText
 } from "./intentRuntime/intentModelFallback";
-import { classifyPulseLexicalCommand, createPulseLexicalRuleContext } from "./intentRuntime/pulseLexicalRules";
+import {
+  classifyPulseLexicalCommand,
+  classifyPulsePreferenceCandidate,
+  createPulseLexicalRuleContext
+} from "./intentRuntime/pulseLexicalRules";
 
 export type {
   IntentInterpreterContext,
   IntentInterpreterTurn,
   InterpretedConversationIntent,
-  PulseControlMode
+  PulseControlMode,
+  PulsePreferenceCandidate,
+  PulsePreferenceIntent
 } from "./intentRuntime/contracts";
 export { buildNoneIntent } from "./intentRuntime/intentModelFallback";
 
@@ -80,6 +87,22 @@ export class IntentInterpreterOrgan {
         lexicalClassification.commandIntent,
         confidenceFromTier(lexicalClassification.confidenceTier),
         "Deterministic pulse lexical classifier matched input text.",
+        "deterministic",
+        lexicalClassification
+      );
+    }
+
+    const pulsePreferenceCandidate = classifyPulsePreferenceCandidate(
+      normalizedText,
+      pulseRuleContext
+    );
+    if (pulsePreferenceCandidate) {
+      return buildPulsePreferenceIntent(
+        pulsePreferenceCandidate,
+        pulsePreferenceCandidate.blocked ? 0 : confidenceFromTier(pulsePreferenceCandidate.confidenceTier),
+        pulsePreferenceCandidate.blocked
+          ? "Pulse preference candidate was detected but blocked by deterministic rule context."
+          : "Pulse preference candidate was detected without granting outreach authority.",
         "deterministic",
         lexicalClassification
       );

@@ -43,6 +43,7 @@ deterministic fail-closed runtime model.
 - Ollama-backed entity-type-interpretation task in `ollamaEntityTypeInterpretation.ts`
 - Ollama-backed relationship-interpretation task in `ollamaRelationshipInterpretation.ts`
 - Ollama-backed handoff-control-interpretation task in `ollamaHandoffControlInterpretation.ts`
+- schema-normalized proactive-inquiry candidate interpretation in `proactiveInquiryInterpretation.ts`
 - shared bounded conversation-task contracts for execution intent, identity interpretation,
   proposal-reply interpretation, continuation interpretation, autonomy-boundary interpretation, contextual-reference
   interpretation, contextual-followup interpretation, bridge-question-timing interpretation,
@@ -84,6 +85,8 @@ deterministic fail-closed runtime model.
 - Optional semantic-route metadata emitted here is an interpretation contract only. It may guide
   downstream planning and memory gates, but it must not authorize side effects, bypass exact
   ownership checks, or write memory directly.
+- Proactive-inquiry interpretation here may propose candidate shape only. It must not authorize
+  outreach, delivery, Source Recall use, or pulse frequency changes.
 
 ## Related Tests
 - `tests/organs/languageUnderstandingEpisodeExtraction.test.ts`
@@ -104,6 +107,7 @@ deterministic fail-closed runtime model.
 - `tests/organs/ollamaEntityDomainHintInterpretation.test.ts`
 - `tests/organs/ollamaEntityTypeInterpretation.test.ts`
 - `tests/organs/ollamaHandoffControlInterpretation.test.ts`
+- `tests/organs/proactiveInquiryInterpretation.test.ts`
 
 ## When to Update This README
 Update this README when:

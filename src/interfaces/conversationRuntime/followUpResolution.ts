@@ -3,6 +3,7 @@
  */
 
 import type { InterpretedConversationIntent } from "../../organs/intentInterpreter";
+import type { PulsePreferenceCandidate } from "../../organs/pulseLexicalClassifier";
 import { buildConversationAwareExecutionInput } from "../conversationExecutionInputPolicy";
 import { recordClassifierEvent } from "../conversationClassifierEvents";
 import {
@@ -169,6 +170,11 @@ export interface InterpretedPulseResolution {
   lexicalClassification: ReturnType<typeof resolveNaturalPulseCommandClassification> | null;
 }
 
+export interface InterpretedPulsePreferenceResolution {
+  preferenceCandidate: PulsePreferenceCandidate;
+  lexicalClassification: ReturnType<typeof resolveNaturalPulseCommandClassification> | null;
+}
+
 /**
  * Approves the active proposal draft and enqueues it as a normal conversation job.
  *
@@ -250,6 +256,54 @@ export async function resolveInterpretedPulseCommandArgument(
 
   return {
     pulseMode: interpreted.pulseMode,
+    lexicalClassification: interpreted.lexicalClassification ?? null
+  };
+}
+
+/**
+ * Resolves optional model-assisted pulse preference interpretation without granting outreach
+ * authority.
+ *
+ * @param userText - User utterance being interpreted.
+ * @param session - Session used for bounded turn context.
+ * @param deps - Manager dependencies including optional intent interpreter.
+ * @returns Typed pulse preference candidate when confidence gates pass; otherwise `null`.
+ */
+export async function resolveInterpretedPulsePreferenceCandidate(
+  userText: string,
+  session: ConversationSession,
+  deps: ConversationIngressDependencies
+): Promise<InterpretedPulsePreferenceResolution | null> {
+  if (!deps.interpretConversationIntent) {
+    return null;
+  }
+  const normalizedUserText = normalizeWhitespace(userText);
+  if (normalizedUserText.length > MAX_INTENT_INTERPRETER_INPUT_CHARS) {
+    return null;
+  }
+
+  const recentTurns = session.conversationTurns.slice(-deps.config.maxContextTurnsForExecution);
+  let interpreted: InterpretedConversationIntent;
+  try {
+    interpreted = await deps.interpretConversationIntent(
+      normalizedUserText,
+      recentTurns,
+      deps.pulseLexicalRuleContext
+    );
+  } catch {
+    return null;
+  }
+  if (
+    interpreted.intentType !== "pulse_preference" ||
+    !interpreted.pulsePreferenceCandidate ||
+    interpreted.pulsePreferenceCandidate.blocked ||
+    interpreted.confidence < deps.intentInterpreterConfidenceThreshold
+  ) {
+    return null;
+  }
+
+  return {
+    preferenceCandidate: interpreted.pulsePreferenceCandidate,
     lexicalClassification: interpreted.lexicalClassification ?? null
   };
 }

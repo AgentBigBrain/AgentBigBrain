@@ -32,6 +32,16 @@ interface Stage686CheckpointEArtifact {
     sortedTuplePass: boolean;
     topCandidateReason: string | null;
   };
+  provenance: {
+    traceId: string;
+    proofCategories: readonly string[];
+    candidateEvidenceRecordCount: number;
+    decisionRecordCount: number;
+    emittedPulseId: string | null;
+    emittedDeliveryDecisionId: string | null;
+    runtimeDeliveryDecision: string;
+    runtimeSuppressionReason: string | null;
+  };
   suppression: {
     missionSuppressionPass: boolean;
     cooldownSuppressionPass: boolean;
@@ -357,6 +367,16 @@ export async function runStage686CheckpointE(): Promise<Stage686CheckpointEArtif
       deterministicOrderPass,
       sortedTuplePass,
       topCandidateReason: baselineA.orderedCandidates[0]?.reasonCode ?? null
+    },
+    provenance: {
+      traceId: baselineA.trace.traceId,
+      proofCategories: baselineA.trace.proofCategories,
+      candidateEvidenceRecordCount: baselineA.trace.candidateEvidenceRecords.length,
+      decisionRecordCount: baselineA.trace.decisionRecords.length,
+      emittedPulseId: baselineA.trace.emittedPulseEnvelope?.pulseId ?? null,
+      emittedDeliveryDecisionId: baselineA.trace.emittedPulseEnvelope?.deliveryDecisionId ?? null,
+      runtimeDeliveryDecision: baselineA.trace.runtimeDeliveryDecision,
+      runtimeSuppressionReason: baselineA.trace.runtimeSuppressionReason
     },
     suppression: {
       missionSuppressionPass,

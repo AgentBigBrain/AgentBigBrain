@@ -385,6 +385,7 @@ async function findPlannerChatSourceRecallCallsites(): Promise<SourceRecallPlann
     path.normalize("src/organs/memoryContext/contextInjection.ts")
   ]);
   const routeGated = new Set([
+    path.normalize("src/interfaces/conversationRuntime/pulsePrompting.ts"),
     path.normalize("src/organs/memoryBrokerPlannerInput.ts")
   ]);
   const files = await listTypeScriptFiles(srcRoot);

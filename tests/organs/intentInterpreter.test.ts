@@ -102,6 +102,27 @@ test("intent interpreter can use model fallback for nuanced pulse language", asy
   assert.equal(client.getCompletionCalls(), 1);
 });
 
+test("intent interpreter returns pulse preference candidates without granting command authority", async () => {
+  const client = new StubModelClient(buildNoneIntent("unused"));
+  const interpreter = new IntentInterpreterOrgan(client);
+
+  const interpreted = await interpreter.interpretConversationIntent(
+    "only ask me privately",
+    "small-fast-model"
+  );
+
+  assert.equal(interpreted.intentType, "pulse_preference");
+  assert.equal(interpreted.pulseMode, null);
+  assert.equal(interpreted.pulsePreferenceCandidate?.preferenceIntent, "private_only");
+  assert.equal(interpreted.pulsePreferenceCandidate?.authority.outreachAuthority, false);
+  assert.equal(interpreted.pulsePreferenceCandidate?.authority.deliveryPermission, false);
+  assert.equal(
+    interpreted.lexicalClassification?.matchedRuleId,
+    "pulse_lexical_v1_preference_candidate_non_command"
+  );
+  assert.equal(client.getCompletionCalls(), 0);
+});
+
 test("intent interpreter skips model call for over-budget input length", async () => {
   const client = new StubModelClient({
     intentType: "pulse_control",

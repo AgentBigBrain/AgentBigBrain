@@ -6,6 +6,10 @@ import {
   PulseReasonCodeV1,
   STAGE_6_86_PULSE_REASON_CODES
 } from "../core/types";
+import type {
+  PulseDeliveryEnvelopeV1,
+  PulseEmissionRecordV1
+} from "../core/stage6_86PulseCandidates";
 import { ConversationSession } from "./sessionStore";
 
 const FALLBACK_PULSE_MESSAGE = "Checking in.";
@@ -16,6 +20,16 @@ const BLOCKED_PULSE_SUMMARY_PATTERNS = [
   /(?:^|\n)\s*-\s*State:\s*blocked\b/i,
   /\bTechnical reason code:\s*COMMUNICATION_NO_SIDE_EFFECT_EXECUTED\b/i
 ] as const;
+
+export type PulseUxMetadataSourceV1 = "typed_delivery_metadata" | "legacy_prompt_text";
+
+export interface ResolvedPulseUxMetadataV1 {
+  reasonCode: PulseReasonCodeV1;
+  source: PulseUxMetadataSourceV1;
+  pulseId?: string;
+  candidateId?: string;
+  deliveryDecisionId?: string;
+}
 
 /**
  * Evaluates stage 6.86 pulse reason code and returns a deterministic policy signal.
@@ -109,6 +123,128 @@ function buildPulseMessage(baseSummary: string): string {
 }
 
 /**
+ * Returns whether a typed pulse envelope is valid for user-facing rendering decisions.
+ *
+ * **Why it exists:**
+ * Typed delivery metadata must still prove deterministic permission before UX rendering treats it
+ * as the pulse source.
+ *
+ * **What it talks to:**
+ * - Uses Stage 6.86 reason-code validation from this module.
+ *
+ * @param value - Candidate delivery envelope from recent pulse history.
+ * @returns `true` when the envelope is allowed, user-visible, and reason-code valid.
+ */
+function isUsablePulseDeliveryEnvelope(
+  value: PulseDeliveryEnvelopeV1 | undefined
+): value is PulseDeliveryEnvelopeV1 {
+  return Boolean(
+    value &&
+      value.allowedByPolicy === true &&
+      value.userVisibleDeliveryAllowed === true &&
+      isPulseReasonCodeV1(value.reasonCode)
+  );
+}
+
+/**
+ * Finds the newest usable typed pulse envelope available at one observation time.
+ *
+ * **Why it exists:**
+ * Rendering should prefer structured session metadata while avoiding records emitted after the
+ * current delivery observation.
+ *
+ * **What it talks to:**
+ * - Reads bounded `session.agentPulse.recentEmissions` metadata.
+ * - Calls `isEmissionAtOrBefore` and `isUsablePulseDeliveryEnvelope` for deterministic filtering.
+ *
+ * @param session - Session that owns recent pulse emission history.
+ * @param observedAt - Timestamp for the current delivery event.
+ * @returns Latest usable typed delivery envelope, or `null`.
+ */
+function getTypedPulseDeliveryEnvelope(
+  session: ConversationSession,
+  observedAt: string
+): PulseDeliveryEnvelopeV1 | null {
+  const observedMs = Date.parse(observedAt);
+  const emissions = session.agentPulse.recentEmissions ?? [];
+  for (const emission of [...emissions].reverse()) {
+    if (!isEmissionAtOrBefore(emission, observedMs)) {
+      continue;
+    }
+    if (isUsablePulseDeliveryEnvelope(emission.deliveryEnvelope)) {
+      return emission.deliveryEnvelope;
+    }
+  }
+  return null;
+}
+
+/**
+ * Returns whether an emission is eligible for one delivery observation timestamp.
+ *
+ * **Why it exists:**
+ * Session history can contain several pulse records; UX rendering should not consume future
+ * envelopes when replaying older job output.
+ *
+ * **What it talks to:**
+ * - Uses only deterministic timestamp parsing.
+ *
+ * @param emission - Recent pulse emission candidate.
+ * @param observedMs - Millisecond timestamp for the current delivery observation.
+ * @returns `true` when the emission can be considered for the observation.
+ */
+function isEmissionAtOrBefore(
+  emission: PulseEmissionRecordV1,
+  observedMs: number
+): boolean {
+  if (!Number.isFinite(observedMs)) {
+    return true;
+  }
+  const emittedMs = Date.parse(emission.emittedAt);
+  return !Number.isFinite(emittedMs) || emittedMs <= observedMs;
+}
+
+/**
+ * Resolves pulse UX metadata from typed delivery state first, with prompt text as legacy fallback.
+ *
+ * **Why it exists:**
+ * Dynamic pulse delivery now has a structured envelope. User-facing rendering should not depend on
+ * extracting authority-bearing details from system prompt text when typed metadata is available.
+ *
+ * **What it talks to:**
+ * - Reads `session.agentPulse.recentEmissions` for typed delivery envelopes.
+ * - Falls back to local legacy prompt-text parsing for older persisted pulse jobs.
+ *
+ * @param session - Session that may contain recent typed pulse delivery metadata.
+ * @param systemInput - Internal system prompt used only as legacy compatibility fallback.
+ * @param observedAt - Timestamp used to avoid consuming future emission records.
+ * @returns Resolved pulse metadata, or `null` when the job is not a supported pulse.
+ */
+export function resolvePulseUxMetadataV1(
+  session: ConversationSession,
+  systemInput: string,
+  observedAt: string
+): ResolvedPulseUxMetadataV1 | null {
+  const envelope = getTypedPulseDeliveryEnvelope(session, observedAt);
+  if (envelope) {
+    return {
+      reasonCode: envelope.reasonCode,
+      source: "typed_delivery_metadata",
+      pulseId: envelope.pulseId,
+      candidateId: envelope.candidateId,
+      deliveryDecisionId: envelope.deliveryDecisionId
+    };
+  }
+
+  const legacyReasonCode = extractPulseReasonCode(systemInput);
+  return legacyReasonCode
+    ? {
+        reasonCode: legacyReasonCode,
+        source: "legacy_prompt_text"
+      }
+    : null;
+}
+
+/**
  * Returns whether a pulse summary should be suppressed from user delivery.
  *
  * **Why it exists:**
@@ -126,9 +262,14 @@ function buildPulseMessage(baseSummary: string): string {
  */
 export function shouldSuppressPulseUserFacingDeliveryV1(
   systemInput: string,
-  baseSummary: string
+  baseSummary: string,
+  session?: ConversationSession,
+  observedAt = new Date().toISOString()
 ): boolean {
-  if (!extractPulseReasonCode(systemInput)) {
+  const metadata = session
+    ? resolvePulseUxMetadataV1(session, systemInput, observedAt)
+    : extractPulseReasonCode(systemInput);
+  if (!metadata) {
     return false;
   }
   const normalized = baseSummary.trim();
@@ -161,11 +302,8 @@ export function renderPulseUserFacingSummaryV1(
   baseSummary: string,
   observedAt: string
 ): string {
-  void session;
-  void observedAt;
-
-  const reasonCode = extractPulseReasonCode(systemInput);
-  if (!reasonCode) {
+  const metadata = resolvePulseUxMetadataV1(session, systemInput, observedAt);
+  if (!metadata) {
     return baseSummary;
   }
   return buildPulseMessage(baseSummary);
