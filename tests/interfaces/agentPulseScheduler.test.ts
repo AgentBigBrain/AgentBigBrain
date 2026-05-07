@@ -1130,6 +1130,10 @@ test("dynamic pulse path persists recentEmissions so cooldown blocks subsequent 
     assert.ok(emissions.length > 0, "recentEmissions should be persisted after first tick");
     assert.ok(emissions[0].pulseId?.startsWith("pulse_"));
     assert.ok(emissions[0].candidateId?.startsWith("pulse_candidate_"));
+    assert.equal(emissions[0].proactiveInquiryCandidate?.authority.outreachAuthority, false);
+    assert.equal(emissions[0].proactiveInquiryCandidate?.authority.deliveryPermission, false);
+    assert.equal(emissions[0].proactiveInquiryCandidate?.evidencePolicy.sourceRecallStatus, "not_used");
+    assert.equal(emissions[0].deliveryEnvelope?.inquiryType, emissions[0].proactiveInquiryCandidate?.inquiryType);
     assert.equal(emissions[0].deliveryEnvelope?.allowedByPolicy, true);
     assert.equal(emissions[0].outcomeRecord?.responseOutcome, null);
 

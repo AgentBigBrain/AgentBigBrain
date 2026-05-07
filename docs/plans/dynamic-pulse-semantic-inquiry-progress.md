@@ -258,7 +258,7 @@ S2-source-recall-evidence
 
 ### Branch / Checkpoint Commit
 
-feat/dynamic-pulse-semantic-inquiry / pending
+feat/dynamic-pulse-semantic-inquiry / b9532ed
 
 ### State
 
@@ -370,3 +370,123 @@ use, delivery-policy changes, or broader context-injection behavior changes.
 - pulse frequency became: equal
 - next slice unblocked: yes, S3 can proceed; if Source Recall is unavailable at runtime, S3 must
   mark `sourceRecallStatus` as disabled, blocked, or unavailable and avoid Source Recall evidence
+
+## 2026-05-07 - S3-proactive-inquiry-candidates
+
+### Slice ID
+
+S3-proactive-inquiry-candidates
+
+### Branch / Checkpoint Commit
+
+feat/dynamic-pulse-semantic-inquiry / pending
+
+### State
+
+passed
+
+### Objective
+
+Introduce a semantic candidate layer that proposes useful questions without granting outreach
+authority.
+
+### Owner Files Inspected
+
+- `src/core/stage6_86/proactiveInquiryCandidates.ts`
+- `src/organs/languageUnderstanding/proactiveInquiryInterpretation.ts`
+- `src/interfaces/conversationRuntime/pulseDynamicEvaluation.ts`
+- `tests/core/stage6_86ProactiveInquiryCandidates.test.ts`
+- `tests/organs/proactiveInquiryInterpretation.test.ts`
+
+### Read-Only Context Files Inspected
+
+- `src/core/stage6_86/pulseCandidateSupport.ts`
+- `src/core/stage6_86PulseCandidates.ts`
+- `src/core/types.ts`
+- `tests/interfaces/agentPulseScheduler.test.ts`
+
+### Prohibited Changes For This Slice
+
+- Do not generate final delivered wording.
+- Do not grant delivery permission from model or inquiry output.
+- Do not change deterministic delivery thresholds, cooldowns, quiet hours, caps, or opt-in.
+- Do not require Source Recall availability.
+- Do not add Source Recall retrieval callsites.
+
+### Precondition Verification
+
+- current code seam: dynamic pulse emitted deterministic reason codes and S0 envelope metadata, but
+  did not have a typed inquiry intent/risk/user-value layer.
+- dependency state: S0-S2 passed.
+- Source Recall state if relevant: optional; S3 can operate with `sourceRecallStatus=not_used`.
+- model/backend state if relevant: model output normalization is schema-only and fail-closed; no
+  live model dependency required.
+
+### Tests To Add First
+
+- Core proactive inquiry candidate tests for Stage 6.86 pulse-candidate conversion.
+- Model-output normalization tests for malformed, low-confidence, and accepted candidates.
+- Scheduler test assertions proving emitted inquiry metadata is non-authoritative and uses
+  `sourceRecallStatus=not_used`.
+
+### Implementation Tasks
+
+- Added `ProactiveInquiryCandidate` contracts, user-value reasons, question-plan shape, evidence
+  policy, risk metadata, and non-authority flags.
+- Added deterministic conversion from existing Stage 6.86 pulse candidates into inquiry candidates.
+- Added schema-normalized model-output boundary that rejects malformed, absent, low-confidence, or
+  low-value candidates.
+- Attached inquiry metadata to dynamic pulse emission history and delivery envelope metadata without
+  changing delivery permission.
+
+### Acceptance Criteria
+
+- Model output is schema-normalized and bounded.
+- Low-confidence or malformed model output fails closed to no semantic candidate.
+- Candidate authority flags are all non-authorizing.
+- User-value rationale is required and bounded.
+- Candidate proposals cannot bypass deterministic delivery policy.
+- S3 does not produce final deliverable pulse wording.
+
+### Required Commands
+
+- `npx tsx tests/core/stage6_86ProactiveInquiryCandidates.test.ts` - passed.
+- `npx tsx tests/organs/proactiveInquiryInterpretation.test.ts` - passed.
+- `npx tsx tests/interfaces/agentPulseScheduler.test.ts` - passed.
+- `npm run check:test-types` - passed.
+- `npm run build` - passed.
+- `npm run check:docs` - passed.
+
+### Evidence Required
+
+Focused tests prove inquiry candidates carry user-value rationale, question intent, evidence policy,
+risk, Source Recall status, and non-authority flags; malformed and low-confidence model output
+returns no candidate; persisted dynamic pulse metadata has no delivery authority.
+
+### Sensitive Scan Scope
+
+Changed proactive inquiry contracts, model-output normalization boundary, dynamic pulse emission
+metadata, focused tests, and progress docs. Focused scan for prior private fixture strings,
+token-shaped secrets, key markers, and local desktop paths passed.
+
+### Stop Conditions
+
+Stop if S3 requires final wording generation, Source Recall retrieval, live model dependency,
+delivery-policy changes, or increased pulse frequency.
+
+### Completion Note
+
+- checkpoint commit hash: pending
+- files changed: proactive inquiry candidate contracts, proactive inquiry model-output normalizer,
+  pulse candidate support, dynamic pulse evaluation, focused tests, progress ledger
+- tests added: core proactive inquiry candidate tests, model-output normalization tests, scheduler
+  inquiry metadata assertions
+- behavior changed: dynamic pulse emission history now includes a typed, non-authoritative
+  proactive inquiry candidate and delivery envelope inquiry type
+- behavior intentionally not changed: no final wording generation, no delivery permission changes,
+  no Source Recall retrieval, no model candidate callsite, no increased proactive frequency
+- production defaults after the slice: unchanged; Agent Pulse and Dynamic Pulse remain disabled by
+  default
+- pulse frequency became: equal
+- next slice unblocked: yes, S4 can apply deterministic delivery/suppression policy to semantic
+  candidates

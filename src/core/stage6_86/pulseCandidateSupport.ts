@@ -3,6 +3,7 @@
  */
 
 import type { SourceAuthority } from "../sourceAuthority";
+import type { ProactiveInquiryCandidate } from "./proactiveInquiryCandidates";
 import {
   ConversationStackV1,
   EntityNodeV1,
@@ -55,6 +56,7 @@ export interface PulseEmissionRecordV1 {
   candidateId?: string;
   questionIntent?: string;
   sourceRecallRefs?: readonly string[];
+  proactiveInquiryCandidate?: ProactiveInquiryCandidate;
   deliveryEnvelope?: PulseDeliveryEnvelopeV1;
   outcomeRecord?: PulseOutcomeRecordV1;
   responseOutcome?: PulseResponseOutcome;
