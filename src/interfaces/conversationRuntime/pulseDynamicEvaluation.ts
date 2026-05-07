@@ -29,6 +29,7 @@ import {
 import type { ConversationDomainLane, EntityGraphV1 } from "../../core/types";
 import { shouldSuppressPulseForSessionDomain } from "./pulseScheduling";
 import { hasAuthoritativeConversationDomainLane } from "./sessionDomainRouting";
+import { evaluateProactiveInquiryDeliveryPolicy } from "../proactiveRuntime/deliveryPolicy";
 
 const RELATIONSHIP_CLARIFICATION_RECENT_TURN_WINDOW = 8;
 
@@ -238,6 +239,22 @@ export async function evaluateDynamicPulse(
     result.emittedCandidate,
     { sourceRecallStatus: "not_used" }
   );
+  const proactiveInquiryDeliveryDecision = evaluateProactiveInquiryDeliveryPolicy({
+    candidate: proactiveInquiryCandidate,
+    targetMode: params.controllerSession.agentPulse.mode,
+    recentPulseHistory
+  });
+  if (!proactiveInquiryDeliveryDecision.allowed) {
+    await params.applyPulseStateToUserSessions(params.userSessions, {
+      lastDecisionCode: "DYNAMIC_SUPPRESSED",
+      lastEvaluatedAt: params.nowIso,
+      lastContextualLexicalEvidence: null,
+      lastPulseReason: null,
+      lastPulseTargetConversationId: params.targetSession.conversationId,
+      updatedAt: params.nowIso
+    });
+    return;
+  }
 
   const prompt = buildDynamicPulsePrompt(
     result.emittedCandidate,

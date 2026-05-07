@@ -12,8 +12,10 @@ import {
 } from "../../src/interfaces/proactiveRuntime/cooldownPolicy";
 import {
   conversationBelongsToProvider,
+  evaluateProactiveInquiryDeliveryPolicy,
   selectPulseTargetSession
 } from "../../src/interfaces/proactiveRuntime/deliveryPolicy";
+import { buildProactiveInquiryCandidateFromPulseCandidate } from "../../src/core/stage6_86/proactiveInquiryCandidates";
 import { shouldSuppressRelationshipClarificationPulse } from "../../src/interfaces/proactiveRuntime/followupQualification";
 import { calculateRelationshipClarificationUtilityScore } from "../../src/interfaces/proactiveRuntime/userValueScoring";
 import type { ConversationSession } from "../../src/interfaces/sessionStore";
@@ -165,4 +167,78 @@ test("cooldown and delivery policy helpers stay human-scale and provider-bounded
     buildSession("telegram:private-new:user-1", { updatedAt: "2026-03-08T11:00:00.000Z" })
   ]);
   assert.equal(selected.targetSession?.conversationId, "telegram:private-new:user-1");
+});
+
+test("evaluateProactiveInquiryDeliveryPolicy allows useful non-authoritative candidates", () => {
+  const candidate = buildProactiveInquiryCandidateFromPulseCandidate(buildPulseCandidate(), {
+    sourceRecallStatus: "not_used"
+  });
+  const decision = evaluateProactiveInquiryDeliveryPolicy({
+    candidate,
+    targetMode: "private"
+  });
+
+  assert.equal(decision.allowed, true);
+  assert.deepEqual(decision.suppressedBy, []);
+});
+
+test("evaluateProactiveInquiryDeliveryPolicy blocks public private evidence and unusable Source Recall", () => {
+  const privateCandidate = {
+    ...buildProactiveInquiryCandidateFromPulseCandidate(buildPulseCandidate(), {
+      sourceRecallStatus: "available",
+      blockReasons: ["public_unsafe"]
+    }),
+    risk: {
+      interruptionRisk: "low" as const,
+      privacyRisk: "private_only" as const,
+      publicSafe: false,
+      activeMissionSafe: true
+    }
+  };
+  const decision = evaluateProactiveInquiryDeliveryPolicy({
+    candidate: privateCandidate,
+    targetMode: "public"
+  });
+
+  assert.equal(decision.allowed, false);
+  assert.ok(decision.suppressedBy.includes("public_route_private_evidence"));
+  assert.ok(decision.suppressedBy.includes("source_recall_unusable"));
+});
+
+test("evaluateProactiveInquiryDeliveryPolicy blocks low value, low novelty, and repeated negative outcomes", () => {
+  const base = buildProactiveInquiryCandidateFromPulseCandidate(buildPulseCandidate(), {
+    sourceRecallStatus: "not_used"
+  });
+  const lowValueCandidate = {
+    ...base,
+    expectedUserValue: 0.1,
+    novelty: 0.1
+  };
+  const lowValueDecision = evaluateProactiveInquiryDeliveryPolicy({
+    candidate: lowValueCandidate,
+    targetMode: "private",
+    recentPulseHistory: [
+      {
+        emittedAt: "2026-03-08T09:00:00.000Z",
+        reasonCode: "RELATIONSHIP_CLARIFICATION",
+        candidateEntityRefs: ["entity_owen"],
+        candidateId: base.sourcePulseCandidateId ?? undefined,
+        proactiveInquiryCandidate: base,
+        responseOutcome: "ignored"
+      },
+      {
+        emittedAt: "2026-03-08T10:00:00.000Z",
+        reasonCode: "RELATIONSHIP_CLARIFICATION",
+        candidateEntityRefs: ["entity_owen"],
+        candidateId: base.sourcePulseCandidateId ?? undefined,
+        proactiveInquiryCandidate: base,
+        responseOutcome: "dismissed"
+      }
+    ]
+  });
+
+  assert.equal(lowValueDecision.allowed, false);
+  assert.ok(lowValueDecision.suppressedBy.includes("low_expected_user_value"));
+  assert.ok(lowValueDecision.suppressedBy.includes("low_novelty"));
+  assert.ok(lowValueDecision.suppressedBy.includes("repeated_negative_outcome"));
 });

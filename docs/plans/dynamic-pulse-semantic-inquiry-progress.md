@@ -379,7 +379,7 @@ S3-proactive-inquiry-candidates
 
 ### Branch / Checkpoint Commit
 
-feat/dynamic-pulse-semantic-inquiry / pending
+feat/dynamic-pulse-semantic-inquiry / a9c7e68
 
 ### State
 
@@ -490,3 +490,124 @@ delivery-policy changes, or increased pulse frequency.
 - pulse frequency became: equal
 - next slice unblocked: yes, S4 can apply deterministic delivery/suppression policy to semantic
   candidates
+
+## 2026-05-07 - S4-deterministic-delivery-policy
+
+### Slice ID
+
+S4-deterministic-delivery-policy
+
+### Branch / Checkpoint Commit
+
+feat/dynamic-pulse-semantic-inquiry / pending
+
+### State
+
+passed
+
+### Objective
+
+Extend deterministic policy so semantic candidates can be safely suppressed or allowed without model
+permission.
+
+### Owner Files Inspected
+
+- `src/core/agentPulse.ts`
+- `src/interfaces/agentPulseScheduler.ts`
+- `src/interfaces/proactiveRuntime/deliveryPolicy.ts`
+- `src/interfaces/proactiveRuntime/cooldownPolicy.ts`
+- `src/interfaces/proactiveRuntime/followupQualification.ts`
+- `src/interfaces/proactiveRuntime/userValueScoring.ts`
+- `src/interfaces/conversationRuntime/pulseEvaluation.ts`
+- `src/interfaces/conversationRuntime/pulseDynamicEvaluation.ts`
+- `src/interfaces/conversationRuntime/pulseSchedulerContracts.ts`
+- `tests/core/agentPulse.test.ts`
+- `tests/interfaces/proactiveRuntime.test.ts`
+
+### Read-Only Context Files Inspected
+
+- `src/core/stage6_86/proactiveInquiryCandidates.ts`
+- `tests/interfaces/agentPulseScheduler.test.ts`
+
+### Prohibited Changes For This Slice
+
+- Do not increase default pulse frequency.
+- Do not loosen opt-in, quiet hours, cooldowns, daily caps, active mission suppression, or routing.
+- Do not let model confidence or Source Recall retrieval override suppression.
+- Do not generate final pulse wording.
+- Do not enable Source Recall retrieval by default.
+
+### Precondition Verification
+
+- current code seam: S3 created non-authoritative inquiry candidates, but no deterministic semantic
+  inquiry policy checked expected user value, novelty, privacy, Source Recall usability, or repeated
+  negative outcomes.
+- dependency state: S0-S3 passed.
+- Source Recall state if relevant: policy consumes Source Recall status on candidate only; no
+  retrieval callsite added.
+- model/backend state if relevant: not relevant for S4.
+
+### Tests To Add First
+
+- Proactive runtime tests for allowed semantic inquiry candidates.
+- Proactive runtime tests for public/private evidence, unusable Source Recall, low value, low
+  novelty, and repeated negative outcome suppression.
+- Scheduler regression test remains focused on unchanged dynamic pulse delivery path.
+
+### Implementation Tasks
+
+- Added deterministic `evaluateProactiveInquiryDeliveryPolicy`.
+- Added suppression reasons for invalid candidate authority, low expected user value, low novelty,
+  blocked privacy risk, public-route private evidence, active mission risk, unusable Source Recall,
+  and repeated negative outcomes.
+- Applied the policy in dynamic pulse evaluation before prompt construction and enqueue.
+- Preserved existing delivery gates and made semantic inquiry policy stricter/equal.
+
+### Acceptance Criteria
+
+- Model candidate confidence cannot override policy suppression.
+- Source Recall retrieval/status cannot override policy suppression.
+- Public mode blocks private/sensitive candidate evidence.
+- Repeated ignored/dismissed/negative/muted outcomes suppress similar future delivery.
+- Semantic inquiry does not increase default pulse frequency; default opt-in, caps, cooldowns,
+  quiet hours, active mission suppression, and route checks remain equal or stricter.
+
+### Required Commands
+
+- `npx tsx tests/interfaces/proactiveRuntime.test.ts` - passed.
+- `npx tsx tests/interfaces/agentPulseScheduler.test.ts` - passed.
+- `npx tsx tests/core/agentPulse.test.ts` - passed.
+- `npm run check:test-types` - passed.
+- `npm run build` - passed.
+- `npm run check:docs` - passed.
+
+### Evidence Required
+
+Focused tests prove semantic inquiry candidates are deterministically allowed or suppressed by
+policy and that low-value/low-novelty/public-unsafe/Source Recall-unusable/repeated-negative
+candidates cannot deliver.
+
+### Sensitive Scan Scope
+
+Changed proactive delivery policy, dynamic pulse evaluation, proactive runtime tests, and progress
+docs. Focused scan for prior private fixture strings, token-shaped secrets, key markers, and local
+desktop paths passed.
+
+### Stop Conditions
+
+Stop if S4 requires policy relaxation, increased frequency, final wording generation, Source Recall
+retrieval callsites, or unrelated scheduler delivery changes.
+
+### Completion Note
+
+- checkpoint commit hash: pending
+- files changed: proactive delivery policy, dynamic pulse evaluation, proactive runtime tests,
+  progress ledger
+- tests added: semantic inquiry delivery policy allow/suppress tests
+- behavior changed: semantic inquiry candidates pass through deterministic delivery policy before
+  dynamic pulse prompt enqueue
+- behavior intentionally not changed: no default pulse frequency increase, no Source Recall
+  retrieval, no final wording generation, no opt-in/quiet-hours/cooldown/cap/routing relaxation
+- production defaults after the slice: unchanged
+- pulse frequency became: equal or stricter
+- next slice unblocked: yes, S5 can bind wording/outcome learning after permission
