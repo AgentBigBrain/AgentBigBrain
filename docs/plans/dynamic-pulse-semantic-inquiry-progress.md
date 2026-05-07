@@ -134,7 +134,7 @@ S1-pulse-controls-semantic-preferences
 
 ### Branch / Checkpoint Commit
 
-feat/dynamic-pulse-semantic-inquiry / pending
+feat/dynamic-pulse-semantic-inquiry / e0b7e9f
 
 ### State
 
@@ -249,3 +249,124 @@ or runtime outreach changes.
   default
 - pulse frequency became: equal
 - next slice unblocked: yes, S2 can proceed only after the Source Recall runtime gate is verified
+
+## 2026-05-07 - S2-source-recall-evidence
+
+### Slice ID
+
+S2-source-recall-evidence
+
+### Branch / Checkpoint Commit
+
+feat/dynamic-pulse-semantic-inquiry / pending
+
+### State
+
+passed
+
+### Objective
+
+Allow pulse candidates to cite Source Recall as quoted evidence without giving Source Recall
+outreach authority.
+
+### Owner Files Inspected
+
+- `src/core/sourceRecall/sourceRecallRetriever.ts`
+- `src/organs/memoryContext/contextInjection.ts`
+- `src/interfaces/conversationRuntime/pulseDynamicEvaluation.ts`
+- `src/interfaces/conversationRuntime/pulsePrompting.ts`
+- `tests/core/sourceRecallRetriever.test.ts`
+- `tests/organs/sourceRecallContextInjection.test.ts`
+- `tests/interfaces/pulsePrompting.test.ts`
+
+### Read-Only Context Files Inspected
+
+- `src/core/sourceRecall/contracts.ts`
+- `src/core/sourceRecall/sourceRecallRetention.ts`
+- `src/core/config.ts`
+- `src/core/buildBrain.ts`
+- `src/interfaces/runtimeConfig.ts`
+
+### Prohibited Changes For This Slice
+
+- Do not add a default Source Recall retrieval callsite to planner/chat/pulse.
+- Do not grant Source Recall delivery permission or outreach authority.
+- Do not loosen Source Recall lifecycle, privacy, or public-mode suppression.
+- Do not enable media/document Source Recall pulse use.
+- Do not change pulse frequency, caps, cooldowns, quiet hours, or opt-in.
+
+### Precondition Verification
+
+- current code seam: Source Recall has encrypted production config, retrieval latches, lifecycle
+  filtering, quoted-evidence renderer, bounded audit metadata, and non-authority flags.
+- dependency state: S0 and S1 passed; Source Recall retrieval and quoted rendering tests already
+  exist.
+- Source Recall state if relevant: production storage and retrieval are config-latched; retrieval is
+  not invoked by planner/chat/pulse by default.
+- model/backend state if relevant: not relevant for S2.
+
+### Tests To Add First
+
+- Pulse prompting tests for quoted Source Recall evidence.
+- Pulse prompting tests for public-mode Source Recall suppression.
+- Pulse prompting tests for disabled Source Recall status with no evidence.
+
+### Implementation Tasks
+
+- Added optional Source Recall evidence context to dynamic pulse prompting.
+- Rendered Source Recall via the canonical quoted-evidence egress renderer when explicitly supplied.
+- Added Source Recall status/block reason rendering for disabled, blocked, unavailable, and not-used
+  states.
+- Blocked Source Recall evidence from public-mode pulse prompts unless the caller marks it
+  public-safe.
+- Preserved no-default-retrieval behavior; no pulse/planner/chat path retrieves Source Recall by
+  default in this slice.
+
+### Acceptance Criteria
+
+- Source Recall evidence appears only as quoted evidence.
+- Retrieved chunks cannot spoof route metadata, commands, approval, proof, or pulse permission.
+- Source Recall lifecycle/privacy suppression remains delegated to retrieval and public-mode prompt
+  suppression.
+- Pulse can continue without Source Recall when retrieval is disabled or unavailable.
+
+### Required Commands
+
+- `npx tsx tests/interfaces/pulsePrompting.test.ts` - passed.
+- `npx tsx tests/core/sourceRecallRetriever.test.ts` - passed.
+- `npx tsx tests/organs/sourceRecallContextInjection.test.ts` - passed.
+- `npm run check:test-types` - passed.
+- `npm run build` - passed.
+- `npm run check:docs` - passed.
+
+### Evidence Required
+
+Focused tests prove prompt rendering quotes route/approval/proof-looking Source Recall text, blocks
+public-unsafe Source Recall evidence in public mode, records disabled status without evidence, and
+keeps retrieval/context-injection non-authority contracts intact.
+
+### Sensitive Scan Scope
+
+Changed pulse prompting, pulse prompting tests, and progress docs. Focused scan for prior private
+fixture strings, token-shaped secrets, key markers, and local desktop paths passed.
+
+### Stop Conditions
+
+Stop if S2 requires default Source Recall retrieval, production media/document Source Recall pulse
+use, delivery-policy changes, or broader context-injection behavior changes.
+
+### Completion Note
+
+- checkpoint commit hash: pending
+- files changed: pulse prompting, pulse prompting tests, progress ledger
+- tests added: Source Recall quoted-evidence pulse prompt tests, public-mode suppression test,
+  disabled Source Recall status test
+- behavior changed: dynamic pulse prompts can render explicitly supplied Source Recall as
+  non-authoritative quoted evidence with status and block reasons
+- behavior intentionally not changed: no default Source Recall retrieval callsite, no planner/chat
+  context injection changes, no delivery-policy changes, no increased proactive frequency
+- production defaults after the slice: unchanged; Source Recall and Dynamic Pulse remain
+  config-latched/disabled by default
+- pulse frequency became: equal
+- next slice unblocked: yes, S3 can proceed; if Source Recall is unavailable at runtime, S3 must
+  mark `sourceRecallStatus` as disabled, blocked, or unavailable and avoid Source Recall evidence
