@@ -252,10 +252,27 @@ export async function evaluateDynamicPulse(
 
   const intentSummary =
     `${result.emittedCandidate.reasonCode}: ${result.emittedCandidate.entityRefs.join(", ") || "(no entities)"}`;
+  const envelope = result.trace.emittedPulseEnvelope;
   const emission: PulseEmissionRecordV1 = {
     emittedAt: params.nowIso,
     reasonCode: result.emittedCandidate.reasonCode,
     candidateEntityRefs: [...result.emittedCandidate.entityRefs],
+    pulseId: envelope?.pulseId,
+    candidateId: result.emittedCandidate.candidateId,
+    questionIntent: result.emittedCandidate.reasonCode,
+    sourceRecallRefs: envelope?.sourceRecallRefs ?? [],
+    deliveryEnvelope: envelope ?? undefined,
+    outcomeRecord: envelope
+      ? {
+          pulseId: envelope.pulseId,
+          candidateId: envelope.candidateId,
+          emittedAt: params.nowIso,
+          deliveredTextHash: null,
+          deliveredTextPreviewRedacted: null,
+          responseOutcome: null,
+          outcomeSource: "timeout"
+        }
+      : undefined,
     responseOutcome: null,
     generatedSnippet: intentSummary.slice(0, 120)
   };

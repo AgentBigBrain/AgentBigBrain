@@ -9,6 +9,9 @@ export {
   type EvaluatePulseCandidatesOptionsV1,
   type EvaluatePulseCandidatesResultV1,
   type PulseCandidateDecisionV1,
+  type PulseCandidateEvaluationTraceV1,
+  type PulseDeliveryEnvelopeV1,
   type PulseEmissionRecordV1,
+  type PulseOutcomeRecordV1,
   type PulseResponseOutcome
 } from "./stage6_86/pulseCandidates";

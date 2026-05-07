@@ -34,14 +34,95 @@ const PRIVACY_SENSITIVE_KEYWORDS = new Set([
 
 const PRIVACY_SENSITIVE_ENTITY_TYPES = new Set(["person", "event"]);
 
-export type PulseResponseOutcome = "engaged" | "ignored" | "dismissed" | null;
+export type PulseResponseOutcome = "engaged" | "ignored" | "dismissed" | "negative" | "muted" | null;
+export type PulseOutcomeSourceV1 =
+  | "explicit_user_reply"
+  | "timeout"
+  | "semantic_interpretation"
+  | "legacy_keyword"
+  | "operator_review";
+export type PulseProofCategoryV1 =
+  | "candidate_generation"
+  | "delivery_permission"
+  | "outcome_tracking";
+export type PulseDeliveryPromptKindV1 = "stage6_86_dynamic_pulse" | "semantic_inquiry_pulse";
 
 export interface PulseEmissionRecordV1 {
   emittedAt: string;
   reasonCode: PulseReasonCodeV1;
   candidateEntityRefs: readonly string[];
+  pulseId?: string;
+  candidateId?: string;
+  questionIntent?: string;
+  sourceRecallRefs?: readonly string[];
+  deliveryEnvelope?: PulseDeliveryEnvelopeV1;
+  outcomeRecord?: PulseOutcomeRecordV1;
   responseOutcome?: PulseResponseOutcome;
   generatedSnippet?: string;
+}
+
+export interface PulseDeliveryEnvelopeV1 {
+  pulseId: string;
+  candidateId: string;
+  reasonCode: PulseReasonCodeV1;
+  inquiryType?: string;
+  evidenceRefs: readonly string[];
+  sourceRecallRefs: readonly string[];
+  deliveryDecisionId: string;
+  promptKind: PulseDeliveryPromptKindV1;
+  createdAt: string;
+  allowedByPolicy: boolean;
+  userVisibleDeliveryAllowed: boolean;
+}
+
+export interface PulseOutcomeRecordV1 {
+  pulseId: string;
+  candidateId: string;
+  emittedAt: string;
+  deliveredTextHash: string | null;
+  deliveredTextPreviewRedacted: string | null;
+  responseOutcome: PulseResponseOutcome;
+  outcomeSource: PulseOutcomeSourceV1;
+  boundUserTurnId?: string;
+}
+
+export interface PulseCandidateEvidenceRecordV1 {
+  candidateId: string;
+  reasonCode: PulseReasonCodeV1;
+  score: number;
+  scoreBreakdown: import("../types").PulseScoreBreakdownV1;
+  evidenceRefs: readonly string[];
+  sourceAuthority: SourceAuthority;
+  provenanceTier: PulseProvenanceTierV1;
+  sensitive: boolean;
+  proofCategory: Extract<PulseProofCategoryV1, "candidate_generation">;
+}
+
+export interface PulseCandidateDecisionRecordV1 {
+  decisionId: string;
+  candidateId: string;
+  reasonCode: PulseReasonCodeV1;
+  decisionCode: import("../types").PulseDecisionCodeV1;
+  blockDetailReason: PulseDecisionV1["blockDetailReason"];
+  allowedByPolicy: boolean;
+  userVisibleDeliveryAllowed: boolean;
+  evidenceRefs: readonly string[];
+  sourceAuthority: SourceAuthority;
+  provenanceTier: PulseProvenanceTierV1;
+  sensitive: boolean;
+  activeMissionSuppressed: boolean;
+  proofCategory: Extract<PulseProofCategoryV1, "delivery_permission">;
+}
+
+export interface PulseCandidateEvaluationTraceV1 {
+  traceId: string;
+  observedAt: string;
+  candidateEvidenceRecords: readonly PulseCandidateEvidenceRecordV1[];
+  decisionRecords: readonly PulseCandidateDecisionRecordV1[];
+  emittedPulseEnvelope: PulseDeliveryEnvelopeV1 | null;
+  runtimeDeliveryDecision: "candidate_emitted" | "no_candidate" | "runtime_suppressed";
+  runtimeSuppressionReason: string | null;
+  proofCategories: readonly PulseProofCategoryV1[];
 }
 
 export interface EvaluatePulseCandidatesOptionsV1 {
@@ -74,6 +155,7 @@ export interface EvaluatePulseCandidatesResultV1 {
   orderedCandidates: readonly import("../types").PulseCandidateV1[];
   decisions: readonly PulseCandidateDecisionV1[];
   emittedCandidate: import("../types").PulseCandidateV1 | null;
+  trace: PulseCandidateEvaluationTraceV1;
 }
 
 export interface PulseCandidateDraftV1 {

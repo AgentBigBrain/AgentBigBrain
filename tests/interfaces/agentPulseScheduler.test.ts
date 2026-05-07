@@ -1128,6 +1128,10 @@ test("dynamic pulse path persists recentEmissions so cooldown blocks subsequent 
     assert.ok(sessionAfterFirst, "session should exist after first tick");
     const emissions = sessionAfterFirst!.agentPulse.recentEmissions ?? [];
     assert.ok(emissions.length > 0, "recentEmissions should be persisted after first tick");
+    assert.ok(emissions[0].pulseId?.startsWith("pulse_"));
+    assert.ok(emissions[0].candidateId?.startsWith("pulse_candidate_"));
+    assert.equal(emissions[0].deliveryEnvelope?.allowedByPolicy, true);
+    assert.equal(emissions[0].outcomeRecord?.responseOutcome, null);
 
     await scheduler.runTickOnce();
     assert.equal(enqueuedPrompts.length, 1, "second tick should be suppressed by cooldown");

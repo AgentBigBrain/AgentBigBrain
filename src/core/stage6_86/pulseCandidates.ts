@@ -32,6 +32,8 @@ import {
   type EvaluatePulseCandidatesResultV1,
   type PulseCandidateDecisionV1,
   type PulseCandidateDraftV1,
+  type PulseCandidateEvaluationTraceV1,
+  type PulseDeliveryEnvelopeV1,
   type PulseEmissionRecordV1
 } from "./pulseCandidateSupport";
 
@@ -40,7 +42,10 @@ export type {
   EvaluatePulseCandidatesOptionsV1,
   EvaluatePulseCandidatesResultV1,
   PulseCandidateDecisionV1,
+  PulseCandidateEvaluationTraceV1,
+  PulseDeliveryEnvelopeV1,
   PulseEmissionRecordV1,
+  PulseOutcomeRecordV1,
   PulseResponseOutcome
 } from "./pulseCandidateSupport";
 
@@ -116,6 +121,51 @@ function buildCandidateId(draft: PulseCandidateDraftV1): string {
     entityRefs: [...draft.entityRefs].sort((left, right) => left.localeCompare(right))
   });
   return `pulse_candidate_${fingerprint.slice(0, 20)}`;
+}
+
+/**
+ * Builds deterministic pulse decision id for typed delivery-provenance records.
+ *
+ * @param candidate - Candidate tied to the decision.
+ * @param decision - Deterministic decision for the candidate.
+ * @param observedAt - Evaluation timestamp.
+ * @returns Stable decision id.
+ */
+function buildPulseDecisionId(
+  candidate: PulseCandidateV1,
+  decision: PulseDecisionV1,
+  observedAt: string
+): string {
+  const fingerprint = sha256HexFromCanonicalJson({
+    candidateId: candidate.candidateId,
+    reasonCode: candidate.reasonCode,
+    decisionCode: decision.decisionCode,
+    blockDetailReason: decision.blockDetailReason,
+    observedAt
+  });
+  return `pulse_decision_${fingerprint.slice(0, 20)}`;
+}
+
+/**
+ * Builds deterministic pulse id for an emitted delivery envelope.
+ *
+ * @param candidate - Emitted candidate.
+ * @param deliveryDecisionId - Decision id that allowed delivery.
+ * @param observedAt - Evaluation timestamp.
+ * @returns Stable pulse id.
+ */
+function buildPulseId(
+  candidate: PulseCandidateV1,
+  deliveryDecisionId: string,
+  observedAt: string
+): string {
+  const fingerprint = sha256HexFromCanonicalJson({
+    candidateId: candidate.candidateId,
+    deliveryDecisionId,
+    reasonCode: candidate.reasonCode,
+    observedAt
+  });
+  return `pulse_${fingerprint.slice(0, 20)}`;
 }
 
 /**
@@ -196,6 +246,143 @@ function sortCandidates(candidates: readonly PulseCandidateV1[]): readonly Pulse
     }
     return left.stableHash.localeCompare(right.stableHash);
   });
+}
+
+/**
+ * Builds typed evidence record for one candidate.
+ *
+ * @param candidate - Candidate produced by deterministic evaluation.
+ * @returns Candidate evidence record.
+ */
+function buildCandidateEvidenceRecord(candidate: PulseCandidateV1) {
+  return {
+    candidateId: candidate.candidateId,
+    reasonCode: candidate.reasonCode,
+    score: candidate.score,
+    scoreBreakdown: candidate.scoreBreakdown,
+    evidenceRefs: candidate.evidenceRefs,
+    sourceAuthority: candidate.sourceAuthority,
+    provenanceTier: candidate.provenanceTier,
+    sensitive: candidate.sensitive,
+    proofCategory: "candidate_generation" as const
+  };
+}
+
+/**
+ * Builds typed decision record for one candidate decision.
+ *
+ * @param entry - Candidate and deterministic decision.
+ * @param observedAt - Evaluation timestamp.
+ * @returns Candidate decision record.
+ */
+function buildCandidateDecisionRecord(
+  entry: PulseCandidateDecisionV1,
+  observedAt: string
+) {
+  const allowedByPolicy = entry.decision.decisionCode === "EMIT";
+  return {
+    decisionId: buildPulseDecisionId(entry.candidate, entry.decision, observedAt),
+    candidateId: entry.candidate.candidateId,
+    reasonCode: entry.candidate.reasonCode,
+    decisionCode: entry.decision.decisionCode,
+    blockDetailReason: entry.decision.blockDetailReason,
+    allowedByPolicy,
+    userVisibleDeliveryAllowed: allowedByPolicy,
+    evidenceRefs: entry.decision.evidenceRefs,
+    sourceAuthority: entry.decision.sourceAuthority,
+    provenanceTier: entry.decision.provenanceTier,
+    sensitive: entry.decision.sensitive,
+    activeMissionSuppressed: entry.decision.activeMissionSuppressed,
+    proofCategory: "delivery_permission" as const
+  };
+}
+
+/**
+ * Builds delivery envelope for the emitted candidate when deterministic policy allows delivery.
+ *
+ * @param entry - Candidate and emit decision.
+ * @param decisionId - Stable decision id tied to the emit decision.
+ * @param observedAt - Evaluation timestamp.
+ * @returns Delivery envelope.
+ */
+function buildPulseDeliveryEnvelope(
+  entry: PulseCandidateDecisionV1,
+  decisionId: string,
+  observedAt: string
+): PulseDeliveryEnvelopeV1 {
+  return {
+    pulseId: buildPulseId(entry.candidate, decisionId, observedAt),
+    candidateId: entry.candidate.candidateId,
+    reasonCode: entry.candidate.reasonCode,
+    evidenceRefs: entry.candidate.evidenceRefs,
+    sourceRecallRefs: [],
+    deliveryDecisionId: decisionId,
+    promptKind: "stage6_86_dynamic_pulse",
+    createdAt: observedAt,
+    allowedByPolicy: true,
+    userVisibleDeliveryAllowed: true
+  };
+}
+
+/**
+ * Builds typed trace for a pulse candidate evaluation pass.
+ *
+ * @param candidates - Ordered candidate list.
+ * @param decisions - Deterministic policy decisions for candidates.
+ * @param emittedCandidate - Candidate selected for delivery, when any.
+ * @param observedAt - Evaluation timestamp.
+ * @returns Typed candidate/decision trace.
+ */
+function buildPulseEvaluationTrace(
+  candidates: readonly PulseCandidateV1[],
+  decisions: readonly PulseCandidateDecisionV1[],
+  emittedCandidate: PulseCandidateV1 | null,
+  observedAt: string
+): PulseCandidateEvaluationTraceV1 {
+  const candidateEvidenceRecords = candidates.map((candidate) =>
+    buildCandidateEvidenceRecord(candidate)
+  );
+  const decisionRecords = decisions.map((entry) =>
+    buildCandidateDecisionRecord(entry, observedAt)
+  );
+  const emittedDecisionRecord = emittedCandidate
+    ? decisionRecords.find(
+        (record) =>
+          record.candidateId === emittedCandidate.candidateId &&
+          record.decisionCode === "EMIT"
+      )
+    : null;
+  const emittedDecisionEntry = emittedCandidate
+    ? decisions.find(
+        (entry) =>
+          entry.candidate.candidateId === emittedCandidate.candidateId &&
+          entry.decision.decisionCode === "EMIT"
+      )
+    : null;
+  const emittedPulseEnvelope =
+    emittedDecisionRecord && emittedDecisionEntry
+      ? buildPulseDeliveryEnvelope(emittedDecisionEntry, emittedDecisionRecord.decisionId, observedAt)
+      : null;
+  const traceFingerprint = sha256HexFromCanonicalJson({
+    observedAt,
+    candidates: candidateEvidenceRecords.map((record) => record.candidateId),
+    decisions: decisionRecords.map((record) => [
+      record.decisionId,
+      record.decisionCode,
+      record.blockDetailReason
+    ]),
+    emittedPulseId: emittedPulseEnvelope?.pulseId ?? null
+  });
+  return {
+    traceId: `pulse_trace_${traceFingerprint.slice(0, 20)}`,
+    observedAt,
+    candidateEvidenceRecords,
+    decisionRecords,
+    emittedPulseEnvelope,
+    runtimeDeliveryDecision: emittedPulseEnvelope ? "candidate_emitted" : "no_candidate",
+    runtimeSuppressionReason: null,
+    proofCategories: ["candidate_generation", "delivery_permission"]
+  };
 }
 
 /**
@@ -800,10 +987,18 @@ export function evaluatePulseCandidatesV1(
     });
   }
 
+  const trace = buildPulseEvaluationTrace(
+    orderedCandidates,
+    decisions,
+    emittedCandidate,
+    input.observedAt
+  );
+
   return {
     orderedCandidates,
     decisions,
-    emittedCandidate
+    emittedCandidate,
+    trace
   };
 }
 

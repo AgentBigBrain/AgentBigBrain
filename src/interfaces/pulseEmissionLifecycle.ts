@@ -41,15 +41,27 @@ export function backfillPulseResponseOutcome(
 
   if (nowMs - emittedMs > PULSE_RESPONSE_WINDOW_MS) {
     latest.responseOutcome = "ignored";
+    if (latest.outcomeRecord) {
+      latest.outcomeRecord.responseOutcome = "ignored";
+      latest.outcomeRecord.outcomeSource = "timeout";
+    }
     return;
   }
 
   if (DISMISSAL_KEYWORDS.test(userText)) {
     latest.responseOutcome = "dismissed";
+    if (latest.outcomeRecord) {
+      latest.outcomeRecord.responseOutcome = "dismissed";
+      latest.outcomeRecord.outcomeSource = "legacy_keyword";
+    }
     return;
   }
 
   latest.responseOutcome = "engaged";
+  if (latest.outcomeRecord) {
+    latest.outcomeRecord.responseOutcome = "engaged";
+    latest.outcomeRecord.outcomeSource = "explicit_user_reply";
+  }
 }
 
 /**
@@ -78,6 +90,10 @@ export function expireStaleEmissions(
     if (!Number.isFinite(emittedMs)) continue;
     if (nowMs - emittedMs > PULSE_RESPONSE_WINDOW_MS) {
       emission.responseOutcome = "ignored";
+      if (emission.outcomeRecord) {
+        emission.outcomeRecord.responseOutcome = "ignored";
+        emission.outcomeRecord.outcomeSource = "timeout";
+      }
     }
   }
 }
