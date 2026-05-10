@@ -120,7 +120,9 @@ export async function loadPlannerLearningContext(
   let judgmentHints: readonly JudgmentPattern[] = [];
   if (deps.judgmentPatternStore) {
     try {
-      judgmentHints = await deps.judgmentPatternStore.getRelevantPatterns(contextQuery, 3);
+      judgmentHints = await deps.judgmentPatternStore.getRelevantPatterns(contextQuery, 3, {
+        principalAccess: options.principalAccess ?? null
+      });
     } catch (error) {
       console.error(
         `[JudgmentPattern] non-fatal hint retrieval failure: ${(error as Error).message}`

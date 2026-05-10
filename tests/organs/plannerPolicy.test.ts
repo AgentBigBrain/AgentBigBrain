@@ -8,7 +8,7 @@ import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 
-import { TaskRequest } from "../../src/core/types";
+import type { TaskRequest, WorkflowPattern } from "../../src/core/types";
 import { ModelClient, StructuredCompletionRequest } from "../../src/models/types";
 import { buildAutonomousExecutionInput } from "../../src/interfaces/conversationRuntime/managerContracts";
 import {
@@ -62,6 +62,10 @@ import {
   isDesktopFolderRuntimeProcessSweepRequest
 } from "../../src/organs/plannerPolicy/desktopRuntimeProcessSweepFallback";
 import { buildDeterministicWorkspaceRecoveryFallbackActions } from "../../src/organs/plannerPolicy/workspaceRecoveryFallback";
+import {
+  buildWorkflowLearningGuidance,
+  buildWorkflowSkillBridgeGuidance
+} from "../../src/organs/plannerPolicy/learningPromptGuidance";
 import { buildWorkspaceRecoverySignalFixture } from "../helpers/conversationFixtures";
 
 class ResponseOnlyModelClient implements ModelClient {
@@ -381,6 +385,76 @@ test("preparePlannerActions strips redundant respond actions from explicit close
     preparation.actions.map((action) => action.type),
     ["close_browser"]
   );
+});
+
+function buildWorkflowPatternForGuidance(
+  workflowKey: string,
+  overrides: Partial<WorkflowPattern> = {}
+): WorkflowPattern {
+  return {
+    id: "pattern_prompt_redaction",
+    workflowKey,
+    status: "active",
+    confidence: 0.83,
+    firstSeenAt: "2026-03-10T10:00:00.000Z",
+    lastSeenAt: "2026-03-10T11:00:00.000Z",
+    supersededAt: null,
+    domainLane: "workflow",
+    successCount: 3,
+    failureCount: 0,
+    suppressedCount: 0,
+    contextTags: ["release", "summary"],
+    accessMetadata: {
+      schemaVersion: 1,
+      classification: "owner_private",
+      principalRole: "owner",
+      principalIdHash: "hash_prompt_private",
+      accessClass: "owner_private",
+      accessAllowed: true,
+      routeVisibility: "private",
+      legacyIdentityState: "principal_verified",
+      source: "principal_access"
+    },
+    ...overrides
+  };
+}
+
+test("learning prompt guidance redacts workflow access scope hashes", () => {
+  const guidance = buildWorkflowLearningGuidance([
+    buildWorkflowPatternForGuidance(
+      "respond:release_summary|scope:owner_private:owner:hash_prompt_private:owner_private"
+    )
+  ]);
+
+  assert.match(guidance, /workflowKey=respond:release_summary/);
+  assert.match(guidance, /accessScope=owner_private/);
+  assert.doesNotMatch(guidance, /hash_prompt_private/);
+  assert.doesNotMatch(guidance, /\|scope:/);
+});
+
+test("workflow skill bridge guidance redacts scoped workflow keys and reasons", () => {
+  const guidance = buildWorkflowSkillBridgeGuidance({
+    preferredSkill: null,
+    preferredWorkflowKey: null,
+    preferredReason: null,
+    discouragedWorkflowKeys: [
+      "respond:release_summary|scope:owner_private:owner:hash_bridge_private:owner_private"
+    ],
+    skillSuggestions: [
+      {
+        workflowKey: "respond:release_summary|scope:owner_private:owner:hash_bridge_private:owner_private",
+        suggestedSkillName: "workflow_release_summary",
+        reason:
+          "Repeated active workflow (respond:release_summary|scope:owner_private:owner:hash_bridge_private:owner_private) succeeded 3 times.",
+        confidence: 0.72
+      }
+    ]
+  });
+
+  assert.match(guidance, /discouragedWorkflowKey=respond:release_summary/);
+  assert.match(guidance, /workflowKey=respond:release_summary/);
+  assert.doesNotMatch(guidance, /hash_bridge_private/);
+  assert.doesNotMatch(guidance, /\|scope:/);
 });
 
 test("preparePlannerActions backfills open-browser workspace context from tracked preview metadata", () => {

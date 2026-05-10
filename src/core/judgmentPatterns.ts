@@ -9,8 +9,15 @@ import { LedgerBackend } from "./config";
 import { hashSha256, clampConfidence, toIso } from "./cryptoUtils";
 import { withFileLock, writeFileAtomic } from "./fileLock";
 import { makeId } from "./ids";
+import {
+    classifyAgentLearningAccess,
+    isAgentLearningVisibleForPrincipal,
+    normalizeAgentLearningAccessMetadata,
+    type AgentLearningAccessMetadataV1,
+    type AgentLearningRetrievalAccessOptions
+} from "./learningAccessMetadata";
 import { withSqliteDatabase } from "./sqliteStore";
-import { TaskRunResult } from "./types";
+import type { TaskPrincipalAccessEnvelope, TaskRunResult } from "./types";
 
 const MAX_JUDGMENT_PATTERNS = 2_000;
 const SQLITE_JUDGMENT_PATTERNS_TABLE = "judgment_patterns";
@@ -18,6 +25,8 @@ const SQLITE_JUDGMENT_PATTERNS_TABLE = "judgment_patterns";
 export type JudgmentSignalType = "objective" | "human_feedback" | "delayed";
 export type JudgmentRiskPosture = "conservative" | "balanced" | "aggressive";
 export type JudgmentPatternStatus = "active" | "superseded";
+export type JudgmentLearningAccessMetadataV1 = AgentLearningAccessMetadataV1;
+export type JudgmentPatternRetrievalAccessOptions = AgentLearningRetrievalAccessOptions;
 
 export interface JudgmentOutcomeSignal {
     id: string;
@@ -40,6 +49,7 @@ export interface JudgmentPattern {
     lastUpdatedAt: string;
     supersededAt: string | null;
     outcomeHistory: readonly JudgmentOutcomeSignal[];
+    accessMetadata?: JudgmentLearningAccessMetadataV1;
 }
 
 interface JudgmentPatternDocument {
@@ -63,6 +73,8 @@ export interface RecordJudgmentPatternInput {
     choice: string;
     rationale: string;
     riskPosture: JudgmentRiskPosture;
+    principalAccess?: TaskPrincipalAccessEnvelope | null;
+    accessMetadata?: JudgmentLearningAccessMetadataV1;
 }
 
 export interface JudgmentCalibrationResult {
@@ -228,7 +240,8 @@ function coerceJudgmentPatternDocument(input: unknown): JudgmentPatternDocument 
                         : new Date().toISOString(),
                 supersededAt:
                     typeof raw.supersededAt === "string" && raw.supersededAt.trim() ? raw.supersededAt : null,
-                outcomeHistory
+                outcomeHistory,
+                accessMetadata: normalizeAgentLearningAccessMetadata(raw.accessMetadata)
             } satisfies JudgmentPattern;
         });
 
@@ -364,7 +377,9 @@ export class JudgmentPatternStore {
             createdAt,
             lastUpdatedAt: createdAt,
             supersededAt: null,
-            outcomeHistory: []
+            outcomeHistory: [],
+            accessMetadata:
+                input.accessMetadata ?? classifyAgentLearningAccess(input.principalAccess ?? null)
         };
 
         if (this.backend === "sqlite") {
@@ -606,13 +621,18 @@ export class JudgmentPatternStore {
      * @param limit - Numeric bound, counter, or index used by this logic.
      * @returns Promise resolving to readonly JudgmentPattern[].
      */
-    async getRelevantPatterns(context: string, limit = 3): Promise<readonly JudgmentPattern[]> {
+    async getRelevantPatterns(
+        context: string,
+        limit = 3,
+        options: JudgmentPatternRetrievalAccessOptions = {}
+    ): Promise<readonly JudgmentPattern[]> {
         const normalizedLimit = Number.isFinite(limit) ? Math.max(1, Math.floor(limit)) : 1;
         const contextFingerprint = hashSha256(context.trim());
         const document = await this.load();
 
         const ranked = document.patterns
             .filter((pattern) => pattern.status === "active")
+            .filter((pattern) => isAgentLearningVisibleForPrincipal(pattern.accessMetadata, options))
             .map((pattern) => ({
                 pattern,
                 score:
@@ -897,6 +917,7 @@ export function deriveJudgmentPatternFromTaskRun(
         options: optionSummary,
         choice: approvedChoices || "no_approved_actions",
         rationale: runResult.summary,
-        riskPosture
+        riskPosture,
+        principalAccess: runResult.task.principalAccess ?? null
     };
 }
