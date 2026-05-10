@@ -190,6 +190,7 @@ export function buildSessionSeed(message: ConversationKeySeedInput): Conversatio
     updatedAt: message.receivedAt,
     modelBackendOverride: null,
     codexAuthProfileId: null,
+    modelOverrideAccess: null,
     activeProposal: null,
     activeClarification: null,
     domainContext: createEmptyConversationDomainContext(buildConversationKey(message)),

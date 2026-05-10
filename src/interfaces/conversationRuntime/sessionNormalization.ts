@@ -29,6 +29,7 @@ import { normalizeAgentPulseSessionState } from "./sessionPulseNormalization";
 import { normalizeConversationTransportIdentity } from "./transportIdentity";
 import { normalizePrincipalContext } from "../principalRuntime/principalAccess";
 import { normalizeConversationTurnActorMetadata } from "./sessionNormalizationTurnActorMetadata";
+import { normalizeBackendProfileOverrideAccessRecord } from "./backendProfileOverridePolicy";
 
 /**
  * Normalizes one persisted conversation session into the stable runtime shape.
@@ -112,6 +113,7 @@ export function normalizeSession(raw: Partial<ConversationSession>): Conversatio
       typeof raw.codexAuthProfileId === "string" && raw.codexAuthProfileId.trim().length > 0
         ? raw.codexAuthProfileId.trim()
         : null,
+    modelOverrideAccess: normalizeBackendProfileOverrideAccessRecord(raw.modelOverrideAccess),
     activeProposal,
     activeClarification,
     domainContext: normalizeConversationDomainContext(raw.domainContext, raw.conversationId),

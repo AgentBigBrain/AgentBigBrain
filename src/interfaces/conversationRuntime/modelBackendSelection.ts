@@ -6,11 +6,21 @@ import type { ModelBackend } from "../../models/types";
 import { normalizeModelBackend } from "../../models/backendConfig";
 import { buildCodexProfileEnvironment } from "../../models/codex/profileState";
 import type { ConversationSession } from "../sessionStore";
+import type { PrincipalContext } from "../principalRuntime/principalAccess";
+import {
+  canUseProtectedModelSelection,
+  isProtectedModelBackendOverride
+} from "./backendProfileOverridePolicy";
 
 export interface ConversationModelSelection {
   backend: ModelBackend;
   codexProfileId: string | null;
 }
+
+type ModelSelectionSession = Pick<
+  ConversationSession,
+  "modelBackendOverride" | "codexAuthProfileId"
+> & { principalContext?: PrincipalContext | null };
 
 /**
  * Resolves the active backend/profile selection for one conversation session.
@@ -20,14 +30,17 @@ export interface ConversationModelSelection {
  * @returns Canonical backend/profile selection.
  */
 export function resolveConversationModelSelection(
-  session: Pick<ConversationSession, "modelBackendOverride" | "codexAuthProfileId"> | null | undefined,
+  session: ModelSelectionSession | null | undefined,
   env: NodeJS.ProcessEnv = process.env
 ): ConversationModelSelection {
-  const backend = session?.modelBackendOverride
-    ? normalizeModelBackend(session.modelBackendOverride)
+  const sessionBackend = resolveAuthorizedSessionBackend(session);
+  const backend = sessionBackend
+    ? normalizeModelBackend(sessionBackend)
     : normalizeModelBackend(env.BRAIN_MODEL_BACKEND);
+  const authorizedSessionProfile =
+    canUseProtectedModelSelection(session?.principalContext) ? session?.codexAuthProfileId?.trim() : "";
   const codexProfileId = backend === "codex_oauth"
-    ? (session?.codexAuthProfileId?.trim() || env.CODEX_AUTH_PROFILE?.trim() || "default")
+    ? (authorizedSessionProfile || env.CODEX_AUTH_PROFILE?.trim() || "default")
     : null;
   return {
     backend,
@@ -43,7 +56,7 @@ export function resolveConversationModelSelection(
  * @returns Environment map used by backend-aware runtime helpers.
  */
 export function buildConversationModelEnvironment(
-  session: Pick<ConversationSession, "modelBackendOverride" | "codexAuthProfileId"> | null | undefined,
+  session: ModelSelectionSession | null | undefined,
   env: NodeJS.ProcessEnv = process.env
 ): NodeJS.ProcessEnv {
   const selection = resolveConversationModelSelection(session, env);
@@ -57,4 +70,19 @@ export function buildConversationModelEnvironment(
   delete nextEnv.CODEX_AUTH_PROFILE;
   delete nextEnv.CODEX_HOME;
   return nextEnv;
+}
+
+function resolveAuthorizedSessionBackend(
+  session: (Pick<ConversationSession, "modelBackendOverride"> & {
+    principalContext?: PrincipalContext | null;
+  }) | null | undefined
+): ModelBackend | null {
+  if (!session?.modelBackendOverride) {
+    return null;
+  }
+  const backend = normalizeModelBackend(session.modelBackendOverride);
+  if (!isProtectedModelBackendOverride(backend)) {
+    return backend;
+  }
+  return canUseProtectedModelSelection(session.principalContext) ? backend : null;
 }

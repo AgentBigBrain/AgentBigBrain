@@ -83,7 +83,10 @@ export class InterfaceBrainRegistry {
    * @returns Cached runtime plus the exact environment used to construct it.
    */
   getRuntimeForSession(
-    session: Pick<ConversationSession, "modelBackendOverride" | "codexAuthProfileId"> | null | undefined
+    session: Pick<
+      ConversationSession,
+      "modelBackendOverride" | "codexAuthProfileId" | "principalContext"
+    > | null | undefined
   ): {
     env: NodeJS.ProcessEnv;
     runtime: BuiltBrainRuntime;
@@ -143,7 +146,10 @@ export class InterfaceBrainRegistry {
    * @returns Direct conversation summary payload.
    */
   async runDirectConversationForSession(
-    session: Pick<ConversationSession, "modelBackendOverride" | "codexAuthProfileId"> | null | undefined,
+    session: Pick<
+      ConversationSession,
+      "modelBackendOverride" | "codexAuthProfileId" | "principalContext"
+    > | null | undefined,
     input: string,
     receivedAt: string
   ): Promise<ConversationExecutionResult> {

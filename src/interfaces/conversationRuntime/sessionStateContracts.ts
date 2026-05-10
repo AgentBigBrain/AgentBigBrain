@@ -21,6 +21,7 @@ import type {
 import type { RecoveryFailureClass } from "../../core/autonomy/contracts";
 import type { ConversationStackV1 } from "../../core/types";
 import type { ModelBackend } from "../../models/types";
+import type { BackendProfileOverrideAccessRecord } from "./backendProfileOverridePolicy";
 import type {
   IdentityAuthority,
   LegacyIdentityState,
@@ -435,6 +436,7 @@ export interface ConversationSession {
   updatedAt: string;
   modelBackendOverride?: ModelBackend | null;
   codexAuthProfileId?: string | null;
+  modelOverrideAccess?: BackendProfileOverrideAccessRecord | null;
   activeProposal: PendingProposal | null;
   activeClarification: ActiveClarificationState | null;
   domainContext: ConversationDomainContext;

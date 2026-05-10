@@ -262,3 +262,33 @@ test("normalizeSession preserves proposal and clarification controller metadata"
   assert.equal(normalized?.activeProposal?.controller?.principalRole, "owner");
   assert.equal(normalized?.activeClarification?.controller?.providerUserIdHash, "principal-hash");
 });
+
+test("normalizeSession preserves valid backend/profile override access metadata", () => {
+  const now = "2026-04-18T20:00:00.000Z";
+  const normalized = normalizeSession({
+    ...buildConversationSessionFixture(
+      {
+        updatedAt: now,
+        modelOverrideAccess: {
+          updatedAt: now,
+          command: "profile",
+          target: "codex_profile",
+          requestedValue: "work",
+          protectedResource: true,
+          principalRole: "owner",
+          accessClass: "owner_private",
+          accessAllowed: true,
+          accessReason: "owner_principal_matched",
+          routeVisibility: "private"
+        }
+      },
+      {
+        conversationId: "telegram:chat-backend-profile:user-1",
+        receivedAt: now
+      }
+    )
+  });
+
+  assert.equal(normalized?.modelOverrideAccess?.target, "codex_profile");
+  assert.equal(normalized?.modelOverrideAccess?.accessAllowed, true);
+});

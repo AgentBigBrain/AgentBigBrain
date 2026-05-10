@@ -19,6 +19,7 @@ import {
   evaluateTaskRunnerNetworkWritePreflight,
   type TaskRunnerConnectorReceiptSeed
 } from "./taskRunnerNetworkPreflight";
+import { evaluateTaskRunnerSkillPrincipalAccess } from "./taskRunnerSkillPrincipalPolicy";
 
 type Metadata = Record<string, string | number | boolean | null>;
 
@@ -126,6 +127,25 @@ export function evaluateTaskRunnerPreflight(
           blockCategory: "constraints",
           conflictCode: stage685Guard.conflictCode
         }
+      }
+    };
+  }
+
+  const skillPrincipalDecision = evaluateTaskRunnerSkillPrincipalAccess({
+    action: input.action,
+    task: input.task
+  });
+  if (!skillPrincipalDecision.allowed && skillPrincipalDecision.violation) {
+    return {
+      proposal,
+      blockedOutcome: {
+        actionResult: buildBlockedActionResult({
+          action: input.action,
+          mode: input.mode,
+          blockedBy: [skillPrincipalDecision.violation.code],
+          violations: [skillPrincipalDecision.violation]
+        }),
+        traceDetails: skillPrincipalDecision.traceDetails
       }
     };
   }

@@ -16,6 +16,11 @@ import { handleConversationCommand } from "../../src/interfaces/conversationRunt
 import type {
   ConversationInboundMessage
 } from "../../src/interfaces/conversationRuntime/managerContracts";
+import {
+  derivePrincipalContextFromIngress,
+  type PrincipalContext
+} from "../../src/interfaces/principalRuntime/principalAccess";
+import { createOwnerOperatorPrincipalConfigFromEnv } from "../../src/interfaces/principalRuntime/principalConfig";
 import type { ConversationJob, ConversationSession } from "../../src/interfaces/sessionStore";
 import { buildConversationIngressConfig } from "../helpers/conversationFixtures";
 
@@ -31,6 +36,30 @@ function buildSession(overrides: Partial<ConversationSession> = {}): Conversatio
     }),
     ...overrides
   };
+}
+
+function buildPrincipalContext(role: "owner" | "operator" | "allowed_user"): PrincipalContext {
+  const principalConfig = createOwnerOperatorPrincipalConfigFromEnv({
+    BRAIN_PRINCIPAL_HMAC_KEY: "test-principal-hmac-key",
+    BRAIN_OWNER_TELEGRAM_USER_IDS: role === "owner" ? "user-1" : undefined,
+    BRAIN_OPERATOR_TELEGRAM_USER_IDS: role === "operator" ? "user-1" : undefined
+  });
+  return derivePrincipalContextFromIngress({
+    provider: "telegram",
+    conversationId: "chat-1",
+    userId: "user-1",
+    username: "agentowner",
+    conversationVisibility: "private",
+    receivedAt: "2026-03-07T17:00:05.000Z",
+    principalConfig,
+    allowedUserIds: role === "allowed_user" ? ["user-1"] : []
+  });
+}
+
+function buildPrincipalSession(role: "owner" | "operator" | "allowed_user"): ConversationSession {
+  return buildSession({
+    principalContext: buildPrincipalContext(role)
+  });
 }
 
 function buildMessage(text: string): ConversationInboundMessage {
@@ -223,7 +252,7 @@ test("handleConversationCommand keeps /auto policy and turn recording behavior",
 });
 
 test("handleConversationCommand routes /memory through canonical review dispatch", async () => {
-  const session = buildSession();
+  const session = buildPrincipalSession("owner");
   let capturedReviewTaskId = "";
 
   const reply = await handleConversationCommand(
@@ -238,9 +267,9 @@ test("handleConversationCommand routes /memory through canonical review dispatch
           capturedReviewTaskId = request.reviewTaskId;
           return [
             {
-              episodeId: "episode_owen_fall",
-              title: "Owen fell down",
-              summary: "Owen fell down and the outcome was unresolved.",
+              episodeId: "episode_riley_fall",
+              title: "Riley fell down",
+              summary: "Riley fell down and the outcome was unresolved.",
               status: "unresolved",
               lastMentionedAt: "2026-03-07T10:00:00.000Z",
               resolvedAt: null,
@@ -255,7 +284,7 @@ test("handleConversationCommand routes /memory through canonical review dispatch
 
   assert.match(capturedReviewTaskId, /^memory_review_/);
   assert.match(reply, /Remembered situations:/);
-  assert.match(reply, /Owen fell down/);
+  assert.match(reply, /Riley fell down/);
 });
 
 test("handleConversationCommand renders the canonical skill inventory for /skills", async () => {
@@ -338,7 +367,7 @@ test("handleConversationCommand uses media-normalized voice command text for /sk
 });
 
 test("handleConversationCommand updates and reports the per-session backend override", async () => {
-  const session = buildSession();
+  const session = buildPrincipalSession("owner");
 
   const setReply = await handleConversationCommand(
     session,
@@ -374,6 +403,41 @@ test("handleConversationCommand updates and reports the per-session backend over
   assert.match(clearReply, /Cleared the session backend override/);
 });
 
+test("handleConversationCommand blocks protected backend overrides for non-owner principals", async () => {
+  const session = buildPrincipalSession("allowed_user");
+
+  const reply = await handleConversationCommand(
+    session,
+    buildMessage("/backend codex_oauth"),
+    buildDependencies(() => {
+      throw new Error("enqueueJob should not run for /backend");
+    })
+  );
+
+  assert.equal(session.modelBackendOverride, null);
+  assert.equal(session.modelOverrideAccess?.accessAllowed, false);
+  assert.equal(session.modelOverrideAccess?.protectedResource, true);
+  assert.equal(session.modelOverrideAccess?.principalRole, "allowed_user");
+  assert.match(reply, /owner or operator authorization/i);
+});
+
+test("handleConversationCommand allows session-local backend overrides for non-owner principals", async () => {
+  const session = buildPrincipalSession("allowed_user");
+
+  const reply = await handleConversationCommand(
+    session,
+    buildMessage("/backend mock"),
+    buildDependencies(() => {
+      throw new Error("enqueueJob should not run for /backend");
+    })
+  );
+
+  assert.equal(session.modelBackendOverride, "mock");
+  assert.equal(session.modelOverrideAccess?.accessAllowed, true);
+  assert.equal(session.modelOverrideAccess?.accessClass, "session_only");
+  assert.match(reply, /Session backend override set to mock/);
+});
+
 test("handleConversationCommand fails closed for unsupported backend overrides", async () => {
   const session = buildSession();
 
@@ -393,7 +457,7 @@ test("handleConversationCommand fails closed for unsupported backend overrides",
 });
 
 test("handleConversationCommand updates and clears the per-session Codex profile override", async () => {
-  const session = buildSession();
+  const session = buildPrincipalSession("operator");
 
   const setReply = await handleConversationCommand(
     session,
@@ -427,4 +491,22 @@ test("handleConversationCommand updates and clears the per-session Codex profile
   );
   assert.equal(session.codexAuthProfileId, null);
   assert.match(clearReply, /Cleared the session Codex profile override/);
+});
+
+test("handleConversationCommand blocks protected Codex profile overrides for non-owner principals", async () => {
+  const session = buildPrincipalSession("allowed_user");
+
+  const reply = await handleConversationCommand(
+    session,
+    buildMessage("/profile work"),
+    buildDependencies(() => {
+      throw new Error("enqueueJob should not run for /profile");
+    })
+  );
+
+  assert.equal(session.codexAuthProfileId, null);
+  assert.equal(session.modelBackendOverride, null);
+  assert.equal(session.modelOverrideAccess?.accessAllowed, false);
+  assert.equal(session.modelOverrideAccess?.target, "codex_profile");
+  assert.match(reply, /owner or operator authorization/i);
 });
