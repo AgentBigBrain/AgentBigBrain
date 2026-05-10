@@ -15,6 +15,8 @@ import {
 } from "../../src/core/stage6_75ApprovalPolicy";
 import type { ApprovalGrantV1 } from "../../src/core/types";
 
+type ApprovalPrincipalRole = "owner" | "operator" | "allowed_user";
+
 function createBaseInput(): EvaluateTaskRunnerPreflightInput {
   const baseConfig = createBrainConfigFromEnv({});
   const config = {
@@ -53,7 +55,11 @@ function createBaseInput(): EvaluateTaskRunnerPreflightInput {
 
 function registerExternalNetworkApprovalGrant(
   input: EvaluateTaskRunnerPreflightInput,
-  approvalId: string
+  approvalId: string,
+  options: {
+    principalRole?: ApprovalPrincipalRole;
+    includePrincipalMetadata?: boolean;
+  } = {}
 ): ApprovalGrantV1 {
   const request = createApprovalRequestV1({
     missionId: input.task.id,
@@ -75,7 +81,21 @@ function registerExternalNetworkApprovalGrant(
   const grant = createApprovalGrantV1({
     request: scopedRequest,
     approvedAt: "2026-03-07T12:00:00.000Z",
-    approvedBy: "tester"
+    approvedBy: "tester",
+    approverPrincipalAccess:
+      options.includePrincipalMetadata === false
+        ? null
+        : {
+            principalRole: options.principalRole ?? "operator",
+            accessOperation: "approval",
+            accessClass: "owner_private",
+            accessAllowed: true,
+            accessReason: "operator_principal_matched",
+            routeVisibility: "private",
+            identityAuthority: "configured_owner_provider_user_id",
+            legacyIdentityState: "principal_verified",
+            ownerMatchSource: "provider_user_id"
+          }
   });
   input.approvalGrantById = new Map([[approvalId, grant]]);
   return grant;
@@ -349,4 +369,76 @@ test("evaluateTaskRunnerPreflight blocks unknown approval ids instead of minting
     /not externally registered/i
   );
   assert.equal(outcome.approvalGrant, undefined);
+});
+
+test("evaluateTaskRunnerPreflight blocks externally registered approvals without principal metadata", () => {
+  const input = createBaseInput();
+  input.action = {
+    id: "action_task_runner_preflight_network_missing_principal",
+    type: "network_write",
+    description: "write connector state",
+    params: {
+      url: "https://example.com/api",
+      connector: "gmail",
+      operation: "write",
+      lastReadAtIso: "2026-03-07T12:00:00.000Z",
+      approvalId: "approval_missing_principal",
+      approvalActionIds: ["action_task_runner_preflight_network_missing_principal"],
+      idempotencyKeys: [
+        "task_task_runner_preflight_1:1:action_task_runner_preflight_network_missing_principal"
+      ]
+    },
+    estimatedCostUsd: 0.08
+  };
+  input.idempotencyKey =
+    "task_task_runner_preflight_1:1:action_task_runner_preflight_network_missing_principal";
+  registerExternalNetworkApprovalGrant(input, "approval_missing_principal", {
+    includePrincipalMetadata: false
+  });
+
+  const outcome = evaluateTaskRunnerPreflight(input);
+
+  assert.deepEqual(outcome.blockedOutcome?.actionResult.blockedBy, [
+    "IDENTITY_IMPERSONATION_DENIED"
+  ]);
+  assert.match(
+    outcome.blockedOutcome?.actionResult.violations[0]?.message ?? "",
+    /missing approver principal metadata/i
+  );
+});
+
+test("evaluateTaskRunnerPreflight blocks network approvals from non-owner/operator principals", () => {
+  const input = createBaseInput();
+  input.action = {
+    id: "action_task_runner_preflight_network_wrong_principal",
+    type: "network_write",
+    description: "write connector state",
+    params: {
+      url: "https://example.com/api",
+      connector: "gmail",
+      operation: "write",
+      lastReadAtIso: "2026-03-07T12:00:00.000Z",
+      approvalId: "approval_wrong_principal",
+      approvalActionIds: ["action_task_runner_preflight_network_wrong_principal"],
+      idempotencyKeys: [
+        "task_task_runner_preflight_1:1:action_task_runner_preflight_network_wrong_principal"
+      ]
+    },
+    estimatedCostUsd: 0.08
+  };
+  input.idempotencyKey =
+    "task_task_runner_preflight_1:1:action_task_runner_preflight_network_wrong_principal";
+  registerExternalNetworkApprovalGrant(input, "approval_wrong_principal", {
+    principalRole: "allowed_user"
+  });
+
+  const outcome = evaluateTaskRunnerPreflight(input);
+
+  assert.deepEqual(outcome.blockedOutcome?.actionResult.blockedBy, [
+    "IDENTITY_IMPERSONATION_DENIED"
+  ]);
+  assert.match(
+    outcome.blockedOutcome?.actionResult.violations[0]?.message ?? "",
+    /owner or operator/i
+  );
 });

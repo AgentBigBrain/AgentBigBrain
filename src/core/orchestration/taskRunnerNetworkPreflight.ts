@@ -325,12 +325,64 @@ function evaluateApprovalGrant(
       )
     };
   }
+  const approvalPrincipalDecision = validateNetworkApprovalPrincipalAccess(approvalGrant);
+  if (!approvalPrincipalDecision.ok) {
+    return {
+      blockedOutcome: buildConstraintBlockedOutcome(
+        input.action,
+        input.mode,
+        "IDENTITY_IMPERSONATION_DENIED",
+        approvalPrincipalDecision.reason
+      )
+    };
+  }
 
   return {
     approvalGrant: {
       approvalId,
       grant: registerApprovalGrantUse(approvalGrant)
     }
+  };
+}
+
+function validateNetworkApprovalPrincipalAccess(grant: ApprovalGrantV1): {
+  ok: boolean;
+  reason: string;
+} {
+  const principalAccess = grant.approverPrincipalAccess;
+  if (!principalAccess) {
+    return {
+      ok: false,
+      reason: "Approval grant is missing approver principal metadata."
+    };
+  }
+  if (principalAccess.accessAllowed !== true) {
+    return {
+      ok: false,
+      reason: "Approval grant principal metadata was not allowed."
+    };
+  }
+  if (principalAccess.accessOperation !== "approval") {
+    return {
+      ok: false,
+      reason: "Approval grant principal metadata is not scoped to approval."
+    };
+  }
+  if (principalAccess.principalRole !== "owner" && principalAccess.principalRole !== "operator") {
+    return {
+      ok: false,
+      reason: "Network approval requires owner or operator approver principal."
+    };
+  }
+  if (principalAccess.accessClass !== "owner_private") {
+    return {
+      ok: false,
+      reason: "Network approval requires owner-private access class."
+    };
+  }
+  return {
+    ok: true,
+    reason: "Approval grant approver principal is valid."
   };
 }
 
