@@ -22,6 +22,74 @@ function buildSession(overrides: Partial<ConversationSession> = {}): Conversatio
   );
 }
 
+function buildController(principalHash: string) {
+  return {
+    source: "session_principal_context" as const,
+    principalRole: "conversation_participant" as const,
+    principalIdHash: principalHash,
+    providerUserIdHash: principalHash,
+    routeVisibility: "private" as const,
+    identityAuthority: "transport_hint" as const,
+    legacyIdentityState: "principal_verified" as const,
+    ownerMatchSource: "none" as const,
+    displayNameHint: "Synthetic"
+  };
+}
+
+test("mergeConversationSession preserves an existing active proposal when incoming state lacks one", () => {
+  const existing = buildSession({
+    activeProposal: {
+      id: "proposal-existing",
+      originalInput: "Build the small demo.",
+      currentInput: "Build the small demo.",
+      createdAt: "2026-03-07T12:00:00.000Z",
+      updatedAt: "2026-03-07T12:00:00.000Z",
+      status: "pending",
+      controller: buildController("principal-existing")
+    }
+  });
+  const incoming = buildSession({
+    updatedAt: "2026-03-07T12:05:00.000Z",
+    activeProposal: null
+  });
+
+  const merged = mergeConversationSession(existing, incoming);
+
+  assert.equal(merged.activeProposal?.id, "proposal-existing");
+  assert.equal(merged.activeProposal?.controller?.providerUserIdHash, "principal-existing");
+});
+
+test("mergeConversationSession prefers the newer active proposal with its controller metadata", () => {
+  const existing = buildSession({
+    activeProposal: {
+      id: "proposal-existing",
+      originalInput: "Build the small demo.",
+      currentInput: "Build the small demo.",
+      createdAt: "2026-03-07T12:00:00.000Z",
+      updatedAt: "2026-03-07T12:00:00.000Z",
+      status: "pending",
+      controller: buildController("principal-existing")
+    }
+  });
+  const incoming = buildSession({
+    updatedAt: "2026-03-07T12:05:00.000Z",
+    activeProposal: {
+      id: "proposal-incoming",
+      originalInput: "Build the revised demo.",
+      currentInput: "Build the revised demo.",
+      createdAt: "2026-03-07T12:04:00.000Z",
+      updatedAt: "2026-03-07T12:04:00.000Z",
+      status: "pending",
+      controller: buildController("principal-incoming")
+    }
+  });
+
+  const merged = mergeConversationSession(existing, incoming);
+
+  assert.equal(merged.activeProposal?.id, "proposal-incoming");
+  assert.equal(merged.activeProposal?.controller?.providerUserIdHash, "principal-incoming");
+});
+
 test("mergeConversationSession removes completed jobs from the queued list", () => {
   const existing = buildSession({
     runningJobId: "job-1",

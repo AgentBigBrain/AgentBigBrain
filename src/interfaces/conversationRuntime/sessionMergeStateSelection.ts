@@ -7,8 +7,31 @@ import type {
   ConversationJob,
   ConversationModeContinuityState,
   ConversationProgressState,
-  ConversationReturnHandoffRecord
+  ConversationReturnHandoffRecord,
+  PendingProposal
 } from "../sessionStore";
+
+/**
+ * Chooses the preferred active proposal state when session snapshots are merged.
+ */
+export function selectActiveProposal(
+  existing: PendingProposal | null,
+  incoming: PendingProposal | null
+): PendingProposal | null {
+  if (!existing) {
+    return incoming;
+  }
+  if (!incoming) {
+    return existing;
+  }
+  if (incoming.updatedAt > existing.updatedAt) {
+    return incoming;
+  }
+  if (existing.updatedAt > incoming.updatedAt) {
+    return existing;
+  }
+  return incoming;
+}
 
 /**
  * Chooses the preferred active clarification state when both session snapshots contain one.

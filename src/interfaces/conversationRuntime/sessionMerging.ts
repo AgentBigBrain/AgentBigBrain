@@ -20,6 +20,7 @@ import type {
 import {
   resolveMergedProgressState,
   selectActiveClarification,
+  selectActiveProposal,
   selectModeContinuity,
   selectProgressState,
   selectReturnHandoff
@@ -380,6 +381,10 @@ export function mergeConversationSession(
     sessionSchemaVersion: "v2",
     conversationStack: mergedConversationStack,
     updatedAt: mergedUpdatedAt,
+    activeProposal: selectActiveProposal(
+      existing.activeProposal,
+      incoming.activeProposal
+    ),
     activeClarification: selectActiveClarification(
       existing.activeClarification,
       incoming.activeClarification
