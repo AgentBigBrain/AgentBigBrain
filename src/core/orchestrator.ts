@@ -569,7 +569,8 @@ export class BrainOrchestrator {
       },
       profileAwareUserInput,
       {
-        conversationDomainContext: options.conversationDomainContext
+        conversationDomainContext: options.conversationDomainContext,
+        principalAccess: task.principalAccess ?? null
       }
     );
     const plannerModel = selectModelForRole("planner", this.config);

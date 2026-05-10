@@ -12,6 +12,11 @@ import { withFileLock, writeFileAtomic } from "./fileLock";
 import { buildProjectionChangeSet } from "./projections/service";
 import { withSqliteDatabase } from "./sqliteStore";
 import { TaskRunResult, WorkflowAdaptationResult, WorkflowObservation, WorkflowPattern } from "./types";
+import {
+  isWorkflowPatternVisibleForPrincipal,
+  normalizeWorkflowLearningAccessMetadata,
+  type WorkflowPatternRetrievalAccessOptions
+} from "./workflowLearningRuntime/accessClassification";
 import { applyWorkflowObservationMetadata } from "./workflowLearningRuntime/patternLifecycle";
 import { deriveWorkflowObservationFromTaskRunDetailed } from "./workflowLearningRuntime/observationExtraction";
 import { rankRelevantWorkflowPatterns } from "./workflowLearningRuntime/relevanceRanking";
@@ -139,7 +144,8 @@ function parseWorkflowPattern(input: unknown): WorkflowPattern | null {
     ] as const),
     evidenceRefs: Array.isArray(candidate.evidenceRefs)
       ? candidate.evidenceRefs.filter((entry): entry is string => typeof entry === "string")
-      : undefined
+      : undefined,
+    accessMetadata: normalizeWorkflowLearningAccessMetadata(candidate.accessMetadata)
   };
 }
 
@@ -443,11 +449,15 @@ export class WorkflowLearningStore {
   async getRelevantPatterns(
     query: string,
     limit = DEFAULT_RELEVANT_PATTERN_LIMIT,
-    sessionDomainLane: string | null = null
+    sessionDomainLane: string | null = null,
+    accessOptions: WorkflowPatternRetrievalAccessOptions | null = null
   ): Promise<readonly WorkflowPattern[]> {
     const normalizedLimit = Number.isFinite(limit) ? Math.max(1, Math.floor(limit)) : 1;
     const document = await this.load();
-    return rankRelevantWorkflowPatterns(document.patterns, query, normalizedLimit, sessionDomainLane);
+    const visiblePatterns = document.patterns.filter((pattern) =>
+      isWorkflowPatternVisibleForPrincipal(pattern, accessOptions)
+    );
+    return rankRelevantWorkflowPatterns(visiblePatterns, query, normalizedLimit, sessionDomainLane);
   }
 
   /**

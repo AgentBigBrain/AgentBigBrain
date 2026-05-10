@@ -45,6 +45,7 @@ export interface LoadPlannerLearningContextDependencies {
 
 export interface LoadPlannerLearningContextOptions {
   conversationDomainContext?: ConversationDomainContext | null;
+  principalAccess?: TaskRequest["principalAccess"] | null;
 }
 
 export interface PlanOrchestratorAttemptInput {
@@ -106,7 +107,8 @@ export async function loadPlannerLearningContext(
       workflowHints = await deps.workflowLearningStore.getRelevantPatterns(
         contextQuery,
         3,
-        options.conversationDomainContext?.dominantLane ?? null
+        options.conversationDomainContext?.dominantLane ?? null,
+        { principalAccess: options.principalAccess ?? null }
       );
     } catch (error) {
       console.error(

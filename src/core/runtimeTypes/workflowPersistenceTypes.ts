@@ -23,6 +23,25 @@ export type WorkflowApprovalPosture =
 export type WorkflowCostBand = "none" | "low" | "medium" | "high";
 
 export type WorkflowLatencyBand = "fast" | "moderate" | "slow";
+export type WorkflowLearningAccessClassification =
+  | "agent_global_safe"
+  | "owner_private"
+  | "principal_private"
+  | "workspace_local"
+  | "external_agent_limited"
+  | "test_fixture";
+
+export interface WorkflowLearningAccessMetadataV1 {
+  schemaVersion: 1;
+  classification: WorkflowLearningAccessClassification;
+  principalRole: string | null;
+  principalIdHash: string | null;
+  accessClass: string | null;
+  accessAllowed: boolean | null;
+  routeVisibility: string | null;
+  legacyIdentityState: string | null;
+  source: "principal_access" | "legacy_unclassified" | "test_fixture";
+}
 
 export interface WorkflowObservation {
   workflowKey: string;
@@ -42,6 +61,7 @@ export interface WorkflowObservation {
   linkedSkillName?: string | null;
   linkedSkillVerificationStatus?: "unverified" | "verified" | "failed" | null;
   evidenceRefs?: readonly string[];
+  accessMetadata?: WorkflowLearningAccessMetadataV1;
 }
 
 export interface WorkflowPattern {
@@ -68,6 +88,7 @@ export interface WorkflowPattern {
   linkedSkillName?: string | null;
   linkedSkillVerificationStatus?: "unverified" | "verified" | "failed" | null;
   evidenceRefs?: readonly string[];
+  accessMetadata?: WorkflowLearningAccessMetadataV1;
 }
 
 export interface WorkflowAdaptationResult {

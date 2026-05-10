@@ -198,6 +198,8 @@ export {
   type WorkflowCostBand,
   type WorkflowConflictCodeV1,
   type WorkflowExecutionStyle,
+  type WorkflowLearningAccessClassification,
+  type WorkflowLearningAccessMetadataV1,
   type WorkflowObservation,
   type WorkflowOperationV1,
   type WorkflowOutcome,

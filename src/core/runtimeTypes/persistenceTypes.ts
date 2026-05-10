@@ -19,6 +19,8 @@ export {
   type WorkflowConflictCodeV1,
   type WorkflowCostBand,
   type WorkflowExecutionStyle,
+  type WorkflowLearningAccessClassification,
+  type WorkflowLearningAccessMetadataV1,
   type WorkflowLatencyBand,
   type WorkflowObservation,
   type WorkflowOperationV1,
