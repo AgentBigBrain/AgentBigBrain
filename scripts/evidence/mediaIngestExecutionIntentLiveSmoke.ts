@@ -307,6 +307,8 @@ function buildTelegramConfig(): TelegramInterfaceConfig {
       maxEventsPerWindow: 20,
       replayCacheSize: 200,
       agentPulseTickIntervalMs: 60_000,
+      agentPulseRunOnStartup: false,
+      agentPulseDynamicReasonAllowlist: [],
       ackDelayMs: 0,
       showTechnicalSummary: false,
       showSafetyCodes: false,

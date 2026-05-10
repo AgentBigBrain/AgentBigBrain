@@ -13,6 +13,9 @@ const MAX_SNIPPET_LENGTH = 120;
 const MAX_DELIVERED_PREVIEW_LENGTH = 160;
 const TOKEN_SHAPED_TEXT_PATTERN = /\b[A-Za-z0-9_./+-]{32,}\b/g;
 const QUOTED_EVIDENCE_BLOCK_PATTERN = /```[\s\S]*?```/g;
+const LOCAL_PATH_PATTERN = /\b[A-Za-z]:\\[^\s]+|\b\/(?:Users|home|tmp|var)\/[^\s]+/g;
+const PRIVATE_CONTEXT_PATTERN =
+  /\b(?:relationship|profile memory|source recall|identity memory|works? with|worked with|private project)\b/gi;
 const DISMISSAL_KEYWORDS = /\b(stop|not now|don't ask|shut up|quit|enough|no more)\b/i;
 const MUTED_KEYWORDS = /\b(?:mute|turn off|disable)\b[\s\S]{0,40}\b(?:pulse|check-?ins?)\b/i;
 const NEGATIVE_KEYWORDS =
@@ -38,10 +41,13 @@ export function backfillPulseResponseOutcome(
   nowMs: number,
   boundUserTurnId?: string
 ): void {
+  if (/^\/pulse\b/i.test(userText.trim())) {
+    return;
+  }
   const emissions = session.agentPulse.recentEmissions;
   if (!emissions || emissions.length === 0) return;
 
-  const latest = emissions[emissions.length - 1];
+  const latest = findLatestUnresolvedEmission(emissions) ?? emissions[emissions.length - 1];
   if (latest.responseOutcome !== undefined && latest.responseOutcome !== null) return;
 
   const emittedMs = Date.parse(latest.emittedAt);
@@ -150,7 +156,10 @@ export function backfillPulseSnippet(
   const emissions = session.agentPulse.recentEmissions;
   if (!emissions || emissions.length === 0) return;
 
-  const latest = emissions[emissions.length - 1];
+  const latest = completedJob.pulseMetadata?.pulseId
+    ? emissions.find((emission) => emission.pulseId === completedJob.pulseMetadata?.pulseId)
+    : emissions[emissions.length - 1];
+  if (!latest) return;
 
   if (completedJob.resultSummary) {
     const deliveredPreview = buildPulseDeliveredTextPreview(completedJob.resultSummary);
@@ -179,6 +188,8 @@ export function buildPulseDeliveredTextPreview(deliveredText: string): string {
   const redacted = deliveredText
     .replace(QUOTED_EVIDENCE_BLOCK_PATTERN, "[quoted evidence redacted]")
     .replace(TOKEN_SHAPED_TEXT_PATTERN, "[redacted]")
+    .replace(LOCAL_PATH_PATTERN, "[path redacted]")
+    .replace(PRIVATE_CONTEXT_PATTERN, "[private context redacted]")
     .replace(/\s+/g, " ")
     .trim();
   return redacted.slice(0, MAX_DELIVERED_PREVIEW_LENGTH);
@@ -200,4 +211,22 @@ export function buildPulseDeliveredTextPreview(deliveredText: string): string {
  */
 function buildPulseReplyBindingId(userText: string, nowMs: number): string {
   return `pulse_reply_${hashSha256(`${nowMs}:${userText}`).slice(0, 16)}`;
+}
+
+/**
+ * Finds the newest pulse emission that has not yet been bound to a user response outcome.
+ */
+function findLatestUnresolvedEmission(
+  emissions: ConversationSession["agentPulse"]["recentEmissions"]
+): NonNullable<ConversationSession["agentPulse"]["recentEmissions"]>[number] | null {
+  if (!emissions) {
+    return null;
+  }
+  for (let index = emissions.length - 1; index >= 0; index -= 1) {
+    const emission = emissions[index];
+    if (emission.outcomeRecord?.responseOutcome == null) {
+      return emission;
+    }
+  }
+  return null;
 }

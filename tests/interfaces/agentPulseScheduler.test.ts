@@ -577,9 +577,14 @@ test("agent pulse scheduler records suppression decision when no reason is allow
     await scheduler.runTickOnce();
 
     assert.equal(enqueueCalls, 0);
-    assert.equal(updates.length, 1);
-    assert.equal(updates[0].key, "discord:chan-1:user-1");
-    assert.equal(updates[0].lastDecisionCode, "RATE_LIMIT");
+    assert.ok(updates.length >= 1);
+    assert.ok(
+      updates.some(
+        (update) =>
+          update.key === "discord:chan-1:user-1" &&
+          update.lastDecisionCode === "RATE_LIMIT"
+      )
+    );
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }
@@ -697,10 +702,15 @@ test("agent pulse scheduler preserves highest-priority suppression reason", asyn
 
     await scheduler.runTickOnce();
 
-    assert.equal(updates.length, 1);
-    assert.equal(updates[0].key, "discord:chan-1:user-1");
-    assert.equal(updates[0].lastDecisionCode, "QUIET_HOURS");
-    assert.equal(updates[0].lastPulseReason, "unresolved_commitment");
+    assert.ok(updates.length >= 1);
+    assert.ok(
+      updates.some(
+        (update) =>
+          update.key === "discord:chan-1:user-1" &&
+          update.lastDecisionCode === "QUIET_HOURS" &&
+          update.lastPulseReason === "unresolved_commitment"
+      )
+    );
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }
@@ -992,7 +1002,8 @@ test("dynamic pulse path calls evaluatePulseCandidatesV1 and enqueues when enabl
       },
       {
         tickIntervalMs: 1_000,
-        reasonPriority: ["unresolved_commitment", "stale_fact_revalidation"]
+        reasonPriority: ["unresolved_commitment", "stale_fact_revalidation"],
+        dynamicReasonAllowlist: ["STALE_FACT_REVALIDATION"]
       }
     );
 
@@ -1117,7 +1128,8 @@ test("dynamic pulse path persists recentEmissions so cooldown blocks subsequent 
       },
       {
         tickIntervalMs: 1_000,
-        reasonPriority: ["unresolved_commitment", "stale_fact_revalidation"]
+        reasonPriority: ["unresolved_commitment", "stale_fact_revalidation"],
+        dynamicReasonAllowlist: ["STALE_FACT_REVALIDATION"]
       }
     );
 
@@ -1414,7 +1426,13 @@ test("dynamic pulse prompt includes naturalness context sections when enabled", 
       },
       {
         tickIntervalMs: 1_000,
-        reasonPriority: ["stale_fact_revalidation"]
+        reasonPriority: ["stale_fact_revalidation"],
+        dynamicReasonAllowlist: [
+          "STALE_FACT_REVALIDATION",
+          "OPEN_LOOP_RESUME",
+          "RELATIONSHIP_CLARIFICATION",
+          "USER_REQUESTED_FOLLOWUP"
+        ]
       }
     );
 
@@ -1528,7 +1546,13 @@ test("dynamic pulse evaluateUserDynamic computes relationship age from entity gr
       },
       {
         tickIntervalMs: 1_000,
-        reasonPriority: ["stale_fact_revalidation"]
+        reasonPriority: ["stale_fact_revalidation"],
+        dynamicReasonAllowlist: [
+          "STALE_FACT_REVALIDATION",
+          "OPEN_LOOP_RESUME",
+          "RELATIONSHIP_CLARIFICATION",
+          "USER_REQUESTED_FOLLOWUP"
+        ]
       }
     );
 

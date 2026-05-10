@@ -4,6 +4,10 @@
 
 import type { PulseEmissionRecordV1 } from "../../core/stage6_86PulseCandidates";
 import type {
+  PulseDecisionRecordV1,
+  PulseSystemJobMetadata
+} from "../proactiveRuntime/pulseAuthorityGateway";
+import type {
   SourceRecallCaptureClass,
   SourceRecallSourceKind,
   SourceRecallSourceRole,
@@ -140,6 +144,15 @@ export type AgentPulseDecisionCode =
   | "SESSION_DOMAIN_SUPPRESSED"
   | "QUIET_HOURS"
   | "RATE_LIMIT"
+  | "DAILY_CAP"
+  | "REASON_NOT_ALLOWED"
+  | "PUBLIC_PRIVACY_BLOCKED"
+  | "ACTIVE_MISSION"
+  | "SOURCE_RECALL_BLOCKED"
+  | "RUNTIME_ACTION_NOT_SCHEDULER_AUTHORIZED"
+  | "DEPENDENCY_UNAVAILABLE"
+  | "SKIPPED_ACTIVE_WORK"
+  | "BLOCKED_BY_POLICY"
   | "NOT_EVALUATED"
   | "DYNAMIC_SENT"
   | "DYNAMIC_SUPPRESSED";
@@ -174,8 +187,12 @@ export interface AgentPulseSessionState {
   lastEvaluatedAt: string | null;
   lastContextualLexicalEvidence?: AgentPulseContextualLexicalEvidence | null;
   recentEmissions?: PulseEmissionRecordV1[];
+  lastDecisionRecord?: PulseDecisionRecordV1 | null;
+  decisionRecords?: PulseDecisionRecordV1[];
   userStyleFingerprint?: string;
   userTimezone?: string;
+  controlUpdatedAt?: string;
+  controlSource?: "exact_slash_command" | "natural_intent" | "operator_review";
 }
 
 export interface PendingProposal {
@@ -364,6 +381,7 @@ export interface ConversationJob {
   finalDeliveryLastErrorCode: string | null;
   finalDeliveryLastAttemptAt: string | null;
   pauseRequestedAt?: string | null;
+  pulseMetadata?: PulseSystemJobMetadata | null;
 }
 
 export interface ConversationClassifierEvent {

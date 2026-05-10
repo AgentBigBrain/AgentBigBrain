@@ -7127,7 +7127,7 @@ test("handleMessage detects timezone from user message and stores in session", a
         userId: "user-1",
         username: "agentowner",
         conversationVisibility: "private",
-        text: "I'm in EST by the way",
+        text: "My timezone is Eastern.",
         receivedAt: new Date().toISOString()
       },
       async () => ({ summary: "Got it!" }),

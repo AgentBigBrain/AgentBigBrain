@@ -82,10 +82,11 @@ delivery policy, wording, and outcome learning. Exact `/pulse` commands remain d
 Natural pulse preferences can become typed preference candidates, but they do not immediately
 authorize outreach.
 
-Dynamic Pulse can propose proactive inquiry candidates from recent conversation, open loops,
-memory, graph signals, and Source Recall evidence. Deterministic policy decides whether ABB may
-interrupt. The model may word an approved check-in after permission, but it does not grant delivery
-authority.
+Dynamic Pulse currently uses deterministic graph, stack, memory, and recent-conversation signals to
+produce typed pulse candidates. Future Source Recall-supported inquiry candidates can add quoted
+evidence after the Source Recall gate is explicitly enabled, but Source Recall still cannot grant
+outreach authority. Deterministic policy decides whether ABB may interrupt. The model may word an
+approved check-in after permission, but it does not grant delivery authority.
 
 ## Proactive inquiry candidate
 
@@ -94,6 +95,14 @@ question intent, evidence refs, Source Recall status, privacy risk, novelty, exp
 and non-authority flags. A candidate can explain why a question might help; it cannot deliver a
 message, write memory, approve an action, mark work complete, or bypass quiet hours, cooldowns,
 caps, routing, or public/private safety.
+
+## Pulse authority gateway
+
+The deterministic boundary that turns a pulse candidate into either an allowed queued response or a
+suppressed decision record. It checks opt-in state, quiet hours, cooldowns, daily caps, active work,
+dynamic reason allowlists, route privacy, public/private evidence safety, and Source Recall
+lifecycle status when source evidence is involved. Prompt text, model output, `pulse_emit`, and
+candidate metadata cannot bypass this gateway.
 
 ## Markdown instruction skill
 

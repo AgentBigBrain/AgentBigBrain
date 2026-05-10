@@ -169,7 +169,7 @@ export class TelegramGateway {
         provider: "telegram",
         sessionStore: this.sessionStore,
         evaluateAgentPulse: async (request) => this.adapter.evaluateAgentPulse(request),
-        enqueueSystemJob: async (session, systemInput, receivedAt) => {
+        enqueueSystemJob: async (session, systemInput, receivedAt, metadata) => {
           const chatId = extractTelegramChatIdFromConversationKey(session.conversationId);
           if (!chatId) {
             return false;
@@ -200,7 +200,8 @@ export class TelegramGateway {
                 )
               };
             },
-            notifier
+            notifier,
+            metadata
           );
         },
         updatePulseState: async (conversationKey, update) =>
@@ -213,7 +214,9 @@ export class TelegramGateway {
       },
       {
         tickIntervalMs: this.config.security.agentPulseTickIntervalMs,
-        reasonPriority: ["unresolved_commitment", "stale_fact_revalidation"]
+        reasonPriority: ["unresolved_commitment", "stale_fact_revalidation"],
+        dynamicReasonAllowlist: this.config.security.agentPulseDynamicReasonAllowlist,
+        runOnStartup: this.config.security.agentPulseRunOnStartup
       }
     );
   }

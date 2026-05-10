@@ -49,12 +49,15 @@ export async function captureConversationJobSourceRecall(
   }
 
   try {
+    const isAgentPulseJob =
+      input.job.pulseMetadata?.kind === "agent_pulse" &&
+      input.job.pulseMetadata.sourceRecallTaskInputCaptureAllowed === false;
     const taskInputText = normalizeTaskSourceText(input.job.input);
     const taskSummaryText = normalizeTaskSourceText(input.job.resultSummary ?? "");
     const scopeId = `conversation:${input.session.conversationId}`;
     const threadId = `conversation:${input.session.conversationId}`;
 
-    const taskInputResult = taskInputText
+    const taskInputResult = taskInputText && !isAgentPulseJob
       ? await captureLowerAuthoritySourceRecall({
           scopeId,
           threadId,

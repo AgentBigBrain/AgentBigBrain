@@ -3,7 +3,8 @@
  */
 
 import type { PulseEmissionRecordV1 } from "../../core/stage6_86PulseCandidates";
-import { appendPulseEmission } from "./sessionPulseMetadata";
+import type { PulseDecisionRecordV1 } from "../proactiveRuntime/pulseAuthorityGateway";
+import { appendPulseDecisionRecord, appendPulseEmission } from "./sessionPulseMetadata";
 import {
   type AgentPulseDecisionCode,
   type AgentPulseMode,
@@ -24,6 +25,7 @@ export interface ConversationAgentPulseStateUpdate {
   lastContextualLexicalEvidence: ConversationSession["agentPulse"]["lastContextualLexicalEvidence"];
   updatedAt: string;
   newEmission: PulseEmissionRecordV1;
+  decisionRecord: PulseDecisionRecordV1;
 }
 
 export interface UpdateConversationAgentPulseStateInput {
@@ -79,6 +81,9 @@ export async function updateConversationAgentPulseState(
   }
   if (update.newEmission) {
     appendPulseEmission(session.agentPulse, update.newEmission);
+  }
+  if (update.decisionRecord) {
+    appendPulseDecisionRecord(session.agentPulse, update.decisionRecord);
   }
   if (typeof update.updatedAt === "string" && update.updatedAt.trim()) {
     session.updatedAt = update.updatedAt;

@@ -214,6 +214,8 @@ export function buildTelegramInterfaceConfigFixture(
       maxEventsPerWindow: 10,
       replayCacheSize: 500,
       agentPulseTickIntervalMs: 30_000,
+      agentPulseRunOnStartup: false,
+      agentPulseDynamicReasonAllowlist: [],
       ackDelayMs: 800,
       showTechnicalSummary: true,
       showSafetyCodes: true,

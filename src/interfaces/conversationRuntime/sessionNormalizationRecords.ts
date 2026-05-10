@@ -19,6 +19,7 @@ import type {
   ConversationTurnMetadata,
   ConversationTurnMetadataSource
 } from "./sessionStateContracts";
+import type { PulseSystemJobMetadata } from "../proactiveRuntime/pulseAuthorityGateway";
 import type { RecoveryFailureClass } from "../../core/autonomy/contracts";
 import { normalizeConversationTurnSourceRecallMetadata } from "./sessionNormalizationSourceRecallRecords";
 export {
@@ -101,6 +102,52 @@ function normalizeRecoveryTrace(
       typeof candidate.fingerprint === "string" && candidate.fingerprint.trim().length > 0
         ? candidate.fingerprint
         : null
+  };
+}
+
+/**
+ * Normalizes persisted Agent Pulse job metadata without allowing malformed legacy payloads to grant
+ * delivery or execution authority.
+ */
+function normalizePulseSystemJobMetadata(candidate: unknown): PulseSystemJobMetadata | null {
+  if (!candidate || typeof candidate !== "object") {
+    return null;
+  }
+  const value = candidate as Partial<PulseSystemJobMetadata>;
+  const promptKind =
+    value.promptKind === "stage6_86_dynamic_pulse" ||
+    value.promptKind === "legacy_pulse" ||
+    value.promptKind === "semantic_inquiry_pulse"
+      ? value.promptKind
+      : null;
+  const allowedActionTypes = Array.isArray(value.allowedActionTypes)
+    ? value.allowedActionTypes
+    : [];
+  const allowedRespondOnly =
+    allowedActionTypes.length === 1 && allowedActionTypes[0] === "respond";
+
+  if (
+    value.kind !== "agent_pulse" ||
+    typeof value.deliveryDecisionId !== "string" ||
+    typeof value.decisionRecordId !== "string" ||
+    !promptKind ||
+    value.executionConstraint !== "respond_only_pulse" ||
+    !allowedRespondOnly ||
+    value.sourceRecallTaskInputCaptureAllowed !== false
+  ) {
+    return null;
+  }
+
+  return {
+    kind: "agent_pulse",
+    pulseId: typeof value.pulseId === "string" ? value.pulseId : null,
+    candidateId: typeof value.candidateId === "string" ? value.candidateId : null,
+    deliveryDecisionId: value.deliveryDecisionId,
+    decisionRecordId: value.decisionRecordId,
+    promptKind,
+    executionConstraint: "respond_only_pulse",
+    allowedActionTypes: ["respond"],
+    sourceRecallTaskInputCaptureAllowed: false
   };
 }
 
@@ -255,7 +302,8 @@ export function normalizeConversationJob(job: Partial<ConversationJob>): Convers
       typeof job.finalDeliveryLastErrorCode === "string" ? job.finalDeliveryLastErrorCode : null,
     finalDeliveryLastAttemptAt:
       typeof job.finalDeliveryLastAttemptAt === "string" ? job.finalDeliveryLastAttemptAt : null,
-    pauseRequestedAt: typeof job.pauseRequestedAt === "string" ? job.pauseRequestedAt : null
+    pauseRequestedAt: typeof job.pauseRequestedAt === "string" ? job.pauseRequestedAt : null,
+    pulseMetadata: normalizePulseSystemJobMetadata(job.pulseMetadata)
   };
 }
 

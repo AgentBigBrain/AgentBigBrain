@@ -12,8 +12,10 @@ import {
 } from "../proactiveRuntime/followupQualification";
 import type {
   ApplyPulseStateToUserSessions,
+  AgentPulseSchedulerConfig,
   AgentPulseSchedulerDeps
 } from "./pulseSchedulerContracts";
+import type { AgentPulseEvaluationResult } from "../../core/profileMemoryStore";
 import type { ConversationSession } from "../sessionStore";
 import {
   evaluatePulseCandidatesV1,
@@ -30,6 +32,15 @@ import type { ConversationDomainLane, EntityGraphV1 } from "../../core/types";
 import { shouldSuppressPulseForSessionDomain } from "./pulseScheduling";
 import { hasAuthoritativeConversationDomainLane } from "./sessionDomainRouting";
 import { evaluateProactiveInquiryDeliveryPolicy } from "../proactiveRuntime/deliveryPolicy";
+import {
+  buildDynamicDecisionRecord,
+  buildDynamicPulseGatewayRequest
+} from "./pulseDynamicAuthority";
+import {
+  buildPulseDecisionRecord,
+  buildPulseSystemJobMetadata,
+  evaluatePulseAuthorityGateway
+} from "../proactiveRuntime/pulseAuthorityGateway";
 
 const RELATIONSHIP_CLARIFICATION_RECENT_TURN_WINDOW = 8;
 
@@ -39,6 +50,8 @@ export interface DynamicPulseEvaluationParams {
   targetSession: ConversationSession;
   nowIso: string;
   deps: Pick<AgentPulseSchedulerDeps, "getEntityGraph" | "enqueueSystemJob">;
+  config: AgentPulseSchedulerConfig;
+  preflightEvaluation: AgentPulseEvaluationResult;
   applyPulseStateToUserSessions: ApplyPulseStateToUserSessions;
 }
 
@@ -105,12 +118,45 @@ export async function evaluateDynamicPulse(
   params: DynamicPulseEvaluationParams
 ): Promise<void> {
   if (shouldSuppressPulseForSessionDomain(params.targetSession, "dynamic")) {
+    const decisionRecord = buildDynamicDecisionRecord({
+      params,
+      candidateId: null,
+      reasonCode: "dynamic",
+      baseDecision: {
+        allowed: false,
+        decisionCode: "SESSION_DOMAIN_SUPPRESSED",
+        suppressedBy: ["session.domain.workflow"],
+        nextEligibleAtIso: null
+      },
+      candidateProposed: false
+    });
     await params.applyPulseStateToUserSessions(params.userSessions, {
       lastDecisionCode: "SESSION_DOMAIN_SUPPRESSED",
       lastEvaluatedAt: params.nowIso,
       lastContextualLexicalEvidence: null,
       lastPulseReason: null,
       lastPulseTargetConversationId: params.targetSession.conversationId,
+      decisionRecord,
+      updatedAt: params.nowIso
+    });
+    return;
+  }
+
+  if (!params.preflightEvaluation.decision.allowed) {
+    const decisionRecord = buildDynamicDecisionRecord({
+      params,
+      candidateId: null,
+      reasonCode: "dynamic_preflight",
+      baseDecision: params.preflightEvaluation.decision,
+      candidateProposed: false
+    });
+    await params.applyPulseStateToUserSessions(params.userSessions, {
+      lastDecisionCode: params.preflightEvaluation.decision.decisionCode,
+      lastEvaluatedAt: params.nowIso,
+      lastContextualLexicalEvidence: null,
+      lastPulseReason: null,
+      lastPulseTargetConversationId: params.targetSession.conversationId,
+      decisionRecord,
       updatedAt: params.nowIso
     });
     return;
@@ -120,10 +166,53 @@ export async function evaluateDynamicPulse(
   try {
     graph = await params.deps.getEntityGraph?.();
   } catch {
-    console.log("[DynamicPulse] Entity graph unavailable, skipping tick.");
+    const decisionRecord = buildDynamicDecisionRecord({
+      params,
+      candidateId: null,
+      reasonCode: "dynamic_dependency",
+      baseDecision: {
+        allowed: false,
+        decisionCode: "DEPENDENCY_UNAVAILABLE",
+        suppressedBy: ["dependency.entity_graph_unavailable"],
+        nextEligibleAtIso: null
+      },
+      candidateProposed: false,
+      decisionStatus: "blocked"
+    });
+    await params.applyPulseStateToUserSessions(params.userSessions, {
+      lastDecisionCode: "DEPENDENCY_UNAVAILABLE",
+      lastEvaluatedAt: params.nowIso,
+      lastContextualLexicalEvidence: null,
+      lastPulseReason: null,
+      lastPulseTargetConversationId: params.targetSession.conversationId,
+      decisionRecord,
+      updatedAt: params.nowIso
+    });
     return;
   }
   if (!graph) {
+    const decisionRecord = buildDynamicDecisionRecord({
+      params,
+      candidateId: null,
+      reasonCode: "dynamic_dependency",
+      baseDecision: {
+        allowed: false,
+        decisionCode: "DEPENDENCY_UNAVAILABLE",
+        suppressedBy: ["dependency.entity_graph_missing"],
+        nextEligibleAtIso: null
+      },
+      candidateProposed: false,
+      decisionStatus: "blocked"
+    });
+    await params.applyPulseStateToUserSessions(params.userSessions, {
+      lastDecisionCode: "DEPENDENCY_UNAVAILABLE",
+      lastEvaluatedAt: params.nowIso,
+      lastContextualLexicalEvidence: null,
+      lastPulseReason: null,
+      lastPulseTargetConversationId: params.targetSession.conversationId,
+      decisionRecord,
+      updatedAt: params.nowIso
+    });
     return;
   }
 
@@ -173,12 +262,25 @@ export async function evaluateDynamicPulse(
     : graph;
 
   if (!result.emittedCandidate) {
+    const decisionRecord = buildDynamicDecisionRecord({
+      params,
+      candidateId: null,
+      reasonCode: "dynamic_candidate",
+      baseDecision: {
+        allowed: false,
+        decisionCode: "DYNAMIC_SUPPRESSED",
+        suppressedBy: ["candidate.none_emitted"],
+        nextEligibleAtIso: null
+      },
+      candidateProposed: false
+    });
     await params.applyPulseStateToUserSessions(params.userSessions, {
       lastDecisionCode: "DYNAMIC_SUPPRESSED",
       lastEvaluatedAt: params.nowIso,
       lastContextualLexicalEvidence: null,
       lastPulseReason: null,
       lastPulseTargetConversationId: params.targetSession.conversationId,
+      decisionRecord,
       updatedAt: params.nowIso
     });
     return;
@@ -198,12 +300,25 @@ export async function evaluateDynamicPulse(
         (emission.responseOutcome === "ignored" || emission.responseOutcome === "dismissed")
     ).length
   })) {
+    const decisionRecord = buildDynamicDecisionRecord({
+      params,
+      candidateId: result.emittedCandidate.candidateId,
+      reasonCode: result.emittedCandidate.reasonCode,
+      baseDecision: {
+        allowed: false,
+        decisionCode: "DYNAMIC_SUPPRESSED",
+        suppressedBy: ["candidate.relationship_clarification_low_utility"],
+        nextEligibleAtIso: null
+      },
+      candidateProposed: true
+    });
     await params.applyPulseStateToUserSessions(params.userSessions, {
       lastDecisionCode: "DYNAMIC_SUPPRESSED",
       lastEvaluatedAt: params.nowIso,
       lastContextualLexicalEvidence: null,
       lastPulseReason: null,
       lastPulseTargetConversationId: params.targetSession.conversationId,
+      decisionRecord,
       updatedAt: params.nowIso
     });
     return;
@@ -245,12 +360,49 @@ export async function evaluateDynamicPulse(
     recentPulseHistory
   });
   if (!proactiveInquiryDeliveryDecision.allowed) {
+    const decisionRecord = buildDynamicDecisionRecord({
+      params,
+      candidateId: result.emittedCandidate.candidateId,
+      reasonCode: result.emittedCandidate.reasonCode,
+      baseDecision: {
+        allowed: false,
+        decisionCode: "DYNAMIC_SUPPRESSED",
+        suppressedBy: proactiveInquiryDeliveryDecision.suppressedBy,
+        nextEligibleAtIso: null
+      },
+      candidateProposed: true
+    });
     await params.applyPulseStateToUserSessions(params.userSessions, {
       lastDecisionCode: "DYNAMIC_SUPPRESSED",
       lastEvaluatedAt: params.nowIso,
       lastContextualLexicalEvidence: null,
       lastPulseReason: null,
       lastPulseTargetConversationId: params.targetSession.conversationId,
+      decisionRecord,
+      updatedAt: params.nowIso
+    });
+    return;
+  }
+
+  const gatewayRequest = buildDynamicPulseGatewayRequest({
+    params,
+    candidate: result.emittedCandidate,
+    proactiveInquiryCandidate
+  });
+  const gatewayDecision = evaluatePulseAuthorityGateway(gatewayRequest);
+  const gatewayDecisionRecord = buildPulseDecisionRecord({
+    request: gatewayRequest,
+    decision: gatewayDecision,
+    candidateProposed: true
+  });
+  if (!gatewayDecision.allowed) {
+    await params.applyPulseStateToUserSessions(params.userSessions, {
+      lastDecisionCode: gatewayDecision.decisionCode,
+      lastEvaluatedAt: params.nowIso,
+      lastContextualLexicalEvidence: null,
+      lastPulseReason: result.emittedCandidate.reasonCode,
+      lastPulseTargetConversationId: params.targetSession.conversationId,
+      decisionRecord: gatewayDecisionRecord,
       updatedAt: params.nowIso
     });
     return;
@@ -266,7 +418,14 @@ export async function evaluateDynamicPulse(
   const enqueued = await params.deps.enqueueSystemJob(
     params.targetSession,
     prompt,
-    params.nowIso
+    params.nowIso,
+    buildPulseSystemJobMetadata({
+      pulseId: result.trace.emittedPulseEnvelope?.pulseId ?? null,
+      candidateId: result.emittedCandidate.candidateId,
+      deliveryDecisionId: gatewayDecision.decisionId,
+      decisionRecordId: gatewayDecisionRecord.decisionRecordId,
+      promptKind: "stage6_86_dynamic_pulse"
+    })
   );
   if (!enqueued) {
     return;
@@ -278,6 +437,8 @@ export async function evaluateDynamicPulse(
   const deliveryEnvelope = envelope
     ? {
         ...envelope,
+        deliveryDecisionId: gatewayDecision.decisionId,
+        decisionRecordId: gatewayDecisionRecord.decisionRecordId,
         inquiryType: proactiveInquiryCandidate.inquiryType
       }
     : undefined;
@@ -299,7 +460,7 @@ export async function evaluateDynamicPulse(
           deliveredTextHash: null,
           deliveredTextPreviewRedacted: null,
           responseOutcome: null,
-          outcomeSource: "timeout"
+          outcomeSource: "pending"
         }
       : undefined,
     responseOutcome: null,
@@ -317,6 +478,7 @@ export async function evaluateDynamicPulse(
     lastEvaluatedAt: params.nowIso,
     lastContextualLexicalEvidence: null,
     updatedAt: params.nowIso,
-    newEmission: emission
+    newEmission: emission,
+    decisionRecord: gatewayDecisionRecord
   });
 }

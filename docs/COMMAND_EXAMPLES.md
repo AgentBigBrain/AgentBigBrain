@@ -163,9 +163,12 @@ Pulse behavior is conservative:
 - Exact `/pulse` commands are deterministic controls.
 - Natural preferences like `don't ask me about that again`, `only ask me privately`, or `that
   follow-up was useful` are treated as preference evidence, not direct permission to interrupt.
-- Source Recall may support a candidate as quoted evidence, but it cannot authorize outreach.
+- Source Recall may support a candidate as quoted evidence only after an explicit gated path is
+  enabled; it cannot authorize outreach.
 - Quiet hours, cooldowns, daily caps, active work, private/public routing, and deleted or redacted
   source records still suppress delivery.
+- Public mode is stricter than private mode. Public pulse prompts are data-minimized and do not
+  receive raw private context by default.
 
 ### Use `/status` when
 

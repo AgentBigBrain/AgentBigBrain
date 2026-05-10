@@ -87,6 +87,7 @@
     "test:interface:trust_lexical_evidence": "tsx scripts/evidence/userFacingTrustLexicalEvidence.ts",
     "test:governor:safety_lexicon_evidence": "tsx scripts/evidence/defaultGovernorSafetyLexiconEvidence.ts",
     "test:interface:contextual_followup_lexical_evidence": "tsx scripts/evidence/agentPulseContextualLexicalEvidence.ts",
+    "test:dynamic_pulse_authority_privacy:evidence": "tsx scripts/evidence/dynamicPulseAuthorityPrivacyMatrix.ts",
     "test:interface:advanced_live_smoke": "tsx scripts/evidence/interfaceAdvancedLiveSmoke.ts",
     "test:interface:real_provider_live_smoke": "tsx scripts/evidence/interfaceRealProviderLiveSmoke.ts",
     "test:telegram_human_conversation:live_smoke": "tsx scripts/evidence/telegramHumanConversationLiveSmoke.ts",

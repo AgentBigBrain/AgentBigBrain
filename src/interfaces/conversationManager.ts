@@ -6,6 +6,10 @@ import { type PulseLexicalRuleContext, createPulseLexicalRuleContext, createFoll
 import { clearConversationAckTimer, enqueueConversationJob } from "./conversationRuntime/conversationLifecycle";
 import { enqueueConversationSystemJob, setConversationWorkerBinding, startConversationWorkerIfNeeded, type SessionWorkerBinding } from "./conversationRuntime/conversationWorkerRuntime";
 import { updateConversationAgentPulseState } from "./conversationRuntime/pulseState";
+import type {
+  PulseDecisionRecordV1,
+  PulseSystemJobMetadata
+} from "./proactiveRuntime/pulseAuthorityGateway";
 import { AUTONOMOUS_EXECUTION_PREFIX, buildAutonomousExecutionInput, type ConversationCheckpointReviewRunner, type ConversationIntentInterpreter, type ConversationManagerConfig, type ConversationManagerDependencies, type ConversationInboundMessage, type ConversationNotifier, type ExecuteConversationTask, type OpenConversationContinuityReadSession, type RememberConversationProfileInput, type QueryConversationContinuityFacts, type QueryConversationContinuityEpisodes } from "./conversationRuntime/managerContracts";
 export { buildAutonomousExecutionInput, parseAutonomousExecutionInput } from "./conversationRuntime/managerContracts";
 export type {
@@ -152,7 +156,8 @@ export class ConversationManager {
     systemInput: string,
     receivedAt: string,
     executeTask: ExecuteConversationTask,
-    notify: ConversationNotifier
+    notify: ConversationNotifier,
+    metadata?: PulseSystemJobMetadata
   ): Promise<boolean> {
     return enqueueConversationSystemJob({
       conversationKey,
@@ -160,6 +165,7 @@ export class ConversationManager {
       receivedAt,
       executeTask,
       notify,
+      metadata,
       store: this.store,
       config: {
         maxContextTurnsForExecution: this.config.maxContextTurnsForExecution
@@ -224,6 +230,7 @@ export class ConversationManager {
       lastContextualLexicalEvidence: ConversationSession["agentPulse"]["lastContextualLexicalEvidence"];
       updatedAt: string;
       newEmission: PulseEmissionRecordV1;
+      decisionRecord: PulseDecisionRecordV1;
     }>
   ): Promise<void> {
     await updateConversationAgentPulseState({

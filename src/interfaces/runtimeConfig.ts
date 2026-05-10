@@ -4,6 +4,10 @@
 
 import { ensureEnvLoaded } from "../core/envLoader";
 import {
+  STAGE_6_86_PULSE_REASON_CODES,
+  type PulseReasonCodeV1
+} from "../core/types";
+import {
   createSourceRecallRuntimeConfigFromEnv,
   type SourceRecallRuntimeConfig
 } from "../core/sourceRecall/sourceRecallRetention";
@@ -20,6 +24,8 @@ export interface SharedInterfaceSecurityConfig {
   maxEventsPerWindow: number;
   replayCacheSize: number;
   agentPulseTickIntervalMs: number;
+  agentPulseRunOnStartup: boolean;
+  agentPulseDynamicReasonAllowlist: PulseReasonCodeV1[];
   ackDelayMs: number;
   showTechnicalSummary: boolean;
   showSafetyCodes: boolean;
@@ -132,6 +138,46 @@ function parsePositiveInt(value: string | undefined, fallback: number): number {
   }
 
   return Math.floor(parsed);
+}
+
+/**
+ * Parses Agent Pulse scheduler cadence while keeping sub-minute intervals test-latched only.
+ */
+function parseAgentPulseTickIntervalMs(env: NodeJS.ProcessEnv): number {
+  const fallback = 120_000;
+  const parsed = parsePositiveInt(env.BRAIN_AGENT_PULSE_TICK_INTERVAL_MS, fallback);
+  if (parsed >= 60_000) {
+    return parsed;
+  }
+  if (parseBoolean(env.BRAIN_AGENT_PULSE_ALLOW_FAST_TICK_FOR_TESTS, false)) {
+    return parsed;
+  }
+  return fallback;
+}
+
+/**
+ * Parses the explicit dynamic pulse reason allowlist used by the delivery authority gateway.
+ */
+function parseAgentPulseDynamicReasonAllowlist(env: NodeJS.ProcessEnv): PulseReasonCodeV1[] {
+  const rawReasons = parseCsv(env.BRAIN_AGENT_PULSE_DYNAMIC_REASONS);
+  if (rawReasons.length === 0) {
+    return [];
+  }
+
+  const reasonSet = new Set<string>(STAGE_6_86_PULSE_REASON_CODES);
+  const normalizedReasons: PulseReasonCodeV1[] = [];
+  for (const reason of rawReasons) {
+    const normalized = reason.trim().toUpperCase();
+    if (!reasonSet.has(normalized)) {
+      throw new Error(
+        `BRAIN_AGENT_PULSE_DYNAMIC_REASONS includes unsupported reason '${reason}'.`
+      );
+    }
+    if (!normalizedReasons.includes(normalized as PulseReasonCodeV1)) {
+      normalizedReasons.push(normalized as PulseReasonCodeV1);
+    }
+  }
+  return normalizedReasons;
 }
 
 /**
@@ -314,7 +360,9 @@ function buildSharedSecurityConfig(env: NodeJS.ProcessEnv): SharedInterfaceSecur
     rateLimitWindowMs: parsePositiveInt(env.BRAIN_INTERFACE_RATE_LIMIT_WINDOW_MS, 60_000),
     maxEventsPerWindow: parsePositiveInt(env.BRAIN_INTERFACE_RATE_LIMIT_MAX_EVENTS, 20),
     replayCacheSize: parsePositiveInt(env.BRAIN_INTERFACE_REPLAY_CACHE_SIZE, 500),
-    agentPulseTickIntervalMs: parsePositiveInt(env.BRAIN_AGENT_PULSE_TICK_INTERVAL_MS, 120_000),
+    agentPulseTickIntervalMs: parseAgentPulseTickIntervalMs(env),
+    agentPulseRunOnStartup: parseBoolean(env.BRAIN_AGENT_PULSE_RUN_ON_STARTUP, false),
+    agentPulseDynamicReasonAllowlist: parseAgentPulseDynamicReasonAllowlist(env),
     ackDelayMs,
     showTechnicalSummary,
     showSafetyCodes: parseBoolean(

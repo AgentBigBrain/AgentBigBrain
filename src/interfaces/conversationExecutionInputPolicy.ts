@@ -1786,7 +1786,9 @@ export async function buildConversationAwareExecutionInput(
     semanticRouteId !== null;
   const routeMemoryIntent =
     semanticRoute?.memoryIntent ?? (hasResolvedSemanticRoute ? "none" : null);
-  const recentTurns = session.conversationTurns.slice(-maxContextTurnsForExecution);
+  const recentTurns = session.agentPulse.mode === "public"
+    ? []
+    : session.conversationTurns.slice(-maxContextTurnsForExecution);
   const rawUserInput = sourceUserInput ?? executionInput;
   const suppressWorkflowContinuityBlocks = shouldSuppressWorkflowContinuityBlocks(
     runtimeReconciledSession,
@@ -2219,7 +2221,9 @@ export function buildAgentPulseExecutionInput(
     "Never open with canned self-introductions like 'AI assistant here' or 'I'm your AI assistant'.",
     "Do not prepend labels like 'AI assistant response' or 'AI assistant check-in'.",
     "Do not impersonate a human.",
-    "Do not perform file/network/shell actions unless explicitly required.",
+    "Execution constraint: respond_only_pulse.",
+    "Allowed action types: respond only.",
+    "Do not perform file, network, shell, browser, memory, skill, projection, or runtime-control actions.",
     "",
     "Agent Pulse request:",
     systemPrompt,

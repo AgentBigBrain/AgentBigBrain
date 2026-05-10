@@ -179,7 +179,7 @@ export class DiscordGateway {
         provider: "discord",
         sessionStore: this.sessionStore,
         evaluateAgentPulse: async (request) => this.adapter.evaluateAgentPulse(request),
-        enqueueSystemJob: async (session, systemInput, receivedAt) => {
+        enqueueSystemJob: async (session, systemInput, receivedAt, metadata) => {
           const channelId = extractChannelIdFromConversationKey(session.conversationId);
           if (!channelId) {
             return false;
@@ -211,7 +211,8 @@ export class DiscordGateway {
                 )
               };
             },
-            notifier
+            notifier,
+            metadata
           );
         },
         updatePulseState: async (conversationKey, update) =>
@@ -224,7 +225,9 @@ export class DiscordGateway {
       },
       {
         tickIntervalMs: this.config.security.agentPulseTickIntervalMs,
-        reasonPriority: ["unresolved_commitment", "stale_fact_revalidation"]
+        reasonPriority: ["unresolved_commitment", "stale_fact_revalidation"],
+        dynamicReasonAllowlist: this.config.security.agentPulseDynamicReasonAllowlist,
+        runOnStartup: this.config.security.agentPulseRunOnStartup
       }
     );
   }
