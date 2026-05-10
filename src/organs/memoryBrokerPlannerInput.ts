@@ -30,6 +30,7 @@ import {
 import {
   buildProfileMemoryIngestPolicy
 } from "../core/profileMemoryRuntime/profileMemoryIngestPolicy";
+import { evaluateProfileMemoryAccessPolicy } from "../core/profileMemoryRuntime/profileMemoryAccessPolicy";
 import {
   createProfileMemoryRequestTelemetry,
   recordProfileMemoryIngestOperation,
@@ -117,6 +118,8 @@ interface BrokerProfileMemoryReadSession {
     nowIso?: string
   ): Promise<readonly ProfileReadableEpisode[]> | readonly ProfileReadableEpisode[];
 }
+
+type BrokerProfileOperation = "profile_read" | "profile_write";
 
 /**
  * Deduplicates bounded texts before model-assisted memory extraction.
@@ -429,6 +432,17 @@ export function assessBrokerPromptCutoverGate(
   };
 }
 
+function evaluateBrokerOwnerProfileAccess(
+  task: TaskRequest,
+  operation: BrokerProfileOperation
+): ReturnType<typeof evaluateProfileMemoryAccessPolicy> {
+  return evaluateProfileMemoryAccessPolicy({
+    principalAccess: task.principalAccess,
+    operation,
+    requestedSubjectKind: "owner_profile"
+  });
+}
+
 /**
  * Builds brokered planner input while keeping the entrypoint free of orchestration detail.
  *
@@ -488,6 +502,8 @@ export async function buildBrokeredPlannerInput(
   );
   try {
     const requestTelemetry = createProfileMemoryRequestTelemetry();
+    const brokerReadAccess = evaluateBrokerOwnerProfileAccess(task, "profile_read");
+    const brokerWriteAccess = evaluateBrokerOwnerProfileAccess(task, "profile_write");
     const sourceFingerprint = buildProfileMemorySourceFingerprint(currentUserRequest);
     const conversationId = options.sessionDomainContext?.conversationId;
     const mediaIngest = parseProfileMediaIngestInput(currentUserRequest);
@@ -505,7 +521,7 @@ export async function buildBrokeredPlannerInput(
           )
         )).flat()
       : [];
-    if (!shouldSkipProfileIngest) {
+    if (!shouldSkipProfileIngest && brokerWriteAccess.allowed) {
       await deps.profileMemoryStore.ingestFromTaskInput(
         task.id,
         currentUserRequest,
@@ -523,16 +539,63 @@ export async function buildBrokeredPlannerInput(
               : task.id,
             dominantLaneAtWrite: options.sessionDomainContext?.dominantLane ?? null,
             sourceSurface: "broker_task_ingest",
-            sourceFingerprint
+            sourceFingerprint,
+            principalAccess: task.principalAccess,
+            requestedSubjectKind: "owner_profile"
           },
           ingestPolicy: buildProfileMemoryIngestPolicy({
             memoryIntent: resolvedRouteMemoryIntent ?? "none",
             sourceSurface: "broker_task_ingest"
           }),
-          requestTelemetry
+          requestTelemetry,
+          principalAccess: task.principalAccess,
+          requestedSubjectKind: "owner_profile"
         }
       );
       recordProfileMemoryIngestOperation(requestTelemetry);
+    }
+    if (!brokerReadAccess.allowed) {
+      const domainBoundary = assessDomainBoundary(
+        currentUserRequest,
+        [],
+        options.sessionDomainContext
+      );
+      const sourceRecallContext = await buildRouteApprovedSourceRecallContext({
+        deps,
+        options,
+        currentUserRequest,
+        resolvedRouteMemoryIntent,
+        domainBoundary
+      });
+      const promptCutoverGate = assessBrokerPromptCutoverGate(requestTelemetry);
+      await recordAudit(
+        deps.memoryAccessAuditStore,
+        task.id,
+        currentUserRequest,
+        requestTelemetry,
+        promptCutoverGate,
+        requestTelemetry.storeLoadCount,
+        0,
+        0,
+        0,
+        domainBoundary
+      );
+      if (sourceRecallContext.trim().length > 0) {
+        return {
+          userInput: buildSourceRecallOnlyContextPacket(
+            task,
+            domainBoundary.lanes,
+            domainBoundary.scores,
+            "source_recall_context_relevant",
+            sourceRecallContext
+          ),
+          profileMemoryStatus: "available"
+        };
+      }
+      return {
+        userInput: task.userInput,
+        profileMemoryStatus: "available"
+      };
     }
     const readSession = await openBrokerProfileMemoryReadSession(
       deps.profileMemoryStore,
