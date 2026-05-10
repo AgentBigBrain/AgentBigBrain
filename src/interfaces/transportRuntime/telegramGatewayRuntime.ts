@@ -17,7 +17,10 @@ import {
   type TelegramVideoAttachment, type TelegramVoiceAttachment
 } from "../mediaRuntime/telegramMediaIngress";
 import { buildConversationTransportIdentityRecord } from "../conversationRuntime/transportIdentity";
-import { abortAutonomousTransportTaskIfRequested } from "./autonomousAbortControl";
+import {
+  abortAutonomousTransportTaskIfRequested,
+  buildAutonomousAbortControllerKey
+} from "./autonomousAbortControl";
 import { shouldNotifyRejectedInvocation } from "./rateLimitPolicy";
 
 export type { TelegramDocumentAttachment, TelegramPhotoSize, TelegramVideoAttachment, TelegramVoiceAttachment } from "../mediaRuntime/telegramMediaIngress";
@@ -246,7 +249,11 @@ export function prepareTelegramUpdate(
   }
 
   const stopRequested = abortAutonomousTransportTaskIfRequested(
-    chatId,
+    buildAutonomousAbortControllerKey({
+      provider: "telegram",
+      conversationId: chatId,
+      userId
+    }),
     normalizedText,
     input.abortControllers
   );

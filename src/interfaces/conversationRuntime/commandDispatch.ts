@@ -31,6 +31,7 @@ import { handleMemoryReviewCommand } from "./memoryReviewCommand";
 import { renderSkillInventory } from "../../organs/skillRegistry/skillInspection";
 import { normalizeModelBackend } from "../../models/backendConfig";
 import { recordTopicAwareUserTurn } from "./conversationRoutingTurnSupport";
+import { buildAutonomousAbortControllerKey } from "../transportRuntime/autonomousAbortControl";
 import {
   evaluateBackendProfileOverrideAccess,
   isProtectedCodexProfileOverride,
@@ -246,7 +247,14 @@ export async function handleConversationCommand(
       {
         ...deps,
         abortActiveAutonomousRun: deps.abortActiveAutonomousRun
-          ? () => deps.abortActiveAutonomousRun?.(message.conversationId) ?? false
+          ? () =>
+              deps.abortActiveAutonomousRun?.(
+                buildAutonomousAbortControllerKey({
+                  provider: message.provider,
+                  conversationId: message.conversationId,
+                  userId: message.userId
+                })
+              ) ?? false
           : undefined
       }
     )).reply;

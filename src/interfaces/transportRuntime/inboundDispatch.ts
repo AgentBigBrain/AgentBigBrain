@@ -28,6 +28,7 @@ import type {
   EntityTypeInterpretationResolver
 } from "../../organs/languageUnderstanding/localIntentModelContracts";
 import { runAutonomousTransportTask } from "./deliveryLifecycle";
+import { buildAutonomousAbortControllerKey } from "./autonomousAbortControl";
 
 /**
  * Formats one transport delivery failure into a stable error message while preserving provider
@@ -287,7 +288,11 @@ function buildTransportExecutionTask(
     const autonomousGoal = parseAutonomousExecutionInput(taskInput);
     if (autonomousGoal) {
       return await runAutonomousTransportTask({
-        conversationId: input.inbound.conversationId,
+        conversationId: buildAutonomousAbortControllerKey({
+          provider: input.inbound.provider,
+          conversationId: input.inbound.conversationId,
+          userId: input.inbound.userId
+        }),
         goal: autonomousGoal.goal,
         initialExecutionInput: autonomousGoal.initialExecutionInput,
         receivedAt,

@@ -6,6 +6,7 @@ import type { TransportFetch } from "./contracts";
 export {
   abortAutonomousTransportTask,
   abortAutonomousTransportTaskIfRequested,
+  buildAutonomousAbortControllerKey,
   isAutonomousStopIntent
 } from "./autonomousAbortControl";
 

@@ -31,6 +31,7 @@ import {
 import {
   attachDiscordSocketLifecycle,
   abortAutonomousTransportTaskIfRequested,
+  buildAutonomousAbortControllerKey,
   buildDiscordIdentifyPayload,
   handleDiscordHelloLifecycle,
   handleDiscordGatewaySocketMessage,
@@ -384,7 +385,14 @@ test("prepareDiscordMessageCreate surfaces transport-facing rejections and stop 
   });
 
   const controllers = new Map<string, AbortController>();
-  controllers.set("c3", new AbortController());
+  controllers.set(
+    buildAutonomousAbortControllerKey({
+      provider: "discord",
+      conversationId: "c3",
+      userId: "u3"
+    }),
+    new AbortController()
+  );
   const stopped = prepareDiscordMessageCreate({
     data: {
       id: "m3",
@@ -413,7 +421,66 @@ test("prepareDiscordMessageCreate surfaces transport-facing rejections and stop 
     channelId: "c3",
     responseText: "Autonomous loop cancelled."
   });
-  assert.equal(controllers.has("c3"), false);
+  assert.equal(
+    controllers.has(
+      buildAutonomousAbortControllerKey({
+        provider: "discord",
+        conversationId: "c3",
+        userId: "u3"
+      })
+    ),
+    false
+  );
+});
+
+test("prepareDiscordMessageCreate does not stop another user run in a shared channel", () => {
+  const active = new AbortController();
+  const controllers = new Map<string, AbortController>();
+  controllers.set(
+    buildAutonomousAbortControllerKey({
+      provider: "discord",
+      conversationId: "shared-channel",
+      userId: "user-a"
+    }),
+    active
+  );
+
+  const result = prepareDiscordMessageCreate({
+    data: {
+      id: "m-shared-stop",
+      channel_id: "shared-channel",
+      content: "/stop",
+      author: {
+        id: "user-b",
+        username: "tester"
+      }
+    },
+    botUserId: "",
+    sharedSecret: "shared-secret",
+    invocationPolicy: {
+      requireNameCall: false,
+      aliases: []
+    },
+    validateMessage: () => ({
+      accepted: true,
+      code: "ACCEPTED",
+      message: "ok"
+    }),
+    abortControllers: controllers
+  });
+
+  assert.notEqual(result.kind, "stop");
+  assert.equal(active.signal.aborted, false);
+  assert.equal(
+    controllers.has(
+      buildAutonomousAbortControllerKey({
+        provider: "discord",
+        conversationId: "shared-channel",
+        userId: "user-a"
+      })
+    ),
+    true
+  );
 });
 
 test("deliverPreparedTransportResponse skips null responses and sends present ones", async () => {
@@ -606,6 +673,7 @@ test("handleAcceptedTransportConversation routes autonomous execution through pr
     abortControllers,
     runTextTask: async () => "unused",
     runAutonomousTask: async (_goal, _receivedAt, progressSender) => {
+      assert.equal(abortControllers.has("telegram:chat-1:user-2"), true);
       await progressSender("step 1");
       return { summary: "autonomous summary" };
     },
@@ -940,6 +1008,85 @@ test("prepareTelegramUpdate returns accepted payloads with normalized runtime me
     observedAt: "2023-11-14T22:13:20.000Z"
   });
   assert.equal(result.entityGraphEvent.eventId, "44");
+});
+
+test("prepareTelegramUpdate only stops the requesting user's autonomous run", () => {
+  const active = new AbortController();
+  const controllers = new Map<string, AbortController>();
+  controllers.set(
+    buildAutonomousAbortControllerKey({
+      provider: "telegram",
+      conversationId: "100",
+      userId: "200"
+    }),
+    active
+  );
+
+  const otherUserStop = prepareTelegramUpdate({
+    update: {
+      update_id: 45,
+      message: {
+        text: "/stop",
+        chat: {
+          id: 100,
+          type: "group"
+        },
+        from: {
+          id: 201,
+          username: "tester-2"
+        }
+      }
+    },
+    sharedSecret: "shared-secret",
+    invocationPolicy: {
+      requireNameCall: false,
+      aliases: []
+    },
+    validateMessage: () => ({
+      accepted: true,
+      code: "ACCEPTED",
+      message: "ok"
+    }),
+    abortControllers: controllers
+  });
+
+  assert.notEqual(otherUserStop.kind, "stop");
+  assert.equal(active.signal.aborted, false);
+
+  const ownerStop = prepareTelegramUpdate({
+    update: {
+      update_id: 46,
+      message: {
+        text: "/stop",
+        chat: {
+          id: 100,
+          type: "group"
+        },
+        from: {
+          id: 200,
+          username: "tester"
+        }
+      }
+    },
+    sharedSecret: "shared-secret",
+    invocationPolicy: {
+      requireNameCall: false,
+      aliases: []
+    },
+    validateMessage: () => ({
+      accepted: true,
+      code: "ACCEPTED",
+      message: "ok"
+    }),
+    abortControllers: controllers
+  });
+
+  assert.deepEqual(ownerStop, {
+    kind: "stop",
+    chatId: "100",
+    responseText: "Autonomous loop cancelled."
+  });
+  assert.equal(active.signal.aborted, true);
 });
 
 test("prepareTelegramUpdate accepts greeting-plus-alias invocations", () => {
@@ -1542,6 +1689,29 @@ test("isAutonomousStopIntent accepts explicit stop commands and rejects ordinary
   assert.equal(isAutonomousStopIntent("stop now"), true);
   assert.equal(isAutonomousStopIntent("/cancel"), true);
   assert.equal(isAutonomousStopIntent("please continue"), false);
+});
+
+test("buildAutonomousAbortControllerKey scopes stop handles to provider conversation and user", () => {
+  assert.equal(
+    buildAutonomousAbortControllerKey({
+      provider: "discord",
+      conversationId: "channel-1",
+      userId: "user-1"
+    }),
+    "discord:channel-1:user-1"
+  );
+  assert.notEqual(
+    buildAutonomousAbortControllerKey({
+      provider: "discord",
+      conversationId: "channel-1",
+      userId: "user-1"
+    }),
+    buildAutonomousAbortControllerKey({
+      provider: "discord",
+      conversationId: "channel-1",
+      userId: "user-2"
+    })
+  );
 });
 
 test("abortAutonomousTransportTaskIfRequested aborts and clears matching controllers only for stop intent", () => {
