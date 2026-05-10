@@ -31,7 +31,8 @@ import {
   ConversationReturnHandoffRecord,
   ConversationRecentActionRecord,
   ConversationSession,
-  ConversationTurn
+  ConversationTurn,
+  ConversationTurnActorMetadata
 } from "./sessionStore";
 import {
   normalizeAssistantTurnText,
@@ -113,6 +114,62 @@ export interface RecordUserTurnWithSourceRecallResult {
 
 interface PushConversationTurnOptions {
   assistantTurnKind?: ConversationAssistantTurnKind | null;
+  actor?: ConversationTurnActorMetadata | null;
+}
+
+function buildUserTurnActorMetadata(
+  session: ConversationSession
+): ConversationTurnActorMetadata | null {
+  const principalContext = session.principalContext;
+  if (!principalContext) {
+    return null;
+  }
+  const actor = principalContext.actor;
+  return {
+    source: "session_principal_context",
+    principalRole: actor.principalRole,
+    principalIdHash: actor.providerUserIdHash,
+    providerUserIdHash: actor.providerUserIdHash,
+    routeVisibility: principalContext.route.visibility,
+    identityAuthority: actor.identityAuthority,
+    legacyIdentityState: actor.legacyIdentityState,
+    ownerMatchSource: actor.ownerMatchSource,
+    displayNameHint: actor.displayNameHint
+  };
+}
+
+function buildAssistantTurnActorMetadata(
+  session: ConversationSession
+): ConversationTurnActorMetadata | null {
+  const principalContext = session.principalContext;
+  if (!principalContext) {
+    return null;
+  }
+  return {
+    source: "assistant_runtime",
+    principalRole: "runtime_continuation",
+    principalIdHash: principalContext.actor.providerUserIdHash,
+    providerUserIdHash: principalContext.actor.providerUserIdHash,
+    routeVisibility: principalContext.route.visibility,
+    identityAuthority: "runtime_inherited",
+    legacyIdentityState: principalContext.actor.legacyIdentityState,
+    ownerMatchSource: "none",
+    displayNameHint: null
+  };
+}
+
+function buildRecoveredTurnActorMetadata(): ConversationTurnActorMetadata {
+  return {
+    source: "legacy_recovery",
+    principalRole: "legacy_unknown",
+    principalIdHash: null,
+    providerUserIdHash: null,
+    routeVisibility: "unknown",
+    identityAuthority: "legacy_unknown",
+    legacyIdentityState: "legacy_actor_unknown",
+    ownerMatchSource: "legacy_unknown",
+    displayNameHint: null
+  };
 }
 
 /**
@@ -182,7 +239,9 @@ export function recordUserTurn(
   topicKeyInterpretation?: TopicKeyInterpretationSignalV1 | null;
   } = {}
 ): ConversationTurn | null {
-  const recordedTurn = pushConversationTurn(session, "user", text, at, maxConversationTurns);
+  const recordedTurn = pushConversationTurn(session, "user", text, at, maxConversationTurns, {
+    actor: buildUserTurnActorMetadata(session)
+  });
   if (!recordedTurn) {
     return null;
   }
@@ -298,7 +357,10 @@ export function recordAssistantTurn(
     text,
     at,
     maxConversationTurns,
-    options
+    {
+      ...options,
+      actor: buildAssistantTurnActorMetadata(session)
+    }
   );
   if (!recordedTurn) {
     return null;
@@ -422,10 +484,15 @@ export function pushConversationTurn(
   }
 
   const metadata =
-    role === "assistant" && options.assistantTurnKind
+    (role === "assistant" && options.assistantTurnKind) || options.actor
       ? {
-          assistantTurnKind: options.assistantTurnKind,
-          assistantTurnKindSource: "runtime_metadata" as const
+          ...(role === "assistant" && options.assistantTurnKind
+            ? {
+                assistantTurnKind: options.assistantTurnKind,
+                assistantTurnKindSource: "runtime_metadata" as const
+              }
+            : {}),
+          ...(options.actor ? { actor: options.actor } : {})
         }
       : undefined;
   const turn: ConversationTurn = {
@@ -486,7 +553,8 @@ export function backfillTurnsFromRecentJobsIfNeeded(
             sourceTimeKind: "captured_record",
             sourceRefAvailable: false,
             diagnosticErrorCode: "source_recall_original_source_unavailable"
-          }
+          },
+          actor: buildRecoveredTurnActorMetadata()
         }
       });
     }
@@ -507,7 +575,8 @@ export function backfillTurnsFromRecentJobsIfNeeded(
               sourceTimeKind: "generated_summary",
               sourceRefAvailable: false,
               diagnosticErrorCode: "source_recall_original_source_unavailable"
-            }
+            },
+            actor: buildRecoveredTurnActorMetadata()
           }
         });
       }
