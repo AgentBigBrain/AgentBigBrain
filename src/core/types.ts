@@ -127,6 +127,7 @@ export {
   type BridgeCandidateV1,
   type BridgeConflictCodeV1,
   type BridgeQuestionV1,
+  type ContinuityActorScopeV1,
   type EntityAlignmentDecisionActionV1,
   type EntityAlignmentDecisionRecordV1,
   type ConversationStackV1,

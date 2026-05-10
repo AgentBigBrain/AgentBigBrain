@@ -709,6 +709,37 @@ export function isOpenLoopV1(value: unknown): value is OpenLoopV1 {
     typeof candidate.createdAt === "string" &&
     typeof candidate.lastMentionedAt === "string" &&
     typeof candidate.priority === "number" &&
-    (candidate.status === "open" || candidate.status === "resolved" || candidate.status === "superseded")
+    (candidate.status === "open" || candidate.status === "resolved" || candidate.status === "superseded") &&
+    (candidate.actorScope === undefined ||
+      candidate.actorScope === null ||
+      isContinuityActorScopeV1(candidate.actorScope))
+  );
+}
+
+function isContinuityActorScopeV1(value: unknown): boolean {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+  const candidate = value as Record<string, unknown>;
+  return (
+    isActorScopeSource(candidate.scopeSource) &&
+    (typeof candidate.principalIdHash === "string" || candidate.principalIdHash === null) &&
+    (typeof candidate.principalRole === "string" || candidate.principalRole === null) &&
+    typeof candidate.accessClass === "string" &&
+    (candidate.routeVisibility === "private" ||
+      candidate.routeVisibility === "public" ||
+      candidate.routeVisibility === "unknown") &&
+    typeof candidate.legacyIdentityState === "string" &&
+    (typeof candidate.scopeId === "string" || candidate.scopeId === null)
+  );
+}
+
+function isActorScopeSource(value: unknown): boolean {
+  return (
+    value === "transport_principal" ||
+    value === "mission_runtime" ||
+    value === "operator_review" ||
+    value === "shared_public" ||
+    value === "legacy_unknown"
   );
 }
