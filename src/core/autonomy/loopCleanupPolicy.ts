@@ -5,7 +5,7 @@
 import { MAIN_AGENT_ID } from "../agentIdentity";
 import { makeId } from "../ids";
 import { BrainOrchestrator } from "../orchestrator";
-import type { TaskRequest, TaskRunResult } from "../types";
+import type { TaskPrincipalAccessEnvelope, TaskRequest, TaskRunResult } from "../types";
 
 export interface ApprovedManagedProcessCheckResult {
   leaseId: string;
@@ -286,14 +286,16 @@ export function resolveTrackedManagedProcessLeaseId(
 export async function cleanupManagedProcessLease(
   orchestrator: BrainOrchestrator,
   overarchingGoal: string,
-  leaseId: string
+  leaseId: string,
+  principalAccess?: TaskPrincipalAccessEnvelope | null
 ): Promise<TaskRunResult | null> {
   const cleanupTask: TaskRequest = {
     id: makeId("task"),
     agentId: MAIN_AGENT_ID,
     goal: overarchingGoal,
     userInput: `stop_process leaseId="${leaseId}". Stop this managed process now for cleanup and do not start a replacement.`,
-    createdAt: new Date().toISOString()
+    createdAt: new Date().toISOString(),
+    principalAccess: principalAccess ?? undefined
   };
   try {
     console.log(`\n[Autonomous Loop Cleanup] Stopping managed process lease ${leaseId}.\n`);

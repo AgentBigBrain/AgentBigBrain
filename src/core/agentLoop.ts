@@ -6,7 +6,7 @@ import { BrainOrchestrator } from "./orchestrator";
 import { MAIN_AGENT_ID } from "./agentIdentity";
 import { makeId } from "./ids";
 import { isAbortError } from "./runtimeAbort";
-import { TaskRequest, TaskRunResult } from "./types";
+import { TaskPrincipalAccessEnvelope, TaskRequest, TaskRunResult } from "./types";
 import { ModelClient } from "../models/types";
 import { BrainConfig } from "./config";
 import { humanizeAutonomousStopReason } from "./autonomy/stopReasonText";
@@ -68,7 +68,8 @@ export class AutonomousLoop {
         callbacks?: AutonomousLoopCallbacks,
         signal?: AbortSignal,
         daemonGoalRolloverLimit?: number,
-        initialGoalInput?: string | null
+        initialGoalInput?: string | null,
+        principalAccess?: TaskPrincipalAccessEnvelope | null
     ): Promise<void> {
         let currentOverarchingGoal = overarchingGoal;
         let daemonGoalRollovers = 0;
@@ -121,7 +122,8 @@ export class AutonomousLoop {
                     await cleanupManagedProcessLease(
                         this.orchestrator,
                         currentOverarchingGoal,
-                        trackedManagedProcessLeaseId
+                        trackedManagedProcessLeaseId,
+                        principalAccess
                     );
                     trackedManagedProcessLeaseId = null;
                 }
@@ -142,7 +144,8 @@ export class AutonomousLoop {
                         await cleanupManagedProcessLease(
                             this.orchestrator,
                             currentOverarchingGoal,
-                            trackedManagedProcessLeaseId
+                            trackedManagedProcessLeaseId,
+                            principalAccess
                         );
                         trackedManagedProcessLeaseId = null;
                     }
@@ -167,7 +170,8 @@ export class AutonomousLoop {
                     agentId: MAIN_AGENT_ID,
                     goal: currentOverarchingGoal,
                     userInput: currentInput,
-                    createdAt: new Date().toISOString()
+                    createdAt: new Date().toISOString(),
+                    principalAccess: principalAccess ?? undefined
                 };
 
                 let result: TaskRunResult;
@@ -180,7 +184,8 @@ export class AutonomousLoop {
                             await cleanupManagedProcessLease(
                                 this.orchestrator,
                                 currentOverarchingGoal,
-                                trackedManagedProcessLeaseId
+                                trackedManagedProcessLeaseId,
+                                principalAccess
                             );
                             trackedManagedProcessLeaseId = null;
                         }
@@ -272,7 +277,8 @@ export class AutonomousLoop {
                         await cleanupManagedProcessLease(
                             this.orchestrator,
                             currentOverarchingGoal,
-                            trackedManagedProcessLeaseId
+                            trackedManagedProcessLeaseId,
+                            principalAccess
                         );
                         trackedManagedProcessLeaseId = null;
                     }
@@ -507,7 +513,8 @@ export class AutonomousLoop {
                         await cleanupManagedProcessLease(
                             this.orchestrator,
                             currentOverarchingGoal,
-                            trackedManagedProcessLeaseId
+                            trackedManagedProcessLeaseId,
+                            principalAccess
                         );
                         trackedManagedProcessLeaseId = null;
                     }
@@ -628,7 +635,8 @@ export class AutonomousLoop {
                     const cleanupResult = await cleanupManagedProcessLease(
                         this.orchestrator,
                         currentOverarchingGoal,
-                        trackedManagedProcessLeaseId
+                        trackedManagedProcessLeaseId,
+                        principalAccess
                     );
                     if (cleanupResult) {
                         missionEvidence = {
@@ -677,7 +685,8 @@ export class AutonomousLoop {
                     await cleanupManagedProcessLease(
                         this.orchestrator,
                         currentOverarchingGoal,
-                        trackedManagedProcessLeaseId
+                        trackedManagedProcessLeaseId,
+                        principalAccess
                     );
                     trackedManagedProcessLeaseId = null;
                 }

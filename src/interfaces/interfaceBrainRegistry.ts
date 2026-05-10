@@ -186,6 +186,7 @@ export class InterfaceBrainRegistry {
   ): Promise<ConversationExecutionResult> {
     const { runtime } = this.getRuntimeForSession(session);
     const loop = new AutonomousLoop(runtime.brain, runtime.modelClient, runtime.config);
+    const principalAccess = buildTaskExecutionPrincipalAccess(session?.principalContext ?? null);
 
     let totalIterations = 0;
     let totalApproved = 0;
@@ -316,7 +317,8 @@ export class InterfaceBrainRegistry {
         },
         signal,
         undefined,
-        initialExecutionInput ?? null
+        initialExecutionInput ?? null,
+        principalAccess
       );
     } catch (error) {
       if (!terminalAborted) {
