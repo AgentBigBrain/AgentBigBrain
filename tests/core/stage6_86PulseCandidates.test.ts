@@ -23,16 +23,16 @@ function buildCheckpointFixture(): { graph: EntityGraphV1; stack: ConversationSt
     updatedAt: "2025-10-01T00:00:00.000Z",
     entities: [
       {
-        entityKey: "entity_owen",
-        canonicalName: "Owen",
+        entityKey: "entity_riley",
+        canonicalName: "Riley",
         entityType: "person",
         disambiguator: null,
         domainHint: null,
-        aliases: ["Owen"],
+        aliases: ["Riley"],
         firstSeenAt: "2025-10-01T00:00:00.000Z",
         lastSeenAt: "2026-02-25T00:00:00.000Z",
         salience: 6,
-        evidenceRefs: ["trace:entity_owen"]
+        evidenceRefs: ["trace:entity_riley"]
       },
       {
         entityKey: "entity_lantern_labs",
@@ -74,7 +74,7 @@ function buildCheckpointFixture(): { graph: EntityGraphV1; stack: ConversationSt
       },
       {
         edgeKey: "edge_stale_confirmed",
-        sourceEntityKey: "entity_owen",
+        sourceEntityKey: "entity_riley",
         targetEntityKey: "entity_lantern_labs",
         relationType: "coworker",
         status: "confirmed",
@@ -194,6 +194,60 @@ function recordsTypedPulseCandidateEvidenceAndDeliveryDecisions(): void {
   assert.deepEqual(result.trace.emittedPulseEnvelope?.sourceRecallRefs, []);
 }
 
+function marksPrivateOpenLoopActorEvidenceSensitive(): void {
+  const seeded = buildConversationStackFromTurnsV1(
+    [
+      {
+        role: "user",
+        text: "Let's review launch blockers.",
+        at: "2026-02-01T09:00:00.000Z"
+      }
+    ],
+    "2026-02-01T09:00:00.000Z"
+  );
+  const activeThreadKey = seeded.activeThreadKey;
+  assert.ok(activeThreadKey);
+  const withOpenLoop = upsertOpenLoopOnConversationStackV1({
+    stack: seeded,
+    threadKey: activeThreadKey!,
+    text: "Remind me later to finalize the launch blockers.",
+    observedAt: "2026-02-01T09:05:00.000Z",
+    priorityHint: 0.95,
+    actorScope: {
+      scopeSource: "transport_principal",
+      principalIdHash: "principal-private",
+      principalRole: "conversation_participant",
+      accessClass: "speaker_private",
+      routeVisibility: "private",
+      legacyIdentityState: "principal_verified",
+      scopeId: "thread:launch"
+    }
+  });
+  const result = evaluatePulseCandidatesV1(
+    {
+      graph: createEmptyEntityGraphV1("2026-02-01T09:05:00.000Z"),
+      stack: withOpenLoop.stack,
+      observedAt: "2026-03-15T12:00:00.000Z"
+    },
+    {
+      pulseMaxOpenLoopsSurfaced: 1,
+      openLoopStaleDays: 1
+    }
+  );
+  const candidate = result.orderedCandidates.find(
+    (entry) => entry.reasonCode === "OPEN_LOOP_RESUME"
+  );
+
+  assert.ok(candidate);
+  assert.equal(candidate?.sensitive, true);
+  assert.equal(candidate?.provenanceTier, "weak");
+  assert.ok(
+    candidate?.evidenceRefs.some((ref) =>
+      ref.startsWith("open_loop_actor_scope:transport_principal:speaker_private:private:")
+    )
+  );
+}
+
 /**
  * Implements `suppressesAllCandidatesWhenActiveMissionWorkExists` behavior within module scope.
  * Interacts with local collaborators through imported modules and typed inputs/outputs.
@@ -299,7 +353,7 @@ function suppressesPrivacySensitiveCandidatesDeterministically(): void {
   assert.ok(
     result.decisions.some(
       (entry) =>
-        entry.candidate.entityRefs.includes("entity_owen") &&
+        entry.candidate.entityRefs.includes("entity_riley") &&
         entry.decision.decisionCode === "SUPPRESS" &&
         entry.decision.blockDetailReason === "PRIVACY_SENSITIVE"
     )
@@ -347,6 +401,10 @@ test(
 test(
   "stage 6.86 pulse candidates record typed evidence decisions and delivery envelopes",
   recordsTypedPulseCandidateEvidenceAndDeliveryDecisions
+);
+test(
+  "stage 6.86 pulse candidates mark private open-loop actor evidence sensitive",
+  marksPrivateOpenLoopActorEvidenceSensitive
 );
 test(
   "stage 6.86 pulse candidates suppress emissions while active mission work exists",
