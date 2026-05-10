@@ -47,6 +47,30 @@ test("approval grant validates when mission/action/idempotency and expiry are in
   assert.equal(decision.blockCode, null);
 });
 
+test("approval grant may carry redacted approver principal metadata", () => {
+  const request = buildRequest();
+  const grant = createApprovalGrantV1({
+    request,
+    approvedAt: "2026-02-27T22:00:00.000Z",
+    approvedBy: TEST_OPERATOR_ID,
+    approverPrincipalAccess: {
+      principalRole: "operator",
+      accessOperation: "approval",
+      accessClass: "owner_private",
+      accessAllowed: true,
+      accessReason: "operator_principal_matched",
+      routeVisibility: "private",
+      identityAuthority: "configured_owner_provider_user_id",
+      legacyIdentityState: "principal_verified",
+      ownerMatchSource: "provider_user_id"
+    }
+  });
+
+  assert.equal(grant.approverPrincipalAccess?.principalRole, "operator");
+  assert.equal(grant.approverPrincipalAccess?.accessOperation, "approval");
+  assert.equal(JSON.stringify(grant).includes("providerUserIdHash"), false);
+});
+
 test("approval grant fails closed when diff hash mismatches", () => {
   const request = buildRequest();
   const grant = createApprovalGrantV1({

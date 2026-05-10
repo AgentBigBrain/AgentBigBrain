@@ -208,6 +208,18 @@ export type GovernanceOutcome = "approved" | "blocked";
 
 export type GovernanceBlockCategory = "none" | "constraints" | "governance" | "runtime";
 
+export interface PrincipalAccessAuditMetadata {
+  principalRole: string | null;
+  accessOperation: string | null;
+  accessClass: string | null;
+  accessAllowed: boolean | null;
+  accessReason: string | null;
+  routeVisibility: string | null;
+  identityAuthority: string | null;
+  legacyIdentityState: string | null;
+  ownerMatchSource: string | null;
+}
+
 export interface GovernanceMemoryEvent {
   id: string;
   recordedAt: string;
@@ -224,6 +236,7 @@ export interface GovernanceMemoryEvent {
   noVotes: number;
   threshold: number | null;
   dissentGovernorIds: readonly GovernorId[];
+  principalAccess?: PrincipalAccessAuditMetadata | null;
 }
 
 export interface GovernanceMemoryReadView {

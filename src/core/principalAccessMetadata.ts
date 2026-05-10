@@ -2,19 +2,13 @@
  * @fileoverview Redacted principal/access metadata helpers for receipts and runtime traces.
  */
 
-import type { RuntimeTraceDetailValue, TaskPrincipalAccessEnvelope } from "./types";
+import type {
+  PrincipalAccessAuditMetadata,
+  RuntimeTraceDetailValue,
+  TaskPrincipalAccessEnvelope
+} from "./types";
 
-export interface RedactedPrincipalAccessMetadata {
-  principalRole: string | null;
-  accessOperation: string | null;
-  accessClass: string | null;
-  accessAllowed: boolean | null;
-  accessReason: string | null;
-  routeVisibility: string | null;
-  identityAuthority: string | null;
-  legacyIdentityState: string | null;
-  ownerMatchSource: string | null;
-}
+export type RedactedPrincipalAccessMetadata = PrincipalAccessAuditMetadata;
 
 /**
  * Builds redacted principal/access metadata without raw provider ids or stable hashes.
@@ -62,6 +56,35 @@ export function renderPrincipalAccessTraceDetails(
     principalIdentityAuthority: metadata.identityAuthority,
     principalLegacyIdentityState: metadata.legacyIdentityState,
     principalOwnerMatchSource: metadata.ownerMatchSource
+  };
+}
+
+/**
+ * Coerces unknown data into redacted principal/access audit metadata.
+ */
+export function coerceRedactedPrincipalAccessMetadata(
+  input: unknown
+): RedactedPrincipalAccessMetadata | null {
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    return null;
+  }
+  const candidate = input as Partial<RedactedPrincipalAccessMetadata>;
+  return {
+    principalRole: typeof candidate.principalRole === "string" ? candidate.principalRole : null,
+    accessOperation:
+      typeof candidate.accessOperation === "string" ? candidate.accessOperation : null,
+    accessClass: typeof candidate.accessClass === "string" ? candidate.accessClass : null,
+    accessAllowed:
+      typeof candidate.accessAllowed === "boolean" ? candidate.accessAllowed : null,
+    accessReason: typeof candidate.accessReason === "string" ? candidate.accessReason : null,
+    routeVisibility:
+      typeof candidate.routeVisibility === "string" ? candidate.routeVisibility : null,
+    identityAuthority:
+      typeof candidate.identityAuthority === "string" ? candidate.identityAuthority : null,
+    legacyIdentityState:
+      typeof candidate.legacyIdentityState === "string" ? candidate.legacyIdentityState : null,
+    ownerMatchSource:
+      typeof candidate.ownerMatchSource === "string" ? candidate.ownerMatchSource : null
   };
 }
 

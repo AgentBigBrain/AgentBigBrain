@@ -19,6 +19,10 @@ import {
 } from "./types";
 import { withFileLock, writeFileAtomic } from "./fileLock";
 import { makeId } from "./ids";
+import {
+  coerceRedactedPrincipalAccessMetadata,
+  type RedactedPrincipalAccessMetadata
+} from "./principalAccessMetadata";
 import { buildProjectionChangeSet } from "./projections/service";
 import { withSqliteDatabase } from "./sqliteStore";
 
@@ -55,6 +59,7 @@ interface AppendGovernanceMemoryEventInput {
   noVotes: number;
   threshold: number | null;
   dissentGovernorIds: GovernorId[];
+  principalAccess?: RedactedPrincipalAccessMetadata | null;
 }
 
 interface LegacyGovernanceMemoryEvent extends Omit<GovernanceMemoryEvent, "mode"> {
@@ -92,6 +97,15 @@ function createInitialState(): GovernanceMemoryState {
  */
 function stripUtf8Bom(value: string): string {
   return value.replace(/^\uFEFF/, "");
+}
+
+function sqliteTableHasColumn(
+  db: DatabaseSync,
+  tableName: string,
+  columnName: string
+): boolean {
+  const rows = db.prepare(`PRAGMA table_info(${tableName})`).all() as Array<{ name?: unknown }>;
+  return rows.some((row) => typeof row.name === "string" && row.name === columnName);
 }
 
 /**
@@ -191,7 +205,8 @@ function normalizeEvent(raw: Partial<LegacyGovernanceMemoryEvent>): GovernanceMe
     yesVotes: Number(raw.yesVotes),
     noVotes: Number(raw.noVotes),
     threshold: raw.threshold ?? null,
-    dissentGovernorIds
+    dissentGovernorIds,
+    principalAccess: coerceRedactedPrincipalAccessMetadata(raw.principalAccess)
   };
 }
 
@@ -237,6 +252,7 @@ function normalizeState(raw: Partial<GovernanceMemoryState>): GovernanceMemorySt
 function freezeEvent(event: GovernanceMemoryEvent): GovernanceMemoryEvent {
   return Object.freeze({
     ...event,
+    principalAccess: event.principalAccess ? Object.freeze({ ...event.principalAccess }) : null,
     blockedBy: Object.freeze([...event.blockedBy]),
     violationCodes: Object.freeze([...event.violationCodes]),
     dissentGovernorIds: Object.freeze([...event.dissentGovernorIds])
@@ -591,7 +607,7 @@ export class GovernanceMemoryStore {
         .prepare(
           `SELECT id, recorded_at, task_id, proposal_id, action_id, action_type, mode, outcome,
                   block_category, blocked_by_json, violation_codes_json, yes_votes, no_votes,
-                  threshold, dissent_governor_ids_json
+                  threshold, dissent_governor_ids_json, principal_access_json
            FROM ${SQLITE_GOVERNANCE_EVENTS_TABLE}
            ORDER BY event_seq DESC
            LIMIT ?`
@@ -666,9 +682,16 @@ export class GovernanceMemoryStore {
          yes_votes INTEGER NOT NULL,
          no_votes INTEGER NOT NULL,
          threshold INTEGER,
-         dissent_governor_ids_json TEXT NOT NULL
+         dissent_governor_ids_json TEXT NOT NULL,
+         principal_access_json TEXT
        );`
     );
+    if (!sqliteTableHasColumn(db, SQLITE_GOVERNANCE_EVENTS_TABLE, "principal_access_json")) {
+      db.exec(
+        `ALTER TABLE ${SQLITE_GOVERNANCE_EVENTS_TABLE}
+         ADD COLUMN principal_access_json TEXT;`
+      );
+    }
     db.exec(
       `CREATE INDEX IF NOT EXISTS idx_${SQLITE_GOVERNANCE_EVENTS_TABLE}_recorded_at
        ON ${SQLITE_GOVERNANCE_EVENTS_TABLE}(recorded_at);`
@@ -744,8 +767,8 @@ export class GovernanceMemoryStore {
       `INSERT OR IGNORE INTO ${SQLITE_GOVERNANCE_EVENTS_TABLE} (
          id, recorded_at, task_id, proposal_id, action_id, action_type, mode, outcome,
          block_category, blocked_by_json, violation_codes_json, yes_votes, no_votes,
-         threshold, dissent_governor_ids_json
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+         threshold, dissent_governor_ids_json, principal_access_json
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
       event.id,
       event.recordedAt,
@@ -761,7 +784,8 @@ export class GovernanceMemoryStore {
       event.yesVotes,
       event.noVotes,
       event.threshold,
-      JSON.stringify(event.dissentGovernorIds)
+      JSON.stringify(event.dissentGovernorIds),
+      JSON.stringify(event.principalAccess ?? null)
     );
   }
 
@@ -806,7 +830,8 @@ export class GovernanceMemoryStore {
       threshold: row.threshold === null ? null : Number(row.threshold),
       dissentGovernorIds: parseJsonStringArray(row.dissent_governor_ids_json).filter(
         (value): value is GovernorId => isGovernorId(value)
-      )
+      ),
+      principalAccess: parsePrincipalAccessJson(row.principal_access_json)
     });
 
     if (!parsed) {
@@ -890,7 +915,7 @@ export class GovernanceMemoryStore {
       .prepare(
         `SELECT id, recorded_at, task_id, proposal_id, action_id, action_type, mode, outcome,
                 block_category, blocked_by_json, violation_codes_json, yes_votes, no_votes,
-                threshold, dissent_governor_ids_json
+                threshold, dissent_governor_ids_json, principal_access_json
          FROM ${SQLITE_GOVERNANCE_EVENTS_TABLE}
          ORDER BY event_seq ASC`
       )
@@ -943,6 +968,7 @@ interface SqliteGovernanceEventRow {
   no_votes: number;
   threshold: number | null;
   dissent_governor_ids_json: string;
+  principal_access_json?: string | null;
 }
 
 /**
@@ -981,7 +1007,12 @@ function isSqliteGovernanceEventRow(value: unknown): value is SqliteGovernanceEv
     Number.isFinite(candidate.no_votes) &&
     (candidate.threshold === null ||
       (typeof candidate.threshold === "number" && Number.isFinite(candidate.threshold))) &&
-    typeof candidate.dissent_governor_ids_json === "string"
+    typeof candidate.dissent_governor_ids_json === "string" &&
+    (
+      candidate.principal_access_json === undefined ||
+      candidate.principal_access_json === null ||
+      typeof candidate.principal_access_json === "string"
+    )
   );
 }
 
@@ -1034,5 +1065,16 @@ function parseJsonStringArray(raw: string): string[] {
     return parsed.filter((value): value is string => typeof value === "string");
   } catch {
     return [];
+  }
+}
+
+function parsePrincipalAccessJson(value: string | null | undefined): RedactedPrincipalAccessMetadata | null {
+  if (!value) {
+    return null;
+  }
+  try {
+    return coerceRedactedPrincipalAccessMetadata(JSON.parse(value));
+  } catch {
+    return null;
   }
 }

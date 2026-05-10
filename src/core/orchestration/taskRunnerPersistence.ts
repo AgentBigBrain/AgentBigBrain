@@ -121,7 +121,8 @@ export async function appendGovernanceEvent(
     threshold: decisionThreshold,
     dissentGovernorIds: actionResult.decision
       ? actionResult.decision.dissent.map((vote) => vote.governorId)
-      : voteSummary.dissentGovernorIds
+      : voteSummary.dissentGovernorIds,
+    principalAccess: principalMetadata
   });
   await appendTraceEvent({
     eventType: "governance_event_persisted",

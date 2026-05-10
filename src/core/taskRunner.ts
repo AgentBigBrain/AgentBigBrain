@@ -360,6 +360,7 @@ export class TaskRunner {
         masterGovernor: this.deps.masterGovernor,
         fastPathGovernorIds: this.deps.config.governance.fastPathGovernorIds,
         perGovernorTimeoutMs: this.deps.config.limits.perGovernorTimeoutMs,
+        principalAccess: task.principalAccess,
         appendTraceEvent: this.deps.appendTraceEvent
       });
       if (governanceOutcome.blockedResult) {

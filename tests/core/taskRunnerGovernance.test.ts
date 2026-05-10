@@ -190,3 +190,62 @@ test("evaluateTaskRunnerGovernance returns combined votes and decision on approv
     ["governance_voted", "governance_voted"]
   );
 });
+
+test("evaluateTaskRunnerGovernance records redacted principal metadata on vote traces", async () => {
+  const { input, traceEvents } = createGovernanceInput();
+  input.principalAccess = {
+    principalContext: {
+      requestId: "request_governance_principal_trace",
+      actor: {
+        principalRole: "operator",
+        identityAuthority: "configured_owner_provider_user_id",
+        legacyIdentityState: "principal_verified",
+        ownerMatchSource: "provider_user_id",
+        providerUserIdHash: "synthetic-governance-provider-hash-not-rendered"
+      },
+      route: {
+        visibility: "private"
+      },
+      subject: {}
+    },
+    accessDecision: {
+      decisionId: "decision_governance_principal_trace",
+      requestId: "request_governance_principal_trace",
+      operation: "approval",
+      accessClass: "owner_private",
+      allowed: true,
+      reason: "operator_principal_matched"
+    }
+  };
+  const outcome = await evaluateTaskRunnerGovernance({
+    ...input,
+    runtime: {
+      runCouncilVote: async () => ({
+        votes: [
+          {
+            governorId: "security",
+            approve: true,
+            reason: "Safe.",
+            confidence: 1
+          }
+        ],
+        decision: {
+          approved: true,
+          yesVotes: 1,
+          noVotes: 0,
+          threshold: 1,
+          dissent: []
+        }
+      })
+    }
+  });
+
+  assert.equal(outcome.decision?.approved, true);
+  assert.equal(traceEvents[0]?.details?.principalRole, "operator");
+  assert.equal(traceEvents[0]?.details?.principalAccessOperation, "approval");
+  assert.equal(traceEvents[0]?.details?.principalAccessClass, "owner_private");
+  assert.equal(
+    Object.values(traceEvents[0]?.details ?? {}).includes("synthetic-governance-provider-hash-not-rendered"),
+    false
+  );
+});

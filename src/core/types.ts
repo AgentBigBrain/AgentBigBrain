@@ -97,6 +97,7 @@ export {
   type GovernorVote,
   type ManagedProcessLifecycleCode,
   type MasterDecision,
+  type PrincipalAccessAuditMetadata,
   type RuntimeTraceDetailValue,
   type RuntimeTraceEvent,
   type RuntimeTraceEventType

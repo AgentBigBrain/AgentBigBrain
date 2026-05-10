@@ -3,6 +3,7 @@
  */
 
 import type { ActionType } from "./actionTypes";
+import type { PrincipalAccessAuditMetadata } from "./governanceOutcomeTypes";
 import type {
   MemoryMutationOperationV1,
   MemoryMutationStoreV1
@@ -144,6 +145,7 @@ export interface ApprovalGrantV1 {
   maxUses: number;
   uses: number;
   grantHash: string;
+  approverPrincipalAccess?: PrincipalAccessAuditMetadata | null;
 }
 
 export interface ConflictObjectV1 {

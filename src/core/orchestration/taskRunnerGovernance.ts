@@ -6,12 +6,17 @@ import { MasterGovernor } from "../../governors/masterGovernor";
 import { type Governor, type GovernorContext } from "../../governors/types";
 import { runCouncilVote } from "../../governors/voteGate";
 import {
+  buildRedactedPrincipalAccessMetadata,
+  renderPrincipalAccessTraceDetails
+} from "../principalAccessMetadata";
+import {
   type ActionRunResult,
   FULL_COUNCIL_GOVERNOR_IDS,
   type GovernanceProposal,
   type GovernorId,
   type GovernorVote,
-  type MasterDecision
+  type MasterDecision,
+  type TaskPrincipalAccessEnvelope
 } from "../types";
 import { type AppendRuntimeTraceEventInput } from "../runtimeTraceLogger";
 import { buildBlockedActionResult } from "./taskRunnerSummary";
@@ -35,6 +40,7 @@ export interface EvaluateTaskRunnerGovernanceInput {
   masterGovernor: MasterGovernor;
   fastPathGovernorIds: readonly GovernorId[];
   perGovernorTimeoutMs: number;
+  principalAccess?: TaskPrincipalAccessEnvelope | null;
   appendTraceEvent: (input: AppendRuntimeTraceEventInput) => Promise<void>;
   runtime?: TaskRunnerGovernanceRuntime;
 }
@@ -60,6 +66,9 @@ export async function evaluateTaskRunnerGovernance(
   const createFastPathMasterGovernor =
     input.runtime?.createFastPathMasterGovernor ??
     ((governorCount: number) => new MasterGovernor(governorCount));
+  const principalTraceDetails = renderPrincipalAccessTraceDetails(
+    buildRedactedPrincipalAccessMetadata(input.principalAccess)
+  );
 
   const preflightVotes: GovernorVote[] = [];
   if (input.action.type === "create_skill") {
@@ -82,7 +91,8 @@ export async function evaluateTaskRunnerGovernance(
         approved: codeReviewVote.approve,
         voteCount: 1,
         yesVotes: codeReviewVote.approve ? 1 : 0,
-        noVotes: codeReviewVote.approve ? 0 : 1
+        noVotes: codeReviewVote.approve ? 0 : 1,
+        ...principalTraceDetails
       }
     });
     if (!codeReviewVote.approve) {
@@ -166,7 +176,8 @@ export async function evaluateTaskRunnerGovernance(
       voteCount: votes.length,
       yesVotes: decision ? decision.yesVotes : votes.filter((vote) => vote.approve).length,
       noVotes: decision ? decision.noVotes : votes.filter((vote) => !vote.approve).length,
-      threshold: decision?.threshold ?? null
+      threshold: decision?.threshold ?? null,
+      ...principalTraceDetails
     }
   });
 
