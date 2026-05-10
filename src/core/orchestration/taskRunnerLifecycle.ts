@@ -4,8 +4,12 @@
 
 import { type ExecutionReceiptStore } from "../advancedAutonomyRuntime";
 import { type BrainConfig } from "../config";
-import { type ActionRunResult, type TaskRunResult } from "../types";
+import { type ActionRunResult, type TaskPrincipalAccessEnvelope, type TaskRunResult } from "../types";
 import { type GovernanceMemoryStore } from "../governanceMemory";
+import {
+  buildRedactedPrincipalAccessMetadata,
+  renderPrincipalAccessTraceDetails
+} from "../principalAccessMetadata";
 import { type AppendRuntimeTraceEventInput } from "../runtimeTraceLogger";
 import {
   advanceMissionPhase,
@@ -25,6 +29,7 @@ export interface RecordBlockedActionOutcomeInput {
   idempotencyKey: string;
   missionState: MissionStateV1;
   outputLength?: number;
+  principalAccess?: TaskPrincipalAccessEnvelope | null;
   proposalId?: string | null;
   taskId: string;
   traceDetails?: TraceDetails;
@@ -39,6 +44,7 @@ export interface RecordApprovedActionOutcomeInput {
   idempotencyKey: string;
   missionState: MissionStateV1;
   outputLength: number;
+  principalAccess?: TaskPrincipalAccessEnvelope | null;
   planTaskId: string;
   proposalId?: string | null;
   taskId: string;
@@ -74,13 +80,19 @@ export async function recordBlockedActionOutcome(
   input.attemptResults.push(input.actionResult);
 
   if (input.traceDetails) {
+    const principalTraceDetails = renderPrincipalAccessTraceDetails(
+      buildRedactedPrincipalAccessMetadata(input.principalAccess)
+    );
     await input.appendTraceEvent({
       eventType: "constraint_blocked",
       taskId: input.taskId,
       actionId: input.actionResult.action.id,
       proposalId: input.proposalId ?? undefined,
       mode: input.actionResult.mode,
-      details: input.traceDetails
+      details: {
+        ...input.traceDetails,
+        ...principalTraceDetails
+      }
     });
   }
 
@@ -89,7 +101,8 @@ export async function recordBlockedActionOutcome(
     proposalId: input.proposalId ?? null,
     actionResult: input.actionResult,
     governanceMemoryStore: input.governanceMemoryStore,
-    appendTraceEvent: input.appendTraceEvent
+    appendTraceEvent: input.appendTraceEvent,
+    principalAccess: input.principalAccess
   });
 
   const missionRegistration = registerMissionActionOutcome(
@@ -117,7 +130,8 @@ export async function recordApprovedActionOutcome(
     proposalId: input.proposalId ?? null,
     actionResult: input.actionResult,
     governanceMemoryStore: input.governanceMemoryStore,
-    appendTraceEvent: input.appendTraceEvent
+    appendTraceEvent: input.appendTraceEvent,
+    principalAccess: input.principalAccess
   });
 
   await appendExecutionReceipt({
@@ -125,7 +139,8 @@ export async function recordApprovedActionOutcome(
     planTaskId: input.planTaskId,
     proposalId: input.proposalId ?? null,
     actionResult: input.actionResult,
-    executionReceiptStore: input.executionReceiptStore
+    executionReceiptStore: input.executionReceiptStore,
+    principalAccess: input.principalAccess
   });
 
   const missionRegistration = registerMissionActionOutcome(

@@ -132,6 +132,30 @@ test("executeTaskRunnerAction returns approved metadata and trace details for pr
   const { input, traceEvents } = createExecutionInput();
   input.executor.prepare = async () => "prepared output";
   input.executor.consumeShellExecutionTelemetry = () => null;
+  input.principalAccess = {
+    principalContext: {
+      requestId: "request_principal_trace",
+      actor: {
+        principalRole: "owner",
+        identityAuthority: "configured_owner_provider_user_id",
+        legacyIdentityState: "principal_verified",
+        ownerMatchSource: "provider_user_id",
+        providerUserIdHash: "synthetic-provider-hash-not-rendered"
+      },
+      route: {
+        visibility: "private"
+      },
+      subject: {}
+    },
+    accessDecision: {
+      decisionId: "decision_principal_trace",
+      requestId: "request_principal_trace",
+      operation: "task_execution",
+      accessClass: "owner_private",
+      allowed: true,
+      reason: "owner_principal_matched"
+    }
+  };
   input.connectorReceiptInput = {
     connector: "gmail",
     operation: "draft",
@@ -160,6 +184,14 @@ test("executeTaskRunnerAction returns approved metadata and trace details for pr
   assert.equal(traceEvents[0]?.eventType, "action_executed");
   assert.equal(traceEvents[0]?.details?.usedPreparedOutput, true);
   assert.equal(traceEvents[0]?.details?.connector, "gmail");
+  assert.equal(traceEvents[0]?.details?.principalRole, "owner");
+  assert.equal(traceEvents[0]?.details?.principalAccessClass, "owner_private");
+  assert.equal(traceEvents[0]?.details?.principalAccessAllowed, true);
+  assert.equal(traceEvents[0]?.details?.principalRouteVisibility, "private");
+  assert.equal(
+    Object.values(traceEvents[0]?.details ?? {}).includes("synthetic-provider-hash-not-rendered"),
+    false
+  );
   assert.equal(
     result.actionResult.executionMetadata?.stage675Connector,
     "gmail"
