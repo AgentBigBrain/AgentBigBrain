@@ -213,7 +213,10 @@ export class ReflectionOrgan {
       runResult.task.id,
       mergeDecision.committedByAgentId,
       "experience",
-      signalMetadata
+      signalMetadata,
+      null,
+      [],
+      runResult.task.principalAccess ?? null
     );
     return true;
   }
@@ -404,7 +407,10 @@ export class ReflectionOrgan {
           runResult.task.id,
           normalizedAgentId,
           "experience",
-          signalMetadata
+          signalMetadata,
+          null,
+          [],
+          runResult.task.principalAccess ?? null
         );
         console.log("[Reflection] Lesson saved successfully.");
       }

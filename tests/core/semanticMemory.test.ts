@@ -10,6 +10,7 @@ import path from "node:path";
 import { test } from "node:test";
 
 import { SemanticMemoryStore } from "../../src/core/semanticMemory";
+import type { TaskPrincipalAccessEnvelope } from "../../src/core/types";
 
 /**
  * Implements `withMemoryStore` behavior within module scope.
@@ -27,6 +28,39 @@ async function withMemoryStore(
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }
+}
+
+function buildPrincipalAccess(input: {
+  role: string;
+  providerUserIdHash: string;
+  accessClass: string;
+  operation?: string;
+  allowed?: boolean;
+}): TaskPrincipalAccessEnvelope {
+  return {
+    principalContext: {
+      requestId: `request_${input.role}_${input.providerUserIdHash}`,
+      actor: {
+        principalRole: input.role,
+        identityAuthority: "configured_owner_provider_user_id",
+        legacyIdentityState: "principal_verified",
+        ownerMatchSource: input.role === "owner" ? "provider_user_id" : "none",
+        providerUserIdHash: input.providerUserIdHash
+      },
+      route: {
+        visibility: "private"
+      },
+      subject: {}
+    },
+    accessDecision: {
+      decisionId: `decision_${input.role}_${input.providerUserIdHash}`,
+      requestId: `request_${input.role}_${input.providerUserIdHash}`,
+      operation: input.operation ?? "task_execution",
+      accessClass: input.accessClass,
+      allowed: input.allowed ?? true,
+      reason: "synthetic_principal_access"
+    }
+  };
 }
 
 test("SemanticMemoryStore starts empty when file is missing", async () => {
@@ -166,6 +200,97 @@ test("SemanticMemoryStore persists optional lesson signal metadata", async () =>
     assert.ok(memory.lessons[0].signalMetadata);
     assert.equal(memory.lessons[0].signalMetadata?.rulepackVersion, "LessonSignalRulepackV1");
     assert.equal(memory.lessons[0].signalMetadata?.matchedRuleId, "lesson_signal_v1_allow_high_signal_keyword");
+  });
+});
+
+test("SemanticMemoryStore classifies and gates owner-private lessons", async () => {
+  await withMemoryStore(async (store) => {
+    const ownerAccess = buildPrincipalAccess({
+      role: "owner",
+      providerUserIdHash: "hash_owner_semantic",
+      accessClass: "owner_private"
+    });
+    const otherAccess = buildPrincipalAccess({
+      role: "allowed_user",
+      providerUserIdHash: "hash_other_semantic",
+      accessClass: "session_only"
+    });
+    await store.appendLesson(
+      "Owner-private deployment lesson should not leak globally.",
+      "task_owner_semantic",
+      undefined,
+      "experience",
+      null,
+      null,
+      [],
+      ownerAccess
+    );
+
+    const memory = await store.load();
+    assert.equal(memory.lessons[0]?.accessMetadata?.classification, "owner_private");
+
+    const noPrincipal = await store.getRelevantLessons("deployment lesson", 5);
+    const otherPrincipal = await store.getRelevantLessons(
+      "deployment lesson",
+      5,
+      undefined,
+      null,
+      { principalAccess: otherAccess }
+    );
+    const ownerPrincipal = await store.getRelevantLessons(
+      "deployment lesson",
+      5,
+      undefined,
+      null,
+      { principalAccess: ownerAccess }
+    );
+
+    assert.equal(noPrincipal.length, 0);
+    assert.equal(otherPrincipal.length, 0);
+    assert.equal(ownerPrincipal.length, 1);
+  });
+});
+
+test("SemanticMemoryStore keeps principal-private lessons scoped to the same actor", async () => {
+  await withMemoryStore(async (store) => {
+    const speakerAccess = buildPrincipalAccess({
+      role: "allowed_user",
+      providerUserIdHash: "hash_speaker_semantic",
+      accessClass: "session_only"
+    });
+    const otherAccess = buildPrincipalAccess({
+      role: "allowed_user",
+      providerUserIdHash: "hash_other_semantic",
+      accessClass: "session_only"
+    });
+    await store.appendLesson(
+      "Principal-private drafting lesson should stay with one speaker.",
+      "task_speaker_semantic",
+      undefined,
+      "experience",
+      null,
+      null,
+      [],
+      speakerAccess
+    );
+
+    const sameSpeaker = await store.getRelevantLessons(
+      "drafting lesson",
+      5,
+      undefined,
+      null,
+      { principalAccess: speakerAccess }
+    );
+    const otherSpeaker = await store.getRelevantLessons(
+      "drafting lesson",
+      5,
+      undefined,
+      null,
+      { principalAccess: otherAccess }
+    );
+
+    assert.equal(sameSpeaker.length, 1);
+    assert.equal(otherSpeaker.length, 0);
   });
 });
 
