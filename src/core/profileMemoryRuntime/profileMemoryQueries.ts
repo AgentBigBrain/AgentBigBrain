@@ -45,6 +45,7 @@ import type {
 } from "./profileMemoryQueryContracts";
 import { queryProfileMemoryTemporalEvidence } from "./profileMemoryTemporalQueries";
 import { synthesizeProfileMemoryTemporalEvidence } from "./profileMemoryTemporalSynthesis";
+import { evaluateProfileMemoryAccessPolicy } from "./profileMemoryAccessPolicy";
 export type {
   ProfileFactContinuityQueryRequest,
   ProfileFactContinuityResult,
@@ -159,6 +160,9 @@ export function readProfileFacts(
   state: ProfileMemoryState,
   request: ProfileAccessRequest
 ): ProfileReadableFact[] {
+  if (!canReadFactsByPrincipalPolicy(request)) {
+    return [];
+  }
   const activeFacts = [...readAuthoritativeProfileCompatibilityFacts(state)]
     .filter((fact) => isCompatibilityVisibleFactLike(fact))
     .sort((left, right) => Date.parse(right.lastUpdatedAt) - Date.parse(left.lastUpdatedAt));
@@ -169,6 +173,19 @@ export function readProfileFacts(
     .filter((fact) => sensitiveAllowed || !isProfileFactEffectivelySensitive(fact))
     .slice(0, maxFacts)
     .map((fact) => toReadableFact(fact));
+}
+
+function canReadFactsByPrincipalPolicy(request: ProfileAccessRequest): boolean {
+  if (!request.principalAccess && !request.requestedSubjectKind) {
+    return true;
+  }
+  return evaluateProfileMemoryAccessPolicy({
+    principalAccess: request.principalAccess,
+    operation: "profile_read",
+    requestedSubjectKind: request.requestedSubjectKind ?? "legacy_global_profile",
+    includeSensitive: request.includeSensitive,
+    explicitHumanApproval: request.explicitHumanApproval
+  }).allowed;
 }
 
 export { readProfileEpisodes };

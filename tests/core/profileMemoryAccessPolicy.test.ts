@@ -5,7 +5,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import { createEmptyProfileMemoryState } from "../../src/core/profileMemory";
 import { evaluateProfileMemoryAccessPolicy } from "../../src/core/profileMemoryRuntime/profileMemoryAccessPolicy";
+import { readProfileFacts } from "../../src/core/profileMemoryRuntime/profileMemoryQueries";
 import {
   buildExternalAgentTaskPrincipalAccess,
   buildTaskExecutionPrincipalAccess,
@@ -127,4 +129,39 @@ test("sensitivity approval does not become principal authority", () => {
 
   assert.equal(decision.allowed, false);
   assert.equal(decision.reason, "sensitivity_approval_is_not_principal_authority");
+});
+
+test("profile fact reads enforce principal policy when subject scope is requested", () => {
+  const state = createEmptyProfileMemoryState();
+  state.facts.push({
+    id: "fact_owner_name",
+    key: "identity.preferred_name",
+    value: "Configured Owner",
+    sensitive: false,
+    status: "confirmed",
+    confidence: 0.98,
+    sourceTaskId: "task_seed",
+    source: "test_fixture",
+    observedAt: "2026-05-10T12:00:00.000Z",
+    confirmedAt: "2026-05-10T12:00:00.000Z",
+    supersededAt: null,
+    lastUpdatedAt: "2026-05-10T12:00:00.000Z"
+  });
+
+  const blocked = readProfileFacts(state, {
+    purpose: "planning_context",
+    includeSensitive: false,
+    requestedSubjectKind: "owner_profile",
+    principalAccess: buildAllowedUserAccess()
+  });
+  const allowed = readProfileFacts(state, {
+    purpose: "planning_context",
+    includeSensitive: false,
+    requestedSubjectKind: "owner_profile",
+    principalAccess: buildOwnerAccess()
+  });
+
+  assert.equal(blocked.length, 0);
+  assert.equal(allowed.length, 1);
+  assert.equal(allowed[0]?.key, "identity.preferred_name");
 });
