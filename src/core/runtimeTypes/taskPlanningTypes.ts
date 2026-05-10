@@ -14,6 +14,24 @@ export interface TaskRequest {
   goal: string;
   userInput: string;
   createdAt: string;
+  principalAccess?: TaskPrincipalAccessEnvelope;
+}
+
+export interface TaskPrincipalAccessEnvelope {
+  principalContext: {
+    requestId: string;
+    actor?: unknown;
+    route?: unknown;
+    subject?: unknown;
+  };
+  accessDecision: {
+    decisionId: string;
+    requestId: string;
+    operation: string;
+    accessClass: string;
+    allowed: boolean;
+    reason: string;
+  };
 }
 
 export interface RespondActionParams extends Record<string, unknown> {

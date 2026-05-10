@@ -133,6 +133,14 @@ test("federation delegation succeeds with valid credentials and contract", async
     assert.ok(result.decision);
     assert.equal(result.decision?.accepted, true);
     assert.ok(result.decision?.taskRequest);
+    assert.equal(
+      result.decision.taskRequest.principalAccess?.accessDecision.accessClass,
+      "external_agent_limited"
+    );
+    assert.equal(
+      result.decision.taskRequest.principalAccess?.accessDecision.operation,
+      "task_execution"
+    );
     assert.ok(result.taskId);
   });
 });

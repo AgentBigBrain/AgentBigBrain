@@ -74,6 +74,7 @@ export type {
   StartProcessActionParams,
   StopFolderRuntimeProcessesActionParams,
   StopProcessActionParams,
+  TaskPrincipalAccessEnvelope,
   TaskRequest,
   UpdateSkillActionParams,
   VerifyBrowserActionParams,

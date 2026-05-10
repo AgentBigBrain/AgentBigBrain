@@ -11,6 +11,8 @@ import {
 } from "../core/buildBrain";
 import { MAIN_AGENT_ID } from "../core/agentIdentity";
 import type { TaskRequest } from "../core/types";
+import type { PrincipalAccessEnvelope } from "./principalRuntime/principalAccess";
+import { buildTaskExecutionPrincipalAccess } from "./principalRuntime/principalAccess";
 import {
   buildConversationModelEnvironment,
   resolveConversationModelSelection
@@ -42,13 +44,18 @@ interface CachedInterfaceBrainRuntime {
  * @param receivedAt - Timestamp used for deterministic metadata.
  * @returns Task request ready for orchestrator execution.
  */
-function buildInterfaceTaskRequest(input: string, receivedAt: string): TaskRequest {
+export function buildInterfaceTaskRequest(
+  input: string,
+  receivedAt: string,
+  principalAccess?: PrincipalAccessEnvelope | null
+): TaskRequest {
   return {
     id: makeId("task"),
     agentId: MAIN_AGENT_ID,
     goal: "Handle user request safely and efficiently.",
     userInput: input.trim(),
-    createdAt: receivedAt
+    createdAt: receivedAt,
+    principalAccess: principalAccess ?? undefined
   };
 }
 
@@ -111,13 +118,14 @@ export class InterfaceBrainRegistry {
   async runTaskForSession(
     session: Pick<
       ConversationSession,
-      "modelBackendOverride" | "codexAuthProfileId" | "domainContext"
+      "modelBackendOverride" | "codexAuthProfileId" | "domainContext" | "principalContext"
     > | null | undefined,
     input: string,
     receivedAt: string
   ): Promise<ConversationExecutionResult> {
     const { runtime } = this.getRuntimeForSession(session);
-    const runResult = await runtime.brain.runTask(buildInterfaceTaskRequest(input, receivedAt), {
+    const principalAccess = buildTaskExecutionPrincipalAccess(session?.principalContext ?? null);
+    const runResult = await runtime.brain.runTask(buildInterfaceTaskRequest(input, receivedAt, principalAccess), {
       conversationDomainContext: session?.domainContext ?? null
     });
     return {
@@ -165,7 +173,10 @@ export class InterfaceBrainRegistry {
    * @returns Autonomous conversation execution result.
    */
   async runAutonomousTaskForSession(
-    session: Pick<ConversationSession, "modelBackendOverride" | "codexAuthProfileId"> | null | undefined,
+    session: Pick<
+      ConversationSession,
+      "modelBackendOverride" | "codexAuthProfileId" | "principalContext"
+    > | null | undefined,
     goal: string,
     receivedAt: string,
     onProgress: (message: string) => Promise<void>,

@@ -331,6 +331,140 @@ export function requirePrincipalAccessForOperation(input: {
   };
 }
 
+/**
+ * Builds the task-execution access envelope carried by governed task requests.
+ */
+export function buildTaskExecutionPrincipalAccess(
+  principalContext: PrincipalContext | null | undefined
+): PrincipalAccessEnvelope {
+  const context =
+    principalContext ??
+    buildLegacyUnknownPrincipalContext({
+      requestId: "task_execution:legacy_unknown",
+      conversationVisibility: "unknown"
+    });
+  const classification = classifyTaskExecutionAccess(context);
+  return requirePrincipalAccessForOperation({
+    principalContext: context,
+    operation: "task_execution",
+    accessClass: classification.accessClass,
+    allowed: classification.allowed,
+    reason: classification.reason
+  });
+}
+
+/**
+ * Builds the direct-reply access envelope carried into model prompt rendering.
+ */
+export function buildDirectReplyPrincipalAccess(
+  principalContext: PrincipalContext | null | undefined
+): PrincipalAccessEnvelope {
+  const context =
+    principalContext ??
+    buildLegacyUnknownPrincipalContext({
+      requestId: "direct_reply:legacy_unknown",
+      conversationVisibility: "unknown"
+    });
+  const classification = classifyTaskExecutionAccess(context);
+  return requirePrincipalAccessForOperation({
+    principalContext: context,
+    operation: "direct_reply",
+    accessClass: classification.accessClass,
+    allowed: classification.allowed,
+    reason: classification.reason
+  });
+}
+
+/**
+ * Builds a federated external-agent context without treating the external agent as an owner.
+ */
+export function buildExternalAgentPrincipalContext(input: {
+  externalAgentId: string;
+  contractId: string;
+  requestedAt: string;
+}): PrincipalContext {
+  const normalizedAgentId = input.externalAgentId.trim() || "unknown";
+  const requestId = `federated:${input.contractId.trim() || "unknown"}`;
+  return {
+    requestId,
+    actor: {
+      principalId: `external_agent:${normalizedAgentId}`,
+      principalRole: "external_agent",
+      provider: "federated",
+      providerUserIdHash: null,
+      providerConversationIdHash: null,
+      conversationId: null,
+      conversationVisibility: "unknown",
+      usernameHint: null,
+      displayNameHint: normalizedAgentId,
+      transportObservedAt: input.requestedAt,
+      ownerMatchSource: "none",
+      identityAuthority: "external_agent_contract",
+      legacyIdentityState: "external_agent_limited"
+    },
+    route: {
+      conversationId: null,
+      providerConversationIdHash: null,
+      visibility: "unknown",
+      source: "federated"
+    },
+    subject: {
+      speakerSubjectRef: null,
+      requestedSubjectRef: null,
+      ownerSubjectRef: null
+    }
+  };
+}
+
+/**
+ * Builds an external-agent-limited task envelope for inbound federation.
+ */
+export function buildExternalAgentTaskPrincipalAccess(input: {
+  externalAgentId: string;
+  contractId: string;
+  requestedAt: string;
+}): PrincipalAccessEnvelope {
+  return requirePrincipalAccessForOperation({
+    principalContext: buildExternalAgentPrincipalContext(input),
+    operation: "task_execution",
+    accessClass: "external_agent_limited",
+    allowed: true,
+    reason: "external_agent_limited"
+  });
+}
+
+export interface ModelPromptPrincipalAccessView {
+  actorRole: PrincipalRole;
+  routeVisibility: ConversationVisibility;
+  accessClass: PrincipalAccessClass;
+  accessAllowed: boolean;
+  accessReason: PrincipalAccessReason;
+  identityAuthority: IdentityAuthority;
+  legacyIdentityState: LegacyIdentityState;
+  ownerMatchSource: OwnerMatchSource;
+}
+
+/**
+ * Returns a model-facing principal view without raw provider ids or stable principal hashes.
+ */
+export function renderPrincipalAccessForModelPrompt(
+  envelope: PrincipalAccessEnvelope | null | undefined
+): ModelPromptPrincipalAccessView | null {
+  if (!envelope) {
+    return null;
+  }
+  return {
+    actorRole: envelope.principalContext.actor.principalRole,
+    routeVisibility: envelope.principalContext.route.visibility,
+    accessClass: envelope.accessDecision.accessClass,
+    accessAllowed: envelope.accessDecision.allowed,
+    accessReason: envelope.accessDecision.reason,
+    identityAuthority: envelope.principalContext.actor.identityAuthority,
+    legacyIdentityState: envelope.principalContext.actor.legacyIdentityState,
+    ownerMatchSource: envelope.principalContext.actor.ownerMatchSource
+  };
+}
+
 function deriveConversationPrincipalFromIngress(input: IngressPrincipalInput): ConversationPrincipal {
   const configuredRole = resolveOwnerOperatorPrincipalRole(
     input.principalConfig,
@@ -388,6 +522,60 @@ function deriveConversationPrincipalFromIngress(input: IngressPrincipalInput): C
           : "none",
     identityAuthority,
     legacyIdentityState: providerUserIdHash ? "principal_verified" : "legacy_actor_unknown"
+  };
+}
+
+function classifyTaskExecutionAccess(context: PrincipalContext): {
+  accessClass: PrincipalAccessClass;
+  allowed: boolean;
+  reason: PrincipalAccessReason;
+} {
+  if (context.actor.principalRole === "legacy_unknown") {
+    return {
+      accessClass: "blocked",
+      allowed: false,
+      reason: "missing_principal_scope"
+    };
+  }
+  if (context.actor.principalRole === "external_agent") {
+    return {
+      accessClass: "external_agent_limited",
+      allowed: true,
+      reason: "external_agent_limited"
+    };
+  }
+  if (context.actor.principalRole === "runtime_continuation") {
+    return {
+      accessClass: "runtime_continuation_limited",
+      allowed: true,
+      reason: "runtime_continuation_inherited"
+    };
+  }
+  if (context.route.visibility === "public") {
+    return {
+      accessClass: "shared_public",
+      allowed: true,
+      reason: "public_safe"
+    };
+  }
+  if (context.actor.principalRole === "owner") {
+    return {
+      accessClass: "owner_private",
+      allowed: true,
+      reason: "owner_principal_matched"
+    };
+  }
+  if (context.actor.principalRole === "operator") {
+    return {
+      accessClass: "operator_private",
+      allowed: true,
+      reason: "operator_principal_matched"
+    };
+  }
+  return {
+    accessClass: "speaker_private",
+    allowed: true,
+    reason: "speaker_scope_matched"
   };
 }
 

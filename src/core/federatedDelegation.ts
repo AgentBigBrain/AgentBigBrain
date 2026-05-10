@@ -5,6 +5,7 @@
 import { clampNonNegative, hashSha256, toIso } from "./cryptoUtils";
 import { makeId } from "./ids";
 import { TaskRequest } from "./types";
+import { buildExternalAgentTaskPrincipalAccess } from "../interfaces/principalRuntime/principalAccess";
 
 export interface FederatedAgentContract {
     externalAgentId: string;
@@ -171,7 +172,12 @@ export class FederatedDelegationGateway {
             agentId: normalizedAgentId,
             goal: `[FederatedContract ${contractId}] ${goal}`,
             userInput,
-            createdAt: toIso(input.requestedAt)
+            createdAt: toIso(input.requestedAt),
+            principalAccess: buildExternalAgentTaskPrincipalAccess({
+                externalAgentId: normalizedAgentId,
+                contractId,
+                requestedAt: toIso(input.requestedAt)
+            })
         };
 
         return {

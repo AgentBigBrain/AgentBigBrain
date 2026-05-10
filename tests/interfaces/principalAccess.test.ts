@@ -6,9 +6,12 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
+  buildExternalAgentTaskPrincipalAccess,
+  buildTaskExecutionPrincipalAccess,
   buildLegacyUnknownPrincipalContext,
   derivePrincipalContextFromIngress,
   normalizePrincipalContext,
+  renderPrincipalAccessForModelPrompt,
   requirePrincipalAccessForOperation
 } from "../../src/interfaces/principalRuntime/principalAccess";
 import { createOwnerOperatorPrincipalConfigFromEnv } from "../../src/interfaces/principalRuntime/principalConfig";
@@ -107,6 +110,70 @@ test("access decisions are operation specific", () => {
 
   assert.equal(envelope.accessDecision.operation, "direct_reply");
   assert.notEqual(envelope.accessDecision.operation, "profile_write");
+});
+
+test("task execution access carries owner scope without reusing direct reply authority", () => {
+  const config = createOwnerOperatorPrincipalConfigFromEnv({
+    BRAIN_PRINCIPAL_HMAC_KEY: PRINCIPAL_KEY,
+    BRAIN_OWNER_DISCORD_USER_IDS: "owner-discord-1"
+  });
+  const context = derivePrincipalContextFromIngress({
+    provider: "discord",
+    conversationId: "private-channel",
+    userId: "owner-discord-1",
+    username: "owner",
+    conversationVisibility: "private",
+    receivedAt: "2026-05-10T12:00:00.000Z",
+    principalConfig: config
+  });
+  const envelope = buildTaskExecutionPrincipalAccess(context);
+
+  assert.equal(envelope.accessDecision.operation, "task_execution");
+  assert.equal(envelope.accessDecision.accessClass, "owner_private");
+  assert.equal(envelope.accessDecision.reason, "owner_principal_matched");
+});
+
+test("external-agent task access is federated-limited and not owner-private", () => {
+  const envelope = buildExternalAgentTaskPrincipalAccess({
+    externalAgentId: "partner-agent-alpha",
+    contractId: "partner-agent-alpha:quote-1",
+    requestedAt: "2026-05-10T12:00:00.000Z"
+  });
+
+  assert.equal(envelope.principalContext.actor.principalRole, "external_agent");
+  assert.equal(envelope.accessDecision.operation, "task_execution");
+  assert.equal(envelope.accessDecision.accessClass, "external_agent_limited");
+  assert.notEqual(envelope.accessDecision.accessClass, "owner_private");
+});
+
+test("model-facing principal view excludes raw provider ids and stable hashes", () => {
+  const config = createOwnerOperatorPrincipalConfigFromEnv({
+    BRAIN_PRINCIPAL_HMAC_KEY: PRINCIPAL_KEY,
+    BRAIN_OWNER_TELEGRAM_USER_IDS: "owner-telegram-1"
+  });
+  const context = derivePrincipalContextFromIngress({
+    provider: "telegram",
+    conversationId: "chat-1",
+    userId: "owner-telegram-1",
+    username: "owner",
+    conversationVisibility: "private",
+    receivedAt: "2026-05-10T12:00:00.000Z",
+    principalConfig: config
+  });
+  const rendered = renderPrincipalAccessForModelPrompt(buildTaskExecutionPrincipalAccess(context));
+
+  assert.deepEqual(rendered, {
+    actorRole: "owner",
+    routeVisibility: "private",
+    accessClass: "owner_private",
+    accessAllowed: true,
+    accessReason: "owner_principal_matched",
+    identityAuthority: "configured_owner_provider_user_id",
+    legacyIdentityState: "principal_verified",
+    ownerMatchSource: "provider_user_id"
+  });
+  assert.equal(JSON.stringify(rendered).includes("owner-telegram-1"), false);
+  assert.equal(JSON.stringify(rendered).includes(context.actor.providerUserIdHash ?? ""), false);
 });
 
 test("principal context normalization preserves safe metadata and rejects malformed records", () => {
