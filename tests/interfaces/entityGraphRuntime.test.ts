@@ -11,8 +11,10 @@ import { test } from "node:test";
 import { EntityGraphStore } from "../../src/core/entityGraphStore";
 import {
   buildInboundEntityGraphEvidenceRef,
+  classifyEntityGraphEvidenceAuthority,
   createDynamicPulseEntityGraphGetter,
   EntityGraphStoreLike,
+  isEntityGraphEvidenceOwnerPrivateEligible,
   maybeRecordInboundEntityGraphMutation
 } from "../../src/interfaces/entityGraphRuntime";
 import type {
@@ -40,6 +42,43 @@ function indexCandidateIdsByName(
 test("buildInboundEntityGraphEvidenceRef normalizes provider, conversation, and event ids", () => {
   const reference = buildInboundEntityGraphEvidenceRef("telegram", "chat:prod room", "event#42");
   assert.equal(reference, "interface:telegram:chat_prod_room:event_42");
+});
+
+test("buildInboundEntityGraphEvidenceRef can carry redacted actor-scoped evidence", () => {
+  const reference = buildInboundEntityGraphEvidenceRef(
+    "discord",
+    "shared-channel",
+    "event-7",
+    {
+      principalIdHash: "discord:redacted_owner_hash",
+      principalRole: "owner",
+      accessClass: "owner_private",
+      routeVisibility: "private",
+      legacyIdentityState: "principal_verified"
+    }
+  );
+
+  assert.equal(
+    reference,
+    "interface:discord:shared-channel:event-7:actor:discord_redacted_owner_hash:role:owner:access:owner_private:route:private:legacy:principal_verified"
+  );
+  assert.equal(classifyEntityGraphEvidenceAuthority([reference]), "actor_scoped");
+  assert.equal(isEntityGraphEvidenceOwnerPrivateEligible([reference]), true);
+});
+
+test("entity graph evidence without an actor stays shared or legacy support only", () => {
+  assert.equal(
+    classifyEntityGraphEvidenceAuthority(["interface:discord:shared-channel:event-7"]),
+    "shared_conversation_only"
+  );
+  assert.equal(
+    classifyEntityGraphEvidenceAuthority(["profile_memory_claim:contact:test"]),
+    "legacy_actorless"
+  );
+  assert.equal(
+    isEntityGraphEvidenceOwnerPrivateEligible(["interface:discord:shared-channel:event-7"]),
+    false
+  );
 });
 
 test("createDynamicPulseEntityGraphGetter binds reads to shared store only when enabled", async () => {
@@ -112,6 +151,66 @@ test("maybeRecordInboundEntityGraphMutation persists provider-scoped evidence re
     const workflowNodes = graph.entities.filter((node) => node.evidenceRefs.includes("interface:telegram:chat-1:1001"));
     assert.ok(workflowNodes.length > 0);
     assert.ok(workflowNodes.every((node) => node.domainHint === "workflow"));
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("maybeRecordInboundEntityGraphMutation keeps same-channel same-name evidence actor-scoped", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-stage6_86-actor-evidence-"));
+  const graphPath = path.join(tempDir, "entity_graph.json");
+  const store = new EntityGraphStore(graphPath, { backend: "json" });
+
+  try {
+    const firstWrite = await maybeRecordInboundEntityGraphMutation(
+      store,
+      true,
+      {
+        provider: "discord",
+        conversationId: "shared-channel",
+        eventId: "event-1",
+        text: "Jordan mentioned Example Analytics.",
+        observedAt: "2026-03-03T10:00:00.000Z",
+        actorEvidence: {
+          principalIdHash: "discord:principal_a",
+          principalRole: "conversation_participant",
+          accessClass: "shared_public",
+          routeVisibility: "public",
+          legacyIdentityState: "principal_verified"
+        }
+      },
+      {}
+    );
+    const secondWrite = await maybeRecordInboundEntityGraphMutation(
+      store,
+      true,
+      {
+        provider: "discord",
+        conversationId: "shared-channel",
+        eventId: "event-2",
+        text: "Jordan mentioned Example Analytics.",
+        observedAt: "2026-03-03T10:05:00.000Z",
+        actorEvidence: {
+          principalIdHash: "discord:principal_b",
+          principalRole: "conversation_participant",
+          accessClass: "shared_public",
+          routeVisibility: "public",
+          legacyIdentityState: "principal_verified"
+        }
+      },
+      {}
+    );
+
+    assert.equal(firstWrite, true);
+    assert.equal(secondWrite, true);
+
+    const graph = await store.getGraph();
+    const jordan = graph.entities.find((node) => node.canonicalName === "Jordan");
+    assert.ok(jordan);
+    assert.ok(jordan.evidenceRefs.some((ref) => ref.includes(":actor:discord_principal_a:")));
+    assert.ok(jordan.evidenceRefs.some((ref) => ref.includes(":actor:discord_principal_b:")));
+    assert.equal(classifyEntityGraphEvidenceAuthority(jordan.evidenceRefs), "actor_scoped");
+    assert.equal(isEntityGraphEvidenceOwnerPrivateEligible(jordan.evidenceRefs), false);
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }

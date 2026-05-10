@@ -14,9 +14,15 @@ import { parseAutonomousExecutionInput } from "../conversationRuntime/managerCon
 import type { TaskRunResult } from "../../core/types";
 import type {
   EntityGraphStoreLike,
+  EntityGraphActorEvidenceContext,
   InboundEntityGraphMutationInput
 } from "../entityGraphRuntime";
 import { maybeRecordInboundEntityGraphMutation } from "../entityGraphRuntime";
+import type { OwnerOperatorPrincipalConfig } from "../principalRuntime/principalConfig";
+import {
+  derivePrincipalContextFromIngress,
+  requirePrincipalAccessForOperation
+} from "../principalRuntime/principalAccess";
 import type {
   EntityDomainHintInterpretationResolver,
   EntityTypeInterpretationResolver
@@ -55,6 +61,9 @@ export interface HandleAcceptedTransportConversationInput {
   conversationManager: ConversationManagerLike;
   entityGraphStore: EntityGraphStoreLike;
   dynamicPulseEnabled: boolean;
+  principalConfig?: OwnerOperatorPrincipalConfig;
+  allowedUserIds?: readonly string[];
+  allowedUsernames?: readonly string[];
   abortControllers: Map<string, AbortController>;
   entityTypeInterpretationResolver?: EntityTypeInterpretationResolver;
   entityDomainHintInterpretationResolver?: EntityDomainHintInterpretationResolver;
@@ -174,11 +183,13 @@ export async function handleAcceptedTransportConversation(
   input: HandleAcceptedTransportConversationInput
 ): Promise<void> {
   const domainHint = await input.resolveEntityGraphDomainHint?.();
+  const actorEvidence = buildInboundEntityGraphActorEvidence(input);
   await maybeRecordInboundEntityGraphMutation(
     input.entityGraphStore,
     input.dynamicPulseEnabled,
     {
       ...input.entityGraphEvent,
+      actorEvidence,
       domainHint: domainHint ?? null
     },
     {
@@ -205,6 +216,58 @@ export async function handleAcceptedTransportConversation(
       buildTransportDeliveryFailureMessage(sendResult, input.deliveryFailureCode)
     );
   }
+}
+
+function buildInboundEntityGraphActorEvidence(
+  input: HandleAcceptedTransportConversationInput
+): EntityGraphActorEvidenceContext | null {
+  const principalContext = derivePrincipalContextFromIngress({
+    provider: input.inbound.provider,
+    conversationId: input.inbound.conversationId,
+    userId: input.inbound.userId,
+    username: input.inbound.username,
+    conversationVisibility: input.inbound.conversationVisibility,
+    transportIdentity: input.inbound.transportIdentity ?? null,
+    receivedAt: input.inbound.receivedAt,
+    principalConfig: input.principalConfig,
+    allowedUserIds: input.allowedUserIds,
+    allowedUsernames: input.allowedUsernames
+  });
+  const accessDecision = requirePrincipalAccessForOperation({
+    principalContext,
+    operation: "entity_graph_write",
+    accessClass:
+      principalContext.route.visibility === "public"
+        ? "shared_public"
+        : principalContext.actor.principalRole === "legacy_unknown"
+          ? "session_only"
+          : principalContext.actor.principalRole === "owner"
+            ? "owner_private"
+            : principalContext.actor.principalRole === "operator"
+              ? "operator_private"
+              : "speaker_private",
+    allowed: principalContext.actor.principalRole !== "legacy_unknown",
+    reason:
+      principalContext.actor.principalRole === "legacy_unknown"
+        ? "missing_principal_scope"
+        : principalContext.route.visibility === "public"
+          ? "public_safe"
+          : principalContext.actor.principalRole === "owner"
+            ? "owner_principal_matched"
+            : principalContext.actor.principalRole === "operator"
+              ? "operator_principal_matched"
+              : "speaker_scope_matched"
+  }).accessDecision;
+  if (!principalContext.actor.providerUserIdHash) {
+    return null;
+  }
+  return {
+    principalIdHash: principalContext.actor.providerUserIdHash,
+    principalRole: principalContext.actor.principalRole,
+    accessClass: accessDecision.accessClass as EntityGraphActorEvidenceContext["accessClass"],
+    routeVisibility: principalContext.route.visibility,
+    legacyIdentityState: principalContext.actor.legacyIdentityState
+  };
 }
 
 /**

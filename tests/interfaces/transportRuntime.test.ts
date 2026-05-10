@@ -60,6 +60,7 @@ import {
 } from "../../src/interfaces/transportRuntime/telegramGatewayNotifier";
 import { sendObservedTelegramGatewayReply } from "../../src/interfaces/transportRuntime/telegramGatewayObservation";
 import type { ConversationInboundMessage } from "../../src/interfaces/conversationRuntime/managerContracts";
+import { createOwnerOperatorPrincipalConfigFromEnv } from "../../src/interfaces/principalRuntime/principalConfig";
 import {
   createDefaultSourceRecallRuntimeConfig,
   createSourceRecallRetentionPolicyFromEnv
@@ -271,11 +272,11 @@ test("prepareDiscordMessageCreate returns accepted payloads with normalized runt
       author: {
         id: "u1",
         username: "tester",
-        global_name: "Avery Brooks",
+        global_name: "Morgan Brooks",
         bot: false
       },
       member: {
-        nick: "Avery"
+        nick: "Morgan"
       },
       timestamp: "2026-03-07T10:00:00.000Z"
     },
@@ -303,7 +304,7 @@ test("prepareDiscordMessageCreate returns accepted payloads with normalized runt
   assert.deepEqual(result.transportIdentity, {
     provider: "discord",
     username: "tester",
-    displayName: "Avery",
+    displayName: "Morgan",
     givenName: null,
     familyName: null,
     observedAt: "2026-03-07T10:00:00.000Z"
@@ -501,6 +502,60 @@ test("handleAcceptedTransportConversation routes text execution and final reply 
       domainHint: "workflow"
     }
   ]);
+});
+
+test("handleAcceptedTransportConversation attaches redacted actor evidence to graph writes when configured", async () => {
+  const inbound: ConversationInboundMessage = {
+    provider: "discord",
+    conversationId: "channel-actor",
+    userId: "user-actor-1",
+    username: "tester",
+    conversationVisibility: "private",
+    text: "Jordan is joining the review.",
+    receivedAt: "2026-03-07T10:02:00.000Z"
+  };
+  const entityGraphWrites: string[] = [];
+  const principalConfig = createOwnerOperatorPrincipalConfigFromEnv({
+    BRAIN_PRINCIPAL_HMAC_KEY: "synthetic-principal-key-for-tests"
+  }, "test_override");
+
+  await handleAcceptedTransportConversation({
+    inbound,
+    entityGraphEvent: {
+      provider: "discord",
+      conversationId: "channel-actor",
+      eventId: "event-actor",
+      text: "Jordan is joining the review.",
+      observedAt: "2026-03-07T10:02:00.000Z"
+    },
+    notifier: {
+      capabilities: { supportsEdit: false, supportsNativeStreaming: false },
+      send: async () => ({ ok: true, messageId: "progress-actor", errorCode: null })
+    },
+    conversationManager: {
+      handleMessage: async () => "final reply"
+    },
+    entityGraphStore: {
+      getGraph: async () => buildEmptyEntityGraph(),
+      upsertFromExtractionInput: async (input) => {
+        entityGraphWrites.push(input.evidenceRef);
+      }
+    },
+    dynamicPulseEnabled: true,
+    principalConfig,
+    abortControllers: new Map<string, AbortController>(),
+    runTextTask: async () => "unused",
+    runAutonomousTask: async () => ({ summary: "autonomous summary" }),
+    deliverReply: async () => ({ ok: true, messageId: "final-actor", errorCode: null }),
+    deliveryFailureCode: "DISCORD_SEND_FAILED"
+  });
+
+  assert.equal(entityGraphWrites.length, 1);
+  assert.match(
+    entityGraphWrites[0] ?? "",
+    /^interface:discord:channel-actor:event-actor:actor:discord_[a-zA-Z0-9_-]+:role:conversation_participant:access:speaker_private:route:private:legacy:principal_verified$/
+  );
+  assert.doesNotMatch(entityGraphWrites[0] ?? "", /user-actor-1/);
 });
 
 test("handleAcceptedTransportConversation routes autonomous execution through progress sender", async () => {
@@ -849,8 +904,8 @@ test("prepareTelegramUpdate returns accepted payloads with normalized runtime me
         from: {
           id: 200,
           username: "tester",
-          first_name: "Avery",
-          last_name: "Bena"
+          first_name: "Morgan",
+          last_name: "Harper"
         },
         date: 1_700_000_000
       }
@@ -879,9 +934,9 @@ test("prepareTelegramUpdate returns accepted payloads with normalized runtime me
   assert.deepEqual(result.transportIdentity, {
     provider: "telegram",
     username: "tester",
-    displayName: "Avery Bena",
-    givenName: "Avery",
-    familyName: "Bena",
+    displayName: "Morgan Harper",
+    givenName: "Morgan",
+    familyName: "Harper",
     observedAt: "2023-11-14T22:13:20.000Z"
   });
   assert.equal(result.entityGraphEvent.eventId, "44");
@@ -900,8 +955,8 @@ test("prepareTelegramUpdate accepts greeting-plus-alias invocations", () => {
         from: {
           id: 200,
           username: "tester",
-          first_name: "Avery",
-          last_name: "Bena"
+          first_name: "Morgan",
+          last_name: "Harper"
         },
         date: 1_700_000_000
       }
@@ -927,9 +982,9 @@ test("prepareTelegramUpdate accepts greeting-plus-alias invocations", () => {
   assert.deepEqual(result.transportIdentity, {
     provider: "telegram",
     username: "tester",
-    displayName: "Avery Bena",
-    givenName: "Avery",
-    familyName: "Bena",
+    displayName: "Morgan Harper",
+    givenName: "Morgan",
+    familyName: "Harper",
     observedAt: "2023-11-14T22:13:20.000Z"
   });
 });
@@ -947,8 +1002,8 @@ test("prepareTelegramUpdate accepts private plain-text messages without alias in
         from: {
           id: 200,
           username: "tester",
-          first_name: "Avery",
-          last_name: "Bena"
+          first_name: "Morgan",
+          last_name: "Harper"
         },
         date: 1_700_000_000
       }
@@ -986,8 +1041,8 @@ test("prepareTelegramUpdate still requires alias in group chats", () => {
         from: {
           id: 200,
           username: "tester",
-          first_name: "Avery",
-          last_name: "Bena"
+          first_name: "Morgan",
+          last_name: "Harper"
         },
         date: 1_700_000_000
       }
