@@ -170,12 +170,14 @@ export function resolvePulseCommandResponse(
     session.agentPulse.optIn = true;
     session.agentPulse.mode = "private";
     session.agentPulse.routeStrategy = "last_private_used";
+    session.agentPulse.controlUpdatedAt = receivedAt;
+    session.agentPulse.controlSource = "exact_slash_command";
     resetAgentPulseRuntimeStatus(session);
     session.updatedAt = receivedAt;
     return [
       normalizedArgument === "on"
-        ? "Agent Pulse is now ON for this conversation."
-        : "Agent Pulse is now PRIVATE for this conversation.",
+        ? "Agent Pulse is now ON for your account. Delivery defaults to private mode."
+        : "Agent Pulse is now PRIVATE for your account.",
       renderAgentPulseStatus(session)
     ].join("\n");
   }
@@ -184,10 +186,12 @@ export function resolvePulseCommandResponse(
     session.agentPulse.optIn = true;
     session.agentPulse.mode = "public";
     session.agentPulse.routeStrategy = "current_conversation";
+    session.agentPulse.controlUpdatedAt = receivedAt;
+    session.agentPulse.controlSource = "exact_slash_command";
     resetAgentPulseRuntimeStatus(session);
     session.updatedAt = receivedAt;
     return [
-      "Agent Pulse is now PUBLIC for this conversation.",
+      "Agent Pulse is now PUBLIC for your account.",
       "Public mode sends generic check-ins only and avoids profile-derived details.",
       renderAgentPulseStatus(session)
     ].join("\n");
@@ -195,10 +199,12 @@ export function resolvePulseCommandResponse(
 
   if (normalizedArgument === "off") {
     session.agentPulse.optIn = false;
+    session.agentPulse.controlUpdatedAt = receivedAt;
+    session.agentPulse.controlSource = "exact_slash_command";
     resetAgentPulseRuntimeStatus(session);
     session.updatedAt = receivedAt;
     return [
-      "Agent Pulse is now OFF for this conversation.",
+      "Agent Pulse is now OFF for your account.",
       renderAgentPulseStatus(session)
     ].join("\n");
   }

@@ -403,7 +403,7 @@ export function resolveDirectExecutionOutcomeLine(runResult: TaskRunResult): str
     case "memory_mutation":
       return "I updated the requested memory state.";
     case "pulse_emit":
-      return "I sent the requested follow-up prompt.";
+      return "I registered the requested pulse follow-up state. Delivery still requires scheduler approval.";
     default:
       return null;
   }

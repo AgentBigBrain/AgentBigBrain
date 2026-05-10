@@ -10,12 +10,14 @@ import { test } from "node:test";
 
 import { createDefaultSourceRecallRetentionPolicy } from "../../src/core/sourceRecall/sourceRecallRetention";
 import { SourceRecallStore } from "../../src/core/sourceRecall/sourceRecallStore";
+import type { TaskRunResult } from "../../src/core/types";
 import type { ConversationNotifierTransport } from "../../src/interfaces/conversationRuntime/managerContracts";
 import {
   enqueueConversationSystemJob,
   processConversationQueue,
   type SessionWorkerBinding
 } from "../../src/interfaces/conversationRuntime/conversationWorkerRuntime";
+import { buildPulseSystemJobMetadata } from "../../src/interfaces/proactiveRuntime/pulseAuthorityGateway";
 import {
   type ConversationJob,
   type ConversationSession,
@@ -73,6 +75,60 @@ function buildAssistantTaskCapturePolicy() {
     encryptedPayloadsAvailable: true,
     sourceKindCaptureAllowlist: ["assistant_turn", "task_input", "task_summary"] as const,
     captureClassAllowlist: ["assistant_output", "operational_output"] as const
+  };
+}
+
+/**
+ * Builds a task result containing one approved non-respond action for pulse constraint tests.
+ */
+function buildSideEffectTaskRunResult(): TaskRunResult {
+  return {
+    task: {
+      id: "task-pulse-side-effect",
+      agentId: "main-agent",
+      goal: "Do side-effect work from a pulse.",
+      userInput: "Pulse should respond only.",
+      createdAt: "2026-05-09T12:00:00.000Z"
+    },
+    plan: {
+      taskId: "task-pulse-side-effect",
+      plannerNotes: "Synthetic side-effect plan.",
+      actions: [
+        {
+          id: "action-pulse-write",
+          type: "write_file",
+          description: "Write a file.",
+          params: {
+            path: "synthetic.txt",
+            content: "not allowed"
+          },
+          estimatedCostUsd: 0.01
+        }
+      ]
+    },
+    actionResults: [
+      {
+        action: {
+          id: "action-pulse-write",
+          type: "write_file",
+          description: "Write a file.",
+          params: {
+            path: "synthetic.txt",
+            content: "not allowed"
+          },
+          estimatedCostUsd: 0.01
+        },
+        mode: "fast_path",
+        approved: true,
+        output: "Wrote synthetic.txt",
+        blockedBy: [],
+        violations: [],
+        votes: []
+      }
+    ],
+    summary: "Wrote synthetic.txt",
+    startedAt: "2026-05-09T12:00:00.000Z",
+    completedAt: "2026-05-09T12:00:01.000Z"
   };
 }
 
@@ -266,6 +322,166 @@ test("processConversationQueue captures task input and summary as operational So
     assert.equal(chunks.some((chunk) => chunk.authority.completionProofAuthority), false);
     assert.ok(chunks.some((chunk) => chunk.text === "Run the synthetic source recall task."));
     assert.ok(chunks.some((chunk) => chunk.text === "Completed the synthetic source recall task."));
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("processConversationQueue excludes Agent Pulse prompts from Source Recall task input", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-conversation-pulse-source-recall-"));
+  const store = new InterfaceSessionStore(path.join(tempDir, "sessions.json"));
+  const sourceRecallStore = new SourceRecallStore({
+    sqlitePath: path.join(tempDir, "source_recall.sqlite"),
+    testOnlyAllowPlaintextStorage: true
+  });
+  const conversationKey = "telegram:chat-1:user-1";
+  const ackTimers = new Map<string, NodeJS.Timeout>();
+  const workerLastSeenAt = new Map<string, string>();
+  const workerBindings = new Map<string, SessionWorkerBinding>();
+  const notify: ConversationNotifierTransport = {
+    capabilities: {
+      supportsEdit: false,
+      supportsNativeStreaming: false
+    },
+    send: async () => ({
+      ok: true,
+      messageId: "message-1",
+      errorCode: null
+    })
+  };
+
+  try {
+    await store.setSession(
+      buildSession(conversationKey, {
+        queuedJobs: [
+          buildQueuedJob({
+            id: "job-source-recall-pulse",
+            input: "System-generated Agent Pulse check-in request.\nAgent Pulse request: ask now.",
+            executionInput: "Internal pulse execution prompt must not be captured.",
+            isSystemJob: true,
+            pulseMetadata: buildPulseSystemJobMetadata({
+              pulseId: "pulse_source_recall_test",
+              candidateId: "candidate_source_recall_test",
+              deliveryDecisionId: "decision_source_recall_test",
+              decisionRecordId: "decision_record_source_recall_test",
+              promptKind: "stage6_86_dynamic_pulse"
+            })
+          })
+        ]
+      })
+    );
+
+    await processConversationQueue({
+      sessionKey: conversationKey,
+      executeTask: async () => ({
+        summary: "Pulse response summary."
+      }),
+      notify,
+      store,
+      sourceRecallCapture: {
+        policy: buildAssistantTaskCapturePolicy(),
+        writer: sourceRecallStore,
+        capturedAt: "2026-05-03T14:30:00.000Z"
+      },
+      config: buildConversationWorkerRuntimeConfig({
+        ackDelayMs: 5_000,
+        heartbeatIntervalMs: 10,
+        maxRecentJobs: 20,
+        maxConversationTurns: 20
+      }),
+      ackTimers,
+      workerLastSeenAt,
+      workerBindings,
+      autonomousExecutionPrefix: "[AUTONOMOUS_LOOP_GOAL]"
+    });
+
+    const records = await sourceRecallStore.listSourceRecords();
+    const sourceKinds = records.map((record) => record.sourceKind).sort();
+    assert.deepEqual(sourceKinds, ["assistant_turn", "task_summary"]);
+    const chunks = (
+      await Promise.all(
+        records.map((record) => sourceRecallStore.listChunksForRecord(record.sourceRecordId))
+      )
+    ).flat();
+    assert.equal(
+      chunks.some((chunk) => chunk.text.includes("Agent Pulse request: ask now")),
+      false
+    );
+    assert.ok(chunks.some((chunk) => chunk.text === "Pulse response summary."));
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("processConversationQueue blocks side-effect results for Agent Pulse jobs", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-conversation-pulse-respond-only-"));
+  const store = new InterfaceSessionStore(path.join(tempDir, "sessions.json"));
+  const conversationKey = "telegram:chat-1:user-1";
+  const notifications: string[] = [];
+  const ackTimers = new Map<string, NodeJS.Timeout>();
+  const workerLastSeenAt = new Map<string, string>();
+  const workerBindings = new Map<string, SessionWorkerBinding>();
+  const notify: ConversationNotifierTransport = {
+    capabilities: {
+      supportsEdit: false,
+      supportsNativeStreaming: false
+    },
+    send: async (message) => {
+      notifications.push(message);
+      return {
+        ok: true,
+        messageId: `message-${notifications.length}`,
+        errorCode: null
+      };
+    }
+  };
+
+  try {
+    await store.setSession(
+      buildSession(conversationKey, {
+        queuedJobs: [
+          buildQueuedJob({
+            id: "job-pulse-respond-only",
+            input: "System-generated Agent Pulse check-in request.",
+            executionInput: "System-generated Agent Pulse check-in request.",
+            isSystemJob: true,
+            pulseMetadata: buildPulseSystemJobMetadata({
+              pulseId: "pulse_respond_only_test",
+              candidateId: "candidate_respond_only_test",
+              deliveryDecisionId: "decision_respond_only_test",
+              decisionRecordId: "decision_record_respond_only_test",
+              promptKind: "stage6_86_dynamic_pulse"
+            })
+          })
+        ]
+      })
+    );
+
+    await processConversationQueue({
+      sessionKey: conversationKey,
+      executeTask: async () => ({
+        summary: "Wrote synthetic.txt",
+        taskRunResult: buildSideEffectTaskRunResult()
+      }),
+      notify,
+      store,
+      config: buildConversationWorkerRuntimeConfig({
+        ackDelayMs: 5_000,
+        heartbeatIntervalMs: 10,
+        maxRecentJobs: 20,
+        maxConversationTurns: 20
+      }),
+      ackTimers,
+      workerLastSeenAt,
+      workerBindings,
+      autonomousExecutionPrefix: "[AUTONOMOUS_LOOP_GOAL]"
+    });
+
+    const session = await store.getSession(conversationKey);
+    assert.ok(session);
+    assert.equal(session.recentJobs[0]?.status, "failed");
+    assert.match(session.recentJobs[0]?.errorMessage ?? "", /respond-only/i);
+    assert.equal(notifications.length, 0);
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }

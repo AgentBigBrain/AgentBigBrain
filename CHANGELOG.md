@@ -17,6 +17,9 @@ stay aligned with `package.json`.
   non-authority guarantees.
 - Added a Source Recall Telegram/Desktop live-smoke command that runs the real Telegram desktop
   workflow with encrypted Source Recall capture enabled and writes redacted proof.
+- Added a Dynamic Pulse authority/privacy evidence matrix that proves scheduler authority,
+  respond-only pulse metadata, public-mode minimization, Source Recall prompt exclusion, and
+  dynamic-reason fail-closed behavior.
 
 ### Changed
 - Expanded the public README and docs map with clearer positioning, authority-boundary diagrams,
@@ -24,6 +27,9 @@ stay aligned with `package.json`.
 - Profile-memory, semantic-memory, workflow-learning, media-artifact, and projection surfaces can
   now cite Source Recall ids as evidence without granting write, truth, approval, or proof
   authority.
+- Agent Pulse delivery now routes through typed authority metadata, keeps public prompts
+  data-minimized, constrains pulse jobs to respond-only execution, and requires explicit Dynamic
+  Pulse reason allowlists before dynamic reasons can emit.
 
 ### Fixed
 - Direct conversation prompts now ground transport/profile name mentions as references to the

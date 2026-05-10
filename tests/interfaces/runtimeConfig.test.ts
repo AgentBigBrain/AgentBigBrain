@@ -18,6 +18,8 @@ test("runtime config selects telegram provider when configured", () => {
   assert.equal(config.provider, "telegram");
   assert.equal(config.security.allowedUsernames[0], "agentowner");
   assert.equal(config.security.agentPulseTickIntervalMs, 120000);
+  assert.equal(config.security.agentPulseRunOnStartup, false);
+  assert.deepEqual(config.security.agentPulseDynamicReasonAllowlist, []);
   assert.equal(config.security.ackDelayMs, 1200);
   assert.equal(config.security.showTechnicalSummary, false);
   assert.equal(config.security.showSafetyCodes, false);
@@ -43,7 +45,7 @@ test("runtime config selects discord provider when configured", () => {
   assert.equal(config.security.allowedUsernames[0], "agentowner");
 });
 
-test("runtime config supports agent pulse scheduler interval override", () => {
+test("runtime config keeps agent pulse scheduler interval at safe floor by default", () => {
   const config = createInterfaceRuntimeConfigFromEnv({
     BRAIN_INTERFACE_PROVIDER: "telegram",
     BRAIN_INTERFACE_SHARED_SECRET: "secret",
@@ -53,7 +55,49 @@ test("runtime config supports agent pulse scheduler interval override", () => {
   });
 
   assert.equal(config.provider, "telegram");
+  assert.equal(config.security.agentPulseTickIntervalMs, 120000);
+});
+
+test("runtime config supports fast agent pulse scheduler interval only for tests", () => {
+  const config = createInterfaceRuntimeConfigFromEnv({
+    BRAIN_INTERFACE_PROVIDER: "telegram",
+    BRAIN_INTERFACE_SHARED_SECRET: "secret",
+    BRAIN_INTERFACE_ALLOWED_USERNAMES: "agentowner",
+    TELEGRAM_BOT_TOKEN: "telegram-token",
+    BRAIN_AGENT_PULSE_TICK_INTERVAL_MS: "45000",
+    BRAIN_AGENT_PULSE_ALLOW_FAST_TICK_FOR_TESTS: "true"
+  });
+
+  assert.equal(config.provider, "telegram");
   assert.equal(config.security.agentPulseTickIntervalMs, 45000);
+});
+
+test("runtime config fails closed for dynamic pulse reason allowlist", () => {
+  const config = createInterfaceRuntimeConfigFromEnv({
+    BRAIN_INTERFACE_PROVIDER: "telegram",
+    BRAIN_INTERFACE_SHARED_SECRET: "secret",
+    BRAIN_INTERFACE_ALLOWED_USERNAMES: "agentowner",
+    TELEGRAM_BOT_TOKEN: "telegram-token"
+  });
+
+  assert.equal(config.provider, "telegram");
+  assert.deepEqual(config.security.agentPulseDynamicReasonAllowlist, []);
+});
+
+test("runtime config parses explicit dynamic pulse reason allowlist", () => {
+  const config = createInterfaceRuntimeConfigFromEnv({
+    BRAIN_INTERFACE_PROVIDER: "telegram",
+    BRAIN_INTERFACE_SHARED_SECRET: "secret",
+    BRAIN_INTERFACE_ALLOWED_USERNAMES: "agentowner",
+    TELEGRAM_BOT_TOKEN: "telegram-token",
+    BRAIN_AGENT_PULSE_DYNAMIC_REASONS: "open_loop_resume, stale_fact_revalidation"
+  });
+
+  assert.equal(config.provider, "telegram");
+  assert.deepEqual(config.security.agentPulseDynamicReasonAllowlist, [
+    "OPEN_LOOP_RESUME",
+    "STALE_FACT_REVALIDATION"
+  ]);
 });
 
 test("runtime config supports bounded ack delay override", () => {
@@ -311,5 +355,19 @@ test("runtime config fails closed when Telegram streaming transport mode is inva
         TELEGRAM_STREAMING_TRANSPORT_MODE: "invalid"
       }),
     /TELEGRAM_STREAMING_TRANSPORT_MODE/
+  );
+});
+
+test("runtime config fails closed when dynamic pulse reason allowlist is invalid", () => {
+  assert.throws(
+    () =>
+      createInterfaceRuntimeConfigFromEnv({
+        BRAIN_INTERFACE_PROVIDER: "telegram",
+        BRAIN_INTERFACE_SHARED_SECRET: "secret",
+        BRAIN_INTERFACE_ALLOWED_USERNAMES: "agentowner",
+        TELEGRAM_BOT_TOKEN: "telegram-token",
+        BRAIN_AGENT_PULSE_DYNAMIC_REASONS: "unknown_reason"
+      }),
+    /BRAIN_AGENT_PULSE_DYNAMIC_REASONS/
   );
 });

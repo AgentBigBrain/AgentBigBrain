@@ -55,6 +55,7 @@ This top-level folder owns the transport and lifecycle path that consumes both s
   `diagnosticsPromptPolicy.ts`, `followUpClassifier.ts`, `invocationHints.ts`,
   `invocationPolicy.ts`, `liveBuildVerificationPromptPolicy.ts`, `trustLexicalClassifier.ts`.
 - Pulse, federation, and entity-graph runtime support: `agentPulseScheduler.ts`,
+  `agentPulseSchedulerSelection.ts`,
   `entityGraphRuntime.ts`, `federatedClient.ts`, `federatedServer.ts`, `federationRuntime.ts`,
   `pulseEmissionLifecycle.ts`, `pulseUxRuntime.ts`, `stage6_86UxRendering.ts`, with canonical
   pulse selection/prompt helpers now owned by `src/interfaces/conversationRuntime/`.

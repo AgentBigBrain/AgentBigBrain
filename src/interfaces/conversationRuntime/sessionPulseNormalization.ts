@@ -5,6 +5,7 @@
 import {
   createDefaultAgentPulseState,
   normalizeAgentPulseContextualLexicalEvidence,
+  normalizePulseDecisionRecords,
   normalizeRecentEmissions
 } from "./sessionPulseMetadata";
 import type {
@@ -62,6 +63,15 @@ export function normalizeAgentPulseSessionState(candidate: unknown): AgentPulseS
       lastDecisionCandidate === "SESSION_DOMAIN_SUPPRESSED" ||
       lastDecisionCandidate === "QUIET_HOURS" ||
       lastDecisionCandidate === "RATE_LIMIT" ||
+      lastDecisionCandidate === "DAILY_CAP" ||
+      lastDecisionCandidate === "REASON_NOT_ALLOWED" ||
+      lastDecisionCandidate === "PUBLIC_PRIVACY_BLOCKED" ||
+      lastDecisionCandidate === "ACTIVE_MISSION" ||
+      lastDecisionCandidate === "SOURCE_RECALL_BLOCKED" ||
+      lastDecisionCandidate === "RUNTIME_ACTION_NOT_SCHEDULER_AUTHORIZED" ||
+      lastDecisionCandidate === "DEPENDENCY_UNAVAILABLE" ||
+      lastDecisionCandidate === "SKIPPED_ACTIVE_WORK" ||
+      lastDecisionCandidate === "BLOCKED_BY_POLICY" ||
       lastDecisionCandidate === "NOT_EVALUATED" ||
       lastDecisionCandidate === "DYNAMIC_SENT" ||
       lastDecisionCandidate === "DYNAMIC_SUPPRESSED"
@@ -75,6 +85,9 @@ export function normalizeAgentPulseSessionState(candidate: unknown): AgentPulseS
       normalizedAgentPulseRaw.lastContextualLexicalEvidence
     ),
     recentEmissions: normalizeRecentEmissions(normalizedAgentPulseRaw.recentEmissions),
+    decisionRecords: normalizePulseDecisionRecords(normalizedAgentPulseRaw.decisionRecords),
+    lastDecisionRecord:
+      normalizePulseDecisionRecords([normalizedAgentPulseRaw.lastDecisionRecord])[0] ?? null,
     userStyleFingerprint:
       typeof normalizedAgentPulseRaw.userStyleFingerprint === "string"
         ? normalizedAgentPulseRaw.userStyleFingerprint
@@ -82,6 +95,16 @@ export function normalizeAgentPulseSessionState(candidate: unknown): AgentPulseS
     userTimezone:
       typeof normalizedAgentPulseRaw.userTimezone === "string"
         ? normalizedAgentPulseRaw.userTimezone
+        : undefined,
+    controlUpdatedAt:
+      typeof normalizedAgentPulseRaw.controlUpdatedAt === "string"
+        ? normalizedAgentPulseRaw.controlUpdatedAt
+        : undefined,
+    controlSource:
+      normalizedAgentPulseRaw.controlSource === "exact_slash_command" ||
+      normalizedAgentPulseRaw.controlSource === "natural_intent" ||
+      normalizedAgentPulseRaw.controlSource === "operator_review"
+        ? normalizedAgentPulseRaw.controlSource
         : undefined
   };
 }

@@ -20,6 +20,8 @@ here so `agentPulseScheduler.ts` can stay a stable tick coordinator while:
 - `pulseSchedulerContracts.ts` owns the canonical scheduler deps/config/state-update contracts
 - `pulseEvaluation.ts` owns the canonical per-user legacy/dynamic evaluation routing
 - `pulseDynamicEvaluation.ts` owns the canonical Stage 6.86 dynamic pulse evaluation path
+- `pulseDynamicAuthority.ts` owns typed authority-record helpers for dynamic-path suppressions and
+  delivery-gateway requests
 
 The latest session-store slice moved canonical session-shape normalization, merge policy, and
 shared Agent Pulse session metadata helpers here so `sessionStore.ts` can stay the stable session

@@ -17,6 +17,12 @@ import {
   shouldSkipSessionForPulse,
   sortByMostRecentSessionUpdate
 } from "./conversationRuntime/pulseScheduling";
+import { selectLatestPulseControlSession } from "./agentPulseSchedulerSelection";
+import {
+  buildPulseAuthorityRequestId,
+  buildPulseDecisionRecord,
+  evaluatePulseAuthorityGateway
+} from "./proactiveRuntime/pulseAuthorityGateway";
 
 export type {
   AgentPulseSchedulerConfig,
@@ -27,6 +33,7 @@ export class AgentPulseScheduler {
   private timer: NodeJS.Timeout | null = null;
   private running = false;
   private tickInFlight = false;
+  private readonly config: AgentPulseSchedulerConfig;
 
   /**
    * Initializes `AgentPulseScheduler` with deterministic runtime dependencies.
@@ -42,8 +49,16 @@ export class AgentPulseScheduler {
    */
   constructor(
     private readonly deps: AgentPulseSchedulerDeps,
-    private readonly config: AgentPulseSchedulerConfig = DEFAULT_AGENT_PULSE_SCHEDULER_CONFIG
-  ) { }
+    config: AgentPulseSchedulerConfig = DEFAULT_AGENT_PULSE_SCHEDULER_CONFIG
+  ) {
+    this.config = {
+      ...config,
+      tickIntervalMs:
+        config.allowFastTickIntervalForTests === true
+          ? config.tickIntervalMs
+          : Math.max(60_000, config.tickIntervalMs)
+    };
+  }
 
   /**
    * Starts input within this module's managed runtime lifecycle.
@@ -62,7 +77,9 @@ export class AgentPulseScheduler {
     this.timer = setInterval(() => {
       void this.runTickOnce();
     }, this.config.tickIntervalMs);
-    void this.runTickOnce();
+    if (this.config.runOnStartup === true) {
+      void this.runTickOnce("startup");
+    }
   }
 
   /**
@@ -92,7 +109,7 @@ export class AgentPulseScheduler {
    * - Uses session listing/filtering helpers and `evaluateUser` for per-user decisions.
    * @returns Promise resolving to void.
    */
-  async runTickOnce(): Promise<void> {
+  async runTickOnce(trigger: "interval" | "startup" | "manual_tick" = "manual_tick"): Promise<void> {
     if (this.tickInFlight) {
       return;
     }
@@ -109,11 +126,42 @@ export class AgentPulseScheduler {
         const userSessions = sortByMostRecentSessionUpdate(
           providerSessions.filter((session) => session.userId === userId)
         );
+        const latestControlSession = selectLatestPulseControlSession(userSessions);
+        if (latestControlSession && !latestControlSession.agentPulse.optIn) {
+          await this.recordSchedulerSuppression(
+            latestControlSession,
+            userSessions,
+            nowIso,
+            trigger,
+            "OPT_OUT",
+            "user.global_opt_out"
+          );
+          continue;
+        }
         const controllerSession = userSessions.find((candidate) => candidate.agentPulse.optIn);
         if (!controllerSession) {
           continue;
         }
+        if (userSessions.some((session) => Boolean(session.runningJobId) || session.queuedJobs.length > 0)) {
+          await this.recordSchedulerSuppression(
+            controllerSession,
+            userSessions,
+            nowIso,
+            trigger,
+            "SKIPPED_ACTIVE_WORK",
+            "policy.user_active_or_queued_mission"
+          );
+          continue;
+        }
         if (shouldSkipSessionForPulse(controllerSession)) {
+          await this.recordSchedulerSuppression(
+            controllerSession,
+            userSessions,
+            nowIso,
+            trigger,
+            "RATE_LIMIT",
+            "policy.pulse_gap"
+          );
           continue;
         }
 
@@ -164,6 +212,104 @@ export class AgentPulseScheduler {
       applyPulseStateToUserSessions: async (sessions, update) =>
         this.applyPulseStateToUserSessions(sessions, update)
     });
+  }
+
+  /**
+   * Records scheduler-level suppression through the same authority-decision ledger as emitted
+   * pulses so skipped work is auditable without creating user-visible outreach.
+   */
+  private async recordSchedulerSuppression(
+    controllerSession: ConversationSession,
+    userSessions: ConversationSession[],
+    nowIso: string,
+    trigger: "interval" | "startup" | "manual_tick",
+    decisionCode: "SKIPPED_ACTIVE_WORK" | "RATE_LIMIT" | "OPT_OUT",
+    suppressedBy: string
+  ): Promise<void> {
+    const requestId = buildPulseAuthorityRequestId({
+      userId: controllerSession.userId,
+      controllerSessionId: controllerSession.conversationId,
+      targetSessionId: null,
+      reasonCode: "scheduler_skip",
+      candidateId: null,
+      trigger,
+      nowIso
+    });
+    const decision = evaluatePulseAuthorityGateway({
+      requestId,
+      userId: controllerSession.userId,
+      controllerSessionId: controllerSession.conversationId,
+      targetSessionId: null,
+      targetVisibility: "unknown",
+      reasonCode: "scheduler_skip",
+      candidateId: null,
+      trigger,
+      nowIso,
+      baseDecision: {
+        allowed: false,
+        decisionCode,
+        suppressedBy: [suppressedBy],
+        nextEligibleAtIso: null
+      },
+      policyContext: {
+        targetSessionVisibility: "unknown",
+        userHasActiveMission: decisionCode === "SKIPPED_ACTIVE_WORK",
+        userHasQueuedMission: decisionCode === "SKIPPED_ACTIVE_WORK",
+        routeIsPublicSafe: false,
+        sourceEvidencePublicSafe: false,
+        timezoneSource: controllerSession.agentPulse.userTimezone ? "explicit_user_setting" : "unknown"
+      },
+      evidence: {
+        evidenceRefs: [],
+        sourceRecallRefs: [],
+        sourceRecallStatus: "not_used",
+        sourceRecallUsable: false,
+        containsPrivateMemoryEvidence: false,
+        containsRelationshipEvidence: false,
+        containsIdentityEvidence: false
+      }
+    });
+    const decisionRecord = buildPulseDecisionRecord({
+      request: {
+        requestId,
+        userId: controllerSession.userId,
+        controllerSessionId: controllerSession.conversationId,
+        targetSessionId: null,
+        targetVisibility: "unknown",
+        reasonCode: "scheduler_skip",
+        candidateId: null,
+        trigger,
+        nowIso,
+        policyContext: {
+          targetSessionVisibility: "unknown",
+          userHasActiveMission: decisionCode === "SKIPPED_ACTIVE_WORK",
+          userHasQueuedMission: decisionCode === "SKIPPED_ACTIVE_WORK",
+          routeIsPublicSafe: false,
+          sourceEvidencePublicSafe: false,
+          timezoneSource: controllerSession.agentPulse.userTimezone ? "explicit_user_setting" : "unknown"
+        },
+        evidence: {
+          evidenceRefs: [],
+          sourceRecallRefs: [],
+          sourceRecallStatus: "not_used",
+          sourceRecallUsable: false,
+          containsPrivateMemoryEvidence: false,
+          containsRelationshipEvidence: false,
+          containsIdentityEvidence: false
+        }
+      },
+      decision,
+      candidateProposed: false,
+      decisionStatus: "skipped"
+    });
+    for (const session of userSessions) {
+      await this.deps.updatePulseState(session.conversationId, {
+        lastDecisionCode: decision.decisionCode,
+        lastEvaluatedAt: nowIso,
+        decisionRecord,
+        updatedAt: nowIso
+      });
+    }
   }
 }
 

@@ -618,6 +618,9 @@ These apply to Telegram, Discord, or both.
 | `BRAIN_INTERFACE_SHOW_COMPLETION_PREFIX` | No | Prefix final completion text. |
 | `BRAIN_ALLOW_AUTONOMOUS_VIA_INTERFACE` | No | Allows interface-origin autonomous execution requests. |
 | `BRAIN_ENABLE_DYNAMIC_PULSE` | No | Enables dynamic pulse behavior in interface runtime. |
+| `BRAIN_AGENT_PULSE_DYNAMIC_REASONS` | No | Comma-separated Dynamic Pulse reason allowlist. Empty means no dynamic reason family may emit. |
+| `BRAIN_AGENT_PULSE_RUN_ON_STARTUP` | No | Allows one startup-labeled pulse evaluation when the scheduler starts. Default is off. |
+| `BRAIN_AGENT_PULSE_ALLOW_FAST_TICK_FOR_TESTS` | No | Test-only latch for sub-minute pulse tick intervals. |
 
 ## 12) `.env` Profiles You Can Copy
 
@@ -1078,7 +1081,13 @@ Practical guidance:
 - `BRAIN_AGENT_PULSE_MIN_INTERVAL_MINUTES`: minimum gap between pulses.
   - Higher value reduces proactive frequency.
 - `BRAIN_AGENT_PULSE_TICK_INTERVAL_MS`: scheduler tick interval.
-  - Lower value checks pulse conditions more frequently.
+  - Production values below 60 seconds are ignored unless the test-only fast-tick latch is set.
+- `BRAIN_AGENT_PULSE_RUN_ON_STARTUP`: startup pulse evaluation latch.
+  - `false`: the scheduler does not run an immediate pulse tick after startup.
+  - `true`: the scheduler may run one startup-labeled evaluation after startup.
+- `BRAIN_AGENT_PULSE_DYNAMIC_REASONS`: comma-separated Dynamic Pulse reason allowlist.
+  - Empty or missing: no Dynamic Pulse reason family may emit.
+  - Example: `OPEN_LOOP_RESUME,STALE_FACT_REVALIDATION`.
 - `BRAIN_ENABLE_DYNAMIC_PULSE`: enables dynamic pulse runtime flow.
   - `false`: dynamic pulse execution paths stay off.
 

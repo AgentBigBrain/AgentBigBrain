@@ -692,7 +692,7 @@ async function runProactiveScenario(
             requiresRevalidation: false
           }
         }),
-        enqueueSystemJob: async (targetSession, systemInput, receivedAt) =>
+        enqueueSystemJob: async (targetSession, systemInput, receivedAt, metadata) =>
           manager.enqueueSystemJob(
             targetSession.conversationId,
             systemInput,
@@ -703,7 +703,8 @@ async function runProactiveScenario(
                 summary: "live proactive smoke ok"
               };
             },
-            async () => { }
+            async () => { },
+            metadata
           ),
         updatePulseState: async (conversationKey, update) =>
           manager.updateAgentPulseState(conversationKey, update),
@@ -715,7 +716,8 @@ async function runProactiveScenario(
       },
       {
         tickIntervalMs: 1_000,
-        reasonPriority: ["unresolved_commitment", "stale_fact_revalidation"]
+        reasonPriority: ["unresolved_commitment", "stale_fact_revalidation"],
+        dynamicReasonAllowlist: ["STALE_FACT_REVALIDATION"]
       }
     );
 

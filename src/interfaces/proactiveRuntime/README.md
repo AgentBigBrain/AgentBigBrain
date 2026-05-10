@@ -12,6 +12,8 @@ Canonical ownership here:
   pulses
 - `cooldownPolicy.ts` owns the human-scale pulse gap plus contextual topic cooldown helpers
 - `deliveryPolicy.ts` owns provider routing, session skipping, and target-session selection
+- `pulseAuthorityGateway.ts` owns deterministic delivery permission records for proactive pulse
+  attempts
 
 Stable conversation-runtime entrypoints continue to orchestrate proactive behavior:
 - `pulseScheduling.ts`

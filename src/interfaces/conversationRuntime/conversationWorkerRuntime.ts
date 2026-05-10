@@ -26,6 +26,7 @@ import type {
   ListBrowserSessionSnapshots,
   ListManagedProcessSnapshots
 } from "./managerContracts";
+import type { PulseSystemJobMetadata } from "../proactiveRuntime/pulseAuthorityGateway";
 import { type SessionWorkerBinding, setConversationWorkerBinding } from "./conversationWorkerBinding";
 import { persistWorkerExecutionOutcome } from "./conversationWorkerOutcomePersistence";
 import { persistConversationExecutionProgress } from "./conversationWorkerProgressPersistence";
@@ -62,6 +63,7 @@ export interface EnqueueConversationSystemJobInput {
   receivedAt: string;
   executeTask: ExecuteConversationTask;
   notify: ConversationNotifier;
+  metadata?: PulseSystemJobMetadata;
   store: InterfaceSessionStore;
   config: Pick<ConversationWorkerRuntimeConfig, "maxContextTurnsForExecution">;
   setWorkerBinding(
@@ -230,6 +232,7 @@ export async function enqueueConversationSystemJob(
     receivedAt,
     executeTask,
     notify,
+    metadata,
     store,
     config,
     setWorkerBinding,
@@ -260,7 +263,8 @@ export async function enqueueConversationSystemJob(
       normalizedInput,
       config.maxContextTurnsForExecution
     ),
-    true
+    true,
+    metadata
   );
   session.updatedAt = receivedAt;
   await store.setSession(session);

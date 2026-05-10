@@ -9,6 +9,7 @@ import type {
   ConversationJob,
   ConversationSession
 } from "../sessionStore";
+import type { PulseSystemJobMetadata } from "../proactiveRuntime/pulseAuthorityGateway";
 
 export interface EnqueueResult {
   reply: string;
@@ -126,7 +127,8 @@ export function enqueueConversationJob(
   input: string,
   receivedAt: string,
   executionInput: string = input,
-  isSystemJob = false
+  isSystemJob = false,
+  pulseMetadata?: PulseSystemJobMetadata
 ): EnqueueResult {
   const job: ConversationJob = {
     id: makeId("job"),
@@ -150,7 +152,8 @@ export function enqueueConversationJob(
     finalDeliveryAttemptCount: 0,
     finalDeliveryLastErrorCode: null,
     finalDeliveryLastAttemptAt: null,
-    pauseRequestedAt: null
+    pauseRequestedAt: null,
+    pulseMetadata: pulseMetadata ?? null
   };
   session.queuedJobs.push(job);
   session.updatedAt = receivedAt;

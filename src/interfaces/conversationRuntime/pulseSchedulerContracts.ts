@@ -13,6 +13,10 @@ import type {
   ConversationSession,
   InterfaceSessionStore
 } from "../sessionStore";
+import type {
+  PulseDecisionRecordV1,
+  PulseSystemJobMetadata
+} from "../proactiveRuntime/pulseAuthorityGateway";
 
 export interface AgentPulseStateUpdate {
   optIn?: boolean;
@@ -26,6 +30,7 @@ export interface AgentPulseStateUpdate {
   lastContextualLexicalEvidence?: ConversationSession["agentPulse"]["lastContextualLexicalEvidence"];
   updatedAt?: string;
   newEmission?: PulseEmissionRecordV1;
+  decisionRecord?: PulseDecisionRecordV1;
 }
 
 export interface AgentPulseSchedulerDeps {
@@ -37,7 +42,8 @@ export interface AgentPulseSchedulerDeps {
   enqueueSystemJob: (
     session: ConversationSession,
     systemInput: string,
-    receivedAt: string
+    receivedAt: string,
+    metadata?: PulseSystemJobMetadata
   ) => Promise<boolean>;
   updatePulseState: (
     conversationKey: string,
@@ -50,6 +56,9 @@ export interface AgentPulseSchedulerDeps {
 export interface AgentPulseSchedulerConfig {
   tickIntervalMs: number;
   reasonPriority: AgentPulseReason[];
+  dynamicReasonAllowlist?: import("../../core/types").PulseReasonCodeV1[];
+  runOnStartup?: boolean;
+  allowFastTickIntervalForTests?: boolean;
 }
 
 export type ApplyPulseStateToUserSessions = (

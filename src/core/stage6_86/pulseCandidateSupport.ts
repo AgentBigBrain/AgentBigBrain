@@ -37,10 +37,12 @@ const PRIVACY_SENSITIVE_ENTITY_TYPES = new Set(["person", "event"]);
 
 export type PulseResponseOutcome = "engaged" | "ignored" | "dismissed" | "negative" | "muted" | null;
 export type PulseOutcomeSourceV1 =
+  | "pending"
   | "explicit_user_reply"
   | "timeout"
   | "semantic_interpretation"
   | "legacy_keyword"
+  | "exact_pulse_command"
   | "operator_review";
 export type PulseProofCategoryV1 =
   | "candidate_generation"
@@ -54,6 +56,7 @@ export interface PulseEmissionRecordV1 {
   candidateEntityRefs: readonly string[];
   pulseId?: string;
   candidateId?: string;
+  deliveryJobId?: string | null;
   questionIntent?: string;
   sourceRecallRefs?: readonly string[];
   proactiveInquiryCandidate?: ProactiveInquiryCandidate;
@@ -71,6 +74,7 @@ export interface PulseDeliveryEnvelopeV1 {
   evidenceRefs: readonly string[];
   sourceRecallRefs: readonly string[];
   deliveryDecisionId: string;
+  decisionRecordId?: string;
   promptKind: PulseDeliveryPromptKindV1;
   createdAt: string;
   allowedByPolicy: boolean;
@@ -80,6 +84,7 @@ export interface PulseDeliveryEnvelopeV1 {
 export interface PulseOutcomeRecordV1 {
   pulseId: string;
   candidateId: string;
+  deliveryJobId?: string | null;
   emittedAt: string;
   deliveredTextHash: string | null;
   deliveredTextPreviewRedacted: string | null;

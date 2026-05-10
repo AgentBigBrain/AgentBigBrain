@@ -1309,6 +1309,18 @@ export async function executeRunningJob(
       job.createdAt,
       onProgressUpdate
     );
+    if (job.pulseMetadata?.executionConstraint === "respond_only_pulse" &&
+      pulseResultContainsNonRespondAction(result)) {
+      job.status = "failed";
+      job.completedAt = new Date().toISOString();
+      job.resultSummary = null;
+      job.errorMessage = "Agent Pulse jobs are respond-only and cannot execute side-effect actions.";
+      return {
+        summary: "Blocked: Agent Pulse jobs can only send a response.",
+        taskRunResult: null,
+        suppressUserDelivery: true
+      };
+    }
     job.status = "completed";
     job.completedAt = new Date().toISOString();
     job.resultSummary = result.summary;
@@ -1324,6 +1336,14 @@ export async function executeRunningJob(
     clearInterval(heartbeat);
     onExecutionSettled();
   }
+}
+
+/**
+ * Detects side-effect action results that are forbidden for respond-only Agent Pulse jobs.
+ */
+function pulseResultContainsNonRespondAction(result: ConversationExecutionResult): boolean {
+  const actionResults = result.taskRunResult?.actionResults ?? [];
+  return actionResults.some((actionResult) => actionResult.action.type !== "respond");
 }
 
 export interface PersistJobOutcomeInput {
@@ -1568,6 +1588,9 @@ export function isBlockedSystemJobOutcome(
   job: ConversationJob,
   executionResult?: ConversationExecutionResult | null
 ): boolean {
+  if (job.isSystemJob === true && executionResult?.suppressUserDelivery === true) {
+    return true;
+  }
   return (
     job.isSystemJob === true &&
     job.status === "completed" &&

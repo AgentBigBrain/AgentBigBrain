@@ -3,6 +3,7 @@
  */
 
 import type { PulseEmissionRecordV1 } from "../../core/stage6_86PulseCandidates";
+import type { PulseDecisionRecordV1 } from "../proactiveRuntime/pulseAuthorityGateway";
 import type {
   AgentPulseContextualLexicalEvidence,
   AgentPulseSessionState,
@@ -11,6 +12,7 @@ import type {
 } from "../sessionStore";
 
 const MAX_RECENT_EMISSIONS = 10;
+const MAX_RECENT_DECISION_RECORDS = 20;
 const EMOJI_PATTERN =
   /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu;
 const FORMALITY_MARKERS = /\b(hi|hey|yo|sup|lol|haha|omg|tbh|imo|nah|yep|yeah|cool|btw|thx|ty)\b/i;
@@ -58,8 +60,6 @@ const IANA_TIMEZONE_MAP: ReadonlyMap<string, string> = new Map([
 ]);
 const TZ_MENTION_PATTERN =
   /\b(?:i(?:'m| am) in|my (?:time\s*zone|tz) is|i(?:'m| am) on)\s+([a-z][a-z\s]{1,20})\b/i;
-const TZ_BARE_ABBREVIATION_PATTERN =
-  /\b(EST|EDT|PST|PDT|CST|CDT|MST|MDT|UTC|GMT|BST|CET|JST|KST|IST|AEST|AEDT|NZST|HST|AKST)\b/;
 const DAYS_OF_WEEK = [
   "Sunday",
   "Monday",
@@ -90,7 +90,9 @@ export function createDefaultAgentPulseState(): AgentPulseSessionState {
     lastDecisionCode: "NOT_EVALUATED",
     lastEvaluatedAt: null,
     lastContextualLexicalEvidence: null,
-    recentEmissions: []
+    recentEmissions: [],
+    lastDecisionRecord: null,
+    decisionRecords: []
   };
 }
 
@@ -171,6 +173,51 @@ export function normalizeRecentEmissions(raw: unknown): PulseEmissionRecordV1[] 
 }
 
 /**
+ * Normalizes persisted pulse decision records into bounded non-raw evidence.
+ */
+export function normalizePulseDecisionRecords(raw: unknown): PulseDecisionRecordV1[] {
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+
+  const valid: PulseDecisionRecordV1[] = [];
+  for (const item of raw) {
+    if (
+      item &&
+      typeof item === "object" &&
+      typeof (item as PulseDecisionRecordV1).decisionRecordId === "string" &&
+      typeof (item as PulseDecisionRecordV1).requestId === "string" &&
+      typeof (item as PulseDecisionRecordV1).userId === "string" &&
+      typeof (item as PulseDecisionRecordV1).trigger === "string" &&
+      typeof (item as PulseDecisionRecordV1).createdAt === "string" &&
+      (item as PulseDecisionRecordV1).rawPromptTextStored === false &&
+      (item as PulseDecisionRecordV1).gatewayDecision &&
+      typeof (item as PulseDecisionRecordV1).gatewayDecision === "object"
+    ) {
+      valid.push(item as PulseDecisionRecordV1);
+    }
+  }
+
+  return valid.slice(-MAX_RECENT_DECISION_RECORDS);
+}
+
+/**
+ * Appends one bounded pulse decision record and updates the latest record pointer.
+ */
+export function appendPulseDecisionRecord(
+  state: AgentPulseSessionState,
+  record: PulseDecisionRecordV1
+): void {
+  const records = state.decisionRecords ?? [];
+  records.push(record);
+  if (records.length > MAX_RECENT_DECISION_RECORDS) {
+    records.splice(0, records.length - MAX_RECENT_DECISION_RECORDS);
+  }
+  state.decisionRecords = records;
+  state.lastDecisionRecord = record;
+}
+
+/**
  * Appends one Agent Pulse emission record while preserving the bounded retention window.
  */
 export function appendPulseEmission(
@@ -242,15 +289,6 @@ export function detectTimezoneFromMessage(text: string): string | null {
   if (mentionMatch) {
     const mentioned = mentionMatch[1].trim().toLowerCase();
     const resolved = IANA_TIMEZONE_MAP.get(mentioned);
-    if (resolved) {
-      return resolved;
-    }
-  }
-
-  const bareMatch = text.match(TZ_BARE_ABBREVIATION_PATTERN);
-  if (bareMatch) {
-    const abbreviation = bareMatch[1].toLowerCase();
-    const resolved = IANA_TIMEZONE_MAP.get(abbreviation);
     if (resolved) {
       return resolved;
     }

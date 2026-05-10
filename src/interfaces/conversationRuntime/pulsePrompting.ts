@@ -162,8 +162,7 @@ export function buildPulsePrompt(
       "Delivery mode: public",
       `Target user: ${session.username}`,
       `Reason code: ${reason}`,
-      relationshipLine,
-      contextDriftLine,
+      "Public prompt context: raw recent turns, profile memory, relationship memory, identity memory, Source Recall excerpts, and private project details are withheld.",
       "Generate one concise, friendly, generic check-in message in natural language.",
       "Do not volunteer that you are an AI assistant in ordinary greetings or casual replies.",
       "Only mention that identity if the user directly asks what you are, if a capability or safety boundary requires it, or if it materially changes the answer.",
@@ -249,10 +248,12 @@ export function buildDynamicPulsePrompt(
   mode: ConversationSession["agentPulse"]["mode"],
   context?: DynamicPulsePromptContext
 ): string {
-  const recentTurns = (session.conversationTurns ?? [])
-    .slice(-DYNAMIC_PULSE_MAX_CONTEXT_TURNS)
-    .map((turn) => `[${turn.role}] ${turn.text.slice(0, 300)}`)
-    .join("\n");
+  const recentTurns = mode === "public"
+    ? "(raw recent conversation withheld for public-mode privacy)"
+    : (session.conversationTurns ?? [])
+      .slice(-DYNAMIC_PULSE_MAX_CONTEXT_TURNS)
+      .map((turn) => `[${turn.role}] ${turn.text.slice(0, 300)}`)
+      .join("\n");
 
   const intent = DYNAMIC_PULSE_INTENT_DIRECTIVES[candidate.reasonCode] || "";
   const scoreTotal = candidate.score.toFixed(2);
@@ -311,7 +312,9 @@ export function buildDynamicPulsePrompt(
       }
     }
 
-    const recentSnippets = outcomes
+    const recentSnippets = mode === "public"
+      ? []
+      : outcomes
       .filter((e) => e.generatedSnippet)
       .slice(-3)
       .map((e) => e.generatedSnippet!);
