@@ -21,6 +21,7 @@ import type {
 import type { RecoveryFailureClass } from "../../core/autonomy/contracts";
 import type { ConversationStackV1 } from "../../core/types";
 import type { ModelBackend } from "../../models/types";
+import type { PrincipalContext } from "../principalRuntime/principalAccess";
 
 export type ProposalStatus = "pending" | "approved" | "cancelled" | "executed";
 export type ConversationJobStatus = "queued" | "running" | "completed" | "failed";
@@ -403,6 +404,7 @@ export interface ConversationSession {
   username: string;
   transportIdentity?: ConversationTransportIdentityRecord | null;
   conversationVisibility: ConversationVisibility;
+  principalContext?: PrincipalContext | null;
   sessionSchemaVersion?: "v1" | "v2";
   conversationStack?: ConversationStackV1;
   updatedAt: string;

@@ -27,6 +27,7 @@ import {
 } from "./sessionNormalizationRecords";
 import { normalizeAgentPulseSessionState } from "./sessionPulseNormalization";
 import { normalizeConversationTransportIdentity } from "./transportIdentity";
+import { normalizePrincipalContext } from "../principalRuntime/principalAccess";
 
 /**
  * Normalizes one persisted conversation session into the stable runtime shape.
@@ -97,6 +98,7 @@ export function normalizeSession(raw: Partial<ConversationSession>): Conversatio
       raw.conversationVisibility === "unknown"
         ? raw.conversationVisibility
         : "unknown",
+    principalContext: normalizePrincipalContext(raw.principalContext),
     sessionSchemaVersion: stackMigration.sessionSchemaVersion,
     conversationStack: stackMigration.conversationStack,
     updatedAt: raw.updatedAt,

@@ -97,6 +97,9 @@ export class TelegramGateway {
       showCompletionPrefix: this.config.security.showCompletionPrefix,
       followUpOverridePath: this.config.security.followUpOverridePath,
       pulseLexicalOverridePath: this.config.security.pulseLexicalOverridePath,
+      principalConfig: this.config.security.principalConfig,
+      allowedUserIds: this.config.security.allowedUserIds,
+      allowedUsernames: this.config.security.allowedUsernames,
       allowAutonomousViaInterface: this.config.security.allowAutonomousViaInterface
     }, {
       interpretConversationIntent: async (input, recentTurns, pulseRuleContext) =>

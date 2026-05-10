@@ -16,6 +16,7 @@ import type {
 } from "../../src/interfaces/conversationRuntime/managerContracts";
 import type { ConversationIngressDependencies } from "../../src/interfaces/conversationRuntime/contracts";
 import type { ConversationSession } from "../../src/interfaces/sessionStore";
+import { createOwnerOperatorPrincipalConfigFromEnv } from "../../src/interfaces/principalRuntime/principalConfig";
 import {
   buildConversationIngressConfig,
   buildConversationSessionFixture
@@ -64,6 +65,59 @@ function createIngressDeps(
     ...overrides
   };
 }
+
+test("processConversationMessage attaches principal context to session metadata", async () => {
+  const receivedAt = "2026-05-10T12:00:00.000Z";
+  let persistedSession: ConversationSession | undefined;
+  const session = buildConversationSessionFixture(
+    {
+      updatedAt: "2026-05-10T11:59:00.000Z"
+    },
+    {
+      conversationId: "chat-1",
+      userId: "owner-user-1",
+      username: "owner_handle",
+      receivedAt
+    }
+  );
+  const deps = createIngressDeps(session, {
+    config: buildConversationIngressConfig({
+      principalConfig: createOwnerOperatorPrincipalConfigFromEnv({
+        BRAIN_PRINCIPAL_HMAC_KEY: "test-principal-hmac-key",
+        BRAIN_OWNER_TELEGRAM_USER_IDS: "owner-user-1"
+      }),
+      allowedUsernames: ["owner_handle"],
+      allowedUserIds: ["owner-user-1"]
+    }),
+    store: {
+      getSession: async () => session,
+      setSession: async (nextSession) => {
+        persistedSession = nextSession;
+      }
+    },
+    runDirectConversationTurn: async () => ({ summary: "Okay." })
+  });
+
+  await processConversationMessage(
+    {
+      ...buildMessage("hello", receivedAt),
+      userId: "owner-user-1",
+      username: "owner_handle"
+    },
+    async () => ({ summary: "not used" }),
+    async () => undefined,
+    deps
+  );
+
+  assert.ok(persistedSession);
+  const storedSession = persistedSession as ConversationSession;
+  assert.equal(storedSession.principalContext?.actor.principalRole, "owner");
+  assert.equal(
+    storedSession.principalContext?.actor.identityAuthority,
+    "configured_owner_provider_user_id"
+  );
+  assert.equal(storedSession.principalContext?.subject.ownerSubjectRef?.subjectKind, "owner_profile");
+});
 
 test("processConversationMessage reuses one bounded entity-reference interpretation result during alias clarification chat", async () => {
   const receivedAt = "2026-03-21T09:00:10.000Z";

@@ -31,6 +31,8 @@ const DEFAULT_CONVERSATION_MANAGER_CONFIG: ConversationManagerConfig = {
   showCompletionPrefix: false,
   followUpOverridePath: null,
   pulseLexicalOverridePath: null,
+  allowedUserIds: [],
+  allowedUsernames: [],
   allowAutonomousViaInterface: false
 };
 const DEFAULT_INTENT_INTERPRETER_CONFIDENCE_THRESHOLD = 0.85;

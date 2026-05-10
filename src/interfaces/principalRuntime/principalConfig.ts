@@ -20,6 +20,10 @@ export interface OwnerOperatorPrincipalConfig {
   operatorPrincipals: readonly ConfiguredPrincipal[];
   localOperatorTrustedMode: boolean;
   hmacKeyConfigured: boolean;
+  redactProviderUserId: (
+    provider: ConfiguredPrincipalProvider,
+    providerUserId: string
+  ) => string | null;
   source: PrincipalConfigSource;
 }
 
@@ -60,6 +64,8 @@ export function createOwnerOperatorPrincipalConfigFromEnv(
     operatorPrincipals: dedupePrincipals(operatorSources),
     localOperatorTrustedMode: parseStrictBoolean(env.BRAIN_LOCAL_OPERATOR_TRUSTED_MODE),
     hmacKeyConfigured: hmacKey !== null,
+    redactProviderUserId: (provider, providerUserId) =>
+      hmacKey ? hmacProviderUserId(hmacKey, provider, providerUserId) : null,
     source
   };
 }

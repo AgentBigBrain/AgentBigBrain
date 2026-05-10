@@ -184,6 +184,7 @@ export function buildSessionSeed(message: ConversationKeySeedInput): Conversatio
     username: message.username,
     transportIdentity: normalizeConversationTransportIdentity(message.transportIdentity),
     conversationVisibility: message.conversationVisibility,
+    principalContext: null,
     sessionSchemaVersion: "v2",
     conversationStack: createEmptyConversationStackV1(message.receivedAt),
     updatedAt: message.receivedAt,
