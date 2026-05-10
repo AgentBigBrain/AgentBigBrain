@@ -21,6 +21,7 @@ export interface ApplyObsidianReviewActionsDependencies {
   profileMemoryStore?: ProfileMemoryStore;
   runtimeStateStore: Stage686RuntimeStateAdapter;
   projectionService?: ProjectionService;
+  localOperatorReviewActionApply?: boolean;
 }
 
 export interface AppliedObsidianReviewAction {
@@ -58,6 +59,11 @@ export async function applyObsidianReviewActionsFromDirectory(
   reviewActionDirectoryPath: string,
   dependencies: ApplyObsidianReviewActionsDependencies
 ): Promise<ApplyObsidianReviewActionsReport> {
+  if (dependencies.localOperatorReviewActionApply !== true) {
+    throw new Error(
+      "Obsidian review-action write-back requires explicit local-operator authorization."
+    );
+  }
   const reviewActionPaths = await collectReviewActionNotePaths(reviewActionDirectoryPath);
   const outcomes: AppliedObsidianReviewAction[] = [];
 

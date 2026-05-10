@@ -47,6 +47,23 @@ function buildAllowedUserAccess(route: "private" | "public" = "private") {
   return buildTaskExecutionPrincipalAccess(context);
 }
 
+function buildOperatorAccess(route: "private" | "public" = "private") {
+  const principalConfig = createOwnerOperatorPrincipalConfigFromEnv({
+    BRAIN_PRINCIPAL_HMAC_KEY: PRINCIPAL_KEY,
+    BRAIN_OPERATOR_TELEGRAM_USER_IDS: "operator-user-1"
+  });
+  const context = derivePrincipalContextFromIngress({
+    provider: "telegram",
+    conversationId: "chat-1",
+    userId: "operator-user-1",
+    username: "operator",
+    conversationVisibility: route,
+    receivedAt: "2026-05-10T12:00:00.000Z",
+    principalConfig
+  });
+  return buildTaskExecutionPrincipalAccess(context);
+}
+
 test("profile-memory policy allows owner-private access only for owner private route", () => {
   const decision = evaluateProfileMemoryAccessPolicy({
     principalAccess: buildOwnerAccess(),
@@ -129,6 +146,28 @@ test("sensitivity approval does not become principal authority", () => {
 
   assert.equal(decision.allowed, false);
   assert.equal(decision.reason, "sensitivity_approval_is_not_principal_authority");
+});
+
+test("profile-memory policy allows private operator memory review only", () => {
+  const allowed = evaluateProfileMemoryAccessPolicy({
+    principalAccess: buildOperatorAccess(),
+    operation: "memory_review",
+    requestedSubjectKind: "owner_profile",
+    includeSensitive: true,
+    explicitHumanApproval: true
+  });
+  const publicBlocked = evaluateProfileMemoryAccessPolicy({
+    principalAccess: buildOperatorAccess("public"),
+    operation: "memory_review",
+    requestedSubjectKind: "owner_profile",
+    includeSensitive: true,
+    explicitHumanApproval: true
+  });
+
+  assert.equal(allowed.allowed, true);
+  assert.equal(allowed.reason, "operator_review_allowed");
+  assert.equal(publicBlocked.allowed, false);
+  assert.equal(publicBlocked.reason, "public_route_private_memory_blocked");
 });
 
 test("profile fact reads enforce principal policy when subject scope is requested", () => {

@@ -79,6 +79,16 @@ export function evaluateProfileMemoryAccessPolicy(
     });
   }
 
+  if (actorRole === "operator" && input.operation === "memory_review") {
+    return buildDecision(input, {
+      actorRole,
+      routeVisibility,
+      accessClass,
+      allowed: routeVisibility !== "public",
+      reason: routeVisibility === "public" ? "public_route_private_memory_blocked" : "operator_review_allowed"
+    });
+  }
+
   if (input.includeSensitive && input.explicitHumanApproval && actorRole !== "owner") {
     return buildDecision(input, {
       actorRole,
@@ -126,16 +136,6 @@ export function evaluateProfileMemoryAccessPolicy(
       accessClass,
       allowed: true,
       reason: "owner_private_allowed"
-    });
-  }
-
-  if (actorRole === "operator" && input.operation === "memory_review") {
-    return buildDecision(input, {
-      actorRole,
-      routeVisibility,
-      accessClass,
-      allowed: true,
-      reason: "operator_review_allowed"
     });
   }
 

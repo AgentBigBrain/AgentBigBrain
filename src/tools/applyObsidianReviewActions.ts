@@ -47,7 +47,8 @@ export async function applyObsidianReviewActions(
   return applyObsidianReviewActionsFromDirectory(reviewActionDirectoryPath, {
     profileMemoryStore: shared.profileMemoryStore,
     runtimeStateStore: shared.stage686RuntimeStateStore,
-    projectionService: shared.projectionService
+    projectionService: shared.projectionService,
+    localOperatorReviewActionApply: env.BRAIN_LOCAL_OPERATOR_TRUSTED_MODE === "true"
   });
 }
 
