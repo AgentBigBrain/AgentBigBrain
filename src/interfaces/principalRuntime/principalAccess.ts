@@ -466,14 +466,19 @@ export function renderPrincipalAccessForModelPrompt(
 }
 
 function deriveConversationPrincipalFromIngress(input: IngressPrincipalInput): ConversationPrincipal {
+  const normalizedProviderUserId = input.userId.trim();
   const configuredRole = resolveOwnerOperatorPrincipalRole(
     input.principalConfig,
     input.provider,
-    input.userId
+    normalizedProviderUserId
   );
   const providerUserIdHash =
     configuredRole?.principal.providerUserIdHash ??
-    input.principalConfig?.redactProviderUserId(input.provider, input.userId) ??
+    (
+      normalizedProviderUserId
+        ? input.principalConfig?.redactProviderUserId(input.provider, normalizedProviderUserId)
+        : null
+    ) ??
     null;
   const usernameHint = input.username.trim() || null;
   const displayNameHint =

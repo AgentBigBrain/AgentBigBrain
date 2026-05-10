@@ -35,6 +35,23 @@ import {
   buildConversationSessionFixture
 } from "../helpers/conversationFixtures";
 import type { ConversationMemoryFactReviewResult } from "../../src/interfaces/conversationRuntime/managerContracts";
+import { createOwnerOperatorPrincipalConfigFromEnv } from "../../src/interfaces/principalRuntime/principalConfig";
+import { derivePrincipalContextFromIngress } from "../../src/interfaces/principalRuntime/principalAccess";
+
+const CONVERSATION_MANAGER_OWNER_PRINCIPAL_CONFIG = createOwnerOperatorPrincipalConfigFromEnv({
+  BRAIN_PRINCIPAL_HMAC_KEY: "synthetic-conversation-manager-key",
+  BRAIN_OWNER_TELEGRAM_USER_IDS: "user-1"
+}, "test_override");
+
+const CONVERSATION_MANAGER_OWNER_PRINCIPAL_CONTEXT = derivePrincipalContextFromIngress({
+  provider: "telegram",
+  conversationId: "chat-1",
+  userId: "user-1",
+  username: "agentowner",
+  conversationVisibility: "private",
+  receivedAt: "2026-03-07T12:00:00.000Z",
+  principalConfig: CONVERSATION_MANAGER_OWNER_PRINCIPAL_CONFIG
+});
 
 function normalizeSyntheticRelationshipText(value: string): string {
   return value.toLowerCase().replace(/\s+/g, " ").trim();
@@ -90,13 +107,13 @@ function syntheticRelationshipCase(
 const SYNTHETIC_RELATIONSHIP_CASES = new Map<string, SyntheticRelationshipInterpretationCase>([
   [
     normalizeSyntheticRelationshipText(
-      "Yeah, so Billy is someone I worked previously. He now works somewhere else."
+      "Yeah, so Blake is someone I worked previously. He now works somewhere else."
     ),
     syntheticRelationshipCase([
       syntheticRelationshipCandidate({
-        objectDisplayName: "Billy",
+        objectDisplayName: "Blake",
         lifecycle: "historical",
-        evidenceText: "Billy is someone I worked previously"
+        evidenceText: "Blake is someone I worked previously"
       })
     ])
   ],
@@ -193,20 +210,20 @@ const SYNTHETIC_RELATIONSHIP_CASES = new Map<string, SyntheticRelationshipInterp
   ],
   [
     normalizeSyntheticRelationshipText(
-      "Billy used to be at Beacon. He's at Northstar now. He drives a gray Accord."
+      "Blake used to be at Beacon. He's at Northstar now. He drives a gray Accord."
     ),
     syntheticRelationshipCase([
       syntheticRelationshipCandidate({
-        objectDisplayName: "Billy",
+        objectDisplayName: "Blake",
         lifecycle: "current",
         workAssociation: "Northstar",
-        evidenceText: "Billy used to be at Beacon. He's at Northstar now. He drives a gray Accord."
+        evidenceText: "Blake used to be at Beacon. He's at Northstar now. He drives a gray Accord."
       }),
       syntheticRelationshipCandidate({
-        objectDisplayName: "Billy",
+        objectDisplayName: "Blake",
         lifecycle: "historical",
         workAssociation: "Beacon",
-        evidenceText: "Billy used to be at Beacon"
+        evidenceText: "Blake used to be at Beacon"
       })
     ])
   ],
@@ -859,17 +876,19 @@ test("conversation manager applies proposal-reply classifier intents for adjust 
 test("conversation manager serves bounded fact review through the real /memory command path", async () => {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-conversation-memory-fact-review-"));
   const store = new InterfaceSessionStore(path.join(tempDir, "sessions.json"));
-  const manager = new ConversationManager(store, {}, {
+  const manager = new ConversationManager(store, {
+    principalConfig: CONVERSATION_MANAGER_OWNER_PRINCIPAL_CONFIG
+  }, {
     reviewConversationMemoryFacts: async (request) => {
       assert.equal(request.reviewTaskId, "memory_fact_review_2026_03_31T12_10_00_000Z");
-      assert.equal(request.query, "Avery");
+      assert.equal(request.query, "Morgan");
       assert.equal(request.maxFacts, 5);
       return Object.assign(
         [
           {
             factId: "fact_preferred_name",
             key: "identity.preferred_name",
-            value: "Avery",
+            value: "Morgan",
             status: "confirmed",
             confidence: 0.98,
             sensitive: false,
@@ -909,7 +928,7 @@ test("conversation manager serves bounded fact review through the real /memory c
 
   try {
     const reply = await manager.handleMessage(
-      buildMessageAt("/memory fact Avery", "2026-03-31T12:10:00.000Z"),
+      buildMessageAt("/memory fact Morgan", "2026-03-31T12:10:00.000Z"),
       async () => {
         throw new Error("executeTask should not run for bounded /memory fact review");
       },
@@ -918,7 +937,7 @@ test("conversation manager serves bounded fact review through the real /memory c
 
     assert.match(reply, /^Remembered facts:/);
     assert.match(reply, /Current State:/);
-    assert.match(reply, /identity\.preferred_name: Avery \(fact_preferred_name\)/);
+    assert.match(reply, /identity\.preferred_name: Morgan \(fact_preferred_name\)/);
     assert.match(reply, /Historical Context:\n- none/);
     assert.match(reply, /Ambiguity Notes:/);
     assert.match(reply, /held back until it has stronger corroboration/i);
@@ -933,7 +952,9 @@ test("conversation manager serves bounded episode review and mutations through t
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-conversation-memory-episode-review-"));
   const store = new InterfaceSessionStore(path.join(tempDir, "sessions.json"));
   const calls: string[] = [];
-  const manager = new ConversationManager(store, {}, {
+  const manager = new ConversationManager(store, {
+    principalConfig: CONVERSATION_MANAGER_OWNER_PRINCIPAL_CONFIG
+  }, {
     reviewConversationMemory: async (request) => {
       assert.equal(request.reviewTaskId, "memory_review_2026_03_31T12_20_00_000Z");
       assert.equal(request.query, "/memory");
@@ -941,9 +962,9 @@ test("conversation manager serves bounded episode review and mutations through t
       calls.push("list");
       return [
         {
-          episodeId: "episode_owen_fall",
-          title: "Owen fell down",
-          summary: "Owen fell down a few weeks ago and the outcome was unresolved.",
+          episodeId: "episode_riley_fall",
+          title: "Riley fell down",
+          summary: "Riley fell down a few weeks ago and the outcome was unresolved.",
           status: "unresolved",
           lastMentionedAt: "2026-03-31T12:05:00.000Z",
           resolvedAt: null,
@@ -956,8 +977,8 @@ test("conversation manager serves bounded episode review and mutations through t
       calls.push(`resolve:${request.episodeId}:${request.note}`);
       return {
         episodeId: request.episodeId,
-        title: "Owen fell down",
-        summary: "Owen fell down a few weeks ago and the outcome was unresolved.",
+        title: "Riley fell down",
+        summary: "Riley fell down a few weeks ago and the outcome was unresolved.",
         status: "resolved",
         lastMentionedAt: "2026-03-31T12:05:00.000Z",
         resolvedAt: request.nowIso,
@@ -969,8 +990,8 @@ test("conversation manager serves bounded episode review and mutations through t
       calls.push(`wrong:${request.episodeId}:${request.note}`);
       return {
         episodeId: request.episodeId,
-        title: "Owen fell down",
-        summary: "Owen fell down a few weeks ago and the outcome was unresolved.",
+        title: "Riley fell down",
+        summary: "Riley fell down a few weeks ago and the outcome was unresolved.",
         status: "no_longer_relevant",
         lastMentionedAt: "2026-03-31T12:05:00.000Z",
         resolvedAt: null,
@@ -982,8 +1003,8 @@ test("conversation manager serves bounded episode review and mutations through t
       calls.push(`forget:${request.episodeId}`);
       return {
         episodeId: request.episodeId,
-        title: "Owen fell down",
-        summary: "Owen fell down a few weeks ago and the outcome was unresolved.",
+        title: "Riley fell down",
+        summary: "Riley fell down a few weeks ago and the outcome was unresolved.",
         status: "unresolved",
         lastMentionedAt: "2026-03-31T12:05:00.000Z",
         resolvedAt: null,
@@ -1002,40 +1023,40 @@ test("conversation manager serves bounded episode review and mutations through t
       async () => {}
     );
     assert.match(reviewReply, /^Remembered situations:/);
-    assert.match(reviewReply, /Owen fell down \(episode_owen_fall\)/);
+    assert.match(reviewReply, /Riley fell down \(episode_riley_fall\)/);
     assert.match(reviewReply, /\/memory resolve <episode-id>/);
 
     const resolveReply = await manager.handleMessage(
-      buildMessageAt("/memory resolve episode_owen_fall Owen recovered", "2026-03-31T12:20:10.000Z"),
+      buildMessageAt("/memory resolve episode_riley_fall Riley recovered", "2026-03-31T12:20:10.000Z"),
       async () => {
         throw new Error("executeTask should not run for bounded /memory episode resolve");
       },
       async () => {}
     );
-    assert.equal(resolveReply, 'Marked "Owen fell down" as resolved.');
+    assert.equal(resolveReply, 'Marked "Riley fell down" as resolved.');
 
     const wrongReply = await manager.handleMessage(
-      buildMessageAt("/memory wrong episode_owen_fall Wrong Owen", "2026-03-31T12:20:20.000Z"),
+      buildMessageAt("/memory wrong episode_riley_fall Wrong Riley", "2026-03-31T12:20:20.000Z"),
       async () => {
         throw new Error("executeTask should not run for bounded /memory episode wrong");
       },
       async () => {}
     );
-    assert.equal(wrongReply, 'Marked "Owen fell down" as no longer relevant.');
+    assert.equal(wrongReply, 'Marked "Riley fell down" as no longer relevant.');
 
     const forgetReply = await manager.handleMessage(
-      buildMessageAt("/memory forget episode_owen_fall", "2026-03-31T12:20:30.000Z"),
+      buildMessageAt("/memory forget episode_riley_fall", "2026-03-31T12:20:30.000Z"),
       async () => {
         throw new Error("executeTask should not run for bounded /memory episode forget");
       },
       async () => {}
     );
-    assert.equal(forgetReply, 'Forgot "Owen fell down".');
+    assert.equal(forgetReply, 'Forgot "Riley fell down".');
     assert.deepEqual(calls, [
       "list",
-      "resolve:episode_owen_fall:Owen recovered",
-      "wrong:episode_owen_fall:Wrong Owen",
-      "forget:episode_owen_fall"
+      "resolve:episode_riley_fall:Riley recovered",
+      "wrong:episode_riley_fall:Wrong Riley",
+      "forget:episode_riley_fall"
     ]);
   } finally {
     await removeTempDirWithRetry(tempDir);
@@ -2455,9 +2476,9 @@ test("conversation manager keeps greetings and identity turns direct under saved
         ...buildMessageAt("What's my name?", "2026-03-20T19:44:05.000Z"),
         transportIdentity: {
           provider: "telegram",
-          username: "avery",
+          username: "morgan",
           displayName: null,
-          givenName: "Avery",
+          givenName: "Morgan",
           familyName: null,
           observedAt: "2026-03-20T19:44:05.000Z"
         }
@@ -2469,7 +2490,7 @@ test("conversation manager keeps greetings and identity turns direct under saved
     );
     assert.equal(
       identityReply,
-      "Your Telegram profile shows Avery, but I don't have that saved as a confirmed name fact yet."
+      "Your Telegram profile shows Morgan, but I don't have that saved as a confirmed name fact yet."
     );
     assert.equal(/ready to review/i.test(identityReply), false);
     assert.equal(localResolverCalls, 0);
@@ -2505,7 +2526,7 @@ test("conversation manager uses bounded identity facts for self-identity direct 
         {
           factId: "fact_identity_preferred_name",
           key: "identity.preferred_name",
-          value: "Avery",
+          value: "Morgan",
           status: "active",
           observedAt: "2026-03-20T17:45:00.000Z",
           lastUpdatedAt: "2026-03-20T17:45:00.000Z",
@@ -2526,7 +2547,7 @@ test("conversation manager uses bounded identity facts for self-identity direct 
       },
       async () => {}
     );
-    assert.equal(firstReply, "You're Avery.");
+    assert.equal(firstReply, "You're Morgan.");
 
     const secondReply = await manager.handleMessage(
       buildMessageAt("You should know my name", "2026-03-20T17:46:05.000Z"),
@@ -2535,7 +2556,7 @@ test("conversation manager uses bounded identity facts for self-identity direct 
       },
       async () => {}
     );
-    assert.equal(secondReply, "You're Avery.");
+    assert.equal(secondReply, "You're Morgan.");
 
     const session = await store.getSession("telegram:chat-1:user-1");
     assert.ok(session);
@@ -2594,9 +2615,9 @@ test("conversation manager does not misroute relationship recall into the identi
     {
       runDirectConversationTurn: async (input) => {
         directInputs.push(input);
-        assert.match(input, /Current user request:\nWho is Billy\?/i);
+        assert.match(input, /Current user request:\nWho is Blake\?/i);
         return {
-          summary: "Billy is the person you worked with at Sample Web Studio."
+          summary: "Blake is the person you worked with at Sample Web Studio."
         };
       }
     }
@@ -2622,14 +2643,14 @@ test("conversation manager does not misroute relationship recall into the identi
     );
 
     const reply = await manager.handleMessage(
-      buildMessageAt("Who is Billy?", "2026-04-10T13:31:02.000Z"),
+      buildMessageAt("Who is Blake?", "2026-04-10T13:31:02.000Z"),
       async () => {
         throw new Error("executeTask should not run for direct relationship recall");
       },
       async () => {}
     );
 
-    assert.equal(reply, "Billy is the person you worked with at Sample Web Studio.");
+    assert.equal(reply, "Blake is the person you worked with at Sample Web Studio.");
     assert.equal(directInputs.length, 1);
   } finally {
     await removeTempDirWithRetry(tempDir);
@@ -2655,14 +2676,14 @@ test("conversation manager keeps short relationship questions off the identity f
       }),
       runDirectConversationTurn: async (input) => {
         directInputs.push(input);
-        if (/Current user request:\s*Do you know Billy\?/i.test(input)) {
+        if (/Current user request:\s*Do you know Blake\?/i.test(input)) {
           return {
-            summary: "Billy used to work with Sample Web Studio."
+            summary: "Blake used to work with Sample Web Studio."
           };
         }
         if (/Current user request:\s*I didn't ask that\./i.test(input)) {
           return {
-            summary: "You're right. You asked about Billy."
+            summary: "You're right. You asked about Blake."
           };
         }
         return {
@@ -2686,13 +2707,13 @@ test("conversation manager keeps short relationship questions off the identity f
     assert.equal(declarationReply, "Okay, I'll remember that you're Alex.");
 
     const recallReply = await manager.handleMessage(
-      buildMessageAt("Do you know Billy?", "2026-04-13T17:16:05.000Z"),
+      buildMessageAt("Do you know Blake?", "2026-04-13T17:16:05.000Z"),
       async () => {
         throw new Error("executeTask should not run for direct relationship recall");
       },
       async () => {}
     );
-    assert.equal(recallReply, "Billy used to work with Sample Web Studio.");
+    assert.equal(recallReply, "Blake used to work with Sample Web Studio.");
 
     const objectionReply = await manager.handleMessage(
       buildMessageAt("I didn't ask that.", "2026-04-13T17:16:10.000Z"),
@@ -2701,7 +2722,7 @@ test("conversation manager keeps short relationship questions off the identity f
       },
       async () => {}
     );
-    assert.equal(objectionReply, "You're right. You asked about Billy.");
+    assert.equal(objectionReply, "You're right. You asked about Blake.");
     assert.equal(directInputs.length, 2);
   } finally {
     await removeTempDirWithRetry(tempDir);
@@ -2728,7 +2749,7 @@ test("conversation manager does not misroute long approval-prefixed relationship
         directInputs.push(input);
         assert.doesNotMatch(input, /If you want me to answer or remember your name/i);
         return {
-          summary: "Okay, I'll keep that in mind about Billy."
+          summary: "Okay, I'll keep that in mind about Blake."
         };
       }
     }
@@ -2755,7 +2776,7 @@ test("conversation manager does not misroute long approval-prefixed relationship
 
     const reply = await manager.handleMessage(
       buildMessageAt(
-        "Yeah, so Billy is someone I worked previously. He now works somewhere else.",
+        "Yeah, so Blake is someone I worked previously. He now works somewhere else.",
         "2026-04-10T13:12:00.000Z"
       ),
       async () => {
@@ -2764,7 +2785,7 @@ test("conversation manager does not misroute long approval-prefixed relationship
       async () => {}
     );
 
-    assert.equal(reply, "Okay, I'll keep that in mind about Billy.");
+    assert.equal(reply, "Okay, I'll keep that in mind about Blake.");
     assert.equal(directInputs.length, 1);
     assert.equal(rememberedInputs.length, 1);
   } finally {
@@ -2944,7 +2965,7 @@ test("conversation manager keeps relationship recap and entity follow-up chat di
         if (/Current user request:\nCan you re explain all these relationships I just told you\?/i.test(input)) {
           return {
             summary:
-              "You work at Northstar Creative and you own Lantern Studio.\n\nMilo is your boss at Northstar Creative, and Owen used to work for you at Lantern Studio."
+              "You work at Northstar Creative and you own Lantern Studio.\n\nMilo is your boss at Northstar Creative, and Riley used to work for you at Lantern Studio."
           };
         }
         if (/Current user request:\nAnd Milo, who is he\?/i.test(input)) {
@@ -2967,18 +2988,18 @@ test("conversation manager keeps relationship recap and entity follow-up chat di
         },
         {
           role: "assistant",
-          text: "You're Avery.",
+          text: "You're Morgan.",
           at: "2026-03-26T15:36:00.000Z"
         },
         {
           role: "user",
           text:
-            "I work with a guy named Milo, and I used to work with a person named Owen. Milo is married, and Owen has a girlfriend. I work with Milo at Northstar Creative and I used to work with Owen at Lantern Studio.",
+            "I work with a guy named Milo, and I used to work with a person named Riley. Milo is married, and Riley has a girlfriend. I work with Milo at Northstar Creative and I used to work with Riley at Lantern Studio.",
           at: "2026-03-26T15:37:00.000Z"
         },
         {
           role: "assistant",
-          text: "Got it - you work with Milo at Northstar Creative, and you used to work with Owen at Lantern Studio.",
+          text: "Got it - you work with Milo at Northstar Creative, and you used to work with Riley at Lantern Studio.",
           at: "2026-03-26T15:37:05.000Z"
         },
         {
@@ -2988,12 +3009,12 @@ test("conversation manager keeps relationship recap and entity follow-up chat di
         },
         {
           role: "user",
-          text: "Owen used to work for me, but Milo is my boss.",
+          text: "Riley used to work for me, but Milo is my boss.",
           at: "2026-03-26T15:37:30.000Z"
         },
         {
           role: "assistant",
-          text: "Got it. Owen used to work for you, and Milo is your boss.",
+          text: "Got it. Riley used to work for you, and Milo is your boss.",
           at: "2026-03-26T15:38:00.000Z"
         }
       ],
@@ -3109,10 +3130,10 @@ test("conversation manager can answer self-identity from low-confidence transpor
         ...buildMessageAt("Who am I?", "2026-03-20T20:49:00.000Z"),
         transportIdentity: {
           provider: "telegram",
-          username: "averybrooks",
-          displayName: "Avery Brooks",
-          givenName: "Avery",
-          familyName: "Bena",
+          username: "morganbrooks",
+          displayName: "Morgan Brooks",
+          givenName: "Morgan",
+          familyName: "Harper",
           observedAt: "2026-03-20T20:49:00.000Z"
         }
       },
@@ -3123,12 +3144,12 @@ test("conversation manager can answer self-identity from low-confidence transpor
     );
     assert.equal(
       reply,
-      "Your Telegram profile shows Avery Brooks, but I don't have that saved as a confirmed name fact yet."
+      "Your Telegram profile shows Morgan Brooks, but I don't have that saved as a confirmed name fact yet."
     );
 
     const session = await store.getSession("telegram:chat-1:user-1");
     assert.ok(session);
-    assert.equal(session?.transportIdentity?.givenName, "Avery");
+    assert.equal(session?.transportIdentity?.givenName, "Morgan");
   } finally {
     await removeTempDirWithRetry(tempDir);
   }
@@ -3145,7 +3166,7 @@ test("conversation manager records bounded self-identity parity telemetry on the
       {
         factId: "fact_identity_preferred_name",
         key: "identity.preferred_name",
-        value: "Avery",
+        value: "Morgan",
         status: "active",
         observedAt: "2026-03-20T20:40:00.000Z",
         lastUpdatedAt: "2026-03-20T20:45:00.000Z",
@@ -3163,9 +3184,9 @@ test("conversation manager records bounded self-identity parity telemetry on the
         ...buildMessageAt("Who am I?", receivedAt),
         transportIdentity: {
           provider: "telegram",
-          username: "morgan_handle",
-          displayName: "Morgan",
-          givenName: "Morgan",
+          username: "quinn_handle",
+          displayName: "Quinn",
+          givenName: "Quinn",
           familyName: null,
           observedAt: receivedAt
         }
@@ -3175,7 +3196,7 @@ test("conversation manager records bounded self-identity parity telemetry on the
       },
       async () => {}
     );
-    assert.equal(reply, "You're Avery.");
+    assert.equal(reply, "You're Morgan.");
 
     const document = await auditStore.load();
     assert.equal(document.events.length, 1);
@@ -3212,8 +3233,8 @@ test("conversation manager persists direct self-identity declarations and recall
         : [],
     rememberConversationProfileInput: async (input) => {
       const userInput = typeof input === "string" ? input : input.userInput ?? "";
-      if (/my name is avery/i.test(userInput)) {
-        rememberedPreferredName = "Avery";
+      if (/my name is morgan/i.test(userInput)) {
+        rememberedPreferredName = "Morgan";
         return true;
       }
       return false;
@@ -3227,7 +3248,7 @@ test("conversation manager persists direct self-identity declarations and recall
     const initialReply = await manager.handleMessage(
       {
         ...buildMessageAt("What is my name?", "2026-03-20T23:09:00.000Z"),
-        username: "avery_brooks"
+        username: "morgan_brooks"
       },
       async () => {
         throw new Error("executeTask should not run for self-identity direct chat");
@@ -3236,32 +3257,32 @@ test("conversation manager persists direct self-identity declarations and recall
     );
     assert.equal(
       initialReply,
-      "Your Telegram username looks like Avery Brooks, but I don't have that saved as a confirmed name fact yet."
+      "Your Telegram username looks like Morgan Brooks, but I don't have that saved as a confirmed name fact yet."
     );
 
     const declarationReply = await manager.handleMessage(
       {
-        ...buildMessageAt("My name is Avery, yes.", "2026-03-20T23:10:00.000Z"),
-        username: "avery_brooks"
+        ...buildMessageAt("My name is Morgan, yes.", "2026-03-20T23:10:00.000Z"),
+        username: "morgan_brooks"
       },
       async () => {
         throw new Error("executeTask should not run for self-identity declaration chat");
       },
       async () => {}
     );
-    assert.equal(declarationReply, "Okay, I'll remember that you're Avery.");
+    assert.equal(declarationReply, "Okay, I'll remember that you're Morgan.");
 
     const recalledReply = await manager.handleMessage(
       {
         ...buildMessageAt("What is my name?", "2026-03-20T23:10:05.000Z"),
-        username: "avery_brooks"
+        username: "morgan_brooks"
       },
       async () => {
         throw new Error("executeTask should not run for self-identity recall chat");
       },
       async () => {}
     );
-    assert.equal(recalledReply, "You're Avery.");
+    assert.equal(recalledReply, "You're Morgan.");
 
     const session = await store.getSession("telegram:chat-1:user-1");
     assert.ok(session);
@@ -3297,25 +3318,25 @@ test("conversation manager uses model-assisted identity interpretation for ambig
       rememberedInputs.push(input);
       const preferredNameCandidate =
         typeof input === "string"
-          ? /my name is avery/i.test(input)
-            ? "Avery"
+          ? /my name is morgan/i.test(input)
+            ? "Morgan"
             : null
           : input.validatedFactCandidates?.find(
               (candidate) => candidate.key === "identity.preferred_name"
             )?.candidateValue ?? null;
-      if (preferredNameCandidate === "Avery") {
-        rememberedPreferredName = "Avery";
+      if (preferredNameCandidate === "Morgan") {
+        rememberedPreferredName = "Morgan";
         return true;
       }
       return false;
     },
     identityInterpretationResolver: async (request) => {
       interpretedInputs.push(request.userInput);
-      if (/my name is avery/i.test(request.userInput)) {
+      if (/my name is morgan/i.test(request.userInput)) {
         return {
           source: "local_intent_model",
           kind: "self_identity_declaration",
-          candidateValue: "Avery",
+          candidateValue: "Morgan",
           confidence: "medium",
           shouldPersist: true,
           explanation: "The user is explicitly reaffirming their own name."
@@ -3331,24 +3352,24 @@ test("conversation manager uses model-assisted identity interpretation for ambig
   try {
     const declarationReply = await manager.handleMessage(
       {
-        ...buildMessageAt("I already told you my name is Avery several times.", "2026-03-20T23:44:00.000Z"),
-        username: "avery_brooks"
+        ...buildMessageAt("I already told you my name is Morgan several times.", "2026-03-20T23:44:00.000Z"),
+        username: "morgan_brooks"
       },
       async () => {
         throw new Error("executeTask should not run for self-identity declaration chat");
       },
       async () => {}
     );
-    assert.equal(declarationReply, "Okay, I'll remember that you're Avery.");
+    assert.equal(declarationReply, "Okay, I'll remember that you're Morgan.");
     assert.deepEqual(interpretedInputs, [
-      "I already told you my name is Avery several times."
+      "I already told you my name is Morgan several times."
     ]);
     assert.equal(rememberedInputs.length, 1);
     const rememberedRequest = rememberedInputs[0] as ProfileMemoryIngestRequest;
     assert.deepEqual(rememberedRequest.validatedFactCandidates, [
       {
         key: "identity.preferred_name",
-        candidateValue: "Avery",
+        candidateValue: "Morgan",
         source: "conversation.identity_interpretation",
         confidence: 0.95
       }
@@ -3363,14 +3384,14 @@ test("conversation manager uses model-assisted identity interpretation for ambig
     const recalledReply = await manager.handleMessage(
       {
         ...buildMessageAt("no what is my name", "2026-03-20T23:44:05.000Z"),
-        username: "avery_brooks"
+        username: "morgan_brooks"
       },
       async () => {
         throw new Error("executeTask should not run for mixed no-plus-identity recall chat");
       },
       async () => {}
     );
-    assert.equal(recalledReply, "You're Avery.");
+    assert.equal(recalledReply, "You're Morgan.");
 
     const session = await store.getSession("telegram:chat-1:user-1");
     assert.ok(session);
@@ -3437,7 +3458,7 @@ test("conversation manager keeps mixed relationship-plus-build turns off the dir
   try {
     const reply = await manager.handleMessage(
       buildMessageAt(
-        "Execute now and build the landing page as plain HTML. I work with Billy at Sample Web Studio.",
+        "Execute now and build the landing page as plain HTML. I work with Blake at Sample Web Studio.",
         "2026-03-26T15:40:00.000Z"
       ),
       async (input) => {
@@ -3461,7 +3482,7 @@ test("conversation manager keeps mixed relationship-plus-build turns off the dir
     assert.equal(executedInputs.length, 1);
     assert.match(
       executedInputs[0] ?? "",
-      /Execute now and build the landing page as plain HTML\. I work with Billy at Sample Web Studio\./
+      /Execute now and build the landing page as plain HTML\. I work with Blake at Sample Web Studio\./
     );
   } finally {
     await removeTempDirWithRetry(tempDir);
@@ -3787,22 +3808,22 @@ test("conversation manager reuses one continuity read session for direct chat co
             assert.equal(request.relevanceScope, "conversation_local");
             return [
               {
-                episodeId: "episode_owen_fall",
-                title: "Owen fell down",
-                summary: "Owen fell down a few weeks ago and the outcome never got resolved.",
+                episodeId: "episode_riley_fall",
+                title: "Riley fell down",
+                summary: "Riley fell down a few weeks ago and the outcome never got resolved.",
                 status: "unresolved",
                 lastMentionedAt: "2026-02-14T15:00:00.000Z",
-                entityRefs: ["Owen"],
+                entityRefs: ["Riley"],
                 entityLinks: [
                   {
-                    entityKey: "entity_owen",
-                    canonicalName: "Owen"
+                    entityKey: "entity_riley",
+                    canonicalName: "Riley"
                   }
                 ],
                 openLoopLinks: [
                   {
-                    loopId: "loop_owen",
-                    threadKey: "thread_owen",
+                    loopId: "loop_riley",
+                    threadKey: "thread_riley",
                     status: "open",
                     priority: 0.8
                   }
@@ -3816,8 +3837,8 @@ test("conversation manager reuses one continuity read session for direct chat co
             assert.equal(request.relevanceScope, "conversation_local");
             return [
               {
-                factId: "fact_owen_relationship",
-                key: "contact.owen.relationship",
+                factId: "fact_riley_relationship",
+                key: "contact.riley.relationship",
                 value: "work_peer",
                 status: "active",
                 observedAt: "2026-02-14T15:00:00.000Z",
@@ -3832,16 +3853,16 @@ test("conversation manager reuses one continuity read session for direct chat co
         ...createEmptyEntityGraphV1("2026-03-26T15:39:00.000Z"),
         entities: [
           {
-            entityKey: "entity_owen",
-            canonicalName: "Owen",
+            entityKey: "entity_riley",
+            canonicalName: "Riley",
             entityType: "person",
             disambiguator: null,
             domainHint: "relationship",
-            aliases: ["Owen"],
+            aliases: ["Riley"],
             firstSeenAt: "2026-02-14T15:00:00.000Z",
             lastSeenAt: "2026-03-26T15:39:00.000Z",
             salience: 1,
-            evidenceRefs: ["trace:owen_context"]
+            evidenceRefs: ["trace:riley_context"]
           }
         ]
       }),
@@ -3850,16 +3871,16 @@ test("conversation manager reuses one continuity read session for direct chat co
         return {
           source: "local_intent_model",
           kind: "entity_scoped_reference",
-          selectedEntityKeys: ["entity_owen"],
+          selectedEntityKeys: ["entity_riley"],
           aliasCandidate: null,
           confidence: "high",
-          explanation: "The user is asking about Owen."
+          explanation: "The user is asking about Riley."
         };
       },
       runDirectConversationTurn: async (input) => {
         directInputs.push(input);
         return {
-          summary: "Owen seems better now."
+          summary: "Riley seems better now."
         };
       }
     }
@@ -3871,7 +3892,7 @@ test("conversation manager reuses one continuity read session for direct chat co
       conversationTurns: [
         {
           role: "user",
-          text: "Owen fell down a few weeks ago.",
+          text: "Riley fell down a few weeks ago.",
           at: "2026-02-14T15:00:00.000Z"
         }
       ],
@@ -3890,16 +3911,16 @@ test("conversation manager reuses one continuity read session for direct chat co
             lastTouchedAt: "2026-03-26T15:38:00.000Z"
           },
           {
-            threadKey: "thread_owen",
-            topicKey: "owen_fall",
-            topicLabel: "Owen Fall",
+            threadKey: "thread_riley",
+            topicKey: "riley_fall",
+            topicLabel: "Riley Fall",
             state: "paused",
-            resumeHint: "Owen fell down and you wanted to hear how it ended up.",
+            resumeHint: "Riley fell down and you wanted to hear how it ended up.",
             openLoops: [
               {
-                loopId: "loop_owen",
-                threadKey: "thread_owen",
-                entityRefs: ["owen"],
+                loopId: "loop_riley",
+                threadKey: "thread_riley",
+                entityRefs: ["riley"],
                 createdAt: "2026-02-14T15:00:00.000Z",
                 lastMentionedAt: "2026-02-14T15:00:00.000Z",
                 priority: 0.8,
@@ -3918,8 +3939,8 @@ test("conversation manager reuses one continuity read session for direct chat co
             mentionCount: 1
           },
           {
-            topicKey: "owen_fall",
-            label: "Owen Fall",
+            topicKey: "riley_fall",
+            label: "Riley Fall",
             firstSeenAt: "2026-02-14T15:00:00.000Z",
             lastSeenAt: "2026-02-14T15:00:00.000Z",
             mentionCount: 1
@@ -3932,7 +3953,7 @@ test("conversation manager reuses one continuity read session for direct chat co
   try {
     const reply = await manager.handleMessage(
       buildMessageAt(
-        "Chat with me about Owen for a minute. How is he doing lately?",
+        "Chat with me about Riley for a minute. How is he doing lately?",
         "2026-03-26T15:39:00.000Z"
       ),
       async () => {
@@ -3941,14 +3962,14 @@ test("conversation manager reuses one continuity read session for direct chat co
       async () => {}
     );
 
-    assert.equal(reply, "Owen seems better now.");
+    assert.equal(reply, "Riley seems better now.");
     assert.equal(openedSessions, 1);
     assert.equal(continuityEpisodeQueries, 2);
     assert.equal(continuityFactQueries, 1);
     assert.equal(entityReferenceInterpretationCalls, 1);
     assert.equal(directInputs.length, 1);
     assert.match(directInputs[0] ?? "", /Contextual recall opportunity \(optional\):/);
-    assert.match(directInputs[0] ?? "", /Relevant situation: Owen fell down/i);
+    assert.match(directInputs[0] ?? "", /Relevant situation: Riley fell down/i);
     const auditDocument = await auditStore.load();
     assert.equal(auditDocument.events.length, 1);
     const [event] = auditDocument.events;
@@ -4460,25 +4481,25 @@ test("conversation manager keeps interrupted third-person contact recall and obj
       directInputs.push(input);
       assert.doesNotMatch(input, /Current working mode from earlier in this chat:/i);
       if (
-        /Current user request:\nBilly used to be at Beacon\. He's at Northstar now\. He drives a gray Accord\./i.test(input)
+        /Current user request:\nBlake used to be at Beacon\. He's at Northstar now\. He drives a gray Accord\./i.test(input)
       ) {
         return {
-          summary: "Got it - Billy's at Northstar now, and Beacon was the earlier connection."
+          summary: "Got it - Blake's at Northstar now, and Beacon was the earlier connection."
         };
       }
-      if (/Current user request:\nwaht about billy and beacon\?/i.test(input)) {
-        assert.match(input, /Billy/i);
+      if (/Current user request:\nwaht about blake and beacon\?/i.test(input)) {
+        assert.match(input, /Blake/i);
         assert.match(input, /Northstar/i);
         assert.match(input, /Beacon/i);
         return {
-          summary: "Billy's at Northstar now. Beacon was the earlier connection."
+          summary: "Blake's at Northstar now. Beacon was the earlier connection."
         };
       }
       if (/Current user request:\nand the accord\?/i.test(input)) {
-        assert.match(input, /Billy/i);
+        assert.match(input, /Blake/i);
         assert.match(input, /gray Accord/i);
         return {
-          summary: "That's Billy's gray Accord."
+          summary: "That's Blake's gray Accord."
         };
       }
       throw new Error(`Unexpected direct conversation input: ${input}`);
@@ -4586,7 +4607,7 @@ test("conversation manager keeps interrupted third-person contact recall and obj
 
     const ingestReply = await manager.handleMessage(
       buildMessageAt(
-        "Billy used to be at Beacon. He's at Northstar now. He drives a gray Accord.",
+        "Blake used to be at Beacon. He's at Northstar now. He drives a gray Accord.",
         "2026-03-27T16:09:00.000Z"
       ),
       async () => {
@@ -4596,7 +4617,7 @@ test("conversation manager keeps interrupted third-person contact recall and obj
     );
     assert.equal(
       ingestReply,
-      "Got it - Billy's at Northstar now, and Beacon was the earlier connection."
+      "Got it - Blake's at Northstar now, and Beacon was the earlier connection."
     );
 
     const storedFacts = await profileStore.readFacts({
@@ -4607,7 +4628,7 @@ test("conversation manager keeps interrupted third-person contact recall and obj
     assert.equal(
       storedFacts.some(
         (fact) =>
-          fact.key === "contact.billy.work_association" &&
+          fact.key === "contact.blake.work_association" &&
           fact.value === "Northstar"
       ),
       true
@@ -4615,7 +4636,7 @@ test("conversation manager keeps interrupted third-person contact recall and obj
     assert.equal(
       storedFacts.some(
         (fact) =>
-          fact.key === "contact.billy.work_association" &&
+          fact.key === "contact.blake.work_association" &&
           fact.value === "Beacon"
       ),
       false
@@ -4669,13 +4690,13 @@ test("conversation manager keeps interrupted third-person contact recall and obj
     );
 
     const historyReply = await manager.handleMessage(
-      buildMessageAt("waht about billy and beacon?", "2026-03-27T16:10:45.000Z"),
+      buildMessageAt("waht about blake and beacon?", "2026-03-27T16:10:45.000Z"),
       async () => {
-        throw new Error("executeTask should not run for interrupted Billy history recall chat");
+        throw new Error("executeTask should not run for interrupted Blake history recall chat");
       },
       async () => {}
     );
-    assert.equal(historyReply, "Billy's at Northstar now. Beacon was the earlier connection.");
+    assert.equal(historyReply, "Blake's at Northstar now. Beacon was the earlier connection.");
     assert.doesNotMatch(
       historyReply,
       /gray Accord|Current State:|Historical Context:|Contradiction Notes:|supporting evidence/i
@@ -4705,7 +4726,7 @@ test("conversation manager keeps interrupted third-person contact recall and obj
       },
       async () => {}
     );
-    assert.equal(objectReply, "That's Billy's gray Accord.");
+    assert.equal(objectReply, "That's Blake's gray Accord.");
     assert.doesNotMatch(
       objectReply,
       /workflow|browser|preview|Current State:|Historical Context:|supporting evidence/i
@@ -5692,10 +5713,10 @@ test("conversation manager reuses global relationship truth across conversations
         };
       }
       if (
-        /Current user request:\nBilly used to be at Beacon\. He's at Northstar now\. He drives a gray Accord\./i.test(input)
+        /Current user request:\nBlake used to be at Beacon\. He's at Northstar now\. He drives a gray Accord\./i.test(input)
       ) {
         return {
-          summary: "Got it - Billy's at Northstar now, and Beacon was the earlier connection."
+          summary: "Got it - Blake's at Northstar now, and Beacon was the earlier connection."
         };
       }
       if (/Current user request:\nWho do I work with now\?/i.test(input)) {
@@ -5704,12 +5725,12 @@ test("conversation manager reuses global relationship truth across conversations
           summary: "Right now, Jordan."
         };
       }
-      if (/Current user request:\nWhat about Billy and Beacon\?/i.test(input)) {
-        assert.match(input, /Billy/i);
+      if (/Current user request:\nWhat about Blake and Beacon\?/i.test(input)) {
+        assert.match(input, /Blake/i);
         assert.match(input, /Beacon/i);
         assert.doesNotMatch(input, /landing page|reference site|browser tabs/i);
         return {
-          summary: "Billy's at Northstar now. Beacon was the earlier connection."
+          summary: "Blake's at Northstar now. Beacon was the earlier connection."
         };
       }
       throw new Error(`Unexpected direct conversation input: ${input}`);
@@ -5769,11 +5790,11 @@ test("conversation manager reuses global relationship truth across conversations
 
     await manager.handleMessage(
       buildMessageAt(
-        "Billy used to be at Beacon. He's at Northstar now. He drives a gray Accord.",
+        "Blake used to be at Beacon. He's at Northstar now. He drives a gray Accord.",
         "2026-03-27T16:21:20.000Z"
       ),
       async () => {
-        throw new Error("executeTask should not run for cross-conversation Billy ingest chat");
+        throw new Error("executeTask should not run for cross-conversation Blake ingest chat");
       },
       async () => {}
     );
@@ -5805,14 +5826,14 @@ test("conversation manager reuses global relationship truth across conversations
     );
     assert.equal(currentReply, "Right now, Jordan.");
 
-    const billyReply = await manager.handleMessage(
-      buildConversationTwoMessageAt("What about Billy and Beacon?", "2026-03-27T16:23:35.000Z"),
+    const blakeReply = await manager.handleMessage(
+      buildConversationTwoMessageAt("What about Blake and Beacon?", "2026-03-27T16:23:35.000Z"),
       async () => {
-        throw new Error("executeTask should not run for cross-conversation Billy recall chat");
+        throw new Error("executeTask should not run for cross-conversation Blake recall chat");
       },
       async () => {}
     );
-    assert.equal(billyReply, "Billy's at Northstar now. Beacon was the earlier connection.");
+    assert.equal(blakeReply, "Blake's at Northstar now. Beacon was the earlier connection.");
     assert.equal(directInputs.length, 4);
   } finally {
     await removeTempDirWithRetry(tempDir);
@@ -5979,7 +6000,8 @@ test("conversation manager applies bounded fact review correction and forget thr
   });
   const manager = new ConversationManager(store, {
     maxConversationTurns: 40,
-    maxContextTurnsForExecution: 10
+    maxContextTurnsForExecution: 10,
+    principalConfig: CONVERSATION_MANAGER_OWNER_PRINCIPAL_CONFIG
   }, {
     rememberConversationProfileInput: async (input, receivedAt) => {
       const request = typeof input === "string"
@@ -6074,7 +6096,8 @@ test("conversation manager applies bounded fact review correction and forget thr
   try {
     await store.setSession(
       buildConversationSessionFixture({
-        conversationId: conversationKey
+        conversationId: conversationKey,
+        principalContext: CONVERSATION_MANAGER_OWNER_PRINCIPAL_CONTEXT
       })
     );
 
@@ -6218,8 +6241,8 @@ test("conversation manager fails closed for ambiguous identity declarations when
   try {
     const reply = await manager.handleMessage(
       {
-        ...buildMessageAt("I already told you my name is Avery several times.", "2026-03-20T23:45:00.000Z"),
-        username: "avery_brooks"
+        ...buildMessageAt("I already told you my name is Morgan several times.", "2026-03-20T23:45:00.000Z"),
+        username: "morgan_brooks"
       },
       async () => {
         throw new Error("executeTask should not run for ambiguous self-identity declaration chat");
@@ -6228,7 +6251,7 @@ test("conversation manager fails closed for ambiguous identity declarations when
     );
     assert.equal(
       reply,
-      "If you're telling me your name, say it in a short direct form like \"My name is Avery.\" and I'll remember it."
+      "If you're telling me your name, say it in a short direct form like \"My name is Morgan.\" and I'll remember it."
     );
     assert.equal(rememberCalls, 0);
 
@@ -6263,8 +6286,8 @@ test("conversation manager fails closed for ambiguous identity declarations when
   try {
     const reply = await manager.handleMessage(
       {
-        ...buildMessageAt("I already told you my name is Avery several times.", "2026-03-20T23:46:00.000Z"),
-        username: "avery_brooks"
+        ...buildMessageAt("I already told you my name is Morgan several times.", "2026-03-20T23:46:00.000Z"),
+        username: "morgan_brooks"
       },
       async () => {
         throw new Error("executeTask should not run for ambiguous self-identity declaration chat");
@@ -6273,7 +6296,7 @@ test("conversation manager fails closed for ambiguous identity declarations when
     );
     assert.equal(
       reply,
-      "If you're telling me your name, say it in a short direct form like \"My name is Avery.\" and I'll remember it."
+      "If you're telling me your name, say it in a short direct form like \"My name is Morgan.\" and I'll remember it."
     );
     assert.equal(rememberCalls, 0);
     assert.equal(interpretationCalls, 1);

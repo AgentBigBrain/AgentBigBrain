@@ -203,6 +203,11 @@ export const TEST_TARGETS: Record<string, TestTargetGroup> = {
     id: "organs",
     description: "All organ tests.",
     patterns: ["tests/organs/**/*.test.ts"]
+  },
+  principalSubjectAccess: {
+    id: "principalSubjectAccess",
+    description: "Principal, subject, and access-boundary evidence tests.",
+    patterns: ["tests/scripts/principalSubjectAccessMatrix.test.ts"]
   }
 };
 
