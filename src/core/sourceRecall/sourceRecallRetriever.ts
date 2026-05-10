@@ -3,6 +3,7 @@
  */
 
 import { hashSha256 } from "../cryptoUtils";
+import type { TaskPrincipalAccessEnvelope } from "../runtimeTypes/taskPlanningTypes";
 import {
   buildSourceRecallAuthorityFlags,
   SOURCE_RECALL_SOURCE_KIND_VALUES,
@@ -45,6 +46,7 @@ export interface SourceRecallRetrievalQuery {
   sourceRoles?: readonly SourceRecallSourceRole[];
   keywords?: readonly string[];
   semanticVectorChunkIds?: readonly string[];
+  principalAccess?: TaskPrincipalAccessEnvelope;
 }
 
 export interface SourceRecallRetrievalAuditEvent {
@@ -57,6 +59,11 @@ export interface SourceRecallRetrievalAuditEvent {
   totalExcerptsReturned: number;
   totalCharsReturned: number;
   blockedRedactedCount: number;
+  principalRole?: string | null;
+  routeVisibility?: string | null;
+  accessOperation?: string | null;
+  accessClass?: string | null;
+  accessAllowed?: boolean | null;
 }
 
 export interface SourceRecallRetrievalResult {
@@ -186,7 +193,8 @@ export async function retrieveSourceRecall(
       returnedChunkIds,
       totalExcerptsReturned: excerpts.length,
       totalCharsReturned,
-      blockedRedactedCount
+      blockedRedactedCount,
+      ...buildSourceRecallRetrievalPrincipalAudit(query.principalAccess)
     }
   };
 }
@@ -325,7 +333,78 @@ function matchesRecordQuery(
   if (query.sourceRoles && !query.sourceRoles.includes(record.sourceRole)) {
     return false;
   }
-  return budget.sourceRoleAllowlist.includes(record.sourceRole);
+  return (
+    budget.sourceRoleAllowlist.includes(record.sourceRole) &&
+    matchesPrincipalAccess(record, query.principalAccess)
+  );
+}
+
+function matchesPrincipalAccess(
+  record: SourceRecallRecord,
+  principalAccess: TaskPrincipalAccessEnvelope | undefined
+): boolean {
+  if (!principalAccess) {
+    return true;
+  }
+  if (!principalAccess.accessDecision.allowed) {
+    return false;
+  }
+  const actor = readObject(principalAccess.principalContext.actor);
+  const route = readObject(principalAccess.principalContext.route);
+  const actorRole = readString(actor?.principalRole);
+  const actorHash = readString(actor?.providerUserIdHash);
+  const routeVisibility = readString(route?.visibility);
+  const metadata = record.principalMetadata;
+  if (!metadata) {
+    return (actorRole === "owner" || actorRole === "operator") && routeVisibility !== "public";
+  }
+  if (routeVisibility === "public") {
+    return metadata.routeVisibility === "public" || metadata.accessClass === "shared_public";
+  }
+  if (
+    actorHash &&
+    metadata.actorProviderUserIdHash &&
+    actorHash === metadata.actorProviderUserIdHash
+  ) {
+    return true;
+  }
+  return actorRole === "owner" || actorRole === "operator";
+}
+
+function buildSourceRecallRetrievalPrincipalAudit(
+  principalAccess: TaskPrincipalAccessEnvelope | undefined
+): Pick<
+  SourceRecallRetrievalAuditEvent,
+  "principalRole" | "routeVisibility" | "accessOperation" | "accessClass" | "accessAllowed"
+> {
+  if (!principalAccess) {
+    return {
+      principalRole: null,
+      routeVisibility: null,
+      accessOperation: null,
+      accessClass: null,
+      accessAllowed: null
+    };
+  }
+  const actor = readObject(principalAccess.principalContext.actor);
+  const route = readObject(principalAccess.principalContext.route);
+  return {
+    principalRole: readString(actor?.principalRole),
+    routeVisibility: readString(route?.visibility),
+    accessOperation: readString(principalAccess.accessDecision.operation),
+    accessClass: readString(principalAccess.accessDecision.accessClass),
+    accessAllowed: principalAccess.accessDecision.allowed
+  };
+}
+
+function readObject(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function readString(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 }
 
 /**
@@ -351,6 +430,9 @@ function buildBudgetedExcerpt(
       lifecycleState: candidate.record.lifecycleState,
       sourceTimeKind: candidate.record.sourceTimeKind,
       freshness: candidate.record.freshness,
+      ...(candidate.record.principalMetadata
+        ? { principalMetadata: candidate.record.principalMetadata }
+        : {}),
       excerpt: "[redacted sensitive source chunk]".slice(0, budget.maxExcerptCharsPerChunk),
       redacted: true,
       recallAuthority: "quoted_evidence_only",
@@ -398,6 +480,9 @@ function buildExcerpt(
     lifecycleState: candidate.record.lifecycleState,
     sourceTimeKind: candidate.record.sourceTimeKind,
     freshness: candidate.record.freshness,
+    ...(candidate.record.principalMetadata
+      ? { principalMetadata: candidate.record.principalMetadata }
+      : {}),
     excerpt,
     redacted,
     recallAuthority: "quoted_evidence_only",

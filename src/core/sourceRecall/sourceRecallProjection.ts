@@ -10,7 +10,8 @@ import type {
   SourceRecallSourceKind,
   SourceRecallSourceTimeKind,
   SourceRecallFreshness,
-  SourceRecallAuthorityFlags
+  SourceRecallAuthorityFlags,
+  SourceRecallPrincipalMetadata
 } from "./contracts";
 import type { SourceAuthority } from "../sourceAuthority";
 import {
@@ -42,6 +43,7 @@ export interface SourceRecallProjectionEntry {
   authority: SourceRecallAuthorityFlags;
   projectionMode: SourceRecallProjectionMode;
   operatorFullEnabled: boolean;
+  principalMetadata?: SourceRecallPrincipalMetadata;
   excerpt: string;
   redacted: boolean;
   authorityNotice: string;
@@ -102,6 +104,7 @@ export function buildSourceRecallProjectionEntries(
         authority: chunk.authority,
         projectionMode: mode,
         operatorFullEnabled,
+        ...(record.principalMetadata ? { principalMetadata: record.principalMetadata } : {}),
         excerpt: renderProjectionExcerpt(record, chunk, {
           operatorFullEnabled,
           maxReviewSafeExcerptChars

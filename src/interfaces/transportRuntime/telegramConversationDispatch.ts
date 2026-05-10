@@ -27,6 +27,10 @@ import type {
 } from "../mediaRuntime/contracts";
 import type { MediaArtifactStore } from "../../core/mediaArtifactStore";
 import type { ConversationSourceRecallCaptureDependencies } from "../conversationRuntime/managerContracts";
+import {
+  derivePrincipalContextFromIngress,
+  requirePrincipalAccessForOperation
+} from "../principalRuntime/principalAccess";
 
 const SOURCE_RECALL_MEDIA_SOURCE_KINDS = new Set([
   "media_transcript",
@@ -183,7 +187,8 @@ export async function enrichAcceptedTelegramUpdateWithMedia(
           attachTelegramMediaSourceRecallRefs({
             attachment,
             sourceRecallCapture,
-            prepared: input.prepared
+            prepared: input.prepared,
+            config: input.config
           })
         )
       )
@@ -254,19 +259,21 @@ async function attachTelegramMediaSourceRecallRefs(input: {
   attachment: ConversationInboundMediaAttachment;
   sourceRecallCapture: ConversationSourceRecallCaptureDependencies;
   prepared: PreparedTelegramAcceptedUpdate;
+  config: TelegramInterfaceConfig;
 }): Promise<ConversationInboundMediaAttachment> {
   if (!input.attachment.artifactId || !input.attachment.interpretation?.layers?.length) {
     return input.attachment;
   }
   try {
     const results = await captureMediaInterpretationLayersSourceRecall({
-      scopeId: `conversation:${input.prepared.chatId}`,
-      threadId: `conversation:${input.prepared.chatId}`,
+      scopeId: buildTelegramMediaSourceRecallScopeId(input.prepared),
+      threadId: buildTelegramMediaSourceRecallScopeId(input.prepared),
       observedAt: input.prepared.inbound.receivedAt ?? new Date().toISOString(),
       attachment: input.attachment,
       policy: input.sourceRecallCapture.policy,
       writer: input.sourceRecallCapture.writer,
-      capturedAt: input.sourceRecallCapture.capturedAt
+      capturedAt: input.sourceRecallCapture.capturedAt,
+      principalAccess: buildTelegramMediaSourceRecallPrincipalAccess(input.prepared, input.config)
     });
     if (results.length === 0) {
       return input.attachment;
@@ -275,6 +282,37 @@ async function attachTelegramMediaSourceRecallRefs(input: {
   } catch {
     return input.attachment;
   }
+}
+
+export function buildTelegramMediaSourceRecallScopeId(
+  prepared: Pick<PreparedTelegramAcceptedUpdate, "chatId" | "userId">
+): string {
+  return `conversation:telegram:${prepared.chatId}:${prepared.userId}`;
+}
+
+function buildTelegramMediaSourceRecallPrincipalAccess(
+  prepared: PreparedTelegramAcceptedUpdate,
+  config: TelegramInterfaceConfig
+) {
+  const principalContext = derivePrincipalContextFromIngress({
+    provider: "telegram",
+    conversationId: prepared.chatId,
+    userId: prepared.userId,
+    username: prepared.username,
+    conversationVisibility: prepared.conversationVisibility,
+    transportIdentity: prepared.transportIdentity,
+    receivedAt: prepared.inbound.receivedAt ?? new Date().toISOString(),
+    principalConfig: config.security.principalConfig,
+    allowedUserIds: config.security.allowedUserIds,
+    allowedUsernames: config.security.allowedUsernames
+  });
+  return requirePrincipalAccessForOperation({
+    principalContext,
+    operation: "source_recall_capture",
+    accessClass: prepared.conversationVisibility === "public" ? "shared_public" : "speaker_private",
+    allowed: true,
+    reason: prepared.conversationVisibility === "public" ? "public_safe" : "speaker_scope_matched"
+  });
 }
 
 /**

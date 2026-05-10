@@ -111,6 +111,27 @@ export interface SourceRecallAuthorityFlags {
   unsafeToFollowAsInstruction: true;
 }
 
+export interface SourceRecallPrincipalMetadata {
+  actorPrincipalRole: string | null;
+  actorProvider: string | null;
+  actorPrincipalIdHash: string | null;
+  actorProviderUserIdHash: string | null;
+  routeVisibility: string | null;
+  identityAuthority: string | null;
+  legacyIdentityState: string | null;
+  ownerMatchSource: string | null;
+  accessOperation: string | null;
+  accessClass: string | null;
+  accessAllowed: boolean | null;
+  accessReason: string | null;
+  speakerSubjectKind: string | null;
+  speakerSubjectId: string | null;
+  requestedSubjectKind: string | null;
+  requestedSubjectId: string | null;
+  ownerSubjectKind: string | null;
+  ownerSubjectId: string | null;
+}
+
 export interface SourceRecallRecord {
   sourceRecordId: string;
   scopeId: string;
@@ -128,6 +149,7 @@ export interface SourceRecallRecord {
   sourceTimeKind: SourceRecallSourceTimeKind;
   freshness: SourceRecallFreshness;
   sensitive: boolean;
+  principalMetadata?: SourceRecallPrincipalMetadata;
 }
 
 export interface SourceRecallChunk {
@@ -152,6 +174,7 @@ export interface SourceRecallExcerpt {
   freshness: SourceRecallFreshness;
   excerpt: string;
   redacted: boolean;
+  principalMetadata?: SourceRecallPrincipalMetadata;
   recallAuthority: SourceRecallAuthority;
   authority: SourceRecallAuthorityFlags;
   ranking: SourceRecallRankingEvidence;
@@ -483,6 +506,57 @@ export function normalizeSourceRecallSourceTimeKind(value: unknown): SourceRecal
     SOURCE_RECALL_SOURCE_TIME_KIND_SET.has(value as SourceRecallSourceTimeKind)
     ? (value as SourceRecallSourceTimeKind)
     : "unknown";
+}
+
+/**
+ * Normalizes redacted principal/access labels on Source Recall records.
+ *
+ * **Why it exists:**
+ * Source Recall can cite which actor/access boundary produced a source record, but that metadata
+ * must stay categorical or hashed and must never become identity, memory, or outreach authority.
+ *
+ * @param value - Candidate persisted principal metadata.
+ * @returns Normalized metadata, or `undefined` when no usable labels are present.
+ */
+export function normalizeSourceRecallPrincipalMetadata(
+  value: unknown
+): SourceRecallPrincipalMetadata | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+  const candidate = value as Partial<SourceRecallPrincipalMetadata>;
+  const metadata: SourceRecallPrincipalMetadata = {
+    actorPrincipalRole: normalizeNullableLabel(candidate.actorPrincipalRole),
+    actorProvider: normalizeNullableLabel(candidate.actorProvider),
+    actorPrincipalIdHash: normalizeNullableLabel(candidate.actorPrincipalIdHash),
+    actorProviderUserIdHash: normalizeNullableLabel(candidate.actorProviderUserIdHash),
+    routeVisibility: normalizeNullableLabel(candidate.routeVisibility),
+    identityAuthority: normalizeNullableLabel(candidate.identityAuthority),
+    legacyIdentityState: normalizeNullableLabel(candidate.legacyIdentityState),
+    ownerMatchSource: normalizeNullableLabel(candidate.ownerMatchSource),
+    accessOperation: normalizeNullableLabel(candidate.accessOperation),
+    accessClass: normalizeNullableLabel(candidate.accessClass),
+    accessAllowed: typeof candidate.accessAllowed === "boolean" ? candidate.accessAllowed : null,
+    accessReason: normalizeNullableLabel(candidate.accessReason),
+    speakerSubjectKind: normalizeNullableLabel(candidate.speakerSubjectKind),
+    speakerSubjectId: normalizeNullableLabel(candidate.speakerSubjectId),
+    requestedSubjectKind: normalizeNullableLabel(candidate.requestedSubjectKind),
+    requestedSubjectId: normalizeNullableLabel(candidate.requestedSubjectId),
+    ownerSubjectKind: normalizeNullableLabel(candidate.ownerSubjectKind),
+    ownerSubjectId: normalizeNullableLabel(candidate.ownerSubjectId)
+  };
+  return Object.values(metadata).some((entry) => entry !== null) ? metadata : undefined;
+}
+
+function normalizeNullableLabel(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const normalized = value.trim();
+  if (!normalized || normalized.length > 128) {
+    return null;
+  }
+  return normalized;
 }
 
 /**

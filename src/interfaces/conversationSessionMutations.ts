@@ -11,6 +11,7 @@ import {
   type SourceRecallRecordWriter
 } from "../core/sourceRecall/sourceRecallConversationCapture";
 import type { SourceRecallRetentionPolicy } from "../core/sourceRecall/sourceRecallRetention";
+import type { TaskPrincipalAccessEnvelope } from "../core/types";
 import {
   applyAssistantTurnToConversationStackV1,
   applyUserTurnToConversationStackV1,
@@ -39,6 +40,7 @@ import {
   normalizeTurnText,
   sortTurnsByTime
 } from "./conversationManagerHelpers";
+import { requirePrincipalAccessForOperation } from "./principalRuntime/principalAccess";
 
 /**
  * Narrows one shared domain lane into the persisted snapshot subset used on workspace and handoff records.
@@ -172,6 +174,50 @@ function buildRecoveredTurnActorMetadata(): ConversationTurnActorMetadata {
   };
 }
 
+function buildSourceRecallCapturePrincipalAccess(
+  session: ConversationSession
+): TaskPrincipalAccessEnvelope | undefined {
+  if (!session.principalContext) {
+    return undefined;
+  }
+  const role = session.principalContext.actor.principalRole;
+  const visibility = session.principalContext.route.visibility;
+  if (visibility === "public") {
+    return requirePrincipalAccessForOperation({
+      principalContext: session.principalContext,
+      operation: "source_recall_capture",
+      accessClass: "shared_public",
+      allowed: true,
+      reason: "public_safe"
+    });
+  }
+  if (role === "owner") {
+    return requirePrincipalAccessForOperation({
+      principalContext: session.principalContext,
+      operation: "source_recall_capture",
+      accessClass: "owner_private",
+      allowed: true,
+      reason: "owner_principal_matched"
+    });
+  }
+  if (role === "operator") {
+    return requirePrincipalAccessForOperation({
+      principalContext: session.principalContext,
+      operation: "source_recall_capture",
+      accessClass: "operator_private",
+      allowed: true,
+      reason: "operator_principal_matched"
+    });
+  }
+  return requirePrincipalAccessForOperation({
+    principalContext: session.principalContext,
+    operation: "source_recall_capture",
+    accessClass: "speaker_private",
+    allowed: true,
+    reason: "speaker_scope_matched"
+  });
+}
+
 /**
  * Finds a job by ID in a session's recent-job ledger.
  *
@@ -299,7 +345,8 @@ export async function recordUserTurnWithSourceRecall(
     },
     policy: options.sourceRecallCapture.policy,
     writer: options.sourceRecallCapture.writer,
-    capturedAt: options.sourceRecallCapture.capturedAt
+    capturedAt: options.sourceRecallCapture.capturedAt,
+    principalAccess: buildSourceRecallCapturePrincipalAccess(session)
   });
   recordedTurn.metadata = {
     ...recordedTurn.metadata,
@@ -421,7 +468,8 @@ export async function recordAssistantTurnWithSourceRecall(
     originParentRefId: session.conversationId,
     policy: options.sourceRecallCapture.policy,
     writer: options.sourceRecallCapture.writer,
-    capturedAt: options.sourceRecallCapture.capturedAt
+    capturedAt: options.sourceRecallCapture.capturedAt,
+    principalAccess: buildSourceRecallCapturePrincipalAccess(session)
   });
   recordedTurn.metadata = {
     ...recordedTurn.metadata,

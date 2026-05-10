@@ -6,7 +6,9 @@ import {
   captureLowerAuthoritySourceRecall,
   type LowerAuthoritySourceRecallCaptureResult
 } from "../../core/sourceRecall/sourceRecallConversationCapture";
+import type { TaskPrincipalAccessEnvelope } from "../../core/types";
 import type { ConversationJob, ConversationSession } from "../sessionStore";
+import { requirePrincipalAccessForOperation } from "../principalRuntime/principalAccess";
 import type { ConversationSourceRecallCaptureDependencies } from "./managerContracts";
 
 export interface CaptureConversationJobSourceRecallInput {
@@ -56,6 +58,7 @@ export async function captureConversationJobSourceRecall(
     const taskSummaryText = normalizeTaskSourceText(input.job.resultSummary ?? "");
     const scopeId = `conversation:${input.session.conversationId}`;
     const threadId = `conversation:${input.session.conversationId}`;
+    const principalAccess = buildJobSourceRecallCapturePrincipalAccess(input.session);
 
     const taskInputResult = taskInputText && !isAgentPulseJob
       ? await captureLowerAuthoritySourceRecall({
@@ -74,7 +77,8 @@ export async function captureConversationJobSourceRecall(
           originParentRefId: input.job.id,
           policy: sourceRecallCapture.policy,
           writer: sourceRecallCapture.writer,
-          capturedAt: sourceRecallCapture.capturedAt
+          capturedAt: sourceRecallCapture.capturedAt,
+          principalAccess
         })
       : null;
 
@@ -95,7 +99,8 @@ export async function captureConversationJobSourceRecall(
           originParentRefId: input.job.id,
           policy: sourceRecallCapture.policy,
           writer: sourceRecallCapture.writer,
-          capturedAt: sourceRecallCapture.capturedAt
+          capturedAt: sourceRecallCapture.capturedAt,
+          principalAccess
         })
       : null;
     const assistantTurnResult = taskSummaryText
@@ -115,7 +120,8 @@ export async function captureConversationJobSourceRecall(
           originParentRefId: input.job.id,
           policy: sourceRecallCapture.policy,
           writer: sourceRecallCapture.writer,
-          capturedAt: sourceRecallCapture.capturedAt
+          capturedAt: sourceRecallCapture.capturedAt,
+          principalAccess
         })
       : null;
 
@@ -141,4 +147,20 @@ export async function captureConversationJobSourceRecall(
  */
 function normalizeTaskSourceText(value: string): string {
   return value.trim();
+}
+
+function buildJobSourceRecallCapturePrincipalAccess(
+  session: ConversationSession
+): TaskPrincipalAccessEnvelope | undefined {
+  const principalContext = session.principalContext;
+  if (!principalContext) {
+    return undefined;
+  }
+  return requirePrincipalAccessForOperation({
+    principalContext,
+    operation: "source_recall_capture",
+    accessClass: principalContext.route.visibility === "public" ? "shared_public" : "session_only",
+    allowed: true,
+    reason: principalContext.route.visibility === "public" ? "public_safe" : "session_only_allowed"
+  });
 }

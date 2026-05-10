@@ -12,6 +12,7 @@ import {
   TelegramGateway,
   type TelegramOutboundDeliveryObservation
 } from "../../src/interfaces/telegramGateway";
+import { buildTelegramMediaSourceRecallScopeId } from "../../src/interfaces/transportRuntime/telegramConversationDispatch";
 import { TelegramInterfaceConfig } from "../../src/interfaces/runtimeConfig";
 import { buildTelegramInterfaceConfigFixture } from "../helpers/conversationFixtures";
 
@@ -115,6 +116,21 @@ test("telegram gateway notifier keeps edit transport when native draft streaming
   assert.equal(notifier.capabilities.supportsNativeStreaming, false);
   assert.equal(typeof notifier.edit, "function");
   assert.equal(notifier.stream, undefined);
+});
+
+test("telegram media Source Recall scope includes sender to avoid same-chat collisions", () => {
+  const firstScope = buildTelegramMediaSourceRecallScopeId({
+    chatId: "shared-chat",
+    userId: "synthetic-user-a"
+  });
+  const secondScope = buildTelegramMediaSourceRecallScopeId({
+    chatId: "shared-chat",
+    userId: "synthetic-user-b"
+  });
+
+  assert.equal(firstScope, "conversation:telegram:shared-chat:synthetic-user-a");
+  assert.equal(secondScope, "conversation:telegram:shared-chat:synthetic-user-b");
+  assert.notEqual(firstScope, secondScope);
 });
 
 test("telegram gateway notifier keeps edit transport when native draft streaming is disallowed", () => {
@@ -370,8 +386,8 @@ test("telegram gateway wires bounded fact-review contracts into conversation man
         return Object.assign(
           [
             {
-              factId: "fact_owen",
-              key: "contact.owen.relationship",
+              factId: "fact_riley",
+              key: "contact.riley.relationship",
               value: "friend",
               status: "confirmed",
               confidence: 0.94,
@@ -400,8 +416,8 @@ test("telegram gateway wires bounded fact-review contracts into conversation man
       correctConversationMemoryFact: async (...args: unknown[]) => {
         captured.correct = args;
         return {
-          factId: "fact_owen",
-          key: "contact.owen.relationship",
+          factId: "fact_riley",
+          key: "contact.riley.relationship",
           value: "coworker",
           status: "confirmed",
           confidence: 0.95,
@@ -413,8 +429,8 @@ test("telegram gateway wires bounded fact-review contracts into conversation man
       forgetConversationMemoryFact: async (...args: unknown[]) => {
         captured.forget = args;
         return {
-          factId: "fact_owen",
-          key: "contact.owen.relationship",
+          factId: "fact_riley",
+          key: "contact.riley.relationship",
           value: "[redacted]",
           status: "superseded",
           confidence: 0.95,
@@ -459,46 +475,46 @@ test("telegram gateway wires bounded fact-review contracts into conversation man
 
   const reviewed = await manager.reviewConversationMemoryFacts?.({
     reviewTaskId: "review_fact_1",
-    query: "what do you remember about Owen?",
+    query: "what do you remember about Riley?",
     nowIso: "2026-03-31T12:10:00.000Z",
     maxFacts: 4
   });
   const corrected = await manager.correctConversationMemoryFact?.({
-    factId: "fact_owen",
+    factId: "fact_riley",
     replacementValue: "coworker",
     nowIso: "2026-03-31T12:11:00.000Z",
     sourceTaskId: "memory_correct_1",
-    sourceText: "/memory fact correct fact_owen coworker",
+    sourceText: "/memory fact correct fact_riley coworker",
     note: "Use the newer wording."
   });
   const forgotten = await manager.forgetConversationMemoryFact?.({
-    factId: "fact_owen",
+    factId: "fact_riley",
     nowIso: "2026-03-31T12:12:00.000Z",
     sourceTaskId: "memory_forget_1",
-    sourceText: "/memory fact forget fact_owen"
+    sourceText: "/memory fact forget fact_riley"
   });
 
   assert.deepEqual(captured.review, [
     "review_fact_1",
-    "what do you remember about Owen?",
+    "what do you remember about Riley?",
     "2026-03-31T12:10:00.000Z",
     4
   ]);
-  assert.equal(reviewed?.[0]?.factId, "fact_owen");
+  assert.equal(reviewed?.[0]?.factId, "fact_riley");
   assert.equal(reviewed?.hiddenDecisionRecords.length, 1);
   assert.deepEqual(captured.correct, [
-    "fact_owen",
+    "fact_riley",
     "coworker",
     "memory_correct_1",
-    "/memory fact correct fact_owen coworker",
+    "/memory fact correct fact_riley coworker",
     "2026-03-31T12:11:00.000Z",
     "Use the newer wording."
   ]);
   assert.equal(corrected?.value, "coworker");
   assert.deepEqual(captured.forget, [
-    "fact_owen",
+    "fact_riley",
     "memory_forget_1",
-    "/memory fact forget fact_owen",
+    "/memory fact forget fact_riley",
     "2026-03-31T12:12:00.000Z"
   ]);
   assert.equal(forgotten?.status, "superseded");

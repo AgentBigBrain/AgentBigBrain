@@ -197,7 +197,8 @@ function allowsSourceRecallContextInjection(
  */
 function buildSourceRecallContextQuery(
   currentUserRequest: string,
-  options: MemoryBrokerBuildInputOptions
+  options: MemoryBrokerBuildInputOptions,
+  task: TaskRequest
 ): Parameters<typeof retrieveSourceRecall>[1] | null {
   const conversationId = options.sessionDomainContext?.conversationId?.trim();
   if (!conversationId) {
@@ -208,7 +209,8 @@ function buildSourceRecallContextQuery(
   return {
     scopeId,
     threadId: scopeId,
-    ...(keywords.length > 0 ? { keywords } : {})
+    ...(keywords.length > 0 ? { keywords } : {}),
+    principalAccess: task.principalAccess
   };
 }
 
@@ -254,6 +256,7 @@ function extractBoundedSourceRecallKeywords(currentUserRequest: string): readonl
  */
 async function buildRouteApprovedSourceRecallContext(input: {
   deps: MemoryBrokerPlannerInputDependencies;
+  task: TaskRequest;
   options: MemoryBrokerBuildInputOptions;
   currentUserRequest: string;
   resolvedRouteMemoryIntent: ProfileMemoryIngestMemoryIntent | null;
@@ -269,7 +272,11 @@ async function buildRouteApprovedSourceRecallContext(input: {
   if (!decideSourceRecallRetrieval(sourceRecall.policy).allowed) {
     return "";
   }
-  const query = buildSourceRecallContextQuery(input.currentUserRequest, input.options);
+  const query = buildSourceRecallContextQuery(
+    input.currentUserRequest,
+    input.options,
+    input.task
+  );
   if (!query) {
     return "";
   }
@@ -500,6 +507,7 @@ export async function buildBrokeredPlannerInput(
     );
     const sourceRecallContext = await buildRouteApprovedSourceRecallContext({
       deps,
+      task,
       options,
       currentUserRequest,
       resolvedRouteMemoryIntent,
@@ -596,6 +604,7 @@ export async function buildBrokeredPlannerInput(
       );
       const sourceRecallContext = await buildRouteApprovedSourceRecallContext({
         deps,
+        task,
         options,
         currentUserRequest,
         resolvedRouteMemoryIntent,
@@ -707,6 +716,7 @@ export async function buildBrokeredPlannerInput(
         : assessedDomainBoundary;
       const sourceRecallContext = await buildRouteApprovedSourceRecallContext({
         deps,
+        task,
         options,
         currentUserRequest,
         resolvedRouteMemoryIntent,
@@ -808,6 +818,7 @@ export async function buildBrokeredPlannerInput(
           })();
     const sourceRecallContext = await buildRouteApprovedSourceRecallContext({
       deps,
+      task,
       options,
       currentUserRequest,
       resolvedRouteMemoryIntent,
