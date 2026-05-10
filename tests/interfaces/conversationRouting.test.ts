@@ -14,6 +14,7 @@ import {
   createFollowUpRuleContext,
   normalizeAssistantTurnText
 } from "../../src/interfaces/conversationManagerHelpers";
+import { buildConversationControllerMetadata } from "../../src/interfaces/conversationSessionMutations";
 import {
   routeConversationMessageInput,
   type ConversationRoutingDependencies
@@ -28,6 +29,8 @@ import {
   buildConversationBrowserSessionFixture,
   buildConversationJobFixture
 } from "../helpers/conversationFixtures";
+import { derivePrincipalContextFromIngress } from "../../src/interfaces/principalRuntime/principalAccess";
+import { createOwnerOperatorPrincipalConfigFromEnv } from "../../src/interfaces/principalRuntime/principalConfig";
 
 function buildSession(overrides: Partial<ConversationSession> = {}): ConversationSession {
   return {
@@ -41,6 +44,22 @@ function buildSession(overrides: Partial<ConversationSession> = {}): Conversatio
     }),
     ...overrides
   };
+}
+
+function attachOwnerPrincipal(session: ConversationSession, userId: string): void {
+  const principalConfig = createOwnerOperatorPrincipalConfigFromEnv({
+    BRAIN_PRINCIPAL_HMAC_KEY: "test-principal-hmac-key",
+    BRAIN_OWNER_TELEGRAM_USER_IDS: userId
+  });
+  session.principalContext = derivePrincipalContextFromIngress({
+    provider: "telegram",
+    conversationId: "chat-1",
+    userId,
+    username: "synthetic",
+    conversationVisibility: "private",
+    receivedAt: "2026-03-11T18:05:00.000Z",
+    principalConfig
+  });
 }
 
 function buildQueuedJob(input: string, executionInput: string): ConversationJob {
@@ -474,6 +493,50 @@ test("routeConversationMessageInput persists build-format clarification and reso
   assert.ok(capturedExecutionInput.includes("Execution lane: static_html_build."));
   assert.equal(session.modeContinuity?.activeMode, "static_html_build");
   assert.equal(session.modeContinuity?.source, "clarification_answer");
+});
+
+test("routeConversationMessageInput blocks clarification answers from a different principal", async () => {
+  const session = buildSession();
+  attachOwnerPrincipal(session, "owner-a");
+  session.activeClarification = {
+    id: "clarification-build-format",
+    kind: "build_format",
+    sourceInput: "Build a static product page.",
+    question: "Would you like that built as plain HTML, or as a framework app like Next.js or React?",
+    requestedAt: "2026-03-11T18:05:00.000Z",
+    matchedRuleId: "clarify_build_format",
+    renderingIntent: "build_format",
+    riskClass: "medium",
+    options: [
+      {
+        id: "static_html",
+        label: "Plain HTML"
+      },
+      {
+        id: "nextjs",
+        label: "Next.js"
+      },
+      {
+        id: "react",
+        label: "React"
+      }
+    ],
+    controller: buildConversationControllerMetadata(session)
+  };
+  attachOwnerPrincipal(session, "owner-b");
+
+  const result = await routeConversationMessageInput(
+    session,
+    "Plain HTML.",
+    "2026-03-11T18:05:10.000Z",
+    buildDependencies(() => {
+      throw new Error("enqueueJob should not run for a mismatched clarification controller");
+    })
+  );
+
+  assert.equal(result.shouldStartWorker, false);
+  assert.equal(result.reply, "That clarification is waiting for the person who started it.");
+  assert.equal(session.activeClarification?.id, "clarification-build-format");
 });
 
 test("routeConversationMessageInput can render build-format clarification wording naturally while keeping deterministic options", async () => {

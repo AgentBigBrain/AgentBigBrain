@@ -119,7 +119,7 @@ interface PushConversationTurnOptions {
   actor?: ConversationTurnActorMetadata | null;
 }
 
-function buildUserTurnActorMetadata(
+export function buildUserTurnActorMetadata(
   session: ConversationSession
 ): ConversationTurnActorMetadata | null {
   const principalContext = session.principalContext;
@@ -160,7 +160,7 @@ function buildAssistantTurnActorMetadata(
   };
 }
 
-function buildRecoveredTurnActorMetadata(): ConversationTurnActorMetadata {
+export function buildRecoveredTurnActorMetadata(): ConversationTurnActorMetadata {
   return {
     source: "legacy_recovery",
     principalRole: "legacy_unknown",
@@ -172,6 +172,31 @@ function buildRecoveredTurnActorMetadata(): ConversationTurnActorMetadata {
     ownerMatchSource: "legacy_unknown",
     displayNameHint: null
   };
+}
+
+export function buildConversationControllerMetadata(
+  session: ConversationSession
+): ConversationTurnActorMetadata {
+  return buildUserTurnActorMetadata(session) ?? buildRecoveredTurnActorMetadata();
+}
+
+export function canCurrentSessionControlRecord(
+  session: ConversationSession,
+  controller: ConversationTurnActorMetadata | null | undefined
+): boolean {
+  const current = buildConversationControllerMetadata(session);
+  if (!controller) {
+    return current.legacyIdentityState === "legacy_actor_unknown";
+  }
+  if (
+    controller.legacyIdentityState === "legacy_actor_unknown" ||
+    controller.principalRole === "legacy_unknown"
+  ) {
+    return current.legacyIdentityState === "legacy_actor_unknown";
+  }
+  const controllerPrincipal = controller.principalIdHash ?? controller.providerUserIdHash ?? null;
+  const currentPrincipal = current.principalIdHash ?? current.providerUserIdHash ?? null;
+  return Boolean(controllerPrincipal && currentPrincipal && controllerPrincipal === currentPrincipal);
 }
 
 function buildSourceRecallCapturePrincipalAccess(
@@ -718,7 +743,10 @@ export function setActiveClarification(
   session: ConversationSession,
   clarification: ActiveClarificationState
 ): void {
-  session.activeClarification = clarification;
+  session.activeClarification = {
+    ...clarification,
+    controller: clarification.controller ?? buildConversationControllerMetadata(session)
+  };
 }
 
 /**

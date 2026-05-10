@@ -28,6 +28,7 @@ import {
 import { normalizeAgentPulseSessionState } from "./sessionPulseNormalization";
 import { normalizeConversationTransportIdentity } from "./transportIdentity";
 import { normalizePrincipalContext } from "../principalRuntime/principalAccess";
+import { normalizeConversationTurnActorMetadata } from "./sessionNormalizationTurnActorMetadata";
 
 /**
  * Normalizes one persisted conversation session into the stable runtime shape.
@@ -56,7 +57,8 @@ export function normalizeSession(raw: Partial<ConversationSession>): Conversatio
           currentInput: raw.activeProposal.currentInput,
           createdAt: raw.activeProposal.createdAt,
           updatedAt: raw.activeProposal.updatedAt,
-          status: raw.activeProposal.status
+          status: raw.activeProposal.status,
+          controller: normalizeConversationTurnActorMetadata(raw.activeProposal.controller)
         }
       : null;
 

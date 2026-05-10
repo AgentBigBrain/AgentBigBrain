@@ -23,6 +23,7 @@ import { buildLocalIntentSessionHints } from "./conversationRoutingSupport";
 import { routeProposalReplyInterpretationModel } from "../../organs/languageUnderstanding/localIntentModelRouter";
 import type { ProposalReplyInterpretationSignal } from "../../organs/languageUnderstanding/localIntentModelProposalReplyContracts";
 import {
+  canCurrentSessionControlRecord,
   recordAssistantTurnWithSourceRecall
 } from "../conversationSessionMutations";
 import {
@@ -43,6 +44,8 @@ const PROPOSAL_REPLY_SHELL_PATTERN =
   /(?:^|\s)(?:npm|npx|pnpm|yarn|git|pwsh|powershell|cmd|bash|python|node)\b/i;
 const PULSE_INTERPRETATION_HINT_PATTERN =
   /\b(pulse|check[- ]?in|check in|notifications?|reminders?|nudges?|pings?)\b/i;
+const PROPOSAL_CONTROLLER_MISMATCH_REPLY =
+  "That draft is waiting for the person who started it.";
 
 /**
  * Validates a model-proposed draft adjustment payload against bounded deterministic safety rules.
@@ -191,6 +194,9 @@ export function approveProposal(
   const active = session.activeProposal;
   if (!active) {
     return "No active draft to approve. Use /propose <task> first.";
+  }
+  if (!canCurrentSessionControlRecord(session, active.controller)) {
+    return PROPOSAL_CONTROLLER_MISMATCH_REPLY;
   }
 
   active.status = "approved";

@@ -226,6 +226,7 @@ export interface PendingProposal {
   createdAt: string;
   updatedAt: string;
   status: ProposalStatus;
+  controller?: ConversationTurnActorMetadata | null;
 }
 
 export type ClarificationOptionId =
@@ -266,6 +267,7 @@ export interface ActiveClarificationState {
   promptFingerprint?: string;
   recoveryInstruction?: string | null;
   options: readonly ActiveClarificationOption[];
+  controller?: ConversationTurnActorMetadata | null;
 }
 
 export interface ConversationModeContinuityState {

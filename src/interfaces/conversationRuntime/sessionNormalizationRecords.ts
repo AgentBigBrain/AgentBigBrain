@@ -19,6 +19,7 @@ import type {
 import type { PulseSystemJobMetadata } from "../proactiveRuntime/pulseAuthorityGateway";
 import type { RecoveryFailureClass } from "../../core/autonomy/contracts";
 import { normalizeConversationTurnMetadata } from "./sessionNormalizationTurnMetadata";
+import { normalizeConversationTurnActorMetadata } from "./sessionNormalizationTurnActorMetadata";
 export {
   normalizeActiveWorkspaceRecord,
   normalizeBrowserSessionRecord,
@@ -226,7 +227,8 @@ export function normalizeActiveClarification(
       ? candidate.options
           .map((option) => normalizeClarificationOption(option as Partial<ActiveClarificationOption>))
           .filter((option): option is ActiveClarificationOption => option !== null)
-      : []
+      : [],
+    controller: normalizeConversationTurnActorMetadata(candidate.controller)
   };
 }
 
