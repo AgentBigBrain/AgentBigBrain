@@ -11,6 +11,10 @@ import {
   createSourceRecallRuntimeConfigFromEnv,
   type SourceRecallRuntimeConfig
 } from "../core/sourceRecall/sourceRecallRetention";
+import {
+  createOwnerOperatorPrincipalConfigFromEnv,
+  type OwnerOperatorPrincipalConfig
+} from "./principalRuntime/principalConfig";
 
 export type InterfaceProvider = "telegram" | "discord";
 export type InterfaceProviderSelection = InterfaceProvider | "both";
@@ -32,6 +36,7 @@ export interface SharedInterfaceSecurityConfig {
   showCompletionPrefix: boolean;
   followUpOverridePath: string | null;
   pulseLexicalOverridePath: string | null;
+  principalConfig?: OwnerOperatorPrincipalConfig;
   allowAutonomousViaInterface: boolean;
   enableDynamicPulse: boolean;
   invocation: {
@@ -375,6 +380,7 @@ function buildSharedSecurityConfig(env: NodeJS.ProcessEnv): SharedInterfaceSecur
     ),
     followUpOverridePath,
     pulseLexicalOverridePath,
+    principalConfig: createOwnerOperatorPrincipalConfigFromEnv(env),
     allowAutonomousViaInterface: parseBoolean(env.BRAIN_ALLOW_AUTONOMOUS_VIA_INTERFACE, false),
     enableDynamicPulse: parseBoolean(env.BRAIN_ENABLE_DYNAMIC_PULSE, false),
     invocation: {
