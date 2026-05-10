@@ -3,6 +3,9 @@
  */
 
 import assert from "node:assert/strict";
+import { mkdtemp, rm } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { test } from "node:test";
 
 import type { ProfileMemoryStore } from "../../src/core/profileMemoryStore";
@@ -31,7 +34,7 @@ function wrapResolvedMemoryRoute(userInput: string): string {
 function buildOwnerTask(id: string, userInput: string): TaskRequest {
   const principalConfig = createOwnerOperatorPrincipalConfigFromEnv({
     BRAIN_PRINCIPAL_HMAC_KEY: "test-principal-hmac-key",
-    BRAIN_OWNER_TELEGRAM_USER_IDS: "owner-user-1"
+    BRAIN_OWNER_TELEGRAM_USER_IDS: "synthetic-provider-principal"
   });
   return {
     id,
@@ -42,7 +45,7 @@ function buildOwnerTask(id: string, userInput: string): TaskRequest {
       derivePrincipalContextFromIngress({
         provider: "telegram",
         conversationId: "chat-1",
-        userId: "owner-user-1",
+        userId: "synthetic-provider-principal",
         username: "owner",
         conversationVisibility: "private",
         receivedAt: "2026-05-10T12:00:00.000Z",
@@ -70,6 +73,18 @@ class PrincipalAwareBrokerStore {
       queryFactsForPlanningContext: () => [],
       queryEpisodesForPlanningContext: () => []
     };
+  }
+}
+
+async function withAuditStore(
+  callback: (store: MemoryAccessAuditStore) => Promise<void>
+): Promise<void> {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-broker-principal-audit-"));
+  const auditStore = new MemoryAccessAuditStore(path.join(tempDir, "memory_access_log.json"));
+  try {
+    await callback(auditStore);
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
   }
 }
 
@@ -110,4 +125,28 @@ test("broker may inject owner profile memory for owner-principal task", async ()
   assert.match(result.userInput, /identity\.preferred_name: Sample/);
   assert.equal(store.ingestCalls, 1);
   assert.equal(store.readSessionCalls, 1);
+});
+
+test("broker audit records redacted principal access labels", async () => {
+  await withAuditStore(async (auditStore) => {
+    const store = new PrincipalAwareBrokerStore();
+    const broker = new MemoryBrokerOrgan(store as unknown as ProfileMemoryStore, auditStore);
+
+    await broker.buildPlannerInput(
+      buildOwnerTask("task_owner_principal_memory_audit", "who is the saved contact?")
+    );
+
+    const document = await auditStore.load();
+    assert.equal(document.events.length, 1);
+    const [event] = document.events;
+    assert.equal(event.principalRole, "owner");
+    assert.equal(event.routeVisibility, "private");
+    assert.equal(event.accessOperation, "task_execution");
+    assert.equal(event.accessClass, "owner_private");
+    assert.equal(event.accessAllowed, true);
+    assert.equal(event.accessReason, "owner_principal_matched");
+    assert.equal(event.identityAuthority, "configured_owner_provider_user_id");
+    assert.equal(event.legacyIdentityState, "principal_verified");
+    assert.equal(event.ownerMatchSource, "provider_user_id");
+  });
 });

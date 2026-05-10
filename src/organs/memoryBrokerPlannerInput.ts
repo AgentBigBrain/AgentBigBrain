@@ -3,7 +3,10 @@
  */
 
 import { ProfileMemoryStore } from "../core/profileMemoryStore";
-import { MemoryAccessAuditStore } from "../core/memoryAccessAudit";
+import {
+  MemoryAccessAuditStore,
+  type MemoryAccessPrincipalAuditSnapshot
+} from "../core/memoryAccessAudit";
 import { LanguageUnderstandingOrgan } from "./languageUnderstanding/episodeExtraction";
 import type { SourceRecallOutputBudget } from "../core/sourceRecall/contracts";
 import {
@@ -443,6 +446,36 @@ function evaluateBrokerOwnerProfileAccess(
   });
 }
 
+function buildTaskPrincipalAuditSnapshot(
+  task: TaskRequest
+): MemoryAccessPrincipalAuditSnapshot | undefined {
+  const principalAccess = task.principalAccess;
+  if (
+    !principalAccess ||
+    !principalAccess.principalContext ||
+    typeof principalAccess.principalContext.actor !== "object" ||
+    principalAccess.principalContext.actor === null ||
+    typeof principalAccess.principalContext.route !== "object" ||
+    principalAccess.principalContext.route === null
+  ) {
+    return undefined;
+  }
+  const actor = principalAccess.principalContext.actor as Record<string, unknown>;
+  const route = principalAccess.principalContext.route as Record<string, unknown>;
+  return {
+    principalRole: actor.principalRole as MemoryAccessPrincipalAuditSnapshot["principalRole"],
+    routeVisibility: route.visibility as MemoryAccessPrincipalAuditSnapshot["routeVisibility"],
+    accessOperation: principalAccess.accessDecision.operation,
+    accessClass: principalAccess.accessDecision
+      .accessClass as MemoryAccessPrincipalAuditSnapshot["accessClass"],
+    accessAllowed: principalAccess.accessDecision.allowed,
+    accessReason: principalAccess.accessDecision.reason,
+    identityAuthority: actor.identityAuthority as MemoryAccessPrincipalAuditSnapshot["identityAuthority"],
+    legacyIdentityState: actor.legacyIdentityState as MemoryAccessPrincipalAuditSnapshot["legacyIdentityState"],
+    ownerMatchSource: actor.ownerMatchSource as MemoryAccessPrincipalAuditSnapshot["ownerMatchSource"]
+  };
+}
+
 /**
  * Builds brokered planner input while keeping the entrypoint free of orchestration detail.
  *
@@ -504,6 +537,7 @@ export async function buildBrokeredPlannerInput(
     const requestTelemetry = createProfileMemoryRequestTelemetry();
     const brokerReadAccess = evaluateBrokerOwnerProfileAccess(task, "profile_read");
     const brokerWriteAccess = evaluateBrokerOwnerProfileAccess(task, "profile_write");
+    const principalAudit = buildTaskPrincipalAuditSnapshot(task);
     const sourceFingerprint = buildProfileMemorySourceFingerprint(currentUserRequest);
     const conversationId = options.sessionDomainContext?.conversationId;
     const mediaIngest = parseProfileMediaIngestInput(currentUserRequest);
@@ -578,7 +612,8 @@ export async function buildBrokeredPlannerInput(
         0,
         0,
         0,
-        domainBoundary
+        domainBoundary,
+        principalAudit
       );
       if (sourceRecallContext.trim().length > 0) {
         return {
@@ -692,7 +727,8 @@ export async function buildBrokeredPlannerInput(
         0,
         0,
         0,
-        domainBoundary
+        domainBoundary,
+        principalAudit
       );
       if (probing.assessment.detected) {
         await recordProbingAudit(
@@ -704,10 +740,11 @@ export async function buildBrokeredPlannerInput(
           requestTelemetry.storeLoadCount,
           0,
           0,
-          0,
-          domainBoundary,
-          probing.assessment
-        );
+        0,
+        domainBoundary,
+        probing.assessment,
+        principalAudit
+      );
       }
       if (
         sourceRecallContext.trim().length > 0 &&
@@ -800,7 +837,8 @@ export async function buildBrokeredPlannerInput(
       retrievedCount,
       retrievedEpisodeCount,
       redactedCount,
-      domainBoundary
+      domainBoundary,
+      principalAudit
     );
     if (probing.assessment.detected) {
       await recordProbingAudit(
@@ -812,10 +850,11 @@ export async function buildBrokeredPlannerInput(
         requestTelemetry.storeLoadCount,
         retrievedCount,
         retrievedEpisodeCount,
-        redactedCount,
-        domainBoundary,
-        probing.assessment
-      );
+      redactedCount,
+      domainBoundary,
+      probing.assessment,
+      principalAudit
+    );
     }
 
     if (promptCutoverGate.decision === "block") {
@@ -913,7 +952,8 @@ async function recordAudit(
   retrievedCount: number,
   retrievedEpisodeCount: number,
   redactedCount: number,
-  domainBoundary: DomainBoundaryAssessment
+  domainBoundary: DomainBoundaryAssessment,
+  principalAudit?: MemoryAccessPrincipalAuditSnapshot
 ): Promise<void> {
   await appendMemoryAccessAudit(
     memoryAccessAuditStore,
@@ -932,6 +972,7 @@ async function recordAudit(
       promptMemoryOwnerCount: requestTelemetry.promptMemoryOwnerCount,
       promptMemorySurfaceCount: requestTelemetry.promptMemorySurfaceCount,
       mixedMemoryOwnerDecisionCount: requestTelemetry.mixedMemoryOwnerDecisionCount,
+      principalAudit,
       promptCutoverGateDecision: promptCutoverGate.decision,
       promptCutoverGateReasons: promptCutoverGate.reasons
     }
@@ -950,7 +991,8 @@ async function recordProbingAudit(
   retrievedEpisodeCount: number,
   redactedCount: number,
   domainBoundary: DomainBoundaryAssessment,
-  probingAssessment: ReturnType<typeof registerAndAssessProbing>["assessment"]
+  probingAssessment: ReturnType<typeof registerAndAssessProbing>["assessment"],
+  principalAudit?: MemoryAccessPrincipalAuditSnapshot
 ): Promise<void> {
   await appendMemoryAccessAudit(
     memoryAccessAuditStore,
@@ -970,6 +1012,7 @@ async function recordProbingAudit(
       promptMemoryOwnerCount: requestTelemetry.promptMemoryOwnerCount,
       promptMemorySurfaceCount: requestTelemetry.promptMemorySurfaceCount,
       mixedMemoryOwnerDecisionCount: requestTelemetry.mixedMemoryOwnerDecisionCount,
+      principalAudit,
       promptCutoverGateDecision: promptCutoverGate.decision,
       promptCutoverGateReasons: promptCutoverGate.reasons,
       retrievedEpisodeCount,

@@ -23,6 +23,63 @@ export type MemoryAccessDomainLane =
 
 export type MemoryAccessAuditEventType = "retrieval" | "PROBING_DETECTED";
 export type MemoryAccessCutoverGateDecision = "allow" | "block";
+export type MemoryAccessAuditPrincipalRole =
+  | "owner"
+  | "operator"
+  | "allowed_user"
+  | "conversation_participant"
+  | "external_agent"
+  | "runtime_continuation"
+  | "local_operator"
+  | "legacy_unknown"
+  | "unknown";
+export type MemoryAccessAuditRouteVisibility = "private" | "public" | "unknown";
+export type MemoryAccessAuditAccessClass =
+  | "owner_private"
+  | "operator_private"
+  | "speaker_private"
+  | "shared_public"
+  | "session_only"
+  | "workspace_local"
+  | "agent_global_safe"
+  | "external_agent_limited"
+  | "runtime_continuation_limited"
+  | "review_only"
+  | "blocked";
+export type MemoryAccessAuditIdentityAuthority =
+  | "configured_owner_provider_user_id"
+  | "configured_operator_provider_user_id"
+  | "allowlisted_provider_user_id"
+  | "allowlisted_username"
+  | "external_agent_contract"
+  | "runtime_inherited"
+  | "transport_hint"
+  | "legacy_unknown";
+export type MemoryAccessAuditLegacyIdentityState =
+  | "principal_verified"
+  | "legacy_actor_unknown"
+  | "legacy_global_memory"
+  | "runtime_continuation_missing_origin"
+  | "external_agent_limited"
+  | "test_override";
+export type MemoryAccessAuditOwnerMatchSource =
+  | "provider_user_id"
+  | "local_operator_trusted_mode"
+  | "operator_provider_user_id"
+  | "none"
+  | "legacy_unknown";
+
+export interface MemoryAccessPrincipalAuditSnapshot {
+  principalRole: MemoryAccessAuditPrincipalRole;
+  routeVisibility: MemoryAccessAuditRouteVisibility;
+  accessOperation: string;
+  accessClass: MemoryAccessAuditAccessClass;
+  accessAllowed: boolean;
+  accessReason: string;
+  identityAuthority: MemoryAccessAuditIdentityAuthority;
+  legacyIdentityState: MemoryAccessAuditLegacyIdentityState;
+  ownerMatchSource: MemoryAccessAuditOwnerMatchSource;
+}
 
 export interface MemoryAccessAuditEvent {
   id: string;
@@ -42,6 +99,15 @@ export interface MemoryAccessAuditEvent {
   identitySafetyDecisionCount?: number;
   selfIdentityParityCheckCount?: number;
   selfIdentityParityMismatchCount?: number;
+  principalRole?: MemoryAccessAuditPrincipalRole;
+  routeVisibility?: MemoryAccessAuditRouteVisibility;
+  accessOperation?: string;
+  accessClass?: MemoryAccessAuditAccessClass;
+  accessAllowed?: boolean;
+  accessReason?: string;
+  identityAuthority?: MemoryAccessAuditIdentityAuthority;
+  legacyIdentityState?: MemoryAccessAuditLegacyIdentityState;
+  ownerMatchSource?: MemoryAccessAuditOwnerMatchSource;
   promptCutoverGateDecision?: MemoryAccessCutoverGateDecision;
   promptCutoverGateReasons?: string[];
   retrievedCount: number;
@@ -79,6 +145,7 @@ interface AppendMemoryAccessAuditInput {
   identitySafetyDecisionCount?: number;
   selfIdentityParityCheckCount?: number;
   selfIdentityParityMismatchCount?: number;
+  principalAudit?: MemoryAccessPrincipalAuditSnapshot;
   promptCutoverGateDecision?: MemoryAccessCutoverGateDecision;
   promptCutoverGateReasons?: readonly string[];
   retrievedCount: number;
@@ -150,6 +217,82 @@ function isMemoryAccessAuditEventType(value: unknown): value is MemoryAccessAudi
  */
 function isMemoryAccessCutoverGateDecision(value: unknown): value is MemoryAccessCutoverGateDecision {
   return value === "allow" || value === "block";
+}
+
+function isMemoryAccessAuditPrincipalRole(value: unknown): value is MemoryAccessAuditPrincipalRole {
+  return (
+    value === "owner" ||
+    value === "operator" ||
+    value === "allowed_user" ||
+    value === "conversation_participant" ||
+    value === "external_agent" ||
+    value === "runtime_continuation" ||
+    value === "local_operator" ||
+    value === "legacy_unknown" ||
+    value === "unknown"
+  );
+}
+
+function isMemoryAccessAuditRouteVisibility(
+  value: unknown
+): value is MemoryAccessAuditRouteVisibility {
+  return value === "private" || value === "public" || value === "unknown";
+}
+
+function isMemoryAccessAuditAccessClass(value: unknown): value is MemoryAccessAuditAccessClass {
+  return (
+    value === "owner_private" ||
+    value === "operator_private" ||
+    value === "speaker_private" ||
+    value === "shared_public" ||
+    value === "session_only" ||
+    value === "workspace_local" ||
+    value === "agent_global_safe" ||
+    value === "external_agent_limited" ||
+    value === "runtime_continuation_limited" ||
+    value === "review_only" ||
+    value === "blocked"
+  );
+}
+
+function isMemoryAccessAuditIdentityAuthority(
+  value: unknown
+): value is MemoryAccessAuditIdentityAuthority {
+  return (
+    value === "configured_owner_provider_user_id" ||
+    value === "configured_operator_provider_user_id" ||
+    value === "allowlisted_provider_user_id" ||
+    value === "allowlisted_username" ||
+    value === "external_agent_contract" ||
+    value === "runtime_inherited" ||
+    value === "transport_hint" ||
+    value === "legacy_unknown"
+  );
+}
+
+function isMemoryAccessAuditLegacyIdentityState(
+  value: unknown
+): value is MemoryAccessAuditLegacyIdentityState {
+  return (
+    value === "principal_verified" ||
+    value === "legacy_actor_unknown" ||
+    value === "legacy_global_memory" ||
+    value === "runtime_continuation_missing_origin" ||
+    value === "external_agent_limited" ||
+    value === "test_override"
+  );
+}
+
+function isMemoryAccessAuditOwnerMatchSource(
+  value: unknown
+): value is MemoryAccessAuditOwnerMatchSource {
+  return (
+    value === "provider_user_id" ||
+    value === "local_operator_trusted_mode" ||
+    value === "operator_provider_user_id" ||
+    value === "none" ||
+    value === "legacy_unknown"
+  );
 }
 
 /**
@@ -268,6 +411,53 @@ function normalizeCutoverGateReasons(value: unknown): string[] {
   return normalizeProbeSignals(value);
 }
 
+function normalizeAuditLabel(value: unknown): string | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  if (!/^[a-z][a-z0-9_:-]{0,80}$/i.test(trimmed)) {
+    return undefined;
+  }
+  return trimmed;
+}
+
+function normalizePrincipalAuditSnapshot(
+  value: unknown
+): MemoryAccessPrincipalAuditSnapshot | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+  const raw = value as Partial<MemoryAccessPrincipalAuditSnapshot>;
+  if (
+    !isMemoryAccessAuditPrincipalRole(raw.principalRole) ||
+    !isMemoryAccessAuditRouteVisibility(raw.routeVisibility) ||
+    !isMemoryAccessAuditAccessClass(raw.accessClass) ||
+    typeof raw.accessAllowed !== "boolean" ||
+    !isMemoryAccessAuditIdentityAuthority(raw.identityAuthority) ||
+    !isMemoryAccessAuditLegacyIdentityState(raw.legacyIdentityState) ||
+    !isMemoryAccessAuditOwnerMatchSource(raw.ownerMatchSource)
+  ) {
+    return undefined;
+  }
+  const accessOperation = normalizeAuditLabel(raw.accessOperation);
+  const accessReason = normalizeAuditLabel(raw.accessReason);
+  if (!accessOperation || !accessReason) {
+    return undefined;
+  }
+  return {
+    principalRole: raw.principalRole,
+    routeVisibility: raw.routeVisibility,
+    accessOperation,
+    accessClass: raw.accessClass,
+    accessAllowed: raw.accessAllowed,
+    accessReason,
+    identityAuthority: raw.identityAuthority,
+    legacyIdentityState: raw.legacyIdentityState,
+    ownerMatchSource: raw.ownerMatchSource
+  };
+}
+
 /**
  * Computes a deterministic fingerprint for query.
  *
@@ -324,6 +514,17 @@ function coerceMemoryAccessAuditDocument(input: unknown): MemoryAccessAuditDocum
       const sourceRecallQueryHash = normalizeSourceRecallQueryHash(raw.sourceRecallQueryHash);
       const sourceRecallSourceRecordIds = normalizeAuditIdList(raw.sourceRecallSourceRecordIds);
       const sourceRecallChunkIds = normalizeAuditIdList(raw.sourceRecallChunkIds);
+      const principalAudit = normalizePrincipalAuditSnapshot({
+        principalRole: raw.principalRole,
+        routeVisibility: raw.routeVisibility,
+        accessOperation: raw.accessOperation,
+        accessClass: raw.accessClass,
+        accessAllowed: raw.accessAllowed,
+        accessReason: raw.accessReason,
+        identityAuthority: raw.identityAuthority,
+        legacyIdentityState: raw.legacyIdentityState,
+        ownerMatchSource: raw.ownerMatchSource
+      });
       const hasSourceRecallAudit =
         Boolean(sourceRecallQueryHash) ||
         sourceRecallSourceRecordIds.length > 0 ||
@@ -353,6 +554,15 @@ function coerceMemoryAccessAuditDocument(input: unknown): MemoryAccessAuditDocum
         identitySafetyDecisionCount: toNonNegativeInteger(raw.identitySafetyDecisionCount),
         selfIdentityParityCheckCount: toNonNegativeInteger(raw.selfIdentityParityCheckCount),
         selfIdentityParityMismatchCount: toNonNegativeInteger(raw.selfIdentityParityMismatchCount),
+        principalRole: principalAudit?.principalRole,
+        routeVisibility: principalAudit?.routeVisibility,
+        accessOperation: principalAudit?.accessOperation,
+        accessClass: principalAudit?.accessClass,
+        accessAllowed: principalAudit?.accessAllowed,
+        accessReason: principalAudit?.accessReason,
+        identityAuthority: principalAudit?.identityAuthority,
+        legacyIdentityState: principalAudit?.legacyIdentityState,
+        ownerMatchSource: principalAudit?.ownerMatchSource,
         promptCutoverGateDecision: isMemoryAccessCutoverGateDecision(raw.promptCutoverGateDecision)
           ? raw.promptCutoverGateDecision
           : "allow",
@@ -444,6 +654,7 @@ export class MemoryAccessAuditStore {
       const sourceRecallQueryHash = normalizeSourceRecallQueryHash(input.sourceRecallQueryHash);
       const sourceRecallSourceRecordIds = normalizeAuditIdList(input.sourceRecallSourceRecordIds);
       const sourceRecallChunkIds = normalizeAuditIdList(input.sourceRecallChunkIds);
+      const principalAudit = normalizePrincipalAuditSnapshot(input.principalAudit);
       const hasSourceRecallAudit =
         Boolean(sourceRecallQueryHash) ||
         sourceRecallSourceRecordIds.length > 0 ||
@@ -466,6 +677,15 @@ export class MemoryAccessAuditStore {
         identitySafetyDecisionCount: toNonNegativeInteger(input.identitySafetyDecisionCount),
         selfIdentityParityCheckCount: toNonNegativeInteger(input.selfIdentityParityCheckCount),
         selfIdentityParityMismatchCount: toNonNegativeInteger(input.selfIdentityParityMismatchCount),
+        principalRole: principalAudit?.principalRole,
+        routeVisibility: principalAudit?.routeVisibility,
+        accessOperation: principalAudit?.accessOperation,
+        accessClass: principalAudit?.accessClass,
+        accessAllowed: principalAudit?.accessAllowed,
+        accessReason: principalAudit?.accessReason,
+        identityAuthority: principalAudit?.identityAuthority,
+        legacyIdentityState: principalAudit?.legacyIdentityState,
+        ownerMatchSource: principalAudit?.ownerMatchSource,
         promptCutoverGateDecision: isMemoryAccessCutoverGateDecision(input.promptCutoverGateDecision)
           ? input.promptCutoverGateDecision
           : "allow",
