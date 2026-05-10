@@ -1,9 +1,13 @@
 /**
- * @fileoverview Bounded current-user name-reference grounding for direct conversation prompts.
+ * @fileoverview Current-speaker name resolution for direct conversation prompts.
  */
 
 import type { ProfileMemoryRequestTelemetry } from "../../core/profileMemoryRuntime/contracts";
 import { recordProfileMemoryRenderOperation } from "../../core/profileMemoryRuntime/profileMemoryRequestTelemetry";
+import {
+  resolveCurrentSpeakerNameResolution,
+  type NameResolutionFact
+} from "../principalRuntime/nameResolution";
 import type { ConversationSession } from "../sessionStore";
 import type { QueryConversationContinuityFacts } from "./managerContracts";
 import {
@@ -15,132 +19,10 @@ import {
   selectConversationTransportIdentityNameHint
 } from "./transportIdentity";
 
-interface CurrentUserIdentityReferenceCandidate {
-  value: string;
-  source: string;
-  confidence: string;
-}
-
-/**
- * Normalizes one identity surface into comparison tokens for exact current-speaker alias checks.
- *
- * @param value - Identity surface from profile facts, transport display names, or user wording.
- * @returns Stable lower-case token sequence.
- */
-function tokenizeCurrentUserIdentityReference(value: string): readonly string[] {
-  return value
-    .normalize("NFKC")
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}]+/gu, " ")
-    .trim()
-    .split(/\s+/)
-    .filter((token) => token.length > 0);
-}
-
-/**
- * Returns whether `candidateTokens` appears as a contiguous token sequence in `inputTokens`.
- *
- * @param inputTokens - Current user-request tokens.
- * @param candidateTokens - Current-speaker identity candidate tokens.
- * @returns `true` when the candidate is explicitly present in the current request.
- */
-function hasCurrentUserIdentityTokenSequence(
-  inputTokens: readonly string[],
-  candidateTokens: readonly string[]
-): boolean {
-  if (candidateTokens.length === 0 || candidateTokens.length > inputTokens.length) {
-    return false;
-  }
-  for (let index = 0; index <= inputTokens.length - candidateTokens.length; index += 1) {
-    if (candidateTokens.every((token, offset) => inputTokens[index + offset] === token)) {
-      return true;
-    }
-  }
-  return false;
-}
-
-/**
- * Adds a candidate once, preserving insertion order for stronger identity sources.
- *
- * @param target - Candidate list under construction.
- * @param seen - Normalized candidate values already added.
- * @param candidate - Candidate to add.
- */
-function pushCurrentUserIdentityReferenceCandidate(
-  target: CurrentUserIdentityReferenceCandidate[],
-  seen: Set<string>,
-  candidate: CurrentUserIdentityReferenceCandidate | null
-): void {
-  if (!candidate) {
-    return;
-  }
-  const normalizedValue = candidate.value.replace(/\s+/g, " ").trim();
-  if (!normalizedValue) {
-    return;
-  }
-  const signature = tokenizeCurrentUserIdentityReference(normalizedValue).join(" ");
-  if (!signature || seen.has(signature)) {
-    return;
-  }
-  seen.add(signature);
-  target.push({
-    ...candidate,
-    value: normalizedValue
-  });
-}
-
-/**
- * Collects bounded current-speaker identity aliases from confirmed facts and transport metadata.
- *
- * @param context - Resolved direct-chat identity context.
- * @returns Ordered current-user identity reference candidates.
- */
-function collectCurrentUserIdentityReferenceCandidates(
-  context: Pick<
-    Awaited<ReturnType<typeof resolveSelfIdentityRecallContext>>,
-    "identityFacts" | "transportHint"
-  >
-): readonly CurrentUserIdentityReferenceCandidate[] {
-  const candidates: CurrentUserIdentityReferenceCandidate[] = [];
-  const seen = new Set<string>();
-  for (const fact of context.identityFacts) {
-    pushCurrentUserIdentityReferenceCandidate(candidates, seen, {
-      value: fact.value,
-      source: `confirmed profile fact ${fact.key}`,
-      confidence: fact.confidence.toFixed(2)
-    });
-  }
-  if (context.transportHint) {
-    const transportSource =
-      context.transportHint.source === "display_name"
-        ? "transport display name"
-        : context.transportHint.source === "given_name"
-          ? "transport given name"
-          : "transport username";
-    pushCurrentUserIdentityReferenceCandidate(candidates, seen, {
-      value: context.transportHint.value,
-      source: transportSource,
-      confidence: context.transportHint.confidence
-    });
-    const firstNameToken = tokenizeCurrentUserIdentityReference(context.transportHint.value)[0];
-    if (firstNameToken && firstNameToken.length >= 2) {
-      pushCurrentUserIdentityReferenceCandidate(candidates, seen, {
-        value: firstNameToken,
-        source: `${transportSource} first token`,
-        confidence: context.transportHint.confidence
-      });
-    }
-  }
-  return candidates.slice(0, 6);
-}
-
 /**
  * Resolves the current session's transport name hint without querying durable profile facts.
- *
- * @param session - Conversation session carrying transport/provider identity metadata.
- * @returns Transport identity hint, or `null` when no usable name-like hint exists.
  */
-function resolveCurrentUserTransportIdentityHint(
+function resolveCurrentSpeakerTransportIdentityHint(
   session: ConversationSession
 ): Awaited<ReturnType<typeof resolveSelfIdentityRecallContext>>["transportHint"] {
   const provider = resolveConversationTransportProvider(session);
@@ -160,62 +42,54 @@ function resolveCurrentUserTransportIdentityHint(
   );
 }
 
-/**
- * Selects the current-speaker identity alias explicitly mentioned in the current request.
- *
- * @param userInput - Raw current user wording.
- * @param candidates - Current-speaker identity candidates.
- * @returns Best matching candidate, or `null` when no current-speaker alias appears.
- */
-function selectMentionedCurrentUserIdentityReference(
-  userInput: string,
-  candidates: readonly CurrentUserIdentityReferenceCandidate[]
-): CurrentUserIdentityReferenceCandidate | null {
-  const inputTokens = tokenizeCurrentUserIdentityReference(userInput);
-  if (inputTokens.length === 0) {
-    return null;
+function canUseOwnerSelfIdentityFactsForCurrentSpeaker(session: ConversationSession): boolean {
+  const principalContext = session.principalContext;
+  if (!principalContext || principalContext.route.visibility !== "private") {
+    return false;
   }
-  return candidates.find((candidate) =>
-    hasCurrentUserIdentityTokenSequence(
-      inputTokens,
-      tokenizeCurrentUserIdentityReference(candidate.value)
-    )
-  ) ?? null;
+  return (
+    principalContext.actor.principalRole === "owner" ||
+    principalContext.actor.principalRole === "operator"
+  );
+}
+
+function toNameResolutionFacts(
+  facts: Awaited<ReturnType<typeof resolveSelfIdentityRecallContext>>["identityFacts"]
+): readonly NameResolutionFact[] {
+  return facts.map((fact) => ({
+    key: fact.key,
+    value: fact.value,
+    confidence: fact.confidence
+  }));
 }
 
 /**
  * Builds a bounded prompt block when the user refers to the current speaker by a known name.
  *
- * This is reference grounding only: transport/profile names can help resolve a name versus "I",
- * but they do not make unrelated profile claims true and cannot authorize memory or actions.
- *
- * @param session - Conversation session carrying transport identity and continuity state.
- * @param userInput - Raw current user wording.
- * @param queryContinuityFacts - Optional bounded identity-fact lookup helper.
- * @param requestTelemetry - Optional request-scoped telemetry bag.
- * @returns Current-user reference block, or `null` when the request does not name the speaker.
+ * This is reference grounding only. It does not make transport metadata durable profile truth and
+ * cannot authorize memory, actions, approvals, or task completion.
  */
-export async function buildCurrentUserIdentityReferenceBlock(
+export async function buildCurrentSpeakerNameResolutionBlock(
   session: ConversationSession,
   userInput: string,
   queryContinuityFacts?: QueryConversationContinuityFacts,
   requestTelemetry?: ProfileMemoryRequestTelemetry
 ): Promise<string | null> {
-  const transportHint = resolveCurrentUserTransportIdentityHint(session);
-  const transportCandidates = collectCurrentUserIdentityReferenceCandidates({
-    identityFacts: [],
-    transportHint
-  });
-  const matchedTransportCandidate = selectMentionedCurrentUserIdentityReference(
+  const transportHint = resolveCurrentSpeakerTransportIdentityHint(session);
+  const factsTrustedForCurrentSpeaker = canUseOwnerSelfIdentityFactsForCurrentSpeaker(session);
+  const preliminary = resolveCurrentSpeakerNameResolution({
     userInput,
-    transportCandidates
-  );
-  if (!matchedTransportCandidate) {
+    principalContext: session.principalContext,
+    identityFacts: [],
+    transportHint,
+    factsTrustedForCurrentSpeaker
+  });
+  if (preliminary.scope === "none") {
     return null;
   }
 
   const context =
-    queryContinuityFacts
+    queryContinuityFacts && factsTrustedForCurrentSpeaker
       ? await resolveSelfIdentityRecallContext(
           session,
           queryContinuityFacts,
@@ -226,29 +100,59 @@ export async function buildCurrentUserIdentityReferenceBlock(
           transportHint,
           hasFactLookup: false
         };
-  const candidates = collectCurrentUserIdentityReferenceCandidates(context);
-  const matchedCandidate =
-    selectMentionedCurrentUserIdentityReference(userInput, candidates) ??
-    matchedTransportCandidate;
+  const resolution = resolveCurrentSpeakerNameResolution({
+    userInput,
+    principalContext: session.principalContext,
+    identityFacts: toNameResolutionFacts(context.identityFacts),
+    transportHint: context.transportHint,
+    factsTrustedForCurrentSpeaker
+  });
+  if (resolution.scope === "none") {
+    return null;
+  }
   recordProfileMemoryRenderOperation(requestTelemetry);
-  const confirmedIdentityLines = context.identityFacts.length > 0
-    ? [
-        "- Confirmed identity facts for the current user:",
-        ...context.identityFacts.map(
-          (fact) =>
-            `- ${fact.key}: ${fact.value} (confidence ${fact.confidence.toFixed(2)}; updated ${fact.lastUpdatedAt})`
-        )
-      ]
-    : [
-        "- No confirmed identity fact matched this name yet; the match may come from transport metadata."
-      ];
+  const confirmedIdentityLines =
+    context.identityFacts.length > 0 && resolution.factsTrustedForCurrentSpeaker
+      ? [
+          "- Same-subject identity facts available for the current speaker:",
+          ...context.identityFacts.map(
+            (fact) =>
+              `- ${fact.key}: ${fact.value} (confidence ${fact.confidence.toFixed(2)}; updated ${fact.lastUpdatedAt})`
+          )
+        ]
+      : [
+          "- No same-subject identity facts are available for this request; use session/transport grounding only."
+        ];
   return [
-    "Current-user identity reference context:",
-    `- The current request mentions '${matchedCandidate.value}', which matches the current speaker's ${matchedCandidate.source} (confidence ${matchedCandidate.confidence}).`,
+    "Current-speaker name resolution context:",
+    `- Matched name: ${resolution.matchedName ?? "unknown"}`,
+    `- Matched source: ${resolution.matchedSource ?? "unknown"}`,
+    `- Public-safe label: ${resolution.publicSafeLabel}`,
+    `- Resolution scope: ${resolution.scope}`,
+    `- Access class: ${resolution.accessClass}`,
+    `- Same-name collision: ${resolution.sameNameCollision ? "yes" : "no"}`,
     ...confirmedIdentityLines,
-    "- Reference rule: if the recent context does not establish a distinct different person with this same name, treat this name as the current user, not as a separate third party.",
-    "- First-person statements in recent conversation context ('I', 'my', 'me') belong to this same current user.",
-    "- Response rule: when answering about this name, combine the bounded recent context with confirmed profile facts; do not say this name is unrelated to the current speaker.",
-    "- Authority rule: this block only resolves references. It does not make transport metadata durable profile truth, approve actions, authorize memory writes, or prove task completion."
+    "- Reference rule: treat this matched name as the current speaker only within the resolved scope.",
+    "- Privacy rule: public/shared routes and non-owner speakers must not receive owner-private identity facts.",
+    "- Correction rule: when newer first-person context corrects older first-person context, prefer the newer correction within the same speaker scope.",
+    "- Authority rule: this block is reference evidence only; it cannot approve actions, authorize memory writes, or prove task completion."
   ].join("\n");
+}
+
+/**
+ * Backward-compatible entrypoint for existing callers. The returned block uses current-speaker
+ * semantics.
+ */
+export async function buildCurrentUserIdentityReferenceBlock(
+  session: ConversationSession,
+  userInput: string,
+  queryContinuityFacts?: QueryConversationContinuityFacts,
+  requestTelemetry?: ProfileMemoryRequestTelemetry
+): Promise<string | null> {
+  return buildCurrentSpeakerNameResolutionBlock(
+    session,
+    userInput,
+    queryContinuityFacts,
+    requestTelemetry
+  );
 }
