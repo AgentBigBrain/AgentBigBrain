@@ -8,6 +8,16 @@ stay aligned with `package.json`.
 ## [Unreleased]
 
 ### Added
+
+### Changed
+
+### Fixed
+
+### Security
+
+## [0.3.1] - 2026-05-10
+
+### Added
 - Added the Source Recall Archive contract, test-only storage seam, quoted-evidence retrieval,
   media/conversation capture metadata, projection-safe read models, and a synthetic evidence
   matrix proving recall quality stays separate from memory truth, approvals, safety, and completion
@@ -24,6 +34,9 @@ stay aligned with `package.json`.
 ### Changed
 - Expanded the public README and docs map with clearer positioning, authority-boundary diagrams,
   and concepts references for new readers.
+- Ollama media transcription now uses the working local `/v1/audio/transcriptions` path for
+  Gemma-style audio models instead of the responses surface, with FFmpeg-backed OGG/Opus to WAV
+  conversion for Telegram voice notes.
 - Profile-memory, semantic-memory, workflow-learning, media-artifact, and projection surfaces can
   now cite Source Recall ids as evidence without granting write, truth, approval, or proof
   authority.

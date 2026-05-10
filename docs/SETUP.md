@@ -213,7 +213,10 @@ How each setting works:
 - `BRAIN_MEDIA_DOCUMENT_MEANING_MODEL`: model used when document meaning is enabled.
 - `BRAIN_MEDIA_DOCUMENT_MEANING_TIMEOUT_MS`: timeout for model-assisted document meaning.
 - `BRAIN_MEDIA_VISION_MODEL`: vision-capable model for screenshots/images. If unset, the runtime falls back to `OPENAI_MODEL_SMALL_FAST`, then `OLLAMA_MODEL_SMALL_FAST` / `OLLAMA_MODEL_DEFAULT`, then `gpt-4.1-mini`.
-- `BRAIN_MEDIA_TRANSCRIPTION_MODEL`: transcription model for voice notes. If unset, the runtime defaults to `whisper-1`. Dedicated models such as `whisper-1` stay on `/audio/transcriptions`; non-whisper models such as Gemma 4 automatically use the multimodal audio-understanding path instead.
+- `BRAIN_MEDIA_TRANSCRIPTION_MODEL`: transcription model for voice notes. If unset, the runtime defaults to `whisper-1`. Dedicated models such as `whisper-1` stay on `/audio/transcriptions`; local Ollama Gemma audio models use Ollama's OpenAI-compatible `/v1/audio/transcriptions` path.
+- `BRAIN_MEDIA_AUDIO_TRANSCODER_PATH`: optional FFmpeg-compatible command used to convert Telegram
+  OGG/Opus voice notes to WAV before local Ollama transcription. If unset, the runtime tries
+  `ffmpeg` on `PATH`.
 - `BRAIN_MEDIA_REQUEST_TIMEOUT_MS`: timeout used by the image/transcription calls.
 
 Operational notes:
@@ -229,15 +232,56 @@ Operational notes:
 - `BRAIN_MEDIA_BACKEND=codex_oauth` reuses the operator's Codex credential ephemerally at request
   time instead of storing a second media-specific token
 - `BRAIN_MEDIA_VISION_BACKEND=ollama` supports local image understanding directly.
-- `BRAIN_MEDIA_TRANSCRIPTION_BACKEND=ollama` is still experimental for local
-  multimodal-audio models such as Gemma 4. The runtime can target Ollama's OpenAI-compatible
-  `/v1/responses` surface, but real audio support depends on the exact Ollama build and model
-  packaging. Do not treat it as the default voice-note path.
+- `BRAIN_MEDIA_TRANSCRIPTION_BACKEND=ollama` supports local Gemma-style audio transcription through
+  Ollama's OpenAI-compatible `/v1/audio/transcriptions` surface. Verify your selected model tag
+  locally because support still depends on the exact Ollama build and model packaging.
+- Telegram voice notes are usually OGG/Opus. When using Ollama for transcription, install FFmpeg
+  and set `BRAIN_MEDIA_AUDIO_TRANSCODER_PATH` if `ffmpeg` is not already on `PATH`.
 - `BRAIN_MEDIA_TRANSCRIPTION_BACKEND=openai_api` still works for other loopback
   OpenAI-compatible servers; when the base URL is local, the media runtime does not require an API
   key just to attach audio for transcription.
 - if your Ollama endpoint is behind an API-key gate, the runtime also honors `OLLAMA_API_KEY`
 - short videos use file metadata and captions even when an API key is configured
+
+Local Ollama voice-note setup:
+
+Windows:
+
+```powershell
+scoop install ffmpeg
+ffmpeg -version
+```
+
+If `ffmpeg -version` does not work in the same shell that starts ABB, set the executable path:
+
+```env
+BRAIN_MEDIA_TRANSCRIPTION_BACKEND=ollama
+BRAIN_MEDIA_TRANSCRIPTION_MODEL=gemma4:e4b-it-q4_K_M
+BRAIN_MEDIA_AUDIO_TRANSCODER_PATH=C:\Users\<you>\scoop\shims\ffmpeg.exe
+```
+
+Windows users who prefer winget can install FFmpeg with:
+
+```powershell
+winget install Gyan.FFmpeg
+```
+
+macOS:
+
+```bash
+brew install ffmpeg
+ffmpeg -version
+```
+
+If Homebrew is not on the service PATH, set the executable path explicitly:
+
+```env
+BRAIN_MEDIA_TRANSCRIPTION_BACKEND=ollama
+BRAIN_MEDIA_TRANSCRIPTION_MODEL=gemma4:e4b-it-q4_K_M
+BRAIN_MEDIA_AUDIO_TRANSCODER_PATH=/opt/homebrew/bin/ffmpeg
+```
+
+On Intel macOS, the Homebrew path is commonly `/usr/local/bin/ffmpeg`.
 
 Video limitation:
 
@@ -948,12 +992,17 @@ This section covers every key listed in `.env.example` and what to expect if you
 - `BRAIN_MEDIA_TRANSCRIPTION_MODEL`: model used for voice-note transcription.
   - If unset, the runtime defaults to `whisper-1`.
   - Dedicated transcription models such as `whisper-1` stay on `/audio/transcriptions`.
-  - Non-whisper models such as Gemma 4 automatically use the multimodal audio path instead.
+  - Local Ollama Gemma audio models use Ollama's OpenAI-compatible `/v1/audio/transcriptions` path.
   - If transcription is unavailable, the runtime falls back to basic media context rather than fabricating a transcript.
-  - `BRAIN_MEDIA_TRANSCRIPTION_BACKEND=ollama` is experimental for local Gemma-style
-    audio runs. The runtime can target Ollama's OpenAI-compatible `/v1/responses` surface, but the
-    working audio capability still depends on what Ollama exposes for that specific build.
-  - Do not treat it as the default local voice-note path.
+  - `BRAIN_MEDIA_TRANSCRIPTION_BACKEND=ollama` supports local Gemma-style audio runs when the
+    selected Ollama build and model tag expose audio capability.
+  - `BRAIN_MEDIA_AUDIO_TRANSCODER_PATH` points to FFmpeg for Telegram OGG/Opus to WAV conversion.
+    - If unset, ABB tries `ffmpeg` on `PATH`.
+    - If FFmpeg is unavailable, local Ollama transcription fails closed to voice-note metadata.
+    - Windows: install with `scoop install ffmpeg` or `winget install Gyan.FFmpeg`.
+    - macOS: install with `brew install ffmpeg`.
+    - Common explicit paths are `C:\Users\<you>\scoop\shims\ffmpeg.exe`,
+      `/opt/homebrew/bin/ffmpeg`, and `/usr/local/bin/ffmpeg`.
   - `BRAIN_MEDIA_TRANSCRIPTION_BACKEND=openai_api` remains available for other loopback
     OpenAI-compatible servers.
   - `BRAIN_MEDIA_REQUEST_TIMEOUT_MS`: timeout for provider-backed media interpretation requests.

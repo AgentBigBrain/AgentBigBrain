@@ -42,11 +42,13 @@ transport parsing but before conversation execution and memory brokerage.
   provider when the primary vision backend fails to load or returns no usable output. This keeps
   the runtime bounded while avoiding silent caption-only degradation on resource-constrained local
   Gemma runs.
-- `BRAIN_MEDIA_TRANSCRIPTION_BACKEND=ollama` is currently an experimental local multimodal-audio
-  path for models such as Gemma 4. The runtime can target Ollama's OpenAI-compatible
-  `/v1/responses` surface, but real audio support still depends on the exact Ollama build and model
-  packaging. We are monitoring Ollama for stable native local audio support before recommending it
-  as the default voice-note path.
+- `BRAIN_MEDIA_TRANSCRIPTION_BACKEND=ollama` supports local Gemma-style audio transcription through
+  Ollama's OpenAI-compatible `/v1/audio/transcriptions` surface. Real audio support still depends
+  on the exact Ollama build and model packaging, so operators should verify the selected model tag
+  with a local audio probe before relying on it for voice-note routing.
+- Telegram voice notes usually arrive as OGG/Opus. The Ollama path converts them to WAV through
+  `BRAIN_MEDIA_AUDIO_TRANSCODER_PATH` or `ffmpeg` on `PATH` before transcription, and fails closed
+  to metadata fallback if conversion is unavailable.
 - `BRAIN_MEDIA_TRANSCRIPTION_BACKEND=openai_api` still supports other loopback OpenAI-compatible
   servers without an API key when `OPENAI_BASE_URL` points at localhost.
 - `BRAIN_MEDIA_DOCUMENT_MEANING_BACKEND` is a distinct opt-in backend for document semantic

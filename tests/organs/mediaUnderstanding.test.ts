@@ -998,15 +998,20 @@ test("interpretVoiceAttachment can use multimodal Gemma audio through Ollama's l
   const originalFetch = globalThis.fetch;
   let seenAuthorizationHeader: string | null = null;
   let seenUrl = "";
-  let seenBody = "";
+  let seenModel: FormDataEntryValue | null = null;
+  let seenFileIsBlob = false;
   try {
     globalThis.fetch = (async (input, init) => {
       seenUrl = typeof input === "string" ? input : input.toString();
       seenAuthorizationHeader = new Headers(init?.headers).get("Authorization");
-      seenBody = typeof init?.body === "string" ? init.body : "";
+      const body = init?.body;
+      if (body instanceof FormData) {
+        seenModel = body.get("model");
+        seenFileIsBlob = body.get("file") instanceof Blob;
+      }
       return new Response(
         JSON.stringify({
-          output_text: "Call Billy after lunch."
+          text: "Call Billy after lunch."
         }),
         {
           status: 200,
@@ -1041,6 +1046,65 @@ test("interpretVoiceAttachment can use multimodal Gemma audio through Ollama's l
         provider: "telegram",
         fileId: "voice-gemma-ollama-1",
         fileUniqueId: "voice-gemma-ollama-1",
+        mimeType: "audio/wav",
+        fileName: "voice-note.wav",
+        sizeBytes: 1024,
+        caption: null,
+        durationSeconds: 8,
+        width: null,
+        height: null
+      },
+      Buffer.from("voice-data", "utf8")
+    );
+
+    assert.equal(seenUrl, "http://localhost:11434/v1/audio/transcriptions");
+    assert.equal(seenAuthorizationHeader, null);
+    assert.equal(seenModel, "gemma4:latest");
+    assert.equal(seenFileIsBlob, true);
+    assert.equal(interpretation.transcript, "Call Billy after lunch.");
+    assert.equal(interpretation.source, "multimodal_audio");
+    assert.match(interpretation.provenance, /Ollama local model transcription model gemma4:latest/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("interpretVoiceAttachment fails closed when Ollama OGG transcription needs a missing transcoder", async () => {
+  const originalFetch = globalThis.fetch;
+  let fetchCalled = false;
+  try {
+    globalThis.fetch = (async () => {
+      fetchCalled = true;
+      return new Response("{}", { status: 200 });
+    }) as typeof fetch;
+
+    const interpretation = await interpretVoiceAttachment(
+      {
+        requestedBackend: "ollama",
+        resolvedBackend: "ollama",
+        requestedVisionBackend: "disabled",
+        resolvedVisionBackend: "disabled",
+        requestedVisionFallbackBackend: "disabled",
+        resolvedVisionFallbackBackend: "disabled",
+        requestedTranscriptionBackend: "ollama",
+        resolvedTranscriptionBackend: "ollama",
+        openAIApiKey: null,
+        openAIBaseUrl: "https://api.openai.com/v1",
+        ollamaApiKey: null,
+        ollamaBaseUrl: "http://localhost:11434",
+        visionModel: "gemma4:latest",
+        visionFallbackModel: null,
+        transcriptionModel: "gemma4:latest",
+        requestTimeoutMs: 45_000,
+        env: {
+          BRAIN_MEDIA_AUDIO_TRANSCODER_PATH: "definitely-not-a-real-ffmpeg"
+        }
+      },
+      {
+        kind: "voice",
+        provider: "telegram",
+        fileId: "voice-gemma-ollama-missing-transcoder",
+        fileUniqueId: "voice-gemma-ollama-missing-transcoder",
         mimeType: "audio/ogg",
         fileName: "voice-note.ogg",
         sizeBytes: 1024,
@@ -1052,13 +1116,9 @@ test("interpretVoiceAttachment can use multimodal Gemma audio through Ollama's l
       Buffer.from("voice-data", "utf8")
     );
 
-    assert.equal(seenUrl, "http://localhost:11434/v1/responses");
-    assert.equal(seenAuthorizationHeader, null);
-    assert.match(seenBody, /input_audio/);
-    assert.match(seenBody, /gemma4:latest/);
-    assert.equal(interpretation.transcript, "Call Billy after lunch.");
-    assert.equal(interpretation.source, "multimodal_audio");
-    assert.match(interpretation.provenance, /Ollama local model transcription model gemma4:latest/);
+    assert.equal(fetchCalled, false);
+    assert.equal(interpretation.source, "metadata_fallback");
+    assert.equal(interpretation.transcript, null);
   } finally {
     globalThis.fetch = originalFetch;
   }

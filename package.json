@@ -1,6 +1,6 @@
 {
   "name": "agentbigbrain",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "private": true,
   "description": "Governance-first TypeScript AI agent runtime with semantic routing, governed tool execution, durable memory, Markdown skills, Obsidian projection, and receipt-backed local/browser automation",
   "scripts": {
