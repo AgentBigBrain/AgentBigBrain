@@ -86,6 +86,7 @@ import {
   type ProfileEpisodeReviewMutationResult,
   type ProfileIngestResult,
   type ProfileMemoryIngestPolicy,
+  type ProfileMemoryAccessSubjectKind,
   type ProfileMemoryRequestTelemetry,
   type ProfileMemoryWriteProvenance,
   type ProfileMediaIngestInput,
@@ -93,6 +94,7 @@ import {
   type ProfileReadableEpisode,
   type ProfileReadableFact
 } from "./profileMemoryRuntime/contracts";
+import { evaluateProfileMemoryAccessPolicy } from "./profileMemoryRuntime/profileMemoryAccessPolicy";
 import {
   normalizeProfileMemoryIngestPolicy,
   selectProfileMemoryExtractionStages
@@ -136,7 +138,8 @@ import type { CreateProfileEpisodeRecordInput } from "./profileMemory";
 import type { ProfileMemoryGraphClaimRecord } from "./profileMemoryRuntime/profileMemoryGraphContracts";
 import type {
   ConversationStackV1,
-  EntityGraphV1
+  EntityGraphV1,
+  TaskPrincipalAccessEnvelope
 } from "./types";
 
 export type {
@@ -158,6 +161,8 @@ export interface ProfileMemoryIngestOptions {
   mediaIngest?: ProfileMediaIngestInput;
   provenance?: ProfileMemoryWriteProvenance;
   ingestPolicy?: ProfileMemoryIngestPolicy;
+  principalAccess?: TaskPrincipalAccessEnvelope;
+  requestedSubjectKind?: ProfileMemoryAccessSubjectKind;
   requestTelemetry?: ProfileMemoryRequestTelemetry;
 }
 
@@ -358,6 +363,12 @@ export class ProfileMemoryStore {
     observedAt: string,
     options: ProfileMemoryIngestOptions = {}
   ): Promise<ProfileIngestResult> {
+    if (!canWriteProfileMemoryByPrincipalPolicy(options)) {
+      return {
+        appliedFacts: 0,
+        supersededFacts: 0
+      };
+    }
     const state = await this.load(options.requestTelemetry);
     if (findProfileMemoryIngestReceipt(state, options.provenance)) {
       return {
@@ -753,6 +764,11 @@ export class ProfileMemoryStore {
   async mutateFactFromUser(
     request: ProfileFactReviewMutationRequest
   ): Promise<ProfileFactReviewMutationResult> {
+    if (!canMutateProfileMemoryByPrincipalPolicy(request)) {
+      return {
+        fact: null
+      };
+    }
     const state = await this.load();
     const targetFact = state.facts.find(
       (fact) => fact.id === request.factId && fact.status !== "superseded" && fact.supersededAt === null
@@ -1378,6 +1394,33 @@ function toReadableEpisode(
     openLoopRefs: [...episode.openLoopRefs],
     tags: [...episode.tags]
   };
+}
+
+function canWriteProfileMemoryByPrincipalPolicy(options: ProfileMemoryIngestOptions): boolean {
+  const principalAccess = options.principalAccess ?? options.provenance?.principalAccess;
+  const requestedSubjectKind =
+    options.requestedSubjectKind ?? options.provenance?.requestedSubjectKind;
+  if (!principalAccess && !requestedSubjectKind) {
+    return true;
+  }
+  return evaluateProfileMemoryAccessPolicy({
+    principalAccess,
+    operation: "profile_write",
+    requestedSubjectKind: requestedSubjectKind ?? "legacy_global_profile"
+  }).allowed;
+}
+
+function canMutateProfileMemoryByPrincipalPolicy(
+  request: ProfileFactReviewMutationRequest
+): boolean {
+  if (!request.principalAccess && !request.requestedSubjectKind) {
+    return true;
+  }
+  return evaluateProfileMemoryAccessPolicy({
+    principalAccess: request.principalAccess,
+    operation: "profile_write",
+    requestedSubjectKind: request.requestedSubjectKind ?? "legacy_global_profile"
+  }).allowed;
 }
 
 /**
