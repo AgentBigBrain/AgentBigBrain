@@ -43,17 +43,40 @@ import { ToolExecutorOrgan } from "../../src/organs/executor";
 import { PlannerOrgan } from "../../src/organs/planner";
 import { ReflectionOrgan } from "../../src/organs/reflection";
 import { PersonalityStore } from "../../src/core/personalityStore";
+import { createOwnerOperatorPrincipalConfigFromEnv } from "../../src/interfaces/principalRuntime/principalConfig";
+import {
+  buildTaskExecutionPrincipalAccess,
+  derivePrincipalContextFromIngress
+} from "../../src/interfaces/principalRuntime/principalAccess";
 
 /**
  * Implements `buildTask` behavior within module scope.
  * Interacts with local collaborators through imported modules and typed inputs/outputs.
  */
 function buildTask(userInput: string): TaskRequest {
+  const createdAt = new Date().toISOString();
+  const principalConfig = createOwnerOperatorPrincipalConfigFromEnv(
+    {
+      BRAIN_PRINCIPAL_HMAC_KEY: "orchestrator-profile-test-principal-key",
+      BRAIN_OWNER_TELEGRAM_USER_IDS: "orchestrator-profile-owner"
+    },
+    "test_override"
+  );
+  const principalContext = derivePrincipalContextFromIngress({
+    provider: "telegram",
+    conversationId: "orchestrator-profile-test-chat",
+    userId: "orchestrator-profile-owner",
+    username: "orchestrator_profile_owner",
+    conversationVisibility: "private",
+    receivedAt: createdAt,
+    principalConfig
+  });
   return {
     id: makeId("task"),
     goal: "Provide safe and helpful assistance.",
     userInput,
-    createdAt: new Date().toISOString()
+    createdAt,
+    principalAccess: buildTaskExecutionPrincipalAccess(principalContext)
   };
 }
 
@@ -564,12 +587,12 @@ test("orchestrator ingests only current user request from conversation-wrapper e
     "- assistant: noted.",
     "",
     "Current user request:",
-    "who is Owen?"
+    "who is Riley?"
   ].join("\n");
 
   try {
     await brain.runTask(buildTask(wrappedInput));
-    assert.equal(capturingStore.lastIngestInput, "who is Owen?");
+    assert.equal(capturingStore.lastIngestInput, "who is Riley?");
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }
@@ -616,7 +639,7 @@ test("orchestrator remembers validated identity candidates through the canonical
         validatedFactCandidates: [
           {
             key: "identity.preferred_name",
-            candidateValue: "Avery",
+            candidateValue: "Morgan",
             source: "conversation.identity_interpretation",
             confidence: 0.95
           }
@@ -637,7 +660,7 @@ test("orchestrator remembers validated identity candidates through the canonical
       maxFacts: 10
     });
     assert.equal(
-      facts.some((fact) => fact.key === "identity.preferred_name" && fact.value === "Avery"),
+      facts.some((fact) => fact.key === "identity.preferred_name" && fact.value === "Morgan"),
       true
     );
   } finally {
@@ -760,8 +783,8 @@ test("orchestrator passes session domain context into broker gating for workflow
   }
 });
 
-test("orchestrator recalls Owen contact context across conversation-wrapper turns", async () => {
-  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-orch-profile-owen-"));
+test("orchestrator recalls Riley contact context across conversation-wrapper turns", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-orch-profile-riley-"));
   const statePath = path.join(tempDir, "state.json");
   const semanticPath = path.join(tempDir, "semantic_memory.json");
   const personalityPath = path.join(tempDir, "personality_profile.json");
@@ -795,16 +818,16 @@ test("orchestrator recalls Owen contact context across conversation-wrapper turn
     profileStore
   );
 
-  const owenNarrativeInput = wrapResolvedMemoryRoute(
-    "I went to school with a guy named Owen, and he also used to work with me at Lantern Studio.",
+  const rileyNarrativeInput = wrapResolvedMemoryRoute(
+    "I went to school with a guy named Riley, and he also used to work with me at Lantern Studio.",
     "profile_update"
   );
 
-  const owenRecallInput = wrapResolvedMemoryRoute("who is Owen?", "relationship_recall");
+  const rileyRecallInput = wrapResolvedMemoryRoute("who is Riley?", "relationship_recall");
 
   try {
-    await brain.runTask(buildTask(owenNarrativeInput));
-    await brain.runTask(buildTask(owenRecallInput));
+    await brain.runTask(buildTask(rileyNarrativeInput));
+    await brain.runTask(buildTask(rileyRecallInput));
 
     const plannerPayload = JSON.parse(modelClient.lastPlannerUserPrompt) as {
       userInput?: string;
@@ -812,9 +835,9 @@ test("orchestrator recalls Owen contact context across conversation-wrapper turn
     const plannerInput = plannerPayload.userInput ?? "";
 
     assert.match(plannerInput, /\[AgentFriendProfileContext\]/);
-    assert.match(plannerInput, /contact\.owen\.name: Owen/i);
-    assert.match(plannerInput, /contact\.owen\.context\.[a-f0-9]+: I went to school with a guy named Owen, and he also used to work with me at Lantern Studio/i);
-    assert.doesNotMatch(plannerInput, /contact\.owen\.work_association: Lantern Studio/i);
+    assert.match(plannerInput, /contact\.riley\.name: Riley/i);
+    assert.match(plannerInput, /contact\.riley\.context\.[a-f0-9]+: I went to school with a guy named Riley, and he also used to work with me at Lantern Studio/i);
+    assert.doesNotMatch(plannerInput, /contact\.riley\.work_association: Lantern Studio/i);
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }
@@ -846,8 +869,8 @@ test("orchestrator exposes bounded remembered-fact review and mutation passthrou
       Object.assign(
         [
           {
-            factId: "fact_owen_role",
-            key: "contact.owen.relationship",
+            factId: "fact_riley_role",
+            key: "contact.riley.relationship",
             value: "acquaintance",
             status: "confirmed",
             confidence: 0.88,
@@ -873,8 +896,8 @@ test("orchestrator exposes bounded remembered-fact review and mutation passthrou
         }
       ),
     correctRememberedFact: async () => ({
-      factId: "fact_owen_role",
-      key: "contact.owen.relationship",
+      factId: "fact_riley_role",
+      key: "contact.riley.relationship",
       value: "friend",
       status: "confirmed",
       confidence: 0.92,
@@ -884,8 +907,8 @@ test("orchestrator exposes bounded remembered-fact review and mutation passthrou
       mutationEnvelope: buildFactMutationEnvelope()
     }),
     forgetRememberedFact: async () => ({
-      factId: "fact_owen_role",
-      key: "contact.owen.relationship",
+      factId: "fact_riley_role",
+      key: "contact.riley.relationship",
       value: "[redacted]",
       status: "superseded",
       confidence: 0.92,
@@ -933,26 +956,26 @@ test("orchestrator exposes bounded remembered-fact review and mutation passthrou
   try {
     const reviewed = await brain.reviewRememberedFacts(
       "review_fact_1",
-      "What do you remember about Owen?",
+      "What do you remember about Riley?",
       "2026-03-31T12:10:00.000Z",
       3
     );
     const corrected = await brain.correctRememberedFact(
-      "fact_owen_role",
+      "fact_riley_role",
       "friend",
       "memory_correct_1",
-      "/memory fact correct fact_owen_role friend",
+      "/memory fact correct fact_riley_role friend",
       "2026-03-31T12:11:00.000Z",
       "Use the newer relationship wording."
     );
     const forgotten = await brain.forgetRememberedFact(
-      "fact_owen_role",
+      "fact_riley_role",
       "memory_forget_1",
-      "/memory fact forget fact_owen_role",
+      "/memory fact forget fact_riley_role",
       "2026-03-31T12:12:00.000Z"
     );
 
-    assert.equal(reviewed[0]?.factId, "fact_owen_role");
+    assert.equal(reviewed[0]?.factId, "fact_riley_role");
     assert.equal(reviewed[0]?.decisionRecord?.family, "generic.profile_fact");
     assert.equal(reviewed.hiddenDecisionRecords[0]?.disposition, "needs_corroboration");
     assert.equal(corrected?.value, "friend");
@@ -992,8 +1015,8 @@ test("orchestrator continuity read sessions reuse one profile-memory snapshot ac
   };
   const profileStore = new CountingContinuityProfileStore(encryptedProfilePath, profileKey, 90);
   await profileStore.ingestFromTaskInput(
-    "seed-owen",
-    "My work peer is Owen. Owen fell down a few weeks ago.",
+    "seed-riley",
+    "My work peer is Riley. Riley fell down a few weeks ago.",
     nowIso,
     {
       ingestPolicy: buildTestProfileUpdatePolicy()
@@ -1021,7 +1044,7 @@ test("orchestrator continuity read sessions reuse one profile-memory snapshot ac
 
     const facts = await readSession?.queryContinuityFacts(
       createEmptyConversationStackV1(nowIso),
-      ["owen"],
+      ["riley"],
       3,
       {
         semanticMode: "relationship_inventory",
@@ -1031,7 +1054,7 @@ test("orchestrator continuity read sessions reuse one profile-memory snapshot ac
     );
     const episodes = await readSession?.queryContinuityEpisodes(
       createEmptyConversationStackV1(nowIso),
-      ["owen"],
+      ["riley"],
       3,
       {
         semanticMode: "event_history",
@@ -1041,7 +1064,7 @@ test("orchestrator continuity read sessions reuse one profile-memory snapshot ac
     );
 
     assert.equal(profileStore.loadCount, 1);
-    assert.ok((facts ?? []).some((fact) => fact.key.startsWith("contact.owen.")));
+    assert.ok((facts ?? []).some((fact) => fact.key.startsWith("contact.riley.")));
     assert.ok(Array.isArray(episodes));
     assert.equal(profileStore.lastFactContinuityRequest?.semanticMode, "relationship_inventory");
     assert.equal(profileStore.lastFactContinuityRequest?.relevanceScope, "conversation_local");

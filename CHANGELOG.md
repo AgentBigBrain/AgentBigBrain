@@ -13,6 +13,10 @@ stay aligned with `package.json`.
 
 ### Fixed
 
+- Strengthened direct-chat current-user identity grounding so transport/profile name references
+  keep recent first-person context attached to the current speaker without adding lexical
+  meaning classifiers.
+
 ### Security
 
 ## [0.3.1] - 2026-05-10

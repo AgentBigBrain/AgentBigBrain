@@ -224,6 +224,9 @@ function coerceExecutionReceiptDocument(input: unknown): ExecutionReceiptDocumen
     return { receipts };
 }
 
+/**
+ * Implements `coercePrincipalAccessMetadata` behavior within this module.
+ */
 function coercePrincipalAccessMetadata(input: unknown): RedactedPrincipalAccessMetadata | null {
     if (!input || typeof input !== "object" || Array.isArray(input)) {
         return null;
@@ -248,6 +251,9 @@ function coercePrincipalAccessMetadata(input: unknown): RedactedPrincipalAccessM
     };
 }
 
+/**
+ * Implements `parsePrincipalAccessJson` behavior within this module.
+ */
 function parsePrincipalAccessJson(value: string | null | undefined): RedactedPrincipalAccessMetadata | null {
     if (!value) {
         return null;

@@ -442,6 +442,9 @@ export function assessBrokerPromptCutoverGate(
   };
 }
 
+/**
+ * Implements `evaluateBrokerOwnerProfileAccess` behavior within this module.
+ */
 function evaluateBrokerOwnerProfileAccess(
   task: TaskRequest,
   operation: BrokerProfileOperation
@@ -453,6 +456,9 @@ function evaluateBrokerOwnerProfileAccess(
   });
 }
 
+/**
+ * Implements `buildTaskPrincipalAuditSnapshot` behavior within this module.
+ */
 function buildTaskPrincipalAuditSnapshot(
   task: TaskRequest
 ): MemoryAccessPrincipalAuditSnapshot | undefined {
@@ -953,6 +959,9 @@ export async function buildBrokeredPlannerInput(
 }
 
 /** Appends the standard retrieval audit event for one brokered planner-input build. */
+/**
+ * Implements `recordAudit` behavior within this module.
+ */
 async function recordAudit(
   memoryAccessAuditStore: MemoryAccessAuditStore,
   taskId: string,
@@ -991,6 +1000,9 @@ async function recordAudit(
 }
 
 /** Appends the probing-specific audit event when extraction-style bursts are detected. */
+/**
+ * Implements `recordProbingAudit` behavior within this module.
+ */
 async function recordProbingAudit(
   memoryAccessAuditStore: MemoryAccessAuditStore,
   taskId: string,
@@ -1036,6 +1048,9 @@ async function recordProbingAudit(
 }
 
 /** Converts one readable planner episode into the bounded synthesis episode shape. */
+/**
+ * Implements `toMemorySynthesisEpisodeRecord` behavior within this module.
+ */
 function toMemorySynthesisEpisodeRecord(
   episode: ProfileReadableEpisode
 ): MemorySynthesisEpisodeRecord {
@@ -1060,6 +1075,9 @@ function toMemorySynthesisEpisodeRecord(
 }
 
 /** Converts one readable planner fact into the bounded synthesis fact shape. */
+/**
+ * Implements `toMemorySynthesisFactRecord` behavior within this module.
+ */
 function toMemorySynthesisFactRecord(
   fact: ProfileReadableFact,
   decisionRecord?: ProfileFactPlanningInspectionResult["entries"][number]["decisionRecord"]

@@ -31,6 +31,10 @@ contract and persistence entrypoint while:
 - `sessionNormalization.ts` owns canonical session and state normalization
 - `sessionNormalizationRecords.ts` owns the canonical record-level normalization helpers used by the
   stable session-normalization entrypoint
+- `sessionNormalizationTurnActorMetadata.ts` owns persisted actor/controller metadata normalization
+  for user, assistant, recovered, proposal, and clarification records
+- `sessionNormalizationTurnMetadata.ts` owns bounded turn metadata normalization below the stable
+  session normalization entrypoint
 - `sessionNormalizationSourceRecallRecords.ts` owns Source Recall turn-metadata normalization so
   quoted-evidence metadata stays separate from the already-capped record-normalization surface
 - `sessionNormalizationOwnershipRecords.ts` owns the extracted browser, path, workspace, and
@@ -295,6 +299,8 @@ should clarify, preserve chat, or fail closed rather than recreating broad keywo
 - `modelBackendSelection.ts` owns canonical per-session backend/profile selection so interface
   sessions can resolve backend overrides and Codex profile routing without leaking provider wiring
   into gateways
+- `backendProfileOverridePolicy.ts` owns owner/operator authorization for protected backend and
+  Codex profile overrides while leaving ordinary session-local backend selection non-authoritative
 - `conversationRoutingDirectReplies.ts` owns the extracted casual-chat and capability-discovery
   direct-reply helpers reused by the stable conversation-routing entrypoint so ordinary
   conversation and normal capability checks can stay out of the worker queue, and can now persist

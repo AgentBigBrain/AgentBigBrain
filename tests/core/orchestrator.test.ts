@@ -39,6 +39,11 @@ import { SemanticMemoryStore } from "../../src/core/semanticMemory";
 import { PersonalityStore } from "../../src/core/personalityStore";
 import { GovernanceMemoryStore } from "../../src/core/governanceMemory";
 import { WINDOWS_TEST_IMPORTANT_FILE_PATH } from "../support/windowsPathFixtures";
+import { createOwnerOperatorPrincipalConfigFromEnv } from "../../src/interfaces/principalRuntime/principalConfig";
+import {
+  buildTaskExecutionPrincipalAccess,
+  derivePrincipalContextFromIngress
+} from "../../src/interfaces/principalRuntime/principalAccess";
 
 /**
  * Implements `withTestBrain` behavior within module scope.
@@ -112,11 +117,29 @@ async function withTestBrainForModelAndConfig(
  * Interacts with local collaborators through imported modules and typed inputs/outputs.
  */
 function buildTask(userInput: string): TaskRequest {
+  const createdAt = new Date().toISOString();
+  const principalConfig = createOwnerOperatorPrincipalConfigFromEnv(
+    {
+      BRAIN_PRINCIPAL_HMAC_KEY: "orchestrator-test-principal-key",
+      BRAIN_OWNER_TELEGRAM_USER_IDS: "orchestrator-owner"
+    },
+    "test_override"
+  );
+  const principalContext = derivePrincipalContextFromIngress({
+    provider: "telegram",
+    conversationId: "orchestrator-test-chat",
+    userId: "orchestrator-owner",
+    username: "orchestrator_owner",
+    conversationVisibility: "private",
+    receivedAt: createdAt,
+    principalConfig
+  });
   return {
     id: makeId("task"),
     goal: "Handle user request safely and efficiently.",
     userInput,
-    createdAt: new Date().toISOString()
+    createdAt,
+    principalAccess: buildTaskExecutionPrincipalAccess(principalContext)
   };
 }
 

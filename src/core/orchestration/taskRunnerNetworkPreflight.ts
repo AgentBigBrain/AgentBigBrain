@@ -52,6 +52,9 @@ export interface EvaluateTaskRunnerNetworkWritePreflightInput {
 }
 
 /** Applies connector consistency, egress, and approval preflight to one network-write action. */
+/**
+ * Implements `evaluateTaskRunnerNetworkWritePreflight` behavior within this module.
+ */
 export function evaluateTaskRunnerNetworkWritePreflight(
   input: EvaluateTaskRunnerNetworkWritePreflightInput
 ): EvaluateTaskRunnerPreflightResult {
@@ -178,6 +181,9 @@ export function evaluateTaskRunnerNetworkWritePreflight(
 }
 
 /** Evaluates freshness and unresolved-conflict requirements for connector-backed write flows. */
+/**
+ * Implements `evaluateConsistencyBlock` behavior within this module.
+ */
 function evaluateConsistencyBlock(
   action: ActionRunResult["action"],
   mode: ActionRunResult["mode"],
@@ -217,6 +223,9 @@ function evaluateConsistencyBlock(
 }
 
 /** Validates and consumes one JIT approval grant for network egress. */
+/**
+ * Implements `evaluateApprovalGrant` behavior within this module.
+ */
 function evaluateApprovalGrant(
   input: EvaluateTaskRunnerNetworkWritePreflightInput,
   url: string
@@ -345,6 +354,9 @@ function evaluateApprovalGrant(
   };
 }
 
+/**
+ * Implements `validateNetworkApprovalPrincipalAccess` behavior within this module.
+ */
 function validateNetworkApprovalPrincipalAccess(grant: ApprovalGrantV1): {
   ok: boolean;
   reason: string;
@@ -387,6 +399,9 @@ function validateNetworkApprovalPrincipalAccess(grant: ApprovalGrantV1): {
 }
 
 /** Normalizes optional conflict metadata into the Stage 6.75 conflict-object contract. */
+/**
+ * Implements `parseConflictObject` behavior within this module.
+ */
 function parseConflictObject(rawValue: unknown, nowIso: string): ConflictObjectV1 | null {
   if (!rawValue || typeof rawValue !== "object" || Array.isArray(rawValue)) {
     return null;
@@ -417,6 +432,9 @@ function parseConflictObject(rawValue: unknown, nowIso: string): ConflictObjectV
 }
 
 /** Maps raw connector operation text into the supported Stage 6.75 operation enum. */
+/**
+ * Implements `normalizeConnectorOperation` behavior within this module.
+ */
 function normalizeConnectorOperation(
   rawOperation: string | null
 ): Stage675ConnectorOperation | null {
@@ -435,6 +453,9 @@ function normalizeConnectorOperation(
 }
 
 /** Builds a canonical constraint-blocked preflight outcome for network-write checks. */
+/**
+ * Implements `buildConstraintBlockedOutcome` behavior within this module.
+ */
 function buildConstraintBlockedOutcome(
   action: ActionRunResult["action"],
   mode: ActionRunResult["mode"],

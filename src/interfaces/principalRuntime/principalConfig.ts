@@ -107,6 +107,9 @@ export function redactProviderUserIdForPrincipalAudit(
   return hmacProviderUserId(normalizedKey, provider, providerUserId);
 }
 
+/**
+ * Implements `parseConfiguredPrincipalList` behavior within this module.
+ */
 function parseConfiguredPrincipalList(
   provider: ConfiguredPrincipalProvider,
   rawValue: string | undefined,
@@ -134,6 +137,9 @@ function parseConfiguredPrincipalList(
   });
 }
 
+/**
+ * Implements `parseCsv` behavior within this module.
+ */
 function parseCsv(value: string | undefined): string[] {
   if (!value) {
     return [];
@@ -144,11 +150,17 @@ function parseCsv(value: string | undefined): string[] {
     .filter((item) => item.length > 0);
 }
 
+/**
+ * Implements `parseStrictBoolean` behavior within this module.
+ */
 function parseStrictBoolean(value: string | undefined): boolean {
   const normalized = (value ?? "").trim().toLowerCase();
   return normalized === "true" || normalized === "1" || normalized === "yes" || normalized === "on";
 }
 
+/**
+ * Implements `normalizeHmacKey` behavior within this module.
+ */
 function normalizeHmacKey(value: string | undefined): string | null {
   const normalized = (value ?? "").trim();
   if (!normalized) {
@@ -160,11 +172,17 @@ function normalizeHmacKey(value: string | undefined): string | null {
   return normalized;
 }
 
+/**
+ * Implements `normalizeProviderUserId` behavior within this module.
+ */
 function normalizeProviderUserId(value: string | null | undefined): string | null {
   const normalized = (value ?? "").trim();
   return normalized.length > 0 ? normalized : null;
 }
 
+/**
+ * Implements `isSafeProviderUserId` behavior within this module.
+ */
 function isSafeProviderUserId(value: string): boolean {
   for (const char of value) {
     const code = char.charCodeAt(0);
@@ -180,6 +198,9 @@ function isSafeProviderUserId(value: string): boolean {
   return true;
 }
 
+/**
+ * Implements `hmacProviderUserId` behavior within this module.
+ */
 function hmacProviderUserId(
   hmacKey: string,
   provider: ConfiguredPrincipalProvider,
@@ -191,6 +212,9 @@ function hmacProviderUserId(
   return `${provider}:${digest.slice(0, 32)}`;
 }
 
+/**
+ * Implements `dedupePrincipals` behavior within this module.
+ */
 function dedupePrincipals(principals: readonly ConfiguredPrincipal[]): ConfiguredPrincipal[] {
   const byKey = new Map<string, ConfiguredPrincipal>();
   for (const principal of principals) {
@@ -199,6 +223,9 @@ function dedupePrincipals(principals: readonly ConfiguredPrincipal[]): Configure
   return [...byKey.values()];
 }
 
+/**
+ * Implements `findConfiguredPrincipal` behavior within this module.
+ */
 function findConfiguredPrincipal(
   principals: readonly ConfiguredPrincipal[],
   provider: ConfiguredPrincipalProvider,

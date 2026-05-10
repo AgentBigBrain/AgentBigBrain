@@ -465,6 +465,9 @@ export function renderPrincipalAccessForModelPrompt(
   };
 }
 
+/**
+ * Implements `deriveConversationPrincipalFromIngress` behavior within this module.
+ */
 function deriveConversationPrincipalFromIngress(input: IngressPrincipalInput): ConversationPrincipal {
   const normalizedProviderUserId = input.userId.trim();
   const configuredRole = resolveOwnerOperatorPrincipalRole(
@@ -530,6 +533,9 @@ function deriveConversationPrincipalFromIngress(input: IngressPrincipalInput): C
   };
 }
 
+/**
+ * Implements `classifyTaskExecutionAccess` behavior within this module.
+ */
 function classifyTaskExecutionAccess(context: PrincipalContext): {
   accessClass: PrincipalAccessClass;
   allowed: boolean;
@@ -584,6 +590,9 @@ function classifyTaskExecutionAccess(context: PrincipalContext): {
   };
 }
 
+/**
+ * Implements `resolveIdentityAuthority` behavior within this module.
+ */
 function resolveIdentityAuthority(input: {
   configuredRole: "owner" | "operator" | null;
   allowedByUserId: boolean;
@@ -605,6 +614,9 @@ function resolveIdentityAuthority(input: {
   return input.providerUserIdHash ? "transport_hint" : "legacy_unknown";
 }
 
+/**
+ * Implements `buildSpeakerSubjectRef` behavior within this module.
+ */
 function buildSpeakerSubjectRef(actor: ConversationPrincipal): MemorySubjectRef | null {
   if (!actor.providerUserIdHash) {
     return null;
@@ -619,6 +631,9 @@ function buildSpeakerSubjectRef(actor: ConversationPrincipal): MemorySubjectRef 
   };
 }
 
+/**
+ * Implements `normalizeConversationPrincipal` behavior within this module.
+ */
 function normalizeConversationPrincipal(input: unknown): ConversationPrincipal | null {
   if (!input || typeof input !== "object") {
     return null;
@@ -666,6 +681,9 @@ function normalizeConversationPrincipal(input: unknown): ConversationPrincipal |
   };
 }
 
+/**
+ * Implements `normalizeMemorySubjectRef` behavior within this module.
+ */
 function normalizeMemorySubjectRef(input: unknown): MemorySubjectRef | null {
   if (!input || typeof input !== "object") {
     return null;
@@ -686,10 +704,16 @@ function normalizeMemorySubjectRef(input: unknown): MemorySubjectRef | null {
   };
 }
 
+/**
+ * Implements `normalizeConversationVisibility` behavior within this module.
+ */
 function normalizeConversationVisibility(value: unknown): ConversationVisibility | null {
   return value === "private" || value === "public" || value === "unknown" ? value : null;
 }
 
+/**
+ * Implements `normalizePrincipalProvider` behavior within this module.
+ */
 function normalizePrincipalProvider(value: unknown): PrincipalProvider | null {
   return value === "telegram" ||
     value === "discord" ||
@@ -702,6 +726,9 @@ function normalizePrincipalProvider(value: unknown): PrincipalProvider | null {
     : null;
 }
 
+/**
+ * Implements `normalizePrincipalRole` behavior within this module.
+ */
 function normalizePrincipalRole(value: unknown): PrincipalRole | null {
   return value === "owner" ||
     value === "operator" ||
@@ -716,6 +743,9 @@ function normalizePrincipalRole(value: unknown): PrincipalRole | null {
     : null;
 }
 
+/**
+ * Implements `normalizeOwnerMatchSource` behavior within this module.
+ */
 function normalizeOwnerMatchSource(value: unknown): OwnerMatchSource | null {
   return value === "provider_user_id" ||
     value === "local_operator_trusted_mode" ||
@@ -726,6 +756,9 @@ function normalizeOwnerMatchSource(value: unknown): OwnerMatchSource | null {
     : null;
 }
 
+/**
+ * Implements `normalizeIdentityAuthority` behavior within this module.
+ */
 function normalizeIdentityAuthority(value: unknown): IdentityAuthority | null {
   return value === "configured_owner_provider_user_id" ||
     value === "configured_operator_provider_user_id" ||
@@ -739,6 +772,9 @@ function normalizeIdentityAuthority(value: unknown): IdentityAuthority | null {
     : null;
 }
 
+/**
+ * Implements `normalizeLegacyIdentityState` behavior within this module.
+ */
 function normalizeLegacyIdentityState(value: unknown): LegacyIdentityState | null {
   return value === "principal_verified" ||
     value === "legacy_actor_unknown" ||
@@ -750,6 +786,9 @@ function normalizeLegacyIdentityState(value: unknown): LegacyIdentityState | nul
     : null;
 }
 
+/**
+ * Implements `normalizeMemorySubjectKind` behavior within this module.
+ */
 function normalizeMemorySubjectKind(value: unknown): MemorySubjectKind | null {
   return value === "owner_profile" ||
     value === "principal_profile" ||

@@ -29,6 +29,9 @@ export async function recordTopicAwareUserTurn(
   });
 }
 
+/**
+ * Implements `recordRoutingUserTurn` behavior within this module.
+ */
 export async function recordRoutingUserTurn(
   session: ConversationSession,
   input: string,

@@ -32,14 +32,23 @@ export interface BackendProfileOverrideAccessResult {
   denialMessage: string | null;
 }
 
+/**
+ * Implements `isProtectedModelBackendOverride` behavior within this module.
+ */
 export function isProtectedModelBackendOverride(backend: ModelBackend): boolean {
   return backend === "codex_oauth";
 }
 
+/**
+ * Implements `isProtectedCodexProfileOverride` behavior within this module.
+ */
 export function isProtectedCodexProfileOverride(profileId: string | null | undefined): boolean {
   return typeof profileId === "string" && profileId.trim().length > 0;
 }
 
+/**
+ * Implements `canUseProtectedModelSelection` behavior within this module.
+ */
 export function canUseProtectedModelSelection(
   principalContext: PrincipalContext | null | undefined
 ): boolean {
@@ -47,6 +56,9 @@ export function canUseProtectedModelSelection(
   return role === "owner" || role === "operator";
 }
 
+/**
+ * Implements `evaluateBackendProfileOverrideAccess` behavior within this module.
+ */
 export function evaluateBackendProfileOverrideAccess(input: {
   command: BackendProfileOverrideCommand;
   target: "model_backend" | "codex_profile";
@@ -94,6 +106,9 @@ export function evaluateBackendProfileOverrideAccess(input: {
   };
 }
 
+/**
+ * Implements `normalizeBackendProfileOverrideAccessRecord` behavior within this module.
+ */
 export function normalizeBackendProfileOverrideAccessRecord(
   input: unknown
 ): BackendProfileOverrideAccessRecord | null {
@@ -128,6 +143,9 @@ export function normalizeBackendProfileOverrideAccessRecord(
   };
 }
 
+/**
+ * Implements `resolveAccessClass` behavior within this module.
+ */
 function resolveAccessClass(
   role: string,
   allowed: boolean,

@@ -42,6 +42,9 @@ function resolveCurrentSpeakerTransportIdentityHint(
   );
 }
 
+/**
+ * Implements `canUseOwnerSelfIdentityFactsForCurrentSpeaker` behavior within this module.
+ */
 function canUseOwnerSelfIdentityFactsForCurrentSpeaker(session: ConversationSession): boolean {
   const principalContext = session.principalContext;
   if (!principalContext || principalContext.route.visibility !== "private") {
@@ -53,6 +56,9 @@ function canUseOwnerSelfIdentityFactsForCurrentSpeaker(session: ConversationSess
   );
 }
 
+/**
+ * Implements `toNameResolutionFacts` behavior within this module.
+ */
 function toNameResolutionFacts(
   facts: Awaited<ReturnType<typeof resolveSelfIdentityRecallContext>>["identityFacts"]
 ): readonly NameResolutionFact[] {

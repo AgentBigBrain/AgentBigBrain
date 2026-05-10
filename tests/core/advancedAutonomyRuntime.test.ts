@@ -144,7 +144,9 @@ async function stage65GovernedFederatedDelegationRoutesThroughOrchestratorPath()
       (result) => result.action.type === "create_skill"
     );
     assert.ok(createSkillResult);
-    assert.ok(createSkillResult!.votes.length > 0);
+    assert.equal(createSkillResult!.approved, false);
+    assert.ok(createSkillResult!.blockedBy.includes("IDENTITY_IMPERSONATION_DENIED"));
+    assert.equal(createSkillResult!.votes.length, 0);
     assert.match(runResult.task.goal, /FederatedContract partner-agent-alpha:quote_001/i);
   });
 }

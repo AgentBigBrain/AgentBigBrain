@@ -131,17 +131,26 @@ function extractConcepts(text: string): string[] {
   return extractSemanticConceptTerms(text).map((token) => normalizeConcept(token));
 }
 
+/**
+ * Implements `readRecord` behavior within this module.
+ */
 function readRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
     : {};
 }
 
+/**
+ * Implements `readOptionalString` behavior within this module.
+ */
 function readOptionalString(record: Record<string, unknown>, key: string): string | null {
   const value = record[key];
   return typeof value === "string" && value.trim().length > 0 ? value : null;
 }
 
+/**
+ * Implements `normalizeLearningAccessClassification` behavior within this module.
+ */
 function normalizeLearningAccessClassification(value: unknown): LearningAccessClassification | null {
   return value === "agent_global_safe" ||
     value === "owner_private" ||
@@ -153,6 +162,9 @@ function normalizeLearningAccessClassification(value: unknown): LearningAccessCl
     : null;
 }
 
+/**
+ * Implements `normalizeSemanticLessonAccessMetadata` behavior within this module.
+ */
 function normalizeSemanticLessonAccessMetadata(
   value: unknown
 ): SemanticLessonAccessMetadataV1 | undefined {
@@ -186,6 +198,9 @@ function normalizeSemanticLessonAccessMetadata(
   };
 }
 
+/**
+ * Implements `classifySemanticLessonAccess` behavior within this module.
+ */
 function classifySemanticLessonAccess(
   principalAccess: TaskPrincipalAccessEnvelope | null | undefined
 ): SemanticLessonAccessMetadataV1 {
@@ -227,6 +242,9 @@ function classifySemanticLessonAccess(
   };
 }
 
+/**
+ * Implements `classifyLearningAccess` behavior within this module.
+ */
 function classifyLearningAccess(input: {
   accessAllowed: boolean;
   accessClass: string;
@@ -302,6 +320,9 @@ function computeSemanticLessonDomainScore(
   return -0.05;
 }
 
+/**
+ * Implements `semanticLessonAccessSignature` behavior within this module.
+ */
 function semanticLessonAccessSignature(
   lesson: Pick<SemanticLesson, "accessMetadata">
 ): string {
@@ -317,6 +338,9 @@ function semanticLessonAccessSignature(
   ].join(":");
 }
 
+/**
+ * Implements `canLinkSemanticLessons` behavior within this module.
+ */
 function canLinkSemanticLessons(left: SemanticLesson, right: SemanticLesson): boolean {
   const leftAccess = left.accessMetadata?.classification ?? "agent_global_safe";
   const rightAccess = right.accessMetadata?.classification ?? "agent_global_safe";
@@ -326,6 +350,9 @@ function canLinkSemanticLessons(left: SemanticLesson, right: SemanticLesson): bo
   return semanticLessonAccessSignature(left) === semanticLessonAccessSignature(right);
 }
 
+/**
+ * Implements `buildSemanticLessonRetrievalContext` behavior within this module.
+ */
 function buildSemanticLessonRetrievalContext(
   options: SemanticLessonRetrievalAccessOptions | null | undefined
 ): {
@@ -358,6 +385,9 @@ function buildSemanticLessonRetrievalContext(
   };
 }
 
+/**
+ * Implements `isSemanticLessonVisibleForRetrieval` behavior within this module.
+ */
 function isSemanticLessonVisibleForRetrieval(
   lesson: SemanticLesson,
   options: SemanticLessonRetrievalAccessOptions | null | undefined

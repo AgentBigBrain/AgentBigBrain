@@ -109,6 +109,9 @@ export function readProfileEpisodes(
     }));
 }
 
+/**
+ * Implements `canReadEpisodesByPrincipalPolicy` behavior within this module.
+ */
 function canReadEpisodesByPrincipalPolicy(request: ProfileAccessRequest): boolean {
   if (!request.principalAccess && !request.requestedSubjectKind) {
     return true;

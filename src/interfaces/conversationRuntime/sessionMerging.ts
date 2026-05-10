@@ -167,6 +167,9 @@ function mergeConversationTurns(
   });
 }
 
+/**
+ * Implements `buildConversationTurnMergeKey` behavior within this module.
+ */
 function buildConversationTurnMergeKey(turn: ConversationTurn): string {
   if (turn.id) {
     return `id:${turn.id}`;

@@ -219,6 +219,9 @@ function isMemoryAccessCutoverGateDecision(value: unknown): value is MemoryAcces
   return value === "allow" || value === "block";
 }
 
+/**
+ * Implements `isMemoryAccessAuditPrincipalRole` behavior within this module.
+ */
 function isMemoryAccessAuditPrincipalRole(value: unknown): value is MemoryAccessAuditPrincipalRole {
   return (
     value === "owner" ||
@@ -233,12 +236,18 @@ function isMemoryAccessAuditPrincipalRole(value: unknown): value is MemoryAccess
   );
 }
 
+/**
+ * Implements `isMemoryAccessAuditRouteVisibility` behavior within this module.
+ */
 function isMemoryAccessAuditRouteVisibility(
   value: unknown
 ): value is MemoryAccessAuditRouteVisibility {
   return value === "private" || value === "public" || value === "unknown";
 }
 
+/**
+ * Implements `isMemoryAccessAuditAccessClass` behavior within this module.
+ */
 function isMemoryAccessAuditAccessClass(value: unknown): value is MemoryAccessAuditAccessClass {
   return (
     value === "owner_private" ||
@@ -255,6 +264,9 @@ function isMemoryAccessAuditAccessClass(value: unknown): value is MemoryAccessAu
   );
 }
 
+/**
+ * Implements `isMemoryAccessAuditIdentityAuthority` behavior within this module.
+ */
 function isMemoryAccessAuditIdentityAuthority(
   value: unknown
 ): value is MemoryAccessAuditIdentityAuthority {
@@ -270,6 +282,9 @@ function isMemoryAccessAuditIdentityAuthority(
   );
 }
 
+/**
+ * Implements `isMemoryAccessAuditLegacyIdentityState` behavior within this module.
+ */
 function isMemoryAccessAuditLegacyIdentityState(
   value: unknown
 ): value is MemoryAccessAuditLegacyIdentityState {
@@ -283,6 +298,9 @@ function isMemoryAccessAuditLegacyIdentityState(
   );
 }
 
+/**
+ * Implements `isMemoryAccessAuditOwnerMatchSource` behavior within this module.
+ */
 function isMemoryAccessAuditOwnerMatchSource(
   value: unknown
 ): value is MemoryAccessAuditOwnerMatchSource {
@@ -411,6 +429,9 @@ function normalizeCutoverGateReasons(value: unknown): string[] {
   return normalizeProbeSignals(value);
 }
 
+/**
+ * Implements `normalizeAuditLabel` behavior within this module.
+ */
 function normalizeAuditLabel(value: unknown): string | undefined {
   if (typeof value !== "string") {
     return undefined;
@@ -422,6 +443,9 @@ function normalizeAuditLabel(value: unknown): string | undefined {
   return trimmed;
 }
 
+/**
+ * Implements `normalizePrincipalAuditSnapshot` behavior within this module.
+ */
 function normalizePrincipalAuditSnapshot(
   value: unknown
 ): MemoryAccessPrincipalAuditSnapshot | undefined {

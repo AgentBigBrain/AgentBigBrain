@@ -17,6 +17,7 @@ full `profileMemoryStore.ts` implementation.
 ## Outputs
 - shared profile-memory runtime contracts in `contracts.ts`, including bounded fact-review plus
   live fact-review mutation request or result shapes
+- principal-aware owner/private read/write policy in `profileMemoryAccessPolicy.ts`
 - deterministic ingest provenance helpers and replay-safe synthetic source-task ids in
   `profileMemoryIngestProvenance.ts`
 - source-lane ingest policy normalization and pre-extraction stage selection in

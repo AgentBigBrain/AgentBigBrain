@@ -630,6 +630,8 @@ Use this when filling `.env` so you know exactly where each interface value come
 |---|---|---|
 | `BRAIN_INTERFACE_ALLOWED_USERNAMES` | `message.from.username` from `getUpdates`; create a Telegram username first if blank. | Your account username. Do not use display name or server nickname. |
 | `BRAIN_INTERFACE_ALLOWED_USER_IDS` | `message.from.id` from `getUpdates`. | Enable Developer Mode, then right-click your user and copy User ID. |
+| `BRAIN_OWNER_TELEGRAM_USER_IDS` / `BRAIN_OWNER_DISCORD_USER_IDS` | `message.from.id`; requires `BRAIN_PRINCIPAL_HMAC_KEY`. | Developer Mode -> Copy User ID; requires `BRAIN_PRINCIPAL_HMAC_KEY`. |
+| `BRAIN_OPERATOR_TELEGRAM_USER_IDS` / `BRAIN_OPERATOR_DISCORD_USER_IDS` | Optional operator ids for review/admin authority. | Optional operator ids for review/admin authority. |
 | `TELEGRAM_ALLOWED_CHAT_IDS` | `message.chat.id` from `getUpdates` after messaging the bot. | n/a |
 | `DISCORD_ALLOWED_CHANNEL_IDS` | n/a | Enable Developer Mode, then right-click the target channel and copy Channel ID. |
 | `TELEGRAM_BOT_TOKEN` | BotFather `/newbot` output. | n/a |
@@ -640,6 +642,8 @@ Bring-up recommendation:
 - Start with `BRAIN_INTERFACE_ALLOWED_USERNAMES` plus the provider bot token.
 - Leave `BRAIN_INTERFACE_ALLOWED_USER_IDS`, `TELEGRAM_ALLOWED_CHAT_IDS`, and `DISCORD_ALLOWED_CHANNEL_IDS` empty until the bot responds once.
 - After initial success, add the stricter ID/chat/channel allowlists if you want tighter ingress control.
+- Add owner/operator principal ids before relying on owner-private memory, `/memory`, protected
+  Codex profile overrides, or cross-provider owner continuity.
 
 ## 11) Shared Interface Settings Explained
 
@@ -651,6 +655,10 @@ These apply to Telegram, Discord, or both.
 | `BRAIN_INTERFACE_SHARED_SECRET` | Yes | Ingress auth secret used by interface adapters. |
 | `BRAIN_INTERFACE_ALLOWED_USERNAMES` | Yes | Comma list of allowed usernames. Normalized lowercase, `@` ignored. |
 | `BRAIN_INTERFACE_ALLOWED_USER_IDS` | No | Optional stricter ID-level allowlist. Telegram: `message.from.id` from `getUpdates`. Discord: Developer Mode -> Copy User ID. |
+| `BRAIN_PRINCIPAL_HMAC_KEY` | Required with owner/operator ids | Keyed redaction secret for provider user ids. Do not reuse provider tokens. |
+| `BRAIN_OWNER_TELEGRAM_USER_IDS` / `BRAIN_OWNER_DISCORD_USER_IDS` | No | Stable provider user ids that define owner-private memory/authority. |
+| `BRAIN_OPERATOR_TELEGRAM_USER_IDS` / `BRAIN_OPERATOR_DISCORD_USER_IDS` | No | Stable provider user ids allowed to perform operator review/admin actions. |
+| `BRAIN_LOCAL_OPERATOR_TRUSTED_MODE` | No | Explicit local-only trusted operator latch. Leave `false` for normal provider interfaces. |
 | `BRAIN_INTERFACE_REQUIRE_NAME_CALL` | No | Requires explicit agent name mention to process input. |
 | `BRAIN_INTERFACE_NAME_ALIASES` | No | Allowed aliases when name-call is required (default includes `BigBrain`). |
 | `BRAIN_INTERFACE_RATE_LIMIT_WINDOW_MS` | No | Rate-limit window size. |
@@ -706,9 +714,12 @@ Important continuity note:
 
 - `BRAIN_INTERFACE_PROVIDER=both` gives you one shared interface runtime and one shared
   orchestrator/session stack.
-- It does **not** automatically give Telegram and Discord shared long-lived profile continuity.
-- If you want cross-platform identity/profile facts to carry across both providers, also enable
-  `BRAIN_PROFILE_MEMORY_ENABLED=true` and set a valid `BRAIN_PROFILE_ENCRYPTION_KEY`.
+- It does **not** automatically prove that a Telegram speaker and a Discord speaker are the same
+  owner. Usernames and display names are aliases/hints only.
+- If you want cross-platform owner-private profile continuity, configure stable owner ids with
+  `BRAIN_OWNER_TELEGRAM_USER_IDS`, `BRAIN_OWNER_DISCORD_USER_IDS`, and
+  `BRAIN_PRINCIPAL_HMAC_KEY`, then enable `BRAIN_PROFILE_MEMORY_ENABLED=true` with a valid
+  `BRAIN_PROFILE_ENCRYPTION_KEY`.
 
 Generate a strong shared secret quickly:
 
@@ -735,7 +746,8 @@ Current operator contract:
   `reject skill ...`, `deprecate skill ...`, or `run skill ...`.
 - Agent-suggested skills are drafts until approved. Rejected or deprecated skills stay reviewable
   but are excluded from active planner guidance and executable reuse.
-- `/memory` is available in private conversations for remembered-situation review and correction.
+- `/memory` is available only to owner/operator principals in private conversations for
+  remembered-situation review and correction. Private route alone is not enough.
 - For real side effects, say `execute now` and name your shell (`PowerShell` / `cmd` / `Terminal` / `bash` / `zsh`).
 - If name-call mode is enabled, natural greeting forms like `Hi BigBrain` and `Hey BigBrain, ...`
   are accepted.
@@ -1097,6 +1109,17 @@ Profile memory stores long-lived personal facts and situations in an encrypted l
 Internally, the runtime uses a graph-backed model so it can track who a claim is about, when it
 was observed, and whether it is current, historical, or in conflict.
 
+Profile-memory encryption protects stored bytes. It does not prove who is speaking. Owner-private
+memory access is controlled by the principal boundary:
+
+- Interface allowlists decide who can send messages to the bot.
+- Owner/operator principal config decides who can read, write, review, or administer owner-private
+  memory and protected runtime controls.
+- Transport display names, usernames, prompt text, task ids, Source Recall refs, graph refs, and
+  model output are not owner proof.
+- Existing legacy/global profile facts are treated as owner-only or review-only until a deliberate
+  migration gives them a verified subject.
+
 Stage 6.86 handles live continuity for the current conversation. That includes the conversation
 stack, entity graph, open loops, pulse state, and runtime-action continuity. When profile memory is
 enabled, those Stage 6.86 flows can query the encrypted memory store for longer-lived recall and
@@ -1314,6 +1337,14 @@ Practical rules:
   - Telegram value source: `message.from.id` from `getUpdates`.
   - Discord value source: Developer Mode -> right-click user -> Copy User ID.
   - If set, non-listed user IDs are rejected even if username matches.
+- `BRAIN_PRINCIPAL_HMAC_KEY`: keyed redaction secret for principal ids.
+  - Required when owner/operator principal ids are configured.
+- `BRAIN_OWNER_TELEGRAM_USER_IDS` / `BRAIN_OWNER_DISCORD_USER_IDS`: owner principals.
+  - These ids control owner-private memory and authority. Usernames do not.
+- `BRAIN_OPERATOR_TELEGRAM_USER_IDS` / `BRAIN_OPERATOR_DISCORD_USER_IDS`: operator principals.
+  - Operators can perform configured review/admin operations without becoming the owner subject.
+- `BRAIN_LOCAL_OPERATOR_TRUSTED_MODE`: explicit local-only trusted operator latch.
+  - Leave `false` for normal Telegram/Discord deployments.
 - `BRAIN_INTERFACE_REQUIRE_NAME_CALL`: explicit invocation requirement.
   - `true` requires alias mention before processing.
 - `BRAIN_INTERFACE_NAME_ALIASES`: accepted invocation aliases.

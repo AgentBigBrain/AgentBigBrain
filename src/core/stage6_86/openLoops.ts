@@ -908,6 +908,9 @@ export function selectOpenLoopsForPulseV1(
   };
 }
 
+/**
+ * Implements `mergeOpenLoopActorScope` behavior within this module.
+ */
 function mergeOpenLoopActorScope(
   existing: ContinuityActorScopeV1 | null,
   incoming: ContinuityActorScopeV1 | null
@@ -931,6 +934,9 @@ function mergeOpenLoopActorScope(
   return existing;
 }
 
+/**
+ * Implements `buildSharedOpenLoopActorScope` behavior within this module.
+ */
 function buildSharedOpenLoopActorScope(scopeId: string | null): ContinuityActorScopeV1 {
   return {
     scopeSource: "shared_public",

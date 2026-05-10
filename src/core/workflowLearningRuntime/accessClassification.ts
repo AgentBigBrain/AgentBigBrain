@@ -14,6 +14,9 @@ export interface WorkflowPatternRetrievalAccessOptions {
   includeTestFixtures?: boolean;
 }
 
+/**
+ * Implements `classifyWorkflowLearningAccess` behavior within this module.
+ */
 export function classifyWorkflowLearningAccess(
   principalAccess: TaskPrincipalAccessEnvelope | null | undefined
 ): WorkflowLearningAccessMetadataV1 {
@@ -54,6 +57,9 @@ export function classifyWorkflowLearningAccess(
   };
 }
 
+/**
+ * Implements `normalizeWorkflowLearningAccessMetadata` behavior within this module.
+ */
 export function normalizeWorkflowLearningAccessMetadata(
   input: unknown
 ): WorkflowLearningAccessMetadataV1 | undefined {
@@ -87,6 +93,9 @@ export function normalizeWorkflowLearningAccessMetadata(
   };
 }
 
+/**
+ * Implements `buildWorkflowAccessScopeSuffix` behavior within this module.
+ */
 export function buildWorkflowAccessScopeSuffix(
   metadata: WorkflowLearningAccessMetadataV1 | undefined
 ): string {
@@ -102,6 +111,9 @@ export function buildWorkflowAccessScopeSuffix(
   ].join(":");
 }
 
+/**
+ * Implements `isWorkflowPatternVisibleForPrincipal` behavior within this module.
+ */
 export function isWorkflowPatternVisibleForPrincipal(
   pattern: WorkflowPattern,
   options: WorkflowPatternRetrievalAccessOptions | null | undefined
@@ -135,6 +147,9 @@ export function isWorkflowPatternVisibleForPrincipal(
   return false;
 }
 
+/**
+ * Implements `classifyWorkflowAccess` behavior within this module.
+ */
 function classifyWorkflowAccess(input: {
   accessAllowed: boolean;
   accessClass: string;
@@ -162,6 +177,9 @@ function classifyWorkflowAccess(input: {
   return "workspace_local";
 }
 
+/**
+ * Implements `buildWorkflowRetrievalContext` behavior within this module.
+ */
 function buildWorkflowRetrievalContext(
   options: WorkflowPatternRetrievalAccessOptions | null | undefined
 ): {
@@ -194,6 +212,9 @@ function buildWorkflowRetrievalContext(
   };
 }
 
+/**
+ * Implements `normalizeWorkflowLearningAccessClassification` behavior within this module.
+ */
 function normalizeWorkflowLearningAccessClassification(
   value: unknown
 ): WorkflowLearningAccessClassification | null {
@@ -207,12 +228,18 @@ function normalizeWorkflowLearningAccessClassification(
     : null;
 }
 
+/**
+ * Implements `readRecord` behavior within this module.
+ */
 function readRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
     : {};
 }
 
+/**
+ * Implements `readOptionalString` behavior within this module.
+ */
 function readOptionalString(record: Record<string, unknown>, key: string): string | null {
   const value = record[key];
   return typeof value === "string" && value.trim().length > 0 ? value : null;

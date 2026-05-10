@@ -161,6 +161,9 @@ export function evaluateProfileMemoryAccessPolicy(
   });
 }
 
+/**
+ * Implements `buildDecision` behavior within this module.
+ */
 function buildDecision(
   input: ProfileMemoryAccessPolicyInput,
   details: Pick<
@@ -175,10 +178,16 @@ function buildDecision(
   };
 }
 
+/**
+ * Implements `isPrivateSubject` behavior within this module.
+ */
 function isPrivateSubject(subjectKind: ProfileMemoryAccessSubjectKind): boolean {
   return subjectKind === "owner_profile" || subjectKind === "legacy_global_profile";
 }
 
+/**
+ * Implements `resolveNonOwnerOwnerPrivateBlockReason` behavior within this module.
+ */
 function resolveNonOwnerOwnerPrivateBlockReason(
   actorRole: string
 ): ProfileMemoryAccessPolicyReason {
@@ -191,6 +200,9 @@ function resolveNonOwnerOwnerPrivateBlockReason(
   return "non_owner_owner_private_blocked";
 }
 
+/**
+ * Implements `readNestedString` behavior within this module.
+ */
 function readNestedString(input: unknown, path: readonly string[]): string | null {
   let current: unknown = input;
   for (const segment of path) {

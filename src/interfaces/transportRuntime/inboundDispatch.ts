@@ -219,6 +219,9 @@ export async function handleAcceptedTransportConversation(
   }
 }
 
+/**
+ * Implements `buildInboundEntityGraphActorEvidence` behavior within this module.
+ */
 function buildInboundEntityGraphActorEvidence(
   input: HandleAcceptedTransportConversationInput
 ): EntityGraphActorEvidenceContext | null {

@@ -716,6 +716,9 @@ export function isOpenLoopV1(value: unknown): value is OpenLoopV1 {
   );
 }
 
+/**
+ * Implements `isContinuityActorScopeV1` behavior within this module.
+ */
 function isContinuityActorScopeV1(value: unknown): boolean {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return false;
@@ -734,6 +737,9 @@ function isContinuityActorScopeV1(value: unknown): boolean {
   );
 }
 
+/**
+ * Implements `isActorScopeSource` behavior within this module.
+ */
 function isActorScopeSource(value: unknown): boolean {
   return (
     value === "transport_principal" ||

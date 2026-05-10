@@ -149,6 +149,9 @@ function normalizeTaskSourceText(value: string): string {
   return value.trim();
 }
 
+/**
+ * Implements `buildJobSourceRecallCapturePrincipalAccess` behavior within this module.
+ */
 function buildJobSourceRecallCapturePrincipalAccess(
   session: ConversationSession
 ): TaskPrincipalAccessEnvelope | undefined {

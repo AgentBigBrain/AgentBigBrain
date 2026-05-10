@@ -1396,6 +1396,9 @@ function toReadableEpisode(
   };
 }
 
+/**
+ * Implements `canWriteProfileMemoryByPrincipalPolicy` behavior within this module.
+ */
 function canWriteProfileMemoryByPrincipalPolicy(options: ProfileMemoryIngestOptions): boolean {
   const principalAccess = options.principalAccess ?? options.provenance?.principalAccess;
   const requestedSubjectKind =
@@ -1410,6 +1413,9 @@ function canWriteProfileMemoryByPrincipalPolicy(options: ProfileMemoryIngestOpti
   }).allowed;
 }
 
+/**
+ * Implements `canMutateProfileMemoryByPrincipalPolicy` behavior within this module.
+ */
 function canMutateProfileMemoryByPrincipalPolicy(
   request: ProfileFactReviewMutationRequest
 ): boolean {

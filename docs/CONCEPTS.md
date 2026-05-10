@@ -16,6 +16,22 @@ exact commands, explicit user statements, active clarification choices, semantic
 lexical fallback evidence, document text, media transcripts, media summaries, review mutations,
 strict schemas, and legacy compatibility paths.
 
+## Principal, subject, and access
+
+The runtime separates three questions that often look similar in conversation:
+
+- principal: which actor sent or initiated the request,
+- subject: who or what the memory/source/action is about,
+- access: whether that actor may perform this operation on that subject.
+
+Provider user ids and local trusted-operator mode can establish owner/operator principals when
+configured. Usernames and display names are only ingress/display hints. Prompt text, model output,
+task ids, graph evidence refs, Source Recall refs, and projection notes cannot grant owner status,
+merge subjects, authorize memory review, or approve side effects.
+
+Legacy subjectless profile memory remains owner-only or review-only until explicitly migrated.
+Missing principal metadata fails closed for owner-private memory.
+
 ## Action authority registry
 
 The canonical registry for planner action ids, aliases, risk classes, side-effect classes, and

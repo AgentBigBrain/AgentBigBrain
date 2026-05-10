@@ -54,6 +54,9 @@ export type {
 } from "./profileMemoryQueryContracts";
 
 /** Builds bounded fact-review entries plus hidden decision records for one approval-aware surface. */
+/**
+ * Implements `reviewProfileFactsForUser` behavior within this module.
+ */
 export function reviewProfileFactsForUser(
   state: ProfileMemoryState,
   request: ProfileFactReviewRequest
@@ -80,6 +83,9 @@ export function reviewProfileFactsForUser(
 }
 
 /** Builds bounded planning-query entries plus hidden decision records for one non-mutating surface. */
+/**
+ * Implements `inspectProfileFactsForPlanningContext` behavior within this module.
+ */
 export function inspectProfileFactsForPlanningContext(
   state: ProfileMemoryState,
   request: ProfileFactPlanningInspectionRequest & {
@@ -130,6 +136,9 @@ export function inspectProfileFactsForPlanningContext(
 }
 
 /** Builds planner-facing profile context from normalized profile-memory state. */
+/**
+ * Implements `buildProfilePlanningContext` behavior within this module.
+ */
 export function buildProfilePlanningContext(
   state: ProfileMemoryState,
   maxFacts: number,
@@ -175,6 +184,9 @@ export function readProfileFacts(
     .map((fact) => toReadableFact(fact));
 }
 
+/**
+ * Implements `canReadFactsByPrincipalPolicy` behavior within this module.
+ */
 function canReadFactsByPrincipalPolicy(request: ProfileAccessRequest): boolean {
   if (!request.principalAccess && !request.requestedSubjectKind) {
     return true;

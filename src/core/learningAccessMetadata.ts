@@ -29,6 +29,9 @@ export interface AgentLearningRetrievalAccessOptions {
   includeTestFixtures?: boolean;
 }
 
+/**
+ * Implements `classifyAgentLearningAccess` behavior within this module.
+ */
 export function classifyAgentLearningAccess(
   principalAccess: TaskPrincipalAccessEnvelope | null | undefined
 ): AgentLearningAccessMetadataV1 {
@@ -70,6 +73,9 @@ export function classifyAgentLearningAccess(
   };
 }
 
+/**
+ * Implements `normalizeAgentLearningAccessMetadata` behavior within this module.
+ */
 export function normalizeAgentLearningAccessMetadata(
   input: unknown
 ): AgentLearningAccessMetadataV1 | undefined {
@@ -102,6 +108,9 @@ export function normalizeAgentLearningAccessMetadata(
   };
 }
 
+/**
+ * Implements `isAgentLearningVisibleForPrincipal` behavior within this module.
+ */
 export function isAgentLearningVisibleForPrincipal(
   metadata: AgentLearningAccessMetadataV1 | undefined,
   options: AgentLearningRetrievalAccessOptions | null | undefined
@@ -134,6 +143,9 @@ export function isAgentLearningVisibleForPrincipal(
   return false;
 }
 
+/**
+ * Implements `shouldApplyGlobalPersonalityLearning` behavior within this module.
+ */
 export function shouldApplyGlobalPersonalityLearning(
   metadata: AgentLearningAccessMetadataV1
 ): boolean {
@@ -148,6 +160,9 @@ export function shouldApplyGlobalPersonalityLearning(
   );
 }
 
+/**
+ * Implements `renderLearningAccessScopeLabel` behavior within this module.
+ */
 export function renderLearningAccessScopeLabel(
   metadata: AgentLearningAccessMetadataV1 | undefined
 ): string {
@@ -160,6 +175,9 @@ export function renderLearningAccessScopeLabel(
   return metadata.classification;
 }
 
+/**
+ * Implements `stripLearningAccessScopeSuffix` behavior within this module.
+ */
 export function stripLearningAccessScopeSuffix(value: string): string {
   const pipeIndex = value.indexOf("|scope:");
   if (pipeIndex >= 0) {
@@ -172,6 +190,9 @@ export function stripLearningAccessScopeSuffix(value: string): string {
   return value;
 }
 
+/**
+ * Implements `redactLearningAccessScopeSuffixes` behavior within this module.
+ */
 export function redactLearningAccessScopeSuffixes(value: string): string {
   let output = "";
   for (let index = 0; index < value.length;) {
@@ -188,6 +209,9 @@ export function redactLearningAccessScopeSuffixes(value: string): string {
   return output;
 }
 
+/**
+ * Implements `buildRetrievalContext` behavior within this module.
+ */
 function buildRetrievalContext(
   options: AgentLearningRetrievalAccessOptions | null | undefined
 ): {
@@ -220,6 +244,9 @@ function buildRetrievalContext(
   };
 }
 
+/**
+ * Implements `classifyAccess` behavior within this module.
+ */
 function classifyAccess(input: {
   accessAllowed: boolean;
   accessClass: string;
@@ -247,6 +274,9 @@ function classifyAccess(input: {
   return "workspace_local";
 }
 
+/**
+ * Implements `normalizeAgentLearningAccessClassification` behavior within this module.
+ */
 function normalizeAgentLearningAccessClassification(
   value: unknown
 ): AgentLearningAccessClassification | null {
@@ -260,17 +290,26 @@ function normalizeAgentLearningAccessClassification(
     : null;
 }
 
+/**
+ * Implements `readRecord` behavior within this module.
+ */
 function readRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
     : {};
 }
 
+/**
+ * Implements `readOptionalString` behavior within this module.
+ */
 function readOptionalString(record: Record<string, unknown>, key: string): string | null {
   const value = record[key];
   return typeof value === "string" && value.trim().length > 0 ? value : null;
 }
 
+/**
+ * Implements `isScopeDelimiter` behavior within this module.
+ */
 function isScopeDelimiter(value: string): boolean {
   return value === "" ||
     value === " " ||

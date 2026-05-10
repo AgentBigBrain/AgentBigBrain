@@ -378,7 +378,7 @@ test("buildConversationAwareExecutionInput adds bounded self-identity facts for 
       {
         factId: "fact_identity_preferred_name",
         key: "identity.preferred_name",
-        value: "Avery",
+        value: "Morgan",
         status: "active",
         observedAt: "2026-03-19T12:00:00.000Z",
         lastUpdatedAt: "2026-03-20T16:00:00.000Z",
@@ -397,7 +397,7 @@ test("buildConversationAwareExecutionInput adds bounded self-identity facts for 
   );
 
   assert.match(executionInput, /Direct self-identity recall context:/);
-  assert.match(executionInput, /identity\.preferred_name: Avery/);
+  assert.match(executionInput, /identity\.preferred_name: Morgan/);
   assert.doesNotMatch(executionInput, /relationship\.manager_name/i);
   assert.match(
     executionInput,
@@ -409,10 +409,10 @@ test("buildConversationAwareExecutionInput falls back to a low-confidence transp
   const session = buildSession({
     transportIdentity: {
       provider: "telegram",
-      username: "averybrooks",
-      displayName: "Avery Brooks",
-      givenName: "Avery",
-      familyName: "Bena",
+      username: "morganbrooks",
+      displayName: "Morgan Brooks",
+      givenName: "Morgan",
+      familyName: "Brooks",
       observedAt: "2026-03-20T20:48:00.000Z"
     }
   });
@@ -427,7 +427,7 @@ test("buildConversationAwareExecutionInput falls back to a low-confidence transp
   assert.match(executionInput, /Direct self-identity recall context:/);
   assert.match(executionInput, /Low-confidence transport identity hint:/);
   assert.match(executionInput, /Source: transport display name/);
-  assert.match(executionInput, /Candidate display name: Avery Brooks/);
+  assert.match(executionInput, /Candidate display name: Morgan Brooks/);
   assert.match(executionInput, /Trust rule: this hint came from transport metadata and is not a stored profile fact\./);
   assert.doesNotMatch(executionInput, /No bounded non-sensitive identity facts were found for this user yet\.\n- Response rule: say you do not know yet/i);
 });
@@ -436,10 +436,10 @@ test("buildConversationAwareExecutionInput keeps confirmed identity facts author
   const session = buildSession({
     transportIdentity: {
       provider: "telegram",
-      username: "averybrooks",
-      displayName: "Avery Brooks",
-      givenName: "Avery",
-      familyName: "Bena",
+      username: "morganbrooks",
+      displayName: "Morgan Brooks",
+      givenName: "Morgan",
+      familyName: "Brooks",
       observedAt: "2026-03-20T20:48:00.000Z"
     }
   });
@@ -495,9 +495,9 @@ test("buildConversationAwareExecutionInput grounds transport-name references as 
   const session = buildSession({
     transportIdentity: {
       provider: "telegram",
-      username: "averybrooks",
-      displayName: "Avery Brooks",
-      givenName: "Avery",
+      username: "morganbrooks",
+      displayName: "Morgan Brooks",
+      givenName: "Morgan",
       familyName: "Brooks",
       observedAt: "2026-03-20T20:48:00.000Z"
     }
@@ -522,43 +522,125 @@ test("buildConversationAwareExecutionInput grounds transport-name references as 
 
   const executionInput = await buildConversationAwareExecutionInput(
     session,
-    "Okay, so tell me about Avery.",
+    "Okay, so tell me about Morgan.",
     10,
     null,
-    "Okay, so tell me about Avery."
+    "Okay, so tell me about Morgan."
   );
 
-  assert.match(executionInput, /Current-user identity reference context:/);
+  assert.match(executionInput, /Current-speaker name resolution context:/);
   assert.match(
     executionInput,
-    /matches the current speaker's transport display name/i
+    /Matched name: Morgan/
   );
-  assert.match(executionInput, /treat this name as the current user, not as a separate third party/i);
-  assert.match(executionInput, /First-person statements in recent conversation context/);
+  assert.match(executionInput, /Resolution scope: current_speaker/);
+  assert.match(executionInput, /Public-safe label: you in this session/);
   assert.match(executionInput, /I mainly work at Northstar Labs now\./);
-  assert.match(executionInput, /It does not make transport metadata durable profile truth/);
+  assert.match(executionInput, /this block is reference evidence only/i);
+});
+
+test("buildConversationAwareExecutionInput keeps corrected first-person work facts attached to the transport-name speaker", async () => {
+  const session = buildSession({
+    transportIdentity: {
+      provider: "telegram",
+      username: "fixtureuser",
+      displayName: "Fixture User",
+      givenName: "Fixture",
+      familyName: "User",
+      observedAt: "2026-05-06T22:39:00.000Z"
+    }
+  });
+  session.conversationTurns.push(
+    {
+      role: "user",
+      text: "Oh okay, well I used to work with Former Teammate at Example Studio",
+      at: "2026-05-06T22:42:00.000Z"
+    },
+    {
+      role: "assistant",
+      text: "That makes sense. So Former Teammate is someone you used to work with at Example Studio.",
+      at: "2026-05-06T22:43:00.000Z"
+    },
+    {
+      role: "user",
+      text: "I now work with Current Teammate and a few other people at Example Labs. Example Studio is my business, and it's still in business, but I mainly work at Example Studio.",
+      at: "2026-05-06T22:43:30.000Z"
+    },
+    {
+      role: "assistant",
+      text: "Got it.",
+      at: "2026-05-06T22:44:00.000Z"
+    },
+    {
+      role: "user",
+      text: "Sorry, I mainly work at Example Labs - my mistake!",
+      at: "2026-05-06T22:45:00.000Z"
+    }
+  );
+
+  const executionInput = await buildConversationAwareExecutionInput(
+    session,
+    "Okay, so tell me about Fixture.",
+    10,
+    null,
+    "Okay, so tell me about Fixture."
+  );
+
+  assert.match(executionInput, /Current-speaker name resolution context:/);
+  assert.match(executionInput, /Matched name: Fixture/);
+  assert.match(executionInput, /Matched source: transport_given_name/);
+  assert.match(executionInput, /Resolution scope: current_speaker/);
+  assert.match(executionInput, /used to work with Former Teammate at Example Studio/);
+  assert.match(executionInput, /I now work with Current Teammate and a few other people at Example Labs/);
+  assert.match(executionInput, /Sorry, I mainly work at Example Labs - my mistake!/);
+  assert.match(executionInput, /newer first-person context corrects older first-person context/);
+});
+
+test("buildConversationAwareExecutionInput grounds first-person versus transport-name questions without classifying their meaning", async () => {
+  const session = buildSession({
+    transportIdentity: {
+      provider: "telegram",
+      username: "fixtureuser",
+      displayName: "Fixture User",
+      givenName: "Fixture",
+      familyName: "User",
+      observedAt: "2026-05-06T22:39:00.000Z"
+    }
+  });
+  const executionInput = await buildConversationAwareExecutionInput(
+    session,
+    'Do you think I am "I" or I am "Fixture" I thought you could infer this?',
+    10,
+    null,
+    'Do you think I am "I" or I am "Fixture" I thought you could infer this?'
+  );
+
+  assert.match(executionInput, /Current-speaker name resolution context:/);
+  assert.match(executionInput, /Matched name: Fixture/);
+  assert.match(executionInput, /Reference rule: treat this matched name as the current speaker/i);
+  assert.match(executionInput, /Current user request:\nDo you think I am "I" or I am "Fixture"/);
 });
 
 test("buildConversationAwareExecutionInput does not ground unrelated names to the current user", async () => {
   const session = buildSession({
     transportIdentity: {
       provider: "telegram",
-      username: "averybrooks",
-      displayName: "Avery Brooks",
-      givenName: "Avery",
+      username: "morganbrooks",
+      displayName: "Morgan Brooks",
+      givenName: "Morgan",
       familyName: "Brooks",
       observedAt: "2026-03-20T20:48:00.000Z"
     }
   });
   const executionInput = await buildConversationAwareExecutionInput(
     session,
-    "What do you know about Morgan?",
+    "What do you know about Robin?",
     10,
     null,
-    "What do you know about Morgan?"
+    "What do you know about Robin?"
   );
 
-  assert.doesNotMatch(executionInput, /Current-user identity reference context:/);
+  assert.doesNotMatch(executionInput, /Current-speaker name resolution context:/);
 });
 
 test("buildConversationAwareExecutionInput includes conversation context, status guardrails, and routing hint", async () => {
@@ -1364,18 +1446,18 @@ test("buildConversationAwareExecutionInput strips robotic assistant labels from 
   const session = buildSession();
   session.conversationTurns.push({
     role: "assistant",
-    text: "AI assistant answer: Owen seems to be doing better now.",
+    text: "AI assistant answer: Riley seems to be doing better now.",
     at: "2026-03-03T00:00:20.000Z"
   });
 
   const executionInput = await buildConversationAwareExecutionInput(
     session,
-    "How is Owen doing?",
+    "How is Riley doing?",
     10
   );
 
   assert.match(executionInput, /Recent conversation context \(oldest to newest\):/);
-  assert.match(executionInput, /- assistant: Owen seems to be doing better now\./);
+  assert.match(executionInput, /- assistant: Riley seems to be doing better now\./);
   assert.doesNotMatch(executionInput, /AI assistant answer:/i);
 });
 
@@ -1446,7 +1528,7 @@ test("buildConversationAwareExecutionInput can inject episode-aware contextual r
   const session = buildSession();
   session.conversationTurns.push({
     role: "user",
-    text: "Owen fell down a few weeks ago.",
+    text: "Riley fell down a few weeks ago.",
     at: "2026-02-14T15:00:00.000Z"
   });
   session.conversationStack = {
@@ -1464,16 +1546,16 @@ test("buildConversationAwareExecutionInput can inject episode-aware contextual r
         lastTouchedAt: "2026-03-03T00:00:00.000Z"
       },
       {
-        threadKey: "thread_owen",
-        topicKey: "owen_fall",
-        topicLabel: "Owen Fall",
+        threadKey: "thread_riley",
+        topicKey: "riley_fall",
+        topicLabel: "Riley Fall",
         state: "paused",
-        resumeHint: "Owen fell down and you wanted to hear how it ended up.",
+        resumeHint: "Riley fell down and you wanted to hear how it ended up.",
         openLoops: [
           {
-            loopId: "loop_owen",
-            threadKey: "thread_owen",
-            entityRefs: ["owen"],
+            loopId: "loop_riley",
+            threadKey: "thread_riley",
+            entityRefs: ["riley"],
             createdAt: "2026-02-14T15:00:00.000Z",
             lastMentionedAt: "2026-02-14T15:00:00.000Z",
             priority: 0.8,
@@ -1492,8 +1574,8 @@ test("buildConversationAwareExecutionInput can inject episode-aware contextual r
         mentionCount: 1
       },
       {
-        topicKey: "owen_fall",
-        label: "Owen Fall",
+        topicKey: "riley_fall",
+        label: "Riley Fall",
         firstSeenAt: "2026-02-14T15:00:00.000Z",
         lastSeenAt: "2026-02-14T15:00:00.000Z",
         mentionCount: 1
@@ -1509,28 +1591,28 @@ test("buildConversationAwareExecutionInput can inject episode-aware contextual r
   });
   const executionInput = await buildConversationAwareExecutionInput(
     session,
-    "Follow-up user response to prior assistant clarification.\nUser follow-up answer: Owen seems better now.",
+    "Follow-up user response to prior assistant clarification.\nUser follow-up answer: Riley seems better now.",
     10,
     null,
-    "How is Owen doing lately?",
+    "How is Riley doing lately?",
     async () => [
       {
-        episodeId: "episode_owen_fall",
-        title: "Owen fell down",
-        summary: "Owen fell down a few weeks ago and the outcome never got resolved.",
+        episodeId: "episode_riley_fall",
+        title: "Riley fell down",
+        summary: "Riley fell down a few weeks ago and the outcome never got resolved.",
         status: "unresolved",
         lastMentionedAt: "2026-02-14T15:00:00.000Z",
-        entityRefs: ["Owen"],
+        entityRefs: ["Riley"],
         entityLinks: [
           {
-            entityKey: "entity_owen",
-            canonicalName: "Owen"
+            entityKey: "entity_riley",
+            canonicalName: "Riley"
           }
         ],
         openLoopLinks: [
           {
-            loopId: "loop_owen",
-            threadKey: "thread_owen",
+            loopId: "loop_riley",
+            threadKey: "thread_riley",
             status: "open",
             priority: 0.8
           }
@@ -1556,16 +1638,16 @@ test("buildConversationAwareExecutionInput can inject episode-aware contextual r
   assert.match(executionInput, /- memoryIntent: contextual_recall/);
   assert.match(executionInput, /Contextual recall opportunity \(optional\):/);
   assert.match(executionInput, /older unresolved situation/i);
-  assert.match(executionInput, /Relevant situation: Owen fell down/i);
+  assert.match(executionInput, /Relevant situation: Riley fell down/i);
   assert.match(executionInput, /Current user request:/);
-  assert.match(executionInput, /User follow-up answer: Owen seems better now\./);
+  assert.match(executionInput, /User follow-up answer: Riley seems better now\./);
 });
 
 test("buildConversationAwareExecutionInput reuses one continuity read session for route-approved contextual recall", async () => {
   const session = buildSession();
   session.conversationTurns.push({
     role: "user",
-    text: "Owen fell down a few weeks ago.",
+    text: "Riley fell down a few weeks ago.",
     at: "2026-02-14T15:00:00.000Z"
   });
   session.conversationStack = {
@@ -1583,16 +1665,16 @@ test("buildConversationAwareExecutionInput reuses one continuity read session fo
         lastTouchedAt: "2026-03-03T00:00:00.000Z"
       },
       {
-        threadKey: "thread_owen",
-        topicKey: "owen_fall",
-        topicLabel: "Owen Fall",
+        threadKey: "thread_riley",
+        topicKey: "riley_fall",
+        topicLabel: "Riley Fall",
         state: "paused",
-        resumeHint: "Owen fell down and you wanted to hear how it ended up.",
+        resumeHint: "Riley fell down and you wanted to hear how it ended up.",
         openLoops: [
           {
-            loopId: "loop_owen",
-            threadKey: "thread_owen",
-            entityRefs: ["owen"],
+            loopId: "loop_riley",
+            threadKey: "thread_riley",
+            entityRefs: ["riley"],
             createdAt: "2026-02-14T15:00:00.000Z",
             lastMentionedAt: "2026-02-14T15:00:00.000Z",
             priority: 0.8,
@@ -1611,8 +1693,8 @@ test("buildConversationAwareExecutionInput reuses one continuity read session fo
         mentionCount: 1
       },
       {
-        topicKey: "owen_fall",
-        label: "Owen Fall",
+        topicKey: "riley_fall",
+        label: "Riley Fall",
         firstSeenAt: "2026-02-14T15:00:00.000Z",
         lastSeenAt: "2026-02-14T15:00:00.000Z",
         mentionCount: 1
@@ -1632,10 +1714,10 @@ test("buildConversationAwareExecutionInput reuses one continuity read session fo
   });
   const executionInput = await buildConversationAwareExecutionInput(
     session,
-    "Follow-up user response to prior assistant clarification.\nUser follow-up answer: Owen seems better now.",
+    "Follow-up user response to prior assistant clarification.\nUser follow-up answer: Riley seems better now.",
     10,
     null,
-    "How is Owen doing lately?",
+    "How is Riley doing lately?",
     async () => {
       throw new Error("raw continuity episode callback should not run when a read session is available");
     },
@@ -1656,22 +1738,22 @@ test("buildConversationAwareExecutionInput reuses one continuity read session fo
           continuityEpisodeQueries += 1;
           return [
             {
-              episodeId: "episode_owen_fall",
-              title: "Owen fell down",
-              summary: "Owen fell down a few weeks ago and the outcome never got resolved.",
+              episodeId: "episode_riley_fall",
+              title: "Riley fell down",
+              summary: "Riley fell down a few weeks ago and the outcome never got resolved.",
               status: "unresolved",
               lastMentionedAt: "2026-02-14T15:00:00.000Z",
-              entityRefs: ["Owen"],
+              entityRefs: ["Riley"],
               entityLinks: [
                 {
-                  entityKey: "entity_owen",
-                  canonicalName: "Owen"
+                  entityKey: "entity_riley",
+                  canonicalName: "Riley"
                 }
               ],
               openLoopLinks: [
                 {
-                  loopId: "loop_owen",
-                  threadKey: "thread_owen",
+                  loopId: "loop_riley",
+                  threadKey: "thread_riley",
                   status: "open",
                   priority: 0.8
                 }
@@ -1683,8 +1765,8 @@ test("buildConversationAwareExecutionInput reuses one continuity read session fo
           continuityFactQueries += 1;
           return [
             {
-              factId: "fact_owen_relationship",
-              key: "contact.owen.relationship",
+              factId: "fact_riley_relationship",
+              key: "contact.riley.relationship",
               value: "work_peer",
               status: "active",
               observedAt: "2026-02-14T15:00:00.000Z",
@@ -1706,7 +1788,7 @@ test("buildConversationAwareExecutionInput reuses one continuity read session fo
   assert.ok(continuityFactQueries > 0);
   assert.match(executionInput, /- memoryIntent: contextual_recall/);
   assert.match(executionInput, /Contextual recall opportunity \(optional\):/);
-  assert.match(executionInput, /Relevant situation: Owen fell down/i);
+  assert.match(executionInput, /Relevant situation: Riley fell down/i);
   assert.doesNotMatch(executionInput, /Relationship continuity context:/);
 });
 
@@ -3179,7 +3261,7 @@ test("buildConversationAwareExecutionInput can use media continuity cues to surf
     conversationTurns: [
       {
         role: "user",
-        text: "We never really found out how Owen's MRI turned out.",
+        text: "We never really found out how Riley's MRI turned out.",
         at: "2026-02-14T15:00:00.000Z"
       }
     ],
@@ -3198,16 +3280,16 @@ test("buildConversationAwareExecutionInput can use media continuity cues to surf
           lastTouchedAt: "2026-03-03T00:00:00.000Z"
         },
         {
-          threadKey: "thread_owen",
-          topicKey: "owen_mri",
-          topicLabel: "Owen MRI",
+          threadKey: "thread_riley",
+          topicKey: "riley_mri",
+          topicLabel: "Riley MRI",
           state: "paused",
-          resumeHint: "Owen was waiting on MRI results and the outcome never got resolved.",
+          resumeHint: "Riley was waiting on MRI results and the outcome never got resolved.",
           openLoops: [
             {
-              loopId: "loop_owen_mri",
-              threadKey: "thread_owen",
-              entityRefs: ["owen", "mri"],
+              loopId: "loop_riley_mri",
+              threadKey: "thread_riley",
+              entityRefs: ["riley", "mri"],
               createdAt: "2026-02-14T15:00:00.000Z",
               lastMentionedAt: "2026-02-14T15:00:00.000Z",
               priority: 0.9,
@@ -3226,8 +3308,8 @@ test("buildConversationAwareExecutionInput can use media continuity cues to surf
           mentionCount: 1
         },
         {
-          topicKey: "owen_mri",
-          label: "Owen MRI",
+          topicKey: "riley_mri",
+          label: "Riley MRI",
           firstSeenAt: "2026-02-14T15:00:00.000Z",
           lastSeenAt: "2026-02-14T15:00:00.000Z",
           mentionCount: 1
@@ -3244,22 +3326,22 @@ test("buildConversationAwareExecutionInput can use media continuity cues to surf
     "Please review the screenshot and tell me what to do next.",
     async () => [
       {
-        episodeId: "episode_owen_mri",
-        title: "Owen MRI results were still pending",
-        summary: "Owen was waiting on MRI results and the outcome never got resolved.",
+        episodeId: "episode_riley_mri",
+        title: "Riley MRI results were still pending",
+        summary: "Riley was waiting on MRI results and the outcome never got resolved.",
         status: "outcome_unknown",
         lastMentionedAt: "2026-02-14T15:00:00.000Z",
-        entityRefs: ["Owen", "MRI"],
+        entityRefs: ["Riley", "MRI"],
         entityLinks: [
           {
-            entityKey: "entity_owen",
-            canonicalName: "Owen"
+            entityKey: "entity_riley",
+            canonicalName: "Riley"
           }
         ],
         openLoopLinks: [
           {
-            loopId: "loop_owen_mri",
-            threadKey: "thread_owen",
+            loopId: "loop_riley_mri",
+            threadKey: "thread_riley",
             status: "open",
             priority: 0.9
           }
@@ -3272,23 +3354,23 @@ test("buildConversationAwareExecutionInput can use media continuity cues to surf
         {
           kind: "image",
           provider: "telegram",
-          fileId: "image-owen-1",
-          fileUniqueId: "image-owen-uniq-1",
+          fileId: "image-riley-1",
+          fileUniqueId: "image-riley-uniq-1",
           mimeType: "image/png",
-          fileName: "owen-update.png",
+          fileName: "riley-update.png",
           sizeBytes: 2048,
-          caption: "Here is the note about Owen.",
+          caption: "Here is the note about Riley.",
           durationSeconds: null,
           width: 1024,
           height: 768,
           interpretation: {
-            summary: "The screenshot mentions Owen and says the MRI results still have not come back.",
+            summary: "The screenshot mentions Riley and says the MRI results still have not come back.",
             transcript: null,
-            ocrText: "Owen MRI results still pending",
+            ocrText: "Riley MRI results still pending",
             confidence: 0.93,
             provenance: "fixture screenshot",
             source: "fixture_catalog",
-            entityHints: ["Owen", "MRI"]
+            entityHints: ["Riley", "MRI"]
           }
         }
       ]
@@ -3296,8 +3378,8 @@ test("buildConversationAwareExecutionInput can use media continuity cues to surf
   );
 
   assert.match(executionInput, /Contextual recall opportunity \(optional\):/);
-  assert.match(executionInput, /Media continuity cues: owen, mri/);
-  assert.match(executionInput, /Relevant situation: Owen MRI results were still pending/i);
+  assert.match(executionInput, /Media continuity cues: riley, mri/);
+  assert.match(executionInput, /Relevant situation: Riley MRI results were still pending/i);
 });
 
 test("buildAgentPulseExecutionInput includes pulse safety instructions and bounded context", () => {

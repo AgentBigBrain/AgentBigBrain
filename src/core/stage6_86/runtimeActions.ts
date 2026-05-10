@@ -104,6 +104,9 @@ function registerPulseEmission(pulseState: Stage686PulseStateV1, observedAt: str
   };
 }
 
+/**
+ * Implements `buildMissionRuntimeActorScope` behavior within this module.
+ */
 function buildMissionRuntimeActorScope(input: ExecuteStage686RuntimeActionInput): ContinuityActorScopeV1 {
   return {
     scopeSource: "mission_runtime",

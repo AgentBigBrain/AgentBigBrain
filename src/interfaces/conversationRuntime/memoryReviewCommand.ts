@@ -203,6 +203,9 @@ export async function handleMemoryReviewCommand(
   return renderMemoryReviewFactMutationResult("forget", fact);
 }
 
+/**
+ * Implements `buildMemoryReviewPrincipalAccess` behavior within this module.
+ */
 function buildMemoryReviewPrincipalAccess(session: ConversationSession) {
   const principalContext =
     session.principalContext ??

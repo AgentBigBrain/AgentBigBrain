@@ -30,6 +30,7 @@ files.
 - task-runner `network_write` connector consistency, egress, and JIT approval gating in
   `taskRunnerNetworkPreflight.ts`
 - task-runner governance preflight and council evaluation in `taskRunnerGovernance.ts`
+- task-runner skill lifecycle principal/role policy in `taskRunnerSkillPrincipalPolicy.ts`
 - task-runner approved-action execution normalization in `taskRunnerExecution.ts`
 - task-runner live-run override extraction and request-scoped browser/process guard helpers in
   `taskRunnerLiveRunOverrides.ts`

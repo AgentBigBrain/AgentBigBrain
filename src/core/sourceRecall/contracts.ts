@@ -548,6 +548,9 @@ export function normalizeSourceRecallPrincipalMetadata(
   return Object.values(metadata).some((entry) => entry !== null) ? metadata : undefined;
 }
 
+/**
+ * Implements `normalizeNullableLabel` behavior within this module.
+ */
 function normalizeNullableLabel(value: unknown): string | null {
   if (typeof value !== "string") {
     return null;

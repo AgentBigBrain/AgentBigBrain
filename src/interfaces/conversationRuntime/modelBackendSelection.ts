@@ -72,6 +72,9 @@ export function buildConversationModelEnvironment(
   return nextEnv;
 }
 
+/**
+ * Implements `resolveAuthorizedSessionBackend` behavior within this module.
+ */
 function resolveAuthorizedSessionBackend(
   session: (Pick<ConversationSession, "modelBackendOverride"> & {
     principalContext?: PrincipalContext | null;

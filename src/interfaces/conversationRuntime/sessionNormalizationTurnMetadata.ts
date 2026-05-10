@@ -11,6 +11,9 @@ import type {
 import { normalizeConversationTurnActorMetadata } from "./sessionNormalizationTurnActorMetadata";
 import { normalizeConversationTurnSourceRecallMetadata } from "./sessionNormalizationSourceRecallRecords";
 
+/**
+ * Implements `normalizeAssistantTurnKind` behavior within this module.
+ */
 function normalizeAssistantTurnKind(value: unknown): ConversationAssistantTurnKind | null {
   return value === "clarification" ||
     value === "informational_answer" ||
@@ -20,6 +23,9 @@ function normalizeAssistantTurnKind(value: unknown): ConversationAssistantTurnKi
     : null;
 }
 
+/**
+ * Implements `normalizeConversationTurnMetadataSource` behavior within this module.
+ */
 function normalizeConversationTurnMetadataSource(
   value: unknown
 ): ConversationTurnMetadataSource | null {

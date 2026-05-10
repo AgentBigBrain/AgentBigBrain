@@ -284,12 +284,18 @@ async function attachTelegramMediaSourceRecallRefs(input: {
   }
 }
 
+/**
+ * Implements `buildTelegramMediaSourceRecallScopeId` behavior within this module.
+ */
 export function buildTelegramMediaSourceRecallScopeId(
   prepared: Pick<PreparedTelegramAcceptedUpdate, "chatId" | "userId">
 ): string {
   return `conversation:telegram:${prepared.chatId}:${prepared.userId}`;
 }
 
+/**
+ * Implements `buildTelegramMediaSourceRecallPrincipalAccess` behavior within this module.
+ */
 function buildTelegramMediaSourceRecallPrincipalAccess(
   prepared: PreparedTelegramAcceptedUpdate,
   config: TelegramInterfaceConfig

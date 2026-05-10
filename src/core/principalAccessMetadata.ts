@@ -88,12 +88,18 @@ export function coerceRedactedPrincipalAccessMetadata(
   };
 }
 
+/**
+ * Implements `readRecord` behavior within this module.
+ */
 function readRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
     : {};
 }
 
+/**
+ * Implements `readString` behavior within this module.
+ */
 function readString(record: Record<string, unknown>, key: string): string | null {
   const value = record[key];
   return typeof value === "string" && value.trim().length > 0 ? value : null;

@@ -442,12 +442,18 @@ function buildSourceRecallPrincipalMetadata(
   };
 }
 
+/**
+ * Implements `readObject` behavior within this module.
+ */
 function readObject(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : null;
 }
 
+/**
+ * Implements `readString` behavior within this module.
+ */
 function readString(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 }

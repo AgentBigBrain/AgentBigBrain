@@ -69,6 +69,7 @@ env-parsing helpers while `config.ts` remains the stable config entrypoint.
   `plannerFailureStore.ts`, `sourceAuthority.ts`, `verificationPromptClassifier.ts`,
   `workflowLearningStore.ts`.
 - Extracted workflow-learning runtime subsystem: `src/core/workflowLearningRuntime/contracts.ts`,
+  `src/core/workflowLearningRuntime/accessClassification.ts`,
   `src/core/workflowLearningRuntime/observationExtraction.ts`,
   `src/core/workflowLearningRuntime/observationScoring.ts`,
   `src/core/workflowLearningRuntime/patternLifecycle.ts`,
@@ -78,8 +79,8 @@ env-parsing helpers while `config.ts` remains the stable config entrypoint.
   `src/core/workflowLearningRuntime/workflowInspection.ts`.
 - Config, identity, and platform/runtime support: `appleSiliconRuntime.ts`, `config.ts`,
   `crossPlatformPath.ts`, `envLoader.ts`, `fileLock.ts`, `ids.ts`, `personality.ts`,
-  `personalityStore.ts`, `runtimeEntropy.ts`, `sessionContext.ts`, `shellRuntimeProfile.ts`,
-  `sqliteStore.ts`,
+  `personalityStore.ts`, `principalAccessMetadata.ts`, `runtimeEntropy.ts`, `sessionContext.ts`,
+  `shellRuntimeProfile.ts`, `sqliteStore.ts`,
   `stateStore.ts`, `types.ts`.
 - Extracted runtime-types subsystem: `src/core/runtimeTypes/actionTypes.ts`,
   `src/core/runtimeTypes/decisionSupportTypes.ts`,
@@ -100,8 +101,9 @@ env-parsing helpers while `config.ts` remains the stable config entrypoint.
   `hardConstraintShellPolicy.ts`, `immutableTargetPolicy.ts`, `retrievalQuarantine.ts`.
 - Shared data, memory, and model-routing primitives: `embeddingProvider.ts`, `entityGraphStore.ts`,
   `evidenceStore.ts`, `governanceMemory.ts`, `judgmentPatterns.ts`, `memoryAccessAudit.ts`,
-  `mediaArtifacts.ts`, `mediaArtifactStore.ts`, `modelRouting.ts`, `onnxEmbeddingProvider.ts`,
-  `profileMemory.ts`, `profileMemoryCrypto.ts`, `profileMemoryPlanningContext.ts`,
+  `learningAccessMetadata.ts`, `mediaArtifacts.ts`, `mediaArtifactStore.ts`, `modelRouting.ts`,
+  `onnxEmbeddingProvider.ts`, `profileMemory.ts`, `profileMemoryCrypto.ts`,
+  `profileMemoryPlanningContext.ts`,
   `profileMemoryStore.ts`, `semanticMemory.ts`, `vectorStore.ts`, `workflowLearningStore.ts`.
 - External projection subsystem: `src/core/projections/contracts.ts`,
   `src/core/projections/config.ts`, `src/core/projections/policy.ts`,

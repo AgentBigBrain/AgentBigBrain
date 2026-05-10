@@ -99,6 +99,9 @@ function stripUtf8Bom(value: string): string {
   return value.replace(/^\uFEFF/, "");
 }
 
+/**
+ * Implements `sqliteTableHasColumn` behavior within this module.
+ */
 function sqliteTableHasColumn(
   db: DatabaseSync,
   tableName: string,
@@ -1068,6 +1071,9 @@ function parseJsonStringArray(raw: string): string[] {
   }
 }
 
+/**
+ * Implements `parsePrincipalAccessJson` behavior within this module.
+ */
 function parsePrincipalAccessJson(value: string | null | undefined): RedactedPrincipalAccessMetadata | null {
   if (!value) {
     return null;

@@ -59,6 +59,9 @@ export function evaluateTaskRunnerSkillPrincipalAccess(input: {
   };
 }
 
+/**
+ * Implements `buildAllowedDecision` behavior within this module.
+ */
 function buildAllowedDecision(
   principalAccess: TaskPrincipalAccessEnvelope | null,
   protectedLifecycle: boolean
@@ -70,6 +73,9 @@ function buildAllowedDecision(
   };
 }
 
+/**
+ * Implements `buildTraceDetails` behavior within this module.
+ */
 function buildTraceDetails(
   principalAccess: TaskPrincipalAccessEnvelope | null,
   protectedLifecycle: boolean,
@@ -85,6 +91,9 @@ function buildTraceDetails(
   };
 }
 
+/**
+ * Implements `readPrincipalRole` behavior within this module.
+ */
 function readPrincipalRole(principalAccess: TaskPrincipalAccessEnvelope | null): string | null {
   const actor = principalAccess?.principalContext.actor;
   if (!actor || typeof actor !== "object" || Array.isArray(actor)) {
@@ -94,6 +103,9 @@ function readPrincipalRole(principalAccess: TaskPrincipalAccessEnvelope | null):
   return typeof role === "string" ? role : null;
 }
 
+/**
+ * Implements `readAccessClass` behavior within this module.
+ */
 function readAccessClass(principalAccess: TaskPrincipalAccessEnvelope | null): string | null {
   const accessClass = principalAccess?.accessDecision.accessClass;
   return typeof accessClass === "string" ? accessClass : null;

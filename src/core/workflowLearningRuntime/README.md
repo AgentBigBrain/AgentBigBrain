@@ -2,6 +2,7 @@
 This subsystem owns deterministic workflow-learning extraction, ranking, inspection, and skill-opportunity helpers.
 
 ## Primary Files
+- `accessClassification.ts`
 - `contracts.ts`
 - `observationExtraction.ts`
 - `observationScoring.ts`
@@ -18,6 +19,7 @@ This subsystem owns deterministic workflow-learning extraction, ranking, inspect
 
 ## Outputs
 - richer workflow observations with execution-style, approval, cost, latency, recovery, and linked-skill metadata
+- principal/access classification so workflow learning can be filtered before it influences planner guidance
 - deterministic ranked retrieval for relevant workflow motifs
 - planner-bias summaries and operator-facing workflow inspection summaries
 - repeated-workflow opportunity ranking used by the skill/workflow bridge

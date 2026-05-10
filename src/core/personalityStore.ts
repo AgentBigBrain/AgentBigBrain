@@ -81,6 +81,9 @@ function isValidHistoryEntry(entry: unknown): entry is PersonalityHistoryEntry {
   );
 }
 
+/**
+ * Implements `normalizePersonalityHistoryEntry` behavior within this module.
+ */
 function normalizePersonalityHistoryEntry(entry: PersonalityHistoryEntry): PersonalityHistoryEntry {
   return {
     taskId: entry.taskId,

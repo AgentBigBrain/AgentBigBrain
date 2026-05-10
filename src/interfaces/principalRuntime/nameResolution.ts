@@ -88,6 +88,9 @@ export function resolveCurrentSpeakerNameResolution(
   };
 }
 
+/**
+ * Implements `collectNameResolutionCandidates` behavior within this module.
+ */
 function collectNameResolutionCandidates(input: {
   currentSpeakerSubjectRef: MemorySubjectRef | null;
   identityFacts: readonly NameResolutionFact[];
@@ -127,6 +130,9 @@ function collectNameResolutionCandidates(input: {
   return candidates.slice(0, 6);
 }
 
+/**
+ * Implements `pushNameResolutionCandidate` behavior within this module.
+ */
 function pushNameResolutionCandidate(
   target: NameResolutionCandidate[],
   seen: Set<string>,
@@ -144,6 +150,9 @@ function pushNameResolutionCandidate(
   });
 }
 
+/**
+ * Implements `selectMentionedNameResolutionCandidate` behavior within this module.
+ */
 function selectMentionedNameResolutionCandidate(
   userInput: string,
   candidates: readonly NameResolutionCandidate[]
@@ -154,6 +163,9 @@ function selectMentionedNameResolutionCandidate(
   ) ?? null;
 }
 
+/**
+ * Implements `tokenizeNameResolutionText` behavior within this module.
+ */
 function tokenizeNameResolutionText(value: string): readonly string[] {
   return value
     .normalize("NFKC")
@@ -164,6 +176,9 @@ function tokenizeNameResolutionText(value: string): readonly string[] {
     .filter((token) => token.length > 0);
 }
 
+/**
+ * Implements `hasTokenSequence` behavior within this module.
+ */
 function hasTokenSequence(
   inputTokens: readonly string[],
   candidateTokens: readonly string[]
@@ -179,6 +194,9 @@ function hasTokenSequence(
   return false;
 }
 
+/**
+ * Implements `normalizeTransportHintSource` behavior within this module.
+ */
 function normalizeTransportHintSource(
   source: NameResolutionTransportHint["source"]
 ): NameResolutionCandidateSource {
@@ -189,6 +207,9 @@ function normalizeTransportHintSource(
       : "transport_username";
 }
 
+/**
+ * Implements `resolveNameResolutionAccessClass` behavior within this module.
+ */
 function resolveNameResolutionAccessClass(
   principalContext: PrincipalContext | null
 ): NameResolutionResult["accessClass"] {
@@ -204,6 +225,9 @@ function resolveNameResolutionAccessClass(
   return "speaker_private";
 }
 
+/**
+ * Implements `buildEmptyNameResolution` behavior within this module.
+ */
 function buildEmptyNameResolution(
   principalContext: PrincipalContext | null,
   factsTrustedForCurrentSpeaker: boolean

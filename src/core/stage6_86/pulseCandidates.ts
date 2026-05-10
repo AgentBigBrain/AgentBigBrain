@@ -569,6 +569,9 @@ function buildOpenLoopDrafts(
   return prioritized;
 }
 
+/**
+ * Implements `isPrivateOpenLoopActorEvidence` behavior within this module.
+ */
 function isPrivateOpenLoopActorEvidence(
   actorScope: import("../types").ContinuityActorScopeV1 | null
 ): boolean {
@@ -581,6 +584,9 @@ function isPrivateOpenLoopActorEvidence(
   return actorScope.routeVisibility !== "public";
 }
 
+/**
+ * Implements `buildOpenLoopActorEvidenceRefs` behavior within this module.
+ */
 function buildOpenLoopActorEvidenceRefs(
   actorScope: import("../types").ContinuityActorScopeV1 | null
 ): readonly string[] {
@@ -598,6 +604,9 @@ function buildOpenLoopActorEvidenceRefs(
   ];
 }
 
+/**
+ * Implements `normalizeEvidenceSegment` behavior within this module.
+ */
 function normalizeEvidenceSegment(value: string): string {
   return value.trim().replace(/[^a-zA-Z0-9._-]/g, "_") || "unknown";
 }

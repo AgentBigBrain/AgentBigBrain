@@ -517,6 +517,9 @@ function asError(error: unknown): Error {
   return new Error(typeof error === "string" ? error : "Unknown entity-graph mutation failure");
 }
 
+/**
+ * Implements `buildInboundEvidenceRefFromInput` behavior within this module.
+ */
 function buildInboundEvidenceRefFromInput(input: InboundEntityGraphMutationInput): string {
   return buildInboundEntityGraphEvidenceRef(
     input.provider,

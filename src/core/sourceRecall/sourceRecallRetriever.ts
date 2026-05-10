@@ -339,6 +339,9 @@ function matchesRecordQuery(
   );
 }
 
+/**
+ * Implements `matchesPrincipalAccess` behavior within this module.
+ */
 function matchesPrincipalAccess(
   record: SourceRecallRecord,
   principalAccess: TaskPrincipalAccessEnvelope | undefined
@@ -371,6 +374,9 @@ function matchesPrincipalAccess(
   return actorRole === "owner" || actorRole === "operator";
 }
 
+/**
+ * Implements `buildSourceRecallRetrievalPrincipalAudit` behavior within this module.
+ */
 function buildSourceRecallRetrievalPrincipalAudit(
   principalAccess: TaskPrincipalAccessEnvelope | undefined
 ): Pick<
@@ -397,12 +403,18 @@ function buildSourceRecallRetrievalPrincipalAudit(
   };
 }
 
+/**
+ * Implements `readObject` behavior within this module.
+ */
 function readObject(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : null;
 }
 
+/**
+ * Implements `readString` behavior within this module.
+ */
 function readString(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 }

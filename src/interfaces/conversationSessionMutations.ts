@@ -119,6 +119,9 @@ interface PushConversationTurnOptions {
   actor?: ConversationTurnActorMetadata | null;
 }
 
+/**
+ * Implements `buildUserTurnActorMetadata` behavior within this module.
+ */
 export function buildUserTurnActorMetadata(
   session: ConversationSession
 ): ConversationTurnActorMetadata | null {
@@ -140,6 +143,9 @@ export function buildUserTurnActorMetadata(
   };
 }
 
+/**
+ * Implements `buildAssistantTurnActorMetadata` behavior within this module.
+ */
 function buildAssistantTurnActorMetadata(
   session: ConversationSession
 ): ConversationTurnActorMetadata | null {
@@ -160,6 +166,9 @@ function buildAssistantTurnActorMetadata(
   };
 }
 
+/**
+ * Implements `buildRecoveredTurnActorMetadata` behavior within this module.
+ */
 export function buildRecoveredTurnActorMetadata(): ConversationTurnActorMetadata {
   return {
     source: "legacy_recovery",
@@ -174,12 +183,18 @@ export function buildRecoveredTurnActorMetadata(): ConversationTurnActorMetadata
   };
 }
 
+/**
+ * Implements `buildConversationControllerMetadata` behavior within this module.
+ */
 export function buildConversationControllerMetadata(
   session: ConversationSession
 ): ConversationTurnActorMetadata {
   return buildUserTurnActorMetadata(session) ?? buildRecoveredTurnActorMetadata();
 }
 
+/**
+ * Implements `canCurrentSessionControlRecord` behavior within this module.
+ */
 export function canCurrentSessionControlRecord(
   session: ConversationSession,
   controller: ConversationTurnActorMetadata | null | undefined
@@ -199,6 +214,9 @@ export function canCurrentSessionControlRecord(
   return Boolean(controllerPrincipal && currentPrincipal && controllerPrincipal === currentPrincipal);
 }
 
+/**
+ * Implements `buildSourceRecallCapturePrincipalAccess` behavior within this module.
+ */
 function buildSourceRecallCapturePrincipalAccess(
   session: ConversationSession
 ): TaskPrincipalAccessEnvelope | undefined {
