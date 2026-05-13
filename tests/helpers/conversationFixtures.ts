@@ -73,6 +73,8 @@ export function buildConversationIngressConfig(
     maxRecentActions: 20,
     maxBrowserSessions: 6,
     maxPathDestinations: 8,
+    allowedUserIds: [],
+    allowedUsernames: [],
     ...overrides
   };
 }

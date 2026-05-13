@@ -62,9 +62,13 @@ export function buildDynamicPulseGatewayRequest(input: {
       sourceRecallRefs: input.proactiveInquiryCandidate.evidence.sourceRecallRefs,
       sourceRecallStatus,
       sourceRecallUsable: input.proactiveInquiryCandidate.evidencePolicy.sourceRecallUsable,
-      containsPrivateMemoryEvidence: false,
+      containsPrivateMemoryEvidence: input.candidate.evidenceRefs.some((ref) =>
+        ref.startsWith("open_loop_actor_scope:")
+      ),
       containsRelationshipEvidence: input.candidate.reasonCode === "RELATIONSHIP_CLARIFICATION",
-      containsIdentityEvidence: false
+      containsIdentityEvidence: input.candidate.evidenceRefs.some((ref) =>
+        ref.startsWith("open_loop_actor_scope:")
+      )
     }
   };
 }

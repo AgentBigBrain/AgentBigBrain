@@ -31,6 +31,12 @@ import { handleMemoryReviewCommand } from "./memoryReviewCommand";
 import { renderSkillInventory } from "../../organs/skillRegistry/skillInspection";
 import { normalizeModelBackend } from "../../models/backendConfig";
 import { recordTopicAwareUserTurn } from "./conversationRoutingTurnSupport";
+import { buildAutonomousAbortControllerKey } from "../transportRuntime/autonomousAbortControl";
+import {
+  evaluateBackendProfileOverrideAccess,
+  isProtectedCodexProfileOverride,
+  isProtectedModelBackendOverride
+} from "./backendProfileOverridePolicy";
 
 /**
  * Resolves `/status` command output with human-first default text and explicit debug fallback.
@@ -70,6 +76,13 @@ function resolveBackendCommandResponse(
   }
   if (normalizedArgument === "clear" || normalizedArgument === "default") {
     session.modelBackendOverride = null;
+    session.modelOverrideAccess = evaluateBackendProfileOverrideAccess({
+      command: "backend",
+      target: "model_backend",
+      requestedValue: null,
+      protectedResource: false,
+      principalContext: session.principalContext
+    }).record;
     session.updatedAt = new Date().toISOString();
     return "Cleared the session backend override. This conversation will use the process default backend again.";
   }
@@ -79,7 +92,20 @@ function resolveBackendCommandResponse(
   } catch {
     return "Unsupported backend. Use /backend status, /backend clear, or one of: mock, ollama, openai_api, codex_oauth.";
   }
+  const access = evaluateBackendProfileOverrideAccess({
+    command: "backend",
+    target: "model_backend",
+    requestedValue: normalizedBackend,
+    protectedResource: isProtectedModelBackendOverride(normalizedBackend),
+    principalContext: session.principalContext
+  });
+  if (!access.allowed) {
+    session.modelOverrideAccess = access.record;
+    session.updatedAt = new Date().toISOString();
+    return access.denialMessage ?? "This backend override is not authorized.";
+  }
   session.modelBackendOverride = normalizedBackend;
+  session.modelOverrideAccess = access.record;
   session.updatedAt = new Date().toISOString();
   if (normalizedBackend !== "codex_oauth") {
     session.codexAuthProfileId = null;
@@ -104,10 +130,30 @@ function resolveProfileCommandResponse(
   }
   if (normalizedArgument.toLowerCase() === "clear" || normalizedArgument.toLowerCase() === "default") {
     session.codexAuthProfileId = null;
+    session.modelOverrideAccess = evaluateBackendProfileOverrideAccess({
+      command: "profile",
+      target: "codex_profile",
+      requestedValue: null,
+      protectedResource: false,
+      principalContext: session.principalContext
+    }).record;
     session.updatedAt = new Date().toISOString();
     return "Cleared the session Codex profile override. This conversation will use the default Codex profile when Codex is selected.";
   }
+  const access = evaluateBackendProfileOverrideAccess({
+    command: "profile",
+    target: "codex_profile",
+    requestedValue: normalizedArgument,
+    protectedResource: isProtectedCodexProfileOverride(normalizedArgument),
+    principalContext: session.principalContext
+  });
+  if (!access.allowed) {
+    session.modelOverrideAccess = access.record;
+    session.updatedAt = new Date().toISOString();
+    return access.denialMessage ?? "This Codex profile override is not authorized.";
+  }
   session.codexAuthProfileId = normalizedArgument;
+  session.modelOverrideAccess = access.record;
   if (!session.modelBackendOverride) {
     session.modelBackendOverride = "codex_oauth";
   }
@@ -201,7 +247,14 @@ export async function handleConversationCommand(
       {
         ...deps,
         abortActiveAutonomousRun: deps.abortActiveAutonomousRun
-          ? () => deps.abortActiveAutonomousRun?.(message.conversationId) ?? false
+          ? () =>
+              deps.abortActiveAutonomousRun?.(
+                buildAutonomousAbortControllerKey({
+                  provider: message.provider,
+                  conversationId: message.conversationId,
+                  userId: message.userId
+                })
+              ) ?? false
           : undefined
       }
     )).reply;

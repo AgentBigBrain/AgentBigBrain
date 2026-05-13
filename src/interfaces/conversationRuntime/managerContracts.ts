@@ -12,6 +12,7 @@ import type { MemoryAccessAuditStore } from "../../core/memoryAccessAudit";
 import type { SourceRecallRecordWriter } from "../../core/sourceRecall/sourceRecallConversationCapture";
 import type { SourceRecallRetentionPolicy } from "../../core/sourceRecall/sourceRecallRetention";
 import type { ConversationInboundMediaEnvelope } from "../mediaRuntime/contracts";
+import type { OwnerOperatorPrincipalConfig } from "../principalRuntime/principalConfig";
 import type {
   FollowUpRuleContext,
   PulseLexicalRuleContext
@@ -273,6 +274,9 @@ export interface ConversationManagerConfig {
   showCompletionPrefix: boolean;
   followUpOverridePath: string | null;
   pulseLexicalOverridePath: string | null;
+  principalConfig?: OwnerOperatorPrincipalConfig;
+  allowedUserIds?: readonly string[];
+  allowedUsernames?: readonly string[];
   allowAutonomousViaInterface: boolean;
 }
 

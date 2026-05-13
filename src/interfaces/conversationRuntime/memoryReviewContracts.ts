@@ -9,6 +9,7 @@ import type {
   ProfileMemoryMutationEnvelope,
   ProfileMemoryQueryDecisionRecord
 } from "../../core/profileMemory";
+import type { TaskPrincipalAccessEnvelope } from "../../core/types";
 
 export interface ConversationMemoryReviewRecord {
   episodeId: string;
@@ -26,6 +27,8 @@ export interface ConversationMemoryReviewRequest {
   query: string;
   nowIso: string;
   maxEpisodes?: number;
+  principalAccess?: TaskPrincipalAccessEnvelope;
+  requestedSubjectKind?: "owner_profile";
 }
 
 export type ReviewConversationMemory = (
@@ -51,6 +54,8 @@ export interface ConversationMemoryFactReviewRequest
   query: string;
   nowIso: string;
   maxFacts?: number;
+  principalAccess?: TaskPrincipalAccessEnvelope;
+  requestedSubjectKind?: "owner_profile";
 }
 
 export interface ConversationMemoryFactReviewResult
@@ -69,6 +74,8 @@ export interface ConversationMemoryMutationRequest {
   nowIso: string;
   sourceTaskId: string;
   sourceText: string;
+  principalAccess?: TaskPrincipalAccessEnvelope;
+  requestedSubjectKind?: "owner_profile";
 }
 
 export type ResolveConversationMemoryEpisode = (
@@ -82,7 +89,12 @@ export type MarkConversationMemoryEpisodeWrong = (
 export type ForgetConversationMemoryEpisode = (
   request: Pick<
     ConversationMemoryMutationRequest,
-    "episodeId" | "nowIso" | "sourceTaskId" | "sourceText"
+    | "episodeId"
+    | "nowIso"
+    | "sourceTaskId"
+    | "sourceText"
+    | "principalAccess"
+    | "requestedSubjectKind"
   >
 ) => Promise<ConversationMemoryReviewRecord | null>;
 
@@ -92,6 +104,8 @@ export interface ConversationMemoryFactMutationRequest {
   nowIso: string;
   sourceTaskId: string;
   sourceText: string;
+  principalAccess?: TaskPrincipalAccessEnvelope;
+  requestedSubjectKind?: "owner_profile";
 }
 
 export interface ConversationMemoryFactCorrectionRequest
@@ -106,6 +120,11 @@ export type CorrectConversationMemoryFact = (
 export type ForgetConversationMemoryFact = (
   request: Pick<
     ConversationMemoryFactMutationRequest,
-    "factId" | "nowIso" | "sourceTaskId" | "sourceText"
+    | "factId"
+    | "nowIso"
+    | "sourceTaskId"
+    | "sourceText"
+    | "principalAccess"
+    | "requestedSubjectKind"
   >
 ) => Promise<ConversationMemoryFactReviewRecord | null>;

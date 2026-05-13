@@ -3,7 +3,10 @@
  */
 
 import { ProfileMemoryStore } from "../core/profileMemoryStore";
-import { MemoryAccessAuditStore } from "../core/memoryAccessAudit";
+import {
+  MemoryAccessAuditStore,
+  type MemoryAccessPrincipalAuditSnapshot
+} from "../core/memoryAccessAudit";
 import { LanguageUnderstandingOrgan } from "./languageUnderstanding/episodeExtraction";
 import type { SourceRecallOutputBudget } from "../core/sourceRecall/contracts";
 import {
@@ -30,6 +33,7 @@ import {
 import {
   buildProfileMemoryIngestPolicy
 } from "../core/profileMemoryRuntime/profileMemoryIngestPolicy";
+import { evaluateProfileMemoryAccessPolicy } from "../core/profileMemoryRuntime/profileMemoryAccessPolicy";
 import {
   createProfileMemoryRequestTelemetry,
   recordProfileMemoryIngestOperation,
@@ -118,6 +122,8 @@ interface BrokerProfileMemoryReadSession {
   ): Promise<readonly ProfileReadableEpisode[]> | readonly ProfileReadableEpisode[];
 }
 
+type BrokerProfileOperation = "profile_read" | "profile_write";
+
 /**
  * Deduplicates bounded texts before model-assisted memory extraction.
  *
@@ -191,7 +197,8 @@ function allowsSourceRecallContextInjection(
  */
 function buildSourceRecallContextQuery(
   currentUserRequest: string,
-  options: MemoryBrokerBuildInputOptions
+  options: MemoryBrokerBuildInputOptions,
+  task: TaskRequest
 ): Parameters<typeof retrieveSourceRecall>[1] | null {
   const conversationId = options.sessionDomainContext?.conversationId?.trim();
   if (!conversationId) {
@@ -202,7 +209,8 @@ function buildSourceRecallContextQuery(
   return {
     scopeId,
     threadId: scopeId,
-    ...(keywords.length > 0 ? { keywords } : {})
+    ...(keywords.length > 0 ? { keywords } : {}),
+    principalAccess: task.principalAccess
   };
 }
 
@@ -248,6 +256,7 @@ function extractBoundedSourceRecallKeywords(currentUserRequest: string): readonl
  */
 async function buildRouteApprovedSourceRecallContext(input: {
   deps: MemoryBrokerPlannerInputDependencies;
+  task: TaskRequest;
   options: MemoryBrokerBuildInputOptions;
   currentUserRequest: string;
   resolvedRouteMemoryIntent: ProfileMemoryIngestMemoryIntent | null;
@@ -263,7 +272,11 @@ async function buildRouteApprovedSourceRecallContext(input: {
   if (!decideSourceRecallRetrieval(sourceRecall.policy).allowed) {
     return "";
   }
-  const query = buildSourceRecallContextQuery(input.currentUserRequest, input.options);
+  const query = buildSourceRecallContextQuery(
+    input.currentUserRequest,
+    input.options,
+    input.task
+  );
   if (!query) {
     return "";
   }
@@ -430,6 +443,53 @@ export function assessBrokerPromptCutoverGate(
 }
 
 /**
+ * Implements `evaluateBrokerOwnerProfileAccess` behavior within this module.
+ */
+function evaluateBrokerOwnerProfileAccess(
+  task: TaskRequest,
+  operation: BrokerProfileOperation
+): ReturnType<typeof evaluateProfileMemoryAccessPolicy> {
+  return evaluateProfileMemoryAccessPolicy({
+    principalAccess: task.principalAccess,
+    operation,
+    requestedSubjectKind: "owner_profile"
+  });
+}
+
+/**
+ * Implements `buildTaskPrincipalAuditSnapshot` behavior within this module.
+ */
+function buildTaskPrincipalAuditSnapshot(
+  task: TaskRequest
+): MemoryAccessPrincipalAuditSnapshot | undefined {
+  const principalAccess = task.principalAccess;
+  if (
+    !principalAccess ||
+    !principalAccess.principalContext ||
+    typeof principalAccess.principalContext.actor !== "object" ||
+    principalAccess.principalContext.actor === null ||
+    typeof principalAccess.principalContext.route !== "object" ||
+    principalAccess.principalContext.route === null
+  ) {
+    return undefined;
+  }
+  const actor = principalAccess.principalContext.actor as Record<string, unknown>;
+  const route = principalAccess.principalContext.route as Record<string, unknown>;
+  return {
+    principalRole: actor.principalRole as MemoryAccessPrincipalAuditSnapshot["principalRole"],
+    routeVisibility: route.visibility as MemoryAccessPrincipalAuditSnapshot["routeVisibility"],
+    accessOperation: principalAccess.accessDecision.operation,
+    accessClass: principalAccess.accessDecision
+      .accessClass as MemoryAccessPrincipalAuditSnapshot["accessClass"],
+    accessAllowed: principalAccess.accessDecision.allowed,
+    accessReason: principalAccess.accessDecision.reason,
+    identityAuthority: actor.identityAuthority as MemoryAccessPrincipalAuditSnapshot["identityAuthority"],
+    legacyIdentityState: actor.legacyIdentityState as MemoryAccessPrincipalAuditSnapshot["legacyIdentityState"],
+    ownerMatchSource: actor.ownerMatchSource as MemoryAccessPrincipalAuditSnapshot["ownerMatchSource"]
+  };
+}
+
+/**
  * Builds brokered planner input while keeping the entrypoint free of orchestration detail.
  *
  * @param task - Current task request.
@@ -453,6 +513,7 @@ export async function buildBrokeredPlannerInput(
     );
     const sourceRecallContext = await buildRouteApprovedSourceRecallContext({
       deps,
+      task,
       options,
       currentUserRequest,
       resolvedRouteMemoryIntent,
@@ -488,6 +549,9 @@ export async function buildBrokeredPlannerInput(
   );
   try {
     const requestTelemetry = createProfileMemoryRequestTelemetry();
+    const brokerReadAccess = evaluateBrokerOwnerProfileAccess(task, "profile_read");
+    const brokerWriteAccess = evaluateBrokerOwnerProfileAccess(task, "profile_write");
+    const principalAudit = buildTaskPrincipalAuditSnapshot(task);
     const sourceFingerprint = buildProfileMemorySourceFingerprint(currentUserRequest);
     const conversationId = options.sessionDomainContext?.conversationId;
     const mediaIngest = parseProfileMediaIngestInput(currentUserRequest);
@@ -505,7 +569,7 @@ export async function buildBrokeredPlannerInput(
           )
         )).flat()
       : [];
-    if (!shouldSkipProfileIngest) {
+    if (!shouldSkipProfileIngest && brokerWriteAccess.allowed) {
       await deps.profileMemoryStore.ingestFromTaskInput(
         task.id,
         currentUserRequest,
@@ -523,16 +587,65 @@ export async function buildBrokeredPlannerInput(
               : task.id,
             dominantLaneAtWrite: options.sessionDomainContext?.dominantLane ?? null,
             sourceSurface: "broker_task_ingest",
-            sourceFingerprint
+            sourceFingerprint,
+            principalAccess: task.principalAccess,
+            requestedSubjectKind: "owner_profile"
           },
           ingestPolicy: buildProfileMemoryIngestPolicy({
             memoryIntent: resolvedRouteMemoryIntent ?? "none",
             sourceSurface: "broker_task_ingest"
           }),
-          requestTelemetry
+          requestTelemetry,
+          principalAccess: task.principalAccess,
+          requestedSubjectKind: "owner_profile"
         }
       );
       recordProfileMemoryIngestOperation(requestTelemetry);
+    }
+    if (!brokerReadAccess.allowed) {
+      const domainBoundary = assessDomainBoundary(
+        currentUserRequest,
+        [],
+        options.sessionDomainContext
+      );
+      const sourceRecallContext = await buildRouteApprovedSourceRecallContext({
+        deps,
+        task,
+        options,
+        currentUserRequest,
+        resolvedRouteMemoryIntent,
+        domainBoundary
+      });
+      const promptCutoverGate = assessBrokerPromptCutoverGate(requestTelemetry);
+      await recordAudit(
+        deps.memoryAccessAuditStore,
+        task.id,
+        currentUserRequest,
+        requestTelemetry,
+        promptCutoverGate,
+        requestTelemetry.storeLoadCount,
+        0,
+        0,
+        0,
+        domainBoundary,
+        principalAudit
+      );
+      if (sourceRecallContext.trim().length > 0) {
+        return {
+          userInput: buildSourceRecallOnlyContextPacket(
+            task,
+            domainBoundary.lanes,
+            domainBoundary.scores,
+            "source_recall_context_relevant",
+            sourceRecallContext
+          ),
+          profileMemoryStatus: "available"
+        };
+      }
+      return {
+        userInput: task.userInput,
+        profileMemoryStatus: "available"
+      };
     }
     const readSession = await openBrokerProfileMemoryReadSession(
       deps.profileMemoryStore,
@@ -609,6 +722,7 @@ export async function buildBrokeredPlannerInput(
         : assessedDomainBoundary;
       const sourceRecallContext = await buildRouteApprovedSourceRecallContext({
         deps,
+        task,
         options,
         currentUserRequest,
         resolvedRouteMemoryIntent,
@@ -629,7 +743,8 @@ export async function buildBrokeredPlannerInput(
         0,
         0,
         0,
-        domainBoundary
+        domainBoundary,
+        principalAudit
       );
       if (probing.assessment.detected) {
         await recordProbingAudit(
@@ -641,10 +756,11 @@ export async function buildBrokeredPlannerInput(
           requestTelemetry.storeLoadCount,
           0,
           0,
-          0,
-          domainBoundary,
-          probing.assessment
-        );
+        0,
+        domainBoundary,
+        probing.assessment,
+        principalAudit
+      );
       }
       if (
         sourceRecallContext.trim().length > 0 &&
@@ -708,6 +824,7 @@ export async function buildBrokeredPlannerInput(
           })();
     const sourceRecallContext = await buildRouteApprovedSourceRecallContext({
       deps,
+      task,
       options,
       currentUserRequest,
       resolvedRouteMemoryIntent,
@@ -737,7 +854,8 @@ export async function buildBrokeredPlannerInput(
       retrievedCount,
       retrievedEpisodeCount,
       redactedCount,
-      domainBoundary
+      domainBoundary,
+      principalAudit
     );
     if (probing.assessment.detected) {
       await recordProbingAudit(
@@ -749,10 +867,11 @@ export async function buildBrokeredPlannerInput(
         requestTelemetry.storeLoadCount,
         retrievedCount,
         retrievedEpisodeCount,
-        redactedCount,
-        domainBoundary,
-        probing.assessment
-      );
+      redactedCount,
+      domainBoundary,
+      probing.assessment,
+      principalAudit
+    );
     }
 
     if (promptCutoverGate.decision === "block") {
@@ -840,6 +959,9 @@ export async function buildBrokeredPlannerInput(
 }
 
 /** Appends the standard retrieval audit event for one brokered planner-input build. */
+/**
+ * Implements `recordAudit` behavior within this module.
+ */
 async function recordAudit(
   memoryAccessAuditStore: MemoryAccessAuditStore,
   taskId: string,
@@ -850,7 +972,8 @@ async function recordAudit(
   retrievedCount: number,
   retrievedEpisodeCount: number,
   redactedCount: number,
-  domainBoundary: DomainBoundaryAssessment
+  domainBoundary: DomainBoundaryAssessment,
+  principalAudit?: MemoryAccessPrincipalAuditSnapshot
 ): Promise<void> {
   await appendMemoryAccessAudit(
     memoryAccessAuditStore,
@@ -869,6 +992,7 @@ async function recordAudit(
       promptMemoryOwnerCount: requestTelemetry.promptMemoryOwnerCount,
       promptMemorySurfaceCount: requestTelemetry.promptMemorySurfaceCount,
       mixedMemoryOwnerDecisionCount: requestTelemetry.mixedMemoryOwnerDecisionCount,
+      principalAudit,
       promptCutoverGateDecision: promptCutoverGate.decision,
       promptCutoverGateReasons: promptCutoverGate.reasons
     }
@@ -876,6 +1000,9 @@ async function recordAudit(
 }
 
 /** Appends the probing-specific audit event when extraction-style bursts are detected. */
+/**
+ * Implements `recordProbingAudit` behavior within this module.
+ */
 async function recordProbingAudit(
   memoryAccessAuditStore: MemoryAccessAuditStore,
   taskId: string,
@@ -887,7 +1014,8 @@ async function recordProbingAudit(
   retrievedEpisodeCount: number,
   redactedCount: number,
   domainBoundary: DomainBoundaryAssessment,
-  probingAssessment: ReturnType<typeof registerAndAssessProbing>["assessment"]
+  probingAssessment: ReturnType<typeof registerAndAssessProbing>["assessment"],
+  principalAudit?: MemoryAccessPrincipalAuditSnapshot
 ): Promise<void> {
   await appendMemoryAccessAudit(
     memoryAccessAuditStore,
@@ -907,6 +1035,7 @@ async function recordProbingAudit(
       promptMemoryOwnerCount: requestTelemetry.promptMemoryOwnerCount,
       promptMemorySurfaceCount: requestTelemetry.promptMemorySurfaceCount,
       mixedMemoryOwnerDecisionCount: requestTelemetry.mixedMemoryOwnerDecisionCount,
+      principalAudit,
       promptCutoverGateDecision: promptCutoverGate.decision,
       promptCutoverGateReasons: promptCutoverGate.reasons,
       retrievedEpisodeCount,
@@ -919,6 +1048,9 @@ async function recordProbingAudit(
 }
 
 /** Converts one readable planner episode into the bounded synthesis episode shape. */
+/**
+ * Implements `toMemorySynthesisEpisodeRecord` behavior within this module.
+ */
 function toMemorySynthesisEpisodeRecord(
   episode: ProfileReadableEpisode
 ): MemorySynthesisEpisodeRecord {
@@ -943,6 +1075,9 @@ function toMemorySynthesisEpisodeRecord(
 }
 
 /** Converts one readable planner fact into the bounded synthesis fact shape. */
+/**
+ * Implements `toMemorySynthesisFactRecord` behavior within this module.
+ */
 function toMemorySynthesisFactRecord(
   fact: ProfileReadableFact,
   decisionRecord?: ProfileFactPlanningInspectionResult["entries"][number]["decisionRecord"]

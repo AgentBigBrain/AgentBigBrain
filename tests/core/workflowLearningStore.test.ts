@@ -12,18 +12,53 @@ import {
   deriveWorkflowObservationFromTaskRun,
   WorkflowLearningStore
 } from "../../src/core/workflowLearningStore";
-import { TaskRunResult } from "../../src/core/types";
+import type { TaskPrincipalAccessEnvelope, TaskRunResult } from "../../src/core/types";
 
 /**
  * Creates a deterministic task-run fixture for workflow-learning tests.
  */
-function buildRunResult(userInput: string): TaskRunResult {
+function buildPrincipalAccess(input: {
+  role: string;
+  providerUserIdHash: string;
+  accessClass: string;
+}): TaskPrincipalAccessEnvelope {
+  return {
+    principalContext: {
+      requestId: `request_workflow_${input.role}_${input.providerUserIdHash}`,
+      actor: {
+        principalRole: input.role,
+        identityAuthority: "configured_owner_provider_user_id",
+        legacyIdentityState: "principal_verified",
+        ownerMatchSource: input.role === "owner" ? "provider_user_id" : "none",
+        providerUserIdHash: input.providerUserIdHash
+      },
+      route: {
+        visibility: "private"
+      },
+      subject: {}
+    },
+    accessDecision: {
+      decisionId: `decision_workflow_${input.role}_${input.providerUserIdHash}`,
+      requestId: `request_workflow_${input.role}_${input.providerUserIdHash}`,
+      operation: "task_execution",
+      accessClass: input.accessClass,
+      allowed: true,
+      reason: "synthetic_workflow_principal"
+    }
+  };
+}
+
+function buildRunResult(
+  userInput: string,
+  principalAccess?: TaskPrincipalAccessEnvelope
+): TaskRunResult {
   return {
     task: {
       id: "task_workflow_learning_fixture",
       goal: "Summarize deterministic workflow behavior.",
       userInput,
-      createdAt: "2026-03-03T00:00:00.000Z"
+      createdAt: "2026-03-03T00:00:00.000Z",
+      principalAccess
     },
     plan: {
       taskId: "task_workflow_learning_fixture",
@@ -151,6 +186,61 @@ test("deriveWorkflowObservationFromTaskRun extracts active request and outcome d
   assert.match(observation.workflowKey, /respond:/i);
   assert.equal(observation.outcome, "success");
   assert.equal(observation.contextTags.includes("release"), true);
+});
+
+test("deriveWorkflowObservationFromTaskRun scopes private workflow keys by principal access", () => {
+  const ownerAccess = buildPrincipalAccess({
+    role: "owner",
+    providerUserIdHash: "hash_workflow_owner",
+    accessClass: "owner_private"
+  });
+  const observation = deriveWorkflowObservationFromTaskRun(buildRunResult(
+    [
+      "You are in an ongoing conversation with the same user.",
+      "Current user request:",
+      "Please summarize private launch workflow."
+    ].join("\n"),
+    ownerAccess
+  ));
+
+  assert.equal(observation.accessMetadata?.classification, "owner_private");
+  assert.match(observation.workflowKey, /scope:owner_private:owner:hash_workflow_owner/i);
+});
+
+test("workflow store gates private workflow patterns by retrieval principal", async () => {
+  await withWorkflowLearningStore(async ({ filePath }) => {
+    const store = new WorkflowLearningStore(filePath);
+    const ownerAccess = buildPrincipalAccess({
+      role: "owner",
+      providerUserIdHash: "hash_workflow_owner",
+      accessClass: "owner_private"
+    });
+    const otherAccess = buildPrincipalAccess({
+      role: "allowed_user",
+      providerUserIdHash: "hash_workflow_other",
+      accessClass: "session_only"
+    });
+    await store.recordObservation(deriveWorkflowObservationFromTaskRun(buildRunResult(
+      [
+        "You are in an ongoing conversation with the same user.",
+        "Current user request:",
+        "Please summarize private launch workflow."
+      ].join("\n"),
+      ownerAccess
+    )));
+
+    const noPrincipalHints = await store.getRelevantPatterns("launch workflow", 3);
+    const otherHints = await store.getRelevantPatterns("launch workflow", 3, null, {
+      principalAccess: otherAccess
+    });
+    const ownerHints = await store.getRelevantPatterns("launch workflow", 3, null, {
+      principalAccess: ownerAccess
+    });
+
+    assert.equal(noPrincipalHints.length, 0);
+    assert.equal(otherHints.length, 0);
+    assert.equal(ownerHints.length, 1);
+  });
 });
 
 test("workflow store biases relevant patterns toward the active session lane", async () => {

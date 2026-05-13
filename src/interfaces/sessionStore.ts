@@ -73,6 +73,7 @@ export type {
   ConversationRecentActionStatus,
   ConversationSession,
   ConversationTurn,
+  ConversationTurnActorMetadata,
   ConversationTurnSourceRecallMetadata,
   ConversationTransportIdentityRecord,
   ConversationTransportProvider,

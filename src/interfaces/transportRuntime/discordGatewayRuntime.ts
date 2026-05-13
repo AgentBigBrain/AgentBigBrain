@@ -16,7 +16,10 @@ import {
   editDiscordChannelMessage,
   sendDiscordChannelMessage
 } from "./discordTransport";
-import { abortAutonomousTransportTaskIfRequested } from "./autonomousAbortControl";
+import {
+  abortAutonomousTransportTaskIfRequested,
+  buildAutonomousAbortControllerKey
+} from "./autonomousAbortControl";
 import { shouldNotifyRejectedInvocation } from "./rateLimitPolicy";
 
 export interface DiscordAuthor {
@@ -155,7 +158,11 @@ export function prepareDiscordMessageCreate(
   }
 
   const stopRequested = abortAutonomousTransportTaskIfRequested(
-    channelId,
+    buildAutonomousAbortControllerKey({
+      provider: "discord",
+      conversationId: channelId,
+      userId
+    }),
     invocation.normalizedText,
     input.abortControllers
   );

@@ -57,6 +57,7 @@ export async function appendMemoryAccessAudit(
       identitySafetyDecisionCount: options?.identitySafetyDecisionCount,
       selfIdentityParityCheckCount: options?.selfIdentityParityCheckCount,
       selfIdentityParityMismatchCount: options?.selfIdentityParityMismatchCount,
+      principalAudit: options?.principalAudit,
       promptCutoverGateDecision: options?.promptCutoverGateDecision,
       promptCutoverGateReasons: options?.promptCutoverGateReasons,
       retrievedCount,

@@ -9,7 +9,38 @@ import path from "node:path";
 import { test } from "node:test";
 
 import { PersonalityStore } from "../../src/core/personalityStore";
-import { TaskRunResult } from "../../src/core/types";
+import type { TaskPrincipalAccessEnvelope, TaskRunResult } from "../../src/core/types";
+
+function buildPrincipalAccess(input: {
+  role: string;
+  providerUserIdHash: string;
+  accessClass: string;
+}): TaskPrincipalAccessEnvelope {
+  return {
+    principalContext: {
+      requestId: `request_personality_${input.role}_${input.providerUserIdHash}`,
+      actor: {
+        principalRole: input.role,
+        identityAuthority: "configured_provider_user_id",
+        legacyIdentityState: "principal_verified",
+        ownerMatchSource: input.role === "owner" ? "provider_user_id" : "none",
+        providerUserIdHash: input.providerUserIdHash
+      },
+      route: {
+        visibility: "private"
+      },
+      subject: {}
+    },
+    accessDecision: {
+      decisionId: `decision_personality_${input.role}_${input.providerUserIdHash}`,
+      requestId: `request_personality_${input.role}_${input.providerUserIdHash}`,
+      operation: "task_execution",
+      accessClass: input.accessClass,
+      allowed: true,
+      reason: "synthetic_personality_principal"
+    }
+  };
+}
 
 /**
  * Implements `buildRunResult` behavior within module scope.
@@ -95,6 +126,31 @@ test("PersonalityStore applies run reward and persists history", async () => {
     const reloaded = await new PersonalityStore(filePath).load();
     assert.equal(reloaded.history.length, 1);
     assert.equal(reloaded.profile.updatedAt.length > 0, true);
+  });
+});
+
+test("PersonalityStore blocks non-owner private personality learning", async () => {
+  await withPersonalityStore(async (store) => {
+    const initial = await store.load();
+    const updated = await store.applyRunReward(buildRunResult({
+      task: {
+        id: "task_personality_other",
+        goal: "personality evolution test",
+        userInput: "status",
+        createdAt: new Date().toISOString(),
+        principalAccess: buildPrincipalAccess({
+          role: "allowed_user",
+          providerUserIdHash: "hash_personality_other",
+          accessClass: "session_only"
+        })
+      }
+    }));
+
+    assert.deepEqual(updated.profile.traits, initial.profile.traits);
+    assert.equal(updated.history.length, 1);
+    assert.equal(updated.history[0].applied, false);
+    assert.equal(updated.history[0].accessMetadata?.classification, "principal_private");
+    assert.equal(updated.history[0].blockReason, "learning_scope_not_global_or_owner_private");
   });
 });
 

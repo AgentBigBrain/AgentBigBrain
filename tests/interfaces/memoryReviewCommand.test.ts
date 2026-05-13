@@ -16,21 +16,41 @@ import type {
 } from "../../src/interfaces/conversationRuntime/managerContracts";
 import type { ConversationSession } from "../../src/interfaces/sessionStore";
 import { buildConversationIngressConfig } from "../helpers/conversationFixtures";
+import {
+  derivePrincipalContextFromIngress
+} from "../../src/interfaces/principalRuntime/principalAccess";
+import { createOwnerOperatorPrincipalConfigFromEnv } from "../../src/interfaces/principalRuntime/principalConfig";
 
 function buildSession(
   overrides: Partial<ConversationSession> = {}
 ): ConversationSession {
-  return {
+  const session = {
     ...buildSessionSeed({
       provider: "telegram",
       conversationId: "chat-1",
-      userId: "user-1",
-      username: "owner",
+      userId: "synthetic-owner-principal",
+      username: "synthetic",
       conversationVisibility: "private",
       receivedAt: "2026-03-08T12:00:00.000Z"
     }),
     ...overrides
   };
+  if (overrides.principalContext === undefined) {
+    const principalConfig = createOwnerOperatorPrincipalConfigFromEnv({
+      BRAIN_PRINCIPAL_HMAC_KEY: "test-principal-hmac-key",
+      BRAIN_OWNER_TELEGRAM_USER_IDS: "synthetic-owner-principal"
+    });
+    session.principalContext = derivePrincipalContextFromIngress({
+      provider: "telegram",
+      conversationId: "chat-1",
+      userId: "synthetic-owner-principal",
+      username: "synthetic",
+      conversationVisibility: session.conversationVisibility,
+      receivedAt: "2026-03-08T12:00:00.000Z",
+      principalConfig
+    });
+  }
+  return session;
 }
 
 function buildMessage(
@@ -40,8 +60,8 @@ function buildMessage(
   return {
     provider: "telegram",
     conversationId: "chat-1",
-    userId: "user-1",
-    username: "owner",
+    userId: "synthetic-owner-principal",
+    username: "synthetic",
     conversationVisibility: visibility,
     text,
     receivedAt: "2026-03-08T12:00:05.000Z"
@@ -79,9 +99,9 @@ function buildEpisode(
   overrides: Partial<ConversationMemoryReviewRecord> = {}
 ): ConversationMemoryReviewRecord {
   return {
-    episodeId: "episode_owen_fall",
-    title: "Owen fell down",
-    summary: "Owen fell down a few weeks ago and the outcome was unresolved.",
+    episodeId: "episode_riley_fall",
+    title: "Riley fell down",
+    summary: "Riley fell down a few weeks ago and the outcome was unresolved.",
     status: "unresolved",
     lastMentionedAt: "2026-03-07T10:00:00.000Z",
     resolvedAt: null,
@@ -97,7 +117,7 @@ function buildFactReviewResult(): ConversationMemoryFactReviewResult {
       {
         factId: "fact_preferred_name",
         key: "identity.preferred_name",
-        value: "Avery",
+        value: "Morgan",
         status: "confirmed",
         confidence: 0.98,
         sensitive: false,
@@ -145,6 +165,37 @@ test("handleMemoryReviewCommand blocks non-private usage", async () => {
   assert.equal(reply, "The /memory command is only available in private conversations.");
 });
 
+test("handleMemoryReviewCommand blocks private non-owner usage", async () => {
+  const principalConfig = createOwnerOperatorPrincipalConfigFromEnv({
+    BRAIN_PRINCIPAL_HMAC_KEY: "test-principal-hmac-key",
+    BRAIN_OWNER_TELEGRAM_USER_IDS: "synthetic-owner-principal"
+  });
+  const session = buildSession({
+    principalContext: derivePrincipalContextFromIngress({
+      provider: "telegram",
+      conversationId: "chat-1",
+      userId: "synthetic-participant-principal",
+      username: "synthetic",
+      conversationVisibility: "private",
+      receivedAt: "2026-03-08T12:00:00.000Z",
+      principalConfig
+    })
+  });
+
+  const reply = await handleMemoryReviewCommand(
+    session,
+    buildMessage("/memory"),
+    buildDependencies({
+      reviewConversationMemory: async () => {
+        assert.fail("non-owner memory review must not reach review dependency");
+      }
+    }),
+    ""
+  );
+
+  assert.equal(reply, "The /memory command requires owner or operator authorization.");
+});
+
 test("handleMemoryReviewCommand renders bounded remembered situations", async () => {
   let capturedRequest: ConversationMemoryReviewRequest | null = null;
 
@@ -165,8 +216,10 @@ test("handleMemoryReviewCommand renders bounded remembered situations", async ()
   }
   const request = capturedRequest as ConversationMemoryReviewRequest;
   assert.equal(request.maxEpisodes, 5);
+  assert.equal(request.principalAccess?.accessDecision.operation, "memory_review");
+  assert.equal(request.requestedSubjectKind, "owner_profile");
   assert.match(reply, /^Remembered situations:/);
-  assert.match(reply, /Owen fell down \(episode_owen_fall\)/);
+  assert.match(reply, /Riley fell down \(episode_riley_fall\)/);
   assert.match(reply, /\/memory resolve <episode-id>/);
 });
 
@@ -188,7 +241,7 @@ test("handleMemoryReviewCommand routes resolve/wrong/forget mutations", async ()
 
   const resolveReply = await handleMemoryReviewCommand(
     buildSession(),
-    buildMessage("/memory resolve episode_owen_fall Owen recovered"),
+    buildMessage("/memory resolve episode_riley_fall Riley recovered"),
     buildDependencies({
       resolveConversationMemoryEpisode: async (request) => {
         calls.push(`resolve:${request.episodeId}:${request.note}`);
@@ -198,12 +251,12 @@ test("handleMemoryReviewCommand routes resolve/wrong/forget mutations", async ()
         });
       }
     }),
-    "resolve episode_owen_fall Owen recovered"
+    "resolve episode_riley_fall Riley recovered"
   );
 
   const wrongReply = await handleMemoryReviewCommand(
     buildSession(),
-    buildMessage("/memory wrong episode_owen_fall Wrong Owen"),
+    buildMessage("/memory wrong episode_riley_fall Wrong Riley"),
     buildDependencies({
       markConversationMemoryEpisodeWrong: async (request) => {
         calls.push(`wrong:${request.episodeId}:${request.note}`);
@@ -212,49 +265,49 @@ test("handleMemoryReviewCommand routes resolve/wrong/forget mutations", async ()
         });
       }
     }),
-    "wrong episode_owen_fall Wrong Owen"
+    "wrong episode_riley_fall Wrong Riley"
   );
 
   const forgetReply = await handleMemoryReviewCommand(
     buildSession(),
-    buildMessage("/memory forget episode_owen_fall"),
+    buildMessage("/memory forget episode_riley_fall"),
     buildDependencies({
       forgetConversationMemoryEpisode: async (request) => {
         calls.push(`forget:${request.episodeId}`);
         return buildEpisode();
       }
     }),
-    "forget episode_owen_fall"
+    "forget episode_riley_fall"
   );
 
   assert.deepEqual(calls, [
-    "resolve:episode_owen_fall:Owen recovered",
-    "wrong:episode_owen_fall:Wrong Owen",
-    "forget:episode_owen_fall"
+    "resolve:episode_riley_fall:Riley recovered",
+    "wrong:episode_riley_fall:Wrong Riley",
+    "forget:episode_riley_fall"
   ]);
-  assert.equal(resolveReply, 'Marked "Owen fell down" as resolved.');
-  assert.equal(wrongReply, 'Marked "Owen fell down" as no longer relevant.');
-  assert.equal(forgetReply, 'Forgot "Owen fell down".');
+  assert.equal(resolveReply, 'Marked "Riley fell down" as resolved.');
+  assert.equal(wrongReply, 'Marked "Riley fell down" as no longer relevant.');
+  assert.equal(forgetReply, 'Forgot "Riley fell down".');
 });
 
 test("handleMemoryReviewCommand renders bounded remembered facts through the private command path", async () => {
   const reply = await handleMemoryReviewCommand(
     buildSession(),
-    buildMessage("/memory fact Avery"),
+    buildMessage("/memory fact Morgan"),
     buildDependencies({
       reviewConversationMemoryFacts: async (request) => {
         assert.equal(request.reviewTaskId, "memory_fact_review_2026_03_08T12_00_05_000Z");
-        assert.equal(request.query, "Avery");
+        assert.equal(request.query, "Morgan");
         assert.equal(request.maxFacts, 5);
         return buildFactReviewResult();
       }
     }),
-    "fact Avery"
+    "fact Morgan"
   );
 
   assert.match(reply, /^Remembered facts:/);
   assert.match(reply, /Current State:/);
-  assert.match(reply, /identity\.preferred_name: Avery \(fact_preferred_name\)/);
+  assert.match(reply, /identity\.preferred_name: Morgan \(fact_preferred_name\)/);
   assert.match(reply, /Historical Context:\n- none/);
   assert.match(reply, /Ambiguity Notes:/);
   assert.match(reply, /held back until it has stronger corroboration/i);
@@ -325,15 +378,15 @@ test("handleMemoryReviewCommand fails closed when runtime review support is unav
   );
   const mutationReply = await handleMemoryReviewCommand(
     buildSession(),
-    buildMessage("/memory resolve episode_owen_fall"),
+    buildMessage("/memory resolve episode_riley_fall"),
     buildDependencies(),
-    "resolve episode_owen_fall"
+    "resolve episode_riley_fall"
   );
   const factReply = await handleMemoryReviewCommand(
     buildSession(),
-    buildMessage("/memory fact Avery"),
+    buildMessage("/memory fact Morgan"),
     buildDependencies(),
-    "fact Avery"
+    "fact Morgan"
   );
 
   assert.equal(listReply, "Memory review is unavailable in this runtime.");

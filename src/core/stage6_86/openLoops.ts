@@ -4,6 +4,7 @@
 
 import {
   ConversationStackV1,
+  ContinuityActorScopeV1,
   OpenLoopV1,
   ThreadFrameV1
 } from "../types";
@@ -64,6 +65,7 @@ export interface UpsertOpenLoopInputV1 {
   text: string;
   observedAt: string;
   entityRefs?: readonly string[];
+  actorScope?: ContinuityActorScopeV1 | null;
   priorityHint?: number;
 }
 
@@ -100,6 +102,7 @@ export interface OpenLoopPulseCandidateV1 {
   loopId: string;
   threadKey: string;
   threadState: ThreadFrameV1["state"];
+  actorScope?: ContinuityActorScopeV1 | null;
   priority: number;
   stale: boolean;
   ageDays: number;
@@ -675,7 +678,8 @@ export function upsertOpenLoopOnConversationStackV1(
       status: "open",
       lastMentionedAt: input.observedAt,
       priority: clampPriority(Math.max(existing.priority, targetPriority)),
-      entityRefs: mergedRefs
+      entityRefs: mergedRefs,
+      actorScope: mergeOpenLoopActorScope(existing.actorScope ?? null, input.actorScope ?? null)
     };
     updated = true;
   } else {
@@ -686,7 +690,8 @@ export function upsertOpenLoopOnConversationStackV1(
       createdAt: input.observedAt,
       lastMentionedAt: input.observedAt,
       priority: targetPriority,
-      status: "open"
+      status: "open",
+      actorScope: input.actorScope ?? null
     };
     created = true;
   }
@@ -856,6 +861,7 @@ export function selectOpenLoopsForPulseV1(
           loopId: loop.loopId,
           threadKey: thread.threadKey,
           threadState: thread.state,
+          actorScope: loop.actorScope ?? null,
           priority: loop.priority,
           stale,
           ageDays: Number(ageDays.toFixed(4)),
@@ -867,6 +873,7 @@ export function selectOpenLoopsForPulseV1(
         loopId: loop.loopId,
         threadKey: thread.threadKey,
         threadState: thread.state,
+        actorScope: loop.actorScope ?? null,
         priority: loop.priority,
         stale,
         ageDays: Number(ageDays.toFixed(4)),
@@ -898,5 +905,46 @@ export function selectOpenLoopsForPulseV1(
   return {
     selected,
     suppressed: [...suppressed, ...capped].sort((left, right) => left.loopId.localeCompare(right.loopId))
+  };
+}
+
+/**
+ * Implements `mergeOpenLoopActorScope` behavior within this module.
+ */
+function mergeOpenLoopActorScope(
+  existing: ContinuityActorScopeV1 | null,
+  incoming: ContinuityActorScopeV1 | null
+): ContinuityActorScopeV1 | null {
+  if (!existing) {
+    return incoming;
+  }
+  if (!incoming) {
+    return existing;
+  }
+  if (
+    existing.principalIdHash &&
+    incoming.principalIdHash &&
+    existing.principalIdHash !== incoming.principalIdHash
+  ) {
+    return buildSharedOpenLoopActorScope(existing.scopeId ?? incoming.scopeId);
+  }
+  if (existing.scopeSource === "legacy_unknown" && incoming.scopeSource !== "legacy_unknown") {
+    return incoming;
+  }
+  return existing;
+}
+
+/**
+ * Implements `buildSharedOpenLoopActorScope` behavior within this module.
+ */
+function buildSharedOpenLoopActorScope(scopeId: string | null): ContinuityActorScopeV1 {
+  return {
+    scopeSource: "shared_public",
+    principalIdHash: null,
+    principalRole: null,
+    accessClass: "shared_public",
+    routeVisibility: "public",
+    legacyIdentityState: "legacy_actor_unknown",
+    scopeId
   };
 }

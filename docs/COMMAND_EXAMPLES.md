@@ -53,8 +53,8 @@ Voice command note:
   that back up`, or `leave the rest for later` can work without a slash command.
 - There is no separate `/skill` slash command. Use natural language through `/chat` or `/propose`:
   `create skill ...` or `run skill ...`.
-- `/memory` is private-only. It is for reviewing or correcting remembered situations, not dumping
-  raw memory internals.
+- `/memory` is owner/operator-only and private-only. It is for reviewing or correcting remembered
+  situations, not dumping raw memory internals.
 
 ## 3) Natural Invocation
 
@@ -136,8 +136,8 @@ Examples:
 ```text
 /memory
 /memory list
-/memory resolve episode_abc123 Billy recovered and is doing well now
-/memory wrong episode_abc123 That situation was about Ben, not Billy
+/memory resolve episode_abc123 The issue was resolved and needs no follow-up
+/memory wrong episode_abc123 That situation was about a different contact
 /memory forget episode_abc123
 ```
 
@@ -269,7 +269,7 @@ Why it works:
 ### Context-aware follow-up
 
 ```text
-Hi BigBrain, Billy came up again today. I was thinking about that whole thing from a few weeks ago and realized I never told you how it ended.
+Hi BigBrain, that project came up again today. I was thinking about the unresolved follow-up from a few weeks ago and realized I never told you how it ended.
 ```
 
 Why it works:

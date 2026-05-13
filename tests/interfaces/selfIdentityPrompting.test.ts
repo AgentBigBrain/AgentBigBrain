@@ -15,7 +15,7 @@ test("buildDeterministicSelfIdentityDeclarationReply defers ambiguous discourse-
   let rememberCalls = 0;
 
   const reply = await buildDeterministicSelfIdentityDeclarationReply(
-    "I already told you my name is Avery several times.",
+    "I already told you my name is Morgan several times.",
     "2026-03-21T10:00:00.000Z",
     async () => {
       rememberCalls += 1;
@@ -37,7 +37,7 @@ test("buildDeterministicSelfIdentityDeclarationReply persists through typed iden
   const rememberedInputs: (string | ProfileMemoryIngestRequest)[] = [];
 
   const reply = await buildDeterministicSelfIdentityDeclarationReply(
-    "My name is Avery, yes.",
+    "My name is Morgan, yes.",
     "2026-03-21T10:00:30.000Z",
     async (input) => {
       rememberedInputs.push(input);
@@ -46,14 +46,14 @@ test("buildDeterministicSelfIdentityDeclarationReply persists through typed iden
     session
   );
 
-  assert.equal(reply, "Okay, I'll remember that you're Avery.");
+  assert.equal(reply, "Okay, I'll remember that you're Morgan.");
   assert.equal(rememberedInputs.length, 1);
   const rememberedRequest = rememberedInputs[0] as ProfileMemoryIngestRequest;
-  assert.equal(rememberedRequest.userInput, "My name is Avery, yes.");
+  assert.equal(rememberedRequest.userInput, "My name is Morgan, yes.");
   assert.deepEqual(rememberedRequest.validatedFactCandidates, [
     {
       key: "identity.preferred_name",
-      candidateValue: "Avery",
+      candidateValue: "Morgan",
       source: "conversation.identity_interpretation",
       confidence: 0.98
     }
@@ -63,7 +63,7 @@ test("buildDeterministicSelfIdentityDeclarationReply persists through typed iden
 });
 
 test("hasSelfIdentityParity does not treat substring collisions as identity parity", () => {
-  assert.equal(hasSelfIdentityParity("Avery", "Avery Stone"), true);
+  assert.equal(hasSelfIdentityParity("Morgan", "Morgan Stone"), true);
   assert.equal(hasSelfIdentityParity("Ann", "Annette"), false);
   assert.equal(hasSelfIdentityParity("Ben", "Benny"), false);
 });
@@ -88,7 +88,7 @@ test("buildModelAssistedSelfIdentityReply persists canonical identity declaratio
 
   const reply = await buildModelAssistedSelfIdentityReply(
     session,
-    "I already told you my name is Avery several times.",
+    "I already told you my name is Morgan several times.",
     "2026-03-21T10:01:00.000Z",
     null,
     undefined,
@@ -99,7 +99,7 @@ test("buildModelAssistedSelfIdentityReply persists canonical identity declaratio
     async () => ({
       source: "local_intent_model",
       kind: "self_identity_declaration",
-      candidateValue: "Avery",
+      candidateValue: "Morgan",
       confidence: "medium",
       shouldPersist: true,
       explanation: "The user is reaffirming their preferred name."
@@ -107,13 +107,13 @@ test("buildModelAssistedSelfIdentityReply persists canonical identity declaratio
     telemetry
   );
 
-  assert.equal(reply, "Okay, I'll remember that you're Avery.");
+  assert.equal(reply, "Okay, I'll remember that you're Morgan.");
   assert.equal(rememberedInputs.length, 1);
   const rememberedRequest = rememberedInputs[0] as ProfileMemoryIngestRequest;
   assert.deepEqual(rememberedRequest.validatedFactCandidates, [
     {
       key: "identity.preferred_name",
-      candidateValue: "Avery",
+      candidateValue: "Morgan",
       source: "conversation.identity_interpretation",
       confidence: 0.95
     }
@@ -144,7 +144,7 @@ test("buildModelAssistedSelfIdentityReply fails closed when the model returns an
 
   const reply = await buildModelAssistedSelfIdentityReply(
     session,
-    "I already told you my name is Avery several times.",
+    "I already told you my name is Morgan several times.",
     "2026-03-21T10:02:00.000Z",
     null,
     undefined,
@@ -155,7 +155,7 @@ test("buildModelAssistedSelfIdentityReply fails closed when the model returns an
     async () => ({
       source: "local_intent_model",
       kind: "self_identity_declaration",
-      candidateValue: "Avery several times",
+      candidateValue: "Morgan several times",
       confidence: "medium",
       shouldPersist: true,
       explanation: "Unsafe oversized clause."
@@ -165,7 +165,7 @@ test("buildModelAssistedSelfIdentityReply fails closed when the model returns an
 
   assert.equal(
     reply,
-    "If you're telling me your name, say it in a short direct form like \"My name is Avery.\" and I'll remember it."
+    "If you're telling me your name, say it in a short direct form like \"My name is Morgan.\" and I'll remember it."
   );
   assert.equal(rememberCalls, 0);
   assert.equal(telemetry.identitySafetyDecisionCount, 1);
@@ -209,9 +209,9 @@ test("buildDeterministicSelfIdentityReply records parity mismatch against confli
     {
       transportIdentity: {
         provider: "telegram",
-        username: "morgan_handle",
-        displayName: "Morgan",
-        givenName: "Morgan",
+        username: "quinn_handle",
+        displayName: "Quinn",
+        givenName: "Quinn",
         familyName: null,
         observedAt: "2026-03-21T10:04:00.000Z"
       }
@@ -229,7 +229,7 @@ test("buildDeterministicSelfIdentityReply records parity mismatch against confli
       {
         factId: "fact_identity_preferred_name",
         key: "identity.preferred_name",
-        value: "Avery",
+        value: "Morgan",
         status: "active",
         observedAt: "2026-03-21T09:00:00.000Z",
         lastUpdatedAt: "2026-03-21T09:30:00.000Z",
@@ -239,7 +239,7 @@ test("buildDeterministicSelfIdentityReply records parity mismatch against confli
     telemetry
   );
 
-  assert.equal(reply, "You're Avery.");
+  assert.equal(reply, "You're Morgan.");
   assert.equal(telemetry.identitySafetyDecisionCount, 1);
   assert.equal(telemetry.retrievalOperationCount, 1);
   assert.equal(telemetry.selfIdentityParityCheckCount, 1);

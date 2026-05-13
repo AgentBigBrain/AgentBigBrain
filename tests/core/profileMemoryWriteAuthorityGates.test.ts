@@ -30,6 +30,39 @@ import { buildDirectCasualConversationReply } from "../../src/interfaces/convers
 import { MemoryAccessAuditStore } from "../../src/core/memoryAccessAudit";
 import { MemoryBrokerOrgan } from "../../src/organs/memoryBroker";
 import type { TaskRequest } from "../../src/core/types";
+import { createOwnerOperatorPrincipalConfigFromEnv } from "../../src/interfaces/principalRuntime/principalConfig";
+import {
+  buildTaskExecutionPrincipalAccess,
+  derivePrincipalContextFromIngress
+} from "../../src/interfaces/principalRuntime/principalAccess";
+
+function buildOwnerTask(input: {
+  id: string;
+  goal: string;
+  userInput: string;
+  createdAt: string;
+}): TaskRequest {
+  const principalConfig = createOwnerOperatorPrincipalConfigFromEnv(
+    {
+      BRAIN_PRINCIPAL_HMAC_KEY: "profile-memory-write-gate-test-key",
+      BRAIN_OWNER_TELEGRAM_USER_IDS: "profile-memory-owner"
+    },
+    "test_override"
+  );
+  const principalContext = derivePrincipalContextFromIngress({
+    provider: "telegram",
+    conversationId: "profile-memory-write-gate-chat",
+    userId: "profile-memory-owner",
+    username: "profile_memory_owner",
+    conversationVisibility: "private",
+    receivedAt: input.createdAt,
+    principalConfig
+  });
+  return {
+    ...input,
+    principalAccess: buildTaskExecutionPrincipalAccess(principalContext)
+  };
+}
 
 test("direct chat keeps lexical relationship wording off the durable memory write seam", async () => {
   const remembered: ProfileMemoryIngestRequest[] = [];
@@ -95,12 +128,12 @@ test("broker ingest without route-approved memory intent uses closed no-op polic
     store as unknown as ProfileMemoryStore,
     new MemoryAccessAuditStore()
   );
-  const task: TaskRequest = {
+  const task = buildOwnerTask({
     id: "task_memory_authority_gate",
     goal: "Provide safe and helpful assistance.",
     userInput: "I work with Milo at Northstar Creative.",
     createdAt: "2026-05-02T12:00:00.000Z"
-  };
+  });
 
   const result = await broker.buildPlannerInput(task);
 
@@ -249,14 +282,14 @@ test("semantic relationship lifecycle keeps historical and uncertain candidates 
     buildValidatedSemanticRelationshipFactCandidates([
       {
         subject: "current_user",
-        objectDisplayName: "Avery",
+        objectDisplayName: "Morgan",
         relationLabel: "work_peer",
         lifecycle: "historical",
         workAssociation: "Northstar Creative",
         sourceFamily: "semantic_model",
         ambiguity: "none",
         evidenceSpan: {
-          text: "Avery was part of my old studio team at Northstar Creative.",
+          text: "Morgan was part of my old studio team at Northstar Creative.",
           startOffset: 0,
           endOffset: 60
         },
@@ -300,15 +333,15 @@ test("semantic relationship lifecycle keeps historical and uncertain candidates 
 
   assert.equal(
     historicalGovernance.allowedCurrentStateFactCandidates.some((candidate) =>
-      candidate.key === "contact.avery.relationship" ||
-      candidate.key === "contact.avery.work_association"
+      candidate.key === "contact.morgan.relationship" ||
+      candidate.key === "contact.morgan.work_association"
     ),
     false
   );
   assert.equal(
     historicalGovernance.allowedSupportOnlyFactCandidates.some((candidate) =>
-      candidate.key === "contact.avery.relationship" ||
-      candidate.key === "contact.avery.work_association"
+      candidate.key === "contact.morgan.relationship" ||
+      candidate.key === "contact.morgan.work_association"
     ),
     true
   );

@@ -20,6 +20,7 @@ import {
   resolveInterpretedPulseCommandArgument
 } from "./followUpResolution";
 import { routeConversationMessageInput } from "./conversationRouting";
+import { buildAutonomousAbortControllerKey } from "../transportRuntime/autonomousAbortControl";
 import { isMixedConversationMemoryStatusRecallTurn } from "./chatTurnSignals";
 
 export interface ConversationInvocationResolution {
@@ -156,7 +157,14 @@ export async function resolveConversationInvocation(
     {
       ...deps,
       abortActiveAutonomousRun: deps.abortActiveAutonomousRun
-        ? () => deps.abortActiveAutonomousRun?.(message.conversationId) ?? false
+        ? () =>
+            deps.abortActiveAutonomousRun?.(
+              buildAutonomousAbortControllerKey({
+                provider: message.provider,
+                conversationId: message.conversationId,
+                userId: message.userId
+              })
+            ) ?? false
         : undefined,
       runDirectConversationTurn: deps.runDirectConversationTurn
     },

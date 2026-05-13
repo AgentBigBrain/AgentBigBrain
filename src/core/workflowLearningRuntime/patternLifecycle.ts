@@ -65,6 +65,7 @@ export function applyWorkflowObservationMetadata(
         : toNullableString(observation.linkedSkillName),
     linkedSkillVerificationStatus:
       observation.linkedSkillVerificationStatus ?? pattern.linkedSkillVerificationStatus,
-    evidenceRefs: mergeEvidenceRefs(pattern.evidenceRefs, observation.evidenceRefs)
+    evidenceRefs: mergeEvidenceRefs(pattern.evidenceRefs, observation.evidenceRefs),
+    accessMetadata: observation.accessMetadata ?? pattern.accessMetadata
   };
 }

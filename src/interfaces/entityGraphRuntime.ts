@@ -9,6 +9,12 @@ import {
   type Stage686EntityTypeHint
 } from "../core/stage6_86EntityGraph";
 import type { EntityGraphV1 } from "../core/types";
+import type { ConversationVisibility } from "./sessionStore";
+import type {
+  LegacyIdentityState,
+  PrincipalAccessClass,
+  PrincipalRole
+} from "./principalRuntime/principalAccess";
 import type {
   EntityDomainHintInterpretationResolver,
   EntityTypeInterpretationResolver
@@ -28,12 +34,26 @@ export interface InboundEntityGraphMutationInput {
   text: string;
   observedAt: string;
   domainHint?: "profile" | "relationship" | "workflow" | "system_policy" | null;
+  actorEvidence?: EntityGraphActorEvidenceContext | null;
 }
 
 interface InboundEntityTypeInterpretationOptions {
   entityTypeInterpretationResolver?: EntityTypeInterpretationResolver;
   entityDomainHintInterpretationResolver?: EntityDomainHintInterpretationResolver;
 }
+
+export interface EntityGraphActorEvidenceContext {
+  principalIdHash: string | null;
+  principalRole: PrincipalRole | null;
+  accessClass: PrincipalAccessClass | null;
+  routeVisibility: ConversationVisibility;
+  legacyIdentityState: LegacyIdentityState;
+}
+
+export type EntityGraphEvidenceAuthority =
+  | "actor_scoped"
+  | "shared_conversation_only"
+  | "legacy_actorless";
 
 /**
  * Resolves a dynamic-pulse graph getter bound to one shared store lifecycle.
@@ -77,14 +97,55 @@ export function createDynamicPulseEntityGraphGetter(
 export function buildInboundEntityGraphEvidenceRef(
   provider: InterfaceProviderId,
   conversationId: string,
-  eventId: string
+  eventId: string,
+  actorEvidence?: EntityGraphActorEvidenceContext | null
 ): string {
-  return [
+  const baseSegments = [
     "interface",
     normalizeEvidenceRefSegment(provider),
     normalizeEvidenceRefSegment(conversationId),
     normalizeEvidenceRefSegment(eventId)
+  ];
+  if (!actorEvidence || !actorEvidence.principalIdHash) {
+    return baseSegments.join(":");
+  }
+  return [
+    ...baseSegments,
+    "actor",
+    normalizeEvidenceRefSegment(actorEvidence.principalIdHash),
+    "role",
+    normalizeEvidenceRefSegment(actorEvidence.principalRole ?? "unknown"),
+    "access",
+    normalizeEvidenceRefSegment(actorEvidence.accessClass ?? "session_only"),
+    "route",
+    normalizeEvidenceRefSegment(actorEvidence.routeVisibility),
+    "legacy",
+    normalizeEvidenceRefSegment(actorEvidence.legacyIdentityState)
   ].join(":");
+}
+
+/**
+ * Classifies graph evidence refs without treating graph evidence as owner truth.
+ */
+export function classifyEntityGraphEvidenceAuthority(
+  evidenceRefs: readonly string[]
+): EntityGraphEvidenceAuthority {
+  if (evidenceRefs.some((ref) => ref.includes(":actor:"))) {
+    return "actor_scoped";
+  }
+  if (evidenceRefs.some((ref) => ref.startsWith("interface:"))) {
+    return "shared_conversation_only";
+  }
+  return "legacy_actorless";
+}
+
+/**
+ * Returns whether graph evidence is scoped enough to support owner-private memory candidates.
+ */
+export function isEntityGraphEvidenceOwnerPrivateEligible(
+  evidenceRefs: readonly string[]
+): boolean {
+  return evidenceRefs.some((ref) => ref.includes(":actor:") && ref.includes(":access:owner_private:"));
 }
 
 /**
@@ -129,11 +190,7 @@ export async function maybeRecordInboundEntityGraphMutation(
       domainHint: input.domainHint ?? null,
       entityTypeHints,
       entityDomainHints,
-      evidenceRef: buildInboundEntityGraphEvidenceRef(
-        input.provider,
-        input.conversationId,
-        input.eventId
-      )
+      evidenceRef: buildInboundEvidenceRefFromInput(input)
     });
     return true;
   } catch (error) {
@@ -190,11 +247,7 @@ async function resolveInboundEntityTypeHints(
   const extraction = extractEntityCandidates({
     text: input.text,
     observedAt: input.observedAt,
-    evidenceRef: buildInboundEntityGraphEvidenceRef(
-      input.provider,
-      input.conversationId,
-      input.eventId
-    ),
+    evidenceRef: buildInboundEvidenceRefFromInput(input),
     domainHint: input.domainHint ?? null
   });
   const candidateEntities = extraction.nodes.map((node) => ({
@@ -286,11 +339,7 @@ async function resolveInboundEntityDomainHints(
   const extraction = extractEntityCandidates({
     text: input.text,
     observedAt: input.observedAt,
-    evidenceRef: buildInboundEntityGraphEvidenceRef(
-      input.provider,
-      input.conversationId,
-      input.eventId
-    ),
+    evidenceRef: buildInboundEvidenceRefFromInput(input),
     domainHint: input.domainHint ?? null
   });
   const candidateEntities = extraction.nodes.map((node) => ({
@@ -466,6 +515,18 @@ function asError(error: unknown): Error {
     return error;
   }
   return new Error(typeof error === "string" ? error : "Unknown entity-graph mutation failure");
+}
+
+/**
+ * Implements `buildInboundEvidenceRefFromInput` behavior within this module.
+ */
+function buildInboundEvidenceRefFromInput(input: InboundEntityGraphMutationInput): string {
+  return buildInboundEntityGraphEvidenceRef(
+    input.provider,
+    input.conversationId,
+    input.eventId,
+    input.actorEvidence ?? null
+  );
 }
 
 /**

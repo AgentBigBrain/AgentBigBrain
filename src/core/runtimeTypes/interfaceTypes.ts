@@ -155,10 +155,26 @@ export interface OpenLoopV1 {
   loopId: string;
   threadKey: string;
   entityRefs: readonly string[];
+  actorScope?: ContinuityActorScopeV1 | null;
   createdAt: string;
   lastMentionedAt: string;
   priority: number;
   status: "open" | "resolved" | "superseded";
+}
+
+export interface ContinuityActorScopeV1 {
+  scopeSource:
+    | "transport_principal"
+    | "mission_runtime"
+    | "operator_review"
+    | "shared_public"
+    | "legacy_unknown";
+  principalIdHash: string | null;
+  principalRole: string | null;
+  accessClass: string;
+  routeVisibility: "private" | "public" | "unknown";
+  legacyIdentityState: string;
+  scopeId: string | null;
 }
 
 export interface ThreadFrameV1 {

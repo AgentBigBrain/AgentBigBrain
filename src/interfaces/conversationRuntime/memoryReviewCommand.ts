@@ -4,6 +4,11 @@
 
 import { normalizeWhitespace, splitCommand } from "../conversationManagerHelpers";
 import type { ConversationSession } from "../sessionStore";
+import { evaluateProfileMemoryAccessPolicy } from "../../core/profileMemoryRuntime/profileMemoryAccessPolicy";
+import {
+  buildLegacyUnknownPrincipalContext,
+  requirePrincipalAccessForOperation
+} from "../principalRuntime/principalAccess";
 import type { ConversationIngressDependencies } from "./contracts";
 import type {
   ConversationInboundMessage,
@@ -53,6 +58,17 @@ export async function handleMemoryReviewCommand(
   if (message.conversationVisibility !== "private") {
     return "The /memory command is only available in private conversations.";
   }
+  const principalAccess = buildMemoryReviewPrincipalAccess(_session);
+  const accessPolicy = evaluateProfileMemoryAccessPolicy({
+    principalAccess,
+    operation: "memory_review",
+    requestedSubjectKind: "owner_profile",
+    includeSensitive: true,
+    explicitHumanApproval: true
+  });
+  if (!accessPolicy.allowed) {
+    return "The /memory command requires owner or operator authorization.";
+  }
 
   const parsed = parseMemoryReviewAction(argument);
   if (parsed.action === "help") {
@@ -67,7 +83,9 @@ export async function handleMemoryReviewCommand(
       reviewTaskId: buildMemoryReviewTaskId("review", message.receivedAt),
       query: message.text,
       nowIso: message.receivedAt,
-      maxEpisodes: 5
+      maxEpisodes: 5,
+      principalAccess,
+      requestedSubjectKind: "owner_profile"
     });
     return renderMemoryReviewList(episodes);
   }
@@ -83,7 +101,9 @@ export async function handleMemoryReviewCommand(
       reviewTaskId: buildMemoryReviewTaskId("fact_review", message.receivedAt),
       query: parsed.query,
       nowIso: message.receivedAt,
-      maxFacts: 5
+      maxFacts: 5,
+      principalAccess,
+      requestedSubjectKind: "owner_profile"
     });
     return renderMemoryReviewFactList(facts);
   }
@@ -100,7 +120,9 @@ export async function handleMemoryReviewCommand(
       note: parsed.note || undefined,
       nowIso: message.receivedAt,
       sourceTaskId: buildMemoryReviewTaskId(parsed.action, message.receivedAt),
-      sourceText: message.text
+      sourceText: message.text,
+      principalAccess,
+      requestedSubjectKind: "owner_profile"
     };
     const episode = await deps.resolveConversationMemoryEpisode(mutationRequest);
     return renderMemoryReviewMutationResult("resolve", episode);
@@ -118,7 +140,9 @@ export async function handleMemoryReviewCommand(
       note: parsed.note || undefined,
       nowIso: message.receivedAt,
       sourceTaskId: buildMemoryReviewTaskId(parsed.action, message.receivedAt),
-      sourceText: message.text
+      sourceText: message.text,
+      principalAccess,
+      requestedSubjectKind: "owner_profile"
     };
     const episode = await deps.markConversationMemoryEpisodeWrong(mutationRequest);
     return renderMemoryReviewMutationResult("wrong", episode);
@@ -135,7 +159,9 @@ export async function handleMemoryReviewCommand(
       episodeId: parsed.episodeId,
       nowIso: message.receivedAt,
       sourceTaskId: buildMemoryReviewTaskId(parsed.action, message.receivedAt),
-      sourceText: message.text
+      sourceText: message.text,
+      principalAccess,
+      requestedSubjectKind: "owner_profile"
     });
     return renderMemoryReviewMutationResult("forget", episode);
   }
@@ -156,7 +182,9 @@ export async function handleMemoryReviewCommand(
       note: parsed.note || undefined,
       nowIso: message.receivedAt,
       sourceTaskId: buildMemoryReviewTaskId("fact_correct", message.receivedAt),
-      sourceText: message.text
+      sourceText: message.text,
+      principalAccess,
+      requestedSubjectKind: "owner_profile"
     });
     return renderMemoryReviewFactMutationResult("correct", fact);
   }
@@ -168,9 +196,54 @@ export async function handleMemoryReviewCommand(
     factId: parsed.factId,
     nowIso: message.receivedAt,
     sourceTaskId: buildMemoryReviewTaskId("fact_forget", message.receivedAt),
-    sourceText: message.text
+    sourceText: message.text,
+    principalAccess,
+    requestedSubjectKind: "owner_profile"
   });
   return renderMemoryReviewFactMutationResult("forget", fact);
+}
+
+/**
+ * Implements `buildMemoryReviewPrincipalAccess` behavior within this module.
+ */
+function buildMemoryReviewPrincipalAccess(session: ConversationSession) {
+  const principalContext =
+    session.principalContext ??
+    buildLegacyUnknownPrincipalContext({
+      requestId: "memory_review:legacy_unknown",
+      conversationId: session.conversationId,
+      conversationVisibility: session.conversationVisibility,
+      source: "legacy"
+    });
+  const actorRole = principalContext.actor.principalRole;
+  if (actorRole === "owner") {
+    return requirePrincipalAccessForOperation({
+      principalContext,
+      operation: "memory_review",
+      accessClass: "owner_private",
+      allowed: true,
+      reason: "owner_principal_matched"
+    });
+  }
+  if (actorRole === "operator") {
+    return requirePrincipalAccessForOperation({
+      principalContext,
+      operation: "memory_review",
+      accessClass: "operator_private",
+      allowed: true,
+      reason: "operator_principal_matched"
+    });
+  }
+  return requirePrincipalAccessForOperation({
+    principalContext,
+    operation: "memory_review",
+    accessClass: "blocked",
+    allowed: false,
+    reason:
+      principalContext.route.visibility === "public"
+        ? "public_route_private_memory_blocked"
+        : "non_owner_owner_private_blocked"
+  });
 }
 
 /**

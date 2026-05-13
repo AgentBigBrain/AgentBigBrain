@@ -110,6 +110,7 @@
     "test:source_recall:evidence": "tsx scripts/evidence/sourceRecallEvidenceMatrix.ts",
     "test:source_recall:production_user_turn_smoke": "tsx scripts/evidence/sourceRecallProductionUserTurnSmoke.ts",
     "test:source_recall:telegram_desktop_live_smoke": "tsx scripts/evidence/sourceRecallTelegramDesktopLiveSmoke.ts",
+    "test:principal_subject_access:evidence": "tsx scripts/evidence/principalSubjectAccessMatrix.ts",
     "test:stage6_x:shell_profile_evidence": "tsx scripts/evidence/stage6_xShellProfileEvidence.ts",
     "audit:governors": "tsx scripts/evidence/governorDriftAudit.ts",
     "audit:claims": "tsx scripts/evidence/claimAudit.ts",

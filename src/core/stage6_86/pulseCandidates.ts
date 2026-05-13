@@ -518,15 +518,20 @@ function buildOpenLoopDrafts(
         continue;
       }
       const staleSignal = computeStalenessSignal(loop.lastMentionedAt, observedAt, openLoopStaleDays);
+      const privateActorEvidence = isPrivateOpenLoopActorEvidence(loop.actorScope ?? null);
       const privacySensitive =
         normalizeStringArray(loop.entityRefs).some((entityKey) => privacyOptOutEntityKeys.has(entityKey)) ||
-        containsPrivacyKeyword(thread.topicLabel);
+        containsPrivacyKeyword(thread.topicLabel) ||
+        privateActorEvidence;
       allDrafts.push({
         reasonCode: "OPEN_LOOP_RESUME",
         lastTouchedAt: loop.lastMentionedAt,
         threadKey: thread.threadKey,
         entityRefs: normalizeStringArray(loop.entityRefs),
-        evidenceRefs: normalizeStringArray([`thread:${thread.threadKey}:loop:${loop.loopId}`]),
+        evidenceRefs: normalizeStringArray([
+          `thread:${thread.threadKey}:loop:${loop.loopId}`,
+          ...buildOpenLoopActorEvidenceRefs(loop.actorScope ?? null)
+        ]),
         sourceAuthority: "stale_runtime_context",
         provenanceTier: privacySensitive ? "weak" : "supporting",
         sensitive: privacySensitive,
@@ -562,6 +567,48 @@ function buildOpenLoopDrafts(
       }
     }));
   return prioritized;
+}
+
+/**
+ * Implements `isPrivateOpenLoopActorEvidence` behavior within this module.
+ */
+function isPrivateOpenLoopActorEvidence(
+  actorScope: import("../types").ContinuityActorScopeV1 | null
+): boolean {
+  if (!actorScope) {
+    return false;
+  }
+  if (actorScope.scopeSource === "shared_public" || actorScope.accessClass === "shared_public") {
+    return false;
+  }
+  return actorScope.routeVisibility !== "public";
+}
+
+/**
+ * Implements `buildOpenLoopActorEvidenceRefs` behavior within this module.
+ */
+function buildOpenLoopActorEvidenceRefs(
+  actorScope: import("../types").ContinuityActorScopeV1 | null
+): readonly string[] {
+  if (!actorScope) {
+    return [];
+  }
+  return [
+    [
+      "open_loop_actor_scope",
+      normalizeEvidenceSegment(actorScope.scopeSource),
+      normalizeEvidenceSegment(actorScope.accessClass),
+      normalizeEvidenceSegment(actorScope.routeVisibility),
+      normalizeEvidenceSegment(actorScope.legacyIdentityState)
+    ].join(":")
+  ];
+}
+
+/**
+ * Implements `normalizeEvidenceSegment` behavior within this module.
+ */
+function normalizeEvidenceSegment(value: string): string {
+  return value.trim().replace(/[^a-zA-Z0-9._-]/g, "_") || "unknown";
 }
 
 /**

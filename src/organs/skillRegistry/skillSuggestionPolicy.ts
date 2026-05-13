@@ -3,6 +3,7 @@
  */
 
 import type { WorkflowPattern } from "../../core/types";
+import { stripLearningAccessScopeSuffix } from "../../core/learningAccessMetadata";
 
 /**
  * Builds a stable suggested skill name from a workflow pattern when no linked skill exists yet.
@@ -44,8 +45,9 @@ export function shouldSuggestSkillFromWorkflow(pattern: WorkflowPattern): boolea
  * @returns Short suggestion explanation suitable for planner/operator output.
  */
 export function describeSkillSuggestion(pattern: WorkflowPattern): string {
+  const workflowKey = stripLearningAccessScopeSuffix(pattern.workflowKey);
   return (
-    `Repeated active workflow (${pattern.workflowKey}) succeeded ${pattern.successCount} times ` +
+    `Repeated active workflow (${workflowKey}) succeeded ${pattern.successCount} times ` +
     `with confidence ${pattern.confidence.toFixed(2)}.`
   );
 }

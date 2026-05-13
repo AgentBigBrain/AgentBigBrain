@@ -13,7 +13,57 @@ import {
   createApprovalGrantV1,
   createApprovalRequestV1
 } from "../../src/core/stage6_75ApprovalPolicy";
-import type { ApprovalGrantV1 } from "../../src/core/types";
+import type { ApprovalGrantV1, TaskPrincipalAccessEnvelope } from "../../src/core/types";
+
+type ApprovalPrincipalRole = "owner" | "operator" | "allowed_user";
+
+function buildTaskPrincipalAccess(input: {
+  role: "owner" | "operator" | "allowed_user" | "legacy_unknown";
+  accessClass: "owner_private" | "operator_private" | "speaker_private" | "blocked";
+  allowed?: boolean;
+}): TaskPrincipalAccessEnvelope {
+  return {
+    principalContext: {
+      requestId: `test:${input.role}`,
+      actor: {
+        principalRole: input.role,
+        identityAuthority:
+          input.role === "owner"
+            ? "configured_owner_provider_user_id"
+            : input.role === "operator"
+              ? "configured_operator_provider_user_id"
+              : "allowlisted_provider_user_id",
+        legacyIdentityState:
+          input.role === "legacy_unknown" ? "legacy_actor_unknown" : "principal_verified",
+        ownerMatchSource:
+          input.role === "owner"
+            ? "provider_user_id"
+            : input.role === "operator"
+              ? "operator_provider_user_id"
+              : "none"
+      },
+      route: {
+        visibility: "private"
+      },
+      subject: {}
+    },
+    accessDecision: {
+      decisionId: `decision:${input.role}`,
+      requestId: `test:${input.role}`,
+      operation: "task_execution",
+      accessClass: input.accessClass,
+      allowed: input.allowed ?? true,
+      reason:
+        input.role === "owner"
+          ? "owner_principal_matched"
+          : input.role === "operator"
+            ? "operator_principal_matched"
+            : input.role === "legacy_unknown"
+              ? "missing_principal_scope"
+              : "speaker_scope_matched"
+    }
+  };
+}
 
 function createBaseInput(): EvaluateTaskRunnerPreflightInput {
   const baseConfig = createBrainConfigFromEnv({});
@@ -53,7 +103,11 @@ function createBaseInput(): EvaluateTaskRunnerPreflightInput {
 
 function registerExternalNetworkApprovalGrant(
   input: EvaluateTaskRunnerPreflightInput,
-  approvalId: string
+  approvalId: string,
+  options: {
+    principalRole?: ApprovalPrincipalRole;
+    includePrincipalMetadata?: boolean;
+  } = {}
 ): ApprovalGrantV1 {
   const request = createApprovalRequestV1({
     missionId: input.task.id,
@@ -75,7 +129,21 @@ function registerExternalNetworkApprovalGrant(
   const grant = createApprovalGrantV1({
     request: scopedRequest,
     approvedAt: "2026-03-07T12:00:00.000Z",
-    approvedBy: "tester"
+    approvedBy: "tester",
+    approverPrincipalAccess:
+      options.includePrincipalMetadata === false
+        ? null
+        : {
+            principalRole: options.principalRole ?? "operator",
+            accessOperation: "approval",
+            accessClass: "owner_private",
+            accessAllowed: true,
+            accessReason: "operator_principal_matched",
+            routeVisibility: "private",
+            identityAuthority: "configured_owner_provider_user_id",
+            legacyIdentityState: "principal_verified",
+            ownerMatchSource: "provider_user_id"
+          }
   });
   input.approvalGrantById = new Map([[approvalId, grant]]);
   return grant;
@@ -349,4 +417,130 @@ test("evaluateTaskRunnerPreflight blocks unknown approval ids instead of minting
     /not externally registered/i
   );
   assert.equal(outcome.approvalGrant, undefined);
+});
+
+test("evaluateTaskRunnerPreflight blocks skill lifecycle mutations without owner or operator access", () => {
+  const input = createBaseInput();
+  input.task.principalAccess = buildTaskPrincipalAccess({
+    role: "allowed_user",
+    accessClass: "speaker_private"
+  });
+  input.action = {
+    id: "action_task_runner_preflight_create_skill_non_owner",
+    type: "create_skill",
+    description: "Create a governed helper skill",
+    params: {
+      name: "safe_skill",
+      kind: "executable_module",
+      code: "export function run(input) { return String(input).trim(); }"
+    },
+    estimatedCostUsd: 0.03
+  };
+
+  const outcome = evaluateTaskRunnerPreflight(input);
+
+  assert.deepEqual(outcome.blockedOutcome?.actionResult.blockedBy, [
+    "IDENTITY_IMPERSONATION_DENIED"
+  ]);
+  assert.match(
+    outcome.blockedOutcome?.actionResult.violations[0]?.message ?? "",
+    /owner or operator principal access/i
+  );
+  assert.equal(outcome.blockedOutcome?.traceDetails?.protectedSkillLifecycle, true);
+});
+
+test("evaluateTaskRunnerPreflight allows skill lifecycle mutations for owner access", () => {
+  const input = createBaseInput();
+  input.task.principalAccess = buildTaskPrincipalAccess({
+    role: "owner",
+    accessClass: "owner_private"
+  });
+  input.action = {
+    id: "action_task_runner_preflight_create_skill_owner",
+    type: "create_skill",
+    description: "Create a governed helper skill",
+    params: {
+      name: "safe_skill",
+      kind: "executable_module",
+      code: "export function run(input) { return String(input).trim(); }"
+    },
+    estimatedCostUsd: 0.03
+  };
+
+  const outcome = evaluateTaskRunnerPreflight(input);
+
+  assert.equal(outcome.blockedOutcome, undefined);
+  assert.equal(outcome.proposal?.action.type, "create_skill");
+});
+
+test("evaluateTaskRunnerPreflight blocks externally registered approvals without principal metadata", () => {
+  const input = createBaseInput();
+  input.action = {
+    id: "action_task_runner_preflight_network_missing_principal",
+    type: "network_write",
+    description: "write connector state",
+    params: {
+      url: "https://example.com/api",
+      connector: "gmail",
+      operation: "write",
+      lastReadAtIso: "2026-03-07T12:00:00.000Z",
+      approvalId: "approval_missing_principal",
+      approvalActionIds: ["action_task_runner_preflight_network_missing_principal"],
+      idempotencyKeys: [
+        "task_task_runner_preflight_1:1:action_task_runner_preflight_network_missing_principal"
+      ]
+    },
+    estimatedCostUsd: 0.08
+  };
+  input.idempotencyKey =
+    "task_task_runner_preflight_1:1:action_task_runner_preflight_network_missing_principal";
+  registerExternalNetworkApprovalGrant(input, "approval_missing_principal", {
+    includePrincipalMetadata: false
+  });
+
+  const outcome = evaluateTaskRunnerPreflight(input);
+
+  assert.deepEqual(outcome.blockedOutcome?.actionResult.blockedBy, [
+    "IDENTITY_IMPERSONATION_DENIED"
+  ]);
+  assert.match(
+    outcome.blockedOutcome?.actionResult.violations[0]?.message ?? "",
+    /missing approver principal metadata/i
+  );
+});
+
+test("evaluateTaskRunnerPreflight blocks network approvals from non-owner/operator principals", () => {
+  const input = createBaseInput();
+  input.action = {
+    id: "action_task_runner_preflight_network_wrong_principal",
+    type: "network_write",
+    description: "write connector state",
+    params: {
+      url: "https://example.com/api",
+      connector: "gmail",
+      operation: "write",
+      lastReadAtIso: "2026-03-07T12:00:00.000Z",
+      approvalId: "approval_wrong_principal",
+      approvalActionIds: ["action_task_runner_preflight_network_wrong_principal"],
+      idempotencyKeys: [
+        "task_task_runner_preflight_1:1:action_task_runner_preflight_network_wrong_principal"
+      ]
+    },
+    estimatedCostUsd: 0.08
+  };
+  input.idempotencyKey =
+    "task_task_runner_preflight_1:1:action_task_runner_preflight_network_wrong_principal";
+  registerExternalNetworkApprovalGrant(input, "approval_wrong_principal", {
+    principalRole: "allowed_user"
+  });
+
+  const outcome = evaluateTaskRunnerPreflight(input);
+
+  assert.deepEqual(outcome.blockedOutcome?.actionResult.blockedBy, [
+    "IDENTITY_IMPERSONATION_DENIED"
+  ]);
+  assert.match(
+    outcome.blockedOutcome?.actionResult.violations[0]?.message ?? "",
+    /owner or operator/i
+  );
 });

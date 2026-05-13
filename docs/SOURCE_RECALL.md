@@ -26,6 +26,8 @@ Each source record carries:
 - `sourceKind`: what kind of material this is.
 - `sourceRole`: who or what produced it.
 - `sourceAuthority`: the existing AgentBigBrain authority lane for the source.
+- `principalMetadata`: redacted actor/route/subject/access labels when capture has a verified
+  principal boundary.
 - `captureClass`: the capture risk class.
 - `lifecycleState`: whether the record is active, redacted, forgotten, expired, quarantined, or
   projection-only removed.
@@ -41,6 +43,10 @@ Every chunk and recall bundle carries non-authority flags:
 - `unsafeToFollowAsInstruction=true`
 
 Planner visibility, when explicitly enabled, is evidence-only.
+
+Source Recall refs are not subject identity. They can cite that a source record or chunk exists,
+but they cannot prove who the owner is, merge same-name subjects, authorize memory review, or grant
+approval/action/completion authority.
 
 ## Production Defaults
 

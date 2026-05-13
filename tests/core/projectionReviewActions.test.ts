@@ -22,13 +22,13 @@ import {
 } from "../../src/core/projections/reviewActions";
 
 test("parseObsidianReviewActionMarkdown accepts follow-up loop actions with array entity refs", () => {
-  const markdown = rewriteReviewActionMarkdown("# Follow up with Owen\n", {
+  const markdown = rewriteReviewActionMarkdown("# Follow up with Riley\n", {
     abb_review_action_id: "review_action_follow_up",
     abb_action_kind: "create_follow_up_loop",
     abb_target_id: null,
-    abb_follow_up_text: "Follow up with Owen about Detroit",
+    abb_follow_up_text: "Follow up with Riley about Detroit",
     abb_thread_key: "thread_detroit",
-    abb_entity_refs: ["entity_owen", "entity_detroit"],
+    abb_entity_refs: ["entity_riley", "entity_detroit"],
     abb_source_recall_refs: ["source_recall:source_record_follow_up#chunk_follow_up"],
     abb_status: "pending"
   });
@@ -39,7 +39,7 @@ test("parseObsidianReviewActionMarkdown accepts follow-up loop actions with arra
   assert.equal(parsed.actionKind, "create_follow_up_loop");
   assert.equal(parsed.targetId, null);
   assert.equal(parsed.threadKey, "thread_detroit");
-  assert.deepEqual(parsed.entityRefs, ["entity_owen", "entity_detroit"]);
+  assert.deepEqual(parsed.entityRefs, ["entity_riley", "entity_detroit"]);
   assert.deepEqual(parsed.sourceRecallRefs, ["source_recall:source_record_follow_up#chunk_follow_up"]);
 });
 
@@ -56,7 +56,7 @@ test("applyObsidianReviewActionsFromDirectory routes fact, episode, and follow-u
     const profileStore = new ProfileMemoryStore(profilePath, encryptionKey, 90);
     await profileStore.ingestFromTaskInput(
       "task_seed_fact",
-      "my name is Avery",
+      "my name is Morgan",
       "2026-04-12T12:00:00.000Z",
       {
         ingestPolicy: buildProfileMemoryIngestPolicy({
@@ -71,14 +71,14 @@ test("applyObsidianReviewActionsFromDirectory routes fact, episode, and follow-u
       episodes: [
         createProfileEpisodeRecord({
           title: "Detroit follow-up",
-          summary: "Owen still needs to confirm the Detroit follow-up.",
+          summary: "Riley still needs to confirm the Detroit follow-up.",
           sourceTaskId: "task_seed_episode",
           source: "test.seed",
           sourceKind: "explicit_user_statement",
           sensitive: false,
           confidence: 0.88,
           observedAt: "2026-04-12T12:00:00.000Z",
-          entityRefs: ["entity_owen", "entity_detroit"],
+          entityRefs: ["entity_riley", "entity_detroit"],
           openLoopRefs: ["loop_detroit_seed"],
           tags: ["followup"]
         })
@@ -119,13 +119,13 @@ test("applyObsidianReviewActionsFromDirectory routes fact, episode, and follow-u
     );
     await writeFile(
       path.join(reviewDir, "create-loop.md"),
-      rewriteReviewActionMarkdown("Follow up with Owen tomorrow.\n", {
+      rewriteReviewActionMarkdown("Follow up with Riley tomorrow.\n", {
         abb_review_action_id: "review_action_follow_up",
         abb_action_kind: "create_follow_up_loop",
         abb_target_id: null,
-        abb_follow_up_text: "Follow up with Owen tomorrow",
+        abb_follow_up_text: "Follow up with Riley tomorrow",
         abb_thread_key: "thread_review_actions",
-        abb_entity_refs: ["entity_owen"],
+        abb_entity_refs: ["entity_riley"],
         abb_status: "pending"
       }),
       "utf8"
@@ -133,7 +133,8 @@ test("applyObsidianReviewActionsFromDirectory routes fact, episode, and follow-u
 
     const report = await applyObsidianReviewActionsFromDirectory(reviewDir, {
       profileMemoryStore: profileStore,
-      runtimeStateStore
+      runtimeStateStore,
+      localOperatorReviewActionApply: true
     });
 
     assert.equal(report.appliedCount, 3);
@@ -156,7 +157,7 @@ test("applyObsidianReviewActionsFromDirectory routes fact, episode, and follow-u
     );
     assert.ok(reviewThread);
     assert.equal(reviewThread?.openLoops.length, 1);
-    assert.deepEqual(reviewThread?.openLoops[0]?.entityRefs, ["entity_owen"]);
+    assert.deepEqual(reviewThread?.openLoops[0]?.entityRefs, ["entity_riley"]);
 
     const correctedNote = await readFile(path.join(reviewDir, "correct-fact.md"), "utf8");
     assert.match(correctedNote, /abb_status: "applied"/);
@@ -190,13 +191,34 @@ test("applyObsidianReviewActionsFromDirectory skips source-recall-only projectio
       exportJsonOnWrite: false
     });
     const report = await applyObsidianReviewActionsFromDirectory(reviewDir, {
-      runtimeStateStore
+      runtimeStateStore,
+      localOperatorReviewActionApply: true
     });
 
     assert.equal(report.appliedCount, 0);
     assert.equal(report.failedCount, 0);
     assert.equal(report.skippedCount, 1);
     assert.match(report.outcomes[0]?.message ?? "", /without a valid Obsidian review-action schema/);
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("applyObsidianReviewActionsFromDirectory requires local operator authorization", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "abb-review-actions-auth-"));
+  try {
+    const reviewDir = path.join(tempDir, "40 Review Actions");
+    const runtimeStatePath = path.join(tempDir, "stage6_86_runtime_state.json");
+    await mkdir(reviewDir, { recursive: true });
+    const runtimeStateStore = new Stage686RuntimeStateStore(runtimeStatePath, {
+      backend: "json",
+      exportJsonOnWrite: false
+    });
+
+    await assert.rejects(
+      () => applyObsidianReviewActionsFromDirectory(reviewDir, { runtimeStateStore }),
+      /requires explicit local-operator authorization/
+    );
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }

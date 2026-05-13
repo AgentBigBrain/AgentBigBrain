@@ -4,6 +4,7 @@ import type { TopicKeyInterpretationSignalV1 } from "../../core/stage6_86Convers
 import { recordUserTurnWithSourceRecall } from "../conversationSessionMutations";
 import type { ConversationSession } from "../sessionStore";
 import type { ConversationSourceRecallCaptureDependencies } from "./managerContracts";
+import type { ConversationRoutingDependencies } from "./conversationRoutingContracts";
 
 /**
  * Records a user turn while preserving topic-key interpretation metadata for later continuity use.
@@ -26,4 +27,24 @@ export async function recordTopicAwareUserTurn(
     topicKeyInterpretation,
     sourceRecallCapture
   });
+}
+
+/**
+ * Implements `recordRoutingUserTurn` behavior within this module.
+ */
+export async function recordRoutingUserTurn(
+  session: ConversationSession,
+  input: string,
+  receivedAt: string,
+  deps: ConversationRoutingDependencies,
+  topicKeyInterpretation: TopicKeyInterpretationSignalV1 | null
+): Promise<void> {
+  await recordTopicAwareUserTurn(
+    session,
+    input,
+    receivedAt,
+    deps.config.maxConversationTurns,
+    topicKeyInterpretation,
+    deps.sourceRecallCapture ?? null
+  );
 }

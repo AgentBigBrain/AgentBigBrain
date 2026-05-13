@@ -5,6 +5,7 @@
 import {
   ApprovalGrantV1,
   ApprovalRequestV1,
+  PrincipalAccessAuditMetadata,
   Stage675BlockCode
 } from "./types";
 import { canonicalJson, sha256Hex } from "./normalizers/canonicalizationRules";
@@ -83,7 +84,9 @@ export function createApprovalGrantV1(input: {
   request: ApprovalRequestV1;
   approvedAt: string;
   approvedBy: string;
+  approverPrincipalAccess?: PrincipalAccessAuditMetadata | null;
 }): ApprovalGrantV1 {
+  const approverPrincipalAccess = input.approverPrincipalAccess ?? null;
   const grantBody = {
     approvalId: input.request.approvalId,
     missionId: input.request.missionId,
@@ -93,7 +96,8 @@ export function createApprovalGrantV1(input: {
     expiresAt: input.request.expiresAt,
     approvedBy: input.approvedBy,
     idempotencyKeys: input.request.idempotencyKeys,
-    maxUses: input.request.maxUses
+    maxUses: input.request.maxUses,
+    approverPrincipalAccess
   };
   return {
     ...grantBody,

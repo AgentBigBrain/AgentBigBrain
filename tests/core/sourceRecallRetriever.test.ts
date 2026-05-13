@@ -18,6 +18,7 @@ import {
   retrieveSourceRecall
 } from "../../src/core/sourceRecall/sourceRecallRetriever";
 import { SourceRecallStore } from "../../src/core/sourceRecall/sourceRecallStore";
+import type { TaskPrincipalAccessEnvelope } from "../../src/core/types";
 
 test("retrieveSourceRecall returns exact quote recall as non-authoritative evidence", async () => {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-source-recall-retrieve-"));
@@ -430,6 +431,46 @@ test("retrieveSourceRecall reports recent fallback as diagnostic-only evidence",
   }
 });
 
+test("retrieveSourceRecall applies principal access metadata when provided", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-source-recall-principal-"));
+  const store = new SourceRecallStore({
+    sqlitePath: path.join(tempDir, "source_recall.sqlite"),
+    testOnlyAllowPlaintextStorage: true
+  });
+  const firstRecord = buildRecord("source_record_principal_a", "scope-a", "thread-a", {
+    principalMetadata: buildPrincipalMetadata("hash-user-a")
+  });
+  const secondRecord = buildRecord("source_record_principal_b", "scope-a", "thread-a", {
+    principalMetadata: buildPrincipalMetadata("hash-user-b")
+  });
+
+  try {
+    await store.upsertSourceRecord(firstRecord, [
+      buildChunk("chunk_principal_a", firstRecord.sourceRecordId, 0, "First speaker source.")
+    ]);
+    await store.upsertSourceRecord(secondRecord, [
+      buildChunk("chunk_principal_b", secondRecord.sourceRecordId, 0, "Second speaker source.")
+    ]);
+
+    const result = await retrieveSourceRecall(store, {
+      scopeId: "scope-a",
+      threadId: "thread-a",
+      principalAccess: buildPrincipalAccess("hash-user-a")
+    });
+
+    assert.deepEqual(
+      result.bundle.excerpts.map((excerpt) => excerpt.chunkId),
+      ["chunk_principal_a"]
+    );
+    assert.equal(result.bundle.excerpts[0]?.principalMetadata?.actorProviderUserIdHash, "hash-user-a");
+    assert.equal(result.auditEvent.principalRole, "conversation_participant");
+    assert.equal(result.auditEvent.accessOperation, "source_recall_retrieve");
+    assert.equal(result.auditEvent.accessAllowed, true);
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
 /**
  * Builds a synthetic Source Recall record.
  *
@@ -467,6 +508,53 @@ function buildRecord(
     freshness: "recent",
     sensitive: false,
     ...overrides
+  };
+}
+
+function buildPrincipalMetadata(actorProviderUserIdHash: string) {
+  return {
+    actorPrincipalRole: "conversation_participant",
+    actorProvider: "telegram",
+    actorPrincipalIdHash: actorProviderUserIdHash,
+    actorProviderUserIdHash,
+    routeVisibility: "private",
+    identityAuthority: "transport_hint",
+    legacyIdentityState: "principal_verified",
+    ownerMatchSource: "none",
+    accessOperation: "source_recall_capture",
+    accessClass: "speaker_private",
+    accessAllowed: true,
+    accessReason: "speaker_scope_matched",
+    speakerSubjectKind: "principal_profile",
+    speakerSubjectId: actorProviderUserIdHash,
+    requestedSubjectKind: null,
+    requestedSubjectId: null,
+    ownerSubjectKind: null,
+    ownerSubjectId: null
+  };
+}
+
+function buildPrincipalAccess(actorProviderUserIdHash: string): TaskPrincipalAccessEnvelope {
+  return {
+    principalContext: {
+      requestId: `test:${actorProviderUserIdHash}`,
+      actor: {
+        principalRole: "conversation_participant",
+        providerUserIdHash: actorProviderUserIdHash
+      },
+      route: {
+        visibility: "private"
+      },
+      subject: null
+    },
+    accessDecision: {
+      decisionId: `test:${actorProviderUserIdHash}:source_recall_retrieve`,
+      requestId: `test:${actorProviderUserIdHash}`,
+      operation: "source_recall_retrieve",
+      accessClass: "speaker_private",
+      allowed: true,
+      reason: "speaker_scope_matched"
+    }
   };
 }
 

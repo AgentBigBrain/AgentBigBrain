@@ -10,9 +10,13 @@ import { hashSha256 } from "./cryptoUtils";
 import { withFileLock, writeFileAtomic } from "./fileLock";
 import { makeId } from "./ids";
 import { sha256HexFromCanonicalJson } from "./normalizers/canonicalizationRules";
+import {
+    buildRedactedPrincipalAccessMetadata,
+    type RedactedPrincipalAccessMetadata
+} from "./principalAccessMetadata";
 import { buildProjectionChangeSet } from "./projections/service";
 import { withSqliteDatabase } from "./sqliteStore";
-import { ActionRunResult } from "./types";
+import type { ActionRunResult, TaskPrincipalAccessEnvelope } from "./types";
 
 const MAX_EXECUTION_RECEIPTS = 10_000;
 const SQLITE_EXECUTION_RECEIPTS_TABLE = "execution_receipts";
@@ -29,6 +33,7 @@ export interface ExecutionReceipt {
     outputDigest: string;
     voteDigest: string;
     metadataDigest: string;
+    principalAccess: RedactedPrincipalAccessMetadata | null;
     priorReceiptHash: string;
     receiptHash: string;
 }
@@ -49,6 +54,7 @@ export interface AppendExecutionReceiptInput {
     planTaskId: string;
     proposalId: string | null;
     actionResult: ActionRunResult;
+    principalAccess?: TaskPrincipalAccessEnvelope | null;
 }
 
 export interface ExecutionReceiptVerificationResult {
@@ -68,6 +74,7 @@ interface SqliteExecutionReceiptRow {
     output_digest: string;
     vote_digest: string;
     metadata_digest: string;
+    principal_access_json?: string | null;
     prior_receipt_hash: string;
     receipt_hash: string;
 }
@@ -94,6 +101,11 @@ function isSqliteExecutionReceiptRow(value: unknown): value is SqliteExecutionRe
         typeof candidate.output_digest === "string" &&
         typeof candidate.vote_digest === "string" &&
         typeof candidate.metadata_digest === "string" &&
+        (
+            candidate.principal_access_json === undefined ||
+            candidate.principal_access_json === null ||
+            typeof candidate.principal_access_json === "string"
+        ) &&
         typeof candidate.prior_receipt_hash === "string" &&
         typeof candidate.receipt_hash === "string"
     );
@@ -134,7 +146,7 @@ function sqliteTableHasColumn(
  * Builds a deterministic payload string for receipt hash computation.
  */
 function toReceiptPayload(receipt: Omit<ExecutionReceipt, "id" | "recordedAt" | "receiptHash">): string {
-    return JSON.stringify({
+    const payload: Record<string, unknown> = {
         taskId: receipt.taskId,
         planTaskId: receipt.planTaskId,
         proposalId: receipt.proposalId,
@@ -145,7 +157,11 @@ function toReceiptPayload(receipt: Omit<ExecutionReceipt, "id" | "recordedAt" | 
         voteDigest: receipt.voteDigest,
         metadataDigest: receipt.metadataDigest,
         priorReceiptHash: receipt.priorReceiptHash
-    });
+    };
+    if (receipt.principalAccess) {
+        payload.principalAccess = receipt.principalAccess;
+    }
+    return JSON.stringify(payload);
 }
 
 /**
@@ -199,12 +215,54 @@ function coerceExecutionReceiptDocument(input: unknown): ExecutionReceiptDocumen
                 metadataDigest: typeof raw.metadataDigest === "string"
                     ? raw.metadataDigest
                     : sha256HexFromCanonicalJson({}),
+                principalAccess: coercePrincipalAccessMetadata(raw.principalAccess),
                 priorReceiptHash: typeof raw.priorReceiptHash === "string" ? raw.priorReceiptHash : "GENESIS",
                 receiptHash: typeof raw.receiptHash === "string" ? raw.receiptHash : hashSha256("")
             } satisfies ExecutionReceipt;
         });
 
     return { receipts };
+}
+
+/**
+ * Implements `coercePrincipalAccessMetadata` behavior within this module.
+ */
+function coercePrincipalAccessMetadata(input: unknown): RedactedPrincipalAccessMetadata | null {
+    if (!input || typeof input !== "object" || Array.isArray(input)) {
+        return null;
+    }
+    const candidate = input as Partial<RedactedPrincipalAccessMetadata>;
+    return {
+        principalRole: typeof candidate.principalRole === "string" ? candidate.principalRole : null,
+        accessOperation:
+            typeof candidate.accessOperation === "string" ? candidate.accessOperation : null,
+        accessClass: typeof candidate.accessClass === "string" ? candidate.accessClass : null,
+        accessAllowed:
+            typeof candidate.accessAllowed === "boolean" ? candidate.accessAllowed : null,
+        accessReason: typeof candidate.accessReason === "string" ? candidate.accessReason : null,
+        routeVisibility:
+            typeof candidate.routeVisibility === "string" ? candidate.routeVisibility : null,
+        identityAuthority:
+            typeof candidate.identityAuthority === "string" ? candidate.identityAuthority : null,
+        legacyIdentityState:
+            typeof candidate.legacyIdentityState === "string" ? candidate.legacyIdentityState : null,
+        ownerMatchSource:
+            typeof candidate.ownerMatchSource === "string" ? candidate.ownerMatchSource : null
+    };
+}
+
+/**
+ * Implements `parsePrincipalAccessJson` behavior within this module.
+ */
+function parsePrincipalAccessJson(value: string | null | undefined): RedactedPrincipalAccessMetadata | null {
+    if (!value) {
+        return null;
+    }
+    try {
+        return coercePrincipalAccessMetadata(JSON.parse(value));
+    } catch {
+        return null;
+    }
 }
 
 export class ExecutionReceiptStore {
@@ -293,6 +351,7 @@ export class ExecutionReceiptStore {
         const outputDigest = hashSha256((input.actionResult.output ?? "").trim());
         const voteDigest = buildVoteDigest(input.actionResult);
         const metadataDigest = buildMetadataDigest(input.actionResult);
+        const principalAccess = buildRedactedPrincipalAccessMetadata(input.principalAccess);
 
         let appendedReceipt: ExecutionReceipt | null = null;
         await withFileLock(this.filePath, async () => {
@@ -312,6 +371,7 @@ export class ExecutionReceiptStore {
                 outputDigest,
                 voteDigest,
                 metadataDigest,
+                principalAccess,
                 priorReceiptHash
             };
             const receiptHash = hashSha256(toReceiptPayload(baseReceipt));
@@ -366,6 +426,7 @@ export class ExecutionReceiptStore {
                 outputDigest: receipt.outputDigest,
                 voteDigest: receipt.voteDigest,
                 metadataDigest: receipt.metadataDigest,
+                principalAccess: receipt.principalAccess,
                 priorReceiptHash: receipt.priorReceiptHash
             });
             const expectedHash = hashSha256(payload);
@@ -404,6 +465,7 @@ export class ExecutionReceiptStore {
         const outputDigest = hashSha256((input.actionResult.output ?? "").trim());
         const voteDigest = buildVoteDigest(input.actionResult);
         const metadataDigest = buildMetadataDigest(input.actionResult);
+        const principalAccess = buildRedactedPrincipalAccessMetadata(input.principalAccess);
 
         const receipt = await withSqliteDatabase(this.sqlitePath, async (db) => {
             this.ensureSqliteSchema(db);
@@ -432,6 +494,7 @@ export class ExecutionReceiptStore {
                     outputDigest,
                     voteDigest,
                     metadataDigest,
+                    principalAccess,
                     priorReceiptHash
                 };
                 const receiptHash = hashSha256(toReceiptPayload(baseReceipt));
@@ -445,8 +508,9 @@ export class ExecutionReceiptStore {
                 db.prepare(
                     `INSERT INTO ${SQLITE_EXECUTION_RECEIPTS_TABLE} (
              id, recorded_at, task_id, plan_task_id, proposal_id, action_id, action_type,
-             approved, output_digest, vote_digest, metadata_digest, prior_receipt_hash, receipt_hash
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+             approved, output_digest, vote_digest, metadata_digest, principal_access_json,
+             prior_receipt_hash, receipt_hash
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
                 ).run(
                     receipt.id,
                     receipt.recordedAt,
@@ -459,6 +523,7 @@ export class ExecutionReceiptStore {
                     receipt.outputDigest,
                     receipt.voteDigest,
                     receipt.metadataDigest,
+                    JSON.stringify(receipt.principalAccess),
                     receipt.priorReceiptHash,
                     receipt.receiptHash
                 );
@@ -538,6 +603,7 @@ export class ExecutionReceiptStore {
          output_digest TEXT NOT NULL,
          vote_digest TEXT NOT NULL,
          metadata_digest TEXT NOT NULL,
+         principal_access_json TEXT,
          prior_receipt_hash TEXT NOT NULL,
          receipt_hash TEXT NOT NULL
        );`
@@ -546,6 +612,12 @@ export class ExecutionReceiptStore {
             db.exec(
                 `ALTER TABLE ${SQLITE_EXECUTION_RECEIPTS_TABLE}
          ADD COLUMN metadata_digest TEXT NOT NULL DEFAULT '${sha256HexFromCanonicalJson({})}';`
+            );
+        }
+        if (!sqliteTableHasColumn(db, SQLITE_EXECUTION_RECEIPTS_TABLE, "principal_access_json")) {
+            db.exec(
+                `ALTER TABLE ${SQLITE_EXECUTION_RECEIPTS_TABLE}
+         ADD COLUMN principal_access_json TEXT;`
             );
         }
         db.exec(
@@ -570,7 +642,8 @@ export class ExecutionReceiptStore {
         const rows = db
             .prepare(
                 `SELECT id, recorded_at, task_id, plan_task_id, proposal_id, action_id, action_type,
-                approved, output_digest, vote_digest, metadata_digest, prior_receipt_hash, receipt_hash
+                approved, output_digest, vote_digest, metadata_digest, principal_access_json,
+                prior_receipt_hash, receipt_hash
          FROM ${SQLITE_EXECUTION_RECEIPTS_TABLE}
          ORDER BY receipt_seq ASC`
             )
@@ -589,6 +662,7 @@ export class ExecutionReceiptStore {
                 outputDigest: row.output_digest,
                 voteDigest: row.vote_digest,
                 metadataDigest: row.metadata_digest,
+                principalAccess: parsePrincipalAccessJson(row.principal_access_json),
                 priorReceiptHash: row.prior_receipt_hash,
                 receiptHash: row.receipt_hash
             }))
@@ -629,8 +703,9 @@ export class ExecutionReceiptStore {
                     db.prepare(
                         `INSERT OR IGNORE INTO ${SQLITE_EXECUTION_RECEIPTS_TABLE} (
                id, recorded_at, task_id, plan_task_id, proposal_id, action_id, action_type,
-               approved, output_digest, vote_digest, metadata_digest, prior_receipt_hash, receipt_hash
-             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+               approved, output_digest, vote_digest, metadata_digest, principal_access_json,
+               prior_receipt_hash, receipt_hash
+             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
                     ).run(
                         receipt.id,
                         receipt.recordedAt,
@@ -643,6 +718,7 @@ export class ExecutionReceiptStore {
                         receipt.outputDigest,
                         receipt.voteDigest,
                         receipt.metadataDigest,
+                        JSON.stringify(receipt.principalAccess),
                         receipt.priorReceiptHash,
                         receipt.receiptHash
                     );

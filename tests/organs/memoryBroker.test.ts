@@ -38,6 +38,12 @@ import { LanguageUnderstandingOrgan } from "../../src/organs/languageUnderstandi
 import { extractCurrentUserRequest, MemoryBrokerOrgan } from "../../src/organs/memoryBroker";
 import { assessBrokerPromptCutoverGate } from "../../src/organs/memoryBrokerPlannerInput";
 import type { ConversationDomainContext } from "../../src/core/types";
+import {
+  buildTaskExecutionPrincipalAccess,
+  derivePrincipalContextFromIngress
+} from "../../src/interfaces/principalRuntime/principalAccess";
+import { createOwnerOperatorPrincipalConfigFromEnv } from "../../src/interfaces/principalRuntime/principalConfig";
+
 
 /**
  * Implements `buildTask` behavior within module scope.
@@ -48,8 +54,27 @@ function buildTask(id: string, userInput: string): TaskRequest {
     id,
     goal: "Provide safe and helpful assistance.",
     userInput,
-    createdAt: new Date().toISOString()
+    createdAt: new Date().toISOString(),
+    principalAccess: buildMemoryBrokerOwnerPrincipalAccess()
   };
+}
+
+function buildMemoryBrokerOwnerPrincipalAccess() {
+  const principalConfig = createOwnerOperatorPrincipalConfigFromEnv({
+    BRAIN_PRINCIPAL_HMAC_KEY: "test-principal-hmac-key",
+    BRAIN_OWNER_TELEGRAM_USER_IDS: "owner-user-1"
+  });
+  return buildTaskExecutionPrincipalAccess(
+    derivePrincipalContextFromIngress({
+      provider: "telegram",
+      conversationId: "chat-1",
+      userId: "owner-user-1",
+      username: "owner",
+      conversationVisibility: "private",
+      receivedAt: "2026-05-10T12:00:00.000Z",
+      principalConfig
+    })
+  );
 }
 
 function wrapResolvedMemoryRoute(

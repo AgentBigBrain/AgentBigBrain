@@ -76,9 +76,9 @@ export function buildIdentityInterpretationFallbackReply(
     reason === "explicit_self_identity_declaration" ||
     reason === "plausible_self_identity_declaration"
   ) {
-    return "If you're telling me your name, say it in a short direct form like \"My name is Avery.\" and I'll remember it.";
+    return "If you're telling me your name, say it in a short direct form like \"My name is Morgan.\" and I'll remember it.";
   }
-  return "If you want me to answer or remember your name, ask directly or tell me in a short form like \"My name is Avery.\"";
+  return "If you want me to answer or remember your name, ask directly or tell me in a short form like \"My name is Morgan.\"";
 }
 
 /**

@@ -12,6 +12,7 @@ import { captureMediaInterpretationLayersSourceRecall } from "../../src/core/sou
 import { createDefaultSourceRecallRetentionPolicy } from "../../src/core/sourceRecall/sourceRecallRetention";
 import { SourceRecallStore } from "../../src/core/sourceRecall/sourceRecallStore";
 import { buildConversationCommandRoutingInput } from "../../src/interfaces/mediaRuntime/mediaNormalization";
+import type { TaskPrincipalAccessEnvelope } from "../../src/core/types";
 import type { ConversationInboundMediaAttachment } from "../../src/interfaces/mediaRuntime/contracts";
 
 test("voice transcripts can be Source Recall while memory authority stays separate", async () => {
@@ -30,7 +31,8 @@ test("voice transcripts can be Source Recall while memory authority stays separa
       attachment,
       policy: buildMediaCapturePolicy(),
       writer: store,
-      capturedAt: "2026-05-03T15:00:01.000Z"
+      capturedAt: "2026-05-03T15:00:01.000Z",
+      principalAccess: buildSourceRecallCaptureAccess("synthetic-user-a")
     });
 
     assert.equal(results.length, 1);
@@ -48,6 +50,10 @@ test("voice transcripts can be Source Recall while memory authority stays separa
     assert.equal(record?.sourceRole, "user");
     assert.equal(record?.captureClass, "ordinary_source");
     assert.equal(record?.originRef.parentRefId, "artifact_voice_1");
+    assert.equal(record?.principalMetadata?.actorPrincipalRole, "conversation_participant");
+    assert.equal(record?.principalMetadata?.actorProviderUserIdHash, "hash_synthetic-user-a");
+    assert.equal(record?.principalMetadata?.accessOperation, "source_recall_capture");
+    assert.equal(record?.principalMetadata?.accessClass, "speaker_private");
     assert.equal(chunks[0]?.authority.currentTruthAuthority, false);
     assert.equal(chunks[0]?.authority.unsafeToFollowAsInstruction, true);
   } finally {
@@ -260,6 +266,42 @@ function buildVoiceAttachment(transcript: string): ConversationInboundMediaAttac
           memoryAuthority: "direct_user_text"
         }
       ]
+    }
+  };
+}
+
+function buildSourceRecallCaptureAccess(userKey: string): TaskPrincipalAccessEnvelope {
+  return {
+    principalContext: {
+      requestId: `test:${userKey}`,
+      actor: {
+        principalRole: "conversation_participant",
+        provider: "telegram",
+        principalId: `hash_${userKey}`,
+        providerUserIdHash: `hash_${userKey}`,
+        identityAuthority: "transport_hint",
+        legacyIdentityState: "principal_verified",
+        ownerMatchSource: "none"
+      },
+      route: {
+        visibility: "private"
+      },
+      subject: {
+        speakerSubjectRef: {
+          subjectKind: "principal_profile",
+          subjectId: `hash_${userKey}`
+        },
+        requestedSubjectRef: null,
+        ownerSubjectRef: null
+      }
+    },
+    accessDecision: {
+      decisionId: `test:${userKey}:source_recall_capture`,
+      requestId: `test:${userKey}`,
+      operation: "source_recall_capture",
+      accessClass: "speaker_private",
+      allowed: true,
+      reason: "speaker_scope_matched"
     }
   };
 }

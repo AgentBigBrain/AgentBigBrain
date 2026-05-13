@@ -21,6 +21,14 @@ import type {
 import type { RecoveryFailureClass } from "../../core/autonomy/contracts";
 import type { ConversationStackV1 } from "../../core/types";
 import type { ModelBackend } from "../../models/types";
+import type { BackendProfileOverrideAccessRecord } from "./backendProfileOverridePolicy";
+import type {
+  IdentityAuthority,
+  LegacyIdentityState,
+  OwnerMatchSource,
+  PrincipalContext,
+  PrincipalRole
+} from "../principalRuntime/principalAccess";
 
 export type ProposalStatus = "pending" | "approved" | "cancelled" | "executed";
 export type ConversationJobStatus = "queued" | "running" | "completed" | "failed";
@@ -45,9 +53,26 @@ export type ConversationAssistantTurnKind =
 export type ConversationTurnMetadataSource =
   | "runtime_metadata"
   | "legacy_text_inference";
+export type ConversationTurnActorMetadataSource =
+  | "session_principal_context"
+  | "assistant_runtime"
+  | "legacy_recovery";
+export interface ConversationTurnActorMetadata {
+  source: ConversationTurnActorMetadataSource;
+  principalRole: PrincipalRole;
+  principalIdHash?: string | null;
+  providerUserIdHash?: string | null;
+  routeVisibility: ConversationVisibility;
+  identityAuthority: IdentityAuthority;
+  legacyIdentityState: LegacyIdentityState;
+  ownerMatchSource: OwnerMatchSource;
+  displayNameHint?: string | null;
+  sourceEventIdHash?: string | null;
+}
 export interface ConversationTurnMetadata {
   assistantTurnKind?: ConversationAssistantTurnKind;
   assistantTurnKindSource?: ConversationTurnMetadataSource;
+  actor?: ConversationTurnActorMetadata;
   sourceRecall?: ConversationTurnSourceRecallMetadata;
 }
 
@@ -202,6 +227,7 @@ export interface PendingProposal {
   createdAt: string;
   updatedAt: string;
   status: ProposalStatus;
+  controller?: ConversationTurnActorMetadata | null;
 }
 
 export type ClarificationOptionId =
@@ -242,6 +268,7 @@ export interface ActiveClarificationState {
   promptFingerprint?: string;
   recoveryInstruction?: string | null;
   options: readonly ActiveClarificationOption[];
+  controller?: ConversationTurnActorMetadata | null;
 }
 
 export interface ConversationModeContinuityState {
@@ -403,11 +430,13 @@ export interface ConversationSession {
   username: string;
   transportIdentity?: ConversationTransportIdentityRecord | null;
   conversationVisibility: ConversationVisibility;
+  principalContext?: PrincipalContext | null;
   sessionSchemaVersion?: "v1" | "v2";
   conversationStack?: ConversationStackV1;
   updatedAt: string;
   modelBackendOverride?: ModelBackend | null;
   codexAuthProfileId?: string | null;
+  modelOverrideAccess?: BackendProfileOverrideAccessRecord | null;
   activeProposal: PendingProposal | null;
   activeClarification: ActiveClarificationState | null;
   domainContext: ConversationDomainContext;

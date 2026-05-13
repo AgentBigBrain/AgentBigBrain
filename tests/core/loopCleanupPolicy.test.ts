@@ -239,11 +239,28 @@ test("tracked start context recovers cwd from approved stop_process metadata whe
 
 test("cleanupManagedProcessLease issues one bounded stop_process task", async () => {
   const orchestrator = new CleanupStubOrchestrator();
+  const principalAccess = {
+    principalContext: {
+      requestId: "test:owner",
+      actor: { principalRole: "owner" },
+      route: { visibility: "private" },
+      subject: {}
+    },
+    accessDecision: {
+      decisionId: "test:owner:task_execution",
+      requestId: "test:owner",
+      operation: "task_execution",
+      accessClass: "owner_private",
+      allowed: true,
+      reason: "owner_principal_matched"
+    }
+  };
 
   await cleanupManagedProcessLease(
     orchestrator as unknown as BrainOrchestrator,
     "Run the local app and verify the UI.",
-    "proc_cleanup_policy_3"
+    "proc_cleanup_policy_3",
+    principalAccess
   );
 
   assert.equal(orchestrator.receivedTasks.length, 1);
@@ -252,4 +269,8 @@ test("cleanupManagedProcessLease issues one bounded stop_process task", async ()
     /^stop_process leaseId="proc_cleanup_policy_3"/i
   );
   assert.equal(orchestrator.receivedTasks[0]?.goal, "Run the local app and verify the UI.");
+  assert.equal(
+    orchestrator.receivedTasks[0]?.principalAccess?.accessDecision.accessClass,
+    "owner_private"
+  );
 });

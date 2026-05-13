@@ -9,7 +9,11 @@ import path from "node:path";
 import { test } from "node:test";
 
 import { GovernanceMemoryStore } from "../../src/core/governanceMemory";
-import { ActionBlockReason, ConstraintViolationCode } from "../../src/core/types";
+import {
+  ActionBlockReason,
+  ConstraintViolationCode,
+  type PrincipalAccessAuditMetadata
+} from "../../src/core/types";
 
 /**
  * Implements `withStore` behavior within module scope.
@@ -75,6 +79,20 @@ function buildBlockedEventInput(taskSuffix: string) {
     noVotes: 2,
     threshold: 6,
     dissentGovernorIds: ["security" as const]
+  };
+}
+
+function buildPrincipalAuditMetadata(): PrincipalAccessAuditMetadata {
+  return {
+    principalRole: "owner",
+    accessOperation: "task_execution",
+    accessClass: "owner_private",
+    accessAllowed: true,
+    accessReason: "owner_principal_matched",
+    routeVisibility: "private",
+    identityAuthority: "configured_owner_provider_user_id",
+    legacyIdentityState: "principal_verified",
+    ownerMatchSource: "provider_user_id"
   };
 }
 
@@ -158,6 +176,21 @@ test("GovernanceMemoryStore read view is immutable for consumers", async () => {
   });
 });
 
+test("GovernanceMemoryStore persists redacted principal access metadata", async () => {
+  await withStore(async (store, filePath) => {
+    await store.appendEvent({
+      ...buildBlockedEventInput("principal"),
+      principalAccess: buildPrincipalAuditMetadata()
+    });
+
+    const view = await store.getReadView(5);
+    const raw = await readFile(filePath, "utf8");
+    assert.equal(view.recentEvents[0]?.principalAccess?.principalRole, "owner");
+    assert.equal(view.recentEvents[0]?.principalAccess?.accessClass, "owner_private");
+    assert.equal(raw.includes("providerUserIdHash"), false);
+  });
+});
+
 test("GovernanceMemoryStore reloads latest events written by another store instance", async () => {
   await withStore(async (store, filePath) => {
     const second = new GovernanceMemoryStore(filePath);
@@ -191,6 +224,26 @@ async function governanceMemoryStoreSqliteBackendReadsWritesAndExportsJsonParity
     };
     assert.equal(typeof exported.createdAt, "string");
     assert.equal(exported.events.length, 2);
+  });
+}
+
+async function governanceMemoryStoreSqlitePersistsPrincipalMetadata(): Promise<void> {
+  await withSqliteBackedStore(async (store, filePath, sqlitePath) => {
+    await store.appendEvent({
+      ...buildBlockedEventInput("sqlite-principal"),
+      principalAccess: buildPrincipalAuditMetadata()
+    });
+
+    const reloaded = new GovernanceMemoryStore(filePath, {
+      backend: "sqlite",
+      sqlitePath,
+      exportJsonOnWrite: true
+    });
+    const view = await reloaded.getReadView(5);
+    const exportedRaw = await readFile(filePath, "utf8");
+    assert.equal(view.recentEvents[0]?.principalAccess?.accessOperation, "task_execution");
+    assert.equal(view.recentEvents[0]?.principalAccess?.routeVisibility, "private");
+    assert.equal(exportedRaw.includes("providerUserIdHash"), false);
   });
 }
 
@@ -241,6 +294,10 @@ async function governanceMemoryStoreSqliteBackendImportsLegacyJsonSnapshot(): Pr
 test(
   "GovernanceMemoryStore sqlite backend reads writes and exports json parity snapshot",
   governanceMemoryStoreSqliteBackendReadsWritesAndExportsJsonParity
+);
+test(
+  "GovernanceMemoryStore sqlite backend preserves redacted principal metadata",
+  governanceMemoryStoreSqlitePersistsPrincipalMetadata
 );
 test(
   "GovernanceMemoryStore sqlite backend imports legacy json snapshot when sqlite ledger is empty",

@@ -24,6 +24,8 @@ import {
   recordUserTurnWithSourceRecall
 } from "../../src/interfaces/conversationSessionMutations";
 import { buildSessionSeed } from "../../src/interfaces/conversationManagerHelpers";
+import { createOwnerOperatorPrincipalConfigFromEnv } from "../../src/interfaces/principalRuntime/principalConfig";
+import { derivePrincipalContextFromIngress } from "../../src/interfaces/principalRuntime/principalAccess";
 import { InterfaceSessionStore } from "../../src/interfaces/sessionStore";
 import type { ConversationJob, ConversationSession } from "../../src/interfaces/sessionStore";
 
@@ -70,6 +72,11 @@ test("recordUserTurnWithSourceRecall captures live user turns as quoted evidence
     assert.equal(record?.originRef.surface, "conversation_session");
     assert.equal(record?.originRef.parentRefId, session.conversationId);
     assert.equal(record?.freshness, "current_turn");
+    assert.equal(record?.principalMetadata?.actorPrincipalRole, "owner");
+    assert.equal(record?.principalMetadata?.routeVisibility, "private");
+    assert.equal(record?.principalMetadata?.accessOperation, "source_recall_capture");
+    assert.equal(record?.principalMetadata?.accessClass, "owner_private");
+    assert.equal(record?.principalMetadata?.accessAllowed, true);
     assert.equal(chunks[0]?.text, "Please remember the project decision exactly as stated.");
     assert.deepEqual(chunks[0]?.authority, buildSourceRecallAuthorityFlags());
   } finally {
@@ -380,7 +387,7 @@ test("task inputs and summaries are operational evidence, not live user source",
       sourceTimeKind: "captured_record",
       freshness: "recent",
       originSurface: "transport_task",
-      originRefId: "https://api.telegram.example/file/bot-secret/download-path",
+      originRefId: "https://api.telegram.example/file/bot-placeholder/download-path",
       originParentRefId: "job-1",
       policy,
       writer: store,
@@ -419,7 +426,7 @@ test("task inputs and summaries are operational evidence, not live user source",
       ]
     );
     assert.equal(records.some((record) => record.sourceKind === "conversation_turn"), false);
-    assert.equal(records[0]?.originRef.refId.includes("bot-secret"), false);
+    assert.equal(records[0]?.originRef.refId.includes("bot-placeholder"), false);
     assert.equal(records[0]?.originRef.refId.includes("https://"), false);
     assert.equal(
       (await store.listChunksForRecord(records[1]?.sourceRecordId ?? ""))[0]?.authority
@@ -462,14 +469,28 @@ test("capture failure does not throw or leak raw source text in diagnostics", as
  * @returns Fresh conversation session.
  */
 function buildSession(): ConversationSession {
-  return buildSessionSeed({
+  const session = buildSessionSeed({
     provider: "telegram",
     conversationId: "chat-1",
-    userId: "user-1",
-    username: "owner",
+    userId: "synthetic-owner-principal",
+    username: "synthetic",
     conversationVisibility: "private",
     receivedAt: "2026-05-03T12:00:00.000Z"
   });
+  const principalConfig = createOwnerOperatorPrincipalConfigFromEnv({
+    BRAIN_PRINCIPAL_HMAC_KEY: "test-principal-hmac-key",
+    BRAIN_OWNER_TELEGRAM_USER_IDS: "synthetic-owner-principal"
+  });
+  session.principalContext = derivePrincipalContextFromIngress({
+    provider: "telegram",
+    conversationId: "chat-1",
+    userId: "synthetic-owner-principal",
+    username: "synthetic",
+    conversationVisibility: "private",
+    receivedAt: "2026-05-03T12:00:00.000Z",
+    principalConfig
+  });
+  return session;
 }
 
 /**
@@ -482,8 +503,8 @@ function buildConversationMessage(text: string) {
   return {
     provider: "telegram" as const,
     conversationId: "chat-1",
-    userId: "user-1",
-    username: "owner",
+    userId: "synthetic-owner-principal",
+    username: "synthetic",
     conversationVisibility: "private" as const,
     text,
     receivedAt: "2026-05-03T13:05:00.000Z"

@@ -11,7 +11,13 @@ import {
   createDefaultPersonalityProfile,
   PersonalityProfile
 } from "./personality";
-import { TaskRunResult } from "./types";
+import {
+  classifyAgentLearningAccess,
+  normalizeAgentLearningAccessMetadata,
+  shouldApplyGlobalPersonalityLearning,
+  type AgentLearningAccessMetadataV1
+} from "./learningAccessMetadata";
+import type { TaskRunResult } from "./types";
 
 export interface PersonalityHistoryEntry {
   taskId: string;
@@ -20,6 +26,9 @@ export interface PersonalityHistoryEntry {
   acceptedTraits: string[];
   rejectedTraits: string[];
   rationale: string[];
+  accessMetadata?: AgentLearningAccessMetadataV1;
+  applied?: boolean;
+  blockReason?: string | null;
 }
 
 export interface PersonalityState {
@@ -73,6 +82,26 @@ function isValidHistoryEntry(entry: unknown): entry is PersonalityHistoryEntry {
 }
 
 /**
+ * Implements `normalizePersonalityHistoryEntry` behavior within this module.
+ */
+function normalizePersonalityHistoryEntry(entry: PersonalityHistoryEntry): PersonalityHistoryEntry {
+  return {
+    taskId: entry.taskId,
+    appliedAt: entry.appliedAt,
+    rewardedTraits: entry.rewardedTraits,
+    acceptedTraits: entry.acceptedTraits,
+    rejectedTraits: entry.rejectedTraits,
+    rationale: entry.rationale,
+    accessMetadata: normalizeAgentLearningAccessMetadata(entry.accessMetadata),
+    applied: typeof entry.applied === "boolean" ? entry.applied : true,
+    blockReason:
+      typeof entry.blockReason === "string" && entry.blockReason.trim().length > 0
+        ? entry.blockReason
+        : null
+  };
+}
+
+/**
  * Normalizes personality state into a stable shape for `personalityStore` logic.
  *
  * **Why it exists:**
@@ -96,7 +125,9 @@ function normalizePersonalityState(raw: unknown): PersonalityState {
     : initial.profile;
 
   const history = Array.isArray(candidate.history)
-    ? candidate.history.filter((entry) => isValidHistoryEntry(entry))
+    ? candidate.history
+      .filter((entry) => isValidHistoryEntry(entry))
+      .map((entry) => normalizePersonalityHistoryEntry(entry))
     : [];
 
   return {
@@ -165,6 +196,25 @@ export class PersonalityStore {
    */
   async applyRunReward(run: TaskRunResult): Promise<PersonalityState> {
     const state = await this.load();
+    const accessMetadata = classifyAgentLearningAccess(run.task.principalAccess ?? null);
+    if (!shouldApplyGlobalPersonalityLearning(accessMetadata)) {
+      const nextState: PersonalityState = {
+        profile: state.profile,
+        history: state.history.concat({
+          taskId: run.task.id,
+          appliedAt: new Date().toISOString(),
+          rewardedTraits: [],
+          acceptedTraits: [],
+          rejectedTraits: [],
+          rationale: ["blocked_private_or_external_personality_learning"],
+          accessMetadata,
+          applied: false,
+          blockReason: "learning_scope_not_global_or_owner_private"
+        })
+      };
+      await this.save(nextState);
+      return nextState;
+    }
     const evaluation = buildPersonalityRewardEvaluation(state.profile, run);
     const updateResult = applySafePersonalityUpdate(state.profile, evaluation.proposal);
 
@@ -176,7 +226,10 @@ export class PersonalityStore {
         rewardedTraits: evaluation.rewardedTraits,
         acceptedTraits: updateResult.acceptedTraits,
         rejectedTraits: updateResult.rejectedTraits,
-        rationale: evaluation.rationale
+        rationale: evaluation.rationale,
+        accessMetadata,
+        applied: true,
+        blockReason: null
       })
     };
 

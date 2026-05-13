@@ -1,5 +1,5 @@
 /**
- * @fileoverview Synthesizes bounded direct conversation replies without touching task-run durability.
+ * @fileoverview Synthesizes bounded direct conversation replies without touching task run durability.
  */
 
 import { MAIN_AGENT_ID } from "../../core/agentIdentity";
@@ -31,7 +31,7 @@ function buildDirectConversationTask(
  *
  * **Why it exists:**
  * Ordinary greetings and identity questions should stay model-authored, but they should not depend
- * on the full task-run durability path or shared `runtime/state.json` lock just to answer small
+ * on the full task run durability path or shared `runtime/state.json` lock just to answer small
  * talk.
  *
  * @param input - Current conversational turn, optionally including bounded chat context.
@@ -84,6 +84,7 @@ export async function runDirectConversationReplyWithRuntime(
       "If the user asks what you are, answer plainly without pretending to be human. " +
       "If the provided prompt includes known identity facts about the user, answer self-identity questions from those facts. " +
       "If the prompt only includes a low-confidence transport identity hint, you may mention it cautiously as a transport/profile hint rather than confirmed memory. " +
+      "If the prompt includes Current-speaker name resolution context, treat the matched name according to the provided resolved scope rather than as a separate person by default. " +
       "Do not say you only know the user's name 'from this chat' when the prompt already gives you a concrete identity fact. " +
       "Answer the user's current conversational turn itself. " +
       "If they want to pause work and chat for a minute, do that instead of continuing the previous workflow output. " +

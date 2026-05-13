@@ -3,6 +3,7 @@
  */
 
 import type { ActionType } from "./actionTypes";
+import type { PrincipalAccessAuditMetadata } from "./governanceOutcomeTypes";
 import type {
   MemoryMutationOperationV1,
   MemoryMutationStoreV1
@@ -18,6 +19,8 @@ export {
   type WorkflowConflictCodeV1,
   type WorkflowCostBand,
   type WorkflowExecutionStyle,
+  type WorkflowLearningAccessClassification,
+  type WorkflowLearningAccessMetadataV1,
   type WorkflowLatencyBand,
   type WorkflowObservation,
   type WorkflowOperationV1,
@@ -144,6 +147,7 @@ export interface ApprovalGrantV1 {
   maxUses: number;
   uses: number;
   grantHash: string;
+  approverPrincipalAccess?: PrincipalAccessAuditMetadata | null;
 }
 
 export interface ConflictObjectV1 {

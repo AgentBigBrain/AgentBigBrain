@@ -92,6 +92,9 @@ export interface ConversationIngressDependencies extends ConversationIngressRule
     | "maxRecentActions"
     | "maxBrowserSessions"
     | "maxPathDestinations"
+    | "principalConfig"
+    | "allowedUserIds"
+    | "allowedUsernames"
   >;
   interpretConversationIntent?: ConversationIntentInterpreter;
   runDirectConversationTurn?: RunDirectConversationTurn;

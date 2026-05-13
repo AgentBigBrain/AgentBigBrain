@@ -25,6 +25,7 @@ import type {
   ProfileMemoryTemporalRelevanceScope,
   ProfileMemoryTemporalSemanticMode
 } from "./profileMemoryTemporalQueryContracts";
+import { evaluateProfileMemoryAccessPolicy } from "./profileMemoryAccessPolicy";
 
 export interface ProfileEpisodeContinuityQueryRequest {
   entityHints: readonly string[];
@@ -79,6 +80,9 @@ export function readProfileEpisodes(
   nowIso = state.updatedAt,
   staleAfterDays = 90
 ): ProfileReadableEpisode[] {
+  if (!canReadEpisodesByPrincipalPolicy(request)) {
+    return [];
+  }
   const sensitiveAllowed = canReadSensitiveEpisodes(request);
   const maxEpisodes = Math.max(1, request.maxEpisodes ?? 10);
   return [...state.episodes]
@@ -103,6 +107,22 @@ export function readProfileEpisodes(
       openLoopRefs: [...episode.openLoopRefs],
       tags: [...episode.tags]
     }));
+}
+
+/**
+ * Implements `canReadEpisodesByPrincipalPolicy` behavior within this module.
+ */
+function canReadEpisodesByPrincipalPolicy(request: ProfileAccessRequest): boolean {
+  if (!request.principalAccess && !request.requestedSubjectKind) {
+    return true;
+  }
+  return evaluateProfileMemoryAccessPolicy({
+    principalAccess: request.principalAccess,
+    operation: "profile_read",
+    requestedSubjectKind: request.requestedSubjectKind ?? "legacy_global_profile",
+    includeSensitive: request.includeSensitive,
+    explicitHumanApproval: request.explicitHumanApproval
+  }).allowed;
 }
 
 /**

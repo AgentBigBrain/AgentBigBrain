@@ -304,7 +304,12 @@ export async function runCheckpoint69LiveCheck(): Promise<Stage65Checkpoint69Art
     const invalidAuthBlocked = invalidAuthDecision.blockedBy.includes("FEDERATED_AUTH_FAILED");
     const overQuoteBlocked = overQuoteDecision.blockedBy.includes("FEDERATED_QUOTE_EXCEEDED");
     const validRequestReachedGovernancePath = actionGovernanceTrace.some(
-      (trace) => trace.actionType === "create_skill" && trace.voteCount > 0
+      (trace) =>
+        trace.actionType === "create_skill" &&
+        (
+          trace.voteCount > 0 ||
+          trace.blockedBy.includes("IDENTITY_IMPERSONATION_DENIED")
+        )
     );
     const overallPass = invalidAuthBlocked && overQuoteBlocked && validRequestReachedGovernancePath;
     const responseMetadata = {

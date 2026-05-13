@@ -8,6 +8,7 @@ import {
   normalizeSourceRecallCaptureClass,
   normalizeSourceRecallFreshness,
   normalizeSourceRecallLifecycleState,
+  normalizeSourceRecallPrincipalMetadata,
   normalizeSourceRecallSourceAuthority,
   normalizeSourceRecallSourceKind,
   normalizeSourceRecallSourceRole,
@@ -115,7 +116,11 @@ export function normalizeSourceRecallRecord(input: SourceRecallRecord): SourceRe
     capturedAt: input.capturedAt,
     sourceTimeKind: normalizeSourceRecallSourceTimeKind(input.sourceTimeKind),
     freshness: normalizeSourceRecallFreshness(input.freshness),
-    sensitive: input.sensitive === true
+    sensitive: input.sensitive === true,
+    ...(() => {
+      const principalMetadata = normalizeSourceRecallPrincipalMetadata(input.principalMetadata);
+      return principalMetadata ? { principalMetadata } : {};
+    })()
   };
 }
 
@@ -336,7 +341,8 @@ function parseSourceRecallRecord(input: unknown): SourceRecallRecord | null {
     capturedAt: candidate.capturedAt,
     sourceTimeKind: candidate.sourceTimeKind ?? "unknown",
     freshness: candidate.freshness ?? "unknown",
-    sensitive: candidate.sensitive === true
+    sensitive: candidate.sensitive === true,
+    ...(candidate.principalMetadata ? { principalMetadata: candidate.principalMetadata } : {})
   });
 }
 

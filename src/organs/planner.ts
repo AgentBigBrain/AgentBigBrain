@@ -251,7 +251,8 @@ export class PlannerOrgan {
       task.userInput,
       8,
       undefined,
-      options.conversationDomainContext?.dominantLane ?? null
+      options.conversationDomainContext?.dominantLane ?? null,
+      { principalAccess: task.principalAccess ?? null }
     );
     const retrievalPolicy = buildDefaultRetrievalQuarantinePolicy(new Date().toISOString());
     const distilledLessons = distillPlannerLessons(relevantLessons, retrievalPolicy);

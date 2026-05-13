@@ -45,6 +45,7 @@ export interface LoadPlannerLearningContextDependencies {
 
 export interface LoadPlannerLearningContextOptions {
   conversationDomainContext?: ConversationDomainContext | null;
+  principalAccess?: TaskRequest["principalAccess"] | null;
 }
 
 export interface PlanOrchestratorAttemptInput {
@@ -106,7 +107,8 @@ export async function loadPlannerLearningContext(
       workflowHints = await deps.workflowLearningStore.getRelevantPatterns(
         contextQuery,
         3,
-        options.conversationDomainContext?.dominantLane ?? null
+        options.conversationDomainContext?.dominantLane ?? null,
+        { principalAccess: options.principalAccess ?? null }
       );
     } catch (error) {
       console.error(
@@ -118,7 +120,9 @@ export async function loadPlannerLearningContext(
   let judgmentHints: readonly JudgmentPattern[] = [];
   if (deps.judgmentPatternStore) {
     try {
-      judgmentHints = await deps.judgmentPatternStore.getRelevantPatterns(contextQuery, 3);
+      judgmentHints = await deps.judgmentPatternStore.getRelevantPatterns(contextQuery, 3, {
+        principalAccess: options.principalAccess ?? null
+      });
     } catch (error) {
       console.error(
         `[JudgmentPattern] non-fatal hint retrieval failure: ${(error as Error).message}`

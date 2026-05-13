@@ -3,6 +3,7 @@
  */
 
 import type { ConversationDomainContext, ProfileMemoryStatus } from "../../core/types";
+import type { MemoryAccessPrincipalAuditSnapshot } from "../../core/memoryAccessAudit";
 import type { SourceAuthority } from "../../core/sourceAuthority";
 import type {
   ProfileMemoryTemporalAnswerMode,
@@ -71,6 +72,7 @@ export interface MemoryAccessAuditAppendOptions {
   identitySafetyDecisionCount?: number;
   selfIdentityParityCheckCount?: number;
   selfIdentityParityMismatchCount?: number;
+  principalAudit?: MemoryAccessPrincipalAuditSnapshot;
   promptCutoverGateDecision?: "allow" | "block";
   promptCutoverGateReasons?: readonly string[];
   retrievedEpisodeCount?: number;

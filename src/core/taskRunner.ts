@@ -360,6 +360,7 @@ export class TaskRunner {
         masterGovernor: this.deps.masterGovernor,
         fastPathGovernorIds: this.deps.config.governance.fastPathGovernorIds,
         perGovernorTimeoutMs: this.deps.config.limits.perGovernorTimeoutMs,
+        principalAccess: task.principalAccess,
         appendTraceEvent: this.deps.appendTraceEvent
       });
       if (governanceOutcome.blockedResult) {
@@ -429,6 +430,7 @@ export class TaskRunner {
               idempotencyKey,
               missionState,
               proposalId: proposal.id,
+              principalAccess: task.principalAccess,
               taskId: task.id,
               traceDetails: {
                 blockCode: "VERIFICATION_GATE_FAILED",
@@ -451,6 +453,7 @@ export class TaskRunner {
         missionAttemptId,
         missionPhase: missionState.currentPhase,
         mode,
+        principalAccess: task.principalAccess,
         proposalId: proposal.id,
         signal,
         stage686RuntimeActionEngine: this.stage686RuntimeActionEngine,
@@ -467,6 +470,7 @@ export class TaskRunner {
           missionState,
           outputLength: executionResult.outputLength,
           proposalId: proposal.id,
+          principalAccess: task.principalAccess,
           taskId: task.id,
           traceDetails: executionResult.blockedTraceDetails
         });
@@ -496,6 +500,7 @@ export class TaskRunner {
         outputLength: executionResult.outputLength,
         planTaskId: plan.taskId,
         proposalId: proposal.id,
+        principalAccess: task.principalAccess,
         taskId: task.id
       });
     }

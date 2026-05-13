@@ -9,13 +9,35 @@ import type { ProfileMemoryStore } from "../../src/core/profileMemoryStore";
 import type { TaskRequest } from "../../src/core/types";
 import type { TemporalMemorySynthesis } from "../../src/core/profileMemoryRuntime/profileMemoryTemporalQueryContracts";
 import { MemoryBrokerOrgan } from "../../src/organs/memoryBroker";
+import { createOwnerOperatorPrincipalConfigFromEnv } from "../../src/interfaces/principalRuntime/principalConfig";
+import {
+  buildTaskExecutionPrincipalAccess,
+  derivePrincipalContextFromIngress
+} from "../../src/interfaces/principalRuntime/principalAccess";
 
 function buildTask(id: string, userInput: string): TaskRequest {
+  const principalConfig = createOwnerOperatorPrincipalConfigFromEnv(
+    {
+      BRAIN_PRINCIPAL_HMAC_KEY: "memory-broker-test-principal-key",
+      BRAIN_OWNER_TELEGRAM_USER_IDS: "owner-fixture"
+    },
+    "test_override"
+  );
+  const principalContext = derivePrincipalContextFromIngress({
+    provider: "telegram",
+    conversationId: "memory-broker-test-chat",
+    userId: "owner-fixture",
+    username: "owner_fixture",
+    conversationVisibility: "private",
+    receivedAt: "2026-05-02T12:00:00.000Z",
+    principalConfig
+  });
   return {
     id,
     goal: "Provide safe and helpful assistance.",
     userInput,
-    createdAt: "2026-05-02T12:00:00.000Z"
+    createdAt: "2026-05-02T12:00:00.000Z",
+    principalAccess: buildTaskExecutionPrincipalAccess(principalContext)
   };
 }
 
@@ -43,7 +65,7 @@ function wrapWithRouteMetadata(
 
 function buildTemporalSynthesis(): TemporalMemorySynthesis {
   return {
-    currentState: ["Avery is tied to Sample Studio."],
+    currentState: ["Morgan is tied to Sample Studio."],
     historicalContext: [],
     contradictionNotes: [],
     answerMode: "current",
@@ -53,21 +75,21 @@ function buildTemporalSynthesis(): TemporalMemorySynthesis {
       relevanceScope: "global_profile",
       asOfValidTime: null,
       asOfObservedTime: "2026-05-02T12:00:00.000Z",
-      focusStableRefIds: ["stable_contact_avery"],
+      focusStableRefIds: ["stable_contact_morgan"],
       degradedNotes: []
     },
     laneMetadata: [{
-      laneId: "stable_contact_avery:contact.work_association",
-      focusStableRefId: "stable_contact_avery",
+      laneId: "stable_contact_morgan:contact.work_association",
+      focusStableRefId: "stable_contact_morgan",
       family: "contact.work_association",
       answerMode: "current",
       dominantLane: "current_state",
       supportingLanes: [],
-      chosenClaimId: "claim_avery_work",
+      chosenClaimId: "claim_morgan_work",
       supportingObservationIds: [],
       rejectedClaims: [],
       lifecycleBuckets: {
-        current: ["claim_avery_work"],
+        current: ["claim_morgan_work"],
         historical: [],
         ended: [],
         overflowNote: null
@@ -110,13 +132,13 @@ class RetrievalAuthorityProfileStore {
 test("memory broker suppresses compatibility retrieval when route metadata is absent", async () => {
   const broker = new MemoryBrokerOrgan(
     new RetrievalAuthorityProfileStore(
-      "contact.avery.name: Avery",
+      "contact.morgan.name: Morgan",
       null
     ) as unknown as ProfileMemoryStore
   );
 
   const enriched = await broker.buildPlannerInput(
-    buildTask("task_retrieval_authority_absent_route", "Who is Avery?")
+    buildTask("task_retrieval_authority_absent_route", "Who is Morgan?")
   );
 
   assert.equal(enriched.profileMemoryStatus, "available");
@@ -127,7 +149,7 @@ test("memory broker suppresses compatibility retrieval when route metadata is ab
   assert.match(enriched.userInput, /currentTruthAuthority=false/);
   assert.match(enriched.userInput, /domainBoundaryDecision=suppress_profile_context/);
   assert.match(enriched.userInput, /domainBoundaryReason=memory_retrieval_authority_blocked/);
-  assert.doesNotMatch(enriched.userInput, /contact\.avery\.name/);
+  assert.doesNotMatch(enriched.userInput, /contact\.morgan\.name/);
 });
 
 test("memory broker injects route-approved semantic retrieval with current-truth metadata", async () => {
@@ -141,7 +163,7 @@ test("memory broker injects route-approved semantic retrieval with current-truth
   const enriched = await broker.buildPlannerInput(
     buildTask(
       "task_retrieval_authority_semantic_route",
-      wrapWithRouteMetadata("Who is Avery?")
+      wrapWithRouteMetadata("Who is Morgan?")
     )
   );
 
@@ -153,13 +175,13 @@ test("memory broker injects route-approved semantic retrieval with current-truth
   assert.match(enriched.userInput, /currentTruthAuthority=true/);
   assert.match(enriched.userInput, /domainBoundaryDecision=inject_profile_context/);
   assert.match(enriched.userInput, /Temporal memory context \(bounded\):/);
-  assert.match(enriched.userInput, /Avery is tied to Sample Studio\./);
+  assert.match(enriched.userInput, /Morgan is tied to Sample Studio\./);
 });
 
 test("memory broker keeps route-approved compatibility retrieval evidence-only", async () => {
   const broker = new MemoryBrokerOrgan(
     new RetrievalAuthorityProfileStore(
-      "contact.avery.name: Avery",
+      "contact.morgan.name: Morgan",
       null
     ) as unknown as ProfileMemoryStore
   );
@@ -167,7 +189,7 @@ test("memory broker keeps route-approved compatibility retrieval evidence-only",
   const enriched = await broker.buildPlannerInput(
     buildTask(
       "task_retrieval_authority_compat_route",
-      wrapWithRouteMetadata("Who is Avery?")
+      wrapWithRouteMetadata("Who is Morgan?")
     )
   );
 
@@ -177,5 +199,5 @@ test("memory broker keeps route-approved compatibility retrieval evidence-only",
   assert.match(enriched.userInput, /plannerAuthority=evidence_only/);
   assert.match(enriched.userInput, /currentTruthAuthority=false/);
   assert.match(enriched.userInput, /\[AgentFriendProfileContext\]/);
-  assert.match(enriched.userInput, /contact\.avery\.name: Avery/);
+  assert.match(enriched.userInput, /contact\.morgan\.name: Morgan/);
 });

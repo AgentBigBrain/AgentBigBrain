@@ -9,6 +9,7 @@ import type {
   SourceRecallSourceTimeKind
 } from "./contracts";
 import type { SourceRecallRetentionPolicy } from "./sourceRecallRetention";
+import type { TaskPrincipalAccessEnvelope } from "../runtimeTypes/taskPlanningTypes";
 import {
   captureLowerAuthoritySourceRecall,
   type LowerAuthoritySourceRecallCaptureResult,
@@ -58,6 +59,7 @@ export interface CaptureMediaInterpretationLayersSourceRecallInput {
   policy: SourceRecallRetentionPolicy;
   writer: SourceRecallRecordWriter;
   capturedAt?: string;
+  principalAccess?: TaskPrincipalAccessEnvelope;
 }
 
 export interface MediaLayerSourceRecallCaptureResult {
@@ -117,7 +119,8 @@ export async function captureMediaInterpretationLayersSourceRecall(
       originParentRefId: input.attachment.artifactId ?? input.attachment.checksumSha256 ?? undefined,
       policy: input.policy,
       writer: input.writer,
-      capturedAt: input.capturedAt
+      capturedAt: input.capturedAt,
+      principalAccess: input.principalAccess
     });
     results.push({
       layerIndex,

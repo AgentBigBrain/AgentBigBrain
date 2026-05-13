@@ -3,6 +3,10 @@
  */
 
 import { estimateActionCostUsd } from "../actionCostPolicy";
+import {
+  buildRedactedPrincipalAccessMetadata,
+  renderPrincipalAccessTraceDetails
+} from "../principalAccessMetadata";
 import { type AppendRuntimeTraceEventInput } from "../runtimeTraceLogger";
 import { throwIfAborted } from "../runtimeAbort";
 import { type Stage686RuntimeActionEngine } from "../stage6_86/runtimeActions";
@@ -11,7 +15,8 @@ import {
   type ActionRunResult,
   type ConstraintViolation,
   type ExecutorExecutionOutcome,
-  type MasterDecision
+  type MasterDecision,
+  type TaskPrincipalAccessEnvelope
 } from "../types";
 import { type ToolExecutorOrgan } from "../../organs/executor";
 import { type TaskRunnerConnectorReceiptSeed } from "./taskRunnerNetworkPreflight";
@@ -45,6 +50,7 @@ export interface ExecuteTaskRunnerActionInput {
   missionAttemptId: number;
   missionPhase: string;
   mode: ActionRunResult["mode"];
+  principalAccess?: TaskPrincipalAccessEnvelope | null;
   proposalId: string;
   signal?: AbortSignal;
   stage686RuntimeActionEngine: Stage686Runtime;
@@ -70,6 +76,9 @@ export async function executeTaskRunnerAction(
 ): Promise<ExecuteTaskRunnerActionResult> {
   throwIfAborted(input.signal);
   const executionStartedAtMs = Date.now();
+  const principalTraceDetails = renderPrincipalAccessTraceDetails(
+    buildRedactedPrincipalAccessMetadata(input.principalAccess)
+  );
   const stage686Execution = await input.stage686RuntimeActionEngine.execute({
     taskId: input.taskId,
     proposalId: input.proposalId,
@@ -205,6 +214,7 @@ export async function executeTaskRunnerAction(
       connector: connectorReceipt?.connector ?? null,
       connectorOperation: connectorReceipt?.operation ?? null,
       connectorExternalIdCount: connectorReceipt?.externalIds.length ?? null,
+      ...principalTraceDetails,
       ...(stage686TraceDetails ?? {})
     }
   });

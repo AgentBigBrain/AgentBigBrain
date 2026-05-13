@@ -36,17 +36,40 @@ import { ToolExecutorOrgan } from "../../src/organs/executor";
 import { PlannerOrgan } from "../../src/organs/planner";
 import { ReflectionOrgan } from "../../src/organs/reflection";
 import { WINDOWS_TEST_TOP_SECRET_FILE_PATH } from "../support/windowsPathFixtures";
+import { createOwnerOperatorPrincipalConfigFromEnv } from "../../src/interfaces/principalRuntime/principalConfig";
+import {
+  buildTaskExecutionPrincipalAccess,
+  derivePrincipalContextFromIngress
+} from "../../src/interfaces/principalRuntime/principalAccess";
 
 /**
  * Implements `buildTask` behavior within module scope.
  * Interacts with local collaborators through imported modules and typed inputs/outputs.
  */
 function buildTask(userInput: string): TaskRequest {
+  const createdAt = new Date().toISOString();
+  const principalConfig = createOwnerOperatorPrincipalConfigFromEnv(
+    {
+      BRAIN_PRINCIPAL_HMAC_KEY: "autonomy-foundation-test-principal-key",
+      BRAIN_OWNER_TELEGRAM_USER_IDS: "autonomy-owner"
+    },
+    "test_override"
+  );
+  const principalContext = derivePrincipalContextFromIngress({
+    provider: "telegram",
+    conversationId: "autonomy-foundation-test-chat",
+    userId: "autonomy-owner",
+    username: "autonomy_owner",
+    conversationVisibility: "private",
+    receivedAt: createdAt,
+    principalConfig
+  });
   return {
     id: makeId("task"),
     goal: "Validate Stage 6 autonomy foundation behavior.",
     userInput,
-    createdAt: new Date().toISOString()
+    createdAt,
+    principalAccess: buildTaskExecutionPrincipalAccess(principalContext)
   };
 }
 
@@ -446,8 +469,8 @@ async function stage6MemoryAccessAuditLoggingWritesAppendOnlyRetrievalEventsAndB
   );
 
   try {
-    await brain.runTask(buildTask("I used to work with Owen at Lantern Studio."));
-    await brain.runTask(buildTask("who is Owen?"));
+    await brain.runTask(buildTask("I used to work with Riley at Lantern Studio."));
+    await brain.runTask(buildTask("who is Riley?"));
     const firstRawAudit = await readFile(path.join(tempDir, "runtime/memory_access_log.json"), "utf8");
     const firstDocument = JSON.parse(firstRawAudit) as {
       events: Array<{
@@ -460,7 +483,7 @@ async function stage6MemoryAccessAuditLoggingWritesAppendOnlyRetrievalEventsAndB
     const firstCount = firstDocument.events.length;
     assert.ok(firstCount >= 1);
 
-    await brain.runTask(buildTask("who is Owen?"));
+    await brain.runTask(buildTask("who is Riley?"));
     const secondRawAudit = await readFile(path.join(tempDir, "runtime/memory_access_log.json"), "utf8");
     const secondDocument = JSON.parse(secondRawAudit) as {
       events: Array<{

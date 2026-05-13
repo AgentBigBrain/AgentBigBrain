@@ -7,6 +7,7 @@ import { type ProfileFactRecord, type ProfileMutationAuditMetadataV1 } from "../
 import type { ConversationDomainLane } from "../sessionContext";
 import type { SourceAuthority } from "../sourceAuthority";
 import type { SourceRecallSourceRef } from "../sourceRecall/contracts";
+import type { TaskPrincipalAccessEnvelope } from "../types";
 import type {
   CreateProfileEpisodeRecordInput,
   ProfileEpisodeRecord
@@ -26,7 +27,16 @@ export interface ProfileAccessRequest {
   approvalId?: string;
   maxFacts?: number;
   maxEpisodes?: number;
+  principalAccess?: TaskPrincipalAccessEnvelope;
+  requestedSubjectKind?: ProfileMemoryAccessSubjectKind;
 }
+
+export type ProfileMemoryAccessSubjectKind =
+  | "owner_profile"
+  | "principal_profile"
+  | "conversation_participant"
+  | "legacy_global_profile"
+  | "unknown";
 
 export interface ProfileReadableFact {
   factId: string;
@@ -120,6 +130,8 @@ export interface ProfileFactReviewMutationRequest {
   nowIso: string;
   sourceTaskId: string;
   sourceText: string;
+  principalAccess?: TaskPrincipalAccessEnvelope;
+  requestedSubjectKind?: ProfileMemoryAccessSubjectKind;
 }
 
 export interface ProfileFactReviewMutationResult {
@@ -267,6 +279,8 @@ export interface ProfileMemoryWriteProvenance {
   sourceSurface: ProfileMemorySourceSurface;
   sourceFingerprint?: string;
   sourceRecallRefs?: readonly SourceRecallSourceRef[];
+  principalAccess?: TaskPrincipalAccessEnvelope;
+  requestedSubjectKind?: ProfileMemoryAccessSubjectKind;
 }
 
 export interface ProfileMediaIngestInput {
@@ -285,6 +299,8 @@ export interface ProfileMemoryIngestRequest {
   mediaIngest?: ProfileMediaIngestInput;
   provenance?: ProfileMemoryWriteProvenance;
   ingestPolicy?: ProfileMemoryIngestPolicy;
+  principalAccess?: TaskPrincipalAccessEnvelope;
+  requestedSubjectKind?: ProfileMemoryAccessSubjectKind;
 }
 
 export interface AgentPulseEvaluationRequest {

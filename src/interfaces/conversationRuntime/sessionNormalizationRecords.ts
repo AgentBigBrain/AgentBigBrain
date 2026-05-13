@@ -6,7 +6,6 @@ import type {
   ActiveClarificationOption,
   ActiveClarificationState,
   ConversationAckLifecycleState,
-  ConversationAssistantTurnKind,
   ConversationFinalDeliveryOutcome,
   ConversationJob,
   ConversationJobStatus,
@@ -15,13 +14,12 @@ import type {
   ConversationRecoveryTrace,
   ConversationReturnHandoffRecord,
   ConversationRecentActionRecord,
-  ConversationTurn,
-  ConversationTurnMetadata,
-  ConversationTurnMetadataSource
+  ConversationTurn
 } from "./sessionStateContracts";
 import type { PulseSystemJobMetadata } from "../proactiveRuntime/pulseAuthorityGateway";
 import type { RecoveryFailureClass } from "../../core/autonomy/contracts";
-import { normalizeConversationTurnSourceRecallMetadata } from "./sessionNormalizationSourceRecallRecords";
+import { normalizeConversationTurnMetadata } from "./sessionNormalizationTurnMetadata";
+import { normalizeConversationTurnActorMetadata } from "./sessionNormalizationTurnActorMetadata";
 export {
   normalizeActiveWorkspaceRecord,
   normalizeBrowserSessionRecord,
@@ -229,7 +227,8 @@ export function normalizeActiveClarification(
       ? candidate.options
           .map((option) => normalizeClarificationOption(option as Partial<ActiveClarificationOption>))
           .filter((option): option is ActiveClarificationOption => option !== null)
-      : []
+      : [],
+    controller: normalizeConversationTurnActorMetadata(candidate.controller)
   };
 }
 
@@ -304,55 +303,6 @@ export function normalizeConversationJob(job: Partial<ConversationJob>): Convers
       typeof job.finalDeliveryLastAttemptAt === "string" ? job.finalDeliveryLastAttemptAt : null,
     pauseRequestedAt: typeof job.pauseRequestedAt === "string" ? job.pauseRequestedAt : null,
     pulseMetadata: normalizePulseSystemJobMetadata(job.pulseMetadata)
-  };
-}
-
-/**
- * Normalizes persisted assistant-turn kind metadata.
- */
-function normalizeAssistantTurnKind(value: unknown): ConversationAssistantTurnKind | null {
-  return value === "clarification" ||
-    value === "informational_answer" ||
-    value === "workflow_progress" ||
-    value === "other"
-    ? value
-    : null;
-}
-
-/**
- * Normalizes persisted turn-metadata source labels.
- */
-function normalizeConversationTurnMetadataSource(
-  value: unknown
-): ConversationTurnMetadataSource | null {
-  return value === "runtime_metadata" || value === "legacy_text_inference"
-    ? value
-    : null;
-}
-
-/**
- * Normalizes optional turn metadata without allowing malformed legacy payloads to poison turns.
- */
-function normalizeConversationTurnMetadata(
-  turn: Partial<ConversationTurn>
-): ConversationTurnMetadata | undefined {
-  const metadata = turn.metadata;
-  if (!metadata || typeof metadata !== "object") {
-    return undefined;
-  }
-  const assistantTurnKind = normalizeAssistantTurnKind(metadata.assistantTurnKind);
-  const assistantTurnKindSource = normalizeConversationTurnMetadataSource(
-    metadata.assistantTurnKindSource
-  );
-  const sourceRecall = normalizeConversationTurnSourceRecallMetadata(metadata.sourceRecall);
-  if (!sourceRecall && (!assistantTurnKind || !assistantTurnKindSource)) {
-    return undefined;
-  }
-  return {
-    ...(assistantTurnKind && assistantTurnKindSource
-      ? { assistantTurnKind, assistantTurnKindSource }
-      : {}),
-    ...(sourceRecall ? { sourceRecall } : {})
   };
 }
 

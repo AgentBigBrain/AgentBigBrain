@@ -75,7 +75,7 @@ function hasTokenSequence(
  * conversational identity path even when the exact value still needs later semantic interpretation.
  *
  * **Why it exists:**
- * Mixed turns like `I already told you my name is Avery several times` should remain eligible
+ * Mixed turns like `I already told you my name is Morgan several times` should remain eligible
  * for the identity interpreter without widening the model path to workflow or artifact wording.
  *
  * **What it talks to:**

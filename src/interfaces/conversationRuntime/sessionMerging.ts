@@ -20,6 +20,7 @@ import type {
 import {
   resolveMergedProgressState,
   selectActiveClarification,
+  selectActiveProposal,
   selectModeContinuity,
   selectProgressState,
   selectReturnHandoff
@@ -147,10 +148,10 @@ function mergeConversationTurns(
 ): ConversationTurn[] {
   const mergedByKey = new Map<string, ConversationTurn>();
   for (const turn of existingTurns) {
-    mergedByKey.set(`${turn.at}|${turn.role}|${turn.text}`, turn);
+    mergedByKey.set(buildConversationTurnMergeKey(turn), turn);
   }
   for (const turn of incomingTurns) {
-    mergedByKey.set(`${turn.at}|${turn.role}|${turn.text}`, turn);
+    mergedByKey.set(buildConversationTurnMergeKey(turn), turn);
   }
 
   return [...mergedByKey.values()].sort((left, right) => {
@@ -164,6 +165,25 @@ function mergeConversationTurns(
     }
     return left.text.localeCompare(right.text);
   });
+}
+
+/**
+ * Implements `buildConversationTurnMergeKey` behavior within this module.
+ */
+function buildConversationTurnMergeKey(turn: ConversationTurn): string {
+  if (turn.id) {
+    return `id:${turn.id}`;
+  }
+  const actor = turn.metadata?.actor;
+  const sourceEventKey = actor?.sourceEventIdHash ? `event:${actor.sourceEventIdHash}` : "";
+  const actorKey = actor
+    ? [
+        actor.source,
+        actor.principalRole,
+        actor.principalIdHash ?? actor.providerUserIdHash ?? "unknown"
+      ].join(":")
+    : "actor:absent";
+  return [turn.at, turn.role, turn.text, sourceEventKey, actorKey].join("|");
 }
 
 /**
@@ -364,6 +384,10 @@ export function mergeConversationSession(
     sessionSchemaVersion: "v2",
     conversationStack: mergedConversationStack,
     updatedAt: mergedUpdatedAt,
+    activeProposal: selectActiveProposal(
+      existing.activeProposal,
+      incoming.activeProposal
+    ),
     activeClarification: selectActiveClarification(
       existing.activeClarification,
       incoming.activeClarification

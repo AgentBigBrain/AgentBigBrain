@@ -14,6 +14,7 @@ import { extractSemanticConceptTerms } from "./languageRuntime/queryIntentTerms"
 import type { ConversationDomainLane } from "./sessionContext";
 import type { SourceRecallSourceRef } from "./sourceRecall/contracts";
 import { normalizeSourceRecallSourceRefs } from "./sourceRecall/sourceRecallMemoryBridge";
+import type { TaskPrincipalAccessEnvelope } from "./types";
 import { SqliteVectorStore } from "./vectorStore";
 
 const MAX_LESSONS = 300;
@@ -21,6 +22,13 @@ const MIN_LINK_OVERLAP = 2;
 
 export type LessonMemoryType = "fact" | "experience" | "belief";
 export type SemanticLessonDomainTag = Exclude<ConversationDomainLane, "unknown">;
+export type LearningAccessClassification =
+  | "agent_global_safe"
+  | "owner_private"
+  | "principal_private"
+  | "workspace_local"
+  | "external_agent_limited"
+  | "test_fixture";
 
 export interface LessonSignalMetadataV1 {
   schemaVersion: 1;
@@ -44,11 +52,29 @@ export interface SemanticLesson {
   domainTag: SemanticLessonDomainTag | null;
   signalMetadata?: LessonSignalMetadataV1;
   sourceRecallRefs?: readonly SourceRecallSourceRef[];
+  accessMetadata?: SemanticLessonAccessMetadataV1;
 }
 
 export interface SemanticMemory {
   lessons: SemanticLesson[];
   conceptIndex: Record<string, string[]>;
+}
+
+export interface SemanticLessonAccessMetadataV1 {
+  schemaVersion: 1;
+  classification: LearningAccessClassification;
+  principalRole: string | null;
+  principalIdHash: string | null;
+  accessClass: string | null;
+  accessAllowed: boolean | null;
+  routeVisibility: string | null;
+  legacyIdentityState: string | null;
+  source: "principal_access" | "legacy_unclassified" | "test_fixture";
+}
+
+export interface SemanticLessonRetrievalAccessOptions {
+  principalAccess?: TaskPrincipalAccessEnvelope | null;
+  includeTestFixtures?: boolean;
 }
 
 /**
@@ -106,6 +132,147 @@ function extractConcepts(text: string): string[] {
 }
 
 /**
+ * Implements `readRecord` behavior within this module.
+ */
+function readRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
+
+/**
+ * Implements `readOptionalString` behavior within this module.
+ */
+function readOptionalString(record: Record<string, unknown>, key: string): string | null {
+  const value = record[key];
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
+/**
+ * Implements `normalizeLearningAccessClassification` behavior within this module.
+ */
+function normalizeLearningAccessClassification(value: unknown): LearningAccessClassification | null {
+  return value === "agent_global_safe" ||
+    value === "owner_private" ||
+    value === "principal_private" ||
+    value === "workspace_local" ||
+    value === "external_agent_limited" ||
+    value === "test_fixture"
+    ? value
+    : null;
+}
+
+/**
+ * Implements `normalizeSemanticLessonAccessMetadata` behavior within this module.
+ */
+function normalizeSemanticLessonAccessMetadata(
+  value: unknown
+): SemanticLessonAccessMetadataV1 | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+  const candidate = value as Partial<SemanticLessonAccessMetadataV1>;
+  const classification = normalizeLearningAccessClassification(candidate.classification);
+  if (candidate.schemaVersion !== 1 || !classification) {
+    return undefined;
+  }
+  return {
+    schemaVersion: 1,
+    classification,
+    principalRole: typeof candidate.principalRole === "string" ? candidate.principalRole : null,
+    principalIdHash:
+      typeof candidate.principalIdHash === "string" ? candidate.principalIdHash : null,
+    accessClass: typeof candidate.accessClass === "string" ? candidate.accessClass : null,
+    accessAllowed:
+      typeof candidate.accessAllowed === "boolean" ? candidate.accessAllowed : null,
+    routeVisibility:
+      typeof candidate.routeVisibility === "string" ? candidate.routeVisibility : null,
+    legacyIdentityState:
+      typeof candidate.legacyIdentityState === "string" ? candidate.legacyIdentityState : null,
+    source:
+      candidate.source === "principal_access" ||
+        candidate.source === "legacy_unclassified" ||
+        candidate.source === "test_fixture"
+        ? candidate.source
+        : "legacy_unclassified"
+  };
+}
+
+/**
+ * Implements `classifySemanticLessonAccess` behavior within this module.
+ */
+function classifySemanticLessonAccess(
+  principalAccess: TaskPrincipalAccessEnvelope | null | undefined
+): SemanticLessonAccessMetadataV1 {
+  if (!principalAccess?.principalContext || !principalAccess.accessDecision) {
+    return {
+      schemaVersion: 1,
+      classification: "agent_global_safe",
+      principalRole: null,
+      principalIdHash: null,
+      accessClass: null,
+      accessAllowed: null,
+      routeVisibility: null,
+      legacyIdentityState: "legacy_actor_unknown",
+      source: "legacy_unclassified"
+    };
+  }
+  const actor = readRecord(principalAccess.principalContext.actor);
+  const route = readRecord(principalAccess.principalContext.route);
+  const principalRole = readOptionalString(actor, "principalRole");
+  const principalIdHash =
+    readOptionalString(actor, "principalIdHash") ?? readOptionalString(actor, "providerUserIdHash");
+  const accessClass = principalAccess.accessDecision.accessClass;
+  const classification = classifyLearningAccess({
+    accessAllowed: principalAccess.accessDecision.allowed,
+    accessClass,
+    principalRole,
+    routeVisibility: readOptionalString(route, "visibility")
+  });
+  return {
+    schemaVersion: 1,
+    classification,
+    principalRole,
+    principalIdHash,
+    accessClass,
+    accessAllowed: principalAccess.accessDecision.allowed,
+    routeVisibility: readOptionalString(route, "visibility"),
+    legacyIdentityState: readOptionalString(actor, "legacyIdentityState"),
+    source: "principal_access"
+  };
+}
+
+/**
+ * Implements `classifyLearningAccess` behavior within this module.
+ */
+function classifyLearningAccess(input: {
+  accessAllowed: boolean;
+  accessClass: string;
+  principalRole: string | null;
+  routeVisibility: string | null;
+}): LearningAccessClassification {
+  if (input.principalRole === "external_agent") {
+    return "external_agent_limited";
+  }
+  if (input.accessAllowed !== true) {
+    return "external_agent_limited";
+  }
+  if (input.accessClass === "owner_private") {
+    return "owner_private";
+  }
+  if (input.accessClass === "speaker_private" || input.accessClass === "session_only") {
+    return "principal_private";
+  }
+  if (input.accessClass === "shared_public" || input.routeVisibility === "public") {
+    return "agent_global_safe";
+  }
+  if (input.accessClass === "external_agent_limited" || input.accessClass === "runtime_continuation_limited") {
+    return "external_agent_limited";
+  }
+  return "workspace_local";
+}
+
+/**
  * Derives overlap from available runtime inputs.
  *
  * **Why it exists:**
@@ -154,6 +321,107 @@ function computeSemanticLessonDomainScore(
 }
 
 /**
+ * Implements `semanticLessonAccessSignature` behavior within this module.
+ */
+function semanticLessonAccessSignature(
+  lesson: Pick<SemanticLesson, "accessMetadata">
+): string {
+  const metadata = lesson.accessMetadata;
+  if (!metadata) {
+    return "agent_global_safe:legacy";
+  }
+  return [
+    metadata.classification,
+    metadata.principalRole ?? "none",
+    metadata.principalIdHash ?? "none",
+    metadata.accessClass ?? "none"
+  ].join(":");
+}
+
+/**
+ * Implements `canLinkSemanticLessons` behavior within this module.
+ */
+function canLinkSemanticLessons(left: SemanticLesson, right: SemanticLesson): boolean {
+  const leftAccess = left.accessMetadata?.classification ?? "agent_global_safe";
+  const rightAccess = right.accessMetadata?.classification ?? "agent_global_safe";
+  if (leftAccess === "agent_global_safe" && rightAccess === "agent_global_safe") {
+    return true;
+  }
+  return semanticLessonAccessSignature(left) === semanticLessonAccessSignature(right);
+}
+
+/**
+ * Implements `buildSemanticLessonRetrievalContext` behavior within this module.
+ */
+function buildSemanticLessonRetrievalContext(
+  options: SemanticLessonRetrievalAccessOptions | null | undefined
+): {
+  includeTestFixtures: boolean;
+  ownerPrivateAllowed: boolean;
+  principalRole: string | null;
+  principalIdHash: string | null;
+} {
+  const principalAccess = options?.principalAccess;
+  if (!principalAccess?.principalContext || !principalAccess.accessDecision) {
+    return {
+      includeTestFixtures: options?.includeTestFixtures === true,
+      ownerPrivateAllowed: false,
+      principalRole: null,
+      principalIdHash: null
+    };
+  }
+  const actor = readRecord(principalAccess.principalContext.actor);
+  const principalRole = readOptionalString(actor, "principalRole");
+  const principalIdHash =
+    readOptionalString(actor, "principalIdHash") ?? readOptionalString(actor, "providerUserIdHash");
+  return {
+    includeTestFixtures: options?.includeTestFixtures === true,
+    ownerPrivateAllowed:
+      principalAccess.accessDecision.allowed === true &&
+      principalAccess.accessDecision.accessClass === "owner_private" &&
+      (principalRole === "owner" || principalRole === "operator"),
+    principalRole,
+    principalIdHash
+  };
+}
+
+/**
+ * Implements `isSemanticLessonVisibleForRetrieval` behavior within this module.
+ */
+function isSemanticLessonVisibleForRetrieval(
+  lesson: SemanticLesson,
+  options: SemanticLessonRetrievalAccessOptions | null | undefined
+): boolean {
+  const metadata = lesson.accessMetadata;
+  if (!metadata || metadata.classification === "agent_global_safe") {
+    return true;
+  }
+  const context = buildSemanticLessonRetrievalContext(options);
+  if (metadata.classification === "test_fixture") {
+    return context.includeTestFixtures;
+  }
+  if (metadata.classification === "owner_private") {
+    return context.ownerPrivateAllowed;
+  }
+  if (metadata.classification === "principal_private") {
+    return Boolean(
+      context.principalIdHash &&
+      metadata.principalIdHash &&
+      context.principalIdHash === metadata.principalIdHash
+    );
+  }
+  if (metadata.classification === "external_agent_limited") {
+    return Boolean(
+      context.principalRole === "external_agent" &&
+      context.principalIdHash &&
+      metadata.principalIdHash &&
+      context.principalIdHash === metadata.principalIdHash
+    );
+  }
+  return false;
+}
+
+/**
  * Builds lesson for this module's runtime flow.
  *
  * **Why it exists:**
@@ -177,9 +445,11 @@ function buildLesson(
   memoryType: LessonMemoryType = "experience",
   signalMetadata: LessonSignalMetadataV1 | null = null,
   domainTag: SemanticLessonDomainTag | null = null,
-  sourceRecallRefs: readonly SourceRecallSourceRef[] = []
+  sourceRecallRefs: readonly SourceRecallSourceRef[] = [],
+  principalAccess: TaskPrincipalAccessEnvelope | null = null
 ): SemanticLesson {
   const normalizedSourceRecallRefs = normalizeSourceRecallSourceRefs(sourceRecallRefs);
+  const accessMetadata = classifySemanticLessonAccess(principalAccess);
   return {
     id: makeId("lesson"),
     text,
@@ -193,7 +463,8 @@ function buildLesson(
     signalMetadata: signalMetadata ?? undefined,
     ...(normalizedSourceRecallRefs.length > 0
       ? { sourceRecallRefs: normalizedSourceRecallRefs }
-      : {})
+      : {}),
+    accessMetadata
   };
 }
 
@@ -334,6 +605,7 @@ function coerceLegacyMemory(input: unknown): SemanticMemory {
         const signalMetadata = normalizeLessonSignalMetadata(rawLesson.signalMetadata);
         const domainTag = normalizeSemanticLessonDomainTag(rawLesson.domainTag);
         const sourceRecallRefs = normalizeSourceRecallSourceRefs(rawLesson.sourceRecallRefs);
+        const accessMetadata = normalizeSemanticLessonAccessMetadata(rawLesson.accessMetadata);
         return {
           id:
             typeof rawLesson.id === "string" && rawLesson.id.trim()
@@ -355,7 +627,8 @@ function coerceLegacyMemory(input: unknown): SemanticMemory {
           memoryType,
           domainTag,
           signalMetadata: signalMetadata ?? undefined,
-          ...(sourceRecallRefs.length > 0 ? { sourceRecallRefs } : {})
+          ...(sourceRecallRefs.length > 0 ? { sourceRecallRefs } : {}),
+          ...(accessMetadata ? { accessMetadata } : {})
         } satisfies SemanticLesson;
       })
       .filter((lesson) => lesson.text.trim().length > 0);
@@ -444,7 +717,8 @@ export class SemanticMemoryStore {
     memoryType: LessonMemoryType = "experience",
     signalMetadata: LessonSignalMetadataV1 | null = null,
     domainTag: SemanticLessonDomainTag | null = null,
-    sourceRecallRefs: readonly SourceRecallSourceRef[] = []
+    sourceRecallRefs: readonly SourceRecallSourceRef[] = [],
+    principalAccess: TaskPrincipalAccessEnvelope | null = null
   ): Promise<void> {
     const normalized = lessonText.trim();
     if (!normalized) {
@@ -461,6 +735,8 @@ export class SemanticMemoryStore {
         memory.lessons.some(
           (existing) =>
             existing.text === normalized && existing.committedByAgentId === normalizedAgentId
+            && semanticLessonAccessSignature(existing) ===
+              semanticLessonAccessSignature({ accessMetadata: classifySemanticLessonAccess(principalAccess) })
         )
       ) {
         return;
@@ -473,7 +749,8 @@ export class SemanticMemoryStore {
         memoryType,
         signalMetadata,
         domainTag,
-        sourceRecallRefs
+        sourceRecallRefs,
+        principalAccess
       );
       persistedLessonId = lesson.id;
       this.connectLesson(memory.lessons, lesson);
@@ -532,12 +809,15 @@ export class SemanticMemoryStore {
     query: string,
     limit = 6,
     memoryType?: LessonMemoryType,
-    sessionDomainLane: ConversationDomainLane | null = null
+    sessionDomainLane: ConversationDomainLane | null = null,
+    accessOptions: SemanticLessonRetrievalAccessOptions | null = null
   ): Promise<SemanticLesson[]> {
     const memory = await this.load();
     const queryConcepts = extractConcepts(query);
 
-    let candidates = memory.lessons;
+    let candidates = memory.lessons.filter((lesson) =>
+      isSemanticLessonVisibleForRetrieval(lesson, accessOptions)
+    );
     if (memoryType) {
       candidates = candidates.filter((lesson) => lesson.memoryType === memoryType);
     }
@@ -609,15 +889,13 @@ export class SemanticMemoryStore {
     // Normalize keyword scores to [0, 1]
     const maxKeywordScore = Math.max(1, ...keywordScores.values());
 
-    const candidateSet = memoryType
-      ? new Set(candidates.map((lesson) => lesson.id))
-      : null;
+    const candidateSet = new Set(candidates.map((lesson) => lesson.id));
 
     const lessonMap = new Map(memory.lessons.map((lesson) => [lesson.id, lesson]));
 
     const hybridScored: Array<[string, number]> = [];
     for (const id of allCandidateIds) {
-      if (candidateSet && !candidateSet.has(id)) continue;
+      if (!candidateSet.has(id)) continue;
       const kScore = (keywordScores.get(id) ?? 0) / maxKeywordScore;
       const vScore = vectorScores.get(id) ?? 0;
       const lesson = lessonMap.get(id);
@@ -662,6 +940,9 @@ export class SemanticMemoryStore {
    */
   private connectLesson(existingLessons: SemanticLesson[], lesson: SemanticLesson): void {
     for (const existing of existingLessons) {
+      if (!canLinkSemanticLessons(existing, lesson)) {
+        continue;
+      }
       const overlap = calculateOverlap(existing.concepts, lesson.concepts);
       if (overlap < MIN_LINK_OVERLAP) {
         continue;

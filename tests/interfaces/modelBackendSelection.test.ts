@@ -9,6 +9,28 @@ import {
   buildConversationModelEnvironment,
   resolveConversationModelSelection
 } from "../../src/interfaces/conversationRuntime/modelBackendSelection";
+import { createOwnerOperatorPrincipalConfigFromEnv } from "../../src/interfaces/principalRuntime/principalConfig";
+import {
+  derivePrincipalContextFromIngress,
+  type PrincipalContext
+} from "../../src/interfaces/principalRuntime/principalAccess";
+
+function buildPrincipalContext(role: "owner" | "allowed_user"): PrincipalContext {
+  const principalConfig = createOwnerOperatorPrincipalConfigFromEnv({
+    BRAIN_PRINCIPAL_HMAC_KEY: "test-principal-hmac-key",
+    BRAIN_OWNER_TELEGRAM_USER_IDS: role === "owner" ? "user-1" : undefined
+  });
+  return derivePrincipalContextFromIngress({
+    provider: "telegram",
+    conversationId: "chat-1",
+    userId: "user-1",
+    username: "agentowner",
+    conversationVisibility: "private",
+    receivedAt: "2026-03-07T12:00:00.000Z",
+    principalConfig,
+    allowedUserIds: role === "allowed_user" ? ["user-1"] : []
+  });
+}
 
 test("resolveConversationModelSelection uses the process default backend when no override exists", () => {
   const selection = resolveConversationModelSelection(null, {
@@ -25,7 +47,8 @@ test("resolveConversationModelSelection keeps the selected Codex profile for cod
   const selection = resolveConversationModelSelection(
     {
       modelBackendOverride: "codex_oauth",
-      codexAuthProfileId: "work"
+      codexAuthProfileId: "work",
+      principalContext: buildPrincipalContext("owner")
     },
     {
       BRAIN_MODEL_BACKEND: "openai_api",
@@ -36,6 +59,25 @@ test("resolveConversationModelSelection keeps the selected Codex profile for cod
   assert.deepEqual(selection, {
     backend: "codex_oauth",
     codexProfileId: "work"
+  });
+});
+
+test("resolveConversationModelSelection ignores protected session Codex backend for non-owner principals", () => {
+  const selection = resolveConversationModelSelection(
+    {
+      modelBackendOverride: "codex_oauth",
+      codexAuthProfileId: "work",
+      principalContext: buildPrincipalContext("allowed_user")
+    },
+    {
+      BRAIN_MODEL_BACKEND: "openai_api",
+      CODEX_AUTH_PROFILE: "default"
+    }
+  );
+
+  assert.deepEqual(selection, {
+    backend: "openai_api",
+    codexProfileId: null
   });
 });
 
@@ -79,7 +121,8 @@ test("buildConversationModelEnvironment pins CODEX_HOME to the selected profile 
   const env = buildConversationModelEnvironment(
     {
       modelBackendOverride: "codex_oauth",
-      codexAuthProfileId: "ops"
+      codexAuthProfileId: "ops",
+      principalContext: buildPrincipalContext("owner")
     },
     {
       BRAIN_MODEL_BACKEND: "openai_api",

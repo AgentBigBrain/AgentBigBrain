@@ -45,6 +45,7 @@ import type {
 } from "./profileMemoryQueryContracts";
 import { queryProfileMemoryTemporalEvidence } from "./profileMemoryTemporalQueries";
 import { synthesizeProfileMemoryTemporalEvidence } from "./profileMemoryTemporalSynthesis";
+import { evaluateProfileMemoryAccessPolicy } from "./profileMemoryAccessPolicy";
 export type {
   ProfileFactContinuityQueryRequest,
   ProfileFactContinuityResult,
@@ -53,6 +54,9 @@ export type {
 } from "./profileMemoryQueryContracts";
 
 /** Builds bounded fact-review entries plus hidden decision records for one approval-aware surface. */
+/**
+ * Implements `reviewProfileFactsForUser` behavior within this module.
+ */
 export function reviewProfileFactsForUser(
   state: ProfileMemoryState,
   request: ProfileFactReviewRequest
@@ -79,6 +83,9 @@ export function reviewProfileFactsForUser(
 }
 
 /** Builds bounded planning-query entries plus hidden decision records for one non-mutating surface. */
+/**
+ * Implements `inspectProfileFactsForPlanningContext` behavior within this module.
+ */
 export function inspectProfileFactsForPlanningContext(
   state: ProfileMemoryState,
   request: ProfileFactPlanningInspectionRequest & {
@@ -129,6 +136,9 @@ export function inspectProfileFactsForPlanningContext(
 }
 
 /** Builds planner-facing profile context from normalized profile-memory state. */
+/**
+ * Implements `buildProfilePlanningContext` behavior within this module.
+ */
 export function buildProfilePlanningContext(
   state: ProfileMemoryState,
   maxFacts: number,
@@ -159,6 +169,9 @@ export function readProfileFacts(
   state: ProfileMemoryState,
   request: ProfileAccessRequest
 ): ProfileReadableFact[] {
+  if (!canReadFactsByPrincipalPolicy(request)) {
+    return [];
+  }
   const activeFacts = [...readAuthoritativeProfileCompatibilityFacts(state)]
     .filter((fact) => isCompatibilityVisibleFactLike(fact))
     .sort((left, right) => Date.parse(right.lastUpdatedAt) - Date.parse(left.lastUpdatedAt));
@@ -169,6 +182,22 @@ export function readProfileFacts(
     .filter((fact) => sensitiveAllowed || !isProfileFactEffectivelySensitive(fact))
     .slice(0, maxFacts)
     .map((fact) => toReadableFact(fact));
+}
+
+/**
+ * Implements `canReadFactsByPrincipalPolicy` behavior within this module.
+ */
+function canReadFactsByPrincipalPolicy(request: ProfileAccessRequest): boolean {
+  if (!request.principalAccess && !request.requestedSubjectKind) {
+    return true;
+  }
+  return evaluateProfileMemoryAccessPolicy({
+    principalAccess: request.principalAccess,
+    operation: "profile_read",
+    requestedSubjectKind: request.requestedSubjectKind ?? "legacy_global_profile",
+    includeSensitive: request.includeSensitive,
+    explicitHumanApproval: request.explicitHumanApproval
+  }).allowed;
 }
 
 export { readProfileEpisodes };

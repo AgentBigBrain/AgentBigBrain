@@ -11,6 +11,7 @@ import {
   type SourceRecallRecordWriter
 } from "../core/sourceRecall/sourceRecallConversationCapture";
 import type { SourceRecallRetentionPolicy } from "../core/sourceRecall/sourceRecallRetention";
+import type { TaskPrincipalAccessEnvelope } from "../core/types";
 import {
   applyAssistantTurnToConversationStackV1,
   applyUserTurnToConversationStackV1,
@@ -31,13 +32,15 @@ import {
   ConversationReturnHandoffRecord,
   ConversationRecentActionRecord,
   ConversationSession,
-  ConversationTurn
+  ConversationTurn,
+  ConversationTurnActorMetadata
 } from "./sessionStore";
 import {
   normalizeAssistantTurnText,
   normalizeTurnText,
   sortTurnsByTime
 } from "./conversationManagerHelpers";
+import { requirePrincipalAccessForOperation } from "./principalRuntime/principalAccess";
 
 /**
  * Narrows one shared domain lane into the persisted snapshot subset used on workspace and handoff records.
@@ -113,6 +116,149 @@ export interface RecordUserTurnWithSourceRecallResult {
 
 interface PushConversationTurnOptions {
   assistantTurnKind?: ConversationAssistantTurnKind | null;
+  actor?: ConversationTurnActorMetadata | null;
+}
+
+/**
+ * Implements `buildUserTurnActorMetadata` behavior within this module.
+ */
+export function buildUserTurnActorMetadata(
+  session: ConversationSession
+): ConversationTurnActorMetadata | null {
+  const principalContext = session.principalContext;
+  if (!principalContext) {
+    return null;
+  }
+  const actor = principalContext.actor;
+  return {
+    source: "session_principal_context",
+    principalRole: actor.principalRole,
+    principalIdHash: actor.providerUserIdHash,
+    providerUserIdHash: actor.providerUserIdHash,
+    routeVisibility: principalContext.route.visibility,
+    identityAuthority: actor.identityAuthority,
+    legacyIdentityState: actor.legacyIdentityState,
+    ownerMatchSource: actor.ownerMatchSource,
+    displayNameHint: actor.displayNameHint
+  };
+}
+
+/**
+ * Implements `buildAssistantTurnActorMetadata` behavior within this module.
+ */
+function buildAssistantTurnActorMetadata(
+  session: ConversationSession
+): ConversationTurnActorMetadata | null {
+  const principalContext = session.principalContext;
+  if (!principalContext) {
+    return null;
+  }
+  return {
+    source: "assistant_runtime",
+    principalRole: "runtime_continuation",
+    principalIdHash: principalContext.actor.providerUserIdHash,
+    providerUserIdHash: principalContext.actor.providerUserIdHash,
+    routeVisibility: principalContext.route.visibility,
+    identityAuthority: "runtime_inherited",
+    legacyIdentityState: principalContext.actor.legacyIdentityState,
+    ownerMatchSource: "none",
+    displayNameHint: null
+  };
+}
+
+/**
+ * Implements `buildRecoveredTurnActorMetadata` behavior within this module.
+ */
+export function buildRecoveredTurnActorMetadata(): ConversationTurnActorMetadata {
+  return {
+    source: "legacy_recovery",
+    principalRole: "legacy_unknown",
+    principalIdHash: null,
+    providerUserIdHash: null,
+    routeVisibility: "unknown",
+    identityAuthority: "legacy_unknown",
+    legacyIdentityState: "legacy_actor_unknown",
+    ownerMatchSource: "legacy_unknown",
+    displayNameHint: null
+  };
+}
+
+/**
+ * Implements `buildConversationControllerMetadata` behavior within this module.
+ */
+export function buildConversationControllerMetadata(
+  session: ConversationSession
+): ConversationTurnActorMetadata {
+  return buildUserTurnActorMetadata(session) ?? buildRecoveredTurnActorMetadata();
+}
+
+/**
+ * Implements `canCurrentSessionControlRecord` behavior within this module.
+ */
+export function canCurrentSessionControlRecord(
+  session: ConversationSession,
+  controller: ConversationTurnActorMetadata | null | undefined
+): boolean {
+  const current = buildConversationControllerMetadata(session);
+  if (!controller) {
+    return current.legacyIdentityState === "legacy_actor_unknown";
+  }
+  if (
+    controller.legacyIdentityState === "legacy_actor_unknown" ||
+    controller.principalRole === "legacy_unknown"
+  ) {
+    return current.legacyIdentityState === "legacy_actor_unknown";
+  }
+  const controllerPrincipal = controller.principalIdHash ?? controller.providerUserIdHash ?? null;
+  const currentPrincipal = current.principalIdHash ?? current.providerUserIdHash ?? null;
+  return Boolean(controllerPrincipal && currentPrincipal && controllerPrincipal === currentPrincipal);
+}
+
+/**
+ * Implements `buildSourceRecallCapturePrincipalAccess` behavior within this module.
+ */
+function buildSourceRecallCapturePrincipalAccess(
+  session: ConversationSession
+): TaskPrincipalAccessEnvelope | undefined {
+  if (!session.principalContext) {
+    return undefined;
+  }
+  const role = session.principalContext.actor.principalRole;
+  const visibility = session.principalContext.route.visibility;
+  if (visibility === "public") {
+    return requirePrincipalAccessForOperation({
+      principalContext: session.principalContext,
+      operation: "source_recall_capture",
+      accessClass: "shared_public",
+      allowed: true,
+      reason: "public_safe"
+    });
+  }
+  if (role === "owner") {
+    return requirePrincipalAccessForOperation({
+      principalContext: session.principalContext,
+      operation: "source_recall_capture",
+      accessClass: "owner_private",
+      allowed: true,
+      reason: "owner_principal_matched"
+    });
+  }
+  if (role === "operator") {
+    return requirePrincipalAccessForOperation({
+      principalContext: session.principalContext,
+      operation: "source_recall_capture",
+      accessClass: "operator_private",
+      allowed: true,
+      reason: "operator_principal_matched"
+    });
+  }
+  return requirePrincipalAccessForOperation({
+    principalContext: session.principalContext,
+    operation: "source_recall_capture",
+    accessClass: "speaker_private",
+    allowed: true,
+    reason: "speaker_scope_matched"
+  });
 }
 
 /**
@@ -182,7 +328,9 @@ export function recordUserTurn(
   topicKeyInterpretation?: TopicKeyInterpretationSignalV1 | null;
   } = {}
 ): ConversationTurn | null {
-  const recordedTurn = pushConversationTurn(session, "user", text, at, maxConversationTurns);
+  const recordedTurn = pushConversationTurn(session, "user", text, at, maxConversationTurns, {
+    actor: buildUserTurnActorMetadata(session)
+  });
   if (!recordedTurn) {
     return null;
   }
@@ -240,7 +388,8 @@ export async function recordUserTurnWithSourceRecall(
     },
     policy: options.sourceRecallCapture.policy,
     writer: options.sourceRecallCapture.writer,
-    capturedAt: options.sourceRecallCapture.capturedAt
+    capturedAt: options.sourceRecallCapture.capturedAt,
+    principalAccess: buildSourceRecallCapturePrincipalAccess(session)
   });
   recordedTurn.metadata = {
     ...recordedTurn.metadata,
@@ -298,7 +447,10 @@ export function recordAssistantTurn(
     text,
     at,
     maxConversationTurns,
-    options
+    {
+      ...options,
+      actor: buildAssistantTurnActorMetadata(session)
+    }
   );
   if (!recordedTurn) {
     return null;
@@ -359,7 +511,8 @@ export async function recordAssistantTurnWithSourceRecall(
     originParentRefId: session.conversationId,
     policy: options.sourceRecallCapture.policy,
     writer: options.sourceRecallCapture.writer,
-    capturedAt: options.sourceRecallCapture.capturedAt
+    capturedAt: options.sourceRecallCapture.capturedAt,
+    principalAccess: buildSourceRecallCapturePrincipalAccess(session)
   });
   recordedTurn.metadata = {
     ...recordedTurn.metadata,
@@ -422,10 +575,15 @@ export function pushConversationTurn(
   }
 
   const metadata =
-    role === "assistant" && options.assistantTurnKind
+    (role === "assistant" && options.assistantTurnKind) || options.actor
       ? {
-          assistantTurnKind: options.assistantTurnKind,
-          assistantTurnKindSource: "runtime_metadata" as const
+          ...(role === "assistant" && options.assistantTurnKind
+            ? {
+                assistantTurnKind: options.assistantTurnKind,
+                assistantTurnKindSource: "runtime_metadata" as const
+              }
+            : {}),
+          ...(options.actor ? { actor: options.actor } : {})
         }
       : undefined;
   const turn: ConversationTurn = {
@@ -486,7 +644,8 @@ export function backfillTurnsFromRecentJobsIfNeeded(
             sourceTimeKind: "captured_record",
             sourceRefAvailable: false,
             diagnosticErrorCode: "source_recall_original_source_unavailable"
-          }
+          },
+          actor: buildRecoveredTurnActorMetadata()
         }
       });
     }
@@ -507,7 +666,8 @@ export function backfillTurnsFromRecentJobsIfNeeded(
               sourceTimeKind: "generated_summary",
               sourceRefAvailable: false,
               diagnosticErrorCode: "source_recall_original_source_unavailable"
-            }
+            },
+            actor: buildRecoveredTurnActorMetadata()
           }
         });
       }
@@ -601,7 +761,10 @@ export function setActiveClarification(
   session: ConversationSession,
   clarification: ActiveClarificationState
 ): void {
-  session.activeClarification = clarification;
+  session.activeClarification = {
+    ...clarification,
+    controller: clarification.controller ?? buildConversationControllerMetadata(session)
+  };
 }
 
 /**

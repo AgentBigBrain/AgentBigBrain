@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { buildConversationStackFromTurnsV1 } from "../../src/core/stage6_86ConversationStack";
+import type { ContinuityActorScopeV1 } from "../../src/core/types";
 import {
   detectOpenLoopTriggerV1,
   findBestOpenLoopResumeMatchV1,
@@ -113,6 +114,56 @@ function upsertsSameOpenLoopDeterministically(): void {
   assert.equal(second.loop?.priority, 0.9);
   assert.equal(second.loop?.lastMentionedAt, "2026-03-01T10:03:00.000Z");
   assert.equal(second.stack.threads.find((thread) => thread.threadKey === threadKey)?.openLoops.length, 1);
+}
+
+function buildActorScope(principalIdHash: string): ContinuityActorScopeV1 {
+  return {
+    scopeSource: "transport_principal",
+    principalIdHash,
+    principalRole: "conversation_participant",
+    accessClass: "speaker_private",
+    routeVisibility: "private",
+    legacyIdentityState: "principal_verified",
+    scopeId: "thread:test"
+  };
+}
+
+function preservesOpenLoopActorScopeAndDowngradesConflicts(): void {
+  const stack = buildConversationStackFromTurnsV1(
+    [
+      {
+        role: "user",
+        text: "Let's review the deployment checklist.",
+        at: "2026-03-01T10:00:00.000Z"
+      }
+    ],
+    "2026-03-01T10:00:00.000Z"
+  );
+  const threadKey = stack.activeThreadKey;
+  assert.ok(threadKey);
+
+  const first = upsertOpenLoopOnConversationStackV1({
+    stack,
+    threadKey: threadKey!,
+    text: "Remind me later to finalize the deployment checklist.",
+    observedAt: "2026-03-01T10:01:00.000Z",
+    actorScope: buildActorScope("principal-a")
+  });
+  const second = upsertOpenLoopOnConversationStackV1({
+    stack: first.stack,
+    threadKey: threadKey!,
+    text: "Remind me later to finalize the deployment checklist.",
+    observedAt: "2026-03-01T10:03:00.000Z",
+    actorScope: buildActorScope("principal-b")
+  });
+  const selection = selectOpenLoopsForPulseV1(second.stack, "2026-04-15T10:03:00.000Z", {
+    maxOpenLoopsSurfaced: 1
+  });
+
+  assert.equal(first.loop?.actorScope?.principalIdHash, "principal-a");
+  assert.equal(second.loop?.actorScope?.scopeSource, "shared_public");
+  assert.equal(second.loop?.actorScope?.principalIdHash, null);
+  assert.equal(selection.selected[0]?.actorScope?.scopeSource, "shared_public");
 }
 
 /**
@@ -232,15 +283,15 @@ function resolvesOpenLoopAndKeepsItOutOfPulseSelection(): void {
 function buildsDeterministicOpenLoopLookupTerms(): void {
   const terms = getOpenLoopLookupTermsV1(
     {
-      entityRefs: ["Owen", "contact.owen"]
+      entityRefs: ["Riley", "contact.riley"]
     },
     {
-      topicLabel: "Owen Fall",
-      resumeHint: "Owen fell down and you wanted an update later."
+      topicLabel: "Riley Fall",
+      resumeHint: "Riley fell down and you wanted an update later."
     }
   );
 
-  assert.equal(terms.includes("owen"), true);
+  assert.equal(terms.includes("riley"), true);
   assert.equal(terms.includes("fall"), true);
   assert.equal(terms.includes("later"), true);
 }
@@ -305,6 +356,10 @@ test(
 test(
   "stage 6.86 open loops deterministically upsert repeated loop cues into one loop id",
   upsertsSameOpenLoopDeterministically
+);
+test(
+  "stage 6.86 open loops preserve actor scope and downgrade conflicting actors to shared",
+  preservesOpenLoopActorScopeAndDowngradesConflicts
 );
 test(
   "stage 6.86 open loops surface bounded pulse candidates and suppress stale low-priority loops",

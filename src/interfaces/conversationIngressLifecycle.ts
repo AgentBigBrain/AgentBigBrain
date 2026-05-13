@@ -29,6 +29,7 @@ import {
 } from "./conversationRuntime/commandDispatch";
 import { resolveConversationInvocation } from "./conversationRuntime/invocationResolution";
 import { recoverStaleRunningJobIfNeeded } from "./conversationRuntime/sessionRecovery";
+import { derivePrincipalContextFromIngress } from "./principalRuntime/principalAccess";
 
 const STARTING_WORK_REPLY_MAX_CHARS = 96;
 
@@ -204,6 +205,18 @@ export async function processConversationMessage(
   session.transportIdentity =
     normalizeConversationTransportIdentity(message.transportIdentity) ?? session.transportIdentity;
   session.conversationVisibility = message.conversationVisibility;
+  session.principalContext = derivePrincipalContextFromIngress({
+    provider: message.provider,
+    conversationId: message.conversationId,
+    userId: message.userId,
+    username: message.username,
+    conversationVisibility: message.conversationVisibility,
+    transportIdentity: session.transportIdentity,
+    receivedAt: message.receivedAt,
+    principalConfig: deps.config.principalConfig,
+    allowedUserIds: deps.config.allowedUserIds,
+    allowedUsernames: deps.config.allowedUsernames
+  });
   session.updatedAt = message.receivedAt;
 
   const receivedMs = Date.parse(message.receivedAt);

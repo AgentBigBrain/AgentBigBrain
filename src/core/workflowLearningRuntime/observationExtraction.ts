@@ -5,6 +5,10 @@
 import { extractActiveRequestSegment } from "../currentRequestExtraction";
 import type { TaskRunResult, WorkflowObservation } from "../types";
 import {
+  buildWorkflowAccessScopeSuffix,
+  classifyWorkflowLearningAccess
+} from "./accessClassification";
+import {
   deriveActionSequenceShape,
   deriveDominantFailureMode,
   deriveLinkedSkillMetadata,
@@ -80,7 +84,12 @@ export function deriveWorkflowObservationFromTaskRunDetailed(
   runResult: TaskRunResult
 ): WorkflowObservation {
   const activeRequest = extractActiveRequestSegment(runResult.task.userInput).trim();
-  const workflowKey = deriveWorkflowKey(runResult, activeRequest);
+  const accessMetadata = classifyWorkflowLearningAccess(runResult.task.principalAccess ?? null);
+  const accessScopeSuffix = buildWorkflowAccessScopeSuffix(accessMetadata);
+  const workflowKey = [
+    deriveWorkflowKey(runResult, activeRequest),
+    accessScopeSuffix
+  ].filter((entry) => entry.length > 0).join("|");
   const { linkedSkillName, linkedSkillVerificationStatus } = deriveLinkedSkillMetadata(
     runResult.actionResults
   );
@@ -99,6 +108,7 @@ export function deriveWorkflowObservationFromTaskRunDetailed(
     dominantFailureMode: deriveDominantFailureMode(runResult),
     recoveryPath: deriveRecoveryPath(runResult.actionResults),
     linkedSkillName,
-    linkedSkillVerificationStatus
+    linkedSkillVerificationStatus,
+    accessMetadata
   };
 }

@@ -3,7 +3,11 @@
  */
 
 import { makeId } from "../core/ids";
-import { findRecentJob } from "./conversationSessionMutations";
+import {
+  buildConversationControllerMetadata,
+  canCurrentSessionControlRecord,
+  findRecentJob
+} from "./conversationSessionMutations";
 import {
   normalizeWhitespace,
   proposalPreview,
@@ -16,6 +20,8 @@ import {
 } from "./sessionStore";
 
 const STATUS_JOB_PREVIEW_MAX_CHARS = 96;
+const PROPOSAL_CONTROLLER_MISMATCH_REPLY =
+  "That draft is waiting for the person who started it.";
 
 /**
  * Builds a pluralized request count phrase for status output.
@@ -349,7 +355,8 @@ export function createProposalDraft(
     currentInput: normalizedInput,
     createdAt: receivedAt,
     updatedAt: receivedAt,
-    status: "pending"
+    status: "pending",
+    controller: buildConversationControllerMetadata(session)
   };
   session.activeProposal = proposal;
   session.updatedAt = receivedAt;
@@ -408,6 +415,9 @@ export function adjustProposalDraft(
   if (!active) {
     return "No active draft to adjust. Use /propose <task> first.";
   }
+  if (!canCurrentSessionControlRecord(session, active.controller)) {
+    return PROPOSAL_CONTROLLER_MISMATCH_REPLY;
+  }
 
   const updated = `${active.currentInput}\nAdjustment requested by user: ${adjustment.trim()}`.trim();
   if (updated.length > maxProposalInputChars) {
@@ -443,6 +453,9 @@ export function cancelProposalDraft(session: ConversationSession, receivedAt: st
   const active = session.activeProposal;
   if (!active) {
     return "No active draft to cancel.";
+  }
+  if (!canCurrentSessionControlRecord(session, active.controller)) {
+    return PROPOSAL_CONTROLLER_MISMATCH_REPLY;
   }
 
   active.status = "cancelled";

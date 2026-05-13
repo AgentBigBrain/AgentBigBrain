@@ -3,10 +3,12 @@
  */
 
 import { hashSha256 } from "../cryptoUtils";
+import type { TaskPrincipalAccessEnvelope } from "../runtimeTypes/taskPlanningTypes";
 import {
   buildSourceRecallAuthorityFlags,
   type SourceRecallChunk,
   type SourceRecallRecord,
+  type SourceRecallPrincipalMetadata,
   type SourceRecallSourceKind,
   type SourceRecallSourceRole,
   type SourceRecallCaptureClass,
@@ -41,6 +43,7 @@ export interface LiveUserTurnSourceRecallCaptureInput {
   policy: SourceRecallRetentionPolicy;
   writer: SourceRecallRecordWriter;
   capturedAt?: string;
+  principalAccess?: TaskPrincipalAccessEnvelope;
 }
 
 export type LiveUserTurnSourceRecallCaptureResult =
@@ -105,6 +108,7 @@ export interface LowerAuthoritySourceRecallCaptureInput {
   policy: SourceRecallRetentionPolicy;
   writer: SourceRecallRecordWriter;
   capturedAt?: string;
+  principalAccess?: TaskPrincipalAccessEnvelope;
 }
 
 export type LowerAuthoritySourceRecallCaptureResult = LiveUserTurnSourceRecallCaptureResult;
@@ -318,7 +322,11 @@ export function buildLiveUserTurnSourceRecallArtifacts(
       capturedAt,
       sourceTimeKind: "observed_event",
       freshness: "current_turn",
-      sensitive: false
+      sensitive: false,
+      ...(() => {
+        const principalMetadata = buildSourceRecallPrincipalMetadata(input.principalAccess);
+        return principalMetadata ? { principalMetadata } : {};
+      })()
     },
     chunks
   };
@@ -383,10 +391,71 @@ export function buildLowerAuthoritySourceRecallArtifacts(
       capturedAt,
       sourceTimeKind: input.sourceTimeKind,
       freshness: input.freshness,
-      sensitive: false
+      sensitive: false,
+      ...(() => {
+        const principalMetadata = buildSourceRecallPrincipalMetadata(input.principalAccess);
+        return principalMetadata ? { principalMetadata } : {};
+      })()
     },
     chunks
   };
+}
+
+/**
+ * Builds redacted principal/access labels for Source Recall records.
+ *
+ * @param principalAccess - Operation-specific access envelope.
+ * @returns Source Recall principal metadata, or `undefined` when no envelope exists.
+ */
+function buildSourceRecallPrincipalMetadata(
+  principalAccess: TaskPrincipalAccessEnvelope | undefined
+): SourceRecallPrincipalMetadata | undefined {
+  if (!principalAccess) {
+    return undefined;
+  }
+  const actor = readObject(principalAccess.principalContext.actor);
+  const route = readObject(principalAccess.principalContext.route);
+  const subject = readObject(principalAccess.principalContext.subject);
+  const speakerSubject = readObject(subject?.speakerSubjectRef);
+  const requestedSubject = readObject(subject?.requestedSubjectRef);
+  const ownerSubject = readObject(subject?.ownerSubjectRef);
+  const decision = principalAccess.accessDecision;
+  return {
+    actorPrincipalRole: readString(actor?.principalRole),
+    actorProvider: readString(actor?.provider),
+    actorPrincipalIdHash: readString(actor?.principalId),
+    actorProviderUserIdHash: readString(actor?.providerUserIdHash),
+    routeVisibility: readString(route?.visibility),
+    identityAuthority: readString(actor?.identityAuthority),
+    legacyIdentityState: readString(actor?.legacyIdentityState),
+    ownerMatchSource: readString(actor?.ownerMatchSource),
+    accessOperation: readString(decision.operation),
+    accessClass: readString(decision.accessClass),
+    accessAllowed: decision.allowed,
+    accessReason: readString(decision.reason),
+    speakerSubjectKind: readString(speakerSubject?.subjectKind),
+    speakerSubjectId: readString(speakerSubject?.subjectId),
+    requestedSubjectKind: readString(requestedSubject?.subjectKind),
+    requestedSubjectId: readString(requestedSubject?.subjectId),
+    ownerSubjectKind: readString(ownerSubject?.subjectKind),
+    ownerSubjectId: readString(ownerSubject?.subjectId)
+  };
+}
+
+/**
+ * Implements `readObject` behavior within this module.
+ */
+function readObject(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+/**
+ * Implements `readString` behavior within this module.
+ */
+function readString(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 }
 
 /**

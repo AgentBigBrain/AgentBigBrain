@@ -405,6 +405,26 @@ Important defaults:
 That design keeps the interface conversational without letting the front door silently become an
 unrestricted autonomy surface.
 
+### Principal, subject, and access boundary
+
+Transport identity and memory authority are separate runtime concerns.
+
+The interface first establishes a transport/session key, then derives a principal/access envelope
+from stable provider user ids when available. Interface username allowlists are ingress controls;
+they do not prove owner/operator authority. Display names, server nicknames, prompt text, model
+output, graph refs, Source Recall refs, task ids, approval ids, and projection notes are not owner
+proof and cannot merge subjects by themselves.
+
+Every protected operation has an operation-specific access decision. A direct-reply decision is not
+reused for profile reads, profile writes, memory review, approvals, skill lifecycle, Source Recall
+retrieval, or execution proof. Missing or legacy actor metadata preserves session continuity but
+fails closed for owner-private memory and protected authority.
+
+Owner/operator principal ids are configured separately from interface allowlists. Existing
+subjectless profile memory is treated as owner-only or review-only until migrated with a verified
+subject. Public routes suppress private identity, relationship, Source Recall, and profile-memory
+evidence unless a future policy explicitly proves the material is public-safe.
+
 ### Agent Pulse and proactive inquiry
 
 Agent Pulse is opt-in and disabled by default. It is not a general background autonomy switch.

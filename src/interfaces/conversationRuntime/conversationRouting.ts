@@ -9,11 +9,13 @@ import type { TopicKeyInterpretationSignalV1 } from "../../core/stage6_86Convers
 import { buildAutonomousExecutionInput } from "./managerContracts";
 import {
   buildClarifiedExecutionInput,
-  isClarificationExpired,
   resolveClarifiedBuildFormatMetadata,
-  resolveClarifiedIntentMode,
-  resolveClarificationAnswer
+  resolveClarifiedIntentMode
 } from "./clarificationBroker";
+import {
+  CLARIFICATION_CONTROLLER_MISMATCH_REPLY,
+  evaluateActiveClarificationRoutingGate
+} from "./clarificationState";
 import { resolveModeContinuityIntent } from "./modeContinuity";
 import { resolveConversationIntentMode } from "./intentModeResolution";
 import {
@@ -33,36 +35,10 @@ import { maybeResolveConversationRoutingInlineReply } from "./conversationRoutin
 import { buildDeterministicDirectChatFallbackReply, buildRecentIdentityInterpretationContext, shouldPreserveDeterministicDirectChatTurn } from "./chatTurnSignals";
 import { resolveConversationTopicKeyInterpretationSignal } from "./conversationTopicKeyInterpretation";
 import { isMediaAnalysisConversationTurn } from "./mediaAnalysisIntent";
-import { recordTopicAwareUserTurn } from "./conversationRoutingTurnSupport";
+import { recordRoutingUserTurn } from "./conversationRoutingTurnSupport";
 import { recordRoutingAssistantTurn } from "./conversationRoutingAssistantTurnSupport";
 import type { ConversationEnqueueResult, ConversationRoutingDependencies } from "./conversationRoutingContracts";
 export type { ConversationEnqueueResult, ConversationRoutingDependencies } from "./conversationRoutingContracts";
-
-/**
- * Records the routed user turn through the shared topic-aware capture seam.
- *
- * @param session - Conversation session receiving the turn.
- * @param input - Current user input.
- * @param receivedAt - Timestamp for the turn.
- * @param deps - Routing dependencies carrying retention bounds and optional Source Recall capture.
- * @param topicKeyInterpretation - Optional topic-key interpretation for continuity.
- */
-async function recordRoutingUserTurn(
-  session: ConversationSession,
-  input: string,
-  receivedAt: string,
-  deps: ConversationRoutingDependencies,
-  topicKeyInterpretation: TopicKeyInterpretationSignalV1 | null
-): Promise<void> {
-  await recordTopicAwareUserTurn(
-    session,
-    input,
-    receivedAt,
-    deps.config.maxConversationTurns,
-    topicKeyInterpretation,
-    deps.sourceRecallCapture ?? null
-  );
-}
 
 
 /**
@@ -134,16 +110,28 @@ async function resolveCanonicalConversationRouting(
     ? await deps.listBrowserSessionSnapshots()
     : undefined;
   if (session.activeClarification) {
-    const clarificationAnswer = resolveClarificationAnswer(
-      session.activeClarification,
-      input
-    );
-    if (clarificationAnswer) {
-      const activeClarification = session.activeClarification;
+    const clarificationGate = evaluateActiveClarificationRoutingGate(session, input, receivedAt);
+    if (clarificationGate.state === "blocked") {
+      await recordRoutingUserTurn(session, input, receivedAt, deps, topicKeyInterpretation);
+      await recordRoutingAssistantTurn(
+        session,
+        CLARIFICATION_CONTROLLER_MISMATCH_REPLY,
+        receivedAt,
+        deps.config.maxConversationTurns,
+        "informational_answer",
+        deps.sourceRecallCapture ?? null
+      );
+      return {
+        reply: CLARIFICATION_CONTROLLER_MISMATCH_REPLY,
+        shouldStartWorker: false
+      };
+    }
+    if (clarificationGate.answer) {
+      const activeClarification = clarificationGate.clarification;
       clearActiveClarification(session);
       if (
         activeClarification.kind === "task_recovery" &&
-        clarificationAnswer.selectedOptionId === "cancel"
+        clarificationGate.answer.selectedOptionId === "cancel"
       ) {
         const reply =
           "Okay. I will leave those folders and preview holders alone for now.";
@@ -157,11 +145,11 @@ async function resolveCanonicalConversationRouting(
       const clarifiedIntentMode = resolveClarifiedIntentMode(
         activeClarification.sourceInput,
         activeClarification,
-        clarificationAnswer.selectedOptionId
+        clarificationGate.answer.selectedOptionId
       );
       const clarifiedBuildFormat = resolveClarifiedBuildFormatMetadata(
         activeClarification,
-        clarificationAnswer.selectedOptionId
+        clarificationGate.answer.selectedOptionId
       );
       const clarifiedSemanticRouteId = inferSemanticRouteIdFromIntentMode(clarifiedIntentMode);
       const clarifiedSemanticRoute = buildConversationSemanticRouteMetadata(
@@ -204,7 +192,7 @@ async function resolveCanonicalConversationRouting(
           buildClarifiedExecutionInput(
             activeClarification.sourceInput,
             activeClarification,
-            clarificationAnswer.selectedOptionId
+            clarificationGate.answer.selectedOptionId
           ),
           deps.config.maxContextTurnsForExecution,
           classifyRoutingIntentV1(activeClarification.sourceInput),
@@ -228,7 +216,7 @@ async function resolveCanonicalConversationRouting(
       await recordRoutingUserTurn(session, input, receivedAt, deps, topicKeyInterpretation);
       return enqueueResult;
     }
-    if (isClarificationExpired(session.activeClarification, receivedAt)) {
+    if (clarificationGate.state === "expired") {
       clearActiveClarification(session);
     } else {
       await recordRoutingUserTurn(session, input, receivedAt, deps, topicKeyInterpretation);

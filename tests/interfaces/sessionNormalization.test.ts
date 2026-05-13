@@ -204,3 +204,91 @@ test("normalizeSession preserves persisted build-format clarifications and optio
     ["static_html", "nextjs", "react"]
   );
 });
+
+test("normalizeSession preserves proposal and clarification controller metadata", () => {
+  const now = "2026-04-18T20:00:00.000Z";
+  const controller = {
+    source: "session_principal_context" as const,
+    principalRole: "owner" as const,
+    principalIdHash: "principal-hash",
+    providerUserIdHash: "principal-hash",
+    routeVisibility: "private" as const,
+    identityAuthority: "configured_owner_provider_user_id" as const,
+    legacyIdentityState: "principal_verified" as const,
+    ownerMatchSource: "provider_user_id" as const,
+    displayNameHint: "Synthetic"
+  };
+  const normalized = normalizeSession({
+    ...buildConversationSessionFixture(
+      {
+        updatedAt: now,
+        activeProposal: {
+          id: "proposal-1",
+          originalInput: "Build a small demo.",
+          currentInput: "Build a small demo.",
+          createdAt: now,
+          updatedAt: now,
+          status: "pending",
+          controller
+        },
+        activeClarification: {
+          id: "clarification-1",
+          kind: "execution_mode",
+          sourceInput: "Build a small demo.",
+          question: "Should I plan first or build now?",
+          requestedAt: now,
+          matchedRuleId: "clarify_plan_or_build",
+          renderingIntent: "plan_or_build",
+          options: [
+            {
+              id: "plan",
+              label: "Plan it first"
+            },
+            {
+              id: "build",
+              label: "Build now"
+            }
+          ],
+          controller
+        }
+      },
+      {
+        conversationId: "telegram:chat-controller:user-1",
+        receivedAt: now
+      }
+    )
+  });
+
+  assert.equal(normalized?.activeProposal?.controller?.principalRole, "owner");
+  assert.equal(normalized?.activeClarification?.controller?.providerUserIdHash, "principal-hash");
+});
+
+test("normalizeSession preserves valid backend/profile override access metadata", () => {
+  const now = "2026-04-18T20:00:00.000Z";
+  const normalized = normalizeSession({
+    ...buildConversationSessionFixture(
+      {
+        updatedAt: now,
+        modelOverrideAccess: {
+          updatedAt: now,
+          command: "profile",
+          target: "codex_profile",
+          requestedValue: "work",
+          protectedResource: true,
+          principalRole: "owner",
+          accessClass: "owner_private",
+          accessAllowed: true,
+          accessReason: "owner_principal_matched",
+          routeVisibility: "private"
+        }
+      },
+      {
+        conversationId: "telegram:chat-backend-profile:user-1",
+        receivedAt: now
+      }
+    )
+  });
+
+  assert.equal(normalized?.modelOverrideAccess?.target, "codex_profile");
+  assert.equal(normalized?.modelOverrideAccess?.accessAllowed, true);
+});

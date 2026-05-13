@@ -17,7 +17,10 @@ import {
   createFollowUpRuleContext,
   createPulseLexicalRuleContext
 } from "../../src/interfaces/conversationManagerHelpers";
+import { buildConversationControllerMetadata } from "../../src/interfaces/conversationSessionMutations";
 import { type ConversationSession } from "../../src/interfaces/sessionStore";
+import { derivePrincipalContextFromIngress } from "../../src/interfaces/principalRuntime/principalAccess";
+import { createOwnerOperatorPrincipalConfigFromEnv } from "../../src/interfaces/principalRuntime/principalConfig";
 import {
   buildConversationIngressConfig,
   buildConversationSessionFixture
@@ -60,6 +63,22 @@ function buildMessage(text: string): ConversationInboundMessage {
     text,
     receivedAt: "2026-03-07T15:05:00.000Z"
   };
+}
+
+function attachOwnerPrincipal(session: ConversationSession, userId: string): void {
+  const principalConfig = createOwnerOperatorPrincipalConfigFromEnv({
+    BRAIN_PRINCIPAL_HMAC_KEY: "test-principal-hmac-key",
+    BRAIN_OWNER_TELEGRAM_USER_IDS: userId
+  });
+  session.principalContext = derivePrincipalContextFromIngress({
+    provider: "telegram",
+    conversationId: "chat-1",
+    userId,
+    username: "synthetic",
+    conversationVisibility: "private",
+    receivedAt: "2026-03-07T15:00:00.000Z",
+    principalConfig
+  });
 }
 
 /**
@@ -111,6 +130,35 @@ test("approveProposal clears the active draft and enqueues the proposal input", 
   assert.equal(session.activeProposal, null);
   assert.ok(reply.includes("Draft draft-1 approved."));
   assert.ok(reply.includes("Execution started. I will keep you updated here while it runs."));
+});
+
+test("approveProposal rejects approval from a different principal than the draft controller", () => {
+  const session = buildSession();
+  attachOwnerPrincipal(session, "owner-a");
+  session.activeProposal = {
+    ...session.activeProposal!,
+    controller: buildConversationControllerMetadata(session)
+  };
+  attachOwnerPrincipal(session, "owner-b");
+  let enqueueCalls = 0;
+
+  const reply = approveProposal(
+    session,
+    buildMessage("approve"),
+    buildDeps({
+      enqueueJob: () => {
+        enqueueCalls += 1;
+        return {
+          reply: "",
+          shouldStartWorker: true
+        };
+      }
+    })
+  );
+
+  assert.equal(reply, "That draft is waiting for the person who started it.");
+  assert.equal(enqueueCalls, 0);
+  assert.equal(session.activeProposal?.status, "pending");
 });
 
 test("resolveInterpretedPulseCommandArgument honors model-assisted pulse control when confidence passes", async () => {

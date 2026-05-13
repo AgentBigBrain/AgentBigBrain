@@ -4,11 +4,16 @@
 
 import { type ExecutionReceiptStore } from "../advancedAutonomyRuntime";
 import { type GovernanceMemoryStore } from "../governanceMemory";
+import {
+  buildRedactedPrincipalAccessMetadata,
+  renderPrincipalAccessTraceDetails
+} from "../principalAccessMetadata";
 import { type AppendRuntimeTraceEventInput } from "../runtimeTraceLogger";
 import {
   type ActionRunResult,
   type GovernanceBlockCategory,
-  type GovernanceMemoryEvent
+  type GovernanceMemoryEvent,
+  type TaskPrincipalAccessEnvelope
 } from "../types";
 
 export interface AppendGovernanceEventInput {
@@ -17,6 +22,7 @@ export interface AppendGovernanceEventInput {
   actionResult: ActionRunResult;
   governanceMemoryStore: GovernanceMemoryStore;
   appendTraceEvent: (input: AppendRuntimeTraceEventInput) => Promise<void>;
+  principalAccess?: TaskPrincipalAccessEnvelope | null;
 }
 
 export interface AppendExecutionReceiptInput {
@@ -25,6 +31,7 @@ export interface AppendExecutionReceiptInput {
   proposalId: string | null;
   actionResult: ActionRunResult;
   executionReceiptStore: ExecutionReceiptStore;
+  principalAccess?: TaskPrincipalAccessEnvelope | null;
 }
 
 /**
@@ -98,6 +105,7 @@ export async function appendGovernanceEvent(
   } = input;
   const voteSummary = summarizeVotes(actionResult.votes);
   const decisionThreshold = actionResult.decision?.threshold ?? null;
+  const principalMetadata = buildRedactedPrincipalAccessMetadata(input.principalAccess);
   const event = await governanceMemoryStore.appendEvent({
     taskId,
     proposalId,
@@ -113,7 +121,8 @@ export async function appendGovernanceEvent(
     threshold: decisionThreshold,
     dissentGovernorIds: actionResult.decision
       ? actionResult.decision.dissent.map((vote) => vote.governorId)
-      : voteSummary.dissentGovernorIds
+      : voteSummary.dissentGovernorIds,
+    principalAccess: principalMetadata
   });
   await appendTraceEvent({
     eventType: "governance_event_persisted",
@@ -126,7 +135,8 @@ export async function appendGovernanceEvent(
       outcome: event.outcome,
       blockCategory: event.blockCategory,
       yesVotes: event.yesVotes,
-      noVotes: event.noVotes
+      noVotes: event.noVotes,
+      ...renderPrincipalAccessTraceDetails(principalMetadata)
     }
   });
   return event;
@@ -155,7 +165,8 @@ export async function appendExecutionReceipt(input: AppendExecutionReceiptInput)
       taskId,
       planTaskId,
       proposalId,
-      actionResult
+      actionResult,
+      principalAccess: input.principalAccess
     });
   } catch (error) {
     console.error(

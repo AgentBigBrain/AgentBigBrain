@@ -28,6 +28,7 @@ import { Stage686RuntimeStateStore } from "./runtimeState";
 import {
   BridgeQuestionV1,
   ConversationStackV1,
+  ContinuityActorScopeV1,
   EntityGraphV1,
   MemoryMutationActionParams,
   PulseEmitActionParams
@@ -100,6 +101,21 @@ function registerPulseEmission(pulseState: Stage686PulseStateV1, observedAt: str
     updatedAt: observedAt,
     lastPulseAt: observedAt,
     emittedTodayCount: previousKey === nextKey ? pulseState.emittedTodayCount + 1 : 1
+  };
+}
+
+/**
+ * Implements `buildMissionRuntimeActorScope` behavior within this module.
+ */
+function buildMissionRuntimeActorScope(input: ExecuteStage686RuntimeActionInput): ContinuityActorScopeV1 {
+  return {
+    scopeSource: "mission_runtime",
+    principalIdHash: null,
+    principalRole: "runtime_continuation",
+    accessClass: "runtime_continuation_limited",
+    routeVisibility: "unknown",
+    legacyIdentityState: "runtime_continuation_missing_origin",
+    scopeId: input.missionId
   };
 }
 
@@ -292,6 +308,7 @@ export class Stage686RuntimeActionEngine {
           text: openLoopText,
           observedAt,
           entityRefs: toStringRefs(params.payload.entityRefs),
+          actorScope: buildMissionRuntimeActorScope(input),
           priorityHint: 0.71
         });
         seededStores = {
@@ -605,6 +622,7 @@ export class Stage686RuntimeActionEngine {
         text: toText(params.seedText) ?? "Please follow up on this unresolved decision later.",
         observedAt,
         entityRefs: refs,
+        actorScope: buildMissionRuntimeActorScope(input),
         priorityHint: 0.74
       });
       const selection = selectOpenLoopsForPulseV1(seeded.stack, observedAt, { maxOpenLoopsSurfaced: 1 });

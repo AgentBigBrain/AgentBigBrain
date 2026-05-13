@@ -27,6 +27,9 @@ import {
 } from "./sessionNormalizationRecords";
 import { normalizeAgentPulseSessionState } from "./sessionPulseNormalization";
 import { normalizeConversationTransportIdentity } from "./transportIdentity";
+import { normalizePrincipalContext } from "../principalRuntime/principalAccess";
+import { normalizeConversationTurnActorMetadata } from "./sessionNormalizationTurnActorMetadata";
+import { normalizeBackendProfileOverrideAccessRecord } from "./backendProfileOverridePolicy";
 
 /**
  * Normalizes one persisted conversation session into the stable runtime shape.
@@ -55,7 +58,8 @@ export function normalizeSession(raw: Partial<ConversationSession>): Conversatio
           currentInput: raw.activeProposal.currentInput,
           createdAt: raw.activeProposal.createdAt,
           updatedAt: raw.activeProposal.updatedAt,
-          status: raw.activeProposal.status
+          status: raw.activeProposal.status,
+          controller: normalizeConversationTurnActorMetadata(raw.activeProposal.controller)
         }
       : null;
 
@@ -97,6 +101,7 @@ export function normalizeSession(raw: Partial<ConversationSession>): Conversatio
       raw.conversationVisibility === "unknown"
         ? raw.conversationVisibility
         : "unknown",
+    principalContext: normalizePrincipalContext(raw.principalContext),
     sessionSchemaVersion: stackMigration.sessionSchemaVersion,
     conversationStack: stackMigration.conversationStack,
     updatedAt: raw.updatedAt,
@@ -108,6 +113,7 @@ export function normalizeSession(raw: Partial<ConversationSession>): Conversatio
       typeof raw.codexAuthProfileId === "string" && raw.codexAuthProfileId.trim().length > 0
         ? raw.codexAuthProfileId.trim()
         : null,
+    modelOverrideAccess: normalizeBackendProfileOverrideAccessRecord(raw.modelOverrideAccess),
     activeProposal,
     activeClarification,
     domainContext: normalizeConversationDomainContext(raw.domainContext, raw.conversationId),

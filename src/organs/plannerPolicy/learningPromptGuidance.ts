@@ -1,4 +1,9 @@
 import { JudgmentPattern } from "../../core/judgmentPatterns";
+import {
+  redactLearningAccessScopeSuffixes,
+  renderLearningAccessScopeLabel,
+  stripLearningAccessScopeSuffix
+} from "../../core/learningAccessMetadata";
 import { PlannerLearningHintSummaryV1, WorkflowPattern } from "../../core/types";
 
 import type { PlannerSkillGuidanceEntry } from "../skillRegistry/contracts";
@@ -15,8 +20,10 @@ export function buildWorkflowLearningGuidance(patterns: readonly WorkflowPattern
     return "";
   }
   const lines = patterns.slice(0, 3).map((pattern) => {
+    const workflowKey = stripLearningAccessScopeSuffix(pattern.workflowKey);
+    const accessScope = renderLearningAccessScopeLabel(pattern.accessMetadata);
     return (
-      `- workflowKey=${pattern.workflowKey}; confidence=${pattern.confidence.toFixed(2)}; ` +
+      `- workflowKey=${workflowKey}; accessScope=${accessScope}; confidence=${pattern.confidence.toFixed(2)}; ` +
       `status=${pattern.status}; success=${pattern.successCount}; failure=${pattern.failureCount}; ` +
       `suppressed=${pattern.suppressedCount}`
     );
@@ -43,8 +50,9 @@ export function buildJudgmentLearningGuidance(patterns: readonly JudgmentPattern
       pattern.outcomeHistory.length > 0
         ? pattern.outcomeHistory[pattern.outcomeHistory.length - 1]
         : undefined;
+    const accessScope = renderLearningAccessScopeLabel(pattern.accessMetadata);
     return (
-      `- riskPosture=${pattern.riskPosture}; confidence=${pattern.confidence.toFixed(2)}; ` +
+      `- riskPosture=${pattern.riskPosture}; accessScope=${accessScope}; confidence=${pattern.confidence.toFixed(2)}; ` +
       `signals=${pattern.outcomeHistory.length}; latestSignal=${latestSignal?.signalType ?? "none"}; ` +
       `latestScore=${latestSignal ? latestSignal.score.toFixed(2) : "n/a"}`
     );
@@ -71,17 +79,19 @@ export function buildWorkflowSkillBridgeGuidance(
   const lines: string[] = [];
   if (workflowBridge.preferredSkill && workflowBridge.preferredWorkflowKey) {
     lines.push(
-      `- preferredSkill=${workflowBridge.preferredSkill.name}; workflowKey=${workflowBridge.preferredWorkflowKey}; ` +
-      `reason=${workflowBridge.preferredReason ?? "verified reusable skill"}`
+      `- preferredSkill=${workflowBridge.preferredSkill.name}; ` +
+      `workflowKey=${stripLearningAccessScopeSuffix(workflowBridge.preferredWorkflowKey)}; ` +
+      `reason=${redactLearningAccessScopeSuffixes(workflowBridge.preferredReason ?? "verified reusable skill")}`
     );
   }
   for (const workflowKey of workflowBridge.discouragedWorkflowKeys) {
-    lines.push(`- discouragedWorkflowKey=${workflowKey}`);
+    lines.push(`- discouragedWorkflowKey=${stripLearningAccessScopeSuffix(workflowKey)}`);
   }
   for (const suggestion of workflowBridge.skillSuggestions) {
     lines.push(
-      `- skillOpportunity=${suggestion.suggestedSkillName}; workflowKey=${suggestion.workflowKey}; ` +
-      `reason=${suggestion.reason}`
+      `- skillOpportunity=${suggestion.suggestedSkillName}; ` +
+      `workflowKey=${stripLearningAccessScopeSuffix(suggestion.workflowKey)}; ` +
+      `reason=${redactLearningAccessScopeSuffixes(suggestion.reason)}`
     );
   }
   if (lines.length === 0) {
