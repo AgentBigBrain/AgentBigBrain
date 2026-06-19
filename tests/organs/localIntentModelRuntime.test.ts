@@ -585,7 +585,7 @@ test("createOllamaIdentityInterpretationResolver parses a valid identity_interpr
           JSON.stringify({
             response: JSON.stringify({
               kind: "self_identity_declaration",
-              candidateValue: "Avery",
+              candidateValue: "Morgan",
               confidence: "high",
               shouldPersist: true,
               explanation: "The user is explicitly stating their own name."
@@ -603,7 +603,7 @@ test("createOllamaIdentityInterpretationResolver parses a valid identity_interpr
   );
 
   const signal = await resolver({
-    userInput: "My name is Avery, yes.",
+    userInput: "My name is Morgan, yes.",
     routingClassification: null,
     sessionHints: {
       hasReturnHandoff: false,
@@ -620,7 +620,7 @@ test("createOllamaIdentityInterpretationResolver parses a valid identity_interpr
   assert.deepEqual(signal, {
     source: "local_intent_model",
     kind: "self_identity_declaration",
-    candidateValue: "Avery",
+    candidateValue: "Morgan",
     confidence: "high",
     shouldPersist: true,
     explanation: "The user is explicitly stating their own name."

@@ -54,18 +54,18 @@
     },
     {
       "id": "voice_memory_followup",
-      "title": "Voice note reopening an unresolved Billy situation",
-      "summary": "The user sends a natural voice note that brings Billy up again and should create or refresh an episodic memory rather than triggering immediate execution.",
+      "title": "Voice note reopening an unresolved Blake situation",
+      "summary": "The user sends a natural voice note that brings Blake up again and should create or refresh an episodic memory rather than triggering immediate execution.",
       "mediaKind": "voice",
-      "fixtureFile": "billy_followup.ogg",
+      "fixtureFile": "blake_followup.ogg",
       "userText": "",
       "expectedInterpretation": {
-        "summary": "Voice note revisits Billy's unresolved MRI situation from a few weeks ago.",
-        "transcript": "Billy came up again while I was driving home, and it reminded me of that whole MRI situation from a few weeks ago. I still do not know how it ended, and it feels like the story never fully closed. If you remember that thread, keep it in mind when we talk next.",
+        "summary": "Voice note revisits Blake's unresolved MRI situation from a few weeks ago.",
+        "transcript": "Blake came up again while I was driving home, and it reminded me of that whole MRI situation from a few weeks ago. I still do not know how it ended, and it feels like the story never fully closed. If you remember that thread, keep it in mind when we talk next.",
         "ocrText": null,
         "confidence": 0.94,
-        "provenance": "repo fixture Billy follow-up voice note",
-        "entityHints": ["Billy", "MRI", "few weeks ago"]
+        "provenance": "repo fixture Blake follow-up voice note",
+        "entityHints": ["Blake", "MRI", "few weeks ago"]
       },
       "expectedBehavior": ["memory_update", "episode_followup", "bounded_media_context"]
     }

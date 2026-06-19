@@ -63,12 +63,12 @@ export async function runStage686CheckpointA(): Promise<Stage686CheckpointAArtif
 
   const observedAt = "2026-03-01T00:00:00.000Z";
   const extractionOne = extractEntityCandidates({
-    text: "Billy and Sarah met at Beacon Labs before Project Aurora review.",
+    text: "Blake and Sarah met at Beacon Labs before Project Aurora review.",
     observedAt,
     evidenceRef: "trace:stage686_a_001"
   });
   const extractionTwo = extractEntityCandidates({
-    text: "Billy and Sarah met at Beacon Labs before Project Aurora review.",
+    text: "Blake and Sarah met at Beacon Labs before Project Aurora review.",
     observedAt,
     evidenceRef: "trace:stage686_a_002"
   });
@@ -85,23 +85,23 @@ export async function runStage686CheckpointA(): Promise<Stage686CheckpointAArtif
   });
 
   await jsonStore.upsertFromExtractionInput({
-    text: "Billy and Sarah met at Beacon Labs before Project Aurora review.",
+    text: "Blake and Sarah met at Beacon Labs before Project Aurora review.",
     observedAt,
     evidenceRef: "trace:stage686_a_003"
   });
   const jsonMutation = await jsonStore.upsertFromExtractionInput({
-    text: "Sarah and Billy met again at Beacon Labs for Project Aurora review.",
+    text: "Sarah and Blake met again at Beacon Labs for Project Aurora review.",
     observedAt: "2026-03-02T00:00:00.000Z",
     evidenceRef: "trace:stage686_a_004"
   });
 
   await sqliteStore.upsertFromExtractionInput({
-    text: "Billy and Sarah met at Beacon Labs before Project Aurora review.",
+    text: "Blake and Sarah met at Beacon Labs before Project Aurora review.",
     observedAt,
     evidenceRef: "trace:stage686_a_003"
   });
   const sqliteMutation = await sqliteStore.upsertFromExtractionInput({
-    text: "Sarah and Billy met again at Beacon Labs for Project Aurora review.",
+    text: "Sarah and Blake met again at Beacon Labs for Project Aurora review.",
     observedAt: "2026-03-02T00:00:00.000Z",
     evidenceRef: "trace:stage686_a_004"
   });
@@ -113,12 +113,12 @@ export async function runStage686CheckpointA(): Promise<Stage686CheckpointAArtif
     {
       nodes: [
         {
-          entityKey: buildEntityKey("William Bena", "person", null),
-          canonicalName: "William Bena",
+          entityKey: buildEntityKey("Rowan Harper", "person", null),
+          canonicalName: "Rowan Harper",
           entityType: "person",
           disambiguator: null,
           domainHint: null,
-          aliases: ["Billy"],
+          aliases: ["Blake"],
           firstSeenAt: observedAt,
           lastSeenAt: observedAt,
           salience: 1,
@@ -135,12 +135,12 @@ export async function runStage686CheckpointA(): Promise<Stage686CheckpointAArtif
     {
       nodes: [
         {
-          entityKey: buildEntityKey("Billy Bena", "person", null),
-          canonicalName: "Billy Bena",
+          entityKey: buildEntityKey("Blake Harper", "person", null),
+          canonicalName: "Blake Harper",
           entityType: "person",
           disambiguator: null,
           domainHint: null,
-          aliases: ["Billy", "Billy Bena"],
+          aliases: ["Blake", "Blake Harper"],
           firstSeenAt: observedAt,
           lastSeenAt: observedAt,
           salience: 1,

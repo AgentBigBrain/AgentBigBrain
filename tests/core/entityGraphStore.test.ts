@@ -36,7 +36,7 @@ async function jsonBackendPersistsUpsertedEntityGraph(): Promise<void> {
     const store = new EntityGraphStore(graphPath, { backend: "json" });
 
     const mutation = await store.upsertFromExtractionInput({
-      text: "Owen and Sarah met at Lantern Labs.",
+      text: "Riley and Sarah met at Lantern Labs.",
       observedAt: "2026-03-01T00:00:00.000Z",
       evidenceRef: "trace:json_upsert",
       domainHint: "workflow"
@@ -119,7 +119,7 @@ async function sqliteAndJsonBackendsProduceEquivalentMutationResults(): Promise<
     });
 
     const input = {
-      text: "Owen and Sarah met at Lantern Labs.",
+      text: "Riley and Sarah met at Lantern Labs.",
       observedAt: "2026-03-01T00:00:00.000Z",
       evidenceRef: "trace:parity",
       domainHint: "workflow" as const
@@ -144,13 +144,13 @@ async function conflictingEntityDomainHintsDegradeToNull(): Promise<void> {
     const store = new EntityGraphStore(graphPath, { backend: "json" });
 
     await store.upsertFromExtractionInput({
-      text: "Owen joined Lantern Labs.",
+      text: "Riley joined Lantern Labs.",
       observedAt: "2026-03-01T00:00:00.000Z",
       evidenceRef: "trace:workflow",
       domainHint: "workflow"
     });
     await store.upsertFromExtractionInput({
-      text: "Owen joined Lantern Labs.",
+      text: "Riley joined Lantern Labs.",
       observedAt: "2026-03-02T00:00:00.000Z",
       evidenceRef: "trace:profile",
       domainHint: "profile"
@@ -408,16 +408,16 @@ async function relationshipExtractionDropsClauseBoundaryAndLeadingStopwordCandid
     const store = new EntityGraphStore(graphPath, { backend: "json" });
 
     const mutation = await store.upsertFromExtractionInput({
-      text: "Owen used to work for me. Milo is my boss. And Milo, who is he?",
+      text: "Riley used to work for me. Milo is my boss. And Milo, who is he?",
       observedAt: "2026-03-26T15:38:00.000Z",
       evidenceRef: "trace:relationship_candidate_cleanup",
       domainHint: "relationship"
     });
 
     const canonicalNames = mutation.graph.entities.map((entity) => entity.canonicalName).sort();
-    assert.ok(canonicalNames.includes("Owen"));
+    assert.ok(canonicalNames.includes("Riley"));
     assert.ok(canonicalNames.includes("Milo"));
-    assert.ok(!canonicalNames.includes("Owen. Milo"));
+    assert.ok(!canonicalNames.includes("Riley. Milo"));
     assert.ok(!canonicalNames.includes("And Milo"));
   });
 }
@@ -466,38 +466,38 @@ async function syncCurrentSurfaceProfileClaimsPromotesOrgAndPlaceContinuity(): P
     const result = await store.syncCurrentSurfaceProfileClaims(
       [
         buildResolvedCurrentClaim({
-          claimId: "claim_billy_name",
-          normalizedKey: "contact.billy.name",
-          normalizedValue: "Billy"
+          claimId: "claim_blake_name",
+          normalizedKey: "contact.blake.name",
+          normalizedValue: "Blake"
         }),
         buildResolvedCurrentClaim({
-          claimId: "claim_billy_work",
-          normalizedKey: "contact.billy.work_association",
-          normalizedValue: "Crimson Analytics"
+          claimId: "claim_blake_work",
+          normalizedKey: "contact.blake.work_association",
+          normalizedValue: "Example Analytics"
         }),
         buildResolvedCurrentClaim({
-          claimId: "claim_billy_location",
-          normalizedKey: "contact.billy.location_association",
+          claimId: "claim_blake_location",
+          normalizedKey: "contact.blake.location_association",
           normalizedValue: "Ferndale"
         }),
         buildResolvedCurrentClaim({
-          claimId: "claim_garrett_name",
-          normalizedKey: "contact.garrett.name",
-          normalizedValue: "Garrett"
+          claimId: "claim_casey_name",
+          normalizedKey: "contact.casey.name",
+          normalizedValue: "Casey"
         }),
         buildResolvedCurrentClaim({
-          claimId: "claim_garrett_org",
-          normalizedKey: "contact.garrett.organization_association",
+          claimId: "claim_casey_org",
+          normalizedKey: "contact.casey.organization_association",
           normalizedValue: "Harbor Signal Studio"
         }),
         buildResolvedCurrentClaim({
-          claimId: "claim_garrett_primary_location",
-          normalizedKey: "contact.garrett.primary_location_association",
+          claimId: "claim_casey_primary_location",
+          normalizedKey: "contact.casey.primary_location_association",
           normalizedValue: "Detroit"
         }),
         buildResolvedCurrentClaim({
-          claimId: "claim_garrett_secondary_location",
-          normalizedKey: "contact.garrett.secondary_location_association",
+          claimId: "claim_casey_secondary_location",
+          normalizedKey: "contact.casey.secondary_location_association",
           normalizedValue: "Ann Arbor"
         })
       ],
@@ -506,14 +506,14 @@ async function syncCurrentSurfaceProfileClaimsPromotesOrgAndPlaceContinuity(): P
 
     assert.equal(result.changed, true);
     const graph = await store.getGraph();
-    const billy = graph.entities.find((entity) => entity.canonicalName === "Billy");
-    const crimson = graph.entities.find((entity) => entity.canonicalName === "Crimson Analytics");
+    const blake = graph.entities.find((entity) => entity.canonicalName === "Blake");
+    const crimson = graph.entities.find((entity) => entity.canonicalName === "Example Analytics");
     const ferndale = graph.entities.find((entity) => entity.canonicalName === "Ferndale");
     const harbor = graph.entities.find((entity) => entity.canonicalName === "Harbor Signal Studio");
     const detroit = graph.entities.find((entity) => entity.canonicalName === "Detroit");
     const annArbor = graph.entities.find((entity) => entity.canonicalName === "Ann Arbor");
 
-    assert.equal(billy?.entityType, "person");
+    assert.equal(blake?.entityType, "person");
     assert.equal(crimson?.entityType, "org");
     assert.equal(ferndale?.entityType, "place");
     assert.equal(harbor?.entityType, "org");
@@ -521,7 +521,7 @@ async function syncCurrentSurfaceProfileClaimsPromotesOrgAndPlaceContinuity(): P
     assert.equal(annArbor?.entityType, "place");
     assert.ok(
       graph.edges.some((edge) =>
-        edge.sourceEntityKey === billy?.entityKey &&
+        edge.sourceEntityKey === blake?.entityKey &&
         edge.targetEntityKey === crimson?.entityKey &&
         edge.relationType === "other" &&
         edge.status === "confirmed"
@@ -529,7 +529,7 @@ async function syncCurrentSurfaceProfileClaimsPromotesOrgAndPlaceContinuity(): P
     );
     assert.ok(
       graph.edges.some((edge) =>
-        edge.sourceEntityKey === billy?.entityKey &&
+        edge.sourceEntityKey === blake?.entityKey &&
         edge.targetEntityKey === ferndale?.entityKey &&
         edge.relationType === "other" &&
         edge.status === "confirmed"
@@ -544,14 +544,14 @@ async function syncCurrentSurfaceProfileClaimsIsIdempotentForRepeatedClaims(): P
     const store = new EntityGraphStore(graphPath, { backend: "json" });
     const claims = [
       buildResolvedCurrentClaim({
-        claimId: "claim_billy_name",
-        normalizedKey: "contact.billy.name",
-        normalizedValue: "Billy"
+        claimId: "claim_blake_name",
+        normalizedKey: "contact.blake.name",
+        normalizedValue: "Blake"
       }),
       buildResolvedCurrentClaim({
-        claimId: "claim_billy_work",
-        normalizedKey: "contact.billy.work_association",
-        normalizedValue: "Crimson Analytics"
+        claimId: "claim_blake_work",
+        normalizedKey: "contact.blake.work_association",
+        normalizedValue: "Example Analytics"
       })
     ] as const;
 
@@ -567,19 +567,19 @@ async function syncCurrentSurfaceProfileClaimsIsIdempotentForRepeatedClaims(): P
     assert.equal(firstResult.changed, true);
     assert.equal(secondResult.changed, true);
     const graph = await store.getGraph();
-    const billy = graph.entities.find((entity) => entity.canonicalName === "Billy");
-    const crimson = graph.entities.find((entity) => entity.canonicalName === "Crimson Analytics");
-    const billyCrimsonEdges = graph.edges.filter((edge) =>
-      edge.sourceEntityKey === billy?.entityKey &&
+    const blake = graph.entities.find((entity) => entity.canonicalName === "Blake");
+    const crimson = graph.entities.find((entity) => entity.canonicalName === "Example Analytics");
+    const blakeExampleAnalyticsEdges = graph.edges.filter((edge) =>
+      edge.sourceEntityKey === blake?.entityKey &&
       edge.targetEntityKey === crimson?.entityKey
     );
 
-    assert.equal(billy?.salience, 1);
+    assert.equal(blake?.salience, 1);
     assert.equal(crimson?.salience, 1);
-    assert.equal(billyCrimsonEdges.length, 1);
+    assert.equal(blakeExampleAnalyticsEdges.length, 1);
     assert.deepEqual(
-      billyCrimsonEdges[0]?.evidenceRefs,
-      ["profile_memory_claim:claim_billy_work"]
+      blakeExampleAnalyticsEdges[0]?.evidenceRefs,
+      ["profile_memory_claim:claim_blake_work"]
     );
   });
 }

@@ -126,7 +126,7 @@ const LIVE_RUN_RUNTIME_PATH = path.resolve(
 );
 const CONVERSATION_ID = `next-js-desktop-conversation-lifecycle-smoke-${RUN_ID}`;
 const USER_ID = "next-js-desktop-conversation-smoke-user";
-const USERNAME = "averybrooks11";
+const USERNAME = "morganbrooks11";
 const PROJECT_LABEL = "Sample City Showcase";
 const FOLDER_NAME = `${PROJECT_LABEL} Smoke ${RUN_ID}`;
 const TURN_TIMEOUT_MS = Number.isFinite(Number(process.env.SAMPLE_CITY_PREVIEW_SMOKE_TURN_TIMEOUT_MS))

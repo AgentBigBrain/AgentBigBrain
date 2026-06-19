@@ -30,8 +30,8 @@ test("readProfileEpisodes hides sensitive episodes without explicit approval", (
     ...createEmptyProfileMemoryState(),
     episodes: [
       createProfileEpisodeRecord({
-        title: "Owen fell down",
-        summary: "Owen fell down and the outcome was unresolved.",
+        title: "Riley fell down",
+        summary: "Riley fell down and the outcome was unresolved.",
         sourceTaskId: "task_episode_query_read_1",
         source: "test",
         sourceKind: "explicit_user_statement",
@@ -57,7 +57,7 @@ test("readProfileEpisodes hides sensitive episodes without explicit approval", (
   });
 
   assert.equal(readable.length, 1);
-  assert.equal(readable[0]?.title, "Owen fell down");
+  assert.equal(readable[0]?.title, "Riley fell down");
 });
 
 test("queryProfileEpisodesForContinuity returns unresolved linked episode for re-mentioned entity hint", () => {
@@ -66,26 +66,26 @@ test("queryProfileEpisodesForContinuity returns unresolved linked episode for re
     ...createEmptyProfileMemoryState(),
     episodes: [
       createProfileEpisodeRecord({
-        title: "Owen fell down",
-        summary: "Owen fell down a few weeks ago and the outcome was never mentioned.",
+        title: "Riley fell down",
+        summary: "Riley fell down a few weeks ago and the outcome was never mentioned.",
         sourceTaskId: "task_episode_query_continuity_1",
         source: "test",
         sourceKind: "explicit_user_statement",
         sensitive: false,
         observedAt,
-        entityRefs: ["contact.owen"],
+        entityRefs: ["contact.riley"],
         tags: ["followup", "injury"]
       }),
       createProfileEpisodeRecord({
-        title: "Owen changed jobs",
-        summary: "Owen changed jobs months ago and the outcome was never revisited.",
+        title: "Riley changed jobs",
+        summary: "Riley changed jobs months ago and the outcome was never revisited.",
         sourceTaskId: "task_episode_query_continuity_2",
         source: "test",
         sourceKind: "explicit_user_statement",
         sensitive: false,
         observedAt: "2025-10-01T10:00:00.000Z",
         lastMentionedAt: "2025-10-01T10:00:00.000Z",
-        entityRefs: ["contact.owen"],
+        entityRefs: ["contact.riley"],
         tags: ["followup", "work"]
       })
     ]
@@ -94,7 +94,7 @@ test("queryProfileEpisodesForContinuity returns unresolved linked episode for re
   const graph = applyEntityExtractionToGraph(
     createEmptyEntityGraphV1(observedAt),
     extractEntityCandidates({
-      text: "Owen asked Sarah for help after the fall.",
+      text: "Riley asked Sarah for help after the fall.",
       observedAt,
       evidenceRef: "trace:episode_query_continuity_1"
     }),
@@ -106,7 +106,7 @@ test("queryProfileEpisodesForContinuity returns unresolved linked episode for re
     [
       {
         role: "user",
-        text: "Owen fell down a few weeks ago.",
+        text: "Riley fell down a few weeks ago.",
         at: observedAt
       }
     ],
@@ -115,20 +115,20 @@ test("queryProfileEpisodesForContinuity returns unresolved linked episode for re
   const stack = upsertOpenLoopOnConversationStackV1({
     stack: seededStack,
     threadKey: seededStack.activeThreadKey!,
-    text: "Remind me later to ask how Owen is doing after the fall.",
+    text: "Remind me later to ask how Riley is doing after the fall.",
     observedAt,
-    entityRefs: ["Owen"]
+    entityRefs: ["Riley"]
   }).stack;
 
   const matches = queryProfileEpisodesForContinuity(state, graph, stack, {
-    entityHints: ["Owen"],
+    entityHints: ["Riley"],
     maxEpisodes: 2
   }, "2026-03-08T10:00:00.000Z", 90);
 
   assert.equal(matches.length, 2);
-  assert.equal(matches[0]?.episode.title, "Owen fell down");
-  assert.equal(matches[1]?.episode.title, "Owen changed jobs");
-  assert.equal(matches[0]?.entityLinks.some((entry) => entry.canonicalName === "Owen"), true);
+  assert.equal(matches[0]?.episode.title, "Riley fell down");
+  assert.equal(matches[1]?.episode.title, "Riley changed jobs");
+  assert.equal(matches[0]?.entityLinks.some((entry) => entry.canonicalName === "Riley"), true);
   assert.equal(matches[0]?.openLoopLinks.length, 1);
 });
 
@@ -258,8 +258,8 @@ test("readProfileEpisodes sorts fresh unresolved situations ahead of stale termi
     ...createEmptyProfileMemoryState(),
     episodes: [
       createProfileEpisodeRecord({
-        title: "Owen finished rehab",
-        summary: "Owen finished rehab and fully recovered.",
+        title: "Riley finished rehab",
+        summary: "Riley finished rehab and fully recovered.",
         sourceTaskId: "task_episode_query_read_sort_1",
         source: "test",
         sourceKind: "explicit_user_statement",
@@ -268,18 +268,18 @@ test("readProfileEpisodes sorts fresh unresolved situations ahead of stale termi
         lastMentionedAt: "2026-03-05T10:00:00.000Z",
         status: "resolved",
         resolvedAt: "2026-03-05T12:00:00.000Z",
-        entityRefs: ["contact.owen"]
+        entityRefs: ["contact.riley"]
       }),
       createProfileEpisodeRecord({
-        title: "Owen fell down",
-        summary: "Owen fell down and the outcome is unresolved.",
+        title: "Riley fell down",
+        summary: "Riley fell down and the outcome is unresolved.",
         sourceTaskId: "task_episode_query_read_sort_2",
         source: "test",
         sourceKind: "explicit_user_statement",
         sensitive: false,
         observedAt: "2026-03-07T10:00:00.000Z",
         lastMentionedAt: "2026-03-07T10:00:00.000Z",
-        entityRefs: ["contact.owen"]
+        entityRefs: ["contact.riley"]
       })
     ]
   };
@@ -296,8 +296,8 @@ test("readProfileEpisodes sorts fresh unresolved situations ahead of stale termi
     90
   );
 
-  assert.equal(readable[0]?.title, "Owen fell down");
-  assert.equal(readable[1]?.title, "Owen finished rehab");
+  assert.equal(readable[0]?.title, "Riley fell down");
+  assert.equal(readable[1]?.title, "Riley finished rehab");
 });
 
 test("queryProfileEpisodesForContinuity uses thread-local scope to prefer the active-thread episode when the current turn is vague", () => {

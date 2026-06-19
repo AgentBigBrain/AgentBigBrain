@@ -9,7 +9,7 @@ test("collectRelationshipContinuityEntityHints keeps earlier memory subjects ali
     provider: "telegram",
     conversationId: "chat-1",
     userId: "user-1",
-    username: "avery_brooks",
+    username: "morgan_brooks",
     conversationVisibility: "private",
     receivedAt: "2026-04-13T13:12:59.000Z"
   });
@@ -18,7 +18,7 @@ test("collectRelationshipContinuityEntityHints keeps earlier memory subjects ali
       id: "turn-user-memory-intake",
       role: "user",
       text:
-        "Billy used to work at Sample Web Studio, Garrett still owns Harbor Signal Studio, and Sam was supposed to bring the revised copy deck on March 12.",
+        "Blake used to work at Sample Web Studio, Casey still owns Harbor Signal Studio, and Sam was supposed to bring the revised copy deck on March 12.",
       at: "2026-04-13T13:12:59.000Z"
     },
     {
@@ -31,7 +31,7 @@ test("collectRelationshipContinuityEntityHints keeps earlier memory subjects ali
       id: "turn-user-memory-corrections",
       role: "user",
       text:
-        "Billy is no longer at Sample Web Studio. Crimson Analytics hired him on March 15, Sam took over the billing cleanup on March 21, and the March 27 review is now the pending milestone.",
+        "Blake is no longer at Sample Web Studio. Example Analytics hired him on March 15, Sam took over the billing cleanup on March 21, and the March 27 review is now the pending milestone.",
       at: "2026-04-13T13:13:07.000Z"
     },
     {
@@ -83,9 +83,9 @@ test("collectRelationshipContinuityEntityHints keeps earlier memory subjects ali
     "Switch gears back to memory and status tracking. Tell me which employment facts are current versus historical, which date is the active pending review date, who currently handles the billing cleanup, and whether the Foundry Echo, River Glass, and Marquee Thread browser pages are still open or fully closed."
   );
 
-  assert.ok(hints.includes("billy"));
+  assert.ok(hints.includes("blake"));
   assert.ok(hints.includes("sample"));
-  assert.ok(hints.includes("crimson"));
+  assert.ok(hints.includes("analytics"));
   assert.ok(hints.includes("sam"));
   assert.ok(hints.includes("march"));
   assert.ok(!hints.includes("switch"));

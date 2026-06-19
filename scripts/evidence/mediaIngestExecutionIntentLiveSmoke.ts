@@ -133,9 +133,9 @@ class MediaIngestLiveSmokeEpisodeModelClient implements ModelClient {
     const supportingSnippet = text.split(/(?<=[.!?])\s+/)[0]?.trim() ?? text;
     const output: LanguageEpisodeExtractionModelOutput = { episodes: [] };
 
-    if (lower.includes("billy") && lower.includes("mri")) {
+    if (lower.includes("blake") && lower.includes("mri")) {
       output.episodes.push({
-        subjectName: "Billy",
+        subjectName: "Blake",
         eventSummary: "was waiting on MRI results",
         supportingSnippet,
         status: "outcome_unknown",
@@ -925,10 +925,10 @@ async function runScenario(
         observed: recentJob?.finalDeliveryOutcome ?? "<missing>"
       });
     } else {
-      const billyEpisode = reviewedEpisodes.find((episode) =>
-        episode.title.toLowerCase().includes("billy") ||
-        episode.summary.toLowerCase().includes("billy") ||
-        episode.entityRefs.some((entity) => entity.toLowerCase().includes("billy"))
+      const blakeEpisode = reviewedEpisodes.find((episode) =>
+        episode.title.toLowerCase().includes("blake") ||
+        episode.summary.toLowerCase().includes("blake") ||
+        episode.entityRefs.some((entity) => entity.toLowerCase().includes("blake"))
       );
       const directConversationInput =
         harness.directConversationRuns.find((run) =>
@@ -936,8 +936,8 @@ async function runScenario(
         )?.input ?? null;
       checks.push({
         label: "voice_followup_memory_written",
-        passed: Boolean(billyEpisode),
-        observed: billyEpisode?.summary ?? "<missing Billy episode>"
+        passed: Boolean(blakeEpisode),
+        observed: blakeEpisode?.summary ?? "<missing Blake episode>"
       });
       checks.push({
         label: "raw_media_not_persisted",

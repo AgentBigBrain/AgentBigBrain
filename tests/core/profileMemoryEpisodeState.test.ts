@@ -20,22 +20,22 @@ test("clampProfileEpisodeConfidence bounds episodic confidence deterministically
 
 test("createProfileEpisodeRecord normalizes optional lists and timestamps", () => {
   const record = createProfileEpisodeRecord({
-    title: "Owen fall situation",
-    summary: "Owen fell down a few weeks ago and the outcome was not mentioned yet.",
+    title: "Riley fall situation",
+    summary: "Riley fell down a few weeks ago and the outcome was not mentioned yet.",
     sourceTaskId: "task_episode_state_1",
     source: "test",
     sourceKind: "explicit_user_statement",
     sensitive: false,
     observedAt: "2026-03-08T12:00:00.000Z",
     confidence: 0.9,
-    entityRefs: ["entity_owen", "entity_owen", " entity_owen ", "entity_park"],
+    entityRefs: ["entity_riley", "entity_riley", " entity_riley ", "entity_park"],
     openLoopRefs: ["loop_2", "loop_1", "loop_1"],
     tags: ["followup", "injury", "followup"]
   });
 
   assert.match(record.id, /^episode_/);
   assert.equal(record.status, "unresolved");
-  assert.deepEqual(record.entityRefs, ["entity_owen", "entity_park"]);
+  assert.deepEqual(record.entityRefs, ["entity_park", "entity_riley"]);
   assert.deepEqual(record.openLoopRefs, ["loop_1", "loop_2"]);
   assert.deepEqual(record.tags, ["followup", "injury"]);
   assert.equal(record.lastMentionedAt, "2026-03-08T12:00:00.000Z");

@@ -86,8 +86,8 @@ test("query and planning surfaces follow graph-backed compatibility authority ov
     updatedAt,
     facts: [
       {
-        id: "fact_authoritative_owen_work",
-        key: "contact.owen.work_association",
+        id: "fact_authoritative_riley_work",
+        key: "contact.riley.work_association",
         value: "Lantern Studio",
         sensitive: false,
         status: "confirmed" as const,
@@ -100,8 +100,8 @@ test("query and planning surfaces follow graph-backed compatibility authority ov
         lastUpdatedAt: updatedAt
       },
       {
-        id: "fact_orphaned_owen_work",
-        key: "contact.owen.work_association",
+        id: "fact_orphaned_riley_work",
+        key: "contact.riley.work_association",
         value: "Beacon Labs",
         sensitive: false,
         status: "confirmed" as const,
@@ -119,32 +119,32 @@ test("query and planning surfaces follow graph-backed compatibility authority ov
         updatedAt,
         observations: [
           createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_OBSERVATION_SCHEMA_NAME, {
-            observationId: "observation_authoritative_owen_work",
-            stableRefId: "stable_contact_owen",
+            observationId: "observation_authoritative_riley_work",
+            stableRefId: "stable_contact_riley",
             family: "contact.work_association",
-            normalizedKey: "contact.owen.work_association",
+            normalizedKey: "contact.riley.work_association",
             normalizedValue: "Lantern Studio",
             sensitive: false,
             sourceTaskId: "task_profile_query_authoritative_work",
-            sourceFingerprint: "fingerprint_authoritative_owen_work",
+            sourceFingerprint: "fingerprint_authoritative_riley_work",
             sourceTier: "explicit_user_statement",
             assertedAt: updatedAt,
             observedAt: updatedAt,
             timePrecision: "instant",
             timeSource: "user_stated",
-            entityRefIds: [buildEntityKey("Owen", "person", null)]
+            entityRefIds: [buildEntityKey("Riley", "person", null)]
           })
         ],
         claims: [
           createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
-            claimId: "claim_authoritative_owen_work",
-            stableRefId: "stable_contact_owen",
+            claimId: "claim_authoritative_riley_work",
+            stableRefId: "stable_contact_riley",
             family: "contact.work_association",
-            normalizedKey: "contact.owen.work_association",
+            normalizedKey: "contact.riley.work_association",
             normalizedValue: "Lantern Studio",
             sensitive: false,
             sourceTaskId: "task_profile_query_authoritative_work",
-            sourceFingerprint: "fingerprint_authoritative_owen_work",
+            sourceFingerprint: "fingerprint_authoritative_riley_work",
             sourceTier: "explicit_user_statement",
             assertedAt: updatedAt,
             validFrom: updatedAt,
@@ -153,9 +153,9 @@ test("query and planning surfaces follow graph-backed compatibility authority ov
             endedByClaimId: null,
             timePrecision: "instant",
             timeSource: "user_stated",
-            derivedFromObservationIds: ["observation_authoritative_owen_work"],
-            projectionSourceIds: ["fact_authoritative_owen_work"],
-            entityRefIds: [buildEntityKey("Owen", "person", null)],
+            derivedFromObservationIds: ["observation_authoritative_riley_work"],
+            projectionSourceIds: ["fact_authoritative_riley_work"],
+            entityRefIds: [buildEntityKey("Riley", "person", null)],
             active: true
           })
         ],
@@ -172,9 +172,9 @@ test("query and planning surfaces follow graph-backed compatibility authority ov
     includeSensitive: false,
     explicitHumanApproval: false
   });
-  const planningContext = buildProfilePlanningContext(state, 4, "where does Owen work?");
+  const planningContext = buildProfilePlanningContext(state, 4, "where does Riley work?");
   const inspection = inspectProfileFactQuery(state, {
-    queryInput: "where does Owen work?",
+    queryInput: "where does Riley work?",
     maxFacts: 4
   });
 
@@ -260,7 +260,7 @@ test("generic sensitive-key facts stay approval-gated even when legacy state mar
   }).nextState;
   state = upsertTemporalProfileFact(state, {
     key: "email.address",
-    value: "avery@example.com",
+    value: "morgan@example.com",
     sensitive: false,
     sourceTaskId: "task_profile_query_generic_floor_email",
     source: "user_input_pattern.my_is",
@@ -306,13 +306,13 @@ test("generic sensitive-key facts stay approval-gated even when legacy state mar
     readableWithApproval.some(
       (fact) =>
         fact.key === "email.address" &&
-        fact.value === "avery@example.com" &&
+        fact.value === "morgan@example.com" &&
         fact.sensitive === true
     ),
     true
   );
   assert.equal(planningContext.includes("email.address"), false);
-  assert.equal(planningContext.includes("avery@example.com"), false);
+  assert.equal(planningContext.includes("morgan@example.com"), false);
   assert.equal(
     continuityFacts.some((fact) => fact.key === "email.address"),
     false
@@ -353,8 +353,8 @@ test("buildProfilePlanningContext preserves query-aware non-sensitive grounding"
     confidence: 0.95
   }).nextState;
   state = upsertTemporalProfileFact(state, {
-    key: "contact.owen.name",
-    value: "Owen",
+    key: "contact.riley.name",
+    value: "Riley",
     sensitive: false,
     sourceTaskId: "task_profile_query_context_3",
     source: "test",
@@ -362,7 +362,7 @@ test("buildProfilePlanningContext preserves query-aware non-sensitive grounding"
     confidence: 0.95
   }).nextState;
   state = upsertTemporalProfileFact(state, {
-    key: "contact.owen.work_association",
+    key: "contact.riley.work_association",
     value: "Lantern Studio",
     sensitive: false,
     sourceTaskId: "task_profile_query_context_4",
@@ -371,11 +371,11 @@ test("buildProfilePlanningContext preserves query-aware non-sensitive grounding"
     confidence: 0.95
   }).nextState;
 
-  const planningContext = buildProfilePlanningContext(state, 4, "who is Owen?");
+  const planningContext = buildProfilePlanningContext(state, 4, "who is Riley?");
 
-  assert.equal(planningContext.includes("contact.owen.name: Owen"), true);
+  assert.equal(planningContext.includes("contact.riley.name: Riley"), true);
   assert.equal(
-    planningContext.includes("contact.owen.work_association: Lantern Studio"),
+    planningContext.includes("contact.riley.work_association: Lantern Studio"),
     true
   );
   assert.equal(planningContext.includes("employment.current: Lantern"), true);
@@ -386,8 +386,8 @@ test("buildProfilePlanningContext preserves query-aware non-sensitive grounding"
 test("queryProfileFactsForContinuity expands continuity hints through the shared entity graph and returns typed temporal metadata", () => {
   let state = createEmptyProfileMemoryState();
   state = upsertTemporalProfileFact(state, {
-    key: "contact.william_bena.name",
-    value: "William Bena",
+    key: "contact.rowan_harper.name",
+    value: "Rowan Harper",
     sensitive: false,
     sourceTaskId: "task_profile_query_continuity_graph_name",
     source: "test",
@@ -395,7 +395,7 @@ test("queryProfileFactsForContinuity expands continuity hints through the shared
     confidence: 0.95
   }).nextState;
   state = upsertTemporalProfileFact(state, {
-    key: "contact.william_bena.work_association",
+    key: "contact.rowan_harper.work_association",
     value: "Lantern Studio",
     sensitive: false,
     sourceTaskId: "task_profile_query_continuity_graph_work",
@@ -417,12 +417,12 @@ test("queryProfileFactsForContinuity expands continuity hints through the shared
     ...createEmptyEntityGraphV1("2026-04-09T10:02:00.000Z"),
     entities: [
       {
-        entityKey: buildEntityKey("William Bena", "person", null),
-        canonicalName: "William Bena",
+        entityKey: buildEntityKey("Rowan Harper", "person", null),
+        canonicalName: "Rowan Harper",
         entityType: "person" as const,
         disambiguator: null,
         domainHint: "relationship" as const,
-        aliases: ["Owen"],
+        aliases: ["Riley"],
         firstSeenAt: "2026-04-09T10:02:00.000Z",
         lastSeenAt: "2026-04-09T10:02:00.000Z",
         salience: 1,
@@ -432,22 +432,22 @@ test("queryProfileFactsForContinuity expands continuity hints through the shared
   };
   const stack = {
     ...createEmptyConversationStackV1("2026-04-09T10:03:00.000Z"),
-    activeThreadKey: "thread_owen",
+    activeThreadKey: "thread_riley",
     threads: [
       {
-        threadKey: "thread_owen",
-        topicKey: "topic_owen",
-        topicLabel: "Owen follow-up",
+        threadKey: "thread_riley",
+        topicKey: "topic_riley",
+        topicLabel: "Riley follow-up",
         state: "active" as const,
-        resumeHint: "Need to remember who Owen is and how we know him.",
+        resumeHint: "Need to remember who Riley is and how we know him.",
         openLoops: [],
         lastTouchedAt: "2026-04-09T10:03:00.000Z"
       }
     ],
     topics: [
       {
-        topicKey: "topic_owen",
-        label: "Owen follow-up",
+        topicKey: "topic_riley",
+        label: "Riley follow-up",
         firstSeenAt: "2026-04-09T10:03:00.000Z",
         lastSeenAt: "2026-04-09T10:03:00.000Z",
         mentionCount: 1
@@ -459,7 +459,7 @@ test("queryProfileFactsForContinuity expands continuity hints through the shared
     state,
     graph,
     {
-      entityHints: ["Owen"],
+      entityHints: ["Riley"],
       semanticMode: "relationship_inventory",
       relevanceScope: "conversation_local",
       maxFacts: 3
@@ -470,14 +470,14 @@ test("queryProfileFactsForContinuity expands continuity hints through the shared
   assert.equal(
     continuityFacts.some(
       (fact) =>
-        fact.key === "contact.william_bena.work_association" &&
+        fact.key === "contact.rowan_harper.work_association" &&
         fact.value === "Lantern Studio"
     ),
     true
   );
   assert.equal(continuityFacts.semanticMode, "relationship_inventory");
   assert.equal(continuityFacts.relevanceScope, "conversation_local");
-  assert.deepEqual(continuityFacts.scopedThreadKeys, ["thread_owen"]);
+  assert.deepEqual(continuityFacts.scopedThreadKeys, ["thread_riley"]);
   assert.ok(continuityFacts.temporalSynthesis);
   assert.ok(
     continuityFacts.temporalSynthesis?.laneMetadata.some(
@@ -489,8 +489,8 @@ test("queryProfileFactsForContinuity expands continuity hints through the shared
 test("read and planning surfaces hide compatibility-unsafe legacy support-only facts", () => {
   let state = createEmptyProfileMemoryState();
   state = upsertTemporalProfileFact(state, {
-    key: "contact.owen.name",
-    value: "Owen",
+    key: "contact.riley.name",
+    value: "Riley",
     sensitive: false,
     sourceTaskId: "task_profile_query_legacy_name",
     source: "test",
@@ -498,7 +498,7 @@ test("read and planning surfaces hide compatibility-unsafe legacy support-only f
     confidence: 0.95
   }).nextState;
   state = upsertTemporalProfileFact(state, {
-    key: "contact.owen.relationship",
+    key: "contact.riley.relationship",
     value: "work_peer",
     sensitive: false,
     sourceTaskId: "task_profile_query_legacy_relationship",
@@ -507,7 +507,7 @@ test("read and planning surfaces hide compatibility-unsafe legacy support-only f
     confidence: 0.95
   }).nextState;
   state = upsertTemporalProfileFact(state, {
-    key: "contact.owen.school_association",
+    key: "contact.riley.school_association",
     value: "went_to_school_together",
     sensitive: false,
     sourceTaskId: "task_profile_query_legacy_school",
@@ -530,17 +530,17 @@ test("read and planning surfaces hide compatibility-unsafe legacy support-only f
     includeSensitive: false,
     explicitHumanApproval: false
   });
-  const planningContext = buildProfilePlanningContext(state, 6, "who is Owen?");
+  const planningContext = buildProfilePlanningContext(state, 6, "who is Riley?");
   const continuityFacts = queryProfileFactsForContinuity(state, {
     entityHints: ["mia"],
     maxFacts: 6
   });
 
-  assert.equal(readable.some((fact) => fact.key === "contact.owen.name"), true);
+  assert.equal(readable.some((fact) => fact.key === "contact.riley.name"), true);
   assert.equal(
     readable.some(
       (fact) =>
-        fact.key === "contact.owen.relationship" &&
+        fact.key === "contact.riley.relationship" &&
         fact.value === "work_peer"
     ),
     false
@@ -548,7 +548,7 @@ test("read and planning surfaces hide compatibility-unsafe legacy support-only f
   assert.equal(
     readable.some(
       (fact) =>
-        fact.key === "contact.owen.school_association" &&
+        fact.key === "contact.riley.school_association" &&
         fact.value === "went_to_school_together"
     ),
     false
@@ -561,21 +561,21 @@ test("read and planning surfaces hide compatibility-unsafe legacy support-only f
     ),
     false
   );
-  assert.equal(planningContext.includes("contact.owen.name: Owen"), true);
-  assert.equal(planningContext.includes("contact.owen.relationship: work_peer"), false);
+  assert.equal(planningContext.includes("contact.riley.name: Riley"), true);
+  assert.equal(planningContext.includes("contact.riley.relationship: work_peer"), false);
   assert.equal(
-    planningContext.includes("contact.owen.school_association: went_to_school_together"),
+    planningContext.includes("contact.riley.school_association: went_to_school_together"),
     false
   );
   assert.equal(planningContext.includes("employment.current: Old Lantern"), false);
   assert.equal(
-    continuityFacts.some((fact) => fact.key === "contact.owen.name" && fact.value === "Owen"),
+    continuityFacts.some((fact) => fact.key === "contact.riley.name" && fact.value === "Riley"),
     true
   );
   assert.equal(
     continuityFacts.some(
       (fact) =>
-        fact.key === "contact.owen.relationship" &&
+        fact.key === "contact.riley.relationship" &&
         fact.value === "work_peer"
     ),
     false
@@ -583,7 +583,7 @@ test("read and planning surfaces hide compatibility-unsafe legacy support-only f
   assert.equal(
     continuityFacts.some(
       (fact) =>
-        fact.key === "contact.owen.school_association" &&
+        fact.key === "contact.riley.school_association" &&
         fact.value === "went_to_school_together"
     ),
     false
@@ -818,8 +818,8 @@ test("reviewProfileFactsForUser keeps registry-forced sensitive families hidden 
 test("inspectProfileFactsForPlanningContext returns selected facts plus bounded decision records", () => {
   let state = createEmptyProfileMemoryState();
   state = upsertTemporalProfileFact(state, {
-    key: "contact.owen.name",
-    value: "Owen",
+    key: "contact.riley.name",
+    value: "Riley",
     sensitive: false,
     sourceTaskId: "task_profile_query_planning_inspection_name",
     source: "user_input_pattern.named_contact",
@@ -827,7 +827,7 @@ test("inspectProfileFactsForPlanningContext returns selected facts plus bounded 
     confidence: 0.95
   }).nextState;
   state = upsertTemporalProfileFact(state, {
-    key: "contact.owen.work_association",
+    key: "contact.riley.work_association",
     value: "Lantern Studio",
     sensitive: false,
     sourceTaskId: "task_profile_query_planning_inspection_work",
@@ -846,14 +846,14 @@ test("inspectProfileFactsForPlanningContext returns selected facts plus bounded 
   }).nextState;
 
   const inspection = inspectProfileFactsForPlanningContext(state, {
-    queryInput: "who is Owen?",
+    queryInput: "who is Riley?",
     maxFacts: 3,
     asOfObservedTime: "2026-04-03T00:03:00.000Z"
   });
 
   assert.equal(inspection.entries.length, 2);
-  assert.equal(inspection.entries[0]?.fact.key, "contact.owen.name");
-  assert.equal(inspection.entries[1]?.fact.key, "contact.owen.work_association");
+  assert.equal(inspection.entries[0]?.fact.key, "contact.riley.name");
+  assert.equal(inspection.entries[1]?.fact.key, "contact.riley.work_association");
   assert.equal(
     inspection.entries.every(
       (entry) => entry.decisionRecord.asOfObservedTime === "2026-04-03T00:03:00.000Z"
@@ -877,8 +877,8 @@ test("planning and continuity selectors cap multi-value contact context under re
     confidence: 0.95
   }).nextState;
   state = upsertTemporalProfileFact(state, {
-    key: "contact.owen.name",
-    value: "Owen",
+    key: "contact.riley.name",
+    value: "Riley",
     sensitive: false,
     sourceTaskId: "task_profile_query_inventory_name",
     source: "test",
@@ -886,8 +886,8 @@ test("planning and continuity selectors cap multi-value contact context under re
     confidence: 0.95
   }).nextState;
   state = upsertTemporalProfileFact(state, {
-    key: "contact.owen.context.ctx001",
-    value: "Owen said the launch slipped.",
+    key: "contact.riley.context.ctx001",
+    value: "Riley said the launch slipped.",
     sensitive: false,
     sourceTaskId: "task_profile_query_inventory_context_1",
     source: "user_input_pattern.contact_context",
@@ -895,8 +895,8 @@ test("planning and continuity selectors cap multi-value contact context under re
     confidence: 0.95
   }).nextState;
   state = upsertTemporalProfileFact(state, {
-    key: "contact.owen.context.ctx002",
-    value: "Owen prefers late meetings.",
+    key: "contact.riley.context.ctx002",
+    value: "Riley prefers late meetings.",
     sensitive: false,
     sourceTaskId: "task_profile_query_inventory_context_2",
     source: "user_input_pattern.contact_context",
@@ -904,8 +904,8 @@ test("planning and continuity selectors cap multi-value contact context under re
     confidence: 0.95
   }).nextState;
   state = upsertTemporalProfileFact(state, {
-    key: "contact.owen.context.ctx003",
-    value: "Owen mentioned the Harbor client.",
+    key: "contact.riley.context.ctx003",
+    value: "Riley mentioned the Harbor client.",
     sensitive: false,
     sourceTaskId: "task_profile_query_inventory_context_3",
     source: "user_input_pattern.contact_context",
@@ -913,23 +913,23 @@ test("planning and continuity selectors cap multi-value contact context under re
     confidence: 0.95
   }).nextState;
 
-  const planningContext = buildProfilePlanningContext(state, 5, "what about Owen?");
+  const planningContext = buildProfilePlanningContext(state, 5, "what about Riley?");
   const continuityFacts = queryProfileFactsForContinuity(state, {
-    entityHints: ["Owen"],
+    entityHints: ["Riley"],
     maxFacts: 5
   });
   const planningContextLines = planningContext
     .split("\n")
     .filter((line) => line.startsWith("- "));
   const planningContextEntries = planningContextLines.filter((line) =>
-    line.includes("contact.owen.context.")
+    line.includes("contact.riley.context.")
   );
   const continuityContextFacts = continuityFacts.filter((fact) =>
-    fact.key.startsWith("contact.owen.context.")
+    fact.key.startsWith("contact.riley.context.")
   );
 
   assert.equal(planningContext.includes("identity.preferred_name: Benny"), true);
-  assert.equal(planningContext.includes("contact.owen.name: Owen"), true);
+  assert.equal(planningContext.includes("contact.riley.name: Riley"), true);
   assert.equal(planningContextEntries.length, 2);
   assert.equal(planningContextLines.length, 4);
   assert.equal(continuityContextFacts.length, 2);
@@ -1197,8 +1197,8 @@ test("read and planning surfaces fail closed for malformed legacy school-associa
 test("read and planning surfaces keep only contact identity for historical or severed contact-support sources", () => {
   let state = createEmptyProfileMemoryState();
   state = upsertTemporalProfileFact(state, {
-    key: "contact.owen.name",
-    value: "Owen",
+    key: "contact.riley.name",
+    value: "Riley",
     sensitive: false,
     sourceTaskId: "task_profile_query_historical_contact_name",
     source: "user_input_pattern.direct_contact_relationship_historical",
@@ -1206,7 +1206,7 @@ test("read and planning surfaces keep only contact identity for historical or se
     confidence: 0.95
   }).nextState;
   state = upsertTemporalProfileFact(state, {
-    key: "contact.owen.relationship",
+    key: "contact.riley.relationship",
     value: "manager",
     sensitive: false,
     sourceTaskId: "task_profile_query_historical_contact_relationship",
@@ -1215,7 +1215,7 @@ test("read and planning surfaces keep only contact identity for historical or se
     confidence: 0.95
   }).nextState;
   state = upsertTemporalProfileFact(state, {
-    key: "contact.owen.work_association",
+    key: "contact.riley.work_association",
     value: "Lantern Studio",
     sensitive: false,
     sourceTaskId: "task_profile_query_historical_contact_work",
@@ -1238,20 +1238,20 @@ test("read and planning surfaces keep only contact identity for historical or se
     includeSensitive: false,
     explicitHumanApproval: false
   });
-  const planningContext = buildProfilePlanningContext(state, 4, "who is Owen?");
+  const planningContext = buildProfilePlanningContext(state, 4, "who is Riley?");
   const continuityFacts = queryProfileFactsForContinuity(state, {
-    entityHints: ["Owen"],
+    entityHints: ["Riley"],
     maxFacts: 4
   });
 
   assert.equal(
-    readable.some((fact) => fact.key === "contact.owen.name" && fact.value === "Owen"),
+    readable.some((fact) => fact.key === "contact.riley.name" && fact.value === "Riley"),
     true
   );
   assert.equal(
     readable.some(
       (fact) =>
-        fact.key === "contact.owen.relationship" &&
+        fact.key === "contact.riley.relationship" &&
         fact.value === "manager"
     ),
     false
@@ -1259,7 +1259,7 @@ test("read and planning surfaces keep only contact identity for historical or se
   assert.equal(
     readable.some(
       (fact) =>
-        fact.key === "contact.owen.work_association" &&
+        fact.key === "contact.riley.work_association" &&
         fact.value === "Lantern Studio"
     ),
     false
@@ -1272,21 +1272,21 @@ test("read and planning surfaces keep only contact identity for historical or se
     ),
     false
   );
-  assert.equal(planningContext.includes("contact.owen.name: Owen"), true);
-  assert.equal(planningContext.includes("contact.owen.relationship: manager"), false);
+  assert.equal(planningContext.includes("contact.riley.name: Riley"), true);
+  assert.equal(planningContext.includes("contact.riley.relationship: manager"), false);
   assert.equal(
-    planningContext.includes("contact.owen.work_association: Lantern Studio"),
+    planningContext.includes("contact.riley.work_association: Lantern Studio"),
     false
   );
   assert.equal(planningContext.includes("employment.current: Lantern Studio"), false);
   assert.equal(
-    continuityFacts.some((fact) => fact.key === "contact.owen.name" && fact.value === "Owen"),
+    continuityFacts.some((fact) => fact.key === "contact.riley.name" && fact.value === "Riley"),
     true
   );
   assert.equal(
     continuityFacts.some(
       (fact) =>
-        fact.key === "contact.owen.relationship" &&
+        fact.key === "contact.riley.relationship" &&
         fact.value === "manager"
     ),
     false
@@ -1294,7 +1294,7 @@ test("read and planning surfaces keep only contact identity for historical or se
   assert.equal(
     continuityFacts.some(
       (fact) =>
-        fact.key === "contact.owen.work_association" &&
+        fact.key === "contact.riley.work_association" &&
         fact.value === "Lantern Studio"
     ),
     false

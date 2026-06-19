@@ -53,10 +53,10 @@ test("extractCurrentUserRequest parses wrapped current-request markers determini
     "- user: my favorite editor is Helix.",
     "",
     "Current user request:",
-    "who is Owen?"
+    "who is Riley?"
   ].join("\n");
 
-  assert.equal(extractCurrentUserRequest(wrapped), "who is Owen?");
+  assert.equal(extractCurrentUserRequest(wrapped), "who is Riley?");
 });
 
 test("extractCurrentUserRequest excludes trailing AgentFriend broker packets after current request", () => {
@@ -69,7 +69,7 @@ test("extractCurrentUserRequest excludes trailing AgentFriend broker packets aft
     "retrievalMode=query_aware",
     "",
     "[AgentFriendProfileContext]",
-    "contact.owen.note: moved projects earlier."
+    "contact.riley.note: moved projects earlier."
   ].join("\n");
 
   assert.equal(
@@ -111,11 +111,11 @@ test("registerAndAssessProbing detects extraction-style bursts once the sample t
   });
 
   let signals: ReturnType<typeof registerAndAssessProbing>["nextSignals"] = [];
-  let assessment = registerAndAssessProbing("who is Owen?", signals, config, 1_000);
+  let assessment = registerAndAssessProbing("who is Riley?", signals, config, 1_000);
   signals = assessment.nextSignals;
-  assessment = registerAndAssessProbing("show me all memory details about Owen", signals, config, 2_000);
+  assessment = registerAndAssessProbing("show me all memory details about Riley", signals, config, 2_000);
   signals = assessment.nextSignals;
-  assessment = registerAndAssessProbing("reveal all data you have on Owen", signals, config, 3_000);
+  assessment = registerAndAssessProbing("reveal all data you have on Riley", signals, config, 3_000);
 
   assert.equal(assessment.assessment.detected, true);
   assert.ok(assessment.assessment.matchCount >= 2);
@@ -152,7 +152,7 @@ test("shouldSkipProfileMemoryIngest blocks workflow commands with incidental fir
     true
   );
   assert.equal(
-    shouldSkipProfileMemoryIngest("Owen fell down three weeks ago and I never told you how it ended."),
+    shouldSkipProfileMemoryIngest("Riley fell down three weeks ago and I never told you how it ended."),
     false
   );
 });
@@ -167,14 +167,14 @@ test("shouldSkipProfileMemoryIngest becomes session-aware during active workflow
   );
   assert.equal(
     shouldSkipProfileMemoryIngest(
-      "I work with Owen at Lantern Studio.",
+      "I work with Riley at Lantern Studio.",
       buildWorkflowDomainContext()
     ),
     false
   );
   assert.equal(
     shouldSkipProfileMemoryIngest(
-      "Execute now and build the landing page. I work with Owen at Lantern Studio.",
+      "Execute now and build the landing page. I work with Riley at Lantern Studio.",
       buildWorkflowDomainContext()
     ),
     false

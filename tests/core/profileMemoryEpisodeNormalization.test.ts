@@ -11,8 +11,8 @@ test("normalizeProfileMemoryEpisodes drops malformed episode payloads and normal
   const episodes = normalizeProfileMemoryEpisodes([
     {
       id: "episode_valid",
-      title: "Owen fall situation",
-      summary: "Owen fell down and the outcome is still unclear.",
+      title: "Riley fall situation",
+      summary: "Riley fell down and the outcome is still unclear.",
       status: "outcome_unknown",
       sourceTaskId: "task_episode_normalization_1",
       source: "test",
@@ -23,8 +23,8 @@ test("normalizeProfileMemoryEpisodes drops malformed episode payloads and normal
       lastMentionedAt: "2026-03-08T12:15:00.000Z",
       lastUpdatedAt: "2026-03-08T12:15:00.000Z",
       resolvedAt: null,
-      entityRefs: ["entity_owen", "entity_owen"],
-      openLoopRefs: ["loop_owen", "loop_owen"],
+      entityRefs: ["entity_riley", "entity_riley"],
+      openLoopRefs: ["loop_riley", "loop_riley"],
       tags: ["injury", "injury", "followup"]
     },
     {
@@ -35,7 +35,7 @@ test("normalizeProfileMemoryEpisodes drops malformed episode payloads and normal
 
   assert.equal(episodes.length, 1);
   assert.equal(episodes[0]?.confidence, 1);
-  assert.deepEqual(episodes[0]?.entityRefs, ["entity_owen"]);
-  assert.deepEqual(episodes[0]?.openLoopRefs, ["loop_owen"]);
+  assert.deepEqual(episodes[0]?.entityRefs, ["entity_riley"]);
+  assert.deepEqual(episodes[0]?.openLoopRefs, ["loop_riley"]);
   assert.deepEqual(episodes[0]?.tags, ["followup", "injury"]);
 });

@@ -94,9 +94,9 @@ test("validateStructuredModelOutput accepts bounded language episode extraction 
     validateStructuredModelOutput("language_episode_extraction_v1", {
       episodes: [
         {
-          subjectName: "Owen",
+          subjectName: "Riley",
           eventSummary: "had a medical situation",
-          supportingSnippet: "Owen had a scare at the hospital and we still do not know what happened.",
+          supportingSnippet: "Riley had a scare at the hospital and we still do not know what happened.",
           status: "unresolved",
           confidence: 0.82,
           tags: ["medical", "followup"]

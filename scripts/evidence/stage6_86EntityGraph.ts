@@ -55,7 +55,7 @@ interface Stage686CheckpointBArtifact {
 export async function runStage686CheckpointB(): Promise<Stage686CheckpointBArtifact> {
   const observedAt = "2026-03-01T00:00:00.000Z";
   const extraction = extractEntityCandidates({
-    text: "Billy and Sarah reviewed Project Aurora at Beacon Labs.",
+    text: "Blake and Sarah reviewed Project Aurora at Beacon Labs.",
     observedAt,
     evidenceRef: "trace:stage686_b_001"
   });
@@ -66,14 +66,14 @@ export async function runStage686CheckpointB(): Promise<Stage686CheckpointBArtif
     "trace:stage686_b_001"
   );
   const baselineGraph = baselineMutation.graph;
-  const billy = baselineGraph.entities.find((entity) => entity.canonicalName === "Billy");
+  const blake = baselineGraph.entities.find((entity) => entity.canonicalName === "Blake");
   const sarah = baselineGraph.entities.find((entity) => entity.canonicalName === "Sarah");
-  if (!billy || !sarah) {
-    throw new Error("Checkpoint 6.86.B requires deterministic Billy/Sarah extraction baseline.");
+  if (!blake || !sarah) {
+    throw new Error("Checkpoint 6.86.B requires deterministic Blake/Sarah extraction baseline.");
   }
 
   const deniedPromotion = promoteRelationEdgeWithConfirmation(baselineGraph, {
-    sourceEntityKey: billy.entityKey,
+    sourceEntityKey: blake.entityKey,
     targetEntityKey: sarah.entityKey,
     relationType: "coworker",
     explicitUserConfirmation: false,
@@ -81,7 +81,7 @@ export async function runStage686CheckpointB(): Promise<Stage686CheckpointBArtif
     evidenceRef: "trace:stage686_b_denied"
   });
   const promoted = promoteRelationEdgeWithConfirmation(baselineGraph, {
-    sourceEntityKey: billy.entityKey,
+    sourceEntityKey: blake.entityKey,
     targetEntityKey: sarah.entityKey,
     relationType: "coworker",
     explicitUserConfirmation: true,

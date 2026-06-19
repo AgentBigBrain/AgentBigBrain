@@ -51,9 +51,9 @@ function buildSession(overrides: Partial<ConversationSession> = {}): Conversatio
 /**
  * Builds one paused-thread stack fixture.
  *
- * @returns Conversation stack containing an older paused Owen thread.
+ * @returns Conversation stack containing an older paused Riley thread.
  */
-function buildPausedOwenStack(): ConversationStackV1 {
+function buildPausedRileyStack(): ConversationStackV1 {
   return {
     schemaVersion: "v1",
     updatedAt: "2026-03-08T11:00:00.000Z",
@@ -69,16 +69,16 @@ function buildPausedOwenStack(): ConversationStackV1 {
         lastTouchedAt: "2026-03-08T10:55:00.000Z"
       },
       {
-        threadKey: "thread_owen",
-        topicKey: "owen_fall",
-        topicLabel: "Owen Fall",
+        threadKey: "thread_riley",
+        topicKey: "riley_fall",
+        topicLabel: "Riley Fall",
         state: "paused",
-        resumeHint: "Owen fell down a few weeks ago and you wanted to hear how that situation ended up.",
+        resumeHint: "Riley fell down a few weeks ago and you wanted to hear how that situation ended up.",
         openLoops: [
           {
-            loopId: "loop_owen",
-            threadKey: "thread_owen",
-            entityRefs: ["owen"],
+            loopId: "loop_riley",
+            threadKey: "thread_riley",
+            entityRefs: ["riley"],
             createdAt: "2026-02-14T15:00:00.000Z",
             lastMentionedAt: "2026-02-14T15:00:00.000Z",
             priority: 0.8,
@@ -97,8 +97,8 @@ function buildPausedOwenStack(): ConversationStackV1 {
         mentionCount: 3
       },
       {
-        topicKey: "owen_fall",
-        label: "Owen Fall",
+        topicKey: "riley_fall",
+        label: "Riley Fall",
         firstSeenAt: "2026-02-14T15:00:00.000Z",
         lastSeenAt: "2026-02-14T15:00:00.000Z",
         mentionCount: 2
@@ -127,12 +127,12 @@ test("resolveContextualRecallCandidate prefers a concrete unresolved episode ove
     conversationTurns: [
       {
         role: "user",
-        text: "Owen fell down a few weeks ago.",
+        text: "Riley fell down a few weeks ago.",
         at: "2026-02-14T15:00:00.000Z"
       },
       {
         role: "assistant",
-        text: "I hope Owen is okay.",
+        text: "I hope Riley is okay.",
         at: "2026-02-14T15:01:00.000Z"
       },
       {
@@ -141,30 +141,30 @@ test("resolveContextualRecallCandidate prefers a concrete unresolved episode ove
         at: "2026-03-08T10:50:00.000Z"
       }
     ],
-    conversationStack: buildPausedOwenStack()
+    conversationStack: buildPausedRileyStack()
   });
   const queryContinuityEpisodes = buildEpisodeQuery(async (request) => {
-    assert.ok(request.entityHints.includes("owen"));
+    assert.ok(request.entityHints.includes("riley"));
     assert.equal(request.semanticMode, "event_history");
     assert.equal(request.relevanceScope, "conversation_local");
     return [
       {
-        episodeId: "episode_owen_fall",
-        title: "Owen fell down",
-        summary: "Owen fell down a few weeks ago and the outcome never got resolved.",
+        episodeId: "episode_riley_fall",
+        title: "Riley fell down",
+        summary: "Riley fell down a few weeks ago and the outcome never got resolved.",
         status: "unresolved",
         lastMentionedAt: "2026-02-14T15:00:00.000Z",
-        entityRefs: ["Owen"],
+        entityRefs: ["Riley"],
         entityLinks: [
           {
-            entityKey: "entity_owen",
-            canonicalName: "Owen"
+            entityKey: "entity_riley",
+            canonicalName: "Riley"
           }
         ],
         openLoopLinks: [
           {
-            loopId: "loop_owen",
-            threadKey: "thread_owen",
+            loopId: "loop_riley",
+            threadKey: "thread_riley",
             status: "open",
             priority: 0.8
           }
@@ -175,17 +175,17 @@ test("resolveContextualRecallCandidate prefers a concrete unresolved episode ove
 
   const candidate = await resolveContextualRecallCandidate(
     session,
-    "How is Owen doing lately?",
+    "How is Riley doing lately?",
     queryContinuityEpisodes
   );
 
   assert.ok(candidate);
   assert.equal(candidate?.kind, "episode");
-  assert.equal(candidate?.threadKey, "thread_owen");
-  assert.equal(candidate?.topicLabel, "Owen fell down");
+  assert.equal(candidate?.threadKey, "thread_riley");
+  assert.equal(candidate?.topicLabel, "Riley fell down");
   assert.equal(candidate?.openLoopCount, 1);
   assert.equal(candidate?.episodeStatus, "unresolved");
-  assert.match(candidate?.supportingCue ?? "", /Owen/i);
+  assert.match(candidate?.supportingCue ?? "", /Riley/i);
 });
 
 test("resolveContextualRecallCandidate allows strong direct overlap even when the recall phrasing is human and not canned", async () => {
@@ -194,7 +194,7 @@ test("resolveContextualRecallCandidate allows strong direct overlap even when th
       {
         role: "user",
         text: [
-          "Owen had a rough fall a few weeks ago and it turned into a whole mess.",
+          "Riley had a rough fall a few weeks ago and it turned into a whole mess.",
           "He ended up in urgent care, and the doctor wanted him to get an MRI because the swelling was not going down.",
           "I never really heard how it all turned out, and I still feel like that situation is hanging open."
         ].join(" "),
@@ -209,29 +209,29 @@ test("resolveContextualRecallCandidate allows strong direct overlap even when th
         at: "2026-02-14T15:01:00.000Z"
       }
     ],
-    conversationStack: buildPausedOwenStack()
+    conversationStack: buildPausedRileyStack()
   });
   const queryContinuityEpisodes = buildEpisodeQuery(async ({ entityHints }) => {
-    assert.ok(entityHints.includes("owen"));
+    assert.ok(entityHints.includes("riley"));
     assert.ok(entityHints.includes("mri"));
     return [
       {
-        episodeId: "episode_owen_mri",
-        title: "Owen was waiting on MRI results",
-        summary: "Owen had a rough fall, ended up in urgent care, and was waiting on MRI results.",
+        episodeId: "episode_riley_mri",
+        title: "Riley was waiting on MRI results",
+        summary: "Riley had a rough fall, ended up in urgent care, and was waiting on MRI results.",
         status: "outcome_unknown",
         lastMentionedAt: "2026-02-14T15:00:00.000Z",
-        entityRefs: ["Owen"],
+        entityRefs: ["Riley"],
         entityLinks: [
           {
-            entityKey: "entity_owen",
-            canonicalName: "Owen"
+            entityKey: "entity_riley",
+            canonicalName: "Riley"
           }
         ],
         openLoopLinks: [
           {
-            loopId: "loop_owen",
-            threadKey: "thread_owen",
+            loopId: "loop_riley",
+            threadKey: "thread_riley",
             status: "open",
             priority: 0.8
           }
@@ -243,7 +243,7 @@ test("resolveContextualRecallCandidate allows strong direct overlap even when th
   const candidate = await resolveContextualRecallCandidate(
     session,
     [
-      "Owen came up again this morning when I was texting someone from home.",
+      "Riley came up again this morning when I was texting someone from home.",
       "It made me think about that whole MRI situation from a few weeks back, and I realized I still do not know how it ended up.",
       "I keep feeling like I missed the ending to that whole thing."
     ].join(" "),
@@ -252,7 +252,7 @@ test("resolveContextualRecallCandidate allows strong direct overlap even when th
 
   assert.ok(candidate);
   assert.equal(candidate?.kind, "episode");
-  assert.match(candidate?.topicLabel ?? "", /Owen/i);
+  assert.match(candidate?.topicLabel ?? "", /Riley/i);
   assert.match(candidate?.topicLabel ?? "", /MRI/i);
 });
 
@@ -260,7 +260,7 @@ test("buildContextualRecallBlock suppresses recall when no paused thread or conc
   const session = buildSession();
   const block = await buildContextualRecallBlock(
     session,
-    "How is Owen doing lately?"
+    "How is Riley doing lately?"
   );
 
   assert.equal(block, null);
@@ -271,37 +271,37 @@ test("resolveContextualRecallCandidate suppresses a bare repeated name when the 
     conversationTurns: [
       {
         role: "user",
-        text: "Owen fell down a few weeks ago and it still feels unresolved.",
+        text: "Riley fell down a few weeks ago and it still feels unresolved.",
         at: "2026-02-14T15:00:00.000Z"
       },
       {
         role: "assistant",
-        text: "If Owen comes up again in a related way, I can help you revisit that situation once.",
+        text: "If Riley comes up again in a related way, I can help you revisit that situation once.",
         at: "2026-02-14T15:01:00.000Z"
       }
     ],
-    conversationStack: buildPausedOwenStack()
+    conversationStack: buildPausedRileyStack()
   });
   const queryContinuityEpisodes = buildEpisodeQuery(async ({ entityHints }) => {
-    assert.ok(entityHints.includes("owen"));
+    assert.ok(entityHints.includes("riley"));
     return [
       {
-        episodeId: "episode_owen_fall",
-        title: "Owen fell down",
-        summary: "Owen fell down a few weeks ago and the outcome never got resolved.",
+        episodeId: "episode_riley_fall",
+        title: "Riley fell down",
+        summary: "Riley fell down a few weeks ago and the outcome never got resolved.",
         status: "unresolved",
         lastMentionedAt: "2026-02-14T15:00:00.000Z",
-        entityRefs: ["Owen"],
+        entityRefs: ["Riley"],
         entityLinks: [
           {
-            entityKey: "entity_owen",
-            canonicalName: "Owen"
+            entityKey: "entity_riley",
+            canonicalName: "Riley"
           }
         ],
         openLoopLinks: [
           {
-            loopId: "loop_owen",
-            threadKey: "thread_owen",
+            loopId: "loop_riley",
+            threadKey: "thread_riley",
             status: "open",
             priority: 0.8
           }
@@ -313,7 +313,7 @@ test("resolveContextualRecallCandidate suppresses a bare repeated name when the 
   const candidate = await resolveContextualRecallCandidate(
     session,
     [
-      "Owen texted me this morning about a movie recommendation and a new coffee place near his office.",
+      "Riley texted me this morning about a movie recommendation and a new coffee place near his office.",
       "We mostly joked around and traded music suggestions for a few minutes.",
       "There was nothing serious in the conversation at all.",
       "I just wanted to tell you something light for once."
@@ -329,30 +329,30 @@ test("buildContextualRecallBlock suppresses recall when the assistant already as
     conversationTurns: [
       {
         role: "assistant",
-        text: "Did Owen end up okay after the fall?",
+        text: "Did Riley end up okay after the fall?",
         at: "2026-03-08T10:59:00.000Z"
       }
     ],
-    conversationStack: buildPausedOwenStack()
+    conversationStack: buildPausedRileyStack()
   });
   const queryContinuityEpisodes = buildEpisodeQuery(async () => [
     {
-      episodeId: "episode_owen_fall",
-      title: "Owen fell down",
-      summary: "Owen fell down a few weeks ago and the outcome never got resolved.",
+      episodeId: "episode_riley_fall",
+      title: "Riley fell down",
+      summary: "Riley fell down a few weeks ago and the outcome never got resolved.",
       status: "unresolved",
       lastMentionedAt: "2026-02-14T15:00:00.000Z",
-      entityRefs: ["Owen"],
+      entityRefs: ["Riley"],
       entityLinks: [
         {
-          entityKey: "entity_owen",
-          canonicalName: "Owen"
+          entityKey: "entity_riley",
+          canonicalName: "Riley"
         }
       ],
       openLoopLinks: [
         {
-          loopId: "loop_owen",
-          threadKey: "thread_owen",
+          loopId: "loop_riley",
+          threadKey: "thread_riley",
           status: "open",
           priority: 0.8
         }
@@ -362,7 +362,7 @@ test("buildContextualRecallBlock suppresses recall when the assistant already as
 
   const block = await buildContextualRecallBlock(
     session,
-    "How is Owen doing lately?",
+    "How is Riley doing lately?",
     queryContinuityEpisodes
   );
 
@@ -374,33 +374,33 @@ test("buildContextualRecallBlock renders a bounded unresolved-situation recall b
     conversationTurns: [
       {
         role: "user",
-        text: "Owen fell down a few weeks ago.",
+        text: "Riley fell down a few weeks ago.",
         at: "2026-02-14T15:00:00.000Z"
       }
     ],
-    conversationStack: buildPausedOwenStack()
+    conversationStack: buildPausedRileyStack()
   });
   const block = await buildContextualRecallBlock(
     session,
-    "How is Owen doing lately?",
+    "How is Riley doing lately?",
     buildEpisodeQuery(async () => [
       {
-        episodeId: "episode_owen_fall",
-        title: "Owen fell down",
-        summary: "Owen fell down a few weeks ago and the outcome never got resolved.",
+        episodeId: "episode_riley_fall",
+        title: "Riley fell down",
+        summary: "Riley fell down a few weeks ago and the outcome never got resolved.",
         status: "unresolved",
         lastMentionedAt: "2026-02-14T15:00:00.000Z",
-        entityRefs: ["Owen"],
+        entityRefs: ["Riley"],
         entityLinks: [
           {
-            entityKey: "entity_owen",
-            canonicalName: "Owen"
+            entityKey: "entity_riley",
+            canonicalName: "Riley"
           }
         ],
         openLoopLinks: [
           {
-            loopId: "loop_owen",
-            threadKey: "thread_owen",
+            loopId: "loop_riley",
+            threadKey: "thread_riley",
             status: "open",
             priority: 0.8
           }
@@ -410,7 +410,7 @@ test("buildContextualRecallBlock renders a bounded unresolved-situation recall b
   );
 
   assert.match(block ?? "", /older unresolved situation/i);
-  assert.match(block ?? "", /Relevant situation: Owen fell down/);
+  assert.match(block ?? "", /Relevant situation: Riley fell down/);
   assert.match(block ?? "", /Situation status: unresolved/i);
   assert.match(block ?? "", /ask at most one brief follow-up/i);
 });
@@ -420,7 +420,7 @@ test("resolveContextualRecallCandidate can use contextual-reference interpretati
     conversationTurns: [
       {
         role: "user",
-        text: "Owen had a rough fall and was waiting on MRI results.",
+        text: "Riley had a rough fall and was waiting on MRI results.",
         at: "2026-02-14T15:00:00.000Z"
       },
       {
@@ -429,7 +429,7 @@ test("resolveContextualRecallCandidate can use contextual-reference interpretati
         at: "2026-02-14T15:01:00.000Z"
       }
     ],
-    conversationStack: buildPausedOwenStack()
+    conversationStack: buildPausedRileyStack()
   });
   let interpretationCalls = 0;
 
@@ -443,10 +443,10 @@ test("resolveContextualRecallCandidate can use contextual-reference interpretati
       return {
         source: "local_intent_model",
         kind: "open_loop_resume_reference",
-        entityHints: ["owen"],
+        entityHints: ["riley"],
         topicHints: ["mri"],
         confidence: "medium",
-        explanation: "The user is referring back to Owen's unresolved MRI situation."
+        explanation: "The user is referring back to Riley's unresolved MRI situation."
       };
     }
   );
@@ -454,8 +454,8 @@ test("resolveContextualRecallCandidate can use contextual-reference interpretati
   assert.equal(interpretationCalls, 1);
   assert.ok(candidate);
   assert.equal(candidate?.kind, "thread");
-  assert.equal(candidate?.threadKey, "thread_owen");
-  assert.match(candidate?.supportingCue ?? "", /Owen|MRI/i);
+  assert.equal(candidate?.threadKey, "thread_riley");
+  assert.match(candidate?.supportingCue ?? "", /Riley|MRI/i);
 });
 
 test("resolveContextualRecallCandidate promotes deterministic open-loop resume matching for interpreted resume references", async () => {
@@ -553,11 +553,11 @@ test("buildContextualRecallBlock includes model-assisted contextual evidence for
     conversationTurns: [
       {
         role: "user",
-        text: "Owen had a rough fall and was waiting on MRI results.",
+        text: "Riley had a rough fall and was waiting on MRI results.",
         at: "2026-02-14T15:00:00.000Z"
       }
     ],
-    conversationStack: buildPausedOwenStack()
+    conversationStack: buildPausedRileyStack()
   });
 
   const block = await buildContextualRecallBlock(
@@ -569,14 +569,14 @@ test("buildContextualRecallBlock includes model-assisted contextual evidence for
     async () => ({
       source: "local_intent_model",
       kind: "contextual_recall_reference",
-      entityHints: ["owen"],
+      entityHints: ["riley"],
       topicHints: ["mri"],
       confidence: "high",
-      explanation: "The user is referring back to Owen's unresolved MRI situation."
+      explanation: "The user is referring back to Riley's unresolved MRI situation."
     })
   );
 
-  assert.match(block ?? "", /Model-assisted contextual hints: owen, mri/i);
+  assert.match(block ?? "", /Model-assisted contextual hints: riley, mri/i);
   assert.match(block ?? "", /Model-assisted cue type: contextual_recall_reference/i);
 });
 
@@ -668,11 +668,11 @@ test("buildContextualRecallBlock does not invoke contextual-reference interpreta
     conversationTurns: [
       {
         role: "user",
-        text: "Owen had a rough fall and was waiting on MRI results.",
+        text: "Riley had a rough fall and was waiting on MRI results.",
         at: "2026-02-14T15:00:00.000Z"
       }
     ],
-    conversationStack: buildPausedOwenStack()
+    conversationStack: buildPausedRileyStack()
   });
   let interpretationCalls = 0;
 
@@ -687,7 +687,7 @@ test("buildContextualRecallBlock does not invoke contextual-reference interpreta
       return {
         source: "local_intent_model",
         kind: "contextual_recall_reference",
-        entityHints: ["owen"],
+        entityHints: ["riley"],
         topicHints: ["mri"],
         confidence: "high",
         explanation: "This should never be used."
@@ -704,7 +704,7 @@ test("buildContextualRecallBlock preserves global truth and conversation-local r
     conversationTurns: [
       {
         role: "user",
-        text: "I work with Owen at Lantern Studio, and his fall still feels unresolved.",
+        text: "I work with Riley at Lantern Studio, and his fall still feels unresolved.",
         at: "2026-02-14T15:00:00.000Z"
       },
       {
@@ -728,33 +728,33 @@ test("buildContextualRecallBlock preserves global truth and conversation-local r
         at: "2026-03-08T10:45:00.000Z"
       }
     ],
-    conversationStack: buildPausedOwenStack()
+    conversationStack: buildPausedRileyStack()
   });
   const supportingEpisode: MemorySynthesisEpisodeRecord = {
-    episodeId: "episode_owen_fall",
-    title: "Owen fell down",
-    summary: "Owen fell down a few weeks ago and the outcome still feels unresolved.",
+    episodeId: "episode_riley_fall",
+    title: "Riley fell down",
+    summary: "Riley fell down a few weeks ago and the outcome still feels unresolved.",
     status: "unresolved",
     lastMentionedAt: "2026-02-14T15:00:00.000Z",
-    entityRefs: ["Owen"],
+    entityRefs: ["Riley"],
     entityLinks: [
       {
-        entityKey: "entity_owen",
-        canonicalName: "Owen"
+        entityKey: "entity_riley",
+        canonicalName: "Riley"
       }
     ],
     openLoopLinks: [
       {
-        loopId: "loop_owen",
-        threadKey: "thread_owen",
+        loopId: "loop_riley",
+        threadKey: "thread_riley",
         status: "open",
         priority: 0.8
       }
     ]
   };
   const supportingFact: MemorySynthesisFactRecord = {
-    factId: "fact_owen_work",
-    key: "contact.owen.work_association",
+    factId: "fact_riley_work",
+    key: "contact.riley.work_association",
     value: "Lantern Studio",
     status: "confirmed",
     observedAt: "2026-02-10T12:00:00.000Z",
@@ -799,7 +799,7 @@ test("buildContextualRecallBlock preserves global truth and conversation-local r
       {
         semanticMode: "relationship_inventory" as const,
         relevanceScope: request.relevanceScope ?? "conversation_local",
-        scopedThreadKeys: ["thread_owen"],
+        scopedThreadKeys: ["thread_riley"],
         temporalSynthesis: typedSynthesis?.temporalSynthesis ?? null,
         laneBoundaries: typedSynthesis?.laneBoundaries ?? []
       }
@@ -813,7 +813,7 @@ test("buildContextualRecallBlock preserves global truth and conversation-local r
   );
 
   assert.ok(block);
-  assert.match(block ?? "", /Owen fell down/i);
+  assert.match(block ?? "", /Riley fell down/i);
   assert.match(block ?? "", /Lantern Studio/i);
   assert.match(block ?? "", /Current State:/);
   assert.match(block ?? "", /Historical Context:/);
@@ -824,37 +824,37 @@ test("buildContextualRecallBlock adds a fail-closed shadow parity guard when tem
     conversationTurns: [
       {
         role: "user",
-        text: "Owen fell down a few weeks ago and I still do not know how that ended.",
+        text: "Riley fell down a few weeks ago and I still do not know how that ended.",
         at: "2026-02-14T15:00:00.000Z"
       }
     ],
-    conversationStack: buildPausedOwenStack()
+    conversationStack: buildPausedRileyStack()
   });
   const supportingEpisode: MemorySynthesisEpisodeRecord = {
-    episodeId: "episode_owen_fall",
-    title: "Owen fell down",
-    summary: "Owen fell down a few weeks ago and the outcome still feels unresolved.",
+    episodeId: "episode_riley_fall",
+    title: "Riley fell down",
+    summary: "Riley fell down a few weeks ago and the outcome still feels unresolved.",
     status: "unresolved",
     lastMentionedAt: "2026-02-14T15:00:00.000Z",
-    entityRefs: ["Owen"],
+    entityRefs: ["Riley"],
     entityLinks: [
       {
-        entityKey: "entity_owen",
-        canonicalName: "Owen"
+        entityKey: "entity_riley",
+        canonicalName: "Riley"
       }
     ],
     openLoopLinks: [
       {
-        loopId: "loop_owen",
-        threadKey: "thread_owen",
+        loopId: "loop_riley",
+        threadKey: "thread_riley",
         status: "open",
         priority: 0.8
       }
     ]
   };
   const supportingFact: MemorySynthesisFactRecord = {
-    factId: "fact_owen_work",
-    key: "contact.owen.work_association",
+    factId: "fact_riley_work",
+    key: "contact.riley.work_association",
     value: "Lantern Studio",
     status: "confirmed",
     observedAt: "2026-02-10T12:00:00.000Z",
@@ -907,7 +907,7 @@ test("buildContextualRecallBlock adds a fail-closed shadow parity guard when tem
       {
         semanticMode: "relationship_inventory" as const,
         relevanceScope: "conversation_local" as const,
-        scopedThreadKeys: ["thread_owen"],
+        scopedThreadKeys: ["thread_riley"],
         temporalSynthesis: divergentTemporal,
         laneBoundaries: compatibilitySynthesis?.laneBoundaries ?? []
       }
@@ -943,37 +943,37 @@ test("buildContextualRecallBlock keeps quarantined identity in fail-closed shado
     conversationTurns: [
       {
         role: "user",
-        text: "Owen was involved somehow, but there are two different Owens in this story.",
+        text: "Riley was involved somehow, but there are two different Rileys in this story.",
         at: "2026-02-14T15:00:00.000Z"
       }
     ],
-    conversationStack: buildPausedOwenStack()
+    conversationStack: buildPausedRileyStack()
   });
   const supportingEpisode: MemorySynthesisEpisodeRecord = {
-    episodeId: "episode_owen_fall_quarantine",
-    title: "Owen fell down",
-    summary: "An older Owen thread stayed unresolved and later got tangled with another Owen reference.",
+    episodeId: "episode_riley_fall_quarantine",
+    title: "Riley fell down",
+    summary: "An older Riley thread stayed unresolved and later got tangled with another Riley reference.",
     status: "unresolved",
     lastMentionedAt: "2026-02-14T15:00:00.000Z",
-    entityRefs: ["Owen"],
+    entityRefs: ["Riley"],
     entityLinks: [
       {
-        entityKey: "entity_owen",
-        canonicalName: "Owen"
+        entityKey: "entity_riley",
+        canonicalName: "Riley"
       }
     ],
     openLoopLinks: [
       {
-        loopId: "loop_owen",
-        threadKey: "thread_owen",
+        loopId: "loop_riley",
+        threadKey: "thread_riley",
         status: "open",
         priority: 0.8
       }
     ]
   };
   const supportingFact: MemorySynthesisFactRecord = {
-    factId: "fact_owen_work_quarantine",
-    key: "contact.owen.work_association",
+    factId: "fact_riley_work_quarantine",
+    key: "contact.riley.work_association",
     value: "Lantern Studio",
     status: "confirmed",
     observedAt: "2026-02-10T12:00:00.000Z",
@@ -989,7 +989,7 @@ test("buildContextualRecallBlock keeps quarantined identity in fail-closed shado
     ...compatibilitySynthesis!.temporalSynthesis,
     currentState: [],
     historicalContext: [],
-    contradictionNotes: ["I can't safely tell which Owen this refers to yet."],
+    contradictionNotes: ["I can't safely tell which Riley this refers to yet."],
     answerMode: "quarantined_identity",
     laneMetadata: compatibilitySynthesis!.temporalSynthesis.laneMetadata.map((lane) => ({
       ...lane,
@@ -1026,7 +1026,7 @@ test("buildContextualRecallBlock keeps quarantined identity in fail-closed shado
       {
         semanticMode: "relationship_inventory" as const,
         relevanceScope: "conversation_local" as const,
-        scopedThreadKeys: ["thread_owen"],
+        scopedThreadKeys: ["thread_riley"],
         temporalSynthesis: quarantinedTemporal,
         laneBoundaries: compatibilitySynthesis?.laneBoundaries ?? []
       }
@@ -1035,7 +1035,7 @@ test("buildContextualRecallBlock keeps quarantined identity in fail-closed shado
 
   const block = await buildContextualRecallBlock(
     session,
-    "When Owen came up again, it made me realize I still do not know which Owen that older unresolved thread was about.",
+    "When Riley came up again, it made me realize I still do not know which Riley that older unresolved thread was about.",
     queryContinuityEpisodes,
     queryContinuityFacts,
     null,
@@ -1048,7 +1048,7 @@ test("buildContextualRecallBlock keeps quarantined identity in fail-closed shado
   assert.ok(block);
   assert.match(block ?? "", /Shadow parity guard:/);
   assert.match(block ?? "", /answer mode/i);
-  assert.match(block ?? "", /Contradiction Notes: I can't safely tell which Owen this refers to yet\./i);
+  assert.match(block ?? "", /Contradiction Notes: I can't safely tell which Riley this refers to yet\./i);
   assert.match(block ?? "", /Current State: none/i);
   assert.doesNotMatch(block ?? "", /Lantern Studio/i);
   assert.equal(requestTelemetry.synthesisOperationCount, 1);
@@ -1215,21 +1215,21 @@ test("buildContextualRecallBlock labels paused-thread token overlap as evidence-
     conversationTurns: [
       {
         role: "user",
-        text: "Owen fell down a few weeks ago.",
+        text: "Riley fell down a few weeks ago.",
         at: "2026-02-14T15:00:00.000Z"
       },
       {
         role: "assistant",
-        text: "I hope Owen is okay.",
+        text: "I hope Riley is okay.",
         at: "2026-02-14T15:01:00.000Z"
       }
     ],
-    conversationStack: buildPausedOwenStack()
+    conversationStack: buildPausedRileyStack()
   });
 
   const block = await buildContextualRecallBlock(
     session,
-    "How is Owen doing lately?",
+    "How is Riley doing lately?",
     undefined,
     undefined,
     null,

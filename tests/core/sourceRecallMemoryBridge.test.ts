@@ -143,7 +143,7 @@ test("profile-memory mutation envelopes can cite Source Recall refs without sour
 
     const governedResult = await store.ingestFromTaskInput(
       "task_source_ref_governed",
-      "My name is Anthony.",
+      "My name is Alex.",
       "2026-05-03T18:01:00.000Z",
       {
         provenance,

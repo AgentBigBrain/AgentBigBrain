@@ -12,7 +12,7 @@ test("upsertTemporalProfileFact replaces prior winner for explicit successor fam
   const emptyState = createEmptyProfileMemoryState();
   const first = upsertTemporalProfileFact(emptyState, {
     key: "identity.preferred_name",
-    value: "Avery",
+    value: "Morgan",
     sensitive: false,
     sourceTaskId: "task_runtime_lifecycle_1",
     source: "test",

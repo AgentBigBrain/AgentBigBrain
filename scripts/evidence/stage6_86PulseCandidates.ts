@@ -67,16 +67,16 @@ function buildCheckpointGraph(): EntityGraphV1 {
     updatedAt: "2025-10-01T00:00:00.000Z",
     entities: [
       {
-        entityKey: "entity_billy",
-        canonicalName: "Billy",
+        entityKey: "entity_blake",
+        canonicalName: "Blake",
         entityType: "person",
         disambiguator: null,
         domainHint: null,
-        aliases: ["Billy"],
+        aliases: ["Blake"],
         firstSeenAt: "2025-10-01T00:00:00.000Z",
         lastSeenAt: "2026-02-25T00:00:00.000Z",
         salience: 6,
-        evidenceRefs: ["trace:entity_billy"]
+        evidenceRefs: ["trace:entity_blake"]
       },
       {
         entityKey: "entity_beacon_labs",
@@ -118,7 +118,7 @@ function buildCheckpointGraph(): EntityGraphV1 {
       },
       {
         edgeKey: "edge_stale_confirmed",
-        sourceEntityKey: "entity_billy",
+        sourceEntityKey: "entity_blake",
         targetEntityKey: "entity_beacon_labs",
         relationType: "coworker",
         status: "confirmed",
@@ -306,7 +306,7 @@ export async function runStage686CheckpointE(): Promise<Stage686CheckpointEArtif
 
   const privacySuppressionPass = baselineA.decisions.some(
     (entry) =>
-      entry.candidate.entityRefs.includes("entity_billy") &&
+      entry.candidate.entityRefs.includes("entity_blake") &&
       entry.decision.decisionCode === "SUPPRESS" &&
       (entry.decision.blockDetailReason === "PRIVACY_SENSITIVE" ||
         entry.decision.blockDetailReason === "BRIDGE_PRIVACY_SENSITIVE")

@@ -36,7 +36,7 @@ test("extractActiveRequestSegment excludes trailing AgentFriend broker packets a
     "retrievalMode=query_aware",
     "",
     "[AgentFriendProfileContext]",
-    "contact.owen.note: moved projects earlier."
+    "contact.riley.note: moved projects earlier."
   ].join("\n");
 
   assert.equal(

@@ -24,7 +24,7 @@ import {
  */
 function extractsDeterministicEntityCandidates(): void {
   const input = {
-    text: "Owen and Sarah met at Lantern Labs before Project Aurora review.",
+    text: "Riley and Sarah met at Lantern Labs before Project Aurora review.",
     observedAt: "2026-03-01T00:00:00.000Z",
     evidenceRef: "trace:entity_extract_001"
   };
@@ -34,7 +34,7 @@ function extractsDeterministicEntityCandidates(): void {
 
   assert.deepEqual(first, second);
   assert.ok(first.nodes.length >= 3);
-  assert.ok(first.nodes.some((node) => node.canonicalName === "Owen"));
+  assert.ok(first.nodes.some((node) => node.canonicalName === "Riley"));
   assert.ok(first.nodes.some((node) => node.canonicalName === "Sarah"));
 }
 
@@ -82,7 +82,7 @@ function appliesEntityExtractionWithCoMentionEdges(): void {
   const observedAt = "2026-03-01T00:00:00.000Z";
   const graph = createEmptyEntityGraphV1(observedAt);
   const extraction = extractEntityCandidates({
-    text: "Owen and Sarah met at Lantern Labs.",
+    text: "Riley and Sarah met at Lantern Labs.",
     observedAt,
     evidenceRef: "trace:entity_extract_002"
   });
@@ -114,19 +114,19 @@ function appliesEntityExtractionWithCoMentionEdges(): void {
  */
 function surfacesAliasCollisionWithoutSilentMerge(): void {
   const observedAt = "2026-03-01T00:00:00.000Z";
-  const existingEntityKey = buildEntityKey("William Bena", "person", null);
-  const incomingEntityKey = buildEntityKey("Owen Bena", "person", null);
+  const existingEntityKey = buildEntityKey("Rowan Harper", "person", null);
+  const incomingEntityKey = buildEntityKey("Riley Harper", "person", null);
   const seededGraph: EntityGraphV1 = {
     schemaVersion: "v1",
     updatedAt: observedAt,
     entities: [
       {
         entityKey: existingEntityKey,
-        canonicalName: "William Bena",
+        canonicalName: "Rowan Harper",
         entityType: "person",
         disambiguator: null,
         domainHint: null,
-        aliases: ["Owen"],
+        aliases: ["Riley"],
         firstSeenAt: observedAt,
         lastSeenAt: observedAt,
         salience: 1,
@@ -142,11 +142,11 @@ function surfacesAliasCollisionWithoutSilentMerge(): void {
       nodes: [
         {
           entityKey: incomingEntityKey,
-          canonicalName: "Owen Bena",
+          canonicalName: "Riley Harper",
           entityType: "person",
           disambiguator: null,
           domainHint: null,
-          aliases: ["Owen", "Owen Bena"],
+          aliases: ["Riley", "Riley Harper"],
           firstSeenAt: observedAt,
           lastSeenAt: observedAt,
           salience: 1,
@@ -164,7 +164,7 @@ function surfacesAliasCollisionWithoutSilentMerge(): void {
   assert.equal(mutation.aliasConflicts[0]?.existingEntityKey, existingEntityKey);
   const incoming = mutation.graph.entities.find((entity) => entity.entityKey === incomingEntityKey);
   assert.ok(incoming);
-  assert.equal(incoming?.aliases.includes("Owen"), false);
+  assert.equal(incoming?.aliases.includes("Riley"), false);
 }
 
 /**
@@ -297,19 +297,19 @@ function keepsCoMentionEdgesUncertainUntilExplicitConfirmation(): void {
   const seeded = applyEntityExtractionToGraph(
     createEmptyEntityGraphV1(observedAt),
     extractEntityCandidates({
-      text: "Owen and Sarah reviewed Project Aurora.",
+      text: "Riley and Sarah reviewed Project Aurora.",
       observedAt,
       evidenceRef: "trace:relation_seed"
     }),
     observedAt,
     "trace:relation_seed"
   ).graph;
-  const owen = seeded.entities.find((entity) => entity.canonicalName === "Owen");
+  const riley = seeded.entities.find((entity) => entity.canonicalName === "Riley");
   const sarah = seeded.entities.find((entity) => entity.canonicalName === "Sarah");
-  assert.ok(owen && sarah);
+  assert.ok(riley && sarah);
 
   const denied = promoteRelationEdgeWithConfirmation(seeded, {
-    sourceEntityKey: owen!.entityKey,
+    sourceEntityKey: riley!.entityKey,
     targetEntityKey: sarah!.entityKey,
     relationType: "friend",
     explicitUserConfirmation: false,
@@ -320,7 +320,7 @@ function keepsCoMentionEdgesUncertainUntilExplicitConfirmation(): void {
   assert.equal(denied.promoted, false);
   assert.equal(denied.deniedConflictCode, "INSUFFICIENT_EVIDENCE");
   const edge = denied.graph.edges.find((entry) =>
-    [entry.sourceEntityKey, entry.targetEntityKey].includes(owen!.entityKey) &&
+    [entry.sourceEntityKey, entry.targetEntityKey].includes(riley!.entityKey) &&
     [entry.sourceEntityKey, entry.targetEntityKey].includes(sarah!.entityKey)
   );
   assert.ok(edge);
@@ -337,19 +337,19 @@ function promotesRelationOnlyWithExplicitConfirmation(): void {
   const seeded = applyEntityExtractionToGraph(
     createEmptyEntityGraphV1(observedAt),
     extractEntityCandidates({
-      text: "Owen and Sarah reviewed Project Aurora.",
+      text: "Riley and Sarah reviewed Project Aurora.",
       observedAt,
       evidenceRef: "trace:relation_seed_2"
     }),
     observedAt,
     "trace:relation_seed_2"
   ).graph;
-  const owen = seeded.entities.find((entity) => entity.canonicalName === "Owen");
+  const riley = seeded.entities.find((entity) => entity.canonicalName === "Riley");
   const sarah = seeded.entities.find((entity) => entity.canonicalName === "Sarah");
-  assert.ok(owen && sarah);
+  assert.ok(riley && sarah);
 
   const promoted = promoteRelationEdgeWithConfirmation(seeded, {
-    sourceEntityKey: owen!.entityKey,
+    sourceEntityKey: riley!.entityKey,
     targetEntityKey: sarah!.entityKey,
     relationType: "coworker",
     explicitUserConfirmation: true,
@@ -390,11 +390,11 @@ function appliesRecencyWeightedCoMentionStrengthIncrements(): void {
  */
 function buildsDeterministicEntityLookupTerms(): void {
   const terms = getEntityLookupTerms({
-    canonicalName: "Owen Bena",
-    aliases: ["Owen", "William Bena"]
+    canonicalName: "Riley Harper",
+    aliases: ["Riley", "Rowan Harper"]
   });
 
-  assert.deepEqual(terms, ["bena", "owen", "william"]);
+  assert.deepEqual(terms, ["harper", "riley", "rowan"]);
 }
 
 /**
@@ -409,20 +409,20 @@ function queriesEntityGraphNodesByCanonicalOrAliasWithExactNormalizedMatches(): 
     updatedAt: observedAt,
     entities: [
       {
-        entityKey: buildEntityKey("William Bena", "person", null),
-        canonicalName: "William Bena",
+        entityKey: buildEntityKey("Rowan Harper", "person", null),
+        canonicalName: "Rowan Harper",
         entityType: "person",
         disambiguator: null,
         domainHint: null,
-        aliases: ["Owen", "Owen Bena"],
+        aliases: ["Riley", "Riley Harper"],
         firstSeenAt: observedAt,
         lastSeenAt: observedAt,
         salience: 1,
-        evidenceRefs: ["trace:owen"]
+        evidenceRefs: ["trace:riley"]
       },
       {
-        entityKey: buildEntityKey("Owen Labs", "org", null),
-        canonicalName: "Owen Labs",
+        entityKey: buildEntityKey("Riley Labs", "org", null),
+        canonicalName: "Riley Labs",
         entityType: "org",
         disambiguator: null,
         domainHint: null,
@@ -430,18 +430,18 @@ function queriesEntityGraphNodesByCanonicalOrAliasWithExactNormalizedMatches(): 
         firstSeenAt: observedAt,
         lastSeenAt: observedAt,
         salience: 1,
-        evidenceRefs: ["trace:owen_labs"]
+        evidenceRefs: ["trace:riley_labs"]
       }
     ],
     edges: []
   };
 
-  const aliasMatches = queryEntityGraphNodesByCanonicalOrAlias(graph, " Owen ");
-  const canonicalMatches = queryEntityGraphNodesByCanonicalOrAlias(graph, "owen labs");
+  const aliasMatches = queryEntityGraphNodesByCanonicalOrAlias(graph, " Riley ");
+  const canonicalMatches = queryEntityGraphNodesByCanonicalOrAlias(graph, "riley labs");
   const partialMatches = queryEntityGraphNodesByCanonicalOrAlias(graph, "ow");
 
-  assert.deepEqual(aliasMatches.map((entity) => entity.canonicalName), ["William Bena"]);
-  assert.deepEqual(canonicalMatches.map((entity) => entity.canonicalName), ["Owen Labs"]);
+  assert.deepEqual(aliasMatches.map((entity) => entity.canonicalName), ["Rowan Harper"]);
+  assert.deepEqual(canonicalMatches.map((entity) => entity.canonicalName), ["Riley Labs"]);
   assert.deepEqual(partialMatches, []);
 }
 
@@ -452,7 +452,7 @@ function queriesEntityGraphNodesByCanonicalOrAliasWithExactNormalizedMatches(): 
 function prunesLowSignalConversationalResidueFromExistingGraph(): void {
   const observedAt = "2026-04-12T13:00:00.000Z";
   const yeahKey = buildEntityKey("Yeah", "thing", null);
-  const owenKey = buildEntityKey("Owen", "thing", null);
+  const rileyKey = buildEntityKey("Riley", "thing", null);
   const graph: EntityGraphV1 = {
     schemaVersion: "v1",
     updatedAt: observedAt,
@@ -470,23 +470,23 @@ function prunesLowSignalConversationalResidueFromExistingGraph(): void {
         evidenceRefs: ["trace:yeah"]
       },
       {
-        entityKey: owenKey,
-        canonicalName: "Owen",
+        entityKey: rileyKey,
+        canonicalName: "Riley",
         entityType: "thing",
         disambiguator: null,
         domainHint: null,
-        aliases: ["Owen"],
+        aliases: ["Riley"],
         firstSeenAt: observedAt,
         lastSeenAt: observedAt,
         salience: 1,
-        evidenceRefs: ["trace:owen"]
+        evidenceRefs: ["trace:riley"]
       }
     ],
     edges: [
       {
         edgeKey: "edge_prune_001",
         sourceEntityKey: yeahKey,
-        targetEntityKey: owenKey,
+        targetEntityKey: rileyKey,
         relationType: "co_mentioned",
         status: "uncertain",
         coMentionCount: 1,
@@ -501,7 +501,7 @@ function prunesLowSignalConversationalResidueFromExistingGraph(): void {
   const pruned = pruneLowSignalEntitiesFromGraph(graph, "2026-04-12T13:05:00.000Z");
 
   assert.deepEqual(pruned.removedEntityKeys, [yeahKey]);
-  assert.deepEqual(pruned.graph.entities.map((entity) => entity.canonicalName), ["Owen"]);
+  assert.deepEqual(pruned.graph.entities.map((entity) => entity.canonicalName), ["Riley"]);
   assert.equal(pruned.graph.edges.length, 0);
 }
 

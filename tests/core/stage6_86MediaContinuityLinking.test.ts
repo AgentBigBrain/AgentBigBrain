@@ -18,18 +18,18 @@ test("buildMediaContinuityHints returns bounded hints from image, voice, and vid
         mimeType: "image/png",
         fileName: "planner.png",
         sizeBytes: 1024,
-        caption: "This screenshot shows Owen near the MRI calendar.",
+        caption: "This screenshot shows Riley near the MRI calendar.",
         durationSeconds: null,
         width: 1280,
         height: 720,
         interpretation: {
-          summary: "Screenshot shows Owen and the MRI follow-up note in the planner.",
+          summary: "Screenshot shows Riley and the MRI follow-up note in the planner.",
           transcript: null,
-          ocrText: "Owen MRI results follow-up",
+          ocrText: "Riley MRI results follow-up",
           confidence: 0.92,
           provenance: "fixture image summary",
           source: "fixture_catalog",
-          entityHints: ["Owen", "MRI"]
+          entityHints: ["Riley", "MRI"]
         }
       },
       {
@@ -45,13 +45,13 @@ test("buildMediaContinuityHints returns bounded hints from image, voice, and vid
         width: null,
         height: null,
         interpretation: {
-          summary: "Voice note says Owen still has not heard about the MRI results.",
-          transcript: "Owen still has not heard about the MRI results and I want to follow up.",
+          summary: "Voice note says Riley still has not heard about the MRI results.",
+          transcript: "Riley still has not heard about the MRI results and I want to follow up.",
           ocrText: null,
           confidence: 0.95,
           provenance: "fixture voice summary",
           source: "fixture_catalog",
-          entityHints: ["Owen", "follow-up"]
+          entityHints: ["Riley", "follow-up"]
         }
       },
       {
@@ -79,7 +79,7 @@ test("buildMediaContinuityHints returns bounded hints from image, voice, and vid
     ]
   });
 
-  assert.ok(hints.recallHints.includes("owen"));
+  assert.ok(hints.recallHints.includes("riley"));
   assert.ok(hints.recallHints.includes("mri"));
   assert.ok(hints.recallHints.includes("panel"));
   assert.ok(hints.evidence.includes("entity_hints"));

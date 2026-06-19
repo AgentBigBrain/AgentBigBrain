@@ -209,13 +209,13 @@ class ScenarioLanguageEpisodeModelClient implements ModelClient {
 
     let output: LanguageEpisodeModelOutput = { episodes: [] };
     if (
-      lowerText.includes("billy")
+      lowerText.includes("blake")
       && (lowerText.includes("urgent care") || lowerText.includes("slipped") || lowerText.includes("mri"))
     ) {
       output = {
         episodes: [
           {
-            subjectName: "Billy",
+            subjectName: "Blake",
             eventSummary: lowerText.includes("mri") ? "was waiting on MRI results" : "had a fall",
             supportingSnippet: firstSentence,
             status: "unresolved",
@@ -515,7 +515,7 @@ function buildEvidenceSession(
   };
 }
 
-function buildBillyFallStack(): ConversationStackV1 {
+function buildBlakeFallStack(): ConversationStackV1 {
   return {
     schemaVersion: "v1",
     updatedAt: "2026-03-08T12:00:00.000Z",
@@ -531,16 +531,16 @@ function buildBillyFallStack(): ConversationStackV1 {
         lastTouchedAt: "2026-03-08T11:59:00.000Z"
       },
       {
-        threadKey: "thread_billy_fall",
-        topicKey: "billy_fall",
-        topicLabel: "Billy Fall",
+        threadKey: "thread_blake_fall",
+        topicKey: "blake_fall",
+        topicLabel: "Blake Fall",
         state: "paused",
-        resumeHint: "Billy fell down a few weeks ago and the situation still felt unresolved.",
+        resumeHint: "Blake fell down a few weeks ago and the situation still felt unresolved.",
         openLoops: [
           {
-            loopId: "loop_billy_fall",
-            threadKey: "thread_billy_fall",
-            entityRefs: ["billy"],
+            loopId: "loop_blake_fall",
+            threadKey: "thread_blake_fall",
+            entityRefs: ["blake"],
             createdAt: "2026-02-14T15:00:00.000Z",
             lastMentionedAt: "2026-02-14T15:00:00.000Z",
             priority: 0.8,
@@ -559,8 +559,8 @@ function buildBillyFallStack(): ConversationStackV1 {
         mentionCount: 2
       },
       {
-        topicKey: "billy_fall",
-        label: "Billy Fall",
+        topicKey: "blake_fall",
+        label: "Blake Fall",
         firstSeenAt: "2026-02-14T15:00:00.000Z",
         lastSeenAt: "2026-02-14T15:00:00.000Z",
         mentionCount: 2
@@ -623,18 +623,18 @@ function buildMomHospitalStack(): ConversationStackV1 {
   };
 }
 
-function buildBillyEntityGraph(): EntityGraphV1 {
+function buildBlakeEntityGraph(): EntityGraphV1 {
   return {
     schemaVersion: "v1",
     updatedAt: "2026-03-08T12:00:00.000Z",
     entities: [
       {
-        entityKey: "entity_billy",
-        canonicalName: "Billy",
+        entityKey: "entity_blake",
+        canonicalName: "Blake",
         entityType: "person",
         disambiguator: null,
         domainHint: null,
-        aliases: ["Billy"],
+        aliases: ["Blake"],
         firstSeenAt: "2026-02-10T12:00:00.000Z",
         lastSeenAt: "2026-03-08T11:00:00.000Z",
         salience: 0.86,
@@ -647,9 +647,9 @@ function buildBillyEntityGraph(): EntityGraphV1 {
 
 function buildRelationshipClarificationCandidate(): PulseCandidateV1 {
   return {
-    candidateId: "candidate_billy_followup",
+    candidateId: "candidate_blake_followup",
     reasonCode: "RELATIONSHIP_CLARIFICATION",
-    entityRefs: ["entity_billy"],
+    entityRefs: ["entity_blake"],
     evidenceRefs: [],
     threadKey: null,
     score: 0.4,
@@ -665,7 +665,7 @@ function buildRelationshipClarificationCandidate(): PulseCandidateV1 {
     provenanceTier: "supporting",
     sensitive: false,
     activeMissionSuppressed: false,
-    stableHash: "candidate_billy_followup_hash"
+    stableHash: "candidate_blake_followup_hash"
   };
 }
 
@@ -687,7 +687,7 @@ function getScenarioEvidenceMode(category: ScenarioCategory): ScenarioEvidenceMo
     : "schema_only";
 }
 
-function buildBillyContinuityEpisodeQuery(): QueryConversationContinuityEpisodes {
+function buildBlakeContinuityEpisodeQuery(): QueryConversationContinuityEpisodes {
   return async ({ entityHints }) => {
     const joinedHints = entityHints.join(" ").toLowerCase();
     if (!/(fall|urgent|care|ended|resolved|situation)/.test(joinedHints)) {
@@ -695,22 +695,22 @@ function buildBillyContinuityEpisodeQuery(): QueryConversationContinuityEpisodes
     }
     return [
       {
-        episodeId: "episode_billy_fall",
-        title: "Billy had a fall",
-        summary: "Billy had a rough fall and the outcome never got a clean follow-up.",
+        episodeId: "episode_blake_fall",
+        title: "Blake had a fall",
+        summary: "Blake had a rough fall and the outcome never got a clean follow-up.",
         status: "unresolved",
         lastMentionedAt: "2026-02-14T15:00:00.000Z",
-        entityRefs: ["Billy"],
+        entityRefs: ["Blake"],
         entityLinks: [
           {
-            entityKey: "entity_billy",
-            canonicalName: "Billy"
+            entityKey: "entity_blake",
+            canonicalName: "Blake"
           }
         ],
         openLoopLinks: [
           {
-            loopId: "loop_billy_fall",
-            threadKey: "thread_billy_fall",
+            loopId: "loop_blake_fall",
+            threadKey: "thread_blake_fall",
             status: "open",
             priority: 0.8
           }
@@ -810,10 +810,10 @@ async function evaluateContextualRecallScenario(
   const priorTurns = scenario.transcript.slice(0, -1);
   const stack = scenario.id.includes("mom_hospital")
     ? buildMomHospitalStack()
-    : buildBillyFallStack();
+    : buildBlakeFallStack();
   const queryContinuityEpisodes = scenario.id.includes("mom_hospital")
     ? buildMomHospitalEpisodeQuery()
-    : buildBillyContinuityEpisodeQuery();
+    : buildBlakeContinuityEpisodeQuery();
   const session = buildEvidenceSession(scenario.id, priorTurns, stack);
   const resolvedReference = resolveContextualReferenceHints({
     userInput,
@@ -870,30 +870,30 @@ function evaluateCrossMemorySynthesisScenario(
   scenario: HumanLanguageScenario
 ): HumanLanguageScenarioResult {
   const positiveEpisode: MemorySynthesisEpisodeRecord = {
-    episodeId: "episode_billy_fall",
-    title: "Billy had a fall",
-    summary: "Billy had a rough fall and the outcome never got a clean follow-up.",
+    episodeId: "episode_blake_fall",
+    title: "Blake had a fall",
+    summary: "Blake had a rough fall and the outcome never got a clean follow-up.",
     status: "unresolved",
     lastMentionedAt: "2026-02-14T15:00:00.000Z",
-    entityRefs: ["Billy"],
+    entityRefs: ["Blake"],
     entityLinks: [
       {
-        entityKey: "entity_billy",
-        canonicalName: "Billy"
+        entityKey: "entity_blake",
+        canonicalName: "Blake"
       }
     ],
     openLoopLinks: [
       {
-        loopId: "loop_billy_fall",
-        threadKey: "thread_billy_fall",
+        loopId: "loop_blake_fall",
+        threadKey: "thread_blake_fall",
         status: "open",
         priority: 0.8
       }
     ]
   };
   const positiveFact: MemorySynthesisFactRecord = {
-    factId: "fact_billy_relationship",
-    key: "contact.billy.relationship",
+    factId: "fact_blake_relationship",
+    key: "contact.blake.relationship",
     value: "person the user checks on often",
     status: "active",
     observedAt: "2026-02-10T12:00:00.000Z",
@@ -966,12 +966,12 @@ function evaluateProactiveUtilityScenario(
   scenario: HumanLanguageScenario
 ): HumanLanguageScenarioResult {
   const candidate = buildRelationshipClarificationCandidate();
-  const graph = buildBillyEntityGraph();
+  const graph = buildBlakeEntityGraph();
   const recentConversationText = getLastUserTurn(scenario);
   const openLoopCount = scenario.polarity === "positive" ? 1 : 0;
   const repeatedNegativeOutcomes = scenario.polarity === "positive" ? 0 : 2;
   const utilityScore = calculateRelationshipClarificationUtilityScore({
-    anchoredEntityCount: recentConversationText.toLowerCase().includes("billy") ? 1 : 0,
+    anchoredEntityCount: recentConversationText.toLowerCase().includes("blake") ? 1 : 0,
     openLoopCount,
     repeatedNegativeOutcomes
   });
@@ -1092,7 +1092,7 @@ export async function runHumanLanguageGeneralizationEvidence(): Promise<HumanLan
   const requiredProofs = {
     richerEpisodeExtractionSuccess: scenarioResults.some(
       (scenario) =>
-        scenario.scenarioId === "episode_understanding_billy_fall_positive"
+        scenario.scenarioId === "episode_understanding_blake_fall_positive"
         && scenario.passed
     ),
     contextualRecallSuccess: scenarioResults.some(

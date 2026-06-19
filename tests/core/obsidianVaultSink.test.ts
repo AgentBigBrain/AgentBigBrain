@@ -408,42 +408,42 @@ test("ObsidianVaultSink keeps duplicate canonical entities distinct and explains
         updatedAt: "2026-04-12T14:00:00.000Z",
         entities: [
           {
-            entityKey: "entity_billy_person_123456",
-            canonicalName: "Billy",
+            entityKey: "entity_blake_person_123456",
+            canonicalName: "Blake",
             entityType: "person",
             disambiguator: null,
             domainHint: "relationship",
-            aliases: ["Billy"],
+            aliases: ["Blake"],
             firstSeenAt: "2026-04-12T14:00:00.000Z",
             lastSeenAt: "2026-04-12T14:00:00.000Z",
             salience: 0.91,
-            evidenceRefs: ["trace:billy_person"]
+            evidenceRefs: ["trace:blake_person"]
           },
           {
-            entityKey: "entity_billy_thing_654321",
-            canonicalName: "Billy",
+            entityKey: "entity_blake_thing_654321",
+            canonicalName: "Blake",
             entityType: "thing",
             disambiguator: null,
             domainHint: "relationship",
-            aliases: ["Billy"],
+            aliases: ["Blake"],
             firstSeenAt: "2026-04-12T14:00:00.000Z",
             lastSeenAt: "2026-04-12T14:00:00.000Z",
             salience: 3.2,
-            evidenceRefs: ["trace:billy_thing_1", "trace:billy_thing_2", "trace:billy_thing_3"]
+            evidenceRefs: ["trace:blake_thing_1", "trace:blake_thing_2", "trace:blake_thing_3"]
           }
         ],
         edges: [
           {
-            edgeKey: "edge_billy_pair",
-            sourceEntityKey: "entity_billy_person_123456",
-            targetEntityKey: "entity_billy_thing_654321",
+            edgeKey: "edge_blake_pair",
+            sourceEntityKey: "entity_blake_person_123456",
+            targetEntityKey: "entity_blake_thing_654321",
             relationType: "co_mentioned",
             status: "uncertain",
             coMentionCount: 1,
             strength: 0.21,
             firstObservedAt: "2026-04-12T14:00:00.000Z",
             lastObservedAt: "2026-04-12T14:00:00.000Z",
-            evidenceRefs: ["trace:edge_billy_pair"]
+            evidenceRefs: ["trace:edge_blake_pair"]
           }
         ]
       }
@@ -453,13 +453,13 @@ test("ObsidianVaultSink keeps duplicate canonical entities distinct and explains
       vaultPath,
       "AgentBigBrain",
       "10 Entities",
-      "Billy (person, relationship, 123456).md"
+      "Blake (person, relationship, 123456).md"
     );
     const thingPath = path.join(
       vaultPath,
       "AgentBigBrain",
       "10 Entities",
-      "Billy (thing, relationship, 654321).md"
+      "Blake (thing, relationship, 654321).md"
     );
 
     await access(thingPath);
@@ -507,24 +507,24 @@ test("ObsidianVaultSink aligns current-surface contact claims onto continuity pe
         updatedAt: "2026-04-12T18:00:00.000Z",
         entities: [
           {
-            entityKey: "entity_billy",
-            canonicalName: "Billy",
+            entityKey: "entity_blake",
+            canonicalName: "Blake",
             entityType: "person",
             disambiguator: null,
             domainHint: "relationship",
-            aliases: ["Billy"],
+            aliases: ["Blake"],
             firstSeenAt: "2026-04-12T18:00:00.000Z",
             lastSeenAt: "2026-04-12T18:00:00.000Z",
             salience: 1.2,
-            evidenceRefs: ["trace:billy"]
+            evidenceRefs: ["trace:blake"]
           },
           {
             entityKey: "entity_crimson",
-            canonicalName: "Crimson Analytics",
+            canonicalName: "Example Analytics",
             entityType: "org",
             disambiguator: null,
             domainHint: "relationship",
-            aliases: ["Crimson Analytics"],
+            aliases: ["Example Analytics"],
             firstSeenAt: "2026-04-12T18:00:00.000Z",
             lastSeenAt: "2026-04-12T18:00:00.000Z",
             salience: 1.0,
@@ -537,14 +537,14 @@ test("ObsidianVaultSink aligns current-surface contact claims onto continuity pe
         createSchemaEnvelopeV1(
           "ProfileMemoryGraphClaimV1",
           {
-            claimId: "claim_billy_work",
-            stableRefId: "stable_contact_billy",
+            claimId: "claim_blake_work",
+            stableRefId: "stable_contact_blake",
             family: "contact.organization_association",
-            normalizedKey: "contact.billy.work_association",
-            normalizedValue: "Crimson Analytics",
+            normalizedKey: "contact.blake.work_association",
+            normalizedValue: "Example Analytics",
             sensitive: false,
-            sourceTaskId: "task_billy",
-            sourceFingerprint: "fingerprint_billy_work",
+            sourceTaskId: "task_blake",
+            sourceFingerprint: "fingerprint_blake_work",
             sourceTier: "explicit_user_statement",
             assertedAt: "2026-04-12T18:00:00.000Z",
             validFrom: "2026-04-12T18:00:00.000Z",
@@ -553,8 +553,8 @@ test("ObsidianVaultSink aligns current-surface contact claims onto continuity pe
             endedByClaimId: null,
             timePrecision: "day",
             timeSource: "user_stated",
-            derivedFromObservationIds: ["obs_billy_work"],
-            projectionSourceIds: ["projection_billy_work"],
+            derivedFromObservationIds: ["obs_blake_work"],
+            projectionSourceIds: ["projection_blake_work"],
             entityRefIds: [],
             active: true
           },
@@ -564,19 +564,19 @@ test("ObsidianVaultSink aligns current-surface contact claims onto continuity pe
       resolvedCurrentClaims: []
     }));
 
-    const billyNote = await readFile(
-      path.join(vaultPath, "AgentBigBrain", "10 Entities", "Billy.md"),
+    const blakeNote = await readFile(
+      path.join(vaultPath, "AgentBigBrain", "10 Entities", "Blake.md"),
       "utf8"
     );
     const crimsonNote = await readFile(
-      path.join(vaultPath, "AgentBigBrain", "10 Entities", "Crimson Analytics.md"),
+      path.join(vaultPath, "AgentBigBrain", "10 Entities", "Example Analytics.md"),
       "utf8"
     );
 
-    assert.match(billyNote, /Current temporal claims: 1/);
-    assert.match(billyNote, /contact\.organization_association: Crimson Analytics/);
+    assert.match(blakeNote, /Current temporal claims: 1/);
+    assert.match(blakeNote, /contact\.organization_association: Example Analytics/);
     assert.match(crimsonNote, /Current temporal claims: 1/);
-    assert.match(crimsonNote, /contact\.organization_association: Crimson Analytics/);
+    assert.match(crimsonNote, /contact\.organization_association: Example Analytics/);
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }
@@ -598,13 +598,13 @@ test("ObsidianVaultSink projects retained profile-memory subjects even when the 
     profileMemory.updatedAt = "2026-04-12T17:50:51.000Z";
     profileMemory.facts = [
       {
-        id: "fact_billy_name",
-        key: "contact.billy.name",
-        value: "Billy",
+        id: "fact_blake_name",
+        key: "contact.blake.name",
+        value: "Blake",
         sensitive: false,
         status: "confirmed",
         confidence: 0.95,
-        sourceTaskId: "task_billy",
+        sourceTaskId: "task_blake",
         source: "test.seed",
         observedAt: "2026-04-12T17:35:42.000Z",
         confirmedAt: "2026-04-12T17:35:42.000Z",
@@ -612,13 +612,13 @@ test("ObsidianVaultSink projects retained profile-memory subjects even when the 
         lastUpdatedAt: "2026-04-12T17:38:58.000Z"
       },
       {
-        id: "fact_billy_work",
-        key: "contact.billy.work_association",
-        value: "Crimson Analytics",
+        id: "fact_blake_work",
+        key: "contact.blake.work_association",
+        value: "Example Analytics",
         sensitive: false,
         status: "confirmed",
         confidence: 0.95,
-        sourceTaskId: "task_billy",
+        sourceTaskId: "task_blake",
         source: "test.seed",
         observedAt: "2026-04-12T17:38:58.000Z",
         confirmedAt: "2026-04-12T17:38:58.000Z",
@@ -626,13 +626,13 @@ test("ObsidianVaultSink projects retained profile-memory subjects even when the 
         lastUpdatedAt: "2026-04-12T17:38:58.000Z"
       },
       {
-        id: "fact_billy_context",
-        key: "contact.billy.context.old_work",
-        value: "Billy is no longer at Sample Web Studio",
+        id: "fact_blake_context",
+        key: "contact.blake.context.old_work",
+        value: "Blake is no longer at Sample Web Studio",
         sensitive: false,
         status: "confirmed",
         confidence: 0.95,
-        sourceTaskId: "task_billy",
+        sourceTaskId: "task_blake",
         source: "test.seed",
         observedAt: "2026-04-12T17:38:58.000Z",
         confirmedAt: "2026-04-12T17:38:58.000Z",
@@ -640,13 +640,13 @@ test("ObsidianVaultSink projects retained profile-memory subjects even when the 
         lastUpdatedAt: "2026-04-12T17:38:58.000Z"
       },
       {
-        id: "fact_billy_context_corktown",
-        key: "contact.billy.context.corktown",
-        value: "I met Billy at the Corktown office on March 2",
+        id: "fact_blake_context_corktown",
+        key: "contact.blake.context.corktown",
+        value: "I met Blake at the Corktown office on March 2",
         sensitive: false,
         status: "confirmed",
         confidence: 0.95,
-        sourceTaskId: "task_billy",
+        sourceTaskId: "task_blake",
         source: "test.seed",
         observedAt: "2026-04-12T17:38:58.000Z",
         confirmedAt: "2026-04-12T17:38:58.000Z",
@@ -654,13 +654,13 @@ test("ObsidianVaultSink projects retained profile-memory subjects even when the 
         lastUpdatedAt: "2026-04-12T17:38:58.000Z"
       },
       {
-        id: "fact_garrett_name",
-        key: "contact.garrett.name",
-        value: "Garrett",
+        id: "fact_casey_name",
+        key: "contact.casey.name",
+        value: "Casey",
         sensitive: false,
         status: "confirmed",
         confidence: 0.95,
-        sourceTaskId: "task_garrett",
+        sourceTaskId: "task_casey",
         source: "test.seed",
         observedAt: "2026-04-12T17:35:42.000Z",
         confirmedAt: "2026-04-12T17:35:42.000Z",
@@ -668,13 +668,13 @@ test("ObsidianVaultSink projects retained profile-memory subjects even when the 
         lastUpdatedAt: "2026-04-12T17:38:58.000Z"
       },
       {
-        id: "fact_billy_location",
-        key: "contact.billy.location_association",
+        id: "fact_blake_location",
+        key: "contact.blake.location_association",
         value: "Ferndale",
         sensitive: false,
         status: "confirmed",
         confidence: 0.95,
-        sourceTaskId: "task_billy",
+        sourceTaskId: "task_blake",
         source: "test.seed",
         observedAt: "2026-04-12T17:38:58.000Z",
         confirmedAt: "2026-04-12T17:38:58.000Z",
@@ -682,13 +682,13 @@ test("ObsidianVaultSink projects retained profile-memory subjects even when the 
         lastUpdatedAt: "2026-04-12T17:38:58.000Z"
       },
       {
-        id: "fact_garrett_org",
-        key: "contact.garrett.organization_association",
+        id: "fact_casey_org",
+        key: "contact.casey.organization_association",
         value: "Harbor Signal Studio",
         sensitive: false,
         status: "confirmed",
         confidence: 0.95,
-        sourceTaskId: "task_garrett",
+        sourceTaskId: "task_casey",
         source: "test.seed",
         observedAt: "2026-04-12T17:38:58.000Z",
         confirmedAt: "2026-04-12T17:38:58.000Z",
@@ -696,13 +696,13 @@ test("ObsidianVaultSink projects retained profile-memory subjects even when the 
         lastUpdatedAt: "2026-04-12T17:38:58.000Z"
       },
       {
-        id: "fact_garrett_primary_location",
-        key: "contact.garrett.primary_location_association",
+        id: "fact_casey_primary_location",
+        key: "contact.casey.primary_location_association",
         value: "Detroit",
         sensitive: false,
         status: "confirmed",
         confidence: 0.95,
-        sourceTaskId: "task_garrett",
+        sourceTaskId: "task_casey",
         source: "test.seed",
         observedAt: "2026-04-12T17:38:58.000Z",
         confirmedAt: "2026-04-12T17:38:58.000Z",
@@ -710,13 +710,13 @@ test("ObsidianVaultSink projects retained profile-memory subjects even when the 
         lastUpdatedAt: "2026-04-12T17:38:58.000Z"
       },
       {
-        id: "fact_garrett_secondary_location",
-        key: "contact.garrett.secondary_location_association",
+        id: "fact_casey_secondary_location",
+        key: "contact.casey.secondary_location_association",
         value: "Ann Arbor",
         sensitive: false,
         status: "confirmed",
         confidence: 0.95,
-        sourceTaskId: "task_garrett",
+        sourceTaskId: "task_casey",
         source: "test.seed",
         observedAt: "2026-04-12T17:38:58.000Z",
         confirmedAt: "2026-04-12T17:38:58.000Z",
@@ -724,13 +724,13 @@ test("ObsidianVaultSink projects retained profile-memory subjects even when the 
         lastUpdatedAt: "2026-04-12T17:38:58.000Z"
       },
       {
-        id: "fact_garrett_harbor",
-        key: "contact.garrett.context.harbor",
-        value: "Garrett still owns Harbor Signal Studio",
+        id: "fact_casey_harbor",
+        key: "contact.casey.context.harbor",
+        value: "Casey still owns Harbor Signal Studio",
         sensitive: false,
         status: "confirmed",
         confidence: 0.95,
-        sourceTaskId: "task_garrett",
+        sourceTaskId: "task_casey",
         source: "test.seed",
         observedAt: "2026-04-12T17:38:58.000Z",
         confirmedAt: "2026-04-12T17:38:58.000Z",
@@ -738,13 +738,13 @@ test("ObsidianVaultSink projects retained profile-memory subjects even when the 
         lastUpdatedAt: "2026-04-12T17:38:58.000Z"
       },
       {
-        id: "fact_garrett_places",
-        key: "contact.garrett.context.places",
-        value: "Garrett is still splitting time between Detroit and Ann Arbor",
+        id: "fact_casey_places",
+        key: "contact.casey.context.places",
+        value: "Casey is still splitting time between Detroit and Ann Arbor",
         sensitive: false,
         status: "confirmed",
         confidence: 0.95,
-        sourceTaskId: "task_garrett",
+        sourceTaskId: "task_casey",
         source: "test.seed",
         observedAt: "2026-04-12T17:38:58.000Z",
         confirmedAt: "2026-04-12T17:38:58.000Z",
@@ -796,17 +796,17 @@ test("ObsidianVaultSink projects retained profile-memory subjects even when the 
       path.join(vaultPath, "AgentBigBrain", "00 Dashboard.md"),
       "utf8"
     );
-    const billyNotePath = path.join(
+    const blakeNotePath = path.join(
       vaultPath,
       "AgentBigBrain",
       "11 Profile Subjects",
-      "Billy.md"
+      "Blake.md"
     );
-    const garrettNotePath = path.join(
+    const caseyNotePath = path.join(
       vaultPath,
       "AgentBigBrain",
       "11 Profile Subjects",
-      "Garrett.md"
+      "Casey.md"
     );
     const sampleStudioConceptPath = path.join(
       vaultPath,
@@ -818,7 +818,7 @@ test("ObsidianVaultSink projects retained profile-memory subjects even when the 
       vaultPath,
       "AgentBigBrain",
       "15 Concepts",
-      "Crimson Analytics.md"
+      "Example Analytics.md"
     );
     const corktownConceptPath = path.join(
       vaultPath,
@@ -850,8 +850,8 @@ test("ObsidianVaultSink projects retained profile-memory subjects even when the 
       "15 Concepts",
       "Ann Arbor.md"
     );
-    const billyNote = await readFile(billyNotePath, "utf8");
-    const garrettNote = await readFile(garrettNotePath, "utf8");
+    const blakeNote = await readFile(blakeNotePath, "utf8");
+    const caseyNote = await readFile(caseyNotePath, "utf8");
     const sampleStudioConceptNote = await readFile(sampleStudioConceptPath, "utf8");
     const mediaArtifactNote = await readFile(
       path.join(
@@ -866,26 +866,26 @@ test("ObsidianVaultSink projects retained profile-memory subjects even when the 
     assert.match(dashboard, /Profile subjects: 2/);
     assert.match(dashboard, /Derived concepts: 8/);
     assert.match(dashboard, /Compatibility profile facts: 11/);
-    assert.match(dashboard, /\[\[11 Profile Subjects\/Billy\|Billy\]\]/);
-    assert.match(dashboard, /\[\[15 Concepts\/Crimson Analytics\|Crimson Analytics\]\]/);
+    assert.match(dashboard, /\[\[11 Profile Subjects\/Blake\|Blake\]\]/);
+    assert.match(dashboard, /\[\[15 Concepts\/Example Analytics\|Example Analytics\]\]/);
     assert.match(dashboard, /\[\[15 Concepts\/Harbor Signal Studio\|Harbor Signal Studio\]\]/);
     assert.match(dashboard, /\[\[15 Concepts\/Ann Arbor\|Ann Arbor\]\]/);
     assert.match(dashboard, /\[\[15 Concepts\/Ferndale\|Ferndale\]\]/);
-    assert.match(billyNote, /Projection lane: retained profile-memory compatibility facts/);
-    assert.match(billyNote, /Work Association: Crimson Analytics/);
-    assert.match(billyNote, /Location Association: Ferndale/);
-    assert.match(billyNote, /Billy is no longer at Sample Web Studio/);
-    assert.match(billyNote, /\[\[15 Concepts\/Sample Web Studio\|Sample Web Studio\]\]/);
-    assert.match(billyNote, /\[\[15 Concepts\/Crimson Analytics\|Crimson Analytics\]\]/);
-    assert.match(billyNote, /\[\[15 Concepts\/Ferndale\|Ferndale\]\]/);
-    assert.match(billyNote, /\[\[15 Concepts\/Corktown\|Corktown\]\]/);
-    assert.match(garrettNote, /Organization Association: Harbor Signal Studio/);
-    assert.match(garrettNote, /Primary Location Association: Detroit/);
-    assert.match(garrettNote, /Secondary Location Association: Ann Arbor/);
-    assert.match(garrettNote, /\[\[15 Concepts\/Harbor Signal Studio\|Harbor Signal Studio\]\]/);
-    assert.match(garrettNote, /\[\[15 Concepts\/Detroit\|Detroit\]\]/);
-    assert.match(garrettNote, /\[\[15 Concepts\/Ann Arbor\|Ann Arbor\]\]/);
-    assert.match(billyNote, /All Stored Facts/);
+    assert.match(blakeNote, /Projection lane: retained profile-memory compatibility facts/);
+    assert.match(blakeNote, /Work Association: Example Analytics/);
+    assert.match(blakeNote, /Location Association: Ferndale/);
+    assert.match(blakeNote, /Blake is no longer at Sample Web Studio/);
+    assert.match(blakeNote, /\[\[15 Concepts\/Sample Web Studio\|Sample Web Studio\]\]/);
+    assert.match(blakeNote, /\[\[15 Concepts\/Example Analytics\|Example Analytics\]\]/);
+    assert.match(blakeNote, /\[\[15 Concepts\/Ferndale\|Ferndale\]\]/);
+    assert.match(blakeNote, /\[\[15 Concepts\/Corktown\|Corktown\]\]/);
+    assert.match(caseyNote, /Organization Association: Harbor Signal Studio/);
+    assert.match(caseyNote, /Primary Location Association: Detroit/);
+    assert.match(caseyNote, /Secondary Location Association: Ann Arbor/);
+    assert.match(caseyNote, /\[\[15 Concepts\/Harbor Signal Studio\|Harbor Signal Studio\]\]/);
+    assert.match(caseyNote, /\[\[15 Concepts\/Detroit\|Detroit\]\]/);
+    assert.match(caseyNote, /\[\[15 Concepts\/Ann Arbor\|Ann Arbor\]\]/);
+    assert.match(blakeNote, /All Stored Facts/);
     assert.match(sampleStudioConceptNote, /Projection lane: derived concepts from retained facts, context observations, and media hints/);
     assert.doesNotMatch(mediaArtifactNote, /- 123456789/);
     assert.match(mediaArtifactNote, /\[\[15 Concepts\/Acme Sample Design, LLC\|Acme Sample Design, LLC\]\]/);

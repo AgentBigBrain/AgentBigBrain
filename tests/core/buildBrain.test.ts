@@ -35,7 +35,7 @@ test("createSharedBrainRuntimeDependencies keeps sqlite bootstrap imports inside
   const contaminatedGraph = applyEntityExtractionToGraph(
     createEmptyEntityGraphV1(observedAt),
     extractEntityCandidates({
-      text: "Billy met Garrett about the Harbor project.",
+      text: "Blake met Casey about the Harbor project.",
       observedAt,
       evidenceRef: "test:cwd",
       domainHint: "relationship"

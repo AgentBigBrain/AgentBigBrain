@@ -1011,7 +1011,7 @@ test("interpretVoiceAttachment can use multimodal Gemma audio through Ollama's l
       }
       return new Response(
         JSON.stringify({
-          text: "Call Billy after lunch."
+          text: "Call Blake after lunch."
         }),
         {
           status: 200,
@@ -1061,7 +1061,7 @@ test("interpretVoiceAttachment can use multimodal Gemma audio through Ollama's l
     assert.equal(seenAuthorizationHeader, null);
     assert.equal(seenModel, "gemma4:latest");
     assert.equal(seenFileIsBlob, true);
-    assert.equal(interpretation.transcript, "Call Billy after lunch.");
+    assert.equal(interpretation.transcript, "Call Blake after lunch.");
     assert.equal(interpretation.source, "multimodal_audio");
     assert.match(interpretation.provenance, /Ollama local model transcription model gemma4:latest/);
   } finally {

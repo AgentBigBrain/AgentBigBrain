@@ -43,29 +43,29 @@ function createCurrentSurfaceClaim(input: {
 
 test("collectProjectedCurrentSurfaceClaimsForEntity bridges contact token claims through current name claims", () => {
   const entity: EntityNodeV1 = {
-    entityKey: "entity_billy_smith",
-    canonicalName: "Billy Smith",
+    entityKey: "entity_blake_smith",
+    canonicalName: "Blake Smith",
     entityType: "person",
     disambiguator: null,
     domainHint: "relationship",
-    aliases: ["Billy Smith"],
+    aliases: ["Blake Smith"],
     firstSeenAt: "2026-04-12T18:00:00.000Z",
     lastSeenAt: "2026-04-12T18:00:00.000Z",
     salience: 1,
-    evidenceRefs: ["trace:billy"]
+    evidenceRefs: ["trace:blake"]
   };
   const claims = [
     createCurrentSurfaceClaim({
-      claimId: "claim_billy_name",
+      claimId: "claim_blake_name",
       family: "contact.name",
-      normalizedKey: "contact.billy.name",
-      normalizedValue: "Billy Smith"
+      normalizedKey: "contact.blake.name",
+      normalizedValue: "Blake Smith"
     }),
     createCurrentSurfaceClaim({
-      claimId: "claim_billy_work",
+      claimId: "claim_blake_work",
       family: "contact.organization_association",
-      normalizedKey: "contact.billy.work_association",
-      normalizedValue: "Crimson Analytics"
+      normalizedKey: "contact.blake.work_association",
+      normalizedValue: "Example Analytics"
     })
   ];
 
@@ -76,7 +76,7 @@ test("collectProjectedCurrentSurfaceClaimsForEntity bridges contact token claims
 
   assert.deepEqual(
     matchedClaims.map((claim) => claim.payload.claimId),
-    ["claim_billy_name", "claim_billy_work"]
+    ["claim_blake_name", "claim_blake_work"]
   );
 });
 
@@ -97,13 +97,13 @@ test("collectProjectedCurrentSurfaceClaimsForEntity keeps organization and locat
     createCurrentSurfaceClaim({
       claimId: "claim_work_detroit",
       family: "contact.organization_association",
-      normalizedKey: "contact.owen.work_association",
+      normalizedKey: "contact.riley.work_association",
       normalizedValue: "Detroit"
     }),
     createCurrentSurfaceClaim({
       claimId: "claim_location_detroit",
       family: "contact.location_association",
-      normalizedKey: "contact.owen.location_association",
+      normalizedKey: "contact.riley.location_association",
       normalizedValue: "Detroit"
     })
   ];

@@ -22,16 +22,16 @@ test("queryProfileMemoryGraphAlignedStableRefGroups attaches one exact Stage 6.8
     ...createEmptyProfileMemoryGraphState(observedAt),
     claims: [
       createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
-        claimId: "claim_contact_owen",
-        stableRefId: "stable_contact_owen",
+        claimId: "claim_contact_riley",
+        stableRefId: "stable_contact_riley",
         family: "contact.relationship.current",
-        normalizedKey: "contact.owen.relationship",
+        normalizedKey: "contact.riley.relationship",
         normalizedValue: "friend",
         redactionState: "not_requested",
         redactedAt: null,
         sensitive: false,
-        sourceTaskId: "task_contact_owen",
-        sourceFingerprint: "fingerprint_contact_owen",
+        sourceTaskId: "task_contact_riley",
+        sourceFingerprint: "fingerprint_contact_riley",
         sourceTier: "explicit_user_statement",
         assertedAt: observedAt,
         validFrom: observedAt,
@@ -41,8 +41,8 @@ test("queryProfileMemoryGraphAlignedStableRefGroups attaches one exact Stage 6.8
         timePrecision: "instant",
         timeSource: "user_stated",
         derivedFromObservationIds: [],
-        projectionSourceIds: ["fact_contact_owen"],
-        entityRefIds: ["contact.owen"],
+        projectionSourceIds: ["fact_contact_riley"],
+        entityRefIds: ["contact.riley"],
         active: true
       })
     ]
@@ -51,16 +51,16 @@ test("queryProfileMemoryGraphAlignedStableRefGroups attaches one exact Stage 6.8
     ...createEmptyEntityGraphV1(observedAt),
     entities: [
       {
-        entityKey: buildEntityKey("William Bena", "person", null),
-        canonicalName: "William Bena",
+        entityKey: buildEntityKey("Rowan Harper", "person", null),
+        canonicalName: "Rowan Harper",
         entityType: "person",
         disambiguator: null,
         domainHint: null,
-        aliases: ["Owen"],
+        aliases: ["Riley"],
         firstSeenAt: observedAt,
         lastSeenAt: observedAt,
         salience: 1,
-        evidenceRefs: ["trace:owen"]
+        evidenceRefs: ["trace:riley"]
       }
     ]
   };
@@ -69,11 +69,11 @@ test("queryProfileMemoryGraphAlignedStableRefGroups attaches one exact Stage 6.8
     graph: graph as ProfileMemoryGraphState,
     entityGraph: entityGraph as EntityGraphV1
   });
-  const alignedGroup = groups.find((group) => group.stableRefId === "stable_contact_owen");
+  const alignedGroup = groups.find((group) => group.stableRefId === "stable_contact_riley");
 
   assert.equal(alignedGroup?.resolution, "provisional");
-  assert.equal(alignedGroup?.primaryEntityKey, buildEntityKey("William Bena", "person", null));
-  assert.equal(alignedGroup?.observedEntityKey, buildEntityKey("William Bena", "person", null));
+  assert.equal(alignedGroup?.primaryEntityKey, buildEntityKey("Rowan Harper", "person", null));
+  assert.equal(alignedGroup?.observedEntityKey, buildEntityKey("Rowan Harper", "person", null));
   assert.equal(alignedGroup?.alignmentConfidence, "high");
 });
 
@@ -83,16 +83,16 @@ test("queryProfileMemoryGraphAlignedStableRefGroups quarantines low-confidence e
     ...createEmptyProfileMemoryGraphState(observedAt),
     claims: [
       createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
-        claimId: "claim_contact_owen_inferred",
-        stableRefId: "stable_contact_owen",
+        claimId: "claim_contact_riley_inferred",
+        stableRefId: "stable_contact_riley",
         family: "contact.relationship.current",
-        normalizedKey: "contact.owen.relationship",
+        normalizedKey: "contact.riley.relationship",
         normalizedValue: "friend",
         redactionState: "not_requested",
         redactedAt: null,
         sensitive: false,
-        sourceTaskId: "task_contact_owen_inferred",
-        sourceFingerprint: "fingerprint_contact_owen_inferred",
+        sourceTaskId: "task_contact_riley_inferred",
+        sourceFingerprint: "fingerprint_contact_riley_inferred",
         sourceTier: "assistant_inference",
         assertedAt: observedAt,
         validFrom: observedAt,
@@ -102,8 +102,8 @@ test("queryProfileMemoryGraphAlignedStableRefGroups quarantines low-confidence e
         timePrecision: "instant",
         timeSource: "inferred",
         derivedFromObservationIds: [],
-        projectionSourceIds: ["fact_contact_owen_inferred"],
-        entityRefIds: ["contact.owen"],
+        projectionSourceIds: ["fact_contact_riley_inferred"],
+        entityRefIds: ["contact.riley"],
         active: true
       })
     ]
@@ -112,16 +112,16 @@ test("queryProfileMemoryGraphAlignedStableRefGroups quarantines low-confidence e
     ...createEmptyEntityGraphV1(observedAt),
     entities: [
       {
-        entityKey: buildEntityKey("William Bena", "person", null),
-        canonicalName: "William Bena",
+        entityKey: buildEntityKey("Rowan Harper", "person", null),
+        canonicalName: "Rowan Harper",
         entityType: "person",
         disambiguator: null,
         domainHint: null,
-        aliases: ["Owen"],
+        aliases: ["Riley"],
         firstSeenAt: observedAt,
         lastSeenAt: observedAt,
         salience: 1,
-        evidenceRefs: ["trace:owen"]
+        evidenceRefs: ["trace:riley"]
       }
     ]
   };
@@ -130,13 +130,13 @@ test("queryProfileMemoryGraphAlignedStableRefGroups quarantines low-confidence e
     graph: graph as ProfileMemoryGraphState,
     entityGraph: entityGraph as EntityGraphV1
   });
-  const alignedGroup = groups.find((group) => group.stableRefId === "stable_contact_owen");
+  const alignedGroup = groups.find((group) => group.stableRefId === "stable_contact_riley");
 
   assert.equal(alignedGroup?.resolution, "quarantined");
   assert.equal(alignedGroup?.alignmentConfidence, "low");
   assert.deepEqual(alignedGroup?.alignmentSourceTiers, ["assistant_inference"]);
   assert.equal(alignedGroup?.primaryEntityKey, null);
-  assert.equal(alignedGroup?.observedEntityKey, buildEntityKey("William Bena", "person", null));
+  assert.equal(alignedGroup?.observedEntityKey, buildEntityKey("Rowan Harper", "person", null));
 });
 
 test("queryProfileMemoryGraphAlignedStableRefGroups fails closed to quarantine when multiple entity identities remain plausible", () => {
@@ -145,16 +145,16 @@ test("queryProfileMemoryGraphAlignedStableRefGroups fails closed to quarantine w
     ...createEmptyProfileMemoryGraphState(observedAt),
     claims: [
       createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
-        claimId: "claim_contact_owen_ambiguous",
-        stableRefId: "stable_contact_owen",
+        claimId: "claim_contact_riley_ambiguous",
+        stableRefId: "stable_contact_riley",
         family: "contact.relationship.current",
-        normalizedKey: "contact.owen.relationship",
+        normalizedKey: "contact.riley.relationship",
         normalizedValue: "friend",
         redactionState: "not_requested",
         redactedAt: null,
         sensitive: false,
-        sourceTaskId: "task_contact_owen_ambiguous",
-        sourceFingerprint: "fingerprint_contact_owen_ambiguous",
+        sourceTaskId: "task_contact_riley_ambiguous",
+        sourceFingerprint: "fingerprint_contact_riley_ambiguous",
         sourceTier: "explicit_user_statement",
         assertedAt: observedAt,
         validFrom: observedAt,
@@ -164,8 +164,8 @@ test("queryProfileMemoryGraphAlignedStableRefGroups fails closed to quarantine w
         timePrecision: "instant",
         timeSource: "user_stated",
         derivedFromObservationIds: [],
-        projectionSourceIds: ["fact_contact_owen_ambiguous"],
-        entityRefIds: ["contact.owen"],
+        projectionSourceIds: ["fact_contact_riley_ambiguous"],
+        entityRefIds: ["contact.riley"],
         active: true
       })
     ]
@@ -174,28 +174,28 @@ test("queryProfileMemoryGraphAlignedStableRefGroups fails closed to quarantine w
     ...createEmptyEntityGraphV1(observedAt),
     entities: [
       {
-        entityKey: buildEntityKey("William Bena", "person", null),
-        canonicalName: "William Bena",
+        entityKey: buildEntityKey("Rowan Harper", "person", null),
+        canonicalName: "Rowan Harper",
         entityType: "person",
         disambiguator: null,
         domainHint: null,
-        aliases: ["Owen"],
+        aliases: ["Riley"],
         firstSeenAt: observedAt,
         lastSeenAt: observedAt,
         salience: 1,
-        evidenceRefs: ["trace:owen_a"]
+        evidenceRefs: ["trace:riley_a"]
       },
       {
-        entityKey: buildEntityKey("Owen Lee", "person", null),
-        canonicalName: "Owen Lee",
+        entityKey: buildEntityKey("Riley Lee", "person", null),
+        canonicalName: "Riley Lee",
         entityType: "person",
         disambiguator: null,
         domainHint: null,
-        aliases: ["Owen"],
+        aliases: ["Riley"],
         firstSeenAt: observedAt,
         lastSeenAt: observedAt,
         salience: 1,
-        evidenceRefs: ["trace:owen_b"]
+        evidenceRefs: ["trace:riley_b"]
       }
     ]
   };
@@ -204,7 +204,7 @@ test("queryProfileMemoryGraphAlignedStableRefGroups fails closed to quarantine w
     graph: graph as ProfileMemoryGraphState,
     entityGraph: entityGraph as EntityGraphV1
   });
-  const alignedGroup = groups.find((group) => group.stableRefId === "stable_contact_owen");
+  const alignedGroup = groups.find((group) => group.stableRefId === "stable_contact_riley");
 
   assert.equal(alignedGroup?.resolution, "quarantined");
   assert.equal(alignedGroup?.primaryEntityKey, null);
@@ -218,10 +218,10 @@ test("queryProfileMemoryGraphAlignedStableRefGroups preserves observed-only alig
     events: [
       createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
         eventId: "event_contact_quarantine",
-        stableRefId: "stable_quarantine_contact_owen",
+        stableRefId: "stable_quarantine_contact_riley",
         family: "episode.candidate",
-        title: "Owen ambiguity",
-        summary: "Owen stays quarantined until an operator resolves the identity.",
+        title: "Riley ambiguity",
+        summary: "Riley stays quarantined until an operator resolves the identity.",
         redactionState: "not_requested",
         redactedAt: null,
         sensitive: false,
@@ -236,7 +236,7 @@ test("queryProfileMemoryGraphAlignedStableRefGroups preserves observed-only alig
         timeSource: "user_stated",
         derivedFromObservationIds: [],
         projectionSourceIds: ["episode_contact_quarantine"],
-        entityRefIds: ["contact.owen"]
+        entityRefIds: ["contact.riley"]
       })
     ]
   };
@@ -244,16 +244,16 @@ test("queryProfileMemoryGraphAlignedStableRefGroups preserves observed-only alig
     ...createEmptyEntityGraphV1(observedAt),
     entities: [
       {
-        entityKey: buildEntityKey("William Bena", "person", null),
-        canonicalName: "William Bena",
+        entityKey: buildEntityKey("Rowan Harper", "person", null),
+        canonicalName: "Rowan Harper",
         entityType: "person",
         disambiguator: null,
         domainHint: null,
-        aliases: ["Owen"],
+        aliases: ["Riley"],
         firstSeenAt: observedAt,
         lastSeenAt: observedAt,
         salience: 1,
-        evidenceRefs: ["trace:owen"]
+        evidenceRefs: ["trace:riley"]
       }
     ]
   };
@@ -263,10 +263,10 @@ test("queryProfileMemoryGraphAlignedStableRefGroups preserves observed-only alig
     entityGraph: entityGraph as EntityGraphV1
   });
   const alignedGroup = groups.find(
-    (group) => group.stableRefId === "stable_quarantine_contact_owen"
+    (group) => group.stableRefId === "stable_quarantine_contact_riley"
   );
 
   assert.equal(alignedGroup?.resolution, "quarantined");
   assert.equal(alignedGroup?.primaryEntityKey, null);
-  assert.equal(alignedGroup?.observedEntityKey, buildEntityKey("William Bena", "person", null));
+  assert.equal(alignedGroup?.observedEntityKey, buildEntityKey("Rowan Harper", "person", null));
 });

@@ -147,7 +147,7 @@ function buildEvent(input: {
 }
 
 test("queryProfileMemoryTemporalEvidence returns bounded slices without deriving a winner", () => {
-  const stableRefId = "stable_contact_owen";
+  const stableRefId = "stable_contact_riley";
   const supportingObservationIds = ["obs1", "obs2", "obs3", "obs4", "obs5"];
   const state = buildState({
     observations: supportingObservationIds.map((observationId, index) =>
@@ -155,7 +155,7 @@ test("queryProfileMemoryTemporalEvidence returns bounded slices without deriving
         observationId,
         stableRefId,
         "contact.work_association",
-        "contact.owen.work_association",
+        "contact.riley.work_association",
         `Lantern ${index}`,
         `2026-04-0${index + 1}T10:00:00.000Z`
       )
@@ -165,7 +165,7 @@ test("queryProfileMemoryTemporalEvidence returns bounded slices without deriving
         claimId: `claim_${index + 1}`,
         stableRefId,
         family: "contact.work_association",
-        normalizedKey: "contact.owen.work_association",
+        normalizedKey: "contact.riley.work_association",
         normalizedValue: `Lantern ${index + 1}`,
         assertedAt: `2026-04-0${Math.min(index + 1, 9)}T12:00:00.000Z`,
         derivedFromObservationIds: supportingObservationIds
@@ -175,8 +175,8 @@ test("queryProfileMemoryTemporalEvidence returns bounded slices without deriving
       buildEvent({
         eventId: `event_${index + 1}`,
         stableRefId,
-        title: `Owen event ${index + 1}`,
-        summary: `Owen event summary ${index + 1}`,
+        title: `Riley event ${index + 1}`,
+        summary: `Riley event summary ${index + 1}`,
         observedAt: `2026-04-1${index}T09:00:00.000Z`,
         derivedFromObservationIds: supportingObservationIds
       })
@@ -186,8 +186,8 @@ test("queryProfileMemoryTemporalEvidence returns bounded slices without deriving
   const slice = queryProfileMemoryTemporalEvidence(state, {
     semanticMode: "relationship_inventory",
     relevanceScope: "global_profile",
-    entityHints: ["Owen"],
-    queryText: "What is going on with Owen?"
+    entityHints: ["Riley"],
+    queryText: "What is going on with Riley?"
   });
 
   assert.equal(slice.focusEntities.length, 1);
@@ -206,33 +206,33 @@ test("queryProfileMemoryTemporalEvidence returns bounded slices without deriving
 });
 
 test("synthesizeProfileMemoryTemporalEvidence prefers higher-authority truth and keeps contradictions explicit", () => {
-  const stableRefId = "stable_contact_owen";
+  const stableRefId = "stable_contact_riley";
   const state = buildState({
     observations: [
       buildObservation(
-        "obs_owen_work",
+        "obs_riley_work",
         stableRefId,
         "contact.work_association",
-        "contact.owen.work_association",
+        "contact.riley.work_association",
         "Lantern Studio",
         "2026-04-01T10:00:00.000Z"
       )
     ],
     claims: [
       buildClaim({
-        claimId: "claim_owen_lantern",
+        claimId: "claim_riley_lantern",
         stableRefId,
         family: "contact.work_association",
-        normalizedKey: "contact.owen.work_association",
+        normalizedKey: "contact.riley.work_association",
         normalizedValue: "Lantern Studio",
         assertedAt: "2026-04-01T10:00:00.000Z",
-        derivedFromObservationIds: ["obs_owen_work"]
+        derivedFromObservationIds: ["obs_riley_work"]
       }),
       buildClaim({
-        claimId: "claim_owen_harbor",
+        claimId: "claim_riley_harbor",
         stableRefId,
         family: "contact.work_association",
-        normalizedKey: "contact.owen.work_association",
+        normalizedKey: "contact.riley.work_association",
         normalizedValue: "Harbor Labs",
         assertedAt: "2026-04-02T10:00:00.000Z",
         sourceTier: "assistant_inference"
@@ -244,8 +244,8 @@ test("synthesizeProfileMemoryTemporalEvidence prefers higher-authority truth and
     queryProfileMemoryTemporalEvidence(state, {
       semanticMode: "relationship_inventory",
       relevanceScope: "global_profile",
-      entityHints: ["Owen"],
-      queryText: "Where does Owen work now?"
+      entityHints: ["Riley"],
+      queryText: "Where does Riley work now?"
     })
   );
 
@@ -256,11 +256,11 @@ test("synthesizeProfileMemoryTemporalEvidence prefers higher-authority truth and
   assert.equal(synthesis.contradictionNotes.length, 1);
   assert.equal(
     synthesis.laneMetadata[0]?.chosenClaimId,
-    "claim_owen_lantern"
+    "claim_riley_lantern"
   );
   assert.deepEqual(synthesis.laneMetadata[0]?.rejectedClaims, [
     {
-      claimId: "claim_owen_harbor",
+      claimId: "claim_riley_harbor",
       reason: "lower_source_authority"
     }
   ]);
@@ -271,9 +271,9 @@ test("synthesizeProfileMemoryTemporalEvidence fails closed for quarantined focus
     claims: [
       buildClaim({
         claimId: "claim_quarantine",
-        stableRefId: "stable_quarantine_contact_owen",
+        stableRefId: "stable_quarantine_contact_riley",
         family: "contact.relationship",
-        normalizedKey: "contact.owen.relationship",
+        normalizedKey: "contact.riley.relationship",
         normalizedValue: "friend",
         assertedAt: "2026-04-01T10:00:00.000Z"
       })
@@ -284,8 +284,8 @@ test("synthesizeProfileMemoryTemporalEvidence fails closed for quarantined focus
     queryProfileMemoryTemporalEvidence(state, {
       semanticMode: "identity",
       relevanceScope: "conversation_local",
-      entityHints: ["Owen"],
-      queryText: "Who is Owen again?"
+      entityHints: ["Riley"],
+      queryText: "Who is Riley again?"
     })
   );
 
@@ -461,7 +461,7 @@ test("synthesizeProfileMemoryTemporalEvidence advances authoritative successors 
 });
 
 test("queryProfileMemoryTemporalEvidence exposes lifecycle bucket overflow for event history inventories", () => {
-  const stableRefId = "stable_contact_owen";
+  const stableRefId = "stable_contact_riley";
   const state = buildState({
     events: [
       buildEvent({
@@ -499,8 +499,8 @@ test("queryProfileMemoryTemporalEvidence exposes lifecycle bucket overflow for e
   const slice = queryProfileMemoryTemporalEvidence(state, {
     semanticMode: "event_history",
     relevanceScope: "global_profile",
-    entityHints: ["Owen"],
-    queryText: "What happened with Owen?",
+    entityHints: ["Riley"],
+    queryText: "What happened with Riley?",
     caps: {
       maxEventsPerFocusEntity: 3
     }
@@ -521,7 +521,7 @@ test("global truth, local relevance keeps synthesis truth stable across scope ch
         stableRefId: "stable_self_profile_owner",
         family: "identity.preferred_name",
         normalizedKey: "identity.preferred_name",
-        normalizedValue: "Avery",
+        normalizedValue: "Morgan",
         assertedAt: "2026-04-01T10:00:00.000Z"
       })
     ]
@@ -552,51 +552,51 @@ test("queryProfileMemoryTemporalEvidence enforces default focus-entity and claim
   const state = buildState({
     claims: [
       buildClaim({
-        claimId: "claim_owen_name",
-        stableRefId: "stable_contact_owen",
+        claimId: "claim_riley_name",
+        stableRefId: "stable_contact_riley",
         family: "contact.name",
-        normalizedKey: "contact.owen.name",
-        normalizedValue: "Owen",
+        normalizedKey: "contact.riley.name",
+        normalizedValue: "Riley",
         assertedAt: "2026-04-01T10:00:00.000Z"
       }),
       buildClaim({
-        claimId: "claim_owen_relationship",
-        stableRefId: "stable_contact_owen",
+        claimId: "claim_riley_relationship",
+        stableRefId: "stable_contact_riley",
         family: "contact.relationship",
-        normalizedKey: "contact.owen.relationship",
+        normalizedKey: "contact.riley.relationship",
         normalizedValue: "friend",
         assertedAt: "2026-04-01T10:05:00.000Z"
       }),
       buildClaim({
-        claimId: "claim_owen_work",
-        stableRefId: "stable_contact_owen",
+        claimId: "claim_riley_work",
+        stableRefId: "stable_contact_riley",
         family: "contact.work_association",
-        normalizedKey: "contact.owen.work_association",
+        normalizedKey: "contact.riley.work_association",
         normalizedValue: "Lantern",
         assertedAt: "2026-04-01T10:10:00.000Z"
       }),
       buildClaim({
-        claimId: "claim_owen_school",
-        stableRefId: "stable_contact_owen",
+        claimId: "claim_riley_school",
+        stableRefId: "stable_contact_riley",
         family: "contact.school_association",
-        normalizedKey: "contact.owen.school_association",
+        normalizedKey: "contact.riley.school_association",
         normalizedValue: "State U",
         assertedAt: "2026-04-01T10:15:00.000Z"
       }),
       buildClaim({
-        claimId: "claim_owen_context",
-        stableRefId: "stable_contact_owen",
+        claimId: "claim_riley_context",
+        stableRefId: "stable_contact_riley",
         family: "contact.context",
-        normalizedKey: "contact.owen.context",
+        normalizedKey: "contact.riley.context",
         normalizedValue: "met via launch prep",
         assertedAt: "2026-04-01T10:20:00.000Z"
       }),
       buildClaim({
-        claimId: "claim_owen_hint",
-        stableRefId: "stable_contact_owen",
+        claimId: "claim_riley_hint",
+        stableRefId: "stable_contact_riley",
         family: "contact.entity_hint",
-        normalizedKey: "contact.owen.entity_hint",
-        normalizedValue: "Owen",
+        normalizedKey: "contact.riley.entity_hint",
+        normalizedValue: "Riley",
         assertedAt: "2026-04-01T10:25:00.000Z"
       }),
       buildClaim({
@@ -629,33 +629,33 @@ test("queryProfileMemoryTemporalEvidence enforces default focus-entity and claim
   const slice = queryProfileMemoryTemporalEvidence(state, {
     semanticMode: "relationship_inventory",
     relevanceScope: "global_profile",
-    entityHints: ["Owen Sarah Milo Nora"],
-    queryText: "What do you remember about Owen Sarah Milo Nora?"
+    entityHints: ["Riley Sarah Milo Nora"],
+    queryText: "What do you remember about Riley Sarah Milo Nora?"
   });
-  const owenFocusEntity = slice.focusEntities.find((focusEntity) => focusEntity.stableRefId === "stable_contact_owen");
+  const rileyFocusEntity = slice.focusEntities.find((focusEntity) => focusEntity.stableRefId === "stable_contact_riley");
 
   assert.equal(slice.focusEntities.length, 3);
-  assert.equal(owenFocusEntity?.claimFamilies.length, 5);
+  assert.equal(rileyFocusEntity?.claimFamilies.length, 5);
   assert.match(slice.degradedNotes.join("\n"), /focus entities omitted/);
-  assert.match(owenFocusEntity?.degradedNotes.join("\n") ?? "", /claim families omitted/);
+  assert.match(rileyFocusEntity?.degradedNotes.join("\n") ?? "", /claim families omitted/);
 });
 
 test("synthesizeProfileMemoryTemporalEvidence caps contradiction notes and exposes insufficient evidence explicitly", () => {
   const state = buildState({
     claims: [
       buildClaim({
-        claimId: "claim_owen_old",
-        stableRefId: "stable_contact_owen",
+        claimId: "claim_riley_old",
+        stableRefId: "stable_contact_riley",
         family: "contact.relationship",
-        normalizedKey: "contact.owen.relationship",
+        normalizedKey: "contact.riley.relationship",
         normalizedValue: "friend",
         assertedAt: "2026-04-01T10:00:00.000Z"
       }),
       buildClaim({
-        claimId: "claim_owen_new",
-        stableRefId: "stable_contact_owen",
+        claimId: "claim_riley_new",
+        stableRefId: "stable_contact_riley",
         family: "contact.relationship",
-        normalizedKey: "contact.owen.relationship",
+        normalizedKey: "contact.riley.relationship",
         normalizedValue: "coworker",
         assertedAt: "2026-04-02T10:00:00.000Z"
       }),
@@ -698,8 +698,8 @@ test("synthesizeProfileMemoryTemporalEvidence caps contradiction notes and expos
     queryProfileMemoryTemporalEvidence(state, {
       semanticMode: "relationship_inventory",
       relevanceScope: "global_profile",
-      entityHints: ["Owen Sarah Milo"],
-      queryText: "What is my relationship to Owen Sarah Milo?"
+      entityHints: ["Riley Sarah Milo"],
+      queryText: "What is my relationship to Riley Sarah Milo?"
     })
   );
   const insufficientSynthesis = synthesizeProfileMemoryTemporalEvidence(
@@ -763,14 +763,14 @@ test("synthesizeProfileMemoryTemporalEvidence treats ended claims as historical 
 });
 
 test("queryProfileMemoryTemporalEvidence keeps higher-authority active claims inside bounded family caps", () => {
-  const stableRefId = "stable_contact_owen";
+  const stableRefId = "stable_contact_riley";
   const state = buildState({
     observations: [
       buildObservation(
         "obs_authoritative_1",
         stableRefId,
         "contact.work_association",
-        "contact.owen.work_association",
+        "contact.riley.work_association",
         "Lantern Studio",
         "2026-04-01T09:00:00.000Z"
       ),
@@ -778,7 +778,7 @@ test("queryProfileMemoryTemporalEvidence keeps higher-authority active claims in
         "obs_authoritative_2",
         stableRefId,
         "contact.work_association",
-        "contact.owen.work_association",
+        "contact.riley.work_association",
         "Lantern Studio",
         "2026-04-01T09:05:00.000Z"
       )
@@ -788,7 +788,7 @@ test("queryProfileMemoryTemporalEvidence keeps higher-authority active claims in
         claimId: "claim_authoritative",
         stableRefId,
         family: "contact.work_association",
-        normalizedKey: "contact.owen.work_association",
+        normalizedKey: "contact.riley.work_association",
         normalizedValue: "Lantern Studio",
         assertedAt: "2026-04-01T10:00:00.000Z",
         derivedFromObservationIds: ["obs_authoritative_1", "obs_authoritative_2"]
@@ -797,7 +797,7 @@ test("queryProfileMemoryTemporalEvidence keeps higher-authority active claims in
         claimId: "claim_inference_1",
         stableRefId,
         family: "contact.work_association",
-        normalizedKey: "contact.owen.work_association",
+        normalizedKey: "contact.riley.work_association",
         normalizedValue: "Harbor Labs",
         assertedAt: "2026-04-02T10:00:00.000Z",
         sourceTier: "assistant_inference"
@@ -806,7 +806,7 @@ test("queryProfileMemoryTemporalEvidence keeps higher-authority active claims in
         claimId: "claim_inference_2",
         stableRefId,
         family: "contact.work_association",
-        normalizedKey: "contact.owen.work_association",
+        normalizedKey: "contact.riley.work_association",
         normalizedValue: "Pier Nine",
         assertedAt: "2026-04-03T10:00:00.000Z",
         sourceTier: "assistant_inference"
@@ -815,7 +815,7 @@ test("queryProfileMemoryTemporalEvidence keeps higher-authority active claims in
         claimId: "claim_inference_3",
         stableRefId,
         family: "contact.work_association",
-        normalizedKey: "contact.owen.work_association",
+        normalizedKey: "contact.riley.work_association",
         normalizedValue: "Northstar",
         assertedAt: "2026-04-04T10:00:00.000Z",
         sourceTier: "assistant_inference"
@@ -824,7 +824,7 @@ test("queryProfileMemoryTemporalEvidence keeps higher-authority active claims in
         claimId: "claim_inference_4",
         stableRefId,
         family: "contact.work_association",
-        normalizedKey: "contact.owen.work_association",
+        normalizedKey: "contact.riley.work_association",
         normalizedValue: "Riverpoint",
         assertedAt: "2026-04-05T10:00:00.000Z",
         sourceTier: "assistant_inference"
@@ -835,8 +835,8 @@ test("queryProfileMemoryTemporalEvidence keeps higher-authority active claims in
   const slice = queryProfileMemoryTemporalEvidence(state, {
     semanticMode: "relationship_inventory",
     relevanceScope: "global_profile",
-    entityHints: ["Owen"],
-    queryText: "Where does Owen work now?",
+    entityHints: ["Riley"],
+    queryText: "Where does Riley work now?",
     caps: {
       maxCandidateClaimsPerFamily: 3
     }
@@ -918,14 +918,14 @@ test("synthesizeProfileMemoryTemporalEvidence uses salience ordering only after 
 });
 
 test("queryProfileMemoryTemporalEvidence keeps higher-authority events inside bounded event caps", () => {
-  const stableRefId = "stable_contact_owen";
+  const stableRefId = "stable_contact_riley";
   const state = buildState({
     observations: [
       buildObservation(
         "obs_event_authoritative_1",
         stableRefId,
         "episode.candidate",
-        "episode.owen_project",
+        "episode.riley_project",
         "Lantern launch blocker",
         "2026-04-01T08:00:00.000Z"
       ),
@@ -933,7 +933,7 @@ test("queryProfileMemoryTemporalEvidence keeps higher-authority events inside bo
         "obs_event_authoritative_2",
         stableRefId,
         "episode.candidate",
-        "episode.owen_project",
+        "episode.riley_project",
         "Lantern launch blocker",
         "2026-04-01T08:05:00.000Z"
       )
@@ -943,7 +943,7 @@ test("queryProfileMemoryTemporalEvidence keeps higher-authority events inside bo
         eventId: "event_authoritative",
         stableRefId,
         title: "Lantern launch blocker",
-        summary: "Owen said the launch is blocked on approvals.",
+        summary: "Riley said the launch is blocked on approvals.",
         observedAt: "2026-04-01T10:00:00.000Z",
         derivedFromObservationIds: [
           "obs_event_authoritative_1",
@@ -970,7 +970,7 @@ test("queryProfileMemoryTemporalEvidence keeps higher-authority events inside bo
         timeSource: "user_stated",
         derivedFromObservationIds: [],
         projectionSourceIds: ["projection_event_inference_1"],
-        entityRefIds: ["contact.owen"]
+        entityRefIds: ["contact.riley"]
       }),
       createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
         eventId: "event_inference_2",
@@ -992,7 +992,7 @@ test("queryProfileMemoryTemporalEvidence keeps higher-authority events inside bo
         timeSource: "user_stated",
         derivedFromObservationIds: [],
         projectionSourceIds: ["projection_event_inference_2"],
-        entityRefIds: ["contact.owen"]
+        entityRefIds: ["contact.riley"]
       }),
       createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
         eventId: "event_inference_3",
@@ -1014,7 +1014,7 @@ test("queryProfileMemoryTemporalEvidence keeps higher-authority events inside bo
         timeSource: "user_stated",
         derivedFromObservationIds: [],
         projectionSourceIds: ["projection_event_inference_3"],
-        entityRefIds: ["contact.owen"]
+        entityRefIds: ["contact.riley"]
       }),
       createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
         eventId: "event_inference_4",
@@ -1036,7 +1036,7 @@ test("queryProfileMemoryTemporalEvidence keeps higher-authority events inside bo
         timeSource: "user_stated",
         derivedFromObservationIds: [],
         projectionSourceIds: ["projection_event_inference_4"],
-        entityRefIds: ["contact.owen"]
+        entityRefIds: ["contact.riley"]
       })
     ]
   });
@@ -1044,8 +1044,8 @@ test("queryProfileMemoryTemporalEvidence keeps higher-authority events inside bo
   const slice = queryProfileMemoryTemporalEvidence(state, {
     semanticMode: "event_history",
     relevanceScope: "global_profile",
-    entityHints: ["Owen"],
-    queryText: "What is still happening with Owen?",
+    entityHints: ["Riley"],
+    queryText: "What is still happening with Riley?",
     caps: {
       maxEventsPerFocusEntity: 3
     }
@@ -1067,7 +1067,7 @@ test("synthesizeProfileMemoryTemporalEvidence exposes degraded notes when suppor
         stableRefId: "stable_self_profile_owner",
         family: "identity.preferred_name",
         normalizedKey: "identity.preferred_name",
-        normalizedValue: "Avery",
+        normalizedValue: "Morgan",
         assertedAt: "2026-04-01T10:00:00.000Z",
         derivedFromObservationIds: ["obs_missing_support"]
       })
